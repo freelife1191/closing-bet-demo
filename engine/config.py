@@ -64,53 +64,116 @@ class MarketGateConfig:
     foreign_net_buy_threshold: int = 500_000_000_000  # 5000억원 순매수
 
 
-class AppConfig:
-    """애플리케이션 설정"""
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+class AppConfig:
+    """애플리케이션 설정 (Dynamic)"""
+    
+    @property
+    def GOOGLE_API_KEY(self):
+        return os.getenv("GOOGLE_API_KEY", "")
+
+    @property
+    def OPENAI_API_KEY(self):
+        return os.getenv("OPENAI_API_KEY", "")
+
+    @property
+    def GEMINI_MODEL(self):
+        return os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+    @property
+    def OPENAI_MODEL(self):
+        return os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Z.ai 설정
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # gemini or zai
-    ZAI_API_KEY = os.getenv("ZAI_API_KEY", "")
-    ZAI_BASE_URL = os.getenv("ZAI_BASE_URL", "https://api.z.ai/v1")  # 기본값 설정
-    ZAI_MODEL = os.getenv("ZAI_MODEL", "coding-plan")  # 기본값: coding-plan
-    LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", 2))  # 동시 요청 수 제한 (기본 2)
-    LLM_CHUNK_SIZE = int(os.getenv("LLM_CHUNK_SIZE", 2))    # 한 번의 요청에 포함할 종목 수 (기본 2)
-    LLM_API_TIMEOUT = int(os.getenv("LLM_API_TIMEOUT", 120))  # LLM API 타임아웃 (초, 기본 120)
+    @property
+    def LLM_PROVIDER(self):
+        return os.getenv("LLM_PROVIDER", "gemini")
 
-    # Analysis LLM 설정 (Gemini 등)
-    ANALYSIS_LLM_CONCURRENCY = int(os.getenv("ANALYSIS_LLM_CONCURRENCY", 2))
-    ANALYSIS_LLM_CHUNK_SIZE = int(os.getenv("ANALYSIS_LLM_CHUNK_SIZE", 2))
-    ANALYSIS_LLM_API_TIMEOUT = int(os.getenv("ANALYSIS_LLM_API_TIMEOUT", 120))
+    @property
+    def ZAI_API_KEY(self):
+        return os.getenv("ZAI_API_KEY", "")
 
-    # VCP Signals AI 분석 전용 설정 (멀티 AI 지원)
-    # VCP_AI_PROVIDERS: 쉼표로 구분된 AI 목록 (gemini,gpt,perplexity)
-    # VCP_SECOND_PROVIDER: gemini 외에 추가로 사용할 AI (gpt 또는 perplexity)
-    VCP_SECOND_PROVIDER = os.getenv("VCP_SECOND_PROVIDER", "gpt").lower()
+    @property
+    def ZAI_BASE_URL(self):
+        return os.getenv("ZAI_BASE_URL", "https://api.z.ai/v1")
+
+    @property
+    def ZAI_MODEL(self):
+        return os.getenv("ZAI_MODEL", "coding-plan")
+        
+    @property
+    def LLM_CONCURRENCY(self):
+        return int(os.getenv("LLM_CONCURRENCY", 2))
+
+    @property
+    def LLM_CHUNK_SIZE(self):
+        return int(os.getenv("LLM_CHUNK_SIZE", 2))
+
+    @property
+    def LLM_API_TIMEOUT(self):
+        return int(os.getenv("LLM_API_TIMEOUT", 120))
+
+    # Analysis LLM 설정
+    @property
+    def ANALYSIS_LLM_CONCURRENCY(self):
+        return int(os.getenv("ANALYSIS_LLM_CONCURRENCY", 2))
+
+    @property
+    def ANALYSIS_LLM_CHUNK_SIZE(self):
+        return int(os.getenv("ANALYSIS_LLM_CHUNK_SIZE", 2))
+
+    @property
+    def ANALYSIS_LLM_API_TIMEOUT(self):
+        return int(os.getenv("ANALYSIS_LLM_API_TIMEOUT", 120))
+
+    # VCP Signals AI Analysis Settings
+    @property
+    def VCP_SECOND_PROVIDER(self):
+        return os.getenv("VCP_SECOND_PROVIDER", "gpt").lower()
     
-    _vcp_providers = os.getenv("VCP_AI_PROVIDERS", "gemini,gpt")
-    VCP_AI_PROVIDERS = [p.strip().lower() for p in _vcp_providers.split(",") if p.strip()]
+    @property
+    def VCP_AI_PROVIDERS(self):
+        _vcp_providers = os.getenv("VCP_AI_PROVIDERS", "gemini,gpt")
+        return [p.strip().lower() for p in _vcp_providers.split(",") if p.strip()]
+
+    @property
+    def VCP_GEMINI_MODEL(self):
+        return os.getenv("VCP_GEMINI_MODEL", "gemini-flash-latest")
+
+    @property
+    def VCP_GPT_MODEL(self):
+        return os.getenv("VCP_GPT_MODEL", "gpt-4o")
+
+    @property
+    def VCP_PERPLEXITY_MODEL(self):
+        return os.getenv("VCP_PERPLEXITY_MODEL", "sonar-pro")
+
+    @property
+    def PERPLEXITY_API_KEY(self):
+        return os.getenv("PERPLEXITY_API_KEY", "").strip()
+
+    @property
+    def DATA_SOURCE(self):
+        return os.getenv("DATA_SOURCE", "krx")
+
+    @property
+    def PRICE_CACHE_TTL(self):
+        return int(os.getenv("PRICE_CACHE_TTL", 300))
+
+    @property
+    def MARKET_GATE_UPDATE_INTERVAL_MINUTES(self):
+        val = os.getenv("MARKET_GATE_UPDATE_INTERVAL_MINUTES", "30")
+        try:
+            return int(val)
+        except:
+            return 30
     
-    # 각 AI별 모델 설정
-    VCP_GEMINI_MODEL = os.getenv("VCP_GEMINI_MODEL", "gemini-flash-latest")
-    VCP_GPT_MODEL = os.getenv("VCP_GPT_MODEL", "gpt-4o")
-    VCP_PERPLEXITY_MODEL = os.getenv("VCP_PERPLEXITY_MODEL", "sonar-pro")
-
-    # Perplexity API Key
-    PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()
-
-    # 데이터 소스
-    DATA_SOURCE = os.getenv("DATA_SOURCE", "krx")
-
-    # 캐시
-    PRICE_CACHE_TTL = int(os.getenv("PRICE_CACHE_TTL", 300))
-
-    # Market Gate Update Interval
-    MARKET_GATE_UPDATE_INTERVAL_MINUTES = int(os.getenv("MARKET_GATE_UPDATE_INTERVAL_MINUTES", 30))
+    @MARKET_GATE_UPDATE_INTERVAL_MINUTES.setter
+    def MARKET_GATE_UPDATE_INTERVAL_MINUTES(self, value):
+        # Setter support for runtime update (optional, but requested in previous code)
+        os.environ["MARKET_GATE_UPDATE_INTERVAL_MINUTES"] = str(value)
 
 
 config = SignalConfig()
 app_config = AppConfig()
+

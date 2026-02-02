@@ -379,6 +379,17 @@ export default function ChatbotPage() {
     }
   };
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+      setMessages(prev => [...prev, { role: 'model', parts: ['🛑 답변 생성이 중단되었습니다.'] }]);
+    }
+  };
+
   const handleSend = async (text: string = input) => {
     if ((!text.trim() && attachedFiles.length === 0) || isLoading) return;
 
@@ -393,25 +404,35 @@ export default function ChatbotPage() {
     // Optimistic update
     setMessages(prev => [...prev, userMsg]);
 
-    // Korean IME fix: Clear with a safe delay (50ms) to catch trailing browser input events
-    // that typically fire after the 'Enter' keydown event.
+    // Korean IME fix: simpler reset
     setInput('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'; // Reset height
+    }
     setTimeout(() => {
-      setInput('');
-      if (inputRef.current) {
-        inputRef.current.value = '';
-      }
-      isComposing.current = false; // Reset composition state safety
-    }, 50);
+      isComposing.current = false;
+    }, 0);
 
     setAttachedFiles([]);
     setShowCommands(false);
     setIsLoading(true);
 
+    // Create new AbortController
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       let res;
       const savedWatchlist = localStorage.getItem('watchlist');
       const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
+
+      // Auth Headers
+      const apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
+      const headers: Record<string, string> = {};
+      if (apiKey) headers['X-Gemini-Key'] = apiKey;
+
+      // Email for quota tracking (from profile)
+      if (userProfile?.email) headers['X-User-Email'] = userProfile.email;
 
       // Prepare Request
       if (attachedFiles.length > 0) {
@@ -420,6 +441,7 @@ export default function ChatbotPage() {
         if (currentModel) formData.append('model', currentModel);
         if (currentSessionId) formData.append('session_id', currentSessionId);
         if (watchlist.length > 0) formData.append('watchlist', JSON.stringify(watchlist));
+        if (userProfile?.persona) formData.append('persona', userProfile.persona);
 
         attachedFiles.forEach(file => {
           formData.append('file', file);
@@ -427,18 +449,23 @@ export default function ChatbotPage() {
 
         res = await fetch('/api/kr/chatbot', {
           method: 'POST',
+          headers: headers, // Pass auth headers (Content-Type is auto-set for FormData)
           body: formData,
+          signal: controller.signal // [Stop Feature]
         });
       } else {
+        headers['Content-Type'] = 'application/json';
         res = await fetch('/api/kr/chatbot', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: headers,
           body: JSON.stringify({
             message: text,
             model: currentModel,
             session_id: currentSessionId,
-            watchlist: watchlist
+            watchlist: watchlist,
+            persona: userProfile?.persona
           }),
+          signal: controller.signal // [Stop Feature]
         });
       }
 
@@ -459,10 +486,15 @@ export default function ChatbotPage() {
       } else if (data.error) {
         setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ 오류: ${data.error}`] }]);
       }
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 통신 오류가 발생했습니다.'] }]);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        // Already handled in handleStop usually, but double check
+        return;
+      }
+      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 오류가 발생했습니다. 설정 > API Key가 정상적으로 등록되어 있는지 확인해주세요.'] }]);
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -841,20 +873,22 @@ export default function ChatbotPage() {
                 </div>
               )}
 
-              {/* Floating Suggestions (Floating Action Chips) */}
-              <div className="absolute bottom-full left-0 right-0 mb-4 px-4 pointer-events-none z-30">
-                <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide pb-2 pointer-events-auto">
-                  {suggestions.map((card, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleSend(card.prompt)}
-                      className="flex-shrink-0 px-3 py-1.5 bg-[#1e1f20]/90 backdrop-blur-md hover:bg-blue-600 hover:text-white border border-white/10 rounded-full text-[11px] text-gray-300 transition-all whitespace-nowrap shadow-lg"
-                    >
-                      {card.title}
-                    </button>
-                  ))}
+              {/* Floating Suggestions (Floating Action Chips) - Only Show when No Messages */}
+              {messages.length === 0 && (
+                <div className="absolute bottom-full left-0 right-0 mb-4 px-4 pointer-events-none z-30">
+                  <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide pb-2 pointer-events-auto">
+                    {suggestions.map((card, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSend(card.prompt)}
+                        className="flex-shrink-0 px-3 py-1.5 bg-[#1e1f20]/90 backdrop-blur-md hover:bg-blue-600 hover:text-white border border-white/10 rounded-full text-[11px] text-gray-300 transition-all whitespace-nowrap shadow-lg"
+                      >
+                        {card.title}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="relative bg-[#1e1f20] rounded-[28px] focus-within:bg-[#2a2b2d] focus-within:ring-1 focus-within:ring-white/20 transition-all shadow-lg">
 
@@ -923,17 +957,24 @@ export default function ChatbotPage() {
                     </div>
                   </div>
 
+
+
                   {/* Textarea */}
                   <textarea
                     ref={inputRef}
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      // Auto-resize
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                    }}
                     onKeyDown={handleKeyDown}
                     onCompositionStart={() => { isComposing.current = true; }}
                     onCompositionEnd={() => { isComposing.current = false; }}
                     placeholder="메시지 입력..."
                     className="flex-1 bg-transparent text-white px-2 resize-none max-h-[200px] focus:outline-none custom-scrollbar leading-relaxed py-2"
-                    style={{ minHeight: '40px', height: 'auto' }}
+                    style={{ height: 'auto', minHeight: '40px' }}
                     rows={1}
                   />
 
@@ -948,16 +989,27 @@ export default function ChatbotPage() {
                       <i className={`fas fa-microphone ${isRecording ? 'fa-beat' : ''}`}></i>
                     </button>
 
-                    {/* Send Button */}
-                    {input.trim() || attachedFiles.length > 0 ? (
-                      <button
-                        onClick={() => handleSend()}
-                        disabled={isLoading}
-                        className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 transition-all shadow-lg animate-fade-in"
-                      >
-                        <i className="fas fa-paper-plane text-xs"></i>
-                      </button>
-                    ) : null}
+                    {/* Send / Stop Button */}
+                    <div className="relative">
+                      {isLoading ? (
+                        <button
+                          onClick={handleStop}
+                          className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-gray-700 hover:bg-gray-600 transition-all shadow-lg animate-fade-in"
+                          title="답변 중단"
+                        >
+                          <div className="w-3 h-3 bg-white rounded-sm"></div>
+                        </button>
+                      ) : (
+                        (input.trim() || attachedFiles.length > 0) ? (
+                          <button
+                            onClick={() => handleSend()}
+                            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 transition-all shadow-lg animate-fade-in"
+                          >
+                            <i className="fas fa-paper-plane text-xs"></i>
+                          </button>
+                        ) : null
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

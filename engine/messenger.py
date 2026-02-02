@@ -11,6 +11,12 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+def _safe_int(val):
+    try:
+        return int(val)
+    except:
+        return 587
+
 class Messenger:
     """메신저 알림 발송 클래스 (Discord & Telegram)"""
     
@@ -40,12 +46,6 @@ class Messenger:
         if not any([self.telegram_token, self.discord_url, self.smtp_user]):
             logger.warning("[Messenger] 개인 알림 설정이 감지되지 않았습니다. 알림 발송이 동작하지 않을 수 있습니다.")
 
-
-def _safe_int(val):
-    try:
-        return int(val)
-    except:
-        return 587
 
     def send_screener_result(self, result):
         """스크리너 결과 발송"""
@@ -273,6 +273,10 @@ def _safe_int(val):
         try:
             if not self.smtp_user or not self.smtp_password:
                 logger.warning("SMTP 설정이 누락되어 이메일을 발송할 수 없습니다.")
+                return
+
+            if not self.email_recipients:
+                logger.warning("수신자 이메일(EMAIL_RECIPIENTS)이 설정되지 않았습니다.")
                 return
 
             msg = MIMEMultipart()

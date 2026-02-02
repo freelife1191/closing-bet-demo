@@ -23,47 +23,63 @@ class LLMAnalyzer:
 
     def __init__(self, api_key: str = None):
         self.provider = app_config.LLM_PROVIDER.lower()
-        self.client = None
-        
-        # API Key 우선순위: 인자 > Config
-        self.api_key = api_key or app_config.GOOGLE_API_KEY
-        
-        if not self.api_key and self.provider != 'zai':
-             logger.warning("GOOGLE_API_KEY가 설정되지 않았습니다.")
+        self._client = None
+        self._api_key_source = api_key # If provided explicitly, stick to it? Or allow override? 
+        # Strategy: If api_key arg is provided, use it rigidly. If None, use app_config dynamically.
+        self._last_loaded_key = None
+        self._init_client()
+
+    def _init_client(self):
+        """Initialize Client based on current config"""
+        # Determine current key
+        if self._api_key_source:
+            current_key = self._api_key_source
+        elif self.provider == 'zai':
+             current_key = app_config.ZAI_API_KEY
+        else:
+             current_key = app_config.GOOGLE_API_KEY
+
+        # If key hasn't changed and client exists, do nothing (unless forced?)
+        if self._client and current_key == self._last_loaded_key:
+            return
+
+        self._last_loaded_key = current_key
+        self._client = None # Reset
+
+        if not current_key and self.provider != 'zai':
+             # logger.warning("GOOGLE_API_KEY가 설정되지 않았습니다.")
              return
 
         if self.provider == 'zai':
-            # Z.ai (OpenAI Compatible) 초기화
-            zai_key = api_key or app_config.ZAI_API_KEY
             base_url = app_config.ZAI_BASE_URL
-            
-            if zai_key:
+            if current_key:
                 try:
                     from openai import OpenAI
-                    formatted_key = zai_key[:4] + "*" * 10 if zai_key else "None"
-                    logger.info(f"Z.ai LLM (OpenAI Compatible) 초기화 시도 (Key: {formatted_key}, Base: {base_url})")
-                    self.client = OpenAI(api_key=zai_key, base_url=base_url)
-                    logger.info("Z.ai LLM 초기화 성공")
+                    formatted_key = current_key[:4] + "*" * 10 if current_key else "None"
+                    logger.info(f"Z.ai LLM Re-Init (Key: {formatted_key})")
+                    self._client = OpenAI(api_key=current_key, base_url=base_url)
                 except ImportError:
-                    logger.error("openai 패키지가 설치되지 않았습니다. pip install openai")
+                    logger.error("openai package missing")
                 except Exception as e:
-                    logger.error(f"Z.ai 초기화 실패: {e}")
-            else:
-                logger.warning("ZAI_API_KEY가 설정되지 않았습니다.")
-        
+                    logger.error(f"Z.ai Init Failed: {e}")
         else:
-            # Gemini (Default) 초기화
+            # Gemini
             if genai is None:
-                logger.error("google-genai 패키지가 설치되지 않았거나 로드할 수 없습니다.")
+                logger.error("google-genai package missing")
                 return
-
             try:
-                masked_key = self.api_key[:4] + "*" * 10 if self.api_key else "None"
-                logger.debug(f"Gemini LLM 확인: Key={masked_key}")
-                self.client = genai.Client(api_key=self.api_key)
-                # logger.info("Gemini LLM 초기화 성공")
+                masked_key = current_key[:4] + "*" * 10 if current_key else "None"
+                # logger.debug(f"Gemini LLM Re-Init: Key={masked_key}")
+                self._client = genai.Client(api_key=current_key)
             except Exception as e:
-                logger.error(f"Gemini 초기화 실패: {e}")
+                logger.error(f"Gemini Init Failed: {e}")
+
+    @property
+    def client(self):
+        """Dynamic Client Accessor"""
+        # Always check/refresh before returning
+        self._init_client()
+        return self._client
 
 
     async def analyze_news_sentiment(self, stock_name: str, news_items: List[Dict]) -> Optional[Dict]:

@@ -4,7 +4,7 @@
 KR Market API 라우트
 - jongga_v2_latest.json 및 signals_log.csv에서 실제 데이터 조회
 """
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, g
 import pandas as pd
 from datetime import datetime, date, timedelta
 import os
@@ -407,77 +407,76 @@ def run_vcp_signals_screener():
         max_stocks: (Optional) 스캔할 최대 종목 수 (기본 50)
     """
     import threading
-    
-    # 이미 실행 중이면 에러
-    if VCP_STATUS['running']:
-        return jsonify({'status': 'error', 'message': 'Already running'}), 409
-
-    req_data = request.get_json(silent=True) or {}
-    target_date = req_data.get('target_date', None)  # YYYY-MM-DD 형식
-    max_stocks = req_data.get('max_stocks', 50)
-    
-    def _run_vcp_async(target_date_arg, max_stocks_arg):
-        """백그라운드 VCP 스크리너 실행"""
-        try:
-            VCP_STATUS['running'] = True
-            VCP_STATUS['progress'] = 0
-            
-            if target_date_arg:
-                msg = f"[VCP] 지정 날짜 분석 시작: {target_date_arg}"
-            else:
-                msg = "[VCP] 실시간 분석 시작"
-            
-            VCP_STATUS['message'] = msg
-            logger.info(msg)
-            print(f"\n{msg}", flush=True)  # [LOG] 강제 출력
-                
-            from scripts import init_data
-            
-            # 1. 최신 데이터 수집 (가격 업데이트)
-            VCP_STATUS['message'] = "가격 데이터 업데이트 중..."
-            logger.info(f"[VCP Screener] 최신 가격 데이터 수집 시작")
-            print(f"[VCP Screener] 최신 가격 데이터 수집 시작...", flush=True)
-            init_data.create_daily_prices(target_date=target_date_arg)
-            VCP_STATUS['progress'] = 30
-            
-            # 1.5 수급 데이터 업데이트 (필수)
-            VCP_STATUS['message'] = "수급 데이터 분석 중..."
-            logger.info(f"[VCP Screener] 기관/외인 수급 데이터 업데이트")
-            print(f"[VCP Screener] 기관/외인 수급 데이터 업데이트...", flush=True)
-            init_data.create_institutional_trend(target_date=target_date_arg)
-            VCP_STATUS['progress'] = 50
-            
-            # 2. 실제 데이터 기반 VCP 스크리너 실행 (init_data.py) + AI 분석
-            VCP_STATUS['message'] = "VCP 패턴 분석 및 AI 진단 중..."
-            logger.info(f"[VCP Screener] VCP 시그널 분석 및 AI 수행")
-            print(f"[VCP Screener] VCP 시그널 분석 및 AI 수행...", flush=True)
-            
-            # run_ai=True로 AI 자동 수행
-            result_df = init_data.create_signals_log(target_date=target_date_arg, run_ai=True)
-            VCP_STATUS['progress'] = 100
-            
-            if isinstance(result_df, pd.DataFrame):
-                success_msg = f"완료: {len(result_df)}개 시그널 감지"
-            elif result_df:
-                success_msg = "완료: 성공"
-            else:
-                success_msg = "완료: 조건 충족 종목 없음"
-                
-            VCP_STATUS['message'] = success_msg
-            logger.info(f"[VCP Screener] {success_msg}")
-            print(f"[VCP Screener] {success_msg}\n", flush=True)
-                
-        except Exception as e:
-            logger.error(f"[VCP Screener] 실패: {e}")
-            print(f"[VCP Screener] ⛔️ 실패: {e}", flush=True)
-            VCP_STATUS['message'] = f"실패: {str(e)}"
-            import traceback
-            traceback.print_exc()
-        finally:
-             VCP_STATUS['running'] = False
-             VCP_STATUS['last_run'] = datetime.now().isoformat()
-    
     try:
+        # 이미 실행 중이면 에러
+        if VCP_STATUS['running']:
+            return jsonify({'status': 'error', 'message': 'Already running'}), 409
+
+        req_data = request.get_json(silent=True) or {}
+        target_date = req_data.get('target_date', None)  # YYYY-MM-DD 형식
+        max_stocks = req_data.get('max_stocks', 50)
+        
+        def _run_vcp_async(target_date_arg, max_stocks_arg):
+            """백그라운드 VCP 스크리너 실행"""
+            try:
+                VCP_STATUS['running'] = True
+                VCP_STATUS['progress'] = 0
+                
+                if target_date_arg:
+                    msg = f"[VCP] 지정 날짜 분석 시작: {target_date_arg}"
+                else:
+                    msg = "[VCP] 실시간 분석 시작"
+                
+                VCP_STATUS['message'] = msg
+                logger.info(msg)
+                print(f"\n{msg}", flush=True)  # [LOG] 강제 출력
+                    
+                from scripts import init_data
+                
+                # 1. 최신 데이터 수집 (가격 업데이트)
+                VCP_STATUS['message'] = "가격 데이터 업데이트 중..."
+                logger.info(f"[VCP Screener] 최신 가격 데이터 수집 시작")
+                print(f"[VCP Screener] 최신 가격 데이터 수집 시작...", flush=True)
+                init_data.create_daily_prices(target_date=target_date_arg)
+                VCP_STATUS['progress'] = 30
+                
+                # 1.5 수급 데이터 업데이트 (필수)
+                VCP_STATUS['message'] = "수급 데이터 분석 중..."
+                logger.info(f"[VCP Screener] 기관/외인 수급 데이터 업데이트")
+                print(f"[VCP Screener] 기관/외인 수급 데이터 업데이트...", flush=True)
+                init_data.create_institutional_trend(target_date=target_date_arg)
+                VCP_STATUS['progress'] = 50
+                
+                # 2. 실제 데이터 기반 VCP 스크리너 실행 (init_data.py) + AI 분석
+                VCP_STATUS['message'] = "VCP 패턴 분석 및 AI 진단 중..."
+                logger.info(f"[VCP Screener] VCP 시그널 분석 및 AI 수행")
+                print(f"[VCP Screener] VCP 시그널 분석 및 AI 수행...", flush=True)
+                
+                # run_ai=True로 AI 자동 수행
+                result_df = init_data.create_signals_log(target_date=target_date_arg, run_ai=True)
+                VCP_STATUS['progress'] = 100
+                
+                if isinstance(result_df, pd.DataFrame):
+                    success_msg = f"완료: {len(result_df)}개 시그널 감지"
+                elif result_df:
+                    success_msg = "완료: 성공"
+                else:
+                    success_msg = "완료: 조건 충족 종목 없음"
+                    
+                VCP_STATUS['message'] = success_msg
+                logger.info(f"[VCP Screener] {success_msg}")
+                print(f"[VCP Screener] {success_msg}\n", flush=True)
+                    
+            except Exception as e:
+                logger.error(f"[VCP Screener] 실패: {e}")
+                print(f"[VCP Screener] ⛔️ 실패: {e}", flush=True)
+                VCP_STATUS['message'] = f"실패: {str(e)}"
+                import traceback
+                traceback.print_exc()
+            finally:
+                 VCP_STATUS['running'] = False
+                 VCP_STATUS['last_run'] = datetime.now().isoformat()
+        
         thread = threading.Thread(target=_run_vcp_async, args=(target_date, max_stocks))
         thread.daemon = True
         thread.start()
@@ -2116,13 +2115,48 @@ def kr_chatbot_sessions():
 
 @kr_bp.route('/chatbot', methods=['POST'])
 def kr_chatbot():
-    """KR 챗봇 (멀티모달 + 세션 지원)"""
+    """KR 챗봇 (멀티모달 + 세션 지원 + API Key/Quota 연동)"""
     try:
         from chatbot import get_chatbot
         
+        # [Auth & Quota Logic]
+        # 1. API Key & Auth Check
+        user_api_key = request.headers.get('X-Gemini-Key')
+        user_email = request.headers.get('X-User-Email')
+        
+        if user_api_key:
+            user_api_key = user_api_key.strip()
+            # print(f"DEBUG: Using Client-Side Key for {user_email}", flush=True)
+
+        use_free_tier = False
+        # 익명/기본 사용자(user@example.com)는 무료 티어 사용 불가 (Server Key 보호)
+        is_authenticated = user_email and user_email != 'user@example.com'
+
+        if not user_api_key:
+            # Key 미제공 시
+            if not is_authenticated:
+                 return jsonify({'error': '로그인이 필요합니다. (또는 설정 > API Key 등록)', 'code': 'AUTH_REQUIRED'}), 401
+            
+            # 무료 티어(Server Key) 가용성 체크
+            from engine.config import app_config
+            server_key_available = bool(app_config.GOOGLE_API_KEY or (app_config.LLM_PROVIDER == 'zai' and app_config.ZAI_API_KEY))
+             
+            if not server_key_available:
+                 return jsonify({'error': '시스템 API Key가 설정되지 않았습니다.', 'code': 'SERVER_CONFIG_MISSING'}), 503
+
+            # 쿼터 확인
+            used = get_user_usage(user_email)
+            if used >= MAX_FREE_USAGE:
+                 return jsonify({'error': '무료 사용량(10회)을 초과했습니다. [설정 > API]에서 개인 API Key를 등록해주세요.', 'code': 'QUOTA_EXCEEDED'}), 402
+            
+            use_free_tier = True
+
+        # 2. Parameters Parsing (JSON or Multipart)
         message = ""
         model_name = None
         session_id = None
+        persona = None
+        watchlist = None
         files = []
 
         # Handle Multipart/Form-Data (File Uploads)
@@ -2132,9 +2166,7 @@ def kr_chatbot():
             session_id = request.form.get('session_id', None)
             persona = request.form.get('persona', None)
             
-            # Watchlist handling (JSON string in FormData)
             watchlist_str = request.form.get('watchlist', None)
-            watchlist = None
             if watchlist_str:
                 try:
                     import json
@@ -2173,14 +2205,20 @@ def kr_chatbot():
             model=model_name, 
             files=files if files else None, 
             watchlist=watchlist,
-            persona=persona
+            persona=persona,
+            api_key=user_api_key # Pass Extracted Key
         )
         
-        if isinstance(result, dict):
-             return jsonify(result)
-        else:
-             # Fallback for legacy return type
-             return jsonify({'response': result})
+        response_data = result if isinstance(result, dict) else {'response': result}
+
+        # 3. Quota Update (If Free Tier & Success)
+        if use_free_tier:
+             # 에러가 아니고, 경고 메시지(⚠️)가 아닐 때만 차감
+             resp_text = response_data.get('response', '')
+             if not response_data.get('error') and not str(resp_text).startswith('⚠️'):
+                 increment_user_usage(user_email)
+        
+        return jsonify(response_data)
              
     except Exception as e:
         logger.error(f"Chatbot API Error: {e}")
@@ -2334,4 +2372,60 @@ def handle_config_interval():
             from engine.config import app_config
             return jsonify({'interval': app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES})
         except Exception as e:
-             return jsonify({'error': str(e)}), 500
+            return jsonify({'error': str(e)}), 500
+
+
+# ==============================================================================
+# Chatbot & Quota Routes (Free Tier Logic)
+# ==============================================================================
+
+QUOTA_FILE = os.path.join(DATA_DIR, 'user_quota.json')
+MAX_FREE_USAGE = 10
+
+def get_user_usage(email):
+    """사용자 사용량 조회"""
+    data = load_json_file('user_quota.json')
+    return data.get(email, 0)
+
+def increment_user_usage(email):
+    """사용자 사용량 증가"""
+    data = load_json_file('user_quota.json')
+    current = data.get(email, 0)
+    data[email] = current + 1
+    
+    with open(QUOTA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+    return current + 1
+
+@kr_bp.route('/user/quota')
+def get_user_quota_info():
+    """사용자 쿼터 정보 반환"""
+    try:
+        user_email = request.args.get('email') or request.headers.get('X-User-Email')
+        if not user_email:
+            return jsonify({'usage': 0, 'limit': MAX_FREE_USAGE, 'remaining': 0, 'message': '로그인이 필요합니다.'})
+            
+        used = get_user_usage(user_email)
+        remaining = max(0, MAX_FREE_USAGE - used)
+        
+        return jsonify({
+            'usage': used,
+            'limit': MAX_FREE_USAGE,
+            'remaining': remaining,
+            'is_exhausted': used >= MAX_FREE_USAGE
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+@kr_bp.route('/chatbot/history', methods=['DELETE'])
+def clear_chat_history():
+    """대화 기록 초기화"""
+    try:
+        from chatbot import get_chatbot
+        bot = get_chatbot()
+        bot.history.clear_all()
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

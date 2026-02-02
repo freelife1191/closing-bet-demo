@@ -15,7 +15,7 @@ import json
 # Load .env file
 try:
     from dotenv import load_dotenv
-    env_path = Path(__file__).parent.parent.parent / ".env"
+    env_path = Path(__file__).parent.parent / ".env"
     load_dotenv(env_path)
 except ImportError:
     pass
@@ -300,6 +300,16 @@ class KRStockChatbot:
         self.memory = MemoryManager(user_id)
         self.history = HistoryManager(user_id)
         self.data_fetcher = data_fetcher
+        
+        # Cache initialization
+        self._data_cache = None
+        self._cache_timestamp = None
+        self._cache_ttl = 60
+        
+        # Data maps initialization
+        self.stock_map = {} 
+        self.ticker_map = {}
+        self._load_stock_map()
         
         # .env에서 사용자 프로필 초기화 (기본값이 없을 때만 설정)
         self._init_user_profile_from_env()
@@ -776,7 +786,7 @@ class KRStockChatbot:
             
         return None
 
-    def chat(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None) -> Dict[str, Any]:
+    def chat(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None) -> Dict[str, Any]:
         """
         사용자 메시지 처리 및 응답 생성
         
@@ -787,11 +797,24 @@ class KRStockChatbot:
             files: 첨부 파일 리스트
             watchlist: 사용자 관심종목 리스트
             persona: 특정 페르소나 지정 ('vcp' 등)
+            api_key: (Optional) 사용자 제공 API Key
         """
         target_model_name = model or self.current_model_name
         
-        if not self.client:
-             return {"response": "⚠️ AI 모델이 설정되지 않았거나 초기화에 실패했습니다.", "session_id": session_id}
+        # [Client Selection]
+        # 사용자 제공 Key가 있으면 임시 Client 생성, 없으면 기본 self.client 사용
+        active_client = self.client
+        if api_key:
+            try:
+                from google import genai
+                active_client = genai.Client(api_key=api_key)
+            except Exception as e:
+                logger.error(f"Temp client init failed: {e}")
+                return {"response": f"⚠️ API Key 오류: {str(e)}", "session_id": session_id}
+
+        if not active_client:
+             debug_info = f"KeyLen: {len(str(api_key))} " if api_key else "Key: None "
+             return {"response": f"⚠️ AI 모델이 설정되지 않았습니다. ({debug_info}) [설정 > API & 기능]에서 API Key를 등록하거나, 구글 로그인을 진행해주세요. (데이터 초기화 후에는 재설정이 필요합니다)", "session_id": session_id}
 
         # Ephemeral check
         is_ephemeral = False
@@ -1007,7 +1030,7 @@ class KRStockChatbot:
             full_user_content = f"{system_prompt}\n{intent_instruction}\n\n[사용자 메시지]: {user_message}"
             content_parts.append(full_user_content)
 
-            chat_session = self.client.chats.create(
+            chat_session = active_client.chats.create(
                 model=target_model_name,
                 history=api_history
             )
@@ -1026,8 +1049,20 @@ class KRStockChatbot:
             return {"response": bot_response, "session_id": session_id}
             
         except Exception as e:
-            logger.error(f"Chat error: {e}")
-            return {"response": f"⚠️ 오류가 발생했습니다: {str(e)}", "session_id": session_id}
+            error_msg = str(e)
+            logger.error(f"Chat error: {error_msg}")
+            
+            # [Error Handling] 429 Resource Exhausted (Quota Limit)
+            if "429" in error_msg or "Resource exhausted" in error_msg:
+                friendly_msg = (
+                    "⚠️ **무료 사용량이 초과되었습니다.**\n\n"
+                    "시스템 공용 사용량이 많아 잠시 답변이 어렵습니다.\n"
+                    "안정적인 사용을 위해 **[설정] > [API Key]** 메뉴에서 개인 **Google Gemini API Key**를 등록해주세요.\n\n"
+                    "(잠시 후 다시 시도하시면 될 수도 있습니다.)"
+                )
+                return {"response": friendly_msg, "session_id": session_id}
+
+            return {"response": f"⚠️ 오류가 발생했습니다: {error_msg}", "session_id": session_id}
 
     def _fetch_jongga_data(self) -> str:
         """jongga_v2_latest.json에서 최신 S/A급 종목 조회"""

@@ -89,12 +89,35 @@ export default function ChatWidget() {
       const savedWatchlist = localStorage.getItem('watchlist');
       const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
 
+      // Auth Info Retrieval
+      let userEmail = null;
+      let apiKey = null;
+      try {
+        const profileStr = localStorage.getItem('user_profile');
+        if (profileStr) {
+          userEmail = JSON.parse(profileStr).email;
+        }
+        apiKey = localStorage.getItem('GOOGLE_API_KEY');
+      } catch (e) {
+        console.error("Auth info parse error", e);
+      }
+
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail || '',
+          'X-Gemini-Key': apiKey || ''
+        },
         body: JSON.stringify({ message: messageToSend, watchlist }),
       });
       const data = await res.json();
+
+      if (res.status === 401 || res.status === 402) {
+        setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ ${data.error}`] }]);
+        setIsLoading(false);
+        return;
+      }
 
       if (data.response) {
         setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
@@ -104,7 +127,7 @@ export default function ChatWidget() {
         setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 응답을 받아오지 못했습니다.'] }]);
       }
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 통신 오류'] }]);
+      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 오류가 발생했습니다. 설정 > API Key가 정상적으로 등록되어 있는지 확인해주세요.'] }]);
     } finally {
       setIsLoading(false);
     }

@@ -5,7 +5,7 @@ import { NextAuthOptions } from "next-auth"
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientId: process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     }),
   ],
@@ -16,7 +16,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
-  pages: {
-    signIn: '/auth/signin', // 커스텀 로그인 페이지 (옵션)
-  }
+  // pages: {
+  //   signIn: '/auth/signin', // 커스텀 로그인 페이지 (옵션)
+  // }
 }

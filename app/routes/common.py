@@ -663,7 +663,7 @@ def get_backtest_summary():
         return jsonify({'error': str(e)}), 500
 
 
-@common_bp.route('/system/env', methods=['GET', 'POST'])
+@common_bp.route('/system/env', methods=['GET', 'POST', 'DELETE'])
 def manage_env():
     """환경 변수 관리 (읽기 및 쓰기)"""
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env')
@@ -682,7 +682,9 @@ def manage_env():
                     if '=' in line:
                         key, value = line.split('=', 1)
                         # 중요 키 마스킹 처리 (선택)
-                        if any(k in key for k in ['KEY', 'SECRET', 'PASSWORD', 'TOKEN']):
+                        # [Modified] 사용자 요청: API Key 외에도 이메일, ID 등 개인정보가 포함된 모든 주요 설정값 마스킹
+                        sensitive_keywords = ['KEY', 'SECRET', 'PASSWORD', 'TOKEN', 'USER', 'ID', 'URL', 'HOST', 'RECIPIENTS']
+                        if any(k in key for k in sensitive_keywords):
                             if len(value) > 8:
                                 value = value[:4] + '*' * (len(value) - 8) + value[-4:]
                             else:
@@ -726,6 +728,14 @@ def manage_env():
                              new_lines.append(original_line)
                              updated_keys.add(key)
                              continue
+                        
+                        # [Modified] 값이 비어있으면 라인 삭제 (완전 삭제)
+                        if not new_value:
+                            updated_keys.add(key)
+                            # 메모리에서도 삭제
+                            if key in os.environ:
+                                del os.environ[key]
+                            continue
                              
                         new_lines.append(f"{key}={new_value}\n")
                         updated_keys.add(key)
@@ -737,6 +747,8 @@ def manage_env():
             # 2. 새로운 키 추가
             for key, value in data.items():
                 if key not in updated_keys and '*' not in value:
+                    if not value: continue # 빈 값은 추가 안 함
+                    
                      # 마지막 줄이 개행문자로 끝나지 않으면 추가
                     if new_lines and not new_lines[-1].endswith('\n'):
                         new_lines[-1] += '\n'
@@ -757,3 +769,135 @@ def manage_env():
             logger.error(f"Error updating .env: {e}")
             return jsonify({'error': str(e)}), 500
 
+    elif request.method == 'DELETE':
+        try:
+            # 민감 정보 초기화 (Factory Reset)
+            sensitive_keys = [
+                'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_API_KEY',
+                'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'ZAI_API_KEY', 'PERPLEXITY_API_KEY',
+                'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID',
+                'DISCORD_WEBHOOK_URL', 'SLACK_WEBHOOK_URL',
+                'SMTP_USER', 'SMTP_PASSWORD', 'EMAIL_RECIPIENTS',
+                'USER_PROFILE'
+            ]
+            
+            lines = []
+            if os.path.exists(env_path):
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+            
+            new_lines = []
+            for line in lines:
+                line_stripped = line.strip()
+                if not line_stripped or line_stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+                
+                if '=' in line_stripped:
+                    key = line_stripped.split('=', 1)[0]
+                    if key in sensitive_keys:
+                        new_lines.append(f"{key}=\n")
+                        # 메모리에서도 삭제
+                        if key in os.environ:
+                            os.environ[key] = ""
+                    else:
+                        new_lines.append(line)
+                else:
+                    new_lines.append(line)
+            
+            with open(env_path, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
+
+            # [New] 모든 사용자 데이터 파일 삭제
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            data_dir = os.path.join(base_dir, 'data')
+            
+            files_to_delete = [
+                'user_quota.json', 
+                'chatbot_history.json',
+                'chatbot_memory.json',
+                'chatbot_sessions.json'
+            ]
+            
+            for fname in files_to_delete:
+                path = os.path.join(data_dir, fname)
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                        logger.info(f"Factory Reset: Deleted {fname}")
+                    except Exception as e:
+                        logger.error(f"Failed to delete {fname}: {e}")
+                
+            return jsonify({'status': 'ok', 'message': 'All sensitive data and user history types wiped.'})
+            
+        except Exception as e:
+            logger.error(f"Error resetting .env: {e}")
+            return jsonify({'error': str(e)}), 500
+
+
+@common_bp.route('/notification/send', methods=['POST'])
+def send_test_notification():
+    """알림 테스트 발송"""
+    try:
+        data = request.get_json() or {}
+        platform = data.get('platform') # discord, telegram, email
+        
+        if not platform:
+             return jsonify({'status': 'error', 'message': 'Platform not specified'}), 400
+             
+        from engine.messenger import Messenger
+        messenger = Messenger()
+        
+        # 테스트용 더미 데이터
+        test_data = {
+            "title": f"[Test] {platform.upper()} Notification",
+            "gate_info": "System Status: Online",
+            "summary_title": "테스트 발송입니다",
+            "summary_desc": "설정된 정보로 알림이 정상적으로 수신되는지 확인하세요.",
+            "signals": [
+                {
+                    "index": 1,
+                    "name": "테스트종목",
+                    "code": "005930",
+                    "market_icon": "🔵",
+                    "grade": "A",
+                    "score": 85.5,
+                    "change_pct": 1.2,
+                    "volume_ratio": 2.5,
+                    "trading_value": 5000000000,
+                    "f_buy": 1000000000,
+                    "i_buy": 500000000,
+                    "entry": 70000,
+                    "target": 75000, 
+                    "stop": 68000,
+                    "ai_reason": "AI 분석 테스트 메시지입니다. 시스템이 정상 동작 중입니다."
+                }
+            ]
+        }
+        
+        # 강제 발송 (Messenger 내부 채널 리스트 무시하고 개별 메소드 호출 시도 또는 환경변수 의존)
+        # Messenger 클래스는 초기화 시 환경변수를 읽으므로, 지금 환경변수가 잘 설정되었다면 동작함.
+        
+        if platform == 'discord':
+            if not messenger.discord_url:
+                return jsonify({'status': 'error', 'message': 'Discord Webhook URL not set in server env'}), 400
+            messenger._send_discord(test_data)
+            
+        elif platform == 'telegram':
+            if not messenger.telegram_token or not messenger.telegram_chat_id:
+                return jsonify({'status': 'error', 'message': 'Telegram Token or Chat ID not set'}), 400
+            messenger._send_telegram(test_data)
+            
+        elif platform == 'email':
+             if not messenger.smtp_user:
+                return jsonify({'status': 'error', 'message': 'SMTP settings not configured'}), 400
+             messenger._send_email(test_data)
+             
+        else:
+            return jsonify({'status': 'error', 'message': f'Unknown platform: {platform}'}), 400
+            
+        return jsonify({'status': 'success', 'message': f'{platform} test message sent'})
+
+    except Exception as e:
+        logger.error(f"Test notification failed: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500

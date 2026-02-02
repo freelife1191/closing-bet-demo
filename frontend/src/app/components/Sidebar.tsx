@@ -11,11 +11,28 @@ export default function Sidebar() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState({ name: 'User', email: 'user@example.com', persona: '' });
 
+  const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
+  const [hasApiKey, setHasApiKey] = useState(false);
+
   useEffect(() => {
+    // Check for API Key in localStorage
+    const checkApiKey = () => {
+      const key = localStorage.getItem('GOOGLE_API_KEY');
+      setHasApiKey(!!key);
+    };
+    checkApiKey();
+
+    // Listen for storage changes (in case Settings updates it)
+    window.addEventListener('storage', checkApiKey);
+
+    // Also check periodically or on window focus
+    const interval = setInterval(checkApiKey, 2000);
+
     const savedProfile = localStorage.getItem('user_profile');
     if (savedProfile) {
       try {
-        setProfile(JSON.parse(savedProfile));
+        const parsed = JSON.parse(savedProfile);
+        setProfile(parsed);
       } catch (e) {
         console.error("Failed to parse user profile from localStorage", e);
       }
@@ -29,6 +46,16 @@ export default function Sidebar() {
       window.removeEventListener('open-settings', handleOpenSettings);
     };
   }, []);
+
+  // Fetch quota when profile email is available
+  useEffect(() => {
+    if (profile.email && profile.email !== 'user@example.com') {
+      fetch(`/api/kr/user/quota?email=${profile.email}`)
+        .then(res => res.json())
+        .then(data => setQuota(data))
+        .catch(e => console.error(e));
+    }
+  }, [profile.email, isSettingsOpen]); // Update when settings close too
 
   const isActive = (path: string) => pathname === path;
   const isGroupActive = (prefix: string) => pathname.startsWith(prefix);
@@ -138,6 +165,11 @@ export default function Sidebar() {
                 <div className="p-3 border-b border-white/5">
                   <div className="text-sm font-bold text-white mb-0.5">{profile.name}</div>
                   <div className="text-xs text-gray-400">{profile.email}</div>
+                  {quota && (
+                    <div className="text-[10px] text-blue-400 mt-1 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded inline-block">
+                      {quota.remaining}회 남음 (총 {quota.limit}회)
+                    </div>
+                  )}
                 </div>
                 <div className="p-1 space-y-0.5">
                   <button
@@ -173,6 +205,32 @@ export default function Sidebar() {
             </>
           )}
 
+          {/* Quota Display above Profile */}
+          {(hasApiKey || quota) && (
+            <div className="mb-2 px-3">
+              {hasApiKey ? (
+                <div className="text-[10px] font-bold text-center text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded py-1">
+                  ✨ API Key 사용 중 (무제한)
+                </div>
+              ) : quota && (
+                <div className="bg-white/5 border border-white/5 rounded-lg p-2">
+                  <div className="flex justify-between items-center text-[10px] text-gray-400 mb-1">
+                    <span>무료 사용량</span>
+                    <span className={`font-bold ${quota.remaining > 3 ? 'text-blue-400' : 'text-red-400'}`}>
+                      {quota.remaining}회 남음
+                    </span>
+                  </div>
+                  <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${quota.remaining > 3 ? 'bg-blue-500' : 'bg-red-500'}`}
+                      style={{ width: `${(quota.usage / quota.limit) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
             className={`relative z-30 flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-white/5 text-left transition-colors ${isUserMenuOpen ? 'bg-white/5' : ''}`}
@@ -182,7 +240,15 @@ export default function Sidebar() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-white truncate">{profile.name}</div>
-              <div className="text-xs text-gray-500 truncate">Free Plan</div>
+              <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
+                {hasApiKey ? (
+                  <span className="text-gray-500 text-[11px]">Personal Pro Plan</span>
+                ) : quota ? (
+                  <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
+                ) : (
+                  <span className="text-gray-500 text-[11px]">로그인 필요 (무료 10회)</span>
+                )}
+              </div>
             </div>
             <i className={`fas fa-chevron-${isUserMenuOpen ? 'down' : 'up'} text-gray-500 text-xs`}></i>
           </button>

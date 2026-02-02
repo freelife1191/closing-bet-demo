@@ -88,7 +88,7 @@ class Chatbot:
         self.user_profile["persona"] = persona
         return self.user_profile
 
-    def chat(self, message: str, session_id: str = None, model: str = None, files=None, watchlist=None, persona=None) -> Any:
+    def chat(self, message: str, session_id: str = None, model: str = None, files=None, watchlist=None, persona=None, api_key: str = None) -> Any:
         # Session handling
         if not session_id or session_id not in self.history.sessions:
             session_id = self.history.create_session(model)
@@ -105,23 +105,52 @@ class Chatbot:
             # Simple interaction:
             response_text = ""
             
-            # Using LLMAnalyzer's client if available (Gemini)
-            if self.analyzer.client:
+            # Determine which client to use
+            active_client = None
+            active_provider = self.analyzer.provider
+
+            if api_key:
+                # User provided key - Create temporary client
+                print(f"Chat request with User API Key (Length: {len(api_key)})", flush=True)
+                try:
+                    if self.analyzer.provider == 'zai':
+                        from openai import OpenAI
+                        base_url = app_config.ZAI_BASE_URL
+                        active_client = OpenAI(api_key=api_key, base_url=base_url)
+                        print("Temp Client (Z.ai) init success", flush=True)
+                    else:
+                        import google.generativeai as genai
+                        active_client = genai.Client(api_key=api_key)
+                        print("Temp Client (Gemini) init success", flush=True)
+                except Exception as e:
+                    print(f"Temp Client Init Failed: {e}", flush=True)
+                    active_client = None
+            else:
+                # Use Server Key
+                print("Chat request checking Server Key...", flush=True)
+                active_client = self.analyzer.client
+                if active_client:
+                     print("Server Client available", flush=True)
+                else:
+                     print("Server Client NOT available", flush=True)
+
+            if active_client:
                  try:
                     # Construct prompt with context
                     prompt = f"User: {message}\n"
                     if watchlist:
                         prompt += f"Watchlist: {watchlist}\n"
                     
-                    if self.analyzer.provider == 'gemini':
-                        resp = self.analyzer.client.models.generate_content(
+                    print(f"Sending prompt to LLM (Provider: {active_provider})", flush=True)
+                    if active_provider == 'gemini':
+                        resp = active_client.models.generate_content(
                             model=model or self.current_model_name,
                             contents=prompt
                         )
                         response_text = resp.text
-                    elif self.analyzer.provider == 'zai':
+                    elif active_provider == 'zai':
                         # Z.ai / OpenAI style
-                         resp = self.analyzer.client.chat.completions.create(
+                         resp = active_client.chat.completions.create(
                             model=app_config.ZAI_MODEL,
                             messages=[{"role": "user", "content": prompt}]
                         )
@@ -129,10 +158,12 @@ class Chatbot:
                     else:
                         response_text = "LLM Provider not configured properly."
                  except Exception as e:
-                     logger.error(f"Generate content failed: {e}")
-                     response_text = "죄송합니다. AI 응답 생성 중 오류가 발생했습니다."
+                     print(f"Generate content failed: {e}", flush=True)
+                     response_text = f"죄송합니다. AI 응답 생성 중 오류가 발생했습니다. ({str(e)})"
             else:
-                 response_text = "AI Client initialized failed."
+                 masked_key = (api_key[:4] + "...") if api_key else "None"
+                 print(f"No Active Client. UserKey: {masked_key}, ServerClient: {self.analyzer.client is not None}", flush=True)
+                 response_text = f"AI 모델이 설정되지 않았습니다. (Key: {masked_key}) [설정 > API & 기능]에서 API Key를 등록하거나, 구글 로그인을 진행해주세요. (서버/클라이언트 키 둘 다 확인되지 않음)"
 
             self.history.add_message(session_id, 'model', response_text)
             
