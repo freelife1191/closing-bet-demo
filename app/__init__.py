@@ -8,7 +8,7 @@ import os
 import sys
 import logging
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -62,7 +62,24 @@ def create_app():
     app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() in ['true', '1']
 
     # CORS
-    CORS(app, resources={r"/*": {"origins": "*"}})
+    # Render + Vercel 연동을 위해 구체적인 Origin 설정 또는 wildcard 사용
+    # Vercel 환경에서 NEXT_PUBLIC_API_URL로 호출 시 CORS 이슈 발생 가능
+    cors_origins = os.getenv('CORS_ORIGINS', '*').split(',')
+    CORS(app, resources={r"/*": {"origins": cors_origins}})
+
+    # Middleware: Request Hook for API Key Handling
+    @app.before_request
+    def check_api_key():
+        # OPTIONS 요청은 통과 (CORS Preflight)
+        if request.method == 'OPTIONS':
+            return
+            
+        # 헤더에서 Key 추출 (없으면 None)
+        g.user_api_key = request.headers.get('X-Gemini-Key')
+        g.user_email = request.headers.get('X-User-Email') # 프론트에서 세션 이메일 전송
+
+        # 공용 키 사용량 체크 로직은 개별 Route 또는 Decorator에서 수행
+        # 여기서는 전역 변수(g)에 세팅만 함
 
     # Register Blueprints with URL prefixes
     from app.routes import kr_bp, common_bp

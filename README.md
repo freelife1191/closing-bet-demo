@@ -1,4 +1,4 @@
-# 🚀 Smart Money Bot: AI 기반 종가 베팅 & VCP 시그널 시스템
+# 🚀 스마트머니 봇: AI 기반 종가 베팅 & VCP 시그널 데모 시스템
 
 ## 🚀 빠른 시작 (Quick Start)
 
@@ -1520,6 +1520,37 @@ Response 200 OK:
 - **장점**: AI가 최신 데이터를 바탕으로 개인화된 답변 생성
 - **결과**: 사용자 참여도 상승, 빠른 의사결정 지원
 
+
+
+---
+
+## 🚀 Deployment (배포)
+
+본 프로젝트는 Backend(Render)와 Frontend(Vercel)로 분리 배포하는 것을 권장합니다.
+
+### 1. 배포 준비 (Preparation)
+제공된 스크립트를 실행하여 배포 환경을 점검하세요.
+```bash
+./deploy_prep.sh
+```
+*   `requirements.txt` 생성 및 점검
+*   `Procfile` 및 `vercel.json` 존재 여부 확인
+*   `runtime.txt` 생성 (Python 버전 지정)
+
+### 2. Backend 배포 (Render / Heroku)
+1.  GitHub 저장소를 Render에 연결하고 **Web Service**를 생성합니다.
+2.  **Build Command**: `pip install -r requirements.txt`
+3.  **Start Command**: `gunicorn flask_app:app`
+4.  **Environment Variables**: `.env`의 내용을 Render 환경 변수에 추가합니다.
+    *   `GOOGLE_API_KEY`, `OPENAI_API_KEY` 등 필수
+
+### 3. Frontend 배포 (Vercel)
+1.  GitHub 저장소를 Vercel에 연결하고 `frontend` 디렉토리를 **Root Directory**로 설정합니다.
+2.  **Framework Preset**: Next.js
+3.  **Environment Variables**:
+    *   `NEXT_PUBLIC_API_URL`: 배포된 백엔드 URL (예: `https://my-backend.onrender.com`)
+    *   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (로그인 기능 사용 시)
+4.  `vercel.json`이 자동으로 `/api` 요청을 백엔드로 프록시합니다.
 
 ---
 

@@ -1984,6 +1984,99 @@ def create_kr_ai_analysis(target_date=None):
         traceback.print_exc()
         return False
 
+def create_kr_ai_analysis_with_key(target_dates=None, api_key=None):
+    """
+    [사용자 요청] API Key를 주입하여 AI 분석 실행 (create_kr_ai_analysis 변형)
+    - 공용 배치 작업이 아니라, 특정 사용자의 요청에 의해 트리거됨.
+    - target_dates: ['YYYY-MM-DD', ...] or None
+    - api_key: 사용자의 Google Gemini API Key (없으면 공용 키 사용 - 정책에 따름)
+    """
+    log(f"AI 재분석 요청 (Key Present: {bool(api_key)})", "INFO")
+    
+    try:
+        import sys
+        # Root path 추가
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root_dir not in sys.path:
+            sys.path.append(root_dir)
+            
+        from kr_ai_analyzer import KrAiAnalyzer
+        import pandas as pd
+        import json
+        
+        # Analyzer 초기화시 키 주입
+        analyzer = KrAiAnalyzer(api_key=api_key)
+        
+        data_dir = os.path.join(BASE_DIR, 'data')
+        signals_path = os.path.join(data_dir, 'signals_log.csv')
+        
+        if not os.path.exists(signals_path):
+            log("VCP 시그널 파일이 없습니다.", "WARNING")
+            return {'count': 0}
+
+        df = pd.read_csv(signals_path, dtype={'ticker': str, 'signal_date': str})
+        if df.empty:
+            return {'count': 0}
+
+        # 날짜 필터링
+        if not target_dates:
+            # 날짜 없으면 최신 날짜 하나만
+            latest_date = df['signal_date'].max()
+            target_dates = [latest_date]
+            
+        all_results = {}
+        total_analyzed = 0
+        
+        for t_date in target_dates:
+            log(f"Deep Analysis for date: {t_date}")
+            
+            # 날짜 포맷 매칭
+            target_df = df[df['signal_date'] == str(t_date)].copy()
+            if target_df.empty:
+                 alt_date = str(t_date).replace('-', '')
+                 target_df = df[df['signal_date'] == alt_date].copy()
+            
+            if target_df.empty:
+                continue
+                
+            # Score 상위 종목 선정
+            if 'score' in target_df.columns:
+                target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
+                target_df = target_df.sort_values('score', ascending=False)
+            
+            # 최대 20개 (Rate Limit 및 시간 고려)
+            target_df = target_df.head(20)
+            tickers = target_df['ticker'].tolist()
+            
+            # 분석 실행
+            results = analyzer.analyze_multiple_stocks(tickers) # api_key 사용됨
+            
+            if results and 'signals' in results:
+                count = len(results['signals'])
+                total_analyzed += count
+                
+                # 저장 (덮어쓰기)
+                date_str_clean = str(t_date).replace('-', '')
+                filename = f'ai_analysis_results_{date_str_clean}.json'
+                filepath = os.path.join(data_dir, filename)
+                
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, ensure_ascii=False, indent=2)
+                
+                # 오늘 날짜면 메인 파일도 업데이트
+                if t_date == datetime.now().strftime('%Y-%m-%d'):
+                    main_path = os.path.join(data_dir, 'ai_analysis_results.json')
+                    with open(main_path, 'w', encoding='utf-8') as f:
+                        json.dump(results, f, ensure_ascii=False, indent=2)
+                        
+        return {'count': total_analyzed}
+
+    except Exception as e:
+        log(f"AI 재분석 실패: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
+        return {'error': str(e)}
+
 def send_jongga_notification():
     """종가베팅 V2 결과 알림 발송"""
     try:

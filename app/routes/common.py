@@ -31,7 +31,11 @@ except ImportError:
     # Fallback if engine package not found in path
     import sys, os
     sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    import sys, os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     import engine.shared as shared_state
+
+from services.paper_trading import paper_trading
 
 # 글로벌 업데이트 상태 추적 (메모리)
 update_tracker = {
@@ -340,59 +344,121 @@ def api_stop_update():
 def get_portfolio_data():
     """포트폴리오 데이터"""
     try:
-        # 샘플 포트폴리오 데이터
-        top_holdings = [
-            {
-                'ticker': '005930',
-                'name': '삼성전자',
-                'price': 71800,
-                'recommendation_price': 72000,
-                'return_pct': -0.28,
-                'score': 82.5,
-                'grade': 'A',
-                'wave': 'N/A',
-                'sd_stage': '강한매집',
-                'inst_trend': '매수',
-                'ytd': 15.2
-            },
-            {
-                'ticker': '000270',
-                'name': '기아',
-                'price': 121000,
-                'recommendation_price': 119800,
-                'return_pct': 1.0,
-                'score': 75.0,
-                'grade': 'A',
-                'wave': '상승',
-                'sd_stage': '약매집',
-                'inst_trend': '중립',
-                'ytd': 22.5
-            }
-        ]
-
+        data = paper_trading.get_portfolio()
+        holdings = data['holdings']
+        cash = data['cash']
+        
+        # Calculate current values using mock Realtime prices (or recently known prices)
+        # In a real app, we would fetch live prices here.
+        # For this demo, we'll try to get prices from our cache or random simulation
+        
+        total_valuation = 0
+        current_holdings = []
+        
+        for item in holdings:
+            ticker = item['ticker']
+            qty = item['quantity']
+            avg_price = item['avg_price']
+            
+            # Mock Current Price (Simulation)
+            # 1. Try to find from recently updated VCP or Jongga data if available?
+            # For simplicity in Demo: Price varies between -2% to +2% of avg_price
+            # In production, use get_realtime_prices logic
+            
+            price_variation = random.uniform(0.95, 1.05) 
+            current_price = int(avg_price * price_variation) # random for now if no live data
+            
+            # TODO: Integrate with real pricing source if available
+            
+            val = current_price * qty
+            total_valuation += val
+            
+            ret = 0
+            if avg_price > 0:
+                ret = ((current_price - avg_price) / avg_price) * 100
+            
+            current_holdings.append({
+                'ticker': ticker,
+                'name': item['name'],
+                'price': current_price,
+                'recommendation_price': int(avg_price),
+                'return_pct': round(ret, 2),
+                'quantity': qty,
+                'valuation': val,
+                'grade': 'N/A' # Could fetch from stock info
+            })
+            
+        total_asset = cash + total_valuation
+        start_capital = 100000000 # Default
+        total_return_won = total_asset - start_capital
+        total_return_pct = (total_return_won / start_capital) * 100
+        
         key_stats = {
-            'qtd_return': '78.8',
-            'ytd_return': '2',
-            'one_year_return': '+15.4',
-            'div_yield': '2.1',
-            'expense_ratio': '0.45'
+            'total_asset': f"{int(total_asset):,}",
+            'cash': f"{int(cash):,}",
+            'total_return_pct': f"{total_return_pct:.2f}",
+            'total_return_won': f"{int(total_return_won):,}",
         }
 
         holdings_distribution = [
-            {'label': 'KOSPI', 'value': 1, 'color': '#ef4444'},
-            {'label': 'KOSDAQ', 'value': 1, 'color': '#3b82f6'}
+             {'label': 'Cash', 'value': cash, 'color': '#9ca3af'},
+             {'label': 'Stocks', 'value': total_valuation, 'color': '#3b82f6'}
         ]
 
         return jsonify({
             'key_stats': key_stats,
             'holdings_distribution': holdings_distribution,
-            'top_holdings': top_holdings,
+            'top_holdings': current_holdings,
             'latest_date': datetime.now().strftime('%Y-%m-%d')
         })
 
     except Exception as e:
         logger.error(f"Error getting portfolio data: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@common_bp.route('/portfolio/buy', methods=['POST'])
+def buy_stock():
+    """모의 투자 매수"""
+    try:
+        data = request.get_json()
+        ticker = data.get('ticker')
+        name = data.get('name')
+        price = data.get('price')
+        quantity = int(data.get('quantity', 0))
+        
+        if not all([ticker, name, price, quantity]):
+             return jsonify({'status': 'error', 'message': 'Missing data'}), 400
+             
+        result = paper_trading.buy_stock(ticker, name, float(price), quantity)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@common_bp.route('/portfolio/sell', methods=['POST'])
+def sell_stock():
+    """모의 투자 매도"""
+    try:
+        data = request.get_json()
+        ticker = data.get('ticker')
+        price = data.get('price')
+        quantity = int(data.get('quantity', 0))
+        
+        if not all([ticker, price, quantity]):
+             return jsonify({'status': 'error', 'message': 'Missing data'}), 400
+             
+        result = paper_trading.sell_stock(ticker, float(price), quantity)
+        return jsonify(result)
+    except Exception as e:
+         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@common_bp.route('/portfolio/reset', methods=['POST'])
+def reset_portfolio():
+    """모의 투자 초기화"""
+    paper_trading.reset_account()
+    return jsonify({'status': 'success', 'message': 'Account reset to 100M KRW'})
 
 
 @common_bp.route('/stock/<ticker>')
@@ -679,6 +745,11 @@ def manage_env():
             # 파일 쓰기
             with open(env_path, 'w', encoding='utf-8') as f:
                 f.writelines(new_lines)
+
+            # 3. 환경변수 메모리 즉시 반영 (재시작 없이 적용)
+            for key, value in data.items():
+                if '*' not in value:
+                    os.environ[key] = value
                 
             return jsonify({'status': 'ok'})
             

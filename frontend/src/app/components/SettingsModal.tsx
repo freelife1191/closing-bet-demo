@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { useRouter } from 'next/navigation';
+import { useSession, signIn, signOut } from "next-auth/react";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface SettingsModalProps {
   onSave: (name: string, email: string, persona: string) => Promise<void>;
 }
 
-type Tab = 'profile' | 'api' | 'system';
+type Tab = 'profile' | 'api' | 'system' | 'notification';
 
 export default function SettingsModal({ isOpen, onClose, profile, onSave }: SettingsModalProps) {
   const router = useRouter();
@@ -116,19 +117,58 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
     }
   };
 
+  // NextAuth
+  const { data: session, status } = useSession();
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user) {
+      setIsGoogleLoggedIn(true);
+      setGoogleUserInfo({
+        name: session.user.name || "User",
+        email: session.user.email || ""
+      });
+      // 프로필 자동 동기화 (옵션)
+      if (!name) setName(session.user.name || "");
+      if (!email || email === 'user@example.com') setEmail(session.user.email || "");
+    } else {
+      setIsGoogleLoggedIn(false);
+      setGoogleUserInfo(null);
+    }
+  }, [status, session]);
+
   const handleGoogleLogin = () => {
-    // Mock Login for now (In real app, use Google OAuth)
-    setIsGoogleLoggedIn(true);
-    setGoogleUserInfo({
-      name: name || "User",
-      email: "user@example.com"
-    });
-    alert("구글 로그인 기능은 현재 데모 모드입니다. \n실제 구현을 위해서는 Firebase Auth나 NextAuth가 필요합니다.");
+    // Google Login via NextAuth
+    signIn('google');
   };
 
   const handleGoogleLogout = () => {
-    setIsGoogleLoggedIn(false);
-    setGoogleUserInfo(null);
+    signOut();
+  };
+
+  // Google API Key handling in localStorage (Client Only)
+  useEffect(() => {
+    if (isOpen) {
+      const storedKey = localStorage.getItem('X-Gemini-Key');
+      if (storedKey) {
+        handleEnvChange('GOOGLE_API_KEY', storedKey); // UI 상에 표시 (보안 주의: 마스킹 가능하면 좋음)
+      }
+    }
+  }, [isOpen]);
+
+  const saveLocalApiKey = (key: string) => {
+    if (key) {
+      localStorage.setItem('X-Gemini-Key', key);
+    } else {
+      localStorage.removeItem('X-Gemini-Key');
+    }
+  };
+
+  // Override handleEnvChange for GOOGLE_API_KEY to save locally too
+  const handleEnvChangeWrapped = (key: string, value: string) => {
+    handleEnvChange(key, value);
+    if (key === 'GOOGLE_API_KEY') {
+      saveLocalApiKey(value);
+    }
   };
 
   return (
@@ -175,6 +215,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
               }`}
           >
             API & 기능
+          </button>
+          <button
+            onClick={() => setActiveTab('notification')}
+            className={`w-full text-left px-3 py-2 rounded-[6px] text-[15px] font-medium transition-all ${activeTab === 'notification' ? 'bg-[#3b3b40] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              }`}
+          >
+            알림 센터
           </button>
           <button
             onClick={() => setActiveTab('system')}
@@ -234,7 +281,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium text-white mb-1">계정 연동</div>
-                        <div className="text-xs text-gray-500">구글 계정으로 로그인하여 설정을 동기화하세요.</div>
+                        <div className="text-xs text-gray-500">구글 계정으로 로그인하여 설정을 동기화하고 개인화 서비스를 이용하세요.</div>
                       </div>
                       <button
                         onClick={handleGoogleLogin}
@@ -363,12 +410,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     <input
                       type="password"
                       value={envVars['GOOGLE_API_KEY'] || ''}
-                      onChange={(e) => handleEnvChange('GOOGLE_API_KEY', e.target.value)}
+                      onChange={(e) => handleEnvChangeWrapped('GOOGLE_API_KEY', e.target.value)}
                       className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500 transition-colors"
                       placeholder="sk-..."
                     />
-                    <div className="mt-2 text-[11px] text-gray-500">
-                      Google AI Studio에서 발급받은 API 키를 입력하세요.
+                    <div className="mt-2 text-[11px] text-gray-500 text-yellow-500">
+                      <i className="fas fa-lock mr-1"></i>
+                      이 키는 브라우저(Local Storage)에만 저장되며 서버로 전송되지 않습니다. (AI 분석 요청 시에만 헤더에 포함됨)
                     </div>
                   </div>
 
@@ -434,6 +482,67 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                       className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500 transition-colors"
                       placeholder="sk-ant-..."
                     />
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === 'notification' && (
+            <div className="space-y-8">
+              <section>
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <i className="fab fa-telegram text-blue-400"></i>
+                  Telegram 알림
+                </h3>
+                <div className="bg-[#27272a] rounded-xl border border-white/5 p-5 space-y-5">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">TELEGRAM_BOT_TOKEN</label>
+                    <input
+                      type="password"
+                      value={envVars['TELEGRAM_BOT_TOKEN'] || ''}
+                      onChange={(e) => handleEnvChange('TELEGRAM_BOT_TOKEN', e.target.value)}
+                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-400 transition-colors"
+                      placeholder="bot123456:ABC-DEF..."
+                    />
+                    <div className="mt-2 text-[11px] text-gray-500">
+                      @BotFather를 통해 생성한 봇 토큰을 입력하세요.
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">TELEGRAM_CHAT_ID</label>
+                    <input
+                      type="text"
+                      value={envVars['TELEGRAM_CHAT_ID'] || ''}
+                      onChange={(e) => handleEnvChange('TELEGRAM_CHAT_ID', e.target.value)}
+                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-400 transition-colors"
+                      placeholder="-1001234567890"
+                    />
+                    <div className="mt-2 text-[11px] text-gray-500">
+                      알림을 받을 채널 또는 개인 채팅 ID입니다. ( https://api.telegram.org/bot[TOKEN]/getUpdates 로 확인)
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <i className="fab fa-discord text-indigo-400"></i>
+                  Discord 알림
+                </h3>
+                <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">DISCORD_WEBHOOK_URL</label>
+                    <input
+                      type="password"
+                      value={envVars['DISCORD_WEBHOOK_URL'] || ''}
+                      onChange={(e) => handleEnvChange('DISCORD_WEBHOOK_URL', e.target.value)}
+                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                      placeholder="https://discord.com/api/webhooks/..."
+                    />
+                    <div className="mt-2 text-[11px] text-gray-500">
+                      디스코드 채널 설정 &gt; 연동 &gt; 웹후크에서 생성한 URL을 입력하세요.
+                    </div>
                   </div>
                 </div>
               </section>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate } from '@/lib/api';
 import StockChart from './StockChart';
+import BuyStockModal from '@/app/components/BuyStockModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -62,6 +63,10 @@ export default function VCPSignalsPage() {
   // Slash Command State for Embedded Chat
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+
+  // Buy Modal State
+  const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
 
   const SLASH_COMMANDS = [
     { cmd: '/help', desc: '도움말 확인' },
@@ -584,6 +589,9 @@ export default function VCPSignalsPage() {
                   <SimpleTooltip text="기관 5일 연속 순매수 금액">기관 5D</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center">
+                  Buy
+                </th>
+                <th className="px-4 py-3 font-semibold text-center">
                   <SimpleTooltip text="VCP(60%) + 수급(40%) 합산 점수 (높을수록 좋음)">Score</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center">
@@ -651,6 +659,18 @@ export default function VCPSignalsPage() {
                         {signal.inst_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.inst_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
                         {formatFlow(signal.inst_5d)}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => {
+                          setBuyingStock({ ticker: signal.ticker, name: signal.name, price: signal.current_price || signal.entry_price || 0 });
+                          setIsBuyModalOpen(true);
+                        }}
+                        className="w-8 h-8 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex items-center justify-center"
+                        title="모의 매수"
+                      >
+                        <i className="fas fa-shopping-cart text-xs"></i>
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
@@ -1058,6 +1078,32 @@ export default function VCPSignalsPage() {
           </div>
         </div>
       )}
+      {/* Buy Stock Modal */}
+      <BuyStockModal
+        isOpen={isBuyModalOpen}
+        onClose={() => setIsBuyModalOpen(false)}
+        stock={buyingStock}
+        onBuy={async (ticker, name, price, quantity) => {
+          try {
+            const res = await fetch('/api/portfolio/buy', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker, name, price, quantity })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+              alert(`${name} ${quantity}주 매수 완료!`);
+              return true;
+            } else {
+              alert(`매수 실패: ${data.message}`);
+              return false;
+            }
+          } catch (e) {
+            alert('매수 요청 중 오류 발생');
+            return false;
+          }
+        }}
+      />
     </div>
   );
 }

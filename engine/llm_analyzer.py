@@ -21,21 +21,28 @@ logger = logging.getLogger(__name__)
 class LLMAnalyzer:
     """LLM 분석기 (Gemini / Z.ai 지원)"""
 
-    def __init__(self):
+    def __init__(self, api_key: str = None):
         self.provider = app_config.LLM_PROVIDER.lower()
         self.client = None
+        
+        # API Key 우선순위: 인자 > Config
+        self.api_key = api_key or app_config.GOOGLE_API_KEY
+        
+        if not self.api_key and self.provider != 'zai':
+             logger.warning("GOOGLE_API_KEY가 설정되지 않았습니다.")
+             return
 
         if self.provider == 'zai':
             # Z.ai (OpenAI Compatible) 초기화
-            api_key = app_config.ZAI_API_KEY
+            zai_key = api_key or app_config.ZAI_API_KEY
             base_url = app_config.ZAI_BASE_URL
             
-            if api_key:
+            if zai_key:
                 try:
                     from openai import OpenAI
-                    formatted_key = api_key[:4] + "*" * 10 if api_key else "None"
+                    formatted_key = zai_key[:4] + "*" * 10 if zai_key else "None"
                     logger.info(f"Z.ai LLM (OpenAI Compatible) 초기화 시도 (Key: {formatted_key}, Base: {base_url})")
-                    self.client = OpenAI(api_key=api_key, base_url=base_url)
+                    self.client = OpenAI(api_key=zai_key, base_url=base_url)
                     logger.info("Z.ai LLM 초기화 성공")
                 except ImportError:
                     logger.error("openai 패키지가 설치되지 않았습니다. pip install openai")
@@ -50,17 +57,14 @@ class LLMAnalyzer:
                 logger.error("google-genai 패키지가 설치되지 않았거나 로드할 수 없습니다.")
                 return
 
-            api_key = app_config.GOOGLE_API_KEY
-            if api_key:
-                try:
-                    masked_key = api_key[:4] + "*" * 10 if api_key else "None"
-                    logger.info(f"Gemini LLM (google-genai) 초기화 시도 (Key: {masked_key})")
-                    self.client = genai.Client(api_key=api_key)
-                    logger.info("Gemini LLM 초기화 성공")
-                except Exception as e:
-                    logger.error(f"Gemini 초기화 실패: {e}")
-            else:
-                logger.warning("GOOGLE_API_KEY가 설정되지 않았습니다.")
+            try:
+                masked_key = self.api_key[:4] + "*" * 10 if self.api_key else "None"
+                logger.debug(f"Gemini LLM 확인: Key={masked_key}")
+                self.client = genai.Client(api_key=self.api_key)
+                # logger.info("Gemini LLM 초기화 성공")
+            except Exception as e:
+                logger.error(f"Gemini 초기화 실패: {e}")
+
 
     async def analyze_news_sentiment(self, stock_name: str, news_items: List[Dict]) -> Optional[Dict]:
         """뉴스 감성 분석"""
