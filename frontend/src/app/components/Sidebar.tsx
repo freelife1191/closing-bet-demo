@@ -20,6 +20,14 @@ export default function Sidebar() {
         console.error("Failed to parse user profile from localStorage", e);
       }
     }
+
+    // Custom event listener for Header button
+    const handleOpenSettings = () => setIsSettingsOpen(true);
+    window.addEventListener('open-settings', handleOpenSettings);
+
+    return () => {
+      window.removeEventListener('open-settings', handleOpenSettings);
+    };
   }, []);
 
   const isActive = (path: string) => pathname === path;

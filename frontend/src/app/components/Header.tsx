@@ -61,7 +61,10 @@ export default function Header() {
         </div>
 
         {/* Notifications */}
-        <button className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors relative">
+        <button
+          onClick={() => window.dispatchEvent(new Event('open-settings'))}
+          className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors relative"
+        >
           <i className="far fa-bell text-lg"></i>
           <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-[#000000]"></span>
         </button>

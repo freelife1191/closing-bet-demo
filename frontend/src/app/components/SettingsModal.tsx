@@ -420,30 +420,10 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">GOOGLE CLIENT ID</label>
-                      <input
-                        type="text"
-                        value={envVars['GOOGLE_CLIENT_ID'] || ''}
-                        onChange={(e) => handleEnvChange('GOOGLE_CLIENT_ID', e.target.value)}
-                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-xs focus:outline-none focus:border-blue-500 transition-colors"
-                        placeholder="Client ID"
-                      />
+                  <div className="pt-4 border-t border-white/5">
+                    <div className="text-[11px] text-gray-500">
+                      Google Cloud Console에서 OAuth 2.0 자격 증명을 생성하여 서버 환경변수(Vercel 등)에 설정해야 합니다.
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">GOOGLE CLIENT SECRET</label>
-                      <input
-                        type="password"
-                        value={envVars['GOOGLE_CLIENT_SECRET'] || ''}
-                        onChange={(e) => handleEnvChange('GOOGLE_CLIENT_SECRET', e.target.value)}
-                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-xs focus:outline-none focus:border-blue-500 transition-colors"
-                        placeholder="Client Secret"
-                      />
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-gray-500">
-                    Google Cloud Console에서 OAuth 2.0 자격 증명을 생성하여 입력하세요. (로그인용)
                   </div>
                 </div>
               </section>
@@ -543,6 +523,73 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     <div className="mt-2 text-[11px] text-gray-500">
                       디스코드 채널 설정 &gt; 연동 &gt; 웹후크에서 생성한 URL을 입력하세요.
                     </div>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <i className="fas fa-envelope text-orange-400"></i>
+                  이메일 알림 (SMTP)
+                </h3>
+                <div className="bg-[#27272a] rounded-xl border border-white/5 p-5 space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Host</label>
+                      <input
+                        type="text"
+                        value={envVars['SMTP_HOST'] || ''}
+                        onChange={(e) => handleEnvChange('SMTP_HOST', e.target.value)}
+                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                        placeholder="smtp.gmail.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Port</label>
+                      <input
+                        type="text"
+                        value={envVars['SMTP_PORT'] || ''}
+                        onChange={(e) => handleEnvChange('SMTP_PORT', e.target.value)}
+                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                        placeholder="587"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP User (Email)</label>
+                    <input
+                      type="email"
+                      value={envVars['SMTP_USER'] || ''}
+                      onChange={(e) => handleEnvChange('SMTP_USER', e.target.value)}
+                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                      placeholder="your-email@gmail.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Password (App Password)</label>
+                    <input
+                      type="password"
+                      value={envVars['SMTP_PASSWORD'] || ''}
+                      onChange={(e) => handleEnvChange('SMTP_PASSWORD', e.target.value)}
+                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                      placeholder="abcd efgh ijkl mnop"
+                    />
+                    <div className="mt-2 text-[11px] text-gray-500">
+                      Gmail의 경우, 2단계 인증 설정 후 '앱 비밀번호'를 생성하여 입력해야 합니다. (공용 비밀번호 절대 불가)
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">수신 이메일 (콤마로 구분)</label>
+                    <input
+                      type="text"
+                      value={envVars['EMAIL_RECIPIENTS'] || ''}
+                      onChange={(e) => handleEnvChange('EMAIL_RECIPIENTS', e.target.value)}
+                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                      placeholder="me@example.com, boss@example.com"
+                    />
                   </div>
                 </div>
               </section>

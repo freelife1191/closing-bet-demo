@@ -29,11 +29,23 @@ class Messenger:
         self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
         # Email Config
-        self.smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        self.smtp_host = os.getenv('SMTP_HOST')
+        self.smtp_port = _safe_int(os.getenv('SMTP_PORT', '587'))
         self.smtp_user = os.getenv('SMTP_USER')
         self.smtp_password = os.getenv('SMTP_PASSWORD')
         self.email_recipients = [e.strip() for e in os.getenv('EMAIL_RECIPIENTS', '').split(',') if e.strip()]
+
+        # [USER REQUEST] 공용 키 사용량 0으로 설정 -> 개인 설정값 없으면 동작 안 하게 강제
+        # 만약 개인 설정이 없다면 disabled 처리 또는 로깅
+        if not any([self.telegram_token, self.discord_url, self.smtp_user]):
+            logger.warning("[Messenger] 개인 알림 설정이 감지되지 않았습니다. 알림 발송이 동작하지 않을 수 있습니다.")
+
+
+def _safe_int(val):
+    try:
+        return int(val)
+    except:
+        return 587
 
     def send_screener_result(self, result):
         """스크리너 결과 발송"""
