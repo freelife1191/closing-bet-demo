@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Environment
+.env
+
+# Logs
+logs/
+*.log
+
+# Data files
+data/*.csv
+data/*.json
+data/history/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated & Temp Files
+response.json
+.sisyphus/
+.ipynb_checkpoints/
+
+# Testing & Build
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/

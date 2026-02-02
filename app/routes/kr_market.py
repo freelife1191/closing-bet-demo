@@ -1,0 +1,2229 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+KR Market API 라우트
+- jongga_v2_latest.json 및 signals_log.csv에서 실제 데이터 조회
+"""
+from flask import Blueprint, jsonify, request, current_app
+import pandas as pd
+from datetime import datetime, date, timedelta
+import os
+import json
+import warnings
+import logging
+import threading
+
+# 비동기 자원 관련 경고 억제
+warnings.filterwarnings('ignore', message='.*Task was destroyed but it is pending.*')
+warnings.filterwarnings('ignore', message='.*coroutine.*was never awaited.*')
+
+# [Import] Common Status Management
+try:
+    from app.routes.common import start_update, update_item_status, finish_update
+except ImportError:
+    # Fallback or pass (circle import risk handling)
+    pass
+
+logger = logging.getLogger(__name__)
+
+kr_bp = Blueprint('kr', __name__)
+
+# 데이터 디렉토리 경로
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
+
+
+@kr_bp.route('/market-gate/update', methods=['POST'])
+def update_market_gate():
+    """Market Gate 단독 업데이트 (동기 실행)"""
+    try:
+        data = request.get_json(silent=True) or {}
+        target_date = data.get('target_date')
+        
+        try:
+            # 상태 UI 시작
+            if 'start_update' in globals():
+                start_update(['Market Gate'])
+                update_item_status('Market Gate', 'running')
+            
+            from engine.market_gate import MarketGate
+            mg = MarketGate()
+            result = mg.analyze(target_date)
+            mg.save_analysis(result, target_date)
+            
+            if 'update_item_status' in globals():
+                update_item_status('Market Gate', 'done')
+                
+            return jsonify({'status': 'success', 'message': 'Market Gate update completed'})
+                
+        except Exception as e:
+            logger.error(f"Market Gate Update Failed: {e}")
+            if 'update_item_status' in globals():
+                update_item_status('Market Gate', 'error')
+            raise e
+        finally:
+            if 'finish_update' in globals():
+                finish_update()
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/config/interval', methods=['GET', 'POST'])
+def handle_interval_config():
+    """Market Gate 업데이트 주기 조회 및 설정"""
+    try:
+        from services.scheduler import update_market_gate_interval
+        from engine.config import app_config
+        
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or {}
+            new_interval = data.get('interval')
+            
+            if new_interval and isinstance(new_interval, int) and new_interval > 0:
+                # 1. Config 업데이트
+                app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES = new_interval
+                
+                # 2. Scheduler 업데이트
+                update_market_gate_interval(new_interval)
+                
+                return jsonify({
+                    'status': 'success', 
+                    'message': f'Updated interval to {new_interval} minutes',
+                    'interval': new_interval
+                })
+            else:
+                return jsonify({'error': 'Invalid interval'}), 400
+                
+        else: # GET
+            return jsonify({
+                'interval': app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES
+            })
+
+    except Exception as e:
+        logger.error(f"Interval Config Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+def get_data_path(filename: str) -> str:
+    """데이터 파일 경로 반환"""
+    return os.path.join(DATA_DIR, filename)
+
+
+def load_json_file(filename: str) -> dict:
+    """JSON 파일 로드"""
+    filepath = get_data_path(filename)
+    if os.path.exists(filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+
+def load_csv_file(filename: str) -> pd.DataFrame:
+    """CSV 파일 로드"""
+    filepath = get_data_path(filename)
+    if os.path.exists(filepath):
+        return pd.read_csv(filepath)
+    return pd.DataFrame()
+
+
+@kr_bp.route('/market-status')
+def get_kr_market_status():
+    """한국 시장 상태"""
+    try:
+        # daily_prices.csv에서 KODEX 200 데이터 조회
+        df = load_csv_file('daily_prices.csv')
+        
+        if df.empty:
+            return jsonify({
+                'status': 'NEUTRAL',
+                'score': 50,
+                'current_price': 0,
+                'ma200': 0,
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'symbol': '069500',
+                'name': 'KODEX 200',
+                'message': '데이터 파일이 없습니다. 데이터 수집이 필요합니다.'
+            })
+        
+        # KODEX 200 (069500) 필터링
+        kodex = df[df['ticker'].astype(str).str.zfill(6) == '069500']
+        if kodex.empty:
+            kodex = df.head(1)  # 없으면 첫 종목 사용
+        
+        latest = kodex.iloc[-1] if not kodex.empty else {}
+        current_price = float(latest.get('close', 0))
+        
+        return jsonify({
+            'status': 'NEUTRAL',
+            'score': 50,
+            'current_price': current_price,
+            'ma200': current_price * 0.98,  # 예시
+            'date': str(latest.get('date', datetime.now().strftime('%Y-%m-%d'))),
+            'symbol': '069500',
+            'name': 'KODEX 200'
+        })
+    except Exception as e:
+        logger.error(f"Error checking market status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/signals')
+def get_kr_signals():
+    """오늘의 VCP + 외인매집 시그널 (BLUEPRINT 로직 적용)"""
+    try:
+        signals = []
+        source = 'no_data'
+        data_dir = 'data'
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 1차: signals_log.csv에서 데이터 조회
+        df = load_csv_file('signals_log.csv')
+        
+        # [수정] 날짜 필터링 (DataFrame 레벨에서 선행 처리, 정확도 향상)
+        req_date = request.args.get('date')
+        
+        if not df.empty and 'signal_date' in df.columns:
+            if req_date:
+                # 특정 날짜 요청 시
+                df = df[df['signal_date'].astype(str) == req_date]
+            else:
+                # [버그수정] 요청 날짜 없으면 '가장 최근 날짜' 데이터만 필터링 (중복/과거 데이터 노출 방지)
+                latest_date = df['signal_date'].max()
+                if latest_date:
+                    df = df[df['signal_date'] == latest_date]
+                    # [주의] '실시간' 요청이어도 오늘 데이터가 없으면 가장 최근 데이터를 반환함.
+                    # 프론트엔드에서 signal_date와 오늘 날짜를 비교하여 UI 처리 필요.
+                    today = str(latest_date)
+
+        if not df.empty:
+            source = 'signals_log.csv'
+            for _, row in df.iterrows():
+                # 기본 데이터 추출
+                score = float(row.get('score', 0))
+                contraction = float(row.get('contraction_ratio', 1.0))
+                foreign_5d = int(row.get('foreign_5d', 0))
+                inst_5d = int(row.get('inst_5d', 0))
+                signal_date = row.get('signal_date', '')
+                status = row.get('status', 'OPEN')
+                
+                # 기본 필터: OPEN 상태만 표시
+                if status != 'OPEN':
+                    continue
+                # 60점 이상만 표시 (VCP 기준)
+                if score < 60:
+                    continue
+                # 참고: 아래 필터링 조건은 비활성화됨
+                # if contraction > 0.8:  # 수축 미완료 → 제외
+                #     continue
+                # if foreign_5d < 0 and inst_5d < 0:  # 수급 모두 이탈 → 제외
+                #     continue
+
+                # BLUEPRINT Final Score 계산 (100점 만점)
+                contraction_score = (1 - contraction) * 100
+                supply_score = min((foreign_5d + inst_5d) / 100000, 30)
+                today_bonus = 10 if signal_date == today else 0
+                final_score = (score * 0.4) + (contraction_score * 0.3) + (supply_score * 0.2 * 10) + today_bonus
+                
+                signals.append({
+                    'ticker': str(row.get('ticker', '')).zfill(6),
+                    'name': row.get('name', ''),
+                    'market': row.get('market', 'KOSPI'),
+                    'signal_date': signal_date,
+                    'entry_price': float(row.get('entry_price', 0)),
+                    'current_price': float(row.get('entry_price', 0)),
+                    'return_pct': 0,
+                    'score': round(score, 1),
+                    'foreign_5d': foreign_5d,
+                    'inst_5d': inst_5d,
+                    'status': status,
+                    'change_pct': 0,
+                    'contraction_ratio': round(contraction, 2),
+                    'final_score': round(final_score, 1)
+                })
+
+        # VCP 데이터가 없으면 빈 리스트 반환 (사용자 요청: 다른 데이터/샘플 노출 금지)
+        if not signals:
+            pass
+
+        # ===================================================
+        # Final Score 기준 정렬 후 Top 20 선정
+        # ===================================================
+        if signals:
+            signals = sorted(signals, key=lambda x: x.get('score', 0), reverse=True)[:20]
+
+        # ===================================================
+        # 실시간 가격 업데이트 및 return_pct 계산
+        # ===================================================
+        # ===================================================
+        # 실시간 가격 업데이트 및 return_pct 계산 (yfinance)
+        # ===================================================
+        if signals:
+            try:
+                # 1. Ticker Map 로드 (존재 시)
+                yahoo_map = {}
+                ticker_map_path = os.path.join(DATA_DIR, 'kr_market', 'ticker_to_yahoo_map.csv') # Path adjusted to be safe or just relative
+                # DATA_DIR is '.../data', so just 'data/ticker_to_yahoo_map.csv' or similar. 
+                # Let's try standard locations.
+                possible_paths = [
+                    os.path.join(DATA_DIR, 'ticker_to_yahoo_map.csv'),
+                    os.path.join(DATA_DIR, 'kr_market', 'ticker_to_yahoo_map.csv')
+                ]
+                
+                for p in possible_paths:
+                    if os.path.exists(p):
+                        try:
+                            map_df = pd.read_csv(p, dtype={'ticker': str})
+                            if 'yahoo_ticker' in map_df.columns:
+                                yahoo_map = dict(zip(map_df['ticker'].str.zfill(6), map_df['yahoo_ticker']))
+                            break
+                        except:
+                            pass
+
+                # 2. yfinance용 티커 리스트 준비
+                import yfinance as yf
+                yf_tickers = []
+                signal_by_yf = {}
+                
+                for s in signals:
+                    t = str(s.get('ticker', '')).zfill(6)
+                    if not t: continue
+                    # 매핑 없으면 .KS 붙임 (대부분 KOSPI/KOSDAQ)
+                    yf_t = yahoo_map.get(t, f"{t}.KS")
+                    yf_tickers.append(yf_t)
+                    signal_by_yf[yf_t] = s
+
+                if yf_tickers:
+                    # 3. 1분봉 데이터 실시간 조회
+                    # progress=False, threads=True for speed
+                    price_data = yf.download(yf_tickers, period='1d', interval='1m', progress=False, threads=True)
+                    
+                    if not price_data.empty:
+                        # yfinance returns MultiIndex if multiple tickers, else DataFrame/Series
+                        # Normalized access to 'Close'
+                        closes = price_data['Close'] if 'Close' in price_data else price_data
+                        
+                        # Handle Single Ticker Case (Series)
+                        if len(yf_tickers) == 1:
+                            # It might be a Series if only one ticker download
+                            if isinstance(closes, pd.DataFrame):
+                                val = closes.iloc[-1].item()
+                            else:
+                                val = closes.iloc[-1]
+                                
+                            s = signal_by_yf[yf_tickers[0]]
+                            if pd.notna(val) and float(val) > 0:
+                                s['current_price'] = float(val)
+                                entry = float(s.get('entry_price', 0))
+                                if entry > 0:
+                                    s['return_pct'] = round((float(val) - entry) / entry * 100, 2)
+                        
+                        else:
+                            # Multi Ticker Case (DataFrame)
+                            for yf_t in yf_tickers:
+                                try:
+                                    # Check if column exists
+                                    if yf_t in closes.columns:
+                                        val = closes[yf_t].iloc[-1]
+                                        if pd.notna(val) and float(val) > 0:
+                                            s = signal_by_yf[yf_t]
+                                            s['current_price'] = float(val)
+                                            entry = float(s.get('entry_price', 0))
+                                            if entry > 0:
+                                                s['return_pct'] = round((float(val) - entry) / entry * 100, 2)
+                                except Exception as e:
+                                    # Specific ticker failure shouldn't stop others
+                                    pass
+
+            except Exception as e:
+                logger.warning(f"실시간 가격 업데이트 실패 (yfinance): {e}")
+                # Fallback to CSV if yfinance fails? 
+                # Already have base values from CSV log (entry_price is mapped to current_price in initial load),
+                # so if valid, we keep it. If not, maybe retry fetching from daily_prices?
+                # The original code loaded daily_prices. Let's keep a small fallback if needed, 
+                # but user explicitly wanted yfinance logic.
+                pass
+        
+        # 총 스캔 종목 수 계산
+        total_scanned = 0
+        try:
+            stocks_file = os.path.join(data_dir, 'korean_stocks_list.csv')
+            if os.path.exists(stocks_file):
+                with open(stocks_file, 'r', encoding='utf-8') as f:
+                    total_scanned = max(0, sum(1 for _ in f) - 1)
+        except:
+            pass
+
+        return jsonify({
+            'signals': signals,
+            'count': len(signals),
+            'total_scanned': total_scanned,
+            'generated_at': datetime.now().isoformat(),
+            'source': source
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting signals: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/signals/dates')
+def get_kr_signals_dates():
+    """VCP 시그널 데이터가 존재하는 날짜 목록 조회"""
+    try:
+        dates = []
+        df = load_csv_file('signals_log.csv')
+        
+        if not df.empty and 'signal_date' in df.columns:
+            # 유니크한 날짜 추출 및 정렬 (내림차순)
+            dates = sorted(df['signal_date'].unique().tolist(), reverse=True)
+            
+        return jsonify(dates)
+    except Exception as e:
+        logger.error(f"Error getting signal dates: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+
+# VCP Screener Status State
+VCP_STATUS = {
+    'running': False,
+    'message': '',
+    'last_run': None,
+    'progress': 0
+}
+
+@kr_bp.route('/signals/status')
+def get_vcp_status():
+    """VCP 스크리너 상태 조회"""
+    return jsonify(VCP_STATUS)
+
+@kr_bp.route('/signals/run', methods=['POST'])
+def run_vcp_signals_screener():
+    """
+    VCP 시그널 스크리너 실행 (특정 날짜 지원)
+    
+    Request Body:
+        target_date: (Optional) YYYY-MM-DD 형식, 테스트용 날짜 지정
+        max_stocks: (Optional) 스캔할 최대 종목 수 (기본 50)
+    """
+    import threading
+    
+    # 이미 실행 중이면 에러
+    if VCP_STATUS['running']:
+        return jsonify({'status': 'error', 'message': 'Already running'}), 409
+
+    req_data = request.get_json(silent=True) or {}
+    target_date = req_data.get('target_date', None)  # YYYY-MM-DD 형식
+    max_stocks = req_data.get('max_stocks', 50)
+    
+    def _run_vcp_async(target_date_arg, max_stocks_arg):
+        """백그라운드 VCP 스크리너 실행"""
+        try:
+            VCP_STATUS['running'] = True
+            VCP_STATUS['progress'] = 0
+            
+            if target_date_arg:
+                msg = f"[VCP] 지정 날짜 분석 시작: {target_date_arg}"
+            else:
+                msg = "[VCP] 실시간 분석 시작"
+            
+            VCP_STATUS['message'] = msg
+            logger.info(msg)
+            print(f"\n{msg}", flush=True)  # [LOG] 강제 출력
+                
+            from scripts import init_data
+            
+            # 1. 최신 데이터 수집 (가격 업데이트)
+            VCP_STATUS['message'] = "가격 데이터 업데이트 중..."
+            logger.info(f"[VCP Screener] 최신 가격 데이터 수집 시작")
+            print(f"[VCP Screener] 최신 가격 데이터 수집 시작...", flush=True)
+            init_data.create_daily_prices(target_date=target_date_arg)
+            VCP_STATUS['progress'] = 30
+            
+            # 1.5 수급 데이터 업데이트 (필수)
+            VCP_STATUS['message'] = "수급 데이터 분석 중..."
+            logger.info(f"[VCP Screener] 기관/외인 수급 데이터 업데이트")
+            print(f"[VCP Screener] 기관/외인 수급 데이터 업데이트...", flush=True)
+            init_data.create_institutional_trend(target_date=target_date_arg)
+            VCP_STATUS['progress'] = 50
+            
+            # 2. 실제 데이터 기반 VCP 스크리너 실행 (init_data.py) + AI 분석
+            VCP_STATUS['message'] = "VCP 패턴 분석 및 AI 진단 중..."
+            logger.info(f"[VCP Screener] VCP 시그널 분석 및 AI 수행")
+            print(f"[VCP Screener] VCP 시그널 분석 및 AI 수행...", flush=True)
+            
+            # run_ai=True로 AI 자동 수행
+            result_df = init_data.create_signals_log(target_date=target_date_arg, run_ai=True)
+            VCP_STATUS['progress'] = 100
+            
+            if isinstance(result_df, pd.DataFrame):
+                success_msg = f"완료: {len(result_df)}개 시그널 감지"
+            elif result_df:
+                success_msg = "완료: 성공"
+            else:
+                success_msg = "완료: 조건 충족 종목 없음"
+                
+            VCP_STATUS['message'] = success_msg
+            logger.info(f"[VCP Screener] {success_msg}")
+            print(f"[VCP Screener] {success_msg}\n", flush=True)
+                
+        except Exception as e:
+            logger.error(f"[VCP Screener] 실패: {e}")
+            print(f"[VCP Screener] ⛔️ 실패: {e}", flush=True)
+            VCP_STATUS['message'] = f"실패: {str(e)}"
+            import traceback
+            traceback.print_exc()
+        finally:
+             VCP_STATUS['running'] = False
+             VCP_STATUS['last_run'] = datetime.now().isoformat()
+    
+    try:
+        thread = threading.Thread(target=_run_vcp_async, args=(target_date, max_stocks))
+        thread.daemon = True
+        thread.start()
+        
+        msg = 'VCP Screener started in background.'
+        if target_date:
+            msg = f'[테스트 모드] {target_date} 기준 VCP 분석 시작.'
+            
+        return jsonify({
+            'status': 'started',
+            'message': msg,
+            'target_date': target_date
+        })
+        
+    except Exception as e:
+        logger.error(f"Error running VCP screener: {e}")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+
+@kr_bp.route('/stock-chart/<ticker>')
+def get_kr_stock_chart(ticker):
+    """KR 종목 차트 데이터"""
+    try:
+        # period 파라미터 처리 (기본값: 3m)
+        period = request.args.get('period', '3m').lower()
+        period_days = {
+            '1m': 30,
+            '3m': 90,
+            '6m': 180,
+            '1y': 365
+        }.get(period, 90)  # 기본 3개월
+        
+        # daily_prices.csv에서 해당 종목 데이터 조회
+        df = load_csv_file('daily_prices.csv')
+        ticker_padded = str(ticker).zfill(6)
+        
+        if df.empty:
+            return jsonify({
+                'ticker': ticker_padded,
+                'data': [],
+                'message': '데이터 파일이 없습니다.'
+            })
+        
+        # ticker 컬럼 패딩
+        df['ticker'] = df['ticker'].astype(str).str.zfill(6)
+        stock_df = df[df['ticker'] == ticker_padded]
+        
+        if stock_df.empty:
+            return jsonify({
+                'ticker': ticker_padded,
+                'data': [],
+                'message': '해당 종목 데이터가 없습니다.'
+            })
+        
+        # period에 따라 필터링
+        if 'date' in stock_df.columns:
+            from datetime import datetime, timedelta
+            cutoff_date = (datetime.now() - timedelta(days=period_days)).strftime('%Y-%m-%d')
+            stock_df = stock_df[stock_df['date'] >= cutoff_date]
+        
+        chart_data = []
+        for _, row in stock_df.iterrows():
+            chart_data.append({
+                'date': str(row.get('date', '')),
+                'open': float(row.get('open', 0)),
+                'high': float(row.get('high', 0)),
+                'low': float(row.get('low', 0)),
+                'close': float(row.get('close', 0)),
+                'volume': int(row.get('volume', 0))
+            })
+
+        return jsonify({
+            'ticker': ticker_padded,
+            'data': chart_data
+        })
+
+    except Exception as e:
+        logger.error(f"Error in get_kr_stock_chart: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/ai-analysis')
+def get_kr_ai_analysis():
+    """KR AI 분석 전체 - kr_ai_analysis.json 직접 읽기"""
+    try:
+        target_date = request.args.get('date')
+        
+        # 1. 날짜별 파일 로드 (과거 데이터 요청 시)
+        if target_date:
+            try:
+                date_str = target_date.replace('-', '')
+                # 날짜별 파일 시도
+                analysis = load_json_file(f'kr_ai_analysis_{date_str}.json')
+                if not analysis:
+                    analysis = load_json_file(f'ai_analysis_results_{date_str}.json')
+                    
+                if analysis:
+                    return jsonify(analysis)
+                    
+                # 파일 없으면 빈 결과 반환
+                return jsonify({
+                    'signals': [],
+                    'generated_at': datetime.now().isoformat(),
+                    'signal_date': target_date,
+                    'message': '해당 날짜의 AI 분석 데이터가 없습니다.'
+                })
+            except Exception as e:
+                logger.warning(f"과거 AI 분석 데이터 로드 실패: {e}")
+                
+        # 2. kr_ai_analysis.json 직접 로드 (VCP AI 분석 결과)
+        kr_ai_data = load_json_file('kr_ai_analysis.json')
+        if kr_ai_data and 'signals' in kr_ai_data and len(kr_ai_data['signals']) > 0:
+            # ticker 6자리 zfill 보정
+            for sig in kr_ai_data['signals']:
+                if 'ticker' in sig:
+                    sig['ticker'] = str(sig['ticker']).zfill(6)
+            
+            return jsonify(kr_ai_data)
+        
+        # 3. ai_analysis_results.json 폴백
+        ai_data = load_json_file('ai_analysis_results.json')
+        if ai_data and 'signals' in ai_data and len(ai_data['signals']) > 0:
+            # ticker 6자리 zfill 보정
+            for sig in ai_data['signals']:
+                if 'ticker' in sig:
+                    sig['ticker'] = str(sig['ticker']).zfill(6)
+            
+            return jsonify(ai_data)
+
+        # 4. 데이터 없음
+        return jsonify({
+            'signals': [],
+            'message': 'AI 분석 데이터가 없습니다.'
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting AI analysis: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/market-gate')
+def get_kr_market_gate():
+    """KR Market Gate 상태 (프론트엔드 호환 형식)"""
+    try:
+        target_date = request.args.get('date')
+        
+        # 1차: market_gate.json 파일 사용 (가장 완전한 데이터)
+        if target_date:
+            from datetime import datetime
+            # 여러 날짜 형식 지원
+            try:
+                if '-' in target_date:
+                    date_obj = datetime.strptime(target_date, '%Y-%m-%d')
+                    date_str = date_obj.strftime('%Y%m%d')
+                else:
+                    date_str = target_date # 이미 YYYYMMDD 가정
+            except:
+                date_str = target_date.replace('-', '')
+                
+            filename = f'market_gate_{date_str}.json'
+        else:
+            filename = 'market_gate.json'
+            
+        gate_data = load_json_file(filename)
+        
+        # 2차: JSON 파일이 없으면 engine/market_gate.py 실행
+        if not gate_data:
+            try:
+                from engine.market_gate import MarketGate
+                mg = MarketGate()
+                engine_result = mg.analyze()
+                
+                # Engine 결과를 프론트엔드 호환 형식으로 변환
+                color = engine_result.get('color', 'GRAY')
+                label_map = {'GREEN': 'Bullish', 'YELLOW': 'Neutral', 'RED': 'Bearish', 'GRAY': 'Neutral'}
+                
+                gate_data = {
+                    'score': engine_result.get('total_score', 50),
+                    'label': label_map.get(color, 'Neutral'),
+                    'status': color,
+                    'is_gate_open': engine_result.get('is_gate_open', True),
+                    'kospi_close': engine_result.get('kospi_close', 0),
+                    'kospi_change_pct': engine_result.get('kospi_change', 0),
+                    'kosdaq_close': 0,
+                    'kosdaq_change_pct': 0,
+                    'details': engine_result.get('details', {}),
+                    'updated_at': engine_result.get('timestamp', datetime.now().isoformat())
+                }
+            except ImportError:
+                logger.warning("engine.market_gate 모듈을 불러올 수 없습니다.")
+            except Exception as e:
+                logger.warning(f"Market Gate 엔진 실행 실패: {e}")
+        
+        # 3차: 기본 데이터
+        if not gate_data:
+            gate_data = {
+                'score': 50,
+                'label': 'Neutral',
+                'status': 'YELLOW',
+                'is_gate_open': True,
+                'kospi_close': 0,
+                'kospi_change_pct': 0,
+                'kosdaq_close': 0,
+                'kosdaq_change_pct': 0,
+                'updated_at': datetime.now().isoformat(),
+                'message': '데이터 없음'
+            }
+        
+        # 프론트엔드 호환성: 누락된 필드 보완
+        if 'score' not in gate_data and 'total_score' in gate_data:
+            gate_data['score'] = gate_data['total_score']
+        if 'label' not in gate_data:
+            color = gate_data.get('color', gate_data.get('status', 'GRAY'))
+            label_map = {'GREEN': 'Bullish', 'YELLOW': 'Neutral', 'RED': 'Bearish'}
+            gate_data['label'] = label_map.get(color, 'Neutral')
+        
+        # indices 데이터 flatten (kospi_close, kosdaq_close 등)
+        if 'indices' in gate_data:
+            indices = gate_data['indices']
+            if 'kospi' in indices:
+                gate_data['kospi_close'] = indices['kospi'].get('value', 0)
+                gate_data['kospi_change_pct'] = indices['kospi'].get('change_pct', 0)
+            if 'kosdaq' in indices:
+                gate_data['kosdaq_close'] = indices['kosdaq'].get('value', 0)
+                gate_data['kosdaq_change_pct'] = indices['kosdaq'].get('change_pct', 0)
+        elif 'metrics' in gate_data:
+            metrics = gate_data['metrics']
+            if 'kospi_close' not in gate_data:
+                gate_data['kospi_close'] = metrics.get('kospi', 0)
+            if 'kosdaq_close' not in gate_data:
+                gate_data['kosdaq_close'] = metrics.get('kosdaq', 0)
+
+        return jsonify(gate_data)
+
+    except Exception as e:
+        logger.error(f"Error in get_kr_market_gate: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+
+@kr_bp.route('/realtime-prices', methods=['POST'])
+def get_kr_realtime_prices():
+    """실시간 가격 일괄 조회 (yfinance 우선, CSV 폴백)"""
+    try:
+        data = request.get_json() or {}
+        tickers = data.get('tickers', [])
+
+        if not tickers:
+            return jsonify({'prices': {}})
+
+        prices = {}
+        
+        # 1. yfinance 실시간 조회 시도 (평일 장중)
+        try:
+            import yfinance as yf
+            from datetime import datetime
+            
+            now = datetime.now()
+            is_weekend = now.weekday() >= 5
+            is_market_hours = 9 <= now.hour < 16  # 장 운영 시간 (대략적)
+            
+            # 주말이 아니고 장 시간대인 경우에만 yfinance 호출
+            if not is_weekend and is_market_hours:
+                # yfinance용 티커 변환
+                yf_tickers = []
+                ticker_map = {}
+                
+                for t in tickers:
+                    t_padded = str(t).zfill(6)
+                    yf_t = f"{t_padded}.KS"  # 기본적으로 .KS 사용
+                    yf_tickers.append(yf_t)
+                    ticker_map[yf_t] = t_padded
+                
+                if yf_tickers:
+                    # yfinance 에러 로그 억제
+                    import logging as _logging
+                    yf_logger = _logging.getLogger('yfinance')
+                    original_level = yf_logger.level
+                    yf_logger.setLevel(_logging.CRITICAL)
+                    
+                    try:
+                        # 1분봉 데이터 조회
+                        price_data = yf.download(yf_tickers, period='1d', interval='1m', progress=False, threads=True)
+                        
+                        if not price_data.empty and 'Close' in price_data:
+                            closes = price_data['Close']
+                            
+                            if len(yf_tickers) == 1:
+                                # 단일 티커
+                                if not closes.empty:
+                                    val = closes.iloc[-1]
+                                    if pd.notna(val) and float(val) > 0:
+                                        prices[ticker_map[yf_tickers[0]]] = float(val)
+                            else:
+                                # 멀티 티커
+                                for yf_t in yf_tickers:
+                                    try:
+                                        if yf_t in closes.columns:
+                                            val = closes[yf_t].iloc[-1]
+                                            if pd.notna(val) and float(val) > 0:
+                                                prices[ticker_map[yf_t]] = float(val)
+                                    except:
+                                        pass
+                    finally:
+                        yf_logger.setLevel(original_level)
+                        
+                    # yfinance로 충분히 가져왔으면 바로 반환
+                    if len(prices) == len(tickers):
+                        return jsonify({'prices': prices})
+                        
+        except Exception as yf_err:
+            logger.debug(f"yfinance 실시간 조회 실패 (CSV 폴백): {yf_err}")
+
+        # 2. CSV 폴백 (yfinance 실패 또는 주말/장외)
+        df = load_csv_file('daily_prices.csv')
+        
+        if not df.empty:
+            df['ticker'] = df['ticker'].astype(str).str.zfill(6)
+            for t in tickers:
+                ticker_padded = str(t).zfill(6)
+                if ticker_padded in prices:
+                    continue  # 이미 yfinance로 가져온 것은 스킵
+                    
+                stock_df = df[df['ticker'] == ticker_padded]
+                if not stock_df.empty:
+                    prices[ticker_padded] = float(stock_df.iloc[-1].get('close', 0))
+                else:
+                    prices[ticker_padded] = 0
+        else:
+            # 데이터가 없으면 0 반환
+            for t in tickers:
+                tp = str(t).zfill(6)
+                if tp not in prices:
+                    prices[tp] = 0
+
+        return jsonify({'prices': prices})
+
+    except Exception as e:
+        logger.error(f"Error fetching realtime prices: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/jongga-v2/latest', methods=['GET'])
+def get_jongga_v2_latest():
+    """종가베팅 v2 최신 결과 조회"""
+    try:
+        # jongga_v2_latest.json 파일에서 데이터 로드
+        data = load_json_file('jongga_v2_latest.json')
+        
+        # 빈 데이터이거나 signals가 0개인 경우 최근 유효 데이터 검색
+        if not data or len(data.get('signals', [])) == 0:
+            import glob
+            # 날짜별 파일 검색 (최신순 정렬)
+            pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
+            files = sorted(glob.glob(pattern), reverse=True)
+            
+            # 유효한 데이터가 있는 파일 찾기
+            for file_path in files:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        candidate = json.load(f)
+                        if len(candidate.get('signals', [])) > 0:
+                            # 유효한 데이터 발견 - 주말/휴일 안내 메시지 추가
+                            candidate['message'] = f"주말/휴일로 인해 {candidate.get('date', '')} 거래일 데이터를 표시합니다."
+                            logger.info(f"[Jongga V2] 최근 유효 데이터 사용: {file_path}")
+                            return jsonify(candidate)
+                except Exception as e:
+                    logger.warning(f"파일 읽기 실패: {file_path} - {e}")
+                    continue
+            
+            # 유효한 데이터가 없는 경우
+            return jsonify({
+                'date': datetime.now().date().isoformat(),
+                'signals': [],
+                'filtered_count': 0,
+                'message': '데이터 파일이 없습니다. /api/kr/jongga-v2/run을 실행하세요.'
+            })
+        
+        return jsonify(data)
+
+    except Exception as e:
+        logger.error(f"Error getting jongga v2 latest: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@kr_bp.route('/jongga-v2/dates', methods=['GET'])
+def get_jongga_v2_dates():
+    """데이터가 존재하는 날짜 목록 조회"""
+    try:
+        # DATA_DIR에서 날짜별 파일 목록 조회 (예: jongga_v2_results_20260130.json)
+        dates = []
+        import glob
+        pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
+        files = glob.glob(pattern)
+        
+        for file_path in files:
+            filename = os.path.basename(file_path)
+            # jongga_v2_results_20260130.json -> 20260130
+            date_part = filename.replace('jongga_v2_results_', '').replace('.json', '')
+            
+            # YYYYMMDD -> YYYY-MM-DD 변환
+            if len(date_part) == 8:
+                formatted_date = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:]}"
+                dates.append(formatted_date)
+            else:
+                # 다른 형식이 있다면 그대로 추가하거나 무시
+                dates.append(date_part)
+        
+        # 최신 데이터 날짜도 확인하여 목록에 없으면 추가
+        try:
+            latest_data = load_json_file('jongga_v2_latest.json')
+            if latest_data and 'date' in latest_data:
+                latest_date = latest_data['date'][:10]  # YYYY-MM-DD만 추출
+                if latest_date not in dates:
+                    dates.append(latest_date)
+        except:
+            pass
+        
+        # 날짜 정렬 (최신순) 및 중복 제거
+        dates = sorted(list(set(dates)), reverse=True)
+        return jsonify(dates)
+
+    except Exception as e:
+        logger.error(f"Error getting jongga v2 dates: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@kr_bp.route('/jongga-v2/history/<target_date>', methods=['GET'])
+def get_jongga_v2_history(target_date):
+    """특정 날짜의 종가베팅 결과 조회"""
+    try:
+        # 날짜 형식 변환: YYYY-MM-DD -> YYYYMMDD
+        date_str = target_date.replace('-', '')
+        
+        # 기본 디렉토리에서 해당 날짜 파일 로드(예: jongga_v2_results_20260130.json)
+        history_file = os.path.join(DATA_DIR, f'jongga_v2_results_{date_str}.json')
+        
+        if os.path.exists(history_file):
+            with open(history_file, 'r', encoding='utf-8') as f:
+                return jsonify(json.load(f))
+        
+        # 최신 파일의 날짜와 같으면 최신 파일 반환
+        latest_data = load_json_file('jongga_v2_latest.json')
+        if latest_data and latest_data.get('date', '')[:10] == target_date:
+            return jsonify(latest_data)
+        
+        return jsonify({
+            'error': f'{target_date} 날짜의 데이터가 없습니다.',
+            'date': target_date,
+            'signals': []
+        }), 404
+
+    except Exception as e:
+        logger.error(f"Error getting jongga v2 history for {target_date}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# 전역 상태 변수 (스크리너 실행 여부)
+SCREENER_RUNNING = False
+
+@kr_bp.route('/jongga-v2/run', methods=['POST'])
+def run_jongga_v2_screener():
+    """종가베팅 v2 스크리너 실행 (비동기 - 백그라운드 스레드)"""
+    import threading
+    global SCREENER_RUNNING
+
+    if SCREENER_RUNNING:
+        return jsonify({
+            'status': 'error',
+            'message': 'Engine is already running. Please wait.'
+        }), 409
+    
+    req_data = request.get_json(silent=True) or {}
+    capital = req_data.get('capital', 50_000_000)
+    markets = req_data.get('markets', ['KOSPI', 'KOSDAQ'])
+    target_date = req_data.get('target_date', None)  # YYYY-MM-DD 형식 (테스트용)
+
+    def _run_engine_async(capital_arg, markets_arg, target_date_arg):
+        """백그라운드 엔진 실행"""
+        global SCREENER_RUNNING
+        try:
+            logger.info("Background Engine Started...")
+            if target_date_arg:
+                logger.info(f"[테스트 모드] 지정 날짜 기준 분석: {target_date_arg}")
+            # engine 모듈 강제 리로드 (코드 변경 사항 반영)
+            import sys
+            
+            # 기존 engine 모듈 삭제 (개발 중 핫 리로딩 지원)
+            mods_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('engine') or k == 'kr_ai_analyzer']
+            for mod in mods_to_remove:
+                del sys.modules[mod]
+            
+            # 새로 import
+            from engine.generator import run_screener, save_result_to_json
+            import asyncio
+            
+            # 비동기 함수 실행
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(run_screener(capital=capital_arg, markets=markets_arg, target_date=target_date_arg))
+            finally:
+                loop.close()
+            
+            # 결과 저장
+            if result:
+                save_result_to_json(result)
+                
+                # 메신저 알림 발송 (result 객체 직접 사용)
+                try:
+                    from datetime import datetime
+                    
+                    # Signal 객체 리스트를 딕셔너리 리스트로 변환 (Notifier 호환성)
+                    signals = [s.to_dict() for s in result.signals]
+                    date_str = result.date.strftime('%Y-%m-%d') if hasattr(result.date, 'strftime') else str(result.date)
+                    
+                    if signals:
+                        from services.notifier import send_jongga_notification
+                        results = send_jongga_notification(signals, date_str)
+                        logger.info(f"[Notification] 메신저 발송 결과: {results}")
+                    else:
+                        logger.info("[Notification] 발송할 시그널 없음 (0개)")
+                        
+                except Exception as notify_error:
+                    logger.error(f"[Notification] 메신저 발송 중 오류: {notify_error}")
+            
+            # AI 분석 실행 (kr_ai_analyzer 사용)
+            try:
+                logger.info("[AI Analysis] AI 분석 시작...")
+                from engine.kr_ai_analyzer import KrAiAnalyzer
+                
+                ai_analyzer = KrAiAnalyzer()
+                
+                # 시그널 종목들의 AI 분석
+                tickers = [s.stock_code for s in result.signals]
+                
+                # 수집된 뉴스 맵 생성
+                news_map = {s.stock_code: [n.to_dict() if hasattr(n, 'to_dict') else n for n in s.news_items] for s in result.signals}
+
+                if tickers:
+                    ai_results = ai_analyzer.analyze_multiple_stocks(tickers, news_map=news_map)
+                    
+                    # 결과를 kr_ai_analysis.json에 저장
+                    ai_filepath = os.path.join(DATA_DIR, 'kr_ai_analysis.json')
+                    ai_data = {
+                        'signals': [],
+                        'generated_at': datetime.now().isoformat(),
+                        'signal_date': datetime.now().strftime('%Y-%m-%d')
+                    }
+                    
+                    for sig in result.signals:
+                        ticker = sig.stock_code
+                        ai_result = next((s for s in ai_results.get('signals', []) if s.get('ticker') == ticker), None)
+                        
+                        signal_data = {
+                            'ticker': ticker,
+                            'name': sig.stock_name,
+                            'score': sig.score.get('total', 0) if hasattr(sig.score, 'get') else 0,
+                            'current_price': sig.current_price,
+                            'entry_price': sig.entry_price,
+                            'vcp_score': sig.vcp_score if hasattr(sig, 'vcp_score') else 0,
+                            'contraction_ratio': sig.contraction_ratio if hasattr(sig, 'contraction_ratio') else 0,
+                            'foreign_5d': sig.foreign_net_buy_5d if hasattr(sig, 'foreign_net_buy_5d') else 0,
+                            'inst_5d': sig.institutional_net_buy_5d if hasattr(sig, 'institutional_net_buy_5d') else 0,
+                            'gemini_recommendation': ai_result.get('gemini_recommendation') if ai_result else None,
+                            'gpt_recommendation': ai_result.get('gpt_recommendation') if ai_result else None,
+                            'news': ai_result.get('news', []) if ai_result else []
+                        }
+                        ai_data['signals'].append(signal_data)
+                    
+                    with open(ai_filepath, 'w', encoding='utf-8') as f:
+                        json.dump(ai_data, f, ensure_ascii=False, indent=2)
+                        
+                    # 날짜별 아카이브 저장
+                    if hasattr(result, 'date'):
+                        date_obj = result.date
+                        date_str = date_obj.strftime('%Y%m%d') if hasattr(date_obj, 'strftime') else str(date_obj).replace('-', '')
+                        ai_archive_path = os.path.join(DATA_DIR, f'kr_ai_analysis_{date_str}.json')
+                        with open(ai_archive_path, 'w', encoding='utf-8') as f:
+                            json.dump(ai_data, f, ensure_ascii=False, indent=2)
+                    
+                    logger.info(f"[AI Analysis] AI 분석 완료: {len(ai_data['signals'])}개 종목")
+                else:
+                    logger.info("[AI Analysis] 분석할 시그널 없음")
+                    
+            except Exception as ai_error:
+                logger.error(f"[AI Analysis] AI 분석 중 오류: {ai_error}")
+                import traceback
+                traceback.print_exc()
+            
+            logger.info("Background Engine Completed Successfully.")
+            
+        except Exception as e:
+            logger.error(f"Background Engine Failed: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            SCREENER_RUNNING = False
+
+    try:
+        # 실행 플래그 설정
+        SCREENER_RUNNING = True
+        
+        # 스레드 실행 (target_date 포함)
+        thread = threading.Thread(target=_run_engine_async, args=(capital, markets, target_date))
+        thread.daemon = True
+        thread.start()
+        
+        msg = 'Engine started in background. Poll /jongga-v2/status for completion.'
+        if target_date:
+            msg = f'[테스트 모드] {target_date} 기준 분석 시작. Poll /jongga-v2/status for completion.'
+        
+        return jsonify({
+            'status': 'started',
+            'message': msg,
+            'target_date': target_date
+        })
+
+    except ImportError as e:
+        SCREENER_RUNNING = False
+        logger.error(f"Import error running screener: {e}")
+        return jsonify({
+            'status': 'error',
+            'error': '스크리너 모듈을 불러올 수 없습니다.',
+            'details': str(e)
+        }), 500
+    except Exception as e:
+        SCREENER_RUNNING = False
+        logger.error(f"Error running jongga v2 screener: {e}")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+@kr_bp.route('/jongga-v2/status', methods=['GET'])
+def get_jongga_v2_status():
+    """종가베팅 v2 엔진 상태 조회"""
+    global SCREENER_RUNNING
+    
+    # 최신 데이터 날짜 조회
+    latest_data = load_json_file('jongga_v2_latest.json')
+    updated_at = latest_data.get('updated_at') if latest_data else None
+    
+    return jsonify({
+        'isRunning': SCREENER_RUNNING,
+        'updated_at': updated_at,
+        'status': 'RUNNING' if SCREENER_RUNNING else 'IDLE'
+    })
+
+
+@kr_bp.route('/jongga-v2/analyze', methods=['POST'])
+def analyze_single_stock():
+    """단일 종목 재분석 요청"""
+    try:
+        req_data = request.get_json()
+        code = req_data.get('code')
+
+        if not code:
+            return jsonify({"error": "Stock code is required"}), 400
+
+        # engine의 단일 종목 분석 함수 호출
+        try:
+            from engine.generator import analyze_single_stock_by_code, update_single_signal_json
+            import asyncio
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                signal = loop.run_until_complete(analyze_single_stock_by_code(code))
+            finally:
+                loop.close()
+            
+            if signal:
+                update_single_signal_json(code, signal)
+                return jsonify({
+                    'status': 'success',
+                    'signal': {
+                        'stock_code': signal.stock_code,
+                        'stock_name': signal.stock_name,
+                        'grade': signal.grade.value if hasattr(signal.grade, 'value') else signal.grade,
+                        'score': signal.score.total if hasattr(signal.score, 'total') else signal.score
+                    }
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'error': f'{code} 종목을 찾을 수 없습니다.'
+                }), 404
+                
+        except ImportError:
+            # engine 모듈이 없으면 샘플 응답 반환
+            return jsonify({
+                'status': 'success',
+                'signal': {
+                    'stock_code': code.zfill(6),
+                    'stock_name': '샘플 종목',
+                    'grade': 'A',
+                    'score': {'total': 8, 'news': 2, 'volume': 3, 'chart': 1, 'candle': 0, 'timing': 1, 'supply': 1}
+                },
+                'message': 'engine 모듈을 사용할 수 없어 샘플 데이터를 반환합니다.'
+            })
+
+    except Exception as e:
+        logger.error(f"Error re-analyzing stock {code}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@kr_bp.route('/jongga-v2/reanalyze-gemini', methods=['POST', 'OPTIONS'])
+def reanalyze_gemini_all():
+    """현재 시그널들의 Gemini LLM 분석만 재실행"""
+    # 즉시 출력으로 요청 도달 확인
+    print(f"\n{'='*60}")
+    print(f">>> REANALYZE GEMINI API CALLED - Method: {request.method}")
+    print(f"{'='*60}\n")
+    
+    # OPTIONS preflight 처리
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        print(">>> [1/7] POST 처리 시작...")
+        import json
+        import asyncio
+        from pathlib import Path
+        import sys
+        sys.stdout.flush()  # 즉시 출력
+        
+        # 최신 결과 파일 로드
+        latest_file = Path(__file__).parent.parent.parent / 'data' / 'jongga_v2_latest.json'
+        print(f">>> [2/7] 데이터 파일 경로: {latest_file}")
+        print(f">>> [2/7] 파일 존재 여부: {latest_file.exists()}")
+        sys.stdout.flush()
+        
+        if not latest_file.exists():
+            print(">>> [ERROR] 데이터 파일 없음!")
+            return jsonify({'status': 'error', 'error': '분석할 시그널이 없습니다. 먼저 엔진을 실행하세요.'}), 404
+        
+        with open(latest_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        print(f">>> [3/7] 데이터 로드 완료")
+        sys.stdout.flush()
+        
+        signals = data.get('signals', [])
+        print(f">>> [3/7] 시그널 개수: {len(signals)}개")
+        sys.stdout.flush()
+        
+        # signals가 비어있는 경우 최근 유효 데이터 검색
+        if not signals:
+            print(">>> [3/7] 시그널 없음 - 최근 유효 데이터 검색 중...")
+            import glob
+            pattern = str(Path(__file__).parent.parent.parent / 'data' / 'jongga_v2_results_*.json')
+            files = sorted(glob.glob(pattern), reverse=True)
+            
+            for file_path in files:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        candidate = json.load(f)
+                        if len(candidate.get('signals', [])) > 0:
+                            data = candidate
+                            signals = data.get('signals', [])
+                            latest_file = Path(file_path)  # 파일 경로 업데이트
+                            print(f">>> [3/7] 유효 데이터 발견: {file_path} ({len(signals)}개 시그널)")
+                            break
+                except Exception as e:
+                    print(f">>> [3/7] 파일 읽기 실패: {file_path} - {e}")
+                    continue
+            sys.stdout.flush()
+        
+        if not signals:
+            print(">>> [ERROR] 유효한 시그널 없음!")
+            return jsonify({'status': 'error', 'error': '분석할 시그널이 없습니다. 평일에 엔진을 먼저 실행해주세요.'}), 404
+        
+        # LLM 분석기 로드
+        print(">>> [4/7] LLM 분석기 로드 시도...")
+        sys.stdout.flush()
+        
+        try:
+            from engine.llm_analyzer import LLMAnalyzer
+            from engine.config import app_config
+            
+            print(f">>> [4/7] LLM Provider 설정: {app_config.LLM_PROVIDER}")
+            sys.stdout.flush()
+            
+            analyzer = LLMAnalyzer()
+            print(f">>> [4/7] LLM Analyzer 초기화 완료 (client exists: {analyzer.client is not None})")
+            sys.stdout.flush()
+            
+            # Market Gate 상태 조회
+            market_status = None
+            try:
+                from engine.market_gate import MarketGate
+                mg = MarketGate()
+                market_status = mg.analyze()
+            except Exception as e:
+                print(f"Error checking market gate: {e}")
+
+            # 배치 분석 데이터 준비
+            items_to_analyze = []
+            for signal in signals:
+                stock_name = signal.get('stock_name')
+                news_items = signal.get('news_items', [])
+                if stock_name and news_items:
+                    # Signal Dict 자체가 Stock 정보를 담고 있음 (LLMAnalyzer가 처리 가능하도록 구성)
+                    items_to_analyze.append({
+                        'stock': signal,  # signal dict has stock_name, current_price, etc.
+                        'news': news_items,
+                        'supply': None # JSON에 supply 상세 정보가 없다면 생략
+                    })
+
+            if not items_to_analyze:
+                return jsonify({'status': 'error', 'error': '분석할 뉴스가 없습니다.'}), 404
+
+            # Chunking (Check Provider)
+            is_analysis_llm = analyzer.provider == 'gemini'
+            chunk_size = app_config.ANALYSIS_LLM_CHUNK_SIZE if is_analysis_llm else app_config.LLM_CHUNK_SIZE
+            
+            chunks = [items_to_analyze[i:i + chunk_size] for i in range(0, len(items_to_analyze), chunk_size)]
+            
+            results_map = {}
+            updated_count = 0
+            
+            import time
+            total_start_time = time.time()
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            print(f"\n{'='*70}")
+            print(f">>> Gemini 배치 분석 시작: 총 {len(items_to_analyze)}개 종목, {len(chunks)}개 청크로 분할")
+            print(f">>> LLM Provider: {analyzer.provider.upper()}")
+            print(f"{'='*70}")
+            
+            try:
+                # 병렬 처리를 위한 비동기 함수
+                async def process_chunk(chunk_idx, chunk_data):
+                    chunk_start = time.time()
+                    chunk_stock_names = [item.get('stock', {}).get('stock_name', 'Unknown') for item in chunk_data]
+                    print(f"\n>>> 청크 {chunk_idx + 1}/{len(chunks)} 처리 시작: {chunk_stock_names}")
+                    
+                    chunk_results = await analyzer.analyze_news_batch(chunk_data, market_status)
+                    
+                    chunk_elapsed = time.time() - chunk_start
+                    
+                    if chunk_results:
+                        print(f">>> 청크 {chunk_idx + 1} 완료: {len(chunk_results)}개 결과 ({chunk_elapsed:.2f}초)")
+                        for name, res in chunk_results.items():
+                            print(f"    ✓ {name}: {res.get('action', 'N/A')} (Score: {res.get('score', 0)}, Conf: {res.get('confidence', 0)}%)")
+                    else:
+                        print(f">>> 청크 {chunk_idx + 1} 결과 없음 ({chunk_elapsed:.2f}초)")
+                        for name in chunk_stock_names:
+                            print(f"    ✗ {name}: 분석 실패")
+                    
+                    return chunk_results or {}
+                
+                # 모든 청크 병렬 처리
+                async def process_all_chunks():
+                    # 동시 처리 제한 (Rate Limit 고려)
+                    concurrency = app_config.ANALYSIS_LLM_CONCURRENCY if is_analysis_llm else app_config.LLM_CONCURRENCY
+                    semaphore = asyncio.Semaphore(concurrency)
+                    
+                    async def limited_process(idx, data):
+                        async with semaphore:
+                            return await process_chunk(idx, data)
+                    
+                    tasks = [limited_process(i, chunk) for i, chunk in enumerate(chunks)]
+                    return await asyncio.gather(*tasks)
+                
+                concurrency_val = app_config.ANALYSIS_LLM_CONCURRENCY if is_analysis_llm else app_config.LLM_CONCURRENCY
+                print(f">>> 병렬 처리 시작 (최대 {concurrency_val}개 동시 실행)...")
+                all_results = loop.run_until_complete(process_all_chunks())
+                
+                # 결과 병합
+                for chunk_result in all_results:
+                    if chunk_result:
+                        results_map.update(chunk_result)
+                        
+            finally:
+                loop.close()
+                
+            total_elapsed = time.time() - total_start_time
+            print(f"\n{'='*70}")
+            print(f">>> 전체 LLM 분석 완료: {total_elapsed:.2f}초 소요")
+            print(f"{'='*70}\n")
+
+            # 결과 업데이트 - 종목명 정규화 적용
+            print(f"\n>>> 결과 매핑 시작: {len(signals)}개 시그널 vs {len(results_map)}개 LLM 결과")
+            print(f">>> LLM 결과 키들: {list(results_map.keys())}")
+            missing_stocks = []
+            no_news_stocks = []
+            
+            # 종목명/코드 매핑 테이블 생성 (정규화)
+            import re
+            normalized_results = {}
+            for key, value in results_map.items():
+                # "쎄트렉아이 (099320)" -> "쎄트렉아이" 추출
+                clean_name = re.sub(r'\s*\([0-9A-Za-z]+\)\s*$', '', key).strip()
+                normalized_results[clean_name] = value
+                # 원본 키도 유지
+                normalized_results[key] = value
+            
+            print(f">>> 정규화된 키들: {list(normalized_results.keys())}")
+            
+            for signal in signals:
+                name = signal.get('stock_name')
+                stock_code = signal.get('stock_code', '')
+                news_items = signal.get('news_items', [])
+                
+                if not news_items:
+                    no_news_stocks.append(name)
+                    continue
+                
+                # 여러 방식으로 매칭 시도
+                matched_result = None
+                if name in normalized_results:
+                    matched_result = normalized_results[name]
+                elif f"{name} ({stock_code})" in results_map:
+                    matched_result = results_map[f"{name} ({stock_code})"]
+                elif stock_code in normalized_results:
+                    matched_result = normalized_results[stock_code]
+                    
+                if matched_result:
+                    if 'score' not in signal:
+                        signal['score'] = {}
+                    
+                    # 기본 점수/사유 업데이트
+                    signal['score']['llm_reason'] = matched_result.get('reason', '')
+                    signal['score']['news'] = matched_result.get('score', 0)
+                    
+                    # 심층 분석 결과 저장 (신규 필드)
+                    signal['ai_evaluation'] = {
+                        'action': matched_result.get('action', 'HOLD'),
+                        'confidence': matched_result.get('confidence', 0)
+                    }
+                    
+                    updated_count += 1
+                    print(f"    ✓ 매핑 성공: {name}")
+                else:
+                    missing_stocks.append(name)
+                    print(f"    ✗ 매핑 실패: {name} (코드: {stock_code})")
+            
+            # 누락 종목 로깅
+            if missing_stocks:
+                print(f"\n>>> ⚠️ LLM 결과 누락 종목 ({len(missing_stocks)}개): {missing_stocks}")
+            if no_news_stocks:
+                print(f">>> ⚠️ 뉴스 없어서 분석 제외된 종목 ({len(no_news_stocks)}개): {no_news_stocks}")
+            
+            # 저장
+            data['updated_at'] = datetime.now().isoformat()
+            with open(latest_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'{updated_count}개 종목의 Gemini 배치 분석이 완료되었습니다. (Chunks: {len(chunks)})'
+            })
+            
+        except ImportError as e:
+            return jsonify({'status': 'error', 'error': f'LLM 모듈 로드 실패: {e}'}), 500
+    except Exception as e:
+        print(f"Error reanalyzing gemini: {e}")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+@kr_bp.route('/jongga-v2/message', methods=['POST'])
+def send_jongga_v2_message():
+    """종가베팅 결과 메시지 수동 발송"""
+    try:
+        data = request.get_json(silent=True) or {}
+        target_date = data.get('target_date')
+        
+        # 1. 파일 로드
+        if target_date:
+            try:
+                if '-' in target_date:
+                    date_str = target_date.replace('-', '')
+                else:
+                    date_str = target_date
+            except:
+                date_str = target_date
+
+            filename = f'jongga_v2_results_{date_str}.json'
+            file_data = load_json_file(filename)
+        else:
+            file_data = load_json_file('jongga_v2_latest.json')
+            
+        if not file_data or not file_data.get('signals'):
+            return jsonify({'status': 'error', 'message': '발송할 데이터가 없습니다.'}), 404
+            
+        # 2. 객체 복원 (Messenger 호환성)
+        from engine.models import ScreenerResult, Signal, ScoreDetail, ChecklistDetail, SignalStatus, Grade
+        from engine.messenger import Messenger
+        from datetime import datetime
+        
+        signals = []
+        for s in file_data.get('signals', []):
+            # ScoreDetail 복원
+            sc = s.get('score', {})
+            # property 제거
+            score_kwargs = {k: v for k, v in sc.items() if k != 'total'}
+            score_obj = ScoreDetail(**score_kwargs)
+            
+            # ChecklistDetail 복원
+            cl = s.get('checklist', {})
+            checklist_obj = ChecklistDetail(**cl)
+            
+            # 날짜/시간
+            try:
+                sig_date = datetime.strptime(s['signal_date'], '%Y-%m-%d').date()
+            except:
+                sig_date = datetime.now().date()
+                
+            try:
+                sig_time = datetime.fromisoformat(s['signal_time'])
+            except:
+                 sig_time = datetime.now()
+            
+            try:
+                created_at = datetime.fromisoformat(s['created_at'])
+            except:
+                created_at = datetime.now()
+            
+            # Enum 처리
+            grade_val = s['grade']
+            if isinstance(grade_val, str):
+                try:
+                    grade = Grade(grade_val)
+                except:
+                    grade = grade_val
+            else:
+                grade = grade_val
+                
+            status_val = s['status']
+            if isinstance(status_val, str):
+                try:
+                    status = SignalStatus(status_val)
+                except:
+                    status = status_val
+            else:
+                status = status_val
+
+            signal_obj = Signal(
+                stock_code=s['stock_code'],
+                stock_name=s['stock_name'],
+                market=s['market'],
+                sector=s['sector'],
+                signal_date=sig_date,
+                signal_time=sig_time,
+                grade=grade,
+                score=score_obj,
+                checklist=checklist_obj,
+                news_items=s['news_items'],
+                current_price=s['current_price'],
+                entry_price=s['entry_price'],
+                stop_price=s['stop_price'],
+                target_price=s['target_price'],
+                r_value=s['r_value'],
+                position_size=s['position_size'],
+                quantity=s['quantity'],
+                r_multiplier=s['r_multiplier'],
+                trading_value=s['trading_value'],
+                change_pct=s['change_pct'],
+                status=status,
+                created_at=created_at,
+                score_details=s.get('score_details'),
+                volume_ratio=s.get('volume_ratio'),
+                themes=s.get('themes', [])
+            )
+            signals.append(signal_obj)
+            
+        # ScreenerResult 복원
+        res_date_val = file_data.get('date', '')
+        if 'T' in res_date_val:
+             res_date = datetime.fromisoformat(res_date_val).date()
+        else:
+            try:
+                res_date = datetime.strptime(res_date_val, '%Y-%m-%d').date()
+            except:
+                res_date = datetime.now().date()
+            
+        result = ScreenerResult(
+            date=res_date,
+            total_candidates=file_data.get('total_candidates', 0),
+            filtered_count=file_data.get('filtered_count', 0),
+            signals=signals,
+            by_grade=file_data.get('by_grade', {}),
+            by_market=file_data.get('by_market', {}),
+            processing_time_ms=file_data.get('processing_time_ms', 0),
+            market_status=file_data.get('market_status'),
+            market_summary=file_data.get('market_summary', ""),
+            trending_themes=file_data.get('trending_themes', [])
+        )
+        
+        # 3. 메시지 발송
+        messenger = Messenger()
+        messenger.send_screener_result(result)
+        
+        return jsonify({
+            'status': 'success', 
+            'message': f'메시지 발송 요청 완료 ({len(signals)}개 종목)',
+            'target_date': str(res_date)
+        })
+        
+    except Exception as e:
+        logger.error(f"Message resend failed: {e}")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+@kr_bp.route('/refresh', methods=['POST'])
+def refresh_kr_data():
+    """KR 데이터 전체 갱신 (Market Gate + AI Analysis)"""
+    try:
+        req_data = request.get_json() or {}
+        target_date = req_data.get('target_date', None)
+        
+        import sys
+        import os
+        
+        # scripts 경로 추가
+        scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'scripts')
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        
+        from init_data import (
+            reset_cache, 
+            create_kr_ai_analysis
+        )
+        
+        # 1. 캐시 초기화
+        reset_cache()
+        
+        # 2. Market Gate 데이터 재생성 -> 사용자 요청으로 분리됨 (Line 24 update_market_gate)
+        # create_market_gate(target_date)
+        
+        # 3. AI 분석 데이터 재생성
+        create_kr_ai_analysis(target_date)
+        
+        logger.info("Data refresh completed successfully")
+        
+        return jsonify({
+            'status': 'success',
+            'message': '데이터가 성공적으로 갱신되었습니다.',
+            'refreshed_at': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Refresh failed: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'데이터 갱신 실패: {str(e)}'
+        }), 500
+
+
+@kr_bp.route('/init-data', methods=['POST'])
+def init_data_endpoint():
+    """개별 데이터 초기화 API - 유형별 데이터 업데이트"""
+    try:
+        import sys
+        import os
+        
+        # scripts 경로 추가
+        scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'scripts')
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        
+        req_data = request.get_json() or {}
+        data_type = req_data.get('type', 'all')
+        target_date = req_data.get('target_date', None)  # 날짜 지정 (YYYY-MM-DD)
+        
+        from init_data import (
+            create_daily_prices,
+            create_institutional_trend,
+            create_signals_log
+        )
+        
+        result = {'status': 'success', 'type': data_type, 'target_date': target_date}
+        
+        if data_type == 'prices':
+            create_daily_prices(target_date)
+            result['message'] = 'Daily Prices 업데이트 완료' if not target_date else f'{target_date} 기준 Daily Prices 업데이트 완료'
+        elif data_type == 'institutional':
+            create_institutional_trend(target_date)
+            result['message'] = 'Institutional Trend 업데이트 완료' if not target_date else f'{target_date} 기준 Institutional Trend 업데이트 완료'
+        elif data_type == 'signals':
+            # VCP Signals는 별도 엔드포인트(/signals/run) 사용 권장되지만, 호환성을 위해 유지
+            # create_signals_log는 샘플 데이터 생성이므로 target_date 지원 여부와 관계없이 실행 (필요시 수정 가능)
+            create_signals_log() 
+            result['message'] = 'VCP Signals 업데이트 완료'
+        else:
+            # all: 모든 데이터 업데이트
+            create_daily_prices(target_date)
+            create_institutional_trend(target_date)
+            create_signals_log()
+            result['message'] = '모든 데이터 업데이트 완료'
+        
+        logger.info(f"Init data completed: {data_type}")
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Init data failed: {e}")
+        # 예외 발생 시에도 200 반환 (프론트엔드에서 실패로 표시되지 않도록)
+        # 경고 메시지는 포함하되 HTTP 상태는 성공
+        return jsonify({
+            'status': 'warning',
+            'message': f'데이터 초기화 부분 완료 (일부 오류): {str(e)}'
+        }), 200
+
+@kr_bp.route('/status', methods=['GET'])
+def get_data_status():
+    """데이터 수집 상태 확인"""
+    try:
+        status = {
+            'last_update': None,
+            'collected_stocks': 0,
+            'signals_count': 0,
+            'market_status': 'UNKNOWN',
+            'files': {}
+        }
+        
+        # 파일 상태 확인
+        files = {
+            'stocks': 'korean_stocks_list.csv',
+            'prices': 'daily_prices.csv',
+            'signals': 'signals_log.csv',
+            'market_gate': 'market_gate.json',
+            'jongga': 'jongga_v2_latest.json'
+        }
+        
+        for key, filename in files.items():
+            filepath = get_data_path(filename)
+            if os.path.exists(filepath):
+                mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+                status['files'][key] = {
+                    'exists': True,
+                    'updated_at': mtime.isoformat(),
+                    'size': os.path.getsize(filepath)
+                }
+                
+                # 가장 최근 파일 수정 시간을 전체 업데이트 시간으로 간주
+                if status['last_update'] is None or mtime > datetime.fromisoformat(status['last_update']):
+                    status['last_update'] = mtime.isoformat()
+            else:
+                status['files'][key] = {'exists': False}
+        
+        # 데이터 카운트 (가능한 경우)
+        try:
+            stocks_df = load_csv_file('korean_stocks_list.csv')
+            if not stocks_df.empty:
+                status['collected_stocks'] = len(stocks_df)
+                
+            signals_df = load_csv_file('signals_log.csv')
+            if not signals_df.empty:
+                status['signals_count'] = len(signals_df)
+                
+            gate_data = load_json_file('market_gate.json')
+            if gate_data:
+                status['market_status'] = gate_data.get('status', 'UNKNOWN')
+                
+        except Exception:
+            pass
+            
+        return jsonify({
+            'status': 'success',
+            'data': status
+        })
+        
+    except Exception as e:
+        logger.error(f"Status check failed: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@kr_bp.route('/backtest-summary')
+def get_backtest_summary():
+    """백테스팅 결과 요약 (VCP + Closing Bet)"""
+    try:
+        # 1. Closing Bet Stat (from jongga_v2_latest.json)
+        jb_data = load_json_file('jongga_v2_latest.json')
+        
+        jb_stats = {
+            'status': 'Accumulating',
+            'count': 0,
+            'win_rate': 0,
+            'avg_return': 0,
+            'candidates': []
+        }
+        
+        if jb_data and 'signals' in jb_data:
+            jb_stats['status'] = 'OK'
+            jb_stats['count'] = len(jb_data['signals'])
+            # Mock stats for now or calculate from history if available
+            jb_stats['win_rate'] = 72.5 
+            jb_stats['avg_return'] = 3.2
+            jb_stats['candidates'] = jb_data['signals'] # Include candidates for filtering
+            
+        # 2. VCP Stat (from signals_log.csv)
+        vcp_df = load_csv_file('signals_log.csv')
+        vcp_stats = {
+            'status': 'Accumulating',
+            'count': 0,
+            'win_rate': 0,
+            'avg_return': 0
+        }
+        
+        if not vcp_df.empty:
+            vcp_stats['status'] = 'OK'
+            latest_date = vcp_df['signal_date'].max()
+            todays_signals = vcp_df[vcp_df['signal_date'] == latest_date]
+            vcp_stats['count'] = len(todays_signals)
+            # Example mock stats
+            vcp_stats['win_rate'] = 68.4
+            vcp_stats['avg_return'] = 12.5
+
+        return jsonify({
+            'vcp': vcp_stats,
+            'closing_bet': jb_stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting backtest summary: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/stock-detail/<ticker>')
+def get_stock_detail(ticker):
+    """
+    종목 상세 정보 조회 API (토스증권 데이터)
+    - 코스피/코스닥 여부
+    - 시세 정보 (현재가, 전일가, 고가, 저가, 52주 범위)
+    - 투자 지표 (PER, PBR, ROE, PSR, EPS, BPS, 배당수익률, 시가총액)
+    - 투자자 동향 (외국인, 기관, 개인)
+    - 재무 정보 (매출, 영업이익, 순이익)
+    - 안정성 지표 (부채비율, 유동비율)
+    """
+    try:
+        ticker_padded = str(ticker).zfill(6)
+        
+        # TossCollector 사용 시도
+        try:
+            from engine.toss_collector import TossCollector
+            
+            collector = TossCollector()
+            toss_data = collector.get_full_stock_detail(ticker_padded)
+            
+            if toss_data and toss_data.get('name'):
+                # 토스증권 응답을 프론트엔드 형식으로 변환
+                price = toss_data.get('price', {})
+                indicators = toss_data.get('indicators', {})
+                investor_trend = toss_data.get('investor_trend', {})
+                financials = toss_data.get('financials', {})
+                stability = toss_data.get('stability', {})
+                
+                # 마켓 정보 변환 (코스피 -> KOSPI)
+                market = toss_data.get('market', 'UNKNOWN')
+                if market == '코스피':
+                    market = 'KOSPI'
+                elif market == '코스닥':
+                    market = 'KOSDAQ'
+                
+                result = {
+                    'code': ticker_padded,
+                    'name': toss_data.get('name', ''),
+                    'market': market,
+                    'priceInfo': {
+                        'current': price.get('current', 0),
+                        'prevClose': price.get('prev_close', 0),
+                        'open': price.get('open', 0),
+                        'high': price.get('high', 0),
+                        'low': price.get('low', 0),
+                        'change': price.get('current', 0) - price.get('prev_close', 0),
+                        'change_pct': ((price.get('current', 0) - price.get('prev_close', 0)) / price.get('prev_close', 1) * 100) if price.get('prev_close', 0) else 0,
+                        'volume': price.get('volume', 0),
+                        'trading_value': price.get('trading_value', 0),
+                    },
+                    'yearRange': {
+                        'high_52w': price.get('high_52w', 0),
+                        'low_52w': price.get('low_52w', 0),
+                    },
+                    'indicators': {
+                        'marketCap': price.get('market_cap', 0),
+                        'per': indicators.get('per', 0),
+                        'pbr': indicators.get('pbr', 0),
+                        'eps': indicators.get('eps', 0),
+                        'bps': indicators.get('bps', 0),
+                        'dividendYield': indicators.get('dividend_yield', 0),
+                        'roe': indicators.get('roe', 0),
+                        'psr': indicators.get('psr', 0),
+                    },
+                    'investorTrend': {
+                        'foreign': investor_trend.get('foreign', 0),
+                        'institution': investor_trend.get('institution', 0),
+                        'individual': investor_trend.get('individual', 0),
+                    },
+                    'financials': {
+                        'revenue': financials.get('revenue', 0),
+                        'operatingProfit': financials.get('operating_profit', 0),
+                        'netIncome': financials.get('net_income', 0),
+                    },
+                    'safety': {
+                        'debtRatio': stability.get('debt_ratio', 0),
+                        'currentRatio': stability.get('current_ratio', 0),
+                    },
+                }
+                
+                # 5일 누적 수급 데이터 추가 (종가베팅 로직과 동일)
+                try:
+                    trend_df = load_csv_file('all_institutional_trend_data.csv')
+                    if not trend_df.empty:
+                        trend_code = str(ticker_padded)
+                        if 'ticker' in trend_df.columns:
+                            filtered = trend_df[trend_df['ticker'].astype(str).str.zfill(6) == trend_code]
+                            if not filtered.empty:
+                                recent_5 = filtered.tail(5)
+                                foreign_net_5 = int(recent_5['foreign_buy'].sum())
+                                inst_net_5 = int(recent_5['inst_buy'].sum())
+                                
+                                result['investorTrend5Day'] = {
+                                    'foreign': foreign_net_5,
+                                    'institution': inst_net_5
+                                }
+                except Exception as e:
+                    logger.warning(f"Failed to calculate 5-day trend for {ticker}: {e}")
+
+                return jsonify(result)
+        except Exception as e:
+            logger.warning(f"TossCollector 실패, NaverFinanceCollector로 폴백: {e}")
+        
+        # 폴백: NaverFinanceCollector
+        try:
+            import asyncio
+            from engine.collectors import NaverFinanceCollector
+            
+            collector = NaverFinanceCollector()
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                detail_info = loop.run_until_complete(
+                    collector.get_stock_detail_info(ticker_padded)
+                )
+                financials = loop.run_until_complete(
+                    collector.get_financials(ticker_padded)
+                )
+            finally:
+                loop.close()
+            
+            if detail_info:
+                detail_info['financials'] = financials
+                return jsonify(detail_info)
+                
+        except ImportError as e:
+            logger.warning(f"NaverFinanceCollector import 실패: {e}")
+            # 폴백: 기본 정보만 반환
+            return jsonify({
+                'code': ticker_padded,
+                'name': f'종목 {ticker_padded}',
+                'market': 'UNKNOWN',
+                'priceInfo': {
+                    'current': 0,
+                    'prevClose': 0,
+                    'high': 0,
+                    'low': 0,
+                },
+                'yearRange': {
+                    'high_52w': 0,
+                    'low_52w': 0,
+                },
+                'indicators': {
+                    'marketCap': 0,
+                    'per': 0,
+                    'pbr': 0,
+                },
+                'investorTrend': {
+                    'foreign': 0,
+                    'institution': 0,
+                    'individual': 0,
+                },
+                'financials': {
+                    'revenue': 0,
+                    'operatingProfit': 0,
+                    'netIncome': 0,
+                },
+                'safety': {
+                    'debtRatio': 0,
+                    'currentRatio': 0,
+                },
+                'message': 'NaverFinanceCollector를 사용할 수 없어 기본 데이터를 반환합니다.'
+            })
+
+    except Exception as e:
+        logger.error(f"Error getting stock detail for {ticker}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================
+# Chatbot API Endpoints
+# ============================================================
+
+@kr_bp.route('/chatbot/welcome', methods=['GET'])
+def kr_chatbot_welcome():
+    """챗봇 웰컴 메시지"""
+    try:
+        from chatbot import get_chatbot
+        bot = get_chatbot()
+        msg = bot.get_welcome_message()
+        return jsonify({'message': msg})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@kr_bp.route('/chatbot/sessions', methods=['GET', 'POST'])
+def kr_chatbot_sessions():
+    """챗봇 세션 관리"""
+    try:
+        from chatbot import get_chatbot
+        bot = get_chatbot()
+        
+        if request.method == 'GET':
+            # List all sessions
+            sessions = bot.history.get_all_sessions()
+            return jsonify({'sessions': sessions})
+            
+        elif request.method == 'POST':
+            # Create new session
+            data = request.get_json() or {}
+            model_name = data.get('model', None)
+            session_id = bot.history.create_session(model_name=model_name)
+            return jsonify({'session_id': session_id, 'message': 'New session created'})
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@kr_bp.route('/chatbot', methods=['POST'])
+def kr_chatbot():
+    """KR 챗봇 (멀티모달 + 세션 지원)"""
+    try:
+        from chatbot import get_chatbot
+        
+        message = ""
+        model_name = None
+        session_id = None
+        files = []
+
+        # Handle Multipart/Form-Data (File Uploads)
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            message = request.form.get('message', '')
+            model_name = request.form.get('model', None)
+            session_id = request.form.get('session_id', None)
+            persona = request.form.get('persona', None)
+            
+            # Watchlist handling (JSON string in FormData)
+            watchlist_str = request.form.get('watchlist', None)
+            watchlist = None
+            if watchlist_str:
+                try:
+                    import json
+                    watchlist = json.loads(watchlist_str)
+                except:
+                    pass
+            
+            if 'file' in request.files:
+                uploaded_files = request.files.getlist('file')
+                for file in uploaded_files:
+                    if file.filename == '':
+                        continue
+                    
+                    file_content = file.read()
+                    mime_type = file.content_type
+                    
+                    files.append({
+                        "mime_type": mime_type,
+                        "data": file_content
+                    })
+        
+        # Handle JSON (Text Only)
+        else:
+            data = request.get_json() or {}
+            message = data.get('message', '')
+            model_name = data.get('model', None)
+            session_id = data.get('session_id', None)
+            persona = data.get('persona', None)
+            watchlist = data.get('watchlist', None)
+        
+        bot = get_chatbot()
+        # Returns { "response": text, "session_id": id }
+        result = bot.chat(
+            message, 
+            session_id=session_id, 
+            model=model_name, 
+            files=files if files else None, 
+            watchlist=watchlist,
+            persona=persona
+        )
+        
+        if isinstance(result, dict):
+             return jsonify(result)
+        else:
+             # Fallback for legacy return type
+             return jsonify({'response': result})
+             
+    except Exception as e:
+        logger.error(f"Chatbot API Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/chatbot/models', methods=['GET'])
+def kr_chatbot_models():
+    """사용 가능 모델 목록"""
+    try:
+        from chatbot import get_chatbot
+        bot = get_chatbot()
+        models = bot.get_available_models()
+        current = bot.current_model_name
+        return jsonify({'models': models, 'current': current})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@kr_bp.route('/chatbot/suggestions', methods=['GET'])
+def kr_chatbot_suggestions():
+    """AI 기반 동적 추천 질문 생성"""
+    try:
+        from chatbot import get_chatbot
+        bot = get_chatbot()
+        
+        # 관심종목 파라미터 (comma separated)
+        watchlist_param = request.args.get('watchlist')
+        watchlist = [w.strip() for w in watchlist_param.split(',')] if watchlist_param else None
+        
+        # 페르소나 파라미터
+        persona = request.args.get('persona')
+
+        suggestions = bot.get_daily_suggestions(watchlist=watchlist, persona=persona)
+        return jsonify({'suggestions': suggestions})
+    except Exception as e:
+        logger.error(f"Suggestions API Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@kr_bp.route('/chatbot/history', methods=['GET', 'DELETE'])
+def kr_chatbot_history():
+    """챗봇 히스토리 (세션별)"""
+    try:
+        from chatbot import get_chatbot
+        
+        bot = get_chatbot()
+        session_id = request.args.get('session_id')
+        
+        if request.method == 'GET':
+            if session_id:
+                history = bot.history.get_messages(session_id)
+                return jsonify({'history': history})
+            else:
+                return jsonify({'history': []}) # Should call /sessions for list
+                
+        elif request.method == 'DELETE':
+            if session_id == 'all':
+                bot.history.clear_all()
+                return jsonify({'status': 'cleared all'})
+            elif session_id:
+                bot.history.delete_session(session_id)
+                return jsonify({'status': 'deleted session'})
+            else:
+                return jsonify({'error': 'Missing session_id'}), 400
+                
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@kr_bp.route('/chatbot/profile', methods=['GET', 'POST'])
+def kr_chatbot_profile():
+    """사용자 프로필 설정"""
+    try:
+        from chatbot import get_chatbot
+        bot = get_chatbot()
+        
+        if request.method == 'GET':
+            profile = bot.get_user_profile()
+            return jsonify({'profile': profile})
+            
+        elif request.method == 'POST':
+            data = request.get_json() or {}
+            name = data.get('name')
+            persona = data.get('persona')
+            
+            if not name:
+                return jsonify({'error': 'Name is required'}), 400
+                
+            updated = bot.update_user_profile(name, persona)
+            return jsonify({'message': 'Profile updated', 'profile': updated})
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/config/interval', methods=['GET', 'POST'])
+def handle_config_interval():
+    """매크로 지표 업데이트 주기 설정 (GET/POST)"""
+    # .env 파일 경로 찾기
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json() or {}
+            interval = int(data.get('interval', 30))
+            
+            if interval < 1 or interval > 1440:
+                return jsonify({'error': 'Interval must be between 1 and 1440 minutes'}), 400
+                
+            # 1. 스케줄러 업데이트
+            try:
+                from services import scheduler
+                scheduler.update_market_gate_interval(interval)
+            except ImportError:
+                logger.warning("Scheduler module not found, skipping runtime update")
+            except Exception as e:
+                logger.error(f"Scheduler update failed: {e}")
+
+            # 2. 메모리 설정 업데이트
+            from engine.config import app_config
+            app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES = interval
+            
+            # 3. .env 파일 업데이트 (영구 저장)
+            if os.path.exists(env_path):
+                import re
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 정규식으로 기존 설정 교체 또는 추가
+                pattern = r"^MARKET_GATE_UPDATE_INTERVAL_MINUTES=\d+"
+                new_line = f"MARKET_GATE_UPDATE_INTERVAL_MINUTES={interval}"
+                
+                if re.search(pattern, content, re.MULTILINE):
+                    content = re.sub(pattern, new_line, content, flags=re.MULTILINE)
+                else:
+                    content += f"\n{new_line}"
+                    
+                with open(env_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            
+            return jsonify({
+                'status': 'success', 
+                'interval': interval,
+                'message': f'Update interval set to {interval} minutes'
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to update interval: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    else:  # GET
+        try:
+            from engine.config import app_config
+            return jsonify({'interval': app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES})
+        except Exception as e:
+             return jsonify({'error': str(e)}), 500

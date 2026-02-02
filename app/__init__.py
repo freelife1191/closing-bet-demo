@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Flask Application Factory
+"""
+
+import os
+import sys
+import logging
+
+from flask import Flask, jsonify
+from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Set path to project root
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+
+# Custom filter to suppress repetitive polling logs
+class PollingLogFilter(logging.Filter):
+    """Filter out repetitive polling API logs"""
+    SUPPRESSED_PATHS = [
+        '/api/system/update-status',
+        '/api/system/data-status',
+        '/api/kr/jongga-v2/status',
+        '/api/kr/status',
+        '/api/kr/stock-detail',  # 상세 조회 로그도 제외
+        '/health',
+    ]
+    
+    def filter(self, record):
+        message = record.getMessage()
+        for path in self.SUPPRESSED_PATHS:
+            if path in message:
+                return False  # Suppress this log
+        return True  # Allow this log
+
+
+# Apply filter to werkzeug logger
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.addFilter(PollingLogFilter())
+
+# Import Blueprints
+try:
+    from app.routes import kr_bp, common_bp
+    blueprints = [kr_bp, common_bp]
+except ImportError as e:
+    print(f"Error importing blueprints: {e}")
+    blueprints = []
+
+def create_app():
+    # Ensure logs are printed to stdout
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    app = Flask(__name__)
+
+    # Config
+    app.config['JSON_AS_ASCII'] = False
+    app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() in ['true', '1']
+
+    # CORS
+    CORS(app, resources={r"/*": {"origins": "*"}})
+
+    # Register Blueprints with URL prefixes
+    from app.routes import kr_bp, common_bp
+    app.register_blueprint(kr_bp, url_prefix='/api/kr')
+    app.register_blueprint(common_bp, url_prefix='/api')
+
+    # Routes
+    @app.route('/')
+    def index():
+        return jsonify({'status': 'OK', 'app': 'KR Market API'})
+
+    @app.route('/health')
+    def health():
+        return jsonify({'status': 'healthy'})
+
+    return app
+
+if __name__ == '__main__':
+    app = create_app()
+    app.run(host='0.0.0.0', port=5001, debug=True)
