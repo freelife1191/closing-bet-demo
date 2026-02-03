@@ -437,7 +437,17 @@ export default function ChatbotPage() {
 
       // Auth Headers
       const apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
-      const headers: Record<string, string> = {};
+      let sessionId = localStorage.getItem('browser_session_id');
+
+      // 세션 ID가 없으면 생성
+      if (!sessionId) {
+        sessionId = 'anon_' + crypto.randomUUID();
+        localStorage.setItem('browser_session_id', sessionId);
+      }
+
+      const headers: Record<string, string> = {
+        'X-Session-Id': sessionId
+      };
       if (apiKey) headers['X-Gemini-Key'] = apiKey;
 
       // Email for quota tracking (from profile)
@@ -638,8 +648,8 @@ export default function ChatbotPage() {
           <button
             onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
             className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${alertModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
-                alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
-                  'bg-blue-500 hover:bg-blue-600'
+              alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                'bg-blue-500 hover:bg-blue-600'
               }`}
           >
             확인

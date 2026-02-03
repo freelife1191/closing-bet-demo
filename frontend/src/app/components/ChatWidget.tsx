@@ -92,6 +92,14 @@ export default function ChatWidget() {
       // Auth Info Retrieval
       let userEmail = null;
       let apiKey = null;
+      let sessionId = localStorage.getItem('browser_session_id');
+
+      // 세션 ID가 없으면 생성
+      if (!sessionId) {
+        sessionId = 'anon_' + crypto.randomUUID();
+        localStorage.setItem('browser_session_id', sessionId);
+      }
+
       try {
         const profileStr = localStorage.getItem('user_profile');
         if (profileStr) {
@@ -107,7 +115,8 @@ export default function ChatWidget() {
         headers: {
           'Content-Type': 'application/json',
           'X-User-Email': userEmail || '',
-          'X-Gemini-Key': apiKey || ''
+          'X-Gemini-Key': apiKey || '',
+          'X-Session-Id': sessionId
         },
         body: JSON.stringify({ message: messageToSend, watchlist }),
       });

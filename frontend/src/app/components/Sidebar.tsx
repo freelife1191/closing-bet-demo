@@ -56,14 +56,19 @@ export default function Sidebar() {
     };
   }, []);
 
-  // Fetch quota when profile email is available
+  // Fetch quota - 로그인 여부 관계없이 세션 ID 또는 이메일로 조회
   useEffect(() => {
-    if (profile.email && profile.email !== 'user@example.com') {
-      fetch(`/api/kr/user/quota?email=${profile.email}`)
-        .then(res => res.json())
-        .then(data => setQuota(data))
-        .catch(e => console.error(e));
+    let sessionId = localStorage.getItem('browser_session_id');
+    if (!sessionId) {
+      sessionId = 'anon_' + crypto.randomUUID();
+      localStorage.setItem('browser_session_id', sessionId);
     }
+
+    const email = profile.email !== 'user@example.com' ? profile.email : '';
+    fetch(`/api/kr/user/quota?email=${email}&session_id=${sessionId}`)
+      .then(res => res.json())
+      .then(data => setQuota(data))
+      .catch(e => console.error(e));
   }, [profile.email, isSettingsOpen]); // Update when settings close too
 
   const isActive = (path: string) => pathname === path;
@@ -260,7 +265,7 @@ export default function Sidebar() {
                 ) : quota ? (
                   <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
                 ) : (
-                  <span className="text-gray-500 text-[11px]">로그인 필요 (무료 10회)</span>
+                  <span className="text-gray-500 text-[11px]">Free Tier (무료 10회)</span>
                 )}
               </div>
             </div>
@@ -295,8 +300,8 @@ export default function Sidebar() {
           <button
             onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
             className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${alertModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
-                alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
-                  'bg-blue-500 hover:bg-blue-600'
+              alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                'bg-blue-500 hover:bg-blue-600'
               }`}
           >
             확인

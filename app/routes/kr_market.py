@@ -2120,22 +2120,23 @@ def kr_chatbot():
         from chatbot import get_chatbot
         
         # [Auth & Quota Logic]
-        # 1. API Key & Auth Check
+        # 1. API Key & Session Check
         user_api_key = request.headers.get('X-Gemini-Key')
         user_email = request.headers.get('X-User-Email')
+        session_id = request.headers.get('X-Session-Id')  # 브라우저 고유 세션 ID
         
         if user_api_key:
             user_api_key = user_api_key.strip()
-            # print(f"DEBUG: Using Client-Side Key for {user_email}", flush=True)
 
         use_free_tier = False
-        # 익명/기본 사용자(user@example.com)는 무료 티어 사용 불가 (Server Key 보호)
+        # 사용량 추적 키: 로그인한 경우 이메일, 아니면 세션 ID 사용
         is_authenticated = user_email and user_email != 'user@example.com'
+        usage_key = user_email if is_authenticated else session_id
 
         if not user_api_key:
-            # Key 미제공 시
-            if not is_authenticated:
-                 return jsonify({'error': '로그인이 필요합니다. (또는 설정 > API Key 등록)', 'code': 'AUTH_REQUIRED'}), 401
+            # Key 미제공 시 - 세션 ID 또는 이메일 기반으로 무료 티어 제공
+            if not usage_key:
+                 return jsonify({'error': '세션 정보가 없습니다. 페이지를 새로고침 해주세요.', 'code': 'SESSION_REQUIRED'}), 400
             
             # 무료 티어(Server Key) 가용성 체크
             from engine.config import app_config
@@ -2144,8 +2145,8 @@ def kr_chatbot():
             if not server_key_available:
                  return jsonify({'error': '시스템 API Key가 설정되지 않았습니다.', 'code': 'SERVER_CONFIG_MISSING'}), 503
 
-            # 쿼터 확인
-            used = get_user_usage(user_email)
+            # 쿼터 확인 (이메일 또는 세션 ID 기준)
+            used = get_user_usage(usage_key)
             if used >= MAX_FREE_USAGE:
                  return jsonify({'error': '무료 사용량(10회)을 초과했습니다. [설정 > API]에서 개인 API Key를 등록해주세요.', 'code': 'QUOTA_EXCEEDED'}), 402
             
@@ -2216,7 +2217,7 @@ def kr_chatbot():
              # 에러가 아니고, 경고 메시지(⚠️)가 아닐 때만 차감
              resp_text = response_data.get('response', '')
              if not response_data.get('error') and not str(resp_text).startswith('⚠️'):
-                 increment_user_usage(user_email)
+                 increment_user_usage(usage_key)
         
         return jsonify(response_data)
              
@@ -2399,13 +2400,19 @@ def increment_user_usage(email):
 
 @kr_bp.route('/user/quota')
 def get_user_quota_info():
-    """사용자 쿼터 정보 반환"""
+    """사용자 쿼터 정보 반환 (이메일 또는 세션 ID 기반)"""
     try:
         user_email = request.args.get('email') or request.headers.get('X-User-Email')
-        if not user_email:
-            return jsonify({'usage': 0, 'limit': MAX_FREE_USAGE, 'remaining': 0, 'message': '로그인이 필요합니다.'})
+        session_id = request.args.get('session_id') or request.headers.get('X-Session-Id')
+        
+        # 로그인한 경우 이메일, 아니면 세션 ID 사용
+        is_authenticated = user_email and user_email != 'user@example.com'
+        usage_key = user_email if is_authenticated else session_id
+        
+        if not usage_key:
+            return jsonify({'usage': 0, 'limit': MAX_FREE_USAGE, 'remaining': MAX_FREE_USAGE, 'message': '무료 10회 사용 가능'})
             
-        used = get_user_usage(user_email)
+        used = get_user_usage(usage_key)
         remaining = max(0, MAX_FREE_USAGE - used)
         
         return jsonify({

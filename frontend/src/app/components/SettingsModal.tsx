@@ -412,8 +412,8 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                             </div>
                           </div>
                         ) : (
-                          <div className="text-xs text-gray-500">
-                            로그인이 필요합니다. (무료 10회 제공)
+                          <div className="text-xs text-blue-400">
+                            ✨ 무료 10회 AI 사용 가능
                           </div>
                         )}
                       </div>
@@ -477,7 +477,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                               {envVars['GOOGLE_API_KEY'] ? (
                                 <span className="text-purple-400 font-bold block">✨ API Key가 감지되었습니다 (무제한 이용 가능)</span>
                               ) : (
-                                <span className="text-blue-400 font-bold">(로그인 시 무료 10회 AI 사용권 제공)</span>
+                                <span className="text-blue-400 font-bold">(무료 10회 AI 사용 가능)</span>
                               )}
                             </div>
                           </div>
