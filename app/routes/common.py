@@ -693,6 +693,9 @@ def manage_env():
                         continue
                     if '=' in line:
                         key, value = line.split('=', 1)
+                        # [Fix] 빈 값은 응답에서 제외 (쓰레기값 방지)
+                        if not value or value.strip() == '':
+                            continue
                         # 중요 키 마스킹 처리 (선택)
                         # [Modified] 사용자 요청: API Key 외에도 이메일, ID 등 개인정보가 포함된 모든 주요 설정값 마스킹
                         sensitive_keywords = ['KEY', 'SECRET', 'PASSWORD', 'TOKEN', 'USER', 'ID', 'URL', 'HOST', 'RECIPIENTS']

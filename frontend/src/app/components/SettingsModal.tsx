@@ -33,6 +33,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
+  // [Fix] API 키 유효성 검사 헬퍼 함수
+  const isApiKeyValid = (key: string | undefined | null): boolean => {
+    return !!(key && key.trim() !== '' && key !== 'null' && key !== 'undefined');
+  };
+
   useEffect(() => {
     if (session?.user?.email && isOpen) {
       fetch(`/api/kr/user/quota?email=${session.user.email}`)
@@ -77,15 +82,23 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
       if (res.ok) {
         const data = await res.json();
 
+        // [Fix] 서버에서 반환한 마스킹된 값(*포함)은 제거 (실제 값이 아니므로)
+        const apiKeyFields = ['GOOGLE_API_KEY', 'OPENAI_API_KEY', 'PERPLEXITY_API_KEY'];
+        for (const key of apiKeyFields) {
+          if (data[key] && data[key].includes('*')) {
+            delete data[key]; // 마스킹된 값은 입력 필드에 표시하지 않음
+          }
+        }
+
         // [Fix] Merge Client-side API Keys from localStorage
-        // This ensures keys entered by user (and saved to LS) are displayed even if not on server
+        // localStorage에 유효한 값이 있으면 그것을 사용
         const googleKey = localStorage.getItem('GOOGLE_API_KEY');
         const openaiKey = localStorage.getItem('OPENAI_API_KEY');
         const perplexityKey = localStorage.getItem('PERPLEXITY_API_KEY');
 
-        if (googleKey && googleKey.trim() !== '') data['GOOGLE_API_KEY'] = googleKey;
-        if (openaiKey && openaiKey.trim() !== '') data['OPENAI_API_KEY'] = openaiKey;
-        if (perplexityKey && perplexityKey.trim() !== '') data['PERPLEXITY_API_KEY'] = perplexityKey;
+        if (isApiKeyValid(googleKey)) data['GOOGLE_API_KEY'] = googleKey!;
+        if (isApiKeyValid(openaiKey)) data['OPENAI_API_KEY'] = openaiKey!;
+        if (isApiKeyValid(perplexityKey)) data['PERPLEXITY_API_KEY'] = perplexityKey!;
 
         setEnvVars(data);
       }
@@ -235,8 +248,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   useEffect(() => {
     if (isOpen) {
       const storedKey = localStorage.getItem('X-Gemini-Key');
-      if (storedKey && storedKey.trim() !== '') {
-        handleEnvChange('GOOGLE_API_KEY', storedKey); // UI 상에 표시
+      // [Fix] 쓰레기값(null, undefined, 빈 문자열) 필터링
+      if (isApiKeyValid(storedKey)) {
+        handleEnvChange('GOOGLE_API_KEY', storedKey!); // UI 상에 표시
+      } else {
+        // 유효하지 않은 값은 localStorage에서 제거
+        localStorage.removeItem('X-Gemini-Key');
+        localStorage.removeItem('GOOGLE_API_KEY');
       }
     }
   }, [isOpen]);
@@ -398,7 +416,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1.5">무료 사용량 상태</label>
                       <div className="bg-[#18181b] border border-white/10 rounded-lg p-3">
-                        {envVars['GOOGLE_API_KEY'] ? (
+                        {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
                           <div className="flex items-center gap-2 text-purple-400">
                             <i className="fas fa-key"></i>
                             <span className="text-sm font-bold">API Key 사용 중 (무제한 이용 가능)</span>
@@ -407,7 +425,31 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           <div className="w-full">
                             <div className="flex justify-between text-xs text-blue-400 mb-1.5">
                               <span>사용량: {quota.usage} / {quota.limit}회</span>
-                              <span className="font-bold text-white">{quota.remaining}회 남음</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white">{quota.remaining}회 남음</span>
+                                <button
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    const sessionId = localStorage.getItem('browser_session_id');
+                                    try {
+                                      const res = await fetch('/api/kr/user/quota/recharge', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ email: session?.user?.email || '', session_id: sessionId })
+                                      });
+                                      const data = await res.json();
+                                      if (res.ok) {
+                                        setQuota(data);
+                                        setTestModal({ isOpen: true, type: 'success', title: '충전 완료', content: data.message });
+                                      }
+                                    } catch (e) { console.error(e); }
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center bg-blue-500 hover:bg-blue-400 rounded text-white text-xs font-bold transition-colors"
+                                  title="5회 충전"
+                                >
+                                  +
+                                </button>
+                              </div>
                             </div>
                             <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                               <div
@@ -479,7 +521,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           <div className="text-xs text-gray-500">
                             구글 계정으로 로그인하여 설정을 동기화하세요.
                             <div className="mt-1">
-                              {envVars['GOOGLE_API_KEY'] ? (
+                              {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
                                 <span className="text-purple-400 font-bold block">✨ API Key가 감지되었습니다 (무제한 이용 가능)</span>
                               ) : (
                                 <span className="text-blue-400 font-bold">(무료 10회 AI 사용 가능)</span>
@@ -504,7 +546,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           <div>
                             <div className="text-sm font-bold text-white">{googleUserInfo?.name}</div>
                             <div className="text-xs text-gray-500">{googleUserInfo?.email}</div>
-                            {envVars['GOOGLE_API_KEY'] ? (
+                            {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
                               <div className="text-[11px] text-purple-400 mt-1 font-bold">
                                 API Key 사용 중 (무제한 이용 가능)
                               </div>

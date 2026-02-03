@@ -43,6 +43,7 @@ export default function ChatWidget() {
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const { data: session } = useSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // [Fix] IME 조합 초기화용
   const pathname = usePathname();
 
   // Slash commands list
@@ -103,6 +104,12 @@ export default function ChatWidget() {
       timestamp: new Date().toISOString()
     };
     setMessages(prev => [...prev, userMsg]);
+
+    // [Fix] 한글 IME 조합 강제 종료 후 입력창 초기화
+    if (textareaRef.current) {
+      textareaRef.current.blur();  // IME 조합 종료
+      textareaRef.current.value = ''; // 직접 값 초기화
+    }
     setInput('');
     setIsLoading(true);
 
@@ -159,6 +166,10 @@ export default function ChatWidget() {
 
       if (data.response) {
         setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
+        // [Fix] 성공 응답 후 Sidebar quota 실시간 업데이트
+        if (!data.response.startsWith('⚠️')) {
+          window.dispatchEvent(new CustomEvent('quota-updated'));
+        }
       } else if (data.error) {
         setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ 오류: ${data.error}`] }]);
       } else {
@@ -460,6 +471,7 @@ export default function ChatWidget() {
 
               {/* Textarea */}
               <textarea
+                ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}

@@ -2204,7 +2204,7 @@ def kr_chatbot():
             
             # 무료 티어(Server Key) 가용성 체크
             from engine.config import app_config
-            server_key_available = bool(app_config.GOOGLE_API_KEY or (app_config.LLM_PROVIDER == 'zai' and app_config.ZAI_API_KEY))
+            server_key_available = bool(app_config.GOOGLE_API_KEY or app_config.ZAI_API_KEY)
              
             if not server_key_available:
                  return jsonify({'error': '시스템 API Key가 설정되지 않았습니다.', 'code': 'SERVER_CONFIG_MISSING'}), 503
@@ -2280,8 +2280,15 @@ def kr_chatbot():
         if use_free_tier:
              # 에러가 아니고, 경고 메시지(⚠️)가 아닐 때만 차감
              resp_text = response_data.get('response', '')
-             if not response_data.get('error') and not str(resp_text).startswith('⚠️'):
-                 increment_user_usage(usage_key)
+             has_error = response_data.get('error')
+             starts_with_warning = str(resp_text).startswith('⚠️')
+             logger.info(f"[QUOTA] use_free_tier={use_free_tier}, has_error={has_error}, starts_with_warning={starts_with_warning}, usage_key={usage_key}")
+             
+             if not has_error and not starts_with_warning:
+                 new_usage = increment_user_usage(usage_key)
+                 logger.info(f"[QUOTA] 사용량 차감 완료: {usage_key} -> {new_usage}회")
+             else:
+                 logger.info(f"[QUOTA] 차감 스킵: error={has_error}, warning={starts_with_warning}")
         
         return jsonify(response_data)
              
@@ -2481,7 +2488,7 @@ def get_user_quota_info():
         
         # Check Server Key Availability
         from engine.config import app_config
-        server_key_available = bool(app_config.GOOGLE_API_KEY or (app_config.LLM_PROVIDER == 'zai' and app_config.ZAI_API_KEY))
+        server_key_available = bool(app_config.GOOGLE_API_KEY or app_config.ZAI_API_KEY)
 
         return jsonify({
             'usage': used,
@@ -2491,6 +2498,44 @@ def get_user_quota_info():
             'server_key_configured': server_key_available
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/user/quota/recharge', methods=['POST'])
+def recharge_user_quota():
+    """무료 사용량 5회 충전"""
+    try:
+        data = request.get_json() or {}
+        user_email = data.get('email') or request.headers.get('X-User-Email')
+        session_id = data.get('session_id') or request.headers.get('X-Session-Id')
+        
+        # 로그인한 경우 이메일, 아니면 세션 ID 사용
+        is_authenticated = user_email and user_email != 'user@example.com'
+        usage_key = user_email if is_authenticated else session_id
+        
+        if not usage_key:
+            return jsonify({'error': '세션 정보가 없습니다.'}), 400
+        
+        # 현재 사용량 조회 후 5회 차감 (최소 0)
+        quota_data = load_json_file('user_quota.json')
+        current_usage = quota_data.get(usage_key, 0)
+        new_usage = max(0, current_usage - 5)
+        quota_data[usage_key] = new_usage
+        
+        with open(QUOTA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(quota_data, f, indent=2)
+        
+        remaining = max(0, MAX_FREE_USAGE - new_usage)
+        
+        return jsonify({
+            'status': 'success',
+            'usage': new_usage,
+            'limit': MAX_FREE_USAGE,
+            'remaining': remaining,
+            'message': f'5회 충전 완료! (남은 횟수: {remaining}회)'
+        })
+    except Exception as e:
+        logger.error(f"Recharge quota error: {e}")
         return jsonify({'error': str(e)}), 500
 
 

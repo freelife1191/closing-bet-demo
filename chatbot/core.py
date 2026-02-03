@@ -314,8 +314,8 @@ class KRStockChatbot:
         # .env에서 사용자 프로필 초기화 (기본값이 없을 때만 설정)
         self._init_user_profile_from_env()
 
-        # Gemini 초기화
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
+        # Gemini 초기화 - ZAI_API_KEY도 확인 (무료 티어 지원)
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "") or os.getenv("ZAI_API_KEY", "")
         self.available_models = []
         self.current_model_name = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
         self.client = None
@@ -324,11 +324,11 @@ class KRStockChatbot:
             try:
                 self.client = genai.Client(api_key=self.api_key)
                 self._init_models()
-                logger.info(f"Gemini initialized for user: {user_id}")
+                logger.info(f"Gemini initialized for user: {user_id} (KeyLen: {len(self.api_key)})")
             except Exception as e:
                 logger.error(f"Gemini initialization failed: {e}")
         else:
-            logger.warning("Gemini not available or API Config missing")
+            logger.warning(f"Gemini not available or API Config missing (GEMINI_AVAILABLE={GEMINI_AVAILABLE}, api_key={bool(self.api_key)})")
 
     def close(self):
         """Gemini 클라이언트 리소스 정리 (asyncio Task pending 오류 방지)"""
@@ -1052,13 +1052,23 @@ class KRStockChatbot:
             error_msg = str(e)
             logger.error(f"Chat error: {error_msg}")
             
-            # [Error Handling] 429 Resource Exhausted (Quota Limit)
-            if "429" in error_msg or "Resource exhausted" in error_msg:
+            # [Error Handling] 429 Resource Exhausted (Google API Rate Limit)
+            if "429" in error_msg or "Resource exhausted" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
                 friendly_msg = (
-                    "⚠️ **무료 사용량이 초과되었습니다.**\n\n"
-                    "시스템 공용 사용량이 많아 잠시 답변이 어렵습니다.\n"
-                    "안정적인 사용을 위해 **[설정] > [API Key]** 메뉴에서 개인 **Google Gemini API Key**를 등록해주세요.\n\n"
-                    "(잠시 후 다시 시도하시면 될 수도 있습니다.)"
+                    "⚠️ **AI 서버 요청 한도 초과**\n\n"
+                    "Google AI 서버의 분당 요청 한도에 도달했습니다.\n"
+                    "**약 30초~1분 후에 다시 시도해주세요.**\n\n"
+                    "💡 안정적인 사용을 위해 **[설정] > [API Key]** 메뉴에서 개인 API Key를 등록하시면 이 제한을 피할 수 있습니다."
+                )
+                return {"response": friendly_msg, "session_id": session_id}
+
+            # [Error Handling] 400 Invalid Argument (API Key Invalid)
+            if "400" in error_msg or "API_KEY_INVALID" in error_msg or "API key not valid" in error_msg:
+                friendly_msg = (
+                    "⚠️ **API Key 설정 오류**\n\n"
+                    "시스템에 설정된 API Key가 유효하지 않습니다.\n"
+                    "관리자에게 문의하거나 **[설정] > [API Key]** 메뉴에서 올바른 API Key를 다시 등록해주세요.\n"
+                    "(Google 서비스 문제일 수도 있습니다.)"
                 )
                 return {"response": friendly_msg, "session_id": session_id}
 

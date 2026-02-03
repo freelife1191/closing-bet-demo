@@ -119,7 +119,7 @@ class Chatbot:
                         active_client = OpenAI(api_key=api_key, base_url=base_url)
                         print("Temp Client (Z.ai) init success", flush=True)
                     else:
-                        import google.generativeai as genai
+                        from google import genai
                         active_client = genai.Client(api_key=api_key)
                         print("Temp Client (Gemini) init success", flush=True)
                 except Exception as e:

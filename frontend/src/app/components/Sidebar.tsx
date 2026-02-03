@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Modal from './Modal';
 import PaperTradingModal from './PaperTradingModal';
 
@@ -28,10 +28,13 @@ export default function Sidebar() {
 
   useEffect(() => {
     // Check for API Key in localStorage (both keys for compatibility)
+    // [Fix] 빈 문자열, null, undefined는 유효하지 않은 키로 처리
     const checkApiKey = () => {
       const googleKey = localStorage.getItem('GOOGLE_API_KEY');
       const geminiKey = localStorage.getItem('X-Gemini-Key');
-      setHasApiKey(!!(googleKey || geminiKey));
+      const isGoogleKeyValid = googleKey && googleKey.trim() !== '' && googleKey !== 'null' && googleKey !== 'undefined';
+      const isGeminiKeyValid = geminiKey && geminiKey.trim() !== '' && geminiKey !== 'null' && geminiKey !== 'undefined';
+      setHasApiKey(!!(isGoogleKeyValid || isGeminiKeyValid));
     };
     checkApiKey();
 
@@ -67,8 +70,7 @@ export default function Sidebar() {
   }, []);
 
   // Fetch quota - API Key가 없을 때만 무료 사용량 조회
-  useEffect(() => {
-    // API Key가 있으면 quota를 조회하지 않음 (무제한)
+  const refreshQuota = useCallback(() => {
     if (hasApiKey) {
       setQuota(null);
       return;
@@ -84,17 +86,22 @@ export default function Sidebar() {
     fetch(`/api/kr/user/quota?email=${email}&session_id=${sessionId}`)
       .then(res => res.json())
       .then(data => {
-        // 서버에 키가 설정되어 있으면 무료 사용량 표시 안 함
-        if (data.server_key_configured) {
-          setServerKeyConfigured(true);
-          setQuota(null);
-        } else {
-          setServerKeyConfigured(false);
-          setQuota(data);
-        }
+        setServerKeyConfigured(data.server_key_configured || false);
+        setQuota(data);
       })
       .catch(e => console.error(e));
-  }, [profile.email, isSettingsOpen, hasApiKey]); // Update when settings close or API key changes
+  }, [hasApiKey, profile.email]);
+
+  useEffect(() => {
+    refreshQuota();
+  }, [refreshQuota, isSettingsOpen]); // Update when settings close or API key changes
+
+  // [Fix] 챗봇 응답 후 quota 자동 갱신
+  useEffect(() => {
+    const handleQuotaUpdate = () => refreshQuota();
+    window.addEventListener('quota-updated', handleQuotaUpdate);
+    return () => window.removeEventListener('quota-updated', handleQuotaUpdate);
+  }, [refreshQuota]);
 
   const isActive = (path: string) => pathname === path;
   const isGroupActive = (prefix: string) => pathname.startsWith(prefix);
@@ -259,9 +266,9 @@ export default function Sidebar() {
           )}
 
           {/* Quota Display above Profile */}
-          {(hasApiKey || serverKeyConfigured || quota) && (
+          {(hasApiKey || quota) && (
             <div className="mb-2 px-3">
-              {(hasApiKey || serverKeyConfigured) ? (
+              {hasApiKey ? (
                 <div className="text-[10px] font-bold text-center text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded py-1">
                   ✨ API Key 사용 중 (무제한)
                 </div>
@@ -269,9 +276,34 @@ export default function Sidebar() {
                 <div className="bg-white/5 border border-white/5 rounded-lg p-2">
                   <div className="flex justify-between items-center text-[10px] text-gray-400 mb-1">
                     <span>무료 사용량</span>
-                    <span className={`font-bold ${quota.remaining > 3 ? 'text-blue-400' : 'text-red-400'}`}>
-                      {quota.remaining}회 남음
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`font-bold ${quota.remaining > 3 ? 'text-blue-400' : 'text-red-400'}`}>
+                        {quota.remaining}회 남음
+                      </span>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const sessionId = localStorage.getItem('browser_session_id');
+                          const email = profile.email !== 'user@example.com' ? profile.email : '';
+                          try {
+                            const res = await fetch('/api/kr/user/quota/recharge', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ email, session_id: sessionId })
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setQuota(data);
+                              setAlertModal({ isOpen: true, type: 'success', title: '충전 완료', content: data.message });
+                            }
+                          } catch (e) { console.error(e); }
+                        }}
+                        className="w-4 h-4 flex items-center justify-center bg-blue-500 hover:bg-blue-400 rounded text-white text-[9px] font-bold transition-colors"
+                        title="5회 충전"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                   <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
                     <div
@@ -294,7 +326,7 @@ export default function Sidebar() {
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-white truncate">{profile.name}</div>
               <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
-                {(hasApiKey || serverKeyConfigured) ? (
+                {hasApiKey ? (
                   <span className="text-gray-500 text-[11px]">Personal Pro Plan</span>
                 ) : quota ? (
                   <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
