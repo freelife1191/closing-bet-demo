@@ -435,8 +435,8 @@ class MarketGate:
             df['ticker'] = df['ticker'].astype(str).str.zfill(6)
             df = df[df['ticker'] == self.kodex_ticker].copy()
             
-            if df.empty:
-                return pd.DataFrame()
+            # if df.empty:
+            #     return pd.DataFrame()
                 
             df = df.sort_values('date')
             
@@ -447,10 +447,49 @@ class MarketGate:
                     logger.warning(f"{target_date} 이전 데이터가 없습니다.")
                     return pd.DataFrame()
             
-            return df
+            if not df.empty:
+                return df
         except Exception as e:
             logger.error(f"CSV 로드 실패: {e}")
-            return pd.DataFrame()
+            # Fallback will be handled below if df is empty or not returned
+        
+        # CSV 로드 실패 또는 데이터 없음 -> yfinance 폴백
+        if 'df' not in locals() or df.empty:
+            logger.info(f"가격 데이터 CSV에서 {self.kodex_ticker} 확인 불가. yfinance 폴백 시도.")
+            try:
+                import yfinance as yf
+                yf_ticker = f"{self.kodex_ticker}.KS"
+                stock = yf.Ticker(yf_ticker)
+                
+                # 충분한 기간 데이터 조회 (MA60 계산 위해 최소 3개월)
+                end_date = None
+                if target_date:
+                    from datetime import datetime, timedelta
+                    dt = datetime.strptime(target_date, '%Y-%m-%d')
+                    end_date = (dt + timedelta(days=1)).strftime('%Y-%m-%d')
+                
+                hist = stock.history(period="6mo" if not target_date else None, end=end_date)
+                
+                if not hist.empty:
+                     hist = hist.reset_index()
+                     # yfinance columns: Date, Open, High, Low, Close, Volume
+                     # Rename to match internal schema: date, open, high, low, close, volume, ticker
+                     hist.columns = [c.lower() for c in hist.columns]
+                     if 'date' in hist.columns:
+                         hist['date'] = hist['date'].dt.strftime('%Y-%m-%d')
+                    
+                     hist['ticker'] = self.kodex_ticker
+                     hist = hist[['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']]
+                     
+                     # 날짜 필터링 (target_date 기준)
+                     if target_date:
+                         hist = hist[hist['date'] <= target_date]
+                         
+                     return hist
+            except Exception as e:
+                logger.error(f"yfinance 폴백 실패: {e}")
+                
+        return pd.DataFrame()
 
     def save_analysis(self, result: Dict, target_date: str = None) -> str:
         """분석 결과 JSON 저장"""

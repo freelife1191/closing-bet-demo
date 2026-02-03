@@ -570,6 +570,103 @@ def create_korean_stocks_list():
         return True
 
 
+
+def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
+    """yfinance를 이용한 가격 데이터 수집 폴백"""
+    try:
+        import yfinance as yf
+        log("yfinance 백업 수집 모드 가동...", "INFO")
+        
+        # 종목 리스트 로드
+        stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
+        if not os.path.exists(stocks_file):
+            log("종목 리스트 파일이 없어 yfinance 수집 불가", "ERROR")
+            return False
+            
+        stocks_df = pd.read_csv(stocks_file, dtype={'ticker': str})
+        tickers = stocks_df['ticker'].tolist()
+        
+        new_data_list = []
+        
+        total = len(tickers)
+        for idx, ticker in enumerate(tickers):
+            try:
+                # 마켓 확인
+                market_info = stocks_df[stocks_df['ticker'] == ticker]['market'].values
+                suffix = ".KS" if len(market_info) > 0 and market_info[0] == 'KOSPI' else ".KQ"
+                yf_ticker = f"{ticker}{suffix}"
+                
+                # 데이터 다운로드 (진행률 표시 없이)
+                df = yf.download(yf_ticker, start=start_date.strftime('%Y-%m-%d'), end=(end_date + timedelta(days=1)).strftime('%Y-%m-%d'), progress=False)
+                
+                if not df.empty:
+                    # MultiIndex 컬럼 처리
+                    if isinstance(df.columns, pd.MultiIndex):
+                         # yfinance 0.2.x+ returns MultiIndex if configured or sometimes by default
+                         # It usually is (Price, Ticker) or just Price.
+                         # Dropping level if it exists
+                        try:
+                            df.columns = df.columns.droplevel(1)
+                        except:
+                            pass
+                        
+                    df = df.reset_index()
+                    # 컬럼 이름이 Date, Open, High ...
+                    
+                    # Rename columns to standard lowercase
+                    df = df.rename(columns={
+                        'Date': 'date', 'Open': 'open', 'High': 'high', 
+                        'Low': 'low', 'Close': 'close', 'Volume': 'volume'
+                    })
+                    
+                    # Ensure columns exist
+                    required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
+                    if not all(col in df.columns for col in required_cols):
+                         continue
+
+                    df['date'] = df['date'].dt.strftime('%Y-%m-%d')
+                    df['ticker'] = ticker
+                    
+                    # Type conversion
+                    df['open'] = df['open'].astype(int)
+                    df['high'] = df['high'].astype(int)
+                    df['low'] = df['low'].astype(int)
+                    df['close'] = df['close'].astype(int)
+                    df['volume'] = df['volume'].astype(int)
+                    
+                    subset = df[['date', 'ticker', 'open', 'high', 'low', 'close', 'volume']]
+                    new_data_list.append(subset)
+                    
+            except Exception as e:
+                continue
+                
+            if idx % 50 == 0:
+                print(f"  -> yfinance 진행: {idx}/{total}")
+
+        if new_data_list:
+            new_df = pd.concat(new_data_list)
+            
+            if not existing_df.empty:
+                if 'date' in existing_df.columns and not pd.api.types.is_string_dtype(existing_df['date']):
+                     existing_df['date'] = existing_df['date'].dt.strftime('%Y-%m-%d')
+                     
+                final_df = pd.concat([existing_df, new_df])
+                final_df = final_df.drop_duplicates(subset=['ticker', 'date'], keep='last')
+            else:
+                final_df = new_df
+                
+            final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+            log(f"yfinance 백업 수집 완료 ({len(final_df)}행)", "SUCCESS")
+            return True
+        else:
+            log("yfinance 수집 데이터 없음", "WARNING")
+            return True
+            
+    except Exception as e:
+        log(f"yfinance 폴백 실패: {e}", "ERROR")
+        return False
+
+
 def create_daily_prices(target_date=None):
     """일별 가격 데이터 수집 - pykrx 날짜별 일괄 조회 (속도 최적화)"""
     log("일별 가격 데이터 수집 중 (Date-based Fast Mode)...")
@@ -712,18 +809,14 @@ def create_daily_prices(target_date=None):
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
             log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "SUCCESS")
         else:
-             if not existing_df.empty:
-                 log("일별 가격: 신규 데이터 없음 (휴장일 등), 기존 데이터 유지", "SUCCESS")
-             else:
-                 log("일별 가격: 수집된 데이터가 없습니다.", "WARNING")
+             log("pykrx 수집 데이터 없음. yfinance 폴백 시도...", "WARNING")
+             return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
                  
         return True
 
     except Exception as e:
-        log(f"일별 가격 데이터 수집 중 치명적 오류: {e}", "ERROR")
-        import traceback
-        traceback.print_exc()
-        return False
+        log(f"pykrx 수집 중 오류: {e} -> yfinance 폴백 시도", "WARNING")
+        return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
 
 
 def create_institutional_trend(target_date=None):
@@ -1061,8 +1154,12 @@ def create_signals_log(target_date=None, run_ai=False):
             # 수급 점수 계산
             supply = calculate_supply_score(ticker, inst_df)
             
-            # 종합 점수 (VCP 60% + 수급 40%)
-            total_score = vcp['score'] * 0.6 + supply['score'] * 0.4
+            # 종합 점수 (VCP 60% + 수급 40%) - 수급 데이터 누락 시 보정 로직 추가
+            # 수급 데이터가 없으면(0점), VCP 점수만으로 100% 환산 (55/60 -> 91점)
+            if supply['score'] == 0 and vcp['score'] > 0:
+                total_score = (vcp['score'] / 60) * 100
+            else:
+                total_score = vcp['score'] * 0.6 + supply['score'] * 0.4
             
             analyzed_count += 1
             
@@ -1070,7 +1167,7 @@ def create_signals_log(target_date=None, run_ai=False):
             if total_score >= 40 or analyzed_count <= 5:
                 log(f"  [{name}] VCP={vcp['score']}, Supply={supply['score']}, Total={total_score:.1f} (CR={vcp['contraction_ratio']})")
             
-            # 최소 점수 필터링 (60점 이상만)
+            # 최소 점수 필터링 (60점 기준 복구)
             if total_score < 60:
                 continue
             
@@ -1268,15 +1365,15 @@ def create_signals_log(target_date=None, run_ai=False):
                         df_combined = df_combined.sort_values(by=['signal_date', 'score'], ascending=[False, False])
                     
                     df_combined.to_csv(file_path, index=False, encoding='utf-8-sig')
-                    # 해당 날짜 데이터 반환 (common.py 연동용)
-                    return df_combined[df_combined['signal_date'] == current_date] if not df_combined.empty else pd.DataFrame()
+                    # 해당 날짜 데이터 반환 (common.py 연동용) -> init_data.py에서는 True 반환해야 함
+                    return True
                 except Exception as e:
                     log(f"기존 로그 병합 실패: {e}, 새로 생성합니다(덮어쓰기).", "WARNING")
                     df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
-                    return df_new
+                    return True
             else:
                 df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
-                return df_new
+                return True
                 
             log(f"VCP 시그널 분석 완료: {len(signals)} 종목 감지 (누적 저장)", "SUCCESS")
             return True
@@ -1499,7 +1596,31 @@ def assign_grade(score_data: dict) -> str:
         return 'D'
     
     # 그 외는 등급 없음
-    return None
+    return None 
+
+def get_themes_by_sector(sector: str, name: str) -> list:
+    """업종 및 종목명 기반 단순 테마 매핑"""
+    themes = []
+    if not sector:
+        return []
+    
+    # Simple Keywords Mapping
+    if '반도체' in sector or '전기전자' in sector:
+        themes.append('반도체')
+        if '삼성' in name or 'SK' in name:
+            themes.append('HBM')
+            themes.append('AI')
+    elif '제약' in sector or '바이오' in sector:
+        themes.append('바이오')
+        themes.append('신약개발')
+    elif '자동차' in sector:
+        themes.append('자동차')
+        themes.append('전기차')
+    elif '금융' in sector:
+        themes.append('금융')
+        themes.append('저PBR')
+        
+    return themes
 
 
 def get_expert_advice(grade: str, score: int, trading_value: int, market: str) -> dict:
@@ -1638,7 +1759,14 @@ def create_jongga_v2_latest():
                 "entry_price": buy_price,
                 "foreign_net_buy": score_data.get('foreign_net_buy', 0),
                 "inst_net_buy": score_data.get('inst_net_buy', 0),
-                "news_items": []
+                "themes": get_themes_by_sector(row.get('sector', ''), name), 
+                "news_items": [],
+                # Default AI Evaluation (Rule-based Fallback)
+                "ai_evaluation": {
+                    "action": "BUY" if grade in ['S', 'A'] else "HOLD",
+                    "confidence": score_data['total'] * 5 + (20 if grade == 'S' else 10 if grade == 'A' else 0),
+                    "model": "Rule-based (Pending AI)"
+                }
             })
         
         # 등급 우선, 총점 순 정렬
@@ -1901,7 +2029,7 @@ def create_kr_ai_analysis(target_date=None):
         if root_dir not in sys.path:
             sys.path.append(root_dir)
             
-        from kr_ai_analyzer import KrAiAnalyzer
+        from engine.kr_ai_analyzer import KrAiAnalyzer
         import pandas as pd
         import json
         

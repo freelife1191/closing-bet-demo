@@ -2,12 +2,14 @@
 import sys
 import os
 import json
+import logging
 # 프로젝트 루트 경로 추가 (scripts 상위 폴더)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from engine.market_gate import MarketGate
 
 def debug_market_gate():
+    logging.basicConfig(level=logging.INFO)
     print(">>> Debugging Market Gate Logic")
 
     # 1. Check JSON file

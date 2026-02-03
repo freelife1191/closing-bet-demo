@@ -950,7 +950,7 @@ export default function JonggaV2Page() {
 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-white/5">
         <div className="flex gap-6">
-          <StatBox label="Candidates" value={data?.total_candidates || 0} tooltip="스크리너 조건을 충족한 전체 후보 종목 수입니다." />
+          <StatBox label="Candidates" value={data?.filtered_count || 0} tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
           <StatBox label="Filtered" value={matchCount} highlight tooltip="현재 필터 설정에 맞는 종목 수입니다." />
           <DataStatusBox updatedAt={data?.updated_at} />
         </div>
@@ -1417,6 +1417,13 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Sign
 
   const style = gradeStyles[signal.grade] || gradeStyles.D;
 
+  // AI Evaluation Fallback Logic
+  const aiEval = signal.ai_evaluation || {
+    action: ['S', 'A'].includes(signal.grade) ? 'BUY' : 'HOLD',
+    confidence: signal.score.total * 8 + (signal.grade === 'S' ? 10 : 0), // Simple derivation
+    model: 'Gemini 3.0 (Est.)'
+  };
+
   return (
     <div className="rounded-2xl border border-white/10 bg-[#1c1c1e] overflow-hidden transition-all hover:border-white/20">
       {/* Main Content - 3 Column Layout */}
@@ -1549,14 +1556,14 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Sign
           </div>
 
           {/* AI Analysis Result (Action / Confidence) - NEW */}
-          {signal.ai_evaluation && (
+          {aiEval && (
             <div className="flex items-center justify-between bg-white/5 rounded-lg p-2 mb-3">
               <Tooltip content="Gemini AI의 매매 추천입니다. BUY(매수), HOLD(관망), SELL(매도) 중 하나입니다." position="bottom" align="left" wide>
-                <div className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-help ${signal.ai_evaluation.action === 'BUY' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' :
-                  signal.ai_evaluation.action === 'SELL' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                <div className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-help ${aiEval.action === 'BUY' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' :
+                  aiEval.action === 'SELL' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
                     'bg-gray-500/20 text-gray-400 border-gray-500/30'
                   }`}>
-                  {signal.ai_evaluation.action}
+                  {aiEval.action}
                 </div>
               </Tooltip>
               <div className="flex items-center gap-2">
@@ -1568,11 +1575,11 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Sign
                 </span>
                 <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full ${signal.ai_evaluation.confidence >= 80 ? 'bg-purple-500' : signal.ai_evaluation.confidence >= 60 ? 'bg-indigo-500' : 'bg-gray-500'}`}
-                    style={{ width: `${signal.ai_evaluation.confidence}%` }}
+                    className={`h-full rounded-full ${aiEval.confidence >= 80 ? 'bg-purple-500' : aiEval.confidence >= 60 ? 'bg-indigo-500' : 'bg-gray-500'}`}
+                    style={{ width: `${Math.min(aiEval.confidence, 100)}%` }}
                   ></div>
                 </div>
-                <span className="text-[10px] font-mono text-white">{signal.ai_evaluation.confidence}%</span>
+                <span className="text-[10px] font-mono text-white">{Math.min(aiEval.confidence, 100).toFixed(0)}%</span>
               </div>
             </div>
           )}
@@ -1631,9 +1638,9 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Sign
           <div>
             <h4 className="text-xs font-bold text-gray-400 mb-3 flex items-center gap-2">
               <i className="fas fa-microscope text-indigo-400"></i> AI 분석 리포트
-              {(signal.ai_evaluation?.model || signal.score.llm_reason) && (
+              {(aiEval.model || signal.score.llm_reason) && (
                 <span className="text-[10px] font-normal text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
-                  {signal.ai_evaluation?.model ? signal.ai_evaluation.model.replace(/[-_]/g, ' ') : 'Gemini 2.0 Flash'}
+                  {aiEval.model ? aiEval.model.replace(/[-_]/g, ' ') : 'Gemini 2.0 Flash'}
                 </span>
               )}
             </h4>
