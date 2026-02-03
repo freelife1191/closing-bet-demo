@@ -373,7 +373,7 @@ export default function VCPSignalsPage() {
     }
 
     return (
-      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${bgClass} border border-current/30`} title={rec.reason}>
+      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${bgClass} border border-current/30 whitespace-nowrap`} title={rec.reason}>
         {icon} {label}
       </span>
     );
@@ -421,23 +421,23 @@ export default function VCPSignalsPage() {
 
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 md:space-y-8 pb-20 md:pb-0">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-500/20 bg-blue-500/5 text-xs text-blue-400 font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-500/20 bg-blue-500/5 text-xs text-blue-400 font-medium mb-2 md:mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>
             VCP 패턴 스캐너
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tighter text-white leading-tight mb-2">
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tighter text-white leading-tight mb-2">
             VCP <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">시그널</span>
           </h2>
-          <p className="text-gray-400 text-lg">Volatility Contraction Pattern + 기관/외국인 수급</p>
+          <p className="text-gray-400 text-sm md:text-lg">Volatility Contraction Pattern + 기관/외국인 수급</p>
         </div>
 
         {/* 리프레쉬 버튼 */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full md:w-auto">
           {screenerMessage && (
-            <span className={`text-xs px-3 py-1 rounded-full ${screenerMessage.includes('성공') || screenerMessage.includes('완료') ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+            <span className={`text-xs px-3 py-1 rounded-full whitespace-nowrap ${screenerMessage.includes('성공') || screenerMessage.includes('완료') ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
               {screenerMessage}
             </span>
           )}
@@ -488,7 +488,7 @@ export default function VCPSignalsPage() {
               }
             }}
             disabled={screenerRunning}
-            className={`px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${screenerRunning
+            className={`flex-1 md:flex-none justify-center px-4 py-3 md:py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${screenerRunning
               ? 'bg-gradient-to-r from-rose-600/80 to-purple-600/80 text-white/80 cursor-wait'
               : 'bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white shadow-lg hover:shadow-rose-500/25'
               }`}
@@ -512,26 +512,26 @@ export default function VCPSignalsPage() {
 
 
       {/* 실시간 VCP 시그널 테이블 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <span className="w-1 h-5 bg-blue-500 rounded-full"></span>
             실시간 VCP 시그널
           </h3>
-          <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full">
+          <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full whitespace-nowrap">
             TOP {Math.min(signals.length, 20)}
           </span>
           {/* 스캔 수 표시 */}
-          <span className="text-xs text-gray-500 ml-2">
+          <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
             (Scanned: {scannedCount})
           </span>
         </div>
 
-        <div className="flex items-center gap-2 relative">
+        <div className="flex items-center gap-2 relative self-end md:self-auto">
           <button
             onClick={handleLoadLatest}
             disabled={loading}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all disabled:opacity-50 ${activeDateTab === 'latest'
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all disabled:opacity-50 whitespace-nowrap ${activeDateTab === 'latest'
               ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/20'
               : 'bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10'
               }`}
@@ -545,7 +545,7 @@ export default function VCPSignalsPage() {
                 if (!isHistoryOpen) loadHistoryDates();
                 setIsHistoryOpen(!isHistoryOpen);
               }}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all border flex items-center gap-2 ${activeDateTab === 'history'
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all border flex items-center gap-2 whitespace-nowrap ${activeDateTab === 'history'
                 ? 'bg-white/10 text-white border-white/20'
                 : 'bg-white/5 hover:bg-white/10 text-gray-400 border-white/10'
                 }`}
@@ -553,6 +553,7 @@ export default function VCPSignalsPage() {
               <i className="fas fa-calendar"></i>
               {selectedHistoryDate || '과거'}
             </button>
+
 
             {isHistoryOpen && (
               <>
@@ -584,45 +585,45 @@ export default function VCPSignalsPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-[#1c1c1e] border border-white/10">
+      <div className="rounded-2xl bg-[#1c1c1e] border border-white/10 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead className="bg-black/20">
               <tr className="text-[10px] text-gray-500 border-b border-white/5 uppercase tracking-wider">
-                <th className="px-4 py-3 font-semibold">Stock</th>
-                <th className="px-4 py-3 font-semibold">Date</th>
-                <th className="px-4 py-3 font-semibold text-right">
+                <th className="px-4 py-3 font-semibold min-w-[120px]">Stock</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Date</th>
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="외국인 5일 연속 순매수 금액">외국인 5D</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-right">
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="기관 5일 연속 순매수 금액">기관 5D</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-center">
+                <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   Buy
                 </th>
-                <th className="px-4 py-3 font-semibold text-center">
+                <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="VCP(60%) + 수급(40%) 합산 점수 (높을수록 좋음)">Score</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-center">
+                <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="변동성 수축 비율 (0.9 미만 권장, 낮을수록 에너지 응축)">Cont.</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-right">
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="시그널 발생 당시 진입 추천가">Entry</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-right">
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="현재 주가 (실시간 업데이트 아님)">Current</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-right">
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="진입가 대비 현재 수익률 (%)">Return</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-center">
+                <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="Second AI 기반 매매 의견">
                     {signals.length > 0 && aiData?.signals?.some(s => s.perplexity_recommendation)
                       ? 'Perplexity'
                       : 'GPT'}
                   </SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-center">
+                <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="Gemini Pro 기반 매매 의견" align="right">Gemini</SimpleTooltip>
                 </th>
               </tr>
@@ -649,14 +650,14 @@ export default function VCPSignalsPage() {
                     className="hover:bg-white/5 transition-colors cursor-pointer group"
                   >
                     <td className="px-4 py-3">
-                      <div className="flex flex-col">
+                      <div className="flex flex-col whitespace-nowrap">
                         <span className="font-bold text-white group-hover:text-blue-400 transition-colors">
                           {signal.name}
                         </span>
                         <span className="text-[10px] text-gray-500">{signal.ticker}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{signal.signal_date || signalDate || '-'}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{signal.signal_date || signalDate || '-'}</td>
                     <td className={`px-4 py-3 text-right font-mono text-xs ${signal.foreign_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
                       <div className="flex items-center justify-end gap-1">
                         {signal.foreign_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.foreign_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
@@ -1138,8 +1139,8 @@ export default function VCPSignalsPage() {
           <button
             onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
             className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${alertModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
-                alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
-                  'bg-blue-500 hover:bg-blue-600'
+              alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                'bg-blue-500 hover:bg-blue-600'
               }`}
           >
             확인

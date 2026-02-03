@@ -36,6 +36,14 @@ const preprocessMarkdown = (text: string) => {
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(true);
+
+  // Auto-hide tooltip
+  useEffect(() => {
+    const timer = setTimeout(() => setShowTooltip(false), 8000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -248,27 +256,27 @@ export default function ChatWidget() {
   if (pathname === '/chatbot') return null;
 
   return (
-    <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex flex-col items-end transition-all duration-300">
+    <>
       {/* Chat Window */}
       {isOpen && (
-        <div className="mb-4 w-[calc(100vw-48px)] h-[calc(100dvh-140px)] md:w-[430px] md:h-[730px] max-h-[80vh] bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in font-sans">
+        <div className="fixed inset-0 w-full h-[100dvh] md:fixed md:bottom-24 md:right-6 md:w-[430px] md:h-[730px] md:max-h-[80vh] bg-[#1c1c1e] md:border border-white/10 md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in font-sans z-[100] md:z-[60]">
 
           {/* Header */}
           <div className="bg-[#2c2c2e] p-4 flex items-center justify-between border-b border-white/5 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
                 <i className="fas fa-robot text-sm text-white"></i>
               </div>
-              <div>
-                <div className="font-bold text-white text-sm flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="font-bold text-white text-sm flex items-center gap-2 whitespace-nowrap">
                   스마트머니봇
                   {hasApiKey && (
-                    <i className="fas fa-key text-[10px] text-yellow-500 animate-pulse" title="개인 API Key 사용 중 (무제한)"></i>
+                    <i className="fas fa-key text-[10px] text-yellow-500 animate-pulse flex-shrink-0" title="개인 API Key 사용 중 (무제한)"></i>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                  <span className="text-[10px] text-gray-400">보통 1초 내 답변</span>
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse flex-shrink-0"></span>
+                  <span className="text-[10px] text-gray-400 truncate">보통 1초 내 답변</span>
                 </div>
               </div>
             </div>
@@ -295,47 +303,32 @@ export default function ChatWidget() {
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto bg-[#151517] relative custom-scrollbar">
             {messages.length === 0 ? (
-              <div className="p-6 flex flex-col h-full animate-fade-in">
-                <div className="flex-1 flex flex-col justify-center items-start space-y-6">
+              <div className="p-6 flex flex-col h-full animate-fade-in justify-center items-center text-center">
+                <div className="flex-1 flex flex-col justify-center items-center w-full max-w-sm">
                   {/* Greeting */}
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                      안녕하세요, 투자자님! 👋
+                  <div className="space-y-4 mb-8">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg mx-auto mb-4">
+                      <i className="fas fa-robot text-3xl text-white"></i>
+                    </div>
+                    <h2 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 break-keep">
+                      안녕하세요, {session?.user?.name || '투자자'}님! 👋
                     </h2>
-                    <p className="text-gray-300 text-sm leading-relaxed">
-                      <strong className="text-white">스마트머니봇</strong>에 오신 것을 환영합니다.<br />
-                      VCP 패턴 분석과 시장 동향 예측을 도와드리는<br />
-                      AI 투자 비서입니다.
+                    <p className="text-gray-400 text-sm leading-relaxed break-keep max-w-[280px] mx-auto">
+                      <strong className="text-white">스마트머니봇</strong>이 VCP 패턴 분석과<br />시장 동향 예측을 도와드립니다.
                     </p>
                   </div>
 
-                  {/* Status Info */}
-                  <div className="bg-[#2c2c2e]/50 rounded-xl p-4 border border-white/5 w-full">
-                    <div className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">Operating Status</div>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 text-xs text-gray-300">
-                        <i className="fas fa-check-circle text-green-500"></i>
-                        <span>AI 분석 엔진: <span className="text-white font-medium">가동 중</span></span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-300">
-                        <i className="fas fa-clock text-blue-500"></i>
-                        <span>운영 시간: <span className="text-white font-medium">24시간 연중무휴</span></span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Suggestions */}
+                  {/* Suggestions Grid */}
                   <div className="w-full space-y-3">
-                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">추천 질문</div>
-                    <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {WELCOME_SUGGESTIONS.map((suggestion, idx) => (
                         <button
                           key={idx}
                           onClick={() => handleSuggestionClick(suggestion)}
-                          className="w-full text-left bg-[#2c2c2e] hover:bg-[#3a3a3c] border border-white/5 hover:border-blue-500/30 p-3 rounded-xl transition-all duration-200 group flex items-center justify-between"
+                          className="bg-[#2c2c2e] hover:bg-[#3a3a3c] border border-white/5 hover:border-blue-500/30 p-3 rounded-2xl transition-all duration-200 text-xs text-gray-300 hover:text-white text-left flex items-center justify-between group h-full min-h-[60px]"
                         >
-                          <span className="text-sm text-gray-200 group-hover:text-blue-300 transition-colors">{suggestion}</span>
-                          <i className="fas fa-chevron-right text-[10px] text-gray-600 group-hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100 transform translate-x-[-5px] group-hover:translate-x-0"></i>
+                          <span className="line-clamp-2 leading-tight">{suggestion}</span>
+                          <i className="fas fa-arrow-right text-[10px] opacity-0 group-hover:opacity-100 transition-opacity text-blue-400 flex-shrink-0 ml-1"></i>
                         </button>
                       ))}
                     </div>
@@ -456,7 +449,7 @@ export default function ChatWidget() {
 
           {/* Input Area (Fixed at Bottom) */}
           <div className="p-3 bg-[#1c1c1e] border-t border-white/5 relative z-20 flex-shrink-0">
-            <div className="flex items-end gap-2 bg-[#2c2c2e] rounded-xl p-2 relative transition-all ring-1 ring-white/5 focus-within:ring-blue-500/50">
+            <div className="flex items-end gap-2 bg-[#2c2c2e] rounded-3xl p-2 pl-4 relative transition-all ring-1 ring-white/5 focus-within:ring-blue-500/50">
 
               {/* Command Button */}
               <div className="relative flex-shrink-0 pb-[1px]">
@@ -506,37 +499,36 @@ export default function ChatWidget() {
         </div>
       )}
 
-      {/* Toggle Button when Closed (Floating) - Just one button logic handled above? 
-          Wait, the structure was: 
-          Container (Fixed) -> {isOpen && Window} -> Toggle Button. 
-          The previous code had the button OUTSIDE the window div.
-          My new structure put the button INSIDE the window div but `fixed` class on button might save it? 
-          Actually, the structure was:
-          <div className="fixed bottom-6 right-6 ...">
-             {isOpen && <Window ... />}
-             <Button ... />
-          </div>
-          
-          I should restore THAT structure to ensure the button is always visible.
-      */}
       {/* Toggle Button (Always Visible) */}
-      <button
-        onClick={toggleChat}
-        className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group z-50 ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-      >
-        <div className="relative w-full h-full flex items-center justify-center">
-          <i className={`fas fa-comment-dots text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`}></i>
-          <i className={`fas fa-times text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`}></i>
-        </div>
-
-        {!isOpen && messages.length === 0 && (
-          <div className="absolute right-16 bg-white text-black px-4 py-2 rounded-xl shadow-lg whitespace-nowrap animate-fade-in origin-right">
-            <div className="text-sm font-bold">궁금한 건 채팅으로 문의하세요</div>
-            <div className="text-xs text-gray-500">대화 시작하기</div>
-            <div className="absolute top-1/2 -right-1.5 w-3 h-3 bg-white transform -translate-y-1/2 rotate-45"></div>
+      <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[60] flex flex-col items-end">
+        <button
+          onClick={toggleChat}
+          className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+        >
+          <div className="relative w-full h-full flex items-center justify-center">
+            <i className={`fas fa-comment-dots text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`}></i>
+            <i className={`fas fa-times text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`}></i>
           </div>
-        )}
-      </button>
-    </div>
+
+
+          {!isOpen && messages.length === 0 && showTooltip && (
+            <div className="absolute right-16 bg-white text-black px-4 py-2 rounded-xl shadow-lg whitespace-nowrap animate-fade-in origin-right z-50">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTooltip(false);
+                }}
+                className="absolute -top-2 -left-2 w-5 h-5 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600 shadow-sm transition-colors z-10"
+              >
+                <i className="fas fa-times text-[10px]"></i>
+              </button>
+              <div className="text-sm font-bold">궁금한 건 채팅으로 문의하세요</div>
+              <div className="text-xs text-gray-500">대화 시작하기</div>
+              <div className="absolute top-1/2 -right-1.5 w-3 h-3 bg-white transform -translate-y-1/2 rotate-45"></div>
+            </div>
+          )}
+        </button>
+      </div>
+    </>
   );
 }

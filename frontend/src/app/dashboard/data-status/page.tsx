@@ -440,7 +440,7 @@ export default function DataStatusPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             시스템 상태
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tighter text-white leading-tight mb-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tighter text-white leading-tight mb-2">
             데이터 <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">상태</span>
           </h2>
           <p className="text-gray-400 text-lg">데이터 파일 상태 및 업데이트 현황</p>
@@ -482,7 +482,7 @@ export default function DataStatusPage() {
             <div className="flex items-center bg-[#1c1c1e] rounded-xl border border-white/10 overflow-hidden">
               <button
                 onClick={() => setUseTodayMode(true)}
-                className={`px-4 py-2.5 text-sm font-medium transition-all ${useTodayMode
+                className={`px-3 py-2 text-xs md:text-sm font-medium transition-all whitespace-nowrap ${useTodayMode
                   ? 'bg-emerald-500 text-white'
                   : 'text-gray-400 hover:text-white'
                   }`}
@@ -495,7 +495,7 @@ export default function DataStatusPage() {
                   setUseTodayMode(false);
                   if (!targetDate) setTargetDate(getLastBusinessDay());
                 }}
-                className={`px-4 py-2.5 text-sm font-medium transition-all ${!useTodayMode
+                className={`px-3 py-2 text-xs md:text-sm font-medium transition-all whitespace-nowrap ${!useTodayMode
                   ? 'bg-purple-500 text-white'
                   : 'text-gray-400 hover:text-white'
                   }`}
@@ -518,7 +518,7 @@ export default function DataStatusPage() {
             <button
               onClick={handleUpdateAll}
               disabled={updating}
-              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-emerald-500/25"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white text-xs md:text-sm font-bold rounded-xl transition-all shadow-lg hover:shadow-emerald-500/25 whitespace-nowrap"
             >
               <i className={`fas fa-sync-alt ${updating ? 'animate-spin' : ''}`}></i>
               {updating ? '업데이트 중...' : '전체 데이터 업데이트'}
@@ -562,33 +562,33 @@ export default function DataStatusPage() {
               className="p-6 rounded-2xl bg-[#1c1c1e] border border-white/10 hover:border-emerald-500/30 transition-all group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
                     <i className="fas fa-file-alt text-emerald-400"></i>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-white flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-white flex items-center gap-2 text-sm break-keep">
                       {file.name}
                       {fileDescriptions[file.name] && (
                         <Tooltip content={fileDescriptions[file.name]} wide position="top">
-                          <i className="fas fa-info-circle text-gray-600 hover:text-emerald-400 text-xs cursor-help transition-colors"></i>
+                          <i className="fas fa-info-circle text-gray-600 hover:text-emerald-400 text-xs cursor-help transition-colors flex-shrink-0"></i>
                         </Tooltip>
                       )}
                     </h3>
-                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 mb-1">
-                      <i className="fas fa-link text-[10px] opacity-50"></i>
-                      <span className="font-mono opacity-75">{file.path}</span>
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 mb-1 truncate">
+                      <i className="fas fa-link text-[10px] opacity-50 flex-shrink-0"></i>
+                      <span className="font-mono opacity-75 truncate">{file.path}</span>
                     </p>
                     <p className="text-xs text-gray-500 truncate max-w-[180px]">
                       {file.menu && <span className="text-emerald-400">@ {file.menu}</span>}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   {file.name === 'AI Jongga V2' && (
                     <button
                       onClick={() => handleSendMessage(file.name)}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 transition-all"
+                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 transition-all flex-shrink-0"
                       title="Resend Message"
                     >
                       <i className="fas fa-paper-plane text-xs"></i>
@@ -597,7 +597,7 @@ export default function DataStatusPage() {
                   <button
                     onClick={() => handleUpdateSingle(file.name)}
                     disabled={!!updatingItem || updating}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
                       ? 'bg-blue-500/20 text-blue-400'
                       : 'bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400'
                       }`}
@@ -608,7 +608,7 @@ export default function DataStatusPage() {
                       : ''
                       }`}></i>
                   </button>
-                  <span className={`px-2 py-1 rounded-lg text-xs font-bold ${file.exists
+                  <span className={`px-2 py-1 rounded-lg text-xs font-bold flex-shrink-0 ${file.exists
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                     : 'bg-red-500/10 text-red-400 border border-red-500/20'
                     }`}>

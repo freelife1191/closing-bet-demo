@@ -12,7 +12,7 @@ export default function DashboardLayout({
       <Header />
 
       {/* Main Content Area */}
-      <main className="md:pl-64 pl-0 pt-16 min-h-screen transition-all duration-300">
+      <main className="md:pl-64 pl-0 pt-16 min-h-screen transition-all duration-300 overflow-x-hidden">
         <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
           {children}
         </div>

@@ -313,30 +313,34 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
         <div className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[70vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
 
           {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-white/10 bg-[#252529]">
+          <div className="flex flex-col md:flex-row md:items-center justify-between p-4 md:p-5 border-b border-white/10 bg-[#252529] gap-4 md:gap-0">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <i className="fas fa-chart-line text-white text-lg"></i>
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 flex-shrink-0">
+                <i className="fas fa-chart-line text-white text-lg md:text-xl"></i>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">모의투자 포트폴리오</h2>
+                <h2 className="text-lg md:text-xl font-bold text-white whitespace-nowrap">모의투자 포트폴리오</h2>
                 <div className="text-xs text-slate-400 font-medium">Paper Trading Account</div>
               </div>
+              <button onClick={onClose} className="ml-auto md:hidden w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white">
+                <i className="fas fa-times"></i>
+              </button>
             </div>
-            <div className="flex items-center gap-3">
+
+            <div className="flex flex-col md:flex-row md:items-center gap-3 w-full md:w-auto">
               {portfolio && (
-                <div className="flex items-center gap-4 px-4 py-2 bg-black/20 rounded-lg border border-white/5 mr-4">
+                <div className="flex flex-row items-center justify-between md:justify-start gap-4 px-4 py-3 md:py-2 bg-black/20 rounded-xl border border-white/5 md:mr-4 w-full md:w-auto">
                   <div className="text-right">
-                    <div className="text-xs text-gray-500">총 평가 자산</div>
-                    <div className="text-base font-bold text-white">{Math.floor(portfolio.total_asset_value).toLocaleString()}원</div>
+                    <div className="text-[10px] md:text-xs text-gray-500">총 평가 자산</div>
+                    <div className="text-sm md:text-base font-bold text-white whitespace-nowrap">{Math.floor(portfolio.total_asset_value).toLocaleString()}원</div>
                   </div>
                   <div className="h-8 w-px bg-white/10"></div>
                   <div className="text-right group relative">
-                    <div className="text-xs text-gray-500 flex items-center justify-end gap-1">
+                    <div className="text-[10px] md:text-xs text-gray-500 flex items-center justify-end gap-1">
                       예수금
                       <button onClick={() => setShowDeposit(!showDeposit)} className="w-4 h-4 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white flex items-center justify-center text-[10px] transition-colors">+</button>
                     </div>
-                    <div className="text-base font-bold text-blue-400">{Math.floor(portfolio.cash).toLocaleString()}원</div>
+                    <div className="text-sm md:text-base font-bold text-blue-400 whitespace-nowrap">{Math.floor(portfolio.cash).toLocaleString()}원</div>
 
                     {/* Deposit Popover */}
                     {showDeposit && (
@@ -354,14 +358,14 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                   </div>
                 </div>
               )}
-              <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+              <button onClick={onClose} className="hidden md:flex w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 items-center justify-center text-gray-400 hover:text-white transition-colors">
                 <i className="fas fa-times"></i>
               </button>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-white/10 bg-[#1c1c1e]">
+          <div className="flex border-b border-white/10 bg-[#1c1c1e] overflow-x-auto no-scrollbar">
             {[
               { id: 'overview', label: '자산 개요', icon: 'fa-wallet' },
               { id: 'holdings', label: '보유 종목', icon: 'fa-list' },
@@ -371,7 +375,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors relative ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-300'
+                className={`flex-none flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors relative whitespace-nowrap ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-300'
                   }`}
               >
                 <i className={`fas ${tab.icon}`}></i>
@@ -384,7 +388,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 bg-[#18181b]">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#18181b]">
             {loading ? (
               <div className="flex h-full items-center justify-center">
                 <i className="fas fa-spinner fa-spin text-3xl text-rose-500"></i>
@@ -395,14 +399,14 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
               <>
                 {/* Overview Tab */}
                 {activeTab === 'overview' && (
-                  <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-[#252529] p-6 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-colors">
+                  <div className="max-w-4xl mx-auto space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-[#252529] p-5 md:p-6 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-colors">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                           <i className="fas fa-coins text-8xl text-rose-500 transform rotate-12"></i>
                         </div>
                         <div className="text-gray-400 text-sm font-medium mb-1">총 평가 손익</div>
-                        <div className={`text-4xl font-bold mb-2 ${(portfolio.total_profit || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                        <div className={`text-3xl md:text-4xl font-bold mb-2 tracking-tight ${(portfolio.total_profit || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
                           {(portfolio.total_profit || 0) > 0 ? '+' : ''}{(portfolio.total_profit || 0).toLocaleString()}원
                         </div>
                         <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${(portfolio.total_profit_rate || 0) >= 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-blue-500/10 text-blue-400'}`}>
@@ -411,14 +415,14 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                         </div>
                       </div>
 
-                      <div className="bg-[#252529] p-6 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-colors">
+                      <div className="bg-[#252529] p-5 md:p-6 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-colors">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                           <i className="fas fa-chart-pie text-8xl text-blue-500 transform -rotate-12"></i>
                         </div>
                         <div className="text-gray-400 text-sm font-medium mb-1">자산 구성</div>
                         <div className="flex items-center gap-4 mt-4">
                           <div className="flex-1">
-                            <div className="flex justify-between text-xs mb-1">
+                            <div className="flex justify-between text-xs mb-1 whitespace-nowrap gap-2">
                               <span className="text-gray-300">주식</span>
                               <span className="text-white font-bold">{((portfolio?.total_stock_value || 0) / portfolio.total_asset_value * 100).toFixed(1)}%</span>
                             </div>
@@ -427,7 +431,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                             </div>
                           </div>
                           <div className="flex-1">
-                            <div className="flex justify-between text-xs mb-1">
+                            <div className="flex justify-between text-xs mb-1 whitespace-nowrap gap-2">
                               <span className="text-gray-300">현금</span>
                               <span className="text-white font-bold">{(portfolio.cash / portfolio.total_asset_value * 100).toFixed(1)}%</span>
                             </div>
@@ -445,79 +449,81 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                 {activeTab === 'holdings' && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <div className="bg-[#252529] rounded-xl border border-white/5 overflow-hidden">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-white/5 text-xs text-gray-500 uppercase tracking-wider">
-                            <th className="px-6 py-4 font-semibold">종목명</th>
-                            <th className="px-6 py-4 font-semibold text-right">보유수량</th>
-                            <th className="px-6 py-4 font-semibold text-right">평균단가</th>
-                            <th className="px-6 py-4 font-semibold text-right">현재가</th>
-                            <th className="px-6 py-4 font-semibold text-right">평가금액</th>
-                            <th className="px-6 py-4 font-semibold text-right">손익(률)</th>
-                            <th className="px-6 py-4 font-semibold text-center">주문</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {portfolio.holdings.map((stock) => (
-                            <tr key={stock.ticker} className="hover:bg-white/5 transition-colors group">
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs font-bold text-gray-400 group-hover:text-white group-hover:bg-white/10 transition-colors">
-                                    {stock.ticker.slice(0, 2)}
-                                  </div>
-                                  <div>
-                                    <div className="text-sm font-bold text-white">{stock.name}</div>
-                                    <div className="text-xs text-gray-500">{stock.ticker}</div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-right text-sm text-gray-300">
-                                {stock.quantity.toLocaleString()}주
-                              </td>
-                              <td className="px-6 py-4 text-right text-sm text-gray-300">
-                                {Math.round(stock.avg_price).toLocaleString()}원
-                              </td>
-                              <td className="px-6 py-4 text-right text-sm font-medium text-white">
-                                {(stock.current_price || stock.avg_price).toLocaleString()}원
-                              </td>
-                              <td className="px-6 py-4 text-right text-sm font-bold text-white">
-                                {(stock.market_value || Math.floor((stock.current_price || stock.avg_price) * stock.quantity)).toLocaleString()}원
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                <div className={`text-sm font-bold ${(stock.profit_rate || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                                  {(stock.profit_rate || 0) > 0 ? '+' : ''}{(stock.profit_rate || 0).toFixed(2)}%
-                                </div>
-                                <div className={`text-xs ${(stock.profit_loss || 0) >= 0 ? 'text-rose-500/70' : 'text-blue-500/70'}`}>
-                                  {(stock.profit_loss || 0).toLocaleString()}원
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    onClick={() => openBuyModal(stock)}
-                                    className="px-3 py-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white text-xs font-bold transition-colors"
-                                  >
-                                    매수
-                                  </button>
-                                  <button
-                                    onClick={() => openSellModal(stock)}
-                                    className="px-3 py-1.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-bold transition-colors"
-                                  >
-                                    매도
-                                  </button>
-                                </div>
-                              </td>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-[800px]">
+                          <thead>
+                            <tr className="bg-white/5 text-xs text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 whitespace-nowrap font-semibold whitespace-nowrap">종목명</th>
+                              <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">보유수량</th>
+                              <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">평균단가</th>
+                              <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">현재가</th>
+                              <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">평가금액</th>
+                              <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">손익(률)</th>
+                              <th className="px-6 py-4 whitespace-nowrap font-semibold text-center whitespace-nowrap">주문</th>
                             </tr>
-                          ))}
-                          {portfolio.holdings.length === 0 && (
-                            <tr>
-                              <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                                보유 중인 종목이 없습니다.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {portfolio.holdings.map((stock) => (
+                              <tr key={stock.ticker} className="hover:bg-white/5 transition-colors group">
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs font-bold text-gray-400 group-hover:text-white group-hover:bg-white/10 transition-colors">
+                                      {stock.ticker.slice(0, 2)}
+                                    </div>
+                                    <div>
+                                      <div className="text-sm font-bold text-white">{stock.name}</div>
+                                      <div className="text-xs text-gray-500">{stock.ticker}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-300">
+                                  {stock.quantity.toLocaleString()}주
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-300">
+                                  {Math.round(stock.avg_price).toLocaleString()}원
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-white">
+                                  {(stock.current_price || stock.avg_price).toLocaleString()}원
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-white">
+                                  {(stock.market_value || Math.floor((stock.current_price || stock.avg_price) * stock.quantity)).toLocaleString()}원
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right">
+                                  <div className={`text-sm font-bold ${(stock.profit_rate || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                                    {(stock.profit_rate || 0) > 0 ? '+' : ''}{(stock.profit_rate || 0).toFixed(2)}%
+                                  </div>
+                                  <div className={`text-xs ${(stock.profit_loss || 0) >= 0 ? 'text-rose-500/70' : 'text-blue-500/70'}`}>
+                                    {(stock.profit_loss || 0).toLocaleString()}원
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => openBuyModal(stock)}
+                                      className="px-3 py-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white text-xs font-bold transition-colors"
+                                    >
+                                      매수
+                                    </button>
+                                    <button
+                                      onClick={() => openSellModal(stock)}
+                                      className="px-3 py-1.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-bold transition-colors"
+                                    >
+                                      매도
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                            {portfolio.holdings.length === 0 && (
+                              <tr>
+                                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                                  보유 중인 종목이 없습니다.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -560,39 +566,39 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                 {activeTab === 'history' && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <div className="bg-[#252529] rounded-xl border border-white/5 overflow-hidden">
-                      <table className="w-full text-left border-collapse">
+                      <div className="overflow-x-auto"><table className="w-full text-left border-collapse min-w-[700px]">
                         <thead>
                           <tr className="bg-white/5 text-xs text-gray-500 uppercase tracking-wider">
-                            <th className="px-6 py-4 font-semibold">일시</th>
-                            <th className="px-6 py-4 font-semibold">종목명</th>
-                            <th className="px-6 py-4 font-semibold text-center">유형</th>
-                            <th className="px-6 py-4 font-semibold text-right">체결가</th>
-                            <th className="px-6 py-4 font-semibold text-right">수량</th>
-                            <th className="px-6 py-4 font-semibold text-right">총액</th>
+                            <th className="px-6 py-4 whitespace-nowrap font-semibold whitespace-nowrap">일시</th>
+                            <th className="px-6 py-4 whitespace-nowrap font-semibold whitespace-nowrap">종목명</th>
+                            <th className="px-6 py-4 whitespace-nowrap font-semibold text-center whitespace-nowrap">유형</th>
+                            <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">체결가</th>
+                            <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">수량</th>
+                            <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">총액</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
                           {tradeHistory.map((trade) => (
                             <tr key={trade.id} className="hover:bg-white/5 transition-colors">
-                              <td className="px-6 py-4 text-xs text-gray-400">
+                              <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-400">
                                 {new Date(trade.timestamp).toLocaleString('ko-KR')}
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-bold text-white">{trade.name}</div>
                                 <div className="text-xs text-gray-500">{trade.ticker}</div>
                               </td>
-                              <td className="px-6 py-4 text-center">
+                              <td className="px-6 py-4 whitespace-nowrap text-center">
                                 <span className={`px-2 py-1 rounded text-[10px] font-bold ${trade.action === 'BUY' ? 'bg-rose-500/10 text-rose-400' : 'bg-blue-500/10 text-blue-400'}`}>
                                   {trade.action === 'BUY' ? '매수' : '매도'}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 text-right text-sm text-gray-300">
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-300">
                                 {trade.price.toLocaleString()}원
                               </td>
-                              <td className="px-6 py-4 text-right text-sm text-gray-300">
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-300">
                                 {trade.quantity.toLocaleString()}주
                               </td>
-                              <td className="px-6 py-4 text-right text-sm font-bold text-white">
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-white">
                                 {Math.floor(trade.price * trade.quantity).toLocaleString()}원
                               </td>
                             </tr>
@@ -605,7 +611,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                             </tr>
                           )}
                         </tbody>
-                      </table>
+                      </table></div>
                     </div>
                   </div>
                 )}

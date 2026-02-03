@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Link from 'next/link';
 import Sidebar from '../components/Sidebar';
 import SettingsModal from '../components/SettingsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
@@ -100,6 +101,7 @@ export default function ChatbotPage() {
   // User Profile State
   const [userProfile, setUserProfile] = useState<{ name: string; email: string; persona: string } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile Sidebar State
 
   // Delete Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -628,6 +630,102 @@ export default function ChatbotPage() {
         />
       )}
 
+      {/* Mobile Sidebar Overlay */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setIsMobileSidebarOpen(false)}></div>
+          <div className="relative w-[280px] bg-[#1e1f20] h-full shadow-2xl flex flex-col animate-slide-in-left border-r border-white/10">
+            <div className="p-4 flex justify-between items-center border-b border-white/5 bg-[#131314]">
+              <span className="font-bold text-gray-200 text-lg">메뉴</span>
+              <button onClick={() => setIsMobileSidebarOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            {/* Navigation Section */}
+            <div className="p-2 space-y-1 border-b border-white/5 bg-[#18181b]">
+              <Link href="/dashboard/kr" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <i className="fas fa-home w-5 text-center text-gray-400"></i>
+                <span>대시보드 홈</span>
+              </Link>
+              <Link href="/dashboard/kr/vcp" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <i className="fas fa-chart-line w-5 text-center text-blue-400"></i>
+                <span>VCP 스크리너</span>
+              </Link>
+              <Link href="/dashboard/kr/closing-bet" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <i className="fas fa-chess-knight w-5 text-center text-purple-400"></i>
+                <span>종가베팅</span>
+              </Link>
+              <Link href="/dashboard/data-status" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <i className="fas fa-database w-5 text-center text-emerald-400"></i>
+                <span>데이터 관리</span>
+              </Link>
+            </div>
+
+            <div className="p-4 flex-shrink-0">
+              <button
+                onClick={() => {
+                  handleNewChat();
+                  setIsMobileSidebarOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-[#2a2b2d] hover:bg-[#333537] text-gray-200 rounded-xl transition-all shadow-sm text-sm font-medium border border-white/5 active:scale-95"
+              >
+                <i className="fas fa-plus text-gray-400"></i>
+                <span>새 채팅</span>
+              </button>
+            </div>
+
+            <div className="px-4 pb-2 text-xs font-semibold text-gray-500 mt-2">최근 대화</div>
+            <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
+              {sessions.length > 0 ? (
+                sessions.map(session => (
+                  <div
+                    key={session.id}
+                    onClick={() => {
+                      setCurrentSessionId(session.id);
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`group relative w-full text-left px-3 py-3 rounded-lg text-sm transition-colors cursor-pointer flex items-center gap-3 ${currentSessionId === session.id
+                      ? 'bg-[#004a77]/40 text-blue-100'
+                      : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                      }`}
+                  >
+                    <i className={`far fa-comment-alt text-xs flex-shrink-0 ${currentSessionId === session.id ? 'text-blue-400' : 'text-gray-500'}`}></i>
+                    <span className="truncate flex-1">{session.title}</span>
+
+                    <button
+                      onClick={(e) => handleDeleteSession(e, session.id)}
+                      className="p-2 text-gray-500 hover:text-red-400 transition-colors z-10"
+                    >
+                      <i className="fas fa-trash-alt text-xs"></i>
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="px-3 py-10 text-center text-xs text-gray-600 flex flex-col items-center gap-2">
+                  <i className="far fa-comment-dots text-2xl opacity-50"></i>
+                  <p>저장된 대화가 없습니다.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Sidebar Footer (Profile) */}
+            <div className="p-4 border-t border-white/5 bg-[#131314]">
+              <button onClick={() => { setIsSettingsOpen(true); setIsMobileSidebarOpen(false); }} className="flex items-center gap-3 w-full text-left">
+                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg">
+                  {userProfile?.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-gray-200 truncate">{userProfile?.name}</div>
+                  <div className="text-xs text-gray-500 truncate">{userProfile?.email}</div>
+                </div>
+                <i className="fas fa-cog text-gray-500"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmationModal
         isOpen={isDeleteModalOpen}
         title="대화 삭제"
@@ -660,7 +758,7 @@ export default function ChatbotPage() {
       </Modal>
 
       {/* Content Wrapper */}
-      <div className="flex-1 flex pl-64 h-full">
+      <div className="flex-1 flex pl-0 md:pl-64 h-full">
 
         {/* Sessions Sidebar */}
         <div className="w-[260px] flex-shrink-0 flex flex-col bg-[#1e1f20] hidden md:flex border-r border-white/5">
@@ -711,10 +809,20 @@ export default function ChatbotPage() {
         <div className="flex-1 flex flex-col relative min-w-0 bg-[#000000]">
 
           {/* Top Bar */}
-          <div className="h-14 flex items-center justify-between px-6 sticky top-0 z-10 bg-[#000000]/80 backdrop-blur-sm">
-            <div className="flex items-center gap-2 text-gray-200 cursor-pointer" onClick={() => setShowCommands(!showCommands)}>
-              <span className="text-lg opacity-80 hover:opacity-100">스마트머니봇</span>
-              {currentModel.includes("pro") && <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold">PRO</span>}
+          <div className="h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-10 bg-[#000000]/80 backdrop-blur-sm border-b border-white/5 md:border-none">
+            <div className="flex items-center gap-3 text-gray-200">
+              {/* Hamburger Button (Mobile) */}
+              <button
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 active:bg-white/20 transition-colors -ml-2"
+              >
+                <i className="fas fa-bars text-lg text-gray-300"></i>
+              </button>
+
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowCommands(!showCommands)}>
+                <span className="text-lg font-bold opacity-90 hover:opacity-100">스마트머니봇</span>
+                {currentModel.includes("pro") && <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold">PRO</span>}
+              </div>
             </div>
             <div className="flex items-center gap-3">
               {/* User Avatar - Initials */}
@@ -736,30 +844,35 @@ export default function ChatbotPage() {
 
               {/* Empty State */}
               {messages.length === 0 ? (
-                <div className="flex-1 flex flex-col justify-center items-start space-y-12 mt-20">
-                  <div className="space-y-2">
-                    <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] animate-fade-in-up">
+                <div className="flex-1 flex flex-col justify-center items-center space-y-6 md:space-y-8 mt-4 md:mt-20 animate-fade-in">
+                  <div className="space-y-2 text-center px-4">
+                    <h1 className="text-2xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] animate-fade-in-up break-keep leading-tight">
                       안녕하세요, {userProfile?.name}님
                     </h1>
-                    <h2 className="text-5xl font-bold text-[#444746] opacity-50 animate-fade-in-up delay-100">
+                    <h2 className="text-lg md:text-4xl font-bold text-[#444746] opacity-50 animate-fade-in-up delay-100 break-keep leading-tight">
                       무엇을 도와드릴까요?
                     </h2>
                   </div>
 
                   {/* Suggestions */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full animate-fade-in-up delay-200">
-                    {suggestions.map((card, idx) => (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 md:gap-3 w-full max-w-4xl animate-fade-in-up delay-200 px-4 md:px-0">
+                    {suggestions.slice(0, 4).map((card, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleSend(card.prompt)}
-                        className="bg-[#1e1f20] hover:bg-[#333537] p-4 rounded-xl text-left transition-all h-48 flex flex-col justify-between group relative overflow-hidden"
+                        className="bg-[#1e1f20] hover:bg-[#333537] p-3 md:p-4 rounded-2xl text-left transition-all h-32 md:h-48 flex flex-col justify-between group relative overflow-hidden border border-white/5 active:scale-95 duration-200"
                       >
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                          <i className={`${card.icon} text-4xl`}></i>
+                        {/* Background Icon - Reduced opacity and size for mobile */}
+                        <div className="absolute top-0 right-0 p-2 md:p-3 opacity-5 md:opacity-10 group-hover:opacity-20 transition-opacity">
+                          <i className={`${card.icon} text-2xl md:text-4xl`}></i>
                         </div>
-                        <div className="text-sm text-gray-300 font-medium z-10">{card.desc}</div>
-                        <div className="self-end w-8 h-8 rounded-full bg-black/20 group-hover:bg-white/20 flex items-center justify-center transition-colors z-10">
-                          <i className={`${card.icon} text-xs text-gray-400 group-hover:text-white`}></i>
+
+                        <div className="text-[11px] md:text-sm text-gray-300 font-medium z-10 break-keep line-clamp-3 leading-relaxed">
+                          {card.desc}
+                        </div>
+
+                        <div className="self-end w-6 h-6 md:w-8 md:h-8 rounded-full bg-black/20 group-hover:bg-white/20 flex items-center justify-center transition-colors z-10">
+                          <i className={`${card.icon} text-[10px] md:text-xs text-gray-400 group-hover:text-white`}></i>
                         </div>
                       </button>
                     ))}
@@ -918,22 +1031,47 @@ export default function ChatbotPage() {
                 </div>
               )}
 
-              {/* Floating Suggestions (Floating Action Chips) - Only Show when No Messages */}
-              {messages.length === 0 && (
-                <div className="absolute bottom-full left-0 right-0 mb-4 px-4 pointer-events-none z-30">
-                  <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide pb-2 pointer-events-auto">
+              {/* Floating Toolbar (Suggestions & Model Selector) */}
+              <div className="absolute bottom-full left-0 right-0 mb-4 px-4 pointer-events-none z-30 flex flex-col items-center gap-3">
+                {/* 1. Suggestions (Wrapped) */}
+                {messages.length === 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 pointer-events-auto max-w-full">
                     {suggestions.map((card, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleSend(card.prompt)}
-                        className="flex-shrink-0 px-3 py-1.5 bg-[#1e1f20]/90 backdrop-blur-md hover:bg-blue-600 hover:text-white border border-white/10 rounded-full text-[11px] text-gray-300 transition-all whitespace-nowrap shadow-lg"
+                        className="px-3 py-1.5 bg-[#1e1f20]/90 backdrop-blur-md hover:bg-blue-600 hover:text-white border border-white/10 rounded-full text-[11px] text-gray-300 transition-all shadow-lg active:scale-95"
                       >
                         {card.title}
                       </button>
                     ))}
                   </div>
+                )}
+
+                {/* 2. Model Selector (Mobile Only - Moved from Input Bar) */}
+                <div className="pointer-events-auto md:hidden relative group">
+                  <button
+                    className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1f20]/90 backdrop-blur-md border border-white/10 rounded-full text-xs text-gray-300 shadow-lg"
+                  >
+                    <i className="fas fa-sparkles text-blue-400"></i>
+                    <span>{currentModel.split('-').pop()?.toUpperCase() || 'MODEL'}</span>
+                    <i className="fas fa-chevron-down text-[10px] text-gray-500"></i>
+                  </button>
+                  {/* Selector Dropup for Mobile */}
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-[#2a2b2d] border border-white/10 rounded-xl shadow-xl overflow-hidden invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-40">
+                    {models.map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setCurrentModel(m)}
+                        className={`w-full text-left px-4 py-2.5 text-xs hover:bg-white/5 flex items-center justify-between ${currentModel === m ? 'text-blue-400' : 'text-gray-300'}`}
+                      >
+                        <span>{m}</span>
+                        {currentModel === m && <i className="fas fa-check"></i>}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              )}
+              </div>
 
               <div className="relative bg-[#1e1f20] rounded-[28px] focus-within:bg-[#2a2b2d] focus-within:ring-1 focus-within:ring-white/20 transition-all shadow-lg">
 
@@ -978,8 +1116,8 @@ export default function ChatbotPage() {
                     accept="image/*,.pdf,.csv,.xlsx,.xls,.txt"
                   />
 
-                  {/* Tools / Model Selector */}
-                  <div className="relative group flex-shrink-0">
+                  {/* Tools / Model Selector (Desktop Only) */}
+                  <div className="relative group flex-shrink-0 hidden md:block">
                     <button
                       className="flex items-center gap-2 px-3 py-1.5 bg-black/20 hover:bg-white/10 rounded-full text-xs text-gray-300 transition-colors border border-white/5 h-8"
                     >

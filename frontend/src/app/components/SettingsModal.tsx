@@ -347,37 +347,37 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
           </div>
         }
       >
-        <div className="flex gap-10 min-h-[600px] text-gray-300">
-          {/* Sidebar */}
-          <div className="w-48 flex-shrink-0 space-y-1">
-            <div className="text-xs font-bold text-gray-500 px-3 mb-2 uppercase tracking-wider">계정</div>
+        <div className="flex flex-col md:flex-row gap-6 md:gap-10 h-full md:min-h-[500px] text-gray-300">
+          {/* Sidebar (Menu) */}
+          <div className="w-full md:w-48 flex-shrink-0 flex md:flex-col gap-2 md:gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0 no-scrollbar">
+            <div className="hidden md:block text-xs font-bold text-gray-500 px-3 mb-2 uppercase tracking-wider">계정</div>
             <button
               onClick={() => setActiveTab('profile')}
-              className={`w-full text-left px-3 py-2 rounded-[6px] text-[15px] font-medium transition-all ${activeTab === 'profile' ? 'bg-[#3b3b40] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              className={`flex-none md:w-full text-left px-4 md:px-3 py-2 rounded-full md:rounded-[6px] text-sm md:text-[15px] font-medium transition-all whitespace-nowrap ${activeTab === 'profile' ? 'bg-[#3b3b40] text-white' : 'bg-white/5 md:bg-transparent text-gray-400 hover:text-gray-200 hover:bg-white/10 md:hover:bg-white/5'
                 }`}
             >
               일반
             </button>
 
-            <div className="h-4"></div>
-            <div className="text-xs font-bold text-gray-500 px-3 mb-2 uppercase tracking-wider">설정</div>
+            <div className="hidden md:block h-4"></div>
+            <div className="hidden md:block text-xs font-bold text-gray-500 px-3 mb-2 uppercase tracking-wider">설정</div>
             <button
               onClick={() => setActiveTab('api')}
-              className={`w-full text-left px-3 py-2 rounded-[6px] text-[15px] font-medium transition-all ${activeTab === 'api' ? 'bg-[#3b3b40] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              className={`flex-none md:w-full text-left px-4 md:px-3 py-2 rounded-full md:rounded-[6px] text-sm md:text-[15px] font-medium transition-all whitespace-nowrap ${activeTab === 'api' ? 'bg-[#3b3b40] text-white' : 'bg-white/5 md:bg-transparent text-gray-400 hover:text-gray-200 hover:bg-white/10 md:hover:bg-white/5'
                 }`}
             >
               API & 기능
             </button>
             <button
               onClick={() => setActiveTab('notification')}
-              className={`w-full text-left px-3 py-2 rounded-[6px] text-[15px] font-medium transition-all ${activeTab === 'notification' ? 'bg-[#3b3b40] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              className={`flex-none md:w-full text-left px-4 md:px-3 py-2 rounded-full md:rounded-[6px] text-sm md:text-[15px] font-medium transition-all whitespace-nowrap ${activeTab === 'notification' ? 'bg-[#3b3b40] text-white' : 'bg-white/5 md:bg-transparent text-gray-400 hover:text-gray-200 hover:bg-white/10 md:hover:bg-white/5'
                 }`}
             >
               알림 센터
             </button>
             <button
               onClick={() => setActiveTab('system')}
-              className={`w-full text-left px-3 py-2 rounded-[6px] text-[15px] font-medium transition-all ${activeTab === 'system' ? 'bg-[#3b3b40] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              className={`flex-none md:w-full text-left px-4 md:px-3 py-2 rounded-full md:rounded-[6px] text-sm md:text-[15px] font-medium transition-all whitespace-nowrap ${activeTab === 'system' ? 'bg-[#3b3b40] text-white' : 'bg-white/5 md:bg-transparent text-gray-400 hover:text-gray-200 hover:bg-white/10 md:hover:bg-white/5'
                 }`}
             >
               시스템
@@ -385,7 +385,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
           </div>
 
           {/* Content */}
-          <div className="flex-1 max-w-2xl pt-1">
+          <div className="flex-1 max-w-2xl pt-0">
             {activeTab === 'profile' && (
               <div className="space-y-10">
                 <section>
@@ -397,7 +397,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
+                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
                         placeholder="표시될 이름을 입력하세요"
                       />
                     </div>
@@ -407,7 +407,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
+                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
                         placeholder="이메일 주소를 입력하세요"
                       />
                     </div>
@@ -481,7 +481,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                                 setIsCustomRole(false);
                               }
                             }}
-                            className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white appearance-none focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
+                            className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
                           >
                             <option>엔지니어링</option>
                             <option>리서치</option>
@@ -501,7 +501,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                               setRole(e.target.value);
                               setIsCustomRole(true);
                             }}
-                            className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors animate-fadeIn"
+                            className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors animate-fadeIn"
                             placeholder="직무를 직접 입력하세요"
                             autoFocus
                           />
@@ -515,26 +515,26 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   <h3 className="text-lg font-bold text-white mb-2">구글 계정</h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
                     {!isGoogleLoggedIn ? (
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                           <div className="text-sm font-medium text-white mb-1">계정 연동</div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-500 break-keep leading-relaxed">
                             구글 계정으로 로그인하여 설정을 동기화하세요.
                             <div className="mt-1">
                               {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
-                                <span className="text-purple-400 font-bold block">✨ API Key가 감지되었습니다 (무제한 이용 가능)</span>
+                                <span className="text-purple-400 font-bold block break-keep">✨ API Key가 감지되었습니다 (무제한 이용 가능)</span>
                               ) : (
-                                <span className="text-blue-400 font-bold">(무료 10회 AI 사용 가능)</span>
+                                <span className="text-blue-400 font-bold block break-keep">(무료 10회 AI 사용 가능)</span>
                               )}
                             </div>
                           </div>
                         </div>
                         <button
                           onClick={handleGoogleLogin}
-                          className="px-4 py-2 bg-white text-black text-sm font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
+                          className="w-full md:w-auto px-4 py-2 bg-white text-black text-xs font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 flex-shrink-0"
                         >
-                          <img src="https://www.google.com/favicon.ico" alt="G" className="w-4 h-4" />
-                          로그인
+                          <img src="https://www.google.com/favicon.ico" alt="G" className="w-3 h-3" />
+                          Google 로그인
                         </button>
                       </div>
                     ) : (
@@ -591,18 +591,18 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                 <section>
                   <h3 className="text-lg font-bold text-white mb-2">관심 종목</h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5 space-y-4">
-                    <div className="flex gap-2">
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input
                         type="text"
                         value={newStock}
                         onChange={(e) => setNewStock(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        className="flex-1 bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
-                        placeholder="종목명 또는 코드 입력 (예: 삼성전자, 005930)"
+                        className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
+                        placeholder="종목명/코드 (예: 삼성전자)"
                       />
                       <button
                         onClick={handleAddStock}
-                        className="px-4 py-2 bg-[#5c5cff] hover:bg-[#4b4bff] text-white text-sm font-bold rounded-lg transition-colors"
+                        className="w-full md:w-auto px-4 py-2 bg-[#5c5cff] hover:bg-[#4b4bff] text-white text-sm font-bold rounded-lg transition-colors flex-shrink-0"
                       >
                         추가
                       </button>
@@ -626,7 +626,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                         ))}
                       </div>
                     ) : (
-                      <div className="text-sm text-gray-500 text-center py-2">
+                      <div className="text-xs text-gray-500 text-center py-2 break-keep leading-relaxed">
                         관심 종목을 추가하면 AI 챗봇이 해당 종목을 분석해드립니다.
                       </div>
                     )}
@@ -687,7 +687,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           type="password"
                           value={envVars['GOOGLE_API_KEY'] || ''}
                           onChange={(e) => handleEnvChange('GOOGLE_API_KEY', e.target.value)}
-                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-blue-500 transition-colors"
                           placeholder="sk-..."
                           autoComplete="new-password"
                           data-lpignore="true"
@@ -731,7 +731,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           type="password"
                           value={envVars['OPENAI_API_KEY'] || ''}
                           onChange={(e) => handleEnvChange('OPENAI_API_KEY', e.target.value)}
-                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-green-500 transition-colors"
+                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-green-500 transition-colors"
                           placeholder="sk-..."
                           autoComplete="new-password"
                           data-lpignore="true"
@@ -763,7 +763,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           type="password"
                           value={envVars['PERPLEXITY_API_KEY'] || ''}
                           onChange={(e) => handleEnvChange('PERPLEXITY_API_KEY', e.target.value)}
-                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition-colors"
                           placeholder="pplx-..."
                           autoComplete="new-password"
                           data-lpignore="true"

@@ -530,11 +530,11 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 md:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-[#1c1c1e] w-full max-w-3xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
+        className="bg-[#1c1c1e] w-[95%] md:w-full max-w-3xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -562,7 +562,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(85vh-70px)]">
+        <div className="p-4 md:p-6 overflow-y-auto max-h-[calc(85vh-70px)]">
           {loading ? (
             <div className="flex items-center justify-center h-40">
               <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
@@ -641,7 +641,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                     <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                   </Tooltip>
                 </h4>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       시가총액
@@ -707,7 +707,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                     <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                   </Tooltip>
                 </h4>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       외국인
@@ -753,7 +753,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                       <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                     </Tooltip>
                   </h4>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                         매출액
@@ -955,8 +955,8 @@ export default function JonggaV2Page() {
           <DataStatusBox updatedAt={data?.updated_at} />
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex gap-2 items-end">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 md:gap-3 w-full md:w-auto">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-end gap-3 sm:gap-2 w-full sm:w-auto">
             {/* Trading Value Filter */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-[9px] text-gray-500">
@@ -1073,13 +1073,13 @@ export default function JonggaV2Page() {
             </div>
           </div>
 
-          <div className="h-6 w-px bg-white/10 mx-2"></div>
+          <div className="hidden sm:block h-6 w-px bg-white/10 mx-2"></div>
 
           <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" wide>
             <select
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-[#1c1c1e] border border-white/10 text-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all hover:border-white/20"
+              className="bg-[#1c1c1e] border border-white/10 text-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all hover:border-white/20 w-full md:w-auto"
             >
               <option value="latest">Latest Report</option>
               {dates.map((d) => (
