@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
+import PaperTradingModal from './PaperTradingModal';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -14,6 +15,8 @@ export default function Sidebar() {
 
   const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
+  const [isPaperTradingOpen, setIsPaperTradingOpen] = useState(false);
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -24,15 +27,19 @@ export default function Sidebar() {
   }>({ isOpen: false, type: 'default', title: '', content: '' });
 
   useEffect(() => {
-    // Check for API Key in localStorage
+    // Check for API Key in localStorage (both keys for compatibility)
     const checkApiKey = () => {
-      const key = localStorage.getItem('GOOGLE_API_KEY');
-      setHasApiKey(!!key);
+      const googleKey = localStorage.getItem('GOOGLE_API_KEY');
+      const geminiKey = localStorage.getItem('X-Gemini-Key');
+      setHasApiKey(!!(googleKey || geminiKey));
     };
     checkApiKey();
 
     // Listen for storage changes (in case Settings updates it)
     window.addEventListener('storage', checkApiKey);
+
+    // Listen for custom event when API key is updated in same tab
+    window.addEventListener('api-key-updated', checkApiKey);
 
     // Also check periodically or on window focus
     const interval = setInterval(checkApiKey, 2000);
@@ -53,11 +60,20 @@ export default function Sidebar() {
 
     return () => {
       window.removeEventListener('open-settings', handleOpenSettings);
+      window.removeEventListener('storage', checkApiKey);
+      window.removeEventListener('api-key-updated', checkApiKey);
+      clearInterval(interval);
     };
   }, []);
 
-  // Fetch quota - 로그인 여부 관계없이 세션 ID 또는 이메일로 조회
+  // Fetch quota - API Key가 없을 때만 무료 사용량 조회
   useEffect(() => {
+    // API Key가 있으면 quota를 조회하지 않음 (무제한)
+    if (hasApiKey) {
+      setQuota(null);
+      return;
+    }
+
     let sessionId = localStorage.getItem('browser_session_id');
     if (!sessionId) {
       sessionId = 'anon_' + crypto.randomUUID();
@@ -67,9 +83,18 @@ export default function Sidebar() {
     const email = profile.email !== 'user@example.com' ? profile.email : '';
     fetch(`/api/kr/user/quota?email=${email}&session_id=${sessionId}`)
       .then(res => res.json())
-      .then(data => setQuota(data))
+      .then(data => {
+        // 서버에 키가 설정되어 있으면 무료 사용량 표시 안 함
+        if (data.server_key_configured) {
+          setServerKeyConfigured(true);
+          setQuota(null);
+        } else {
+          setServerKeyConfigured(false);
+          setQuota(data);
+        }
+      })
       .catch(e => console.error(e));
-  }, [profile.email, isSettingsOpen]); // Update when settings close too
+  }, [profile.email, isSettingsOpen, hasApiKey]); // Update when settings close or API key changes
 
   const isActive = (path: string) => pathname === path;
   const isGroupActive = (prefix: string) => pathname.startsWith(prefix);
@@ -157,6 +182,15 @@ export default function Sidebar() {
             )}
           </div>
 
+          {/* 모의투자 버튼 */}
+          <button
+            onClick={() => setIsPaperTradingOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-gray-400 hover:bg-white/5 hover:text-white"
+          >
+            <i className="fas fa-wallet w-5 text-center text-emerald-400"></i>
+            모의투자
+          </button>
+
           <Link
             href="/dashboard/data-status"
             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${isActive('/dashboard/data-status')
@@ -225,9 +259,9 @@ export default function Sidebar() {
           )}
 
           {/* Quota Display above Profile */}
-          {(hasApiKey || quota) && (
+          {(hasApiKey || serverKeyConfigured || quota) && (
             <div className="mb-2 px-3">
-              {hasApiKey ? (
+              {(hasApiKey || serverKeyConfigured) ? (
                 <div className="text-[10px] font-bold text-center text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded py-1">
                   ✨ API Key 사용 중 (무제한)
                 </div>
@@ -260,7 +294,7 @@ export default function Sidebar() {
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-white truncate">{profile.name}</div>
               <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
-                {hasApiKey ? (
+                {(hasApiKey || serverKeyConfigured) ? (
                   <span className="text-gray-500 text-[11px]">Personal Pro Plan</span>
                 ) : quota ? (
                   <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
@@ -288,6 +322,11 @@ export default function Sidebar() {
         onClose={() => setIsSettingsOpen(false)}
         profile={profile}
         onSave={handleSaveSettings}
+      />
+
+      <PaperTradingModal
+        isOpen={isPaperTradingOpen}
+        onClose={() => setIsPaperTradingOpen(false)}
       />
 
       {/* Alert Modal */}

@@ -59,6 +59,24 @@ class SignalGenerator:
         self._collector: Optional[KRXCollector] = None
         self._news: Optional[EnhancedNewsCollector] = None
         self._naver: Optional[NaverFinanceCollector] = None
+        
+        # 스캔 통계
+        self.scan_stats = {
+            "scanned": 0,
+            "phase1": 0,
+            "phase2": 0,
+            "final": 0
+        }
+        
+        # 탈락 통계 (진단용)
+        self.drop_stats = {
+            "low_trading_value": 0,
+            "low_volume_ratio": 0,
+            "low_pre_score": 0,
+            "no_news": 0,
+            "grade_fail": 0,
+            "other": 0
+        }
 
     async def __aenter__(self):
         self._collector = KRXCollector(self.config)
@@ -91,14 +109,31 @@ class SignalGenerator:
         markets = markets or ["KOSPI", "KOSDAQ"]
 
         all_signals = []
+        
+        # 탈락 통계 초기화
+        self.drop_stats = {
+            "low_trading_value": 0,
+            "low_volume_ratio": 0,
+            "low_pre_score": 0,
+            "no_news": 0,
+            "grade_fail": 0,
+            "other": 0
+        }
 
         for market in markets:
+            logger.info(f"="*60)
+            logger.info(f"[종가베팅] {market} 스크리닝 시작 (v2.2 Batch)")
+            logger.info(f"="*60)
             print(f"\n[{market}] 상승률 상위 종목 스크리닝... (v2.2 Batch)")
 
             # 1. 상승률 상위 종목 조회 (테스트 모드 시 지정 날짜 사용)
             target_date_str = target_date.strftime('%Y%m%d') if target_date else None
             candidates = await self._collector.get_top_gainers(market, top_n, target_date_str)
+            logger.info(f"[{market}] 상승률 상위 데이터 수집 완료: {len(candidates)}개")
             print(f"  - 1차 필터 통과: {len(candidates)}개")
+            
+            # 통계 업데이트
+            self.scan_stats["scanned"] += len(candidates)
 
             # --- Phase 1: Base Analysis & Pre-Screening ---
             pending_items = []  # {'stock':, 'charts':, 'supply':, 'news':}
@@ -114,7 +149,9 @@ class SignalGenerator:
                 # - Pre-Score 최소 2점 (뉴스 제외 점수, 대덕전자 등 포착 위해 완화)
                 # - 거래대금 최소 500억원 (사용자 요청)
                 PRE_SCORE_THRESHOLD = 2
-                MIN_TRADING_VALUE = 50_000_000_000  # 500억
+                PRE_SCORE_THRESHOLD = 2
+                # MIN_TRADING_VALUE = 50_000_000_000  # Deprecated
+
                 
                 if base_data:
                     stock_obj = base_data['stock']
@@ -123,25 +160,40 @@ class SignalGenerator:
                     score_details = base_data.get('score_details', {})
                     volume_ratio = score_details.get('volume_ratio', 0)
                     
-                    # 1차 필터 조건 (사용자 규칙 2026-01-31):
+                    # 1차 필터 조건 (사용자 규칙 2026-01-31 -> 완화):
                     # 1. Pre-Score 2점 이상
-                    # 2. 거래대금 500억 이상
+                    # 2. 거래대금 300억 이상 (Config Min)
                     # 3. 거래량 배수 2배 이상 (예외 없음)
+                    MIN_TRADING_VALUE = self.scorer.config.trading_value_min
+                    
                     if (pre_score >= PRE_SCORE_THRESHOLD and 
                         trading_value >= MIN_TRADING_VALUE and
                         volume_ratio >= 2.0):
                         pending_items.append(base_data)
+                        logger.debug(f"[Phase1 Pass] {stock.name}: Score={pre_score}, Value={trading_value//100_000_000}억, VolRatio={volume_ratio:.1f}")
+                    else:
+                        # 탈락 원인 분류
+                        if trading_value < MIN_TRADING_VALUE:
+                            self.drop_stats["low_trading_value"] += 1
+                        elif volume_ratio < 2.0:
+                            self.drop_stats["low_volume_ratio"] += 1
+                        elif pre_score < PRE_SCORE_THRESHOLD:
+                            self.drop_stats["low_pre_score"] += 1
+                        print(f"    [Drop] {stock.name}: Score={pre_score}/{PRE_SCORE_THRESHOLD}, Value={trading_value//100_000_000}억/{MIN_TRADING_VALUE//100_000_000}억, VolRatio={volume_ratio:.1f}/2.0")
                 
                 if (i+1) % 10 == 0:
                     print(f"    Processing {i+1}/{len(candidates)}...", end='\r')
             
-            print(f"\n    -> 1차 선별 완료: {len(pending_items)}개 (Pre-Score≥2, 대금≥500억, 거래량≥2배)")
+            logger.info(f"[Phase1 완료] {market}: {len(pending_items)}개 통과 (탈락: 거래대금부족={self.drop_stats['low_trading_value']}, 거래량부족={self.drop_stats['low_volume_ratio']}, 점수부족={self.drop_stats['low_pre_score']})")
+            print(f"\n    -> 1차 선별 완료: {len(pending_items)}개 (Pre-Score≥2, 대금≥300억, 거래량≥2배)")
+            self.scan_stats["phase1"] += len(pending_items)
 
             # --- Phase 2: News Fetching & Batch LLM ---
             print(f"  [Phase 2] 뉴스 수집 및 Batch LLM 분석...")
             
             # 뉴스 수집
             stocks_to_analyze = []
+            news_fail_count = 0
             for item in pending_items:
                 if shared_state.STOP_REQUESTED:
                     print(f"\n[STOP] 사용자 중단 요청 감지")
@@ -151,8 +203,14 @@ class SignalGenerator:
                 if news_list:
                     item['news'] = news_list
                     stocks_to_analyze.append(item)
+                    logger.debug(f"[뉴스] {stock.name}: {len(news_list)}개 수집")
+                else:
+                    news_fail_count += 1
+                    self.drop_stats["no_news"] += 1
+                    logger.debug(f"[뉴스 없음] {stock.name}")
             
-            print(f"    -> 뉴스 수집 완료: {len(stocks_to_analyze)}개 종목")
+            logger.info(f"[Phase2 뉴스수집] {market}: {len(stocks_to_analyze)}개 성공, {news_fail_count}개 뉴스 없음")
+            print(f"    -> 뉴스 수집 완료: {len(stocks_to_analyze)}개 종목 (뉴스 없음: {news_fail_count}개)")
 
             # Market Gate 상태 조회
             market_status = None
@@ -222,7 +280,10 @@ class SignalGenerator:
                     grade_val = getattr(signal.grade, 'value', signal.grade)
                     if grade_val != 'C':
                         all_signals.append(signal)
+                        logger.info(f"[시그널 생성] {stock.name}: {grade_val}급 (점수: {signal.score.total}, 거래대금: {stock.trading_value//100_000_000}억, 등락률: {stock.change_pct:.1f}%)")
                         print(f"    ✅ {stock.name}: {grade_val}급 (점수: {signal.score.total})")
+                else:
+                    self.drop_stats["grade_fail"] += 1
 
         # 등급순 정렬 (D등급 포함)
         grade_order = {'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4}
@@ -231,7 +292,41 @@ class SignalGenerator:
         # 참고: max_positions는 동시 매매 포지션 제한이며, 시그널 표시 개수는 제한하지 않음
         # (조건 충족 종목은 모두 표시)
 
-        print(f"\n총 {len(all_signals)}개 시그널 생성 완료")
+        # 최종 결과 요약 로그
+        logger.info(f"="*60)
+        logger.info(f"[종가베팅 스크리닝 결과 요약]")
+        logger.info(f"="*60)
+        logger.info(f"  - 전체 스캔: {self.scan_stats['scanned']}개")
+        logger.info(f"  - Phase1 통과: {self.scan_stats['phase1']}개")
+        logger.info(f"  - 최종 시그널: {len(all_signals)}개")
+        logger.info(f"  [탈락 통계]")
+        logger.info(f"    - 거래대금 부족: {self.drop_stats['low_trading_value']}개")
+        logger.info(f"    - 거래량배수 부족: {self.drop_stats['low_volume_ratio']}개")
+        logger.info(f"    - Pre-Score 부족: {self.drop_stats['low_pre_score']}개")
+        logger.info(f"    - 뉴스 없음: {self.drop_stats['no_news']}개")
+        logger.info(f"    - 등급 미달: {self.drop_stats['grade_fail']}개")
+        logger.info(f"="*60)
+        
+        print(f"\n" + "="*60)
+        print(f"[종가베팅 스크리닝 결과 요약]")
+        print(f"="*60)
+        print(f"  - 전체 스캔: {self.scan_stats['scanned']}개")
+        print(f"  - Phase1 통과: {self.scan_stats['phase1']}개")
+        print(f"  - 최종 시그널: {len(all_signals)}개")
+        print(f"  [탈락 통계]")
+        print(f"    - 거래대금 부족: {self.drop_stats['low_trading_value']}개")
+        print(f"    - 거래량배수 부족: {self.drop_stats['low_volume_ratio']}개")
+        print(f"    - Pre-Score 부족: {self.drop_stats['low_pre_score']}개")
+        print(f"    - 뉴스 없음: {self.drop_stats['no_news']}개")
+        print(f"    - 등급 미달: {self.drop_stats['grade_fail']}개")
+        print(f"="*60)
+        
+        if len(all_signals) == 0:
+            logger.warning(f"[경고] 생성된 시그널이 0개입니다!")
+            print(f"\n[경고] 생성된 시그널이 0개입니다!")
+            print(f"  -> 위 탈락 통계를 확인하세요.")
+
+        self.scan_stats["final"] = len(all_signals)
         return all_signals
 
     async def _analyze_base(self, stock: StockData) -> Optional[Dict]:
@@ -279,7 +374,7 @@ class SignalGenerator:
             grade = self.scorer.determine_grade(stock, score, score_details, supply, charts)
             
             if not grade:
-                print(f"    [DEBUG] 등급탈락 {stock.name}: 등급규칙 미달")
+                print(f"    [DEBUG] 등급탈락 {stock.name}: Score={score.total}, Value={stock.trading_value//100_000_000}억, Rise={stock.change_pct}%, VolRatio={score_details.get('volume_ratio', 0)}")
                 return None
 
             # 포지션 계산
@@ -423,8 +518,9 @@ async def run_screener(
 
     result = ScreenerResult(
         date=parsed_date if parsed_date else date.today(),
-        total_candidates=summary["total"],
-        filtered_count=len(signals),
+        total_candidates=len(signals),  # 최종 추출된 시그널 수
+        filtered_count=generator.scan_stats.get("phase1", 0),  # 1차 필터(조건) 통과 수
+        scanned_count=generator.scan_stats.get("scanned", 0),  # 전체 스캔 종목 수
         signals=signals,
         by_grade=summary["by_grade"],
         by_market=summary["by_market"],
@@ -498,6 +594,7 @@ def save_result_to_json(result: ScreenerResult):
         "market_status": result.market_status,
         "market_summary": result.market_summary,
         "trending_themes": result.trending_themes,
+        "scanned_count": getattr(result, "scanned_count", 0),
         "updated_at": datetime.now().isoformat()
     }
 

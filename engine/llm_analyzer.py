@@ -8,6 +8,7 @@ import logging
 import time
 from typing import List, Dict, Optional
 import asyncio
+import random
 try:
     from google import genai
 except ImportError:
@@ -151,7 +152,7 @@ class LLMAnalyzer:
                     )
 
                 # Retry Logic Wrapper
-                max_retries = 3
+                max_retries = 5
                 for attempt in range(max_retries):
                     try:
                         resp = await asyncio.to_thread(_call_gemini)
@@ -160,8 +161,8 @@ class LLMAnalyzer:
                     except Exception as e:
                         if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                              if attempt < max_retries - 1:
-                                wait_time = (2 ** attempt) + 1  # 2, 3, 5 seconds
-                                logger.warning(f"[GEMINI] Rate limit hit (429). Retrying in {wait_time}s... ({attempt+1}/{max_retries})")
+                                wait_time = (2 ** attempt) * 2 + random.uniform(0, 1) # 2s, 4s, 8s, 16s, 32s
+                                logger.warning(f"[GEMINI] Rate limit hit (429). Retrying in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
                                 await asyncio.sleep(wait_time)
                                 continue
                         # Other errors or max retries reached
@@ -369,7 +370,7 @@ class LLMAnalyzer:
                         )
 
                     # Retry Logic for Batch
-                    max_retries = 3
+                    max_retries = 5
                     for attempt in range(max_retries):
                         try:
                             # Use wait_for for timeout within the retry loop
@@ -384,8 +385,8 @@ class LLMAnalyzer:
                         except Exception as e:
                             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                                 if attempt < max_retries - 1:
-                                    wait_time = (2 ** attempt) + 1
-                                    logger.warning(f"[GEMINI] Rate limit (429) hit during batch. Retrying in {wait_time}s... ({attempt+1}/{max_retries})")
+                                    wait_time = (2 ** attempt) * 2 + random.uniform(0, 1)
+                                    logger.warning(f"[GEMINI] Rate limit (429) hit during batch. Retrying in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
                                     await asyncio.sleep(wait_time)
                                     continue
                             raise e
@@ -498,8 +499,21 @@ class LLMAnalyzer:
                         contents=full_prompt
                     )
 
-                response = await asyncio.to_thread(_call_gemini_summary)
-                response_content = response.text
+                # Retry Logic for Summary
+                max_retries = 5
+                for attempt in range(max_retries):
+                    try:
+                        response = await asyncio.to_thread(_call_gemini_summary)
+                        response_content = response.text
+                        break
+                    except Exception as e:
+                        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                             if attempt < max_retries - 1:
+                                wait_time = (2 ** attempt) * 2 + random.uniform(0, 1)
+                                logger.warning(f"[GEMINI] Rate limit (429) hit during summary. Retrying in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
+                                await asyncio.sleep(wait_time)
+                                continue
+                        raise e
                 
             return response_content.strip()
 

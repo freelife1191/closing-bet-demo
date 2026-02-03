@@ -134,6 +134,7 @@ class ScreenerResult:
     date: date
     total_candidates: int
     filtered_count: int
+    scanned_count: int  # 전체 스캔 종목 수
     signals: List[Signal]
     by_grade: Dict[str, int]
     by_market: Dict[str, int]
@@ -141,3 +142,4 @@ class ScreenerResult:
     market_status: Dict[str, Any]
     market_summary: str
     trending_themes: List[str]
+

@@ -245,3 +245,112 @@ export const closingBetAPI = {
   getTiming: () => fetchAPI<ClosingBetTiming>('/api/kr/closing-bet/timing'),
   getBacktestStats: () => fetchAPI<any>('/api/kr/closing-bet/backtest-stats'),
 };
+
+// 모의투자 API Types
+export interface PaperTradingHolding {
+  ticker: string;
+  name: string;
+  avg_price: number;
+  quantity: number;
+  total_cost: number;
+  current_price?: number;
+  market_value?: number;
+  profit_loss?: number;
+  profit_rate?: number;
+  return_pct?: number;
+}
+
+export interface PaperTradingPortfolio {
+  holdings: PaperTradingHolding[];
+  cash: number;
+  total_asset_value: number;
+  total_stock_value?: number;
+  total_profit?: number;
+  total_profit_rate?: number;
+}
+
+export interface PaperTradingAssetHistory {
+  date: string;
+  total_asset: number;
+  cash: number;
+  stock_value: number;
+}
+
+export interface TradeLogEntry {
+  id: number;
+  action: 'BUY' | 'SELL';
+  ticker: string;
+  name: string;
+  price: number;
+  quantity: number;
+  timestamp: string;
+}
+
+export interface BuyRequest {
+  ticker: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+export interface SellRequest {
+  ticker: string;
+  price: number;
+  quantity: number;
+}
+
+export interface TradeResponse {
+  status: 'success' | 'error';
+  message: string;
+}
+
+// 모의투자 API
+export const paperTradingAPI = {
+  getPortfolio: () => fetchAPI<PaperTradingPortfolio>('/api/portfolio'),
+
+  buy: async (data: BuyRequest): Promise<TradeResponse> => {
+    const response = await fetch('/api/portfolio/buy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  sell: async (data: SellRequest): Promise<TradeResponse> => {
+    const response = await fetch('/api/portfolio/sell', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  async reset() {
+    const res = await fetch('/api/portfolio/reset', { method: 'POST' });
+    if (!res.ok) throw new Error('Account reset failed');
+    return res.json();
+  },
+
+  async deposit(amount: number) {
+    const res = await fetch('/api/portfolio/deposit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount }),
+    });
+    if (!res.ok) throw new Error('Deposit failed');
+    return res.json();
+  },
+
+  async getTradeHistory(limit = 50) {
+    const res = await fetch(`/api/portfolio/history?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch trade history');
+    return res.json();
+  },
+
+  async getAssetHistory(limit = 30) {
+    const res = await fetch(`/api/portfolio/history/asset?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch asset history');
+    return res.json();
+  }
+};

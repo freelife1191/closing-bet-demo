@@ -53,7 +53,7 @@ except ImportError as e:
 
 def create_app():
     # Ensure logs are printed to stdout
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
     
     app = Flask(__name__)
 

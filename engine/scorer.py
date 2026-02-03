@@ -51,6 +51,9 @@ class Scorer:
         # 6. 수급 (0-2점)
         score.supply, checklist.supply_positive = self._score_supply(supply)
         
+        # 총점 계산 (개별 점수 합산)
+        score.total = score.news + score.volume + score.chart + score.candle + score.timing + score.supply
+        
         # 상세 내역 (프론트엔드 필터용)
         # 거래량 배수 = 오늘 거래량 / 최근 20일 평균 거래량 (네이버/토스 기준)
         volume_ratio = 0.0
@@ -270,12 +273,16 @@ class Scorer:
         if score_details and 'volume_ratio' in score_details:
             volume_ratio = score_details.get('volume_ratio', 0.0)
         
+        # 디버그용 로그 (등급 판정 과정 추적)
+        logger.debug(f"[등급판정] {stock.name}: Value={trading_value//100_000_000}억, Rise={change_pct:.1f}%, Score={score.total}, VolRatio={volume_ratio:.1f}")
+        
         # 1. 공통 필터 (Common Exclusion)
-        # 1. 공통 필터 (Common Exclusion)
-        if trading_value < 50_000_000_000:
+        if trading_value < self.config.trading_value_min:
+            logger.debug(f"  -> [Drop] 거래대금 부족: {trading_value//100_000_000}억 < {self.config.trading_value_min//100_000_000}억")
             return None
             
         if volume_ratio < 2.0:
+            logger.debug(f"  -> [Drop] 거래량배수 부족: {volume_ratio:.1f} < 2.0")
             return None
 
         # 2. 등급 판별 (Strict logic first)
@@ -285,6 +292,7 @@ class Scorer:
         if (trading_value >= 1_000_000_000_000 and 
             change_pct >= 10.0 and 
             score.total >= 10):
+            logger.debug(f"  -> [S급] 조건 충족!")
             return Grade.S
             
         # [A급] 대형 우량주
@@ -292,6 +300,7 @@ class Scorer:
         if (trading_value >= 500_000_000_000 and 
             change_pct >= 3.0 and
             score.total >= 8):
+            logger.debug(f"  -> [A급] 조건 충족!")
             return Grade.A
             
         # [B급] 중형 주도주
@@ -299,6 +308,7 @@ class Scorer:
         if (trading_value >= 100_000_000_000 and 
             change_pct >= 4.0 and
             score.total >= 6):
+            logger.debug(f"  -> [B급] 조건 충족!")
             return Grade.B
             
         # [C급] 강소 주도주 (소형)
@@ -306,16 +316,19 @@ class Scorer:
         if (trading_value >= 50_000_000_000 and 
             change_pct >= 5.0 and
             score.total >= 8):
+            logger.debug(f"  -> [C급] 조건 충족!")
             return Grade.C
             
         # [D급] 조건부 관망 (소형)
-        # 조건: 거래대금 500억 이상 AND 등락률 4% 이상 AND 점수 6점 이상 AND 거래량 배수 2배 이상 (위 점수 조건 미달 시)
-        if (trading_value >= 50_000_000_000 and 
+        # 조건: 거래대금 Min(300억) 이상 AND 등락률 4% 이상 AND 점수 6점 이상 AND 거래량 배수 2배 이상 (위 점수 조건 미달 시)
+        if (trading_value >= self.config.trading_value_min and 
             change_pct >= 4.0 and
             score.total >= 6 and
             volume_ratio >= 2.0):
+            logger.debug(f"  -> [D급] 조건 충족!")
             return Grade.D
         
         # 조건 미충족 시 등급 없음
+        logger.debug(f"  -> [Drop] 등급 조건 미충족 (Score={score.total}, Rise={change_pct:.1f}%, Value={trading_value//100_000_000}억)")
         return None
 

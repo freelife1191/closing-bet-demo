@@ -424,72 +424,68 @@ class MarketGate:
 
 
     def _load_price_data(self, target_date: str = None) -> pd.DataFrame:
-        """KODEX 200 데이터 로드 및 날짜 필터링"""
+        """KODEX 200 데이터 로드 및 날짜 필터링 (Fallback: pykrx)"""
+        df = pd.DataFrame()
         filepath = os.path.join(self.data_dir, 'daily_prices.csv')
-        if not os.path.exists(filepath):
-            logger.warning(f"데이터 파일 없음: {filepath}")
-            return pd.DataFrame()
-            
-        try:
-            df = pd.read_csv(filepath)
-            df['ticker'] = df['ticker'].astype(str).str.zfill(6)
-            df = df[df['ticker'] == self.kodex_ticker].copy()
-            
-            # if df.empty:
-            #     return pd.DataFrame()
-                
-            df = df.sort_values('date')
-            
-            # 날짜 필터링
-            if target_date:
-                df = df[df['date'] <= target_date]
-                if df.empty:
-                    logger.warning(f"{target_date} 이전 데이터가 없습니다.")
-                    return pd.DataFrame()
-            
-            if not df.empty:
-                return df
-        except Exception as e:
-            logger.error(f"CSV 로드 실패: {e}")
-            # Fallback will be handled below if df is empty or not returned
         
-        # CSV 로드 실패 또는 데이터 없음 -> yfinance 폴백
-        if 'df' not in locals() or df.empty:
-            logger.info(f"가격 데이터 CSV에서 {self.kodex_ticker} 확인 불가. yfinance 폴백 시도.")
+        # 1. CSV 로드 시도
+        if os.path.exists(filepath):
             try:
-                import yfinance as yf
-                yf_ticker = f"{self.kodex_ticker}.KS"
-                stock = yf.Ticker(yf_ticker)
-                
-                # 충분한 기간 데이터 조회 (MA60 계산 위해 최소 3개월)
-                end_date = None
-                if target_date:
-                    from datetime import datetime, timedelta
-                    dt = datetime.strptime(target_date, '%Y-%m-%d')
-                    end_date = (dt + timedelta(days=1)).strftime('%Y-%m-%d')
-                
-                hist = stock.history(period="6mo" if not target_date else None, end=end_date)
-                
-                if not hist.empty:
-                     hist = hist.reset_index()
-                     # yfinance columns: Date, Open, High, Low, Close, Volume
-                     # Rename to match internal schema: date, open, high, low, close, volume, ticker
-                     hist.columns = [c.lower() for c in hist.columns]
-                     if 'date' in hist.columns:
-                         hist['date'] = hist['date'].dt.strftime('%Y-%m-%d')
-                    
-                     hist['ticker'] = self.kodex_ticker
-                     hist = hist[['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']]
-                     
-                     # 날짜 필터링 (target_date 기준)
-                     if target_date:
-                         hist = hist[hist['date'] <= target_date]
-                         
-                     return hist
+                temp_df = pd.read_csv(filepath)
+                temp_df['ticker'] = temp_df['ticker'].astype(str).str.zfill(6)
+                df = temp_df[temp_df['ticker'] == self.kodex_ticker].copy()
+                if not df.empty:
+                    df = df.sort_values('date')
             except Exception as e:
-                logger.error(f"yfinance 폴백 실패: {e}")
+                logger.error(f"CSV 로드 실패: {e}")
+        
+        # 2. [Fallback] 데이터가 없으면 pykrx 조회
+        if df.empty:
+            logger.info("CSV에 KODEX 200 데이터 없음. pykrx 조회 시도...")
+            try:
+                from pykrx import stock
+                today = datetime.now().strftime("%Y%m%d")
+                start = (datetime.now() - timedelta(days=120)).strftime("%Y%m%d") # 60일 -> 120일 (MA60 계산 위해)
                 
-        return pd.DataFrame()
+                pdf = stock.get_market_ohlcv_by_date(start, today, self.kodex_ticker)
+                
+                if not pdf.empty:
+                    pdf = pdf.reset_index()
+                    # 컬럼명 매핑 (한글 -> 영문)
+                    # pykrx: 날짜(index), 시가, 고가, 저가, 종가, 거래량, 거래대금, 등락률
+                    p_cols = ['date', 'open', 'high', 'low', 'close', 'volume', 'trading_value', 'change']
+                    # 실제 컬럼 수 확인 후 매핑 (거래대금, 등락률은 옵션일 수 있음)
+                    # 하지만 get_market_ohlcv_by_date는 보통 시/고/저/종/거/대/등락률 줌.
+                    # 안전하게 rename
+                    rename_map = {
+                        '날짜': 'date', '시가': 'open', '고가': 'high', '저가': 'low', 
+                        '종가': 'close', '거래량': 'volume', '거래대금': 'trading_value', '등락률': 'change_pct'
+                    }
+                    pdf.rename(columns=rename_map, inplace=True)
+                    
+                    # 날짜 변환
+                    pdf['date'] = pdf['date'].dt.strftime('%Y-%m-%d')
+                    pdf['ticker'] = self.kodex_ticker
+                    
+                    # 필수 컬럼 존재 확인
+                    req_cols = ['date', 'ticker', 'close']
+                    if all(c in pdf.columns for c in req_cols):
+                        df = pdf
+                        logger.info(f"pykrx를 통해 KODEX 200 데이터 확보 ({len(df)} rows)")
+            except Exception as e:
+                logger.error(f"pykrx Fallback 실패: {e}")
+
+        # 3. 날짜 필터링
+        if df.empty:
+            return pd.DataFrame()
+
+        if target_date:
+            df = df[df['date'] <= target_date]
+            if df.empty:
+                logger.warning(f"{target_date} 이전 데이터가 없습니다.")
+                return pd.DataFrame()
+        
+        return df
 
     def save_analysis(self, result: Dict, target_date: str = None) -> str:
         """분석 결과 JSON 저장"""

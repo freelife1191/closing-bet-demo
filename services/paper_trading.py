@@ -52,6 +52,17 @@ class PaperTradingService:
                 )
             ''')
             
+            # Asset History Table (For Charting)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS asset_history (
+                    date TEXT PRIMARY KEY,
+                    total_asset REAL,
+                    cash REAL,
+                    stock_value REAL,
+                    timestamp TEXT
+                )
+            ''')
+            
             # Balance Table (Cash)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS balance (
@@ -79,6 +90,21 @@ class PaperTradingService:
             row = cursor.fetchone()
             return row[0] if row else 0
 
+    def deposit_cash(self, amount):
+        """Deposit cash (Charging)"""
+        if amount <= 0:
+            return {'status': 'error', 'message': 'Amount must be positive'}
+            
+        try:
+            conn = self.get_context()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE balance SET cash = cash + ? WHERE id = 1', (amount,))
+            conn.commit()
+            conn.close()
+            return {'status': 'success', 'message': f'Deposited {amount:,} KRW'}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
     def update_balance(self, amount, operation='add'):
         """Update cash balance"""
         with self.get_context() as conn:
@@ -98,11 +124,14 @@ class PaperTradingService:
         if quantity <= 0:
             return {'status': 'error', 'message': 'Quantity must be positive'}
             
-        total_cost = price * quantity
+        total_cost = int(price * quantity) # 정수로 처리
         current_cash = self.get_balance()
         
         if current_cash < total_cost:
-            return {'status': 'error', 'message': 'Insufficient funds'}
+            return {
+                'status': 'error', 
+                'message': f'잔고 부족 (필요: {total_cost:,}원, 보유: {int(current_cash):,}원)'
+            }
 
         try:
             conn = self.get_context()
@@ -142,7 +171,7 @@ class PaperTradingService:
             
             conn.commit()
             conn.close()
-            return {'status': 'success', 'message': f'Bought {quantity} of {name}'}
+            return {'status': 'success', 'message': f'{name} {quantity}주 매수 완료'}
             
         except Exception as e:
             logger.error(f"Buy failed: {e}")
@@ -172,6 +201,7 @@ class PaperTradingService:
             
             if remaining_qty == 0:
                 cursor.execute('DELETE FROM portfolio WHERE ticker = ?', (ticker,))
+                # 전량 매도 시에는 해당 종목 평가 손익 확정 로직이 필요할 수 있으나 여기선 생략
             else:
                 # FIFO / Avg Cost Logic: 
                 # When selling, cost basis reduces proportionally.
@@ -190,13 +220,13 @@ class PaperTradingService:
             ''', ('SELL', ticker, name, price, quantity, datetime.now().isoformat()))
             
             # 4. Add Cash
-            total_proceeds = price * quantity
+            total_proceeds = int(price * quantity)
             cursor.execute('UPDATE balance SET cash = cash + ? WHERE id = 1', (total_proceeds,))
             
             conn.commit()
             conn.close()
-            return {'status': 'success', 'message': f'Sold {quantity} of {name}'}
-
+            return {'status': 'success', 'message': f'{name} {quantity}주 매도 완료'}
+            
         except Exception as e:
             logger.error(f"Sell failed: {e}")
             return {'status': 'error', 'message': str(e)}
@@ -220,6 +250,45 @@ class PaperTradingService:
                 'total_asset_value': cash  # Will need to add holdings value in API layer
             }
 
+    def record_asset_history(self, stock_value):
+        """Record daily asset history snapshot"""
+        try:
+            cash = self.get_balance()
+            total_asset = cash + stock_value
+            today = datetime.now().strftime('%Y-%m-%d')
+            
+            conn = self.get_context()
+            cursor = conn.cursor()
+            
+            # 하루에 하나의 기록만 남김 (UPDATE or INSERT)
+            cursor.execute('''
+                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_asset = excluded.total_asset,
+                    cash = excluded.cash,
+                    stock_value = excluded.stock_value,
+                    timestamp = excluded.timestamp
+            ''', (today, total_asset, cash, stock_value, datetime.now().isoformat()))
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to record asset history: {e}")
+
+    def get_asset_history(self, limit=30):
+        """Get asset history for chart"""
+        with self.get_context() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT date, total_asset, cash, stock_value 
+                FROM asset_history 
+                ORDER BY date ASC 
+                LIMIT ?
+            ''', (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+
     def reset_account(self):
         """Reset everything to default"""
         try:
@@ -227,6 +296,7 @@ class PaperTradingService:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM portfolio')
             cursor.execute('DELETE FROM trade_log')
+            cursor.execute('DELETE FROM asset_history') # 히스토리도 초기화
             cursor.execute('UPDATE balance SET cash = 100000000 WHERE id = 1')
             conn.commit()
             conn.close()
@@ -234,5 +304,20 @@ class PaperTradingService:
         except Exception:
             return False
 
+    def get_trade_history(self, limit=50):
+        """Get trade history"""
+        with self.get_context() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, action, ticker, name, price, quantity, timestamp
+                FROM trade_log
+                ORDER BY timestamp DESC
+                LIMIT ?
+            ''', (limit,))
+            trades = [dict(row) for row in cursor.fetchall()]
+            return {'trades': trades}
+
 # Global Instance
 paper_trading = PaperTradingService()
+

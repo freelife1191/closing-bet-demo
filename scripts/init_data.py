@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 import json
 import socket
+import yfinance as yf
 import time
 import random
 import logging
@@ -483,47 +484,54 @@ def create_korean_stocks_list():
         
         all_data = []
         
-        # KOSPI 시가총액 상위 종목 조회
-        try:
-            kospi_cap = stock.get_market_cap(today, market="KOSPI")
-            if not kospi_cap.empty:
-                # 시가총액 순 정렬 후 상위 300개 (VCP 발굴 확률 확대를 위해 증가)
-                kospi_cap = kospi_cap.sort_values('시가총액', ascending=False).head(300)
-                for ticker in kospi_cap.index:
-                    try:
-                        name = stock.get_market_ticker_name(ticker)
-                        all_data.append({
-                            'ticker': ticker,
-                            'name': name,
-                            'market': 'KOSPI',
-                            'sector': ''
-                        })
-                    except:
-                        pass
-                log(f"KOSPI 시가총액 상위 {len(kospi_cap)} 종목 수집", "SUCCESS")
-        except Exception as e:
-            log(f"KOSPI 시가총액 조회 실패: {e}", "WARNING")
-        
-        # KOSDAQ 시가총액 상위 종목 조회
-        try:
-            kosdaq_cap = stock.get_market_cap(today, market="KOSDAQ")
-            if not kosdaq_cap.empty:
-                # 시가총액 순 정렬 후 상위 300개 (코스닥 포함 요청 반영)
-                kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False).head(300)
-                for ticker in kosdaq_cap.index:
-                    try:
-                        name = stock.get_market_ticker_name(ticker)
-                        all_data.append({
-                            'ticker': ticker,
-                            'name': name,
-                            'market': 'KOSDAQ',
-                            'sector': ''
-                        })
-                    except:
-                        pass
-                log(f"KOSDAQ 시가총액 상위 {len(kosdaq_cap)} 종목 수집", "SUCCESS")
-        except Exception as e:
-            log(f"KOSDAQ 시가총액 조회 실패: {e}", "WARNING")
+        def get_market_cap_safe(target_date, market):
+            try:
+                df = stock.get_market_cap(target_date, market=market)
+                if not df.empty:
+                    return df
+            except:
+                pass
+            return pd.DataFrame()
+
+        # KOSPI
+        kospi_cap = get_market_cap_safe(today, "KOSPI")
+        if kospi_cap.empty: # 오늘 데이터 없으면 하루 전 시도
+             from datetime import timedelta
+             prev_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
+             log(f"오늘({today}) KOSPI 데이터 없음. 전일({prev_date}) 데이터 시도...", "WARNING")
+             kospi_cap = get_market_cap_safe(prev_date, "KOSPI")
+
+        if not kospi_cap.empty:
+            # 1000개로 확대
+            kospi_cap = kospi_cap.sort_values('시가총액', ascending=False).head(1000)
+            for ticker in kospi_cap.index:
+                try:
+                    name = stock.get_market_ticker_name(ticker)
+                    all_data.append({'ticker': ticker, 'name': name, 'market': 'KOSPI', 'sector': ''})
+                except: pass
+            log(f"KOSPI 시가총액 상위 {len(kospi_cap)} 종목 수집", "SUCCESS")
+        else:
+            log("KOSPI 시가총액 조회 실패", "WARNING")
+
+        # KOSDAQ
+        kosdaq_cap = get_market_cap_safe(today, "KOSDAQ")
+        if kosdaq_cap.empty: 
+             from datetime import timedelta
+             prev_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
+             log(f"오늘({today}) KOSDAQ 데이터 없음. 전일({prev_date}) 데이터 시도...", "WARNING")
+             kosdaq_cap = get_market_cap_safe(prev_date, "KOSDAQ")
+
+        if not kosdaq_cap.empty:
+            # 1000개로 확대
+            kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False).head(1000)
+            for ticker in kosdaq_cap.index:
+                try:
+                    name = stock.get_market_ticker_name(ticker)
+                    all_data.append({'ticker': ticker, 'name': name, 'market': 'KOSDAQ', 'sector': ''})
+                except: pass
+            log(f"KOSDAQ 시가총액 상위 {len(kosdaq_cap)} 종목 수집", "SUCCESS")
+        else:
+            log("KOSDAQ 시가총액 조회 실패", "WARNING")
         
         if all_data:
             df = pd.DataFrame(all_data)
@@ -539,28 +547,32 @@ def create_korean_stocks_list():
         # 폴백: 시가총액 상위 주요 종목 (KOSPI + KOSDAQ)
         data = {
             'ticker': [
-                # KOSPI 상위 15개
+                # KOSPI 상위 20개
                 '005930', '000660', '005380', '373220', '207940', '000270', '035420', '068270', '105560', '055550',
-                '035720', '003550', '015760', '028260', '017670',
-                # KOSDAQ 상위 10개
-                '247540', '086520', '196170', '263750', '145020', '403870', '328130', '091990', '336370', '058470'
+                '035720', '003550', '015760', '028260', '017670', '032830', '009150', '251270', '012330', '034730',
+                # KOSDAQ 상위 10개 + 인기/급등주 (알테오젠, 리노공업 등)
+                '247540', '086520', '196170', '263750', '145020', '403870', '328130', '091990', '336370', '058470',
+                '293490', '214150', '035900', '041510', '036930', '039030', '035760', '022100', '042700', '064350'
             ],
             'name': [
                 # KOSPI
                 '삼성전자', 'SK하이닉스', '현대차', 'LG에너지솔루션', '삼성바이오로직스', '기아', 'NAVER', '셀트리온', 'KB금융', '신한지주',
-                '카카오', 'LG', '한국전력', '삼성물산', 'SK텔레콤',
+                '카카오', 'LG', '한국전력', '삼성물산', 'SK텔레콤', '삼성생명', '삼성전기', '넷마블', '현대모비스', 'SK',
                 # KOSDAQ
-                '에코프로비엠', '에코프로', '알테오젠', '펄어비스', '휴젤', '피에이치에이', '루닛', '셀트리온제약', '솔브레인', '리노공업'
+                '에코프로비엠', '에코프로', '알테오젠', '펄어비스', '휴젤', '피에이치에이', '루닛', '셀트리온제약', '솔브레인', '리노공업',
+                '카카오게임즈', '클래시스', 'JYP Ent.', '에스엠', '주성엔지니어링', '이오테크닉스', 'CJ ENM', '포스코DX', '한미반도체', '현대로템'
             ],
             'market': [
                 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI',
-                'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI',
+                'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI', 'KOSPI',
+                'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ',
                 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ'
             ],
             'sector': [
                 '반도체', '반도체', '자동차', '2차전지', '바이오', '자동차', '인터넷', '바이오', '금융', '금융',
-                '인터넷', '지주', '에너지', '건설', '통신',
-                '2차전지', '2차전지', '바이오', '게임', '바이오', '자동차부품', 'AI/의료', '바이오', '반도체소재', '반도체장비'
+                '인터넷', '지주', '에너지', '건설', '통신', '금융', '전기전자', '게임', '자동차부품', '지주',
+                '2차전지', '2차전지', '바이오', '게임', '바이오', '자동차부품', 'AI/의료', '바이오', '반도체소재', '반도체장비',
+                '게임', '미용기기', '엔터', '엔터', '반도체장비', '반도체장비', '미디어', 'IT서비스', '반도체장비', '방산'
             ],
         }
         df = pd.DataFrame(data)
@@ -788,7 +800,7 @@ def create_daily_prices(target_date=None):
                 log(f"[Daily Prices] {cur_date_fmt} 수집 완료 ({len(df_final)}종목) - {progress:.1f}%", "INFO")
                 
                 # Rate Limit 방지
-                time.sleep(random.uniform(0.3, 0.7))
+                time.sleep(random.uniform(0.05, 0.1))
                 
             except Exception as e:
                 log(f"날짜별 수집 실패 ({cur_date_str}): {e}", "WARNING")
@@ -890,7 +902,7 @@ def create_institutional_trend(target_date=None):
                 return 'SKIPPED'
                 
             # Random sleep
-            time.sleep(random.uniform(0.2, 0.5))
+            time.sleep(random.uniform(0.05, 0.1))
 
             try:
                 df = stock.get_market_trading_value_by_date(req_start_date, end_date, ticker)
@@ -916,7 +928,7 @@ def create_institutional_trend(target_date=None):
         total_tickers = len(tickers[:600])
         processed_count = 0
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_ticker = {executor.submit(fetch_inst, t): t for t in tickers[:600]}
             
             for future in as_completed(future_to_ticker):
@@ -1060,11 +1072,54 @@ def calculate_supply_score(ticker: str, inst_df: pd.DataFrame) -> dict:
     - 외국인 5일 순매수: 25점
     - 기관 5일 순매수: 20점
     - 연속 매수일: 15점
+    
+    [2026-02-03 수정] 수급 데이터가 없으면 pykrx API로 실시간 수집
     """
     try:
         # ticker 비교 시 zfill(6) 적용하여 형식 맞춤
         df = inst_df[inst_df['ticker'].astype(str).str.zfill(6) == ticker].sort_values('date')
+        
+        # 수급 데이터가 부족한 경우 pykrx API로 직접 수집
         if len(df) < 5:
+            log(f"  [{ticker}] 수급 데이터 부족 ({len(df)}행) - pykrx API 호출 시도", "WARNING")
+            try:
+                from pykrx import stock
+                import time
+                
+                end_date = datetime.now().strftime('%Y%m%d')
+                start_date = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
+                
+                time.sleep(0.05)  # Rate limiting
+                inst_data = stock.get_market_trading_value_by_date(start_date, end_date, ticker)
+                
+                if not inst_data.empty and len(inst_data) >= 5:
+                    recent = inst_data.tail(5)
+                    foreign_5d = int(recent.get('외국인합계', pd.Series([0])).sum())
+                    inst_5d = int(recent.get('기관합계', pd.Series([0])).sum())
+                    
+                    score = 0
+                    if foreign_5d > 1000000000: score += 40
+                    elif foreign_5d > 500000000: score += 25
+                    elif foreign_5d > 0: score += 10
+                    
+                    if inst_5d > 500000000: score += 30
+                    elif inst_5d > 200000000: score += 20
+                    elif inst_5d > 0: score += 10
+                    
+                    # 연속 매수일 계산
+                    consecutive = 0
+                    for val in reversed(recent.get('외국인합계', pd.Series([0])).values):
+                        if val > 0: consecutive += 1
+                        else: break
+                    score += min(consecutive * 6, 30)
+                    
+                    log(f"  [{ticker}] pykrx 수급 수집 성공: 외인 {foreign_5d:,.0f}, 기관 {inst_5d:,.0f}", "SUCCESS")
+                    return {'score': score, 'foreign_5d': foreign_5d, 'inst_5d': inst_5d}
+                else:
+                    log(f"  [{ticker}] pykrx 데이터 부족: {len(inst_data) if not inst_data.empty else 0}행", "WARNING")
+            except Exception as e:
+                log(f"  [{ticker}] pykrx API 호출 실패: {e}", "WARNING")
+            
             return {'score': 0, 'foreign_5d': 0, 'inst_5d': 0}
         
         recent = df.tail(5)
@@ -1190,8 +1245,8 @@ def create_signals_log(target_date=None, run_ai=False):
         
         log(f"총 {analyzed_count}개 종목 분석 완료, {len(signals)}개 시그널 감지")
         
-        # 점수 높은 순 정렬, 최대 20개
-        signals = sorted(signals, key=lambda x: x['score'], reverse=True)[:20]
+        # 점수 높은 순 정렬, 최대 50개 (AI 분석 대상 확대)
+        signals = sorted(signals, key=lambda x: x['score'], reverse=True)[:50]
         
         # AI 분석 실행 (옵션)
         if run_ai and signals:
@@ -1274,7 +1329,7 @@ def create_signals_log(target_date=None, run_ai=False):
                             'inst_5d': signal.get('inst_5d', 0),
                             'entry_price': signal.get('entry_price', 0),
                             'current_price': signal.get('current_price', signal.get('entry_price', 0)),
-                            'return_pct': 0,
+                            'return_pct': round(((int(current_price) - int(signal.get('entry_price', current_price))) / int(signal.get('entry_price', current_price))) * 100, 2) if signal.get('entry_price', 0) > 0 else 0,
                             'vcp_score': signal.get('vcp_score', 0),
                             # AI 분석 결과 통합
                             'gemini_recommendation': ai_data.get('gemini_recommendation'),
@@ -1397,521 +1452,54 @@ def create_signals_log(target_date=None, run_ai=False):
 
 
 
-def calculate_advanced_score(ticker: str, prices_df: pd.DataFrame, inst_df: pd.DataFrame) -> dict:
-    """
-    종가베팅 시스템 고도화 (Advanced Closing Bet)
-    기본 필터: 최소한의 기준만 적용 (필터링은 프론트엔드/API에서 처리)
-    """
-    try:
-        ticker_prices = prices_df[prices_df['ticker'].astype(str).str.zfill(6) == ticker].copy()
-        if len(ticker_prices) < 20:
-            return {'total': 0, 'passed_filter': False}
-        
-        ticker_prices = ticker_prices.sort_values('date')
-        current = ticker_prices.iloc[-1]
-        prev = ticker_prices.iloc[-2]
-        
-        # --- 최소한의 데이터 유효성 체크 ---
-        trading_value = current['volume'] * current['close']
-        volume_ratio = current['volume'] / prev['volume'] if prev['volume'] > 0 else 0
-        
-        # 당일 등락률 계산
-        prev_close = prev['close']
-        change_pct = ((current['close'] - prev_close) / prev_close * 100) if prev_close > 0 else 0
-        
-        # 최소 기준: 거래대금 300억 미만 제외 (2026-01-31 업데이트)
-        if trading_value < 30_000_000_000:  # 300억
-            return {'total': 0, 'passed_filter': False, 'reason': '거래대금 과소 (300억 미만)'}
-        
-        if change_pct <= 0:
-             return {'total': 0, 'passed_filter': False, 'reason': '상승률 미달'}
-        
-        # 종가 >= 당일고 * 0.9 체크
-        day_high = current['high']
-        close_ratio = current['close'] / day_high if day_high > 0 else 0
-
-        # 점수 상세 내역 초기화
-        details = {
-            'news': 0,
-            'volume': 0,
-            'chart': 0,
-            'candle': 0,
-            'consolidation': 0,
-            'supply': 0,
-            'rise_pct': round(change_pct, 2),
-            'volume_ratio': round(volume_ratio, 2)
-        }
-        
-        base_score = 0
-        
-        # 1. 뉴스 & 모멘텀 (3점) - 거래대금 기반 폴백
-        # 뉴스는 별도 API가 없으므로 거래대금 규모로 모멘텀 추정
-        if trading_value > 500_000_000_000: 
-            details['news'] = 3
-        elif trading_value > 100_000_000_000: 
-            details['news'] = 2
-        else: 
-            details['news'] = 1
-        base_score += details['news']
-        
-        # 2. 거래대금/거래량 폭발 (3점)
-        # 3000억 이상이면 만점
-        if trading_value >= 300_000_000_000: 
-            details['volume'] = 3
-        elif trading_value >= 100_000_000_000: 
-            details['volume'] = 2
-        else: 
-            details['volume'] = 1
-        base_score += details['volume']
-        
-        # 3. 차트 위치 (2점)
-        high_20d = ticker_prices.tail(20)['high'].max()
-        if current['close'] >= high_20d * 0.98: 
-            details['chart'] = 2
-        elif current['close'] > ticker_prices['close'].tail(20).mean(): 
-            details['chart'] = 1
-        base_score += details['chart']
-        
-        # 4. 수급 (2점)
-        inst_data = inst_df[inst_df['ticker'].astype(str).str.zfill(6) == ticker]
-        if not inst_data.empty:
-            recent_inst = inst_data.tail(5)
-            f_buy = recent_inst['foreign_buy'].sum()
-            i_buy = recent_inst['inst_buy'].sum()
-            if f_buy > 0 and i_buy > 0: 
-                details['supply'] = 2
-            elif f_buy > 0 or i_buy > 0: 
-                details['supply'] = 1
-        base_score += details['supply']
-        
-        # 5. 캔들/조정 (2점)
-        if current['close'] > current['open']: 
-            details['candle'] = 1
-        base_score += details['candle']
-
-        recent_range = (ticker_prices.tail(5)['high'] - ticker_prices.tail(5)['low']).mean()
-        avg_range = (ticker_prices.tail(20)['high'] - ticker_prices.tail(20)['low']).mean()
-        if recent_range < avg_range * 0.8: # 변동성 축소
-            details['consolidation'] = 1
-        base_score += details['consolidation']
-        
-        # --- 가산점 (Bonus Score) ---
-        bonus = 0
-        
-        # 1. 거래량 급증 (Volume Surge) - details에 반영하기에는 애매하므로 총점에만 가산
-        if volume_ratio >= 10: bonus += 4
-        elif volume_ratio >= 5: bonus += 3
-        elif volume_ratio >= 3: bonus += 2
-        elif volume_ratio >= 2: bonus += 1
-        
-        # 2. 장대양봉 (Long Body)
-        pct = change_pct
-        if pct >= 25: bonus += 5
-        elif pct >= 20: bonus += 4
-        elif pct >= 15: bonus += 3
-        elif pct >= 10: bonus += 2
-        elif pct >= 5: bonus += 1
-        
-        score_total = base_score + bonus
-        
-        # 수급 데이터 (외인+기관 동시 순매수 체크)
-        inst_data = inst_df[inst_df['ticker'].astype(str).str.zfill(6) == ticker]
-        foreign_positive = False
-        inst_positive = False
-        foreign_net_buy = 0
-        inst_net_buy = 0
-        
-        if not inst_data.empty:
-            recent_inst = inst_data.tail(5)
-            foreign_net_buy = int(recent_inst['foreign_buy'].sum())
-            inst_net_buy = int(recent_inst['inst_buy'].sum())
-            foreign_positive = foreign_net_buy > 0
-            inst_positive = inst_net_buy > 0
-        
-        return {
-            'base': base_score,
-            'bonus': bonus, 
-            'total': score_total, 
-            'passed_filter': True,
-            'details': details,
-            'volume_ratio': volume_ratio,
-            'close_ratio': close_ratio,
-            'foreign_positive': foreign_positive,
-            'inst_positive': inst_positive,
-            'foreign_net_buy': foreign_net_buy,
-            'inst_net_buy': inst_net_buy,
-            'rise_pct': round(change_pct, 2),
-            'trading_value': trading_value
-        }
-
-    except Exception as e:
-        return {'total': 0, 'passed_filter': False, 'reason': str(e)}
-
-
-def assign_grade(score_data: dict) -> str:
-    """
-    등급 분류 (2026-01-31 수정)
-    
-    S급: 1조원+ AND 10%+ 상승 AND 외인+기관 동반 AND 거래량 5배
-    A급: 5000억+ AND 5%+ 상승 AND (외인 OR 기관) AND 거래량 3배
-    B급: 1000억+ AND 4%+ 상승 AND (외인 OR 기관) AND 거래량 2배
-    C급: 500억+ AND 5%+ 상승 AND 점수 8점 이상 AND 거래량 3배
-    D급: 500억+ AND 4%+ 상승 AND 점수 6점 이상
-    """
-    trading_value = score_data.get('trading_value', 0)
-    volume_ratio = score_data.get('volume_ratio', 0)
-    close_ratio = score_data.get('close_ratio', 0)
-    foreign_positive = score_data.get('foreign_positive', False)
-    inst_positive = score_data.get('inst_positive', False)
-    rise_pct = score_data.get('rise_pct', 0)
-    
-    # 기본 조건: 상승 종목만
-    if rise_pct <= 0:
-        return None
-    
-    # 외인+기관 동반 체크
-    both_positive = foreign_positive and inst_positive
-    either_positive = foreign_positive or inst_positive
-    
-    # S급: 1조 원 이상 AND 10% 이상 상승 AND 외인+기관 동반 순매수 AND 거래량 5배
-    if trading_value >= 1_000_000_000_000 and rise_pct >= 10.0 and both_positive and volume_ratio >= 5.0:
-        return 'S'
-    
-    # A급: 5,000억 원 이상 AND 5% 이상 상승 AND (외인 or 기관) AND 거래량 3배
-    if trading_value >= 500_000_000_000 and rise_pct >= 5.0:
-        if either_positive and volume_ratio >= 3.0:
-             return 'A'
-
-    # B급: 1,000억 원 이상 AND 4% 이상 상승 AND (외인 or 기관) AND 거래량 2배
-    if trading_value >= 100_000_000_000 and rise_pct >= 4.0:
-        if volume_ratio >= 2.0 and either_positive:
-            return 'B'
-    
-    # C급: 500억 이상 AND 5% 이상 상승 AND 외인+기관 동반 AND 거래량 3배
-    if trading_value >= 50_000_000_000 and rise_pct >= 5.0 and both_positive and volume_ratio >= 3.0:
-        return 'C'
-        
-    # D급: 500억 이상 AND 4% 이상 상승 AND (외인 or 기관) AND 거래량 2배
-    if trading_value >= 50_000_000_000 and rise_pct >= 4.0 and volume_ratio >= 2.0:
-        return 'D'
-    
-    # 그 외는 등급 없음
-    return None 
-
-def get_themes_by_sector(sector: str, name: str) -> list:
-    """업종 및 종목명 기반 단순 테마 매핑"""
-    themes = []
-    if not sector:
-        return []
-    
-    # Simple Keywords Mapping
-    if '반도체' in sector or '전기전자' in sector:
-        themes.append('반도체')
-        if '삼성' in name or 'SK' in name:
-            themes.append('HBM')
-            themes.append('AI')
-    elif '제약' in sector or '바이오' in sector:
-        themes.append('바이오')
-        themes.append('신약개발')
-    elif '자동차' in sector:
-        themes.append('자동차')
-        themes.append('전기차')
-    elif '금융' in sector:
-        themes.append('금융')
-        themes.append('저PBR')
-        
-    return themes
-
-
-def get_expert_advice(grade: str, score: int, trading_value: int, market: str) -> dict:
-    """점수, 등급, 거래대금 기반 전문가 조언 상세 생성"""
-    advice = {
-        "trading_tip": "15:10~15:30 사이 분봉상 눌림목 지지(20선) 확인 후 종가 부근 진입.",
-        "selling_strategy": "익일 시초 30분 내 3% 이상 상승 시 50% 분할 익절, 나머지는 본절가 위협 시 전량 매도 (트레일링 스탑).",
-        "market_context": "수급이 강하게 들어온 종목입니다. 갭상승 출발 가능성이 높습니다."
-    }
-    
-    # 1. 등급별 전략 차별화
-    if grade == 'S':
-        advice["market_context"] = "🚀 강력한 주도주 (S등급). 코스피 5000 돌파장처럼 공격적으로 비중을 실어도 좋은 구간입니다."
-        advice["selling_strategy"] = "상승 탄력이 강하므로 5%~10% 이상 슈팅 시 50% 익절, 나머지는 3일선/5일선 이탈까지 홀딩."
-    elif grade == 'A':
-        advice["market_context"] = "수급과 차트가 우수한 A등급 종목입니다. 눌림 시 적극 매수 유효."
-    else: # B, C
-        advice["trading_tip"] = "상승탄력이 다소 약할 수 있으므로, 철저히 지지선 근처에서만 진입하세요. 추격매수 금지."
-        advice["selling_strategy"] = "짧게 3% 내외에서 전량 익절하거나, 본절 로스컷을 타이트하게 잡으세요."
-
-    # 2. 거래대금 규모별 팁 (시장 적응)
-    if market == 'KOSPI':
-        if trading_value >= 100_000_000_000: # 1000억 이상
-            advice["market_context"] += " (코스피 대형주 특성: 무거운 만큼 추세 지속력이 좋습니다)"
-        else:
-            advice["market_context"] += " (코스피 중소형: 변동성에 유의하세요)"
-    elif market == 'KOSDAQ':
-        if trading_value >= 500_000_000_000: # 500억 -> 5000 (User said 200~500, but logic usually higher is better)
-             advice["market_context"] += " (코스닥 주도주: 변동성이 매우 큽니다)"
-        elif trading_value >= 20_000_000_000:
-             advice["market_context"] += " (코스닥 알짜 중소형주: 200~500억 구간)"
-
-    # 3. 추가 매수 가이드
-    if score >= 15: # 매우 높은 점수
-        advice["buy_strategy"] = "확신이 드는 자리입니다. 비중 50% 추가 매수 고려 가능 (단, 분할로 접근)."
-    else:
-        advice["buy_strategy"] = "무리한 추가 매수는 자제하고, 1차 진입 물량만 운영하세요."
-
-    return advice
-
-
 def create_jongga_v2_latest():
-    """종가베팅 V2 최신 결과 생성 - 고도화된 로직 적용"""
-    log("종가베팅 V2 분석 중 (Advanced System)...")
+    """종가베팅 V2 최신 결과 생성 - Using Central SignalGenerator"""
+    log("종가베팅 V2 분석 중 (SignalGenerator)...")
     try:
-        # 데이터 로드
-        prices_file = os.path.join(BASE_DIR, 'data', 'daily_prices.csv')
-        inst_file = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
-        stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
-        
-        if not all(os.path.exists(f) for f in [prices_file, inst_file, stocks_file]):
-            raise Exception("필요한 데이터 파일 없음")
-        
-        prices_df = pd.read_csv(prices_file)
-        inst_df = pd.read_csv(inst_file)
-        stocks_df = pd.read_csv(stocks_file)
-        
-        signals = []
-        
-        for _, row in stocks_df.iterrows():
-            ticker = str(row['ticker']).zfill(6)
-            name = row['name']
-            
-            # 고도화된 평가 로직 수행
-            score_data = calculate_advanced_score(ticker, prices_df, inst_df)
-            
-            if not score_data['passed_filter']:
-                continue
-                
-            # 최소 10점(기본+보너스 포함) 이상만 필터링 (필터가 강력하므로 점수 컷은 낮춤)
-            if score_data['total'] < 10:
-                continue
-            
-            ticker_prices = prices_df[prices_df['ticker'].astype(str).str.zfill(6) == ticker]
-            current = ticker_prices.iloc[-1]
-            current_price = int(current['close'])
-            trading_value = int(current['volume'] * current['close'])
-            
-            # 등급 분류 - 새로운 기준 (2026-01-31)
-            grade = assign_grade(score_data)
-            
-            # 등급 없으면 스킵 (조건 미충족)
-            if grade is None:
-                continue
+        from engine.generator import SignalGenerator
+        import asyncio
 
-            log(f"  [Jongga V2 Catch] {name} ({ticker}) - Grade: {grade}, Score: {score_data['total']}, TradingVal: {trading_value//100000000}억")
-            
-            # 전문가 조언 생성
-            advice = get_expert_advice(grade, score_data['total'], trading_value, row['market'])
-            
-            # 미니 차트 데이터 (최근 10일)
-            mini_chart = ticker_prices.tail(10)[['date', 'open', 'high', 'low', 'close', 'volume']].to_dict(orient='records')
-            
-            # 매수/매도/손절 가격 계산 (현재가 기준)
-            buy_price = current_price
-            target_price_1 = int(current_price * 1.025)  # +2.5% 공격 익절
-            target_price_2 = int(current_price * 1.05)   # +5% 수급 강세 익절
-            stop_price = int(current_price * 0.97)       # -3% 손절
-            
-            signals.append({
-                "stock_code": ticker,
-                "stock_name": name,
-                "market": row['market'],
-                "grade": grade,
-                "total_score": score_data['total'],
-                "score_details": score_data,
-                "current_price": current_price,
-                "trading_value": trading_value,
-                "change_pct": float(score_data.get('rise_pct', 0)),
-                "volume_ratio": score_data.get('volume_ratio', 0),
-                "advice": advice,
-                "mini_chart": mini_chart,
-                
-                # 매수/매도/손절 전략 가격
-                "buy_price": buy_price,
-                "target_price_1": target_price_1,  # +2.5%
-                "target_price_2": target_price_2,  # +5%
-                "stop_price": stop_price,          # -3%
-                
-                # 기존 필드 호환성 유지
-                "score": {
-                    "total": score_data['base'],
-                    "news": score_data['details'].get('news', 0),
-                    "volume": score_data['details'].get('volume', 0),
-                    "chart": score_data['details'].get('chart', 0),
-                    "supply": score_data['details'].get('supply', 0),
-                    "timing": score_data['details'].get('consolidation', 0),
-                    "candle": score_data['details'].get('candle', 0),
-                    "llm_reason": f"종합 점수 {score_data['total']}점 (기본 {score_data['base']} + 보너스 {score_data['bonus']})"
-                },
-                "checklist": {
-                    "has_news": True,
-                    "is_new_high": score_data.get('close_ratio', 0) >= 0.9,
-                    "supply_positive": score_data.get('foreign_positive', False) and score_data.get('inst_positive', False)
-                },
-                "entry_price": buy_price,
-                "foreign_net_buy": score_data.get('foreign_net_buy', 0),
-                "inst_net_buy": score_data.get('inst_net_buy', 0),
-                "themes": get_themes_by_sector(row.get('sector', ''), name), 
-                "news_items": [],
-                # Default AI Evaluation (Rule-based Fallback)
-                "ai_evaluation": {
-                    "action": "BUY" if grade in ['S', 'A'] else "HOLD",
-                    "confidence": score_data['total'] * 5 + (20 if grade == 'S' else 10 if grade == 'A' else 0),
-                    "model": "Rule-based (Pending AI)"
-                }
-            })
+        async def run_analysis():
+            # capital/risk settings are loaded from config inside SignalGenerator
+            async with SignalGenerator() as generator:
+                return await generator.generate()
+
+        # Run analysis (Sync wrapper for Async)
+        result = asyncio.run(run_analysis())
         
-        # 등급 우선, 총점 순 정렬
-        grade_order = {'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4}
-        signals = sorted(signals, key=lambda x: (grade_order.get(x['grade'], 9), -x['total_score']))[:10]
-        
-        # --- Gemini 3.0 Analysis Integration ---
-        # signals가 없으면 Gemini 분석 스킵 (API 할당량 절약)
-        if not signals:
-            log("분석 대상 시그널 없음 - Gemini 분석 스킵", "WARNING")
+        # Convert to JSON serializable structure
+        if result:
+            signals_json = [s.to_dict() for s in result.signals]
+            
+            output_data = {
+                'date': result.date.strftime('%Y-%m-%d'),
+                'total_candidates': result.total_candidates,
+                'filtered_count': result.filtered_count,
+                'signals': signals_json,
+                'by_grade': result.by_grade,
+                'by_market': result.by_market,
+                'processing_time_ms': result.processing_time_ms,
+                'market_status': result.market_status,
+                'market_summary': result.market_summary,
+                'trending_themes': result.trending_themes,
+                'updated_at': datetime.now().isoformat()
+            }
+
+            # Save to JSON
+            file_path = os.path.join(BASE_DIR, 'data', 'jongga_v2_latest.json')
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(output_data, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
+                
+            log(f"종가베팅 V2 분석 완료: {len(signals_json)} 종목 (SignalGenerator)", "SUCCESS")
+            return True
         else:
-            # --- Gemini 3.0 Analysis Integration ---
-            try:
-                async def run_batch_analysis(target_signals):
-                    log(f"Gemini 3.0 Analysis 시작 ({len(target_signals)} 종목)...")
-                    news_collector = EnhancedNewsCollector(config)
-                    llm_analyzer = LLMAnalyzer()
-                    market_gate = MarketGate()
-                    
-                    # 1. Market Status
-                    market_status = market_gate.analyze()
+            log("종가베팅 분석 결과 없음 (None returned)", "WARNING")
+            return False
 
-                    # 2. News Collection & Preparation
-                    items_for_llm = []
-                    
-                    async with news_collector:
-                        for signal in target_signals:
-                            code = signal['stock_code']
-                            name = signal['stock_name']
-                            
-                            # 뉴스 수집
-                            news_items = await news_collector.get_stock_news(code, 3, name)
-                            
-                            # LLM Input 구성
-                            items_for_llm.append({
-                                'stock': signal, 
-                                'news': news_items,
-                                'supply': None 
-                            })
-                            
-                            # UI용 뉴스 저장
-                            signal['news_items'] = [{
-                                "title": n.title,
-                                "url": n.url,
-                                "published_at": n.published_at.isoformat() if n.published_at else "",
-                                "source": n.source
-                            } for n in news_items]
-                    
-                    # 3. Batch LLM Execution (Chunking + Parallel)
-                    if items_for_llm:
-                        # 청킹 설정
-                        chunk_size = app_config.ANALYSIS_LLM_CHUNK_SIZE
-                        concurrency = app_config.ANALYSIS_LLM_CONCURRENCY
-                        chunks = [items_for_llm[i:i + chunk_size] for i in range(0, len(items_for_llm), chunk_size)]
-                        
-                        log(f"  -> {len(chunks)}개 청크로 분할 (청크당 {chunk_size}종목, 동시 {concurrency}개)")
-                        
-                        # 병렬 처리를 위한 Semaphore
-                        semaphore = asyncio.Semaphore(concurrency)
-                        
-                        async def process_chunk(chunk_idx, chunk_data):
-                            async with semaphore:
-                                try:
-                                    result = await llm_analyzer.analyze_news_batch(chunk_data, market_status)
-                                    log(f"  -> 청크 {chunk_idx + 1}/{len(chunks)} 완료")
-                                    return result
-                                except Exception as e:
-                                    log(f"  -> 청크 {chunk_idx + 1} 오류: {e}", "ERROR")
-                                    return {}
-                        
-                        # 모든 청크 병렬 실행
-                        tasks = [process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
-                        chunk_results = await asyncio.gather(*tasks)
-                        
-                        # 결과 병합
-                        results_map = {}
-                        for res in chunk_results:
-                            if res:
-                                results_map.update(res)
-                        
-                        # 4. Merge Results
-                        for signal in target_signals:
-                            name = signal['stock_name']
-                            if name in results_map:
-                                llm_res = results_map[name]
-                                if llm_res.get('reason'):
-                                    signal['score']['llm_reason'] = llm_res.get('reason')
-                                
-                                # AI Recommendation Mapping (UI 표시용)
-                                # Provider에 상관없이 UI의 두 컬럼 모두에 표시되도록 설정 (사용자 요청 반영)
-                                recommendation = {
-                                    "action": llm_res.get('action', 'HOLD'),
-                                    "confidence": llm_res.get('confidence', 0),
-                                    "reason": llm_res.get('reason', ''),
-                                    "model": llm_res.get('model', 'Unknown')
-                                }
-                                signal['gemini_recommendation'] = recommendation
-                                signal['gpt_recommendation'] = recommendation
-                                signal['ai_evaluation'] = recommendation
-                                    
-                                log(f"  -> {name}: AI 분석 완료 ({recommendation['action']})")
-
-                # 이미 실행 중인 이벤트 루프가 있는지 확인
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-                
-                if loop and loop.is_running():
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        pool.submit(asyncio.run, run_batch_analysis(signals)).result()
-                else:
-                    asyncio.run(run_batch_analysis(signals))
-                        
-            except Exception as e:
-                log(f"Gemini 분석 단계 중 오류 (건너뜀): {e}", "ERROR")
-
-        # ---------------------------------------
-        
-        # 주말인 경우 금요일 날짜로 설정 (데이터 정합성)
-        now = datetime.now()
-        target_date = now
-        if now.weekday() == 5: # Sat
-            target_date = now - timedelta(days=1)
-        elif now.weekday() == 6: # Sun
-            target_date = now - timedelta(days=2)
-            
-        result = {
-            'date': target_date.strftime('%Y-%m-%d'),
-            'total_candidates': len(stocks_df),
-            'filtered_count': len(signals),
-            'signals': signals,
-            'updated_at': datetime.now().isoformat()
-        }
-        
-        file_path = os.path.join(BASE_DIR, 'data', 'jongga_v2_latest.json')
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(result, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
-            
-        log(f"종가베팅 V2 고도화 분석 완료: {len(signals)} 종목", "SUCCESS")
-        return True
-            
     except Exception as e:
         log(f"종가베팅 분석 실패: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -2079,7 +1667,7 @@ def create_kr_ai_analysis(target_date=None):
             target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
             target_df = target_df.sort_values('score', ascending=False)
             
-        target_df = target_df.head(20)
+        target_df = target_df.head(50)
         tickers = target_df['ticker'].tolist()
         
         log(f"AI 분석 대상: {len(tickers)} 종목")
@@ -2372,5 +1960,128 @@ def main():
         log(f"⚠️ 일부 데이터 생성에 실패했습니다 ({total_tasks - success_count}/{total_tasks}).", "WARNING")
         log("상세 로그를 확인하세요.", "WARNING")
 
+
+def update_vcp_signals_recent_price():
+    """VCP 시그널 로그(signals_log.csv)의 최신 가격 업데이트"""
+    log("VCP 시그널 최신 가격 업데이트 시작...")
+    try:
+        file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
+        if not os.path.exists(file_path):
+            log("VCP 시그널 파일이 없습니다.", "WARNING")
+            return
+
+        df = pd.read_csv(file_path, dtype={'ticker': str})
+        
+        # 오늘 날짜
+        today_str = datetime.now().strftime('%Y%m%d')
+        
+        # 최신 가격 데이터 로드 (pykrx 사용)
+        from pykrx import stock
+        import time
+
+        updated_count = 0
+        
+        # 유니크 티커 목록
+        tickers = df['ticker'].unique()
+        
+        current_prices = {}
+        log(f"총 {len(tickers)}개 종목의 현재가 조회 중...")
+        
+        for ticker in tickers:
+            try:
+                # pykrx로 현재가 조회
+                df_price = stock.get_market_ohlcv(today_str, today_str, ticker)
+                if not df_price.empty:
+                    current_price = int(df_price['종가'].iloc[-1])
+                    current_prices[ticker] = current_price
+                
+                time.sleep(0.05) # Rate limiting
+            except Exception as e:
+                # log(f"{ticker} 가격 조회 실패: {e}", "WARNING")
+                pass
+        
+        log(f"{len(current_prices)}개 종목 현재가 확보 완료. 업데이트 적용 중...")
+        
+        # 데이터프레임 업데이트
+        for idx, row in df.iterrows():
+            ticker = row['ticker']
+            if ticker in current_prices:
+                current_p = current_prices[ticker]
+                entry_p = row['entry_price']
+                
+                df.at[idx, 'current_price'] = current_p
+                if entry_p > 0:
+                    ret = ((current_p - entry_p) / entry_p) * 100
+                    df.at[idx, 'return_pct'] = round(ret, 2)
+                
+                updated_count += 1
+        
+        # 저장
+        df.to_csv(file_path, index=False, encoding='utf-8-sig')
+        log(f"VCP 시그널 가격 업데이트 완료: {updated_count}건 갱신", "SUCCESS")
+        
+        # kr_ai_analysis.json도 동기화 (선택 사항)
+        update_kr_ai_analysis_prices(current_prices)
+        
+    except Exception as e:
+        log(f"가격 업데이트 실패: {e}", "ERROR")
+
+def update_kr_ai_analysis_prices(price_map):
+    """kr_ai_analysis.json 파일의 가격 정보도 업데이트"""
+    try:
+        kr_ai_path = os.path.join(BASE_DIR, 'data', 'kr_ai_analysis.json')
+        if not os.path.exists(kr_ai_path):
+            return
+            
+        with open(kr_ai_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        updated = False
+        if 'signals' in data:
+            for signal in data['signals']:
+                ticker = signal.get('ticker')
+                if ticker in price_map:
+                    current_p = price_map[ticker]
+                    entry_p = signal.get('entry_price', current_p)
+                    
+                    signal['current_price'] = current_p
+                    if entry_p > 0:
+                        signal['return_pct'] = round(((current_p - entry_p) / entry_p) * 100, 2)
+                    updated = True
+        
+        if updated:
+            with open(kr_ai_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+            log("kr_ai_analysis.json 가격 동기화 완료", "INFO")
+            
+    except Exception as e:
+        log(f"AI 분석 파일 가격 동기화 실패: {e}", "WARNING")
+
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1]
+        if cmd == "init-prices":
+            create_daily_prices()
+        elif cmd == "init-inst":
+            create_institutional_data()
+        elif cmd == "init-stocks":
+            create_stock_list()
+        elif cmd == "vcp-signal":
+             # 특정 날짜 지정 가능 (YYYY-MM-DD)
+            target_date = sys.argv[2] if len(sys.argv) > 2 else None
+            create_signals_log(target_date)
+        elif cmd == "ai-analysis":
+            create_kr_ai_analysis()
+        elif cmd == "update-prices":
+            update_vcp_signals_recent_price()
+        elif cmd == "all":
+            log("전체 데이터 초기화 시작...")
+            create_stock_list()
+            create_daily_prices()
+            create_institutional_data()
+            create_signals_log() # VCP 분석
+            create_kr_ai_analysis() # AI 분석
+            log("전체 데이터 초기화 완료!", "SUCCESS")
+    else:
+        main()
+

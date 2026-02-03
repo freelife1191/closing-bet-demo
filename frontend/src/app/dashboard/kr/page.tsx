@@ -287,42 +287,58 @@ export default function KRMarketOverview() {
             <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1.5 relative group">
               <span className="w-1 h-1 rounded-full bg-blue-500/50"></span>
               매크로 지표:
-              <select
-                value={[5, 10, 15, 30, 60].includes(updateInterval) ? updateInterval : 'custom'}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val !== 'custom') handleIntervalChange(Number(val));
-                  else setUpdateInterval(updateInterval); // custom 선택 시 UI 리렌더링 유도
-                }}
-                className="bg-transparent border-none text-[10px] font-bold text-gray-400 hover:text-blue-400 focus:ring-0 cursor-pointer appearance-none text-right pr-0 ml-0.5 transition-colors outline-none"
-                style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
-              >
-                {[5, 10, 15, 30, 60].includes(updateInterval) ? null : <option value="custom" className="bg-[#1c1c1e] text-blue-400">직접입력 ({updateInterval}분)</option>}
-                <option value={5} className="bg-[#1c1c1e] text-gray-300">5분</option>
-                <option value={10} className="bg-[#1c1c1e] text-gray-300">10분</option>
-                <option value={15} className="bg-[#1c1c1e] text-gray-300">15분</option>
-                <option value={30} className="bg-[#1c1c1e] text-gray-300">30분</option>
-                <option value={60} className="bg-[#1c1c1e] text-gray-300">60분</option>
-                <option value="custom" className="bg-[#1c1c1e] text-gray-300">직접입력...</option>
-              </select>
-
-              {![5, 10, 15, 30, 60].includes(updateInterval) && (
-                <input
-                  type="number"
-                  min="1"
-                  max="1440"
+              {/* 커스텀 값인 경우 number input 표시 */}
+              {![1, 5, 10, 15, 30, 60].includes(updateInterval) ? (
+                <div className="flex items-center gap-1 ml-0.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value={updateInterval}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (val >= 1 && val <= 1440) {
+                        handleIntervalChange(val);
+                      }
+                    }}
+                    className="w-12 bg-[#1c1c1e] border border-gray-700 rounded text-[10px] px-1.5 py-0.5 text-center text-blue-400 focus:outline-none focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:opacity-100 [&::-webkit-inner-spin-button]:opacity-100"
+                  />
+                  <span className="text-[10px] text-gray-500">분</span>
+                  <button
+                    onClick={() => handleIntervalChange(5)}
+                    className="text-[9px] text-gray-600 hover:text-gray-400 ml-1"
+                    title="기본값(5분)으로 초기화"
+                  >
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+              ) : (
+                <select
                   value={updateInterval}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val > 0) handleIntervalChange(val);
+                    const val = e.target.value;
+                    if (val === 'custom') {
+                      // 직접입력 선택시 기본값 2로 시작
+                      handleIntervalChange(2);
+                    } else {
+                      handleIntervalChange(Number(val));
+                    }
                   }}
-                  className="w-10 bg-[#1c1c1e] border border-gray-700 rounded ml-1 text-[10px] px-1 py-0.5 text-center text-blue-400 focus:outline-none focus:border-blue-500"
-                />
+                  className="bg-transparent border-none text-[10px] font-bold text-gray-400 hover:text-blue-400 focus:ring-0 cursor-pointer appearance-none text-right pr-0 ml-0.5 transition-colors outline-none"
+                  style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                >
+                  <option value={1} className="bg-[#1c1c1e] text-gray-300">1분</option>
+                  <option value={5} className="bg-[#1c1c1e] text-gray-300">5분</option>
+                  <option value={10} className="bg-[#1c1c1e] text-gray-300">10분</option>
+                  <option value={15} className="bg-[#1c1c1e] text-gray-300">15분</option>
+                  <option value={30} className="bg-[#1c1c1e] text-gray-300">30분</option>
+                  <option value={60} className="bg-[#1c1c1e] text-gray-300">60분</option>
+                  <option value="custom" className="bg-[#1c1c1e] text-gray-300">직접입력...</option>
+                </select>
               )}
-
               <span className="text-gray-500 ml-1">마다 자동 갱신</span>
               {/* Custom Arrow for Dropdown */}
-              {[5, 10, 15, 30, 60].includes(updateInterval) && (
+              {[1, 5, 10, 15, 30, 60].includes(updateInterval) && (
                 <i className="fas fa-chevron-down text-[8px] text-gray-600 ml-1 group-hover:text-blue-500 transition-colors pointer-events-none absolute right-full mr-1 opacity-0 group-hover:opacity-100"></i>
               )}
             </div>

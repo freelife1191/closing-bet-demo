@@ -71,6 +71,26 @@ export default function ChatWidget() {
     if (isOpen) scrollToBottom();
   }, [messages, isOpen]);
 
+  // [Fix] Re-render when API Key changes
+  const [hasApiKey, setHasApiKey] = useState(false);
+  useEffect(() => {
+    const checkKey = () => {
+      const k1 = localStorage.getItem('X-Gemini-Key');
+      const k2 = localStorage.getItem('GOOGLE_API_KEY');
+      const valid = (k1 && k1 !== 'null' && k1 !== 'undefined') || (k2 && k2 !== 'null' && k2 !== 'undefined');
+      setHasApiKey(!!valid);
+    };
+    checkKey();
+    window.addEventListener('api-key-updated', checkKey);
+    const interval = setInterval(checkKey, 2000);
+    return () => {
+      window.removeEventListener('api-key-updated', checkKey);
+      clearInterval(interval);
+    };
+  }, []);
+
+
+
   const handleSend = async (msgOverride?: string) => {
     const messageToSend = msgOverride || input;
     if (!messageToSend.trim() || isLoading) return;
@@ -100,14 +120,21 @@ export default function ChatWidget() {
         localStorage.setItem('browser_session_id', sessionId);
       }
 
-      try {
-        const profileStr = localStorage.getItem('user_profile');
-        if (profileStr) {
-          userEmail = JSON.parse(profileStr).email;
-        }
-        apiKey = localStorage.getItem('GOOGLE_API_KEY');
-      } catch (e) {
-        console.error("Auth info parse error", e);
+      // [Fix] API Key Retrieval Logic Enhanced
+      // 1. Try X-Gemini-Key
+      // 2. Try GOOGLE_API_KEY
+      // 3. Ensure not "null", "undefined", or empty string
+      // Removed intermediate catch block to fix Syntax Error and Scope Issue
+
+      let rawKey = localStorage.getItem('X-Gemini-Key');
+      if (!rawKey || rawKey === 'null' || rawKey === 'undefined') {
+        rawKey = localStorage.getItem('GOOGLE_API_KEY');
+      }
+
+      if (rawKey && rawKey !== 'null' && rawKey !== 'undefined' && rawKey.trim().length > 0) {
+        apiKey = rawKey.trim();
+      } else {
+        apiKey = null;
       }
 
       const res = await fetch('/api/kr/chatbot', {
@@ -220,7 +247,12 @@ export default function ChatWidget() {
                 <i className="fas fa-robot text-sm text-white"></i>
               </div>
               <div>
-                <div className="font-bold text-white text-sm">스마트머니봇</div>
+                <div className="font-bold text-white text-sm flex items-center gap-2">
+                  스마트머니봇
+                  {hasApiKey && (
+                    <i className="fas fa-key text-[10px] text-yellow-500 animate-pulse" title="개인 API Key 사용 중 (무제한)"></i>
+                  )}
+                </div>
                 <div className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                   <span className="text-[10px] text-gray-400">보통 1초 내 답변</span>

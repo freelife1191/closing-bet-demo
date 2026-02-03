@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 class KRXCollector:
     """KRX 데이터 수집기"""
 
+
+    # 경고 로그 중복 출력 방지 플래그
+    _market_date_warning_shown = False
+
     def __init__(self, config):
         self.config = config
 
@@ -70,9 +74,13 @@ class KRXCollector:
                 return last_trading_date_str
             
         except ImportError:
-            logger.warning("pykrx 미설치 - 주말 처리만 적용")
+            if not self._market_date_warning_shown:
+                logger.warning("pykrx 미설치 - 주말 처리만 적용")
+                KRXCollector._market_date_warning_shown = True
         except Exception as e:
-            logger.warning(f"개장일 확인 실패: {e} - 주말 처리만 적용")
+            if not self._market_date_warning_shown:
+                logger.warning(f"개장일 확인 실패: {e} - 주말 처리만 적용")
+                KRXCollector._market_date_warning_shown = True
         
         # 폴백: 주말 처리만 된 날짜 반환
         return target.strftime('%Y%m%d')
@@ -174,6 +182,7 @@ class KRXCollector:
         
         try:
             df = pd.read_csv(csv_path)
+            logger.info(f"CSV Loaded: {len(df)} rows. Columns: {df.columns.tolist()}")
             
             # 종목 목록에서 마켓 정보 가져오기
             stocks_df = pd.read_csv(stocks_path) if os.path.exists(stocks_path) else pd.DataFrame()
@@ -239,6 +248,12 @@ class KRXCollector:
                 ))
             
             logger.info(f"로컬 CSV에서 {len(results)}개 종목 로드 완료 ({market})")
+            if len(results) == 0:
+                logger.warning(f"로컬 CSV 로드 결과가 0개입니다. 파일 내용을 확인하세요. (df shape: {df.shape if 'df' in locals() else 'N/A'})")
+            else:
+                 # 상위 5개 로그 출력
+                for i, s in enumerate(results[:5]):
+                    logger.info(f"  [{i+1}] {s.name}: {s.change_pct}%")
             return results
             
         except Exception as e:

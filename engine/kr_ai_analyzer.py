@@ -81,7 +81,10 @@ class KrAiAnalyzer:
             import csv
             
             # signals_log.csv에서 종목 정보 조회
-            signals_file = os.path.join(os.path.dirname(__file__), 'data', 'signals_log.csv')
+            # Fix: engine/data가 아니라 root/data 경로 사용
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            signals_file = os.path.join(root_dir, 'data', 'signals_log.csv')
+            
             stock_name = None
             entry_price = None
             
@@ -149,51 +152,59 @@ class KrAiAnalyzer:
             seen_titles = set()
             
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': f'https://finance.naver.com/item/news.naver?code={ticker}'
             }
             
-            # 1. 네이버 금융 종목 뉴스 (신뢰도 0.9)
+            # 1. 네이버 금융 종목 뉴스 (신뢰도 0.9) - iframe 내부 URL 사용
             try:
-                url = f"https://finance.naver.com/item/news.naver?code={ticker}"
+                # [Fix] news.naver -> news_news.naver (실제 데이터가 있는 iframe)
+                url = f"https://finance.naver.com/item/news_news.naver?code={ticker}"
                 response = requests.get(url, headers=headers, timeout=10)
                 response.encoding = 'euc-kr'
                 
                 if response.status_code == 200:
                     soup = BeautifulSoup(response.text, 'html.parser')
-                    news_rows = soup.select('table.type5 tbody tr')
                     
-                    for row in news_rows[:5]:
-                        try:
-                            title_tag = row.select_one('td.title a')
-                            if not title_tag:
+                    # news_news.naver 구조: table.type5 사용
+                    news_table = soup.select_one('table.type5')
+                    if news_table:
+                        news_rows = news_table.select('tr')
+                        
+                        for row in news_rows:
+                            if len(news_list) >= 5: break
+                            
+                            try:
+                                title_tag = row.select_one('td.title a')
+                                if not title_tag:
+                                    continue
+                                
+                                title = title_tag.get_text(strip=True)
+                                if title in seen_titles or len(title) < 5:
+                                    continue
+                                seen_titles.add(title)
+                                
+                                href = title_tag.get('href', '')
+                                full_url = f"https://finance.naver.com{href}" if href.startswith('/') else href
+                                
+                                source = row.select_one('td.info')
+                                source = source.get_text(strip=True) if source else '네이버금융'
+                                
+                                date_tag = row.select_one('td.date')
+                                date = date_tag.get_text(strip=True) if date_tag else datetime.now().strftime('%Y.%m.%d')
+                                
+                                weight = self.MAJOR_SOURCES.get(source, 0.7)
+                                
+                                news_list.append({
+                                    'title': title,
+                                    'source': source,
+                                    'published_at': date,
+                                    'url': full_url,
+                                    'weight': weight,
+                                    'from': 'naver_finance'
+                                })
+                            except Exception:
                                 continue
-                            
-                            title = title_tag.get_text(strip=True)
-                            if title in seen_titles or len(title) < 5:
-                                continue
-                            seen_titles.add(title)
-                            
-                            href = title_tag.get('href', '')
-                            full_url = f"https://finance.naver.com{href}" if href.startswith('/') else href
-                            
-                            source = row.select_one('td.info')
-                            source = source.get_text(strip=True) if source else '네이버금융'
-                            
-                            date_tag = row.select_one('td.date')
-                            date = date_tag.get_text(strip=True) if date_tag else datetime.now().strftime('%Y.%m.%d')
-                            
-                            weight = self.MAJOR_SOURCES.get(source, 0.7)
-                            
-                            news_list.append({
-                                'title': title,
-                                'source': source,
-                                'published_at': date,
-                                'url': full_url,
-                                'weight': weight,
-                                'from': 'naver_finance'
-                            })
-                        except Exception:
-                            continue
             except Exception as e:
                 logger.debug(f"네이버 금융 뉴스 수집 실패: {e}")
             
@@ -206,12 +217,15 @@ class KrAiAnalyzer:
                     if response.ok:
                         soup = BeautifulSoup(response.text, 'html.parser')
                         
-                        # 뉴스 아이템 선택자 (네이버 뉴스 검색 결과)
-                        news_items = soup.select('div.news_wrap.api_ani_send') or \
+                        # 뉴스 아이템 선택자 (네이버 뉴스 검색 결과 - 다양한 패턴 지원)
+                        news_items = soup.select('div.news_wrap') or \
                                      soup.select('li.bx') or \
-                                     soup.select('div.news_area')
+                                     soup.select('div.news_area') or \
+                                     soup.select('div.news_contents')
                         
-                        for item in news_items[:5]:
+                        count = 0
+                        for item in news_items:
+                            if count >= 5: break
                             try:
                                 title_link = item.select_one('a.news_tit')
                                 if not title_link:
@@ -225,7 +239,7 @@ class KrAiAnalyzer:
                                 link_url = title_link.get('href', '')
                                 
                                 # 언론사 추출
-                                source_el = item.select_one('a.info.press') or item.select_one('span.info.press')
+                                source_el = item.select_one('a.info.press') or item.select_one('span.info.press') or item.select_one('a.press')
                                 source = source_el.text.strip().replace('언론사 선정', '') if source_el else '네이버뉴스'
                                 
                                 weight = self.MAJOR_SOURCES.get(source, 0.7)
@@ -238,6 +252,7 @@ class KrAiAnalyzer:
                                     'weight': weight,
                                     'from': 'naver_search'
                                 })
+                                count += 1
                             except Exception:
                                 continue
                 except Exception as e:
@@ -253,12 +268,16 @@ class KrAiAnalyzer:
                         soup = BeautifulSoup(response.text, 'html.parser')
                         
                         # 다음 뉴스 결과 선택자
-                        news_items = soup.select('ul.c-list-basic li') or \
-                                     soup.select('div.wrap_cont')
+                        news_items = soup.select('div.c-item-content') or \
+                                     soup.select('ul.list_news > li') or \
+                                     soup.select('div.item-bundle-mid') or \
+                                     soup.select('ul.c-list-basic li')
                         
-                        for item in news_items[:5]:
+                        count = 0
+                        for item in news_items:
+                            if count >= 5: break
                             try:
-                                title_link = item.select_one('a.tit_main') or item.select_one('a.f_link_b')
+                                title_link = item.select_one('a.item-title') or item.select_one('a.f_link_b') or item.select_one('a.tit_main')
                                 if not title_link:
                                     continue
                                 
@@ -270,7 +289,7 @@ class KrAiAnalyzer:
                                 link_url = title_link.get('href', '')
                                 
                                 # 언론사 추출
-                                source_el = item.select_one('span.info_cp') or item.select_one('span.f_nb')
+                                source_el = item.select_one('span.txt_info') or item.select_one('a.txt_info') or item.select_one('span.f_nb') or item.select_one('span.info_cp')
                                 source = source_el.text.strip() if source_el else '다음뉴스'
                                 
                                 weight = self.MAJOR_SOURCES.get(source, 0.7)
@@ -283,6 +302,7 @@ class KrAiAnalyzer:
                                     'weight': weight,
                                     'from': 'daum_search'
                                 })
+                                count += 1
                             except Exception:
                                 continue
                 except Exception as e:
@@ -441,6 +461,8 @@ class KrAiAnalyzer:
                 result = self.analyze_stock(ticker, news_items=news)
                 if result and 'error' not in result:
                     results['signals'].append(result)
+                else:
+                    logger.warning(f"분석 결과 제외됨 ({ticker}): {result}")
 
             return results
 

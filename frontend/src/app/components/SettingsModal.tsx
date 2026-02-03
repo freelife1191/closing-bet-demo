@@ -108,6 +108,8 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
         localStorage.setItem(key, value);
         localStorage.setItem('X-Gemini-Key', value); // [Fix] Sync legacy key for compatibility
       }
+      // Notify Sidebar immediately about API key change
+      window.dispatchEvent(new Event('api-key-updated'));
     } else if (key === 'OPENAI_API_KEY') {
       if (!value) {
         localStorage.removeItem(key);
@@ -157,6 +159,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
       // 3. Save Watchlist to localStorage
       localStorage.setItem('watchlist', JSON.stringify(watchlist));
+
+      // 4. Dispatch custom event to notify Sidebar of API key change
+      window.dispatchEvent(new Event('api-key-updated'));
 
       setTestModal({
         isOpen: true,

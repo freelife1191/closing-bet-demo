@@ -950,8 +950,8 @@ export default function JonggaV2Page() {
 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-white/5">
         <div className="flex gap-6">
-          <StatBox label="Candidates" value={data?.filtered_count || 0} tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
-          <StatBox label="Filtered" value={matchCount} highlight tooltip="현재 필터 설정에 맞는 종목 수입니다." />
+          <StatBox label="CANDIDATES" value={data?.filtered_count || 0} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
+          <StatBox label="FILTERED" value={data?.total_candidates || 0} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
           <DataStatusBox updatedAt={data?.updated_at} />
         </div>
 

@@ -190,7 +190,7 @@ def run_background_update(target_date):
         if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
         update_item_status('AI Analysis', 'running')
         try:
-            from kr_ai_analyzer import KrAiAnalyzer
+            from engine.kr_ai_analyzer import KrAiAnalyzer
             import pandas as pd
             import json
             
@@ -204,7 +204,7 @@ def run_background_update(target_date):
                 target_df = pd.DataFrame()
                 analysis_date = target_date if target_date else datetime.now().strftime('%Y-%m-%d')
                 
-                if vcp_df is not None and not vcp_df.empty:
+                if vcp_df is not None and hasattr(vcp_df, 'empty') and not vcp_df.empty:
                     logger.info("VCP 결과 메모리에서 로드")
                     target_df = vcp_df.copy()
                     if 'signal_date' in target_df.columns:
@@ -348,72 +348,48 @@ def get_portfolio_data():
         holdings = data['holdings']
         cash = data['cash']
         
-        # Calculate current values using mock Realtime prices (or recently known prices)
-        # In a real app, we would fetch live prices here.
-        # For this demo, we'll try to get prices from our cache or random simulation
+        updated_holdings = []
+        total_stock_value = 0
         
-        total_valuation = 0
-        current_holdings = []
+        for holding in holdings:
+            avg_price = holding['avg_price']
+            quantity = holding['quantity']
+            
+            # [긴급복구] 실시간 가격 연동(yfinance) 제거 - 서버 안정성 우선
+            current_price = avg_price 
+            
+            market_value = int(current_price * quantity)
+            total_stock_value += market_value
+            
+            profit_loss = 0
+            profit_rate = 0
+            
+            h_dict = dict(holding)
+            h_dict['current_price'] = current_price
+            h_dict['market_value'] = market_value
+            h_dict['profit_loss'] = int(profit_loss)
+            h_dict['profit_rate'] = round(profit_rate, 2)
+            updated_holdings.append(h_dict)
+            
+        total_asset = cash + total_stock_value
         
-        for item in holdings:
-            ticker = item['ticker']
-            qty = item['quantity']
-            avg_price = item['avg_price']
+        # 자산 히스토리 기록
+        try:
+            paper_trading.record_asset_history(total_stock_value)
+        except Exception as e:
+            logger.warning(f"Failed to record asset history: {e}")
             
-            # Mock Current Price (Simulation)
-            # 1. Try to find from recently updated VCP or Jongga data if available?
-            # For simplicity in Demo: Price varies between -2% to +2% of avg_price
-            # In production, use get_realtime_prices logic
-            
-            price_variation = random.uniform(0.95, 1.05) 
-            current_price = int(avg_price * price_variation) # random for now if no live data
-            
-            # TODO: Integrate with real pricing source if available
-            
-            val = current_price * qty
-            total_valuation += val
-            
-            ret = 0
-            if avg_price > 0:
-                ret = ((current_price - avg_price) / avg_price) * 100
-            
-            current_holdings.append({
-                'ticker': ticker,
-                'name': item['name'],
-                'price': current_price,
-                'recommendation_price': int(avg_price),
-                'return_pct': round(ret, 2),
-                'quantity': qty,
-                'valuation': val,
-                'grade': 'N/A' # Could fetch from stock info
-            })
-            
-        total_asset = cash + total_valuation
-        start_capital = 100000000 # Default
-        total_return_won = total_asset - start_capital
-        total_return_pct = (total_return_won / start_capital) * 100
-        
-        key_stats = {
-            'total_asset': f"{int(total_asset):,}",
-            'cash': f"{int(cash):,}",
-            'total_return_pct': f"{total_return_pct:.2f}",
-            'total_return_won': f"{int(total_return_won):,}",
-        }
-
-        holdings_distribution = [
-             {'label': 'Cash', 'value': cash, 'color': '#9ca3af'},
-             {'label': 'Stocks', 'value': total_valuation, 'color': '#3b82f6'}
-        ]
-
         return jsonify({
-            'key_stats': key_stats,
-            'holdings_distribution': holdings_distribution,
-            'top_holdings': current_holdings,
-            'latest_date': datetime.now().strftime('%Y-%m-%d')
+            'holdings': updated_holdings,
+            'cash': cash,
+            'total_asset_value': total_asset,
+            'total_stock_value': total_stock_value,
+            'total_profit': int(total_asset - 100000000),
+            'total_profit_rate': round(((total_asset - 100000000) / 100000000 * 100), 2)
         })
-
+        
     except Exception as e:
-        logger.error(f"Error getting portfolio data: {e}")
+        logger.error(f"Error fetching portfolio: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -459,6 +435,42 @@ def reset_portfolio():
     """모의 투자 초기화"""
     paper_trading.reset_account()
     return jsonify({'status': 'success', 'message': 'Account reset to 100M KRW'})
+
+
+@common_bp.route('/portfolio/deposit', methods=['POST'])
+def deposit_cash():
+    """예수금 충전"""
+    try:
+        data = request.get_json()
+        amount = int(data.get('amount', 0))
+        result = paper_trading.deposit_cash(amount)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@common_bp.route('/portfolio/history')
+def get_trade_history():
+    """거래 내역 조회"""
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        data = paper_trading.get_trade_history(limit)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"Error getting trade history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@common_bp.route('/portfolio/history/asset')
+def get_asset_history():
+    """자산 변동 내역 조회 (차트용)"""
+    try:
+        limit = request.args.get('limit', 30, type=int)
+        data = paper_trading.get_asset_history(limit)
+        return jsonify({'history': data})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 
 @common_bp.route('/stock/<ticker>')
