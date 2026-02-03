@@ -248,10 +248,10 @@ export default function ChatWidget() {
   if (pathname === '/chatbot') return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex flex-col items-end transition-all duration-300">
       {/* Chat Window */}
       {isOpen && (
-        <div className="mb-4 w-[430px] h-[730px] max-h-[80vh] bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in font-sans">
+        <div className="mb-4 w-[calc(100vw-48px)] h-[calc(100dvh-140px)] md:w-[430px] md:h-[730px] max-h-[80vh] bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in font-sans">
 
           {/* Header */}
           <div className="bg-[#2c2c2e] p-4 flex items-center justify-between border-b border-white/5 flex-shrink-0">

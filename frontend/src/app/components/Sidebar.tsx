@@ -18,13 +18,20 @@ export default function Sidebar() {
   const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
   const [isPaperTradingOpen, setIsPaperTradingOpen] = useState(false);
 
-  // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
     isOpen: boolean;
     type: 'default' | 'success' | 'danger';
     title: string;
     content: string;
   }>({ isOpen: false, type: 'default', title: '', content: '' });
+
+  // Mobile Sidebar State
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Close mobile sidebar on path change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     // Check for API Key in localStorage (both keys for compatibility)
@@ -44,17 +51,18 @@ export default function Sidebar() {
     // Listen for custom event when API key is updated in same tab
     window.addEventListener('api-key-updated', checkApiKey);
 
+    // Listen for mobile sidebar toggle
+    const handleSidebarToggle = () => setIsMobileOpen(prev => !prev);
+    window.addEventListener('sidebar-toggle', handleSidebarToggle);
+
     // Also check periodically or on window focus
     const interval = setInterval(checkApiKey, 2000);
 
     const savedProfile = localStorage.getItem('user_profile');
     if (savedProfile) {
       try {
-        const parsed = JSON.parse(savedProfile);
-        setProfile(parsed);
-      } catch (e) {
-        console.error("Failed to parse user profile from localStorage", e);
-      }
+        setProfile(JSON.parse(savedProfile));
+      } catch (e) { console.error("Profile parse error", e); }
     }
 
     // Custom event listener for Header button
@@ -62,10 +70,11 @@ export default function Sidebar() {
     window.addEventListener('open-settings', handleOpenSettings);
 
     return () => {
-      window.removeEventListener('open-settings', handleOpenSettings);
+      clearInterval(interval);
       window.removeEventListener('storage', checkApiKey);
       window.removeEventListener('api-key-updated', checkApiKey);
-      clearInterval(interval);
+      window.removeEventListener('sidebar-toggle', handleSidebarToggle);
+      window.removeEventListener('open-settings', handleOpenSettings);
     };
   }, []);
 
@@ -116,7 +125,15 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="w-64 border-r border-white/10 bg-[#1c1c1e] flex flex-col h-screen fixed left-0 top-0 z-50">
+      {/* Mobile Sidebar Overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[49] md:hidden transition-opacity"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      <aside className={`w-64 border-r border-white/10 bg-[#1c1c1e] flex flex-col h-screen fixed left-0 top-0 z-50 transition-transform duration-300 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
         {/* Logo */}
         <Link href="/" className="p-6 flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
