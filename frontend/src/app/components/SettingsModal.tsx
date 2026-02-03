@@ -83,9 +83,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
         const openaiKey = localStorage.getItem('OPENAI_API_KEY');
         const perplexityKey = localStorage.getItem('PERPLEXITY_API_KEY');
 
-        if (googleKey) data['GOOGLE_API_KEY'] = googleKey;
-        if (openaiKey) data['OPENAI_API_KEY'] = openaiKey;
-        if (perplexityKey) data['PERPLEXITY_API_KEY'] = perplexityKey;
+        if (googleKey && googleKey.trim() !== '') data['GOOGLE_API_KEY'] = googleKey;
+        if (openaiKey && openaiKey.trim() !== '') data['OPENAI_API_KEY'] = openaiKey;
+        if (perplexityKey && perplexityKey.trim() !== '') data['PERPLEXITY_API_KEY'] = perplexityKey;
 
         setEnvVars(data);
       }
@@ -235,8 +235,8 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   useEffect(() => {
     if (isOpen) {
       const storedKey = localStorage.getItem('X-Gemini-Key');
-      if (storedKey) {
-        handleEnvChange('GOOGLE_API_KEY', storedKey); // UI 상에 표시 (보안 주의: 마스킹 가능하면 좋음)
+      if (storedKey && storedKey.trim() !== '') {
+        handleEnvChange('GOOGLE_API_KEY', storedKey); // UI 상에 표시
       }
     }
   }, [isOpen]);

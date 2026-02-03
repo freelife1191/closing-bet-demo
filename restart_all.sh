@@ -34,7 +34,9 @@ echo "🔧 Python deps setup (isolated venv)..."
 # 1. 시스템 기본 deps (충돌 최소)
 SYS_DEPS=("flask" "flask-cors" "python-dotenv")
 for dep in "${SYS_DEPS[@]}"; do
-  ! python3.11 -c "import $dep" 2>/dev/null && {
+  # 패키지명에서 하이픈을 언더스코어로 변환 (flask-cors → flask_cors, python-dotenv → dotenv)
+  import_name=$(echo "$dep" | sed 's/-/_/g' | sed 's/python_dotenv/dotenv/')
+  ! python3.11 -c "import $import_name" 2>/dev/null && {
     echo "   📦 System $dep"
     python3.11 -m pip install --break-system-packages --no-deps --quiet "$dep"
   }
@@ -49,11 +51,13 @@ done
 source venv/bin/activate
 pip install --upgrade pip --quiet >/dev/null
 
-VENV_DEPS=("flask" "flask-cors" "python-dotenv" "pandas" "requests" 
+VENV_DEPS=("flask" "flask-cors" "python-dotenv" "pandas" "requests"
            "google-generativeai==0.8.5" "schedule" "yfinance" "pykrx" "apscheduler")
 for dep in "${VENV_DEPS[@]}"; do
   pkg=${dep%%==*}
-  ! python -c "import $pkg" 2>/dev/null 2>&1 && {
+  # 패키지명에서 하이픈을 언더스코어로 변환 (flask-cors → flask_cors, python-dotenv → dotenv)
+  import_name=$(echo "$pkg" | sed 's/-/_/g' | sed 's/python_dotenv/dotenv/' | sed 's/google_generativeai/google.generativeai/')
+  ! python -c "import $import_name" 2>/dev/null 2>&1 && {
     echo "   📦 venv $dep"
     pip install --quiet "$dep"
   }

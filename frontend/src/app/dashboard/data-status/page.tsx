@@ -137,7 +137,13 @@ export default function DataStatusPage() {
         if (!status.isRunning && pollingRef.current) {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
-          await loadData();
+
+          // 백엔드 파일 시스템 저장이 완료될 때까지 약간의 지연 시간을 둠 (정합성 보장)
+          setTimeout(async () => {
+            await loadData();
+            setUpdating(false);
+            setUpdatingItem(null);
+          }, 1000);
         }
       }
     } catch (error) {
@@ -244,21 +250,9 @@ export default function DataStatusPage() {
         });
 
         if (startRes.ok) {
-          // 완료될 때까지 폴링 (최대 5분)
-          const maxAttempts = 150;
-          let attempts = 0;
-          let completed = false;
-
-          while (attempts < maxAttempts && !completed) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            const statusRes = await fetch('/api/kr/jongga-v2/status');
-            const statusData = await statusRes.json();
-
-            if (!statusData.isRunning) {
-              completed = true;
-            }
-            attempts++;
-          }
+          // 전역 updating 상태를 설정하여 pollUpdateStatus가 loadData를 호출하도록 함
+          setUpdating(true);
+          startPolling();
         }
       } else if (fileName === 'VCP Signals') {
         // VCP Signals도 target_date 지원
@@ -268,11 +262,10 @@ export default function DataStatusPage() {
           body: JSON.stringify({ target_date: effectiveDate })
         });
 
-        if (!startRes.ok) {
-          console.error('Failed to run VCP Signals');
+        if (startRes.ok) {
+          setUpdating(true);
+          startPolling();
         }
-        // VCP는 빠르게 완료됨
-        await new Promise(resolve => setTimeout(resolve, 2000));
       } else {
         // 다른 항목들은 동기식 처리
         switch (fileName) {
