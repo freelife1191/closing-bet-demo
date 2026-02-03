@@ -156,14 +156,12 @@ if [ ! -d "venv" ]; then
   python3.11 -m venv venv || python3 -m venv venv
 fi
 
-echo "   📦 Using venv virtual environment..."
-source venv/bin/activate
-
 # venv 내 필수 패키지 확인 및 설치
 echo "   📦 Installing/Updating requirements from requirements.txt..."
-pip install -r requirements.txt --quiet
+./venv/bin/pip install -r requirements.txt
 
-nohup python flask_app.py > logs/backend.log 2>&1 &
+# Use explicit path to venv python to ensure correct environment
+nohup ./venv/bin/python flask_app.py > logs/backend.log 2>&1 &
 BACKEND_PID=$!
 echo "   Backend PID: $BACKEND_PID"
 
