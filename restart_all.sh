@@ -73,33 +73,107 @@ else
   PKG_MGR="apt"
 fi
 
-# (System dependency checks removed in favor of venv)
-echo "✅ Environment setup proceeding with venv..."
+############################################
+# 1) pipx 및 Flask (pipx) 자동 설치
+############################################
+echo "🔍 Checking pipx & Flask (pipx)..."
+
+# pipx 설치
+if ! command -v pipx >/dev/null 2>&1; then
+  echo "   📦 pipx not found. Installing via $PKG_MGR..."
+  if [ "$IS_MAC" = "true" ]; then
+    if ! command -v brew >/dev/null 2>&1; then
+      echo "     🍺 Installing Homebrew first..."
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+      eval "$(/opt/homebrew/bin/brew shellenv)"
+    fi
+    brew install pipx
+  else
+    sudo apt update
+    sudo apt install -y pipx
+  fi
+  pipx ensurepath
+fi
+
+# PATH 보정
+if ! command -v pipx >/dev/null 2>&1 && [ -d "$HOME/.local/bin" ]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+# Flask pipx 설치 확인
+PIPX_LIST_OUTPUT="$(pipx list 2>/dev/null || true)"
+if echo "$PIPX_LIST_OUTPUT" | grep -qi "package flask"; then
+  echo "   ✅ Flask already installed in pipx."
+else
+  echo "   📦 Installing Flask via pipx..."
+  pipx install flask
+fi
+
+############################################
+# 2) python3.11 전역 의존성 자동 설치
+############################################
+echo "🔍 Checking Python 3.11 dependencies..."
+
+PY_DEPS=("flask" "flask_cors" "python_dotenv" "pandas" "requests" "google_genai" "schedule")
+for dep in "${PY_DEPS[@]}"; do
+  case "$dep" in
+    flask_cors) IMPORT_NAME="flask_cors"; PIP_NAME="flask-cors" ;;
+    python_dotenv) IMPORT_NAME="dotenv"; PIP_NAME="python-dotenv" ;;
+    google_genai) IMPORT_NAME="google.genai"; PIP_NAME="google-genai" ;;
+    *) IMPORT_NAME="$dep"; PIP_NAME="$dep" ;;
+  esac
+
+  if ! python3.11 -c "import $IMPORT_NAME" 2>/dev/null; then
+    echo "   📦 Installing missing dependency: $PIP_NAME ..."
+    if [ "$IS_MAC" = "true" ]; then
+      python3.11 -m pip install --user "$PIP_NAME"
+    else
+      python3.11 -m pip install "$PIP_NAME" --break-system-packages
+    fi
+  else
+    echo "   ✅ $PIP_NAME already available."
+  fi
+done
+
+echo "✅ All Python dependencies ready!"
 echo ""
 
 # ==== Frontend deps ====
 cd frontend || { echo "❌ frontend dir not found!"; exit 1; }
-echo "📦 Installing/Updating frontend dependencies..."
-npm install
+if [ ! -d "node_modules" ]; then
+  echo "📦 Installing node_modules..."
+  npm install
+fi
 cd ..
 
 ############################################
 # 3) Backend 시작 (venv 가상환경 사용)
 ############################################
 echo "🚀 Starting Backend (Flask) on port $FLASK_PORT..."
-if [ ! -d "venv" ]; then
-  echo "   📦 venv not found. Creating new virtual environment..."
-  python3.11 -m venv venv || python3 -m venv venv
+if [ -d "venv" ]; then
+  echo "   📦 Using venv virtual environment..."
+  source venv/bin/activate
+  
+  # venv 내 필수 패키지 확인 및 설치
+  VENV_DEPS=("yfinance" "pykrx" "google-generativeai" "apscheduler")
+  for dep in "${VENV_DEPS[@]}"; do
+    case "$dep" in
+      google-generativeai) IMPORT_NAME="google.generativeai"; PIP_NAME="google-generativeai" ;;
+      *) IMPORT_NAME="$dep"; PIP_NAME="$dep" ;;
+    esac
+    
+    if ! python -c "import $IMPORT_NAME" 2>/dev/null; then
+      echo "   📦 Installing missing venv dependency: $PIP_NAME ..."
+      pip install "$PIP_NAME" --quiet
+    fi
+  done
+  
+  nohup python flask_app.py > logs/backend.log 2>&1 &
+else
+  echo "   ⚠️  venv not found, using system python3.11..."
+  nohup python3.11 flask_app.py > logs/backend.log 2>&1 &
 fi
-
-echo "   📦 Using venv virtual environment..."
-source venv/bin/activate
-
-# venv 내 필수 패키지 확인 및 설치
-echo "   📦 Installing/Updating requirements from requirements.txt..."
-pip install -r requirements.txt --quiet
-
-nohup python flask_app.py > logs/backend.log 2>&1 &
 BACKEND_PID=$!
 echo "   Backend PID: $BACKEND_PID"
 

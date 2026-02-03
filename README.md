@@ -12,8 +12,13 @@
 git clone <repository_url>
 cd closing-bet-v2
 
-# ⚠️ 별도의 가상환경 설정이나 pip install이 필요 없습니다. (restart_all.sh가 자동 수행)
-# 프론트엔드 의존성도 자동으로 설치됩니다.
+# 백엔드 가상환경 설정 및 패키지 설치
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# 프론트엔드 의존성 설치
+cd frontend && npm install && cd ..
 ```
 
 ### 2. API 키 설정 (.env)
@@ -41,7 +46,7 @@ MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
   ```bash
   ./restart_all.sh
   ```
-  *(기존 프로세스 종료 후, 가상환경(venv) 및 필요한 의존성(pip/npm)을 자동으로 설치/업데이트하고 서버를 실행합니다.)*
+  *(기존 프로세스를 자동으로 종료하고 `.env` 설정에 따라 새 포트로 서버를 띄웁니다.)*
 
 - **서버 중지**:
   새로 추가된 `stop_all.sh` 스크립트를 사용하여 모든 서비스를 안전하게 종료할 수 있습니다.
