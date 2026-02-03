@@ -51,17 +51,8 @@ done
 source venv/bin/activate
 pip install --upgrade pip --quiet >/dev/null
 
-VENV_DEPS=("flask" "flask-cors" "python-dotenv" "pandas" "requests"
-           "google-genai" "schedule" "yfinance" "pykrx" "apscheduler")
-for dep in "${VENV_DEPS[@]}"; do
-  pkg=${dep%%==*}
-  # 패키지명에서 하이픈을 언더스코어로 변환 (flask-cors → flask_cors, python-dotenv → dotenv)
-  import_name=$(echo "$pkg" | sed 's/-/_/g' | sed 's/python_dotenv/dotenv/' | sed 's/google_genai/google.genai/')
-  ! python -c "import $import_name" 2>/dev/null 2>&1 && {
-    echo "   📦 venv $dep"
-    pip install --quiet "$dep"
-  }
-done
+echo "📦 Installing dependencies from requirements.txt..."
+pip install -r requirements.txt --quiet
 deactivate
 
 echo "✅ Python ready!"
