@@ -1865,82 +1865,82 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
             <span className="text-xs text-slate-500">※ 거래대금 300억 미만 자동 제외</span>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-white/10">
-            <table className="w-full text-xs text-left">
+          <div className="overflow-x-auto rounded-xl border border-white/10">
+            <table className="w-full text-xs text-left min-w-[600px] border-collapse">
               <thead className="bg-white/5 text-slate-400 font-medium">
                 <tr>
-                  <th className="px-4 py-3 w-16 text-center">등급</th>
-                  <th className="px-4 py-3">거래대금 & 등락률</th>
-                  <th className="px-4 py-3">점수 (Total Score)</th>
-                  <th className="px-4 py-3">추가 조건 (거래량/수급)</th>
-                  <th className="px-4 py-3">비고</th>
+                  <th className="px-4 py-3 w-16 text-center whitespace-nowrap">등급</th>
+                  <th className="px-4 py-3 whitespace-nowrap">거래대금 & 등락률</th>
+                  <th className="px-4 py-3 whitespace-nowrap">점수 (Total Score)</th>
+                  <th className="px-4 py-3 whitespace-nowrap">추가 조건 (거래량/수급)</th>
+                  <th className="px-4 py-3 whitespace-nowrap">비고</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-slate-300">
                 <tr className="bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors">
-                  <td className="px-4 py-3 font-bold text-indigo-400 text-center text-sm">S 급</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 font-bold text-indigo-400 text-center text-sm whitespace-nowrap">S 급</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-indigo-300 font-bold mb-1">1조 원 이상</span>
                     <span className="text-rose-400 font-bold">+10% 이상</span>
                   </td>
-                  <td className="px-4 py-3 font-bold text-white">10점 이상</td>
-                  <td className="px-4 py-3 text-slate-400">
+                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">10점 이상</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                     <div>거래량 5배↑</div>
                     <div className="text-emerald-400">외인+기관 양매수</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-400">초대형 수급 폭발</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">초대형 수급 폭발</td>
                 </tr>
                 <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-rose-400 text-center text-sm">A 급</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 font-bold text-rose-400 text-center text-sm whitespace-nowrap">A 급</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-rose-300 font-bold mb-1">5,000억 이상</span>
                     <span className="text-rose-400 font-bold">+5% 이상</span>
                   </td>
-                  <td className="px-4 py-3 font-bold text-white">8점 이상</td>
-                  <td className="px-4 py-3 text-slate-400">
+                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">8점 이상</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                     <div>거래량 3배↑</div>
                     <div>외인 or 기관</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-400">대형 우량주</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">대형 우량주</td>
                 </tr>
                 <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-blue-400 text-center text-sm">B 급</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 font-bold text-blue-400 text-center text-sm whitespace-nowrap">B 급</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-blue-300 font-bold mb-1">1,000억 이상</span>
                     <span className="text-rose-400 font-bold">+4% 이상</span>
                   </td>
-                  <td className="px-4 py-3 font-bold text-white">6점 이상</td>
-                  <td className="px-4 py-3 text-slate-400">
+                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">6점 이상</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                     <div>거래량 2배↑</div>
                     <div>외인 or 기관</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-400">중형 주도주</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">중형 주도주</td>
                 </tr>
                 <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-emerald-400 text-center text-sm">C 급</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 font-bold text-emerald-400 text-center text-sm whitespace-nowrap">C 급</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-emerald-300 font-bold mb-1">500억 이상</span>
                     <span className="text-rose-400 font-bold">+5% 이상</span>
                   </td>
-                  <td className="px-4 py-3 font-bold text-white">8점 이상</td>
-                  <td className="px-4 py-3 text-slate-400">
+                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">8점 이상</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                     <div>거래량 3배↑</div>
                     <div className="text-emerald-400">외인+기관 양매수</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-400">강소 주도주</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">강소 주도주</td>
                 </tr>
                 <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-gray-400 text-center text-sm">D 급</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 font-bold text-gray-400 text-center text-sm whitespace-nowrap">D 급</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-slate-400 font-bold mb-1">500억 이상</span>
                     <span className="text-rose-400 font-bold">+4% 이상</span>
                   </td>
-                  <td className="px-4 py-3 font-bold text-white">6점 이상</td>
-                  <td className="px-4 py-3 text-slate-400">
+                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">6점 이상</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                     <div>거래량 2배↑</div>
                     <div className="text-slate-500">수급 무관</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">관망 / 조건부</td>
+                  <td className="px-4 py-3 text-slate-500 whitespace-nowrap">관망 / 조건부</td>
                 </tr>
               </tbody>
             </table>
