@@ -151,29 +151,19 @@ cd ..
 # 3) Backend 시작 (venv 가상환경 사용)
 ############################################
 echo "🚀 Starting Backend (Flask) on port $FLASK_PORT..."
-if [ -d "venv" ]; then
-  echo "   📦 Using venv virtual environment..."
-  source venv/bin/activate
-  
-  # venv 내 필수 패키지 확인 및 설치
-  VENV_DEPS=("yfinance" "pykrx" "google-generativeai" "apscheduler")
-  for dep in "${VENV_DEPS[@]}"; do
-    case "$dep" in
-      google-generativeai) IMPORT_NAME="google.generativeai"; PIP_NAME="google-generativeai" ;;
-      *) IMPORT_NAME="$dep"; PIP_NAME="$dep" ;;
-    esac
-    
-    if ! python -c "import $IMPORT_NAME" 2>/dev/null; then
-      echo "   📦 Installing missing venv dependency: $PIP_NAME ..."
-      pip install "$PIP_NAME" --quiet
-    fi
-  done
-  
-  nohup python flask_app.py > logs/backend.log 2>&1 &
-else
-  echo "   ⚠️  venv not found, using system python3.11..."
-  nohup python3.11 flask_app.py > logs/backend.log 2>&1 &
+if [ ! -d "venv" ]; then
+  echo "   📦 venv not found. Creating new virtual environment..."
+  python3.11 -m venv venv || python3 -m venv venv
 fi
+
+echo "   📦 Using venv virtual environment..."
+source venv/bin/activate
+
+# venv 내 필수 패키지 확인 및 설치
+echo "   📦 Installing/Updating requirements from requirements.txt..."
+pip install -r requirements.txt --quiet
+
+nohup python flask_app.py > logs/backend.log 2>&1 &
 BACKEND_PID=$!
 echo "   Backend PID: $BACKEND_PID"
 
