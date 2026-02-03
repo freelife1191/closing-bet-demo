@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useSession } from "next-auth/react";
 
 interface Message {
   role: 'user' | 'model';
@@ -40,6 +41,7 @@ export default function ChatWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [thinkingIndex, setThinkingIndex] = useState(0);
+  const { data: session } = useSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -110,7 +112,7 @@ export default function ChatWidget() {
       const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
 
       // Auth Info Retrieval
-      let userEmail = null;
+      const userEmail = session?.user?.email || null;
       let apiKey = null;
       let sessionId = localStorage.getItem('browser_session_id');
 
