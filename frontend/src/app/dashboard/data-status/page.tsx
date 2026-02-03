@@ -342,8 +342,14 @@ export default function DataStatusPage() {
 
     } catch (error) {
       console.error('Update failed:', error);
+      setModal({
+        isOpen: true,
+        type: 'danger',
+        title: '업데이트 실패',
+        content: '업데이트 시작 실패: 서버 로그를 확인하세요.',
+        showCancel: false
+      });
       setUpdating(false);
-      alert('업데이트 시작 실패: 서버 로그를 확인하세요.');
     }
   };
 

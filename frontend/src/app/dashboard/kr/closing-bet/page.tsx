@@ -1336,7 +1336,7 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
     setAnalyzingGemini(true);
     try {
       console.log('Gemini Analysis Request Triggered...');
-      const res = await fetch('http://localhost:5001/api/kr/jongga-v2/reanalyze-gemini', {
+      const res = await fetch('/api/kr/jongga-v2/reanalyze-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

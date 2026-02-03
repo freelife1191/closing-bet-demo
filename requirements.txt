@@ -9,3 +9,4 @@ yfinance
 pykrx
 gunicorn
 pytz
+schedule

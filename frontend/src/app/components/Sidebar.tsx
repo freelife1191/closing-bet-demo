@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import Modal from './Modal';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -13,6 +14,14 @@ export default function Sidebar() {
 
   const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [hasApiKey, setHasApiKey] = useState(false);
+
+  // Alert Modal State
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    type: 'default' | 'success' | 'danger';
+    title: string;
+    content: string;
+  }>({ isOpen: false, type: 'default', title: '', content: '' });
 
   useEffect(() => {
     // Check for API Key in localStorage
@@ -192,7 +201,12 @@ export default function Sidebar() {
                   <div className="h-px bg-white/5 mx-2 my-1"></div>
                   <button
                     onClick={() => {
-                      alert("로그아웃 되었습니다.");
+                      setAlertModal({
+                        isOpen: true,
+                        type: 'success',
+                        title: '로그아웃',
+                        content: '로그아웃 되었습니다.'
+                      });
                       setIsUserMenuOpen(false);
                     }}
                     className="w-full text-left px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2"
@@ -270,6 +284,27 @@ export default function Sidebar() {
         profile={profile}
         onSave={handleSaveSettings}
       />
+
+      {/* Alert Modal */}
+      <Modal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        type={alertModal.type}
+        footer={
+          <button
+            onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+            className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${alertModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
+                alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                  'bg-blue-500 hover:bg-blue-600'
+              }`}
+          >
+            확인
+          </button>
+        }
+      >
+        <p>{alertModal.content}</p>
+      </Modal>
     </>
   );
 }

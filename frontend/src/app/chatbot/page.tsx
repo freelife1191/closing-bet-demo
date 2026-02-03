@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import Sidebar from '../components/Sidebar';
 import SettingsModal from '../components/SettingsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
+import Modal from '../components/Modal';
 
 // Types
 interface Message {
@@ -103,6 +104,14 @@ export default function ChatbotPage() {
   // Delete Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [sessionToDeleteId, setSessionToDeleteId] = useState<string | null>(null);
+
+  // Alert Modal State
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    type: 'default' | 'success' | 'danger';
+    title: string;
+    content: string;
+  }>({ isOpen: false, type: 'default', title: '', content: '' });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -543,7 +552,12 @@ export default function ChatbotPage() {
 
   const toggleRecording = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert("이 브라우저는 음성 인식을 지원하지 않습니다.");
+      setAlertModal({
+        isOpen: true,
+        type: 'danger',
+        title: '음성 인식 미지원',
+        content: '이 브라우저는 음성 인식을 지원하지 않습니다.'
+      });
       return;
     }
 
@@ -613,6 +627,27 @@ export default function ChatbotPage() {
         confirmText="삭제"
         cancelText="취소"
       />
+
+      {/* Alert Modal */}
+      <Modal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        type={alertModal.type}
+        footer={
+          <button
+            onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+            className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${alertModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
+                alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                  'bg-blue-500 hover:bg-blue-600'
+              }`}
+          >
+            확인
+          </button>
+        }
+      >
+        <p>{alertModal.content}</p>
+      </Modal>
 
       {/* Content Wrapper */}
       <div className="flex-1 flex pl-64 h-full">
