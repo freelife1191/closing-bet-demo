@@ -295,237 +295,26 @@ class SignalGenerator:
                 else:
                     self.drop_stats["grade_fail"] += 1
 
-        # 등급순 정렬 (D등급 포함)
-        grade_order = {'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4}
-        all_signals.sort(key=lambda s: (grade_order[getattr(s.grade, 'value', s.grade)], -s.score.total))
+            # 중간 결과 저장 (KOSPI 분석 완료 후 즉시 반영을 위해)
+            if market == markets[0] and len(markets) > 1:
+                mid_processing_time = (time.time() - start_time) * 1000
+                mid_result = ScreenerResult(
+                    date=parsed_date if parsed_date else date.today(),
+                    total_candidates=len(all_signals),
+                    filtered_count=generator.scan_stats.get("phase1", 0),
+                    scanned_count=generator.scan_stats.get("scanned", 0),
+                    signals=all_signals,
+                    by_grade=generator.get_summary(all_signals)["by_grade"],
+                    by_market=generator.get_summary(all_signals)["by_market"],
+                    processing_time_ms=mid_processing_time,
+                    market_status=market_status,
+                    market_summary="", # 중간 단계에서는 요약 생략
+                    trending_themes=[] # 중간 단계에서는 테마 생략
+                )
+                save_result_to_json(mid_result)
+                logger.info(f"[{market}] 분석 완료 - 중간 결과 저장됨 ({len(all_signals)}개 시그널)")
 
-        # 참고: max_positions는 동시 매매 포지션 제한이며, 시그널 표시 개수는 제한하지 않음
-        # (조건 충족 종목은 모두 표시)
-
-        # 최종 결과 요약 로그
-        logger.info(f"="*60)
-        logger.info(f"[종가베팅 스크리닝 결과 요약]")
-        logger.info(f"="*60)
-        logger.info(f"  - 전체 스캔: {self.scan_stats['scanned']}개")
-        logger.info(f"  - Phase1 통과: {self.scan_stats['phase1']}개")
-        logger.info(f"  - 최종 시그널: {len(all_signals)}개")
-        logger.info(f"  [탈락 통계]")
-        logger.info(f"    - 거래대금 부족: {self.drop_stats['low_trading_value']}개")
-        logger.info(f"    - 거래량배수 부족: {self.drop_stats['low_volume_ratio']}개")
-        logger.info(f"    - Pre-Score 부족: {self.drop_stats['low_pre_score']}개")
-        logger.info(f"    - 뉴스 없음: {self.drop_stats['no_news']}개")
-        logger.info(f"    - 등급 미달: {self.drop_stats['grade_fail']}개")
-        logger.info(f"="*60)
-        
-        print(f"\n" + "="*60)
-        print(f"[종가베팅 스크리닝 결과 요약]")
-        print(f"="*60)
-        print(f"  - 전체 스캔: {self.scan_stats['scanned']}개")
-        print(f"  - Phase1 통과: {self.scan_stats['phase1']}개")
-        print(f"  - 최종 시그널: {len(all_signals)}개")
-        print(f"  [탈락 통계]")
-        print(f"    - 거래대금 부족: {self.drop_stats['low_trading_value']}개")
-        print(f"    - 거래량배수 부족: {self.drop_stats['low_volume_ratio']}개")
-        print(f"    - Pre-Score 부족: {self.drop_stats['low_pre_score']}개")
-        print(f"    - 뉴스 없음: {self.drop_stats['no_news']}개")
-        print(f"    - 등급 미달: {self.drop_stats['grade_fail']}개")
-        print(f"="*60)
-        
-        if len(all_signals) == 0:
-            logger.warning(f"[경고] 생성된 시그널이 0개입니다!")
-            print(f"\n[경고] 생성된 시그널이 0개입니다!")
-            print(f"  -> 위 탈락 통계를 확인하세요.")
-
-        self.scan_stats["final"] = len(all_signals)
-        return all_signals
-
-    async def _analyze_base(self, stock: StockData) -> Optional[Dict]:
-        """1단계: 기본 분석 (차트, 수급, Pre-Score)"""
-        try:
-            # 상세 정보
-            detail = await self._collector.get_stock_detail(stock.code)
-            if detail:
-                stock.high_52w = detail.get('high_52w', stock.high_52w)
-                stock.low_52w = detail.get('low_52w', stock.low_52w)
-
-            # 차트
-            charts = await self._collector.get_chart_data(stock.code, 60)
-            
-            # 수급
-            supply = await self._collector.get_supply_data(stock.code)
-            
-            # Pre-Score 계산 (뉴스/LLM 없음)
-            pre_score, _, score_details = self.scorer.calculate(stock, charts, [], supply, None)
-            
-            return {
-                'stock': stock,
-                'charts': charts,
-                'supply': supply,
-                'pre_score': pre_score,
-                'score_details': score_details  # 필터링을 위해 상세 점수(거래량 배수 등) 포함 필수
-            }
-        except Exception as e:
-            print(f"    ⚠️ 기본 분석 오류 {stock.name}: {e}")
-            return None
-
-    def _create_final_signal(
-        self, stock, target_date, news_list, llm_result, charts, supply, themes: List[str] = None
-    ) -> Optional[Signal]:
-        """최종 시그널 생성 헬퍼"""
-        try:
-            # 점수 계산
-            score, checklist, score_details = self.scorer.calculate(stock, charts, news_list, supply, llm_result)
-            
-            # [Fix] AI 분석 결과 보존 (JSON 저장 및 Score 객체 할당)
-            if llm_result:
-                score_details['ai_evaluation'] = llm_result
-                score.ai_evaluation = llm_result  # Frontend가 Score 객체를 참조할 경우를 대비해 할당
-            
-            # 등급 미달 제외 (None)
-            grade = self.scorer.determine_grade(stock, score, score_details, supply, charts)
-            
-            if not grade:
-                print(f"    [DEBUG] 등급탈락 {stock.name}: Score={score.total}, Value={stock.trading_value//100_000_000}억, Rise={stock.change_pct}%, VolRatio={score_details.get('volume_ratio', 0)}")
-                return None
-
-            # 포지션 계산
-            position = self.position_sizer.calculate(stock.close, grade)
-
-            return Signal(
-                stock_code=stock.code,
-                stock_name=stock.name,
-                market=stock.market,
-                sector=stock.sector,
-                signal_date=target_date,
-                signal_time=datetime.now(),
-                grade=grade,
-                score=score,
-                checklist=checklist,
-                news_items=[{
-                    "title": n.title,
-                    "source": n.source,
-                    "published_at": n.published_at.isoformat() if n.published_at else "",
-                    "url": n.url,
-                    "weight": getattr(n, 'weight', 1.0)
-                } for n in news_list[:5]],
-                current_price=stock.close,
-                change_pct=stock.change_pct,
-                entry_price=position.entry_price,
-                stop_price=position.stop_price,
-                target_price=position.target_price,
-                r_value=position.r_value,
-                position_size=position.position_size,
-                quantity=position.quantity,
-                r_multiplier=position.r_multiplier,
-                trading_value=stock.trading_value,
-                volume_ratio=score_details.get('volume_ratio', 0.0),  # UI 표시용 값 할당
-                status=SignalStatus.PENDING,
-                created_at=datetime.now(),
-                score_details=score_details,
-                themes=themes or []
-            )
-        except Exception as e:
-            print(f"    ⚠️ 시그널 생성 오류 {stock.name}: {e}")
-            return None
-
-    async def _analyze_stock(self, stock: StockData, target_date: date) -> Optional[Signal]:
-        """단일 종목 분석 (기존 호환용 - Batch 미사용)"""
-        # 1. Base Analysis
-        base_data = await self._analyze_base(stock)
-        if not base_data: return None
-        
-        # 2. News
-        news_list = await self._news.get_stock_news(stock.code, 3, stock.name)
-        
-        # 3. LLM (Single)
-        llm_result = None
-        if news_list and self.llm_analyzer.client:
-            print(f"    [LLM] Analyzing {stock.name} news...")
-            news_dicts = [{"title": n.title, "summary": n.summary} for n in news_list]
-            llm_result = await self.llm_analyzer.analyze_news_sentiment(stock.name, news_dicts)
-
-        # 4. Finalize
-        return self._create_final_signal(
-            stock, target_date, news_list, llm_result, base_data['charts'], base_data['supply']
-        )
-
-    def get_summary(self, signals: List[Signal]) -> Dict:
-        """시그널 요약 정보"""
-        summary = {
-            "total": len(signals),
-            "by_grade": {g: 0 for g in ['S', 'A', 'B', 'C', 'D']},
-            "by_market": {},
-            "total_position": 0,
-            "total_risk": 0,
-        }
-
-        for s in signals:
-            summary["by_grade"][getattr(s.grade, 'value', s.grade)] += 1
-            summary["by_market"][s.market] = summary["by_market"].get(s.market, 0) + 1
-            summary["total_position"] += s.position_size
-            summary["total_risk"] += s.r_value * s.r_multiplier
-
-        return summary
-
-
-async def run_screener(
-    capital: float = 50_000_000,
-    markets: List[str] = None,
-    target_date: str = None,  # YYYY-MM-DD 형식 (테스트용)
-    top_n: int = 300,
-) -> ScreenerResult:
-    """
-    스크리너 실행 (간편 함수)
-    
-    Args:
-        capital: 투자 자본금
-        markets: 대상 시장 리스트 ['KOSPI', 'KOSDAQ']
-        target_date: 특정 날짜 기준 분석 (YYYY-MM-DD 형식, 테스트용)
-        top_n: 분석할 상위 종목 수
-    """
-    start_time = time.time()
-    
-    # target_date 문자열을 date 객체로 변환
-    parsed_date = None
-    if target_date:
-        try:
-            parsed_date = datetime.strptime(target_date, '%Y-%m-%d').date()
-            print(f"[테스트 모드] 지정 날짜 기준 분석: {target_date}")
-        except ValueError:
-            print(f"[경고] 날짜 형식 오류: {target_date} (YYYY-MM-DD 필요)")
-            parsed_date = None
-
-    async with SignalGenerator(capital=capital) as generator:
-        signals = await generator.generate(target_date=parsed_date, markets=markets, top_n=top_n)
-        summary = generator.get_summary(signals)
-        
-        # 2. Market Gate 실행
-        print(f"\n[Market Gate] 시장 상태 분석 중...")
-        market_gate = MarketGate()
-        market_status = market_gate.analyze()
-        market_gate.save_analysis(market_status) # [Fix] 분석 결과 저장 (Dashboard 동기화)
-        print(f"  -> 상태: {market_status.get('status')} (Score: {market_status.get('total_score')})")
-        
-        # 3. Final Market Summary (LLM)
-        print(f"\n[Final Summary] 시장 요약 리포트 생성 중...")
-        market_summary = await generator.llm_analyzer.generate_market_summary(
-            [s.to_dict() for s in signals]
-        )
-        print(f"  -> 요약 완료 ({len(market_summary)}자)")
-
-        # 4. Trending Themes 집계 (빈도수 기반)
-        from collections import Counter
-        all_themes = []
-        for s in signals:
-            if s.themes:
-                all_themes.extend(s.themes)
-        
-        # 빈도수 상위 20개 추출
-        theme_counts = Counter(all_themes)
-        trending_themes = [theme for theme, count in theme_counts.most_common(20)]
-        print(f"  -> Trending Themes: {trending_themes[:5]}...")
-
-    processing_time = (time.time() - start_time) * 1000
+        processing_time = (time.time() - start_time) * 1000
 
     result = ScreenerResult(
         date=parsed_date if parsed_date else date.today(),

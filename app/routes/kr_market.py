@@ -445,7 +445,8 @@ def get_kr_ai_analysis():
         if target_date:
             try:
                 date_str = target_date.replace('-', '')
-                # 날짜별 파일 시도
+                
+                # 1-1. 기존 방식 파일 시도
                 analysis = load_json_file(f'kr_ai_analysis_{date_str}.json')
                 if not analysis:
                     analysis = load_json_file(f'ai_analysis_results_{date_str}.json')
@@ -457,7 +458,50 @@ def get_kr_ai_analysis():
                             if 'ticker' in sig:
                                 sig['ticker'] = str(sig['ticker']).zfill(6)
                     return jsonify(analysis)
+
+                # 1-2. [New] 통합 결과 파일 시도 (jongga_v2_results_YYYYMMDD.json)
+                v2_result = load_json_file(f'jongga_v2_results_{date_str}.json')
+                if v2_result and 'signals' in v2_result and len(v2_result['signals']) > 0:
+                    ai_signals = []
+                    for sig in v2_result['signals']:
+                        # AI 분석 데이터 추출 (우선순위: score_details > score > llm_reason)
+                        ai_eval = None
+                        if 'score_details' in sig and isinstance(sig['score_details'], dict):
+                            ai_eval = sig['score_details'].get('ai_evaluation')
+                        if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
+                            ai_eval = sig['score'].get('ai_evaluation')
+                        if not ai_eval and 'ai_evaluation' in sig:
+                            ai_eval = sig['ai_evaluation']
+                        if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
+                             ai_eval = sig['score'].get('llm_reason')
+
+                        if isinstance(ai_eval, str):
+                            ai_eval = {'reason': ai_eval, 'action': 'HOLD', 'confidence': 0}
+
+                        if ai_eval:
+                            signal_data = {
+                                'ticker': str(sig.get('stock_code', '')).zfill(6),
+                                'name': sig.get('stock_name', ''),
+                                'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
+                                'current_price': sig.get('current_price', 0),
+                                'entry_price': sig.get('entry_price', 0),
+                                'vcp_score': 0,
+                                'contraction_ratio': sig.get('contraction_ratio', 0),
+                                'foreign_5d': sig.get('foreign_5d', 0),
+                                'inst_5d': sig.get('inst_5d', 0),
+                                'gemini_recommendation': ai_eval, 
+                                'news': sig.get('news_items', [])
+                            }
+                            ai_signals.append(signal_data)
                     
+                    if ai_signals:
+                        return jsonify({
+                            'signals': ai_signals,
+                            'generated_at': v2_result.get('updated_at', datetime.now().isoformat()),
+                            'signal_date': target_date,
+                            'source': 'jongga_v2_integrated_history'
+                        })
+
                 # 파일 없으면 빈 결과 반환
                 return jsonify({
                     'signals': [],
@@ -468,7 +512,73 @@ def get_kr_ai_analysis():
             except Exception as e:
                 logger.warning(f"과거 AI 분석 데이터 로드 실패: {e}")
 
-        # 2. kr_ai_analysis.json 직접 로드 (VCP AI 분석 결과 - BLUEPRINT 최우선)
+        # 2. [Priority] jongga_v2_latest.json에서 AI 데이터 추출 (통합 저장 방식 대응)
+        # V2 엔진은 이 파일에만 저장하므로 가장 먼저 확인해야 함
+        try:
+            latest_data = load_json_file('jongga_v2_latest.json')
+            if latest_data and 'signals' in latest_data and len(latest_data['signals']) > 0:
+                ai_signals = []
+                for sig in latest_data['signals']:
+                    # AI 분석 데이터 추출 (우선순위: score_details > score > llm_reason)
+                    ai_eval = None
+                    
+                    # 1. score_details 내 객체 확인 (가장 상세함)
+                    if 'score_details' in sig and isinstance(sig['score_details'], dict):
+                        ai_eval = sig['score_details'].get('ai_evaluation')
+                    
+                    # 2. score 내 객체 확인
+                    if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
+                        ai_eval = sig['score'].get('ai_evaluation')
+                    
+                    # 3. 최상위 필드 확인
+                    if not ai_eval and 'ai_evaluation' in sig:
+                        ai_eval = sig['ai_evaluation']
+                        
+                    # 4. 텍스트 reason (마지막 수단)
+                    if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
+                         ai_eval = sig['score'].get('llm_reason')
+
+                    # 텍스트 reason만 있는 경우 객체로 변환
+                    if isinstance(ai_eval, str):
+                         # LLM reason만 있고 평가 객체가 없는 경우
+                        ai_eval = {'reason': ai_eval, 'action': 'HOLD', 'confidence': 0}
+
+                    # 프론트엔드 호환 구조 생성 (gemini_recommendation 필수)
+                    # AI 데이터가 없어도 signals 리스트에는 포함시켜야 함 (정보 일관성)
+                    
+                    signal_data = {
+                        'ticker': str(sig.get('stock_code', '')).zfill(6),
+                        'name': sig.get('stock_name', ''),
+                        'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
+                        'current_price': sig.get('current_price', 0),
+                        'entry_price': sig.get('entry_price', 0),
+                        'vcp_score': 0, # 필수 아님
+                        'contraction_ratio': sig.get('contraction_ratio', 0),
+                        'foreign_5d': sig.get('foreign_5d', 0), # 필드명 주의 (foreign_net_buy_5d vs foreign_5d)
+                        'inst_5d': sig.get('inst_5d', 0),
+                            # 프론트엔드가 기대하는 필드로 매핑
+                        'gemini_recommendation': ai_eval, 
+                        'news': sig.get('news_items', [])
+                    }
+                    ai_signals.append(signal_data)
+                
+                # 하나라도 있으면 반환 (AI 분석이 아직 안 된 초기 상태일 수도 있으므로 signals 존재만으로 반환)
+                if ai_signals:
+                    # 날짜 형식 보정 (YYYYMMDD -> YYYY-MM-DD)
+                    s_date = latest_data.get('date', '')
+                    if len(s_date) == 8 and '-' not in s_date:
+                        s_date = f"{s_date[:4]}-{s_date[4:6]}-{s_date[6:]}"
+
+                    return jsonify({
+                        'signals': ai_signals,
+                        'generated_at': latest_data.get('updated_at', datetime.now().isoformat()),
+                        'signal_date': s_date,
+                        'source': 'jongga_v2_integrated'
+                    })
+        except Exception as e:
+            logger.warning(f"AI Analysis Priority Load Failed: {e}")
+
+        # 3. kr_ai_analysis.json 직접 로드 (Legacy, VCP AI 분석 결과)
         kr_ai_data = load_json_file('kr_ai_analysis.json')
         if kr_ai_data and 'signals' in kr_ai_data and len(kr_ai_data['signals']) > 0:
             # ticker 6자리 zfill 보정
@@ -478,7 +588,7 @@ def get_kr_ai_analysis():
             
             return jsonify(kr_ai_data)
         
-        # 3. ai_analysis_results.json 폴백 (raw AI output)
+        # 4. ai_analysis_results.json 폴백 (raw AI output - Legacy)
         ai_data = load_json_file('ai_analysis_results.json')
         if ai_data and 'signals' in ai_data and len(ai_data['signals']) > 0:
             # ticker 6자리 zfill 보정
@@ -488,7 +598,7 @@ def get_kr_ai_analysis():
             
             return jsonify(ai_data)
 
-        # 4. 데이터 없음
+        # 5. 데이터 없음
         return jsonify({
             'signals': [],
             'message': 'AI 분석 데이터가 없습니다.'
@@ -1002,70 +1112,6 @@ def run_jongga_v2_screener():
                         
                 except Exception as notify_error:
                     logger.error(f"[Notification] 메신저 발송 중 오류: {notify_error}")
-            
-            # AI 분석 실행 (kr_ai_analyzer 사용)
-            try:
-                logger.info("[AI Analysis] AI 분석 시작...")
-                from engine.kr_ai_analyzer import KrAiAnalyzer
-                
-                ai_analyzer = KrAiAnalyzer()
-                
-                # 시그널 종목들의 AI 분석
-                tickers = [s.stock_code for s in result.signals]
-                
-                # 수집된 뉴스 맵 생성
-                news_map = {s.stock_code: [n.to_dict() if hasattr(n, 'to_dict') else n for n in s.news_items] for s in result.signals}
-
-                if tickers:
-                    ai_results = ai_analyzer.analyze_multiple_stocks(tickers, news_map=news_map)
-                    
-                    # 결과를 kr_ai_analysis.json에 저장
-                    ai_filepath = os.path.join(DATA_DIR, 'kr_ai_analysis.json')
-                    ai_data = {
-                        'signals': [],
-                        'generated_at': datetime.now().isoformat(),
-                        'signal_date': datetime.now().strftime('%Y-%m-%d')
-                    }
-                    
-                    for sig in result.signals:
-                        ticker = sig.stock_code
-                        ai_result = next((s for s in ai_results.get('signals', []) if s.get('ticker') == ticker), None)
-                        
-                        signal_data = {
-                            'ticker': ticker,
-                            'name': sig.stock_name,
-                            'score': sig.score.get('total', 0) if hasattr(sig.score, 'get') else 0,
-                            'current_price': sig.current_price,
-                            'entry_price': sig.entry_price,
-                            'vcp_score': sig.vcp_score if hasattr(sig, 'vcp_score') else 0,
-                            'contraction_ratio': sig.contraction_ratio if hasattr(sig, 'contraction_ratio') else 0,
-                            'foreign_5d': sig.foreign_net_buy_5d if hasattr(sig, 'foreign_net_buy_5d') else 0,
-                            'inst_5d': sig.institutional_net_buy_5d if hasattr(sig, 'institutional_net_buy_5d') else 0,
-                            'gemini_recommendation': ai_result.get('gemini_recommendation') if ai_result else None,
-                            'gpt_recommendation': ai_result.get('gpt_recommendation') if ai_result else None,
-                            'news': ai_result.get('news', []) if ai_result else []
-                        }
-                        ai_data['signals'].append(signal_data)
-                    
-                    with open(ai_filepath, 'w', encoding='utf-8') as f:
-                        json.dump(ai_data, f, ensure_ascii=False, indent=2)
-                        
-                    # 날짜별 아카이브 저장
-                    if hasattr(result, 'date'):
-                        date_obj = result.date
-                        date_str = date_obj.strftime('%Y%m%d') if hasattr(date_obj, 'strftime') else str(date_obj).replace('-', '')
-                        ai_archive_path = os.path.join(DATA_DIR, f'kr_ai_analysis_{date_str}.json')
-                        with open(ai_archive_path, 'w', encoding='utf-8') as f:
-                            json.dump(ai_data, f, ensure_ascii=False, indent=2)
-                    
-                    logger.info(f"[AI Analysis] AI 분석 완료: {len(ai_data['signals'])}개 종목")
-                else:
-                    logger.info("[AI Analysis] 분석할 시그널 없음")
-                    
-            except Exception as ai_error:
-                logger.error(f"[AI Analysis] AI 분석 중 오류: {ai_error}")
-                import traceback
-                traceback.print_exc()
             
             logger.info("Background Engine Completed Successfully.")
             
