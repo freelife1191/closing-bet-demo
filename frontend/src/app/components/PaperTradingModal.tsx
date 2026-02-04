@@ -475,14 +475,52 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                     {/* Deposit Popover */}
                     {showDeposit && (
                       <div className="absolute top-full right-0 mt-2 w-60 bg-[#2c2c2e] border border-white/10 rounded-lg shadow-xl p-3 z-50">
-                        <div className="text-xs text-white mb-2 font-bold">예수금 충전</div>
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="text-xs text-white font-bold">예수금 충전</div>
+                          <button onClick={() => setShowDeposit(false)} className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                            <i className="fas fa-times text-xs"></i>
+                          </button>
+                        </div>
                         <input
                           type="text"
                           className="w-full bg-black/40 border border-white/10 rounded px-2 py-1.5 text-right text-sm text-white mb-2"
                           value={depositAmount}
-                          onChange={e => setDepositAmount(e.target.value)}
+                          onChange={e => {
+                            // 숫자와 콤마만 허용
+                            const val = e.target.value.replace(/[^0-9]/g, '');
+                            setDepositAmount(val ? parseInt(val, 10).toLocaleString() : '');
+                          }}
                         />
-                        <button onClick={handleDeposit} className="w-full py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded font-bold">충전하기</button>
+                        <div className="grid grid-cols-3 gap-1 mb-2">
+                          <button
+                            onClick={() => {
+                              const current = parseInt(depositAmount.replace(/,/g, '') || '0', 10);
+                              setDepositAmount((current + 1000000).toLocaleString());
+                            }}
+                            className="px-1 py-1.5 bg-white/5 hover:bg-white/10 text-[10px] text-gray-300 hover:text-white rounded transition-colors"
+                          >
+                            +100만
+                          </button>
+                          <button
+                            onClick={() => {
+                              const current = parseInt(depositAmount.replace(/,/g, '') || '0', 10);
+                              setDepositAmount((current + 10000000).toLocaleString());
+                            }}
+                            className="px-1 py-1.5 bg-white/5 hover:bg-white/10 text-[10px] text-gray-300 hover:text-white rounded transition-colors"
+                          >
+                            +1천만
+                          </button>
+                          <button
+                            onClick={() => {
+                              const current = parseInt(depositAmount.replace(/,/g, '') || '0', 10);
+                              setDepositAmount((current + 100000000).toLocaleString());
+                            }}
+                            className="px-1 py-1.5 bg-white/5 hover:bg-white/10 text-[10px] text-gray-300 hover:text-white rounded transition-colors"
+                          >
+                            +1억
+                          </button>
+                        </div>
+                        <button onClick={handleDeposit} className="w-full py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded font-bold transition-colors">충전하기</button>
                       </div>
                     )}
                   </div>
