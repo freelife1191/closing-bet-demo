@@ -452,6 +452,17 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 def log(message, level="INFO"):
+    # File logging
+    if level == "ERROR":
+        logging.error(f"[init_data] {message}")
+    elif level == "WARNING":
+        logging.warning(f"[init_data] {message}")
+    elif level == "SUCCESS":
+        logging.info(f"[init_data] ✅ {message}")
+    else:
+        logging.info(f"[init_data] {message}")
+
+    # Console logging
     if level == "SUCCESS":
         print(f"{Colors.OKGREEN}✅ {message}{Colors.ENDC}", flush=True)
     elif level == "ERROR":
@@ -464,6 +475,7 @@ def log(message, level="INFO"):
         print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}", flush=True)
     else:
         print(f"📌 {message}", flush=True)
+
 
 def ensure_directory(dir_path):
     """디렉토리가 존재하는지 확인하고, 없으면 생성합니다."""
@@ -586,6 +598,10 @@ def create_korean_stocks_list():
 def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
     """yfinance를 이용한 가격 데이터 수집 폴백"""
     try:
+        if start_date.date() > end_date.date():
+            log(f"yfinance 수집: 시작일({start_date.strftime('%Y-%m-%d')})이 종료일({end_date.strftime('%Y-%m-%d')})보다 미래입니다. (최신 상태)", "SUCCESS")
+            return True
+
         import yfinance as yf
         log("yfinance 백업 수집 모드 가동...", "INFO")
         
@@ -615,8 +631,8 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
                 yf_logger.setLevel(_logging.CRITICAL)
                 
                 try:
-                    # 데이터 다운로드 (진행률 표시 없이)
-                    df = yf.download(yf_ticker, start=start_date.strftime('%Y-%m-%d'), end=(end_date + timedelta(days=1)).strftime('%Y-%m-%d'), progress=False)
+                    # 데이터 다운로드 (진행률 표시 없이, 스레드 비활성화)
+                    df = yf.download(yf_ticker, start=start_date.strftime('%Y-%m-%d'), end=(end_date + timedelta(days=1)).strftime('%Y-%m-%d'), progress=False, threads=False)
                 finally:
                     yf_logger.setLevel(original_level)
                 
@@ -853,6 +869,10 @@ def create_daily_prices(target_date=None):
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
             log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "SUCCESS")
         else:
+             if start_date_obj.date() > end_date_obj.date():
+                 log("pykrx 수집 데이터 없음 (이미 최신).", "SUCCESS")
+                 return True
+
              log("pykrx 수집 데이터 없음. yfinance 폴백 시도...", "WARNING")
              return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
                  
