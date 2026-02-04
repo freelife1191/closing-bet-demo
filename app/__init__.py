@@ -95,6 +95,27 @@ def create_app():
     def health():
         return jsonify({'status': 'healthy'})
 
+    # Global Error Handler for Diagnostics
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        # Log the full traceback to a special file
+        import traceback
+        error_msg = f"Unhandled Exception: {str(e)}\n{traceback.format_exc()}"
+        print(f"\nCRITICAL SERVER ERROR:\n{error_msg}\n", flush=True)
+        
+        # Log to file
+        try:
+            with open('logs/critical_errors.log', 'a', encoding='utf-8') as f:
+                f.write(f"\n[{datetime.now().isoformat()}] {error_msg}\n")
+        except:
+            pass
+
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e),
+            'type': type(e).__name__
+        }), 500
+
     return app
 
 if __name__ == '__main__':
