@@ -78,7 +78,13 @@ class AppConfig:
 
     @property
     def GEMINI_MODEL(self):
+        """챗봇용 Gemini 모델"""
         return os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+    @property
+    def ANALYSIS_GEMINI_MODEL(self):
+        """종가베팅 분석 엔진용 Gemini 모델"""
+        return os.getenv("ANALYSIS_GEMINI_MODEL", "gemini-2.0-flash")
 
     @property
     def OPENAI_MODEL(self):

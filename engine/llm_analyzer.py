@@ -147,7 +147,7 @@ class LLMAnalyzer:
                     # Retry logic defined in wrapper or handle here?
                     # Since we are using wrapper below, simple call is enough
                     return self.client.models.generate_content(
-                        model=app_config.GEMINI_MODEL,
+                        model=app_config.ANALYSIS_GEMINI_MODEL,
                         contents=full_prompt
                     )
 
@@ -365,7 +365,7 @@ class LLMAnalyzer:
                     
                     def _call_gemini_batch():
                         return self.client.models.generate_content(
-                            model=app_config.GEMINI_MODEL,
+                            model=app_config.ANALYSIS_GEMINI_MODEL,
                             contents=full_prompt
                         )
 
@@ -417,7 +417,7 @@ class LLMAnalyzer:
                         "action": item.get("action", "HOLD"),
                         "confidence": item.get("confidence", 0),
                         "reason": item.get("reason", ""),
-                        "model": app_config.ZAI_MODEL if self.provider == 'zai' else app_config.GEMINI_MODEL
+                        "model": app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL
                     }
                     logger.debug(f"  → {name}: {item.get('action')} (Score: {item.get('score')}, Conf: {item.get('confidence')}%)")
             
@@ -495,7 +495,7 @@ class LLMAnalyzer:
                 
                 def _call_gemini_summary():
                     return self.client.models.generate_content(
-                        model=app_config.GEMINI_MODEL,
+                        model=app_config.ANALYSIS_GEMINI_MODEL,
                         contents=full_prompt
                     )
 
