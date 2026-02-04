@@ -936,9 +936,10 @@ def create_institutional_trend(target_date=None):
                             return True
                     
                     if missing_tickers:
-                        log(f"수급 데이터: 신규 종목 {len(missing_tickers)}개가 감지되었습니다. 전체 구간 재수집을 수행합니다.", "WARNING")
-                        # 신규 종목이 있으면 안전하게 전체 구간(30일) 재수집
-                        start_date_obj = end_date_obj - timedelta(days=30)
+                        log(f"수급 데이터: 신규 종목 {len(missing_tickers)}개가 감지되었습니다. (최적화: 최근 7일만 재수집)", "WARNING")
+                        # 신규 종목이 있어도 과도한 재수집 방지 (30일 -> 7일)
+                        # VCP에서 주로 5일치(inst_5d)를 사용하므로 7일이면 충분함
+                        start_date_obj = end_date_obj - timedelta(days=7)
                     elif last_date_tickers < len(tickers_set) * 0.8:
                         log(f"수급 데이터: 최신 날짜 데이터가 부족합니다({last_date_tickers}/{len(tickers_set)}). 재수집합니다.", "WARNING")
                         start_date_obj = end_date_obj - timedelta(days=5)
