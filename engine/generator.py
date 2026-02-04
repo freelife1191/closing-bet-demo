@@ -101,6 +101,8 @@ class SignalGenerator:
         top_n: int = 300,
     ) -> List[Signal]:
         """시그널 생성 (Batch Processing 적용)"""
+        start_time = time.time()  # [Fix] 시작 시간 초기화
+
         # 주말/휴일 처리: 제공된 날짜가 없으면 가장 최근 장 마감 날짜 사용
         if target_date is None:
             latest_str = self._collector._get_latest_market_date()
