@@ -301,13 +301,13 @@ class SignalGenerator:
             if market == markets[0] and len(markets) > 1:
                 mid_processing_time = (time.time() - start_time) * 1000
                 mid_result = ScreenerResult(
-                    date=parsed_date if parsed_date else date.today(),
+                    date=target_date, # [Fix] parsed_date -> target_date
                     total_candidates=len(all_signals),
-                    filtered_count=generator.scan_stats.get("phase1", 0),
-                    scanned_count=generator.scan_stats.get("scanned", 0),
+                    filtered_count=self.scan_stats.get("phase1", 0), # [Fix] generator -> self
+                    scanned_count=self.scan_stats.get("scanned", 0),  # [Fix] generator -> self
                     signals=all_signals,
-                    by_grade=generator.get_summary(all_signals)["by_grade"],
-                    by_market=generator.get_summary(all_signals)["by_market"],
+                    by_grade=self.get_summary(all_signals)["by_grade"], # [Fix] generator -> self
+                    by_market=self.get_summary(all_signals)["by_market"], # [Fix] generator -> self
                     processing_time_ms=mid_processing_time,
                     market_status=market_status,
                     market_summary="", # 중간 단계에서는 요약 생략
