@@ -503,7 +503,7 @@ def get_kr_stock_chart(ticker):
 
 @kr_bp.route('/ai-analysis')
 def get_kr_ai_analysis():
-    """KR AI 분석 전체 - kr_ai_analysis.json 직접 읽기"""
+    """KR AI 분석 전체 - kr_ai_analysis.json 직접 읽기 (V2 호환 최적화)"""
     try:
         target_date = request.args.get('date')
         
@@ -517,6 +517,11 @@ def get_kr_ai_analysis():
                     analysis = load_json_file(f'ai_analysis_results_{date_str}.json')
                     
                 if analysis:
+                    # ticker 6자리 zfill 보정
+                    if 'signals' in analysis:
+                        for sig in analysis['signals']:
+                            if 'ticker' in sig:
+                                sig['ticker'] = str(sig['ticker']).zfill(6)
                     return jsonify(analysis)
                     
                 # 파일 없으면 빈 결과 반환
@@ -528,30 +533,8 @@ def get_kr_ai_analysis():
                 })
             except Exception as e:
                 logger.warning(f"과거 AI 분석 데이터 로드 실패: {e}")
-                
-        # 2. 최신 VCP AI 분석 결과 우선 로드 (ai_analysis_results_YYYYMMDD.json)
-        # init_data.py에서 생성하는 파일 (VCP Signals + AI)
-        import glob
-        import os
-        
-        # ai_analysis_results_*.json 패턴 매칭
-        pattern = os.path.join(DATA_DIR, 'ai_analysis_results_*.json')
-        files = sorted(glob.glob(pattern), reverse=True)
-        
-        if files:
-            latest_file = files[0] # 가장 최신 날짜
-            try:
-                ai_data = load_json_file(os.path.basename(latest_file))
-                if ai_data and 'signals' in ai_data and len(ai_data['signals']) > 0:
-                     # ticker 6자리 zfill 보정
-                    for sig in ai_data['signals']:
-                        if 'ticker' in sig:
-                            sig['ticker'] = str(sig['ticker']).zfill(6)
-                    return jsonify(ai_data)
-            except Exception as e:
-                logger.warning(f"최신 VCP AI 분석 로드 실패: {e}")
 
-        # 3. kr_ai_analysis.json (Legacy / Jongga V2 AI)
+        # 2. kr_ai_analysis.json 직접 로드 (VCP AI 분석 결과 - BLUEPRINT 최우선)
         kr_ai_data = load_json_file('kr_ai_analysis.json')
         if kr_ai_data and 'signals' in kr_ai_data and len(kr_ai_data['signals']) > 0:
             # ticker 6자리 zfill 보정
@@ -561,7 +544,7 @@ def get_kr_ai_analysis():
             
             return jsonify(kr_ai_data)
         
-        # 4. ai_analysis_results.json 폴백
+        # 3. ai_analysis_results.json 폴백 (raw AI output)
         ai_data = load_json_file('ai_analysis_results.json')
         if ai_data and 'signals' in ai_data and len(ai_data['signals']) > 0:
             # ticker 6자리 zfill 보정
@@ -571,7 +554,7 @@ def get_kr_ai_analysis():
             
             return jsonify(ai_data)
 
-        # 5. 데이터 없음
+        # 4. 데이터 없음
         return jsonify({
             'signals': [],
             'message': 'AI 분석 데이터가 없습니다.'
@@ -580,6 +563,8 @@ def get_kr_ai_analysis():
     except Exception as e:
         logger.error(f"Error getting AI analysis: {e}")
         return jsonify({'error': str(e)}), 500
+
+
 
 
 @kr_bp.route('/market-gate')

@@ -502,8 +502,8 @@ def create_korean_stocks_list():
              kospi_cap = get_market_cap_safe(prev_date, "KOSPI")
 
         if not kospi_cap.empty:
-            # 시가총액 순 정렬 후 상위 300개 (VCP 발굴 확률 확대를 위해 증가)
-            kospi_cap = kospi_cap.sort_values('시가총액', ascending=False).head(300)
+            # 시가총액 순 정렬 후 상위 1000개 (VCP 발굴 확률 확대를 위해 대폭 증가)
+            kospi_cap = kospi_cap.sort_values('시가총액', ascending=False).head(1000)
             for ticker in kospi_cap.index:
                 try:
                     name = stock.get_market_ticker_name(ticker)
@@ -522,8 +522,8 @@ def create_korean_stocks_list():
              kosdaq_cap = get_market_cap_safe(prev_date, "KOSDAQ")
 
         if not kosdaq_cap.empty:
-            # 시가총액 순 정렬 후 상위 300개 (코스닥 포함 요청 반영)
-            kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False).head(300)
+            # 시가총액 순 정렬 후 상위 1000개 (코스닥 포함 요청 반영)
+            kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False).head(1000)
             for ticker in kosdaq_cap.index:
                 try:
                     name = stock.get_market_ticker_name(ticker)
@@ -709,19 +709,36 @@ def create_daily_prices(target_date=None):
                 existing_df = pd.read_csv(file_path, dtype={'ticker': str})
                 if not existing_df.empty and 'date' in existing_df.columns:
                     max_date_str = existing_df['date'].max()
-                    max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
-                    # 마지막 저장일 다음날부터 수집
-                    start_date_obj = max_date_dt + timedelta(days=1)
-                    log(f"기존 데이터 확인: {max_date_str}까지 존재. 이후부터 수집.", "INFO")
+                    
+                    # (중요) 종목 수 체크 - 새로 추가된 종목이 있을 수 있음
+                    # 현재 등록된 종목 수(600개)와 마지막 날짜의 데이터 개수 비게
+                    stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
+                    total_stocks_count = 600
+                    if os.path.exists(stocks_file):
+                        try:
+                            stocks_df = pd.read_csv(stocks_file)
+                            total_stocks_count = len(stocks_df)
+                        except:
+                            pass
+                    
+                    last_date_count = len(existing_df[existing_df['date'] == max_date_str])
+                    
+                    if start_date_obj.date() > end_date_obj.date():
+                        if last_date_count >= total_stocks_count * 0.9:
+                            log("이미 최신 데이터가 존재하며 충분합니다.", "SUCCESS")
+                            return True
+                        else:
+                            log(f"데이터 날짜는 최신이나 종목 수가 부족합니다({last_date_count}/{total_stocks_count}). 재수집을 시작합니다.", "WARNING")
+                            start_date_obj = end_date_obj - timedelta(days=5) # 부족한 경우 최근 5일치 재수집
+                    else:
+                        max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
+                        # 마지막 저장일 다음날부터 수집
+                        start_date_obj = max_date_dt + timedelta(days=1)
+                        log(f"기존 데이터 확인: {max_date_str}까지 존재. 이후부터 수집.", "INFO")
                 else:
                     log("기존 데이터 비어있음.", "INFO")
             except Exception as e:
                 log(f"기존 데이터 로드 오류: {e}", "WARNING")
-
-        # 수집 시작일이 종료일보다 미래면 수집 불필요 (단, 당일재수집 옵션 고려 등은 생략, '최신'이면 pass)
-        if start_date_obj.date() > end_date_obj.date():
-             log("이미 최신 데이터가 존재합니다.", "SUCCESS")
-             return True
              
         req_start_date_str = start_date_obj.strftime('%Y%m%d')
         log(f"수집 구간: {req_start_date_str} ~ {end_date_str}", "INFO")
@@ -868,28 +885,40 @@ def create_institutional_trend(target_date=None):
             try:
                 existing_df = pd.read_csv(file_path, dtype={'ticker': str, 'date': str})
                 if not existing_df.empty and 'date' in existing_df.columns:
-                    # 가장 최근 데이터 날짜 확인 -> 그 다음날부터 수집
+                    # 가장 최근 데이터 날짜 확인
                     max_date_str = existing_df['date'].max()
-                    try:
-                        max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
-                        # 30일보다 더 오래된 경우만 30일 전으로 설정 (안전장치), 아니면 마지막 수집일 다음날
-                        # 단, 너무 오래된 갭 보정을 위해 max(30일전, 마지막수집+1) 로직 사용 가능하나
-                        # 여기서는 증분 수집이므로 이어받기가 핵심
-                        start_date_obj = max_date_dt + timedelta(days=1)
-                        
-                        # 만약 start_date_obj가 end_date_obj보다 미래라면 (이미 최신), 
-                        # 하지만 혹시 모르니 오늘 날짜 다시 체크할 수도 있음. 일단 pass
-                        if start_date_obj.date() > end_date_obj.date():
-                             log("수급 데이터: 이미 최신 상태입니다.", "SUCCESS")
-                             return True
-                    except:
-                        pass
+                    
+                    # (중요) 단순 날짜 체크만 하지 않고, 종목 수가 부족한지 확인
+                    last_date_tickers = len(existing_df[existing_df['date'] == max_date_str])
+                    
+                    # 신규 추가된 종목이 있는지 확인 (Backfill 필요 여부)
+                    existing_tickers = set(existing_df['ticker'].unique())
+                    missing_tickers = tickers_set - existing_tickers
+                    
+                    if start_date_obj.date() > end_date_obj.date() and not missing_tickers:
+                        if last_date_tickers >= len(tickers_set) * 0.9: # 90% 이상 차있으면 최신으로 간주
+                            log("수급 데이터: 이미 최신 상태이며 데이터가 충분합니다.", "SUCCESS")
+                            return True
+                    
+                    if missing_tickers:
+                        log(f"수급 데이터: 신규 종목 {len(missing_tickers)}개가 감지되었습니다. 전체 구간 재수집을 수행합니다.", "WARNING")
+                        # 신규 종목이 있으면 안전하게 전체 구간(30일) 재수집
+                        start_date_obj = end_date_obj - timedelta(days=30)
+                    elif last_date_tickers < len(tickers_set) * 0.8:
+                        log(f"수급 데이터: 최신 날짜 데이터가 부족합니다({last_date_tickers}/{len(tickers_set)}). 재수집합니다.", "WARNING")
+                        start_date_obj = end_date_obj - timedelta(days=5)
+                    else:
+                        # 정상적인 경우 max_date 다음날부터
+                        try:
+                            max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
+                            start_date_obj = max_date_dt + timedelta(days=1)
+                        except: pass
             except Exception as e:
                 log(f"기존 수급 데이터 로드 실패 (새로 시작): {e}", "WARNING")
 
         start_date = start_date_obj.strftime('%Y%m%d')
         
-        # 시작일이 종료일보다 미래인 경우 처리
+        # 시작일이 종료일보다 미래인 경우 (그리고 미싱 티커 없는 경우) 처리
         if start_date > end_date:
              log("수급 데이터: 이미 최신 상태입니다.", "SUCCESS")
              return True
@@ -1107,7 +1136,7 @@ def calculate_supply_score(ticker: str, inst_df: pd.DataFrame) -> dict:
         return {'score': 0, 'foreign_5d': 0, 'inst_5d': 0}
 
 
-def create_signals_log(target_date=None, run_ai=False):
+def create_signals_log(target_date=None, run_ai=True):
     """VCP 시그널 로그 생성 - 실제 데이터 기반 분석"""
     log("VCP 시그널 분석 중 (실제 데이터 기반)...")
     try:
@@ -1270,6 +1299,11 @@ def create_signals_log(target_date=None, run_ai=False):
                             except Exception as news_err:
                                 log(f"[AI Analysis] {name} 뉴스 수집 실패: {news_err}", "WARNING")
                         
+                        # 현재가 및 수익률 명시적 계산
+                        curr_p = int(signal.get('current_price', signal.get('entry_price', 0)))
+                        entry_p = int(signal.get('entry_price', curr_p))
+                        ret_p = round(((curr_p - entry_p) / entry_p * 100), 2) if entry_p > 0 else 0
+
                         kr_signal = {
                             'ticker': ticker,
                             'name': name,
@@ -1278,9 +1312,9 @@ def create_signals_log(target_date=None, run_ai=False):
                             'contraction_ratio': signal.get('contraction_ratio', 0),
                             'foreign_5d': signal.get('foreign_5d', 0),
                             'inst_5d': signal.get('inst_5d', 0),
-                            'entry_price': signal.get('entry_price', 0),
-                            'current_price': signal.get('current_price', signal.get('entry_price', 0)),
-                            'return_pct': round(((int(current_price) - int(signal.get('entry_price', current_price))) / int(signal.get('entry_price', current_price))) * 100, 2) if signal.get('entry_price', 0) > 0 else 0,
+                            'entry_price': entry_p,
+                            'current_price': curr_p,
+                            'return_pct': ret_p,
                             'vcp_score': signal.get('vcp_score', 0),
                             # AI 분석 결과 통합
                             'gemini_recommendation': ai_data.get('gemini_recommendation'),

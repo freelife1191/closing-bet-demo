@@ -75,44 +75,41 @@ class KrAiAnalyzer:
             return {"error": str(e)}
 
     def _get_stock_info(self, ticker: str) -> Optional[Dict]:
-        """종목 기본 정보 조회"""
+        """종목 기본 정보 조회 (실제 데이터 우선)"""
         try:
-            import random
-            import csv
+            import pandas as pd
+            import os
             
-            # signals_log.csv에서 종목 정보 조회
-            # Fix: engine/data가 아니라 root/data 경로 사용
             root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             signals_file = os.path.join(root_dir, 'data', 'signals_log.csv')
             
-            stock_name = None
-            entry_price = None
-            
             if os.path.exists(signals_file):
-                with open(signals_file, 'r', encoding='utf-8-sig') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        if row.get('ticker') == ticker:
-                            stock_name = row.get('name', '').strip()
-                            entry_price = row.get('entry_price', '')
-                            break
+                df = pd.read_csv(signals_file, dtype={'ticker': str})
+                stock_data = df[df['ticker'] == ticker].tail(1)
+                
+                if not stock_data.empty:
+                    row = stock_data.iloc[0]
+                    return {
+                        'ticker': ticker,
+                        'name': row.get('name', f'종목_{ticker}'),
+                        'price': int(row.get('current_price', row.get('entry_price', 0))),
+                        'change_pct': float(row.get('return_pct', 0)),
+                        'market': row.get('market', 'KOSPI'),
+                        'score': float(row.get('score', 0)),
+                        'vcp_score': float(row.get('vcp_score', 0)),
+                        'contraction_ratio': float(row.get('contraction_ratio', 0)),
+                        'foreign_5d': int(row.get('foreign_5d', 0)),
+                        'inst_5d': int(row.get('inst_5d', 0))
+                    }
             
-            # 종목명을 CSV에서 찾지 못하면 fallback
-            if not stock_name:
-                stock_name = self._get_stock_name(ticker)
-            
-            # entry_price 파싱
-            price = int(entry_price) if entry_price and entry_price.isdigit() else random.randint(50000, 150000)
-            
+            # Fallback (최소 정보)
             return {
                 'ticker': ticker,
-                'name': stock_name,
-                'price': price,
-                'change_pct': round(random.uniform(-5, 5), 2),
-                'per': round(random.uniform(5, 25), 2),
-                'pbr': round(random.uniform(0.5, 2.5), 2),
-                'roe': round(random.uniform(5, 25), 2),
-                'market_cap': random.randint(100000000000, 5000000000000)
+                'name': self._get_stock_name(ticker),
+                'price': 0,
+                'change_pct': 0,
+                'market': 'KOSPI',
+                'score': 0
             }
         except Exception as e:
             logger.error(f"종목 정보 조회 실패 ({ticker}): {e}")

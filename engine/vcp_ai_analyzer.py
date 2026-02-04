@@ -194,6 +194,7 @@ class VCPMultiAIAnalyzer:
     async def analyze_stock(self, stock_name: str, stock_data: Dict) -> Dict:
         """단일 종목 멀티 AI 분석 (Gemini + GPT/Perplexity 동시 실행 - 병렬 처리)"""
         results = {
+            'ticker': stock_data.get('ticker', ''),
             'stock_name': stock_name,
             'gemini_recommendation': None,
             'gpt_recommendation': None,

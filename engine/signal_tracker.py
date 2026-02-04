@@ -193,6 +193,7 @@ class SignalTracker:
                         'score': row['supply_demand_index'],
                         'contraction_ratio': vcp_info.get('contraction_ratio'),
                         'entry_price': vcp_info.get('current_price'),
+                        'current_price': vcp_info.get('current_price'),
                         'status': 'OPEN',
                         'exit_price': None,
                         'exit_date': None,
@@ -273,6 +274,10 @@ class SignalTracker:
             if len(ticker_prices) > 0:
                 current_price = ticker_prices.iloc[-1][price_col]
                 return_pct = (current_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
+                
+                # 항상 현재가 및 등락률 업데이트
+                df.at[idx, 'current_price'] = round(current_price, 0)
+                df.at[idx, 'return_pct'] = round(return_pct, 2)
                 
                 # 청산 조건 체크
                 should_close = False
