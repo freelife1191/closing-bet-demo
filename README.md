@@ -177,6 +177,9 @@ graph TD
   - OpenAI GPT via Z.ai (빠른 응답, 크로스 밸리데이션)
   - Perplexity Sonar (실시간 웹 검색, 최신 뉴스/정보 반영)
   - LangChain-style Prompt Composition (Chain of Thought, Intent Injection)
+- **Financial Services**:
+  - **Toss Securities API**: 초고속 실시간 국내 주가 데이터 연동
+  - **yfinance / pykrx**: 글로벌 지수 및 국내 시장 수급 데이터 수집
 - **Web Framework**: Flask (Blueprint-based modular routing)
 - **Task Scheduling**: APSchedule + Threading (15:20, 15:40 KST)
 
@@ -190,6 +193,7 @@ graph TD
 
 **1. 🇰🇷 한국 시장 데이터**
 - **Library**: `pykrx` (KRX 정보데이터시스템 Wrapper)
+- **API**: **토스증권(Toss Securities) WTS API** (실시간 시세 최우선 순위 활용)
 - **Coverage**:
   - KOSPI / KOSDAQ 지수 및 구성 종목
   - 섹터 ETF (반도체, 2차전지 등) 시제
@@ -203,7 +207,9 @@ graph TD
   - 원자재 선물 (Gold, Silver)
   - 암호화폐 (BTC, ETH, XRP)
 - **News Sources**: Naver Finance (Crawling), Daum News, Search APIs
-- **Storage**: CSV/JSON files (flat structure for simplicity)
+- **Storage**:
+  - CSV/JSON files (flat structure for simplicity)
+  - **SQLite (paper_trading.db)**: 모의투자 포트폴리오 및 매매 이력 관리
 - **Logging**: Python logging with rotation (logs/app.log)
 
 #### Notification Services
