@@ -331,12 +331,25 @@ class MarketGate:
                             # pykrx 데이터 없으면 yfinance ETF 조회 시도 (ACE KRX금현물: 411060.KS, KODEX 은선물(H): 144600.KS)
                             yf_ticker = f"{ticker}.KS"
                             try:
-                                # 이미 다운로드된 data에 없을 수 있으므로 개별 Ticker로 간단히 조회
-                                yf_stock = yf.Ticker(yf_ticker)
-                                yf_hist = yf_stock.history(period='2d')
-                                if not yf_hist.empty:
-                                    latest_val = float(yf_hist['Close'].iloc[-1])
-                                    prev_val = float(yf_hist['Close'].iloc[-2]) if len(yf_hist) >= 2 else latest_val
+                                # 이미 다운로드된 data에 없을 수 있으므로 개별 Ticker로 조회 (threads=False 필수)
+                                yf_hist = yf.download(yf_ticker, period='2d', progress=False, threads=False)
+                                
+                                # MultiIndex 처리
+                                if isinstance(yf_hist.columns, pd.MultiIndex):
+                                    # Close 컬럼 추출
+                                    try:
+                                        yf_hist = yf_hist['Close']
+                                    except KeyError:
+                                        # 최신 yfinance 구조 대응
+                                        yf_hist = yf_hist.xs('Close', axis=1, level=0, drop_level=True) if 'Close' in yf_hist.columns.get_level_values(0) else yf_hist.iloc[:, 0]
+                                
+                                # Series 변환
+                                if isinstance(yf_hist, pd.DataFrame):
+                                     yf_hist = yf_hist[yf_ticker] if yf_ticker in yf_hist.columns else yf_hist.iloc[:, 0]
+
+                                if not yf_hist.empty and len(yf_hist) > 0:
+                                    latest_val = float(yf_hist.iloc[-1])
+                                    prev_val = float(yf_hist.iloc[-2]) if len(yf_hist) >= 2 else latest_val
                                     yf_chg = ((latest_val - prev_val) / prev_val) * 100 if prev_val > 0 else 0.0
                                     result['commodities'][key] = {'value': latest_val, 'change_pct': yf_chg}
                                 else:
@@ -547,10 +560,32 @@ class MarketGate:
             
             try:
                 ticker = "USDKRW=X"
-                data = yf.Ticker(ticker)
-                hist = data.history(period="1d")
-                if not hist.empty:
-                    rate = hist['Close'].iloc[-1]
+                # [Fix] Ticker() 대신 download(threads=False) 사용
+                hist = yf.download(ticker, period="1d", progress=False, threads=False)
+                
+                # MultiIndex 처리
+                if isinstance(hist.columns, pd.MultiIndex):
+                     try:
+                        hist = hist['Close']
+                     except:
+                        hist = hist.xs('Close', axis=1, level=0, drop_level=True) if 'Close' in hist.columns.get_level_values(0) else hist.iloc[:, 0]
+                
+                # Series 변환
+                if isinstance(hist, pd.DataFrame):
+                    if ticker in hist.columns:
+                        hist = hist[ticker]
+                    elif 'Close' in hist.columns:
+                        hist = hist['Close']
+                    else:
+                        hist = hist.iloc[:, 0] # Fallback to first column
+
+                if not hist.empty and len(hist) > 0:
+                    # iloc[-1]로 최신값 추출 (Series, DF 모두 호환)
+                    val = hist.iloc[-1]
+                    # 값이 Series등으로 나올 경우 스칼라 변환
+                    if hasattr(val, 'item'): val = val.item() 
+                        
+                    rate = float(val)
                     logger.info(f"현재 환율: {rate:.2f} 원")
                     return rate
             finally:

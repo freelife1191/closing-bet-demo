@@ -192,7 +192,8 @@ class SignalTracker:
                         'inst_5d': row['institutional_net_buy_5d'],
                         'score': row['supply_demand_index'],
                         'contraction_ratio': vcp_info.get('contraction_ratio'),
-                        'entry_price': vcp_info.get('current_price'),
+                        # [FIX] VCP Entry Price는 현재가가 아닌 '돌파 매수점(Recent High)'으로 설정
+                        'entry_price': vcp_info.get('recent_high'),
                         'current_price': vcp_info.get('current_price'),
                         'status': 'OPEN',
                         'exit_price': None,
@@ -388,7 +389,12 @@ class SignalTracker:
             logger.warning("사용 가능한 AI Provider가 없습니다")
             return signals_df
         
-        logger.info(f"🤖 AI 분석 시작: {len(signals_df)}개 종목")
+        # [Optimization] AI 비용 절감을 위해 상위 20개 시그널만 선별
+        if len(signals_df) > 20:
+            logger.info(f"   AI 분석 대상 {len(signals_df)}개 -> 상위 20개로 제한")
+            signals_df = signals_df.sort_values(by='score', ascending=False).head(20)
+        
+        logger.info(f"🤖 AI 분석 시작: {len(signals_df)}개 종목 (TOP 20)")
         
         # DataFrame -> List[Dict] 변환
         stocks_to_analyze = []

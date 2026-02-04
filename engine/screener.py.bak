@@ -236,9 +236,6 @@ class SmartMoneyScreener:
             
             is_vcp = score >= 50 # Threshold
             
-            # Pivot Point (Entry Price) Calculation
-            recent_high = high.tail(20).max()
-            
             return VCPResult(
                 ticker=stock['ticker'],
                 name=stock['name'],
@@ -246,7 +243,7 @@ class SmartMoneyScreener:
                 contraction_ratio=round(contraction_ratio, 2),
                 is_vcp=is_vcp,
                 date=df.iloc[-1]['date'].strftime('%Y-%m-%d'),
-                entry_price=recent_high  # [FIX] Entry Price is the Pivot Point (Recent High)
+                entry_price=current_price
             )
 
         except Exception as e:

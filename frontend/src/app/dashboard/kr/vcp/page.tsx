@@ -725,10 +725,10 @@ export default function VCPSignalsPage() {
 
       {/* Chart Modal with AI Analysis Panel */}
       {isModalOpen && selectedStock && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeChart}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeChart}>
           <div className="bg-[#1c1c1e] border border-white/10 rounded-2xl w-full max-w-[95vw] h-[90vh] overflow-hidden shadow-2xl flex flex-col lg:flex-row" onClick={e => e.stopPropagation()}>
             {/* Left: Chart Section */}
-            <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-white/10">
+            <div className="flex-none lg:flex-1 flex flex-col h-[45vh] lg:h-auto border-b lg:border-b-0 lg:border-r border-white/10">
               <div className="flex justify-between items-center p-4 border-b border-white/5">
                 <h3 className="text-lg font-bold text-white">
                   {selectedStock.name} <span className="text-sm text-gray-500">({selectedStock.ticker})</span>
@@ -737,7 +737,7 @@ export default function VCPSignalsPage() {
                   <i className="fas fa-times text-xl"></i>
                 </button>
               </div>
-              <div className="flex-1 p-4 min-h-[400px]">
+              <div className="flex-1 p-2 lg:p-4 lg:min-h-[400px]">
                 {chartLoading ? (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400">
                     <i className="fas fa-spinner fa-spin text-3xl mb-3"></i>
@@ -785,23 +785,37 @@ export default function VCPSignalsPage() {
                 const vcpRatio = firstHalfHigh > 0 ? (secondHalfLow / firstHalfHigh).toFixed(2) : '-';
 
                 return (
-                  <div className="flex items-center justify-between px-4 py-3 bg-black/30 border-t border-white/5 text-xs">
+                  <div className="grid grid-cols-2 lg:flex lg:items-center lg:justify-between gap-y-1 lg:gap-y-0 px-4 py-3 bg-black/30 border-t border-white/5 text-xs">
+                    {/* Row 1 Left: VCP Checkbox */}
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-500">VCP 패턴:</span>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
+                      <span className="text-gray-500 font-bold">VCP 패턴</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer ml-2">
                         <input
                           type="checkbox"
                           className="w-3 h-3 rounded border-white/20 bg-white/5 text-rose-500 focus:ring-rose-500/30"
                           checked={showVcpRange}
                           onChange={(e) => setShowVcpRange(e.target.checked)}
                         />
-                        <span className="text-rose-400 font-medium">VCP 범위 표시</span>
+                        <span className="text-rose-400 font-medium">범위 표시</span>
                       </label>
                     </div>
-                    <div className="flex items-center gap-4 font-mono">
-                      <span className="text-gray-400">VCP Ratio: <span className="text-cyan-400 font-bold">{vcpRatio}</span></span>
-                      <span className="text-gray-400">전반부 범위: <span className="text-white">₩{firstHalfHigh.toLocaleString()}</span></span>
-                      <span className="text-gray-400">후반부 범위: <span className="text-white">₩{secondHalfLow.toLocaleString()}</span></span>
+
+                    {/* Row 1 Right: Ratio (Mobile aligned right) */}
+                    <div className="flex items-center justify-end lg:justify-start gap-1 font-mono">
+                      <span className="text-gray-400">Ratio:</span>
+                      <span className="text-cyan-400 font-bold">{vcpRatio}</span>
+                    </div>
+
+                    {/* Row 2 Left: First Half */}
+                    <div className="flex items-center gap-1 font-mono">
+                      <span className="text-gray-400">전반부:</span>
+                      <span className="text-white">₩{firstHalfHigh.toLocaleString()}</span>
+                    </div>
+
+                    {/* Row 2 Right: Second Half (Mobile aligned right) */}
+                    <div className="flex items-center justify-end lg:justify-start gap-1 font-mono">
+                      <span className="text-gray-400">후반부:</span>
+                      <span className="text-white">₩{secondHalfLow.toLocaleString()}</span>
                     </div>
                   </div>
                 );
@@ -809,7 +823,7 @@ export default function VCPSignalsPage() {
             </div>
 
             {/* Right: AI Analysis Panel */}
-            <div className="w-full lg:w-[500px] flex flex-col bg-[#131722]">
+            <div className="flex-1 lg:flex-none w-full lg:w-[500px] flex flex-col bg-[#131722] min-h-0">
               <div className="flex items-center justify-between p-4 border-b border-white/5">
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
@@ -1015,46 +1029,49 @@ export default function VCPSignalsPage() {
                         )}
                       </div>
 
-                      {/* Chat Input */}
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          {/* Persistent Suggestions (Floating above Input) */}
-                          <div className="absolute bottom-full left-0 w-full mb-2 pointer-events-none">
-                            <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide pb-1 pointer-events-auto">
-                              {VCP_SUGGESTIONS.map((suggestion, idx) => (
-                                <button
-                                  key={idx}
-                                  onClick={() => handleVCPChatSend(suggestion)}
-                                  className="flex-shrink-0 px-3 py-1.5 bg-[#1c1c1e]/90 backdrop-blur-md hover:bg-blue-600 hover:text-white border border-white/10 rounded-full text-[11px] text-gray-300 transition-all whitespace-nowrap shadow-lg"
-                                >
-                                  {suggestion}
-                                </button>
-                              ))}
-                            </div>
+                    </div>
+
+                    {/* Fixed Bottom Input Area */}
+                    <div className="p-4 border-t border-white/5 bg-[#131722] z-10">
+                      <div className="relative">
+                        {/* Persistent Suggestions (Floating above Input) */}
+                        <div className="absolute bottom-full left-0 w-full mb-3 pointer-events-none">
+                          <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide pb-1 pointer-events-auto">
+                            {VCP_SUGGESTIONS.map((suggestion, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => handleVCPChatSend(suggestion)}
+                                className="flex-shrink-0 px-3 py-1.5 bg-[#1c1c1e]/90 backdrop-blur-md hover:bg-blue-600 hover:text-white border border-white/10 rounded-full text-[11px] text-gray-300 transition-all whitespace-nowrap shadow-lg"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
                           </div>
+                        </div>
 
-                          {/* Slash Command Popup */}
-                          {chatInput.startsWith('/') && filteredCommands.length > 0 && (
-                            <div className="absolute bottom-full left-0 w-full mb-1 bg-[#2c2c2e] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-                              {filteredCommands.map((cmd, i) => (
-                                <button
-                                  key={i}
-                                  onClick={() => {
-                                    setShowCommands(false);
-                                    handleVCPChatSend(cmd.cmd); // 클릭 즉시 전송
-                                  }}
-                                  className={`w-full text-left px-3 py-2 text-xs flex justify-between transition-colors ${i === selectedCommandIndex
-                                    ? 'bg-blue-500/20 text-white'
-                                    : 'text-gray-300 hover:bg-white/5'
-                                    }`}
-                                >
-                                  <span className={`font-mono ${i === selectedCommandIndex ? 'text-blue-300' : 'text-blue-400'}`}>{cmd.cmd}</span>
-                                  <span className="text-gray-500">{cmd.desc}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                        {/* Slash Command Popup */}
+                        {chatInput.startsWith('/') && filteredCommands.length > 0 && (
+                          <div className="absolute bottom-full left-0 w-full mb-1 bg-[#2c2c2e] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+                            {filteredCommands.map((cmd, i) => (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  setShowCommands(false);
+                                  handleVCPChatSend(cmd.cmd);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-xs flex justify-between transition-colors ${i === selectedCommandIndex
+                                  ? 'bg-blue-500/20 text-white'
+                                  : 'text-gray-300 hover:bg-white/5'
+                                  }`}
+                              >
+                                <span className={`font-mono ${i === selectedCommandIndex ? 'text-blue-300' : 'text-blue-400'}`}>{cmd.cmd}</span>
+                                <span className="text-gray-500">{cmd.desc}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
+                        <div className="relative">
                           <input
                             type="text"
                             value={chatInput}
@@ -1064,7 +1081,7 @@ export default function VCPSignalsPage() {
                             }}
                             onKeyDown={handleKeyDown}
                             placeholder="AI에게 질문하기... (/ 명령어)"
-                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
+                            className="w-full pl-4 pr-10 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 transition-colors"
                           />
                           <button
                             onClick={() => handleVCPChatSend()}
@@ -1075,11 +1092,6 @@ export default function VCPSignalsPage() {
                           </button>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Generated At */}
-                    <div className="px-4 py-3 border-t border-white/5 text-[10px] text-gray-600 text-right">
-                      Generated at: {aiData?.generated_at ? new Date(aiData.generated_at).toLocaleString('ko-KR') : '-'}
                     </div>
                   </div>
                 );

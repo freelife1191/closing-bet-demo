@@ -155,154 +155,81 @@ def fetch_market_indices():
         return indices
     
     try:
-        # KOSPI (^KS11)
-        kospi = yf.Ticker('^KS11')
-        kospi_hist = kospi.history(period='5d')
-        if not kospi_hist.empty:
-            current = kospi_hist['Close'].iloc[-1]
-            prev = kospi_hist['Close'].iloc[-2] if len(kospi_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['kospi'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
+        # yfinance 일괄 다운로드 (threads=False 필수)
+        ticker_map = {
+            'kospi': '^KS11', 'kosdaq': '^KQ11',
+            'gold': '411060.KS', 'silver': '144600.KS',
+            'us_gold': 'GC=F', 'us_silver': 'SI=F',
+            'sp500': '^GSPC', 'nasdaq': '^IXIC',
+            'btc': 'BTC-USD', 'eth': 'ETH-USD', 'xrp': 'XRP-USD'
+        }
         
-        # KOSDAQ (^KQ11)
-        kosdaq = yf.Ticker('^KQ11')
-        kosdaq_hist = kosdaq.history(period='5d')
-        if not kosdaq_hist.empty:
-            current = kosdaq_hist['Close'].iloc[-1]
-            prev = kosdaq_hist['Close'].iloc[-2] if len(kosdaq_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['kosdaq'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
-            
-        # KRX Gold (411060.KS - ACE KRX금현물)
-        gold = yf.Ticker('411060.KS')
-        gold_hist = gold.history(period='5d')
-        if not gold_hist.empty:
-            current = gold_hist['Close'].iloc[-1]
-            prev = gold_hist['Close'].iloc[-2] if len(gold_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['kr_gold'] = {
-                'value': round(current, 0), # 원화는 정수
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 0)
-            }
-        else:
-            indices['kr_gold'] = {'value': 0, 'change_pct': 0, 'prev_close': 0}
+        symbols = list(ticker_map.values())
+        
+        # 안전한 다운로드 (스레드 비활성화)
+        data = yf.download(symbols, period="5d", progress=False, threads=False)
+        
+        # 데이터 추출 Helper
+        def get_val_change_prev(ticker):
+             try:
+                # MultiIndex 처리
+                if isinstance(data.columns, pd.MultiIndex):
+                    if ticker in data['Close'].columns:
+                        series = data['Close'][ticker].dropna()
+                    else:
+                        return 0, 0, 0
+                else: # 단일 티커 혹은 Flattened
+                    if ticker in data.columns:
+                        series = data[ticker].dropna()
+                    elif 'Close' in data.columns:
+                        series = data['Close'].dropna()
+                    else:
+                        return 0, 0, 0
+                
+                if series.empty: return 0, 0, 0
+                
+                latest = float(series.iloc[-1])
+                prev = float(series.iloc[-2]) if len(series) >= 2 else latest
+                change = ((latest - prev) / prev) * 100 if prev != 0 else 0
+                return latest, change, prev
+             except:
+                return 0, 0, 0
 
-        # KRX Silver (144600.KS - KODEX 은선물(H))
-        silver = yf.Ticker('144600.KS')
-        silver_hist = silver.history(period='5d')
-        if not silver_hist.empty:
-            current = silver_hist['Close'].iloc[-1]
-            prev = silver_hist['Close'].iloc[-2] if len(silver_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['kr_silver'] = {
-                'value': round(current, 0),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 0)
-            }
-        else:
-             indices['kr_silver'] = {'value': 0, 'change_pct': 0, 'prev_close': 0}
-             
-        # US Gold Futures (GC=F)
-        us_gold = yf.Ticker('GC=F')
-        us_gold_hist = us_gold.history(period='5d')
-        if not us_gold_hist.empty:
-            current = us_gold_hist['Close'].iloc[-1]
-            prev = us_gold_hist['Close'].iloc[-2] if len(us_gold_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['us_gold'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
-            
-        # US Silver Futures (SI=F)
-        us_silver = yf.Ticker('SI=F')
-        us_silver_hist = us_silver.history(period='5d')
-        if not us_silver_hist.empty:
-            current = us_silver_hist['Close'].iloc[-1]
-            prev = us_silver_hist['Close'].iloc[-2] if len(us_silver_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['us_silver'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
+        # 결과 매핑
+        ks_val, ks_chg, ks_prev = get_val_change_prev(ticker_map['kospi'])
+        indices['kospi'] = {'value': round(ks_val, 2), 'change_pct': round(ks_chg, 2), 'prev_close': round(ks_prev, 2)}
         
-        log(f"시장 지수 수집 완료: KOSPI {indices['kospi']['value']}, Gold {indices.get('gold', {}).get('value')}", "SUCCESS")
+        kq_val, kq_chg, kq_prev = get_val_change_prev(ticker_map['kosdaq'])
+        indices['kosdaq'] = {'value': round(kq_val, 2), 'change_pct': round(kq_chg, 2), 'prev_close': round(kq_prev, 2)}
         
-        # S&P 500 (^GSPC)
-        sp500 = yf.Ticker('^GSPC')
-        sp500_hist = sp500.history(period='5d')
-        if not sp500_hist.empty:
-            current = sp500_hist['Close'].iloc[-1]
-            prev = sp500_hist['Close'].iloc[-2] if len(sp500_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['sp500'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
-            
-        # Nasdaq (^IXIC)
-        nasdaq = yf.Ticker('^IXIC')
-        nasdaq_hist = nasdaq.history(period='5d')
-        if not nasdaq_hist.empty:
-            current = nasdaq_hist['Close'].iloc[-1]
-            prev = nasdaq_hist['Close'].iloc[-2] if len(nasdaq_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['nasdaq'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
-
-        # Bitcoin (BTC-USD)
-        btc = yf.Ticker('BTC-USD')
-        btc_hist = btc.history(period='5d')
-        if not btc_hist.empty:
-            current = btc_hist['Close'].iloc[-1]
-            prev = btc_hist['Close'].iloc[-2] if len(btc_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['btc'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
-            
-        # Ethereum (ETH-USD)
-        eth = yf.Ticker('ETH-USD')
-        eth_hist = eth.history(period='5d')
-        if not eth_hist.empty:
-            current = eth_hist['Close'].iloc[-1]
-            prev = eth_hist['Close'].iloc[-2] if len(eth_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['eth'] = {
-                'value': round(current, 2),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 2)
-            }
-            
-        # Ripple (XRP-USD)
-        xrp = yf.Ticker('XRP-USD')
-        xrp_hist = xrp.history(period='5d')
-        if not xrp_hist.empty:
-            current = xrp_hist['Close'].iloc[-1]
-            prev = xrp_hist['Close'].iloc[-2] if len(xrp_hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            indices['xrp'] = {
-                'value': round(current, 4),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 4)
-            }
+        g_val, g_chg, g_prev = get_val_change_prev(ticker_map['gold'])
+        indices['kr_gold'] = {'value': round(g_val, 0), 'change_pct': round(g_chg, 2), 'prev_close': round(g_prev, 0)}
+        
+        s_val, s_chg, s_prev = get_val_change_prev(ticker_map['silver'])
+        indices['kr_silver'] = {'value': round(s_val, 0), 'change_pct': round(s_chg, 2), 'prev_close': round(s_prev, 0)}
+        
+        ug_val, ug_chg, ug_prev = get_val_change_prev(ticker_map['us_gold'])
+        indices['us_gold'] = {'value': round(ug_val, 2), 'change_pct': round(ug_chg, 2), 'prev_close': round(ug_prev, 2)}
+        
+        us_val, us_chg, us_prev = get_val_change_prev(ticker_map['us_silver'])
+        indices['us_silver'] = {'value': round(us_val, 2), 'change_pct': round(us_chg, 2), 'prev_close': round(us_prev, 2)}
+        
+        sp_val, sp_chg, sp_prev = get_val_change_prev(ticker_map['sp500'])
+        indices['sp500'] = {'value': round(sp_val, 2), 'change_pct': round(sp_chg, 2), 'prev_close': round(sp_prev, 2)}
+        
+        nd_val, nd_chg, nd_prev = get_val_change_prev(ticker_map['nasdaq'])
+        indices['nasdaq'] = {'value': round(nd_val, 2), 'change_pct': round(nd_chg, 2), 'prev_close': round(nd_prev, 2)}
+        
+        b_val, b_chg, b_prev = get_val_change_prev(ticker_map['btc'])
+        indices['btc'] = {'value': round(b_val, 2), 'change_pct': round(b_chg, 2), 'prev_close': round(b_prev, 2)}
+        
+        e_val, e_chg, e_prev = get_val_change_prev(ticker_map['eth'])
+        indices['eth'] = {'value': round(e_val, 2), 'change_pct': round(e_chg, 2), 'prev_close': round(e_prev, 2)}
+        
+        x_val, x_chg, x_prev = get_val_change_prev(ticker_map['xrp'])
+        indices['xrp'] = {'value': round(x_val, 4), 'change_pct': round(x_chg, 2), 'prev_close': round(x_prev, 4)}
+        
+        log(f"시장 지수 수집 완료: KOSPI {ks_val}, Gold {g_val}", "SUCCESS")
             
     except Exception as e:
         log(f"시장 지수 수집 실패: {e} - 샘플 데이터 사용", "WARNING")
@@ -388,24 +315,73 @@ def fetch_stock_price(ticker):
     try:
         # 한국 종목은 .KS (KOSPI) 또는 .KQ (KOSDAQ) 접미사 필요
         yahoo_ticker = f"{ticker}.KS"
-        stock = yf.Ticker(yahoo_ticker)
-        hist = stock.history(period='5d')
         
-        if hist.empty:
+        # yfinance 에러 로그 억제 및 안전한 다운로드
+        import logging as _logging
+        yf_logger = _logging.getLogger('yfinance')
+        original_level = yf_logger.level
+        yf_logger.setLevel(_logging.CRITICAL)
+        
+        hist = pd.DataFrame()
+        try:
+             hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
+        except: pass
+        finally:
+             yf_logger.setLevel(original_level)
+
+        # 데이터 유효성 검사 (Close 컬럼 존재 여부)
+        is_valid = False
+        if not hist.empty:
+             if isinstance(hist.columns, pd.MultiIndex):
+                  if 'Close' in hist.columns.get_level_values(0): is_valid = True
+             elif 'Close' in hist.columns:
+                  is_valid = True
+        
+        if not is_valid:
             # KOSDAQ 시도
             yahoo_ticker = f"{ticker}.KQ"
-            stock = yf.Ticker(yahoo_ticker)
-            hist = stock.history(period='5d')
-        
+            yf_logger.setLevel(_logging.CRITICAL)
+            try:
+                hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
+            except: pass
+            finally:
+                yf_logger.setLevel(original_level)
+
         if not hist.empty:
-            current = hist['Close'].iloc[-1]
-            prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
-            change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-            return {
-                'price': round(current, 0),
-                'change_pct': round(change_pct, 2),
-                'prev_close': round(prev, 0)
-            }
+            # Extract Close series safely
+            close_series = None
+            if isinstance(hist.columns, pd.MultiIndex):
+                try:
+                    close_series = hist['Close']
+                    if isinstance(close_series, pd.DataFrame): 
+                        close_series = close_series.iloc[:, 0]
+                except:
+                    # 최악의 경우 첫 번째 컬럼
+                    close_series = hist.iloc[:, 0]
+            elif 'Close' in hist.columns:
+                close_series = hist['Close']
+            else:
+                close_series = hist.iloc[:, 0]
+            
+            # Ensure it is a Series
+            if isinstance(close_series, pd.DataFrame):
+                close_series = close_series.iloc[:, 0]
+
+            if not close_series.empty:
+                # 스칼라 값 변환 (.item() 사용)
+                def get_val(s, idx):
+                    val = s.iloc[idx]
+                    return val.item() if hasattr(val, 'item') else val
+
+                current = get_val(close_series, -1)
+                prev = get_val(close_series, -2) if len(close_series) > 1 else current
+                
+                change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                return {
+                    'price': round(float(current), 0),
+                    'change_pct': round(float(change_pct), 2),
+                    'prev_close': round(float(prev), 0)
+                }
     except Exception as e:
         pass
     
@@ -1261,8 +1237,8 @@ def create_signals_log(target_date=None, run_ai=True):
         
         log(f"총 {analyzed_count}개 종목 분석 완료, {len(signals)}개 시그널 감지")
         
-        # 점수 높은 순 정렬 (제한 제거)
-        signals = sorted(signals, key=lambda x: x['score'], reverse=True) # [:20] 제한 제거
+        # 점수 높은 순 정렬 (Top 20 제한)
+        signals = sorted(signals, key=lambda x: x['score'], reverse=True)[:20]
         
         # AI 분석 실행 (옵션)
         if run_ai and signals:
@@ -1688,7 +1664,7 @@ def create_kr_ai_analysis(target_date=None):
             target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
             target_df = target_df.sort_values('score', ascending=False)
             
-        target_df = target_df.head(50)
+        target_df = target_df.head(20)
         tickers = target_df['ticker'].tolist()
         
         log(f"AI 분석 대상: {len(tickers)} 종목")

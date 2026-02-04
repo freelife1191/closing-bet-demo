@@ -1,73 +1,15 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-KR Market API 라우트
-- jongga_v2_latest.json 및 signals_log.csv에서 실제 데이터 조회
-"""
-from flask import Blueprint, jsonify, request, current_app, g
-import pandas as pd
-from datetime import datetime, date, timedelta
 import os
 import json
-import warnings
 import logging
-import threading
-
-# 비동기 자원 관련 경고 억제
-warnings.filterwarnings('ignore', message='.*Task was destroyed but it is pending.*')
-warnings.filterwarnings('ignore', message='.*coroutine.*was never awaited.*')
-
-# [Import] Common Status Management
-try:
-    from app.routes.common import start_update, update_item_status, finish_update
-except ImportError:
-    # Fallback or pass (circle import risk handling)
-    pass
-
-logger = logging.getLogger(__name__)
+from datetime import datetime, timedelta
+import pandas as pd
+from flask import Blueprint, jsonify, request, current_app
 
 kr_bp = Blueprint('kr', __name__)
+logger = logging.getLogger(__name__)
 
-# 데이터 디렉토리 경로
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
-
-
-@kr_bp.route('/market-gate/update', methods=['POST'])
-def update_market_gate():
-    """Market Gate 단독 업데이트 (동기 실행)"""
-    try:
-        data = request.get_json(silent=True) or {}
-        target_date = data.get('target_date')
-        
-        try:
-            # 상태 UI 시작
-            if 'start_update' in globals():
-                start_update(['Market Gate'])
-                update_item_status('Market Gate', 'running')
-            
-            from engine.market_gate import MarketGate
-            mg = MarketGate()
-            result = mg.analyze(target_date)
-            mg.save_analysis(result, target_date)
-            
-            if 'update_item_status' in globals():
-                update_item_status('Market Gate', 'done')
-                
-            return jsonify({'status': 'success', 'message': 'Market Gate update completed'})
-                
-        except Exception as e:
-            logger.error(f"Market Gate Update Failed: {e}")
-            if 'update_item_status' in globals():
-                update_item_status('Market Gate', 'error')
-            raise e
-        finally:
-            if 'finish_update' in globals():
-                finish_update()
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
+# Constants
+DATA_DIR = 'data'
 @kr_bp.route('/config/interval', methods=['GET', 'POST'])
 def handle_interval_config():
     """Market Gate 업데이트 주기 조회 및 설정"""
@@ -255,35 +197,80 @@ def get_kr_signals():
             signals = sorted(signals, key=lambda x: x.get('score', 0), reverse=True)[:20]
 
         # ===================================================
-        # 실시간 가격 업데이트 및 return_pct 계산
-        # ===================================================
-        # ===================================================
         # 실시간 가격 업데이트 및 return_pct 계산 (yfinance)
         # ===================================================
         if signals:
             try:
-                # 1. Ticker Map 로드 (존재 시)
-                yahoo_map = {}
-                ticker_map_path = os.path.join(DATA_DIR, 'kr_market', 'ticker_to_yahoo_map.csv') # Path adjusted to be safe or just relative
-                # DATA_DIR is '.../data', so just 'data/ticker_to_yahoo_map.csv' or similar. 
-                # Let's try standard locations.
-                possible_paths = [
-                    os.path.join(DATA_DIR, 'ticker_to_yahoo_map.csv'),
-                    os.path.join(DATA_DIR, 'kr_market', 'ticker_to_yahoo_map.csv')
-                ]
+                # 1. 대상 티커 리스트 추출
+                tickers = [s['ticker'] for s in signals]
                 
-                for p in possible_paths:
-                    if os.path.exists(p):
-                        try:
-                            map_df = pd.read_csv(p, dtype={'ticker': str})
-                            if 'yahoo_ticker' in map_df.columns:
-                                yahoo_map = dict(zip(map_df['ticker'].str.zfill(6), map_df['yahoo_ticker']))
-                            break
-                        except:
-                            pass
+                # 2. yfinance용 심볼 변환 (KOSPI/KOSDAQ)
+                # (간단하게, korean_stocks_list.csv를 참고하거나 기본 .KS 시도)
+                yf_tickers = []
+                ticker_to_yf = {}
+                
+                # 시장 정보 매핑 (메모리 캐시 활용 권장되나 여기선 파일 읽기)
+                market_map = {}
+                try:
+                    s_df = load_csv_file('korean_stocks_list.csv')
+                    if not s_df.empty:
+                        s_df['ticker'] = s_df['ticker'].astype(str).str.zfill(6)
+                        market_map = dict(zip(s_df['ticker'], s_df['market']))
+                except:
+                    pass
 
-            except:
-                pass
+                for t in tickers:
+                    market = market_map.get(t, 'KOSPI')
+                    suffix = ".KQ" if market == "KOSDAQ" else ".KS"
+                    yf_t = f"{t}{suffix}"
+                    yf_tickers.append(yf_t)
+                    ticker_to_yf[yf_t] = t
+
+                # 3. yfinance 실시간 조회 (장중/평일 위주, 혹은 항상 최근가)
+                import yfinance as yf
+                import logging as _logging
+                
+                # 로깅 억제
+                yf_logger = _logging.getLogger('yfinance')
+                original_level = yf_logger.level
+                yf_logger.setLevel(_logging.CRITICAL)
+                
+                try:
+                    # 1일 데이터, 1분 간격 (혹은 5일 1일) - 실시간성 위해 1일 추천
+                    price_data = yf.download(yf_tickers, period='1d', interval='1m', progress=False, threads=True)
+                    
+                    if not price_data.empty and 'Close' in price_data:
+                        closes = price_data['Close']
+                        updated_count = 0
+                        
+                        # 멀티 티커 처리
+                        if isinstance(closes, pd.DataFrame):
+                             for yf_t in yf_tickers:
+                                if yf_t in closes.columns:
+                                    series = closes[yf_t].dropna()
+                                    if not series.empty:
+                                        curr_price = float(series.iloc[-1])
+                                        target_ticker = ticker_to_yf[yf_t]
+                                        
+                                        # Signals 리스트 업데이트
+                                        for sig in signals:
+                                            if sig['ticker'] == target_ticker:
+                                                sig['current_price'] = curr_price
+                                                if sig['entry_price'] > 0:
+                                                    sig['return_pct'] = round((curr_price - sig['entry_price']) / sig['entry_price'] * 100, 2)
+                                                updated_count += 1
+                        # 단일 티커 처리 (Series)
+                        elif isinstance(closes, pd.Series):
+                             # 티커가 1개인 경우
+                             pass # 위 로직은 Batch라 보통 DF로 옴. 1개면 DF col이 심볼.
+                             
+                except Exception as yf_e:
+                     logger.debug(f"Signal Realtime Update Failed: {yf_e}")
+                finally:
+                    yf_logger.setLevel(original_level)
+
+            except Exception as e:
+                logger.warning(f"Error updating realtime prices for signals: {e}")
         
         # 총 스캔 종목 수 계산
         total_scanned = 0

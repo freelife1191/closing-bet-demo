@@ -38,7 +38,7 @@ export default function StockChart({ data, ticker, name, vcpRange }: ChartProps)
         horzLines: { color: '#333' },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 400,
+      height: chartContainerRef.current.clientHeight,
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
@@ -131,8 +131,8 @@ export default function StockChart({ data, ticker, name, vcpRange }: ChartProps)
     // Resize Observer for efficient resizing
     const resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0 || !entries[0].contentRect) return;
-      const { width } = entries[0].contentRect;
-      chart.applyOptions({ width });
+      const { width, height } = entries[0].contentRect;
+      chart.applyOptions({ width, height });
     });
 
     if (chartContainerRef.current) {
@@ -146,8 +146,8 @@ export default function StockChart({ data, ticker, name, vcpRange }: ChartProps)
   }, [data, vcpRange]);
 
   return (
-    <div className="w-full relative group">
-      <div ref={chartContainerRef} className="w-full h-[400px]" />
+    <div className="w-full h-full relative group">
+      <div ref={chartContainerRef} className="w-full h-full" />
       <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
         <span className="text-[10px] text-amber-400 font-bold bg-black/50 px-2 py-1 rounded border border-amber-400/30">SMA 20</span>
         {vcpRange?.enabled && (

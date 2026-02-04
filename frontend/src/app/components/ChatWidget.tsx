@@ -257,9 +257,8 @@ export default function ChatWidget() {
 
   return (
     <>
-      {/* Chat Window */}
       {isOpen && (
-        <div className="fixed inset-0 w-full h-[100dvh] md:fixed md:bottom-24 md:right-6 md:w-[430px] md:h-[730px] md:max-h-[80vh] bg-[#1c1c1e] md:border border-white/10 md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in font-sans z-[100] md:z-[60]">
+        <div className="fixed inset-0 z-[110] w-full h-[100dvh] md:fixed md:inset-auto md:bottom-24 md:right-6 md:w-[430px] md:h-[730px] md:max-h-[80vh] bg-[#1c1c1e] md:border border-white/10 md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in font-sans md:z-[110]">
 
           {/* Header */}
           <div className="bg-[#2c2c2e] p-4 flex items-center justify-between border-b border-white/5 flex-shrink-0">
@@ -500,7 +499,7 @@ export default function ChatWidget() {
       )}
 
       {/* Toggle Button (Always Visible) */}
-      <div className="fixed bottom-3 right-3 md:bottom-6 md:right-6 z-[101] flex flex-col items-end">
+      <div className="fixed bottom-3 right-3 md:bottom-6 md:right-6 z-[120] flex flex-col items-end">
         <button
           onClick={toggleChat}
           className={`w-11 h-11 md:w-14 md:h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
