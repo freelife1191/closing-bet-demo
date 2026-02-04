@@ -316,6 +316,117 @@ class SignalGenerator:
 
         return all_signals
 
+    async def _analyze_base(self, stock: StockData) -> Optional[Dict]:
+        """1단계: 기본 분석 (차트, 수급, Pre-Score)"""
+        try:
+            # 상세 정보
+            detail = await self._collector.get_stock_detail(stock.code)
+            if detail:
+                stock.high_52w = detail.get('high_52w', stock.high_52w)
+                stock.low_52w = detail.get('low_52w', stock.low_52w)
+
+            # 차트
+            charts = await self._collector.get_chart_data(stock.code, 60)
+            
+            # 수급
+            supply = await self._collector.get_supply_data(stock.code)
+            
+            # Pre-Score 계산 (뉴스/LLM 없음)
+            pre_score, _, score_details = self.scorer.calculate(stock, charts, [], supply, None)
+            
+            return {
+                'stock': stock,
+                'charts': charts,
+                'supply': supply,
+                'pre_score': pre_score,
+                'score_details': score_details
+            }
+        except Exception as e:
+            print(f"    ⚠️ 기본 분석 오류 {stock.name}: {e}")
+            return None
+
+    def _create_final_signal(
+        self, stock, target_date, news_list, llm_result, charts, supply, themes: List[str] = None
+    ) -> Optional[Signal]:
+        """최종 시그널 생성 헬퍼"""
+        try:
+            # 점수 계산
+            score, checklist, score_details = self.scorer.calculate(stock, charts, news_list, supply, llm_result)
+            
+            # [Fix] AI 분석 결과 보존
+            if llm_result:
+                score_details['ai_evaluation'] = llm_result
+                score.ai_evaluation = llm_result
+            
+            # 등급 미달 제외 (None)
+            grade = self.scorer.determine_grade(stock, score, score_details, supply, charts)
+            
+            if not grade:
+                print(f"    [DEBUG] 등급탈락 {stock.name}: Score={score.total}, Value={stock.trading_value//100_000_000}억, Rise={stock.change_pct}%, VolRatio={score_details.get('volume_ratio', 0)}")
+                return None
+
+            # 포지션 계산
+            position = self.position_sizer.calculate(stock.close, grade)
+
+            return Signal(
+                stock_code=stock.code,
+                stock_name=stock.name,
+                market=stock.market,
+                sector=stock.sector,
+                signal_date=target_date,
+                signal_time=datetime.now(),
+                grade=grade,
+                score=score,
+                checklist=checklist,
+                news_items=[{
+                    "title": n.title,
+                    "source": n.source,
+                    "published_at": n.published_at.isoformat() if n.published_at else "",
+                    "url": n.url,
+                    "weight": getattr(n, 'weight', 1.0)
+                } for n in news_list[:5]],
+                current_price=stock.close,
+                change_pct=stock.change_pct,
+                entry_price=position.entry_price,
+                stop_price=position.stop_price,
+                target_price=position.target_price,
+                r_value=position.r_value,
+                position_size=position.position_size,
+                quantity=position.quantity,
+                r_multiplier=position.r_multiplier,
+                trading_value=stock.trading_value,
+                volume_ratio=score_details.get('volume_ratio', 0.0),
+                status=SignalStatus.PENDING,
+                created_at=datetime.now(),
+                score_details=score_details,
+                themes=themes or []
+            )
+        except Exception as e:
+            print(f"    ⚠️ 시그널 생성 오류 {stock.name}: {e}")
+            return None
+
+    async def _analyze_stock(self, stock: StockData, target_date: date) -> Optional[Signal]:
+        """단일 종목 분석 (기존 호환용 - Batch 미사용)"""
+        # 1. Base Analysis
+        base_data = await self._analyze_base(stock)
+        if not base_data: return None
+        
+        # 2. News
+        news_list = await self._news.get_stock_news(stock.code, 3, stock.name)
+        
+        # 3. LLM (Single)
+        llm_result = None
+        if news_list and self.llm_analyzer.client:
+            print(f"    [LLM] Analyzing {stock.name} news...")
+            news_dicts = [{"title": n.title, "summary": n.summary} for n in news_list]
+            llm_result = await self.llm_analyzer.analyze_news_sentiment(stock.name, news_dicts)
+
+        # 4. Finalize
+        return self._create_final_signal(
+            stock, target_date, news_list, llm_result, base_data['charts'], base_data['supply']
+        )
+
+
     def get_summary(self, signals: List[Signal]) -> Dict:
         """시그널 요약 정보"""
         summary = {
