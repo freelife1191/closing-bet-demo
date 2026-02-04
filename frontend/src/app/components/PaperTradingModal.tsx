@@ -151,8 +151,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
           chartContainerRef.current.style.position = 'relative';
           chartContainerRef.current.appendChild(unitLabel);
 
-          console.log('[ChartDebug] Container:', chartContainerRef.current.clientWidth, 'x', chartContainerRef.current.clientHeight);
-          console.log('[ChartDebug] Data:', chartData);
+
 
           chartInstance = chart;
           chartRef.current = chart;
@@ -169,7 +168,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
           // 메인 자산 라인 -> Area Chart
           // 메인 자산 라인 -> Area Chart (v5 호환)
-          console.log('[ChartDebug] Adding Area Series');
+
           const { AreaSeries, LineSeries } = await import('lightweight-charts');
 
           const mainSeries = chart.addSeries(AreaSeries, {
@@ -209,7 +208,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             });
           }
 
-          console.log('[ChartDebug] Formatted Data:', formattedData);
+
           mainSeries.setData(formattedData);
 
           // 이평선 추가
