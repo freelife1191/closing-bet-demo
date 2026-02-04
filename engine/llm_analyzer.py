@@ -81,6 +81,15 @@ class LLMAnalyzer:
         # Always check/refresh before returning
         self._init_client()
         return self._client
+    
+    async def close(self):
+        """리소스 정리"""
+        try:
+            if self._client and hasattr(self._client, 'aclose'):
+                await self._client.aclose()
+        except Exception as e:
+            logger.warning(f"Error closing LLM client: {e}")
+
 
 
     async def analyze_news_sentiment(self, stock_name: str, news_items: List[Dict]) -> Optional[Dict]:

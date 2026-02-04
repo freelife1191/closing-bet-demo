@@ -200,13 +200,22 @@ class NotificationService:
             return False
         
         try:
-            payload = {"content": message}
-            response = requests.post(
-                self.discord_webhook_url,
-                json=payload,
-                timeout=10
-            )
-            response.raise_for_status()
+            # 2000자 제한 처리 (안전하게 1900자로 분할)
+            import time
+            chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
+            
+            for chunk in chunks:
+                payload = {"content": chunk}
+                response = requests.post(
+                    self.discord_webhook_url,
+                    json=payload,
+                    timeout=10
+                )
+                response.raise_for_status()
+                # Rate Limit 방지를 위한 짧은 대기
+                if len(chunks) > 1:
+                    time.sleep(0.5)
+            
             logger.info("[Notifier] Discord 발송 성공")
             return True
         except Exception as e:

@@ -93,6 +93,9 @@ class SignalGenerator:
             await self._collector.__aexit__(exc_type, exc_val, exc_tb)
         if self._news:
             await self._news.__aexit__(exc_type, exc_val, exc_tb)
+        
+        if self.llm_analyzer:
+            await self.llm_analyzer.close()
 
     async def generate(
         self,
