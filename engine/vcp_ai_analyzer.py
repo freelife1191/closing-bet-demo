@@ -328,10 +328,11 @@ class VCPMultiAIAnalyzer:
         """여러 종목 일괄 분석 (완전 병렬 처리 + 진행률 로그)"""
         results = {}
         total = len(stocks)
-        logger.info(f"VCP AI 일괄 분석 시작: 총 {total}개 종목 (Concurrency: 5)")
+        concurrency = getattr(app_config, 'ANALYSIS_LLM_CONCURRENCY', 2)
+        logger.info(f"VCP AI 일괄 분석 시작: 총 {total}개 종목 (Concurrency: {concurrency})")
         
         # 동시 실행 제한 (Rate Limit 고려)
-        sem = asyncio.Semaphore(5) 
+        sem = asyncio.Semaphore(concurrency) 
         
         async def _bounded_analyze(stock, idx):
             async with sem:

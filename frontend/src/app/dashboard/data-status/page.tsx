@@ -247,25 +247,46 @@ export default function DataStatusPage() {
 
       // 파일명에 따른 API 엔드포인트 매핑
       if (fileName === 'AI Jongga V2') {
-        // AI Jongga V2는 비동기 실행이므로 폴링 필요
+        // AI Jongga V2는 비동기 실행이므로 전용 폴링 필요
         await fetchAPI('/api/kr/jongga-v2/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target_date: effectiveDate })
         });
-        // 전역 updating 상태를 설정하여 pollUpdateStatus가 loadData를 호출하도록 함
-        setUpdating(true);
-        startPolling();
+
+        // 전용 폴링 (Wait until done)
+        let isV2Running = true;
+        while (isV2Running) {
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            const status: any = await fetchAPI('/api/kr/jongga-v2/status');
+            isV2Running = status.isRunning;
+          } catch (e) {
+            console.error("Polling V2 failed", e);
+            isV2Running = false;
+          }
+        }
 
       } else if (fileName === 'VCP Signals') {
-        // VCP Signals도 target_date 지원
+        // VCP Signals도 전용 폴링 필요
         await fetchAPI('/api/kr/signals/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target_date: effectiveDate })
         });
-        setUpdating(true);
-        startPolling();
+
+        // 전용 폴링 (Wait until done)
+        let isVcpRunning = true;
+        while (isVcpRunning) {
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            const status: any = await fetchAPI('/api/kr/signals/status');
+            isVcpRunning = status.running; // Key is 'running' for VCP
+          } catch (e) {
+            console.error("Polling VCP failed", e);
+            isVcpRunning = false;
+          }
+        }
 
       } else {
         // 다른 항목들은 동기식 처리
@@ -500,7 +521,7 @@ export default function DataStatusPage() {
 
             <button
               onClick={handleUpdateAll}
-              disabled={updating}
+              disabled={updating || !!updatingItem}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white text-xs md:text-sm font-bold rounded-xl transition-all shadow-lg hover:shadow-emerald-500/25 whitespace-nowrap"
             >
               <i className={`fas fa-sync-alt ${updating ? 'animate-spin' : ''}`}></i>
