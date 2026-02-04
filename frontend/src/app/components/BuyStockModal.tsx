@@ -22,24 +22,44 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
   const [amount, setAmount] = useState<string>('0');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [portfolio, setPortfolio] = useState<any>(null);
+  const [fetchedPrice, setFetchedPrice] = useState<number | null>(null);
+  const [loadingPrice, setLoadingPrice] = useState(false);
 
-  // 포트폴리오(예수금) 조회
+  // 포트폴리오(예수금) 조회 및 실시간 가격 조회
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && stock) {
       paperTradingAPI.getPortfolio().then(setPortfolio).catch(console.error);
       setQuantity('0');
       setAmount('0');
+
+      // 실시간 가격 조회
+      setLoadingPrice(true);
+      fetch('/api/kr/realtime-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers: [stock.ticker] })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data[stock.ticker]) {
+            setFetchedPrice(data[stock.ticker]);
+          }
+        })
+        .catch(console.error)
+        .finally(() => setLoadingPrice(false));
+    } else {
+      setFetchedPrice(null);
     }
-  }, [isOpen]);
+  }, [isOpen, stock]);
 
   if (!stock) return null;
 
-  const price = stock.current_price || stock.entry_price || stock.price || 0;
+  const price = fetchedPrice || stock.current_price || stock.entry_price || stock.price || 0;
   const numericQty = parseInt(quantity.replace(/,/g, ''), 10) || 0;
   const numericAmount = parseInt(amount.replace(/,/g, ''), 10) || 0;
 
   // 계산
-  const estimatedQty = mode === 'quantity' ? numericQty : Math.floor(numericAmount / price);
+  const estimatedQty = mode === 'quantity' ? numericQty : (price > 0 ? Math.floor(numericAmount / price) : 0);
   // 실제 체결 금액 (주 단위 절삭 반영)
   const finalCost = estimatedQty * price;
 
@@ -131,8 +151,23 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
 
         {/* Price Info */}
         <div className="flex justify-between items-center bg-white/5 rounded-xl p-4 mb-6 border border-white/5">
-          <span className="text-gray-400 text-sm">현재가 (매수가)</span>
-          <span className="text-2xl font-bold text-rose-400">
+          <div className="flex flex-col">
+            <span className="text-gray-400 text-sm flex items-center gap-2">
+              현재가 (매수가)
+              {loadingPrice && <i className="fas fa-circle-notch fa-spin text-xs text-blue-500"></i>}
+            </span>
+            {fetchedPrice ? (
+              <span className="text-[10px] text-green-400 font-bold flex items-center gap-1 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                실시간 시세 적용
+              </span>
+            ) : (
+              <span className="text-[10px] text-yellow-500 font-bold mt-0.5">
+                ⚠ 진입가/기본가 적용
+              </span>
+            )}
+          </div>
+          <span className={`text-2xl font-bold ${loadingPrice ? 'opacity-50' : 'text-rose-400'} transition-opacity`}>
             {price.toLocaleString()}원
           </span>
         </div>
