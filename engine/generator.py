@@ -314,34 +314,126 @@ class SignalGenerator:
                 save_result_to_json(mid_result)
                 logger.info(f"[{market}] 분석 완료 - 중간 결과 저장됨 ({len(all_signals)}개 시그널)")
 
+        return all_signals
+
+    def get_summary(self, signals: List[Signal]) -> Dict:
+        """시그널 요약 정보"""
+        summary = {
+            "total": len(signals),
+            "by_grade": {g: 0 for g in ['S', 'A', 'B', 'C', 'D']},
+            "by_market": {},
+            "total_position": 0,
+            "total_risk": 0,
+        }
+
+        for s in signals:
+            if hasattr(s, 'grade'):
+                grade_val = getattr(s.grade, 'value', s.grade)
+                if grade_val in summary["by_grade"]:
+                    summary["by_grade"][grade_val] += 1
+            
+            if hasattr(s, 'market'):
+                summary["by_market"][s.market] = summary["by_market"].get(s.market, 0) + 1
+            
+            if hasattr(s, 'position_size'):
+                summary["total_position"] += s.position_size
+            
+            if hasattr(s, 'r_value') and hasattr(s, 'r_multiplier'):
+                summary["total_risk"] += s.r_value * s.r_multiplier
+
+        return summary
+
+
+async def run_screener(
+    capital: float = 50_000_000,
+    markets: List[str] = None,
+    target_date: str = None,  # YYYY-MM-DD 형식 (테스트용)
+    top_n: int = 300,
+) -> ScreenerResult:
+    """
+    스크리너 실행 (간편 함수)
+    """
+    start_time = time.time()
+    
+    # target_date 문자열을 date 객체로 변환
+    parsed_date = None
+    if target_date:
+        try:
+            parsed_date = datetime.strptime(target_date, '%Y-%m-%d').date()
+            print(f"[테스트 모드] 지정 날짜 기준 분석: {target_date}")
+        except ValueError:
+            print(f"[경고] 날짜 형식 오류: {target_date} (YYYY-MM-DD 필요)")
+            parsed_date = None
+
+    async with SignalGenerator(capital=capital) as generator:
+        signals = await generator.generate(target_date=parsed_date, markets=markets, top_n=top_n)
+        summary = generator.get_summary(signals)
+        
+        # 2. Market Gate 실행
+        print(f"\n[Market Gate] 시장 상태 분석 중...")
+        market_status = {}
+        try:
+            market_gate = MarketGate()
+            market_status = market_gate.analyze()
+            market_gate.save_analysis(market_status)
+            print(f"  -> 상태: {market_status.get('status')} (Score: {market_status.get('total_score')})")
+        except Exception as e:
+            logger.error(f"Market Gate Error: {e}")
+        
+        # 3. Final Market Summary (LLM)
+        print(f"\n[Final Summary] 시장 요약 리포트 생성 중...")
+        market_summary = ""
+        try:
+            market_summary = await generator.llm_analyzer.generate_market_summary(
+                [s.to_dict() for s in signals]
+            )
+            print(f"  -> 요약 완료 ({len(market_summary)}자)")
+        except Exception as e:
+            logger.error(f"Market Summary Error: {e}")
+
+        # 4. Trending Themes 집계
+        trending_themes = []
+        try:
+            from collections import Counter
+            all_themes = []
+            for s in signals:
+                if s.themes:
+                    all_themes.extend(s.themes)
+            
+            theme_counts = Counter(all_themes)
+            trending_themes = [theme for theme, count in theme_counts.most_common(20)]
+            print(f"  -> Trending Themes: {trending_themes[:5]}...")
+        except Exception as e:
+            logger.error(f"Themes Error: {e}")
+
         processing_time = (time.time() - start_time) * 1000
 
-    result = ScreenerResult(
-        date=parsed_date if parsed_date else date.today(),
-        total_candidates=len(signals),  # 최종 추출된 시그널 수
-        filtered_count=generator.scan_stats.get("phase1", 0),  # 1차 필터(조건) 통과 수
-        scanned_count=generator.scan_stats.get("scanned", 0),  # 전체 스캔 종목 수
-        signals=signals,
-        by_grade=summary["by_grade"],
-        by_market=summary["by_market"],
-        processing_time_ms=processing_time,
-        market_status=market_status,
-        market_summary=market_summary,
-        trending_themes=trending_themes
-    )
+        result = ScreenerResult(
+            date=parsed_date if parsed_date else date.today(),
+            total_candidates=len(signals),
+            filtered_count=generator.scan_stats.get("phase1", 0),
+            scanned_count=generator.scan_stats.get("scanned", 0),
+            signals=signals,
+            by_grade=summary["by_grade"],
+            by_market=summary["by_market"],
+            processing_time_ms=processing_time,
+            market_status=market_status,
+            market_summary=market_summary,
+            trending_themes=trending_themes
+        )
 
-    # 결과 저장
-    save_result_to_json(result)
+        # 결과 저장
+        save_result_to_json(result)
 
-    # 메신저 알림 발송
-    try:
-        from engine.messenger import Messenger
-        messenger = Messenger()
-        messenger.send_screener_result(result)
-    except Exception as e:
-        print(f"[오류] 메신저 발송 실패: {e}")
+        # 메신저 알림 발송
+        try:
+            from engine.messenger import Messenger
+            messenger = Messenger()
+            messenger.send_screener_result(result)
+        except Exception as e:
+            print(f"[오류] 메신저 발송 실패: {e}")
 
-    return result
+        return result
 
 
 async def analyze_single_stock_by_code(
