@@ -608,8 +608,17 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
                 suffix = ".KS" if len(market_info) > 0 and market_info[0] == 'KOSPI' else ".KQ"
                 yf_ticker = f"{ticker}{suffix}"
                 
-                # 데이터 다운로드 (진행률 표시 없이)
-                df = yf.download(yf_ticker, start=start_date.strftime('%Y-%m-%d'), end=(end_date + timedelta(days=1)).strftime('%Y-%m-%d'), progress=False)
+                # yfinance 에러 로그 억제
+                import logging as _logging
+                yf_logger = _logging.getLogger('yfinance')
+                original_level = yf_logger.level
+                yf_logger.setLevel(_logging.CRITICAL)
+                
+                try:
+                    # 데이터 다운로드 (진행률 표시 없이)
+                    df = yf.download(yf_ticker, start=start_date.strftime('%Y-%m-%d'), end=(end_date + timedelta(days=1)).strftime('%Y-%m-%d'), progress=False)
+                finally:
+                    yf_logger.setLevel(original_level)
                 
                 if not df.empty:
                     # MultiIndex 컬럼 처리
@@ -698,6 +707,12 @@ def create_daily_prices(target_date=None):
 
         # 마지막 개장일 확인
         end_date_str, end_date_obj = get_last_trading_date(reference_date=end_date_obj)
+
+        # [Safety] 미래 날짜 요청 방지
+        if end_date_obj > datetime.now():
+            log(f"요청 날짜({end_date_str})가 미래이므로 오늘 날짜로 조정합니다.", "WARNING")
+            end_date_obj = datetime.now()
+            end_date_str = end_date_obj.strftime('%Y%m%d')
         
         # 기존 데이터 로드 및 시작일 결정
         file_path = os.path.join(BASE_DIR, 'data', 'daily_prices.csv')
