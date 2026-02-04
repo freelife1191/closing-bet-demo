@@ -51,20 +51,25 @@ class Scorer:
         # 6. 수급 (0-2점)
         score.supply, checklist.supply_positive = self._score_supply(supply)
         
-        # 총점 계산 (개별 점수 합산)
-        score.total = score.news + score.volume + score.chart + score.candle + score.timing + score.supply
+        # 기본 점수 (Base Score)
+        base_score = score.news + score.volume + score.chart + score.candle + score.timing + score.supply
         
         # 상세 내역 (프론트엔드 필터용)
         # 거래량 배수 = 오늘 거래량 / 최근 20일 평균 거래량 (네이버/토스 기준)
         volume_ratio = 0.0
-        if charts and len(charts.volumes) >= 2:  # 최소 2일치 데이터
+        if charts and len(charts.volumes) >= 2:
             today_vol = charts.volumes[-1]
-            # 최근 20일 평균 (데이터가 부족하면 있는 만큼 사용, 최소 1일)
             lookback = min(20, len(charts.volumes) - 1)
             if lookback > 0:
                 avg_vol = sum(charts.volumes[-lookback-1:-1]) / lookback
                 if avg_vol > 0:
                     volume_ratio = round(today_vol / avg_vol, 2)
+        
+        # [New] 가산점 (Bonus Score) - V2 Logic
+        bonus_score = self._calculate_bonus(stock.change_pct, volume_ratio)
+        
+        # 총점 계산 (기본 + 보너스)
+        score.total = base_score + bonus_score
         
         # 외인/기관 수급 데이터 추출
         foreign_net_buy = 0
@@ -83,33 +88,57 @@ class Scorer:
             'rise_pct': stock.change_pct,
             'volume_ratio': volume_ratio,
             'foreign_net_buy': foreign_net_buy,
-            'inst_net_buy': inst_net_buy
+            'inst_net_buy': inst_net_buy,
+            'base_score': base_score,
+            'bonus_score': bonus_score
         }
 
         return score, checklist, details
 
-    def _score_news(self, news: Optional[List[NewsItem]], llm_result: Optional[Dict]) -> tuple[int, bool, List[str], str]:
-        """뉴스 점수 (0-3점)"""
-        if not llm_result:
-            return 0, False, [], ""
+    def _calculate_bonus(self, change_pct: float, volume_ratio: float) -> int:
+        """가산점 계산 (최대 9점)"""
+        bonus = 0
+        
+        # 1. 거래량 급증 (최대 4점)
+        if volume_ratio >= 10: bonus += 4
+        elif volume_ratio >= 5: bonus += 3
+        elif volume_ratio >= 3: bonus += 2
+        elif volume_ratio >= 2: bonus += 1
+            
+        # 2. 장대양봉 (최대 5점)
+        if change_pct >= 25: bonus += 5
+        elif change_pct >= 20: bonus += 4
+        elif change_pct >= 15: bonus += 3
+        elif change_pct >= 10: bonus += 2
+        elif change_pct >= 5: bonus += 1
+            
+        return bonus
 
-        # LLM 호재 점수 (0-3점)
-        llm_score = llm_result.get('score', 0)
-        llm_reason = llm_result.get('reason', '') # 분석 사유
+    def _score_news(self, news: Optional[List[NewsItem]], llm_result: Optional[Dict], stock: StockData = None) -> tuple[int, bool, List[str], str]:
+        """뉴스 점수 (0-3점) - 거래대금 Fallback 추가"""
+        
+        # 1. LLM/News 기반 점수
+        llm_score = llm_result.get('score', 0) if llm_result else 0
+        llm_reason = llm_result.get('reason', '') if llm_result else ""
+        
+        has_news = news is not None and len(news) > 0
+        sources = [n.source for n in news] if news else []
 
-        # 뉴스 출처 수집
-        sources = []
-        if news:
-            sources = [n.source for n in news]
-
-        # 뉴스가 있으면 +1점 (최소)
-        has_news = len(news) > 0
-
-        final_score = llm_score
-        if has_news and final_score == 0:
-            final_score = 1
-
-        return min(3, final_score), has_news, sources, llm_reason
+        news_score = llm_score
+        if has_news and news_score == 0:
+            news_score = 1
+            
+        # 2. Fallback: 뉴스가 없어도 거래대금이 크면 점수 부여 (V2 Logic)
+        # (대형주는 뉴스 없이도 수급만으로 상승하는 경우가 많음)
+        if news_score == 0 and stock:
+            if stock.trading_value >= 500_000_000_000: # 5000억
+                news_score = 3
+            elif stock.trading_value >= 100_000_000_000: # 1000억
+                news_score = 2
+            elif stock.trading_value >= 50_000_000_000: # 500억
+                news_score = 1
+                
+        return min(3, news_score), has_news, sources, llm_reason
 
     def _score_volume(self, stock: StockData) -> int:
         """거래대금 점수 (0-3점)"""

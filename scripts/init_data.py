@@ -1118,8 +1118,14 @@ def create_signals_log(target_date=None, run_ai=False):
         inst_file = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
         stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
         
+        if not os.path.exists(stocks_file):
+            log("주식 목록 파일이 없어 새로 생성합니다...", "WARNING")
+            create_korean_stocks_list()
+        
+        # 재확인
         if not all(os.path.exists(f) for f in [prices_file, inst_file, stocks_file]):
-            raise Exception("필요한 데이터 파일 없음")
+            missing = [f for f in [prices_file, inst_file, stocks_file] if not os.path.exists(f)]
+            raise Exception(f"필요한 데이터 파일 없음: {missing}")
         
         prices_df = pd.read_csv(prices_file)
         inst_df = pd.read_csv(inst_file)
