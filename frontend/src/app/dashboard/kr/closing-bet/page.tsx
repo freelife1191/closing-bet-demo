@@ -95,6 +95,10 @@ interface Signal {
     volume_ratio?: number;
     foreign_net_buy?: number;
     inst_net_buy?: number;
+    base_score?: number;
+    bonus_score?: number;
+    candle?: number;
+    consolidation?: number;
   };
   ai_evaluation?: {
     action: 'BUY' | 'HOLD' | 'SELL';
@@ -1813,47 +1817,73 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Sign
                   strokeWidth="8"
                   fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 40}`}
-                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - signal.score.total / 12)}`}
+                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - signal.score.total / 21)}`}
                   className="transition-all duration-1000 ease-out"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-3xl font-bold text-white">{signal.score.total}</span>
-                <span className="text-[10px] text-gray-500">/ 12점</span>
+                <span className="text-[10px] text-gray-500">/ 21점</span>
               </div>
             </div>
             <div className="text-xs text-gray-400 mt-2 font-medium flex items-center justify-center gap-1">
               TOTAL SCORE
-              <Tooltip content="6개 항목(News, Volume, Chart, Supply, Timing, Candle)의 합계 점수입니다. 최대 12점이며, 8점 이상이면 강력한 매수 신호입니다." position="bottom">
+              <Tooltip content={
+                <div className="text-left space-y-2">
+                  <p><strong>합계 점수: {signal.score.total}점</strong> (최대 21점)</p>
+                  <p className="text-[9px] text-gray-400">● 기본 점수 (Max 12): 뉴스(3), 거래량(3), 차트(2), 수급(2), 캔들(1), 기간조정(1)</p>
+                  <p className="text-[9px] text-gray-400">● 가산점 (Max 9): 거래량 급증(최대 4), 장대양봉(최대 5)</p>
+                  <p className="text-indigo-400 font-bold mt-1">※ 8점 이상 강력 매수 신호</p>
+                </div>
+              } position="bottom" wide>
                 <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
               </Tooltip>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-center text-[10px] text-gray-500 mb-4 px-2">
-            <div className="bg-white/5 rounded py-1 hover:bg-white/10 transition-colors">
+            <div className={`bg-white/5 rounded py-1 hover:bg-white/10 transition-colors border ${signal.score.chart >= 2 ? 'border-indigo-500/30' : 'border-transparent'}`}>
               <Tooltip content="차트 패턴: 신고가/돌파 여부 및 추세 분석 (최대 2점)">
                 <div className="cursor-help">차트</div>
               </Tooltip>
               <div className="text-white font-bold">{signal.score.chart}/2</div>
             </div>
-            <div className="bg-white/5 rounded py-1 hover:bg-white/10 transition-colors">
+            <div className={`bg-white/5 rounded py-1 hover:bg-white/10 transition-colors border ${signal.score.supply >= 2 ? 'border-indigo-500/30' : 'border-transparent'}`}>
               <Tooltip content="수급 점수: 외국인/기관 순매수 강도 (최대 2점)">
                 <div className="cursor-help">수급</div>
               </Tooltip>
               <div className="text-white font-bold">{signal.score.supply}/2</div>
             </div>
-            <div className="bg-white/5 rounded py-1 hover:bg-white/10 transition-colors">
-              <Tooltip content="관련 뉴스 점수: 최근 3일간 관련 뉴스 품질 및 수량 평가 (최대 3점)">
+            <div className={`bg-white/5 rounded py-1 hover:bg-white/10 transition-colors border ${signal.score.news >= 3 ? 'border-indigo-500/30' : 'border-transparent'}`}>
+              <Tooltip content="관련 뉴스 점수: 최근 3일간 관련 뉴스 품질/수량 및 AI 평가 (최대 3점)">
                 <div className="cursor-help">뉴스</div>
               </Tooltip>
               <div className="text-white font-bold">{signal.score.news}/3</div>
             </div>
-            <div className="bg-white/5 rounded py-1 hover:bg-white/10 transition-colors">
+            <div className={`bg-white/5 rounded py-1 hover:bg-white/10 transition-colors border ${signal.score.volume >= 3 ? 'border-indigo-500/30' : 'border-transparent'}`}>
               <Tooltip content="거래대금 점수: 1조(3점), 5000억(2점), 1000억(1점) (최대 3점)">
                 <div className="cursor-help">거래량</div>
               </Tooltip>
               <div className="text-white font-bold">{signal.score.volume}/3</div>
+            </div>
+            {/* 추가된 항목들 */}
+            <div className={`bg-white/5 rounded py-1 hover:bg-white/10 transition-colors border ${signal.score.candle >= 1 ? 'border-indigo-500/30' : 'border-transparent'}`}>
+              <Tooltip content="캔들 형태: 장대양봉 및 윗꼬리 관리 여부 (최대 1점)">
+                <div className="cursor-help">캔들</div>
+              </Tooltip>
+              <div className="text-white font-bold">{signal.score.candle}/1</div>
+            </div>
+            <div className={`bg-white/5 rounded py-1 hover:bg-white/10 transition-colors border ${signal.score.timing >= 1 ? 'border-indigo-500/30' : 'border-transparent'}`}>
+              <Tooltip content="변동성 수축: 볼린저밴드 수축 및 기간조정 여부 (최대 1점)">
+                <div className="cursor-help">조정</div>
+              </Tooltip>
+              <div className="text-white font-bold">{signal.score.timing}/1</div>
+            </div>
+            <div className={`col-span-2 bg-indigo-500/10 rounded py-1 hover:bg-indigo-500/20 transition-colors border ${(signal.score_details?.bonus_score || 0) > 0 ? 'border-indigo-500/50' : 'border-transparent'}`}>
+              <Tooltip content="가산점: 거래량 급증(최대 4점) + 장대양봉(최대 5점) (최대 9점)">
+                <div className="cursor-help text-indigo-300 font-bold">보너스 (가산점)</div>
+              </Tooltip>
+              <div className="text-indigo-400 font-bold">+{signal.score_details?.bonus_score || 0}/9</div>
             </div>
           </div>
 
@@ -1913,7 +1943,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                 <tr>
                   <th className="px-4 py-3 w-16 text-center whitespace-nowrap">등급</th>
                   <th className="px-4 py-3 whitespace-nowrap">거래대금 & 등락률</th>
-                  <th className="px-4 py-3 whitespace-nowrap">점수 (Total Score)</th>
+                  <th className="px-4 py-3 whitespace-nowrap">점수 (Total / 21)</th>
                   <th className="px-4 py-3 whitespace-nowrap">추가 조건 (거래량/수급)</th>
                   <th className="px-4 py-3 whitespace-nowrap">비고</th>
                 </tr>
@@ -1989,58 +2019,88 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
           </div>
         </div>
 
-        {/* 3. 핵심 평가 요소 */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-indigo-500/30 pb-2">
-            <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-xs">3</span>
-            핵심 평가 요소 (Score 12점 만점)
+            <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-xs">2</span>
+            핵심 평가 요소 (Score 21점 만점)
           </h3>
           <p className="text-xs text-gray-400">
-            위 점수 조건에 사용되는 항목별 배점입니다.
+            기본 점수(12점)와 가산점(9점)으로 구성됩니다.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1">
-              <div className="flex justify-between items-center text-sm font-bold text-white">
-                <span>📰 뉴스</span>
-                <span className="text-indigo-400">3점</span>
+          <div className="space-y-4">
+            {/* 기본 점수 섹션 */}
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <h4 className="text-xs font-bold text-indigo-400 mb-3 flex items-center gap-2">
+                <i className="fas fa-check-circle"></i> 기본 배점 항목 (Max 12점)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>📰 뉴스/재료</span>
+                    <span className="text-indigo-400 font-mono">3점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">호재 강도 및 AI 평가</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>💰 거래대금</span>
+                    <span className="text-indigo-400 font-mono">3점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">시장 주도력 (유동성)</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>📈 차트</span>
+                    <span className="text-indigo-400 font-mono">2점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">추세 및 패턴 분석</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>🤝 수급</span>
+                    <span className="text-indigo-400 font-mono">2점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">외인/기관 동반 매수</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>🕯 캔들</span>
+                    <span className="text-indigo-400 font-mono">1점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">장대양봉 및 꼬리 관리</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>⏳ 기간조정</span>
+                    <span className="text-indigo-400 font-mono">1점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">변동성 및 이격 수축</div>
+                </div>
               </div>
-              <div className="text-xs text-gray-400">호재성 기사 유무 및 AI 강도 평가</div>
             </div>
-            <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1">
-              <div className="flex justify-between items-center text-sm font-bold text-white">
-                <span>💰 거래대금</span>
-                <span className="text-indigo-400">3점</span>
+
+            {/* 가산점 섹션 */}
+            <div className="bg-indigo-500/5 rounded-xl p-4 border border-indigo-500/20">
+              <h4 className="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
+                <i className="fas fa-plus-circle"></i> 가산점 항목 (Max 9점)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>📊 거래량 급증</span>
+                    <span className="text-emerald-400 font-mono">+4점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">전일비 2배~10배 거래량 폭발</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>🚀 당일 상승률</span>
+                    <span className="text-emerald-400 font-mono">+5점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">5%~25% 이상 강한 상승 마감</div>
+                </div>
               </div>
-              <div className="text-xs text-gray-400">시장 주도력 평가 (유동성)</div>
-            </div>
-            <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1">
-              <div className="flex justify-between items-center text-sm font-bold text-white">
-                <span>📈 차트</span>
-                <span className="text-indigo-400">2점</span>
-              </div>
-              <div className="text-xs text-gray-400">신고가, 이평선 정배열 등 </div>
-            </div>
-            <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1">
-              <div className="flex justify-between items-center text-sm font-bold text-white">
-                <span>🤝 수급</span>
-                <span className="text-indigo-400">2점</span>
-              </div>
-              <div className="text-xs text-gray-400">외인/기관 순매수 지속성</div>
-            </div>
-            <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1">
-              <div className="flex justify-between items-center text-sm font-bold text-white">
-                <span>🕯 캔들</span>
-                <span className="text-indigo-400">1점</span>
-              </div>
-              <div className="text-xs text-gray-400">장대양봉 및 윗꼬리 관리 여부</div>
-            </div>
-            <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1">
-              <div className="flex justify-between items-center text-sm font-bold text-white">
-                <span>⏳ 기간조정</span>
-                <span className="text-indigo-400">1점</span>
-              </div>
-              <div className="text-xs text-gray-400">볼린저밴드 수축 등 변동성 축소 후 발산</div>
             </div>
           </div>
         </div>
