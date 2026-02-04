@@ -313,47 +313,14 @@ class PaperTradingService:
 
                 new_prices = {}
                 
-                # 3. yfinance Fallback (Only for missing)
-                missing_tickers = [t for t in tickers if t not in new_prices]
-                if missing_tickers:
-                    logger.info(f"Toss failed for {len(missing_tickers)} tickers. Trying yfinance...")
-                    yf_tickers = [f"{t}.KS" for t in missing_tickers]
-                    try:
-                        # Use threads=False to prevent file handle leaks
-                        df = yf.download(yf_tickers, period="1d", progress=False, threads=False)
-                        
-                        if not df.empty:
-                            # Handle MultiIndex columns
-                            try:
-                                closes = df['Close']
-                            except KeyError:
-                                closes = df.xs('Close', axis=1, level=0, drop_level=True) if isinstance(df.columns, pd.MultiIndex) and 'Close' in df.columns.get_level_values(0) else df
-                            
-                            for t in missing_tickers:
-                                ks_ticker = f"{t}.KS"
-                                val = None
-                                try:
-                                    if isinstance(closes, pd.Series):
-                                        val = closes.iloc[-1]
-                                    elif ks_ticker in closes.columns:
-                                        val = closes[ks_ticker].dropna().iloc[-1]
-                                    
-                                    if val is not None:
-                                        new_prices[t] = int(float(val))
-                                except Exception:
-                                    pass
-                    except Exception as e:
-                        logger.error(f"PaperTrading YF Error: {e}")
-
                 # 2. Try Toss Securities API first (Mobile/WTS) - Robust & Supports Bulk
                 # Toss API is much faster (<0.1s) and supports KR stocks perfectly
                 missing_tickers = [t for t in tickers if t not in new_prices]
                 if missing_tickers:
-                    logger.info(f"Using Toss Securities API for {len(missing_tickers)} tickers...")
+                    # logger.info(f"Using Toss Securities API for {len(missing_tickers)} tickers...")
                     import requests
                     
                     # Create mapping: padded(6) -> original_ticker_in_db
-                    # This handles cases where DB has '5930' but API returns '005930'
                     ticker_map = {str(t).zfill(6): t for t in missing_tickers}
 
                     # Format tickers for Toss (A005930) - Ensure 6 digits
@@ -388,12 +355,44 @@ class PaperTradingService:
                                     if original_t and close is not None:
                                         new_prices[original_t] = int(close)
                                         count += 1
-                                logger.info(f"Toss API success: Fetched {count}/{len(chunk)} prices.")
+                                # logger.info(f"Toss API success: Fetched {count}/{len(chunk)} prices.")
                             else:
                                 logger.warning(f"Toss API returned {res.status_code}: {res.text[:100]}")
                                         
                         except Exception as te:
                             logger.error(f"Toss API Error: {te}")
+
+                # 3. yfinance Fallback (Only for missing)
+                missing_tickers = [t for t in tickers if t not in new_prices]
+                if missing_tickers:
+                    logger.info(f"Toss failed for {len(missing_tickers)} tickers: {missing_tickers}. Trying yfinance...")
+                    yf_tickers = [f"{t}.KS" for t in missing_tickers]
+                    try:
+                        # Use threads=False to prevent file handle leaks
+                        df = yf.download(yf_tickers, period="1d", progress=False, threads=False)
+                        
+                        if not df.empty:
+                            # Handle MultiIndex columns
+                            try:
+                                closes = df['Close']
+                            except KeyError:
+                                closes = df.xs('Close', axis=1, level=0, drop_level=True) if isinstance(df.columns, pd.MultiIndex) and 'Close' in df.columns.get_level_values(0) else df
+                            
+                            for t in missing_tickers:
+                                ks_ticker = f"{t}.KS"
+                                val = None
+                                try:
+                                    if isinstance(closes, pd.Series):
+                                        val = closes.iloc[-1]
+                                    elif ks_ticker in closes.columns:
+                                        val = closes[ks_ticker].dropna().iloc[-1]
+                                    
+                                    if val is not None:
+                                        new_prices[t] = int(float(val))
+                                except Exception:
+                                    pass
+                    except Exception as e:
+                        logger.error(f"PaperTrading YF Error: {e}")
 
                 # 4. Fallback to Naver Mobile API (User Request - Robust Realtime)
                 missing_tickers = [t for t in tickers if t not in new_prices]
