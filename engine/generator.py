@@ -145,47 +145,57 @@ class SignalGenerator:
                     raise Exception("사용자 중단 요청")
                 base_data = await self._analyze_base(stock)
                 
-                # 1차 필터 조건 강화 (2026-01-31):
-                # - Pre-Score 최소 2점 (뉴스 제외 점수, 대덕전자 등 포착 위해 완화)
-                # - 거래대금 최소 500억원 (사용자 요청)
-                PRE_SCORE_THRESHOLD = 2
-                PRE_SCORE_THRESHOLD = 2
-                # MIN_TRADING_VALUE = 50_000_000_000  # Deprecated
+                # 1차 필터 조건 강화 (2026-02-05):
+                # - Pre-Score 방식 대신 Determine Grade(D급 이상) 조건을 선행 적용
+                # - LLM 비용 절감을 위해 최종 후보군 수준만 분석
+                # PRE_SCORE_THRESHOLD = 2 (Deprecated)
 
                 
                 if base_data:
                     stock_obj = base_data['stock']
-                    pre_score = base_data['pre_score'].total
-                    trading_value = getattr(stock_obj, 'trading_value', 0)
+                    pre_score = base_data['pre_score']
                     score_details = base_data.get('score_details', {})
+                    trading_value = getattr(stock_obj, 'trading_value', 0)
                     volume_ratio = score_details.get('volume_ratio', 0)
                     
-                    # 1차 필터 조건 (사용자 규칙 2026-01-31 -> 완화):
-                    # 1. Pre-Score 2점 이상
-                    # 2. 거래대금 300억 이상 (Config Min)
-                    # 3. 거래량 배수 2배 이상 (예외 없음)
+                    # 1. 1차 필터: 기본 조건 (거래대금, 거래량 등)
+                    # - 거래대금 300억 이상 (Config Min)
+                    # - 거래량 배수 2배 이상
                     MIN_TRADING_VALUE = self.scorer.config.trading_value_min
                     
-                    if (pre_score >= PRE_SCORE_THRESHOLD and 
-                        trading_value >= MIN_TRADING_VALUE and
-                        volume_ratio >= 2.0):
+                    if trading_value < MIN_TRADING_VALUE:
+                        self.drop_stats["low_trading_value"] += 1
+                        print(f"    [Drop] 거래대금 부족: {stock.name} ({trading_value//100_000_000}억 < {MIN_TRADING_VALUE//100_000_000}억)")
+                        continue
+                        
+                    if volume_ratio < 2.0:
+                        self.drop_stats["low_volume_ratio"] += 1
+                        print(f"    [Drop] 거래량배수 부족: {stock.name} ({volume_ratio:.1f} < 2.0)")
+                        continue
+
+                    # 2. 최종 필터 (Pre-LLM): 등급 미달 사전 차단
+                    # LLM 없이도 최소 D등급 기준(6점)은 넘어야 함
+                    # (scorer.determine_grade는 거래대금, 등락률, 점수 등을 종합 평가)
+                    temp_grade = self.scorer.determine_grade(
+                        stock_obj, pre_score, score_details, base_data['supply'], base_data['charts']
+                    )
+                    
+                    if temp_grade:
+                        # 통과
                         pending_items.append(base_data)
-                        logger.debug(f"[Phase1 Pass] {stock.name}: Score={pre_score}, Value={trading_value//100_000_000}억, VolRatio={volume_ratio:.1f}")
+                        grade_val = getattr(temp_grade, 'value', temp_grade)
+                        logger.debug(f"[Phase1 Pass] {stock.name}: Grade={grade_val}, Score={pre_score.total}")
                     else:
-                        # 탈락 원인 분류
-                        if trading_value < MIN_TRADING_VALUE:
-                            self.drop_stats["low_trading_value"] += 1
-                        elif volume_ratio < 2.0:
-                            self.drop_stats["low_volume_ratio"] += 1
-                        elif pre_score < PRE_SCORE_THRESHOLD:
-                            self.drop_stats["low_pre_score"] += 1
-                        print(f"    [Drop] {stock.name}: Score={pre_score}/{PRE_SCORE_THRESHOLD}, Value={trading_value//100_000_000}억/{MIN_TRADING_VALUE//100_000_000}억, VolRatio={volume_ratio:.1f}/2.0")
+                        # 등급 미달 탈락
+                        self.drop_stats["grade_fail"] += 1
+                        # 1차 필터는 통과했으나 등급 요건 불충족
+                        print(f"    [Drop] 등급 미달: {stock.name} (Score={pre_score.total}, Pre-Grade=None)")
                 
                 if (i+1) % 10 == 0:
                     print(f"    Processing {i+1}/{len(candidates)}...", end='\r')
             
-            logger.info(f"[Phase1 완료] {market}: {len(pending_items)}개 통과 (탈락: 거래대금부족={self.drop_stats['low_trading_value']}, 거래량부족={self.drop_stats['low_volume_ratio']}, 점수부족={self.drop_stats['low_pre_score']})")
-            print(f"\n    -> 1차 선별 완료: {len(pending_items)}개 (Pre-Score≥2, 대금≥300억, 거래량≥2배)")
+            logger.info(f"[Phase1 완료] {market}: {len(pending_items)}개 통과 (탈락: 거래대금부족={self.drop_stats['low_trading_value']}, 거래량부족={self.drop_stats['low_volume_ratio']}, 등급미달={self.drop_stats['grade_fail']})")
+            print(f"\n    -> 1차 선별 완료: {len(pending_items)}개 (사전 등급 D급 이상, 대금/거래량 충족)")
             self.scan_stats["phase1"] += len(pending_items)
 
             # --- Phase 2: News Fetching & Batch LLM ---
@@ -366,9 +376,10 @@ class SignalGenerator:
             # 점수 계산
             score, checklist, score_details = self.scorer.calculate(stock, charts, news_list, supply, llm_result)
             
-            # [Fix] AI 분석 결과 보존 (JSON 저장용)
+            # [Fix] AI 분석 결과 보존 (JSON 저장 및 Score 객체 할당)
             if llm_result:
                 score_details['ai_evaluation'] = llm_result
+                score.ai_evaluation = llm_result  # Frontend가 Score 객체를 참조할 경우를 대비해 할당
             
             # 등급 미달 제외 (None)
             grade = self.scorer.determine_grade(stock, score, score_details, supply, charts)
