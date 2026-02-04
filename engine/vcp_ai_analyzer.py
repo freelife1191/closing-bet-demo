@@ -197,7 +197,8 @@ class VCPMultiAIAnalyzer:
         except json.JSONDecodeError:
             # JSON 추출 시도
             import re
-            match = re.search(r'\{[^}]+\}', text, re.DOTALL)
+            # [수정] 더 강력한 JSON 추출 정규식 (중괄호 내부 모든 내용 포함)
+            match = re.search(r'\{.*\}', text, re.DOTALL)
             if match:
                 try:
                     return json.loads(match.group())
@@ -320,6 +321,10 @@ class VCPMultiAIAnalyzer:
                 
                 # JSON 파싱
                 result = self._parse_json_response(response_text)
+                
+                if not result:
+                    logger.warning(f"[Perplexity] JSON 파싱 실패 for {stock_name}. Raw Output: {response_text[:300]}...")
+                
                 return result
                 
             except Exception as e:
