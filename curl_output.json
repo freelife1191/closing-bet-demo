@@ -1,0 +1,548 @@
+{
+  "count": 20,
+  "generated_at": "2026-02-05T05:22:10.327910",
+  "signals": [
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.43,
+      "current_price": 12420.0,
+      "entry_price": 12080.0,
+      "final_score": 125.5,
+      "foreign_5d": 1428566845,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "\ud53c\uc5d0\uc774\uce58\uc5d0\uc774\ub294 VCP \uc810\uc218\uac00 100\uc810\uc73c\ub85c \ub9e4\uc6b0 \ub192\uc740 VCP \ud328\ud134 \uc644\uc131\ub3c4\ub97c \ubcf4\uc785\ub2c8\ub2e4. \uc218\ucd95 \ube44\uc728 \ub610\ud55c 0.43\uc73c\ub85c \uc774\uc0c1\uc801\uc778 \uc218\uc900\uc774\uba70, \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 5\uc77c \uc21c\ub9e4\uc218\uc138\uac00 \ub9e4\uc6b0 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \uc0c1\uc2b9 \ucd94\uc138 \uc804\ud658\uc758 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 324512985,
+      "market": "KOSDAQ",
+      "name": "\ud53c\uc5d0\uc774\uce58\uc5d0\uc774",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 95,
+        "reason": "\ud53c\uc5d0\uc774\uce58\uc5d0\uc774\uc758 VCP \uc810\uc218 100\uc810\uacfc \uc218\ucd95 \ube44\uc728 0.43\uc740 \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc758 \uc774\uc0c1\uc801\uc778 \uc870\uac74(\uc810\uc9c4\uc801 \uc218\ucd95, \ub0ae\uc740 \ubcc0\ub3d9\uc131)\uc744 \ucda9\uc871\ud558\uba70, \uacf5\uae09 \uc18c\uc9c4\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \ub098\ud0c0\ub0c5\ub2c8\ub2e4[1][2][3]. \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 14\uc5b5 \uc8fc \uc774\uc0c1, \uae30\uad00 3\uc5b5 \uc8fc \uc21c\ub9e4\uc218\ub294 \uac15\ub825\ud55c \uc218\uae09 \uc9c0\uc9c0\ub97c \ud655\uc778\uc2dc\ucf1c \ub3cc\ud30c \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\uc2b5\ub2c8\ub2e4[1][2]. VCP \ud328\ud134\uc758 \ub192\uc740 \uc2e0\ub8b0\ub3c4\uc640 \ub9e4\uc218 \uc138\ub825 \uc720\uc785\uc73c\ub85c \ub9e4\uc218 \ucd94\ucc9c\ud569\ub2c8\ub2e4."
+      },
+      "return_pct": 2.81,
+      "score": 96.0,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "043370"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.56,
+      "current_price": 63300.0,
+      "entry_price": 63200.0,
+      "final_score": 115.3,
+      "foreign_5d": 6750314550,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "HL\ub9cc\ub3c4\ub294 VCP \uc810\uc218\uac00 75\uc810\uc73c\ub85c VCP \ud328\ud134\uc774 \uc720\ud6a8\ud558\uba70, \uc218\ucd95 \ube44\uc728 \ub610\ud55c 0.56\uc73c\ub85c \uae0d\uc815\uc801\uc785\ub2c8\ub2e4. \ucd5c\uadfc 5\uc77c\uac04 \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \ub098\ud0c0\ub098 \ub9e4\uc218\uc138 \uc720\uc785\uc744 \ub4b7\ubc1b\uce68\ud558\ubbc0\ub85c, \ub9e4\uc218 \uad00\uc810\uc744 \uc720\uc9c0\ud569\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 5433920250,
+      "market": "KOSPI",
+      "name": "HL\ub9cc\ub3c4",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "HL\ub9cc\ub3c4\ub294 VCP \uc810\uc218 75\uc640 \uc218\ucd95 \ube44\uc728 0.56\uc73c\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \ub69c\ub837\ud558\uba70, \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 67\uc5b5\uc8fc, \uae30\uad00 54\uc5b5\uc8fc\ub85c \uac15\ud55c \uc218\uae09 \uc720\uc785\uc774 \ud655\uc778\ub429\ub2c8\ub2e4. \uc774\ub3d9\ud3c9\uade0\uc120 \uc6b0\uc0c1\ud5a5 \uc720\uc9c0\uc640 \uc790\uc728\uc8fc\ud589\u00b7SDV \uc218\uc694 \uc99d\uac00 \uc804\ub9dd\uc774 \uc0c1\uc2b9 \ub3cc\ud30c \uac00\ub2a5\uc131\uc744 \ub192\uc5ec \ub9e4\uc218 \uc801\uae30\uc785\ub2c8\ub2e4."
+      },
+      "return_pct": 0.16,
+      "score": 80.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "204320"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.76,
+      "current_price": 148200.0,
+      "entry_price": 139800.0,
+      "final_score": 106.9,
+      "foreign_5d": 35719042150,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "\ud55c\uc804\uae30\uc220\uc740 VCP \ud328\ud134 \uc810\uc218\uac00 65\uc810\uc73c\ub85c \uc591\ud638\ud558\uba70, \uc218\ucd95 \ube44\uc728\uc774 0.76\uc73c\ub85c \ubcc0\ub3d9\uc131\uc774 \ucd95\uc18c\ub418\ub294 \ucd94\uc138\uc785\ub2c8\ub2e4. \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 5\uc77c \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \ucd94\uac00 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 23524454100,
+      "market": "KOSPI",
+      "name": "\ud55c\uc804\uae30\uc220",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "\ud55c\uc804\uae30\uc220\uc740 VCP \uc810\uc218 65\uc640 \uc218\ucd95 \ube44\uc728 0.76\uc73c\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \ub69c\ub837\ud558\uba70, \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 357\uc5b5\uc8fc\uc640 \uae30\uad00 235\uc5b5\uc8fc\ub85c \uac15\ub825\ud55c \uc218\uae09\uc774 \ub4b7\ubc1b\uce68\ub41c\ub2e4[1][2]. \uc774\ub294 \uacf5\uae09 \uc18c\uc9c4\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95 \uc0c1\ud0dc\ub97c \ub098\ud0c0\ub0b4 \ub3cc\ud30c \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4. VCP \ud575\uc2ec\uc778 \uac70\ub798\ub7c9 \uac10\uc18c\uc640 \ub9e4\uc218 \uc138\ub825 \uc720\uc785\uc774 \ud655\uc778\ub418\uc5b4 \ub9e4\uc218 \ucd94\ucc9c."
+      },
+      "return_pct": 6.01,
+      "score": 74.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "052690"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.9,
+      "current_price": 87800.0,
+      "entry_price": 88000.0,
+      "final_score": 102.7,
+      "foreign_5d": 23765526150,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "\uc9c0\ud22c\uc9c0\ubc14\uc774\uc624\ub294 VCP \ud328\ud134 \uc810\uc218\uac00 65\uc810\uc73c\ub85c \uc591\ud638\ud558\uba70, \uc218\ucd95 \ube44\uc728\uc774 0.9\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ucd94\uc138\ub97c \ubcf4\uc785\ub2c8\ub2e4. \ud2b9\ud788 \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 5\uc77c \uc21c\ub9e4\uc218 \uaddc\ubaa8\uac00 \ub9e4\uc6b0 \ucee4 \uc218\uae09 \uac1c\uc120\uc774 \ub69c\ub837\ud558\ubbc0\ub85c \ub9e4\uc218 \uad00\uc810\uc73c\ub85c \uc811\uadfc\ud558\ub294 \uac83\uc774 \uc720\ub9ac\ud574 \ubcf4\uc785\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 6101068400,
+      "market": "KOSDAQ",
+      "name": "\uc9c0\ud22c\uc9c0\ubc14\uc774\uc624",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 72,
+        "reason": "VCP \ud328\ud134\uc758 \ud575\uc2ec\uc778 \ubcc0\ub3d9\uc131 \ucd95\uc18c(\uc218\ucd95 \ube44\uc728 0.9)\uc640 \uac70\ub798\ub7c9 \uac10\uc18c\uac00 \ud655\uc778\ub418\uba70[1][2], \uc678\uad6d\uc778\u00b7\uae30\uad00\uc758 \uac15\ub825\ud55c \uc21c\ub9e4\uc218(\uc57d 300\uc5b5 \uaddc\ubaa8)\uac00 \ub3d9\ubc18\ub418\uc5b4 \uc788\uc2b5\ub2c8\ub2e4. VCP \ud328\ud134\uc740 \uacf5\uae09 \uc18c\uc9c4\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \ud1b5\ud574 \ud3ed\ubc1c\uc801 \uc0c1\uc2b9\uc744 \uc2e0\ud638\ud558\ub294 \uc2e0\ub8b0\ub3c4 \ub192\uc740 \uae30\ubc95\uc774\uba70[1], \uc190\uc808\uc120\uc744 5-7% \uc218\uc900\uc73c\ub85c \uc124\uc815\ud558\uc5ec \ub9ac\uc2a4\ud06c\ub97c \uc81c\ud55c\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4[2]."
+      },
+      "return_pct": -0.23,
+      "score": 74.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "456160"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.7,
+      "current_price": 102800.0,
+      "entry_price": 101400.0,
+      "final_score": 108.4,
+      "foreign_5d": 56327056050,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 78,
+        "reason": "LG\uc804\uc790\ub294 VCP \uc810\uc218\uac00 \ub192\uc544 \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \uc720\ud6a8\ud558\uba70, \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uac00 \uae30\uad00 \ub9e4\ub3c4\uc138\ub97c \uc0c1\uc1c4\ud558\uace0 \uc788\uc5b4 \uc0c1\uc2b9 \ucd94\uc138 \uac00\ub2a5\uc131\uc774 \ub192\uc2b5\ub2c8\ub2e4. \uc218\ucd95 \ube44\uc728 \ub610\ud55c 0.7\ub85c \uc591\ud638\ud558\uc5ec \ucd94\uac00\uc801\uc778 \ubcc0\ub3d9\uc131 \uac10\uc18c \uc774\ud6c4 \uc0c1\uc2b9 \ub3cc\ud30c\ub97c \uae30\ub300\ud574 \ubcfc \uc218 \uc788\uc2b5\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -24570509050,
+      "market": "KOSPI",
+      "name": "LG\uc804\uc790",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 82,
+        "reason": "LG\uc804\uc790\ub294 VCP \uc810\uc218 80\uc810\uc73c\ub85c \uc6b0\uc218\ud55c \uae30\uc220\uc801 \ud328\ud134\uc744 \ud615\uc131\ud558\uace0 \uc788\uc73c\uba70[4], 2026\ub144 \uad6c\uc870\uc870\uc815 \ud6a8\uacfc \ubcf8\uaca9\ud654\ub85c \uc601\uc5c5\uc774\uc775\uc774 43% \uc99d\uac00\ud560 \uac83\uc73c\ub85c \uc804\ub9dd\ub418\uc5b4[1] \uc2e4\uc801 \ud134\uc5b4\ub77c\uc6b4\ub4dc \ubaa8\uba58\ud140\uc774 \uac15\ud558\ub2e4. \ud604\uc7ac \uc8fc\uac00\ub294 2026\ub144 \uae30\uc900 P/B 0.6-0.7\ubc30\uc758 \uc5ed\uc0ac\uc801 \uc800\uc810 \uc218\uc900[1][2]\uc774\uba74\uc11c \uc678\uad6d\uc778 \uc21c\ub9e4\uc218 56\uc870\uc6d0\uc73c\ub85c \uac15\ud55c \uc218\uae09 \uc9c0\uc9c0\ub97c \ubc1b\uace0 \uc788\uc5b4, HVAC\u00b7\ub85c\ubd07 \ub4f1 \uc2e0\uc131\uc7a5 \ub3d9\ub825\uacfc \ud568\uaed8 \uc8fc\uac00 \uc0c1\uc2b9 \uc5ec\ub825\uc774 \ud06c\ub2e4[2][3]."
+      },
+      "return_pct": 1.38,
+      "score": 73.6,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "066570"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.48,
+      "current_price": 11690.0,
+      "entry_price": 11210.0,
+      "final_score": 108.6,
+      "foreign_5d": 13262250,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "\uc138\uc6d0\ubb3c\uc0b0\uc740 VCP \ud328\ud134 \uc810\uc218\uac00 \ub9e4\uc6b0 \ub192\uace0 \uc218\ucd95 \ube44\uc728\ub3c4 \uc591\ud638\ud558\uc5ec \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud6c4 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\uc2b5\ub2c8\ub2e4. \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\ub294 \ubc18\uba74 \uae30\uad00 \ub9e4\ub3c4\uc138\ub294 \uc0c1\ub300\uc801\uc73c\ub85c \uc57d\ud558\uc5ec \ub9e4\uc218\uc138 \uc6b0\uc704\ub85c \ud310\ub2e8\ub429\ub2c8\ub2e4. \ub2e4\ub9cc, \uc2dc\uc7a5 \uc0c1\ud669\uc5d0 \ub530\ub77c \ubcc0\ub3d9\uc131\uc774 \ucee4\uc9c8 \uc218 \uc788\uc73c\ubbc0\ub85c \ubd84\ud560 \ub9e4\uc218\ub97c \uace0\ub824\ud558\ub294 \uac83\uc774 \uc88b\uc2b5\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -10582460,
+      "market": "KOSDAQ",
+      "name": "\uc138\uc6d0\ubb3c\uc0b0",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 72,
+        "reason": "\uc138\uc6d0\ubb3c\uc0b0\uc740 VCP \ud328\ud134\uc758 \ud575\uc2ec \uc870\uac74\uc778 \ubcc0\ub3d9\uc131 \ucd95\uc18c(\uc218\ucd95 \ube44\uc728 0.48)\uc640 \uac70\ub798\ub7c9 \uac10\uc18c\ub97c \ucda9\uc871\ud558\uace0 \uc788\uc73c\uba70[1][2], \uc678\uad6d\uc778\uc758 \uac15\ud55c \uc21c\ub9e4\uc218(13262250\uc8fc)\uac00 \uc0c1\uc2b9 \ub3cc\ud30c \uc2e0\ud638\ub97c \ub4b7\ubc1b\uce68\ud569\ub2c8\ub2e4[2]. \ub2e4\ub9cc \uae30\uad00\uc758 \uc21c\ub9e4\ub3c4(-10582460\uc8fc)\uac00 \uc9c4\ud589 \uc911\uc774\ubbc0\ub85c \uc190\uc808\uc120\uc744 5-7% \uc218\uc900\uc73c\ub85c \uc124\uc815\ud558\uc5ec \ub9ac\uc2a4\ud06c\ub97c \uad00\ub9ac\ud574\uc57c \ud569\ub2c8\ub2e4[2]."
+      },
+      "return_pct": 4.28,
+      "score": 73.6,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "024830"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.73,
+      "current_price": 27650.0,
+      "entry_price": 26800.0,
+      "final_score": 107.3,
+      "foreign_5d": 1399558475,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "\uc5d0\ube0c\ub9ac\ubd07\uc740 VCP \uc810\uc218\uac00 75\uc810\uc73c\ub85c \ud328\ud134\uc774 \uc720\ud6a8\ud558\uba70, \uc218\ucd95 \ube44\uc728\uc774 0.73\uc73c\ub85c \ubcc0\ub3d9\uc131\uc774 \ucd95\uc18c\ub418\ub294 \ucd94\uc138\uc785\ub2c8\ub2e4. \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 5\uc77c \uc21c\ub9e4\uc218\ub7c9\uc774 \uc0c1\ub2f9\ud558\uc5ec \uc0c1\uc2b9 \ucd94\uc138 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 1329137225,
+      "market": "KOSDAQ",
+      "name": "\uc5d0\ube0c\ub9ac\ubd07",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "\uc5d0\ube0c\ub9ac\ubd07\uc740 VCP \uc810\uc218 75\uc640 \uc218\ucd95 \ube44\uc728 0.73\uc73c\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \uac15\ud558\uac8c \ud615\uc131\ub418\uc5b4 \ub3cc\ud30c \uac00\ub2a5\uc131\uc774 \ub192\uc73c\uba70, \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 5\uc77c \uc21c\ub9e4\uc218 \uaddc\ubaa8\uac00 \uac01\uac01 14\uc5b5\uc8fc, 13\uc5b5\uc8fc \uc218\uc900\uc73c\ub85c \uac15\ub825\ud55c \uc218\uae09\uc774 \uc720\uc785\ub418\uace0 \uc788\uc2b5\ub2c8\ub2e4[1]. AI \uc790\uc728\uc8fc\ud589\ubaa8\ub4c8 \uc0ac\uc5c5 \ub9e4\ucd9c \ubc18\uc601\uc73c\ub85c \uc131\uc7a5 \uc7a0\uc7ac\ub825\uc774 \uc788\uc73c\uba70, CB \uc138\ub825 \ub9e4\ub3c4 \uc644\ub8cc \ud6c4 \ubc18\ub4f1 \uae30\ub300\uac10\uc774 \uc81c\uae30\ub429\ub2c8\ub2e4[2][4][5]. \ub2e4\ub9cc PER 44.63\ubc30 \uace0\ud3c9\uac00\uc640 ROE 5.37% \uc57d\ud654\ub85c \ub2e8\uae30 \ub9ac\uc2a4\ud06c \uc874\uc7ac\ud558\ub098 \uc218\uae09 \uc6b0\uc704\ub85c \ub9e4\uc218 \uc801\uae30\uc785\ub2c8\ub2e4[3]."
+      },
+      "return_pct": 3.17,
+      "score": 73.0,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "270660"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.84,
+      "current_price": 38050.0,
+      "entry_price": 37700.0,
+      "final_score": 103.5,
+      "foreign_5d": 1469240050,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 78,
+        "reason": "\ud55c\ud14d\uc740 VCP \ud328\ud134 \uc810\uc218\uac00 \uc591\ud638\ud558\uace0 \uc218\ucd95 \ube44\uc728\uc774 \uae30\uc900\uce58\uc5d0 \uadfc\uc811\ud558\uc5ec \ubcc0\ub3d9\uc131 \uac10\uc18c \ucd94\uc138\uac00 \ub098\ud0c0\ub098\uace0 \uc788\uc2b5\ub2c8\ub2e4. \ud2b9\ud788, \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 5\uc77c \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \ub2e8\uae30\uc801\uc778 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 1050502450,
+      "market": "KOSDAQ",
+      "name": "\ud55c\ud14d",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "\ud55c\ud14d\uc758 VCP \uc810\uc218 65\ub294 \uc591\ud638\ud55c \ud328\ud134(60-79\uc810)\uc744 \ub098\ud0c0\ub0b4\uba70 \uc218\ucd95 \ube44\uc728 0.84\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c\uac00 \ub69c\ub837\ud558\uace0, \uc678\uad6d\uc778 \ubc0f \uae30\uad00\uc758 5\uc77c \uc21c\ub9e4\uc218 \uaddc\ubaa8\uac00 \ub9c9\ub300\ud574 \uc218\uae09\uc774 \uac15\ub825\ud568[1][3]. VCP \ud328\ud134\uc758 \uacf5\uae09 \uc18c\uba78\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95 \uc2e0\ud638\uac00 \ud655\uc778\ub418\uba70 \ub3cc\ud30c \uc2dc \ud3ed\ubc1c\uc801 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\uc74c[1][2]."
+      },
+      "return_pct": 0.93,
+      "score": 71.8,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "098070"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.64,
+      "current_price": 5500.0,
+      "entry_price": 5620.0,
+      "final_score": 109.3,
+      "foreign_5d": 1275333135,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "JTC\ub294 VCP \uc810\uc218\uac00 80\uc810\uc73c\ub85c \ub192\uc740 \uc2e0\ub8b0\ub3c4\ub97c \ubcf4\uc774\uba70, \uc218\ucd95 \ube44\uc728 \ub610\ud55c \uc591\ud638\ud569\ub2c8\ub2e4. \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \ucd94\uac00 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4. \ub2e4\ub9cc \uae30\uad00 \ub9e4\ub3c4\uc138\ub294 \uc9c0\uc18d\uc801\uc73c\ub85c \uc8fc\uc2dc\ud574\uc57c \ud569\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -532544475,
+      "market": "KOSDAQ",
+      "name": "JTC",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "JTC\ub294 VCP \uc810\uc218 80\uc810\uacfc \uc218\ucd95 \ube44\uc728 0.64\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c\uac00 \ub69c\ub837\ud558\uba70, \uc774\ub294 \uacf5\uae09 \uc18c\uc9c4\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \ub098\ud0c0\ub0b4 \ub3cc\ud30c \uac00\ub2a5\uc131\uc774 \ub192\ub2e4[1][2][3]. \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 12\uc5b5 7\ucc9c\ub9cc \uc8fc \uaddc\ubaa8\uac00 \uac15\ub825\ud55c \uc218\uae09 \uc9c0\uc9c0\ud558\ub098, \uae30\uad00 \uc21c\ub9e4\uc218\ub294 \ubd80\uc815\uc801\uc774\ub098 \uc678\uad6d\uc778 \uc8fc\ub3c4\ub85c \uc0c1\uc1c4\ub41c\ub2e4. VCP \ud328\ud134\uc758 \ub192\uc740 \uc2e0\ub8b0\ub3c4\uc640 \uae0d\uc815 \uc218\uae09\uc744 \uc885\ud569\ud574 \ub9e4\uc218 \ucd94\ucc9c."
+      },
+      "return_pct": -2.14,
+      "score": 71.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "950170"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.76,
+      "current_price": 47900.0,
+      "entry_price": 47650.0,
+      "final_score": 105.6,
+      "foreign_5d": 637312375,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "\uc2e0\uc138\uacc4\ud478\ub4dc\ub294 VCP \ud328\ud134 \uc810\uc218\uac00 \uc591\ud638\ud558\uace0, \uc218\ucd95 \ube44\uc728\uc774 \uae30\uc900\uce58\uc5d0 \uadfc\uc811\ud558\uc5ec \ubcc0\ub3d9\uc131 \ucd95\uc18c \uad6d\uba74\uc5d0 \uc788\uc2b5\ub2c8\ub2e4. \ucd5c\uadfc \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 \uc21c\ub9e4\uc218\uc138\uac00 \uc720\uc785\ub418\uace0 \uc788\uc5b4 \uc0c1\uc2b9 \ucd94\uc138 \uc804\ud658 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 108409050,
+      "market": "KOSPI",
+      "name": "\uc2e0\uc138\uacc4\ud478\ub4dc",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "\uc2e0\uc138\uacc4\ud478\ub4dc\uc758 VCP \uc810\uc218 75\uc640 \uc218\ucd95 \ube44\uc728 0.76\uc740 \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc758 \uac15\ud55c \uc2e0\ud638\ub97c \ubcf4\uc774\uba70, \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 637,312,375\uc8fc\uc640 \uae30\uad00 6,108,409,050\uc8fc\ub294 \uac15\ub825\ud55c \uc218\uae09 \uc720\uc785\uc744 \ud655\uc778. VCP \ud328\ud134\uc758 \ud575\uc2ec\uc778 \uacf5\uae09 \uc18c\uc9c4\uacfc \uac70\ub798\ub7c9 dry-up \ud6c4 \ub3cc\ud30c \uac00\ub2a5\uc131\uc774 \ub192\uc544 \ub9e4\uc218 \uc801\uae30."
+      },
+      "return_pct": 0.52,
+      "score": 71.0,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "031440"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.58,
+      "current_price": 32600.0,
+      "entry_price": 31600.0,
+      "final_score": 110.9,
+      "foreign_5d": -1331555975,
+      "gemini_recommendation": {
+        "action": "HOLD",
+        "confidence": 70,
+        "reason": "\ub098\uc6b0\ub85c\ubcf4\ud2f1\uc2a4\ub294 VCP \uc810\uc218\uac00 \ub192\uc544 \uae30\uc220\uc801 \ubd84\uc11d \uad00\uc810\uc5d0\uc11c \uae0d\uc815\uc801\uc774\uc9c0\ub9cc, \ucd5c\uadfc \uc678\uad6d\uc778 \uc21c\ub9e4\ub3c4\uc138\uac00 \uac15\ud569\ub2c8\ub2e4. \uae30\uad00 \ub9e4\uc218\uc138\uac00 \uc774\ub97c \uc0c1\uc1c4\ud558\ub294\uc9c0 \ucd94\uac00 \ud655\uc778\uc774 \ud544\uc694\ud558\uba70, \ud604\uc7ac\ub294 \ubcf4\uc720 \uad00\uc810\uc744 \uc720\uc9c0\ud569\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 1965304875,
+      "market": "KOSDAQ",
+      "name": "\ub098\uc6b0\ub85c\ubcf4\ud2f1\uc2a4",
+      "perplexity_recommendation": {
+        "action": "HOLD",
+        "confidence": 55,
+        "reason": "\ub098\uc6b0\ub85c\ubcf4\ud2f1\uc2a4\ub294 VCP \ud328\ud134 \uc644\uc131 \ud6c4 \uc0c1\uc2b9\uc138\ub97c \ubcf4\uc774\uace0 \uc788\uc73c\ub098[1], 3\ub144 \ub0b4 \ucd5c\uace0\uc810 \uc774\ud6c4 \ud558\ubc29 \ucd94\uc138\uc640 \ub192\uc740 \ubc38\ub958\uc5d0\uc774\uc158, \uc801\uc790 \uc2e4\uc801\uc774 \uc6b0\ub824\ub41c\ub2e4[6]. \uae30\uad00\uc758 \uc21c\ub9e4\uc218(+1.96\uc870)\ub294 \uae0d\uc815\uc801\uc774\uc9c0\ub9cc \uc678\uad6d\uc778\uc758 \uac15\ud55c \uc21c\ub9e4\ub3c4(-1.33\uc870)\uac00 \uc0c1\ucda9\ub418\uc5b4 \ud604\uc7ac \ucd94\uc138 \ud655\uc778\uc774 \ud544\uc694\ud558\ub2e4[4]."
+      },
+      "return_pct": 3.16,
+      "score": 70.8,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "459510"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.76,
+      "current_price": 32150.0,
+      "entry_price": 32250.0,
+      "final_score": 105.3,
+      "foreign_5d": 1897370850,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 78,
+        "reason": "\ud0dc\uc6c5\uc740 VCP \ud328\ud134 \uc810\uc218\uac00 \uc900\uc218\ud558\uace0 \uc218\ucd95 \ube44\uc728\uc774 \uc591\ud638\ud558\uc5ec \ubcc0\ub3d9\uc131 \ucd95\uc18c \uc774\ud6c4 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \uc788\uc2b5\ub2c8\ub2e4. \ud2b9\ud788, \ucd5c\uadfc \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ub825\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \ub9e4\uc218\uc138 \uac15\ud654\uc5d0 \ub530\ub978 \uc8fc\uac00 \uc0c1\uc2b9\uc744 \uae30\ub300\ud574 \ubcfc \uc218 \uc788\uc2b5\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 301622675,
+      "market": "KOSDAQ",
+      "name": "\ud0dc\uc6c5",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "\ud0dc\uc6c5 \uc885\ubaa9\uc740 VCP \uc810\uc218 65\uc640 \uc218\ucd95 \ube44\uc728 0.76\uc73c\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \ub69c\ub837\ud558\uba70, \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 18.97\uc5b5\uc8fc\uc640 \uae30\uad00 3\uc5b5\uc8fc\ub85c \uac15\ud55c \uc218\uae09\uc774 \ub4b7\ubc1b\uce68\ub41c\ub2e4[1][2]. \uc774\ub294 \uacf5\uae09 \uc18c\uc9c4\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95 \uc0c1\ud0dc\ub97c \ub098\ud0c0\ub0b4 \ub3cc\ud30c \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4. VCP \ud575\uc2ec\uc778 \uac70\ub798\ub7c9 \uac10\uc18c\uc640 \ub9e4\uc218\uc138 \uc720\uc785\uc774 \ub9e4\uc218 \uc2e0\ud638\ub85c \uc791\uc6a9\ud55c\ub2e4."
+      },
+      "return_pct": -0.31,
+      "score": 70.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "044490"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.65,
+      "current_price": 5260.0,
+      "entry_price": 5210.0,
+      "final_score": 108.5,
+      "foreign_5d": 729421226,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "\ub514\uc640\uc774\ub294 VCP \uc810\uc218\uac00 \ub192\uc544 \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \uae0d\uc815\uc801\uc73c\ub85c \ub098\ud0c0\ub098\uace0 \uc788\uc2b5\ub2c8\ub2e4. \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\ub294 \uc810 \ub610\ud55c \ub9e4\uc218 \uc2e0\ud638\ub85c \ud574\uc11d\ub418\ub098, \uae30\uad00\uc758 \ub9e4\ub3c4\uc138\ub294 \uc8fc\uc758\ud574\uc57c \ud569\ub2c8\ub2e4. \uc804\ubc18\uc801\uc73c\ub85c \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -2578560,
+      "market": "KOSPI",
+      "name": "\ub514\uc640\uc774",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "\ub514\uc640\uc774 \uc885\ubaa9\uc740 VCP \uc810\uc218 80\uacfc \uc218\ucd95 \ube44\uc728 0.65\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \uac15\ub825\ud558\uac8c \ud615\uc131\ub418\uc5b4 \uacf5\uae09 \uc18c\uc9c4\uacfc \uc0c1\uc2b9 \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \uc2dc\uc0ac\ud55c\ub2e4[1][2]. \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 \uaddc\ubaa8\uac00 7\uc5b5 \uc8fc \uc774\uc0c1\uc73c\ub85c \ub300\uaddc\ubaa8 \ub9e4\uc218\uc138\ub97c \ubcf4\uc774\ub294 \ubc18\uba74 \uae30\uad00 \uc21c\ub9e4\uc218\ub294 \uc18c\ud3ed \uc74c\uc218\ub85c \ubb34\uc2dc\ud560 \uc218\uc900\uc774\uba70, VCP \ub3cc\ud30c \uac00\ub2a5\uc131\uc774 \ub192\ub2e4[1][3]. \uac70\ub798\ub7c9 \uac10\uc18c\uc640 \uc800\ud56d \ub3cc\ud30c \uc2dc \ud3ed\ubc1c\uc801 \uc0c1\uc2b9 \uae30\ub300."
+      },
+      "return_pct": 0.96,
+      "score": 70.0,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "013570"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.64,
+      "current_price": 3425.0,
+      "entry_price": 3400.0,
+      "final_score": 108.8,
+      "foreign_5d": 109716776,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 78,
+        "reason": "\uba54\uc384\uc774\uc0c1\uc740 \ub192\uc740 VCP \uc810\uc218\uc640 \ub0ae\uc740 \uc218\ucd95 \ube44\uc728\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \uad6d\uba74\uc744 \ubcf4\uc774\uba70, \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc2b5\ub2c8\ub2e4. \uae30\uad00 \ub9e4\ub3c4\uc138\uac00 \uc874\uc7ac\ud558\ub098, \uc678\uad6d\uc778 \ub9e4\uc218\uc138\uac00 \uc774\ub97c \uc0c1\uc1c4\ud560 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4. \uc0c1\uc2b9 \ucd94\uc138 \uc804\ud658 \uac00\ub2a5\uc131\uc774 \ub192\uc544 \ub9e4\uc218\ub97c \uace0\ub824\ud574\ubcfc \ub9cc\ud569\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -22883019,
+      "market": "KOSDAQ",
+      "name": "\uba54\uc384\uc774\uc0c1",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 90,
+        "reason": "\uba54\uc384\uc774\uc0c1\uc740 VCP \uc810\uc218 90\uacfc \uc218\ucd95 \ube44\uc728 0.64\ub85c \uc6b0\uc218\ud55c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc744 \ubcf4\uc774\uba70, \uc774\ub294 \uacf5\uae09 \uc18c\uc9c4\uacfc \uc0c1\uc2b9 \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \uc2dc\uc0ac\ud569\ub2c8\ub2e4[1][2]. \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 1\uc5b5 \uc8fc \uc774\uc0c1\uc73c\ub85c \uac15\ud55c \uc218\uae09 \uc9c0\uc9c0\ub418\ub098 \uae30\uad00 \uc21c\ub9e4\uc218\ub294 \ubd80\uc815\uc801\uc774\ub098 VCP \uc2e0\ub8b0\ub3c4\uac00 \uc774\ub97c \uc0c1\uc1c4\ud569\ub2c8\ub2e4[1][3]. \ub3cc\ud30c \uc2dc \ud3ed\ubc1c\uc801 \uc0c1\uc2b9 \uac00\ub2a5\uc131 \ub192\uc544 \ub9e4\uc218 \uad8c\uc7a5."
+      },
+      "return_pct": 0.74,
+      "score": 70.0,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "408920"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.61,
+      "current_price": 1758.0,
+      "entry_price": 1743.0,
+      "final_score": 109.4,
+      "foreign_5d": 126194513,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "\uba54\ud0c0\ub7a9\uc2a4\ub294 \ub192\uc740 VCP \uc810\uc218\uc640 0.61\uc758 \uc218\ucd95 \ube44\uc728\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \ub69c\ub837\ud558\uac8c \ub098\ud0c0\ub0a9\ub2c8\ub2e4. \ucd5c\uadfc \uc678\uad6d\uc778\uacfc \uae30\uad00\uc758 \ub300\uaddc\ubaa8 \uc21c\ub9e4\uc218\ub294 \uac15\ub825\ud55c \ub9e4\uc218 \uc2e0\ud638\ub85c \ud574\uc11d\ub418\uba70, VCP \ub3cc\ud30c \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 29629308,
+      "market": "KOSPI",
+      "name": "\uba54\ud0c0\ub7a9\uc2a4",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 90,
+        "reason": "\uba54\ud0c0\ub7a9\uc2a4\uc758 VCP \uc810\uc218 90\uacfc \uc218\ucd95 \ube44\uc728 0.61\uc740 \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc758 \uac15\ub825\ud55c \uc2e0\ud638\ub85c, \uacf5\uae09 \uc18c\uc9c4\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \ub098\ud0c0\ub0b4\uba70 \ub3cc\ud30c \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4[1][2][3]. \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 1.26\uc5b5\uc8fc\uc640 \uae30\uad00 2.96\ucc9c\ub9cc\uc8fc\uc758 \uac15\ud55c \uc218\uae09 \uc720\uc785\uc774 \uc774\ub97c \ub4b7\ubc1b\uce68\ud55c\ub2e4. VCP \ud328\ud134\uc758 \ub192\uc740 \uc2e0\ub8b0\ub3c4\uc640 \ub9e4\uc218 \uc138\ub825 \uc9c0\ubc30\ub85c \ub9e4\uc218 \ucd94\ucc9c."
+      },
+      "return_pct": 0.86,
+      "score": 69.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "090370"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.99,
+      "current_price": 79400.0,
+      "entry_price": 77200.0,
+      "final_score": 97.8,
+      "foreign_5d": 1454027500,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "OCI\ub294 VCP \ud328\ud134 \uc810\uc218\uac00 \uc591\ud638\ud558\uace0 \uc218\ucd95 \ube44\uc728\uc774 \ub0ae\uc544 \ubcc0\ub3d9\uc131\uc774 \ucd95\uc18c\ub418\ub294 \ucd94\uc138\uc785\ub2c8\ub2e4. \uae30\uad00\uacfc \uc678\uad6d\uc778\uc758 \uac15\ub825\ud55c \uc21c\ub9e4\uc218\uc138\ub294 \uae0d\uc815\uc801\uc778 \uc2e0\ud638\uc774\uba70, \ucd94\uac00 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": 1831825550,
+      "market": "KOSPI",
+      "name": "OCI",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "OCI\ub294 VCP \uc810\uc218 60\uacfc \uc218\ucd95 \ube44\uc728 0.99\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \ub69c\ub837\ud558\uba70, \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 14.5\uc5b5\uc8fc\uc640 \uae30\uad00 5\uc77c \uc21c\ub9e4\uc218 18.3\uc5b5\uc8fc\ub85c \uac15\ub825\ud55c \uc218\uae09\uc774 \uc720\uc785\ub418\uc5b4 \uacf5\uae09 \uc18c\uba78\uacfc \uc5d0\ub108\uc9c0 \uc751\ucd95 \uc2e0\ud638\uac00 \ud655\uc778\ub429\ub2c8\ub2e4[1][2]. VCP \ud328\ud134\uc758 \ud575\uc2ec\uc778 \uac70\ub798\ub7c9 \uac10\uc18c\uc640 \ub3cc\ud30c \uc900\ube44 \ub2e8\uacc4\ub85c \ubcf4\uc544 \uc0c1\uc2b9 \ud655\ub960\uc774 \ub192\uc73c\ub098, VCP \uc810\uc218\uac00 100\uc5d0 \ubbf8\uce58\uc9c0 \ubabb\ud574 \uc644\ubcbd\ud55c \ud328\ud134\uc740 \uc544\ub2d9\ub2c8\ub2e4."
+      },
+      "return_pct": 2.85,
+      "score": 68.8,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "456040"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.67,
+      "current_price": 6240.0,
+      "entry_price": 6170.0,
+      "final_score": 107.4,
+      "foreign_5d": 921067110,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "\ucf00\uc774\ud53c\uc5d0\ud504\ub294 \ub192\uc740 VCP \uc810\uc218\uc640 \uc218\ucd95 \ube44\uc728\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud6c4 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\uc2b5\ub2c8\ub2e4. \ucd5c\uadfc \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \uae0d\uc815\uc801\uc778 \uc2dc\uadf8\ub110\ub85c \ud310\ub2e8\ub429\ub2c8\ub2e4. \uae30\uad00 \ub9e4\ub3c4\uc138\ub294 \ub2e4\uc18c \uc544\uc27d\uc9c0\ub9cc, \uc678\uad6d\uc778 \uc218\uae09\uc744 \uace0\ub824\ud588\uc744 \ub54c \ub9e4\uc218 \uad00\uc810\uc73c\ub85c \uc811\uadfc\ud558\ub294 \uac83\uc774 \uc720\ub9ac\ud574 \ubcf4\uc785\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -22704790,
+      "market": "KOSDAQ",
+      "name": "\ucf00\uc774\ud53c\uc5d0\ud504",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 90,
+        "reason": "\ucf00\uc774\ud53c\uc5d0\ud504\ub294 VCP \uc810\uc218 90\uacfc \uc218\ucd95 \ube44\uc728 0.67\ub85c \uc6b0\uc218\ud55c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc744 \ubcf4\uc774\uba70, \uacf5\uae09 \uc18c\uc9c4\uacfc \uc0c1\uc2b9 \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \ub098\ud0c0\ub0c5\ub2c8\ub2e4[1][2][3]. \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 921067110\uc8fc\uac00 \uac15\ub825\ud55c \uc218\uae09 \uc9c0\uc9c0\ub97c \ud655\uc778\ud558\ub098, \uae30\uad00 \uc21c\ub9e4\uc218\ub294 \ubd80\uc815\uc801\uc785\ub2c8\ub2e4. VCP \uace0\uc2e0\ub8b0 \ud328\ud134\uacfc \uc678\uad6d\uc778 \ub9e4\uc218 \uc6b0\uc704\ub97c \uace0\ub824\ud574 \ub9e4\uc218 \ucd94\ucc9c\ud558\ub098 \uac70\ub798\ub7c9 dry-up \ud655\uc778 \ud544\uc694."
+      },
+      "return_pct": 1.13,
+      "score": 68.8,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "024880"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.83,
+      "current_price": 9720.0,
+      "entry_price": 9710.0,
+      "final_score": 102.4,
+      "foreign_5d": 1722321585,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "\uc774\uc218\ud654\ud559\uc740 VCP \ud328\ud134 \uc810\uc218\uac00 \uc591\ud638\ud558\uba70 \uc218\ucd95 \ube44\uc728\ub3c4 \uc900\uc218\ud569\ub2c8\ub2e4. \ud2b9\ud788 \uc678\uad6d\uc778\uc758 \uac15\ub825\ud55c \uc21c\ub9e4\uc218\uac00 \uae0d\uc815\uc801 \uc2dc\uadf8\ub110\ub85c \uc791\uc6a9\ud558\uc5ec \ub9e4\uc218 \uc758\uacac\uc744 \uc81c\uc2dc\ud569\ub2c8\ub2e4. \ub2e4\ub9cc \uae30\uad00 \ub9e4\ub3c4\uc138\ub294 \ub9ac\uc2a4\ud06c \uc694\uc778\uc785\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -3118960,
+      "market": "KOSPI",
+      "name": "\uc774\uc218\ud654\ud559",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "VCP \uc810\uc218 75\uc640 \uc218\ucd95 \ube44\uc728 0.83\uc73c\ub85c \ubcc0\ub3d9\uc131 \uc218\ucd95 \ud328\ud134\uc774 \uac15\ud558\uac8c \ud615\uc131\ub418\uc5c8\uc73c\uba70, \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 17\uc5b5\uc8fc \uaddc\ubaa8\uc758 \uac15\ud55c \uc218\uae09\uc774 \uc9c0\uc9c0. \ucd5c\uadfc \uc0c1\ud55c\uac00 \uae30\ub85d\uacfc \uc804\uace0\uccb4 \ubc30\ud130\ub9ac \ub4f1 \uc2a4\ud398\uc15c\ud2f0 \uc0ac\uc5c5 \ubaa8\uba58\ud140, \uc99d\uad8c\uc0ac \ub9e4\uc218 \uc758\uacac(\ubaa9\ud45c\uac00 28,000\uc6d0)\uc73c\ub85c \ub2e8\uae30 \ubc18\ub4f1 \uc9c0\uc18d \uac00\ub2a5\uc131 \ub192\uc74c. \ub2e4\ub9cc \uae30\uad00 \uc21c\ub9e4\ub3c4\uc640 \uc7ac\ubb34 \ubd80\uc9c4\uc740 \uc911\uae30 \ub9ac\uc2a4\ud06c."
+      },
+      "return_pct": 0.1,
+      "score": 68.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "005950"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.78,
+      "current_price": 4250.0,
+      "entry_price": 4180.0,
+      "final_score": 103.9,
+      "foreign_5d": 1356007474,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "\ud734\uc2a4\ud2f8\uc740 VCP \ud328\ud134 \uc810\uc218\uac00 \ub192\uc544 \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud6c4 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ubcf4\uc785\ub2c8\ub2e4. \ub610\ud55c, \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \uae0d\uc815\uc801\uc778 \uc2dc\uadf8\ub110\ub85c \ud574\uc11d\ub429\ub2c8\ub2e4. \ub2e4\ub9cc, \uae30\uad00 \uc21c\ub9e4\ub3c4\ub294 \uc8fc\uc758\ud574\uc57c \ud560 \ubd80\ubd84\uc785\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -13240467,
+      "market": "KOSPI",
+      "name": "\ud734\uc2a4\ud2f8",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 82,
+        "reason": "\ud734\uc2a4\ud2f8\uc740 VCP \uc810\uc218 75\uc810(\uc591\ud638\ud55c \ud328\ud134)\uacfc \uc218\ucd95 \ube44\uc728 0.78\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c\uac00 \ub69c\ub837\ud558\uba70, \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 13\uc5b55\ucc9c\ub9cc\uc8fc \uaddc\ubaa8\uac00 \uac15\ub825\ud55c \uc218\uae09 \uc9c0\uc9c0\ub97c \ubcf4\uc778\ub2e4[1][6]. \uae30\uad00 \uc21c\ub9e4\uc218\ub294 \ubd80\uc815\uc801\uc774\uc9c0\ub9cc \uc678\uad6d\uc778 \ub9e4\uc218\uac00 \uc774\ub97c \uc0c1\uc1c4\ud558\uba70 \ub3cc\ud30c \uac00\ub2a5\uc131\uc774 \ub192\uc544 \ub9e4\uc218 \uc801\uae30\ub2e4[2][5]."
+      },
+      "return_pct": 1.67,
+      "score": 68.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "005010"
+    },
+    {
+      "change_pct": 0,
+      "contraction_ratio": 0.5,
+      "current_price": 1878.0,
+      "entry_price": 1831.0,
+      "final_score": 112.3,
+      "foreign_5d": 1147623137,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "KBI\ub3d9\uc591\ucca0\uad00\uc740 VCP \uc810\uc218\uac00 75\uc810\uc73c\ub85c \ud328\ud134 \uc644\uc131\ub3c4\uac00 \ub192\uace0, \uc218\ucd95 \ube44\uc728 \ub610\ud55c \uc591\ud638\ud569\ub2c8\ub2e4. \ud2b9\ud788 \uc678\uad6d\uc778 \uc21c\ub9e4\uc218\uc138\uac00 \uac15\ud558\uac8c \uc720\uc785\ub418\uace0 \uc788\uc5b4 \ucd94\uac00 \uc0c1\uc2b9 \uac00\ub2a5\uc131\uc774 \ub192\ub2e4\uace0 \ud310\ub2e8\ub429\ub2c8\ub2e4. \ub2e4\ub9cc, \uae30\uad00 \ub9e4\ub3c4\uc138\ub294 \uc8fc\uc758\ud574\uc57c \ud560 \ubd80\ubd84\uc785\ub2c8\ub2e4."
+      },
+      "gpt_recommendation": null,
+      "inst_5d": -2541732,
+      "market": "KOSPI",
+      "name": "KBI\ub3d9\uc591\ucca0\uad00",
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "VCP \uc810\uc218 75\uc640 \uc218\ucd95 \ube44\uc728 0.5\ub85c \ubcc0\ub3d9\uc131 \ucd95\uc18c \ud328\ud134\uc774 \uba85\ud655\ud788 \ud615\uc131\ub418\uc5b4 \uacf5\uae09 \uc18c\uc9c4\uacfc \uc0c1\uc2b9 \uc5d0\ub108\uc9c0 \uc751\ucd95\uc744 \uc2dc\uc0ac\ud558\uba70[1][2], \uc678\uad6d\uc778 5\uc77c \uc21c\ub9e4\uc218 11\uc5b5 \uc8fc \uaddc\ubaa8\uac00 \uac15\ub825\ud55c \uc218\uae09 \uc9c0\uc9c0\ub97c \ubcf4\uc784[\uc885\ubaa9 \uc815\ubcf4]. \uae30\uad00 \uc21c\ub9e4\uc218\ub294 \ub9c8\uc774\ub108\uc2a4\uc774\ub098 VCP \ud328\ud134\uc758 \uae30\uc220\uc801 \uc2e0\ub8b0\ub3c4\uac00 \ub192\uc544 \ub3cc\ud30c \ub9e4\uc218 \uc801\uae30."
+      },
+      "return_pct": 2.57,
+      "score": 68.2,
+      "signal_date": "2026-02-05",
+      "status": "OPEN",
+      "ticker": "008970"
+    }
+  ],
+  "source": "signals_log.csv",
+  "total_scanned": 1951
+}

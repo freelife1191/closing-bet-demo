@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate } from '@/lib/api';
+import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate, AIRecommendation } from '@/lib/api';
 import StockChart from './StockChart';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import Modal from '@/app/components/Modal';
@@ -138,17 +138,28 @@ export default function VCPSignalsPage() {
 
   // 선택된 종목 변경 시 AI 탭 자동 조정
   useEffect(() => {
-    if (!selectedStock || !aiData?.signals) return;
+    if (!selectedStock) return;
 
-    const stock = aiData.signals.find(s => s.ticker === selectedStock.ticker);
-    if (!stock) return;
+    // Prefer merged signal logic
+    const signal = signals.find(s => s.ticker === selectedStock.ticker);
+    const stock = aiData?.signals?.find(s => s.ticker === selectedStock.ticker);
+
+    // Helper to check existence
+    const hasData = (type: 'gpt' | 'gemini' | 'perplexity') => {
+      if (type === 'gpt') return !!(signal?.gpt_recommendation || stock?.gpt_recommendation);
+      if (type === 'perplexity') return !!(signal?.perplexity_recommendation || stock?.perplexity_recommendation);
+      return !!(signal?.gemini_recommendation || stock?.gemini_recommendation);
+    };
 
     // 현재 탭에 데이터가 없으면 다른 탭으로 자동 전환
-    if (activeAiTab === 'gpt' && !stock.gpt_recommendation) {
-      if (stock.perplexity_recommendation) setActiveAiTab('perplexity');
-      else if (stock.gemini_recommendation) setActiveAiTab('gemini');
+    if (activeAiTab === 'gpt' && !hasData('gpt')) {
+      if (hasData('perplexity')) setActiveAiTab('perplexity');
+      else if (hasData('gemini')) setActiveAiTab('gemini');
+    } else if (activeAiTab === 'perplexity' && !hasData('perplexity')) {
+      if (hasData('gpt')) setActiveAiTab('gpt');
+      else if (hasData('gemini')) setActiveAiTab('gemini');
     }
-  }, [selectedStock, aiData, activeAiTab]);
+  }, [selectedStock, aiData, signals, activeAiTab]);
 
   // 날짜 선택 상태
   const [activeDateTab, setActiveDateTab] = useState<'latest' | 'history'>('latest');
@@ -348,15 +359,22 @@ export default function VCPSignalsPage() {
     return value.toLocaleString();
   };
 
-  const getAIBadge = (ticker: string, model: 'gpt' | 'gemini' | 'perplexity') => {
-    if (!aiData) return null;
-    const stock = aiData.signals?.find((s) => s.ticker === ticker);
-    if (!stock) return null;
-
+  const getAIBadge = (signal: KRSignal, model: 'gpt' | 'gemini' | 'perplexity') => {
     let rec;
-    if (model === 'gpt') rec = stock.gpt_recommendation;
-    else if (model === 'perplexity') rec = stock.perplexity_recommendation;
-    else rec = stock.gemini_recommendation;
+    // 1. Try merged signal data first
+    if (model === 'gpt') rec = signal.gpt_recommendation;
+    else if (model === 'perplexity') rec = signal.perplexity_recommendation;
+    else rec = signal.gemini_recommendation;
+
+    // 2. Fallback to aiData (legacy/separate load)
+    if (!rec && aiData) {
+      const stock = aiData.signals?.find((s) => s.ticker === signal.ticker);
+      if (stock) {
+        if (model === 'gpt') rec = stock.gpt_recommendation;
+        else if (model === 'perplexity') rec = stock.perplexity_recommendation;
+        else rec = stock.gemini_recommendation;
+      }
+    }
 
     if (!rec) return <span className="text-gray-500 text-[10px]">-</span>;
 
@@ -381,6 +399,8 @@ export default function VCPSignalsPage() {
       </span>
     );
   };
+
+
 
   const handleVCPChatSend = async (msgFromCommand?: string) => {
     // 인자로 받은 메시지가 있으면 그것을 사용, 없으면 입력창 값 사용
@@ -621,9 +641,8 @@ export default function VCPSignalsPage() {
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="Second AI 기반 매매 의견">
-                    {signals.length > 0 && aiData?.signals?.some(s => s.perplexity_recommendation)
-                      ? 'Perplexity'
-                      : 'GPT'}
+                    {/* Priority check for Perplexity if available in any signal */}
+                    {signals.some(s => s.perplexity_recommendation) ? 'Perplexity' : 'GPT'}
                   </SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
@@ -708,12 +727,13 @@ export default function VCPSignalsPage() {
                         ? (Math.abs(signal.return_pct) < 0.01 ? <span className="text-gray-600 font-normal">0.0%</span> : `${signal.return_pct >= 0 ? '+' : ''}${signal.return_pct.toFixed(1)}%`)
                         : '-'}
                     </td>
+
                     <td className="px-4 py-3 text-center">
-                      {aiData?.signals?.some(s => s.perplexity_recommendation)
-                        ? getAIBadge(signal.ticker, 'perplexity')
-                        : getAIBadge(signal.ticker, 'gpt')}
+                      {signals.some(s => s.perplexity_recommendation) || aiData?.signals?.some(s => s.perplexity_recommendation)
+                        ? getAIBadge(signal, 'perplexity')
+                        : getAIBadge(signal, 'gpt')}
                     </td>
-                    <td className="px-4 py-3 text-center">{getAIBadge(signal.ticker, 'gemini')}</td>
+                    <td className="px-4 py-3 text-center">{getAIBadge(signal, 'gemini')}</td>
                   </tr>
                 ))
               )}
@@ -839,13 +859,21 @@ export default function VCPSignalsPage() {
 
               {/* AI Tabs */}
               {(() => {
-                const stock = aiData?.signals?.find(s => s.ticker === selectedStock.ticker);
+                // Use merged signal (signals array) as primary source, fallback to aiData (stock)
                 const signal = signals.find(s => s.ticker === selectedStock.ticker);
+                const stock = aiData?.signals?.find(s => s.ticker === selectedStock.ticker);
+
+                // Helper to get rec from either source (Explicit access to avoid TS index errors)
+                const getRec = (type: 'gpt' | 'gemini' | 'perplexity'): AIRecommendation | undefined => {
+                  if (type === 'gpt') return signal?.gpt_recommendation || stock?.gpt_recommendation;
+                  if (type === 'perplexity') return signal?.perplexity_recommendation || stock?.perplexity_recommendation;
+                  return signal?.gemini_recommendation || stock?.gemini_recommendation;
+                };
 
                 let rec;
-                if (activeAiTab === 'gpt') rec = stock?.gpt_recommendation;
-                else if (activeAiTab === 'perplexity') rec = stock?.perplexity_recommendation;
-                else rec = stock?.gemini_recommendation;
+                if (activeAiTab === 'gpt') rec = getRec('gpt');
+                else if (activeAiTab === 'perplexity') rec = getRec('perplexity');
+                else rec = getRec('gemini');
 
                 // logic moved to top level effect
 
@@ -855,7 +883,7 @@ export default function VCPSignalsPage() {
                   <div className="flex-1 overflow-y-auto">
                     {/* Tab Buttons */}
                     <div className="flex border-b border-white/5">
-                      {stock?.gpt_recommendation && (
+                      {getRec('gpt') && (
                         <button
                           onClick={() => setActiveAiTab('gpt')}
                           className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'gpt' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
@@ -863,7 +891,7 @@ export default function VCPSignalsPage() {
                           <i className="fas fa-robot mr-1"></i> GPT
                         </button>
                       )}
-                      {stock?.perplexity_recommendation && (
+                      {getRec('perplexity') && (
                         <button
                           onClick={() => setActiveAiTab('perplexity')}
                           className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'perplexity' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}

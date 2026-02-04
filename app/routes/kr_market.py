@@ -207,6 +207,75 @@ def get_kr_signals():
         if signals:
             signals = sorted(signals, key=lambda x: x.get('score', 0), reverse=True)[:20]
 
+            # [AI Integration] Load AI fields from JSON and merge
+            try:
+                # Determine date from the first signal
+                sig_date = signals[0].get('signal_date', '')
+                date_str = sig_date.replace('-', '') if sig_date else datetime.now().strftime('%Y%m%d')
+                
+                ai_data_map = {}
+                
+                # 1. Try specific date result first
+                ai_json = load_json_file(f'ai_analysis_results_{date_str}.json')
+                
+                # 2. Fallback to general file if specific file missing or empty
+                if not ai_json or 'signals' not in ai_json:
+                     # Check if the requested date is today/latest, if so check the main file
+                     logger.info("Falling back to kr_ai_analysis.json")
+                     ai_json = load_json_file('kr_ai_analysis.json') 
+
+                # Debug Print
+                logger.info(f"AI JSON Loaded: {bool(ai_json)}, Signals in JSON: {len(ai_json.get('signals', [])) if ai_json else 0}")
+
+
+                # 3. Build map
+                if ai_json and 'signals' in ai_json:
+                     for item in ai_json['signals']:
+                         t = str(item.get('ticker', '')).zfill(6)
+                         ai_data_map[t] = item
+
+                # 3.1 Load Legacy File for Fallback Merge (if specific file misses fields)
+                # specifically for Perplexity which might be in legacy file
+                try:
+                    legacy_json = load_json_file('kr_ai_analysis.json')
+                    if legacy_json and 'signals' in legacy_json:
+                        for l_item in legacy_json['signals']:
+                            t = str(l_item.get('ticker', '')).zfill(6)
+                            if t in ai_data_map:
+                                # Merge missing fields into ai_data_map item
+                                current = ai_data_map[t]
+                                if not current.get('perplexity_recommendation') and l_item.get('perplexity_recommendation'):
+                                    current['perplexity_recommendation'] = l_item['perplexity_recommendation']
+                                if not current.get('gemini_recommendation') and l_item.get('gemini_recommendation'):
+                                    current['gemini_recommendation'] = l_item['gemini_recommendation']
+                            else:
+                                # If ticker not in daily but in legacy? strictly speaking we only care about signals in the list.
+                                # pass
+                                pass
+                except Exception as leg_e:
+                    logger.warning(f"Legacy merge failed: {leg_e}")
+                
+                # 4. Merge
+                if ai_data_map:
+                    merged_count = 0
+                    for s in signals:
+                        t = s['ticker']
+                        if t in ai_data_map:
+                            ai_item = ai_data_map[t]
+                            # Merge AI fields
+                            s['gemini_recommendation'] = ai_item.get('gemini_recommendation')
+                            s['gpt_recommendation'] = ai_item.get('gpt_recommendation')
+                            s['perplexity_recommendation'] = ai_item.get('perplexity_recommendation')
+                            
+                            # Merge News if missing
+                            if 'news' in ai_item and not s.get('news'):
+                                s['news'] = ai_item['news']
+                                
+                            merged_count += 1
+                    logger.info(f"Merged AI data for {merged_count} signals")
+            except Exception as e:
+                logger.warning(f"Failed to merge AI data into signals: {e}")
+
         # ===================================================
         # 실시간 가격 업데이트 및 return_pct 계산 Logic Removed
         # Frontend에서 /realtime-prices 엔드포인트를 통해 별도로 수행함

@@ -47,6 +47,10 @@ export interface KRSignal {
   inst_5d: number;
   score: number;
   contraction_ratio: number;
+  gpt_recommendation?: AIRecommendation;
+  perplexity_recommendation?: AIRecommendation;
+  gemini_recommendation?: AIRecommendation;
+  news?: NewsItem[];
 }
 
 export interface KRSignalsResponse {
@@ -144,10 +148,10 @@ export interface KRChartResponse {
 
 // KR Market API functions
 export const krAPI = {
-  getSignals: (date?: string) => fetchAPI<KRSignalsResponse>(`/api/kr/signals${date ? `?date=${date}` : ''}`),
+  getSignals: (date?: string) => fetchAPI<KRSignalsResponse>(`/api/kr/signals?_t=${Date.now()}${date ? `&date=${date}` : ''}`),
   getSignalDates: () => fetchAPI<string[]>('/api/kr/signals/dates'),
-  getMarketGate: (date?: string) => fetchAPI<KRMarketGate>(`/api/kr/market-gate${date ? `?date=${date}` : ''}`),
-  getAIAnalysis: (date?: string) => fetchAPI<KRAIAnalysis>(`/api/kr/ai-analysis${date ? `?date=${date}` : ''}`),
+  getMarketGate: (date?: string) => fetchAPI<KRMarketGate>(`/api/kr/market-gate?_t=${Date.now()}${date ? `&date=${date}` : ''}`),
+  getAIAnalysis: (date?: string) => fetchAPI<KRAIAnalysis>(`/api/kr/ai-analysis?_t=${Date.now()}${date ? `&date=${date}` : ''}`),
   getDataStatus: () => fetchAPI<{ status: string; data: DataStatus }>('/api/kr/status'),
   getStockChart: (ticker: string, period?: string) => fetchAPI<KRChartResponse>(`/api/kr/stock-chart/${ticker}${period ? `?period=${period}` : ''}`),
   getHistoryDates: () => fetchAPI<{ dates: string[] }>('/api/kr/ai-history-dates'),
