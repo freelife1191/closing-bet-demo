@@ -342,51 +342,13 @@ def api_stop_update():
 
 @common_bp.route('/portfolio')
 def get_portfolio_data():
-    """포트폴리오 데이터"""
+    """포트폴리오 데이터 (Fast - Cached)"""
     try:
-        data = paper_trading.get_portfolio()
-        holdings = data['holdings']
-        cash = data['cash']
+        # Start sync if not running (Lazy Start)
+        paper_trading.start_background_sync()
         
-        updated_holdings = []
-        total_stock_value = 0
-        
-        for holding in holdings:
-            avg_price = holding['avg_price']
-            quantity = holding['quantity']
-            
-            # [긴급복구] 실시간 가격 연동(yfinance) 제거 - 서버 안정성 우선
-            current_price = avg_price 
-            
-            market_value = int(current_price * quantity)
-            total_stock_value += market_value
-            
-            profit_loss = 0
-            profit_rate = 0
-            
-            h_dict = dict(holding)
-            h_dict['current_price'] = current_price
-            h_dict['market_value'] = market_value
-            h_dict['profit_loss'] = int(profit_loss)
-            h_dict['profit_rate'] = round(profit_rate, 2)
-            updated_holdings.append(h_dict)
-            
-        total_asset = cash + total_stock_value
-        
-        # 자산 히스토리 기록
-        try:
-            paper_trading.record_asset_history(total_stock_value)
-        except Exception as e:
-            logger.warning(f"Failed to record asset history: {e}")
-            
-        return jsonify({
-            'holdings': updated_holdings,
-            'cash': cash,
-            'total_asset_value': total_asset,
-            'total_stock_value': total_stock_value,
-            'total_profit': int(total_asset - 100000000),
-            'total_profit_rate': round(((total_asset - 100000000) / 100000000 * 100), 2)
-        })
+        data = paper_trading.get_portfolio_valuation()
+        return jsonify(data)
         
     except Exception as e:
         logger.error(f"Error fetching portfolio: {e}")

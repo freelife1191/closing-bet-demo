@@ -41,13 +41,17 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
   const isInvalid = numericQty <= 0 || numericQty > maxQty;
 
   const handleSubmit = async () => {
+    console.log('[SellStockModal] Submit Clicked. Qty:', numericQty, 'Max:', maxQty, 'Invalid:', isInvalid);
     if (isSubmitting || isInvalid) return;
 
     setIsSubmitting(true);
     try {
+      console.log('[SellStockModal] Calling onSell...');
       const success = await onSell(stock.ticker, stock.name, price, numericQty);
+      console.log('[SellStockModal] onSell result:', success);
       if (success) onClose();
     } catch (e: any) {
+      console.error('[SellStockModal] Error:', e);
       alert('매도 실패: ' + e.message);
     } finally {
       setIsSubmitting(false);
@@ -66,7 +70,7 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-[#1c1c1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
 

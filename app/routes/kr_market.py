@@ -8,6 +8,11 @@ from flask import Blueprint, jsonify, request, current_app
 kr_bp = Blueprint('kr', __name__)
 logger = logging.getLogger(__name__)
 
+# Global Flags for Background Tasks
+is_market_gate_updating = False
+is_signals_updating = False
+is_jongga_updating = False
+
 # Constants
 DATA_DIR = 'data'
 @kr_bp.route('/config/interval', methods=['GET', 'POST'])
@@ -188,6 +193,12 @@ def get_kr_signals():
 
         # VCP 데이터가 없으면 빈 리스트 반환 (사용자 요청: 다른 데이터/샘플 노출 금지)
         if not signals:
+            # [Auto-Recovery] 데이터가 없고 실행 중도 아니면 백그라운드 실행
+            if not VCP_STATUS['running']:
+                logger.info("[Signals] 데이터 없음. 백그라운드 VCP 스크리너 자동 시작.")
+                import threading
+                threading.Thread(target=_run_vcp_background, args=(None, 50)).start()
+                # Frontend gets empty list but 'is_initializing' flag could be helpful if needed
             pass
 
         # ===================================================
@@ -197,80 +208,10 @@ def get_kr_signals():
             signals = sorted(signals, key=lambda x: x.get('score', 0), reverse=True)[:20]
 
         # ===================================================
-        # 실시간 가격 업데이트 및 return_pct 계산 (yfinance)
+        # 실시간 가격 업데이트 및 return_pct 계산 Logic Removed
+        # Frontend에서 /realtime-prices 엔드포인트를 통해 별도로 수행함
         # ===================================================
-        if signals:
-            try:
-                # 1. 대상 티커 리스트 추출
-                tickers = [s['ticker'] for s in signals]
-                
-                # 2. yfinance용 심볼 변환 (KOSPI/KOSDAQ)
-                # (간단하게, korean_stocks_list.csv를 참고하거나 기본 .KS 시도)
-                yf_tickers = []
-                ticker_to_yf = {}
-                
-                # 시장 정보 매핑 (메모리 캐시 활용 권장되나 여기선 파일 읽기)
-                market_map = {}
-                try:
-                    s_df = load_csv_file('korean_stocks_list.csv')
-                    if not s_df.empty:
-                        s_df['ticker'] = s_df['ticker'].astype(str).str.zfill(6)
-                        market_map = dict(zip(s_df['ticker'], s_df['market']))
-                except:
-                    pass
-
-                for t in tickers:
-                    market = market_map.get(t, 'KOSPI')
-                    suffix = ".KQ" if market == "KOSDAQ" else ".KS"
-                    yf_t = f"{t}{suffix}"
-                    yf_tickers.append(yf_t)
-                    ticker_to_yf[yf_t] = t
-
-                # 3. yfinance 실시간 조회 (장중/평일 위주, 혹은 항상 최근가)
-                import yfinance as yf
-                import logging as _logging
-                
-                # 로깅 억제
-                yf_logger = _logging.getLogger('yfinance')
-                original_level = yf_logger.level
-                yf_logger.setLevel(_logging.CRITICAL)
-                
-                try:
-                    # 1일 데이터, 1분 간격 (혹은 5일 1일) - 실시간성 위해 1일 추천
-                    price_data = yf.download(yf_tickers, period='1d', interval='1m', progress=False, threads=True)
-                    
-                    if not price_data.empty and 'Close' in price_data:
-                        closes = price_data['Close']
-                        updated_count = 0
-                        
-                        # 멀티 티커 처리
-                        if isinstance(closes, pd.DataFrame):
-                             for yf_t in yf_tickers:
-                                if yf_t in closes.columns:
-                                    series = closes[yf_t].dropna()
-                                    if not series.empty:
-                                        curr_price = float(series.iloc[-1])
-                                        target_ticker = ticker_to_yf[yf_t]
-                                        
-                                        # Signals 리스트 업데이트
-                                        for sig in signals:
-                                            if sig['ticker'] == target_ticker:
-                                                sig['current_price'] = curr_price
-                                                if sig['entry_price'] > 0:
-                                                    sig['return_pct'] = round((curr_price - sig['entry_price']) / sig['entry_price'] * 100, 2)
-                                                updated_count += 1
-                        # 단일 티커 처리 (Series)
-                        elif isinstance(closes, pd.Series):
-                             # 티커가 1개인 경우
-                             pass # 위 로직은 Batch라 보통 DF로 옴. 1개면 DF col이 심볼.
-                             
-                except Exception as yf_e:
-                     logger.debug(f"Signal Realtime Update Failed: {yf_e}")
-                finally:
-                    yf_logger.setLevel(original_level)
-
-            except Exception as e:
-                logger.warning(f"Error updating realtime prices for signals: {e}")
+        pass
         
         # 총 스캔 종목 수 계산
         total_scanned = 0
@@ -326,6 +267,67 @@ def get_vcp_status():
     """VCP 스크리너 상태 조회"""
     return jsonify(VCP_STATUS)
 
+def _run_vcp_background(target_date_arg, max_stocks_arg):
+    """백그라운드 VCP 스크리너 실행 (Module Level Helper)"""
+    try:
+        VCP_STATUS['running'] = True
+        VCP_STATUS['progress'] = 0
+        
+        if target_date_arg:
+            msg = f"[VCP] 지정 날짜 분석 시작: {target_date_arg}"
+        else:
+            msg = "[VCP] 실시간 분석 시작"
+        
+        VCP_STATUS['message'] = msg
+        logger.info(msg)
+        print(f"\n{msg}", flush=True)
+            
+        from scripts import init_data
+        
+        # 1. 최신 데이터 수집 (가격 업데이트)
+        VCP_STATUS['message'] = "가격 데이터 업데이트 중..."
+        logger.info(f"[VCP Screener] 최신 가격 데이터 수집 시작")
+        print(f"[VCP Screener] 최신 가격 데이터 수집 시작...", flush=True)
+        init_data.create_daily_prices(target_date=target_date_arg)
+        VCP_STATUS['progress'] = 30
+        
+        # 1.5 수급 데이터 업데이트 (필수)
+        VCP_STATUS['message'] = "수급 데이터 분석 중..."
+        logger.info(f"[VCP Screener] 기관/외인 수급 데이터 업데이트")
+        print(f"[VCP Screener] 기관/외인 수급 데이터 업데이트...", flush=True)
+        init_data.create_institutional_trend(target_date=target_date_arg)
+        VCP_STATUS['progress'] = 50
+        
+        # 2. 실제 데이터 기반 VCP 스크리너 실행 (init_data.py) + AI 분석
+        VCP_STATUS['message'] = "VCP 패턴 분석 및 AI 진단 중..."
+        logger.info(f"[VCP Screener] VCP 시그널 분석 및 AI 수행")
+        print(f"[VCP Screener] VCP 시그널 분석 및 AI 수행...", flush=True)
+        
+        # run_ai=True로 AI 자동 수행
+        result_df = init_data.create_signals_log(target_date=target_date_arg, run_ai=True)
+        VCP_STATUS['progress'] = 100
+        
+        if isinstance(result_df, pd.DataFrame):
+            success_msg = f"완료: {len(result_df)}개 시그널 감지"
+        elif result_df:
+            success_msg = "완료: 성공"
+        else:
+            success_msg = "완료: 조건 충족 종목 없음"
+            
+        VCP_STATUS['message'] = success_msg
+        logger.info(f"[VCP Screener] {success_msg}")
+        print(f"[VCP Screener] {success_msg}\n", flush=True)
+            
+    except Exception as e:
+        logger.error(f"[VCP Screener] 실패: {e}")
+        print(f"[VCP Screener] ⛔️ 실패: {e}", flush=True)
+        VCP_STATUS['message'] = f"실패: {str(e)}"
+        import traceback
+        traceback.print_exc()
+    finally:
+            VCP_STATUS['running'] = False
+            VCP_STATUS['last_run'] = datetime.now().isoformat()
+
 @kr_bp.route('/signals/run', methods=['POST'])
 def run_vcp_signals_screener():
     """
@@ -345,68 +347,7 @@ def run_vcp_signals_screener():
         target_date = req_data.get('target_date', None)  # YYYY-MM-DD 형식
         max_stocks = req_data.get('max_stocks', 50)
         
-        def _run_vcp_async(target_date_arg, max_stocks_arg):
-            """백그라운드 VCP 스크리너 실행"""
-            try:
-                VCP_STATUS['running'] = True
-                VCP_STATUS['progress'] = 0
-                
-                if target_date_arg:
-                    msg = f"[VCP] 지정 날짜 분석 시작: {target_date_arg}"
-                else:
-                    msg = "[VCP] 실시간 분석 시작"
-                
-                VCP_STATUS['message'] = msg
-                logger.info(msg)
-                print(f"\n{msg}", flush=True)  # [LOG] 강제 출력
-                    
-                from scripts import init_data
-                
-                # 1. 최신 데이터 수집 (가격 업데이트)
-                VCP_STATUS['message'] = "가격 데이터 업데이트 중..."
-                logger.info(f"[VCP Screener] 최신 가격 데이터 수집 시작")
-                print(f"[VCP Screener] 최신 가격 데이터 수집 시작...", flush=True)
-                init_data.create_daily_prices(target_date=target_date_arg)
-                VCP_STATUS['progress'] = 30
-                
-                # 1.5 수급 데이터 업데이트 (필수)
-                VCP_STATUS['message'] = "수급 데이터 분석 중..."
-                logger.info(f"[VCP Screener] 기관/외인 수급 데이터 업데이트")
-                print(f"[VCP Screener] 기관/외인 수급 데이터 업데이트...", flush=True)
-                init_data.create_institutional_trend(target_date=target_date_arg)
-                VCP_STATUS['progress'] = 50
-                
-                # 2. 실제 데이터 기반 VCP 스크리너 실행 (init_data.py) + AI 분석
-                VCP_STATUS['message'] = "VCP 패턴 분석 및 AI 진단 중..."
-                logger.info(f"[VCP Screener] VCP 시그널 분석 및 AI 수행")
-                print(f"[VCP Screener] VCP 시그널 분석 및 AI 수행...", flush=True)
-                
-                # run_ai=True로 AI 자동 수행
-                result_df = init_data.create_signals_log(target_date=target_date_arg, run_ai=True)
-                VCP_STATUS['progress'] = 100
-                
-                if isinstance(result_df, pd.DataFrame):
-                    success_msg = f"완료: {len(result_df)}개 시그널 감지"
-                elif result_df:
-                    success_msg = "완료: 성공"
-                else:
-                    success_msg = "완료: 조건 충족 종목 없음"
-                    
-                VCP_STATUS['message'] = success_msg
-                logger.info(f"[VCP Screener] {success_msg}")
-                print(f"[VCP Screener] {success_msg}\n", flush=True)
-                    
-            except Exception as e:
-                logger.error(f"[VCP Screener] 실패: {e}")
-                print(f"[VCP Screener] ⛔️ 실패: {e}", flush=True)
-                VCP_STATUS['message'] = f"실패: {str(e)}"
-                import traceback
-                traceback.print_exc()
-            finally:
-                 VCP_STATUS['running'] = False
-                 VCP_STATUS['last_run'] = datetime.now().isoformat()
-        
-        thread = threading.Thread(target=_run_vcp_async, args=(target_date, max_stocks))
+        thread = threading.Thread(target=_run_vcp_background, args=(target_date, max_stocks))
         thread.daemon = True
         thread.start()
         
@@ -608,35 +549,44 @@ def get_kr_market_gate():
             except Exception as e:
                 logger.warning(f"Market Gate Fallback 실패: {e}")
         
-        # 유효하지 않은 경우에만 엔진 재실행
+        # [FIX] 실시간 분석 제거 (비동기 처리 원칙)
+        # 데이터가 없으면 '분석 대기' 상태를 반환하고, 실제 분석은 스케줄러나 별도 트리거로 수행됨을 유도
         if not is_valid:
-            try:
-                from engine.market_gate import MarketGate
-                mg = MarketGate()
-                engine_result = mg.analyze()
-                
-                # Engine 결과를 프론트엔드 호환 형식으로 변환
-                color = engine_result.get('color', 'GRAY')
-                label_map = {'GREEN': 'Bullish', 'YELLOW': 'Neutral', 'RED': 'Bearish', 'GRAY': 'Neutral'}
-                
-                gate_data = {
-                    'score': engine_result.get('total_score', 50),
-                    'label': label_map.get(color, 'Neutral'),
-                    'status': color,
-                    'is_gate_open': engine_result.get('is_gate_open', True),
-                    'kospi_close': engine_result.get('kospi_close', 0),
-                    'kospi_change_pct': engine_result.get('kospi_change', 0),
-                    'kosdaq_close': 0,
-                    'kosdaq_change_pct': 0,
-                    'details': engine_result.get('details', {}),
-                    'updated_at': engine_result.get('timestamp', datetime.now().isoformat())
-                }
-            except ImportError:
-                logger.warning("engine.market_gate 모듈을 불러올 수 없습니다.")
-            except Exception as e:
-                logger.warning(f"Market Gate 엔진 실행 실패: {e}")
+            logger.info("[Market Gate] 유효한 데이터 없음. 백그라운드 분석 자동 시작.")
+            
+            # [Auto-Recovery] 백그라운드 분석 트리거
+            global is_market_gate_updating
+            if not is_market_gate_updating:
+                import threading
+                def run_analysis():
+                    global is_market_gate_updating
+                    try:
+                        is_market_gate_updating = True
+                        from engine.market_gate import MarketGate
+                        mg = MarketGate()
+                        mg.analyze()  # Save to JSON automatically
+                        logger.info("[Market Gate] 백그라운드 분석 완료")
+                    except Exception as e:
+                        logger.error(f"[Market Gate] 백그라운드 분석 실패: {e}")
+                    finally:
+                        is_market_gate_updating = False
+
+                threading.Thread(target=run_analysis).start()
+
+            gate_data = {
+                'score': 50,
+                'label': 'Initializing...',
+                'status': 'initializing', # Frontend polls on this status
+                'is_gate_open': True,
+                'kospi_close': 0,
+                'kospi_change_pct': 0,
+                'kosdaq_close': 0,
+                'kosdaq_change_pct': 0,
+                'updated_at': datetime.now().isoformat(),
+                'message': '데이터 분석 중... 잠시만 기다려주세요.'
+            }
         
-        # 3차: 기본 데이터
+        # 3차: 기본 데이터 (위에서 처리했으므로 중복 방지용 안전장치)
         if not gate_data:
             gate_data = {
                 'score': 50,
@@ -736,36 +686,75 @@ def get_kr_realtime_prices():
                     yf_logger.setLevel(_logging.CRITICAL)
                     
                     try:
-                        # 일봉 데이터 조회 (1분봉은 장외시간에 실패)
-                        # [2026-02-03 수정] period='1d', interval='1m' → period='5d', interval='1d'
+                        # 일봉 데이터 조회
                         price_data = yf.download(yf_tickers, period='5d', interval='1d', progress=False, threads=True)
                         
                         if not price_data.empty and 'Close' in price_data:
                             closes = price_data['Close']
                             
-                            if len(yf_tickers) == 1:
-                                # 단일 티커
-                                if not closes.empty:
-                                    val = closes.iloc[-1]
-                                    if pd.notna(val) and float(val) > 0:
-                                        prices[ticker_map[yf_tickers[0]]] = float(val)
-                            else:
-                                # 멀티 티커
-                                for yf_t in yf_tickers:
-                                    try:
-                                        if yf_t in closes.columns:
-                                            val = closes[yf_t].iloc[-1]
-                                            if pd.notna(val) and float(val) > 0:
-                                                prices[ticker_map[yf_t]] = float(val)
-                                    except:
-                                        pass
+                            # Helper to extract price safely
+                            def extract_price(t_sym, data_src):
+                                try:
+                                    if isinstance(data_src, pd.DataFrame) and t_sym in data_src.columns:
+                                        series = data_src[t_sym].dropna()
+                                        if not series.empty: return float(series.iloc[-1])
+                                    elif isinstance(data_src, pd.Series):
+                                        return float(data_src.iloc[-1])
+                                except: pass
+                                return None
+
+                            for yf_t in yf_tickers:
+                                val = extract_price(yf_t, closes)
+                                if val:
+                                    prices[ticker_map[yf_t]] = val
+                                    
                     finally:
                         yf_logger.setLevel(original_level)
                         
-                    # yfinance로 충분히 가져왔으면 바로 반환
+                    # Check missing tickers
+                    missing = [t for t in tickers if str(t).zfill(6) not in prices]
+                    
+                    # 1.5 Toss Securities API Fallback (Bulk)
+                    if missing:
+                        try:
+                            import requests
+                            toss_codes = [f"A{str(t).zfill(6)}" for t in missing]
+                            # Chunking 50
+                            for i in range(0, len(toss_codes), 50):
+                                chunk = toss_codes[i:i+50]
+                                url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes={','.join(chunk)}"
+                                res = requests.get(url, timeout=5)
+                                if res.status_code == 200:
+                                    results = res.json().get('result', [])
+                                    for item in results:
+                                        code = item.get('code', '')[1:]
+                                        close = item.get('close')
+                                        if code and close:
+                                            prices[code] = float(close)
+                        except Exception as e:
+                            logger.debug(f"Toss Fallback Failed: {e}")
+
+                    # 1.6 Naver Mobile API Fallback (Individual)
+                    missing = [t for t in tickers if str(t).zfill(6) not in prices]
+                    if missing:
+                        try:
+                            import requests
+                            headers = {'User-Agent': 'Mozilla/5.0'}
+                            for t in missing:
+                                try:
+                                    url = f"https://m.stock.naver.com/api/stock/{str(t).zfill(6)}/basic"
+                                    res = requests.get(url, headers=headers, timeout=2)
+                                    if res.status_code == 200:
+                                        data = res.json()
+                                        if 'closePrice' in data:
+                                            prices[str(t).zfill(6)] = float(data['closePrice'].replace(',', ''))
+                                except: pass
+                        except Exception: pass
+                        
+                    # Return if we have everything
                     if len(prices) == len(tickers):
                         return jsonify({'prices': prices})
-                        
+
         except Exception as yf_err:
             logger.debug(f"yfinance 실시간 조회 실패 (CSV 폴백): {yf_err}")
 
@@ -826,12 +815,32 @@ def get_jongga_v2_latest():
                     logger.warning(f"파일 읽기 실패: {file_path} - {e}")
                     continue
             
-            # 유효한 데이터가 없는 경우
+            # 유효한 데이터가 없는 경우 -> Auto-Recovery Trigger
+            logger.info("[Jongga V2] 데이터 없음. 백그라운드 분석 자동 시작.")
+            
+            global is_jongga_updating
+            if not is_jongga_updating:
+                import threading
+                def run_analysis():
+                    global is_jongga_updating
+                    try:
+                        is_jongga_updating = True
+                        from engine.launcher import run_jongga_v2_screener
+                        run_jongga_v2_screener()
+                        logger.info("[Jongga V2] 백그라운드 분석 완료")
+                    except Exception as e:
+                        logger.error(f"[Jongga V2] 백그라운드 분석 실패: {e}")
+                    finally:
+                        is_jongga_updating = False
+
+                threading.Thread(target=run_analysis).start()
+
             return jsonify({
                 'date': datetime.now().date().isoformat(),
                 'signals': [],
                 'filtered_count': 0,
-                'message': '데이터 파일이 없습니다. /api/kr/jongga-v2/run을 실행하세요.'
+                'status': 'initializing', # Frontend polls on this
+                'message': '데이터 분석 중... 잠시만 기다려주세요.'
             })
         
         return jsonify(data)
@@ -839,6 +848,12 @@ def get_jongga_v2_latest():
     except Exception as e:
         logger.error(f"Error getting jongga v2 latest: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@kr_bp.route('/jongga-v2/results', methods=['GET'])
+def get_jongga_v2_results():
+    """Frontend compatibility alias for results"""
+    return get_jongga_v2_latest()
 
 
 @kr_bp.route('/jongga-v2/dates', methods=['GET'])

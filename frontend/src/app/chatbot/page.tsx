@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { fetchAPI } from '@/lib/api';
+
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import Sidebar from '../components/Sidebar';
@@ -283,11 +285,12 @@ export default function ChatbotPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // ...
+
   // API Calls
   const fetchModels = async () => {
     try {
-      const res = await fetch('/api/kr/chatbot/models');
-      const data = await res.json();
+      const data: any = await fetchAPI('/api/kr/chatbot/models');
       if (data.models) {
         setModels(data.models);
         // Don't override user selection if possible, but for now set default
@@ -300,8 +303,7 @@ export default function ChatbotPage() {
 
   const fetchSessions = async (): Promise<Session[]> => {
     try {
-      const res = await fetch('/api/kr/chatbot/sessions');
-      const data = await res.json();
+      const data: any = await fetchAPI('/api/kr/chatbot/sessions');
       if (data.sessions) {
         setSessions(data.sessions);
         return data.sessions;
@@ -314,8 +316,7 @@ export default function ChatbotPage() {
 
   const fetchHistory = async (sessionId: string) => {
     try {
-      const res = await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`);
-      const data = await res.json();
+      const data: any = await fetchAPI(`/api/kr/chatbot/history?session_id=${sessionId}`);
       if (data.history) {
         setMessages(data.history);
       }
@@ -326,8 +327,7 @@ export default function ChatbotPage() {
 
   const fetchUserProfile = async () => {
     try {
-      const res = await fetch('/api/kr/chatbot/profile');
-      const data = await res.json();
+      const data: any = await fetchAPI('/api/kr/chatbot/profile');
       if (data.profile) {
         setUserProfile(data.profile);
         // Update Cache

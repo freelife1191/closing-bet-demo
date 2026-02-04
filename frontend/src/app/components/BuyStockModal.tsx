@@ -50,14 +50,18 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
   const isInsufficient = totalRequired > cash;
 
   const handleSubmit = async () => {
+    console.log('[BuyStockModal] Submit Clicked. Qty:', estimatedQty, 'Insufficient:', isInsufficient);
     if (isSubmitting || estimatedQty <= 0) return;
     if (isInsufficient) return;
 
     setIsSubmitting(true);
     try {
+      console.log('[BuyStockModal] Calling onBuy...');
       const success = await onBuy(stock.ticker, stock.name, price, estimatedQty);
+      console.log('[BuyStockModal] onBuy result:', success);
       if (success) onClose();
     } catch (e) {
+      console.error('[BuyStockModal] Error:', e);
       alert('매수 실패: ' + e);
     } finally {
       setIsSubmitting(false);
@@ -107,7 +111,7 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-[#1c1c1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
 

@@ -2,12 +2,36 @@
 
 const API_BASE = '';  // Empty = use Next.js proxy
 
-export async function fetchAPI<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`);
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status}`);
+export async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
+
+  try {
+    // 옵션 병합 (signal 우선순위 고려)
+    const fetchOptions: RequestInit = {
+      ...options,
+      signal: controller.signal
+    };
+
+    const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
+    clearTimeout(id);
+
+    if (!response.ok) {
+      // 에러 객체에 status 등을 담아서 던질 수도 있음
+      const error: any = new Error(`API Error: ${response.status}`);
+      error.status = response.status;
+      try {
+        error.data = await response.json();
+      } catch (e) { /* ignore */ }
+      throw error;
+    }
+    return response.json();
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw e;
   }
-  return response.json();
 }
 
 // KR Market API Types
@@ -29,6 +53,7 @@ export interface KRSignalsResponse {
   signals: KRSignal[];
   total_scanned?: number;
   error?: string;
+  source?: string;
 }
 
 export interface KRMarketGate {
@@ -55,6 +80,7 @@ export interface KRMarketGate {
     xrp: { value: number; change_pct: number };
   };
   sectors: KRSector[];
+  message?: string;
 }
 
 export interface KRSector {

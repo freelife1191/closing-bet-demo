@@ -30,9 +30,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [chartData, setChartData] = useState<PaperTradingAssetHistory[]>([]);
-  const [maToggle, setMaToggle] = useState<Record<number, boolean>>({
-    3: false, 5: true, 10: false, 20: true, 40: false, 60: false, 100: false, 120: false
-  });
+  const [maToggle, setMaToggle] = useState<{ [key: number]: boolean }>({ 10: true });
+  const [timeRange, setTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'ALL'>('1Y');
 
   // Modals state
   const [buyModalOpen, setBuyModalOpen] = useState(false);
@@ -46,7 +45,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
       const data = await paperTradingAPI.getPortfolio();
       setPortfolio(data);
     } catch (e) {
-      console.error(e);
+      console.error("Failed to fetch portfolio", e);
     } finally {
       setLoading(false);
     }
@@ -54,9 +53,9 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
   const fetchHistory = async () => {
     try {
-      const res = await paperTradingAPI.getTradeHistory();
-      if (res && res.trades) {
-        setTradeHistory(res.trades);
+      const data = await paperTradingAPI.getTradeHistory(50);
+      if (data.trades) {
+        setTradeHistory(data.trades);
       }
     } catch (e) {
       console.error("Failed to fetch trade history", e);
@@ -66,12 +65,21 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   useEffect(() => {
     if (isOpen) {
       fetchPortfolio();
-      // 차트 데이터 로드 (전체)
-      paperTradingAPI.getAssetHistory(365).then(res => {
+
+      // Calculate days based on timeRange
+      let days = 365;
+      if (timeRange === '1M') days = 30;
+      else if (timeRange === '3M') days = 90;
+      else if (timeRange === '6M') days = 180;
+      else if (timeRange === '1Y') days = 365;
+      else if (timeRange === 'ALL') days = 3650;
+
+      // 차트 데이터 로드
+      paperTradingAPI.getAssetHistory(days).then(res => {
         if (res.history) setChartData(res.history);
       }).catch(console.error);
     }
-  }, [isOpen, refreshKey]);
+  }, [isOpen, refreshKey, timeRange]);
 
   // 탭 변경 시 데이터 로드
   useEffect(() => {
@@ -116,8 +124,35 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             timeScale: {
               timeVisible: true,
               borderColor: '#444',
+              tickMarkFormatter: (time: string | number | { year: number, month: number, day: number }) => {
+                let date: Date;
+                if (typeof time === 'number') {
+                  date = new Date(time * 1000);
+                } else if (typeof time === 'string') {
+                  date = new Date(time);
+                } else if (typeof time === 'object' && 'year' in time) {
+                  date = new Date(time.year, time.month - 1, time.day);
+                } else {
+                  return '';
+                }
+                if (isNaN(date.getTime())) return '';
+                return `${date.getMonth() + 1}/${date.getDate()}`;
+              },
             },
+            rightPriceScale: {
+              borderColor: '#444',
+            }
           });
+
+          // Add Unit Label Overlay
+          const unitLabel = document.createElement('div');
+          unitLabel.className = 'absolute top-2 right-2 text-xs text-gray-500 z-10 pointer-events-none';
+          unitLabel.innerText = '(단위: 원)';
+          chartContainerRef.current.style.position = 'relative';
+          chartContainerRef.current.appendChild(unitLabel);
+
+          console.log('[ChartDebug] Container:', chartContainerRef.current.clientWidth, 'x', chartContainerRef.current.clientHeight);
+          console.log('[ChartDebug] Data:', chartData);
 
           chartInstance = chart;
           chartRef.current = chart;
@@ -133,45 +168,49 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
           resizeObserver.observe(chartContainerRef.current);
 
           // 메인 자산 라인 -> Area Chart
-          if (chart.addAreaSeries) {
-            const mainSeries = chart.addAreaSeries({
-              lineColor: '#fb7185', // rose-400
-              topColor: 'rgba(251, 113, 133, 0.4)',
-              bottomColor: 'rgba(251, 113, 133, 0.0)',
-              lineWidth: 2,
+          // 메인 자산 라인 -> Area Chart (v5 호환)
+          console.log('[ChartDebug] Adding Area Series');
+          const { AreaSeries, LineSeries } = await import('lightweight-charts');
+
+          const mainSeries = chart.addSeries(AreaSeries, {
+            lineColor: '#fb7185', // rose-400
+            topColor: 'rgba(251, 113, 133, 0.4)',
+            bottomColor: 'rgba(251, 113, 133, 0.0)',
+            lineWidth: 2,
+          });
+
+          // 데이터 포맷팅
+          const formattedData = chartData
+            .map(d => {
+              const dateStr = typeof d.date === 'string' ? d.date.split('T')[0] : d.date;
+              return {
+                time: dateStr,
+                value: d.total_asset
+              };
+            })
+            .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+          if (formattedData.length === 0) {
+            // 데이터가 아예 없으면 3일 전부터 오늘까지의 가상 데이터 생성 (사용자 요청)
+            const today = new Date();
+            const threeDaysAgo = new Date(today);
+            threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+            formattedData.push({ time: threeDaysAgo.toISOString().split('T')[0], value: 100000000 });
+            formattedData.push({ time: today.toISOString().split('T')[0], value: 100000000 });
+          } else if (formattedData.length === 1) {
+            // 데이터가 1개뿐이면 3일 전 데이터를 시작점으로 추가
+            const firstDate = new Date(formattedData[0].time);
+            const prevDate = new Date(firstDate);
+            prevDate.setDate(prevDate.getDate() - 3);
+            formattedData.unshift({
+              time: prevDate.toISOString().split('T')[0],
+              value: 100000000 // 기본 초기 자산
             });
-
-            // 데이터 포맷팅
-            const formattedData = chartData
-              .map(d => {
-                const dateStr = typeof d.date === 'string' ? d.date.split('T')[0] : d.date;
-                return {
-                  time: dateStr,
-                  value: d.total_asset
-                };
-              })
-              .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-
-            if (formattedData.length === 0) {
-              // 데이터가 아예 없으면 오늘/어제로 기본 1억 라인 생성
-              const today = new Date();
-              const yest = new Date(today);
-              yest.setDate(yest.getDate() - 1);
-              formattedData.push({ time: yest.toISOString().split('T')[0], value: 100000000 });
-              formattedData.push({ time: today.toISOString().split('T')[0], value: 100000000 });
-            } else if (formattedData.length === 1) {
-              // 데이터가 1개뿐이면 라인이 안 그려지므로, 가상의 시작점(어제) 추가
-              const firstDate = new Date(formattedData[0].time);
-              const prevDate = new Date(firstDate);
-              prevDate.setDate(prevDate.getDate() - 1);
-              formattedData.unshift({
-                time: prevDate.toISOString().split('T')[0],
-                value: 100000000 // 기본 초기 자산
-              });
-            }
-
-            mainSeries.setData(formattedData);
           }
+
+          console.log('[ChartDebug] Formatted Data:', formattedData);
+          mainSeries.setData(formattedData);
 
           // 이평선 추가
           const maColors: Record<number, string> = {
@@ -198,8 +237,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             }
             maData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
-            if (maData.length > 0 && chart.addLineSeries) {
-              const maSeries = chart.addLineSeries({
+            if (maData.length > 0) {
+              const maSeries = chart.addSeries(LineSeries, {
                 color: maColors[period] || '#fff',
                 lineWidth: 1,
                 lineStyle: LineStyle.Solid,
@@ -209,7 +248,94 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             }
           });
 
-          chart.timeScale().fitContent();
+          // Y-Axis Formatting (Korean currency units or commas)
+          chart.applyOptions({
+            localization: {
+              priceFormatter: (p: number) => Math.round(p).toLocaleString(),
+            },
+          });
+
+          // Floating Tooltip Logic
+          // 툴팁 엘리먼트 생성 (DOM 조작 대신 React state로 관리하면 좋지만, Crosshair 성능상 ref로 직접 조작)
+          const toolTipWidth = 200;
+          const toolTipHeight = 100;
+          const toolTipMargin = 15;
+
+          const toolTip = document.createElement('div');
+          toolTip.className = 'absolute bg-[#2a2a2e] border border-white/10 rounded-lg p-3 shadow-xl text-sm z-50 pointer-events-none hidden';
+          toolTip.style.width = '220px';
+          // 차트 컨테이너에 추가 (relative여야 함)
+          chartContainerRef.current.style.position = 'relative';
+          chartContainerRef.current.appendChild(toolTip);
+
+          const updateTooltip = (param: any) => {
+            if (
+              param.point === undefined ||
+              !param.time ||
+              param.point.x < 0 ||
+              param.point.x > chartContainerRef.current!.clientWidth ||
+              param.point.y < 0 ||
+              param.point.y > chartContainerRef.current!.clientHeight
+            ) {
+              toolTip.style.display = 'none';
+              return;
+            }
+
+            // 메인 시리즈 데이터 가져오기
+            const data = param.seriesData.get(mainSeries);
+            if (!data) {
+              toolTip.style.display = 'none';
+              return;
+            }
+
+            toolTip.style.display = 'block';
+
+            const totalAsset = data.value;
+            const profit = totalAsset - 100000000;
+            const profitRate = (profit / 100000000) * 100;
+            const isPlus = profit >= 0;
+            const colorClass = isPlus ? 'text-rose-400' : 'text-blue-400';
+            const sign = isPlus ? '+' : '';
+
+            const dateStr = param.time as string; // String type because we setup time as string
+
+            toolTip.innerHTML = `
+              <div class="font-bold text-gray-300 mb-2 border-b border-white/10 pb-1">${dateStr}</div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-gray-500 text-xs">총 자산</span>
+                <span class="font-bold text-white">${Math.floor(totalAsset).toLocaleString()}원</span>
+              </div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-gray-500 text-xs">평가 손익</span>
+                <span class="font-bold ${colorClass}">${sign}${Math.floor(profit).toLocaleString()}원</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-500 text-xs">수익률</span>
+                <span class="font-bold ${colorClass}">${sign}${profitRate.toFixed(2)}%</span>
+              </div>
+            `;
+
+            // 위치 조정
+            const coordinate = mainSeries.priceToCoordinate(totalAsset);
+            let shiftedX = param.point.x + 15;
+            let shiftedY = param.point.y + 15;
+
+            // 화면 밖으로 나가지 않게 조정
+            if (shiftedX + toolTipWidth > chartContainerRef.current!.clientWidth) {
+              shiftedX = param.point.x - toolTipWidth - 15;
+            }
+            if (shiftedY + toolTipHeight > chartContainerRef.current!.clientHeight) {
+              shiftedY = param.point.y - toolTipHeight - 15;
+            }
+
+            toolTip.style.left = shiftedX + 'px';
+            toolTip.style.top = shiftedY + 'px';
+          };
+
+          chart.subscribeCrosshairMove(updateTooltip);
+
+          // 데이터가 있으면 마지막 데이터로 초기 툴팁 표시 또는 고정 표시 (선택)
+          // 여기서는 hover 시에만 나오도록 함
 
         } catch (err) {
           console.error("Failed to load/render chart:", err);
@@ -226,6 +352,11 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
         try {
           chartInstance.remove();
         } catch (e) { /* ignore */ }
+        // 툴팁 제거 로직은 chart.remove()시 DOM은 알아서 정리되나? 
+        // chartContainerRef.current 내부를 비우는게 확실함.
+        if (chartContainerRef.current) {
+          chartContainerRef.current.innerHTML = '';
+        }
         chartInstance = null;
         chartRef.current = null;
       }
@@ -281,7 +412,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
   const handleBuySubmit = async (ticker: string, name: string, price: number, quantity: number) => {
     try {
-      await paperTradingAPI.buy(ticker, price, quantity); // name param might not be in API but kept for consistency
+      await paperTradingAPI.buy({ ticker, name, price, quantity });
       alert(`${name} ${quantity}주 매수 완료`);
       setRefreshKey(p => p + 1);
       return true;
@@ -293,7 +424,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
   const handleSellSubmit = async (ticker: string, name: string, price: number, quantity: number) => {
     try {
-      await paperTradingAPI.sell(ticker, price, quantity);
+      await paperTradingAPI.sell({ ticker, price, quantity });
       alert(`${name} ${quantity}주 매도 완료`);
       setRefreshKey(p => p + 1);
       return true;
@@ -308,9 +439,9 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[70vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
 
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between p-4 md:p-5 border-b border-white/10 bg-[#252529] gap-4 md:gap-0">
@@ -375,7 +506,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-none flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors relative whitespace-nowrap ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-300'
+                className={`flex-none flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors relative whitespace-nowrap focus:outline-none focus:ring-0 ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-300'
                   }`}
               >
                 <i className={`fas ${tab.icon}`}></i>
@@ -405,7 +536,17 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                           <i className="fas fa-coins text-8xl text-rose-500 transform rotate-12"></i>
                         </div>
-                        <div className="text-gray-400 text-sm font-medium mb-1">총 평가 손익</div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="text-gray-400 text-sm font-medium">총 평가 손익</div>
+                          <div className="group/info relative">
+                            <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 cursor-help text-xs"></i>
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-gray-800 text-xs text-gray-300 p-2 rounded border border-white/10 shadow-lg hidden group-hover/info:block z-50">
+                              * 총 수익률 = (총 평가 자산 - 초기 자본금) / 초기 자본금<br />
+                              * 초기 자본금: 1억 원<br />
+                              (보유 현금 비중이 높으면 개별 종목 수익률보다 낮을 수 있습니다.)
+                            </div>
+                          </div>
+                        </div>
                         <div className={`text-3xl md:text-4xl font-bold mb-2 tracking-tight ${(portfolio.total_profit || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
                           {(portfolio.total_profit || 0) > 0 ? '+' : ''}{(portfolio.total_profit || 0).toLocaleString()}원
                         </div>
@@ -532,19 +673,41 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                 {activeTab === 'chart' && (
                   <div className="h-full flex flex-col space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     {/* Controls */}
-                    <div className="bg-[#252529] p-3 rounded-xl border border-white/5 flex flex-wrap gap-2 items-center">
-                      <span className="text-xs text-gray-500 font-bold px-2">이동평균선</span>
-                      {[3, 5, 10, 20, 60, 120].map(d => (
-                        <label key={d} className="flex items-center gap-1.5 px-2 py-1 bg-black/20 rounded cursor-pointer hover:bg-black/40 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={!!maToggle[d]}
-                            onChange={e => setMaToggle(p => ({ ...p, [d]: e.target.checked }))}
-                            className="rounded border-gray-600 bg-gray-700 text-rose-500 focus:ring-offset-0 focus:ring-0 w-3 h-3"
-                          />
-                          <span className="text-xs text-gray-300">{d}일</span>
-                        </label>
-                      ))}
+                    <div className="bg-[#252529] p-3 rounded-xl border border-white/5 flex flex-wrap gap-2 items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 font-bold px-2">기간</span>
+                        {(['1M', '3M', '6M', '1Y', 'ALL'] as const).map(range => (
+                          <button
+                            key={range}
+                            onClick={() => setTimeRange(range)}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${timeRange === range
+                              ? 'bg-rose-500 text-white font-bold'
+                              : 'bg-black/20 text-gray-400 hover:bg-black/40 hover:text-white'
+                              }`}
+                          >
+                            {range === '1M' && '1개월'}
+                            {range === '3M' && '3개월'}
+                            {range === '6M' && '6개월'}
+                            {range === '1Y' && '1년'}
+                            {range === 'ALL' && '전체'}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 font-bold px-2">이동평균선</span>
+                        {[3, 5, 10, 20, 60, 120].map(d => (
+                          <label key={d} className="flex items-center gap-1.5 px-2 py-1 bg-black/20 rounded cursor-pointer hover:bg-black/40 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={!!maToggle[d]}
+                              onChange={e => setMaToggle(p => ({ ...p, [d]: e.target.checked }))}
+                              className="rounded border-gray-600 bg-gray-700 text-rose-500 focus:ring-offset-0 focus:ring-0 w-3 h-3"
+                            />
+                            <span className="text-xs text-gray-300">{d}일</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Chart Container */}
@@ -575,6 +738,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                             <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">체결가</th>
                             <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">수량</th>
                             <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">총액</th>
+                            <th className="px-6 py-4 whitespace-nowrap font-semibold text-right whitespace-nowrap">실현손익</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
@@ -601,11 +765,25 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-white">
                                 {Math.floor(trade.price * trade.quantity).toLocaleString()}원
                               </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right">
+                                {trade.action === 'SELL' && trade.profit !== undefined ? (
+                                  <div>
+                                    <div className={`text-sm font-bold ${(trade.profit || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                                      {(trade.profit || 0) > 0 ? '+' : ''}{(trade.profit || 0).toLocaleString()}원
+                                    </div>
+                                    <div className={`text-xs ${(trade.profit_rate || 0) >= 0 ? 'text-rose-500/70' : 'text-blue-500/70'}`}>
+                                      {(trade.profit_rate || 0).toFixed(2)}%
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-600">-</span>
+                                )}
+                              </td>
                             </tr>
                           ))}
                           {tradeHistory.length === 0 && (
                             <tr>
-                              <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                              <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                                 거래 내역이 없습니다.
                               </td>
                             </tr>

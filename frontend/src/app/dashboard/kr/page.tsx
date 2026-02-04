@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { krAPI, KRMarketGate, KRSignalsResponse, DataStatus } from '@/lib/api';
+import { useEffect, useState, useRef } from 'react';
+import { krAPI, KRMarketGate, KRSignalsResponse, DataStatus, fetchAPI } from '@/lib/api';
 
 function Tooltip({ children, content, className = "", position = "top", align = "center" }: { children: React.ReactNode, content: string, className?: string, position?: 'top' | 'bottom', align?: 'left' | 'center' | 'right' }) {
   const positionClass = position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2';
@@ -55,10 +55,12 @@ export default function KRMarketOverview() {
   const [lastUpdated, setLastUpdated] = useState<string>('');
 
   // 날짜 선택 상태
+  const [topSectors, setTopSectors] = useState<any[]>([]); // New state for top sectors
   const [useTodayMode, setUseTodayMode] = useState(true);
   const [targetDate, setTargetDate] = useState('');
   const [mgLoading, setMgLoading] = useState(false);
   const [updateInterval, setUpdateInterval] = useState(30); // Default 30min
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 설정값 로드
   useEffect(() => {
@@ -124,6 +126,23 @@ export default function KRMarketOverview() {
   }, [useTodayMode, targetDate]); // 의존성 추가 (날짜 변경 시 자동 로드)
 
   const loadData = async () => {
+    // Safety: Force loading to false after 15s
+    const safetyTimer = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) {
+          console.warn('[Safety] Force stopping loading spinner');
+          return false;
+        }
+        return prev;
+      });
+    }, 15000);
+
+    // Clear pending retry since we are loading now
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
     setLoading(true);
     try {
       // 날짜 파라미터 결정
@@ -134,10 +153,7 @@ export default function KRMarketOverview() {
         krAPI.getMarketGate(dateParam),
         krAPI.getSignals(dateParam),
         krAPI.getDataStatus(),
-        fetch('/api/kr/backtest-summary').then(res => {
-          if (!res.ok) throw new Error(`Backtest API Error: ${res.status}`);
-          return res.json();
-        })
+        fetchAPI<BacktestSummary>('/api/kr/backtest-summary') // Updated to fetchAPI for consistency
       ]);
 
       // Market Gate 데이터 처리
@@ -170,10 +186,25 @@ export default function KRMarketOverview() {
         console.error('Failed to load Backtest Summary:', btResult.reason);
       }
 
+
+      // [Auto-Recovery] If initializing or empty in Realtime Mode -> Rapid Polling (5s)
+      if (useTodayMode) {
+        const isInitializing =
+          (gateResult.status === 'fulfilled' && (gateResult.value?.status === 'initializing' || gateResult.value?.message?.includes('대기'))) ||
+          (signalsResult.status === 'fulfilled' && (!signalsResult.value?.signals || signalsResult.value.signals.length === 0));
+
+        if (isInitializing) {
+          console.log('[Auto-Recovery] Data not ready. Retrying in 5s...');
+          if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = setTimeout(loadData, 5000);
+        }
+      }
+
       setLastUpdated(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
     } catch (error) {
       console.error('Critical Error in loadData:', error);
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   };

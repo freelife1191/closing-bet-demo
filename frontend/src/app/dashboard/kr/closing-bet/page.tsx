@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { fetchAPI } from '@/lib/api';
 import Modal from '@/app/components/Modal';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
@@ -830,6 +831,8 @@ export default function JonggaV2Page() {
   const [loading, setLoading] = useState(true);
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('latest');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [chartModal, setChartModal] = useState<{ isOpen: boolean, symbol: string, name: string }>({
     isOpen: false, symbol: '', name: ''
@@ -886,9 +889,8 @@ export default function JonggaV2Page() {
   const matchCount = filteredSignals.length;
 
   useEffect(() => {
-    fetch('/api/kr/jongga-v2/dates')
-      .then((res) => res.json())
-      .then((data) => {
+    fetchAPI('/api/kr/jongga-v2/dates')
+      .then((data: any) => {
         if (Array.isArray(data)) {
           setDates(data);
         }
@@ -897,24 +899,63 @@ export default function JonggaV2Page() {
   }, []);
 
   useEffect(() => {
+    // Safety Force Timeout
+    const safetyTimer = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) {
+          console.error("Force safety timeout triggered for Closing Bet data load");
+          return false;
+        }
+        return prev;
+      });
+    }, 15000); // 15s absolute max wait
+
     setLoading(true);
     let url = '/api/kr/jongga-v2/latest';
     if (selectedDate !== 'latest') {
       url = `/api/kr/jongga-v2/history/${selectedDate}`;
     }
 
-    fetch(url)
-      .then((res) => res.json())
-      .then((data) => {
+    console.log(`Fetching Closing Bet data: ${url}`);
+
+    fetchAPI(url)
+      .then((data: any) => {
+        console.log("Closing Bet data loaded successfully");
+
+        // [Auto-Recovery] If initializing, retry in 5s
+        if (selectedDate === 'latest' && (data?.status === 'initializing' || data?.message?.includes('분석 중'))) {
+          console.log("[Auto-Recovery] Initializing... Retrying in 5s");
+          if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = setTimeout(() => {
+            setRefreshKey(prev => prev + 1);
+          }, 5000);
+          // Do NOT set loading to false, keep spinning
+          return;
+        }
+
         setData(data);
         setLoading(false);
       })
       .catch((err) => {
         console.error('Failed to fetch data:', err);
-        setLoading(false);
-        setData(null);
+        // [Auto-Recovery] Retry on error (e.g. timeout, 500)
+        console.log("[Auto-Recovery] Fetch failed. Retrying in 5s...");
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(() => {
+          setRefreshKey(prev => prev + 1);
+        }, 5000);
+        // Keep loading true so user sees spinner, not empty state
+        // setLoading(false); 
+      })
+      .finally(() => {
+        clearTimeout(safetyTimer);
       });
-  }, [selectedDate]);
+
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      clearTimeout(safetyTimer);
+    };
+  }, [selectedDate, refreshKey]);
 
   if (loading) {
     return (
@@ -1262,8 +1303,8 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
     const interval = setInterval(async () => {
       try {
         // 변경: 상태 전용 엔드포인트 폴링
-        const res = await fetch('/api/kr/jongga-v2/status');
-        const data = await res.json();
+        const res: any = await fetchAPI('/api/kr/jongga-v2/status');
+        const data = res; // fetchAPI returns JSON directly
 
         if (data) {
           // 실행 중이면 계속 폴링
@@ -1304,29 +1345,33 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
 
   const timeStr = updateDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
+  // ... (existing code)
+
   const handleUpdate = async () => {
     if (updating) return;
 
     setUpdating(true);
     try {
-      const res = await fetch('/api/kr/jongga-v2/run', { method: 'POST' });
-      if (res.ok) {
-        console.log('Engine started in background');
-        // 폴링 시작
+      // fetchAPI를 사용하여 타임아웃 적용 (엔진 실행은 오래 걸릴 수 있으므로 타임아웃 넉넉히 주거나, 비동기 확인만 하므로 기본값 사용)
+      const res = await fetchAPI('/api/kr/jongga-v2/run', { method: 'POST' });
+      // fetchAPI throws on error, so we catch it below. 
+      // Note: fetchAPI returns the parsed JSON if successful.
+      // However, the original code checks res.ok or res.status which fetchAPI masks by throwing on error.
+      // We need to adjust usage or assumption. 
+      // fetchAPI signature: async function fetchAPI<T = any>(url: string, options: RequestInit = {}): Promise<T>
+      // It returns data directly and throws error with status attached if possible.
+
+      console.log('Engine started in background');
+      pollStatus();
+
+    } catch (error: any) {
+      if (error.status === 409) {
+        console.log('Engine is already running.');
         pollStatus();
       } else {
-        // 이미 실행 중인 경우
-        if (res.status === 409) {
-          console.log('Engine is already running.');
-          pollStatus(); // 실행 중이면 바로 폴링 시작
-        } else {
-          console.error('엔진 실행 실패. 서버 로그를 확인하세요.');
-          setUpdating(false);
-        }
+        console.error('업데이트 요청 중 오류 발생', error);
+        setUpdating(false);
       }
-    } catch (error) {
-      console.error('업데이트 요청 중 오류 발생', error);
-      setUpdating(false);
     }
   };
 
@@ -1336,19 +1381,16 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
     setAnalyzingGemini(true);
     try {
       console.log('Gemini Analysis Request Triggered...');
-      const res = await fetch('/api/kr/jongga-v2/reanalyze-gemini', {
+      // Use fetchAPI
+      const data: any = await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      const data = await res.json();
-      if (res.ok) {
-        console.log(data.message || 'Gemini 분석 완료!');
-        window.location.reload();
-      } else {
-        console.error(data.error || 'Gemini 분석 실패');
-      }
-    } catch (error) {
+      console.log(data.message || 'Gemini 분석 완료!');
+      window.location.reload();
+    } catch (error: any) {
       console.error('Gemini 분석 요청 중 오류 발생', error);
+      // alert(error.message || '분석 실패');
     } finally {
       setAnalyzingGemini(false);
     }

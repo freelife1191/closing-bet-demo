@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Modal from '@/app/components/Modal';
+import { fetchAPI } from '@/lib/api';
 
 // Tooltip 컴포넌트
 function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false }: {
@@ -105,47 +106,52 @@ export default function DataStatusPage() {
   const [useTodayMode, setUseTodayMode] = useState(true);
 
   // 데이터 로드 (전체)
+  // 데이터 로드 (전체)
   const loadData = useCallback(async () => {
+    // Safety Force Stop
+    const timer = setTimeout(() => {
+      setLoading(prev => prev ? false : prev);
+    }, 10000);
+
     try {
-      const res = await fetch('/api/system/data-status');
-      if (res.ok) {
-        setData(await res.json());
-      }
+      const data: DataStatusResponse = await fetchAPI('/api/system/data-status');
+      setData(data);
     } catch (error) {
       console.error('Failed to load data status:', error);
+    } finally {
+      clearTimeout(timer);
     }
   }, []);
 
   // 업데이트 상태만 폴링 (가벼움)
   const pollUpdateStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/system/update-status');
-      if (res.ok) {
-        const status: UpdateStatusResponse = await res.json();
-        setUpdating(status.isRunning);
+      const status: UpdateStatusResponse = await fetchAPI('/api/system/update-status');
 
-        // 업데이트 중이 아니면 items를 비워서 오래된 에러 상태가 표시되지 않도록 함
-        if (!status.isRunning) {
-          setUpdateItems([]);
-        } else {
-          setUpdateItems(status.items);
-        }
+      setUpdating(status.isRunning);
 
-        setUpdateProgress(status.currentItem ? `${status.currentItem} 업데이트 중...` : '');
-
-        // 완료되면 폴링 중지 및 데이터 새로고침
-        if (!status.isRunning && pollingRef.current) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-
-          // 백엔드 파일 시스템 저장이 완료될 때까지 약간의 지연 시간을 둠 (정합성 보장)
-          setTimeout(async () => {
-            await loadData();
-            setUpdating(false);
-            setUpdatingItem(null);
-          }, 1000);
-        }
+      // 업데이트 중이 아니면 items를 비워서 오래된 에러 상태가 표시되지 않도록 함
+      if (!status.isRunning) {
+        setUpdateItems([]);
+      } else {
+        setUpdateItems(status.items);
       }
+
+      setUpdateProgress(status.currentItem ? `${status.currentItem} 업데이트 중...` : '');
+
+      // 완료되면 폴링 중지 및 데이터 새로고침
+      if (!status.isRunning && pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+
+        // 백엔드 파일 시스템 저장이 완료될 때까지 약간의 지연 시간을 둠 (정합성 보장)
+        setTimeout(async () => {
+          await loadData();
+          setUpdating(false);
+          setUpdatingItem(null);
+        }, 1000);
+      }
+
     } catch (error) {
       console.error('Failed to poll update status:', error);
     }
@@ -192,31 +198,30 @@ export default function DataStatusPage() {
   useEffect(() => {
     const checkRunningStatus = async () => {
       try {
-        const res = await fetch('/api/kr/jongga-v2/status');
-        if (res.ok) {
-          const data = await res.json();
-          // 백엔드에서 실행 중이면 스피너 복구 및 폴링 시작
-          if (data.isRunning) {
-            setUpdatingItem('AI Jongga V2');
+        const data: any = await fetchAPI('/api/kr/jongga-v2/status');
 
-            // 폴링 재개 로직
-            const poll = async () => {
-              let completed = false;
-              while (!completed) {
-                await new Promise(r => setTimeout(r, 2000));
-                const statusRes = await fetch('/api/kr/jongga-v2/status');
-                const statusData = await statusRes.json();
+        // 백엔드에서 실행 중이면 스피너 복구 및 폴링 시작
+        if (data.isRunning) {
+          setUpdatingItem('AI Jongga V2');
 
+          // 폴링 재개 로직
+          const poll = async () => {
+            let completed = false;
+            while (!completed) {
+              await new Promise(r => setTimeout(r, 2000));
+              try {
+                const statusData: any = await fetchAPI('/api/kr/jongga-v2/status');
                 if (!statusData.isRunning) {
                   completed = true;
                   setUpdatingItem(null);
                   await loadData();
                 }
-              }
-            };
-            poll();
-          }
+              } catch (e) { console.error("Poll fail", e); completed = true; }
+            }
+          };
+          poll();
         }
+
       } catch (e) {
         console.error("Failed to check running status:", e);
       }
@@ -243,29 +248,25 @@ export default function DataStatusPage() {
       // 파일명에 따른 API 엔드포인트 매핑
       if (fileName === 'AI Jongga V2') {
         // AI Jongga V2는 비동기 실행이므로 폴링 필요
-        const startRes = await fetch('/api/kr/jongga-v2/run', {
+        await fetchAPI('/api/kr/jongga-v2/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target_date: effectiveDate })
         });
+        // 전역 updating 상태를 설정하여 pollUpdateStatus가 loadData를 호출하도록 함
+        setUpdating(true);
+        startPolling();
 
-        if (startRes.ok) {
-          // 전역 updating 상태를 설정하여 pollUpdateStatus가 loadData를 호출하도록 함
-          setUpdating(true);
-          startPolling();
-        }
       } else if (fileName === 'VCP Signals') {
         // VCP Signals도 target_date 지원
-        const startRes = await fetch('/api/kr/signals/run', {
+        await fetchAPI('/api/kr/signals/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target_date: effectiveDate })
         });
+        setUpdating(true);
+        startPolling();
 
-        if (startRes.ok) {
-          setUpdating(true);
-          startPolling();
-        }
       } else {
         // 다른 항목들은 동기식 처리
         switch (fileName) {
@@ -289,15 +290,11 @@ export default function DataStatusPage() {
             throw new Error('Unknown file type');
         }
 
-        const res = await fetch(endpoint, {
+        await fetchAPI(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
-
-        if (!res.ok) {
-          console.error(`Failed to update ${fileName}`);
-        }
       }
 
       await loadData(); // 즉시 반영
@@ -317,7 +314,7 @@ export default function DataStatusPage() {
     // 1. 백엔드에 업데이트 시작 알림 & 백그라운드 실행 요청
     try {
       setUpdating(true);
-      const res = await fetch('/api/system/start-update', {
+      await fetchAPI('/api/system/start-update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -325,10 +322,6 @@ export default function DataStatusPage() {
           target_date: effectiveDate // 날짜 전달
         })
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to start update');
-      }
 
       // 2. 폴링 시작 (나머지는 백엔드가 알아서 함)
       startPolling();
@@ -364,7 +357,7 @@ export default function DataStatusPage() {
 
   const handleStopUpdate = async () => {
     try {
-      await fetch('/api/system/stop-update', { method: 'POST' });
+      await fetchAPI('/api/system/stop-update', { method: 'POST' });
     } catch (e) {
       console.error("Failed to stop update:", e);
     }
@@ -395,37 +388,27 @@ export default function DataStatusPage() {
     setModal(prev => ({ ...prev, isOpen: false }));
 
     try {
-      const res = await fetch('/api/kr/jongga-v2/message', {
+      const resData: any = await fetchAPI('/api/kr/jongga-v2/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_date: date })
       });
 
-      const resData = await res.json();
-      if (res.ok) {
-        setModal({
-          isOpen: true,
-          type: 'success',
-          title: '발송 성공',
-          content: resData.message || '메시지 발송 성공',
-          showCancel: false
-        });
-      } else {
-        setModal({
-          isOpen: true,
-          type: 'danger',
-          title: '발송 실패',
-          content: `오류: ${resData.error || resData.message || '알 수 없는 오류'}`,
-          showCancel: false
-        });
-      }
-    } catch (e) {
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: '발송 성공',
+        content: resData.message || '메시지 발송 성공',
+        showCancel: false
+      });
+
+    } catch (e: any) {
       console.error("Failed to send message:", e);
       setModal({
         isOpen: true,
         type: 'danger',
-        title: '요청 실패',
-        content: '메시지 발송 요청 중 오류가 발생했습니다.',
+        title: '발송 실패',
+        content: `오류: ${e.message || e.data?.message || '알 수 없는 오류'}`,
         showCancel: false
       });
     }

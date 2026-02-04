@@ -257,8 +257,9 @@ export default function VCPSignalsPage() {
 
   const loadSignals = async (date?: string) => {
     setLoading(true);
+
+    // 1. Signals 데이터 로드 (Critical Path)
     try {
-      // 1. Signals 데이터 로드 (우선순위 높음)
       const signalsRes = await krAPI.getSignals(date || undefined);
       setSignals(signalsRes.signals || []);
       setScannedCount(signalsRes.total_scanned || 600);
@@ -275,20 +276,22 @@ export default function VCPSignalsPage() {
       }
 
       setLastUpdated(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
+    } catch (error) {
+      console.error('Failed to load signals:', error);
+      setSignals([]);
+    } finally {
+      // Signals 로드 완료 즉시 로딩 해제 (AI 데이터 기다리지 않음)
+      setLoading(false);
+    }
 
-      // 2. AI 데이터 로드 (실패해도 Signals에는 영향 없도록 별도 처리)
+    // 2. AI 데이터 로드 (Background / Non-blocking)
+    if (signals.length > 0 || true) { // 항상 시도
       try {
         const aiRes = await krAPI.getAIAnalysis(date);
         setAiData(aiRes);
       } catch (aiError) {
         console.error('Failed to load AI data:', aiError);
       }
-
-    } catch (error) {
-      console.error('Failed to load signals:', error);
-      setSignals([]); // 에러 발생 시 기존 데이터 잔상 제거
-    } finally {
-      setLoading(false);
     }
   };
 
