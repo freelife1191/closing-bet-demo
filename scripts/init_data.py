@@ -309,82 +309,135 @@ def fetch_sector_indices():
 
 def fetch_stock_price(ticker):
     """개별 종목 실시간 가격 수집"""
-    if not YFINANCE_AVAILABLE:
-        return None
+    import requests
     
-    try:
-        # 한국 종목은 .KS (KOSPI) 또는 .KQ (KOSDAQ) 접미사 필요
-        yahoo_ticker = f"{ticker}.KS"
-        
-        # yfinance 에러 로그 억제 및 안전한 다운로드
-        import logging as _logging
-        yf_logger = _logging.getLogger('yfinance')
-        original_level = yf_logger.level
-        yf_logger.setLevel(_logging.CRITICAL)
-        
-        hist = pd.DataFrame()
+    # 1. Try yfinance
+    if YFINANCE_AVAILABLE:
         try:
-             hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
-        except: pass
-        finally:
-             yf_logger.setLevel(original_level)
-
-        # 데이터 유효성 검사 (Close 컬럼 존재 여부)
-        is_valid = False
-        if not hist.empty:
-             if isinstance(hist.columns, pd.MultiIndex):
-                  if 'Close' in hist.columns.get_level_values(0): is_valid = True
-             elif 'Close' in hist.columns:
-                  is_valid = True
-        
-        if not is_valid:
-            # KOSDAQ 시도
-            yahoo_ticker = f"{ticker}.KQ"
+            # 한국 종목은 .KS (KOSPI) 또는 .KQ (KOSDAQ) 접미사 필요
+            yahoo_ticker = f"{ticker}.KS"
+            
+            # yfinance 에러 로그 억제 및 안전한 다운로드
+            import logging as _logging
+            yf_logger = _logging.getLogger('yfinance')
+            original_level = yf_logger.level
             yf_logger.setLevel(_logging.CRITICAL)
+            
+            hist = pd.DataFrame()
             try:
-                hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
+                 hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
             except: pass
             finally:
-                yf_logger.setLevel(original_level)
+                 yf_logger.setLevel(original_level)
 
-        if not hist.empty:
-            # Extract Close series safely
-            close_series = None
-            if isinstance(hist.columns, pd.MultiIndex):
-                try:
-                    close_series = hist['Close']
-                    if isinstance(close_series, pd.DataFrame): 
-                        close_series = close_series.iloc[:, 0]
-                except:
-                    # 최악의 경우 첫 번째 컬럼
-                    close_series = hist.iloc[:, 0]
-            elif 'Close' in hist.columns:
-                close_series = hist['Close']
-            else:
-                close_series = hist.iloc[:, 0]
+            # 데이터 유효성 검사 (Close 컬럼 존재 여부)
+            is_valid = False
+            if not hist.empty:
+                 if isinstance(hist.columns, pd.MultiIndex):
+                      if 'Close' in hist.columns.get_level_values(0): is_valid = True
+                 elif 'Close' in hist.columns:
+                      is_valid = True
             
-            # Ensure it is a Series
-            if isinstance(close_series, pd.DataFrame):
-                close_series = close_series.iloc[:, 0]
+            if not is_valid:
+                # KOSDAQ 시도
+                yahoo_ticker = f"{ticker}.KQ"
+                yf_logger.setLevel(_logging.CRITICAL)
+                try:
+                    hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
+                except: pass
+                finally:
+                    yf_logger.setLevel(original_level)
 
-            if not close_series.empty:
-                # 스칼라 값 변환 (.item() 사용)
-                def get_val(s, idx):
-                    val = s.iloc[idx]
-                    return val.item() if hasattr(val, 'item') else val
-
-                current = get_val(close_series, -1)
-                prev = get_val(close_series, -2) if len(close_series) > 1 else current
+            if not hist.empty:
+                # Extract Close series safely
+                close_series = None
+                if isinstance(hist.columns, pd.MultiIndex):
+                    try:
+                        close_series = hist['Close']
+                        if isinstance(close_series, pd.DataFrame): 
+                            close_series = close_series.iloc[:, 0]
+                    except:
+                        # 최악의 경우 첫 번째 컬럼
+                        close_series = hist.iloc[:, 0]
+                elif 'Close' in hist.columns:
+                    close_series = hist['Close']
+                else:
+                    close_series = hist.iloc[:, 0]
                 
-                change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                # Ensure it is a Series
+                if isinstance(close_series, pd.DataFrame):
+                    close_series = close_series.iloc[:, 0]
+
+                if not close_series.empty:
+                    # 스칼라 값 변환 (.item() 사용)
+                    def get_val(s, idx):
+                        val = s.iloc[idx]
+                        return val.item() if hasattr(val, 'item') else val
+
+                    current = get_val(close_series, -1)
+                    prev = get_val(close_series, -2) if len(close_series) > 1 else current
+                    
+                    change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                    return {
+                        'price': round(float(current), 0),
+                        'change_pct': round(float(change_pct), 2),
+                        'prev_close': round(float(prev), 0)
+                    }
+        except Exception as e:
+            pass
+
+    # 2. Try Toss Securities API (Fallback 1)
+    try:
+        toss_url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes=A{str(ticker).zfill(6)}"
+        res = requests.get(toss_url, timeout=3)
+        if res.status_code == 200:
+            result = res.json().get('result', [])
+            if result:
+                item = result[0]
+                current = float(item.get('close', 0))
+                prev = float(item.get('base', 0)) # base appears to be previous close
+                
+                if current > 0:
+                    change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                    return {
+                        'price': round(current, 0),
+                        'change_pct': round(change_pct, 2),
+                        'prev_close': round(prev, 0)
+                    }
+    except Exception as e:
+        # log(f"Toss API Fallback failed for {ticker}: {e}", "WARNING")
+        pass
+
+    # 3. Try Naver Securities API (Fallback 2)
+    try:
+        naver_url = f"https://m.stock.naver.com/api/stock/{str(ticker).zfill(6)}/basic"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(naver_url, headers=headers, timeout=3)
+        if res.status_code == 200:
+            data = res.json()
+            if 'closePrice' in data:
+                current = float(data['closePrice'].replace(',', ''))
+                change_pct = float(data.get('fluctuationsRatio', 0))
+                prev = float(data.get('compareToPreviousClosePrice', '0').replace(',', ''))
+                
+                # Naver 'compareToPreviousClosePrice' is the diff, not the price itself usually? 
+                # Actually closer inspection of Naver API:
+                # compareToPreviousClosePrice is the diff value. 
+                # prev_close = current - diff (if up) or current + diff (if down)
+                # But safer to calculate from percentage if available.
+                # Let's derive prev from current and change_pct to be safe
+                
+                prev_calc = current / (1 + (change_pct / 100)) if change_pct != -100 else 0
+                
                 return {
-                    'price': round(float(current), 0),
-                    'change_pct': round(float(change_pct), 2),
-                    'prev_close': round(float(prev), 0)
+                    'price': round(current, 0),
+                    'change_pct': round(change_pct, 2),
+                    'prev_close': round(prev_calc, 0)
                 }
     except Exception as e:
+        # log(f"Naver API Fallback failed for {ticker}: {e}", "WARNING")
         pass
-    
+
     return None
 
 
@@ -2060,13 +2113,31 @@ def update_vcp_signals_recent_price():
         
         for ticker in tickers:
             try:
-                # pykrx로 현재가 조회
-                df_price = stock.get_market_ohlcv(today_str, today_str, ticker)
-                if not df_price.empty:
-                    current_price = int(df_price['종가'].iloc[-1])
-                    current_prices[ticker] = current_price
+                price_found = False
+                current_price = 0
                 
-                time.sleep(0.05) # Rate limiting
+                # 1. pykrx 시도
+                try:
+                    df_price = stock.get_market_ohlcv(today_str, today_str, ticker)
+                    if not df_price.empty:
+                        current_price = int(df_price['종가'].iloc[-1])
+                        if current_price > 0:
+                            current_prices[ticker] = current_price
+                            price_found = True
+                except:
+                    pass
+                
+                # 2. yfinance 폴백 (fetch_stock_price 사용)
+                if not price_found:
+                    data = fetch_stock_price(ticker)
+                    if data and 'price' in data:
+                        current_price = int(data['price'])
+                        if current_price > 0:
+                            current_prices[ticker] = current_price
+                            price_found = True
+                            # log(f"  -> {ticker} yfinance 폴백 성공: {current_price}", "INFO")
+
+                time.sleep(0.01) # Rate limiting
             except Exception as e:
                 # log(f"{ticker} 가격 조회 실패: {e}", "WARNING")
                 pass

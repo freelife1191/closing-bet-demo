@@ -180,8 +180,8 @@ def get_kr_signals():
                     'market': row.get('market', 'KOSPI'),
                     'signal_date': signal_date,
                     'entry_price': float(row.get('entry_price', 0)),
-                    'current_price': float(row.get('entry_price', 0)),
-                    'return_pct': 0,
+                    'current_price': float(row.get('current_price', row.get('entry_price', 0))),
+                    'return_pct': float(row.get('return_pct', 0)),
                     'score': round(score, 1),
                     'foreign_5d': foreign_5d,
                     'inst_5d': inst_5d,
@@ -305,6 +305,12 @@ def _run_vcp_background(target_date_arg, max_stocks_arg):
         
         # run_ai=True로 AI 자동 수행
         result_df = init_data.create_signals_log(target_date=target_date_arg, run_ai=True)
+        VCP_STATUS['progress'] = 80
+
+        # [NEW] 최신 가격 업데이트 (Entry != Current 반영을 위해)
+        VCP_STATUS['message'] = "최신 가격 동기화 중..."
+        logger.info(f"[VCP Screener] 최신 가격 동기화 수행")
+        init_data.update_vcp_signals_recent_price()
         VCP_STATUS['progress'] = 100
         
         if isinstance(result_df, pd.DataFrame):
