@@ -168,10 +168,13 @@ class LLMAnalyzer:
                         response_content = resp.text
                         break
                     except Exception as e:
-                        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        error_msg = str(e).lower()
+                        retry_conditions = ["429", "resource_exhausted", "503", "overloaded", "502", "500"]
+                        
+                        if any(c in error_msg for c in retry_conditions):
                              if attempt < max_retries - 1:
                                 wait_time = (2 ** attempt) * 2 + random.uniform(0, 1) # 2s, 4s, 8s, 16s, 32s
-                                logger.warning(f"[GEMINI] Rate limit hit (429). Retrying in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
+                                logger.warning(f"[GEMINI] API Error ({error_msg[:30]}...). Retrying in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
                                 await asyncio.sleep(wait_time)
                                 continue
                         # Other errors or max retries reached

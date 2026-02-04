@@ -120,10 +120,13 @@ class VCPMultiAIAnalyzer:
                 return result
                 
             except Exception as e:
-                error_msg = str(e)
-                if attempt < max_retries and ('429' in error_msg or 'Resource exhausted' in error_msg or 'Quota exceeded' in error_msg):
+                error_msg = str(e).lower()
+                # 429: Rate Limit, 503/500: Server Error/Overloaded
+                retry_conditions = ['429', 'resource exhausted', 'quota exceeded', '503', '502', '500', 'overloaded']
+                
+                if attempt < max_retries and any(c in error_msg for c in retry_conditions):
                     delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
-                    logger.warning(f"[Gemini] {stock_name} 429 Error. Retrying in {delay:.2f}s... ({attempt+1}/{max_retries})")
+                    logger.warning(f"[Gemini] {stock_name} API Error ({error_msg[:50]}...). Retrying in {delay:.2f}s... ({attempt+1}/{max_retries})")
                     await asyncio.sleep(delay)
                 else:
                     logger.error(f"[Gemini] {stock_name} 분석 실패 (Final): {e}")
