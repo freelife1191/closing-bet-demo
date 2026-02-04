@@ -9,10 +9,14 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
 import logging
+import os
 
 from engine.market_gate import MarketGate
 
 logger = logging.getLogger(__name__)
+
+# Base directory for data files
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 @dataclass
@@ -52,31 +56,77 @@ class SmartMoneyScreener:
         self.contraction_threshold = 0.7  # 70% 이하 축소 시 VCP 인정
         self.lookback_days = 60
         self.market_gate = MarketGate()
-        self.target_date = target_date  # 테스트용 날짜 지정
+        self.target_date = target_date
+        
+        # Data Cache
+        self.stocks_df = None
+        self.prices_df = None
+        self.inst_df = None
+
+    def _load_data(self):
+        """데이터 파일 로드"""
+        try:
+            stocks_path = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
+            prices_path = os.path.join(BASE_DIR, 'data', 'daily_prices.csv')
+            inst_path = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
+
+            if os.path.exists(stocks_path):
+                self.stocks_df = pd.read_csv(stocks_path)
+            
+            if os.path.exists(prices_path):
+                self.prices_df = pd.read_csv(prices_path, dtype={'ticker': str})
+                self.prices_df['date'] = pd.to_datetime(self.prices_df['date'])
+                
+            if os.path.exists(inst_path):
+                self.inst_df = pd.read_csv(inst_path, dtype={'ticker': str})
+                self.inst_df['date'] = pd.to_datetime(self.inst_df['date'])
+                
+        except Exception as e:
+            logger.error(f"데이터 로드 실패: {e}")
 
     def run_screening(self, max_stocks: int = 50) -> pd.DataFrame:
         """스크리닝 실행"""
         try:
+            # Load Data First
+            self._load_data()
+            if self.stocks_df is None or self.prices_df is None or self.inst_df is None:
+                logger.error("필수 데이터 파일이 누락되었습니다.")
+                return pd.DataFrame()
+
             # Market Gate 확인
             gate_status = self.market_gate.analyze()
             logger.info(f"=== Market Gate Status: {gate_status['status']} (Open: {gate_status['is_gate_open']}) ===")
             if not gate_status['is_gate_open']:
                 logger.warning(f"⚠️ 시장 경보: {gate_status['gate_reason']} - 보수적 접근 필요")
 
-            # 종목 리스트 로드
-            stock_list = self._load_stock_list()
-
             # 결과 저장 리스트
             results = []
-
-            for i, stock in enumerate(stock_list[:max_stocks]):
+            
+            # Analyze stocks
+            # If max_stocks is small, we might just be testing, but for production we iterate all
+            # Here we iterate stocks_df
+            
+            count = 0
+            for _, stock_row in self.stocks_df.iterrows():
+                if count >= max_stocks: 
+                    break
+                    
+                stock_dict = {
+                    'ticker': str(stock_row['ticker']).zfill(6),
+                    'name': stock_row['name'],
+                    'market': stock_row.get('market', 'UNKNOWN')
+                }
+                
                 try:
-                    result = self._analyze_stock(stock)
+                    result = self._analyze_stock(stock_dict)
                     if result and result['score'] > 50:
                         result['market_status'] = gate_status['status']
                         results.append(result)
+                        
+                    count += 1 # Only count actual analyzed stocks (or should we count attempts? Logic kept simple)
+                    
                 except Exception as e:
-                    logger.warning(f"{stock['ticker']} 분석 실패: {e}")
+                    # logger.warning(f"{stock_dict['ticker']} 분석 실패: {e}")
                     continue
 
             # DataFrame으로 변환
@@ -90,172 +140,177 @@ class SmartMoneyScreener:
             logger.error(f"스크리닝 실패: {e}")
             return pd.DataFrame()
 
-    def _load_stock_list(self) -> List[Dict]:
-        """종목 리스트 로드"""
-        try:
-            # 실제로는 pykrx에서 로드
-            # 여기서는 샘플 데이터 반환
-            return [
-                {'ticker': '005930', 'name': '삼성전자', 'market': 'KOSPI'},
-                {'ticker': '000270', 'name': '기아', 'market': 'KOSPI'},
-                {'ticker': '035420', 'name': 'NAVER', 'market': 'KOSPI'},
-                {'ticker': '005380', 'name': '현대차', 'market': 'KOSPI'},
-                {'ticker': '068270', 'name': '셀트리온', 'market': 'KOSDAQ'},
-            ]
-        except Exception as e:
-            logger.error(f"종목 리스트 로드 실패: {e}")
-            return []
-
     def _analyze_stock(self, stock: Dict) -> Optional[Dict]:
         """개별 종목 분석"""
         try:
             ticker = stock['ticker']
 
-            # 가격 데이터 로드
-            price_data = self._load_price_data(ticker)
-            if price_data is None or len(price_data) < 60:
+            # 가격 데이터 필터링 (메모리상)
+            # Optimize: slicing boolean index is fast enough for small datasets, but for millions of rows it might be slow.
+            # Assuming daily_prices.csv isn't infinitely large.
+            
+            stock_prices = self.prices_df[self.prices_df['ticker'] == ticker].copy()
+            if len(stock_prices) < 20: 
                 return None
+                
+            stock_prices = stock_prices.sort_values('date')
+            
+            # If target_date is set, filter up to that date
+            if self.target_date:
+                target_dt = pd.to_datetime(self.target_date)
+                stock_prices = stock_prices[stock_prices['date'] <= target_dt]
+                if stock_prices.empty: return None
 
             # VCP 패턴 감지
-            vcp_result = self._detect_vcp_pattern(price_data, stock)
+            vcp_result = self._detect_vcp_pattern(stock_prices, stock)
 
             # 수급 점수 계산
-            supply_score = self._calculate_supply_score(ticker)
-
+            supply_result = self._calculate_supply_score(ticker)
+            supply_score = supply_result['score']
+            
             # 종합 점수
-            total_score = vcp_result.vcp_score * 0.4 + supply_score * 0.6
+            total_score = vcp_result.vcp_score * 0.6 + supply_score * 0.4
 
             return {
                 'ticker': ticker,
                 'name': stock['name'],
                 'score': total_score,
-                'foreign_net_5d': supply_score,
-                'inst_net_5d': int(supply_score * 0.5),
+                'foreign_net_5d': supply_result.get('foreign_5d', 0),
+                'inst_net_5d': supply_result.get('inst_5d', 0),
                 'market': stock['market'],
                 'entry_price': vcp_result.entry_price,
-                'change_pct': (vcp_result.entry_price / price_data.iloc[-60]['close'] - 1) * 100,
-                'market_status': 'UNKNOWN' # Will be updated in run_screening
+                'change_pct': 0 if len(stock_prices) == 0 else (stock_prices.iloc[-1]['close'] - stock_prices.iloc[0]['close']) / stock_prices.iloc[0]['close'] * 100,
+                'market_status': 'UNKNOWN',
+                'contraction_ratio': vcp_result.contraction_ratio
             }
 
         except Exception as e:
-            logger.warning(f"{stock['ticker']} 분석 중 에러: {e}")
-            return None
-
-    def _load_price_data(self, ticker: str) -> Optional[pd.DataFrame]:
-        """가격 데이터 로드"""
-        try:
-            # 실제로는 CSV나 pykrx에서 로드
-            # 여기서는 샘플 데이터 반환
-            dates = pd.date_range(end=datetime.now(), periods=60, freq='D')
-
-            # 랜덤 시계열 데이터 생성
-            base_price = np.random.randint(50000, 150000)
-            returns = np.random.normal(0.001, 0.02, 60)
-            prices = base_price * (1 + returns).cumprod()
-
-            # 고가/저가/시가/종가 생성
-            df = pd.DataFrame({
-                'date': dates,
-                'open': prices * np.random.uniform(0.98, 1.0, 60),
-                'high': prices * np.random.uniform(1.0, 1.05, 60),
-                'low': prices * np.random.uniform(0.95, 1.0, 60),
-                'close': prices,
-                'volume': np.random.randint(100000, 10000000, 60)
-            })
-
-            return df
-
-        except Exception as e:
-            logger.error(f"가격 데이터 로드 실패 ({ticker}): {e}")
+            # logger.warning(f"{stock['ticker']} 분석 중 에러: {e}")
             return None
 
     def _detect_vcp_pattern(self, df: pd.DataFrame, stock: Dict) -> VCPResult:
-        """VCP 패턴 감지"""
+        """VCP 패턴 감지 (Real Logic)"""
         try:
-            # ATR 계산
-            high = df['high'].values
-            low = df['low'].values
-            close = df['close'].values
+            if len(df) < 20:
+                return VCPResult(stock['ticker'], stock['name'], 0, 1.0, False, "", 0)
 
-            tr = np.maximum(high - low,
-                          np.maximum(np.abs(high - np.roll(close, 1)),
-                                    np.abs(low - np.roll(close, 1))))
-            atr = pd.Series(tr).rolling(14).mean()
-
-            # 최근 30일 ATR 변화
-            recent_atr = atr.iloc[-30:]
-            atr_contraction = (recent_atr.iloc[-1] / recent_atr.iloc[0]) if recent_atr.iloc[0] > 0 else 1.0
-
-            # 고가-저가 범위 축소 비율
-            recent_high = high[-30:].max()
-            recent_low = low[-30:].min()
-            price_range = (recent_high - recent_low) / recent_low
-            avg_range = (high[:-30].max() - low[:-30].min()) / low[:-30].min()
-            range_contraction = price_range / avg_range if avg_range > 0 else 1.0
-
-            # 현재가가 고점 근처인지 확인 (92% 이상)
-            current_price = close[-1]
-            recent_high_price = close[-30:].max()
-            price_near_high = current_price >= recent_high_price * 0.92
+            # Volatility Contraction
+            # Range = High - Low
+            high = df['high']
+            low = df['low']
+            close = df['close']
             
-            # 상승 추세 확인 (시작가 대비 98% 이상)
-            price_start = close[-30]
-            is_uptrend = current_price > price_start * 0.98
-
-            # BLUEPRINT VCP 점수 계산 (0-20점)
-            vcp_score = 0.0
+            daily_range = high - low
             
-            # 축소 비율이 낮을수록 고점수
-            if range_contraction <= 0.3:
-                vcp_score += 10.0
-            elif range_contraction <= 0.5:
-                vcp_score += 7.0
-            elif range_contraction <= 0.7:
-                vcp_score += 4.0
+            recent_range = daily_range.tail(5).mean()
+            avg_range = daily_range.tail(20).mean()
             
-            # 고점 근처 보너스
-            if price_near_high:
-                vcp_score += 5.0
+            contraction_ratio = recent_range / avg_range if avg_range > 0 else 1.0
             
-            # 상승 추세 보너스
-            if is_uptrend:
-                vcp_score += 5.0
-
-            entry_price = current_price
-            is_vcp = vcp_score > 10  # 10점 이상이면 VCP 인정
-
+            # Volume Contraction
+            volume = df['volume']
+            recent_vol = volume.tail(5).mean()
+            avg_vol = volume.tail(20).mean()
+            vol_ratio = recent_vol / avg_vol if avg_vol > 0 else 1.0
+            
+            # MA Alignment
+            ma5 = close.tail(5).mean()
+            ma20 = close.tail(20).mean()
+            current_price = close.iloc[-1]
+            
+            score = 0
+            
+            # 1. Volatility Score (Max 40)
+            if contraction_ratio < 0.5: score += 40
+            elif contraction_ratio < 0.7: score += 30
+            elif contraction_ratio < 0.9: score += 15
+            
+            # 2. Volume Score (Max 30)
+            if vol_ratio < 0.5: score += 30
+            elif vol_ratio < 0.7: score += 20
+            elif vol_ratio < 0.9: score += 10
+            
+            # 3. MA Score (Max 30)
+            if current_price > ma5 > ma20: score += 30
+            elif current_price > ma20: score += 15
+            
+            is_vcp = score >= 50 # Threshold
+            
             return VCPResult(
                 ticker=stock['ticker'],
                 name=stock['name'],
-                vcp_score=vcp_score,
-                contraction_ratio=range_contraction,
+                vcp_score=float(score),
+                contraction_ratio=round(contraction_ratio, 2),
                 is_vcp=is_vcp,
-                date=self.target_date if self.target_date else datetime.now().strftime('%Y-%m-%d'),
-                entry_price=entry_price
+                date=df.iloc[-1]['date'].strftime('%Y-%m-%d'),
+                entry_price=current_price
             )
 
         except Exception as e:
-            logger.error(f"VCP 패턴 감지 실패: {e}")
-            return VCPResult(
-                ticker=stock['ticker'],
-                name=stock['name'],
-                vcp_score=0,
-                contraction_ratio=1.0,
-                is_vcp=False,
-                date=datetime.now().strftime('%Y-%m-%d'),
-                entry_price=0
-            )
+            return VCPResult(stock['ticker'], stock['name'], 0, 1.0, False, "", 0)
 
-    def _calculate_supply_score(self, ticker: str) -> float:
+    def _calculate_supply_score(self, ticker: str) -> Dict:
         """수급 점수 계산 (0-100)"""
         try:
-            # 실제로는 CSV에서 로드
-            # 여기서는 랜덤 점수 반환
-            import random
-            return random.uniform(30, 90)
+            if self.inst_df is None:
+                return {'score': 0}
+                
+            ticker_inst = self.inst_df[self.inst_df['ticker'] == ticker]
+            if ticker_inst.empty or len(ticker_inst) < 5:
+                return {'score': 0}
+            
+            ticker_inst = ticker_inst.sort_values('date')
+            
+            # If target_date is set
+            if self.target_date:
+                 ticker_inst = ticker_inst[ticker_inst['date'] <= self.target_date]
+            
+            if len(ticker_inst) < 5: return {'score': 0}
+
+            recent = ticker_inst.tail(5)
+            
+            # Data columns might vary slightly, check standard names from debug_vcp.py
+            # Assuming 'foreign_buy', 'inst_buy' columns exist (net buying)
+            
+            # Check column existence fallback
+            f_col = 'foreign_net_buy' if 'foreign_net_buy' in recent.columns else 'foreign_buy'
+            i_col = 'inst_net_buy' if 'inst_net_buy' in recent.columns else 'inst_buy'
+            
+            if f_col not in recent.columns: f_col = 'foreign' # Try another guess if needed
+            if i_col not in recent.columns: i_col = 'institutional'
+
+            foreign_5d = recent[f_col].sum() if f_col in recent.columns else 0
+            inst_5d = recent[i_col].sum() if i_col in recent.columns else 0
+            
+            score = 0
+            
+            # Foreign Score
+            if foreign_5d > 1_000_000_000: score += 40
+            elif foreign_5d > 500_000_000: score += 25
+            elif foreign_5d > 0: score += 10
+            
+            # Inst Score
+            if inst_5d > 500_000_000: score += 30
+            elif inst_5d > 200_000_000: score += 20
+            elif inst_5d > 0: score += 10
+            
+            # Consecutive Foreign Buying
+            consecutive = 0
+            if f_col in recent.columns:
+                for val in reversed(recent[f_col].values):
+                    if val > 0: consecutive += 1
+                    else: break
+            score += min(consecutive * 6, 30)
+            
+            return {
+                'score': score, 
+                'foreign_5d': int(foreign_5d), 
+                'inst_5d': int(inst_5d)
+            }
+            
         except Exception as e:
-            logger.warning(f"수급 점수 계산 실패 ({ticker}): {e}")
-            return 50.0
+            # logger.warning(f"수급 점수 계산 실패 ({ticker}): {e}")
+            return {'score': 0}
 
     def generate_signals(self, results: pd.DataFrame) -> List[Dict]:
         """시그널 생성"""
@@ -278,7 +333,8 @@ class SmartMoneyScreener:
                     'foreign_5d': row['foreign_net_5d'],
                     'inst_5d': row['inst_net_5d'],
                     'market': row['market'],
-                    'change_pct': row['change_pct']
+                    'change_pct': row['change_pct'],
+                    'contraction_ratio': row.get('contraction_ratio', 0)
                 }
                 signals.append(signal)
 

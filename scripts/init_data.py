@@ -502,8 +502,8 @@ def create_korean_stocks_list():
              kospi_cap = get_market_cap_safe(prev_date, "KOSPI")
 
         if not kospi_cap.empty:
-            # 1000개로 확대
-            kospi_cap = kospi_cap.sort_values('시가총액', ascending=False).head(1000)
+            # 시가총액 순 정렬 후 상위 300개 (VCP 발굴 확률 확대를 위해 증가)
+            kospi_cap = kospi_cap.sort_values('시가총액', ascending=False).head(300)
             for ticker in kospi_cap.index:
                 try:
                     name = stock.get_market_ticker_name(ticker)
@@ -522,8 +522,8 @@ def create_korean_stocks_list():
              kosdaq_cap = get_market_cap_safe(prev_date, "KOSDAQ")
 
         if not kosdaq_cap.empty:
-            # 1000개로 확대
-            kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False).head(1000)
+            # 시가총액 순 정렬 후 상위 300개 (코스닥 포함 요청 반영)
+            kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False).head(300)
             for ticker in kosdaq_cap.index:
                 try:
                     name = stock.get_market_ticker_name(ticker)
@@ -832,24 +832,23 @@ def create_daily_prices(target_date=None):
 
 
 def create_institutional_trend(target_date=None):
-    """수급 데이터 수집 - pykrx 기관/외국인 순매매"""
+    """수급 데이터 수집 - pykrx 기관/외국인 순매매 (Optimized)"""
     log("수급 데이터 수집 중 (pykrx 실제 데이터)...")
     try:
         from pykrx import stock
         
         # 종목 목록 로드
         stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
+        tickers_set = set() # 빠른 조회를 위해 set 사용
         if os.path.exists(stocks_file):
             stocks_df = pd.read_csv(stocks_file)
-            tickers = stocks_df['ticker'].astype(str).str.zfill(6).tolist()
-            # Market Gate 분석을 위해 KODEX 200 (069500) 필수 추가
-            if '069500' not in tickers:
-                tickers.insert(0, '069500')
+            tickers_set = set(stocks_df['ticker'].astype(str).str.zfill(6).tolist())
+            if '069500' not in tickers_set:
+                tickers_set.add('069500')
         else:
-            tickers = ['069500', '005930', '000660', '000270', '051910', '006400']
+            tickers_set = {'069500', '005930', '000660', '000270', '051910', '006400'}
         
         if target_date:
-            # from datetime import datetime
             if isinstance(target_date, str):
                 target_date_obj = datetime.strptime(target_date, '%Y-%m-%d')
             else:
@@ -859,147 +858,140 @@ def create_institutional_trend(target_date=None):
 
         # 마지막 개장일 확인 (주말/휴일 자동 처리)
         end_date, end_date_obj = get_last_trading_date(reference_date=target_date_obj)
-        start_date = (end_date_obj - timedelta(days=30)).strftime('%Y%m%d')
-        
-        log(f"수급 데이터 수집 구간(기본): {start_date} ~ {end_date} (증분 수집 적용)")
         
         # 기존 데이터 로드
         file_path = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
         existing_df = pd.DataFrame()
-        last_updates = {}
+        start_date_obj = end_date_obj - timedelta(days=30) # 기본 30일 전
         
         if os.path.exists(file_path):
             try:
-                existing_df = pd.read_csv(file_path)
-                if not existing_df.empty and 'date' in existing_df.columns and 'ticker' in existing_df.columns:
-                    existing_df['ticker'] = existing_df['ticker'].astype(str).str.zfill(6)
-                    last_updates = existing_df.groupby('ticker')['date'].max().to_dict()
-            except:
-                pass
-
-        all_data = []
-        success_count = 0
-        skipped_count = 0
-        
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        def fetch_inst(ticker):
-            if shared_state.STOP_REQUESTED: return None
-            
-            # 증분 로직
-            req_start_date = start_date
-            last_date_str = last_updates.get(ticker)
-            if last_date_str:
-                try:
-                    last_dt = datetime.strptime(last_date_str, '%Y-%m-%d')
-                    if last_dt.date() >= end_date_obj.date():
-                        return 'SKIPPED'
-                    req_start_date = (last_dt + timedelta(days=1)).strftime('%Y%m%d')
-                except:
-                    pass
-            
-            if req_start_date > end_date:
-                return 'SKIPPED'
-                
-            # Random sleep
-            time.sleep(random.uniform(0.05, 0.1))
-
-            try:
-                df = stock.get_market_trading_value_by_date(req_start_date, end_date, ticker)
-                if not df.empty:
-                    local_data = []
-                    for date, row in df.iterrows():
-                        foreign_net = row.get('외국인합계', 0)
-                        inst_net = row.get('기관합계', 0)
-                        local_data.append({
-                            'date': date.strftime('%Y-%m-%d'),
-                            'ticker': ticker,
-                            'foreign_buy': int(foreign_net) if pd.notna(foreign_net) else 0,
-                            'inst_buy': int(inst_net) if pd.notna(inst_net) else 0
-                        })
-                    return local_data
-            except ValueError:
-                # pykrx Length mismatch error (데이터 없음) - 조용히 무시
-                return None
+                existing_df = pd.read_csv(file_path, dtype={'ticker': str, 'date': str})
+                if not existing_df.empty and 'date' in existing_df.columns:
+                    # 가장 최근 데이터 날짜 확인 -> 그 다음날부터 수집
+                    max_date_str = existing_df['date'].max()
+                    try:
+                        max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
+                        # 30일보다 더 오래된 경우만 30일 전으로 설정 (안전장치), 아니면 마지막 수집일 다음날
+                        # 단, 너무 오래된 갭 보정을 위해 max(30일전, 마지막수집+1) 로직 사용 가능하나
+                        # 여기서는 증분 수집이므로 이어받기가 핵심
+                        start_date_obj = max_date_dt + timedelta(days=1)
+                        
+                        # 만약 start_date_obj가 end_date_obj보다 미래라면 (이미 최신), 
+                        # 하지만 혹시 모르니 오늘 날짜 다시 체크할 수도 있음. 일단 pass
+                        if start_date_obj.date() > end_date_obj.date():
+                             log("수급 데이터: 이미 최신 상태입니다.", "SUCCESS")
+                             return True
+                    except:
+                        pass
             except Exception as e:
-                log(f"[Trend Fail] {ticker}: {str(e)}", "WARNING")
-            return None
+                log(f"기존 수급 데이터 로드 실패 (새로 시작): {e}", "WARNING")
 
-        total_tickers = len(tickers[:600])
-        processed_count = 0
-
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            future_to_ticker = {executor.submit(fetch_inst, t): t for t in tickers[:600]}
-            
-            for future in as_completed(future_to_ticker):
-                if shared_state.STOP_REQUESTED:
-                    log("⛔️ 사용자 요청으로 수급 데이터 수집 중단", "WARNING")
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise Exception("사용자 요청 중단")
-                
-                processed_count += 1
-                
-                # 진행률 로그 (10건마다)
-                if processed_count % 10 == 0 or processed_count == total_tickers:
-                    progress = (processed_count / total_tickers) * 100
-                    log(f"[Institutional Trend] 진행률: {processed_count}/{total_tickers} ({progress:.1f}%)", "INFO")
-                
-                result = future.result()
-                if result == 'SKIPPED':
-                    skipped_count += 1
-                elif result:
-                    all_data.extend(result)
-                    success_count += 1
-                    
-                    # [중간 저장] 30개 종목마다 저장
-                    if success_count % 30 == 0:
-                        try:
-                            temp_new_df = pd.DataFrame(all_data)
-                            if not existing_df.empty:
-                                temp_final = pd.concat([existing_df, temp_new_df])
-                                temp_final = temp_final.drop_duplicates(subset=['date', 'ticker'], keep='last')
-                            else:
-                                temp_final = temp_new_df
-                            temp_final.to_csv(file_path, index=False, encoding='utf-8-sig')
-                            log(f"[Auto-Save] 수급 데이터 중간 저장 ({success_count}개)", "INFO")
-                        except Exception as e:
-                            log(f"중간 저장 실패: {e}", "WARNING")
+        start_date = start_date_obj.strftime('%Y%m%d')
         
-        # 병합 저장
-        if all_data:
-            new_df = pd.DataFrame(all_data)
+        # 시작일이 종료일보다 미래인 경우 처리
+        if start_date > end_date:
+             log("수급 데이터: 이미 최신 상태입니다.", "SUCCESS")
+             return True
+
+        log(f"수급 데이터 수집 구간(개선됨): {start_date} ~ {end_date} (Date-based Bulk Fetch)")
+        
+        # 날짜 루프 시작
+        date_range = pd.date_range(start=start_date_obj, end=end_date_obj)
+        total_days = len(date_range)
+        processed_days = 0
+        
+        new_data_list = []
+        
+        for dt in date_range:
+            if shared_state.STOP_REQUESTED:
+                log("⛔️ 사용자 요청으로 수급 데이터 수집 중단", "WARNING")
+                break
+                
+            cur_date_str = dt.strftime('%Y%m%d')
+            cur_date_fmt = dt.strftime('%Y-%m-%d')
+            
+            # 주말 체크
+            if dt.weekday() >= 5:
+                processed_days += 1
+                continue
+            
+            try:
+                # 1. 외국인 순매수 (전 종목)
+                df_foreign = stock.get_market_net_purchases_of_equities_by_ticker(cur_date_str, cur_date_str, "ALL", "외국인")
+                time.sleep(0.2) # Rate limit
+                
+                # 2. 기관 순매수 (전 종목)
+                df_inst = stock.get_market_net_purchases_of_equities_by_ticker(cur_date_str, cur_date_str, "ALL", "기관합계")
+                time.sleep(0.2)
+                
+                # 데이터 병합
+                # 인덱스: 티커
+                combined_rows = []
+                
+                # 외국인 데이터 기준 루프 (또는 set of tickers)
+                # target_tickers에 있는 것만 필터링
+                
+                # 인덱스(티커)를 set으로 확보
+                available_tickers = set(df_foreign.index) | set(df_inst.index)
+                target_intersect = available_tickers & tickers_set
+                
+                for ticker in target_intersect:
+                    f_val = 0
+                    i_val = 0
+                    
+                    if ticker in df_foreign.index:
+                        # 순매수거래대금 컬럼 확인
+                        if '순매수거래대금' in df_foreign.columns:
+                            f_val = df_foreign.loc[ticker, '순매수거래대금']
+                    
+                    if ticker in df_inst.index:
+                        if '순매수거래대금' in df_inst.columns:
+                            i_val = df_inst.loc[ticker, '순매수거래대금']
+                            
+                    combined_rows.append({
+                        'date': cur_date_fmt,
+                        'ticker': ticker,
+                        'foreign_buy': int(f_val),
+                        'inst_buy': int(i_val)
+                    })
+                
+                if combined_rows:
+                    new_data_list.extend(combined_rows)
+                    log(f"[Supply Trend] {cur_date_fmt} 수집 완료 ({len(combined_rows)}종목)", "INFO")
+                else:
+                    log(f"[Supply Trend] {cur_date_fmt} 데이터 없음 (휴장일?)", "INFO")
+                
+            except Exception as e:
+                log(f"수급 데이터 날짜별 수집 실패 ({cur_date_str}): {e}", "WARNING")
+            
+            processed_days += 1
+        
+        # 결과 저장
+        if new_data_list:
+            log("수급 데이터 병합 및 저장 중...", "INFO")
+            new_df = pd.DataFrame(new_data_list)
+            
             if not existing_df.empty:
                 final_df = pd.concat([existing_df, new_df])
                 final_df = final_df.drop_duplicates(subset=['date', 'ticker'], keep='last')
-                # final_df = final_df.sort_values(['ticker', 'date']) # 수급 데이터는 굳이 정렬 안해도? 파일만 커지나. 정렬 하는게 좋음.
             else:
                 final_df = new_df
-                
+            
+            # 정렬
+            final_df = final_df.sort_values(['ticker', 'date'])
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
-            log(f"수급 데이터: {success_count}개 업데이트, {skipped_count}개 최신 유지. 총 {len(final_df)}행", "SUCCESS")
-            return True
-        elif skipped_count > 0:
-            log(f"수급 데이터: 모두 최신 상태임 ({skipped_count}개 종목)", "SUCCESS")
+            log(f"수급 데이터 업데이트 완료: 총 {len(final_df)}행 (신규 {len(new_data_list)}행)", "SUCCESS")
             return True
         else:
-             if not existing_df.empty:
-                log("수급 데이터: 신규 수집 실패하였으나 기존 데이터 유지", "WARNING")
-                return True
-             
-             # 파일도 없고 데이터도 없으면 빈 파일 생성
-             log("수급 데이터: 수집 데이터 없음 - 빈 파일 생성", "WARNING")
-             df = pd.DataFrame(columns=['date', 'ticker', 'foreign_buy', 'inst_buy'])
-             df.to_csv(file_path, index=False, encoding='utf-8-sig')
-             return True
-            
+            log("수급 데이터: 신규 수집된 데이터가 없습니다.", "SUCCESS")
+            return True
+
     except Exception as e:
-        log(f"pykrx 수급 수집 실패: {e} (샘플 생성 안함)", "WARNING")
-        
-        # 빈 파일 생성
-        df = pd.DataFrame(columns=['date', 'ticker', 'foreign_buy', 'inst_buy'])
-        file_path = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
-        df.to_csv(file_path, index=False, encoding='utf-8-sig')
-        return True
+        log(f"수급 데이터 수집 중 치명적 오류: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def calculate_vcp_score(df: pd.DataFrame) -> dict:
@@ -1072,54 +1064,11 @@ def calculate_supply_score(ticker: str, inst_df: pd.DataFrame) -> dict:
     - 외국인 5일 순매수: 25점
     - 기관 5일 순매수: 20점
     - 연속 매수일: 15점
-    
-    [2026-02-03 수정] 수급 데이터가 없으면 pykrx API로 실시간 수집
     """
     try:
         # ticker 비교 시 zfill(6) 적용하여 형식 맞춤
         df = inst_df[inst_df['ticker'].astype(str).str.zfill(6) == ticker].sort_values('date')
-        
-        # 수급 데이터가 부족한 경우 pykrx API로 직접 수집
         if len(df) < 5:
-            log(f"  [{ticker}] 수급 데이터 부족 ({len(df)}행) - pykrx API 호출 시도", "WARNING")
-            try:
-                from pykrx import stock
-                import time
-                
-                end_date = datetime.now().strftime('%Y%m%d')
-                start_date = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
-                
-                time.sleep(0.05)  # Rate limiting
-                inst_data = stock.get_market_trading_value_by_date(start_date, end_date, ticker)
-                
-                if not inst_data.empty and len(inst_data) >= 5:
-                    recent = inst_data.tail(5)
-                    foreign_5d = int(recent.get('외국인합계', pd.Series([0])).sum())
-                    inst_5d = int(recent.get('기관합계', pd.Series([0])).sum())
-                    
-                    score = 0
-                    if foreign_5d > 1000000000: score += 40
-                    elif foreign_5d > 500000000: score += 25
-                    elif foreign_5d > 0: score += 10
-                    
-                    if inst_5d > 500000000: score += 30
-                    elif inst_5d > 200000000: score += 20
-                    elif inst_5d > 0: score += 10
-                    
-                    # 연속 매수일 계산
-                    consecutive = 0
-                    for val in reversed(recent.get('외국인합계', pd.Series([0])).values):
-                        if val > 0: consecutive += 1
-                        else: break
-                    score += min(consecutive * 6, 30)
-                    
-                    log(f"  [{ticker}] pykrx 수급 수집 성공: 외인 {foreign_5d:,.0f}, 기관 {inst_5d:,.0f}", "SUCCESS")
-                    return {'score': score, 'foreign_5d': foreign_5d, 'inst_5d': inst_5d}
-                else:
-                    log(f"  [{ticker}] pykrx 데이터 부족: {len(inst_data) if not inst_data.empty else 0}행", "WARNING")
-            except Exception as e:
-                log(f"  [{ticker}] pykrx API 호출 실패: {e}", "WARNING")
-            
             return {'score': 0, 'foreign_5d': 0, 'inst_5d': 0}
         
         recent = df.tail(5)
@@ -1209,12 +1158,8 @@ def create_signals_log(target_date=None, run_ai=False):
             # 수급 점수 계산
             supply = calculate_supply_score(ticker, inst_df)
             
-            # 종합 점수 (VCP 60% + 수급 40%) - 수급 데이터 누락 시 보정 로직 추가
-            # 수급 데이터가 없으면(0점), VCP 점수만으로 100% 환산 (55/60 -> 91점)
-            if supply['score'] == 0 and vcp['score'] > 0:
-                total_score = (vcp['score'] / 60) * 100
-            else:
-                total_score = vcp['score'] * 0.6 + supply['score'] * 0.4
+            # 종합 점수 (VCP 60% + 수급 40%)
+            total_score = vcp['score'] * 0.6 + supply['score'] * 0.4
             
             analyzed_count += 1
             
@@ -1245,8 +1190,8 @@ def create_signals_log(target_date=None, run_ai=False):
         
         log(f"총 {analyzed_count}개 종목 분석 완료, {len(signals)}개 시그널 감지")
         
-        # 점수 높은 순 정렬, 최대 50개 (AI 분석 대상 확대)
-        signals = sorted(signals, key=lambda x: x['score'], reverse=True)[:50]
+        # 점수 높은 순 정렬 (제한 제거)
+        signals = sorted(signals, key=lambda x: x['score'], reverse=True) # [:20] 제한 제거
         
         # AI 분석 실행 (옵션)
         if run_ai and signals:
@@ -1676,21 +1621,95 @@ def create_kr_ai_analysis(target_date=None):
         analyzer = KrAiAnalyzer()
         results = analyzer.analyze_multiple_stocks(tickers)
         
+        # [Fix] CSV의 supply 데이터를 AI 결과에 병합
+        try:
+            csv_data = {row['ticker']: row for _, row in target_df.iterrows()}
+            for signal in results.get('signals', []):
+                ticker = signal.get('ticker')
+                if ticker in csv_data:
+                    csv_row = csv_data[ticker]
+                    
+                    # 데이터 병합 (타입 안전 처리)
+                    try:
+                        signal['foreign_5d'] = int(float(csv_row.get('foreign_5d', 0)))
+                    except: signal['foreign_5d'] = 0
+                        
+                    try:
+                        signal['inst_5d'] = int(float(csv_row.get('inst_5d', 0)))
+                    except: signal['inst_5d'] = 0
+                        
+                    try:
+                        signal['score'] = float(csv_row.get('score', 0))
+                    except: signal['score'] = 0.0
+                        
+                    try:
+                        signal['contraction_ratio'] = float(csv_row.get('contraction_ratio', 0))
+                    except: signal['contraction_ratio'] = 0.0
+                        
+                    try:
+                        signal['entry_price'] = int(float(csv_row.get('entry_price', 0)))
+                    except: signal['entry_price'] = 0
+
+                    try:
+                        current_p = int(float(csv_row.get('current_price', 0)))
+                        if current_p == 0:
+                            current_p = signal['entry_price']
+                        signal['current_price'] = current_p
+                    except: signal['current_price'] = signal.get('entry_price', 0)
+                        
+                    try:
+                        signal['vcp_score'] = float(csv_row.get('vcp_score', 0))
+                    except: signal['vcp_score'] = 0.0
+                        
+                    signal['market'] = csv_row.get('market', signal.get('market', 'KOSPI'))
+            
+            log("AI 결과에 Supply 데이터 병합 완료", "INFO")
+        except Exception as merge_e:
+            log(f"데이터 병합 중 오류 (무시): {merge_e}", "WARNING")
+        
         # 메타데이터
         results['generated_at'] = datetime.now().isoformat()
         results['signal_date'] = target_date
         
-        # 저장
+        # 시장 지수 데이터 수집 (frontend 호환용)
+        market_indices = {}
+        try:
+            from pykrx import stock
+            today_str = datetime.now().strftime('%Y%m%d')
+            kospi = stock.get_index_ohlcv(today_str, today_str, "1001")
+            kosdaq = stock.get_index_ohlcv(today_str, today_str, "2001")
+            
+            if not kospi.empty:
+                market_indices['kospi'] = {
+                    'value': float(kospi['종가'].iloc[-1]),
+                    'change_pct': float(kospi['등락률'].iloc[-1]) if '등락률' in kospi.columns else 0
+                }
+            if not kosdaq.empty:
+                market_indices['kosdaq'] = {
+                    'value': float(kosdaq['종가'].iloc[-1]),
+                    'change_pct': float(kosdaq['등락률'].iloc[-1]) if '등락률' in kosdaq.columns else 0
+                }
+        except: pass
+        
+        results['market_indices'] = market_indices
+
+        # 저장 (ai_analysis_results.json)
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
             
         log(f"AI 분석 결과 저장 완료: {filepath}", "SUCCESS")
         
-        # 최신 파일(ai_analysis_results.json)도 업데이트 (오늘 날짜인 경우)
+        # 최신 파일 (ai_analysis_results.json)
         if target_date == datetime.now().strftime('%Y-%m-%d'):
             main_path = os.path.join(data_dir, 'ai_analysis_results.json')
             with open(main_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, indent=2)
+
+            # [Fix] kr_ai_analysis.json 생성 (Frontend용)
+            kr_ai_path = os.path.join(data_dir, 'kr_ai_analysis.json')
+            with open(kr_ai_path, 'w', encoding='utf-8') as f:
+                 json.dump(results, f, ensure_ascii=False, indent=2)
+            log(f"Frontend 데이터 동기화 완료: {kr_ai_path}", "SUCCESS")
                 
         return True
 
@@ -2063,9 +2082,9 @@ if __name__ == '__main__':
         if cmd == "init-prices":
             create_daily_prices()
         elif cmd == "init-inst":
-            create_institutional_data()
+            create_institutional_trend()
         elif cmd == "init-stocks":
-            create_stock_list()
+            create_korean_stocks_list()
         elif cmd == "vcp-signal":
              # 특정 날짜 지정 가능 (YYYY-MM-DD)
             target_date = sys.argv[2] if len(sys.argv) > 2 else None
@@ -2076,9 +2095,9 @@ if __name__ == '__main__':
             update_vcp_signals_recent_price()
         elif cmd == "all":
             log("전체 데이터 초기화 시작...")
-            create_stock_list()
+            create_korean_stocks_list()
             create_daily_prices()
-            create_institutional_data()
+            create_institutional_trend()
             create_signals_log() # VCP 분석
             create_kr_ai_analysis() # AI 분석
             log("전체 데이터 초기화 완료!", "SUCCESS")

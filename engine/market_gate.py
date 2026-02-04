@@ -263,6 +263,8 @@ class MarketGate:
                             # 등락률 계산
                             if '등락률' in df.columns:
                                 change_pct = float(latest['등락률'])
+                            elif 'FLUCTUATION_RATE' in df.columns: # English column name possibility
+                                change_pct = float(latest['FLUCTUATION_RATE'])
                             else:
                                 if len(df) >= 2:
                                     prev = float(df.iloc[-2]['종가'])
@@ -270,14 +272,15 @@ class MarketGate:
                                 else:
                                     change_pct = 0.0
                                     
-                            result['indices'][key] = {'value': close_val, 'change_pct': change_pct}
+                            result['indices'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
                         else:
                             # Fallback to yfinance
+                            logger.info(f"pykrx returned empty for {key}, using yfinance fallback")
                             v, c = extract_val(ticker_map[key])
                             result['indices'][key] = {'value': v, 'change_pct': c}
                             
                     except Exception as e:
-                        logger.error(f"pykrx fetch failed for {key}: {e}")
+                        logger.warning(f"pykrx fetch failed for {key}: {e}. Using yfinance fallback.")
                         # Fallback
                         v, c = extract_val(ticker_map[key])
                         result['indices'][key] = {'value': v, 'change_pct': c}
