@@ -57,6 +57,13 @@ def create_app():
     
     app = Flask(__name__)
 
+    # Start Scheduler (Singleton protected)
+    try:
+        from services import scheduler
+        scheduler.start_scheduler()
+    except Exception as e:
+        print(f"Failed to start scheduler: {e}")
+
     # Config
     app.config['JSON_AS_ASCII'] = False
     app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() in ['true', '1']

@@ -601,28 +601,54 @@ class PaperTradingService:
 
     def get_asset_history(self, limit=30):
         """Get asset history for chart"""
+        from datetime import timedelta  # Ensure timedelta is available
+
         with self.get_context() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
+            # Fetch latest N records (DESC), then sort by date (ASC) for chart
             cursor.execute('''
                 SELECT date, total_asset, cash, stock_value 
                 FROM asset_history 
-                ORDER BY date ASC 
+                ORDER BY date DESC 
                 LIMIT ?
             ''', (limit,))
             rows = [dict(row) for row in cursor.fetchall()]
+            rows.reverse() # Sort by date ASC for chart
             
             # [Fix] If history is scarce (< 2 points), return dummy data for chart rendering
             if len(rows) < 2:
+                # Calculate current total asset dynamically for better dummy data
+                current_cash = self.get_balance()
+                
+                # Calculate current stock value from portfolio
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute('SELECT quantity, avg_price, ticker FROM portfolio')
+                portfolio_rows = cursor.fetchall()
+                
+                current_stock_val = 0
+                import yfinance as yf # For fallback price check if needed, but for dummy data, use avg_price or cache
+                
+                with self.cache_lock:
+                    prices = self.price_cache
+                    
+                for r in portfolio_rows:
+                    qty = r['quantity']
+                    price = prices.get(r['ticker'], r['avg_price']) # Use current price if available
+                    current_stock_val += qty * price
+                    
+                current_total = current_cash + current_stock_val
+                
                 today = datetime.now()
                 dummy_data = []
                 for i in range(4, -1, -1): # Last 5 days
                     d = (today - timedelta(days=i)).strftime('%Y-%m-%d')
                     dummy_data.append({
                         'date': d,
-                        'total_asset': 100000000, # Initial Balance
-                        'cash': 100000000,
-                        'stock_value': 0
+                        'total_asset': current_total, # Use current actual total
+                        'cash': current_cash,
+                        'stock_value': current_stock_val
                     })
                 return dummy_data
                 

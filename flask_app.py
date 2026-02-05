@@ -46,12 +46,7 @@ if __name__ == '__main__':
     print(f"🤖 [DIAGNOSTIC] Active Model:   {active_model}")
     print("="*60 + "\n")
 
-    # Start Scheduler
-    try:
-        from services import scheduler
-        scheduler.start_scheduler()
-    except Exception as e:
-        print(f"Failed to start scheduler: {e}")
+    # Scheduler is now started inside create_app() with Singleton lock protection
 
     app.run(
         host=config.FLASK_HOST,

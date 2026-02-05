@@ -179,6 +179,11 @@ class AppConfig:
         # Setter support for runtime update (optional, but requested in previous code)
         os.environ["MARKET_GATE_UPDATE_INTERVAL_MINUTES"] = str(value)
 
+    @property
+    def SCHEDULER_ENABLED(self):
+        """스케줄러 활성화 여부"""
+        return os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
+
 
 config = SignalConfig()
 app_config = AppConfig()

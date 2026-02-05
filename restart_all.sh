@@ -71,9 +71,13 @@ cd frontend
 cd ..
 
 # Backend (venv 실행)
-echo "🚀 Backend $FLASK_PORT..."
+echo "🚀 Backend $FLASK_PORT (Gunicorn)..."
+# Cleanup stale lock file
+rm -f services/scheduler.lock
+
 source venv/bin/activate
-nohup python flask_app.py > logs/backend.log 2>&1 &
+# Use Gunicorn as in Procfile
+nohup gunicorn flask_app:app --bind 0.0.0.0:$FLASK_PORT --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
 deactivate
 BACKEND_PID=$!
 

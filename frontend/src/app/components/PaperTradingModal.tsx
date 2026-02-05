@@ -762,9 +762,9 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                       <div ref={chartContainerRef} className="w-full" style={{ height: '220px' }} />
                       {chartData.length === 0 && (
                         <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-black/50 z-10 backdrop-blur-sm rounded-xl">
-                          <div>
-                            <p className="mb-2">표시할 데이터가 충분하지 않습니다</p>
-                            <p className="text-xs opacity-70">거래를 시작하면 자산 변동 그래프가 그려집니다</p>
+                          <div className="text-center">
+                            <p className="mb-2 font-bold text-gray-400">자산 데이터 수집 중</p>
+                            <p className="text-xs opacity-70">첫 거래 후 데이터가 기록되기까지 잠시 기다려주세요</p>
                           </div>
                         </div>
                       )}
