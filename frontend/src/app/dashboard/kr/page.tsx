@@ -471,7 +471,7 @@ export default function KRMarketOverview() {
               </Tooltip>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="h-16 rounded-xl bg-white/5 animate-pulse border border-white/5"></div>
@@ -494,7 +494,7 @@ export default function KRMarketOverview() {
       </section>
 
       {/* KPI Cards (Performance Overview) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Today's Signals */}
         <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative overflow-hidden group hover:border-rose-500/30 transition-all">
           <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/10 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2"></div>
@@ -609,7 +609,7 @@ export default function KRMarketOverview() {
               </Tooltip>
             </h3>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* KOSPI */}
             <div className="p-4 rounded-2xl bg-[#1c1c1e] border border-white/10">
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KOSPI</div>

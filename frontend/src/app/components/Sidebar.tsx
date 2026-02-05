@@ -132,12 +132,12 @@ export default function Sidebar() {
       {/* Mobile Sidebar Overlay */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[59] md:hidden transition-opacity"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[59] lg:hidden transition-opacity"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
 
-      <aside className={`w-64 border-r border-white/10 bg-[#1c1c1e] flex flex-col h-screen fixed left-0 top-0 z-[60] transition-transform duration-300 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+      <aside className={`w-64 border-r border-white/10 bg-[#1c1c1e] flex flex-col h-screen fixed left-0 top-0 z-[60] transition-transform duration-300 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         {/* Logo */}
         <Link href="/" className="p-6 flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">

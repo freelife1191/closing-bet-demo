@@ -1216,7 +1216,7 @@ export default function JonggaV2Page() {
                 <span className="w-1 h-4 bg-emerald-500 rounded-full"></span>
                 종가베팅 매수 일봉 패턴
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                 <div className="bg-white/5 rounded-xl p-3 border border-white/5">
                   <h5 className="text-xs font-bold text-emerald-400 mb-2">1) 신고가 조정 후 반등</h5>
                   <div className="text-[10px] text-gray-400 space-y-1">

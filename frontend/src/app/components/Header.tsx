@@ -41,13 +41,13 @@ export default function Header() {
   };
 
   return (
-    <header className="h-16 border-b border-white/10 bg-[#000000]/95 backdrop-blur supports-[backdrop-filter]:bg-[#000000]/60 flex items-center justify-between px-4 md:px-6 fixed top-0 md:left-64 left-0 right-0 z-40 transition-all duration-300">
+    <header className="h-16 border-b border-white/10 bg-[#000000]/95 backdrop-blur supports-[backdrop-filter]:bg-[#000000]/60 flex items-center justify-between px-4 md:px-6 fixed top-0 lg:left-64 left-0 right-0 z-40 transition-all duration-300">
       {/* Left: Breadcrumb & Mobile Menu */}
       <div className="flex items-center gap-3">
         {/* Mobile Menu Button */}
         <button
           onClick={() => window.dispatchEvent(new Event('sidebar-toggle'))}
-          className="md:hidden text-gray-400 hover:text-white p-2 -ml-2 transition-colors"
+          className="lg:hidden text-gray-400 hover:text-white p-2 -ml-2 transition-colors"
         >
           <i className="fas fa-bars text-xl"></i>
         </button>
@@ -60,7 +60,7 @@ export default function Header() {
       {/* Right: Search & Actions */}
       <div className="flex items-center gap-2 md:gap-4">
         {/* Search Bar */}
-        <div className="relative hidden md:block">
+        <div className="relative hidden lg:block">
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm"></i>
           <input
             type="text"
@@ -72,7 +72,7 @@ export default function Header() {
           </div>
         </div>
         {/* Mobile Search Icon */}
-        <button className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400">
+        <button className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400">
           <i className="fas fa-search"></i>
         </button>
 
