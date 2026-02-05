@@ -1007,15 +1007,15 @@ export default function JonggaV2Page() {
         <TrendingThemesBox themes={getTrendingThemes(filteredSignals)} />
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-white/5">
+      <div className="flex flex-col gap-6 pb-6 border-b border-white/5">
         <div className="flex gap-6">
           <StatBox label="CANDIDATES" value={data?.filtered_count || 0} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
           <StatBox label="FILTERED" value={data?.total_candidates || 0} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
           <DataStatusBox updatedAt={data?.updated_at} />
         </div>
 
-        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 md:gap-3 w-full md:w-auto">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap md:items-end gap-3 md:gap-2 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 w-full">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             {/* Trading Value Filter */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-[9px] text-gray-500">
@@ -1132,30 +1132,32 @@ export default function JonggaV2Page() {
             </div>
           </div>
 
-          <div className="hidden sm:block h-6 w-px bg-white/10 mx-2"></div>
+          <div className="flex items-center gap-3 md:ml-auto">
+            <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
 
-          <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" wide>
-            <select
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-[#1c1c1e] border border-white/10 text-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all hover:border-white/20 w-full md:w-auto"
-            >
-              <option value="latest">Latest Report</option>
-              {dates.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </Tooltip>
-          <Tooltip content="현재 선택된 날짜의 데이터를 다시 불러옵니다." position="bottom" align="right">
-            <button
-              onClick={() => setSelectedDate(selectedDate)}
-              className="p-2 bg-[#1c1c1e] border border-white/10 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-all"
-            >
-              <i className="fas fa-sync-alt"></i>
-            </button>
-          </Tooltip>
+            <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" wide>
+              <select
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-[#1c1c1e] border border-white/10 text-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all hover:border-white/20 w-full md:w-auto"
+              >
+                <option value="latest">Latest Report</option>
+                {dates.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </Tooltip>
+            <Tooltip content="현재 선택된 날짜의 데이터를 다시 불러옵니다." position="bottom" align="right">
+              <button
+                onClick={() => setSelectedDate(selectedDate)}
+                className="p-2 bg-[#1c1c1e] border border-white/10 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-all"
+              >
+                <i className="fas fa-sync-alt"></i>
+              </button>
+            </Tooltip>
+          </div>
         </div>
       </div>
 
