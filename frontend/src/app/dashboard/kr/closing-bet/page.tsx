@@ -1809,7 +1809,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
                 </span>
               )}
             </h4>
-            <p className="text-sm text-gray-300 leading-relaxed line-clamp-4">
+            <p className="text-sm text-gray-300 leading-relaxed">
               {signal.score.llm_reason || "AI 분석 대기 중입니다..."}
             </p>
           </div>

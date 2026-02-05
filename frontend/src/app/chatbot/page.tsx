@@ -824,10 +824,10 @@ export default function ChatbotPage() {
         </div>
 
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#000000] h-full overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 bg-[#000000] h-full overflow-hidden relative">
 
           {/* Top Bar */}
-          <div className="h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-10 bg-[#000000]/80 backdrop-blur-sm border-b border-white/5 md:border-none">
+          <div className="h-14 flex items-center justify-between px-4 md:px-6 absolute top-0 left-0 w-full z-20 bg-[#000000]/80 backdrop-blur-sm border-b border-white/5 md:border-none">
             <div className="flex items-center gap-3 text-gray-200">
               {/* Hamburger Button (Mobile) */}
               <button
@@ -857,7 +857,7 @@ export default function ChatbotPage() {
           </div>
 
           {/* Chat Content */}
-          <main className="flex-1 overflow-y-auto relative custom-scrollbar">
+          <main className="flex-1 overflow-y-auto relative custom-scrollbar pt-14">
             <div className="max-w-3xl mx-auto px-4 py-8 min-h-full flex flex-col">
 
               {/* Empty State */}
