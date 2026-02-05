@@ -520,6 +520,11 @@ export default function ChatbotPage() {
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      // Reset viewport for mobile keyboard fix
+      if (window.innerWidth < 1024) {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+      }
     }
   };
 
@@ -621,7 +626,7 @@ export default function ChatbotPage() {
 
 
   return (
-    <div className="flex h-[100vh] h-[100dvh] bg-[#131314] text-white overflow-hidden">
+    <div className="fixed inset-0 flex bg-[#131314] text-white overflow-hidden">
       {/* Global Sidebar (Fixed) */}
       <Sidebar />
 
@@ -827,7 +832,7 @@ export default function ChatbotPage() {
         <div className="flex-1 flex flex-col min-w-0 bg-[#000000] h-full overflow-hidden relative">
 
           {/* Top Bar */}
-          <div className="h-14 flex items-center justify-between px-4 md:px-6 absolute top-0 left-0 w-full z-20 bg-[#000000]/80 backdrop-blur-sm border-b border-white/5 md:border-none">
+          <div className="h-14 flex items-center justify-between px-4 md:px-6 fixed top-0 left-0 right-0 lg:left-[calc(16rem+260px)] z-20 bg-[#000000]/80 backdrop-blur-sm border-b border-white/5 md:border-none transition-all">
             <div className="flex items-center gap-3 text-gray-200">
               {/* Hamburger Button (Mobile) */}
               <button
@@ -1173,6 +1178,12 @@ export default function ChatbotPage() {
                     onKeyDown={handleKeyDown}
                     onCompositionStart={() => { isComposing.current = true; }}
                     onCompositionEnd={() => { isComposing.current = false; }}
+                    onBlur={() => {
+                      if (window.innerWidth < 1024) {
+                        window.scrollTo(0, 0);
+                        document.body.scrollTop = 0;
+                      }
+                    }}
                     placeholder="메시지 입력..."
                     className="flex-1 bg-transparent text-white px-2 resize-none max-h-[200px] focus:outline-none custom-scrollbar leading-relaxed py-2"
                     style={{ height: 'auto', minHeight: '40px' }}
