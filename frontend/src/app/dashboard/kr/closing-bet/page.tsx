@@ -852,6 +852,14 @@ export default function JonggaV2Page() {
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
 
+  // Alert Modal State
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    type: 'default' | 'success' | 'danger';
+    title: string;
+    content: string;
+  }>({ isOpen: false, type: 'default', title: '', content: '' });
+
   // Tips Collapse State
 
   // Tips Collapse State
@@ -1313,19 +1321,55 @@ export default function JonggaV2Page() {
             });
             const data = await res.json();
             if (data.status === 'success') {
-              alert(`${name} ${quantity}주 매수 완료!`);
+              setAlertModal({
+                isOpen: true,
+                type: 'success',
+                title: '매수 완료',
+                content: `${name} ${quantity}주 매수 완료!`
+              });
               return true;
             } else {
-              alert(`매수 실패: ${data.message}`);
+              setAlertModal({
+                isOpen: true,
+                type: 'danger',
+                title: '매수 실패',
+                content: `매수 실패: ${data.message}`
+              });
               return false;
             }
           } catch (e) {
             console.error('Buy error:', e);
-            alert('매수 중 오류가 발생했습니다.');
+            setAlertModal({
+              isOpen: true,
+              type: 'danger',
+              title: '오류',
+              content: '매수 중 오류가 발생했습니다.'
+            });
             return false;
           }
         }}
       />
+
+      {/* Alert Modal */}
+      <Modal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        type={alertModal.type}
+        footer={
+          <button
+            onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+            className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${alertModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
+              alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                'bg-blue-500 hover:bg-blue-600'
+              }`}
+          >
+            확인
+          </button>
+        }
+      >
+        <p>{alertModal.content}</p>
+      </Modal>
     </div>
   );
 }
