@@ -10,6 +10,13 @@ cd "$PROJECT_ROOT"
 # .env 로드
 [ -f .env ] && { echo "📄 .env loaded"; set -a; source .env; set +a; }
 
+# Frontend .env 심볼릭 링크 연결 (배포 환경 대응)
+if [ -f .env ]; then
+  echo "🔗 Linking .env to frontend/.env..."
+  mkdir -p frontend
+  ln -sf ../.env frontend/.env
+fi
+
 FRONTEND_PORT=${FRONTEND_PORT:-3500}
 FLASK_PORT=${FLASK_PORT:-5501}
 
