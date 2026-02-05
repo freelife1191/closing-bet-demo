@@ -288,6 +288,7 @@ export interface PaperTradingHolding {
   profit_loss?: number;
   profit_rate?: number;
   return_pct?: number;
+  is_stale?: boolean;
 }
 
 export interface PaperTradingPortfolio {
@@ -297,6 +298,7 @@ export interface PaperTradingPortfolio {
   total_stock_value?: number;
   total_profit?: number;
   total_profit_rate?: number;
+  total_principal?: number;
 }
 
 export interface PaperTradingAssetHistory {

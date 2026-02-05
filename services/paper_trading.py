@@ -93,15 +93,23 @@ class PaperTradingService:
                 )
             ''')
             
-            # Balance Table (Cash)
+            # Balance Table (Cash & Deposit History)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS balance (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
-                    cash REAL DEFAULT 100000000  -- Default 100M KRW
+                    cash REAL DEFAULT 100000000,
+                    total_deposit REAL DEFAULT 0
                 )
             ''')
+            
+            # Migration: Add total_deposit if missing (Run this BEFORE Insert)
+            try:
+                cursor.execute('ALTER TABLE balance ADD COLUMN total_deposit REAL DEFAULT 0')
+            except Exception:
+                pass # Already exists
+
             # Initialize balance if not exists
-            cursor.execute('INSERT OR IGNORE INTO balance (id, cash) VALUES (1, 100000000)')
+            cursor.execute('INSERT OR IGNORE INTO balance (id, cash, total_deposit) VALUES (1, 100000000, 0)')
             
             conn.commit()
             conn.close()
@@ -128,7 +136,7 @@ class PaperTradingService:
         try:
             conn = self.get_context()
             cursor = conn.cursor()
-            cursor.execute('UPDATE balance SET cash = cash + ? WHERE id = 1', (amount,))
+            cursor.execute('UPDATE balance SET cash = cash + ?, total_deposit = total_deposit + ? WHERE id = 1', (amount, amount))
             conn.commit()
             conn.close()
             return {'status': 'success', 'message': f'Deposited {amount:,} KRW'}
@@ -270,14 +278,19 @@ class PaperTradingService:
             cursor.execute('SELECT * FROM portfolio')
             holdings = [dict(row) for row in cursor.fetchall()]
             
-            cursor.execute('SELECT cash FROM balance WHERE id = 1')
+            cursor.execute('SELECT cash, total_deposit FROM balance WHERE id = 1')
             balance_row = cursor.fetchone()
             cash = balance_row['cash'] if balance_row else 0
+            total_deposit = balance_row['total_deposit'] if balance_row and 'total_deposit' in balance_row.keys() else 0
             
+            # Initial Principal is 100,000,000. Total Principal = 100M + Deposits
+            total_principal = 100000000 + total_deposit
+
             return {
                 'holdings': holdings,
                 'cash': cash,
-                'total_asset_value': cash  # Will need to add holdings value in API layer
+                'total_asset_value': cash,  # Will need to add holdings value in API layer
+                'total_principal': total_principal
             }
 
     def start_background_sync(self):
@@ -463,9 +476,10 @@ class PaperTradingService:
             cursor.execute('SELECT * FROM portfolio')
             holdings = [dict(row) for row in cursor.fetchall()]
             
-            cursor.execute('SELECT cash FROM balance WHERE id = 1')
+            cursor.execute('SELECT cash, total_deposit FROM balance WHERE id = 1')
             balance_row = cursor.fetchone()
             cash = balance_row['cash'] if balance_row else 0
+            total_deposit = balance_row['total_deposit'] if balance_row and 'total_deposit' in balance_row.keys() else 0
 
         updated_holdings = []
         total_stock_value = 0
@@ -504,10 +518,17 @@ class PaperTradingService:
             quantity = holding['quantity']
             
             # Use cached price if available, else avg_price (fallback)
-            current_price = current_prices.get(ticker, avg_price)
+            is_stale = False
+            if ticker in current_prices:
+                current_price = current_prices[ticker]
+            else:
+                current_price = avg_price
+                is_stale = True
+                # Log only sparsely to avoid spam (or rely on the bulk warning above)
             
             if ticker not in current_prices:
-                logger.warning(f"Price Cache Miss for {ticker}. Cache Keys Sample: {list(current_prices.keys())[:5]}")
+                # logger.warning(f"Price Cache Miss for {ticker}. Using Avg Price.")
+                pass
             
             market_value = int(current_price * quantity)
             total_stock_value += market_value
@@ -522,10 +543,18 @@ class PaperTradingService:
             h_dict['market_value'] = market_value
             h_dict['profit_loss'] = int(profit_loss)
             h_dict['profit_rate'] = round(profit_rate, 2)
+            h_dict['is_stale'] = is_stale # Add Stale Flag
             updated_holdings.append(h_dict)
 
         total_asset = cash + total_stock_value
         
+        # Correct Profit Calculation: Asset - (Initial + Deposits)
+        # Assuming initial capital is fixed at 100,000,000
+        # If we tracked 'total_deposit' in DB, we use it.
+        total_principal = 100000000 + total_deposit
+        total_profit = total_asset - total_principal
+        total_profit_rate = (total_profit / total_principal * 100) if total_principal > 0 else 0
+
         # Record history (Optimized: Record only if significant change or sufficient time passed?)
         # For now, simplistic record on view
         try:
@@ -538,8 +567,9 @@ class PaperTradingService:
             'cash': cash,
             'total_asset_value': total_asset,
             'total_stock_value': total_stock_value,
-            'total_profit': int(total_asset - 100000000),
-            'total_profit_rate': round(((total_asset - 100000000) / 100000000 * 100), 2),
+            'total_profit': int(total_profit),
+            'total_profit_rate': round(total_profit_rate, 2),
+            'total_principal': total_principal,
             'last_update': self.last_update.isoformat() if self.last_update else None
         }
 
@@ -606,7 +636,7 @@ class PaperTradingService:
             cursor.execute('DELETE FROM portfolio')
             cursor.execute('DELETE FROM trade_log')
             cursor.execute('DELETE FROM asset_history') # 히스토리도 초기화
-            cursor.execute('UPDATE balance SET cash = 100000000 WHERE id = 1')
+            cursor.execute('UPDATE balance SET cash = 100000000, total_deposit = 0 WHERE id = 1')
             conn.commit()
             conn.close()
             return True

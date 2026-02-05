@@ -578,8 +578,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                           <div className="group/info relative">
                             <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 cursor-help text-xs"></i>
                             <div className="absolute left-0 bottom-full mb-2 w-64 bg-gray-800 text-xs text-gray-300 p-2 rounded border border-white/10 shadow-lg hidden group-hover/info:block z-50">
-                              * 총 수익률 = (총 평가 자산 - 초기 자본금) / 초기 자본금<br />
-                              * 초기 자본금: 1억 원<br />
+                              * 총 수익률 = (총 평가 자산 - 총 원금) / 총 원금<br />
+                              * 총 원금 = 초기 자본금(1억) + 총 입금액<br />
                               (보유 현금 비중이 높으면 개별 종목 수익률보다 낮을 수 있습니다.)
                             </div>
                           </div>
@@ -661,7 +661,17 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                                   {Math.round(stock.avg_price).toLocaleString()}원
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-white">
-                                  {(stock.current_price || stock.avg_price).toLocaleString()}원
+                                  <div className="flex items-center justify-end gap-1">
+                                    {(stock.current_price || stock.avg_price).toLocaleString()}원
+                                    {stock.is_stale && (
+                                      <div className="group/stale relative">
+                                        <i className="fas fa-exclamation-triangle text-amber-500 text-[10px] cursor-help"></i>
+                                        <div className="absolute right-0 bottom-full mb-1 w-32 bg-gray-800 text-[10px] text-gray-300 p-1.5 rounded border border-white/10 shadow-lg hidden group-hover/stale:block z-50 text-center">
+                                          현재가 지연됨<br />(매수평단가 표시 중)
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-white">
                                   {(stock.market_value || Math.floor((stock.current_price || stock.avg_price) * stock.quantity)).toLocaleString()}원

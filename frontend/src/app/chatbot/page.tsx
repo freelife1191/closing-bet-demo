@@ -10,6 +10,7 @@ import Sidebar from '../components/Sidebar';
 import SettingsModal from '../components/SettingsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import Modal from '../components/Modal';
+import PaperTradingModal from '../components/PaperTradingModal';
 
 // Types
 interface Message {
@@ -116,6 +117,9 @@ export default function ChatbotPage() {
     title: string;
     content: string;
   }>({ isOpen: false, type: 'default', title: '', content: '' });
+
+  // Paper Trading Modal State
+  const [isPaperTradingOpen, setIsPaperTradingOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -660,6 +664,16 @@ export default function ChatbotPage() {
                 <i className="fas fa-database w-5 text-center text-emerald-400"></i>
                 <span>데이터 관리</span>
               </Link>
+              <button
+                onClick={() => {
+                  setIsPaperTradingOpen(true);
+                  setIsMobileSidebarOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors text-left"
+              >
+                <i className="fas fa-wallet w-5 text-center text-emerald-400"></i>
+                <span>모의투자</span>
+              </button>
             </div>
 
             <div className="p-4 flex-shrink-0">
@@ -736,7 +750,6 @@ export default function ChatbotPage() {
         cancelText="취소"
       />
 
-      {/* Alert Modal */}
       <Modal
         isOpen={alertModal.isOpen}
         onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
@@ -756,6 +769,11 @@ export default function ChatbotPage() {
       >
         <p>{alertModal.content}</p>
       </Modal>
+
+      <PaperTradingModal
+        isOpen={isPaperTradingOpen}
+        onClose={() => setIsPaperTradingOpen(false)}
+      />
 
       {/* Content Wrapper */}
       <div className="flex-1 flex pl-0 lg:pl-64 h-full">
