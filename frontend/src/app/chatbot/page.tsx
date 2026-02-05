@@ -617,7 +617,7 @@ export default function ChatbotPage() {
 
 
   return (
-    <div className="flex h-screen bg-[#131314] text-white">
+    <div className="flex h-screen [height:100dvh] bg-[#131314] text-white overflow-hidden">
       {/* Global Sidebar (Fixed) */}
       <Sidebar />
 
@@ -806,7 +806,7 @@ export default function ChatbotPage() {
         </div>
 
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col relative min-w-0 bg-[#000000]">
+        <div className="flex-1 flex flex-col min-w-0 bg-[#000000] h-full overflow-hidden">
 
           {/* Top Bar */}
           <div className="h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-10 bg-[#000000]/80 backdrop-blur-sm border-b border-white/5 md:border-none">
@@ -839,7 +839,7 @@ export default function ChatbotPage() {
           </div>
 
           {/* Chat Content */}
-          <main className="flex-1 overflow-y-auto relative custom-scrollbar pb-40">
+          <main className="flex-1 overflow-y-auto relative custom-scrollbar">
             <div className="max-w-3xl mx-auto px-4 py-8 min-h-full flex flex-col">
 
               {/* Empty State */}
@@ -1004,7 +1004,7 @@ export default function ChatbotPage() {
           </main>
 
           {/* Footer (Input Area) */}
-          <footer className="absolute bottom-0 left-0 right-0 p-4 bg-[#131314]">
+          <footer className="flex-shrink-0 p-4 bg-[#131314] border-t border-white/5 pb-[calc(1rem+env(safe-area-inset-bottom))]">
             <div className="max-w-3xl mx-auto relative">
               {showCommands && filteredCommands.length > 0 && (
                 <div className="absolute bottom-full left-0 mb-4 w-[300px] bg-[#1e1f20] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 animate-fade-in-up">
