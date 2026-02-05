@@ -1015,7 +1015,7 @@ export default function JonggaV2Page() {
         </div>
 
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 md:gap-3 w-full md:w-auto">
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-end gap-3 sm:gap-2 w-full sm:w-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap lg:items-end gap-3 lg:gap-2 w-full lg:w-auto">
             {/* Trading Value Filter */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-[9px] text-gray-500">
