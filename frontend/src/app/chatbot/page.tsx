@@ -617,7 +617,7 @@ export default function ChatbotPage() {
 
 
   return (
-    <div className="flex h-screen [height:100dvh] bg-[#131314] text-white overflow-hidden">
+    <div className="flex h-[100vh] h-[100dvh] bg-[#131314] text-white overflow-hidden">
       {/* Global Sidebar (Fixed) */}
       <Sidebar />
 
@@ -1004,7 +1004,7 @@ export default function ChatbotPage() {
           </main>
 
           {/* Footer (Input Area) */}
-          <footer className="flex-shrink-0 p-4 bg-[#131314] border-t border-white/5 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <footer className="flex-shrink-0 p-4 bg-[#131314] border-t border-white/5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
             <div className="max-w-3xl mx-auto relative">
               {showCommands && filteredCommands.length > 0 && (
                 <div className="absolute bottom-full left-0 mb-4 w-[300px] bg-[#1e1f20] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 animate-fade-in-up">
