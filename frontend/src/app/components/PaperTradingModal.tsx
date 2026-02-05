@@ -438,12 +438,12 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
   return (
     <>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
 
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between p-4 md:p-5 border-b border-white/10 bg-[#252529] gap-4 md:gap-0">
+          <div className="flex flex-col md:flex-row md:items-center justify-between p-4 md:p-5 border-b border-white/10 bg-[#252529] gap-4 md:gap-0 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 flex-shrink-0">
                 <i className="fas fa-chart-line text-white text-lg md:text-xl"></i>
@@ -533,7 +533,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-white/10 bg-[#1c1c1e] overflow-x-auto no-scrollbar">
+          <div className="flex border-b border-white/10 bg-[#1c1c1e] overflow-x-auto no-scrollbar flex-shrink-0">
             {[
               { id: 'overview', label: '자산 개요', icon: 'fa-wallet' },
               { id: 'holdings', label: '보유 종목', icon: 'fa-list' },
@@ -556,7 +556,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#18181b]">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#18181b] relative">
             {loading ? (
               <div className="flex h-full items-center justify-center">
                 <i className="fas fa-spinner fa-spin text-3xl text-rose-500"></i>
@@ -710,8 +710,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                 {activeTab === 'chart' && (
                   <div className="h-full flex flex-col space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     {/* Controls */}
-                    <div className="bg-[#252529] p-3 rounded-xl border border-white/5 flex flex-wrap gap-2 items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    <div className="bg-[#252529] p-3 rounded-xl border border-white/5 flex flex-col md:flex-row flex-wrap gap-2 items-start md:items-center justify-between">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-gray-500 font-bold px-2">기간</span>
                         {(['1M', '3M', '6M', '1Y', 'ALL'] as const).map(range => (
                           <button
@@ -731,17 +731,17 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                         ))}
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 font-bold px-2">이동평균선</span>
+                      <div className="flex items-center gap-2 flex-wrap max-w-full">
+                        <span className="text-xs text-gray-500 font-bold px-2 whitespace-nowrap">이동평균선</span>
                         {[3, 5, 10, 20, 60, 120].map(d => (
-                          <label key={d} className="flex items-center gap-1.5 px-2 py-1 bg-black/20 rounded cursor-pointer hover:bg-black/40 transition-colors">
+                          <label key={d} className="flex items-center gap-1.5 px-2 py-1 bg-black/20 rounded cursor-pointer hover:bg-black/40 transition-colors flex-shrink-0">
                             <input
                               type="checkbox"
                               checked={!!maToggle[d]}
                               onChange={e => setMaToggle(p => ({ ...p, [d]: e.target.checked }))}
                               className="rounded border-gray-600 bg-gray-700 text-rose-500 focus:ring-offset-0 focus:ring-0 w-3 h-3"
                             />
-                            <span className="text-xs text-gray-300">{d}일</span>
+                            <span className="text-xs text-gray-300 whitespace-nowrap">{d}일</span>
                           </label>
                         ))}
                       </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { useRouter } from 'next/navigation';
 import { useSession, signIn, signOut } from "next-auth/react";
+import { useAdmin } from '@/hooks/useAdmin';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -27,6 +28,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   const [role, setRole] = useState('엔지니어링');
   const [isCustomRole, setIsCustomRole] = useState(false);
 
+
+
+  // ADMIN 권한 체크
+  const { isAdmin } = useAdmin();
+
   // Google Login State
   const [isGoogleLoggedIn, setIsGoogleLoggedIn] = useState(false);
   const [googleUserInfo, setGoogleUserInfo] = useState<{ name: string, email: string } | null>(null);
@@ -49,6 +55,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
   // Watchlist State
   const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [isWatchlistLoaded, setIsWatchlistLoaded] = useState(false);
   const [newStock, setNewStock] = useState('');
 
   useEffect(() => {
@@ -66,8 +73,23 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
           setWatchlist([]);
         }
       }
+      setIsWatchlistLoaded(true);
     }
   }, [isOpen, profile]);
+
+  // Watchlist 자동 저장 (변경 시 즉시 반영)
+  // Watchlist 자동 저장 (변경 시 즉시 반영)
+  useEffect(() => {
+    // 로드 완료 전에는 저장 방지 (데이터 덮어쓰기 방지)
+    if (!isWatchlistLoaded) return;
+
+    if (watchlist.length > 0) {
+      localStorage.setItem('watchlist', JSON.stringify(watchlist));
+    } else if (isOpen) {
+      // 빈 배열이어도 사용자가 모두 삭제했을 수 있으므로 저장
+      localStorage.setItem('watchlist', JSON.stringify([]));
+    }
+  }, [watchlist, isOpen, isWatchlistLoaded]);
 
   useEffect(() => {
     if (isOpen) {
@@ -389,7 +411,14 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
             {activeTab === 'profile' && (
               <div className="space-y-10">
                 <section>
-                  <h3 className="text-lg font-bold text-white mb-2">프로필</h3>
+                  <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                    프로필
+                    {isAdmin && (
+                      <span className="text-[10px] font-bold bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded border border-rose-500/30">
+                        ADMIN
+                      </span>
+                    )}
+                  </h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5 space-y-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1.5">이름</label>
@@ -518,7 +547,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                           <div className="text-sm font-medium text-white mb-1">계정 연동</div>
-                          <div className="text-xs text-gray-500 break-keep leading-relaxed">
+                          <div className="text-xs text-gray-400 break-keep leading-relaxed">
                             구글 계정으로 로그인하여 설정을 동기화하세요.
                             <div className="mt-1">
                               {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
@@ -531,27 +560,34 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                         </div>
                         <button
                           onClick={handleGoogleLogin}
-                          className="w-full md:w-auto px-4 py-2 bg-white text-black text-xs font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 flex-shrink-0"
+                          className="w-full md:w-auto px-5 py-2.5 bg-white hover:bg-gray-100 text-gray-900 text-sm font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center justify-center gap-3 flex-shrink-0"
                         >
-                          <img src="https://www.google.com/favicon.ico" alt="G" className="w-3 h-3" />
-                          Google 로그인
+                          <img src="https://www.google.com/favicon.ico" alt="G" className="w-4 h-4" />
+                          <span>Google 계정으로 계속하기</span>
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
                             {googleUserInfo?.name?.[0] || "U"}
                           </div>
                           <div>
-                            <div className="text-sm font-bold text-white">{googleUserInfo?.name}</div>
-                            <div className="text-xs text-gray-500">{googleUserInfo?.email}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-base font-bold text-white">{googleUserInfo?.name}</div>
+                              {isAdmin && (
+                                <span className="text-[10px] font-bold bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded border border-rose-500/30">
+                                  ADMIN
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-400">{googleUserInfo?.email}</div>
                             {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
                               <div className="text-[11px] text-purple-400 mt-1 font-bold">
                                 API Key 사용 중 (무제한 이용 가능)
                               </div>
                             ) : quota && (
-                              <div className="mt-1.5 w-full">
+                              <div className="mt-1.5 w-full max-w-[200px]">
                                 <div className="text-[11px] text-blue-400 flex justify-between mb-1">
                                   <span>무료 사용량</span>
                                   <span className="font-bold text-white">{quota.usage} / {quota.limit}회</span>
@@ -569,18 +605,18 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleResetData}
-                            className="px-3 py-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-md text-xs transition-all font-bold"
-                          >
-                            계정 삭제
-                          </button>
+                        <div className="flex items-center gap-2 self-end md:self-auto">
                           <button
                             onClick={handleGoogleLogout}
-                            className="px-3 py-1.5 border border-white/10 bg-transparent text-gray-400 hover:text-white rounded-md text-xs transition-colors"
+                            className="px-4 py-2 border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs transition-colors font-medium h-9"
                           >
                             로그아웃
+                          </button>
+                          <button
+                            onClick={handleResetData}
+                            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 rounded-lg text-xs transition-colors font-medium h-9 whitespace-nowrap"
+                          >
+                            계정 삭제
                           </button>
                         </div>
                       </div>
@@ -1024,16 +1060,16 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     데이터 관리 (Danger Zone)
                   </h3>
                   <div className="bg-[#27272a] rounded-xl border border-red-500/20 p-5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                       <div>
                         <div className="text-sm font-bold text-white mb-1">모든 설정 초기화</div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 break-keep leading-relaxed">
                           저장된 API Key, 구글 로그인 정보, 이메일 설정 등 모든 민감 정보를 영구적으로 삭제하고 로그아웃합니다.
                         </div>
                       </div>
                       <button
                         onClick={handleResetData}
-                        className="px-4 py-2 bg-red-500/10 text-red-500 text-sm font-bold rounded-lg hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
+                        className="w-full md:w-auto px-5 py-2.5 bg-red-500/10 text-red-500 text-sm font-bold rounded-xl hover:bg-red-500 hover:text-white transition-all border border-red-500/20 shadow-lg hover:shadow-red-500/20 whitespace-nowrap flex-shrink-0"
                       >
                         초기화 및 삭제
                       </button>

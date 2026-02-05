@@ -25,6 +25,31 @@ logger = logging.getLogger(__name__)
 
 common_bp = Blueprint('common', __name__)
 
+
+# ====== ADMIN 권한 확인 API ======
+@common_bp.route('/admin/check')
+def check_admin():
+    """
+    ADMIN 권한 확인 API
+    - 이메일이 ADMIN_EMAILS 환경변수에 포함되어 있는지 확인
+    - 프론트엔드의 useAdmin 훅에서 호출
+    """
+    email = request.args.get('email', '').strip().lower()
+    
+    if not email:
+        return jsonify({'isAdmin': False, 'error': 'Email required'}), 400
+
+    # 환경변수에서 ADMIN 이메일 목록 로드
+    admin_emails_str = os.environ.get('ADMIN_EMAILS', '')
+    admin_emails = [e.strip().lower() for e in admin_emails_str.split(',') if e.strip()]
+    
+    is_admin = email in admin_emails
+    
+    logger.debug(f"Admin check: {email} -> {is_admin}")
+    
+    return jsonify({'isAdmin': is_admin})
+
+
 try:
     import engine.shared as shared_state
 except ImportError:

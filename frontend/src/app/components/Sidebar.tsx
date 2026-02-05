@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import Modal from './Modal';
 import PaperTradingModal from './PaperTradingModal';
+import { useAdmin } from '@/hooks/useAdmin';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -27,6 +28,9 @@ export default function Sidebar() {
 
   // Mobile Sidebar State
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // ADMIN 권한 체크
+  const { isAdmin } = useAdmin();
 
   // Close mobile sidebar on path change
   useEffect(() => {
@@ -337,11 +341,21 @@ export default function Sidebar() {
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
             className={`relative z-30 flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-white/5 text-left transition-colors ${isUserMenuOpen ? 'bg-white/5' : ''}`}
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white relative">
               {profile.name[0]}
+              {isAdmin && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 border-2 border-[#1c1c1e] rounded-full" title="ADMIN"></div>
+              )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">{profile.name}</div>
+              <div className="flex items-center gap-1.5">
+                <div className="text-sm font-medium text-white truncate">{profile.name}</div>
+                {isAdmin && (
+                  <span className="text-[10px] font-bold bg-rose-500/20 text-rose-400 px-1 rounded border border-rose-500/30">
+                    ADMIN
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
                 {hasApiKey ? (
                   <span className="text-gray-500 text-[11px]">Personal Pro Plan</span>

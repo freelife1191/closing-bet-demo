@@ -7,6 +7,7 @@ import BuyStockModal from '@/app/components/BuyStockModal';
 import Modal from '@/app/components/Modal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useAdmin } from '@/hooks/useAdmin';
 
 // Simple Tooltip Component
 // Simple Tooltip Component
@@ -57,6 +58,12 @@ export default function VCPSignalsPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const [chartPeriod, setChartPeriod] = useState<'1M' | '3M' | '6M' | '1Y'>('3M');
   const [showVcpRange, setShowVcpRange] = useState(true); // VCP 범위 표시 상태
+
+  // ADMIN 권한 체크
+  const { isAdmin, isLoading: isAdminLoading } = useAdmin();
+
+  // Permission denied modal
+  const [permissionModal, setPermissionModal] = useState(false);
 
   const [screenerRunning, setScreenerRunning] = useState(false);
   const [screenerMessage, setScreenerMessage] = useState<string | null>(null);
@@ -466,6 +473,11 @@ export default function VCPSignalsPage() {
           )}
           <button
             onClick={async () => {
+              // ADMIN 권한 체크
+              if (!isAdmin) {
+                setPermissionModal(true);
+                return;
+              }
               if (screenerRunning) return;
               setScreenerRunning(true);
               // 1. 실행 요청
@@ -615,10 +627,10 @@ export default function VCPSignalsPage() {
               <tr className="text-[10px] text-gray-500 border-b border-white/5 uppercase tracking-wider">
                 <th className="px-4 py-3 font-semibold min-w-[120px]">Stock</th>
                 <th className="px-4 py-3 font-semibold whitespace-nowrap">Date</th>
-                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap min-w-[100px] w-[100px]">
                   <SimpleTooltip text="외국인 5일 연속 순매수 금액">외국인 5D</SimpleTooltip>
                 </th>
-                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap min-w-[100px] w-[100px]">
                   <SimpleTooltip text="기관 5일 연속 순매수 금액">기관 5D</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
@@ -680,13 +692,13 @@ export default function VCPSignalsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{signal.signal_date || signalDate || '-'}</td>
-                    <td className={`px-4 py-3 text-right font-mono text-xs ${signal.foreign_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${signal.foreign_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
                       <div className="flex items-center justify-end gap-1">
                         {signal.foreign_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.foreign_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
                         {formatFlow(signal.foreign_5d)}
                       </div>
                     </td>
-                    <td className={`px-4 py-3 text-right font-mono text-xs ${signal.inst_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${signal.inst_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
                       <div className="flex items-center justify-end gap-1">
                         {signal.inst_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.inst_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
                         {formatFlow(signal.inst_5d)}
@@ -808,37 +820,43 @@ export default function VCPSignalsPage() {
                 const vcpRatio = firstHalfHigh > 0 ? (secondHalfLow / firstHalfHigh).toFixed(2) : '-';
 
                 return (
-                  <div className="grid grid-cols-2 lg:flex lg:items-center lg:justify-between gap-y-1 lg:gap-y-0 px-4 py-3 bg-black/30 border-t border-white/5 text-xs">
-                    {/* Row 1 Left: VCP Checkbox */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-500 font-bold">VCP 패턴</span>
-                      <label className="flex items-center gap-1.5 cursor-pointer ml-2">
-                        <input
-                          type="checkbox"
-                          className="w-3 h-3 rounded border-white/20 bg-white/5 text-rose-500 focus:ring-rose-500/30"
-                          checked={showVcpRange}
-                          onChange={(e) => setShowVcpRange(e.target.checked)}
-                        />
-                        <span className="text-rose-400 font-medium">범위 표시</span>
-                      </label>
+                  <div className="relative h-[60px] lg:h-auto lg:min-h-[40px] px-4 py-2 bg-black/30 border-t border-white/5 text-xs flex flex-col lg:flex-row justify-between">
+                    {/* Top Row: VCP Pattern Checkbox (Left) / Front Half (Right) */}
+                    <div className="flex justify-between items-start lg:items-center w-full">
+                      {/* VCP Checkbox (Left Top) */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500 font-bold">VCP 패턴</span>
+                        <label className="flex items-center gap-1.5 cursor-pointer ml-2">
+                          <input
+                            type="checkbox"
+                            className="w-3 h-3 rounded border-white/20 bg-white/5 text-rose-500 focus:ring-rose-500/30"
+                            checked={showVcpRange}
+                            onChange={(e) => setShowVcpRange(e.target.checked)}
+                          />
+                          <span className="text-rose-400 font-medium">범위 표시</span>
+                        </label>
+                      </div>
+
+                      {/* First Half (Right Top) */}
+                      <div className="flex items-center gap-1 font-mono">
+                        <span className="text-gray-400">전반부:</span>
+                        <span className="text-white">₩{firstHalfHigh.toLocaleString()}</span>
+                      </div>
                     </div>
 
-                    {/* Row 1 Right: Ratio (Mobile aligned right) */}
-                    <div className="flex items-center justify-end lg:justify-start gap-1 font-mono">
-                      <span className="text-gray-400">Ratio:</span>
-                      <span className="text-cyan-400 font-bold">{vcpRatio}</span>
-                    </div>
+                    {/* Bottom Row: Ratio (Left) / Second Half (Right) */}
+                    <div className="flex justify-between items-end lg:items-center w-full mt-1 lg:mt-0">
+                      {/* Ratio (Left Bottom) */}
+                      <div className="flex items-center gap-1 font-mono">
+                        <span className="text-gray-400">Ratio:</span>
+                        <span className="text-cyan-400 font-bold">{vcpRatio}</span>
+                      </div>
 
-                    {/* Row 2 Left: First Half */}
-                    <div className="flex items-center gap-1 font-mono">
-                      <span className="text-gray-400">전반부:</span>
-                      <span className="text-white">₩{firstHalfHigh.toLocaleString()}</span>
-                    </div>
-
-                    {/* Row 2 Right: Second Half (Mobile aligned right) */}
-                    <div className="flex items-center justify-end lg:justify-start gap-1 font-mono">
-                      <span className="text-gray-400">후반부:</span>
-                      <span className="text-white">₩{secondHalfLow.toLocaleString()}</span>
+                      {/* Second Half (Right Bottom) */}
+                      <div className="flex items-center gap-1 font-mono">
+                        <span className="text-gray-400">후반부:</span>
+                        <span className="text-white">₩{secondHalfLow.toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1191,6 +1209,25 @@ export default function VCPSignalsPage() {
         }
       >
         <p>{alertModal.content}</p>
+      </Modal>
+
+      {/* Permission Denied Modal */}
+      <Modal
+        isOpen={permissionModal}
+        onClose={() => setPermissionModal(false)}
+        title="권한 없음"
+        type="danger"
+        footer={
+          <button
+            onClick={() => setPermissionModal(false)}
+            className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-colors"
+          >
+            확인
+          </button>
+        }
+      >
+        <p>관리자만 VCP 스크리너를 실행할 수 있습니다.</p>
+        <p className="text-sm text-gray-400 mt-2">관리자 계정으로 로그인해 주세요.</p>
       </Modal>
     </div>
   );

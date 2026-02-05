@@ -54,7 +54,6 @@ export default function ChatWidget() {
   const textareaRef = useRef<HTMLTextAreaElement>(null); // [Fix] IME 조합 초기화용
   const pathname = usePathname();
 
-  // Slash commands list
   const SLASH_COMMANDS = [
     { cmd: '/help', desc: '도움말 확인', auto: true },
     { cmd: '/status', desc: '현재 상태 확인', auto: true },
@@ -63,6 +62,13 @@ export default function ChatWidget() {
     { cmd: '/memory add', desc: '메모리 추가', auto: false },
     { cmd: '/clear', desc: '화면 청소', auto: true },
     { cmd: '/clear all', desc: '전체 데이터 초기화', auto: true },
+  ];
+
+  const DEFAULT_SUGGESTIONS = [
+    { emoji: "📊", label: "시장 분석", text: "오늘 마켓게이트 상태 알려줘" },
+    { emoji: "💎", label: "종목 추천", text: "VCP 매수 추천 종목 분석해줘" },
+    { emoji: "📈", label: "종가 베팅", text: "오늘의 종가베팅 추천해줘" },
+    { emoji: "📰", label: "뉴스 요약", text: "최근 주요 뉴스 정리해줘" }
   ];
 
   const WELCOME_SUGGESTIONS = [
@@ -259,130 +265,113 @@ export default function ChatWidget() {
     <>
       {isOpen && (
         <div className="fixed inset-0 z-[110] w-full h-[100dvh] md:fixed md:inset-auto md:bottom-24 md:right-6 md:w-[430px] md:h-[730px] md:max-h-[80vh] bg-[#1c1c1e] md:border border-white/10 md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in font-sans md:z-[110]">
-
           {/* Header */}
-          <div className="bg-[#2c2c2e] p-4 flex items-center justify-between border-b border-white/5 flex-shrink-0">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                <i className="fas fa-robot text-sm text-white"></i>
+          <div className="flex items-center justify-between p-4 border-b border-white/10 bg-[#252529] flex-shrink-0 safe-top">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <i className="fas fa-robot text-white text-lg"></i>
               </div>
-              <div className="min-w-0">
-                <div className="font-bold text-white text-sm flex items-center gap-2 whitespace-nowrap">
-                  스마트머니봇
-                  {hasApiKey && (
-                    <i className="fas fa-key text-[10px] text-yellow-500 animate-pulse flex-shrink-0" title="개인 API Key 사용 중 (무제한)"></i>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 whitespace-nowrap">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse flex-shrink-0"></span>
-                  <span className="text-[10px] text-gray-400 truncate">보통 1초 내 답변</span>
+              <div>
+                <h3 className="font-bold text-white text-lg">AI Assistant</h3>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                  <span className="text-xs text-blue-400 font-medium">Online</span>
                 </div>
               </div>
             </div>
-
             <div className="flex items-center gap-2">
               <button
                 onClick={handleNewChat}
-                className="p-2 text-gray-400 hover:text-white transition-colors"
-                title="새 대화"
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                title="New Chat"
               >
-                <i className="fas fa-eraser text-xs"></i>
+                <i className="fas fa-redo-alt"></i>
               </button>
-              <div className="w-[1px] h-4 bg-white/10 mx-1"></div>
               <button
-                onClick={toggleChat}
-                className="p-2 text-gray-400 hover:text-white transition-colors"
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors md:hidden"
               >
                 <i className="fas fa-times"></i>
               </button>
             </div>
           </div>
 
-
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto bg-[#151517] relative custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth bg-[#18181b] relative">
             {messages.length === 0 ? (
-              <div className="p-6 flex flex-col h-full animate-fade-in justify-center items-center text-center">
-                <div className="flex-1 flex flex-col justify-center items-center w-full max-w-sm">
-                  {/* Greeting */}
-                  <div className="space-y-4 mb-8">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg mx-auto mb-4">
-                      <i className="fas fa-robot text-3xl text-white"></i>
-                    </div>
-                    <h2 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 break-keep">
-                      안녕하세요, {session?.user?.name || '투자자'}님! 👋
-                    </h2>
-                    <p className="text-gray-400 text-sm leading-relaxed break-keep max-w-[280px] mx-auto">
-                      <strong className="text-white">스마트머니봇</strong>이 VCP 패턴 분석과<br />시장 동향 예측을 도와드립니다.
-                    </p>
-                  </div>
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-6 animate-fade-in p-4">
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-2">
+                  <i className="fas fa-robot text-4xl text-blue-400"></i>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">무엇을 도와드릴까요?</h3>
+                  <p className="text-sm text-gray-400 max-w-[240px] mx-auto leading-relaxed">
+                    시장 분석, 종목 진단, 매매 전략 등<br />
+                    궁금한 점을 자유롭게 물어보세요.
+                  </p>
+                </div>
 
-                  {/* Suggestions Grid */}
-                  <div className="w-full space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      {WELCOME_SUGGESTIONS.map((suggestion, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSuggestionClick(suggestion)}
-                          className="bg-[#2c2c2e] hover:bg-[#3a3a3c] border border-white/5 hover:border-blue-500/30 p-3 rounded-2xl transition-all duration-200 text-xs text-gray-300 hover:text-white text-left flex items-center justify-between group h-full min-h-[60px]"
-                        >
-                          <span className="line-clamp-2 leading-tight">{suggestion}</span>
-                          <i className="fas fa-arrow-right text-[10px] opacity-0 group-hover:opacity-100 transition-opacity text-blue-400 flex-shrink-0 ml-1"></i>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 w-full gap-2 px-4">
+                  {DEFAULT_SUGGESTIONS.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSuggestionClick(suggestion.text)}
+                      className="flex items-center gap-3 p-3 text-left bg-[#252529] hover:bg-[#2c2c30] border border-white/5 hover:border-blue-500/30 rounded-xl transition-all group"
+                    >
+                      <span className="w-8 h-8 rounded-lg bg-black/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+                        {suggestion.emoji}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-200 truncate group-hover:text-blue-400 transition-colors">
+                          {suggestion.label}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {suggestion.text}
+                        </div>
+                      </div>
+                      <i className="fas fa-chevron-right text-xs text-gray-600 group-hover:text-blue-400 transition-colors"></i>
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : (
-              <div className="p-4 space-y-4 pb-20">
+              <>
                 {messages.map((msg, idx) => (
-                  <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${msg.role === 'user'
-                      ? 'bg-blue-600 text-white whitespace-pre-wrap'
-                      : 'bg-[#2c2c2e] text-gray-200'
-                      }`}>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          p({ children }) {
-                            return <p className="mb-2 last:mb-0">{children}</p>
-                          },
-                          ul({ children }) {
-                            return <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>
-                          },
-                          li({ children }) {
-                            return <li>{children}</li>
-                          },
-                          code({ node, className, children, ...props }) {
-                            return (
-                              <code className="bg-black/30 px-1 rounded text-blue-300 font-mono" {...props}>{children}</code>
-                            )
-                          },
-                          table({ children }) {
-                            return <div className="overflow-x-auto my-2 border border-white/10 rounded"><table className="min-w-full divide-y divide-white/10">{children}</table></div>
-                          },
-                          th({ children }) {
-                            return <th className="px-2 py-1 text-left text-xs font-semibold text-gray-400 bg-white/5">{children}</th>
-                          },
-                          td({ children }) {
-                            return <td className="px-2 py-1 text-xs text-gray-300 border-t border-white/5">{children}</td>
-                          },
-                          a({ children, href }) {
-                            return <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noreferrer">{children}</a>
-                          },
-                          strong({ children }) {
-                            return <strong className="text-white font-bold">{children}</strong>
-                          }
-                        }}
-                      >
-                        {typeof msg.parts[0] === 'string'
-                          ? preprocessMarkdown(msg.parts[0])
-                          : preprocessMarkdown((msg.parts[0] as any).text)
-                        }
-                      </ReactMarkdown>
+                  <div
+                    key={idx}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                        ? 'bg-blue-600 text-white rounded-br-none'
+                        : 'bg-[#252529] text-gray-200 border border-white/10 rounded-bl-none'
+                        }`}
+                    >
+                      {msg.role === 'model' ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p({ children }) { return <p className="mb-2 last:mb-0">{children}</p> },
+                            ul({ children }) { return <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul> },
+                            li({ children }) { return <li>{children}</li> },
+                            code({ node, className, children, ...props }) {
+                              return <code className="bg-black/30 px-1 rounded text-blue-300 font-mono" {...props}>{children}</code>
+                            },
+                            table({ children }) {
+                              return <div className="overflow-x-auto my-2 border border-white/10 rounded"><table className="min-w-full divide-y divide-white/10">{children}</table></div>
+                            },
+                            th({ children }) { return <th className="px-2 py-1 text-left text-xs font-semibold text-gray-400 bg-white/5">{children}</th> },
+                            td({ children }) { return <td className="px-2 py-1 text-xs text-gray-300 border-t border-white/5">{children}</td> },
+                            a({ children, href }) { return <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noreferrer">{children}</a> },
+                            strong({ children }) { return <strong className="text-white font-bold">{children}</strong> }
+                          }}
+                        >
+                          {preprocessMarkdown(msg.parts[0] || '')}
+                        </ReactMarkdown>
+                      ) : (
+                        msg.parts[0]
+                      )}
                     </div>
-                    {/* Timestamp */}
                     <div className={`text-[10px] text-gray-500 mt-1 px-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                       {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}
                     </div>
@@ -390,111 +379,78 @@ export default function ChatWidget() {
                 ))}
 
                 {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-[#2c2c2e] rounded-xl px-4 py-3 border border-white/5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"></div>
-                        <span className="text-xs text-gray-300 font-medium animate-pulse">
-                          {THINKING_STEPS[thinkingIndex]}
-                        </span>
+                  <div className="flex justify-start animate-fade-in">
+                    <div className="bg-[#252529] border border-white/10 rounded-2xl rounded-bl-none px-4 py-3 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                        <div className="w-2 h-2 bg-rose-500 rounded-full animate-bounce"></div>
+                        <span className="text-xs text-gray-400 ml-2 font-medium animate-pulse">Thinking...</span>
                       </div>
                     </div>
                   </div>
                 )}
                 <div ref={messagesEndRef} />
-              </div>
+              </>
             )}
 
-          </div>
-
-          {/* Command Suggestions Popup (Fixed Position relative to Input) */}
-          {input.startsWith('/') && filteredCommands.length > 0 && (
-            <div className="absolute bottom-[70px] left-2 right-2 bg-[#1c1c1e] border border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-[200px] overflow-y-auto z-[60]">
-              <div className="px-3 py-2 bg-[#2c2c2e] border-b border-white/5 text-[10px] font-bold text-gray-400">
-                사용 가능한 명령어
-              </div>
-              {filteredCommands.map((cmd, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleCommandClick(cmd.cmd)}
-                  className={`w-full text-left px-4 py-2 text-xs flex justify-between items-center transition-colors group ${idx === selectedCommandIndex
-                    ? 'bg-blue-600/20 text-white'
-                    : 'text-gray-200 hover:bg-blue-600/20 hover:text-white'
-                    }`}
-                >
-                  <span className={`font-mono font-bold ${idx === selectedCommandIndex ? 'text-blue-300' : 'text-blue-400'}`}>{cmd.cmd}</span>
-                  <span className="text-gray-500 group-hover:text-gray-300">{cmd.desc}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Persistent Suggestions (When chat is active) - Moved to Bottom */}
-          {messages.length > 0 && (
-            <div className="bg-[#1c1c1e] border-t border-white/5 py-3 px-4 flex-shrink-0">
-              <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide">
-                {WELCOME_SUGGESTIONS.map((suggestion, idx) => (
+            {/* Command Suggestions Popup */}
+            {input.startsWith('/') && filteredCommands.length > 0 && (
+              <div className="absolute bottom-4 left-4 right-4 bg-[#1c1c1e] border border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-[200px] overflow-y-auto z-[60]">
+                <div className="px-3 py-2 bg-[#2c2c2e] border-b border-white/5 text-[10px] font-bold text-gray-400">
+                  사용 가능한 명령어
+                </div>
+                {filteredCommands.map((cmd, idx) => (
                   <button
                     key={idx}
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    className="flex-shrink-0 px-3 py-1.5 bg-[#2c2c2e] hover:bg-blue-600 hover:text-white border border-white/5 rounded-full text-[11px] text-gray-400 hover:text-white transition-all whitespace-nowrap"
+                    onClick={() => handleCommandClick(cmd.cmd)}
+                    className={`w-full text-left px-4 py-2 text-xs flex justify-between items-center transition-colors group ${idx === selectedCommandIndex
+                      ? 'bg-blue-600/20 text-white'
+                      : 'text-gray-200 hover:bg-blue-600/20 hover:text-white'
+                      }`}
                   >
-                    {suggestion}
+                    <span className={`font-mono font-bold ${idx === selectedCommandIndex ? 'text-blue-300' : 'text-blue-400'}`}>{cmd.cmd}</span>
+                    <span className="text-gray-500 group-hover:text-gray-300">{cmd.desc}</span>
                   </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Input Area (Fixed at Bottom) */}
-          <div className="p-3 bg-[#1c1c1e] border-t border-white/5 relative z-20 flex-shrink-0">
-            <div className="flex items-end gap-2 bg-[#2c2c2e] rounded-3xl p-2 pl-4 relative transition-all ring-1 ring-white/5 focus-within:ring-blue-500/50">
-
-              {/* Command Button */}
-              <div className="relative flex-shrink-0 pb-[1px]">
-                <button
-                  onClick={() => setInput('/ ')}
-                  className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-blue-400 transition-colors"
-                  title="명령어"
-                >
-                  <i className="fas fa-terminal text-xs"></i>
-                </button>
-              </div>
-
-              {/* Textarea */}
-              <textarea
-                ref={textareaRef}
+          {/* Input Area */}
+          <div className="p-4 bg-[#252529] border-t border-white/10 safe-bottom">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="relative flex items-center"
+            >
+              <input
+                type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="메시지를 입력하세요..."
-                className="flex-1 bg-transparent text-white text-sm placeholder-gray-500 resize-none focus:outline-none custom-scrollbar py-1.5 leading-relaxed max-h-[100px] min-h-[36px]"
-                rows={1}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = 'auto';
-                  target.style.height = `${Math.min(target.scrollHeight, 100)}px`;
-                }}
+                placeholder={isLoading ? "답변을 기다리고 있습니다..." : "메시지를 입력하세요... (슬래시 커맨드 '/' 사용 가능)"}
+                disabled={isLoading}
+                className="w-full bg-[#18181b] text-white text-sm rounded-xl pl-4 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 border border-white/5 placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               />
-
-              {/* Send Button */}
-              <div className="flex-shrink-0 pb-[1px]">
-                <button
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || isLoading}
-                  className="w-8 h-8 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 rounded-lg flex items-center justify-center text-white transition-all shadow-lg active:scale-95"
-                >
-                  {isLoading ? (
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : (
-                    <i className="fas fa-paper-plane text-xs"></i>
-                  )}
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="absolute right-2 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-700 transition-all shadow-lg shadow-blue-500/20"
+              >
+                {isLoading ? (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <i className="fas fa-paper-plane text-xs"></i>
+                )}
+              </button>
+            </form>
+            <div className="text-[10px] text-center text-gray-600 mt-2 font-medium">
+              AI can make mistakes. Please check important info.
             </div>
           </div>
-
-          {/* Floating Toggle Button Removed when Open to prevent overlap */}
         </div>
       )}
 

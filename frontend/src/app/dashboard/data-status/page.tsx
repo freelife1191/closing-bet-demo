@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Modal from '@/app/components/Modal';
 import { fetchAPI } from '@/lib/api';
+import { useAdmin } from '@/hooks/useAdmin';
 
 // Tooltip 컴포넌트
 function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false }: {
@@ -100,6 +101,9 @@ export default function DataStatusPage() {
   const [updateItems, setUpdateItems] = useState<UpdateItem[]>([]);
   const [updateProgress, setUpdateProgress] = useState<string>('');
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ADMIN 권한 체크
+  const { isAdmin, isLoading: isAdminLoading } = useAdmin();
 
   // 날짜 선택 state (기본값: 오늘 - 실시간)
   const [targetDate, setTargetDate] = useState<string>('');
@@ -238,6 +242,18 @@ export default function DataStatusPage() {
   const handleUpdateSingle = async (fileName: string) => {
     if (updating || updatingItem) return;
 
+    // ADMIN 권한 체크
+    if (!isAdmin) {
+      setModal({
+        isOpen: true,
+        type: 'danger',
+        title: '권한 없음',
+        content: '관리자만 데이터 업데이트를 수행할 수 있습니다.\n\n관리자 계정으로 로그인해 주세요.',
+        showCancel: false
+      });
+      return;
+    }
+
     setUpdatingItem(fileName);
     const effectiveDate = getEffectiveTargetDate();
 
@@ -329,6 +345,18 @@ export default function DataStatusPage() {
 
   const handleUpdateAll = async () => {
     if (updating) return;
+
+    // ADMIN 권한 체크
+    if (!isAdmin) {
+      setModal({
+        isOpen: true,
+        type: 'danger',
+        title: '권한 없음',
+        content: '관리자만 데이터 업데이트를 수행할 수 있습니다.\n\n관리자 계정으로 로그인해 주세요.',
+        showCancel: false
+      });
+      return;
+    }
 
     const effectiveDate = getEffectiveTargetDate();
 
@@ -519,14 +547,23 @@ export default function DataStatusPage() {
               />
             )}
 
-            <button
-              onClick={handleUpdateAll}
-              disabled={updating || !!updatingItem}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white text-xs md:text-sm font-bold rounded-xl transition-all shadow-lg hover:shadow-emerald-500/25 whitespace-nowrap"
-            >
-              <i className={`fas fa-sync-alt ${updating ? 'animate-spin' : ''}`}></i>
-              {updating ? '업데이트 중...' : '전체 데이터 업데이트'}
-            </button>
+            {/* ADMIN만 전체 업데이트 버튼 표시 */}
+            {!isAdminLoading && isAdmin && (
+              <button
+                onClick={handleUpdateAll}
+                disabled={updating || !!updatingItem}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white text-xs md:text-sm font-bold rounded-xl transition-all shadow-lg hover:shadow-emerald-500/25 whitespace-nowrap"
+              >
+                <i className={`fas fa-sync-alt ${updating ? 'animate-spin' : ''}`}></i>
+                {updating ? '업데이트 중...' : '전체 데이터 업데이트'}
+              </button>
+            )}
+            {!isAdminLoading && !isAdmin && (
+              <span className="text-xs text-amber-400 bg-amber-500/10 px-3 py-2 rounded-xl border border-amber-500/20">
+                <i className="fas fa-lock mr-1.5"></i>
+                관리자 전용
+              </span>
+            )}
 
             {updating && (
               <button
@@ -598,20 +635,23 @@ export default function DataStatusPage() {
                       <i className="fas fa-paper-plane text-xs"></i>
                     </button>
                   )}
-                  <button
-                    onClick={() => handleUpdateSingle(file.name)}
-                    disabled={!!updatingItem || updating}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400'
-                      }`}
-                    title={`${file.name} 업데이트`}
-                  >
-                    <i className={`fas fa-sync-alt text-xs ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
-                      ? 'animate-spin'
-                      : ''
-                      }`}></i>
-                  </button>
+                  {/* ADMIN만 개별 업데이트 버튼 표시 */}
+                  {!isAdminLoading && isAdmin && (
+                    <button
+                      onClick={() => handleUpdateSingle(file.name)}
+                      disabled={!!updatingItem || updating}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400'
+                        }`}
+                      title={`${file.name} 업데이트`}
+                    >
+                      <i className={`fas fa-sync-alt text-xs ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
+                        ? 'animate-spin'
+                        : ''
+                        }`}></i>
+                    </button>
+                  )}
                   <span className={`px-2 py-1 rounded-lg text-xs font-bold flex-shrink-0 ${file.exists
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                     : 'bg-red-500/10 text-red-400 border border-red-500/20'

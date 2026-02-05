@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAPI } from '@/lib/api';
 import Modal from '@/app/components/Modal';
+import { useAdmin } from '@/hooks/useAdmin';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
 function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false, width }: {
@@ -1298,6 +1299,10 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
   const [analyzingGemini, setAnalyzingGemini] = useState(false);
   const [currentUpdatedAt, setCurrentUpdatedAt] = useState(updatedAt);
 
+  // ADMIN 권한 체크
+  const { isAdmin } = useAdmin();
+  const [permissionModal, setPermissionModal] = useState(false);
+
   // updatedAt props가 변경되면 내부 상태도 업데이트 (초기화용)
   useEffect(() => {
     setCurrentUpdatedAt(updatedAt);
@@ -1352,6 +1357,12 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
   // ... (existing code)
 
   const handleUpdate = async () => {
+    // ADMIN 권한 체크
+    if (!isAdmin) {
+      setPermissionModal(true);
+      return;
+    }
+
     if (updating) return;
 
     setUpdating(true);
@@ -1380,6 +1391,12 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
   };
 
   const handleGeminiReanalyze = async () => {
+    // ADMIN 권한 체크
+    if (!isAdmin) {
+      setPermissionModal(true);
+      return;
+    }
+
     if (analyzingGemini) return;
 
     setAnalyzingGemini(true);
@@ -1429,8 +1446,28 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
           {updating ? 'RUNNING...' : analyzingGemini ? 'ANALYZING...' : (isToday ? 'UPDATED' : 'OLD DATA')}
         </span>
       </div>
+
       <span className="text-[10px] text-gray-600 font-mono mt-0.5">{updating || analyzingGemini ? 'Please wait...' : timeStr}</span>
-    </div>
+
+      {/* Permission Denied Modal */}
+      <Modal
+        isOpen={permissionModal}
+        onClose={() => setPermissionModal(false)}
+        title="권한 없음"
+        type="danger"
+        footer={
+          <button
+            onClick={() => setPermissionModal(false)}
+            className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-colors"
+          >
+            확인
+          </button>
+        }
+      >
+        <p>관리자만 실행할 수 있습니다.</p>
+        <p className="text-sm text-gray-400 mt-2">관리자 계정으로 로그인해 주세요.</p>
+      </Modal>
+    </div >
   )
 }
 
