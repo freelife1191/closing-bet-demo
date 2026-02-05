@@ -758,10 +758,10 @@ export default function ChatbotPage() {
       </Modal>
 
       {/* Content Wrapper */}
-      <div className="flex-1 flex pl-0 md:pl-64 h-full">
+      <div className="flex-1 flex pl-0 lg:pl-64 h-full">
 
         {/* Sessions Sidebar */}
-        <div className="w-[260px] flex-shrink-0 flex flex-col bg-[#1e1f20] hidden md:flex border-r border-white/5">
+        <div className="w-[260px] flex-shrink-0 flex flex-col bg-[#1e1f20] hidden lg:flex border-r border-white/5">
           <div className="p-4">
             <button
               onClick={handleNewChat}
@@ -814,7 +814,7 @@ export default function ChatbotPage() {
               {/* Hamburger Button (Mobile) */}
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 active:bg-white/20 transition-colors -ml-2"
+                className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 active:bg-white/20 transition-colors -ml-2"
               >
                 <i className="fas fa-bars text-lg text-gray-300"></i>
               </button>

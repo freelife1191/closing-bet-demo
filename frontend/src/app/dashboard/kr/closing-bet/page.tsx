@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAPI } from '@/lib/api';
 import Modal from '@/app/components/Modal';
+import BuyStockModal from '@/app/components/BuyStockModal';
 import { useAdmin } from '@/hooks/useAdmin';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
@@ -847,6 +848,10 @@ export default function JonggaV2Page() {
   });
   const [gradeGuideOpen, setGradeGuideOpen] = useState(false);
 
+  // Buy Modal State
+  const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
+
   // Tips Collapse State
 
   // Tips Collapse State
@@ -1262,6 +1267,10 @@ export default function JonggaV2Page() {
               index={idx}
               onOpenChart={() => setChartModal({ isOpen: true, symbol: signal.stock_code, name: signal.stock_name })}
               onOpenDetail={() => setDetailModal({ isOpen: true, code: signal.stock_code, name: signal.stock_name })}
+              onBuy={() => {
+                setBuyingStock({ ticker: signal.stock_code, name: signal.stock_name, price: signal.current_price || signal.entry_price || 0 });
+                setIsBuyModalOpen(true);
+              }}
             />
           ))
         )}
@@ -1289,6 +1298,33 @@ export default function JonggaV2Page() {
       <GradeGuideModal
         isOpen={gradeGuideOpen}
         onClose={() => setGradeGuideOpen(false)}
+      />
+
+      <BuyStockModal
+        isOpen={isBuyModalOpen}
+        onClose={() => setIsBuyModalOpen(false)}
+        stock={buyingStock}
+        onBuy={async (ticker, name, price, quantity) => {
+          try {
+            const res = await fetch('/api/portfolio/buy', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker, name, price, quantity })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+              alert(`${name} ${quantity}주 매수 완료!`);
+              return true;
+            } else {
+              alert(`매수 실패: ${data.message}`);
+              return false;
+            }
+          } catch (e) {
+            console.error('Buy error:', e);
+            alert('매수 중 오류가 발생했습니다.');
+            return false;
+          }
+        }}
       />
     </div>
   );
@@ -1489,7 +1525,7 @@ function StatBox({ label, value, highlight = false, customValue, tooltip }: { la
   )
 }
 
-function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Signal, index: number, onOpenChart: () => void, onOpenDetail: () => void }) {
+function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signal: Signal, index: number, onOpenChart: () => void, onOpenDetail: () => void, onBuy: () => void }) {
   const gradeStyles: Record<string, { bg: string, text: string, border: string }> = {
     S: { bg: 'bg-indigo-500/20', text: 'text-indigo-400', border: 'border-indigo-500/30' },
     A: { bg: 'bg-rose-500/20', text: 'text-rose-400', border: 'border-rose-500/30' },
@@ -1931,7 +1967,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Sign
             >
               <i className="fas fa-search-plus"></i> 상세 분석 보기
             </button>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <a
                 href={`https://m.stock.naver.com/domestic/stock/${signal.stock_code}/main`}
                 target="_blank"
@@ -1948,6 +1984,12 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail }: { signal: Sign
               >
                 <i className="fas fa-mobile-alt"></i> 토스
               </a>
+              <button
+                onClick={onBuy}
+                className="py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95 flex items-center justify-center gap-2"
+              >
+                <i className="fas fa-shopping-cart"></i> 모의 매수
+              </button>
             </div>
           </div>
         </div>
