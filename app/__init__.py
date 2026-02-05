@@ -57,6 +57,48 @@ def create_app():
     
     app = Flask(__name__)
 
+    # -------------------------------------------------------------
+    # [FIX] Reset Update Status on Startup (Prevents Ghost Updates)
+    # -------------------------------------------------------------
+    try:
+        import json
+        data_dir = 'data'
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+            
+        common_status_file = os.path.join(data_dir, 'update_status.json')
+        v2_status_file = os.path.join(data_dir, 'v2_screener_status.json')
+        
+        # 1. Reset Common Update Status
+        if os.path.exists(common_status_file):
+            try:
+                with open(common_status_file, 'r', encoding='utf-8') as f:
+                    status = json.load(f)
+                
+                # 강제 리셋 (서버 재시작 시 이전 실행 상태 무효화)
+                # 실행 중이었거나 알 수 없는 상태라면 초기화
+                updated = False
+                if status.get('isRunning', False):
+                    status['isRunning'] = False
+                    status['items'] = [] 
+                    updated = True
+                
+                if updated:
+                    with open(common_status_file, 'w', encoding='utf-8') as f:
+                        json.dump(status, f, indent=2)
+                    print("[Startup] 🧹 Reset stuck update_status.json")
+            except Exception as e:
+                print(f"[Startup] Error reading/writing update_status.json: {e}")
+
+        # 2. Reset V2 Screener Status
+        # 항상 초기화 (서버 끄면 스레드도 죽으므로)
+        with open(v2_status_file, 'w', encoding='utf-8') as f:
+             json.dump({'isRunning': False}, f)
+             print("[Startup] 🧹 Reset v2_screener_status.json")
+
+    except Exception as e:
+        print(f"[Startup] Failed to reset status files: {e}")
+
     # Start Scheduler (Singleton protected)
     try:
         from services import scheduler

@@ -254,6 +254,10 @@ class SignalGenerator:
                 async def _process_chunk(chunk_idx, chunk_data):
                     async with semaphore:
                         try:
+                            if shared_state.STOP_REQUESTED:
+                                print(f"    Checked stop request in chunk {chunk_idx}, skipping...")
+                                return {}
+
                             start = time.time()
                             print(f"    [LLM Batch] Processing Chunk {chunk_idx}/{total_chunks} ({len(chunk_data)} stocks)...")
                             # chunk_data는 이미 full context dict 리스트임

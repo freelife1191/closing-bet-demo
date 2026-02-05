@@ -110,7 +110,6 @@ export default function DataStatusPage() {
   const [useTodayMode, setUseTodayMode] = useState(true);
 
   // 데이터 로드 (전체)
-  // 데이터 로드 (전체)
   const loadData = useCallback(async () => {
     // Safety Force Stop
     const timer = setTimeout(() => {
@@ -132,16 +131,22 @@ export default function DataStatusPage() {
     try {
       const status: UpdateStatusResponse = await fetchAPI('/api/system/update-status');
 
+      // 로컬 updating 상태를 우선시하되, 백엔드가 실행 중이고 로컬이 아니면 동기화 (선택적)
+      // 여기서는 handleUpdateAll이 클라이언트 주도이므로 백엔드 isRunning을 강제로 반영하지 않음
+      // 다만 개별 업데이트나 다른 세션에서의 업데이트 감지를 위해 참고할 수는 있음.
+      // 하지만 현재 문제 해결을 위해 handleUpdateAll 실행 중에는 백엔드 상태에 의해 updating이 덮어써지지 않도록 주의.
+
+      // 로컬에서 updating 중이라도 백엔드 상태와 동기화
+
+
       setUpdating(status.isRunning);
 
-      // 업데이트 중이 아니면 items를 비워서 오래된 에러 상태가 표시되지 않도록 함
-      if (!status.isRunning) {
-        setUpdateItems([]);
-      } else {
+      // 상태가 있으면 무조건 표시 (완료 후에도 결과 확인 가능하도록)
+      if (status.items && status.items.length > 0) {
         setUpdateItems(status.items);
       }
 
-      setUpdateProgress(status.currentItem ? `${status.currentItem} 업데이트 중...` : '');
+      setUpdateProgress(status.isRunning && status.currentItem ? `${status.currentItem} 업데이트 중...` : '');
 
       // 완료되면 폴링 중지 및 데이터 새로고침
       if (!status.isRunning && pollingRef.current) {
@@ -154,12 +159,15 @@ export default function DataStatusPage() {
           setUpdating(false);
           setUpdatingItem(null);
         }, 1000);
+      } else if (status.isRunning && !pollingRef.current) {
+        // 실행 중인데 폴링이 없으면 시작 (페이지 마운트 대응)
+        startPolling();
       }
 
     } catch (error) {
       console.error('Failed to poll update status:', error);
     }
-  }, [loadData]);
+  }, [loadData, updating, updateItems.length]);
 
   // 폴링 시작
   const startPolling = useCallback(() => {
@@ -179,7 +187,8 @@ export default function DataStatusPage() {
         clearInterval(pollingRef.current);
       }
     };
-  }, [loadData, pollUpdateStatus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 마운트 시 한 번만 실행 (의존성 배열 비움)
 
   const [modal, setModal] = useState<{
     isOpen: boolean;
@@ -234,13 +243,80 @@ export default function DataStatusPage() {
     checkRunningStatus();
   }, [loadData]);
 
+  // VCP Status Check added to checkRunningStatus logic (merged for better readability if needed, but separate is fine)
+  useEffect(() => {
+    const checkVcpStatus = async () => {
+      try {
+        const status: any = await fetchAPI('/api/kr/signals/status');
+        if (status.running) {
+          setUpdatingItem('VCP Signals');
+
+          // Poll VCP
+          const poll = async () => {
+            let running = true;
+            while (running) {
+              await new Promise(r => setTimeout(r, 2000));
+              try {
+                const newStatus: any = await fetchAPI('/api/kr/signals/status');
+                if (!newStatus.running) {
+                  running = false;
+                  setUpdatingItem(null);
+                  await loadData();
+                }
+              } catch (e) {
+                console.error("Poll VCP fail", e);
+                running = false;
+              }
+            }
+          };
+          poll();
+        }
+      } catch (e) {
+        console.error("Failed to check VCP status:", e);
+      }
+    };
+
+    // Only run if not already updating something
+    if (!updatingItem) {
+      checkVcpStatus();
+    }
+  }, []); // Run once on mount
+
   // 현재 선택된 날짜 (실시간 모드면 빈 문자열, 아니면 선택된 날짜)
   const getEffectiveTargetDate = () => {
     return useTodayMode ? null : targetDate;
   };
 
-  const handleUpdateSingle = async (fileName: string) => {
-    if (updating || updatingItem) return;
+  // 개별 업데이트 로직 분리 (재사용 위해)
+  const performUpdate = async (fileName: string, effectiveDate: string | null) => {
+    try {
+      // Single item update using global system (Unified Async Update)
+      await fetchAPI('/api/system/start-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [fileName], target_date: effectiveDate, force: true })
+      });
+
+      // Trigger polling immediately to catch the 'running' status
+      startPolling();
+
+    } catch (e: any) {
+      if (e.status === 409) {
+        setModal({
+          isOpen: true,
+          type: 'default',
+          title: '업데이트 중복',
+          content: '⚠️ 이미 다른 업데이트가 진행 중입니다. 잠시 후 다시 시도해주세요.',
+          showCancel: false
+        });
+      } else {
+        throw e;
+      }
+    }
+  };
+
+  const handleUpdate = async (fileName: string) => {
+    if (updatingItem) return;
 
     // ADMIN 권한 체크
     if (!isAdmin) {
@@ -258,84 +334,7 @@ export default function DataStatusPage() {
     const effectiveDate = getEffectiveTargetDate();
 
     try {
-      let endpoint = '';
-      let body: Record<string, unknown> = {};
-
-      // 파일명에 따른 API 엔드포인트 매핑
-      if (fileName === 'AI Jongga V2') {
-        // AI Jongga V2는 비동기 실행이므로 전용 폴링 필요
-        await fetchAPI('/api/kr/jongga-v2/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target_date: effectiveDate })
-        });
-
-        // 전용 폴링 (Wait until done)
-        let isV2Running = true;
-        while (isV2Running) {
-          await new Promise(r => setTimeout(r, 1000));
-          try {
-            const status: any = await fetchAPI('/api/kr/jongga-v2/status');
-            isV2Running = status.isRunning;
-          } catch (e) {
-            console.error("Polling V2 failed", e);
-            isV2Running = false;
-          }
-        }
-
-      } else if (fileName === 'VCP Signals') {
-        // VCP Signals도 전용 폴링 필요
-        await fetchAPI('/api/kr/signals/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target_date: effectiveDate })
-        });
-
-        // 전용 폴링 (Wait until done)
-        let isVcpRunning = true;
-        while (isVcpRunning) {
-          await new Promise(r => setTimeout(r, 1000));
-          try {
-            const status: any = await fetchAPI('/api/kr/signals/status');
-            isVcpRunning = status.running; // Key is 'running' for VCP
-          } catch (e) {
-            console.error("Polling VCP failed", e);
-            isVcpRunning = false;
-          }
-        }
-
-      } else {
-        // 다른 항목들은 동기식 처리
-        switch (fileName) {
-          case 'Daily Prices':
-            endpoint = '/api/kr/init-data';
-            body = { type: 'prices', target_date: effectiveDate };
-            break;
-          case 'Institutional Trend':
-            endpoint = '/api/kr/init-data';
-            body = { type: 'institutional', target_date: effectiveDate };
-            break;
-          case 'Market Gate':
-            endpoint = '/api/kr/market-gate/update';
-            body = { target_date: effectiveDate };
-            break;
-          case 'AI Analysis':
-            endpoint = '/api/kr/refresh';
-            body = { target_date: effectiveDate };
-            break;
-          default:
-            throw new Error('Unknown file type');
-        }
-
-        await fetchAPI(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-      }
-
-      await loadData(); // 즉시 반영
-
+      await performUpdate(fileName, effectiveDate);
     } catch (error) {
       console.error(`Update failed for ${fileName}:`, error);
     } finally {
@@ -359,34 +358,36 @@ export default function DataStatusPage() {
     }
 
     const effectiveDate = getEffectiveTargetDate();
+    const itemsToUpdate = ['Daily Prices', 'Institutional Trend', 'VCP Signals', 'AI Analysis', 'AI Jongga V2', 'Market Gate'];
 
-    // 1. 백엔드에 업데이트 시작 알림 & 백그라운드 실행 요청
+    setUpdating(true);
+    setUpdateItems([]);
+
     try {
-      setUpdating(true);
+      // 순차적으로 업데이트 실행 (Backend Orchestration)
       await fetchAPI('/api/system/start-update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: ['Daily Prices', 'Institutional Trend', 'VCP Signals', 'AI Analysis', 'AI Jongga V2'],
-          target_date: effectiveDate // 날짜 전달
-        })
+        body: JSON.stringify({ items: itemsToUpdate, target_date: effectiveDate, force: true })
       });
 
-      // 2. 폴링 시작 (나머지는 백엔드가 알아서 함)
+      setUpdateProgress('업데이트 시작 요청 완료...');
+      // Polling start immediately
       startPolling();
 
-    } catch (error) {
-      console.error('Update failed:', error);
+    } catch (error: any) {
+      console.error('Update All failed:', error);
       setModal({
         isOpen: true,
         type: 'danger',
-        title: '업데이트 실패',
-        content: '업데이트 시작 실패: 서버 로그를 확인하세요.',
+        title: '업데이트 오류',
+        content: error.message || '전체 업데이트 시작 중 오류가 발생했습니다.',
         showCancel: false
       });
-      setUpdating(false);
+      setUpdating(false); // Only reset on error, otherwise let poll handle it
     }
   };
+
 
   const formatTimeAgo = (isoString: string) => {
     if (!isoString) return '-';
@@ -431,9 +432,6 @@ export default function DataStatusPage() {
   };
 
   const performSendMessage = async (date: string | null) => {
-    // Modal loading state handled by closing it or showing spinner? 
-    // Ideally we keep it open with loader, but strictly requested just to replace alert.
-    // Let's close confirm modal and rely on async result modal.
     setModal(prev => ({ ...prev, isOpen: false }));
 
     try {
@@ -461,6 +459,13 @@ export default function DataStatusPage() {
         showCancel: false
       });
     }
+  };
+
+  const isItemRunning = (name: string) => {
+    return (
+      updatingItem === name ||
+      updateItems.some(item => item.name === name && (item.status === 'running' || item.status === 'pending'))
+    );
   };
 
   return (
@@ -501,10 +506,10 @@ export default function DataStatusPage() {
             </div>
           )}
 
-          {updateProgress && (
+          {(updateProgress || updatingItem) && (
             <div className="text-xs text-emerald-400 animate-pulse">
               <i className="fas fa-spinner animate-spin mr-2"></i>
-              {updateProgress}
+              {updateProgress || `${updatingItem} 업데이트 중...`}
             </div>
           )}
 
@@ -608,132 +613,110 @@ export default function DataStatusPage() {
                     <i className="fas fa-file-alt text-emerald-400"></i>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-white flex items-center gap-2 text-sm break-keep">
-                      {file.name}
-                      {fileDescriptions[file.name] && (
-                        <Tooltip content={fileDescriptions[file.name]} wide position="top">
-                          <i className="fas fa-info-circle text-gray-600 hover:text-emerald-400 text-xs cursor-help transition-colors flex-shrink-0"></i>
-                        </Tooltip>
-                      )}
-                    </h3>
-                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 mb-1 truncate">
-                      <i className="fas fa-link text-[10px] opacity-50 flex-shrink-0"></i>
-                      <span className="font-mono opacity-75 truncate">{file.path}</span>
-                    </p>
-                    <p className="text-xs text-gray-500 truncate max-w-[180px]">
-                      {file.menu && <span className="text-emerald-400">@ {file.menu}</span>}
-                    </p>
+                    <h3 className="text-lg font-bold text-white truncate">{file.name}</h3>
+                    <p className="text-xs text-gray-500 mt-1 truncate">{file.path}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                  {file.name === 'AI Jongga V2' && (
-                    <button
-                      onClick={() => handleSendMessage(file.name)}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 transition-all flex-shrink-0"
-                      title="Resend Message"
-                    >
-                      <i className="fas fa-paper-plane text-xs"></i>
-                    </button>
-                  )}
-                  {/* ADMIN만 개별 업데이트 버튼 표시 */}
-                  {!isAdminLoading && isAdmin && (
-                    <button
-                      onClick={() => handleUpdateSingle(file.name)}
-                      disabled={!!updatingItem || updating}
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400'
-                        }`}
-                      title={`${file.name} 업데이트`}
-                    >
-                      <i className={`fas fa-sync-alt text-xs ${updatingItem === file.name || updateItems.find(item => item.name === file.name)?.status === 'running'
-                        ? 'animate-spin'
-                        : ''
-                        }`}></i>
-                    </button>
-                  )}
-                  <span className={`px-2 py-1 rounded-lg text-xs font-bold flex-shrink-0 ${file.exists
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                    }`}>
-                    {file.exists ? '정상' : '누락'}
-                  </span>
+                <div className={`px-2 py-1 rounded text-[10px] font-bold ${file.exists
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  }`}>
+                  {file.exists ? '생성됨' : '미생성'}
                 </div>
               </div>
 
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">최근 업데이트</span>
-                  <span className="text-gray-300 font-medium">{formatTimeAgo(file.lastModified)}</span>
+              <div className="space-y-3 mb-6">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">크기</span>
+                  <span className="text-gray-300 font-mono">{file.size}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">파일 크기</span>
-                  <span className="text-gray-300 font-medium">{file.size}</span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">행 수</span>
+                  <span className="text-gray-300 font-mono">
+                    {file.rowCount !== null ? `${file.rowCount.toLocaleString()} lines` : '-'}
+                  </span>
                 </div>
-                {file.rowCount !== null && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">레코드 수</span>
-                    <span className="text-gray-300 font-medium">{file.rowCount.toLocaleString()}</span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">최근 수정</span>
+                  <div className="text-right">
+                    <div className="text-gray-300">{formatTimeAgo(file.lastModified)}</div>
+                    <div className="text-[10px] text-gray-600">{file.lastModified || '-'}</div>
                   </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-4 border-t border-white/5">
+                {!isAdminLoading && isAdmin && (
+                  <button
+                    onClick={() => handleUpdate(file.name)}
+                    disabled={updating || !!updatingItem}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#2c2c2e] hover:bg-[#3c3c3e] disabled:opacity-50 text-xs text-gray-300 font-medium rounded-lg transition-colors"
+                  >
+                    <i className={`fas fa-sync-alt ${isItemRunning(file.name) ? 'animate-spin' : ''}`}></i>
+                    {isItemRunning(file.name) ? '업데이트 중...' : '업데이트'}
+                  </button>
+                )}
+                {file.name === 'AI Jongga V2' && isAdmin && (
+                  <button
+                    onClick={() => handleSendMessage(file.name)}
+                    disabled={updating || !!updatingItem || !file.exists}
+                    className="flex-none w-10 h-9 flex items-center justify-center bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors disabled:opacity-30"
+                    title="메시지 발송"
+                  >
+                    <i className="fas fa-paper-plane"></i>
+                  </button>
                 )}
               </div>
 
-              {file.link && (
-                <a
-                  href={file.link}
-                  className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-gray-400 hover:text-white transition-colors"
-                >
-                  {file.menu}에서 보기 <i className="fas fa-arrow-right text-xs"></i>
-                </a>
-              )}
+              <Tooltip content={fileDescriptions[file.name] || '데이터 설명이 없습니다.'} className="mt-3 w-full">
+                <div className="w-full text-center text-[10px] text-gray-600 hover:text-gray-400 transition-colors cursor-help">
+                  <i className="fas fa-info-circle mr-1"></i>
+                  데이터 설명 보기
+                </div>
+              </Tooltip>
             </div>
           ))
         )}
       </div>
 
-      {/* Path Info */}
-      <div className="p-4 rounded-xl bg-[#1c1c1e]/50 border border-white/5">
-        <p className="text-xs text-gray-500">
-          <i className="fas fa-folder mr-2"></i>
-          데이터 디렉토리: <code className="text-gray-400">./data/</code>
-        </p>
-      </div>
-
       {/* Modal */}
       <Modal
         isOpen={modal.isOpen}
-        onClose={() => setModal(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => setModal({ ...modal, isOpen: false })}
         title={modal.title}
         type={modal.type}
         footer={
-          <>
-            {modal.showCancel && (
-              <button
-                onClick={() => setModal(prev => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-              >
-                취소
-              </button>
-            )}
+          /* Footer Content Construction */
+          (modal.showCancel || modal.onConfirm) ? (
+            <>
+              {modal.showCancel && (
+                <button
+                  onClick={() => setModal({ ...modal, isOpen: false })}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                >
+                  취소
+                </button>
+              )}
+              {modal.onConfirm && (
+                <button
+                  onClick={modal.onConfirm}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-lg transition-colors shadow-lg hover:shadow-emerald-500/25"
+                >
+                  확인
+                </button>
+              )}
+            </>
+          ) : (
             <button
-              onClick={() => {
-                if (modal.onConfirm) {
-                  modal.onConfirm();
-                } else {
-                  setModal(prev => ({ ...prev, isOpen: false }));
-                }
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${modal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
-                modal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
-                  'bg-blue-500 hover:bg-blue-600'
-                }`}
+              onClick={() => setModal({ ...modal, isOpen: false })}
+              className="px-4 py-2 bg-[#2c2c2e] hover:bg-[#3c3c3e] text-white text-sm font-bold rounded-lg transition-colors border border-white/5"
             >
-              {modal.showCancel ? '확인' : '닫기'}
+              확인
             </button>
-          </>
+          )
         }
       >
-        <p className="whitespace-pre-wrap">{modal.content}</p>
+        <div className="whitespace-pre-wrap">{modal.content}</div>
       </Modal>
     </div>
   );

@@ -143,6 +143,13 @@ export default function VCPSignalsPage() {
   // AI 탭 상태 (GPT vs Gemini vs Perplexity)
   const [activeAiTab, setActiveAiTab] = useState<'gpt' | 'gemini' | 'perplexity'>('gemini');
 
+  // Determine Primary AI (GPT or Perplexity) based on data availability
+  // If GPT data exists and NO Perplexity data exists, use GPT (Legacy support)
+  // Otherwise default to Perplexity (assuming current config)
+  const hasPerplexity = signals.some(s => s.perplexity_recommendation) || aiData?.signals?.some(s => s.perplexity_recommendation);
+  const hasGpt = signals.some(s => s.gpt_recommendation) || aiData?.signals?.some(s => s.gpt_recommendation);
+  const primaryAI = (hasGpt && !hasPerplexity) ? 'gpt' : 'perplexity';
+
   // 선택된 종목 변경 시 AI 탭 자동 조정
   useEffect(() => {
     if (!selectedStock) return;
@@ -653,8 +660,8 @@ export default function VCPSignalsPage() {
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="Second AI 기반 매매 의견">
-                    {/* Priority check for Perplexity if available in any signal */}
-                    {signals.some(s => s.perplexity_recommendation) ? 'Perplexity' : 'GPT'}
+                    {/* Priority check for Perplexity if available in any signal, or default to Perplexity */}
+                    {primaryAI === 'perplexity' ? 'Perplexity' : 'GPT'}
                   </SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
@@ -741,7 +748,7 @@ export default function VCPSignalsPage() {
                     </td>
 
                     <td className="px-4 py-3 text-center">
-                      {signals.some(s => s.perplexity_recommendation) || aiData?.signals?.some(s => s.perplexity_recommendation)
+                      {primaryAI === 'perplexity'
                         ? getAIBadge(signal, 'perplexity')
                         : getAIBadge(signal, 'gpt')}
                     </td>

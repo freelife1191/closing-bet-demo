@@ -733,7 +733,7 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
         return False
 
 
-def create_daily_prices(target_date=None):
+def create_daily_prices(target_date=None, force=False):
     """일별 가격 데이터 수집 - pykrx 날짜별 일괄 조회 (속도 최적화)"""
     log("일별 가격 데이터 수집 중 (Date-based Fast Mode)...")
     try:
@@ -784,9 +784,15 @@ def create_daily_prices(target_date=None):
                     last_date_count = len(existing_df[existing_df['date'] == max_date_str])
                     
                     if start_date_obj.date() > end_date_obj.date():
-                        if last_date_count >= total_stocks_count * 0.9:
+                        # Force check
+                        if not force and last_date_count >= total_stocks_count * 0.9:
                             log("이미 최신 데이터가 존재하며 충분합니다.", "SUCCESS")
                             return True
+                        elif force:
+                             log("최신 데이터가 존재하지만 강제 업데이트(force=True)를 진행합니다.", "WARNING")
+                             # 강제 시 1일 전부터 다시 수집하도록? 아니면 당일만?
+                             # 보통 당일 재수집을 원할 것이므로 5일 전부터 안전하게 재수집
+                             start_date_obj = end_date_obj - timedelta(days=5)
                         else:
                             log(f"데이터 날짜는 최신이나 종목 수가 부족합니다({last_date_count}/{total_stocks_count}). 재수집을 시작합니다.", "WARNING")
                             start_date_obj = end_date_obj - timedelta(days=5) # 부족한 경우 최근 5일치 재수집
@@ -794,7 +800,11 @@ def create_daily_prices(target_date=None):
                         max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
                         # 마지막 저장일 다음날부터 수집
                         start_date_obj = max_date_dt + timedelta(days=1)
-                        log(f"기존 데이터 확인: {max_date_str}까지 존재. 이후부터 수집.", "INFO")
+                        if force:
+                             log("강제 업데이트: 기존 데이터 무시하고 최근 5일 재수집", "INFO")
+                             start_date_obj = end_date_obj - timedelta(days=5)
+                        else:
+                             log(f"기존 데이터 확인: {max_date_str}까지 존재. 이후부터 수집.", "INFO")
                 else:
                     log("기존 데이터 비어있음.", "INFO")
             except Exception as e:
@@ -912,7 +922,7 @@ def create_daily_prices(target_date=None):
         return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
 
 
-def create_institutional_trend(target_date=None):
+def create_institutional_trend(target_date=None, force=False):
     """수급 데이터 수집 - pykrx 기관/외국인 순매매 (Optimized)"""
     log("수급 데이터 수집 중 (pykrx 실제 데이터)...")
     try:
@@ -960,11 +970,14 @@ def create_institutional_trend(target_date=None):
                     missing_tickers = tickers_set - existing_tickers
                     
                     if start_date_obj.date() > end_date_obj.date() and not missing_tickers:
-                        if last_date_tickers >= len(tickers_set) * 0.9: # 90% 이상 차있으면 최신으로 간주
+                        if not force and last_date_tickers >= len(tickers_set) * 0.9: # 90% 이상 차있으면 최신으로 간주
                             log("수급 데이터: 이미 최신 상태이며 데이터가 충분합니다.", "SUCCESS")
                             return True
-                    
-                    if missing_tickers:
+                        elif force:
+                             log("수급 데이터: 강제 업데이트 진행 (최근 7일 재수집)", "WARNING")
+                             start_date_obj = end_date_obj - timedelta(days=7)
+
+                    if missing_tickers and not force: # Force일때는 위에서 처리됨
                         log(f"수급 데이터: 신규 종목 {len(missing_tickers)}개가 감지되었습니다. (최적화: 최근 7일만 재수집)", "WARNING")
                         # 신규 종목이 있어도 과도한 재수집 방지 (30일 -> 7일)
                         # VCP에서 주로 5일치(inst_5d)를 사용하므로 7일이면 충분함
@@ -1434,6 +1447,30 @@ def create_signals_log(target_date=None, run_ai=True):
                 import traceback
                 traceback.print_exc()
         
+
+
+        # [FIX] AI 분석 결과를 signals 리스트에 병합 (CSV 저장을 위해)
+        if run_ai and signals and 'ai_results' in locals() and ai_results:
+            try:
+                for signal in signals:
+                    ticker = signal['ticker']
+                    if ticker in ai_results:
+                        ai_data = ai_results[ticker]
+                        
+                        # Gemini 결과 우선
+                        gemini = ai_data.get('gemini_recommendation')
+                        if gemini:
+                            signal['ai_action'] = gemini.get('action', 'HOLD')
+                            signal['ai_confidence'] = gemini.get('confidence', 0)
+                            signal['ai_reason'] = gemini.get('reason', '')
+                        else:
+                            # 다른 AI 결과 폴백? (일단 Gemini 기준)
+                            signal['ai_action'] = 'N/A'
+                            signal['ai_confidence'] = 0
+                            signal['ai_reason'] = '분석 실패'
+            except Exception as e:
+                log(f"AI 결과 병합 중 오류: {e}", "WARNING")
+
         if signals:
             df_new = pd.DataFrame(signals)
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')

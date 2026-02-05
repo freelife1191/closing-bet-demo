@@ -174,21 +174,55 @@ def get_kr_signals():
                 today_bonus = 10 if signal_date == today else 0
                 final_score = (score * 0.4) + (contraction_score * 0.3) + (supply_score * 0.2 * 10) + today_bonus
                 
+                # AI Analysis Columns (CSV)
+                # [NEW] Read AI fields from CSV
+                ai_action = row.get('ai_action')
+                if pd.isna(ai_action): ai_action = None
+                
+                ai_confidence = row.get('ai_confidence')
+                if pd.isna(ai_confidence): ai_confidence = 0
+                
+                ai_reason = row.get('ai_reason')
+                if pd.isna(ai_reason): ai_reason = None
+
+                gemini_rec = None
+                if ai_action and ai_reason:
+                    gemini_rec = {
+                        "action": ai_action,
+                        "confidence": int(ai_confidence) if ai_confidence else 0,
+                        "reason": ai_reason,
+                        "news_sentiment": "positive" # Default or analyze later
+                    }
+
+                # [FIX] Handle NaN values for JSON serialization
+                return_pct = row.get('return_pct')
+                if pd.isna(return_pct): return_pct = None
+
+                contraction_ratio = row.get('contraction_ratio')
+                if pd.isna(contraction_ratio): contraction_ratio = None
+                
+                entry_price = row.get('entry_price')
+                if pd.isna(entry_price): entry_price = None
+
+                current_price = row.get('current_price')
+                if pd.isna(current_price): current_price = None
+
                 signals.append({
-                    'ticker': str(row.get('ticker', '')).zfill(6),
-                    'name': row.get('name', ''),
-                    'market': row.get('market', 'KOSPI'),
-                    'signal_date': signal_date,
-                    'entry_price': float(row.get('entry_price', 0)),
-                    'current_price': float(row.get('current_price', row.get('entry_price', 0))),
-                    'return_pct': float(row.get('return_pct', 0)),
-                    'score': round(score, 1),
-                    'foreign_5d': foreign_5d,
-                    'inst_5d': inst_5d,
-                    'status': status,
-                    'change_pct': 0,
-                    'contraction_ratio': round(contraction, 2),
-                    'final_score': round(final_score, 1)
+                    'ticker': str(row.get('ticker', '')).zfill(6), # Ensure formatting
+                    'name': row.get('name'),
+                    'signal_date': str(row.get('signal_date')),
+                    'market': row.get('market'),
+                    'status': row.get('status'),
+                    'score': float(row.get('score', 0)),
+                    'contraction_ratio': contraction_ratio,
+                    'entry_price': entry_price,
+                    'foreign_5d': int(row.get('foreign_5d', 0)),
+                    'inst_5d': int(row.get('inst_5d', 0)),
+                    'vcp_score': int(row.get('vcp_score', 0)),
+                    'current_price': current_price,
+                    # 'return_pct': row.get('return_pct') # CSV said return_pct
+                    'return_pct': return_pct,
+                    'gemini_recommendation': gemini_rec 
                 })
 
         # VCP 데이터가 없으면 빈 리스트 반환 (사용자 요청: 다른 데이터/샘플 노출 금지)
@@ -1113,16 +1147,37 @@ def get_jongga_v2_history(target_date):
         return jsonify({"error": str(e)}), 500
 
 
-# 전역 상태 변수 (스크리너 실행 여부)
-SCREENER_RUNNING = False
+
+# V2 Status File
+V2_STATUS_FILE = os.path.join(DATA_DIR, 'v2_screener_status.json')
+
+def _save_v2_status(running: bool):
+    try:
+        with open(V2_STATUS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({
+                'isRunning': running, 
+                'updated_at': datetime.now().isoformat()
+            }, f)
+    except Exception as e:
+        logger.error(f"Failed to save V2 status: {e}")
+
+def _load_v2_status():
+    try:
+        if not os.path.exists(V2_STATUS_FILE):
+             return {'isRunning': False}
+        with open(V2_STATUS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {'isRunning': False}
 
 @kr_bp.route('/jongga-v2/run', methods=['POST'])
 def run_jongga_v2_screener():
     """종가베팅 v2 스크리너 실행 (비동기 - 백그라운드 스레드)"""
     import threading
-    global SCREENER_RUNNING
 
-    if SCREENER_RUNNING:
+    # Check file based status
+    status = _load_v2_status()
+    if status.get('isRunning', False):
         return jsonify({
             'status': 'error',
             'message': 'Engine is already running. Please wait.'
@@ -1135,8 +1190,10 @@ def run_jongga_v2_screener():
 
     def _run_engine_async(capital_arg, markets_arg, target_date_arg):
         """백그라운드 엔진 실행"""
-        global SCREENER_RUNNING
         try:
+            # Set Running Flag
+            _save_v2_status(True)
+            
             logger.info("Background Engine Started...")
             if target_date_arg:
                 logger.info(f"[테스트 모드] 지정 날짜 기준 분석: {target_date_arg}")
@@ -1189,16 +1246,17 @@ def run_jongga_v2_screener():
             import traceback
             traceback.print_exc()
         finally:
-            SCREENER_RUNNING = False
+            # Reset Running Flag
+            _save_v2_status(False)
 
     try:
-        # 실행 플래그 설정
-        SCREENER_RUNNING = True
-        
         # 스레드 실행 (target_date 포함)
         thread = threading.Thread(target=_run_engine_async, args=(capital, markets, target_date))
         thread.daemon = True
         thread.start()
+        
+        # 즉시 상태 파일 업데이트 (스레드 시작 전 레이스 컨디션 방지, 근데 스레드 안에서도 덮어쓰는데 뭐.. 안전하게 여기서도 True)
+        _save_v2_status(True)
         
         msg = 'Engine started in background. Poll /jongga-v2/status for completion.'
         if target_date:
@@ -1211,7 +1269,7 @@ def run_jongga_v2_screener():
         })
 
     except ImportError as e:
-        SCREENER_RUNNING = False
+        _save_v2_status(False)
         logger.error(f"Import error running screener: {e}")
         return jsonify({
             'status': 'error',
@@ -1219,7 +1277,7 @@ def run_jongga_v2_screener():
             'details': str(e)
         }), 500
     except Exception as e:
-        SCREENER_RUNNING = False
+        _save_v2_status(False)
         logger.error(f"Error running jongga v2 screener: {e}")
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
@@ -1227,16 +1285,19 @@ def run_jongga_v2_screener():
 @kr_bp.route('/jongga-v2/status', methods=['GET'])
 def get_jongga_v2_status():
     """종가베팅 v2 엔진 상태 조회"""
-    global SCREENER_RUNNING
     
     # 최신 데이터 날짜 조회
     latest_data = load_json_file('jongga_v2_latest.json')
     updated_at = latest_data.get('updated_at') if latest_data else None
     
+    # Check status file
+    status = _load_v2_status()
+    is_running = status.get('isRunning', False)
+    
     return jsonify({
-        'isRunning': SCREENER_RUNNING,
+        'isRunning': is_running,
         'updated_at': updated_at,
-        'status': 'RUNNING' if SCREENER_RUNNING else 'IDLE'
+        'status': 'RUNNING' if is_running else 'IDLE'
     })
 
 
@@ -1805,102 +1866,96 @@ def reanalyze_gemini():
 
 @kr_bp.route('/refresh', methods=['POST'])
 def refresh_kr_data():
-    """KR 데이터 전체 갱신 (Market Gate + AI Analysis)"""
+    """KR 데이터 전체 갱신 (Market Gate + AI Analysis) - Background Async"""
     try:
         req_data = request.get_json() or {}
         target_date = req_data.get('target_date', None)
         
-        import sys
-        import os
+        # 1. Use background update mechanism from common
+        from .common import load_update_status, start_update, run_background_update
+        from threading import Thread
         
-        # scripts 경로 추가
-        scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'scripts')
-        if scripts_dir not in sys.path:
-            sys.path.insert(0, scripts_dir)
+        # Check running status
+        status = load_update_status()
+        if status.get('isRunning', False):
+             return jsonify({'status': 'error', 'message': 'Update already in progress'}), 409
+             
+        # Define items to update
+        items_list = ['Market Gate', 'AI Analysis']
         
-        from init_data import (
-            reset_cache, 
-            create_kr_ai_analysis
-        )
+        # Start update
+        start_update(items_list)
         
-        # 1. 캐시 초기화
-        reset_cache()
+        thread = Thread(target=run_background_update, args=(target_date, items_list))
+        thread.daemon = True
+        thread.start()
         
-        # 2. Market Gate 데이터 재생성 -> 사용자 요청으로 분리됨 (Line 24 update_market_gate)
-        # create_market_gate(target_date)
-        
-        # 3. AI 분석 데이터 재생성
-        create_kr_ai_analysis(target_date)
-        
-        logger.info("Data refresh completed successfully")
+        logger.info("Data refresh started in background")
         
         return jsonify({
-            'status': 'success',
-            'message': '데이터가 성공적으로 갱신되었습니다.',
-            'refreshed_at': datetime.now().isoformat()
+            'status': 'started',
+            'message': '데이터 갱신 작업이 백그라운드에서 시작되었습니다.',
+            'items': items_list
         })
         
     except Exception as e:
-        logger.error(f"Refresh failed: {e}")
+        logger.error(f"Refresh start failed: {e}")
         return jsonify({
             'status': 'error',
-            'message': f'데이터 갱신 실패: {str(e)}'
+            'message': f'데이터 갱신 시작 실패: {str(e)}'
         }), 500
 
 
 @kr_bp.route('/init-data', methods=['POST'])
 def init_data_endpoint():
-    """개별 데이터 초기화 API - 유형별 데이터 업데이트"""
+    """개별 데이터 초기화 API - Background Async"""
     try:
-        import sys
-        import os
-        
-        # scripts 경로 추가
-        scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'scripts')
-        if scripts_dir not in sys.path:
-            sys.path.insert(0, scripts_dir)
-        
         req_data = request.get_json() or {}
         data_type = req_data.get('type', 'all')
         target_date = req_data.get('target_date', None)  # 날짜 지정 (YYYY-MM-DD)
         
-        from init_data import (
-            create_daily_prices,
-            create_institutional_trend,
-            create_signals_log
-        )
+        # 1. Map type to common items
+        items_map = {
+            'prices': ['Daily Prices'],
+            'institutional': ['Institutional Trend'],
+            'signals': ['VCP Signals'],
+            'all': ['Daily Prices', 'Institutional Trend', 'VCP Signals']
+        }
         
-        result = {'status': 'success', 'type': data_type, 'target_date': target_date}
+        items_list = items_map.get(data_type, [])
+        if not items_list:
+            return jsonify({'status': 'error', 'message': f'Unknown data type: {data_type}'}), 400
+            
+        # 2. Use background update mechanism
+        from .common import load_update_status, start_update, run_background_update
+        from threading import Thread
         
-        if data_type == 'prices':
-            create_daily_prices(target_date)
-            result['message'] = 'Daily Prices 업데이트 완료' if not target_date else f'{target_date} 기준 Daily Prices 업데이트 완료'
-        elif data_type == 'institutional':
-            create_institutional_trend(target_date)
-            result['message'] = 'Institutional Trend 업데이트 완료' if not target_date else f'{target_date} 기준 Institutional Trend 업데이트 완료'
-        elif data_type == 'signals':
-            # VCP Signals는 별도 엔드포인트(/signals/run) 사용 권장되지만, 호환성을 위해 유지
-            # create_signals_log는 샘플 데이터 생성이므로 target_date 지원 여부와 관계없이 실행 (필요시 수정 가능)
-            create_signals_log() 
-            result['message'] = 'VCP Signals 업데이트 완료'
-        else:
-            # all: 모든 데이터 업데이트
-            create_daily_prices(target_date)
-            create_institutional_trend(target_date)
-            create_signals_log()
-            result['message'] = '모든 데이터 업데이트 완료'
+        # Check running status
+        status = load_update_status()
+        if status.get('isRunning', False):
+             return jsonify({'status': 'error', 'message': 'Update already in progress'}), 409
+             
+        # Start update
+        start_update(items_list)
         
-        logger.info(f"Init data completed: {data_type}")
-        return jsonify(result)
+        thread = Thread(target=run_background_update, args=(target_date, items_list))
+        thread.daemon = True
+        thread.start()
+        
+        logger.info(f"Init data started in background: {data_type}")
+        return jsonify({
+            'status': 'started', 
+            'type': data_type, 
+            'target_date': target_date,
+            'message': f'{data_type} 업데이트가 백그라운드에서 시작되었습니다.'
+        })
         
     except Exception as e:
-        logger.error(f"Init data failed: {e}")
-        # 예외 발생 시에도 200 반환 (프론트엔드에서 실패로 표시되지 않도록)
-        # 경고 메시지는 포함하되 HTTP 상태는 성공
+        logger.error(f"Init data start failed: {e}")
         return jsonify({
-            'status': 'warning',
-            'message': f'데이터 초기화 부분 완료 (일부 오류): {str(e)}'
-        }), 200
+            'status': 'error',
+            'message': f'데이터 초기화 시작 실패: {str(e)}'
+        }), 500
 
 @kr_bp.route('/status', methods=['GET'])
 def get_data_status():

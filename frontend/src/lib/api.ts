@@ -2,9 +2,14 @@
 
 const API_BASE = '';  // Empty = use Next.js proxy
 
-export async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+interface FetchOptions extends RequestInit {
+  timeout?: number;
+}
+
+export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
+  const timeoutMs = options.timeout ?? 10000; // 기본 10초, 옵션으로 변경 가능
+  const id = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     // 옵션 병합 (signal 우선순위 고려)

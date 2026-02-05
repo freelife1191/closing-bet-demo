@@ -743,17 +743,29 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
                       <div className="flex items-center gap-2 flex-wrap max-w-full">
                         <span className="text-xs text-gray-500 font-bold px-2 whitespace-nowrap">이동평균선</span>
-                        {[3, 5, 10, 20, 60, 120].map(d => (
-                          <label key={d} className="flex items-center gap-1.5 px-2 py-1 bg-black/20 rounded cursor-pointer hover:bg-black/40 transition-colors flex-shrink-0">
-                            <input
-                              type="checkbox"
-                              checked={!!maToggle[d]}
-                              onChange={e => setMaToggle(p => ({ ...p, [d]: e.target.checked }))}
-                              className="rounded border-gray-600 bg-gray-700 text-rose-500 focus:ring-offset-0 focus:ring-0 w-3 h-3"
-                            />
-                            <span className="text-xs text-gray-300 whitespace-nowrap">{d}일</span>
-                          </label>
-                        ))}
+                        {[3, 5, 10, 20, 60, 120].map(d => {
+                          const isAvailable = chartData.length >= d;
+                          return (
+                            <label
+                              key={d}
+                              className={`flex items-center gap-1.5 px-2 py-1 bg-black/20 rounded transition-colors flex-shrink-0 ${isAvailable ? 'cursor-pointer hover:bg-black/40' : 'opacity-50 cursor-not-allowed'
+                                }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!maToggle[d]}
+                                onChange={e => {
+                                  if (isAvailable) {
+                                    setMaToggle(p => ({ ...p, [d]: e.target.checked }));
+                                  }
+                                }}
+                                disabled={!isAvailable}
+                                className="rounded border-gray-600 bg-gray-700 text-rose-500 focus:ring-offset-0 focus:ring-0 w-3 h-3 disabled:opacity-50"
+                              />
+                              <span className="text-xs text-gray-300 whitespace-nowrap">{d}일</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
 

@@ -6,6 +6,7 @@
 from flask import Blueprint, jsonify, request
 import pandas as pd
 import os
+import json
 import logging
 import logging
 import random
@@ -62,73 +63,105 @@ except ImportError:
 
 from services.paper_trading import paper_trading
 
-# 글로벌 업데이트 상태 추적 (메모리)
-update_tracker = {
-    'isRunning': False,
-    'startTime': None,
-    'currentItem': None,
-    'items': [],  # [{'name': 'Daily Prices', 'status': 'pending|running|done|error'}]
-}
+# Status File Path
+UPDATE_STATUS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data', 'update_status.json')
 update_lock = Lock()
 
+def load_update_status():
+    """상태 파일 로드"""
+    default_status = {
+        'isRunning': False,
+        'startTime': None,
+        'currentItem': None,
+        'items': []
+    }
+    
+    if os.path.exists(UPDATE_STATUS_FILE):
+        try:
+            with open(UPDATE_STATUS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load update status: {e}")
+            return default_status
+    return default_status
+
+def save_update_status(status):
+    """상태 파일 저장 (Atomic Write)"""
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(UPDATE_STATUS_FILE), exist_ok=True)
+        
+        # Write to temp file first
+        tmp_file = UPDATE_STATUS_FILE + ".tmp"
+        with open(tmp_file, 'w', encoding='utf-8') as f:
+            json.dump(status, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno()) # Ensure write to disk
+            
+        # Atomic replace
+        os.replace(tmp_file, UPDATE_STATUS_FILE)
+            
+    except Exception as e:
+        logger.error(f"Failed to save update status: {e}")
 
 def start_update(items_list):
     """업데이트 시작"""
     with update_lock:
         shared_state.STOP_REQUESTED = False
-        update_tracker['isRunning'] = True
-        update_tracker['startTime'] = datetime.now().isoformat()
-        update_tracker['items'] = [{'name': name, 'status': 'pending'} for name in items_list]
-        update_tracker['currentItem'] = None
+        status = load_update_status()
+        status['isRunning'] = True
+        status['startTime'] = datetime.now().isoformat()
+        status['items'] = [{'name': name, 'status': 'pending'} for name in items_list]
+        status['currentItem'] = None
+        save_update_status(status)
 
-
-def update_item_status(name, status):
+def update_item_status(name, status_code):
     """아이템 상태 업데이트"""
     with update_lock:
-        for item in update_tracker['items']:
+        status = load_update_status()
+        for item in status['items']:
             if item['name'] == name:
-                item['status'] = status
-                if status == 'running':
-                    update_tracker['currentItem'] = name
+                item['status'] = status_code
+                if status_code == 'running':
+                    status['currentItem'] = name
                 break
-
+        save_update_status(status)
 
 def stop_update():
     """업데이트 중단"""
     with update_lock:
         shared_state.STOP_REQUESTED = True
-        update_tracker['isRunning'] = False
-        update_tracker['currentItem'] = None
-        # 중단 시에도 기존 상태 유지 또는 초기화? 
-        # UI에서 'Stopped' 상태를 처리하려면 남겨두는 게 좋지만, 
-        # 여기서는 update_tracker['items']를 비우지 않고 그대로 두어 에러 표시 등이 가능하게 함.
-        # 다만 재시작 시 start_update에서 초기화됨.
+        status = load_update_status()
+        status['isRunning'] = False
+        status['currentItem'] = None
         
         # 명시적으로 실행 중인 항목을 error/stopped로 변경
-        for item in update_tracker['items']:
+        for item in status['items']:
             if item['status'] == 'running':
                 item['status'] = 'error' # 중단됨
-
+        save_update_status(status)
 
 def finish_update():
     """업데이트 완료"""
     with update_lock:
-        update_tracker['isRunning'] = False
-        update_tracker['currentItem'] = None
-        # 완료 시 items를 비워서 오래된 에러 상태가 남지 않도록 함
-        update_tracker['items'] = []
-
+        status = load_update_status()
+        status['isRunning'] = False
+        status['currentItem'] = None
+        # 완료 시 items를 남겨두어 UI에서 결과를 확인할 수 있게 함 (다음 start 시 초기화됨)
+        # status['items'] = [] 
+        save_update_status(status)
 
 @common_bp.route('/system/update-status')
 def get_update_status():
     """업데이트 상태만 조회 (가벼운 폴링용)"""
+    # 읽기 시에는 Lock을 걸지 않아도 무방 (파일 시스템 원자성 의존)
+    # 다만 쓰기와 겹치면 빈 파일 읽을 수 있으므로 Lock 사용 권장
     with update_lock:
-        return jsonify({
-            'isRunning': update_tracker['isRunning'],
-            'startTime': update_tracker['startTime'],
-            'currentItem': update_tracker['currentItem'],
-            'items': update_tracker['items'].copy()
-        })
+        status = load_update_status()
+        # DEBUG: 실제 파일 경로 확인용
+        status['_debug_path'] = UPDATE_STATUS_FILE
+        status['_debug_exists'] = os.path.exists(UPDATE_STATUS_FILE)
+        return jsonify(status)
 
 
 @common_bp.route('/system/start-update', methods=['POST'])
@@ -137,201 +170,215 @@ def api_start_update():
     data = request.get_json() or {}
     items_list = data.get('items', [])
     target_date = data.get('target_date') # YYYY-MM-DD or None
+    force = data.get('force', False) # Force update flag
     
     # 이미 실행 중이면 거부
-    if update_tracker['isRunning']:
+    current_status = load_update_status()
+    if current_status['isRunning']:
         return jsonify({'status': 'error', 'message': 'Already running'}), 400
 
     # UI 상태 초기화
     start_update(items_list)
     
     # 백그라운드 스레드 실행
-    thread = Thread(target=run_background_update, args=(target_date,))
+    thread = Thread(target=run_background_update, args=(target_date, items_list, force))
     thread.daemon = True
     thread.start()
     
     return jsonify({'status': 'ok'})
 
 
-def run_background_update(target_date):
+def run_background_update(target_date, selected_items=None, force=False):
     """백그라운드에서 순차적으로 데이터 업데이트 실행"""
     import asyncio
     
+    # Default to all items if not specified
+    if selected_items is None:
+        selected_items = ['Daily Prices', 'Institutional Trend', 'Market Gate', 'VCP Signals', 'AI Analysis', 'AI Jongga V2']
+
     try:
         from scripts import init_data
 
         # 1. Daily Prices
-        if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
-        update_item_status('Daily Prices', 'running')
-        try:
-            init_data.create_daily_prices(target_date)
-            update_item_status('Daily Prices', 'done')
-        except Exception as e:
-            logger.error(f"Daily Prices Failed: {e}")
-            update_item_status('Daily Prices', 'error')
-            if shared_state.STOP_REQUESTED: raise e # 중단 요청이면 전체 중단
+        if 'Daily Prices' in selected_items:
+            if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
+            update_item_status('Daily Prices', 'running')
+            try:
+                # Force parameter supported
+                init_data.create_daily_prices(target_date, force=force)
+                update_item_status('Daily Prices', 'done')
+            except Exception as e:
+                logger.error(f"Daily Prices Failed: {e}")
+                update_item_status('Daily Prices', 'error')
+                if shared_state.STOP_REQUESTED: raise e # 중단 요청이면 전체 중단
             
         # 2. Institutional Trend
-        if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
-        update_item_status('Institutional Trend', 'running')
-        try:
-            init_data.create_institutional_trend(target_date)
-            update_item_status('Institutional Trend', 'done')
-        except Exception as e:
-            logger.error(f"Institutional Trend Failed: {e}")
-            update_item_status('Institutional Trend', 'error')
-            if shared_state.STOP_REQUESTED: raise e
+        if 'Institutional Trend' in selected_items:
+            if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
+            update_item_status('Institutional Trend', 'running')
+            try:
+                # Force parameter supported
+                init_data.create_institutional_trend(target_date, force=force)
+                update_item_status('Institutional Trend', 'done')
+            except Exception as e:
+                logger.error(f"Institutional Trend Failed: {e}")
+                update_item_status('Institutional Trend', 'error')
+                if shared_state.STOP_REQUESTED: raise e
 
         # 2.5 Market Gate Analysis
-        if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
-        update_item_status('Market Gate', 'running')
-        try:
-            from engine.market_gate import MarketGate
-            mg = MarketGate()
-            result = mg.analyze(target_date)
-            mg.save_analysis(result, target_date)
-            update_item_status('Market Gate', 'done')
-        except Exception as e:
-            logger.error(f"Market Gate Failed: {e}")
-            update_item_status('Market Gate', 'error')
-            if shared_state.STOP_REQUESTED: raise e
+        if 'Market Gate' in selected_items:
+            if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
+            update_item_status('Market Gate', 'running')
+            try:
+                from engine.market_gate import MarketGate
+                mg = MarketGate()
+                result = mg.analyze(target_date)
+                mg.save_analysis(result, target_date)
+                update_item_status('Market Gate', 'done')
+            except Exception as e:
+                logger.error(f"Market Gate Failed: {e}")
+                update_item_status('Market Gate', 'error')
+                if shared_state.STOP_REQUESTED: raise e
 
         # 3. VCP Signals
-        if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
-        update_item_status('VCP Signals', 'running')
-        vcp_df = None
-        try:
-            # VCP는 스크립트 함수 호출 대신 기존 로직 활용 (init_data.create_signals_log는 샘플용일 수 있으므로 주의)
-            # init_data.create_signals_log() 대신 kr_market.run_vcp_signals_screener 로직을 사용해야 함.
-            # 하지만 여기서는 간단히 init_data.create_signals_log() 사용 (기존 init-data API도 그랬음)
-            vcp_df = init_data.create_signals_log(target_date)
-            update_item_status('VCP Signals', 'done')
-        except Exception as e:
-            logger.error(f"VCP Signals Failed: {e}")
-            update_item_status('VCP Signals', 'error')
-            if shared_state.STOP_REQUESTED: raise e
+        if 'VCP Signals' in selected_items:
+            if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
+            update_item_status('VCP Signals', 'running')
+            vcp_df = None
+            try:
+                # VCP는 스크립트 함수 호출 대신 기존 로직 활용 (init_data.create_signals_log는 샘플용일 수 있으므로 주의)
+                # init_data.create_signals_log() 대신 kr_market.run_vcp_signals_screener 로직을 사용해야 함.
+                # 하지만 여기서는 간단히 init_data.create_signals_log() 사용 (기존 init-data API도 그랬음)
+                vcp_df = init_data.create_signals_log(target_date)
+                update_item_status('VCP Signals', 'done')
+            except Exception as e:
+                logger.error(f"VCP Signals Failed: {e}")
+                update_item_status('VCP Signals', 'error')
+                if shared_state.STOP_REQUESTED: raise e
 
         # 4. AI Analysis
-        if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
-        update_item_status('AI Analysis', 'running')
-        try:
-            from engine.kr_ai_analyzer import KrAiAnalyzer
-            import pandas as pd
-            import json
-            
-            # 경로 설정
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            data_dir = os.path.join(base_dir, 'data')
-            signals_path = os.path.join(data_dir, 'signals_log.csv')
-            
-            if os.path.exists(signals_path):
-                # 우선 메모리에 있는 vcp_df 사용 (실시간성 보장)
-                target_df = pd.DataFrame()
-                analysis_date = target_date if target_date else datetime.now().strftime('%Y-%m-%d')
+        if 'AI Analysis' in selected_items:
+            if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
+            update_item_status('AI Analysis', 'running')
+            try:
+                from engine.kr_ai_analyzer import KrAiAnalyzer
+                import pandas as pd
+                import json
                 
-                if vcp_df is not None and hasattr(vcp_df, 'empty') and not vcp_df.empty:
-                    logger.info("VCP 결과 메모리에서 로드")
-                    target_df = vcp_df.copy()
-                    if 'signal_date' in target_df.columns:
-                        analysis_date = str(target_df['signal_date'].iloc[0])
-                else:
-                    logger.info("VCP 결과 파일에서 로드 시도")
-                    df = pd.read_csv(signals_path)
-                    if not df.empty and 'signal_date' in df.columns:
-                        # 분석 날짜 결정
-                        if not target_date:
-                            analysis_date = str(df['signal_date'].max())
+                # 경로 설정
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                data_dir = os.path.join(base_dir, 'data')
+                signals_path = os.path.join(data_dir, 'signals_log.csv')
+                
+                if os.path.exists(signals_path):
+                    # 우선 메모리에 있는 vcp_df 사용 (실시간성 보장)
+                    target_df = pd.DataFrame()
+                    analysis_date = target_date if target_date else datetime.now().strftime('%Y-%m-%d')
+                    
+                    if 'VCP Signals' in selected_items and 'vcp_df' in locals() and vcp_df is not None and hasattr(vcp_df, 'empty') and not vcp_df.empty:
+                        logger.info("VCP 결과 메모리에서 로드")
+                        target_df = vcp_df.copy()
+                        if 'signal_date' in target_df.columns:
+                            analysis_date = str(target_df['signal_date'].iloc[0])
+                    else:
+                        logger.info("VCP 결과 파일에서 로드 시도")
+                        df = pd.read_csv(signals_path)
+                        if not df.empty and 'signal_date' in df.columns:
+                            # 분석 날짜 결정
+                            if not target_date:
+                                analysis_date = str(df['signal_date'].max())
+                                
+                            # 해당 날짜 데이터 필터링
+                            target_df = df[df['signal_date'].astype(str) == analysis_date].copy()
+                    
+                    if not target_df.empty:
+                            # 티커 정규화 및 중복 제거 (분석 대상 확보)
+                            target_df['ticker'] = target_df['ticker'].astype(str).str.zfill(6)
+                            target_df = target_df.drop_duplicates(subset=['ticker'])
                             
-                        # 해당 날짜 데이터 필터링
-                        target_df = df[df['signal_date'].astype(str) == analysis_date].copy()
-                
-                if not target_df.empty:
-                        # 티커 정규화 및 중복 제거 (분석 대상 확보)
-                        target_df['ticker'] = target_df['ticker'].astype(str).str.zfill(6)
-                        target_df = target_df.drop_duplicates(subset=['ticker'])
-                        
-                        # Score 숫자형 변환 (정렬 오류 방지)
-                        if 'score' in target_df.columns:
-                            target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
-                        
-                        # 점수 높은 순 정렬 후 상위 20개 분석 (사용자 요청: 전체/다수 분석)
-                        target_df = target_df.sort_values('score', ascending=False).head(20)
-                        tickers = target_df['ticker'].tolist()
-                        
-                        # [사용자 요청] 재분석 시 해당 날짜의 기존 AI 결과 파일 삭제 (찌꺼기 데이터 방지)
-                        date_str_clean = analysis_date.replace('-', '')
-                        target_filename = f'ai_analysis_results_{date_str_clean}.json'
-                        target_filepath = os.path.join(data_dir, target_filename)
-                        
-                        if os.path.exists(target_filepath):
-                            try:
-                                os.remove(target_filepath)
-                                logger.info(f"기존 AI 분석 파일 삭제 완료: {target_filename}")
-                            except Exception as del_err:
-                                logger.warning(f"기존 AI 파일 삭제 실패: {del_err}")
+                            # Score 숫자형 변환 (정렬 오류 방지)
+                            if 'score' in target_df.columns:
+                                target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
+                            
+                            # 점수 높은 순 정렬 후 상위 20개 분석 (사용자 요청: 전체/다수 분석)
+                            target_df = target_df.sort_values('score', ascending=False).head(20)
+                            tickers = target_df['ticker'].tolist()
+                            
+                            # [사용자 요청] 재분석 시 해당 날짜의 기존 AI 결과 파일 삭제 (찌꺼기 데이터 방지)
+                            date_str_clean = analysis_date.replace('-', '')
+                            target_filename = f'ai_analysis_results_{date_str_clean}.json'
+                            target_filepath = os.path.join(data_dir, target_filename)
+                            
+                            if os.path.exists(target_filepath):
+                                try:
+                                    os.remove(target_filepath)
+                                    logger.info(f"기존 AI 분석 파일 삭제 완료: {target_filename}")
+                                except Exception as del_err:
+                                    logger.warning(f"기존 AI 파일 삭제 실패: {del_err}")
 
-                        logger.info(f"AI 분석 시작: {len(tickers)} 종목 ({analysis_date})")
-                        
-                        analyzer = KrAiAnalyzer()
-                        # 분석 실행
-                        results = analyzer.analyze_multiple_stocks(tickers)
-                        
-                        # 메타데이터 추가
-                        results['generated_at'] = datetime.now().isoformat()
-                        results['signal_date'] = analysis_date
-                        
-                        # 2. 날짜별 파일 저장
-                        date_str = analysis_date.replace('-', '')
-                        filename = f'ai_analysis_results_{date_str}.json'
-                        filepath = os.path.join(data_dir, filename)
-                        
-                        with open(filepath, 'w', encoding='utf-8') as f:
-                            json.dump(results, f, ensure_ascii=False, indent=2)
-                        logger.info(f"AI 분석 결과 저장 완료: {filepath}")
+                            logger.info(f"AI 분석 시작: {len(tickers)} 종목 ({analysis_date})")
                             
-                        # 3. 최신 결과 업데이트 (target_date가 없거나 오늘인 경우)
-                        # 또는 사용자가 조회할 때 편의를 위해 항상 최신 파일도 갱신할지?
-                        # -> 일단 target_date 모드일 때는 최신 파일 건드리지 않는 게 안전 (혼선 방지)
-                        is_today = analysis_date == datetime.now().strftime('%Y-%m-%d')
-                        if not target_date or is_today:
-                             main_path = os.path.join(data_dir, 'ai_analysis_results.json')
-                             with open(main_path, 'w', encoding='utf-8') as f:
+                            analyzer = KrAiAnalyzer()
+                            # 분석 실행
+                            results = analyzer.analyze_multiple_stocks(tickers)
+                            
+                            # 메타데이터 추가
+                            results['generated_at'] = datetime.now().isoformat()
+                            results['signal_date'] = analysis_date
+                            
+                            # 2. 날짜별 파일 저장
+                            date_str = analysis_date.replace('-', '')
+                            filename = f'ai_analysis_results_{date_str}.json'
+                            filepath = os.path.join(data_dir, filename)
+                            
+                            with open(filepath, 'w', encoding='utf-8') as f:
                                 json.dump(results, f, ensure_ascii=False, indent=2)
-                        
+                            logger.info(f"AI 분석 결과 저장 완료: {filepath}")
+                                
+                            # 3. 최신 결과 업데이트 (target_date가 없거나 오늘인 경우)
+                            # 또는 사용자가 조회할 때 편의를 위해 항상 최신 파일도 갱신할지?
+                            # -> 일단 target_date 모드일 때는 최신 파일 건드리지 않는 게 안전 (혼선 방지)
+                            is_today = analysis_date == datetime.now().strftime('%Y-%m-%d')
+                            if not target_date or is_today:
+                                 main_path = os.path.join(data_dir, 'ai_analysis_results.json')
+                                 with open(main_path, 'w', encoding='utf-8') as f:
+                                    json.dump(results, f, ensure_ascii=False, indent=2)
+                            
+                            update_item_status('AI Analysis', 'done')
+                    else:
+                        logger.info(f"[{analysis_date}] 시그널 데이터가 없어 AI 분석 생략")
                         update_item_status('AI Analysis', 'done')
+
                 else:
-                    logger.info(f"[{analysis_date}] 시그널 데이터가 없어 AI 분석 생략")
                     update_item_status('AI Analysis', 'done')
 
-            else:
-                update_item_status('AI Analysis', 'done')
-
-        except Exception as e:
-            logger.error(f"AI Analysis Failed: {e}")
-            update_item_status('AI Analysis', 'error')
-            if shared_state.STOP_REQUESTED: raise e
+            except Exception as e:
+                logger.error(f"AI Analysis Failed: {e}")
+                update_item_status('AI Analysis', 'error')
+                if shared_state.STOP_REQUESTED: raise e
 
         # 5. AI Jongga V2
-        if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
-        update_item_status('AI Jongga V2', 'running')
-        try:
-            # 비동기 실행을 위해 asyncio run
-            # run_screener는 engine.generator에 정의됨
-            from engine.generator import run_screener
-            
-            async def run_async_screener():
-                await run_screener(capital=50000000, target_date=target_date)
+        if 'AI Jongga V2' in selected_items:
+            if shared_state.STOP_REQUESTED: raise Exception("Stopped by user")
+            update_item_status('AI Jongga V2', 'running')
+            try:
+                # 비동기 실행을 위해 asyncio run
+                # run_screener는 engine.generator에 정의됨
+                from engine.generator import run_screener
                 
-            asyncio.run(run_async_screener())
-            update_item_status('AI Jongga V2', 'done')
-            
-            # AI Analysis도 완료된 것으로 간주 (run_screener가 다 함)
-            update_item_status('AI Analysis', 'done') 
-            
-        except Exception as e:
-            logger.error(f"AI Jongga V2 Failed: {e}")
-            update_item_status('AI Jongga V2', 'error')
-            if shared_state.STOP_REQUESTED: raise e
+                async def run_async_screener():
+                    await run_screener(capital=50000000, target_date=target_date)
+                    
+                asyncio.run(run_async_screener())
+                update_item_status('AI Jongga V2', 'done')
+                
+                # AI Analysis도 완료된 것으로 간주 (run_screener가 다 함)
+                update_item_status('AI Analysis', 'done') 
+                
+            except Exception as e:
+                logger.error(f"AI Jongga V2 Failed: {e}")
+                update_item_status('AI Jongga V2', 'error')
+                if shared_state.STOP_REQUESTED: raise e
 
     except Exception as e:
         logger.error(f"Background Update Failed: {e}")
@@ -622,10 +669,11 @@ def get_data_status():
                 'menu': file_info.get('menu', '')
             })
     
+    current_status = load_update_status()
     update_status = {
-        'isRunning': False,
-        'lastRun': datetime.now().isoformat(),
-        'progress': ''
+        'isRunning': current_status['isRunning'],
+        'lastRun': current_status['startTime'] or datetime.now().isoformat(),
+        'progress': current_status['currentItem'] or ''
     }
 
     return jsonify({
