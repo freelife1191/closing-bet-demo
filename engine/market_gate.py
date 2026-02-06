@@ -244,79 +244,150 @@ class MarketGate:
                 result['indices'][key] = {'value': v, 'change_pct': c}
 
             # 2. Korean Indices (pykrx)
+            # 2. Korean Indices (FinanceDataReader -> pykrx -> yfinance)
             try:
-                from pykrx import stock
-                from datetime import datetime
-                today = datetime.now().strftime("%Y%m%d")
+                # Attempt 1: FinanceDataReader (Real-time & Reliable)
+                import FinanceDataReader as fdr
+                from datetime import datetime, timedelta
                 
-                # KOSPI (1001), KOSDAQ (2001)
-                for key, ticker in [('kospi', '1001'), ('kosdaq', '2001')]:
+                # KOSPI (KS11), KOSDAQ (KQ11)
+                fdr_map = {'kospi': 'KS11', 'kosdaq': 'KQ11'}
+                
+                for key, symbol in fdr_map.items():
                     try:
-                        # 최근 5일치 가져와서 최신값 사용
-                        start_date = (datetime.now() - pd.Timedelta(days=5)).strftime("%Y%m%d")
-                        df = stock.get_index_ohlcv_by_date(start_date, today, ticker)
+                        # Fetch recent data
+                        now = datetime.now()
+                        start_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+                        
+                        df = fdr.DataReader(symbol, start_date)
                         
                         if not df.empty:
                             latest = df.iloc[-1]
-                            close_val = float(latest['종가'])
+                            close_val = float(latest['Close'])
                             
-                            # 등락률 계산
-                            if '등락률' in df.columns:
-                                change_pct = float(latest['등락률'])
-                            elif 'FLUCTUATION_RATE' in df.columns: # English column name possibility
-                                change_pct = float(latest['FLUCTUATION_RATE'])
+                            # Calculate Change %
+                            if 'Change' in df.columns:
+                                change_pct = float(latest['Change']) * 100
+                            elif 'Comp' in df.columns:
+                                if len(df) >= 2:
+                                    prev = float(df.iloc[-2]['Close'])
+                                    change_pct = ((close_val - prev) / prev) * 100
+                                else:
+                                    change_pct = 0.0
                             else:
                                 if len(df) >= 2:
-                                    prev = float(df.iloc[-2]['종가'])
+                                    prev = float(df.iloc[-2]['Close'])
                                     change_pct = ((close_val - prev) / prev) * 100
                                 else:
                                     change_pct = 0.0
                                     
                             result['indices'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
+                            logger.info(f"FinanceDataReader fetch success for {key}: {close_val} ({change_pct:.2f}%)")
+                            
                         else:
-                            # Fallback to yfinance
-                            logger.info(f"pykrx returned empty for {key}, using yfinance fallback")
-                            v, c = extract_val(ticker_map[key])
-                            result['indices'][key] = {'value': v, 'change_pct': c}
+                            raise ValueError("Empty DataFrame from FDR")
                             
                     except Exception as e:
-                        logger.warning(f"pykrx fetch failed for {key}: {e}. Using yfinance fallback.")
-                        # Fallback
-                        v, c = extract_val(ticker_map[key])
-                        result['indices'][key] = {'value': v, 'change_pct': c}
+                        logger.warning(f"FinanceDataReader fetch failed for {key}: {e}. Trying pykrx...")
+                        
+                        # Attempt 2: pykrx (Fallback)
+                        try:
+                            from pykrx import stock
+                            ticker_code = '1001' if key == 'kospi' else '2001'
+                            today = datetime.now().strftime("%Y%m%d")
+                            start_str = (datetime.now() - timedelta(days=5)).strftime("%Y%m%d")
+                            
+                            df = stock.get_index_ohlcv_by_date(start_str, today, ticker_code)
+                            
+                            if not df.empty:
+                                latest = df.iloc[-1]
+                                close_val = float(latest['종가'])
+                                
+                                if '등락률' in df.columns:
+                                    change_pct = float(latest['등락률'])
+                                elif 'FLUCTUATION_RATE' in df.columns:
+                                    change_pct = float(latest['FLUCTUATION_RATE'])
+                                else:
+                                    if len(df) >= 2:
+                                        prev = float(df.iloc[-2]['종가'])
+                                        change_pct = ((close_val - prev) / prev) * 100
+                                    else:
+                                        change_pct = 0.0
+                                        
+                                result['indices'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
+                                logger.info(f"pykrx fetch success for {key}: {close_val} ({change_pct:.2f}%)")
+                            else:
+                                raise ValueError("Empty DataFrame from pykrx")
+                                
+                        except Exception as pykrx_e:
+                            logger.warning(f"pykrx fetch failed for {key}: {pykrx_e}. Using yfinance fallback.")
+                            
+                            # Attempt 3: yfinance (Last Resort)
+                            v, c = extract_val(ticker_map[key])
+                            result['indices'][key] = {'value': v, 'change_pct': c}
 
-            except ImportError:
-                 # pykrx 없으면 yfinance fallback
+            except Exception as e:
+                 logger.error(f"Global indices processing critical error: {e}")
+                 # Final Fallback to yfinance for all if completely broken
                  for key in ['kospi', 'kosdaq']:
                     v, c = extract_val(ticker_map[key])
                     result['indices'][key] = {'value': v, 'change_pct': c}
             
-            # 원자재 (US) & 크립토
+            # 3. Global Indices (Added: FDR Priority for S&P500, NASDAQ)
+            try:
+                # FDR symbols: S&P500='US500', NASDAQ='IXIC'
+                fdr_global_map = {'sp500': 'US500', 'nasdaq': 'IXIC'}
+                
+                for key, symbol in fdr_global_map.items():
+                    try:
+                        start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+                        df = fdr.DataReader(symbol, start_date)
+                        
+                        if not df.empty:
+                            latest = df.iloc[-1]
+                            close_val = float(latest['Close'])
+                            if 'Change' in df.columns:
+                                change_pct = float(latest['Change']) * 100
+                            else:
+                                if len(df) >= 2:
+                                    prev = float(df.iloc[-2]['Close'])
+                                    change_pct = ((close_val - prev) / prev) * 100
+                                else:
+                                    change_pct = 0.0
+                            
+                            # Overwrite yfinance result if FDR succeeds
+                            result['indices'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
+                    except Exception as e:
+                        logger.warning(f"FDR fetch failed for {key}: {e} (Keeping yfinance value)")
+            except Exception as e:
+                logger.warning(f"FDR Global indices error: {e}")
+
+
+            # 4. Commodities (Keep yfinance primary as per plan)
             for key in ['us_gold', 'us_silver']:
                 v, c = extract_val(ticker_map[key])
                 result['commodities'][key] = {'value': v, 'change_pct': c}
 
-            # 원자재 (KRX) - ETF 사용
-            # KRX 금: 411060 (ACE KRX금현물), KRX 은: 144600 (KODEX 은선물(H))
+            # 5. KRX Commodities (Detailed Logic)
+            # KRX Gold: 411060 (ACE KRX금현물), KRX Silver: 144600 (KODEX 은선물(H))
             try:
                 from pykrx import stock
                 krx_commodities = {
-                    'gold': '411060',  # ACE KRX금현물
-                    'silver': '144600' # KODEX 은선물(H)
+                    'gold': '411060',  
+                    'silver': '144600' 
                 }
                 
-                # 오늘 날짜 (장 마감 전이면 전일 데이터일 수 있음)
                 today_str = datetime.now().strftime("%Y%m%d")
                 start_str = (datetime.now() - timedelta(days=5)).strftime("%Y%m%d")
 
                 for key, ticker in krx_commodities.items():
+                    fetch_success = False
                     try:
+                        # Attempt 1: pykrx
                         df = stock.get_market_ohlcv_by_date(start_str, today_str, ticker)
                         if not df.empty:
                             latest = df.iloc[-1]
                             val = float(latest['종가'])
-                            
-                            # 등락률
                             if '등락률' in df.columns:
                                 chg = float(latest['등락률'])
                             else:
@@ -325,49 +396,97 @@ class MarketGate:
                                     chg = ((val - prev) / prev) * 100
                                 else:
                                     chg = 0.0
-                                    
                             result['commodities'][key] = {'value': val, 'change_pct': chg}
-                        else:
-                            # pykrx 데이터 없으면 yfinance ETF 조회 시도 (ACE KRX금현물: 411060.KS, KODEX 은선물(H): 144600.KS)
-                            yf_ticker = f"{ticker}.KS"
-                            try:
-                                # 이미 다운로드된 data에 없을 수 있으므로 개별 Ticker로 조회 (threads=False 필수)
-                                yf_hist = yf.download(yf_ticker, period='2d', progress=False, threads=False)
-                                
-                                # MultiIndex 처리
-                                if isinstance(yf_hist.columns, pd.MultiIndex):
-                                    # Close 컬럼 추출
-                                    try:
-                                        yf_hist = yf_hist['Close']
-                                    except KeyError:
-                                        # 최신 yfinance 구조 대응
-                                        yf_hist = yf_hist.xs('Close', axis=1, level=0, drop_level=True) if 'Close' in yf_hist.columns.get_level_values(0) else yf_hist.iloc[:, 0]
-                                
-                                # Series 변환
-                                if isinstance(yf_hist, pd.DataFrame):
-                                     yf_hist = yf_hist[yf_ticker] if yf_ticker in yf_hist.columns else yf_hist.iloc[:, 0]
-
-                                if not yf_hist.empty and len(yf_hist) > 0:
-                                    latest_val = float(yf_hist.iloc[-1])
-                                    prev_val = float(yf_hist.iloc[-2]) if len(yf_hist) >= 2 else latest_val
-                                    yf_chg = ((latest_val - prev_val) / prev_val) * 100 if prev_val > 0 else 0.0
-                                    result['commodities'][key] = {'value': latest_val, 'change_pct': yf_chg}
-                                else:
-                                    result['commodities'][key] = {'value': 0.0, 'change_pct': 0.0}
-                            except:
-                                result['commodities'][key] = {'value': 0.0, 'change_pct': 0.0}
+                            fetch_success = True
+                            logger.info(f"KRX Commodity {key} fetched via pykrx")
                     except Exception as e:
-                        logger.warning(f"KRX commodity fetch failed ({key}): {e}")
-                        result['commodities'][key] = {'value': 0.0, 'change_pct': 0.0}
+                        logger.warning(f"pykrx failed for {key}: {e}")
+
+                    # Attempt 2: FinanceDataReader (Fallback)
+                    if not fetch_success:
+                        try:
+                             import FinanceDataReader as fdr
+                             df = fdr.DataReader(ticker, start_str)
+                             if not df.empty:
+                                latest = df.iloc[-1]
+                                val = float(latest['Close'])
+                                if 'Change' in df.columns:
+                                    chg = float(latest['Change']) * 100
+                                else:
+                                    if len(df) >= 2:
+                                        prev = float(df.iloc[-2]['Close'])
+                                        chg = ((val - prev) / prev) * 100
+                                    else:
+                                        chg = 0.0
+                                result['commodities'][key] = {'value': val, 'change_pct': chg}
+                                fetch_success = True
+                                logger.info(f"KRX Commodity {key} fetched via FDR")
+                        except Exception as e:
+                             logger.warning(f"FDR failed for {key}: {e}")
+
+                    # Attempt 3: yfinance (Last Resort)
+                    if not fetch_success:
+                        yf_ticker = f"{ticker}.KS"
+                        try:
+                            yf_hist = yf.download(yf_ticker, period='2d', progress=False, threads=False)
+                            if isinstance(yf_hist.columns, pd.MultiIndex):
+                                try:
+                                    yf_hist = yf_hist['Close']
+                                except:
+                                    yf_hist = yf_hist.xs('Close', axis=1, level=0, drop_level=True) if 'Close' in yf_hist.columns.get_level_values(0) else yf_hist.iloc[:, 0]
+                            
+                            if isinstance(yf_hist, pd.DataFrame):
+                                yf_hist = yf_hist[yf_ticker] if yf_ticker in yf_hist.columns else yf_hist.iloc[:, 0]
+
+                            if not yf_hist.empty and len(yf_hist) > 0:
+                                latest_val = float(yf_hist.iloc[-1])
+                                prev_val = float(yf_hist.iloc[-2]) if len(yf_hist) >= 2 else latest_val
+                                yf_chg = ((latest_val - prev_val) / prev_val) * 100 if prev_val > 0 else 0.0
+                                result['commodities'][key] = {'value': latest_val, 'change_pct': yf_chg}
+                                logger.info(f"KRX Commodity {key} fetched via yfinance")
+                            else:
+                                result['commodities'][key] = {'value': 0.0, 'change_pct': 0.0}
+                        except Exception as e:
+                            logger.warning(f"yfinance failed for {key}: {e}")
+                            result['commodities'][key] = {'value': 0.0, 'change_pct': 0.0}
 
             except ImportError:
                  logger.warning("pykrx not installed, skipping KRX commodities")
                  result['commodities']['gold'] = {'value': 0.0, 'change_pct': 0.0}
                  result['commodities']['silver'] = {'value': 0.0, 'change_pct': 0.0}
-                
+            
+            # 6. Crypto (FDR Priority)
+            try:
+                # FDR symbols: BTC/USD, ETH/USD, XRP/USD
+                fdr_crypto_map = {'btc': 'BTC/USD', 'eth': 'ETH/USD', 'xrp': 'XRP/USD'}
+                for key, symbol in fdr_crypto_map.items():
+                    try:
+                        start_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+                        df = fdr.DataReader(symbol, start_date)
+                        if not df.empty:
+                            latest = df.iloc[-1]
+                            close_val = float(latest['Close'])
+                            
+                            if 'Change' in df.columns:
+                                change_pct = float(latest['Change']) * 100
+                            else:
+                                if len(df) >= 2:
+                                    prev = float(df.iloc[-2]['Close'])
+                                    change_pct = ((close_val - prev) / prev) * 100
+                                else:
+                                    change_pct = 0.0
+                            
+                            result['crypto'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
+                    except Exception as e:
+                        logger.warning(f"FDR Crypto fetch failed for {key}: {e} (Keeping yfinance value)")
+            except Exception as e:
+                logger.warning(f"FDR Crypto error: {e}")
+
+            # Ensure 'btc', 'eth', 'xrp' are filled if FDR failed (yfinance fallback from previous block)
             for key in ['btc', 'eth', 'xrp']:
-                v, c = extract_val(ticker_map[key])
-                result['crypto'][key] = {'value': v, 'change_pct': c}
+                if key not in result['crypto']:
+                    v, c = extract_val(ticker_map[key])
+                    result['crypto'][key] = {'value': v, 'change_pct': c}
             
             return result
             
@@ -503,9 +622,25 @@ class MarketGate:
         
         return df
 
+    def _sanitize_for_json(self, data):
+        """JSON 직렬화를 위해 NaN, Infinity 등을 None으로 변환 (Recursive)"""
+        if isinstance(data, dict):
+            return {k: self._sanitize_for_json(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._sanitize_for_json(v) for v in data]
+        elif isinstance(data, float):
+            import math
+            if math.isnan(data) or math.isinf(data):
+                return None
+            return data
+        return data
+
     def save_analysis(self, result: Dict, target_date: str = None) -> str:
         """분석 결과 JSON 저장"""
         import json
+        
+        # Sanitize data to remove NaN/Infinity which breaks JS JSON.parse
+        result = self._sanitize_for_json(result)
         
         # 날짜 포맷팅 (YYYYMMDD)을 result['dataset_date'] 기반으로 할 수도 있음
         if target_date:
@@ -544,15 +679,30 @@ class MarketGate:
         return filepath
 
     def _get_usd_krw(self) -> float:
-        """환율 조회 (yfinance) - 실패 시 1350(SAFE) 반환"""
+        """환율 조회 (FDR -> yfinance) - 실패 시 1350(SAFE) 반환"""
         try:
-            # 주말에는 환율 시장이 닫혀있으므로 기본값 반환 (불필요한 API 호출 방지)
-            now = datetime.now()
-            if now.weekday() >= 5:  # 토,일
-                logger.debug("주말 - 환율 기본값 사용 (1350원)")
-                return 1350.0
+            # 주말 체크 (선택사항, FX는 24시간 도는 경우도 있지만 KRW는 주말 쉼)
+            # 하지만 FDR/YF에서 주말엔 금요일 종가가 나옴
             
-            # yfinance 에러 로그 임시 억제
+            # 1. FinanceDataReader (Priority)
+            try:
+                import FinanceDataReader as fdr
+                from datetime import datetime, timedelta
+                
+                # Fetch recent
+                now = datetime.now()
+                start_date = (now - timedelta(days=5)).strftime("%Y-%m-%d")
+                
+                df = fdr.DataReader('USD/KRW', start_date)
+                if not df.empty:
+                    latest = df.iloc[-1]
+                    rate = float(latest['Close'])
+                    logger.info(f"FDR 환율 조회 성공: {rate:.2f} 원")
+                    return rate
+            except Exception as e:
+                logger.warning(f"FDR 환율 조회 실패: {e}, Trying yfinance...")
+
+            # 2. yfinance (Fallback)
             import logging as _logging
             yf_logger = _logging.getLogger('yfinance')
             original_level = yf_logger.level
@@ -560,33 +710,28 @@ class MarketGate:
             
             try:
                 ticker = "USDKRW=X"
-                # [Fix] Ticker() 대신 download(threads=False) 사용
                 hist = yf.download(ticker, period="1d", progress=False, threads=False)
                 
-                # MultiIndex 처리
                 if isinstance(hist.columns, pd.MultiIndex):
                      try:
                         hist = hist['Close']
                      except:
                         hist = hist.xs('Close', axis=1, level=0, drop_level=True) if 'Close' in hist.columns.get_level_values(0) else hist.iloc[:, 0]
                 
-                # Series 변환
                 if isinstance(hist, pd.DataFrame):
                     if ticker in hist.columns:
                         hist = hist[ticker]
                     elif 'Close' in hist.columns:
                         hist = hist['Close']
                     else:
-                        hist = hist.iloc[:, 0] # Fallback to first column
+                        hist = hist.iloc[:, 0]
 
                 if not hist.empty and len(hist) > 0:
-                    # iloc[-1]로 최신값 추출 (Series, DF 모두 호환)
                     val = hist.iloc[-1]
-                    # 값이 Series등으로 나올 경우 스칼라 변환
                     if hasattr(val, 'item'): val = val.item() 
                         
                     rate = float(val)
-                    logger.info(f"현재 환율: {rate:.2f} 원")
+                    logger.info(f"yfinance 환율 조회 성공: {rate:.2f} 원")
                     return rate
             finally:
                 yf_logger.setLevel(original_level)

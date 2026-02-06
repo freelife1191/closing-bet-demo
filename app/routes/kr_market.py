@@ -750,6 +750,18 @@ def get_kr_market_gate():
                gate_data.get('total_score', 50) != 50:
                 is_valid = True
                 
+            # [2026-02-06 Improved] 데이터 최신성 검사 (Staleness Check)
+            # 실시간 요청(target_date is None)인 경우, 저장된 데이터 날짜가 오늘과 다르면 갱신 트리거
+            if not target_date and is_valid:
+                dataset_date = gate_data.get('dataset_date', '')
+                today_str = datetime.now().strftime('%Y-%m-%d')
+                
+                # 주말(토/일)이 아니면 오늘 날짜와 비교
+                if datetime.now().weekday() < 5: 
+                    if dataset_date != today_str:
+                        logger.info(f"[Market Gate] 데이터가 구버전임 ({dataset_date} vs {today_str}). 갱신 필요.")
+                        is_valid = False  # 유효하지 않음으로 처리하여 아래에서 Auto-Update 유도
+                
         if not is_valid and not target_date:
             # 실시간 요청인데 데이터가 부실하면 jongga_v2 스냅샷 확인
             try:
@@ -783,8 +795,9 @@ def get_kr_market_gate():
                         is_market_gate_updating = True
                         from engine.market_gate import MarketGate
                         mg = MarketGate()
-                        mg.analyze()  # Save to JSON automatically
-                        logger.info("[Market Gate] 백그라운드 분석 완료")
+                        result = mg.analyze()
+                        mg.save_analysis(result)  # Explicitly save the result
+                        logger.info("[Market Gate] 백그라운드 분석 및 저장 완료")
                     except Exception as e:
                         logger.error(f"[Market Gate] 백그라운드 분석 실패: {e}")
                     finally:
