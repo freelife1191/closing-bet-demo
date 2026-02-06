@@ -162,7 +162,7 @@ def start_scheduler():
     logger.info(f"Scheduled Closing Analysis at {closing_time}")
     
     # 앱 시작 시 1회 즉시 실행 (데이터 확인용 - 비동기로 실행하여 부팅 지연 방지)
-    threading.Thread(target=run_market_gate_sync, daemon=True).start()
+    # threading.Thread(target=run_market_gate_sync, daemon=True).start()
 
     # 3. Start Loop
     def run_loop():

@@ -69,7 +69,7 @@ def load_csv_file(filename: str) -> pd.DataFrame:
     """CSV 파일 로드"""
     filepath = get_data_path(filename)
     if os.path.exists(filepath):
-        return pd.read_csv(filepath)
+        return pd.read_csv(filepath, low_memory=False)
     return pd.DataFrame()
 
 

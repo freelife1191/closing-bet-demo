@@ -635,7 +635,7 @@ class MarketGate:
         # 1. CSV 로드 시도
         if os.path.exists(filepath):
             try:
-                temp_df = pd.read_csv(filepath)
+                temp_df = pd.read_csv(filepath, dtype={'ticker': str})
                 temp_df['ticker'] = temp_df['ticker'].astype(str).str.zfill(6)
                 df = temp_df[temp_df['ticker'] == self.kodex_ticker].copy()
                 if not df.empty:
