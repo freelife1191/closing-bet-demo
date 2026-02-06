@@ -61,7 +61,14 @@ class NotificationService:
         total_raw_count = len(signals)
         signals = [s for s in signals if str(s.get('grade', 'D')).upper() != 'D']
         filtered_count = total_raw_count - len(signals)
-        
+
+        # [수정] 정렬 로직 추가: 등급순(S->A->B->C) -> 점수순(내림차순)
+        grade_priority = {'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4}
+        signals.sort(key=lambda x: (
+            grade_priority.get(str(x.get('grade', 'D')).upper(), 99),
+            -float(x.get('score', {}).get('total', 0) if isinstance(x.get('score'), dict) else x.get('total_score', 0))
+        ))
+                
         # 등급 분포 계산
         grades = [s.get('grade', 'D') for s in signals]
         grade_counts = Counter(grades)
@@ -92,9 +99,9 @@ class NotificationService:
                 total_score = sig.get('total_score', 0)
             
             # 가격 정보
-            entry_price = sig.get('entry_price', sig.get('buy_price', 0))
-            target_price = sig.get('target_price_1', int(entry_price * 1.05) if entry_price else 0)
-            stop_loss = sig.get('stop_loss', int(entry_price * 0.97) if entry_price else 0)
+            entry_price = int(sig.get('entry_price', sig.get('buy_price', 0)))
+            target_price = int(sig.get('target_price_1', entry_price * 1.05 if entry_price else 0))
+            stop_loss = int(sig.get('stop_loss', entry_price * 0.97 if entry_price else 0))
             
             # 상세 정보 (score_details에서 추출)
             score_details = sig.get('score_details', {})

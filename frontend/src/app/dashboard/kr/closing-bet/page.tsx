@@ -1837,7 +1837,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
                     }>
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-emerald-500 hover:text-emerald-400 transition-colors">매수가</span>
                     </Tooltip>
-                    : <span className="text-emerald-400 font-mono">₩{(signal.buy_price || signal.entry_price || 0).toLocaleString()}</span>
+                    : <span className="text-emerald-400 font-mono">₩{Math.round(signal.buy_price || signal.entry_price || 0).toLocaleString()}</span>
                   </span>
                 </li>
                 <li className="flex items-start gap-1.5">
@@ -1856,7 +1856,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
                     }>
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-amber-500 hover:text-amber-400 transition-colors">목표가</span>
                     </Tooltip>
-                    : <span className="text-amber-400 font-mono">₩{signal.target_price?.toLocaleString()}</span>
+                    : <span className="text-amber-400 font-mono">₩{Math.round(signal.target_price || 0).toLocaleString()}</span>
                   </span>
                 </li>
                 <li className="flex items-start gap-1.5">
@@ -1873,7 +1873,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
                     }>
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-rose-500 hover:text-rose-400 transition-colors">손절가</span>
                     </Tooltip>
-                    : <span className="text-rose-400 font-mono">₩{signal.stop_price?.toLocaleString()}</span>
+                    : <span className="text-rose-400 font-mono">₩{Math.round(signal.stop_price || 0).toLocaleString()}</span>
                   </span>
                 </li>
               </ul>

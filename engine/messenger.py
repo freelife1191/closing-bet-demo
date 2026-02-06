@@ -74,6 +74,14 @@ class Messenger:
     def _generate_message_data(self, result):
         """메시지 데이터 구조 생성"""
         date_str = result.date.strftime('%Y-%m-%d')
+
+        # [수정] 정렬 로직 추가: 등급순(S->A->B->C->D) -> 점수순(내림차순)
+        if result.signals:
+            grade_priority = {'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4}
+            result.signals.sort(key=lambda s: (
+                grade_priority.get(str(getattr(s.grade, 'value', s.grade)).upper(), 99),
+                -float(s.score.total if s.score else 0)
+            ))
         
         # Market Status
         market_stats = result.market_status or {}
@@ -107,9 +115,9 @@ class Messenger:
                 "trading_value": s.trading_value,
                 "f_buy": f_buy,
                 "i_buy": i_buy,
-                "entry": s.entry_price,
-                "target": s.target_price,
-                "stop": s.stop_price,
+                "entry": int(s.entry_price),
+                "target": int(s.target_price),
+                "stop": int(s.stop_price),
                 "ai_reason": ai_reason
             })
             
