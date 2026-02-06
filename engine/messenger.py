@@ -71,6 +71,14 @@ class Messenger:
         except Exception as e:
             logger.error(f"메신저 알림 발송 중 전체 오류: {e}")
 
+    def _get_score_total(self, score_obj):
+        """점수 객체 또는 딕셔너리에서 total 값 안전하게 추출"""
+        if not score_obj:
+            return 0
+        if isinstance(score_obj, dict):
+            return float(score_obj.get('total', 0))
+        return float(getattr(score_obj, 'total', 0))
+
     def _generate_message_data(self, result):
         """메시지 데이터 구조 생성"""
         date_str = result.date.strftime('%Y-%m-%d')
@@ -80,7 +88,7 @@ class Messenger:
             grade_priority = {'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4}
             result.signals.sort(key=lambda s: (
                 grade_priority.get(str(getattr(s.grade, 'value', s.grade)).upper(), 99),
-                -float(s.score.total if s.score else 0)
+                -self._get_score_total(s.score)
             ))
         
         # Market Status
@@ -96,11 +104,17 @@ class Messenger:
             
             # 수급 데이터 (score_details가 있다면 사용, 없으면 0)
             details = s.score_details or {}
-            f_buy = details.get('foreign_buy_5d', 0)
-            i_buy = details.get('inst_buy_5d', 0)
+            # [FIX] 키 이름 불일치 수정 (foreign_buy_5d -> foreign_net_buy)
+            f_buy = details.get('foreign_net_buy', details.get('foreign_buy_5d', 0))
+            i_buy = details.get('inst_net_buy', details.get('inst_buy_5d', 0))
             
             # AI Reason
-            ai_reason = s.score.llm_reason if s.score and s.score.llm_reason else "AI 분석 대기중"
+            ai_reason = "AI 분석 대기중"
+            if s.score:
+                if isinstance(s.score, dict):
+                    ai_reason = s.score.get('llm_reason', ai_reason)
+                else:
+                    ai_reason = getattr(s.score, 'llm_reason', ai_reason)
 
             signals.append({
                 "index": i,
@@ -109,7 +123,7 @@ class Messenger:
                 "market": s.market,
                 "market_icon": market_icon,
                 "grade": grade,
-                "score": s.score.total if s.score else 0,
+                "score": self._get_score_total(s.score),
                 "change_pct": s.change_pct,
                 "volume_ratio": s.volume_ratio or 0.0,
                 "trading_value": s.trading_value,
@@ -131,11 +145,24 @@ class Messenger:
         }
 
     def _format_money(self, val):
-        """금액 포맷팅 (억/만 단위)"""
-        val = int(val)
-        if abs(val) >= 100000000:
-            return f"{val/100000000:+.1f}억"
-        elif abs(val) >= 10000:
+        """금액 포맷팅 (조/억/만 단위)"""
+        try:
+            val_float = float(val)
+            val_int = int(val)
+            # 정수라면 정수형 우선 사용
+            if val_float == val_int:
+                val = val_int
+            else:
+                val = val_float
+        except:
+            return str(val)
+            
+        abs_val = abs(val)
+        if abs_val >= 1000000000000: # 1조 이상
+            return f"{val/1000000000000:+.1f}조"
+        elif abs_val >= 100000000: # 1억 이상
+            return f"{val/100000000:+.0f}억"
+        elif abs_val >= 10000: # 1만 이상
             return f"{val/10000:+.0f}만"
         return f"{val:+}"
 
@@ -167,13 +194,14 @@ class Messenger:
             for s in data['signals']:
                 f_buy_str = self._format_money(s['f_buy'])
                 i_buy_str = self._format_money(s['i_buy'])
-                tv_str = f"{s['trading_value']/100000000:.1f}억"
+                # 거래대금: + 기호 제거
+                tv_str = self._format_money(s['trading_value']).replace('+', '')
                 
                 # 상세 정보
                 # 상세 정보 (가독성을 위해 종목 간 개행 추가)
                 item_text = (
                     f"\n\n{s['index']}. {s['market_icon']} <b>{s['name']} ({s['code']})</b> - {s['grade']}등급 {s['score']}점\n"
-                    f"   📈 상승: {s['change_pct']:+.1f}% | 배수: {s['volume_ratio']:.1f}x | 대금: {tv_str}\n"
+                    f"   📈 상승: {s['change_pct']:+.1f}% | 배수: {s['volume_ratio']:.0f}x | 대금: {tv_str}\n"
                     f"   🏦 외인(5일): {f_buy_str} | 기관(5일): {i_buy_str}\n"
                     f"   💰 진입: ₩{s['entry']:,} | 목표: ₩{s['target']:,} | 손절: ₩{s['stop']:,}\n"
                     f"   🤖 <i>{s['ai_reason'][:60]}...</i>"
@@ -229,12 +257,13 @@ class Messenger:
             for s in data['signals']:
                 f_buy_str = self._format_money(s['f_buy'])
                 i_buy_str = self._format_money(s['i_buy'])
-                tv_str = f"{s['trading_value']/100000000:.1f}억"
+                # 거래대금: + 기호 제거, 조 단위 지원
+                tv_str = self._format_money(s['trading_value']).replace('+', '')
                 
                 # Markdown Format (Telegram HTML 대응)
                 item_text = (
                     f"\n{s['index']}. {s['market_icon']} **{s['name']} ({s['code']})** - {s['grade']}등급 {s['score']}점\n"
-                    f"   📈 상승: {s['change_pct']:+.1f}% | 배수: {s['volume_ratio']:.1f}x | 대금: {tv_str}\n"
+                    f"   📈 상승: {s['change_pct']:+.1f}% | 배수: {s['volume_ratio']:.0f}x | 대금: {tv_str}\n"
                     f"   🏦 외인(5일): {f_buy_str} | 기관(5일): {i_buy_str}\n"
                     f"   💰 진입: {s['entry']:,} | 목표: {s['target']:,} | 손절: {s['stop']:,}\n"
                     f"   🤖 *{s['ai_reason'][:60]}...*"

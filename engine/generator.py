@@ -410,7 +410,7 @@ class SignalGenerator:
                 quantity=position.quantity,
                 r_multiplier=position.r_multiplier,
                 trading_value=stock.trading_value,
-                volume_ratio=score_details.get('volume_ratio', 0.0),
+                volume_ratio=int(score_details.get('volume_ratio', 0.0)),
                 status=SignalStatus.PENDING,
                 created_at=datetime.now(),
                 score_details=score_details,
@@ -665,6 +665,25 @@ def update_single_signal_json(code: str, signal: Signal):
     ]
 
     data["signals"] = updated_signals
+    
+    # [Sort] Grade (S>A>B>C>D) -> Score Descending
+    def sort_key_dict(s):
+        grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+        grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
+        
+        score_obj = s.get('score', 0)
+        if isinstance(score_obj, dict):
+            total_score = score_obj.get('total', 0)
+        else:
+            try:
+                total_score = float(score_obj)
+            except (ValueError, TypeError):
+                total_score = 0
+                
+        return (grade_val, total_score)
+
+    data["signals"].sort(key=sort_key_dict, reverse=True)
+
     data["updated_at"] = datetime.now().isoformat()
 
     # 저장
