@@ -128,7 +128,7 @@ def get_last_trading_date(reference_date=None):
             return last_trading_date_str, last_trading_date
         else:
             # 데이터가 없으면 계산된 날짜 사용
-            log(f"pykrx 데이터 없음, 계산된 날짜 사용: {target_date.strftime('%Y%m%d')}", "WARNING")
+            log(f"pykrx 데이터 없음, 계산된 날짜 사용: {target_date.strftime('%Y%m%d')}", "DEBUG")
             
     except ImportError:
         log("pykrx 미설치 - 주말 처리만 적용", "WARNING")
@@ -488,6 +488,8 @@ def log(message, level="INFO"):
         logging.warning(f"[init_data] {message}")
     elif level == "SUCCESS":
         logging.info(f"[init_data] ✅ {message}")
+    elif level == "DEBUG":
+        logging.debug(f"[init_data] {message}")
     else:
         logging.info(f"[init_data] {message}")
 
@@ -502,7 +504,12 @@ def log(message, level="INFO"):
         print(f"\n{Colors.HEADER}{Colors.BOLD}{'='*60}{Colors.ENDC}", flush=True)
         print(f"{Colors.HEADER}{message}{Colors.ENDC}", flush=True)
         print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}", flush=True)
+    elif level == "DEBUG":
+        pass  # Skip console output for debug
     else:
+        # INFO logs also skipped in console if not important, but keep default behavior for now or strict?
+        # User wants "only errors when there is an error", but some info might be useful.
+        # Let's keep INFO printing but move verbose logs to DEBUG.
         print(f"📌 {message}", flush=True)
 
 
@@ -741,7 +748,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
         force: 강제 업데이트 여부
         lookback_days: 강제 업데이트 시 재수집할 기간 (기본: 5일)
     """
-    log("일별 가격 데이터 수집 중 (Date-based Fast Mode)...")
+    log("일별 가격 데이터 수집 중 (Date-based Fast Mode)...", "DEBUG")
     try:
         from pykrx import stock
         import time
@@ -795,7 +802,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                             log("이미 최신 데이터가 존재하며 충분합니다.", "SUCCESS")
                             return True
                         elif force:
-                             log(f"최신 데이터가 존재하지만 강제 업데이트(force=True)를 진행합니다. (최근 {lookback_days}일)", "WARNING")
+                             log(f"최신 데이터가 존재하지만 강제 업데이트(force=True)를 진행합니다. (최근 {lookback_days}일)", "DEBUG")
                              start_date_obj = end_date_obj - timedelta(days=lookback_days)
                         else:
                             log(f"데이터 날짜는 최신이나 종목 수가 부족합니다({last_date_count}/{total_stocks_count}). 재수집을 시작합니다.", "WARNING")
@@ -843,7 +850,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 if cur_date_fmt in existing_df['date'].values:
                      # 오늘이 아니면 Skip
                     if dt.date() < datetime.now().date():
-                         log(f"  -> {cur_date_fmt} 데이터 존재 (Skip)", "INFO")
+                         log(f"  -> {cur_date_fmt} 데이터 존재 (Skip)", "DEBUG")
                          processed_days += 1
                          continue
                 
@@ -898,7 +905,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 
                 processed_days += 1
                 progress = (processed_days / total_days) * 100
-                log(f"[Daily Prices] {cur_date_fmt} 수집 완료 ({len(df_final)}종목) - {progress:.1f}%", "INFO")
+                log(f"[Daily Prices] {cur_date_fmt} 수집 완료 ({len(df_final)}종목) - {progress:.1f}%", "DEBUG")
                 
                 # Rate Limit 방지
                 time.sleep(random.uniform(0.05, 0.1))
@@ -909,7 +916,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 
         # 병합 및 저장
         if new_data_list:
-            log("데이터 병합 중...", "INFO")
+            log("데이터 병합 중...", "DEBUG")
             new_chunk_df = pd.concat(new_data_list, ignore_index=True)
             
             if not existing_df.empty:
@@ -1020,7 +1027,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
              log("수급 데이터: 이미 최신 상태입니다.", "SUCCESS")
              return True
 
-        log(f"수급 데이터 수집 구간(개선됨): {start_date} ~ {end_date} (Date-based Bulk Fetch)")
+        log(f"수급 데이터 수집 구간(개선됨): {start_date} ~ {end_date} (Date-based Bulk Fetch)", "DEBUG")
         
         # 날짜 루프 시작
         date_range = pd.date_range(start=start_date_obj, end=end_date_obj)
@@ -1047,7 +1054,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
                 if cur_date_fmt in existing_df['date'].values:
                     # 오늘이 아니면 Skip
                     if dt.date() < datetime.now().date():
-                         log(f"  -> {cur_date_fmt} 수급 데이터 존재 (Skip)", "INFO")
+                         log(f"  -> {cur_date_fmt} 수급 데이터 존재 (Skip)", "DEBUG")
                          processed_days += 1
                          continue
             
@@ -1093,9 +1100,9 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
                 
                 if combined_rows:
                     new_data_list.extend(combined_rows)
-                    log(f"[Supply Trend] {cur_date_fmt} 수집 완료 ({len(combined_rows)}종목)", "INFO")
+                    log(f"[Supply Trend] {cur_date_fmt} 수집 완료 ({len(combined_rows)}종목)", "DEBUG")
                 else:
-                    log(f"[Supply Trend] {cur_date_fmt} 데이터 없음 (휴장일?)", "INFO")
+                    log(f"[Supply Trend] {cur_date_fmt} 데이터 없음 (휴장일?)", "DEBUG")
                 
             except Exception as e:
                 log(f"수급 데이터 날짜별 수집 실패 ({cur_date_str}): {e}", "WARNING")
@@ -1104,7 +1111,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
         
         # 결과 저장
         if new_data_list:
-            log("수급 데이터 병합 및 저장 중...", "INFO")
+            log("수급 데이터 병합 및 저장 중...", "DEBUG")
             new_df = pd.DataFrame(new_data_list)
             
             if not existing_df.empty:
@@ -1268,7 +1275,7 @@ def create_signals_log(target_date=None, run_ai=True):
         
         # (중요) 타겟 날짜 기준 데이터 필터링 (Look-ahead Bias 방지 및 시점 정확도 확보)
         if target_date:
-            log(f"[{target_date}] 기준 과거 데이터로 필터링합니다...", "INFO")
+            log(f"[{target_date}] 기준 과거 데이터로 필터링합니다...", "DEBUG")
             prices_df = prices_df[prices_df['date'] <= target_date]
             inst_df = inst_df[inst_df['date'] <= target_date]
         
@@ -1277,7 +1284,7 @@ def create_signals_log(target_date=None, run_ai=True):
         
         analyzed_count = 0
         total_stocks = len(stocks_df)
-        log(f"총 {total_stocks}개 종목에 대한 VCP 분석 시작... (KOSPI+KOSDAQ)", "INFO")
+        log(f"총 {total_stocks}개 종목에 대한 VCP 분석 시작... (KOSPI+KOSDAQ)", "DEBUG")
         
         for _, row in stocks_df.iterrows():
             ticker = str(row['ticker']).zfill(6)

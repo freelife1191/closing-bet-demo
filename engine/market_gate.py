@@ -296,7 +296,7 @@ class MarketGate:
                                     change_pct = 0.0
                                     
                             result['indices'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
-                            logger.info(f"FinanceDataReader fetch success for {key}: {close_val} ({change_pct:.2f}%)")
+                            logger.debug(f"FinanceDataReader fetch success for {key}: {close_val} ({change_pct:.2f}%)")
                             
                         else:
                             raise ValueError("Empty DataFrame from FDR")
@@ -329,7 +329,7 @@ class MarketGate:
                                         change_pct = 0.0
                                         
                                 result['indices'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
-                                logger.info(f"pykrx fetch success for {key}: {close_val} ({change_pct:.2f}%)")
+                                logger.debug(f"pykrx fetch success for {key}: {close_val} ({change_pct:.2f}%)")
                             else:
                                 raise ValueError("Empty DataFrame from pykrx")
                                 
@@ -364,7 +364,7 @@ class MarketGate:
                                 else:
                                     change_pct = 0.0
                                 result['indices'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
-                                logger.info(f"pykrx direct fetch success for {key}: {close_val} ({change_pct:.2f}%)")
+                                logger.debug(f"pykrx direct fetch success for {key}: {close_val} ({change_pct:.2f}%)")
                         except Exception as pe:
                             logger.warning(f"pykrx direct fetch failed for {key}: {pe}")
                             # yfinance fallback
@@ -444,7 +444,7 @@ class MarketGate:
                                     chg = 0.0
                             result['commodities'][key] = {'value': val, 'change_pct': chg}
                             fetch_success = True
-                            logger.info(f"KRX Commodity {key} fetched via pykrx")
+                            logger.debug(f"KRX Commodity {key} fetched via pykrx")
                     except Exception as e:
                         logger.warning(f"pykrx failed for {key}: {e}")
 
@@ -466,7 +466,7 @@ class MarketGate:
                                         chg = 0.0
                                 result['commodities'][key] = {'value': val, 'change_pct': chg}
                                 fetch_success = True
-                                logger.info(f"KRX Commodity {key} fetched via FDR")
+                                logger.debug(f"KRX Commodity {key} fetched via FDR")
                         except Exception as e:
                              logger.warning(f"FDR failed for {key}: {e}")
 
@@ -489,7 +489,7 @@ class MarketGate:
                                 prev_val = float(yf_hist.iloc[-2]) if len(yf_hist) >= 2 else latest_val
                                 yf_chg = ((latest_val - prev_val) / prev_val) * 100 if prev_val > 0 else 0.0
                                 result['commodities'][key] = {'value': latest_val, 'change_pct': yf_chg}
-                                logger.info(f"KRX Commodity {key} fetched via yfinance")
+                                logger.debug(f"KRX Commodity {key} fetched via yfinance")
                             else:
                                 result['commodities'][key] = {'value': 0.0, 'change_pct': 0.0}
                         except Exception as e:
@@ -592,7 +592,7 @@ class MarketGate:
                     kospi_indices = global_data.get('indices', {}).get('kospi', {})
                     if 'change_pct' in kospi_indices:
                         result[name] = kospi_indices['change_pct']
-                        logger.info(f"Sector {name} synchronized with Global Index: {result[name]}%")
+                        logger.debug(f"Sector {name} synchronized with Global Index: {result[name]}%")
                         continue
                 
                 try:
@@ -645,7 +645,7 @@ class MarketGate:
         
         # 2. [Fallback] 데이터가 없으면 pykrx 조회
         if df.empty:
-            logger.info("CSV에 KODEX 200 데이터 없음. pykrx 조회 시도...")
+            logger.debug("CSV에 KODEX 200 데이터 없음. pykrx 조회 시도...")
             try:
                 from pykrx import stock
                 today = datetime.now().strftime("%Y%m%d")
@@ -675,7 +675,7 @@ class MarketGate:
                     req_cols = ['date', 'ticker', 'close']
                     if all(c in pdf.columns for c in req_cols):
                         df = pdf
-                        logger.info(f"pykrx를 통해 KODEX 200 데이터 확보 ({len(df)} rows)")
+                        logger.debug(f"pykrx를 통해 KODEX 200 데이터 확보 ({len(df)} rows)")
             except Exception as e:
                 logger.error(f"pykrx Fallback 실패: {e}")
 
@@ -766,7 +766,7 @@ class MarketGate:
                 if not df.empty:
                     latest = df.iloc[-1]
                     rate = float(latest['Close'])
-                    logger.info(f"FDR 환율 조회 성공: {rate:.2f} 원")
+                    logger.debug(f"FDR 환율 조회 성공: {rate:.2f} 원")
                     return rate
             except Exception as e:
                 logger.warning(f"FDR 환율 조회 실패: {e}, Trying yfinance...")
