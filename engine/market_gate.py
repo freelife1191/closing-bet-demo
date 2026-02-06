@@ -98,7 +98,7 @@ class MarketGate:
 
             # 4. 글로벌 데이터 (지수, 원자재, 크립토)
             global_data = self._get_global_data(target_date)
-            sector_data = self._get_sector_data(target_date)
+            sector_data = self._get_sector_data(target_date, global_data=global_data)
 
             # KOSPI/KOSDAQ 실제 지수 사용 (없으면 ETF 값 Fallback)
             real_kospi = global_data.get('indices', {}).get('kospi', {})
@@ -494,11 +494,11 @@ class MarketGate:
             logger.error(f"Global data processing error: {e}")
             return {}
 
-    def _get_sector_data(self, target_date: str = None) -> dict:
+    def _get_sector_data(self, target_date: str = None, global_data: dict = None) -> dict:
         """주요 섹터 ETF 등락률 수집 (pykrx 사용)"""
         try:
             from pykrx import stock
-            from datetime import datetime
+            from datetime import datetime, timedelta
             import pandas as pd
             
             # 주요 섹터 ETF (KODEX/TIGER)
@@ -515,6 +515,9 @@ class MarketGate:
                 'KOSPI 200': '069500'    # KODEX 200 (지수 대용)
             }
             
+            # [2026-02-06] 실시간 지수 동기화를 위해 전역 지수 데이터 확보
+            # 이 함수는 analyze() 내에서 _get_global_data() 다음에 호출됨이 보장되어야 함
+            
             today = datetime.now().strftime("%Y%m%d")
             # 최근 5일 데이터 조회 (안전하게)
             start_date = (datetime.now() - timedelta(days=5)).strftime("%Y%m%d")
@@ -522,6 +525,16 @@ class MarketGate:
             result = {}
             
             for name, ticker in sectors.items():
+                # KOSPI 200은 _get_global_data에서 이미 FDR 등으로 실시간 수집했을 가능성이 큼
+                if name == 'KOSPI 200' and global_data:
+                    # kospi_close/change가 FDR/yfinance로 수집된 최신 지수임
+                    # _get_global_data에서 'indices' -> 'kospi' 에 저장됨
+                    kospi_indices = global_data.get('indices', {}).get('kospi', {})
+                    if 'change_pct' in kospi_indices:
+                        result[name] = kospi_indices['change_pct']
+                        logger.info(f"Sector {name} synchronized with Global Index: {result[name]}%")
+                        continue
+                
                 try:
                     # pykrx OHLCV 조회
                     df = stock.get_market_ohlcv_by_date(start_date, today, ticker)
@@ -529,28 +542,24 @@ class MarketGate:
                     if df.empty:
                         result[name] = 0.0
                         continue
-                        
+                    
                     latest = df.iloc[-1]
-                    
-                    # 등락률 확인
                     if '등락률' in df.columns:
-                        change_pct = float(latest['등락률'])
+                        result[name] = round(float(latest['등락률']), 2)
                     else:
-                        # 수동 계산
                         if len(df) >= 2:
-                            curr_close = float(latest['종가'])
-                            prev_close = float(df.iloc[-2]['종가'])
-                            change_pct = ((curr_close - prev_close) / prev_close) * 100
+                            prev = float(df.iloc[-2]['종가'])
+                            now = float(latest['종가'])
+                            result[name] = round(((now - prev) / prev) * 100, 2)
                         else:
-                            change_pct = 0.0
+                            result[name] = 0.0
                             
-                    result[name] = round(change_pct, 2)
-                    
                 except Exception as e:
-                    logger.warning(f"Sector data fetch failed ({name}): {e}")
+                    logger.warning(f"Sector {name} fetch failed: {e}")
                     result[name] = 0.0
                     
             return result
+
             
         except Exception as e:
             logger.warning(f"Sector data error: {e}")
