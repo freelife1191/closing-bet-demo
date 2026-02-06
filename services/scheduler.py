@@ -28,6 +28,9 @@ from init_data import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Global lock file reference to prevent GC
+_scheduler_lock_file = None
+
 
 
 
@@ -130,12 +133,13 @@ def start_scheduler():
         return
 
     # 2. Lock File Check (to prevent duplicates in Gunicorn workers)
+    global _scheduler_lock_file
     lock_file_path = os.path.join(os.path.dirname(__file__), 'scheduler.lock')
     try:
         # Create or open the lock file
-        lock_file = open(lock_file_path, 'w')
+        _scheduler_lock_file = open(lock_file_path, 'w')
         # Try to acquire a non-blocking exclusive lock
-        fcntl.lockf(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.lockf(_scheduler_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         # If successful, we are the scheduler instance
         logger.info("Scheduler lock acquired. Starting scheduler service...")
     except IOError:

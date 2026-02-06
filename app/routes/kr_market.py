@@ -622,6 +622,7 @@ def get_kr_ai_analysis():
                             signal_data = {
                                 'ticker': str(sig.get('stock_code', '')).zfill(6),
                                 'name': sig.get('stock_name', ''),
+                                'grade': sig.get('grade'), # Added Grade
                                 'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
                                 'current_price': sig.get('current_price', 0),
                                 'entry_price': sig.get('entry_price', 0),
@@ -635,6 +636,15 @@ def get_kr_ai_analysis():
                             ai_signals.append(signal_data)
                     
                     if ai_signals:
+                        # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                        def sort_key(s):
+                            grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                            grade_val = grade_map.get(s.get('grade'), 0)
+                            score_val = s.get('score', 0)
+                            return (grade_val, score_val)
+
+                        ai_signals.sort(key=sort_key, reverse=True)
+
                         return jsonify({
                             'signals': ai_signals,
                             'generated_at': v2_result.get('updated_at', datetime.now().isoformat()),
@@ -689,6 +699,7 @@ def get_kr_ai_analysis():
                     signal_data = {
                         'ticker': str(sig.get('stock_code', '')).zfill(6),
                         'name': sig.get('stock_name', ''),
+                        'grade': sig.get('grade'), # Added Grade
                         'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
                         'current_price': sig.get('current_price', 0),
                         'entry_price': sig.get('entry_price', 0),
@@ -704,6 +715,15 @@ def get_kr_ai_analysis():
                 
                 # 하나라도 있으면 반환 (AI 분석이 아직 안 된 초기 상태일 수도 있으므로 signals 존재만으로 반환)
                 if ai_signals:
+                    # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                    def sort_key(s):
+                        grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                        grade_val = grade_map.get(s.get('grade'), 0)
+                        score_val = s.get('score', 0)
+                        return (grade_val, score_val)
+
+                    ai_signals.sort(key=sort_key, reverse=True)
+
                     # 날짜 형식 보정 (YYYYMMDD -> YYYY-MM-DD)
                     s_date = latest_data.get('date', '')
                     if len(s_date) == 8 and '-' not in s_date:
