@@ -2213,11 +2213,9 @@ def get_data_status():
 
 @kr_bp.route('/backtest-summary')
 def get_backtest_summary():
-    """백테스팅 결과 요약 (VCP + Closing Bet)"""
+    """백테스팅 결과 요약 (VCP + Closing Bet) - Dynamic Calculation"""
     try:
-        # 1. Closing Bet Stat (from jongga_v2_latest.json)
-        jb_data = load_json_file('jongga_v2_latest.json')
-        
+        # 1. Closing Bet Stat (Dynamic)
         jb_stats = {
             'status': 'Accumulating',
             'count': 0,
@@ -2226,107 +2224,88 @@ def get_backtest_summary():
             'candidates': []
         }
         
-        if jb_data:
-            # 기본 데이터가 있으면 표시 (signals가 0개여도)
-            jb_stats['status'] = 'OK'
-            jb_stats['count'] = len(jb_data.get('signals', []))
+        try:
+            # Load latest for candidates display
+            jb_data = load_json_file('jongga_v2_latest.json')
+            if jb_data and 'signals' in jb_data:
+                 jb_stats['candidates'] = jb_data['signals']
             
-            # [2026-02-03] 데이터가 있으면, 0개여도 과거 통계를 보여주거나 기본값 표시
-            # Mock stats for now or calculate from history if available
-            jb_stats['win_rate'] = 72.5 
-            jb_stats['avg_return'] = 3.2
-            jb_stats['candidates'] = jb_data.get('signals', [])
+            # Calculate stats from history (last 30 days)
+            import glob
+            pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
+            files = sorted(glob.glob(pattern), reverse=True)[:30]
             
-            # 만약 정말 데이터가 없다면 (초기 상태) fallback 시도
-            if jb_stats['count'] == 0:
-                 # 오늘 데이터가 없으면 과거 기록에서 최근 유효 데이터 스캔 (통계용)
+            total_signals = 0
+            wins = 0
+            total_return = 0.0
+            
+            # Load current prices for accurate return calc
+            price_map = {}
+            price_file = get_data_path('daily_prices.csv')
+            if os.path.exists(price_file):
+                df_prices = pd.read_csv(price_file, usecols=['ticker', 'close'], dtype={'ticker': str})
+                df_prices['ticker'] = df_prices['ticker'].str.zfill(6)
+                price_map = df_prices.set_index('ticker')['close'].to_dict()
+
+            processed_tickers = set() # Avoid duplicates if same signal appears multiple times? (Usually daily signals are unique per day)
+            
+            for fpath in files:
                 try:
-                    import glob
-                    pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
-                    files = sorted(glob.glob(pattern), reverse=True)
-                    
-                    found_signals = False
-                    # 최대 7일치 스캔하여 '통계'를 위한 데이터 확인
-                    for file_path in files[:7]:
-                        try:
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                hist_data = json.load(f)
-                                if hist_data and len(hist_data.get('signals', [])) > 0:
-                                    # 과거 데이터 발견 -> 통계 수치 유지 (또는 해당 파일로 대체하고 싶다면 여기서 candidates 교체 가능)
-                                    # 여기서는 '오늘 데이터'는 0개지만, 시스템 상태는 OK임을 보여주기 위함
-                                    found_signals = True
-                                    break
-                        except:
-                            continue
-                            
-                    if found_signals:
-                        jb_stats['status'] = 'OK'
-                        # candidates는 current empty list 유지 (오늘 0개니까)
-                        # 하지만 win_rate 표시는 정당화됨
-                except Exception as e:
-                    logger.warning(f"Backtest History Scan Failed: {e}")
-
-        else:
-             # 파일 아예 없음 -> Fallback 시도 (이전 코드와 동일 logic)
-             # [2026-02-03 추가] 오늘 데이터가 없으면 과거 기록에서 최근 유효 데이터 스캔
-            try:
-                import glob
-                pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
-                files = sorted(glob.glob(pattern), reverse=True)
-                
-                # 최대 7일치 스캔
-                for file_path in files[:7]:
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            hist_data = json.load(f)
-                            if hist_data and len(hist_data.get('signals', [])) > 0:
-                                jb_stats['status'] = 'OK (Past Data)'
-                                jb_stats['count'] = len(hist_data['signals'])
-                                jb_stats['win_rate'] = 72.5 # Mock
-                                jb_stats['avg_return'] = 3.2 # Mock
-                                jb_stats['candidates'] = hist_data['signals']
-                                jb_stats['message'] = f"최근 데이터 ({hist_data.get('date')}) 표시 중"
-                                break
-                    except:
-                        continue
-            except Exception as e:
-                logger.warning(f"Backtest History Scan Failed: {e}")
-
-        # [NEW] 실시간 가격 주입 (Closing Bet Candidates)
-        if jb_stats['candidates']:
-            try:
-                price_file = get_data_path('daily_prices.csv')
-                if os.path.exists(price_file):
-                    # Data Load
-                    df_prices = pd.read_csv(price_file, usecols=['date', 'ticker', 'close'], dtype={'ticker': str, 'close': float})
-                    if not df_prices.empty:
-                        df_latest = df_prices.drop_duplicates(subset=['ticker'], keep='last')
-                        latest_price_map = df_latest.set_index('ticker')['close'].to_dict()
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        d = json.load(f)
+                        signals = d.get('signals', [])
+                        date_str = d.get('date', '')
                         
-                        updated_count = 0
-                        for cand in jb_stats['candidates']:
-                            ticker = str(cand.get('code', '')).zfill(6) # Closing Bet uses 'code' not 'ticker'
-                            if not ticker: ticker = str(cand.get('ticker', '')).zfill(6)
+                        for s in signals:
+                            code = str(s.get('stock_code') or s.get('code') or '').zfill(6)
+                            if not code: continue
                             
-                            if ticker in latest_price_map:
-                                real_price = latest_price_map[ticker]
-                                cand['current_price'] = real_price # Update price
-                                
-                                # 재계산 (진입가 대비)
-                                # Closing Bet entry is usually 'close' of the signal date (yesterday's close for today)
-                                # But if 'entry_price' field exists, use it.
-                                entry_price = cand.get('entry_price') or cand.get('close') # Fallback to signal close
-                                
-                                if entry_price and entry_price > 0:
-                                    ret = ((real_price - entry_price) / entry_price) * 100
-                                    cand['return_pct'] = round(ret, 2)
-                                updated_count += 1
-                        logger.debug(f"[Backtest Summary] Updated prices for {updated_count} candidates")
-            except Exception as e:
-                logger.warning(f"[Backtest Summary] Price injection failed: {e}")
+                            # Entry Price
+                            entry = s.get('entry_price')
+                            if not entry: entry = s.get('close') or s.get('current_price')
+                            
+                            if not entry: continue
+                            
+                            # Current Price (Realtime > File > Signal's Close)
+                            # For stats, we want CURRENT result.
+                            curr = price_map.get(code)
+                            
+                            # If no current price, skip stat calc or use signal's own return?
+                            # Using signal's own return is static at time of generation.
+                            # We prefer current price.
+                            if curr:
+                                ret = ((curr - entry) / entry) * 100
+                                total_signals += 1
+                                total_return += ret
+                                if ret > 0: wins += 1
+                except:
+                    continue
+            
+            if total_signals > 0:
+                jb_stats['status'] = 'OK'
+                jb_stats['count'] = total_signals # Total historical count used for stats
+                jb_stats['win_rate'] = round((wins / total_signals) * 100, 1)
+                jb_stats['avg_return'] = round(total_return / total_signals, 1)
+            else:
+                 # Fallback to mock if absolutely no data (fresh install)
+                 if jb_stats['candidates']:
+                     jb_stats['status'] = 'OK (New)'
+            
+            # Inject prices into candidates (Front display)
+            if jb_stats['candidates'] and price_map:
+                for cand in jb_stats['candidates']:
+                    code = str(cand.get('stock_code') or cand.get('code') or '').zfill(6)
+                    if code in price_map:
+                        cand['current_price'] = price_map[code]
+                        entry = cand.get('entry_price') or cand.get('close')
+                        if entry:
+                             cand['return_pct'] = round(((price_map[code] - entry) / entry) * 100, 2)
 
-        # 2. VCP Stat (from signals_log.csv)
-        vcp_df = load_csv_file('signals_log.csv')
+        except Exception as e:
+            logger.error(f"Closing Bet Stat Calc Failed: {e}")
+            # Keep default empty stats
+
+        # 2. VCP Stat (Dynamic from signals_log.csv)
         vcp_stats = {
             'status': 'Accumulating',
             'count': 0,
@@ -2334,14 +2313,32 @@ def get_backtest_summary():
             'avg_return': 0
         }
         
-        if not vcp_df.empty:
-            vcp_stats['status'] = 'OK'
-            latest_date = vcp_df['signal_date'].max()
-            todays_signals = vcp_df[vcp_df['signal_date'] == latest_date]
-            vcp_stats['count'] = len(todays_signals)
-            # Example mock stats
-            vcp_stats['win_rate'] = 68.4
-            vcp_stats['avg_return'] = 12.5
+        try:
+            vcp_df = load_csv_file('signals_log.csv')
+            if not vcp_df.empty:
+                vcp_stats['status'] = 'OK'
+                
+                # Get all CLOSED signals or OPEN signals with some age?
+                # Usually stats are based on CLOSED signals + OPEN signals current return
+                # Filter valid return_pct
+                if 'return_pct' in vcp_df.columns:
+                    valid_df = vcp_df[vcp_df['return_pct'].notnull()]
+                    
+                    if not valid_df.empty:
+                        total_v = len(valid_df)
+                        wins_v = len(valid_df[valid_df['return_pct'] > 0])
+                        avg_ret_v = valid_df['return_pct'].mean()
+                        
+                        vcp_stats['count'] = total_v
+                        vcp_stats['win_rate'] = round((wins_v / total_v) * 100, 1)
+                        vcp_stats['avg_return'] = round(avg_ret_v, 1)
+                        
+                        # Use latest count for "Today's Signals" count?
+                        # Frontend expects "count" usually as total analyzed or relevant count.
+                        # Let's keep total_v for stats consistency.
+            
+        except Exception as e:
+            logger.error(f"VCP Stat Calc Failed: {e}")
 
         return jsonify({
             'vcp': vcp_stats,

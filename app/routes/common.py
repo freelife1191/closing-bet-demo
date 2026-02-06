@@ -246,10 +246,18 @@ def run_background_update(target_date, selected_items=None, force=False):
             update_item_status('VCP Signals', 'running')
             vcp_df = None
             try:
-                # VCP는 스크립트 함수 호출 대신 기존 로직 활용 (init_data.create_signals_log는 샘플용일 수 있으므로 주의)
-                # init_data.create_signals_log() 대신 kr_market.run_vcp_signals_screener 로직을 사용해야 함.
-                # 하지만 여기서는 간단히 init_data.create_signals_log() 사용 (기존 init-data API도 그랬음)
+                # 1. 시그널 생성 (기존 로직)
                 vcp_df = init_data.create_signals_log(target_date)
+                
+                # 2. [FIX] 기존 열린 시그널 성과 업데이트 (Tracker 연동)
+                try:
+                    from engine.signal_tracker import SignalTracker
+                    tracker = SignalTracker()
+                    tracker.update_open_signals()
+                    logger.info("SignalTracker: Open signals updated")
+                except Exception as tracker_e:
+                    logger.warning(f"SignalTracker update failed (non-critical): {tracker_e}")
+                
                 update_item_status('VCP Signals', 'done')
             except Exception as e:
                 logger.error(f"VCP Signals Failed: {e}")
