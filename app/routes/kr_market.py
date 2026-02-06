@@ -586,20 +586,7 @@ def get_kr_ai_analysis():
             try:
                 date_str = target_date.replace('-', '')
                 
-                # 1-1. 기존 방식 파일 시도
-                analysis = load_json_file(f'kr_ai_analysis_{date_str}.json')
-                if not analysis:
-                    analysis = load_json_file(f'ai_analysis_results_{date_str}.json')
-                    
-                if analysis:
-                    # ticker 6자리 zfill 보정
-                    if 'signals' in analysis:
-                        for sig in analysis['signals']:
-                            if 'ticker' in sig:
-                                sig['ticker'] = str(sig['ticker']).zfill(6)
-                    return jsonify(analysis)
-
-                # 1-2. [New] 통합 결과 파일 시도 (jongga_v2_results_YYYYMMDD.json)
+                # 1-1. [Priority] 통합 결과 파일 시도 (jongga_v2_results_YYYYMMDD.json)
                 v2_result = load_json_file(f'jongga_v2_results_{date_str}.json')
                 if v2_result and 'signals' in v2_result and len(v2_result['signals']) > 0:
                     ai_signals = []
@@ -623,7 +610,7 @@ def get_kr_ai_analysis():
                                 'ticker': str(sig.get('stock_code', '')).zfill(6),
                                 'name': sig.get('stock_name', ''),
                                 'grade': sig.get('grade'), # Added Grade
-                                'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
+                                'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else (sig.get('score') if isinstance(sig.get('score'), (int, float)) else 0),
                                 'current_price': sig.get('current_price', 0),
                                 'entry_price': sig.get('entry_price', 0),
                                 'vcp_score': 0,
@@ -639,7 +626,7 @@ def get_kr_ai_analysis():
                         # [Sort] Grade (S>A>B>C>D) -> Score Descending
                         def sort_key(s):
                             grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
-                            grade_val = grade_map.get(s.get('grade'), 0)
+                            grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
                             score_val = s.get('score', 0)
                             return (grade_val, score_val)
 
@@ -651,6 +638,19 @@ def get_kr_ai_analysis():
                             'signal_date': target_date,
                             'source': 'jongga_v2_integrated_history'
                         })
+
+                # 1-2. 기존 방식 파일 시도 (Legacy Fallback)
+                analysis = load_json_file(f'kr_ai_analysis_{date_str}.json')
+                if not analysis:
+                    analysis = load_json_file(f'ai_analysis_results_{date_str}.json')
+                    
+                if analysis:
+                    # ticker 6자리 zfill 보정
+                    if 'signals' in analysis:
+                        for sig in analysis['signals']:
+                            if 'ticker' in sig:
+                                sig['ticker'] = str(sig['ticker']).zfill(6)
+                    return jsonify(analysis)
 
                 # 파일 없으면 빈 결과 반환
                 return jsonify({
@@ -718,7 +718,7 @@ def get_kr_ai_analysis():
                     # [Sort] Grade (S>A>B>C>D) -> Score Descending
                     def sort_key(s):
                         grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
-                        grade_val = grade_map.get(s.get('grade'), 0)
+                        grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
                         score_val = s.get('score', 0)
                         return (grade_val, score_val)
 
@@ -1206,6 +1206,21 @@ def get_jongga_v2_latest():
             except Exception as e:
                 logger.warning(f"Failed to inject prices for Jongga V2: {e}")
 
+        if data and data.get('signals'):
+            # [Sort] Grade (S>A>B>C>D) -> Score Descending
+            def sort_key(s):
+                grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
+                # Score can be dict (V2) or number (Legacy fallback)
+                score_val = 0
+                if isinstance(s.get('score'), dict):
+                    score_val = s['score'].get('total', 0)
+                else:
+                    score_val = s.get('score', 0)
+                return (grade_val, score_val)
+
+            data['signals'].sort(key=sort_key, reverse=True)
+
         return jsonify(data)
 
     except Exception as e:
@@ -1273,11 +1288,38 @@ def get_jongga_v2_history(target_date):
         
         if os.path.exists(history_file):
             with open(history_file, 'r', encoding='utf-8') as f:
-                return jsonify(json.load(f))
+                data = json.load(f)
+                if data and 'signals' in data:
+                     # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                    def sort_key(s):
+                        grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                        grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
+                        score_val = 0
+                        if isinstance(s.get('score'), dict):
+                            score_val = s['score'].get('total', 0)
+                        else:
+                            score_val = s.get('score', 0)
+                        return (grade_val, score_val)
+                    
+                    data['signals'].sort(key=sort_key, reverse=True)
+                return jsonify(data)
         
         # 최신 파일의 날짜와 같으면 최신 파일 반환
         latest_data = load_json_file('jongga_v2_latest.json')
         if latest_data and latest_data.get('date', '')[:10] == target_date:
+            if latest_data and 'signals' in latest_data:
+                 # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                def sort_key(s):
+                    grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                    grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
+                    score_val = 0
+                    if isinstance(s.get('score'), dict):
+                        score_val = s['score'].get('total', 0)
+                    else:
+                        score_val = s.get('score', 0)
+                    return (grade_val, score_val)
+                
+                latest_data['signals'].sort(key=sort_key, reverse=True)
             return jsonify(latest_data)
         
         return jsonify({

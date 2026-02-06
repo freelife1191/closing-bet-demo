@@ -534,6 +534,19 @@ async def run_screener(
 
         processing_time = (time.time() - start_time) * 1000
 
+        # [Sort] Grade (S>A>B>C>D) -> Score Descending
+        def sort_key_gen(s):
+            # Grade handling (Enum or String)
+            g_val = getattr(s.grade, 'value', s.grade)
+            grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+            grade_score = grade_map.get(str(g_val).strip().upper(), 0)
+            
+            # Score handling
+            total_score = s.score.total if s.score else 0
+            return (grade_score, total_score)
+            
+        signals.sort(key=sort_key_gen, reverse=True)
+
         result = ScreenerResult(
             date=parsed_date if parsed_date else date.today(),
             total_candidates=len(signals),
