@@ -133,7 +133,8 @@ def get_last_trading_date(reference_date=None):
     except ImportError:
         log("pykrx 미설치 - 주말 처리만 적용", "WARNING")
     except Exception as e:
-        log(f"개장일 확인 실패: {e} - 주말 처리만 적용", "WARNING")
+        # 지수명 KeyError 등 pykrx 내부 오류 발생 시 조용히 넘어가고 주말 처리만 적용
+        log(f"개장일 확인 실패 (pykrx): {e}. 기본 주말 처리만 적용합니다.", "DEBUG")
     
     # 폴백: 주말 처리만 된 날짜 반환
     return target_date.strftime('%Y%m%d'), target_date
@@ -878,10 +879,12 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                     if 'index' in df.columns:
                         df = df.rename(columns={'index': 'ticker'})
                 
-                # 필수 컬럼 존재 확인
+                # 필수 컬럼 존재 확인 (한글/영문 대응)
                 rename_map = {
                     '시가': 'open', '고가': 'high', '저가': 'low', 
-                    '종가': 'close', '거래량': 'volume', '거래대금': 'trading_value'
+                    '종가': 'close', '거래량': 'volume', '거래대금': 'trading_value',
+                    'Open': 'open', 'High': 'high', 'Low': 'low', 
+                    'Close': 'close', 'Volume': 'volume', 'Amount': 'trading_value'
                 }
                 
                 # 실제 존재하는 컬럼만 rename

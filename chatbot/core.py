@@ -511,13 +511,13 @@ class KRStockChatbot:
         현재 시장 상황과 데이터, 페르소나를 기반으로 AI 추천 질문 5가지를 생성
         (1시간 캐싱 적용 - 페르소나별 분리)
         """
-        # 0. 캐시 확인
+        # 0. 캐시 확인 (watchlist가 있어도 캐시 키에 포함하여 캐시 적용)
         now = datetime.now()
-        cache_key = f"daily_suggestions_{persona if persona else 'default'}"
+        watchlist_suffix = "_".join(sorted(watchlist)) if watchlist else "empty"
+        cache_key = f"daily_suggestions_{persona if persona else 'default'}_{watchlist_suffix}"
         cached = self.memory.get(cache_key)
         
-        # Watchlist가 있으면 개인화되므로 캐시 무시 (또는 별도 키 사용)
-        if not watchlist and cached:
+        if cached:
             updated_at = datetime.fromisoformat(cached["updated_at"])
             # 1시간 TTL
             if (now - updated_at).total_seconds() < 3600:
@@ -622,14 +622,16 @@ class KRStockChatbot:
             
             suggestions = json.loads(response.text)
             
-            # 4. 캐싱 (개인화 요청이 아닐 경우만)
-            if not watchlist:
-                self.memory.add(cache_key, suggestions)
+            # 4. 캐싱 (개인화된 watchlist가 있어도 캐시 저장)
+            self.memory.add(cache_key, suggestions)
                 
             return suggestions
             
         except Exception as e:
-            logger.error(f"Failed to generate suggestions: {e}")
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                logger.warning(f"Gemini API 할당량 초과 (429 RESOURCE_EXHAUSTED). 기본 추천 질문으로 대체합니다.")
+            else:
+                logger.error(f"Failed to generate suggestions: {e}")
             # Fallback (기본 정적 추천)
             return [
                 { "title": "시장 현황", "prompt": "오늘 마켓게이트 상태와 투자 전략 알려줘", "desc": "마켓게이트 상태와 투자 전략", "icon": "fas fa-chart-pie" },
