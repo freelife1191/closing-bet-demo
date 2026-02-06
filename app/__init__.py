@@ -55,6 +55,11 @@ def create_app():
     # Ensure logs are printed to stdout
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
     
+    # [FIX] Suppress repetitive logs from third-party libraries
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('google_genai').setLevel(logging.WARNING)
+    logging.getLogger('google_genai.models').setLevel(logging.WARNING)
+    
     app = Flask(__name__)
 
     # -------------------------------------------------------------

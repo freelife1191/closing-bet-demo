@@ -324,7 +324,7 @@ class KRStockChatbot:
             try:
                 self.client = genai.Client(api_key=self.api_key)
                 self._init_models()
-                logger.info(f"Gemini initialized for user: {user_id} (KeyLen: {len(self.api_key)})")
+                logger.debug(f"Gemini initialized for user: {user_id} (KeyLen: {len(self.api_key)})")
             except Exception as e:
                 logger.error(f"Gemini initialization failed: {e}")
         else:
@@ -367,7 +367,7 @@ class KRStockChatbot:
                     ticker = row['ticker']
                     self.stock_map[name] = ticker
                     self.ticker_map[ticker] = name
-                logger.info(f"Loaded {len(self.stock_map)} stocks from list")
+                logger.debug(f"Loaded {len(self.stock_map)} stocks from list")
             else:
                 logger.warning("korean_stocks_list.csv not found")
         except Exception as e:

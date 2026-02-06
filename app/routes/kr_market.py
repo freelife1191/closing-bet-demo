@@ -1182,7 +1182,7 @@ def get_jongga_v2_latest():
                                     ret = ((real_price - entry_price) / entry_price) * 100
                                     sig['return_pct'] = round(ret, 2)
                                 updated_count += 1
-                        logger.info(f"[Jongga V2 Latest] Updated prices for {updated_count} signals")
+                        logger.debug(f"[Jongga V2 Latest] Updated prices for {updated_count} signals")
             except Exception as e:
                 logger.warning(f"Failed to inject prices for Jongga V2: {e}")
 
