@@ -733,8 +733,14 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
         return False
 
 
-def create_daily_prices(target_date=None, force=False):
-    """일별 가격 데이터 수집 - pykrx 날짜별 일괄 조회 (속도 최적화)"""
+def create_daily_prices(target_date=None, force=False, lookback_days=5):
+    """
+    일별 가격 데이터 수집 - pykrx 날짜별 일괄 조회 (속도 최적화)
+    Args:
+        target_date: 기준 날짜 (기본: 오늘)
+        force: 강제 업데이트 여부
+        lookback_days: 강제 업데이트 시 재수집할 기간 (기본: 5일)
+    """
     log("일별 가격 데이터 수집 중 (Date-based Fast Mode)...")
     try:
         from pykrx import stock
@@ -789,20 +795,18 @@ def create_daily_prices(target_date=None, force=False):
                             log("이미 최신 데이터가 존재하며 충분합니다.", "SUCCESS")
                             return True
                         elif force:
-                             log("최신 데이터가 존재하지만 강제 업데이트(force=True)를 진행합니다.", "WARNING")
-                             # 강제 시 1일 전부터 다시 수집하도록? 아니면 당일만?
-                             # 보통 당일 재수집을 원할 것이므로 5일 전부터 안전하게 재수집
-                             start_date_obj = end_date_obj - timedelta(days=5)
+                             log(f"최신 데이터가 존재하지만 강제 업데이트(force=True)를 진행합니다. (최근 {lookback_days}일)", "WARNING")
+                             start_date_obj = end_date_obj - timedelta(days=lookback_days)
                         else:
                             log(f"데이터 날짜는 최신이나 종목 수가 부족합니다({last_date_count}/{total_stocks_count}). 재수집을 시작합니다.", "WARNING")
-                            start_date_obj = end_date_obj - timedelta(days=5) # 부족한 경우 최근 5일치 재수집
+                            start_date_obj = end_date_obj - timedelta(days=lookback_days) # 부족한 경우에도 lookback_days 사용
                     else:
                         max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
                         # 마지막 저장일 다음날부터 수집
                         start_date_obj = max_date_dt + timedelta(days=1)
                         if force:
-                             log("강제 업데이트: 기존 데이터 무시하고 최근 5일 재수집", "INFO")
-                             start_date_obj = end_date_obj - timedelta(days=5)
+                             log(f"강제 업데이트: 기존 데이터 무시하고 최근 {lookback_days}일 재수집", "INFO")
+                             start_date_obj = end_date_obj - timedelta(days=lookback_days)
                         else:
                              log(f"기존 데이터 확인: {max_date_str}까지 존재. 이후부터 수집.", "INFO")
                 else:
@@ -832,6 +836,16 @@ def create_daily_prices(target_date=None, force=False):
             if dt.weekday() >= 5: 
                 processed_days += 1
                 continue
+
+            # [Optimization] 이미 수집된 데이터는 건너뛰기 (과거 데이터인 경우만)
+            # 오늘 날짜는 장중 변동 가능하므로 항상 수집
+            if not existing_df.empty and 'date' in existing_df.columns:
+                if cur_date_fmt in existing_df['date'].values:
+                     # 오늘이 아니면 Skip
+                    if dt.date() < datetime.now().date():
+                         log(f"  -> {cur_date_fmt} 데이터 존재 (Skip)", "INFO")
+                         processed_days += 1
+                         continue
                 
             try:
                 # 해당 날짜의 전 종목 시세 조회 (1회 요청)
@@ -922,8 +936,14 @@ def create_daily_prices(target_date=None, force=False):
         return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
 
 
-def create_institutional_trend(target_date=None, force=False):
-    """수급 데이터 수집 - pykrx 기관/외국인 순매매 (Optimized)"""
+def create_institutional_trend(target_date=None, force=False, lookback_days=7):
+    """
+    수급 데이터 수집 - pykrx 기관/외국인 순매매 (Optimized)
+    Args:
+        target_date: 기준 날짜
+        force: 강제 업데이트 여부
+        lookback_days: 강제 업데이트 시 재수집할 기간 (기본: 7일)
+    """
     log("수급 데이터 수집 중 (pykrx 실제 데이터)...")
     try:
         from pykrx import stock
@@ -974,17 +994,16 @@ def create_institutional_trend(target_date=None, force=False):
                             log("수급 데이터: 이미 최신 상태이며 데이터가 충분합니다.", "SUCCESS")
                             return True
                         elif force:
-                             log("수급 데이터: 강제 업데이트 진행 (최근 7일 재수집)", "WARNING")
-                             start_date_obj = end_date_obj - timedelta(days=7)
+                             log(f"수급 데이터: 강제 업데이트 진행 (최근 {lookback_days}일 재수집)", "WARNING")
+                             start_date_obj = end_date_obj - timedelta(days=lookback_days)
 
                     if missing_tickers and not force: # Force일때는 위에서 처리됨
-                        log(f"수급 데이터: 신규 종목 {len(missing_tickers)}개가 감지되었습니다. (최적화: 최근 7일만 재수집)", "WARNING")
-                        # 신규 종목이 있어도 과도한 재수집 방지 (30일 -> 7일)
-                        # VCP에서 주로 5일치(inst_5d)를 사용하므로 7일이면 충분함
-                        start_date_obj = end_date_obj - timedelta(days=7)
+                        log(f"수급 데이터: 신규 종목 {len(missing_tickers)}개가 감지되었습니다. (최적화: 최근 {lookback_days}일만 재수집)", "WARNING")
+                        # 신규 종목이 있어도 과도한 재수집 방지 (30일 -> lookback_days)
+                        start_date_obj = end_date_obj - timedelta(days=lookback_days)
                     elif last_date_tickers < len(tickers_set) * 0.8:
                         log(f"수급 데이터: 최신 날짜 데이터가 부족합니다({last_date_tickers}/{len(tickers_set)}). 재수집합니다.", "WARNING")
-                        start_date_obj = end_date_obj - timedelta(days=5)
+                        start_date_obj = end_date_obj - timedelta(days=lookback_days)     
                     elif not force:
                         # 정상적인 경우 max_date 다음날부터 (Force가 아닐 때만)
                         try:
@@ -1022,6 +1041,15 @@ def create_institutional_trend(target_date=None, force=False):
             if dt.weekday() >= 5:
                 processed_days += 1
                 continue
+            
+            # [Optimization] 이미 수집된 데이터는 건너뛰기 (과거 데이터인 경우만)
+            if not existing_df.empty and 'date' in existing_df.columns:
+                if cur_date_fmt in existing_df['date'].values:
+                    # 오늘이 아니면 Skip
+                    if dt.date() < datetime.now().date():
+                         log(f"  -> {cur_date_fmt} 수급 데이터 존재 (Skip)", "INFO")
+                         processed_days += 1
+                         continue
             
             try:
                 # 1. 외국인 순매수 (전 종목)

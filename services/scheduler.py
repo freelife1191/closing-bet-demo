@@ -92,8 +92,11 @@ def run_market_gate_sync():
         
         # force=True로 최근 데이터(특히 당일) 강제 갱신 유도
         # (주의: 너무 빈번하면 API 제한 걸릴 수 있으나, 30분 주기는 적절함)
-        create_daily_prices(force=True) 
-        create_institutional_trend(force=True)
+        # [Optimization] lookback_days=2 (오늘+어제)만 갱신하여 5~7일치 중복 수집 방지
+        # 이미 수집된 날짜(어제 이전)는 건너뛰고 싶지만, 장중에는 오늘 데이터가 계속 변하므로 force 필요
+        # 단, 과거 데이터까지 force할 필요는 없으므로 2일로 제한
+        create_daily_prices(force=True, lookback_days=2) 
+        create_institutional_trend(force=True, lookback_days=2)
         
         # 2. VCP 시그널 분석 (Smart Money 업데이트 시 제외 요청)
         # 사용자 요청: VCP 시그널, 종가 베팅 데이터는 업데이트 되면 안됨
