@@ -3,6 +3,7 @@ import time
 import schedule
 import threading
 import logging
+import fcntl
 from datetime import datetime
 import sys
 import os
@@ -148,11 +149,17 @@ def start_scheduler():
     schedule.every(interval).minutes.do(run_market_gate_sync).tag('market_gate')
     logger.info(f"Scheduled Market Gate sync every {interval} minutes")
     
-    # 매일 15:20 AI 종가베팅 (장 마감 직전)
-    schedule.every().day.at("15:20").do(run_jongga_v2_analysis)
+    # 스케줄 시간 설정 (환경변수로 커스터마이징 가능)
+    jongga_time = os.getenv('JONGGA_SCHEDULE_TIME', '15:20')
+    closing_time = os.getenv('CLOSING_SCHEDULE_TIME', '15:40')
+    
+    # 매일 AI 종가베팅 (장 마감 직전) - 기본값 15:20
+    schedule.every().day.at(jongga_time).do(run_jongga_v2_analysis)
+    logger.info(f"Scheduled Jongga V2 Analysis at {jongga_time}")
 
-    # 매일 15:40 장 마감 전체 분석
-    schedule.every().day.at("15:40").do(run_daily_closing_analysis)
+    # 매일 장 마감 전체 분석 - 기본값 15:40
+    schedule.every().day.at(closing_time).do(run_daily_closing_analysis)
+    logger.info(f"Scheduled Closing Analysis at {closing_time}")
     
     # 앱 시작 시 1회 즉시 실행 (데이터 확인용 - 비동기로 실행하여 부팅 지연 방지)
     threading.Thread(target=run_market_gate_sync, daemon=True).start()
