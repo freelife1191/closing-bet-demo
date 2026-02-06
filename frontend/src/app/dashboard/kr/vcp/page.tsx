@@ -26,7 +26,7 @@ const SimpleTooltip = ({ text, children, align = 'center' }: { text: string; chi
   return (
     <div className="group relative flex items-center justify-center gap-1 cursor-help">
       {children}
-      <div className={`absolute top-full mt-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-[100] text-center border border-white/10 pointer-events-none ${positionClass}`}>
+      <div className={`absolute top-full mt-2 hidden group-hover:block min-w-[120px] w-max max-w-[180px] p-2 bg-gray-900 text-white text-[10px] rounded shadow-lg z-[100] text-center border border-white/10 pointer-events-none whitespace-normal break-keep ${positionClass}`}>
         {text}
         <div className={`absolute bottom-full border-4 border-transparent border-b-gray-900 ${arrowClass}`}></div>
       </div>
@@ -641,7 +641,7 @@ export default function VCPSignalsPage() {
                   <SimpleTooltip text="기관 5일 연속 순매수 금액">기관 5D</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
-                  Buy
+                  <SimpleTooltip text="클릭하여 모의 투자 계좌로 매수 주문을 실행할 수 있습니다.">Buy</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="VCP(60%) + 수급(40%) 합산 점수 (높을수록 좋음)">Score</SimpleTooltip>
@@ -712,16 +712,17 @@ export default function VCPSignalsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => {
-                          setBuyingStock({ ticker: signal.ticker, name: signal.name, price: signal.current_price || signal.entry_price || 0 });
-                          setIsBuyModalOpen(true);
-                        }}
-                        className="w-8 h-8 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex items-center justify-center"
-                        title="모의 매수"
-                      >
-                        <i className="fas fa-shopping-cart text-xs"></i>
-                      </button>
+                      <SimpleTooltip text="모의 계좌로 매수 주문을 실행합니다.">
+                        <button
+                          onClick={() => {
+                            setBuyingStock({ ticker: signal.ticker, name: signal.name, price: signal.current_price || signal.entry_price || 0 });
+                            setIsBuyModalOpen(true);
+                          }}
+                          className="w-8 h-8 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex items-center justify-center"
+                        >
+                          <i className="fas fa-shopping-cart text-xs"></i>
+                        </button>
+                      </SimpleTooltip>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">

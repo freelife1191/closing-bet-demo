@@ -22,7 +22,7 @@ function Tooltip({ children, content, className = "", position = "top", align = 
   return (
     <span className={`relative group/tooltip inline-flex items-center ${className}`}>
       {children}
-      <div className={`absolute ${alignClass} ${positionClass} w-56 px-3 py-2 bg-gray-900/95 text-gray-200 text-[11px] font-medium rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-50 border border-white/10 shadow-xl backdrop-blur-sm text-center leading-relaxed`}>
+      <div className={`absolute ${alignClass} ${positionClass} min-w-[120px] w-max max-w-[200px] px-3 py-2 bg-gray-900/95 text-gray-200 text-[11px] font-medium rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-[100] border border-white/10 shadow-xl backdrop-blur-sm text-center leading-relaxed whitespace-normal break-keep`}>
         {content}
         <div className={`absolute ${arrowAlignClass} border-4 border-transparent ${arrowClass}`}></div>
       </div>
@@ -414,7 +414,7 @@ export default function KRMarketOverview() {
       {/* Market Gate Section */}
       <section className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Gate Score Card */}
-        <div className="lg:col-span-1 p-6 rounded-2xl bg-[#1c1c1e] border border-white/10 relative overflow-hidden group">
+        <div className="lg:col-span-1 p-6 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-rose-500">
             <i className="fas fa-chart-line text-4xl"></i>
           </div>
@@ -508,7 +508,7 @@ export default function KRMarketOverview() {
       {/* KPI Cards (Performance Overview) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Today's Signals */}
-        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative overflow-hidden group hover:border-rose-500/30 transition-all">
+        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group hover:border-rose-500/30 transition-all">
           <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/10 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2"></div>
           <div className="flex items-center gap-2 mb-1">
             <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Today&apos;s Signals</div>
@@ -523,7 +523,7 @@ export default function KRMarketOverview() {
         </div>
 
         {/* 2. VCP Strategy Performance */}
-        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative overflow-hidden group hover:border-amber-500/30 transition-all">
+        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group hover:border-amber-500/30 transition-all">
           <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2"></div>
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-2 mb-1">
@@ -549,7 +549,7 @@ export default function KRMarketOverview() {
         </div>
 
         {/* 3. Closing Bet Performance */}
-        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative overflow-hidden group hover:border-emerald-500/30 transition-all">
+        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group hover:border-emerald-500/30 transition-all">
           <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2"></div>
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-2 mb-1">
