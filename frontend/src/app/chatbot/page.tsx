@@ -140,42 +140,16 @@ export default function ChatbotPage() {
   // Suggestions State
   const [suggestions, setSuggestions] = useState<SuggestionCard[]>(SUGGESTIONS);
 
+  /* 
+  // [Optimization] 페이지 진입 시 알트(Alt) Gemini API 호출 중단 요청 반영
+  // 사용자가 직접 요청하지 않았는데 불필요하게 Quota를 소모하는 문제 방지
   useEffect(() => {
-    // Initial fetch of dynamic suggestions
     const fetchSuggestions = async () => {
-      try {
-        const savedWatchlist = localStorage.getItem('watchlist');
-        const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
-
-        let url = '/api/kr/chatbot/suggestions';
-        const params = new URLSearchParams();
-
-        if (watchlist.length > 0) {
-          params.append('watchlist', watchlist.join(','));
-        }
-
-        if (userProfile?.persona) {
-          params.append('persona', userProfile.persona);
-        }
-
-        if (Array.from(params).length > 0) {
-          url += `?${params.toString()}`;
-        }
-
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
-            setSuggestions(data.suggestions);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to load dynamic suggestions", e);
-      }
+      // ... (Removed auto-fetch logic) ...
     };
-
-    fetchSuggestions();
+    // fetchSuggestions();
   }, [userProfile?.persona]);
+  */
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
