@@ -1925,6 +1925,7 @@ def send_jongga_v2_message():
             date=res_date,
             total_candidates=file_data.get('total_candidates', 0),
             filtered_count=file_data.get('filtered_count', 0),
+            scanned_count=file_data.get('scanned_count', 0),
             signals=signals,
             by_grade=file_data.get('by_grade', {}),
             by_market=file_data.get('by_market', {}),
