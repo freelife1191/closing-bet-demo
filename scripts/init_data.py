@@ -1544,16 +1544,12 @@ def create_jongga_v2_latest():
     """종가베팅 V2 최신 결과 생성 - Using Central SignalGenerator"""
     log("종가베팅 V2 분석 중 (SignalGenerator)...")
     try:
-        from engine.generator import SignalGenerator
+        from engine.generator import run_screener
         import asyncio
 
-        async def run_analysis():
-            # capital/risk settings are loaded from config inside SignalGenerator
-            async with SignalGenerator() as generator:
-                return await generator.generate()
-
         # Run analysis (Sync wrapper for Async)
-        result = asyncio.run(run_analysis())
+        # run_screener returns ScreenerResult object
+        result = asyncio.run(run_screener())
         
         # Convert to JSON serializable structure
         if result:
@@ -1563,6 +1559,7 @@ def create_jongga_v2_latest():
                 'date': result.date.strftime('%Y-%m-%d'),
                 'total_candidates': result.total_candidates,
                 'filtered_count': result.filtered_count,
+                'scanned_count': getattr(result, 'scanned_count', 0),
                 'signals': signals_json,
                 'by_grade': result.by_grade,
                 'by_market': result.by_market,
@@ -2068,6 +2065,7 @@ def send_jongga_notification():
                     date=res_date,
                     total_candidates=file_data.get('total_candidates', 0),
                     filtered_count=len(signals),
+                    scanned_count=file_data.get('scanned_count', 0),
                     signals=signals,
                     by_grade=by_grade,
                     by_market=by_market,

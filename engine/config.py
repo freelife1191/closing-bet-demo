@@ -131,6 +131,11 @@ class AppConfig:
     @property
     def ANALYSIS_LLM_API_TIMEOUT(self):
         return int(os.getenv("ANALYSIS_LLM_API_TIMEOUT", 120))
+    
+    @property
+    def ANALYSIS_LLM_REQUEST_DELAY(self):
+        """API 호출 간 강제 대기 시간 (초)"""
+        return float(os.getenv("ANALYSIS_LLM_REQUEST_DELAY", 4.0))
 
     # VCP Signals AI Analysis Settings
     @property

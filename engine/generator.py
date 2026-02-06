@@ -262,8 +262,14 @@ class SignalGenerator:
                             print(f"    [LLM Batch] Processing Chunk {chunk_idx}/{total_chunks} ({len(chunk_data)} stocks)...")
                             # chunk_data는 이미 full context dict 리스트임
                             result = await self.llm_analyzer.analyze_news_batch(chunk_data, market_status)
+                            
+                            # Rate Limit 방지를 위한 강제 대기
+                            delay = app_config.ANALYSIS_LLM_REQUEST_DELAY
+                            if delay > 0:
+                                await asyncio.sleep(delay)
+                                
                             elapsed = time.time() - start
-                            print(f"    ✅ Chunk {chunk_idx} Done in {elapsed:.2f}s")
+                            print(f"    ✅ Chunk {chunk_idx} Done in {elapsed:.2f}s (Delay: {delay}s)")
                             return result
                         except Exception as e:
                             print(f"    ⚠️ Chunk {chunk_idx} Error: {e}")
