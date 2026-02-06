@@ -136,14 +136,14 @@ def get_kr_signals():
             else:
                 # [버그수정] 요청 날짜 없으면 '가장 최근 날짜' 데이터만 필터링 (중복/과거 데이터 노출 방지)
                 latest_date = df['signal_date'].max()
-                logger.info(f"Latest date in CSV: {latest_date}")
+                logger.debug(f"Latest date in CSV: {latest_date}")
                 
                 if pd.notna(latest_date):
                     df = df[df['signal_date'].astype(str) == str(latest_date)]
                     # [주의] '실시간' 요청이어도 오늘 데이터가 없으면 가장 최근 데이터를 반환함.
                     # 프론트엔드에서 signal_date와 오늘 날짜를 비교하여 UI 처리 필요.
                     today = str(latest_date)
-                    logger.info(f"Filtered signals for date {latest_date}: {len(df)} rows")
+                    logger.debug(f"Filtered signals for date {latest_date}: {len(df)} rows")
 
         if not df.empty:
             source = 'signals_log.csv'
@@ -250,7 +250,7 @@ def get_kr_signals():
                     latest_price_map = df_latest.set_index('ticker')['close'].to_dict()
                     latest_date_map = df_latest.set_index('ticker')['date'].to_dict()
                     
-                    logger.info(f"Loaded latest prices for {len(latest_price_map)} tickers")
+                    logger.debug(f"Loaded latest prices for {len(latest_price_map)} tickers")
 
                     # Signals 리스트 업데이트
                     for sig in signals:
@@ -296,7 +296,7 @@ def get_kr_signals():
                      ai_json = load_json_file('kr_ai_analysis.json') 
 
                 # Debug Print
-                logger.info(f"AI JSON Loaded: {bool(ai_json)}, Signals in JSON: {len(ai_json.get('signals', [])) if ai_json else 0}")
+                logger.debug(f"AI JSON Loaded: {bool(ai_json)}, Signals in JSON: {len(ai_json.get('signals', [])) if ai_json else 0}")
 
 
                 # 3. Build map
@@ -343,7 +343,7 @@ def get_kr_signals():
                                 s['news'] = ai_item['news']
                                 
                             merged_count += 1
-                    logger.info(f"Merged AI data for {merged_count} signals")
+                    logger.debug(f"Merged AI data for {merged_count} signals")
             except Exception as e:
                 logger.warning(f"Failed to merge AI data into signals: {e}")
 
@@ -2258,7 +2258,7 @@ def get_backtest_summary():
                                     ret = ((real_price - entry_price) / entry_price) * 100
                                     cand['return_pct'] = round(ret, 2)
                                 updated_count += 1
-                        logger.info(f"[Backtest Summary] Updated prices for {updated_count} candidates")
+                        logger.debug(f"[Backtest Summary] Updated prices for {updated_count} candidates")
             except Exception as e:
                 logger.warning(f"[Backtest Summary] Price injection failed: {e}")
 
