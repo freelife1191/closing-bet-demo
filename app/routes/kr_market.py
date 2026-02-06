@@ -1837,11 +1837,9 @@ def send_jongga_v2_message():
         
         signals = []
         for s in file_data.get('signals', []):
-            # ScoreDetail 복원
+            # ScoreDetail 복원 (total 포함)
             sc = s.get('score', {})
-            # property 제거
-            score_kwargs = {k: v for k, v in sc.items() if k != 'total'}
-            score_obj = ScoreDetail(**score_kwargs)
+            score_obj = ScoreDetail(**sc)
             
             # ChecklistDetail 복원
             cl = s.get('checklist', {})

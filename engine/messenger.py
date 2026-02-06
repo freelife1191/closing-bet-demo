@@ -116,6 +116,10 @@ class Messenger:
                 else:
                     ai_reason = getattr(s.score, 'llm_reason', ai_reason)
 
+            # [DEBUG] Log score extraction
+            extracted_score = self._get_score_total(s.score)
+            logger.debug(f"[Messenger] {s.stock_name} - score type: {type(s.score)}, extracted_score: {extracted_score}")
+            
             signals.append({
                 "index": i,
                 "name": s.stock_name,
@@ -123,7 +127,7 @@ class Messenger:
                 "market": s.market,
                 "market_icon": market_icon,
                 "grade": grade,
-                "score": self._get_score_total(s.score),
+                "score": extracted_score,
                 "change_pct": s.change_pct,
                 "volume_ratio": s.volume_ratio or 0.0,
                 "trading_value": s.trading_value,
@@ -290,7 +294,7 @@ class Messenger:
                     # 🤖 AI: 시장 전체가...
                     
                     # Line 1: Name
-                    field_value += f"**{s['index']}. {s['name']}** [{s['market']}] ({s['code']})\n"
+                    field_value += f"**{s['index']}. {s['name']}** [{s['market']}] ({s['code']}) - {s['grade']}등급 **{s['score']}점**\n"
                     
                     # Line 2: Metrics (With Labels)
                     field_value += f"📈 **상승**: `{s['change_pct']:+.1f}%` | 🌊 **배수**: `{s['volume_ratio']:.0f}x` | 💰 **대금**: `{tv_str}`\n"

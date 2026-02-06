@@ -2005,9 +2005,9 @@ def send_jongga_notification():
             if file_data and file_data.get('signals'):
                 # 객체 복원 (Messenger 호환성)
                 signals = []
-                for s in file_data.get('signals', []):
-                    # ScoreDetail 복원
+                for i, s in enumerate(file_data.get('signals', [])):
                     # ScoreDetail 복원 (total 포함)
+                    sc = s.get('score', {})
                     score_obj = ScoreDetail(**sc)
                     
                     # ChecklistDetail 복원
