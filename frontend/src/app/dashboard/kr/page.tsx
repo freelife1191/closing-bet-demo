@@ -276,6 +276,18 @@ export default function KRMarketOverview() {
     return 'text-gray-500';
   };
 
+  /**
+   * Helper: Format number with smart decimals
+   * - Indices/Crypto/Commodities: No decimals (user request), unless value < 10 (e.g. XRP)
+   */
+  const formatFinancialValue = (val: number | undefined) => {
+    if (val === undefined || val === null) return '--';
+    // If value is small (< 10), keep 2 decimals (e.g. XRP $1.26)
+    // Otherwise, integer only (e.g. KOSPI 2500, BTC 60000)
+    const maxDecimals = val < 10 ? 2 : 0;
+    return val.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -615,7 +627,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KOSPI</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.kospi_close?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.kospi_close)}
                 </span>
                 {gateData && (
                   <span className={`text-xs font-bold mb-0.5 ${gateData.kospi_change_pct >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -630,7 +642,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KOSDAQ</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.kosdaq_close?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.kosdaq_close)}
                 </span>
                 {gateData && (
                   <span className={`text-xs font-bold mb-0.5 ${gateData.kosdaq_change_pct >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -645,7 +657,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">S&P 500</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.indices?.sp500?.value?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.indices?.sp500?.value)}
                 </span>
                 {gateData?.indices?.sp500 && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.indices.sp500.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -660,7 +672,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">NASDAQ</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.indices?.nasdaq?.value?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.indices?.nasdaq?.value)}
                 </span>
                 {gateData?.indices?.nasdaq && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.indices.nasdaq.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -690,7 +702,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KRX GOLD</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.commodities?.gold?.value?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.gold?.value)}
                 </span>
                 {gateData?.commodities?.gold && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.gold.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -705,7 +717,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KRX SILVER</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.commodities?.silver?.value?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.silver?.value)}
                 </span>
                 {gateData?.commodities?.silver && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.silver.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -720,7 +732,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">US GOLD (F)</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  ${loading ? '--' : gateData?.commodities?.us_gold?.value?.toLocaleString() ?? '--'}
+                  ${loading ? '--' : formatFinancialValue(gateData?.commodities?.us_gold?.value)}
                 </span>
                 {gateData?.commodities?.us_gold && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.us_gold?.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -735,7 +747,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">US SILVER (F)</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  ${loading ? '--' : gateData?.commodities?.us_silver?.value?.toLocaleString() ?? '--'}
+                  ${loading ? '--' : formatFinancialValue(gateData?.commodities?.us_silver?.value)}
                 </span>
                 {gateData?.commodities?.us_silver && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.us_silver?.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -765,7 +777,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">BITCOIN</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.crypto?.btc?.value?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.crypto?.btc?.value)}
                 </span>
                 {gateData?.crypto?.btc && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.crypto.btc.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -780,7 +792,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">ETHEREUM</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.crypto?.eth?.value?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.crypto?.eth?.value)}
                 </span>
                 {gateData?.crypto?.eth && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.crypto.eth.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
@@ -795,7 +807,7 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">XRP</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : gateData?.crypto?.xrp?.value?.toLocaleString() ?? '--'}
+                  {loading ? '--' : formatFinancialValue(gateData?.crypto?.xrp?.value)}
                 </span>
                 {gateData?.crypto?.xrp && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.crypto.xrp.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
