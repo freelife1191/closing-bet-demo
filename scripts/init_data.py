@@ -1285,6 +1285,7 @@ def create_signals_log(target_date=None, run_ai=True):
                 continue
             
             current_price = ticker_prices['close'].iloc[-1]
+            recent_high = ticker_prices['close'].tail(20).max()
             
             signals.append({
                 'ticker': ticker,
@@ -1294,7 +1295,7 @@ def create_signals_log(target_date=None, run_ai=True):
                 'status': 'OPEN',
                 'score': round(total_score, 1),
                 'contraction_ratio': vcp['contraction_ratio'],
-                'entry_price': int(current_price),
+                'entry_price': int(recent_high),
                 'foreign_5d': supply['foreign_5d'],
                 'inst_5d': supply['inst_5d'],
                 'vcp_score': vcp['score'], # AI 분석용 추가 정보
