@@ -510,7 +510,7 @@ class PaperTradingService:
              t1 = holdings[0]['ticker']
              in_cache = t1 in current_prices
              val = current_prices.get(t1)
-             logger.info(f"Portfolio Valuation: Cache Size={len(current_prices)}, Holdings={len(holdings)}. Sample ({t1}): InCache={in_cache}, Val={val}")
+             logger.debug(f"Portfolio Valuation: Cache Size={len(current_prices)}, Holdings={len(holdings)}. Sample ({t1}): InCache={in_cache}, Val={val}")
 
         for holding in holdings:
             ticker = holding['ticker']
