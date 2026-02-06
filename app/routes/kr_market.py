@@ -225,15 +225,52 @@ def get_kr_signals():
                     'gemini_recommendation': gemini_rec 
                 })
 
-        # VCP 데이터가 없으면 빈 리스트 반환 (사용자 요청: 다른 데이터/샘플 노출 금지)
         if not signals:
             # [Auto-Recovery] 데이터가 없고 실행 중도 아니면 백그라운드 실행
             if not VCP_STATUS['running']:
                 logger.info("[Signals] 데이터 없음. 백그라운드 VCP 스크리너 자동 시작.")
                 import threading
                 threading.Thread(target=_run_vcp_background, args=(None, 50)).start()
-                # Frontend gets empty list but 'is_initializing' flag could be helpful if needed
             pass
+        
+        # [NEW] 실시간 가격 주입 (Scheduler가 갱신한 daily_prices.csv 기반)
+        try:
+            price_file = get_data_path('daily_prices.csv')
+            if os.path.exists(price_file):
+                # 최신 가격 맵 생성 (읽기 최적화)
+                # 날짜, 티커, 종가만 읽음
+                df_prices = pd.read_csv(price_file, usecols=['date', 'ticker', 'close'], dtype={'ticker': str, 'close': float})
+                
+                if not df_prices.empty:
+                    # 날짜 기준 정렬 후 최신값 가져오기 (각 티커별 마지막 행)
+                    # drop_duplicates(keep='last')가 더 빠름 (파일이 날짜순 정렬 가정)
+                    df_latest = df_prices.drop_duplicates(subset=['ticker'], keep='last')
+                    
+                    # Dict 변환 for fast lookup: ticker -> close
+                    latest_price_map = df_latest.set_index('ticker')['close'].to_dict()
+                    latest_date_map = df_latest.set_index('ticker')['date'].to_dict()
+                    
+                    logger.info(f"Loaded latest prices for {len(latest_price_map)} tickers")
+
+                    # Signals 리스트 업데이트
+                    for sig in signals:
+                        ticker = sig.get('ticker')
+                        if ticker in latest_price_map:
+                            real_price = latest_price_map[ticker]
+                            entry_price = sig.get('entry_price')
+                            
+                            # 가격 업데이트
+                            sig['current_price'] = real_price
+                            
+                            # 수익률 재계산
+                            if entry_price and entry_price > 0:
+                                new_return = ((real_price - entry_price) / entry_price) * 100
+                                sig['return_pct'] = round(new_return, 2)
+                                
+                            # (선택) 데이터 기준일 표시가 필요하다면? sig['price_date'] = latest_date_map[ticker]
+        except Exception as e:
+            logger.warning(f"Failed to inject real-time prices: {e}")
+            # 실패해도 기존 signals 반환 (Graceful degradation)
 
         # ===================================================
         # Final Score 기준 정렬 후 Top 20 선정
@@ -864,6 +901,50 @@ def get_kr_market_gate():
         return jsonify({'error': str(e)}), 500
 
 
+@kr_bp.route('/market-gate/update', methods=['POST'])
+def update_kr_market_gate():
+    """Market Gate 및 관련 데이터(Smart Money) 강제 업데이트"""
+    try:
+        data = request.get_json() or {}
+        target_date = data.get('target_date')
+        
+        logger.info(f"[Update] Market Gate 및 Smart Money 데이터 갱신 요청 (Date: {target_date})")
+
+        # 1. [Smart Money] 수급 데이터(기관/외인) 우선 갱신
+        # Market Gate 분석 시 이 데이터가 사용되므로 먼저 실행해야 함
+        from scripts import init_data
+        try:
+             # force=True는 아니지만, create_institutional_trend 내부 로직에 따라 필요한 경우 갱신
+             # 명시적으로 실행하여 최신 상태 보장
+             logger.info("[Update] 수급 데이터(Smart Money) 동기화 시작...")
+             init_data.create_institutional_trend(target_date=target_date, force=True)
+             logger.info("[Update] 수급 데이터 동기화 완료")
+        except Exception as e:
+            logger.error(f"[Update] 수급 데이터 갱신 실패 (무시하고 진행): {e}")
+
+        # 2. [Market Gate] 시장 지표 분석 및 저장
+        from engine.market_gate import MarketGate
+        mg = MarketGate()
+        
+        # 분석 실행
+        result = mg.analyze(target_date=target_date)
+        
+        # 결과 저장
+        saved_path = mg.save_analysis(result, target_date=target_date)
+        
+        logger.info(f"[Update] Market Gate 분석 완료 및 저장: {saved_path}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Market Gate and Smart Money data updated successfully',
+            'data': result
+        })
+
+    except Exception as e:
+        logger.error(f"[Update] Market Gate 갱신 중 오류: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 
 @kr_bp.route('/realtime-prices', methods=['POST'])
 def get_kr_realtime_prices():
@@ -1075,6 +1156,36 @@ def get_jongga_v2_latest():
                 'message': '데이터 분석 중... 잠시만 기다려주세요.'
             })
         
+        # [NEW] 실시간 가격 주입 (Jongga V2)
+        if data and data.get('signals'):
+            try:
+                price_file = get_data_path('daily_prices.csv')
+                if os.path.exists(price_file):
+                    df_prices = pd.read_csv(price_file, usecols=['date', 'ticker', 'close'], dtype={'ticker': str, 'close': float})
+                    if not df_prices.empty:
+                        df_latest = df_prices.drop_duplicates(subset=['ticker'], keep='last')
+                        latest_price_map = df_latest.set_index('ticker')['close'].to_dict()
+                        
+                        updated_count = 0
+                        for sig in data['signals']:
+                            # Jongga uses 'code' primarily
+                            ticker = str(sig.get('code', '')).zfill(6)
+                            if not ticker: ticker = str(sig.get('ticker', '')).zfill(6)
+                            
+                            if ticker in latest_price_map:
+                                real_price = latest_price_map[ticker]
+                                sig['current_price'] = real_price
+                                
+                                # 재계산
+                                entry_price = sig.get('entry_price') or sig.get('close') # Fallback
+                                if entry_price and entry_price > 0:
+                                    ret = ((real_price - entry_price) / entry_price) * 100
+                                    sig['return_pct'] = round(ret, 2)
+                                updated_count += 1
+                        logger.info(f"[Jongga V2 Latest] Updated prices for {updated_count} signals")
+            except Exception as e:
+                logger.warning(f"Failed to inject prices for Jongga V2: {e}")
+
         return jsonify(data)
 
     except Exception as e:
@@ -2117,6 +2228,39 @@ def get_backtest_summary():
                         continue
             except Exception as e:
                 logger.warning(f"Backtest History Scan Failed: {e}")
+
+        # [NEW] 실시간 가격 주입 (Closing Bet Candidates)
+        if jb_stats['candidates']:
+            try:
+                price_file = get_data_path('daily_prices.csv')
+                if os.path.exists(price_file):
+                    # Data Load
+                    df_prices = pd.read_csv(price_file, usecols=['date', 'ticker', 'close'], dtype={'ticker': str, 'close': float})
+                    if not df_prices.empty:
+                        df_latest = df_prices.drop_duplicates(subset=['ticker'], keep='last')
+                        latest_price_map = df_latest.set_index('ticker')['close'].to_dict()
+                        
+                        updated_count = 0
+                        for cand in jb_stats['candidates']:
+                            ticker = str(cand.get('code', '')).zfill(6) # Closing Bet uses 'code' not 'ticker'
+                            if not ticker: ticker = str(cand.get('ticker', '')).zfill(6)
+                            
+                            if ticker in latest_price_map:
+                                real_price = latest_price_map[ticker]
+                                cand['current_price'] = real_price # Update price
+                                
+                                # 재계산 (진입가 대비)
+                                # Closing Bet entry is usually 'close' of the signal date (yesterday's close for today)
+                                # But if 'entry_price' field exists, use it.
+                                entry_price = cand.get('entry_price') or cand.get('close') # Fallback to signal close
+                                
+                                if entry_price and entry_price > 0:
+                                    ret = ((real_price - entry_price) / entry_price) * 100
+                                    cand['return_pct'] = round(ret, 2)
+                                updated_count += 1
+                        logger.info(f"[Backtest Summary] Updated prices for {updated_count} candidates")
+            except Exception as e:
+                logger.warning(f"[Backtest Summary] Price injection failed: {e}")
 
         # 2. VCP Stat (from signals_log.csv)
         vcp_df = load_csv_file('signals_log.csv')

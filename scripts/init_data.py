@@ -985,8 +985,8 @@ def create_institutional_trend(target_date=None, force=False):
                     elif last_date_tickers < len(tickers_set) * 0.8:
                         log(f"수급 데이터: 최신 날짜 데이터가 부족합니다({last_date_tickers}/{len(tickers_set)}). 재수집합니다.", "WARNING")
                         start_date_obj = end_date_obj - timedelta(days=5)
-                    else:
-                        # 정상적인 경우 max_date 다음날부터
+                    elif not force:
+                        # 정상적인 경우 max_date 다음날부터 (Force가 아닐 때만)
                         try:
                             max_date_dt = datetime.strptime(max_date_str, '%Y-%m-%d')
                             start_date_obj = max_date_dt + timedelta(days=1)

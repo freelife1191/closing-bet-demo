@@ -79,14 +79,30 @@ def run_daily_closing_analysis(test_mode=False):
             logger.error(f"[Scheduler] 장 마감 정기 분석 실패: {e}")
 
 def run_market_gate_sync():
-    """주기적 매크로 지표 업데이트 (30분)"""
-    logger.info(">>> [Scheduler] Market Gate 주기적 동기화 시작")
+    """주기적 매크로 지표 및 스마트머니 데이터 업데이트 (30분)"""
+    logger.info(">>> [Scheduler] Market Gate 및 전체 데이터 동기화 시작")
     try:
+        # 1. 기초 데이터 업데이트 (주가 & 수급)
+        # Market Gate와 Smart Money Tracking 페이지의 데이터 일관성을 위해 필수
+        logger.info("[Scheduler] 실시간 주가/수급 데이터 갱신 중...")
+        
+        # force=True로 최근 데이터(특히 당일) 강제 갱신 유도
+        # (주의: 너무 빈번하면 API 제한 걸릴 수 있으나, 30분 주기는 적절함)
+        create_daily_prices(force=True) 
+        create_institutional_trend(force=True)
+        
+        # 2. VCP 시그널 분석 (Smart Money 업데이트 시 제외 요청)
+        # 사용자 요청: VCP 시그널, 종가 베팅 데이터는 업데이트 되면 안됨
+        # logger.info("[Scheduler] 실시간 VCP 시그널 스캔...")
+        # create_signals_log(run_ai=False) 
+
+        # 3. Market Gate 분석
         from engine.market_gate import MarketGate
         mg = MarketGate()
         result = mg.analyze()
         mg.save_analysis(result)
-        logger.info("<<< [Scheduler] Market Gate 주기적 동기화 완료")
+        
+        logger.info("<<< [Scheduler] Market Gate 및 전체 데이터 동기화 완료")
     except Exception as e:
         logger.error(f"[Scheduler] Market Gate 동기화 실패: {e}")
 
