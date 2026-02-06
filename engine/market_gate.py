@@ -259,7 +259,7 @@ class MarketGate:
                 import FinanceDataReader as fdr
                 fdr_available = True
             except ImportError:
-                logger.warning("FinanceDataReader not installed. Using pykrx/yfinance fallback.")
+                logger.debug("FinanceDataReader not installed. Using pykrx/yfinance fallback.")
             
             # Korean Indices (FDR -> pykrx -> yfinance)
             if fdr_available:
@@ -730,7 +730,7 @@ class MarketGate:
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
-            logger.info(f"Market Gate 저장 완료: {filepath}")
+            logger.debug(f"Market Gate 저장 완료: {filepath}")
         except Exception as e:
             logger.error(f"Market Gate 저장 실패: {e}")
             return ""
@@ -769,7 +769,7 @@ class MarketGate:
                     logger.debug(f"FDR 환율 조회 성공: {rate:.2f} 원")
                     return rate
             except Exception as e:
-                logger.warning(f"FDR 환율 조회 실패: {e}, Trying yfinance...")
+                logger.debug(f"FDR 환율 조회 실패: {e}, Trying yfinance...")
 
             # 2. yfinance (Fallback)
             import logging as _logging
@@ -800,7 +800,7 @@ class MarketGate:
                     if hasattr(val, 'item'): val = val.item() 
                         
                     rate = float(val)
-                    logger.info(f"yfinance 환율 조회 성공: {rate:.2f} 원")
+                    logger.debug(f"yfinance 환율 조회 성공: {rate:.2f} 원")
                     return rate
             finally:
                 yf_logger.setLevel(original_level)

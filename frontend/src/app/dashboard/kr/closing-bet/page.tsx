@@ -1642,7 +1642,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
                 </Tooltip>
               </div>
               <div className="text-sm font-bold text-amber-400">
-                {(signal.volume_ratio ?? signal.score_details?.volume_ratio ?? 1).toFixed(1)}x
+                {(signal.volume_ratio ?? signal.score_details?.volume_ratio ?? 1).toFixed(0)}x
               </div>
             </div>
             <div className="text-center">

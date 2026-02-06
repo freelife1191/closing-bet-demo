@@ -99,7 +99,7 @@ def create_app():
         # 항상 초기화 (서버 끄면 스레드도 죽으므로)
         with open(v2_status_file, 'w', encoding='utf-8') as f:
              json.dump({'isRunning': False}, f)
-             print("[Startup] 🧹 Reset v2_screener_status.json")
+             logging.debug("[Startup] 🧹 Reset v2_screener_status.json")
 
     except Exception as e:
         print(f"[Startup] Failed to reset status files: {e}")

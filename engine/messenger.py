@@ -200,7 +200,7 @@ class Messenger:
                 # 상세 정보
                 # 상세 정보 (가독성을 위해 종목 간 개행 추가)
                 item_text = (
-                    f"\n\n{s['index']}. {s['market_icon']} <b>{s['name']} ({s['code']})</b> - {s['grade']}등급 {s['score']}점\n"
+                    f"\n\n{s['index']}. {s['market_icon']} [{s['market']}] <b>{s['name']} ({s['code']})</b> - {s['grade']}등급 {s['score']}점\n"
                     f"   📈 상승: {s['change_pct']:+.1f}% | 배수: {s['volume_ratio']:.0f}x | 대금: {tv_str}\n"
                     f"   🏦 외인(5일): {f_buy_str} | 기관(5일): {i_buy_str}\n"
                     f"   💰 진입: ₩{s['entry']:,} | 목표: ₩{s['target']:,} | 손절: ₩{s['stop']:,}\n"
@@ -242,55 +242,95 @@ class Messenger:
             logger.error(f"Telegram 발송 중 오류: {e}")
 
     def _send_discord(self, data):
-        """디스코드 메시지 발송 (Telegram 포맷과 통일)"""
+        """디스코드 메시지 발송 (Embed Fields 활용, 가독성 개선 + Label 추가 버전)"""
         try:
-            # Header
-            description_lines = [
-                f"{data['gate_info']}",
-                f"{data['summary_title']}",
-                f"{data['summary_desc']}",
-                "-" * 25,
-                "**📋 전체 신호:**"
-            ]
-            
-            # Signals Loop
+            # 1. 등급별로 신호 그룹화
+            grouped_signals = {'S': [], 'A': [], 'B': [], 'C': [], 'D': []}
             for s in data['signals']:
-                f_buy_str = self._format_money(s['f_buy'])
-                i_buy_str = self._format_money(s['i_buy'])
-                # 거래대금: + 기호 제거, 조 단위 지원
-                tv_str = self._format_money(s['trading_value']).replace('+', '')
-                
-                # Markdown Format (Telegram HTML 대응)
-                item_text = (
-                    f"\n{s['index']}. {s['market_icon']} **{s['name']} ({s['code']})** - {s['grade']}등급 {s['score']}점\n"
-                    f"   📈 상승: {s['change_pct']:+.1f}% | 배수: {s['volume_ratio']:.0f}x | 대금: {tv_str}\n"
-                    f"   🏦 외인(5일): {f_buy_str} | 기관(5일): {i_buy_str}\n"
-                    f"   💰 진입: {s['entry']:,} | 목표: {s['target']:,} | 손절: {s['stop']:,}\n"
-                    f"   🤖 *{s['ai_reason'][:60]}...*"
-                )
-                description_lines.append(item_text)
+                grade = str(s['grade']).upper()
+                if grade in grouped_signals:
+                    grouped_signals[grade].append(s)
+                else:
+                    if 'Other' not in grouped_signals: grouped_signals['Other'] = []
+                    grouped_signals['Other'].append(s)
 
-            # 신호가 없을 경우
-            if not data['signals']:
-                description_lines.append("\n🚫 **오늘 조건에 부합하는 추천 종목이 없습니다.**\n내일의 기회를 기다려보세요! 🍀")
-                
-            footer_text = "\n\n⚠️ 투자 참고용이며 손실에 대한 책임은 본인에게 있습니다."
-            
-            # Combine
-            full_description = "\n".join(description_lines) + footer_text
-            
-            # Length Check (Discord Embed Description Limit: 4096)
-            if len(full_description) > 4000:
-                full_description = full_description[:3900] + "\n\n...(내용이 길어 일부 생략됨, 전체 내역은 웹 대시보드 참고)..." + footer_text
+            # 2. Main Embed Description (Summary)
+            main_desc = (
+                f"{data['gate_info']}\n"
+                f"{data['summary_desc']}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━"
+            )
 
-            # Embed Construction
+            fields = []
+
+            # 3. Add Fields per Grade
+            priority_order = ['S', 'A', 'B', 'C', 'D', 'Other']
+            
+            for grade in priority_order:
+                signals = grouped_signals.get(grade, [])
+                if not signals:
+                    continue
+                
+                # Field Title
+                icon_map = {'S': '🏆', 'A': '🥇', 'B': '🥈', 'C': '🥉', 'D': '⚠️', 'Other': '❓'}
+                field_name = f"{icon_map.get(grade, '')} {grade} Grade ({len(signals)})"
+                
+                # Field Value (Signal List)
+                field_value = ""
+                for s in signals:
+                    # 데이터 포맷팅
+                    f_buy_str = self._format_money(s['f_buy'])
+                    i_buy_str = self._format_money(s['i_buy'])
+                    tv_str = self._format_money(s['trading_value']).replace('+', '')
+                    
+                    # [변경] 가독성을 위해 코드블럭 제거, 이모지 활용, 텍스트 라벨 추가
+                    # 1. 한화솔루션 (001230)
+                    # 📈 상승: +15.4% | 🌊 배수: 11x | 💰 대금: 2.2조
+                    # 💵 진입: 42,000 | 🎯 목표: 44,100 | 🛡️ 손절: 40,740
+                    # 🤖 AI: 시장 전체가...
+                    
+                    # Line 1: Name
+                    field_value += f"**{s['index']}. {s['name']}** [{s['market']}] ({s['code']})\n"
+                    
+                    # Line 2: Metrics (With Labels)
+                    field_value += f"📈 **상승**: `{s['change_pct']:+.1f}%` | 🌊 **배수**: `{s['volume_ratio']:.0f}x` | 💰 **대금**: `{tv_str}`\n"
+                    
+                    # Line 3: Price (With Labels)
+                    field_value += f"💵 **진입**: {s['entry']:,} | 🎯 **목표**: {s['target']:,} | 🛡️ **손절**: {s['stop']:,}\n"
+                    
+                    # Line 4: Supply (Optional - only if meaningful)
+                    if s['f_buy'] != 0 or s['i_buy'] != 0:
+                        field_value += f"🏦 **외인**: {f_buy_str} | **기관**: {i_buy_str}\n"
+                    
+                    # Line 5: AI Comment (Italic)
+                    # Limit AI reason length
+                    ai_reason = s['ai_reason']
+                    if len(ai_reason) > 60:
+                        ai_reason = ai_reason[:57] + "..."
+                    field_value += f"🤖 **AI**: *{ai_reason}*\n"
+                    
+                    field_value += "\n" # Spacer
+
+                # Discord Field Value Limit Check
+                if len(field_value) > 1000:
+                    field_value = field_value[:950] + "\n...(생략)..."
+                
+                # [변경] 등급 간 간격 추가를 위한 Spacer Field
+                if fields: # 첫 번째 등급이 아니라면 앞에 공백 추가
+                     fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
+                
+                fields.append({"name": field_name, "value": field_value, "inline": False})
+
+            # 4. Embed Construction
             embed = {
                 "title": data['title'],
-                "description": full_description,
-                "color": 0x00ff00, # Green
-                "footer": {"text": "AI Jongga Bot"}
+                "description": main_desc,
+                "color": 0x00ff00 if data['signals'] else 0x99aab5, 
+                "fields": fields,
+                "footer": {"text": "AI Jongga Bot • 투자 책임은 본인에게 있습니다."}
             }
 
+            # 5. Payload Construction
             payload = {
                 "username": "Closing Bet Bot",
                 "embeds": [embed]
@@ -357,12 +397,12 @@ class Messenger:
             for s in data['signals']:
                 f_buy_str = self._format_money(s['f_buy'])
                 i_buy_str = self._format_money(s['i_buy'])
-                tv_str = f"{s['trading_value']/100000000:.1f}억"
+                tv_str = self._format_money(s['trading_value'])
                 
                 html_body += f"""
                     <div class="signal-item">
                         <div class="signal-header">
-                            {s['index']}. {s['market_icon']} {s['name']} ({s['code']}) 
+                            {s['index']}. {s['market_icon']} [{s['market']}] {s['name']} ({s['code']}) 
                             <span class="grade-badge">{s['grade']}등급 ({s['score']}점)</span>
                         </div>
                         <div class="details">

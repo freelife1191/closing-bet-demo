@@ -84,11 +84,11 @@ def run_daily_closing_analysis(test_mode=False):
 
 def run_market_gate_sync():
     """주기적 매크로 지표 및 스마트머니 데이터 업데이트 (30분)"""
-    logger.info(">>> [Scheduler] Market Gate 및 전체 데이터 동기화 시작")
+    logger.debug(">>> [Scheduler] Market Gate 및 전체 데이터 동기화 시작")
     try:
         # 1. 기초 데이터 업데이트 (주가 & 수급)
         # Market Gate와 Smart Money Tracking 페이지의 데이터 일관성을 위해 필수
-        logger.info("[Scheduler] 실시간 주가/수급 데이터 갱신 중...")
+        logger.debug("[Scheduler] 실시간 주가/수급 데이터 갱신 중...")
         
         # force=True로 최근 데이터(특히 당일) 강제 갱신 유도
         # (주의: 너무 빈번하면 API 제한 걸릴 수 있으나, 30분 주기는 적절함)
@@ -109,7 +109,7 @@ def run_market_gate_sync():
         result = mg.analyze()
         mg.save_analysis(result)
         
-        logger.info("<<< [Scheduler] Market Gate 및 전체 데이터 동기화 완료")
+        logger.debug("<<< [Scheduler] Market Gate 및 전체 데이터 동기화 완료")
     except Exception as e:
         logger.error(f"[Scheduler] Market Gate 동기화 실패: {e}")
 

@@ -124,7 +124,7 @@ def get_last_trading_date(reference_date=None):
             # 마지막 거래일을 가져옴
             last_trading_date = kospi_data.index[-1]
             last_trading_date_str = last_trading_date.strftime('%Y%m%d')
-            log(f"마지막 개장일 확인: {last_trading_date_str}", "SUCCESS")
+            log(f"마지막 개장일 확인: {last_trading_date_str}", "DEBUG")
             return last_trading_date_str, last_trading_date
         else:
             # 데이터가 없으면 계산된 날짜 사용
@@ -812,7 +812,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                         # 마지막 저장일 다음날부터 수집
                         start_date_obj = max_date_dt + timedelta(days=1)
                         if force:
-                             log(f"강제 업데이트: 기존 데이터 무시하고 최근 {lookback_days}일 재수집", "INFO")
+                             log(f"강제 업데이트: 기존 데이터 무시하고 최근 {lookback_days}일 재수집", "DEBUG")
                              start_date_obj = end_date_obj - timedelta(days=lookback_days)
                         else:
                              log(f"기존 데이터 확인: {max_date_str}까지 존재. 이후부터 수집.", "INFO")
@@ -822,7 +822,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 log(f"기존 데이터 로드 오류: {e}", "WARNING")
              
         req_start_date_str = start_date_obj.strftime('%Y%m%d')
-        log(f"수집 구간: {req_start_date_str} ~ {end_date_str}", "INFO")
+        log(f"수집 구간: {req_start_date_str} ~ {end_date_str}", "DEBUG")
 
         # 날짜 리스트 생성
         date_range = pd.date_range(start=start_date_obj, end=end_date_obj)
@@ -927,7 +927,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 
             final_df = final_df.sort_values(['ticker', 'date'])
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
-            log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "SUCCESS")
+            log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "DEBUG")
         else:
              if start_date_obj.date() > end_date_obj.date():
                  log("pykrx 수집 데이터 없음 (이미 최신).", "SUCCESS")
@@ -951,7 +951,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
         force: 강제 업데이트 여부
         lookback_days: 강제 업데이트 시 재수집할 기간 (기본: 7일)
     """
-    log("수급 데이터 수집 중 (pykrx 실제 데이터)...")
+    log("수급 데이터 수집 중 (pykrx 실제 데이터)...", "DEBUG")
     try:
         from pykrx import stock
         
@@ -1123,7 +1123,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             # 정렬
             final_df = final_df.sort_values(['ticker', 'date'])
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
-            log(f"수급 데이터 업데이트 완료: 총 {len(final_df)}행 (신규 {len(new_data_list)}행)", "SUCCESS")
+            log(f"수급 데이터 업데이트 완료: 총 {len(final_df)}행 (신규 {len(new_data_list)}행)", "DEBUG")
             return True
         else:
             log("수급 데이터: 신규 수집된 데이터가 없습니다.", "SUCCESS")
