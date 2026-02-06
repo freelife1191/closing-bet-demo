@@ -93,7 +93,7 @@ def main():
                     
                     # Relaxed check
                     print(f"\n  [Relaxed Check (300억+, 3%+, vol_ratio >= 1.5)]")
-                    relaxed = [r for r in results if r['trading_value_M'] >= 30000 and r['rise_pct'] >= 3.0 and r['volume_ratio'] >= 1.5]
+                    relaxed = [r for r in results if r['trading_value_M'] >= 35000 and r['rise_pct'] >= 3.0 and r['volume_ratio'] >= 1.5]
                     if relaxed:
                         for r in relaxed:
                             print(f"  ⚠️ {r['ticker']}: {r['rise_pct']:.2f}%, {r['trading_value_M']/1000:.0f}억, vol_ratio={r['volume_ratio']:.2f}")

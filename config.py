@@ -190,7 +190,7 @@ SECTORS = {
 class AppConfig:
     """애플리케이션 전체 설정"""
     FLASK_DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    FLASK_PORT = int(os.getenv("FLASK_PORT", 5001))
+    FLASK_PORT = int(os.getenv("FLASK_PORT", 5501))
     FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE = os.getenv("LOG_FILE", "logs/app.log")

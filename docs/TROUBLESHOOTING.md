@@ -20,12 +20,12 @@
 
 ## 서버 오류
 
-### `Port 5001 is already in use`
+### `Port 5501 is already in use`
 - **원인**: 이미 백엔드 서버가 실행 중입니다.
 - **해결**:
   ```bash
   # 포트를 사용하는 프로세스 종료 (macOS/Linux)
-  lsof -ti:5001 | xargs kill -9
+  lsof -ti:5501 | xargs kill -9
   ```
 
 ### `ModuleNotFoundError: No module named ...`
@@ -41,5 +41,5 @@
 ### API가 404를 반환함
 - **원인**: URL 경로가 잘못되었거나 백엔드 라우트 설정 문제.
 - **해결**:
-  - `http://localhost:5001/api/kr/...` 경로가 맞는지 확인.
+  - `http://localhost:5501/api/kr/...` 경로가 맞는지 확인.
   - 브라우저 개발자 도구(F12) > Network 탭에서 요청 URL 확인.

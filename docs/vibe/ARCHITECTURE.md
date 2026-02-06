@@ -226,29 +226,29 @@ closing-bet-demo/
 
 ### 1. 데이터 소스 (Data Sources)
 
-| 소스 | 용도 | 모듈 |
-|------|------|------|
-| **pykrx** | KRX 데이터 (KOSPI/KOSDAQ 종목, 지수, 수급) | `engine/collectors.py` |
-| **yfinance** | 글로벌 데이터 (S&P 500, NASDAQ, 환율, 원자재, 크립토) | `engine/collectors.py` |
-| **네이버 금융** | 종목 뉴스 크롤링 | `engine/collectors.py` |
-| **다음 뉴스** | 추가 뉴스 소스 | `engine/collectors.py` |
+| 소스            | 용도                                                  | 모듈                   |
+| --------------- | ----------------------------------------------------- | ---------------------- |
+| **pykrx**       | KRX 데이터 (KOSPI/KOSDAQ 종목, 지수, 수급)            | `engine/collectors.py` |
+| **yfinance**    | 글로벌 데이터 (S&P 500, NASDAQ, 환율, 원자재, 크립토) | `engine/collectors.py` |
+| **네이버 금융** | 종목 뉴스 크롤링                                      | `engine/collectors.py` |
+| **다음 뉴스**   | 추가 뉴스 소스                                        | `engine/collectors.py` |
 
 ### 2. AI 서비스 (AI Services)
 
-| AI 제공자 | 용도 | 사용 시나리오 | 모델 |
-|------------|------|--------------|------|
-| **Google Gemini** | 심층 추론, 뉴스 맥락 이해, 투자 가설 생성 | VCP 분석, 뉴스 감성, 챗봇 | `gemini-flash-latest` |
-| **Z.ai (GPT 호환)** | 빠른 응답, 크로스 밸리데이션 | 챗봇, 배치 분석 | `gpt-4o` |
-| **Perplexity** | 실시간 웹 검색, 최신 정보 반영 | 뉴스 검색, 팩트 체크 | `sonar-small-online` |
+| AI 제공자           | 용도                                      | 사용 시나리오             | 모델                  |
+| ------------------- | ----------------------------------------- | ------------------------- | --------------------- |
+| **Google Gemini**   | 심층 추론, 뉴스 맥락 이해, 투자 가설 생성 | VCP 분석, 뉴스 감성, 챗봇 | `gemini-flash-latest` |
+| **Z.ai (GPT 호환)** | 빠른 응답, 크로스 밸리데이션              | 챗봇, 배치 분석           | `gpt-4o`              |
+| **Perplexity**      | 실시간 웹 검색, 최신 정보 반영            | 뉴스 검색, 팩트 체크      | `sonar-small-online`  |
 
 ### 3. 알림 서비스 (Notification Services)
 
-| 채널 | 구현 | 설정 |
-|--------|------|------|
-| **Telegram** | Bot API (`sendMessage`, HTML 파싱) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
-| **Discord** | Webhook (Rich Embeds) | `DISCORD_WEBHOOK_URL` |
-| **Slack** | Incoming Webhooks (Markdown) | `SLACK_WEBHOOK_URL` |
-| **Email** | SMTP (HTML) | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` |
+| 채널         | 구현                               | 설정                                      |
+| ------------ | ---------------------------------- | ----------------------------------------- |
+| **Telegram** | Bot API (`sendMessage`, HTML 파싱) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`  |
+| **Discord**  | Webhook (Rich Embeds)              | `DISCORD_WEBHOOK_URL`                     |
+| **Slack**    | Incoming Webhooks (Markdown)       | `SLACK_WEBHOOK_URL`                       |
+| **Email**    | SMTP (HTML)                        | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` |
 
 ---
 
@@ -412,7 +412,7 @@ results = await asyncio.gather(*[analyze_single_stock(item) for item in items])
 ```bash
 # 서버
 FLASK_DEBUG=false
-FLASK_PORT=5001
+FLASK_PORT=5501
 FLASK_HOST=0.0.0.0
 
 # API Keys

@@ -38,7 +38,7 @@ def main():
             "buy_price": 74500,
             "target_price_1": 76800,
             "target_price_2": 78000,
-            "stop_price": 73000,
+            "stop_price": 73500,
             "themes": ["반도체", "HBM", "AI"],
             "news_items": [
                 {"title": "삼성전자, HBM3E 공급 임박설에 강세", "source": "한국경제", "url": "#", "published_at": today},
@@ -59,7 +59,7 @@ def main():
             "grade": "A",
             "total_score": 9,
             "current_price": 142000,
-            "trading_value": 300000000000,
+            "trading_value": 350000000000,
             "change_pct": 1.8,
             "volume_ratio": 1.8,
             "score": {

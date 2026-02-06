@@ -24,8 +24,8 @@ cd frontend && npm install && cd ..
 ### 2. API 키 설정 (.env)
 루트 디렉토리의 `.env` 파일에 API 키를 설정합니다.
 ```env
-FRONTEND_PORT=3000
-FLASK_PORT=5001
+FRONTEND_PORT=3500
+FLASK_PORT=5501
 GOOGLE_API_KEY=your_gemini_key_here
 OPENAI_API_KEY=your_openai_key_here
 PERPLEXITY_API_KEY=your_perplexity_key_here
@@ -53,7 +53,7 @@ MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
   ```bash
   ./stop_all.sh
   ```
-  *(수동 종료 시에는 `lsof -ti :5001,3000 | xargs kill -9` 등을 활용하세요.)*
+  *(수동 종료 시에는 `lsof -ti :5501,3500 | xargs kill -9` 등을 활용하세요.)*
 
 - **로그 확인**:
   ```bash

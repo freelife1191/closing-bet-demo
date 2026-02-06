@@ -102,8 +102,8 @@ npm run dev
 ```
 
 ### 3. 접속
-- 백엔드 API: http://localhost:5001
-- 프론트엔드 대시보드: http://localhost:3000
+- 백엔드 API: http://localhost:5501
+- 프론트엔드 대시보드: http://localhost:3500
 
 ## 📝 주요 기능
 

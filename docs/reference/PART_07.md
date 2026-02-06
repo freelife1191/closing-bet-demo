@@ -189,7 +189,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 # === Server Config ===
 FLASK_DEBUG=true
-FLASK_PORT=5001
+FLASK_PORT=5501
 ```
 
 ### 5.2 Getting API Keys
@@ -301,7 +301,7 @@ cat > .env << 'EOF'
 GOOGLE_API_KEY=your_gemini_key
 OPENAI_API_KEY=your_openai_key
 FLASK_DEBUG=true
-FLASK_PORT=5001
+FLASK_PORT=5501
 EOF
 
 # 5. Create directory structure
@@ -315,12 +315,12 @@ mkdir -p kr_market/data templates
 python flask_app.py
 
 # Production mode (with gunicorn)
-gunicorn -w 4 -b 0.0.0.0:5001 flask_app:app
+gunicorn -w 4 -b 0.0.0.0:5501 flask_app:app
 ```
 
 ### 7.3 Accessing the Dashboard
 
-Open browser: `http://localhost:5001/app`
+Open browser: `http://localhost:5501/app`
 
 ---
 
@@ -398,7 +398,7 @@ max_contraction_ratio: float = 0.8   # Maximum volatility contraction
 | `ModuleNotFoundError: pykrx`    | Missing dependency                  | `pip install pykrx`                                   |
 | API returns empty data          | No signals in CSV                   | Run VCP scanner first                                 |
 | Gemini timeout                  | Rate limiting                       | Wait 1 minute, retry                                  |
-| Port 5001 in use                | Another process                     | Kill process or change port                           |
+| Port 5501 in use                | Another process                     | Kill process or change port                           |
 | `❌ 가격 데이터 파일이 없습니다` | daily_prices.csv 누락               | `python scripts/create_complete_daily_prices.py` 실행 |
 | `❌ 수급 데이터 파일이 없습니다` | institutional data 누락             | `python all_institutional_trend_data.py` 실행         |
 | `signal_tracker` 데이터 못 찾음 | 🔧 **경로 버그 (2026-01-03 수정됨)** | `os.path.dirname()` 제거 - data_dir 직접 사용         |
@@ -450,7 +450,7 @@ Continue to **[BLUEPRINT_02_BACKEND_FLASK_CORE.md](./BLUEPRINT_02_BACKEND_FLASK_
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Next.js Frontend                         │
-│                     (http://localhost:3000)                      │
+│                     (http://localhost:3500)                      │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │
 │  │ VCP 시그널 │ │ 종가베팅  │ │ Market   │ │   Data Status    │   │
 │  │  /vcp    │ │/closing  │ │  Gate    │ │   /data-status   │   │
@@ -460,7 +460,7 @@ Continue to **[BLUEPRINT_02_BACKEND_FLASK_CORE.md](./BLUEPRINT_02_BACKEND_FLASK_
         ▼            ▼            ▼                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Flask API Backend                            │
-│                    (http://localhost:5001)                       │
+│                    (http://localhost:5501)                       │
 │                                                                  │
 │  /api/kr/signals     /api/kr/jongga-v2    /api/kr/market-gate   │
 │  /api/kr/ai-analysis /api/kr/backtest     /api/system/data-status│
@@ -712,13 +712,13 @@ LOG_LEVEL=INFO
 **터미널 1 - Flask:**
 ```bash
 python3 flask_app.py
-# → http://localhost:5001
+# → http://localhost:5501
 ```
 
 **터미널 2 - Next.js:**
 ```bash
 cd frontend && npm run dev
-# → http://localhost:3000
+# → http://localhost:3500
 ```
 
 ---

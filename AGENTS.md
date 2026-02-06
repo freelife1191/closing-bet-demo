@@ -14,7 +14,7 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
 python run.py                    # Interactive menu
-python flask_app.py              # Flask server (port 5001)
+python flask_app.py              # Flask server (port 5501)
 
 pytest                          # Run all tests
 pytest tests/test_vcp.py        # Specific test file
@@ -28,7 +28,7 @@ python scripts/init_data.py     # Initialize data
 ### Next.js Frontend
 ```bash
 cd frontend && npm install
-npm run dev                     # Dev server (port 3000)
+npm run dev                     # Dev server (port 3500)
 npm run build                   # Production build
 npm run start                   # Production server
 npm run lint                    # ESLint
@@ -72,17 +72,17 @@ npm run lint                    # ESLint
 
 ## WHERE TO LOOK
 
-| Task | Location |
-|------|----------|
-| Configuration | `config.py` |
-| Entry Points | `run.py`, `flask_app.py` |
-| Core Engine | `engine/` (screener, models, llm_analyzer, market_gate) |
-| AI Integration | `engine/llm_analyzer.py`, `engine/kr_ai_analyzer.py` |
-| Data Models | `engine/models.py` |
-| Flask Routes | Check Blueprint imports in `flask_app.py` |
-| Testing | `tests/` (pytest) |
-| Frontend | `frontend/src/` (Next.js) |
-| Data Storage | `data/` (CSV/JSON) |
+| Task           | Location                                                |
+| -------------- | ------------------------------------------------------- |
+| Configuration  | `config.py`                                             |
+| Entry Points   | `run.py`, `flask_app.py`                                |
+| Core Engine    | `engine/` (screener, models, llm_analyzer, market_gate) |
+| AI Integration | `engine/llm_analyzer.py`, `engine/kr_ai_analyzer.py`    |
+| Data Models    | `engine/models.py`                                      |
+| Flask Routes   | Check Blueprint imports in `flask_app.py`               |
+| Testing        | `tests/` (pytest)                                       |
+| Frontend       | `frontend/src/` (Next.js)                               |
+| Data Storage   | `data/` (CSV/JSON)                                      |
 
 ## ANTI-PATTERNS
 
@@ -105,7 +105,7 @@ npm run lint                    # ESLint
 
 ```bash
 FLASK_DEBUG=false
-FLASK_PORT=5001
+FLASK_PORT=5501
 FLASK_HOST=0.0.0.0
 LOG_LEVEL=INFO
 
@@ -117,7 +117,7 @@ OPENAI_MODEL=gpt-4o
 
 ## NOTES
 
-- Flask on 5001, Next.js dev on 3000
+- Flask on 5501, Next.js dev on 3500
 - API keys required for AI functionality
 - Logs written to `logs/app.log`
 - Market data sources: pykrx, finance-datareader, yfinance

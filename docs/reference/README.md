@@ -120,7 +120,7 @@ npm install
 npm run dev
 ```
 
-대시보드가 `http://localhost:3000`에서 시작됩니다.
+대시보드가 `http://localhost:3500`에서 시작됩니다.
 
 ### 4. 데이터 수집 (선택)
 

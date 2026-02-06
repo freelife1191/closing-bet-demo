@@ -48,7 +48,7 @@ pip install -r requirements.txt
 ```ini
 # Server Config
 FLASK_DEBUG=true
-FLASK_PORT=5001
+FLASK_PORT=5501
 
 # AI API Keys (선택 사항 - 뉴스 분석용)
 GOOGLE_API_KEY=your_gemini_api_key
@@ -70,7 +70,7 @@ python scripts/init_data.py
 ```bash
 python flask_app.py
 ```
-- 주소: `http://localhost:5001`
+- 주소: `http://localhost:5501`
 
 ### 프론트엔드 (Next.js)
 ```bash
@@ -78,4 +78,4 @@ cd frontend
 npm install
 npm run dev
 ```
-- 주소: `http://localhost:3000`
+- 주소: `http://localhost:3500`

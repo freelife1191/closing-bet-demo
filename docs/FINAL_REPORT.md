@@ -272,7 +272,7 @@ nano .env
 GOOGLE_API_KEY=your_gemini_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 FLASK_DEBUG=true
-FLASK_PORT=5001
+FLASK_PORT=5501
 ```
 
 ### 2단계: 데이터 초기화 (최초 1회만 실행)
@@ -310,15 +310,15 @@ npm run dev
 
 ### 5단계: 접속
 
-- **백엔드 API**: http://localhost:5001
-  - 시장 상태: http://localhost:5001/api/kr/market-status
-  - VCP 시그널: http://localhost:5001/api/kr/signals
-  - AI 분석: http://localhost:5001/api/kr/ai-analysis
-  - 종가베팅 V2: http://localhost:5001/api/kr/jongga-v2/latest
-  - 포트폴리오: http://localhost:5001/api/common/portfolio
-  - 시스템 상태: http://localhost:5001/api/common/system/data-status
+- **백엔드 API**: http://localhost:5501
+  - 시장 상태: http://localhost:5501/api/kr/market-status
+  - VCP 시그널: http://localhost:5501/api/kr/signals
+  - AI 분석: http://localhost:5501/api/kr/ai-analysis
+  - 종가베팅 V2: http://localhost:5501/api/kr/jongga-v2/latest
+  - 포트폴리오: http://localhost:5501/api/common/portfolio
+  - 시스템 상태: http://localhost:5501/api/common/system/data-status
 
-- **프론트엔드 대시보드**: http://localhost:3000
+- **프론트엔드 대시보드**: http://localhost:3500
 
 ---
 
@@ -390,14 +390,14 @@ pip install -r requirements.txt
 
 ## 📊 프로젝트 통계
 
-| 카테고리 | 수량 | 비고 |
-|---------|------|------|
-| **Python 파일** | 15개 | 모듈, 스크립트, 설정 |
-| **JSON 파일** | 5개 | 설정, 데이터, 문서 |
-| **Markdown 파일** | 11개 | 문서, 원본 문서 |
-| **TypeScript 파일** | 3개 | 프론트엔드 |
-| **기타 파일** | 1개 | .gitignore |
-| **총합** | **35개** | |
+| 카테고리            | 수량     | 비고                 |
+| ------------------- | -------- | -------------------- |
+| **Python 파일**     | 15개     | 모듈, 스크립트, 설정 |
+| **JSON 파일**       | 5개      | 설정, 데이터, 문서   |
+| **Markdown 파일**   | 11개     | 문서, 원본 문서      |
+| **TypeScript 파일** | 3개      | 프론트엔드           |
+| **기타 파일**       | 1개      | .gitignore           |
+| **총합**            | **35개** |                      |
 
 ---
 

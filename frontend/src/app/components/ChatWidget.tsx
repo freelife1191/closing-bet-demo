@@ -223,7 +223,7 @@ export default function ChatWidget() {
     if (isLoading) {
       const interval = setInterval(() => {
         setThinkingIndex((prev) => (prev + 1) % THINKING_STEPS.length);
-      }, 3000);
+      }, 3500);
       return () => clearInterval(interval);
     } else {
       setThinkingIndex(0);

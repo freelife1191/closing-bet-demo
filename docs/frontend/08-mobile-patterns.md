@@ -53,13 +53,13 @@ export default function MobileSidebar() {
 
 ### 핵심 클래스
 
-| 클래스 | 설명 |
-|--------|------|
-| `fixed inset-0` | 전체 화면 덮기 |
-| `bg-black/60 backdrop-blur-sm` | 반투명 배경 + 블러 |
-| `z-[59]` | 사이드바(z-[60])보다 아래 |
-| `md:hidden` | 데스크탑에서 숨김 |
-| `transition-opacity` | 페이드 효과 |
+| 클래스                         | 설명                      |
+| ------------------------------ | ------------------------- |
+| `fixed inset-0`                | 전체 화면 덮기            |
+| `bg-black/60 backdrop-blur-sm` | 반투명 배경 + 블러        |
+| `z-[59]`                       | 사이드바(z-[60])보다 아래 |
+| `md:hidden`                    | 데스크탑에서 숨김         |
+| `transition-opacity`           | 페이드 효과               |
 
 ## 2. 햄버거 메뉴 버튼
 
@@ -103,7 +103,7 @@ interface ToastProps {
 
 export default function MobileToast({ message, type, onClose }: ToastProps) {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 3500);
     return () => clearTimeout(timer);
   }, [onClose]);
 
@@ -130,10 +130,10 @@ export default function MobileToast({ message, type, onClose }: ToastProps) {
 
 ### 모바일 vs 데스크탑 위치
 
-| 요소 | 모바일 | 데스크탑 |
-|------|--------|----------|
-| 위치 | `bottom-20 left-4 right-4` | `bottom-8 right-8` |
-| 너비 | 전체 (왼쪽 여백 16px) | 고정 `w-80` (320px) |
+| 요소 | 모바일                     | 데스크탑            |
+| ---- | -------------------------- | ------------------- |
+| 위치 | `bottom-20 left-4 right-4` | `bottom-8 right-8`  |
+| 너비 | 전체 (왼쪽 여백 16px)      | 고정 `w-80` (320px) |
 
 ## 4. 터치 영역 최소 크기
 
@@ -153,11 +153,11 @@ export default function MobileToast({ message, type, onClose }: ToastProps) {
 
 ### 아이콘 버튼 크기 가이드
 
-| 크기 | 클래스 | 용도 |
-|------|--------|------|
-| 작음 | `w-8 h-8` (32px) | 좁은 공간 |
+| 크기 | 클래스             | 용도      |
+| ---- | ------------------ | --------- |
+| 작음 | `w-8 h-8` (32px)   | 좁은 공간 |
 | 기본 | `w-11 h-11` (44px) | 터치 권장 |
-| 큼 | `w-14 h-14` (56px) | 주요 액션 |
+| 큼   | `w-14 h-14` (56px) | 주요 액션 |
 
 ## 5. 모바일 네비게이션 바 (Bottom)
 
@@ -333,12 +333,12 @@ const handleSend = () => {
 
 ## 요약
 
-| 패턴 | 주요 클래스 |
-|------|-------------|
-| 오버레이 | `fixed inset-0 bg-black/60 backdrop-blur-sm` |
-| 햄버거 버튼 | `md:hidden p-2 min-w-[44px]` |
-| 바텀 네비게이션 | `fixed bottom-0 md:hidden` |
-| 터치 영역 | `min-w-[44px] min-h-[44px]` |
-| 가로 스크롤 | `overflow-x-auto snap-x -webkit-overflow-scrolling:touch` |
-| 입력창 | `ref + blur()` |
-| 하단 여유 | `pb-20 md:pb-0` |
+| 패턴            | 주요 클래스                                               |
+| --------------- | --------------------------------------------------------- |
+| 오버레이        | `fixed inset-0 bg-black/60 backdrop-blur-sm`              |
+| 햄버거 버튼     | `md:hidden p-2 min-w-[44px]`                              |
+| 바텀 네비게이션 | `fixed bottom-0 md:hidden`                                |
+| 터치 영역       | `min-w-[44px] min-h-[44px]`                               |
+| 가로 스크롤     | `overflow-x-auto snap-x -webkit-overflow-scrolling:touch` |
+| 입력창          | `ref + blur()`                                            |
+| 하단 여유       | `pb-20 md:pb-0`                                           |

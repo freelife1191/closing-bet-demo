@@ -481,7 +481,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 3500,
     strictPort: false,
     host: true,
   },
@@ -610,5 +610,5 @@ echo "   - Next.js 기반(.next) 폴더는 frontend.bak으로 이동했습니다
 echo "   - 새로운 frontend 폴더는 Vite 기반으로 구성되었습니다."
 echo "   - React Router를 사용하도록 src/pages/ 구조로 변환되었습니다."
 echo "   - 터미널 로그에 'VITE ready in ...'가 뜨는지 확인하세요."
-echo "   - 브라우저 주소: http://localhost:3000"
+echo "   - 브라우저 주소: http://localhost:3500"
 echo ""

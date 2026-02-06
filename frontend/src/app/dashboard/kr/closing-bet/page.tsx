@@ -1421,7 +1421,7 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
     setTimeout(() => {
       clearInterval(interval);
       if (updating) setUpdating(false);
-    }, 300000);
+    }, 350000);
   }, [updating]);
 
   if (!updatedAt && !updating && !analyzingGemini) return <StatBox label="Data Status" value={0} customValue="LOADING..." />;

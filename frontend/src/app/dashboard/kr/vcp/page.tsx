@@ -207,7 +207,7 @@ export default function VCPSignalsPage() {
               await loadSignals();
               await loadMarketGate();
               setScreenerRunning(false);
-              setTimeout(() => setScreenerMessage(null), 3000);
+              setTimeout(() => setScreenerMessage(null), 3500);
             }
           } catch (e) {
             console.error(e);
@@ -515,7 +515,7 @@ export default function VCPSignalsPage() {
 
                       setScreenerMessage('✅ 업데이트 완료!');
                       setScreenerRunning(false);
-                      setTimeout(() => setScreenerMessage(null), 3000);
+                      setTimeout(() => setScreenerMessage(null), 3500);
                     }
                   } catch (err) {
                     console.error("Polling error:", err);

@@ -65,33 +65,33 @@ kr_market_package/
 
 ### 1. 백엔드 핵심 (Python Flask)
 
-| 모듈 | 기능 | 파일 |
-|-------|-------|------|
-| **설정 시스템** | MarketRegime, BacktestConfig, ScreenerConfig, 전역 설정 | `config.py` |
-| **데이터 모델** | StockInfo, Signal, Trade, BacktestResult, MarketStatus | `models.py` |
-| **Flask 팩토리** | Blueprint 구조, CORS, 로깅, 에러 핸들러 | `app/__init__.py` |
-| **VCP 스크리너** | 변동성 수축 패턴 감지, 수급 분석, 점수 계산 | `screener.py` |
-| **AI 분석기** | Gemini + GPT 듀얼 AI 분석, 뉴스 감성 분석 | `kr_ai_analyzer.py` |
+| 모듈             | 기능                                                    | 파일                |
+| ---------------- | ------------------------------------------------------- | ------------------- |
+| **설정 시스템**  | MarketRegime, BacktestConfig, ScreenerConfig, 전역 설정 | `config.py`         |
+| **데이터 모델**  | StockInfo, Signal, Trade, BacktestResult, MarketStatus  | `models.py`         |
+| **Flask 팩토리** | Blueprint 구조, CORS, 로깅, 에러 핸들러                 | `app/__init__.py`   |
+| **VCP 스크리너** | 변동성 수축 패턴 감지, 수급 분석, 점수 계산             | `screener.py`       |
+| **AI 분석기**    | Gemini + GPT 듀얼 AI 분석, 뉴스 감성 분석               | `kr_ai_analyzer.py` |
 
 ### 2. 종가베팅 V2 엔진
 
-| 모듈 | 기능 | 파일 |
-|-------|-------|------|
-| **데이터 모델** | Signal, ScoreDetail, ChecklistDetail, SignalStatus, StockData | `engine/models.py` |
-| **엔진 설정** | SignalConfig, 12점 점수 기준, 자금 관리 설정 | `engine/config.py` |
-| **12점 점수 시스템** | 뉴스(3점), 거래대금(3점), 차트(2점), 캔들(1점), 타이밍(1점), 수급(2점) | `engine/scorer.py` |
-| **자금 관리** | 포지션 크기 계산, 손절/익절 설정, R-Multiplier | `engine/position_sizer.py` |
-| **LLM 분석기** | Gemini API 기반 뉴스 감성 분석, 호재 점수 산출 | `engine/llm_analyzer.py` |
-| **데이터 수집기** | KRXCollector, EnhancedNewsCollector (비동기 처리) | `engine/collectors.py` |
-| **시그널 생성기** | 메인 로직, 종목 분석, 점수 계산, 시그널 생성, JSON 저장 | `engine/generator.py` |
+| 모듈                 | 기능                                                                   | 파일                       |
+| -------------------- | ---------------------------------------------------------------------- | -------------------------- |
+| **데이터 모델**      | Signal, ScoreDetail, ChecklistDetail, SignalStatus, StockData          | `engine/models.py`         |
+| **엔진 설정**        | SignalConfig, 12점 점수 기준, 자금 관리 설정                           | `engine/config.py`         |
+| **12점 점수 시스템** | 뉴스(3점), 거래대금(3점), 차트(2점), 캔들(1점), 타이밍(1점), 수급(2점) | `engine/scorer.py`         |
+| **자금 관리**        | 포지션 크기 계산, 손절/익절 설정, R-Multiplier                         | `engine/position_sizer.py` |
+| **LLM 분석기**       | Gemini API 기반 뉴스 감성 분석, 호재 점수 산출                         | `engine/llm_analyzer.py`   |
+| **데이터 수집기**    | KRXCollector, EnhancedNewsCollector (비동기 처리)                      | `engine/collectors.py`     |
+| **시그널 생성기**    | 메인 로직, 종목 분석, 점수 계산, 시그널 생성, JSON 저장                | `engine/generator.py`      |
 
 ### 3. 프론트엔드 (Next.js + TypeScript)
 
-| 모듈 | 기능 | 파일 |
-|-------|-------|------|
+| 모듈              | 기능                                          | 파일                                                                         |
+| ----------------- | --------------------------------------------- | ---------------------------------------------------------------------------- |
 | **프로젝트 설정** | Node.js 의존성, Next.js 설정, TypeScript 설정 | `frontend/package.json`, `frontend/next.config.js`, `frontend/tsconfig.json` |
-| **스타일링** | Tailwind CSS 설정, 글로벌 스타일 | `frontend/tailwind.config.js`, `frontend/src/app/globals.css` |
-| **기본 페이지** | 루트 레이아웃, 메인 페이지 | `frontend/src/app/layout.tsx`, `frontend/src/app/page.tsx` |
+| **스타일링**      | Tailwind CSS 설정, 글로벌 스타일              | `frontend/tailwind.config.js`, `frontend/src/app/globals.css`                |
+| **기본 페이지**   | 루트 레이아웃, 메인 페이지                    | `frontend/src/app/layout.tsx`, `frontend/src/app/page.tsx`                   |
 
 ---
 
@@ -148,8 +148,8 @@ npm run dev
 
 ### 4단계: 접속
 
-- **백엔드 API**: http://localhost:5001
-- **프론트엔드 대시보드**: http://localhost:3000
+- **백엔드 API**: http://localhost:5501
+- **프론트엔드 대시보드**: http://localhost:3500
 
 ---
 
