@@ -782,7 +782,7 @@ export default function KRMarketOverview() {
                 {gateData?.crypto?.btc && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.crypto.btc.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
                     <i className={`fas fa-caret-${(gateData.crypto.btc.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
-                    {(gateData.crypto.btc.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.crypto.btc.change_pct?.toFixed(1)}%
+                    {(gateData.crypto.btc.change_pct ?? 0) >= 0 ? '+' : ''}{(gateData.crypto.btc.change_pct ?? 0).toFixed(1)}%
                   </span>
                 )}
               </div>
@@ -797,7 +797,7 @@ export default function KRMarketOverview() {
                 {gateData?.crypto?.eth && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.crypto.eth.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
                     <i className={`fas fa-caret-${(gateData.crypto.eth.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
-                    {(gateData.crypto.eth.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.crypto.eth.change_pct?.toFixed(1)}%
+                    {(gateData.crypto.eth.change_pct ?? 0) >= 0 ? '+' : ''}{(gateData.crypto.eth.change_pct ?? 0).toFixed(1)}%
                   </span>
                 )}
               </div>
@@ -812,7 +812,7 @@ export default function KRMarketOverview() {
                 {gateData?.crypto?.xrp && (
                   <span className={`text-xs font-bold mb-0.5 ${(gateData.crypto.xrp.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
                     <i className={`fas fa-caret-${(gateData.crypto.xrp.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
-                    {(gateData.crypto.xrp.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.crypto.xrp.change_pct?.toFixed(1)}%
+                    {(gateData.crypto.xrp.change_pct ?? 0) >= 0 ? '+' : ''}{(gateData.crypto.xrp.change_pct ?? 0).toFixed(1)}%
                   </span>
                 )}
               </div>

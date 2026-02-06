@@ -36,6 +36,14 @@ class MarketGate:
         self.data_dir = data_dir
         self.kodex_ticker = '069500' # KODEX 200
         self.config = MarketGateConfig()
+        
+        # [2026-02-06] KIS 실시간 수급 수집기 초기화
+        try:
+            from .kis_collector import KisCollector
+            self.kis = KisCollector()
+        except ImportError:
+            self.kis = None
+            logger.warning("KisCollector not found. Real-time supply score will be disabled.")
 
     def analyze(self, target_date: str = None) -> Dict[str, Any]:
         """시장 상태 분석 실행 (target_date: YYYY-MM-DD)"""
@@ -506,15 +514,28 @@ class MarketGate:
                                 latest = df.iloc[-1]
                                 close_val = float(latest['Close'])
                                 
-                                if 'Change' in df.columns:
+                                import math
+                                if 'Change' in df.columns and not math.isnan(float(latest['Change'])):
                                     change_pct = float(latest['Change']) * 100
                                 else:
+                                    # Change 컬럼이 없거나 NaN이면 직접 계산
                                     if len(df) >= 2:
                                         prev = float(df.iloc[-2]['Close'])
-                                        change_pct = ((close_val - prev) / prev) * 100
+                                        if prev > 0:
+                                            change_pct = ((close_val - prev) / prev) * 100
+                                        else:
+                                            change_pct = 0.0
                                     else:
                                         change_pct = 0.0
                                 
+                                if math.isnan(change_pct):
+                                    change_pct = 0.0
+
+                                # [2026-02-06 Fix] FDR 데이터 불완전(변동률 0.0) 시 yfinance Fallback 유도
+                                if change_pct == 0.0:
+                                     logger.warning(f"FDR {key} has 0.0% change. Fallback to yfinance recommended.")
+                                     continue
+
                                 result['crypto'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
                         except Exception as e:
                             logger.warning(f"FDR Crypto fetch failed for {key}: {e} (Keeping yfinance value)")
@@ -790,7 +811,22 @@ class MarketGate:
             return 1350.0
 
     def _load_supply_data(self) -> Dict:
-        """최근 수급 데이터 로드"""
+        """최근 수급 데이터 로드 (실시간 KIS 지원)"""
+        # 1. 먼저 KIS 실시간 데이터 시도 (장중 실시간성 확보)
+        if self.kis and os.getenv("KIS_APP_KEY"):
+            try:
+                # KOSPI(0001) 시장 전체 수급 기준
+                kis_data = self.kis.get_market_investor_trend("0001")
+                if kis_data and kis_data.get('foreign_buy') != 0:
+                    logger.info(f"KIS 실시간 수급 데이터 확보: Foreign={kis_data['foreign_buy']}")
+                    return {
+                        "foreign_buy": kis_data['foreign_buy'],
+                        "inst_buy": kis_data['inst_buy']
+                    }
+            except Exception as e:
+                logger.warning(f"KIS 실시간 수급 로드 실패: {e}")
+
+        # 2. Fallback: 기존 CSV 파일 로드
         filepath = os.path.join(self.data_dir, 'all_institutional_trend_data.csv')
         if not os.path.exists(filepath):
             return {}
@@ -803,6 +839,8 @@ class MarketGate:
                 return {}
 
             df = df.sort_values('date')
+            # 069500(KODEX 200) 또는 전체 종목 합산 데이터 활용
+            # 여기서는 파일 구조에 따라 마지막 행 사용
             latest = df.iloc[-1]
             return {
                 "foreign_buy": latest.get('foreign_buy', 0),
