@@ -164,10 +164,10 @@ function TradeTable({ trades }: { trades: Trade[] }) {
               <th className="py-3 px-4 text-right">진입가</th>
               <th className="py-3 px-4 text-center">결과</th>
               <th className="py-3 px-4 text-right">수익률</th>
-              <th className="py-3 px-4 text-center">최고가</th>
-              <th className="py-3 px-4 text-center">가격흐름</th>
-              <th className="py-3 px-4 text-center">보유일</th>
-              <th className="py-3 px-4 text-center">점수</th>
+              <th className="py-3 px-4 text-center whitespace-nowrap">최고가</th>
+              <th className="py-3 px-4 text-center whitespace-nowrap">가격흐름</th>
+              <th className="py-3 px-4 text-center whitespace-nowrap">보유일</th>
+              <th className="py-3 px-4 text-center whitespace-nowrap">점수</th>
               <th className="py-3 px-4">테마</th>
             </tr>
           </thead>

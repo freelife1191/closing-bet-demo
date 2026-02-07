@@ -105,6 +105,7 @@ export default function ChatbotPage() {
   const [userProfile, setUserProfile] = useState<{ name: string; email: string; persona: string } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile Sidebar State
+  const [isMenuExpanded, setIsMenuExpanded] = useState(true); // Menu Parsing State
 
   // Delete Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -648,40 +649,49 @@ export default function ChatbotPage() {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setIsMobileSidebarOpen(false)}></div>
           <div className="relative w-[280px] bg-[#1e1f20] h-full shadow-2xl flex flex-col animate-slide-in-left border-r border-white/10">
             <div className="p-4 flex justify-between items-center border-b border-white/5 bg-[#131314]">
-              <span className="font-bold text-gray-200 text-lg">메뉴</span>
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsMenuExpanded(!isMenuExpanded)}>
+                <span className="font-bold text-gray-200 text-lg">메뉴</span>
+                <i className={`fas fa-chevron-${isMenuExpanded ? 'up' : 'down'} text-xs text-gray-500 transition-transform duration-200`}></i>
+              </div>
               <button onClick={() => setIsMobileSidebarOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
             {/* Navigation Section */}
-            <div className="p-2 space-y-1 border-b border-white/5 bg-[#18181b]">
-              <Link href="/dashboard/kr" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
-                <i className="fas fa-home w-5 text-center text-gray-400"></i>
-                <span>대시보드 홈</span>
-              </Link>
-              <Link href="/dashboard/kr/vcp" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
-                <i className="fas fa-chart-line w-5 text-center text-blue-400"></i>
-                <span>VCP 스크리너</span>
-              </Link>
-              <Link href="/dashboard/kr/closing-bet" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
-                <i className="fas fa-chess-knight w-5 text-center text-purple-400"></i>
-                <span>종가베팅</span>
-              </Link>
-              <Link href="/dashboard/data-status" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
-                <i className="fas fa-database w-5 text-center text-emerald-400"></i>
-                <span>데이터 관리</span>
-              </Link>
-              <button
-                onClick={() => {
-                  setIsPaperTradingOpen(true);
-                  setIsMobileSidebarOpen(false);
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors text-left"
-              >
-                <i className="fas fa-wallet w-5 text-center text-emerald-400"></i>
-                <span>모의투자</span>
-              </button>
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isMenuExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+              <div className="p-2 space-y-1 border-b border-white/5 bg-[#18181b]">
+                <Link href="/dashboard/kr" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                  <i className="fas fa-home w-5 text-center text-gray-400"></i>
+                  <span>대시보드 홈</span>
+                </Link>
+                <Link href="/dashboard/kr/vcp" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                  <i className="fas fa-chart-line w-5 text-center text-blue-400"></i>
+                  <span>VCP 스크리너</span>
+                </Link>
+                <Link href="/dashboard/kr/closing-bet" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                  <i className="fas fa-chess-knight w-5 text-center text-purple-400"></i>
+                  <span>종가베팅</span>
+                </Link>
+                <Link href="/dashboard/kr/cumulative" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                  <i className="fas fa-chart-bar w-5 text-center text-yellow-500"></i>
+                  <span>누적 성과</span>
+                </Link>
+                <Link href="/dashboard/data-status" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                  <i className="fas fa-database w-5 text-center text-emerald-400"></i>
+                  <span>데이터 관리</span>
+                </Link>
+                <button
+                  onClick={() => {
+                    setIsPaperTradingOpen(true);
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors text-left"
+                >
+                  <i className="fas fa-wallet w-5 text-center text-emerald-400"></i>
+                  <span>모의투자</span>
+                </button>
+              </div>
             </div>
 
             <div className="p-4 flex-shrink-0">
