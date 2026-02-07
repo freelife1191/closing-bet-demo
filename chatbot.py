@@ -14,18 +14,21 @@ class HistoryManager:
     def __init__(self):
         self.sessions = {} # {session_id: {created_at, messages: [], model: str}}
 
-    def create_session(self, model_name: str = None) -> str:
+    def create_session(self, model_name: str = None, owner_id: str = None) -> str:
         session_id = str(uuid.uuid4())
         self.sessions[session_id] = {
             'created_at': datetime.now().isoformat(),
             'messages': [],
-            'model': model_name or app_config.GEMINI_MODEL
+            'model': model_name or app_config.GEMINI_MODEL,
+            'owner_id': owner_id  # [Fix] Session Ownership
         }
         return session_id
 
-    def get_all_sessions(self) -> List[Dict]:
+    def get_all_sessions(self, owner_id: str = None) -> List[Dict]:
+        # [Fix] Filter by owner_id
         return [
             {'id': k, **v} for k, v in self.sessions.items()
+            if v.get('owner_id') == owner_id or (not v.get('owner_id') and not owner_id)
         ]
 
     def get_messages(self, session_id: str) -> List[Dict]:
@@ -88,10 +91,25 @@ class Chatbot:
         self.user_profile["persona"] = persona
         return self.user_profile
 
-    def chat(self, message: str, session_id: str = None, model: str = None, files=None, watchlist=None, persona=None, api_key: str = None) -> Any:
+    def chat(self, message: str, session_id: str = None, model: str = None, files=None, watchlist=None, persona=None, api_key: str = None, owner_id: str = None) -> Any:
         # Session handling
         if not session_id or session_id not in self.history.sessions:
-            session_id = self.history.create_session(model)
+            session_id = self.history.create_session(model, owner_id=owner_id)
+        
+        # [Security] Verify ownership if accessing existing session
+        if session_id in self.history.sessions:
+            session_owner = self.history.sessions[session_id].get('owner_id')
+            if session_owner and session_owner != owner_id:
+                # If searching for owner-mismatch, we can either error or create new.
+                # Here we'll treat as authorized for simplicity or just log warning?
+                # Ideally, we should block.
+                # For now, let's just log and proceed (or maybe we force create new?)
+                # Actually, blocking is safer.
+                if owner_id: # Only block if we know who the requester is
+                     logger.warning(f"Session access denied. SessionOwner: {session_owner}, Requester: {owner_id}")
+                     # Return error or just create new session?
+                     # Let's create new session to avoid error loop
+                     session_id = self.history.create_session(model, owner_id=owner_id)
         
         # User message history
         self.history.add_message(session_id, 'user', message)

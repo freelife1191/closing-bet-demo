@@ -251,8 +251,9 @@ export default function KRMarketOverview() {
   };
 
   const getSectorColor = (signal: string) => {
-    if (signal === 'bullish') return 'bg-green-500/20 text-green-400 border-green-500/30';
-    if (signal === 'bearish') return 'bg-red-500/20 text-red-400 border-red-500/30';
+    const s = signal?.toLowerCase();
+    if (s === 'bullish') return 'bg-green-500/20 text-green-400 border-green-500/30';
+    if (s === 'bearish') return 'bg-red-500/20 text-red-400 border-red-500/30';
     return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
   };
 
@@ -262,14 +263,14 @@ export default function KRMarketOverview() {
 
   const getGateStatusColor = (status: string, score?: number) => {
     const s = status?.toUpperCase();
-    if (s === 'GREEN' || s === 'BULLISH') return 'text-green-500';
-    if (s === 'RED' || s === 'BEARISH') return 'text-red-500';
-    if (s === 'YELLOW' || s === 'NEUTRAL' || s === 'SIDEWAYS' || s === 'UNKNOWN') return 'text-yellow-500';
+    if (s === 'GREEN' || s === 'BULLISH' || s === 'STRONG BULL') return 'text-green-500';
+    if (s === 'RED' || s === 'BEARISH' || s === 'DANGER') return 'text-red-500';
+    if (s === 'YELLOW' || s === 'NEUTRAL' || s === 'SIDEWAYS') return 'text-yellow-500';
 
-    // Fallback: Score based
+    // Fallback: Score based (Backend Logic: < 60 is Red, >= 60 is Yellow, >= 80 is Green)
     if (score !== undefined) {
-      if (score >= 70) return 'text-green-500';
-      if (score >= 40) return 'text-yellow-500';
+      if (score >= 80) return 'text-green-500';
+      if (score >= 60) return 'text-yellow-500';
       return 'text-red-500';
     }
 
@@ -286,6 +287,60 @@ export default function KRMarketOverview() {
     // Otherwise, integer only (e.g. KOSPI 2500, BTC 60000)
     const maxDecimals = val < 10 ? 2 : 0;
     return val.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
+  };
+
+  const getWinRateStatus = (rate: number) => {
+    if (rate >= 60) return { label: '매수', className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
+    if (rate >= 40) return { label: '관망', className: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
+    return { label: '매도', className: 'bg-rose-500/10 text-rose-500 border-rose-500/20' };
+  };
+
+  const getStrategyTheme = (rate: number) => {
+    if (rate >= 60) return {
+      border: 'hover:border-emerald-500/30',
+      glow: 'bg-emerald-500/10',
+      text: 'group-hover:text-emerald-400',
+      icon: 'text-emerald-500'
+    };
+    if (rate >= 40) return {
+      border: 'hover:border-amber-500/30',
+      glow: 'bg-amber-500/10',
+      text: 'group-hover:text-amber-400',
+      icon: 'text-amber-500'
+    };
+    return {
+      border: 'hover:border-rose-500/30',
+      glow: 'bg-rose-500/10',
+      text: 'group-hover:text-rose-400',
+      icon: 'text-rose-500'
+    };
+  };
+
+  const getSignalCountTheme = (count: number) => {
+    if (count >= 5) return {
+      label: '매수',
+      border: 'hover:border-emerald-500/30',
+      glow: 'bg-emerald-500/10',
+      text: 'group-hover:text-emerald-400',
+      icon: 'text-emerald-500',
+      badge: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+    };
+    if (count >= 1) return {
+      label: '관망',
+      border: 'hover:border-amber-500/30',
+      glow: 'bg-amber-500/10',
+      text: 'group-hover:text-amber-400',
+      icon: 'text-amber-500',
+      badge: 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+    };
+    return {
+      label: '매도',
+      border: 'hover:border-rose-500/30',
+      glow: 'bg-rose-500/10',
+      text: 'group-hover:text-rose-400',
+      icon: 'text-rose-500',
+      badge: 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+    };
   };
 
   return (
@@ -508,90 +563,127 @@ export default function KRMarketOverview() {
       {/* KPI Cards (Performance Overview) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Today's Signals */}
-        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group hover:border-rose-500/30 transition-all">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/10 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2"></div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Today&apos;s Signals</div>
-            <Tooltip content="오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다." position="bottom" align="left">
-              <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
-            </Tooltip>
-          </div>
-          <div className="text-3xl font-black text-white group-hover:text-rose-400 transition-colors">
-            {loading ? '--' : signalsData?.signals?.length ?? 0}
-          </div>
-          <div className="mt-2 text-xs text-gray-500">VCP + 외국인 순매수</div>
-        </div>
+        {(() => {
+          const signalCount = signalsData?.signals?.length ?? 0;
+          const signalTheme = getSignalCountTheme(signalCount);
+          return (
+            <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${signalTheme.border}`}>
+              <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${signalTheme.glow}`}></div>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">오늘의 시그널</div>
+                  <Tooltip content="오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다." position="bottom" align="left">
+                    <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
+                  </Tooltip>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${signalTheme.badge}`}>
+                  {signalTheme.label}
+                </span>
+              </div>
+              <div className={`text-3xl font-black text-white transition-colors ${signalTheme.text}`}>
+                {loading ? '--' : signalCount}
+              </div>
+              <div className="mt-2 text-xs text-gray-500">VCP + 외국인 순매수</div>
+            </div>
+          );
+        })()}
 
         {/* 2. VCP Strategy Performance */}
-        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group hover:border-amber-500/30 transition-all">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2"></div>
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">VCP Strategy</div>
-              <Tooltip content="VCP 전략(변동성 축소 패턴)의 과거 성과(승률) 분석 결과입니다." position="bottom" align="left">
-                <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
-              </Tooltip>
-            </div>
-            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[10px] font-bold border border-amber-500/20">Win Rate</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black text-white group-hover:text-amber-400 transition-colors">
-              {loading ? '--' : backtestData?.vcp?.win_rate ?? 0}<span className="text-base text-gray-600">%</span>
-            </span>
-            <span className={`text-xs font-bold ${(backtestData?.vcp?.avg_return ?? 0) > 0 ? 'text-red-400' : 'text-blue-400'}`}>
-              Avg. {(backtestData?.vcp?.avg_return ?? 0) > 0 ? '+' : ''}{backtestData?.vcp?.avg_return}%
-            </span>
-          </div>
-          <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
-            <span>{renderTradeCount(backtestData?.vcp?.count ?? 0)}</span>
-            {backtestData?.vcp?.status === 'OK' && <i className="fas fa-check-circle text-emerald-500"></i>}
-          </div>
-        </div>
-
-        {/* 3. Closing Bet Performance */}
-        <div className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group hover:border-emerald-500/30 transition-all">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2"></div>
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">종가베팅</div>
-              <Tooltip content="종가베팅 전략(장 마감 전 진입)의 성과 분석 결과입니다." position="bottom" align="left">
-                <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
-              </Tooltip>
-            </div>
-            {backtestData?.closing_bet?.status === 'Accumulating' ? (
-              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20 animate-pulse">
-                <i className="fas fa-hourglass-half mr-1"></i>축적 중
-              </span>
-            ) : (
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 text-[10px] font-bold border border-emerald-500/20">Win Rate</span>
-            )}
-          </div>
-          {backtestData?.closing_bet?.status === 'Accumulating' ? (
-            <div className="py-4">
-              <div className="text-2xl font-black text-amber-400 mb-1">
-                <i className="fas fa-database mr-2"></i>데이터 축적 중
+        {(() => {
+          const vcpRate = backtestData?.vcp?.win_rate ?? 0;
+          const vcpTheme = getStrategyTheme(vcpRate);
+          return (
+            <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${vcpTheme.border}`}>
+              <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${vcpTheme.glow}`}></div>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">VCP 전략</div>
+                  <Tooltip content="VCP 전략(변동성 축소 패턴)의 과거 성과(승률) 분석 결과입니다." position="bottom" align="left">
+                    <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
+                  </Tooltip>
+                </div>
+                {(() => {
+                  const status = getWinRateStatus(vcpRate);
+                  return (
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
+                      {status.label}
+                    </span>
+                  );
+                })()}
               </div>
-              <div className="text-xs text-gray-500">
-                {backtestData?.closing_bet?.message || '최소 2일 데이터 필요'}
-              </div>
-            </div>
-          ) : (
-            <>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-white group-hover:text-emerald-400 transition-colors">
-                  {loading ? '--' : backtestData?.closing_bet?.win_rate ?? 0}<span className="text-base text-gray-600">%</span>
+                <span className={`text-3xl font-black text-white transition-colors ${vcpTheme.text}`}>
+                  {loading ? '--' : vcpRate}<span className="text-base text-gray-600">%</span>
                 </span>
-                <span className={`text-xs font-bold ${(backtestData?.closing_bet?.avg_return ?? 0) > 0 ? 'text-red-400' : 'text-blue-400'}`}>
-                  Avg. {(backtestData?.closing_bet?.avg_return ?? 0) > 0 ? '+' : ''}{backtestData?.closing_bet?.avg_return}%
+                <span className={`text-xs font-bold ${(backtestData?.vcp?.avg_return ?? 0) > 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                  Avg. {(backtestData?.vcp?.avg_return ?? 0) > 0 ? '+' : ''}{backtestData?.vcp?.avg_return}%
                 </span>
               </div>
               <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
-                <span>{renderTradeCount(backtestData?.closing_bet?.count ?? 0)}</span>
-                {backtestData?.closing_bet?.status === 'OK' && <i className="fas fa-check-circle text-emerald-500"></i>}
+                <span>{renderTradeCount(backtestData?.vcp?.count ?? 0)}</span>
+                {backtestData?.vcp?.status === 'OK' && <i className={`fas fa-check-circle ${vcpTheme.icon}`}></i>}
               </div>
-            </>
-          )}
-        </div>
+            </div>
+          );
+        })()}
+
+        {/* 3. Closing Bet Performance */}
+        {(() => {
+          const cbRate = backtestData?.closing_bet?.win_rate ?? 0;
+          const cbTheme = getStrategyTheme(cbRate);
+          return (
+            <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${cbTheme.border}`}>
+              <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${cbTheme.glow}`}></div>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">종가베팅 전략</div>
+                  <Tooltip content="종가베팅 전략(장 마감 전 진입)의 성과 분석 결과입니다." position="bottom" align="left">
+                    <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
+                  </Tooltip>
+                </div>
+                {backtestData?.closing_bet?.status === 'Accumulating' ? (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20 animate-pulse">
+                    <i className="fas fa-hourglass-half mr-1"></i>축적 중
+                  </span>
+                ) : (
+                  (() => {
+                    const status = getWinRateStatus(cbRate);
+                    return (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
+                        {status.label}
+                      </span>
+                    );
+                  })()
+                )}
+              </div>
+              {backtestData?.closing_bet?.status === 'Accumulating' ? (
+                <div className="py-4">
+                  <div className="text-2xl font-black text-amber-400 mb-1">
+                    <i className="fas fa-database mr-2"></i>데이터 축적 중
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {backtestData?.closing_bet?.message || '최소 2일 데이터 필요'}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <span className={`text-3xl font-black text-white transition-colors ${cbTheme.text}`}>
+                      {loading ? '--' : cbRate}<span className="text-base text-gray-600">%</span>
+                    </span>
+                    <span className={`text-xs font-bold ${(backtestData?.closing_bet?.avg_return ?? 0) > 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                      Avg. {(backtestData?.closing_bet?.avg_return ?? 0) > 0 ? '+' : ''}{backtestData?.closing_bet?.avg_return}%
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
+                    <span>{renderTradeCount(backtestData?.closing_bet?.count ?? 0)}</span>
+                    {backtestData?.closing_bet?.status === 'OK' && <i className={`fas fa-check-circle ${cbTheme.icon}`}></i>}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* 4. Update Button */}
         <button
@@ -608,6 +700,7 @@ export default function KRMarketOverview() {
           </div>
         </button>
       </div>
+
 
       <section className="space-y-6">
         {/* 1. Global Indices */}

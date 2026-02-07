@@ -1546,7 +1546,7 @@ def analyze_single_stock():
 
 @kr_bp.route('/jongga-v2/reanalyze-gemini', methods=['POST', 'OPTIONS'])
 def reanalyze_gemini_all():
-    """현재 시그널들의 Gemini LLM 분석만 재실행"""
+    """현재 시그널들의 Gemini LLM 분석만 재실행 (Partial / Retry 지원)"""
     # 즉시 출력으로 요청 도달 확인
     print(f"\n{'='*60}")
     print(f">>> REANALYZE GEMINI API CALLED - Method: {request.method}")
@@ -1562,13 +1562,17 @@ def reanalyze_gemini_all():
         import asyncio
         from pathlib import Path
         import sys
-        sys.stdout.flush()  # 즉시 출력
+        sys.stdout.flush()
         
+        # Request Parameters
+        req_data = request.get_json(silent=True) or {}
+        target_tickers = req_data.get('target_tickers', []) # List of strings
+        force_update = req_data.get('force', False)
+        
+        print(f">>> 요청 파라미터: target_tickers={target_tickers}, force={force_update}")
+
         # 최신 결과 파일 로드
         latest_file = Path(__file__).parent.parent.parent / 'data' / 'jongga_v2_latest.json'
-        print(f">>> [2/7] 데이터 파일 경로: {latest_file}")
-        print(f">>> [2/7] 파일 존재 여부: {latest_file.exists()}")
-        sys.stdout.flush()
         
         if not latest_file.exists():
             print(">>> [ERROR] 데이터 파일 없음!")
@@ -1576,15 +1580,12 @@ def reanalyze_gemini_all():
         
         with open(latest_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        print(f">>> [3/7] 데이터 로드 완료")
-        sys.stdout.flush()
         
-        signals = data.get('signals', [])
-        print(f">>> [3/7] 시그널 개수: {len(signals)}개")
-        sys.stdout.flush()
+        all_signals = data.get('signals', [])
+        print(f">>> [3/7] 시그널 개수: {len(all_signals)}개")
         
         # signals가 비어있는 경우 최근 유효 데이터 검색
-        if not signals:
+        if not all_signals:
             print(">>> [3/7] 시그널 없음 - 최근 유효 데이터 검색 중...")
             import glob
             pattern = str(Path(__file__).parent.parent.parent / 'data' / 'jongga_v2_results_*.json')
@@ -1596,33 +1597,59 @@ def reanalyze_gemini_all():
                         candidate = json.load(f)
                         if len(candidate.get('signals', [])) > 0:
                             data = candidate
-                            signals = data.get('signals', [])
+                            all_signals = data.get('signals', [])
                             latest_file = Path(file_path)  # 파일 경로 업데이트
-                            print(f">>> [3/7] 유효 데이터 발견: {file_path} ({len(signals)}개 시그널)")
+                            print(f">>> [3/7] 유효 데이터 발견: {file_path} ({len(all_signals)}개 시그널)")
                             break
                 except Exception as e:
                     print(f">>> [3/7] 파일 읽기 실패: {file_path} - {e}")
                     continue
-            sys.stdout.flush()
         
-        if not signals:
-            print(">>> [ERROR] 유효한 시그널 없음!")
+        if not all_signals:
             return jsonify({'status': 'error', 'error': '분석할 시그널이 없습니다. 평일에 엔진을 먼저 실행해주세요.'}), 404
+            
+        # --- Filter Signals to Analyze ---
+        signals_to_process = []
         
+        if target_tickers:
+            # Case 1: Specific tickers requested (Retry)
+            target_set = set(str(t).strip() for t in target_tickers)
+            print(f">>> [Filter] 타겟 종목 분석: {target_set}")
+            for sig in all_signals:
+                code = str(sig.get('stock_code', '')).strip()
+                name = str(sig.get('stock_name', '')).strip()
+                if code in target_set or name in target_set:
+                    signals_to_process.append(sig)
+        else:
+            # Case 2: Global Reanalyze
+            if force_update:
+                print(f">>> [Filter] 강제 전체 재분석")
+                signals_to_process = all_signals
+            else:
+                print(f">>> [Filter] 스마트 분석 (누락/실패 항목만)")
+                for sig in all_signals:
+                    # Check if analysis exists
+                    has_ai_eval = 'ai_evaluation' in sig and sig['ai_evaluation']
+                    has_reason = 'score' in sig and sig['score'].get('llm_reason')
+                    
+                    if not has_ai_eval or not has_reason:
+                        signals_to_process.append(sig)
+
+        print(f">>> [Filter] 최종 분석 대상: {len(signals_to_process)}개 / 전체 {len(all_signals)}개")
+        
+        if not signals_to_process:
+            return jsonify({
+                'status': 'success', 
+                'message': '모든 종목에 AI 분석이 완료되어 있습니다. 재분석이 필요하면 force=true 옵션을 사용하세요.'
+            })
+
         # LLM 분석기 로드
         print(">>> [4/7] LLM 분석기 로드 시도...")
-        sys.stdout.flush()
-        
         try:
             from engine.llm_analyzer import LLMAnalyzer
             from engine.config import app_config
             
-            print(f">>> [4/7] LLM Provider 설정: {app_config.LLM_PROVIDER}")
-            sys.stdout.flush()
-            
             analyzer = LLMAnalyzer()
-            print(f">>> [4/7] LLM Analyzer 초기화 완료 (client exists: {analyzer.client is not None})")
-            sys.stdout.flush()
             
             # Market Gate 상태 조회
             market_status = None
@@ -1635,19 +1662,18 @@ def reanalyze_gemini_all():
 
             # 배치 분석 데이터 준비
             items_to_analyze = []
-            for signal in signals:
+            for signal in signals_to_process:
                 stock_name = signal.get('stock_name')
                 news_items = signal.get('news_items', [])
                 if stock_name and news_items:
-                    # Signal Dict 자체가 Stock 정보를 담고 있음 (LLMAnalyzer가 처리 가능하도록 구성)
                     items_to_analyze.append({
-                        'stock': signal,  # signal dict has stock_name, current_price, etc.
+                        'stock': signal,
                         'news': news_items,
-                        'supply': None # JSON에 supply 상세 정보가 없다면 생략
+                        'supply': None
                     })
 
             if not items_to_analyze:
-                return jsonify({'status': 'error', 'error': '분석할 뉴스가 없습니다.'}), 404
+                return jsonify({'status': 'error', 'error': '분석 대상 종목들에 뉴스가 없어 분석할 수 없습니다.'}), 404
 
             # Chunking (Check Provider)
             is_analysis_llm = analyzer.provider == 'gemini'
@@ -1664,8 +1690,7 @@ def reanalyze_gemini_all():
             asyncio.set_event_loop(loop)
             
             print(f"\n{'='*70}")
-            print(f">>> Gemini 배치 분석 시작: 총 {len(items_to_analyze)}개 종목, {len(chunks)}개 청크로 분할")
-            print(f">>> LLM Provider: {analyzer.provider.upper()}")
+            print(f">>> Gemini 배치 분석 시작: 총 {len(items_to_analyze)}개 종목")
             print(f"{'='*70}")
             
             try:
@@ -1677,34 +1702,33 @@ def reanalyze_gemini_all():
                     
                     chunk_results = await analyzer.analyze_news_batch(chunk_data, market_status)
                     
-                    chunk_elapsed = time.time() - chunk_start
-                    
                     if chunk_results:
-                        print(f">>> 청크 {chunk_idx + 1} 완료: {len(chunk_results)}개 결과 ({chunk_elapsed:.2f}초)")
                         for name, res in chunk_results.items():
-                            print(f"    ✓ {name}: {res.get('action', 'N/A')} (Score: {res.get('score', 0)}, Conf: {res.get('confidence', 0)}%)")
-                    else:
-                        print(f">>> 청크 {chunk_idx + 1} 결과 없음 ({chunk_elapsed:.2f}초)")
-                        for name in chunk_stock_names:
-                            print(f"    ✗ {name}: 분석 실패")
+                            print(f"    ✓ {name}: {res.get('action', 'N/A')}")
                     
                     return chunk_results or {}
                 
-                # 모든 청크 병렬 처리
+                # 모든 청크 순차/병렬 처리 (Concurrency 제어 + Delay 적용)
                 async def process_all_chunks():
-                    # 동시 처리 제한 (Rate Limit 고려)
                     concurrency = app_config.ANALYSIS_LLM_CONCURRENCY if is_analysis_llm else app_config.LLM_CONCURRENCY
+                    delay = app_config.ANALYSIS_LLM_REQUEST_DELAY if is_analysis_llm else 0.5
+                    
                     semaphore = asyncio.Semaphore(concurrency)
+                    results = []
                     
-                    async def limited_process(idx, data):
+                    # 청크 단위로 순차 실행하되, 내부적으로 Semaphore로 동시성 제어
+                    for i, chunk in enumerate(chunks):
                         async with semaphore:
-                            return await process_chunk(idx, data)
-                    
-                    tasks = [limited_process(i, chunk) for i, chunk in enumerate(chunks)]
-                    return await asyncio.gather(*tasks)
+                            res = await process_chunk(i, chunk)
+                            results.append(res)
+                        
+                        # 마지막 청크가 아니면 대기
+                        if i < len(chunks) - 1:
+                            print(f">>> [Rate Limit] 청크 간 대기: {delay}초...")
+                            await asyncio.sleep(delay)
+                            
+                    return results
                 
-                concurrency_val = app_config.ANALYSIS_LLM_CONCURRENCY if is_analysis_llm else app_config.LLM_CONCURRENCY
-                print(f">>> 병렬 처리 시작 (최대 {concurrency_val}개 동시 실행)...")
                 all_results = loop.run_until_complete(process_all_chunks())
                 
                 # 결과 병합
@@ -1716,38 +1740,24 @@ def reanalyze_gemini_all():
                 loop.close()
                 
             total_elapsed = time.time() - total_start_time
-            print(f"\n{'='*70}")
-            print(f">>> 전체 LLM 분석 완료: {total_elapsed:.2f}초 소요")
-            print(f"{'='*70}\n")
+            print(f"\n>>> 전체 LLM 분석 완료: {total_elapsed:.2f}초 소요")
 
             # 결과 업데이트 - 종목명 정규화 적용
-            print(f"\n>>> 결과 매핑 시작: {len(signals)}개 시그널 vs {len(results_map)}개 LLM 결과")
-            print(f">>> LLM 결과 키들: {list(results_map.keys())}")
-            missing_stocks = []
-            no_news_stocks = []
+            print(f"\n>>> 결과 매핑 시작: {len(results_map)}개 LLM 결과")
             
             # 종목명/코드 매핑 테이블 생성 (정규화)
             import re
             normalized_results = {}
             for key, value in results_map.items():
-                # "쎄트렉아이 (099320)" -> "쎄트렉아이" 추출
                 clean_name = re.sub(r'\s*\([0-9A-Za-z]+\)\s*$', '', key).strip()
                 normalized_results[clean_name] = value
-                # 원본 키도 유지
                 normalized_results[key] = value
             
-            print(f">>> 정규화된 키들: {list(normalized_results.keys())}")
-            
-            for signal in signals:
+            # [IMPORTANT] Update All Signals
+            for signal in all_signals:
                 name = signal.get('stock_name')
                 stock_code = signal.get('stock_code', '')
-                news_items = signal.get('news_items', [])
                 
-                if not news_items:
-                    no_news_stocks.append(name)
-                    continue
-                
-                # 여러 방식으로 매칭 시도
                 matched_result = None
                 if name in normalized_results:
                     matched_result = normalized_results[name]
@@ -1760,40 +1770,22 @@ def reanalyze_gemini_all():
                     if 'score' not in signal:
                         signal['score'] = {}
                     
-                    # 기본 점수/사유 업데이트
                     signal['score']['llm_reason'] = matched_result.get('reason', '')
                     signal['score']['news'] = matched_result.get('score', 0)
-                    
-                    # 심층 분석 결과 저장 (신규 필드)
                     signal['ai_evaluation'] = {
                         'action': matched_result.get('action', 'HOLD'),
                         'confidence': matched_result.get('confidence', 0)
                     }
-                    
                     updated_count += 1
-                    print(f"    ✓ 매핑 성공: {name}")
-                else:
-                    missing_stocks.append(name)
-                    print(f"    ✗ 매핑 실패: {name} (코드: {stock_code})")
-            
-            # 누락 종목 로깅
-            if missing_stocks:
-                print(f"\n>>> ⚠️ LLM 결과 누락 종목 ({len(missing_stocks)}개): {missing_stocks}")
-            if no_news_stocks:
-                print(f">>> ⚠️ 뉴스 없어서 분석 제외된 종목 ({len(no_news_stocks)}개): {no_news_stocks}")
             
             # 저장
             data['updated_at'] = datetime.now().isoformat()
             with open(latest_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            
-            if 'chunks' in result:
-                chunks_info = f"{len(result['chunks'])} chunks processed"
-                logger.info(f"Gemini re-analysis completed: {chunks_info}")
                 
             return jsonify({
                 'status': 'success',
-                'message': f'{updated_count}개 종목의 Gemini 배치 분석이 완료되었습니다.'
+                'message': f'{updated_count}개 종목의 Gemini 분석이 완료되었습니다.'
             })
             
         except ImportError as e:
@@ -2540,16 +2532,21 @@ def kr_chatbot_sessions():
         from chatbot import get_chatbot
         bot = get_chatbot()
         
+        # [Fix] Owner Isolation
+        user_email = request.headers.get('X-User-Email')
+        session_id_header = request.headers.get('X-Session-Id')
+        owner_id = user_email if (user_email and user_email != 'user@example.com') else session_id_header
+
         if request.method == 'GET':
-            # List all sessions
-            sessions = bot.history.get_all_sessions()
+            # List all sessions (Filtered by owner)
+            sessions = bot.history.get_all_sessions(owner_id=owner_id)
             return jsonify({'sessions': sessions})
             
         elif request.method == 'POST':
             # Create new session
             data = request.get_json() or {}
             model_name = data.get('model', None)
-            session_id = bot.history.create_session(model_name=model_name)
+            session_id = bot.history.create_session(model_name=model_name, owner_id=owner_id)
             return jsonify({'session_id': session_id, 'message': 'New session created'})
             
     except Exception as e:
@@ -2649,10 +2646,43 @@ def kr_chatbot():
             files=files if files else None, 
             watchlist=watchlist,
             persona=persona,
-            api_key=user_api_key # Pass Extracted Key
+            api_key=user_api_key, # Pass Extracted Key
+            owner_id=usage_key # Pass owner_id (usage_key is verified email or session_id)
         )
         
         response_data = result if isinstance(result, dict) else {'response': result}
+
+        # [Log] Chat Activity
+        try:
+            from services.activity_logger import activity_logger
+            
+            # Extract detailed info
+            response_text = response_data.get('response', '')
+            usage_metadata = response_data.get('usage_metadata', {})
+            
+            # Determine Device Type (Reuse logic or keep simple)
+            ua_string = request.user_agent.string
+            device_type = 'WEB'
+            if request.user_agent.platform in ('android', 'iphone', 'ipad') or 'Mobile' in ua_string:
+                device_type = 'MOBILE'
+
+            activity_logger.log_action(
+                user_id=usage_key,
+                action='CHAT_MESSAGE',
+                details={
+                    'session_id': session_id,
+                    'model': model_name,
+                    'user_message': message[:2000] if message else "", # Increased limit for better context
+                    'bot_response': response_text[:2000] if response_text else "",
+                    'token_usage': usage_metadata,
+                    'has_files': bool(files),
+                    'device': device_type,
+                    'user_agent': ua_string[:150]
+                },
+                ip_address=request.remote_addr
+            )
+        except Exception as e:
+            logger.error(f"Chat log error: {e}")
 
         # 3. Quota Update (If Free Tier & Success)
         if use_free_tier:

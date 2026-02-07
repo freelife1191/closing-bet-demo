@@ -11,6 +11,11 @@ const nextConfig = {
     ];
   },
   transpilePackages: ['react-markdown', 'remark-gfm'],
+  logging: {
+    fetches: {
+      fullUrl: false,
+    },
+  },
 };
 
 module.exports = nextConfig;

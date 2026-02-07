@@ -194,23 +194,16 @@ export default function ChatbotPage() {
     // Listen for profile updates from Sidebar
     window.addEventListener('user-profile-updated', loadProfile);
 
-    // 2. Load Local Cache for Session ID
+    // 2. Load Local Cache for Session ID (Optimistic Restore)
     const cachedSessionId = localStorage.getItem('chatbot_last_session_id');
+    if (cachedSessionId) {
+      setCurrentSessionId(cachedSessionId);
+    }
 
     fetchModels();
 
-    // Fetch sessions then decide which to load
-    fetchSessions().then((loadedSessions: Session[]) => {
-      if (cachedSessionId && loadedSessions && loadedSessions.length > 0) {
-        // Check if cached ID is valid
-        const exists = loadedSessions.find(s => s.id === cachedSessionId);
-        if (exists) {
-          setCurrentSessionId(cachedSessionId);
-        } else {
-          setCurrentSessionId(null);
-        }
-      }
-    });
+    // Fetch sessions list (Logic separated from restoration to prevent race condition)
+    fetchSessions();
 
     // We don't fetch user profile from backend here anymore to avoid overwriting sidebar settings
     // or we fetch it but save it to the global key? Better to rely on sidebar state as source of truth for now.
@@ -279,9 +272,47 @@ export default function ChatbotPage() {
     }
   };
 
+  // Helper: Get Auth Headers
+  const getAuthHeaders = () => {
+    let sessionId = localStorage.getItem('browser_session_id');
+    if (!sessionId) {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        sessionId = 'anon_' + crypto.randomUUID();
+      } else {
+        // Fallback for non-secure contexts or older browsers
+        sessionId = 'anon_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+      }
+      localStorage.setItem('browser_session_id', sessionId);
+    }
+
+    const headers: Record<string, string> = {
+      'X-Session-Id': sessionId
+    };
+
+    // User Profile Email
+    const savedProfile = localStorage.getItem('user_profile');
+    if (savedProfile) {
+      try {
+        const p = JSON.parse(savedProfile);
+        if (p.email && p.email !== 'user@example.com') {
+          headers['X-User-Email'] = p.email;
+        }
+      } catch (e) { }
+    }
+
+    // API Key
+    const apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
+    if (apiKey) headers['X-Gemini-Key'] = apiKey;
+
+    return headers;
+  };
+
   const fetchSessions = async (): Promise<Session[]> => {
     try {
-      const data: any = await fetchAPI('/api/kr/chatbot/sessions');
+      const headers = getAuthHeaders();
+      const data: any = await fetchAPI('/api/kr/chatbot/sessions', {
+        headers
+      });
       if (data.sessions) {
         setSessions(data.sessions);
         return data.sessions;
@@ -294,7 +325,10 @@ export default function ChatbotPage() {
 
   const fetchHistory = async (sessionId: string) => {
     try {
-      const data: any = await fetchAPI(`/api/kr/chatbot/history?session_id=${sessionId}`);
+      const headers = getAuthHeaders();
+      const data: any = await fetchAPI(`/api/kr/chatbot/history?session_id=${sessionId}`, {
+        headers
+      });
       if (data.history) {
         setMessages(data.history);
       }
@@ -416,22 +450,7 @@ export default function ChatbotPage() {
       const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
 
       // Auth Headers
-      const apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
-      let sessionId = localStorage.getItem('browser_session_id');
-
-      // 세션 ID가 없으면 생성
-      if (!sessionId) {
-        sessionId = 'anon_' + crypto.randomUUID();
-        localStorage.setItem('browser_session_id', sessionId);
-      }
-
-      const headers: Record<string, string> = {
-        'X-Session-Id': sessionId
-      };
-      if (apiKey) headers['X-Gemini-Key'] = apiKey;
-
-      // Email for quota tracking (from profile)
-      if (userProfile?.email) headers['X-User-Email'] = userProfile.email;
+      const headers = getAuthHeaders();
 
       // Prepare Request
       if (attachedFiles.length > 0) {
@@ -446,14 +465,20 @@ export default function ChatbotPage() {
           formData.append('file', file);
         });
 
+        // Add headers to fetch options. 
+        // Note: For FormData, Content-Type is auto-set.
+        // But our getAuthHeaders might not set Content-Type (which is good).
+
         res = await fetch('/api/kr/chatbot', {
           method: 'POST',
-          headers: headers, // Pass auth headers (Content-Type is auto-set for FormData)
+          headers: headers, // Pass auth headers
           body: formData,
-          signal: controller.signal // [Stop Feature]
+          signal: controller.signal
         });
       } else {
+        // For JSON, we need Content-Type
         headers['Content-Type'] = 'application/json';
+
         res = await fetch('/api/kr/chatbot', {
           method: 'POST',
           headers: headers,
@@ -464,7 +489,7 @@ export default function ChatbotPage() {
             watchlist: watchlist,
             persona: userProfile?.persona
           }),
-          signal: controller.signal // [Stop Feature]
+          signal: controller.signal
         });
       }
 
@@ -522,7 +547,11 @@ export default function ChatbotPage() {
     if (!sessionToDeleteId) return;
 
     try {
-      await fetch(`/api/kr/chatbot/history?session_id=${sessionToDeleteId}`, { method: 'DELETE' });
+      const headers = getAuthHeaders();
+      await fetch(`/api/kr/chatbot/history?session_id=${sessionToDeleteId}`, {
+        method: 'DELETE',
+        headers // Add headers for delete as well
+      });
       await fetchSessions();
       if (currentSessionId === sessionToDeleteId) {
         handleNewChat();
@@ -600,7 +629,7 @@ export default function ChatbotPage() {
 
 
   return (
-    <div className="fixed inset-0 flex bg-[#131314] text-white overflow-hidden">
+    <div className="h-screen w-full flex bg-[#131314] text-white overflow-hidden">
       {/* Global Sidebar (Fixed) */}
       <Sidebar />
 

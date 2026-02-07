@@ -272,7 +272,7 @@ export default function ChatWidget() {
                 <i className="fas fa-robot text-white text-lg"></i>
               </div>
               <div>
-                <h3 className="font-bold text-white text-lg">AI Assistant</h3>
+                <h3 className="font-bold text-white text-lg">스마트 머니 봇</h3>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                   <span className="text-xs text-blue-400 font-medium">Online</span>

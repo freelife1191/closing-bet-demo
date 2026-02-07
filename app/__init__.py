@@ -131,9 +131,70 @@ def create_app():
         # 헤더에서 Key 추출 (없으면 None)
         g.user_api_key = request.headers.get('X-Gemini-Key')
         g.user_email = request.headers.get('X-User-Email') # 프론트에서 세션 이메일 전송
+        g.session_id = request.headers.get('X-Session-Id') # 브라우저 세션 ID
 
-        # 공용 키 사용량 체크 로직은 개별 Route 또는 Decorator에서 수행
-        # 여기서는 전역 변수(g)에 세팅만 함
+    # Middleware: Activity Logging
+    @app.after_request
+    def log_activity(response):
+        try:
+            # Skip logging for OPTIONS and static polling paths
+            if request.method == 'OPTIONS':
+                return response
+                
+            path = request.path
+            # Suppress noisy paths
+            noisy_paths = [
+                '/health',
+                '/api/system/update-status',
+                '/api/system/data-status',
+                '/api/kr/jongga-v2/status',
+                '/api/kr/status',
+                '/static',
+                '/favicon.ico'
+            ]
+            if any(path.startswith(p) for p in noisy_paths):
+                return response
+                
+            # Determine User ID (Email > Session ID > IP)
+            user_id = getattr(g, 'user_email', None)
+            if not user_id or user_id == 'user@example.com':
+                user_id = getattr(g, 'session_id', None)
+            
+            # Log Action
+            from services.activity_logger import activity_logger
+            
+            status_code = response.status_code
+            # only log errors or non-GET modification requests, OR major GET requests
+            # For "Connection History", maybe log all non-noisy requests?
+            # Let's log everything that isn't noisy.
+            
+            # Determine Device Type
+            ua_string = request.user_agent.string
+            device_type = 'WEB'
+            if request.user_agent.platform in ('android', 'iphone', 'ipad') or 'Mobile' in ua_string:
+                device_type = 'MOBILE'
+            
+            details = {
+                'method': request.method,
+                'path': path,
+                'status': status_code,
+                'device': device_type,
+                'session_id': getattr(g, 'session_id', None),
+                'user_agent': ua_string[:150] if ua_string else None
+            }
+            
+            activity_logger.log_action(
+                user_id=user_id,
+                action='API_ACCESS',
+                details=details,
+                ip_address=request.remote_addr
+            )
+            
+        except Exception as e:
+            # Logging should not break the request
+            print(f"Activity Log Error: {e}")
+            
+        return response
 
     # Register Blueprints with URL prefixes
     from app.routes import kr_bp, common_bp

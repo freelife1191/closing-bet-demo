@@ -833,6 +833,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
 }
 
 export default function JonggaV2Page() {
+  const { isAdmin } = useAdmin();
+  const [analyzingGemini, setAnalyzingGemini] = useState(false);
   const [data, setData] = useState<ScreenerResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [dates, setDates] = useState<string[]>([]);
@@ -906,6 +908,45 @@ export default function JonggaV2Page() {
   const filteredSignals = getFilteredSignals();
   const matchCount = filteredSignals.length;
 
+  const handleRetryAnalysis = async (stockCode: string) => {
+    if (!isAdmin) {
+      setAlertModal({
+        isOpen: true,
+        type: 'danger',
+        title: '권한 없음',
+        content: '관리자만 실행할 수 있습니다.'
+      });
+      return;
+    }
+
+    if (analyzingGemini) return;
+
+    const confirmMsg = "이 종목만 다시 분석하시겠습니까?";
+    if (!window.confirm(confirmMsg)) return;
+
+    setAnalyzingGemini(true);
+    try {
+      console.log(`Retry Analysis for ${stockCode}...`);
+      await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_tickers: [stockCode] })
+      });
+      console.log('개별 분석 완료!');
+      window.location.reload();
+    } catch (error: any) {
+      console.error('개별 분석 실패', error);
+      setAlertModal({
+        isOpen: true,
+        type: 'danger',
+        title: '분석 실패',
+        content: '재분석 실패: ' + (error.message || 'Unknown error')
+      });
+    } finally {
+      setAnalyzingGemini(false);
+    }
+  };
+
   useEffect(() => {
     fetchAPI('/api/kr/jongga-v2/dates')
       .then((data: any) => {
@@ -956,7 +997,16 @@ export default function JonggaV2Page() {
       })
       .catch((err) => {
         console.error('Failed to fetch data:', err);
-        // [Auto-Recovery] Retry on error (e.g. timeout, 500)
+
+        // [Fix] 404 Not Found (데이터 없음)인 경우 무한 재시도 방지
+        if (err.status === 404 || err.message?.includes('404')) {
+          console.warn('Data not found (404). Stopping retry.');
+          setLoading(false);
+          setData(null); // Explicitly set null to trigger "No Data" UI
+          return;
+        }
+
+        // [Auto-Recovery] Retry on other errors (e.g. timeout, 500)
         console.log("[Auto-Recovery] Fetch failed. Retrying in 5s...");
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
         retryTimerRef.current = setTimeout(() => {
@@ -1281,6 +1331,8 @@ export default function JonggaV2Page() {
                 setBuyingStock({ ticker: signal.stock_code, name: signal.stock_name, price: signal.current_price || signal.entry_price || 0 });
                 setIsBuyModalOpen(true);
               }}
+              onRetry={handleRetryAnalysis}
+              isAdmin={isAdmin}
             />
           ))
         )}
@@ -1499,6 +1551,8 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
     }
   };
 
+
+
   return (
     <div className="flex flex-col">
       <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1 flex items-center gap-2">
@@ -1571,7 +1625,15 @@ function StatBox({ label, value, highlight = false, customValue, tooltip }: { la
   )
 }
 
-function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signal: Signal, index: number, onOpenChart: () => void, onOpenDetail: () => void, onBuy: () => void }) {
+function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, isAdmin }: {
+  signal: Signal,
+  index: number,
+  onOpenChart: () => void,
+  onOpenDetail: () => void,
+  onBuy: () => void,
+  onRetry: (code: string) => void,
+  isAdmin: boolean
+}) {
   const gradeStyles: Record<string, { bg: string, text: string, border: string }> = {
     S: { bg: 'bg-indigo-500/20', text: 'text-indigo-400', border: 'border-indigo-500/30' },
     A: { bg: 'bg-rose-500/20', text: 'text-rose-400', border: 'border-rose-500/30' },
@@ -1801,12 +1863,27 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
         {/* Column 2: Analysis Details */}
         <div className="p-5 lg:w-[45%] border-b lg:border-b-0 lg:border-r border-white/10 flex flex-col justify-between">
           <div>
-            <h4 className="text-xs font-bold text-gray-400 mb-3 flex items-center gap-2">
-              <i className="fas fa-microscope text-indigo-400"></i> AI 분석 리포트
-              {(aiEval.model || signal.score.llm_reason) && (
-                <span className="text-[10px] font-normal text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
-                  {aiEval.model ? aiEval.model.replace(/[-_]/g, ' ') : 'Gemini 2.0 Flash'}
-                </span>
+            <h4 className="text-xs font-bold text-gray-400 mb-3 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <i className="fas fa-microscope text-indigo-400"></i> AI 분석 리포트
+                {(aiEval.model || signal.score.llm_reason) && (
+                  <span className="text-[10px] font-normal text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
+                    {aiEval.model ? aiEval.model.replace(/[-_]/g, ' ') : 'Gemini 2.0 Flash'}
+                  </span>
+                )}
+              </span>
+              {/* Retry Button - Only for Admin */}
+              {isAdmin && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRetry(signal.stock_code);
+                  }}
+                  className="text-gray-600 hover:text-indigo-400 transition-colors p-1"
+                  title="이 종목만 재분석 (Admin)"
+                >
+                  <i className="fas fa-redo-alt text-[10px]"></i>
+                </button>
               )}
             </h4>
             <p className="text-sm text-gray-300 leading-relaxed">
@@ -2006,19 +2083,30 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
             </div>
           </div>
 
-          <div className="mt-auto space-y-2">
+          <div className="mt-auto space-y-2.5">
+            {/* Primary Actions: Stacked for better mobile/narrow visibility */}
             <button
               onClick={onOpenDetail}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-95 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/10 active:scale-[0.98] flex items-center justify-center gap-2 group/btn"
             >
-              <i className="fas fa-search-plus"></i> 상세 분석 보기
+              <i className="fas fa-search-plus transition-transform group-hover/btn:scale-110"></i>
+              상세 분석 보기
             </button>
-            <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={onBuy}
+              className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] flex items-center justify-center gap-2 group/buy"
+            >
+              <i className="fas fa-shopping-cart transition-transform group-hover/buy:scale-110"></i>
+              모의 매수
+            </button>
+
+            {/* Secondary Actions: 2-Column Grid for Links */}
+            <div className="grid grid-cols-2 gap-2">
               <a
                 href={`https://m.stock.naver.com/domestic/stock/${signal.stock_code}/main`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="py-2.5 bg-[#03c75a] hover:bg-[#02b351] text-white text-sm font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                className="py-2.5 bg-[#03c75a] hover:bg-[#02b351] text-white text-xs font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <span className="font-serif font-black">N</span> 네이버
               </a>
@@ -2026,16 +2114,10 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy }: { signa
                 href={`https://tossinvest.com/stocks/${signal.stock_code}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="py-2.5 bg-[#3182f6] hover:bg-[#1b64da] text-white text-sm font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                className="py-2.5 bg-[#3182f6] hover:bg-[#1b64da] text-white text-xs font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <i className="fas fa-mobile-alt"></i> 토스
               </a>
-              <button
-                onClick={onBuy}
-                className="py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95 flex items-center justify-center gap-2"
-              >
-                <i className="fas fa-shopping-cart"></i> 모의 매수
-              </button>
             </div>
           </div>
         </div>

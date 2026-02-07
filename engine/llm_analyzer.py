@@ -397,7 +397,8 @@ class LLMAnalyzer:
                         except Exception as e:
                             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                                 if attempt < max_retries - 1:
-                                    wait_time = (2 ** attempt) * 2 + random.uniform(0, 1)
+                                    # Base wait: 5, 10, 20, 40, 80 seconds + Jitter
+                                    wait_time = (5 * (2 ** attempt)) + random.uniform(1, 3) 
                                     logger.warning(f"[GEMINI] Rate limit (429) hit during batch. Retrying in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
                                     await asyncio.sleep(wait_time)
                                     continue

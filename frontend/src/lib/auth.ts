@@ -15,6 +15,17 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
+  logger: {
+    error(code, metadata) {
+      console.error(code, metadata)
+    },
+    warn(code) {
+      // ignore warnings
+    },
+    debug(code, metadata) {
+      // ignore debug messages
+    },
+  },
   secret: process.env.NEXTAUTH_SECRET,
   // pages: {
   //   signIn: '/auth/signin', // 커스텀 로그인 페이지 (옵션)

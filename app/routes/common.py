@@ -420,6 +420,37 @@ def api_stop_update():
     return jsonify({'status': 'stopped'})
 
 
+@common_bp.route('/system/log-event', methods=['POST'])
+def api_log_event():
+    """프론트엔드 이벤트 로깅 (Login, Profile Update 등)"""
+    try:
+        data = request.get_json() or {}
+        action = data.get('action', 'FRONTEND_EVENT')
+        details = data.get('details', {})
+        
+        # User ID extraction
+        user_email = request.headers.get('X-User-Email')
+        session_id = request.headers.get('X-Session-Id')
+        user_id = user_email if (user_email and user_email != 'user@example.com') else session_id
+        
+        from services.activity_logger import activity_logger
+        
+        # Ensure session_id is in details
+        if 'session_id' not in details and session_id:
+            details['session_id'] = session_id
+            
+        activity_logger.log_action(
+            user_id=user_id,
+            action=action,
+            details=details,
+            ip_address=request.remote_addr
+        )
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        logger.error(f"Event Log Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @common_bp.route('/portfolio')
 def get_portfolio_data():
     """포트폴리오 데이터 (Fast - Cached)"""

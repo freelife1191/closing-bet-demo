@@ -84,7 +84,10 @@ BACKEND_PID=$!
 # Frontend
 cd frontend
 echo "🚀 Frontend $FRONTEND_PORT..."
-PORT=$FRONTEND_PORT nohup npm run dev > ../logs/frontend.log 2>&1 &
+# Filter noisy logs (NextAuth polling, 404s, etc.) using line-buffered grep
+# Note: Using unbuffer or check if Next.js detects pipe. 
+# We use grep -vE to filter multiple patterns.
+PORT=$FRONTEND_PORT nohup npm run dev 2>&1 | grep --line-buffered -vE "GET /api/auth/session|com.chrome.devtools.json|_not-found|wait - compiling" > ../logs/frontend.log &
 FRONTEND_PID=$!
 cd ..
 

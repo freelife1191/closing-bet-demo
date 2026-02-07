@@ -125,6 +125,23 @@ export default function Sidebar() {
     localStorage.setItem('user_profile', JSON.stringify(newProfile));
     // Dispatch event for other components to update
     window.dispatchEvent(new Event('user-profile-updated'));
+
+    // [Log] Update Profile Event
+    try {
+      let sessionId = localStorage.getItem('browser_session_id');
+      await fetch('/api/system/log-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': email,
+          'X-Session-Id': sessionId || ''
+        },
+        body: JSON.stringify({
+          action: 'PROFILE_UPDATE',
+          details: { name, email, persona }
+        })
+      });
+    } catch (e) { console.error("Log failed", e); }
   };
 
   return (

@@ -149,7 +149,7 @@ class HistoryManager:
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
-    def create_session(self, model_name: str = "gemini-2.0-flash-lite", save_immediate: bool = True) -> str:
+    def create_session(self, model_name: str = "gemini-2.0-flash-lite", save_immediate: bool = True, owner_id: str = None) -> str:
         session_id = str(uuid.uuid4())
         self.sessions[session_id] = {
             "id": session_id,
@@ -157,7 +157,8 @@ class HistoryManager:
             "messages": [],
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "model": model_name
+            "model": model_name,
+            "owner_id": owner_id # [Fix] Session Ownership
         }
         if save_immediate:
             self._save()
@@ -177,10 +178,37 @@ class HistoryManager:
     def get_session(self, session_id: str):
         return self.sessions.get(session_id)
 
-    def get_all_sessions(self):
-        # Filter out empty or ephemeral-only sessions
+    def get_all_sessions(self, owner_id: str = None):
+        # Filter out empty or ephemeral-only sessions AND filter by owner
         valid_sessions = []
         for s in self.sessions.values():
+            # [Fix] Owner Check
+            # If owner_id is provided, only show sessions for that owner.
+            # If session has no owner (legacy), it might be visible to all or migration needed.
+            # For strict isolation: if owner_id provided, must match.
+            if owner_id and s.get("owner_id") != owner_id:
+                # Allow access to legacy sessions (no owner_id) if configured, 
+                # but for new logic, we assume strict isolation.
+                # However, to avoid hiding old sessions from everyone, 
+                # maybe we don't show them if owner_id is passed?
+                # Let's show only matching owner_id.
+                if s.get("owner_id"): # If it HAS an owner and it doesn't match, skip
+                    continue
+                # If it doesn't have an owner, we might choose to show it or not.
+                # Let's hide it to be safe for new users.
+                # But existing users might lose history.
+                # Tradeoff: Hide header-less sessions from header-bearing users?
+                # Let's stick to strict match if session has owner, 
+                # and if session has no owner, maybe allow?
+                # For now: strict match if session has owner.
+                pass 
+            
+            # Additional logic: If request has owner_id, only return matching sessions.
+            # If session has no owner_id, only return if request has no owner_id?
+            sess_owner = s.get("owner_id")
+            if sess_owner != owner_id:
+                continue
+
             msgs = s.get("messages", [])
             if not msgs:
                 continue
@@ -788,7 +816,7 @@ class KRStockChatbot:
             
         return None
 
-    def chat(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None) -> Dict[str, Any]:
+    def chat(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None, owner_id: str = None) -> Dict[str, Any]:
         """
         사용자 메시지 처리 및 응답 생성
         
@@ -826,7 +854,17 @@ class KRStockChatbot:
         # 0. 세션 확인 및 생성
         # 세션이 없으면 새로 생성하되, Ephemeral 명령이면 바로 저장하지 않음 (Memory only)
         if not session_id or not self.history.get_session(session_id):
-            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral)
+            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id)
+
+        # [Security] Verify ownership
+        if session_id:
+            session_data = self.history.get_session(session_id)
+            if session_data:
+                sess_owner = session_data.get("owner_id")
+                if sess_owner and sess_owner != owner_id:
+                     logger.warning(f"Session access denied. Owner: {sess_owner}, Requester: {owner_id}")
+                     # Access denied -> Create new session for the requester
+                     session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id)
 
         # 1. 명령어 체크 (파일이 없을 때만)
         if not files and user_message.startswith("/"):
@@ -1040,6 +1078,17 @@ class KRStockChatbot:
             response = chat_session.send_message(content_parts)
             bot_response = response.text
             
+            # [Usage Metadata Extraction]
+            usage_metadata = {}
+            if hasattr(response, 'usage_metadata'):
+                meta = response.usage_metadata
+                # Extract fields safely
+                usage_metadata = {
+                    'prompt_token_count': getattr(meta, 'prompt_token_count', 0),
+                    'candidates_token_count': getattr(meta, 'candidates_token_count', 0),
+                    'total_token_count': getattr(meta, 'total_token_count', 0),
+                }
+
             # 6. 히스토리 저장
             user_history_msg = user_message
             if files:
@@ -1048,7 +1097,11 @@ class KRStockChatbot:
             self.history.add_message(session_id, "user", user_history_msg)
             self.history.add_message(session_id, "model", bot_response)
             
-            return {"response": bot_response, "session_id": session_id}
+            return {
+                "response": bot_response, 
+                "session_id": session_id,
+                "usage_metadata": usage_metadata
+            }
             
         except Exception as e:
             error_msg = str(e)

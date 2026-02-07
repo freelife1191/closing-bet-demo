@@ -122,7 +122,7 @@ class AppConfig:
     # Analysis LLM 설정
     @property
     def ANALYSIS_LLM_CONCURRENCY(self):
-        return int(os.getenv("ANALYSIS_LLM_CONCURRENCY", 2))
+        return int(os.getenv("ANALYSIS_LLM_CONCURRENCY", 1))
 
     @property
     def ANALYSIS_LLM_CHUNK_SIZE(self):
@@ -135,7 +135,7 @@ class AppConfig:
     @property
     def ANALYSIS_LLM_REQUEST_DELAY(self):
         """API 호출 간 강제 대기 시간 (초)"""
-        return float(os.getenv("ANALYSIS_LLM_REQUEST_DELAY", 4.0))
+        return float(os.getenv("ANALYSIS_LLM_REQUEST_DELAY", 5.0))
 
     # VCP Signals AI Analysis Settings
     @property
