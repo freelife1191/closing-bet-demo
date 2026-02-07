@@ -921,8 +921,6 @@ export default function JonggaV2Page() {
 
     if (analyzingGemini) return;
 
-    const confirmMsg = "이 종목만 다시 분석하시겠습니까?";
-    if (!window.confirm(confirmMsg)) return;
 
     setAnalyzingGemini(true);
     try {
@@ -1436,6 +1434,12 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
   // ADMIN 권한 체크
   const { isAdmin } = useAdmin();
   const [permissionModal, setPermissionModal] = useState(false);
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    type: 'default' | 'success' | 'danger';
+    title: string;
+    content: string;
+  }>({ isOpen: false, type: 'default', title: '', content: '' });
 
   // updatedAt props가 변경되면 내부 상태도 업데이트 (초기화용)
   useEffect(() => {
@@ -1545,6 +1549,12 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
       window.location.reload();
     } catch (error: any) {
       console.error('Gemini 분석 요청 중 오류 발생', error);
+      setAlertModal({
+        isOpen: true,
+        type: 'danger',
+        title: '분석 실패',
+        content: error.message || '분석 중 오류가 발생했습니다.'
+      });
       // alert(error.message || '분석 실패');
     } finally {
       setAnalyzingGemini(false);
@@ -1602,6 +1612,27 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
       >
         <p>관리자만 실행할 수 있습니다.</p>
         <p className="text-sm text-gray-400 mt-2">관리자 계정으로 로그인해 주세요.</p>
+      </Modal>
+
+      {/* Alert Modal */}
+      <Modal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        type={alertModal.type}
+        footer={
+          <button
+            onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+            className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${alertModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600' :
+              alertModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                'bg-blue-500 hover:bg-blue-600'
+              }`}
+          >
+            확인
+          </button>
+        }
+      >
+        <p>{alertModal.content}</p>
       </Modal>
     </div >
   )
