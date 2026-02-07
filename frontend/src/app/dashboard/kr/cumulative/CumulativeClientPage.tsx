@@ -339,17 +339,20 @@ export default function CumulativeClientPage() {
             <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
               실전 종가베팅 <span className="text-blue-500">누적 성과</span>
             </h1>
-            <div className="flex items-center gap-3 text-sm text-gray-400">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-400">
               <span>{kpi.priceDate} 기준 누적 성과</span>
-              <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-xs font-bold">목표가 (Target)</span>
-              <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-xs font-bold">손절가 (Stop)</span>
+              <div className="flex gap-2">
+                <span className="whitespace-nowrap px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-bold">목표 (+9%)</span>
+                <span className="whitespace-nowrap px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-[10px] font-bold">손절 (-5%)</span>
+              </div>
             </div>
           </div>
           <button
             onClick={() => window.location.reload()}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1c1c1e] hover:bg-[#2c2c2e] border border-white/10 rounded-lg text-sm transition-colors cursor-pointer"
+            className="flex items-center gap-2 p-2 md:px-4 md:py-2 bg-[#1c1c1e] hover:bg-[#2c2c2e] border border-white/10 rounded-lg text-sm transition-colors cursor-pointer whitespace-nowrap"
           >
-            <i className="fas fa-sync-alt"></i> 새로고침
+            <i className="fas fa-sync-alt"></i>
+            <span className="hidden sm:inline">새로고침</span>
           </button>
         </div>
       </div>
