@@ -215,6 +215,15 @@ export default function Sidebar() {
                   ● 종가베팅
                 </Link>
                 <Link
+                  href="/dashboard/kr/cumulative"
+                  className={`block px-3 py-2 rounded-lg text-sm transition-colors ${isActive('/dashboard/kr/cumulative')
+                    ? 'text-amber-400 bg-amber-500/5'
+                    : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                >
+                  ● 누적 성과
+                </Link>
+                <Link
                   href="/chatbot"
                   className={`block px-3 py-2 rounded-lg text-sm transition-colors ${isActive('/chatbot')
                     ? 'text-green-400 bg-green-500/5'

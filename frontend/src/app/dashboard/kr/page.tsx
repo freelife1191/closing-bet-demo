@@ -267,10 +267,10 @@ export default function KRMarketOverview() {
     if (s === 'RED' || s === 'BEARISH' || s === 'DANGER') return 'text-red-500';
     if (s === 'YELLOW' || s === 'NEUTRAL' || s === 'SIDEWAYS') return 'text-yellow-500';
 
-    // Fallback: Score based (Backend Logic: < 60 is Red, >= 60 is Yellow, >= 80 is Green)
+    // Fallback: Score based (Backend Logic: < 40 is Red, >= 40 is Yellow, >= 70 is Green)
     if (score !== undefined) {
-      if (score >= 80) return 'text-green-500';
-      if (score >= 60) return 'text-yellow-500';
+      if (score >= 70) return 'text-green-500';
+      if (score >= 40) return 'text-yellow-500';
       return 'text-red-500';
     }
 

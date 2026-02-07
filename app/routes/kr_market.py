@@ -771,8 +771,179 @@ def get_kr_ai_analysis():
 
 
 
-@kr_bp.route('/market-gate')
-def get_kr_market_gate():
+@kr_bp.route('/closing-bet/cumulative')
+def get_cumulative_performance():
+    """종가베팅 누적 성과 조회 (실제 데이터 연동)"""
+    try:
+        # 1. 모든 결과 파일 스캔 (jongga_v2_results_YYYYMMDD.json)
+        import glob
+        pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
+        files = glob.glob(pattern)
+        files.sort(reverse=True) # 최신순 정렬
+
+        trades = []
+        
+        # 2. 가격 데이터 로드 (Price Trail 계산용)
+        # daily_prices.csv 전체를 메모리에 올리는 것은 비효율적일 수 있으나, 
+        # 현재 데모 규모에서는 가장 빠르고 확실한 방법.
+        # 최적화: 필요한 컬럼만 로드 + Date Indexing
+        price_df = load_csv_file('daily_prices.csv')
+        if not price_df.empty:
+            price_df['ticker'] = price_df['ticker'].astype(str).str.zfill(6)
+            price_df['date'] = pd.to_datetime(price_df['date'])
+            price_df = price_df.sort_values('date')
+            price_df.set_index('date', inplace=True) # Date 인덱싱
+        
+        # 3. 파일별로 순회하며 Trade 정보 추출
+        for filepath in files:
+            try:
+                data = load_json_file(os.path.basename(filepath))
+                if not data or 'signals' not in data:
+                    continue
+                
+                # 파일명에서 날짜 추출 (jongga_v2_results_20260205.json)
+                file_date_str = os.path.basename(filepath).split('_')[-1].replace('.json', '')
+                try:
+                    stats_date = datetime.strptime(file_date_str, '%Y%m%d').strftime('%Y-%m-%d')
+                except:
+                    stats_date = data.get('date', '')
+
+                for sig in data['signals']:
+                    ticker = str(sig.get('stock_code', '')).zfill(6)
+                    entry = sig.get('entry_price', 0)
+                    target = sig.get('target_price', 0)
+                    stop = sig.get('stop_price', 0)
+                    
+                    if entry == 0: continue
+
+                    # Outcomes & Price Trail 계산
+                    outcome = 'OPEN'
+                    roi = 0.0
+                    max_high = 0.0
+                    days = 0
+                    price_trail = []
+
+                    # 해당 종목의 가격 데이터 필터링
+                    if not price_df.empty:
+                        # 신호 발생일 이후의 데이터만 조회
+                        stock_prices = price_df[price_df['ticker'] == ticker]
+                        if not stock_prices.empty:
+                            # signal_date 이후 데이터
+                            # stats_date 문자열을 timestamp로 변환
+                            sig_ts = pd.Timestamp(stats_date)
+                            period_prices = stock_prices[stock_prices.index >= sig_ts]
+                            
+                            if not period_prices.empty:
+                                # Price Trail (Graph Data) - 종가 리스트
+                                price_trail = period_prices['close'].tolist()
+                                days = len(price_trail)
+                                
+                                # Max High 계산
+                                high_prices = period_prices['high'].max()
+                                if high_prices > 0:
+                                    max_high = round(((high_prices - entry) / entry) * 100, 1)
+
+                                # Outcome 판별 (간이 로직: 기간 내 고가/저가 체크)
+                                # 실제로는 일별로 순차 체크해야 정확함 (Stop 먼저 터졌는지 Target 먼저 터졌는지)
+                                # 여기서는 간략히 최신 종가 기준 ROI로 판단하거나, 고가/저가 도달 여부로 판단
+                                
+                                # 1. 타겟 도달 여부 확인 (High >= Target)
+                                hit_target = period_prices[period_prices['high'] >= target]
+                                
+                                # 2. 스탑 도달 여부 확인 (Low <= Stop)
+                                hit_stop = period_prices[period_prices['low'] <= stop]
+
+                                if not hit_target.empty:
+                                    # 타겟 도달
+                                    outcome = 'WIN'
+                                    roi = round(((target - entry) / entry) * 100, 1)
+                                    # 만약 스탑도 도달했다면? 날짜 비교 필요
+                                    if not hit_stop.empty:
+                                        first_win = hit_target.index[0]
+                                        first_loss = hit_stop.index[0]
+                                        if first_loss < first_win:
+                                            outcome = 'LOSS'
+                                            roi = -5.0 # Stop Loss ROI (Fixed approx)
+                                elif not hit_stop.empty:
+                                    outcome = 'LOSS'
+                                    roi = -5.0
+                                else:
+                                    # 진행 중 (OPEN)
+                                    outcome = 'OPEN'
+                                    last_close = period_prices['close'].iloc[-1]
+                                    roi = round(((last_close - entry) / entry) * 100, 1)
+
+                    # ROI가 0.0이고 Price Trail이 있으면 마지막 가격 기준으로 업데이트 (OPEN 상태)
+                    if outcome == 'OPEN' and price_trail:
+                         last_p = price_trail[-1]
+                         current_roi = ((last_p - entry) / entry) * 100
+                         roi = round(current_roi, 1)
+
+                    trades.append({
+                        'id': f"{ticker}-{stats_date}", # Unique ID
+                        'date': stats_date,
+                        'grade': sig.get('grade', 'C'),
+                        'name': sig.get('stock_name', ''),
+                        'code': ticker,
+                        'market': sig.get('market', ''),
+                        'entry': entry,
+                        'outcome': outcome,
+                        'roi': roi,
+                        'maxHigh': max_high,
+                        'priceTrail': price_trail, # List of numbers
+                        'days': days,
+                        'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
+                        'themes': sig.get('themes', [])
+                    })
+
+            except Exception as e:
+                logger.error(f"Error processing file {filepath}: {e}")
+                continue
+        
+        # 4. 집계 (KPIs)
+        total_signals = len(trades)
+        wins = sum(1 for t in trades if t['outcome'] == 'WIN')
+        losses = sum(1 for t in trades if t['outcome'] == 'LOSS')
+        opens = sum(1 for t in trades if t['outcome'] == 'OPEN')
+        
+        closed_trades = wins + losses
+        win_rate = round((wins / closed_trades * 100), 1) if closed_trades > 0 else 0.0
+        
+        # ROI 합계
+        total_roi = sum(t['roi'] for t in trades)
+        avg_roi = round(total_roi / total_signals, 2) if total_signals > 0 else 0.0
+        
+        # Profit Factor (총 이익 / 총 손실)
+        gross_profit = sum(t['roi'] for t in trades if t['roi'] > 0)
+        gross_loss = abs(sum(t['roi'] for t in trades if t['roi'] < 0))
+        profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else round(gross_profit, 2) # 손실 없으면 총이익 표시 or Inf
+
+        # Price Date (가격 데이터 기준일)
+        max_price_date = price_df.index.max() if not price_df.empty else datetime.now()
+        price_date_str = max_price_date.strftime('%Y-%m-%d')
+
+        # Response
+        return jsonify({
+            'kpi': {
+                'totalSignals': total_signals,
+                'winRate': win_rate,
+                'wins': wins,
+                'losses': losses,
+                'open': opens,
+                'avgRoi': avg_roi,
+                'totalRoi': round(total_roi, 1),
+                'avgDays': round(sum(t['days'] for t in trades) / total_signals, 1) if total_signals > 0 else 0,
+                'priceDate': price_date_str, 
+                'profitFactor': profit_factor
+            },
+            'trades': trades
+        })
+
+    except Exception as e:
+        logger.error(f"Error calculating cumulative performance: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
     """KR Market Gate 상태 (프론트엔드 호환 형식)"""
     try:
         target_date = request.args.get('date')

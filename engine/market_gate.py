@@ -82,26 +82,29 @@ class MarketGate:
             total_score = tech_score + macro_score + supply_score
             
             # Gate Open 여부 판단 
-            # 1. 총점 60점 이상
+            # 1. 총점 40점 이상 (Neutral 구간 포함)
             # 2. 환율이 Danger 수준이면 무조건 False
-            is_open = total_score >= 60
+            is_open = total_score >= 40
             if macro_status == "DANGER":
                 is_open = False
                 gate_reason = "환율 위험 수준 (Gate Closed)"
-            elif total_score < 60:
-                gate_reason = f"점수 미달 ({total_score}/60)"
+            elif total_score < 40:
+                gate_reason = f"점수 미달 ({total_score}/40)"
             else:
                 gate_reason = "시장 양호"
 
-            # 상태 메시지
-            if total_score >= 80 and macro_status == "SAFE":
+            # 상태 메시지 및 레이블 (New Thresholds)
+            if total_score >= 70 and macro_status == "SAFE":
                 status = "강세장 (Strong Bull)"
+                label = "Bullish"
                 color = "GREEN"
-            elif is_open:
+            elif total_score >= 40:
                 status = "중립/강세 (Neutral/Bull)"
+                label = "Neutral"
                 color = "YELLOW"
             else:
                 status = "약세장/위험 (Bear/Danger)"
+                label = "Bearish"
                 color = "RED"
 
             # 4. 글로벌 데이터 (지수, 원자재, 크립토)
@@ -121,6 +124,7 @@ class MarketGate:
                 "kosdaq_change_pct": global_data.get('indices', {}).get('kosdaq', {}).get('change_pct', 0),
                 "usd_krw": usd_krw,
                 "total_score": total_score,
+                "label": label,  # Explicitly added for Frontend
                 "is_gate_open": is_open,
                 "gate_reason": gate_reason,
                 "status": status,
@@ -946,6 +950,7 @@ class MarketGate:
             "is_gate_open": True, 
             "gate_reason": "데이터 부족 (Default Open)",
             "status": "분석 대기 (Neutral)",
+            "label": "Neutral",
             "color": "YELLOW",
             "message": msg,
             "dataset_date": "",
