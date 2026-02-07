@@ -381,9 +381,12 @@ class LLMAnalyzer:
                 # Gemini - Blocking Call -> Thread
                     full_prompt = system_prompt + "\n" + user_prompt
                     
+                    # Model Fallback Support
+                    current_model = app_config.ANALYSIS_GEMINI_MODEL
+
                     def _call_gemini_batch():
                         return self.client.models.generate_content(
-                            model=app_config.ANALYSIS_GEMINI_MODEL,
+                            model=current_model,
                             contents=full_prompt
                         )
 
@@ -404,11 +407,20 @@ class LLMAnalyzer:
                             if attempt == max_retries - 1: raise
                             continue
                         except Exception as e:
-                            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                            error_msg = str(e)
+                            if any(code in error_msg for code in ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]):
                                 if attempt < max_retries - 1:
-                                    # Base wait: 5, 10, 20, 40, 80 seconds + Jitter
-                                    wait_time = (5 * (2 ** attempt)) + random.uniform(1, 3) 
-                                    logger.warning(f"[GEMINI] Rate limit (429) hit during batch. Retrying in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
+                                    # Fallback Logic: Gemini 3 -> Latest
+                                    if current_model == "gemini-3-flash-preview":
+                                        logger.warning(f"[GEMINI] {current_model} 과부하/오류로 인해 'gemini-flash-latest'로 전환하여 재시도합니다.")
+                                        current_model = "gemini-flash-latest"
+                                        # 즉시 재시도를 위해 wait_time을 짧게 가져감
+                                        wait_time = 1.0
+                                    else:
+                                        # Base wait: 5, 10, 20...
+                                        wait_time = (5 * (2 ** attempt)) + random.uniform(1, 3) 
+                                    
+                                    logger.warning(f"[GEMINI] Transient error ({error_msg}) hit. Retrying with {current_model} in {wait_time:.1f}s... ({attempt+1}/{max_retries})")
                                     await asyncio.sleep(wait_time)
                                     continue
                             raise e

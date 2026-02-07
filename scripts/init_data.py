@@ -640,7 +640,7 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
             return True
 
         import yfinance as yf
-        log("yfinance 백업 수집 모드 가동...", "INFO")
+        log("yfinance 백업 수집 모드 가동...", "DEBUG")
         
         # 종목 리스트 로드
         stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
@@ -936,7 +936,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                  log("pykrx 수집 데이터 없음 (이미 최신).", "SUCCESS")
                  return True
 
-             log("pykrx 수집 데이터 없음. yfinance 폴백 시도...", "WARNING")
+             log("pykrx 수집 데이터 없음. yfinance 폴백 시도...", "DEBUG")
              return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
                  
         return True
