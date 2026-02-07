@@ -966,7 +966,8 @@ def get_cumulative_performance():
         logger.error(f"Error calculating cumulative performance: {e}")
         return jsonify({'error': str(e)}), 500
 
-
+@kr_bp.route('/market-gate')
+def get_kr_market_gate():
     """KR Market Gate 상태 (프론트엔드 호환 형식)"""
     try:
         target_date = request.args.get('date')

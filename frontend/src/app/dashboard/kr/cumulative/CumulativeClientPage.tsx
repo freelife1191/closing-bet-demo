@@ -153,91 +153,93 @@ function DailyBarGraph({ data }: { data: number[] }) {
 function TradeTable({ trades }: { trades: Trade[] }) {
   return (
     <div className="bg-[#1c1c1e] rounded-2xl border border-white/5 overflow-hidden">
-      <table className="w-full text-left border-collapse">
-        <thead className="bg-[#2c2c2e]/50 text-[10px] uppercase text-gray-500 font-medium">
-          <tr>
-            <th className="py-3 px-4 w-12 text-center">#</th>
-            <th className="py-3 px-4">추천일</th>
-            <th className="py-3 px-4">등급</th>
-            <th className="py-3 px-4">종목명</th>
-            <th className="py-3 px-4 text-right">진입가</th>
-            <th className="py-3 px-4 text-center">결과</th>
-            <th className="py-3 px-4 text-right">수익률</th>
-            <th className="py-3 px-4 text-center">최고가</th>
-            <th className="py-3 px-4 text-center">가격흐름</th>
-            <th className="py-3 px-4 text-center">보유일</th>
-            <th className="py-3 px-4 text-center">점수</th>
-            <th className="py-3 px-4">테마</th>
-          </tr>
-        </thead>
-        <tbody className="text-xs divide-y divide-white/5">
-          {trades.map((trade, idx) => (
-            <tr key={trade.id} className="hover:bg-white/5 transition-colors group">
-              <td className="py-3 px-4 text-center text-gray-600">{trades.length - idx}</td>
-              <td className="py-3 px-4 text-gray-400 font-mono tracking-tight">{trade.date}</td>
-              <td className="py-3 px-4">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${trade.grade === 'S' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
-                  trade.grade === 'A' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                    'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                  }`}>
-                  {trade.grade}
-                </span>
-              </td>
-              <td className="py-3 px-4">
-                <div className="font-bold text-white">{trade.name}</div>
-                <div className="text-[10px]">
-                  <span className="text-gray-500">{trade.code}</span>{' '}
-                  <span className={`${trade.market === 'KOSPI' ? 'text-blue-400' :
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[800px]">
+          <thead className="bg-[#2c2c2e]/50 text-[10px] uppercase text-gray-500 font-medium">
+            <tr>
+              <th className="py-3 px-4 w-12 text-center">#</th>
+              <th className="py-3 px-4">추천일</th>
+              <th className="py-3 px-4">등급</th>
+              <th className="py-3 px-4">종목명</th>
+              <th className="py-3 px-4 text-right">진입가</th>
+              <th className="py-3 px-4 text-center">결과</th>
+              <th className="py-3 px-4 text-right">수익률</th>
+              <th className="py-3 px-4 text-center">최고가</th>
+              <th className="py-3 px-4 text-center">가격흐름</th>
+              <th className="py-3 px-4 text-center">보유일</th>
+              <th className="py-3 px-4 text-center">점수</th>
+              <th className="py-3 px-4">테마</th>
+            </tr>
+          </thead>
+          <tbody className="text-xs divide-y divide-white/5">
+            {trades.map((trade, idx) => (
+              <tr key={trade.id} className="hover:bg-white/5 transition-colors group">
+                <td className="py-3 px-4 text-center text-gray-600">{trades.length - idx}</td>
+                <td className="py-3 px-4 text-gray-400 font-mono tracking-tight">{trade.date}</td>
+                <td className="py-3 px-4">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${trade.grade === 'S' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
+                    trade.grade === 'A' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                      'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                    }`}>
+                    {trade.grade}
+                  </span>
+                </td>
+                <td className="py-3 px-4">
+                  <div className="font-bold text-white">{trade.name}</div>
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">{trade.code}</span>{' '}
+                    <span className={`${trade.market === 'KOSPI' ? 'text-blue-400' :
                       trade.market === 'KOSDAQ' ? 'text-rose-400' :
                         'text-gray-500'
-                    }`}>{trade.market}</span>
-                </div>
-              </td>
-              <td className="py-3 px-4 text-right text-gray-300 font-mono">{trade.entry.toLocaleString()}</td>
-              <td className="py-3 px-4 text-center">
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${trade.outcome === 'WIN' ? 'bg-emerald-500/20 text-emerald-400' :
-                  trade.outcome === 'LOSS' ? 'bg-rose-500/20 text-rose-400' :
-                    'bg-gray-500/20 text-gray-400'
+                      }`}>{trade.market}</span>
+                  </div>
+                </td>
+                <td className="py-3 px-4 text-right text-gray-300 font-mono">{trade.entry.toLocaleString()}</td>
+                <td className="py-3 px-4 text-center">
+                  <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded text-[10px] font-bold ${trade.outcome === 'WIN' ? 'bg-emerald-500/20 text-emerald-400' :
+                    trade.outcome === 'LOSS' ? 'bg-rose-500/20 text-rose-400' :
+                      'bg-gray-500/20 text-gray-400'
+                    }`}>
+                    {trade.outcome === 'WIN' ? '성공' : trade.outcome === 'LOSS' ? '실패' : '보유'}
+                  </span>
+                </td>
+                <td className={`py-3 px-4 text-right font-bold font-mono ${trade.roi > 0 ? 'text-emerald-400' : trade.roi < 0 ? 'text-rose-400' : 'text-gray-400'
                   }`}>
-                  {trade.outcome === 'WIN' ? '성공' : trade.outcome === 'LOSS' ? '실패' : '보유'}
-                </span>
-              </td>
-              <td className={`py-3 px-4 text-right font-bold font-mono ${trade.roi > 0 ? 'text-emerald-400' : trade.roi < 0 ? 'text-rose-400' : 'text-gray-400'
-                }`}>
-                {trade.roi > 0 ? '+' : ''}{trade.roi.toFixed(1)}%
-              </td>
-              {/* Max High Logic */}
-              <td className={`py-3 px-4 text-center font-mono ${trade.maxHigh >= 9 ? 'text-emerald-400 font-bold' :
-                trade.maxHigh > 0 ? 'text-yellow-400' : 'text-gray-500'
-                }`}>
-                {trade.maxHigh > 0 ? trade.maxHigh + '%' : '-'}
-              </td>
-              {/* Daily Bar Graph */}
-              <td className="py-3 px-4 text-center align-middle">
-                <div className="flex justify-center">
-                  <DailyBarGraph data={trade.priceTrail} />
-                </div>
-              </td>
-              <td className="py-3 px-4 text-center text-gray-400">{trade.days}일</td>
-              <td className="py-3 px-4 text-center text-blue-400 font-bold">{Math.floor(trade.score)}</td>
-              <td className="py-3 px-4">
-                <div className="flex gap-1 flex-wrap">
-                  {trade.themes.map(t => (
-                    <span key={t} className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[10px] border border-purple-500/20">{t}</span>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          ))}
-          {trades.length === 0 && (
-            <tr>
-              <td colSpan={12} className="py-8 text-center text-gray-500">
-                해당 기간에 대한 거래 내역이 없습니다.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+                  {trade.roi > 0 ? '+' : ''}{trade.roi.toFixed(1)}%
+                </td>
+                {/* Max High Logic */}
+                <td className={`py-3 px-4 text-center font-mono ${trade.maxHigh >= 9 ? 'text-emerald-400 font-bold' :
+                  trade.maxHigh > 0 ? 'text-yellow-400' : 'text-gray-500'
+                  }`}>
+                  {trade.maxHigh > 0 ? trade.maxHigh + '%' : '-'}
+                </td>
+                {/* Daily Bar Graph */}
+                <td className="py-3 px-4 text-center align-middle">
+                  <div className="flex justify-center">
+                    <DailyBarGraph data={trade.priceTrail} />
+                  </div>
+                </td>
+                <td className="py-3 px-4 text-center text-gray-400">{trade.days}일</td>
+                <td className="py-3 px-4 text-center text-blue-400 font-bold">{Math.floor(trade.score)}</td>
+                <td className="py-3 px-4">
+                  <div className="flex gap-1 flex-wrap">
+                    {trade.themes.map(t => (
+                      <span key={t} className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[10px] border border-purple-500/20">{t}</span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {trades.length === 0 && (
+              <tr>
+                <td colSpan={12} className="py-8 text-center text-gray-500">
+                  해당 기간에 대한 거래 내역이 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
