@@ -828,53 +828,76 @@ def get_cumulative_performance():
                         # 신호 발생일 이후의 데이터만 조회
                         stock_prices = price_df[price_df['ticker'] == ticker]
                         if not stock_prices.empty:
-                            # signal_date 이후 데이터
+                            # signal_date 이후 데이터 (Start from NEXT day)
                             # stats_date 문자열을 timestamp로 변환
                             sig_ts = pd.Timestamp(stats_date)
-                            period_prices = stock_prices[stock_prices.index >= sig_ts]
+                            period_prices = stock_prices[stock_prices.index > sig_ts]
+                            # 사용자 요청: Target +9%, Stop -5% 강제 적용
+                            target = entry * 1.09
+                            stop = entry * 0.95
                             
-                            if not period_prices.empty:
-                                # Price Trail (Graph Data) - 종가 리스트
-                                price_trail = period_prices['close'].tolist()
-                                days = len(price_trail)
-                                
-                                # Max High 계산
-                                high_prices = period_prices['high'].max()
-                                if high_prices > 0:
-                                    max_high = round(((high_prices - entry) / entry) * 100, 1)
+                            # Outcome 및 Exit Date 판별 logic
+                            hit_target = period_prices[period_prices['high'] >= target]
+                            hit_stop = period_prices[period_prices['low'] <= stop]
+                            
+                            first_win_date = hit_target.index[0] if not hit_target.empty else None
+                            first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
 
-                                # Outcome 판별 (간이 로직: 기간 내 고가/저가 체크)
-                                # 실제로는 일별로 순차 체크해야 정확함 (Stop 먼저 터졌는지 Target 먼저 터졌는지)
-                                # 여기서는 간략히 최신 종가 기준 ROI로 판단하거나, 고가/저가 도달 여부로 판단
-                                
-                                # 1. 타겟 도달 여부 확인 (High >= Target)
-                                hit_target = period_prices[period_prices['high'] >= target]
-                                
-                                # 2. 스탑 도달 여부 확인 (Low <= Stop)
-                                hit_stop = period_prices[period_prices['low'] <= stop]
-
-                                if not hit_target.empty:
-                                    # 타겟 도달
+                            exit_date = None
+                            
+                            if first_win_date and first_loss_date:
+                                if first_win_date <= first_loss_date:
                                     outcome = 'WIN'
-                                    roi = round(((target - entry) / entry) * 100, 1)
-                                    # 만약 스탑도 도달했다면? 날짜 비교 필요
-                                    if not hit_stop.empty:
-                                        first_win = hit_target.index[0]
-                                        first_loss = hit_stop.index[0]
-                                        if first_loss < first_win:
-                                            outcome = 'LOSS'
-                                            roi = -5.0 # Stop Loss ROI (Fixed approx)
-                                elif not hit_stop.empty:
+                                    roi = 9.0
+                                    exit_date = first_win_date
+                                else:
                                     outcome = 'LOSS'
                                     roi = -5.0
-                                else:
-                                    # 진행 중 (OPEN)
-                                    outcome = 'OPEN'
-                                    last_close = period_prices['close'].iloc[-1]
-                                    roi = round(((last_close - entry) / entry) * 100, 1)
+                                    exit_date = first_loss_date
+                            elif first_win_date:
+                                outcome = 'WIN'
+                                roi = 9.0
+                                exit_date = first_win_date
+                            elif first_loss_date:
+                                outcome = 'LOSS'
+                                roi = -5.0
+                                exit_date = first_loss_date
+                            else:
+                                outcome = 'OPEN'
+                                # OPEN 상태면 마지막 데이터까지 사용
+                                # exit_date = period_prices.index[-1] 
+                            
+                            # Price Trail 구성
+                            if exit_date:
+                                # Exit Date까지만 데이터 자르기
+                                trade_period = period_prices[period_prices.index <= exit_date]
+                            else:
+                                trade_period = period_prices
+                            
+                            # 초기값 [진입가]
+                            price_trail = [entry]
+                            
+                            # 종가 리스트 추가
+                            if not trade_period.empty:
+                                closes = trade_period['close'].tolist()
+                                price_trail.extend(closes)
+                                
+                                # WIN/LOSS 인 경우 마지막 가격을 Target/Stop 가로 보정 (그래프 일치)
+                                if outcome == 'WIN':
+                                    price_trail[-1] = target
+                                elif outcome == 'LOSS':
+                                    price_trail[-1] = stop
+                            
+                            days = len(trade_period)
 
-                    # ROI가 0.0이고 Price Trail이 있으면 마지막 가격 기준으로 업데이트 (OPEN 상태)
-                    if outcome == 'OPEN' and price_trail:
+                            # Max High 계산 (Exit Date 까지만)
+                            # WIN이면 당연히 Target 이상이겠지만, 기록용
+                            high_prices = trade_period['high'].max()
+                            if high_prices > 0:
+                                max_high = round(((high_prices - entry) / entry) * 100, 1)
+
+                    # ROI가 0.0이고 Price Trail이 있으면 마지막 가격 기준으로 업데이트 (OPEN 상태 fallback)
+                    if outcome == 'OPEN' and price_trail and roi == 0.0:
                          last_p = price_trail[-1]
                          current_roi = ((last_p - entry) / entry) * 100
                          roi = round(current_roi, 1)

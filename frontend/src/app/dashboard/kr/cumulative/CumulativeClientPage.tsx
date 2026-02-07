@@ -81,7 +81,7 @@ function DistributionBar({ kpi }: { kpi: KPIData }) {
       <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-4">승패 분포 (WIN/LOSS)</h3>
       <div className="flex h-8 w-full rounded-lg overflow-hidden font-bold text-xs text-black">
         {wPct > 0 && <div style={{ width: `${wPct}%` }} className="bg-emerald-500 flex items-center justify-center">{kpi.wins} 성공</div>}
-        {oPct > 0 && <div style={{ width: `${oPct}%` }} className="bg-gray-600 flex items-center justify-center text-white">{kpi.open} 진행</div>}
+        {oPct > 0 && <div style={{ width: `${oPct}%` }} className="bg-gray-600 flex items-center justify-center text-white">{kpi.open} 보유</div>}
         {lPct > 0 && <div style={{ width: `${lPct}%` }} className="bg-rose-500 flex items-center justify-center text-white">{kpi.losses} 실패</div>}
       </div>
       <div className="flex gap-6 mt-3 text-[10px] text-gray-400 justify-start">
@@ -91,7 +91,7 @@ function DistributionBar({ kpi }: { kpi: KPIData }) {
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-gray-600"></div>
-          진행중
+          보유중
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-rose-500"></div>
@@ -133,9 +133,9 @@ function DailyBarGraph({ data }: { data: number[] }) {
         const heightPct = Math.min(Math.max((absChange / 2) * 100, 30), 100);
 
         let colorClass = 'bg-gray-600';
-        if (change >= 9) colorClass = 'bg-emerald-500'; // >= 9% Increase: Green
-        else if (change > 0) colorClass = 'bg-yellow-400'; // < 9% Increase: Yellow
-        else if (change < 0) colorClass = 'bg-rose-500'; // Decrease: Red
+        if (change > 0) colorClass = 'bg-emerald-500';
+        else if (change < 0) colorClass = 'bg-rose-500';
+        else colorClass = 'bg-gray-700';
 
         return (
           <div
@@ -185,7 +185,13 @@ function TradeTable({ trades }: { trades: Trade[] }) {
               </td>
               <td className="py-3 px-4">
                 <div className="font-bold text-white">{trade.name}</div>
-                <div className="text-[10px] text-gray-500">{trade.code} {trade.market}</div>
+                <div className="text-[10px]">
+                  <span className="text-gray-500">{trade.code}</span>{' '}
+                  <span className={`${trade.market === 'KOSPI' ? 'text-blue-400' :
+                      trade.market === 'KOSDAQ' ? 'text-rose-400' :
+                        'text-gray-500'
+                    }`}>{trade.market}</span>
+                </div>
               </td>
               <td className="py-3 px-4 text-right text-gray-300 font-mono">{trade.entry.toLocaleString()}</td>
               <td className="py-3 px-4 text-center">
@@ -193,7 +199,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
                   trade.outcome === 'LOSS' ? 'bg-rose-500/20 text-rose-400' :
                     'bg-gray-500/20 text-gray-400'
                   }`}>
-                  {trade.outcome === 'WIN' ? '성공' : trade.outcome === 'LOSS' ? '실패' : '진행'}
+                  {trade.outcome === 'WIN' ? '성공' : trade.outcome === 'LOSS' ? '실패' : '보유'}
                 </span>
               </td>
               <td className={`py-3 px-4 text-right font-bold font-mono ${trade.roi > 0 ? 'text-emerald-400' : trade.roi < 0 ? 'text-rose-400' : 'text-gray-400'
@@ -333,8 +339,8 @@ export default function CumulativeClientPage() {
             </h1>
             <div className="flex items-center gap-3 text-sm text-gray-400">
               <span>{kpi.priceDate} 기준 누적 성과</span>
-              <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-xs font-bold">목표가 +9%</span>
-              <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-xs font-bold">손절가 -5%</span>
+              <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-xs font-bold">목표가 (Target)</span>
+              <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-xs font-bold">손절가 (Stop)</span>
             </div>
           </div>
           <button
@@ -352,7 +358,7 @@ export default function CumulativeClientPage() {
         <StatCard title="승률" value={`${kpi.winRate}%`} colorClass="text-yellow-400" />
         <StatCard title="성공" value={kpi.wins} colorClass="text-emerald-400" />
         <StatCard title="실패" value={kpi.losses} colorClass="text-rose-400" />
-        <StatCard title="진행중" value={kpi.open} colorClass="text-yellow-500" />
+        <StatCard title="보유중" value={kpi.open} colorClass="text-yellow-500" />
         <StatCard title="평균 수익률" value={`${kpi.avgRoi > 0 ? '+' : ''}${kpi.avgRoi}%`} colorClass={kpi.avgRoi >= 0 ? "text-emerald-400" : "text-rose-400"} />
       </div>
 
@@ -383,7 +389,7 @@ export default function CumulativeClientPage() {
               <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => setOutcomeFilter('All')} />
               <FilterButton label="성공" count={kpi.wins} active={outcomeFilter === 'WIN'} onClick={() => setOutcomeFilter('WIN')} />
               <FilterButton label="실패" count={kpi.losses} active={outcomeFilter === 'LOSS'} onClick={() => setOutcomeFilter('LOSS')} />
-              <FilterButton label="진행" count={kpi.open} active={outcomeFilter === 'OPEN'} onClick={() => setOutcomeFilter('OPEN')} />
+              <FilterButton label="보유" count={kpi.open} active={outcomeFilter === 'OPEN'} onClick={() => setOutcomeFilter('OPEN')} />
             </div>
           </div>
 

@@ -56,7 +56,58 @@ def verify_data():
         
         real_names = [t['name'] for t in trades]
         print(f"   Real Names: {real_names[:5]}...")
+
+        # Check WIN/LOSS ROI accuracy
+        win_trades = [t for t in trades if t['outcome'] == 'WIN']
+        loss_trades = [t for t in trades if t['outcome'] == 'LOSS']
         
+        if win_trades:
+            print(f"✅ WIN Trades Found: {len(win_trades)}")
+            print(f"   Sample WIN ROI: {win_trades[0]['roi']}% (Expected 9.0%)")
+            if win_trades[0]['roi'] == 9.0:
+                print("   ✅ WIN ROI Verified as 9.0%")
+                # Verify Price Trail End
+                last_p = win_trades[0]['priceTrail'][-1]
+                entry = win_trades[0]['entry']
+                implied_roi = round(((last_p - entry) / entry) * 100, 1)
+                print(f"   - Price Trail End ROI: {implied_roi}%")
+                if implied_roi == 9.0:
+                    print("   ✅ Price Trail ends at Target Price")
+                else:
+                    print(f"   ⚠️ Price Trail Mismatch: Ends at {implied_roi}%")
+            else:
+                print(f"   ⚠️ WIN ROI Mismatch: {win_trades[0]['roi']}%")
+
+        if loss_trades:
+            print(f"✅ LOSS Trades Found: {len(loss_trades)}")
+            print(f"   Sample LOSS ROI: {loss_trades[0]['roi']}% (Expected -5.0%)")
+            if loss_trades[0]['roi'] == -5.0:
+                print("   ✅ LOSS ROI Verified as -5.0%")
+                # Verify Price Trail End
+                last_p = loss_trades[0]['priceTrail'][-1]
+                entry = loss_trades[0]['entry']
+                implied_roi = round(((last_p - entry) / entry) * 100, 1)
+                print(f"   - Price Trail End ROI: {implied_roi}%")
+                if implied_roi == -5.0:
+                    print("   ✅ Price Trail ends at Stop Price")
+                else:
+                    print(f"   ⚠️ Price Trail Mismatch: Ends at {implied_roi}%")
+            else:
+                print(f"   ⚠️ LOSS ROI Mismatch: {loss_trades[0]['roi']}%")
+            
+        # Check for OPEN trades
+        open_trades = [t for t in trades if t['outcome'] == 'OPEN']
+        if open_trades:
+            print(f"✅ OPEN Trades Found: {len(open_trades)}")
+            print(f"   Sample OPEN Trade: {open_trades[0]['name']} ({open_trades[0]['code']})")
+            print(f"   - Date: {open_trades[0]['date']}")
+            print(f"   - Entry: {open_trades[0]['entry']}")
+            print(f"   - ROI: {open_trades[0]['roi']}%")
+            print(f"   - Max High: {open_trades[0]['maxHigh']}%")
+            print(f"   - Price Trail Points: {len(open_trades[0]['priceTrail'])}")
+        else:
+            print("⚠️ No OPEN trades found (All closed or no recent data).")
+
         # Mock check is a bit loose because real data might actually contain these stocks.
         # But ID structure is different. Mock ID was int, Real ID is string "code-date"
         if isinstance(first_trade['id'], int):
