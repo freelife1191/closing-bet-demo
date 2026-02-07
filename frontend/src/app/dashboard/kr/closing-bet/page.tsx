@@ -254,7 +254,7 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in duration-200" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in duration-200" onClick={onClose}>
       <div
         className="bg-[#1c1c1e] w-full max-w-4xl h-[80vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
@@ -537,7 +537,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 md:p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 md:p-4"
       onClick={onClose}
     >
       <div
@@ -1698,10 +1698,10 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
   return (
     <div className="rounded-2xl border border-white/10 bg-[#1c1c1e] overflow-hidden transition-all hover:border-white/20">
       {/* Main Content - 3 Column Layout */}
-      <div className="flex flex-col lg:flex-row">
+      <div className="flex flex-col xl:flex-row">
 
         {/* Column 1: Stock Info + Chart */}
-        <div className="p-5 lg:w-[25%] border-b lg:border-b-0 lg:border-r border-white/10 flex flex-col">
+        <div className="p-5 xl:w-[25%] border-b xl:border-b-0 xl:border-r border-white/10 flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -1728,7 +1728,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
           )}
 
           {/* Key Metrics - NEW! */}
-          <div className="grid grid-cols-2 gap-2 mb-4 bg-white/5 rounded-xl p-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-2 gap-2 mb-4 bg-white/5 rounded-xl p-3">
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                 상승률
@@ -1905,7 +1905,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
         </div>
 
         {/* Column 2: Analysis Details */}
-        <div className="p-5 lg:w-[45%] border-b lg:border-b-0 lg:border-r border-white/10 flex flex-col justify-between">
+        <div className="p-5 xl:w-[45%] border-b xl:border-b-0 xl:border-r border-white/10 flex flex-col justify-between">
           <div>
             <h4 className="text-xs font-bold text-gray-400 mb-3 flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -2045,7 +2045,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
         </div>
 
         {/* Column 3: Score & Actions */}
-        <div className="p-5 lg:w-[30%] flex flex-col justify-between bg-black/20">
+        <div className="p-5 xl:w-[30%] flex flex-col justify-between bg-black/20">
           <div className="text-center mb-4">
             <div className="inline-block relative">
               <svg className="w-24 h-24 transform -rotate-90">
@@ -2082,7 +2082,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-center text-[10px] text-gray-500 mb-4 px-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-2 gap-2 text-center text-[10px] text-gray-500 mb-4 px-2">
             <div className={`bg-white/5 rounded py-1 hover:bg-white/10 transition-colors border ${signal.score.chart >= 2 ? 'border-indigo-500/30' : 'border-transparent'}`}>
               <Tooltip content="차트 패턴: 신고가/돌파 여부 및 추세 분석 (최대 2점)">
                 <div className="cursor-help">차트</div>
@@ -2128,7 +2128,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </div>
           </div>
 
-          <div className="mt-auto space-y-2.5">
+          <div className="mt-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-2.5">
             {/* Primary Actions: Stacked for better mobile/narrow visibility */}
             <button
               onClick={onOpenDetail}
@@ -2146,7 +2146,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </button>
 
             {/* Secondary Actions: 2-Column Grid for Links */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 md:col-span-2 xl:col-span-1">
               <a
                 href={`https://m.stock.naver.com/domestic/stock/${signal.stock_code}/main`}
                 target="_blank"

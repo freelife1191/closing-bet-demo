@@ -72,6 +72,11 @@ class LLMAnalyzer:
                 masked_key = current_key[:4] + "*" * 10 if current_key else "None"
                 # logger.debug(f"Gemini LLM Re-Init: Key={masked_key}")
                 self._client = genai.Client(api_key=current_key)
+                
+                # [Log Model Info]
+                model_name = app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL
+                logger.info(f"LLM Client Initialized ({self.provider.upper()}) - Model: {model_name}")
+
             except Exception as e:
                 logger.error(f"Gemini Init Failed: {e}")
 
@@ -353,7 +358,8 @@ class LLMAnalyzer:
             is_analysis_llm = self.provider == 'gemini'
             API_TIMEOUT = app_config.ANALYSIS_LLM_API_TIMEOUT if is_analysis_llm else app_config.LLM_API_TIMEOUT
             
-            logger.info(f"[{self.provider.upper()}] LLM API 호출 시작 (Timeout: {API_TIMEOUT}s)...")
+            used_model = app_config.ANALYSIS_GEMINI_MODEL if is_analysis_llm else app_config.ZAI_MODEL
+            logger.info(f"[{self.provider.upper()}] LLM API 호출 시작 (Model: {used_model}, Timeout: {API_TIMEOUT}s)...")
 
             try:
                 if self.provider == 'zai':
@@ -383,12 +389,15 @@ class LLMAnalyzer:
 
                     # Retry Logic for Batch
                     max_retries = 5
+                    used_model_version = None
+                    
                     for attempt in range(max_retries):
                         try:
                             # Use wait_for for timeout within the retry loop
                             resp = await asyncio.wait_for(asyncio.to_thread(_call_gemini_batch), timeout=API_TIMEOUT)
                             response_content = resp.text
-                            logger.info(f"[GEMINI] API 응답 수신 완료 (길이: {len(response_content)} chars)")
+                            used_model_version = getattr(resp, 'model_version', None)
+                            logger.info(f"[GEMINI] API 응답 수신 완료 (길이: {len(response_content)} chars, Version: {used_model_version})")
                             break
                         except asyncio.TimeoutError:
                             logger.warning(f"[GEMINI] Batch Analysis Timeout (Attempt {attempt+1}/{max_retries})")
@@ -418,6 +427,9 @@ class LLMAnalyzer:
             results_list = json.loads(json_str)
             logger.info(f"[{self.provider.upper()}] JSON 파싱 성공: {len(results_list)}개 종목 분석 결과")
             
+            # 실제 사용된 모델명 결정 (API 응답 우선, 없으면 설정값)
+            actual_model_name = used_model_version if used_model_version else (app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL)
+
             # Map 변환
             final_map = {}
             for item in results_list:
@@ -427,10 +439,8 @@ class LLMAnalyzer:
                         "score": item.get("score", 0),
                         "action": item.get("action", "HOLD"),
                         "confidence": item.get("confidence", 0),
-                        "action": item.get("action", "HOLD"),
-                        "confidence": item.get("confidence", 0),
                         "reason": item.get("reason", ""),
-                        "model": app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL
+                        "model": actual_model_name
                     }
                     logger.debug(f"  → {name}: {item.get('action')} (Score: {item.get('score')}, Conf: {item.get('confidence')}%)")
             

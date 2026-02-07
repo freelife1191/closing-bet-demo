@@ -1774,7 +1774,8 @@ def reanalyze_gemini_all():
                     signal['score']['news'] = matched_result.get('score', 0)
                     signal['ai_evaluation'] = {
                         'action': matched_result.get('action', 'HOLD'),
-                        'confidence': matched_result.get('confidence', 0)
+                        'confidence': matched_result.get('confidence', 0),
+                        'model': matched_result.get('model', 'gemini-2.0-flash')  # [Fix] Pass model name to frontend
                     }
                     updated_count += 1
             
