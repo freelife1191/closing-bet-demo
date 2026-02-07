@@ -1557,7 +1557,7 @@ def reanalyze_gemini_all():
         return jsonify({'status': 'ok'}), 200
     
     try:
-        print(">>> [1/7] POST 처리 시작...")
+        print(">>> [API] 요청 처리 시작...")
         import json
         import asyncio
         from pathlib import Path
@@ -1582,11 +1582,11 @@ def reanalyze_gemini_all():
             data = json.load(f)
         
         all_signals = data.get('signals', [])
-        print(f">>> [3/7] 시그널 개수: {len(all_signals)}개")
+        print(f">>> [Data] 로드된 후보 종목: 총 {len(all_signals)}개")
         
         # signals가 비어있는 경우 최근 유효 데이터 검색
         if not all_signals:
-            print(">>> [3/7] 시그널 없음 - 최근 유효 데이터 검색 중...")
+            print(">>> [Data] 시그널 없음 - 최근 유효 데이터 검색 중...")
             import glob
             pattern = str(Path(__file__).parent.parent.parent / 'data' / 'jongga_v2_results_*.json')
             files = sorted(glob.glob(pattern), reverse=True)
@@ -1599,10 +1599,10 @@ def reanalyze_gemini_all():
                             data = candidate
                             all_signals = data.get('signals', [])
                             latest_file = Path(file_path)  # 파일 경로 업데이트
-                            print(f">>> [3/7] 유효 데이터 발견: {file_path} ({len(all_signals)}개 시그널)")
+                            print(f">>> [Data] 유효 데이터 발견: {file_path} ({len(all_signals)}개 시그널)")
                             break
                 except Exception as e:
-                    print(f">>> [3/7] 파일 읽기 실패: {file_path} - {e}")
+                    print(f">>> [Data] 파일 읽기 실패: {file_path} - {e}")
                     continue
         
         if not all_signals:
@@ -1644,7 +1644,7 @@ def reanalyze_gemini_all():
             })
 
         # LLM 분석기 로드
-        print(">>> [4/7] LLM 분석기 로드 시도...")
+        print(">>> [Engine] LLM 분석기 로드 중...")
         try:
             from engine.llm_analyzer import LLMAnalyzer
             from engine.config import app_config

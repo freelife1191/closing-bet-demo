@@ -835,6 +835,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
 export default function JonggaV2Page() {
   const { isAdmin } = useAdmin();
   const [analyzingGemini, setAnalyzingGemini] = useState(false);
+  const [retryingTicker, setRetryingTicker] = useState<string | null>(null);
   const [data, setData] = useState<ScreenerResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [dates, setDates] = useState<string[]>([]);
@@ -921,14 +922,15 @@ export default function JonggaV2Page() {
 
     if (analyzingGemini) return;
 
-
     setAnalyzingGemini(true);
+    setRetryingTicker(stockCode);
     try {
       console.log(`Retry Analysis for ${stockCode}...`);
       await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_tickers: [stockCode] })
+        body: JSON.stringify({ target_tickers: [stockCode] }),
+        timeout: 120000 // 120s timeout for LLM
       });
       console.log('개별 분석 완료!');
       window.location.reload();
@@ -942,6 +944,7 @@ export default function JonggaV2Page() {
       });
     } finally {
       setAnalyzingGemini(false);
+      setRetryingTicker(null);
     }
   };
 
@@ -1059,7 +1062,11 @@ export default function JonggaV2Page() {
         <div className="flex gap-6">
           <StatBox label="CANDIDATES" value={data?.filtered_count || 0} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
           <StatBox label="FILTERED" value={data?.total_candidates || 0} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
-          <DataStatusBox updatedAt={data?.updated_at} />
+          <DataStatusBox
+            updatedAt={data?.updated_at || null}
+            analyzingGemini={analyzingGemini}
+            setAnalyzingGemini={setAnalyzingGemini}
+          />
         </div>
 
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 w-full">
@@ -1330,6 +1337,7 @@ export default function JonggaV2Page() {
                 setIsBuyModalOpen(true);
               }}
               onRetry={handleRetryAnalysis}
+              isRetrying={retryingTicker === signal.stock_code}
               isAdmin={isAdmin}
             />
           ))
@@ -1426,9 +1434,12 @@ export default function JonggaV2Page() {
   );
 }
 
-function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
+function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
+  updatedAt: string | null,
+  analyzingGemini: boolean,
+  setAnalyzingGemini: (v: boolean) => void
+}) {
   const [updating, setUpdating] = useState(false);
-  const [analyzingGemini, setAnalyzingGemini] = useState(false);
   const [currentUpdatedAt, setCurrentUpdatedAt] = useState(updatedAt);
 
   // ADMIN 권한 체크
@@ -1543,7 +1554,8 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
       // Use fetchAPI
       const data: any = await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 240000 // 4분 (Global은 오래 걸림)
       });
       console.log(data.message || 'Gemini 분석 완료!');
       window.location.reload();
@@ -1580,9 +1592,9 @@ function DataStatusBox({ updatedAt }: { updatedAt?: string }) {
           <button
             onClick={handleGeminiReanalyze}
             disabled={updating || analyzingGemini}
-            className={`p-1 rounded bg-white/5 hover:bg-white/10 transition-all ${analyzingGemini ? 'animate-pulse text-purple-400' : 'text-gray-500 hover:text-purple-400'}`}
+            className={`p-1 rounded bg-white/5 hover:bg-white/10 transition-all ${analyzingGemini ? 'text-purple-400' : 'text-gray-500 hover:text-purple-400'}`}
           >
-            <i className="fas fa-brain text-[10px]"></i>
+            <i className={`fas fa-brain text-[10px] ${analyzingGemini ? 'animate-spin' : ''}`}></i>
           </button>
         </Tooltip>
       </span>
@@ -1656,13 +1668,14 @@ function StatBox({ label, value, highlight = false, customValue, tooltip }: { la
   )
 }
 
-function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, isAdmin }: {
+function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, isRetrying, isAdmin }: {
   signal: Signal,
   index: number,
   onOpenChart: () => void,
   onOpenDetail: () => void,
   onBuy: () => void,
   onRetry: (code: string) => void,
+  isRetrying: boolean,
   isAdmin: boolean
 }) {
   const gradeStyles: Record<string, { bg: string, text: string, border: string }> = {
@@ -1910,10 +1923,11 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                     e.stopPropagation();
                     onRetry(signal.stock_code);
                   }}
-                  className="text-gray-600 hover:text-indigo-400 transition-colors p-1"
+                  disabled={isRetrying}
+                  className={`transition-colors p-1 ${isRetrying ? 'text-indigo-400' : 'text-gray-600 hover:text-indigo-400'}`}
                   title="이 종목만 재분석 (Admin)"
                 >
-                  <i className="fas fa-redo-alt text-[10px]"></i>
+                  <i className={`fas fa-redo-alt text-[10px] ${isRetrying ? 'animate-spin' : ''}`}></i>
                 </button>
               )}
             </h4>

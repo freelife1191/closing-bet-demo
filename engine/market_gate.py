@@ -533,7 +533,7 @@ class MarketGate:
 
                                 # [2026-02-06 Fix] FDR 데이터 불완전(변동률 0.0) 시 yfinance Fallback 유도
                                 if change_pct == 0.0:
-                                     logger.warning(f"FDR {key} has 0.0% change. Fallback to yfinance recommended.")
+                                     logger.debug(f"FDR {key} has 0.0% change. Fallback to yfinance recommended.")
                                      continue
 
                                 result['crypto'][key] = {'value': close_val, 'change_pct': round(change_pct, 2)}
