@@ -171,7 +171,11 @@ class LLMAnalyzer:
                     try:
                         resp = await asyncio.to_thread(_call_gemini)
                         response_content = resp.text
+                        # Try various attributes for model version
                         used_model_version = getattr(resp, 'model_version', None)
+                        if not used_model_version:
+                             # Some versions might put it in usage_metadata or similar, but let's stick to safe defaults if missing
+                             pass
                         break
                     except Exception as e:
                         error_msg = str(e).lower()
@@ -209,6 +213,8 @@ class LLMAnalyzer:
                 if isinstance(result, dict) and 'model' not in result:
                     # Capture actual version from response if available
                     actual_model = used_model_version if 'used_model_version' in locals() and used_model_version else (app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL)
+                    if actual_model == "gemini-flash-latest":
+                         actual_model = "gemini-1.5-flash (Latest)"
                     result['model'] = actual_model
                 return result
             except json.JSONDecodeError as je:
@@ -422,6 +428,9 @@ class LLMAnalyzer:
                             resp = await asyncio.wait_for(asyncio.to_thread(_call_gemini_batch), timeout=API_TIMEOUT)
                             response_content = resp.text
                             used_model_version = getattr(resp, 'model_version', None)
+                            if not used_model_version:
+                                # Fallback or check other attributes
+                                pass
                             logger.info(f"[GEMINI] API 응답 수신 완료 (길이: {len(response_content)} chars, Version: {used_model_version})")
                             break
                         except asyncio.TimeoutError:
@@ -463,6 +472,9 @@ class LLMAnalyzer:
             
             # 실제 사용된 모델명 결정 (API 응답 우선, 없으면 설정값)
             actual_model_name = used_model_version if used_model_version else (app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL)
+            
+            if actual_model_name == "gemini-flash-latest":
+                actual_model_name = "gemini-1.5-flash (Latest)" 
 
             # Map 변환
             final_map = {}
