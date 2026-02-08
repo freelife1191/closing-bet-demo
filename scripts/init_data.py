@@ -618,9 +618,9 @@ def create_korean_stocks_list():
                 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ', 'KOSDAQ'
             ],
             'sector': [
-                '반도체', '반도체', '자동차', '2차전지', '바이오', '자동차', '인터넷', '바이오', '금융', '금융',
+                '반도체', '반도체', '자동차', '2차전지', '헬스케어', '자동차', '인터넷', '헬스케어', '금융', '금융',
                 '인터넷', '지주', '에너지', '건설', '통신', '금융', '전기전자', '게임', '자동차부품', '지주',
-                '2차전지', '2차전지', '바이오', '게임', '바이오', '자동차부품', 'AI/의료', '바이오', '반도체소재', '반도체장비',
+                '2차전지', '2차전지', '헬스케어', '게임', '헬스케어', '자동차부품', 'AI/의료', '헬스케어', '반도체소재', '반도체장비',
                 '게임', '미용기기', '엔터', '엔터', '반도체장비', '반도체장비', '미디어', 'IT서비스', '반도체장비', '방산'
             ],
         }
@@ -1139,208 +1139,35 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
         return False
 
 
-def calculate_vcp_score(df: pd.DataFrame) -> dict:
-    """
-    VCP 패턴 점수 계산 (0~100)
-    - 변동성 수축: 최근 5일 고저폭 < 20일 평균 고저폭
-    - 거래량 감소: 최근 5일 거래량 < 20일 평균 거래량
-    - 이평선 정배열: 종가 > 5MA > 20MA
-    """
-    if len(df) < 20:
-        return {'score': 0, 'contraction_ratio': 0, 'reasons': []}
-    
-    try:
-        df = df.sort_index()
-        
-        # 변동성 수축 계산
-        df['range'] = df['high'] - df['low']
-        recent_range = df['range'].tail(5).mean()
-        avg_range = df['range'].tail(20).mean()
-        contraction_ratio = recent_range / avg_range if avg_range > 0 else 1
-        
-        # 거래량 감소 계산
-        recent_vol = df['volume'].tail(5).mean()
-        avg_vol = df['volume'].tail(20).mean()
-        vol_ratio = recent_vol / avg_vol if avg_vol > 0 else 1
-        
-        # 이평선 정배열
-        ma5 = df['close'].tail(5).mean()
-        ma20 = df['close'].tail(20).mean()
-        current_price = df['close'].iloc[-1]
-        
-        score = 0
-        reasons = []
-        
-        # 변동성 수축 (최대 40점)
-        if contraction_ratio < 0.5:
-            score += 40
-            reasons.append("강한 변동성 수축")
-        elif contraction_ratio < 0.7:
-            score += 30
-            reasons.append("변동성 수축")
-        elif contraction_ratio < 0.9:
-            score += 15
-        
-        # 거래량 감소 (최대 30점)
-        if vol_ratio < 0.5:
-            score += 30
-            reasons.append("거래량 급감")
-        elif vol_ratio < 0.7:
-            score += 20
-            reasons.append("거래량 감소")
-        elif vol_ratio < 0.9:
-            score += 10
-        
-        # 이평선 정배열 (최대 30점)
-        if current_price > ma5 > ma20:
-            score += 30
-            reasons.append("이평선 정배열")
-        elif current_price > ma20:
-            score += 15
-        
-        return {'score': score, 'contraction_ratio': round(contraction_ratio, 2), 'reasons': reasons}
-    except:
-        return {'score': 0, 'contraction_ratio': 0, 'reasons': []}
-
-
-def calculate_supply_score(ticker: str, inst_df: pd.DataFrame) -> dict:
-    """
-    수급 점수 계산 (0~100)
-    - 외국인 5일 순매수: 25점
-    - 기관 5일 순매수: 20점
-    - 연속 매수일: 15점
-    """
-    try:
-        # ticker 비교 시 zfill(6) 적용하여 형식 맞춤
-        df = inst_df[inst_df['ticker'].astype(str).str.zfill(6) == ticker].sort_values('date')
-        if len(df) < 5:
-            return {'score': 0, 'foreign_5d': 0, 'inst_5d': 0}
-        
-        recent = df.tail(5)
-        foreign_5d = recent['foreign_buy'].sum()
-        inst_5d = recent['inst_buy'].sum()
-        
-        score = 0
-        
-        # 외국인 순매수 (최대 40점)
-        if foreign_5d > 1000000000:  # 10억
-            score += 40
-        elif foreign_5d > 500000000:  # 5억
-            score += 25
-        elif foreign_5d > 0:
-            score += 10
-        
-        # 기관 순매수 (최대 30점)
-        if inst_5d > 500000000:  # 5억
-            score += 30
-        elif inst_5d > 200000000:  # 2억
-            score += 20
-        elif inst_5d > 0:
-            score += 10
-        
-        # 연속 매수일 (최대 30점)
-        consecutive = 0
-        for val in reversed(recent['foreign_buy'].values):
-            if val > 0:
-                consecutive += 1
-            else:
-                break
-        score += min(consecutive * 6, 30)
-        
-        return {'score': score, 'foreign_5d': int(foreign_5d), 'inst_5d': int(inst_5d)}
-    except:
-        return {'score': 0, 'foreign_5d': 0, 'inst_5d': 0}
-
-
 def create_signals_log(target_date=None, run_ai=True):
-    """VCP 시그널 로그 생성 - 실제 데이터 기반 분석"""
-    log("VCP 시그널 분석 중 (실제 데이터 기반)...")
+    """VCP 시그널 로그 생성 - Using SmartMoneyScreener (engine.screener)"""
+    log("VCP 시그널 분석 중 (SmartMoneyScreener)...")
     try:
-        from pykrx import stock
+        from engine.screener import SmartMoneyScreener
         
-        # 데이터 로드
-        prices_file = os.path.join(BASE_DIR, 'data', 'daily_prices.csv')
-        inst_file = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
-        stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
-        
-        if not os.path.exists(stocks_file):
-            log("주식 목록 파일이 없어 새로 생성합니다...", "WARNING")
-            create_korean_stocks_list()
-        
-        # 재확인
-        if not all(os.path.exists(f) for f in [prices_file, inst_file, stocks_file]):
-            missing = [f for f in [prices_file, inst_file, stocks_file] if not os.path.exists(f)]
-            raise Exception(f"필요한 데이터 파일 없음: {missing}")
-        
-        prices_df = pd.read_csv(prices_file)
-        inst_df = pd.read_csv(inst_file)
-        stocks_df = pd.read_csv(stocks_file)
-        
-        # (중요) 타겟 날짜 기준 데이터 필터링 (Look-ahead Bias 방지 및 시점 정확도 확보)
-        if target_date:
-            log(f"[{target_date}] 기준 과거 데이터로 필터링합니다...", "DEBUG")
-            prices_df = prices_df[prices_df['date'] <= target_date]
-            inst_df = inst_df[inst_df['date'] <= target_date]
-        
+        # 스크리너 실행 (KOSPI+KOSDAQ 전체 분석)
+        screener = SmartMoneyScreener(target_date=target_date)
+        df_result = screener.run_screening(max_stocks=600)
         
         signals = []
+        if not df_result.empty:
+            for _, row in df_result.iterrows():
+                signals.append({
+                    'ticker': row['ticker'],
+                    'name': row['name'],
+                    'signal_date': target_date if target_date else datetime.now().strftime('%Y-%m-%d'),
+                    'market': row['market'],
+                    'status': 'OPEN',
+                    'score': round(row['score'], 1),
+                    'contraction_ratio': row.get('contraction_ratio', 0),
+                    'entry_price': int(row['entry_price']),
+                    'foreign_5d': int(row['foreign_net_5d']),
+                    'inst_5d': int(row['inst_net_5d']),
+                    'vcp_score': 0, # Screener doesn't expose sub-score directly, optional
+                    'current_price': int(row.get('entry_price', 0)) # Approximation or need fetch
+                })
         
-        analyzed_count = 0
-        total_stocks = len(stocks_df)
-        log(f"총 {total_stocks}개 종목에 대한 VCP 분석 시작... (KOSPI+KOSDAQ)", "DEBUG")
-        
-        for _, row in stocks_df.iterrows():
-            ticker = str(row['ticker']).zfill(6)
-            name = row['name']
-            market = row['market']
-            
-            # 가격 데이터 필터링
-            ticker_prices = prices_df[prices_df['ticker'].astype(str).str.zfill(6) == ticker].copy()
-            if len(ticker_prices) < 20:
-                continue
-            
-            # 인덱스를 날짜로 설정
-            ticker_prices['date'] = pd.to_datetime(ticker_prices['date'])
-            ticker_prices = ticker_prices.set_index('date')
-            
-            # VCP 점수 계산
-            vcp = calculate_vcp_score(ticker_prices)
-            
-            # 수급 점수 계산
-            supply = calculate_supply_score(ticker, inst_df)
-            
-            # 종합 점수 (VCP 60% + 수급 40%)
-            total_score = vcp['score'] * 0.6 + supply['score'] * 0.4
-            
-            analyzed_count += 1
-            
-            # 디버그 로그: 상위 점수 종목 또는 일부 종목 출력
-            if total_score >= 40 or analyzed_count <= 5:
-                log(f"  [{name}] VCP={vcp['score']}, Supply={supply['score']}, Total={total_score:.1f} (CR={vcp['contraction_ratio']})")
-            
-            # 최소 점수 필터링 (60점 기준 복구)
-            if total_score < 60:
-                continue
-            
-            current_price = ticker_prices['close'].iloc[-1]
-            recent_high = ticker_prices['close'].tail(20).max()
-            
-            signals.append({
-                'ticker': ticker,
-                'name': name,
-                'signal_date': target_date if target_date else datetime.now().strftime('%Y-%m-%d'),
-                'market': market,
-                'status': 'OPEN',
-                'score': round(total_score, 1),
-                'contraction_ratio': vcp['contraction_ratio'],
-                'entry_price': int(recent_high),
-                'foreign_5d': supply['foreign_5d'],
-                'inst_5d': supply['inst_5d'],
-                'vcp_score': vcp['score'], # AI 분석용 추가 정보
-                'current_price': int(current_price)
-            })
-        
-        log(f"총 {analyzed_count}개 종목 분석 완료, {len(signals)}개 시그널 감지")
+        log(f"총 {len(signals)}개 시그널 감지")
         
         # 점수 높은 순 정렬 (Top 20 제한)
         signals = sorted(signals, key=lambda x: x['score'], reverse=True)[:20]

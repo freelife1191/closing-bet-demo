@@ -178,21 +178,16 @@ class Scorer:
         return 0
 
     def _score_timing(self, stock: StockData, charts: Optional[ChartData]) -> int:
-        """기간조정 점수 (0-1점)"""
-        if not charts:
+        """기간조정 점수 (0-1점): 볼린저밴드 수축 및 횡보 후 돌파"""
+        if not charts or len(charts.closes) < 20:
             return 0
 
-        if len(charts.closes) < 20:
-            return 0
-
-        # 볼린저 밴드 수축 확인 (Band Width)
-        # Band Width = (Upper - Lower) / Middle
-        # 수축 기준: 최근 5일 평균 Band Width가 과거 20일 평균보다 작음 (변동성 축소)
-        
+        # 볼린저 밴드 계산 및 돌파 확인
         import math
         
         closes = charts.closes
         band_widths = []
+        is_breakout = False
         
         # 최근 20일간의 Band Width 계산
         for i in range(20):
@@ -214,17 +209,26 @@ class Scorer:
             if avg > 0:
                 bw = (upper - lower) / avg
                 band_widths.append(bw)
-        
+            
+            # 오늘(i=0) 기준 상단 돌파 여부 확인
+            if i == 0:
+                if closes[-1] > upper:
+                    is_breakout = True
+
         if len(band_widths) < 10:
             return 0
             
-        # 최근 3일 평균 Band Width
-        recent_bw = sum(band_widths[:3]) / 3
-        # 과거 (3일 이후) 평균 Band Width
-        past_bw = sum(band_widths[3:]) / len(band_widths[3:])
+        # 1. 수축 (Contraction): 최근 5일(오늘 제외) 평균 Band Width가 과거 대비 낮거나 절대값이 작음
+        # band_widths 리스트는 [오늘, 1일전, 2일전, ...] 순서임 (range(20) 역순 아님, i가 0부터 커짐)
+        # i=0: 오늘, i=1: 1일전...
         
-        # 변동성이 과거 대비 70% 수준으로 수축되었거나, 절대값이 0.1(10%) 미만인 경우 점수 부여
-        if recent_bw < past_bw * 0.7 or recent_bw < 0.1:
+        recent_bw_avg = sum(band_widths[1:6]) / 5  # 어제부터 5일간
+        past_bw_avg = sum(band_widths[6:]) / len(band_widths[6:]) # 그 이전
+        
+        is_contracted = (recent_bw_avg < past_bw_avg * 0.8) or (recent_bw_avg < 0.15)
+        
+        # 2. 횡보 후 돌파: 수축 상태에서 오늘 상단 밴드 돌파
+        if is_contracted and is_breakout:
             return 1
 
         return 0
@@ -280,19 +284,19 @@ class Scorer:
 
         return score, score > 0
 
-    def determine_grade(self, stock: StockData, score: ScoreDetail, score_details: Dict = None, supply: SupplyData = None, charts: ChartData = None) -> Grade:
-        """등급 결정 (2026-02-01 Simplified V3)
-        
-        [공통 필터]
-        - 거래대금 300억 미만 제외
-        - 거래량 배수 2.0배 미만 제외 (필수)
-        
-        [단순화된 등급 기준]
-        S급: 1조원+, 10%+, 점수 10+, 거래량배수 5.0+
-        A급: 5,000억+, 5%+, 점수 8+, 거래량배수 3.0+
-        B급: 1,000억+, 4%+, 점수 6+, 거래량배수 2.0+
-        C급: 500억+, 5%+, 점수 8+, 거래량배수 3.0+
-        D급: 500억+, 4%+, 점수 6+, 거래량배수 2.0+
+    def determine_grade(
+        self, 
+        stock: StockData, 
+        score: ScoreDetail, 
+        score_details: Dict, 
+        supply: SupplyData, 
+        charts: ChartData,
+        allow_no_news: bool = False  # [Fix] Phase 1 선별용 플래그
+    ) -> Optional[Grade]:
+        """
+        최종 등급 판정 (S/A/B/C)
+        - 필수 조건(거래대금, 등락률, 윗꼬리 등) 검증
+        - 점수 및 거래대금 기준 등급 부여
         """
         trading_value = stock.trading_value
         change_pct = stock.change_pct
@@ -303,61 +307,84 @@ class Scorer:
             volume_ratio = score_details.get('volume_ratio', 0.0)
         
         # 디버그용 로그 (등급 판정 과정 추적)
-        logger.debug(f"[등급판정] {stock.name}: Value={trading_value//100_000_000}억, Rise={change_pct:.1f}%, Score={score.total}, VolRatio={volume_ratio:.1f}")
+        # logger.debug(f"[등급판정] {stock.name}: Value={trading_value//100_000_000}억, Rise={change_pct:.1f}%, Score={score.total}, VolRatio={volume_ratio:.1f}")
         
-        # 1. 공통 필터 (Common Exclusion)
+        # --- 1. 회피 조건 (Don'ts) & 필수 조건 Check ---
+
+        # 1) 거래대금 500억 미만 제외 (Config.min이 500억으로 상향됨)
         if trading_value < self.config.trading_value_min:
-            logger.debug(f"  -> [Drop] 거래대금 부족: {trading_value//100_000_000}억 < {self.config.trading_value_min//100_000_000}억")
+            logger.debug(f"  -> [Drop] 거래대금 부족: {trading_value//100_000_000}억 < 500억")
             return None
             
+        # 2) 등락률 5~29.9% 이외 제외 (상한가 제외, 너무 낮은 등락률 제외)
+        if not (5.0 <= change_pct <= 29.9):
+            logger.debug(f"  -> [Drop] 등락률 조건 위배: {change_pct:.1f}% (Target: 5~29.9%)")
+            return None
+
+        # 3) 상한가 제외 (30% 이상)
+        if change_pct >= 30.0:
+             logger.debug(f"  -> [Drop] 상한가 도달 종목")
+             return None
+
+        # 4) 뉴스 없음 (단순 급등 작전주 회피)
+        if not allow_no_news and score.news == 0:
+            logger.debug(f"  -> [Drop] 뉴스/재료 없음")
+            return None
+
+        # 5) 윗꼬리가 긴 캔들 (매도세)
+        # _score_candle 함수가 1점을 주면 '양호(윗꼬리 짧음)', 0점이면 '나쁨(윗꼬리 긺 or 음봉)')
+        # 다만 _score_candle은 장대양봉 조건도 포함하므로, 여기서는 윗꼬리만 별도로 엄격히 볼 수도 있음
+        # 일단 Score 기반으로 차단하거나, Chart Data로 직접 확인
+        if charts:
+             # 직접 확인: 윗꼬리가 몸통의 50%를 넘으면 탈락
+             try:
+                 open_p = charts.opens[-1]
+                 close_p = charts.closes[-1]
+                 high_p = charts.highs[-1]
+                 
+                 body = abs(close_p - open_p)
+                 upper_shadow = high_p - max(open_p, close_p)
+                 
+                 if body > 0 and upper_shadow > body * 0.5:
+                     logger.debug(f"  -> [Drop] 윗꼬리 과다: Shadow({upper_shadow}) > Body({body}*0.5)")
+                     return None
+             except:
+                 pass
+
+        # 6) 거래량 배수 확인 (최소 2배)
         if volume_ratio < 2.0:
             logger.debug(f"  -> [Drop] 거래량배수 부족: {volume_ratio:.1f} < 2.0")
             return None
 
-        # 2. 등급 판별 (Strict logic first)
+        # --- 2. 등급 판별 (18점 만점 기준) ---
+        # Config 기준: S(15), A(12), B(10)
         
-        # [S급] 초대형 수급 폭발
-        # 조건: 거래대금 1조원 이상 AND 등락률 10% 이상 AND 점수 10점 이상
-        if (trading_value >= 1_000_000_000_000 and 
-            change_pct >= 10.0 and 
-            score.total >= 10):
+        # [S급]
+        if (trading_value >= self.config.trading_value_s and # 1조
+            score.total >= self.config.min_s_grade): # 15점
             logger.debug(f"  -> [S급] 조건 충족!")
             return Grade.S
             
-        # [A급] 대형 우량주
-        # 조건: 거래대금 5,000억 이상 AND 등락률 3% 이상 AND 점수 8점 이상
-        if (trading_value >= 500_000_000_000 and 
-            change_pct >= 3.0 and
-            score.total >= 8):
+        # [A급]
+        if (trading_value >= self.config.trading_value_a and # 5000억
+            score.total >= self.config.min_a_grade): # 12점
             logger.debug(f"  -> [A급] 조건 충족!")
             return Grade.A
             
-        # [B급] 중형 주도주
-        # 조건: 거래대금 1,000억 이상 AND 등락률 4% 이상 AND 점수 6점 이상
-        if (trading_value >= 100_000_000_000 and 
-            change_pct >= 4.0 and
-            score.total >= 6):
+        # [B급]
+        if (trading_value >= self.config.trading_value_b and # 1000억
+            score.total >= self.config.min_b_grade): # 10점
             logger.debug(f"  -> [B급] 조건 충족!")
             return Grade.B
             
-        # [C급] 강소 주도주 (소형)
-        # 조건: 거래대금 500억 이상 AND 등락률 5% 이상 AND 점수 8점 이상
-        if (trading_value >= 50_000_000_000 and 
-            change_pct >= 5.0 and
-            score.total >= 8):
+        # [C급] (나머지 합격권)
+        # 점수 8점 이상이면 C급 부여 (기존 D급 삭제/통합)
+        if score.total >= 8:
             logger.debug(f"  -> [C급] 조건 충족!")
             return Grade.C
-            
-        # [D급] 조건부 관망 (소형)
-        # 조건: 거래대금 Min(300억) 이상 AND 등락률 4% 이상 AND 점수 6점 이상 AND 거래량 배수 2배 이상 (위 점수 조건 미달 시)
-        if (trading_value >= self.config.trading_value_min and 
-            change_pct >= 4.0 and
-            score.total >= 6 and
-            volume_ratio >= 2.0):
-            logger.debug(f"  -> [D급] 조건 충족!")
-            return Grade.D
         
-        # 조건 미충족 시 등급 없음
-        logger.debug(f"  -> [Drop] 등급 조건 미충족 (Score={score.total}, Rise={change_pct:.1f}%, Value={trading_value//100_000_000}억)")
+        # [D급 이하] - 검출 제외
+        # 8점 미만은 D등급으로 분류되나, 스크리닝 단계에서 제외함 (User Request)
+        logger.debug(f"  -> [Drop] 점수 미달 (Score={score.total} < 8, Grade D filtered out)")
         return None
 

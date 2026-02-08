@@ -22,39 +22,40 @@ class Grade(Enum):
 @dataclass
 class SignalConfig:
     """시그널 생성 설정"""
-    # 12점 점수 시스템
-    max_score: int = 12
+    # 18점 점수 시스템 (종가베팅)
+    max_score: int = 18
 
     # 등급 기준
     min_s_grade: int = 10
     min_a_grade: int = 8
     min_b_grade: int = 6
 
-    # 거래대금 기준 (원) - 2026-01-31 업데이트
-    trading_value_s: int = 1_000_000_000_000  # 1조 → 3점
-    trading_value_a: int = 500_000_000_000    # 5000억 → 2점
-    trading_value_b: int = 100_000_000_000    # 1000억 → 1점 (사용자 기준 반영)
-    trading_value_c: int = 50_000_000_000     # 500억 → C급 기준
-    trading_value_min: int = 30_000_000_000   # 300억 → 수집 최소 기준
+    # 거래대금 기준 (원) - 2026-02-08 업데이트 (Dos 조건 반영)
+    trading_value_s: int = 1_000_000_000_000  # 1조
+    trading_value_a: int = 500_000_000_000    # 5000억
+    trading_value_b: int = 100_000_000_000    # 1000억
+    trading_value_c: int = 50_000_000_000     # 500억
+    trading_value_min: int = 50_000_000_000   # 500억 (문서 기준)
 
     # 자금 관리
     capital: float = 50_000_000  # 5천만원
     risk_per_trade: float = 0.005  # 0.5% (R값)
     max_positions: int = 10
 
-    # 손절/익절
+    # 손절/익절 (User Request: +5%, -3%)
     stop_loss_pct: float = 0.03  # -3%
     take_profit_pct: float = 0.05  # +5%
-    r_multiplier: int = 3  # R:Reward = 1:3
+    r_multiplier: int = 3  # R:Reward = 3:5 approx (Not strictly 1:3 anymore, but keeping field)
 
 
 @dataclass 
 class MarketGateConfig:
     """Market Gate 설정 - 시장 진입 조건"""
     # 환율 기준 (USD/KRW)
-    usd_krw_safe: float = 1350.0            # 안전 (초록)
-    usd_krw_warning: float = 1400.0         # 주의 (노랑)
-    usd_krw_danger: float = 1450.0          # 위험 (빨강)
+    # 환율 기준 (New Normal Regime applied 2026-02-08)
+    usd_krw_safe: float = 1420.0            # 안전 (초록) - 1420 이하
+    usd_krw_warning: float = 1450.0         # 주의 (노랑) - 1450 이하
+    usd_krw_danger: float = 1480.0          # 위험 (빨강) - 1480 이상 (Penalty)
     
     # KOSPI 기준
     kospi_ma_short: int = 20                # 단기 이평
@@ -192,4 +193,3 @@ class AppConfig:
 
 config = SignalConfig()
 app_config = AppConfig()
-

@@ -84,6 +84,11 @@ def run_daily_closing_analysis(test_mode=False):
 
 def run_market_gate_sync():
     """주기적 매크로 지표 및 스마트머니 데이터 업데이트 (30분)"""
+    # [2026-02-08] 주말 실행 방지
+    if datetime.now().weekday() >= 5:
+        logger.debug("[Scheduler] 주말이므로 Market Gate 동기화 건너뜀")
+        return
+
     logger.debug(">>> [Scheduler] Market Gate 및 전체 데이터 동기화 시작")
     try:
         # 1. 기초 데이터 업데이트 (주가 & 수급)
@@ -95,8 +100,10 @@ def run_market_gate_sync():
         # [Optimization] lookback_days=2 (오늘+어제)만 갱신하여 5~7일치 중복 수집 방지
         # 이미 수집된 날짜(어제 이전)는 건너뛰고 싶지만, 장중에는 오늘 데이터가 계속 변하므로 force 필요
         # 단, 과거 데이터까지 force할 필요는 없으므로 2일로 제한
-        create_daily_prices(force=True, lookback_days=2) 
-        create_institutional_trend(force=True, lookback_days=2)
+        # [2026-02-08 Fix] 서버 재기동 시 VCP 분석처럼 보이는 전체 종목 갱신 방지
+        # Market Gate는 지수/섹터만 필요하므로 개별 종목 갱신은 불필요 (장 마감 때만 수행)
+        # create_daily_prices(force=True, lookback_days=2) 
+        # create_institutional_trend(force=True, lookback_days=2)
         
         # 2. VCP 시그널 분석 (Smart Money 업데이트 시 제외 요청)
         # 사용자 요청: VCP 시그널, 종가 베팅 데이터는 업데이트 되면 안됨

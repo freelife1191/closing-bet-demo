@@ -187,11 +187,11 @@ export default function KRMarketOverview() {
       }
 
 
-      // [Auto-Recovery] If initializing or empty in Realtime Mode -> Rapid Polling (5s)
+      // [Auto-Recovery] If initializing (Market Gate not ready) -> Rapid Polling (5s)
       if (useTodayMode) {
+        // [Fixed] Don't retry just because signals are empty (valid state)
         const isInitializing =
-          (gateResult.status === 'fulfilled' && (gateResult.value?.status === 'initializing' || gateResult.value?.message?.includes('대기'))) ||
-          (signalsResult.status === 'fulfilled' && (!signalsResult.value?.signals || signalsResult.value.signals.length === 0));
+          (gateResult.status === 'fulfilled' && (gateResult.value?.status === 'initializing' || gateResult.value?.message?.includes('대기')));
 
         if (isInitializing) {
           console.log('[Auto-Recovery] Data not ready. Retrying in 5s...');
@@ -510,8 +510,16 @@ export default function KRMarketOverview() {
               </div>
             </div>
             <div className={`mt-4 px-4 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-bold ${getGateStatusColor(gateData?.status ?? 'GRAY', gateData?.score)}`}>
-              <Tooltip content={gateData?.label === 'Bullish' ? '상승장 (매수 우위)' : gateData?.label === 'Bearish' ? '하락장 (매도 우위)' : '중립/혼조세 (방향성 탐색)'} position="bottom">
-                {loading ? 'Analyzing...' : (gateData?.label === 'Unknown' || gateData?.label === 'UnKnown' ? 'Neutral' : gateData?.label ?? 'Neutral')}
+              <Tooltip content={
+                (gateData?.score && gateData.score >= 70) ? '상승장 (매수 우위)' :
+                  (gateData?.score && gateData.score >= 40) ? '중립/혼조세 (방향성 탐색)' :
+                    '하락장 (매도 우위)'
+              } position="bottom">
+                {loading ? 'Analyzing...' : (
+                  (gateData?.score && gateData.score >= 70) ? 'Bullish' :
+                    (gateData?.score && gateData.score >= 40) ? 'Neutral' :
+                      'Bearish'
+                )}
               </Tooltip>
             </div>
           </div>

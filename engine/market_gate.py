@@ -20,9 +20,9 @@ except ImportError:
     from dataclasses import dataclass
     @dataclass
     class MarketGateConfig:
-        usd_krw_safe: float = 1350.0
-        usd_krw_warning: float = 1400.0
-        usd_krw_danger: float = 1450.0
+        usd_krw_safe: float = 1420.0
+        usd_krw_warning: float = 1450.0
+        usd_krw_danger: float = 1480.0
         kospi_ma_short: int = 20
         kospi_ma_long: int = 60
         foreign_net_buy_threshold: int = 500_000_000_000
@@ -44,6 +44,46 @@ class MarketGate:
         except ImportError:
             self.kis = None
             logger.warning("KisCollector not found. Real-time supply score will be disabled.")
+            
+        # 주요 섹터 ETF (KODEX/TIGER)
+        self.sectors = {
+            '반도체': '091160',      # KODEX 반도체
+            '2차전지': '305720',     # TIGER 2차전지테마
+            '자동차': '091170',      # KODEX 자동차
+            '헬스케어': '102780',    # KODEX 헬스케어
+            'IT': '091180',          # TIGER 200 IT
+            '은행': '102960',        # KODEX 은행
+            '철강': '117680',        # TIGER 200 철강소재
+            '증권': '102970',        # KODEX 증권
+            '조선': '139230',        # TIGER 200 중공업 (Data replacement for 446910)
+            '에너지': '117690',      # KODEX 에너지화학
+            'KOSPI 200': '069500'    # KODEX 200
+        }
+        
+    def _fetch_benchmark_data(self, start_date: str, end_date: str) -> pd.DataFrame:
+        """KOSPI 지수 데이터 로드 (RS 계산용)"""
+        try:
+            # 1. Try FDR first
+            try:
+                import FinanceDataReader as fdr
+                df = fdr.DataReader('KS11', start_date, end_date)
+                if not df.empty:
+                    df = df.reset_index()
+                    df.columns = [c.lower() for c in df.columns]
+                    # FDR returns 'date', 'close', etc.
+                    return df[['date', 'close']].rename(columns={'close': 'bench_close'})
+            except Exception as e:
+                logger.debug(f"FDR benchmark fetch failed: {e}")
+
+            # 2. Fallback to pykrx
+            # from pykrx import stock
+            # pykrx logic ... (omitted for brevity, FDR is usually reliable)
+            # Just return empty if failed, handle in calc
+            return pd.DataFrame()
+            
+        except Exception as e:
+            logger.warning(f"Benchmark fetch failed: {e}")
+            return pd.DataFrame()
 
     def analyze(self, target_date: str = None) -> Dict[str, Any]:
         """시장 상태 분석 실행 (target_date: YYYY-MM-DD)"""
@@ -53,57 +93,67 @@ class MarketGate:
             if df.empty:
                 return self._default_result("가격 데이터 부족")
             
-            df = self._calculate_indicators(df)
+            # Benchmark (KOSPI) Load for RS
+            start_dt = df.iloc[0]['date']
+            end_dt = df.iloc[-1]['date']
+            
+            # str conversion if datetime
+            if isinstance(start_dt, datetime): start_dt = start_dt.strftime("%Y-%m-%d")
+            if isinstance(end_dt, datetime): end_dt = end_dt.strftime("%Y-%m-%d")
+            else: start_dt = str(start_dt)[:10]; end_dt = str(end_dt)[:10] # pandas timestamp
+            
+            bench_df = self._fetch_benchmark_data(start_dt, end_dt)
+            
+            df = self._calculate_indicators(df, bench_df)
             current_tech = df.iloc[-1]
             
-            # 2. 거시 지표 (환율)
+            # 2. 거시 지표 (환율) - Display Purpose Only (Score Excluded)
             usd_krw = self._get_usd_krw()
             
-            # 3. 수급 지표 (외인/기관)
+            # 3. 수급 지표 (외인/기관) - Display Purpose Only (Score Excluded)
             supply_data = self._load_supply_data()
             
-            # --- 점수 산출 (Total 100) ---
+            # --- 점수 산출 (Total 100 - Technical Only) ---
             
-            # PART 7: 기술적 지표 (70점 만점 조정)
+            # Technical Indicators (100점 만점)
             score_trend = self._score_trend(current_tech)      # 25점
             score_rsi = self._score_rsi(current_tech)          # 25점
-            score_macd = self._score_macd(current_tech)        # 20점 -> 10점 조정
-            score_vol = self._score_volume(current_tech)       # 15점 -> 10점 조정
+            score_macd = self._score_macd(current_tech)        # 20점
+            score_vol = self._score_volume(current_tech)       # 15점
+            score_rs = self._score_rs(current_tech)            # 15점 (New)
             
-            tech_score = score_trend + score_rsi + min(score_macd, 10) + min(score_vol, 10)
+            tech_score = score_trend + score_rsi + score_macd + score_vol + score_rs
             
-            # PART 1: 거시/수급 지표 (30점 + Alpha penalty)
-            # 환율 점수 (기본 15점, 위험 시 페널티)
+            # Validation (Cap at 100)
+            total_score = min(tech_score, 100)
+            
+            # Reference Scores (Not added to total)
             macro_score, macro_status = self._score_macro(usd_krw)
-            
-            # 수급 점수 (기본 15점)
-            supply_score = self._score_supply(supply_data)
-            
-            total_score = tech_score + macro_score + supply_score
+            supply_score = self._score_supply(supply_data) # Just for display
             
             # Gate Open 여부 판단 
-            # 1. 총점 40점 이상 (Neutral 구간 포함)
-            # 2. 환율이 Danger 수준이면 무조건 False
             is_open = total_score >= 40
-            if macro_status == "DANGER":
-                is_open = False
-                gate_reason = "환율 위험 수준 (Gate Closed)"
-            elif total_score < 40:
-                gate_reason = f"점수 미달 ({total_score}/40)"
+            
+            if total_score < 40:
+                gate_reason = f"기술적 점수 미달 ({total_score}/40)"
             else:
-                gate_reason = "시장 양호"
+                gate_reason = "시장 양호 (Technical)"
+                
+            # Optional: Warning Override (Display only)
+            if macro_status == "DANGER":
+                 gate_reason += " [환율 위험]" 
 
-            # 상태 메시지 및 레이블 (New Thresholds)
-            if total_score >= 70 and macro_status == "SAFE":
-                status = "강세장 (Strong Bull)"
+            # 상태 메시지 및 레이블
+            if total_score >= 70:
+                status = "강세장 (Bullish)"
                 label = "Bullish"
                 color = "GREEN"
             elif total_score >= 40:
-                status = "중립/강세 (Neutral/Bull)"
+                status = "중립 (Neutral)"
                 label = "Neutral"
                 color = "YELLOW"
             else:
-                status = "약세장/위험 (Bear/Danger)"
+                status = "약세장 (Bearish)"
                 label = "Bearish"
                 color = "RED"
 
@@ -131,11 +181,12 @@ class MarketGate:
                 "color": color,
                 "dataset_date": str(current_tech['date']),
                 "details": {
-                    "tech_score": tech_score,
-                    "macro_score": macro_score,
-                    "supply_score": supply_score,
+                    "tech_score": int(total_score),
+                    "rs_score": score_rs,
                     "trend_score": score_trend,
                     "rsi_score": score_rsi,
+                    "macd_score": score_macd,
+                    "vol_score": score_vol,
                     "rsi_val": round(float(current_tech['rsi']), 2),
                     "macd_val": round(float(current_tech['macd']), 2),
                     "ma20": float(current_tech['ma20']),
@@ -566,18 +617,7 @@ class MarketGate:
             import pandas as pd
             
             # 주요 섹터 ETF (KODEX/TIGER)
-            # pykrx는 6자리 종목코드 사용
-            sectors = {
-                '반도체': '091160',      # KODEX 반도체
-                '2차전지': '305720',     # TIGER 2차전지테마
-                '자동차': '091180',      # KODEX 자동차
-                '헬스케어': '266420',    # KODEX 헬스케어
-                'IT': '139260',          # TIGER 200 IT
-                '은행': '091170',        # KODEX 은행
-                '철강': '139240',        # TIGER 200 철강소재
-                '증권': '102970',        # KODEX 증권
-                'KOSPI 200': '069500'    # KODEX 200 (지수 대용)
-            }
+            # self.sectors 사용
             
             # [2026-02-06] 실시간 지수 동기화를 위해 전역 지수 데이터 확보
             # 이 함수는 analyze() 내에서 _get_global_data() 다음에 호출됨이 보장되어야 함
@@ -588,7 +628,7 @@ class MarketGate:
             
             result = {}
             
-            for name, ticker in sectors.items():
+            for name, ticker in self.sectors.items():
                 # KOSPI 200은 _get_global_data에서 이미 FDR 등으로 실시간 수집했을 가능성이 큼
                 if name == 'KOSPI 200' and global_data:
                     # kospi_close/change가 FDR/yfinance로 수집된 최신 지수임
@@ -623,13 +663,9 @@ class MarketGate:
                     result[name] = 0.0
                     
             return result
-
-            
         except Exception as e:
             logger.warning(f"Sector data error: {e}")
             return {}
-
-
 
     def _load_price_data(self, target_date: str = None) -> pd.DataFrame:
         """KODEX 200 데이터 로드 및 날짜 필터링 (Fallback: pykrx)"""
@@ -833,6 +869,7 @@ class MarketGate:
         # 2. Fallback: 기존 CSV 파일 로드
         filepath = os.path.join(self.data_dir, 'all_institutional_trend_data.csv')
         if not os.path.exists(filepath):
+            # logger.warning(f"수급 데이터 파일 없음: {filepath}")
             return {}
         
         try:
@@ -854,8 +891,8 @@ class MarketGate:
             logger.error(f"수급 데이터 로드 실패: {e}")
             return {}
 
-    def _calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """기술적 지표 계산"""
+    def _calculate_indicators(self, df: pd.DataFrame, bench_df: pd.DataFrame = None) -> pd.DataFrame:
+        """기술적 지표 계산 (RS 포함)"""
         close = df['close']
         
         # EMA
@@ -881,6 +918,34 @@ class MarketGate:
         if 'change_pct' not in df.columns:
             df['change_pct'] = close.pct_change() * 100
             
+        # --- RS Calculation ---
+        try:
+            # 20-day Return
+            df['ret_20d'] = df['close'].pct_change(periods=20) * 100
+            
+            if bench_df is not None and not bench_df.empty:
+                # Merge on date to align
+                # Ensure date format overlap
+                # Assuming 'date' columns are compatible (string or timestamp)
+                # Convert to datetime if needed
+                df['date_dt'] = pd.to_datetime(df['date'])
+                bench_df['date_dt'] = pd.to_datetime(bench_df['date'])
+                
+                merged = pd.merge(df, bench_df[['date_dt', 'bench_close']], on='date_dt', how='left')
+                merged['bench_ret_20d'] = merged['bench_close'].pct_change(periods=20) * 100
+                
+                # RS = Asset Return - Bench Return
+                merged['rs_diff'] = merged['ret_20d'] - merged['bench_ret_20d']
+                
+                # Assign back
+                df['rs_diff'] = merged['rs_diff']
+            else:
+                df['rs_diff'] = 0.0 # Default if no bench
+                
+        except Exception as e:
+            logger.warning(f"RS calculation failed: {e}")
+            df['rs_diff'] = 0.0
+
         return df.fillna(0)
 
     def _score_trend(self, row) -> int:
@@ -901,16 +966,29 @@ class MarketGate:
         return 5
 
     def _score_macd(self, row) -> int:
-        """MACD 점수 (10점): 골든크로스"""
+        """MACD 점수 (20점): 골든크로스"""
         if row['macd'] > row['signal']:
-            return 10
+            return 20 # Restored to 20
         return 0
 
     def _score_volume(self, row) -> int:
-        """거래량 점수 (10점): 20일 평균 상회"""
+        """거래량 점수 (15점): 20일 평균 상회"""
         if row['vol_ma20'] > 0 and row['volume'] > row['vol_ma20']:
-            return 10
+            return 15
         return 0
+        
+    def _score_rs(self, row) -> int:
+        """RS 점수 (15점): KOSPI 대비 강세"""
+        rs = row.get('rs_diff', 0.0)
+        
+        if rs > 2.0:
+            return 15
+        elif 0 <= rs <= 2.0:
+            return 10
+        elif -2.0 <= rs < 0:
+            return 5
+        else:
+            return 0
 
     def _score_macro(self, usd_krw: float) -> Tuple[int, str]:
         """환율 점수 및 상태 (15점 + Penalty)"""

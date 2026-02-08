@@ -29,6 +29,7 @@ class VCPResult:
     is_vcp: bool
     date: str
     entry_price: float
+    pattern_desc: str = ""
 
 
 @dataclass
@@ -99,12 +100,44 @@ class SmartMoneyScreener:
             if not gate_status['is_gate_open']:
                 logger.warning(f"⚠️ 시장 경보: {gate_status['gate_reason']} - 보수적 접근 필요")
 
+            # [개선] 수급 우수 종목을 우선 분석하도록 사전 정렬
+            # 1. 최근 5일 수급 데이터 집계
+            if self.inst_df is not None and not self.inst_df.empty:
+                # Target date 기준 필터링
+                inst_copy = self.inst_df.copy()
+                if self.target_date:
+                    target_dt = pd.to_datetime(self.target_date)
+                    inst_copy = inst_copy[inst_copy['date'] <= target_dt]
+                
+                # 티커별 최근 5일 수급 합계 계산
+                inst_copy = inst_copy.sort_values('date')
+                
+                # 컬럼명 확인 및 fallback
+                f_col = 'foreign_buy' if 'foreign_buy' in inst_copy.columns else 'foreign_net_buy'
+                i_col = 'inst_buy' if 'inst_buy' in inst_copy.columns else 'inst_net_buy'
+                
+                if f_col in inst_copy.columns and i_col in inst_copy.columns:
+                    # 티커별 최근 5일 데이터만 추출 후 합계
+                    recent_supply = inst_copy.groupby('ticker').tail(5).groupby('ticker').agg({
+                        f_col: 'sum',
+                        i_col: 'sum'
+                    }).reset_index()
+                    recent_supply['total_supply'] = recent_supply[f_col] + recent_supply[i_col]
+                    recent_supply = recent_supply.sort_values('total_supply', ascending=False)
+                    
+                    # 상위 수급 종목 순서로 stocks_df 재정렬
+                    top_tickers = recent_supply['ticker'].tolist()
+                    self.stocks_df['ticker'] = self.stocks_df['ticker'].astype(str).str.zfill(6)
+                    
+                    # 수급 순서에 맞게 정렬 (수급 데이터 없는 종목은 뒤로)
+                    supply_order = {t: i for i, t in enumerate(top_tickers)}
+                    self.stocks_df['supply_rank'] = self.stocks_df['ticker'].map(supply_order).fillna(999999)
+                    self.stocks_df = self.stocks_df.sort_values('supply_rank')
+                    
+                    logger.info(f"[Screener] 수급 우선 정렬 완료: 상위 종목 {len(top_tickers)}개")
+
             # 결과 저장 리스트
             results = []
-            
-            # Analyze stocks
-            # If max_stocks is small, we might just be testing, but for production we iterate all
-            # Here we iterate stocks_df
             
             count = 0
             for _, stock_row in self.stocks_df.iterrows():
@@ -119,14 +152,13 @@ class SmartMoneyScreener:
                 
                 try:
                     result = self._analyze_stock(stock_dict)
-                    if result and result['score'] > 50:
+                    if result and result['score'] > 60:  # 60점 이상만 포함
                         result['market_status'] = gate_status['status']
                         results.append(result)
                         
-                    count += 1 # Only count actual analyzed stocks (or should we count attempts? Logic kept simple)
+                    count += 1
                     
                 except Exception as e:
-                    # logger.warning(f"{stock_dict['ticker']} 분석 실패: {e}")
                     continue
 
             # DataFrame으로 변환
@@ -164,12 +196,28 @@ class SmartMoneyScreener:
             # VCP 패턴 감지
             vcp_result = self._detect_vcp_pattern(stock_prices, stock)
 
-            # 수급 점수 계산
+            # 수급 점수 계산 (Foreign + Inst)
             supply_result = self._calculate_supply_score(ticker)
-            supply_score = supply_result['score']
+            supply_score_raw = supply_result['score'] # Max 70 (Foreign 40 + Inst 30)
             
-            # 종합 점수
-            total_score = vcp_result.vcp_score * 0.6 + supply_score * 0.4
+            # 거래량 비율 점수 (Max 20)
+            volume = stock_prices['volume']
+            current_vol = volume.iloc[-1]
+            avg_vol = volume.tail(20).mean()
+            vol_ratio = current_vol / avg_vol if avg_vol > 0 else 1.0
+            
+            vol_score = 0
+            if vol_ratio > 3.0: vol_score = 20
+            elif vol_ratio > 2.0: vol_score = 15
+            elif vol_ratio > 1.0: vol_score = 10
+            
+            # VCP 점수 (Max 10)
+            # vcp_result.vcp_score is 0-100. Scale to 0-10.
+            # If is_vcp is true, it means score >= 50.
+            vcp_score_final = min(round(vcp_result.vcp_score / 10), 10)
+            
+            # Total Score = Supply(Max 70) + Vol(Max 20) + VCP(Max 10) = 100
+            total_score = supply_score_raw + vol_score + vcp_score_final
 
             return {
                 'ticker': ticker,
@@ -189,56 +237,76 @@ class SmartMoneyScreener:
             return None
 
     def _detect_vcp_pattern(self, df: pd.DataFrame, stock: Dict) -> VCPResult:
-        """VCP 패턴 감지 (Real Logic)"""
+        """VCP 패턴 감지 (ATR & Range Contraction & Near High)"""
         try:
-            if len(df) < 20:
-                return VCPResult(stock['ticker'], stock['name'], 0, 1.0, False, "", 0)
+            if len(df) < 60: 
+                return VCPResult(stock['ticker'], stock['name'], 0, 1.0, False, str(df.iloc[-1]['date']), 0, "Not enough data")
 
-            # Volatility Contraction
-            # Range = High - Low
-            high = df['high']
-            low = df['low']
-            close = df['close']
+            # 1. Price Near Recent High (Constraint)
+            high_60d = df['high'].tail(60).max()
+            current_close = df.iloc[-1]['close']
             
-            daily_range = high - low
+            if current_close < high_60d * 0.85:
+                 return VCPResult(stock['ticker'], stock['name'], 0, 1.0, False, str(df.iloc[-1]['date']), 0, "Price too low vs 60d High")
+
+            # 2. ATR (Volatility) Check
+            df = df.copy()
+            df['prev_close'] = df['close'].shift(1)
+            df['tr1'] = df['high'] - df['low']
+            df['tr2'] = abs(df['high'] - df['prev_close'])
+            df['tr3'] = abs(df['low'] - df['prev_close'])
+            df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
             
-            recent_range = daily_range.tail(5).mean()
-            avg_range = daily_range.tail(20).mean()
+            atr_20 = df['tr'].tail(20).mean()
+            atr_5 = df['tr'].tail(5).mean()
             
-            contraction_ratio = recent_range / avg_range if avg_range > 0 else 1.0
+            vol_contracting = atr_5 < atr_20
             
-            # Volume Contraction
+            # 3. Range Contraction Ratio
+            daily_range = df['high'] - df['low']
+            avg_range_20 = daily_range.tail(20).mean()
+            recent_range_5 = daily_range.tail(5).mean()
+            
+            # Avoid division by zero
+            contraction_ratio = recent_range_5 / avg_range_20 if avg_range_20 > 0.0001 else 1.0
+            
+            # 4. Volume Contraction
             volume = df['volume']
             recent_vol = volume.tail(5).mean()
             avg_vol = volume.tail(20).mean()
             vol_ratio = recent_vol / avg_vol if avg_vol > 0 else 1.0
             
-            # MA Alignment
-            ma5 = close.tail(5).mean()
-            ma20 = close.tail(20).mean()
-            current_price = close.iloc[-1]
+            # 5. MA Alignment
+            ma5 = df['close'].tail(5).mean()
+            ma20 = df['close'].tail(20).mean()
             
             score = 0
             
-            # 1. Volatility Score (Max 40)
+            # A. Volatility Score
             if contraction_ratio < 0.5: score += 40
-            elif contraction_ratio < 0.7: score += 30
-            elif contraction_ratio < 0.9: score += 15
+            elif contraction_ratio < 0.6: score += 30
+            elif contraction_ratio < 0.7: score += 15
             
-            # 2. Volume Score (Max 30)
+            # B. Volume Score
             if vol_ratio < 0.5: score += 30
             elif vol_ratio < 0.7: score += 20
             elif vol_ratio < 0.9: score += 10
             
-            # 3. MA Score (Max 30)
-            if current_price > ma5 > ma20: score += 30
-            elif current_price > ma20: score += 15
+            # C. MA Score
+            if current_close > ma5 > ma20: score += 30
+            elif current_close > ma20: score += 15
             
-            is_vcp = score >= 50 # Threshold
+            is_vcp = (contraction_ratio <= 0.7) and vol_contracting and (score >= 50)
             
-            # Pivot Point (Entry Price) Calculation
-            recent_high = high.tail(20).max()
+            entry_price = high_60d
             
+            desc = []
+            if not vol_contracting: desc.append("ATR Expansion")
+            if contraction_ratio > 0.7: desc.append(f"Range Ratio {contraction_ratio:.2f} > 0.7")
+            if score < 50: desc.append(f"Low Score {score}")
+            
+            pattern_desc = ", ".join(desc) if not is_vcp else "VCP Confirmed"
+
             return VCPResult(
                 ticker=stock['ticker'],
                 name=stock['name'],
@@ -246,7 +314,8 @@ class SmartMoneyScreener:
                 contraction_ratio=round(contraction_ratio, 2),
                 is_vcp=is_vcp,
                 date=df.iloc[-1]['date'].strftime('%Y-%m-%d'),
-                entry_price=recent_high  # [FIX] Entry Price is the Pivot Point (Recent High)
+                entry_price=entry_price,
+                pattern_desc=pattern_desc
             )
 
         except Exception as e:
@@ -287,23 +356,31 @@ class SmartMoneyScreener:
             
             score = 0
             
-            # Foreign Score
-            if foreign_5d > 1_000_000_000: score += 40
-            elif foreign_5d > 500_000_000: score += 25
+            # Foreign Score (Max 25)
+            if foreign_5d > 50_000_000_000: score += 25  # 500억
+            elif foreign_5d > 20_000_000_000: score += 15 # 200억
             elif foreign_5d > 0: score += 10
             
-            # Inst Score
-            if inst_5d > 500_000_000: score += 30
-            elif inst_5d > 200_000_000: score += 20
-            elif inst_5d > 0: score += 10
+            # Inst Score (Max 20)
+            if inst_5d > 50_000_000_000: score += 20     # 500억
+            elif inst_5d > 20_000_000_000: score += 10    # 200억
+            elif inst_5d > 0: score += 5
             
-            # Consecutive Foreign Buying
-            consecutive = 0
+            # Consecutive Foreign Buying (Max 15)
+            consecutive_f = 0
             if f_col in recent.columns:
                 for val in reversed(recent[f_col].values):
-                    if val > 0: consecutive += 1
+                    if val > 0: consecutive_f += 1
                     else: break
-            score += min(consecutive * 6, 30)
+            score += min(consecutive_f * 3, 15)
+
+            # Consecutive Inst Buying (Max 10)
+            consecutive_i = 0
+            if i_col in recent.columns:
+                for val in reversed(recent[i_col].values):
+                    if val > 0: consecutive_i += 1
+                    else: break
+            score += min(consecutive_i * 2, 10) # 2 points per day, max 10
             
             return {
                 'score': score, 

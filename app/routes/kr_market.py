@@ -225,13 +225,7 @@ def get_kr_signals():
                     'gemini_recommendation': gemini_rec 
                 })
 
-        if not signals:
-            # [Auto-Recovery] 데이터가 없고 실행 중도 아니면 백그라운드 실행
-            if not VCP_STATUS['running']:
-                logger.info("[Signals] 데이터 없음. 백그라운드 VCP 스크리너 자동 시작.")
-                import threading
-                threading.Thread(target=_run_vcp_background, args=(None, 50)).start()
-            pass
+
         
         # [NEW] 실시간 가격 주입 (Scheduler가 갱신한 daily_prices.csv 기반)
         try:
@@ -416,7 +410,13 @@ def _run_vcp_background(target_date_arg, max_stocks_arg):
         if target_date_arg:
             msg = f"[VCP] 지정 날짜 분석 시작: {target_date_arg}"
         else:
-            msg = "[VCP] 실시간 분석 시작"
+            # [2026-02-08] User Request: Disable Realtime VCP Analysis
+            msg = "[VCP] 실시간 분석이 비활성화되었습니다."
+            logger.info(msg)
+            print(f"\n{msg}", flush=True)
+            VCP_STATUS['message'] = msg
+            VCP_STATUS['running'] = False
+            return
         
         VCP_STATUS['message'] = msg
         logger.info(msg)
@@ -662,81 +662,111 @@ def get_kr_ai_analysis():
             except Exception as e:
                 logger.warning(f"과거 AI 분석 데이터 로드 실패: {e}")
 
-        # 2. [Priority] jongga_v2_latest.json에서 AI 데이터 추출 (통합 저장 방식 대응)
-        # V2 엔진은 이 파일에만 저장하므로 가장 먼저 확인해야 함
+        # 2. [Priority Logic] Compare timestamps of jongga_v2_latest.json and ai_analysis_results.json
+        
+        # Load Jongga V2
         try:
-            latest_data = load_json_file('jongga_v2_latest.json')
-            if latest_data and 'signals' in latest_data and len(latest_data['signals']) > 0:
-                ai_signals = []
-                for sig in latest_data['signals']:
-                    # AI 분석 데이터 추출 (우선순위: score_details > score > llm_reason)
-                    ai_eval = None
-                    
-                    # 1. score_details 내 객체 확인 (가장 상세함)
-                    if 'score_details' in sig and isinstance(sig['score_details'], dict):
-                        ai_eval = sig['score_details'].get('ai_evaluation')
-                    
-                    # 2. score 내 객체 확인
-                    if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
-                        ai_eval = sig['score'].get('ai_evaluation')
-                    
-                    # 3. 최상위 필드 확인
-                    if not ai_eval and 'ai_evaluation' in sig:
-                        ai_eval = sig['ai_evaluation']
-                        
-                    # 4. 텍스트 reason (마지막 수단)
-                    if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
-                         ai_eval = sig['score'].get('llm_reason')
+            jongga_data = load_json_file('jongga_v2_latest.json')
+            if jongga_data and 'updated_at' in jongga_data:
+                try:
+                    jongga_time = datetime.fromisoformat(jongga_data['updated_at'])
+                except: pass
+            elif jongga_data and 'date' in jongga_data:
+                 # Fallback for date only
+                 try:
+                     jongga_time = datetime.strptime(jongga_data['date'], "%Y-%m-%d")
+                 except: pass
+        except: pass
 
-                    # 텍스트 reason만 있는 경우 객체로 변환
-                    if isinstance(ai_eval, str):
-                         # LLM reason만 있고 평가 객체가 없는 경우
-                        ai_eval = {'reason': ai_eval, 'action': 'HOLD', 'confidence': 0}
+        # Load VCP (AI Analysis)
+        try:
+            vcp_data = load_json_file('ai_analysis_results.json')
+            if vcp_data and 'generated_at' in vcp_data:
+                try:
+                    vcp_time = datetime.fromisoformat(vcp_data['generated_at'])
+                except: pass
+        except: pass
 
-                    # 프론트엔드 호환 구조 생성 (gemini_recommendation 필수)
-                    # AI 데이터가 없어도 signals 리스트에는 포함시켜야 함 (정보 일관성)
-                    
-                    signal_data = {
-                        'ticker': str(sig.get('stock_code', '')).zfill(6),
-                        'name': sig.get('stock_name', ''),
-                        'grade': sig.get('grade'), # Added Grade
-                        'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
-                        'current_price': sig.get('current_price', 0),
-                        'entry_price': sig.get('entry_price', 0),
-                        'vcp_score': 0, # 필수 아님
-                        'contraction_ratio': sig.get('contraction_ratio', 0),
-                        'foreign_5d': sig.get('foreign_5d', 0), # 필드명 주의 (foreign_net_buy_5d vs foreign_5d)
-                        'inst_5d': sig.get('inst_5d', 0),
-                            # 프론트엔드가 기대하는 필드로 매핑
-                        'gemini_recommendation': ai_eval, 
-                        'news': sig.get('news_items', [])
-                    }
-                    ai_signals.append(signal_data)
+        # Decision Logic: Use Jongga if it's newer OR VCP is missing
+        use_jongga = False
+        if jongga_data and 'signals' in jongga_data and len(jongga_data['signals']) > 0:
+            if not vcp_data or jongga_time >= vcp_time:
+                use_jongga = True
+        
+        # If VCP is newer, skip Jongga usage here and let it fall through to step 4 (or handle here)
+        # However, step 4 (Legacy) loads ai_analysis_results.json again. 
+        # To avoid code duplication, we only process Jongga here if it wins.
+        
+        if use_jongga:
+            latest_data = jongga_data
+            ai_signals = []
+            for sig in latest_data['signals']:
+                # AI 분석 데이터 추출 (우선순위: score_details > score > llm_reason)
+                ai_eval = None
                 
-                # 하나라도 있으면 반환 (AI 분석이 아직 안 된 초기 상태일 수도 있으므로 signals 존재만으로 반환)
-                if ai_signals:
-                    # [Sort] Grade (S>A>B>C>D) -> Score Descending
-                    def sort_key(s):
-                        grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
-                        grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
-                        score_val = s.get('score', 0)
-                        return (grade_val, score_val)
+                # 1. score_details 내 객체 확인 (가장 상세함)
+                if 'score_details' in sig and isinstance(sig['score_details'], dict):
+                    ai_eval = sig['score_details'].get('ai_evaluation')
+                
+                # 2. score 내 객체 확인
+                if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
+                    ai_eval = sig['score'].get('ai_evaluation')
+                
+                # 3. 최상위 필드 확인
+                if not ai_eval and 'ai_evaluation' in sig:
+                    ai_eval = sig['ai_evaluation']
+                    
+                # 4. 텍스트 reason (마지막 수단)
+                if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
+                        ai_eval = sig['score'].get('llm_reason')
 
-                    ai_signals.sort(key=sort_key, reverse=True)
+                # 텍스트 reason만 있는 경우 객체로 변환
+                if isinstance(ai_eval, str):
+                        # LLM reason만 있고 평가 객체가 없는 경우
+                    ai_eval = {'reason': ai_eval, 'action': 'HOLD', 'confidence': 0}
 
-                    # 날짜 형식 보정 (YYYYMMDD -> YYYY-MM-DD)
-                    s_date = latest_data.get('date', '')
-                    if len(s_date) == 8 and '-' not in s_date:
-                        s_date = f"{s_date[:4]}-{s_date[4:6]}-{s_date[6:]}"
+                # 프론트엔드 호환 구조 생성 (gemini_recommendation 필수)
+                # AI 데이터가 없어도 signals 리스트에는 포함시켜야 함 (정보 일관성)
+                
+                signal_data = {
+                    'ticker': str(sig.get('stock_code', '')).zfill(6),
+                    'name': sig.get('stock_name', ''),
+                    'grade': sig.get('grade'), # Added Grade
+                    'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
+                    'current_price': sig.get('current_price', 0),
+                    'entry_price': sig.get('entry_price', 0),
+                    'vcp_score': 0, # 필수 아님
+                    'contraction_ratio': sig.get('contraction_ratio', 0),
+                    'foreign_5d': sig.get('foreign_5d', 0), # 필드명 주의 (foreign_net_buy_5d vs foreign_5d)
+                    'inst_5d': sig.get('inst_5d', 0),
+                        # 프론트엔드가 기대하는 필드로 매핑
+                    'gemini_recommendation': ai_eval, 
+                    'news': sig.get('news_items', [])
+                }
+                ai_signals.append(signal_data)
+            
+            if ai_signals:
+                # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                def sort_key(s):
+                    grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                    grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
+                    score_val = s.get('score', 0)
+                    return (grade_val, score_val)
 
-                    return jsonify({
-                        'signals': ai_signals,
-                        'generated_at': latest_data.get('updated_at', datetime.now().isoformat()),
-                        'signal_date': s_date,
-                        'source': 'jongga_v2_integrated'
-                    })
-        except Exception as e:
-            logger.warning(f"AI Analysis Priority Load Failed: {e}")
+                ai_signals.sort(key=sort_key, reverse=True)
+
+                # 날짜 형식 보정 (YYYYMMDD -> YYYY-MM-DD)
+                s_date = latest_data.get('date', '')
+                if len(s_date) == 8 and '-' not in s_date:
+                    s_date = f"{s_date[:4]}-{s_date[4:6]}-{s_date[6:]}"
+
+                return jsonify({
+                    'signals': ai_signals,
+                    'generated_at': latest_data.get('updated_at', datetime.now().isoformat()),
+                    'signal_date': s_date,
+                    'source': 'jongga_v2_integrated_history'
+                })
+
 
         # 3. kr_ai_analysis.json 직접 로드 (Legacy, VCP AI 분석 결과)
         kr_ai_data = load_json_file('kr_ai_analysis.json')
@@ -2427,11 +2457,20 @@ def get_backtest_summary():
             
             # Load current prices for accurate return calc
             price_map = {}
+            df_prices_full = pd.DataFrame() # Load full data for backtest
+            
             price_file = get_data_path('daily_prices.csv')
             if os.path.exists(price_file):
-                df_prices = pd.read_csv(price_file, usecols=['ticker', 'close'], dtype={'ticker': str})
-                df_prices['ticker'] = df_prices['ticker'].str.zfill(6)
-                price_map = df_prices.set_index('ticker')['close'].to_dict()
+                # Load OHLC for backtest
+                df_prices_full = pd.read_csv(price_file, usecols=['date', 'ticker', 'close', 'high', 'low'], dtype={'ticker': str})
+                df_prices_full['ticker'] = df_prices_full['ticker'].str.zfill(6)
+                
+                # Current price map from latest date in file? 
+                # Or just use today's? 
+                # Let's assume daily_prices has up-to-date info.
+                # Group by ticker and get last close
+                latest_prices = df_prices_full.sort_values('date').groupby('ticker').tail(1)
+                price_map = latest_prices.set_index('ticker')['close'].to_dict()
 
             processed_tickers = set() # Avoid duplicates if same signal appears multiple times? (Usually daily signals are unique per day)
             
@@ -2459,8 +2498,14 @@ def get_backtest_summary():
                             # If no current price, skip stat calc or use signal's own return?
                             # Using signal's own return is static at time of generation.
                             # We prefer current price.
+                            # If no current price, skip stat calc or use signal's own return?
+                            # Using signal's own return is static at time of generation.
+                            # We prefer current price.
                             if curr:
-                                ret = ((curr - entry) / entry) * 100
+                                # OLD: ret = ((curr - entry) / entry) * 100
+                                # NEW: Scenario logic
+                                ret = calculate_scenario_return(code, entry, date_str, curr, df_prices_full)
+                                
                                 total_signals += 1
                                 total_return += ret
                                 if ret > 0: wins += 1
@@ -2504,24 +2549,32 @@ def get_backtest_summary():
             if not vcp_df.empty:
                 vcp_stats['status'] = 'OK'
                 
-                # Get all CLOSED signals or OPEN signals with some age?
-                # Usually stats are based on CLOSED signals + OPEN signals current return
-                # Filter valid return_pct
-                if 'return_pct' in vcp_df.columns:
-                    valid_df = vcp_df[vcp_df['return_pct'].notnull()]
+                total_v = 0
+                wins_v = 0
+                total_ret_v = 0.0
+                
+                # VCP Backtest Simulation
+                for _, row in vcp_df.iterrows():
+                    ticker = str(row.get('ticker', '')).zfill(6)
+                    entry_price = float(row.get('entry_price', 0))
+                    signal_date = str(row.get('signal_date', ''))
                     
-                    if not valid_df.empty:
-                        total_v = len(valid_df)
-                        wins_v = len(valid_df[valid_df['return_pct'] > 0])
-                        avg_ret_v = valid_df['return_pct'].mean()
-                        
-                        vcp_stats['count'] = total_v
-                        vcp_stats['win_rate'] = round((wins_v / total_v) * 100, 1)
-                        vcp_stats['avg_return'] = round(avg_ret_v, 1)
-                        
-                        # Use latest count for "Today's Signals" count?
-                        # Frontend expects "count" usually as total analyzed or relevant count.
-                        # Let's keep total_v for stats consistency.
+                    if entry_price <= 0 or not signal_date: continue
+                    
+                    # Current Price for holding return
+                    current_price = price_map.get(ticker, 0)
+                    if current_price == 0: continue # Skip if no current price
+                    
+                    sim_ret = calculate_scenario_return(ticker, entry_price, signal_date, current_price, df_prices_full)
+                    
+                    total_v += 1
+                    total_ret_v += sim_ret
+                    if sim_ret > 0: wins_v += 1
+
+                if total_v > 0:
+                    vcp_stats['count'] = total_v
+                    vcp_stats['win_rate'] = round((wins_v / total_v) * 100, 1)
+                    vcp_stats['avg_return'] = round(total_ret_v / total_v, 1)
             
         except Exception as e:
             logger.error(f"VCP Stat Calc Failed: {e}")
@@ -2532,8 +2585,62 @@ def get_backtest_summary():
         })
 
     except Exception as e:
-        logger.error(f"Error getting backtest summary: {e}")
+        logger.error(f"Backtest Summary Error: {e}")
         return jsonify({'error': str(e)}), 500
+
+def calculate_scenario_return(ticker, entry_price, signal_date, current_price, price_df):
+    """
+    백테스트 시뮬레이션 (Scenario based)
+    - 익절: +15% 도달 시 매도
+    - 손절: -5% 이탈 시 매도
+    - 보유: 현재가 기준 수익률
+    """
+    try:
+        # Filter logic needs full OHLCV data. 
+        # But here we only loaded 'close' in df_prices (optimization).
+        # We need High/Low for strict backtest.
+        # If High/Low not available, we can only use Close (approximate).
+        
+        # NOTE: For real implementation, we should load full OHLCV.
+        # But to avoid memory burst, let's check if we can access the file cheaply or if 'price_df' has it via optimization.
+        # Current implementation of 'df_prices' in get_backtest_summary only loads 'close'.
+        # We should update get_backtest_summary to load 'high', 'low' too.
+        
+        # If we rely on current 'price_df' passed (which is df_prices_full), we assume it has columns.
+        if 'high' not in price_df.columns:
+            # Fallback to Close-only check
+             ret = ((current_price - entry_price) / entry_price) * 100
+             if ret > 15: return 15.0
+             if ret < -5: return -5.0
+             return ret
+
+        # Extract history for ticker after signal_date
+        # Assuming price_df is indexed or can be filtered efficiently.
+        # This part might be slow if price_df is huge (600 stocks * 90 days = 54k rows).
+        # It's acceptable for now.
+        
+        subset = price_df[
+            (price_df['ticker'] == ticker) & 
+            (price_df['date'] > signal_date)
+        ].sort_values('date')
+        
+        for _, day in subset.iterrows():
+            low = day['low']
+            high = day['high']
+            
+            # Check Stop Loss (-5%)
+            if low <= entry_price * 0.95:
+                return -5.0
+                
+            # Check Take Profit (+15%)
+            if high >= entry_price * 1.15:
+                return 15.0
+        
+        # If still holding
+        return ((current_price - entry_price) / entry_price) * 100
+        
+    except:
+        return ((current_price - entry_price) / entry_price) * 100
 
 
 @kr_bp.route('/stock-detail/<ticker>')

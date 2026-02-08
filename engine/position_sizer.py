@@ -74,16 +74,16 @@ class PositionSizer:
                 quantity=0
             )
 
-    def _get_r_multiplier(self, grade: Grade) -> int:
-        """등급별 R-Multiplier"""
+    def _get_r_multiplier(self, grade: Grade) -> float:
+        """등급별 R-Multiplier (문서 기준)"""
         if grade == Grade.S:
-            return 3  # 1:3
+            return 1.5  # S등급: 1.5R
         elif grade == Grade.A:
-            return 2  # 1:2
+            return 1.0  # A등급: 1.0R
         elif grade == Grade.B:
-            return 1.5  # 1:1.5
+            return 0.5  # B등급: 0.5R
         else:
-            return 1  # 1:1
+            return 0.0  # C등급: 매매 안함
 
     def calculate_max_positions(self, grade: Grade) -> int:
         """최대 포지션 수"""

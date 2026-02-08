@@ -130,8 +130,8 @@ class KRXCollector:
             logger.warning(f"pykrx 실시간 데이터 수집 실패: {e}")
         
         # 2. Fallback: 로컬 daily_prices.csv 사용
-        logger.info(f"Fallback: 로컬 daily_prices.csv 사용 ({market})")
-        return self._load_from_local_csv(market, top_n)
+        logger.info(f"Fallback: 로컬 daily_prices.csv 사용 ({market}) Target={target_date}")
+        return self._load_from_local_csv(market, top_n, target_date)
     
     def _process_ohlcv_dataframe(self, df, market: str, top_n: int) -> List[StockData]:
         """pykrx DataFrame을 StockData 리스트로 변환"""
@@ -168,7 +168,7 @@ class KRXCollector:
                 continue
         return results
     
-    def _load_from_local_csv(self, market: str, top_n: int) -> List[StockData]:
+    def _load_from_local_csv(self, market: str, top_n: int, target_date: str = None) -> List[StockData]:
         """로컬 daily_prices.csv에서 상승률 상위 종목 로드"""
         import pandas as pd
         import os
@@ -182,7 +182,7 @@ class KRXCollector:
         
         try:
             df = pd.read_csv(csv_path)
-            logger.info(f"CSV Loaded: {len(df)} rows. Columns: {df.columns.tolist()}")
+            # logger.info(f"CSV Loaded: {len(df)} rows. Columns: {df.columns.tolist()}")
             
             # 종목 목록에서 마켓 정보 가져오기
             stocks_df = pd.read_csv(stocks_path) if os.path.exists(stocks_path) else pd.DataFrame()
@@ -191,15 +191,37 @@ class KRXCollector:
                 for _, row in stocks_df.iterrows():
                     market_map[str(row['ticker']).zfill(6)] = row['market']
             
-            # 가장 최근 날짜 데이터만 사용
+            # 날짜 필터링
             df['date'] = pd.to_datetime(df['date'])
-            latest_date = df['date'].max()
-            latest_df = df[df['date'] == latest_date].copy()
+            
+            if target_date:
+                # target_date는 YYYYMMDD 또는 YYYY-MM-DD
+                if len(str(target_date)) == 8:
+                    dt = datetime.strptime(str(target_date), "%Y%m%d")
+                else:
+                    dt = pd.to_datetime(target_date)
+                
+                # 해당 날짜 데이터 검색
+                latest_df = df[df['date'].dt.date == dt.date()].copy()
+                if latest_df.empty:
+                    logger.warning(f"로컬 CSV에 {target_date} 데이터 없음. 최신 날짜로 대체 시도.")
+                    latest_date = df['date'].max()
+                    latest_df = df[df['date'] == latest_date].copy()
+            else:
+                latest_date = df['date'].max()
+                latest_df = df[df['date'] == latest_date].copy()
+            
+            logger.info(f"로컬 데이터 날짜: {latest_df['date'].max()}")
             
             # 마켓 필터링
             latest_df['ticker'] = latest_df['ticker'].astype(str).str.zfill(6)
             latest_df['market_actual'] = latest_df['ticker'].map(market_map)
+            
+            logger.info(f"Market Map Size: {len(market_map)}")
+            logger.info(f"Before Market Filter: {len(latest_df)} rows")
+            
             latest_df = latest_df[latest_df['market_actual'] == market]
+            logger.info(f"After Market Filter ({market}): {len(latest_df)} rows")
             
             # 등락률 계산
             if 'change_pct' not in latest_df.columns:
@@ -208,17 +230,27 @@ class KRXCollector:
                 else:
                     latest_df['change_pct'] = 0
             
-            # 거래대금 계산
+            # 거래대금 계산 (0인 경우 재계산)
             if 'trading_value' not in latest_df.columns:
                 if 'volume' in latest_df.columns and 'close' in latest_df.columns:
                     latest_df['trading_value'] = latest_df['volume'] * latest_df['close']
                 else:
                     latest_df['trading_value'] = 0
+            else:
+                 # 0 또는 NaN인 값 재계산
+                 latest_df['trading_value'] = latest_df['trading_value'].fillna(0).astype(float)
+                 mask_zero = latest_df['trading_value'] <= 0
+                 
+                 if mask_zero.any():
+                     logger.debug(f"Recalculating 0/NaN trading_value for {mask_zero.sum()} rows")
+                     latest_df.loc[mask_zero, 'trading_value'] = latest_df.loc[mask_zero, 'volume'] * latest_df.loc[mask_zero, 'close']
             
             # 필터링
             mask_price = latest_df['close'] >= 1000
             mask_vol = latest_df['trading_value'] >= 1_000_000_000
             mask_rise = latest_df['change_pct'] > 0
+            
+            logger.info(f"TopGainers Filter ({market}): Rise={mask_rise.sum()}, ValidVol={mask_vol.sum()}")
             
             filtered_df = latest_df[mask_price & mask_vol & mask_rise].copy()
             filtered_df = filtered_df.sort_values(by='change_pct', ascending=False)
@@ -387,7 +419,7 @@ class KRXCollector:
         """섹터 조회"""
         sectors = {
             '005930': '반도체', '000270': '자동차', '035420': '인터넷',
-            '005380': '자동차', '015760': '반도체', '068270': '바이오',
+            '005380': '자동차', '015760': '반도체', '068270': '헬스케어',
             '052190': '반도체', '011200': '해운', '096770': '통신',
             '066570': '2차전지'
         }
@@ -428,12 +460,28 @@ class EnhancedNewsCollector:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def _get_weight(self, source: str) -> float:
-        """언론사 가중치 반환 (부분 일치 검색)"""
+    # 플랫폼별 신뢰도 (AIAnalysis.md 기준)
+    PLATFORM_RELIABILITY = {
+        "finance": 0.9,  # 네이버 금융 크롤링
+        "search_naver": 0.85,  # 네이버 뉴스 검색
+        "search_daum": 0.8,   # 다음 뉴스 검색
+    }
+
+    def _get_weight(self, source: str, platform: str = 'search_naver') -> float:
+        """
+        언론사 가중치 + 플랫폼 신뢰도 기반 최종 점수 반환 
+        Formula: Publisher Weight * Platform Reliability
+        """
+        publisher_weight = 0.7 # 기본값
         for major_source, weight in self.MAJOR_SOURCES.items():
             if major_source in source:
-                return weight
-        return 0.7  # 기본값 (주요 언론사 아님)
+                publisher_weight = weight
+                break
+        
+        platform_score = self.PLATFORM_RELIABILITY.get(platform, 0.8)
+        
+        # 소수점 2자리 반올림
+        return round(publisher_weight * platform_score, 2)
 
     async def get_stock_news(self, code: str, limit: int, name: str = None) -> List[NewsItem]:
         """종목 뉴스 수집 - 다중 소스 통합 (네이버 금융, 네이버 검색, 다음 검색)"""
