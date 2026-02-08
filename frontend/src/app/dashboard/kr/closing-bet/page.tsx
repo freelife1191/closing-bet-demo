@@ -53,6 +53,11 @@ interface ScoreDetail {
   supply: number;
   llm_reason: string;
   total: number;
+  ai_evaluation?: {
+    action: 'BUY' | 'HOLD' | 'SELL';
+    confidence: number;
+    model?: string;
+  };
 }
 
 interface ChecklistDetail {
@@ -1688,12 +1693,32 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
   const style = gradeStyles[signal.grade] || gradeStyles.D;
 
-  // AI Evaluation Fallback Logic
-  const aiEval = signal.ai_evaluation || {
-    action: ['S', 'A'].includes(signal.grade) ? 'BUY' : 'HOLD',
-    confidence: signal.score.total * 8 + (signal.grade === 'S' ? 10 : 0), // Simple derivation
-    model: 'Gemini 3.0 (Est.)'
-  };
+  // AI Evaluation Logic with robust fallback
+  let aiEval = signal.ai_evaluation;
+
+  // 만약 구조화된 AI 결과가 없다면, 텍스트 분석 결과(llm_reason)를 기반으로 추정
+  if (!aiEval && signal.score?.llm_reason && signal.score.llm_reason.length > 5) {
+    const reasonText = signal.score.llm_reason;
+    const isBuy = reasonText.includes('BUY') || reasonText.includes('매수') || reasonText.includes('긍정') || reasonText.includes('상승');
+    const isSell = reasonText.includes('SELL') || reasonText.includes('매도') || reasonText.includes('부정') || reasonText.includes('하락');
+
+    // 단순 텍스트만 있는 경우
+    aiEval = {
+      action: isBuy ? 'BUY' : (isSell ? 'SELL' : 'HOLD'),
+      confidence: 0, // 신뢰도 데이터 없음
+      reason: reasonText,
+      model: signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || 'Gemini 2.0 Flash'
+    };
+  }
+
+  // 여전히 없다면 등급 기반 추정 (또는 대기 상태 표시)
+  if (!aiEval) {
+    aiEval = {
+      action: ['S', 'A'].includes(signal.grade) ? 'BUY' : 'HOLD',
+      confidence: signal.score.total * 8 + (signal.grade === 'S' ? 10 : 0),
+      model: signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || 'Est. (Waiting for AI)'
+    };
+  }
 
   return (
     <div className="rounded-2xl border border-white/10 bg-[#1c1c1e] overflow-hidden transition-all hover:border-white/20">
@@ -1910,9 +1935,9 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <h4 className="text-xs font-bold text-gray-400 mb-3 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <i className="fas fa-microscope text-indigo-400"></i> AI 분석 리포트
-                {(aiEval.model || signal.score.llm_reason) && (
+                {(aiEval?.model || signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || signal.score.llm_reason) && (
                   <span className="text-[10px] font-normal text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
-                    {aiEval.model ? aiEval.model.replace(/[-_]/g, ' ') : 'Gemini 2.0 Flash'}
+                    {(aiEval?.model || signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || 'Gemini 2.0 Flash').replace(/[-_]/g, ' ')}
                   </span>
                 )}
               </span>
@@ -2186,7 +2211,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
               <i className="fas fa-list-ol text-indigo-400"></i>
               통합 등급 산정 기준
             </h3>
-            <span className="text-xs text-slate-500">※ 거래대금 300억 미만 자동 제외</span>
+            <span className="text-xs text-slate-500">※ 거래대금 500억 미만 자동 제외</span>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-white/10">

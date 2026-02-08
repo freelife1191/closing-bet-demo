@@ -164,7 +164,7 @@ class SignalGenerator:
                     volume_ratio = score_details.get('volume_ratio', 0)
                     
                     # 1. 1차 필터: 기본 조건 (거래대금, 거래량 등)
-                    # - 거래대금 300억 이상 (Config Min)
+                    # - 거래대금 500억 이상 (Config Min)
                     # - 거래량 배수 2배 이상
                     MIN_TRADING_VALUE = self.scorer.config.trading_value_min
                     
@@ -182,7 +182,7 @@ class SignalGenerator:
                     # LLM 없이도 최소 D등급 기준(6점)은 넘어야 함
                     # (scorer.determine_grade는 거래대금, 등락률, 점수 등을 종합 평가)
                     temp_grade = self.scorer.determine_grade(
-                        stock_obj, pre_score, score_details, base_data['supply'], base_data['charts']
+                        stock_obj, pre_score, score_details, base_data['supply'], base_data['charts'], allow_no_news=True
                     )
                     
                     if temp_grade:
@@ -194,13 +194,13 @@ class SignalGenerator:
                         # 등급 미달 탈락
                         self.drop_stats["grade_fail"] += 1
                         # 1차 필터는 통과했으나 등급 요건 불충족
-                        print(f"    [Drop] 등급 미달: {stock.name} (Score={pre_score.total}, Pre-Grade=None)")
+                        # print(f"    [Drop] 등급 미달: {stock.name} (Score={pre_score.total}, Pre-Grade=None)")
                 
                 if (i+1) % 10 == 0:
                     print(f"    Processing {i+1}/{len(candidates)}...", end='\r')
             
             logger.info(f"[Phase1 완료] {market}: {len(pending_items)}개 통과 (탈락: 거래대금부족={self.drop_stats['low_trading_value']}, 거래량부족={self.drop_stats['low_volume_ratio']}, 등급미달={self.drop_stats['grade_fail']})")
-            print(f"\n    -> 1차 선별 완료: {len(pending_items)}개 (사전 등급 D급 이상, 대금/거래량 충족)")
+            print(f"\n    -> 1차 선별 완료: {len(pending_items)}개 (Drop: 대금{self.drop_stats['low_trading_value']}, 거래량{self.drop_stats['low_volume_ratio']}, 등급{self.drop_stats['grade_fail']})")
             self.scan_stats["phase1"] += len(pending_items)
 
             # --- Phase 2: News Fetching & Batch LLM ---
@@ -414,6 +414,7 @@ class SignalGenerator:
                 status=SignalStatus.PENDING,
                 created_at=datetime.now(),
                 score_details=score_details,
+                ai_evaluation=llm_result,
                 themes=themes or []
             )
         except Exception as e:

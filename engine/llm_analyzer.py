@@ -171,6 +171,7 @@ class LLMAnalyzer:
                     try:
                         resp = await asyncio.to_thread(_call_gemini)
                         response_content = resp.text
+                        used_model_version = getattr(resp, 'model_version', None)
                         break
                     except Exception as e:
                         error_msg = str(e).lower()
@@ -204,6 +205,11 @@ class LLMAnalyzer:
             # JSON 파싱
             try:
                 result = json.loads(json_str)
+                # 모델명 추가 (프론트엔드 노출용)
+                if isinstance(result, dict) and 'model' not in result:
+                    # Capture actual version from response if available
+                    actual_model = used_model_version if 'used_model_version' in locals() and used_model_version else (app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL)
+                    result['model'] = actual_model
                 return result
             except json.JSONDecodeError as je:
                 logger.error(f"JSON 파싱 실패 ({stock_name}): {je}\nRaw: {result_text}")
@@ -304,10 +310,22 @@ class LLMAnalyzer:
                 s_value = getattr(stock, 'trading_value', 0)
                 if isinstance(stock, dict): s_value = stock.get('trading_value', 0)
                 
+                # VCP 지표 추출
+                vcp_score = getattr(stock, 'score', 0)
+                if isinstance(stock, dict): vcp_score = stock.get('score', 0)
+                # score객체일 경우 처리
+                if hasattr(vcp_score, 'total'): vcp_score = vcp_score.total
+                elif isinstance(vcp_score, dict): vcp_score = vcp_score.get('total', 0)
+
+                contraction_ratio = getattr(stock, 'contraction_ratio', 0)
+                if isinstance(stock, dict): contraction_ratio = stock.get('contraction_ratio', 0)
+                
                 stocks_text += f"""
                 === {s_name} ({s_code}) ===
                 [기술적/수급 지표]
                 - 현재가: {s_close:,}원 (등락: {s_change}%)
+                - **VCP 점수: {vcp_score}점**
+                - **수축 비율: {contraction_ratio} (낮을수록 좋음)**
                 - 거래대금: {s_value // 100000000}억원
                 - 수급: {supply_text}
                 
@@ -320,12 +338,16 @@ class LLMAnalyzer:
             {market_context}
 
             다음 종목들을 분석하여 투자 매력도를 평가하세요.
-            문서에 정의된 '종합 분석' 기준을 따릅니다.
+            특히 **VCP(변동성 수축 패턴)의 기술적 완성도**를 반드시 평가에 포함해야 합니다.
 
             [입력 데이터]
             {stocks_text}
 
             [평가 기준]
+            0. **VCP 분석 (필수)**:
+               - 변동성 수축(Contraction Ratio)이 0.1~0.5 사이로 건전한가?
+               - 거래량(Volume)이 급감하며 매물 소화가 잘 되었는가?
+               - 이 기술적 지표가 점수에 **가장 큰 영향**을 미쳐야 함.
             1. **Score (0-3)**: 뉴스/재료 기반 호재 강도
                - 3점: 확실한 호재 (대규모 수주, 상한가 재료, 어닝 서프라이즈)
                - 2점: 긍정적 호재 (실적 개선, 기대감, 테마 상승)

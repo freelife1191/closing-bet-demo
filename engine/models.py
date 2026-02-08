@@ -102,6 +102,7 @@ class Signal:
     status: SignalStatus
     created_at: datetime
     score_details: Dict
+    ai_evaluation: Optional[Dict] = None
     themes: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
