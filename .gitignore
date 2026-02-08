@@ -50,4 +50,5 @@ dist/
 *.egg-info/
 .agent/
 .claude/
+.omc/
 
