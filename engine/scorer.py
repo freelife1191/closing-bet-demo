@@ -377,9 +377,13 @@ class Scorer:
             logger.debug(f"  -> [B급] 조건 충족!")
             return Grade.B
             
-        # [C급] (나머지 합격권)
-        # 점수 8점 이상이면 C급 부여 (기존 D급 삭제/통합)
-        if score.total >= 8:
+        # [C급] (강소 주도주)
+        # 500억 이상, 10% 이상 상승, 거래량 5배, 외인+기관 양매수, 8점 이상
+        if (score.total >= 8 and
+            change_pct >= 10.0 and
+            volume_ratio >= 5.0 and
+            supply.foreign_buy_5d > 0 and
+            supply.inst_buy_5d > 0):
             logger.debug(f"  -> [C급] 조건 충족!")
             return Grade.C
         

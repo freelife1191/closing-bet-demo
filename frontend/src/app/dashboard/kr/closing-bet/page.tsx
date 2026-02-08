@@ -2291,11 +2291,11 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                   <td className="px-4 py-3 font-bold text-emerald-400 text-center text-sm whitespace-nowrap">C 급</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-emerald-300 font-bold mb-1">500억 이상</span>
-                    <span className="text-rose-400 font-bold">+5% 이상</span>
+                    <span className="text-rose-400 font-bold">+10% 이상</span>
                   </td>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">8점 이상</td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div>거래량 3배↑</div>
+                    <div>거래량 5배↑</div>
                     <div className="text-emerald-400">외인+기관 양매수</div>
                   </td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">강소 주도주</td>
