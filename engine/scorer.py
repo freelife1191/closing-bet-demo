@@ -383,8 +383,8 @@ class Scorer:
             logger.debug(f"  -> [C급] 조건 충족!")
             return Grade.C
         
-        # [D급 이하] - 검출 제외
-        # 8점 미만은 D등급으로 분류되나, 스크리닝 단계에서 제외함 (User Request)
-        logger.debug(f"  -> [Drop] 점수 미달 (Score={score.total} < 8, Grade D filtered out)")
+        # [점수 미달] - 검출 제외
+        # 8점 미만은 시그널 생성 대상에서 제외 (D등급 개념 삭제)
+        logger.debug(f"  -> [Drop] 점수 미달 (Score={score.total} < 8)")
         return None
 

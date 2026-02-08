@@ -214,7 +214,7 @@ class LLMAnalyzer:
                     # Capture actual version from response if available
                     actual_model = used_model_version if 'used_model_version' in locals() and used_model_version else (app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL)
                     if actual_model == "gemini-flash-latest":
-                         actual_model = "gemini-1.5-flash (Latest)"
+                         actual_model = "Gemini Flash (Latest)"
                     result['model'] = actual_model
                 return result
             except json.JSONDecodeError as je:
@@ -474,7 +474,7 @@ class LLMAnalyzer:
             actual_model_name = used_model_version if used_model_version else (app_config.ZAI_MODEL if self.provider == 'zai' else app_config.ANALYSIS_GEMINI_MODEL)
             
             if actual_model_name == "gemini-flash-latest":
-                actual_model_name = "gemini-1.5-flash (Latest)" 
+                actual_model_name = "Gemini Flash (Latest)" 
 
             # Map 변환
             final_map = {}

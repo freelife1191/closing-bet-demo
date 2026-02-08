@@ -1167,7 +1167,8 @@ export default function JonggaV2Page() {
                 <option value="S">S급 이상</option>
                 <option value="A">A급 이상</option>
                 <option value="B">B급 이상</option>
-                <option value="D">D급 이상</option>
+                <option value="A">A급 이상</option>
+                <option value="B">B급 이상</option>
               </select>
             </div>
 
@@ -1330,22 +1331,24 @@ export default function JonggaV2Page() {
             </p>
           </div>
         ) : (
-          filteredSignals.map((signal, idx) => (
-            <SignalCard
-              key={signal.stock_code}
-              signal={signal}
-              index={idx}
-              onOpenChart={() => setChartModal({ isOpen: true, symbol: signal.stock_code, name: signal.stock_name })}
-              onOpenDetail={() => setDetailModal({ isOpen: true, code: signal.stock_code, name: signal.stock_name })}
-              onBuy={() => {
-                setBuyingStock({ ticker: signal.stock_code, name: signal.stock_name, price: signal.current_price || signal.entry_price || 0 });
-                setIsBuyModalOpen(true);
-              }}
-              onRetry={handleRetryAnalysis}
-              isRetrying={retryingTicker === signal.stock_code}
-              isAdmin={isAdmin}
-            />
-          ))
+          filteredSignals
+            .filter(s => s.grade !== 'D') // D등급 원천 필터링 (안전장치)
+            .map((signal, idx) => (
+              <SignalCard
+                key={signal.stock_code}
+                signal={signal}
+                index={idx}
+                onOpenChart={() => setChartModal({ isOpen: true, symbol: signal.stock_code, name: signal.stock_name })}
+                onOpenDetail={() => setDetailModal({ isOpen: true, code: signal.stock_code, name: signal.stock_name })}
+                onBuy={() => {
+                  setBuyingStock({ ticker: signal.stock_code, name: signal.stock_name, price: signal.current_price || signal.entry_price || 0 });
+                  setIsBuyModalOpen(true);
+                }}
+                onRetry={handleRetryAnalysis}
+                isRetrying={retryingTicker === signal.stock_code}
+                isAdmin={isAdmin}
+              />
+            ))
         )}
       </div>
 
@@ -1698,7 +1701,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
     // Alias Mapping (Legacy or Configuration nicknames)
     const lowerName = modelName.toLowerCase();
     if (lowerName === 'gemini-flash-latest' || lowerName === 'gemini flash latest') {
-      return 'Gemini 1.5 Flash (Latest)';
+      return 'Gemini Flash (Latest)';
     }
 
     // Default formatting (snake_case or kebab-case to Title Case)
@@ -2295,19 +2298,6 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                   </td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">강소 주도주</td>
                 </tr>
-                <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-gray-400 text-center text-sm whitespace-nowrap">D 급</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="block text-slate-400 font-bold mb-1">500억 이상</span>
-                    <span className="text-rose-400 font-bold">+4% 이상</span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">6점 이상</td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div>거래량 2배↑</div>
-                    <div className="text-slate-500">수급 무관</div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500 whitespace-nowrap">관망 / 조건부</td>
-                </tr>
               </tbody>
             </table>
           </div>
@@ -2400,7 +2390,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
         </div>
 
       </div>
-    </Modal>
+    </Modal >
   );
 }
 
