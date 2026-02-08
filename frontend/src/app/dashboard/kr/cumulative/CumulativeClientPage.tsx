@@ -179,7 +179,8 @@ function TradeTable({ trades }: { trades: Trade[] }) {
                 <td className="py-3 px-4">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${trade.grade === 'S' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
                     trade.grade === 'A' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                      'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                      trade.grade === 'B' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                        'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                     }`}>
                     {trade.grade}
                   </span>
@@ -272,7 +273,9 @@ export default function CumulativeClientPage() {
         if (!res.ok) throw new Error('Failed to fetch data');
         const data = await res.json();
         setKpi(data.kpi);
-        setTrades(data.trades);
+        // D등급 제외 필터링
+        const filtered = (data.trades || []).filter((t: Trade) => t.grade !== 'D');
+        setTrades(filtered);
       } catch (error) {
         console.error('Error fetching cumulative data:', error);
       } finally {
@@ -308,11 +311,13 @@ export default function CumulativeClientPage() {
   const sStats = calculateGradeStats('S');
   const aStats = calculateGradeStats('A');
   const bStats = calculateGradeStats('B');
+  const cStats = calculateGradeStats('C');
 
   const gradeCards = [
     { grade: 'S', ...sStats, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
     { grade: 'A', ...aStats, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
     { grade: 'B', ...bStats, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+    { grade: 'C', ...cStats, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
   ];
 
   if (loading) {
@@ -405,6 +410,7 @@ export default function CumulativeClientPage() {
               <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
               <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
               <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
+              <FilterButton label="C" count={cStats.count} active={gradeFilter === 'C'} onClick={() => setGradeFilter('C')} />
             </div>
           </div>
         </div>
