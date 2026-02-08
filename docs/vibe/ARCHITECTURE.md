@@ -5,7 +5,7 @@
 이 프로젝트는 AI 기반 한국 주식 시장 분석 시스템으로, 규제 기반 스크리닝과 AI 추론을 결합하여 스마트머니(Smart Money) 추적 및 VCP(Volatility Contraction Pattern) 패턴 분석을 수행합니다.
 
 - **백엔드**: Python 3.10+ / Flask
-- **프론트엔드**: Next.js 14 (App Router) / React / TypeScript
+- **프론트엔드**: Next.js 16 (App Router) / React / TypeScript
 - **AI 엔진**: Gemini 2.0 Flash, GPT (Z.ai), Perplexity
 - **데이터 소스**: pykrx, yfinance, 네이버/다음 뉴스 크롤링
 
@@ -295,8 +295,8 @@ closing-bet-demo/
 - **로깅**: Python `logging` (rotation)
 
 ### 프론트엔드 (Next.js)
-- **Framework**: Next.js 14 (App Router)
-- **언어**: TypeScript, React 18
+- **Framework**: Next.js 16 (App Router)
+- **언어**: TypeScript, React 19
 - **상태 관리**: Zustand
 - **스타일링**: Tailwind CSS
 - **아이콘**: React Icons, FontAwesome

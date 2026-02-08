@@ -103,7 +103,7 @@ export default function HomePage() {
                   <i className="fas fa-server text-2xl text-indigo-400"></i>
                 </div>
                 <h3 className="text-xl font-bold text-center mb-2">Flask API Backend</h3>
-                <p className="text-center text-xs text-gray-500 font-mono mb-6">Port: 5501</p>
+                <p className="text-center text-xs text-gray-500 font-mono mb-6"></p>
                 <ul className="space-y-3 text-sm text-gray-300">
                   <li className="flex items-center gap-2"><i className="fas fa-check text-green-500 text-xs"></i> Signals (/api/kr/signals)</li>
                   <li className="flex items-center gap-2"><i className="fas fa-check text-green-500 text-xs"></i> AI Analysis (/api/kr/ai)</li>
@@ -140,7 +140,7 @@ export default function HomePage() {
                   <i className="fas fa-desktop text-2xl text-blue-400"></i>
                 </div>
                 <h3 className="text-xl font-bold text-center mb-2">Next.js Frontend</h3>
-                <p className="text-center text-xs text-gray-500 font-mono mb-6">Port: 3500</p>
+                <p className="text-center text-xs text-gray-500 font-mono mb-6"></p>
                 <ul className="space-y-3 text-sm text-gray-300">
                   <li className="flex items-center gap-2"><i className="fas fa-columns text-blue-400 text-xs"></i> Dashboard UI</li>
                   <li className="flex items-center gap-2"><i className="fas fa-bolt text-blue-400 text-xs"></i> Real-time Signals</li>

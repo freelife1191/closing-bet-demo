@@ -59,7 +59,7 @@ closing-bet-v2/
 │
 ├── data/                     # 데이터 저장소
 │
-└── frontend/                 # Next.js 14 + Tailwind
+└── frontend/                 # Next.js 16 + Tailwind
     └── src/app/
         └── dashboard/kr/
             ├── page.tsx      # 메인 대시보드

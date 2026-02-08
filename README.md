@@ -184,7 +184,7 @@ graph TD
 - **Task Scheduling**: APSchedule + Threading (15:20, 15:40 KST)
 
 #### Frontend (Next.js)
-- **Framework**: Next.js 14 (App Router, TypeScript)
+- **Framework**: Next.js 16 (App Router, TypeScript)
 - **UI Components**: React with Tailwind CSS
 - **Real-time Updates**: WebSocket connection for live signal updates
 
