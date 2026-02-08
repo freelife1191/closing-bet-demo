@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { krAPI, KRMarketGate, KRSignalsResponse, DataStatus, fetchAPI } from '@/lib/api';
+import Modal from '@/app/components/Modal';
 
-function Tooltip({ children, content, className = "", position = "top", align = "center" }: { children: React.ReactNode, content: string, className?: string, position?: 'top' | 'bottom', align?: 'left' | 'center' | 'right' }) {
+function Tooltip({ children, content, className = "", position = "top", align = "center" }: { children: React.ReactNode, content: React.ReactNode, className?: string, position?: 'top' | 'bottom', align?: 'left' | 'center' | 'right' }) {
   const positionClass = position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2';
   const arrowClass = position === 'bottom' ? 'bottom-full border-b-gray-900/95 -mb-1' : 'top-full border-t-gray-900/95 -mt-1';
 
@@ -22,7 +23,7 @@ function Tooltip({ children, content, className = "", position = "top", align = 
   return (
     <span className={`relative group/tooltip inline-flex items-center ${className}`}>
       {children}
-      <div className={`absolute ${alignClass} ${positionClass} min-w-[120px] w-max max-w-[200px] px-3 py-2 bg-gray-900/95 text-gray-200 text-[11px] font-medium rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-[100] border border-white/10 shadow-xl backdrop-blur-sm text-center leading-relaxed whitespace-normal break-keep`}>
+      <div className={`absolute ${alignClass} ${positionClass} min-w-[260px] w-max max-w-[320px] px-4 py-3 bg-gray-900/95 text-gray-200 text-xs font-medium rounded-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-[100] border border-white/10 shadow-xl backdrop-blur-sm text-left leading-relaxed whitespace-normal break-keep`}>
         {content}
         <div className={`absolute ${arrowAlignClass} border-4 border-transparent ${arrowClass}`}></div>
       </div>
@@ -46,6 +47,144 @@ interface BacktestSummary {
   };
 }
 
+function StrategyGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="AI 전략 성과 지표 가이드" type="default" wide>
+      <div className="space-y-8 max-h-[70vh] overflow-y-auto pr-2">
+
+        {/* 1. Performance Metrics Guide */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <i className="fas fa-chart-bar text-amber-400"></i>
+              성과 지표 해석
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <i className="fas fa-trophy"></i>
+                </span>
+                <h4 className="font-bold text-white text-sm">승률 (Win Rate)</h4>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                전체 매매 횟수 중 <span className="text-emerald-400">수익 실현</span>에 성공한 비율입니다.
+                <br />
+                <span className="text-gray-500 mt-1 block">계산식: (익절 횟수 / 전체 진입 횟수) × 100</span>
+              </p>
+            </div>
+
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                  <i className="fas fa-percent"></i>
+                </span>
+                <h4 className="font-bold text-white text-sm">평균 수익률 (Avg)</h4>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                모든 매매(익절+손절)의 손익률 평균입니다.
+                <br />
+                <span className="text-gray-500 mt-1 block">손절(-3%~-5%)이 포함되므로 낮게 보일 수 있습니다.</span>
+              </p>
+            </div>
+
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                  <i className="fas fa-star"></i>
+                </span>
+                <h4 className="font-bold text-white text-sm">성능 등급</h4>
+              </div>
+              <ul className="text-xs text-gray-400 space-y-1">
+                <li className="flex justify-between"><span className="text-emerald-400 font-bold">우수</span> <span>승률 60% 이상</span></li>
+                <li className="flex justify-between"><span className="text-amber-400 font-bold">양호</span> <span>승률 40% ~ 59%</span></li>
+                <li className="flex justify-between"><span className="text-rose-400 font-bold">미흡</span> <span>승률 40% 미만</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Strategy Criteria */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <i className="fas fa-chess-board text-indigo-400"></i>
+              전략별 운영 기준
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* VCP Strategy */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">VCP 전략</span>
+                <span className="text-xs text-gray-500">변동성 축소 패턴 (Mark Minervini)</span>
+              </div>
+              <div className="bg-[#1c1c1e] rounded-xl border border-white/10 p-4 space-y-3">
+                <div>
+                  <h5 className="text-xs font-bold text-gray-300 mb-1">🎯 타겟 종목</h5>
+                  <p className="text-[11px] text-gray-500">기관/외국인 수급이 유입되며 변동성이 줄어드는 주도주</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] text-gray-400 flex gap-2">
+                    <i className="fas fa-check text-emerald-500 mt-0.5"></i>
+                    <span><strong>이평선 정배열</strong>: 주가 {'>'} 20일 {'>'} 60일 (상승 추세)</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400 flex gap-2">
+                    <i className="fas fa-check text-emerald-500 mt-0.5"></i>
+                    <span><strong>거래량 감소</strong>: 조정 구간에서 거래량 급감 (매물 소화)</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400 flex gap-2">
+                    <i className="fas fa-check text-emerald-500 mt-0.5"></i>
+                    <span><strong>돌파 시그널</strong>: 저항선 돌파 시 거래량 폭발</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Closing Bet Strategy */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/30">종가베팅 전략</span>
+                <span className="text-xs text-gray-500">장 마감 전 동시호가 공략</span>
+              </div>
+              <div className="bg-[#1c1c1e] rounded-xl border border-white/10 p-4 space-y-3">
+                <div>
+                  <h5 className="text-xs font-bold text-gray-300 mb-1">🎯 타겟 종목</h5>
+                  <p className="text-[11px] text-gray-500">당일 시장 주도주 중 장 막판까지 수급이 유지되는 종목</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] text-gray-400 flex gap-2">
+                    <i className="fas fa-check text-amber-500 mt-0.5"></i>
+                    <span><strong>거래대금</strong>: 코스피 1000억↑ / 코스닥 500억↑</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400 flex gap-2">
+                    <i className="fas fa-check text-amber-500 mt-0.5"></i>
+                    <span><strong>수급 주체</strong>: 외국인/기관 양매수 or 강력한 순매수</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400 flex gap-2">
+                    <i className="fas fa-check text-amber-500 mt-0.5"></i>
+                    <span><strong>고가 마감</strong>: 당일 고가 부근에서 밀리지 않고 마감</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 text-center">
+          <p className="text-xs text-blue-300">
+            <i className="fas fa-info-circle mr-2"></i>
+            모든 성과 지표는 <strong>최근 30일(또는 설정된 기간)</strong>의 실제 시그널을 기반으로 자동 계산됩니다.
+          </p>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function KRMarketOverview() {
   const [gateData, setGateData] = useState<KRMarketGate | null>(null);
   const [signalsData, setSignalsData] = useState<KRSignalsResponse | null>(null);
@@ -60,6 +199,7 @@ export default function KRMarketOverview() {
   const [targetDate, setTargetDate] = useState('');
   const [mgLoading, setMgLoading] = useState(false);
   const [updateInterval, setUpdateInterval] = useState(30); // Default 30min
+  const [isStrategyGuideOpen, setIsStrategyGuideOpen] = useState(false);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 설정값 로드
@@ -314,6 +454,56 @@ export default function KRMarketOverview() {
       text: 'group-hover:text-rose-400',
       icon: 'text-rose-500'
     };
+  };
+
+  const getStrategyTooltip = (rate: number, avgReturn: number, count: number, strategyName: string) => {
+    const isVCP = strategyName.includes("VCP");
+    const criteriaText = isVCP
+      ? "돌파 매매 진입 후 익절(+15%) 성공 비율"
+      : "종가 매수 후 보유 시 익절(+15%) 성공 비율";
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-1">
+          <span className="font-bold text-white text-sm">{strategyName} 성과 분석</span>
+          <span className="text-[10px] text-gray-500">최근 30일 기준</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] text-gray-400 mb-0.5">승률 (Win Rate)</div>
+            <div className={`text-base font-black ${rate >= 50 ? 'text-rose-400' : 'text-blue-400'}`}>
+              {rate}%
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 mb-0.5">평균 수익률 (Avg)</div>
+            <div className={`text-base font-black ${avgReturn > 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+              {avgReturn > 0 ? '+' : ''}{avgReturn}%
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2 text-[11px] text-gray-300">
+          <div className="flex gap-2">
+            <span className="text-gray-500 min-w-[30px]">기준:</span>
+            <span>익절 +15%, 손절 -5% 기준 백테스팅 결과입니다.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-gray-500 min-w-[30px]">해석:</span>
+            <span>
+              {rate >= 60 ? "현재 시장 주도주 매매에 매우 유리한 구간입니다." :
+                rate >= 40 ? "선별적인 접근으로 수익을 낼 수 있는 구간입니다." :
+                  "시장 변동성이 크거나 추세가 약해 보수적 대응이 필요합니다."}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-gray-500 min-w-[30px]">표본:</span>
+            <span>총 {count}번의 매매 신호를 분석한 결과입니다.</span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const getSignalCountTheme = (count: number) => {
@@ -601,6 +791,7 @@ export default function KRMarketOverview() {
         {/* 2. VCP Strategy Performance */}
         {(() => {
           const vcpRate = backtestData?.vcp?.win_rate ?? 0;
+          const avgReturn = backtestData?.vcp?.avg_return ?? 0;
           const vcpTheme = getStrategyTheme(vcpRate);
           return (
             <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${vcpTheme.border}`}>
@@ -608,9 +799,15 @@ export default function KRMarketOverview() {
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">VCP 전략</div>
-                  <Tooltip content="VCP 전략(변동성 축소 패턴)의 과거 성과(승률) 분석 결과입니다." position="bottom" align="left">
+                  <Tooltip content={getStrategyTooltip(vcpRate, avgReturn, backtestData?.vcp?.count ?? 0, "VCP 전략")} position="bottom" align="left">
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
+                  <button
+                    onClick={() => setIsStrategyGuideOpen(true)}
+                    className="ml-1 text-[8px] px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 transition-colors"
+                  >
+                    기준표
+                  </button>
                 </div>
                 {(() => {
                   const status = getStrategyStatus(vcpRate);
@@ -625,8 +822,8 @@ export default function KRMarketOverview() {
                 <span className={`text-3xl font-black text-white transition-colors ${vcpTheme.text}`}>
                   {loading ? '--' : vcpRate}<span className="text-base text-gray-600">%</span>
                 </span>
-                <span className={`text-xs font-bold ${(backtestData?.vcp?.avg_return ?? 0) > 0 ? 'text-red-400' : 'text-blue-400'}`}>
-                  Avg. {(backtestData?.vcp?.avg_return ?? 0) > 0 ? '+' : ''}{backtestData?.vcp?.avg_return}%
+                <span className={`text-xs font-bold ${avgReturn > 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                  Avg. {avgReturn > 0 ? '+' : ''}{avgReturn}%
                 </span>
               </div>
               <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
@@ -640,6 +837,7 @@ export default function KRMarketOverview() {
         {/* 3. Closing Bet Performance */}
         {(() => {
           const cbRate = backtestData?.closing_bet?.win_rate ?? 0;
+          const avgReturn = backtestData?.closing_bet?.avg_return ?? 0;
           const cbTheme = getStrategyTheme(cbRate);
           return (
             <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${cbTheme.border}`}>
@@ -647,9 +845,15 @@ export default function KRMarketOverview() {
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">종가베팅 전략</div>
-                  <Tooltip content="종가베팅 전략(장 마감 전 진입)의 성과 분석 결과입니다." position="bottom" align="left">
+                  <Tooltip content={getStrategyTooltip(cbRate, avgReturn, backtestData?.closing_bet?.count ?? 0, "종가베팅 전략")} position="bottom" align="left">
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
+                  <button
+                    onClick={() => setIsStrategyGuideOpen(true)}
+                    className="ml-1 text-[8px] px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 transition-colors"
+                  >
+                    기준표
+                  </button>
                 </div>
                 {backtestData?.closing_bet?.status === 'Accumulating' ? (
                   <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20 animate-pulse">
@@ -923,6 +1127,11 @@ export default function KRMarketOverview() {
           </div>
         </div>
       </section>
+
+      <StrategyGuideModal
+        isOpen={isStrategyGuideOpen}
+        onClose={() => setIsStrategyGuideOpen(false)}
+      />
     </div>
   );
 }
