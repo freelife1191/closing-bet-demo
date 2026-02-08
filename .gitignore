@@ -48,3 +48,6 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+.agent/
+.claude/
+
