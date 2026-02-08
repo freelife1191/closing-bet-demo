@@ -289,10 +289,10 @@ export default function KRMarketOverview() {
     return val.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
   };
 
-  const getWinRateStatus = (rate: number) => {
-    if (rate >= 60) return { label: '매수', className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
-    if (rate >= 40) return { label: '관망', className: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
-    return { label: '매도', className: 'bg-rose-500/10 text-rose-500 border-rose-500/20' };
+  const getStrategyStatus = (rate: number) => {
+    if (rate >= 60) return { label: '우수', className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
+    if (rate >= 40) return { label: '양호', className: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
+    return { label: '미흡', className: 'bg-rose-500/10 text-rose-500 border-rose-500/20' };
   };
 
   const getStrategyTheme = (rate: number) => {
@@ -613,7 +613,7 @@ export default function KRMarketOverview() {
                   </Tooltip>
                 </div>
                 {(() => {
-                  const status = getWinRateStatus(vcpRate);
+                  const status = getStrategyStatus(vcpRate);
                   return (
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
                       {status.label}
@@ -657,7 +657,7 @@ export default function KRMarketOverview() {
                   </span>
                 ) : (
                   (() => {
-                    const status = getWinRateStatus(cbRate);
+                    const status = getStrategyStatus(cbRate);
                     return (
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
                         {status.label}
