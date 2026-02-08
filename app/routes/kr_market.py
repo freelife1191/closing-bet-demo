@@ -953,7 +953,7 @@ def get_cumulative_performance():
                 logger.error(f"Error processing file {filepath}: {e}")
                 continue
         
-        # 4. 집계 (KPIs)
+        # 4. 집계 (KPIs) - 전체 데이터 기준 (Pagination 전)
         total_signals = len(trades)
         wins = sum(1 for t in trades if t['outcome'] == 'WIN')
         losses = sum(1 for t in trades if t['outcome'] == 'LOSS')
@@ -974,6 +974,16 @@ def get_cumulative_performance():
         # Price Date (가격 데이터 기준일)
         max_price_date = price_df.index.max() if not price_df.empty else datetime.now()
         price_date_str = max_price_date.strftime('%Y-%m-%d')
+        
+        # 5. Pagination Logic
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 50))
+        
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        
+        paginated_trades = trades[start_idx:end_idx]
+        total_pages = (total_signals + limit - 1) // limit
 
         # Response
         return jsonify({
@@ -989,7 +999,13 @@ def get_cumulative_performance():
                 'priceDate': price_date_str, 
                 'profitFactor': profit_factor
             },
-            'trades': trades
+            'trades': paginated_trades,
+            'pagination': {
+                'total': total_signals,
+                'page': page,
+                'limit': limit,
+                'totalPages': total_pages
+            }
         })
 
     except Exception as e:

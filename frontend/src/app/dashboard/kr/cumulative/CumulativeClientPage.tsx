@@ -263,17 +263,25 @@ export default function CumulativeClientPage() {
     profitFactor: 0
   });
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [pagination, setPagination] = useState<any>(null); // Pagination Metadata
   const [loading, setLoading] = useState(true);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50); // Default 50
 
   // Fetch Data
   React.useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        const res = await fetch('/api/kr/closing-bet/cumulative');
+        // [FIX] Server-side Pagination
+        const res = await fetch(`/api/kr/closing-bet/cumulative?page=${currentPage}&limit=${itemsPerPage}`);
         if (!res.ok) throw new Error('Failed to fetch data');
         const data = await res.json();
         setKpi(data.kpi);
-        // D등급 제외 필터링
+        setPagination(data.pagination);
+        // D등급 제외 필터링 (Server should handle this ideally, but keeping frontend filter for safety/consistency)
         const filtered = (data.trades || []).filter((t: Trade) => t.grade !== 'D');
         setTrades(filtered);
       } catch (error) {
@@ -284,7 +292,7 @@ export default function CumulativeClientPage() {
     };
 
     fetchData();
-  }, []);
+  }, [currentPage, itemsPerPage]); // Re-fetch on page/limit change
 
   // Filter Logic
   const filteredTrades = trades.filter(t => {
@@ -392,30 +400,73 @@ export default function CumulativeClientPage() {
 
       {/* Trade List Section */}
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 text-sm font-medium">결과:</span>
-            <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
-              <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => setOutcomeFilter('All')} />
-              <FilterButton label="성공" count={kpi.wins} active={outcomeFilter === 'WIN'} onClick={() => setOutcomeFilter('WIN')} />
-              <FilterButton label="실패" count={kpi.losses} active={outcomeFilter === 'LOSS'} onClick={() => setOutcomeFilter('LOSS')} />
-              <FilterButton label="보유" count={kpi.open} active={outcomeFilter === 'OPEN'} onClick={() => setOutcomeFilter('OPEN')} />
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-sm font-medium">결과:</span>
+              <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
+                <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => setOutcomeFilter('All')} />
+                <FilterButton label="성공" count={kpi.wins} active={outcomeFilter === 'WIN'} onClick={() => setOutcomeFilter('WIN')} />
+                <FilterButton label="실패" count={kpi.losses} active={outcomeFilter === 'LOSS'} onClick={() => setOutcomeFilter('LOSS')} />
+                <FilterButton label="보유" count={kpi.open} active={outcomeFilter === 'OPEN'} onClick={() => setOutcomeFilter('OPEN')} />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-sm font-medium">등급:</span>
+              <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
+                <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => setGradeFilter('All')} />
+                <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
+                <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
+                <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
+                <FilterButton label="C" count={cStats.count} active={gradeFilter === 'C'} onClick={() => setGradeFilter('C')} />
+              </div>
             </div>
           </div>
 
+          {/* Pagination Size Selector */}
           <div className="flex items-center gap-2">
-            <span className="text-gray-500 text-sm font-medium">등급:</span>
-            <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
-              <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => setGradeFilter('All')} />
-              <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
-              <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
-              <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
-              <FilterButton label="C" count={cStats.count} active={gradeFilter === 'C'} onClick={() => setGradeFilter('C')} />
-            </div>
+            <span className="text-gray-500 text-sm font-medium">페이지당:</span>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1); // Reset to first page
+              }}
+              className="bg-[#1c1c1e] text-white text-xs p-1.5 rounded border border-white/10 outline-none focus:border-indigo-500"
+            >
+              <option value={50}>50개</option>
+              <option value={100}>100개</option>
+              <option value={200}>200개</option>
+              <option value={500}>500개</option>
+            </select>
           </div>
         </div>
 
         <TradeTable trades={filteredTrades} />
+
+        {/* Pagination Controls */}
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 bg-[#1c1c1e] border border-white/10 rounded disabled:opacity-50 hover:bg-white/5 transition-colors"
+            >
+              Prev
+            </button>
+            <span className="text-sm text-gray-400">
+              Page <span className="text-white font-bold">{currentPage}</span> of {pagination.totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
+              disabled={currentPage === pagination.totalPages}
+              className="px-3 py-1 bg-[#1c1c1e] border border-white/10 rounded disabled:opacity-50 hover:bg-white/5 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
     </div>
