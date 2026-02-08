@@ -57,6 +57,7 @@ interface ScoreDetail {
     action: 'BUY' | 'HOLD' | 'SELL';
     confidence: number;
     model?: string;
+    reason?: string;
   };
 }
 
@@ -111,6 +112,7 @@ interface Signal {
     action: 'BUY' | 'HOLD' | 'SELL';
     confidence: number;
     model?: string;
+    reason?: string;
   };
   themes?: string[]; // 관련 테마 태그 (예: 원전, SMR, 전력인프라)
 }
