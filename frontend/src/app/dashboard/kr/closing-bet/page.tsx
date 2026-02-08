@@ -1691,6 +1691,23 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
     D: { bg: 'bg-slate-500/20', text: 'text-slate-400', border: 'border-slate-500/30' },
   };
 
+  // Helper function to format model names (handles legacy names and formatting)
+  const formatAiModelName = (modelName: string | undefined): string => {
+    if (!modelName) return 'Gemini 2.0 Flash';
+
+    // Alias Mapping (Legacy or Configuration nicknames)
+    const lowerName = modelName.toLowerCase();
+    if (lowerName === 'gemini-flash-latest' || lowerName === 'gemini flash latest') {
+      return 'Gemini 1.5 Flash (Latest)';
+    }
+
+    // Default formatting (snake_case or kebab-case to Title Case)
+    return modelName
+      .replace(/[-_]/g, ' ')
+      .replace(/\bgemini\b/gi, 'Gemini')
+      .replace(/\bgpt\b/gi, 'GPT');
+  };
+
   const style = gradeStyles[signal.grade] || gradeStyles.D;
 
   // AI Evaluation Logic with robust fallback
@@ -1937,7 +1954,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                 <i className="fas fa-microscope text-indigo-400"></i> AI 분석 리포트
                 {(aiEval?.model || signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || signal.score.llm_reason) && (
                   <span className="text-[10px] font-normal text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
-                    {(aiEval?.model || signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || 'Gemini 2.0 Flash').replace(/[-_]/g, ' ')}
+                    {formatAiModelName(aiEval?.model || signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model)}
                   </span>
                 )}
               </span>
