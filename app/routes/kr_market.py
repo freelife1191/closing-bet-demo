@@ -1040,9 +1040,23 @@ def get_kr_market_gate():
                 
                 # 주말(토/일)이 아니면 오늘 날짜와 비교
                 if datetime.now().weekday() < 5: 
-                    if dataset_date != today_str:
-                        logger.info(f"[Market Gate] 데이터가 구버전임 ({dataset_date} vs {today_str}). 갱신 필요.")
-                        is_valid = False  # 유효하지 않음으로 처리하여 아래에서 Auto-Update 유도
+                    current_hour = datetime.now().hour
+                    
+                    # [2026-02-09 Fix] 
+                    # 1. 오전 9시 이전에는 장 시작 전이므로 전일 데이터 허용 (로그 방지)
+                    # 2. 최근 30분 내에 분석된 데이터라면, 날짜가 다르더라도(장중/휴장 등) 유효하다고 판단 (무한 루프 방지)
+                    is_recent_analysis = False
+                    if gate_data.get('timestamp'):
+                        try:
+                            last_update = datetime.fromisoformat(gate_data['timestamp'])
+                            if (datetime.now() - last_update).total_seconds() < 1800: # 30분
+                                is_recent_analysis = True
+                        except: pass
+
+                    if current_hour >= 9 and not is_recent_analysis:
+                        if dataset_date != today_str:
+                            logger.info(f"[Market Gate] 데이터가 구버전임 ({dataset_date} vs {today_str}). 갱신 필요.")
+                            is_valid = False  # 유효하지 않음으로 처리하여 아래에서 Auto-Update 유도
                 
         if not is_valid and not target_date:
             # 실시간 요청인데 데이터가 부실하면 jongga_v2 스냅샷 확인
