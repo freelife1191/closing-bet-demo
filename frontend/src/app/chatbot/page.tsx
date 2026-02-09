@@ -236,14 +236,19 @@ export default function ChatbotPage() {
   // Load History when Session Changes
   useEffect(() => {
     if (currentSessionId) {
+      // [Fix] Always fetch history unless it's a brand new session we just created AND we already have messages
+      // isCreatingSessionRef is used to avoid re-fetching right after we receive the first response
+      // But we should be careful. 
+      console.log(`[SessionChange] ID: ${currentSessionId}, isCreating: ${isCreatingSessionRef.current}`);
+
       if (isCreatingSessionRef.current) {
-        // Skip fetching history if we just created this session (optimistic UI is up to date)
         isCreatingSessionRef.current = false;
       } else {
         fetchHistory(currentSessionId);
       }
       localStorage.setItem('chatbot_last_session_id', currentSessionId);
     } else {
+      console.log('[SessionChange] New Chat (No ID)');
       setMessages([]); // New Chat
     }
   }, [currentSessionId]);
@@ -326,15 +331,22 @@ export default function ChatbotPage() {
 
   const fetchHistory = async (sessionId: string) => {
     try {
+      setIsLoading(true); // Show loading state
       const headers = getAuthHeaders();
       const data: any = await fetchAPI(`/api/kr/chatbot/history?session_id=${sessionId}`, {
         headers
       });
       if (data.history) {
+        console.log(`[History] Loaded ${data.history.length} messages for session ${sessionId}`);
         setMessages(data.history);
+      } else {
+        setMessages([]);
       }
     } catch (error) {
       console.error('Failed to fetch history:', error);
+      setMessages([{ role: 'model', parts: ['⚠️ 대화 기록을 불러오는데 실패했습니다.'] }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -12,7 +12,35 @@ logger = logging.getLogger(__name__)
 
 class HistoryManager:
     def __init__(self):
-        self.sessions = {} # {session_id: {created_at, messages: [], model: str}}
+        # [Fix] File-based Persistence
+        self.DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        self.HISTORY_FILE = os.path.join(self.DATA_DIR, 'chatbot_history.json')
+        self.sessions = {} # {session_id: {created_at, messages: [], model: str, owner_id: str}}
+        self.load_history()
+
+    def load_history(self):
+        """Load history from JSON file"""
+        try:
+            if os.path.exists(self.HISTORY_FILE):
+                with open(self.HISTORY_FILE, 'r', encoding='utf-8') as f:
+                    self.sessions = json.load(f)
+                logger.info(f"Loaded {len(self.sessions)} chat sessions from history.")
+            else:
+                self.sessions = {}
+        except Exception as e:
+            logger.error(f"Failed to load chat history: {e}")
+            self.sessions = {}
+
+    def save_history(self):
+        """Save history to JSON file"""
+        try:
+            if not os.path.exists(self.DATA_DIR):
+                os.makedirs(self.DATA_DIR)
+            
+            with open(self.HISTORY_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.sessions, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Failed to save chat history: {e}")
 
     def create_session(self, model_name: str = None, owner_id: str = None) -> str:
         session_id = str(uuid.uuid4())
@@ -20,16 +48,44 @@ class HistoryManager:
             'created_at': datetime.now().isoformat(),
             'messages': [],
             'model': model_name or app_config.GEMINI_MODEL,
-            'owner_id': owner_id  # [Fix] Session Ownership
+            'owner_id': owner_id 
         }
+        self.save_history() # Save
         return session_id
 
     def get_all_sessions(self, owner_id: str = None) -> List[Dict]:
-        # [Fix] Filter by owner_id
-        return [
-            {'id': k, **v} for k, v in self.sessions.items()
-            if v.get('owner_id') == owner_id or (not v.get('owner_id') and not owner_id)
-        ]
+        sessions_list = []
+        for k, v in self.sessions.items():
+            if v.get('owner_id') == owner_id or (not v.get('owner_id') and not owner_id):
+                # Calculate metadata
+                msg_count = len(v.get('messages', []))
+                preview = ""
+                if msg_count > 0:
+                    # Try to get first user message
+                    for m in v['messages']:
+                        if m['role'] == 'user':
+                            content = m['parts'][0]
+                            if isinstance(content, dict): content = content.get('text', '') # Handle multimodal
+                            preview = content[:50]
+                            break
+                    if not preview: 
+                        # If no user message, take first message
+                        content = v['messages'][0]['parts'][0]
+                        if isinstance(content, dict): content = content.get('text', '')
+                        preview = content[:50]
+                
+                if msg_count > 0:
+                    sessions_list.append({
+                        'id': k, 
+                        'created_at': v.get('created_at'),
+                        'model': v.get('model'),
+                        'title': v.get('title') or preview or "New Chat",
+                        'message_count': msg_count
+                    })
+
+        # Sort by created_at desc (Newest first)
+        sessions_list.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        return sessions_list
 
     def get_messages(self, session_id: str) -> List[Dict]:
         if session_id in self.sessions:
@@ -38,22 +94,38 @@ class HistoryManager:
 
     def add_message(self, session_id: str, role: str, content: str):
         if session_id not in self.sessions:
-            self.create_session() # Fallback if session doesn't exist (or just ignore?)
-            # Usually better to ensure session exists. For now, rely on caller to create/pass valid ID.
-            if session_id not in self.sessions: return
+            # If session doesn't exist in memory/file, recreate minimal session
+            # Ideally frontend should handle session creation, but this is a fallback
+            self.create_session() 
+            if session_id not in self.sessions: 
+                 # If creation failed or ID mismatch (create_session generates new ID), 
+                 # create with specific ID is not supported by create_session above.
+                 # Let's fix create_session or handle here.
+                 # Actually create_session generates new ID. We can't reuse old ID easily unless we force it.
+                 # Let's force create for this specific ID if needed, or just return.
+                 # Better approach: Create a new session entry with the given ID
+                 self.sessions[session_id] = {
+                    'created_at': datetime.now().isoformat(),
+                    'messages': [],
+                    'model': app_config.GEMINI_MODEL,
+                    'owner_id': None # Unknown owner
+                }
             
         self.sessions[session_id]['messages'].append({
             'role': role,
             'parts': [content],
             'timestamp': datetime.now().isoformat()
         })
+        self.save_history() # Save
 
     def delete_session(self, session_id: str):
         if session_id in self.sessions:
             del self.sessions[session_id]
+            self.save_history() # Save
 
     def clear_all(self):
         self.sessions = {}
+        self.save_history() # Save
 
 class Chatbot:
     _instance = None

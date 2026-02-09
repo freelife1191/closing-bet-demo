@@ -202,13 +202,6 @@ export default function ChatWidget() {
     // 1. Reset frontend
     setMessages([]);
     setInput('');
-
-    // 2. Clear backend history
-    try {
-      await fetch('/api/kr/chatbot/history', { method: 'DELETE' });
-    } catch (e) {
-      console.error("Failed to clear history:", e);
-    }
   };
 
   const handleSuggestionClick = (text: string) => {
