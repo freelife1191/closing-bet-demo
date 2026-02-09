@@ -39,6 +39,7 @@ Thumbs.db
 response.json
 .sisyphus/
 .ipynb_checkpoints/
+services/*.lock
 
 # Testing & Build
 .pytest_cache/
