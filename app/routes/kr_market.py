@@ -817,12 +817,23 @@ def get_cumulative_performance():
         # daily_prices.csv 전체를 메모리에 올리는 것은 비효율적일 수 있으나, 
         # 현재 데모 규모에서는 가장 빠르고 확실한 방법.
         # 최적화: 필요한 컬럼만 로드 + Date Indexing
-        price_df = load_csv_file('daily_prices.csv')
-        if not price_df.empty:
-            price_df['ticker'] = price_df['ticker'].astype(str).str.zfill(6)
-            price_df['date'] = pd.to_datetime(price_df['date'])
-            price_df = price_df.sort_values('date')
-            price_df.set_index('date', inplace=True) # Date 인덱싱
+        # 2. Daily Price Data Loading (Robust)
+        price_df = pd.DataFrame()
+        try:
+            loaded_df = load_csv_file('daily_prices.csv')
+            if not loaded_df.empty:
+                # 필수 컬럼 확인
+                if 'date' in loaded_df.columns and 'ticker' in loaded_df.columns:
+                    loaded_df['ticker'] = loaded_df['ticker'].astype(str).str.zfill(6)
+                    loaded_df['date'] = pd.to_datetime(loaded_df['date'])
+                    loaded_df = loaded_df.sort_values('date')
+                    loaded_df.set_index('date', inplace=True)
+                    price_df = loaded_df
+                else:
+                    logger.warning("daily_prices.csv missing required columns (date, ticker)")
+        except Exception as e:
+            logger.error(f"Error loading daily_prices.csv: {e}")
+            price_df = pd.DataFrame()
         
         # 3. 파일별로 순회하며 Trade 정보 추출
         for filepath in files:
