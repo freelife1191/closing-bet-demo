@@ -84,10 +84,10 @@ class ScoringThresholds:
     TOTAL_MAX: int = 21
 
     # Grade thresholds
-    MIN_C_GRADE: int = 8
-    MIN_B_GRADE: int = 10
-    MIN_A_GRADE: int = 12
-    MIN_S_GRADE: int = 15
+    MIN_C_GRADE: int = 4
+    MIN_B_GRADE: int = 6
+    MIN_A_GRADE: int = 8
+    MIN_S_GRADE: int = 10
 
 
 @dataclass(frozen=True)

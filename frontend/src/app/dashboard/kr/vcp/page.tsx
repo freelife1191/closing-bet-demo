@@ -906,193 +906,192 @@ export default function VCPSignalsPage() {
                 const confidence = rec?.confidence ?? 0;
 
                 return (
-                  <div className="flex-1 overflow-y-auto">
-                    {/* Tab Buttons */}
-                    <div className="flex border-b border-white/5">
-                      {getRec('gpt') && (
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    {/* Content Area: Scrollable */}
+                    <div className="flex-1 overflow-y-auto">
+                      {/* Tab Buttons */}
+                      <div className="flex border-b border-white/5 sticky top-0 bg-[#131722] z-20">
+                        {getRec('gpt') && (
+                          <button
+                            onClick={() => setActiveAiTab('gpt')}
+                            className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'gpt' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
+                          >
+                            <i className="fas fa-robot mr-1"></i> GPT
+                          </button>
+                        )}
+                        {getRec('perplexity') && (
+                          <button
+                            onClick={() => setActiveAiTab('perplexity')}
+                            className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'perplexity' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
+                          >
+                            <i className="fas fa-search mr-1"></i> Perplexity
+                          </button>
+                        )}
                         <button
-                          onClick={() => setActiveAiTab('gpt')}
-                          className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'gpt' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
+                          onClick={() => setActiveAiTab('gemini')}
+                          className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'gemini' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
                         >
-                          <i className="fas fa-robot mr-1"></i> GPT
+                          <i className="fas fa-gem mr-1"></i> Gemini
                         </button>
-                      )}
-                      {getRec('perplexity') && (
-                        <button
-                          onClick={() => setActiveAiTab('perplexity')}
-                          className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'perplexity' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
-                        >
-                          <i className="fas fa-search mr-1"></i> Perplexity
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setActiveAiTab('gemini')}
-                        className={`flex-1 py-3 text-xs font-bold transition-colors ${activeAiTab === 'gemini' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
-                      >
-                        <i className="fas fa-gem mr-1"></i> Gemini
-                      </button>
-                    </div>
-
-                    {/* Confidence Score */}
-                    <div className="p-4 flex items-center gap-4">
-                      <div className="relative w-14 h-14">
-                        <svg className="w-full h-full -rotate-90">
-                          <circle cx="28" cy="28" r="24" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-white/10" />
-                          <circle
-                            cx="28" cy="28" r="24"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                            fill="transparent"
-                            strokeDasharray={`${(confidence / 100) * 150.8} 150.8`}
-                            className={confidence >= 70 ? 'text-emerald-500' : confidence >= 50 ? 'text-yellow-500' : 'text-red-500'}
-                          />
-                        </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{confidence}%</span>
                       </div>
-                      <div className="flex-1">
-                        {rec ? (
-                          <div className="bg-black/30 rounded-lg p-3 text-xs text-gray-300 leading-relaxed border border-white/5">
-                            "{rec.reason || 'No analysis available.'}"
+
+                      {/* Confidence Score */}
+                      <div className="p-4 flex items-center gap-4">
+                        <div className="relative w-14 h-14 shrink-0">
+                          <svg className="w-full h-full -rotate-90">
+                            <circle cx="28" cy="28" r="24" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-white/10" />
+                            <circle
+                              cx="28" cy="28" r="24"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                              fill="transparent"
+                              strokeDasharray={`${(confidence / 100) * 150.8} 150.8`}
+                              className={confidence >= 70 ? 'text-emerald-500' : confidence >= 50 ? 'text-yellow-500' : 'text-red-500'}
+                            />
+                          </svg>
+                          <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{confidence}%</span>
+                        </div>
+                        <div className="flex-1">
+                          {rec ? (
+                            <div className="bg-black/30 rounded-lg p-3 text-xs text-gray-300 leading-relaxed border border-white/5">
+                              "{rec.reason || 'No analysis available.'}"
+                            </div>
+                          ) : (
+                            <div className="text-gray-500 text-xs">AI 분석 데이터 없음</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* VCP Score & Stats */}
+                      <div className="px-4 pb-4 space-y-3">
+                        <div className="bg-black/30 rounded-lg p-3 border border-white/5">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">VCP Score</span>
+                            <span className="text-lg font-bold text-blue-400">{signal?.score?.toFixed(1) ?? '-'}</span>
                           </div>
-                        ) : (
-                          <div className="text-gray-500 text-xs">AI 분석 데이터 없음</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* VCP Score & Stats */}
-                    <div className="px-4 pb-4 space-y-3">
-                      <div className="bg-black/30 rounded-lg p-3 border border-white/5">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wider">VCP Score</span>
-                          <span className="text-lg font-bold text-blue-400">{signal?.score?.toFixed(1) ?? '-'}</span>
-                        </div>
-                        <div className="text-xs text-gray-400 leading-relaxed">
-                          수축비율 {signal?.contraction_ratio?.toFixed(2) ?? '-'}로 기술적 압축이 양호하고,
-                          외국인 5일 순매수 {formatFlow(signal?.foreign_5d)}주(강한 수급)가 기관 매도를
-                          압도해 추세 지속 가능성이 높음
+                          <div className="text-xs text-gray-400 leading-relaxed">
+                            수축비율 {signal?.contraction_ratio?.toFixed(2) ?? '-'}로 기술적 압축이 양호하고,
+                            외국인 5일 순매수 {formatFlow(signal?.foreign_5d)}주(강한 수급)가 기관 매도를
+                            압도해 추세 지속 가능성이 높음
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* News Section */}
-                    <div className="px-4 pb-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <i className="fas fa-newspaper text-gray-500 text-xs"></i>
-                        <span className="text-xs font-bold text-gray-400">주요 뉴스</span>
-                      </div>
-                      <div className="space-y-2">
-                        {stock?.news && stock.news.length > 0 ? (
-                          stock.news.slice(0, 4).map((news, i) => (
-                            <a
-                              key={i}
-                              href={news.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block text-xs text-gray-400 hover:text-blue-400 transition-colors truncate"
-                            >
-                              • {news.title}
-                            </a>
-                          ))
-                        ) : (
-                          <div className="text-xs text-gray-600">관련 뉴스 없음</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* AI Chatbot Section */}
-                    <div className="px-4 pb-4 border-t border-white/5 pt-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <i className="fas fa-robot text-blue-400 text-xs"></i>
-                          <span className="text-xs font-bold text-gray-400">AI 상담 (VCP 전문가)</span>
+                      {/* News Section */}
+                      <div className="px-4 pb-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <i className="fas fa-newspaper text-gray-500 text-xs"></i>
+                          <span className="text-xs font-bold text-gray-400">주요 뉴스</span>
                         </div>
-                        {/* Help Tooltip */}
-                        <div className="relative group">
-                          <i className="fas fa-question-circle text-gray-500 hover:text-gray-300 text-xs cursor-help"></i>
-                          <div className="absolute right-0 top-full mt-2 w-56 bg-[#1c1c1e] border border-white/10 rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                            <div className="text-xs font-bold text-gray-200 mb-2">💡 사용법</div>
-                            <div className="text-[10px] text-gray-500 space-y-1">
-                              <div>🤖 "이 종목 VCP 패턴 맞아?"</div>
-                              <div>📊 "수급 상황 분석해줘"</div>
-                              <div>💰 "손절가랑 목표가 알려줘"</div>
+                        <div className="space-y-2">
+                          {stock?.news && stock.news.length > 0 ? (
+                            stock.news.slice(0, 4).map((news, i) => (
+                              <a
+                                key={i}
+                                href={news.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-xs text-gray-400 hover:text-blue-400 transition-colors truncate"
+                              >
+                                • {news.title}
+                              </a>
+                            ))
+                          ) : (
+                            <div className="text-xs text-gray-600">관련 뉴스 없음</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* AI Chatbot Section */}
+                      <div className="px-4 pb-4 border-t border-white/5 pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <i className="fas fa-robot text-blue-400 text-xs"></i>
+                            <span className="text-xs font-bold text-gray-400">AI 상담 (VCP 전문가)</span>
+                          </div>
+                          <div className="relative group">
+                            <i className="fas fa-question-circle text-gray-500 hover:text-gray-300 text-xs cursor-help"></i>
+                            <div className="absolute right-0 top-full mt-2 w-56 bg-[#1c1c1e] border border-white/10 rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                              <div className="text-xs font-bold text-gray-200 mb-2">💡 사용법</div>
+                              <div className="text-[10px] text-gray-500 space-y-1">
+                                <div>🤖 "이 종목 VCP 패턴 맞아?"</div>
+                                <div>📊 "수급 상황 분석해줘"</div>
+                                <div>💰 "손절가랑 목표가 알려줘"</div>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Persistent Suggestions (Moved to Input Area) */}
-
-                      {/* Chat History */}
-                      <div className="h-[600px] overflow-y-auto space-y-4 mb-3 custom-scrollbar px-1 pb-20">
-                        {chatHistory.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-full text-gray-500 text-xs">
-                            <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3">
-                              <i className="fas fa-comment-dots text-xl text-gray-600"></i>
+                        {/* Chat History */}
+                        <div className="space-y-4 mb-3 custom-scrollbar px-1 pb-4">
+                          {chatHistory.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-10 text-gray-500 text-xs">
+                              <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3">
+                                <i className="fas fa-comment-dots text-xl text-gray-600"></i>
+                              </div>
+                              <p>"{selectedStock?.name}"에 대해 질문해보세요</p>
                             </div>
-                            <p>"{selectedStock?.name}"에 대해 질문해보세요</p>
-                          </div>
-                        ) : (
-                          <>
-                            {chatHistory.map((msg, i) => (
-                              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed ${msg.role === 'user'
-                                  ? 'bg-blue-600 text-white rounded-br-none'
-                                  : 'bg-[#2c2c2e] text-gray-200 rounded-bl-none border border-white/5'
-                                  }`}>
-                                  <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    components={{
-                                      p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                                      strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
-                                      ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
-                                      ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1 pl-1">{children}</ol>,
-                                      li: ({ children }) => <li className="text-gray-300">{children}</li>,
-                                      code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
-                                    }}
-                                  >
-                                    {msg.content}
-                                  </ReactMarkdown>
+                          ) : (
+                            <>
+                              {chatHistory.map((msg, i) => (
+                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                  <div className={`inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed ${msg.role === 'user'
+                                    ? 'bg-blue-600 text-white rounded-br-none'
+                                    : 'bg-[#2c2c2e] text-gray-200 rounded-bl-none border border-white/5'
+                                    }`}>
+                                    <ReactMarkdown
+                                      remarkPlugins={[remarkGfm]}
+                                      components={{
+                                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                                        strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
+                                        ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
+                                        ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1 pl-1">{children}</ol>,
+                                        li: ({ children }) => <li className="text-gray-300">{children}</li>,
+                                        code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
+                                      }}
+                                    >
+                                      {msg.content}
+                                    </ReactMarkdown>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Suggestion Chips */}
+                              {chatHistory.length === 1 && chatHistory[0].role === 'assistant' && (
+                                <div className="flex flex-wrap gap-2 mt-4 px-1">
+                                  {VCP_SUGGESTIONS.map((suggestion, idx) => (
+                                    <button
+                                      key={idx}
+                                      onClick={() => handleVCPChatSend(suggestion)}
+                                      className="px-3 py-1.5 bg-[#2c2c2e] hover:bg-blue-600/20 hover:text-blue-300 hover:border-blue-500/30 border border-white/5 rounded-full text-[11px] text-gray-400 transition-all text-left"
+                                    >
+                                      {suggestion}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {chatLoading && (
+                            <div className="flex justify-start">
+                              <div className="bg-[#2c2c2e] rounded-2xl rounded-bl-none px-4 py-3 border border-white/5">
+                                <div className="flex gap-1">
+                                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></div>
+                                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce delay-75"></div>
+                                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce delay-150"></div>
                                 </div>
                               </div>
-                            ))}
-
-                            {/* Suggestion Chips (Only show when checking initial greeting) */}
-                            {chatHistory.length === 1 && chatHistory[0].role === 'assistant' && (
-                              <div className="flex flex-wrap gap-2 mt-4 px-1">
-                                {VCP_SUGGESTIONS.map((suggestion, idx) => (
-                                  <button
-                                    key={idx}
-                                    onClick={() => handleVCPChatSend(suggestion)}
-                                    className="px-3 py-1.5 bg-[#2c2c2e] hover:bg-blue-600/20 hover:text-blue-300 hover:border-blue-500/30 border border-white/5 rounded-full text-[11px] text-gray-400 transition-all text-left"
-                                  >
-                                    {suggestion}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-                        {chatLoading && (
-                          <div className="flex justify-start">
-                            <div className="bg-[#2c2c2e] rounded-2xl rounded-bl-none px-4 py-3 border border-white/5">
-                              <div className="flex gap-1">
-                                <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></div>
-                                <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce delay-75"></div>
-                                <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce delay-150"></div>
-                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-
                     </div>
 
                     {/* Fixed Bottom Input Area */}
-                    <div className="p-4 border-t border-white/5 bg-[#131722] z-10">
+                    <div className="p-4 border-t border-white/5 bg-[#131722] shrink-0">
                       <div className="relative">
-                        {/* Persistent Suggestions (Floating above Input) */}
-                        <div className="absolute bottom-full left-0 w-full mb-3 pointer-events-none">
+                        {/* Persistent Suggestions */}
+                        <div className="absolute bottom-full left-0 w-full mb-3 pointer-events-none px-1">
                           <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide pb-1 pointer-events-auto">
                             {VCP_SUGGESTIONS.map((suggestion, idx) => (
                               <button
@@ -1152,6 +1151,7 @@ export default function VCPSignalsPage() {
                     </div>
                   </div>
                 );
+
               })()}
             </div>
           </div>

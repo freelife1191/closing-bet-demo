@@ -2,41 +2,67 @@
 
 **🌐 데모 페이지 (Live Demo)**: [https://close.highvalue.kr/dashboard/kr](https://close.highvalue.kr/dashboard/kr)
 
-![랜딩 페이지](assets/0.%20랜딩페이지.png)
+![랜딩 페이지](assets/1.png)
+
+![아키텍처 소개](assets/2.png)
+
+![핵심 분석 기능](assets/3.png)
 
 ## 🚀 빠른 시작 (Quick Start)
 
-### 1. 환경 설정 및 설치
+### 1. 서버 시작 (가장 빠른 방법)
+
+`restart_all.sh` 스크립트가 자동으로 환경 설정, 패키지 설치, 서버 실행을 처리합니다.
+
 ```bash
-# 저장소 클론 및 이동
-git clone <repository_url>
-cd closing-bet-v2
-
-# 백엔드 가상환경 설정 및 패키지 설치
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# 프론트엔드 의존성 설치
-cd frontend && npm install && cd ..
+./restart_all.sh
 ```
 
+이 스크립트는 다음 작업을 자동으로 수행합니다:
+- ✅ 가상환경(venv) 자동 생성 및 패키지 설치
+- ✅ 프론트엔드 의존성 설치 (npm install)
+- ✅ 기존 프로세스 자동 종료
+- ✅ 백엔드(Gunicorn)과 프론트엔드(Next.js) 동시 시작
+- ✅ .env 설정 자동 로드 및 포트 적용
+
+**서버 접속:**
+- 백엔드: http://localhost:5501
+- 프론트엔드: http://localhost:3500
+
 ### 2. API 키 설정 (.env)
+
 루트 디렉토리의 `.env` 파일에 API 키를 설정합니다.
+
 ```env
+# 서버 포트 설정
 FRONTEND_PORT=3500
 FLASK_PORT=5501
+FLASK_HOST=0.0.0.0
+
+# AI API 키 (필수)
 GOOGLE_API_KEY=your_gemini_key_here
 OPENAI_API_KEY=your_openai_key_here
 PERPLEXITY_API_KEY=your_perplexity_key_here
-ZAI_API_KEY=your_zai_key_here  # 선택사항
+
+# 선택사항 (Z.ai 통한 GPT)
+ZAI_API_KEY=your_zai_key_here
 
 # VCP AI 설정
 VCP_AI_PROVIDERS=gemini,gpt,perplexity
+VCP_GEMINI_MODEL=gemini-2.0-flash
+VCP_GPT_MODEL=gpt-4o
+VCP_PERPLEXITY_MODEL=sonar-pro
+
+# 스케줄러 시간 설정 (KST)
+JONGGA_SCHEDULE_TIME=15:20
+CLOSING_SCHEDULE_TIME=15:40
 MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
+
+# 스케줄러 활성화
+SCHEDULER_ENABLED=true
 ```
 
-![내 설정](/assets/10.%20내%20설정.png)
+![내 설정](assets/33.png)
 *사용자 설정 및 API 키 관리 화면*
 
 ### 3. 서버 실행 및 중지
@@ -72,8 +98,11 @@ MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
 - **원자재 및 자산**: 금(Gold), 은(Silver), 비트코인(BTC), 이더리움(ETH) 시세
 - **Market Gate 점수**: 위 실시간 지표와 현재 환율을 결합하여 **접속 즉시** 동적 계산
 
-![메인 화면](/assets/1.%20스마트머니%20추적%20메인.png)
-*스마트머니 추적을 통한 시장 주도주 포착 화면*
+![스마트머니 추적](assets/7.png)
+*스마트머니 추적을 통한 데이터 확인*
+
+![AI전략 성과 지표](assets/8.png)
+*AI전략 성과 지표*
 
 ### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
 - **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
@@ -81,7 +110,7 @@ MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
 - **스케줄 분석**: AI 분석(15:20 KST), 일일 전체 분석 및 시그널 확정(15:40 KST)
 - **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
 
-![데이터 상태](/assets/9.%20데이터%20상태.png)
+![데이터 상태](assets/25.png)
 *실시간 데이터 동기화 및 마켓 게이트 상태 확인*
 
 ---
@@ -117,43 +146,53 @@ MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
 ```mermaid
 graph TD
     subgraph "Data Layer (Collection)"
-        A[KRX / pykrx] --> B(Daily Price & Volume)
-        A --> C(Institutional Flow)
-        D[Naver Finance] --> E(News Crawling)
-        F[Global Macro API] --> G(Exchange/Indices)
+        A[Toss Securities API<br>Real-time Priority] --> B(Daily Price & Volume)
+        C[pykrx / KRX] --> B
+        C --> D(Institutional Flow)
+        E[yfinance] --> F(Exchange/Indices/Crypto)
+        G[Naver/Daum News] --> H(News Crawling)
     end
 
-    subgraph "Engine Layer (Screening & Scoring)"
-        B & C --> H{Smart Money Screener}
-        H -->|Supply Score| I[Candidate Selection]
-        I --> J{Market Gate}
-        J -->|OPEN| K[Trade Setup]
+    subgraph "Engine Layer (Modular Pipeline)"
+        B & D --> I{Phase1: Base Analysis}
+        I -->|Filter 500억+| J[Phase2: News Collector]
+        J --> K[Phase3: LLM Analyzer]
+        K -->|Gemini + GPT/Perplexity| L[Phase4: Signal Finalizer]
+        L --> M[Grade System S/A/B/C]
+
+        M --> N{Market Gate Check}
+        N -->|OPEN| O[Signal Output]
+        N -->|CLOSED| P[Block Signal]
     end
 
-    subgraph "AI Core Layer (Reasoning & Validation)"
-        K --> L[LLM Analyzer]
-        E --> M[News Sentiment]
-        L & M --> N{VCP Multi-AI Analyzer}
-        N -->|ThreadPool| O[Gemini]
-        N -->|ThreadPool| P[GPT/Perplexity]
-        
-        O -->|Investment Hypothesis| Q[Consensus Engine]
-        P -->|Cross Check| Q
+    subgraph "API Layer (Flask Blueprint)"
+        O --> Q[kr_market Blueprint]
+        O --> R[common Blueprint]
+        Q --> S[Market Status API]
+        Q --> T[Signals API]
+        R --> U[Admin API]
+        R --> V[Config API]
     end
 
-    subgraph "Service Layer (Delivery)"
-        Q --> R[Signal Generator]
-        R --> S[Grade System S/A/B/C]
-        S --> T[Dashboard UI]
-        S --> U[Chatbot ULW]
-        S --> V[Notification Service]
+    subgraph "Services Layer"
+        S --> W[Scheduler Service]
+        O --> X[Notification Service]
+        O --> Y[Paper Trading Service]
+        W -->|15:20 KST| Z[종가베팅 Analysis]
+        W -->|15:40 KST| AA[VCP Analysis]
+    end
+
+    subgraph "Frontend Layer (Next.js)"
+        Q --> AB[Dashboard UI]
+        Q --> AC[Chatbot ULW]
+        X --> AD[Multi-Channel Alert]
     end
 
     subgraph "Notification Channels"
-        V --> W[Telegram Bot]
-        V --> X[Discord Webhook]
-        V --> Y[Slack Incoming]
-        V --> Z[Email SMTP]
+        AD --> AE[Telegram Bot]
+        AD --> AF[Discord Webhook]
+        AD --> AG[Slack Incoming]
+        AD --> AH[Email SMTP]
     end
 ```
 
@@ -167,50 +206,220 @@ graph TD
 | **Async Batch Processing**      | `asyncio`와 `Semaphore`로 동시에 5~10개 종목 뉴스 분석   | API 호출 시간 최적화, Rate Limit 방지           |
 | **Market Gate Pattern**         | 개별 종목 분석 전 시장 전체 상태 먼저 점검               | 하락장에서의 무분별한 매수 방지, 계좌 보호      |
 | **Persona-Based Prompting**     | 일관된 투자 철학(스마트머니봇)을 시스템 프롬프트에 탑재  | AI 응답의 편차 최소화, 신뢰할 수 있는 조언 생성 |
+| **Modular Phase Pipeline**      | `phases.py`의 4단계 파이프라인으로 시그널 생성 분리      | 단일 책임 원칙(SRP), 테스트 가능성 향상         |
+| **Centralized Constants**       | `constants.py`의 dataclass로 모든 임계값 중앙화          | 유지보수성 향상, 설정 변경 용이성               |
 
 ### 기술 스택
 
+#### 모듈형 아키텍처 (Modular Architecture)
+
+시스템은 SOLID 원칙을 따르는 모듈형 아키텍처로 설계되어 유지보수성과 테스트 가능성을 극대화했습니다.
+
+**핵심 모듈 구조:**
+
+```python
+engine/
+├── phases.py              # 4단계 시그널 생성 파이프라인
+│   ├── BasePhase          # 추상 기본 클래스
+│   ├── Phase1Analyzer     # 기본 분석 및 사전 필터링
+│   ├── Phase2NewsCollector # 뉴스 수집
+│   ├── Phase3LLMAnalyzer   # AI 배치 분석
+│   ├── Phase4SignalFinalizer # 시그널 생성
+│   └── SignalGenerationPipeline # 오케스트레이터
+│
+├── constants.py           # 모든 임계값 중앙화 (dataclass)
+│   ├── TradingValueThresholds  # 거래대금 기준
+│   ├── VCPThresholds           # VCP 패턴 기준
+│   ├── ScoringThresholds       # 점수 기준
+│   └── MarketGateThresholds    # Market Gate 기준
+│
+├── data_sources.py        # 전략 패턴 기반 데이터 소스
+│   ├── DataSourceStrategy     # 추상 인터페이스
+│   ├── FDRSource              # 한국투자증권 API
+│   ├── PykrxSource            # KRX 데이터
+│   ├── YFinanceSource         # 글로벌 데이터
+│   └── DataSourceManager      # 폴백 체인 관리자
+│
+├── error_handler.py       # 표준화된 에러 처리
+│   ├── @handle_data_error     # 데이터 에러 처리
+│   ├── @handle_llm_error      # LLM 에러 처리
+│   └── safe_execute()         # 안전 실행 래퍼
+│
+├── exceptions.py          # 커스텀 예외 계층
+│   ├── MarketDataError        # 마켓 데이터 에러
+│   ├── LLMAnalysisError       # LLM 분석 에러
+│   └── GradeCalculationError  # 등급 계산 에러
+│
+├── llm_utils.py           # LLM 재시도 로직
+│   ├── @async_retry_with_backoff  # 비동기 재시도
+│   └── process_batch_with_concurrency() # 배치 처리
+│
+└── pandas_utils.py        # DataFrame 유틸리티
+    ├── safe_value()            # NaN 안전 처리
+    ├── filter_by_date()        # 날짜 필터링
+    └── merge_realtime_prices() # 실시간 가격 병합
+```
+
+**설계 패턴 적용:**
+- **전략 패턴 (Strategy Pattern)**: `DataSourceStrategy`로 데이터 소스 추상화
+- **템플릿 메서드 (Template Method)**: `BasePhase`의 `execute()` 템플릿
+- **데코레이터 패턴 (Decorator Pattern)**: 에러 처리 및 재시도 데코레이터
+- **퍼사드 패턴 (Facade Pattern)**: `DataSourceManager`, `GlobalDataFetcher`
+- **단일 책임 원칙 (SRP)**: 각 Phase 클래스가 하나의 책임만 담당
+
 #### Backend (Python)
 - **Core Engine**: Python 3.10+, Pandas, Numpy (Vectorized Calculation for 2000+ stocks)
+- **Web Framework**: Flask (Blueprint-based modular routing)
+- **Production Server**: Gunicorn (2 workers, 8 threads, 120s timeout)
+- **Modular Architecture** (SOLID Principles):
+  - `engine/phases.py`: 4단계 시그널 생성 파이프라인 (Phase1~4 클래스)
+  - `engine/constants.py`: 모든 임계값 중앙화 (TradingValue, VCP, Scoring thresholds)
+  - `engine/data_sources.py`: 전략 패턴 기반 데이터 소스 (FDR, pykrx, yfinance)
+  - `engine/error_handler.py`: 표준화된 에러 처리 데코레이터
+  - `engine/exceptions.py`: 커스텀 예외 계층 구조
+  - `engine/llm_utils.py`: LLM 재시도 로직 (async/sync decorators)
+  - `engine/pandas_utils.py`: DataFrame 유틸리티 및 NaN 처리
 - **AI Engine**:
-  - Google Gemini (긴 컨텍스트 윈도우, 심층 추론)
+  - Google Gemini 2.0 Flash (긴 컨텍스트 윈도우, 심층 추론)
   - OpenAI GPT via Z.ai (빠른 응답, 크로스 밸리데이션)
   - Perplexity Sonar (실시간 웹 검색, 최신 뉴스/정보 반영)
   - LangChain-style Prompt Composition (Chain of Thought, Intent Injection)
 - **Financial Services**:
-  - **Toss Securities API**: 초고속 실시간 국내 주가 데이터 연동
-  - **yfinance / pykrx**: 글로벌 지수 및 국내 시장 수급 데이터 수집
-- **Web Framework**: Flask (Blueprint-based modular routing)
-- **Task Scheduling**: APSchedule + Threading (15:20, 15:40 KST)
+  - **Toss Securities API**: 초고속 실시간 국내 주가 데이터 연동 (최우선 순위)
+  - **pykrx**: KRX 정보데이터시스템 Wrapper
+  - **yfinance**: 글로벌 지수 및 원자재, 크립토 데이터 수집
+
+#### Phase Pipeline (4단계 시그널 생성)
+
+시그널 생성은 `engine/phases.py`의 4단계 파이프라인을 통해 처리됩니다:
+
+```mermaid
+graph TD
+    A[Phase1Analyzer<br>기본 분석 및 필터링] --> B{후보 종목 통과?}
+    B -->|Yes| C[Phase2NewsCollector<br>뉴스 수집]
+    B -->|No| X[제외]
+    C --> D[Phase3LLMAnalyzer<br>AI 배치 분석]
+    D --> E[Phase4SignalFinalizer<br>시그널 생성]
+    E --> F[최종 시그널 출력]
+```
+
+**Phase 1: 기본 분석 및 사전 필터링**
+- 상승률 상위 종목에 대해 기본 분석 수행
+- 차트, 수급 데이터 수집
+- Pre-Score 계산 (뉴스/LLM 제외)
+- 필터 조건 검증 (거래대금 500억+, 거래량 2배+)
+
+**Phase 2: 뉴스 수집**
+- 네이버 금융, 다음 뉴스에서 최신 뉴스 수집
+- 언론사별 가중치 부여 (한국경제 0.9, 일반 0.7)
+- 중복 제거 및 품질 필터링
+
+**Phase 3: AI 배치 분석**
+- Gemini, GPT/Perplexity 병렬 분석
+- `asyncio`와 `Semaphore`로 동시성 제어
+- 교차 검증 및 신뢰도 산출
+
+**Phase 4: 시그널 생성**
+- 등급 산정 (S/A/B/C)
+- 목표가/손절가 계산
+- 최종 시그널 출력 및 저장
+
+#### Flask API 구조 (Blueprint-based)
+
+시스템은 Flask Blueprint를 사용하여 모듈형 라우팅을 구현합니다:
+
+```python
+app/
+├── __init__.py          # 애플리케이션 팩토리
+├── routes/
+│   ├── kr_market.py     # 한국 시장 관련 API (Blueprint: 'kr')
+│   └── common.py        # 공통 API (Blueprint: 'common')
+└── utils/               # 유틸리티 함수
+```
+
+**한국 시장 API (`kr_market` Blueprint):**
+- `GET /market-status`: 한국 시장 현황 (KOSPI/KOSDAQ, 지수, 수급)
+- `GET|POST /config/interval`: Market Gate 업데이트 주기 설정
+- `GET /signals`: 최신 시그널 조회
+- `GET /vcp-signals`: VCP 패턴 시그널 조회
+- `GET /market-gate`: Market Gate 상태 및 점수
+
+**공통 API (`common` Blueprint):**
+- `GET /admin/check`: 관리자 권한 확인 (이메일 기반)
+- `POST /screening`: 시그널 스크리닝 요청
+- `GET /health`: 시스템 헬스체크
+- `POST /chat`: AI 챗봇 대화
+
+#### 서비스 레이어 (Services Layer)
+
+백그라운드에서 실행되는 핵심 서비스들:
+
+```python
+services/
+├── scheduler.py      # 자동화된 스케줄링 서비스
+├── notifier.py       # 멀티채널 알림 서비스
+├── paper_trading.py  # 모의투자 서비스
+├── activity_logger.py # 활동 로깅
+└── usage_tracker.py   # 사용량 추적
+```
+
+**스케줄러 서비스 (`scheduler.py`):**
+- **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락으로 중복 실행 방지
+- **15:20 KST - 종가베팅 분석**: 장중 데이터 기반 AI 분석
+  - 장중 주가 데이터 업데이트
+  - 종가베팅 V2 시그널 생성
+  - 알림 발송
+- **15:40 KST - 장 마감 분석**: 확정 데이터 기반 전체 분석
+  - 일별 주가 데이터 수집
+  - 기관/외인 수급 데이터 수집
+  - VCP 시그널 분석
+
+**알림 서비스 (`notifier.py`):**
+- **NotificationService 클래스**: 4채널 지원 알림 시스템
+- **채널별 전송**:
+  - Telegram Bot API (HTML parse mode)
+  - Discord Webhook (Rich Embeds)
+  - Slack Incoming Webhooks (Markdown)
+  - Email SMTP (Gmail, Office 365)
+- **D등급 자동 필터링**: 저품질 신호 제외
+- **정렬 로직**: 등급순(S→A→B→C) → 점수순 정렬
+
+**모의투자 서비스 (`paper_trading.py`):**
+- **포트폴리오 관리**: 보유 종목, 매수 평단가, 수익률
+- **매매 이력**: 모든 매수/매도 내역 자동 기록
+- **실시간 가격**: Toss Securities API 연동
+- **성과 분석**: 총 수익률, CAGR, MDD, 승률 계산
 
 #### Frontend (Next.js)
 - **Framework**: Next.js 16 (App Router, TypeScript)
 - **UI Components**: React with Tailwind CSS
 - **Real-time Updates**: WebSocket connection for live signal updates
+- **Testing**: Vitest (단위 테스트, UI 테스트, 커버리지)
+- **Linting**: ESLint + TypeScript strict mode
 
 #### Data & Storage (데이터 인프라)
+
 본 프로젝트는 외부 API 의존성을 최소화하고 데이터 신뢰성을 보장하기 위해 검증된 오픈소스 라이브러리를 활용합니다.
 
-**1. 🇰🇷 한국 시장 데이터**
-- **Library**: `pykrx` (KRX 정보데이터시스템 Wrapper)
-- **API**: **토스증권(Toss Securities) WTS API** (실시간 시세 최우선 순위 활용)
-- **Coverage**:
-  - KOSPI / KOSDAQ 지수 및 구성 종목
-  - 섹터 ETF (반도체, 2차전지 등) 시제
-  - 투자자별(외국인/기관) 수급 데이터
+**한국 시장 데이터 우선순위:**
+1. **Toss Securities API** (최우선): 초고속 실시간 시세 (<1초 지연)
+2. **pykrx**: KRX 정보데이터시스템 Wrapper (폴백)
+3. **yfinance**: 글로벌 지수/원자재/크립토
 
-**2. 🌎 글로벌 데이터**
-- **Library**: `yfinance` (Yahoo Finance API Wrapper)
-- **Coverage**:
-  - 미국 지수 (S&P 500, NASDAQ)
-  - 환율 (USD/KRW)
-  - 원자재 선물 (Gold, Silver)
-  - 암호화폐 (BTC, ETH, XRP)
-- **News Sources**: Naver Finance (Crawling), Daum News, Search APIs
-- **Storage**:
-  - CSV/JSON files (flat structure for simplicity)
-  - **SQLite (paper_trading.db)**: 모의투자 포트폴리오 및 매매 이력 관리
-- **Logging**: Python logging with rotation (logs/app.log)
+**Coverage:**
+- KOSPI/KOSDAQ 지수 및 구성 종목
+- 섹터 ETF (반도체, 2차전지 등) 시세
+- 투자자별(외국인/기관) 수급 데이터
+- 글로벌 지수 (S&P 500, NASDAQ)
+- 환율 (USD/KRW) 및 원자재 선물
+- 암호화폐 (BTC, ETH, XRP)
+
+**Storage:**
+- **CSV/JSON files**: flat structure (일일 종가, 시그널 로그)
+- **SQLite (paper_trading.db)**: 모의투자 포트폴리오 및 매매 이력
+- **Logging**:
+  - Python: `logs/backend.log` (rotation)
+  - Frontend: `logs/frontend.log` (필터링된 로그)
 
 #### Notification Services
 - **Telegram**: Bot API (sendMessage, HTML parse mode)
@@ -753,12 +962,15 @@ AI 통합 순서:
 
 **3. VCP Signals (변동성 축소 패턴)**
 
-![VCP 시그널](/assets/2.%20VCP%20시그널.png)
+![VCP 시그널](assets/15.png)
 *VCP 패턴이 포착된 종목 리스트 및 요약 정보*
+
+![VCP 패턴](assets/6.png)
+*VCP 패턴 상세 리포트*
 
 마크 미너비니(Mark Minervini)의 **VCP (Volatility Contraction Pattern)** 전략을 한국 시장에 맞게 튜닝했습니다. VCP는 "가격이 상승하면서 변동성이 줄어드는 구간"으로, 이는 대형주나 기관 매집 구간에서 자주 관찰됩니다.
 
-![VCP 상세](/assets/3.%20VCP%20시그널%20종목상세.png)
+![VCP 상세](assets/16.png)
 *개별 종목의 VCP 패턴 분석 및 AI 투자 의견 상세*
 
 마크 미너비니의 VCP 이론을 파이썬 알고리즘으로 구현했습니다.
@@ -882,10 +1094,16 @@ vcp_conditions = {
     
 **D. 종가베팅 등급 기준 (Closing Bet Grade Criteria)**
 
-![종가 베팅](/assets/4.%20종가%20베팅.png)
+![종가 베팅](assets/9.png)
 *장 마감 직전 포착된 종가 베팅 후보 종목 리스트*
 
-![종가베팅 등급기준](/assets/6.%20종가%20베팅%20등급%20산정%20기준.png)
+![종가 베팅 상세](assets/10.png)
+*종목 상세 리포트*
+
+![종가 베팅 차트 상세](assets/11.png)
+*종목 차트 상세 리포트*
+
+![종가베팅 등급기준](assets/12.png)
 *시스템에 적용된 4단계(S/A/B/C) 등급 산정 세부 기준*
 
 > **공통 제외 조건**: 거래대금 **500억 미만** 또는 거래량 배수 **2.0배 미만**인 종목은 등급과 무관하게 **자동 제외**됩니다.
@@ -894,8 +1112,11 @@ vcp_conditions = {
 
 **4. Paper Trading (모의투자)**
 
-![모의투자 메인](/assets/17. 모의투자1.png)
+![모의투자 자산 개요](assets/21.png)
 *보유 자산 현황 및 실시간 수익률 대시보드*
+
+![모의투자 거래 내역](assets/24.png)
+*거래 내역*
 
 실시간 시장 데이터를 기반으로 가상의 자산을 운용하며 투자 전략을 검증할 수 있는 기능을 제공합니다.
 
@@ -907,16 +1128,15 @@ vcp_conditions = {
 
 #### 4.2 주요 화면
 
-|                     종목 보유 현황                      |                    수익률 변동 차트                     |
-| :-----------------------------------------------------: | :-----------------------------------------------------: |
-| ![/assets/19. 모의투자4.png](/assets/19. 모의투자4.png) | ![/assets/19. 모의투자3.png](/assets/19. 모의투자3.png) |
-|            *현재 보유 중인 종목 상세 리스트*            |              *누적 수익률 변동 추이 차트*               |
+|          종목 보유 현황           |         수익률 변동 차트          |
+| :-------------------------------: | :-------------------------------: |
+| ![/assets/22.png](/assets/22.png) | ![/assets/23.png](/assets/23.png) |
+| *현재 보유 중인 종목 상세 리스트* |   *누적 수익률 변동 추이 차트*    |
 
-|                     매수 주문 (Buy)                     |                    매도 주문 (Sell)                     |
-| :-----------------------------------------------------: | :-----------------------------------------------------: |
-| ![/assets/20. 모의투자5.png](/assets/20. 모의투자5.png) | ![/assets/21. 모의투자6.png](/assets/21. 모의투자6.png) |
-|             *수량 및 가격 설정을 통한 매수*             |            *실시간 가격 기반 수익 확정 매도*            |
-
+|          매수 주문 (Buy)          |         매도 주문 (Sell)          |
+| :-------------------------------: | :-------------------------------: |
+| ![/assets/26.png](/assets/26.png) | ![/assets/27.png](/assets/27.png) |
+|  *수량 및 가격 설정을 통한 매수*  | *실시간 가격 기반 수익 확정 매도* |
 
 #### 3.4 AI VCP 분석 (Multi-AI Validation)
 
@@ -973,11 +1193,17 @@ VCP 패턴과 수급 상황을 종합 분석하세요.
 
 ### 4. 알고리즘 및 기술적 상세
 
-#### 4.1 종가베팅 V2 (Closing Bet) 알고리즘
+#### 4.1 종가베팅 (Closing Bet) 알고리즘
 **전략 시나리오:**
 - **15:20 장중**: 후보군 스크리닝 → AI 필터링 → 최종 신호 생성
 - **15:30 장 마감**: 시가초가/지정가 확정
 - **익일 09:00~09:30**: 목표가/손절가에 따라 자동 매도 추천
+
+![종가 매매 전략](assets/4.png)
+*종가 매매 전략 시나리오*
+
+![수급 분석](assets/5.png)
+*수급 분석 상세 리포트*
 
 #### 4.2 Screener Logic (Rule-based)
 
@@ -1067,7 +1293,7 @@ supply_filters = {
 - **기술적 패턴 (0~2점)**: 모멘텀, 거래량 패턴
 - **최대 점수**: 8점 (S급 기준)
 
-![종가베팅 상세](/assets/5.%20종가%20베팅%20상세%20분석%20보기.png)
+![종가베팅 상세](assets/10.png)
 *AI가 분석한 종가 베팅 종목의 뉴스 재료 및 투자 가설 상세 리포트*
 
 #### 4.4 왜 AI 필터링이 필요한가?
@@ -1116,6 +1342,12 @@ supply_filters = {
     3.  전 종목 대상 **VCP 패턴 정밀 스캔**.
     4.  일일 리포트(Daily Report) 이메일 발송.
 
+
+| 시간 (KST)     | 작업(Job)                      | 세부 내용                                                                     |
+| -------------- | ------------------------------ | ----------------------------------------------------------------------------- |
+| **매일 15:20** | `run_jongga_v2_analysis()`     | 1. 장중 시세 업데이트<br>2. 종가베팅 스크리닝<br>3. AI 필터링<br>4. 알림 발송 |
+| **매일 15:40** | `run_daily_closing_analysis()` | 1. 장 마감 시세 확정<br>2. VCP 신호 생성<br>3. 수급 데이터 업데이트           |
+
 #### 6.1 스케줄러 아키텍처
 
 **구현 방식:** Python `schedule` 라이브러리 + Threading (데몬 스레드)
@@ -1137,16 +1369,6 @@ graph TD
     I --> M[Email]
 ```
 
-![알림 채널](/assets/11.%20스마트%20머니%20봇.png)
-*스마트 머니 봇의 다양한 알림 인터페이스*
-
-**스케줄링 잡(Scheduled Jobs):**
-
-| 시간 (KST)     | 작업(Job)                      | 세부 내용                                                                     |
-| -------------- | ------------------------------ | ----------------------------------------------------------------------------- |
-| **매일 15:20** | `run_jongga_v2_analysis()`     | 1. 장중 시세 업데이트<br>2. 종가베팅 스크리닝<br>3. AI 필터링<br>4. 알림 발송 |
-| **매일 15:40** | `run_daily_closing_analysis()` | 1. 장 마감 시세 확정<br>2. VCP 신호 생성<br>3. 수급 데이터 업데이트           |
-
 #### 6.2 실행 방법
 
 **자동 실행 (Flask 서버 시작 시):**
@@ -1166,11 +1388,215 @@ python services/scheduler.py test
 
 ---
 
-### 7. Multi-Channel Notification (다중 채널 알림)
+### 7. AI 상담 챗봇 (Smart Money Bot)
+
+**스마트 머니 봇**은 실시간으로 시장 상황을 질문하고, 종목 분석을 요청할 수 있는 AI 투자 어드바이저입니다.
+
+![AI 챗봇 메인](assets/13.png)
+*AI 상담 챗봇 메인 화면*
+
+#### 7.1 핵심 기능
+
+**1) 시장 브리핑**
+- 현재 KOSPI/KOSDAQ 지수 및 등락률
+- Market Gate 상태 (OPEN/CLOSED)
+- 주도 테마 및 섹터 흐름
+- 환율 및 글로벌 지수 현황
+
+**2) 종목 분석**
+- 개별 종목 기본 정보 (가격, PER, PBR)
+- 수급 분석 (외국인/기관 5일/20일 누적)
+- 최신 뉴스 감성 분석
+- VCP 패턴 여부 확인
+- AI 매수/관망/매도 추천
+
+**3) 관심종목 설정 & 맞춤 상담**
+- **관심종목 등록**: 자주 조회하는 종목을 워치리스트에 추가
+- **맞춤 분석**: 관심종목의 실시간 상태 모니터링
+- **AI 상담**: 관심종목에 대한 개별 투자 조언 제공
+- **알림 설정**: 관심종목 급등락 시 알림 받기
+
+![AI 챗봇 대화](assets/14.png)
+*실시간 AI 대화 및 종목 상담*
+
+#### 7.2 관심종목 설정 기능
+
+**워치리스트 관리:**
+```typescript
+// 관심종목 추가 예시
+사용자: "삼성전자, SK하이닉스 관심종목으로 추가해줘"
+봇: "네, 삼성전자(005930)와 SK하이닉스(000660)를 관심종목에 등록했습니다.
+     이제 이 종목들의 실시간 상태를 모니터링하고, 중요한 변화가 있으면 알려드릴게요."
+```
+
+**관심종목 기반 AI 상담:**
+```typescript
+// 관심종목 자동 분석
+사용자: "내 관심종목들 어떻게 되고 있어?"
+봇: "[관심종목 현황]
+     • 삼성전자: 75,000원 (+8.5%) | 외국인 순매수 중 | 매수 추천
+     • SK하이닉스: 150,000원 (+5.2%) | 기관 순매수 중 | 관망
+
+     [종합 의견]
+     관심종목 모두 외인/기관 수급이 유입되고 있어 단기적으로 긍정적입니다.
+     다만 환율이 1450원 이상으로 상승 시 수출주 악재 가능성 있어 주의가 필요합니다."
+```
+
+#### 7.3 AI 투자 철학
+
+**스마트 머니 봇 (Black Knight) 페르소나:**
+```
+투자 원칙:
+1. 수급이 곧 진실이다
+   - 외국인/기관 순매수가 동반되지 않은 상승은 신뢰하지 않음
+
+2. Market Gate 우선
+   - 시장 지표가 악화되면 개별 종목 추천 중단
+
+3. 리스크 관리
+   - 손절가(-3%)를 생명처럼 지킴
+   - 전저점 이탈 시 즉시 손절
+```
+
+---
+
+### 8. 누적 성과 분석 (Cumulative Performance)
+
+시스템은 전체 투자 성과를 추적하고 분석하는 기능을 제공합니다.
+
+![누적 성과 차트](assets/14.png)
+*모의투자 누적 수익률 추이 및 자산 변동 그래프*
+
+#### 8.1 성과 지표
+
+**주요 지표:**
+- **총 수익률**: 초기 자산 대비 현재 수익률
+- **CAGR**: 연평균 성장률 (Compound Annual Growth Rate)
+- **MDD**: 최대 낙폭 (Maximum Drawdown)
+- **승률**: 전체 매매 중 수익성 있는 거래 비율
+- **평균 수익/손실**: 수익 거래와 손실 거래의 평균 금액
+- **샤프 비율**: 위험 조정 수익률
+
+#### 8.2 성과 리포트
+
+![성과 지표 대시보드](assets/13.png)
+*주요 성과 지표 및 수익률 분석 대시보드*
+
+**분석 기능:**
+- 일별/주별/월별 성과 추이
+- 등급별(S/A/B/C) 승률 분석
+- 손익 비율 분석
+- 최대 연승/연패 기록
+
+---
+
+### 7. AI 상담 챗봇 (Smart Money Bot)
+
+**스마트 머니 봇**은 실시간으로 시장 상황을 질문하고, 종목 분석을 요청할 수 있는 AI 투자 어드바이저입니다.
+
+![AI 챗봇 메인](assets/31.png)
+*AI 상담 챗봇 메인 화면*
+
+#### 7.1 핵심 기능
+
+**1) 시장 브리핑**
+- 현재 KOSPI/KOSDAQ 지수 및 등락률
+- Market Gate 상태 (OPEN/CLOSED)
+- 주도 테마 및 섹터 흐름
+- 환율 및 글로벌 지수 현황
+
+**2) 종목 분석**
+- 개별 종목 기본 정보 (가격, PER, PBR)
+- 수급 분석 (외국인/기관 5일/20일 누적)
+- 최신 뉴스 감성 분석
+- VCP 패턴 여부 확인
+- AI 매수/관망/매도 추천
+
+**3) 관심종목 설정 & 맞춤 상담**
+- **관심종목 등록**: 자주 조회하는 종목을 워치리스트에 추가
+- **맞춤 분석**: 관심종목의 실시간 상태 모니터링
+- **AI 상담**: 관심종목에 대한 개별 투자 조언 제공
+- **알림 설정**: 관심종목 급등락 시 알림 받기
+
+![AI 챗봇 대화](assets/32.png)
+*실시간 AI 대화 및 종목 상담*
+
+#### 7.2 관심종목 설정 기능
+
+**워치리스트 관리:**
+```typescript
+// 관심종목 추가 예시
+사용자: "삼성전자, SK하이닉스 관심종목으로 추가해줘"
+봇: "네, 삼성전자(005930)와 SK하이닉스(000660)를 관심종목에 등록했습니다.
+     이제 이 종목들의 실시간 상태를 모니터링하고, 중요한 변화가 있으면 알려드릴게요."
+```
+
+**관심종목 기반 AI 상담:**
+```typescript
+// 관심종목 자동 분석
+사용자: "내 관심종목들 어떻게 되고 있어?"
+봇: "[관심종목 현황]
+     • 삼성전자: 75,000원 (+8.5%) | 외국인 순매수 중 | 매수 추천
+     • SK하이닉스: 150,000원 (+5.2%) | 기관 순매수 중 | 관망
+
+     [종합 의견]
+     관심종목 모두 외인/기관 수급이 유입되고 있어 단기적으로 긍정적입니다.
+     다만 환율이 1450원 이상으로 상승 시 수출주 악재 가능성 있어 주의가 필요합니다."
+```
+
+#### 7.3 AI 투자 철학
+
+**스마트 머니 봇 (Black Knight) 페르소나:**
+```
+투자 원칙:
+1. 수급이 곧 진실이다
+   - 외국인/기관 순매수가 동반되지 않은 상승은 신뢰하지 않음
+
+2. Market Gate 우선
+   - 시장 지표가 악화되면 개별 종목 추천 중단
+
+3. 리스크 관리
+   - 손절가(-3%)를 생명처럼 지킴
+   - 전저점 이탈 시 즉시 손절
+```
+
+---
+
+### 8. 누적 성과 분석 (Cumulative Performance)
+
+시스템은 전체 투자 성과를 추적하고 분석하는 기능을 제공합니다.
+
+![누적 성과 지표 가이드](assets/14.png)
+*누적 성과 지표 가이드*
+
+#### 8.1 성과 지표
+
+**주요 지표:**
+- **총 수익률**: 초기 자산 대비 현재 수익률
+- **CAGR**: 연평균 성장률 (Compound Annual Growth Rate)
+- **MDD**: 최대 낙폭 (Maximum Drawdown)
+- **승률**: 전체 매매 중 수익성 있는 거래 비율
+- **평균 수익/손실**: 수익 거래와 손실 거래의 평균 금액
+- **샤프 비율**: 위험 조정 수익률
+
+#### 8.2 성과 리포트
+
+![성과 지표 대시보드](assets/13.png)
+*주요 성과 지표 및 수익률 분석 대시보드*
+
+**분석 기능:**
+- 일별/주별/월별 성과 추이
+- 등급별(S/A/B/C) 승률 분석
+- 손익 비율 분석
+- 최대 연승/연패 기록
+
+---
+
+### 9. Multi-Channel Notification (다중 채널 알림)
 
 분석 완료 시 **Telegram, Discord, Slack, Email**로 동시에 리포트를 발송합니다.
 
-#### 7.1 지원 채널별 특징
+#### 9.1 지원 채널별 특징
 
 | 채널         | 방식                    | 장점                         | 사용 사례             |
 | ------------ | ----------------------- | ---------------------------- | --------------------- |
@@ -1179,12 +1605,17 @@ python services/scheduler.py test
 | **Slack**    | Webhook (Markdown)      | 기업 환경 연동, 워크스페이스 | 업무용 투자 리포트    |
 | **Email**    | SMTP (HTML)             | 공식 기록 보존, 대량 전송    | 일일/주간 요약 정산   |
 
-![Telegram 알림](/assets/14.%20종가베팅%20Telegram.png)
-![Discord 알림](/assets/15.%20종가베팅%20Discord.png)
-![Email 알림](/assets/16.%20종가베팅%20email.png)
-*텔레그램, 디스코드, 이메일을 통한 실시간 시그널 전송 예시*
+![알림 채널 예시](assets/29.png)
+*Telegram 알림*
 
-#### 7.2 환경 설정 (.env)
+![Discord 알림](assets/28.png)
+*Discord 알림*
+
+![Email 알림](assets/30.png)
+*Email 알림*
+     다만 환율이 1450원 이상으로 상승 시 수출주 악재 가능성 있어 주의가 필요합니다."
+
+#### 9.2 환경 설정 (.env)
 
 ```env
 # 알림 활성화
@@ -1209,7 +1640,7 @@ SMTP_PASSWORD=your_app_password
 EMAIL_RECIPIENTS=user1@email.com,user2@email.com
 ```
 
-#### 7.3 메시지 포맷
+#### 9.3 메시지 포맷
 
 **A. 종가베팅 V2 알림 (Jongga Notification)**
 
@@ -1274,7 +1705,7 @@ EMAIL_RECIPIENTS=user1@email.com,user2@email.com
 ━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-#### 7.4 발송 로직
+#### 9.4 발송 로직
 
 ```python
 # services/notifier.py - send_all()
@@ -1315,11 +1746,11 @@ class NotificationService:
 
 ---
 
-### 8. Chatbot ULW (AI 투자 어드바이저)
+### 10. Chatbot ULW (AI 투자 어드바이저)
 
 **ULW (Ultra-Lightweight Chatbot)** 은 실시간으로 시장 상황을 질문하고, 종목 분석을 요청할 수 있는 인터랙티브 챗봇입니다.
 
-#### 8.1 챗봇 아키텍처
+#### 10.1 챗봇 아키텍처
 
 ```mermaid
 graph TD
@@ -1335,7 +1766,7 @@ graph TD
     H --> J[Memory Storage]
 ```
 
-#### 8.2 페르소나: 스마트머니봇 (Black Knight)
+#### 10.2 페르소나: 스마트머니봇 (Black Knight)
 
 **페르소나 정의:**
 - **이름**: 스마트머니봇 (Smart Money Bot)
@@ -1393,11 +1824,11 @@ def build_system_prompt(market_data: Dict, user_memory: List) -> str:
 | 테마 변화를 모름        | 오늘의 주도 종목 리스트 제공        |
 | **결과**: 일반화된 답변 | **결과**: 상황에 맞는 최신화된 답변 |
 
-#### 8.3 대화 기능 (Conversation Features)
+#### 10.3 대화 기능 (Conversation Features)
 
 **A. 시장 질문 (Market Query)**
 
-![AI 챗봇 멀티모달](/assets/7.%20AI%20상담%20챗봇%20멀티%20모달%20채팅.png)
+![AI 챗봇 멀티모달](assets/17.png)
 *텍스트와 이미지를 동시에 분석하는 멀티모달 AI 채팅 인터페이스*
 
 ```
@@ -1421,12 +1852,12 @@ Market Gate가 [CLOSED] 상태입니다.
 """
 ```
 
-![AI 챗봇 시장분석](/assets/12.%20스마트%20머니%20봇%20채팅.png)
+![AI 챗봇 시장분석](assets/18.png)
 *현재 시장 지표와 테마를 종합한 AI 시장 브리핑*
 
 **B. 종목 분석 (Stock Analysis)**
 
-![AI 챗봇 종목분석](/assets/8.%20AI%20상담%20챗봇%20설정된%20관심종목%20수집%20데이터%20기반%20답변.png)
+![AI 챗봇 종목분석](assets/19.png)
 *사용자의 관심 종목 데이터와 실시간 뉴스를 결합한 정밀 분석 답변*
 
 ```
@@ -1469,7 +1900,7 @@ Bot: """
 """
 ```
 
-![AI 챗봇 답변](/assets/13.%20스마트%20머니%20봇%20답변.png)
+![AI 챗봇 답변](assets/20.png)
 *수급, 기술적 지표, 뉴스를 종합하여 도출된 최종 투자 전략*
 
 **C. 포트폴리오 관리 (Portfolio Management)**
@@ -1492,7 +1923,7 @@ user_memory = {
 - **대화 맥락 유지**: 최근 10개 질문-답변 쌍 컨텍스트 유지
 - **개인화 추천**: 사용자의 과거 투자 성향에 따른 맞춤 종목 추천
 
-#### 8.4 API 통합 (Flask + Chatbot)
+#### 10.4 API 통합 (Flask + Chatbot)
 
 ```python
 # flask_app.py - Chatbot Routes
@@ -1557,7 +1988,7 @@ Response 200 OK:
 }
 ```
 
-#### 8.5 왜 챗봇이 필요한가?
+#### 10.5 왜 챗봇이 필요한가?
 
 **시나리오 A (챗봇 없음):**
 - 사용자: 매일 리포트를 읽어 직접 판단

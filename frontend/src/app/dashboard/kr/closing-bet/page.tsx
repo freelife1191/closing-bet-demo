@@ -263,7 +263,7 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in duration-200" onClick={onClose}>
       <div
-        className="bg-[#1c1c1e] w-full max-w-4xl h-[80vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200"
+        className="bg-[#1c1c1e] w-full max-w-7xl h-[80vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#1c1c1e]">
