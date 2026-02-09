@@ -750,7 +750,7 @@ export default function KRMarketOverview() {
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
                 </div>
-                {signalTheme.label !== '관망' && (
+                {signalTheme.label !== '관망' && signalTheme.label !== '매도' && (
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${signalTheme.badge}`}>
                     {signalTheme.label}
                   </span>
