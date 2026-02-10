@@ -18,7 +18,9 @@ logs/
 # Data files
 data/*.csv
 data/*.json
+data/*.db
 data/history/
+*.db
 
 # IDE
 .vscode/
