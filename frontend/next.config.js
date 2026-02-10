@@ -16,6 +16,7 @@ const nextConfig = {
       fullUrl: false,
     },
   },
+  devIndicators: false,
 };
 
 module.exports = nextConfig;

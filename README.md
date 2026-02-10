@@ -828,13 +828,15 @@ INVESTMENT_HYPOTHESIS = """
 
 #### 1.1 구성 지표
 
-| 카테고리      | 지표            | 임계값          | 점수 배점 |
-| ------------- | --------------- | --------------- | --------- |
-| **Technical** | KODEX 200 지수  | 정배열 여부     | 25점      |
-|               | RSI (KODEX 200) | 50~70 최적구간  | 25점      |
-|               | MACD Signal     | 골든크로스      | 20점      |
-|               | 거래량 (Liquid) | 20일 평균 상회  | 15점      |
-|               | 상대강도 (RS)   | KOSPI 대비 우위 | 15점      |
+| 카테고리      | 지표            | 임계값                   | 점수 배점 |
+| ------------- | --------------- | ------------------------ | --------- |
+| **Technical** | KODEX 200 지수  | 정배열 여부              | 25점      |
+|               | RSI (KODEX 200) | 50~70 최적구간           | 25점      |
+|               | MACD Signal     | 골든크로스               | 20점      |
+|               | 거래량 (Liquid) | 20일 평균 상회           | 15점      |
+|               | 상대강도 (RS)   | KOSPI 대비 2%p 이상 우위 | 15점      |
+|               |                 | KOSPI 대비 0~2%p 우위    | 10점      |
+|               |                 | KOSPI 대비 -2~0%p 열위   | 5점       |
 
 **총점 100점 만점** (40점 미만 시 Gate Closed)
 
@@ -861,9 +863,13 @@ def evaluate_market_gate():
     if volume > avg_volume_20d:
         score += 15
 
-    # 5. 상대강도 (RS)
-    if rs_score > 0: # KOSPI 대비 우위
+    # 5. 상대강도 (RS) - Tiered Score
+    if rs_score > 2.0:
         score += 15
+    elif rs_score >= 0:
+        score += 10
+    elif rs_score >= -2.0:
+        score += 5
 
     # 판정
     if score >= 40:

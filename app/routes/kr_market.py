@@ -2558,6 +2558,16 @@ def get_backtest_summary():
                 jb_stats['count'] = total_signals # Total historical count used for stats
                 jb_stats['win_rate'] = round((wins / total_signals) * 100, 1)
                 jb_stats['avg_return'] = round(total_return / total_signals, 1)
+
+                # [Improvement] Status Logic
+                if jb_stats['win_rate'] == 0:
+                    jb_stats['status'] = 'PENDING'
+                elif jb_stats['win_rate'] >= 60:
+                     jb_stats['status'] = 'EXCELLENT'
+                elif jb_stats['win_rate'] >= 40:
+                     jb_stats['status'] = 'GOOD'
+                else:
+                     jb_stats['status'] = 'BAD'
             else:
                  # Fallback to mock if absolutely no data (fresh install)
                  if jb_stats['candidates']:
@@ -2616,6 +2626,18 @@ def get_backtest_summary():
                     vcp_stats['count'] = total_v
                     vcp_stats['win_rate'] = round((wins_v / total_v) * 100, 1)
                     vcp_stats['avg_return'] = round(total_ret_v / total_v, 1)
+
+                    # [Improvement] Status Logic
+                    # If win rate is 0%, consider it Pending regardless of count 
+                    # (unless count is very high, e.g. > 30, then it might be truly bad)
+                    if vcp_stats['win_rate'] == 0:
+                        vcp_stats['status'] = 'PENDING'
+                    elif vcp_stats['win_rate'] >= 60:
+                        vcp_stats['status'] = 'EXCELLENT'
+                    elif vcp_stats['win_rate'] >= 40:
+                        vcp_stats['status'] = 'GOOD'
+                    else:
+                        vcp_stats['status'] = 'BAD'
             
         except Exception as e:
             logger.error(f"VCP Stat Calc Failed: {e}")

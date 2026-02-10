@@ -1,5 +1,10 @@
 # PART 7 (Core Logic)
 
+> [!WARNING]
+> **Reference Only**: This document contains reference code and backups.
+> The actual source of truth is located in the `app/` and `engine/` directories.
+> Do not modify this file directly for production changes.
+
 ### blueprint/BLUEPRINT_01_OVERVIEW.md (kr_market_package/blueprint/BLUEPRINT_01_OVERVIEW.md)
 ```markdown
 # KR Market AI Stock Analysis System - Blueprint Part 1: Overview

@@ -1,5 +1,10 @@
 # PART 4 (Core Logic)
 
+> [!WARNING]
+> **Reference Only**: This document contains reference code and backups.
+> The actual source of truth is located in the `app/` and `engine/` directories.
+> Do not modify this file directly for production changes.
+
 ### engine/generator.py (kr_market_package/engine/generator.py)
 ```python
 """

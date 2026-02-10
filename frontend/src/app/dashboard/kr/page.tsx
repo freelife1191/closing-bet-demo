@@ -405,7 +405,9 @@ export default function KRMarketOverview() {
     return val.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
   };
 
-  const getStrategyStatus = (rate: number) => {
+  const getStrategyStatus = (rate: number, count: number) => {
+    // If win rate is 0%, consider it Pending regardless of count (accumulating phase)
+    if (rate === 0) return { label: '대기', className: 'bg-gray-500/10 text-gray-400 border-gray-500/20' };
     if (rate >= 60) return { label: '우수', className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
     if (rate >= 40) return { label: '양호', className: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
     return { label: '미흡', className: 'bg-rose-500/10 text-rose-500 border-rose-500/20' };
@@ -786,7 +788,7 @@ export default function KRMarketOverview() {
                   </button>
                 </div>
                 {(() => {
-                  const status = getStrategyStatus(vcpRate);
+                  const status = getStrategyStatus(vcpRate, backtestData?.vcp?.count ?? 0);
                   return (
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
                       {status.label}
@@ -837,7 +839,7 @@ export default function KRMarketOverview() {
                   </span>
                 ) : (
                   (() => {
-                    const status = getStrategyStatus(cbRate);
+                    const status = getStrategyStatus(cbRate, backtestData?.closing_bet?.count ?? 0);
                     return (
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
                         {status.label}

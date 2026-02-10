@@ -395,14 +395,7 @@ export default function Sidebar() {
             <i className={`fas fa-chevron-${isUserMenuOpen ? 'down' : 'up'} text-gray-500 text-xs`}></i>
           </button>
 
-          {/* Issues Button (from screenshot) */}
-          <button className="mt-3 w-full flex items-center justify-between px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-full text-xs font-medium transition-colors border border-rose-500/20">
-            <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px]">N</span>
-              <span>5 Issues</span>
-            </div>
-            <i className="fas fa-times text-[10px] opacity-50 hover:opacity-100"></i>
-          </button>
+
         </div>
       </aside>
 

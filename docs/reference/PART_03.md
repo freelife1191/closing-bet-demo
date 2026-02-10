@@ -1,5 +1,10 @@
 # PART 3 (Core Logic)
 
+> [!WARNING]
+> **Reference Only**: This document contains reference code and backups.
+> The actual source of truth is located in the `app/` and `engine/` directories.
+> Do not modify this file directly for production changes.
+
 ### app/routes/common.py (kr_market_package/app/routes/common.py)
 ```python
 # app/routes/common.py

@@ -1,5 +1,10 @@
 # PART 1 (Core Logic)
 
+> [!WARNING]
+> **Reference Only**: This document contains reference code and backups.
+> The actual source of truth is located in the `app/` and `engine/` directories.
+> Do not modify this file directly for production changes.
+
 ### flask_app.py (kr_market_package/flask_app.py)
 ```python
 #!/usr/bin/env python3

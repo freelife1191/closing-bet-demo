@@ -1,5 +1,10 @@
 # PART 5 (Core Logic)
 
+> [!WARNING]
+> **Reference Only**: This document contains reference code and backups.
+> The actual source of truth is located in the `app/` and `engine/` directories.
+> Do not modify this file directly for production changes.
+
 ### frontend/src/app/dashboard/kr/page.tsx (kr_market_package/frontend/src/app/dashboard/kr/page.tsx)
 ```tsx
 'use client';
