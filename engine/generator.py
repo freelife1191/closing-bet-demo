@@ -6,6 +6,9 @@
 - Scorer로 점수 계산
 - PositionSizer로 자금 관리
 - 최종 Signal 생성 (Batch LLM 지원)
+
+REFACTORED: Now uses SignalGenerationPipeline from phases.py
+for cleaner separation of concerns.
 """
 
 import asyncio
@@ -30,9 +33,17 @@ from engine.collectors import KRXCollector, EnhancedNewsCollector, NaverFinanceC
 from engine.toss_collector import TossCollector
 from engine.scorer import Scorer
 from engine.position_sizer import PositionSizer
-
 from engine.llm_analyzer import LLMAnalyzer
 from engine.market_gate import MarketGate
+
+# [REFACTORED] Import the phase-based pipeline
+from engine.phases import (
+    SignalGenerationPipeline,
+    Phase1Analyzer,
+    Phase2NewsCollector,
+    Phase3LLMAnalyzer,
+    Phase4SignalFinalizer
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +98,57 @@ class SignalGenerator:
 
         self._news = EnhancedNewsCollector(self.config)
         await self._news.__aenter__()
-        
+
         self._naver = NaverFinanceCollector(self.config)
-        
+
         self._toss_collector = TossCollector(self.config)
+
+        # [REFACTORED] Initialize the signal generation pipeline
+        self._pipeline = self._create_pipeline()
+
         return self
+
+    def _create_pipeline(self) -> SignalGenerationPipeline:
+        """
+        Create the signal generation pipeline with all phases.
+
+        This method encapsulates the dependency injection of all phases.
+        """
+        # Phase 1: Base Analysis & Pre-Screening
+        phase1 = Phase1Analyzer(
+            collector=self._collector,
+            scorer=self.scorer,
+            trading_value_min=self.config.trading_value_min,
+            volume_ratio_min=2.0  # Default volume ratio minimum
+        )
+
+        # Phase 2: News Collection
+        phase2 = Phase2NewsCollector(
+            news_collector=self._news,
+            max_news_per_stock=3
+        )
+
+        # Phase 3: LLM Batch Analysis
+        phase3 = Phase3LLMAnalyzer(
+            llm_analyzer=self.llm_analyzer,
+            chunk_size=10,
+            request_delay=2.0
+        )
+
+        # Phase 4: Signal Finalization
+        phase4 = Phase4SignalFinalizer(
+            scorer=self.scorer,
+            position_sizer=self.position_sizer,
+            naver_collector=self._naver,
+            include_c_grade=False
+        )
+
+        return SignalGenerationPipeline(
+            phase1=phase1,
+            phase2=phase2,
+            phase3=phase3,
+            phase4=phase4
+        )
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self._collector:
@@ -108,18 +165,25 @@ class SignalGenerator:
         markets: List[str] = None,
         top_n: int = 300,
     ) -> List[Signal]:
-        """시그널 생성 (Batch Processing 적용)"""
-        start_time = time.time()  # [Fix] 시작 시간 초기화
+        """
+        시그널 생성 (Refactored to use SignalGenerationPipeline)
+
+        Uses the 4-phase pipeline for cleaner separation of concerns:
+        - Phase 1: Base Analysis & Pre-Screening
+        - Phase 2: News Collection
+        - Phase 3: LLM Batch Analysis
+        - Phase 4: Signal Finalization
+        """
+        start_time = time.time()
 
         # 주말/휴일 처리: 제공된 날짜가 없으면 가장 최근 장 마감 날짜 사용
         if target_date is None:
             latest_str = self._collector._get_latest_market_date()
             target_date = datetime.strptime(latest_str, '%Y%m%d').date()
-            
-        markets = markets or ["KOSPI", "KOSDAQ"]
 
+        markets = markets or ["KOSPI", "KOSDAQ"]
         all_signals = []
-        
+
         # 탈락 통계 초기화
         self.drop_stats = {
             "low_trading_value": 0,
@@ -132,269 +196,128 @@ class SignalGenerator:
 
         for market in markets:
             logger.info(f"="*60)
-            logger.info(f"[종가베팅] {market} 스크리닝 시작 (v2.2 Batch)")
+            logger.info(f"[종가베팅] {market} 스크리닝 시작 (v3.0 Pipeline)")
             logger.info(f"="*60)
-            print(f"\n[{market}] 상승률 상위 종목 스크리닝... (v2.2 Batch)")
+            print(f"\n[{market}] 상승률 상위 종목 스크리닝... (v3.0 Pipeline)")
 
-            # 1. 상승률 상위 종목 조회 (테스트 모드 시 지정 날짜 사용)
+            # 1. 상승률 상위 종목 조회
             target_date_str = target_date.strftime('%Y%m%d') if target_date else None
             candidates = await self._collector.get_top_gainers(market, top_n, target_date_str)
             logger.info(f"[{market}] 상승률 상위 데이터 수집 완료: {len(candidates)}개")
             print(f"  - 1차 필터 통과: {len(candidates)}개")
-            
+
             # 통계 업데이트
             self.scan_stats["scanned"] += len(candidates)
 
-            # --- [New] Toss Data Sync (Hybrid) ---
-            if self.config.USE_TOSS_DATA and candidates:
-                try:
-                    print(f"  [Hybrid] Toss 증권 데이터 동기화 중... ({len(candidates)}개)")
-                    # 배치 조회를 위해 코드 리스트 추출
-                    codes = [stock.code for stock in candidates]
-                    toss_data_map = self.scorer.collector_toss.get_prices_batch(codes) if hasattr(self.scorer, 'collector_toss') else {}
-                    
-                    # 만약 scorer에 collector_toss가 없다면 직접 생성 시도 (구조상 generator에서 접근 가능해야 함)
-                    if not toss_data_map:
-                         from engine.toss_collector import TossCollector
-                         toss_collector = TossCollector(self.config)
-                         toss_data_map = toss_collector.get_prices_batch(codes)
-                    
-                    updated_count = 0
-                    for stock in candidates:
-                        if stock.code in toss_data_map:
-                            t_data = toss_data_map[stock.code]
-                            
-                            # 데이터 업데이트 (가격, 등락률, 거래량, 거래대금)
-                            # 기존 값 백업 (디버깅용)
-                            # original_values = (stock.close, stock.trading_value)
-                            
-                            if t_data.get('acc_trade_price_24h'): # 가상자산 등 다른 필드일 경우 대비 체크
-                                pass
-                                
-                            # 유효한 데이터만 업데이트
-                            new_close = t_data.get('current')
-                            new_val = t_data.get('trading_value')
-                            new_vol = t_data.get('volume')
-                            new_rate = t_data.get('change_pct')
-                            
-                            new_open = t_data.get('open')
-                            new_high = t_data.get('high')
-                            new_low = t_data.get('low')
-                            
-                            if new_close and new_val:
-                                stock.close = int(new_close)
-                                stock.trading_value = float(new_val)
-                                stock.volume = int(new_vol)
-                                stock.change_pct = float(new_rate)
-                                
-                                # [New] Chart Sync를 위해 OHLC 정보 저장 (동적 속성)
-                                stock.open = int(new_open) if new_open else 0
-                                stock.high = int(new_high) if new_high else 0
-                                stock.low = int(new_low) if new_low else 0
-                                
-                                updated_count += 1
-                                
-                                # 유진로봇 등 주요 종목 로그
-                                if stock.trading_value >= 300_000_000_000:
-                                    logger.info(f"  [Toss Update] {stock.name}({stock.code}): {int(stock.trading_value)//100000000}억 (Rate: {stock.change_pct}%)")
+            if not candidates:
+                print(f"  - No candidates for {market}")
+                continue
 
-                    print(f"  [Hybrid] {updated_count}개 종목 데이터 업데이트 완료 (Toss 기준)")
-                    
-                except Exception as e:
-                    logger.error(f"Toss 데이터 동기화 중 오류: {e}")
-                    print(f"  [Warning] Toss 동기화 실패. KRX 데이터 사용. ({e})")
+            # Toss 데이터 동기화 (Hybrid 모드)
+            await self._sync_toss_data(candidates)
 
-            # --- Phase 1: Base Analysis & Pre-Screening ---
-            pending_items = []  # {'stock':, 'charts':, 'supply':, 'news':}
-            
-            print(f"  [Phase 1] 기본 분석 및 선별 진행 중...")
-            for i, stock in enumerate(candidates):
-                if shared_state.STOP_REQUESTED:
-                    print(f"\n[STOP] 사용자 중단 요청 감지")
-                    raise Exception("사용자 중단 요청")
-                base_data = await self._analyze_base(stock)
-                
-                # 1차 필터 조건 강화 (2026-02-05):
-                # - Pre-Score 방식 대신 Determine Grade(D급 이상) 조건을 선행 적용
-                # - LLM 비용 절감을 위해 최종 후보군 수준만 분석
-                # PRE_SCORE_THRESHOLD = 2 (Deprecated)
-
-                
-                if base_data:
-                    stock_obj = base_data['stock']
-                    pre_score = base_data['pre_score']
-                    score_details = base_data.get('score_details', {})
-                    trading_value = getattr(stock_obj, 'trading_value', 0)
-                    volume_ratio = score_details.get('volume_ratio', 0)
-                    
-                    # 1. 1차 필터: 기본 조건 (거래대금, 거래량 등)
-                    # - 거래대금 500억 이상 (Config Min)
-                    # - 거래량 배수 2배 이상
-                    MIN_TRADING_VALUE = self.scorer.config.trading_value_min
-                    
-                    if trading_value < MIN_TRADING_VALUE:
-                        self.drop_stats["low_trading_value"] += 1
-                        print(f"    [Drop] 거래대금 부족: {stock.name} ({trading_value//100_000_000}억 < {MIN_TRADING_VALUE//100_000_000}억)")
-                        continue
-                        
-                    if volume_ratio < 2.0:
-                        self.drop_stats["low_volume_ratio"] += 1
-                        print(f"    [Drop] 거래량배수 부족: {stock.name} ({volume_ratio:.1f} < 2.0)")
-                        continue
-
-                    # 2. 최종 필터 (Pre-LLM): 등급 미달 사전 차단
-                    # LLM 없이도 최소 D등급 기준(6점)은 넘어야 함
-                    # (scorer.determine_grade는 거래대금, 등락률, 점수 등을 종합 평가)
-                    temp_grade = self.scorer.determine_grade(
-                        stock_obj, pre_score, score_details, base_data['supply'], base_data['charts'], allow_no_news=True
-                    )
-                    
-                    if temp_grade:
-                        # 통과
-                        pending_items.append(base_data)
-                        grade_val = getattr(temp_grade, 'value', temp_grade)
-                        logger.debug(f"[Phase1 Pass] {stock.name}: Grade={grade_val}, Score={pre_score.total}")
-                    else:
-                        # 등급 미달 탈락
-                        self.drop_stats["grade_fail"] += 1
-                        # 1차 필터는 통과했으나 등급 요건 불충족
-                        # print(f"    [Drop] 등급 미달: {stock.name} (Score={pre_score.total}, Pre-Grade=None)")
-                
-                if (i+1) % 10 == 0:
-                    print(f"    Processing {i+1}/{len(candidates)}...", end='\r')
-            
-            logger.info(f"[Phase1 완료] {market}: {len(pending_items)}개 통과 (탈락: 거래대금부족={self.drop_stats['low_trading_value']}, 거래량부족={self.drop_stats['low_volume_ratio']}, 등급미달={self.drop_stats['grade_fail']})")
-            print(f"\n    -> 1차 선별 완료: {len(pending_items)}개 (Drop: 대금{self.drop_stats['low_trading_value']}, 거래량{self.drop_stats['low_volume_ratio']}, 등급{self.drop_stats['grade_fail']})")
-            self.scan_stats["phase1"] += len(pending_items)
-
-            # --- Phase 2: News Fetching & Batch LLM ---
-            print(f"  [Phase 2] 뉴스 수집 및 Batch LLM 분석...")
-            
-            # 뉴스 수집
-            stocks_to_analyze = []
-            news_fail_count = 0
-            for item in pending_items:
-                if shared_state.STOP_REQUESTED:
-                    print(f"\n[STOP] 사용자 중단 요청 감지")
-                    raise Exception("사용자 요청 중단")
-                stock = item['stock']
-                news_list = await self._news.get_stock_news(stock.code, 3, stock.name)
-                if news_list:
-                    item['news'] = news_list
-                    stocks_to_analyze.append(item)
-                    logger.debug(f"[뉴스] {stock.name}: {len(news_list)}개 수집")
-                else:
-                    news_fail_count += 1
-                    self.drop_stats["no_news"] += 1
-                    logger.debug(f"[뉴스 없음] {stock.name}")
-            
-            logger.info(f"[Phase2 뉴스수집] {market}: {len(stocks_to_analyze)}개 성공, {news_fail_count}개 뉴스 없음")
-            print(f"    -> 뉴스 수집 완료: {len(stocks_to_analyze)}개 종목 (뉴스 없음: {news_fail_count}개)")
-
-            # Market Gate 상태 조회
-            market_status = None
+            # [REFACTORED] Use SignalGenerationPipeline
             try:
-                from engine.market_gate import MarketGate
-                mg = MarketGate()
-                market_status = mg.analyze()
-            except Exception as e:
-                print(f"    ⚠️ Market Gate 조회 실패: {e}")
-
-            # Batch LLM Analysis
-            llm_results_map = {}
-            if self.llm_analyzer.client and stocks_to_analyze:
-                # Provider check (Analysis LLM)
-                is_analysis_llm = app_config.LLM_PROVIDER == 'gemini' # or other analysis providers
-                
-                # 5개씩 Chunking
-                chunk_size = app_config.ANALYSIS_LLM_CHUNK_SIZE if is_analysis_llm else app_config.LLM_CHUNK_SIZE
-                chunks = [stocks_to_analyze[i:i + chunk_size] for i in range(0, len(stocks_to_analyze), chunk_size)]
-                
-                total_chunks = len(chunks)
-                # 5. Parallel Batch Processing
-                concurrency = app_config.ANALYSIS_LLM_CONCURRENCY if is_analysis_llm else app_config.LLM_CONCURRENCY
-                semaphore = asyncio.Semaphore(concurrency)
-                
-                async def _process_chunk(chunk_idx, chunk_data):
-                    async with semaphore:
-                        try:
-                            if shared_state.STOP_REQUESTED:
-                                print(f"    Checked stop request in chunk {chunk_idx}, skipping...")
-                                return {}
-
-                            start = time.time()
-                            print(f"    [LLM Batch] Processing Chunk {chunk_idx}/{total_chunks} ({len(chunk_data)} stocks)...")
-                            # chunk_data는 이미 full context dict 리스트임
-                            result = await self.llm_analyzer.analyze_news_batch(chunk_data, market_status)
-                            
-                            # Rate Limit 방지를 위한 강제 대기
-                            delay = app_config.ANALYSIS_LLM_REQUEST_DELAY
-                            if delay > 0:
-                                await asyncio.sleep(delay)
-                                
-                            elapsed = time.time() - start
-                            print(f"    ✅ Chunk {chunk_idx} Done in {elapsed:.2f}s (Delay: {delay}s)")
-                            return result
-                        except Exception as e:
-                            print(f"    ⚠️ Chunk {chunk_idx} Error: {e}")
-                            return {}
-
-                tasks = [
-                    _process_chunk(i, chunk) 
-                    for i, chunk in enumerate(chunks, 1)
-                ]
-                
-                print(f"    🚀 Starting {len(tasks)} batch requests (Concurrency: {concurrency})...")
-                results_list = await asyncio.gather(*tasks)
-                
-                for res in results_list:
-                    if res:
-                        llm_results_map.update(res)
-
-            # --- Phase 3: Final Scoring ---
-            print(f"  [Phase 3] 최종 점수 계산...")
-            for item in stocks_to_analyze:
-                stock = item['stock']
-                llm_result = llm_results_map.get(stock.name)
-                
-                # 테마 수집
-                themes = await self._naver.get_themes(stock.code) if self._naver else []
-                
-                # 최종 시그널 생성
-                signal = self._create_final_signal(
-                    stock, target_date, item['news'], llm_result, item['charts'], item['supply'], themes
-                )
-
-                if signal:
-                    grade_val = getattr(signal.grade, 'value', signal.grade)
-                    if grade_val != 'C':
-                        all_signals.append(signal)
-                        logger.info(f"[시그널 생성] {stock.name}: {grade_val}급 (점수: {signal.score.total}, 거래대금: {stock.trading_value//100_000_000}억, 등락률: {stock.change_pct:.1f}%)")
-                        print(f"    ✅ {stock.name}: {grade_val}급 (점수: {signal.score.total})")
-                else:
-                    self.drop_stats["grade_fail"] += 1
-
-            # 중간 결과 저장 (KOSPI 분석 완료 후 즉시 반영을 위해)
-            if market == markets[0] and len(markets) > 1:
-                mid_processing_time = (time.time() - start_time) * 1000
-                mid_result = ScreenerResult(
-                    date=target_date, # [Fix] parsed_date -> target_date
-                    total_candidates=len(all_signals),
-                    filtered_count=self.scan_stats.get("phase1", 0), # [Fix] generator -> self
-                    scanned_count=self.scan_stats.get("scanned", 0),  # [Fix] generator -> self
-                    signals=all_signals,
-                    by_grade=self.get_summary(all_signals)["by_grade"], # [Fix] generator -> self
-                    by_market=self.get_summary(all_signals)["by_market"], # [Fix] generator -> self
-                    processing_time_ms=mid_processing_time,
+                market_status = await self._get_market_status(target_date)
+                signals = await self._pipeline.execute(
+                    candidates=candidates,
                     market_status=market_status,
-                    market_summary="", # 중간 단계에서는 요약 생략
-                    trending_themes=[] # 중간 단계에서는 테마 생략
+                    target_date=target_date
                 )
-                save_result_to_json(mid_result)
-                logger.info(f"[{market}] 분석 완료 - 중간 결과 저장됨 ({len(all_signals)}개 시그널)")
+
+                # Update statistics from pipeline
+                self._update_pipeline_stats()
+
+                all_signals.extend(signals)
+
+                elapsed = time.time() - start_time
+                print(f"  ✓ {market} 완료: {len(signals)}개 시그널 ({elapsed:.1f}초)")
+
+            except Exception as e:
+                logger.error(f"[{market}] Pipeline execution failed: {e}")
+                print(f"  ✗ {market} 실패: {e}")
+                continue
+
+        # 요약
+        total_elapsed = time.time() - start_time
+        logger.info(f"="*60)
+        logger.info(f"[종가베팅] 전체 완료: {len(all_signals)}개 시그널 ({total_elapsed:.1f}초)")
+        logger.info(f"="*60)
 
         return all_signals
 
+    async def _sync_toss_data(self, candidates: List[StockData]) -> None:
+        """
+        Toss 증권 데이터 동기화 (Hybrid 모드)
+
+        Toss API를 통해 실시간 가격 데이터를 후보 종목에 동기화합니다.
+        """
+        if not self.config.USE_TOSS_DATA or not candidates:
+            return
+
+        try:
+            print(f"  [Hybrid] Toss 증권 데이터 동기화 중... ({len(candidates)}개)")
+            codes = [stock.code for stock in candidates]
+            toss_data_map = self.scorer.collector_toss.get_prices_batch(codes) if hasattr(self.scorer, 'collector_toss') else {}
+
+            if not toss_data_map:
+                from engine.toss_collector import TossCollector
+                toss_collector = TossCollector(self.config)
+                toss_data_map = toss_collector.get_prices_batch(codes)
+
+            updated_count = 0
+            for stock in candidates:
+                if stock.code in toss_data_map:
+                    t_data = toss_data_map[stock.code]
+
+                    new_close = t_data.get('current')
+                    new_val = t_data.get('trading_value')
+                    new_vol = t_data.get('volume')
+                    new_rate = t_data.get('change_pct')
+
+                    if new_close and new_val:
+                        stock.close = int(new_close)
+                        stock.trading_value = float(new_val)
+                        stock.volume = int(new_vol)
+                        stock.change_pct = float(new_rate)
+                        stock.open = int(t_data.get('open', 0))
+                        stock.high = int(t_data.get('high', 0))
+                        stock.low = int(t_data.get('low', 0))
+                        updated_count += 1
+
+                        if stock.trading_value >= 300_000_000_000:
+                            logger.info(f"  [Toss Update] {stock.name}({stock.code}): {int(stock.trading_value)//100000000}억 (Rate: {stock.change_pct}%)")
+
+            print(f"  [Hybrid] {updated_count}개 종목 데이터 업데이트 완료 (Toss 기준)")
+
+        except Exception as e:
+            logger.error(f"Toss 데이터 동기화 중 오류: {e}")
+            print(f"  [Warning] Toss 동기화 실패. KRX 데이터 사용. ({e})")
+
+    async def _get_market_status(self, target_date: date) -> Dict:
+        """
+        Market Gate 상태 조회
+
+        Returns market status dict for use in pipeline phases.
+        """
+        try:
+            market_gate = MarketGate(self.config.DATA_DIR)
+            return await market_gate.analyze(target_date.strftime('%Y-%m-%d'))
+        except Exception as e:
+            logger.warning(f"Market Gate analysis failed: {e}")
+            return {}
+
+    def _update_pipeline_stats(self) -> None:
+        """
+        파이프라인 통계 업데이트
+
+        Updates drop_stats from pipeline phases.
+        """
+        if hasattr(self._pipeline, 'phase1') and self._pipeline.phase1:
+            phase1_drops = self._pipeline.phase1.get_drop_stats()
+            for key, value in phase1_drops.items():
+                if key in self.drop_stats:
+                    self.drop_stats[key] += value
     async def _analyze_base(self, stock: StockData) -> Optional[Dict]:
         """1단계: 기본 분석 (차트, 수급, Pre-Score)"""
         try:
