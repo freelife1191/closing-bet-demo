@@ -309,137 +309,20 @@ def fetch_sector_indices():
 
 
 def fetch_stock_price(ticker):
-    """개별 종목 실시간 가격 수집"""
-    import requests
-    
-    # 1. Try yfinance
-    if YFINANCE_AVAILABLE:
+    """개별 종목 실시간 가격 수집 (Use Shared Logic)"""
+    try:
+        from engine.data_sources import fetch_stock_price as shared_fetch
+        return shared_fetch(ticker)
+    except ImportError:
+        # Fallback if engine package not found (e.g. running script directly)
+        import sys
+        if BASE_DIR not in sys.path:
+            sys.path.append(BASE_DIR)
         try:
-            # 한국 종목은 .KS (KOSPI) 또는 .KQ (KOSDAQ) 접미사 필요
-            yahoo_ticker = f"{ticker}.KS"
-            
-            # yfinance 에러 로그 억제 및 안전한 다운로드
-            import logging as _logging
-            yf_logger = _logging.getLogger('yfinance')
-            original_level = yf_logger.level
-            yf_logger.setLevel(_logging.CRITICAL)
-            
-            hist = pd.DataFrame()
-            try:
-                 hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
-            except: pass
-            finally:
-                 yf_logger.setLevel(original_level)
-
-            # 데이터 유효성 검사 (Close 컬럼 존재 여부)
-            is_valid = False
-            if not hist.empty:
-                 if isinstance(hist.columns, pd.MultiIndex):
-                      if 'Close' in hist.columns.get_level_values(0): is_valid = True
-                 elif 'Close' in hist.columns:
-                      is_valid = True
-            
-            if not is_valid:
-                # KOSDAQ 시도
-                yahoo_ticker = f"{ticker}.KQ"
-                yf_logger.setLevel(_logging.CRITICAL)
-                try:
-                    hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
-                except: pass
-                finally:
-                    yf_logger.setLevel(original_level)
-
-            if not hist.empty:
-                # Extract Close series safely
-                close_series = None
-                if isinstance(hist.columns, pd.MultiIndex):
-                    try:
-                        close_series = hist['Close']
-                        if isinstance(close_series, pd.DataFrame): 
-                            close_series = close_series.iloc[:, 0]
-                    except:
-                        # 최악의 경우 첫 번째 컬럼
-                        close_series = hist.iloc[:, 0]
-                elif 'Close' in hist.columns:
-                    close_series = hist['Close']
-                else:
-                    close_series = hist.iloc[:, 0]
-                
-                # Ensure it is a Series
-                if isinstance(close_series, pd.DataFrame):
-                    close_series = close_series.iloc[:, 0]
-
-                if not close_series.empty:
-                    # 스칼라 값 변환 (.item() 사용)
-                    def get_val(s, idx):
-                        val = s.iloc[idx]
-                        return val.item() if hasattr(val, 'item') else val
-
-                    current = get_val(close_series, -1)
-                    prev = get_val(close_series, -2) if len(close_series) > 1 else current
-                    
-                    change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-                    return {
-                        'price': round(float(current), 0),
-                        'change_pct': round(float(change_pct), 2),
-                        'prev_close': round(float(prev), 0)
-                    }
-        except Exception as e:
-            pass
-
-    # 2. Try Toss Securities API (Fallback 1)
-    try:
-        toss_url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes=A{str(ticker).zfill(6)}"
-        res = requests.get(toss_url, timeout=3)
-        if res.status_code == 200:
-            result = res.json().get('result', [])
-            if result:
-                item = result[0]
-                current = float(item.get('close', 0))
-                prev = float(item.get('base', 0)) # base appears to be previous close
-                
-                if current > 0:
-                    change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-                    return {
-                        'price': round(current, 0),
-                        'change_pct': round(change_pct, 2),
-                        'prev_close': round(prev, 0)
-                    }
-    except Exception as e:
-        # log(f"Toss API Fallback failed for {ticker}: {e}", "WARNING")
-        pass
-
-    # 3. Try Naver Securities API (Fallback 2)
-    try:
-        naver_url = f"https://m.stock.naver.com/api/stock/{str(ticker).zfill(6)}/basic"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(naver_url, headers=headers, timeout=3)
-        if res.status_code == 200:
-            data = res.json()
-            if 'closePrice' in data:
-                current = float(data['closePrice'].replace(',', ''))
-                change_pct = float(data.get('fluctuationsRatio', 0))
-                prev = float(data.get('compareToPreviousClosePrice', '0').replace(',', ''))
-                
-                # Naver 'compareToPreviousClosePrice' is the diff, not the price itself usually? 
-                # Actually closer inspection of Naver API:
-                # compareToPreviousClosePrice is the diff value. 
-                # prev_close = current - diff (if up) or current + diff (if down)
-                # But safer to calculate from percentage if available.
-                # Let's derive prev from current and change_pct to be safe
-                
-                prev_calc = current / (1 + (change_pct / 100)) if change_pct != -100 else 0
-                
-                return {
-                    'price': round(current, 0),
-                    'change_pct': round(change_pct, 2),
-                    'prev_close': round(prev_calc, 0)
-                }
-    except Exception as e:
-        # log(f"Naver API Fallback failed for {ticker}: {e}", "WARNING")
-        pass
-
-    return None
+            from engine.data_sources import fetch_stock_price as shared_fetch
+            return shared_fetch(ticker)
+        except:
+            return None
 
 
 # 전역 캐시 (여러 함수에서 공유)
@@ -552,13 +435,22 @@ def create_korean_stocks_list():
 
         if not kospi_cap.empty:
             # 시가총액 순 정렬 후 상위 1000개 (VCP 발굴 확률 확대를 위해 대폭 증가)
-            kospi_cap = kospi_cap.sort_values('시가총액', ascending=False).head(1000)
-            for ticker in kospi_cap.index:
+            kospi_cap = kospi_cap.sort_values('시가총액', ascending=False)
+            kospi_top_cap = kospi_cap.head(1000)
+            
+            # [추가] 거래대금 상위 500개도 추가 (시총은 작지만 거래가 터진 급등주 포착)
+            kospi_top_vol = kospi_cap.sort_values('거래대금', ascending=False).head(500)
+            
+            # 병합 (중복 제거)
+            kospi_metrics = pd.concat([kospi_top_cap, kospi_top_vol])
+            kospi_metrics = kospi_metrics[~kospi_metrics.index.duplicated(keep='first')]
+            
+            for ticker in kospi_metrics.index:
                 try:
                     name = stock.get_market_ticker_name(ticker)
                     all_data.append({'ticker': ticker, 'name': name, 'market': 'KOSPI', 'sector': ''})
                 except: pass
-            log(f"KOSPI 시가총액 상위 {len(kospi_cap)} 종목 수집", "SUCCESS")
+            log(f"KOSPI 종목 수집: 시총상위 1000 + 거래대금상위 500 -> 통합 {len(kospi_metrics)}개", "SUCCESS")
         else:
             log("KOSPI 시가총액 조회 실패", "WARNING")
 
@@ -572,13 +464,22 @@ def create_korean_stocks_list():
 
         if not kosdaq_cap.empty:
             # 시가총액 순 정렬 후 상위 1000개 (코스닥 포함 요청 반영)
-            kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False).head(1000)
-            for ticker in kosdaq_cap.index:
+            kosdaq_cap = kosdaq_cap.sort_values('시가총액', ascending=False)
+            kosdaq_top_cap = kosdaq_cap.head(1000)
+            
+            # [추가] 거래대금 상위 500개도 추가
+            kosdaq_top_vol = kosdaq_cap.sort_values('거래대금', ascending=False).head(500)
+
+            # 병합
+            kosdaq_metrics = pd.concat([kosdaq_top_cap, kosdaq_top_vol])
+            kosdaq_metrics = kosdaq_metrics[~kosdaq_metrics.index.duplicated(keep='first')]
+
+            for ticker in kosdaq_metrics.index:
                 try:
                     name = stock.get_market_ticker_name(ticker)
                     all_data.append({'ticker': ticker, 'name': name, 'market': 'KOSDAQ', 'sector': ''})
                 except: pass
-            log(f"KOSDAQ 시가총액 상위 {len(kosdaq_cap)} 종목 수집", "SUCCESS")
+            log(f"KOSDAQ 종목 수집: 시총상위 1000 + 거래대금상위 500 -> 통합 {len(kosdaq_metrics)}개", "SUCCESS")
         else:
             log("KOSDAQ 시가총액 조회 실패", "WARNING")
         
@@ -655,6 +556,10 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
         
         total = len(tickers)
         for idx, ticker in enumerate(tickers):
+            if shared_state.STOP_REQUESTED:
+                log("⛔️ 사용자 요청으로 yfinance 수집 중단", "WARNING")
+                return False
+            
             try:
                 # 마켓 확인
                 market_info = stocks_df[stocks_df['ticker'] == ticker]['market'].values
@@ -749,7 +654,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
         force: 강제 업데이트 여부
         lookback_days: 강제 업데이트 시 재수집할 기간 (기본: 5일)
     """
-    log("일별 가격 데이터 수집 중 (Date-based Fast Mode)...", "DEBUG")
+    log("Daily Prices 데이터 업데이트 시작 (Date-based Fast Mode)...", "INFO")
     try:
         from pykrx import stock
         import time
@@ -780,6 +685,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
 
         if os.path.exists(file_path):
             try:
+                log(f"기존 데이터 로드 중... ({file_path})", "INFO")
                 existing_df = pd.read_csv(file_path, dtype={'ticker': str})
                 if not existing_df.empty and 'date' in existing_df.columns:
                     max_date_str = existing_df['date'].max()
@@ -823,14 +729,21 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 log(f"기존 데이터 로드 오류: {e}", "WARNING")
              
         req_start_date_str = start_date_obj.strftime('%Y%m%d')
-        log(f"수집 구간: {req_start_date_str} ~ {end_date_str}", "DEBUG")
+        log(f"수집 구간: {req_start_date_str} ~ {end_date_str}", "INFO")
 
         # 날짜 리스트 생성
         date_range = pd.date_range(start=start_date_obj, end=end_date_obj)
         total_days = len(date_range)
         
+        # [Optimization] Create a set of existing dates for O(1) lookup
+        existing_dates_set = set()
+        if not existing_df.empty and 'date' in existing_df.columns:
+            existing_dates_set = set(existing_df['date'].unique())
+            log(f"기존 데이터 날짜 인덱싱 완료 ({len(existing_dates_set)}일)", "INFO")
+
         new_data_list = []
         processed_days = 0
+        skipped_count = 0
         
         for dt in date_range:
             if shared_state.STOP_REQUESTED:
@@ -843,16 +756,21 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
             # 주말 체크 (토/일) - pykrx가 알아서 빈값 줄 수 있으나 미리 건너뛰면 빠름
             if dt.weekday() >= 5: 
                 processed_days += 1
+                skipped_count += 1
                 continue
 
             # [Optimization] 이미 수집된 데이터는 건너뛰기 (과거 데이터인 경우만)
             # 오늘 날짜는 장중 변동 가능하므로 항상 수집
             if not existing_df.empty and 'date' in existing_df.columns:
-                if cur_date_fmt in existing_df['date'].values:
+                if cur_date_fmt in existing_dates_set:
                      # 오늘이 아니면 Skip
                     if dt.date() < datetime.now().date():
-                         log(f"  -> {cur_date_fmt} 데이터 존재 (Skip)", "DEBUG")
                          processed_days += 1
+                         skipped_count += 1
+                         # 디버깅을 위해 일단 매번 출력 (또는 5회마다)
+                         if total_days < 20 or processed_days % 5 == 0:
+                             progress = (processed_days / total_days) * 100
+                             log(f"  -> {cur_date_fmt} 데이터 존재 (Skip) - 진행률: {progress:.1f}%", "INFO")
                          continue
                 
             try:
@@ -908,7 +826,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 
                 processed_days += 1
                 progress = (processed_days / total_days) * 100
-                log(f"[Daily Prices] {cur_date_fmt} 수집 완료 ({len(df_final)}종목) - {progress:.1f}%", "DEBUG")
+                log(f"[Daily Prices] {cur_date_fmt} 수집 완료 ({len(df_final)}종목) - {progress:.1f}%", "INFO")
                 
                 # Rate Limit 방지
                 time.sleep(random.uniform(0.05, 0.1))
@@ -929,14 +847,87 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 final_df = new_chunk_df
                 
             final_df = final_df.sort_values(['ticker', 'date'])
+            
+            # [Added] Toss API를 통한 오늘의 종가 보정 (정확도 확보)
+            if end_date_obj.date() == datetime.now().date():
+                try:
+                    log("Toss Batch API를 이용한 오늘의 종가 보정 중...", "INFO")
+                    from engine.toss_collector import TossCollector
+                    from engine.data_sources import fetch_stock_price
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                    collector = TossCollector()
+                    target_tickers = final_df[final_df['date'] == end_date]['ticker'].unique().tolist()
+                    
+                    # 1. Attempt Toss Batch (Fastest)
+                    toss_prices = collector.get_prices_batch(target_tickers)
+                    
+                    # 2. Identify missing tickers
+                    processed_tickers = set(toss_prices.keys())
+                    all_tickers_set = set(target_tickers)
+                    missing_tickers = list(all_tickers_set - processed_tickers)
+                    
+                    # Update with Toss data first
+                    if toss_prices:
+                        mask = (final_df['date'] == end_date)
+                        def get_toss_price(row):
+                            t_data = toss_prices.get(row['ticker'])
+                            return int(t_data['current']) if t_data and t_data['current'] > 0 else row['close']
+                        final_df.loc[mask, 'close'] = final_df[mask].apply(get_toss_price, axis=1)
+                    
+                    # 3. Fallback for missing tickers (Naver -> YF via fetch_stock_price)
+                    if missing_tickers:
+                        log(f"Toss Batch 미수집 {len(missing_tickers)}종목. Naver/YF 폴백 병렬 수행...", "WARNING")
+                        
+                        fallback_results = {}
+                        with ThreadPoolExecutor(max_workers=20) as executor:
+                            future_to_ticker = {executor.submit(fetch_stock_price, t): t for t in missing_tickers}
+                            for future in as_completed(future_to_ticker):
+                                t = future_to_ticker[future]
+                                try:
+                                    data = future.result()
+                                    if data:
+                                        fallback_results[t] = data
+                                except Exception as exc:
+                                    pass
+                        
+                        # Apply Fallback Data
+                        if fallback_results:
+                            mask = (final_df['date'] == end_date) & (final_df['ticker'].isin(fallback_results.keys()))
+                            # Pandas apply is slow, loop might be better for partial updates or map
+                            # Using map for speed
+                            for t, data in fallback_results.items():
+                                # Locating specific row
+                                idx = (final_df['date'] == end_date) & (final_df['ticker'] == t)
+                                if any(idx):
+                                    final_df.loc[idx, 'close'] = int(data['price'])
+                            
+                            log(f"폴백 데이터 보정 완료: {len(fallback_results)}개 종목 추가 업데이트", "SUCCESS")
+                        else:
+                             log("폴백 데이터 수집 실패 (모든 소스 응답 없음)", "WARNING")
+
+                    log(f"최종 데이터 보정 완료: 총 {len(toss_prices) + len(fallback_results) if 'fallback_results' in locals() else len(toss_prices)}개", "SUCCESS")
+
+                except Exception as te:
+                    log(f"데이터 보정 프로세스 중 오류: {te}", "WARNING")
+            else:
+                log(f"Toss Batch 보정 생략 (요청일 {end_date_obj.date()} != 오늘 {datetime.now().date()})", "INFO")
+
+            log(f"데이터 저장 시작... ({file_path})", "INFO")
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
-            log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "DEBUG")
+            log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "INFO")
+            print("DEBUG: create_daily_prices finished successfully.", flush=True)
         else:
              if start_date_obj.date() > end_date_obj.date():
                  log("pykrx 수집 데이터 없음 (이미 최신).", "SUCCESS")
                  return True
 
              log("pykrx 수집 데이터 없음. yfinance 폴백 시도...", "DEBUG")
+             
+             if skipped_count == total_days and total_days > 0:
+                 log(f"모든 날짜({total_days}일) 데이터가 이미 존재합니다. yfinance 폴백 생략.", "SUCCESS")
+                 return True
+
              return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
                  
         return True
@@ -1117,6 +1108,63 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             log("수급 데이터 병합 및 저장 중...", "DEBUG")
             new_df = pd.DataFrame(new_data_list)
             
+            # [Added] 주요 종목 Toss API 정밀 수급 보정 (정확도 확보)
+            if end_date_obj.date() == datetime.now().date():
+                try:
+                    from engine.toss_collector import TossCollector
+                    collector = TossCollector()
+                    
+                    # 1. 오늘 날짜 데이터만 추출
+                    today_mask = (new_df['date'] == cur_date_fmt)
+                    today_df = new_df[today_mask].copy()
+                    
+                    if not today_df.empty:
+                        # 2. 보정 대상 종목 선정 (예: 거래대금이 큰 종목 위주로 300개)
+                        # 가격 데이터와 병합하여 거래대금 확인
+                        price_file = os.path.join(BASE_DIR, 'data', 'daily_prices.csv')
+                        p_df = pd.read_csv(price_file, dtype={'ticker': str})
+                        p_today = p_df[p_df['date'] == cur_date_fmt]
+                        
+                        merged = pd.merge(today_df, p_today[['ticker', 'trading_value']], on='ticker', how='left')
+                        top_candidates = merged.sort_values('trading_value', ascending=False).head(300)['ticker'].tolist()
+                        
+                        log(f"Toss API를 이용한 수급 정밀 보정 중 (대상: {len(top_candidates)}종목)...", "DEBUG")
+                        
+                        success_count = 0
+                        for t in top_candidates:
+                            try:
+                                # 1. Toss 시도
+                                t_trend = collector.get_investor_trend(t, days=1)
+                                if t_trend and (t_trend.get('foreign', 0) != 0 or t_trend.get('institution', 0) != 0):
+                                    idx_mask = (new_df['date'] == cur_date_fmt) & (new_df['ticker'] == t)
+                                    if any(idx_mask):
+                                        new_df.loc[idx_mask, 'foreign_buy'] = int(t_trend.get('foreign', 0))
+                                        new_df.loc[idx_mask, 'inst_buy'] = int(t_trend.get('institution', 0))
+                                        success_count += 1
+                                        continue
+                                
+                                # 2. Toss 실패/데이터 0인 경우 Naver 실시간 시도 (Fallback)
+                                try:
+                                    # data_sources에서 함수 가져오기 (Lazy import)
+                                    from engine.data_sources import fetch_investor_trend_naver
+                                    n_trend = fetch_investor_trend_naver(t)
+                                    
+                                    if n_trend and (n_trend.get('foreign', 0) != 0 or n_trend.get('institution', 0) != 0):
+                                        idx_mask = (new_df['date'] == cur_date_fmt) & (new_df['ticker'] == t)
+                                        if any(idx_mask):
+                                            new_df.loc[idx_mask, 'foreign_buy'] = int(n_trend.get('foreign', 0))
+                                            new_df.loc[idx_mask, 'inst_buy'] = int(n_trend.get('institution', 0))
+                                            success_count += 1
+                                            # log(f"  -> {t} Naver 폴백 성공", "DEBUG")
+                                except:
+                                    pass
+                            except:
+                                pass
+                        
+                        log(f"Toss 수급 보정 완료: {success_count}개 종목 정밀 업데이트", "SUCCESS")
+                except Exception as te:
+                    log(f"Toss 수급 보정 실패: {te}", "WARNING")
+
             if not existing_df.empty:
                 final_df = pd.concat([existing_df, new_df])
                 final_df = final_df.drop_duplicates(subset=['date', 'ticker'], keep='last')
@@ -1999,50 +2047,55 @@ def update_vcp_signals_recent_price():
         # 오늘 날짜
         today_str = datetime.now().strftime('%Y%m%d')
         
-        # 최신 가격 데이터 로드 (pykrx 사용)
+        # 최신 가격 데이터 로드 (pykrx 사용 - 일괄 수집 방식)
         from pykrx import stock
-        import time
-
-        updated_count = 0
-        
-        # 유니크 티커 목록
-        tickers = df['ticker'].unique()
         
         current_prices = {}
-        log(f"총 {len(tickers)}개 종목의 현재가 조회 중...")
         
-        for ticker in tickers:
+        # 1. KOSPI/KOSDAQ 전체 종가 일괄 조회 (매우 빠름)
+        for market in ["KOSPI", "KOSDAQ"]:
             try:
-                price_found = False
-                current_price = 0
-                
-                # 1. pykrx 시도
+                # get_market_ohlcv_by_date(..., ..., ticker) 대신 
+                # get_market_ohlcv_by_date(..., ..., market) 사용 시 해당 시장 전체 데이터 리턴
+                df_market = stock.get_market_ohlcv_by_date(today_str, today_str, market)
+                if not df_market.empty:
+                    for ticker, row in df_market.iterrows():
+                        price = int(row['종가'])
+                        if price > 0:
+                            current_prices[str(ticker)] = price
+            except Exception as e:
+                log(f"{market} 전체 가격 조회 실패 fallback 시도: {e}", "WARNING")
+        
+        # 2. Toss Batch API를 이용한 최종 보정 (신뢰도 높음)
+        try:
+            from engine.toss_collector import TossCollector
+            collector = TossCollector()
+            # 시그널에 있는 종목들 우선 보정
+            sig_tickers = df['ticker'].unique().tolist()
+            toss_data = collector.get_prices_batch(sig_tickers)
+            if toss_data:
+                for t, data in toss_data.items():
+                    if data['current'] > 0:
+                        current_prices[str(t)] = int(data['current'])
+                log(f"Toss Batch API를 통한 {len(toss_data)}개 종목 최종 보정 완료", "SUCCESS")
+        except Exception as te:
+            log(f"Toss 보정 시도 실패: {te}", "WARNING")
+        
+        # 3. 부족한 데이터가 있다면 개별 조회 (Fallback - Naver)
+        tickers = df['ticker'].unique()
+        missing_tickers = [t for t in tickers if t not in current_prices]
+        
+        if missing_tickers:
+            log(f"누락된 {len(missing_tickers)}개 종목 개별 조회 시작 (Fallback)...")
+            for ticker in missing_tickers:
                 try:
-                    df_price = stock.get_market_ohlcv(today_str, today_str, ticker)
-                    if not df_price.empty:
-                        current_price = int(df_price['종가'].iloc[-1])
-                        if current_price > 0:
-                            current_prices[ticker] = current_price
-                            price_found = True
-                except:
-                    pass
-                
-                # 2. yfinance 폴백 (fetch_stock_price 사용)
-                if not price_found:
                     data = fetch_stock_price(ticker)
                     if data and 'price' in data:
-                        current_price = int(data['price'])
-                        if current_price > 0:
-                            current_prices[ticker] = current_price
-                            price_found = True
-                            # log(f"  -> {ticker} yfinance 폴백 성공: {current_price}", "INFO")
-
-                time.sleep(0.01) # Rate limiting
-            except Exception as e:
-                # log(f"{ticker} 가격 조회 실패: {e}", "WARNING")
-                pass
+                        current_prices[ticker] = int(data['price'])
+                except:
+                    pass
         
-        log(f"{len(current_prices)}개 종목 현재가 확보 완료. 업데이트 적용 중...")
+        log(f"총 {len(current_prices)}개 종목의 데이터 수집 완료. 업데이트 적용 중...")
         
         # 데이터프레임 업데이트
         for idx, row in df.iterrows():

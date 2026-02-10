@@ -193,7 +193,7 @@ export const krAPI = {
     return response.json();
   },
 
-  getVCPStatus: () => fetchAPI<{ running: boolean; message: string; progress: number }>('/api/kr/signals/status'),
+  getVCPStatus: () => fetchAPI<{ running: boolean; status: string; message: string; progress: number }>('/api/kr/signals/status'),
 
   // Market Gate 개별 업데이트
   updateMarketGate: async (target_date?: string) => {

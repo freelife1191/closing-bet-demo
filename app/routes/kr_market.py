@@ -391,6 +391,7 @@ def get_kr_signals_dates():
 # VCP Screener Status State
 VCP_STATUS = {
     'running': False,
+    'status': 'idle', # idle, running, success, error
     'message': '',
     'last_run': None,
     'progress': 0
@@ -405,18 +406,13 @@ def _run_vcp_background(target_date_arg, max_stocks_arg):
     """백그라운드 VCP 스크리너 실행 (Module Level Helper)"""
     try:
         VCP_STATUS['running'] = True
+        VCP_STATUS['status'] = 'running'
         VCP_STATUS['progress'] = 0
         
         if target_date_arg:
             msg = f"[VCP] 지정 날짜 분석 시작: {target_date_arg}"
         else:
-            # [2026-02-08] User Request: Disable Realtime VCP Analysis
-            msg = "[VCP] 실시간 분석이 비활성화되었습니다."
-            logger.info(msg)
-            print(f"\n{msg}", flush=True)
-            VCP_STATUS['message'] = msg
-            VCP_STATUS['running'] = False
-            return
+            msg = "[VCP] 실시간 분석 시작..."
         
         VCP_STATUS['message'] = msg
         logger.info(msg)
@@ -461,6 +457,7 @@ def _run_vcp_background(target_date_arg, max_stocks_arg):
             success_msg = "완료: 조건 충족 종목 없음"
             
         VCP_STATUS['message'] = success_msg
+        VCP_STATUS['status'] = 'success'
         logger.info(f"[VCP Screener] {success_msg}")
         print(f"[VCP Screener] {success_msg}\n", flush=True)
             
@@ -468,6 +465,7 @@ def _run_vcp_background(target_date_arg, max_stocks_arg):
         logger.error(f"[VCP Screener] 실패: {e}")
         print(f"[VCP Screener] ⛔️ 실패: {e}", flush=True)
         VCP_STATUS['message'] = f"실패: {str(e)}"
+        VCP_STATUS['status'] = 'error'
         import traceback
         traceback.print_exc()
     finally:
@@ -1234,7 +1232,7 @@ def update_kr_market_gate():
 
 @kr_bp.route('/realtime-prices', methods=['POST'])
 def get_kr_realtime_prices():
-    """실시간 가격 일괄 조회 (yfinance 우선, CSV 폴백)"""
+    """실시간 가격 일괄 조회 (Unified Data Source)"""
     try:
         data = request.get_json() or {}
         tickers = data.get('tickers', [])
@@ -1243,6 +1241,27 @@ def get_kr_realtime_prices():
             return jsonify({'prices': {}})
 
         prices = {}
+        
+        # [Optimization] 소량 요청(예: 매수 모달)은 정밀도 높은 fetch_stock_price 사용
+        # 대량 요청(예: 포트폴리오 목록)은 기존 Bulk 로직 유지
+        if len(tickers) <= 5:
+            from engine.data_sources import fetch_stock_price
+            for t in tickers:
+                t_str = str(t).zfill(6)
+                try:
+                    # fetch_stock_price returns dict {price, change_pct, ...}
+                    rt_data = fetch_stock_price(t_str)
+                    if rt_data and rt_data.get('price'):
+                         prices[t_str] = rt_data['price']
+                    else:
+                         prices[t_str] = 0 # Failed
+                except Exception as e:
+                    logger.warning(f"Failed to fetch stock price for {t}: {e}")
+                    prices[t_str] = 0
+            
+            return jsonify({'prices': prices})
+
+        # --- 기존 Bulk Logic (5개 초과 시) ---
         
         # 1. yfinance 실시간 조회 시도 (평일 장중)
         try:

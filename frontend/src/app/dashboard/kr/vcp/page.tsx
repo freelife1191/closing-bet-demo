@@ -498,10 +498,11 @@ export default function VCPSignalsPage() {
                 const pollInterval = setInterval(async () => {
                   try {
                     const status = await krAPI.getVCPStatus();
-                    if (status.running) {
+
+                    if (status.status === 'running' || status.running) {
                       setScreenerMessage(`🔄 ${status.message} (${status.progress || 0}%)`);
-                    } else {
-                      // 완료됨
+                    } else if (status.status === 'success') {
+                      // 완료됨 (성공)
                       clearInterval(pollInterval);
                       setScreenerMessage('✅ 데이터 로딩 중...');
 
@@ -515,7 +516,20 @@ export default function VCPSignalsPage() {
 
                       setScreenerMessage('✅ 업데이트 완료!');
                       setScreenerRunning(false);
-                      setTimeout(() => setScreenerMessage(null), 3500);
+                      setTimeout(() => setScreenerMessage(null), 5000); // 5초 후 메시지 삭제
+                    } else if (status.status === 'error') {
+                      // 완료됨 (실패)
+                      clearInterval(pollInterval);
+                      setScreenerMessage(`❌ 오류: ${status.message}`);
+                      setScreenerRunning(false);
+                      setTimeout(() => setScreenerMessage(null), 7000); // 7초 후 메시지 삭제
+                    } else {
+                      // Status가 없는 구버전 API 대응 혹은 IDLE 상태
+                      if (!status.running) {
+                        clearInterval(pollInterval);
+                        setScreenerRunning(false);
+                        setScreenerMessage(null);
+                      }
                     }
                   } catch (err) {
                     console.error("Polling error:", err);

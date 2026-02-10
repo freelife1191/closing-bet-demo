@@ -13,6 +13,7 @@ import threading
 import time
 import pandas as pd
 from datetime import datetime
+from engine.data_sources import fetch_stock_price
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,17 @@ class PaperTradingService:
         if quantity <= 0:
             return {'status': 'error', 'message': 'Quantity must be positive'}
             
-        total_cost = int(price * quantity) # 정수로 처리
+        # [User Request] Trust Client Price
+        # 사용자가 보고 매수한 가격(프론트엔드 가격)을 그대로 체결 가격으로 사용합니다.
+        # 서버에서 다시 조회하면 소스/시간 차이로 가격이 달라져 혼란을 줄 수 있음.
+        execution_price = price
+        
+        # [Sync Cache] Update cache with the executed price so Portfolio Current Price matches
+        with self.cache_lock:
+            self.price_cache[ticker] = int(execution_price)
+            self.last_update = datetime.now()
+
+        total_cost = int(execution_price * quantity) # 정수로 처리
         current_cash = self.get_balance()
         
         if current_cash < total_cost:
@@ -196,13 +207,13 @@ class PaperTradingService:
                 cursor.execute('''
                     INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
                     VALUES (?, ?, ?, ?, ?, ?)
-                ''', (ticker, name, price, quantity, total_cost, datetime.now().isoformat()))
+                ''', (ticker, name, execution_price, quantity, total_cost, datetime.now().isoformat()))
             
             # 2. Log Trade
             cursor.execute('''
                 INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
                 VALUES (?, ?, ?, ?, ?, ?, 0, 0)
-            ''', ('BUY', ticker, name, price, quantity, datetime.now().isoformat()))
+            ''', ('BUY', ticker, name, execution_price, quantity, datetime.now().isoformat()))
             
             # 3. Deduct Cash
             cursor.execute('UPDATE balance SET cash = cash - ? WHERE id = 1', (total_cost,))
@@ -234,6 +245,14 @@ class PaperTradingService:
             
             name, avg_price, current_qty, current_total_cost = row
             
+            # [User Request] Trust Client Price
+            execution_price = price
+            
+            # [Sync Cache] Update cache immediately
+            with self.cache_lock:
+                self.price_cache[ticker] = int(execution_price)
+                self.last_update = datetime.now()
+            
             # 2. Update/Remove Portfolio
             remaining_qty = current_qty - quantity
             
@@ -248,7 +267,7 @@ class PaperTradingService:
                 ''', (remaining_qty, new_total_cost, datetime.now().isoformat(), ticker))
             
             # 3. Calculate Profit & Log Trade
-            total_proceeds = int(price * quantity)
+            total_proceeds = int(execution_price * quantity)
             cost_basis = int(avg_price * quantity)
             profit = total_proceeds - cost_basis
             profit_rate = (profit / cost_basis * 100) if cost_basis > 0 else 0
@@ -256,7 +275,7 @@ class PaperTradingService:
             cursor.execute('''
                 INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', ('SELL', ticker, name, price, quantity, datetime.now().isoformat(), profit, profit_rate))
+            ''', ('SELL', ticker, name, execution_price, quantity, datetime.now().isoformat(), profit, profit_rate))
             
             # 4. Add Cash
             cursor.execute('UPDATE balance SET cash = cash + ? WHERE id = 1', (total_proceeds,))

@@ -12,6 +12,8 @@ import logging
 import os
 
 from engine.market_gate import MarketGate
+from engine.data_sources import fetch_stock_price
+from engine.toss_collector import TossCollector # [NEW] Toss Collector 연동
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,7 @@ class SmartMoneyScreener:
         self.contraction_threshold = 0.7  # 70% 이하 축소 시 VCP 인정
         self.lookback_days = 60
         self.market_gate = MarketGate()
+        self.toss_collector = TossCollector() # [NEW] Toss Collector 초기화
         self.target_date = target_date
         
         # Data Cache
@@ -192,6 +195,11 @@ class SmartMoneyScreener:
                 target_dt = pd.to_datetime(self.target_date)
                 stock_prices = stock_prices[stock_prices['date'] <= target_dt]
                 if stock_prices.empty: return None
+            else:
+                # [최적화] 실시간 개별 가격 수집 로직 제거 (성능 및 일관성 저하 방지)
+                # 이제 스크리너는 로드된 prices_df (CSV 기반) 데이터만 사용합니다.
+                # 실시간 업데이트는 init_data.py에서 일괄(Bulk)로 수행되어야 합니다.
+                pass
 
             # VCP 패턴 감지
             vcp_result = self._detect_vcp_pattern(stock_prices, stock)
@@ -202,7 +210,7 @@ class SmartMoneyScreener:
             
             # 거래량 비율 점수 (Max 20)
             volume = stock_prices['volume']
-            current_vol = volume.iloc[-1]
+            current_vol = volume.iloc[-1] if not volume.empty else 0
             avg_vol = volume.tail(20).mean()
             vol_ratio = current_vol / avg_vol if avg_vol > 0 else 1.0
             
@@ -227,6 +235,7 @@ class SmartMoneyScreener:
                 'inst_net_5d': supply_result.get('inst_5d', 0),
                 'market': stock['market'],
                 'entry_price': vcp_result.entry_price,
+                'current_price': stock_prices.iloc[-1]['close'] if not stock_prices.empty else 0, # Added current_price
                 'change_pct': 0 if len(stock_prices) == 0 else (stock_prices.iloc[-1]['close'] - stock_prices.iloc[0]['close']) / stock_prices.iloc[0]['close'] * 100,
                 'market_status': 'UNKNOWN',
                 'contraction_ratio': vcp_result.contraction_ratio
@@ -322,7 +331,65 @@ class SmartMoneyScreener:
             return VCPResult(stock['ticker'], stock['name'], 0, 1.0, False, "", 0)
 
     def _calculate_supply_score(self, ticker: str) -> Dict:
-        """수급 점수 계산 (0-100)"""
+        """수급 점수 계산 (Toss API 기반)"""
+        try:
+            # 1. Toss API를 통해 실시간 수급 조회 (최근 5일)
+            # 종목 코드는 6자리 문자열 가정
+            trend_data = self.toss_collector.get_investor_trend(ticker, days=5)
+            
+            if not trend_data:
+                # Fallback to CSV if API fails (기존 로직 유지)
+                return self._calculate_supply_score_csv(ticker)
+
+            foreign_5d = trend_data.get('foreign', 0)
+            inst_5d = trend_data.get('institution', 0)
+            details = trend_data.get('details', []) # 일별 상세 데이터
+
+            score = 0
+            
+            # Foreign Score (Max 25)
+            if foreign_5d > 50_000_000_000: score += 25  # 500억
+            elif foreign_5d > 20_000_000_000: score += 15 # 200억
+            elif foreign_5d > 0: score += 10
+            
+            # Inst Score (Max 20)
+            if inst_5d > 50_000_000_000: score += 20     # 500억
+            elif inst_5d > 20_000_000_000: score += 10    # 200억
+            elif inst_5d > 0: score += 5
+            
+            # Consecutive Foreign Buying (Max 15)
+            consecutive_f = 0
+            if details:
+                # details[0] is latest based on verification
+                for d in details:
+                    if d.get('netForeignerBuyVolume', 0) > 0:
+                        consecutive_f += 1
+                    else:
+                        break
+            score += min(consecutive_f * 3, 15)
+
+            # Consecutive Inst Buying (Max 10)
+            consecutive_i = 0
+            if details:
+                for d in details:
+                    if d.get('netInstitutionBuyVolume', 0) > 0:
+                        consecutive_i += 1
+                    else:
+                        break
+            score += min(consecutive_i * 2, 10)
+            
+            return {
+                'score': score, 
+                'foreign_5d': int(foreign_5d), 
+                'inst_5d': int(inst_5d)
+            }
+            
+        except Exception as e:
+            # logger.warning(f"Toss 수급 조회 실패 ({ticker}): {e}")
+            return self._calculate_supply_score_csv(ticker)
+
+    def _calculate_supply_score_csv(self, ticker: str) -> Dict:
+        """수급 점수 계산 (CSV Fallback - 기존 로직 이동)"""
         try:
             if self.inst_df is None:
                 return {'score': 0}
@@ -391,7 +458,7 @@ class SmartMoneyScreener:
         except Exception as e:
             # logger.warning(f"수급 점수 계산 실패 ({ticker}): {e}")
             return {'score': 0}
-
+    
     def generate_signals(self, results: pd.DataFrame) -> List[Dict]:
         """시그널 생성"""
         try:

@@ -620,3 +620,167 @@ class GlobalDataFetcher:
                 result[key] = {'value': latest, 'change_pct': round(change, 2)}
 
         return result
+
+
+def fetch_stock_price(ticker):
+    """
+    개별 종목 실시간 가격 수집 (Shared Utility)
+    - yfinance -> Toss -> Naver 순서로 폴백
+    """
+    import requests
+    import pandas as pd
+    
+    # 1. Try Toss Securities API (Prioritized for Real-time accuracy)
+    try:
+        toss_url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes=A{str(ticker).zfill(6)}"
+        res = requests.get(toss_url, timeout=3)
+        if res.status_code == 200:
+            result = res.json().get('result', [])
+            if result:
+                item = result[0]
+                current = float(item.get('close', 0))
+                # Toss API 'base' is usually previous close
+                prev = float(item.get('base', 0)) 
+                volume = float(item.get('accTradeVolume', 0))
+                
+                if current > 0:
+                    change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                    return {
+                        'price': round(current, 0),
+                        'change_pct': round(change_pct, 2),
+                        'prev_close': round(prev, 0),
+                        'volume': int(volume),
+                        'source': 'toss'
+                    }
+    except Exception as e:
+        pass
+        
+    # 2. Try Naver Securities API (Fallback 1 - High Reliability)
+    try:
+        naver_url = f"https://m.stock.naver.com/api/stock/{str(ticker).zfill(6)}/basic"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(naver_url, headers=headers, timeout=3)
+        if res.status_code == 200:
+            data = res.json()
+            if 'closePrice' in data:
+                current = float(data['closePrice'].replace(',', ''))
+                change_pct = float(data.get('fluctuationsRatio', 0))
+                volume = float(data.get('accumulatedTradingVolume', '0').replace(',', ''))
+                
+                prev_calc = current / (1 + (change_pct / 100)) if change_pct != -100 else 0
+                
+                return {
+                    'price': round(current, 0),
+                    'change_pct': round(change_pct, 2),
+                    'prev_close': round(prev_calc, 0),
+                    'volume': int(volume),
+                    'source': 'naver'
+                }
+    except Exception as e:
+        pass
+
+    # 3. Try yfinance (Fallback 2 - Global Standard)
+    try:
+        import yfinance as yf
+        import logging as _logging
+        yf_logger = _logging.getLogger('yfinance')
+        original_level = yf_logger.level
+        yf_logger.setLevel(_logging.CRITICAL)
+        
+        yahoo_ticker = f"{ticker}.KS"
+        hist = pd.DataFrame()
+        try:
+             hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
+        except: pass
+
+        # Validation
+        is_valid = False
+        if not hist.empty:
+             if isinstance(hist.columns, pd.MultiIndex):
+                  if 'Close' in hist.columns.get_level_values(0): is_valid = True
+             elif 'Close' in hist.columns:
+                  is_valid = True
+        
+        if not is_valid:
+            yahoo_ticker = f"{ticker}.KQ"
+            try:
+                hist = yf.download(yahoo_ticker, period='5d', progress=False, threads=False)
+            except: pass
+        
+        yf_logger.setLevel(original_level)
+
+        if not hist.empty:
+            close_series = hist['Close'] if 'Close' in hist.columns else hist.iloc[:, 0]
+            if isinstance(close_series, pd.DataFrame): close_series = close_series.iloc[:, 0]
+            if isinstance(hist.columns, pd.MultiIndex):
+                # Handle MultiIndex for Volume
+                try: 
+                    vol_series = hist['Volume']
+                    if isinstance(vol_series, pd.DataFrame): vol_series = vol_series.iloc[:, 0]
+                except: vol_series = pd.Series([0]*len(close_series))
+            else:
+                vol_series = hist['Volume'] if 'Volume' in hist.columns else pd.Series([0]*len(close_series))
+
+            if not close_series.empty:
+                def get_val(s, idx):
+                    val = s.iloc[idx]
+                    return val.item() if hasattr(val, 'item') else val
+
+                current = get_val(close_series, -1)
+                prev = get_val(close_series, -2) if len(close_series) > 1 else current
+                volume = get_val(vol_series, -1) if not vol_series.empty else 0
+                
+                change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                
+                return {
+                    'price': round(float(current), 0),
+                    'change_pct': round(float(change_pct), 2),
+                    'prev_close': round(float(prev), 0),
+                    'volume': int(volume),
+                    'source': 'yfinance'
+                }
+    except Exception as e:
+        pass
+
+    return None
+
+def fetch_investor_trend_naver(ticker):
+    """
+    네이버 증권 API를 통한 최신 날짜 수급 데이터 수집 (Fallback용)
+    - 수량(Volume)을 가져와 종가(Close)를 곱하여 금액(Value)으로 추정 반환
+    Returns: {'foreign': int, 'institution': int} or None
+    """
+    import requests
+    try:
+        # 모바일 트렌드 API (JSON)
+        url = f"https://m.stock.naver.com/api/stock/{str(ticker).zfill(6)}/trend"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url, headers=headers, timeout=3)
+        if res.status_code == 200:
+            data = res.json()
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0] # 최신 데이터 (보통 오늘)
+                
+                # 데이터 파싱 (, 제거 및 부호 처리)
+                # 예: "165,800", "+1,837,045"
+                close_str = str(item.get('closePrice', '0')).replace(',', '')
+                foreign_str = str(item.get('foreignerPureBuyQuant', '0')).replace(',', '').replace('+', '')
+                inst_str = str(item.get('organPureBuyQuant', '0')).replace(',', '').replace('+', '')
+                
+                # 안전한 변환
+                try:
+                    close = int(close_str)
+                    foreign_vol = int(foreign_str)
+                    inst_vol = int(inst_str)
+                except:
+                    return None
+                
+                # 순매수 금액 추정 (종가 * 순매수량)
+                # 정확하진 않지만(평단가 모름), 근사치로 충분함
+                return {
+                    'foreign': foreign_vol * close,
+                    'institution': inst_vol * close
+                }
+    except Exception:
+        pass
+    return None

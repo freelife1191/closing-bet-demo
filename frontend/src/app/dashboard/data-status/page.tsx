@@ -62,7 +62,7 @@ interface DataStatusResponse {
 
 interface UpdateItem {
   name: string;
-  status: 'pending' | 'running' | 'done' | 'error';
+  status: 'pending' | 'running' | 'done' | 'error' | 'cancelled' | 'stopped';
 }
 
 interface UpdateStatusResponse {
@@ -158,6 +158,7 @@ export default function DataStatusPage() {
           await loadData();
           setUpdating(false);
           setUpdatingItem(null);
+          setUpdateItems([]); // [Fix] 업데이트 완료/중단 시 상단 진행바 UI 초기화
         }, 1000);
       } else if (status.isRunning && !pollingRef.current) {
         // 실행 중인데 폴링이 없으면 시작 (페이지 마운트 대응)
@@ -493,12 +494,14 @@ export default function DataStatusPage() {
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-medium border ${item.status === 'done' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                     item.status === 'running' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                       item.status === 'error' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                        'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                        (item.status === 'cancelled' || item.status === 'stopped') ? 'bg-gray-500/10 text-gray-500 border-gray-500/20' :
+                          'bg-gray-500/10 text-gray-400 border-gray-500/20'
                     }`}
                 >
                   {item.status === 'running' && <i className="fas fa-spinner animate-spin text-[8px]"></i>}
                   {item.status === 'done' && <i className="fas fa-check text-[8px]"></i>}
                   {item.status === 'error' && <i className="fas fa-times text-[8px]"></i>}
+                  {(item.status === 'cancelled' || item.status === 'stopped') && <i className="fas fa-ban text-[8px]"></i>}
                   {item.status === 'pending' && <i className="fas fa-clock text-[8px]"></i>}
                   {item.name}
                 </div>

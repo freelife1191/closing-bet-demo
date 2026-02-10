@@ -138,7 +138,16 @@ def stop_update():
         # 명시적으로 실행 중인 항목을 error/stopped로 변경
         for item in status['items']:
             if item['status'] == 'running':
-                item['status'] = 'error' # 중단됨
+                # 사용자가 중지했으므로 'error'보다는 'stopped'가 맞음 (또는 UI가 인식하는 실패 코드로)
+                item['status'] = 'error' 
+            elif item['status'] == 'pending':
+                item['status'] = 'cancelled' # 대기 중인 건 취소됨 -> UI에서 멈춤 처리
+        
+        # [사용자 요청] 깔끔하게 중지되고 UI가 처음 시작하기 전으로 초기화
+        # 하지만 상태 확인을 위해 items는 남겨두되, cancelled 처리된 것은 UI가 알아서 처리해야 함.
+        # 만약 "완전 초기화"를 원한다면 status['items'] = [] 할 수도 있지만, 
+        # 직전 실패 내역은 보여주는 게 UX상 나을 수 있음. 일단 상태 코드 변경으로 대응.
+        
         save_update_status(status)
 
 def finish_update():
@@ -389,7 +398,10 @@ def run_background_update(target_date, selected_items=None, force=False):
                 if shared_state.STOP_REQUESTED: raise e
 
     except Exception as e:
-        logger.error(f"Background Update Failed: {e}")
+        if str(e) == "Stopped by user" or shared_state.STOP_REQUESTED:
+            logger.info(f"Background Update Stopped: {e}")
+        else:
+            logger.error(f"Background Update Failed: {e}")
         # Stop Requested면 무시, 아니면 에러 로깅
     finally:
         finish_update()

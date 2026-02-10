@@ -34,7 +34,7 @@ class Scorer:
         checklist = ChecklistDetail()
 
         # 1. 뉴스/재료 (0-3점)
-        score.news, checklist.has_news, checklist.news_sources, score.llm_reason = self._score_news(news, llm_result)
+        score.news, checklist.has_news, checklist.news_sources, score.llm_reason = self._score_news(news, llm_result, stock)
 
         # 2. 거래대금 (0-3점)
         score.volume = self._score_volume(stock)
@@ -58,9 +58,16 @@ class Scorer:
         # 거래량 배수 = 오늘 거래량 / 최근 20일 평균 거래량 (네이버/토스 기준)
         volume_ratio = 0.0
         if charts and len(charts.volumes) >= 2:
-            today_vol = charts.volumes[-1]
+            # [Fix] Toss 데이터 등으로 stock.volume이 업데이트되었을 수 있으므로
+            # charts.volumes[-1] (KRX) 대신 stock.volume을 우선 사용
+            today_vol = stock.volume if stock.volume > 0 else charts.volumes[-1]
+            
             lookback = min(20, len(charts.volumes) - 1)
             if lookback > 0:
+                # 평균은 과거 데이터(어제까지)로 계산
+                # charts.volumes는 [D-n, ..., D-1, D-0] 순서라고 가정 시 (보통 pykrx는 날짜 오름차순)
+                # D-0이 오늘이라면, 어제까지의 평균은 D-20 ~ D-1
+                # 인덱싱: 뒤에서부터 -lookback-1 : -1
                 avg_vol = sum(charts.volumes[-lookback-1:-1]) / lookback
                 if avg_vol > 0:
                     volume_ratio = round(today_vol / avg_vol, 2)
@@ -316,15 +323,13 @@ class Scorer:
             logger.debug(f"  -> [Drop] 거래대금 부족: {trading_value//100_000_000}억 < 500억")
             return None
             
-        # 2) 등락률 5~29.9% 이외 제외 (상한가 제외, 너무 낮은 등락률 제외)
-        if not (5.0 <= change_pct <= 29.9):
-            logger.debug(f"  -> [Drop] 등락률 조건 위배: {change_pct:.1f}% (Target: 5~29.9%)")
+        # 2) 등락률 5~30% 이내 (상한가 포함)
+        if not (5.0 <= change_pct <= 30.0):
+            logger.debug(f"  -> [Drop] 등락률 조건 위배: {change_pct:.1f}% (Target: 5~30%)")
             return None
 
-        # 3) 상한가 제외 (30% 이상)
-        if change_pct >= 30.0:
-             logger.debug(f"  -> [Drop] 상한가 도달 종목")
-             return None
+        # 3) 상한가 제외 로직 삭제 (유진로봇 등 포함)
+        # if change_pct >= 30.0: ...
 
         # 4) 뉴스 없음 (단순 급등 작전주 회피)
         if not allow_no_news and score.news == 0:
@@ -351,29 +356,36 @@ class Scorer:
              except:
                  pass
 
-        # 6) 거래량 배수 확인 (최소 2배)
-        if volume_ratio < 2.0:
-            logger.debug(f"  -> [Drop] 거래량배수 부족: {volume_ratio:.1f} < 2.0")
+        # 6) 거래량 배수 확인 (기본 2배)
+        # 5000억 이상 1배 완화 로직 제거 (User Request: 원복)
+        min_vol_ratio = 2.0
+            
+        if volume_ratio < min_vol_ratio:
+            logger.debug(f"  -> [Drop] 거래량배수 부족: {volume_ratio:.1f} < {min_vol_ratio}")
             return None
 
         # --- 2. 등급 판별 (18점 만점 기준) ---
         # Config 기준: S(15), A(12), B(10)
+        # User Request: 거래량 배수 S(5배), A(3배), B(2배)
         
         # [S급]
         if (trading_value >= self.config.trading_value_s and # 1조
-            score.total >= self.config.min_s_grade): # 15점
+            score.total >= self.config.min_s_grade and   # 15점
+            volume_ratio >= 5.0):                        # 5배
             logger.debug(f"  -> [S급] 조건 충족!")
             return Grade.S
             
         # [A급]
         if (trading_value >= self.config.trading_value_a and # 5000억
-            score.total >= self.config.min_a_grade): # 12점
+            score.total >= self.config.min_a_grade and   # 12점
+            volume_ratio >= 3.0):                        # 3배
             logger.debug(f"  -> [A급] 조건 충족!")
             return Grade.A
             
         # [B급]
         if (trading_value >= self.config.trading_value_b and # 1000억
-            score.total >= self.config.min_b_grade): # 10점
+            score.total >= self.config.min_b_grade and   # 10점
+            volume_ratio >= 2.0):                        # 2배
             logger.debug(f"  -> [B급] 조건 충족!")
             return Grade.B
             

@@ -38,16 +38,16 @@ def run_jongga_v2_analysis(test_mode=False):
     """장 마감 직전 AI 종가베팅 분석 (15:20)"""
     now = datetime.now()
     if test_mode or now.weekday() < 5:  # 평일만 or 테스트
-        logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (15:20)")
+        logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:00 - After Close)")
         try:
-            # 1. 당일(장중) 데이터 수집 (Pre-close)
-            # 15:20 시점의 데이터로 업데이트하여 분석 정확도 확보
-            logger.info("[Scheduler] 장중 주가 데이터 업데이트...")
-            create_daily_prices()
+            # 1. 당일(장중) 데이터 수집 (Pre-close) -> 제거 (15:40 정기 분석에서 수행됨)
+            # 16:00 시점에 실행되므로 이미 create_daily_prices()가 완료된 상태라 가정
+            # logger.info("[Scheduler] 장중 주가 데이터 업데이트...")
+            # create_daily_prices()
             
             # 2. 분석 실행
             create_jongga_v2_latest()
-            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료")
+            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:00)")
             
             # 3. 알림 발송 (Messenger 사용)
             send_jongga_notification()
@@ -164,10 +164,10 @@ def start_scheduler():
     logger.info(f"Scheduled Market Gate sync every {interval} minutes")
     
     # 스케줄 시간 설정 (환경변수로 커스터마이징 가능)
-    jongga_time = os.getenv('JONGGA_SCHEDULE_TIME', '15:20')
+    jongga_time = os.getenv('JONGGA_SCHEDULE_TIME', '16:00')
     closing_time = os.getenv('CLOSING_SCHEDULE_TIME', '15:40')
     
-    # 매일 AI 종가베팅 (장 마감 직전) - 기본값 15:20
+    # 매일 AI 종가베팅 (장 마감 직전) - 기본값 16:00 (장 마감 데이터 사용)
     schedule.every().day.at(jongga_time).do(run_jongga_v2_analysis)
     logger.info(f"Scheduled Jongga V2 Analysis at {jongga_time}")
 

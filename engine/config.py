@@ -42,6 +42,9 @@ class SignalConfig:
     risk_per_trade: float = 0.005  # 0.5% (R값)
     max_positions: int = 10
 
+    # 데이터 수집 설정
+    USE_TOSS_DATA: bool = True  # Toss 증권 데이터 사용 여부 (KRX 데이터 보정용)
+
     # 손절/익절 (User Request: +5%, -3%)
     stop_loss_pct: float = 0.03  # -3%
     take_profit_pct: float = 0.05  # +5%

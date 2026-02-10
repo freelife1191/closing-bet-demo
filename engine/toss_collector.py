@@ -33,23 +33,35 @@ class TossCollector:
         return code
     
     def _safe_request(self, url: str, method: str = 'GET', json_data: dict = None) -> Optional[Dict]:
-        """안전한 API 요청"""
-        try:
-            if method.upper() == 'POST':
-                response = self.session.post(url, json=json_data or {}, timeout=10)
-            else:
-                response = self.session.get(url, timeout=10)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                print(f"FAILED: {url} [{response.status_code}]")  # DEBUG PRINT
-                logger.warning(f"토스증권 API 요청 실패: {url} - {response.status_code}")
+        """안전한 API 요청 (재시도 로직 포함)"""
+        import time
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                if method.upper() == 'POST':
+                    response = self.session.post(url, json=json_data or {}, timeout=10)
+                else:
+                    response = self.session.get(url, timeout=10)
+                
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 429: # Rate Limit
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                else:
+                    # 400 에러 등은 재시도 없이 중단
+                    if response.status_code != 404:
+                         logger.warning(f"토스증권 API 상세 오류: {url} - {response.status_code}")
+                    return None
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                logger.error(f"토스증권 API 최종 실패: {url} - {e}")
                 return None
-        except Exception as e:
-            print(f"ERROR: {url} [{e}]") # DEBUG PRINT
-            logger.error(f"토스증권 API 오류: {url} - {e}")
-            return None
+        return None
     
     def get_stock_info(self, code: str) -> Optional[Dict]:
         """기본 종목 정보 (마켓, 상장일 등)"""
@@ -110,7 +122,63 @@ class TossCollector:
             'market_cap': price_data.get('marketCap', 0),
             'upper_limit': price_data.get('upperLimit', 0),
             'lower_limit': price_data.get('lowerLimit', 0),
+            'change': (price_data.get('close', 0) - price_data.get('base', 0)),
+            'change_pct': ((price_data.get('close', 0) - price_data.get('base', 0)) / price_data.get('base', 1) * 100) if price_data.get('base') else 0.0,
         }
+    
+    def get_prices_batch(self, codes: list) -> Dict[str, Dict]:
+        """
+        여러 종목의 가격 상세 정보 조회 (Batch)
+        Args:
+            codes: 종목 코드 리스트 (예: ['005930', '000660'])
+        Returns:
+            Dict[code, price_detail_dict]
+        """
+        if not codes:
+            return {}
+            
+        # 1. 포맷팅 및 청크 분할 (URL 길이 제한 고려, 20개씩)
+        chunk_size = 20
+        results = {}
+        
+        for i in range(0, len(codes), chunk_size):
+            chunk = codes[i:i + chunk_size]
+            toss_codes = [self._format_code(c) for c in chunk]
+            codes_str = ",".join(toss_codes)
+            
+            url = f"{self.BASE_URL}/v3/stock-prices/details?productCodes={codes_str}"
+            data = self._safe_request(url)
+            
+            if not data:
+                continue
+                
+            result_obj = data.get('result', data)
+            items = []
+            
+            if isinstance(result_obj, list):
+                items = result_obj
+            elif isinstance(result_obj, dict):
+                 # 단일 객체 리턴될 경우 리스트로 감쌈 (codes가 1개일 때 그럴 수 있음)
+                 items = [result_obj]
+            
+            for item in items:
+                raw_code = item.get('code', '') # "A005930"
+                # "A" 제거하여 원본 코드 복원
+                code = raw_code[1:] if raw_code.startswith('A') else raw_code
+                
+                results[code] = {
+                    'current': item.get('close', 0),
+                    'open': item.get('open', 0),
+                    'high': item.get('high', 0),
+                    'low': item.get('low', 0),
+                    'volume': item.get('volume', 0),
+                    'trading_value': item.get('value', 0),
+                    'market_cap': item.get('marketCap', 0),
+                    'change': (item.get('close', 0) - item.get('base', 0)) if item.get('base') else 0,
+                    'change_pct': ((item.get('close', 0) - item.get('base', 0)) / item.get('base', 1) * 100) if item.get('base') else 0.0
+                }
+                
+        return results
     
     def get_investment_indicators(self, code: str) -> Optional[Dict]:
         """투자 지표 (PER, PBR, ROE, PSR, 배당수익률, 시가총액)"""
@@ -185,16 +253,18 @@ class TossCollector:
              # 혹시 모를 구버전 호환
              trends = data.get('trends', [])
         
-        # 합계 계산
-        foreign_sum = sum(t.get('netForeignerBuyVolume', 0) for t in trends)
-        institution_sum = sum(t.get('netInstitutionBuyVolume', 0) for t in trends)
-        individual_sum = sum(t.get('netIndividualsBuyVolume', 0) for t in trends)
+        # 합계 계산 (Volume -> Value 변환)
+        # Note: Toss API provides 'close' price for each day in trend data
+        foreign_sum = sum(t.get('netForeignerBuyVolume', 0) * t.get('close', 0) for t in trends)
+        institution_sum = sum(t.get('netInstitutionBuyVolume', 0) * t.get('close', 0) for t in trends)
+        individual_sum = sum(t.get('netIndividualsBuyVolume', 0) * t.get('close', 0) for t in trends)
         
         return {
             'foreign': foreign_sum,
             'institution': institution_sum,
             'individual': individual_sum,
             'days': days,
+            'details': trends
         }
     
     def get_financials(self, code: str) -> Optional[Dict]:

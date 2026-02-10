@@ -21,12 +21,13 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine.config import config, app_config
+from engine.config import config as default_config, app_config
 import engine.shared as shared_state
 from engine.models import (
     StockData, Signal, SignalStatus, ScoreDetail, ChecklistDetail, ScreenerResult, ChartData, Grade
 )
 from engine.collectors import KRXCollector, EnhancedNewsCollector, NaverFinanceCollector
+from engine.toss_collector import TossCollector
 from engine.scorer import Scorer
 from engine.position_sizer import PositionSizer
 
@@ -49,7 +50,8 @@ class SignalGenerator:
             capital: 총 자본금 (기본 5천만원)
             config: 설정 (기본 설정 사용)
         """
-        self.config = config
+        # [Fix] config가 None으로 전달되면 기본 설정(default_config) 사용
+        self.config = config if config else default_config
         self.capital = capital
 
         self.scorer = Scorer(self.config)
@@ -59,6 +61,7 @@ class SignalGenerator:
         self._collector: Optional[KRXCollector] = None
         self._news: Optional[EnhancedNewsCollector] = None
         self._naver: Optional[NaverFinanceCollector] = None
+        self._toss_collector: Optional[TossCollector] = None
         
         # 스캔 통계
         self.scan_stats = {
@@ -86,6 +89,8 @@ class SignalGenerator:
         await self._news.__aenter__()
         
         self._naver = NaverFinanceCollector(self.config)
+        
+        self._toss_collector = TossCollector(self.config)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -139,6 +144,65 @@ class SignalGenerator:
             
             # 통계 업데이트
             self.scan_stats["scanned"] += len(candidates)
+
+            # --- [New] Toss Data Sync (Hybrid) ---
+            if self.config.USE_TOSS_DATA and candidates:
+                try:
+                    print(f"  [Hybrid] Toss 증권 데이터 동기화 중... ({len(candidates)}개)")
+                    # 배치 조회를 위해 코드 리스트 추출
+                    codes = [stock.code for stock in candidates]
+                    toss_data_map = self.scorer.collector_toss.get_prices_batch(codes) if hasattr(self.scorer, 'collector_toss') else {}
+                    
+                    # 만약 scorer에 collector_toss가 없다면 직접 생성 시도 (구조상 generator에서 접근 가능해야 함)
+                    if not toss_data_map:
+                         from engine.toss_collector import TossCollector
+                         toss_collector = TossCollector(self.config)
+                         toss_data_map = toss_collector.get_prices_batch(codes)
+                    
+                    updated_count = 0
+                    for stock in candidates:
+                        if stock.code in toss_data_map:
+                            t_data = toss_data_map[stock.code]
+                            
+                            # 데이터 업데이트 (가격, 등락률, 거래량, 거래대금)
+                            # 기존 값 백업 (디버깅용)
+                            # original_values = (stock.close, stock.trading_value)
+                            
+                            if t_data.get('acc_trade_price_24h'): # 가상자산 등 다른 필드일 경우 대비 체크
+                                pass
+                                
+                            # 유효한 데이터만 업데이트
+                            new_close = t_data.get('current')
+                            new_val = t_data.get('trading_value')
+                            new_vol = t_data.get('volume')
+                            new_rate = t_data.get('change_pct')
+                            
+                            new_open = t_data.get('open')
+                            new_high = t_data.get('high')
+                            new_low = t_data.get('low')
+                            
+                            if new_close and new_val:
+                                stock.close = int(new_close)
+                                stock.trading_value = float(new_val)
+                                stock.volume = int(new_vol)
+                                stock.change_pct = float(new_rate)
+                                
+                                # [New] Chart Sync를 위해 OHLC 정보 저장 (동적 속성)
+                                stock.open = int(new_open) if new_open else 0
+                                stock.high = int(new_high) if new_high else 0
+                                stock.low = int(new_low) if new_low else 0
+                                
+                                updated_count += 1
+                                
+                                # 유진로봇 등 주요 종목 로그
+                                if stock.trading_value >= 300_000_000_000:
+                                    logger.info(f"  [Toss Update] {stock.name}({stock.code}): {int(stock.trading_value)//100000000}억 (Rate: {stock.change_pct}%)")
+
+                    print(f"  [Hybrid] {updated_count}개 종목 데이터 업데이트 완료 (Toss 기준)")
+                    
+                except Exception as e:
+                    logger.error(f"Toss 데이터 동기화 중 오류: {e}")
+                    print(f"  [Warning] Toss 동기화 실패. KRX 데이터 사용. ({e})")
 
             # --- Phase 1: Base Analysis & Pre-Screening ---
             pending_items = []  # {'stock':, 'charts':, 'supply':, 'news':}
@@ -343,6 +407,19 @@ class SignalGenerator:
             # 차트
             charts = await self._collector.get_chart_data(stock.code, 60)
             
+            # [Hybrid] 차트 데이터 싱크 (KRX -> Toss)
+            if self.config.USE_TOSS_DATA and charts and getattr(stock, 'trading_value', 0) > 0 and charts.closes:
+                try:
+                    # Top Gainers는 오늘 데이터가 갱신된 상태이므로 마지막 캔들 덮어쓰기
+                    charts.closes[-1] = stock.close
+                    # stock.volume은 이미 Toss 데이터로 업데이트된 상태
+                    charts.volumes[-1] = stock.volume
+                    if hasattr(stock, 'open') and stock.open: charts.opens[-1] = stock.open
+                    if hasattr(stock, 'high') and stock.high: charts.highs[-1] = stock.high
+                    if hasattr(stock, 'low') and stock.low: charts.lows[-1] = stock.low
+                except Exception as e:
+                    pass
+
             # 수급
             supply = await self._collector.get_supply_data(stock.code)
             
@@ -580,27 +657,63 @@ async def analyze_single_stock_by_code(
     code: str,
     capital: float = 50_000_000,
 ) -> Optional[Signal]:
-    """단일 종목 재분석"""
+    """단일 종목 재분석 (Toss Data Priority)"""
     async with SignalGenerator(capital=capital) as generator:
-        # 기본 상세 정보 조회
-        detail = await generator._collector.get_stock_detail(code)
-        if not detail:
-            return None
+        # 1. Toss 데이터 우선 조회
+        stock = None
+        try:
+            toss_detail = generator._toss_collector.get_full_stock_detail(code)
+            if toss_detail and toss_detail.get('name'):
+                price_info = toss_detail.get('price', {})
+                market_segment = toss_detail.get('market', 'KOSPI')
+                
+                # Market Correction (Toss might return 'KOSPI' or 'KOSDAQ' string)
+                if 'KOSDAQ' in market_segment.upper():
+                    market = 'KOSDAQ'
+                else:
+                    market = 'KOSPI'
 
-        # StockData 복원
-        stock = StockData(
-            code=code,
-            name=detail.get('name', '알 수 없는 종목'),
-            market='KOSPI',
-            sector='기타',
-            close=50000,
-            change_pct=0,
-            trading_value=100_000_000,
-            volume=0,
-            marcap=0
-        )
+                stock = StockData(
+                    code=code,
+                    name=toss_detail['name'],
+                    market=market,
+                    sector=toss_detail.get('sector', '기타'),
+                    close=int(price_info.get('current', 0)),
+                    change_pct=float(price_info.get('change_pct', 0)),
+                    trading_value=float(price_info.get('trading_value', 0)),
+                    volume=int(price_info.get('volume', 0)),
+                    marcap=int(price_info.get('market_cap', 0)),
+                    high_52w=int(price_info.get('high_52w', 0)),
+                    low_52w=int(price_info.get('low_52w', 0))
+                )
+                logger.info(f"[SingleAnalysis] Toss Data Loaded for {code}: {stock.name} ({stock.close})")
+        except Exception as e:
+            logger.warning(f"[SingleAnalysis] Toss Data Failed: {e}")
+
+        # 2. Fallback to KRX if Toss failed
+        if not stock:
+            detail = await generator._collector.get_stock_detail(code)
+            if not detail:
+                logger.error(f"[SingleAnalysis] Failed to fetch stock detail for {code}")
+                return None
+
+            # StockData 복원 (KRX Fallback)
+            # 시장 정보가 KOSDAQ일 수 있으므로 pykrx 등에서 확인 필요하나 
+            # KRXCollector._get_stock_name이 업데이트되었으므로 이름은 확보됨
+            stock = StockData(
+                code=code,
+                name=detail.get('name', '알 수 없는 종목'),
+                market='KOSDAQ' if detail.get('market') == 'KOSDAQ' else 'KOSPI', # KRXCollector need update to return market
+                sector='기타',
+                close=detail.get('close', 50000), # Fallback dummy
+                change_pct=0,
+                trading_value=100_000_000,
+                volume=0,
+                marcap=0
+            )
 
         # 재분석 실행
+        # (단일 분석 시점엔 장중일 수도 있으니 today 사용, 하지만 종가베팅은 보통 장 마감 후)
         new_signal = await generator._analyze_stock(stock, date.today())
 
         if new_signal:

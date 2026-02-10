@@ -406,22 +406,41 @@ class KRXCollector:
             return None
 
     def _get_stock_name(self, ticker: str) -> str:
-        """종목명 조회"""
+        """종목명 조회 (pykrx 사용)"""
+        try:
+            from pykrx import stock
+            name = stock.get_market_ticker_name(ticker)
+            if name:
+                return name
+        except Exception as e:
+            pass
+            
+        # Fallback: Common Major Stocks
         names = {
             '005930': '삼성전자', '000270': '기아', '035420': 'NAVER',
             '005380': '현대차', '015760': '한화사이언스',
             '068270': '셀트리온', '052190': '삼성에스디에스',
-            '011200': 'HMM', '096770': 'SK이노베이션', '066570': 'LG전자'
+            '011200': 'HMM', '096770': 'SK이노베이션', '066570': 'LG전자',
+            '056080': '유진로봇'
         }
         return names.get(ticker, '알 수 없는 종목')
 
     def _get_sector(self, ticker: str) -> str:
         """섹터 조회"""
+        try:
+            from pykrx import stock
+            # pykrx에는 섹터 조회 함수가 시점별로 다름 (get_market_fundamental_by_ticker 등 활용 가능하지만 느림)
+            # 여기서는 간단히 하드코딩 유지하거나 확장
+            pass
+        except:
+            pass
+            
         sectors = {
             '005930': '반도체', '000270': '자동차', '035420': '인터넷',
             '005380': '자동차', '015760': '반도체', '068270': '헬스케어',
             '052190': '반도체', '011200': '해운', '096770': '통신',
-            '066570': '2차전지'
+            '066570': '2차전지',
+            '056080': '로봇'
         }
         return sectors.get(ticker, '기타')
 
