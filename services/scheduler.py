@@ -137,12 +137,7 @@ def update_market_gate_interval(minutes: int):
 
 def start_scheduler():
     """스케줄러 시작 (백그라운드 스레드) - Singleton 보장"""
-    # 1. Config Check
-    if not app_config.SCHEDULER_ENABLED:
-        logger.info("Scheduler is disabled in configuration. Skipping start.")
-        return
-
-    # 2. Lock File Check (to prevent duplicates in Gunicorn workers)
+    # 1. Lock File Check FIRST (항상 먼저 실행 - 모든 워커에서 중복 로그 방지)
     global _scheduler_lock_file
     lock_file_path = os.path.join(os.path.dirname(__file__), 'scheduler.lock')
     try:
@@ -154,7 +149,12 @@ def start_scheduler():
         logger.info("Scheduler lock acquired. Starting scheduler service...")
     except IOError:
         # Lock acquisition failed, meaning another worker is running the scheduler
-        logger.info("Scheduler is already running in another worker. Skipping start.")
+        # Silent return - no log needed to avoid duplicates
+        return
+
+    # 2. Config Check (잠금 획득한 워커에서만 실행)
+    if not app_config.SCHEDULER_ENABLED:
+        logger.info("Scheduler is disabled in configuration. Skipping start.")
         return
 
     # 2. Schedule Jobs

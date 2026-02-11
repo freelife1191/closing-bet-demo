@@ -352,6 +352,22 @@ def reset_cache():
 
 
 
+# 전역 로거 설정 (중복 출력 방지)
+logger = logging.getLogger("init_data")
+logger.propagate = False
+logger.setLevel(logging.INFO)
+
+try:
+    _log_dir = os.path.join(BASE_DIR, 'logs')
+    if not os.path.exists(_log_dir):
+        os.makedirs(_log_dir)
+    _fh = logging.FileHandler(os.path.join(_log_dir, 'init_data.log'), encoding='utf-8')
+    _fh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    if not logger.handlers:
+        logger.addHandler(_fh)
+except Exception as e:
+    print(f"Logger setup failed: {e}")
+
 # 색상 코드 (터미널)
 class Colors:
     HEADER = '\033[95m'
@@ -365,17 +381,17 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 def log(message, level="INFO"):
-    # File logging
+    # File logging (propagate=False로 콘솔 중복 방지)
     if level == "ERROR":
-        logging.error(f"[init_data] {message}")
+        logger.error(message)
     elif level == "WARNING":
-        logging.warning(f"[init_data] {message}")
+        logger.warning(message)
     elif level == "SUCCESS":
-        logging.info(f"[init_data] ✅ {message}")
+        logger.info(f"✅ {message}")
     elif level == "DEBUG":
-        logging.debug(f"[init_data] {message}")
+        logger.debug(message)
     else:
-        logging.info(f"[init_data] {message}")
+        logger.info(message)
 
     # Console logging
     if level == "SUCCESS":
@@ -2153,6 +2169,12 @@ def update_kr_ai_analysis_prices(price_map):
         log(f"AI 분석 파일 가격 동기화 실패: {e}", "WARNING")
 
 if __name__ == '__main__':
+    # 로깅 핸들러 초기화 (중복 방지 - 라이브러리 로그용)
+    root = logging.getLogger()
+    if root.handlers:
+        for h in root.handlers[:]:
+            root.removeHandler(h)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     if len(sys.argv) > 1:
         cmd = sys.argv[1]
         if cmd == "init-prices":
