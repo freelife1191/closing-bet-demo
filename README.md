@@ -310,45 +310,50 @@ graph TD
 
 #### Flask API 구조 (Blueprint-based)
 
-시스템은 Flask Blueprint를 사용하여 모듈형 라우팅을 구현합니다:
+시스템은 Flask Blueprint를 사용하여 모듈형 라우팅과 관심사 분리를 구현합니다.
 
 ```python
 app/
-├── __init__.py          # 애플리케이션 팩토리
 ├── routes/
 │   ├── kr_market.py     # 한국 시장 관련 API (Blueprint: 'kr')
-│   └── common.py        # 공통 API (Blueprint: 'common')
-└── utils/               # 유틸리티 함수
+│   │   ├── get_kr_market_status  # 지수/환율/수급 현황
+│   │   ├── get_kr_signals        # VCP 및 외인매집 시그널 조회
+│   │   ├── get_kr_market_gate    # Market Gate 점수 및 상태
+│   │   ├── get_kr_realtime_prices # 전 종목 실시간 가격 통합 조회
+│   │   ├── get_jongga_v2_latest  # 최신 AI 종가베팅 결과 조회
+│   │   ├── get_performance       # 성과 분석 및 승률 통계
+│   │   ├── run_vcp_screener      # VCP 스크리너 백그라운드 실행
+│   │   └── run_jongga_v2_screener # 종가베팅 V2 스크리너 실행
+│   └── common.py        # 공통 및 유틸리티 API (Blueprint: 'common')
+│       ├── chat_with_ai          # 스마트머니봇 AI 챗봇 대화
+│       ├── run_screening         # 실시간 기술적 지표 스크리닝
+│       ├── check_admin           # 관리자 권한 및 설정 확인
+│       └── health_check          # 시스템 상태 및 가동 여부 체크
+└── utils/               # 공통 유틸리티 함수
 ```
-
-**한국 시장 API (`kr_market` Blueprint):**
-- `GET /market-status`: 한국 시장 현황 (KOSPI/KOSDAQ, 지수, 수급)
-- `GET /signals`: 최신 VCP 시그널 분석 결과 조회
-- `GET /jongga-v2/latest`: 최신 AI 종가베팅 분석 결과 조회
-- `GET /performance`: 종가베팅 전략의 누적 성과 및 승률 통계
-- `GET /realtime-prices`: 전 종목 실시간 가격 통합 조회 (Toss/YF 폴백)
-- `GET /market-gate`: Market Gate 상태 및 상세 스코어링 데이터
-- `POST /market-gate/update`: 시장 데이터 및 Market Gate 강제 동기화
-- `POST /vcp-screener`: VCP 시그널 생성 엔진 백그라운드 실행
-- `POST /jongga-v2/screener`: AI 종가베팅 엔진 백그라운드 실행
-
-**공통 API (`common` Blueprint):**
-- `POST /chat`: AI 투자 어드바이저(스마트머니봇)와 대화
-- `POST /screening`: 실시간 기술적 지표 기반 종목 스크리닝
-- `GET /admin/check`: 관리자 권한 확인 (설치 및 설정용)
-- `GET /health`: 시스템 상태 및 API 가동 여부 체크
 
 #### 서비스 레이어 (Services Layer)
 
-백그라운드에서 실행되는 핵심 서비스들:
+백그라운드에서 독립적인 생애주기를 가지며 비즈니스 로직을 수행하는 핵심 서비스들입니다.
 
 ```python
 services/
 ├── scheduler.py      # 자동화된 스케줄링 서비스
+│   ├── run_daily_closing_analysis # 장 마감 메인 체인 실행 (16:00)
+│   ├── run_jongga_v2_analysis     # AI 종가베팅 심층 분석 엔진
+│   ├── run_market_gate_sync       # 주기적 지표 동기화 (30분 단위)
+│   └── start_scheduler            # 백그라운드 스레드 및 중복 실행 방지
 ├── notifier.py       # 멀티채널 알림 서비스
+│   ├── NotificationService       # 핵심 알림 관리 클래스
+│   ├── format_jongga_message     # 등급별 메시지 포맷팅 로직
+│   └── send_all (Telegram/Discord/Slack/Email) # 전 채널 동시 발송
 ├── paper_trading.py  # 모의투자 서비스
-├── activity_logger.py # 활동 로깅
-└── usage_tracker.py   # 사용량 추적
+│   ├── PaperTradingService       # 자산/포트폴리오 관리 클래스
+│   ├── buy_stock / sell_stock    # 주문 체결 로직 및 DB 연동
+│   ├── get_portfolio_valuation   # Toss API 연동 실시간 자산 평가
+│   └── record_asset_history      # 누적 수익률 시계열 데이터 기록
+├── activity_logger.py # 시스템 주요 이벤트 및 활동 로깅
+└── usage_tracker.py   # API 호출 제한 및 토큰 사용량 모니터링
 ```
 
 **스케줄러 서비스 (`scheduler.py`):**
@@ -377,11 +382,26 @@ services/
 - **성과 분석**: 총 수익률, CAGR, MDD, 승률 계산
 
 #### Frontend (Next.js)
+
+Next.js 16의 App Router를 기반으로 한 반응형 웹 인터페이스입니다.
+
+```python
+frontend/src/app/
+├── dashboard/           # 메인 대시보드 (종가베팅/VCP/마켓게이트)
+├── chatbot/             # 스마트머니봇 AI 채팅 인터페이스
+├── components/          # 공통 UI 컴포넌트 라이브러리 (Atomic Design)
+│   ├── charts/          # 기술적 분석용 인터랙티브 차트
+│   ├── signals/         # 시그널 리스트 및 상세 뷰
+│   └── layout/          # 헤더, 사이드바, 푸터
+├── api/                 # 프론트엔드 전용 API 프록시 및 핸들러
+├── layout.tsx           # 전역 레이아웃 및 테마(Tailwind) 설정
+└── page.tsx             # 메인 랜딩 페이지 및 상태 관리
+```
+
 - **Framework**: Next.js 16 (App Router, TypeScript)
 - **UI Components**: React with Tailwind CSS
-- **Real-time Updates**: WebSocket connection for live signal updates
-- **Testing**: Vitest (단위 테스트, UI 테스트, 커버리지)
-- **Linting**: ESLint + TypeScript strict mode
+- **Real-time Updates**: WebSocket (or Interval Sync) for live updates
+- **Testing**: Vitest (Unit & UI Tests)
 
 #### Data & Storage (데이터 인프라)
 
