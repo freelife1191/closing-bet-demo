@@ -1,0 +1,793 @@
+{
+  "date": "2026-02-10",
+  "total_candidates": 6,
+  "filtered_count": 6,
+  "signals": [
+    {
+      "stock_code": "047040",
+      "stock_name": "대우건설",
+      "market": "KOSPI",
+      "sector": "기타",
+      "signal_date": "2026-02-10",
+      "signal_time": "2026-02-11T07:15:39.307491",
+      "grade": "A",
+      "score": {
+        "total": 14,
+        "news": 1,
+        "volume": 2,
+        "chart": 1,
+        "candle": 0,
+        "timing": 0,
+        "supply": 1,
+        "llm_reason": "시장 상황이 중립적인 가운데, 대우건설의 VCP 점수가 0점으로 변동성 수축 패턴이 완성되지 않았거나 관찰되지 않아 기술적 완성도가 매우 낮습니다. 이는 VCP 기준으로 볼 때 매력적인 저위험 진입 구간으로 판단하기 어렵게 만듭니다. 뉴스 측면에서는 '적자 리스크 선반영 및 체질 개선' 등 산업 전반의 긍정적 요소가 있으나, '성수4지구 재입찰 취소' 및 '서류 미비'와 같은 구체적인 악재성 뉴스가 동시 발생하여 긍정적 기대감을 상쇄합니다. 수급은 기관이 약 450억원을 순매수하며 주가 급등을 견인했지만, 외인은 약 40억원을 순매도했습니다. 현재 주가가 27.90% 급등하며 강한 모멘텀을 보이고 있으나, 가장 중요한 기술적 지표인 VCP의 미완성과 특정 악재 뉴스, 그리고 이미 상당 부분 상승한 가격을 고려할 때 신규 매수보다는 현 상황을 관망하며 추가적인 추이를 지켜보는 것이 합리적입니다.",
+        "ai_evaluation": {
+          "score": 1,
+          "action": "HOLD",
+          "confidence": 40,
+          "reason": "시장 상황이 중립적인 가운데, 대우건설의 VCP 점수가 0점으로 변동성 수축 패턴이 완성되지 않았거나 관찰되지 않아 기술적 완성도가 매우 낮습니다. 이는 VCP 기준으로 볼 때 매력적인 저위험 진입 구간으로 판단하기 어렵게 만듭니다. 뉴스 측면에서는 '적자 리스크 선반영 및 체질 개선' 등 산업 전반의 긍정적 요소가 있으나, '성수4지구 재입찰 취소' 및 '서류 미비'와 같은 구체적인 악재성 뉴스가 동시 발생하여 긍정적 기대감을 상쇄합니다. 수급은 기관이 약 450억원을 순매수하며 주가 급등을 견인했지만, 외인은 약 40억원을 순매도했습니다. 현재 주가가 27.90% 급등하며 강한 모멘텀을 보이고 있으나, 가장 중요한 기술적 지표인 VCP의 미완성과 특정 악재 뉴스, 그리고 이미 상당 부분 상승한 가격을 고려할 때 신규 매수보다는 현 상황을 관망하며 추가적인 추이를 지켜보는 것이 합리적입니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "checklist": {
+        "has_news": true,
+        "is_new_high": false,
+        "is_breakout": true,
+        "ma_aligned": true,
+        "supply_positive": true,
+        "news_sources": [
+          "머니투데이",
+          "서울경제",
+          "연합뉴스"
+        ]
+      },
+      "news_items": [
+        {
+          "title": "'적자 리스크' 선반영·체질 개선 본격화…건설업계는 성장 경쟁 중",
+          "source": "머니투데이",
+          "published_at": "2026-02-11T07:13:38.068789",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005316888&office_id=008&code=047040&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "성수4지구, 재입찰 공고 직후 취소…시공사 선정 안갯속",
+          "source": "서울경제",
+          "published_at": "2026-02-11T07:13:38.069249",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004589029&office_id=011&code=047040&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "성수4지구, 대우건설 서류 미비로 재입찰 공고했다가 취소(종합2보)",
+          "source": "연합뉴스",
+          "published_at": "2026-02-11T07:13:38.069767",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015898235&office_id=001&code=047040&page=&sm=",
+          "weight": 0.72
+        }
+      ],
+      "current_price": 7380,
+      "change_pct": 27.902946273830153,
+      "entry_price": 7380,
+      "stop_price": 7158.599999999999,
+      "target_price": 7749.0,
+      "r_value": 250000.0,
+      "position_size": 250000.0,
+      "quantity": 33,
+      "r_multiplier": 1.0,
+      "trading_value": 720149226940.0,
+      "volume_ratio": 10,
+      "status": "PENDING",
+      "created_at": "2026-02-11T07:15:39.307627",
+      "score_details": {
+        "news": 1,
+        "volume": 2,
+        "chart": 1,
+        "candle": 0,
+        "consolidation": 0,
+        "supply": 1,
+        "rise_pct": 27.902946273830153,
+        "volume_ratio": 10.83,
+        "foreign_net_buy": -4010908745,
+        "inst_net_buy": 44998893710,
+        "base_score": 5,
+        "bonus_score": 9,
+        "ai_evaluation": {
+          "score": 1,
+          "action": "HOLD",
+          "confidence": 40,
+          "reason": "시장 상황이 중립적인 가운데, 대우건설의 VCP 점수가 0점으로 변동성 수축 패턴이 완성되지 않았거나 관찰되지 않아 기술적 완성도가 매우 낮습니다. 이는 VCP 기준으로 볼 때 매력적인 저위험 진입 구간으로 판단하기 어렵게 만듭니다. 뉴스 측면에서는 '적자 리스크 선반영 및 체질 개선' 등 산업 전반의 긍정적 요소가 있으나, '성수4지구 재입찰 취소' 및 '서류 미비'와 같은 구체적인 악재성 뉴스가 동시 발생하여 긍정적 기대감을 상쇄합니다. 수급은 기관이 약 450억원을 순매수하며 주가 급등을 견인했지만, 외인은 약 40억원을 순매도했습니다. 현재 주가가 27.90% 급등하며 강한 모멘텀을 보이고 있으나, 가장 중요한 기술적 지표인 VCP의 미완성과 특정 악재 뉴스, 그리고 이미 상당 부분 상승한 가격을 고려할 때 신규 매수보다는 현 상황을 관망하며 추가적인 추이를 지켜보는 것이 합리적입니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "ai_evaluation": {
+        "score": 1,
+        "action": "HOLD",
+        "confidence": 40,
+        "reason": "시장 상황이 중립적인 가운데, 대우건설의 VCP 점수가 0점으로 변동성 수축 패턴이 완성되지 않았거나 관찰되지 않아 기술적 완성도가 매우 낮습니다. 이는 VCP 기준으로 볼 때 매력적인 저위험 진입 구간으로 판단하기 어렵게 만듭니다. 뉴스 측면에서는 '적자 리스크 선반영 및 체질 개선' 등 산업 전반의 긍정적 요소가 있으나, '성수4지구 재입찰 취소' 및 '서류 미비'와 같은 구체적인 악재성 뉴스가 동시 발생하여 긍정적 기대감을 상쇄합니다. 수급은 기관이 약 450억원을 순매수하며 주가 급등을 견인했지만, 외인은 약 40억원을 순매도했습니다. 현재 주가가 27.90% 급등하며 강한 모멘텀을 보이고 있으나, 가장 중요한 기술적 지표인 VCP의 미완성과 특정 악재 뉴스, 그리고 이미 상당 부분 상승한 가격을 고려할 때 신규 매수보다는 현 상황을 관망하며 추가적인 추이를 지켜보는 것이 합리적입니다.",
+        "model": "gemini-2.5-flash"
+      },
+      "themes": [
+        "건설",
+        "대우건설"
+      ]
+    },
+    {
+      "stock_code": "018880",
+      "stock_name": "한온시스템",
+      "market": "KOSPI",
+      "sector": "기타",
+      "signal_date": "2026-02-10",
+      "signal_time": "2026-02-11T07:15:39.531226",
+      "grade": "A",
+      "score": {
+        "total": 14,
+        "news": 2,
+        "volume": 2,
+        "chart": 1,
+        "candle": 0,
+        "timing": 0,
+        "supply": 1,
+        "llm_reason": "한온시스템 역시 VCP 점수가 0점으로 변동성 수축 패턴의 완성도가 미흡하여 VCP 기반의 저위험 진입 구간으로 평가하기 어렵습니다. 이는 VCP를 최우선으로 고려하는 투자 판단에서 중요한 제약 요소입니다. 뉴스는 주가 급등과 함께 '바닥 확인 기대감' 등 긍정적인 시장 심리를 반영하고 있으며, 이는 추가 상승에 대한 기대감을 높이는 호재성 재료로 판단됩니다. 수급 측면에서는 외인이 약 124억원을 순매수하며 주가 상승을 이끌었으나, 기관은 약 330억원을 순매도하여 수급 주체가 엇갈리는 모습입니다. 현재 20.25%의 강한 주가 상승 모멘텀이 있으나, 가장 중요한 VCP의 미완성이라는 기술적 제약과 기관의 매도세를 감안할 때 신규 매수보다는 현재의 모멘텀 지속 여부와 수급 개선을 확인하며 보수적으로 접근하는 것이 바람직합니다.",
+        "ai_evaluation": {
+          "score": 2,
+          "action": "HOLD",
+          "confidence": 55,
+          "reason": "한온시스템 역시 VCP 점수가 0점으로 변동성 수축 패턴의 완성도가 미흡하여 VCP 기반의 저위험 진입 구간으로 평가하기 어렵습니다. 이는 VCP를 최우선으로 고려하는 투자 판단에서 중요한 제약 요소입니다. 뉴스는 주가 급등과 함께 '바닥 확인 기대감' 등 긍정적인 시장 심리를 반영하고 있으며, 이는 추가 상승에 대한 기대감을 높이는 호재성 재료로 판단됩니다. 수급 측면에서는 외인이 약 124억원을 순매수하며 주가 상승을 이끌었으나, 기관은 약 330억원을 순매도하여 수급 주체가 엇갈리는 모습입니다. 현재 20.25%의 강한 주가 상승 모멘텀이 있으나, 가장 중요한 VCP의 미완성이라는 기술적 제약과 기관의 매도세를 감안할 때 신규 매수보다는 현재의 모멘텀 지속 여부와 수급 개선을 확인하며 보수적으로 접근하는 것이 바람직합니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "checklist": {
+        "has_news": true,
+        "is_new_high": false,
+        "is_breakout": true,
+        "ma_aligned": true,
+        "supply_positive": true,
+        "news_sources": [
+          "서울경제",
+          "뉴스1",
+          "SBS Biz"
+        ]
+      },
+      "news_items": [
+        {
+          "title": "주가 부진 벗어나나…한온시스템, 주가 17% 급등 [줍줍리포트]",
+          "source": "서울경제",
+          "published_at": "2026-02-11T07:13:38.609637",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004588861&office_id=011&code=018880&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "한온시스템, 코스피 거래량 1위 18% 급등…바닥 확인 기대감",
+          "source": "뉴스1",
+          "published_at": "2026-02-11T07:13:38.608811",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008766194&office_id=421&code=018880&page=&sm=",
+          "weight": 0.68
+        },
+        {
+          "title": "[애프터마켓 브리핑] NXT, 거래 종목 650개로 줄인다…거래량 급증...",
+          "source": "SBS Biz",
+          "published_at": "2026-02-11T07:13:38.608341",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0000491896&office_id=374&code=018880&page=&sm=",
+          "weight": 0.59
+        }
+      ],
+      "current_price": 4660,
+      "change_pct": 20.258064516129032,
+      "entry_price": 4660,
+      "stop_price": 4520.2,
+      "target_price": 4893.0,
+      "r_value": 250000.0,
+      "position_size": 250000.0,
+      "quantity": 53,
+      "r_multiplier": 1.0,
+      "trading_value": 988027392220.0,
+      "volume_ratio": 14,
+      "status": "PENDING",
+      "created_at": "2026-02-11T07:15:39.531368",
+      "score_details": {
+        "news": 2,
+        "volume": 2,
+        "chart": 1,
+        "candle": 0,
+        "consolidation": 0,
+        "supply": 1,
+        "rise_pct": 20.258064516129032,
+        "volume_ratio": 14.04,
+        "foreign_net_buy": 12409579039,
+        "inst_net_buy": -33168855469,
+        "base_score": 6,
+        "bonus_score": 8,
+        "ai_evaluation": {
+          "score": 2,
+          "action": "HOLD",
+          "confidence": 55,
+          "reason": "한온시스템 역시 VCP 점수가 0점으로 변동성 수축 패턴의 완성도가 미흡하여 VCP 기반의 저위험 진입 구간으로 평가하기 어렵습니다. 이는 VCP를 최우선으로 고려하는 투자 판단에서 중요한 제약 요소입니다. 뉴스는 주가 급등과 함께 '바닥 확인 기대감' 등 긍정적인 시장 심리를 반영하고 있으며, 이는 추가 상승에 대한 기대감을 높이는 호재성 재료로 판단됩니다. 수급 측면에서는 외인이 약 124억원을 순매수하며 주가 상승을 이끌었으나, 기관은 약 330억원을 순매도하여 수급 주체가 엇갈리는 모습입니다. 현재 20.25%의 강한 주가 상승 모멘텀이 있으나, 가장 중요한 VCP의 미완성이라는 기술적 제약과 기관의 매도세를 감안할 때 신규 매수보다는 현재의 모멘텀 지속 여부와 수급 개선을 확인하며 보수적으로 접근하는 것이 바람직합니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "ai_evaluation": {
+        "score": 2,
+        "action": "HOLD",
+        "confidence": 55,
+        "reason": "한온시스템 역시 VCP 점수가 0점으로 변동성 수축 패턴의 완성도가 미흡하여 VCP 기반의 저위험 진입 구간으로 평가하기 어렵습니다. 이는 VCP를 최우선으로 고려하는 투자 판단에서 중요한 제약 요소입니다. 뉴스는 주가 급등과 함께 '바닥 확인 기대감' 등 긍정적인 시장 심리를 반영하고 있으며, 이는 추가 상승에 대한 기대감을 높이는 호재성 재료로 판단됩니다. 수급 측면에서는 외인이 약 124억원을 순매수하며 주가 상승을 이끌었으나, 기관은 약 330억원을 순매도하여 수급 주체가 엇갈리는 모습입니다. 현재 20.25%의 강한 주가 상승 모멘텀이 있으나, 가장 중요한 VCP의 미완성이라는 기술적 제약과 기관의 매도세를 감안할 때 신규 매수보다는 현재의 모멘텀 지속 여부와 수급 개선을 확인하며 보수적으로 접근하는 것이 바람직합니다.",
+        "model": "gemini-2.5-flash"
+      },
+      "themes": [
+        "자동차부품",
+        "한온시스템"
+      ]
+    },
+    {
+      "stock_code": "000120",
+      "stock_name": "CJ대한통운",
+      "market": "KOSPI",
+      "sector": "기타",
+      "signal_date": "2026-02-10",
+      "signal_time": "2026-02-11T07:15:39.769132",
+      "grade": "B",
+      "score": {
+        "total": 13,
+        "news": 3,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "timing": 1,
+        "supply": 1,
+        "llm_reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 그러나 새벽배송 규제 완화 가능성과 CJ대한통운의 '오네' 서비스 확대는 장기적인 성장 동력으로 작용할 강력한 호재(뉴스 3점)입니다. 기관의 대규모 순매수(5일합 529억원)가 유입되며 긍정적인 추세가 확인됩니다. 이미 18.27%의 큰 폭 상승이 있었으나, 구조적인 시장 변화 가능성을 고려할 때 추가적인 상승 여력이 있다고 판단됩니다. 단기 급등에 따른 조정 가능성에는 유의해야 합니다.",
+        "ai_evaluation": {
+          "score": 3,
+          "action": "BUY",
+          "confidence": 75,
+          "reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 그러나 새벽배송 규제 완화 가능성과 CJ대한통운의 '오네' 서비스 확대는 장기적인 성장 동력으로 작용할 강력한 호재(뉴스 3점)입니다. 기관의 대규모 순매수(5일합 529억원)가 유입되며 긍정적인 추세가 확인됩니다. 이미 18.27%의 큰 폭 상승이 있었으나, 구조적인 시장 변화 가능성을 고려할 때 추가적인 상승 여력이 있다고 판단됩니다. 단기 급등에 따른 조정 가능성에는 유의해야 합니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "checklist": {
+        "has_news": true,
+        "is_new_high": false,
+        "is_breakout": true,
+        "ma_aligned": true,
+        "supply_positive": true,
+        "news_sources": [
+          "서울경제",
+          "머니투데이",
+          "뉴스1"
+        ]
+      },
+      "news_items": [
+        {
+          "title": "새벽배송 14년 족쇄 풀리나...CJ대한통운·한진 ‘풀악셀’ [코주부]",
+          "source": "서울경제",
+          "published_at": "2026-02-11T07:13:39.045455",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004589089&office_id=011&code=000120&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "[우보세]KT, AI 시대 존재감 증명할 때",
+          "source": "머니투데이",
+          "published_at": "2026-02-11T07:13:39.046093",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005316857&office_id=008&code=000120&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "\"일주일 내내 '오네'\"…CJ대한통운, 탈쿠팡·마트 새벽배송發 '호재'...",
+          "source": "뉴스1",
+          "published_at": "2026-02-11T07:13:39.045747",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008767365&office_id=421&code=000120&page=&sm=",
+          "weight": 0.68
+        }
+      ],
+      "current_price": 138500,
+      "change_pct": 18.274978650725878,
+      "entry_price": 138500,
+      "stop_price": 134345.0,
+      "target_price": 145425.0,
+      "r_value": 250000.0,
+      "position_size": 125000.0,
+      "quantity": 0,
+      "r_multiplier": 0.5,
+      "trading_value": 124462379300.0,
+      "volume_ratio": 9,
+      "status": "PENDING",
+      "created_at": "2026-02-11T07:15:39.769261",
+      "score_details": {
+        "news": 3,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "consolidation": 1,
+        "supply": 1,
+        "rise_pct": 18.274978650725878,
+        "volume_ratio": 9.35,
+        "foreign_net_buy": -8644404150,
+        "inst_net_buy": 52926032850,
+        "base_score": 7,
+        "bonus_score": 6,
+        "ai_evaluation": {
+          "score": 3,
+          "action": "BUY",
+          "confidence": 75,
+          "reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 그러나 새벽배송 규제 완화 가능성과 CJ대한통운의 '오네' 서비스 확대는 장기적인 성장 동력으로 작용할 강력한 호재(뉴스 3점)입니다. 기관의 대규모 순매수(5일합 529억원)가 유입되며 긍정적인 추세가 확인됩니다. 이미 18.27%의 큰 폭 상승이 있었으나, 구조적인 시장 변화 가능성을 고려할 때 추가적인 상승 여력이 있다고 판단됩니다. 단기 급등에 따른 조정 가능성에는 유의해야 합니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "ai_evaluation": {
+        "score": 3,
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 그러나 새벽배송 규제 완화 가능성과 CJ대한통운의 '오네' 서비스 확대는 장기적인 성장 동력으로 작용할 강력한 호재(뉴스 3점)입니다. 기관의 대규모 순매수(5일합 529억원)가 유입되며 긍정적인 추세가 확인됩니다. 이미 18.27%의 큰 폭 상승이 있었으나, 구조적인 시장 변화 가능성을 고려할 때 추가적인 상승 여력이 있다고 판단됩니다. 단기 급등에 따른 조정 가능성에는 유의해야 합니다.",
+        "model": "gemini-2.5-flash"
+      },
+      "themes": [
+        "항공화물운송과물류",
+        "CJ대한통운"
+      ]
+    },
+    {
+      "stock_code": "023530",
+      "stock_name": "롯데쇼핑",
+      "market": "KOSPI",
+      "sector": "기타",
+      "signal_date": "2026-02-10",
+      "signal_time": "2026-02-11T07:15:40.009456",
+      "grade": "B",
+      "score": {
+        "total": 11,
+        "news": 1,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "timing": 0,
+        "supply": 2,
+        "llm_reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 제공된 뉴스 중 롯데쇼핑에 대한 직접적인 강력한 호재는 부재하며, 새벽배송 관련 뉴스는 CJ대한통운에 해당하는 내용입니다. 일자리 감소 등은 중립적이거나 부정적인 소식입니다(뉴스 1점). 다만, 외인과 기관의 대규모 동반 순매수(외인 5일합 123억, 기관 5일합 393억)가 유입되며 단기적인 주가 상승(16.39%)을 견인했습니다. 명확한 펀더멘탈 호재 없이 수급만으로 급등한 종목은 추격 매수 시 위험 부담이 크므로, 현재는 관망하며 추가적인 정보나 시장 상황 변화를 지켜보는 것이 현명하다고 판단됩니다.",
+        "ai_evaluation": {
+          "score": 1,
+          "action": "HOLD",
+          "confidence": 60,
+          "reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 제공된 뉴스 중 롯데쇼핑에 대한 직접적인 강력한 호재는 부재하며, 새벽배송 관련 뉴스는 CJ대한통운에 해당하는 내용입니다. 일자리 감소 등은 중립적이거나 부정적인 소식입니다(뉴스 1점). 다만, 외인과 기관의 대규모 동반 순매수(외인 5일합 123억, 기관 5일합 393억)가 유입되며 단기적인 주가 상승(16.39%)을 견인했습니다. 명확한 펀더멘탈 호재 없이 수급만으로 급등한 종목은 추격 매수 시 위험 부담이 크므로, 현재는 관망하며 추가적인 정보나 시장 상황 변화를 지켜보는 것이 현명하다고 판단됩니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "checklist": {
+        "has_news": true,
+        "is_new_high": false,
+        "is_breakout": true,
+        "ma_aligned": true,
+        "supply_positive": true,
+        "news_sources": [
+          "매일경제",
+          "서울경제",
+          "국제신문"
+        ]
+      },
+      "news_items": [
+        {
+          "title": "500대 기업 일자리, 작년에 6700개 감소…‘이 회사’는 최다 증...",
+          "source": "매일경제",
+          "published_at": "2026-02-11T07:13:39.504131",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005635562&office_id=009&code=023530&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "새벽배송 14년 족쇄 풀리나...CJ대한통운·한진 ‘풀악셀’ [코주부]",
+          "source": "서울경제",
+          "published_at": "2026-02-11T07:13:39.502908",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004589089&office_id=011&code=023530&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "지난해 국내 500대 기업 일자리 6700개 줄어",
+          "source": "국제신문",
+          "published_at": "2026-02-11T07:13:39.502370",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0000135074&office_id=658&code=023530&page=&sm=",
+          "weight": 0.59
+        }
+      ],
+      "current_price": 115000,
+      "change_pct": 16.39676113360324,
+      "entry_price": 115000,
+      "stop_price": 111550.0,
+      "target_price": 120750.0,
+      "r_value": 250000.0,
+      "position_size": 125000.0,
+      "quantity": 1,
+      "r_multiplier": 0.5,
+      "trading_value": 107335432500.0,
+      "volume_ratio": 7,
+      "status": "PENDING",
+      "created_at": "2026-02-11T07:15:40.009602",
+      "score_details": {
+        "news": 1,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "consolidation": 0,
+        "supply": 2,
+        "rise_pct": 16.39676113360324,
+        "volume_ratio": 7.03,
+        "foreign_net_buy": 12388248200,
+        "inst_net_buy": 39367118400,
+        "base_score": 5,
+        "bonus_score": 6,
+        "ai_evaluation": {
+          "score": 1,
+          "action": "HOLD",
+          "confidence": 60,
+          "reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 제공된 뉴스 중 롯데쇼핑에 대한 직접적인 강력한 호재는 부재하며, 새벽배송 관련 뉴스는 CJ대한통운에 해당하는 내용입니다. 일자리 감소 등은 중립적이거나 부정적인 소식입니다(뉴스 1점). 다만, 외인과 기관의 대규모 동반 순매수(외인 5일합 123억, 기관 5일합 393억)가 유입되며 단기적인 주가 상승(16.39%)을 견인했습니다. 명확한 펀더멘탈 호재 없이 수급만으로 급등한 종목은 추격 매수 시 위험 부담이 크므로, 현재는 관망하며 추가적인 정보나 시장 상황 변화를 지켜보는 것이 현명하다고 판단됩니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "ai_evaluation": {
+        "score": 1,
+        "action": "HOLD",
+        "confidence": 60,
+        "reason": "VCP 점수 0점으로 변동성 수축 패턴의 기술적 완성도는 낮아 VCP 기반의 저위험 진입 구간은 아닙니다. 제공된 뉴스 중 롯데쇼핑에 대한 직접적인 강력한 호재는 부재하며, 새벽배송 관련 뉴스는 CJ대한통운에 해당하는 내용입니다. 일자리 감소 등은 중립적이거나 부정적인 소식입니다(뉴스 1점). 다만, 외인과 기관의 대규모 동반 순매수(외인 5일합 123억, 기관 5일합 393억)가 유입되며 단기적인 주가 상승(16.39%)을 견인했습니다. 명확한 펀더멘탈 호재 없이 수급만으로 급등한 종목은 추격 매수 시 위험 부담이 크므로, 현재는 관망하며 추가적인 정보나 시장 상황 변화를 지켜보는 것이 현명하다고 판단됩니다.",
+        "model": "gemini-2.5-flash"
+      },
+      "themes": [
+        "백화점과일반상점",
+        "롯데쇼핑"
+      ]
+    },
+    {
+      "stock_code": "139480",
+      "stock_name": "이마트",
+      "market": "KOSPI",
+      "sector": "기타",
+      "signal_date": "2026-02-10",
+      "signal_time": "2026-02-11T07:15:40.246095",
+      "grade": "B",
+      "score": {
+        "total": 9,
+        "news": 1,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "timing": 0,
+        "supply": 1,
+        "llm_reason": "VCP 점수가 0으로 기술적 완성도가 매우 낮아 VCP(변동성 수축 패턴) 매매 전략에 부합하지 않습니다. 새벽배송 규제 완화 가능성 등 일부 긍정적 뉴스도 있으나, 일자리 감소 추세 등 중립적/부정적 뉴스도 혼재되어 있습니다. 수급 또한 외인 순매도, 기관 순매수로 혼조세를 보여, VCP 패턴 부재와 더불어 명확한 매수 신호가 부족합니다. 현재 높은 등락률을 보였으나, VCP 조건 미충족으로 신규 매수보다는 보유자의 관망이 적절합니다.",
+        "ai_evaluation": {
+          "score": 1,
+          "action": "HOLD",
+          "confidence": 40,
+          "reason": "VCP 점수가 0으로 기술적 완성도가 매우 낮아 VCP(변동성 수축 패턴) 매매 전략에 부합하지 않습니다. 새벽배송 규제 완화 가능성 등 일부 긍정적 뉴스도 있으나, 일자리 감소 추세 등 중립적/부정적 뉴스도 혼재되어 있습니다. 수급 또한 외인 순매도, 기관 순매수로 혼조세를 보여, VCP 패턴 부재와 더불어 명확한 매수 신호가 부족합니다. 현재 높은 등락률을 보였으나, VCP 조건 미충족으로 신규 매수보다는 보유자의 관망이 적절합니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "checklist": {
+        "has_news": true,
+        "is_new_high": false,
+        "is_breakout": true,
+        "ma_aligned": true,
+        "supply_positive": true,
+        "news_sources": [
+          "매일경제",
+          "서울경제",
+          "국제신문"
+        ]
+      },
+      "news_items": [
+        {
+          "title": "500대 기업 일자리, 작년에 6700개 감소…‘이 회사’는 최다 증...",
+          "source": "매일경제",
+          "published_at": "2026-02-11T07:13:39.948340",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005635562&office_id=009&code=139480&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "새벽배송 14년 족쇄 풀리나...CJ대한통운·한진 ‘풀악셀’ [코주부]",
+          "source": "서울경제",
+          "published_at": "2026-02-11T07:13:39.947149",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004589089&office_id=011&code=139480&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "지난해 국내 500대 기업 일자리 6700개 줄어",
+          "source": "국제신문",
+          "published_at": "2026-02-11T07:13:39.946712",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0000135074&office_id=658&code=139480&page=&sm=",
+          "weight": 0.59
+        }
+      ],
+      "current_price": 121300,
+      "change_pct": 12.942271880819368,
+      "entry_price": 121300,
+      "stop_price": 117661.0,
+      "target_price": 127365.0,
+      "r_value": 250000.0,
+      "position_size": 125000.0,
+      "quantity": 1,
+      "r_multiplier": 0.5,
+      "trading_value": 344643854800.0,
+      "volume_ratio": 8,
+      "status": "PENDING",
+      "created_at": "2026-02-11T07:15:40.246235",
+      "score_details": {
+        "news": 1,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "consolidation": 0,
+        "supply": 1,
+        "rise_pct": 12.942271880819368,
+        "volume_ratio": 8.53,
+        "foreign_net_buy": -31108288350,
+        "inst_net_buy": 10763161900,
+        "base_score": 4,
+        "bonus_score": 5,
+        "ai_evaluation": {
+          "score": 1,
+          "action": "HOLD",
+          "confidence": 40,
+          "reason": "VCP 점수가 0으로 기술적 완성도가 매우 낮아 VCP(변동성 수축 패턴) 매매 전략에 부합하지 않습니다. 새벽배송 규제 완화 가능성 등 일부 긍정적 뉴스도 있으나, 일자리 감소 추세 등 중립적/부정적 뉴스도 혼재되어 있습니다. 수급 또한 외인 순매도, 기관 순매수로 혼조세를 보여, VCP 패턴 부재와 더불어 명확한 매수 신호가 부족합니다. 현재 높은 등락률을 보였으나, VCP 조건 미충족으로 신규 매수보다는 보유자의 관망이 적절합니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "ai_evaluation": {
+        "score": 1,
+        "action": "HOLD",
+        "confidence": 40,
+        "reason": "VCP 점수가 0으로 기술적 완성도가 매우 낮아 VCP(변동성 수축 패턴) 매매 전략에 부합하지 않습니다. 새벽배송 규제 완화 가능성 등 일부 긍정적 뉴스도 있으나, 일자리 감소 추세 등 중립적/부정적 뉴스도 혼재되어 있습니다. 수급 또한 외인 순매도, 기관 순매수로 혼조세를 보여, VCP 패턴 부재와 더불어 명확한 매수 신호가 부족합니다. 현재 높은 등락률을 보였으나, VCP 조건 미충족으로 신규 매수보다는 보유자의 관망이 적절합니다.",
+        "model": "gemini-2.5-flash"
+      },
+      "themes": [
+        "백화점과일반상점",
+        "이마트"
+      ]
+    },
+    {
+      "stock_code": "267270",
+      "stock_name": "HD건설기계",
+      "market": "KOSPI",
+      "sector": "기타",
+      "signal_date": "2026-02-10",
+      "signal_time": "2026-02-11T07:15:40.512785",
+      "grade": "B",
+      "score": {
+        "total": 7,
+        "news": 2,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "timing": 0,
+        "supply": 1,
+        "llm_reason": "VCP 점수가 0으로 기술적 완성도가 낮아 VCP(변동성 수축 패턴) 매매 전략에 적합하지 않습니다. 'AI 굴착기'를 통한 신흥시장 진출 및 광물 수요 증가는 강력한 호재로 평가되나, 핵심 평가 요소인 VCP 조건이 미충족되었습니다. 수급은 외인 순매도, 기관 순매수가 혼재되어 명확한 방향성이 보이지 않습니다. 긍정적 뉴스에도 불구하고 VCP 조건 미충족으로 인해 신규 매수보다는 시장 상황 및 VCP 패턴 형성 여부를 추가로 관망하는 것이 좋습니다.",
+        "ai_evaluation": {
+          "score": 2,
+          "action": "HOLD",
+          "confidence": 50,
+          "reason": "VCP 점수가 0으로 기술적 완성도가 낮아 VCP(변동성 수축 패턴) 매매 전략에 적합하지 않습니다. 'AI 굴착기'를 통한 신흥시장 진출 및 광물 수요 증가는 강력한 호재로 평가되나, 핵심 평가 요소인 VCP 조건이 미충족되었습니다. 수급은 외인 순매도, 기관 순매수가 혼재되어 명확한 방향성이 보이지 않습니다. 긍정적 뉴스에도 불구하고 VCP 조건 미충족으로 인해 신규 매수보다는 시장 상황 및 VCP 패턴 형성 여부를 추가로 관망하는 것이 좋습니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "checklist": {
+        "has_news": true,
+        "is_new_high": false,
+        "is_breakout": false,
+        "ma_aligned": true,
+        "supply_positive": true,
+        "news_sources": [
+          "매일경제",
+          "머니투데이",
+          "헤럴드경제"
+        ]
+      },
+      "news_items": [
+        {
+          "title": "All Star 30대 기업, 전 구간 순위 변화 … 존경받는 기업 패...",
+          "source": "매일경제",
+          "published_at": "2026-02-11T07:13:40.398076",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005634911&office_id=009&code=267270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "국민연금 '주요주주' 상장사 264곳…합병·리밸런스에 8곳 줄어",
+          "source": "머니투데이",
+          "published_at": "2026-02-11T07:13:40.397266",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005316736&office_id=008&code=267270&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "광물 수요에 날개 달았다…‘AI 굴착기’ 타고 신흥시장 접수 [그 회사...",
+          "source": "헤럴드경제",
+          "published_at": "2026-02-11T07:13:40.397789",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0002598723&office_id=016&code=267270&page=&sm=",
+          "weight": 0.68
+        }
+      ],
+      "current_price": 130600,
+      "change_pct": 5.748987854251012,
+      "entry_price": 130600,
+      "stop_price": 126682.0,
+      "target_price": 137130.0,
+      "r_value": 250000.0,
+      "position_size": 125000.0,
+      "quantity": 0,
+      "r_multiplier": 0.5,
+      "trading_value": 195367675550.0,
+      "volume_ratio": 2,
+      "status": "PENDING",
+      "created_at": "2026-02-11T07:15:40.512912",
+      "score_details": {
+        "news": 2,
+        "volume": 1,
+        "chart": 1,
+        "candle": 0,
+        "consolidation": 0,
+        "supply": 1,
+        "rise_pct": 5.748987854251012,
+        "volume_ratio": 2.34,
+        "foreign_net_buy": -57157347050,
+        "inst_net_buy": 37913416250,
+        "base_score": 5,
+        "bonus_score": 2,
+        "ai_evaluation": {
+          "score": 2,
+          "action": "HOLD",
+          "confidence": 50,
+          "reason": "VCP 점수가 0으로 기술적 완성도가 낮아 VCP(변동성 수축 패턴) 매매 전략에 적합하지 않습니다. 'AI 굴착기'를 통한 신흥시장 진출 및 광물 수요 증가는 강력한 호재로 평가되나, 핵심 평가 요소인 VCP 조건이 미충족되었습니다. 수급은 외인 순매도, 기관 순매수가 혼재되어 명확한 방향성이 보이지 않습니다. 긍정적 뉴스에도 불구하고 VCP 조건 미충족으로 인해 신규 매수보다는 시장 상황 및 VCP 패턴 형성 여부를 추가로 관망하는 것이 좋습니다.",
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "ai_evaluation": {
+        "score": 2,
+        "action": "HOLD",
+        "confidence": 50,
+        "reason": "VCP 점수가 0으로 기술적 완성도가 낮아 VCP(변동성 수축 패턴) 매매 전략에 적합하지 않습니다. 'AI 굴착기'를 통한 신흥시장 진출 및 광물 수요 증가는 강력한 호재로 평가되나, 핵심 평가 요소인 VCP 조건이 미충족되었습니다. 수급은 외인 순매도, 기관 순매수가 혼재되어 명확한 방향성이 보이지 않습니다. 긍정적 뉴스에도 불구하고 VCP 조건 미충족으로 인해 신규 매수보다는 시장 상황 및 VCP 패턴 형성 여부를 추가로 관망하는 것이 좋습니다.",
+        "model": "gemini-2.5-flash"
+      },
+      "themes": [
+        "기계",
+        "HD건설기계"
+      ]
+    }
+  ],
+  "by_grade": {
+    "S": 0,
+    "A": 2,
+    "B": 4,
+    "C": 0,
+    "D": 0
+  },
+  "by_market": {
+    "KOSPI": 6
+  },
+  "processing_time_ms": 221325.51503181458,
+  "market_status": {
+    "timestamp": "2026-02-11T07:13:45.270015",
+    "kospi_close": 5301.69,
+    "kospi_change": 0.07,
+    "kosdaq_close": 1115.2,
+    "kosdaq_change_pct": -1.1,
+    "usd_krw": 1456.969970703125,
+    "total_score": 60,
+    "label": "Neutral",
+    "is_gate_open": true,
+    "gate_reason": "시장 양호 (Technical)",
+    "status": "중립 (Neutral)",
+    "color": "YELLOW",
+    "dataset_date": "2026-02-10",
+    "details": {
+      "tech_score": 60,
+      "rs_score": 10,
+      "trend_score": 25,
+      "rsi_score": 25,
+      "macd_score": 0,
+      "vol_score": 0,
+      "rsi_val": 63.1,
+      "macd_val": 3475.79,
+      "ma20": 73953.81230313031,
+      "ma60": 66416.47967442306,
+      "macro_status": "WARNING"
+    },
+    "indices": {
+      "sp500": {
+        "value": 6941.81005859375,
+        "change_pct": -0.33
+      },
+      "nasdaq": {
+        "value": 23102.474609375,
+        "change_pct": -0.59
+      },
+      "kospi": {
+        "value": 5301.69,
+        "change_pct": 0.07
+      },
+      "kosdaq": {
+        "value": 1115.2,
+        "change_pct": -1.1
+      }
+    },
+    "commodities": {
+      "us_gold": {
+        "value": 5047.89990234375,
+        "change_pct": -0.059395356431591946
+      },
+      "us_silver": {
+        "value": 80.58000183105469,
+        "change_pct": -1.8095419072360852
+      },
+      "gold": {
+        "value": 33260.0,
+        "change_pct": -0.2997601918465228
+      },
+      "silver": {
+        "value": 13575.0,
+        "change_pct": -0.1471129091577786
+      }
+    },
+    "crypto": {
+      "btc": {
+        "value": 68591.0,
+        "change_pct": -2.18
+      },
+      "eth": {
+        "value": 2006.9925537109375,
+        "change_pct": -4.59
+      },
+      "xrp": {
+        "value": 1.3950550556182861,
+        "change_pct": -2.86
+      }
+    },
+    "sectors": [
+      {
+        "name": "반도체",
+        "change_pct": -2.11,
+        "signal": "Bearish"
+      },
+      {
+        "name": "2차전지",
+        "change_pct": -0.38,
+        "signal": "Neutral"
+      },
+      {
+        "name": "자동차",
+        "change_pct": 3.11,
+        "signal": "Bullish"
+      },
+      {
+        "name": "헬스케어",
+        "change_pct": 0.99,
+        "signal": "Bullish"
+      },
+      {
+        "name": "IT",
+        "change_pct": 2.07,
+        "signal": "Bullish"
+      },
+      {
+        "name": "은행",
+        "change_pct": -1.19,
+        "signal": "Bearish"
+      },
+      {
+        "name": "철강",
+        "change_pct": -0.46,
+        "signal": "Neutral"
+      },
+      {
+        "name": "증권",
+        "change_pct": 2.49,
+        "signal": "Bullish"
+      },
+      {
+        "name": "조선",
+        "change_pct": -0.78,
+        "signal": "Bearish"
+      },
+      {
+        "name": "에너지",
+        "change_pct": 0.4,
+        "signal": "Neutral"
+      },
+      {
+        "name": "KOSPI 200",
+        "change_pct": 0.07,
+        "signal": "Neutral"
+      }
+    ]
+  },
+  "market_summary": "",
+  "trending_themes": [],
+  "scanned_count": 300,
+  "updated_at": "2026-02-11T07:15:40.513450"
+}

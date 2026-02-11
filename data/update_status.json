@@ -1,0 +1,31 @@
+{
+  "isRunning": false,
+  "startTime": "2026-02-11T10:40:41.255232",
+  "currentItem": null,
+  "items": [
+    {
+      "name": "Daily Prices",
+      "status": "done"
+    },
+    {
+      "name": "Institutional Trend",
+      "status": "done"
+    },
+    {
+      "name": "VCP Signals",
+      "status": "done"
+    },
+    {
+      "name": "AI Analysis",
+      "status": "done"
+    },
+    {
+      "name": "AI Jongga V2",
+      "status": "done"
+    },
+    {
+      "name": "Market Gate",
+      "status": "done"
+    }
+  ]
+}

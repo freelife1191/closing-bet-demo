@@ -1,0 +1,395 @@
+{
+  "signals": [
+    {
+      "ticker": "068270",
+      "name": "셀트리온",
+      "price": 238000,
+      "change_pct": -2.26,
+      "news": [
+        {
+          "title": "바이오시밀러 임상 3상 간소화 본격화....셀트리온, CT-P55 임...",
+          "source": "한국경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005249759&office_id=015&code=068270&page=&sm=",
+          "weight": 0.81
+        },
+        {
+          "title": "코스피·코스닥 '하락세'...美 고용보고서 앞두고 '경계감'",
+          "source": "한국경제TV",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0001241441&office_id=215&code=068270&page=&sm=",
+          "weight": 0.81
+        },
+        {
+          "title": "셀트리온, 건선 치료제 임상 3상 간소화 계획 승인 소식에 5%↑…5...",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006217243&office_id=018&code=068270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "셀트리온, ‘CT-P55’ 임상 3상 간소화 계획 유럽서 승인",
+          "source": "연합뉴스",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015899192&office_id=001&code=068270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "셀트리온, 'CT-P55' 임상3상 변경승인…\"개발 속도↑·비용↓\"",
+          "source": "머니투데이",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005316931&office_id=008&code=068270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "코스피, 5300선 회복…코스닥도 상승 전환",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006217271&office_id=018&code=068270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "코스피, 5300선 아래로…연휴 앞두고 숨고르기",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006217204&office_id=018&code=068270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "코스피, 美 고용보고서 앞두고 하락해 5,260대…코스닥도 내려(종합...",
+          "source": "연합뉴스",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015899312&office_id=001&code=068270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "코스피, 5300 밑으로…미국 경제 지표 발표 앞두고 경계감↑",
+          "source": "머니투데이",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005316981&office_id=008&code=068270&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "셀트리온, 'CT-P55' 임상 3상 IND 변경 승인",
+          "source": "뉴스1",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008767640&office_id=421&code=068270&page=&sm=",
+          "weight": 0.72
+        }
+      ],
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 90,
+        "reason": "[핵심 투자 포인트]\n• 원자재 가격 하락에 따른 마진율 개선 (OPM +3%p 예상)\n• 신규 수주 공시로 인한 향후 3년치 일감 확보\n\n[리스크 요인]\n• 환율 변동성에 따른 단기 환차손 가능성\n\n[종합 의견]\n셀트리온의 최근 주가 흐름은 견조하며, 이는 원자재 가격 하락에 따른 마진율 개선 (OPM +3%p 예상) 때문으로 분석됩니다. 기술적 분석상으로도 VCP 패턴 완성 단계에 진입하여 변동성이 축소되고 있으며, 조만간 상방 돌파 시도가 예상됩니다. 다만 환율 변동성에 따른 단기 환차손 가능성 점은 유의할 필요가 있어, 분할 매수 전략을 권장합니다.",
+        "news_sentiment": "positive"
+      },
+      "gpt_recommendation": {
+        "action": "BUY",
+        "confidence": 73,
+        "reason": "VCP 패턴 및 외인 매집 추이 확인",
+        "target_price": 273700.0,
+        "stop_loss": 226100.0
+      },
+      "final_recommendation": {
+        "action": "BUY",
+        "confidence": 81.5,
+        "reason": "[핵심 투자 포인트]\n• 원자재 가격 하락에 따른 마진율 개선 (OPM +3%p 예상)\n• 신규 수주 공시로 인한 향후 3년치 일감 확보\n\n[리스크 요인]\n• 환율 변동성에 따른 단기 환차손 가능성\n\n[종합 의견]\n셀트리온의 최근 주가 흐름은 견조하며, 이는 원자재 가격 하락에 따른 마진율 개선 (OPM +3%p 예상) 때문으로 분석됩니다. 기술적 분석상으로도 VCP 패턴 완성 단계에 진입하여 변동성이 축소되고 있으며, 조만간 상방 돌파 시도가 예상됩니다. 다만 환율 변동성에 따른 단기 환차손 가능성 점은 유의할 필요가 있어, 분할 매수 전략을 권장합니다. / VCP 패턴 및 외인 매집 추이 확인"
+      },
+      "analyzed_at": "2026-02-11T10:42:18.636356"
+    },
+    {
+      "ticker": "009830",
+      "name": "한화솔루션",
+      "price": 48300,
+      "change_pct": -2.72,
+      "news": [
+        {
+          "title": "이충훈 삼성증권 부사장 \"기술·해외기업이 올해 IPO 시장 주도\" [자...",
+          "source": "한국경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005249821&office_id=015&code=009830&page=&sm=",
+          "weight": 0.81
+        },
+        {
+          "title": "한화그룹, 설 명절 앞두고 1790억 원 대금 조기 지급",
+          "source": "서울경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004588671&office_id=011&code=009830&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "한화그룹, 명절 앞두고 약 1790억원 협력사 대금 조기 지급",
+          "source": "머니투데이",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005316336&office_id=008&code=009830&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "일주일 만에 2만원에서 4만원으로 '껑충'…머스크 언급에 기대감 커진....",
+          "source": "아시아경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005720148&office_id=277&code=009830&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "한화그룹 계열사, 협력사 대금 조기 지급",
+          "source": "파이낸셜뉴스",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005476606&office_id=014&code=009830&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "한화그룹, 설 전 협력사 대금 1790억원 조기 지급",
+          "source": "헤럴드경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0002598568&office_id=016&code=009830&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "[서울데이터랩]개장 직후 인기 검색 종목 20選",
+          "source": "서울신문",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0003616850&office_id=081&code=009830&page=&sm=",
+          "weight": 0.63
+        },
+        {
+          "title": "일론 머스크가 던진 질문 '태양광은 어디까지 쓰일 수 있나' [기자수첩...",
+          "source": "데일리안",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0003058474&office_id=119&code=009830&page=&sm=",
+          "weight": 0.63
+        },
+        {
+          "title": "한화그룹, 설 앞두고 협력사 대금 1790억원 조기 지급",
+          "source": "디지털데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0002217679&office_id=138&code=009830&page=&sm=",
+          "weight": 0.63
+        },
+        {
+          "title": "한화, 설 앞두고 협력사 대금 1천790억원 조기 지급",
+          "source": "지디넷코리아",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0002410043&office_id=092&code=009830&page=&sm=",
+          "weight": 0.63
+        }
+      ],
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 88,
+        "reason": "[핵심 투자 포인트]\n• 외국인 및 기관의 동반 순매수세 지속 (수급 개선)\n• 차세대 신기술 개발 완료 및 상용화 임박\n\n[리스크 요인]\n• 환율 변동성에 따른 단기 환차손 가능성\n\n[종합 의견]\n최근 섹터 내 순환매가 유입되면서 한화솔루션 또한 수혜를 입고 있습니다. 핵심 포인트는 외국인 및 기관의 동반 순매수세 지속 (수급 개선)이며, 이는 내년도 실적 성장을 견인할 강력한 모멘텀입니다. 환율 변동성에 따른 단기 환차손 가능성 우려가 있으나, 현 주가에는 이미 선반영된 것으로 판단되며 추가 하락 제한적일 것입니다.",
+        "news_sentiment": "positive"
+      },
+      "gpt_recommendation": {
+        "action": "BUY",
+        "confidence": 71,
+        "reason": "VCP 패턴 및 외인 매집 추이 확인",
+        "target_price": 55544.99999999999,
+        "stop_loss": 45885.0
+      },
+      "final_recommendation": {
+        "action": "BUY",
+        "confidence": 79.5,
+        "reason": "[핵심 투자 포인트]\n• 외국인 및 기관의 동반 순매수세 지속 (수급 개선)\n• 차세대 신기술 개발 완료 및 상용화 임박\n\n[리스크 요인]\n• 환율 변동성에 따른 단기 환차손 가능성\n\n[종합 의견]\n최근 섹터 내 순환매가 유입되면서 한화솔루션 또한 수혜를 입고 있습니다. 핵심 포인트는 외국인 및 기관의 동반 순매수세 지속 (수급 개선)이며, 이는 내년도 실적 성장을 견인할 강력한 모멘텀입니다. 환율 변동성에 따른 단기 환차손 가능성 우려가 있으나, 현 주가에는 이미 선반영된 것으로 판단되며 추가 하락 제한적일 것입니다. / VCP 패턴 및 외인 매집 추이 확인"
+      },
+      "analyzed_at": "2026-02-11T10:42:18.941317"
+    },
+    {
+      "ticker": "090430",
+      "name": "아모레퍼시픽",
+      "price": 163400,
+      "change_pct": -3.31,
+      "news": [
+        {
+          "title": "코스닥 하락장에도 기회…“순환매 읽으면 유망주 잡힌다”[홍.신.소...",
+          "source": "한국경제TV",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0001241357&office_id=215&code=090430&page=&sm=",
+          "weight": 0.81
+        },
+        {
+          "title": "日 휩쓰는 K제품…'큐텐 어워즈' 수상 절반이 'K셀러'",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006217297&office_id=018&code=090430&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "오설록, 올리브베러에서 '티 바' 운영",
+          "source": "머니투데이",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005316985&office_id=008&code=090430&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "오설록, 올리브베러에서 '티 바' 운영…시음 프로그램 선봬",
+          "source": "연합뉴스",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015899284&office_id=001&code=090430&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "오설록, 올리브베러에서 차 시음 제공한다",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006217196&office_id=018&code=090430&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "아모레퍼시픽그룹, 설맞아 협력사에 대금 280억원 조기지급",
+          "source": "연합뉴스",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015897496&office_id=001&code=090430&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "아모레퍼시픽그룹, 설 맞아 협력사 대금 280억 조기 지급",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006216600&office_id=018&code=090430&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "아모레퍼시픽 사내봉사단 '앞나눔즈' 4기 활동 마무리",
+          "source": "파이낸셜뉴스",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005476900&office_id=014&code=090430&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "아모레퍼시픽 사내 봉사단 '앞나눔즈' 4기 활동 마무리",
+          "source": "뉴스1",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008767806&office_id=421&code=090430&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "[오늘의신상]자외선 차단 '70+'…헤라, UV 프로텍터 신제품",
+          "source": "아시아경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005719583&office_id=277&code=090430&page=&sm=",
+          "weight": 0.72
+        }
+      ],
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 89,
+        "reason": "[핵심 투자 포인트]\n• 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단)\n• 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단)\n\n[리스크 요인]\n• 글로벌 경기 둔화 우려에 따른 전방 산업 수요 위축\n\n[종합 의견]\n동사는 아모레퍼시픽 분야의 선도 기업으로, 최근 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단) 점이 긍정적입니다. 특히 3분기 실적 서프라이즈와 함께 연간 가이던스가 상향 조정된 점이 주가 상승의 주요 트리거가 될 것으로 판단됩니다. 현재 밸류에이션은 역사적 저점 수준으로, 중장기적 관점에서 매수 접근이 유효해 보입니다.",
+        "news_sentiment": "positive"
+      },
+      "gpt_recommendation": {
+        "action": "BUY",
+        "confidence": 87,
+        "reason": "VCP 패턴 및 외인 매집 추이 확인",
+        "target_price": 187910.0,
+        "stop_loss": 155230.0
+      },
+      "final_recommendation": {
+        "action": "BUY",
+        "confidence": 88.0,
+        "reason": "[핵심 투자 포인트]\n• 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단)\n• 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단)\n\n[리스크 요인]\n• 글로벌 경기 둔화 우려에 따른 전방 산업 수요 위축\n\n[종합 의견]\n동사는 아모레퍼시픽 분야의 선도 기업으로, 최근 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단) 점이 긍정적입니다. 특히 3분기 실적 서프라이즈와 함께 연간 가이던스가 상향 조정된 점이 주가 상승의 주요 트리거가 될 것으로 판단됩니다. 현재 밸류에이션은 역사적 저점 수준으로, 중장기적 관점에서 매수 접근이 유효해 보입니다. / VCP 패턴 및 외인 매집 추이 확인"
+      },
+      "analyzed_at": "2026-02-11T10:42:19.266588"
+    },
+    {
+      "ticker": "066570",
+      "name": "LG전자",
+      "price": 112500,
+      "change_pct": -0.35,
+      "news": [
+        {
+          "title": "파리바게뜨, LG전자와 손잡고 ISE서 미래형 매장 선봬",
+          "source": "한국경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005249812&office_id=015&code=066570&page=&sm=",
+          "weight": 0.81
+        },
+        {
+          "title": "롯데웰푸드, 인도 빙과 자회사 현지 IPO 검토",
+          "source": "한국경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005249818&office_id=015&code=066570&page=&sm=",
+          "weight": 0.81
+        },
+        {
+          "title": "파리바게뜨, LG전자와 유럽서 ‘미래형 파바’ 매장 선봬",
+          "source": "서울경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004589167&office_id=011&code=066570&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "파리바게뜨, LG전자와 유럽서 ‘K파바’ 홍보",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006217192&office_id=018&code=066570&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "11번가, 2월 ‘월간 십일절’…\"이사·혼수·신학기템 특가\"",
+          "source": "이데일리",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006217284&office_id=018&code=066570&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "“이젠 로봇주” LG전자, 6% 강세...1분기 ‘어닝 서프라이즈’ 전...",
+          "source": "서울경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004589171&office_id=011&code=066570&page=&sm=",
+          "weight": 0.77
+        },
+        {
+          "title": "LG전자, 청담동 플래그십 D5서 '아트나이트' 진행",
+          "source": "뉴스1",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008767934&office_id=421&code=066570&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "“가전 회사 → 로봇주 가나?” LG전자, 피지컬AI 기대감에 주가 1...",
+          "source": "헤럴드경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0002599323&office_id=016&code=066570&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "파리바게뜨·LG전자, 유럽 무대에 ‘K파바’ 쇼케이스",
+          "source": "아시아경제",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005720423&office_id=277&code=066570&page=&sm=",
+          "weight": 0.72
+        },
+        {
+          "title": "파리바게뜨, LG전자 손잡고 바르셀로나 ISE 2026 전시 공간 운...",
+          "source": "뉴스1",
+          "published_at": "2026.02.11",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008767716&office_id=421&code=066570&page=&sm=",
+          "weight": 0.72
+        }
+      ],
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 87,
+        "reason": "[핵심 투자 포인트]\n• 정부의 K-칩스법 지원 수혜 예상 (세제 혜택)\n• 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단)\n\n[리스크 요인]\n• 단기 급등에 따른 차익 실현 매물 출회 가능성\n\n[종합 의견]\n최근 섹터 내 순환매가 유입되면서 LG전자 또한 수혜를 입고 있습니다. 핵심 포인트는 정부의 K-칩스법 지원 수혜 예상 (세제 혜택)이며, 이는 내년도 실적 성장을 견인할 강력한 모멘텀입니다. 단기 급등에 따른 차익 실현 매물 출회 가능성 우려가 있으나, 현 주가에는 이미 선반영된 것으로 판단되며 추가 하락 제한적일 것입니다.",
+        "news_sentiment": "neutral"
+      },
+      "gpt_recommendation": {
+        "action": "BUY",
+        "confidence": 58,
+        "reason": "VCP 패턴 및 외인 매집 추이 확인",
+        "target_price": 129374.99999999999,
+        "stop_loss": 106875.0
+      },
+      "final_recommendation": {
+        "action": "BUY",
+        "confidence": 72.5,
+        "reason": "[핵심 투자 포인트]\n• 정부의 K-칩스법 지원 수혜 예상 (세제 혜택)\n• 경쟁사 대비 저평가 매력 부각 (PER 밴드 하단)\n\n[리스크 요인]\n• 단기 급등에 따른 차익 실현 매물 출회 가능성\n\n[종합 의견]\n최근 섹터 내 순환매가 유입되면서 LG전자 또한 수혜를 입고 있습니다. 핵심 포인트는 정부의 K-칩스법 지원 수혜 예상 (세제 혜택)이며, 이는 내년도 실적 성장을 견인할 강력한 모멘텀입니다. 단기 급등에 따른 차익 실현 매물 출회 가능성 우려가 있으나, 현 주가에는 이미 선반영된 것으로 판단되며 추가 하락 제한적일 것입니다. / VCP 패턴 및 외인 매집 추이 확인"
+      },
+      "analyzed_at": "2026-02-11T10:42:19.524444"
+    }
+  ],
+  "generated_at": "2026-02-11T10:42:19.524606",
+  "total": 4,
+  "signal_date": "2026-02-11"
+}

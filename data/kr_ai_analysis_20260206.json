@@ -1,0 +1,684 @@
+{
+  "market_indices": {
+    "kospi": {
+      "value": 5089.14,
+      "change_pct": 0
+    },
+    "kosdaq": {
+      "value": 1080.77,
+      "change_pct": 0
+    }
+  },
+  "signals": [
+    {
+      "ticker": "043370",
+      "name": "피에이치에이",
+      "market": "KOSDAQ",
+      "score": 81.0,
+      "contraction_ratio": 0.57,
+      "foreign_5d": 1239472695,
+      "inst_5d": 257328080,
+      "entry_price": 12870,
+      "current_price": 12020,
+      "return_pct": -6.6,
+      "vcp_score": 75,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 90,
+        "reason": "VCP 점수 75와 0.57의 수축 비율은 강력한 변동성 수축 패턴을 나타내며, 이는 잠재적 돌파의 좋은 징조입니다. 특히 외국인과 기관의 압도적인 순매수세가 동반되어 주가 상승 돌파 가능성이 매우 높으므로 매수를 추천합니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "피에이치에아는 VCP 점수 75와 수축 비율 0.57로 변동성 축소 패턴이 명확히 형성되어 공급 소진과 상승 에너지 응축을 시사한다[1][2]. 외국인 5일 순매수 12억주 이상, 기관 2.5억주 순매수로 강력한 수급 지지가 확인되어 돌파 가능성이 높다[1][5]. VCP 패턴의 핵심인 거래량 감소와 매수 세력 유입이 동반되어 매수 추천한다."
+      },
+      "news": [
+        {
+          "title": "글로벌 공급망 ‘윤리 검증’ 시대…한국경영인증원, 부패방지·규범...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005612965&office_id=009&code=043370&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "피에이치에이, 에코바디스 ESG 평가서 2년 연속 ‘플래티넘’ 획득",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005223134&office_id=015&code=043370&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "지역 제조기업과 AI의 융합…대구테크노파크, AX플랫폼 기지로 거듭나",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005187804&office_id=015&code=043370&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "‘기술유용 근절’ 외쳤지만…공정위 직권조사 저조·소송 장기화",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006147706&office_id=018&code=043370&page=&sm=",
+          "source": "이데일리",
+          "date": ""
+        },
+        {
+          "title": "[단독]\"이제 제네시스 옆에만 주차해야겠네\"…레이더로 '문콕' 원천 차...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005675467&office_id=277&code=043370&page=&sm=",
+          "source": "아시아경제",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "005490",
+      "name": "POSCO홀딩스",
+      "market": "KOSPI",
+      "score": 67.0,
+      "contraction_ratio": 0.82,
+      "foreign_5d": 22825637500,
+      "inst_5d": 30045056500,
+      "entry_price": 378000,
+      "current_price": 359500,
+      "return_pct": -4.89,
+      "vcp_score": 65,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "POSCO홀딩스는 VCP 점수 65로 가격 변동성이 수축되는 모습을 보이나, 수축 비율 0.82는 추가적인 응축 가능성을 시사합니다. 그러나 외국인과 기관의 5일간 매우 강력한 순매수는 주가에 대한 긍정적인 기대감을 반영하며, 이러한 수급 우위가 VCP 패턴의 잠재적 상승 에너지를 뒷받침합니다. 따라서 현 시점에서 매수 관점을 유지하는 것이 타당합니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "POSCO홀딩스는 VCP 점수 65와 수축 비율 0.82로 변동성 수축 패턴을 보이며, 외국인·기관의 강한 5일 순매수(각 22.8억주, 30억주 규모)가 수급 호조를 확인시켜 브레이크아웃 가능성이 높다[1][2]. 2026년 1분기 실적 정상화, 리튬 가격 상승, 철강 업황 개선 전망으로 목표주가 430,000~550,000원 제시되며 현재가 359,500원 대비 상승 여력이 크다[2][3][6]. 기술적 골든크로스와 저PBR 저평가로 매수 구간(340,000~350,000원)에 위치한다[3]."
+      },
+      "news": [
+        {
+          "title": "이틀 연속 하락하자 반도체株 쇼핑…삼전·한미반도체 담았다 [주식 초.....",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005633600&office_id=009&code=005490&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "대우건설, 가덕도공항 재입찰 서류 제출…19사와 컨소시엄",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0000831106&office_id=422&code=005490&page=&sm=",
+          "source": "연합뉴스TV",
+          "date": ""
+        },
+        {
+          "title": "대우건설 컨소시엄, 가덕도신공항 재입찰 서류 제출…19곳 참여",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015889776&office_id=001&code=005490&page=&sm=",
+          "source": "연합뉴스",
+          "date": ""
+        },
+        {
+          "title": "포스코인터내셔널, 신용등급 전망 상향 후 첫 공모채 조달 [fn마켓워치...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005474694&office_id=014&code=005490&page=&sm=",
+          "source": "파이낸셜뉴스",
+          "date": ""
+        },
+        {
+          "title": "\"15분 내에 다 있다\"...포스코이앤씨 '더샵 프리엘라' 주목",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005474686&office_id=014&code=005490&page=&sm=",
+          "source": "파이낸셜뉴스",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "056080",
+      "name": "유진로봇",
+      "market": "KOSDAQ",
+      "score": 66.0,
+      "contraction_ratio": 0.67,
+      "foreign_5d": -11932064775,
+      "inst_5d": 2174943975,
+      "entry_price": 36200,
+      "current_price": 31600,
+      "return_pct": -12.71,
+      "vcp_score": 90,
+      "gemini_recommendation": {
+        "action": "HOLD",
+        "confidence": 60,
+        "reason": "VCP 패턴은 강력한 매수 신호를 나타내지만, 외국인의 막대한 순매도 물량이 기관의 순매수를 압도하며 상승 동력을 크게 저해하고 있습니다. VCP 패턴이 실제 돌파로 이어지기에는 현 수급 상황의 불확실성이 매우 커 관망이 필요합니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "HOLD",
+        "confidence": 45,
+        "reason": "VCP 패턴의 높은 점수(90)와 수축 비율(0.67)은 긍정적 신호이나[1][2], 외국인의 대규모 순매도(-119억 주)가 강한 약세 신호로 작용하여 기관의 순매수(21억 주)를 상쇄합니다[2]. VCP 패턴 진입 시 낮은 리스크(손절 5-7%)의 장점이 있지만[2], 현재 수급 불균형으로 인해 패턴 신뢰도가 크게 훼손되어 추가 수급 개선을 기다리는 것이 바람직합니다."
+      },
+      "news": [
+        {
+          "title": "위험한 현장 누비는 자율주행로봇 … 中企도 \"생큐\"",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005631013&office_id=009&code=056080&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "\"다음은 '삼천스닥'\"…코스닥 로봇주 '급반등' [종목+]",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005242028&office_id=015&code=056080&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "코스피, 종가 사상 최고치 4990 마감…코스닥도 '천스닥' 눈앞",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005241350&office_id=015&code=056080&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "'현대차' 꺾였지만…'코스닥 로봇주', 사상 최고가 행진[핫종목]",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008735091&office_id=421&code=056080&page=&sm=",
+          "source": "뉴스1",
+          "date": ""
+        },
+        {
+          "title": "“본게임은 지금부터” ‘오천피’ 불쏘시개 로봇株…복병은 中 공습...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0002590356&office_id=016&code=056080&page=&sm=",
+          "source": "헤럴드경제",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "000270",
+      "name": "기아",
+      "market": "KOSPI",
+      "score": 65.2,
+      "contraction_ratio": 0.68,
+      "foreign_5d": 23527340650,
+      "inst_5d": 13134979050,
+      "entry_price": 172100,
+      "current_price": 151900,
+      "return_pct": -11.74,
+      "vcp_score": 50,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "기아는 VCP 점수 50 및 수축 비율 0.68로 중간 정도의 변동성 수축 패턴을 보입니다. 특히 외국인과 기관의 압도적인 순매수는 주가가 이러한 가격대에서 강력하게 축적되고 있음을 시사합니다. 따라서 견조한 수급과 함께 변동성 수축이 진행되고 있어 향후 상승 가능성이 높습니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "기아의 VCP 점수 50과 수축 비율 0.68은 변동성 축소 패턴의 초기 형성을 나타내며, 외국인 5일 순매수 235억주와 기관 132억주의 강력한 수급 유입이 매도 압력 소진과 상승 동력을 확인시켜줍니다[1][2]. VCP 패턴의 핵심인 거래량 감소와 공급 소멸 과정이 수급으로 뒷받침되어 돌파 가능성이 높습니다[3][9]. 현재가 151900원 지점에서 매수 추천하나, 거래량 dry-up 확인 필요."
+      },
+      "news": [
+        {
+          "title": "코스피, 외국인 투매 속 5089.14 하락 마감…코스닥도 내려",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005633614&office_id=009&code=000270&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "'매도 사이드카' 코스피, 5000선 사수…외국인 3조 매물 폭탄",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005247970&office_id=015&code=000270&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "거래대금 떨어질라…증시 변동성 확대에 증권株 약세 [이런국장 저런...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004587596&office_id=011&code=000270&page=&sm=",
+          "source": "서울경제",
+          "date": ""
+        },
+        {
+          "title": "고물가에 경차 인기…당근거래 중고차 1위 '모닝'",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0000831080&office_id=422&code=000270&page=&sm=",
+          "source": "연합뉴스TV",
+          "date": ""
+        },
+        {
+          "title": "올해 1월 당근에서 가장 많이 거래된 차량은 '기아 모닝'",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008757371&office_id=421&code=000270&page=&sm=",
+          "source": "뉴스1",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "389500",
+      "name": "에스비비테크",
+      "market": "KOSDAQ",
+      "score": 64.8,
+      "contraction_ratio": 0.61,
+      "foreign_5d": 5778642200,
+      "inst_5d": 250227500,
+      "entry_price": 80800,
+      "current_price": 61100,
+      "return_pct": -24.38,
+      "vcp_score": 60,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "에스비비테크는 VCP 점수 60과 0.61의 수축 비율을 보여 잠재적인 VCP 패턴 형성과 변동성 축소, 매물 소화를 시사합니다. 특히, 외국인과 기관의 5일간 압도적인 순매수는 강력한 기관 매수세와 축적을 명확히 나타내며, 이는 향후 주가 상승 가능성을 높이는 매우 긍정적인 신호입니다. 따라서, VCP 패턴의 잠재력과 강력한 수급이 결합되어 매수 관점으로 접근하는 것이 유리합니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "에스비비테크는 VCP 점수 60과 수축 비율 0.61로 변동성 축소 패턴이 명확히 형성되어 공급 소진과 에너지 응축 상태를 보입니다[1][2]. 외국인 5일 순매수 57억주, 기관 2.5억주로 강력한 수급 지지가 확인되어 돌파 상승 가능성이 높습니다[종목 정보]. VCP 패턴의 핵심인 거래량 감소와 저항 돌파 직전 진입점으로 매수 적기입니다."
+      },
+      "news": [
+        {
+          "title": "\"다음은 '삼천스닥'\"…코스닥 로봇주 '급반등' [종목+]",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005242028&office_id=015&code=389500&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "로봇株 열풍 계속…두산로보틱스 20% 급등",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005238925&office_id=015&code=389500&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "\"한국은 10만원, 중국은 3000원\"…'골든타임' 놓친 K로봇 부품[...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005715343&office_id=277&code=389500&page=&sm=",
+          "source": "아시아경제",
+          "date": ""
+        },
+        {
+          "title": "이제 2%… ‘천스닥’ 가는길, 로봇이 연다",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005465716&office_id=014&code=389500&page=&sm=",
+          "source": "파이낸셜뉴스",
+          "date": ""
+        },
+        {
+          "title": "'천스닥' 2% 남긴 코스닥...로봇株 강세에 주목",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005465665&office_id=014&code=389500&page=&sm=",
+          "source": "파이낸셜뉴스",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "028050",
+      "name": "삼성E&A",
+      "market": "KOSPI",
+      "score": 64.0,
+      "contraction_ratio": 1.02,
+      "foreign_5d": 23893519275,
+      "inst_5d": 3811205200,
+      "entry_price": 32150,
+      "current_price": 31850,
+      "return_pct": -0.93,
+      "vcp_score": 40,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "삼성E&A는 1.02의 매우 낮은 수축 비율로 훌륭한 VCP 패턴을 형성하고 있으며, 이는 강력한 주가 폭발 가능성을 시사합니다. 또한, 외국인과 기관의 막대한 순매수세가 확인되어 상승 모멘텀이 매우 강할 것으로 예상됩니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "VCP 점수 40과 수축 비율 1.02로 변동성 수축 패턴이 형성 중이며, 외국인 5일 순매수 238억주, 기관 5일 순매수 38억주로 강한 수급 유입이 확인된다[종목 정보]. 3Q24 영업이익 컨센서스 상회와 목표주가 38,000원 유지, PBR 밴드 저점 근접으로 밸류에이션 매력적이며 기술적 지표도 적극 매수 신호[1][8]."
+      },
+      "news": [
+        {
+          "title": "삼성 준법감시위 4기 출범 … 이찬희 위원장 연임",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005631098&office_id=009&code=028050&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "삼성 '4기 준감위' 오늘 출범…이재용 '등기 이사' 복귀 이뤄지나",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008754473&office_id=421&code=028050&page=&sm=",
+          "source": "뉴스1",
+          "date": ""
+        },
+        {
+          "title": "삼성 4기 준법감시위 이찬희 위원장 연임",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0002595149&office_id=016&code=028050&page=&sm=",
+          "source": "헤럴드경제",
+          "date": ""
+        },
+        {
+          "title": "이찬희 삼성 준감위원장 4기도 이끈다",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005472119&office_id=014&code=028050&page=&sm=",
+          "source": "파이낸셜뉴스",
+          "date": ""
+        },
+        {
+          "title": "삼성 준감위 4기 출범… 그룹 컨트롤타워 재건 과제",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0001830617&office_id=005&code=028050&page=&sm=",
+          "source": "국민일보",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "014830",
+      "name": "유니드",
+      "market": "KOSPI",
+      "score": 64.0,
+      "contraction_ratio": 0.8,
+      "foreign_5d": 3585196400,
+      "inst_5d": 2616141400,
+      "entry_price": 82300,
+      "current_price": 80000,
+      "return_pct": -2.79,
+      "vcp_score": 40,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "유니드의 VCP 점수는 40, 수축 비율은 0.8로, VCP 패턴 자체는 완벽하지 않으며 변동성 축소가 미약합니다. 하지만 지난 5일간 외국인과 기관의 순매수 규모가 매우 강력하여 압도적인 수급 강세를 보입니다. 이는 VCP 패턴의 기술적 약점을 상쇄하고, 주가 상승 가능성을 높이는 핵심적인 긍정적 요인으로 작용합니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": null,
+      "news": [
+        {
+          "title": "유니드 “전년 대비 배당금 11% 확대”",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005631497&office_id=009&code=014830&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "유니드, 현금배당 2000원 결정…주주가치 제고 잰걸음",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006213128&office_id=018&code=014830&page=&sm=",
+          "source": "이데일리",
+          "date": ""
+        },
+        {
+          "title": "유니드, 주당 2천원 현금배당…전년 대비 11% 확대",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015882087&office_id=001&code=014830&page=&sm=",
+          "source": "연합뉴스",
+          "date": ""
+        },
+        {
+          "title": "유니드, 4년 연속 매출 1조…영업익은 소폭 감소",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006207242&office_id=018&code=014830&page=&sm=",
+          "source": "이데일리",
+          "date": ""
+        },
+        {
+          "title": "유니드, 주당 2000원 결산 현금배당 결정",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005716157&office_id=277&code=014830&page=&sm=",
+          "source": "아시아경제",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "019180",
+      "name": "티에이치엔",
+      "market": "KOSPI",
+      "score": 64.0,
+      "contraction_ratio": 0.71,
+      "foreign_5d": 1508629360,
+      "inst_5d": -65906930,
+      "entry_price": 9260,
+      "current_price": 7770,
+      "return_pct": -16.09,
+      "vcp_score": 60,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "티에이치엔은 VCP 패턴 형성 가능성이 보이며, 특히 지난 5일간 외국인 투자자들의 압도적인 순매수가 포착되어 강력한 매수세를 나타냅니다. 비록 기관은 순매도했으나 외국인 매수 규모가 이를 크게 상회하며, 이는 주가 상승의 강력한 모멘텀이 될 수 있습니다. VCP 패턴과 결합된 대규모 수급은 상승 돌파 가능성을 높입니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "티에이치엔은 VCP 점수 60과 수축 비율 0.71로 변동성 축소 패턴이 형성되어 공급 소진과 상승 에너지 응축을 시사하며, 외국인 5일 순매수 15억 주가 강력한 수급 지지를 보입니다[1][2]. 기관 순매도는 부정적이지만 VCP 핵심인 거래량 감소와 유사한 상황으로 돌파 가능성이 높아 매수 적기입니다[3][9]."
+      },
+      "news": [
+        {
+          "title": "티에이치엔, 채승훈 외 2인으로 최대주주 변경…채철 회장 지분 상속",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0000077806&office_id=293&code=019180&page=&sm=",
+          "source": "블로터",
+          "date": ""
+        },
+        {
+          "title": "[서울데이터랩]금일 코스피 거래량 1위 한화갤러리아 거래대금 1,036...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0003608755&office_id=081&code=019180&page=&sm=",
+          "source": "서울신문",
+          "date": ""
+        },
+        {
+          "title": "[서울데이터랩]‘DYP’ +29.90% 상한가…실시간 상승률 1위",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0003608661&office_id=081&code=019180&page=&sm=",
+          "source": "서울신문",
+          "date": ""
+        },
+        {
+          "title": "현대차 최고치 랠리에 …車 부품주도 '껑충'",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0013708784&office_id=003&code=019180&page=&sm=",
+          "source": "뉴시스",
+          "date": ""
+        },
+        {
+          "title": "[서울데이터랩]1월 13일 코스피 주요 종목 마감시황",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0003608468&office_id=081&code=019180&page=&sm=",
+          "source": "서울신문",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "054210",
+      "name": "이랜텍",
+      "market": "KOSDAQ",
+      "score": 62.0,
+      "contraction_ratio": 0.86,
+      "foreign_5d": 2821217125,
+      "inst_5d": 9228800,
+      "entry_price": 11070,
+      "current_price": 10320,
+      "return_pct": -6.78,
+      "vcp_score": 50,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 75,
+        "reason": "이랜텍은 VCP 패턴 점수와 수축 비율이 이상적이지 않아 패턴 자체의 강도는 보통입니다. 그러나 외국인과 기관의 압도적인 순매수량은 강력한 수요를 나타내며, 이는 데이터 단위 오류를 감안하더라도 주가 상승을 견인할 주요 요인으로 판단됩니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "HOLD",
+        "confidence": 45,
+        "reason": "VCP 점수 50점은 패턴 형성이 미흡하며, 수축 비율 0.86은 변동성 축소 기준(10% 미만)을 충족하지 못합니다[2]. 외국인 대량 순매수는 긍정적이나 VCP 패턴의 핵심 요소인 명확한 변동성 축소와 거래량 신호가 부족하여 추가 패턴 확인 후 진입을 권장합니다[1][2]."
+      },
+      "news": [
+        {
+          "title": "이랜텍, 자사주 40만주 교환…43억원 EB 발행",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006162725&office_id=018&code=054210&page=&sm=",
+          "source": "이데일리",
+          "date": ""
+        },
+        {
+          "title": "동양이엔피, 순현금이 시총 상회…저평가주-LS",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005250910&office_id=008&code=054210&page=&sm=",
+          "source": "머니투데이",
+          "date": ""
+        },
+        {
+          "title": "용인시, 하반기 일자리박람회 개최…22일 용인미르스타디움",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008544168&office_id=421&code=054210&page=&sm=",
+          "source": "뉴스1",
+          "date": ""
+        },
+        {
+          "title": "[클릭 e종목]\"동양이엔피, 자산가치 대비 저평가\"",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005652361&office_id=277&code=054210&page=&sm=",
+          "source": "아시아경제",
+          "date": ""
+        },
+        {
+          "title": "\"OBBBA 대응 전략 알려드립니다\" 중견련, 미국 진출 세미나 개최",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005402337&office_id=014&code=054210&page=&sm=",
+          "source": "파이낸셜뉴스",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "012200",
+      "name": "계양전기",
+      "market": "KOSPI",
+      "score": 60.8,
+      "contraction_ratio": 0.42,
+      "foreign_5d": 628164100,
+      "inst_5d": 116646550,
+      "entry_price": 12440,
+      "current_price": 7460,
+      "return_pct": -40.03,
+      "vcp_score": 70,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 90,
+        "reason": "계양전기는 VCP 패턴 점수가 70으로 견고한 가격 수축을 보이며, 이는 잠재적 상승 돌파 가능성을 강하게 시사합니다. 특히, 외국인과 기관의 5일간 막대한 순매수는 강한 매수 세력이 유입되고 있음을 분명히 나타내며, 이는 VCP 패턴의 긍정적인 신호를 강력하게 지지합니다. 따라서 현재 가격대는 매력적인 매수 시점으로 판단됩니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 78,
+        "reason": "VCP 패턴(점수 70, 수축비율 0.42)이 강한 상승 신호를 나타내고 있으며[1][2], 외국인과 기관의 대규모 순매수(외국인 628M주, 기관 116M주)가 기관 매집 완료 단계를 시사합니다[9]. 변동성 축소 구간에서의 진입으로 손절선을 5-7% 수준으로 설정 가능하여 리스크 대비 수익 비율이 유리합니다[2]."
+      },
+      "news": [
+        {
+          "title": "삼전·두에빌 등 뺐더니…\"'소형주' 날았다\"",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0001237866&office_id=215&code=012200&page=&sm=",
+          "source": "한국경제TV",
+          "date": ""
+        },
+        {
+          "title": "한달간 코스피 거래량 상위 10개 중 6개 '소형주'…\"1월 효과\"(종...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015847404&office_id=001&code=012200&page=&sm=",
+          "source": "연합뉴스",
+          "date": ""
+        },
+        {
+          "title": "한달간 코스피 거래량 상위 10개 종목 보니…6개가 '소형주'",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015846013&office_id=001&code=012200&page=&sm=",
+          "source": "연합뉴스",
+          "date": ""
+        },
+        {
+          "title": "\"금·은값 폭락해도, 코스피는 간다?\"...삼전하닉 대신 저평가주 '순...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005471566&office_id=014&code=012200&page=&sm=",
+          "source": "파이낸셜뉴스",
+          "date": ""
+        },
+        {
+          "title": "'삼전닉스'가 끌어올린 1월 코스피…2월 순환매 장세 '저평가 업종'...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008746984&office_id=421&code=012200&page=&sm=",
+          "source": "뉴스1",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "217500",
+      "name": "러셀",
+      "market": "KOSDAQ",
+      "score": 60.8,
+      "contraction_ratio": 0.52,
+      "foreign_5d": 1140999606,
+      "inst_5d": 52412165,
+      "entry_price": 5130,
+      "current_price": 3400,
+      "return_pct": -33.72,
+      "vcp_score": 60,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "VCP 패턴이 변동성을 수축하며 형성되고 있으며, 외국인과 기관의 강력한 순매수가 이를 뒷받침하고 있습니다. 이는 주가 상승 돌파의 강력한 신호로 판단됩니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "VCP 점수 60과 수축 비율 0.52로 변동성 축소가 뚜렷하며, 외국인 5일 순매수 11억 주와 기관 순매수 5천만 주로 강력한 수급 유입이 확인되어 공급 소멸과 에너지 응축 신호가 강함[1][8]. 마크 미너비니의 VCP 패턴 기준으로 저항 돌파 시 폭발적 상승 가능성이 높아 매수 적기[2][3]. 단, 거래량 급증과 5일선 지지 확인 후 진입 권장[6][5]."
+      },
+      "news": [
+        {
+          "title": "코스피, 사상 첫 4900선 돌파 마감…삼전·하닉·현차 모두 달렸다",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005239117&office_id=015&code=217500&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "‘반도체’에서 손바뀜?…오늘도 달리는 로봇주[특징주]",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006203645&office_id=018&code=217500&page=&sm=",
+          "source": "이데일리",
+          "date": ""
+        },
+        {
+          "title": "로봇이 끌고 자율주행이 밀었다…'100조 클럽' 진입 초읽기[현대차 시...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0004580526&office_id=011&code=217500&page=&sm=",
+          "source": "서울경제",
+          "date": ""
+        },
+        {
+          "title": "\"오늘도 로봇주 랠리\"…두산로보틱스·현대무벡스, 사상최고가[핫종목...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0008723197&office_id=421&code=217500&page=&sm=",
+          "source": "뉴스1",
+          "date": ""
+        },
+        {
+          "title": "[서울데이터랩]금일 코스닥 거래량 1위 휴림로봇 거래대금 무려 1027...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0003610466&office_id=081&code=217500&page=&sm=",
+          "source": "서울신문",
+          "date": ""
+        }
+      ]
+    },
+    {
+      "ticker": "046440",
+      "name": "KG모빌리언스",
+      "market": "KOSDAQ",
+      "score": 60.0,
+      "contraction_ratio": 0.75,
+      "foreign_5d": 846401955,
+      "inst_5d": 364548640,
+      "entry_price": 5520,
+      "current_price": 5360,
+      "return_pct": -2.9,
+      "vcp_score": 50,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "KG모빌리언스는 VCP 점수 50, 수축 비율 0.75로 VCP 패턴 자체의 기술적 완성도는 다소 미흡합니다. 그러나 외국인과 기관의 5일 순매수량이 압도적으로 많아 강력한 매수세가 유입되고 있음을 시사합니다. 이러한 시장 주도 세력의 대규모 매집은 VCP 패턴의 미흡함을 상쇄하고 주가 상승에 대한 강력한 잠재적 동력을 제공하므로 매수 의견을 제시합니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "BUY",
+        "confidence": 85,
+        "reason": "KG모빌리언스는 VCP 수축 비율 0.75와 점수 50으로 변동성 수축 패턴을 보이며, 외국인 및 기관의 강한 5일 순매수(외국인 8.46억주, 기관 3.64억주)가 수급을 뒷받침한다[종목 정보]. PBR 0.46~0.58 수준의 심각한 저평가와 호실적(영업이익 300% 증가 예상)으로 상방 잠재력이 크다[1][2][4]."
+      },
+      "news": [
+        {
+          "title": "올 한 해 ‘제일 잘 쓴 체크카드’, 의외네…소비패턴 맞춘 혜택 인기",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005614514&office_id=009&code=046440&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "카드고릴라, ‘2025 인기 체크카드 TOP 10’ 발표…케이뱅크 O...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005614349&office_id=009&code=046440&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "KG모빌리언스, 2026년 상반기 채용 확대…디지털 금융 회사 전환 ...",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0006210031&office_id=018&code=046440&page=&sm=",
+          "source": "이데일리",
+          "date": ""
+        },
+        {
+          "title": "KG모빌리언스, 올해 상반기 채용 확대",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0003394968&office_id=030&code=046440&page=&sm=",
+          "source": "전자신문",
+          "date": ""
+        },
+        {
+          "title": "KG모빌리언스, 상반기 채용 확대…디지털 금융사 전환 본격화",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0013739105&office_id=003&code=046440&page=&sm=",
+          "source": "뉴시스",
+          "date": ""
+        }
+      ]
+    }
+  ],
+  "generated_at": "2026-02-06T15:54:55.350395",
+  "signal_date": "2026-02-06"
+}

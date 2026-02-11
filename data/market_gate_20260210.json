@@ -1,0 +1,127 @@
+{
+  "timestamp": "2026-02-11T08:13:58.268518",
+  "kospi_close": 5301.68994140625,
+  "kospi_change": 0.07,
+  "kosdaq_close": 1115.199951171875,
+  "kosdaq_change_pct": -1.1,
+  "usd_krw": 1456.2099609375,
+  "total_score": 60,
+  "label": "Neutral",
+  "is_gate_open": true,
+  "gate_reason": "시장 양호 (Technical)",
+  "status": "중립 (Neutral)",
+  "color": "YELLOW",
+  "dataset_date": "2026-02-10",
+  "details": {
+    "tech_score": 60,
+    "rs_score": 10,
+    "trend_score": 25,
+    "rsi_score": 25,
+    "macd_score": 0,
+    "vol_score": 0,
+    "rsi_val": 63.1,
+    "macd_val": 3475.79,
+    "ma20": 73953.81230313031,
+    "ma60": 66416.47967442306,
+    "macro_status": "WARNING"
+  },
+  "indices": {
+    "sp500": {
+      "value": 6941.81005859375,
+      "change_pct": -0.33
+    },
+    "nasdaq": {
+      "value": 23102.474609375,
+      "change_pct": -0.59
+    },
+    "kospi": {
+      "value": 5301.68994140625,
+      "change_pct": 0.07
+    },
+    "kosdaq": {
+      "value": 1115.199951171875,
+      "change_pct": -1.1
+    }
+  },
+  "commodities": {
+    "us_gold": {
+      "value": 5057.60009765625,
+      "change_pct": 0.13
+    },
+    "us_silver": {
+      "value": 80.87000274658203,
+      "change_pct": -1.46
+    }
+  },
+  "crypto": {
+    "btc": {
+      "value": 68633.6484375,
+      "change_pct": -2.12
+    },
+    "eth": {
+      "value": 2016.3729248046875,
+      "change_pct": -4.15
+    },
+    "xrp": {
+      "value": 1.3970024585723877,
+      "change_pct": -2.72
+    }
+  },
+  "sectors": [
+    {
+      "name": "반도체",
+      "change_pct": -2.11,
+      "signal": "Bearish"
+    },
+    {
+      "name": "2차전지",
+      "change_pct": -0.38,
+      "signal": "Neutral"
+    },
+    {
+      "name": "자동차",
+      "change_pct": 3.11,
+      "signal": "Bullish"
+    },
+    {
+      "name": "헬스케어",
+      "change_pct": 0.99,
+      "signal": "Bullish"
+    },
+    {
+      "name": "IT",
+      "change_pct": 2.07,
+      "signal": "Bullish"
+    },
+    {
+      "name": "은행",
+      "change_pct": -1.19,
+      "signal": "Bearish"
+    },
+    {
+      "name": "철강",
+      "change_pct": -0.46,
+      "signal": "Neutral"
+    },
+    {
+      "name": "증권",
+      "change_pct": 2.49,
+      "signal": "Bullish"
+    },
+    {
+      "name": "조선",
+      "change_pct": -0.78,
+      "signal": "Bearish"
+    },
+    {
+      "name": "에너지",
+      "change_pct": 0.4,
+      "signal": "Neutral"
+    },
+    {
+      "name": "KOSPI 200",
+      "change_pct": 0.07,
+      "signal": "Neutral"
+    }
+  ]
+}

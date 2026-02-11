@@ -1,0 +1,63 @@
+{
+  "market_indices": {},
+  "signals": [
+    {
+      "ticker": "020000",
+      "name": "한섬",
+      "market": "KOSPI",
+      "score": 63,
+      "contraction_ratio": 1.71,
+      "foreign_5d": 258250,
+      "inst_5d": 254990,
+      "entry_price": 21450,
+      "current_price": 21450,
+      "return_pct": 0.0,
+      "vcp_score": 0,
+      "gemini_recommendation": {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "한섬은 VCP 점수가 0으로 VCP 패턴이 확인되지 않습니다. 그러나 외국인과 기관이 5일간 각각 25만주 이상을 순매수하며 매우 강력한 매수 수급을 보이고 있어, 이는 단기 상승 모멘텀으로 작용할 가능성이 높습니다."
+      },
+      "gpt_recommendation": null,
+      "perplexity_recommendation": {
+        "action": "HOLD",
+        "confidence": 40,
+        "reason": "VCP 점수가 0으로 패턴이 명확히 형성되지 않았으며, 수축 비율 1.71%는 VCP의 핵심인 20-30% 이상 변동성 축소 기준에 미치지 못함[1]. 외국인과 기관의 5일 순매수(각 258K주, 255K주)는 긍정적 수급이나 거래량 dry-up 등 추가 확인 없이는 돌파 신호로 부족함[1]. 관망하며 차트 돌파와 거래량 증가를 기다려야 함."
+      },
+      "news": [
+        {
+          "title": "[특징주 & 리포트] '대우건설, 4년 만에 최고가' 등",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005249535&office_id=015&code=020000&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "새벽배송 풀리나…대형마트주 질주",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005249521&office_id=015&code=020000&page=&sm=",
+          "source": "한국경제",
+          "date": ""
+        },
+        {
+          "title": "한섬, 실적 턴어라운드에 12%대 급등…증권가 목표가 줄상향",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0005635033&office_id=009&code=020000&page=&sm=",
+          "source": "매일경제",
+          "date": ""
+        },
+        {
+          "title": "[특징주] '깜짝 호실적' 내놓은 한섬, 16% 급등 마감(종합)",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015897957&office_id=001&code=020000&page=&sm=",
+          "source": "연합뉴스",
+          "date": ""
+        },
+        {
+          "title": "[특징주] '깜짝 호실적' 내놓은 한섬, 장초반 10%대 급등",
+          "url": "https://finance.naver.com/item/news_read.naver?article_id=0015896365&office_id=001&code=020000&page=&sm=",
+          "source": "연합뉴스",
+          "date": ""
+        }
+      ]
+    }
+  ],
+  "generated_at": "2026-02-11T00:33:58.269172",
+  "signal_date": "2026-02-10"
+}
