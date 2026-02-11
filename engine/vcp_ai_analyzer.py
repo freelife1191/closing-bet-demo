@@ -94,7 +94,7 @@ class VCPMultiAIAnalyzer:
         base_delay = 2
         
         # 모델 폴백 체인
-        model_chain = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-2.0-flash"]
+        model_chain = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
         
         for attempt in range(max_retries + 1):
             try:
