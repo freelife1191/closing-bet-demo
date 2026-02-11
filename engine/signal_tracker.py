@@ -199,7 +199,9 @@ class SignalTracker:
                         'exit_price': None,
                         'exit_date': None,
                         'return_pct': None,
-                        'hold_days': 0
+                        'hold_days': 0,
+                        # [FIX] 실제 VCP 패턴 점수 계산 및 추가 ({detect_vcp_forming}에서 반환된 정보 활용)
+                        'vcp_score': self.calculate_vcp_score(vcp_info)
                     }
                     vcp_signals.append(signal)
             
@@ -403,7 +405,8 @@ class SignalTracker:
                 'ticker': row['ticker'],
                 'name': row['name'],
                 'current_price': row['entry_price'],
-                'vcp_score': row.get('score', 0),
+                # [FIX] 수급 점수('score')가 아닌 실제 VCP 패턴 점수('vcp_score') 전달
+                'vcp_score': row.get('vcp_score', 0),
                 'contraction_ratio': row.get('contraction_ratio', 0),
                 'foreign_5d': row['foreign_5d'],
                 'inst_5d': row['inst_5d']

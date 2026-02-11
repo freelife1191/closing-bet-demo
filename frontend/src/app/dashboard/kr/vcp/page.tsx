@@ -842,43 +842,38 @@ export default function VCPSignalsPage() {
                 const vcpRatio = firstHalfHigh > 0 ? (secondHalfLow / firstHalfHigh).toFixed(2) : '-';
 
                 return (
-                  <div className="relative h-[60px] lg:h-auto lg:min-h-[40px] px-4 py-2 bg-black/30 border-t border-white/5 text-xs flex flex-col lg:flex-row justify-between">
-                    {/* Top Row: VCP Pattern Checkbox (Left) / Front Half (Right) */}
-                    <div className="flex justify-between items-start lg:items-center w-full">
-                      {/* VCP Checkbox (Left Top) */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500 font-bold">VCP 패턴</span>
-                        <label className="flex items-center gap-1.5 cursor-pointer ml-2">
-                          <input
-                            type="checkbox"
-                            className="w-3 h-3 rounded border-white/20 bg-white/5 text-rose-500 focus:ring-rose-500/30"
-                            checked={showVcpRange}
-                            onChange={(e) => setShowVcpRange(e.target.checked)}
-                          />
-                          <span className="text-rose-400 font-medium">범위 표시</span>
-                        </label>
-                      </div>
+                  <div className="relative auto-cols-min grid grid-cols-2 lg:flex lg:items-center lg:justify-start lg:gap-8 px-4 py-3 bg-black/30 border-t border-white/5 text-xs text-gray-300">
 
-                      {/* First Half (Right Top) */}
-                      <div className="flex items-center gap-1 font-mono">
-                        <span className="text-gray-400">전반부:</span>
-                        <span className="text-white">₩{firstHalfHigh.toLocaleString()}</span>
-                      </div>
+                    {/* VCP Checkbox */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 font-bold whitespace-nowrap">VCP 패턴</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer ml-2">
+                        <input
+                          type="checkbox"
+                          className="w-3 h-3 rounded border-white/20 bg-white/5 text-rose-500 focus:ring-rose-500/30"
+                          checked={showVcpRange}
+                          onChange={(e) => setShowVcpRange(e.target.checked)}
+                        />
+                        <span className="text-rose-400 font-medium whitespace-nowrap">범위 표시</span>
+                      </label>
                     </div>
 
-                    {/* Bottom Row: Ratio (Left) / Second Half (Right) */}
-                    <div className="flex justify-between items-end lg:items-center w-full mt-1 lg:mt-0">
-                      {/* Ratio (Left Bottom) */}
-                      <div className="flex items-center gap-1 font-mono">
-                        <span className="text-gray-400">Ratio:</span>
-                        <span className="text-cyan-400 font-bold">{vcpRatio}</span>
-                      </div>
+                    {/* First Half */}
+                    <div className="flex items-center gap-2 font-mono justify-end lg:justify-start">
+                      <span className="text-gray-500">전반부:</span>
+                      <span className="text-white font-bold">₩{firstHalfHigh.toLocaleString()}</span>
+                    </div>
 
-                      {/* Second Half (Right Bottom) */}
-                      <div className="flex items-center gap-1 font-mono">
-                        <span className="text-gray-400">후반부:</span>
-                        <span className="text-white">₩{secondHalfLow.toLocaleString()}</span>
-                      </div>
+                    {/* Ratio */}
+                    <div className="flex items-center gap-2 font-mono mt-1 lg:mt-0">
+                      <span className="text-gray-500">Ratio:</span>
+                      <span className={`font-bold ${parseFloat(vcpRatio) <= 0.6 ? 'text-emerald-400' : 'text-cyan-400'}`}>{vcpRatio}</span>
+                    </div>
+
+                    {/* Second Half */}
+                    <div className="flex items-center gap-2 font-mono mt-1 lg:mt-0 justify-end lg:justify-start">
+                      <span className="text-gray-500">후반부:</span>
+                      <span className="text-white font-bold">₩{secondHalfLow.toLocaleString()}</span>
                     </div>
                   </div>
                 );

@@ -1337,7 +1337,7 @@ export default function JonggaV2Page() {
             .filter(s => s.grade !== 'D') // D등급 원천 필터링 (안전장치)
             .map((signal, idx) => (
               <SignalCard
-                key={signal.stock_code}
+                key={`${signal.stock_code}-${idx}`}
                 signal={signal}
                 index={idx}
                 onOpenChart={() => setChartModal({ isOpen: true, symbol: signal.stock_code, name: signal.stock_name })}
