@@ -195,6 +195,9 @@ graph TD
 engine/
 ├── market_gate.py         # 시장 신호등 (최상위 관문)
 │   └── MarketGate         # 지수/환율/기술적 지표 종합 분석 및 판정
+├── grade_classifier.py    # 종목 등급 판정 (S/A/B/C) 및 필터링 로직
+├── scorer.py              # 12점 만점의 기술적/수급 점수 산출 시스템
+├── vcp.py                 # 변동성 수축 패턴(VCP) 감지 엔진 (Technical Scanner)
 ├── phases.py              # 4단계 시그널 생성 파이프라인
 │   ├── BasePhase          # 추상 기본 클래스
 │   ├── Phase1Analyzer     # 기본 분석 및 사전 필터링
@@ -519,8 +522,6 @@ Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)
 **투자 철학 (Investment Philosophy):**
 
 ```python
-# engine/chatbot/prompts.py
-SYSTEM_PERSONA = """
 너는 VCP 기반 한국 주식 투자 어드바이저 '스마트머니봇'이야.
 
 ## 핵심 투자 원칙 (Core Constraints)
@@ -684,7 +685,7 @@ VCP_ANALYSIS_PROMPT = """
 ```
 
 **VCP 분석의 특징:**
-- **변동성 수축(Contraction)**: 가격 폭이 줄어들면서 거래량이 줄어드는 구간 포착
+- **변동성 수축(Contraction)**: 가격 폭이 줄어들면서 거래량이 줄어드는 구간 포착 (Range Contraction Ratio **0.7 이하** 필수)
 - **매집(Accumulation)**: 외국인/기관의 지속적인 순매수 확인
 - **AI 패턴 인식**: 단순 지표가 아닌, 패턴의 질적(Quality) 평가
 
@@ -911,6 +912,20 @@ def evaluate_market_gate():
         return MarketStatus.GATE_OPEN, f"{score}점: 매수 허용"
     else:
         return MarketStatus.GATE_CLOSED, f"{score}점: 매수 보류"
+```
+
+#### 1.3 Rule-Based Scorer (12점 점수 시스템)
+`engine/scorer.py`는 AI 분석 전, 순수 데이터 기반으로 종목의 기술적/수급적 완성도를 평가합니다.
+
+- **기본 점수 (Max 12점)**:
+  - **뉴스/재료 (3점)**: LLM 감성 분석 및 거래대금 연동
+  - **거래대금 (3점)**: 절대 규모 및 상대적 폭발성
+  - **캔들/추세 (1점)**: 캔들의 형태 및 정배열 여부
+  - **타이밍/수축 (1점)**: 볼린저밴드 수축 및 횡보 구간
+  - **차트/패턴 (2점)**: VCP 완성도 및 주요 이평선 돌파
+  - **수급 (2점)**: 외국인/기관 동반 순매수 및 기여도
+- **가산점 (Max 9점)**: 당일 등락률 및 거래량 배수 기반
+- **등급 판정**: `GradeClassifier`를 통해 S(12점+), A(10점+), B(8점+), C(그외) 등급 부여
 ```
 
 #### 1.3 왜 Market Gate가 필요한가?
