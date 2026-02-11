@@ -2539,6 +2539,7 @@ def get_backtest_summary():
             
             total_signals = 0
             wins = 0
+            losses_j = 0
             total_return = 0.0
             
             # Load current prices for accurate return calc
@@ -2589,19 +2590,32 @@ def get_backtest_summary():
                             # We prefer current price.
                             if curr:
                                 # OLD: ret = ((curr - entry) / entry) * 100
-                                # NEW: Scenario logic
-                                ret = calculate_scenario_return(code, entry, date_str, curr, df_prices_full)
+                                # NEW: Scenario logic (Target 9%, Stop 5%)
+                                ret = calculate_scenario_return(code, entry, date_str, curr, df_prices_full, target_pct=0.09, stop_pct=0.05)
                                 
                                 total_signals += 1
                                 total_return += ret
-                                if ret > 0: wins += 1
+                                
+                                # Count WINS only if target hit (>= 9.0)
+                                if ret >= 9.0: 
+                                    wins += 1
+                                # Count LOSSES only if stop hit (<= -5.0)
+                                elif ret <= -5.0:
+                                    losses_j += 1
                 except:
                     continue
             
             if total_signals > 0:
                 jb_stats['status'] = 'OK'
                 jb_stats['count'] = total_signals # Total historical count used for stats
-                jb_stats['win_rate'] = round((wins / total_signals) * 100, 1)
+                
+                # Win Rate = Wins / Closed Trades
+                closed_trades = wins + losses_j
+                if closed_trades > 0:
+                    jb_stats['win_rate'] = round((wins / closed_trades) * 100, 1)
+                else:
+                    jb_stats['win_rate'] = 0.0
+                    
                 jb_stats['avg_return'] = round(total_return / total_signals, 1)
 
                 # [Improvement] Status Logic
@@ -2647,6 +2661,7 @@ def get_backtest_summary():
                 
                 total_v = 0
                 wins_v = 0
+                losses_v = 0
                 total_ret_v = 0.0
                 
                 # VCP Backtest Simulation
@@ -2661,15 +2676,26 @@ def get_backtest_summary():
                     current_price = price_map.get(ticker, 0)
                     if current_price == 0: continue # Skip if no current price
                     
-                    sim_ret = calculate_scenario_return(ticker, entry_price, signal_date, current_price, df_prices_full)
+                    # VCP: Target 15%, Stop 5%
+                    sim_ret = calculate_scenario_return(ticker, entry_price, signal_date, current_price, df_prices_full, target_pct=0.15, stop_pct=0.05)
                     
                     total_v += 1
                     total_ret_v += sim_ret
-                    if sim_ret > 0: wins_v += 1
+                    
+                    if sim_ret >= 15.0: 
+                        wins_v += 1
+                    elif sim_ret <= -5.0:
+                         losses_v += 1
 
                 if total_v > 0:
                     vcp_stats['count'] = total_v
-                    vcp_stats['win_rate'] = round((wins_v / total_v) * 100, 1)
+                    
+                    closed_v = wins_v + losses_v
+                    if closed_v > 0:
+                        vcp_stats['win_rate'] = round((wins_v / closed_v) * 100, 1)
+                    else:
+                        vcp_stats['win_rate'] = 0.0
+                        
                     vcp_stats['avg_return'] = round(total_ret_v / total_v, 1)
 
                     # [Improvement] Status Logic
@@ -2696,11 +2722,11 @@ def get_backtest_summary():
         logger.error(f"Backtest Summary Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-def calculate_scenario_return(ticker, entry_price, signal_date, current_price, price_df):
+def calculate_scenario_return(ticker, entry_price, signal_date, current_price, price_df, target_pct=0.15, stop_pct=0.05):
     """
     백테스트 시뮬레이션 (Scenario based)
-    - 익절: +15% 도달 시 매도
-    - 손절: -5% 이탈 시 매도
+    - 익절: +target_pct 도달 시 매도 (기본 15%)
+    - 손절: -stop_pct 이탈 시 매도 (기본 5%)
     - 보유: 현재가 기준 수익률
     """
     try:
@@ -2718,8 +2744,8 @@ def calculate_scenario_return(ticker, entry_price, signal_date, current_price, p
         if 'high' not in price_df.columns:
             # Fallback to Close-only check
              ret = ((current_price - entry_price) / entry_price) * 100
-             if ret > 15: return 15.0
-             if ret < -5: return -5.0
+             if ret > (target_pct * 100): return (target_pct * 100)
+             if ret < -(stop_pct * 100): return -(stop_pct * 100)
              return ret
 
         # Extract history for ticker after signal_date
@@ -2736,13 +2762,13 @@ def calculate_scenario_return(ticker, entry_price, signal_date, current_price, p
             low = day['low']
             high = day['high']
             
-            # Check Stop Loss (-5%)
-            if low <= entry_price * 0.95:
-                return -5.0
+            # Check Stop Loss
+            if low <= entry_price * (1 - stop_pct):
+                return -(stop_pct * 100)
                 
-            # Check Take Profit (+15%)
-            if high >= entry_price * 1.15:
-                return 15.0
+            # Check Take Profit
+            if high >= entry_price * (1 + target_pct):
+                return (target_pct * 100)
         
         # If still holding
         return ((current_price - entry_price) / entry_price) * 100

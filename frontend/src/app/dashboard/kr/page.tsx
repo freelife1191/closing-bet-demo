@@ -438,7 +438,7 @@ export default function KRMarketOverview() {
     const isVCP = strategyName.includes("VCP");
     const criteriaText = isVCP
       ? "돌파 매매 진입 후 익절(+15%) 성공 비율"
-      : "종가 매수 후 보유 시 익절(+15%) 성공 비율";
+      : "종가 매수 후 보유 시 익절(+9%) 성공 비율";
 
     return (
       <div className="space-y-3">
@@ -465,7 +465,7 @@ export default function KRMarketOverview() {
         <div className="space-y-2 text-[11px] text-gray-300">
           <div className="flex gap-2">
             <span className="text-gray-500 min-w-[30px]">기준:</span>
-            <span>익절 +15%, 손절 -5% 기준 백테스팅 결과입니다.</span>
+            <span>{strategyName === 'Closing Bet' ? '익절 +9%, 손절 -5%' : '익절 +15%, 손절 -5%'} 기준 백테스팅 결과입니다.</span>
           </div>
           <div className="flex gap-2">
             <span className="text-gray-500 min-w-[30px]">해석:</span>
