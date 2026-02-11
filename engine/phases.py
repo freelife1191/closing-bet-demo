@@ -169,6 +169,36 @@ class Phase1Analyzer(BasePhase):
                 stock, charts, [], supply, None
             )
 
+            # [NEW] VCP 패턴 분석
+            vcp_data = None
+            try:
+                import pandas as pd
+                from engine.vcp import detect_vcp_pattern
+                
+                if charts and len(charts.closes) >= 60:
+                    df = pd.DataFrame({
+                        'open': charts.opens,
+                        'high': charts.highs,
+                        'low': charts.lows,
+                        'close': charts.closes,
+                        'volume': charts.volumes,
+                        'date': charts.dates
+                    })
+                    # 날짜 형식 변환 (YYYYMMDD -> datetime)
+                    df['date'] = pd.to_datetime(df['date'], format='%Y%m%d', errors='coerce')
+                    
+                    vcp_result = detect_vcp_pattern(df, stock.code, stock.name)
+                    vcp_data = {
+                        'score': vcp_result.vcp_score,
+                        'ratio': vcp_result.contraction_ratio,
+                        'is_vcp': vcp_result.is_vcp
+                    }
+                    # StockData에 주입 (LLMAnalyzer가 읽을 수 있도록)
+                    setattr(stock, 'vcp_score', vcp_result.vcp_score)
+                    setattr(stock, 'contraction_ratio', vcp_result.contraction_ratio)
+            except Exception as e:
+                logger.debug(f"VCP analysis failed for {stock.name}: {e}")
+
             # 5. 필터 조건 검증
             volume_ratio = score_details.get('volume_ratio', 0)
             trading_value = getattr(stock, 'trading_value', 0)
@@ -200,7 +230,8 @@ class Phase1Analyzer(BasePhase):
                 'supply': supply,
                 'pre_score': pre_score,
                 'score_details': score_details,
-                'temp_grade': temp_grade
+                'temp_grade': temp_grade,
+                'vcp': vcp_data
             }
 
         except Exception as e:
@@ -513,6 +544,13 @@ class Phase4SignalFinalizer(BasePhase):
         grade = self.scorer.determine_grade(
             stock, score, score_details, supply, charts
         )
+
+        # [NEW] VCP 데이터 추가 (Frontend 표시용)
+        vcp_data = item.get('vcp')
+        if vcp_data:
+            score_details['vcp_score'] = vcp_data.get('score', 0)
+            score_details['contraction_ratio'] = vcp_data.get('ratio', 0)
+            score_details['is_vcp'] = vcp_data.get('is_vcp', False)
 
         if not grade:
             logger.info(f"   [Drop Phase4] {stock.name}: Grade Fail. Score={score.total}, TV={stock.trading_value//100_000_000}억, VR={score_details.get('volume_ratio')}")

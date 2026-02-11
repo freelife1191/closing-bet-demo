@@ -704,20 +704,38 @@ Format: {{"score": 2, "reason": "종합적인 요약 이유"}}
     def _extract_vcp_info(self, stock: Dict) -> tuple:
         """VCP 정보 추출"""
         vcp_score = 0
-        contraction_ratio = 0
+        contraction_ratio = 1.0
 
         if isinstance(stock, dict):
-            score = stock.get('score', 0)
-            if hasattr(score, 'total'):
-                vcp_score = score.total
-            elif isinstance(score, dict):
-                vcp_score = score.get('total', 0)
+            # 1. Direct VCP keys
+            if 'vcp_score' in stock:
+                vcp_score = stock['vcp_score']
+                contraction_ratio = stock.get('contraction_ratio', 1.0)
+            # 2. Score object fallback
             else:
-                vcp_score = score
+                score = stock.get('score', 0)
+                if hasattr(score, 'total'):
+                    # This is Closing Bet Score, not VCP score. 
+                    # If this is Closing Bet, we want VCP score if available.
+                    vcp_score = getattr(stock, 'vcp_score', 0)
+                elif isinstance(score, dict):
+                    vcp_score = score.get('total', 0)
+                else:
+                    vcp_score = score
+                
+                if 'contraction_ratio' in stock:
+                    contraction_ratio = stock['contraction_ratio']
 
-            contraction_ratio = stock.get('contraction_ratio', 0)
         else:
-            vcp_score = getattr(stock, 'score', 0)
-            contraction_ratio = getattr(stock, 'contraction_ratio', 0)
+            # Object
+            if hasattr(stock, 'vcp_score'):
+                vcp_score = getattr(stock, 'vcp_score', 0)
+                contraction_ratio = getattr(stock, 'contraction_ratio', 1.0)
+            else:
+                # Fallback to score (might be total score if VCP not available)
+                # But for VCP analysis we really want VCP score.
+                # If unavailable, return 0 to indicate "Not observed"
+                vcp_score = 0
+                contraction_ratio = getattr(stock, 'contraction_ratio', 1.0)
 
         return vcp_score, contraction_ratio
