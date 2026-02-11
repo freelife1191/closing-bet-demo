@@ -1229,7 +1229,7 @@ def create_signals_log(target_date=None, run_ai=True):
                     'entry_price': int(row['entry_price']),
                     'foreign_5d': int(row['foreign_net_5d']),
                     'inst_5d': int(row['inst_net_5d']),
-                    'vcp_score': 0, # Screener doesn't expose sub-score directly, optional
+                    'vcp_score': row.get('vcp_score', 0), # [FIX] Use calculated score from screener
                     'current_price': int(row.get('entry_price', 0)) # Approximation or need fetch
                 })
         
@@ -2117,16 +2117,21 @@ def update_vcp_signals_recent_price():
         from pykrx import stock
         
         current_prices = {}
+        updated_count = 0  # [Fix] Initialize counter
         
         # 1. KOSPI/KOSDAQ 전체 종가 일괄 조회 (매우 빠름)
         for market in ["KOSPI", "KOSDAQ"]:
             try:
-                # get_market_ohlcv_by_date(..., ..., ticker) 대신 
-                # get_market_ohlcv_by_date(..., ..., market) 사용 시 해당 시장 전체 데이터 리턴
-                df_market = stock.get_market_ohlcv_by_date(today_str, today_str, market)
+                # get_market_ohlcv(date, market=...) 사용
+                df_market = stock.get_market_ohlcv(today_str, market=market)
                 if not df_market.empty:
                     for ticker, row in df_market.iterrows():
-                        price = int(row['종가'])
+                        # [Fix] Handle float strings (e.g. '2650.55')
+                        try:
+                            price = int(float(row['종가']))
+                        except:
+                            price = 0
+                            
                         if price > 0:
                             current_prices[str(ticker)] = price
             except Exception as e:
@@ -2142,7 +2147,7 @@ def update_vcp_signals_recent_price():
             if toss_data:
                 for t, data in toss_data.items():
                     if data['current'] > 0:
-                        current_prices[str(t)] = int(data['current'])
+                        current_prices[str(t)] = int(float(data['current']))
                 log(f"Toss Batch API를 통한 {len(toss_data)}개 종목 최종 보정 완료", "SUCCESS")
         except Exception as te:
             log(f"Toss 보정 시도 실패: {te}", "WARNING")
@@ -2157,7 +2162,7 @@ def update_vcp_signals_recent_price():
                 try:
                     data = fetch_stock_price(ticker)
                     if data and 'price' in data:
-                        current_prices[ticker] = int(data['price'])
+                        current_prices[ticker] = int(float(data['price']))
                 except:
                     pass
         

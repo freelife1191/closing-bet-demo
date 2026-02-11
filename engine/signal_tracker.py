@@ -405,7 +405,8 @@ class SignalTracker:
                 'ticker': row['ticker'],
                 'name': row['name'],
                 'current_price': row['entry_price'],
-                # [FIX] 수급 점수('score')가 아닌 실제 VCP 패턴 점수('vcp_score') 전달
+                # [FIX] User requested Total Score (Supply+VCP) which is >60
+                'score': row.get('score', 0),
                 'vcp_score': row.get('vcp_score', 0),
                 'contraction_ratio': row.get('contraction_ratio', 0),
                 'foreign_5d': row['foreign_5d'],

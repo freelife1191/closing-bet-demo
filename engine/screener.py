@@ -258,7 +258,8 @@ class SmartMoneyScreener:
                 'current_price': stock_prices.iloc[-1]['close'] if not stock_prices.empty else 0, # Added current_price
                 'change_pct': 0 if len(stock_prices) == 0 else (stock_prices.iloc[-1]['close'] - stock_prices.iloc[0]['close']) / stock_prices.iloc[0]['close'] * 100,
                 'market_status': 'UNKNOWN',
-                'contraction_ratio': vcp_result.contraction_ratio
+                'contraction_ratio': vcp_result.contraction_ratio,
+                'vcp_score': vcp_score_final  # [FIX] Return calculated VCP score
             }
 
         except Exception as e:

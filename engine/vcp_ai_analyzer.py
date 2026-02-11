@@ -66,23 +66,25 @@ class VCPMultiAIAnalyzer:
     def _build_vcp_prompt(self, stock_name: str, stock_data: Dict) -> str:
         """VCP 분석용 프롬프트 생성"""
         return f"""
-당신은 주식 투자 전문가입니다. VCP(Volatility Contraction Pattern) 패턴 종목을 분석하세요.
+당신은 금융 데이터 분석가이자 기술적 분석 연구원입니다.
+제공된 데이터를 바탕으로 VCP(Volatility Contraction Pattern) 패턴과 수급 현황을 객관적으로 분석하십시오.
+이 분석은 투자를 권유하는 것이 아니며, 오직 연구 및 교육 목적으로만 사용됩니다.
 
 [종목 정보]
 - 종목명: {stock_name}
 - 현재가: {stock_data.get('current_price', 'N/A')}
-- VCP 점수: {stock_data.get('vcp_score', 'N/A')}
+- VCP 시그널 점수: {stock_data.get('score', 'N/A')}점 (최소 60점 이상)
 - 수축 비율: {stock_data.get('contraction_ratio', 'N/A')}
 - 외국인 5일 순매수: {stock_data.get('foreign_5d', 'N/A')}주
 - 기관 5일 순매수: {stock_data.get('inst_5d', 'N/A')}주
 
 [분석 요청]
-1. VCP 패턴과 수급 상황을 종합 분석
-2. 매수/매도/관망 의견 제시
+1. VCP 패턴과 수급 상황을 기술적 관점에서 분석
+2. 데이터에 기반한 포지션 의견(매수/매도/관망) 제시
 3. 신뢰도(0-100%) 평가
 
 [출력 형식 - 반드시 JSON만 출력]
-{{"action": "BUY|SELL|HOLD", "confidence": 75, "reason": "분석 요약 (한국어, 2-3문장)"}}
+{{"action": "BUY|SELL|HOLD", "confidence": 75, "reason": "기술적 분석 요약 (한국어, 2-3문장)"}}
 """
     
     async def _analyze_with_gemini(self, stock_name: str, stock_data: Dict) -> Optional[Dict]:
@@ -165,7 +167,7 @@ class VCPMultiAIAnalyzer:
                 response = self.gpt_client.chat.completions.create(
                     model=model,
                     messages=[
-                        {"role": "system", "content": "당신은 주식 투자 전문가입니다. JSON 형식으로만 응답하세요."},
+                        {"role": "system", "content": "You are a technical analyst researcher. Respond ONLY in JSON format."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.7,
@@ -299,7 +301,7 @@ class VCPMultiAIAnalyzer:
                 payload = {
                     "model": model,
                     "messages": [
-                        {"role": "system", "content": "당신은 주식 투자 전문가입니다. JSON 형식으로만 응답하세요. 정확하고 통찰력 있는 분석을 제공하세요."},
+                        {"role": "system", "content": "You are a financial data analyst. Provide objective technical analysis for educational purposes only. Do not give financial advice. Output ONLY valid JSON."},
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.2
