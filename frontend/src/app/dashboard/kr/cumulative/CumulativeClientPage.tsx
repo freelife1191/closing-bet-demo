@@ -792,7 +792,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
           </thead>
           <tbody className="text-xs divide-y divide-white/5">
             {trades.map((trade, idx) => (
-              <tr key={trade.id} className="hover:bg-white/5 transition-colors group">
+              <tr key={`${trade.id}-${idx}`} className="hover:bg-white/5 transition-colors group">
                 <td className="py-3 px-4 text-center text-gray-600">{trades.length - idx}</td>
                 <td className="py-3 px-4 text-gray-400 font-mono tracking-tight">{trade.date}</td>
                 <td className="py-3 px-4">

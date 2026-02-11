@@ -24,18 +24,12 @@ echo "🛑 Stopping $FRONTEND_PORT/$FLASK_PORT..."
 
 kill_port() {
   local port=$1
-  echo "   🔍 Checking port $port..."
-  # 1. lsof (most reliable on macOS)
+  # Only echo if PIDs are found to keep it quiet
   pids=$(lsof -ti :$port 2>/dev/null || true)
   if [ -n "$pids" ]; then
-    echo "   🔪 Killing PIDs on $port: $pids"
+    echo "   🔪 Killing processes on port $port (PIDs: $(echo $pids | tr '\n' ' '))"
     kill -9 $pids 2>/dev/null || true
-    sleep 1
-  fi
-  
-  # 2. fuser (if available, mostly Linux)
-  if command -v fuser >/dev/null 2>&1; then
-    fuser -k -n tcp $port 2>/dev/null || true
+    sleep 0.5
   fi
 }
 

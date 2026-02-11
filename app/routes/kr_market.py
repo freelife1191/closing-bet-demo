@@ -858,7 +858,10 @@ def get_cumulative_performance():
                     stats_date = data.get('date', '')
 
                 for sig in data['signals']:
-                    ticker = str(sig.get('stock_code', '')).zfill(6)
+                    # [FIX] Keys in jongga_v2_results are 'ticker' and 'name', not 'stock_code'/'stock_name'
+                    ticker = str(sig.get('ticker', sig.get('stock_code', ''))).zfill(6)
+                    if ticker == '000000': continue
+                    
                     entry = sig.get('entry_price', 0)
                     target = sig.get('target_price', 0)
                     stop = sig.get('stop_price', 0)
@@ -955,7 +958,7 @@ def get_cumulative_performance():
                         'id': f"{ticker}-{stats_date}", # Unique ID
                         'date': stats_date,
                         'grade': sig.get('grade', 'C'),
-                        'name': sig.get('stock_name', ''),
+                        'name': sig.get('name', sig.get('stock_name', '')), # [FIX] Use 'name' first
                         'code': ticker,
                         'market': sig.get('market', ''),
                         'entry': entry,
@@ -1467,11 +1470,11 @@ def get_jongga_v2_latest():
                         
                         updated_count = 0
                         for sig in data['signals']:
-                            # Jongga uses 'code' primarily
-                            ticker = str(sig.get('code', '')).zfill(6)
-                            if not ticker: ticker = str(sig.get('ticker', '')).zfill(6)
+                            # Jongga uses 'code' primarily, but check 'ticker' and 'stock_code' too
+                            raw_code = sig.get('code') or sig.get('ticker') or sig.get('stock_code')
+                            ticker = str(raw_code).strip().zfill(6) if raw_code else ''
                             
-                            if ticker in latest_price_map:
+                            if ticker and ticker != '000000' and ticker in latest_price_map:
                                 real_price = latest_price_map[ticker]
                                 sig['current_price'] = real_price
                                 
@@ -1499,6 +1502,60 @@ def get_jongga_v2_latest():
                 return (grade_val, score_val)
 
             data['signals'].sort(key=sort_key, reverse=True)
+
+            # [FIX] Normalize signal fields for frontend compatibility
+            # Frontend expects: stock_code, stock_name, change_pct, score (dict), checklist, etc.
+            for sig in data['signals']:
+                # stock_code / stock_name aliases
+                if 'stock_code' not in sig:
+                    sig['stock_code'] = str(sig.get('ticker', sig.get('code', ''))).zfill(6)
+                if 'stock_name' not in sig:
+                    sig['stock_name'] = sig.get('name', '')
+                
+                # change_pct (frontend) from return_pct (backend)
+                if 'change_pct' not in sig and 'return_pct' in sig:
+                    sig['change_pct'] = sig['return_pct']
+                elif 'change_pct' not in sig:
+                    # Calculate from current_price and entry_price
+                    entry = sig.get('entry_price', 0)
+                    current = sig.get('current_price', 0)
+                    if entry and entry > 0 and current:
+                        sig['change_pct'] = round(((current - entry) / entry) * 100, 2)
+                    else:
+                        sig['change_pct'] = 0
+                
+                # score: frontend expects dict { total, ... }, backend may send int
+                raw_score = sig.get('score', 0)
+                if not isinstance(raw_score, dict):
+                    sig['score'] = {
+                        'total': int(raw_score) if raw_score else 0,
+                        'base_score': int(raw_score) if raw_score else 0,
+                        'bonus_score': 0
+                    }
+                
+                # Ensure checklist exists (frontend accesses checklist.has_news etc.)
+                if 'checklist' not in sig:
+                    sig['checklist'] = {
+                        'has_news': False,
+                        'volume_surge': False,
+                        'supply_demand': sig.get('foreign_5d', 0) > 0 or sig.get('inst_5d', 0) > 0
+                    }
+                
+                # Ensure target_price / stop_price exist
+                entry = sig.get('entry_price', 0)
+                if not sig.get('target_price') and entry:
+                    sig['target_price'] = round(entry * 1.09)
+                if not sig.get('stop_price') and entry:
+                    sig['stop_price'] = round(entry * 0.95)
+                
+                # ai_evaluation structure (frontend expects nested object)
+                if 'ai_evaluation' not in sig and sig.get('ai_action'):
+                    sig['ai_evaluation'] = {
+                        'action': sig.get('ai_action', 'HOLD'),
+                        'confidence': sig.get('ai_confidence', 0),
+                        'reason': sig.get('ai_reason', ''),
+                        'model': 'gemini'
+                    }
 
         return jsonify(data)
 

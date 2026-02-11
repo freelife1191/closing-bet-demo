@@ -1420,32 +1420,33 @@ def create_signals_log(target_date=None, run_ai=True):
                 elif score >= 60: grade_counts['B'] += 1
                 else: grade_counts['C'] += 1
                 
-            jongga_data = {
+            # [Fix] VCP 결과는 별도 파일로 저장 (종가베팅 데이터와 분리)
+            vcp_data = {
                 "date": target_date if target_date else datetime.now().strftime('%Y-%m-%d'),
-                "total_candidates": len(signals), # 전체 후보 (여기선 Top 20만 남았을 수 있음, 원본 df_result 사용 권장하지만 여기선 signals 사용)
+                "total_candidates": len(signals),
                 "filtered_count": len(df_result) - len(signals) if 'df_result' in locals() else 0,
                 "signals": signals,
                 "by_grade": grade_counts,
-                "by_market": {}, # 생략
+                "by_market": {},
                 "processing_time_ms": 0,
-                "market_status": market_status,
-                "market_summary": "", # AI 요약이 있다면 추가 가능
+                "market_status": market_status, 
+                "market_summary": "", 
                 "trending_themes": [],
                 "updated_at": datetime.now().isoformat()
             }
             
             # 날짜 포맷 (YYYYMMDD)
-            j_date_str = str(jongga_data['date']).replace('-', '')
-            j_path = os.path.join(BASE_DIR, 'data', f'jongga_v2_results_{j_date_str}.json')
+            j_date_str = str(vcp_data['date']).replace('-', '')
+            j_path = os.path.join(BASE_DIR, 'data', f'vcp_signals_results_{j_date_str}.json')
             
             with open(j_path, 'w', encoding='utf-8') as f:
-                json.dump(jongga_data, f, indent=2, ensure_ascii=False)
-            log(f"메신저 연동 파일 저장 완료: {j_path}", "SUCCESS")
+                json.dump(vcp_data, f, indent=2, ensure_ascii=False)
+            log(f"VCP 시그널 결과 저장 완료: {j_path}", "SUCCESS")
             
-            # Latest 파일 업데이트
-            j_latest_path = os.path.join(BASE_DIR, 'data', 'jongga_v2_latest.json')
+            # Latest 파일 업데이트 (VCP 전용)
+            j_latest_path = os.path.join(BASE_DIR, 'data', 'vcp_signals_latest.json')
             with open(j_latest_path, 'w', encoding='utf-8') as f:
-                json.dump(jongga_data, f, indent=2, ensure_ascii=False)
+                json.dump(vcp_data, f, indent=2, ensure_ascii=False)
                 
         except Exception as e:
             log(f"jongga_v2_results 저장 실패: {e}", "WARNING")
@@ -2242,6 +2243,8 @@ if __name__ == '__main__':
              # 특정 날짜 지정 가능 (YYYY-MM-DD)
             target_date = sys.argv[2] if len(sys.argv) > 2 else None
             create_signals_log(target_date)
+        elif cmd == "jongga-v2":
+            create_jongga_v2_latest()
         elif cmd == "ai-analysis":
             create_kr_ai_analysis()
         elif cmd == "update-prices":
