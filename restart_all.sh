@@ -24,16 +24,32 @@ echo "🛑 Stopping $FRONTEND_PORT/$FLASK_PORT..."
 
 kill_port() {
   local port=$1
+  echo "   🔍 Checking port $port..."
+  # 1. lsof (most reliable on macOS)
   pids=$(lsof -ti :$port 2>/dev/null || true)
-  [ -n "$pids" ] && { echo "   🔪 $port ($pids)"; kill -9 $pids 2>/dev/null; }
-  command -v ss >/dev/null 2>&1 && {
-    pids=$(ss -tulpn 2>/dev/null | grep :$port | awk '{print $7}' | cut -d, -f2 | cut -d= -f2 | sort -u)
-    [ -n "$pids" ] && kill -9 $pids 2>/dev/null
-  }
+  if [ -n "$pids" ]; then
+    echo "   🔪 Killing PIDs on $port: $pids"
+    kill -9 $pids 2>/dev/null || true
+    sleep 1
+  fi
+  
+  # 2. fuser (if available, mostly Linux)
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k -n tcp $port 2>/dev/null || true
+  fi
 }
 
-kill_port $FRONTEND_PORT; kill_port $FLASK_PORT
-pkill -f "flask_app.py" "next dev" "npm.*dev" 2>/dev/null || true
+kill_port $FRONTEND_PORT
+kill_port $FLASK_PORT
+
+# 3. 명시적 프로세스 패턴 종료 (Next.js 및 관련 워커)
+echo "   🧹 Cleaning up related processes..."
+pkill -f "next-router-worker" 2>/dev/null || true
+pkill -f "next-render-worker" 2>/dev/null || true
+pkill -f "node.*next" 2>/dev/null || true
+pkill -f "flask_app.py" 2>/dev/null || true
+pkill -f "gunicorn.*flask_app" 2>/dev/null || true
+sleep 1
 mkdir -p logs
 
 echo "🔧 Python deps setup (isolated venv)..."

@@ -858,16 +858,16 @@ export default function VCPSignalsPage() {
                       </label>
                     </div>
 
-                    {/* First Half */}
-                    <div className="flex items-center gap-2 font-mono justify-end lg:justify-start">
-                      <span className="text-gray-500">전반부:</span>
-                      <span className="text-white font-bold">₩{firstHalfHigh.toLocaleString()}</span>
-                    </div>
-
                     {/* Ratio */}
-                    <div className="flex items-center gap-2 font-mono mt-1 lg:mt-0">
+                    <div className="flex items-center gap-2 font-mono justify-end lg:justify-start">
                       <span className="text-gray-500">Ratio:</span>
                       <span className={`font-bold ${parseFloat(vcpRatio) <= 0.6 ? 'text-emerald-400' : 'text-cyan-400'}`}>{vcpRatio}</span>
+                    </div>
+
+                    {/* First Half */}
+                    <div className="flex items-center gap-2 font-mono mt-1 lg:mt-0">
+                      <span className="text-gray-500">전반부:</span>
+                      <span className="text-white font-bold">₩{firstHalfHigh.toLocaleString()}</span>
                     </div>
 
                     {/* Second Half */}
