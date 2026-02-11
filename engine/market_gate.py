@@ -247,6 +247,11 @@ class MarketGate:
                 result['commodities']['us_gold'] = commodities_data['gold']
             if 'silver' in commodities_data:
                 result['commodities']['us_silver'] = commodities_data['silver']
+            # Add KRX gold/silver ETF data
+            if 'krx_gold' in commodities_data:
+                result['commodities']['krx_gold'] = commodities_data['krx_gold']
+            if 'krx_silver' in commodities_data:
+                result['commodities']['krx_silver'] = commodities_data['krx_silver']
 
             # Use GlobalDataFetcher for crypto
             crypto_data = self.global_fetcher.fetch_crypto(start_date, end_date)

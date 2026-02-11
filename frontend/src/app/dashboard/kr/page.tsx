@@ -987,12 +987,12 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KRX GOLD</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.gold?.value)}
+                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.krx_gold?.value)}
                 </span>
-                {gateData?.commodities?.gold && (
-                  <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.gold.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                    <i className={`fas fa-caret-${(gateData.commodities.gold.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
-                    {(gateData.commodities.gold.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.commodities.gold.change_pct?.toFixed(1)}%
+                {gateData?.commodities?.krx_gold && (
+                  <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.krx_gold.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                    <i className={`fas fa-caret-${(gateData.commodities.krx_gold.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
+                    {(gateData.commodities.krx_gold.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.commodities.krx_gold.change_pct?.toFixed(1)}%
                   </span>
                 )}
               </div>
@@ -1002,12 +1002,12 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KRX SILVER</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.silver?.value)}
+                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.krx_silver?.value)}
                 </span>
-                {gateData?.commodities?.silver && (
-                  <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.silver.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                    <i className={`fas fa-caret-${(gateData.commodities.silver.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
-                    {(gateData.commodities.silver.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.commodities.silver.change_pct?.toFixed(1)}%
+                {gateData?.commodities?.krx_silver && (
+                  <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.krx_silver.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                    <i className={`fas fa-caret-${(gateData.commodities.krx_silver.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
+                    {(gateData.commodities.krx_silver.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.commodities.krx_silver.change_pct?.toFixed(1)}%
                   </span>
                 )}
               </div>

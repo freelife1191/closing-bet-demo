@@ -873,7 +873,8 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                     from concurrent.futures import ThreadPoolExecutor, as_completed
 
                     collector = TossCollector()
-                    target_tickers = final_df[final_df['date'] == end_date]['ticker'].unique().tolist()
+                    end_date_fmt = end_date_obj.strftime('%Y-%m-%d') # Defined for filtering
+                    target_tickers = final_df[final_df['date'] == end_date_fmt]['ticker'].unique().tolist()
                     
                     # 1. Attempt Toss Batch (Fastest)
                     toss_prices = collector.get_prices_batch(target_tickers)
@@ -885,7 +886,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                     
                     # Update with Toss data first
                     if toss_prices:
-                        mask = (final_df['date'] == end_date)
+                        mask = (final_df['date'] == end_date_fmt)
                         def get_toss_price(row):
                             t_data = toss_prices.get(row['ticker'])
                             return int(t_data['current']) if t_data and t_data['current'] > 0 else row['close']
@@ -909,12 +910,12 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                         
                         # Apply Fallback Data
                         if fallback_results:
-                            mask = (final_df['date'] == end_date) & (final_df['ticker'].isin(fallback_results.keys()))
+                            mask = (final_df['date'] == end_date_fmt) & (final_df['ticker'].isin(fallback_results.keys()))
                             # Pandas apply is slow, loop might be better for partial updates or map
                             # Using map for speed
                             for t, data in fallback_results.items():
                                 # Locating specific row
-                                idx = (final_df['date'] == end_date) & (final_df['ticker'] == t)
+                                idx = (final_df['date'] == end_date_fmt) & (final_df['ticker'] == t)
                                 if any(idx):
                                     final_df.loc[idx, 'close'] = int(data['price'])
                             

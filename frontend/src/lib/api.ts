@@ -6,28 +6,43 @@ interface FetchOptions extends RequestInit {
   timeout?: number;
 }
 
-export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+/**
+ * AbortController를 사용하여 타임아웃 기능이 있는 fetch 래퍼
+ */
+function createTimeoutFetch(timeoutMs: number = 10000): {
+  controller: AbortController;
+  cleanup: () => void;
+} {
   const controller = new AbortController();
-  const timeoutMs = options.timeout ?? 10000; // 기본 10초, 옵션으로 변경 가능
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  const cleanup = () => clearTimeout(timeoutId);
+
+  return { controller, cleanup };
+}
+
+/**
+ * API 호출을 위한 공통 fetch 함수 (GET)
+ * - 타임아웃 처리 포함
+ * - 에러 핸들링 표준화
+ */
+export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+  const { controller, cleanup } = createTimeoutFetch(options.timeout ?? 10000);
 
   try {
-    // 옵션 병합 (signal 우선순위 고려)
     const fetchOptions: RequestInit = {
       ...options,
       signal: controller.signal
     };
 
     const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
-    clearTimeout(id);
 
     if (!response.ok) {
-      // 에러 객체에 status 등을 담아서 던질 수도 있음
       const error: any = new Error(`API Error: ${response.status}`);
       error.status = response.status;
       try {
         error.data = await response.json();
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
       throw error;
     }
     return response.json();
@@ -36,6 +51,52 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
       throw new Error('Request timed out');
     }
     throw e;
+  } finally {
+    cleanup();
+  }
+}
+
+/**
+ * POST 요청을 위한 공통 fetch 함수
+ * - 타임아웃 처리 포함
+ * - JSON 직렬화 자동 처리
+ * - 에러 핸들링 표준화
+ */
+export async function fetchPostAPI<T>(
+  endpoint: string,
+  data: any,
+  options: { timeout?: number; headers?: Record<string, string> } = {}
+): Promise<T> {
+  const { timeout = 30000, headers = {} } = options; // POST는 기본 30초
+  const { controller, cleanup } = createTimeoutFetch(timeout);
+
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      signal: controller.signal,
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      const error: any = new Error(`API Error: ${response.status}`);
+      error.status = response.status;
+      try {
+        error.data = await response.json();
+      } catch { /* ignore */ }
+      throw error;
+    }
+    return response.json();
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw e;
+  } finally {
+    cleanup();
   }
 }
 
@@ -74,8 +135,8 @@ export interface KRMarketGate {
   kosdaq_close: number;
   kosdaq_change_pct: number;
   commodities?: {
-    gold: { value: number; change_pct: number };
-    silver: { value: number; change_pct: number };
+    krx_gold: { value: number; change_pct: number };
+    krx_silver: { value: number; change_pct: number };
     us_gold?: { value: number; change_pct: number };
     us_silver?: { value: number; change_pct: number };
   };
@@ -163,51 +224,27 @@ export const krAPI = {
   getHistory: (date: string) => fetchAPI<KRAIAnalysis>(`/api/kr/ai-history/${date}`),
 
   // 스크리너 실행 (Closing Bet)
-  runScreener: async (capital = 50_000_000, markets = ['KOSPI', 'KOSDAQ'], target_date?: string) => {
-    const response = await fetch('/api/kr/jongga-v2/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ capital, markets, target_date }),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Screener execution failed');
-    }
-    return response.json();
-  },
+  runScreener: (capital = 50_000_000, markets = ['KOSPI', 'KOSDAQ'], target_date?: string) =>
+    fetchPostAPI<any>('/api/kr/jongga-v2/run', { capital, markets, target_date }, { timeout: 60000 }),
 
   // VCP 스크리너 실행 (VCP Signals + AI)
   runVCPScreener: async (target_date?: string, max_stocks = 50) => {
-    const response = await fetch('/api/kr/signals/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_date, max_stocks }),
-    });
-    if (!response.ok) {
-      if (response.status === 409) {
+    try {
+      return await fetchPostAPI<any>('/api/kr/signals/run', { target_date, max_stocks }, { timeout: 60000 });
+    } catch (e: any) {
+      // Preserve 409 status error message
+      if (e.message.includes('409') || e.status === 409) {
         throw new Error('이미 분석이 진행 중입니다.');
       }
-      const error = await response.json();
-      throw new Error(error.message || 'VCP Screener execution failed');
+      throw e;
     }
-    return response.json();
   },
 
   getVCPStatus: () => fetchAPI<{ running: boolean; status: string; message: string; progress: number }>('/api/kr/signals/status'),
 
   // Market Gate 개별 업데이트
-  updateMarketGate: async (target_date?: string) => {
-    const response = await fetch('/api/kr/market-gate/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_date }),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Market Gate update failed');
-    }
-    return response.json();
-  },
+  updateMarketGate: (target_date?: string) =>
+    fetchPostAPI<any>('/api/kr/market-gate/update', { target_date }, { timeout: 30000 }),
 };
 
 // Closing Bet API
@@ -345,49 +382,15 @@ export interface TradeResponse {
 export const paperTradingAPI = {
   getPortfolio: () => fetchAPI<PaperTradingPortfolio>('/api/portfolio'),
 
-  buy: async (data: BuyRequest): Promise<TradeResponse> => {
-    const response = await fetch('/api/portfolio/buy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return response.json();
-  },
+  buy: (data: BuyRequest) => fetchPostAPI<TradeResponse>('/api/portfolio/buy', data),
 
-  sell: async (data: SellRequest): Promise<TradeResponse> => {
-    const response = await fetch('/api/portfolio/sell', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return response.json();
-  },
+  sell: (data: SellRequest) => fetchPostAPI<TradeResponse>('/api/portfolio/sell', data),
 
-  async reset() {
-    const res = await fetch('/api/portfolio/reset', { method: 'POST' });
-    if (!res.ok) throw new Error('Account reset failed');
-    return res.json();
-  },
+  reset: () => fetchPostAPI<any>('/api/portfolio/reset', {}),
 
-  async deposit(amount: number) {
-    const res = await fetch('/api/portfolio/deposit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount }),
-    });
-    if (!res.ok) throw new Error('Deposit failed');
-    return res.json();
-  },
+  deposit: (amount: number) => fetchPostAPI<any>('/api/portfolio/deposit', { amount }),
 
-  async getTradeHistory(limit = 50) {
-    const res = await fetch(`/api/portfolio/history?limit=${limit}`);
-    if (!res.ok) throw new Error('Failed to fetch trade history');
-    return res.json();
-  },
+  getTradeHistory: (limit = 50) => fetchAPI<any>(`/api/portfolio/history?limit=${limit}`),
 
-  async getAssetHistory(limit = 30) {
-    const res = await fetch(`/api/portfolio/history/asset?limit=${limit}`);
-    if (!res.ok) throw new Error('Failed to fetch asset history');
-    return res.json();
-  }
+  getAssetHistory: (limit = 30) => fetchAPI<any>(`/api/portfolio/history/asset?limit=${limit}`)
 };

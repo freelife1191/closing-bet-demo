@@ -525,6 +525,60 @@ class GlobalDataFetcher:
     def __init__(self, manager: DataSourceManager = None):
         self.manager = manager or DataSourceManager()
 
+    def _extract_valid_value_pair(
+        self,
+        df: pd.DataFrame,
+        data_key: str,
+        data_name: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        DataFrame에서 유효한 가격 쌍을 추출하고 변동률 계산
+
+        NaN 및 0 값을 건너뛰고 유효한 최신/이전 데이터 쌍을 찾습니다.
+
+        Args:
+            df: 가격 데이터가 포함된 DataFrame
+            data_key: 데이터 키 (예: 'sp500', 'gold')
+            data_name: 데이터 이름 (로그용)
+
+        Returns:
+            {'value': float, 'change_pct': float} 또는 None (유효한 데이터 없음)
+        """
+        if df.empty or len(df) < 2:
+            return None
+
+        # 1. latest_val: 가장 최신 유효한 데이터 찾기
+        latest_idx = -1
+        latest_val = df.iloc[latest_idx]['close']
+
+        nan_count = 0
+        while pd.isna(latest_val) or latest_val == 0:
+            nan_count += 1
+            if nan_count >= len(df):
+                break
+            latest_idx -= 1
+            latest_val = df.iloc[latest_idx]['close']
+
+        # 2. prev_val: latest_val 이전의 유효한 데이터 찾기
+        prev_idx = latest_idx - 1
+
+        # prev_val도 NaN이 아닌 유효한 데이터를 찾을 때까지 이동
+        while prev_idx >= -len(df):
+            prev_val = df.iloc[prev_idx]['close']
+            if not pd.isna(prev_val) and prev_val != 0:
+                break
+            prev_idx -= 1
+
+        # 유효한 값인지 최종 확인
+        if prev_idx >= -len(df) and not pd.isna(latest_val) and latest_val != 0:
+            latest = float(latest_val)
+            prev = float(prev_val)
+            change = ((latest - prev) / prev) * 100 if prev > 0 else 0.0
+            return {'value': latest, 'change_pct': round(change, 2)}
+
+        logger.debug(f"{data_name} ({data_key}): Invalid data (NaN or zero)")
+        return None
+
     def fetch_all_indices(
         self,
         start_date: str,
@@ -550,11 +604,9 @@ class GlobalDataFetcher:
         result = {}
         for key, symbol in indices.items():
             df = self.manager.fetch_index_data(symbol, start_date, end_date)
-            if not df.empty and len(df) >= 2:
-                latest = float(df.iloc[-1]['close'])
-                prev = float(df.iloc[-2]['close'])
-                change = ((latest - prev) / prev) * 100 if prev > 0 else 0.0
-                result[key] = {'value': latest, 'change_pct': round(change, 2)}
+            value_pair = self._extract_valid_value_pair(df, key, "Index")
+            if value_pair:
+                result[key] = value_pair
 
         return result
 
@@ -573,19 +625,33 @@ class GlobalDataFetcher:
         Returns:
             {key: {'value': float, 'change_pct': float}} 형태의 dict
         """
+        # 글로벌 원자재 (미국 시장)
         commodities = {
             'gold': 'GC=F',
             'silver': 'SI=F'
         }
 
+        # KRX 원자재 ETF (한국 시장) - 종목이므로 fetch_stock_data 사용
+        krx_commodities = {
+            'krx_gold': '132030',   # KODEX 골드선물(H)
+            'krx_silver': '144600'  # KODEX 은선물(H)
+        }
+
         result = {}
+
+        # 글로벌 원자재 데이터 수집 (지수)
         for key, symbol in commodities.items():
             df = self.manager.fetch_index_data(symbol, start_date, end_date)
-            if not df.empty and len(df) >= 2:
-                latest = float(df.iloc[-1]['close'])
-                prev = float(df.iloc[-2]['close'])
-                change = ((latest - prev) / prev) * 100 if prev > 0 else 0.0
-                result[key] = {'value': latest, 'change_pct': round(change, 2)}
+            value_pair = self._extract_valid_value_pair(df, key, "Commodity")
+            if value_pair:
+                result[key] = value_pair
+
+        # KRX 원자재 ETF 데이터 수집 (종목)
+        for key, ticker in krx_commodities.items():
+            df = self.manager.fetch_stock_data(ticker, start_date, end_date)
+            value_pair = self._extract_valid_value_pair(df, key, "KRX Commodity")
+            if value_pair:
+                result[key] = value_pair
 
         return result
 
@@ -613,11 +679,9 @@ class GlobalDataFetcher:
         result = {}
         for key, symbol in crypto.items():
             df = self.manager.fetch_index_data(symbol, start_date, end_date)
-            if not df.empty and len(df) >= 2:
-                latest = float(df.iloc[-1]['close'])
-                prev = float(df.iloc[-2]['close'])
-                change = ((latest - prev) / prev) * 100 if prev > 0 else 0.0
-                result[key] = {'value': latest, 'change_pct': round(change, 2)}
+            value_pair = self._extract_valid_value_pair(df, key, "Crypto")
+            if value_pair:
+                result[key] = value_pair
 
         return result
 
