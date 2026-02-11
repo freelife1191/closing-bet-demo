@@ -243,6 +243,12 @@ class Messenger:
             logger.info("메신저 알림이 비활성화되어 있습니다.")
             return
 
+        # Skip if no signals found (prevent empty notification spam)
+        signals = getattr(result, 'signals', [])
+        if not signals or len(signals) == 0:
+            logger.info("[Notification] 발송할 시그널 없음 (0개) - 알림 스킵")
+            return
+
         try:
             # 메시지 데이터 빌드
             message_data = MessageDataBuilder.build(result)

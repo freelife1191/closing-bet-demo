@@ -214,7 +214,7 @@ class SignalGenerator:
                 continue
 
             # Toss 데이터 동기화 (Hybrid 모드)
-            await self._sync_toss_data(candidates)
+            await self._sync_toss_data(candidates, target_date)
 
             # [REFACTORED] Use SignalGenerationPipeline
             try:
@@ -244,9 +244,13 @@ class SignalGenerator:
         logger.info(f"[종가베팅] 전체 완료: {len(all_signals)}개 시그널 ({total_elapsed:.1f}초)")
         logger.info(f"="*60)
 
+        # 파이프라인 통계 저장 (최종 누적)
+        if self._pipeline:
+            self.pipeline_stats = self._pipeline.get_pipeline_stats()
+
         return all_signals
 
-    async def _sync_toss_data(self, candidates: List[StockData]) -> None:
+    async def _sync_toss_data(self, candidates: List[StockData], target_date: date = None) -> None:
         """
         Toss 증권 데이터 동기화 (Hybrid 모드)
 
@@ -254,6 +258,11 @@ class SignalGenerator:
         """
         if not self.config.USE_TOSS_DATA or not candidates:
             return
+
+        # [Fix] 과거 날짜 분석 시 실시간 데이터 덮어쓰기 방지
+        if target_date and target_date != date.today():
+             # logger.debug(f"  [Skip] Toss Realtime Sync skipped for past date: {target_date}")
+             return
 
         try:
             print(f"  [Hybrid] Toss 증권 데이터 동기화 중... ({len(candidates)}개)")
@@ -302,7 +311,7 @@ class SignalGenerator:
         """
         try:
             market_gate = MarketGate(self.config.DATA_DIR)
-            return await market_gate.analyze(target_date.strftime('%Y-%m-%d'))
+            return market_gate.analyze(target_date.strftime('%Y-%m-%d'))
         except Exception as e:
             logger.warning(f"Market Gate analysis failed: {e}")
             return {}
@@ -548,10 +557,16 @@ async def run_screener(
             
         signals.sort(key=sort_key_gen, reverse=True)
 
+        # Phase 1 통과 수 집계
+        phase1_passed = 0
+        if hasattr(generator, 'pipeline_stats'):
+            phase1_stats = generator.pipeline_stats.get('phase1', {}).get('stats', {})
+            phase1_passed = phase1_stats.get('passed', 0)
+
         result = ScreenerResult(
             date=parsed_date if parsed_date else date.today(),
-            total_candidates=len(signals),
-            filtered_count=generator.scan_stats.get("phase1", 0),
+            total_candidates=phase1_passed,  # 1차 필터 통과 수 (CANDIDATES)
+            filtered_count=len(signals),     # 최종 선정 수 (FILTERED)
             scanned_count=generator.scan_stats.get("scanned", 0),
             signals=signals,
             by_grade=summary["by_grade"],

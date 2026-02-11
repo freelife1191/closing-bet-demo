@@ -851,6 +851,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 log(f"날짜별 수집 실패 ({cur_date_str}): {e}", "WARNING")
                 processed_days += 1
                 
+        
         # 병합 및 저장
         if new_data_list:
             log("데이터 병합 중...", "DEBUG")
@@ -873,7 +874,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                     from concurrent.futures import ThreadPoolExecutor, as_completed
 
                     collector = TossCollector()
-                    end_date_fmt = end_date_obj.strftime('%Y-%m-%d') # Defined for filtering
+                    end_date_fmt = end_date_obj.strftime('%Y-%m-%d')
                     target_tickers = final_df[final_df['date'] == end_date_fmt]['ticker'].unique().tolist()
                     
                     # 1. Attempt Toss Batch (Fastest)
@@ -889,7 +890,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                         mask = (final_df['date'] == end_date_fmt)
                         def get_toss_price(row):
                             t_data = toss_prices.get(row['ticker'])
-                            return int(t_data['current']) if t_data and t_data['current'] > 0 else row['close']
+                            return int(t_data['current']) if t_data and t_data.get('current') and t_data['current'] > 0 else row['close']
                         final_df.loc[mask, 'close'] = final_df[mask].apply(get_toss_price, axis=1)
                     
                     # 3. Fallback for missing tickers (Naver -> YF via fetch_stock_price)
@@ -1402,6 +1403,53 @@ def create_signals_log(target_date=None, run_ai=True):
             except Exception as e:
                 log(f"AI 결과 병합 중 오류: {e}", "WARNING")
 
+        # [Fix] jongga_v2_results_{date}.json 저장 (Messenger/Dashboard 연동용)
+        try:
+            from engine.market_gate import MarketGate
+            market_gate = MarketGate()
+            market_status = market_gate.analyze()
+            
+            # Grade 분포 계산
+            grade_counts = {'S': 0, 'A': 0, 'B': 0, 'C': 0, 'D': 0}
+            # signals에는 grade 정보가 없을 수 있음 (Screener 결과엔 score만 있음)
+            # Score 기반 추정 (Scorer 로직 참고: ~80:S, ~70:A, ~60:B)
+            for s in signals:
+                score = float(s.get('score', 0))
+                if score >= 80: grade_counts['S'] += 1
+                elif score >= 70: grade_counts['A'] += 1
+                elif score >= 60: grade_counts['B'] += 1
+                else: grade_counts['C'] += 1
+                
+            jongga_data = {
+                "date": target_date if target_date else datetime.now().strftime('%Y-%m-%d'),
+                "total_candidates": len(signals), # 전체 후보 (여기선 Top 20만 남았을 수 있음, 원본 df_result 사용 권장하지만 여기선 signals 사용)
+                "filtered_count": len(df_result) - len(signals) if 'df_result' in locals() else 0,
+                "signals": signals,
+                "by_grade": grade_counts,
+                "by_market": {}, # 생략
+                "processing_time_ms": 0,
+                "market_status": market_status,
+                "market_summary": "", # AI 요약이 있다면 추가 가능
+                "trending_themes": [],
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            # 날짜 포맷 (YYYYMMDD)
+            j_date_str = str(jongga_data['date']).replace('-', '')
+            j_path = os.path.join(BASE_DIR, 'data', f'jongga_v2_results_{j_date_str}.json')
+            
+            with open(j_path, 'w', encoding='utf-8') as f:
+                json.dump(jongga_data, f, indent=2, ensure_ascii=False)
+            log(f"메신저 연동 파일 저장 완료: {j_path}", "SUCCESS")
+            
+            # Latest 파일 업데이트
+            j_latest_path = os.path.join(BASE_DIR, 'data', 'jongga_v2_latest.json')
+            with open(j_latest_path, 'w', encoding='utf-8') as f:
+                json.dump(jongga_data, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            log(f"jongga_v2_results 저장 실패: {e}", "WARNING")
+
         if signals:
             df_new = pd.DataFrame(signals)
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
@@ -1429,7 +1477,8 @@ def create_signals_log(target_date=None, run_ai=True):
                     elif df_new.empty:
                          df_combined = df_old
                     else:
-                         df_combined = pd.concat([df_old, df_new])
+                         # concat 시 ignore_index=True 권장
+                         df_combined = pd.concat([df_old, df_new], ignore_index=True)
                          
                     # 중복 제거 (안전장치)
                     if not df_combined.empty:

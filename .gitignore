@@ -8,6 +8,11 @@ venv/
 env/
 ENV/
 
+# Backup
+backup/
+.backup/
+*.bak
+
 # Environment
 .env
 

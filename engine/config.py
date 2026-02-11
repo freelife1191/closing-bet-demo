@@ -44,6 +44,7 @@ class SignalConfig:
 
     # 데이터 수집 설정
     USE_TOSS_DATA: bool = True  # Toss 증권 데이터 사용 여부 (KRX 데이터 보정용)
+    DATA_DIR: str = "data"  # 데이터 디렉토리 경로
 
     # 손절/익절 (User Request: +5%, -3%)
     stop_loss_pct: float = 0.03  # -3%

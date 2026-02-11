@@ -13,6 +13,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
+import functools
 
 from engine.models import StockData, ChartData, SupplyData, NewsItem
 
@@ -129,10 +130,11 @@ class BaseCollector(ABC):
             logger.warning(f"날짜 파싱 실패: {date_input}")
             return None
 
+    @functools.lru_cache(maxsize=1)
     def _get_latest_market_date(self) -> str:
         """
-        가장 최근 장 마감 날짜 반환
-
+        가장 최근 장 마감 날짜 반환 (Cached)
+        
         - 주말(토/일): 금요일 날짜 반환
         - 금요일이 휴일인 경우: pykrx를 통해 실제 마지막 개장일 확인
         - 평일 장 마감 전(~15:30): 전일 날짜 반환
@@ -143,11 +145,11 @@ class BaseCollector(ABC):
         """
         now = datetime.now()
         weekday = now.weekday()  # 0=월, 1=화, ..., 5=토, 6=일
-
+        
         # 장 마감 시간 (15:30)
         market_close_hour = 15
         market_close_minute = 30
-
+        
         if weekday == 5:  # 토요일 -> 금요일
             target = now - timedelta(days=1)
         elif weekday == 6:  # 일요일 -> 금요일
@@ -165,24 +167,28 @@ class BaseCollector(ABC):
         # pykrx를 통해 실제 개장일 확인 (휴일 대응)
         try:
             from pykrx import stock
-
+            
             # 최근 10일간 거래일 조회 (휴일 연속 대비)
             start_check = (target - timedelta(days=10)).strftime('%Y%m%d')
             end_check = target.strftime('%Y%m%d')
-
+            
             # KOSPI 지수의 OHLCV로 개장일 확인
             kospi_data = stock.get_index_ohlcv_by_date(start_check, end_check, "1001")
-
+            
             if not kospi_data.empty:
                 # 마지막 거래일을 가져옴
                 last_trading_date = kospi_data.index[-1]
                 return last_trading_date.strftime('%Y%m%d')
-
+                
         except ImportError:
-            logger.warning("pykrx 미설치 - 주말 처리만 적용")
+            # 한 번만 경고
+            if not getattr(self, '_pykrx_warning_shown', False):
+                logger.warning("pykrx 미설치 - 주말 처리만 적용")
+                self._pykrx_warning_shown = True
         except Exception as e:
-            logger.warning(f"개장일 확인 실패: {e} - 주말 처리만 적용")
-
+            # 반복 경고 방지를 위해 DEBUG 레벨로 변경
+            logger.debug(f"개장일 확인 실패: {e} - 주말 처리만 적용")
+            
         # 폴백: 주말 처리만 된 날짜 반환
         return target.strftime('%Y%m%d')
 

@@ -125,7 +125,7 @@ class PriceChangeThresholds:
         BONUS_25PCT: 25% 이상 (가산점 5점)
     """
     MIN: float = 5.0
-    MAX: float = 20.0
+    MAX: float = 29.5
     LIMIT: float = 29.5
 
     # Bonus points for large gains
@@ -589,9 +589,9 @@ class MessengerThresholds:
 
     @property
     def GRADE_PRIORITY(self) -> dict:
-        return frozenset({
+        return {
             "S": 0, "A": 1, "B": 2, "C": 3, "D": 4
-        })
+        }
 
 
 # =============================================================================

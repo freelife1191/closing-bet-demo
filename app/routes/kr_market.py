@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import threading
 from datetime import datetime, timedelta
 import pandas as pd
 from flask import Blueprint, jsonify, request, current_app
@@ -8,10 +9,19 @@ from flask import Blueprint, jsonify, request, current_app
 kr_bp = Blueprint('kr', __name__)
 logger = logging.getLogger(__name__)
 
-# Global Flags for Background Tasks
+# Global Flags for Background Tasks (with locks for thread safety)
 is_market_gate_updating = False
 is_signals_updating = False
 is_jongga_updating = False
+
+# Thread locks for preventing race conditions
+_jongga_lock = threading.Lock()
+_market_gate_lock = threading.Lock()
+_signals_lock = threading.Lock()
+
+# Timestamp tracking to prevent infinite loops
+_jongga_last_run = None
+_MIN_JONGGA_RUN_INTERVAL = timedelta(minutes=5)  # Minimum 5 minutes between runs
 
 # Constants
 DATA_DIR = 'data'
@@ -1433,32 +1443,16 @@ def get_jongga_v2_latest():
                     logger.warning(f"파일 읽기 실패: {file_path} - {e}")
                     continue
             
-            # 유효한 데이터가 없는 경우 -> Auto-Recovery Trigger
-            logger.info("[Jongga V2] 데이터 없음. 백그라운드 분석 자동 시작.")
-            
-            global is_jongga_updating
-            if not is_jongga_updating:
-                import threading
-                def run_analysis():
-                    global is_jongga_updating
-                    try:
-                        is_jongga_updating = True
-                        from engine.launcher import run_jongga_v2_screener
-                        run_jongga_v2_screener()
-                        logger.info("[Jongga V2] 백그라운드 분석 완료")
-                    except Exception as e:
-                        logger.error(f"[Jongga V2] 백그라운드 분석 실패: {e}")
-                    finally:
-                        is_jongga_updating = False
-
-                threading.Thread(target=run_analysis).start()
+            # 유효한 데이터가 없는 경우 -> 데이터 없음 응답 반환 (자동 실행 비활성화)
+            now = datetime.now()
+            logger.info("[Jongga V2] 종가베팅 데이터 없음. 자동 실행 비활성화 상태.")
 
             return jsonify({
-                'date': datetime.now().date().isoformat(),
+                'date': now.date().isoformat(),
                 'signals': [],
                 'filtered_count': 0,
-                'status': 'initializing', # Frontend polls on this
-                'message': '데이터 분석 중... 잠시만 기다려주세요.'
+                'status': 'no_data',
+                'message': '현재 종가베팅 데이터가 없습니다. [업데이트] 버튼을 눌러 분석을 실행해주세요.'
             })
         
         # [NEW] 실시간 가격 주입 (Jongga V2)
@@ -1641,6 +1635,87 @@ def _load_v2_status():
     except:
         return {'isRunning': False}
 
+
+def _run_jongga_v2_background(capital: int = 50_000_000, markets: list = None, target_date: str = None):
+    """
+    백그라운드에서 Jongga V2 엔진 실행 (Flask request context 불필요)
+
+    Args:
+        capital: 초기 투자금 (기본값: 5000만원)
+        markets: 대상 시장 리스트 ['KOSPI', 'KOSDAQ']
+        target_date: 분석 기준일 (YYYY-MM-DD, 테스트용)
+    """
+    if markets is None:
+        markets = ['KOSPI', 'KOSDAQ']
+
+    # Set Running Flag
+    _save_v2_status(True)
+
+    logger.info("[Background] Jongga V2 Engine Started...")
+    if target_date:
+        logger.info(f"[테스트 모드] 지정 날짜 기준 분석: {target_date}")
+
+    try:
+        # engine 모듈 강제 리로드 (코드 변경 사항 반영)
+        import sys
+
+        # [FIX] 기존 engine 모듈 삭제 시 외부 라이브러리(yfinance, pykrx, FinanceDataReader 등)를
+        # 간접적으로 깨뜨리지 않도록, 삭제 대상을 프로젝트 engine 서브모듈로 한정
+        # 특히 engine.__init__은 외부 라이브러리를 import하므로 제외
+        PRESERVE_MODULES = {'engine'}  # engine 패키지 자체는 보존
+        mods_to_remove = [
+            k for k in list(sys.modules.keys())
+            if k.startswith('engine.') and k not in PRESERVE_MODULES
+        ]
+        for mod in mods_to_remove:
+            del sys.modules[mod]
+
+        # 새로 import
+        from engine.generator import run_screener, save_result_to_json
+        import asyncio
+
+        # 비동기 함수 실행
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(run_screener(capital=capital, markets=markets, target_date=target_date))
+        finally:
+            # [FIX] Close all async generators before closing the loop
+            # This prevents "Task was destroyed but it is pending" error
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception as e:
+                logger.warning(f"Error shutting down async generators: {e}")
+            loop.close()
+
+        # 결과 저장
+        if result:
+            save_result_to_json(result)
+
+            # 메신저 알림 발송 (result 객체 직접 사용)
+            try:
+                # Signal 객체 리스트를 딕셔너리 리스트로 변환 (Notifier 호환성)
+                signals = [s.to_dict() for s in result.signals]
+                date_str = result.date.strftime('%Y-%m-%d') if hasattr(result.date, 'strftime') else str(result.date)
+
+                if signals:
+                    from services.notifier import send_jongga_notification
+                    results = send_jongga_notification(signals, date_str)
+                    logger.info(f"[Notification] 메신저 발송 결과: {results}")
+                else:
+                    logger.info("[Notification] 발송할 시그널 없음 (0개)")
+
+            except Exception as notify_error:
+                logger.error(f"[Notification] 메신저 발송 중 오류: {notify_error}")
+
+        logger.info("[Background] Jongga V2 Engine Completed Successfully.")
+
+    finally:
+        # Always reset status, even on error
+        _save_v2_status(False)
+        logger.info("[Background] Jongga V2 Status reset to False")
+
+
 @kr_bp.route('/jongga-v2/run', methods=['POST'])
 def run_jongga_v2_screener():
     """종가베팅 v2 스크리너 실행 (비동기 - 백그라운드 스레드)"""
@@ -1653,65 +1728,16 @@ def run_jongga_v2_screener():
             'status': 'error',
             'message': 'Engine is already running. Please wait.'
         }), 409
-    
+
     req_data = request.get_json(silent=True) or {}
     capital = req_data.get('capital', 50_000_000)
     markets = req_data.get('markets', ['KOSPI', 'KOSDAQ'])
     target_date = req_data.get('target_date', None)  # YYYY-MM-DD 형식 (테스트용)
 
-    def _run_engine_async(capital_arg, markets_arg, target_date_arg):
-        """백그라운드 엔진 실행"""
+    def _run_wrapper():
+        """Wrapper for background execution with status management"""
         try:
-            # Set Running Flag
-            _save_v2_status(True)
-            
-            logger.info("Background Engine Started...")
-            if target_date_arg:
-                logger.info(f"[테스트 모드] 지정 날짜 기준 분석: {target_date_arg}")
-            # engine 모듈 강제 리로드 (코드 변경 사항 반영)
-            import sys
-            
-            # 기존 engine 모듈 삭제 (개발 중 핫 리로딩 지원)
-            mods_to_remove = [k for k in list(sys.modules.keys()) if k.startswith('engine') or k == 'kr_ai_analyzer']
-            for mod in mods_to_remove:
-                del sys.modules[mod]
-            
-            # 새로 import
-            from engine.generator import run_screener, save_result_to_json
-            import asyncio
-            
-            # 비동기 함수 실행
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(run_screener(capital=capital_arg, markets=markets_arg, target_date=target_date_arg))
-            finally:
-                loop.close()
-            
-            # 결과 저장
-            if result:
-                save_result_to_json(result)
-                
-                # 메신저 알림 발송 (result 객체 직접 사용)
-                try:
-                    from datetime import datetime
-                    
-                    # Signal 객체 리스트를 딕셔너리 리스트로 변환 (Notifier 호환성)
-                    signals = [s.to_dict() for s in result.signals]
-                    date_str = result.date.strftime('%Y-%m-%d') if hasattr(result.date, 'strftime') else str(result.date)
-                    
-                    if signals:
-                        from services.notifier import send_jongga_notification
-                        results = send_jongga_notification(signals, date_str)
-                        logger.info(f"[Notification] 메신저 발송 결과: {results}")
-                    else:
-                        logger.info("[Notification] 발송할 시그널 없음 (0개)")
-                        
-                except Exception as notify_error:
-                    logger.error(f"[Notification] 메신저 발송 중 오류: {notify_error}")
-            
-            logger.info("Background Engine Completed Successfully.")
-            
+            _run_jongga_v2_background(capital=capital, markets=markets, target_date=target_date)
         except Exception as e:
             logger.error(f"Background Engine Failed: {e}")
             import traceback
@@ -1722,7 +1748,7 @@ def run_jongga_v2_screener():
 
     try:
         # 스레드 실행 (target_date 포함)
-        thread = threading.Thread(target=_run_engine_async, args=(capital, markets, target_date))
+        thread = threading.Thread(target=_run_wrapper)
         thread.daemon = True
         thread.start()
         

@@ -481,38 +481,42 @@ class MarketGate:
                 logger.debug(f"FDR 환율 조회 실패: {e}, Trying yfinance...")
 
             # 2. yfinance (Fallback)
-            import logging as _logging
-            yf_logger = _logging.getLogger('yfinance')
-            original_level = yf_logger.level
-            yf_logger.setLevel(_logging.CRITICAL)
-            
             try:
-                ticker = "USDKRW=X"
-                hist = yf.download(ticker, period="1d", progress=False, threads=False)
+                import yfinance as yf
+                import logging as _logging
+                yf_logger = _logging.getLogger('yfinance')
+                original_level = yf_logger.level
+                yf_logger.setLevel(_logging.CRITICAL)
                 
-                if isinstance(hist.columns, pd.MultiIndex):
-                     try:
-                        hist = hist['Close']
-                     except:
-                        hist = hist.xs('Close', axis=1, level=0, drop_level=True) if 'Close' in hist.columns.get_level_values(0) else hist.iloc[:, 0]
-                
-                if isinstance(hist, pd.DataFrame):
-                    if ticker in hist.columns:
-                        hist = hist[ticker]
-                    elif 'Close' in hist.columns:
-                        hist = hist['Close']
-                    else:
-                        hist = hist.iloc[:, 0]
+                try:
+                    ticker = "USDKRW=X"
+                    hist = yf.download(ticker, period="1d", progress=False, threads=False)
+                    
+                    if isinstance(hist.columns, pd.MultiIndex):
+                         try:
+                            hist = hist['Close']
+                         except:
+                            hist = hist.xs('Close', axis=1, level=0, drop_level=True) if 'Close' in hist.columns.get_level_values(0) else hist.iloc[:, 0]
+                    
+                    if isinstance(hist, pd.DataFrame):
+                        if ticker in hist.columns:
+                            hist = hist[ticker]
+                        elif 'Close' in hist.columns:
+                            hist = hist['Close']
+                        else:
+                            hist = hist.iloc[:, 0]
 
-                if not hist.empty and len(hist) > 0:
-                    val = hist.iloc[-1]
-                    if hasattr(val, 'item'): val = val.item() 
-                        
-                    rate = float(val)
-                    logger.debug(f"yfinance 환율 조회 성공: {rate:.2f} 원")
-                    return rate
-            finally:
-                yf_logger.setLevel(original_level)
+                    if not hist.empty and len(hist) > 0:
+                        val = hist.iloc[-1]
+                        if hasattr(val, 'item'): val = val.item() 
+                            
+                        rate = float(val)
+                        logger.debug(f"yfinance 환율 조회 성공: {rate:.2f} 원")
+                        return rate
+                finally:
+                    yf_logger.setLevel(original_level)
+            except Exception as yf_err:
+                logger.debug(f"yfinance 환율 조회 실패: {yf_err}")
                 
             return 1350.0
         except Exception as e:

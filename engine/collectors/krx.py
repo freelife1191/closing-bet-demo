@@ -293,7 +293,7 @@ class KRXCollector(BaseCollector):
 
     async def get_stock_detail(self, code: str) -> Optional[Dict]:
         """
-        종목 상세 정보 조회
+        종목 상세 정보 조회 (pykrx -> CSV fallback)
 
         Args:
             code: 종목 코드
@@ -301,20 +301,47 @@ class KRXCollector(BaseCollector):
         Returns:
             종목 상세 정보 딕셔너리
         """
+        # 1. 기본 정보 구성
+        name = self._get_stock_name(code)
+        
+        # 2. 52주 신고/신저가 조회 (Local CSV 활용)
+        high_52w = 0
+        low_52w = 0
+        
         try:
-            return {
-                'code': code,
-                'name': self._get_stock_name(code),
-                'high_52w': 150000,
-                'low_52w': 50000
-            }
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            csv_path = os.path.join(base_dir, 'data', 'daily_prices.csv')
+            
+            if os.path.exists(csv_path):
+                # 효율성을 위해 전체를 읽지 않고 최적화할 수 있으나, 여기서는 단순 구현
+                # 실전에서는 DB나 인덱싱된 파일을 사용하는 것이 좋음
+                df = pd.read_csv(csv_path)
+                df['ticker'] = df['ticker'].astype(str).str.zfill(6)
+                stock_df = df[df['ticker'] == code].copy()
+                
+                if not stock_df.empty:
+                    # 최근 1년 데이터 필터링
+                    stock_df['date'] = pd.to_datetime(stock_df['date'])
+                    latest_date = stock_df['date'].max()
+                    one_year_ago = latest_date - timedelta(days=365)
+                    year_df = stock_df[stock_df['date'] >= one_year_ago]
+                    
+                    if not year_df.empty:
+                        high_52w = int(year_df['high'].max())
+                        low_52w = int(year_df['low'].min())
         except Exception as e:
-            logger.error(f"종목 상세 조회 실패 ({code}): {e}")
-            return None
+            logger.warning(f"52주 신고/신저가 계산 실패 (CSV): {e}")
+
+        return {
+            'code': code,
+            'name': name,
+            'high_52w': high_52w if high_52w > 0 else 0,
+            'low_52w': low_52w if low_52w > 0 else 0
+        }
 
     async def get_chart_data(self, code: str, days: int) -> Optional[ChartData]:
         """
-        차트 데이터 조회
+        차트 데이터 조회 (pykrx -> CSV fallback)
 
         Args:
             code: 종목 코드
@@ -323,49 +350,66 @@ class KRXCollector(BaseCollector):
         Returns:
             ChartData 객체 또는 None
         """
+        # 1. pykrx 시도
         try:
-            # 실제 데이터 조회 (pykrx)
             from pykrx import stock
-
-            # 종료일: 최신 장 마감일
             end_date_str = self._get_latest_market_date()
             end_date = datetime.strptime(end_date_str, "%Y%m%d")
-
-            # 시작일: 휴일 고려하여 넉넉하게 계산 (약 1.6배)
             start_date = end_date - timedelta(days=int(days * 1.6) + 10)
             start_date_str = start_date.strftime("%Y%m%d")
 
             df = stock.get_market_ohlcv_by_date(start_date_str, end_date_str, code)
 
-            if df.empty:
+            if not df.empty:
+                df = df.tail(days)
+                return ChartData(
+                    dates=[d.date() for d in df.index],
+                    opens=df['시가'].tolist(),
+                    highs=df['고가'].tolist(),
+                    lows=df['저가'].tolist(),
+                    closes=df['종가'].tolist(),
+                    volumes=df['거래량'].tolist()
+                )
+        except Exception as e:
+            logger.warning(f"pykrx 차트 조회 실패 ({code}): {e}")
+
+        # 2. CSV Fallback
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            csv_path = os.path.join(base_dir, 'data', 'daily_prices.csv')
+            
+            if not os.path.exists(csv_path):
                 return None
 
-            # 최근 N일 데이터만 사용
-            df = df.tail(days)
-
-            dates = [d.date() for d in df.index]
-            opens = df['시가'].tolist()
-            highs = df['고가'].tolist()
-            lows = df['저가'].tolist()
-            closes = df['종가'].tolist()
-            volumes = df['거래량'].tolist()
-
+            df = pd.read_csv(csv_path)
+            df['ticker'] = df['ticker'].astype(str).str.zfill(6)
+            df['date'] = pd.to_datetime(df['date'])
+            
+            # 해당 종목 데이터 필터링
+            stock_df = df[df['ticker'] == code].sort_values('date')
+            
+            if stock_df.empty:
+                return None
+                
+            # 최근 N일 데이터
+            stock_df = stock_df.tail(days)
+            
             return ChartData(
-                dates=dates,
-                opens=opens,
-                highs=highs,
-                lows=lows,
-                closes=closes,
-                volumes=volumes
+                dates=[d.date() for d in stock_df['date']],
+                opens=stock_df['open'].tolist(),
+                highs=stock_df['high'].tolist(),
+                lows=stock_df['low'].tolist(),
+                closes=stock_df['close'].tolist(),
+                volumes=stock_df['volume'].tolist()
             )
 
         except Exception as e:
-            logger.error(f"차트 데이터 조회 실패 ({code}): {e}")
+            logger.error(f"차트 데이터 CSV 조회 실패 ({code}): {e}")
             return None
 
     async def get_supply_data(self, code: str) -> Optional[SupplyData]:
         """
-        수급 데이터 조회 - pykrx 실제 데이터
+        수급 데이터 조회 (pykrx -> CSV fallback)
 
         Args:
             code: 종목 코드
@@ -373,62 +417,58 @@ class KRXCollector(BaseCollector):
         Returns:
             SupplyData 객체 또는 None
         """
+        # 1. pykrx 시도
         try:
             from pykrx import stock
-            from datetime import datetime, timedelta
-
-            # 최근 5일간 수급 데이터 조회
             end_date = self._get_latest_market_date()
             end_dt = datetime.strptime(end_date, "%Y%m%d")
             start_date = (end_dt - timedelta(days=10)).strftime('%Y%m%d')
-
-            try:
-                df = stock.get_market_trading_value_by_date(start_date, end_date, code)
-
-                if df.empty:
-                    # 데이터 없으면 기본값 반환
-                    return SupplyData(
-                        foreign_buy_5d=0,
-                        inst_buy_5d=0,
-                        retail_buy_5d=0
-                    )
-
-                # 최근 5일 데이터만 사용
+            
+            df = stock.get_market_trading_value_by_date(start_date, end_date, code)
+            
+            if not df.empty:
                 df = df.tail(5)
-
-                # 컬럼명: 기관합계, 외국인합계, 개인 등
-                # pykrx 버전에 따라 컬럼명이 다를 수 있음
-                foreign_col = '외국인합계' if '외국인합계' in df.columns else '외국인'
-                inst_col = '기관합계' if '기관합계' in df.columns else '기관'
-                retail_col = '개인' if '개인' in df.columns else '개인합계'
-
-                foreign_5d = int(df[foreign_col].sum()) if foreign_col in df.columns else 0
-                inst_5d = int(df[inst_col].sum()) if inst_col in df.columns else 0
-                retail_5d = int(df[retail_col].sum()) if retail_col in df.columns else 0
+                # 컬럼명 처리 (버전 호환)
+                foreign_col = next((c for c in df.columns if '외국인' in c), None)
+                inst_col = next((c for c in df.columns if '기관' in c), None)
+                retail_col = next((c for c in df.columns if '개인' in c), None)
 
                 return SupplyData(
-                    foreign_buy_5d=foreign_5d,
-                    inst_buy_5d=inst_5d,
-                    retail_buy_5d=retail_5d
+                    foreign_buy_5d=int(df[foreign_col].sum()) if foreign_col else 0,
+                    inst_buy_5d=int(df[inst_col].sum()) if inst_col else 0,
+                    retail_buy_5d=int(df[retail_col].sum()) if retail_col else 0
                 )
-
-            except Exception as e:
-                logger.warning(f"pykrx 수급 조회 실패 ({code}): {e}")
-                return SupplyData(
-                    foreign_buy_5d=0,
-                    inst_buy_5d=0,
-                    retail_buy_5d=0
-                )
-
-        except ImportError as e:
-            logger.warning(f"pykrx import 실패 ({code}): {e}")
-            return SupplyData(
-                foreign_buy_5d=0,
-                inst_buy_5d=0,
-                retail_buy_5d=0
-            )
         except Exception as e:
-            logger.error(f"수급 데이터 조회 실패 ({code}): {e}")
+            logger.warning(f"pykrx 수급 조회 실패 ({code}): {e}")
+
+        # 2. CSV Fallback (all_institutional_trend_data.csv)
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            csv_path = os.path.join(base_dir, 'data', 'all_institutional_trend_data.csv')
+            
+            if not os.path.exists(csv_path):
+                return SupplyData(0, 0, 0)
+
+            df = pd.read_csv(csv_path)
+            df['ticker'] = df['ticker'].astype(str).str.zfill(6)
+            df['date'] = pd.to_datetime(df['date'])
+            
+            stock_df = df[df['ticker'] == code].sort_values('date')
+            
+            if stock_df.empty:
+                 return SupplyData(0, 0, 0)
+                 
+            # 최근 5일
+            recent_df = stock_df.tail(5)
+            
+            return SupplyData(
+                foreign_buy_5d=int(recent_df['foreign_buy'].sum()),
+                inst_buy_5d=int(recent_df['inst_buy'].sum()),
+                retail_buy_5d=0  # CSV에 개인 데이터가 없으면 0 처리
+            )
+
+        except Exception as e:
+            logger.error(f"수급 데이터 CSV 조회 실패 ({code}): {e}")
             return None
 
     def _get_stock_name(self, ticker: str) -> str:

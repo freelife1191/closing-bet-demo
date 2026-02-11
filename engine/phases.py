@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Optional, Any
 from datetime import date, datetime
 
-from engine.models import StockData, Signal, ScoreDetail, ChartData, Grade
+from engine.models import StockData, Signal, ScoreDetail, ChartData, Grade, SignalStatus
 from engine.scorer import Scorer
 from engine.llm_analyzer import LLMAnalyzer
 from engine.constants import (
@@ -455,7 +455,7 @@ class Phase4SignalFinalizer(BasePhase):
                     # C급 제외 옵션
                     grade_val = getattr(signal.grade, 'value', signal.grade)
                     if not self.include_c_grade and grade_val == 'C':
-                        logger.debug(f"[Drop] {signal.stock_name}: C grade excluded")
+                        logger.info(f"[Drop Phase4] {signal.stock_name}: C grade excluded (Score={signal.score.total})")
                         continue
 
                     signals.append(signal)
@@ -465,7 +465,7 @@ class Phase4SignalFinalizer(BasePhase):
                     self.stats["failed"] += 1
 
             except Exception as e:
-                logger.debug(f"Signal creation failed: {e}")
+                logger.info(f"[Error Phase4] Signal creation failed for {item['stock'].name}: {e}")
                 self.stats["failed"] += 1
 
         logger.info(
@@ -515,6 +515,7 @@ class Phase4SignalFinalizer(BasePhase):
         )
 
         if not grade:
+            logger.info(f"   [Drop Phase4] {stock.name}: Grade Fail. Score={score.total}, TV={stock.trading_value//100_000_000}억, VR={score_details.get('volume_ratio')}")
             return None
 
         # 포지션 계산
@@ -554,7 +555,7 @@ class Phase4SignalFinalizer(BasePhase):
             r_multiplier=position.r_multiplier,
             trading_value=stock.trading_value,
             volume_ratio=int(score_details.get('volume_ratio', 0.0)),
-            status=Signal.Status.PENDING,
+            status=SignalStatus.PENDING,
             created_at=datetime.now(),
             score_details=score_details,
             themes=themes
