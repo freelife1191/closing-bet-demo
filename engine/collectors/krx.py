@@ -66,7 +66,7 @@ class KRXCollector(BaseCollector):
             # 테스트 모드: 특정 날짜 지정 시 해당 날짜 사용
             if target_date:
                 target_date_str = target_date  # YYYYMMDD 형식
-                logger.info(f"[테스트 모드] 지정 날짜 기준 조회: {target_date_str}")
+                logger.info(f"지정 날짜 기준 조회: {target_date_str}")
             else:
                 # 가장 최근 장 마감 날짜 계산
                 target_date_str = self._get_latest_market_date()
