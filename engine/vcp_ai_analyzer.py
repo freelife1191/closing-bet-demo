@@ -93,17 +93,26 @@ class VCPMultiAIAnalyzer:
         max_retries = 5
         base_delay = 2
         
+        # 모델 폴백 체인
+        model_chain = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-2.0-flash"]
+        
         for attempt in range(max_retries + 1):
             try:
+                # 시도 횟수에 따라 모델 변경 (폴백)
+                # 0, 1회: gemini-flash-latest
+                # 2회: gemini-1.5-flash
+                # 3회 이상: gemini-2.0-flash
+                model_idx = min(attempt // 2, len(model_chain) - 1)
+                current_model = model_chain[model_idx]
+                
                 prompt = self._build_vcp_prompt(stock_name, stock_data)
-                model = app_config.VCP_GEMINI_MODEL
                 
                 start = time.time()
                 
                 # Gemini API 호출 (동기 호출을 executor로 실행)
                 def _call():
                     response = self.gemini_client.models.generate_content(
-                        model=model,
+                        model=current_model,
                         contents=prompt
                     )
                     return response.text
@@ -113,7 +122,7 @@ class VCPMultiAIAnalyzer:
                     response_text = await loop.run_in_executor(executor, _call)
                 
                 elapsed = time.time() - start
-                logger.debug(f"[Gemini] {stock_name} 분석 완료 ({elapsed:.2f}s)")
+                logger.debug(f"[Gemini] {stock_name} 분석 완료 ({current_model}, {elapsed:.2f}s)")
                 
                 # JSON 파싱
                 result = self._parse_json_response(response_text)
@@ -126,7 +135,14 @@ class VCPMultiAIAnalyzer:
                 
                 if attempt < max_retries and any(c in error_msg for c in retry_conditions):
                     delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
-                    logger.warning(f"[Gemini] {stock_name} API ({error_msg[:100]}) -> {delay:.2f}초 후 재시도... ({attempt+1}/{max_retries})")
+                    next_model_idx = min((attempt + 1) // 2, len(model_chain) - 1)
+                    next_model = model_chain[next_model_idx]
+                    
+                    log_msg = f"[Gemini] {stock_name} API ({error_msg[:50]}) -> {delay:.2f}초 후 재시도"
+                    if next_model != current_model:
+                        log_msg += f" (모델 전환: {current_model} -> {next_model})"
+                    
+                    logger.warning(f"{log_msg} ({attempt+1}/{max_retries})")
                     await asyncio.sleep(delay)
                 else:
                     logger.error(f"[Gemini] {stock_name} 분석 실패 (Final): {e}")
