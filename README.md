@@ -49,7 +49,7 @@ ZAI_API_KEY=your_zai_key_here
 
 # VCP AI 설정
 VCP_AI_PROVIDERS=gemini,gpt,perplexity
-VCP_GEMINI_MODEL=gemini-2.0-flash
+VCP_GEMINI_MODEL=gemini-2.5-flash
 VCP_GPT_MODEL=gpt-4o
 VCP_PERPLEXITY_MODEL=sonar-pro
 
@@ -280,7 +280,7 @@ engine/
   - `engine/llm_utils.py`: LLM 재시도 로직 (async/sync decorators)
   - `engine/pandas_utils.py`: DataFrame 유틸리티 및 NaN 처리
 - **AI Engine**:
-  - Google Gemini 2.0 Flash (긴 컨텍스트 윈도우, 심층 추론)
+  - Google Gemini 2.5 Flash (긴 컨텍스트 윈도우, 심층 추론 지원)
   - OpenAI GPT via Z.ai (빠른 응답, 크로스 밸리데이션)
   - Perplexity Sonar (실시간 웹 검색, 최신 뉴스/정보 반영)
   - LangChain-style Prompt Composition (Chain of Thought, Intent Injection)
@@ -401,10 +401,11 @@ services/
 
 본 프로젝트는 외부 API 의존성을 최소화하고 데이터 신뢰성을 보장하기 위해 검증된 오픈소스 라이브러리를 활용합니다.
 
-**한국 시장 데이터 우선순위:**
+**한국 시장 데이터 우선순위 및 폴백:**
 1. **Toss Securities API** (최우선): 초고속 실시간 시세 (<1초 지연)
-2. **pykrx**: KRX 정보데이터시스템 Wrapper (폴백)
-3. **yfinance**: 글로벌 지수/원자재/크립토
+2. **Naver Securities API**: 안정적인 국내 주식 가격 정보 (폴백 1)
+3. **yfinance**: 글로벌 지수/원자재/크립토 및 최종 가격 보완 (폴백 2)
+4. **pykrx**: KRX 정보데이터시스템 기반 역사적 데이터 (폴백 3)
 
 **Coverage:**
 - KOSPI/KOSDAQ 지수 및 구성 종목
@@ -441,7 +442,7 @@ services/
 
 | 모델           | 역할                           | 사용 시나리오                                                 | 장점                                                              |
 | -------------- | ------------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **Gemini**     | **Analysis Agent** (심층 추론) | 복잡한 뉴스 분석, 긴 컨텍스트 윈도우 필요, 다차원 데이터 통합 | 긴 컨텍스트(1M+ tokens), 한-영문 혼용 처리, 복잡한 논리 사고      |
+| **Gemini**     | **Analysis Agent** (심층 추론) | 복잡한 뉴스 분석, 긴 컨텍스트 윈도우 필요, 다차원 데이터 통합 | **심층 추론(Thinking)** 지원, 한-영문 혼용 처리, 복잡한 논리 사고 |
 | **Perplexity** | **Search Agent** (실시간 정보) | 최신 뉴스 검색, 팩트 체크, 실시간 시장 이슈 파악              | **실시간 웹 검색(Web Search)**, 최신 정보 반영, 출처(Source) 명시 |
 | **Z.ai / GPT** | **Speed Agent** (빠른 검증)    | 챗봇 대화, 단순 뉴스 감성 분석, 크로스 밸리데이션             | 빠른 응답 시간, OpenAI 호환성, 비용 효율적                        |
 
@@ -590,6 +591,10 @@ BATCH_ANALYSIS_PROMPT = """
 {stocks_text}
 
 [평가 기준]
+0. **VCP 분석 (필수)**:
+   - 변동성 수축(Contraction Ratio)이 0.1~0.5 사이로 건전한가?
+   - 거래량(Volume)이 급감하며 매물 소화가 잘 되었는가?
+   - 이 기술적 지표가 점수에 **가장 큰 영향**을 미쳐야 함.
 1. **Score (0-3)**: 뉴스/재료 기반 호재 강도
    - 3점: 확실한 호재 (대규모 수주, 상한가 재료, 어닝 서프라이즈)
    - 2점: 긍정적 호재 (실적 개선, 기대감, 테마 상승)
@@ -597,10 +602,12 @@ BATCH_ANALYSIS_PROMPT = """
    - 0점: 악재 또는 별다른 호재 없음
 2. **Action**: BUY / HOLD / SELL
 3. **Confidence**: 확신도 (0-100%)
-4. **Reason**: 다음 요소를 종합하여 간결하게 작성하세요.
-   - 뉴스/재료 분석 (호재 여부)
-   - 수급 동향 (외인/기관)
-   - 종합 투자 의견
+4. **Reason**: 다음 요소를 종합하여 **3~5줄**로 구체적 근거를 포함하여 작성하세요.
+   - 뉴스/재료 분석: 구체적 호재/악재 내용과 산업 영향도
+   - VCP 기술적 분석: 수축 비율, 거래량 추이, 패턴 완성도 평가
+   - 수급 동향: 외인/기관 매매 추이와 의미
+   - 리스크 요인: 단기 과열, 밸류에이션, 업종 리스크 등
+   - 매매 전략: 매수 시점, 목표가, 손절 기준 구체적 제시
 
 [출력 형식]
 반드시 아래 포맷의 **JSON 배열**로만 답하세요. (Markdown code block 없이)
