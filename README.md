@@ -1,12 +1,36 @@
 # 🚀 Smart Money Bot: AI 기반 종가 베팅 & VCP 시그널 시스템
 
-**🌐 데모 페이지 (Live Demo)**: [https://close.highvalue.kr/dashboard/kr](https://close.highvalue.kr/dashboard/kr)
+**🌐 데모 페이지 (Live Demo)**: [https://close.highvalue.kr](https://close.highvalue.kr)
 
 ![랜딩 페이지](assets/1.png)
 
 ![아키텍처 소개](assets/2.png)
 
 ![핵심 분석 기능](assets/3.png)
+
+---
+
+## 🎯 핵심 가치 제안
+
+- **Rule-based Screening + AI Reasoning**: 엄격한 기술적 필터링과 AI의 맥락 이해력을 결합하여 신호 품질을 극대화
+- **Multi-Model AI Cross-Validation**: 세 가지 모델(Gemini, GPT, Perplexity)을 조화롭게 운용하여 분석 신뢰도 극대화
+- **Market-First Approach**: 개별 종목 분석 전에 시장 상태를 먼저 판단하여 하락장 리스크 사전 차단
+- **Real-time Multi-Channel Notification**: Telegram, Discord, Slack, Email로 분석 결과를 즉시 전달
+
+ ### 1. Market-First Philosophy (시장 우선주의)
+> *"시장을 이기는 종목은 없다."*
+- 개별 종목 분석 이전에 **Market Gate(시장 신호등)** 가 시장의 건전성을 먼저 판단합니다.
+- 환율, 수급, 기술적 지표가 위험 수준일 경우, 아무리 좋은 종목이 포착되어도 매수를 **원천 차단(Gate Closed)** 하여 계좌를 보호합니다.        
+
+### 2. Rule-based Screening + AI Reasoning (하이브리드 분석)
+- **1차 필터(Rule)**: **거래대금 500억 이상**, **전일 대비 거래량 200% 이상**의 엄격한 기준으로 종목을 압축합니다.
+- **2차 필터(AI)**: 선별된 종목의 뉴스와 재료를 AI가 정성적으로 분석하여 "가짜 반등"과 "진짜 호재"를 구분합니다.  
+
+### 3. Multi-Model AI Cross-Validation (이중 검증)
+- **Gemini**: 긴 문맥(Context) 이해와 심층 추론을 담당하여 상세한 투자 리포트를 작성합니다.
+- **GPT/Perplexity**: Gemini의 분석 결과를 제3자 관점에서 검증(Critic)하여 편향(Bias)을 제거합니다.
+
+---
 
 ## 🚀 빠른 시작 (Quick Start)
 
@@ -84,56 +108,6 @@ SCHEDULER_ENABLED=true
   ```bash
   tail -f logs/backend.log logs/frontend.log
   ```
-
----
-
-## 📊 데이터 동기화 및 스케줄러 (Data Sync & Scheduler)
-
-서버가 구동되면 백그라운드에서 다음 작업들이 정해진 시간에 자동으로 수행되거나, 사용자 요청 시 실시간으로 데이터를 갱신합니다.
-
-### 1. 실시간 업데이트 (Real-time)
-페이지 접속 시 또는 브라우저에서 요청 시 즉시 갱신되는 항목입니다.
-- **글로벌 지수**: S&P 500, NASDAQ, KOSPI, KOSDAQ 실시간 지수 (`yfinance`)
-- **원자재 및 자산**: 금(Gold), 은(Silver), 비트코인(BTC), 이더리움(ETH) 시세
-- **Market Gate 점수**: 위 실시간 지표와 현재 환율을 결합하여 **접속 즉시** 동적 계산
-
-![스마트머니 추적](assets/7.png)
-*스마트머니 추적을 통한 데이터 확인*
-
-![AI전략 성과 지표](assets/8.png)
-*AI전략 성과 지표*
-
-### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
-- **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
-- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (기본 30분, **1분~60분 단위 설정 가능**)
-- **장 마감 순차 분석 (16:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution)
-- **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
-
-![데이터 상태](assets/25.png)
-*실시간 데이터 동기화 및 마켓 게이트 상태 확인*
-
----
-
-## 🎯 핵심 가치 제안
-
-- **Rule-based Screening + AI Reasoning**: 엄격한 기술적 필터링과 AI의 맥락 이해력을 결합하여 신호 품질을 극대화
-- **Multi-Model AI Cross-Validation**: 세 가지 모델(Gemini, GPT, Perplexity)을 조화롭게 운용하여 분석 신뢰도 극대화
-- **Market-First Approach**: 개별 종목 분석 전에 시장 상태를 먼저 판단하여 하락장 리스크 사전 차단
-- **Real-time Multi-Channel Notification**: Telegram, Discord, Slack, Email로 분석 결과를 즉시 전달
-
- ### 1. Market-First Philosophy (시장 우선주의)
-> *"시장을 이기는 종목은 없다."*
-- 개별 종목 분석 이전에 **Market Gate(시장 신호등)** 가 시장의 건전성을 먼저 판단합니다.
-- 환율, 수급, 기술적 지표가 위험 수준일 경우, 아무리 좋은 종목이 포착되어도 매수를 **원천 차단(Gate Closed)** 하여 계좌를 보호합니다.        
-
-### 2. Rule-based Screening + AI Reasoning (하이브리드 분석)
-- **1차 필터(Rule)**: **거래대금 500억 이상**, **전일 대비 거래량 200% 이상**의 엄격한 기준으로 종목을 압축합니다.
-- **2차 필터(AI)**: 선별된 종목의 뉴스와 재료를 AI가 정성적으로 분석하여 "가짜 반등"과 "진짜 호재"를 구분합니다.  
-
-### 3. Multi-Model AI Cross-Validation (이중 검증)
-- **Gemini**: 긴 문맥(Context) 이해와 심층 추론을 담당하여 상세한 투자 리포트를 작성합니다.
-- **GPT/Perplexity**: Gemini의 분석 결과를 제3자 관점에서 검증(Critic)하여 편향(Bias)을 제거합니다.
-
 ---
 
 ## 🏗 시스템 아키텍처
@@ -177,8 +151,8 @@ graph TD
         S --> W[Scheduler Service]
         O --> X[Notification Service]
         O --> Y[Paper Trading Service]
-        W -->|16:00 KST| Z[종가베팅 Analysis]
         W -->|16:00 KST| AA[VCP Analysis]
+        AA --> Z[종가베팅 Analysis]
     end
 
     subgraph "Frontend Layer (Next.js)"
@@ -204,6 +178,7 @@ graph TD
 | **Multi-Model AI Verification** | Gemini와 GPT/Perplexity를 병렬로 실행하여 결과 교차 검증 | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
 | **Async Batch Processing**      | `asyncio`와 `Semaphore`로 동시에 5~10개 종목 뉴스 분석   | API 호출 시간 최적화, Rate Limit 방지           |
 | **Market Gate Pattern**         | 개별 종목 분석 전 시장 전체 상태 먼저 점검               | 하락장에서의 무분별한 매수 방지, 계좌 보호      |
+| **Chain Execution Pattern**     | 데이터 수집 → VCP 분석 → AI 종가베팅 순차 실행           | 데이터 정합성 보장 및 분석 단계별 의존성 해결   |
 | **Persona-Based Prompting**     | 일관된 투자 철학(스마트머니봇)을 시스템 프롬프트에 탑재  | AI 응답의 편차 최소화, 신뢰할 수 있는 조언 생성 |
 | **Modular Phase Pipeline**      | `phases.py`의 4단계 파이프라인으로 시그널 생성 분리      | 단일 책임 원칙(SRP), 테스트 가능성 향상         |
 | **Centralized Constants**       | `constants.py`의 dataclass로 모든 임계값 중앙화          | 유지보수성 향상, 설정 변경 용이성               |
@@ -218,6 +193,8 @@ graph TD
 
 ```python
 engine/
+├── market_gate.py         # 시장 신호등 (최상위 관문)
+│   └── MarketGate         # 지수/환율/기술적 지표 종합 분석 및 판정
 ├── phases.py              # 4단계 시그널 생성 파이프라인
 │   ├── BasePhase          # 추상 기본 클래스
 │   ├── Phase1Analyzer     # 기본 분석 및 사전 필터링
@@ -225,34 +202,42 @@ engine/
 │   ├── Phase3LLMAnalyzer   # AI 배치 분석
 │   ├── Phase4SignalFinalizer # 시그널 생성
 │   └── SignalGenerationPipeline # 오케스트레이터
-│
+├── collectors/            # 로우 데이터 수집기 모듈
+│   ├── base.py            # 수집기 기본 추상 클래스
+│   ├── krx.py             # KRX 정보데이터시스템 수집기
+│   ├── naver.py           # 네이버 금융 데이터 수집기
+│   └── news.py            # 뉴스 정보 수집기
+├── generator.py           # 시그널 및 분석 리포트 생성 엔진
+│   ├── SignalGenerator    # VCP/종가베팅 최종 시그널 생성
+│   └── ReportGenerator    # AI 기반 종목 상세 리포트 구성
+├── llm_analyzer.py        # 뉴스 감성 및 배치 분석 (Gemini/GPT)
+├── vcp_ai_analyzer.py     # VCP 기술적 분석 전용 AI 모듈
+├── data_sources.py        # 전략 패턴 기반 데이터 소스
+│   ├── DataSourceStrategy # 추상 인터페이스
+│   ├── FDRSource          # 한국투자증권 API
+│   ├── PykrxSource        # KRX 데이터
+│   ├── YFinanceSource     # 글로벌 데이터
+│   └── DataSourceManager  # 폴백 체인 관리자
+├── toss_collector.py      # 토스증권 API 기반 실시간 데이터 수집
+├── kis_collector.py       # 한국투자증권(KIS) API 연동 모듈
+├── messenger.py           # 멀티채널(텔레그램/디스코드 등) 알림 허브
+│   └── messenger_formatters.py # 채널별 메시지 포맷팅 로직
 ├── constants.py           # 모든 임계값 중앙화 (dataclass)
 │   ├── TradingValueThresholds  # 거래대금 기준
 │   ├── VCPThresholds           # VCP 패턴 기준
 │   ├── ScoringThresholds       # 점수 기준
 │   └── MarketGateThresholds    # Market Gate 기준
-│
-├── data_sources.py        # 전략 패턴 기반 데이터 소스
-│   ├── DataSourceStrategy     # 추상 인터페이스
-│   ├── FDRSource              # 한국투자증권 API
-│   ├── PykrxSource            # KRX 데이터
-│   ├── YFinanceSource         # 글로벌 데이터
-│   └── DataSourceManager      # 폴백 체인 관리자
-│
 ├── error_handler.py       # 표준화된 에러 처리
 │   ├── @handle_data_error     # 데이터 에러 처리
 │   ├── @handle_llm_error      # LLM 에러 처리
 │   └── safe_execute()         # 안전 실행 래퍼
-│
 ├── exceptions.py          # 커스텀 예외 계층
 │   ├── MarketDataError        # 마켓 데이터 에러
 │   ├── LLMAnalysisError       # LLM 분석 에러
 │   └── GradeCalculationError  # 등급 계산 에러
-│
 ├── llm_utils.py           # LLM 재시도 로직
 │   ├── @async_retry_with_backoff  # 비동기 재시도
 │   └── process_batch_with_concurrency() # 배치 처리
-│
 └── pandas_utils.py        # DataFrame 유틸리티
     ├── safe_value()            # NaN 안전 처리
     ├── filter_by_date()        # 날짜 필터링
@@ -338,16 +323,20 @@ app/
 
 **한국 시장 API (`kr_market` Blueprint):**
 - `GET /market-status`: 한국 시장 현황 (KOSPI/KOSDAQ, 지수, 수급)
-- `GET|POST /config/interval`: Market Gate 업데이트 주기 설정
-- `GET /signals`: 최신 시그널 조회
-- `GET /vcp-signals`: VCP 패턴 시그널 조회
-- `GET /market-gate`: Market Gate 상태 및 점수
+- `GET /signals`: 최신 VCP 시그널 분석 결과 조회
+- `GET /jongga-v2/latest`: 최신 AI 종가베팅 분석 결과 조회
+- `GET /performance`: 종가베팅 전략의 누적 성과 및 승률 통계
+- `GET /realtime-prices`: 전 종목 실시간 가격 통합 조회 (Toss/YF 폴백)
+- `GET /market-gate`: Market Gate 상태 및 상세 스코어링 데이터
+- `POST /market-gate/update`: 시장 데이터 및 Market Gate 강제 동기화
+- `POST /vcp-screener`: VCP 시그널 생성 엔진 백그라운드 실행
+- `POST /jongga-v2/screener`: AI 종가베팅 엔진 백그라운드 실행
 
 **공통 API (`common` Blueprint):**
-- `GET /admin/check`: 관리자 권한 확인 (이메일 기반)
-- `POST /screening`: 시그널 스크리닝 요청
-- `GET /health`: 시스템 헬스체크
-- `POST /chat`: AI 챗봇 대화
+- `POST /chat`: AI 투자 어드바이저(스마트머니봇)와 대화
+- `POST /screening`: 실시간 기술적 지표 기반 종목 스크리닝
+- `GET /admin/check`: 관리자 권한 확인 (설치 및 설정용)
+- `GET /health`: 시스템 상태 및 API 가동 여부 체크
 
 #### 서비스 레이어 (Services Layer)
 
@@ -363,13 +352,13 @@ services/
 ```
 
 **스케줄러 서비스 (`scheduler.py`):**
-- **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락으로 중복 실행 방지
-- **16:00 KST - 장 마감 통합 분석**: 모든 작업을 순차적으로 실행 (Chain Execution)
-  - **데이터 수집**: 일별 주가 및 수급 데이터 확정본 수집
-  - **VCP 분석**: 전 종목 기술적 패턴/수급 기반 분석
-  - **AI 종가베팅**: AI(Gemini) 기반 심층 가설 수립
-  - **알림 전송**: 분석 즉시 4개 채널로 결과 발송
-- **주기적 동기화**: 설정된 인터벌에 따라 Market Gate 및 환율 최신화
+- **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락(`scheduler.lock`)으로 프로세스 중복 실행 원천 차단
+- **16:00 KST - 장 마감 체인 분석 (Chain Execution)**: 모든 작업을 정해진 순서에 따라 원스톱으로 병렬/순차 실행
+  1. **데이터 수집**: 일별 종가 및 투자자별 수급 데이터 확정본 동기화
+  2. **VCP 분석**: 전 종목 기술적 패턴 필터링 및 VCP 시그널 생성
+  3. **AI 종가베팅**: VCP 시그널 기반 AI(Gemini) 심층 정성적 분석 수행
+  4. **알림 전송**: 모든 분석 완료 즉시 4개 채널(텔레그램 등)로 결과 발송
+- **주기적 동기화**: 설정된 인터벌(기본 30분)에 따라 Market Gate 및 환율 실시간 최신화
 
 **알림 서비스 (`notifier.py`):**
 - **NotificationService 클래스**: 4채널 지원 알림 시스템
@@ -431,7 +420,7 @@ services/
 
 이 시스템의 핵심 경쟁력은 **Rule-based Screening**과 **AI Reasoning**의 결합입니다. 단순한 지표 추천이 아닌, AI가 시장의 문맥(Context)을 이해하고 논리적인 "투자 가설(Investment Hypothesis)"을 생성합니다.
 
-이 시스템의 백엔드는 단순한 API 호출이 아닌, **고성능 동시성 제어(Concurrency Control)**와 **프롬프트 엔지니어링**의 집약체입니다.
+이 시스템의 백엔드는 단순한 API 호출이 아닌, **고성능 동시성 제어(Concurrency Control)** 와 **프롬프트 엔지니어링**의 집약체입니다.
 
 ### 1. Multi-Model AI Engine Architecture
 
@@ -1911,6 +1900,33 @@ Response 200 OK:
 - **장점**: AI가 최신 데이터를 바탕으로 개인화된 답변 생성
 - **결과**: 사용자 참여도 상승, 빠른 의사결정 지원
 
+
+---
+
+## 📊 데이터 동기화 및 스케줄러 (Data Sync & Scheduler)
+
+서버가 구동되면 백그라운드에서 다음 작업들이 정해진 시간에 자동으로 수행되거나, 사용자 요청 시 실시간으로 데이터를 갱신합니다.
+
+### 1. 실시간 업데이트 (Real-time)
+페이지 접속 시 또는 브라우저에서 요청 시 즉시 갱신되는 항목입니다.
+- **글로벌 지수**: S&P 500, NASDAQ, KOSPI, KOSDAQ 실시간 지수 (`yfinance`)
+- **원자재 및 자산**: 금(Gold), 은(Silver), 비트코인(BTC), 이더리움(ETH) 시세
+- **Market Gate 점수**: 위 실시간 지표와 현재 환율을 결합하여 **접속 즉시** 동적 계산
+
+![스마트머니 추적](assets/7.png)
+*스마트머니 추적을 통한 데이터 확인*
+
+![AI전략 성과 지표](assets/8.png)
+*AI전략 성과 지표*
+
+### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
+- **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
+- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (기본 30분, **1분~60분 단위 설정 가능**)
+- **장 마감 순차 분석 (16:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution)
+- **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
+
+![데이터 상태](assets/25.png)
+*실시간 데이터 동기화 및 마켓 게이트 상태 확인*
 
 ---
 
