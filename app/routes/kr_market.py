@@ -501,6 +501,13 @@ def run_vcp_signals_screener():
         target_date = req_data.get('target_date', None)  # YYYY-MM-DD 형식
         max_stocks = req_data.get('max_stocks', 50)
         
+        # [RACE CONDITION FIX]
+        # 스레드 시작 전에 상태를 먼저 업데이트하여 프론트엔드 폴링 시 'idle'로 오인하는 것 방지
+        VCP_STATUS['running'] = True
+        VCP_STATUS['status'] = 'running'
+        VCP_STATUS['progress'] = 0
+        VCP_STATUS['message'] = "분석 요청 중..."
+
         thread = threading.Thread(target=_run_vcp_background, args=(target_date, max_stocks))
         thread.daemon = True
         thread.start()
