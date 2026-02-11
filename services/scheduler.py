@@ -35,10 +35,10 @@ _scheduler_lock_file = None
 
 
 def run_jongga_v2_analysis(test_mode=False):
-    """장 마감 후 AI 종가베팅 분석 (16:30 - Last)"""
+    """장 마감 후 AI 종가베팅 분석"""
     now = datetime.now()
     if test_mode or now.weekday() < 5:  # 평일만 or 테스트
-        logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:30 - After Closing Analysis)")
+        logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:00 - After Closing Analysis)")
         try:
             # 1. 당일(장중) 데이터 수집 (Pre-close) -> 제거 (16:05 정기 분석에서 수행됨)
             # 16:30 시점에 실행되므로 이미 create_daily_prices()가 완료된 상태라 가정
@@ -60,7 +60,7 @@ def run_jongga_v2_analysis(test_mode=False):
 
 
 def run_daily_closing_analysis(test_mode=False):
-    """장 마감 후 전체 데이터 수집 및 분석 (16:05 - First)"""
+    """장 마감 후 전체 데이터 수집 및 분석 (16:00 - First)"""
     now = datetime.now()
     if test_mode or now.weekday() < 5: # 평일만 or 테스트
         logger.info(">>> [Scheduler] 장 마감 정기 분석 시작")
