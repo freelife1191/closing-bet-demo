@@ -99,10 +99,13 @@ class GeminiRetryStrategy(LLMRetryStrategy):
                     timeout=timeout
                 )
 
-                # 모델 버전 저장
+                # 응답 모델 버전 로깅 (디버그 전용, _current_model은 덮어쓰지 않음)
                 model_version = getattr(resp, 'model_version', None)
-                if model_version:
-                    self._current_model = model_version
+                if model_version and model_version != self._current_model:
+                    logger.debug(
+                        f"[GEMINI] 요청 모델: {self._current_model} → "
+                        f"실제 응답 모델: {model_version}"
+                    )
 
                 return resp.text
 
@@ -120,10 +123,10 @@ class GeminiRetryStrategy(LLMRetryStrategy):
                 # 재시도 조건 확인
                 if any(c in error_msg for c in RetryConfig.RETRY_CONDITIONS):
                     if attempt < RetryConfig.MAX_RETRIES - 1:
-                        # Fallback Logic: gemini-3-flash-preview -> gemini-flash-latest
-                        if self.model == "gemini-3-flash-preview":
+                        # Fallback Logic: primary -> gemini-flash-latest
+                        if self._current_model != "gemini-flash-latest":
                             logger.warning(
-                                f"[GEMINI] {self.model} 과부하로 인해 "
+                                f"[GEMINI] {self._current_model} 과부하 또는 오류로 인해 "
                                 "'gemini-flash-latest'로 전환하여 재시도합니다."
                             )
                             self._current_model = "gemini-flash-latest"
@@ -451,10 +454,12 @@ Format: {{"score": 2, "reason": "종합적인 요약 이유"}}
    - 0점: 악재 또는 별다른 호재 없음
 2. **Action**: BUY / HOLD / SELL
 3. **Confidence**: 확신도 (0-100%)
-4. **Reason**: 다음 요소를 종합하여 간결하게 작성하세요.
-   - 뉴스/재료 분석 (호재 여부)
-   - 수급 동향 (외인/기관)
-   - 종합 투자 의견
+4. **Reason**: 다음 요소를 종합하여 **3~5줄**로 구체적 근거를 포함하여 작성하세요.
+   - 뉴스/재료 분석: 구체적 호재/악재 내용과 산업 영향도
+   - VCP 기술적 분석: 수축 비율, 거래량 추이, 패턴 완성도 평가
+   - 수급 동향: 외인/기관 매매 추이와 의미
+   - 리스크 요인: 단기 과열, 밸류에이션, 업종 리스크 등
+   - 매매 전략: 매수 시점, 목표가, 손절 기준 구체적 제시
 
 [출력 형식]
 반드시 아래 포맷의 **JSON 배열**로만 답하세요. (Markdown code block 없이)

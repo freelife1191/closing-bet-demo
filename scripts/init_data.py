@@ -569,6 +569,7 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
         tickers = stocks_df['ticker'].tolist()
         
         new_data_list = []
+        failed_tickers = []  # yfinance 실패 종목 추적
         
         total = len(tickers)
         for idx, ticker in enumerate(tickers):
@@ -617,6 +618,7 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
                     # Ensure columns exist
                     required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
                     if not all(col in df.columns for col in required_cols):
+                         failed_tickers.append(ticker)
                          continue
 
                     df['date'] = df['date'].dt.strftime('%Y-%m-%d')
@@ -631,12 +633,78 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
                     
                     subset = df[['date', 'ticker', 'open', 'high', 'low', 'close', 'volume']]
                     new_data_list.append(subset)
+                else:
+                    failed_tickers.append(ticker)
                     
             except Exception as e:
+                failed_tickers.append(ticker)
                 continue
                 
             if idx % 50 == 0:
                 print(f"  -> yfinance 진행: {idx}/{total}")
+
+        # yfinance 실패 종목에 대한 토스/네이버 폴백
+        if failed_tickers:
+            log(f"yfinance 실패 {len(failed_tickers)}개 종목에 대해 토스/네이버 폴백 시도...", "INFO")
+            import requests
+            
+            for ticker in failed_tickers:
+                try:
+                    fallback_data = None
+                    
+                    # 토스 증권 API 시도
+                    try:
+                        toss_url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes=A{ticker}"
+                        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+                        res = requests.get(toss_url, headers=headers, timeout=3)
+                        if res.status_code == 200:
+                            result = res.json().get('result', [])
+                            if result:
+                                item = result[0]
+                                close_price = int(item.get('close', 0))
+                                open_price = int(item.get('open', close_price))
+                                high_price = int(item.get('high', close_price))
+                                low_price = int(item.get('low', close_price))
+                                volume = int(item.get('accTradeVolume', 0))
+                                
+                                if close_price > 0:
+                                    fallback_data = {
+                                        'date': end_date.strftime('%Y-%m-%d'),
+                                        'ticker': ticker,
+                                        'open': open_price, 'high': high_price,
+                                        'low': low_price, 'close': close_price,
+                                        'volume': volume
+                                    }
+                    except:
+                        pass
+                    
+                    # 네이버 증권 API 시도 (토스 실패 시)
+                    if not fallback_data:
+                        try:
+                            naver_url = f"https://m.stock.naver.com/api/stock/{ticker}/basic"
+                            headers = {'User-Agent': 'Mozilla/5.0'}
+                            res = requests.get(naver_url, headers=headers, timeout=3)
+                            if res.status_code == 200:
+                                data = res.json()
+                                if 'closePrice' in data:
+                                    close_price = int(data['closePrice'].replace(',', ''))
+                                    if close_price > 0:
+                                        fallback_data = {
+                                            'date': end_date.strftime('%Y-%m-%d'),
+                                            'ticker': ticker,
+                                            'open': close_price, 'high': close_price,
+                                            'low': close_price, 'close': close_price,
+                                            'volume': 0
+                                        }
+                        except:
+                            pass
+                    
+                    if fallback_data:
+                        fb_df = pd.DataFrame([fallback_data])
+                        new_data_list.append(fb_df)
+                        
+                except Exception:
+                    continue
 
         if new_data_list:
             new_df = pd.concat(new_data_list)

@@ -394,10 +394,31 @@ class PaperTradingService:
                         except Exception as te:
                             logger.error(f"Toss API Error: {te}")
 
-                # 3. yfinance Fallback (Only for missing)
+                # 3. 네이버 증권 API (개별) - 토스 실패 종목 대상
                 missing_tickers = [t for t in tickers if t not in new_prices]
                 if missing_tickers:
-                    logger.info(f"Toss failed for {len(missing_tickers)} tickers: {missing_tickers}. Trying yfinance...")
+                    logger.info(f"Toss failed for {len(missing_tickers)} tickers. Trying Naver API...")
+                    import requests
+                    
+                    for t in missing_tickers:
+                        try:
+                            url = f"https://m.stock.naver.com/api/stock/{t}/basic"
+                            headers = {'User-Agent': 'Mozilla/5.0'}
+                            res = requests.get(url, headers=headers, timeout=3)
+                            
+                            if res.status_code == 200:
+                                data = res.json()
+                                if 'closePrice' in data:
+                                    price_str = data['closePrice'].replace(',', '')
+                                    new_prices[t] = int(price_str)
+                                    continue
+                        except Exception as ne:
+                            logger.error(f"Naver API Error for {t}: {ne}")
+
+                # 4. yfinance Fallback (토스/네이버 모두 실패 시)
+                missing_tickers = [t for t in tickers if t not in new_prices]
+                if missing_tickers:
+                    logger.info(f"Toss/Naver failed for {len(missing_tickers)} tickers: {missing_tickers}. Trying yfinance...")
                     yf_tickers = [f"{t}.KS" for t in missing_tickers]
                     try:
                         # Use threads=False to prevent file handle leaks
@@ -426,31 +447,8 @@ class PaperTradingService:
                     except Exception as e:
                         logger.error(f"PaperTrading YF Error: {e}")
 
-                # 4. Fallback to Naver Mobile API (User Request - Robust Realtime)
-                missing_tickers = [t for t in tickers if t not in new_prices]
-                if missing_tickers:
-                    logger.info(f"Toss/YF failed. Using Naver Mobile API for {len(missing_tickers)} tickers...")
-                    import requests
-                    
-                    for t in missing_tickers:
-                        try:
-                            # Naver Mobile JSON API
-                            url = f"https://m.stock.naver.com/api/stock/{t}/basic"
-                            headers = {'User-Agent': 'Mozilla/5.0'}
-                            res = requests.get(url, headers=headers, timeout=3)
-                            
-                            if res.status_code == 200:
-                                data = res.json()
-                                if 'closePrice' in data:
-                                    price_str = data['closePrice'].replace(',', '')
-                                    new_prices[t] = int(price_str)
-                                    logger.info(f"Naver API fetched {t}: {price_str}")
-                                    continue
-                        except Exception as ne:
-                            logger.error(f"Naver API Error for {t}: {ne}")
-
                 # 5. Final Fallback to pykrx (Historical Data / Market Close)
-                still_missing = [t for t in missing_tickers if t not in new_prices]
+                still_missing = [t for t in tickers if t not in new_prices]
                 if still_missing:
                     try:
                         today_str = datetime.now().strftime("%Y%m%d")

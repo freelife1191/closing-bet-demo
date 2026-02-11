@@ -95,14 +95,15 @@ class VCPMultiAIAnalyzer:
         max_retries = 5
         base_delay = 2
         
-        # 모델 폴백 체인
-        model_chain = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
+        # 모델 폴백 체인 (사용자 설정 모델 우선)
+        primary_model = app_config.ANALYSIS_GEMINI_MODEL
+        model_chain = [primary_model, "gemini-flash-latest", "gemini-2.0-flash"]
         
         for attempt in range(max_retries + 1):
             try:
                 # 시도 횟수에 따라 모델 변경 (폴백)
-                # 0, 1회: gemini-flash-latest
-                # 2회: gemini-2.5-flash
+                # 0, 1회: 설정된 기본 모델 (primary_model)
+                # 2회: gemini-flash-latest (이미 base면 건너뜀)
                 # 3회 이상: gemini-2.0-flash
                 model_idx = min(attempt // 2, len(model_chain) - 1)
                 current_model = model_chain[model_idx]

@@ -1282,119 +1282,114 @@ def get_kr_realtime_prices():
             return jsonify({'prices': prices})
 
         # --- 기존 Bulk Logic (5개 초과 시) ---
+        # 폴백 순서: 토스(Bulk) → 네이버(개별) → yfinance(Bulk)
         
-        # 1. yfinance 실시간 조회 시도 (평일 장중)
         try:
-            import yfinance as yf
+            import requests
             from datetime import datetime
             
-            now = datetime.now()
-            is_weekend = now.weekday() >= 5
-            is_market_hours = 9 <= now.hour < 16  # 장 운영 시간 (대략적)
-            
-            # 주말이 아니고 장 시간대인 경우에만 yfinance 호출
-            if not is_weekend and is_market_hours:
-                # yfinance용 티커 변환
-                yf_tickers = []
-                ticker_map = {}
-                
-                # [수정] 시장 정보 로드 (KOSPI/KOSDAQ 구분용)
-                market_map = {}
-                try:
-                    stocks_df = load_csv_file('korean_stocks_list.csv')
-                    if not stocks_df.empty:
-                        stocks_df['ticker'] = stocks_df['ticker'].astype(str).str.zfill(6)
-                        market_map = dict(zip(stocks_df['ticker'], stocks_df['market']))
-                except:
-                    pass
+            # 1. 토스 증권 API (Bulk) - 가장 빠르고 한국 주식에 최적화
+            try:
+                toss_codes = [f"A{str(t).zfill(6)}" for t in tickers]
+                for i in range(0, len(toss_codes), 50):
+                    chunk = toss_codes[i:i+50]
+                    url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes={','.join(chunk)}"
+                    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+                    res = requests.get(url, headers=headers, timeout=5)
+                    if res.status_code == 200:
+                        results = res.json().get('result', [])
+                        for item in results:
+                            code = item.get('code', '')
+                            clean_code = code[1:] if code.startswith('A') else code
+                            close = item.get('close')
+                            if clean_code and close:
+                                prices[clean_code] = float(close)
+            except Exception as e:
+                logger.debug(f"Toss Bulk API Failed: {e}")
 
-                for t in tickers:
-                    t_padded = str(t).zfill(6)
-                    market = market_map.get(t_padded, 'KOSPI')
-                    suffix = ".KQ" if market == "KOSDAQ" else ".KS"
-                    yf_t = f"{t_padded}{suffix}"
-                    yf_tickers.append(yf_t)
-                    ticker_map[yf_t] = t_padded
-                
-                if yf_tickers:
-                    # yfinance 에러 로그 억제
-                    import logging as _logging
-                    yf_logger = _logging.getLogger('yfinance')
-                    original_level = yf_logger.level
-                    yf_logger.setLevel(_logging.CRITICAL)
-                    
+            # 2. 네이버 증권 API (개별) - 토스 실패 종목에 대해
+            missing = [t for t in tickers if str(t).zfill(6) not in prices]
+            if missing:
+                naver_headers = {'User-Agent': 'Mozilla/5.0'}
+                for t in missing:
                     try:
-                        # 일봉 데이터 조회
-                        price_data = yf.download(yf_tickers, period='5d', interval='1d', progress=False, threads=True)
+                        url = f"https://m.stock.naver.com/api/stock/{str(t).zfill(6)}/basic"
+                        res = requests.get(url, headers=naver_headers, timeout=2)
+                        if res.status_code == 200:
+                            data = res.json()
+                            if 'closePrice' in data:
+                                prices[str(t).zfill(6)] = float(data['closePrice'].replace(',', ''))
+                    except:
+                        pass
+
+            # 3. yfinance (Bulk) - 토스/네이버 모두 실패 시 최종 폴백
+            missing = [t for t in tickers if str(t).zfill(6) not in prices]
+            if missing:
+                now = datetime.now()
+                is_weekend = now.weekday() >= 5
+                is_market_hours = 9 <= now.hour < 16
+                
+                if not is_weekend and is_market_hours:
+                    try:
+                        import yfinance as yf
                         
-                        if not price_data.empty and 'Close' in price_data:
-                            closes = price_data['Close']
+                        # 시장 정보 로드 (KOSPI/KOSDAQ 구분용)
+                        market_map = {}
+                        try:
+                            stocks_df = load_csv_file('korean_stocks_list.csv')
+                            if not stocks_df.empty:
+                                stocks_df['ticker'] = stocks_df['ticker'].astype(str).str.zfill(6)
+                                market_map = dict(zip(stocks_df['ticker'], stocks_df['market']))
+                        except:
+                            pass
+
+                        yf_tickers = []
+                        ticker_map = {}
+                        for t in missing:
+                            t_padded = str(t).zfill(6)
+                            market = market_map.get(t_padded, 'KOSPI')
+                            suffix = ".KQ" if market == "KOSDAQ" else ".KS"
+                            yf_t = f"{t_padded}{suffix}"
+                            yf_tickers.append(yf_t)
+                            ticker_map[yf_t] = t_padded
+                        
+                        if yf_tickers:
+                            import logging as _logging
+                            yf_logger = _logging.getLogger('yfinance')
+                            original_level = yf_logger.level
+                            yf_logger.setLevel(_logging.CRITICAL)
                             
-                            # Helper to extract price safely
-                            def extract_price(t_sym, data_src):
-                                try:
-                                    if isinstance(data_src, pd.DataFrame) and t_sym in data_src.columns:
-                                        series = data_src[t_sym].dropna()
-                                        if not series.empty: return float(series.iloc[-1])
-                                    elif isinstance(data_src, pd.Series):
-                                        return float(data_src.iloc[-1])
-                                except: pass
-                                return None
-
-                            for yf_t in yf_tickers:
-                                val = extract_price(yf_t, closes)
-                                if val:
-                                    prices[ticker_map[yf_t]] = val
+                            try:
+                                price_data = yf.download(yf_tickers, period='5d', interval='1d', progress=False, threads=True)
+                                
+                                if not price_data.empty and 'Close' in price_data:
+                                    closes = price_data['Close']
                                     
-                    finally:
-                        yf_logger.setLevel(original_level)
-                        
-                    # Check missing tickers
-                    missing = [t for t in tickers if str(t).zfill(6) not in prices]
-                    
-                    # 1.5 Toss Securities API Fallback (Bulk)
-                    if missing:
-                        try:
-                            import requests
-                            toss_codes = [f"A{str(t).zfill(6)}" for t in missing]
-                            # Chunking 50
-                            for i in range(0, len(toss_codes), 50):
-                                chunk = toss_codes[i:i+50]
-                                url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes={','.join(chunk)}"
-                                res = requests.get(url, timeout=5)
-                                if res.status_code == 200:
-                                    results = res.json().get('result', [])
-                                    for item in results:
-                                        code = item.get('code', '')[1:]
-                                        close = item.get('close')
-                                        if code and close:
-                                            prices[code] = float(close)
-                        except Exception as e:
-                            logger.debug(f"Toss Fallback Failed: {e}")
+                                    def extract_price(t_sym, data_src):
+                                        try:
+                                            if isinstance(data_src, pd.DataFrame) and t_sym in data_src.columns:
+                                                series = data_src[t_sym].dropna()
+                                                if not series.empty: return float(series.iloc[-1])
+                                            elif isinstance(data_src, pd.Series):
+                                                return float(data_src.iloc[-1])
+                                        except: pass
+                                        return None
 
-                    # 1.6 Naver Mobile API Fallback (Individual)
-                    missing = [t for t in tickers if str(t).zfill(6) not in prices]
-                    if missing:
-                        try:
-                            import requests
-                            headers = {'User-Agent': 'Mozilla/5.0'}
-                            for t in missing:
-                                try:
-                                    url = f"https://m.stock.naver.com/api/stock/{str(t).zfill(6)}/basic"
-                                    res = requests.get(url, headers=headers, timeout=2)
-                                    if res.status_code == 200:
-                                        data = res.json()
-                                        if 'closePrice' in data:
-                                            prices[str(t).zfill(6)] = float(data['closePrice'].replace(',', ''))
-                                except: pass
-                        except Exception: pass
+                                    for yf_t in yf_tickers:
+                                        val = extract_price(yf_t, closes)
+                                        if val:
+                                            prices[ticker_map[yf_t]] = val
+                            finally:
+                                yf_logger.setLevel(original_level)
+                    except Exception as yf_err:
+                        logger.debug(f"yfinance Fallback Failed: {yf_err}")
                         
-                    # Return if we have everything
-                    if len(prices) == len(tickers):
-                        return jsonify({'prices': prices})
+            # Return if we have everything
+            if len(prices) >= len(tickers):
+                return jsonify({'prices': prices})
 
-        except Exception as yf_err:
-            logger.debug(f"yfinance 실시간 조회 실패 (CSV 폴백): {yf_err}")
+        except Exception as bulk_err:
+            logger.debug(f"Bulk 가격 조회 실패 (CSV 폴백): {bulk_err}")
 
         # 2. CSV 폴백 (yfinance 실패 또는 주말/장외)
         df = load_csv_file('daily_prices.csv')

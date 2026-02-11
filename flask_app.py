@@ -32,18 +32,16 @@ if __name__ == '__main__':
     from engine.config import app_config
     
     provider = app_config.LLM_PROVIDER
-    if provider == 'zai':
-        active_key = app_config.ZAI_API_KEY
-        active_model = app_config.ZAI_MODEL
-    else:
-        active_key = app_config.GOOGLE_API_KEY
-        active_model = app_config.GEMINI_MODEL
+    chatbot_model = app_config.GEMINI_MODEL
+    analysis_model = app_config.ANALYSIS_GEMINI_MODEL
+    active_key = app_config.ZAI_API_KEY if provider == 'zai' else app_config.GOOGLE_API_KEY
         
     masked_key = active_key[:6] + "*"*10 if active_key else "None"
     
     print(f"📡 [DIAGNOSTIC] LLM Provider: {provider}")
     print(f"🔑 [DIAGNOSTIC] Active API Key: {masked_key}")
-    print(f"🤖 [DIAGNOSTIC] Active Model:   {active_model}")
+    print(f"🤖 [DIAGNOSTIC] Chatbot Model:  {chatbot_model}")
+    print(f"🔬 [DIAGNOSTIC] Analysis Model: {analysis_model}")
     print("="*60 + "\n")
 
     # Scheduler is now started inside create_app() with Singleton lock protection
