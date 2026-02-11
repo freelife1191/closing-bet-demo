@@ -16,9 +16,8 @@ logs/
 *.log
 
 # Data files
-# Data files
-# data/*.csv (Allow CSV for seeding)
-# data/*.json (Allow JSON for seeding)
+data/*.csv
+data/*.json
 data/*.db
 data/history/
 *.db
