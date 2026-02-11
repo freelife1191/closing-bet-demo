@@ -2050,11 +2050,11 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div>
               <h5 className="text-[10px] text-gray-500 mb-2 font-bold">체크리스트</h5>
               <div className="space-y-1">
-                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist.has_news ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
-                  {signal.checklist.has_news ? '뉴스/호재 있음' : '특별한 호재 없음'}
+                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist?.has_news ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
+                  {signal.checklist?.has_news ? '뉴스/호재 있음' : '특별한 호재 없음'}
                 </div>
-                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist.supply_positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
-                  {signal.checklist.supply_positive ? '수급 양호 (외인/기관)' : '수급 보통'}
+                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist?.supply_positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
+                  {signal.checklist?.supply_positive ? '수급 양호 (외인/기관)' : '수급 보통'}
                 </div>
               </div>
             </div>
