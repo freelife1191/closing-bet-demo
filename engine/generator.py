@@ -29,6 +29,7 @@ import engine.shared as shared_state
 from engine.models import (
     StockData, Signal, SignalStatus, ScoreDetail, ChecklistDetail, ScreenerResult, ChartData, Grade
 )
+from engine.exceptions import NoCandidatesError
 from engine.collectors import KRXCollector, EnhancedNewsCollector, NaverFinanceCollector
 from engine.toss_collector import TossCollector
 from engine.scorer import Scorer
@@ -233,6 +234,10 @@ class SignalGenerator:
                 elapsed = time.time() - start_time
                 print(f"  ✓ {market} 완료: {len(signals)}개 시그널 ({elapsed:.1f}초)")
 
+            except NoCandidatesError as e:
+                logger.warning(f"[{market}] {e}")
+                print(f"  - {market}: 조건에 맞는 후보 종목이 없습니다. ({e})")
+                continue
             except Exception as e:
                 logger.error(f"[{market}] Pipeline execution failed: {e}")
                 print(f"  ✗ {market} 실패: {e}")

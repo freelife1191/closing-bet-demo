@@ -68,12 +68,32 @@ class SmartMoneyScreener:
         self.inst_df = None
 
     def _load_data(self):
-        """데이터 파일 로드"""
-        try:
-            stocks_path = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
-            prices_path = os.path.join(BASE_DIR, 'data', 'daily_prices.csv')
-            inst_path = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
+        """데이터 파일 로드 (누락 시 자동 생성)"""
+        stocks_path = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
+        prices_path = os.path.join(BASE_DIR, 'data', 'daily_prices.csv')
+        inst_path = os.path.join(BASE_DIR, 'data', 'all_institutional_trend_data.csv')
 
+        # 1. Check & Generate Stocks List
+        if not os.path.exists(stocks_path):
+            logger.warning(" Stocks list missing. Attempting to generate...")
+            try:
+                from scripts.init_data import create_korean_stocks_list
+                create_korean_stocks_list()
+            except Exception as e:
+                logger.error(f"Failed to generate stocks list: {e}")
+
+        # 2. Check & Generate Daily Prices
+        if not os.path.exists(prices_path):
+            logger.warning(" Daily prices missing. Attempting to generate...")
+            try:
+                from scripts.init_data import create_daily_prices
+                # 기본 90일치 데이터 생성
+                create_daily_prices(lookback_days=90)
+            except Exception as e:
+                logger.error(f"Failed to generate daily prices: {e}")
+
+        # 3. Load Data
+        try:
             if os.path.exists(stocks_path):
                 self.stocks_df = pd.read_csv(stocks_path)
             

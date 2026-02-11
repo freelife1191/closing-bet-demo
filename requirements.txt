@@ -10,3 +10,5 @@ pykrx
 gunicorn
 pytz
 schedule
+
+finance-datareader
