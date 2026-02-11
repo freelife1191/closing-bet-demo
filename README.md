@@ -214,10 +214,10 @@ engine/
 ├── vcp_ai_analyzer.py     # VCP 기술적 분석 전용 AI 모듈
 ├── data_sources.py        # 전략 패턴 기반 데이터 소스
 │   ├── DataSourceStrategy # 추상 인터페이스
-│   ├── FDRSource          # 한국투자증권 API
-│   ├── PykrxSource        # KRX 데이터
-│   ├── YFinanceSource     # 글로벌 데이터
-│   └── DataSourceManager  # 폴백 체인 관리자
+│   ├── FDRSource          # FinanceDataReader (오픈소스 데이터)
+│   ├── PykrxSource        # KRX 공식 데이터 (pykrx)
+│   ├── YFinanceSource     # 글로벌 실시간/지수 데이터 (yfinance)
+│   └── DataSourceManager  # 우선순위 기반 폴백 체인 오케스트레이터
 ├── toss_collector.py      # 토스증권 API 기반 실시간 데이터 수집
 ├── kis_collector.py       # 한국투자증권(KIS) API 연동 모듈
 ├── messenger.py           # 멀티채널(텔레그램/디스코드 등) 알림 허브
@@ -312,24 +312,46 @@ graph TD
 
 시스템은 Flask Blueprint를 사용하여 모듈형 라우팅과 관심사 분리를 구현합니다.
 
+**한국 시장 API (`kr_market` Blueprint - `/api/kr`):**
+- `GET /api/kr/market-status`: 한국 시장 현황 (KOSPI/KOSDAQ 지수, 환율, 수급)
+- `GET /api/kr/signals`: 최신 VCP 및 외인매집 시그널 분석 결과 조회
+- `GET /api/kr/jongga-v2/latest`: 최신 AI 종가베팅(V2) 분석 결과 조회
+- `GET /api/kr/closing-bet/cumulative`: 종가베팅 전략의 누적 성과 및 승률 통계
+- `POST /api/kr/realtime-prices`: 전 종목 실시간 가격 통합 조회 (Toss/YF 폴백)
+- `GET /api/kr/market-gate`: Market Gate 상태 및 상세 스코어링 데이터
+- `POST /api/kr/market-gate/update`: 시장 데이터 및 Market Gate 강제 동기화
+- `POST /api/kr/signals/run`: VCP 시그널 생성 엔진 백그라운드 실행
+- `POST /api/kr/jongga-v2/run`: AI 종가베팅 V2 엔진 백그라운드 실행
+- `POST /api/kr/chatbot`: AI 투자 어드바이저(스마트머니봇)와 대화
+
+**공통 API (`common` Blueprint - `/api`):**
+- `GET /api/admin/check`: 관리자 권한 확인 (설치 및 설정용)
+- `GET /api/portfolio`: 모의투자 포트폴리오 및 자산 현황 조회
+- `POST /api/portfolio/buy`: 모의투자 매수 주문 체결
+- `POST /api/portfolio/sell`: 모의투자 매도 주문 체결
+- `GET /api/system/env`: 시스템 전체 환경 변수 관리 (관리자 전용)
+- `GET /health`: 시스템 상태 및 API 가동 여부 체크 (Root)
+
 ```python
 app/
 ├── routes/
 │   ├── kr_market.py     # 한국 시장 관련 API (Blueprint: 'kr')
-│   │   ├── get_kr_market_status  # 지수/환율/수급 현황
-│   │   ├── get_kr_signals        # VCP 및 외인매집 시그널 조회
-│   │   ├── get_kr_market_gate    # Market Gate 점수 및 상태
-│   │   ├── get_kr_realtime_prices # 전 종목 실시간 가격 통합 조회
-│   │   ├── get_jongga_v2_latest  # 최신 AI 종가베팅 결과 조회
-│   │   ├── get_performance       # 성과 분석 및 승률 통계
-│   │   ├── run_vcp_screener      # VCP 스크리너 백그라운드 실행
-│   │   └── run_jongga_v2_screener # 종가베팅 V2 스크리너 실행
+│   │   ├── get_kr_market_status  # /market-status (지수/환율/수급)
+│   │   ├── get_kr_signals        # /signals (VCP 시그널)
+│   │   ├── get_kr_market_gate    # /market-gate (시장 신호등)
+│   │   ├── get_kr_realtime_prices # /realtime-prices (실시간 시세)
+│   │   ├── get_jongga_v2_latest  # /jongga-v2/latest (V2 결과)
+│   │   ├── get_cumulative_performance # /closing-bet/cumulative (성과)
+│   │   ├── run_vcp_signals_screener # /signals/run (엔진 실행)
+│   │   ├── run_jongga_v2_screener # /jongga-v2/run (엔진 실행)
+│   │   └── chatbot               # /chatbot (AI 대화 엔진)
 │   └── common.py        # 공통 및 유틸리티 API (Blueprint: 'common')
-│       ├── chat_with_ai          # 스마트머니봇 AI 챗봇 대화
-│       ├── run_screening         # 실시간 기술적 지표 스크리닝
-│       ├── check_admin           # 관리자 권한 및 설정 확인
-│       └── health_check          # 시스템 상태 및 가동 여부 체크
-└── utils/               # 공통 유틸리티 함수
+│       ├── check_admin           # /admin/check
+│       ├── get_portfolio_data    # /portfolio
+│       ├── buy_stock / sell_stock # /portfolio/buy, /portfolio/sell
+│       ├── manage_env            # /system/env
+│       └── send_test_notification # /notification/send
+└── __init__.py          # 애플리케이션 팩토리 및 /health (Root)
 ```
 
 #### 서비스 레이어 (Services Layer)
