@@ -54,8 +54,7 @@ VCP_GPT_MODEL=gpt-4o
 VCP_PERPLEXITY_MODEL=sonar-pro
 
 # 스케줄러 시간 설정 (KST)
-JONGGA_SCHEDULE_TIME=15:20
-CLOSING_SCHEDULE_TIME=15:40
+CLOSING_SCHEDULE_TIME=16:00
 MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
 
 # 스케줄러 활성화
@@ -107,7 +106,7 @@ SCHEDULER_ENABLED=true
 ### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
 - **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
 - **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (기본 30분, **1분~60분 단위 설정 가능**)
-- **스케줄 분석**: AI 분석(15:20 KST), 일일 전체 분석 및 시그널 확정(15:40 KST)
+- **장 마감 순차 분석 (16:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution)
 - **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
 
 ![데이터 상태](assets/25.png)
@@ -178,8 +177,8 @@ graph TD
         S --> W[Scheduler Service]
         O --> X[Notification Service]
         O --> Y[Paper Trading Service]
-        W -->|15:20 KST| Z[종가베팅 Analysis]
-        W -->|15:40 KST| AA[VCP Analysis]
+        W -->|16:00 KST| Z[종가베팅 Analysis]
+        W -->|16:00 KST| AA[VCP Analysis]
     end
 
     subgraph "Frontend Layer (Next.js)"
@@ -365,14 +364,12 @@ services/
 
 **스케줄러 서비스 (`scheduler.py`):**
 - **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락으로 중복 실행 방지
-- **15:20 KST - 종가베팅 분석**: 장중 데이터 기반 AI 분석
-  - 장중 주가 데이터 업데이트
-  - 종가베팅 V2 시그널 생성
-  - 알림 발송
-- **15:40 KST - 장 마감 분석**: 확정 데이터 기반 전체 분석
-  - 일별 주가 데이터 수집
-  - 기관/외인 수급 데이터 수집
-  - VCP 시그널 분석
+- **16:00 KST - 장 마감 통합 분석**: 모든 작업을 순차적으로 실행 (Chain Execution)
+  - **데이터 수집**: 일별 주가 및 수급 데이터 확정본 수집
+  - **VCP 분석**: 전 종목 기술적 패턴/수급 기반 분석
+  - **AI 종가베팅**: AI(Gemini 2.5 Flash) 기반 심층 가설 수립
+  - **알림 전송**: 분석 즉시 4개 채널로 결과 발송
+- **주기적 동기화**: 설정된 인터벌에 따라 Market Gate 및 환율 최신화
 
 **알림 서비스 (`notifier.py`):**
 - **NotificationService 클래스**: 4채널 지원 알림 시스템
