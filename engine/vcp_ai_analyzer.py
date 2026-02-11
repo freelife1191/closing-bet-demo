@@ -90,7 +90,7 @@ class VCPMultiAIAnalyzer:
         if not self.gemini_client:
             return None
         
-        max_retries = 3
+        max_retries = 5
         base_delay = 2
         
         for attempt in range(max_retries + 1):
@@ -126,7 +126,7 @@ class VCPMultiAIAnalyzer:
                 
                 if attempt < max_retries and any(c in error_msg for c in retry_conditions):
                     delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
-                    logger.warning(f"[Gemini] {stock_name} API Error ({error_msg[:50]}...). Retrying in {delay:.2f}s... ({attempt+1}/{max_retries})")
+                    logger.warning(f"[Gemini] {stock_name} API ({error_msg[:100]}) -> {delay:.2f}초 후 재시도... ({attempt+1}/{max_retries})")
                     await asyncio.sleep(delay)
                 else:
                     logger.error(f"[Gemini] {stock_name} 분석 실패 (Final): {e}")

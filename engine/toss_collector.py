@@ -51,9 +51,11 @@ class TossCollector:
                     time.sleep(retry_delay * (attempt + 1))
                     continue
                 else:
-                    # 400 에러 등은 재시도 없이 중단
-                    if response.status_code != 404:
+                    # 400 에러 등은 데이터 부재 상황일 수 있으므로 DEBUG로 처리
+                    if response.status_code not in [404, 400]:
                          logger.warning(f"토스증권 API 상세 오류: {url} - {response.status_code}")
+                    else:
+                         logger.debug(f"토스증권 API 데이터 없음 (Skip): {url} - {response.status_code}")
                     return None
             except Exception as e:
                 if attempt < max_retries - 1:
