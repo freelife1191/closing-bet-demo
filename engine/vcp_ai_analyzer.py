@@ -100,7 +100,7 @@ class VCPMultiAIAnalyzer:
             try:
                 # 시도 횟수에 따라 모델 변경 (폴백)
                 # 0, 1회: gemini-flash-latest
-                # 2회: gemini-1.5-flash
+                # 2회: gemini-2.5-flash
                 # 3회 이상: gemini-2.0-flash
                 model_idx = min(attempt // 2, len(model_chain) - 1)
                 current_model = model_chain[model_idx]
