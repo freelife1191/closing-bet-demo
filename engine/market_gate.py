@@ -15,6 +15,7 @@ from typing import Dict, Tuple, Optional, Any
 
 # Import GlobalDataFetcher from data_sources module
 from engine.data_sources import GlobalDataFetcher, DataSourceManager
+from engine.utils import NumpyEncoder
 
 # Config Import
 try:
@@ -438,7 +439,7 @@ class MarketGate:
         
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
+                json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
             logger.debug(f"Market Gate 저장 완료: {filepath}")
         except Exception as e:
             logger.error(f"Market Gate 저장 실패: {e}")
@@ -450,7 +451,7 @@ class MarketGate:
             latest_path = os.path.join(self.data_dir, 'market_gate.json')
             try:
                 with open(latest_path, 'w', encoding='utf-8') as f:
-                    json.dump(result, f, ensure_ascii=False, indent=2)
+                    json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
             except Exception as e:
                 logger.error(f"최신 Market Gate 갱신 실패: {e}")
                 

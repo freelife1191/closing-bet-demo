@@ -16,6 +16,7 @@ from datetime import datetime
 from threading import Lock, Thread
 import traceback
 import re
+from engine.utils import NumpyEncoder
 
 # Add scripts directory to path for importing init_data
 scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scripts')
@@ -94,7 +95,7 @@ def save_update_status(status):
         # Write to temp file first
         tmp_file = UPDATE_STATUS_FILE + ".tmp"
         with open(tmp_file, 'w', encoding='utf-8') as f:
-            json.dump(status, f, indent=2, ensure_ascii=False)
+            json.dump(status, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
             f.flush()
             os.fsync(f.fileno()) # Ensure write to disk
             
@@ -349,7 +350,7 @@ def run_background_update(target_date, selected_items=None, force=False):
                             filepath = os.path.join(data_dir, filename)
                             
                             with open(filepath, 'w', encoding='utf-8') as f:
-                                json.dump(results, f, ensure_ascii=False, indent=2)
+                                json.dump(results, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
                             logger.info(f"AI 분석 결과 저장 완료: {filepath}")
                                 
                             # 3. 최신 결과 업데이트 (target_date가 없거나 오늘인 경우)
@@ -359,7 +360,7 @@ def run_background_update(target_date, selected_items=None, force=False):
                             if not target_date or is_today:
                                  main_path = os.path.join(data_dir, 'ai_analysis_results.json')
                                  with open(main_path, 'w', encoding='utf-8') as f:
-                                    json.dump(results, f, ensure_ascii=False, indent=2)
+                                    json.dump(results, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
                             
                             update_item_status('AI Analysis', 'done')
                     else:

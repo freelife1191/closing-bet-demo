@@ -36,6 +36,7 @@ from engine.scorer import Scorer
 from engine.position_sizer import PositionSizer
 from engine.llm_analyzer import LLMAnalyzer
 from engine.market_gate import MarketGate
+from engine.utils import NumpyEncoder
 
 # [REFACTORED] Import the phase-based pipeline
 from engine.phases import (
@@ -691,12 +692,12 @@ def save_result_to_json(result: ScreenerResult):
     daily_path = os.path.join(data_dir, f"jongga_v2_results_{date_str}.json")
 
     with open(daily_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+        json.dump(data, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
     # Latest 파일
     latest_path = os.path.join(data_dir, "jongga_v2_latest.json")
     with open(latest_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+        json.dump(data, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
     print(f"\n[저장 완료] Daily: {daily_path}")
     print(f"[저장 완료] Latest: {latest_path}")
@@ -745,14 +746,14 @@ def update_single_signal_json(code: str, signal: Signal):
 
     # 저장
     with open(latest_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+        json.dump(data, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
     # Daily 파일도 업데이트
     date_str = date.today().strftime("%Y%m%d")
     daily_path = os.path.join(data_dir, f"jongga_v2_results_{date_str}.json")
     if os.path.exists(daily_path):
         with open(daily_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(data, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
 
 # 테스트용 메인

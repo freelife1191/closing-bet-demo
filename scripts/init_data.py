@@ -652,6 +652,10 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
                 
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
             log(f"yfinance 백업 수집 완료 ({len(final_df)}행)", "SUCCESS")
+            
+            # [Added] 데이터 가지치기
+            prune_daily_prices(file_path, days_to_keep=1095)
+            
             return True
         else:
             log("yfinance 수집 데이터 없음", "WARNING")
@@ -934,6 +938,10 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
             log(f"데이터 저장 시작... ({file_path})", "INFO")
             final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
             log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "INFO")
+            
+            # [Added] 데이터 가지치기 (최근 3년 유지)
+            prune_daily_prices(file_path, days_to_keep=1095)
+            
             print("DEBUG: create_daily_prices finished successfully.", flush=True)
         else:
              if start_date_obj.date() > end_date_obj.date():
@@ -944,6 +952,10 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
              
              if skipped_count == total_days and total_days > 0:
                  log(f"모든 날짜({total_days}일) 데이터가 이미 존재합니다. yfinance 폴백 생략.", "SUCCESS")
+                 
+                 # [Added] 데이터 가지치기 (데이터가 이미 있어도 수행)
+                 prune_daily_prices(file_path, days_to_keep=1095)
+                 
                  return True
 
              return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
@@ -2223,6 +2235,46 @@ def update_kr_ai_analysis_prices(price_map):
             
     except Exception as e:
         log(f"AI 분석 파일 가격 동기화 실패: {e}", "WARNING")
+
+def prune_daily_prices(file_path, days_to_keep=1095):
+    """
+    일별 데이터 파일에서 오래된 데이터를 삭제합니다.
+    Args:
+        file_path: 파일 경로
+        days_to_keep: 유지할 기간 (일) - 기본 3년 (1095일)
+    """
+    try:
+        log(f"데이터 가지치기 시작 (최근 {days_to_keep}일 유지)...", "INFO")
+        
+        # 파일이 없으면 리턴
+        if not os.path.exists(file_path):
+            return
+
+        # 청크 단위로 읽어서 처리하거나, 전체 로드 후 필터링 (메모리 충분 가정)
+        # 현재 20만행 수준이므로 전체 로드 가능
+        df = pd.read_csv(file_path, dtype={'ticker': str})
+        
+        if df.empty or 'date' not in df.columns:
+            return
+
+        # 기준 날짜 계산
+        cutoff_date = (datetime.now() - timedelta(days=days_to_keep)).strftime('%Y-%m-%d')
+        
+        # 필터링
+        original_count = len(df)
+        df_pruned = df[df['date'] >= cutoff_date]
+        pruned_count = len(df_pruned)
+        
+        # 삭제된 데이터가 있을 경우만 저장
+        if original_count > pruned_count:
+            df_pruned.to_csv(file_path, index=False, encoding='utf-8-sig')
+            deleted_count = original_count - pruned_count
+            log(f"오래된 데이터 삭제 완료: {deleted_count}행 삭제 (기준일: {cutoff_date})", "SUCCESS")
+        else:
+            log(f"삭제할 오래된 데이터가 없습니다. (기준일: {cutoff_date})", "INFO")
+            
+    except Exception as e:
+        log(f"데이터 가지치기 실패: {e}", "WARNING")
 
 if __name__ == '__main__':
     # 로깅 핸들러 초기화 (중복 방지 - 라이브러리 로그용)
