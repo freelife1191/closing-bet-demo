@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAPI } from '@/lib/api';
 import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
+import VCPCriteriaModal from '@/app/components/VCPCriteriaModal';
 import { useAdmin } from '@/hooks/useAdmin';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
@@ -861,6 +862,7 @@ export default function JonggaV2Page() {
   // Buy Modal State
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
+  const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false); // [NEW] VCP Modal State
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -1078,6 +1080,8 @@ export default function JonggaV2Page() {
 
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 w-full">
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* [MOVED] VCP 기준표 버튼 removed from here */}
+
             {/* Trading Value Filter */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-[9px] text-gray-500">
@@ -1197,6 +1201,14 @@ export default function JonggaV2Page() {
 
           <div className="flex items-center gap-3 md:ml-auto">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
+
+            {/* [NEW] VCP 기준표 버튼 (Moved here) */}
+            <button
+              onClick={() => setIsVCPCriteriaModalOpen(true)}
+              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10"
+            >
+              <i className="fas fa-table"></i> VCP 기준표
+            </button>
 
             <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" wide>
               <select
@@ -1440,6 +1452,12 @@ export default function JonggaV2Page() {
       >
         <p>{alertModal.content}</p>
       </Modal>
+
+      {/* VCP Criteria Modal */}
+      <VCPCriteriaModal
+        isOpen={isVCPCriteriaModalOpen}
+        onClose={() => setIsVCPCriteriaModalOpen(false)}
+      />
     </div>
   );
 }

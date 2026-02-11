@@ -5,6 +5,7 @@ import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate, AIRecommendation } from '@
 import StockChart from './StockChart';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import Modal from '@/app/components/Modal';
+import VCPCriteriaModal from '@/app/components/VCPCriteriaModal'; // [NEW] Import
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAdmin } from '@/hooks/useAdmin';
@@ -75,6 +76,7 @@ export default function VCPSignalsPage() {
   // Buy Modal State
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
+  const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false); // [NEW] State
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -478,6 +480,8 @@ export default function VCPSignalsPage() {
               {screenerMessage}
             </span>
           )}
+          {/* [MOVED] VCP 기준표 버튼 removed from here */}
+
           <button
             onClick={async () => {
               // ADMIN 권한 체크
@@ -584,6 +588,15 @@ export default function VCPSignalsPage() {
         </div>
 
         <div className="flex items-center gap-2 relative self-end md:self-auto">
+          {/* [NEW] VCP 기준표 버튼 (Moved here) */}
+          <button
+            onClick={() => setIsVCPCriteriaModalOpen(true)}
+            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10"
+          >
+            <i className="fas fa-table"></i>
+            <span>VCP 기준표</span>
+          </button>
+
           <button
             onClick={handleLoadLatest}
             disabled={loading}
@@ -1246,6 +1259,12 @@ export default function VCPSignalsPage() {
         <p>관리자만 VCP 스크리너를 실행할 수 있습니다.</p>
         <p className="text-sm text-gray-400 mt-2">관리자 계정으로 로그인해 주세요.</p>
       </Modal>
+
+      {/* VCP Criteria Modal */}
+      <VCPCriteriaModal
+        isOpen={isVCPCriteriaModalOpen}
+        onClose={() => setIsVCPCriteriaModalOpen(false)}
+      />
     </div>
   );
 }

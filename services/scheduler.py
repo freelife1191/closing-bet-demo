@@ -35,19 +35,19 @@ _scheduler_lock_file = None
 
 
 def run_jongga_v2_analysis(test_mode=False):
-    """장 마감 직전 AI 종가베팅 분석 (15:20)"""
+    """장 마감 후 AI 종가베팅 분석 (16:30 - Last)"""
     now = datetime.now()
     if test_mode or now.weekday() < 5:  # 평일만 or 테스트
-        logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:00 - After Close)")
+        logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:30 - After Closing Analysis)")
         try:
-            # 1. 당일(장중) 데이터 수집 (Pre-close) -> 제거 (15:40 정기 분석에서 수행됨)
-            # 16:00 시점에 실행되므로 이미 create_daily_prices()가 완료된 상태라 가정
+            # 1. 당일(장중) 데이터 수집 (Pre-close) -> 제거 (16:05 정기 분석에서 수행됨)
+            # 16:30 시점에 실행되므로 이미 create_daily_prices()가 완료된 상태라 가정
             # logger.info("[Scheduler] 장중 주가 데이터 업데이트...")
             # create_daily_prices()
             
             # 2. 분석 실행
             create_jongga_v2_latest()
-            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:00)")
+            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:30)")
             
             # 3. 알림 발송 (Messenger 사용)
             send_jongga_notification()
@@ -60,7 +60,7 @@ def run_jongga_v2_analysis(test_mode=False):
 
 
 def run_daily_closing_analysis(test_mode=False):
-    """장 마감 후 전체 데이터 수집 및 분석 (15:40)"""
+    """장 마감 후 전체 데이터 수집 및 분석 (16:05 - First)"""
     now = datetime.now()
     if test_mode or now.weekday() < 5: # 평일만 or 테스트
         logger.info(">>> [Scheduler] 장 마감 정기 분석 시작")
@@ -76,9 +76,11 @@ def run_daily_closing_analysis(test_mode=False):
             logger.info("[Scheduler] VCP 시그널 분석...")
             create_signals_log(run_ai=True)
             
-            # Note: Jongga V2 is now run separately at 15:20
+            # [2026-02-11 Modified] Chain Execution: Run Jongga V2 immediately after Closing Analysis
+            logger.info(">>> [Scheduler] Chaining: 데이터 수집 완료 후 AI 종가베팅 분석 즉시 시작")
+            run_jongga_v2_analysis(test_mode=test_mode)
             
-            logger.info("<<< [Scheduler] 장 마감 정기 분석 완료")
+            logger.info("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
         except Exception as e:
             logger.error(f"[Scheduler] 장 마감 정기 분석 실패: {e}")
 
@@ -164,16 +166,17 @@ def start_scheduler():
     logger.info(f"Scheduled Market Gate sync every {interval} minutes")
     
     # 스케줄 시간 설정 (환경변수로 커스터마이징 가능)
-    jongga_time = os.getenv('JONGGA_SCHEDULE_TIME', '16:00')
-    closing_time = os.getenv('CLOSING_SCHEDULE_TIME', '15:40')
+    # [2026-02-11 Modified] 장 마감(16:00) 정각에 시작하여 순차적으로 실행
+    closing_time = os.getenv('CLOSING_SCHEDULE_TIME', '16:00') # 장 마감 직후 실행 (16:00)
+    # jongga_time = os.getenv('JONGGA_SCHEDULE_TIME', '16:30')   # 가장 늦게 실행 (16:30)
     
-    # 매일 AI 종가베팅 (장 마감 직전) - 기본값 16:00 (장 마감 데이터 사용)
-    schedule.every().day.at(jongga_time).do(run_jongga_v2_analysis)
-    logger.info(f"Scheduled Jongga V2 Analysis at {jongga_time}")
+    # 매일 AI 종가베팅 (장 마감 후)
+    # schedule.every().day.at(jongga_time).do(run_jongga_v2_analysis)
+    # logger.info(f"Scheduled Jongga V2 Analysis at {jongga_time} (Runs Last)")
 
-    # 매일 장 마감 전체 분석 - 기본값 15:40
+    # 매일 장 마감 전체 분석 (이후 Jongga V2 자동 실행됨)
     schedule.every().day.at(closing_time).do(run_daily_closing_analysis)
-    logger.info(f"Scheduled Closing Analysis at {closing_time}")
+    logger.info(f"Scheduled Daily Closing Analysis at {closing_time} (Chains Jongga V2)")
     
     # 앱 시작 시 1회 즉시 실행 (데이터 확인용 - 비동기로 실행하여 부팅 지연 방지)
     # threading.Thread(target=run_market_gate_sync, daemon=True).start()
