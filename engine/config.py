@@ -33,7 +33,7 @@ class SignalConfig:
     # 거래대금 기준 (원) - 2026-02-08 업데이트 (Dos 조건 반영)
     trading_value_s: int = 1_000_000_000_000  # 1조
     trading_value_a: int = 500_000_000_000    # 5000억
-    trading_value_b: int = 100_000_000_000    # 1000억
+    trading_value_b: int = 50_000_000_000     # 500억
     trading_value_c: int = 50_000_000_000     # 500억
     trading_value_min: int = 50_000_000_000   # 500억 (문서 기준)
 

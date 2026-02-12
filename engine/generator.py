@@ -586,13 +586,13 @@ async def run_screener(
         # 결과 저장
         save_result_to_json(result)
 
-        # 메신저 알림 발송
-        try:
-            from engine.messenger import Messenger
-            messenger = Messenger()
-            messenger.send_screener_result(result)
-        except Exception as e:
-            print(f"[오류] 메신저 발송 실패: {e}")
+        # 메신저 알림 발송 - [REMOVED] Scheduler handles this now (Double Send Fix)
+        # try:
+        #     from engine.messenger import Messenger
+        #     messenger = Messenger()
+        #     messenger.send_screener_result(result)
+        # except Exception as e:
+        #     print(f"[오류] 메신저 발송 실패: {e}")
 
         return result
 
