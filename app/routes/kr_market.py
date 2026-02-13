@@ -3178,6 +3178,11 @@ def kr_chatbot():
             if request.user_agent.platform in ('android', 'iphone', 'ipad') or 'Mobile' in ua_string:
                 device_type = 'MOBILE'
 
+            # Get Real IP
+            real_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            if real_ip and ',' in real_ip:
+                real_ip = real_ip.split(',')[0].strip()
+
             activity_logger.log_action(
                 user_id=usage_key,
                 action='CHAT_MESSAGE',
@@ -3191,10 +3196,10 @@ def kr_chatbot():
                     'device': device_type,
                     'user_agent': ua_string[:150]
                 },
-                ip_address=request.remote_addr
+                ip_address=real_ip
             )
         except Exception as e:
-            logger.error(f"Chat log error: {e}")
+            logger.error(f"[{usage_key}] Chat log error: {e}")
 
         # 3. Quota Update (If Free Tier & Success)
         if use_free_tier:
@@ -3213,7 +3218,7 @@ def kr_chatbot():
         return jsonify(response_data)
              
     except Exception as e:
-        logger.error(f"Chatbot API Error: {e}")
+        logger.error(f"[{usage_key}] Chatbot API Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 

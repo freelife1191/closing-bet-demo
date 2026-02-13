@@ -61,6 +61,10 @@ def create_app():
     logging.getLogger('google_genai.models').setLevel(logging.WARNING)
     
     app = Flask(__name__)
+    
+    # [Middleware] ProxyFix for Real IP - Reverted in favor of manual check
+    # from werkzeug.middleware.proxy_fix import ProxyFix
+    # app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
     # -------------------------------------------------------------
     # [FIX] Reset Update Status on Startup (Prevents Ghost Updates)
@@ -149,6 +153,7 @@ def create_app():
                 '/api/system/data-status',
                 '/api/kr/jongga-v2/status',
                 '/api/kr/status',
+                '/api/kr/realtime-prices',
                 '/static',
                 '/favicon.ico'
             ]
@@ -183,11 +188,16 @@ def create_app():
                 'user_agent': ua_string[:150] if ua_string else None
             }
             
+            # Get Real IP (Trust X-Forwarded-For from Frontend/Proxy)
+            real_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            if real_ip and ',' in real_ip:
+                real_ip = real_ip.split(',')[0].strip()
+
             activity_logger.log_action(
                 user_id=user_id,
                 action='API_ACCESS',
                 details=details,
-                ip_address=request.remote_addr
+                ip_address=real_ip
             )
             
         except Exception as e:

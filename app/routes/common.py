@@ -452,11 +452,15 @@ def api_log_event():
         if 'session_id' not in details and session_id:
             details['session_id'] = session_id
             
+        real_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if real_ip and ',' in real_ip:
+            real_ip = real_ip.split(',')[0].strip()
+            
         activity_logger.log_action(
             user_id=user_id,
             action=action,
             details=details,
-            ip_address=request.remote_addr
+            ip_address=real_ip
         )
         return jsonify({'status': 'ok'})
     except Exception as e:

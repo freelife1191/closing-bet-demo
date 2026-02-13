@@ -1105,7 +1105,7 @@ class KRStockChatbot:
             
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"Chat error: {error_msg}")
+            logger.error(f"[User: {self.user_id}] Chat error: {error_msg}")
             
             # [Error Handling] 429 Resource Exhausted (Google API Rate Limit)
             if "429" in error_msg or "Resource exhausted" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
