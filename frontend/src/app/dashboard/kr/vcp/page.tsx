@@ -367,9 +367,14 @@ export default function VCPSignalsPage() {
   const formatFlow = (value: number | undefined) => {
     if (value === undefined || value === null) return '-';
     const absValue = Math.abs(value);
-    if (absValue >= 100000000) {
+
+    if (absValue >= 10000000000000000) { // 1경 (10^16)
+      return `${(value / 10000000000000000).toFixed(1)}경`;
+    } else if (absValue >= 1000000000000) { // 1조 (10^12)
+      return `${(value / 1000000000000).toFixed(1)}조`;
+    } else if (absValue >= 100000000) { // 1억 (10^8)
       return `${(value / 100000000).toFixed(1)}억`;
-    } else if (absValue >= 10000) {
+    } else if (absValue >= 10000) { // 1만 (10^4)
       return `${(value / 10000).toFixed(0)}만`;
     }
     return value.toLocaleString();
