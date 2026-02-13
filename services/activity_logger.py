@@ -23,6 +23,23 @@ class ActivityLogger:
             handler = TimedRotatingFileHandler(
                 self.filepath, when='midnight', interval=1, backupCount=30, encoding='utf-8'
             )
+            handler.suffix = "%Y-%m-%d"
+            
+            # Custom Namer: user_activity.log.2026-02-13 -> user_activity_2026-02-13.log
+            def proper_namer(name):
+                 # name input: /path/to/user_activity.log.2026-02-13
+                 import os
+                 dir_name, file_name = os.path.split(name)
+                 parts = file_name.split('.')
+                 # parts example: ['user_activity', 'log', '2026-02-13']
+                 if len(parts) >= 3:
+                     # Want: user_activity_2026-02-13.log
+                     new_name = f"{parts[0]}_{parts[2]}.{parts[1]}"
+                     return os.path.join(dir_name, new_name)
+                 return name
+
+            handler.namer = proper_namer
+            
             formatter = logging.Formatter('%(message)s')
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
