@@ -160,6 +160,8 @@ def create_app():
                 '/api/kr/user/quota',
                 '/api/admin/check',
                 '/api/kr/config/interval',
+                '/api/kr/jongga-v2/dates',
+                '/api/kr/jongga-v2/latest',
                 '/static',
                 '/favicon.ico'
             ]
