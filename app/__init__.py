@@ -154,6 +154,12 @@ def create_app():
                 '/api/kr/jongga-v2/status',
                 '/api/kr/status',
                 '/api/kr/realtime-prices',
+                '/api/kr/market-gate',
+                '/api/kr/signals',
+                '/api/kr/backtest-summary',
+                '/api/kr/user/quota',
+                '/api/admin/check',
+                '/api/kr/config/interval',
                 '/static',
                 '/favicon.ico'
             ]
