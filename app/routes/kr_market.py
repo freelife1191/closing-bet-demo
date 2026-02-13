@@ -1067,7 +1067,10 @@ def get_kr_market_gate():
         gate_data = load_json_file(filename)
         
         # [2026-02-03 추가] 데이터 유효성 검사 및 Fallback (jongga_v2_latest.json 사용)
+        # [2026-02-03 추가] 데이터 유효성 검사 및 Fallback (jongga_v2_latest.json 사용)
         is_valid = False
+        needs_update = False  # [FIX] 백그라운드 갱신 필요 여부 플래그 추가
+
         if gate_data:
             # 1. Status가 "분석 대기"가 아니거나
             # 2. Sectors 데이터가 있거나
@@ -1101,9 +1104,10 @@ def get_kr_market_gate():
                     if current_hour >= 9 and not is_recent_analysis:
                         if dataset_date != today_str:
                             logger.info(f"[Market Gate] 데이터가 구버전임 ({dataset_date} vs {today_str}). 갱신 필요.")
-                            is_valid = False  # 유효하지 않음으로 처리하여 아래에서 Auto-Update 유도
+                            # is_valid = False  # [FIX] 유효성 취소 대신 갱신 플래그만 설정 (UI에는 기존 데이터 표시)
+                            needs_update = True
                 
-        if not is_valid and not target_date:
+        if (not is_valid or needs_update) and not target_date:
             # 실시간 요청인데 데이터가 부실하면 jongga_v2 스냅샷 확인
             try:
                 snapshot = load_json_file('jongga_v2_latest.json')
@@ -1111,20 +1115,24 @@ def get_kr_market_gate():
                     snap_status = snapshot['market_status']
                     # 스냅샷이 더 풍부한 정보를 담고 있다면 교체
                     if snap_status.get('sectors') and len(snap_status['sectors']) > 0:
-                        logger.info("[Market Gate] 실시간 데이터 부실 -> 종가베팅 스냅샷으로 대체")
+                        logger.info("[Market Gate] 실시간 데이터 부실 또는 구버전 -> 종가베팅 스냅샷으로 대체 (UI용)")
                         gate_data = snap_status
                         # 날짜 정보 등 보정
                         if 'dataset_date' not in gate_data:
                             gate_data['dataset_date'] = snapshot.get('date')
-                        # [FIX] 스냅샷 대체 성공 시 is_valid=True로 설정하여 불필요한 재분석 방지
+                        # [FIX] 스냅샷 대체 성공 시 is_valid=True로 설정하여 불필요한 재분석 방지? 
+                        # -> 아니요, 배경에서는 갱신해야 함. UI용으로는 Valid함.
                         is_valid = True
             except Exception as e:
                 logger.warning(f"Market Gate Fallback 실패: {e}")
         
         # [FIX] 실시간 분석 제거 (비동기 처리 원칙)
-        # 데이터가 없으면 '분석 대기' 상태를 반환하고, 실제 분석은 스케줄러나 별도 트리거로 수행됨을 유도
-        if not is_valid:
-            logger.info("[Market Gate] 유효한 데이터 없음. 백그라운드 분석 자동 시작.")
+        # 데이터가 없거나 갱신이 필요하면 백그라운드 분석 트리거
+        if not is_valid or needs_update:
+            if not is_valid:
+                logger.info("[Market Gate] 유효한 데이터 없음. 백그라운드 분석 자동 시작.")
+            elif needs_update:
+                logger.info("[Market Gate] 데이터 갱신 필요. 백그라운드 분석 자동 시작.")
             
             # [Auto-Recovery] 백그라운드 분석 트리거
             global is_market_gate_updating
