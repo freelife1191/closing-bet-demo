@@ -412,6 +412,7 @@ class PaperTradingService:
                 if missing_tickers:
                     logger.info(f"Toss failed for {len(missing_tickers)} tickers. Trying Naver API...")
                     import requests
+                    from requests.exceptions import ConnectionError as ReqConnectionError
                     
                     for t in missing_tickers:
                         time.sleep(0.2)  # [Rate Limit Prevention]
@@ -429,6 +430,10 @@ class PaperTradingService:
                                     price_str = data['closePrice'].replace(',', '')
                                     new_prices[t] = int(price_str)
                                     continue
+                        except ReqConnectionError as ce:
+                            # DNS 오류 등 네트워크 자체 실패 → 나머지도 같은 이유로 실패하므로 즉시 중단
+                            logger.warning(f"Naver API 네트워크 오류 (DNS/연결 실패). 나머지 {len(missing_tickers)}개 종목 건너뜀: {ce}")
+                            break
                         except Exception as ne:
                             logger.error(f"Naver API Error for {t}: {ne}")
 
