@@ -217,6 +217,12 @@ def get_kr_signals():
                 current_price = row.get('current_price')
                 if pd.isna(current_price): current_price = None
 
+                target_price = row.get('target_price')
+                if pd.isna(target_price): target_price = None
+
+                stop_price = row.get('stop_price')
+                if pd.isna(stop_price): stop_price = None
+
                 signals.append({
                     'ticker': str(row.get('ticker', '')).zfill(6), # Ensure formatting
                     'name': row.get('name'),
@@ -226,6 +232,8 @@ def get_kr_signals():
                     'score': float(row.get('score', 0)),
                     'contraction_ratio': contraction_ratio,
                     'entry_price': entry_price,
+                    'target_price': target_price,
+                    'stop_price': stop_price,
                     'foreign_5d': int(row.get('foreign_5d', 0)),
                     'inst_5d': int(row.get('inst_5d', 0)),
                     'vcp_score': int(row.get('vcp_score', 0)),

@@ -685,6 +685,12 @@ export default function VCPSignalsPage() {
                   <SimpleTooltip text="시그널 발생 당시 진입 추천가">Entry</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+                  <SimpleTooltip text="손절가 (현재가 -3%)">Stop</SimpleTooltip>
+                </th>
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+                  <SimpleTooltip text="목표가 (현재가 +5%)">Target</SimpleTooltip>
+                </th>
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="현재 주가 (실시간 업데이트 아님)">Current</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
@@ -704,14 +710,14 @@ export default function VCPSignalsPage() {
             <tbody className="divide-y divide-white/5 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="p-8 text-center text-gray-500">
+                  <td colSpan={13} className="p-8 text-center text-gray-500">
                     <i className="fas fa-spinner fa-spin text-2xl text-blue-500/50 mb-3"></i>
                     <p className="text-xs">Loading signals...</p>
                   </td>
                 </tr>
               ) : signals.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-8 text-center text-gray-500">
+                  <td colSpan={13} className="p-8 text-center text-gray-500">
                     <p>No signals found.</p>
                   </td>
                 </tr>
@@ -767,6 +773,22 @@ export default function VCPSignalsPage() {
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-gray-400">
                       ₩{signal.entry_price?.toLocaleString() ?? '-'}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-rose-400">
+                      {/* 손절가: 현재가 기준 -3% (0.97) */}
+                      {(() => {
+                        const price = signal.current_price || signal.entry_price || 0;
+                        const stop = Math.floor(price * 0.97);
+                        return price > 0 ? `₩${stop.toLocaleString()}` : '-';
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-green-400">
+                      {/* 목표가: 현재가 기준 +5% (1.05) */}
+                      {(() => {
+                        const price = signal.current_price || signal.entry_price || 0;
+                        const target = Math.floor(price * 1.05);
+                        return price > 0 ? `₩${target.toLocaleString()}` : '-';
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-white">
                       ₩{signal.current_price?.toLocaleString() ?? '-'}

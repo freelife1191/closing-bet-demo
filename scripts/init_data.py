@@ -79,6 +79,8 @@ from engine.config import config, app_config
 from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
 from engine.market_gate import MarketGate
+from engine.position_sizer import PositionSizer
+from engine.models import Grade
 
 # =====================================================
 # 주말/휴일 처리를 위한 유틸리티 함수
@@ -1295,22 +1297,41 @@ def create_signals_log(target_date=None, run_ai=True):
         screener = SmartMoneyScreener(target_date=target_date)
         df_result = screener.run_screening(max_stocks=600)
         
+        # Position Sizer 초기화 (자본금 1000만원 기준 - 비율 계산용)
+        position_sizer = PositionSizer(10_000_000)
+        
         signals = []
         if not df_result.empty:
             for _, row in df_result.iterrows():
+                 # Score 기반 Grade 결정
+                score = round(row['score'], 1)
+                grade = Grade.C
+                if score >= 80: grade = Grade.S
+                elif score >= 70: grade = Grade.A
+                elif score >= 60: grade = Grade.B
+                
+                entry_price = int(row['entry_price'])
+                current_price = int(row.get('entry_price', 0)) # Approximation
+                
+                # 목표가/손절가 계산
+                position = position_sizer.calculate(entry_price, grade)
+                
                 signals.append({
                     'ticker': row['ticker'],
                     'name': row['name'],
                     'signal_date': target_date if target_date else datetime.now().strftime('%Y-%m-%d'),
                     'market': row['market'],
                     'status': 'OPEN',
-                    'score': round(row['score'], 1),
+                    'score': score,
+                    'grade': grade.value, 
                     'contraction_ratio': row.get('contraction_ratio', 0),
-                    'entry_price': int(row['entry_price']),
+                    'entry_price': entry_price,
+                    'target_price': int(position.target_price),
+                    'stop_price': int(position.stop_price),
                     'foreign_5d': int(row['foreign_net_5d']),
                     'inst_5d': int(row['inst_net_5d']),
-                    'vcp_score': row.get('vcp_score', 0), # [FIX] Use calculated score from screener
-                    'current_price': int(row.get('entry_price', 0)) # Approximation or need fetch
+                    'vcp_score': row.get('vcp_score', 0), 
+                    'current_price': current_price
                 })
         
         log(f"총 {len(signals)}개 시그널 감지")

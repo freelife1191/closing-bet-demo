@@ -107,6 +107,8 @@ export interface KRSignal {
   market: 'KOSPI' | 'KOSDAQ';
   signal_date: string;
   entry_price: number;
+  target_price?: number;
+  stop_price?: number;
   current_price: number;
   return_pct: number;
   foreign_5d: number;
