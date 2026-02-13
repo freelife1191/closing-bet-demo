@@ -34,61 +34,80 @@ _scheduler_lock_file = None
 
 
 
+# ... imports
+from engine.market_schedule import MarketSchedule
+
+# ...
+
 def run_jongga_v2_analysis(test_mode=False):
     """장 마감 후 AI 종가베팅 분석"""
     now = datetime.now()
-    if test_mode or now.weekday() < 5:  # 평일만 or 테스트
-        logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:00 - After Closing Analysis)")
-        try:
-            # 1. 당일(장중) 데이터 수집 (Pre-close) -> 제거 (16:05 정기 분석에서 수행됨)
-            # 16:30 시점에 실행되므로 이미 create_daily_prices()가 완료된 상태라 가정
-            # logger.info("[Scheduler] 장중 주가 데이터 업데이트...")
-            # create_daily_prices()
-            
-            # 2. 분석 실행
-            create_jongga_v2_latest()
-            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:30)")
-            
-            # 3. 알림 발송 (Messenger 사용)
-            send_jongga_notification()
-            
-            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료")
-            
-        except Exception as e:
-            logger.error(f"[Scheduler] AI 종가베팅 분석 실패: {e}")
+    
+    # [2026-02-13] 휴장일 체크 (주말 + 공휴일)
+    if not test_mode and not MarketSchedule.is_market_open(now.date()):
+        logger.info(f"[Scheduler] 오늘은 휴장일({now.strftime('%Y-%m-%d')})이므로 종가베팅 분석을 건너뜁니다.")
+        return
+
+    logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:00 - After Closing Analysis)")
+    try:
+        # 1. 당일(장중) 데이터 수집 (Pre-close) -> 제거 (16:05 정기 분석에서 수행됨)
+        # 16:30 시점에 실행되므로 이미 create_daily_prices()가 완료된 상태라 가정
+        # logger.info("[Scheduler] 장중 주가 데이터 업데이트...")
+        # create_daily_prices()
+        
+        # 2. 분석 실행
+        create_jongga_v2_latest()
+        logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:30)")
+        
+        # 3. 알림 발송 (Messenger 사용)
+        send_jongga_notification()
+        
+        logger.info("<<< [Scheduler] AI 종가베팅 분석 완료")
+        
+    except Exception as e:
+        logger.error(f"[Scheduler] AI 종가베팅 분석 실패: {e}")
 
 
 
 def run_daily_closing_analysis(test_mode=False):
     """장 마감 후 전체 데이터 수집 및 분석 (16:00 - First)"""
     now = datetime.now()
-    if test_mode or now.weekday() < 5: # 평일만 or 테스트
-        logger.info(">>> [Scheduler] 장 마감 정기 분석 시작")
-        try:
-            # 1. 최신 데이터 수집
-            logger.info("[Scheduler] 일별 주가 데이터 수집...")
-            create_daily_prices()
-            
-            logger.info("[Scheduler] 기관/외인 수급 데이터 수집...")
-            create_institutional_trend()
-            
-            # 2. 분석 실행
-            logger.info("[Scheduler] VCP 시그널 분석...")
-            create_signals_log(run_ai=True)
-            
-            # [2026-02-11 Modified] Chain Execution: Run Jongga V2 immediately after Closing Analysis
-            logger.info(">>> [Scheduler] Chaining: 데이터 수집 완료 후 AI 종가베팅 분석 즉시 시작")
-            run_jongga_v2_analysis(test_mode=test_mode)
-            
-            logger.info("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
-        except Exception as e:
-            logger.error(f"[Scheduler] 장 마감 정기 분석 실패: {e}")
+    
+    # [2026-02-13] 휴장일 체크 (주말 + 공휴일)
+    if not test_mode and not MarketSchedule.is_market_open(now.date()):
+        logger.info(f"[Scheduler] 오늘은 휴장일({now.strftime('%Y-%m-%d')})이므로 정기 분석을 건너뜁니다.")
+        return
+
+    logger.info(">>> [Scheduler] 장 마감 정기 분석 시작")
+    try:
+        # 1. 최신 데이터 수집
+        logger.info("[Scheduler] 일별 주가 데이터 수집...")
+        create_daily_prices()
+        
+        logger.info("[Scheduler] 기관/외인 수급 데이터 수집...")
+        create_institutional_trend()
+        
+        # 2. 분석 실행
+        logger.info("[Scheduler] VCP 시그널 분석...")
+        create_signals_log(run_ai=True)
+        
+        # [2026-02-11 Modified] Chain Execution: Run Jongga V2 immediately after Closing Analysis
+        logger.info(">>> [Scheduler] Chaining: 데이터 수집 완료 후 AI 종가베팅 분석 즉시 시작")
+        run_jongga_v2_analysis(test_mode=test_mode)
+        
+        logger.info("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
+    except Exception as e:
+        logger.error(f"[Scheduler] 장 마감 정기 분석 실패: {e}")
 
 def run_market_gate_sync():
     """주기적 매크로 지표 및 스마트머니 데이터 업데이트 (30분)"""
-    # [2026-02-08] 주말 실행 방지
-    if datetime.now().weekday() >= 5:
-        logger.debug("[Scheduler] 주말이므로 Market Gate 동기화 건너뜀")
+    now = datetime.now()
+
+    # [2026-02-13] 휴장일 체크
+    # Market Gate는 글로벌 지수나 환율 때문에 휴장일에도 돌 수 있지만,
+    # 사용자 요청("주말/공휴일 스케줄러 안돌게")에 따라 중지
+    if not MarketSchedule.is_market_open(now.date()):
+        # logger.debug(f"[Scheduler] 휴장일이므로 Market Gate 동기화 건너뜀")
         return
 
     logger.debug(">>> [Scheduler] Market Gate 및 전체 데이터 동기화 시작")

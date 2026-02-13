@@ -46,6 +46,8 @@ class ScreenerResult:
     entry_price: float
     change_pct: float
     market_status: str = "UNKNOWN" # Market Gate Status
+    foreign_net_1d: int = 0
+    inst_net_1d: int = 0
 
 
 class SmartMoneyScreener:
@@ -253,6 +255,8 @@ class SmartMoneyScreener:
                 'score': total_score,
                 'foreign_net_5d': supply_result.get('foreign_5d', 0),
                 'inst_net_5d': supply_result.get('inst_5d', 0),
+                'foreign_net_1d': supply_result.get('foreign_1d', 0),
+                'inst_net_1d': supply_result.get('inst_1d', 0),
                 'market': stock['market'],
                 'entry_price': vcp_result.entry_price,
                 'current_price': stock_prices.iloc[-1]['close'] if not stock_prices.empty else 0, # Added current_price
@@ -322,10 +326,20 @@ class SmartMoneyScreener:
                         break
             score += min(consecutive_i * 2, 10)
             
+            # 당일(1일) 수급 확인 (Toss 데이터 기준 details[0]가 최신)
+            foreign_1d = 0
+            inst_1d = 0
+            if details and len(details) > 0:
+                latest = details[0]
+                foreign_1d = latest.get('netForeignerBuyVolume', 0)
+                inst_1d = latest.get('netInstitutionBuyVolume', 0)
+
             return {
                 'score': score, 
                 'foreign_5d': int(foreign_5d), 
-                'inst_5d': int(inst_5d)
+                'inst_5d': int(inst_5d),
+                'foreign_1d': int(foreign_1d),
+                'inst_1d': int(inst_1d)
             }
             
         except Exception as e:
@@ -336,11 +350,11 @@ class SmartMoneyScreener:
         """수급 점수 계산 (CSV Fallback - 기존 로직 이동)"""
         try:
             if self.inst_df is None:
-                return {'score': 0}
+                return {'score': 0, 'foreign_1d': 0, 'inst_1d': 0}
                 
             ticker_inst = self.inst_df[self.inst_df['ticker'] == ticker]
             if ticker_inst.empty or len(ticker_inst) < 5:
-                return {'score': 0}
+                return {'score': 0, 'foreign_1d': 0, 'inst_1d': 0}
             
             ticker_inst = ticker_inst.sort_values('date')
             
@@ -348,7 +362,7 @@ class SmartMoneyScreener:
             if self.target_date:
                  ticker_inst = ticker_inst[ticker_inst['date'] <= self.target_date]
             
-            if len(ticker_inst) < 5: return {'score': 0}
+            if len(ticker_inst) < 5: return {'score': 0, 'foreign_1d': 0, 'inst_1d': 0}
 
             recent = ticker_inst.tail(5)
             
@@ -364,6 +378,11 @@ class SmartMoneyScreener:
 
             foreign_5d = recent[f_col].sum() if f_col in recent.columns else 0
             inst_5d = recent[i_col].sum() if i_col in recent.columns else 0
+            
+            # 당일(1일) 수급 - CSV 최신 행에서 추출
+            latest_row = ticker_inst.iloc[-1]
+            foreign_1d = int(latest_row[f_col]) if f_col in latest_row.index else 0
+            inst_1d = int(latest_row[i_col]) if i_col in latest_row.index else 0
             
             score = 0
             
@@ -396,12 +415,14 @@ class SmartMoneyScreener:
             return {
                 'score': score, 
                 'foreign_5d': int(foreign_5d), 
-                'inst_5d': int(inst_5d)
+                'inst_5d': int(inst_5d),
+                'foreign_1d': foreign_1d,
+                'inst_1d': inst_1d
             }
             
         except Exception as e:
             # logger.warning(f"수급 점수 계산 실패 ({ticker}): {e}")
-            return {'score': 0}
+            return {'score': 0, 'foreign_1d': 0, 'inst_1d': 0}
     
     def generate_signals(self, results: pd.DataFrame) -> List[Dict]:
         """시그널 생성"""

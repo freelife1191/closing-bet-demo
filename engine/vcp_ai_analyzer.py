@@ -77,6 +77,9 @@ class VCPMultiAIAnalyzer:
 - 수축 비율: {stock_data.get('contraction_ratio', 'N/A')}
 - 외국인 5일 순매수: {stock_data.get('foreign_5d', 'N/A')}주
 - 기관 5일 순매수: {stock_data.get('inst_5d', 'N/A')}주
+- 외국인 1일(오늘) 순매수: {stock_data.get('foreign_1d', 'N/A')}주
+- 기관 1일(오늘) 순매수: {stock_data.get('inst_1d', 'N/A')}주
+(주의: 5일 누적과 오늘의 수급 방향이 다를 경우, 오늘의 변화를 중요하게 고려하십시오)
 
 [분석 요청]
 1. VCP 패턴과 수급 상황을 기술적 관점에서 분석

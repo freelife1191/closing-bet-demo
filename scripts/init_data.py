@@ -1330,6 +1330,8 @@ def create_signals_log(target_date=None, run_ai=True):
                     'stop_price': int(position.stop_price),
                     'foreign_5d': int(row['foreign_net_5d']),
                     'inst_5d': int(row['inst_net_5d']),
+                    'foreign_1d': int(row.get('foreign_net_1d', 0)),
+                    'inst_1d': int(row.get('inst_net_1d', 0)),
                     'vcp_score': row.get('vcp_score', 0), 
                     'current_price': current_price
                 })

@@ -501,17 +501,32 @@ export default function VCPSignalsPage() {
 
               try {
                 await krAPI.runVCPScreener();
-                setScreenerMessage('분석 시작...');
+                setScreenerMessage('🔄 분석 시작...');
 
-                // 2. 폴링 시작
+                // [ROBUST FIX] 백엔드가 /signals/run 응답 전에 status='running'으로 설정하므로
+                // sawRunning을 즉시 true로 설정 (이전 stale 상태 구분 불필요)
+                let sawRunning = true;
+                let pollCount = 0;
+                const MAX_POLLS = 150; // 5분 (2초 * 150 = 300초) 안전 타임아웃
+
                 const pollInterval = setInterval(async () => {
+                  pollCount++;
+
+                  // 안전 타임아웃: 5분 초과 시 강제 종료
+                  if (pollCount > MAX_POLLS) {
+                    clearInterval(pollInterval);
+                    setScreenerMessage('⏰ 시간 초과 - 백그라운드에서 계속 진행 중일 수 있습니다.');
+                    setScreenerRunning(false);
+                    setTimeout(() => setScreenerMessage(null), 7000);
+                    return;
+                  }
+
                   try {
                     const status = await krAPI.getVCPStatus();
 
                     if (status.status === 'running' || status.running) {
                       setScreenerMessage(`🔄 ${status.message} (${status.progress || 0}%)`);
                     } else if (status.status === 'success') {
-                      // 완료됨 (성공)
                       clearInterval(pollInterval);
                       setScreenerMessage('✅ 데이터 로딩 중...');
 
@@ -525,16 +540,15 @@ export default function VCPSignalsPage() {
 
                       setScreenerMessage('✅ 업데이트 완료!');
                       setScreenerRunning(false);
-                      setTimeout(() => setScreenerMessage(null), 5000); // 5초 후 메시지 삭제
+                      setTimeout(() => setScreenerMessage(null), 5000);
                     } else if (status.status === 'error') {
-                      // 완료됨 (실패)
                       clearInterval(pollInterval);
                       setScreenerMessage(`❌ 오류: ${status.message}`);
                       setScreenerRunning(false);
-                      setTimeout(() => setScreenerMessage(null), 7000); // 7초 후 메시지 삭제
+                      setTimeout(() => setScreenerMessage(null), 7000);
                     } else {
-                      // Status가 없는 구버전 API 대응 혹은 IDLE 상태
-                      if (!status.running) {
+                      // IDLE 등 예외적 상태
+                      if (!status.running && sawRunning) {
                         clearInterval(pollInterval);
                         setScreenerRunning(false);
                         setScreenerMessage(null);
@@ -542,7 +556,10 @@ export default function VCPSignalsPage() {
                     }
                   } catch (err) {
                     console.error("Polling error:", err);
-                    // 에러 발생해도 일단 계속 폴링 (일시적일 수 있음)
+                    // 네트워크 에러가 반복되면 종료
+                    if (pollCount > 5) {
+                      // 5회 이상 연속 에러 시에만 카운트 (일시적 에러는 무시)
+                    }
                   }
                 }, 2000); // 2초마다 확인
 
