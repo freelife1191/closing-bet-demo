@@ -141,8 +141,8 @@ def create_app():
     @app.after_request
     def log_activity(response):
         try:
-            # Skip logging for OPTIONS and static polling paths
-            if request.method == 'OPTIONS':
+            # Skip logging for OPTIONS and GET requests (reduce noise)
+            if request.method in ['OPTIONS', 'GET']:
                 return response
                 
             path = request.path
