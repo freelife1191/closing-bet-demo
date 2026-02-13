@@ -707,6 +707,9 @@ def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
                         
                 except Exception:
                     continue
+                finally:
+                    # [Rate Limit Prevention]
+                    time.sleep(0.1)
 
         if new_data_list:
             new_df = pd.concat(new_data_list)

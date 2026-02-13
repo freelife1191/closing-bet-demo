@@ -325,6 +325,12 @@ class PaperTradingService:
     def _update_prices_loop(self):
         """Background loop to fetch prices"""
         import yfinance as yf
+        try:
+            from pykrx import stock
+        except ImportError:
+            stock = None
+            logger.warning("pykrx module not found. KRX fallback will disabled.")
+
         # Silence yfinance and related loggers
         logging.getLogger('yfinance').setLevel(logging.CRITICAL)
         logging.getLogger('peewee').setLevel(logging.CRITICAL)
@@ -333,7 +339,6 @@ class PaperTradingService:
         while self.is_running:
             try:
                 # 1. Get all tickers from portfolio
-                # ... (rest of logic) ...
                 with self.get_context() as conn:
                     cursor = conn.cursor()
                     cursor.execute('SELECT ticker FROM portfolio')
@@ -346,10 +351,8 @@ class PaperTradingService:
                 new_prices = {}
                 
                 # 2. Try Toss Securities API first (Mobile/WTS) - Robust & Supports Bulk
-                # Toss API is much faster (<0.1s) and supports KR stocks perfectly
                 missing_tickers = [t for t in tickers if t not in new_prices]
                 if missing_tickers:
-                    # logger.info(f"Using Toss Securities API for {len(missing_tickers)} tickers...")
                     import requests
                     
                     # Create mapping: padded(6) -> original_ticker_in_db
@@ -363,36 +366,46 @@ class PaperTradingService:
                     for i in range(0, len(toss_codes), chunk_size):
                         chunk = toss_codes[i:i + chunk_size]
                         codes_str = ",".join(chunk)
-                        
-                        try:
-                            url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes={codes_str}"
-                            headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-                            res = requests.get(url, headers=headers, timeout=5) # Fast timeout
-                            
-                            if res.status_code == 200:
-                                data = res.json()
-                                results = data.get('result', [])
+
+                        # Retry Logic for Toss API
+                        for attempt in range(3):
+                            try:
+                                url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes={codes_str}"
+                                headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                                res = requests.get(url, headers=headers, timeout=5)
                                 
-                                count = 0
-                                for item in results:
-                                    raw_code = item.get('code', '')
-                                    # Robust 'A' removal
-                                    clean_code = raw_code[1:] if raw_code.startswith('A') else raw_code
+                                if res.status_code == 200:
+                                    data = res.json()
+                                    results = data.get('result', [])
                                     
-                                    # Map back to original ticker (DB format)
-                                    original_t = ticker_map.get(clean_code)
-                                    
-                                    close = item.get('close')
-                                    
-                                    if original_t and close is not None:
-                                        new_prices[original_t] = int(close)
-                                        count += 1
-                                # logger.info(f"Toss API success: Fetched {count}/{len(chunk)} prices.")
-                            else:
-                                logger.warning(f"Toss API returned {res.status_code}: {res.text[:100]}")
+                                    count = 0
+                                    for item in results:
+                                        raw_code = item.get('code', '')
+                                        clean_code = raw_code[1:] if raw_code.startswith('A') else raw_code
+                                        original_t = ticker_map.get(clean_code)
+                                        close = item.get('close')
                                         
-                        except Exception as te:
-                            logger.error(f"Toss API Error: {te}")
+                                        if original_t and close is not None:
+                                            new_prices[original_t] = int(close)
+                                            count += 1
+                                    # Success - break retry loop
+                                    break
+                                elif res.status_code == 429:
+                                    wait = (attempt + 1) * 2
+                                    logger.warning(f"Toss API Rate Limit. Waiting {wait}s...")
+                                    time.sleep(wait)
+                                    continue
+                                else:
+                                    logger.warning(f"Toss API returned {res.status_code}: {res.text[:100]}")
+                                    if 400 <= res.status_code < 500 and res.status_code != 429:
+                                        break
+                                            
+                            except Exception as te:
+                                if attempt < 2:
+                                    time.sleep(1)
+                                    logger.warning(f"Toss API Retry {attempt+1}/3 failed: {te}")
+                                else:
+                                    logger.error(f"Toss API Error after 3 attempts: {te}")
 
                 # 3. 네이버 증권 API (개별) - 토스 실패 종목 대상
                 missing_tickers = [t for t in tickers if t not in new_prices]
@@ -401,10 +414,14 @@ class PaperTradingService:
                     import requests
                     
                     for t in missing_tickers:
+                        time.sleep(0.2)  # [Rate Limit Prevention]
                         try:
                             url = f"https://m.stock.naver.com/api/stock/{t}/basic"
-                            headers = {'User-Agent': 'Mozilla/5.0'}
-                            res = requests.get(url, headers=headers, timeout=3)
+                            headers = {
+                                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                                'Referer': 'https://m.stock.naver.com/'
+                            }
+                            res = requests.get(url, headers=headers, timeout=5)
                             
                             if res.status_code == 200:
                                 data = res.json()
@@ -421,11 +438,9 @@ class PaperTradingService:
                     logger.info(f"Toss/Naver failed for {len(missing_tickers)} tickers: {missing_tickers}. Trying yfinance...")
                     yf_tickers = [f"{t}.KS" for t in missing_tickers]
                     try:
-                        # Use threads=False to prevent file handle leaks
                         df = yf.download(yf_tickers, period="1d", progress=False, threads=False)
                         
                         if not df.empty:
-                            # Handle MultiIndex columns
                             try:
                                 closes = df['Close']
                             except KeyError:
@@ -446,10 +461,8 @@ class PaperTradingService:
                                     pass
                     except Exception as e:
                         logger.error(f"PaperTrading YF Error: {e}")
-
-                # 5. Final Fallback to pykrx (Historical Data / Market Close)
                 still_missing = [t for t in tickers if t not in new_prices]
-                if still_missing:
+                if still_missing and stock:  # Check if stock is available
                     try:
                         today_str = datetime.now().strftime("%Y%m%d")
                         for t in still_missing:
@@ -477,6 +490,7 @@ class PaperTradingService:
                 with self.cache_lock:
                     self.price_cache.update(new_prices)
                     self.last_update = datetime.now()
+
 
             except Exception as e:
                 logger.error(f"PaperTrading Loop Error: {e}")

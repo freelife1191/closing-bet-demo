@@ -69,15 +69,21 @@ class NaverFinanceCollector(BaseCollector):
             상세 정보 딕셔너리 또는 None
         """
         try:
-            import requests
+            # import requests  <-- Removed, handled in _request
             from bs4 import BeautifulSoup
 
             result = self._create_empty_result_dict(code)
             result['code'] = code
 
             url = f'https://finance.naver.com/item/main.naver?code={code}'
-            response = requests.get(url, headers=self.headers, timeout=10)
-            response.raise_for_status()
+            # response = requests.get(url, headers=self.headers, timeout=10)
+            response = self._request(url, headers=self.headers)
+            
+            if not response or not response.ok:
+                logger.warning(f"상세 정보 요청 실패: {code}")
+                return None
+                
+            # response.raise_for_status() <--- _request handles logic, returns Response or None
 
             soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -132,7 +138,7 @@ class NaverFinanceCollector(BaseCollector):
             재무 정보 딕셔너리
         """
         try:
-            import requests
+            # import requests <-- Removed
             from bs4 import BeautifulSoup
 
             result = {
@@ -143,9 +149,10 @@ class NaverFinanceCollector(BaseCollector):
 
             # 네이버 기업분석 페이지
             url = f'https://navercomp.wisereport.co.kr/v2/company/c1010001.aspx?cmp_cd={code}'
-            response = requests.get(url, headers=self.headers, timeout=10)
+            # response = requests.get(url, headers=self.headers, timeout=10)
+            response = self._request(url, headers=self.headers)
 
-            if response.ok:
+            if response and response.ok:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 tables = soup.select('table.gHead01')
 
@@ -183,28 +190,27 @@ class NaverFinanceCollector(BaseCollector):
     async def get_themes(self, code: str) -> List[str]:
         """
         네이버 금융에서 종목 관련 테마 태그 수집
-
+        
         예: 원전, SMR, 전력인프라, 반도체 등
-
+        
         Args:
             code: 종목 코드
-
+            
         Returns:
             테마 리스트 (최대 5개)
         """
         try:
-            import requests
             from bs4 import BeautifulSoup
-
+            
             themes = []
-
+            
             # 네이버 금융 종목 메인 페이지에서 테마 태그 추출
             url = f'https://finance.naver.com/item/main.naver?code={code}'
-            response = requests.get(url, headers=self.headers, timeout=10)
-
-            if response.ok:
+            response = self._request(url, headers=self.headers)
+            
+            if response and response.ok:
                 soup = BeautifulSoup(response.text, 'html.parser')
-
+                
                 # 1. 업종/테마 정보 추출
                 theme_links = soup.select('div.sub_section th em a, div.sub_section td a')
                 for link in theme_links:
@@ -212,14 +218,14 @@ class NaverFinanceCollector(BaseCollector):
                     if theme_text and 2 <= len(theme_text) <= 20:
                         if theme_text not in ['더보기', '차트', '뉴스', '게시판', '종합정보']:
                             themes.append(theme_text)
-
+                            
                 # 2. 업종 정보 추출
                 sector_el = soup.select_one('div.section.trade_compare em a')
                 if sector_el:
                     sector = sector_el.text.strip()
                     if sector and sector not in themes:
                         themes.append(sector)
-
+                        
                 # 3. 분류 정보
                 category_links = soup.select('div.wrap_company a')
                 for link in category_links:
@@ -227,18 +233,66 @@ class NaverFinanceCollector(BaseCollector):
                     if text and text not in ['KOSPI', 'KOSDAQ', '', ' '] and len(text) <= 15:
                         if text not in themes:
                             themes.append(text)
-
+                            
             # 중복 제거 및 최대 5개로 제한
             unique_themes = list(dict.fromkeys(themes))[:5]
-
+            
             if unique_themes:
                 logger.info(f"테마 수집 완료: {code} -> {unique_themes}")
-
+                
             return unique_themes
-
+            
         except Exception as e:
             logger.debug(f"테마 수집 실패 ({code}): {e}")
             return []
+
+    def _request(self, url: str, headers: Dict = None, timeout: int = 10, retries: int = 3):
+        """
+        HTTP 요청 헬퍼 (재시도 로직 포함)
+        
+        Args:
+            url: 요청 URL
+            headers: 헤더
+            timeout: 타임아웃 (초)
+            retries: 재시도 횟수
+            
+        Returns:
+            Response 객체 또는 None
+        """
+        import requests
+        import time
+        
+        for attempt in range(retries):
+            try:
+                response = requests.get(url, headers=headers, timeout=timeout)
+                
+                # 429 Too Many Requests 처리
+                if response.status_code == 429:
+                    wait_time = (2 ** attempt) * 0.5  # 0.5s, 1s, 2s
+                    logger.warning(f"Naver API Rate Limit (429). Waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                    
+                # 5xx Server Error 처리
+                if 500 <= response.status_code < 600:
+                    wait_time = (2 ** attempt) * 0.5
+                    logger.warning(f"Naver Server Error ({response.status_code}). Waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                
+                return response
+                
+            except requests.RequestException as e:
+                # Connection Error 등
+                if attempt < retries - 1:
+                    wait_time = (2 ** attempt) * 0.5
+                    logger.debug(f"Request failed ({e}). Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Request failed after {retries} attempts: {url}")
+                    return None
+                    
+        return None
 
     # ========================================================================
     # Private Methods - Extractors

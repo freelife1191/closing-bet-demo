@@ -722,8 +722,11 @@ def fetch_stock_price(ticker):
     # 2. Try Naver Securities API (Fallback 1 - High Reliability)
     try:
         naver_url = f"https://m.stock.naver.com/api/stock/{str(ticker).zfill(6)}/basic"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(naver_url, headers=headers, timeout=3)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Referer': 'https://m.stock.naver.com/'
+        }
+        res = requests.get(naver_url, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
             if 'closePrice' in data:
@@ -741,7 +744,7 @@ def fetch_stock_price(ticker):
                     'source': 'naver'
                 }
     except Exception as e:
-        pass
+        logger.debug(f"Naver API fetch failed for {ticker}: {e}")
 
     # 3. Try yfinance (Fallback 2 - Global Standard)
     try:
