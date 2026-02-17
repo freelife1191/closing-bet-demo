@@ -625,7 +625,7 @@ def sort_signals_by_grade_and_score(
         return []
 
     if grade_order is None:
-        grade_order = {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}
+        grade_order = {"S": 5, "A": 4, "B": 3}
 
     def sort_key(signal: Dict[str, Any]) -> tuple:
         grade = str(signal.get('grade', '')).strip().upper()

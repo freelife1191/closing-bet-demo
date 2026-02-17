@@ -17,13 +17,12 @@ class Grade(Enum):
     S = "S"  # 최고 - 풀배팅
     A = "A"  # 우수 - 기본배팅
     B = "B"  # 보통 - 절반배팅
-    C = "C"  # 미달 - 매매안함
 
 @dataclass
 class SignalConfig:
     """시그널 생성 설정"""
-    # 18점 점수 시스템 (종가베팅)
-    max_score: int = 18
+    # 20점 점수 시스템 (종가베팅)
+    max_score: int = 20
 
     # 등급 기준
     min_s_grade: int = 10
@@ -33,9 +32,8 @@ class SignalConfig:
     # 거래대금 기준 (원) - 2026-02-08 업데이트 (Dos 조건 반영)
     trading_value_s: int = 1_000_000_000_000  # 1조
     trading_value_a: int = 500_000_000_000    # 5000억
-    trading_value_b: int = 50_000_000_000     # 500억
-    trading_value_c: int = 50_000_000_000     # 500억
-    trading_value_min: int = 50_000_000_000   # 500억 (문서 기준)
+    trading_value_b: int = 100_000_000_000    # 1000억
+    trading_value_min: int = 100_000_000_000  # 1000억 (문서 기준)
 
     # 자금 관리
     capital: float = 50_000_000  # 5천만원

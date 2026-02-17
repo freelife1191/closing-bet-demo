@@ -265,6 +265,14 @@ export interface ScoreDetails {
     rise_pct?: number;
     [key: string]: any;
   };
+  bonus_breakdown?: {
+    volume?: number;
+    candle?: number;
+    new_high?: number;
+    limit_up?: number;
+  };
+  is_new_high?: boolean;
+  is_limit_up?: boolean;
   foreign_net_buy?: number;
   inst_net_buy?: number;
 }
@@ -282,7 +290,7 @@ export interface ClosingBetCandidate {
   stock_code: string;
   stock_name: string;
   market: string;
-  grade: 'S' | 'A' | 'B' | 'C';
+  grade: 'S' | 'A' | 'B';
   current_price: number;
   entry_price: number;
   stop_price: number;

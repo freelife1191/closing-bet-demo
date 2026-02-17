@@ -118,7 +118,6 @@ class TestSignalGeneratorInitialization:
         sg = SignalGenerator()
         assert sg.drop_stats == {
             "low_trading_value": 0,
-            "low_volume_ratio": 0,
             "low_pre_score": 0,
             "no_news": 0,
             "grade_fail": 0,

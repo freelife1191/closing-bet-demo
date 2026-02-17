@@ -98,29 +98,22 @@ const TOOLTIP_CONTENT = {
   // --- Grades ---
   gradeS: {
     title: "S등급 (Super) 성과",
-    desc: "초대형 주도주(거래대금 1조↑, 점수 15점↑)에 대한 매매 성과입니다.",
+    desc: "초대형 주도주(거래대금 1조↑, 점수 10점↑)에 대한 매매 성과입니다.",
     criteria: "가장 강력한 수급과 상승 모멘텀을 가진 종목군",
     interpretation: "시장 주도주로 승률이 가장 안정적이어야 하는 등급입니다."
   },
   gradeA: {
     title: "A등급 (Ace) 성과",
-    desc: "대형 주도주(거래대금 5천억↑, 점수 12점↑)에 대한 매매 성과입니다.",
+    desc: "대형 주도주(거래대금 5천억↑, 점수 8점↑)에 대한 매매 성과입니다.",
     criteria: "확실한 재료와 수급이 받쳐주는 종목군",
     interpretation: "가장 많은 매매 기회가 발생하며 수익의 허리를 담당합니다."
   },
   gradeB: {
     title: "B등급 (Basic) 성과",
-    desc: "중형 수급주(거래대금 1천억↑, 점수 10점↑)에 대한 매매 성과입니다.",
+    desc: "중형 수급주(거래대금 1천억↑, 점수 6점↑)에 대한 매매 성과입니다.",
     criteria: "테마의 2등주나 개별 호재주가 포함될 수 있음",
     interpretation: "변동성이 클 수 있어 선별적인 접근이 필요합니다."
   },
-  gradeC: {
-    title: "C등급 (Challenge) 성과",
-    desc: "소형 급등주(거래대금 500억↑, 점수 8점↑)에 대한 매매 성과입니다.",
-    criteria: "시총이 작고 가벼워 등락폭이 매우 큼",
-    interpretation: "하이리스크 하이리턴 영역으로 비중 조절이 필수입니다."
-  },
-
   // --- Distribution ---
   distribution: {
     title: "승패 분포 (Win/Loss Distribution)",
@@ -139,7 +132,7 @@ const TOOLTIP_CONTENT = {
   table_grade: {
     title: "등급 (Grade)",
     desc: "AI가 분석한 종목의 상승 잠재력 등급입니다.",
-    criteria: "S > A > B > C 순으로 강력함",
+    criteria: "S > A > B 순으로 강력함",
     interpretation: "등급이 높을수록 성공 확률과 기대 수익률이 높은 경향이 있습니다."
   },
   table_entry: {
@@ -434,22 +427,19 @@ function CumulativeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: (
             </div>
             <div className="border-t border-white/10 pt-4">
               <h4 className="font-bold text-white text-sm mb-1">등급 분류 (Ranking)</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                <div className="p-2 border border-purple-500/30 bg-purple-500/10 rounded-lg">
-                  <span className="text-purple-400 font-bold text-xs">[S등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1조↑ + 점수 15점↑ (초대형 주도주)</span>
-                </div>
-                <div className="p-2 border border-rose-500/30 bg-rose-500/10 rounded-lg">
-                  <span className="text-rose-400 font-bold text-xs">[A등급]</span> <span className="text-gray-400 text-[10px]">거래대금 5천억↑ + 점수 12점↑ (대형 주도주)</span>
-                </div>
-                <div className="p-2 border border-blue-500/30 bg-blue-500/10 rounded-lg">
-                  <span className="text-blue-400 font-bold text-xs">[B등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1천억↑ + 점수 10점↑ (준수한 수급주)</span>
-                </div>
-                <div className="p-2 border border-emerald-500/30 bg-emerald-500/10 rounded-lg">
-                  <span className="text-emerald-400 font-bold text-xs">[C등급]</span> <span className="text-gray-400 text-[10px]">거래대금 500억↑ + 점수 8점↑ (강소 주도주)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                  <div className="p-2 border border-purple-500/30 bg-purple-500/10 rounded-lg">
+                    <span className="text-purple-400 font-bold text-xs">[S등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1조↑ + 점수 10점↑ (초대형 주도주)</span>
+                  </div>
+                  <div className="p-2 border border-rose-500/30 bg-rose-500/10 rounded-lg">
+                    <span className="text-rose-400 font-bold text-xs">[A등급]</span> <span className="text-gray-400 text-[10px]">거래대금 5천억↑ + 점수 8점↑ (대형 주도주)</span>
+                  </div>
+                  <div className="p-2 border border-blue-500/30 bg-blue-500/10 rounded-lg">
+                    <span className="text-blue-400 font-bold text-xs">[B등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1천억↑ + 점수 6점↑ (준수한 수급주)</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
         </div>
       </div>
     </Modal>
@@ -939,13 +929,11 @@ export default function CumulativeClientPage() {
   const sStats = calculateGradeStats('S');
   const aStats = calculateGradeStats('A');
   const bStats = calculateGradeStats('B');
-  const cStats = calculateGradeStats('C');
 
   const gradeCards = [
     { grade: 'S', ...sStats, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', tooltipKey: 'gradeS' as const },
     { grade: 'A', ...aStats, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', tooltipKey: 'gradeA' as const },
     { grade: 'B', ...bStats, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', tooltipKey: 'gradeB' as const },
-    { grade: 'C', ...cStats, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', tooltipKey: 'gradeC' as const },
   ];
 
   if (loading) {
@@ -1053,7 +1041,6 @@ export default function CumulativeClientPage() {
                 <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
                 <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
                 <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
-                <FilterButton label="C" count={cStats.count} active={gradeFilter === 'C'} onClick={() => setGradeFilter('C')} />
               </div>
             </div>
           </div>

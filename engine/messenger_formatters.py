@@ -231,7 +231,7 @@ class DiscordFormatter(MessageFormatter):
 
         # 등급 아이콘 맵
         self.grade_icons = {
-            'S': '🏆', 'A': '🥇', 'B': '🥈', 'C': '🥉', 'D': '⚠️', 'Other': '❓'
+            'S': '🏆', 'A': '🥇', 'B': '🥈', 'D': '⚠️', 'Other': '❓'
         }
 
     def format(self, data: MessageData) -> Dict:
@@ -253,7 +253,7 @@ class DiscordFormatter(MessageFormatter):
 
         # 3. Fields 생성
         fields = []
-        priority_order = ['S', 'A', 'B', 'C', 'D', 'Other']
+        priority_order = ['S', 'A', 'B', 'D', 'Other']
 
         for i, grade in enumerate(priority_order):
             signals = grouped_signals.get(grade, [])
@@ -289,7 +289,7 @@ class DiscordFormatter(MessageFormatter):
 
     def _group_by_grade(self, signals: List[SignalData]) -> Dict[str, List[SignalData]]:
         """등급별 시그널 그룹화"""
-        grouped = {'S': [], 'A': [], 'B': [], 'C': [], 'D': [], 'Other': []}
+        grouped = {'S': [], 'A': [], 'B': [], 'D': [], 'Other': []}
         for signal in signals:
             grade = str(signal.grade).upper()
             if grade in grouped:

@@ -15,7 +15,6 @@ class Grade(Enum):
     S = "S"
     A = "A"
     B = "B"
-    C = "C"
 
 
 @dataclass

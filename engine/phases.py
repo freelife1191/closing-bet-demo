@@ -20,7 +20,6 @@ from engine.scorer import Scorer
 from engine.llm_analyzer import LLMAnalyzer
 from engine.constants import (
     TRADING_VALUES,
-    VOLUME,
     PRICE_CHANGE,
     LLM as LLM_THRESHOLD,
 )
@@ -71,7 +70,7 @@ class Phase1Analyzer(BasePhase):
     - 상승률 상위 종목에 대해 기본 분석 수행
     - 차트, 수급 데이터 수집
     - Pre-Score 계산 (뉴스/LLM 제외)
-    - 필터 조건 검증 (거래대금, 거래량 배수)
+    - 필터 조건 검증 (거래대금, 가격/뉴스/등락 필터)
     - 등급 미달 사전 차단
     """
 
@@ -80,7 +79,6 @@ class Phase1Analyzer(BasePhase):
         collector,
         scorer: Scorer,
         trading_value_min: int = None,
-        volume_ratio_min: float = None
     ):
         super().__init__("Phase1: Base Analysis")
         self.collector = collector
@@ -88,12 +86,10 @@ class Phase1Analyzer(BasePhase):
 
         # Thresholds from constants
         self.trading_value_min = trading_value_min or TRADING_VALUES.MINIMUM
-        self.volume_ratio_min = volume_ratio_min or VOLUME.RATIO_MIN
 
         # Drop statistics
         self.drop_stats = {
             "low_trading_value": 0,
-            "low_volume_ratio": 0,
             "grade_fail": 0,
             "other": 0
         }
@@ -136,7 +132,7 @@ class Phase1Analyzer(BasePhase):
         logger.info(
             f"[Phase 1] Complete: {self.stats['passed']} passed, "
             f"{self.stats['failed']} failed (Drops: TV={self.drop_stats['low_trading_value']}, "
-            f"VR={self.drop_stats['low_volume_ratio']}, Grade={self.drop_stats['grade_fail']})"
+            f"Grade={self.drop_stats['grade_fail']})"
         )
 
         return results
@@ -200,7 +196,6 @@ class Phase1Analyzer(BasePhase):
                 logger.debug(f"VCP analysis failed for {stock.name}: {e}")
 
             # 5. 필터 조건 검증
-            volume_ratio = score_details.get('volume_ratio', 0)
             trading_value = getattr(stock, 'trading_value', 0)
 
             # 필터 1: 거래대금
@@ -209,13 +204,7 @@ class Phase1Analyzer(BasePhase):
                 logger.debug(f"[Drop] {stock.name}: Trading value {trading_value // 100_000_000}B < {self.trading_value_min // 100_000_000}B")
                 return None
 
-            # 필터 2: 거래량 배수
-            if volume_ratio < self.volume_ratio_min:
-                self.drop_stats["low_volume_ratio"] += 1
-                logger.debug(f"[Drop] {stock.name}: Volume ratio {volume_ratio} < {self.volume_ratio_min}")
-                return None
-
-            # 필터 3: 등급 미달 사전 차단
+            # 필터 2: 등급 미달 사전 차단
             temp_grade = self.scorer.determine_grade(
                 stock, pre_score, score_details, supply, charts, allow_no_news=True
             )
@@ -450,7 +439,7 @@ class Phase4SignalFinalizer(BasePhase):
         self.naver_collector = naver_collector
         self.include_c_grade = include_c_grade
 
-        self.final_stats = {"S": 0, "A": 0, "B": 0, "C": 0}
+        self.final_stats = {"S": 0, "A": 0, "B": 0}
 
     async def execute(
         self,
@@ -483,12 +472,7 @@ class Phase4SignalFinalizer(BasePhase):
                 )
 
                 if signal:
-                    # C급 제외 옵션
                     grade_val = getattr(signal.grade, 'value', signal.grade)
-                    if not self.include_c_grade and grade_val == 'C':
-                        logger.info(f"[Drop Phase4] {signal.stock_name}: C grade excluded (Score={signal.score.total})")
-                        continue
-
                     signals.append(signal)
                     self._update_grade_stats(grade_val)
                     self.stats["passed"] += 1
@@ -502,7 +486,7 @@ class Phase4SignalFinalizer(BasePhase):
         logger.info(
             f"[Phase 4] Complete: {len(signals)} signals created "
             f"(S:{self.final_stats['S']}, A:{self.final_stats['A']}, "
-            f"B:{self.final_stats['B']}, C:{self.final_stats['C']})"
+            f"B:{self.final_stats['B']})"
         )
 
         return signals
@@ -553,7 +537,7 @@ class Phase4SignalFinalizer(BasePhase):
             score_details['is_vcp'] = vcp_data.get('is_vcp', False)
 
         if not grade:
-            logger.info(f"   [Drop Phase4] {stock.name}: Grade Fail. Score={score.total}, TV={stock.trading_value//100_000_000}억, VR={score_details.get('volume_ratio')}")
+            logger.info(f"   [Drop Phase4] {stock.name}: Grade Fail. Score={score.total}, TV={stock.trading_value//100_000_000}억")
             return None
 
         # 포지션 계산

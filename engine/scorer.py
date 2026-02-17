@@ -87,7 +87,7 @@ class Scorer:
         score.timing = self._score_timing(stock, charts)
 
         # 6. 수급 (0-2점)
-        score.supply, checklist.supply_positive = self._score_supply(supply)
+        score.supply, checklist.supply_positive = self._score_supply(stock.trading_value, supply)
 
         # 기본 점수 계산
         base_score = (
@@ -98,15 +98,30 @@ class Scorer:
         # 거래량 배수 계산
         volume_ratio = self._calculate_volume_ratio(stock, charts)
 
+        # 상한가(상한가 직전 포함) 여부
+        is_limit_up = stock.change_pct >= PRICE_CHANGE.LIMIT
+
         # 가산점 계산 (V2 Logic)
-        bonus_score = self._calculate_bonus(stock.change_pct, volume_ratio)
+        bonus_score, bonus_breakdown = self._calculate_bonus(
+            volume_ratio,
+            score.chart,
+            is_limit_up
+        )
 
         # 총점 계산
         score.total = base_score + bonus_score
 
         # 상세 내역
         details = self._build_score_details(
-            stock, supply, score, base_score, bonus_score, volume_ratio
+            stock,
+            supply,
+            score,
+            base_score,
+            bonus_score,
+            volume_ratio,
+            bonus_breakdown,
+            checklist.is_new_high,
+            is_limit_up
         )
 
         return score, checklist, details
@@ -121,7 +136,7 @@ class Scorer:
         allow_no_news: bool = False
     ) -> Optional[Grade]:
         """
-        최종 등급 판정 (S/A/B/C)
+        최종 등급 판정 (S/A/B)
 
         Refactored (Phase 4):
         - Filter validation delegated to FilterValidator
@@ -319,22 +334,24 @@ class Scorer:
 
         return min(2, score), is_new_high, is_breakout, ma_aligned
 
-    def _score_supply(self, supply: Optional[SupplyData]) -> tuple[int, bool]:
-        """수급 점수 (0-2점)"""
-        if not supply:
+    def _score_supply(self, trading_value: float, supply: Optional[SupplyData]) -> tuple[int, bool]:
+        """수급 점수 (0-2점)
+
+        수급 기준:
+        - 외국인+기관 5일순매수 합계가 거래대금 대비 5% 이상: 1점
+        - 외국인+기관 5일순매수 합계가 거래대금 대비 10% 이상: 2점
+        """
+        if not supply or trading_value <= 0:
             return 0, False
 
-        # 외인+기관 동시 순매수
-        foreign_positive = supply.foreign_buy_5d > 0
-        inst_positive = supply.inst_buy_5d > 0
+        total_buy_5d = max(0, supply.foreign_buy_5d) + max(0, supply.inst_buy_5d)
+        supply_ratio = (total_buy_5d / trading_value) * 100
 
-        score = 0
-        if foreign_positive:
-            score += 1
-        if inst_positive:
-            score += 1
-
-        return score, score > 0
+        if supply_ratio >= 10:
+            return 2, True
+        if supply_ratio >= 5:
+            return 1, True
+        return 0, False
 
     def _calculate_volume_ratio(self, stock: StockData, charts: Optional[ChartData]) -> float:
         """거래량 배수 계산"""
@@ -354,24 +371,49 @@ class Scorer:
 
         return volume_ratio
 
-    def _calculate_bonus(self, change_pct: float, volume_ratio: float) -> int:
-        """가산점 계산 (최대 9점)"""
+    def _calculate_bonus(
+        volume_ratio: float,
+        chart_score: int,
+        is_limit_up: bool = False
+    ) -> tuple[int, Dict[str, int]]:
+        """가산점 계산 (최대 7점)
+
+        분배:
+        - 거래량 급증: 최대 5점
+          (2배: 1점, 3배: 2점, 4배: 3점, 5배: 4점, 6배 이상: 5점)
+        - 장대양봉: 최대 1점
+        - 상한가: 최대 1점
+        """
         bonus = 0
 
-        # 1. 거래량 급증 (최대 4점)
-        if volume_ratio >= 10: bonus += 4
-        elif volume_ratio >= 5: bonus += 3
-        elif volume_ratio >= 3: bonus += 2
-        elif volume_ratio >= 2: bonus += 1
+        volume_bonus = 0
+        if volume_ratio >= 6:
+            volume_bonus = 5
+        elif volume_ratio >= 5:
+            volume_bonus = 4
+        elif volume_ratio >= 4:
+            volume_bonus = 3
+        elif volume_ratio >= 3:
+            volume_bonus = 2
+        elif volume_ratio >= 2:
+            volume_bonus = 1
+        bonus += volume_bonus
 
-        # 2. 장대양봉 (최대 5점)
-        if change_pct >= 25: bonus += 5
-        elif change_pct >= 20: bonus += 4
-        elif change_pct >= 15: bonus += 3
-        elif change_pct >= 10: bonus += 2
-        elif change_pct >= 5: bonus += 1
+        candle_bonus = 0
+        if chart_score >= 1:
+            candle_bonus = 1
+        bonus += candle_bonus
 
-        return bonus
+        limit_up_bonus = 1 if is_limit_up else 0
+        bonus += limit_up_bonus
+
+        bonus_breakdown = {
+            "volume": volume_bonus,
+            "candle": candle_bonus,
+            "limit_up": limit_up_bonus
+        }
+
+        return min(7, bonus), bonus_breakdown
 
     def _build_score_details(
         self,
@@ -380,7 +422,10 @@ class Scorer:
         score: ScoreDetail,
         base_score: int,
         bonus_score: int,
-        volume_ratio: float
+        volume_ratio: float,
+        bonus_breakdown: Dict[str, int] = None,
+        is_new_high: bool = False,
+        is_limit_up: bool = False
     ) -> Dict:
         """점수 상세 딕셔너리 빌드"""
         # 외인/기관 수급 데이터 추출
@@ -402,5 +447,8 @@ class Scorer:
             'foreign_net_buy': foreign_net_buy,
             'inst_net_buy': inst_net_buy,
             'base_score': base_score,
-            'bonus_score': bonus_score
+            'bonus_score': bonus_score,
+            'bonus_breakdown': bonus_breakdown or {},
+            'is_new_high': is_new_high,
+            'is_limit_up': is_limit_up
         }

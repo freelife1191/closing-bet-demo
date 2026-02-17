@@ -7,7 +7,6 @@ class Grade(Enum):
     S = "S"
     A = "A"
     B = "B"
-    C = "C"
     D = "D"
 
 class SignalStatus(Enum):
@@ -143,4 +142,3 @@ class ScreenerResult:
     market_status: Dict[str, Any]
     market_summary: str
     trending_themes: List[str]
-

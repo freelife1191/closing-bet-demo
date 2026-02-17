@@ -87,7 +87,6 @@ class SignalGenerator:
         # 탈락 통계 (진단용)
         self.drop_stats = {
             "low_trading_value": 0,
-            "low_volume_ratio": 0,
             "low_pre_score": 0,
             "no_news": 0,
             "grade_fail": 0,
@@ -121,7 +120,6 @@ class SignalGenerator:
             collector=self._collector,
             scorer=self.scorer,
             trading_value_min=self.config.trading_value_min,
-            volume_ratio_min=2.0  # Default volume ratio minimum
         )
 
         # Phase 2: News Collection
@@ -189,7 +187,6 @@ class SignalGenerator:
         # 탈락 통계 초기화
         self.drop_stats = {
             "low_trading_value": 0,
-            "low_volume_ratio": 0,
             "low_pre_score": 0,
             "no_news": 0,
             "grade_fail": 0,
@@ -462,7 +459,7 @@ class SignalGenerator:
         """시그널 요약 정보"""
         summary = {
             "total": len(signals),
-            "by_grade": {g: 0 for g in ['S', 'A', 'B', 'C', 'D']},
+            "by_grade": {g: 0 for g in ['S', 'A', 'B']},
             "by_market": {},
             "total_position": 0,
             "total_risk": 0,
@@ -554,7 +551,7 @@ async def run_screener(
         def sort_key_gen(s):
             # Grade handling (Enum or String)
             g_val = getattr(s.grade, 'value', s.grade)
-            grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+            grade_map = {'S': 3, 'A': 2, 'B': 1}
             grade_score = grade_map.get(str(g_val).strip().upper(), 0)
             
             # Score handling
@@ -726,7 +723,7 @@ def update_single_signal_json(code: str, signal: Signal):
     
     # [Sort] Grade (S>A>B>C>D) -> Score Descending
     def sort_key_dict(s):
-        grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+        grade_map = {'S': 3, 'A': 2, 'B': 1}
         grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
         
         score_obj = s.get('score', 0)

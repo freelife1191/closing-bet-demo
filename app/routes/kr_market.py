@@ -75,6 +75,94 @@ def load_json_file(filename: str) -> dict:
     return {}
 
 
+def _recalculate_jongga_grade(signal: dict) -> tuple[str, bool]:
+    """종가베팅 단일 시그널 등급을 현재 기준으로 재산정"""
+    try:
+        tv = float(signal.get("trading_value", 0) or 0)
+        change_pct = float(signal.get("change_pct", 0) or 0)
+        score = signal.get("score") or {}
+        score_total = int((score.get("total") if isinstance(score, dict) else score) or 0)
+        score_details = signal.get("score_details") or {}
+        foreign_net_buy = float(score_details.get("foreign_net_buy", 0) or 0)
+        inst_net_buy = float(score_details.get("inst_net_buy", 0) or 0)
+        has_dual_buy = foreign_net_buy > 0 and inst_net_buy > 0
+    except Exception:
+        return "D", False
+
+    prev_grade = str(signal.get("grade", "")).strip().upper()
+    new_grade = "D"
+    if (
+        tv >= 1_000_000_000_000 and
+        score_total >= 10 and
+        change_pct >= 3.0 and
+        has_dual_buy
+    ):
+        new_grade = "S"
+    elif (
+        tv >= 500_000_000_000 and
+        score_total >= 8 and
+        change_pct >= 3.0 and
+        has_dual_buy
+    ):
+        new_grade = "A"
+    elif (
+        tv >= 100_000_000_000 and
+        score_total >= 6 and
+        change_pct >= 3.0 and
+        has_dual_buy
+    ):
+        new_grade = "B"
+
+    if prev_grade != new_grade:
+        signal["grade"] = new_grade
+        return new_grade, True
+
+    return new_grade, False
+
+
+def _recalculate_jongga_grades(data: dict) -> bool:
+    """종가베팅 signals grade + by_grade 동기화"""
+    if not data or "signals" not in data:
+        return False
+
+    signals = data.get("signals", [])
+    if not isinstance(signals, list):
+        return False
+
+    changed = False
+    grade_count = {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0}
+
+    for sig in signals:
+        if not isinstance(sig, dict):
+            continue
+        _, did_change = _recalculate_jongga_grade(sig)
+        changed = changed or did_change
+        grade = str(sig.get("grade", "D")).strip().upper()
+        if grade not in grade_count:
+            grade_count[grade] = 0
+        grade_count[grade] += 1
+
+    prev_by_grade = data.get("by_grade")
+    new_by_grade = {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0}
+    if isinstance(prev_by_grade, dict):
+        for g in new_by_grade:
+            if g in prev_by_grade:
+                new_by_grade[g] = int(prev_by_grade[g]) if isinstance(prev_by_grade[g], (int, float)) else 0
+
+    # 재계산값 우선 반영
+    for g, cnt in grade_count.items():
+        if g in new_by_grade:
+            new_by_grade[g] = cnt
+        elif cnt > 0:
+            new_by_grade[g] = cnt
+
+    if data.get("by_grade") != new_by_grade:
+        data["by_grade"] = new_by_grade
+        changed = True
+
+    return changed
+
+
 def load_csv_file(filename: str) -> pd.DataFrame:
     """CSV 파일 로드"""
     filepath = get_data_path(filename)
@@ -646,9 +734,9 @@ def get_kr_ai_analysis():
                             ai_signals.append(signal_data)
                     
                     if ai_signals:
-                        # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                        # [Sort] Grade (S>A>B) -> Score Descending
                         def sort_key(s):
-                            grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                            grade_map = {'S': 3, 'A': 2, 'B': 1}
                             grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
                             score_val = s.get('score', 0)
                             return (grade_val, score_val)
@@ -769,9 +857,9 @@ def get_kr_ai_analysis():
                 ai_signals.append(signal_data)
             
             if ai_signals:
-                # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                # [Sort] Grade (S>A>B) -> Score Descending
                 def sort_key(s):
-                    grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                    grade_map = {'S': 3, 'A': 2, 'B': 1}
                     grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
                     score_val = s.get('score', 0)
                     return (grade_val, score_val)
@@ -972,7 +1060,7 @@ def get_cumulative_performance():
                     trades.append({
                         'id': f"{ticker}-{stats_date}", # Unique ID
                         'date': stats_date,
-                        'grade': sig.get('grade', 'C'),
+                        'grade': sig.get('grade'),
                         'name': sig.get('name', sig.get('stock_name', '')), # [FIX] Use 'name' first
                         'code': ticker,
                         'market': sig.get('market', ''),
@@ -1457,6 +1545,9 @@ def get_jongga_v2_latest():
                         candidate = json.load(f)
                         if len(candidate.get('signals', [])) > 0:
                             # 유효한 데이터 발견 - 주말/휴일 안내 메시지 추가
+                            if _recalculate_jongga_grades(candidate):
+                                with open(file_path, 'w', encoding='utf-8') as wf:
+                                    json.dump(candidate, wf, ensure_ascii=False, indent=2)
                             candidate['message'] = f"주말/휴일로 인해 {candidate.get('date', '')} 거래일 데이터를 표시합니다."
                             logger.info(f"[Jongga V2] 최근 유효 데이터 사용: {file_path}")
                             return jsonify(candidate)
@@ -1507,9 +1598,14 @@ def get_jongga_v2_latest():
                 logger.warning(f"Failed to inject prices for Jongga V2: {e}")
 
         if data and data.get('signals'):
-            # [Sort] Grade (S>A>B>C>D) -> Score Descending
+            # 저장 데이터의 grade가 이전 규칙으로 남아 있는 케이스 보정
+            if _recalculate_jongga_grades(data):
+                with open(get_data_path('jongga_v2_latest.json'), 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+
+            # [Sort] Grade (S>A>B) -> Score Descending
             def sort_key(s):
-                grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                grade_map = {'S': 3, 'A': 2, 'B': 1}
                 grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
                 # Score can be dict (V2) or number (Legacy fallback)
                 score_val = 0
@@ -1529,7 +1625,7 @@ def get_jongga_v2_latest():
                     sig['stock_code'] = str(sig.get('ticker', sig.get('code', ''))).zfill(6)
                 if 'stock_name' not in sig:
                     sig['stock_name'] = sig.get('name', '')
-                
+
                 # change_pct (frontend) from return_pct (backend)
                 if 'change_pct' not in sig and 'return_pct' in sig:
                     sig['change_pct'] = sig['return_pct']
@@ -1541,7 +1637,7 @@ def get_jongga_v2_latest():
                         sig['change_pct'] = round(((current - entry) / entry) * 100, 2)
                     else:
                         sig['change_pct'] = 0
-                
+
                 # score: frontend expects dict { total, ... }, backend may send int
                 raw_score = sig.get('score', 0)
                 if not isinstance(raw_score, dict):
@@ -1550,7 +1646,7 @@ def get_jongga_v2_latest():
                         'base_score': int(raw_score) if raw_score else 0,
                         'bonus_score': 0
                     }
-                
+
                 # Ensure checklist exists (frontend accesses checklist.has_news etc.)
                 if 'checklist' not in sig:
                     sig['checklist'] = {
@@ -1558,14 +1654,14 @@ def get_jongga_v2_latest():
                         'volume_surge': False,
                         'supply_demand': sig.get('foreign_5d', 0) > 0 or sig.get('inst_5d', 0) > 0
                     }
-                
+
                 # Ensure target_price / stop_price exist
                 entry = sig.get('entry_price', 0)
                 if not sig.get('target_price') and entry:
                     sig['target_price'] = round(entry * 1.09)
                 if not sig.get('stop_price') and entry:
                     sig['stop_price'] = round(entry * 0.95)
-                
+
                 # ai_evaluation structure (frontend expects nested object)
                 if 'ai_evaluation' not in sig and sig.get('ai_action'):
                     sig['ai_evaluation'] = {
@@ -1644,9 +1740,11 @@ def get_jongga_v2_history(target_date):
             with open(history_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 if data and 'signals' in data:
-                     # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                    # 저장 데이터의 grade 보정
+                    _recalculate_jongga_grades(data)
+                    # [Sort] Grade (S>A>B) -> Score Descending
                     def sort_key(s):
-                        grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                        grade_map = {'S': 3, 'A': 2, 'B': 1}
                         grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
                         score_val = 0
                         if isinstance(s.get('score'), dict):
@@ -1662,9 +1760,10 @@ def get_jongga_v2_history(target_date):
         latest_data = load_json_file('jongga_v2_latest.json')
         if latest_data and latest_data.get('date', '')[:10] == target_date:
             if latest_data and 'signals' in latest_data:
-                 # [Sort] Grade (S>A>B>C>D) -> Score Descending
+                _recalculate_jongga_grades(latest_data)
+                # [Sort] Grade (S>A>B) -> Score Descending
                 def sort_key(s):
-                    grade_map = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1}
+                    grade_map = {'S': 3, 'A': 2, 'B': 1}
                     grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
                     score_val = 0
                     if isinstance(s.get('score'), dict):

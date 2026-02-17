@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from engine.models import StockData, ScoreDetail, Grade, ChartData, SupplyData
 from engine.config import SignalConfig
-from engine.constants import VOLUME, PRICE_CHANGE
+from engine.constants import PRICE_CHANGE
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +80,6 @@ class FilterValidator:
         """
         trading_value = stock.trading_value
         change_pct = stock.change_pct
-        volume_ratio = score_details.get('volume_ratio', 0.0)
-
         # 1. 거래대금 필터
         result = self._validate_trading_value(trading_value)
         if not result.passed:
@@ -102,17 +100,12 @@ class FilterValidator:
         if not result.passed:
             return result
 
-        # 5. 거래량 배수 필터
-        result = self._validate_volume_ratio(volume_ratio)
-        if not result.passed:
-            return result
-
         # 모든 필터 통과
         return FilterResult(passed=True)
 
     def _validate_trading_value(self, trading_value: int) -> FilterResult:
         """
-        거래대금 필터 (500억 이상)
+        거래대금 필터 (최소값)
 
         Args:
             trading_value: 거래대금
@@ -120,7 +113,7 @@ class FilterValidator:
         Returns:
             FilterResult
         """
-        min_value = self.config.trading_value_min  # 500억
+        min_value = self.config.trading_value_min
         if trading_value < min_value:
             return FilterResult(
                 passed=False,
@@ -130,7 +123,7 @@ class FilterValidator:
 
     def _validate_price_change(self, change_pct: float) -> FilterResult:
         """
-        등락률 필터 (5~30% 이내)
+        등락률 필터 (PRICE_CHANGE.MIN~PRICE_CHANGE.MAX 이내)
 
         Args:
             change_pct: 등락률
@@ -194,25 +187,6 @@ class FilterValidator:
 
         return FilterResult(passed=True)
 
-    def _validate_volume_ratio(self, volume_ratio: float) -> FilterResult:
-        """
-        거래량 배수 필터 (기본 2배 이상)
-
-        Args:
-            volume_ratio: 거래량 배수
-
-        Returns:
-            FilterResult
-        """
-        min_ratio = VOLUME.RATIO_MIN  # 2.0
-        if volume_ratio < min_ratio:
-            return FilterResult(
-                passed=False,
-                reason=f"거래량배수 부족: {volume_ratio:.1f} < {min_ratio}"
-            )
-        return FilterResult(passed=True)
-
-
 # =============================================================================
 # Grade Classifier
 # =============================================================================
@@ -253,28 +227,22 @@ class GradeClassifier:
         """
         trading_value = stock.trading_value
         change_pct = stock.change_pct
-        volume_ratio = score_details.get('volume_ratio', 0.0)
         total_score = score.total
 
         # S급 판정
-        if self._is_s_grade(trading_value, total_score, volume_ratio):
+        if self._is_s_grade(trading_value, change_pct, total_score, supply):
             logger.debug("  -> [S급] 조건 충족!")
             return Grade.S
 
         # A급 판정
-        if self._is_a_grade(trading_value, total_score, volume_ratio):
+        if self._is_a_grade(trading_value, change_pct, total_score, supply):
             logger.debug("  -> [A급] 조건 충족!")
             return Grade.A
 
         # B급 판정
-        if self._is_b_grade(trading_value, total_score, volume_ratio):
+        if self._is_b_grade(trading_value, change_pct, total_score, supply):
             logger.debug("  -> [B급] 조건 충족!")
             return Grade.B
-
-        # C급 판정 (강소 주도주)
-        if self._is_c_grade(total_score, change_pct, volume_ratio, supply):
-            logger.debug("  -> [C급] 조건 충족!")
-            return Grade.C
 
         # 점수 미달
         logger.debug(f"  -> [Drop] 점수 미달 (Score={total_score} < 8)")
@@ -283,63 +251,52 @@ class GradeClassifier:
     def _is_s_grade(
         self,
         trading_value: int,
+        change_pct: float,
         total_score: float,
-        volume_ratio: float
+        supply: SupplyData
     ) -> bool:
-        """S급 조건: 1조 이상, 15점 이상, 5배 이상"""
+        """S급 조건: 1조 이상, 10점 이상, 상승률 3% 이상, 외인+기관 양매수"""
         return (
             trading_value >= self.config.trading_value_s and  # 1조
-            total_score >= self.config.min_s_grade and        # 15점
-            volume_ratio >= 5.0                               # 5배
+            total_score >= self.config.min_s_grade and        # 10점
+            change_pct >= PRICE_CHANGE.MIN and                # 상승률 3%
+            self._has_dual_buy(supply)                       # 외인+기관 동반 매수
         )
 
     def _is_a_grade(
         self,
         trading_value: int,
+        change_pct: float,
         total_score: float,
-        volume_ratio: float
+        supply: SupplyData
     ) -> bool:
-        """A급 조건: 5000억 이상, 12점 이상, 3배 이상"""
+        """A급 조건: 5000억 이상, 8점 이상, 상승률 3% 이상, 외인+기관 양매수"""
         return (
             trading_value >= self.config.trading_value_a and  # 5000억
-            total_score >= self.config.min_a_grade and        # 12점
-            volume_ratio >= 3.0                               # 3배
+            total_score >= self.config.min_a_grade and        # 8점
+            change_pct >= PRICE_CHANGE.MIN and                # 상승률 3%
+            self._has_dual_buy(supply)                       # 외인+기관 동반 매수
         )
 
     def _is_b_grade(
         self,
         trading_value: int,
-        total_score: float,
-        volume_ratio: float
-    ) -> bool:
-        """B급 조건: 1000억 이상, 10점 이상, 2배 이상"""
-        return (
-            trading_value >= self.config.trading_value_b and  # 1000억
-            total_score >= self.config.min_b_grade and        # 10점
-            volume_ratio >= 2.0                               # 2배
-        )
-
-    def _is_c_grade(
-        self,
-        total_score: float,
         change_pct: float,
-        volume_ratio: float,
+        total_score: float,
         supply: SupplyData
     ) -> bool:
-        """
-        C급 조건 (강소 주도주):
-        - 8점 이상
-        - 10% 이상 상승
-        - 거래량 5배 이상
-        - 외인+기관 양매수
-        """
+        """B급 조건: 1,000억 이상, 6점 이상, 상승률 3% 이상, 외인+기관 양매수"""
         return (
-            total_score >= 8 and
-            change_pct >= 10.0 and
-            volume_ratio >= 5.0 and
-            supply.foreign_buy_5d > 0 and
-            supply.inst_buy_5d > 0
+            trading_value >= self.config.trading_value_b and  # 1000억
+            total_score >= self.config.min_b_grade and        # 6점
+            change_pct >= PRICE_CHANGE.MIN and                # 상승률 3%
+            self._has_dual_buy(supply)                       # 외인+기관 동반 매수
         )
+
+    @staticmethod
+    def _has_dual_buy(supply: SupplyData) -> bool:
+        """외인+기관 동반 매수 여부"""
+        return supply.foreign_buy_5d > 0 and supply.inst_buy_5d > 0
 
 
 # =============================================================================

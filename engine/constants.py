@@ -24,7 +24,7 @@ class TradingValueThresholds:
         S_GRADE: S급 등급 기준 (1조 원)
         A_GRADE: A급 등급 기준 (5000억 원)
         B_GRADE: B급 등급 기준 (1000억 원)
-        MINIMUM: 최소 거래대금 (500억 원) - Phase 1 필터링 기준
+        MINIMUM: 최소 거래대금 (1000억 원) - Phase 1 필터링 기준
         NEWS_FALLBACK_S: 뉴스 없어도 S급으로 처리하는 대형주 기준
         NEWS_FALLBACK_A: 뉴스 없어도 A급으로 처리하는 대형주 기준
         NEWS_FALLBACK_B: 뉴스 없어도 B급으로 처리하는 대형주 기준
@@ -32,12 +32,12 @@ class TradingValueThresholds:
     S_GRADE: int = 1_000_000_000_000    # 1조
     A_GRADE: int = 500_000_000_000     # 5000억
     B_GRADE: int = 100_000_000_000     # 1000억
-    MINIMUM: int = 50_000_000_000      # 500억
+    MINIMUM: int = 100_000_000_000      # 1000억
 
     # News fallback thresholds (V2 Logic - for large caps without news)
     NEWS_FALLBACK_S: int = 500_000_000_000   # 5000억
     NEWS_FALLBACK_A: int = 100_000_000_000   # 1000억
-    NEWS_FALLBACK_B: int = 50_000_000_000    # 500억
+    NEWS_FALLBACK_B: int = 100_000_000_000    # 1000억
 
 
 # =============================================================================
@@ -72,19 +72,17 @@ class ScoringThresholds:
 
     Attributes:
         BASE_MAX: 기본 점수 최대값 (뉴스 3 + 거래대금 3 + 차트 2 + 캔들 1 + 기간조정 1 + 수급 2)
-        BONUS_MAX: 가산점 최대값 (거래량 급증 4 + 장대양봉 5)
+        BONUS_MAX: 가산점 최대값 (거래량 급증 5 + 장대양봉 1 + 상한가 1)
         TOTAL_MAX: 총점 최대값
-        MIN_C_GRADE: C등급 최소 점수
         MIN_B_GRADE: B등급 최소 점수
         MIN_A_GRADE: A등급 최소 점수
         MIN_S_GRADE: S등급 최소 점수
     """
     BASE_MAX: int = 12
-    BONUS_MAX: int = 9
-    TOTAL_MAX: int = 21
+    BONUS_MAX: int = 7
+    TOTAL_MAX: int = 19
 
     # Grade thresholds
-    MIN_C_GRADE: int = 4
     MIN_B_GRADE: int = 6
     MIN_A_GRADE: int = 8
     MIN_S_GRADE: int = 10
@@ -98,13 +96,17 @@ class VolumeThresholds:
     Attributes:
         RATIO_MIN: 최소 거래량 배수 (2배 이상)
         RATIO_3X: 3배 이상 (2점)
-        RATIO_5X: 5배 이상 (3점)
-        RATIO_10X: 10배 이상 (4점)
+        RATIO_4X: 4배 이상 (3점)
+        RATIO_5X: 5배 이상 (4점)
+        RATIO_6X: 6배 이상 (5점)
+        RATIO_10X: 10배 이상 (5점)
         LOOKBACK_DAYS: 평균 거래량 계산 기간
     """
     RATIO_MIN: float = 2.0
+    RATIO_4X: float = 4.0
     RATIO_3X: float = 3.0
     RATIO_5X: float = 5.0
+    RATIO_6X: float = 6.0
     RATIO_10X: float = 10.0
     LOOKBACK_DAYS: int = 20
 
@@ -115,7 +117,7 @@ class PriceChangeThresholds:
     등락률 관련 임계값
 
     Attributes:
-        MIN: 최소 등락률 (5%)
+        MIN: 최소 등락률 (3%)
         MAX: 최대 등락률 (20%) - 상한가 제외
         LIMIT: 상한가 인근 (29.5% 이상) - 제외 대상
         BONUS_5PCT: 5% 이상 (가산점 1점)
@@ -124,7 +126,7 @@ class PriceChangeThresholds:
         BONUS_20PCT: 20% 이상 (가산점 4점)
         BONUS_25PCT: 25% 이상 (가산점 5점)
     """
-    MIN: float = 5.0
+    MIN: float = 3.0
     MAX: float = 29.5
     LIMIT: float = 29.5
 
@@ -580,7 +582,7 @@ class MessengerThresholds:
         DISCORD_FIELD_MAX_LENGTH: 디스코드 필드 최대 길이 (1000자)
         DISCORD_FIELD_TRUNCATE_LENGTH: 디스코드 필드 자르기 길이 (950자)
         AI_REASON_MAX_LENGTH: AI 의견 최대 길이 (60자)
-        GRADE_PRIORITY: 등급 우선순위 (S=0, A=1, B=2, C=3, D=4)
+        GRADE_PRIORITY: 등급 우선순위 (S=0, A=1, B=2, D=3)
     """
     TELEGRAM_MAX_LENGTH: int = 4000
     DISCORD_FIELD_MAX_LENGTH: int = 1000
@@ -590,7 +592,7 @@ class MessengerThresholds:
     @property
     def GRADE_PRIORITY(self) -> dict:
         return {
-            "S": 0, "A": 1, "B": 2, "C": 3, "D": 4
+            "S": 0, "A": 1, "B": 2, "D": 3
         }
 
 
