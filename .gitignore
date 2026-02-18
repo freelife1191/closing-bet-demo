@@ -48,6 +48,12 @@ response.json
 .ipynb_checkpoints/
 services/*.lock
 
+# Project showcase generated artifacts
+project/video/scenes/
+project/video/audio/
+project/video/evidence/*.zip
+project/video/evidence/tmp_videos/
+
 # Testing & Build
 .pytest_cache/
 .mypy_cache/
