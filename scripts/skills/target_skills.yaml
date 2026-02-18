@@ -1,0 +1,37 @@
+skills:
+  - name: logo-thumbnail-prompt-designer
+    path: .agent/skills/logo-thumbnail-prompt-designer
+  - name: pipeline-output-validator
+    path: .agent/skills/pipeline-output-validator
+  - name: promo-asset-studio
+    path: .agent/skills/promo-asset-studio
+  - name: qwen3-tts-m1-local
+    path: .agent/skills/qwen3-tts-m1-local
+  - name: qwen3-tts-universal
+    path: .agent/skills/qwen3-tts-universal
+  - name: scene-record-and-capture
+    path: .agent/skills/scene-record-and-capture
+  - name: scene-script-architect
+    path: .agent/skills/scene-script-architect
+  - name: scene-subtitle-builder
+    path: .agent/skills/scene-subtitle-builder
+  - name: scene-tts-qwen
+    path: .agent/skills/scene-tts-qwen
+  - name: video-copywriter-docs
+    path: .agent/skills/video-copywriter-docs
+  - name: video-manifest-planner
+    path: .agent/skills/video-manifest-planner
+  - name: video-mastering-editor
+    path: .agent/skills/video-mastering-editor
+  - name: video-orchestration-manager
+    path: .agent/skills/video-orchestration-manager
+  - name: video-pipeline-orchestrator
+    path: .agent/skills/video-pipeline-orchestrator
+  - name: video-postproduction-remotion
+    path: .agent/skills/video-postproduction-remotion
+  - name: video-qc-gatekeeper
+    path: .agent/skills/video-qc-gatekeeper
+  - name: video-quality-researcher
+    path: .agent/skills/video-quality-researcher
+  - name: video-tts-local-free
+    path: .agent/skills/video-tts-local-free
