@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import subprocess
+import sys
 
 from scripts.skills.validate_skill_structure import validate_skill_dir
 
@@ -26,7 +27,7 @@ def test_validator_flags_missing_required_sections(tmp_path: Path) -> None:
 def test_validator_cli_runs_for_selected_skill() -> None:
     completed = subprocess.run(
         [
-            "python",
+            sys.executable,
             "scripts/skills/validate_skill_structure.py",
             "--skills",
             "qwen3-tts-universal",
