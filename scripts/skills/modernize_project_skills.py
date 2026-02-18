@@ -75,7 +75,10 @@ def normalize_description(raw: str, skill_name: str) -> str:
         return f"Use when operating or validating the {skill_name} workflow in this project."
     if desc.lower().startswith("use when"):
         return desc
-    return f"Use when {desc[0].lower()}{desc[1:]}"
+    lowered = f"{desc[0].lower()}{desc[1:]}" if len(desc) > 1 else desc.lower()
+    if lowered.startswith(("build ", "create ", "generate ", "execute ", "analyze ", "lead ", "compose ", "operate ", "run ", "manage ", "design ")):
+        return f"Use when you need to {lowered}"
+    return f"Use when {lowered}"
 
 
 def build_skill_markdown(
