@@ -7,6 +7,7 @@ from scripts.skills.validate_skill_structure import validate_skill_dir
 
 
 SCENE_SKILLS = [
+    Path('.agent/skills/playwright-scene-recorder'),
     Path('.agent/skills/scene-script-architect'),
     Path('.agent/skills/scene-record-and-capture'),
     Path('.agent/skills/scene-subtitle-builder'),

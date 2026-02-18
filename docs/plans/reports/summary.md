@@ -1,6 +1,6 @@
 # Skill Modernization Summary
 
-- Total skills: 18
+- Total skills: 19
 
 ## Status Matrix
 - `logo-thumbnail-prompt-designer`: `pass` (docs/plans/reports/logo-thumbnail-prompt-designer.md)
@@ -8,6 +8,7 @@
 - `promo-asset-studio`: `pass` (docs/plans/reports/promo-asset-studio.md)
 - `qwen3-tts-m1-local`: `pass` (docs/plans/reports/qwen3-tts-m1-local.md)
 - `qwen3-tts-universal`: `pass` (docs/plans/reports/qwen3-tts-universal.md)
+- `playwright-scene-recorder`: `pass` (docs/plans/reports/playwright-scene-recorder.md)
 - `scene-record-and-capture`: `pass` (docs/plans/reports/scene-record-and-capture.md)
 - `scene-script-architect`: `pass` (docs/plans/reports/scene-script-architect.md)
 - `scene-subtitle-builder`: `pass` (docs/plans/reports/scene-subtitle-builder.md)

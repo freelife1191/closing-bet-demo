@@ -98,6 +98,7 @@ bash .agent/skills/qwen3-tts-universal/scripts/smoke_test_qwen3_tts.sh \
 - `.agent/skills/promo-asset-studio/commands/run.md`
 - `.agent/skills/qwen3-tts-m1-local/commands/run.md`
 - `.agent/skills/qwen3-tts-universal/commands/run.md`
+- `.agent/skills/playwright-scene-recorder/commands/run.md`
 - `.agent/skills/scene-record-and-capture/commands/run.md`
 - `.agent/skills/scene-script-architect/commands/run.md`
 - `.agent/skills/scene-subtitle-builder/commands/run.md`

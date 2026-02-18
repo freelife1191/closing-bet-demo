@@ -9,6 +9,8 @@ skills:
     path: .agent/skills/qwen3-tts-m1-local
   - name: qwen3-tts-universal
     path: .agent/skills/qwen3-tts-universal
+  - name: playwright-scene-recorder
+    path: .agent/skills/playwright-scene-recorder
   - name: scene-record-and-capture
     path: .agent/skills/scene-record-and-capture
   - name: scene-script-architect
