@@ -1,0 +1,4 @@
+interface:
+  display_name: "Qwen3 TTS M1 Local"
+  short_description: "Install and run Qwen3-TTS on Apple Silicon locally"
+  default_prompt: "Install and verify Qwen3-TTS local inference on this Mac."
