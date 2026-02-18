@@ -325,11 +325,13 @@ git commit -m "feat: add project-showcase-kit per-tool install templates"
 **Step 1: Write the failing test**
 
 ```python
+import subprocess
+import sys
 from pathlib import Path
-from project.project_showcase_kit_src.scripts.build_dist import build_dist
 
 def test_build_dist_generates_all_installers(tmp_path: Path):
-    build_dist(repo_root=tmp_path)
+    script = Path("project/project-showcase-kit-src/scripts/build_dist.py")
+    subprocess.run([sys.executable, str(script), "--repo-root", str(tmp_path)], check=True)
     for tool in ["codex", "claudecode", "gemini", "antigravity"]:
         assert (tmp_path / "project/project-showcase-kit-dist/install" / tool / "install.sh").exists()
 ```
@@ -621,4 +623,3 @@ Expected:
 - All tests PASS.
 - Skill structure validation PASS with `psk-*` paths.
 - Dist installers exist for all four tools.
-
