@@ -50,7 +50,7 @@ pip install faster-whisper srt pydub soundfile requests
 
 Qwen3-TTS 전용 스킬 기반 설치(범용: macOS/Linux/CPU/GPU):
 ```bash
-bash .agent/skills/qwen3-tts-universal/scripts/install_qwen3_tts.sh \
+bash .agent/skills/psk-qwen3-tts-universal/scripts/install_qwen3_tts.sh \
   --project-root /Users/freelife/vibe/lecture/hodu/closing-bet-demo \
   --venv-path /Users/freelife/vibe/lecture/hodu/closing-bet-demo/.venv-qwen3-tts \
   --default-mode custom_voice \
@@ -85,7 +85,7 @@ QWEN3_TTS_SPEAKER=Vivian
 QWEN3_TTS_STYLE_INSTRUCT=
 QWEN3_TTS_DEVICE=auto
 QWEN3_TTS_DTYPE=auto
-QWEN_LOCAL_CMD="/Users/freelife/vibe/lecture/hodu/closing-bet-demo/.venv-qwen3-tts/bin/python /Users/freelife/vibe/lecture/hodu/closing-bet-demo/.agent/skills/qwen3-tts-universal/scripts/qwen3_tts_runner.py --mode custom_voice --input {text_file} --output {output_file} --model-size 0.6b --language Auto --speaker Vivian --device auto --dtype auto"
+QWEN_LOCAL_CMD="/Users/freelife/vibe/lecture/hodu/closing-bet-demo/.venv-qwen3-tts/bin/python /Users/freelife/vibe/lecture/hodu/closing-bet-demo/.agent/skills/psk-qwen3-tts-universal/scripts/qwen3_tts_runner.py --mode custom_voice --input {text_file} --output {output_file} --model-size 0.6b --language Auto --speaker Vivian --device auto --dtype auto"
 ```
 
 참고:
@@ -173,7 +173,7 @@ Qwen 미설정 환경 사전 점검(예: Google만 설정):
 
 Qwen3-TTS 로컬 스모크 테스트:
 ```bash
-bash .agent/skills/qwen3-tts-universal/scripts/smoke_test_qwen3_tts.sh \
+bash .agent/skills/psk-qwen3-tts-universal/scripts/smoke_test_qwen3_tts.sh \
   --project-root /Users/freelife/vibe/lecture/hodu/closing-bet-demo \
   --venv-path /Users/freelife/vibe/lecture/hodu/closing-bet-demo/.venv-qwen3-tts \
   --mode all
@@ -182,17 +182,17 @@ bash .agent/skills/qwen3-tts-universal/scripts/smoke_test_qwen3_tts.sh \
 Qwen3-TTS 고급 모드(선택형 옵션) 테스트:
 ```bash
 # Custom Voice (speaker/language/model-size/style)
-.venv-qwen3-tts/bin/python .agent/skills/qwen3-tts-universal/scripts/qwen3_tts_runner.py \
+.venv-qwen3-tts/bin/python .agent/skills/psk-qwen3-tts-universal/scripts/qwen3_tts_runner.py \
   --mode custom_voice --text "옵션 테스트입니다." --output /tmp/custom.wav \
   --model-size 1.7b --speaker Sohee --language Korean --instruct "차분한 뉴스 앵커 톤"
 
 # Voice Design
-.venv-qwen3-tts/bin/python .agent/skills/qwen3-tts-universal/scripts/qwen3_tts_runner.py \
+.venv-qwen3-tts/bin/python .agent/skills/psk-qwen3-tts-universal/scripts/qwen3_tts_runner.py \
   --mode voice_design --text "This is a design test." --output /tmp/design.wav \
   --language English --instruct "Warm, confident female narrator"
 
 # Voice Clone
-.venv-qwen3-tts/bin/python .agent/skills/qwen3-tts-universal/scripts/qwen3_tts_runner.py \
+.venv-qwen3-tts/bin/python .agent/skills/psk-qwen3-tts-universal/scripts/qwen3_tts_runner.py \
   --mode voice_clone --text "클론 테스트 문장입니다." --output /tmp/clone.wav \
   --model-size 0.6b --language Korean --ref-audio /path/to/ref.wav --ref-text "레퍼런스 대본"
 ```
@@ -302,45 +302,45 @@ subtitles.srt를 검토해 싱크 이슈가 의심되는 구간만 타임코드�
 ## 8) Skill 사용(전문화 버전)
 - 통합 사용 가이드: `.agent/skills/SKILLS_GUIDE.md`
 - 스킬별 canonical 실행 진입점: `.agent/skills/SKILLS_GUIDE.md`의 `7) 스킬별 Canonical Run 문서`
-- `.agent/skills/scene-script-architect/SKILL.md`
-- `.agent/skills/scene-record-and-capture/SKILL.md`
-- `.agent/skills/scene-tts-qwen/SKILL.md`
-- `.agent/skills/qwen3-tts-universal/SKILL.md`
-- `.agent/skills/scene-subtitle-builder/SKILL.md`
-- `.agent/skills/video-mastering-editor/SKILL.md`
-- `.agent/skills/promo-asset-studio/SKILL.md`
-- `.agent/skills/video-copywriter-docs/SKILL.md`
-- `.agent/skills/logo-thumbnail-prompt-designer/SKILL.md`
-- `.agent/skills/pipeline-output-validator/SKILL.md`
-- `.agent/skills/video-orchestration-manager/SKILL.md`
-- `.agent/skills/video-quality-researcher/SKILL.md`
+- `.agent/skills/psk-scene-script-architect/SKILL.md`
+- `.agent/skills/psk-scene-record-and-capture/SKILL.md`
+- `.agent/skills/psk-scene-tts-qwen/SKILL.md`
+- `.agent/skills/psk-qwen3-tts-universal/SKILL.md`
+- `.agent/skills/psk-scene-subtitle-builder/SKILL.md`
+- `.agent/skills/psk-video-mastering-editor/SKILL.md`
+- `.agent/skills/psk-promo-asset-studio/SKILL.md`
+- `.agent/skills/psk-video-copywriter-docs/SKILL.md`
+- `.agent/skills/psk-logo-thumbnail-prompt-designer/SKILL.md`
+- `.agent/skills/psk-pipeline-output-validator/SKILL.md`
+- `.agent/skills/psk-video-orchestration-manager/SKILL.md`
+- `.agent/skills/psk-video-quality-researcher/SKILL.md`
 
 기존 통합 스킬:
-- `.agent/skills/video-manifest-planner/SKILL.md`
-- `.agent/skills/playwright-scene-recorder/SKILL.md`
-- `.agent/skills/video-postproduction-remotion/SKILL.md`
-- `.agent/skills/video-qc-gatekeeper/SKILL.md`
-- `.agent/skills/video-pipeline-orchestrator/SKILL.md`
-- `.agent/skills/video-tts-local-free/SKILL.md`
+- `.agent/skills/psk-video-manifest-planner/SKILL.md`
+- `.agent/skills/psk-playwright-scene-recorder/SKILL.md`
+- `.agent/skills/psk-video-postproduction-remotion/SKILL.md`
+- `.agent/skills/psk-video-qc-gatekeeper/SKILL.md`
+- `.agent/skills/psk-video-pipeline-orchestrator/SKILL.md`
+- `.agent/skills/psk-video-tts-local-free/SKILL.md`
 
 호출 예시:
 ```text
-playwright-scene-recorder 스킬 규칙으로 녹화 실행하고 실패 씬만 재시도해줘.
+psk-playwright-scene-recorder 스킬 규칙으로 녹화 실행하고 실패 씬만 재시도해줘.
 ```
 
 오케스트레이션 매니저 호출 예시:
 ```text
-video-orchestration-manager 스킬로 전체 사이클 실행하고 manager_report.md 기준으로 실패 원인/재실행 계획/사용자 승인 요청안을 작성해줘.
+psk-video-orchestration-manager 스킬로 전체 사이클 실행하고 manager_report.md 기준으로 실패 원인/재실행 계획/사용자 승인 요청안을 작성해줘.
 ```
 
 품질 개선 리서처 호출 예시:
 ```text
-video-quality-researcher 스킬로 validation_report.json, manager_report.json, narration.json을 분석해 must-fix/nice-to-have를 분리하고 각 항목별 검증 커맨드까지 작성해줘.
+psk-video-quality-researcher 스킬로 validation_report.json, manager_report.json, narration.json을 분석해 must-fix/nice-to-have를 분리하고 각 항목별 검증 커맨드까지 작성해줘.
 ```
 
 QC 게이트키퍼 호출 예시:
 ```text
-video-qc-gatekeeper 스킬 규칙으로 Gate A~D 증적을 점검하고 signoff.json 기준으로 릴리즈 가능 여부를 판정해줘.
+psk-video-qc-gatekeeper 스킬 규칙으로 Gate A~D 증적을 점검하고 signoff.json 기준으로 릴리즈 가능 여부를 판정해줘.
 ```
 
 ## 9) 실패 시 즉시 조치
