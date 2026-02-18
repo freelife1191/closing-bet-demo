@@ -1,0 +1,39 @@
+skills:
+  - source: video-manifest-planner
+    target: psk-video-manifest-planner
+  - source: playwright-scene-recorder
+    target: psk-playwright-scene-recorder
+  - source: video-postproduction-remotion
+    target: psk-video-postproduction-remotion
+  - source: video-qc-gatekeeper
+    target: psk-video-qc-gatekeeper
+  - source: video-orchestration-manager
+    target: psk-video-orchestration-manager
+  - source: video-pipeline-orchestrator
+    target: psk-video-pipeline-orchestrator
+  - source: video-quality-researcher
+    target: psk-video-quality-researcher
+  - source: video-mastering-editor
+    target: psk-video-mastering-editor
+  - source: video-copywriter-docs
+    target: psk-video-copywriter-docs
+  - source: video-tts-local-free
+    target: psk-video-tts-local-free
+  - source: scene-script-architect
+    target: psk-scene-script-architect
+  - source: scene-record-and-capture
+    target: psk-scene-record-and-capture
+  - source: scene-subtitle-builder
+    target: psk-scene-subtitle-builder
+  - source: scene-tts-qwen
+    target: psk-scene-tts-qwen
+  - source: promo-asset-studio
+    target: psk-promo-asset-studio
+  - source: logo-thumbnail-prompt-designer
+    target: psk-logo-thumbnail-prompt-designer
+  - source: pipeline-output-validator
+    target: psk-pipeline-output-validator
+  - source: qwen3-tts-universal
+    target: psk-qwen3-tts-universal
+  - source: qwen3-tts-m1-local
+    target: psk-qwen3-tts-m1-local
