@@ -1,0 +1,173 @@
+{
+  "generatedAt": "2026-02-19T17:20:02.185251+00:00",
+  "version": "detail",
+  "sourceScenario": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/project/video/scenarios/scenario_detail.md",
+  "targetDurationSec": 220,
+  "scenes": [
+    {
+      "scene_id": "S1",
+      "target_sec": 15.0,
+      "speech_est_sec": 15.111,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.533,
+      "cue_start": 0.0,
+      "cue_end": 15.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "speed"
+    },
+    {
+      "scene_id": "S2",
+      "target_sec": 16.0,
+      "speech_est_sec": 16.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.5,
+      "cue_start": 15.0,
+      "cue_end": 31.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S3",
+      "target_sec": 18.0,
+      "speech_est_sec": 18.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.5,
+      "cue_start": 31.0,
+      "cue_end": 49.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S4",
+      "target_sec": 14.0,
+      "speech_est_sec": 14.13,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.643,
+      "cue_start": 49.0,
+      "cue_end": 63.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "speed"
+    },
+    {
+      "scene_id": "S5",
+      "target_sec": 16.0,
+      "speech_est_sec": 16.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.5,
+      "cue_start": 63.0,
+      "cue_end": 79.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S6",
+      "target_sec": 14.0,
+      "speech_est_sec": 14.13,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.643,
+      "cue_start": 79.0,
+      "cue_end": 93.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "speed"
+    },
+    {
+      "scene_id": "S7",
+      "target_sec": 13.0,
+      "speech_est_sec": 13.111,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.538,
+      "cue_start": 93.0,
+      "cue_end": 106.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "speed"
+    },
+    {
+      "scene_id": "S8",
+      "target_sec": 14.0,
+      "speech_est_sec": 13.958,
+      "fill_ratio": 0.997,
+      "tts_rate": 4.8,
+      "cue_start": 106.0,
+      "cue_end": 120.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S9",
+      "target_sec": 15.0,
+      "speech_est_sec": 14.894,
+      "fill_ratio": 0.9929,
+      "tts_rate": 4.7,
+      "cue_start": 120.0,
+      "cue_end": 135.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S10",
+      "target_sec": 13.0,
+      "speech_est_sec": 13.111,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.538,
+      "cue_start": 135.0,
+      "cue_end": 148.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "speed"
+    },
+    {
+      "scene_id": "S11",
+      "target_sec": 12.0,
+      "speech_est_sec": 11.875,
+      "fill_ratio": 0.9896,
+      "tts_rate": 4.8,
+      "cue_start": 148.0,
+      "cue_end": 160.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S12",
+      "target_sec": 13.0,
+      "speech_est_sec": 13.111,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.538,
+      "cue_start": 160.0,
+      "cue_end": 173.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "speed"
+    },
+    {
+      "scene_id": "S13",
+      "target_sec": 14.0,
+      "speech_est_sec": 14.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.5,
+      "cue_start": 173.0,
+      "cue_end": 187.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S14",
+      "target_sec": 14.0,
+      "speech_est_sec": 13.958,
+      "fill_ratio": 0.997,
+      "tts_rate": 4.8,
+      "cue_start": 187.0,
+      "cue_end": 201.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "none"
+    },
+    {
+      "scene_id": "S15",
+      "target_sec": 19.0,
+      "speech_est_sec": 19.13,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.632,
+      "cue_start": 201.0,
+      "cue_end": 220.0,
+      "overflow_sec": 0.0,
+      "adjustment_step": "speed"
+    }
+  ]
+}

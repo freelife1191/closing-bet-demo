@@ -1,0 +1,149 @@
+{
+  "generatedAt": "2026-02-19T17:20:02.186021+00:00",
+  "version": "normal",
+  "sourceScenario": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/project/video/scenarios/scenario_normal.md",
+  "targetDurationSec": 120,
+  "policy": {
+    "minTtsRate": 4.4,
+    "maxTtsRate": 4.8,
+    "defaultTtsRate": 4.6,
+    "maxCompressionRatio": 0.08,
+    "order": [
+      "speed",
+      "compression",
+      "scene_extend"
+    ]
+  },
+  "scenes": [
+    {
+      "scene_id": "S1",
+      "target_sec": 14.0,
+      "speech_est_sec": 13.958,
+      "speech_final_sec": 13.958,
+      "fill_ratio": 0.997,
+      "tts_rate": 4.8,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "none",
+      "cue_start": 0.0,
+      "cue_end": 14.0
+    },
+    {
+      "scene_id": "S2",
+      "target_sec": 13.0,
+      "speech_est_sec": 12.917,
+      "speech_final_sec": 12.917,
+      "fill_ratio": 0.9936,
+      "tts_rate": 4.8,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "none",
+      "cue_start": 14.0,
+      "cue_end": 27.0
+    },
+    {
+      "scene_id": "S3",
+      "target_sec": 11.0,
+      "speech_est_sec": 11.087,
+      "speech_final_sec": 11.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.636,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "speed",
+      "cue_start": 27.0,
+      "cue_end": 38.0
+    },
+    {
+      "scene_id": "S4",
+      "target_sec": 13.0,
+      "speech_est_sec": 12.979,
+      "speech_final_sec": 12.979,
+      "fill_ratio": 0.9984,
+      "tts_rate": 4.7,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "none",
+      "cue_start": 38.0,
+      "cue_end": 51.0
+    },
+    {
+      "scene_id": "S5",
+      "target_sec": 11.0,
+      "speech_est_sec": 11.111,
+      "speech_final_sec": 11.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.545,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "speed",
+      "cue_start": 51.0,
+      "cue_end": 62.0
+    },
+    {
+      "scene_id": "S6",
+      "target_sec": 11.0,
+      "speech_est_sec": 11.111,
+      "speech_final_sec": 11.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.545,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "speed",
+      "cue_start": 62.0,
+      "cue_end": 73.0
+    },
+    {
+      "scene_id": "S7",
+      "target_sec": 10.0,
+      "speech_est_sec": 10.0,
+      "speech_final_sec": 10.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.8,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "none",
+      "cue_start": 73.0,
+      "cue_end": 83.0
+    },
+    {
+      "scene_id": "S8",
+      "target_sec": 11.0,
+      "speech_est_sec": 11.111,
+      "speech_final_sec": 11.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.545,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "speed",
+      "cue_start": 83.0,
+      "cue_end": 94.0
+    },
+    {
+      "scene_id": "S9",
+      "target_sec": 11.0,
+      "speech_est_sec": 11.087,
+      "speech_final_sec": 11.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.636,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "speed",
+      "cue_start": 94.0,
+      "cue_end": 105.0
+    },
+    {
+      "scene_id": "S10",
+      "target_sec": 15.0,
+      "speech_est_sec": 15.106,
+      "speech_final_sec": 15.0,
+      "fill_ratio": 1.0,
+      "tts_rate": 4.733,
+      "overflow_sec": 0.0,
+      "compression_ratio": 0.0,
+      "adjustment_step": "speed",
+      "cue_start": 105.0,
+      "cue_end": 120.0
+    }
+  ]
+}
