@@ -1,7 +1,0 @@
-# playwright scene recorder defaults
-runtime:
-  headless: false
-  max_retries_per_scene: 2
-  collect_trace_on_failure: true
-  collect_screenshot_on_failure: true
-  auto_start_services: true

@@ -67,3 +67,8 @@ dist/
 .omc/
 
 *.backup
+
+# Project Showcase Kit runtime isolation
+project/project-showcase-kit/.venvs/
+project/project-showcase-kit/out/
+project/

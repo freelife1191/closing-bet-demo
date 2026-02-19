@@ -1,9 +1,0 @@
-tools:
-  - name: codex
-    install_subdir: codex
-  - name: claudecode
-    install_subdir: claudecode
-  - name: gemini
-    install_subdir: gemini
-  - name: antigravity
-    install_subdir: antigravity
