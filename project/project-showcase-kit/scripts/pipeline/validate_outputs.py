@@ -29,6 +29,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--require-showcase", action="store_true")
     parser.add_argument("--scenario-dir", default="project/video/scenarios")
     parser.add_argument("--term-audit", default="project/video/evidence/term_audit_report.json")
+    parser.add_argument("--scene-gate", default="project/video/evidence/scene_gate_report.json")
+    parser.add_argument("--version-gate", default="project/video/evidence/version_gate_report.json")
+    parser.add_argument("--runtime-budget", default="project/video/evidence/runtime_budget_report.json")
     return parser.parse_args()
 
 
@@ -156,6 +159,40 @@ def main() -> int:
             "output_within_project_root",
             len(outside) == 0,
             "ok" if not outside else "; ".join(outside),
+        )
+    )
+
+
+    scene_gate_payload = safe_load_json(Path(args.scene_gate).resolve())
+    version_gate_payload = safe_load_json(Path(args.version_gate).resolve())
+    runtime_budget_payload = safe_load_json(Path(args.runtime_budget).resolve())
+
+    scene_gate_status = str(scene_gate_payload.get("status", "missing")).strip().lower()
+    version_gate_status = str(version_gate_payload.get("status", "missing")).strip().lower()
+    runtime_within_budget = runtime_budget_payload.get("withinBudget")
+    if runtime_within_budget is None:
+        runtime_status = str(runtime_budget_payload.get("status", "missing")).strip().lower()
+        runtime_within_budget = runtime_status in {"pass", "missing", ""}
+
+    checks.append(
+        make_check(
+            "scene_gate_pass",
+            scene_gate_status in {"pass", "missing", ""},
+            f"{Path(args.scene_gate).resolve()} status={scene_gate_status or 'missing'}",
+        )
+    )
+    checks.append(
+        make_check(
+            "version_gate_pass",
+            version_gate_status in {"pass", "missing", ""},
+            f"{Path(args.version_gate).resolve()} status={version_gate_status or 'missing'}",
+        )
+    )
+    checks.append(
+        make_check(
+            "runtime_budget_within_120min",
+            bool(runtime_within_budget),
+            f"{Path(args.runtime_budget).resolve()} withinBudget={runtime_within_budget}",
         )
     )
 
