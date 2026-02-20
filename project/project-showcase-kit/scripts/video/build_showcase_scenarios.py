@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -378,6 +379,24 @@ def _format_hms(total_sec: int) -> str:
     return f"{minute:02d}:{second:02d}"
 
 
+def _parse_hms(raw: str) -> int:
+    parts = raw.strip().split(":")
+    if len(parts) != 2:
+        return 0
+    return (int(parts[0]) * 60) + int(parts[1])
+
+
+def _parse_time_range(raw: str) -> tuple[int, int]:
+    if "-" not in raw:
+        return 0, 0
+    start_raw, end_raw = [item.strip() for item in raw.split("-", 1)]
+    start_sec = _parse_hms(start_raw)
+    end_sec = _parse_hms(end_raw)
+    if end_sec < start_sec:
+        end_sec = start_sec
+    return start_sec, end_sec
+
+
 def _build_rows(seeds: List[SceneSeed], target_sec: int) -> List[SceneRow]:
     durations = _allocate_seconds(seeds, target_sec)
     rows: List[SceneRow] = []
@@ -422,22 +441,53 @@ def _render(version_name: str, target_sec: int, rows: List[SceneRow]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def _build_scene_plan_payload(version: str, target_sec: int, rows: List[SceneRow]) -> Dict:
+    scene_rows: List[Dict[str, object]] = []
+    for row in rows:
+        start_sec, end_sec = _parse_time_range(row.time)
+        scene_rows.append(
+            {
+                "scene_id": row.scene,
+                "time_range": row.time,
+                "start_sec": start_sec,
+                "end_sec": end_sec,
+                "target_sec": max(0, end_sec - start_sec),
+                "screen": row.screen,
+                "action": row.action,
+                "narration_ko": row.narration,
+                "tts_rate": float(row.tts_rate),
+                "subtitle_cue": row.subtitle_cue,
+            }
+        )
+    return {
+        "version": version,
+        "targetDurationSec": target_sec,
+        "scenes": scene_rows,
+    }
+
+
 def main() -> int:
     """CLI entrypoint."""
     args = parse_args()
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    scenario_map: Dict[str, str] = {
-        "scenario_short.md": _render("간소화(1분 이내)", args.short_target_sec, _build_rows(_short_seeds(), args.short_target_sec)),
-        "scenario_normal.md": _render("보통(2분)", args.normal_target_sec, _build_rows(_normal_seeds(), args.normal_target_sec)),
-        "scenario_detail.md": _render("디테일(3분 이상)", args.detail_target_sec, _build_rows(_detail_seeds(), args.detail_target_sec)),
-    }
+    version_specs = [
+        ("short", "간소화(1분 이내)", args.short_target_sec, _short_seeds()),
+        ("normal", "보통(2분)", args.normal_target_sec, _normal_seeds()),
+        ("detail", "디테일(3분 이상)", args.detail_target_sec, _detail_seeds()),
+    ]
 
-    for filename, content in scenario_map.items():
-        path = out_dir / filename
-        path.write_text(content, encoding="utf-8")
-        print(f"scenario generated: {path}")
+    for version, label, target_sec, seeds in version_specs:
+        rows = _build_rows(seeds, target_sec)
+        scenario_path = out_dir / f"scenario_{version}.md"
+        scenario_path.write_text(_render(label, target_sec, rows), encoding="utf-8")
+        print(f"scenario generated: {scenario_path}")
+
+        scene_plan = _build_scene_plan_payload(version=version, target_sec=target_sec, rows=rows)
+        scene_plan_path = out_dir / f"scene_plan_{version}.json"
+        scene_plan_path.write_text(json.dumps(scene_plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"scene plan generated: {scene_plan_path}")
 
     return 0
 

@@ -139,6 +139,7 @@ def _plan_scene(row: ScenarioRow) -> Dict[str, float | str]:
             "adjustment_step": "none",
             "cue_start": round(row.start_sec, 3),
             "cue_end": round(row.end_sec, 3),
+            "subtitle_cue": row.subtitle_cue,
         }
 
     base_rate = min(MAX_TTS_RATE, max(MIN_TTS_RATE, row.tts_rate_hint))
@@ -188,6 +189,7 @@ def _plan_scene(row: ScenarioRow) -> Dict[str, float | str]:
         "adjustment_step": adjustment_step,
         "cue_start": round(row.start_sec, 3),
         "cue_end": round(cue_end, 3),
+        "subtitle_cue": row.subtitle_cue,
     }
 
 
@@ -253,13 +255,47 @@ def main() -> int:
             ],
         }
 
+        sync_bundle_payload = {
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "version": version,
+            "sourceScenario": str(scenario_path),
+            "targetDurationSec": target_duration,
+            "policy": {
+                "syncToleranceSceneBoundarySec": 0.15,
+                "syncToleranceCaptionVoiceEndSec": 0.10,
+                "order": ["speed", "compression", "scene_extend"],
+            },
+            "scenes": [
+                {
+                    "scene_id": item["scene_id"],
+                    "target_sec": item["target_sec"],
+                    "tts_rate": item["tts_rate"],
+                    "speech_est_sec": item["speech_est_sec"],
+                    "speech_final_sec": item["speech_final_sec"],
+                    "scene_extend_budget_sec": item["overflow_sec"],
+                    "adjustment_step": item["adjustment_step"],
+                    "caption_cues": [
+                        {
+                            "text": item["subtitle_cue"],
+                            "start_sec": item["cue_start"],
+                            "end_sec": item["cue_end"],
+                        }
+                    ],
+                }
+                for item in scene_plans
+            ],
+        }
+
         tts_out = out_dir / f"tts_plan_{version}.json"
         caption_out = out_dir / f"caption_plan_{version}.json"
+        sync_bundle_out = out_dir / f"sync_bundle_{version}.json"
         _write_json(tts_out, tts_payload)
         _write_json(caption_out, caption_payload)
+        _write_json(sync_bundle_out, sync_bundle_payload)
 
         print(f"sync plan generated: {tts_out}")
         print(f"sync plan generated: {caption_out}")
+        print(f"sync bundle generated: {sync_bundle_out}")
 
     return 0
 
