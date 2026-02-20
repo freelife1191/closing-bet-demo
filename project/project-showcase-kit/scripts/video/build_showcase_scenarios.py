@@ -410,6 +410,7 @@ def _render(version_name: str, target_sec: int, rows: List[SceneRow]) -> str:
         f"- targetDurationSec: {target_sec}",
         "- ttsPolicy: seminar(4.4~4.8 syll/sec, default 4.6)",
         "- syncPolicy: speed -> compression -> scene_extend(no-cut)",
+        "- scriptPolicy: dual-script(ko,en-separated)",
         "",
         "| Scene | Time | Screen | Action | Narration | TTSRate | SubtitleCue |",
         "| --- | --- | --- | --- | --- | --- | --- |",
