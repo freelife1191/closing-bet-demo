@@ -271,12 +271,12 @@ class LLMAnalyzer:
         try:
             masked_key = api_key[:4] + "*" * 10 if api_key else "None"
             
-            # API Timeout: google-genai http_options uses seconds (float)
-            timeout_sec = float(app_config.ANALYSIS_LLM_API_TIMEOUT)
+            # API Timeout: google-genai http_options uses milliseconds (ms)
+            timeout_ms = float(app_config.ANALYSIS_LLM_API_TIMEOUT) * 1000
 
             self._client = genai.Client(
                 api_key=api_key,
-                http_options={'timeout': timeout_sec}
+                http_options={'timeout': timeout_ms}
             )
 
             self._retry_strategy = GeminiRetryStrategy(
@@ -285,7 +285,7 @@ class LLMAnalyzer:
             )
 
             model_name = app_config.ANALYSIS_GEMINI_MODEL
-            logger.info(f"Gemini LLM Client Initialized - Model: {model_name}, Timeout setting: {timeout_sec}s")
+            logger.info(f"Gemini LLM Client Initialized - Model: {model_name}, Timeout setting: {timeout_ms}ms")
 
         except Exception as e:
             logger.error(f"Gemini Init Failed: {e}")
