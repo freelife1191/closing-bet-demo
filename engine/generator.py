@@ -50,6 +50,22 @@ from engine.phases import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_total_candidates(total_candidates: Optional[int], filtered_count: int) -> int:
+    """후보/최종 개수 불변식(total_candidates >= filtered_count) 보장."""
+    base = int(total_candidates or 0)
+    final_count = int(filtered_count or 0)
+
+    if base < final_count:
+        logger.warning(
+            "[Counts] total_candidates(%s) < filtered_count(%s). "
+            "total_candidates를 filtered_count로 보정합니다.",
+            base,
+            final_count,
+        )
+        return final_count
+    return base
+
+
 class SignalGenerator:
     """종가베팅 시그널 생성기 (v2)"""
 
@@ -184,6 +200,14 @@ class SignalGenerator:
         markets = markets or ["KOSPI", "KOSDAQ"]
         all_signals = []
 
+        # 스캔 통계 초기화 (run 당 1회)
+        self.scan_stats = {
+            "scanned": 0,
+            "phase1": 0,
+            "phase2": 0,
+            "final": 0,
+        }
+
         # 탈락 통계 초기화
         self.drop_stats = {
             "low_trading_value": 0,
@@ -215,6 +239,13 @@ class SignalGenerator:
             # Toss 데이터 동기화 (Hybrid 모드)
             await self._sync_toss_data(candidates, target_date)
 
+            phase1_pass_before = 0
+            phase2_pass_before = 0
+            if self._pipeline and hasattr(self._pipeline, 'phase1'):
+                phase1_pass_before = self._pipeline.phase1.get_stats().get('passed', 0)
+            if self._pipeline and hasattr(self._pipeline, 'phase2'):
+                phase2_pass_before = self._pipeline.phase2.get_stats().get('passed', 0)
+
             # [REFACTORED] Use SignalGenerationPipeline
             try:
                 market_status = await self._get_market_status(target_date)
@@ -223,9 +254,6 @@ class SignalGenerator:
                     market_status=market_status,
                     target_date=target_date
                 )
-
-                # Update statistics from pipeline
-                self._update_pipeline_stats()
 
                 all_signals.extend(signals)
 
@@ -240,16 +268,25 @@ class SignalGenerator:
                 logger.error(f"[{market}] Pipeline execution failed: {e}")
                 print(f"  ✗ {market} 실패: {e}")
                 continue
+            finally:
+                if self._pipeline and hasattr(self._pipeline, 'phase1'):
+                    phase1_pass_after = self._pipeline.phase1.get_stats().get('passed', 0)
+                    self.scan_stats["phase1"] += max(0, phase1_pass_after - phase1_pass_before)
+                if self._pipeline and hasattr(self._pipeline, 'phase2'):
+                    phase2_pass_after = self._pipeline.phase2.get_stats().get('passed', 0)
+                    self.scan_stats["phase2"] += max(0, phase2_pass_after - phase2_pass_before)
 
         # 요약
         total_elapsed = time.time() - start_time
         logger.info(f"="*60)
         logger.info(f"[종가베팅] 전체 완료: {len(all_signals)}개 시그널 ({total_elapsed:.1f}초)")
         logger.info(f"="*60)
+        self.scan_stats["final"] = len(all_signals)
 
         # 파이프라인 통계 저장 (최종 누적)
         if self._pipeline:
             self.pipeline_stats = self._pipeline.get_pipeline_stats()
+            self.drop_stats = self.pipeline_stats.get('phase1', {}).get('drops', self.drop_stats)
 
         return all_signals
 
@@ -561,15 +598,19 @@ async def run_screener(
         signals.sort(key=sort_key_gen, reverse=True)
 
         # Phase 1 통과 수 집계
-        phase1_passed = 0
-        if hasattr(generator, 'pipeline_stats'):
+        phase1_passed = generator.scan_stats.get("phase1", 0)
+        if phase1_passed == 0 and hasattr(generator, 'pipeline_stats'):
+            # fallback for backward compatibility
             phase1_stats = generator.pipeline_stats.get('phase1', {}).get('stats', {})
-            phase1_passed = phase1_stats.get('passed', 0)
+            phase1_passed = int(phase1_stats.get('passed', 0))
+
+        filtered_count = len(signals)
+        total_candidates = _normalize_total_candidates(phase1_passed, filtered_count)
 
         result = ScreenerResult(
             date=parsed_date if parsed_date else date.today(),
-            total_candidates=phase1_passed,  # 1차 필터 통과 수 (CANDIDATES)
-            filtered_count=len(signals),     # 최종 선정 수 (FILTERED)
+            total_candidates=total_candidates,  # 1차 필터 통과 수 (CANDIDATES)
+            filtered_count=filtered_count,      # 최종 선정 수 (FILTERED)
             scanned_count=generator.scan_stats.get("scanned", 0),
             signals=signals,
             by_grade=summary["by_grade"],

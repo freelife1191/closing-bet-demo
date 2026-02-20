@@ -107,7 +107,7 @@ class Phase1Analyzer(BasePhase):
         Returns:
             필터링된 후보 리스트 (dict 형태)
         """
-        self.stats["processed"] = len(candidates)
+        self.stats["processed"] += len(candidates)
         results = []
 
         for i, stock in enumerate(candidates):
@@ -132,7 +132,7 @@ class Phase1Analyzer(BasePhase):
         logger.info(
             f"[Phase 1] Complete: {self.stats['passed']} passed, "
             f"{self.stats['failed']} failed (Drops: TV={self.drop_stats['low_trading_value']}, "
-            f"Grade={self.drop_stats['grade_fail']})"
+            f"Grade={self.drop_stats['grade_fail']}, Other={self.drop_stats['other']})"
         )
 
         return results
@@ -263,7 +263,7 @@ class Phase2NewsCollector(BasePhase):
         Returns:
             뉴스가 추가된 리스트
         """
-        self.stats["processed"] = len(items)
+        self.stats["processed"] += len(items)
         results = []
 
         for item in items:
@@ -345,7 +345,7 @@ class Phase3LLMAnalyzer(BasePhase):
         Returns:
             {종목명: {score, action, confidence, reason}} 형태의 dict
         """
-        self.stats["processed"] = len(items)
+        self.stats["processed"] += len(items)
 
         if not self.llm_analyzer.client or not items:
             logger.info("[Phase 3] Skipped: No LLM client or items")
@@ -458,7 +458,7 @@ class Phase4SignalFinalizer(BasePhase):
         Returns:
             최종 시그널 리스트
         """
-        self.stats["processed"] = len(items)
+        self.stats["processed"] += len(items)
         signals = []
 
         for item in items:

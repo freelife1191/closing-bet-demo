@@ -15,7 +15,8 @@ export default function Header() {
       'Data status': '데이터 상태',
       'Vcp': 'VCP 시그널',
       'Closing bet': '종가베팅',
-      'Chatbot': 'AI 상담'
+      'Chatbot': 'AI 상담',
+      'Cumulative': '누적 성과'
     };
 
     return (

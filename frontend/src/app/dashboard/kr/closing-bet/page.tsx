@@ -921,6 +921,8 @@ export default function JonggaV2Page() {
 
   const filteredSignals = getFilteredSignals();
   const matchCount = filteredSignals.length;
+  const candidatesCount = data?.total_candidates ?? 0;
+  const filteredCount = data?.filtered_count ?? data?.signals?.length ?? 0;
 
   const handleRetryAnalysis = async (stockCode: string) => {
     if (!isAdmin) {
@@ -1073,8 +1075,8 @@ export default function JonggaV2Page() {
 
       <div className="flex flex-col gap-6 pb-6 border-b border-white/5">
         <div className="flex gap-6">
-          <StatBox label="CANDIDATES" value={data?.filtered_count || 0} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
-          <StatBox label="FILTERED" value={data?.total_candidates || 0} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
+          <StatBox label="CANDIDATES" value={candidatesCount} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
+          <StatBox label="FILTERED" value={filteredCount} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
           <DataStatusBox
             updatedAt={data?.updated_at || null}
             analyzingGemini={analyzingGemini}

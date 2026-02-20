@@ -28,7 +28,7 @@
 
 ### 3. Multi-Model AI Cross-Validation (이중 검증)
 - **Gemini**: 긴 문맥(Context) 이해와 심층 추론을 담당하여 상세한 투자 리포트를 작성합니다.
-- **GPT/Perplexity**: Gemini의 분석 결과를 제3자 관점에서 검증(Critic)하여 편향(Bias)을 제거합니다.
+- **GPT/Perplexity**: VCP 분석에서는 `VCP_SECOND_PROVIDER` 설정에 따라 Gemini의 보조 검증 모델로 동작합니다.
 
 ---
 
@@ -72,10 +72,11 @@ PERPLEXITY_API_KEY=your_perplexity_key_here
 ZAI_API_KEY=your_zai_key_here
 
 # VCP AI 설정
-VCP_AI_PROVIDERS=gemini,gpt,perplexity
-VCP_GEMINI_MODEL=gemini-2.5-flash
-VCP_GPT_MODEL=gpt-4o
-VCP_PERPLEXITY_MODEL=sonar-pro
+VCP_AI_PROVIDERS=gemini,gpt
+VCP_SECOND_PROVIDER=gpt         # gpt 또는 perplexity 중 1개 선택
+VCP_GEMINI_MODEL=gemini-2.0-flash
+VCP_GPT_MODEL=gpt-5-nano
+VCP_PERPLEXITY_MODEL=sonar
 
 # 스케줄러 시간 설정 (KST)
 CLOSING_SCHEDULE_TIME=16:00
@@ -175,8 +176,8 @@ graph TD
 
 | 설계 원칙                       | 적용 방식                                                | 이유                                            |
 | ------------------------------- | -------------------------------------------------------- | ----------------------------------------------- |
-| **Multi-Model AI Verification** | Gemini와 GPT/Perplexity를 병렬로 실행하여 결과 교차 검증 | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
-| **Async Batch Processing**      | `asyncio`와 `Semaphore`로 동시에 5~10개 종목 뉴스 분석   | API 호출 시간 최적화, Rate Limit 방지           |
+| **Multi-Model AI Verification** | Gemini + 설정된 보조모델(GPT 또는 Perplexity) 병렬 실행  | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
+| **Async Batch Processing**      | `asyncio` + `Semaphore`로 환경변수 기반 동시성 제어       | API 호출 시간 최적화, Rate Limit 방지           |
 | **Market Gate Pattern**         | 개별 종목 분석 전 시장 전체 상태 먼저 점검               | 하락장에서의 무분별한 매수 방지, 계좌 보호      |
 | **Chain Execution Pattern**     | 데이터 수집 → VCP 분석 → AI 종가베팅 순차 실행           | 데이터 정합성 보장 및 분석 단계별 의존성 해결   |
 | **Persona-Based Prompting**     | 일관된 투자 철학(스마트머니봇)을 시스템 프롬프트에 탑재  | AI 응답의 편차 최소화, 신뢰할 수 있는 조언 생성 |
@@ -469,7 +470,8 @@ frontend/src/app/
 
 ### 1. Multi-Model AI Engine Architecture
 
-서로 다른 특성을 가진 세 가지 모델을 **하이브리드로 운용**하여 비용 효율성, 최신성, 분석 깊이를 동시에 달성했습니다.
+서로 다른 특성을 가진 모델을 역할별로 분리해 운용합니다.  
+VCP 분석은 **Gemini + (GPT 또는 Perplexity 중 1개)** 조합으로 실행되고, 결과는 모델별 필드로 분리 저장됩니다.
 
 | 모델           | 역할                           | 사용 시나리오                                                 | 장점                                                              |
 | -------------- | ------------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -482,19 +484,17 @@ frontend/src/app/
 ```mermaid
 graph LR
     A[Input Data] --> B[Gemini Analysis]
-    A --> C[GPT/Perplexity Analysis]
-    B --> D{Result Agreement?}
-    C --> D
-    D -->|Yes| E[Average Confidence]
-    D -->|No| F[Higher Confidence Model]
-    E --> G[Final Recommendation]
-    F --> G
+    A --> C[Secondary Analysis\nGPT or Perplexity]
+    B --> D[gemini_recommendation]
+    C --> E[gpt_recommendation or\nperplexity_recommendation]
+    D --> F[Persist to JSON/API]
+    E --> F
 ```
 
-**검증 규칙:**
-1. **일치(Agreement)**: 두 AI의 액션(BUY/SELL/HOLD)이 일치하면 → `신뢰도 평균`
-2. **불일치(Disagreement)**: 더 높은 신뢰도(Confidence)를 가진 모델 선택 (동점 시 Gemini 우선)
-3. **실패(Fallback)**: 한쪽 API 실패 시 다른 쪽 결과 사용
+**검증 규칙 (VCP 기준):**
+1. Gemini는 기본 분석 모델로 실행됩니다.
+2. 보조 모델은 `VCP_SECOND_PROVIDER` 값(`gpt` 또는 `perplexity`)에 따라 1개만 실행됩니다.
+3. 결과는 자동 합의(평균/우선선택) 없이 모델별로 저장되며, 프론트엔드에서 탭으로 비교합니다.
 
 ### Concurrency Architecture
 Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)으로 동작하는 LLM 클라이언트 라이브러리들을 비동기 논블로킹(Non-blocking) 환경에서 병렬 실행합니다.
@@ -502,9 +502,9 @@ Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)
 *   **구현 파일**: `engine/vcp_ai_analyzer.py`
 *   **작동 방식**:
     1.  `VCPMultiAIAnalyzer`가 분석 요청을 수신합니다.
-    2.  **Gemini**와 **GPT/Perplexity** 분석 작업을 각각의 스레드 풀로 위임(`loop.run_in_executor`)합니다.
-    3.  두 모델이 동시에 추론을 수행하며, 가장 먼저 도착하거나 타임아웃 내에 도착한 응답을 수집합니다.
-    4.  **Consensus Logic**: 두 모델의 의견이 일치(Agree)하면 신뢰도 점수를 상향하고, 불일치(Disagree)하면 더 보수적인 의견을 채택합니다.
+    2.  **Gemini/GPT**는 스레드 풀(`loop.run_in_executor`)로 실행하고, **Perplexity**는 `httpx.AsyncClient`로 비동기 호출합니다.
+    3.  두 모델이 동시에 추론을 수행하고 응답을 개별 필드에 저장합니다.
+    4.  합의 점수 산출 없이 `gemini_recommendation`, `gpt_recommendation`, `perplexity_recommendation` 형태로 반환합니다.
 
 ---
 
@@ -540,7 +540,7 @@ SYSTEM_PERSONA = """너는 VCP 기반 한국 주식 투자 어드바이저 '스�
 ## 🔥 RAG 데이터 활용 지침 (최우선 준수)
 **아래 [데이터] 섹션에 제공되는 정보를 반드시 우선적으로 참고하여 답변해야 해:**
 1. **[Market Gate 상세 분석]**: 시장 상태, 점수, 섹터 동향 → 시장 질문에 활용
-2. **[VCP AI 분석 결과]**: Gemini/Perplexity AI 분석, 매수/매도 추천 → 종목 추천에 활용
+2. **[VCP AI 분석 결과]**: Gemini/GPT/Perplexity AI 분석(설정 기반), 매수/매도 추천 → 종목 추천에 활용
 3. **[종가베팅 추천 종목]**: S/A급 종목, 점수, AI 분석 → 종가베팅 질문에 활용
 4. **[최근 뉴스]**: 수집된 최신 뉴스 제목 → 뉴스/이슈 질문에 활용
 
@@ -578,7 +578,7 @@ SYSTEM_PERSONA = """너는 VCP 기반 한국 주식 투자 어드바이저 '스�
 | **`closing_bet`**     | **종가베팅**    | S/A급 종목 우선 추천, 15:20분 진입 전략 가이드                             |
 | **`risk_check`**      | **리스크 관리** | 구체적인 손절가(-5%) 제시, 포지션 비중 조절 및 거시 위험 대응              |
 | **`market_gate`**     | **시장 신호등** | 시장 상태(GREEN/YELLOW/RED)별 구체적 비중 및 공격성 조절 가이드            |
-| **`vcp_analysis`**    | **VCP 시그널**  | Gemini/Perplexity AI 추천 결과 분석, VCP 점수 및 수축 비율 설명            |
+| **`vcp_analysis`**    | **VCP 시그널**  | Gemini/GPT/Perplexity AI 추천 결과 분석, VCP 점수 및 수축 비율 설명        |
 | **`news_analysis`**   | **뉴스 분석**   | 최근 뉴스 데이터(제목/출처) 기반 인용, 종목 영향력 및 호재/악재 평가       |
 
 **A. 뉴스 감성 분석 프롬프트 (News Sentiment Analysis)**
@@ -855,10 +855,9 @@ INVESTMENT_HYPOTHESIS = """
 
 시장의 거시적/미시적 데이터를 정량화하여 **"매수 버튼을 활성화할지"** 결정하는 최상위 관문입니다. 코드 레벨(`engine/market_gate.py`)에서 구현된 실제 스코어링 로직은 다음과 같습니다.
 
-*   **총점 100점 만점** (60점 이상 Open)
+*   **총점 100점 만점** (40점 이상 Open)
 
 | 카테고리      | 지표       | 상세 조건                       | 배점     | 비고                              |
-| 카테고리      | 지표       | 상세 조건                       | 배점     | 비고               |
 | ------------- | ---------- | ------------------------------- | -------- | ------------------ |
 | **Technical** | **Trend**  | KODEX 200 20일 > 60일 (정배열)  | **25점** | 추세 추종          |
 | **(100점)**   | **RSI**    | RSI 14일 기준 50~70 구간 (강세) | **25점** | 과매수/과매도 회피 |
@@ -920,7 +919,7 @@ def evaluate_market_gate():
         return MarketStatus.GATE_CLOSED, f"{score}점: 매수 보류"
 ```
 
-#### 1.3 Rule-Based Scorer (12점 점수 시스템)
+#### 1.3 Rule-Based Scorer (기본 12점 + 가산 7점)
 `engine/scorer.py`는 AI 분석 전, 순수 데이터 기반으로 종목의 기술적/수급적 완성도를 평가합니다.
 
 - **기본 점수 (Max 12점)**:
@@ -935,7 +934,6 @@ def evaluate_market_gate():
   - **S급**: 거래대금 1조+ / 10점+ / +3% 이상 (풀배팅)
   - **A급**: 거래대금 5000억+ / 8점+ / +3% 이상 (기본배팅)
   - **B급**: 거래대금 1000억+ / 6점+ / +3% 이상 (절반배팅)
-```
 
 #### 1.3 왜 Market Gate가 필요한가?
 
@@ -1155,7 +1153,7 @@ vcp_conditions = {
 - **Entry Price 대비 수익률**: 진입가 대비 현재 수익률을 실시간으로 계산하여 표시합니다.
 
 ** B. AI 심층 분석 및 뉴스 연동 (AI & News)**
-- **Multi-Model Analysis**: Gemini(심층 추론), Perplexity(실시간 정보), GPT(검증) 3가지 모델이 종목을 다각도로 분석합니다.
+- **Multi-Model Analysis**: VCP는 Gemini(주분석) + 보조모델 1개(GPT 또는 Perplexity) 조합으로 실행되며, 모델별 결과를 비교합니다.
 - **뉴스 자동 수집**: `EnhancedNewsCollector`가 각 시그널 발생 종목의 최신 뉴스를 자동으로 수집하여 AI에게 제공합니다.
 - **AI 추천 배지**: AI의 분석 결과(매수/관망/매도)를 직관적인 배지로 시각화하여 제공합니다.
 

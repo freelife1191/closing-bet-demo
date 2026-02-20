@@ -22,6 +22,12 @@ interface Trade {
   themes: string[];
 }
 
+interface GradeRoiData {
+  count: number;
+  avgRoi: number;
+  totalRoi: number;
+}
+
 interface KPIData {
   totalSignals: number;
   winRate: number;
@@ -30,6 +36,11 @@ interface KPIData {
   open: number;
   avgRoi: number;
   totalRoi: number;
+  roiByGrade: {
+    S: GradeRoiData;
+    A: GradeRoiData;
+    B: GradeRoiData;
+  };
   avgDays: number;
   priceDate: string;
   profitFactor: number;
@@ -72,15 +83,15 @@ const TOOLTIP_CONTENT = {
   },
   avgRoi: {
     title: "평균 수익률 (Average ROI)",
-    desc: "모든 청산(익절/손절) 건의 수익률을 단순 평균한 값입니다.",
-    criteria: "(총 수익률 합계) / (청산된 매매 횟수)",
-    interpretation: "양수(+)를 유지해야 계좌가 성장합니다. 손익비 관리가 잘 되고 있는지 보여줍니다."
+    desc: "S/A/B 등급별 평균 수익률을 동시에 보여줍니다.",
+    criteria: "각 등급별 (등급 총 수익률 합계) / (등급 매매 수)",
+    interpretation: "S/A/B의 평균 수익률을 비교해 어떤 등급이 실제 수익에 기여하는지 확인할 수 있습니다."
   },
   totalRoi: {
     title: "누적 수익률 (Total ROI)",
-    desc: "초기 자본금 대비 현재까지 발생한 총 수익률의 합계(단리)입니다.",
-    criteria: "모든 개별 매매 수익률의 단순 합산",
-    interpretation: "복리 효과를 적용하면 실제 계좌 수익률은 더 높을 수 있습니다."
+    desc: "S/A/B 등급별 누적 수익률을 동시에 보여줍니다.",
+    criteria: "각 등급의 개별 매매 수익률 단순 합산",
+    interpretation: "S/A/B별 누적 수익률을 비교하면 전체 성과에서 등급별 기여도를 명확하게 볼 수 있습니다."
   },
   avgDays: {
     title: "평균 보유일 (Average Days)",
@@ -335,14 +346,14 @@ function renderStatTooltip(key: keyof typeof TOOLTIP_CONTENT, kpi: KPIData) {
 }
 
 
-function StatCard({ title, value, colorClass = 'text-white', subtext, kpi, tooltipKey }: { title: string, value: string | number, colorClass?: string, subtext?: string, kpi?: KPIData, tooltipKey?: keyof typeof TOOLTIP_CONTENT }) {
+function StatCard({ title, value, colorClass = 'text-white', subtext, kpi, tooltipKey, valueClassName = 'text-2xl' }: { title: string, value: React.ReactNode, colorClass?: string, subtext?: string, kpi?: KPIData, tooltipKey?: keyof typeof TOOLTIP_CONTENT, valueClassName?: string }) {
   const content = (
     <div className="bg-[#1c1c1e] p-4 rounded-xl border border-white/5 flex flex-col justify-between h-24 hover:border-white/20 transition-colors relative group cursor-help">
       <div className="flex justify-between items-start">
         <div className="text-[10px] text-gray-500 font-bold tracking-wider uppercase">{title}</div>
         {tooltipKey && <i className="fas fa-question-circle text-gray-700 text-[10px] group-hover:text-gray-500 transition-colors"></i>}
       </div>
-      <div className={`text-2xl font-bold ${colorClass}`}>{value}</div>
+      <div className={`${valueClassName} font-bold ${colorClass}`}>{value}</div>
       {subtext && <div className="text-xs text-gray-500">{subtext}</div>}
     </div>
   );
@@ -855,6 +866,13 @@ function TradeTable({ trades }: { trades: Trade[] }) {
 }
 
 export default function CumulativeClientPage() {
+  const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
+  const createEmptyRoiByGrade = () => ({
+    S: { count: 0, avgRoi: 0, totalRoi: 0 },
+    A: { count: 0, avgRoi: 0, totalRoi: 0 },
+    B: { count: 0, avgRoi: 0, totalRoi: 0 }
+  });
+
   const [outcomeFilter, setOutcomeFilter] = useState('All');
   const [gradeFilter, setGradeFilter] = useState('All');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -868,6 +886,7 @@ export default function CumulativeClientPage() {
     open: 0,
     avgRoi: 0,
     totalRoi: 0,
+    roiByGrade: createEmptyRoiByGrade(),
     avgDays: 0,
     priceDate: '-',
     profitFactor: 0
@@ -889,7 +908,16 @@ export default function CumulativeClientPage() {
         const res = await fetch(`/api/kr/closing-bet/cumulative?page=${currentPage}&limit=${itemsPerPage}`);
         if (!res.ok) throw new Error('Failed to fetch data');
         const data = await res.json();
-        setKpi(data.kpi);
+        const emptyRoiByGrade = createEmptyRoiByGrade();
+        const apiRoiByGrade = data.kpi?.roiByGrade || {};
+        setKpi({
+          ...data.kpi,
+          roiByGrade: {
+            S: { ...emptyRoiByGrade.S, ...(apiRoiByGrade.S || {}) },
+            A: { ...emptyRoiByGrade.A, ...(apiRoiByGrade.A || {}) },
+            B: { ...emptyRoiByGrade.B, ...(apiRoiByGrade.B || {}) }
+          }
+        });
         setPagination(data.pagination);
         // D등급 제외 필터링 (Server should handle this ideally, but keeping frontend filter for safety/consistency)
         const filtered = (data.trades || []).filter((t: Trade) => t.grade !== 'D');
@@ -997,13 +1025,39 @@ export default function CumulativeClientPage() {
         <StatCard title="성공" value={kpi.wins} colorClass="text-emerald-400" tooltipKey="wins" kpi={kpi} />
         <StatCard title="실패" value={kpi.losses} colorClass="text-rose-400" tooltipKey="losses" kpi={kpi} />
         <StatCard title="보유중" value={kpi.open} colorClass="text-yellow-500" tooltipKey="open" kpi={kpi} />
-        <StatCard title="평균 수익률" value={`${kpi.avgRoi > 0 ? '+' : ''}${kpi.avgRoi}%`} colorClass={kpi.avgRoi >= 0 ? "text-emerald-400" : "text-rose-400"} tooltipKey="avgRoi" kpi={kpi} />
+        <StatCard
+          title="평균 수익률 (S/A/B)"
+          value={
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm font-semibold leading-tight">
+              <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.avgRoi)}</span>
+              <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.avgRoi)}</span>
+              <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.avgRoi)}</span>
+            </div>
+          }
+          valueClassName="text-sm leading-tight"
+          colorClass="text-white"
+          tooltipKey="avgRoi"
+          kpi={kpi}
+        />
       </div>
 
 
       {/* Metric Cards - Row 2 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard title="누적 수익률" value={`${kpi.totalRoi > 0 ? '+' : ''}${kpi.totalRoi}%`} colorClass={kpi.totalRoi >= 0 ? "text-emerald-400" : "text-rose-400"} tooltipKey="totalRoi" kpi={kpi} />
+        <StatCard
+          title="누적 수익률 (S/A/B)"
+          value={
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm font-semibold leading-tight">
+              <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.totalRoi)}</span>
+              <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.totalRoi)}</span>
+              <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.totalRoi)}</span>
+            </div>
+          }
+          valueClassName="text-sm leading-tight"
+          colorClass="text-white"
+          tooltipKey="totalRoi"
+          kpi={kpi}
+        />
         <StatCard title="평균 보유일" value={kpi.avgDays} tooltipKey="avgDays" kpi={kpi} />
         <StatCard title="데이터 기준일" value={kpi.priceDate} />
         <StatCard title="손익비 (Profit Factor)" value={kpi.profitFactor} colorClass="text-cyan-400" tooltipKey="profitFactor" kpi={kpi} />

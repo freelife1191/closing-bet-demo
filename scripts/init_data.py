@@ -1616,13 +1616,15 @@ def create_signals_log(target_date=None, run_ai=True):
             return True
             
     except Exception as e:
-        log(f"VCP 분석 실패: {e}", "WARNING")
+        log(f"VCP 분석 실패: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
         # 빈 결과 파일 생성 (샘플 데이터 생성 안함)
         df = pd.DataFrame(columns=['ticker', 'name', 'signal_date', 'market', 'status', 'score', 'contraction_ratio', 'entry_price', 'foreign_5d', 'inst_5d'])
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
         df.to_csv(file_path, index=False, encoding='utf-8-sig')
         log("VCP 분석 오류 - 빈 결과 저장", "INFO")
-        return True
+        return False
 
 
 
@@ -2048,123 +2050,150 @@ def send_jongga_notification():
         from datetime import datetime
         
         data_file = os.path.join(BASE_DIR, 'data', 'jongga_v2_latest.json')
-        
-        if os.path.exists(data_file):
-            with open(data_file, 'r', encoding='utf-8') as f:
-                file_data = json.load(f)
-            
-            if file_data and file_data.get('signals'):
-                # 객체 복원 (Messenger 호환성)
-                signals = []
-                for i, s in enumerate(file_data.get('signals', [])):
-                    # ScoreDetail 복원 (total 포함)
-                    sc = s.get('score', {})
-                    score_obj = ScoreDetail(**sc)
-                    
-                    # ChecklistDetail 복원
-                    cl = s.get('checklist', {})
-                    checklist_obj = ChecklistDetail(**cl)
-                    
-                    # 날짜/시간
-                    try:
-                        sig_date = datetime.strptime(s.get('signal_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
-                    except:
-                        sig_date = datetime.now().date()
-                        
-                    try:
-                        created_at = datetime.fromisoformat(s.get('created_at', datetime.now().isoformat()))
-                    except:
-                        created_at = datetime.now()
-                    
-                    # Enum 처리
-                    grade_val = s.get('grade')
-                    if isinstance(grade_val, str):
-                        try:
-                            grade = Grade(grade_val)
-                        except:
-                            grade = grade_val
-                    
-                    status_val = s.get('status', 'waiting')
-                    if isinstance(status_val, str):
-                        try:
-                            status = SignalStatus(status_val)
-                        except:
-                            status = SignalStatus.PENDING
-                    
-                    target_price = s.get('target_price', 0)
-                    if target_price == 0:
-                        target_price = s.get('target_price_1', 0)
+        messenger = Messenger()
 
-                    signal_obj = Signal(
-                        stock_code=s['stock_code'],
-                        stock_name=s['stock_name'],
-                        market=s.get('market', ''),
-                        sector=s.get('sector', ''),
-                        signal_date=sig_date,
-                        signal_time=datetime.now(),
-                        grade=grade,
-                        score=score_obj,
-                        checklist=checklist_obj,
-                        news_items=s.get('news_items', []),
-                        current_price=s.get('current_price', 0.0),
-                        entry_price=s.get('entry_price', 0),
-                        stop_price=s.get('stop_price', 0),
-                        target_price=target_price,
-                        r_value=s.get('r_value', 0.0),
-                        position_size=s.get('position_size', 0.0),
-                        quantity=s.get('quantity', 0),
-                        r_multiplier=s.get('r_multiplier', 0.0),
-                        trading_value=s.get('trading_value', 0),
-                        change_pct=s.get('change_pct', 0.0),
-                        status=status,
-                        created_at=created_at,
-                        volume_ratio=s.get('volume_ratio', 0.0),
-                        themes=s.get('themes', []),
-                        score_details=s.get('score_details', {})
-                    )
-                    signals.append(signal_obj)
-                    
-                # ScreenerResult 생성
-                res_date = datetime.now().date()
+        if not os.path.exists(data_file):
+            log(f"종가베팅 결과 파일이 없습니다: {data_file}", "WARNING")
+            messenger.send_custom_message(
+                title="⚠️ 종가베팅 알림 실패",
+                message=f"결과 파일을 찾지 못했습니다.\n경로: {data_file}"
+            )
+            return
+        
+        with open(data_file, 'r', encoding='utf-8') as f:
+            file_data = json.load(f)
+
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        if isinstance(file_data, dict) and file_data.get('date'):
+            date_str = str(file_data.get('date'))
+
+        if file_data and file_data.get('signals'):
+            # 객체 복원 (Messenger 호환성)
+            signals = []
+            for s in file_data.get('signals', []):
+                # ScoreDetail 복원 (total 포함)
+                sc = s.get('score', {})
+                score_obj = ScoreDetail(**sc)
+                
+                # ChecklistDetail 복원
+                cl = s.get('checklist', {})
+                checklist_obj = ChecklistDetail(**cl)
+                
+                # 날짜/시간
                 try:
-                    date_val = file_data.get('date')
-                    if date_val:
-                        res_date = datetime.strptime(date_val, '%Y-%m-%d').date()
+                    sig_date = datetime.strptime(
+                        s.get('signal_date', datetime.now().strftime('%Y-%m-%d')),
+                        '%Y-%m-%d'
+                    ).date()
                 except:
-                    pass
+                    sig_date = datetime.now().date()
+                    
+                try:
+                    created_at = datetime.fromisoformat(s.get('created_at', datetime.now().isoformat()))
+                except:
+                    created_at = datetime.now()
                 
-                # Calculate statistics if missing
-                by_grade = file_data.get('by_grade', {})
-                if not by_grade:
-                    from collections import Counter
-                    grades = [str(s.grade.value if hasattr(s.grade, 'value') else s.grade) for s in signals]
-                    by_grade = dict(Counter(grades))
-                    
-                by_market = file_data.get('by_market', {})
-                if not by_market:
-                    from collections import Counter
-                    markets = [s.market for s in signals]
-                    by_market = dict(Counter(markets))
-                    
-                result = ScreenerResult(
-                    date=res_date,
-                    total_candidates=file_data.get('total_candidates', 0),
-                    filtered_count=len(signals),
-                    scanned_count=file_data.get('scanned_count', 0),
-                    signals=signals,
-                    by_grade=by_grade,
-                    by_market=by_market,
-                    processing_time_ms=file_data.get('processing_time_ms', 0.0),
-                    market_status=file_data.get('market_status'),
-                    market_summary=file_data.get('market_summary', ""),
-                    trending_themes=file_data.get('trending_themes', [])
+                # Enum 처리
+                grade = Grade.B
+                grade_val = s.get('grade')
+                if isinstance(grade_val, Grade):
+                    grade = grade_val
+                elif isinstance(grade_val, str):
+                    try:
+                        grade = Grade(grade_val.strip().upper())
+                    except Exception:
+                        grade = Grade.B
+
+                status = SignalStatus.PENDING
+                status_val = s.get('status', 'PENDING')
+                if isinstance(status_val, SignalStatus):
+                    status = status_val
+                elif isinstance(status_val, str):
+                    try:
+                        status = SignalStatus(status_val.strip().upper())
+                    except Exception:
+                        status = SignalStatus.PENDING
+                
+                target_price = s.get('target_price', 0)
+                if target_price == 0:
+                    target_price = s.get('target_price_1', 0)
+
+                signal_obj = Signal(
+                    stock_code=s['stock_code'],
+                    stock_name=s['stock_name'],
+                    market=s.get('market', ''),
+                    sector=s.get('sector', ''),
+                    signal_date=sig_date,
+                    signal_time=datetime.now(),
+                    grade=grade,
+                    score=score_obj,
+                    checklist=checklist_obj,
+                    news_items=s.get('news_items', []),
+                    current_price=s.get('current_price', 0.0),
+                    entry_price=s.get('entry_price', 0),
+                    stop_price=s.get('stop_price', 0),
+                    target_price=target_price,
+                    r_value=s.get('r_value', 0.0),
+                    position_size=s.get('position_size', 0.0),
+                    quantity=s.get('quantity', 0),
+                    r_multiplier=s.get('r_multiplier', 0.0),
+                    trading_value=s.get('trading_value', 0),
+                    change_pct=s.get('change_pct', 0.0),
+                    status=status,
+                    created_at=created_at,
+                    volume_ratio=s.get('volume_ratio', 0.0),
+                    themes=s.get('themes', []),
+                    score_details=s.get('score_details', {})
                 )
+                signals.append(signal_obj)
                 
-                messenger = Messenger()
-                messenger.send_screener_result(result)
-                log(f"알림 발송 완료: {len(signals)}개 신호", "SUCCESS")
-            else:
-                log("발송할 신호 없음 (0개)", "INFO")
+            # ScreenerResult 생성
+            res_date = datetime.now().date()
+            try:
+                date_val = file_data.get('date')
+                if date_val:
+                    res_date = datetime.strptime(date_val, '%Y-%m-%d').date()
+            except:
+                pass
+            
+            # Calculate statistics if missing
+            by_grade = file_data.get('by_grade', {})
+            if not by_grade:
+                from collections import Counter
+                grades = [str(s.grade.value if hasattr(s.grade, 'value') else s.grade) for s in signals]
+                by_grade = dict(Counter(grades))
+                
+            by_market = file_data.get('by_market', {})
+            if not by_market:
+                from collections import Counter
+                markets = [s.market for s in signals]
+                by_market = dict(Counter(markets))
+                
+            result = ScreenerResult(
+                date=res_date,
+                total_candidates=file_data.get('total_candidates', 0),
+                filtered_count=len(signals),
+                scanned_count=file_data.get('scanned_count', 0),
+                signals=signals,
+                by_grade=by_grade,
+                by_market=by_market,
+                processing_time_ms=file_data.get('processing_time_ms', 0.0),
+                market_status=file_data.get('market_status'),
+                market_summary=file_data.get('market_summary', ""),
+                trending_themes=file_data.get('trending_themes', [])
+            )
+            
+            messenger.send_screener_result(result)
+            log(f"알림 발송 완료: {len(signals)}개 신호", "SUCCESS")
+        else:
+            messenger.send_custom_message(
+                title=f"📊 종가베팅 ({date_str}) - 신호 없음",
+                message=(
+                    f"{date_str} 종가베팅 분석이 완료되었습니다.\n"
+                    "선별된 신호가 0건이라 상세 시그널은 없습니다."
+                )
+            )
+            log("발송할 신호 없음 (0개) - 실행 결과 알림 발송", "INFO")
                 
     except Exception as notify_error:
         log(f"알림 발송 중 오류: {notify_error}", "ERROR")
@@ -2405,4 +2434,3 @@ if __name__ == '__main__':
             log("전체 데이터 초기화 완료!", "SUCCESS")
     else:
         main()
-

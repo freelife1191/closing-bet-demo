@@ -9,6 +9,7 @@ Created: 2024-12-01
 Refactored: 2025-02-11 (Phase 4)
 """
 import logging
+import re
 from typing import Optional, List, Dict
 
 from engine.models import (
@@ -193,21 +194,83 @@ class Scorer:
 
         has_news = news is not None and len(news) > 0
         sources = [n.source for n in news] if news else []
+        has_relevant_news = self._has_relevant_news(news, stock)
+        fallback_score = self._fallback_news_score_by_trading_value(
+            stock.trading_value if stock else 0
+        )
 
         news_score = llm_score
         if has_news and news_score == 0:
             news_score = 1
 
+        # 종목과 무관한 헤드라인만 수집된 경우, LLM 저점수로 과도하게 깎이지 않도록 보정
+        if has_news and stock and not has_relevant_news:
+            news_score = max(news_score, fallback_score)
+
         # 2. Fallback: 뉴스가 없어도 거래대금이 크면 점수 부여
         if news_score == 0 and stock:
-            if stock.trading_value >= TRADING_VALUES.NEWS_FALLBACK_S:  # 5000억
-                news_score = 3
-            elif stock.trading_value >= TRADING_VALUES.NEWS_FALLBACK_A:  # 1000억
-                news_score = 2
-            elif stock.trading_value >= TRADING_VALUES.NEWS_FALLBACK_B:  # 500억
-                news_score = 1
+            news_score = fallback_score
 
         return min(3, news_score), has_news, sources, llm_reason
+
+    @staticmethod
+    def _normalize_news_text(text: str) -> str:
+        """종목명/제목 매칭용 텍스트 정규화."""
+        if not text:
+            return ""
+        return re.sub(r"[^0-9A-Za-z가-힣]", "", text).lower()
+
+    def _build_stock_aliases(self, stock_name: str) -> List[str]:
+        """우선주 접미사 등을 제거한 종목명 별칭 집합 생성."""
+        normalized = self._normalize_news_text(stock_name)
+        if not normalized:
+            return []
+
+        aliases = {normalized}
+
+        # 예: 삼성전자우, 미래에셋증권2우B -> 삼성전자, 미래에셋증권
+        preferred_base = re.sub(r"(?:[0-9]+)?우(?:[a-z])?$", "", normalized, flags=re.IGNORECASE)
+        if preferred_base:
+            aliases.add(preferred_base)
+
+        if normalized.endswith("우") and len(normalized) > 1:
+            aliases.add(normalized[:-1])
+
+        return [alias for alias in aliases if len(alias) >= 2]
+
+    def _has_relevant_news(
+        self,
+        news: Optional[List[NewsItem]],
+        stock: Optional[StockData],
+    ) -> bool:
+        """뉴스 제목에 종목명(또는 우선주 제거 별칭) 포함 여부 판정."""
+        if not news:
+            return False
+
+        if not stock or not stock.name:
+            return True
+
+        aliases = self._build_stock_aliases(stock.name)
+        if not aliases:
+            return True
+
+        for item in news:
+            title = self._normalize_news_text(item.title if item else "")
+            if title and any(alias in title for alias in aliases):
+                return True
+
+        return False
+
+    @staticmethod
+    def _fallback_news_score_by_trading_value(trading_value: float) -> int:
+        """거래대금 기반 뉴스 점수 보정."""
+        if trading_value >= TRADING_VALUES.NEWS_FALLBACK_S:  # 5000억
+            return 3
+        if trading_value >= TRADING_VALUES.NEWS_FALLBACK_A:  # 1000억
+            return 2
+        if trading_value >= TRADING_VALUES.NEWS_FALLBACK_B:  # 500억
+            return 1
+        return 0
 
     def _score_volume(self, stock: StockData) -> int:
         """거래대금 점수 (0-3점)"""
@@ -372,6 +435,7 @@ class Scorer:
         return volume_ratio
 
     def _calculate_bonus(
+        self,
         volume_ratio: float,
         chart_score: int,
         is_limit_up: bool = False

@@ -71,4 +71,8 @@ dist/
 # Project Showcase Kit runtime isolation
 project/project-showcase-kit/.venvs/
 project/project-showcase-kit/out/
+
+# Untrack directories
 project/
+docs/
+tests/

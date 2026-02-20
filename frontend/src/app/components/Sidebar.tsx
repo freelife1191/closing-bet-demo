@@ -161,7 +161,7 @@ export default function Sidebar() {
             M
           </div>
           <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-            마켓플로우
+            스마트 머니 봇
           </span>
         </Link>
 

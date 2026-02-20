@@ -56,8 +56,11 @@ def run_jongga_v2_analysis(test_mode=False):
         # create_daily_prices()
         
         # 2. 분석 실행
-        create_jongga_v2_latest()
-        logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:30)")
+        analysis_ok = create_jongga_v2_latest()
+        if analysis_ok is False:
+            logger.error("[Scheduler] 종가베팅 결과 생성 실패 감지")
+        else:
+            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:30)")
         
         # 3. 알림 발송 (Messenger 사용)
         send_jongga_notification()
@@ -82,14 +85,20 @@ def run_daily_closing_analysis(test_mode=False):
     try:
         # 1. 최신 데이터 수집
         logger.info("[Scheduler] 일별 주가 데이터 수집...")
-        create_daily_prices()
+        prices_ok = create_daily_prices()
+        if prices_ok is False:
+            logger.error("[Scheduler] 일별 주가 데이터 수집 실패 감지")
         
         logger.info("[Scheduler] 기관/외인 수급 데이터 수집...")
-        create_institutional_trend()
+        inst_ok = create_institutional_trend()
+        if inst_ok is False:
+            logger.error("[Scheduler] 기관/외인 수급 데이터 수집 실패 감지")
         
         # 2. 분석 실행
         logger.info("[Scheduler] VCP 시그널 분석...")
-        create_signals_log(run_ai=True)
+        vcp_ok = create_signals_log(run_ai=True)
+        if vcp_ok is False:
+            logger.error("[Scheduler] VCP 시그널 분석 실패 감지")
         
         # [2026-02-11 Modified] Chain Execution: Run Jongga V2 immediately after Closing Analysis
         logger.info(">>> [Scheduler] Chaining: 데이터 수집 완료 후 AI 종가베팅 분석 즉시 시작")

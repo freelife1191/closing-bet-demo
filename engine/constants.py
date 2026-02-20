@@ -118,8 +118,8 @@ class PriceChangeThresholds:
 
     Attributes:
         MIN: 최소 등락률 (3%)
-        MAX: 최대 등락률 (20%) - 상한가 제외
-        LIMIT: 상한가 인근 (29.5% 이상) - 제외 대상
+        MAX: 최대 등락률 (30%) - 국내 상한가(약 29.9%) 구간 포함
+        LIMIT: 상한가 인근 (29.5% 이상)
         BONUS_5PCT: 5% 이상 (가산점 1점)
         BONUS_10PCT: 10% 이상 (가산점 2점)
         BONUS_15PCT: 15% 이상 (가산점 3점)
@@ -127,7 +127,7 @@ class PriceChangeThresholds:
         BONUS_25PCT: 25% 이상 (가산점 5점)
     """
     MIN: float = 3.0
-    MAX: float = 29.5
+    MAX: float = 30.0
     LIMIT: float = 29.5
 
     # Bonus points for large gains

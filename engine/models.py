@@ -7,6 +7,7 @@ class Grade(Enum):
     S = "S"
     A = "A"
     B = "B"
+    C = "C"
     D = "D"
 
 class SignalStatus(Enum):

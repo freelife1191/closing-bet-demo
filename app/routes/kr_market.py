@@ -937,6 +937,9 @@ def get_cumulative_performance():
                 if 'date' in loaded_df.columns and 'ticker' in loaded_df.columns:
                     loaded_df['ticker'] = loaded_df['ticker'].astype(str).str.zfill(6)
                     loaded_df['date'] = pd.to_datetime(loaded_df['date'])
+                    for col in ['open', 'high', 'low', 'close']:
+                        if col in loaded_df.columns:
+                            loaded_df[col] = pd.to_numeric(loaded_df[col], errors='coerce')
                     loaded_df = loaded_df.sort_values('date')
                     loaded_df.set_index('date', inplace=True)
                     price_df = loaded_df
@@ -987,6 +990,13 @@ def get_cumulative_performance():
                             # stats_date 문자열을 timestamp로 변환
                             sig_ts = pd.Timestamp(stats_date)
                             period_prices = stock_prices[stock_prices.index > sig_ts]
+                            # 비정상 가격(0/음수/결측치) 행 제외:
+                            # 0 값이 들어오면 stop 조건(low <= stop)에 즉시 걸려 오탐 LOSS가 발생할 수 있음
+                            period_prices = period_prices[
+                                (period_prices['high'] > 0) &
+                                (period_prices['low'] > 0) &
+                                (period_prices['close'] > 0)
+                            ]
                             # 사용자 요청: Target +9%, Stop -5% 강제 적용
                             target = entry * 1.09
                             stop = entry * 0.95
@@ -1087,9 +1097,21 @@ def get_cumulative_performance():
         closed_trades = wins + losses
         win_rate = round((wins / closed_trades * 100), 1) if closed_trades > 0 else 0.0
         
-        # ROI 합계
+        # ROI 집계
         total_roi = sum(t['roi'] for t in trades)
         avg_roi = round(total_roi / total_signals, 2) if total_signals > 0 else 0.0
+
+        roi_by_grade = {}
+        for grade in ['S', 'A', 'B']:
+            grade_trades = [t for t in trades if t.get('grade') == grade]
+            grade_count = len(grade_trades)
+            grade_total_roi = sum(t['roi'] for t in grade_trades)
+            grade_avg_roi = round(grade_total_roi / grade_count, 2) if grade_count > 0 else 0.0
+            roi_by_grade[grade] = {
+                'count': grade_count,
+                'avgRoi': grade_avg_roi,
+                'totalRoi': round(grade_total_roi, 1)
+            }
         
         # Profit Factor (총 이익 / 총 손실)
         gross_profit = sum(t['roi'] for t in trades if t['roi'] > 0)
@@ -1120,6 +1142,7 @@ def get_cumulative_performance():
                 'open': opens,
                 'avgRoi': avg_roi,
                 'totalRoi': round(total_roi, 1),
+                'roiByGrade': roi_by_grade,
                 'avgDays': round(sum(t['days'] for t in trades) / total_signals, 1) if total_signals > 0 else 0,
                 'priceDate': price_date_str, 
                 'profitFactor': profit_factor
