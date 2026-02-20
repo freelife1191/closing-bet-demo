@@ -87,7 +87,7 @@ rm -f services/scheduler.lock
 
 source venv/bin/activate
 # Use Gunicorn as in Procfile
-nohup gunicorn flask_app:app --bind 0.0.0.0:$FLASK_PORT --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
+nohup gunicorn flask_app:app --bind 0.0.0.0:$FLASK_PORT --workers 2 --threads 8 --timeout 300 > logs/backend.log 2>&1 &
 deactivate
 BACKEND_PID=$!
 

@@ -11,6 +11,9 @@ const nextConfig = {
     ];
   },
   transpilePackages: ['react-markdown', 'remark-gfm'],
+  experimental: {
+    proxyTimeout: 120000,
+  },
   logging: {
     fetches: {
       fullUrl: false,

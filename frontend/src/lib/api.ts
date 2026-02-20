@@ -227,12 +227,12 @@ export const krAPI = {
 
   // 스크리너 실행 (Closing Bet)
   runScreener: (capital = 50_000_000, markets = ['KOSPI', 'KOSDAQ'], target_date?: string) =>
-    fetchPostAPI<any>('/api/kr/jongga-v2/run', { capital, markets, target_date }, { timeout: 60000 }),
+    fetchPostAPI<any>('/api/kr/jongga-v2/run', { capital, markets, target_date }, { timeout: 120000 }),
 
   // VCP 스크리너 실행 (VCP Signals + AI)
   runVCPScreener: async (target_date?: string, max_stocks = 50) => {
     try {
-      return await fetchPostAPI<any>('/api/kr/signals/run', { target_date, max_stocks }, { timeout: 60000 });
+      return await fetchPostAPI<any>('/api/kr/signals/run', { target_date, max_stocks }, { timeout: 120000 });
     } catch (e: any) {
       // Preserve 409 status error message
       if (e.message.includes('409') || e.status === 409) {

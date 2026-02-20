@@ -2300,10 +2300,11 @@ def reanalyze_gemini_all():
         except ImportError as e:
             return jsonify({'status': 'error', 'error': f'LLM 모듈 로드 실패: {e}'}), 500
     except Exception as e:
-        print(f"Error reanalyzing gemini: {e}")
         import traceback
-        traceback.print_exc()
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        trace = traceback.format_exc()
+        print(f"\n{'='*70}\n[ERROR] reanalyze_gemini_all FAILED!\n{trace}\n{'='*70}\n")
+        logger.error(f"Error reanalyzing gemini: {e}\n{trace}")
+        return jsonify({'status': 'error', 'error': str(e), 'traceback': trace}), 500
 
 
 @kr_bp.route('/jongga-v2/message', methods=['POST'])
