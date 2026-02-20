@@ -132,6 +132,7 @@ elif [[ "${REUSE_EXISTING_SET}" != "true" ]]; then
 fi
 
 cd "${ROOT_DIR}"
+PIPELINE_STARTED_AT="$(date +%s)"
 log_info "pipeline start (restored-full-stage)"
 log_info "pipeline config tts-engine=${TTS_ENGINE} cache-mode=${CACHE_MODE} reuse-existing=${REUSE_EXISTING} showcase-scenario=${SHOWCASE_SCENARIO} scenario-version=${SCENARIO_VERSION} manifest-from-scenario=${MANIFEST_FROM_SCENARIO}"
 
@@ -205,6 +206,14 @@ fi
 
 "${SCRIPT_DIR}/run_stage.sh" sync-policy
 "${SCRIPT_DIR}/run_stage.sh" scene-runner --manifest "${MANIFEST_PATH}"
+"${SCRIPT_DIR}/run_stage.sh" scene-gate \
+  --scene-gate-input-json project/video/evidence/scene_runner_report.json \
+  --scene-gate-out-json project/video/evidence/scene_gate_report.json \
+  --scene-gate-out-md project/video/evidence/scene_gate_report.md
+"${SCRIPT_DIR}/run_stage.sh" version-gate \
+  --scene-gate-out-json project/video/evidence/scene_gate_report.json \
+  --version-gate-out-json project/video/evidence/version_gate_report.json \
+  --version-gate-out-md project/video/evidence/version_gate_report.md
 "${SCRIPT_DIR}/run_stage.sh" record --manifest "${MANIFEST_PATH}" --headless "${HEADLESS}" --reuse-existing "${REUSE_EXISTING}"
 VOICE_ARGS=(
   "${SCRIPT_DIR}/run_stage.sh"
@@ -221,6 +230,11 @@ fi
 "${SCRIPT_DIR}/run_stage.sh" captions --manifest "${MANIFEST_PATH}" --language "${LANGUAGE}"
 "${SCRIPT_DIR}/run_stage.sh" render --manifest "${MANIFEST_PATH}" --language "${LANGUAGE}" --strict-remotion "${STRICT_REMOTION}" --burn-in-captions "${BURN_IN_CAPTIONS}"
 "${SCRIPT_DIR}/run_stage.sh" assets --manifest "${MANIFEST_PATH}" --language "${LANGUAGE}" --thumbnail-mode "${THUMBNAIL_MODE}" --title "${TITLE}" --subtitle "${SUBTITLE}"
+"${SCRIPT_DIR}/run_stage.sh" runtime-budget \
+  --runtime-elapsed-seconds "$(( $(date +%s) - PIPELINE_STARTED_AT ))" \
+  --runtime-budget-minutes "120" \
+  --runtime-out-json project/video/evidence/runtime_budget_report.json \
+  --runtime-out-md project/video/evidence/runtime_budget_report.md
 "${SCRIPT_DIR}/run_stage.sh" validate --manifest "${MANIFEST_PATH}"
 "${SCRIPT_DIR}/run_stage.sh" manager-report --manifest "${MANIFEST_PATH}"
 "${SCRIPT_DIR}/run_stage.sh" quality-report --manifest "${MANIFEST_PATH}"

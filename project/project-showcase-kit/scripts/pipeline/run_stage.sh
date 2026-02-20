@@ -11,7 +11,7 @@ Usage:
   ${KIT_DIR}/scripts/pipeline/run_stage.sh <stage> [options]
 
 Stages:
-  preflight | manifest | showcase-scenario | manifest-from-scenario | scene-runner | record | voice | captions | render | assets | validate | qc | manager-report | quality-report | sync-policy
+  preflight | manifest | showcase-scenario | manifest-from-scenario | scene-runner | scene-gate | version-gate | runtime-budget | record | voice | captions | render | assets | validate | qc | manager-report | quality-report | sync-policy
 
 Common Options:
   --manifest <path>           (default: project/video/manifest.json)
@@ -30,6 +30,15 @@ Common Options:
   --scene-failure-plan <path> (scene-runner only, optional simulated retry outcomes)
   --scene-runner-out-json <path> (scene-runner only, default: project/video/evidence/scene_runner_report.json)
   --scene-runner-out-md <path> (scene-runner only, default: project/video/evidence/scene_runner_report.md)
+  --scene-gate-input-json <path> (scene-gate only, default: project/video/evidence/scene_runner_report.json)
+  --scene-gate-out-json <path> (scene-gate only, default: project/video/evidence/scene_gate_report.json)
+  --scene-gate-out-md <path> (scene-gate only, default: project/video/evidence/scene_gate_report.md)
+  --version-gate-out-json <path> (version-gate only, default: project/video/evidence/version_gate_report.json)
+  --version-gate-out-md <path> (version-gate only, default: project/video/evidence/version_gate_report.md)
+  --runtime-elapsed-seconds <sec> (runtime-budget only, default: 0)
+  --runtime-budget-minutes <min> (runtime-budget only, default: 120)
+  --runtime-out-json <path> (runtime-budget only, default: project/video/evidence/runtime_budget_report.json)
+  --runtime-out-md <path> (runtime-budget only, default: project/video/evidence/runtime_budget_report.md)
 
 Preflight Options:
   --strict-tts <true|false>   (default: false)
@@ -93,6 +102,15 @@ GATE_D="pending"
 SCENE_FAILURE_PLAN=""
 SCENE_RUNNER_OUT_JSON="project/video/evidence/scene_runner_report.json"
 SCENE_RUNNER_OUT_MD="project/video/evidence/scene_runner_report.md"
+SCENE_GATE_INPUT_JSON="project/video/evidence/scene_runner_report.json"
+SCENE_GATE_OUT_JSON="project/video/evidence/scene_gate_report.json"
+SCENE_GATE_OUT_MD="project/video/evidence/scene_gate_report.md"
+VERSION_GATE_OUT_JSON="project/video/evidence/version_gate_report.json"
+VERSION_GATE_OUT_MD="project/video/evidence/version_gate_report.md"
+RUNTIME_ELAPSED_SECONDS="0"
+RUNTIME_BUDGET_MINUTES="120"
+RUNTIME_OUT_JSON="project/video/evidence/runtime_budget_report.json"
+RUNTIME_OUT_MD="project/video/evidence/runtime_budget_report.md"
 
 SYNC_AUDIT_META="project/video/evidence/sync_audit_report.json"
 TIMELINE_OUT_JSON="project/video/evidence/timeline_report.json"
@@ -126,6 +144,24 @@ while [[ $# -gt 0 ]]; do
       SCENE_RUNNER_OUT_JSON="$2"; shift 2 ;;
     --scene-runner-out-md)
       SCENE_RUNNER_OUT_MD="$2"; shift 2 ;;
+    --scene-gate-input-json)
+      SCENE_GATE_INPUT_JSON="$2"; shift 2 ;;
+    --scene-gate-out-json)
+      SCENE_GATE_OUT_JSON="$2"; shift 2 ;;
+    --scene-gate-out-md)
+      SCENE_GATE_OUT_MD="$2"; shift 2 ;;
+    --version-gate-out-json)
+      VERSION_GATE_OUT_JSON="$2"; shift 2 ;;
+    --version-gate-out-md)
+      VERSION_GATE_OUT_MD="$2"; shift 2 ;;
+    --runtime-elapsed-seconds)
+      RUNTIME_ELAPSED_SECONDS="$2"; shift 2 ;;
+    --runtime-budget-minutes)
+      RUNTIME_BUDGET_MINUTES="$2"; shift 2 ;;
+    --runtime-out-json)
+      RUNTIME_OUT_JSON="$2"; shift 2 ;;
+    --runtime-out-md)
+      RUNTIME_OUT_MD="$2"; shift 2 ;;
     --tts-engine)
       TTS_ENGINE="$2"; shift 2 ;;
     --qwen-local-timeout-sec)
@@ -343,6 +379,31 @@ PY
       SCENE_RUNNER_ARGS+=(--failure-plan "${SCENE_FAILURE_PLAN}")
     fi
     "${PYTHON}" "${SCRIPT_DIR}/stage_scene_runner.py" "${SCENE_RUNNER_ARGS[@]}"
+    ;;
+
+  scene-gate)
+    log_info "stage=scene-gate"
+    "${PYTHON}" "${SCRIPT_DIR}/stage_scene_gate.py" \
+      --input-json "${SCENE_GATE_INPUT_JSON}" \
+      --out-json "${SCENE_GATE_OUT_JSON}" \
+      --out-md "${SCENE_GATE_OUT_MD}"
+    ;;
+
+  version-gate)
+    log_info "stage=version-gate"
+    "${PYTHON}" "${SCRIPT_DIR}/stage_version_gate_report.py" \
+      --scene-gate-json "${SCENE_GATE_OUT_JSON}" \
+      --out-json "${VERSION_GATE_OUT_JSON}" \
+      --out-md "${VERSION_GATE_OUT_MD}"
+    ;;
+
+  runtime-budget)
+    log_info "stage=runtime-budget"
+    "${PYTHON}" "${SCRIPT_DIR}/stage_runtime_budget_report.py" \
+      --elapsed-seconds "${RUNTIME_ELAPSED_SECONDS}" \
+      --budget-minutes "${RUNTIME_BUDGET_MINUTES}" \
+      --out-json "${RUNTIME_OUT_JSON}" \
+      --out-md "${RUNTIME_OUT_MD}"
     ;;
 
   record)
