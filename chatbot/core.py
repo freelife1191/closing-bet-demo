@@ -46,7 +46,8 @@ REASONING_START_REGEX = re.compile(
     re.IGNORECASE,
 )
 ANSWER_HEADER_REGEX = re.compile(
-    r"(?:\n|^)\s*(?:---|___|\*\*\*)?\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?\s*\n?",
+    # Allow inline "[답변]" markers as some model outputs place it on the same line.
+    r"(?:---|___|\*\*\*)?\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?\s*\n?",
     re.IGNORECASE,
 )
 REASONING_HEADER_REGEX = re.compile(
@@ -120,7 +121,10 @@ def _extract_reasoning_and_answer(text: str, is_streaming: bool = False) -> Tupl
     reasoning = ""
 
     start_match = REASONING_START_REGEX.search(processed)
-    end_match = ANSWER_HEADER_REGEX.search(processed)
+    end_match = ANSWER_HEADER_REGEX.search(
+        processed,
+        start_match.end() if start_match else 0,
+    )
 
     if start_match:
         start_idx = start_match.start()
@@ -258,36 +262,90 @@ class HistoryManager:
         
         # Structure: { session_id: { id, title, messages, created_at, updated_at, model } }
         self.sessions = self._load()
+
+    def _atomic_write(self, data: Dict[str, Any]) -> None:
+        """히스토리 파일을 원자적으로 저장해 부분 저장/빈 파일 상태를 방지한다."""
+        data_dir = self.file_path.parent
+        if not data_dir.exists():
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+        tmp_path = self.file_path.with_name(
+            f"{self.file_path.name}.tmp-{uuid.uuid4().hex}"
+        )
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self.file_path)
+        finally:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+
+    def _backup_corrupt_history(self) -> None:
+        """손상된 히스토리 파일을 백업하고 원본 경로는 재초기화 가능 상태로 만든다."""
+        if not self.file_path.exists():
+            return
+
+        backup_path = self.file_path.with_name(
+            f"{self.file_path.stem}.corrupt-"
+            f"{datetime.now().strftime('%Y%m%d%H%M%S')}-"
+            f"{uuid.uuid4().hex[:8]}{self.file_path.suffix}"
+        )
+        try:
+            os.replace(self.file_path, backup_path)
+            logger.warning(f"Corrupt history backed up to: {backup_path}")
+        except Exception as backup_error:
+            logger.error(f"Failed to backup corrupt history: {backup_error}")
         
     def _load(self):
         if self.file_path.exists():
             try:
-                with open(self.file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    # Migration: if list (old format), convert to default session
-                    if isinstance(data, list):
-                        default_id = str(uuid.uuid4())
-                        return {
-                            default_id: {
-                                "id": default_id,
-                                "title": "이전 대화",
-                                "messages": data,
-                                "created_at": datetime.now().isoformat(),
-                                "updated_at": datetime.now().isoformat(),
-                                "model": "gemini-2.0-flash-lite"
-                            }
+                raw = self.file_path.read_text(encoding="utf-8")
+                if not raw.strip():
+                    logger.warning("History file is empty. Reinitializing with empty JSON.")
+                    self._atomic_write({})
+                    return {}
+
+                data = json.loads(raw)
+                # Migration: if list (old format), convert to default session
+                if isinstance(data, list):
+                    default_id = str(uuid.uuid4())
+                    migrated = {
+                        default_id: {
+                            "id": default_id,
+                            "title": "이전 대화",
+                            "messages": data,
+                            "created_at": datetime.now().isoformat(),
+                            "updated_at": datetime.now().isoformat(),
+                            "model": "gemini-2.0-flash-lite"
                         }
+                    }
+                    self._atomic_write(migrated)
+                    return migrated
+                if isinstance(data, dict):
                     return data
+
+                logger.error(f"Unexpected history format type: {type(data).__name__}")
+                self._backup_corrupt_history()
+                self._atomic_write({})
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to load history (invalid JSON): {e}")
+                try:
+                    self._backup_corrupt_history()
+                    self._atomic_write({})
+                except Exception as recover_error:
+                    logger.error(f"Failed to recover corrupt history file: {recover_error}")
             except Exception as e:
                 logger.error(f"Failed to load history: {e}")
         return {}
 
     def _save(self):
         try:
-            if not DATA_DIR.exists():
-                DATA_DIR.mkdir(parents=True, exist_ok=True)
-            with open(self.file_path, "w", encoding="utf-8") as f:
-                json.dump(self.sessions, f, ensure_ascii=False, indent=2)
+            self._atomic_write(self.sessions)
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 

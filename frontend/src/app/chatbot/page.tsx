@@ -745,6 +745,18 @@ export default function ChatbotPage() {
             }
           }
         }
+
+        // Safety net: if stream closed without explicit done event,
+        // ensure the last placeholder message does not remain in streaming state.
+        setMessages(prev => {
+          if (prev.length === 0) return prev;
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === 'model' && last?.isStreaming) {
+            next[next.length - 1] = { ...last, isStreaming: false };
+          }
+          return next;
+        });
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
