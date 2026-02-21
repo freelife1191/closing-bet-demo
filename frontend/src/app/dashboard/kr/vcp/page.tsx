@@ -78,7 +78,7 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
       // Both start and end exist (fully generated or streaming past reasoning)
       const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
       reasoning = reasoningBlock;
-      processed = processed.replace(reasoningBlock, ''); // Remove the reasoning block from the visible chat
+      processed = processed.substring(0, startMatch.index!) + processed.substring(endMatch.index!); // Remove the reasoning block from the visible chat
     } else if (isStreaming) {
       // Stream is active, and only start tag exists. Everything after start is reasoning.
       reasoning = processed.substring(startMatch.index!);
@@ -86,7 +86,7 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
     } else {
       // Fallback if formatting is broken but stream is done
       reasoning = processed.substring(startMatch.index!);
-      processed = processed.replace(reasoning, '');
+      processed = processed.substring(0, startMatch.index!);
     }
   } else if (isStreaming) {
     // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
@@ -110,13 +110,10 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
     cleanReasoning = cleanReasoning.replace(/[\*\_\[\]]+$/, '');
   }
 
-  // FORCE newlines before numbered lists inside dense text
-  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
-  processed = processed.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
-
-  // FORCE newlines before numbered lists inside dense text (e.g., "내용 2. ")
-  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
-  cleanReasoning = cleanReasoning.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+  // Cleanup trailing broken markdown
+  if (isStreaming) {
+    cleanReasoning = cleanReasoning.replace(/[\*\_\[\]]+$/, '');
+  }
 
   return { cleanText: processed.trim(), suggestions, reasoning: cleanReasoning };
 };
@@ -1326,9 +1323,9 @@ export default function VCPSignalsPage() {
                                           components={{
                                             p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
                                             strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
-                                            ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
-                                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1 pl-1">{children}</ol>,
-                                            li: ({ children }) => <li className="text-gray-300">{children}</li>,
+                                            ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 my-1">{children}</ul>,
+                                            ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 my-1">{children}</ol>,
+                                            li: ({ children }) => <li className="text-gray-300 mb-1 leading-relaxed">{children}</li>,
                                             code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
                                           }}
                                         >
@@ -1362,9 +1359,9 @@ export default function VCPSignalsPage() {
                                           components={{
                                             p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
                                             strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
-                                            ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
-                                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1 pl-1">{children}</ol>,
-                                            li: ({ children }) => <li className="text-gray-300">{children}</li>,
+                                            ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 my-1">{children}</ul>,
+                                            ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 my-1">{children}</ol>,
+                                            li: ({ children }) => <li className="text-gray-300 mb-1 leading-relaxed">{children}</li>,
                                             code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
                                           }}
                                         >

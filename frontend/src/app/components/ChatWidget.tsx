@@ -65,7 +65,7 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
       // Both start and end exist (fully generated or streaming past reasoning)
       const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
       reasoning = reasoningBlock;
-      processed = processed.replace(reasoningBlock, ''); // Remove the reasoning block from the visible chat
+      processed = processed.substring(0, startMatch.index!) + processed.substring(endMatch.index!); // Remove the reasoning block from the visible chat
     } else if (isStreaming) {
       // Stream is active, and only start tag exists. Everything after start is reasoning.
       reasoning = processed.substring(startMatch.index!);
@@ -73,7 +73,7 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
     } else {
       // Fallback if formatting is broken but stream is done
       reasoning = processed.substring(startMatch.index!);
-      processed = processed.replace(reasoning, '');
+      processed = processed.substring(0, startMatch.index!);
     }
   } else if (isStreaming) {
     // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
@@ -480,8 +480,9 @@ export default function ChatWidget() {
                                 remarkPlugins={[remarkGfm]}
                                 components={{
                                   p({ children }) { return <p className="mb-2 last:mb-0">{children}</p> },
-                                  ul({ children }) { return <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul> },
-                                  li({ children }) { return <li>{children}</li> },
+                                  ul({ children }) { return <ul className="list-disc pl-5 mb-2 last:mb-0 space-y-1">{children}</ul> },
+                                  ol({ children }) { return <ol className="list-decimal pl-5 mb-2 last:mb-0 space-y-1">{children}</ol> },
+                                  li({ children }) { return <li className="mb-1 leading-relaxed">{children}</li> },
                                   code({ node, className, children, ...props }) {
                                     return <code className="bg-black/30 px-1 rounded text-blue-300 font-mono" {...props}>{children}</code>
                                   },
