@@ -8,7 +8,7 @@ Gemini AI 연동 및 대화 처리 로직 (지원 모델 설정 가능)
 import os
 import logging
 import re
-from typing import Optional, Callable, Dict, Any, List, Tuple
+from typing import Optional, Callable, Dict, Any, List, Tuple, Generator
 from pathlib import Path
 from datetime import datetime
 import json
@@ -1014,37 +1014,440 @@ class KRStockChatbot:
 {signal_txt}
 """
 
-    def _detect_stock_query(self, message: str) -> Optional[str]:
-        """종목 관련 질문 감지 및 상세 정보 반환 (전체 종목 대상)"""
-        # 1. Watchlist 우선 검색 (Context Optimization)
-        # (This is handled in chat method but helpful to do full lookup here too if specifically asked)
-        
+    def _detect_stock_query_from_stock_map(self, message: str) -> Optional[str]:
+        """전체 종목 맵에서 종목 질문을 감지해 상세 컨텍스트를 반환한다."""
         detected_name = None
         detected_ticker = None
-        
-        # 이름/코드 매핑 사용
+
         for name, ticker in self.stock_map.items():
             if name in message:
                 detected_name = name
                 detected_ticker = ticker
                 break
-        
+
         if not detected_ticker:
             for ticker, name in self.ticker_map.items():
                 if ticker in message:
                     detected_name = name
                     detected_ticker = ticker
                     break
-        
+
         if detected_name and detected_ticker:
             logger.info(f"Detected stock query: {detected_name}")
             return self._format_stock_context(detected_name, detected_ticker)
-            
+
         return None
+
+    def _detect_stock_query_from_vcp_data(self, message: str) -> Optional[str]:
+        """VCP 캐시 데이터에서 종목 질문을 감지해 요약 정보를 반환한다."""
+        data = self._get_cached_data()
+        vcp_stocks = data.get("vcp_stocks", [])
+
+        for stock in vcp_stocks:
+            name = stock.get("name", "")
+            ticker = stock.get("ticker", "")
+            if name and (name in message or ticker in message):
+                return self._format_stock_info(stock)
+        return None
+
+    def _detect_stock_query(self, message: str) -> Optional[str]:
+        """
+        종목 관련 질문 감지.
+        현재 동작 호환을 위해 VCP 캐시 기반 탐지 경로를 우선(사실상 단일) 사용한다.
+        """
+        return self._detect_stock_query_from_vcp_data(message)
 
     def _normalize_markdown_response(self, text: str) -> str:
         """LLM 응답의 자주 깨지는 마크다운 문법을 안전하게 정규화"""
         return _normalize_markdown_text(text)
+
+    def _resolve_active_client(self, api_key: Optional[str]) -> Tuple[Optional[Any], Optional[str]]:
+        """요청별 활성 클라이언트 선택 (사용자 키 우선)."""
+        active_client = self.client
+        if api_key:
+            try:
+                from google import genai
+
+                active_client = genai.Client(api_key=api_key)
+            except Exception as e:
+                logger.error(f"Temp client init failed: {e}")
+                return None, f"⚠️ API Key 오류: {str(e)}"
+
+        if not active_client:
+            debug_info = f"KeyLen: {len(str(api_key))} " if api_key else "Key: None "
+            return (
+                None,
+                (
+                    "⚠️ AI 모델이 설정되지 않았습니다. "
+                    f"({debug_info}) [설정 > API & 기능]에서 API Key를 등록하거나, "
+                    "구글 로그인을 진행해주세요. (데이터 초기화 후에는 재설정이 필요합니다)"
+                ),
+            )
+
+        return active_client, None
+
+    def _is_ephemeral_command(self, user_message: str, files: Optional[list]) -> bool:
+        """저장 없이 처리 가능한 경량 명령 여부."""
+        return bool(
+            not files
+            and user_message.strip().startswith(("/status", "/help", "/memory view"))
+        )
+
+    def _ensure_session_access(
+        self,
+        session_id: Optional[str],
+        target_model_name: str,
+        is_ephemeral: bool,
+        owner_id: Optional[str],
+        reuse_session_id_on_owner_mismatch: bool,
+    ) -> str:
+        """세션 생성/검증 및 소유권 확인."""
+        if not session_id or not self.history.get_session(session_id):
+            session_id = self.history.create_session(
+                model_name=target_model_name,
+                save_immediate=not is_ephemeral,
+                owner_id=owner_id,
+                session_id=session_id,
+            )
+
+        if session_id:
+            session_data = self.history.get_session(session_id)
+            if session_data:
+                session_owner = session_data.get("owner_id")
+                if session_owner and session_owner != owner_id:
+                    logger.warning(
+                        "Session access denied. Owner: %s, Requester: %s",
+                        session_owner,
+                        owner_id,
+                    )
+                    if reuse_session_id_on_owner_mismatch:
+                        session_id = self.history.create_session(
+                            model_name=target_model_name,
+                            save_immediate=not is_ephemeral,
+                            owner_id=owner_id,
+                            session_id=session_id,
+                        )
+                    else:
+                        session_id = self.history.create_session(
+                            model_name=target_model_name,
+                            save_immediate=not is_ephemeral,
+                            owner_id=owner_id,
+                        )
+
+        return session_id
+
+    def _execute_command(
+        self,
+        user_message: str,
+        session_id: str,
+        files: Optional[list],
+        is_ephemeral: bool,
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        슬래시 명령 실행.
+        returns: (handled, response, error_message)
+        """
+        if files or not user_message.startswith("/"):
+            return False, None, None
+
+        try:
+            cmd_resp = self._handle_command(user_message, session_id)
+            should_save = not is_ephemeral
+            self.history.add_message(session_id, "user", user_message, save=should_save)
+            self.history.add_message(session_id, "model", cmd_resp, save=should_save)
+            return True, cmd_resp, None
+        except Exception as e:
+            logger.error(f"Command error: {e}")
+            return True, None, f"⚠️ 명령어 처리 중 오류가 발생했습니다: {str(e)}"
+
+    def _collect_market_context(
+        self,
+    ) -> Tuple[Dict[str, Any], List[dict], Dict[str, Any], Dict[str, Any]]:
+        """챗봇 프롬프트용 시장/시그널 컨텍스트를 수집한다."""
+        market_gate_data = self._fetch_market_gate()
+        data = self._get_cached_data()
+        vcp_data = data.get("vcp_stocks", [])
+        sector_scores = data.get("sector_scores", {})
+
+        market_data = {
+            "kospi": market_gate_data.get("kospi_close", "N/A"),
+            "kosdaq": market_gate_data.get("kosdaq_close", "N/A"),
+            "usd_krw": market_gate_data.get("usd_krw", "N/A"),
+            "market_gate": market_gate_data.get("color", "UNKNOWN"),
+            "market_status": market_gate_data.get("status", ""),
+            "total_score": market_gate_data.get("total_score", 0),
+        }
+
+        if market_gate_data.get("sectors"):
+            sector_scores = {
+                sector["name"]: sector["change_pct"]
+                for sector in market_gate_data.get("sectors", [])
+            }
+
+        return market_gate_data, vcp_data, sector_scores, market_data
+
+    def _contains_any_keyword(self, user_message: str, keywords: List[str]) -> bool:
+        """문자열에 키워드 중 하나라도 포함되는지 확인."""
+        return any(keyword in user_message for keyword in keywords)
+
+    def _build_closing_bet_context(self) -> Tuple[str, str]:
+        """종가베팅 의도 컨텍스트/지시문 생성."""
+        self.memory.add("interest", "종가베팅")
+        logger.info(f"Auto-saved interest: 종가베팅 for user {self.user_id}")
+
+        jongga_data = self._fetch_jongga_data()
+        if jongga_data:
+            context_text = f"\n\n## [종가베팅 추천 종목]\n{jongga_data}"
+        else:
+            context_text = "\n\n## [종가베팅 데이터]\n현재 추천할 만한 종가베팅 시그널이 없습니다."
+
+        from .prompts import INTENT_PROMPTS
+
+        intent_instruction = INTENT_PROMPTS.get("closing_bet", "")
+        return context_text, intent_instruction
+
+    def _build_market_gate_context(self, market_gate_data: Dict[str, Any]) -> str:
+        """시장/마켓게이트 질문용 컨텍스트 생성."""
+        if not market_gate_data:
+            return ""
+
+        gate_color = market_gate_data.get("color", "UNKNOWN")
+        gate_status = market_gate_data.get("status", "")
+        gate_score = market_gate_data.get("total_score", 0)
+        gate_reason = market_gate_data.get("gate_reason", "")
+
+        sectors = market_gate_data.get("sectors", [])[:5]
+        sectors_text = "\n".join(
+            [f"  - {s['name']}: {s['change_pct']:+.2f}% ({s['signal']})" for s in sectors]
+        )
+
+        return f"""
+## [Market Gate 상세 분석]
+- **상태**: {gate_color} ({gate_status})
+- **점수**: {gate_score}점
+- **판단 근거**: {gate_reason}
+
+### 주요 지수
+
+
+### 섹터 동향
+{sectors_text}
+"""
+
+    def _build_watchlist_detailed_context(
+        self,
+        watchlist: List[str],
+        vcp_data: List[dict],
+    ) -> str:
+        """관심종목 상세 컨텍스트 생성."""
+        watchlist_context = "\n\n## [내 관심종목 상세 분석 데이터]\n"
+        for stock_name in watchlist:
+            ticker = self.stock_map.get(stock_name)
+            if not ticker:
+                ticker = stock_name if stock_name.isdigit() else None
+
+            if ticker:
+                stock_detail = self._format_stock_context(stock_name, ticker)
+                watchlist_context += stock_detail + "\n"
+                match = next((s for s in vcp_data if s.get("code") == ticker), None)
+                if match:
+                    watchlist_context += (
+                        f"-> [VCP 상태]: 현재 VCP 패턴 포착됨 ({match.get('score')}점)\n"
+                    )
+            else:
+                watchlist_context += f"- {stock_name}: (종목 코드를 찾을 수 없음)\n"
+        return watchlist_context
+
+    def _build_watchlist_summary_context(self, watchlist: List[str], vcp_data: List[dict]) -> str:
+        """관심종목 VCP 요약 컨텍스트 생성."""
+        summary = []
+        for stock_name in watchlist:
+            match = next(
+                (
+                    stock
+                    for stock in vcp_data
+                    if stock.get("name") == stock_name or stock.get("code") == stock_name
+                ),
+                None,
+            )
+            if match:
+                summary.append(f"{stock_name}({match.get('score', 0)}점)")
+
+        if not summary:
+            return ""
+        return f"\n\n## [관심종목 VCP 요약]\n{', '.join(summary)}\n"
+
+    def _build_additional_context(
+        self,
+        user_message: str,
+        watchlist: Optional[list],
+        vcp_data: List[dict],
+        market_gate_data: Dict[str, Any],
+    ) -> Tuple[str, str, bool]:
+        """질문 의도별 추가 컨텍스트와 intent 문구를 구성한다."""
+        additional_context = ""
+        intent_instruction = ""
+        jongga_context = False
+
+        if self._contains_any_keyword(user_message, ["종가베팅", "종가 베팅", "Closing Betting"]):
+            jongga_context = True
+            context_text, intent_instruction = self._build_closing_bet_context()
+            additional_context += context_text
+
+        elif self._contains_any_keyword(user_message, ["시장", "마켓게이트", "Market Gate", "시황", "장세", "지수"]):
+            additional_context += self._build_market_gate_context(market_gate_data)
+            intent_instruction = "위 Market Gate 데이터를 참고하여 현재 시장 상황과 투자 전략을 상세히 분석해주세요."
+
+        elif self._contains_any_keyword(user_message, ["VCP", "수급", "추천", "뭐 살", "매수", "시그널"]):
+            vcp_analysis = self._fetch_vcp_ai_analysis()
+            if vcp_analysis:
+                additional_context += f"\n\n## [VCP AI 분석 결과 - 매수 추천 종목]\n{vcp_analysis}"
+            else:
+                additional_context += "\n\n## [VCP 분석]\n현재 분석된 VCP 시그널이 없습니다."
+            intent_instruction = "위 VCP AI 분석 결과를 참고하여 투자 추천과 근거를 설명해주세요."
+
+        elif self._contains_any_keyword(user_message, ["뉴스", "호재", "이슈", "속보", "소식"]):
+            news_data = self._fetch_latest_news()
+            if news_data:
+                additional_context += f"\n\n## [최근 뉴스]\n{news_data}"
+            else:
+                additional_context += "\n\n## [뉴스]\n최근 수집된 주요 뉴스가 없습니다."
+            intent_instruction = "위 뉴스 데이터를 참고하여 시장에 미칠 영향을 분석해주세요."
+
+        if watchlist and self._contains_any_keyword(
+            user_message,
+            ["내 종목", "관심 종목", "관심종목", "포트폴리오", "가지고 있는"],
+        ):
+            additional_context += self._build_watchlist_detailed_context(watchlist, vcp_data)
+            intent_instruction = (
+                "위 [내 관심종목 상세 분석 데이터]를 바탕으로, 각 종목의 현재 주가 흐름, "
+                "수급 상태, VCP 패턴 여부를 종합하여 상세히 진단해주세요."
+            )
+        elif watchlist:
+            additional_context += self._build_watchlist_summary_context(watchlist, vcp_data)
+
+        return additional_context, intent_instruction, jongga_context
+
+    def _compose_system_prompt(
+        self,
+        user_message: str,
+        target_model_name: str,
+        market_data: Dict[str, Any],
+        vcp_data: List[dict],
+        sector_scores: Dict[str, Any],
+        watchlist: Optional[list],
+        persona: Optional[str],
+        additional_context: str,
+    ) -> str:
+        """기본 시스템 프롬프트 + 질의별 컨텍스트 병합."""
+        stock_context = self._detect_stock_query(user_message)
+        system_prompt = build_system_prompt(
+            memory_text=self.memory.format_for_prompt(),
+            market_data=market_data,
+            vcp_data=vcp_data,
+            sector_scores=sector_scores,
+            current_model=target_model_name,
+            persona=persona,
+            watchlist=watchlist,
+        )
+
+        if stock_context:
+            system_prompt += f"\n\n## 질문 대상 종목 상세\n{stock_context}"
+        if additional_context:
+            system_prompt += additional_context
+        return system_prompt
+
+    def _build_api_history(self, session_id: str) -> List[dict]:
+        """Gemini SDK 전달용 히스토리(role/parts만 유지)."""
+        chat_history = self.history.get_messages(session_id)
+        return [{"role": msg["role"], "parts": msg["parts"]} for msg in chat_history]
+
+    def _build_content_parts(
+        self,
+        files: Optional[list],
+        system_prompt: str,
+        intent_instruction: str,
+        user_message: str,
+        jongga_context: bool,
+    ) -> List[Any]:
+        """멀티모달 요청 payload(parts) 생성."""
+        content_parts: List[Any] = []
+        if files:
+            for file in files:
+                content_parts.append(
+                    {"mime_type": file["mime_type"], "data": file["data"]}
+                )
+
+        # 기존 동작 호환: non-jongga intent 문구는 삽입하지 않는다.
+        resolved_intent = ""
+        if jongga_context:
+            resolved_intent = intent_instruction
+
+        full_user_content = (
+            f"{system_prompt}\n{resolved_intent}\n\n[사용자 메시지]: {user_message}"
+        )
+        content_parts.append(full_user_content)
+        return content_parts
+
+    def _format_user_history_message(self, user_message: str, files: Optional[list]) -> str:
+        if not files:
+            return user_message
+        return f"{user_message} [파일 {len(files)}개 첨부됨]"
+
+    def _friendly_error_message(self, error_msg: str, default_prefix: str) -> str:
+        """사용자 친화 에러 메시지 변환."""
+        if (
+            "429" in error_msg
+            or "Resource exhausted" in error_msg
+            or "RESOURCE_EXHAUSTED" in error_msg
+        ):
+            return (
+                "⚠️ **AI 서버 요청 한도 초과**\n\n"
+                "Google AI 서버의 분당 요청 한도에 도달했습니다.\n"
+                "**약 30초~1분 후에 다시 시도해주세요.**\n\n"
+                "💡 안정적인 사용을 위해 **[설정] > [API Key]** 메뉴에서 "
+                "개인 API Key를 등록하시면 이 제한을 피할 수 있습니다."
+            )
+
+        if (
+            "400" in error_msg
+            or "API_KEY_INVALID" in error_msg
+            or "API key not valid" in error_msg
+        ):
+            return (
+                "⚠️ **API Key 설정 오류**\n\n"
+                "시스템에 설정된 API Key가 유효하지 않습니다.\n"
+                "관리자에게 문의하거나 **[설정] > [API Key]** 메뉴에서 "
+                "올바른 API Key를 다시 등록해주세요.\n"
+                "(Google 서비스 문제일 수도 있습니다.)"
+            )
+
+        return f"{default_prefix}{error_msg}"
+
+    def _build_fallback_models(self, target_model_name: str) -> List[str]:
+        """스트리밍 재시도용 모델 후보 리스트."""
+        fallback_sequence = [
+            "gemini-2.0-flash-lite",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-2.5-flash",
+            "gemini-3-flash-preview",
+        ]
+        models = [target_model_name]
+        for model_name in fallback_sequence:
+            if model_name not in models:
+                models.append(model_name)
+        return models
+
+    def _is_retryable_stream_error(self, error_msg: str) -> bool:
+        error_upper = error_msg.upper()
+        return (
+            "503" in error_msg
+            or "UNAVAILABLE" in error_upper
+            or "429" in error_msg
+            or "RESOURCE EXHAUSTED" in error_upper
+            or "RESOURCE_EXHAUSTED" in error_upper
+        )
 
     def chat(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None, owner_id: str = None) -> Dict[str, Any]:
         """
@@ -1060,305 +1463,232 @@ class KRStockChatbot:
             api_key: (Optional) 사용자 제공 API Key
         """
         target_model_name = model or self.current_model_name
-        
-        # [Client Selection]
-        # 사용자 제공 Key가 있으면 임시 Client 생성, 없으면 기본 self.client 사용
-        active_client = self.client
-        if api_key:
-            try:
-                from google import genai
-                active_client = genai.Client(api_key=api_key)
-            except Exception as e:
-                logger.error(f"Temp client init failed: {e}")
-                return {"response": f"⚠️ API Key 오류: {str(e)}", "session_id": session_id}
+        active_client, client_error = self._resolve_active_client(api_key)
+        if client_error:
+            return {"response": client_error, "session_id": session_id}
 
-        if not active_client:
-             debug_info = f"KeyLen: {len(str(api_key))} " if api_key else "Key: None "
-             return {"response": f"⚠️ AI 모델이 설정되지 않았습니다. ({debug_info}) [설정 > API & 기능]에서 API Key를 등록하거나, 구글 로그인을 진행해주세요. (데이터 초기화 후에는 재설정이 필요합니다)", "session_id": session_id}
+        is_ephemeral = self._is_ephemeral_command(user_message, files)
+        session_id = self._ensure_session_access(
+            session_id=session_id,
+            target_model_name=target_model_name,
+            is_ephemeral=is_ephemeral,
+            owner_id=owner_id,
+            reuse_session_id_on_owner_mismatch=True,
+        )
 
-        # Ephemeral check
-        is_ephemeral = False
-        if not files and user_message.strip().startswith(("/status", "/help", "/memory view")):
-            is_ephemeral = True
+        handled, cmd_resp, cmd_error = self._execute_command(
+            user_message=user_message,
+            session_id=session_id,
+            files=files,
+            is_ephemeral=is_ephemeral,
+        )
+        if handled:
+            if cmd_error:
+                return {"response": cmd_error, "session_id": session_id}
+            return {"response": cmd_resp, "session_id": session_id}
 
-        # 0. 세션 확인 및 생성
-        # 0. 세션 확인 및 생성
-        # 세션이 없으면 새로 생성하되, Ephemeral 명령이면 바로 저장하지 않음 (Memory only)
-        if not session_id or not self.history.get_session(session_id):
-            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id, session_id=session_id)
-
-        # [Security] Verify ownership
-        if session_id:
-            session_data = self.history.get_session(session_id)
-            if session_data:
-                sess_owner = session_data.get("owner_id")
-                if sess_owner and sess_owner != owner_id:
-                     logger.warning(f"Session access denied. Owner: {sess_owner}, Requester: {owner_id}")
-                     # Access denied -> Create new session for the requester
-                     session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id, session_id=session_id)
-
-        # 1. 명령어 체크 (파일이 없을 때만)
-        if not files and user_message.startswith("/"):
-            try:
-                cmd_resp = self._handle_command(user_message, session_id)
-                
-                # Ephemeral 명령이어도 메모리에는 남겨야 함 (화면 표시용)
-                # 단, save=False로 디스크 저장은 건너뜀
-                should_save = not is_ephemeral
-                
-                # User Message 기록
-                self.history.add_message(session_id, "user", user_message, save=should_save)
-                
-                # Model Response 기록
-                self.history.add_message(session_id, "model", cmd_resp, save=should_save)
-                
-                return {"response": cmd_resp, "session_id": session_id}
-            except Exception as e:
-                logger.error(f"Command error: {e}")
-                return {"response": f"⚠️ 명령어 처리 중 오류가 발생했습니다: {str(e)}", "session_id": session_id}
-        # 2. 시장 데이터 가져오기 (챗봇 컨텍스트용) - 실제 데이터 사용
-        # Market Gate 실제 데이터 로드
-        market_gate_data = self._fetch_market_gate()
-        
-        # 기존 캐시 데이터도 가져오기 (VCP 종목 등)
-        data = self._get_cached_data()
-        vcp_data = data.get("vcp_stocks", [])
-        sector_scores = data.get("sector_scores", {})
-        
-        # Market Gate 데이터를 market_data 형식으로 변환
-        market_data = {
-            "kospi": market_gate_data.get("kospi_close", "N/A"),
-            "kosdaq": market_gate_data.get("kosdaq_close", "N/A"),
-            "usd_krw": market_gate_data.get("usd_krw", "N/A"),
-            "market_gate": market_gate_data.get("color", "UNKNOWN"),
-            "market_status": market_gate_data.get("status", ""),
-            "total_score": market_gate_data.get("total_score", 0)
-        }
-        
-        # Sector Scores from Market Gate
-        if market_gate_data.get("sectors"):
-            sector_scores = {s["name"]: s["change_pct"] for s in market_gate_data.get("sectors", [])}
-
-        # 3. 특정 종목 질문인지 확인 (텍스트 기반)
-        stock_context = self._detect_stock_query(user_message)
-        
-        # 3.1 의도 감지 및 컨텍스트 구성
-        additional_context = ""
-        intent_instruction = ""
-        jongga_context = False
-        
-        # 3.1.1 종가베팅 추천 질문 확인
-        if any(kw in user_message for kw in ["종가베팅", "종가 베팅", "Closing Betting"]):
-            jongga_context = True # Flag set
-            self.memory.add("interest", "종가베팅")
-            logger.info(f"Auto-saved interest: 종가베팅 for user {self.user_id}")
-            
-            jongga_data = self._fetch_jongga_data()
-            if jongga_data:
-                additional_context += f"\n\n## [종가베팅 추천 종목]\n{jongga_data}"
-            else:
-                additional_context += "\n\n## [종가베팅 데이터]\n현재 추천할 만한 종가베팅 시그널이 없습니다."
-            
-            from .prompts import INTENT_PROMPTS
-            intent_instruction = INTENT_PROMPTS.get("closing_bet", "")
-        
-        # 3.1.2 시장/마켓게이트 질문 감지
-        elif any(kw in user_message for kw in ["시장", "마켓게이트", "Market Gate", "시황", "장세", "지수"]):
-            mg = market_gate_data
-            if mg:
-                gate_color = mg.get("color", "UNKNOWN")
-                gate_status = mg.get("status", "")
-                gate_score = mg.get("total_score", 0)
-                gate_reason = mg.get("gate_reason", "")
-                
-                indices = mg.get("indices", {})
-                sectors = mg.get("sectors", [])[:5]  # 상위 5개 섹터만
-                
-                indices_text = "\n".join([f"  - {k.upper()}: {v.get('value', 'N/A')} ({v.get('change_pct', 0):+.2f}%)" for k, v in indices.items()])
-                sectors_text = "\n".join([f"  - {s['name']}: {s['change_pct']:+.2f}% ({s['signal']})" for s in sectors])
-                
-                additional_context += f"""
-## [Market Gate 상세 분석]
-- **상태**: {gate_color} ({gate_status})
-- **점수**: {gate_score}점
-- **판단 근거**: {gate_reason}
-
-### 주요 지수
-
-
-### 섹터 동향
-{sectors_text}
-"""
-                intent_instruction = "위 Market Gate 데이터를 참고하여 현재 시장 상황과 투자 전략을 상세히 분석해주세요."
-        
-        # 3.1.3 VCP/수급/추천 종목 질문 감지
-        elif any(kw in user_message for kw in ["VCP", "수급", "추천", "뭐 살", "매수", "시그널"]):
-            vcp_analysis = self._fetch_vcp_ai_analysis()
-            if vcp_analysis:
-                additional_context += f"\n\n## [VCP AI 분석 결과 - 매수 추천 종목]\n{vcp_analysis}"
-            else:
-                additional_context += "\n\n## [VCP 분석]\n현재 분석된 VCP 시그널이 없습니다."
-            
-            intent_instruction = "위 VCP AI 분석 결과를 참고하여 투자 추천과 근거를 설명해주세요."
-        
-        # 3.1.4 뉴스/이슈 질문 감지
-        elif any(kw in user_message for kw in ["뉴스", "호재", "이슈", "속보", "소식"]):
-            news_data = self._fetch_latest_news()
-            if news_data:
-                additional_context += f"\n\n## [최근 뉴스]\n{news_data}"
-            else:
-                additional_context += "\n\n## [뉴스]\n최근 수집된 주요 뉴스가 없습니다."
-            
-            intent_instruction = "위 뉴스 데이터를 참고하여 시장에 미칠 영향을 분석해주세요."
-
-        # 3.1.5 관심종목 질문 감지 (또는 watchlist가 있고 '내 종목' 등을 물어볼 때)
-        if watchlist and any(kw in user_message for kw in ["내 종목", "관심 종목", "관심종목", "포트폴리오", "가지고 있는"]):
-             # Watchlist items analysis (Full Data Injection)
-             watchlist_context = "\n\n## [내 관심종목 상세 분석 데이터]\n"
-             
-             for stock_name in watchlist:
-                 # 1. Try to resolve ticker
-                 ticker = self.stock_map.get(stock_name)
-                 if not ticker:
-                      # If watchlist item IS a ticker?
-                      ticker = stock_name if stock_name.isdigit() else None
-                      
-                 if ticker:
-                     # 2. Fetch Full Context (Price, Trend, Signal)
-                     stock_detail = self._format_stock_context(stock_name, ticker)
-                     watchlist_context += stock_detail + "\n"
-                     
-                     # Check VCP score as well
-                     match = next((s for s in vcp_data if s.get('code') == ticker), None)
-                     if match:
-                         watchlist_context += f"-> [VCP 상태]: 현재 VCP 패턴 포착됨 ({match.get('score')}점)\n"
-                 else:
-                     watchlist_context += f"- {stock_name}: (종목 코드를 찾을 수 없음)\n"
-            
-             additional_context += watchlist_context
-             intent_instruction = "위 [내 관심종목 상세 분석 데이터]를 바탕으로, 각 종목의 현재 주가 흐름, 수급 상태, VCP 패턴 여부를 종합하여 상세히 진단해주세요."
-
-        # 3.1.6 기본 Watchlist Context 주입
-        elif watchlist:
-            wl_summary = []
-            for stock_name in watchlist:
-                match = next((s for s in vcp_data if s.get('name') == stock_name or s.get('code') == stock_name), None)
-                if match:
-                    score = match.get('score', 0)
-                    wl_summary.append(f"{stock_name}({score}점)")
-            
-            if wl_summary:
-                additional_context += f"\n\n## [관심종목 VCP 요약]\n{', '.join(wl_summary)}\n"
-
-        # 4. 시스템 프롬프트 구성
-        system_prompt = build_system_prompt(
-            memory_text=self.memory.format_for_prompt(),
+        market_gate_data, vcp_data, sector_scores, market_data = self._collect_market_context()
+        additional_context, intent_instruction, jongga_context = self._build_additional_context(
+            user_message=user_message,
+            watchlist=watchlist,
+            vcp_data=vcp_data,
+            market_gate_data=market_gate_data,
+        )
+        system_prompt = self._compose_system_prompt(
+            user_message=user_message,
+            target_model_name=target_model_name,
             market_data=market_data,
             vcp_data=vcp_data,
             sector_scores=sector_scores,
-            current_model=target_model_name,
+            watchlist=watchlist,
             persona=persona,
-            watchlist=watchlist
+            additional_context=additional_context,
         )
-        
-        if stock_context:
-            system_prompt += f"\n\n## 질문 대상 종목 상세\n{stock_context}"
-            
-        if additional_context:
-            system_prompt += additional_context
-        
-        # 5. Gemini 호출
+
         try:
-            # 채팅 히스토리 로드
-            chat_history = self.history.get_messages(session_id)
-            
-            # FIX: Gemini SDK Pydantic Validation Error (Extra inputs are not permitted)
-            # Remove 'timestamp' and other extra fields before passing to SDK
-            api_history = []
-            for msg in chat_history:
-                clean_msg = {
-                    "role": msg["role"],
-                    "parts": msg["parts"]
-                }
-                api_history.append(clean_msg)
-            
-            # 멀티모달 프롬프트 구성
-            content_parts = []
-            
-            if files:
-                for file in files:
-                    content_parts.append({
-                        "mime_type": file["mime_type"],
-                        "data": file["data"]
-                    })
-            
-            # 프롬프트에 종가베팅 의도 명시
-            intent_instruction = ""
-            if jongga_context:
-                from .prompts import INTENT_PROMPTS
-                intent_instruction = INTENT_PROMPTS.get("closing_bet", "")
-                
-            full_user_content = f"{system_prompt}\n{intent_instruction}\n\n[사용자 메시지]: {user_message}"
-            content_parts.append(full_user_content)
+            api_history = self._build_api_history(session_id)
+            content_parts = self._build_content_parts(
+                files=files,
+                system_prompt=system_prompt,
+                intent_instruction=intent_instruction,
+                user_message=user_message,
+                jongga_context=jongga_context,
+            )
 
             chat_session = active_client.chats.create(
                 model=target_model_name,
-                history=api_history
+                history=api_history,
             )
-            
             response = chat_session.send_message(content_parts)
             bot_response = self._normalize_markdown_response(response.text or "")
-            
-            # [Usage Metadata Extraction]
+
             usage_metadata = {}
-            if hasattr(response, 'usage_metadata'):
+            if hasattr(response, "usage_metadata"):
                 meta = response.usage_metadata
-                # Extract fields safely
                 usage_metadata = {
-                    'prompt_token_count': getattr(meta, 'prompt_token_count', 0),
-                    'candidates_token_count': getattr(meta, 'candidates_token_count', 0),
-                    'total_token_count': getattr(meta, 'total_token_count', 0),
+                    "prompt_token_count": getattr(meta, "prompt_token_count", 0),
+                    "candidates_token_count": getattr(meta, "candidates_token_count", 0),
+                    "total_token_count": getattr(meta, "total_token_count", 0),
                 }
 
-            # 6. 히스토리 저장
-            user_history_msg = user_message
-            if files:
-                user_history_msg += f" [파일 {len(files)}개 첨부됨]"
-                
+            user_history_msg = self._format_user_history_message(user_message, files)
             self.history.add_message(session_id, "user", user_history_msg)
             self.history.add_message(session_id, "model", bot_response)
-            
+
             return {
-                "response": bot_response, 
+                "response": bot_response,
                 "session_id": session_id,
-                "usage_metadata": usage_metadata
+                "usage_metadata": usage_metadata,
             }
-            
         except Exception as e:
             error_msg = str(e)
             logger.error(f"[User: {self.user_id}] Chat error: {error_msg}")
-            
-            # [Error Handling] 429 Resource Exhausted (Google API Rate Limit)
-            if "429" in error_msg or "Resource exhausted" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                friendly_msg = (
-                    "⚠️ **AI 서버 요청 한도 초과**\n\n"
-                    "Google AI 서버의 분당 요청 한도에 도달했습니다.\n"
-                    "**약 30초~1분 후에 다시 시도해주세요.**\n\n"
-                    "💡 안정적인 사용을 위해 **[설정] > [API Key]** 메뉴에서 개인 API Key를 등록하시면 이 제한을 피할 수 있습니다."
-                )
-                return {"response": friendly_msg, "session_id": session_id}
+            return {
+                "response": self._friendly_error_message(
+                    error_msg,
+                    default_prefix="⚠️ 오류가 발생했습니다: ",
+                ),
+                "session_id": session_id,
+            }
 
-            # [Error Handling] 400 Invalid Argument (API Key Invalid)
-            if "400" in error_msg or "API_KEY_INVALID" in error_msg or "API key not valid" in error_msg:
-                friendly_msg = (
-                    "⚠️ **API Key 설정 오류**\n\n"
-                    "시스템에 설정된 API Key가 유효하지 않습니다.\n"
-                    "관리자에게 문의하거나 **[설정] > [API Key]** 메뉴에서 올바른 API Key를 다시 등록해주세요.\n"
-                    "(Google 서비스 문제일 수도 있습니다.)"
-                )
-                return {"response": friendly_msg, "session_id": session_id}
+    def _yield_stream_deltas(
+        self,
+        session_id: str,
+        streamed_reasoning: str,
+        streamed_answer: str,
+        current_reasoning: str,
+        current_answer: str,
+    ) -> Generator[Dict[str, Any], None, Tuple[str, str]]:
+        """스트리밍 중 추론/답변 델타를 계산하고 이벤트를 방출한다."""
+        reasoning_reset, reasoning_delta = _compute_stream_delta(
+            streamed_reasoning,
+            current_reasoning,
+        )
+        if reasoning_reset:
+            streamed_reasoning = ""
+            yield {"reasoning_clear": True, "session_id": session_id}
+        if reasoning_delta:
+            streamed_reasoning = current_reasoning
+            yield {
+                "reasoning_chunk": reasoning_delta,
+                "session_id": session_id,
+            }
 
-            return {"response": f"⚠️ 오류가 발생했습니다: {error_msg}", "session_id": session_id}
+        answer_reset, answer_delta = _compute_stream_delta(
+            streamed_answer,
+            current_answer,
+        )
+        if answer_reset:
+            streamed_answer = ""
+            yield {"answer_clear": True, "session_id": session_id}
+        if answer_delta:
+            streamed_answer = current_answer
+            yield {
+                "chunk": answer_delta,
+                "answer_chunk": answer_delta,
+                "session_id": session_id,
+            }
+
+        return streamed_reasoning, streamed_answer
+
+    def _stream_single_model_response(
+        self,
+        response_stream: Any,
+        session_id: str,
+    ) -> Generator[Dict[str, Any], None, Tuple[str, str, str]]:
+        """단일 모델 응답 스트림을 처리하고 최종 누적 상태를 반환한다."""
+        bot_response = ""
+        streamed_reasoning = ""
+        streamed_answer = ""
+
+        for chunk in response_stream:
+            chunk_text = getattr(chunk, "text", "")
+            if not chunk_text:
+                continue
+
+            bot_response += chunk_text
+            current_reasoning, current_answer = _extract_reasoning_and_answer(
+                bot_response,
+                is_streaming=True,
+            )
+            streamed_reasoning, streamed_answer = yield from self._yield_stream_deltas(
+                session_id=session_id,
+                streamed_reasoning=streamed_reasoning,
+                streamed_answer=streamed_answer,
+                current_reasoning=current_reasoning,
+                current_answer=current_answer,
+            )
+
+        return bot_response, streamed_reasoning, streamed_answer
+
+    def _stream_with_fallback_models(
+        self,
+        active_client: Any,
+        target_model_name: str,
+        api_history: List[dict],
+        content_parts: List[Any],
+        session_id: str,
+    ) -> Generator[Dict[str, Any], None, Tuple[str, str, str, Optional[str]]]:
+        """폴백 모델 순회로 스트리밍을 수행한다."""
+        last_error = None
+
+        for current_model in self._build_fallback_models(target_model_name):
+            try:
+                chat_session = active_client.chats.create(
+                    model=current_model,
+                    history=api_history,
+                )
+                response_stream = chat_session.send_message_stream(content_parts)
+                bot_response, streamed_reasoning, streamed_answer = yield from self._stream_single_model_response(
+                    response_stream=response_stream,
+                    session_id=session_id,
+                )
+                return bot_response, streamed_reasoning, streamed_answer, None
+            except Exception as e:
+                last_error = str(e)
+                if self._is_retryable_stream_error(last_error):
+                    logger.warning(
+                        "[User: %s] %s Error (retryable). Details: %s",
+                        self.user_id,
+                        current_model,
+                        last_error,
+                    )
+                    yield {"clear": True, "session_id": session_id}
+                    continue
+                raise
+
+        return "", "", "", (last_error or "알 수 없는 오류")
+
+    def _sync_stream_with_final_response(
+        self,
+        bot_response: str,
+        streamed_reasoning: str,
+        streamed_answer: str,
+        session_id: str,
+    ) -> Generator[Dict[str, Any], None, str]:
+        """최종 정규화 결과와 스트리밍 화면을 동기화한다."""
+        normalized_response = self._normalize_markdown_response(bot_response)
+        final_reasoning, final_answer = _extract_reasoning_and_answer(
+            normalized_response,
+            is_streaming=False,
+        )
+
+        if (
+            normalized_response != bot_response
+            or final_reasoning != streamed_reasoning
+            or final_answer != streamed_answer
+        ):
+            yield {"clear": True, "session_id": session_id}
+            if final_reasoning:
+                yield {"reasoning_chunk": final_reasoning, "session_id": session_id}
+            if final_answer:
+                yield {
+                    "chunk": final_answer,
+                    "answer_chunk": final_answer,
+                    "session_id": session_id,
+                }
+
+        return normalized_response
 
     def chat_stream(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None, owner_id: str = None) -> Dict[str, Any]:
         """
@@ -1374,405 +1704,111 @@ class KRStockChatbot:
             api_key: (Optional) 사용자 제공 API Key
         """
         target_model_name = model or self.current_model_name
-        
-        # [Client Selection]
-        # 사용자 제공 Key가 있으면 임시 Client 생성, 없으면 기본 self.client 사용
-        active_client = self.client
-        if api_key:
-            try:
-                from google import genai
-                active_client = genai.Client(api_key=api_key)
-            except Exception as e:
-                logger.error(f"Temp client init failed: {e}")
-                yield {"error": f"⚠️ API Key 오류: {str(e)}", "session_id": session_id}
+        active_client, client_error = self._resolve_active_client(api_key)
+        if client_error:
+            yield {"error": client_error, "session_id": session_id}
+            return
 
-        if not active_client:
-             debug_info = f"KeyLen: {len(str(api_key))} " if api_key else "Key: None "
-             yield {"error": f"⚠️ AI 모델이 설정되지 않았습니다. ({debug_info}) [설정 > API & 기능]에서 API Key를 등록하거나, 구글 로그인을 진행해주세요. (데이터 초기화 후에는 재설정이 필요합니다)", "session_id": session_id}
+        is_ephemeral = self._is_ephemeral_command(user_message, files)
+        session_id = self._ensure_session_access(
+            session_id=session_id,
+            target_model_name=target_model_name,
+            is_ephemeral=is_ephemeral,
+            owner_id=owner_id,
+            reuse_session_id_on_owner_mismatch=False,
+        )
 
-        # Ephemeral check
-        is_ephemeral = False
-        if not files and user_message.strip().startswith(("/status", "/help", "/memory view")):
-            is_ephemeral = True
-
-        # 0. 세션 확인 및 생성
-        # 세션이 없으면 새로 생성하되, Ephemeral 명령이면 바로 저장하지 않음 (Memory only)
-        if not session_id or not self.history.get_session(session_id):
-            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id, session_id=session_id)
-
-        # [Security] Verify ownership
-        if session_id:
-            session_data = self.history.get_session(session_id)
-            if session_data:
-                sess_owner = session_data.get("owner_id")
-                if sess_owner and sess_owner != owner_id:
-                     logger.warning(f"Session access denied. Owner: {sess_owner}, Requester: {owner_id}")
-                     # Access denied -> Create new session for the requester
-                     session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id)
-
-        # 1. 명령어 체크 (파일이 없을 때만)
-        if not files and user_message.startswith("/"):
-            try:
-                cmd_resp = self._handle_command(user_message, session_id)
-                
-                # Ephemeral 명령이어도 메모리에는 남겨야 함 (화면 표시용)
-                # 단, save=False로 디스크 저장은 건너뜀
-                should_save = not is_ephemeral
-                
-                # User Message 기록
-                self.history.add_message(session_id, "user", user_message, save=should_save)
-                
-                # Model Response 기록
-                self.history.add_message(session_id, "model", cmd_resp, save=should_save)
-                
+        handled, cmd_resp, cmd_error = self._execute_command(
+            user_message=user_message,
+            session_id=session_id,
+            files=files,
+            is_ephemeral=is_ephemeral,
+        )
+        if handled:
+            if cmd_error:
+                yield {"error": cmd_error, "session_id": session_id}
+            else:
                 yield {"chunk": cmd_resp, "session_id": session_id}
-                return
-            except Exception as e:
-                logger.error(f"Command error: {e}")
-                yield {"error": f"⚠️ 명령어 처리 중 오류가 발생했습니다: {str(e)}", "session_id": session_id}
-        # 2. 시장 데이터 가져오기 (챗봇 컨텍스트용) - 실제 데이터 사용
-        # Market Gate 실제 데이터 로드
-        market_gate_data = self._fetch_market_gate()
-        
-        # 기존 캐시 데이터도 가져오기 (VCP 종목 등)
-        data = self._get_cached_data()
-        vcp_data = data.get("vcp_stocks", [])
-        sector_scores = data.get("sector_scores", {})
-        
-        # Market Gate 데이터를 market_data 형식으로 변환
-        market_data = {
-            "kospi": market_gate_data.get("kospi_close", "N/A"),
-            "kosdaq": market_gate_data.get("kosdaq_close", "N/A"),
-            "usd_krw": market_gate_data.get("usd_krw", "N/A"),
-            "market_gate": market_gate_data.get("color", "UNKNOWN"),
-            "market_status": market_gate_data.get("status", ""),
-            "total_score": market_gate_data.get("total_score", 0)
-        }
-        
-        # Sector Scores from Market Gate
-        if market_gate_data.get("sectors"):
-            sector_scores = {s["name"]: s["change_pct"] for s in market_gate_data.get("sectors", [])}
+            return
 
-        # 3. 특정 종목 질문인지 확인 (텍스트 기반)
-        stock_context = self._detect_stock_query(user_message)
-        
-        # 3.1 의도 감지 및 컨텍스트 구성
-        additional_context = ""
-        intent_instruction = ""
-        jongga_context = False
-        
-        # 3.1.1 종가베팅 추천 질문 확인
-        if any(kw in user_message for kw in ["종가베팅", "종가 베팅", "Closing Betting"]):
-            jongga_context = True # Flag set
-            self.memory.add("interest", "종가베팅")
-            logger.info(f"Auto-saved interest: 종가베팅 for user {self.user_id}")
-            
-            jongga_data = self._fetch_jongga_data()
-            if jongga_data:
-                additional_context += f"\n\n## [종가베팅 추천 종목]\n{jongga_data}"
-            else:
-                additional_context += "\n\n## [종가베팅 데이터]\n현재 추천할 만한 종가베팅 시그널이 없습니다."
-            
-            from .prompts import INTENT_PROMPTS
-            intent_instruction = INTENT_PROMPTS.get("closing_bet", "")
-        
-        # 3.1.2 시장/마켓게이트 질문 감지
-        elif any(kw in user_message for kw in ["시장", "마켓게이트", "Market Gate", "시황", "장세", "지수"]):
-            mg = market_gate_data
-            if mg:
-                gate_color = mg.get("color", "UNKNOWN")
-                gate_status = mg.get("status", "")
-                gate_score = mg.get("total_score", 0)
-                gate_reason = mg.get("gate_reason", "")
-                
-                indices = mg.get("indices", {})
-                sectors = mg.get("sectors", [])[:5]  # 상위 5개 섹터만
-                
-                indices_text = "\n".join([f"  - {k.upper()}: {v.get('value', 'N/A')} ({v.get('change_pct', 0):+.2f}%)" for k, v in indices.items()])
-                sectors_text = "\n".join([f"  - {s['name']}: {s['change_pct']:+.2f}% ({s['signal']})" for s in sectors])
-                
-                additional_context += f"""
-## [Market Gate 상세 분석]
-- **상태**: {gate_color} ({gate_status})
-- **점수**: {gate_score}점
-- **판단 근거**: {gate_reason}
-
-### 주요 지수
-
-
-### 섹터 동향
-{sectors_text}
-"""
-                intent_instruction = "위 Market Gate 데이터를 참고하여 현재 시장 상황과 투자 전략을 상세히 분석해주세요."
-        
-        # 3.1.3 VCP/수급/추천 종목 질문 감지
-        elif any(kw in user_message for kw in ["VCP", "수급", "추천", "뭐 살", "매수", "시그널"]):
-            vcp_analysis = self._fetch_vcp_ai_analysis()
-            if vcp_analysis:
-                additional_context += f"\n\n## [VCP AI 분석 결과 - 매수 추천 종목]\n{vcp_analysis}"
-            else:
-                additional_context += "\n\n## [VCP 분석]\n현재 분석된 VCP 시그널이 없습니다."
-            
-            intent_instruction = "위 VCP AI 분석 결과를 참고하여 투자 추천과 근거를 설명해주세요."
-        
-        # 3.1.4 뉴스/이슈 질문 감지
-        elif any(kw in user_message for kw in ["뉴스", "호재", "이슈", "속보", "소식"]):
-            news_data = self._fetch_latest_news()
-            if news_data:
-                additional_context += f"\n\n## [최근 뉴스]\n{news_data}"
-            else:
-                additional_context += "\n\n## [뉴스]\n최근 수집된 주요 뉴스가 없습니다."
-            
-            intent_instruction = "위 뉴스 데이터를 참고하여 시장에 미칠 영향을 분석해주세요."
-
-        # 3.1.5 관심종목 질문 감지 (또는 watchlist가 있고 '내 종목' 등을 물어볼 때)
-        if watchlist and any(kw in user_message for kw in ["내 종목", "관심 종목", "관심종목", "포트폴리오", "가지고 있는"]):
-             # Watchlist items analysis (Full Data Injection)
-             watchlist_context = "\n\n## [내 관심종목 상세 분석 데이터]\n"
-             
-             for stock_name in watchlist:
-                 # 1. Try to resolve ticker
-                 ticker = self.stock_map.get(stock_name)
-                 if not ticker:
-                      # If watchlist item IS a ticker?
-                      ticker = stock_name if stock_name.isdigit() else None
-                      
-                 if ticker:
-                     # 2. Fetch Full Context (Price, Trend, Signal)
-                     stock_detail = self._format_stock_context(stock_name, ticker)
-                     watchlist_context += stock_detail + "\n"
-                     
-                     # Check VCP score as well
-                     match = next((s for s in vcp_data if s.get('code') == ticker), None)
-                     if match:
-                         watchlist_context += f"-> [VCP 상태]: 현재 VCP 패턴 포착됨 ({match.get('score')}점)\n"
-                 else:
-                     watchlist_context += f"- {stock_name}: (종목 코드를 찾을 수 없음)\n"
-            
-             additional_context += watchlist_context
-             intent_instruction = "위 [내 관심종목 상세 분석 데이터]를 바탕으로, 각 종목의 현재 주가 흐름, 수급 상태, VCP 패턴 여부를 종합하여 상세히 진단해주세요."
-
-        # 3.1.6 기본 Watchlist Context 주입
-        elif watchlist:
-            wl_summary = []
-            for stock_name in watchlist:
-                match = next((s for s in vcp_data if s.get('name') == stock_name or s.get('code') == stock_name), None)
-                if match:
-                    score = match.get('score', 0)
-                    wl_summary.append(f"{stock_name}({score}점)")
-            
-            if wl_summary:
-                additional_context += f"\n\n## [관심종목 VCP 요약]\n{', '.join(wl_summary)}\n"
-
-        # 4. 시스템 프롬프트 구성
-        system_prompt = build_system_prompt(
-            memory_text=self.memory.format_for_prompt(),
+        market_gate_data, vcp_data, sector_scores, market_data = self._collect_market_context()
+        additional_context, intent_instruction, jongga_context = self._build_additional_context(
+            user_message=user_message,
+            watchlist=watchlist,
+            vcp_data=vcp_data,
+            market_gate_data=market_gate_data,
+        )
+        system_prompt = self._compose_system_prompt(
+            user_message=user_message,
+            target_model_name=target_model_name,
             market_data=market_data,
             vcp_data=vcp_data,
             sector_scores=sector_scores,
-            current_model=target_model_name,
+            watchlist=watchlist,
             persona=persona,
-            watchlist=watchlist
+            additional_context=additional_context,
         )
-        
-        if stock_context:
-            system_prompt += f"\n\n## 질문 대상 종목 상세\n{stock_context}"
-            
-        if additional_context:
-            system_prompt += additional_context
-        
-        # 5. Gemini 호출
+
         try:
-            # 채팅 히스토리 로드
-            chat_history = self.history.get_messages(session_id)
-            
-            # FIX: Gemini SDK Pydantic Validation Error (Extra inputs are not permitted)
-            # Remove 'timestamp' and other extra fields before passing to SDK
-            api_history = []
-            for msg in chat_history:
-                clean_msg = {
-                    "role": msg["role"],
-                    "parts": msg["parts"]
+            api_history = self._build_api_history(session_id)
+            content_parts = self._build_content_parts(
+                files=files,
+                system_prompt=system_prompt,
+                intent_instruction=intent_instruction,
+                user_message=user_message,
+                jongga_context=jongga_context,
+            )
+
+            (
+                bot_response,
+                streamed_reasoning,
+                streamed_answer,
+                fallback_error,
+            ) = yield from self._stream_with_fallback_models(
+                active_client=active_client,
+                target_model_name=target_model_name,
+                api_history=api_history,
+                content_parts=content_parts,
+                session_id=session_id,
+            )
+
+            if fallback_error:
+                logger.error(
+                    "[User: %s] All fallback models failed. Last Error: %s",
+                    self.user_id,
+                    fallback_error,
+                )
+                yield {
+                    "error": "⚠️ **서버 통신 지연**\n\nAI 서버에 트래픽이 집중되고 있거나 일시적인 장애가 발생했습니다. 잠시 후 다시 시도해주세요.",
+                    "session_id": session_id,
                 }
-                api_history.append(clean_msg)
-            
-            # 멀티모달 프롬프트 구성
-            content_parts = []
-            
-            if files:
-                for file in files:
-                    content_parts.append({
-                        "mime_type": file["mime_type"],
-                        "data": file["data"]
-                    })
-            
-            # 프롬프트에 종가베팅 의도 명시
-            intent_instruction = ""
-            if jongga_context:
-                from .prompts import INTENT_PROMPTS
-                intent_instruction = INTENT_PROMPTS.get("closing_bet", "")
-                
-            full_user_content = f"{system_prompt}\n{intent_instruction}\n\n[사용자 메시지]: {user_message}"
-            content_parts.append(full_user_content)
-
-            # 5. Gemini 호출 (Fallback 적용)
-            fallback_sequence = [
-                "gemini-2.0-flash-lite",
-                "gemini-2.5-flash-lite",
-                "gemini-2.0-flash",
-                "gemini-2.5-flash",
-                "gemini-3-flash-preview"
-            ]
-            
-            fallback_models = [target_model_name]
-            for m in fallback_sequence:
-                if m not in fallback_models:
-                    fallback_models.append(m)
-            bot_response = ""
-            streamed_reasoning = ""
-            streamed_answer = ""
-            success = False
-            last_error = None
-            
-            for current_model in fallback_models:
-                try:
-                    chat_session = active_client.chats.create(
-                        model=current_model,
-                        history=api_history
-                    )
-                    
-                    bot_response = ""
-                    streamed_reasoning = ""
-                    streamed_answer = ""
-                    response_stream = chat_session.send_message_stream(content_parts)
-                    for chunk in response_stream:
-                        if chunk.text:
-                            bot_response += chunk.text
-                            current_reasoning, current_answer = _extract_reasoning_and_answer(
-                                bot_response,
-                                is_streaming=True,
-                            )
-
-                            reasoning_reset, reasoning_delta = _compute_stream_delta(
-                                streamed_reasoning,
-                                current_reasoning,
-                            )
-                            if reasoning_reset:
-                                streamed_reasoning = ""
-                                yield {"reasoning_clear": True, "session_id": session_id}
-                            if reasoning_delta:
-                                streamed_reasoning = current_reasoning
-                                yield {"reasoning_chunk": reasoning_delta, "session_id": session_id}
-
-                            answer_reset, answer_delta = _compute_stream_delta(
-                                streamed_answer,
-                                current_answer,
-                            )
-                            if answer_reset:
-                                streamed_answer = ""
-                                yield {"answer_clear": True, "session_id": session_id}
-                            if answer_delta:
-                                streamed_answer = current_answer
-                                # Backward compatibility: keep "chunk" for existing clients.
-                                yield {
-                                    "chunk": answer_delta,
-                                    "answer_chunk": answer_delta,
-                                    "session_id": session_id,
-                                }
-                            
-                    success = True
-                    break # 성공 시 루프 종료
-                except Exception as e:
-                    error_msg = str(e)
-                    last_error = error_msg
-                    
-                    error_msg_upper = error_msg.upper()
-                    if "503" in error_msg or "UNAVAILABLE" in error_msg_upper or "429" in error_msg or "RESOURCE EXHAUSTED" in error_msg_upper or "RESOURCE_EXHAUSTED" in error_msg_upper:
-                        logger.warning(f"[User: {self.user_id}] {current_model} Error (503/429). Retrying with next fallback model... Details: {error_msg}")
-                        # Tell frontend to clear the accumulated message because we are restarting the stream
-                        yield {"clear": True, "session_id": session_id}
-                        # 다음 모델로 넘어감
-                        continue
-                    else:
-                        # 503 이외의 에러는 바로 던짐
-                        raise e
-            
-            if not success:
-                # 모든 Fallback 모델이 실패했거나 503 에러가 반복된 경우
-                error_msg = last_error or "알 수 없는 오류"
-                logger.error(f"[User: {self.user_id}] All fallback models failed. Last Error: {error_msg}")
-                yield {"error": "⚠️ **서버 통신 지연**\n\nAI 서버에 트래픽이 집중되고 있거나 일시적인 장애가 발생했습니다. 잠시 후 다시 시도해주세요.", "session_id": session_id}
                 return
 
-            # Final normalization for markdown stability.
-            normalized_response = self._normalize_markdown_response(bot_response)
-            final_reasoning, final_answer = _extract_reasoning_and_answer(
-                normalized_response,
-                is_streaming=False,
+            bot_response = yield from self._sync_stream_with_final_response(
+                bot_response=bot_response,
+                streamed_reasoning=streamed_reasoning,
+                streamed_answer=streamed_answer,
+                session_id=session_id,
             )
-            if (
-                normalized_response != bot_response
-                or final_reasoning != streamed_reasoning
-                or final_answer != streamed_answer
-            ):
-                yield {"clear": True, "session_id": session_id}
-                if final_reasoning:
-                    yield {"reasoning_chunk": final_reasoning, "session_id": session_id}
-                if final_answer:
-                    yield {
-                        "chunk": final_answer,
-                        "answer_chunk": final_answer,
-                        "session_id": session_id,
-                    }
-            bot_response = normalized_response
-            
-            # [Usage Metadata Extraction]
-            usage_metadata = {}
-            # Not fully supported in stream without iterating the entire generator safely first
 
-            # 6. 히스토리 저장
-            user_history_msg = user_message
-            if files:
-                user_history_msg += f" [파일 {len(files)}개 첨부됨]"
-                
+            usage_metadata = {}
+            user_history_msg = self._format_user_history_message(user_message, files)
             self.history.add_message(session_id, "user", user_history_msg)
             self.history.add_message(session_id, "model", bot_response)
-            
-            # Yield final metadata
-            yield {
-                "done": True,
-                "session_id": session_id,
-                "usage_metadata": usage_metadata
-            }
+
+            yield {"done": True, "session_id": session_id, "usage_metadata": usage_metadata}
             return
-            
+
         except Exception as e:
             error_msg = str(e)
             logger.error(f"[User: {self.user_id}] Chat error: {error_msg}")
-            
-            # [Error Handling] 429 Resource Exhausted (Google API Rate Limit)
-            if "429" in error_msg or "Resource exhausted" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                friendly_msg = (
-                    "⚠️ **AI 서버 요청 한도 초과**\n\n"
-                    "Google AI 서버의 분당 요청 한도에 도달했습니다.\n"
-                    "**약 30초~1분 후에 다시 시도해주세요.**\n\n"
-                    "💡 안정적인 사용을 위해 **[설정] > [API Key]** 메뉴에서 개인 API Key를 등록하시면 이 제한을 피할 수 있습니다."
-                )
-                yield {"error": friendly_msg, "session_id": session_id}
-                return
-
-            # [Error Handling] 400 Invalid Argument (API Key Invalid)
-            if "400" in error_msg or "API_KEY_INVALID" in error_msg or "API key not valid" in error_msg:
-                friendly_msg = (
-                    "⚠️ **API Key 설정 오류**\n\n"
-                    "시스템에 설정된 API Key가 유효하지 않습니다.\n"
-                    "관리자에게 문의하거나 **[설정] > [API Key]** 메뉴에서 올바른 API Key를 다시 등록해주세요.\n"
-                    "(Google 서비스 문제일 수도 있습니다.)"
-                )
-                yield {"error": friendly_msg, "session_id": session_id}
-                return
-
-            yield {"error": f"⚠️ 서버 통신 오류가 발생했습니다: {error_msg}", "session_id": session_id}
+            yield {
+                "error": self._friendly_error_message(
+                    error_msg,
+                    default_prefix="⚠️ 서버 통신 오류가 발생했습니다: ",
+                ),
+                "session_id": session_id,
+            }
             return
 
     def _fetch_jongga_data(self) -> str:
@@ -1842,21 +1878,6 @@ class KRStockChatbot:
                 return response
             return "현재 데이터를 불러올 수 없습니다."
         return "질문을 이해하지 못했습니다."
-
-    def _detect_stock_query(self, message: str) -> Optional[str]:
-        """종목 관련 질문 감지 및 상세 정보 반환"""
-        data = self._get_cached_data()
-        vcp_stocks = data.get("vcp_stocks", [])
-        
-        # Explicit context provided by frontend (e.g. "[삼성전자(005930)] 전망")
-        # Or simple scan
-        for stock in vcp_stocks:
-            name = stock.get('name', '')
-            ticker = stock.get('ticker', '')
-            
-            if name and (name in message or ticker in message):
-                return self._format_stock_info(stock)
-        return None
 
     def _format_stock_info(self, stock: Dict) -> str:
         """종목 정보 포맷팅"""

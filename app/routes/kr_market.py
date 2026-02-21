@@ -8,12 +8,40 @@ from flask import Blueprint, jsonify, request, current_app
 
 from app.routes.kr_market_helpers import (
     _VALID_AI_ACTIONS,
+    _aggregate_cumulative_kpis,
+    _apply_latest_prices_to_jongga_signals,
+    _apply_gemini_reanalysis_results,
+    _apply_vcp_reanalysis_updates,
+    _build_ai_data_map,
+    _build_ai_signals_from_jongga_results,
+    _build_cumulative_trade_record,
+    _build_jongga_news_analysis_items,
+    _build_latest_price_map,
+    _build_vcp_stock_payloads,
+    _build_vcp_signals_from_dataframe,
+    _calculate_jongga_backtest_stats,
+    _calculate_scenario_return,
+    _calculate_vcp_backtest_stats,
+    _extract_stats_date_from_results_filename,
+    _extract_vcp_ai_recommendation,
+    _filter_signals_dataframe_by_date,
+    _format_signal_date,
     _is_jongga_ai_analysis_completed,
     _is_meaningful_ai_reason,
     _is_vcp_ai_analysis_failed,
+    _merge_ai_data_into_vcp_signals,
+    _merge_legacy_ai_fields_into_map,
+    _normalize_jongga_signals_for_frontend,
+    _normalize_ai_payload_tickers,
     _normalize_text,
+    _paginate_items,
+    _prepare_cumulative_price_dataframe,
     _recalculate_jongga_grade,
     _recalculate_jongga_grades,
+    _select_signals_for_gemini_reanalysis,
+    _should_use_jongga_ai_payload,
+    _sort_and_limit_vcp_signals,
+    _sort_jongga_signals,
 )
 
 kr_bp = Blueprint('kr', __name__)
@@ -149,6 +177,77 @@ def load_csv_file(filename: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def _load_latest_vcp_price_map() -> dict:
+    """daily_prices.csv에서 ticker별 최신 종가 맵을 로드한다."""
+    price_file = get_data_path("daily_prices.csv")
+    if not os.path.exists(price_file):
+        return {}
+
+    df_prices = pd.read_csv(
+        price_file,
+        usecols=["date", "ticker", "close"],
+        dtype={"ticker": str, "close": float},
+    )
+    if df_prices.empty:
+        return {}
+
+    df_latest = df_prices.drop_duplicates(subset=["ticker"], keep="last")
+    latest_price_map = df_latest.set_index("ticker")["close"].to_dict()
+    logger.debug(f"Loaded latest prices for {len(latest_price_map)} tickers")
+    return latest_price_map
+
+
+def _count_total_scanned_stocks(data_dir: str) -> int:
+    """스캔 대상 종목 수(korean_stocks_list.csv 라인 수-헤더)를 반환한다."""
+    stocks_file = os.path.join(data_dir, "korean_stocks_list.csv")
+    if not os.path.exists(stocks_file):
+        return 0
+
+    with open(stocks_file, "r", encoding="utf-8") as file:
+        return max(0, sum(1 for _ in file) - 1)
+
+
+def _load_jongga_result_payloads(limit: int = 0) -> list:
+    """
+    jongga_v2_results 파일들을 최신순으로 로드한다.
+    반환값: [(filepath, payload), ...]
+    """
+    import glob
+
+    pattern = os.path.join(DATA_DIR, "jongga_v2_results_*.json")
+    files = sorted(glob.glob(pattern), reverse=True)
+    if limit > 0:
+        files = files[:limit]
+
+    payloads = []
+    for filepath in files:
+        try:
+            payload = load_json_file(os.path.basename(filepath))
+            if isinstance(payload, dict):
+                payloads.append((filepath, payload))
+        except Exception as e:
+            logger.error(f"Error processing file {filepath}: {e}")
+    return payloads
+
+
+def _load_backtest_price_snapshot() -> tuple[pd.DataFrame, dict]:
+    """
+    백테스트용 가격 스냅샷 로드.
+    반환값: (전체 가격 DataFrame, ticker별 최신 종가 맵)
+    """
+    price_file = get_data_path("daily_prices.csv")
+    if not os.path.exists(price_file):
+        return pd.DataFrame(), {}
+
+    df_prices_full = pd.read_csv(
+        price_file,
+        usecols=["date", "ticker", "close", "high", "low"],
+        dtype={"ticker": str},
+    )
+    df_prices_full["ticker"] = df_prices_full["ticker"].astype(str).str.zfill(6)
+    return df_prices_full, _build_latest_price_map(df_prices_full)
+
+
 @kr_bp.route('/market-status')
 def get_kr_market_status():
     """한국 시장 상태"""
@@ -194,252 +293,62 @@ def get_kr_market_status():
 def get_kr_signals():
     """오늘의 VCP + 외인매집 시그널 (BLUEPRINT 로직 적용)"""
     try:
-        signals = []
-        source = 'no_data'
-        data_dir = 'data'
-        today = datetime.now().strftime('%Y-%m-%d')
-        
-        # 1차: signals_log.csv에서 데이터 조회
-        df = load_csv_file('signals_log.csv')
-        
-        # [수정] 날짜 필터링 (DataFrame 레벨에서 선행 처리, 정확도 향상)
-        req_date = request.args.get('date')
-        
-        if not df.empty and 'signal_date' in df.columns:
-            if req_date:
-                # 특정 날짜 요청 시
-                df = df[df['signal_date'].astype(str) == req_date]
-            else:
-                # [버그수정] 요청 날짜 없으면 '가장 최근 날짜' 데이터만 필터링 (중복/과거 데이터 노출 방지)
-                latest_date = df['signal_date'].max()
-                logger.debug(f"Latest date in CSV: {latest_date}")
-                
-                if pd.notna(latest_date):
-                    df = df[df['signal_date'].astype(str) == str(latest_date)]
-                    # [주의] '실시간' 요청이어도 오늘 데이터가 없으면 가장 최근 데이터를 반환함.
-                    # 프론트엔드에서 signal_date와 오늘 날짜를 비교하여 UI 처리 필요.
-                    today = str(latest_date)
-                    logger.debug(f"Filtered signals for date {latest_date}: {len(df)} rows")
+        source = "no_data"
+        data_dir = "data"
+        today = datetime.now().strftime("%Y-%m-%d")
 
-        if not df.empty:
-            source = 'signals_log.csv'
-            for _, row in df.iterrows():
-                # 기본 데이터 추출
-                score = float(row.get('score', 0))
-                contraction = float(row.get('contraction_ratio', 1.0))
-                foreign_5d = int(row.get('foreign_5d', 0))
-                inst_5d = int(row.get('inst_5d', 0))
-                signal_date = row.get('signal_date', '')
-                status = row.get('status', 'OPEN')
-                
-                # 기본 필터: OPEN 상태만 표시
-                if status != 'OPEN':
-                    continue
-                # 60점 이상만 표시 (VCP 기준)
-                if score < 60:
-                    continue
-                # 참고: 아래 필터링 조건은 비활성화됨
-                # if contraction > 0.8:  # 수축 미완료 → 제외
-                #     continue
-                # if foreign_5d < 0 and inst_5d < 0:  # 수급 모두 이탈 → 제외
-                #     continue
+        req_date = request.args.get("date")
+        signals_df = load_csv_file("signals_log.csv")
+        signals_df, today = _filter_signals_dataframe_by_date(signals_df, req_date, today)
+        if req_date:
+            logger.debug(f"Signals requested for explicit date: {req_date}")
+        elif not signals_df.empty:
+            logger.debug(f"Filtered latest signal rows: {len(signals_df)}")
 
-                # BLUEPRINT Final Score 계산 (100점 만점)
-                contraction_score = (1 - contraction) * 100
-                supply_score = min((foreign_5d + inst_5d) / 100000, 30)
-                today_bonus = 10 if signal_date == today else 0
-                final_score = (score * 0.4) + (contraction_score * 0.3) + (supply_score * 0.2 * 10) + today_bonus
-                
-                # AI Analysis Columns (CSV)
-                # [NEW] Read AI fields from CSV
-                ai_action = row.get('ai_action')
-                if pd.isna(ai_action): ai_action = None
-                
-                ai_confidence = row.get('ai_confidence')
-                if pd.isna(ai_confidence): ai_confidence = 0
-                
-                ai_reason = row.get('ai_reason')
-                if pd.isna(ai_reason): ai_reason = None
+        signals = _build_vcp_signals_from_dataframe(signals_df)
+        if signals:
+            source = "signals_log.csv"
 
-                gemini_rec = None
-                if ai_action and ai_reason:
-                    gemini_rec = {
-                        "action": ai_action,
-                        "confidence": int(ai_confidence) if ai_confidence else 0,
-                        "reason": ai_reason,
-                        "news_sentiment": "positive" # Default or analyze later
-                    }
-
-                # [FIX] Handle NaN values for JSON serialization
-                return_pct = row.get('return_pct')
-                if pd.isna(return_pct): return_pct = None
-
-                contraction_ratio = row.get('contraction_ratio')
-                if pd.isna(contraction_ratio): contraction_ratio = None
-                
-                entry_price = row.get('entry_price')
-                if pd.isna(entry_price): entry_price = None
-
-                current_price = row.get('current_price')
-                if pd.isna(current_price): current_price = None
-
-                target_price = row.get('target_price')
-                if pd.isna(target_price): target_price = None
-
-                stop_price = row.get('stop_price')
-                if pd.isna(stop_price): stop_price = None
-
-                signals.append({
-                    'ticker': str(row.get('ticker', '')).zfill(6), # Ensure formatting
-                    'name': row.get('name'),
-                    'signal_date': str(row.get('signal_date')),
-                    'market': row.get('market'),
-                    'status': row.get('status'),
-                    'score': float(row.get('score', 0)),
-                    'contraction_ratio': contraction_ratio,
-                    'entry_price': entry_price,
-                    'target_price': target_price,
-                    'stop_price': stop_price,
-                    'foreign_5d': int(row.get('foreign_5d', 0)),
-                    'inst_5d': int(row.get('inst_5d', 0)),
-                    'vcp_score': int(row.get('vcp_score', 0)),
-                    'current_price': current_price,
-                    # 'return_pct': row.get('return_pct') # CSV said return_pct
-                    'return_pct': return_pct,
-                    'gemini_recommendation': gemini_rec 
-                })
-
-
-        
-        # [NEW] 실시간 가격 주입 (Scheduler가 갱신한 daily_prices.csv 기반)
         try:
-            price_file = get_data_path('daily_prices.csv')
-            if os.path.exists(price_file):
-                # 최신 가격 맵 생성 (읽기 최적화)
-                # 날짜, 티커, 종가만 읽음
-                df_prices = pd.read_csv(price_file, usecols=['date', 'ticker', 'close'], dtype={'ticker': str, 'close': float})
-                
-                if not df_prices.empty:
-                    # 날짜 기준 정렬 후 최신값 가져오기 (각 티커별 마지막 행)
-                    # drop_duplicates(keep='last')가 더 빠름 (파일이 날짜순 정렬 가정)
-                    df_latest = df_prices.drop_duplicates(subset=['ticker'], keep='last')
-                    
-                    # Dict 변환 for fast lookup: ticker -> close
-                    latest_price_map = df_latest.set_index('ticker')['close'].to_dict()
-                    latest_date_map = df_latest.set_index('ticker')['date'].to_dict()
-                    
-                    logger.debug(f"Loaded latest prices for {len(latest_price_map)} tickers")
-
-                    # Signals 리스트 업데이트
-                    for sig in signals:
-                        ticker = sig.get('ticker')
-                        if ticker in latest_price_map:
-                            real_price = latest_price_map[ticker]
-                            entry_price = sig.get('entry_price')
-                            
-                            # 가격 업데이트
-                            sig['current_price'] = real_price
-                            
-                            # 수익률 재계산
-                            if entry_price and entry_price > 0:
-                                new_return = ((real_price - entry_price) / entry_price) * 100
-                                sig['return_pct'] = round(new_return, 2)
-                                
-                            # (선택) 데이터 기준일 표시가 필요하다면? sig['price_date'] = latest_date_map[ticker]
+            latest_price_map = _load_latest_vcp_price_map()
+            if latest_price_map:
+                _apply_latest_prices_to_jongga_signals(signals, latest_price_map)
         except Exception as e:
             logger.warning(f"Failed to inject real-time prices: {e}")
-            # 실패해도 기존 signals 반환 (Graceful degradation)
 
-        # ===================================================
-        # Final Score 기준 정렬 후 Top 20 선정
-        # ===================================================
         if signals:
-            signals = sorted(signals, key=lambda x: x.get('score', 0), reverse=True)[:20]
-
-            # [AI Integration] Load AI fields from JSON and merge
+            signals = _sort_and_limit_vcp_signals(signals, limit=20)
             try:
-                # Determine date from the first signal
-                sig_date = signals[0].get('signal_date', '')
-                date_str = sig_date.replace('-', '') if sig_date else datetime.now().strftime('%Y%m%d')
-                
-                ai_data_map = {}
-                
-                # 1. Try specific date result first
-                ai_json = load_json_file(f'ai_analysis_results_{date_str}.json')
-                
-                # 2. Fallback to general file if specific file missing or empty
-                if not ai_json or 'signals' not in ai_json:
-                     # Check if the requested date is today/latest, if so check the main file
-                     logger.info("Falling back to kr_ai_analysis.json")
-                     ai_json = load_json_file('kr_ai_analysis.json') 
+                sig_date = signals[0].get("signal_date", "")
+                date_str = sig_date.replace("-", "") if sig_date else datetime.now().strftime("%Y%m%d")
+                ai_json = load_json_file(f"ai_analysis_results_{date_str}.json")
+                if not ai_json or "signals" not in ai_json:
+                    logger.info("Falling back to kr_ai_analysis.json")
+                    ai_json = load_json_file("kr_ai_analysis.json")
 
-                # Debug Print
-                logger.debug(f"AI JSON Loaded: {bool(ai_json)}, Signals in JSON: {len(ai_json.get('signals', [])) if ai_json else 0}")
+                logger.debug(
+                    "AI JSON Loaded: %s, Signals in JSON: %d",
+                    bool(ai_json),
+                    len(ai_json.get("signals", [])) if isinstance(ai_json, dict) else 0,
+                )
 
-
-                # 3. Build map
-                if ai_json and 'signals' in ai_json:
-                     for item in ai_json['signals']:
-                         t = str(item.get('ticker', '')).zfill(6)
-                         ai_data_map[t] = item
-
-                # 3.1 Load Legacy File for Fallback Merge (if specific file misses fields)
-                # specifically for Perplexity which might be in legacy file
+                ai_data_map = _build_ai_data_map(ai_json)
                 try:
-                    legacy_json = load_json_file('kr_ai_analysis.json')
-                    if legacy_json and 'signals' in legacy_json:
-                        for l_item in legacy_json['signals']:
-                            t = str(l_item.get('ticker', '')).zfill(6)
-                            if t in ai_data_map:
-                                # Merge missing fields into ai_data_map item
-                                current = ai_data_map[t]
-                                if not current.get('perplexity_recommendation') and l_item.get('perplexity_recommendation'):
-                                    current['perplexity_recommendation'] = l_item['perplexity_recommendation']
-                                if not current.get('gemini_recommendation') and l_item.get('gemini_recommendation'):
-                                    current['gemini_recommendation'] = l_item['gemini_recommendation']
-                            else:
-                                # If ticker not in daily but in legacy? strictly speaking we only care about signals in the list.
-                                # pass
-                                pass
-                except Exception as leg_e:
-                    logger.warning(f"Legacy merge failed: {leg_e}")
-                
-                # 4. Merge
-                if ai_data_map:
-                    merged_count = 0
-                    for s in signals:
-                        t = s['ticker']
-                        if t in ai_data_map:
-                            ai_item = ai_data_map[t]
-                            # Merge AI fields
-                            s['gemini_recommendation'] = ai_item.get('gemini_recommendation')
-                            s['gpt_recommendation'] = ai_item.get('gpt_recommendation')
-                            s['perplexity_recommendation'] = ai_item.get('perplexity_recommendation')
-                            
-                            # Merge News if missing
-                            if 'news' in ai_item and not s.get('news'):
-                                s['news'] = ai_item['news']
-                                
-                            merged_count += 1
-                    logger.debug(f"Merged AI data for {merged_count} signals")
+                    legacy_json = load_json_file("kr_ai_analysis.json")
+                    _merge_legacy_ai_fields_into_map(ai_data_map, legacy_json)
+                except Exception as legacy_error:
+                    logger.warning(f"Legacy merge failed: {legacy_error}")
+
+                merged_count = _merge_ai_data_into_vcp_signals(signals, ai_data_map)
+                logger.debug(f"Merged AI data for {merged_count} signals")
             except Exception as e:
                 logger.warning(f"Failed to merge AI data into signals: {e}")
 
-        # ===================================================
-        # 실시간 가격 업데이트 및 return_pct 계산 Logic Removed
-        # Frontend에서 /realtime-prices 엔드포인트를 통해 별도로 수행함
-        # ===================================================
-        pass
-        
-        # 총 스캔 종목 수 계산
         total_scanned = 0
         try:
-            stocks_file = os.path.join(data_dir, 'korean_stocks_list.csv')
-            if os.path.exists(stocks_file):
-                with open(stocks_file, 'r', encoding='utf-8') as f:
-                    total_scanned = max(0, sum(1 for _ in f) - 1)
-        except:
-            pass
+            total_scanned = _count_total_scanned_stocks(data_dir)
+        except Exception:
+            total_scanned = 0
 
         return jsonify({
             'signals': signals,
@@ -674,20 +583,8 @@ def reanalyze_vcp_failed_ai():
                 'message': '사용 가능한 AI Provider가 없습니다.'
             }), 503
 
-        stocks_to_analyze = []
-        for _, row in failed_df.iterrows():
-            stocks_to_analyze.append({
-                'ticker': str(row.get('ticker', '')).zfill(6),
-                'name': row.get('name', ''),
-                'current_price': float(row.get('current_price', row.get('entry_price', 0)) or 0),
-                'score': float(row.get('score', 0) or 0),
-                'vcp_score': float(row.get('vcp_score', 0) or 0),
-                'contraction_ratio': float(row.get('contraction_ratio', 0) or 0),
-                'foreign_5d': float(row.get('foreign_5d', 0) or 0),
-                'inst_5d': float(row.get('inst_5d', 0) or 0),
-                'foreign_1d': float(row.get('foreign_1d', 0) or 0),
-                'inst_1d': float(row.get('inst_1d', 0) or 0),
-            })
+        failed_rows = [(idx, row.to_dict()) for idx, row in failed_df.iterrows()]
+        stocks_to_analyze = _build_vcp_stock_payloads([row for _, row in failed_rows])
 
         import asyncio
         loop = asyncio.new_event_loop()
@@ -697,40 +594,11 @@ def reanalyze_vcp_failed_ai():
         finally:
             loop.close()
 
-        updated_count = 0
-        still_failed_count = 0
-        updated_recommendations = {}
-
-        for idx, row in failed_df.iterrows():
-            ticker = str(row.get('ticker', '')).zfill(6)
-            ai_res = ai_results.get(ticker, {}) if isinstance(ai_results, dict) else {}
-            gemini = ai_res.get('gemini_recommendation') if isinstance(ai_res, dict) else None
-
-            action = _normalize_text(gemini.get('action')).upper() if isinstance(gemini, dict) else ""
-            confidence_raw = gemini.get('confidence', 0) if isinstance(gemini, dict) else 0
-            reason = _normalize_text(gemini.get('reason')) if isinstance(gemini, dict) else ""
-
-            if action in _VALID_AI_ACTIONS and _is_meaningful_ai_reason(reason):
-                try:
-                    confidence_val = int(float(confidence_raw))
-                except Exception:
-                    confidence_val = 0
-
-                signals_df.at[idx, 'ai_action'] = action
-                signals_df.at[idx, 'ai_confidence'] = confidence_val
-                signals_df.at[idx, 'ai_reason'] = reason
-
-                updated_recommendations[ticker] = {
-                    'action': action,
-                    'confidence': confidence_val,
-                    'reason': reason,
-                }
-                updated_count += 1
-            else:
-                signals_df.at[idx, 'ai_action'] = 'N/A'
-                signals_df.at[idx, 'ai_confidence'] = 0
-                signals_df.at[idx, 'ai_reason'] = '분석 실패'
-                still_failed_count += 1
+        updated_count, still_failed_count, updated_recommendations = _apply_vcp_reanalysis_updates(
+            signals_df,
+            failed_rows,
+            ai_results,
+        )
 
         signals_path = get_data_path('signals_log.csv')
         signals_df.to_csv(signals_path, index=False, encoding='utf-8-sig')
@@ -824,220 +692,73 @@ def get_kr_stock_chart(ticker):
 def get_kr_ai_analysis():
     """KR AI 분석 전체 - kr_ai_analysis.json 직접 읽기 (V2 호환 최적화)"""
     try:
-        target_date = request.args.get('date')
-        
-        # 1. 날짜별 파일 로드 (과거 데이터 요청 시)
+        target_date = request.args.get("date")
+
         if target_date:
             try:
-                date_str = target_date.replace('-', '')
-                
-                # 1-1. [Priority] 통합 결과 파일 시도 (jongga_v2_results_YYYYMMDD.json)
-                v2_result = load_json_file(f'jongga_v2_results_{date_str}.json')
-                if v2_result and 'signals' in v2_result and len(v2_result['signals']) > 0:
-                    ai_signals = []
-                    for sig in v2_result['signals']:
-                        # AI 분석 데이터 추출 (우선순위: score_details > score > llm_reason)
-                        ai_eval = None
-                        if 'score_details' in sig and isinstance(sig['score_details'], dict):
-                            ai_eval = sig['score_details'].get('ai_evaluation')
-                        if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
-                            ai_eval = sig['score'].get('ai_evaluation')
-                        if not ai_eval and 'ai_evaluation' in sig:
-                            ai_eval = sig['ai_evaluation']
-                        if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
-                             ai_eval = sig['score'].get('llm_reason')
+                date_str = target_date.replace("-", "")
+                v2_result = load_json_file(f"jongga_v2_results_{date_str}.json")
+                v2_signals = _build_ai_signals_from_jongga_results(
+                    v2_result.get("signals", []),
+                    include_without_ai=False,
+                    allow_numeric_score_fallback=True,
+                )
+                if v2_signals:
+                    return jsonify(
+                        {
+                            "signals": v2_signals,
+                            "generated_at": v2_result.get("updated_at", datetime.now().isoformat()),
+                            "signal_date": target_date,
+                            "source": "jongga_v2_integrated_history",
+                        }
+                    )
 
-                        if isinstance(ai_eval, str):
-                            ai_eval = {'reason': ai_eval, 'action': 'HOLD', 'confidence': 0}
-
-                        if ai_eval:
-                            signal_data = {
-                                'ticker': str(sig.get('stock_code', '')).zfill(6),
-                                'name': sig.get('stock_name', ''),
-                                'grade': sig.get('grade'), # Added Grade
-                                'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else (sig.get('score') if isinstance(sig.get('score'), (int, float)) else 0),
-                                'current_price': sig.get('current_price', 0),
-                                'entry_price': sig.get('entry_price', 0),
-                                'vcp_score': 0,
-                                'contraction_ratio': sig.get('contraction_ratio', 0),
-                                'foreign_5d': sig.get('foreign_5d', 0),
-                                'inst_5d': sig.get('inst_5d', 0),
-                                'gemini_recommendation': ai_eval, 
-                                'news': sig.get('news_items', [])
-                            }
-                            ai_signals.append(signal_data)
-                    
-                    if ai_signals:
-                        # [Sort] Grade (S>A>B) -> Score Descending
-                        def sort_key(s):
-                            grade_map = {'S': 3, 'A': 2, 'B': 1}
-                            grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
-                            score_val = s.get('score', 0)
-                            return (grade_val, score_val)
-
-                        ai_signals.sort(key=sort_key, reverse=True)
-
-                        return jsonify({
-                            'signals': ai_signals,
-                            'generated_at': v2_result.get('updated_at', datetime.now().isoformat()),
-                            'signal_date': target_date,
-                            'source': 'jongga_v2_integrated_history'
-                        })
-
-                # 1-2. 기존 방식 파일 시도 (Legacy Fallback)
-                analysis = load_json_file(f'kr_ai_analysis_{date_str}.json')
+                analysis = load_json_file(f"kr_ai_analysis_{date_str}.json")
                 if not analysis:
-                    analysis = load_json_file(f'ai_analysis_results_{date_str}.json')
-                    
-                if analysis:
-                    # ticker 6자리 zfill 보정
-                    if 'signals' in analysis:
-                        for sig in analysis['signals']:
-                            if 'ticker' in sig:
-                                sig['ticker'] = str(sig['ticker']).zfill(6)
-                    return jsonify(analysis)
+                    analysis = load_json_file(f"ai_analysis_results_{date_str}.json")
 
-                # 파일 없으면 빈 결과 반환
-                return jsonify({
-                    'signals': [],
-                    'generated_at': datetime.now().isoformat(),
-                    'signal_date': target_date,
-                    'message': '해당 날짜의 AI 분석 데이터가 없습니다.'
-                })
+                if analysis:
+                    return jsonify(_normalize_ai_payload_tickers(analysis))
+
+                return jsonify(
+                    {
+                        "signals": [],
+                        "generated_at": datetime.now().isoformat(),
+                        "signal_date": target_date,
+                        "message": "해당 날짜의 AI 분석 데이터가 없습니다.",
+                    }
+                )
             except Exception as e:
                 logger.warning(f"과거 AI 분석 데이터 로드 실패: {e}")
 
-        # 2. [Priority Logic] Compare timestamps of jongga_v2_latest.json and ai_analysis_results.json
-        
-        # Load Jongga V2
-        try:
-            jongga_data = load_json_file('jongga_v2_latest.json')
-            if jongga_data and 'updated_at' in jongga_data:
-                try:
-                    jongga_time = datetime.fromisoformat(jongga_data['updated_at'])
-                except: pass
-            elif jongga_data and 'date' in jongga_data:
-                 # Fallback for date only
-                 try:
-                     jongga_time = datetime.strptime(jongga_data['date'], "%Y-%m-%d")
-                 except: pass
-        except: pass
+        jongga_data = load_json_file("jongga_v2_latest.json")
+        vcp_data = load_json_file("ai_analysis_results.json")
 
-        # Load VCP (AI Analysis)
-        try:
-            vcp_data = load_json_file('ai_analysis_results.json')
-            if vcp_data and 'generated_at' in vcp_data:
-                try:
-                    vcp_time = datetime.fromisoformat(vcp_data['generated_at'])
-                except: pass
-        except: pass
-
-        # Decision Logic: Use Jongga if it's newer OR VCP is missing
-        use_jongga = False
-        if jongga_data and 'signals' in jongga_data and len(jongga_data['signals']) > 0:
-            if not vcp_data or jongga_time >= vcp_time:
-                use_jongga = True
-        
-        # If VCP is newer, skip Jongga usage here and let it fall through to step 4 (or handle here)
-        # However, step 4 (Legacy) loads ai_analysis_results.json again. 
-        # To avoid code duplication, we only process Jongga here if it wins.
-        
-        if use_jongga:
-            latest_data = jongga_data
-            ai_signals = []
-            for sig in latest_data['signals']:
-                # AI 분석 데이터 추출 (우선순위: score_details > score > llm_reason)
-                ai_eval = None
-                
-                # 1. score_details 내 객체 확인 (가장 상세함)
-                if 'score_details' in sig and isinstance(sig['score_details'], dict):
-                    ai_eval = sig['score_details'].get('ai_evaluation')
-                
-                # 2. score 내 객체 확인
-                if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
-                    ai_eval = sig['score'].get('ai_evaluation')
-                
-                # 3. 최상위 필드 확인
-                if not ai_eval and 'ai_evaluation' in sig:
-                    ai_eval = sig['ai_evaluation']
-                    
-                # 4. 텍스트 reason (마지막 수단)
-                if not ai_eval and 'score' in sig and isinstance(sig['score'], dict):
-                        ai_eval = sig['score'].get('llm_reason')
-
-                # 텍스트 reason만 있는 경우 객체로 변환
-                if isinstance(ai_eval, str):
-                        # LLM reason만 있고 평가 객체가 없는 경우
-                    ai_eval = {'reason': ai_eval, 'action': 'HOLD', 'confidence': 0}
-
-                # 프론트엔드 호환 구조 생성 (gemini_recommendation 필수)
-                # AI 데이터가 없어도 signals 리스트에는 포함시켜야 함 (정보 일관성)
-                
-                signal_data = {
-                    'ticker': str(sig.get('stock_code', '')).zfill(6),
-                    'name': sig.get('stock_name', ''),
-                    'grade': sig.get('grade'), # Added Grade
-                    'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
-                    'current_price': sig.get('current_price', 0),
-                    'entry_price': sig.get('entry_price', 0),
-                    'vcp_score': 0, # 필수 아님
-                    'contraction_ratio': sig.get('contraction_ratio', 0),
-                    'foreign_5d': sig.get('foreign_5d', 0), # 필드명 주의 (foreign_net_buy_5d vs foreign_5d)
-                    'inst_5d': sig.get('inst_5d', 0),
-                        # 프론트엔드가 기대하는 필드로 매핑
-                    'gemini_recommendation': ai_eval, 
-                    'news': sig.get('news_items', [])
-                }
-                ai_signals.append(signal_data)
-            
+        if _should_use_jongga_ai_payload(jongga_data, vcp_data):
+            ai_signals = _build_ai_signals_from_jongga_results(
+                jongga_data.get("signals", []),
+                include_without_ai=True,
+                allow_numeric_score_fallback=False,
+            )
             if ai_signals:
-                # [Sort] Grade (S>A>B) -> Score Descending
-                def sort_key(s):
-                    grade_map = {'S': 3, 'A': 2, 'B': 1}
-                    grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
-                    score_val = s.get('score', 0)
-                    return (grade_val, score_val)
+                return jsonify(
+                    {
+                        "signals": ai_signals,
+                        "generated_at": jongga_data.get("updated_at", datetime.now().isoformat()),
+                        "signal_date": _format_signal_date(jongga_data.get("date", "")),
+                        "source": "jongga_v2_integrated_history",
+                    }
+                )
 
-                ai_signals.sort(key=sort_key, reverse=True)
+        kr_ai_data = load_json_file("kr_ai_analysis.json")
+        if kr_ai_data and "signals" in kr_ai_data and len(kr_ai_data["signals"]) > 0:
+            return jsonify(_normalize_ai_payload_tickers(kr_ai_data))
 
-                # 날짜 형식 보정 (YYYYMMDD -> YYYY-MM-DD)
-                s_date = latest_data.get('date', '')
-                if len(s_date) == 8 and '-' not in s_date:
-                    s_date = f"{s_date[:4]}-{s_date[4:6]}-{s_date[6:]}"
+        ai_data = load_json_file("ai_analysis_results.json")
+        if ai_data and "signals" in ai_data and len(ai_data["signals"]) > 0:
+            return jsonify(_normalize_ai_payload_tickers(ai_data))
 
-                return jsonify({
-                    'signals': ai_signals,
-                    'generated_at': latest_data.get('updated_at', datetime.now().isoformat()),
-                    'signal_date': s_date,
-                    'source': 'jongga_v2_integrated_history'
-                })
-
-
-        # 3. kr_ai_analysis.json 직접 로드 (Legacy, VCP AI 분석 결과)
-        kr_ai_data = load_json_file('kr_ai_analysis.json')
-        if kr_ai_data and 'signals' in kr_ai_data and len(kr_ai_data['signals']) > 0:
-            # ticker 6자리 zfill 보정
-            for sig in kr_ai_data['signals']:
-                if 'ticker' in sig:
-                    sig['ticker'] = str(sig['ticker']).zfill(6)
-            
-            return jsonify(kr_ai_data)
-        
-        # 4. ai_analysis_results.json 폴백 (raw AI output - Legacy)
-        ai_data = load_json_file('ai_analysis_results.json')
-        if ai_data and 'signals' in ai_data and len(ai_data['signals']) > 0:
-            # ticker 6자리 zfill 보정
-            for sig in ai_data['signals']:
-                if 'ticker' in sig:
-                    sig['ticker'] = str(sig['ticker']).zfill(6)
-            
-            return jsonify(ai_data)
-
-        # 5. 데이터 없음
-        return jsonify({
-            'signals': [],
-            'message': 'AI 분석 데이터가 없습니다.'
-        })
+        return jsonify({"signals": [], "message": "AI 분석 데이터가 없습니다."})
 
     except Exception as e:
         logger.error(f"Error getting AI analysis: {e}")
@@ -1050,245 +771,34 @@ def get_kr_ai_analysis():
 def get_cumulative_performance():
     """종가베팅 누적 성과 조회 (실제 데이터 연동)"""
     try:
-        # 1. 모든 결과 파일 스캔 (jongga_v2_results_YYYYMMDD.json)
-        import glob
-        pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
-        files = glob.glob(pattern)
-        files.sort(reverse=True) # 최신순 정렬
+        result_payloads = _load_jongga_result_payloads()
+        raw_price_df = load_csv_file("daily_prices.csv")
+        price_df = _prepare_cumulative_price_dataframe(raw_price_df)
+
+        if not raw_price_df.empty and price_df.empty:
+            logger.warning("daily_prices.csv missing required columns (date, ticker)")
 
         trades = []
-        
-        # 2. 가격 데이터 로드 (Price Trail 계산용)
-        # daily_prices.csv 전체를 메모리에 올리는 것은 비효율적일 수 있으나, 
-        # 현재 데모 규모에서는 가장 빠르고 확실한 방법.
-        # 최적화: 필요한 컬럼만 로드 + Date Indexing
-        # 2. Daily Price Data Loading (Robust)
-        price_df = pd.DataFrame()
-        try:
-            loaded_df = load_csv_file('daily_prices.csv')
-            if not loaded_df.empty:
-                # 필수 컬럼 확인
-                if 'date' in loaded_df.columns and 'ticker' in loaded_df.columns:
-                    loaded_df['ticker'] = loaded_df['ticker'].astype(str).str.zfill(6)
-                    loaded_df['date'] = pd.to_datetime(loaded_df['date'])
-                    for col in ['open', 'high', 'low', 'close']:
-                        if col in loaded_df.columns:
-                            loaded_df[col] = pd.to_numeric(loaded_df[col], errors='coerce')
-                    loaded_df = loaded_df.sort_values('date')
-                    loaded_df.set_index('date', inplace=True)
-                    price_df = loaded_df
-                else:
-                    logger.warning("daily_prices.csv missing required columns (date, ticker)")
-        except Exception as e:
-            logger.error(f"Error loading daily_prices.csv: {e}")
-            price_df = pd.DataFrame()
-        
-        # 3. 파일별로 순회하며 Trade 정보 추출
-        for filepath in files:
-            try:
-                data = load_json_file(os.path.basename(filepath))
-                if not data or 'signals' not in data:
-                    continue
-                
-                # 파일명에서 날짜 추출 (jongga_v2_results_20260205.json)
-                file_date_str = os.path.basename(filepath).split('_')[-1].replace('.json', '')
-                try:
-                    stats_date = datetime.strptime(file_date_str, '%Y%m%d').strftime('%Y-%m-%d')
-                except:
-                    stats_date = data.get('date', '')
-
-                for sig in data['signals']:
-                    # [FIX] Keys in jongga_v2_results are 'ticker' and 'name', not 'stock_code'/'stock_name'
-                    ticker = str(sig.get('ticker', sig.get('stock_code', ''))).zfill(6)
-                    if ticker == '000000': continue
-                    
-                    entry = sig.get('entry_price', 0)
-                    target = sig.get('target_price', 0)
-                    stop = sig.get('stop_price', 0)
-                    
-                    if entry == 0: continue
-
-                    # Outcomes & Price Trail 계산
-                    outcome = 'OPEN'
-                    roi = 0.0
-                    max_high = 0.0
-                    days = 0
-                    price_trail = []
-
-                    # 해당 종목의 가격 데이터 필터링
-                    if not price_df.empty:
-                        # 신호 발생일 이후의 데이터만 조회
-                        stock_prices = price_df[price_df['ticker'] == ticker]
-                        if not stock_prices.empty:
-                            # signal_date 이후 데이터 (Start from NEXT day)
-                            # stats_date 문자열을 timestamp로 변환
-                            sig_ts = pd.Timestamp(stats_date)
-                            period_prices = stock_prices[stock_prices.index > sig_ts]
-                            # 비정상 가격(0/음수/결측치) 행 제외:
-                            # 0 값이 들어오면 stop 조건(low <= stop)에 즉시 걸려 오탐 LOSS가 발생할 수 있음
-                            period_prices = period_prices[
-                                (period_prices['high'] > 0) &
-                                (period_prices['low'] > 0) &
-                                (period_prices['close'] > 0)
-                            ]
-                            # 사용자 요청: Target +9%, Stop -5% 강제 적용
-                            target = entry * 1.09
-                            stop = entry * 0.95
-                            
-                            # Outcome 및 Exit Date 판별 logic
-                            hit_target = period_prices[period_prices['high'] >= target]
-                            hit_stop = period_prices[period_prices['low'] <= stop]
-                            
-                            first_win_date = hit_target.index[0] if not hit_target.empty else None
-                            first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
-
-                            exit_date = None
-                            
-                            if first_win_date and first_loss_date:
-                                if first_win_date <= first_loss_date:
-                                    outcome = 'WIN'
-                                    roi = 9.0
-                                    exit_date = first_win_date
-                                else:
-                                    outcome = 'LOSS'
-                                    roi = -5.0
-                                    exit_date = first_loss_date
-                            elif first_win_date:
-                                outcome = 'WIN'
-                                roi = 9.0
-                                exit_date = first_win_date
-                            elif first_loss_date:
-                                outcome = 'LOSS'
-                                roi = -5.0
-                                exit_date = first_loss_date
-                            else:
-                                outcome = 'OPEN'
-                                # OPEN 상태면 마지막 데이터까지 사용
-                                # exit_date = period_prices.index[-1] 
-                            
-                            # Price Trail 구성
-                            if exit_date:
-                                # Exit Date까지만 데이터 자르기
-                                trade_period = period_prices[period_prices.index <= exit_date]
-                            else:
-                                trade_period = period_prices
-                            
-                            # 초기값 [진입가]
-                            price_trail = [entry]
-                            
-                            # 종가 리스트 추가
-                            if not trade_period.empty:
-                                closes = trade_period['close'].tolist()
-                                price_trail.extend(closes)
-                                
-                                # WIN/LOSS 인 경우 마지막 가격을 Target/Stop 가로 보정 (그래프 일치)
-                                if outcome == 'WIN':
-                                    price_trail[-1] = target
-                                elif outcome == 'LOSS':
-                                    price_trail[-1] = stop
-                            
-                            days = len(trade_period)
-
-                            # Max High 계산 (Exit Date 까지만)
-                            # WIN이면 당연히 Target 이상이겠지만, 기록용
-                            high_prices = trade_period['high'].max()
-                            if high_prices > 0:
-                                max_high = round(((high_prices - entry) / entry) * 100, 1)
-
-                    # ROI가 0.0이고 Price Trail이 있으면 마지막 가격 기준으로 업데이트 (OPEN 상태 fallback)
-                    if outcome == 'OPEN' and price_trail and roi == 0.0:
-                         last_p = price_trail[-1]
-                         current_roi = ((last_p - entry) / entry) * 100
-                         roi = round(current_roi, 1)
-
-                    trades.append({
-                        'id': f"{ticker}-{stats_date}", # Unique ID
-                        'date': stats_date,
-                        'grade': sig.get('grade'),
-                        'name': sig.get('name', sig.get('stock_name', '')), # [FIX] Use 'name' first
-                        'code': ticker,
-                        'market': sig.get('market', ''),
-                        'entry': entry,
-                        'outcome': outcome,
-                        'roi': roi,
-                        'maxHigh': max_high,
-                        'priceTrail': price_trail, # List of numbers
-                        'days': days,
-                        'score': sig.get('score', {}).get('total', 0) if isinstance(sig.get('score'), dict) else 0,
-                        'themes': sig.get('themes', [])
-                    })
-
-            except Exception as e:
-                logger.error(f"Error processing file {filepath}: {e}")
+        for filepath, data in result_payloads:
+            signals = data.get("signals", [])
+            if not isinstance(signals, list):
                 continue
-        
-        # 4. 집계 (KPIs) - 전체 데이터 기준 (Pagination 전)
-        total_signals = len(trades)
-        wins = sum(1 for t in trades if t['outcome'] == 'WIN')
-        losses = sum(1 for t in trades if t['outcome'] == 'LOSS')
-        opens = sum(1 for t in trades if t['outcome'] == 'OPEN')
-        
-        closed_trades = wins + losses
-        win_rate = round((wins / closed_trades * 100), 1) if closed_trades > 0 else 0.0
-        
-        # ROI 집계
-        total_roi = sum(t['roi'] for t in trades)
-        avg_roi = round(total_roi / total_signals, 2) if total_signals > 0 else 0.0
 
-        roi_by_grade = {}
-        for grade in ['S', 'A', 'B']:
-            grade_trades = [t for t in trades if t.get('grade') == grade]
-            grade_count = len(grade_trades)
-            grade_total_roi = sum(t['roi'] for t in grade_trades)
-            grade_avg_roi = round(grade_total_roi / grade_count, 2) if grade_count > 0 else 0.0
-            roi_by_grade[grade] = {
-                'count': grade_count,
-                'avgRoi': grade_avg_roi,
-                'totalRoi': round(grade_total_roi, 1)
-            }
-        
-        # Profit Factor (총 이익 / 총 손실)
-        gross_profit = sum(t['roi'] for t in trades if t['roi'] > 0)
-        gross_loss = abs(sum(t['roi'] for t in trades if t['roi'] < 0))
-        profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else round(gross_profit, 2) # 손실 없으면 총이익 표시 or Inf
+            stats_date = _extract_stats_date_from_results_filename(
+                filepath,
+                fallback_date=data.get("date", ""),
+            )
+            for signal in signals:
+                trade = _build_cumulative_trade_record(signal, stats_date, price_df)
+                if trade:
+                    trades.append(trade)
 
-        # Price Date (가격 데이터 기준일)
-        max_price_date = price_df.index.max() if not price_df.empty else datetime.now()
-        price_date_str = max_price_date.strftime('%Y-%m-%d')
-        
-        # 5. Pagination Logic
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 50))
-        
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        
-        paginated_trades = trades[start_idx:end_idx]
-        total_pages = (total_signals + limit - 1) // limit
+        kpi = _aggregate_cumulative_kpis(trades, price_df, datetime.now())
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 50))
+        paginated_trades, pagination = _paginate_items(trades, page, limit)
 
-        # Response
-        return jsonify({
-            'kpi': {
-                'totalSignals': total_signals,
-                'winRate': win_rate,
-                'wins': wins,
-                'losses': losses,
-                'open': opens,
-                'avgRoi': avg_roi,
-                'totalRoi': round(total_roi, 1),
-                'roiByGrade': roi_by_grade,
-                'avgDays': round(sum(t['days'] for t in trades) / total_signals, 1) if total_signals > 0 else 0,
-                'priceDate': price_date_str, 
-                'profitFactor': profit_factor
-            },
-            'trades': paginated_trades,
-            'pagination': {
-                'total': total_signals,
-                'page': page,
-                'limit': limit,
-                'totalPages': total_pages
-            }
-        })
+        return jsonify({"kpi": kpi, "trades": paginated_trades, "pagination": pagination})
 
     except Exception as e:
         logger.error(f"Error calculating cumulative performance: {e}")
@@ -1733,23 +1243,10 @@ def get_jongga_v2_latest():
                     if not df_prices.empty:
                         df_latest = df_prices.drop_duplicates(subset=['ticker'], keep='last')
                         latest_price_map = df_latest.set_index('ticker')['close'].to_dict()
-                        
-                        updated_count = 0
-                        for sig in data['signals']:
-                            # Jongga uses 'code' primarily, but check 'ticker' and 'stock_code' too
-                            raw_code = sig.get('code') or sig.get('ticker') or sig.get('stock_code')
-                            ticker = str(raw_code).strip().zfill(6) if raw_code else ''
-                            
-                            if ticker and ticker != '000000' and ticker in latest_price_map:
-                                real_price = latest_price_map[ticker]
-                                sig['current_price'] = real_price
-                                
-                                # 재계산
-                                entry_price = sig.get('entry_price') or sig.get('close') # Fallback
-                                if entry_price and entry_price > 0:
-                                    ret = ((real_price - entry_price) / entry_price) * 100
-                                    sig['return_pct'] = round(ret, 2)
-                                updated_count += 1
+                        updated_count = _apply_latest_prices_to_jongga_signals(
+                            data['signals'],
+                            latest_price_map,
+                        )
                         logger.debug(f"[Jongga V2 Latest] Updated prices for {updated_count} signals")
             except Exception as e:
                 logger.warning(f"Failed to inject prices for Jongga V2: {e}")
@@ -1760,73 +1257,8 @@ def get_jongga_v2_latest():
                 with open(get_data_path('jongga_v2_latest.json'), 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
 
-            # [Sort] Grade (S>A>B) -> Score Descending
-            def sort_key(s):
-                grade_map = {'S': 3, 'A': 2, 'B': 1}
-                grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
-                # Score can be dict (V2) or number (Legacy fallback)
-                score_val = 0
-                if isinstance(s.get('score'), dict):
-                    score_val = s['score'].get('total', 0)
-                else:
-                    score_val = s.get('score', 0)
-                return (grade_val, score_val)
-
-            data['signals'].sort(key=sort_key, reverse=True)
-
-            # [FIX] Normalize signal fields for frontend compatibility
-            # Frontend expects: stock_code, stock_name, change_pct, score (dict), checklist, etc.
-            for sig in data['signals']:
-                # stock_code / stock_name aliases
-                if 'stock_code' not in sig:
-                    sig['stock_code'] = str(sig.get('ticker', sig.get('code', ''))).zfill(6)
-                if 'stock_name' not in sig:
-                    sig['stock_name'] = sig.get('name', '')
-
-                # change_pct (frontend) from return_pct (backend)
-                if 'change_pct' not in sig and 'return_pct' in sig:
-                    sig['change_pct'] = sig['return_pct']
-                elif 'change_pct' not in sig:
-                    # Calculate from current_price and entry_price
-                    entry = sig.get('entry_price', 0)
-                    current = sig.get('current_price', 0)
-                    if entry and entry > 0 and current:
-                        sig['change_pct'] = round(((current - entry) / entry) * 100, 2)
-                    else:
-                        sig['change_pct'] = 0
-
-                # score: frontend expects dict { total, ... }, backend may send int
-                raw_score = sig.get('score', 0)
-                if not isinstance(raw_score, dict):
-                    sig['score'] = {
-                        'total': int(raw_score) if raw_score else 0,
-                        'base_score': int(raw_score) if raw_score else 0,
-                        'bonus_score': 0
-                    }
-
-                # Ensure checklist exists (frontend accesses checklist.has_news etc.)
-                if 'checklist' not in sig:
-                    sig['checklist'] = {
-                        'has_news': False,
-                        'volume_surge': False,
-                        'supply_demand': sig.get('foreign_5d', 0) > 0 or sig.get('inst_5d', 0) > 0
-                    }
-
-                # Ensure target_price / stop_price exist
-                entry = sig.get('entry_price', 0)
-                if not sig.get('target_price') and entry:
-                    sig['target_price'] = round(entry * 1.09)
-                if not sig.get('stop_price') and entry:
-                    sig['stop_price'] = round(entry * 0.95)
-
-                # ai_evaluation structure (frontend expects nested object)
-                if 'ai_evaluation' not in sig and sig.get('ai_action'):
-                    sig['ai_evaluation'] = {
-                        'action': sig.get('ai_action', 'HOLD'),
-                        'confidence': sig.get('ai_confidence', 0),
-                        'reason': sig.get('ai_reason', ''),
-                        'model': 'gemini'
-                    }
+            _sort_jongga_signals(data['signals'])
+            _normalize_jongga_signals_for_frontend(data['signals'])
 
         return jsonify(data)
 
@@ -1899,18 +1331,7 @@ def get_jongga_v2_history(target_date):
                 if data and 'signals' in data:
                     # 저장 데이터의 grade 보정
                     _recalculate_jongga_grades(data)
-                    # [Sort] Grade (S>A>B) -> Score Descending
-                    def sort_key(s):
-                        grade_map = {'S': 3, 'A': 2, 'B': 1}
-                        grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
-                        score_val = 0
-                        if isinstance(s.get('score'), dict):
-                            score_val = s['score'].get('total', 0)
-                        else:
-                            score_val = s.get('score', 0)
-                        return (grade_val, score_val)
-                    
-                    data['signals'].sort(key=sort_key, reverse=True)
+                    _sort_jongga_signals(data['signals'])
                 return jsonify(data)
         
         # 최신 파일의 날짜와 같으면 최신 파일 반환
@@ -1918,18 +1339,7 @@ def get_jongga_v2_history(target_date):
         if latest_data and latest_data.get('date', '')[:10] == target_date:
             if latest_data and 'signals' in latest_data:
                 _recalculate_jongga_grades(latest_data)
-                # [Sort] Grade (S>A>B) -> Score Descending
-                def sort_key(s):
-                    grade_map = {'S': 3, 'A': 2, 'B': 1}
-                    grade_val = grade_map.get(str(s.get('grade', '')).strip().upper(), 0)
-                    score_val = 0
-                    if isinstance(s.get('score'), dict):
-                        score_val = s['score'].get('total', 0)
-                    else:
-                        score_val = s.get('score', 0)
-                    return (grade_val, score_val)
-                
-                latest_data['signals'].sort(key=sort_key, reverse=True)
+                _sort_jongga_signals(latest_data['signals'])
             return jsonify(latest_data)
         
         return jsonify({
@@ -2251,27 +1661,18 @@ def reanalyze_gemini_all():
             return jsonify({'status': 'error', 'error': '분석할 시그널이 없습니다. 평일에 엔진을 먼저 실행해주세요.'}), 404
             
         # --- Filter Signals to Analyze ---
-        signals_to_process = []
-        
+        signals_to_process = _select_signals_for_gemini_reanalysis(
+            all_signals=all_signals,
+            target_tickers=target_tickers,
+            force_update=force_update,
+        )
         if target_tickers:
-            # Case 1: Specific tickers requested (Retry)
             target_set = set(str(t).strip() for t in target_tickers)
             print(f">>> [Filter] 타겟 종목 분석: {target_set}")
-            for sig in all_signals:
-                code = str(sig.get('stock_code', '')).strip()
-                name = str(sig.get('stock_name', '')).strip()
-                if code in target_set or name in target_set:
-                    signals_to_process.append(sig)
+        elif force_update:
+            print(f">>> [Filter] 강제 전체 재분석")
         else:
-            # Case 2: Global Reanalyze
-            if force_update:
-                print(f">>> [Filter] 강제 전체 재분석")
-                signals_to_process = all_signals
-            else:
-                print(f">>> [Filter] 스마트 분석 (누락/실패 항목만)")
-                for sig in all_signals:
-                    if not _is_jongga_ai_analysis_completed(sig):
-                        signals_to_process.append(sig)
+            print(f">>> [Filter] 스마트 분석 (누락/실패 항목만)")
 
         print(f">>> [Filter] 최종 분석 대상: {len(signals_to_process)}개 / 전체 {len(all_signals)}개")
         
@@ -2299,16 +1700,7 @@ def reanalyze_gemini_all():
                 print(f"Error checking market gate: {e}")
 
             # 배치 분석 데이터 준비
-            items_to_analyze = []
-            for signal in signals_to_process:
-                stock_name = signal.get('stock_name')
-                news_items = signal.get('news_items', [])
-                if stock_name and news_items:
-                    items_to_analyze.append({
-                        'stock': signal,
-                        'news': news_items,
-                        'supply': None
-                    })
+            items_to_analyze = _build_jongga_news_analysis_items(signals_to_process)
 
             if not items_to_analyze:
                 return jsonify({'status': 'error', 'error': '분석 대상 종목들에 뉴스가 없어 분석할 수 없습니다.'}), 404
@@ -2380,42 +1772,11 @@ def reanalyze_gemini_all():
             total_elapsed = time.time() - total_start_time
             print(f"\n>>> 전체 LLM 분석 완료: {total_elapsed:.2f}초 소요")
 
-            # 결과 업데이트 - 종목명 정규화 적용
             print(f"\n>>> 결과 매핑 시작: {len(results_map)}개 LLM 결과")
-            
-            # 종목명/코드 매핑 테이블 생성 (정규화)
-            import re
-            normalized_results = {}
-            for key, value in results_map.items():
-                clean_name = re.sub(r'\s*\([0-9A-Za-z]+\)\s*$', '', key).strip()
-                normalized_results[clean_name] = value
-                normalized_results[key] = value
-            
-            # [IMPORTANT] Update All Signals
-            for signal in all_signals:
-                name = signal.get('stock_name')
-                stock_code = signal.get('stock_code', '')
-                
-                matched_result = None
-                if name in normalized_results:
-                    matched_result = normalized_results[name]
-                elif f"{name} ({stock_code})" in results_map:
-                    matched_result = results_map[f"{name} ({stock_code})"]
-                elif stock_code in normalized_results:
-                    matched_result = normalized_results[stock_code]
-                    
-                if matched_result:
-                    if 'score' not in signal:
-                        signal['score'] = {}
-                    
-                    signal['score']['llm_reason'] = matched_result.get('reason', '')
-                    signal['score']['news'] = matched_result.get('score', 0)
-                    signal['ai_evaluation'] = {
-                        'action': matched_result.get('action', 'HOLD'),
-                        'confidence': matched_result.get('confidence', 0),
-                        'model': matched_result.get('model', 'gemini-2.0-flash')  # [Fix] Pass model name to frontend
-                    }
-                    updated_count += 1
+            updated_count = _apply_gemini_reanalysis_results(
+                all_signals=all_signals,
+                results_map=results_map,
+            )
             
             # 저장
             data['updated_at'] = datetime.now().isoformat()
@@ -2845,264 +2206,64 @@ def get_data_status():
 def get_backtest_summary():
     """백테스팅 결과 요약 (VCP + Closing Bet) - Dynamic Calculation"""
     try:
-        # 1. Closing Bet Stat (Dynamic)
-        jb_stats = {
-            'status': 'Accumulating',
-            'count': 0,
-            'win_rate': 0,
-            'avg_return': 0,
-            'candidates': []
-        }
-        
+        candidates = []
+        latest_payload = load_json_file("jongga_v2_latest.json")
+        if isinstance(latest_payload, dict) and isinstance(latest_payload.get("signals"), list):
+            candidates = latest_payload.get("signals", [])
+
         try:
-            # Load latest for candidates display
-            jb_data = load_json_file('jongga_v2_latest.json')
-            if jb_data and 'signals' in jb_data:
-                 jb_stats['candidates'] = jb_data['signals']
-            
-            # Calculate stats from history (last 30 days)
-            import glob
-            pattern = os.path.join(DATA_DIR, 'jongga_v2_results_*.json')
-            files = sorted(glob.glob(pattern), reverse=True)[:30]
-            
-            total_signals = 0
-            wins = 0
-            losses_j = 0
-            total_return = 0.0
-            
-            # Load current prices for accurate return calc
-            price_map = {}
-            df_prices_full = pd.DataFrame() # Load full data for backtest
-            
-            price_file = get_data_path('daily_prices.csv')
-            if os.path.exists(price_file):
-                # Load OHLC for backtest
-                df_prices_full = pd.read_csv(price_file, usecols=['date', 'ticker', 'close', 'high', 'low'], dtype={'ticker': str})
-                df_prices_full['ticker'] = df_prices_full['ticker'].str.zfill(6)
-                
-                # Current price map from latest date in file? 
-                # Or just use today's? 
-                # Let's assume daily_prices has up-to-date info.
-                # Group by ticker and get last close
-                latest_prices = df_prices_full.sort_values('date').groupby('ticker').tail(1)
-                price_map = latest_prices.set_index('ticker')['close'].to_dict()
+            price_df_full, price_map = _load_backtest_price_snapshot()
+        except Exception as e:
+            logger.error(f"Backtest price loading failed: {e}")
+            price_df_full, price_map = pd.DataFrame(), {}
 
-            processed_tickers = set() # Avoid duplicates if same signal appears multiple times? (Usually daily signals are unique per day)
-            
-            for fpath in files:
-                try:
-                    with open(fpath, 'r', encoding='utf-8') as f:
-                        d = json.load(f)
-                        signals = d.get('signals', [])
-                        date_str = d.get('date', '')
-                        
-                        for s in signals:
-                            code = str(s.get('stock_code') or s.get('code') or '').zfill(6)
-                            if not code: continue
-                            
-                            # Entry Price
-                            entry = s.get('entry_price')
-                            if not entry: entry = s.get('close') or s.get('current_price')
-                            
-                            if not entry: continue
-                            
-                            # Current Price (Realtime > File > Signal's Close)
-                            # For stats, we want CURRENT result.
-                            curr = price_map.get(code)
-                            
-                            # If no current price, skip stat calc or use signal's own return?
-                            # Using signal's own return is static at time of generation.
-                            # We prefer current price.
-                            # If no current price, skip stat calc or use signal's own return?
-                            # Using signal's own return is static at time of generation.
-                            # We prefer current price.
-                            if curr:
-                                # OLD: ret = ((curr - entry) / entry) * 100
-                                # NEW: Scenario logic (Target 9%, Stop 5%)
-                                ret = calculate_scenario_return(code, entry, date_str, curr, df_prices_full, target_pct=0.09, stop_pct=0.05)
-                                
-                                total_signals += 1
-                                total_return += ret
-                                
-                                # Count WINS only if target hit (>= 9.0)
-                                if ret >= 9.0: 
-                                    wins += 1
-                                # Count LOSSES only if stop hit (<= -5.0)
-                                elif ret <= -5.0:
-                                    losses_j += 1
-                except:
-                    continue
-            
-            if total_signals > 0:
-                jb_stats['status'] = 'OK'
-                jb_stats['count'] = total_signals # Total historical count used for stats
-                
-                # Win Rate = Wins / Closed Trades
-                closed_trades = wins + losses_j
-                if closed_trades > 0:
-                    jb_stats['win_rate'] = round((wins / closed_trades) * 100, 1)
-                else:
-                    jb_stats['win_rate'] = 0.0
-                    
-                jb_stats['avg_return'] = round(total_return / total_signals, 1)
-
-                # [Improvement] Status Logic
-                if jb_stats['win_rate'] == 0:
-                    jb_stats['status'] = 'PENDING'
-                elif jb_stats['win_rate'] >= 60:
-                     jb_stats['status'] = 'EXCELLENT'
-                elif jb_stats['win_rate'] >= 40:
-                     jb_stats['status'] = 'GOOD'
-                else:
-                     jb_stats['status'] = 'BAD'
-            else:
-                 # Fallback to mock if absolutely no data (fresh install)
-                 if jb_stats['candidates']:
-                     jb_stats['status'] = 'OK (New)'
-            
-            # Inject prices into candidates (Front display)
-            if jb_stats['candidates'] and price_map:
-                for cand in jb_stats['candidates']:
-                    code = str(cand.get('stock_code') or cand.get('code') or '').zfill(6)
-                    if code in price_map:
-                        cand['current_price'] = price_map[code]
-                        entry = cand.get('entry_price') or cand.get('close')
-                        if entry:
-                             cand['return_pct'] = round(((price_map[code] - entry) / entry) * 100, 2)
-
+        jb_stats = {
+            "status": "Accumulating",
+            "count": 0,
+            "win_rate": 0,
+            "avg_return": 0,
+            "candidates": candidates,
+        }
+        try:
+            history_payloads = [payload for _, payload in _load_jongga_result_payloads(limit=30)]
+            jb_stats = _calculate_jongga_backtest_stats(
+                candidates,
+                history_payloads,
+                price_map,
+                price_df_full,
+            )
         except Exception as e:
             logger.error(f"Closing Bet Stat Calc Failed: {e}")
-            # Keep default empty stats
 
-        # 2. VCP Stat (Dynamic from signals_log.csv)
         vcp_stats = {
-            'status': 'Accumulating',
-            'count': 0,
-            'win_rate': 0,
-            'avg_return': 0
+            "status": "Accumulating",
+            "count": 0,
+            "win_rate": 0,
+            "avg_return": 0,
         }
-        
         try:
-            vcp_df = load_csv_file('signals_log.csv')
-            if not vcp_df.empty:
-                vcp_stats['status'] = 'OK'
-                
-                total_v = 0
-                wins_v = 0
-                losses_v = 0
-                total_ret_v = 0.0
-                
-                # VCP Backtest Simulation
-                for _, row in vcp_df.iterrows():
-                    ticker = str(row.get('ticker', '')).zfill(6)
-                    entry_price = float(row.get('entry_price', 0))
-                    signal_date = str(row.get('signal_date', ''))
-                    
-                    if entry_price <= 0 or not signal_date: continue
-                    
-                    # Current Price for holding return
-                    current_price = price_map.get(ticker, 0)
-                    if current_price == 0: continue # Skip if no current price
-                    
-                    # VCP: Target 15%, Stop 5%
-                    sim_ret = calculate_scenario_return(ticker, entry_price, signal_date, current_price, df_prices_full, target_pct=0.15, stop_pct=0.05)
-                    
-                    total_v += 1
-                    total_ret_v += sim_ret
-                    
-                    if sim_ret >= 15.0: 
-                        wins_v += 1
-                    elif sim_ret <= -5.0:
-                         losses_v += 1
-
-                if total_v > 0:
-                    vcp_stats['count'] = total_v
-                    
-                    closed_v = wins_v + losses_v
-                    if closed_v > 0:
-                        vcp_stats['win_rate'] = round((wins_v / closed_v) * 100, 1)
-                    else:
-                        vcp_stats['win_rate'] = 0.0
-                        
-                    vcp_stats['avg_return'] = round(total_ret_v / total_v, 1)
-
-                    # [Improvement] Status Logic
-                    # If win rate is 0%, consider it Pending regardless of count 
-                    # (unless count is very high, e.g. > 30, then it might be truly bad)
-                    if vcp_stats['win_rate'] == 0:
-                        vcp_stats['status'] = 'PENDING'
-                    elif vcp_stats['win_rate'] >= 60:
-                        vcp_stats['status'] = 'EXCELLENT'
-                    elif vcp_stats['win_rate'] >= 40:
-                        vcp_stats['status'] = 'GOOD'
-                    else:
-                        vcp_stats['status'] = 'BAD'
-            
+            vcp_df = load_csv_file("signals_log.csv")
+            vcp_stats = _calculate_vcp_backtest_stats(vcp_df, price_map, price_df_full)
         except Exception as e:
             logger.error(f"VCP Stat Calc Failed: {e}")
 
-        return jsonify({
-            'vcp': vcp_stats,
-            'closing_bet': jb_stats
-        })
+        return jsonify({"vcp": vcp_stats, "closing_bet": jb_stats})
 
     except Exception as e:
         logger.error(f"Backtest Summary Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 def calculate_scenario_return(ticker, entry_price, signal_date, current_price, price_df, target_pct=0.15, stop_pct=0.05):
-    """
-    백테스트 시뮬레이션 (Scenario based)
-    - 익절: +target_pct 도달 시 매도 (기본 15%)
-    - 손절: -stop_pct 이탈 시 매도 (기본 5%)
-    - 보유: 현재가 기준 수익률
-    """
-    try:
-        # Filter logic needs full OHLCV data. 
-        # But here we only loaded 'close' in df_prices (optimization).
-        # We need High/Low for strict backtest.
-        # If High/Low not available, we can only use Close (approximate).
-        
-        # NOTE: For real implementation, we should load full OHLCV.
-        # But to avoid memory burst, let's check if we can access the file cheaply or if 'price_df' has it via optimization.
-        # Current implementation of 'df_prices' in get_backtest_summary only loads 'close'.
-        # We should update get_backtest_summary to load 'high', 'low' too.
-        
-        # If we rely on current 'price_df' passed (which is df_prices_full), we assume it has columns.
-        if 'high' not in price_df.columns:
-            # Fallback to Close-only check
-             ret = ((current_price - entry_price) / entry_price) * 100
-             if ret > (target_pct * 100): return (target_pct * 100)
-             if ret < -(stop_pct * 100): return -(stop_pct * 100)
-             return ret
-
-        # Extract history for ticker after signal_date
-        # Assuming price_df is indexed or can be filtered efficiently.
-        # This part might be slow if price_df is huge (600 stocks * 90 days = 54k rows).
-        # It's acceptable for now.
-        
-        subset = price_df[
-            (price_df['ticker'] == ticker) & 
-            (price_df['date'] > signal_date)
-        ].sort_values('date')
-        
-        for _, day in subset.iterrows():
-            low = day['low']
-            high = day['high']
-            
-            # Check Stop Loss
-            if low <= entry_price * (1 - stop_pct):
-                return -(stop_pct * 100)
-                
-            # Check Take Profit
-            if high >= entry_price * (1 + target_pct):
-                return (target_pct * 100)
-        
-        # If still holding
-        return ((current_price - entry_price) / entry_price) * 100
-        
-    except:
-        return ((current_price - entry_price) / entry_price) * 100
+    """헬퍼 모듈 시나리오 계산 로직에 대한 호환 래퍼."""
+    return _calculate_scenario_return(
+        ticker=ticker,
+        entry_price=entry_price,
+        signal_date=signal_date,
+        current_price=current_price,
+        price_df=price_df,
+        target_pct=target_pct,
+        stop_pct=stop_pct,
+    )
 
 
 @kr_bp.route('/stock-detail/<ticker>')
