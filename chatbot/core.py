@@ -1410,8 +1410,9 @@ class KRStockChatbot:
                     error_msg = str(e)
                     last_error = error_msg
                     
-                    if "503" in error_msg or "UNAVAILABLE" in error_msg.upper():
-                        logger.warning(f"[User: {self.user_id}] {current_model} 503 Error. Retrying with next fallback model...")
+                    error_msg_upper = error_msg.upper()
+                    if "503" in error_msg or "UNAVAILABLE" in error_msg_upper or "429" in error_msg or "RESOURCE EXHAUSTED" in error_msg_upper or "RESOURCE_EXHAUSTED" in error_msg_upper:
+                        logger.warning(f"[User: {self.user_id}] {current_model} Error (503/429). Retrying with next fallback model... Details: {error_msg}")
                         # Tell frontend to clear the accumulated message because we are restarting the stream
                         yield {"clear": True, "session_id": session_id}
                         # 다음 모델로 넘어감
