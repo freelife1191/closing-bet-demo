@@ -1385,7 +1385,18 @@ class KRStockChatbot:
             content_parts.append(full_user_content)
 
             # 5. Gemini 호출 (Fallback 적용)
-            fallback_models = [target_model_name, "gemini-2.5-flash", "gemini-3-flash-preview"]
+            fallback_sequence = [
+                "gemini-2.0-flash-lite",
+                "gemini-2.5-flash-lite",
+                "gemini-2.0-flash",
+                "gemini-2.5-flash",
+                "gemini-3-flash-preview"
+            ]
+            
+            fallback_models = [target_model_name]
+            for m in fallback_sequence:
+                if m not in fallback_models:
+                    fallback_models.append(m)
             bot_response = ""
             success = False
             last_error = None
