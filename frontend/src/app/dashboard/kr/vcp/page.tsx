@@ -628,18 +628,34 @@ export default function VCPSignalsPage() {
                       return newMsgs;
                     });
                   }
+                  if (data.clear) {
+                    setChatHistory(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1] = {
+                        ...newMsgs[newMsgs.length - 1],
+                        content: ""
+                      };
+                      return newMsgs;
+                    });
+                  }
                   if (data.chunk) {
                     setChatHistory(prev => {
                       const newMsgs = [...prev];
                       const lastMsg = newMsgs[newMsgs.length - 1];
-                      lastMsg.content += data.chunk;
+                      newMsgs[newMsgs.length - 1] = {
+                        ...lastMsg,
+                        content: lastMsg.content + data.chunk
+                      };
                       return newMsgs;
                     });
                   }
                   if (data.done) {
                     setChatHistory(prev => {
                       const newMsgs = [...prev];
-                      newMsgs[newMsgs.length - 1].isStreaming = false;
+                      newMsgs[newMsgs.length - 1] = {
+                        ...newMsgs[newMsgs.length - 1],
+                        isStreaming: false
+                      };
                       return newMsgs;
                     });
                   }

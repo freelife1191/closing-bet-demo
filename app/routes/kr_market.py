@@ -667,13 +667,18 @@ def get_kr_stock_chart(ticker):
         
         chart_data = []
         for _, row in stock_df.iterrows():
+            close_price = float(row.get('close', 0))
+            volume = int(row.get('volume', 0))
+            if close_price <= 0 or volume <= 0:
+                continue
+
             chart_data.append({
                 'date': str(row.get('date', '')),
                 'open': float(row.get('open', 0)),
                 'high': float(row.get('high', 0)),
                 'low': float(row.get('low', 0)),
-                'close': float(row.get('close', 0)),
-                'volume': int(row.get('volume', 0))
+                'close': close_price,
+                'volume': volume
             })
 
         return jsonify({
@@ -3273,56 +3278,62 @@ def kr_chatbot():
             watchlist = data.get('watchlist', None)
         
         bot = get_chatbot()
-        # Returns { "response": text, "session_id": id }
-        result = bot.chat(
-            message, 
-            session_id=session_id, 
-            model=model_name, 
-            files=files if files else None, 
-            watchlist=watchlist,
-            persona=persona,
-            api_key=user_api_key, # Pass Extracted Key
-            owner_id=usage_key # Pass owner_id (usage_key is verified email or session_id)
-        )
-        
-        response_data = result if isinstance(result, dict) else {'response': result}
 
-        # [Log] Chat Activity
-        try:
-            from services.activity_logger import activity_logger
+        from flask import Response, stream_with_context
+        import json
+
+        def generate():
+            full_response = ""
+            usage_metadata = {}
+            for chunk in bot.chat_stream(
+                message, 
+                session_id=session_id, 
+                model=model_name, 
+                files=files if files else None, 
+                watchlist=watchlist,
+                persona=persona,
+                api_key=user_api_key,
+                owner_id=usage_key
+            ):
+                if "chunk" in chunk:
+                    full_response += chunk["chunk"]
+                if "usage_metadata" in chunk:
+                    usage_metadata = chunk["usage_metadata"]
+                
+                # Server-Sent Events format
+                yield f"data: {json.dumps(chunk)}\n\n"
             
-            # Extract detailed info
-            response_text = response_data.get('response', '')
-            usage_metadata = response_data.get('usage_metadata', {})
-            
-            # Determine Device Type (Reuse logic or keep simple)
-            ua_string = request.user_agent.string
-            device_type = 'WEB'
-            if request.user_agent.platform in ('android', 'iphone', 'ipad') or 'Mobile' in ua_string:
-                device_type = 'MOBILE'
+            # [Log] Chat Activity after streaming completes
+            try:
+                from services.activity_logger import activity_logger
+                ua_string = request.user_agent.string
+                device_type = 'WEB'
+                if request.user_agent.platform in ('android', 'iphone', 'ipad') or 'Mobile' in ua_string:
+                    device_type = 'MOBILE'
 
-            # Get Real IP
-            real_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-            if real_ip and ',' in real_ip:
-                real_ip = real_ip.split(',')[0].strip()
+                real_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+                if real_ip and ',' in real_ip:
+                    real_ip = real_ip.split(',')[0].strip()
 
-            activity_logger.log_action(
-                user_id=usage_key,
-                action='CHAT_MESSAGE',
-                details={
-                    'session_id': session_id,
-                    'model': model_name,
-                    'user_message': message[:2000] if message else "", # Increased limit for better context
-                    'bot_response': response_text[:2000] if response_text else "",
-                    'token_usage': usage_metadata,
-                    'has_files': bool(files),
-                    'device': device_type,
-                    'user_agent': ua_string[:150]
-                },
-                ip_address=real_ip
-            )
-        except Exception as e:
-            logger.error(f"[{usage_key}] Chat log error: {e}")
+                activity_logger.log_action(
+                    user_id=usage_key,
+                    action='CHAT_MESSAGE',
+                    details={
+                        'session_id': session_id,
+                        'model': model_name,
+                        'user_message': message[:2000] if message else "",
+                        'bot_response': full_response[:2000] if full_response else "",
+                        'token_usage': usage_metadata,
+                        'has_files': bool(files),
+                        'device': device_type,
+                        'user_agent': ua_string[:150]
+                    },
+                    ip_address=real_ip
+                )
+            except Exception as e:
+                logger.error(f"[{usage_key}] Chat log error: {e}")
+
+        return Response(stream_with_context(generate()), content_type='text/event-stream')
 
         # 3. Quota Update (If Free Tier & Success)
         if use_free_tier:

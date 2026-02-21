@@ -598,6 +598,16 @@ export default function ChatbotPage() {
                       return newMsgs;
                     });
                   }
+                  if (data.clear) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1] = {
+                        ...newMsgs[newMsgs.length - 1],
+                        parts: [""]
+                      };
+                      return newMsgs;
+                    });
+                  }
                   if (data.chunk) {
                     setMessages(prev => {
                       const newMsgs = [...prev];

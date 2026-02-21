@@ -288,18 +288,34 @@ export default function ChatWidget() {
                       return newMsgs;
                     });
                   }
+                  if (data.clear) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1] = {
+                        ...newMsgs[newMsgs.length - 1],
+                        parts: [""]
+                      };
+                      return newMsgs;
+                    });
+                  }
                   if (data.chunk) {
                     setMessages(prev => {
                       const newMsgs = [...prev];
                       const lastMsg = newMsgs[newMsgs.length - 1];
-                      lastMsg.parts[0] = (lastMsg.parts[0] as string) + data.chunk;
+                      newMsgs[newMsgs.length - 1] = {
+                        ...lastMsg,
+                        parts: [(lastMsg.parts[0] as string) + data.chunk]
+                      };
                       return newMsgs;
                     });
                   }
                   if (data.done) {
                     setMessages(prev => {
                       const newMsgs = [...prev];
-                      newMsgs[newMsgs.length - 1].isStreaming = false;
+                      newMsgs[newMsgs.length - 1] = {
+                        ...newMsgs[newMsgs.length - 1],
+                        isStreaming: false
+                      };
                       return newMsgs;
                     });
                     window.dispatchEvent(new CustomEvent('quota-updated'));

@@ -1412,6 +1412,8 @@ class KRStockChatbot:
                     
                     if "503" in error_msg or "UNAVAILABLE" in error_msg.upper():
                         logger.warning(f"[User: {self.user_id}] {current_model} 503 Error. Retrying with next fallback model...")
+                        # Tell frontend to clear the accumulated message because we are restarting the stream
+                        yield {"clear": True, "session_id": session_id}
                         # 다음 모델로 넘어감
                         continue
                     else:
