@@ -5,11 +5,13 @@ import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from "next-auth/react";
+import ThinkingProcess from './ThinkingProcess';
 
 interface Message {
   role: 'user' | 'model';
   parts: string[];
   timestamp?: string;
+  isStreaming?: boolean;
 }
 
 const THINKING_STEPS = [
@@ -32,6 +34,78 @@ const preprocessMarkdown = (text: string) => {
   processed = processed.replace(/(\*\*|__)(.*?)\1([가-힣])/g, '$1$2$1 $3');
 
   return processed;
+};
+
+const parseAIResponse = (text: string, isStreaming: boolean = false) => {
+  let processed = text;
+  let suggestions: string[] = [];
+  let reasoning = "";
+
+  const suggestionMatch = processed.match(/(?:\*\*|__)?\\*\[\s*추천\s*질문\s*\\*\](?:\*\*|__)?[\s\S]*$/i);
+  if (suggestionMatch) {
+    const sugText = suggestionMatch[0];
+    processed = processed.replace(sugText, '');
+
+    const lines = sugText.split('\n');
+    suggestions = lines
+      .map(l => l.replace(/^(?:\d+\.|\-|\*)\s*/, '').trim())
+      .filter(l => l.length > 0 && !l.replace(/\*/g, '').includes('[추천 질문]'))
+      .map(l => l.replace(/\*\*/g, ''));
+  }
+
+  // Handle live streaming: if [추론 과정] exists but [답변] doesn't, the entire text might be reasoning so far.
+  const reasonStartRegex = /(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?/i;
+  const reasonEndRegex = /(?:---|___|\*\*\*|)\s*(?:\n)*\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?/i;
+
+  const startMatch = processed.match(reasonStartRegex);
+  const endMatch = processed.match(reasonEndRegex);
+
+  if (startMatch) {
+    if (endMatch) {
+      // Both start and end exist (fully generated or streaming past reasoning)
+      const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
+      reasoning = reasoningBlock;
+      processed = processed.replace(reasoningBlock, ''); // Remove the reasoning block from the visible chat
+    } else if (isStreaming) {
+      // Stream is active, and only start tag exists. Everything after start is reasoning.
+      reasoning = processed.substring(startMatch.index!);
+      processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
+    } else {
+      // Fallback if formatting is broken but stream is done
+      reasoning = processed.substring(startMatch.index!);
+      processed = processed.replace(reasoning, '');
+    }
+  } else if (isStreaming) {
+    // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
+    if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
+      // If the stream just started and starts with typical tag characters
+      if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
+        reasoning = processed;
+        processed = '';
+      }
+    }
+  }
+
+  // Strip '[답변]' markers and horizontal rules just before it
+  processed = processed.replace(reasonEndRegex, '');
+  processed = preprocessMarkdown(processed);
+
+  let cleanReasoning = preprocessMarkdown(reasoning).replace(/\\*\[\s*추론\s*과정\s*\\*\]/g, '').trim();
+
+  // Cleanup trailing broken markdown
+  if (isStreaming) {
+    cleanReasoning = cleanReasoning.replace(/[\*\_\[\]]+$/, '');
+  }
+
+  // FORCE newlines before numbered lists inside dense text
+  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
+  processed = processed.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+
+  // FORCE newlines before numbered lists inside dense text (e.g., "내용 2. ")
+  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
+  cleanReasoning = cleanReasoning.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+
+  return { cleanText: processed.trim(), suggestions, reasoning: cleanReasoning };
 };
 
 export default function ChatWidget() {
@@ -170,27 +244,76 @@ export default function ChatWidget() {
         },
         body: JSON.stringify({ message: messageToSend, watchlist }),
       });
-      const data = await res.json();
 
-      if (res.status === 401 || res.status === 402) {
-        setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ ${data.error}`] }]);
+      if (res.status === 401 || res.status === 402 || res.status === 400 || !res.ok) {
+        let errStr = "서버 통신 오류가 발생했습니다.";
+        try {
+          const errData = await res.json();
+          if (errData.error) errStr = errData.error;
+        } catch (e) { }
+        setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ ${errStr}`] }]);
         setIsLoading(false);
         return;
       }
 
-      if (data.response) {
-        setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
-        // [Fix] 성공 응답 후 Sidebar quota 실시간 업데이트
-        if (!data.response.startsWith('⚠️')) {
-          window.dispatchEvent(new CustomEvent('quota-updated'));
+      if (res.body) {
+        setIsLoading(false); // Stop block indicator
+
+        // Setup a new streaming message
+        setMessages(prev => [...prev, { role: 'model', parts: [""], isStreaming: true }]);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let done = false;
+        let buffer = "";
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() || "";
+
+            for (const part of parts) {
+              if (part.startsWith("data: ")) {
+                const dataStr = part.substring(6);
+                if (!dataStr.trim()) continue;
+                try {
+                  const data = JSON.parse(dataStr);
+                  if (data.error) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], parts: [`⚠️ 오류: ${data.error}`], isStreaming: false };
+                      return newMsgs;
+                    });
+                  }
+                  if (data.chunk) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      lastMsg.parts[0] = (lastMsg.parts[0] as string) + data.chunk;
+                      return newMsgs;
+                    });
+                  }
+                  if (data.done) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1].isStreaming = false;
+                      return newMsgs;
+                    });
+                    window.dispatchEvent(new CustomEvent('quota-updated'));
+                  }
+                } catch (e) {
+                  console.error("SSE Parse logic error", e);
+                }
+              }
+            }
+          }
         }
-      } else if (data.error) {
-        setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ 오류: ${data.error}`] }]);
-      } else {
-        setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 응답을 받아오지 못했습니다.'] }]);
       }
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 오류가 발생했습니다. 설정 > API Key가 정상적으로 등록되어 있는지 확인해주세요.'] }]);
+      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 서버와 통신이 원활하지 않습니다. 잠시 후 다시 시도해주세요.'] }]);
     } finally {
       setIsLoading(false);
     }
@@ -341,26 +464,56 @@ export default function ChatWidget() {
                         }`}
                     >
                       {msg.role === 'model' ? (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            p({ children }) { return <p className="mb-2 last:mb-0">{children}</p> },
-                            ul({ children }) { return <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul> },
-                            li({ children }) { return <li>{children}</li> },
-                            code({ node, className, children, ...props }) {
-                              return <code className="bg-black/30 px-1 rounded text-blue-300 font-mono" {...props}>{children}</code>
-                            },
-                            table({ children }) {
-                              return <div className="overflow-x-auto my-2 border border-white/10 rounded"><table className="min-w-full divide-y divide-white/10">{children}</table></div>
-                            },
-                            th({ children }) { return <th className="px-2 py-1 text-left text-xs font-semibold text-gray-400 bg-white/5">{children}</th> },
-                            td({ children }) { return <td className="px-2 py-1 text-xs text-gray-300 border-t border-white/5">{children}</td> },
-                            a({ children, href }) { return <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noreferrer">{children}</a> },
-                            strong({ children }) { return <strong className="text-white font-bold">{children}</strong> }
-                          }}
-                        >
-                          {preprocessMarkdown(msg.parts[0] || '')}
-                        </ReactMarkdown>
+                        (() => {
+                          const { cleanText, suggestions, reasoning } = parseAIResponse(msg.parts[0] || '', msg.isStreaming);
+                          return (
+                            <div className="flex flex-col gap-2 relative z-10">
+                              {msg.role === 'model' && (
+                                <ThinkingProcess
+                                  reasoning={reasoning}
+                                  isStreaming={!!msg.isStreaming}
+                                  className="text-white"
+                                />
+                              )}
+
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  p({ children }) { return <p className="mb-2 last:mb-0">{children}</p> },
+                                  ul({ children }) { return <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul> },
+                                  li({ children }) { return <li>{children}</li> },
+                                  code({ node, className, children, ...props }) {
+                                    return <code className="bg-black/30 px-1 rounded text-blue-300 font-mono" {...props}>{children}</code>
+                                  },
+                                  table({ children }) {
+                                    return <div className="overflow-x-auto my-2 border border-white/10 rounded"><table className="min-w-full divide-y divide-white/10">{children}</table></div>
+                                  },
+                                  th({ children }) { return <th className="px-2 py-1 text-left text-xs font-semibold text-gray-400 bg-white/5">{children}</th> },
+                                  td({ children }) { return <td className="px-2 py-1 text-xs text-gray-300 border-t border-white/5">{children}</td> },
+                                  a({ children, href }) { return <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noreferrer">{children}</a> },
+                                  strong({ children }) { return <strong className="text-white font-bold">{children}</strong> }
+                                }}
+                              >
+                                {cleanText}
+                              </ReactMarkdown>
+
+                              {suggestions.length > 0 && (
+                                <div className="flex flex-col gap-1.5 mt-2 pt-3 border-t border-white/10">
+                                  <span className="text-[10px] font-bold text-gray-500 mb-0.5"><i className="fas fa-lightbulb text-yellow-500 mr-1"></i>추천 질문</span>
+                                  {suggestions.map((sug, i) => (
+                                    <button
+                                      key={i}
+                                      onClick={() => handleSend(sug)}
+                                      className="px-3 py-2 bg-blue-500/10 hover:bg-blue-600 text-blue-300 hover:text-white rounded-lg text-xs transition-colors border border-blue-500/20 text-left shadow-sm hover:shadow-md"
+                                    >
+                                      {sug}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()
                       ) : (
                         msg.parts[0]
                       )}

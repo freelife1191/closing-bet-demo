@@ -9,6 +9,7 @@ import VCPCriteriaModal from '@/app/components/VCPCriteriaModal'; // [NEW] Impor
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAdmin } from '@/hooks/useAdmin';
+import ThinkingProcess from '@/app/components/ThinkingProcess';
 
 // Simple Tooltip Component
 // Simple Tooltip Component
@@ -35,6 +36,91 @@ const SimpleTooltip = ({ text, children, align = 'center' }: { text: string; chi
   );
 };
 
+// Helper to fix CJK markdown issues and malformed AI output
+const preprocessMarkdown = (text: string) => {
+  let processed = text;
+
+  // 1. Fix malformed bold with spaces: "** text **" -> "**text**"
+  processed = processed.replace(/\*\*\s+(.*?)\s*\*\*/g, '**$1**');
+
+  // 2. Fix CJK boundary issues: "**Bold**Suffix" -> "**Bold** Suffix"
+  processed = processed.replace(/(\*\*|__)(.*?)\1([가-힣])/g, '$1$2$1 $3');
+
+  return processed;
+};
+
+const parseAIResponse = (text: string, isStreaming: boolean = false) => {
+  let processed = text;
+  let suggestions: string[] = [];
+  let reasoning = "";
+
+  const suggestionMatch = processed.match(/(?:\*\*|)?\\*\[\s*추천\s*질문\s*\\*\](?:\*\*|)?[\s\S]*$/i);
+  if (suggestionMatch) {
+    const sugText = suggestionMatch[0];
+    processed = processed.replace(sugText, '');
+
+    const lines = sugText.split('\n');
+    suggestions = lines
+      .map(l => l.replace(/^(?:\d+\.|\-|\*)\s*/, '').trim())
+      .filter(l => l.length > 0 && !l.replace(/\*/g, '').includes('[추천 질문]'))
+      .map(l => l.replace(/\*\*/g, ''));
+  }
+
+  // Handle live streaming: if [추론 과정] exists but [답변] doesn't, the entire text might be reasoning so far.
+  const reasonStartRegex = /(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?/i;
+  const reasonEndRegex = /(?:---|___|\*\*\*|)\s*(?:\n)*\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?/i;
+
+  const startMatch = processed.match(reasonStartRegex);
+  const endMatch = processed.match(reasonEndRegex);
+
+  if (startMatch) {
+    if (endMatch) {
+      // Both start and end exist (fully generated or streaming past reasoning)
+      const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
+      reasoning = reasoningBlock;
+      processed = processed.replace(reasoningBlock, ''); // Remove the reasoning block from the visible chat
+    } else if (isStreaming) {
+      // Stream is active, and only start tag exists. Everything after start is reasoning.
+      reasoning = processed.substring(startMatch.index!);
+      processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
+    } else {
+      // Fallback if formatting is broken but stream is done
+      reasoning = processed.substring(startMatch.index!);
+      processed = processed.replace(reasoning, '');
+    }
+  } else if (isStreaming) {
+    // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
+    if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
+      // If the stream just started and starts with typical tag characters
+      if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
+        reasoning = processed;
+        processed = '';
+      }
+    }
+  }
+
+  // Strip '[답변]' markers and horizontal rules just before it
+  processed = processed.replace(reasonEndRegex, '');
+  processed = preprocessMarkdown(processed);
+
+  let cleanReasoning = preprocessMarkdown(reasoning).replace(/\\*\[\s*추론\s*과정\s*\\*\]/g, '').trim();
+
+  // Cleanup trailing broken markdown
+  if (isStreaming) {
+    cleanReasoning = cleanReasoning.replace(/[\*\_\[\]]+$/, '');
+  }
+
+  // FORCE newlines before numbered lists inside dense text
+  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
+  processed = processed.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+
+  // FORCE newlines before numbered lists inside dense text (e.g., "내용 2. ")
+  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
+  cleanReasoning = cleanReasoning.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+
+  return { cleanText: processed.trim(), suggestions, reasoning: cleanReasoning };
+};
+
 export default function VCPSignalsPage() {
   const [signals, setSignals] = useState<KRSignal[]>([]);
   const [aiData, setAiData] = useState<KRAIAnalysis | null>(null);
@@ -48,7 +134,7 @@ export default function VCPSignalsPage() {
   const [marketGate, setMarketGate] = useState<KRMarketGate | null>(null);
 
   // Chatbot State
-  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string; isStreaming?: boolean }>>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
 
@@ -110,15 +196,44 @@ export default function VCPSignalsPage() {
     setSelectedCommandIndex(0);
   }, [chatInput]);
 
+  // On ticker change, load chat history from localStorage or reset to empty
   useEffect(() => {
-    // Welcome Message for VCP Bot
-    if (chatHistory.length === 0) {
-      setChatHistory([{
-        role: 'assistant',
-        content: `👋 안녕하세요! **VCP 전문가 챗봇**입니다.\n\n이 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n\n명령어 예시:\n* \`/status\` - 현재 상태 확인\n* \`/help\` - 도움말`
-      }]);
+    if (selectedStock?.ticker && isModalOpen) {
+      const saved = localStorage.getItem(`vcp_chat_${selectedStock.ticker}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setChatHistory(parsed);
+            return;
+          }
+        } catch (e) {
+          console.error('Failed to parse chat history', e);
+        }
+      }
+      // If no saved history or parse failed, set empty to trigger welcome message
+      setChatHistory([]);
     }
-  }, [selectedStock, isModalOpen]);
+  }, [selectedStock?.ticker, isModalOpen]);
+
+  // Welcome Message for VCP Bot (only when history is explicitly empty AND a stock is selected)
+  useEffect(() => {
+    if (selectedStock?.ticker && chatHistory.length === 0 && isModalOpen) {
+      const welcomeMsg = {
+        role: 'assistant' as const,
+        content: `👋 안녕하세요! **VCP 전문가 챗봇**입니다.\n\n**${selectedStock.name}** 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n\n명령어 예시:\n* \`/status\` - 현재 상태 확인\n* \`/help\` - 도움말`
+      };
+      setChatHistory([welcomeMsg]);
+      localStorage.setItem(`vcp_chat_${selectedStock.ticker}`, JSON.stringify([welcomeMsg]));
+    }
+  }, [selectedStock, chatHistory.length, isModalOpen]);
+
+  // Save chat history on every update
+  useEffect(() => {
+    if (selectedStock?.ticker && chatHistory.length > 0) {
+      localStorage.setItem(`vcp_chat_${selectedStock.ticker}`, JSON.stringify(chatHistory));
+    }
+  }, [chatHistory, selectedStock?.ticker]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (showCommands && filteredCommands.length > 0) {
@@ -429,6 +544,13 @@ export default function VCPSignalsPage() {
 
     if (!message.trim() || chatLoading) return;
 
+    if (message.trim().toLowerCase() === '/clear') {
+      setChatHistory([]); // The useEffect will handle injecting the welcome message
+      setChatInput('');
+      setSelectedCommandIndex(0);
+      return;
+    }
+
     // 슬래시 커맨드인 경우 종목 컨텍스트를 붙이지 않음
     const isCommand = message.startsWith('/');
     const stockContext = (selectedStock && !isCommand) ? `[${selectedStock.name}(${selectedStock.ticker})] ` : '';
@@ -439,23 +561,101 @@ export default function VCPSignalsPage() {
     setChatLoading(true);
 
     try {
+      // Get auth
+      const userEmail = "admin@hodu.dev"; // Or get from session
+      const stockTicker = selectedStock?.ticker || 'default';
+      const sessionKey = `vcp_chat_session_id_${stockTicker}`;
+      let sessionId = localStorage.getItem(sessionKey);
+      if (!sessionId) {
+        sessionId = `vcp_${stockTicker}_` + crypto.randomUUID();
+        localStorage.setItem(sessionKey, sessionId);
+      }
+
+      let apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
+      if (apiKey === 'null' || apiKey === 'undefined') apiKey = null;
+
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail || '',
+          'X-Gemini-Key': apiKey || '',
+          'X-Session-Id': sessionId
+        },
         body: JSON.stringify({
           message: fullMessage,
           persona: 'vcp'
         }),
       });
-      const data = await res.json();
-      if (data.response) {
-        setChatHistory(prev => [...prev, { role: 'assistant', content: data.response }]);
-      } else {
-        setChatHistory(prev => [...prev, { role: 'assistant', content: '응답을 받지 못했습니다.' }]);
+
+      if (!res.ok || res.status === 401 || res.status === 402 || res.status === 400) {
+        let errStr = "서버 통신 오류가 발생했습니다.";
+        try {
+          const errData = await res.json();
+          if (errData.error) errStr = errData.error;
+        } catch (e) { }
+        setChatHistory(prev => [...prev, { role: 'assistant', content: `⚠️ ${errStr}` }]);
+        setChatLoading(false);
+        return;
+      }
+
+      if (res.body) {
+        setChatLoading(false);
+
+        // Setup a new streaming message
+        setChatHistory(prev => [...prev, { role: 'assistant', content: "", isStreaming: true }]);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let done = false;
+        let buffer = "";
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() || "";
+
+            for (const part of parts) {
+              if (part.startsWith("data: ")) {
+                const dataStr = part.substring(6);
+                if (!dataStr.trim()) continue;
+                try {
+                  const data = JSON.parse(dataStr);
+                  if (data.error) {
+                    setChatHistory(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], content: data.error, isStreaming: false };
+                      return newMsgs;
+                    });
+                  }
+                  if (data.chunk) {
+                    setChatHistory(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      lastMsg.content += data.chunk;
+                      return newMsgs;
+                    });
+                  }
+                  if (data.done) {
+                    setChatHistory(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1].isStreaming = false;
+                      return newMsgs;
+                    });
+                  }
+                } catch (e) {
+                  console.error("SSE Parse logic error", e);
+                }
+              }
+            }
+          }
+        }
       }
     } catch (e) {
-      setChatHistory(prev => [...prev, { role: 'assistant', content: '통신 오류가 발생했습니다.' }]);
-    } finally {
+      setChatHistory(prev => [...prev, { role: 'assistant', content: '⚠️ 서버와 통신이 원활하지 않습니다. 잠시 후 다시 시도해주세요.', isStreaming: false }]);
       setChatLoading(false);
     }
   };
@@ -861,10 +1061,11 @@ export default function VCPSignalsPage() {
                   (() => {
                     const signal = signals.find(s => s.ticker === selectedStock.ticker);
                     // VCP 범위 계산: 차트 데이터에서 직접 계산
-                    const recentData = chartData.slice(-30); // 최근 30일
-                    const last10Days = chartData.slice(-10); // 최근 10일
-                    const firstHalfHigh = Math.max(...recentData.map(d => d.high)); // 전반부: 30일 고점
-                    const secondHalfLow = Math.min(...last10Days.map(d => d.low)); // 후반부: 10일 저점
+                    const validData = chartData.filter(d => d.close > 0 && d.high > 0);
+                    const recentData = validData.slice(-30); // 최근 30일
+                    const last10Days = validData.slice(-10); // 최근 10일
+                    const firstHalfHigh = recentData.length > 0 ? Math.max(...recentData.map(d => d.high)) : 0; // 전반부: 30일 고점
+                    const secondHalfLow = last10Days.length > 0 ? Math.min(...last10Days.map(d => d.low)) : 0; // 후반부: 10일 저점
 
                     return (
                       <StockChart
@@ -892,10 +1093,11 @@ export default function VCPSignalsPage() {
                 if (!signal || chartData.length === 0) return null;
 
                 // VCP 범위 계산: 차트 데이터에서 직접 계산
-                const recentData = chartData.slice(-30);
-                const last10Days = chartData.slice(-10);
-                const firstHalfHigh = Math.max(...recentData.map(d => d.high));
-                const secondHalfLow = Math.min(...last10Days.map(d => d.low));
+                const validData = chartData.filter(d => d.close > 0 && d.high > 0);
+                const recentData = validData.slice(-30);
+                const last10Days = validData.slice(-10);
+                const firstHalfHigh = recentData.length > 0 ? Math.max(...recentData.map(d => d.high)) : 0;
+                const secondHalfLow = last10Days.length > 0 ? Math.min(...last10Days.map(d => d.low)) : 0;
                 const vcpRatio = firstHalfHigh > 0 ? (secondHalfLow / firstHalfHigh).toFixed(2) : '-';
 
                 return (
@@ -1099,28 +1301,80 @@ export default function VCPSignalsPage() {
                             </div>
                           ) : (
                             <>
-                              {chatHistory.map((msg, i) => (
-                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                  <div className={`inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed ${msg.role === 'user'
-                                    ? 'bg-blue-600 text-white rounded-br-none'
-                                    : 'bg-[#2c2c2e] text-gray-200 rounded-bl-none border border-white/5'
-                                    }`}>
-                                    <ReactMarkdown
-                                      remarkPlugins={[remarkGfm]}
-                                      components={{
-                                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                                        strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
-                                        ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
-                                        ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1 pl-1">{children}</ol>,
-                                        li: ({ children }) => <li className="text-gray-300">{children}</li>,
-                                        code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
-                                      }}
-                                    >
-                                      {msg.content}
-                                    </ReactMarkdown>
-                                  </div>
-                                </div>
-                              ))}
+                              {chatHistory.map((msg, i) => {
+                                const isUser = msg.role === 'user';
+                                let displayContent = msg.content;
+                                let extractedSuggestions: string[] = [];
+
+                                if (!isUser) {
+                                  const { cleanText, suggestions, reasoning } = parseAIResponse(msg.content, msg.isStreaming);
+                                  displayContent = cleanText;
+                                  extractedSuggestions = suggestions;
+
+                                  return (
+                                    <div key={i} className="flex justify-start">
+                                      <div className="flex flex-col gap-2 relative z-10 w-full overflow-hidden inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed bg-[#2c2c2e] text-gray-200 rounded-bl-none border border-white/5">
+                                        {msg.role === 'assistant' && (
+                                          <ThinkingProcess
+                                            reasoning={reasoning}
+                                            isStreaming={!!msg.isStreaming}
+                                            className="mb-2"
+                                          />
+                                        )}
+                                        <ReactMarkdown
+                                          remarkPlugins={[remarkGfm]}
+                                          components={{
+                                            p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                                            strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
+                                            ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
+                                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1 pl-1">{children}</ol>,
+                                            li: ({ children }) => <li className="text-gray-300">{children}</li>,
+                                            code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
+                                          }}
+                                        >
+                                          {displayContent}
+                                        </ReactMarkdown>
+
+                                        {!isUser && extractedSuggestions.length > 0 && (
+                                          <div className="flex flex-col gap-1.5 mt-2 pt-3 border-t border-white/10">
+                                            <span className="text-[10px] font-bold text-gray-500 mb-0.5"><i className="fas fa-lightbulb text-yellow-500 mr-1"></i>추천 질문</span>
+                                            {extractedSuggestions.map((sug, idx) => (
+                                              <button
+                                                key={idx}
+                                                onClick={() => handleVCPChatSend(sug)}
+                                                className="px-3 py-2 bg-blue-500/10 hover:bg-blue-600 text-blue-300 hover:text-white rounded-lg text-xs transition-colors border border-blue-500/20 text-left shadow-sm hover:shadow-md"
+                                              >
+                                                {sug}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                } else {
+                                  // User Message
+                                  return (
+                                    <div key={i} className="flex justify-end">
+                                      <div className="inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed bg-blue-600 text-white rounded-br-none">
+                                        <ReactMarkdown
+                                          remarkPlugins={[remarkGfm]}
+                                          components={{
+                                            p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                                            strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
+                                            ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
+                                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1 pl-1">{children}</ol>,
+                                            li: ({ children }) => <li className="text-gray-300">{children}</li>,
+                                            code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
+                                          }}
+                                        >
+                                          {displayContent}
+                                        </ReactMarkdown>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                              })}
 
                               {/* Suggestion Chips */}
                               {chatHistory.length === 1 && chatHistory[0].role === 'assistant' && (

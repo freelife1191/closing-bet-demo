@@ -11,12 +11,14 @@ import SettingsModal from '../components/SettingsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import Modal from '../components/Modal';
 import PaperTradingModal from '../components/PaperTradingModal';
+import ThinkingProcess from '../components/ThinkingProcess';
 
 // Types
 interface Message {
   role: 'user' | 'model';
   parts: (string | { text: string })[];
   timestamp?: string;
+  isStreaming?: boolean;
 }
 
 interface Session {
@@ -56,29 +58,78 @@ const preprocessMarkdown = (text: string) => {
   return processed;
 };
 
-// Helper: Extract suggestions from AI response
-// Format expected: "[추천 질문]\n1. Question...\n2. Question..."
-const extractSuggestions = (text: string) => {
-  const marker = '[추천 질문]';
-  const markerIndex = text.indexOf(marker);
+const extractSuggestions = (text: string, isStreaming: boolean = false) => {
+  let processed = text;
+  let suggestions: string[] = [];
+  let reasoning = "";
 
-  if (markerIndex === -1) {
-    return { content: text, suggestions: [] };
+  const suggestionMatch = processed.match(/(?:\*\*|__)?\\*\[\s*추천\s*질문\s*\\*\](?:\*\*|__)?[\s\S]*$/i);
+  if (suggestionMatch) {
+    const sugText = suggestionMatch[0];
+    processed = processed.replace(sugText, '');
+
+    const lines = sugText.split('\n');
+    suggestions = lines
+      .map(l => l.replace(/^(?:\d+\.|\-|\*)\s*/, '').trim())
+      .filter(l => l.length > 0 && !l.replace(/\*/g, '').includes('[추천 질문]'))
+      .map(l => l.replace(/\*\*/g, '')); // 별표 제거
   }
 
-  // Split content and suggestions section
-  const content = text.substring(0, markerIndex).trim();
-  const suggestionSection = text.substring(markerIndex + marker.length).trim();
+  // Handle live streaming: if [추론 과정] exists but [답변] doesn't, the entire text might be reasoning so far.
+  const reasonStartRegex = /(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?/i;
+  const reasonEndRegex = /(?:---|___|\*\*\*|)\s*(?:\n)*\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?/i;
 
-  // Parse questions (lines starting with number or bullet)
-  const suggestions = suggestionSection
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => /^\d+\.|^-/.test(line)) // Matches "1. " or "- "
-    .map(line => line.replace(/^\d+\.|^-\s*/, '').trim()) // Remove marker
-    .slice(0, 3); // Limit to 3
+  const startMatch = processed.match(reasonStartRegex);
+  const endMatch = processed.match(reasonEndRegex);
 
-  return { content, suggestions };
+  if (startMatch) {
+    if (endMatch) {
+      // Both start and end exist (fully generated or streaming past reasoning)
+      const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
+      reasoning = reasoningBlock;
+      processed = processed.replace(reasoningBlock, ''); // Remove the reasoning block from the visible chat
+    } else if (isStreaming) {
+      // Stream is active, and only start tag exists. Everything after start is reasoning.
+      reasoning = processed.substring(startMatch.index!);
+      processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
+    } else {
+      // Fallback if formatting is broken but stream is done
+      reasoning = processed.substring(startMatch.index!);
+      processed = processed.replace(reasoning, '');
+    }
+  } else if (isStreaming) {
+    // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
+    if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
+      // If the stream just started and starts with typical tag characters
+      if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
+        reasoning = processed;
+        processed = '';
+      }
+    }
+  }
+
+  // Strip '[답변]' markers and horizontal rules just before it
+  processed = processed.replace(reasonEndRegex, '');
+
+  // FORCE newlines before numbered lists inside dense text
+  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
+  processed = processed.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+
+  let cleanReasoning = preprocessMarkdown(reasoning).replace(/\\*\[\s*추론\s*과정\s*\\*\]/g, '').trim();
+
+  // Cleanup trailing broken markdown
+  if (isStreaming) {
+    cleanReasoning = cleanReasoning.replace(/[\*\_\[\]]+$/, '');
+  }
+
+  // FORCE newlines before numbered lists inside dense text (e.g., "내용 2. ")
+  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
+  cleanReasoning = cleanReasoning.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+
+  // Debug: see what's being extracted
+  // console.log("Stream:", isStreaming, "| Start:", !!startMatch, "| End:", !!endMatch, "| Reasoning len:", cleanReasoning.length, "| Raw Text:", text.slice(0, 100).replace(/\n/g, '\\n'));
+
+  return { content: processed.trim(), suggestions, reasoning: cleanReasoning };
 };
 
 export default function ChatbotPage() {
@@ -506,29 +557,82 @@ export default function ChatbotPage() {
         });
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        let errStr = "서버 통신 오류가 발생했습니다.";
+        try {
+          const errData = await res.json();
+          if (errData.error) errStr = errData.error;
+        } catch (e) { }
+        setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ ${errStr}`] }]);
+        setIsLoading(false);
+        return;
+      }
 
-      if (data.response) {
-        // If it's a new session, update state
-        if (data.session_id && data.session_id !== currentSessionId) {
-          isCreatingSessionRef.current = true; // Prevent history fetch overwriting optimistic state
-          setCurrentSessionId(data.session_id);
-          fetchSessions();
-        } else {
-          fetchSessions();
+      if (res.body) {
+        setIsLoading(false);
+        setMessages(prev => [...prev, { role: 'model', parts: [""], isStreaming: true }]);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let done = false;
+        let buffer = "";
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() || "";
+
+            for (const part of parts) {
+              if (part.startsWith("data: ")) {
+                const dataStr = part.substring(6);
+                if (!dataStr.trim()) continue;
+                try {
+                  const data = JSON.parse(dataStr);
+                  if (data.error) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], parts: [data.error], isStreaming: false };
+                      return newMsgs;
+                    });
+                  }
+                  if (data.chunk) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      let currentText = typeof lastMsg.parts[0] === 'string' ? lastMsg.parts[0] : (lastMsg.parts[0] as any).text;
+                      newMsgs[newMsgs.length - 1] = { ...lastMsg, parts: [currentText + data.chunk] };
+                      return newMsgs;
+                    });
+                  }
+                  if (data.session_id && data.session_id !== currentSessionId) {
+                    isCreatingSessionRef.current = true;
+                    setCurrentSessionId(data.session_id);
+                    fetchSessions();
+                  } else if (data.done) {
+                    fetchSessions();
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], isStreaming: false };
+                      return newMsgs;
+                    });
+                  }
+                } catch (e) {
+                  // ignore JSON parse error for partial chunks
+                }
+              }
+            }
+          }
         }
-
-        setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
-
-      } else if (data.error) {
-        setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ 오류: ${data.error}`] }]);
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
         // Already handled in handleStop usually, but double check
         return;
       }
-      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 오류가 발생했습니다. 설정 > API Key가 정상적으로 등록되어 있는지 확인해주세요.'] }]);
+      setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 서버와 통신이 원활하지 않습니다. 잠시 후 다시 시도해주세요.'] }]);
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
@@ -934,9 +1038,9 @@ export default function ChatbotPage() {
                       ? msg.parts[0]
                       : (msg.parts[0] as any).text;
 
-                    const { content, suggestions } = msg.role === 'model'
-                      ? extractSuggestions(rawText)
-                      : { content: rawText, suggestions: [] };
+                    const { content, suggestions, reasoning } = msg.role === 'model'
+                      ? extractSuggestions(rawText, !!msg.isStreaming)
+                      : { content: rawText, suggestions: [], reasoning: "" };
 
                     return (
                       <div key={idx} className="flex gap-4 group">
@@ -964,6 +1068,12 @@ export default function ChatbotPage() {
                           </div>
                           <div className={`prose prose-sm prose-invert max-w-none leading-relaxed space-y-4 ${msg.role === 'user' ? 'text-lg text-gray-100 font-medium' : 'text-gray-300'
                             }`}>
+                            {msg.role === 'model' && (
+                              <ThinkingProcess
+                                reasoning={reasoning}
+                                isStreaming={!!msg.isStreaming}
+                              />
+                            )}
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
                               components={{
