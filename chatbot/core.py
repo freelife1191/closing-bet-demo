@@ -136,8 +136,10 @@ def _extract_reasoning_and_answer(text: str, is_streaming: bool = False) -> Tupl
             reasoning = processed[start_idx:]
             processed = processed[:start_idx]
         else:
-            reasoning = processed[start_idx:]
-            processed = processed[:start_idx]
+            # 최종 응답에서 [답변] 헤더가 누락된 경우,
+            # 전체 텍스트를 답변으로 간주해 빈 답변이 되지 않게 한다.
+            reasoning = ""
+            processed = text
     else:
         processed = ANSWER_HEADER_REGEX.sub("", processed)
         if is_streaming:

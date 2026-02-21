@@ -160,9 +160,10 @@ const extractSuggestions = (text: string, isStreaming: boolean = false, streamRe
         reasoning = processed.substring(startMatch.index!);
         processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
       } else {
-        // Fallback if formatting is broken but stream is done
-        reasoning = processed.substring(startMatch.index!);
-        processed = processed.substring(0, startMatch.index!);
+        // Non-streaming fallback:
+        // If [답변] header is missing, do not hide the whole body as reasoning-only.
+        // Keep full text in answer area to prevent empty final answer.
+        reasoning = "";
       }
     } else if (isStreaming) {
       // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
