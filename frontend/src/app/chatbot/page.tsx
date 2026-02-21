@@ -19,6 +19,7 @@ interface Message {
   parts: (string | { text: string })[];
   timestamp?: string;
   isStreaming?: boolean;
+  reasoning?: string;
 }
 
 interface Session {
@@ -35,6 +36,25 @@ interface SuggestionCard {
   prompt: string;
 }
 
+const getTurnIndicesFromMessage = (messages: Message[], index: number): number[] => {
+  const current = messages[index];
+  if (!current) return [];
+
+  const prev = messages[index - 1];
+  const next = messages[index + 1];
+
+  if (current.role === 'user' && next?.role === 'model') {
+    return [index, index + 1];
+  }
+
+  if (current.role === 'model' && prev?.role === 'user') {
+    return [index - 1, index];
+  }
+
+  // Fallback for irregular history
+  return [index];
+};
+
 const SUGGESTIONS: SuggestionCard[] = [
   { title: '시장 현황', desc: '마켓게이트 상태와 투자 전략', icon: 'fas fa-chart-pie', prompt: '오늘 마켓게이트 상태와 투자 전략 알려줘' },
   { title: 'VCP 추천', desc: 'AI 분석 기반 매수 추천 종목', icon: 'fas fa-search-dollar', prompt: 'VCP AI 분석 결과 매수 추천 종목 알려줘' },
@@ -46,22 +66,68 @@ const SUGGESTIONS: SuggestionCard[] = [
 // Helper to fix CJK markdown issues and malformed AI output
 const preprocessMarkdown = (text: string) => {
   let processed = text;
+  const removeLastUnmatchedMarker = (line: string, markerRegex: RegExp, markerLength: number): string => {
+    const matches = [...line.matchAll(markerRegex)];
+    if (matches.length % 2 === 1) {
+      const idx = matches[matches.length - 1].index;
+      if (typeof idx === 'number') {
+        return line.slice(0, idx) + line.slice(idx + markerLength);
+      }
+    }
+    return line;
+  };
 
-  // 1. Fix malformed bold with spaces: "** text **" -> "**text**"
-  // Handles cases where AI adds spaces inside the markers
-  processed = processed.replace(/\*\*\s+(.*?)\s*\*\*/g, '**$1**');
+  // 1. Remove stray emphasis markers before ordered list starts (e.g. "****1. ")
+  processed = processed.replace(/^\s*\*{3,}(?=\d+[.)]\s)/gm, '');
 
-  // 2. Fix CJK boundary issues: "**Bold**Suffix" -> "**Bold** Suffix"
-  // Insert generic space between bold/italic end and Korean particles
-  processed = processed.replace(/(\*\*|__)(.*?)\1([가-힣])/g, '$1$2$1 $3');
+  // 2. Split section labels and first ordered item when they are stuck together.
+  processed = processed.replace(/((?:\*\*|__)?\[[^\]\n]{1,20}\](?:\*\*|__)?)\s*(?=[1-9]\d?[.)])/g, '$1\n');
+
+  // 3. Ensure space after ordered-list marker (e.g. "1.조선", "1.**제목**" -> "1. 조선", "1. **제목**")
+  processed = processed.replace(/(?<!\d)([1-9]\d?[.)])(?=\*\*|__|[가-힣A-Za-z(])/g, '$1 ');
+
+  // 4. Ensure emphasis opening marker is separated from previous word (opening marker only).
+  // Avoid touching closing markers before punctuation (e.g. "**텍스트**:")
+  processed = processed.replace(/([가-힣A-Za-z0-9])(?=(\*\*|__)\s*[가-힣A-Za-z0-9(])/g, '$1 ');
+
+  // 5. Trim inner spaces in emphasis markers (covers both-sided or one-sided spaces).
+  processed = processed.replace(/\*\*([^*\n]+)\*\*/g, (m, inner: string) => {
+    const trimmed = inner.trim();
+    return trimmed ? `**${trimmed}**` : m;
+  });
+  processed = processed.replace(/__([^_\n]+)__/g, (m, inner: string) => {
+    const trimmed = inner.trim();
+    return trimmed ? `__${trimmed}__` : m;
+  });
+
+  // 5-1. Remove trailing unmatched emphasis marker in a line.
+  processed = processed
+    .split('\n')
+    .map((line) => {
+      const balancedAsterisk = removeLastUnmatchedMarker(line, /(?<!\*)\*\*(?!\*)/g, 2);
+      return removeLastUnmatchedMarker(balancedAsterisk, /(?<!_)__(?!_)/g, 2);
+    })
+    .join('\n');
+
+  // 6. Normalize quoted emphasis wrappers: **"텍스트"** / **'텍스트'** -> **텍스트**
+  processed = processed.replace(/\*\*\s*['"“”‘’]\s*([^*\n]+?)\s*['"“”‘’]\s*\*\*/g, '**$1**');
+  processed = processed.replace(/__\s*['"“”‘’]\s*([^_\n]+?)\s*['"“”‘’]\s*__/g, '__$1__');
+
+  // 7. Ensure spacing after closing emphasis marker when attached to text.
+  processed = processed.replace(/(?<=\S)(\*\*|__)(?=[가-힣A-Za-z0-9])/g, '$1 ');
+
+  // 8. Fix CJK boundary issues: "**Bold**Suffix" -> "**Bold** Suffix"
+  processed = processed.replace(/\*\*([A-Za-z0-9가-힣(][^*\n]*?)\*\*([가-힣])/g, '**$1** $2');
+  processed = processed.replace(/__([A-Za-z0-9가-힣(][^_\n]*?)__([가-힣])/g, '__$1__ $2');
 
   return processed;
 };
 
-const extractSuggestions = (text: string, isStreaming: boolean = false) => {
+const extractSuggestions = (text: string, isStreaming: boolean = false, streamReasoning?: string) => {
   let processed = text;
   let suggestions: string[] = [];
-  let reasoning = "";
+  const hasStreamReasoning = typeof streamReasoning === 'string' && streamReasoning.length > 0;
+  let reasoning = hasStreamReasoning ? streamReasoning : "";
 
   const suggestionMatch = processed.match(/(?:\*\*|__)?\\*\[\s*추천\s*질문\s*\\*\](?:\*\*|__)?[\s\S]*$/i);
   if (suggestionMatch) {
@@ -75,35 +141,37 @@ const extractSuggestions = (text: string, isStreaming: boolean = false) => {
       .map(l => l.replace(/\*\*/g, '')); // 별표 제거
   }
 
-  // Handle live streaming: if [추론 과정] exists but [답변] doesn't, the entire text might be reasoning so far.
   const reasonStartRegex = /(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?/i;
   const reasonEndRegex = /(?:---|___|\*\*\*|)\s*(?:\n)*\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?/i;
 
-  const startMatch = processed.match(reasonStartRegex);
-  const endMatch = processed.match(reasonEndRegex);
+  if (!hasStreamReasoning) {
+    // Fallback parser for legacy/history messages where reasoning and answer are mixed in one text.
+    const startMatch = processed.match(reasonStartRegex);
+    const endMatch = processed.match(reasonEndRegex);
 
-  if (startMatch) {
-    if (endMatch) {
-      // Both start and end exist (fully generated or streaming past reasoning)
-      const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
-      reasoning = reasoningBlock;
-      processed = processed.substring(0, startMatch.index!) + processed.substring(endMatch.index!); // Remove the reasoning block from the visible chat
+    if (startMatch) {
+      if (endMatch) {
+        // Both start and end exist (fully generated or streaming past reasoning)
+        const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
+        reasoning = reasoningBlock;
+        processed = processed.substring(0, startMatch.index!) + processed.substring(endMatch.index!); // Remove the reasoning block from the visible chat
+      } else if (isStreaming) {
+        // Stream is active, and only start tag exists. Everything after start is reasoning.
+        reasoning = processed.substring(startMatch.index!);
+        processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
+      } else {
+        // Fallback if formatting is broken but stream is done
+        reasoning = processed.substring(startMatch.index!);
+        processed = processed.substring(0, startMatch.index!);
+      }
     } else if (isStreaming) {
-      // Stream is active, and only start tag exists. Everything after start is reasoning.
-      reasoning = processed.substring(startMatch.index!);
-      processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
-    } else {
-      // Fallback if formatting is broken but stream is done
-      reasoning = processed.substring(startMatch.index!);
-      processed = processed.substring(0, startMatch.index!);
-    }
-  } else if (isStreaming) {
-    // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
-    if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
-      // If the stream just started and starts with typical tag characters
-      if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
-        reasoning = processed;
-        processed = '';
+      // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
+      if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
+        // If the stream just started and starts with typical tag characters
+        if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
+          reasoning = processed;
+          processed = '';
+        }
       }
     }
   }
@@ -115,7 +183,8 @@ const extractSuggestions = (text: string, isStreaming: boolean = false) => {
   // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
   processed = processed.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
 
-  let cleanReasoning = preprocessMarkdown(reasoning).replace(/\\*\[\s*추론\s*과정\s*\\*\]/g, '').trim();
+  const reasoningHeaderRegex = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\\?\[\s*추론\s*과정\s*\\?\](?:\*\*|__)?\s*\n?/i;
+  let cleanReasoning = preprocessMarkdown(reasoning).replace(reasoningHeaderRegex, '').trim();
 
   // Cleanup trailing broken markdown
   if (isStreaming) {
@@ -161,6 +230,10 @@ export default function ChatbotPage() {
   // Delete Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [sessionToDeleteId, setSessionToDeleteId] = useState<string | null>(null);
+  const [isMessageDeleteModalOpen, setIsMessageDeleteModalOpen] = useState(false);
+  const [messageToDeleteIndex, setMessageToDeleteIndex] = useState<number | null>(null);
+  const [isTurnDeleteModalOpen, setIsTurnDeleteModalOpen] = useState(false);
+  const [turnDeleteIndices, setTurnDeleteIndices] = useState<number[]>([]);
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -178,6 +251,7 @@ export default function ChatbotPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposing = useRef(false); // Track IME composition state
   const isCreatingSessionRef = useRef(false); // To prevent history fetch on new session creation
+  const sessionsFetchSeqRef = useRef(0); // Prevent stale session list responses from overriding latest state
 
   // Loading Steps
   const [loadingStep, setLoadingStep] = useState(0);
@@ -365,13 +439,18 @@ export default function ChatbotPage() {
   };
 
   const fetchSessions = async (): Promise<Session[]> => {
+    const requestSeq = ++sessionsFetchSeqRef.current;
     try {
       const headers = getAuthHeaders();
-      const data: any = await fetchAPI('/api/kr/chatbot/sessions', {
-        headers
+      headers['Cache-Control'] = 'no-cache';
+      const data: any = await fetchAPI(`/api/kr/chatbot/sessions?_t=${Date.now()}`, {
+        headers,
+        cache: 'no-store'
       });
       if (data.sessions) {
-        setSessions(data.sessions);
+        if (requestSeq === sessionsFetchSeqRef.current) {
+          setSessions(data.sessions);
+        }
         return data.sessions;
       }
     } catch (e) {
@@ -384,8 +463,10 @@ export default function ChatbotPage() {
     try {
       setIsLoading(true); // Show loading state
       const headers = getAuthHeaders();
-      const data: any = await fetchAPI(`/api/kr/chatbot/history?session_id=${sessionId}`, {
-        headers
+      headers['Cache-Control'] = 'no-cache';
+      const data: any = await fetchAPI(`/api/kr/chatbot/history?session_id=${sessionId}&_t=${Date.now()}`, {
+        headers,
+        cache: 'no-store'
       });
       if (data.history) {
         console.log(`[History] Loaded ${data.history.length} messages for session ${sessionId}`);
@@ -570,7 +651,7 @@ export default function ChatbotPage() {
 
       if (res.body) {
         setIsLoading(false);
-        setMessages(prev => [...prev, { role: 'model', parts: [""], isStreaming: true }]);
+        setMessages(prev => [...prev, { role: 'model', parts: [""], reasoning: "", isStreaming: true }]);
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -603,17 +684,45 @@ export default function ChatbotPage() {
                       const newMsgs = [...prev];
                       newMsgs[newMsgs.length - 1] = {
                         ...newMsgs[newMsgs.length - 1],
-                        parts: [""]
+                        parts: [""],
+                        reasoning: ""
                       };
                       return newMsgs;
                     });
                   }
-                  if (data.chunk) {
+                  if (data.answer_clear) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      newMsgs[newMsgs.length - 1] = { ...lastMsg, parts: [""] };
+                      return newMsgs;
+                    });
+                  }
+                  if (data.reasoning_clear) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      newMsgs[newMsgs.length - 1] = { ...lastMsg, reasoning: "" };
+                      return newMsgs;
+                    });
+                  }
+
+                  const answerDelta = typeof data.answer_chunk === 'string' ? data.answer_chunk : data.chunk;
+                  if (typeof answerDelta === 'string' && answerDelta.length > 0) {
                     setMessages(prev => {
                       const newMsgs = [...prev];
                       const lastMsg = newMsgs[newMsgs.length - 1];
                       let currentText = typeof lastMsg.parts[0] === 'string' ? lastMsg.parts[0] : (lastMsg.parts[0] as any).text;
-                      newMsgs[newMsgs.length - 1] = { ...lastMsg, parts: [currentText + data.chunk] };
+                      newMsgs[newMsgs.length - 1] = { ...lastMsg, parts: [currentText + answerDelta] };
+                      return newMsgs;
+                    });
+                  }
+                  if (typeof data.reasoning_chunk === 'string' && data.reasoning_chunk.length > 0) {
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      const currentReasoning = lastMsg.reasoning || "";
+                      newMsgs[newMsgs.length - 1] = { ...lastMsg, reasoning: currentReasoning + data.reasoning_chunk };
                       return newMsgs;
                     });
                   }
@@ -672,22 +781,151 @@ export default function ChatbotPage() {
 
   const confirmDeleteSession = async () => {
     if (!sessionToDeleteId) return;
+    const targetSessionId = sessionToDeleteId;
+    const previousSessions = sessions;
 
     try {
+      // Optimistic UI update
+      setSessions(prev => prev.filter(s => s.id !== targetSessionId));
+
       const headers = getAuthHeaders();
-      await fetch(`/api/kr/chatbot/history?session_id=${sessionToDeleteId}`, {
+      headers['Cache-Control'] = 'no-cache';
+      const res = await fetch(`/api/kr/chatbot/history?session_id=${encodeURIComponent(targetSessionId)}&_t=${Date.now()}`, {
         method: 'DELETE',
-        headers // Add headers for delete as well
+        headers, // Add headers for delete as well
+        cache: 'no-store'
       });
-      await fetchSessions();
-      if (currentSessionId === sessionToDeleteId) {
+
+      if (!res.ok) {
+        setSessions(previousSessions);
+        throw new Error(`Delete failed: ${res.status}`);
+      }
+
+      if (currentSessionId === targetSessionId) {
         handleNewChat();
       }
+      await fetchSessions();
     } catch (e) {
       console.error("Delete failed", e);
     } finally {
       setIsDeleteModalOpen(false);
       setSessionToDeleteId(null);
+    }
+  };
+
+  const handleDeleteMessage = (e: React.MouseEvent, msgIndex: number) => {
+    e.stopPropagation();
+    if (isLoading) return;
+    setMessageToDeleteIndex(msgIndex);
+    setIsMessageDeleteModalOpen(true);
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (messageToDeleteIndex === null) return;
+
+    const targetIndex = messageToDeleteIndex;
+    const targetSessionId = currentSessionId;
+    const previousMessages = messages;
+
+    try {
+      // Optimistic UI update
+      setMessages(prev => prev.filter((_, idx) => idx !== targetIndex));
+
+      if (!targetSessionId) {
+        throw new Error('NO_ACTIVE_SESSION');
+      }
+
+      const headers = getAuthHeaders();
+      headers['Cache-Control'] = 'no-cache';
+
+      const res = await fetch(
+        `/api/kr/chatbot/history?session_id=${encodeURIComponent(targetSessionId)}&index=${targetIndex}&_t=${Date.now()}`,
+        {
+          method: 'DELETE',
+          headers,
+          cache: 'no-store'
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`Delete message failed: ${res.status}`);
+      }
+
+      await fetchHistory(targetSessionId);
+      await fetchSessions();
+    } catch (e) {
+      console.error("Message delete failed", e);
+      setMessages(previousMessages);
+      setAlertModal({
+        isOpen: true,
+        type: 'danger',
+        title: '메시지 삭제 실패',
+        content: '메시지 삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+      });
+    } finally {
+      setIsMessageDeleteModalOpen(false);
+      setMessageToDeleteIndex(null);
+    }
+  };
+
+  const handleDeleteTurn = (e: React.MouseEvent, msgIndex: number) => {
+    e.stopPropagation();
+    if (isLoading) return;
+
+    const indices = getTurnIndicesFromMessage(messages, msgIndex);
+    if (indices.length === 0) return;
+
+    setTurnDeleteIndices(indices);
+    setIsTurnDeleteModalOpen(true);
+  };
+
+  const confirmDeleteTurn = async () => {
+    if (turnDeleteIndices.length === 0) return;
+
+    const targetSessionId = currentSessionId;
+    const targetIndices = [...turnDeleteIndices];
+    const previousMessages = messages;
+
+    try {
+      const deleteSet = new Set(targetIndices);
+      setMessages(prev => prev.filter((_, idx) => !deleteSet.has(idx)));
+
+      if (!targetSessionId) {
+        throw new Error('NO_ACTIVE_SESSION');
+      }
+
+      const headers = getAuthHeaders();
+      headers['Cache-Control'] = 'no-cache';
+
+      const sortedIndices = [...targetIndices].sort((a, b) => b - a);
+      for (const idx of sortedIndices) {
+        const res = await fetch(
+          `/api/kr/chatbot/history?session_id=${encodeURIComponent(targetSessionId)}&index=${idx}&_t=${Date.now()}`,
+          {
+            method: 'DELETE',
+            headers,
+            cache: 'no-store'
+          }
+        );
+        if (!res.ok) {
+          throw new Error(`Delete turn failed at index ${idx}: ${res.status}`);
+        }
+      }
+
+      await fetchHistory(targetSessionId);
+      await fetchSessions();
+    } catch (e) {
+      console.error("Turn delete failed", e);
+      setMessages(previousMessages);
+      setAlertModal({
+        isOpen: true,
+        type: 'danger',
+        title: '질문/답변 삭제 실패',
+        content: '질문과 답변 삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+      });
+    } finally {
+      setIsTurnDeleteModalOpen(false);
+      setTurnDeleteIndices([]);
     }
   };
 
@@ -894,6 +1132,32 @@ export default function ChatbotPage() {
         cancelText="취소"
       />
 
+      <ConfirmationModal
+        isOpen={isMessageDeleteModalOpen}
+        title="메시지 삭제"
+        message={`이 메시지를 삭제하시겠습니까?\n삭제된 메시지는 복구할 수 없습니다.`}
+        onConfirm={confirmDeleteMessage}
+        onCancel={() => {
+          setIsMessageDeleteModalOpen(false);
+          setMessageToDeleteIndex(null);
+        }}
+        confirmText="삭제"
+        cancelText="취소"
+      />
+
+      <ConfirmationModal
+        isOpen={isTurnDeleteModalOpen}
+        title="질문/답변 삭제"
+        message={`이 질문과 답변을 함께 삭제하시겠습니까?\n삭제된 내용은 복구할 수 없습니다.`}
+        onConfirm={confirmDeleteTurn}
+        onCancel={() => {
+          setIsTurnDeleteModalOpen(false);
+          setTurnDeleteIndices([]);
+        }}
+        confirmText="삭제"
+        cancelText="취소"
+      />
+
       <Modal
         isOpen={alertModal.isOpen}
         onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
@@ -1049,7 +1313,7 @@ export default function ChatbotPage() {
                       : (msg.parts[0] as any).text;
 
                     const { content, suggestions, reasoning } = msg.role === 'model'
-                      ? extractSuggestions(rawText, !!msg.isStreaming)
+                      ? extractSuggestions(rawText, !!msg.isStreaming, msg.reasoning)
                       : { content: rawText, suggestions: [], reasoning: "" };
 
                     return (
@@ -1075,6 +1339,26 @@ export default function ChatbotPage() {
                                 hour12: true
                               }) : ''}
                             </span>
+                            {!msg.isStreaming && (
+                              <span className="ml-1 inline-flex items-center gap-1">
+                                <button
+                                  onClick={(e) => handleDeleteTurn(e, idx)}
+                                  className="h-6 px-2 rounded-full text-[10px] font-bold text-gray-500 hover:text-amber-300 hover:bg-amber-500/10 transition-colors opacity-70 hover:opacity-100"
+                                  title="이 질문과 답변 함께 삭제"
+                                  aria-label="이 질문과 답변 함께 삭제"
+                                >
+                                  질문/답변
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteMessage(e, idx)}
+                                  className="w-6 h-6 rounded-full text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-70 hover:opacity-100"
+                                  title="이 메시지 삭제"
+                                  aria-label="이 메시지 삭제"
+                                >
+                                  <i className="fas fa-trash-alt text-[11px]"></i>
+                                </button>
+                              </span>
+                            )}
                           </div>
                           <div className={`prose prose-sm prose-invert max-w-none leading-relaxed space-y-4 ${msg.role === 'user' ? 'text-lg text-gray-100 font-medium' : 'text-gray-300'
                             }`}>

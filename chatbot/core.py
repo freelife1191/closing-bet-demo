@@ -7,7 +7,8 @@ Gemini AI 연동 및 대화 처리 로직 (지원 모델 설정 가능)
 
 import os
 import logging
-from typing import Optional, Callable, Dict, Any, List
+import re
+from typing import Optional, Callable, Dict, Any, List, Tuple
 from pathlib import Path
 from datetime import datetime
 import json
@@ -38,6 +39,147 @@ DEFAULT_GEMINI_MODEL = "gemini-2.0-flash-lite"
 # 데이터 저장 경로 설정
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
+
+
+REASONING_START_REGEX = re.compile(
+    r"(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?",
+    re.IGNORECASE,
+)
+ANSWER_HEADER_REGEX = re.compile(
+    r"(?:\n|^)\s*(?:---|___|\*\*\*)?\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?\s*\n?",
+    re.IGNORECASE,
+)
+REASONING_HEADER_REGEX = re.compile(
+    r"^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\\?\[\s*추론\s*과정\s*\\?\](?:\*\*|__)?\s*\n?",
+    re.IGNORECASE,
+)
+DOUBLE_ASTERISK_MARKER_REGEX = re.compile(r"(?<!\*)\*\*(?!\*)")
+DOUBLE_UNDERSCORE_MARKER_REGEX = re.compile(r"(?<!_)__(?!_)")
+
+
+def _normalize_markdown_text(text: str) -> str:
+    """LLM 응답에서 자주 깨지는 마크다운 문법 정규화"""
+    if not text:
+        return text
+
+    normalized = text.replace("\r\n", "\n")
+
+    # Remove accidental marker noise before ordered list starts (e.g. "****1. ")
+    normalized = re.sub(r"^\s*\*{3,}(?=\d+[.)]\s)", "", normalized, flags=re.MULTILINE)
+
+    # Split section labels and first ordered item when they are stuck together.
+    normalized = re.sub(r"((?:\*\*|__)?\[[^\]\n]{1,20}\](?:\*\*|__)?)\s*(?=[1-9]\d?[.)])", r"\1\n", normalized)
+
+    # Ensure a space after ordered-list markers (e.g. "1.조선", "1.**제목**")
+    normalized = re.sub(r"(?<!\d)([1-9]\d?[.)])(?=\*\*|__|[가-힣A-Za-z(])", r"\1 ", normalized)
+
+    # Ensure emphasis opening marker is separated from previous word.
+    # Apply only when marker is followed by a real token start, not punctuation (e.g. avoid turning "**텍스트**:" into "**텍스트 **:")
+    normalized = re.sub(r"([가-힣A-Za-z0-9])(?=(\*\*|__)\s*[가-힣A-Za-z0-9(])", r"\1 ", normalized)
+
+    # Trim inner spaces in emphasis markers (covers both-sided or one-sided spaces).
+    normalized = re.sub(
+        r"\*\*([^*\n]+)\*\*",
+        lambda m: f"**{m.group(1).strip()}**" if m.group(1).strip() else m.group(0),
+        normalized,
+    )
+    normalized = re.sub(
+        r"__([^_\n]+)__",
+        lambda m: f"__{m.group(1).strip()}__" if m.group(1).strip() else m.group(0),
+        normalized,
+    )
+
+    # Remove a last unmatched emphasis marker in each line (e.g. trailing ".**").
+    balanced_lines: List[str] = []
+    for line in normalized.split("\n"):
+        line = _remove_last_unmatched_marker(line, DOUBLE_ASTERISK_MARKER_REGEX, 2)
+        line = _remove_last_unmatched_marker(line, DOUBLE_UNDERSCORE_MARKER_REGEX, 2)
+        balanced_lines.append(line)
+    normalized = "\n".join(balanced_lines)
+
+    # Normalize quoted emphasis wrappers: **\"text\"** / **'text'** -> **text**
+    normalized = re.sub(r"\*\*\s*['\"“”‘’]\s*([^*\n]+?)\s*['\"“”‘’]\s*\*\*", r"**\1**", normalized)
+    normalized = re.sub(r"__\s*['\"“”‘’]\s*([^_\n]+?)\s*['\"“”‘’]\s*__", r"__\1__", normalized)
+
+    # Ensure spacing after closing emphasis marker when attached to text.
+    normalized = re.sub(r"(?<=\S)(\*\*|__)(?=[가-힣A-Za-z0-9])", r"\1 ", normalized)
+
+    # Prevent CJK boundary collapse without crossing lines/other emphasis spans
+    normalized = re.sub(r"\*\*([A-Za-z0-9가-힣(][^*\n]*?)\*\*([가-힣])", r"**\1** \2", normalized)
+    normalized = re.sub(r"__([A-Za-z0-9가-힣(][^_\n]*?)__([가-힣])", r"__\1__ \2", normalized)
+
+    return normalized
+
+
+def _extract_reasoning_and_answer(text: str, is_streaming: bool = False) -> Tuple[str, str]:
+    """[추론 과정]/[답변] 블록을 분리해 reasoning, answer 텍스트를 반환한다."""
+    if not text:
+        return "", ""
+
+    processed = text
+    reasoning = ""
+
+    start_match = REASONING_START_REGEX.search(processed)
+    end_match = ANSWER_HEADER_REGEX.search(processed)
+
+    if start_match:
+        start_idx = start_match.start()
+        if end_match and end_match.start() >= start_idx:
+            reasoning = processed[start_idx:end_match.start()]
+            processed = processed[:start_idx] + processed[end_match.end():]
+        elif is_streaming:
+            # 스트리밍 중 [답변] 헤더가 아직 오지 않았다면 이후 텍스트는 추론으로 본다.
+            reasoning = processed[start_idx:]
+            processed = processed[:start_idx]
+        else:
+            reasoning = processed[start_idx:]
+            processed = processed[:start_idx]
+    else:
+        processed = ANSWER_HEADER_REGEX.sub("", processed)
+        if is_streaming:
+            stripped = processed.strip()
+            # Early stream often starts with an incomplete "[추론 과정]" header (e.g. "**[추").
+            # Hold until header is complete to avoid flashing broken marker text in the answer area.
+            if (
+                0 < len(stripped) < 40
+                and (
+                    stripped.startswith("[")
+                    or stripped.startswith("\\[")
+                    or stripped.startswith("*[")
+                    or stripped.startswith("**[")
+                    or stripped.startswith("__[")
+                )
+            ):
+                return "", ""
+
+    reasoning = REASONING_HEADER_REGEX.sub("", reasoning, count=1).strip()
+    processed = ANSWER_HEADER_REGEX.sub("", processed).strip()
+
+    if is_streaming:
+        reasoning = re.sub(r"[\*\_\[\]]+$", "", reasoning)
+        processed = re.sub(r"[\*\_\[\]]+$", "", processed)
+
+    return reasoning, processed
+
+
+def _compute_stream_delta(previous: str, current: str) -> Tuple[bool, str]:
+    """
+    이전/현재 텍스트를 비교해 델타를 계산한다.
+    returns: (reset_needed, delta_text)
+    """
+    if current.startswith(previous):
+        return False, current[len(previous):]
+    return True, current
+
+
+def _remove_last_unmatched_marker(line: str, marker_regex: re.Pattern[str], marker_length: int) -> str:
+    """라인 내 강조 마커 개수가 홀수면 마지막 마커를 제거한다."""
+    matches = list(marker_regex.finditer(line))
+    if len(matches) % 2 == 1:
+        last = matches[-1]
+        return line[:last.start()] + line[last.start() + marker_length:]
+    return line
+
 
 class MemoryManager:
     """간단한 인메모리 메모리 매니저 (JSON 파일 영구 저장)"""
@@ -149,8 +291,9 @@ class HistoryManager:
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
-    def create_session(self, model_name: str = "gemini-2.0-flash-lite", save_immediate: bool = True, owner_id: str = None) -> str:
-        session_id = str(uuid.uuid4())
+    def create_session(self, model_name: str = "gemini-2.0-flash-lite", save_immediate: bool = True, owner_id: str = None, session_id: str = None) -> str:
+        self.sessions = self._load() # [Fix] Multi-worker Sync
+        session_id = session_id or str(uuid.uuid4())
         self.sessions[session_id] = {
             "id": session_id,
             "title": "새로운 대화",
@@ -165,10 +308,22 @@ class HistoryManager:
         return session_id
 
     def delete_session(self, session_id: str):
+        self.sessions = self._load() # [Fix] Multi-worker Sync
         if session_id in self.sessions:
             del self.sessions[session_id]
             self._save()
             return True
+        return False
+
+    def delete_message(self, session_id: str, msg_index: int):
+        self.sessions = self._load() # [Fix] Multi-worker Sync
+        if session_id in self.sessions:
+            session = self.sessions[session_id]
+            if 0 <= msg_index < len(session["messages"]):
+                del session["messages"][msg_index]
+                session["updated_at"] = datetime.now().isoformat()
+                self._save()
+                return True
         return False
 
     def clear_all(self):
@@ -176,9 +331,11 @@ class HistoryManager:
         self._save()
 
     def get_session(self, session_id: str):
+        self.sessions = self._load() # [Fix] Multi-worker Sync
         return self.sessions.get(session_id)
 
     def get_all_sessions(self, owner_id: str = None):
+        self.sessions = self._load() # [Fix] Multi-worker Sync
         # Filter out empty or ephemeral-only sessions AND filter by owner
         valid_sessions = []
         for s in self.sessions.values():
@@ -243,11 +400,14 @@ class HistoryManager:
         )
 
     def add_message(self, session_id: str, role: str, message: str, save: bool = True):
+        # Always reload latest snapshot before mutating.
+        # Without this, stale in-memory state from another worker can resurrect deleted sessions.
+        self.sessions = self._load()
         if session_id not in self.sessions:
             # Fallback (Ephemeral check handled in chat, but here strictly requires existence or auto-create)
             # Since chat method handles ephemeral, if we reach here, we must modify a session.
             # If logic is correct, this might be rare, but let's be safe.
-            self.create_session() # Auto-recover
+            self.create_session(session_id=session_id) # Auto-recover
             
         session = self.sessions[session_id]
         
@@ -277,6 +437,8 @@ class HistoryManager:
             self._save()
 
     def get_messages(self, session_id: str):
+        # Sync from disk for multi-worker consistency.
+        self.sessions = self._load()
         session = self.sessions.get(session_id)
         if session:
             # FIX: Sanitize legacy messages where parts might be strings
@@ -285,9 +447,13 @@ class HistoryManager:
                 new_parts = []
                 for p in msg["parts"]:
                     if isinstance(p, str):
-                        new_parts.append({"text": p})
+                        new_parts.append({"text": _normalize_markdown_text(p)})
                     else:
-                        new_parts.append(p)
+                        if isinstance(p, dict) and isinstance(p.get("text"), str):
+                            sanitized_part = {**p, "text": _normalize_markdown_text(p["text"])}
+                            new_parts.append(sanitized_part)
+                        else:
+                            new_parts.append(p)
                 
                 # Create sanitized message object
                 sanitized_msg = {
@@ -816,6 +982,10 @@ class KRStockChatbot:
             
         return None
 
+    def _normalize_markdown_response(self, text: str) -> str:
+        """LLM 응답의 자주 깨지는 마크다운 문법을 안전하게 정규화"""
+        return _normalize_markdown_text(text)
+
     def chat(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None, owner_id: str = None) -> Dict[str, Any]:
         """
         사용자 메시지 처리 및 응답 생성
@@ -852,9 +1022,10 @@ class KRStockChatbot:
             is_ephemeral = True
 
         # 0. 세션 확인 및 생성
+        # 0. 세션 확인 및 생성
         # 세션이 없으면 새로 생성하되, Ephemeral 명령이면 바로 저장하지 않음 (Memory only)
         if not session_id or not self.history.get_session(session_id):
-            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id)
+            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id, session_id=session_id)
 
         # [Security] Verify ownership
         if session_id:
@@ -864,7 +1035,7 @@ class KRStockChatbot:
                 if sess_owner and sess_owner != owner_id:
                      logger.warning(f"Session access denied. Owner: {sess_owner}, Requester: {owner_id}")
                      # Access denied -> Create new session for the requester
-                     session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id)
+                     session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id, session_id=session_id)
 
         # 1. 명령어 체크 (파일이 없을 때만)
         if not files and user_message.startswith("/"):
@@ -1076,7 +1247,7 @@ class KRStockChatbot:
             )
             
             response = chat_session.send_message(content_parts)
-            bot_response = response.text
+            bot_response = self._normalize_markdown_response(response.text or "")
             
             # [Usage Metadata Extraction]
             usage_metadata = {}
@@ -1167,7 +1338,7 @@ class KRStockChatbot:
         # 0. 세션 확인 및 생성
         # 세션이 없으면 새로 생성하되, Ephemeral 명령이면 바로 저장하지 않음 (Memory only)
         if not session_id or not self.history.get_session(session_id):
-            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id)
+            session_id = self.history.create_session(model_name=target_model_name, save_immediate=not is_ephemeral, owner_id=owner_id, session_id=session_id)
 
         # [Security] Verify ownership
         if session_id:
@@ -1398,6 +1569,8 @@ class KRStockChatbot:
                 if m not in fallback_models:
                     fallback_models.append(m)
             bot_response = ""
+            streamed_reasoning = ""
+            streamed_answer = ""
             success = False
             last_error = None
             
@@ -1409,11 +1582,43 @@ class KRStockChatbot:
                     )
                     
                     bot_response = ""
+                    streamed_reasoning = ""
+                    streamed_answer = ""
                     response_stream = chat_session.send_message_stream(content_parts)
                     for chunk in response_stream:
                         if chunk.text:
                             bot_response += chunk.text
-                            yield {"chunk": chunk.text, "session_id": session_id}
+                            current_reasoning, current_answer = _extract_reasoning_and_answer(
+                                bot_response,
+                                is_streaming=True,
+                            )
+
+                            reasoning_reset, reasoning_delta = _compute_stream_delta(
+                                streamed_reasoning,
+                                current_reasoning,
+                            )
+                            if reasoning_reset:
+                                streamed_reasoning = ""
+                                yield {"reasoning_clear": True, "session_id": session_id}
+                            if reasoning_delta:
+                                streamed_reasoning = current_reasoning
+                                yield {"reasoning_chunk": reasoning_delta, "session_id": session_id}
+
+                            answer_reset, answer_delta = _compute_stream_delta(
+                                streamed_answer,
+                                current_answer,
+                            )
+                            if answer_reset:
+                                streamed_answer = ""
+                                yield {"answer_clear": True, "session_id": session_id}
+                            if answer_delta:
+                                streamed_answer = current_answer
+                                # Backward compatibility: keep "chunk" for existing clients.
+                                yield {
+                                    "chunk": answer_delta,
+                                    "answer_chunk": answer_delta,
+                                    "session_id": session_id,
+                                }
                             
                     success = True
                     break # 성공 시 루프 종료
@@ -1438,6 +1643,28 @@ class KRStockChatbot:
                 logger.error(f"[User: {self.user_id}] All fallback models failed. Last Error: {error_msg}")
                 yield {"error": "⚠️ **서버 통신 지연**\n\nAI 서버에 트래픽이 집중되고 있거나 일시적인 장애가 발생했습니다. 잠시 후 다시 시도해주세요.", "session_id": session_id}
                 return
+
+            # Final normalization for markdown stability.
+            normalized_response = self._normalize_markdown_response(bot_response)
+            final_reasoning, final_answer = _extract_reasoning_and_answer(
+                normalized_response,
+                is_streaming=False,
+            )
+            if (
+                normalized_response != bot_response
+                or final_reasoning != streamed_reasoning
+                or final_answer != streamed_answer
+            ):
+                yield {"clear": True, "session_id": session_id}
+                if final_reasoning:
+                    yield {"reasoning_chunk": final_reasoning, "session_id": session_id}
+                if final_answer:
+                    yield {
+                        "chunk": final_answer,
+                        "answer_chunk": final_answer,
+                        "session_id": session_id,
+                    }
+            bot_response = normalized_response
             
             # [Usage Metadata Extraction]
             usage_metadata = {}

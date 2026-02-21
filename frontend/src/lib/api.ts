@@ -242,6 +242,10 @@ export const krAPI = {
     }
   },
 
+  // VCP 실패 AI만 재분석
+  reanalyzeVCPFailedAI: (target_date?: string) =>
+    fetchPostAPI<any>('/api/kr/signals/reanalyze-failed-ai', { target_date }, { timeout: 240000 }),
+
   getVCPStatus: () => fetchAPI<{ running: boolean; status: string; message: string; progress: number }>('/api/kr/signals/status'),
 
   // Market Gate 개별 업데이트

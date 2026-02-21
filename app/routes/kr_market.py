@@ -25,6 +25,148 @@ _MIN_JONGGA_RUN_INTERVAL = timedelta(minutes=5)  # Minimum 5 minutes between run
 
 # Constants
 DATA_DIR = 'data'
+
+_VALID_AI_ACTIONS = {"BUY", "SELL", "HOLD"}
+_INVALID_AI_REASONS = {
+    "",
+    "-",
+    "n/a",
+    "na",
+    "none",
+    "null",
+    "분석 실패",
+    "분석 대기중",
+    "분석 대기 중",
+    "분석중",
+    "분석 중",
+    "no analysis available.",
+    "no analysis available",
+    "analysis failed",
+    "failed",
+}
+
+
+def _normalize_text(value) -> str:
+    """문자열 정규화 (None-safe)"""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _is_meaningful_ai_reason(reason) -> bool:
+    """AI 분석 사유 텍스트가 실질적인 내용인지 판별"""
+    reason_text = _normalize_text(reason)
+    if not reason_text:
+        return False
+    return reason_text.lower() not in _INVALID_AI_REASONS
+
+
+def _is_jongga_ai_analysis_completed(signal: dict) -> bool:
+    """
+    종가베팅 시그널의 AI 분석 완료 여부 판별.
+    - 의미 있는 reason이 있어야 완료로 간주
+    - action이 존재하면 BUY/SELL/HOLD 중 하나여야 완료로 간주
+    """
+    if not isinstance(signal, dict):
+        return False
+
+    ai_evaluation = signal.get("ai_evaluation")
+    score = signal.get("score") if isinstance(signal.get("score"), dict) else {}
+
+    ai_reason = ai_evaluation.get("reason") if isinstance(ai_evaluation, dict) else None
+    llm_reason = score.get("llm_reason")
+
+    if _is_meaningful_ai_reason(ai_reason):
+        candidate_reason = ai_reason
+    else:
+        candidate_reason = llm_reason
+
+    if not _is_meaningful_ai_reason(candidate_reason):
+        return False
+
+    if isinstance(ai_evaluation, dict):
+        action = _normalize_text(ai_evaluation.get("action")).upper()
+        if action and action not in _VALID_AI_ACTIONS:
+            return False
+
+    return True
+
+
+def _is_vcp_ai_analysis_failed(row: dict) -> bool:
+    """
+    VCP 시그널의 AI 분석 실패 여부 판별.
+    - action이 BUY/SELL/HOLD가 아니면 실패
+    - reason이 비어있거나 실패/placeholder 문구면 실패
+    """
+    if not isinstance(row, dict):
+        return True
+
+    action = _normalize_text(row.get("ai_action")).upper()
+    reason = row.get("ai_reason")
+
+    if action not in _VALID_AI_ACTIONS:
+        return True
+
+    if not _is_meaningful_ai_reason(reason):
+        return True
+
+    return False
+
+
+def _update_vcp_ai_cache_files(target_date: str, updated_recommendations: dict) -> int:
+    """
+    VCP AI 결과 캐시 파일(ai_analysis_results/kr_ai_analysis)에
+    재분석된 Gemini 결과를 반영한다.
+    """
+    if not updated_recommendations:
+        return 0
+
+    date_str = str(target_date or "").replace("-", "")
+    candidate_files = [
+        f"ai_analysis_results_{date_str}.json" if date_str else "",
+        "ai_analysis_results.json",
+        f"kr_ai_analysis_{date_str}.json" if date_str else "",
+        "kr_ai_analysis.json",
+    ]
+
+    updated_files = 0
+    now_iso = datetime.now().isoformat()
+
+    for filename in candidate_files:
+        if not filename:
+            continue
+        filepath = get_data_path(filename)
+        if not os.path.exists(filepath):
+            continue
+
+        try:
+            data = load_json_file(filename)
+            signals = data.get("signals", []) if isinstance(data, dict) else []
+            if not isinstance(signals, list) or not signals:
+                continue
+
+            changed = False
+            for item in signals:
+                if not isinstance(item, dict):
+                    continue
+
+                ticker = str(item.get("ticker") or item.get("stock_code") or "").zfill(6)
+                if ticker in updated_recommendations:
+                    item["gemini_recommendation"] = updated_recommendations[ticker]
+                    changed = True
+
+            if changed:
+                data["generated_at"] = now_iso
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                updated_files += 1
+
+        except Exception as e:
+            logger.warning(f"VCP AI cache update failed ({filename}): {e}")
+
+    return updated_files
+
+
 @kr_bp.route('/config/interval', methods=['GET', 'POST'])
 def handle_interval_config():
     """Market Gate 업데이트 주기 조회 및 설정"""
@@ -622,6 +764,157 @@ def run_vcp_signals_screener():
         logger.error(f"Error running VCP screener: {e}")
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
+
+
+@kr_bp.route('/signals/reanalyze-failed-ai', methods=['POST'])
+def reanalyze_vcp_failed_ai():
+    """VCP 시그널 중 AI 분석 실패 건만 재분석"""
+    try:
+        if VCP_STATUS.get('running'):
+            return jsonify({
+                'status': 'error',
+                'message': 'VCP 스크리너가 실행 중입니다. 완료 후 다시 시도해 주세요.'
+            }), 409
+
+        req_data = request.get_json(silent=True) or {}
+        target_date = req_data.get('target_date')
+        target_date = str(target_date).strip() if target_date else None
+
+        signals_df = load_csv_file('signals_log.csv')
+        if signals_df.empty:
+            return jsonify({'status': 'error', 'message': 'signals_log.csv 데이터가 없습니다.'}), 404
+
+        if 'ticker' not in signals_df.columns:
+            return jsonify({'status': 'error', 'message': 'signals_log.csv에 ticker 컬럼이 없습니다.'}), 400
+        if 'signal_date' not in signals_df.columns:
+            return jsonify({'status': 'error', 'message': 'signals_log.csv에 signal_date 컬럼이 없습니다.'}), 400
+
+        signals_df['ticker'] = signals_df['ticker'].astype(str).str.zfill(6)
+        signals_df['signal_date'] = signals_df['signal_date'].astype(str)
+
+        if target_date:
+            target_date_alt = target_date.replace('-', '')
+            scoped_df = signals_df[
+                (signals_df['signal_date'] == target_date) |
+                (signals_df['signal_date'] == target_date_alt)
+            ].copy()
+        else:
+            latest_date = signals_df['signal_date'].max()
+            target_date = str(latest_date)
+            scoped_df = signals_df[signals_df['signal_date'] == str(latest_date)].copy()
+
+        if scoped_df.empty:
+            return jsonify({
+                'status': 'error',
+                'message': f'해당 날짜({target_date})의 VCP 시그널 데이터가 없습니다.'
+            }), 404
+
+        failed_mask = scoped_df.apply(
+            lambda row: _is_vcp_ai_analysis_failed(row.to_dict()),
+            axis=1
+        )
+        failed_df = scoped_df[failed_mask].copy()
+
+        total_in_scope = len(scoped_df)
+        failed_targets = len(failed_df)
+
+        if failed_targets == 0:
+            return jsonify({
+                'status': 'success',
+                'message': '재분석이 필요한 실패 항목이 없습니다.',
+                'target_date': target_date,
+                'total_in_scope': total_in_scope,
+                'failed_targets': 0,
+                'updated_count': 0,
+                'still_failed_count': 0,
+                'cache_files_updated': 0,
+            })
+
+        from engine.vcp_ai_analyzer import get_vcp_analyzer
+        analyzer = get_vcp_analyzer()
+        if not analyzer.get_available_providers():
+            return jsonify({
+                'status': 'error',
+                'message': '사용 가능한 AI Provider가 없습니다.'
+            }), 503
+
+        stocks_to_analyze = []
+        for _, row in failed_df.iterrows():
+            stocks_to_analyze.append({
+                'ticker': str(row.get('ticker', '')).zfill(6),
+                'name': row.get('name', ''),
+                'current_price': float(row.get('current_price', row.get('entry_price', 0)) or 0),
+                'score': float(row.get('score', 0) or 0),
+                'vcp_score': float(row.get('vcp_score', 0) or 0),
+                'contraction_ratio': float(row.get('contraction_ratio', 0) or 0),
+                'foreign_5d': float(row.get('foreign_5d', 0) or 0),
+                'inst_5d': float(row.get('inst_5d', 0) or 0),
+                'foreign_1d': float(row.get('foreign_1d', 0) or 0),
+                'inst_1d': float(row.get('inst_1d', 0) or 0),
+            })
+
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            ai_results = loop.run_until_complete(analyzer.analyze_batch(stocks_to_analyze))
+        finally:
+            loop.close()
+
+        updated_count = 0
+        still_failed_count = 0
+        updated_recommendations = {}
+
+        for idx, row in failed_df.iterrows():
+            ticker = str(row.get('ticker', '')).zfill(6)
+            ai_res = ai_results.get(ticker, {}) if isinstance(ai_results, dict) else {}
+            gemini = ai_res.get('gemini_recommendation') if isinstance(ai_res, dict) else None
+
+            action = _normalize_text(gemini.get('action')).upper() if isinstance(gemini, dict) else ""
+            confidence_raw = gemini.get('confidence', 0) if isinstance(gemini, dict) else 0
+            reason = _normalize_text(gemini.get('reason')) if isinstance(gemini, dict) else ""
+
+            if action in _VALID_AI_ACTIONS and _is_meaningful_ai_reason(reason):
+                try:
+                    confidence_val = int(float(confidence_raw))
+                except Exception:
+                    confidence_val = 0
+
+                signals_df.at[idx, 'ai_action'] = action
+                signals_df.at[idx, 'ai_confidence'] = confidence_val
+                signals_df.at[idx, 'ai_reason'] = reason
+
+                updated_recommendations[ticker] = {
+                    'action': action,
+                    'confidence': confidence_val,
+                    'reason': reason,
+                }
+                updated_count += 1
+            else:
+                signals_df.at[idx, 'ai_action'] = 'N/A'
+                signals_df.at[idx, 'ai_confidence'] = 0
+                signals_df.at[idx, 'ai_reason'] = '분석 실패'
+                still_failed_count += 1
+
+        signals_path = get_data_path('signals_log.csv')
+        signals_df.to_csv(signals_path, index=False, encoding='utf-8-sig')
+
+        cache_files_updated = _update_vcp_ai_cache_files(target_date, updated_recommendations)
+
+        return jsonify({
+            'status': 'success',
+            'message': f'실패 {failed_targets}건 중 {updated_count}건 재분석 완료',
+            'target_date': target_date,
+            'total_in_scope': total_in_scope,
+            'failed_targets': failed_targets,
+            'updated_count': updated_count,
+            'still_failed_count': still_failed_count,
+            'cache_files_updated': cache_files_updated,
+        })
+
+    except Exception as e:
+        logger.error(f"Error reanalyzing VCP failed AI: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @kr_bp.route('/stock-chart/<ticker>')
@@ -2141,11 +2434,7 @@ def reanalyze_gemini_all():
             else:
                 print(f">>> [Filter] 스마트 분석 (누락/실패 항목만)")
                 for sig in all_signals:
-                    # Check if analysis exists
-                    has_ai_eval = 'ai_evaluation' in sig and sig['ai_evaluation']
-                    has_reason = 'score' in sig and sig['score'].get('llm_reason')
-                    
-                    if not has_ai_eval or not has_reason:
+                    if not _is_jongga_ai_analysis_completed(sig):
                         signals_to_process.append(sig)
 
         print(f">>> [Filter] 최종 분석 대상: {len(signals_to_process)}개 / 전체 {len(all_signals)}개")
@@ -3234,7 +3523,8 @@ def kr_chatbot():
         # 2. Parameters Parsing (JSON or Multipart)
         message = ""
         model_name = None
-        session_id = None
+        # Use header_session_id safely retrieved above as default 
+        parsed_session_id = session_id 
         persona = None
         watchlist = None
         files = []
@@ -3243,7 +3533,7 @@ def kr_chatbot():
         if request.content_type and 'multipart/form-data' in request.content_type:
             message = request.form.get('message', '')
             model_name = request.form.get('model', None)
-            session_id = request.form.get('session_id', None)
+            parsed_session_id = request.form.get('session_id', parsed_session_id)
             persona = request.form.get('persona', None)
             
             watchlist_str = request.form.get('watchlist', None)
@@ -3273,7 +3563,7 @@ def kr_chatbot():
             data = request.get_json() or {}
             message = data.get('message', '')
             model_name = data.get('model', None)
-            session_id = data.get('session_id', None)
+            parsed_session_id = data.get('session_id', parsed_session_id)
             persona = data.get('persona', None)
             watchlist = data.get('watchlist', None)
         
@@ -3287,7 +3577,7 @@ def kr_chatbot():
             usage_metadata = {}
             for chunk in bot.chat_stream(
                 message, 
-                session_id=session_id, 
+                session_id=parsed_session_id, 
                 model=model_name, 
                 files=files if files else None, 
                 watchlist=watchlist,
@@ -3333,7 +3623,12 @@ def kr_chatbot():
             except Exception as e:
                 logger.error(f"[{usage_key}] Chat log error: {e}")
 
-        return Response(stream_with_context(generate()), content_type='text/event-stream')
+        response = Response(stream_with_context(generate()), content_type='text/event-stream')
+        # Prevent proxy buffering so SSE chunks are delivered immediately.
+        response.headers['Cache-Control'] = 'no-cache, no-transform'
+        response.headers['X-Accel-Buffering'] = 'no'
+        response.headers['Connection'] = 'keep-alive'
+        return response
 
         # 3. Quota Update (If Free Tier & Success)
         if use_free_tier:
@@ -3409,8 +3704,20 @@ def kr_chatbot_history():
                 bot.history.clear_all()
                 return jsonify({'status': 'cleared all'})
             elif session_id:
-                bot.history.delete_session(session_id)
-                return jsonify({'status': 'deleted session'})
+                msg_index_str = request.args.get('index')
+                if msg_index_str is not None:
+                    try:
+                        msg_index = int(msg_index_str)
+                        success = bot.history.delete_message(session_id, msg_index)
+                        if success:
+                            return jsonify({'status': 'deleted message'})
+                        else:
+                            return jsonify({'error': 'Message not found'}), 404
+                    except ValueError:
+                        return jsonify({'error': 'Invalid index format'}), 400
+                else:
+                    bot.history.delete_session(session_id)
+                    return jsonify({'status': 'deleted session'})
             else:
                 return jsonify({'error': 'Missing session_id'}), 400
                 

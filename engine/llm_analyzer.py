@@ -51,6 +51,15 @@ class RetryConfig:
     ]
 
 
+GEMINI_RETRY_MODEL_CHAIN = [
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-3-flash-preview",
+]
+
+
 class LLMRetryStrategy(ABC):
     """LLM 재시도 전략 인터페이스"""
 
@@ -76,11 +85,13 @@ class GeminiRetryStrategy(LLMRetryStrategy):
     def __init__(self, client, model: str = "gemini-2.0-flash"):
         self.client = client
         self.model = model
-        self._current_model = model
+        self._model_chain = list(GEMINI_RETRY_MODEL_CHAIN)
+        self._current_model = self._model_chain[0]
 
     async def execute(self, prompt: str, timeout: float, model: str) -> str:
         """Gemini 호출 실행"""
-        self._current_model = model
+        # 매 호출마다 고정 체인의 첫 모델부터 시작
+        self._current_model = self._model_chain[0]
 
         def _call_gemini():
             return self.client.models.generate_content(
@@ -92,7 +103,10 @@ class GeminiRetryStrategy(LLMRetryStrategy):
 
     async def _call_with_retry(self, call_fn: Callable, timeout: float) -> str:
         """Gemini 재시도 로직"""
-        for attempt in range(RetryConfig.MAX_RETRIES):
+        total_models = len(self._model_chain)
+
+        for attempt, current_model in enumerate(self._model_chain):
+            self._current_model = current_model
             try:
                 resp = await asyncio.wait_for(
                     asyncio.to_thread(call_fn),
@@ -111,38 +125,41 @@ class GeminiRetryStrategy(LLMRetryStrategy):
 
             except asyncio.TimeoutError:
                 logger.warning(
-                    f"[GEMINI] Timeout (Attempt {attempt + 1}/{RetryConfig.MAX_RETRIES})"
+                    f"[GEMINI] Timeout (Attempt {attempt + 1}/{total_models}, Model: {self._current_model})"
                 )
-                if attempt == RetryConfig.MAX_RETRIES - 1:
+                if attempt >= total_models - 1:
                     raise
+
+                next_model = self._model_chain[attempt + 1]
+                wait_time = min(
+                    (RetryConfig.BASE_WAIT * (2 ** attempt)) + random.uniform(0.5, 1.5),
+                    RetryConfig.MAX_WAIT
+                )
+                logger.warning(
+                    f"[GEMINI] Timeout으로 모델 전환: {self._current_model} -> {next_model} "
+                    f"(대기 {wait_time:.1f}s)"
+                )
+                await asyncio.sleep(wait_time)
                 continue
 
             except Exception as e:
                 error_msg = str(e).lower()
+                is_retryable = any(c in error_msg for c in RetryConfig.RETRY_CONDITIONS)
 
-                # 재시도 조건 확인
-                if any(c in error_msg for c in RetryConfig.RETRY_CONDITIONS):
-                    if attempt < RetryConfig.MAX_RETRIES - 1:
-                        # Fallback Logic: primary -> gemini-flash-latest
-                        if self._current_model != "gemini-flash-latest":
-                            logger.warning(
-                                f"[GEMINI] {self._current_model} 과부하 또는 오류로 인해 "
-                                "'gemini-flash-latest'로 전환하여 재시도합니다."
-                            )
-                            self._current_model = "gemini-flash-latest"
-                            wait_time = 1.0
-                        else:
-                            wait_time = (5 * (2 ** attempt)) + random.uniform(1, 3)
+                if attempt < total_models - 1:
+                    next_model = self._model_chain[attempt + 1]
+                    wait_time = min(
+                        (RetryConfig.BASE_WAIT * (2 ** attempt)) + random.uniform(0.5, 1.5),
+                        RetryConfig.MAX_WAIT
+                    )
+                    error_type = "재시도 가능 오류" if is_retryable else "분석 실패"
+                    logger.warning(
+                        f"[GEMINI] {error_type} 발생으로 모델 전환: {self._current_model} -> {next_model} "
+                        f"(대기 {wait_time:.1f}s, {attempt + 1}/{total_models})"
+                    )
+                    await asyncio.sleep(wait_time)
+                    continue
 
-                        logger.warning(
-                            f"[GEMINI] Transient error hit. "
-                            f"Retrying with {self._current_model} in {wait_time:.1f}s... "
-                            f"({attempt + 1}/{RetryConfig.MAX_RETRIES})"
-                        )
-                        await asyncio.sleep(wait_time)
-                        continue
-
-                # Other errors or max retries reached
                 raise e
 
     def get_model_name(self) -> str:

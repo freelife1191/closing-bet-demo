@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate, AIRecommendation } from '@/lib/api';
 import StockChart from './StockChart';
 import BuyStockModal from '@/app/components/BuyStockModal';
+import ConfirmationModal from '@/app/components/ConfirmationModal';
 import Modal from '@/app/components/Modal';
 import VCPCriteriaModal from '@/app/components/VCPCriteriaModal'; // [NEW] Import
 import ReactMarkdown from 'react-markdown';
@@ -39,22 +40,70 @@ const SimpleTooltip = ({ text, children, align = 'center' }: { text: string; chi
 // Helper to fix CJK markdown issues and malformed AI output
 const preprocessMarkdown = (text: string) => {
   let processed = text;
+  const removeLastUnmatchedMarker = (line: string, markerRegex: RegExp, markerLength: number): string => {
+    const matches = [...line.matchAll(markerRegex)];
+    if (matches.length % 2 === 1) {
+      const idx = matches[matches.length - 1].index;
+      if (typeof idx === 'number') {
+        return line.slice(0, idx) + line.slice(idx + markerLength);
+      }
+    }
+    return line;
+  };
 
-  // 1. Fix malformed bold with spaces: "** text **" -> "**text**"
-  processed = processed.replace(/\*\*\s+(.*?)\s*\*\*/g, '**$1**');
+  // 1. Remove stray emphasis markers before ordered list starts (e.g. "****1. ")
+  processed = processed.replace(/^\s*\*{3,}(?=\d+[.)]\s)/gm, '');
 
-  // 2. Fix CJK boundary issues: "**Bold**Suffix" -> "**Bold** Suffix"
-  processed = processed.replace(/(\*\*|__)(.*?)\1([가-힣])/g, '$1$2$1 $3');
+  // 2. Split section labels and first ordered item when they are stuck together.
+  processed = processed.replace(/((?:\*\*|__)?\[[^\]\n]{1,20}\](?:\*\*|__)?)\s*(?=[1-9]\d?[.)])/g, '$1\n');
+
+  // 3. Ensure space after ordered-list marker (e.g. "1.조선", "1.**제목**" -> "1. 조선", "1. **제목**")
+  processed = processed.replace(/(?<!\d)([1-9]\d?[.)])(?=\*\*|__|[가-힣A-Za-z(])/g, '$1 ');
+
+  // 4. Ensure emphasis opening marker is separated from previous word (opening marker only).
+  // Avoid touching closing markers before punctuation (e.g. "**텍스트**:")
+  processed = processed.replace(/([가-힣A-Za-z0-9])(?=(\*\*|__)\s*[가-힣A-Za-z0-9(])/g, '$1 ');
+
+  // 5. Trim inner spaces in emphasis markers (covers both-sided or one-sided spaces).
+  processed = processed.replace(/\*\*([^*\n]+)\*\*/g, (m, inner: string) => {
+    const trimmed = inner.trim();
+    return trimmed ? `**${trimmed}**` : m;
+  });
+  processed = processed.replace(/__([^_\n]+)__/g, (m, inner: string) => {
+    const trimmed = inner.trim();
+    return trimmed ? `__${trimmed}__` : m;
+  });
+
+  // 6. Normalize quoted emphasis wrappers: **"텍스트"** / **'텍스트'** -> **텍스트**
+  processed = processed.replace(/\*\*\s*['"“”‘’]\s*([^*\n]+?)\s*['"“”‘’]\s*\*\*/g, '**$1**');
+  processed = processed.replace(/__\s*['"“”‘’]\s*([^_\n]+?)\s*['"“”‘’]\s*__/g, '__$1__');
+
+  // 7. Ensure spacing after closing emphasis marker when attached to text.
+  processed = processed.replace(/(?<=\S)(\*\*|__)(?=[가-힣A-Za-z0-9])/g, '$1 ');
+
+  // 8. Remove trailing unmatched emphasis marker in a line.
+  processed = processed
+    .split('\n')
+    .map((line) => {
+      const balancedAsterisk = removeLastUnmatchedMarker(line, /(?<!\*)\*\*(?!\*)/g, 2);
+      return removeLastUnmatchedMarker(balancedAsterisk, /(?<!_)__(?!_)/g, 2);
+    })
+    .join('\n');
+
+  // 9. Fix CJK boundary issues: "**Bold**Suffix" -> "**Bold** Suffix"
+  processed = processed.replace(/\*\*([A-Za-z0-9가-힣(][^*\n]*?)\*\*([가-힣])/g, '**$1** $2');
+  processed = processed.replace(/__([A-Za-z0-9가-힣(][^_\n]*?)__([가-힣])/g, '__$1__ $2');
 
   return processed;
 };
 
-const parseAIResponse = (text: string, isStreaming: boolean = false) => {
+const parseAIResponse = (text: string, isStreaming: boolean = false, streamReasoning?: string) => {
   let processed = text;
   let suggestions: string[] = [];
-  let reasoning = "";
+  const hasStreamReasoning = typeof streamReasoning === 'string' && streamReasoning.length > 0;
+  let reasoning = hasStreamReasoning ? streamReasoning : "";
 
-  const suggestionMatch = processed.match(/(?:\*\*|)?\\*\[\s*추천\s*질문\s*\\*\](?:\*\*|)?[\s\S]*$/i);
+  const suggestionMatch = processed.match(/(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*|__)?\\?\[?\s*추천\s*질문\s*\]?(?:\*\*|__)?\s*\n[\s\S]*$/i);
   if (suggestionMatch) {
     const sugText = suggestionMatch[0];
     processed = processed.replace(sugText, '');
@@ -62,39 +111,45 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
     const lines = sugText.split('\n');
     suggestions = lines
       .map(l => l.replace(/^(?:\d+\.|\-|\*)\s*/, '').trim())
-      .filter(l => l.length > 0 && !l.replace(/\*/g, '').includes('[추천 질문]'))
+      .filter(l => {
+        if (l.length === 0) return false;
+        const normalized = l.replace(/\*/g, '').replace(/\s/g, '').replace(/[\[\]]/g, '');
+        return !normalized.includes('추천질문');
+      })
       .map(l => l.replace(/\*\*/g, ''));
   }
 
-  // Handle live streaming: if [추론 과정] exists but [답변] doesn't, the entire text might be reasoning so far.
   const reasonStartRegex = /(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?/i;
   const reasonEndRegex = /(?:---|___|\*\*\*|)\s*(?:\n)*\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?/i;
 
-  const startMatch = processed.match(reasonStartRegex);
-  const endMatch = processed.match(reasonEndRegex);
+  if (!hasStreamReasoning) {
+    // Fallback parser for legacy/history messages where reasoning and answer are mixed in one text.
+    const startMatch = processed.match(reasonStartRegex);
+    const endMatch = processed.match(reasonEndRegex);
 
-  if (startMatch) {
-    if (endMatch) {
-      // Both start and end exist (fully generated or streaming past reasoning)
-      const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
-      reasoning = reasoningBlock;
-      processed = processed.substring(0, startMatch.index!) + processed.substring(endMatch.index!); // Remove the reasoning block from the visible chat
+    if (startMatch) {
+      if (endMatch) {
+        // Both start and end exist (fully generated or streaming past reasoning)
+        const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
+        reasoning = reasoningBlock;
+        processed = processed.substring(0, startMatch.index!) + processed.substring(endMatch.index!); // Remove the reasoning block from the visible chat
+      } else if (isStreaming) {
+        // Stream is active, and only start tag exists. Everything after start is reasoning.
+        reasoning = processed.substring(startMatch.index!);
+        processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
+      } else {
+        // Fallback if formatting is broken but stream is done
+        reasoning = processed.substring(startMatch.index!);
+        processed = processed.substring(0, startMatch.index!);
+      }
     } else if (isStreaming) {
-      // Stream is active, and only start tag exists. Everything after start is reasoning.
-      reasoning = processed.substring(startMatch.index!);
-      processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
-    } else {
-      // Fallback if formatting is broken but stream is done
-      reasoning = processed.substring(startMatch.index!);
-      processed = processed.substring(0, startMatch.index!);
-    }
-  } else if (isStreaming) {
-    // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
-    if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
-      // If the stream just started and starts with typical tag characters
-      if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
-        reasoning = processed;
-        processed = '';
+      // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
+      if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
+        // If the stream just started and starts with typical tag characters
+        if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
+          reasoning = processed;
+          processed = '';
+        }
       }
     }
   }
@@ -103,12 +158,8 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
   processed = processed.replace(reasonEndRegex, '');
   processed = preprocessMarkdown(processed);
 
-  let cleanReasoning = preprocessMarkdown(reasoning).replace(/\\*\[\s*추론\s*과정\s*\\*\]/g, '').trim();
-
-  // Cleanup trailing broken markdown
-  if (isStreaming) {
-    cleanReasoning = cleanReasoning.replace(/[\*\_\[\]]+$/, '');
-  }
+  const reasoningHeaderRegex = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\\?\[\s*추론\s*과정\s*\\?\](?:\*\*|__)?\s*\n?/i;
+  let cleanReasoning = preprocessMarkdown(reasoning).replace(reasoningHeaderRegex, '').trim();
 
   // Cleanup trailing broken markdown
   if (isStreaming) {
@@ -117,6 +168,8 @@ const parseAIResponse = (text: string, isStreaming: boolean = false) => {
 
   return { cleanText: processed.trim(), suggestions, reasoning: cleanReasoning };
 };
+
+const getVcpWelcomeMessage = (stockName?: string) => `👋 안녕하세요! **VCP 전문가 챗봇**입니다.\n\n**${stockName || '선택 종목'}** 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n\n명령어 예시:\n* \`/status\` - 현재 상태 확인\n* \`/help\` - 도움말`;
 
 export default function VCPSignalsPage() {
   const [signals, setSignals] = useState<KRSignal[]>([]);
@@ -131,7 +184,7 @@ export default function VCPSignalsPage() {
   const [marketGate, setMarketGate] = useState<KRMarketGate | null>(null);
 
   // Chatbot State
-  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string; isStreaming?: boolean }>>([]);
+  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string; isStreaming?: boolean }>>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
 
@@ -150,6 +203,7 @@ export default function VCPSignalsPage() {
   const [permissionModal, setPermissionModal] = useState(false);
 
   const [screenerRunning, setScreenerRunning] = useState(false);
+  const [reanalyzingFailedAI, setReanalyzingFailedAI] = useState(false);
   const [screenerMessage, setScreenerMessage] = useState<string | null>(null);
 
   // Slash Command State for Embedded Chat
@@ -168,6 +222,11 @@ export default function VCPSignalsPage() {
     title: string;
     content: string;
   }>({ isOpen: false, type: 'default', title: '', content: '' });
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    isOpen: boolean;
+    mode: 'clear_all' | 'single_message' | null;
+    msgIndex: number | null;
+  }>({ isOpen: false, mode: null, msgIndex: null });
 
   const SLASH_COMMANDS = [
     { cmd: '/help', desc: '도움말 확인' },
@@ -177,60 +236,141 @@ export default function VCPSignalsPage() {
     { cmd: '/clear', desc: '대화 내역 초기화' },
   ];
 
-  const VCP_SUGGESTIONS = [
-    "이 종목 VCP 패턴 분석해줘",
-    "수급(기관/외국인) 상황 어때?",
-    "AI 매매 의견(Gemini/Perplexity) 알려줘",
-    "진입가와 손절가 추천해줘",
-    "관련된 최신 뉴스 있어?"
-  ];
-
   const filteredCommands = chatInput.startsWith('/')
     ? SLASH_COMMANDS.filter(c => c.cmd.toLowerCase().startsWith(chatInput.toLowerCase()))
     : [];
+  const VCP_FALLBACK_SUGGESTIONS = [
+    "이 종목 VCP 패턴 분석해줘",
+    "수급(기관/외국인) 상황 어때?",
+    "진입가와 손절가 추천해줘",
+  ];
+
+  const openDeleteConfirmModal = (mode: 'clear_all' | 'single_message', msgIndex: number | null = null) => {
+    setDeleteConfirmModal({ isOpen: true, mode, msgIndex });
+  };
+
+  const closeDeleteConfirmModal = () => {
+    setDeleteConfirmModal({ isOpen: false, mode: null, msgIndex: null });
+  };
+
+  const handleConfirmDeleteChatHistory = async () => {
+    try {
+      if (deleteConfirmModal.mode === 'clear_all') {
+        const stockTicker = selectedStock?.ticker || 'default';
+        const sessionKey = `vcp_chat_session_id_${stockTicker}`;
+        const sessionId = localStorage.getItem(sessionKey);
+
+        if (sessionId) {
+          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, { method: 'DELETE' });
+        }
+
+        setChatHistory([{
+          role: 'assistant',
+          content: getVcpWelcomeMessage(selectedStock?.name)
+        }]);
+        return;
+      }
+
+      if (deleteConfirmModal.mode === 'single_message' && deleteConfirmModal.msgIndex !== null) {
+        const msgIndex = deleteConfirmModal.msgIndex;
+        const newHistory = [...chatHistory];
+        newHistory.splice(msgIndex, 1);
+
+        // UI 즉시 반영
+        setChatHistory(newHistory);
+
+        try {
+          const stockTicker = selectedStock?.ticker || 'default';
+          const sessionKey = `vcp_chat_session_id_${stockTicker}`;
+          const sessionId = localStorage.getItem(sessionKey);
+          if (sessionId) {
+            await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&index=${msgIndex}`, { method: 'DELETE' });
+            console.log("Deleted message at index", msgIndex);
+          }
+        } catch (e) {
+          console.error("Failed to sync partial deletion with DB", e);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to delete VCP chat history", e);
+    } finally {
+      closeDeleteConfirmModal();
+    }
+  };
 
   useEffect(() => {
     setSelectedCommandIndex(0);
   }, [chatInput]);
 
-  // On ticker change, load chat history from localStorage or reset to empty
+  // On ticker change, load chat history from backend DB
   useEffect(() => {
-    if (selectedStock?.ticker && isModalOpen) {
-      const saved = localStorage.getItem(`vcp_chat_${selectedStock.ticker}`);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setChatHistory(parsed);
-            return;
-          }
-        } catch (e) {
-          console.error('Failed to parse chat history', e);
+    let isMounted = true;
+
+    const loadHistory = async () => {
+      if (!selectedStock?.ticker || !isModalOpen) return;
+
+      setChatLoading(true);
+      try {
+        const stockTicker = selectedStock.ticker;
+        const sessionKey = `vcp_chat_session_id_${stockTicker}`;
+        let sessionId = localStorage.getItem(sessionKey);
+
+        if (!sessionId) {
+          // No session yet, just show welcome message
+          setChatHistory([{
+            role: 'assistant',
+            content: getVcpWelcomeMessage(selectedStock.name)
+          }]);
+          setChatLoading(false);
+          return;
         }
+
+        // Fetch from backend
+        const headers: Record<string, string> = {
+          'Cache-Control': 'no-cache'
+        };
+        const email = localStorage.getItem('user_email');
+        if (email) headers['X-User-Email'] = email;
+
+        const res = await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&_t=${Date.now()}`, {
+          headers,
+          cache: 'no-store'
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.history && data.history.length > 0) {
+            const mappedHistory = data.history.map((msg: any) => {
+              let textContent = '';
+              if (msg.content) {
+                textContent = msg.content;
+              } else if (msg.parts && Array.isArray(msg.parts)) {
+                textContent = msg.parts.map((p: any) => typeof p === 'string' ? p : p.text).join('');
+              }
+              return {
+                role: msg.role === 'model' ? 'assistant' : msg.role,
+                content: textContent
+              };
+            });
+            if (isMounted) setChatHistory(mappedHistory);
+          } else {
+            if (isMounted) setChatHistory([{
+              role: 'assistant',
+              content: getVcpWelcomeMessage(selectedStock.name)
+            }]);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse VCP chat history from DB', e);
+      } finally {
+        if (isMounted) setChatLoading(false);
       }
-      // If no saved history or parse failed, set empty to trigger welcome message
-      setChatHistory([]);
-    }
+    };
+
+    loadHistory();
+
+    return () => { isMounted = false; };
   }, [selectedStock?.ticker, isModalOpen]);
-
-  // Welcome Message for VCP Bot (only when history is explicitly empty AND a stock is selected)
-  useEffect(() => {
-    if (selectedStock?.ticker && chatHistory.length === 0 && isModalOpen) {
-      const welcomeMsg = {
-        role: 'assistant' as const,
-        content: `👋 안녕하세요! **VCP 전문가 챗봇**입니다.\n\n**${selectedStock.name}** 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n\n명령어 예시:\n* \`/status\` - 현재 상태 확인\n* \`/help\` - 도움말`
-      };
-      setChatHistory([welcomeMsg]);
-      localStorage.setItem(`vcp_chat_${selectedStock.ticker}`, JSON.stringify([welcomeMsg]));
-    }
-  }, [selectedStock, chatHistory.length, isModalOpen]);
-
-  // Save chat history on every update
-  useEffect(() => {
-    if (selectedStock?.ticker && chatHistory.length > 0) {
-      localStorage.setItem(`vcp_chat_${selectedStock.ticker}`, JSON.stringify(chatHistory));
-    }
-  }, [chatHistory, selectedStock?.ticker]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (showCommands && filteredCommands.length > 0) {
@@ -447,6 +587,30 @@ export default function VCPSignalsPage() {
     loadSignals();
   };
 
+  const handleReanalyzeFailedAI = async () => {
+    if (!isAdmin) {
+      setPermissionModal(true);
+      return;
+    }
+    if (screenerRunning || reanalyzingFailedAI) return;
+
+    const targetDate = activeDateTab === 'history' ? (selectedHistoryDate || undefined) : undefined;
+
+    setReanalyzingFailedAI(true);
+    setScreenerMessage('🤖 실패 AI 재분석 요청 중...');
+    try {
+      const res: any = await krAPI.reanalyzeVCPFailedAI(targetDate);
+      await loadSignals(targetDate);
+      setScreenerMessage(`✅ ${res?.message || '실패 AI 재분석 완료'}`);
+      setTimeout(() => setScreenerMessage(null), 5000);
+    } catch (e: any) {
+      setScreenerMessage(`❌ ${e?.message || '실패 AI 재분석 실패'}`);
+      setTimeout(() => setScreenerMessage(null), 7000);
+    } finally {
+      setReanalyzingFailedAI(false);
+    }
+  };
+
   const openChart = async (ticker: string, name: string, period?: string) => {
     setSelectedStock({ name, ticker });
     setIsModalOpen(true);
@@ -542,6 +706,16 @@ export default function VCPSignalsPage() {
     if (!message.trim() || chatLoading) return;
 
     if (message.trim().toLowerCase() === '/clear') {
+      const stockTicker = selectedStock?.ticker || 'default';
+      const sessionKey = `vcp_chat_session_id_${stockTicker}`;
+      let sessionId = localStorage.getItem(sessionKey);
+      if (sessionId) {
+        try {
+          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, { method: 'DELETE' });
+        } catch (e) {
+          console.error("Failed to clear VCP chat history on server", e);
+        }
+      }
       setChatHistory([]); // The useEffect will handle injecting the welcome message
       setChatInput('');
       setSelectedCommandIndex(0);
@@ -600,7 +774,7 @@ export default function VCPSignalsPage() {
         setChatLoading(false);
 
         // Setup a new streaming message
-        setChatHistory(prev => [...prev, { role: 'assistant', content: "", isStreaming: true }]);
+        setChatHistory(prev => [...prev, { role: 'assistant', content: "", reasoning: "", isStreaming: true }]);
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -633,18 +807,54 @@ export default function VCPSignalsPage() {
                       const newMsgs = [...prev];
                       newMsgs[newMsgs.length - 1] = {
                         ...newMsgs[newMsgs.length - 1],
-                        content: ""
+                        content: "",
+                        reasoning: ""
                       };
                       return newMsgs;
                     });
                   }
-                  if (data.chunk) {
+                  if (data.answer_clear) {
                     setChatHistory(prev => {
                       const newMsgs = [...prev];
                       const lastMsg = newMsgs[newMsgs.length - 1];
                       newMsgs[newMsgs.length - 1] = {
                         ...lastMsg,
-                        content: lastMsg.content + data.chunk
+                        content: ""
+                      };
+                      return newMsgs;
+                    });
+                  }
+                  if (data.reasoning_clear) {
+                    setChatHistory(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      newMsgs[newMsgs.length - 1] = {
+                        ...lastMsg,
+                        reasoning: ""
+                      };
+                      return newMsgs;
+                    });
+                  }
+
+                  const answerDelta = typeof data.answer_chunk === 'string' ? data.answer_chunk : data.chunk;
+                  if (typeof answerDelta === 'string' && answerDelta.length > 0) {
+                    setChatHistory(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      newMsgs[newMsgs.length - 1] = {
+                        ...lastMsg,
+                        content: lastMsg.content + answerDelta
+                      };
+                      return newMsgs;
+                    });
+                  }
+                  if (typeof data.reasoning_chunk === 'string' && data.reasoning_chunk.length > 0) {
+                    setChatHistory(prev => {
+                      const newMsgs = [...prev];
+                      const lastMsg = newMsgs[newMsgs.length - 1];
+                      newMsgs[newMsgs.length - 1] = {
+                        ...lastMsg,
+                        reasoning: (lastMsg.reasoning || "") + data.reasoning_chunk
                       };
                       return newMsgs;
                     });
@@ -701,13 +911,34 @@ export default function VCPSignalsPage() {
           {/* [MOVED] VCP 기준표 버튼 removed from here */}
 
           <button
+            onClick={handleReanalyzeFailedAI}
+            disabled={screenerRunning || reanalyzingFailedAI}
+            className={`flex-1 md:flex-none justify-center px-4 py-3 md:py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${reanalyzingFailedAI
+              ? 'bg-indigo-600/80 text-white/80 cursor-wait'
+              : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg hover:shadow-indigo-500/25'
+              }`}
+          >
+            {reanalyzingFailedAI ? (
+              <>
+                <i className="fas fa-circle-notch fa-spin text-lg"></i>
+                <span>Retrying...</span>
+              </>
+            ) : (
+              <>
+                <i className="fas fa-brain"></i>
+                <span>실패 AI 재분석</span>
+              </>
+            )}
+          </button>
+
+          <button
             onClick={async () => {
               // ADMIN 권한 체크
               if (!isAdmin) {
                 setPermissionModal(true);
                 return;
               }
-              if (screenerRunning) return;
+              if (screenerRunning || reanalyzingFailedAI) return;
               setScreenerRunning(true);
               // 1. 실행 요청
               setScreenerMessage('분석 요청 중...');
@@ -782,7 +1013,7 @@ export default function VCPSignalsPage() {
                 setTimeout(() => setScreenerMessage(null), 5000);
               }
             }}
-            disabled={screenerRunning}
+            disabled={screenerRunning || reanalyzingFailedAI}
             className={`flex-1 md:flex-none justify-center px-4 py-3 md:py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${screenerRunning
               ? 'bg-gradient-to-r from-rose-600/80 to-purple-600/80 text-white/80 cursor-wait'
               : 'bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white shadow-lg hover:shadow-rose-500/25'
@@ -1290,14 +1521,25 @@ export default function VCPSignalsPage() {
                             <i className="fas fa-robot text-blue-400 text-xs"></i>
                             <span className="text-xs font-bold text-gray-400">AI 상담 (VCP 전문가)</span>
                           </div>
-                          <div className="relative group">
-                            <i className="fas fa-question-circle text-gray-500 hover:text-gray-300 text-xs cursor-help"></i>
-                            <div className="absolute right-0 top-full mt-2 w-56 bg-[#1c1c1e] border border-white/10 rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                              <div className="text-xs font-bold text-gray-200 mb-2">💡 사용법</div>
-                              <div className="text-[10px] text-gray-500 space-y-1">
-                                <div>🤖 "이 종목 VCP 패턴 맞아?"</div>
-                                <div>📊 "수급 상황 분석해줘"</div>
-                                <div>💰 "손절가랑 목표가 알려줘"</div>
+                          <div className="flex items-center gap-3">
+                            {chatHistory.length > 0 && (
+                              <button
+                                onClick={() => openDeleteConfirmModal('clear_all')}
+                                className="text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                                title="대화 내역 비우기"
+                              >
+                                <i className="fas fa-trash-alt text-xs"></i>
+                              </button>
+                            )}
+                            <div className="relative group">
+                              <i className="fas fa-question-circle text-gray-500 hover:text-gray-300 text-xs cursor-help"></i>
+                              <div className="absolute right-0 top-full mt-2 w-56 bg-[#1c1c1e] border border-white/10 rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                <div className="text-xs font-bold text-gray-200 mb-2">💡 사용법</div>
+                                <div className="text-[10px] text-gray-500 space-y-1">
+                                  <div>🤖 "이 종목 VCP 패턴 맞아?"</div>
+                                  <div>📊 "수급 상황 분석해줘"</div>
+                                  <div>💰 "손절가랑 목표가 알려줘"</div>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1319,14 +1561,30 @@ export default function VCPSignalsPage() {
                                 let displayContent = msg.content;
                                 let extractedSuggestions: string[] = [];
 
+                                // 개별 메시지 삭제 로직
+                                const handleDeleteMessage = (msgIndex: number) => {
+                                  openDeleteConfirmModal('single_message', msgIndex);
+                                };
+
                                 if (!isUser) {
-                                  const { cleanText, suggestions, reasoning } = parseAIResponse(msg.content, msg.isStreaming);
+                                  const { cleanText, suggestions, reasoning } = parseAIResponse(msg.content, msg.isStreaming, msg.reasoning);
                                   displayContent = cleanText;
                                   extractedSuggestions = suggestions;
+                                  const suggestionButtons = extractedSuggestions.length > 0
+                                    ? extractedSuggestions
+                                    : (!msg.isStreaming && i === chatHistory.length - 1 ? VCP_FALLBACK_SUGGESTIONS : []);
 
                                   return (
-                                    <div key={i} className="flex justify-start">
+                                    <div key={i} className="flex justify-start relative group">
                                       <div className="flex flex-col gap-2 relative z-10 w-full overflow-hidden inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed bg-[#2c2c2e] text-gray-200 rounded-bl-none border border-white/5">
+                                        <button
+                                          onClick={() => handleDeleteMessage(i)}
+                                          className="absolute top-2 right-2 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-[#1c1c1e]/80 p-1.5 rounded-full z-20"
+                                          title="이 답변 지우기"
+                                        >
+                                          <i className="fas fa-trash-alt text-[10px]"></i>
+                                        </button>
+
                                         {msg.role === 'assistant' && (
                                           <ThinkingProcess
                                             reasoning={reasoning}
@@ -1337,6 +1595,9 @@ export default function VCPSignalsPage() {
                                         <ReactMarkdown
                                           remarkPlugins={[remarkGfm]}
                                           components={{
+                                            h1: ({ children }) => <h1 className="text-[16px] font-bold text-blue-400 mt-4 mb-2">{children}</h1>,
+                                            h2: ({ children }) => <h2 className="text-[14px] font-bold text-blue-300 mt-3 mb-1.5 border-b border-blue-500/20 pb-1">{children}</h2>,
+                                            h3: ({ children }) => <h3 className="text-[13px] font-bold text-blue-300 mt-2 mb-1">{children}</h3>,
                                             p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
                                             strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
                                             ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 my-1">{children}</ul>,
@@ -1348,10 +1609,10 @@ export default function VCPSignalsPage() {
                                           {displayContent}
                                         </ReactMarkdown>
 
-                                        {!isUser && extractedSuggestions.length > 0 && (
+                                        {!isUser && suggestionButtons.length > 0 && (
                                           <div className="flex flex-col gap-1.5 mt-2 pt-3 border-t border-white/10">
                                             <span className="text-[10px] font-bold text-gray-500 mb-0.5"><i className="fas fa-lightbulb text-yellow-500 mr-1"></i>추천 질문</span>
-                                            {extractedSuggestions.map((sug, idx) => (
+                                            {suggestionButtons.map((sug, idx) => (
                                               <button
                                                 key={idx}
                                                 onClick={() => handleVCPChatSend(sug)}
@@ -1368,41 +1629,38 @@ export default function VCPSignalsPage() {
                                 } else {
                                   // User Message
                                   return (
-                                    <div key={i} className="flex justify-end">
-                                      <div className="inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed bg-blue-600 text-white rounded-br-none">
-                                        <ReactMarkdown
-                                          remarkPlugins={[remarkGfm]}
-                                          components={{
-                                            p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                                            strong: ({ children }) => <span className="font-bold text-blue-300 bg-blue-500/10 px-1 rounded mx-0.5">{children}</span>,
-                                            ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 my-1">{children}</ul>,
-                                            ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 my-1">{children}</ol>,
-                                            li: ({ children }) => <li className="text-gray-300 mb-1 leading-relaxed">{children}</li>,
-                                            code: ({ children }) => <code className="font-mono bg-black/30 px-1 rounded text-orange-400">{children}</code>
-                                          }}
+                                    <div key={i} className="flex justify-end relative group">
+                                      <div className="relative inline-block max-w-[90%]">
+                                        <button
+                                          onClick={() => handleDeleteMessage(i)}
+                                          className="absolute top-1 left-[-24px] text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 z-20"
+                                          title="이 질문 지우기"
                                         >
-                                          {displayContent}
-                                        </ReactMarkdown>
+                                          <i className="fas fa-trash-alt text-[10px]"></i>
+                                        </button>
+
+                                        <div className="inline-block px-3 py-2.5 rounded-2xl text-xs max-w-full leading-relaxed bg-blue-600 text-white rounded-br-none">
+                                          <ReactMarkdown
+                                            remarkPlugins={[remarkGfm]}
+                                            components={{
+                                              h3: ({ children }) => <h3 className="text-[13px] font-bold text-white mt-2 mb-1">{children}</h3>,
+                                              p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                                              strong: ({ children }) => <span className="font-bold text-blue-200 bg-blue-500/20 px-1 rounded mx-0.5">{children}</span>,
+                                              ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 my-1">{children}</ul>,
+                                              ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 my-1">{children}</ol>,
+                                              li: ({ children }) => <li className="text-gray-100 mb-1 leading-relaxed">{children}</li>,
+                                              code: ({ children }) => <code className="font-mono bg-black/20 px-1 rounded text-orange-300">{children}</code>
+                                            }}
+                                          >
+                                            {displayContent}
+                                          </ReactMarkdown>
+                                        </div>
                                       </div>
                                     </div>
                                   );
                                 }
                               })}
 
-                              {/* Suggestion Chips */}
-                              {chatHistory.length === 1 && chatHistory[0].role === 'assistant' && (
-                                <div className="flex flex-wrap gap-2 mt-4 px-1">
-                                  {VCP_SUGGESTIONS.map((suggestion, idx) => (
-                                    <button
-                                      key={idx}
-                                      onClick={() => handleVCPChatSend(suggestion)}
-                                      className="px-3 py-1.5 bg-[#2c2c2e] hover:bg-blue-600/20 hover:text-blue-300 hover:border-blue-500/30 border border-white/5 rounded-full text-[11px] text-gray-400 transition-all text-left"
-                                    >
-                                      {suggestion}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
                             </>
                           )}
                           {chatLoading && (
@@ -1423,21 +1681,6 @@ export default function VCPSignalsPage() {
                     {/* Fixed Bottom Input Area */}
                     <div className="p-4 border-t border-white/5 bg-[#131722] shrink-0">
                       <div className="relative">
-                        {/* Persistent Suggestions */}
-                        <div className="absolute bottom-full left-0 w-full mb-3 pointer-events-none px-1">
-                          <div className="flex gap-2 overflow-x-auto custom-scrollbar-hide pb-1 pointer-events-auto">
-                            {VCP_SUGGESTIONS.map((suggestion, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => handleVCPChatSend(suggestion)}
-                                className="flex-shrink-0 px-3 py-1.5 bg-[#1c1c1e]/90 backdrop-blur-md hover:bg-blue-600 hover:text-white border border-white/10 rounded-full text-[11px] text-gray-300 transition-all whitespace-nowrap shadow-lg"
-                              >
-                                {suggestion}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
                         {/* Slash Command Popup */}
                         {chatInput.startsWith('/') && filteredCommands.length > 0 && (
                           <div className="absolute bottom-full left-0 w-full mb-1 bg-[#2c2c2e] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
@@ -1530,6 +1773,17 @@ export default function VCPSignalsPage() {
             return false;
           }
         }}
+      />
+      <ConfirmationModal
+        isOpen={deleteConfirmModal.isOpen}
+        title={deleteConfirmModal.mode === 'clear_all' ? '대화 내역 삭제' : '메시지 삭제'}
+        message={deleteConfirmModal.mode === 'clear_all'
+          ? '현재 종목의 모든 VCP AI 상담 내역을 삭제하시겠습니까?'
+          : '이 메시지를 삭제하시겠습니까?\n삭제하면 이후 대화 문맥이 끊어질 수 있습니다.'}
+        onConfirm={handleConfirmDeleteChatHistory}
+        onCancel={closeDeleteConfirmModal}
+        confirmText="삭제"
+        cancelText="취소"
       />
       {/* Alert Modal */}
       <Modal

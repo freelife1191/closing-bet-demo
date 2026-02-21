@@ -1597,7 +1597,7 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
             <i className="fas fa-sync-alt text-[10px]"></i>
           </button>
         </Tooltip>
-        <Tooltip content="기존 데이터를 기반으로 Gemini AI를 재호출하여 분석 결과만 업데이트합니다." position="bottom" align="right" wide>
+        <Tooltip content="기존 데이터를 기반으로 Gemini AI를 재호출합니다. 전체 실행 시 미분석/실패 항목만 재분석됩니다." position="bottom" align="right" wide>
           <button
             onClick={handleGeminiReanalyze}
             disabled={updating || analyzingGemini}

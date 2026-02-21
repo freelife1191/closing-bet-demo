@@ -10,6 +10,45 @@ interface ThinkingProcessProps {
   className?: string;
 }
 
+const normalizeOrderedListMarkdown = (text: string): string => {
+  if (!text) return text;
+
+  let normalized = text.replace(/\r\n/g, '\n');
+
+  // Break dense inline numbering into line-based list items.
+  normalized = normalized.replace(
+    /(?<=\S)\s+(?=(?:\*\*|__)?\d+[.)](?:\s|(?=\*\*|__|[가-힣A-Za-z(])))/g,
+    '\n'
+  );
+
+  const lines = normalized.split('\n');
+  const output: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+    const orderedMarker = trimmed.match(/^(\d+)[.)]\s*(.*)$/);
+
+    if (!orderedMarker) {
+      output.push(line);
+      continue;
+    }
+
+    const [, num, body] = orderedMarker;
+    const previousLine = output[output.length - 1] ?? '';
+    const previousTrimmed = previousLine.trim();
+    const previousIsOrderedItem = /^\d+\.\s/.test(previousTrimmed);
+
+    // Add a blank line before list start so markdown reliably parses ordered lists.
+    if (previousTrimmed && !previousIsOrderedItem) {
+      output.push('');
+    }
+
+    output.push(`${num}. ${body.trimStart()}`);
+  }
+
+  return output.join('\n');
+};
+
 export default function ThinkingProcess({ reasoning, isStreaming, className = '' }: ThinkingProcessProps) {
   // If streaming, force open. If done, user can toggle.
   const [isOpen, setIsOpen] = useState(isStreaming);
@@ -29,6 +68,8 @@ export default function ThinkingProcess({ reasoning, isStreaming, className = ''
 
   // If we're not streaming anymore, and there's absolutely no reasoning generated, hide it completely.
   if (!reasoning && !isStreaming) return null;
+
+  const normalizedReasoning = normalizeOrderedListMarkdown(reasoning);
 
   return (
     <div className={`mb-4 overflow-hidden ${className}`}>
@@ -57,28 +98,24 @@ export default function ThinkingProcess({ reasoning, isStreaming, className = ''
         <i className={`fas fa-chevron-down text-xs transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}></i>
       </button>
 
-      {isOpen && (
+      {isOpen && reasoning && (
         <div className={`mt-2 p-4 rounded-xl border border-white/5 bg-black/20 text-[13px] leading-relaxed flex flex-col gap-2
                 ${isStreaming ? 'animate-pulse opacity-80' : 'text-gray-300'}
             `}>
-          {!reasoning ? (
-            <p className="text-[#b5b5b6] italic m-0">생각을 정리하고 있습니다...</p>
-          ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                p: ({ node, ...props }) => <p className="mb-3 last:mb-0 text-[#b5b5b6]" {...props} />,
-                strong: ({ node, ...props }) => <strong className="font-bold text-gray-200" {...props} />,
-                ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-4 space-y-2 text-[#b5b5b6]" {...props} />,
-                ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-4 space-y-2 text-[#b5b5b6]" {...props} />,
-                li: ({ node, ...props }) => <li className="text-[#b5b5b6] mb-2 last:mb-0" {...props} />,
-                h3: ({ node, ...props }) => <h3 className="font-bold text-gray-200 mb-2 mt-4 text-[14px]" {...props} />,
-                h4: ({ node, ...props }) => <h4 className="font-bold text-gray-300 mb-2 mt-3 text-[13px]" {...props} />,
-              }}
-            >
-              {reasoning}
-            </ReactMarkdown>
-          )}
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p: ({ node, ...props }) => <p className="mb-3 last:mb-0 text-[#b5b5b6]" {...props} />,
+              strong: ({ node, ...props }) => <strong className="font-bold text-gray-200" {...props} />,
+              ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-4 space-y-2 text-[#b5b5b6]" {...props} />,
+              ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-4 space-y-2 text-[#b5b5b6]" {...props} />,
+              li: ({ node, ...props }) => <li className="text-[#b5b5b6] mb-2 last:mb-0" {...props} />,
+              h3: ({ node, ...props }) => <h3 className="font-bold text-gray-200 mb-2 mt-4 text-[14px]" {...props} />,
+              h4: ({ node, ...props }) => <h4 className="font-bold text-gray-300 mb-2 mt-3 text-[13px]" {...props} />,
+            }}
+          >
+            {normalizedReasoning}
+          </ReactMarkdown>
         </div>
       )}
     </div>

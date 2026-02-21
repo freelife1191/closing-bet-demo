@@ -17,6 +17,14 @@ from engine.config import app_config
 
 logger = logging.getLogger(__name__)
 
+GEMINI_RETRY_MODEL_CHAIN = [
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-3-flash-preview",
+]
+
 
 class VCPMultiAIAnalyzer:
     """VCP 시그널 멀티 AI 분석기 (Gemini + GPT/Perplexity 동시 분석)"""
@@ -95,22 +103,12 @@ class VCPMultiAIAnalyzer:
         if not self.gemini_client:
             return None
         
-        max_retries = 5
         base_delay = 2
-        
-        # 모델 폴백 체인 (사용자 설정 모델 우선)
-        primary_model = app_config.ANALYSIS_GEMINI_MODEL
-        model_chain = [primary_model, "gemini-flash-latest", "gemini-2.0-flash"]
-        
-        for attempt in range(max_retries + 1):
+        model_chain = list(GEMINI_RETRY_MODEL_CHAIN)
+        max_retries = len(model_chain) - 1
+
+        for attempt, current_model in enumerate(model_chain):
             try:
-                # 시도 횟수에 따라 모델 변경 (폴백)
-                # 0, 1회: 설정된 기본 모델 (primary_model)
-                # 2회: gemini-flash-latest (이미 base면 건너뜀)
-                # 3회 이상: gemini-2.0-flash
-                model_idx = min(attempt // 2, len(model_chain) - 1)
-                current_model = model_chain[model_idx]
-                
                 prompt = self._build_vcp_prompt(stock_name, stock_data)
                 
                 start = time.time()
@@ -122,32 +120,45 @@ class VCPMultiAIAnalyzer:
                         contents=prompt
                     )
                     return response.text
-                
-                loop = asyncio.get_event_loop()
-                with ThreadPoolExecutor() as executor:
-                    response_text = await loop.run_in_executor(executor, _call)
+
+                response_text = await asyncio.to_thread(_call)
                 
                 elapsed = time.time() - start
                 logger.debug(f"[Gemini] {stock_name} 분석 완료 ({current_model}, {elapsed:.2f}s)")
                 
                 # JSON 파싱
                 result = self._parse_json_response(response_text)
+                if result:
+                    return result
+
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
+                    next_model = model_chain[attempt + 1]
+                    logger.warning(
+                        f"[Gemini] {stock_name} JSON 파싱 실패 -> {delay:.2f}초 후 재시도 "
+                        f"(모델 전환: {current_model} -> {next_model}, {attempt+1}/{max_retries})"
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                logger.error(f"[Gemini] {stock_name} 분석 실패 (Final): 유효한 JSON 응답을 받지 못함")
                 return result
                 
             except Exception as e:
                 error_msg = str(e).lower()
                 # 429: Rate Limit, 503/500: Server Error/Overloaded
                 retry_conditions = ['429', 'resource exhausted', 'quota exceeded', '503', '502', '500', 'overloaded']
-                
-                if attempt < max_retries and any(c in error_msg for c in retry_conditions):
+
+                if attempt < max_retries:
                     delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
-                    next_model_idx = min((attempt + 1) // 2, len(model_chain) - 1)
-                    next_model = model_chain[next_model_idx]
-                    
-                    log_msg = f"[Gemini] {stock_name} API ({error_msg[:50]}) -> {delay:.2f}초 후 재시도"
-                    if next_model != current_model:
-                        log_msg += f" (모델 전환: {current_model} -> {next_model})"
-                    
+                    next_model = model_chain[attempt + 1]
+                    is_retryable = any(c in error_msg for c in retry_conditions)
+                    reason = "429/503 계열 오류" if is_retryable else "분석 실패"
+
+                    log_msg = (
+                        f"[Gemini] {stock_name} {reason} ({error_msg[:50]}) -> {delay:.2f}초 후 재시도 "
+                        f"(모델 전환: {current_model} -> {next_model})"
+                    )
                     logger.warning(f"{log_msg} ({attempt+1}/{max_retries})")
                     await asyncio.sleep(delay)
                 else:
