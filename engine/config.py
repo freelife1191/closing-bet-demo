@@ -177,7 +177,7 @@ class AppConfig:
         val = os.getenv("MARKET_GATE_UPDATE_INTERVAL_MINUTES", "30")
         try:
             return int(val)
-        except:
+        except (TypeError, ValueError):
             return 30
     
     @MARKET_GATE_UPDATE_INTERVAL_MINUTES.setter

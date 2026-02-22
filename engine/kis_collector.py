@@ -8,7 +8,12 @@ import requests
 import json
 import os
 from typing import Dict, Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from services.kr_market_data_cache_service import (
+    atomic_write_text,
+    load_json_payload_from_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +44,13 @@ class KisCollector:
         """저장된 토큰 로드"""
         if os.path.exists(self.token_file):
             try:
-                with open(self.token_file, 'r') as f:
-                    data = json.load(f)
-                    self.access_token = data.get("access_token")
-                    expired_at_str = data.get("expired_at")
-                    if expired_at_str:
-                        self.token_expired_at = datetime.fromisoformat(expired_at_str)
+                data = load_json_payload_from_path(self.token_file)
+                if not isinstance(data, dict):
+                    return
+                self.access_token = data.get("access_token")
+                expired_at_str = data.get("expired_at")
+                if expired_at_str:
+                    self.token_expired_at = datetime.fromisoformat(expired_at_str)
                 logger.info("Loaded KIS token from file")
             except Exception as e:
                 logger.warning(f"Failed to load KIS token file: {e}")
@@ -52,11 +58,14 @@ class KisCollector:
     def _save_token_to_file(self):
         """토큰 정보를 파일에 저장"""
         try:
-            with open(self.token_file, 'w') as f:
-                json.dump({
-                    "access_token": self.access_token,
-                    "expired_at": self.token_expired_at.isoformat() if self.token_expired_at else None
-                }, f)
+            payload = {
+                "access_token": self.access_token,
+                "expired_at": self.token_expired_at.isoformat() if self.token_expired_at else None,
+            }
+            atomic_write_text(
+                self.token_file,
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            )
         except Exception as e:
             logger.warning(f"Failed to save KIS token file: {e}")
 
@@ -89,7 +98,7 @@ class KisCollector:
                 data = res.json()
                 self.access_token = data.get("access_token")
                 expires_in = int(data.get("expires_in", 86400))
-                self.token_expired_at = datetime.now().replace(microsecond=0) + pd.Timedelta(seconds=expires_in)
+                self.token_expired_at = datetime.now().replace(microsecond=0) + timedelta(seconds=expires_in)
                 self._save_token_to_file()
                 logger.info("KIS API Access Token issued and saved")
                 return True

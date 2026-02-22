@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Messenger platform-specific formatters.
+"""
+
+from __future__ import annotations
+
+from typing import Dict, List
+
+from engine.constants import MESSENGER
+from engine.messenger_formatters_models import MessageData, SignalData
+from engine.messenger_money_formatter import MoneyFormatter
+
+
+class MessageFormatter:
+    """메시지 포맷터 기본 클래스 (Abstract)."""
+
+    def format(self, data: MessageData):
+        """메시지 포맷팅."""
+        raise NotImplementedError
+
+
+class TelegramFormatter(MessageFormatter):
+    """텔레그램 메시지 포맷터."""
+
+    def __init__(self):
+        self.max_length = MESSENGER.TELEGRAM_MAX_LENGTH
+        self.ai_reason_max_length = MESSENGER.AI_REASON_MAX_LENGTH
+
+    def format(self, data: MessageData) -> str:
+        """텔레그램 HTML 메시지 생성."""
+        header_text = self._build_header(data)
+        footer = self._build_footer()
+
+        # 헤더 + 푸터 길이 계산
+        current_len = len(header_text) + len(footer) + 50
+
+        body_lines = []
+        truncated = False
+
+        for signal in data.signals:
+            item_text = self._format_signal(signal)
+
+            # 길이 체크
+            if current_len + len(item_text) > self.max_length:
+                truncated = True
+                break
+
+            body_lines.append(item_text)
+            current_len += len(item_text)
+
+        if truncated:
+            body_lines.append("\n\n✂️ <b>(메시지 길이 제한으로 하위 등급 종목은 생략되었습니다)</b>")
+
+        if not body_lines:
+            body_lines.append("\n\n🚫 <b>오늘 조건에 부합하는 추천 종목이 없습니다.</b>\n내일의 기회를 기다려보세요! 🍀")
+
+        return header_text + "".join(body_lines) + footer
+
+    def _build_header(self, data: MessageData) -> str:
+        """헤더 생성."""
+        lines = [
+            f"<b>{data.title}</b>",
+            f"{data.gate_info}",
+            f"{data.summary_title}",
+            f"{data.summary_desc}",
+            "-" * 25,
+            "📋 <b>전체 신호:</b>",
+        ]
+        return "\n".join(lines)
+
+    def _build_footer(self) -> str:
+        """푸터 생성."""
+        return "\n\n⚠️ 투자 참고용이며 손실에 대한 책임은 본인에게 있습니다."
+
+    def _format_signal(self, signal: SignalData) -> str:
+        """개별 시그널 포맷팅."""
+        f_buy_str = MoneyFormatter.format(signal.f_buy)
+        i_buy_str = MoneyFormatter.format(signal.i_buy)
+        tv_str = MoneyFormatter.format(signal.trading_value).replace('+', '')
+
+        ai_reason = signal.ai_reason
+        if len(ai_reason) > self.ai_reason_max_length:
+            ai_reason = ai_reason[:self.ai_reason_max_length - 3] + "..."
+
+        return (
+            f"\n\n"
+            f"{signal.index}. {signal.market_icon} [{signal.market}] <b>{signal.name} ({signal.code})</b> - {signal.grade}등급 {signal.score}점\n"
+            f"   📈 상승: {signal.change_pct:+.1f}% | 배수: {signal.volume_ratio:.0f}x | 대금: {tv_str}\n"
+            f"   🏦 외인(5일): {f_buy_str} | 기관(5일): {i_buy_str}\n"
+            f"   💰 진입: ₩{signal.entry:,} | 목표: ₩{signal.target:,} | 손절: ₩{signal.stop:,}\n"
+            f"   🤖 <i>{ai_reason}...</i>"
+        )
+
+
+class DiscordFormatter(MessageFormatter):
+    """디스코드 메시지 포맷터."""
+
+    def __init__(self):
+        self.field_max_length = MESSENGER.DISCORD_FIELD_MAX_LENGTH
+        self.truncate_length = MESSENGER.DISCORD_FIELD_TRUNCATE_LENGTH
+        self.ai_reason_max_length = MESSENGER.AI_REASON_MAX_LENGTH
+
+        # 등급 아이콘 맵
+        self.grade_icons = {
+            'S': '🏆', 'A': '🥇', 'B': '🥈', 'D': '⚠️', 'Other': '❓'
+        }
+
+    def format(self, data: MessageData) -> Dict:
+        """디스코드 Embed 페이로드 생성."""
+        # 1. 등급별 시그널 그룹화
+        grouped_signals = self._group_by_grade(data.signals)
+
+        # 2. Embed Description (Summary)
+        main_desc = (
+            f"{data.gate_info}\n"
+            f"{data.summary_desc}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━"
+        )
+
+        # 3. Fields 생성
+        fields = []
+        priority_order = ['S', 'A', 'B', 'D', 'Other']
+
+        for i, grade in enumerate(priority_order):
+            signals = grouped_signals.get(grade, [])
+            if not signals:
+                continue
+
+            field_name = f"{self.grade_icons.get(grade, '')} {grade} Grade ({len(signals)})"
+            field_value = self._format_signals_by_grade(signals)
+
+            # Field Value 길이 체크
+            if len(field_value) > self.field_max_length:
+                field_value = field_value[:self.truncate_length] + "\n...(생략)..."
+
+            # Spacer Field (등급 간 간격)
+            if i > 0:
+                fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
+
+            fields.append({"name": field_name, "value": field_value, "inline": False})
+
+        # 4. Embed 구성
+        embed = {
+            "title": data.title,
+            "description": main_desc,
+            "color": 0x00ff00 if data.signals else 0x99aab5,
+            "fields": fields,
+            "footer": {"text": "AI Jongga Bot • 투자 책임은 본인에게 있습니다."},
+        }
+
+        return {
+            "username": "Closing Bet Bot",
+            "embeds": [embed],
+        }
+
+    def _group_by_grade(self, signals: List[SignalData]) -> Dict[str, List[SignalData]]:
+        """등급별 시그널 그룹화."""
+        grouped = {'S': [], 'A': [], 'B': [], 'D': [], 'Other': []}
+        for signal in signals:
+            grade = str(signal.grade).upper()
+            if grade in grouped:
+                grouped[grade].append(signal)
+            else:
+                grouped['Other'].append(signal)
+        return grouped
+
+    def _format_signals_by_grade(self, signals: List[SignalData]) -> str:
+        """등급별 시그널 포맷팅."""
+        result = ""
+        for s in signals:
+            f_buy_str = MoneyFormatter.format(s.f_buy)
+            i_buy_str = MoneyFormatter.format(s.i_buy)
+            tv_str = MoneyFormatter.format(s.trading_value).replace('+', '')
+
+            # AI Reason 길이 제한
+            ai_reason = s.ai_reason
+            if len(ai_reason) > self.ai_reason_max_length:
+                ai_reason = ai_reason[:self.ai_reason_max_length - 3] + "..."
+
+            result += f"**{s.index}. {s.name}** [{s.market}] ({s.code}) - {s.grade}등급 **{s.score}점**\n"
+            result += f"📈 **상승**: `{s.change_pct:+.1f}%` | 🌊 **배수**: `{s.volume_ratio:.0f}x` | 💰 **대금**: `{tv_str}`\n"
+            result += f"💵 **진입**: {s.entry:,} | 🎯 **목표**: {s.target:,} | 🛡️ **손절**: {s.stop:,}\n"
+
+            # 수급 정보 (있는 경우만)
+            if s.f_buy != 0 or s.i_buy != 0:
+                result += f"🏦 **외인**: {f_buy_str} | **기관**: {i_buy_str}\n"
+
+            result += f"🤖 **AI**: *{ai_reason}*\n"
+            result += "\n"  # Spacer
+
+        return result
+
+
+class EmailFormatter(MessageFormatter):
+    """이메일 메시지 포맷터."""
+
+    def __init__(self):
+        self.ai_reason_max_length = MESSENGER.AI_REASON_MAX_LENGTH
+
+    def format(self, data: MessageData) -> str:
+        """HTML 이메일 본문 생성."""
+        html_body = self._build_html_template(data)
+
+        if not data.signals:
+            html_body += self._build_empty_state()
+
+        html_body += self._build_html_footer()
+
+        return html_body
+
+    def _build_html_template(self, data: MessageData) -> str:
+        """HTML 템플릿 헤더와 시그널 리스트 생성."""
+        html = f"""
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .header {{ background-color: #f4f4f4; padding: 20px; border-bottom: 2px solid #ddd; }}
+        .gate-info {{ font-weight: bold; color: #d32f2f; }}
+        .summary {{ margin: 20px 0; }}
+        .signal-item {{ border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }}
+        .signal-header {{ font-weight: bold; font-size: 1.1em; color: #1976d2; }}
+        .grade-badge {{ background-color: #e3f2fd; color: #1976d2; padding: 3px 8px; border-radius: 12px; font-size: 0.9em; }}
+        .details {{ margin-top: 10px; font-size: 0.95em; }}
+        .price-info {{ font-weight: bold; }}
+        .ai-reason {{ background-color: #fff3e0; padding: 10px; margin-top: 10px; border-left: 4px solid #ff9800; font-style: italic; }}
+        .footer {{ margin-top: 30px; font-size: 0.8em; color: #777; text-align: center; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>{data.title}</h2>
+        <p class="gate-info">{data.gate_info}</p>
+    </div>
+
+    <div class="summary">
+        <h3>{data.summary_title}</h3>
+        <p>{data.summary_desc}</p>
+    </div>
+
+    <div class="signals">
+        <h3>📋 전체 신호</h3>
+"""
+        # 시그널 아이템 추가
+        for signal in data.signals:
+            html += self._format_signal_html(signal)
+
+        return html
+
+    def _format_signal_html(self, signal: SignalData) -> str:
+        """개별 시그널 HTML 포맷팅."""
+        f_buy_str = MoneyFormatter.format(signal.f_buy)
+        i_buy_str = MoneyFormatter.format(signal.i_buy)
+        tv_str = MoneyFormatter.format(signal.trading_value)
+
+        return f"""
+    <div class="signal-item">
+        <div class="signal-header">
+            {signal.index}. {signal.market_icon} [{signal.market}] {signal.name} ({signal.code})
+            <span class="grade-badge">{signal.grade}등급 ({signal.score}점)</span>
+        </div>
+        <div class="details">
+            📈 <b>상승:</b> {signal.change_pct:+.1f}% | <b>배수:</b> {signal.volume_ratio:.1f}x | <b>대금:</b> {tv_str}<br>
+            🏦 <b>외인(5일):</b> {f_buy_str} | <b>기관(5일):</b> {i_buy_str}<br>
+            💰 <span class="price-info">진입: {signal.entry:,}원 | 목표: {signal.target:,}원 | 손절: {signal.stop:,}원</span>
+        </div>
+        <div class="ai-reason">
+            🤖 AI 분석: {signal.ai_reason}
+        </div>
+    </div>
+    <br>
+"""
+
+    def _build_empty_state(self) -> str:
+        """시그널 없을 때 메시지."""
+        return """
+    <div style="text-align: center; padding: 30px; color: #666;">
+        <span style="font-size: 3em;">🚫</span>
+        <h3>오늘 조건에 부합하는 추천 종목이 없습니다.</h3>
+        <p>내일의 기회를 기다려보세요! 🍀</p>
+    </div>
+"""
+
+    def _build_html_footer(self) -> str:
+        """HTML 푸터."""
+        return """
+    </div>
+    <div class="footer">
+        <p>⚠️ 본 메일은 정보 제공을 목적으로 하며, 투자의 책임은 본인에게 있습니다.</p>
+        <p>Powered by AI Jongga V2 Bot</p>
+    </div>
+</body>
+</html>
+"""

@@ -6,683 +6,380 @@ Paper Trading Service (Mock Investment)
 - Uses SQLite for persistence.
 """
 
-import os
-import sqlite3
 import logging
+import os
 import threading
 import time
-import pandas as pd
 from datetime import datetime
+from typing import Any, Dict
+
+from services.paper_trading_db_setup import init_db as init_db_impl
+from services.paper_trading_history_mixin import PaperTradingHistoryMixin
+from services.paper_trading_price_fetchers import (
+    fetch_prices_naver as fetch_prices_naver_impl,
+    fetch_prices_pykrx as fetch_prices_pykrx_impl,
+    fetch_prices_toss as fetch_prices_toss_impl,
+    fetch_prices_yfinance as fetch_prices_yfinance_impl,
+)
+from services.paper_trading_trade_account_mixin import PaperTradingTradeAccountMixin
+from services.paper_trading_sync_service import (
+    refresh_price_cache_once as refresh_price_cache_once_impl,
+    run_price_update_loop as run_price_update_loop_impl,
+)
+from services.paper_trading_valuation_helpers import (
+    build_dummy_asset_history as build_dummy_asset_history_impl,
+    build_valuated_holding as build_valuated_holding_impl,
+    calculate_stock_value_from_rows as calculate_stock_value_from_rows_impl,
+)
+from services.paper_trading_valuation_service import (
+    get_portfolio_valuation as get_portfolio_valuation_impl,
+)
+from services.sqlite_utils import connect_sqlite
 
 logger = logging.getLogger(__name__)
 
-class PaperTradingService:
-    def __init__(self, db_name='paper_trading.db'):
+
+class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixin):
+    UPDATE_INTERVAL_SEC = 60
+    EMPTY_PORTFOLIO_SLEEP_SEC = 10
+    TOSS_CHUNK_SIZE = 50
+    TOSS_RETRY_COUNT = 3
+    NAVER_THROTTLE_SEC = 0.2
+    INITIAL_SYNC_WAIT_TRIES = 50
+    INITIAL_SYNC_WAIT_SEC = 0.1
+    SQLITE_BUSY_TIMEOUT_MS = 30_000
+    PRICE_CACHE_WARMUP_LIMIT = 5_000
+
+    def __init__(self, db_name='paper_trading.db', auto_start_sync=True):
         # Root path logic
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.db_path = os.path.join(base_dir, 'data', db_name)
-        
+
         # Cache for real-time prices
         self.price_cache = {}
         self.cache_lock = threading.Lock()
         self.last_update = None
         self.is_running = False
         self.bg_thread = None
-        
-        self.is_running = False
-        self.bg_thread = None
-        
+        self._initial_sync_wait_done = False
+
         self._init_db()
-        
+        self._load_price_cache_from_db()
+
         # [Optimization] Auto-start background sync on initialization
-        self.start_background_sync()
+        if auto_start_sync:
+            self.start_background_sync()
 
     def _init_db(self):
         """Initialize SQLite database tables"""
-        try:
-            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Portfolio Table (Current Holdings)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS portfolio (
-                    ticker TEXT PRIMARY KEY,
-                    name TEXT,
-                    avg_price REAL,
-                    quantity INTEGER,
-                    total_cost REAL,
-                    last_updated TEXT
-                )
-            ''')
-            
-            # Trade Log Table (History)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS trade_log (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    action TEXT,  -- 'BUY' or 'SELL'
-                    ticker TEXT,
-                    name TEXT,
-                    price REAL,
-                    quantity INTEGER,
-                    timestamp TEXT,
-                    profit REAL DEFAULT 0,
-                    profit_rate REAL DEFAULT 0
-                )
-            ''')
-            
-            # Migration: Add columns if not exists (for existing DB)
-            try:
-                cursor.execute('ALTER TABLE trade_log ADD COLUMN profit REAL DEFAULT 0')
-            except Exception:
-                pass # Already exists
-                
-            try:
-                cursor.execute('ALTER TABLE trade_log ADD COLUMN profit_rate REAL DEFAULT 0')
-            except Exception:
-                pass # Already exists
-            
-            # Asset History Table (For Charting)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS asset_history (
-                    date TEXT PRIMARY KEY,
-                    total_asset REAL,
-                    cash REAL,
-                    stock_value REAL,
-                    timestamp TEXT
-                )
-            ''')
-            
-            # Balance Table (Cash & Deposit History)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS balance (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    cash REAL DEFAULT 100000000,
-                    total_deposit REAL DEFAULT 0
-                )
-            ''')
-            
-            # Migration: Add total_deposit if missing (Run this BEFORE Insert)
-            try:
-                cursor.execute('ALTER TABLE balance ADD COLUMN total_deposit REAL DEFAULT 0')
-            except Exception:
-                pass # Already exists
-
-            # Initialize balance if not exists
-            cursor.execute('INSERT OR IGNORE INTO balance (id, cash, total_deposit) VALUES (1, 100000000, 0)')
-            
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.error(f"Failed to initialize paper trading db: {e}")
+        init_db_impl(
+            db_path=self.db_path,
+            logger=logger,
+        )
 
     def get_context(self):
         """Helper to get db connection"""
-        return sqlite3.connect(self.db_path)
+        timeout_seconds = max(1, self.SQLITE_BUSY_TIMEOUT_MS // 1000)
+        return connect_sqlite(
+            self.db_path,
+            timeout_seconds=timeout_seconds,
+            pragmas=(
+                f"PRAGMA busy_timeout={self.SQLITE_BUSY_TIMEOUT_MS}",
+                "PRAGMA foreign_keys=ON",
+                "PRAGMA temp_store=MEMORY",
+            ),
+        )
 
-    def get_balance(self):
-        """Get current cash balance"""
-        with self.get_context() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT cash FROM balance WHERE id = 1')
-            row = cursor.fetchone()
-            return row[0] if row else 0
-
-    def deposit_cash(self, amount):
-        """Deposit cash (Charging)"""
-        if amount <= 0:
-            return {'status': 'error', 'message': 'Amount must be positive'}
-            
+    def _load_price_cache_from_db(self) -> None:
+        """SQLite에 저장된 최신 가격 캐시를 메모리로 워밍업한다."""
         try:
-            conn = self.get_context()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE balance SET cash = cash + ?, total_deposit = total_deposit + ? WHERE id = 1', (amount, amount))
-            conn.commit()
-            conn.close()
-            return {'status': 'success', 'message': f'Deposited {amount:,} KRW'}
-        except Exception as e:
-            return {'status': 'error', 'message': str(e)}
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM portfolio")
+                portfolio_count_row = cursor.fetchone()
+                portfolio_count = int(portfolio_count_row[0]) if portfolio_count_row else 0
+                if portfolio_count > 0:
+                    cursor.execute(
+                        """
+                        SELECT pc.ticker, pc.price
+                        FROM price_cache pc
+                        INNER JOIN portfolio p ON p.ticker = pc.ticker
+                        ORDER BY pc.updated_at DESC
+                        LIMIT ?
+                        """,
+                        (self.PRICE_CACHE_WARMUP_LIMIT,),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT ticker, price
+                        FROM price_cache
+                        ORDER BY updated_at DESC
+                        LIMIT ?
+                        """,
+                        (self.PRICE_CACHE_WARMUP_LIMIT,),
+                    )
+                rows = cursor.fetchall()
+        except Exception as error:
+            logger.warning(f"Failed to warm up price cache from SQLite: {error}")
+            return
 
-    def update_balance(self, amount, operation='add'):
-        """Update cash balance"""
-        with self.get_context() as conn:
-            cursor = conn.cursor()
-            current = self.get_balance()
-            if operation == 'subtract':
-                new_balance = current - amount
-            else:
-                new_balance = current + amount
-            
-            cursor.execute('UPDATE balance SET cash = ? WHERE id = 1', (new_balance,))
-            conn.commit()
-            return new_balance
+        warmed_cache: Dict[str, int] = {}
+        for ticker, price in rows:
+            ticker_key = str(ticker).zfill(6)
+            try:
+                price_int = int(float(price))
+            except (TypeError, ValueError):
+                continue
+            if price_int <= 0:
+                continue
+            warmed_cache[ticker_key] = price_int
 
-    def buy_stock(self, ticker, name, price, quantity):
-        """Execute Buy Order"""
-        if quantity <= 0:
-            return {'status': 'error', 'message': 'Quantity must be positive'}
-            
-        total_cost = int(price * quantity) # 정수로 처리
-        current_cash = self.get_balance()
-        
-        if current_cash < total_cost:
-            return {
-                'status': 'error', 
-                'message': f'잔고 부족 (필요: {total_cost:,}원, 보유: {int(current_cash):,}원)'
-            }
+        if not warmed_cache:
+            return
 
-        try:
-            conn = self.get_context()
-            cursor = conn.cursor()
-            
-            # 1. Update Portfolio
-            cursor.execute('SELECT avg_price, quantity, total_cost FROM portfolio WHERE ticker = ?', (ticker,))
-            row = cursor.fetchone()
-            
-            if row:
-                # Update existing position
-                old_avg, old_qty, old_cost = row
-                new_qty = old_qty + quantity
-                new_total_cost = old_cost + total_cost
-                new_avg = new_total_cost / new_qty
-                
-                cursor.execute('''
-                    UPDATE portfolio 
-                    SET avg_price = ?, quantity = ?, total_cost = ?, last_updated = ?
-                    WHERE ticker = ?
-                ''', (new_avg, new_qty, new_total_cost, datetime.now().isoformat(), ticker))
-            else:
-                # Create new position
-                cursor.execute('''
-                    INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (ticker, name, price, quantity, total_cost, datetime.now().isoformat()))
-            
-            # 2. Log Trade
-            cursor.execute('''
-                INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
-                VALUES (?, ?, ?, ?, ?, ?, 0, 0)
-            ''', ('BUY', ticker, name, price, quantity, datetime.now().isoformat()))
-            
-            # 3. Deduct Cash
-            cursor.execute('UPDATE balance SET cash = cash - ? WHERE id = 1', (total_cost,))
-            
-            conn.commit()
-            conn.close()
-            return {'status': 'success', 'message': f'{name} {quantity}주 매수 완료'}
-            
-        except Exception as e:
-            logger.error(f"Buy failed: {e}")
-            return {'status': 'error', 'message': str(e)}
+        with self.cache_lock:
+            self.price_cache.update(warmed_cache)
 
-    def sell_stock(self, ticker, price, quantity):
-        """Execute Sell Order"""
-        if quantity <= 0:
-            return {'status': 'error', 'message': 'Quantity must be positive'}
+    def _persist_price_cache(self, prices: Dict[str, int]) -> None:
+        """가격 캐시를 SQLite에 upsert하여 재시작 시 재사용한다."""
+        if not prices:
+            return
+
+        updated_at = datetime.now().isoformat()
+        upsert_rows: list[tuple[str, int, str]] = []
+        for ticker, price in prices.items():
+            ticker_key = str(ticker).zfill(6)
+            try:
+                price_int = int(float(price))
+            except (TypeError, ValueError):
+                continue
+            if price_int <= 0:
+                continue
+            upsert_rows.append((ticker_key, price_int, updated_at))
+
+        if not upsert_rows:
+            return
 
         try:
-            conn = self.get_context()
-            cursor = conn.cursor()
-            
-            # 1. Check Portfolio
-            cursor.execute('SELECT name, avg_price, quantity, total_cost FROM portfolio WHERE ticker = ?', (ticker,))
-            row = cursor.fetchone()
-            
-            if not row or row[2] < quantity:
-                conn.close()
-                return {'status': 'error', 'message': 'Not enough shares to sell'}
-            
-            name, avg_price, current_qty, current_total_cost = row
-            
-            # 2. Update/Remove Portfolio
-            remaining_qty = current_qty - quantity
-            
-            if remaining_qty == 0:
-                cursor.execute('DELETE FROM portfolio WHERE ticker = ?', (ticker,))
-            else:
-                new_total_cost = avg_price * remaining_qty
-                cursor.execute('''
-                    UPDATE portfolio 
-                    SET quantity = ?, total_cost = ?, last_updated = ?
-                    WHERE ticker = ?
-                ''', (remaining_qty, new_total_cost, datetime.now().isoformat(), ticker))
-            
-            # 3. Calculate Profit & Log Trade
-            total_proceeds = int(price * quantity)
-            cost_basis = int(avg_price * quantity)
-            profit = total_proceeds - cost_basis
-            profit_rate = (profit / cost_basis * 100) if cost_basis > 0 else 0
-            
-            cursor.execute('''
-                INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', ('SELL', ticker, name, price, quantity, datetime.now().isoformat(), profit, profit_rate))
-            
-            # 4. Add Cash
-            cursor.execute('UPDATE balance SET cash = cash + ? WHERE id = 1', (total_proceeds,))
-            
-            conn.commit()
-            conn.close()
-            return {'status': 'success', 'message': f'{name} {quantity}주 매도 완료'}
-            
-        except Exception as e:
-            logger.error(f"Sell failed: {e}")
-            return {'status': 'error', 'message': str(e)}
-
-    def get_portfolio(self):
-        """Get all holdings"""
-        with self.get_context() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT * FROM portfolio')
-            holdings = [dict(row) for row in cursor.fetchall()]
-            
-            cursor.execute('SELECT cash, total_deposit FROM balance WHERE id = 1')
-            balance_row = cursor.fetchone()
-            cash = balance_row['cash'] if balance_row else 0
-            total_deposit = balance_row['total_deposit'] if balance_row and 'total_deposit' in balance_row.keys() else 0
-            
-            # Initial Principal is 100,000,000. Total Principal = 100M + Deposits
-            total_principal = 100000000 + total_deposit
-
-            return {
-                'holdings': holdings,
-                'cash': cash,
-                'total_asset_value': cash,  # Will need to add holdings value in API layer
-                'total_principal': total_principal
-            }
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    """
+                    INSERT INTO price_cache (ticker, price, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(ticker) DO UPDATE SET
+                        price = excluded.price,
+                        updated_at = excluded.updated_at
+                    """,
+                    upsert_rows,
+                )
+                conn.commit()
+        except Exception as error:
+            logger.warning(f"Failed to persist price cache into SQLite: {error}")
 
     def start_background_sync(self):
         """Start background price sync thread"""
         if self.is_running:
             return
-            
+
         self.is_running = True
         self.bg_thread = threading.Thread(target=self._update_prices_loop, daemon=True)
         self.bg_thread.start()
         logger.info("PaperTrading Price Sync Started")
 
+    def _get_portfolio_tickers(self) -> list[str]:
+        with self.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ticker FROM portfolio")
+            return [row[0] for row in cursor.fetchall()]
+
+    def _fetch_prices_toss(self, session: Any, tickers: list[str]) -> Dict[str, int]:
+        """Toss API에서 여러 종목 가격을 한 번에 조회한다."""
+        return fetch_prices_toss_impl(
+            session=session,
+            tickers=tickers,
+            chunk_size=self.TOSS_CHUNK_SIZE,
+            retry_count=self.TOSS_RETRY_COUNT,
+            logger=logger,
+        )
+
+    def _fetch_prices_naver(self, session: Any, tickers: list[str]) -> Dict[str, int]:
+        """Naver API에서 개별 종목 가격을 조회한다."""
+        return fetch_prices_naver_impl(
+            session=session,
+            tickers=tickers,
+            throttle_sec=self.NAVER_THROTTLE_SEC,
+            logger=logger,
+        )
+
+    def _fetch_prices_yfinance(self, yf_module: Any, tickers: list[str]) -> Dict[str, int]:
+        """yfinance에서 종가를 조회한다."""
+        return fetch_prices_yfinance_impl(
+            yf_module=yf_module,
+            tickers=tickers,
+            logger=logger,
+        )
+
+    def _fetch_prices_pykrx(self, pykrx_stock: Any, tickers: list[str]) -> Dict[str, int]:
+        """pykrx에서 종가를 조회한다."""
+        return fetch_prices_pykrx_impl(
+            pykrx_stock=pykrx_stock,
+            tickers=tickers,
+            logger=logger,
+        )
+
+    def _refresh_price_cache_once(
+        self,
+        *,
+        session: Any,
+        yf_module: Any,
+        pykrx_stock: Any,
+    ) -> int:
+        """
+        포트폴리오 종목의 최신 가격을 한 번 갱신한다.
+
+        Returns:
+            다음 루프까지 대기할 초(second).
+        """
+        tickers = self._get_portfolio_tickers()
+        resolved_prices, sleep_seconds = refresh_price_cache_once_impl(
+            tickers=tickers,
+            session=session,
+            yf_module=yf_module,
+            pykrx_stock=pykrx_stock,
+            fetch_prices_toss_fn=self._fetch_prices_toss,
+            fetch_prices_naver_fn=self._fetch_prices_naver,
+            fetch_prices_yfinance_fn=self._fetch_prices_yfinance,
+            fetch_prices_pykrx_fn=self._fetch_prices_pykrx,
+            update_interval_sec=self.UPDATE_INTERVAL_SEC,
+            empty_portfolio_sleep_sec=self.EMPTY_PORTFOLIO_SLEEP_SEC,
+            logger=logger,
+        )
+
+        changed_prices: Dict[str, int] = {}
+        with self.cache_lock:
+            if resolved_prices:
+                changed_prices = {
+                    ticker: price
+                    for ticker, price in resolved_prices.items()
+                    if self.price_cache.get(ticker) != price
+                }
+                self.price_cache.update(resolved_prices)
+            self.last_update = datetime.now()
+
+        if changed_prices:
+            self._persist_price_cache(changed_prices)
+
+        return sleep_seconds
+
     def _update_prices_loop(self):
         """Background loop to fetch prices"""
-        import yfinance as yf
-        # Silence yfinance and related loggers
-        logging.getLogger('yfinance').setLevel(logging.CRITICAL)
-        logging.getLogger('peewee').setLevel(logging.CRITICAL)
-        logging.getLogger('urllib3').setLevel(logging.ERROR)
-        
-        while self.is_running:
-            try:
-                # 1. Get all tickers from portfolio
-                # ... (rest of logic) ...
-                with self.get_context() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('SELECT ticker FROM portfolio')
-                    tickers = [row[0] for row in cursor.fetchall()]
-                
-                if not tickers:
-                    time.sleep(10)
-                    continue
+        run_price_update_loop_impl(
+            is_running_fn=lambda: self.is_running,
+            refresh_price_cache_once_fn=lambda session, yf_module, pykrx_stock: self._refresh_price_cache_once(
+                session=session,
+                yf_module=yf_module,
+                pykrx_stock=pykrx_stock,
+            ),
+            update_interval_sec=self.UPDATE_INTERVAL_SEC,
+            logger=logger,
+        )
 
-                new_prices = {}
-                
-                # 2. Try Toss Securities API first (Mobile/WTS) - Robust & Supports Bulk
-                # Toss API is much faster (<0.1s) and supports KR stocks perfectly
-                missing_tickers = [t for t in tickers if t not in new_prices]
-                if missing_tickers:
-                    # logger.info(f"Using Toss Securities API for {len(missing_tickers)} tickers...")
-                    import requests
-                    
-                    # Create mapping: padded(6) -> original_ticker_in_db
-                    ticker_map = {str(t).zfill(6): t for t in missing_tickers}
+    def _wait_for_initial_price_sync(
+        self,
+        holdings: list[dict],
+        current_prices: Dict[str, int],
+    ) -> Dict[str, int]:
+        """초기 캐시가 비어있을 때 1회만 짧게 동기화를 대기한다."""
+        should_wait_for_initial_sync = (
+            not current_prices
+            and bool(holdings)
+            and self.bg_thread is not None
+            and self.bg_thread.is_alive()
+            and not self._initial_sync_wait_done
+        )
+        if not should_wait_for_initial_sync:
+            return current_prices
 
-                    # Format tickers for Toss (A005930) - Ensure 6 digits
-                    toss_codes = [f"A{str(t).zfill(6)}" for t in missing_tickers]
-                    
-                    # Split into chunks of 50 to avoid URL length limits
-                    chunk_size = 50
-                    for i in range(0, len(toss_codes), chunk_size):
-                        chunk = toss_codes[i:i + chunk_size]
-                        codes_str = ",".join(chunk)
-                        
-                        try:
-                            url = f"https://wts-info-api.tossinvest.com/api/v3/stock-prices/details?productCodes={codes_str}"
-                            headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-                            res = requests.get(url, headers=headers, timeout=5) # Fast timeout
-                            
-                            if res.status_code == 200:
-                                data = res.json()
-                                results = data.get('result', [])
-                                
-                                count = 0
-                                for item in results:
-                                    raw_code = item.get('code', '')
-                                    # Robust 'A' removal
-                                    clean_code = raw_code[1:] if raw_code.startswith('A') else raw_code
-                                    
-                                    # Map back to original ticker (DB format)
-                                    original_t = ticker_map.get(clean_code)
-                                    
-                                    close = item.get('close')
-                                    
-                                    if original_t and close is not None:
-                                        new_prices[original_t] = int(close)
-                                        count += 1
-                                # logger.info(f"Toss API success: Fetched {count}/{len(chunk)} prices.")
-                            else:
-                                logger.warning(f"Toss API returned {res.status_code}: {res.text[:100]}")
-                                        
-                        except Exception as te:
-                            logger.error(f"Toss API Error: {te}")
+        logger.info("Portfolio Valuation: Waiting for initial price sync...")
+        for _ in range(self.INITIAL_SYNC_WAIT_TRIES):
+            time.sleep(self.INITIAL_SYNC_WAIT_SEC)
+            with self.cache_lock:
+                if self.price_cache:
+                    current_prices = self.price_cache.copy()
+                    break
+        self._initial_sync_wait_done = True
+        if current_prices:
+            logger.info("Portfolio Valuation: Synced successfully waited.")
+        return current_prices
 
-                # 3. yfinance Fallback (Only for missing)
-                missing_tickers = [t for t in tickers if t not in new_prices]
-                if missing_tickers:
-                    logger.info(f"Toss failed for {len(missing_tickers)} tickers: {missing_tickers}. Trying yfinance...")
-                    yf_tickers = [f"{t}.KS" for t in missing_tickers]
-                    try:
-                        # Use threads=False to prevent file handle leaks
-                        df = yf.download(yf_tickers, period="1d", progress=False, threads=False)
-                        
-                        if not df.empty:
-                            # Handle MultiIndex columns
-                            try:
-                                closes = df['Close']
-                            except KeyError:
-                                closes = df.xs('Close', axis=1, level=0, drop_level=True) if isinstance(df.columns, pd.MultiIndex) and 'Close' in df.columns.get_level_values(0) else df
-                            
-                            for t in missing_tickers:
-                                ks_ticker = f"{t}.KS"
-                                val = None
-                                try:
-                                    if isinstance(closes, pd.Series):
-                                        val = closes.iloc[-1]
-                                    elif ks_ticker in closes.columns:
-                                        val = closes[ks_ticker].dropna().iloc[-1]
-                                    
-                                    if val is not None:
-                                        new_prices[t] = int(float(val))
-                                except Exception:
-                                    pass
-                    except Exception as e:
-                        logger.error(f"PaperTrading YF Error: {e}")
+    @staticmethod
+    def _build_valuated_holding(
+        holding: dict,
+        current_prices: Dict[str, int],
+    ) -> tuple[dict, int]:
+        """단일 보유 종목 평가값을 계산한다."""
+        return build_valuated_holding_impl(holding, current_prices)
 
-                # 4. Fallback to Naver Mobile API (User Request - Robust Realtime)
-                missing_tickers = [t for t in tickers if t not in new_prices]
-                if missing_tickers:
-                    logger.info(f"Toss/YF failed. Using Naver Mobile API for {len(missing_tickers)} tickers...")
-                    import requests
-                    
-                    for t in missing_tickers:
-                        try:
-                            # Naver Mobile JSON API
-                            url = f"https://m.stock.naver.com/api/stock/{t}/basic"
-                            headers = {'User-Agent': 'Mozilla/5.0'}
-                            res = requests.get(url, headers=headers, timeout=3)
-                            
-                            if res.status_code == 200:
-                                data = res.json()
-                                if 'closePrice' in data:
-                                    price_str = data['closePrice'].replace(',', '')
-                                    new_prices[t] = int(price_str)
-                                    logger.info(f"Naver API fetched {t}: {price_str}")
-                                    continue
-                        except Exception as ne:
-                            logger.error(f"Naver API Error for {t}: {ne}")
+    @staticmethod
+    def _calculate_stock_value_from_rows(
+        portfolio_rows: list[dict],
+        current_prices: Dict[str, int],
+    ) -> int:
+        """포트폴리오 행 기준 현재 주식 평가금액 합계를 계산한다."""
+        return calculate_stock_value_from_rows_impl(portfolio_rows, current_prices)
 
-                # 5. Final Fallback to pykrx (Historical Data / Market Close)
-                still_missing = [t for t in missing_tickers if t not in new_prices]
-                if still_missing:
-                    try:
-                        today_str = datetime.now().strftime("%Y%m%d")
-                        for t in still_missing:
-                            try:
-                                # pykrx get_market_ohlcv returns dataframe
-                                df = stock.get_market_ohlcv(today_str, today_str, t)
-                                if not df.empty and '종가' in df.columns:
-                                    price = df['종가'].iloc[-1]
-                                    if price > 0:
-                                        new_prices[t] = int(price)
-                                else:
-                                    # Try yesterday
-                                    yesterday = (datetime.now() - pd.Timedelta(days=1)).strftime("%Y%m%d")
-                                    df = stock.get_market_ohlcv(yesterday, yesterday, t)
-                                    if not df.empty and '종가' in df.columns:
-                                        price = df['종가'].iloc[-1]
-                                        if price > 0:
-                                            new_prices[t] = int(price)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-                
-                # 5. Update Cache safely
-                with self.cache_lock:
-                    self.price_cache.update(new_prices)
-                    self.last_update = datetime.now()
-
-            except Exception as e:
-                logger.error(f"PaperTrading Loop Error: {e}")
-            
-            
-            time.sleep(60) # Update every 60 seconds (Optimized from 30s)
+    @staticmethod
+    def _build_dummy_asset_history(
+        *,
+        current_total: float,
+        current_cash: float,
+        current_stock_val: float,
+    ) -> list[dict]:
+        """차트 최소 포인트 보장을 위한 더미 히스토리 생성."""
+        return build_dummy_asset_history_impl(
+            current_total=current_total,
+            current_cash=current_cash,
+            current_stock_val=current_stock_val,
+        )
 
     def get_portfolio_valuation(self):
         """Get portfolio with cached prices (Fast)"""
-        with self.get_context() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT * FROM portfolio')
-            holdings = [dict(row) for row in cursor.fetchall()]
-            
-            cursor.execute('SELECT cash, total_deposit FROM balance WHERE id = 1')
-            balance_row = cursor.fetchone()
-            cash = balance_row['cash'] if balance_row else 0
-            total_deposit = balance_row['total_deposit'] if balance_row and 'total_deposit' in balance_row.keys() else 0
+        return get_portfolio_valuation_impl(
+            get_context_fn=self.get_context,
+            cache_lock=self.cache_lock,
+            price_cache=self.price_cache,
+            wait_for_initial_price_sync_fn=self._wait_for_initial_price_sync,
+            build_valuated_holding_fn=self._build_valuated_holding,
+            record_asset_history_fn=self.record_asset_history,
+            record_asset_history_with_cash_fn=getattr(self, "record_asset_history_with_cash", None),
+            last_update=self.last_update,
+            logger=logger,
+        )
 
-        updated_holdings = []
-        total_stock_value = 0
-        
-        # Use Cached Prices
-        with self.cache_lock:
-            current_prices = self.price_cache.copy()
 
-        # [Improvement] If cache is empty but we have holdings, wait briefly for background sync
-        if not current_prices and holdings and self.bg_thread and self.bg_thread.is_alive():
-            logger.info("Portfolio Valuation: Waiting for initial price sync...")
-        if not current_prices and holdings and self.bg_thread and self.bg_thread.is_alive():
-            logger.info("Portfolio Valuation: Waiting for initial price sync...")
-            for _ in range(50): # Wait up to 5 seconds (0.1s * 50)
-                time.sleep(0.1)
-                with self.cache_lock:
-                    if self.price_cache:
-                        current_prices = self.price_cache.copy()
-                        break
-            if current_prices:
-                logger.info("Portfolio Valuation: Synced successfully waited.")
-            
-        # Log cache status once in a while or if empty
-        if not current_prices and holdings:
-            logger.warning("Portfolio Valuation: Price cache is empty! Falling back to purchase price.")
-        elif holdings:
-             # Debug sampling (Sample first ticker)
-             t1 = holdings[0]['ticker']
-             in_cache = t1 in current_prices
-             val = current_prices.get(t1)
-             logger.debug(f"Portfolio Valuation: Cache Size={len(current_prices)}, Holdings={len(holdings)}. Sample ({t1}): InCache={in_cache}, Val={val}")
+_paper_trading_instance: PaperTradingService | None = None
+_paper_trading_singleton_lock = threading.Lock()
 
-        for holding in holdings:
-            ticker = holding['ticker']
-            avg_price = holding['avg_price']
-            quantity = holding['quantity']
-            
-            # Use cached price if available, else avg_price (fallback)
-            is_stale = False
-            if ticker in current_prices:
-                current_price = current_prices[ticker]
-            else:
-                current_price = avg_price
-                is_stale = True
-                # Log only sparsely to avoid spam (or rely on the bulk warning above)
-            
-            if ticker not in current_prices:
-                # logger.warning(f"Price Cache Miss for {ticker}. Using Avg Price.")
-                pass
-            
-            market_value = int(current_price * quantity)
-            total_stock_value += market_value
-            
-            profit_loss = market_value - (avg_price * quantity)
-            profit_rate = 0
-            if avg_price > 0:
-                profit_rate = ((current_price - avg_price) / avg_price) * 100
-                
-            h_dict = dict(holding)
-            h_dict['current_price'] = current_price
-            h_dict['market_value'] = market_value
-            h_dict['profit_loss'] = int(profit_loss)
-            h_dict['profit_rate'] = round(profit_rate, 2)
-            h_dict['is_stale'] = is_stale # Add Stale Flag
-            updated_holdings.append(h_dict)
 
-        total_asset = cash + total_stock_value
-        
-        # Correct Profit Calculation: Asset - (Initial + Deposits)
-        # Assuming initial capital is fixed at 100,000,000
-        # If we tracked 'total_deposit' in DB, we use it.
-        total_principal = 100000000 + total_deposit
-        total_profit = total_asset - total_principal
-        total_profit_rate = (total_profit / total_principal * 100) if total_principal > 0 else 0
+def get_paper_trading_service() -> PaperTradingService:
+    """전역 PaperTradingService 싱글톤을 지연 생성한다."""
+    global _paper_trading_instance
+    if _paper_trading_instance is not None:
+        return _paper_trading_instance
 
-        # Record history (Optimized: Record only if significant change or sufficient time passed?)
-        # For now, simplistic record on view
-        try:
-            self.record_asset_history(total_stock_value)
-        except Exception:
-            pass
+    with _paper_trading_singleton_lock:
+        if _paper_trading_instance is None:
+            _paper_trading_instance = PaperTradingService()
+    return _paper_trading_instance
 
-        return {
-            'holdings': updated_holdings,
-            'cash': cash,
-            'total_asset_value': total_asset,
-            'total_stock_value': total_stock_value,
-            'total_profit': int(total_profit),
-            'total_profit_rate': round(total_profit_rate, 2),
-            'total_principal': total_principal,
-            'last_update': self.last_update.isoformat() if self.last_update else None
-        }
 
-    def record_asset_history(self, current_stock_value):
-        """Record daily asset history snapshot"""
-        try:
-            cash = self.get_balance()
-            total_asset = cash + current_stock_value
-            today = datetime.now().strftime('%Y-%m-%d')
-            
-            conn = self.get_context()
-            cursor = conn.cursor()
-            
-            # 하루에 하나의 기록만 남김 (UPDATE or INSERT)
-            cursor.execute('''
-                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(date) DO UPDATE SET
-                    total_asset = excluded.total_asset,
-                    cash = excluded.cash,
-                    stock_value = excluded.stock_value,
-                    timestamp = excluded.timestamp
-            ''', (today, total_asset, cash, current_stock_value, datetime.now().isoformat()))
-            
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.error(f"Failed to record asset history: {e}")
+class _PaperTradingProxy:
+    """기존 전역 인스턴스 호환을 위한 지연 위임 프록시."""
 
-    def get_asset_history(self, limit=30):
-        """Get asset history for chart"""
-        from datetime import timedelta  # Ensure timedelta is available
+    def __getattr__(self, item: str):
+        return getattr(get_paper_trading_service(), item)
 
-        with self.get_context() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            # Fetch latest N records (DESC), then sort by date (ASC) for chart
-            cursor.execute('''
-                SELECT date, total_asset, cash, stock_value 
-                FROM asset_history 
-                ORDER BY date DESC 
-                LIMIT ?
-            ''', (limit,))
-            rows = [dict(row) for row in cursor.fetchall()]
-            rows.reverse() # Sort by date ASC for chart
-            
-            # [Fix] If history is scarce (< 2 points), return dummy data for chart rendering
-            if len(rows) < 2:
-                # Calculate current total asset dynamically for better dummy data
-                current_cash = self.get_balance()
-                
-                # Calculate current stock value from portfolio
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute('SELECT quantity, avg_price, ticker FROM portfolio')
-                portfolio_rows = cursor.fetchall()
-                
-                current_stock_val = 0
-                import yfinance as yf # For fallback price check if needed, but for dummy data, use avg_price or cache
-                
-                with self.cache_lock:
-                    prices = self.price_cache
-                    
-                for r in portfolio_rows:
-                    qty = r['quantity']
-                    price = prices.get(r['ticker'], r['avg_price']) # Use current price if available
-                    current_stock_val += qty * price
-                    
-                current_total = current_cash + current_stock_val
-                
-                today = datetime.now()
-                dummy_data = []
-                for i in range(4, -1, -1): # Last 5 days
-                    d = (today - timedelta(days=i)).strftime('%Y-%m-%d')
-                    dummy_data.append({
-                        'date': d,
-                        'total_asset': current_total, # Use current actual total
-                        'cash': current_cash,
-                        'stock_value': current_stock_val
-                    })
-                return dummy_data
-                
-            return rows
 
-    def reset_account(self):
-        """Reset everything to default"""
-        try:
-            conn = self.get_context()
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM portfolio')
-            cursor.execute('DELETE FROM trade_log')
-            cursor.execute('DELETE FROM asset_history') # 히스토리도 초기화
-            cursor.execute('UPDATE balance SET cash = 100000000, total_deposit = 0 WHERE id = 1')
-            conn.commit()
-            conn.close()
-            return True
-        except Exception:
-            return False
-
-    def get_trade_history(self, limit=50):
-        """Get trade history"""
-        with self.get_context() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT id, action, ticker, name, price, quantity, timestamp, profit, profit_rate
-                FROM trade_log
-                ORDER BY timestamp DESC
-                LIMIT ?
-            ''', (limit,))
-            trades = [dict(row) for row in cursor.fetchall()]
-            return {'trades': trades}
-
-# Global Instance
-paper_trading = PaperTradingService()
-
+paper_trading = _PaperTradingProxy()

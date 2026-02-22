@@ -1,0 +1,496 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+KR Market Data Cache Service 리팩토링 회귀 테스트
+"""
+
+from __future__ import annotations
+
+import logging
+import json
+
+import pandas as pd
+
+import services.kr_market_data_cache_prices as cache_prices
+import services.kr_market_data_cache_core as cache_core
+import services.kr_market_data_cache_jongga as cache_jongga
+import services.kr_market_data_cache_service as cache_service
+from services.sqlite_utils import connect_sqlite
+
+
+def _reset_data_cache_state() -> None:
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.JSON_FILE_CACHE.clear()
+        cache_service.CSV_FILE_CACHE.clear()
+        cache_service.LATEST_VCP_PRICE_MAP_CACHE["signature"] = None
+        cache_service.LATEST_VCP_PRICE_MAP_CACHE["value"] = {}
+        cache_service.SCANNED_STOCK_COUNT_CACHE["signature"] = None
+        cache_service.SCANNED_STOCK_COUNT_CACHE["value"] = 0
+        cache_service.BACKTEST_PRICE_SNAPSHOT_CACHE["signature"] = None
+        cache_service.BACKTEST_PRICE_SNAPSHOT_CACHE["df"] = pd.DataFrame()
+        cache_service.BACKTEST_PRICE_SNAPSHOT_CACHE["price_map"] = {}
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["signature"] = None
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["payloads"] = []
+    cache_core._JSON_PAYLOAD_SQLITE_READY.clear()
+    cache_core._CSV_PAYLOAD_SQLITE_READY.clear()
+
+
+def test_load_latest_price_map_reuses_backtest_snapshot_cache(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "5930", "close": 100.0, "high": 101.0, "low": 99.0},
+            {"date": "2026-02-21", "ticker": "5930", "close": 110.0, "high": 111.0, "low": 109.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    cache_service.load_backtest_price_snapshot(
+        data_dir=str(tmp_path),
+        build_latest_price_map=lambda df: {"005930": float(df["close"].iloc[-1])},
+    )
+
+    monkeypatch.setattr(
+        cache_prices.pd,
+        "read_csv",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("read_csv should not be called")),
+    )
+    latest_price_map = cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert latest_price_map["005930"] == 110.0
+
+
+def test_load_backtest_snapshot_reuses_latest_price_map_cache(tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "005930", "close": 100.0, "high": 101.0, "low": 99.0},
+            {"date": "2026-02-21", "ticker": "005930", "close": 111.0, "high": 113.0, "low": 108.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    called = {"build_latest_price_map": 0}
+
+    def _should_not_run(_df):
+        called["build_latest_price_map"] += 1
+        raise AssertionError("build_latest_price_map should not be called when latest cache exists")
+
+    df_prices, latest_map = cache_service.load_backtest_price_snapshot(
+        data_dir=str(tmp_path),
+        build_latest_price_map=_should_not_run,
+    )
+
+    assert len(df_prices) == 2
+    assert latest_map["005930"] == 111.0
+    assert called["build_latest_price_map"] == 0
+
+
+def test_load_jongga_result_payloads_reuses_json_cache_without_reopening(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    result_file = tmp_path / "jongga_v2_results_20260222.json"
+    result_file.write_text(
+        json.dumps({"date": "2026-02-22", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    first = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(first) == 1
+
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("open should not be called")),
+    )
+    second = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+
+    assert len(second) == 1
+    assert second[0][1]["date"] == "2026-02-22"
+
+
+def test_load_jongga_result_payloads_respects_limit_before_loading(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    for day in range(1, 6):
+        (tmp_path / f"jongga_v2_results_2026020{day}.json").write_text(
+            json.dumps({"date": f"2026-02-0{day}", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    calls = {"count": 0}
+
+    def _counted_loader(_path: str, *, signature=None):
+        calls["count"] += 1
+        return {"date": "2026-02-05", "signals": [{"stock_code": "005930"}]}
+
+    monkeypatch.setattr(cache_jongga, "_load_json_payload_from_path", _counted_loader)
+
+    first = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=2)
+    second = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=2)
+
+    assert len(first) == 2
+    assert len(second) == 2
+    assert calls["count"] == 2
+
+
+def test_load_jongga_result_payloads_uses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(
+        cache_jongga,
+        "_JONGGA_PAYLOAD_SQLITE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+
+    result_file = tmp_path / "jongga_v2_results_20260222.json"
+    result_file.write_text(
+        json.dumps({"date": "2026-02-22", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    first = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(first) == 1
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["signature"] = None
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["payloads"] = []
+
+    monkeypatch.setattr(
+        cache_jongga,
+        "_load_json_payload_from_path",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("json file loader should not run")),
+    )
+    second = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+
+    assert len(second) == 1
+    assert second[0][1]["date"] == "2026-02-22"
+
+
+def test_load_jongga_result_payloads_prunes_sqlite_cache_rows(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(
+        cache_jongga,
+        "_JONGGA_PAYLOAD_SQLITE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    monkeypatch.setattr(cache_jongga, "_JONGGA_PAYLOAD_SQLITE_MAX_ROWS", 2)
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+
+    for day in range(1, 5):
+        (tmp_path / f"jongga_v2_results_2026020{day}.json").write_text(
+            json.dumps({"date": f"2026-02-0{day}", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        _ = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM jongga_results_payload_cache")
+        row_count = int(cursor.fetchone()[0])
+
+    assert row_count == 2
+
+
+def test_load_latest_price_map_normalizes_ticker_and_picks_latest_on_unsorted_dates(tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-22", "ticker": "5930", "close": 120.0},
+            {"date": "2026-02-20", "ticker": "5930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 200.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    latest_map = cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert latest_map["005930"] == 120.0
+    assert latest_map["000660"] == 200.0
+
+
+def test_load_latest_price_map_skips_invalid_close_values(tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "5930", "close": "N/A"},
+            {"date": "2026-02-21", "ticker": "5930", "close": 130.0},
+            {"date": "2026-02-22", "ticker": "000660", "close": "bad"},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    latest_map = cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert latest_map["005930"] == 130.0
+    assert "000660" not in latest_map
+
+
+def test_load_latest_price_map_reuses_core_csv_cache(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "5930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "5930", "close": 110.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    calls = {"count": 0}
+    original_read_csv = cache_core.pd.read_csv
+
+    def _counted_read_csv(*args, **kwargs):
+        calls["count"] += 1
+        return original_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(cache_core.pd, "read_csv", _counted_read_csv)
+
+    _ = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=["date", "ticker", "close"],
+    )
+    latest_map = cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert latest_map["005930"] == 110.0
+    assert calls["count"] == 1
+
+
+def test_load_csv_file_uses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "005930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "005930", "close": 111.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    first = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=["date", "ticker", "close"],
+    )
+    assert len(first) == 2
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.CSV_FILE_CACHE.clear()
+
+    monkeypatch.setattr(
+        cache_core.pd,
+        "read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("read_csv should not run")),
+    )
+    second = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=["date", "ticker", "close"],
+    )
+    assert len(second) == 2
+    assert float(second.iloc[-1]["close"]) == 111.0
+
+
+def test_load_csv_file_full_snapshot_uses_sqlite_after_memory_clear(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "005930", "close": 100.0, "volume": 1_000},
+            {"date": "2026-02-21", "ticker": "005930", "close": 111.0, "volume": 2_000},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    first = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=None,
+    )
+    assert len(first) == 2
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.CSV_FILE_CACHE.clear()
+
+    monkeypatch.setattr(
+        cache_core.pd,
+        "read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("read_csv should not run")),
+    )
+    second = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=None,
+    )
+    assert len(second) == 2
+    assert float(second.iloc[-1]["close"]) == 111.0
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM csv_file_payload_cache
+            WHERE usecols_signature = ?
+            """,
+            ("[]",),
+        )
+        row_count = int(cursor.fetchone()[0])
+
+    assert row_count >= 1
+
+
+def test_load_csv_file_full_snapshot_skips_sqlite_when_file_is_large(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(cache_core, "_FULL_CSV_SQLITE_MAX_BYTES", 1)
+
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "005930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "005930", "close": 111.0},
+            {"date": "2026-02-22", "ticker": "000660", "close": 200.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    calls = {"count": 0}
+    original_read_csv = cache_core.pd.read_csv
+
+    def _counted_read_csv(*args, **kwargs):
+        calls["count"] += 1
+        return original_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(cache_core.pd, "read_csv", _counted_read_csv)
+
+    first = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=None,
+    )
+    assert len(first) == 3
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.CSV_FILE_CACHE.clear()
+
+    second = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=None,
+    )
+    assert len(second) == 3
+    assert calls["count"] == 2
+
+
+def test_load_csv_file_prunes_sqlite_snapshot_rows(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(cache_core, "_CSV_PAYLOAD_SQLITE_MAX_ROWS", 2)
+
+    for index in range(1, 5):
+        filename = f"sample_{index}.csv"
+        (tmp_path / filename).write_text(
+            "date,ticker,close\n2026-02-20,005930,100\n",
+            encoding="utf-8",
+        )
+        _ = cache_service.load_csv_file(
+            str(tmp_path),
+            filename,
+            deep_copy=False,
+            usecols=["date", "ticker", "close"],
+        )
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM csv_file_payload_cache")
+        row_count = int(cursor.fetchone()[0])
+
+    assert row_count == 2
+
+
+def test_load_latest_price_map_passes_signature_to_core_loader(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "5930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "5930", "close": 111.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    calls = {"count": 0}
+    original_file_signature = cache_core.file_signature
+
+    def _counted_file_signature(path: str):
+        calls["count"] += 1
+        return original_file_signature(path)
+
+    monkeypatch.setattr(cache_prices, "file_signature", _counted_file_signature)
+    monkeypatch.setattr(cache_core, "file_signature", _counted_file_signature)
+
+    latest_map = cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert latest_map["005930"] == 111.0
+    assert calls["count"] == 1
+
+
+def test_load_json_file_uses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    target_file = tmp_path / "kr_ai_analysis.json"
+    target_file.write_text(
+        json.dumps({"signals": [{"ticker": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    first = cache_service.load_json_file(str(tmp_path), "kr_ai_analysis.json")
+    assert first["signals"][0]["ticker"] == "005930"
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.JSON_FILE_CACHE.clear()
+
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("open should not be called")),
+    )
+    second = cache_service.load_json_file(str(tmp_path), "kr_ai_analysis.json")
+    assert second["signals"][0]["ticker"] == "005930"
+
+
+def test_load_json_file_prunes_sqlite_rows(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(cache_core, "_JSON_PAYLOAD_SQLITE_MAX_ROWS", 2)
+
+    for index in range(1, 5):
+        filename = f"ai_analysis_results_2026020{index}.json"
+        (tmp_path / filename).write_text(
+            json.dumps({"signals": [{"ticker": f"{index:06d}"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        _ = cache_service.load_json_file(str(tmp_path), filename)
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM json_file_payload_cache")
+        row_count = int(cursor.fetchone()[0])
+
+    assert row_count == 2

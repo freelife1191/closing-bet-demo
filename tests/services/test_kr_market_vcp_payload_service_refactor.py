@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+KR Market VCP Payload Service SQLite 캐시 회귀 테스트
+"""
+
+from __future__ import annotations
+
+import logging
+
+import pandas as pd
+
+import services.kr_market_vcp_payload_service as vcp_payload_service
+import services.kr_market_vcp_signals_cache as vcp_signals_cache
+from services.sqlite_utils import connect_sqlite
+
+
+def _write_signals_csv(tmp_path, signal_date: str) -> None:
+    pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "name": "삼성전자",
+                "signal_date": signal_date,
+                "market": "KOSPI",
+                "status": "NEW",
+                "score": 85,
+                "contraction_ratio": 0.42,
+                "entry_price": 100.0,
+                "target_price": 120.0,
+                "stop_price": 95.0,
+                "foreign_5d": 1000,
+                "inst_5d": 2000,
+                "vcp_score": 85,
+                "current_price": 101.0,
+                "return_pct": 1.0,
+                "ai_action": "BUY",
+                "ai_reason": "ok",
+                "ai_confidence": 0.9,
+            }
+        ]
+    ).to_csv(tmp_path / "signals_log.csv", index=False)
+
+
+def _build_payload(tmp_path, *, req_date: str | None):
+    logger = logging.getLogger("vcp-payload-cache-test")
+    return vcp_payload_service.build_vcp_signals_payload(
+        req_date=req_date,
+        load_csv_file=lambda name: pd.read_csv(tmp_path / name),
+        load_json_file=lambda _name: {},
+        filter_signals_dataframe_by_date=lambda df, req, _today: (
+            df if not req else df[df["signal_date"] == req],
+            req or "",
+        ),
+        build_vcp_signals_from_dataframe=lambda df: [
+            {
+                "ticker": str(row["ticker"]).zfill(6),
+                "signal_date": row["signal_date"],
+                "score": int(row["score"]),
+            }
+            for _, row in df.iterrows()
+        ],
+        load_latest_vcp_price_map=lambda: {},
+        apply_latest_prices_to_jongga_signals=lambda _signals, _price_map: 0,
+        sort_and_limit_vcp_signals=lambda signals, limit=100: list(signals)[:limit],
+        build_ai_data_map=lambda _payload: {},
+        merge_legacy_ai_fields_into_map=lambda _ai_map, _legacy: None,
+        merge_ai_data_into_vcp_signals=lambda _signals, _ai_map: 0,
+        count_total_scanned_stocks=lambda _data_dir: 1,
+        logger=logger,
+        data_dir=str(tmp_path),
+    )
+
+
+def _reset_vcp_signals_cache_state() -> None:
+    with vcp_signals_cache._VCP_SIGNALS_CACHE_LOCK:
+        vcp_signals_cache._VCP_SIGNALS_MEMORY_CACHE.clear()
+    vcp_signals_cache._VCP_SIGNALS_SQLITE_READY.clear()
+
+
+def test_build_vcp_payload_reuses_sqlite_cache_after_memory_clear(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    first = _build_payload(tmp_path, req_date="2026-02-22")
+    assert first["count"] == 1
+    assert first["signals"][0]["ticker"] == "005930"
+
+    with vcp_signals_cache._VCP_SIGNALS_CACHE_LOCK:
+        vcp_signals_cache._VCP_SIGNALS_MEMORY_CACHE.clear()
+
+    monkeypatch.setattr(
+        vcp_payload_service,
+        "_load_csv_readonly",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("CSV loader should not run")),
+    )
+    second = _build_payload(tmp_path, req_date="2026-02-22")
+
+    assert second["count"] == 1
+    assert second["signals"][0]["ticker"] == "005930"
+
+
+def test_build_vcp_payload_prunes_sqlite_cache_rows(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    monkeypatch.setattr(vcp_signals_cache, "_VCP_SIGNALS_SQLITE_MAX_ROWS", 2)
+
+    for day in range(1, 5):
+        _write_signals_csv(tmp_path, f"2026-02-0{day}")
+        _ = _build_payload(tmp_path, req_date=f"2026-02-0{day}")
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM vcp_signals_payload_cache")
+        row_count = int(cursor.fetchone()[0])
+
+    assert row_count == 2

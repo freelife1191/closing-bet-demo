@@ -8,6 +8,11 @@ venv/
 env/
 ENV/
 
+# Backup
+backup/
+.backup/
+*.bak
+
 # Environment
 .env
 
@@ -18,7 +23,11 @@ logs/
 # Data files
 data/*.csv
 data/*.json
+data/*.db
+*.db-shm
+*.db-wal
 data/history/
+*.db
 
 # IDE
 .vscode/
@@ -41,6 +50,12 @@ response.json
 .ipynb_checkpoints/
 services/*.lock
 
+# Project showcase generated artifacts
+project/video/scenes/
+project/video/audio/
+project/video/evidence/*.zip
+project/video/evidence/tmp_videos/
+
 # Testing & Build
 .pytest_cache/
 .mypy_cache/
@@ -53,3 +68,12 @@ dist/
 .claude/
 .omc/
 
+*.backup
+
+# Project Showcase Kit runtime isolation
+project/project-showcase-kit/.venvs/
+project/project-showcase-kit/out/
+
+# Untrack directories
+project/
+docs/
