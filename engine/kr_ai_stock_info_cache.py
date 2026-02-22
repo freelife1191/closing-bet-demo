@@ -9,11 +9,16 @@ from __future__ import annotations
 import copy
 import json
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any, Callable
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _STOCK_INFO_CACHE_LOCK = threading.Lock()
@@ -21,6 +26,8 @@ _STOCK_INFO_CACHE: dict[str, tuple[tuple[int, int], dict[str, object]]] = {}
 _STOCK_INFO_SQLITE_READY_LOCK = threading.Lock()
 _STOCK_INFO_SQLITE_READY: set[str] = set()
 _STOCK_INFO_SQLITE_MAX_ROWS = 512
+_STOCK_INFO_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
+_STOCK_INFO_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
 
 
 def _stock_info_cache_key(signals_file: str, ticker: str) -> str:
@@ -31,49 +38,62 @@ def resolve_stock_info_cache_db_path(signals_file: str) -> str:
     return os.path.join(os.path.dirname(signals_file), "runtime_cache.db")
 
 
+def _invalidate_stock_info_sqlite_ready(db_path: str) -> None:
+    with _STOCK_INFO_SQLITE_READY_LOCK:
+        _STOCK_INFO_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "kr_ai_stock_info_cache" in message
+
+
+def _recover_stock_info_sqlite_schema(db_path: str, logger: Any) -> bool:
+    _invalidate_stock_info_sqlite_ready(db_path)
+    return _ensure_stock_info_sqlite(db_path, logger)
+
+
 def _ensure_stock_info_sqlite(db_path: str, logger: Any) -> bool:
     with _STOCK_INFO_SQLITE_READY_LOCK:
         if db_path in _STOCK_INFO_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            _STOCK_INFO_SQLITE_READY.discard(db_path)
 
-    try:
-        with connect_sqlite(
-            db_path,
-            timeout_seconds=30,
-            pragmas=(
-                "PRAGMA journal_mode=WAL",
-                "PRAGMA synchronous=NORMAL",
-                "PRAGMA temp_store=MEMORY",
-                "PRAGMA busy_timeout=30000",
-            ),
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS kr_ai_stock_info_cache (
-                    signals_path TEXT NOT NULL,
-                    ticker TEXT NOT NULL,
-                    mtime_ns INTEGER NOT NULL,
-                    size INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (signals_path, ticker)
+        try:
+            with connect_sqlite(
+                db_path,
+                timeout_seconds=30,
+                pragmas=_STOCK_INFO_SQLITE_INIT_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS kr_ai_stock_info_cache (
+                        signals_path TEXT NOT NULL,
+                        ticker TEXT NOT NULL,
+                        mtime_ns INTEGER NOT NULL,
+                        size INTEGER NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (signals_path, ticker)
+                    )
+                    """
                 )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_kr_ai_stock_info_cache_updated_at
-                ON kr_ai_stock_info_cache(updated_at DESC)
-                """
-            )
-            conn.commit()
-        with _STOCK_INFO_SQLITE_READY_LOCK:
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_kr_ai_stock_info_cache_updated_at
+                    ON kr_ai_stock_info_cache(updated_at DESC)
+                    """
+                )
+                conn.commit()
             _STOCK_INFO_SQLITE_READY.add(db_path)
-        return True
-    except Exception as error:
-        logger.debug("Failed to initialize KR AI stock info sqlite cache: %s", error)
-        return False
+            return True
+        except Exception as error:
+            logger.debug("Failed to initialize KR AI stock info sqlite cache: %s", error)
+            return False
 
 
 def _load_stock_info_from_sqlite(
@@ -88,8 +108,12 @@ def _load_stock_info_from_sqlite(
     if not _ensure_stock_info_sqlite(db_path, logger):
         return None
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    def _query_payload() -> tuple[Any, ...] | None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=_STOCK_INFO_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -108,11 +132,26 @@ def _load_stock_info_from_sqlite(
                     int(signature[1]),
                 ),
             )
-            row = cursor.fetchone()
-            if not row:
+            return cursor.fetchone()
+
+    try:
+        row = _query_payload()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_stock_info_sqlite_schema(db_path, logger):
+            try:
+                row = _query_payload()
+            except Exception as retry_error:
+                logger.debug("Failed to load KR AI stock info sqlite cache after schema recovery: %s", retry_error)
                 return None
-            payload = json.loads(row[0])
-            return payload if isinstance(payload, dict) else None
+        else:
+            logger.debug("Failed to load KR AI stock info sqlite cache: %s", error)
+            return None
+
+    try:
+        if not row:
+            return None
+        payload = json.loads(row[0])
+        return payload if isinstance(payload, dict) else None
     except Exception as error:
         logger.debug("Failed to load KR AI stock info sqlite cache: %s", error)
         return None
@@ -137,8 +176,21 @@ def _save_stock_info_to_sqlite(
         logger.debug("Failed to serialize KR AI stock info cache: %s", error)
         return
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    normalized_max_rows = max(1, int(_STOCK_INFO_SQLITE_MAX_ROWS))
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="kr_ai_stock_info_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payload() -> None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=_STOCK_INFO_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             now_iso = datetime.now().isoformat()
             cursor = conn.cursor()
             cursor.execute(
@@ -166,21 +218,19 @@ def _save_stock_info_to_sqlite(
                     now_iso,
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM kr_ai_stock_info_cache
-                WHERE (signals_path, ticker) NOT IN (
-                    SELECT signals_path, ticker
-                    FROM kr_ai_stock_info_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_STOCK_INFO_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payload()
     except Exception as error:
-        logger.debug("Failed to save KR AI stock info sqlite cache: %s", error)
+        if _is_missing_table_error(error) and _recover_stock_info_sqlite_schema(db_path, logger):
+            try:
+                _upsert_payload()
+            except Exception as retry_error:
+                logger.debug("Failed to save KR AI stock info sqlite cache after schema recovery: %s", retry_error)
+        else:
+            logger.debug("Failed to save KR AI stock info sqlite cache: %s", error)
 
 
 def load_cached_stock_info(
@@ -238,4 +288,3 @@ def save_cached_stock_info(
 def clear_stock_info_cache() -> None:
     with _STOCK_INFO_CACHE_LOCK:
         _STOCK_INFO_CACHE.clear()
-

@@ -10,6 +10,24 @@ from datetime import datetime, timedelta
 from typing import Dict
 
 
+def _normalize_ticker(ticker: str) -> str:
+    return str(ticker).zfill(6)
+
+
+def _resolve_price_for_ticker(
+    *,
+    ticker: str,
+    current_prices: Dict[str, int],
+) -> int | None:
+    raw_ticker = str(ticker)
+    normalized_ticker = _normalize_ticker(raw_ticker)
+    if raw_ticker in current_prices:
+        return current_prices[raw_ticker]
+    if normalized_ticker in current_prices:
+        return current_prices[normalized_ticker]
+    return None
+
+
 def build_valuated_holding(
     holding: dict,
     current_prices: Dict[str, int],
@@ -20,11 +38,15 @@ def build_valuated_holding(
     quantity = holding["quantity"]
 
     is_stale = False
-    if ticker in current_prices:
-        current_price = current_prices[ticker]
-    else:
+    resolved_price = _resolve_price_for_ticker(
+        ticker=ticker,
+        current_prices=current_prices,
+    )
+    if resolved_price is None:
         current_price = avg_price
         is_stale = True
+    else:
+        current_price = resolved_price
 
     market_value = int(current_price * quantity)
     profit_loss = market_value - (avg_price * quantity)
@@ -47,7 +69,11 @@ def calculate_stock_value_from_rows(
     current_stock_val = 0
     for row in portfolio_rows:
         qty = row["quantity"]
-        price = current_prices.get(row["ticker"], row["avg_price"])
+        resolved_price = _resolve_price_for_ticker(
+            ticker=row["ticker"],
+            current_prices=current_prices,
+        )
+        price = resolved_price if resolved_price is not None else row["avg_price"]
         current_stock_val += qty * price
     return current_stock_val
 
@@ -72,4 +98,3 @@ def build_dummy_asset_history(
             }
         )
     return dummy_data
-

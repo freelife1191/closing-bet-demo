@@ -8,6 +8,7 @@ import os
 import sys
 import logging
 import json
+import importlib
 from datetime import datetime
 
 from flask import Flask, jsonify, request, g
@@ -78,6 +79,7 @@ def _configure_logging() -> None:
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('google_genai').setLevel(logging.WARNING)
     logging.getLogger('google_genai.models').setLevel(logging.WARNING)
+    logging.getLogger('google_genai._api_client').setLevel(logging.ERROR)
 
 
 def _reset_startup_status_files() -> None:
@@ -113,11 +115,25 @@ def _reset_startup_status_files() -> None:
 
 
 def _start_scheduler() -> None:
+    app_logger = logging.getLogger(__name__)
     try:
-        from services import scheduler
-        scheduler.start_scheduler()
+        scheduler_module = importlib.import_module("services.scheduler")
+    except ImportError as error:
+        if "schedule" in str(error):
+            app_logger.warning(
+                "Scheduler dependency 'schedule' is missing. Skipping scheduler start."
+            )
+        else:
+            app_logger.error(f"Failed to import scheduler module: {error}")
+        return
     except Exception as error:
-        print(f"Failed to start scheduler: {error}")
+        app_logger.error(f"Unexpected scheduler import failure: {error}")
+        return
+
+    try:
+        scheduler_module.start_scheduler()
+    except Exception as error:
+        app_logger.error(f"Failed to start scheduler: {error}")
 
 
 def _configure_app(app: Flask) -> None:

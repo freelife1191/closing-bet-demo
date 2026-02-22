@@ -16,13 +16,18 @@ import hashlib
 import heapq
 import json
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any, Callable
 
 from numpy_json_encoder import NumpyEncoder
 from services.file_row_count_cache import file_signature
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _BACKTEST_SUMMARY_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
@@ -34,6 +39,32 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BACKTEST_SUMMARY_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
 _BACKTEST_SUMMARY_MEMORY_MAX_ENTRIES = 16
 _BACKTEST_SUMMARY_SQLITE_MAX_ROWS = 64
+_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS = 5
+_BACKTEST_SUMMARY_INIT_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS * 1000,
+)
+_BACKTEST_SUMMARY_SESSION_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS * 1000,
+    base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-4000"),
+)
+
+
+def _invalidate_backtest_summary_sqlite_ready(db_path: str) -> None:
+    with _BACKTEST_SUMMARY_SQLITE_LOCK:
+        _BACKTEST_SUMMARY_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "backtest_summary_cache" in message
+
+
+def _recover_backtest_summary_sqlite_schema(logger: Any) -> bool:
+    db_path = _BACKTEST_SUMMARY_CACHE_DB_PATH
+    _invalidate_backtest_summary_sqlite_ready(db_path)
+    return _ensure_backtest_summary_sqlite(logger)
 
 
 def clear_backtest_summary_cache() -> None:
@@ -43,8 +74,12 @@ def clear_backtest_summary_cache() -> None:
 
 def _save_memory_cache_entry(signature: tuple[Any, ...], payload: dict[str, Any]) -> None:
     with _BACKTEST_SUMMARY_CACHE_LOCK:
-        if signature not in _BACKTEST_SUMMARY_CACHE and len(_BACKTEST_SUMMARY_CACHE) >= _BACKTEST_SUMMARY_MEMORY_MAX_ENTRIES:
-            _BACKTEST_SUMMARY_CACHE.clear()
+        if signature in _BACKTEST_SUMMARY_CACHE:
+            _BACKTEST_SUMMARY_CACHE.pop(signature, None)
+        elif len(_BACKTEST_SUMMARY_CACHE) >= _BACKTEST_SUMMARY_MEMORY_MAX_ENTRIES:
+            # 전체 캐시를 비우지 않고 가장 오래된 항목만 제거해 히트율을 유지한다.
+            oldest_key = next(iter(_BACKTEST_SUMMARY_CACHE))
+            _BACKTEST_SUMMARY_CACHE.pop(oldest_key, None)
         _BACKTEST_SUMMARY_CACHE[signature] = copy.deepcopy(payload)
 
 
@@ -171,23 +206,17 @@ def build_backtest_summary_cache_signature(
 
 def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
     db_path = _BACKTEST_SUMMARY_CACHE_DB_PATH
-    if db_path in _BACKTEST_SUMMARY_SQLITE_READY:
-        return True
 
     with _BACKTEST_SUMMARY_SQLITE_LOCK:
         if db_path in _BACKTEST_SUMMARY_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            _BACKTEST_SUMMARY_SQLITE_READY.discard(db_path)
         try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             with connect_sqlite(
                 db_path,
-                timeout_seconds=5,
-                pragmas=(
-                    "PRAGMA journal_mode=WAL",
-                    "PRAGMA synchronous=NORMAL",
-                    "PRAGMA temp_store=MEMORY",
-                    "PRAGMA busy_timeout=5000",
-                ),
+                timeout_seconds=_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_BACKTEST_SUMMARY_INIT_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -210,7 +239,7 @@ def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
             _BACKTEST_SUMMARY_SQLITE_READY.add(db_path)
             return True
         except Exception as error:
-            logger.debug(f"Failed to initialize backtest summary sqlite cache: {error}")
+            logger.debug("Failed to initialize backtest summary sqlite cache: %s", error)
             return False
 
 
@@ -223,11 +252,12 @@ def _load_backtest_summary_from_sqlite(
         return None
 
     cache_hash, signature_json = _cache_hash(signature)
-    try:
+
+    def _query_row() -> tuple[Any, ...] | None:
         with connect_sqlite(
             _BACKTEST_SUMMARY_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_BACKTEST_SUMMARY_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -238,7 +268,25 @@ def _load_backtest_summary_from_sqlite(
                 """,
                 (cache_hash,),
             )
-            row = cursor.fetchone()
+            return cursor.fetchone()
+
+    try:
+        row = _query_row()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_backtest_summary_sqlite_schema(logger):
+            try:
+                row = _query_row()
+            except Exception as retry_error:
+                logger.debug(
+                    "Failed to load backtest summary sqlite cache after schema recovery: %s",
+                    retry_error,
+                )
+                return None
+        else:
+            logger.debug("Failed to load backtest summary sqlite cache: %s", error)
+            return None
+
+    try:
         if row is None:
             return None
         cached_key_json, payload_json = row
@@ -247,7 +295,7 @@ def _load_backtest_summary_from_sqlite(
         payload = json.loads(payload_json)
         return payload if isinstance(payload, dict) else None
     except Exception as error:
-        logger.debug(f"Failed to load backtest summary sqlite cache: {error}")
+        logger.debug("Failed to load backtest summary sqlite cache: %s", error)
         return None
 
 
@@ -261,12 +309,30 @@ def _save_backtest_summary_to_sqlite(
         return
 
     cache_hash, signature_json = _cache_hash(signature)
+    normalized_max_rows = max(1, int(_BACKTEST_SUMMARY_SQLITE_MAX_ROWS))
     try:
-        payload_json = json.dumps(payload, ensure_ascii=False, cls=NumpyEncoder)
+        payload_json = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            cls=NumpyEncoder,
+        )
+    except Exception as error:
+        logger.debug("Failed to serialize backtest summary sqlite cache payload: %s", error)
+        return
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="backtest_summary_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payload() -> None:
         with connect_sqlite(
             _BACKTEST_SUMMARY_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_BACKTEST_SUMMARY_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -285,21 +351,22 @@ def _save_backtest_summary_to_sqlite(
                     datetime.now().isoformat(),
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM backtest_summary_cache
-                WHERE cache_hash NOT IN (
-                    SELECT cache_hash
-                    FROM backtest_summary_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_BACKTEST_SUMMARY_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payload()
     except Exception as error:
-        logger.debug(f"Failed to save backtest summary sqlite cache: {error}")
+        if _is_missing_table_error(error) and _recover_backtest_summary_sqlite_schema(logger):
+            try:
+                _upsert_payload()
+            except Exception as retry_error:
+                logger.debug(
+                    "Failed to save backtest summary sqlite cache after schema recovery: %s",
+                    retry_error,
+                )
+        else:
+            logger.debug("Failed to save backtest summary sqlite cache: %s", error)
 
 
 def get_cached_backtest_summary(

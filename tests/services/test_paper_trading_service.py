@@ -283,6 +283,83 @@ def test_buy_stock_does_not_call_get_balance_for_cash_check(monkeypatch):
         _cleanup_service(service)
 
 
+def test_buy_stock_normalizes_ticker_for_portfolio_and_trade_log():
+    service = _build_service()
+    try:
+        result = service.buy_stock("5930", "삼성전자", 1_000, 1)
+        assert result["status"] == "success"
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("005930",))
+            normalized_count = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("5930",))
+            raw_count = int(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT ticker FROM trade_log WHERE action = 'BUY' ORDER BY id DESC LIMIT 1"
+            )
+            trade_ticker_row = cursor.fetchone()
+
+        assert normalized_count == 1
+        assert raw_count == 0
+        assert trade_ticker_row is not None
+        assert str(trade_ticker_row[0]) == "005930"
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stock_insufficient_funds_does_not_update_price_cache():
+    service = _build_service()
+    try:
+        result = service.buy_stock("005930", "삼성전자", 100_000_000, 2)
+        assert result["status"] == "error"
+
+        with service.cache_lock:
+            assert "005930" not in service.price_cache
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM price_cache WHERE ticker = ?", ("005930",))
+            row_count = int(cursor.fetchone()[0])
+
+        assert row_count == 0
+    finally:
+        _cleanup_service(service)
+
+
+def test_sell_stock_resolves_legacy_unpadded_ticker_row():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("5930", "삼성전자", 1_000, 1, 1_000, "2026-01-01T00:00:00"),
+            )
+            conn.commit()
+
+        result = service.sell_stock("005930", 1_100, 1)
+        assert result["status"] == "success"
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker IN (?, ?)", ("5930", "005930"))
+            remaining_positions = int(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT ticker FROM trade_log WHERE action = 'SELL' ORDER BY id DESC LIMIT 1"
+            )
+            trade_ticker_row = cursor.fetchone()
+
+        assert remaining_positions == 0
+        assert trade_ticker_row is not None
+        assert str(trade_ticker_row[0]) == "005930"
+    finally:
+        _cleanup_service(service)
+
+
 def test_reset_account_clears_positions_and_restores_cash():
     service = _build_service()
     try:
@@ -294,6 +371,80 @@ def test_reset_account_clears_positions_and_restores_cash():
         portfolio = service.get_portfolio()
         assert portfolio["holdings"] == []
         assert int(portfolio["cash"]) == 100_000_000
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_normalizes_legacy_ticker_format():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("5930", "삼성전자", 1_000, 2, 2_000, "2026-01-01T00:00:00"),
+            )
+            conn.commit()
+
+        portfolio = service.get_portfolio()
+        assert len(portfolio["holdings"]) == 1
+        assert portfolio["holdings"][0]["ticker"] == "005930"
+    finally:
+        _cleanup_service(service)
+
+
+def test_sell_stock_insufficient_quantity_does_not_overwrite_price_cache():
+    service = _build_service()
+    try:
+        buy_result = service.buy_stock("005930", "삼성전자", 1_000, 1)
+        assert buy_result["status"] == "success"
+
+        with service.cache_lock:
+            assert service.price_cache.get("005930") == 1_000
+
+        sell_result = service.sell_stock("005930", 1_200, 2)
+        assert sell_result["status"] == "error"
+
+        with service.cache_lock:
+            assert service.price_cache.get("005930") == 1_000
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT price FROM price_cache WHERE ticker = ?", ("005930",))
+            row = cursor.fetchone()
+
+        assert row is not None
+        assert int(row[0]) == 1_000
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_valuation_uses_normalized_cache_for_legacy_ticker():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("5930", "삼성전자", 1_000, 3, 3_000, "2026-01-01T00:00:00"),
+            )
+            conn.commit()
+
+        with service.cache_lock:
+            service.price_cache["005930"] = 7_000
+
+        valuation = service.get_portfolio_valuation()
+        assert len(valuation["holdings"]) == 1
+        assert valuation["holdings"][0]["ticker"] == "005930"
+        assert valuation["holdings"][0]["current_price"] == 7_000
+        assert valuation["holdings"][0]["is_stale"] is False
+        assert valuation["total_stock_value"] == 21_000
     finally:
         _cleanup_service(service)
 
@@ -402,6 +553,48 @@ def test_get_context_closes_connection_after_context_exit():
         _cleanup_service(service)
 
 
+def test_constructor_skips_price_cache_ensure_when_db_init_succeeds(monkeypatch):
+    ensure_calls: list[bool] = []
+    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
+
+    monkeypatch.setattr(PaperTradingService, "_init_db", lambda self: True)
+    monkeypatch.setattr(PaperTradingService, "_load_price_cache_from_db", lambda self: None)
+
+    def _fake_ensure(self, force_recheck: bool = False):
+        ensure_calls.append(bool(force_recheck))
+        return True
+
+    monkeypatch.setattr(PaperTradingService, "_ensure_price_cache_table", _fake_ensure)
+
+    service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+    try:
+        assert service._price_cache_schema_ready is True
+        assert ensure_calls == []
+    finally:
+        _cleanup_service(service)
+
+
+def test_constructor_ensures_price_cache_when_db_init_fails(monkeypatch):
+    ensure_calls: list[bool] = []
+    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
+
+    monkeypatch.setattr(PaperTradingService, "_init_db", lambda self: False)
+    monkeypatch.setattr(PaperTradingService, "_load_price_cache_from_db", lambda self: None)
+
+    def _fake_ensure(self, force_recheck: bool = False):
+        ensure_calls.append(bool(force_recheck))
+        self._price_cache_schema_ready = True
+        return True
+
+    monkeypatch.setattr(PaperTradingService, "_ensure_price_cache_table", _fake_ensure)
+
+    service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+    try:
+        assert ensure_calls == [True]
+    finally:
+        _cleanup_service(service)
+
+
 def test_get_asset_history_dummy_path_does_not_call_get_balance(monkeypatch):
     service = _build_service()
     try:
@@ -438,6 +631,27 @@ def test_refresh_price_cache_once_persists_prices_to_sqlite(monkeypatch):
         )
 
         assert sleep_seconds == service.UPDATE_INTERVAL_SEC
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT price FROM price_cache WHERE ticker = ?", ("005930",))
+            row = cursor.fetchone()
+
+        assert row is not None
+        assert int(row[0]) == 70500
+    finally:
+        _cleanup_service(service)
+
+
+def test_persist_price_cache_recreates_missing_table():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DROP TABLE IF EXISTS price_cache")
+            conn.commit()
+
+        service._persist_price_cache({"005930": 70500})
+
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT price FROM price_cache WHERE ticker = ?", ("005930",))
@@ -509,6 +723,98 @@ def test_service_warms_up_price_cache_for_active_holdings_first():
         if second_service is not None:
             _cleanup_service(second_service)
         _cleanup_service(first_service)
+
+
+def test_service_warmup_skips_count_query_for_portfolio_presence(monkeypatch):
+    service = _build_service()
+    try:
+        service._persist_price_cache({"005930": 70900})
+        traced_sql: list[str] = []
+        original_get_context = service.get_context
+
+        def _traced_context():
+            conn = original_get_context()
+            conn.set_trace_callback(traced_sql.append)
+            return conn
+
+        monkeypatch.setattr(service, "get_context", _traced_context)
+        service._load_price_cache_from_db()
+
+        assert not any("SELECT COUNT(*) FROM portfolio" in sql for sql in traced_sql)
+        assert any("SELECT 1" in sql and "FROM portfolio" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stock_recovers_when_trade_log_table_missing():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DROP TABLE IF EXISTS trade_log")
+            conn.commit()
+
+        result = service.buy_stock("005930", "삼성전자", 1000, 1)
+        assert result["status"] == "success"
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM trade_log")
+            trade_count = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("005930",))
+            holding_count = int(cursor.fetchone()[0])
+
+        assert trade_count == 1
+        assert holding_count == 1
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_recovers_when_balance_table_missing():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DROP TABLE IF EXISTS balance")
+            conn.commit()
+
+        portfolio = service.get_portfolio()
+        assert isinstance(portfolio, dict)
+        assert "cash" in portfolio
+        assert int(portfolio["cash"]) == 100_000_000
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM balance WHERE id = 1")
+            balance_rows = int(cursor.fetchone()[0])
+
+        assert balance_rows == 1
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_asset_history_recovers_when_asset_history_table_missing():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DROP TABLE IF EXISTS asset_history")
+            conn.commit()
+
+        history = service.get_asset_history(limit=10)
+        assert isinstance(history, list)
+        assert len(history) >= 2
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='asset_history'"
+            )
+            table_row = cursor.fetchone()
+
+        assert table_row is not None
+    finally:
+        _cleanup_service(service)
 
 
 def test_record_asset_history_uses_single_context_without_get_balance(monkeypatch):

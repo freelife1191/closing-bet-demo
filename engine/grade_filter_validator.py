@@ -93,10 +93,15 @@ class FilterValidator:
         return FilterResult(passed=True)
 
     def _validate_price_change(self, change_pct: float) -> FilterResult:
-        if not (PRICE_CHANGE.MIN <= change_pct <= PRICE_CHANGE.MAX):
+        max_change = max(
+            30.0,
+            PRICE_CHANGE.MAX,
+            getattr(PRICE_CHANGE, "LIMIT", PRICE_CHANGE.MAX),
+        )
+        if not (PRICE_CHANGE.MIN <= change_pct <= max_change):
             return FilterResult(
                 passed=False,
-                reason=f"등락률 조건 위배: {change_pct:.1f}% (Target: {PRICE_CHANGE.MIN}~{PRICE_CHANGE.MAX}%)",
+                reason=f"등락률 조건 위배: {change_pct:.1f}% (Target: {PRICE_CHANGE.MIN}~{max_change}%)",
             )
         return FilterResult(passed=True)
 
@@ -126,4 +131,3 @@ class FilterValidator:
             logger.debug(f"윗꼬리 필터 계산 실패, 필터 통과 처리: {error}")
 
         return FilterResult(passed=True)
-

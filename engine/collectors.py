@@ -4,11 +4,18 @@
 Engine - Collectors (데이터 수집기)
 """
 import logging
+import os
 from typing import List, Optional, Dict
 from datetime import date, datetime, timedelta
 from engine.models import StockData, ChartData, NewsItem, SupplyData
 
 logger = logging.getLogger(__name__)
+
+# 리팩토링 과정에서 `engine/collectors.py`와 `engine/collectors/` 디렉토리가 공존한다.
+# 모듈이 패키지처럼 동작하도록 __path__를 지정해 하위 모듈 import 호환을 유지한다.
+_COLLECTORS_SUBMODULE_PATH = os.path.join(os.path.dirname(__file__), "collectors")
+if os.path.isdir(_COLLECTORS_SUBMODULE_PATH):
+    __path__ = [_COLLECTORS_SUBMODULE_PATH]  # type: ignore[assignment]
 
 
 class KRXCollector:

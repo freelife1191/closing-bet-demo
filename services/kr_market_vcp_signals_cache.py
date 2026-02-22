@@ -10,11 +10,16 @@ import copy
 import hashlib
 import json
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
@@ -22,6 +27,9 @@ _VCP_SIGNALS_MEMORY_CACHE: dict[str, tuple[tuple[Any, ...], list[dict[str, Any]]
 _VCP_SIGNALS_MEMORY_MAX_ENTRIES = 16
 _VCP_SIGNALS_SQLITE_MAX_ROWS = 64
 _VCP_SIGNALS_SQLITE_READY: set[str] = set()
+_VCP_SIGNALS_SQLITE_READY_LOCK = threading.Lock()
+_VCP_SIGNALS_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
+_VCP_SIGNALS_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
 
 
 def _file_signature(path: str) -> tuple[int, int] | None:
@@ -42,44 +50,59 @@ def _signature_digest(signature: tuple[Any, ...]) -> tuple[str, str]:
     return digest, payload
 
 
-def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
-    if db_path in _VCP_SIGNALS_SQLITE_READY:
-        return True
-    try:
-        with connect_sqlite(
-            db_path,
-            timeout_seconds=30,
-            pragmas=(
-                "PRAGMA journal_mode=WAL",
-                "PRAGMA synchronous=NORMAL",
-                "PRAGMA temp_store=MEMORY",
-                "PRAGMA busy_timeout=30000",
-            ),
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS vcp_signals_payload_cache (
-                    signature_hash TEXT PRIMARY KEY,
-                    signature_json TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_vcp_signals_payload_cache_updated_at
-                ON vcp_signals_payload_cache(updated_at DESC)
-                """
-            )
-            conn.commit()
-        _VCP_SIGNALS_SQLITE_READY.add(db_path)
-        return True
-    except Exception as error:
-        if logger:
-            logger.debug(f"Failed to initialize vcp signals sqlite cache: {error}")
+def _invalidate_vcp_signals_sqlite_ready(db_path: str) -> None:
+    with _VCP_SIGNALS_SQLITE_READY_LOCK:
+        _VCP_SIGNALS_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
         return False
+    message = str(error).lower()
+    return "no such table" in message and "vcp_signals_payload_cache" in message
+
+
+def _recover_vcp_signals_sqlite_schema(db_path: str, logger: Any) -> bool:
+    _invalidate_vcp_signals_sqlite_ready(db_path)
+    return _ensure_sqlite_cache(db_path, logger)
+
+
+def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
+    with _VCP_SIGNALS_SQLITE_READY_LOCK:
+        if db_path in _VCP_SIGNALS_SQLITE_READY:
+            if os.path.exists(db_path):
+                return True
+            _VCP_SIGNALS_SQLITE_READY.discard(db_path)
+        try:
+            with connect_sqlite(
+                db_path,
+                timeout_seconds=30,
+                pragmas=_VCP_SIGNALS_SQLITE_INIT_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS vcp_signals_payload_cache (
+                        signature_hash TEXT PRIMARY KEY,
+                        signature_json TEXT NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_vcp_signals_payload_cache_updated_at
+                    ON vcp_signals_payload_cache(updated_at DESC)
+                    """
+                )
+                conn.commit()
+            _VCP_SIGNALS_SQLITE_READY.add(db_path)
+            return True
+        except Exception as error:
+            if logger:
+                logger.debug(f"Failed to initialize vcp signals sqlite cache: {error}")
+            return False
 
 
 def build_vcp_signals_cache_signature(
@@ -114,8 +137,12 @@ def get_cached_vcp_signals(
     if not _ensure_sqlite_cache(db_path, logger):
         return None
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    def _query_payload() -> tuple[Any, ...] | None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=_VCP_SIGNALS_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -127,15 +154,32 @@ def get_cached_vcp_signals(
                 """,
                 (digest, signature_json),
             )
-            row = cursor.fetchone()
-            if not row:
+            return cursor.fetchone()
+
+    try:
+        row = _query_payload()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_vcp_signals_sqlite_schema(db_path, logger):
+            try:
+                row = _query_payload()
+            except Exception as retry_error:
+                if logger:
+                    logger.debug("Failed to load cached vcp signals payload after schema recovery: %s", retry_error)
                 return None
-            payload = json.loads(row[0])
-            if not isinstance(payload, list):
-                return None
+        else:
+            if logger:
+                logger.debug("Failed to load cached vcp signals payload: %s", error)
+            return None
+
+    try:
+        if not row:
+            return None
+        payload = json.loads(row[0])
+        if not isinstance(payload, list):
+            return None
     except Exception as error:
         if logger:
-            logger.debug(f"Failed to load cached vcp signals payload: {error}")
+            logger.debug("Failed to load cached vcp signals payload: %s", error)
         return None
 
     with _VCP_SIGNALS_CACHE_LOCK:
@@ -174,8 +218,21 @@ def save_cached_vcp_signals(
             logger.debug(f"Failed to serialize vcp signals payload: {error}")
         return
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    normalized_max_rows = max(1, int(_VCP_SIGNALS_SQLITE_MAX_ROWS))
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="vcp_signals_payload_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payload() -> None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=_VCP_SIGNALS_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -192,22 +249,21 @@ def save_cached_vcp_signals(
                 """,
                 (digest, signature_json, payload_json, datetime.now().isoformat()),
             )
-            cursor.execute(
-                """
-                DELETE FROM vcp_signals_payload_cache
-                WHERE signature_hash NOT IN (
-                    SELECT signature_hash
-                    FROM vcp_signals_payload_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_VCP_SIGNALS_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payload()
     except Exception as error:
-        if logger:
-            logger.debug(f"Failed to save cached vcp signals payload: {error}")
+        if _is_missing_table_error(error) and _recover_vcp_signals_sqlite_schema(db_path, logger):
+            try:
+                _upsert_payload()
+            except Exception as retry_error:
+                if logger:
+                    logger.debug("Failed to save cached vcp signals payload after schema recovery: %s", retry_error)
+        else:
+            if logger:
+                logger.debug("Failed to save cached vcp signals payload: %s", error)
 
 
 __all__ = [

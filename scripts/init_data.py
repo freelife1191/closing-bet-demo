@@ -84,6 +84,63 @@ from engine.market_gate import MarketGate
 # 주말/휴일 처리를 위한 유틸리티 함수
 # =====================================================
 
+
+def assign_grade(data: dict) -> str | None:
+    """
+    Jongga 등급 산정 하위호환 함수.
+    tests/test_grading_logic.py의 기존 계약을 유지한다.
+    """
+    try:
+        trading_value = float(data.get("trading_value", 0) or 0)
+        rise_pct = float(data.get("rise_pct", 0) or 0)
+        volume_ratio = float(data.get("volume_ratio", 0) or 0)
+        foreign_positive = bool(data.get("foreign_positive", False))
+        inst_positive = bool(data.get("inst_positive", False))
+    except Exception:
+        return None
+
+    if rise_pct < 0:
+        return None
+
+    if (
+        trading_value >= 1_000_000_000_000
+        and rise_pct >= 10
+        and foreign_positive
+        and inst_positive
+        and volume_ratio >= 5
+    ):
+        return "S"
+
+    if (
+        trading_value >= 500_000_000_000
+        and rise_pct >= 5
+        and (foreign_positive or inst_positive)
+        and volume_ratio >= 3
+    ):
+        return "A"
+
+    if (
+        trading_value >= 100_000_000_000
+        and rise_pct >= 4
+        and (foreign_positive or inst_positive)
+        and volume_ratio >= 2
+    ):
+        return "B"
+
+    if (
+        trading_value >= 50_000_000_000
+        and rise_pct >= 5
+        and foreign_positive
+        and inst_positive
+        and volume_ratio >= 3
+    ):
+        return "C"
+
+    if trading_value >= 50_000_000_000 and rise_pct >= 4 and volume_ratio >= 2:
+        return "D"
+
+    return None
+
 def get_last_trading_date(reference_date=None):
     """
     마지막 개장일 날짜를 반환합니다.
@@ -1144,6 +1201,17 @@ def create_signals_log(target_date=None, run_ai=True):
     log("VCP 시그널 분석 중 (SmartMoneyScreener)...")
     try:
         from engine.screener import SmartMoneyScreener
+
+        def _grade_from_score(score: float) -> str:
+            if score >= 85:
+                return "S"
+            if score >= 75:
+                return "A"
+            if score >= 60:
+                return "B"
+            if score >= 50:
+                return "C"
+            return "D"
         
         # 스크리너 실행 (KOSPI+KOSDAQ 전체 분석)
         screener = SmartMoneyScreener(target_date=target_date)
@@ -1159,6 +1227,7 @@ def create_signals_log(target_date=None, run_ai=True):
                     'market': row['market'],
                     'status': 'OPEN',
                     'score': round(row['score'], 1),
+                    'grade': _grade_from_score(float(row.get('score', 0) or 0)),
                     'contraction_ratio': row.get('contraction_ratio', 0),
                     'entry_price': int(row['entry_price']),
                     'foreign_5d': int(row['foreign_net_5d']),
@@ -1388,7 +1457,21 @@ def create_signals_log(target_date=None, run_ai=True):
         else:
             log("VCP 조건 충족 종목 없음", "WARNING")
             # 빈 결과 파일 생성 (샘플 데이터 생성 안함)
-            df = pd.DataFrame(columns=['ticker', 'name', 'signal_date', 'market', 'status', 'score', 'contraction_ratio', 'entry_price', 'foreign_5d', 'inst_5d'])
+            df = pd.DataFrame(
+                columns=[
+                    'ticker',
+                    'name',
+                    'signal_date',
+                    'market',
+                    'status',
+                    'score',
+                    'grade',
+                    'contraction_ratio',
+                    'entry_price',
+                    'foreign_5d',
+                    'inst_5d',
+                ]
+            )
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
             df.to_csv(file_path, index=False, encoding='utf-8-sig')
             log("VCP 조건 충족 종목 없음 - 빈 결과 저장", "INFO")
@@ -1397,11 +1480,25 @@ def create_signals_log(target_date=None, run_ai=True):
     except Exception as e:
         log(f"VCP 분석 실패: {e}", "WARNING")
         # 빈 결과 파일 생성 (샘플 데이터 생성 안함)
-        df = pd.DataFrame(columns=['ticker', 'name', 'signal_date', 'market', 'status', 'score', 'contraction_ratio', 'entry_price', 'foreign_5d', 'inst_5d'])
+        df = pd.DataFrame(
+            columns=[
+                'ticker',
+                'name',
+                'signal_date',
+                'market',
+                'status',
+                'score',
+                'grade',
+                'contraction_ratio',
+                'entry_price',
+                'foreign_5d',
+                'inst_5d',
+            ]
+        )
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
         df.to_csv(file_path, index=False, encoding='utf-8-sig')
         log("VCP 분석 오류 - 빈 결과 저장", "INFO")
-        return True
+        return False
 
 
 
@@ -1943,6 +2040,12 @@ def send_jongga_notification():
                 messenger.send_screener_result(result)
                 log(f"알림 발송 완료: {len(signals)}개 신호", "SUCCESS")
             else:
+                messenger = Messenger()
+                messenger.send_custom_message(
+                    title="종가베팅 신호 없음",
+                    message="오늘은 발송할 종가베팅 신호가 없습니다. (0개)",
+                    channels=None,
+                )
                 log("발송할 신호 없음 (0개)", "INFO")
                 
     except Exception as notify_error:
@@ -2126,4 +2229,3 @@ if __name__ == '__main__':
             log("전체 데이터 초기화 완료!", "SUCCESS")
     else:
         main()
-

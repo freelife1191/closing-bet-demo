@@ -9,12 +9,17 @@ from __future__ import annotations
 import copy
 import json
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any, Dict
 
 from numpy_json_encoder import NumpyEncoder
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _UPDATE_STATUS_CACHE: dict[str, tuple[tuple[int, int], Dict[str, Any]]] = {}
@@ -23,6 +28,21 @@ _UPDATE_STATUS_DB_INIT_LOCK = threading.Lock()
 _UPDATE_STATUS_DB_READY: set[str] = set()
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _UPDATE_STATUS_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
+_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS = 5
+_UPDATE_STATUS_SQLITE_MAX_ROWS = 256
+_UPDATE_STATUS_INIT_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS * 1000,
+)
+_UPDATE_STATUS_SESSION_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS * 1000,
+    base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-4000"),
+)
+
+
+def _ensure_parent_dir(path: str) -> None:
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
 
 
 def _status_file_signature(update_status_file: str) -> tuple[int, int] | None:
@@ -33,25 +53,46 @@ def _status_file_signature(update_status_file: str) -> tuple[int, int] | None:
     return int(stat.st_mtime_ns), int(stat.st_size)
 
 
+def _normalize_db_key(path: str) -> str:
+    try:
+        return os.path.realpath(os.path.expanduser(path))
+    except Exception:
+        return str(path)
+
+
+def _invalidate_update_status_sqlite_ready(db_path: str) -> None:
+    db_key = _normalize_db_key(db_path)
+    with _UPDATE_STATUS_DB_INIT_LOCK:
+        _UPDATE_STATUS_DB_READY.discard(db_key)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "update_status_snapshot" in message
+
+
+def _recover_update_status_sqlite(logger) -> bool:
+    db_path = _UPDATE_STATUS_CACHE_DB_PATH
+    _invalidate_update_status_sqlite_ready(db_path)
+    return _ensure_update_status_sqlite(logger)
+
+
 def _ensure_update_status_sqlite(logger) -> bool:
     db_path = _UPDATE_STATUS_CACHE_DB_PATH
-    if db_path in _UPDATE_STATUS_DB_READY:
-        return True
+    db_key = _normalize_db_key(db_path)
 
     with _UPDATE_STATUS_DB_INIT_LOCK:
-        if db_path in _UPDATE_STATUS_DB_READY:
-            return True
+        if db_key in _UPDATE_STATUS_DB_READY:
+            if os.path.exists(db_path):
+                return True
+            _UPDATE_STATUS_DB_READY.discard(db_key)
         try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             with connect_sqlite(
                 db_path,
-                timeout_seconds=5,
-                pragmas=(
-                    "PRAGMA journal_mode=WAL",
-                    "PRAGMA synchronous=NORMAL",
-                    "PRAGMA temp_store=MEMORY",
-                    "PRAGMA busy_timeout=5000",
-                ),
+                timeout_seconds=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_UPDATE_STATUS_INIT_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -63,23 +104,34 @@ def _ensure_update_status_sqlite(logger) -> bool:
                     )
                     """
                 )
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_update_status_snapshot_updated_at
+                    ON update_status_snapshot(updated_at DESC)
+                    """
+                )
                 conn.commit()
-            _UPDATE_STATUS_DB_READY.add(db_path)
+            _UPDATE_STATUS_DB_READY.add(db_key)
             return True
         except Exception as error:
             logger.error(f"Failed to initialize update status sqlite cache: {error}")
             return False
 
 
-def _load_update_status_from_sqlite(*, update_status_file: str, logger) -> Dict[str, Any] | None:
+def _load_update_status_from_sqlite(
+    *,
+    update_status_file: str,
+    logger,
+    _retried: bool = False,
+) -> Dict[str, Any] | None:
     if not _ensure_update_status_sqlite(logger):
         return None
 
     try:
         with connect_sqlite(
             _UPDATE_STATUS_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_UPDATE_STATUS_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -96,20 +148,52 @@ def _load_update_status_from_sqlite(*, update_status_file: str, logger) -> Dict[
         payload = json.loads(row[0])
         return payload if isinstance(payload, dict) else None
     except Exception as error:
+        if (not _retried) and _is_missing_table_error(error):
+            if _recover_update_status_sqlite(logger):
+                return _load_update_status_from_sqlite(
+                    update_status_file=update_status_file,
+                    logger=logger,
+                    _retried=True,
+                )
         logger.error(f"Failed to load update status sqlite snapshot: {error}")
         return None
 
 
-def _save_update_status_to_sqlite(*, update_status_file: str, status: Dict[str, Any], logger) -> None:
+def _prune_update_status_snapshot_if_needed(
+    cursor: sqlite3.Cursor,
+    *,
+    max_rows: int,
+) -> None:
+    normalized_max_rows = max(1, int(max_rows))
+    prune_rows_by_updated_at_if_needed(
+        cursor,
+        table_name="update_status_snapshot",
+        max_rows=normalized_max_rows,
+    )
+
+
+def _save_update_status_to_sqlite(
+    *,
+    update_status_file: str,
+    status: Dict[str, Any],
+    logger,
+    _retried: bool = False,
+) -> None:
     if not _ensure_update_status_sqlite(logger):
         return
 
+    normalized_max_rows = max(1, int(_UPDATE_STATUS_SQLITE_MAX_ROWS))
     try:
-        payload_json = json.dumps(status, ensure_ascii=False, cls=NumpyEncoder)
+        payload_json = json.dumps(
+            status,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            cls=NumpyEncoder,
+        )
         with connect_sqlite(
             _UPDATE_STATUS_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_UPDATE_STATUS_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -122,8 +206,21 @@ def _save_update_status_to_sqlite(*, update_status_file: str, status: Dict[str, 
                 """,
                 (update_status_file, payload_json, datetime.now().isoformat()),
             )
+            _prune_update_status_snapshot_if_needed(
+                cursor,
+                max_rows=normalized_max_rows,
+            )
             conn.commit()
     except Exception as error:
+        if (not _retried) and _is_missing_table_error(error):
+            if _recover_update_status_sqlite(logger):
+                _save_update_status_to_sqlite(
+                    update_status_file=update_status_file,
+                    status=status,
+                    logger=logger,
+                    _retried=True,
+                )
+                return
         logger.error(f"Failed to save update status sqlite snapshot: {error}")
 
 
@@ -179,7 +276,7 @@ def load_update_status(*, update_status_file: str, logger) -> Dict[str, Any]:
 def save_update_status(*, status: Dict[str, Any], update_status_file: str, logger) -> None:
     """상태 파일 저장 (Atomic Write)."""
     try:
-        os.makedirs(os.path.dirname(update_status_file), exist_ok=True)
+        _ensure_parent_dir(update_status_file)
         tmp_file = update_status_file + ".tmp"
         with open(tmp_file, "w", encoding="utf-8") as handle:
             json.dump(status, handle, indent=2, ensure_ascii=False, cls=NumpyEncoder)

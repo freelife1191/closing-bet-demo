@@ -124,3 +124,81 @@ def test_signal_dates_route_requests_only_signal_date_column_when_supported():
     assert captured["name"] == "signals_log.csv"
     assert captured["kwargs"]["deep_copy"] is False
     assert captured["kwargs"]["usecols"] == ["signal_date"]
+
+
+def test_signals_route_count_callback_accepts_data_dir_argument():
+    captured: dict[str, Any] = {}
+
+    def _build_payload(**kwargs):
+        count_fn = kwargs["count_total_scanned_stocks"]
+        data_dir = kwargs["data_dir"]
+        captured["data_dir"] = data_dir
+        captured["total_scanned"] = count_fn(data_dir)
+        return {
+            "signals": [],
+            "count": 0,
+            "total_scanned": captured["total_scanned"],
+            "generated_at": "2026-02-22T00:00:00",
+            "source": "signals_log.csv",
+        }
+
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    deps["build_vcp_signals_payload"] = _build_payload
+    deps["count_total_scanned_stocks"] = lambda data_dir: 123 if data_dir == "/tmp" else 0
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_count_callback_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.get("/api/kr/signals")
+
+    assert response.status_code == 200
+    assert captured["data_dir"] == "/tmp"
+    assert captured["total_scanned"] == 123
+    assert response.get_json()["total_scanned"] == 123
+
+
+def test_signals_route_count_callback_allows_legacy_noarg_callback():
+    captured: dict[str, Any] = {}
+
+    def _build_payload(**kwargs):
+        count_fn = kwargs["count_total_scanned_stocks"]
+        data_dir = kwargs["data_dir"]
+        captured["data_dir"] = data_dir
+        captured["total_scanned"] = count_fn(data_dir)
+        return {
+            "signals": [],
+            "count": 0,
+            "total_scanned": captured["total_scanned"],
+            "generated_at": "2026-02-22T00:00:00",
+            "source": "signals_log.csv",
+        }
+
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    deps["build_vcp_signals_payload"] = _build_payload
+    deps["count_total_scanned_stocks"] = lambda: 77
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_count_callback_legacy_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.get("/api/kr/signals")
+
+    assert response.status_code == 200
+    assert captured["data_dir"] == "/tmp"
+    assert captured["total_scanned"] == 77
+    assert response.get_json()["total_scanned"] == 77

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import threading
 from collections.abc import Callable
 from datetime import datetime
@@ -16,13 +17,20 @@ from typing import Any
 
 import pandas as pd
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _LATEST_CLOSE_MAP_CACHE_LOCK = threading.Lock()
 _LATEST_CLOSE_MAP_CACHE: dict[tuple[str, int, int], dict[str, float]] = {}
 _LATEST_CLOSE_MAP_SQLITE_READY: set[str] = set()
 _LATEST_CLOSE_MAP_SQLITE_LOCK = threading.Lock()
+_LATEST_CLOSE_MAP_SQLITE_MAX_ROWS = 200
+_LATEST_CLOSE_MAP_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=5_000)
+_LATEST_CLOSE_MAP_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=5_000)
 
 
 def _file_signature(path: str) -> tuple[int, int] | None:
@@ -47,24 +55,34 @@ def _resolve_latest_close_map_cache_db_path(source_path: str) -> str:
     return os.path.join(source_dir, "runtime_cache.db")
 
 
-def _ensure_latest_close_map_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
-    if db_path in _LATEST_CLOSE_MAP_SQLITE_READY:
-        return True
+def _invalidate_latest_close_map_sqlite_ready(db_path: str) -> None:
+    with _LATEST_CLOSE_MAP_SQLITE_LOCK:
+        _LATEST_CLOSE_MAP_SQLITE_READY.discard(db_path)
 
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "realtime_latest_close_map_cache" in message
+
+
+def _recover_latest_close_map_sqlite_schema(db_path: str, logger: logging.Logger | None) -> bool:
+    _invalidate_latest_close_map_sqlite_ready(db_path)
+    return _ensure_latest_close_map_sqlite(db_path, logger)
+
+
+def _ensure_latest_close_map_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
     with _LATEST_CLOSE_MAP_SQLITE_LOCK:
         if db_path in _LATEST_CLOSE_MAP_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            _LATEST_CLOSE_MAP_SQLITE_READY.discard(db_path)
         try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             with connect_sqlite(
                 db_path,
                 timeout_seconds=5,
-                pragmas=(
-                    "PRAGMA journal_mode=WAL",
-                    "PRAGMA synchronous=NORMAL",
-                    "PRAGMA temp_store=MEMORY",
-                    "PRAGMA busy_timeout=5000",
-                ),
+                pragmas=_LATEST_CLOSE_MAP_SQLITE_INIT_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -103,8 +121,12 @@ def _load_latest_close_map_from_sqlite(
     if not _ensure_latest_close_map_sqlite(db_path, logger):
         return None
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=5) as conn:
+    def _query_payload() -> tuple[Any, ...] | None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=5,
+            pragmas=_LATEST_CLOSE_MAP_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -117,7 +139,24 @@ def _load_latest_close_map_from_sqlite(
                 """,
                 (source_path, int(signature[0]), int(signature[1])),
             )
-            row = cursor.fetchone()
+            return cursor.fetchone()
+
+    try:
+        row = _query_payload()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_latest_close_map_sqlite_schema(db_path, logger):
+            try:
+                row = _query_payload()
+            except Exception as retry_error:
+                if logger is not None:
+                    logger.debug("Failed to load latest-close sqlite cache after schema recovery: %s", retry_error)
+                return None
+        else:
+            if logger is not None:
+                logger.debug("Failed to load latest-close sqlite cache: %s", error)
+            return None
+
+    try:
         if row is None:
             return None
         loaded = json.loads(str(row[0]))
@@ -132,8 +171,21 @@ def _load_latest_close_map_from_sqlite(
         return normalized
     except Exception as error:
         if logger is not None:
-            logger.debug(f"Failed to load latest-close sqlite cache: {error}")
+            logger.debug("Failed to load latest-close sqlite cache: %s", error)
         return None
+
+
+def _prune_latest_close_cache_if_needed(
+    cursor: sqlite3.Cursor,
+    *,
+    max_rows: int,
+) -> None:
+    normalized_max_rows = max(1, int(max_rows))
+    prune_rows_by_updated_at_if_needed(
+        cursor,
+        table_name="realtime_latest_close_map_cache",
+        max_rows=normalized_max_rows,
+    )
 
 
 def _save_latest_close_map_to_sqlite(
@@ -147,9 +199,20 @@ def _save_latest_close_map_to_sqlite(
     if not _ensure_latest_close_map_sqlite(db_path, logger):
         return
 
+    normalized_max_rows = max(1, int(_LATEST_CLOSE_MAP_SQLITE_MAX_ROWS))
     try:
-        payload_json = json.dumps(latest_close_map, ensure_ascii=False)
-        with connect_sqlite(db_path, timeout_seconds=5) as conn:
+        payload_json = json.dumps(latest_close_map, ensure_ascii=False, separators=(",", ":"))
+    except Exception as error:
+        if logger is not None:
+            logger.debug("Failed to serialize latest-close sqlite cache payload: %s", error)
+        return
+
+    def _upsert_payload() -> None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=5,
+            pragmas=_LATEST_CLOSE_MAP_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -171,21 +234,24 @@ def _save_latest_close_map_to_sqlite(
                     datetime.now().isoformat(),
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM realtime_latest_close_map_cache
-                WHERE source_path NOT IN (
-                    SELECT source_path
-                    FROM realtime_latest_close_map_cache
-                    ORDER BY updated_at DESC
-                    LIMIT 200
-                )
-                """
+            _prune_latest_close_cache_if_needed(
+                cursor,
+                max_rows=normalized_max_rows,
             )
             conn.commit()
+
+    try:
+        _upsert_payload()
     except Exception as error:
-        if logger is not None:
-            logger.debug(f"Failed to save latest-close sqlite cache: {error}")
+        if _is_missing_table_error(error) and _recover_latest_close_map_sqlite_schema(db_path, logger):
+            try:
+                _upsert_payload()
+            except Exception as retry_error:
+                if logger is not None:
+                    logger.debug("Failed to save latest-close sqlite cache after schema recovery: %s", retry_error)
+        else:
+            if logger is not None:
+                logger.debug("Failed to save latest-close sqlite cache: %s", error)
 
 
 def clear_latest_close_map_cache() -> None:
@@ -251,4 +317,3 @@ def load_cached_latest_close_map(
         logger=logger,
     )
     return dict(latest_prices)
-

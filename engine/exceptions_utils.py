@@ -32,7 +32,12 @@ _SCORING_ERRORS = (ScoringError, InvalidStockDataError)
 _SCREENING_ERRORS = (ScreeningError, NoCandidatesError)
 _NETWORK_ERRORS = (NetworkError, APIConnectionError)
 _RETRYABLE_ERRORS = (LLMRateLimitError, LLMTimeoutError, NetworkError, APIConnectionError)
-_CRITICAL_ERRORS = (ConfigurationError, APIAuthenticationError, DataValidationError)
+_CRITICAL_ERRORS = (
+    ConfigurationError,
+    APIAuthenticationError,
+    DataValidationError,
+    DataFileNotFoundError,
+)
 
 
 def get_error_category(error: Exception) -> str:
@@ -60,4 +65,3 @@ def is_retryable_error(error: Exception) -> bool:
 def is_critical_error(error: Exception) -> bool:
     """치명적 에러인지 확인 (즉시 중단 필요)."""
     return isinstance(error, _CRITICAL_ERRORS)
-

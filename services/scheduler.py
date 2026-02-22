@@ -11,8 +11,12 @@ import logging
 import os
 import threading
 import time
+from typing import TextIO
 
-import schedule
+try:
+    import schedule
+except ImportError:
+    schedule = None
 
 from engine.config import app_config
 from services.scheduler_jobs import (
@@ -24,11 +28,19 @@ from services.scheduler_loop import compute_scheduler_sleep_seconds
 
 logger = logging.getLogger(__name__)
 
-_scheduler_lock_file = None
+_scheduler_lock_file: TextIO | None = None
+
+
+def _is_schedule_available() -> bool:
+    return schedule is not None
 
 
 def update_market_gate_interval(minutes: int) -> None:
     """실시간으로 Market Gate 업데이트 주기를 변경한다."""
+    if not _is_schedule_available():
+        logger.warning("[Scheduler] python 'schedule' 모듈이 없어 주기 변경을 건너뜁니다.")
+        return
+
     try:
         schedule.clear("market_gate")
         logger.info("[Scheduler] 기존 Market Gate 스케줄 제거됨")
@@ -42,18 +54,28 @@ def update_market_gate_interval(minutes: int) -> None:
 def _acquire_scheduler_lock() -> bool:
     """다중 워커 중 단일 스케줄러 인스턴스만 실행되도록 파일 잠금을 획득한다."""
     global _scheduler_lock_file
+
+    if _scheduler_lock_file is not None and not _scheduler_lock_file.closed:
+        return True
+
     lock_file_path = os.path.join(os.path.dirname(__file__), "scheduler.lock")
+    lock_handle: TextIO | None = None
 
     try:
-        _scheduler_lock_file = open(lock_file_path, "w")
-        fcntl.lockf(_scheduler_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_handle = open(lock_file_path, "w")
+        fcntl.lockf(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _scheduler_lock_file = lock_handle
         logger.info("Scheduler lock acquired. Starting scheduler service...")
         return True
-    except IOError:
+    except OSError:
+        if lock_handle is not None and not lock_handle.closed:
+            lock_handle.close()
         return False
 
 
 def _scheduler_loop() -> None:
+    if not _is_schedule_available():
+        return
     while True:
         schedule.run_pending()
         idle_seconds = schedule.idle_seconds()
@@ -62,6 +84,10 @@ def _scheduler_loop() -> None:
 
 def start_scheduler() -> None:
     """스케줄러 시작 (백그라운드 스레드) - Singleton 보장."""
+    if not _is_schedule_available():
+        logger.warning("Scheduler dependency 'schedule' is missing. Skipping scheduler start.")
+        return
+
     if not _acquire_scheduler_lock():
         return
 

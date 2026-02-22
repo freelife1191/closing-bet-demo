@@ -11,6 +11,7 @@ import glob
 import heapq
 import json
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any
@@ -22,7 +23,11 @@ from services.kr_market_data_cache_core import (
     _load_json_payload_from_path,
     file_signature,
 )
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _JONGGA_PAYLOAD_SQLITE_LOCK = threading.Lock()
@@ -30,6 +35,26 @@ _JONGGA_PAYLOAD_SQLITE_READY: set[str] = set()
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _JONGGA_PAYLOAD_SQLITE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
 _JONGGA_PAYLOAD_SQLITE_MAX_ROWS = 64
+_JONGGA_PAYLOAD_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=5_000)
+_JONGGA_PAYLOAD_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=5_000)
+
+
+def _invalidate_jongga_payload_sqlite_ready(db_path: str) -> None:
+    with _JONGGA_PAYLOAD_SQLITE_LOCK:
+        _JONGGA_PAYLOAD_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "jongga_results_payload_cache" in message
+
+
+def _recover_jongga_payload_sqlite_schema(logger: Any | None) -> bool:
+    db_path = _JONGGA_PAYLOAD_SQLITE_DB_PATH
+    _invalidate_jongga_payload_sqlite_ready(db_path)
+    return _ensure_jongga_payload_sqlite(logger)
 
 
 def _collect_jongga_result_files(data_dir: str, *, limit: int = 0) -> list[str]:
@@ -62,23 +87,17 @@ def _signature_hash(signature: tuple[Any, ...]) -> tuple[str, str]:
 
 def _ensure_jongga_payload_sqlite(logger: Any | None) -> bool:
     db_path = _JONGGA_PAYLOAD_SQLITE_DB_PATH
-    if db_path in _JONGGA_PAYLOAD_SQLITE_READY:
-        return True
 
     with _JONGGA_PAYLOAD_SQLITE_LOCK:
         if db_path in _JONGGA_PAYLOAD_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            _JONGGA_PAYLOAD_SQLITE_READY.discard(db_path)
         try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             with connect_sqlite(
                 db_path,
                 timeout_seconds=5,
-                pragmas=(
-                    "PRAGMA journal_mode=WAL",
-                    "PRAGMA synchronous=NORMAL",
-                    "PRAGMA temp_store=MEMORY",
-                    "PRAGMA busy_timeout=5000",
-                ),
+                pragmas=_JONGGA_PAYLOAD_SQLITE_INIT_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -129,11 +148,11 @@ def _load_payloads_from_sqlite(
         return None
 
     cache_hash, signature_json = _signature_hash(signature)
-    try:
+    def _query_row() -> tuple[Any, ...] | None:
         with connect_sqlite(
             _JONGGA_PAYLOAD_SQLITE_DB_PATH,
             timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            pragmas=_JONGGA_PAYLOAD_SQLITE_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -144,7 +163,24 @@ def _load_payloads_from_sqlite(
                 """,
                 (cache_hash,),
             )
-            row = cursor.fetchone()
+            return cursor.fetchone()
+
+    try:
+        row = _query_row()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_jongga_payload_sqlite_schema(logger):
+            try:
+                row = _query_row()
+            except Exception as retry_error:
+                if logger is not None:
+                    logger.debug("Failed to load jongga payload sqlite cache after schema recovery: %s", retry_error)
+                return None
+        else:
+            if logger is not None:
+                logger.debug(f"Failed to load jongga payload sqlite cache: {error}")
+            return None
+
+    try:
         if row is None:
             return None
         cached_key_json, payload_json = row
@@ -173,12 +209,31 @@ def _save_payloads_to_sqlite(
         return
 
     cache_hash, signature_json = _signature_hash(signature)
+    normalized_max_rows = max(1, int(_JONGGA_PAYLOAD_SQLITE_MAX_ROWS))
     try:
-        payload_json = json.dumps(payloads, ensure_ascii=False, cls=NumpyEncoder)
+        payload_json = json.dumps(
+            payloads,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            cls=NumpyEncoder,
+        )
+    except Exception as error:
+        if logger is not None:
+            logger.debug(f"Failed to serialize jongga payload sqlite cache: {error}")
+        return
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="jongga_results_payload_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payloads() -> None:
         with connect_sqlite(
             _JONGGA_PAYLOAD_SQLITE_DB_PATH,
             timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            pragmas=_JONGGA_PAYLOAD_SQLITE_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -197,22 +252,21 @@ def _save_payloads_to_sqlite(
                     datetime.now().isoformat(),
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM jongga_results_payload_cache
-                WHERE cache_hash NOT IN (
-                    SELECT cache_hash
-                    FROM jongga_results_payload_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_JONGGA_PAYLOAD_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payloads()
     except Exception as error:
-        if logger is not None:
-            logger.debug(f"Failed to save jongga payload sqlite cache: {error}")
+        if _is_missing_table_error(error) and _recover_jongga_payload_sqlite_schema(logger):
+            try:
+                _upsert_payloads()
+            except Exception as retry_error:
+                if logger is not None:
+                    logger.debug("Failed to save jongga payload sqlite cache after schema recovery: %s", retry_error)
+        else:
+            if logger is not None:
+                logger.debug(f"Failed to save jongga payload sqlite cache: {error}")
 
 
 def load_jongga_result_payloads(

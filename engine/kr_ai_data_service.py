@@ -11,11 +11,10 @@ import logging
 import os
 import threading
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from engine.collectors.news import EnhancedNewsCollector
 from engine.constants import FILE_PATHS, NEWS_COLLECTION, NEWS_SOURCE_WEIGHTS
 from engine.models import NewsItem
 from engine.kr_ai_stock_info_cache import (
@@ -28,6 +27,27 @@ from services.kr_market_data_cache_service import load_csv_file
 
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_news_collector_class():
+    """리팩토링 중인 collectors 구조(모듈/패키지 공존)에서 안전하게 클래스를 해석한다."""
+    try:
+        from engine.collectors.news import EnhancedNewsCollector as collector_class
+
+        return collector_class
+    except Exception:
+        pass
+
+    try:
+        from engine.collectors import EnhancedNewsCollector as collector_class
+
+        return collector_class
+    except Exception:
+        return None
+
+
+_ENHANCED_NEWS_COLLECTOR_CLASS = _resolve_news_collector_class()
+
 
 LATEST_SIGNAL_USECOLS = [
     "ticker",
@@ -84,8 +104,21 @@ def clear_kr_ai_stock_info_cache() -> None:
 class KrAiDataService:
     """KR AI Analyzer 데이터 로딩/뉴스 변환 책임을 담당한다."""
 
-    def __init__(self, news_collector: Optional[EnhancedNewsCollector] = None):
-        self.news_collector = news_collector or EnhancedNewsCollector()
+    def __init__(self, news_collector: Optional[Any] = None):
+        self.news_collector = news_collector or self._create_default_news_collector()
+
+    @staticmethod
+    def _create_default_news_collector() -> Any:
+        """기본 뉴스 수집기 인스턴스를 생성한다."""
+        collector_class = _ENHANCED_NEWS_COLLECTOR_CLASS
+        if collector_class is None:
+            raise ImportError("EnhancedNewsCollector import failed")
+
+        try:
+            return collector_class()
+        except TypeError:
+            # legacy collectors.py 구현은 config 인자를 필수로 받는다.
+            return collector_class(None)
 
     @staticmethod
     def _load_latest_signal_row(signals_file: str, ticker: str) -> Optional[pd.Series]:

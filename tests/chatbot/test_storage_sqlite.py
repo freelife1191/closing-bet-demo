@@ -16,10 +16,16 @@ sys.path.insert(
 )
 
 import chatbot.core as chatbot_core
+import chatbot.storage_sqlite_history as storage_sqlite_history
+import chatbot.storage_sqlite_common as sqlite_common
 from chatbot.storage_sqlite_helpers import (
     apply_history_session_deltas_in_sqlite,
+    clear_history_sessions_in_sqlite,
+    load_history_sessions_from_sqlite,
+    load_memories_from_sqlite,
     resolve_chatbot_storage_db_path,
     save_history_sessions_to_sqlite,
+    save_memories_to_sqlite,
 )
 
 
@@ -173,7 +179,7 @@ def test_apply_history_session_deltas_updates_and_deletes(tmp_path: Path):
     assert s1_message_count == 2
 
 
-def test_apply_history_session_deltas_clear_all(tmp_path: Path):
+def test_apply_history_session_deltas_clear_all(monkeypatch, tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     baseline_sessions = {
         "s1": {
@@ -187,6 +193,15 @@ def test_apply_history_session_deltas_clear_all(tmp_path: Path):
         }
     }
     assert save_history_sessions_to_sqlite(db_path, baseline_sessions, chatbot_core.logger) is True
+    traced_sql: list[str] = []
+    original_connect = storage_sqlite_history.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(storage_sqlite_history, "connect_sqlite", _traced_connect)
 
     assert (
         apply_history_session_deltas_in_sqlite(
@@ -202,6 +217,70 @@ def test_apply_history_session_deltas_clear_all(tmp_path: Path):
 
     assert _count_rows(db_path, "chatbot_sessions") == 0
     assert _count_rows(db_path, "chatbot_messages") == 0
+    assert any("DELETE FROM chatbot_sessions" in sql for sql in traced_sql)
+    assert not any("DELETE FROM chatbot_messages" in sql for sql in traced_sql)
+
+
+def test_save_history_sessions_uses_session_delete_only(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    sessions = {
+        "s1": {
+            "id": "s1",
+            "title": "세션1",
+            "messages": [{"role": "user", "parts": [{"text": "a"}], "timestamp": "2026-02-22T00:00:00"}],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:00",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-a",
+        }
+    }
+    assert save_history_sessions_to_sqlite(db_path, sessions, chatbot_core.logger) is True
+
+    traced_sql: list[str] = []
+    original_connect = storage_sqlite_history.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(storage_sqlite_history, "connect_sqlite", _traced_connect)
+
+    assert save_history_sessions_to_sqlite(db_path, sessions, chatbot_core.logger) is True
+    assert any("DELETE FROM chatbot_sessions" in sql for sql in traced_sql)
+    assert not any("DELETE FROM chatbot_messages" in sql for sql in traced_sql)
+
+
+def test_clear_history_sessions_uses_session_delete_only(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    sessions = {
+        "s1": {
+            "id": "s1",
+            "title": "세션1",
+            "messages": [{"role": "user", "parts": [{"text": "a"}], "timestamp": "2026-02-22T00:00:00"}],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:00",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-a",
+        }
+    }
+    assert save_history_sessions_to_sqlite(db_path, sessions, chatbot_core.logger) is True
+
+    traced_sql: list[str] = []
+    original_connect = storage_sqlite_history.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(storage_sqlite_history, "connect_sqlite", _traced_connect)
+
+    assert clear_history_sessions_in_sqlite(db_path, chatbot_core.logger) is True
+    assert _count_rows(db_path, "chatbot_sessions") == 0
+    assert _count_rows(db_path, "chatbot_messages") == 0
+    assert any("DELETE FROM chatbot_sessions" in sql for sql in traced_sql)
+    assert not any("DELETE FROM chatbot_messages" in sql for sql in traced_sql)
 
 
 def _install_message_delete_audit_trigger(db_path: Path) -> None:
@@ -236,7 +315,7 @@ def _read_message_delete_audit_count(db_path: Path) -> int:
     return int(row[0]) if row else 0
 
 
-def test_apply_history_session_deltas_append_only_skips_message_delete(tmp_path: Path):
+def test_apply_history_session_deltas_append_only_skips_message_delete(monkeypatch, tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     baseline_sessions = {
         "s1": {
@@ -254,6 +333,15 @@ def test_apply_history_session_deltas_append_only_skips_message_delete(tmp_path:
     }
     assert save_history_sessions_to_sqlite(db_path, baseline_sessions, chatbot_core.logger) is True
     _install_message_delete_audit_trigger(db_path)
+    traced_sql: list[str] = []
+    original_connect = storage_sqlite_history.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(storage_sqlite_history, "connect_sqlite", _traced_connect)
 
     updated_sessions = {
         "s1": {
@@ -281,6 +369,7 @@ def test_apply_history_session_deltas_append_only_skips_message_delete(tmp_path:
 
     assert _read_message_delete_audit_count(db_path) == 0
     assert _count_rows(db_path, "chatbot_messages") == 3
+    assert not any("SELECT COUNT(*) FROM chatbot_messages" in sql for sql in traced_sql)
 
 
 def test_apply_history_session_deltas_non_append_falls_back_to_rewrite(tmp_path: Path):
@@ -336,3 +425,118 @@ def test_apply_history_session_deltas_non_append_falls_back_to_rewrite(tmp_path:
         ).fetchone()
     assert row is not None
     assert "a-수정" in str(row[0])
+
+
+def test_ensure_chatbot_storage_schema_skips_redundant_init(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+
+    original_connect = sqlite_common.connect_sqlite
+    connect_calls = {"count": 0}
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite_common, "connect_sqlite", _counted_connect)
+
+    assert sqlite_common.ensure_chatbot_storage_schema(db_path, chatbot_core.logger) is True
+    assert sqlite_common.ensure_chatbot_storage_schema(db_path, chatbot_core.logger) is True
+    assert connect_calls["count"] == 1
+
+
+def test_ensure_chatbot_storage_schema_reinitializes_after_db_removed(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+
+    original_connect = sqlite_common.connect_sqlite
+    connect_calls = {"count": 0}
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite_common, "connect_sqlite", _counted_connect)
+
+    assert sqlite_common.ensure_chatbot_storage_schema(db_path, chatbot_core.logger) is True
+    db_path.unlink()
+    assert sqlite_common.ensure_chatbot_storage_schema(db_path, chatbot_core.logger) is True
+    assert connect_calls["count"] == 2
+
+
+def test_load_history_sessions_recovers_when_sessions_table_missing(tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    sessions = {
+        "s1": {
+            "id": "s1",
+            "title": "세션1",
+            "messages": [{"role": "user", "parts": [{"text": "a"}], "timestamp": "2026-02-22T00:00:00"}],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:00",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-a",
+        }
+    }
+    assert save_history_sessions_to_sqlite(db_path, sessions, chatbot_core.logger) is True
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE IF EXISTS chatbot_sessions")
+        conn.commit()
+
+    loaded = load_history_sessions_from_sqlite(db_path, chatbot_core.logger)
+    assert loaded == {}
+
+    with sqlite3.connect(db_path) as conn:
+        table_row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chatbot_sessions'"
+        ).fetchone()
+    assert table_row is not None
+
+
+def test_save_history_sessions_recovers_when_messages_table_missing(tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    sessions = {
+        "s1": {
+            "id": "s1",
+            "title": "세션1",
+            "messages": [
+                {"role": "user", "parts": [{"text": "a"}], "timestamp": "2026-02-22T00:00:00"},
+                {"role": "model", "parts": [{"text": "b"}], "timestamp": "2026-02-22T00:00:01"},
+            ],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:01",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-a",
+        }
+    }
+    assert save_history_sessions_to_sqlite(db_path, sessions, chatbot_core.logger) is True
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE IF EXISTS chatbot_messages")
+        conn.commit()
+
+    assert save_history_sessions_to_sqlite(db_path, sessions, chatbot_core.logger) is True
+    assert _count_rows(db_path, "chatbot_sessions") == 1
+    assert _count_rows(db_path, "chatbot_messages") == 2
+
+
+def test_load_memories_recovers_when_memories_table_missing(tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    memories = {
+        "risk": {
+            "value": "aggressive",
+            "updated_at": "2026-02-22T00:00:00",
+        }
+    }
+    assert save_memories_to_sqlite(db_path, memories, chatbot_core.logger) is True
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE IF EXISTS chatbot_memories")
+        conn.commit()
+
+    loaded = load_memories_from_sqlite(db_path, chatbot_core.logger)
+    assert loaded == {}
+
+    with sqlite3.connect(db_path) as conn:
+        table_row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chatbot_memories'"
+        ).fetchone()
+    assert table_row is not None

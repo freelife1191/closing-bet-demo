@@ -42,7 +42,12 @@ def _write_signals_csv(tmp_path, signal_date: str) -> None:
     ).to_csv(tmp_path / "signals_log.csv", index=False)
 
 
-def _build_payload(tmp_path, *, req_date: str | None):
+def _build_payload(
+    tmp_path,
+    *,
+    req_date: str | None,
+    count_total_scanned_stocks_fn=lambda _data_dir: 1,
+):
     logger = logging.getLogger("vcp-payload-cache-test")
     return vcp_payload_service.build_vcp_signals_payload(
         req_date=req_date,
@@ -66,7 +71,7 @@ def _build_payload(tmp_path, *, req_date: str | None):
         build_ai_data_map=lambda _payload: {},
         merge_legacy_ai_fields_into_map=lambda _ai_map, _legacy: None,
         merge_ai_data_into_vcp_signals=lambda _signals, _ai_map: 0,
-        count_total_scanned_stocks=lambda _data_dir: 1,
+        count_total_scanned_stocks=count_total_scanned_stocks_fn,
         logger=logger,
         data_dir=str(tmp_path),
     )
@@ -114,3 +119,95 @@ def test_build_vcp_payload_prunes_sqlite_cache_rows(monkeypatch, tmp_path):
         row_count = int(cursor.fetchone()[0])
 
     assert row_count == 2
+
+
+def test_build_vcp_payload_creates_sqlite_parent_dir_when_missing(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+    db_path = tmp_path / "cache" / "nested" / "runtime_cache.db"
+
+    monkeypatch.setattr(vcp_signals_cache, "_resolve_cache_db_path", lambda _data_dir: str(db_path))
+
+    payload = _build_payload(tmp_path, req_date="2026-02-22")
+
+    assert payload["count"] == 1
+    assert db_path.exists()
+
+    with connect_sqlite(str(db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM vcp_signals_payload_cache")
+        row_count = int(cursor.fetchone()[0])
+
+    assert row_count >= 1
+
+
+def test_build_vcp_payload_allows_legacy_noarg_scanned_count_callback(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    payload = _build_payload(
+        tmp_path,
+        req_date="2026-02-22",
+        count_total_scanned_stocks_fn=lambda: 7,
+    )
+
+    assert payload["count"] == 1
+    assert payload["total_scanned"] == 7
+
+
+def test_build_vcp_payload_coerces_invalid_scanned_count_to_zero(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    payload = _build_payload(
+        tmp_path,
+        req_date="2026-02-22",
+        count_total_scanned_stocks_fn=lambda _data_dir: "N/A",
+    )
+
+    assert payload["count"] == 1
+    assert payload["total_scanned"] == 0
+
+
+def test_build_vcp_payload_recovers_when_sqlite_table_missing(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    first = _build_payload(tmp_path, req_date="2026-02-22")
+    assert first["count"] == 1
+
+    db_path = tmp_path / "runtime_cache.db"
+    with connect_sqlite(str(db_path)) as conn:
+        conn.execute("DROP TABLE vcp_signals_payload_cache")
+        conn.commit()
+
+    with vcp_signals_cache._VCP_SIGNALS_CACHE_LOCK:
+        vcp_signals_cache._VCP_SIGNALS_MEMORY_CACHE.clear()
+
+    second = _build_payload(tmp_path, req_date="2026-02-22")
+    assert second["count"] == 1
+    assert second["signals"][0]["ticker"] == "005930"
+
+    with connect_sqlite(str(db_path)) as conn:
+        row_count = int(conn.execute("SELECT COUNT(*) FROM vcp_signals_payload_cache").fetchone()[0])
+    assert row_count >= 1
+
+
+def test_build_vcp_payload_skips_delete_when_rows_within_limit(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+    monkeypatch.setattr(vcp_signals_cache, "_VCP_SIGNALS_SQLITE_MAX_ROWS", 16)
+
+    traced_sql: list[str] = []
+    original_connect = vcp_signals_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(vcp_signals_cache, "connect_sqlite", _traced_connect)
+
+    payload = _build_payload(tmp_path, req_date="2026-02-22")
+    assert payload["count"] == 1
+    assert not any("DELETE FROM vcp_signals_payload_cache" in sql for sql in traced_sql)

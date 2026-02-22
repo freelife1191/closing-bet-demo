@@ -90,21 +90,24 @@ class PaperTradingHistoryMixin:
 
     def _record_asset_history_with_cash_value(self, *, cash: int, current_stock_value: int) -> None:
         """현재 현금/주식 평가값으로 자산 히스토리를 upsert한다."""
-        with self.get_context() as conn:
-            cursor = conn.cursor()
-            snapshot = self._upsert_asset_history_row(
-                cursor=cursor,
-                cash=int(cash),
-                current_stock_value=int(current_stock_value),
-            )
-            if snapshot:
-                conn.commit()
-                self._set_last_asset_history_snapshot(
-                    date=str(snapshot["date"]),
-                    total_asset=int(snapshot["total_asset"]),
-                    cash=int(snapshot["cash"]),
-                    stock_value=int(snapshot["stock_value"]),
+        def _operation():
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                snapshot = self._upsert_asset_history_row(
+                    cursor=cursor,
+                    cash=int(cash),
+                    current_stock_value=int(current_stock_value),
                 )
+                if snapshot:
+                    conn.commit()
+                    self._set_last_asset_history_snapshot(
+                        date=str(snapshot["date"]),
+                        total_asset=int(snapshot["total_asset"]),
+                        cash=int(snapshot["cash"]),
+                        stock_value=int(snapshot["stock_value"]),
+                    )
+
+        self._execute_db_operation_with_schema_retry(_operation)
 
     def record_asset_history_with_cash(self, *, cash: int, current_stock_value: int) -> None:
         """외부에서 이미 계산한 cash 값을 재사용해 히스토리를 기록한다."""
@@ -119,65 +122,71 @@ class PaperTradingHistoryMixin:
     def record_asset_history(self, current_stock_value):
         """Record daily asset history snapshot"""
         try:
-            with self.get_context() as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT cash FROM balance WHERE id = 1')
-                balance_row = cursor.fetchone()
-                cash = int(balance_row[0]) if balance_row else 0
-                snapshot = self._upsert_asset_history_row(
-                    cursor=cursor,
-                    cash=int(cash),
-                    current_stock_value=int(current_stock_value),
-                )
-                if snapshot:
-                    conn.commit()
-                    self._set_last_asset_history_snapshot(
-                        date=str(snapshot["date"]),
-                        total_asset=int(snapshot["total_asset"]),
-                        cash=int(snapshot["cash"]),
-                        stock_value=int(snapshot["stock_value"]),
+            def _operation():
+                with self.get_context() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT cash FROM balance WHERE id = 1')
+                    balance_row = cursor.fetchone()
+                    cash = int(balance_row[0]) if balance_row else 0
+                    snapshot = self._upsert_asset_history_row(
+                        cursor=cursor,
+                        cash=int(cash),
+                        current_stock_value=int(current_stock_value),
                     )
+                    if snapshot:
+                        conn.commit()
+                        self._set_last_asset_history_snapshot(
+                            date=str(snapshot["date"]),
+                            total_asset=int(snapshot["total_asset"]),
+                            cash=int(snapshot["cash"]),
+                            stock_value=int(snapshot["stock_value"]),
+                        )
+
+            self._execute_db_operation_with_schema_retry(_operation)
         except Exception as e:
             logger.error(f"Failed to record asset history: {e}")
 
     def get_asset_history(self, limit=30):
         """Get asset history for chart"""
-        with self.get_context() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            # Fetch latest N records (DESC), then sort by date (ASC) for chart
-            cursor.execute(
-                '''
-                SELECT date, total_asset, cash, stock_value
-                FROM asset_history
-                ORDER BY date DESC
-                LIMIT ?
-            ''',
-                (limit,),
-            )
-            rows = [dict(row) for row in cursor.fetchall()]
-            rows.reverse()  # Sort by date ASC for chart
-
-            # [Fix] If history is scarce (< 2 points), return dummy data for chart rendering
-            if len(rows) < 2:
-                # Calculate current total asset dynamically for better dummy data
-                cursor.execute('SELECT cash FROM balance WHERE id = 1')
-                balance_row = cursor.fetchone()
-                current_cash = int(balance_row['cash']) if balance_row else 0
-
-                # Calculate current stock value from portfolio
-                cursor.execute('SELECT quantity, avg_price, ticker FROM portfolio')
-                portfolio_rows = cursor.fetchall()
-
-                with self.cache_lock:
-                    prices = self.price_cache
-                current_stock_val = self._calculate_stock_value_from_rows(portfolio_rows, prices)
-
-                current_total = current_cash + current_stock_val
-                return self._build_dummy_asset_history(
-                    current_total=current_total,
-                    current_cash=current_cash,
-                    current_stock_val=current_stock_val,
+        def _operation():
+            with self.get_context() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                # Fetch latest N records (DESC), then sort by date (ASC) for chart
+                cursor.execute(
+                    '''
+                    SELECT date, total_asset, cash, stock_value
+                    FROM asset_history
+                    ORDER BY date DESC
+                    LIMIT ?
+                ''',
+                    (limit,),
                 )
+                rows = [dict(row) for row in cursor.fetchall()]
+                rows.reverse()  # Sort by date ASC for chart
 
-            return rows
+                # [Fix] If history is scarce (< 2 points), return dummy data for chart rendering
+                if len(rows) < 2:
+                    # Calculate current total asset dynamically for better dummy data
+                    cursor.execute('SELECT cash FROM balance WHERE id = 1')
+                    balance_row = cursor.fetchone()
+                    current_cash = int(balance_row['cash']) if balance_row else 0
+
+                    # Calculate current stock value from portfolio
+                    cursor.execute('SELECT quantity, avg_price, ticker FROM portfolio')
+                    portfolio_rows = cursor.fetchall()
+
+                    with self.cache_lock:
+                        prices = self.price_cache
+                    current_stock_val = self._calculate_stock_value_from_rows(portfolio_rows, prices)
+
+                    current_total = current_cash + current_stock_val
+                    return self._build_dummy_asset_history(
+                        current_total=current_total,
+                        current_cash=current_cash,
+                        current_stock_val=current_stock_val,
+                    )
+
+                return rows
+
+        return self._execute_db_operation_with_schema_retry(_operation)

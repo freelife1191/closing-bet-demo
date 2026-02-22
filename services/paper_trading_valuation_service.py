@@ -14,6 +14,10 @@ from datetime import datetime
 from typing import Any, Callable, Dict
 
 
+def _normalize_ticker(ticker: str) -> str:
+    return str(ticker).zfill(6)
+
+
 def _load_holdings_and_balance(get_context_fn: Callable[[], Any]) -> tuple[list[dict], int, int]:
     """DB에서 보유 종목과 현금/입금 총액을 로드한다."""
     with get_context_fn() as conn:
@@ -27,6 +31,8 @@ def _load_holdings_and_balance(get_context_fn: Callable[[], Any]) -> tuple[list[
             """
         )
         holdings = [dict(row) for row in cursor.fetchall()]
+        for holding in holdings:
+            holding["ticker"] = _normalize_ticker(holding.get("ticker", ""))
 
         cursor.execute("SELECT cash, total_deposit FROM balance WHERE id = 1")
         balance_row = cursor.fetchone()
@@ -51,9 +57,14 @@ def get_portfolio_valuation(
     last_update: datetime | None,
     logger: logging.Logger,
     record_asset_history_with_cash_fn: Callable[..., None] | None = None,
+    run_db_operation_with_schema_retry_fn: Callable[[Callable[[], Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """캐시 가격을 기준으로 포트폴리오 평가 결과를 계산한다."""
-    holdings, cash, total_deposit = _load_holdings_and_balance(get_context_fn)
+    load_holdings_fn = lambda: _load_holdings_and_balance(get_context_fn)
+    if callable(run_db_operation_with_schema_retry_fn):
+        holdings, cash, total_deposit = run_db_operation_with_schema_retry_fn(load_holdings_fn)
+    else:
+        holdings, cash, total_deposit = load_holdings_fn()
 
     updated_holdings: list[dict] = []
     total_stock_value = 0

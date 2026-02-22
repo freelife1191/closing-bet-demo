@@ -11,19 +11,52 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any, Callable
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 _ROW_COUNT_CACHE: dict[str, tuple[tuple[int, int], int | None]] = {}
 _ROW_COUNT_CACHE_LOCK = threading.Lock()
 _ROW_COUNT_SQLITE_LOCK = threading.Lock()
 _ROW_COUNT_SQLITE_READY: set[str] = set()
+_ROW_COUNT_MEMORY_MAX_ENTRIES = 4_096
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _ROW_COUNT_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
+_ROW_COUNT_SQLITE_TIMEOUT_SECONDS = 5
+_ROW_COUNT_SQLITE_MAX_ROWS = 8_192
+_ROW_COUNT_INIT_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_ROW_COUNT_SQLITE_TIMEOUT_SECONDS * 1000,
+)
+_ROW_COUNT_SESSION_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_ROW_COUNT_SQLITE_TIMEOUT_SECONDS * 1000,
+    base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-4000"),
+)
+
+
+def _invalidate_row_count_sqlite_ready(db_path: str) -> None:
+    with _ROW_COUNT_SQLITE_LOCK:
+        _ROW_COUNT_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "file_row_count_cache" in message
+
+
+def _recover_row_count_sqlite_schema(logger: Any) -> bool:
+    db_path = _ROW_COUNT_CACHE_DB_PATH
+    _invalidate_row_count_sqlite_ready(db_path)
+    return _ensure_row_count_sqlite_cache(logger)
 
 
 def clear_file_row_count_cache() -> None:
@@ -72,25 +105,29 @@ def count_rows_for_path(path: str, logger: Any) -> int | None:
     return None
 
 
+def _save_row_count_memory_entry(path: str, signature: tuple[int, int], row_count: int | None) -> None:
+    max_entries = max(1, int(_ROW_COUNT_MEMORY_MAX_ENTRIES))
+    with _ROW_COUNT_CACHE_LOCK:
+        if path in _ROW_COUNT_CACHE:
+            _ROW_COUNT_CACHE.pop(path, None)
+        elif len(_ROW_COUNT_CACHE) >= max_entries:
+            oldest_key = next(iter(_ROW_COUNT_CACHE))
+            _ROW_COUNT_CACHE.pop(oldest_key, None)
+        _ROW_COUNT_CACHE[path] = (signature, row_count)
+
+
 def _ensure_row_count_sqlite_cache(logger: Any) -> bool:
     db_path = _ROW_COUNT_CACHE_DB_PATH
-    if db_path in _ROW_COUNT_SQLITE_READY:
-        return True
-
     with _ROW_COUNT_SQLITE_LOCK:
         if db_path in _ROW_COUNT_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            _ROW_COUNT_SQLITE_READY.discard(db_path)
         try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             with connect_sqlite(
                 db_path,
-                timeout_seconds=5,
-                pragmas=(
-                    "PRAGMA journal_mode=WAL",
-                    "PRAGMA synchronous=NORMAL",
-                    "PRAGMA temp_store=MEMORY",
-                    "PRAGMA busy_timeout=5000",
-                ),
+                timeout_seconds=_ROW_COUNT_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_ROW_COUNT_INIT_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -114,7 +151,7 @@ def _ensure_row_count_sqlite_cache(logger: Any) -> bool:
             _ROW_COUNT_SQLITE_READY.add(db_path)
             return True
         except Exception as error:
-            logger.debug(f"Failed to initialize row count sqlite cache: {error}")
+            logger.debug("Failed to initialize row count sqlite cache: %s", error)
             return False
 
 
@@ -127,11 +164,11 @@ def _load_row_count_from_sqlite(
     if not _ensure_row_count_sqlite_cache(logger):
         return False, None
 
-    try:
+    def _query_row() -> tuple[Any, ...] | None:
         with connect_sqlite(
             _ROW_COUNT_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_ROW_COUNT_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_ROW_COUNT_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -142,13 +179,45 @@ def _load_row_count_from_sqlite(
                 """,
                 (path, int(signature[0]), int(signature[1])),
             )
-            row = cursor.fetchone()
+            return cursor.fetchone()
+
+    try:
+        row = _query_row()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_row_count_sqlite_schema(logger):
+            try:
+                row = _query_row()
+            except Exception as retry_error:
+                logger.debug(
+                    "Failed to load row count cache from sqlite after schema recovery (%s): %s",
+                    path,
+                    retry_error,
+                )
+                return False, None
+        else:
+            logger.debug("Failed to load row count cache from sqlite (%s): %s", path, error)
+            return False, None
+
+    try:
         if row is None:
             return False, None
         return True, row[0]
     except Exception as error:
-        logger.debug(f"Failed to load row count cache from sqlite ({path}): {error}")
+        logger.debug("Failed to parse row count cache row from sqlite (%s): %s", path, error)
         return False, None
+
+
+def _prune_row_count_cache_if_needed(
+    cursor: sqlite3.Cursor,
+    *,
+    max_rows: int,
+) -> None:
+    normalized_max_rows = max(1, int(max_rows))
+    prune_rows_by_updated_at_if_needed(
+        cursor,
+        table_name="file_row_count_cache",
+        max_rows=normalized_max_rows,
+    )
 
 
 def _save_row_count_to_sqlite(
@@ -161,11 +230,12 @@ def _save_row_count_to_sqlite(
     if not _ensure_row_count_sqlite_cache(logger):
         return
 
-    try:
+    normalized_max_rows = max(1, int(_ROW_COUNT_SQLITE_MAX_ROWS))
+    def _upsert_row_count() -> None:
         with connect_sqlite(
             _ROW_COUNT_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_ROW_COUNT_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_ROW_COUNT_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -186,9 +256,26 @@ def _save_row_count_to_sqlite(
                     datetime.now().isoformat(),
                 ),
             )
+            _prune_row_count_cache_if_needed(
+                cursor,
+                max_rows=normalized_max_rows,
+            )
             conn.commit()
+
+    try:
+        _upsert_row_count()
     except Exception as error:
-        logger.debug(f"Failed to persist row count cache into sqlite ({path}): {error}")
+        if _is_missing_table_error(error) and _recover_row_count_sqlite_schema(logger):
+            try:
+                _upsert_row_count()
+            except Exception as retry_error:
+                logger.debug(
+                    "Failed to persist row count cache into sqlite after schema recovery (%s): %s",
+                    path,
+                    retry_error,
+                )
+        else:
+            logger.debug("Failed to persist row count cache into sqlite (%s): %s", path, error)
 
 
 def get_cached_file_row_count(
@@ -213,15 +300,13 @@ def get_cached_file_row_count(
         logger=logger,
     )
     if found_in_sqlite:
-        with _ROW_COUNT_CACHE_LOCK:
-            _ROW_COUNT_CACHE[path] = (signature, sqlite_cached)
+        _save_row_count_memory_entry(path, signature, sqlite_cached)
         return sqlite_cached
 
     resolver = count_rows_fn or count_rows_for_path
     row_count = resolver(path, logger)
 
-    with _ROW_COUNT_CACHE_LOCK:
-        _ROW_COUNT_CACHE[path] = (signature, row_count)
+    _save_row_count_memory_entry(path, signature, row_count)
     _save_row_count_to_sqlite(
         path=path,
         signature=signature,
@@ -229,4 +314,3 @@ def get_cached_file_row_count(
         logger=logger,
     )
     return row_count
-

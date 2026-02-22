@@ -71,11 +71,11 @@ def build_vcp_signals_payload(
         except Exception as e:
             logger.warning(f"Failed to merge AI data into signals: {e}")
 
-    try:
-        total_scanned = count_total_scanned_stocks(data_dir)
-    except Exception as e:
-        logger.warning(f"Failed to count scanned stocks: {e}")
-        total_scanned = 0
+    total_scanned = _resolve_total_scanned_stocks_count(
+        count_total_scanned_stocks=count_total_scanned_stocks,
+        data_dir=data_dir,
+        logger=logger,
+    )
 
     return {
         "signals": signals,
@@ -84,6 +84,33 @@ def build_vcp_signals_payload(
         "generated_at": current_time.isoformat(),
         "source": source,
     }
+
+
+def _resolve_total_scanned_stocks_count(
+    *,
+    count_total_scanned_stocks: Callable[[str], int],
+    data_dir: str,
+    logger: logging.Logger,
+) -> int:
+    try:
+        value = count_total_scanned_stocks(data_dir)
+    except TypeError:
+        try:
+            # 하위 호환: 무인자 콜백도 허용한다.
+            value = count_total_scanned_stocks()
+        except Exception as error:
+            logger.warning(f"Failed to count scanned stocks: {error}")
+            return 0
+    except Exception as error:
+        logger.warning(f"Failed to count scanned stocks: {error}")
+        return 0
+
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _load_vcp_signals(

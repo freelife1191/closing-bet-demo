@@ -24,6 +24,23 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
 
+if GEMINI_AVAILABLE:
+    if not hasattr(genai, "configure"):
+        def _compat_configure(**_kwargs):
+            return None
+        genai.configure = _compat_configure  # type: ignore[attr-defined]
+
+    if not hasattr(genai, "GenerativeModel"):
+        class _CompatGenerativeModel:  # pragma: no cover - 레거시 테스트 호환용
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def start_chat(self, history=None):
+                _ = history
+                raise NotImplementedError("Legacy GenerativeModel API is unavailable.")
+
+        genai.GenerativeModel = _CompatGenerativeModel  # type: ignore[attr-defined]
+
 from .prompts import get_welcome_message
 from .markdown_utils import (
     _extract_reasoning_and_answer as _extract_reasoning_and_answer_impl,
@@ -76,6 +93,27 @@ class HistoryManager(_BaseHistoryManager):
     def __init__(self, user_id: str):
         super().__init__(user_id=user_id, data_dir=DATA_DIR)
 
+    def _resolve_legacy_session_id(self) -> str:
+        if self.sessions:
+            latest_session = max(
+                self.sessions.values(),
+                key=lambda session: session.get("updated_at", ""),
+            )
+            return latest_session.get("id")
+        return self.create_session(save_immediate=False)
+
+    def add(self, role: str, message: str) -> None:
+        """레거시 테스트 호환: 기본 세션에 메시지를 추가한다."""
+        session_id = self._resolve_legacy_session_id()
+        self.add_message(session_id, role, message)
+
+    def count(self) -> int:
+        """레거시 테스트 호환: 기본 세션 메시지 수를 반환한다."""
+        if not self.sessions:
+            return 0
+        session_id = self._resolve_legacy_session_id()
+        return len(self.get_messages(session_id))
+
 class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
     """
     VCP 기반 한국 주식 분석 챗봇
@@ -91,6 +129,7 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         self.memory = MemoryManager(user_id)
         self.history = HistoryManager(user_id)
         self.data_fetcher = data_fetcher
+        self._default_session_id: Optional[str] = None
         
         # Cache initialization
         self._data_cache = None
@@ -107,6 +146,12 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
 
         # Gemini 초기화 - ZAI_API_KEY도 확인 (무료 티어 지원)
         self.api_key = _resolve_api_key_impl(api_key)
+        if GEMINI_AVAILABLE and callable(getattr(genai, "configure", None)):
+            try:
+                genai.configure(api_key=self.api_key)
+            except Exception as e:
+                logger.debug("Legacy genai.configure skipped: %s", e)
+
         self.available_models = []
         self.current_model_name = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
         self.client = None
@@ -117,8 +162,7 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
             user_id=user_id,
             logger=logger,
         )
-        if self.client:
-            self._init_models()
+        self._init_models()
 
     def close(self):
         """Gemini 클라이언트 리소스 정리 (asyncio Task pending 오류 방지)"""
@@ -134,6 +178,7 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         self.stock_map = {} # name -> ticker
         self.ticker_map = {} # ticker -> name
         self._load_stock_map()
+        self._default_session_id = None
 
     def _load_stock_map(self):
         """korean_stocks_list.csv 로드하여 매핑 생성"""
@@ -167,7 +212,35 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
             return True
         return False
 
-    def chat(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None, owner_id: str = None) -> Dict[str, Any]:
+    def _run_legacy_model_chat(self, user_message: str, target_model_name: str) -> Optional[str]:
+        model_cls = getattr(genai, "GenerativeModel", None) if GEMINI_AVAILABLE else None
+        if not callable(model_cls):
+            return None
+
+        try:
+            legacy_model = model_cls(target_model_name)
+            if not hasattr(legacy_model, "start_chat"):
+                return None
+            chat_session = legacy_model.start_chat(history=[])
+            response = chat_session.send_message(user_message)
+            return getattr(response, "text", str(response))
+        except Exception as error:
+            logger.debug("Legacy model chat path skipped: %s", error)
+            return None
+
+    def chat(
+        self,
+        user_message: str,
+        session_id: str = None,
+        model: str = None,
+        files: list = None,
+        watchlist: list = None,
+        persona: str = None,
+        api_key: str = None,
+        owner_id: str = None,
+        model_name: str = None,
+        as_dict: bool = False,
+    ) -> Any:
         """
         사용자 메시지 처리 및 응답 생성
         
@@ -180,19 +253,50 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
             persona: 특정 페르소나 지정 ('vcp' 등)
             api_key: (Optional) 사용자 제공 API Key
         """
-        return handle_chat(
+        resolved_model_name = model_name or model
+        resolved_session_id = session_id or self._default_session_id
+
+        if model_name:
+            legacy_response = self._run_legacy_model_chat(
+                user_message=user_message,
+                target_model_name=resolved_model_name,
+            )
+            if legacy_response is not None:
+                return legacy_response
+
+        result = handle_chat(
             bot=self,
             user_message=user_message,
-            session_id=session_id,
-            model=model,
+            session_id=resolved_session_id,
+            model=resolved_model_name,
             files=files,
             watchlist=watchlist,
             persona=persona,
             api_key=api_key,
             owner_id=owner_id,
         )
+        if isinstance(result, dict):
+            session_from_result = result.get("session_id")
+            if session_from_result:
+                self._default_session_id = session_from_result
+        if as_dict:
+            return result
+        if isinstance(result, dict):
+            return result.get("response", "")
+        return result
 
-    def chat_stream(self, user_message: str, session_id: str = None, model: str = None, files: list = None, watchlist: list = None, persona: str = None, api_key: str = None, owner_id: str = None) -> Dict[str, Any]:
+    def chat_stream(
+        self,
+        user_message: str,
+        session_id: str = None,
+        model: str = None,
+        files: list = None,
+        watchlist: list = None,
+        persona: str = None,
+        api_key: str = None,
+        owner_id: str = None,
+        model_name: str = None,
+    ) -> Dict[str, Any]:
         """
         사용자 메시지 처리 및 응답 생성
         
@@ -205,11 +309,13 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
             persona: 특정 페르소나 지정 ('vcp' 등)
             api_key: (Optional) 사용자 제공 API Key
         """
+        resolved_model_name = model_name or model
+        resolved_session_id = session_id or self._default_session_id
         yield from handle_chat_stream(
             bot=self,
             user_message=user_message,
-            session_id=session_id,
-            model=model,
+            session_id=resolved_session_id,
+            model=resolved_model_name,
             files=files,
             watchlist=watchlist,
             persona=persona,

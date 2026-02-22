@@ -8,10 +8,11 @@ Paper Trading Service (Mock Investment)
 
 import logging
 import os
+import sqlite3
 import threading
 import time
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Callable, Dict, TypeVar
 
 from services.paper_trading_db_setup import init_db as init_db_impl
 from services.paper_trading_history_mixin import PaperTradingHistoryMixin
@@ -34,9 +35,10 @@ from services.paper_trading_valuation_helpers import (
 from services.paper_trading_valuation_service import (
     get_portfolio_valuation as get_portfolio_valuation_impl,
 )
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import build_sqlite_pragmas, connect_sqlite
 
 logger = logging.getLogger(__name__)
+_T = TypeVar("_T")
 
 
 class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixin):
@@ -49,6 +51,18 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
     INITIAL_SYNC_WAIT_SEC = 0.1
     SQLITE_BUSY_TIMEOUT_MS = 30_000
     PRICE_CACHE_WARMUP_LIMIT = 5_000
+    _RECOVERABLE_TABLE_NAMES = (
+        "portfolio",
+        "trade_log",
+        "asset_history",
+        "balance",
+        "price_cache",
+    )
+    SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
+        busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS,
+        include_foreign_keys=True,
+        base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-8000"),
+    )
 
     def __init__(self, db_name='paper_trading.db', auto_start_sync=True):
         # Root path logic
@@ -62,19 +76,25 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         self.is_running = False
         self.bg_thread = None
         self._initial_sync_wait_done = False
+        self._price_cache_schema_ready = False
 
-        self._init_db()
+        self._price_cache_schema_ready = self._init_db()
+        if not self._price_cache_schema_ready:
+            self._ensure_price_cache_table(force_recheck=True)
         self._load_price_cache_from_db()
 
         # [Optimization] Auto-start background sync on initialization
         if auto_start_sync:
             self.start_background_sync()
 
-    def _init_db(self):
+    def _init_db(self, force_recheck: bool = False) -> bool:
         """Initialize SQLite database tables"""
-        init_db_impl(
-            db_path=self.db_path,
-            logger=logger,
+        return bool(
+            init_db_impl(
+                db_path=self.db_path,
+                logger=logger,
+                force_recheck=force_recheck,
+            )
         )
 
     def get_context(self):
@@ -83,22 +103,102 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         return connect_sqlite(
             self.db_path,
             timeout_seconds=timeout_seconds,
-            pragmas=(
-                f"PRAGMA busy_timeout={self.SQLITE_BUSY_TIMEOUT_MS}",
-                "PRAGMA foreign_keys=ON",
-                "PRAGMA temp_store=MEMORY",
-            ),
+            pragmas=self.SQLITE_SESSION_PRAGMAS,
         )
 
-    def _load_price_cache_from_db(self) -> None:
+    @staticmethod
+    def _is_missing_table_error(error: Exception, *, table_names: tuple[str, ...]) -> bool:
+        if not isinstance(error, sqlite3.OperationalError):
+            return False
+        message = str(error).lower()
+        if "no such table" not in message:
+            return False
+        return any(table_name.lower() in message for table_name in table_names)
+
+    @classmethod
+    def _is_missing_price_cache_table_error(cls, error: Exception) -> bool:
+        return cls._is_missing_table_error(error, table_names=("price_cache",))
+
+    @classmethod
+    def _is_missing_paper_trading_table_error(cls, error: Exception) -> bool:
+        return cls._is_missing_table_error(error, table_names=cls._RECOVERABLE_TABLE_NAMES)
+
+    @staticmethod
+    def _create_price_cache_schema(cursor: sqlite3.Cursor) -> None:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS price_cache (
+                ticker TEXT PRIMARY KEY,
+                price INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_price_cache_updated_at
+            ON price_cache(updated_at DESC)
+            """
+        )
+
+    def _ensure_price_cache_table(self, force_recheck: bool = False) -> bool:
+        if self._price_cache_schema_ready and not force_recheck:
+            return True
+        try:
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                self._create_price_cache_schema(cursor)
+                conn.commit()
+            self._price_cache_schema_ready = True
+            return True
+        except Exception as error:
+            self._price_cache_schema_ready = False
+            logger.warning(f"Failed to ensure price cache table: {error}")
+            return False
+
+    def _recover_paper_trading_schema(self) -> bool:
+        self._price_cache_schema_ready = False
+        recovered = self._init_db(force_recheck=True)
+        if not recovered:
+            recovered = self._ensure_price_cache_table(force_recheck=True)
+        if recovered:
+            self._price_cache_schema_ready = True
+        return recovered
+
+    def _execute_db_operation_with_schema_retry(
+        self,
+        operation: Callable[[], _T],
+        *,
+        _retried: bool = False,
+    ) -> _T:
+        try:
+            return operation()
+        except Exception as error:
+            if (not _retried) and self._is_missing_paper_trading_table_error(error):
+                if self._recover_paper_trading_schema():
+                    return self._execute_db_operation_with_schema_retry(
+                        operation,
+                        _retried=True,
+                    )
+            raise
+
+    def _load_price_cache_from_db(self, *, _retried: bool = False) -> None:
         """SQLite에 저장된 최신 가격 캐시를 메모리로 워밍업한다."""
         try:
             with self.get_context() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM portfolio")
-                portfolio_count_row = cursor.fetchone()
-                portfolio_count = int(portfolio_count_row[0]) if portfolio_count_row else 0
-                if portfolio_count > 0:
+                if not self._price_cache_schema_ready:
+                    self._create_price_cache_schema(cursor)
+                    conn.commit()
+                    self._price_cache_schema_ready = True
+                has_holdings_row = cursor.execute(
+                    """
+                    SELECT 1
+                    FROM portfolio
+                    LIMIT 1
+                    """
+                ).fetchone()
+                if has_holdings_row is not None:
                     cursor.execute(
                         """
                         SELECT pc.ticker, pc.price
@@ -121,6 +221,11 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                     )
                 rows = cursor.fetchall()
         except Exception as error:
+            self._price_cache_schema_ready = False
+            if (not _retried) and self._is_missing_paper_trading_table_error(error):
+                if self._recover_paper_trading_schema():
+                    self._load_price_cache_from_db(_retried=True)
+                    return
             logger.warning(f"Failed to warm up price cache from SQLite: {error}")
             return
 
@@ -141,7 +246,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         with self.cache_lock:
             self.price_cache.update(warmed_cache)
 
-    def _persist_price_cache(self, prices: Dict[str, int]) -> None:
+    def _persist_price_cache(self, prices: Dict[str, int], *, _retried: bool = False) -> None:
         """가격 캐시를 SQLite에 upsert하여 재시작 시 재사용한다."""
         if not prices:
             return
@@ -164,6 +269,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         try:
             with self.get_context() as conn:
                 cursor = conn.cursor()
+                if not self._price_cache_schema_ready:
+                    self._create_price_cache_schema(cursor)
+                    self._price_cache_schema_ready = True
                 cursor.executemany(
                     """
                     INSERT INTO price_cache (ticker, price, updated_at)
@@ -176,6 +284,11 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                 )
                 conn.commit()
         except Exception as error:
+            self._price_cache_schema_ready = False
+            if (not _retried) and self._is_missing_paper_trading_table_error(error):
+                if self._recover_paper_trading_schema():
+                    self._persist_price_cache(prices, _retried=True)
+                    return
             logger.warning(f"Failed to persist price cache into SQLite: {error}")
 
     def start_background_sync(self):
@@ -303,12 +416,26 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             return current_prices
 
         logger.info("Portfolio Valuation: Waiting for initial price sync...")
+        wait_started_at = time.monotonic()
+        minimum_wait_seconds = 0.8
+        target_tickers = {
+            str(holding.get("ticker")).zfill(6)
+            for holding in holdings
+            if holding.get("ticker")
+        }
+
         for _ in range(self.INITIAL_SYNC_WAIT_TRIES):
             time.sleep(self.INITIAL_SYNC_WAIT_SEC)
             with self.cache_lock:
-                if self.price_cache:
-                    current_prices = self.price_cache.copy()
-                    break
+                if not self.price_cache:
+                    continue
+                if target_tickers and not target_tickers.issubset(self.price_cache.keys()):
+                    continue
+                if (time.monotonic() - wait_started_at) < minimum_wait_seconds:
+                    continue
+
+                current_prices = self.price_cache.copy()
+                break
         self._initial_sync_wait_done = True
         if current_prices:
             logger.info("Portfolio Valuation: Synced successfully waited.")
@@ -354,6 +481,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             build_valuated_holding_fn=self._build_valuated_holding,
             record_asset_history_fn=self.record_asset_history,
             record_asset_history_with_cash_fn=getattr(self, "record_asset_history_with_cash", None),
+            run_db_operation_with_schema_retry_fn=self._execute_db_operation_with_schema_retry,
             last_update=self.last_update,
             logger=logger,
         )

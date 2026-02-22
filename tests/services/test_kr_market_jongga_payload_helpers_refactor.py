@@ -7,6 +7,7 @@ KR Market Jongga Payload Helpers 리팩토링 회귀 테스트
 from __future__ import annotations
 
 import os
+import sqlite3
 import types
 
 import services.kr_market_jongga_payload_helpers as payload_helpers
@@ -207,3 +208,111 @@ def test_find_recent_valid_jongga_payload_prunes_sqlite_rows(monkeypatch, tmp_pa
         row_count = int(cursor.fetchone()[0])
 
     assert row_count == 2
+
+
+def test_find_recent_valid_jongga_payload_creates_sqlite_parent_dir_when_missing(monkeypatch, tmp_path):
+    payload_helpers._RECENT_JONGGA_PAYLOAD_CACHE.clear()
+    payload_helpers._RECENT_JONGGA_SQLITE_READY.clear()
+
+    (tmp_path / "jongga_v2_results_20260220.json").write_text("{}", encoding="utf-8")
+    db_path = tmp_path / "cache" / "nested" / "runtime_cache.db"
+
+    monkeypatch.setattr(payload_helpers, "_runtime_cache_db_path", lambda _data_dir: str(db_path))
+    monkeypatch.setattr(
+        payload_helpers,
+        "load_json_from_path",
+        lambda *_args, **_kwargs: {
+            "date": "2026-02-20",
+            "signals": [{"ticker": "000001"}],
+        },
+    )
+
+    loaded = payload_helpers.find_recent_valid_jongga_payload(
+        data_dir=str(tmp_path),
+        recalculate_jongga_grades=lambda _payload: False,
+        logger=_logger_stub(),
+    )
+
+    assert loaded is not None
+    assert db_path.exists()
+
+    with connect_sqlite(str(db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM jongga_recent_valid_payload_cache")
+        row_count = int(cursor.fetchone()[0])
+    assert row_count >= 1
+
+
+def test_find_recent_valid_jongga_payload_recovers_when_sqlite_table_missing(monkeypatch, tmp_path):
+    payload_helpers._RECENT_JONGGA_PAYLOAD_CACHE.clear()
+    payload_helpers._RECENT_JONGGA_SQLITE_READY.clear()
+
+    (tmp_path / "jongga_v2_results_20260220.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        payload_helpers,
+        "load_json_from_path",
+        lambda *_args, **_kwargs: {
+            "date": "2026-02-20",
+            "signals": [{"ticker": "000001"}],
+        },
+    )
+
+    first = payload_helpers.find_recent_valid_jongga_payload(
+        data_dir=str(tmp_path),
+        recalculate_jongga_grades=lambda _payload: False,
+        logger=_logger_stub(),
+    )
+    assert first is not None
+
+    db_path = tmp_path / "runtime_cache.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE jongga_recent_valid_payload_cache")
+        conn.commit()
+
+    payload_helpers._RECENT_JONGGA_PAYLOAD_CACHE.clear()
+    second = payload_helpers.find_recent_valid_jongga_payload(
+        data_dir=str(tmp_path),
+        recalculate_jongga_grades=lambda _payload: False,
+        logger=_logger_stub(),
+    )
+    assert second is not None
+    assert second["signals"][0]["ticker"] == "000001"
+
+    with sqlite3.connect(db_path) as conn:
+        row_count = int(conn.execute("SELECT COUNT(*) FROM jongga_recent_valid_payload_cache").fetchone()[0])
+    assert row_count >= 1
+
+
+def test_find_recent_valid_jongga_payload_skips_delete_when_rows_within_limit(monkeypatch, tmp_path):
+    payload_helpers._RECENT_JONGGA_PAYLOAD_CACHE.clear()
+    payload_helpers._RECENT_JONGGA_SQLITE_READY.clear()
+    monkeypatch.setattr(payload_helpers, "_RECENT_JONGGA_SQLITE_MAX_ROWS", 16)
+
+    (tmp_path / "jongga_v2_results_20260220.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        payload_helpers,
+        "load_json_from_path",
+        lambda *_args, **_kwargs: {
+            "date": "2026-02-20",
+            "signals": [{"ticker": "000001"}],
+        },
+    )
+
+    traced_sql: list[str] = []
+    original_connect = payload_helpers.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(payload_helpers, "connect_sqlite", _traced_connect)
+
+    loaded = payload_helpers.find_recent_valid_jongga_payload(
+        data_dir=str(tmp_path),
+        recalculate_jongga_grades=lambda _payload: False,
+        logger=_logger_stub(),
+    )
+
+    assert loaded is not None
+    assert not any("DELETE FROM jongga_recent_valid_payload_cache" in sql for sql in traced_sql)

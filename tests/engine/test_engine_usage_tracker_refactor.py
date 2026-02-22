@@ -7,6 +7,7 @@ Engine UsageTracker SQLite 리팩토링 회귀 테스트
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 
 import engine.services.usage_tracker as engine_usage_tracker
 
@@ -60,3 +61,21 @@ def test_engine_usage_tracker_default_db_path_points_to_project_data_dir():
     assert db_path.name == "usage.db"
     assert db_path.parent.name == "data"
     assert db_path.parent.parent.name != "engine"
+
+
+def test_engine_usage_tracker_recovers_when_usage_table_missing(monkeypatch, tmp_path):
+    tracker, db_path = _build_tracker_with_db(monkeypatch, tmp_path, max_free_usage=3)
+    email = "recover@example.com"
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE IF EXISTS api_usage")
+        conn.commit()
+
+    assert tracker.check_and_increment(email) is True
+    assert tracker.get_usage(email) == 1
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='api_usage'"
+        ).fetchone()
+    assert row is not None

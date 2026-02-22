@@ -83,3 +83,21 @@ def test_usage_tracker_normalizes_email_key(tmp_path):
     assert tracker.check_and_increment(" User@Example.com ") is True
     assert tracker.check_and_increment("user@example.com") is True
     assert tracker.get_usage("USER@EXAMPLE.COM") == 2
+
+
+def test_usage_tracker_recovers_when_usage_table_missing(tmp_path):
+    tracker = _build_tracker(tmp_path, limit=3)
+    email = "recover@example.com"
+
+    with sqlite3.connect(tracker.db_path) as conn:
+        conn.execute("DROP TABLE IF EXISTS usage_log")
+        conn.commit()
+
+    assert tracker.check_and_increment(email) is True
+    assert tracker.get_usage(email) == 1
+
+    with sqlite3.connect(tracker.db_path) as conn:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='usage_log'"
+        ).fetchone()
+    assert row is not None

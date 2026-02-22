@@ -349,3 +349,20 @@ def test_get_stock_info_handles_invalid_numeric_values_gracefully(monkeypatch):
     assert info["contraction_ratio"] == 0.0
     assert info["foreign_5d"] == 0
     assert info["inst_5d"] == 0
+
+
+def test_default_news_collector_supports_legacy_constructor_signature(monkeypatch):
+    class _LegacyCollector:
+        def __init__(self, config):
+            self.config = config
+
+    monkeypatch.setattr(
+        kr_ai_data_service_module,
+        "_ENHANCED_NEWS_COLLECTOR_CLASS",
+        _LegacyCollector,
+    )
+
+    service = KrAiDataService(news_collector=None)
+
+    assert isinstance(service.news_collector, _LegacyCollector)
+    assert service.news_collector.config is None

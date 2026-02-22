@@ -8,6 +8,7 @@ Paper Trading 가격 수집 유틸리티
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
@@ -55,6 +56,45 @@ def _extract_close_series(df: pd.DataFrame) -> pd.Series | pd.DataFrame:
         if isinstance(df.columns, pd.MultiIndex) and "Close" in df.columns.get_level_values(0):
             return df.xs("Close", axis=1, level=0, drop_level=True)
         return df
+
+
+def _extract_krx_close_map(df: pd.DataFrame) -> Dict[str, int]:
+    """pykrx 일자별 전종목 DataFrame에서 ticker -> 종가 맵을 추출한다."""
+    if df.empty or "종가" not in df.columns:
+        return {}
+
+    close_map: Dict[str, int] = {}
+    for index_value, close_price in df["종가"].items():
+        ticker = _normalize_ticker(index_value)
+        try:
+            close_int = int(float(close_price))
+        except (TypeError, ValueError):
+            continue
+        if close_int > 0:
+            close_map[ticker] = close_int
+    return close_map
+
+
+def _fetch_pykrx_batch_close_map(
+    *,
+    pykrx_stock: Any,
+    date_str: str,
+    logger: Any | None,
+) -> Dict[str, int]:
+    """pykrx 전종목 배치 API를 사용해 종가 맵을 가져온다."""
+    if not hasattr(pykrx_stock, "get_market_ohlcv_by_ticker"):
+        return {}
+
+    try:
+        batch_df = pykrx_stock.get_market_ohlcv_by_ticker(date_str, market="ALL")
+    except TypeError:
+        batch_df = pykrx_stock.get_market_ohlcv_by_ticker(date_str)
+    except Exception as error:
+        if logger is not None:
+            logger.debug(f"pykrx batch 가격 조회 실패 ({date_str}): {error}")
+        return {}
+
+    return _extract_krx_close_map(batch_df if isinstance(batch_df, pd.DataFrame) else pd.DataFrame())
 
 
 def fetch_prices_toss(
@@ -192,11 +232,16 @@ def fetch_prices_yfinance(
         return {}
 
     yf_tickers = [f"{ticker}.KS" for ticker in normalized_tickers]
+    yf_logger = logging.getLogger("yfinance")
+    original_level = yf_logger.level
+    yf_logger.setLevel(logging.CRITICAL)
     try:
         df = yf_module.download(yf_tickers, period="1d", progress=False, threads=False)
     except Exception as error:
         logger.error(f"PaperTrading YF Error: {error}")
         return {}
+    finally:
+        yf_logger.setLevel(original_level)
 
     if df.empty:
         return {}
@@ -237,6 +282,32 @@ def fetch_prices_pykrx(
     now = datetime.now()
     today_str = now.strftime("%Y%m%d")
     yesterday_str = (now - timedelta(days=1)).strftime("%Y%m%d")
+
+    today_close_map = _fetch_pykrx_batch_close_map(
+        pykrx_stock=pykrx_stock,
+        date_str=today_str,
+        logger=logger,
+    )
+    prices: Dict[str, int] = {
+        ticker: today_close_map[ticker]
+        for ticker in normalized_tickers
+        if ticker in today_close_map
+    }
+
+    missing_tickers = [ticker for ticker in normalized_tickers if ticker not in prices]
+    if missing_tickers:
+        yesterday_close_map = _fetch_pykrx_batch_close_map(
+            pykrx_stock=pykrx_stock,
+            date_str=yesterday_str,
+            logger=logger,
+        )
+        for ticker in missing_tickers:
+            close_price = yesterday_close_map.get(ticker)
+            if close_price is not None and close_price > 0:
+                prices[ticker] = close_price
+
+    if prices:
+        return prices
 
     prices: Dict[str, int] = {}
     for ticker in normalized_tickers:

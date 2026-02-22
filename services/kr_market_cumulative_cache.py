@@ -15,13 +15,18 @@ import glob
 import hashlib
 import json
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any, Callable
 
 from numpy_json_encoder import NumpyEncoder
 from services.file_row_count_cache import file_signature
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _CUMULATIVE_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
@@ -33,6 +38,32 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CUMULATIVE_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
 _CUMULATIVE_MEMORY_MAX_ENTRIES = 8
 _CUMULATIVE_SQLITE_MAX_ROWS = 16
+_CUMULATIVE_SQLITE_TIMEOUT_SECONDS = 5
+_CUMULATIVE_INIT_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_CUMULATIVE_SQLITE_TIMEOUT_SECONDS * 1000,
+)
+_CUMULATIVE_SESSION_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_CUMULATIVE_SQLITE_TIMEOUT_SECONDS * 1000,
+    base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-4000"),
+)
+
+
+def _invalidate_cumulative_sqlite_ready(db_path: str) -> None:
+    with _CUMULATIVE_SQLITE_LOCK:
+        _CUMULATIVE_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "cumulative_performance_cache" in message
+
+
+def _recover_cumulative_sqlite_schema(logger: Any) -> bool:
+    db_path = _CUMULATIVE_CACHE_DB_PATH
+    _invalidate_cumulative_sqlite_ready(db_path)
+    return _ensure_cumulative_sqlite(logger)
 
 
 def clear_cumulative_cache() -> None:
@@ -42,8 +73,12 @@ def clear_cumulative_cache() -> None:
 
 def _save_memory_cache_entry(signature: tuple[Any, ...], payload: dict[str, Any]) -> None:
     with _CUMULATIVE_CACHE_LOCK:
-        if signature not in _CUMULATIVE_CACHE and len(_CUMULATIVE_CACHE) >= _CUMULATIVE_MEMORY_MAX_ENTRIES:
-            _CUMULATIVE_CACHE.clear()
+        if signature in _CUMULATIVE_CACHE:
+            _CUMULATIVE_CACHE.pop(signature, None)
+        elif len(_CUMULATIVE_CACHE) >= _CUMULATIVE_MEMORY_MAX_ENTRIES:
+            # 전체 캐시 초기화 대신 가장 오래된 항목만 제거해 캐시 효율을 유지한다.
+            oldest_key = next(iter(_CUMULATIVE_CACHE))
+            _CUMULATIVE_CACHE.pop(oldest_key, None)
         _CUMULATIVE_CACHE[signature] = copy.deepcopy(payload)
 
 
@@ -113,23 +148,17 @@ def _signature_hash(signature: tuple[Any, ...]) -> str:
 
 def _ensure_cumulative_sqlite(logger: Any) -> bool:
     db_path = _CUMULATIVE_CACHE_DB_PATH
-    if db_path in _CUMULATIVE_SQLITE_READY:
-        return True
 
     with _CUMULATIVE_SQLITE_LOCK:
         if db_path in _CUMULATIVE_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            _CUMULATIVE_SQLITE_READY.discard(db_path)
         try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             with connect_sqlite(
                 db_path,
-                timeout_seconds=5,
-                pragmas=(
-                    "PRAGMA journal_mode=WAL",
-                    "PRAGMA synchronous=NORMAL",
-                    "PRAGMA temp_store=MEMORY",
-                    "PRAGMA busy_timeout=5000",
-                ),
+                timeout_seconds=_CUMULATIVE_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_CUMULATIVE_INIT_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -151,7 +180,7 @@ def _ensure_cumulative_sqlite(logger: Any) -> bool:
             _CUMULATIVE_SQLITE_READY.add(db_path)
             return True
         except Exception as error:
-            logger.debug(f"Failed to initialize cumulative sqlite cache: {error}")
+            logger.debug("Failed to initialize cumulative sqlite cache: %s", error)
             return False
 
 
@@ -160,11 +189,12 @@ def _load_from_sqlite(signature: tuple[Any, ...], logger: Any) -> dict[str, Any]
         return None
 
     cache_hash = _signature_hash(signature)
-    try:
+
+    def _query_row() -> tuple[Any, ...] | None:
         with connect_sqlite(
             _CUMULATIVE_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_CUMULATIVE_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_CUMULATIVE_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -175,7 +205,22 @@ def _load_from_sqlite(signature: tuple[Any, ...], logger: Any) -> dict[str, Any]
                 """,
                 (cache_hash,),
             )
-            row = cursor.fetchone()
+            return cursor.fetchone()
+
+    try:
+        row = _query_row()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_cumulative_sqlite_schema(logger):
+            try:
+                row = _query_row()
+            except Exception as retry_error:
+                logger.debug("Failed to load cumulative sqlite cache after schema recovery: %s", retry_error)
+                return None
+        else:
+            logger.debug("Failed to load cumulative sqlite cache: %s", error)
+            return None
+
+    try:
         if row is None:
             return None
         payload = json.loads(row[0])
@@ -185,7 +230,7 @@ def _load_from_sqlite(signature: tuple[Any, ...], logger: Any) -> dict[str, Any]
             return None
         return payload
     except Exception as error:
-        logger.debug(f"Failed to load cumulative sqlite cache: {error}")
+        logger.debug("Failed to load cumulative sqlite cache: %s", error)
         return None
 
 
@@ -194,12 +239,30 @@ def _save_to_sqlite(signature: tuple[Any, ...], payload: dict[str, Any], logger:
         return
 
     cache_hash = _signature_hash(signature)
+    normalized_max_rows = max(1, int(_CUMULATIVE_SQLITE_MAX_ROWS))
     try:
-        payload_json = json.dumps(payload, ensure_ascii=False, cls=NumpyEncoder)
+        payload_json = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            cls=NumpyEncoder,
+        )
+    except Exception as error:
+        logger.debug("Failed to serialize cumulative sqlite cache payload: %s", error)
+        return
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="cumulative_performance_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payload() -> None:
         with connect_sqlite(
             _CUMULATIVE_CACHE_DB_PATH,
-            timeout_seconds=5,
-            pragmas=("PRAGMA busy_timeout=5000",),
+            timeout_seconds=_CUMULATIVE_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_CUMULATIVE_SESSION_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -212,21 +275,19 @@ def _save_to_sqlite(signature: tuple[Any, ...], payload: dict[str, Any], logger:
                 """,
                 (cache_hash, payload_json, datetime.now().isoformat()),
             )
-            cursor.execute(
-                """
-                DELETE FROM cumulative_performance_cache
-                WHERE cache_hash NOT IN (
-                    SELECT cache_hash
-                    FROM cumulative_performance_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_CUMULATIVE_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payload()
     except Exception as error:
-        logger.debug(f"Failed to save cumulative sqlite cache: {error}")
+        if _is_missing_table_error(error) and _recover_cumulative_sqlite_schema(logger):
+            try:
+                _upsert_payload()
+            except Exception as retry_error:
+                logger.debug("Failed to save cumulative sqlite cache after schema recovery: %s", retry_error)
+        else:
+            logger.debug("Failed to save cumulative sqlite cache: %s", error)
 
 
 def get_cached_cumulative_payload(

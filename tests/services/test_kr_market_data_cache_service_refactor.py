@@ -197,6 +197,123 @@ def test_load_jongga_result_payloads_prunes_sqlite_cache_rows(monkeypatch, tmp_p
     assert row_count == 2
 
 
+def test_load_jongga_result_payloads_creates_sqlite_parent_dir_when_missing(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    db_path = tmp_path / "cache" / "nested" / "runtime_cache.db"
+    monkeypatch.setattr(cache_jongga, "_JONGGA_PAYLOAD_SQLITE_DB_PATH", str(db_path))
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+
+    result_file = tmp_path / "jongga_v2_results_20260222.json"
+    result_file.write_text(
+        json.dumps({"date": "2026-02-22", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    payloads = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+
+    assert len(payloads) == 1
+    assert db_path.exists()
+
+    with connect_sqlite(str(db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM jongga_results_payload_cache")
+        row_count = int(cursor.fetchone()[0])
+    assert row_count >= 1
+
+
+def test_load_jongga_result_payloads_recovers_when_sqlite_table_missing(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(
+        cache_jongga,
+        "_JONGGA_PAYLOAD_SQLITE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+
+    result_file = tmp_path / "jongga_v2_results_20260222.json"
+    result_file.write_text(
+        json.dumps({"date": "2026-02-22", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    first = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(first) == 1
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        conn.execute("DROP TABLE jongga_results_payload_cache")
+        conn.commit()
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["signature"] = None
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["payloads"] = []
+
+    second = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(second) == 1
+    assert second[0][1]["date"] == "2026-02-22"
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        row_count = int(conn.execute("SELECT COUNT(*) FROM jongga_results_payload_cache").fetchone()[0])
+    assert row_count >= 1
+
+
+def test_load_jongga_result_payloads_skips_delete_when_rows_within_limit(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(
+        cache_jongga,
+        "_JONGGA_PAYLOAD_SQLITE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    monkeypatch.setattr(cache_jongga, "_JONGGA_PAYLOAD_SQLITE_MAX_ROWS", 16)
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+
+    traced_sql: list[str] = []
+    original_connect = cache_jongga.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(cache_jongga, "connect_sqlite", _traced_connect)
+
+    (tmp_path / "jongga_v2_results_20260222.json").write_text(
+        json.dumps({"date": "2026-02-22", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    payloads = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(payloads) == 1
+    assert not any("DELETE FROM jongga_results_payload_cache" in sql for sql in traced_sql)
+
+
+def test_load_jongga_result_payloads_stores_compact_sqlite_payload_json(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(
+        cache_jongga,
+        "_JONGGA_PAYLOAD_SQLITE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+
+    (tmp_path / "jongga_v2_results_20260222.json").write_text(
+        json.dumps({"date": "2026-02-22", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    payloads = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(payloads) == 1
+
+    with connect_sqlite(str(tmp_path / "runtime_cache.db")) as conn:
+        row = conn.execute(
+            "SELECT payload_json FROM jongga_results_payload_cache LIMIT 1"
+        ).fetchone()
+
+    assert row is not None
+    payload_json = str(row[0])
+    assert ": " not in payload_json
+    assert ", " not in payload_json
+
+
 def test_load_latest_price_map_normalizes_ticker_and_picks_latest_on_unsorted_dates(tmp_path):
     _reset_data_cache_state()
     daily_prices = tmp_path / "daily_prices.csv"

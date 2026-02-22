@@ -42,9 +42,10 @@ class ScoringThresholds:
     BONUS_MAX: int = 7
     TOTAL_MAX: int = 19
 
-    MIN_B_GRADE: int = 6
-    MIN_A_GRADE: int = 8
-    MIN_S_GRADE: int = 10
+    MIN_C_GRADE: int = 8
+    MIN_B_GRADE: int = 10
+    MIN_A_GRADE: int = 12
+    MIN_S_GRADE: int = 15
 
 
 @dataclass(frozen=True)
@@ -64,8 +65,8 @@ class VolumeThresholds:
 class PriceChangeThresholds:
     """등락률 관련 임계값"""
 
-    MIN: float = 3.0
-    MAX: float = 30.0
+    MIN: float = 5.0
+    MAX: float = 20.0
     LIMIT: float = 29.5
 
     BONUS_5PCT: float = 5.0
@@ -131,4 +132,3 @@ __all__ = [
     "VCPThresholds",
     "VolumeThresholds",
 ]
-

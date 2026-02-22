@@ -7,6 +7,7 @@ Engine - Data Source Provider Strategies
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -15,6 +16,18 @@ from engine.data_sources_strategy_base import DataSourceStrategy
 
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _suppress_yfinance_logs():
+    """yfinance 내부 에러 로그를 현재 호출 범위에서만 억제한다."""
+    yf_logger = logging.getLogger("yfinance")
+    original_level = yf_logger.level
+    yf_logger.setLevel(logging.CRITICAL)
+    try:
+        yield
+    finally:
+        yf_logger.setLevel(original_level)
 
 
 class FDRSource(DataSourceStrategy):
@@ -220,13 +233,14 @@ class YFinanceSource(DataSourceStrategy):
             return pd.DataFrame()
 
         try:
-            df = self._yf.download(
-                symbol,
-                start=start_date,
-                end=end_date,
-                progress=False,
-                threads=False,
-            )
+            with _suppress_yfinance_logs():
+                df = self._yf.download(
+                    symbol,
+                    start=start_date,
+                    end=end_date,
+                    progress=False,
+                    threads=False,
+                )
 
             if not df.empty:
                 df = df.reset_index()
@@ -258,12 +272,13 @@ class YFinanceSource(DataSourceStrategy):
             symbol = symbol_map.get(pair, pair)
             start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
-            df = self._yf.download(
-                symbol,
-                start=start_date,
-                progress=False,
-                threads=False,
-            )
+            with _suppress_yfinance_logs():
+                df = self._yf.download(
+                    symbol,
+                    start=start_date,
+                    progress=False,
+                    threads=False,
+                )
 
             if not df.empty:
                 df = df.reset_index()

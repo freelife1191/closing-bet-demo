@@ -7,11 +7,16 @@ stock_context 결과 문자열 캐시(SQLite + 메모리).
 from __future__ import annotations
 
 import logging
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -20,7 +25,12 @@ _RESULT_TEXT_CACHE_LOCK = Lock()
 _RESULT_TEXT_CACHE: dict[str, tuple[tuple[int, int], str]] = {}
 _RESULT_TEXT_SQLITE_LOCK = Lock()
 _RESULT_TEXT_SQLITE_READY: set[str] = set()
+_RESULT_TEXT_MEMORY_MAX_ENTRIES = 2048
 _RESULT_TEXT_SQLITE_MAX_ROWS = 1024
+_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS = 30
+_RESULT_TEXT_SQLITE_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS * 1000,
+)
 
 
 def _build_result_cache_key(path: Path, *, dataset: str, ticker_padded: str) -> str:
@@ -31,52 +41,76 @@ def _resolve_runtime_cache_db_path(data_dir: Path) -> Path:
     return data_dir / "runtime_cache.db"
 
 
+def _invalidate_result_text_sqlite_ready(db_path: Path) -> None:
+    cache_key = str(db_path)
+    with _RESULT_TEXT_SQLITE_LOCK:
+        _RESULT_TEXT_SQLITE_READY.discard(cache_key)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "chatbot_stock_context_cache" in message
+
+
+def _recover_result_text_sqlite_schema(db_path: Path) -> bool:
+    _invalidate_result_text_sqlite_ready(db_path)
+    return _ensure_result_text_sqlite_cache(db_path)
+
+
 def _ensure_result_text_sqlite_cache(db_path: Path) -> bool:
     cache_key = str(db_path)
     with _RESULT_TEXT_SQLITE_LOCK:
         if cache_key in _RESULT_TEXT_SQLITE_READY:
-            return True
+            if db_path.exists():
+                return True
+            _RESULT_TEXT_SQLITE_READY.discard(cache_key)
 
-    try:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        with connect_sqlite(
-            str(db_path),
-            timeout_seconds=30,
-            pragmas=(
-                "PRAGMA journal_mode=WAL",
-                "PRAGMA synchronous=NORMAL",
-                "PRAGMA temp_store=MEMORY",
-                "PRAGMA busy_timeout=30000",
-            ),
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS chatbot_stock_context_cache (
-                    cache_key TEXT PRIMARY KEY,
-                    dataset TEXT NOT NULL,
-                    ticker TEXT NOT NULL,
-                    mtime_ns INTEGER NOT NULL,
-                    size INTEGER NOT NULL,
-                    payload_text TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+        try:
+            with connect_sqlite(
+                str(db_path),
+                timeout_seconds=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_RESULT_TEXT_SQLITE_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS chatbot_stock_context_cache (
+                        cache_key TEXT PRIMARY KEY,
+                        dataset TEXT NOT NULL,
+                        ticker TEXT NOT NULL,
+                        mtime_ns INTEGER NOT NULL,
+                        size INTEGER NOT NULL,
+                        payload_text TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_chatbot_stock_context_cache_updated_at
-                ON chatbot_stock_context_cache(updated_at DESC)
-                """
-            )
-            conn.commit()
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_chatbot_stock_context_cache_updated_at
+                    ON chatbot_stock_context_cache(updated_at DESC)
+                    """
+                )
+                conn.commit()
 
-        with _RESULT_TEXT_SQLITE_LOCK:
             _RESULT_TEXT_SQLITE_READY.add(cache_key)
-        return True
-    except Exception as exc:
-        LOGGER.debug("Failed to initialize stock context sqlite cache (%s): %s", db_path, exc)
-        return False
+            return True
+        except Exception as exc:
+            LOGGER.debug("Failed to initialize stock context sqlite cache (%s): %s", db_path, exc)
+            return False
+
+
+def _save_result_text_memory_entry(cache_key: str, signature: tuple[int, int], payload_text: str) -> None:
+    max_entries = max(1, int(_RESULT_TEXT_MEMORY_MAX_ENTRIES))
+    with _RESULT_TEXT_CACHE_LOCK:
+        if cache_key in _RESULT_TEXT_CACHE:
+            _RESULT_TEXT_CACHE.pop(cache_key, None)
+        elif len(_RESULT_TEXT_CACHE) >= max_entries:
+            oldest_key = next(iter(_RESULT_TEXT_CACHE))
+            _RESULT_TEXT_CACHE.pop(oldest_key, None)
+        _RESULT_TEXT_CACHE[cache_key] = (signature, payload_text)
 
 
 def _load_result_text_from_sqlite(
@@ -89,8 +123,12 @@ def _load_result_text_from_sqlite(
     if not _ensure_result_text_sqlite_cache(db_path):
         return None
 
-    try:
-        with connect_sqlite(str(db_path), timeout_seconds=30) as conn:
+    def _query_row() -> tuple[object, ...] | None:
+        with connect_sqlite(
+            str(db_path),
+            timeout_seconds=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_RESULT_TEXT_SQLITE_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -103,11 +141,26 @@ def _load_result_text_from_sqlite(
                 """,
                 (cache_key, int(signature[0]), int(signature[1])),
             )
-            row = cursor.fetchone()
-            if not row:
+            return cursor.fetchone()
+
+    try:
+        row = _query_row()
+    except Exception as exc:
+        if _is_missing_table_error(exc) and _recover_result_text_sqlite_schema(db_path):
+            try:
+                row = _query_row()
+            except Exception as retry_exc:
+                LOGGER.debug("Failed to load stock context sqlite cache after schema recovery (%s): %s", cache_key, retry_exc)
                 return None
-            payload_text = row[0]
-            return payload_text if isinstance(payload_text, str) else None
+        else:
+            LOGGER.debug("Failed to load stock context sqlite cache (%s): %s", cache_key, exc)
+            return None
+
+    try:
+        if not row:
+            return None
+        payload_text = row[0]
+        return payload_text if isinstance(payload_text, str) else None
     except Exception as exc:
         LOGGER.debug("Failed to load stock context sqlite cache (%s): %s", cache_key, exc)
         return None
@@ -126,8 +179,21 @@ def _save_result_text_to_sqlite(
     if not _ensure_result_text_sqlite_cache(db_path):
         return
 
-    try:
-        with connect_sqlite(str(db_path), timeout_seconds=30) as conn:
+    normalized_max_rows = max(1, int(_RESULT_TEXT_SQLITE_MAX_ROWS))
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="chatbot_stock_context_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payload_text() -> None:
+        with connect_sqlite(
+            str(db_path),
+            timeout_seconds=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_RESULT_TEXT_SQLITE_PRAGMAS,
+        ) as conn:
             now_iso = datetime.now().isoformat()
             cursor = conn.cursor()
             cursor.execute(
@@ -159,21 +225,23 @@ def _save_result_text_to_sqlite(
                     now_iso,
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM chatbot_stock_context_cache
-                WHERE cache_key NOT IN (
-                    SELECT cache_key
-                    FROM chatbot_stock_context_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_RESULT_TEXT_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payload_text()
     except Exception as exc:
-        LOGGER.debug("Failed to save stock context sqlite cache (%s): %s", cache_key, exc)
+        if _is_missing_table_error(exc) and _recover_result_text_sqlite_schema(db_path):
+            try:
+                _upsert_payload_text()
+            except Exception as retry_exc:
+                LOGGER.debug(
+                    "Failed to save stock context sqlite cache after schema recovery (%s): %s",
+                    cache_key,
+                    retry_exc,
+                )
+        else:
+            LOGGER.debug("Failed to save stock context sqlite cache (%s): %s", cache_key, exc)
 
 
 def load_cached_result_text(
@@ -198,8 +266,7 @@ def load_cached_result_text(
     if sqlite_cached is None:
         return None
 
-    with _RESULT_TEXT_CACHE_LOCK:
-        _RESULT_TEXT_CACHE[cache_key] = (signature, sqlite_cached)
+    _save_result_text_memory_entry(cache_key, signature, sqlite_cached)
     return sqlite_cached
 
 
@@ -213,8 +280,7 @@ def save_cached_result_text(
     payload_text: str,
 ) -> None:
     cache_key = _build_result_cache_key(path, dataset=dataset, ticker_padded=ticker_padded)
-    with _RESULT_TEXT_CACHE_LOCK:
-        _RESULT_TEXT_CACHE[cache_key] = (signature, payload_text)
+    _save_result_text_memory_entry(cache_key, signature, payload_text)
     _save_result_text_to_sqlite(
         data_dir=data_dir,
         cache_key=cache_key,
@@ -228,4 +294,3 @@ def save_cached_result_text(
 def clear_result_text_cache() -> None:
     with _RESULT_TEXT_CACHE_LOCK:
         _RESULT_TEXT_CACHE.clear()
-

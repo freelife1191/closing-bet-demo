@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import threading
 from datetime import datetime
 from io import StringIO
@@ -16,7 +17,11 @@ from typing import Any
 
 import pandas as pd
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +32,8 @@ SIGNALS_LOG_SOURCE_CACHE: dict[str, tuple[tuple[int, int, int], pd.DataFrame]] =
 CSV_SOURCE_SQLITE_READY_LOCK = threading.Lock()
 CSV_SOURCE_SQLITE_READY: set[str] = set()
 CSV_SOURCE_SQLITE_MAX_ROWS = 128
+CSV_SOURCE_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
+CSV_SOURCE_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
 
 
 def get_file_signature(path: str) -> tuple[int, int, int] | None:
@@ -43,57 +50,74 @@ def _source_cache_db_path(path: str) -> str:
     return os.path.join(os.path.dirname(path), "runtime_cache.db")
 
 
+def _invalidate_csv_source_sqlite_ready(db_path: str) -> None:
+    with CSV_SOURCE_SQLITE_READY_LOCK:
+        CSV_SOURCE_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "signal_tracker_csv_source_cache" in message
+
+
+def _recover_csv_source_sqlite_schema(db_path: str) -> bool:
+    _invalidate_csv_source_sqlite_ready(db_path)
+    return _ensure_csv_source_sqlite_cache(db_path)
+
+
 def _usecols_signature(usecols_filter: set[str] | None) -> str:
     if usecols_filter is None:
         return "__ALL_COLUMNS__"
-    return json.dumps(sorted(str(column) for column in usecols_filter), ensure_ascii=False)
+    return json.dumps(
+        sorted(str(column) for column in usecols_filter),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _ensure_csv_source_sqlite_cache(db_path: str) -> bool:
     with CSV_SOURCE_SQLITE_READY_LOCK:
         if db_path in CSV_SOURCE_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            CSV_SOURCE_SQLITE_READY.discard(db_path)
 
-    try:
-        with connect_sqlite(
-            db_path,
-            timeout_seconds=30,
-            pragmas=(
-                "PRAGMA journal_mode=WAL",
-                "PRAGMA synchronous=NORMAL",
-                "PRAGMA temp_store=MEMORY",
-                "PRAGMA busy_timeout=30000",
-            ),
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS signal_tracker_csv_source_cache (
-                    source_path TEXT NOT NULL,
-                    cache_kind TEXT NOT NULL,
-                    usecols_signature TEXT NOT NULL,
-                    inode INTEGER NOT NULL,
-                    mtime_ns INTEGER NOT NULL,
-                    size INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (source_path, cache_kind, usecols_signature)
+        try:
+            with connect_sqlite(
+                db_path,
+                timeout_seconds=30,
+                pragmas=CSV_SOURCE_SQLITE_INIT_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS signal_tracker_csv_source_cache (
+                        source_path TEXT NOT NULL,
+                        cache_kind TEXT NOT NULL,
+                        usecols_signature TEXT NOT NULL,
+                        inode INTEGER NOT NULL,
+                        mtime_ns INTEGER NOT NULL,
+                        size INTEGER NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (source_path, cache_kind, usecols_signature)
+                    )
+                    """
                 )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_signal_tracker_csv_source_cache_updated_at
-                ON signal_tracker_csv_source_cache(updated_at DESC)
-                """
-            )
-            conn.commit()
-        with CSV_SOURCE_SQLITE_READY_LOCK:
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_signal_tracker_csv_source_cache_updated_at
+                    ON signal_tracker_csv_source_cache(updated_at DESC)
+                    """
+                )
+                conn.commit()
             CSV_SOURCE_SQLITE_READY.add(db_path)
-        return True
-    except Exception as error:
-        logger.debug("Failed to initialize signal tracker sqlite cache: %s", error)
-        return False
+            return True
+        except Exception as error:
+            logger.debug("Failed to initialize signal tracker sqlite cache: %s", error)
+            return False
 
 
 def _load_csv_source_from_sqlite(
@@ -107,8 +131,12 @@ def _load_csv_source_from_sqlite(
     if not _ensure_csv_source_sqlite_cache(db_path):
         return None
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    def _query_row() -> tuple[Any, ...] | None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=CSV_SOURCE_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -131,13 +159,31 @@ def _load_csv_source_from_sqlite(
                     int(signature[2]),
                 ),
             )
-            row = cursor.fetchone()
-            if not row:
+            return cursor.fetchone()
+
+    try:
+        row = _query_row()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_csv_source_sqlite_schema(db_path):
+            try:
+                row = _query_row()
+            except Exception as retry_error:
+                logger.debug(
+                    "Failed to load signal tracker sqlite cache after schema recovery: %s",
+                    retry_error,
+                )
                 return None
-            payload_json = row[0]
-            if not isinstance(payload_json, str) or not payload_json:
-                return None
-            return pd.read_json(StringIO(payload_json), orient="records")
+        else:
+            logger.debug("Failed to load signal tracker sqlite cache: %s", error)
+            return None
+
+    try:
+        if not row:
+            return None
+        payload_json = row[0]
+        if not isinstance(payload_json, str) or not payload_json:
+            return None
+        return pd.read_json(StringIO(payload_json), orient="records")
     except Exception as error:
         logger.debug("Failed to load signal tracker sqlite cache: %s", error)
         return None
@@ -161,8 +207,21 @@ def _save_csv_source_to_sqlite(
         logger.debug("Failed to serialize signal tracker cache payload: %s", error)
         return
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    normalized_max_rows = max(1, int(CSV_SOURCE_SQLITE_MAX_ROWS))
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="signal_tracker_csv_source_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payload() -> None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=CSV_SOURCE_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             now_iso = datetime.now().isoformat()
             cursor = conn.cursor()
             cursor.execute(
@@ -195,21 +254,22 @@ def _save_csv_source_to_sqlite(
                     now_iso,
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM signal_tracker_csv_source_cache
-                WHERE (source_path, cache_kind, usecols_signature) NOT IN (
-                    SELECT source_path, cache_kind, usecols_signature
-                    FROM signal_tracker_csv_source_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (CSV_SOURCE_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payload()
     except Exception as error:
-        logger.debug("Failed to save signal tracker sqlite cache: %s", error)
+        if _is_missing_table_error(error) and _recover_csv_source_sqlite_schema(db_path):
+            try:
+                _upsert_payload()
+            except Exception as retry_error:
+                logger.debug(
+                    "Failed to save signal tracker sqlite cache after schema recovery: %s",
+                    retry_error,
+                )
+        else:
+            logger.debug("Failed to save signal tracker sqlite cache: %s", error)
 
 
 def load_csv_with_signature_cache(

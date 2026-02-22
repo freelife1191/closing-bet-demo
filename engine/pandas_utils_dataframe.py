@@ -7,6 +7,7 @@ Common DataFrame filters, aggregations, and calculation helpers.
 """
 
 import logging
+import statistics
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -125,14 +126,11 @@ def calculate_volume_ratio(
     if lookback == 0:
         return 1.0
 
-    avg_volume = (
-        sum(historical_volumes[-lookback:-1]) / (lookback - 1)
-        if lookback > 1
-        else current_volume
-    )
+    reference_window = historical_volumes[-lookback:]
+    baseline_volume = statistics.median(reference_window)
 
-    if avg_volume > 0:
-        return round(current_volume / avg_volume, 2)
+    if baseline_volume > 0:
+        return round(current_volume / baseline_volume, 2)
     return 1.0
 
 

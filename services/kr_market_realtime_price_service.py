@@ -27,6 +27,12 @@ from services.kr_market_realtime_market_map_cache import (
     build_market_map as _build_market_map_impl,
     clear_market_map_cache as _clear_market_map_cache_impl,
 )
+from services.kr_market_realtime_price_cache import (
+    load_recent_yfinance_failed_tickers as _load_recent_yfinance_failed_tickers,
+    save_yfinance_failed_tickers as _save_yfinance_failed_tickers,
+)
+
+_YFINANCE_FAILURE_CACHE_TTL_SECONDS = 30 * 60
 
 
 def clear_market_map_cache() -> None:
@@ -283,6 +289,17 @@ def fetch_yfinance_missing_prices(
     if is_weekend or not is_market_hours:
         return
 
+    recent_failed = _load_recent_yfinance_failed_tickers(
+        missing,
+        get_data_path=get_data_path,
+        logger=logger,
+        max_age_seconds=_YFINANCE_FAILURE_CACHE_TTL_SECONDS,
+    )
+    if recent_failed:
+        missing = [ticker for ticker in missing if ticker not in recent_failed]
+        if not missing:
+            return
+
     try:
         import yfinance as yf
     except Exception as e:
@@ -312,14 +329,30 @@ def fetch_yfinance_missing_prices(
     yf_logger.setLevel(logging.CRITICAL)
 
     try:
-        price_data = yf.download(yf_tickers, period="5d", interval="1d", progress=False, threads=True)
+        price_data = yf.download(
+            yf_tickers,
+            period="5d",
+            interval="1d",
+            progress=False,
+            threads=False,
+        )
     except Exception as e:
         logger.debug(f"yfinance Fallback Failed: {e}")
+        _save_yfinance_failed_tickers(
+            missing,
+            get_data_path=get_data_path,
+            logger=logger,
+        )
         return
     finally:
         yf_logger.setLevel(original_level)
 
     if price_data.empty or "Close" not in price_data:
+        _save_yfinance_failed_tickers(
+            missing,
+            get_data_path=get_data_path,
+            logger=logger,
+        )
         return
 
     closes = price_data["Close"]
@@ -336,10 +369,21 @@ def fetch_yfinance_missing_prices(
             return None
         return None
 
+    resolved_tickers: set[str] = set()
     for yf_symbol in yf_tickers:
         value = extract_price(yf_symbol, closes)
         if value is not None:
-            prices[ticker_map[yf_symbol]] = value
+            ticker_key = ticker_map[yf_symbol]
+            prices[ticker_key] = value
+            resolved_tickers.add(ticker_key)
+
+    failed_tickers = [ticker_map[symbol] for symbol in yf_tickers if ticker_map[symbol] not in resolved_tickers]
+    if failed_tickers:
+        _save_yfinance_failed_tickers(
+            failed_tickers,
+            get_data_path=get_data_path,
+            logger=logger,
+        )
 
 
 def fill_missing_prices_from_csv(

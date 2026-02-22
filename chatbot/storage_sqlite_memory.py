@@ -18,9 +18,18 @@ from services.sqlite_utils import connect_sqlite
 from .storage_sqlite_common import _SQLITE_PRAGMAS, ensure_chatbot_storage_schema
 
 
+def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and table_name.lower() in message
+
+
 def load_memories_from_sqlite(
     db_path: Path,
     logger: logging.Logger,
+    *,
+    _retried: bool = False,
 ) -> Dict[str, Any] | None:
     if not db_path.exists():
         return None
@@ -50,6 +59,17 @@ def load_memories_from_sqlite(
                 }
             return memories
     except Exception as error:
+        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
+            if ensure_chatbot_storage_schema(
+                db_path,
+                logger,
+                force_recheck=True,
+            ):
+                return load_memories_from_sqlite(
+                    db_path,
+                    logger,
+                    _retried=True,
+                )
         logger.error(f"Failed to load chatbot memories from SQLite: {error}")
         return None
 
@@ -58,6 +78,8 @@ def save_memories_to_sqlite(
     db_path: Path,
     memories: Dict[str, Any],
     logger: logging.Logger,
+    *,
+    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -67,6 +89,7 @@ def save_memories_to_sqlite(
             cursor = conn.cursor()
             cursor.execute("DELETE FROM chatbot_memories")
 
+            rows: list[tuple[str, str, str]] = []
             for key, raw_value in memories.items():
                 value = raw_value.get("value") if isinstance(raw_value, dict) else raw_value
                 updated_at = (
@@ -74,16 +97,36 @@ def save_memories_to_sqlite(
                     if isinstance(raw_value, dict) and raw_value.get("updated_at")
                     else datetime.now().isoformat()
                 )
-                cursor.execute(
+                rows.append(
+                    (
+                        str(key),
+                        json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                        updated_at,
+                    )
+                )
+            if rows:
+                cursor.executemany(
                     """
                     INSERT INTO chatbot_memories (memory_key, value_json, updated_at)
                     VALUES (?, ?, ?)
                     """,
-                    (str(key), json.dumps(value, ensure_ascii=False), updated_at),
+                    rows,
                 )
             conn.commit()
         return True
     except Exception as error:
+        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
+            if ensure_chatbot_storage_schema(
+                db_path,
+                logger,
+                force_recheck=True,
+            ):
+                return save_memories_to_sqlite(
+                    db_path,
+                    memories,
+                    logger,
+                    _retried=True,
+                )
         logger.error(f"Failed to save chatbot memories into SQLite: {error}")
         return False
 
@@ -93,6 +136,8 @@ def upsert_memory_entry_in_sqlite(
     key: str,
     record: Dict[str, Any],
     logger: logging.Logger,
+    *,
+    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -108,11 +153,24 @@ def upsert_memory_entry_in_sqlite(
                     value_json=excluded.value_json,
                     updated_at=excluded.updated_at
                 """,
-                (str(key), json.dumps(value, ensure_ascii=False), updated_at),
+                (str(key), json.dumps(value, ensure_ascii=False, separators=(",", ":")), updated_at),
             )
             conn.commit()
         return True
     except Exception as error:
+        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
+            if ensure_chatbot_storage_schema(
+                db_path,
+                logger,
+                force_recheck=True,
+            ):
+                return upsert_memory_entry_in_sqlite(
+                    db_path,
+                    key,
+                    record,
+                    logger,
+                    _retried=True,
+                )
         logger.error(f"Failed to upsert chatbot memory into SQLite: {error}")
         return False
 
@@ -121,6 +179,8 @@ def delete_memory_entry_in_sqlite(
     db_path: Path,
     key: str,
     logger: logging.Logger,
+    *,
+    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -136,6 +196,18 @@ def delete_memory_entry_in_sqlite(
             conn.commit()
         return True
     except Exception as error:
+        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
+            if ensure_chatbot_storage_schema(
+                db_path,
+                logger,
+                force_recheck=True,
+            ):
+                return delete_memory_entry_in_sqlite(
+                    db_path,
+                    key,
+                    logger,
+                    _retried=True,
+                )
         logger.error(f"Failed to delete chatbot memory from SQLite: {error}")
         return False
 
@@ -143,6 +215,8 @@ def delete_memory_entry_in_sqlite(
 def clear_memories_in_sqlite(
     db_path: Path,
     logger: logging.Logger,
+    *,
+    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -152,6 +226,17 @@ def clear_memories_in_sqlite(
             conn.commit()
         return True
     except Exception as error:
+        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
+            if ensure_chatbot_storage_schema(
+                db_path,
+                logger,
+                force_recheck=True,
+            ):
+                return clear_memories_in_sqlite(
+                    db_path,
+                    logger,
+                    _retried=True,
+                )
         logger.error(f"Failed to clear chatbot memories in SQLite: {error}")
         return False
 

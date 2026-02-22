@@ -80,7 +80,7 @@ def _register_signals_route(
     logger: Any,
     deps: dict[str, Any],
     load_latest_vcp_price_map_fn: Callable[[], dict[str, float]],
-    count_total_scanned_stocks_fn: Callable[[], int],
+    count_total_scanned_stocks_fn: Callable[[str], int],
 ) -> None:
     @kr_bp.route('/signals')
     def get_kr_signals():
@@ -299,8 +299,16 @@ def register_market_data_signal_routes(
     def _load_latest_vcp_price_map() -> dict[str, float]:
         return deps["load_latest_vcp_price_map"]()
 
-    def _count_total_scanned_stocks() -> int:
-        return deps["count_total_scanned_stocks"](deps["data_dir_getter"]())
+    def _count_total_scanned_stocks(data_dir: str) -> int:
+        count_fn = deps["count_total_scanned_stocks"]
+        try:
+            count_value = count_fn(data_dir)
+        except TypeError:
+            # 하위 호환: 기존 무인자 콜백도 허용한다.
+            count_value = count_fn()
+        if count_value is None:
+            return 0
+        return int(count_value)
 
     def _run_vcp_background(target_date_arg: str | None, max_stocks_arg: int | None) -> None:
         deps["run_vcp_background_pipeline"](

@@ -83,9 +83,9 @@ class CoreCommandMixin:
 
         try:
             cmd_resp = self._handle_command(user_message, session_id)
-            should_save = not is_ephemeral
-            self.history.add_message(session_id, "user", user_message, save=should_save)
-            self.history.add_message(session_id, "model", cmd_resp, save=should_save)
+            if not is_ephemeral:
+                self.history.add_message(session_id, "user", user_message, save=True)
+                self.history.add_message(session_id, "model", cmd_resp, save=True)
             return True, cmd_resp, None
         except Exception as error:
             logger.error(f"Command error: {error}")
@@ -179,4 +179,3 @@ class CoreCommandMixin:
     def _get_help(self) -> str:
         """도움말"""
         return _get_help_impl()
-

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import threading
 from collections.abc import Callable
 from datetime import datetime
@@ -17,7 +18,11 @@ from typing import Any
 
 import pandas as pd
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _SOURCE_CACHE: dict[tuple[str, str, str, str], tuple[tuple[int, int], pd.DataFrame]] = {}
@@ -25,6 +30,8 @@ _SOURCE_CACHE_LOCK = threading.Lock()
 _SOURCE_SQLITE_READY: set[str] = set()
 _SOURCE_SQLITE_READY_LOCK = threading.Lock()
 _SOURCE_SQLITE_MAX_ROWS = 128
+_SOURCE_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
+_SOURCE_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
 
 
 def _file_signature(path: str) -> tuple[int, int] | None:
@@ -43,17 +50,34 @@ def _resolve_db_path(path: str) -> str:
     return os.path.join(os.path.dirname(path), "runtime_cache.db")
 
 
+def _invalidate_source_cache_sqlite_ready(db_path: str) -> None:
+    with _SOURCE_SQLITE_READY_LOCK:
+        _SOURCE_SQLITE_READY.discard(db_path)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "signal_tracker_source_cache" in message
+
+
+def _recover_source_cache_sqlite_schema(db_path: str, logger: logging.Logger | None) -> bool:
+    _invalidate_source_cache_sqlite_ready(db_path)
+    return _ensure_source_cache_sqlite(db_path, logger)
+
+
 def _serialize_usecols(usecols: list[str] | tuple[str, ...] | None) -> str:
     if usecols is None:
         return "[]"
-    return json.dumps([str(column) for column in usecols], ensure_ascii=False)
+    return json.dumps([str(column) for column in usecols], ensure_ascii=False, separators=(",", ":"))
 
 
 def _serialize_dtype(dtype: dict[str, Any] | None) -> str:
     if not dtype:
         return "{}"
     normalized = {str(key): str(value) for key, value in sorted(dtype.items(), key=lambda item: str(item[0]))}
-    return json.dumps(normalized, ensure_ascii=False)
+    return json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
 
 
 def clear_signal_tracker_source_cache(*, reset_sqlite_state: bool = False) -> None:
@@ -68,49 +92,45 @@ def clear_signal_tracker_source_cache(*, reset_sqlite_state: bool = False) -> No
 def _ensure_source_cache_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
     with _SOURCE_SQLITE_READY_LOCK:
         if db_path in _SOURCE_SQLITE_READY:
-            return True
+            if os.path.exists(db_path):
+                return True
+            _SOURCE_SQLITE_READY.discard(db_path)
 
-    try:
-        with connect_sqlite(
-            db_path,
-            timeout_seconds=30,
-            pragmas=(
-                "PRAGMA journal_mode=WAL",
-                "PRAGMA synchronous=NORMAL",
-                "PRAGMA temp_store=MEMORY",
-                "PRAGMA busy_timeout=30000",
-            ),
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS signal_tracker_source_cache (
-                    source_path TEXT NOT NULL,
-                    cache_kind TEXT NOT NULL,
-                    usecols_signature TEXT NOT NULL,
-                    dtype_signature TEXT NOT NULL,
-                    mtime_ns INTEGER NOT NULL,
-                    size INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (source_path, cache_kind, usecols_signature, dtype_signature)
+        try:
+            with connect_sqlite(
+                db_path,
+                timeout_seconds=30,
+                pragmas=_SOURCE_SQLITE_INIT_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS signal_tracker_source_cache (
+                        source_path TEXT NOT NULL,
+                        cache_kind TEXT NOT NULL,
+                        usecols_signature TEXT NOT NULL,
+                        dtype_signature TEXT NOT NULL,
+                        mtime_ns INTEGER NOT NULL,
+                        size INTEGER NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (source_path, cache_kind, usecols_signature, dtype_signature)
+                    )
+                    """
                 )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_signal_tracker_source_cache_updated_at
-                ON signal_tracker_source_cache(updated_at DESC)
-                """
-            )
-            conn.commit()
-        with _SOURCE_SQLITE_READY_LOCK:
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_signal_tracker_source_cache_updated_at
+                    ON signal_tracker_source_cache(updated_at DESC)
+                    """
+                )
+                conn.commit()
             _SOURCE_SQLITE_READY.add(db_path)
-        return True
-    except Exception as error:
-        if logger is not None:
-            logger.debug("Failed to initialize signal tracker source sqlite cache: %s", error)
-        return False
+            return True
+        except Exception as error:
+            if logger is not None:
+                logger.debug("Failed to initialize signal tracker source sqlite cache: %s", error)
+            return False
 
 
 def _load_from_sqlite(
@@ -126,8 +146,12 @@ def _load_from_sqlite(
     if not _ensure_source_cache_sqlite(db_path, logger):
         return None
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    def _query_row() -> tuple[Any, ...] | None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=_SOURCE_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -150,7 +174,27 @@ def _load_from_sqlite(
                     int(signature[1]),
                 ),
             )
-            row = cursor.fetchone()
+            return cursor.fetchone()
+
+    try:
+        row = _query_row()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_source_cache_sqlite_schema(db_path, logger):
+            try:
+                row = _query_row()
+            except Exception as retry_error:
+                if logger is not None:
+                    logger.debug(
+                        "Failed to load signal tracker source cache from sqlite after schema recovery: %s",
+                        retry_error,
+                    )
+                return None
+        else:
+            if logger is not None:
+                logger.debug("Failed to load signal tracker source cache from sqlite: %s", error)
+            return None
+
+    try:
         if not row:
             return None
         payload_json = row[0]
@@ -187,8 +231,21 @@ def _save_to_sqlite(
             logger.debug("Failed to serialize signal tracker source cache payload: %s", error)
         return
 
-    try:
-        with connect_sqlite(db_path, timeout_seconds=30) as conn:
+    normalized_max_rows = max(1, int(_SOURCE_SQLITE_MAX_ROWS))
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="signal_tracker_source_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_payload() -> None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=30,
+            pragmas=_SOURCE_SQLITE_SESSION_PRAGMAS,
+        ) as conn:
             now_iso = datetime.now().isoformat()
             cursor = conn.cursor()
             cursor.execute(
@@ -220,22 +277,24 @@ def _save_to_sqlite(
                     now_iso,
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM signal_tracker_source_cache
-                WHERE (source_path, cache_kind, usecols_signature, dtype_signature) NOT IN (
-                    SELECT source_path, cache_kind, usecols_signature, dtype_signature
-                    FROM signal_tracker_source_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_SOURCE_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_payload()
     except Exception as error:
-        if logger is not None:
-            logger.debug("Failed to save signal tracker source cache to sqlite: %s", error)
+        if _is_missing_table_error(error) and _recover_source_cache_sqlite_schema(db_path, logger):
+            try:
+                _upsert_payload()
+            except Exception as retry_error:
+                if logger is not None:
+                    logger.debug(
+                        "Failed to save signal tracker source cache to sqlite after schema recovery: %s",
+                        retry_error,
+                    )
+        else:
+            if logger is not None:
+                logger.debug("Failed to save signal tracker source cache to sqlite: %s", error)
 
 
 def load_signal_tracker_csv_cached(
@@ -308,4 +367,3 @@ def load_signal_tracker_csv_cached(
         logger=logger,
     )
     return loaded.copy(deep=deep_copy)
-

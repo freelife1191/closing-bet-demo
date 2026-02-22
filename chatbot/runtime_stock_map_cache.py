@@ -7,19 +7,29 @@ chatbot 런타임 종목맵 캐시(SQLite + 메모리).
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    prune_rows_by_updated_at_if_needed,
+)
 
 
 _STOCK_MAP_CACHE_LOCK = threading.Lock()
 _STOCK_MAP_CACHE: dict[str, tuple[tuple[int, int], dict[str, str], dict[str, str]]] = {}
 _STOCK_MAP_SQLITE_READY_LOCK = threading.Lock()
 _STOCK_MAP_SQLITE_READY: set[str] = set()
+_STOCK_MAP_MEMORY_MAX_ENTRIES = 256
 _STOCK_MAP_SQLITE_MAX_ROWS = 128
+_STOCK_MAP_SQLITE_TIMEOUT_SECONDS = 30
+_STOCK_MAP_SQLITE_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS * 1000,
+)
 
 
 def file_signature(path: Path) -> tuple[int, int] | None:
@@ -38,50 +48,79 @@ def _stock_map_cache_db_path(data_dir: Path) -> Path:
     return data_dir / "runtime_cache.db"
 
 
+def _invalidate_stock_map_sqlite_ready(db_path: Path) -> None:
+    db_key = str(db_path)
+    with _STOCK_MAP_SQLITE_READY_LOCK:
+        _STOCK_MAP_SQLITE_READY.discard(db_key)
+
+
+def _is_missing_table_error(error: Exception) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    message = str(error).lower()
+    return "no such table" in message and "chatbot_stock_map_cache" in message
+
+
+def _recover_stock_map_sqlite_schema(db_path: Path, logger: Any) -> bool:
+    _invalidate_stock_map_sqlite_ready(db_path)
+    return _ensure_stock_map_sqlite(db_path, logger)
+
+
 def _ensure_stock_map_sqlite(db_path: Path, logger: Any) -> bool:
     db_key = str(db_path)
     with _STOCK_MAP_SQLITE_READY_LOCK:
         if db_key in _STOCK_MAP_SQLITE_READY:
-            return True
+            if db_path.exists():
+                return True
+            _STOCK_MAP_SQLITE_READY.discard(db_key)
 
-    try:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        with connect_sqlite(
-            str(db_path),
-            timeout_seconds=30,
-            pragmas=(
-                "PRAGMA journal_mode=WAL",
-                "PRAGMA synchronous=NORMAL",
-                "PRAGMA temp_store=MEMORY",
-                "PRAGMA busy_timeout=30000",
-            ),
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS chatbot_stock_map_cache (
-                    source_path TEXT PRIMARY KEY,
-                    mtime_ns INTEGER NOT NULL,
-                    size INTEGER NOT NULL,
-                    stock_map_json TEXT NOT NULL,
-                    ticker_map_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+        try:
+            with connect_sqlite(
+                str(db_path),
+                timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_STOCK_MAP_SQLITE_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS chatbot_stock_map_cache (
+                        source_path TEXT PRIMARY KEY,
+                        mtime_ns INTEGER NOT NULL,
+                        size INTEGER NOT NULL,
+                        stock_map_json TEXT NOT NULL,
+                        ticker_map_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_chatbot_stock_map_cache_updated_at
-                ON chatbot_stock_map_cache(updated_at DESC)
-                """
-            )
-            conn.commit()
-        with _STOCK_MAP_SQLITE_READY_LOCK:
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_chatbot_stock_map_cache_updated_at
+                    ON chatbot_stock_map_cache(updated_at DESC)
+                    """
+                )
+                conn.commit()
             _STOCK_MAP_SQLITE_READY.add(db_key)
-        return True
-    except Exception as error:
-        logger.debug("Failed to initialize stock map sqlite cache: %s", error)
-        return False
+            return True
+        except Exception as error:
+            logger.debug("Failed to initialize stock map sqlite cache: %s", error)
+            return False
+
+
+def _save_stock_map_memory_entry(
+    cache_key: str,
+    signature: tuple[int, int],
+    stock_map: dict[str, str],
+    ticker_map: dict[str, str],
+) -> None:
+    max_entries = max(1, int(_STOCK_MAP_MEMORY_MAX_ENTRIES))
+    with _STOCK_MAP_CACHE_LOCK:
+        if cache_key in _STOCK_MAP_CACHE:
+            _STOCK_MAP_CACHE.pop(cache_key, None)
+        elif len(_STOCK_MAP_CACHE) >= max_entries:
+            oldest_key = next(iter(_STOCK_MAP_CACHE))
+            _STOCK_MAP_CACHE.pop(oldest_key, None)
+        _STOCK_MAP_CACHE[cache_key] = (signature, dict(stock_map), dict(ticker_map))
 
 
 def _load_stock_map_from_sqlite(
@@ -95,8 +134,12 @@ def _load_stock_map_from_sqlite(
     if not _ensure_stock_map_sqlite(db_path, logger):
         return None
 
-    try:
-        with connect_sqlite(str(db_path), timeout_seconds=30) as conn:
+    def _query_row() -> tuple[Any, ...] | None:
+        with connect_sqlite(
+            str(db_path),
+            timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_STOCK_MAP_SQLITE_PRAGMAS,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -109,18 +152,32 @@ def _load_stock_map_from_sqlite(
                 """,
                 (str(source_path.resolve()), int(signature[0]), int(signature[1])),
             )
-            row = cursor.fetchone()
-            if not row:
-                return None
+            return cursor.fetchone()
 
-            stock_map = json.loads(row[0])
-            ticker_map = json.loads(row[1])
-            if isinstance(stock_map, dict) and isinstance(ticker_map, dict):
-                return (
-                    {str(k): str(v) for k, v in stock_map.items()},
-                    {str(k): str(v) for k, v in ticker_map.items()},
-                )
+    try:
+        row = _query_row()
+    except Exception as error:
+        if _is_missing_table_error(error) and _recover_stock_map_sqlite_schema(db_path, logger):
+            try:
+                row = _query_row()
+            except Exception as retry_error:
+                logger.debug("Failed to load stock map sqlite cache after schema recovery: %s", retry_error)
+                return None
+        else:
+            logger.debug("Failed to load stock map sqlite cache: %s", error)
             return None
+
+    try:
+        if not row:
+            return None
+        stock_map = json.loads(row[0])
+        ticker_map = json.loads(row[1])
+        if isinstance(stock_map, dict) and isinstance(ticker_map, dict):
+            return (
+                {str(k): str(v) for k, v in stock_map.items()},
+                {str(k): str(v) for k, v in ticker_map.items()},
+            )
+        return None
     except Exception as error:
         logger.debug("Failed to load stock map sqlite cache: %s", error)
         return None
@@ -146,8 +203,21 @@ def _save_stock_map_to_sqlite(
         logger.debug("Failed to serialize stock map cache: %s", error)
         return
 
-    try:
-        with connect_sqlite(str(db_path), timeout_seconds=30) as conn:
+    normalized_max_rows = max(1, int(_STOCK_MAP_SQLITE_MAX_ROWS))
+
+    def _prune_rows_if_needed(cursor: sqlite3.Cursor) -> None:
+        prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="chatbot_stock_map_cache",
+            max_rows=normalized_max_rows,
+        )
+
+    def _upsert_stock_map() -> None:
+        with connect_sqlite(
+            str(db_path),
+            timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_STOCK_MAP_SQLITE_PRAGMAS,
+        ) as conn:
             now_iso = datetime.now().isoformat()
             cursor = conn.cursor()
             cursor.execute(
@@ -176,21 +246,19 @@ def _save_stock_map_to_sqlite(
                     now_iso,
                 ),
             )
-            cursor.execute(
-                """
-                DELETE FROM chatbot_stock_map_cache
-                WHERE source_path NOT IN (
-                    SELECT source_path
-                    FROM chatbot_stock_map_cache
-                    ORDER BY updated_at DESC
-                    LIMIT ?
-                )
-                """,
-                (_STOCK_MAP_SQLITE_MAX_ROWS,),
-            )
+            _prune_rows_if_needed(cursor)
             conn.commit()
+
+    try:
+        _upsert_stock_map()
     except Exception as error:
-        logger.debug("Failed to save stock map sqlite cache: %s", error)
+        if _is_missing_table_error(error) and _recover_stock_map_sqlite_schema(db_path, logger):
+            try:
+                _upsert_stock_map()
+            except Exception as retry_error:
+                logger.debug("Failed to save stock map sqlite cache after schema recovery: %s", retry_error)
+        else:
+            logger.debug("Failed to save stock map sqlite cache: %s", error)
 
 
 def load_stock_map_cache(
@@ -216,8 +284,7 @@ def load_stock_map_cache(
         return None
 
     stock_map, ticker_map = sqlite_cached
-    with _STOCK_MAP_CACHE_LOCK:
-        _STOCK_MAP_CACHE[cache_key] = (signature, dict(stock_map), dict(ticker_map))
+    _save_stock_map_memory_entry(cache_key, signature, stock_map, ticker_map)
     return dict(stock_map), dict(ticker_map)
 
 
@@ -231,8 +298,7 @@ def save_stock_map_cache(
     logger: Any,
 ) -> None:
     cache_key = _stock_map_cache_key(source_path)
-    with _STOCK_MAP_CACHE_LOCK:
-        _STOCK_MAP_CACHE[cache_key] = (signature, dict(stock_map), dict(ticker_map))
+    _save_stock_map_memory_entry(cache_key, signature, stock_map, ticker_map)
 
     _save_stock_map_to_sqlite(
         data_dir=data_dir,
@@ -264,4 +330,3 @@ def build_stock_maps(df: Any) -> tuple[dict[str, str], dict[str, str]]:
 def clear_stock_map_cache() -> None:
     with _STOCK_MAP_CACHE_LOCK:
         _STOCK_MAP_CACHE.clear()
-

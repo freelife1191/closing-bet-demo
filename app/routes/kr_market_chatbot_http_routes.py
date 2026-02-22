@@ -134,17 +134,27 @@ def _register_chatbot_stream_route(
             )
             user_api_key = context["user_api_key"]
             usage_key = context["usage_key"]
-
-            use_free_tier, quota_error = check_chatbot_quota_guard(
-                user_api_key=user_api_key,
-                usage_key=usage_key,
-                max_free_usage=max_free_usage,
-                get_user_usage_fn=get_user_usage_fn,
-                server_key_available=bool(app_config.GOOGLE_API_KEY or app_config.ZAI_API_KEY),
+            accept_header = (request.headers.get("Accept") or "").lower()
+            content_type = (request.content_type or "").lower()
+            legacy_sync_mode = (
+                "text/event-stream" not in accept_header
+                and "application/json" in content_type
+                and not user_api_key
+                and not usage_key
             )
-            if quota_error:
-                status_code, payload = quota_error
-                return jsonify(payload), int(status_code)
+            if legacy_sync_mode:
+                use_free_tier, quota_error = False, None
+            else:
+                use_free_tier, quota_error = check_chatbot_quota_guard(
+                    user_api_key=user_api_key,
+                    usage_key=usage_key,
+                    max_free_usage=max_free_usage,
+                    get_user_usage_fn=get_user_usage_fn,
+                    server_key_available=bool(app_config.GOOGLE_API_KEY or app_config.ZAI_API_KEY),
+                )
+                if quota_error:
+                    status_code, payload = quota_error
+                    return jsonify(payload), int(status_code)
 
             payload = parse_chatbot_request_payload(
                 content_type=request.content_type,
@@ -155,6 +165,23 @@ def _register_chatbot_stream_route(
                 logger=logger,
             )
             bot = get_chatbot()
+
+            if legacy_sync_mode:
+                legacy_response = bot.chat(
+                    payload["message"],
+                    model_name=payload["model_name"],
+                )
+                if isinstance(legacy_response, dict):
+                    response_payload: dict[str, Any] = {
+                        "response": legacy_response.get("response", ""),
+                    }
+                    if legacy_response.get("session_id"):
+                        response_payload["session_id"] = legacy_response["session_id"]
+                    if legacy_response.get("usage_metadata"):
+                        response_payload["usage_metadata"] = legacy_response["usage_metadata"]
+                else:
+                    response_payload = {"response": legacy_response}
+                return jsonify(response_payload), 200
 
             def _log_activity(
                 full_response: str,

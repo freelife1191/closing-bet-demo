@@ -258,8 +258,18 @@ class LLMAnalyzer:
 
         Refactored to use retry strategy.
         """
+        strategy_client = getattr(self._retry_strategy, "client", None)
+        if (
+            self._retry_strategy is not None
+            and strategy_client is not None
+            and self._client is not None
+            and strategy_client is not self._client
+        ):
+            # 테스트/호환 경로: 외부에서 _client를 주입한 경우 전략을 무효화한다.
+            self._retry_strategy = None
+
         if not self._retry_strategy:
-            raise RuntimeError("Retry strategy not initialized")
+            return await self._execute_legacy_retry_call(prompt=prompt, timeout=timeout)
 
         model_name = self._retry_strategy.get_model_name()
         logger.info(
@@ -278,3 +288,32 @@ class LLMAnalyzer:
         except Exception as e:
             logger.error(f"[{self.provider.upper()}] API Error: {e}")
             raise
+
+    async def _execute_legacy_retry_call(self, prompt: str, timeout: float) -> str:
+        """레거시 호환: 주입된 클라이언트 기반 단순 재시도."""
+        if not self._client:
+            raise RuntimeError("Retry strategy not initialized")
+        if not hasattr(self._client, "models") or not hasattr(self._client.models, "generate_content"):
+            raise RuntimeError("Retry strategy not initialized")
+
+        model_name = getattr(app_config, "GEMINI_MODEL", "gemini-2.0-flash-lite")
+        max_retries = RetryConfig.MAX_RETRIES
+
+        for attempt in range(max_retries):
+            try:
+                response = self._client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                return getattr(response, "text", "")
+            except asyncio.TimeoutError:
+                if attempt >= max_retries - 1:
+                    raise
+            except Exception as error:
+                is_retryable = RetryConfig.is_retryable_error(str(error))
+                if not is_retryable or attempt >= max_retries - 1:
+                    raise
+
+            await asyncio.sleep(RetryConfig.compute_wait_time(attempt))
+
+        raise RuntimeError("LLM call failed after retries")

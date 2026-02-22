@@ -9,18 +9,21 @@ Usage Tracker Service
 
 import os
 import logging
+import sqlite3
 from datetime import datetime
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import build_sqlite_pragmas, connect_sqlite
 
 logger = logging.getLogger(__name__)
 
 class UsageTracker:
     SQLITE_BUSY_TIMEOUT_MS = 30_000
-    SQLITE_INIT_PRAGMAS = (
-        "PRAGMA journal_mode=WAL",
-        "PRAGMA synchronous=NORMAL",
-        "PRAGMA temp_store=MEMORY",
+    SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(
+        busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS,
+    )
+    SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
+        busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS,
+        base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-8000"),
     )
 
     def __init__(self, db_path='usage.db', limit=10):
@@ -39,20 +42,18 @@ class UsageTracker:
         return connect_sqlite(
             self.db_path,
             timeout_seconds=timeout_seconds,
-            pragmas=(
-                f"PRAGMA busy_timeout={self.SQLITE_BUSY_TIMEOUT_MS}",
-                "PRAGMA temp_store=MEMORY",
-            ),
+            pragmas=self.SQLITE_SESSION_PRAGMAS,
         )
 
     def _init_db(self):
         """Initialize SQLite database table"""
         try:
-            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-            with self._connect() as conn:
+            with connect_sqlite(
+                self.db_path,
+                timeout_seconds=max(1, self.SQLITE_BUSY_TIMEOUT_MS // 1000),
+                pragmas=self.SQLITE_INIT_PRAGMAS,
+            ) as conn:
                 cursor = conn.cursor()
-                for pragma_sql in self.SQLITE_INIT_PRAGMAS:
-                    cursor.execute(pragma_sql)
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS usage_log (
                         email TEXT PRIMARY KEY,
@@ -70,7 +71,14 @@ class UsageTracker:
         except Exception as e:
             logger.error(f"Failed to initialize usage db: {e}")
 
-    def check_and_increment(self, email: str) -> bool:
+    @staticmethod
+    def _is_missing_usage_table_error(error: Exception) -> bool:
+        if not isinstance(error, sqlite3.OperationalError):
+            return False
+        message = str(error).lower()
+        return "no such table" in message and "usage_log" in message
+
+    def check_and_increment(self, email: str, *, _retried: bool = False) -> bool:
         """
         Check if user has remaining quota and increment if yes.
         Returns True if allowed, False if limit exceeded.
@@ -103,12 +111,15 @@ class UsageTracker:
             return True
 
         except Exception as e:
+            if (not _retried) and self._is_missing_usage_table_error(e):
+                self._init_db()
+                return self.check_and_increment(email, _retried=True)
             logger.error(f"Usage tracking error: {e}")
             # Fail open or closed? Let's fail open for now to avoid blocking users on DB error, 
             # OR fail closed to protect costs. Let's fail closed.
             return False
 
-    def get_usage(self, email: str) -> int:
+    def get_usage(self, email: str, *, _retried: bool = False) -> int:
         """Get current usage count"""
         normalized_email = self._normalize_email(email)
         if not normalized_email:
@@ -120,6 +131,9 @@ class UsageTracker:
                 row = cursor.fetchone()
             return row[0] if row else 0
         except Exception as e:
+            if (not _retried) and self._is_missing_usage_table_error(e):
+                self._init_db()
+                return self.get_usage(email, _retried=True)
             logger.warning(f"Failed to read usage for {normalized_email}: {e}")
             return 0
 
