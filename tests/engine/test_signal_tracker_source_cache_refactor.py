@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import threading
+import time
 
 import pandas as pd
 
@@ -123,6 +125,137 @@ def test_load_signal_tracker_csv_cached_recovers_when_sqlite_table_missing(monke
     assert row_count >= 1
 
 
+def test_load_signal_tracker_csv_cached_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime_cache.db"
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    monkeypatch.setattr(source_cache, "_resolve_db_path", lambda _path: str(db_path))
+
+    csv_path = tmp_path / "daily_prices_read_only.csv"
+    pd.DataFrame([{"ticker": "005930", "close": 100.0}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    first = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(first) == 1
+
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=False)
+    read_only_flags: list[bool] = []
+    original_connect = source_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(source_cache, "connect_sqlite", _traced_connect)
+    monkeypatch.setattr(
+        source_cache.pd,
+        "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("csv reader should not run when sqlite cache is warm")),
+    )
+
+    second = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(second) == 1
+    assert True in read_only_flags
+
+
+def test_load_signal_tracker_csv_cached_reuses_alias_memory_cache_without_sqlite_query(
+    monkeypatch, tmp_path
+):
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    monkeypatch.chdir(tmp_path)
+
+    csv_path = tmp_path / "daily_prices_alias.csv"
+    pd.DataFrame([{"ticker": "005930", "close": 100.0}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    first = source_cache.load_signal_tracker_csv_cached(
+        path="daily_prices_alias.csv",
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(first) == 1
+
+    monkeypatch.setattr(
+        source_cache,
+        "connect_sqlite",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should reuse source cache alias memory key")
+        ),
+    )
+    monkeypatch.setattr(
+        source_cache.pd,
+        "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("csv reader should not run when alias memory cache is warm")
+        ),
+    )
+
+    second = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(second) == 1
+    assert str(second.iloc[0]["ticker"]).zfill(6) == "005930"
+
+
+def test_load_signal_tracker_csv_cached_reads_legacy_sqlite_source_path_key(
+    monkeypatch, tmp_path
+):
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    monkeypatch.chdir(tmp_path)
+
+    csv_path = tmp_path / "daily_prices_legacy.csv"
+    pd.DataFrame([{"ticker": "005930", "close": 100.0}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    first = source_cache.load_signal_tracker_csv_cached(
+        path="daily_prices_legacy.csv",
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(first) == 1
+
+    with sqlite3.connect(str(tmp_path / "runtime_cache.db")) as conn:
+        conn.execute(
+            """
+            UPDATE signal_tracker_source_cache
+            SET source_path = ?
+            WHERE source_path = ?
+            """,
+            ("daily_prices_legacy.csv", source_cache._normalize_path(str(csv_path))),
+        )
+        conn.commit()
+
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=False)
+    monkeypatch.setattr(
+        source_cache.pd,
+        "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should load signal tracker source cache from legacy sqlite key")
+        ),
+    )
+
+    second = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(second) == 1
+    assert str(second.iloc[0]["ticker"]).zfill(6) == "005930"
+
+
 def test_load_signal_tracker_csv_cached_skips_delete_when_rows_within_limit(monkeypatch, tmp_path):
     db_path = tmp_path / "runtime_cache.db"
     source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
@@ -152,6 +285,86 @@ def test_load_signal_tracker_csv_cached_skips_delete_when_rows_within_limit(monk
     assert not any("DELETE FROM signal_tracker_source_cache" in sql for sql in traced_sql)
 
 
+def test_load_signal_tracker_csv_cached_repeated_snapshot_key_prunes_once(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime_cache.db"
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    monkeypatch.setattr(source_cache, "_resolve_db_path", lambda _path: str(db_path))
+    monkeypatch.setattr(source_cache, "_SOURCE_SQLITE_PRUNE_FORCE_INTERVAL", 10_000)
+
+    prune_calls = {"count": 0}
+    original_prune = source_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(source_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    csv_path = tmp_path / "daily_prices_single.csv"
+    pd.DataFrame([{"ticker": "005930", "close": 100.0}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    first = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(first) == 1
+
+    time.sleep(0.001)
+    pd.DataFrame([{"ticker": "005930", "close": 101.0}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=False)
+
+    second = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(second) == 1
+    assert prune_calls["count"] == 1
+
+
+def test_load_signal_tracker_csv_cached_forces_prune_on_configured_interval(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime_cache.db"
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    monkeypatch.setattr(source_cache, "_resolve_db_path", lambda _path: str(db_path))
+    monkeypatch.setattr(source_cache, "_SOURCE_SQLITE_PRUNE_FORCE_INTERVAL", 2)
+
+    prune_calls = {"count": 0}
+    original_prune = source_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(source_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    csv_path = tmp_path / "daily_prices_single.csv"
+    pd.DataFrame([{"ticker": "005930", "close": 100.0}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    first = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(first) == 1
+
+    time.sleep(0.001)
+    pd.DataFrame([{"ticker": "005930", "close": 101.0}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=False)
+
+    second = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "close"],
+        dtype={"ticker": str},
+    )
+    assert len(second) == 1
+    assert prune_calls["count"] == 2
+
+
 def test_signal_tracker_source_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_path):
     source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
     db_path = tmp_path / "runtime_cache.db"
@@ -171,3 +384,176 @@ def test_signal_tracker_source_sqlite_ready_cache_uses_normalized_db_key(monkeyp
     assert source_cache._ensure_source_cache_sqlite(relative_db_path, None) is True
 
     assert connect_calls["count"] == 1
+
+
+def test_signal_tracker_source_sqlite_schema_init_is_single_flight_under_concurrency(
+    monkeypatch,
+    tmp_path,
+):
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    db_path = str(tmp_path / "runtime_cache.db")
+
+    monkeypatch.setattr(source_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _run_once(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+        return None
+
+    monkeypatch.setattr(source_cache, "run_sqlite_with_retry", _run_once)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(source_cache._ensure_source_cache_sqlite(db_path, None))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 1
+    assert results == {"first": True, "second": True}
+
+
+def test_signal_tracker_source_sqlite_waiter_retries_after_initializer_failure(
+    monkeypatch,
+    tmp_path,
+):
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    db_path = str(tmp_path / "runtime_cache.db")
+
+    monkeypatch.setattr(source_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(source_cache, "run_sqlite_with_retry", _fail_then_succeed)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(source_cache._ensure_source_cache_sqlite(db_path, None))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 2
+    assert results.get("first") is False
+    assert results.get("second") is True
+
+
+def test_signal_tracker_source_sqlite_ready_cache_is_bounded(monkeypatch, tmp_path):
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    monkeypatch.setattr(source_cache, "_SOURCE_SQLITE_READY_MAX_ENTRIES", 1)
+    monkeypatch.setattr(source_cache, "sqlite_db_path_exists", lambda _path: True)
+    monkeypatch.setattr(
+        source_cache,
+        "run_sqlite_with_retry",
+        lambda _operation, *, max_retries, retry_delay_seconds: None,
+    )
+
+    first_db_path = str(tmp_path / "first.db")
+    second_db_path = str(tmp_path / "second.db")
+
+    assert source_cache._ensure_source_cache_sqlite(first_db_path, None) is True
+    assert source_cache._ensure_source_cache_sqlite(second_db_path, None) is True
+
+    with source_cache._SOURCE_SQLITE_READY_CONDITION:
+        assert len(source_cache._SOURCE_SQLITE_READY) == 1
+        assert source_cache.normalize_sqlite_db_key(second_db_path) in source_cache._SOURCE_SQLITE_READY
+
+
+def test_load_signal_tracker_csv_cached_memory_cache_is_bounded_lru(monkeypatch, tmp_path):
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    monkeypatch.setattr(source_cache, "_SOURCE_MEMORY_CACHE_MAX_ENTRIES", 2)
+
+    first_csv = tmp_path / "daily_prices_first_lru.csv"
+    second_csv = tmp_path / "daily_prices_second_lru.csv"
+    third_csv = tmp_path / "daily_prices_third_lru.csv"
+
+    for index, path in enumerate((first_csv, second_csv, third_csv), start=1):
+        pd.DataFrame(
+            [
+                {"ticker": "005930", "close": 100.0 + index},
+            ]
+        ).to_csv(path, index=False, encoding="utf-8-sig")
+
+    usecols = ["ticker", "close"]
+    dtype = {"ticker": str}
+
+    _ = source_cache.load_signal_tracker_csv_cached(
+        path=str(first_csv),
+        cache_kind="price_source",
+        usecols=usecols,
+        dtype=dtype,
+    )
+    _ = source_cache.load_signal_tracker_csv_cached(
+        path=str(second_csv),
+        cache_kind="price_source",
+        usecols=usecols,
+        dtype=dtype,
+    )
+    _ = source_cache.load_signal_tracker_csv_cached(
+        path=str(first_csv),
+        cache_kind="price_source",
+        usecols=usecols,
+        dtype=dtype,
+    )
+    _ = source_cache.load_signal_tracker_csv_cached(
+        path=str(third_csv),
+        cache_kind="price_source",
+        usecols=usecols,
+        dtype=dtype,
+    )
+
+    usecols_signature = source_cache._serialize_usecols(usecols)
+    dtype_signature = source_cache._serialize_dtype(dtype)
+    first_key = (source_cache._normalize_path(str(first_csv)), "price_source", usecols_signature, dtype_signature)
+    second_key = (source_cache._normalize_path(str(second_csv)), "price_source", usecols_signature, dtype_signature)
+    third_key = (source_cache._normalize_path(str(third_csv)), "price_source", usecols_signature, dtype_signature)
+
+    with source_cache._SOURCE_CACHE_LOCK:
+        cached_keys = list(source_cache._SOURCE_CACHE.keys())
+
+    assert len(cached_keys) == 2
+    assert first_key in cached_keys
+    assert third_key in cached_keys
+    assert second_key not in cached_keys

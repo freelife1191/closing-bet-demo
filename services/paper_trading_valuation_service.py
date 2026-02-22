@@ -18,9 +18,9 @@ def _normalize_ticker(ticker: str) -> str:
     return str(ticker).zfill(6)
 
 
-def _load_holdings_and_balance(get_context_fn: Callable[[], Any]) -> tuple[list[dict], int, int]:
+def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[list[dict], int, int]:
     """DB에서 보유 종목과 현금/입금 총액을 로드한다."""
-    with get_context_fn() as conn:
+    with get_read_context_fn() as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -48,7 +48,7 @@ def _load_holdings_and_balance(get_context_fn: Callable[[], Any]) -> tuple[list[
 
 def get_portfolio_valuation(
     *,
-    get_context_fn: Callable[[], Any],
+    get_read_context_fn: Callable[[], Any],
     cache_lock: Any,
     price_cache: Dict[str, int],
     wait_for_initial_price_sync_fn: Callable[[list[dict], Dict[str, int]], Dict[str, int]],
@@ -60,7 +60,7 @@ def get_portfolio_valuation(
     run_db_operation_with_schema_retry_fn: Callable[[Callable[[], Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """캐시 가격을 기준으로 포트폴리오 평가 결과를 계산한다."""
-    load_holdings_fn = lambda: _load_holdings_and_balance(get_context_fn)
+    load_holdings_fn = lambda: _load_holdings_and_balance(get_read_context_fn)
     if callable(run_db_operation_with_schema_retry_fn):
         holdings, cash, total_deposit = run_db_operation_with_schema_retry_fn(load_holdings_fn)
     else:

@@ -73,7 +73,7 @@ class PaperTradingTradeAccountMixin:
     def get_balance(self):
         """Get current cash balance"""
         def _operation():
-            with self.get_context() as conn:
+            with self.get_read_context() as conn:
                 cursor = conn.cursor()
                 cursor.execute('SELECT cash FROM balance WHERE id = 1')
                 row = cursor.fetchone()
@@ -297,7 +297,7 @@ class PaperTradingTradeAccountMixin:
     def get_portfolio(self):
         """Get all holdings"""
         def _operation():
-            with self.get_context() as conn:
+            with self.get_read_context() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
 
@@ -350,6 +350,8 @@ class PaperTradingTradeAccountMixin:
             with self.cache_lock:
                 self.price_cache.clear()
                 self.last_update = None
+            if hasattr(self, "_reset_price_cache_prune_state"):
+                self._reset_price_cache_prune_state()
             if hasattr(self, "_last_asset_history_snapshot"):
                 self._last_asset_history_snapshot = None
             return True
@@ -360,7 +362,7 @@ class PaperTradingTradeAccountMixin:
     def get_trade_history(self, limit=50):
         """Get trade history"""
         def _operation():
-            with self.get_context() as conn:
+            with self.get_read_context() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute(

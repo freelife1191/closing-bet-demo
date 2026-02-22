@@ -90,13 +90,25 @@ class PaperTradingHistoryMixin:
 
     def _record_asset_history_with_cash_value(self, *, cash: int, current_stock_value: int) -> None:
         """현재 현금/주식 평가값으로 자산 히스토리를 upsert한다."""
+        normalized_cash = int(cash)
+        normalized_stock_value = int(current_stock_value)
+        total_asset = normalized_cash + normalized_stock_value
+        today = datetime.now().strftime('%Y-%m-%d')
+        if not self._asset_history_snapshot_changed(
+            date=today,
+            total_asset=total_asset,
+            cash=normalized_cash,
+            stock_value=normalized_stock_value,
+        ):
+            return
+
         def _operation():
             with self.get_context() as conn:
                 cursor = conn.cursor()
                 snapshot = self._upsert_asset_history_row(
                     cursor=cursor,
-                    cash=int(cash),
-                    current_stock_value=int(current_stock_value),
+                    cash=normalized_cash,
+                    current_stock_value=normalized_stock_value,
                 )
                 if snapshot:
                     conn.commit()
@@ -149,7 +161,7 @@ class PaperTradingHistoryMixin:
     def get_asset_history(self, limit=30):
         """Get asset history for chart"""
         def _operation():
-            with self.get_context() as conn:
+            with self.get_read_context() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 # Fetch latest N records (DESC), then sort by date (ASC) for chart

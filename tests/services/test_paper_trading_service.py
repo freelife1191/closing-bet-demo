@@ -7,10 +7,13 @@ PaperTradingService 단위 테스트
 from __future__ import annotations
 
 import sqlite3
+import threading
+import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import services.paper_trading as paper_trading_module
 from services.paper_trading import PaperTradingService
 import services.paper_trading_history_mixin as paper_trading_history_mixin
 
@@ -496,6 +499,48 @@ def test_record_asset_history_skips_duplicate_daily_snapshot_writes(monkeypatch)
         _cleanup_service(service)
 
 
+def test_record_asset_history_with_cash_skips_write_context_for_duplicate_snapshot(monkeypatch):
+    service = _build_service()
+    try:
+        fixed_now = datetime(2026, 2, 22, 9, 0, 0)
+
+        class _FakeDateTime:
+            @classmethod
+            def now(cls):
+                return fixed_now
+
+        monkeypatch.setattr(paper_trading_history_mixin, "datetime", _FakeDateTime)
+        service._set_last_asset_history_snapshot(
+            date="2026-02-22",
+            total_asset=100_000_000,
+            cash=100_000_000,
+            stock_value=0,
+        )
+
+        original_get_context = service.get_context
+        write_context_calls = {"count": 0}
+
+        def _traced_get_context():
+            write_context_calls["count"] += 1
+            return original_get_context()
+
+        monkeypatch.setattr(service, "get_context", _traced_get_context)
+
+        service.record_asset_history_with_cash(
+            cash=100_000_000,
+            current_stock_value=0,
+        )
+
+        assert write_context_calls["count"] == 0
+        with original_get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM asset_history")
+            row_count = int(cursor.fetchone()[0])
+        assert row_count == 0
+    finally:
+        _cleanup_service(service)
+
+
 def test_paper_trading_db_has_indexes_for_history_queries():
     service = _build_service()
     try:
@@ -553,6 +598,65 @@ def test_get_context_closes_connection_after_context_exit():
         _cleanup_service(service)
 
 
+def test_get_read_context_applies_busy_timeout_and_read_only(monkeypatch):
+    service = _build_service()
+    try:
+        read_only_flags: list[bool] = []
+        original_connect = paper_trading_module.connect_sqlite
+
+        def _traced_connect(*args, **kwargs):
+            if "read_only" in kwargs:
+                read_only_flags.append(bool(kwargs["read_only"]))
+            return original_connect(*args, **kwargs)
+
+        monkeypatch.setattr(paper_trading_module, "connect_sqlite", _traced_connect)
+
+        with service.get_read_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA busy_timeout")
+            timeout_ms = int(cursor.fetchone()[0])
+            cursor.execute("SELECT 1")
+            assert int(cursor.fetchone()[0]) == 1
+
+        assert timeout_ms == service.SQLITE_BUSY_TIMEOUT_MS
+        assert True in read_only_flags
+    finally:
+        _cleanup_service(service)
+
+
+def test_read_methods_use_read_context_without_get_context(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(
+            service,
+            "get_context",
+            lambda: (_ for _ in ()).throw(AssertionError("get_context should not be used for read methods")),
+        )
+        monkeypatch.setattr(service, "record_asset_history_with_cash", lambda **_kwargs: None)
+        monkeypatch.setattr(service, "record_asset_history", lambda *_args, **_kwargs: None)
+
+        assert service._get_portfolio_tickers() == []
+        assert isinstance(service.get_balance(), (int, float))
+
+        portfolio = service.get_portfolio()
+        assert isinstance(portfolio, dict)
+        assert "holdings" in portfolio
+
+        history_payload = service.get_trade_history(limit=5)
+        assert isinstance(history_payload, dict)
+        assert "trades" in history_payload
+
+        asset_history = service.get_asset_history(limit=5)
+        assert isinstance(asset_history, list)
+        assert len(asset_history) >= 2
+
+        valuation = service.get_portfolio_valuation()
+        assert isinstance(valuation, dict)
+        assert "holdings" in valuation
+    finally:
+        _cleanup_service(service)
+
+
 def test_constructor_skips_price_cache_ensure_when_db_init_succeeds(monkeypatch):
     ensure_calls: list[bool] = []
     db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
@@ -591,6 +695,105 @@ def test_constructor_ensures_price_cache_when_db_init_fails(monkeypatch):
     service = PaperTradingService(db_name=db_name, auto_start_sync=False)
     try:
         assert ensure_calls == [True]
+    finally:
+        _cleanup_service(service)
+
+
+def test_ensure_price_cache_table_deduplicates_concurrent_initialization(monkeypatch):
+    service = _build_service()
+    try:
+        with service._price_cache_schema_condition:
+            service._price_cache_schema_ready = False
+            service._price_cache_schema_init_in_progress = False
+
+        original_get_context = service.get_context
+        get_context_calls = {"count": 0}
+        calls_lock = threading.Lock()
+        first_entered = threading.Event()
+
+        def _slow_counted_get_context():
+            with calls_lock:
+                get_context_calls["count"] += 1
+                call_index = get_context_calls["count"]
+            if call_index == 1:
+                first_entered.set()
+                time.sleep(0.05)
+            return original_get_context()
+
+        monkeypatch.setattr(service, "get_context", _slow_counted_get_context)
+
+        first_result: list[bool] = []
+        second_result: list[bool] = []
+
+        thread_first = threading.Thread(
+            target=lambda: first_result.append(service._ensure_price_cache_table())
+        )
+        thread_second = threading.Thread(
+            target=lambda: second_result.append(service._ensure_price_cache_table())
+        )
+
+        thread_first.start()
+        assert first_entered.wait(timeout=1.0)
+        thread_second.start()
+
+        thread_first.join(timeout=2.0)
+        thread_second.join(timeout=2.0)
+
+        assert thread_first.is_alive() is False
+        assert thread_second.is_alive() is False
+        assert first_result == [True]
+        assert second_result == [True]
+        assert get_context_calls["count"] == 1
+    finally:
+        _cleanup_service(service)
+
+
+def test_load_price_cache_from_db_avoids_write_connection_when_schema_ready(monkeypatch):
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO price_cache (ticker, price, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(ticker) DO UPDATE SET
+                    price = excluded.price,
+                    updated_at = excluded.updated_at
+                """,
+                ("005930", 70_500, "2026-02-22T00:00:00"),
+            )
+            conn.commit()
+
+        with service.cache_lock:
+            service.price_cache.clear()
+
+        monkeypatch.setattr(service, "_ensure_price_cache_table", lambda *args, **kwargs: True)
+        monkeypatch.setattr(
+            service,
+            "get_context",
+            lambda: (_ for _ in ()).throw(AssertionError("load warmup should not use write context")),
+        )
+
+        service._load_price_cache_from_db()
+
+        with service.cache_lock:
+            assert service.price_cache.get("005930") == 70_500
+    finally:
+        _cleanup_service(service)
+
+
+def test_persist_price_cache_skips_write_when_schema_ensure_fails(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(service, "_ensure_price_cache_table", lambda *args, **kwargs: False)
+        monkeypatch.setattr(
+            service,
+            "get_context",
+            lambda: (_ for _ in ()).throw(AssertionError("write context should not be used")),
+        )
+
+        service._persist_price_cache({"005930": 70_500})
     finally:
         _cleanup_service(service)
 
@@ -663,6 +866,105 @@ def test_persist_price_cache_recreates_missing_table():
         _cleanup_service(service)
 
 
+def test_persist_price_cache_prunes_rows_to_configured_max(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(service, "PRICE_CACHE_MAX_ROWS", 3)
+
+        service._persist_price_cache(
+            {
+                "000001": 10_000,
+                "000002": 10_100,
+                "000003": 10_200,
+            }
+        )
+        time.sleep(0.01)
+        service._persist_price_cache(
+            {
+                "000004": 10_300,
+                "000005": 10_400,
+            }
+        )
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ticker FROM price_cache")
+            tickers = {str(row[0]) for row in cursor.fetchall()}
+            cursor.execute("SELECT COUNT(*) FROM price_cache")
+            row_count = int(cursor.fetchone()[0])
+
+        assert row_count == 3
+        assert "000004" in tickers
+        assert "000005" in tickers
+    finally:
+        _cleanup_service(service)
+
+
+def test_persist_price_cache_keeps_max_rows_on_sequential_upserts(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(service, "PRICE_CACHE_MAX_ROWS", 3)
+        service._persist_price_cache({"000001": 10_000, "000002": 10_100, "000003": 10_200})
+        time.sleep(0.01)
+        service._persist_price_cache({"000004": 10_300})
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ticker FROM price_cache")
+            tickers = {str(row[0]) for row in cursor.fetchall()}
+            cursor.execute("SELECT COUNT(*) FROM price_cache")
+            row_count = int(cursor.fetchone()[0])
+
+        assert row_count == 3
+        assert "000004" in tickers
+    finally:
+        _cleanup_service(service)
+
+
+def test_persist_price_cache_repeated_ticker_prunes_once(monkeypatch):
+    service = _build_service()
+    try:
+        service._reset_price_cache_prune_state()
+        monkeypatch.setattr(service, "PRICE_CACHE_PRUNE_FORCE_INTERVAL", 10_000)
+        prune_calls = {"count": 0}
+        original_prune = paper_trading_module.prune_rows_by_updated_at_if_needed
+
+        def _counted_prune(*args, **kwargs):
+            prune_calls["count"] += 1
+            return original_prune(*args, **kwargs)
+
+        monkeypatch.setattr(paper_trading_module, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+        service._persist_price_cache({"005930": 70_500})
+        service._persist_price_cache({"005930": 70_600})
+
+        assert prune_calls["count"] == 1
+    finally:
+        _cleanup_service(service)
+
+
+def test_persist_price_cache_forces_prune_on_configured_interval(monkeypatch):
+    service = _build_service()
+    try:
+        service._reset_price_cache_prune_state()
+        monkeypatch.setattr(service, "PRICE_CACHE_PRUNE_FORCE_INTERVAL", 2)
+        prune_calls = {"count": 0}
+        original_prune = paper_trading_module.prune_rows_by_updated_at_if_needed
+
+        def _counted_prune(*args, **kwargs):
+            prune_calls["count"] += 1
+            return original_prune(*args, **kwargs)
+
+        monkeypatch.setattr(paper_trading_module, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+        service._persist_price_cache({"005930": 70_500})
+        service._persist_price_cache({"005930": 70_600})
+
+        assert prune_calls["count"] == 2
+    finally:
+        _cleanup_service(service)
+
+
 def test_refresh_price_cache_once_skips_sqlite_write_when_price_unchanged(monkeypatch):
     service = _build_service()
     try:
@@ -730,18 +1032,59 @@ def test_service_warmup_skips_count_query_for_portfolio_presence(monkeypatch):
     try:
         service._persist_price_cache({"005930": 70900})
         traced_sql: list[str] = []
-        original_get_context = service.get_context
+        original_get_read_context = service.get_read_context
 
-        def _traced_context():
-            conn = original_get_context()
+        def _traced_read_context():
+            conn = original_get_read_context()
             conn.set_trace_callback(traced_sql.append)
             return conn
 
-        monkeypatch.setattr(service, "get_context", _traced_context)
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
         service._load_price_cache_from_db()
 
         assert not any("SELECT COUNT(*) FROM portfolio" in sql for sql in traced_sql)
         assert any("SELECT 1" in sql and "FROM portfolio" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
+def test_load_price_cache_from_db_uses_read_context_when_schema_ready(monkeypatch):
+    service = _build_service()
+    try:
+        service._persist_price_cache({"005930": 70900})
+        service.price_cache.clear()
+        service._price_cache_schema_ready = True
+
+        monkeypatch.setattr(
+            service,
+            "get_context",
+            lambda: (_ for _ in ()).throw(
+                AssertionError("get_context should not be used for warmup reads when schema is ready")
+            ),
+        )
+
+        service._load_price_cache_from_db()
+        assert service.price_cache.get("005930") == 70900
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_tickers_recovers_when_portfolio_table_missing():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DROP TABLE IF EXISTS portfolio")
+            conn.commit()
+
+        tickers = service._get_portfolio_tickers()
+        assert tickers == []
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM portfolio")
+            row_count = int(cursor.fetchone()[0])
+        assert row_count == 0
     finally:
         _cleanup_service(service)
 
@@ -886,5 +1229,24 @@ def test_reset_account_clears_price_cache_table_and_memory():
             after_reset = int(cursor.fetchone()[0])
 
         assert after_reset == 0
+    finally:
+        _cleanup_service(service)
+
+
+def test_reset_account_resets_price_cache_prune_tracker_state():
+    service = _build_service()
+    try:
+        service._persist_price_cache({"005930": 70_500})
+        service._persist_price_cache({"000660": 123_400})
+
+        with service._price_cache_prune_lock:
+            assert len(service._price_cache_known_tickers) >= 2
+            assert service._price_cache_save_counter >= 2
+
+        assert service.reset_account() is True
+
+        with service._price_cache_prune_lock:
+            assert len(service._price_cache_known_tickers) == 0
+            assert service._price_cache_save_counter == 0
     finally:
         _cleanup_service(service)

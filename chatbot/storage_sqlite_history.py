@@ -20,11 +20,12 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
 )
 
-from .storage_sqlite_common import _SQLITE_PRAGMAS, ensure_chatbot_storage_schema
+from .storage_sqlite_common import _SQLITE_SESSION_PRAGMAS, ensure_chatbot_storage_schema
 
 _SQLITE_TIMEOUT_SECONDS = 30
 _SQLITE_RETRY_ATTEMPTS = 2
 _SQLITE_RETRY_DELAY_SECONDS = 0.03
+_SQLITE_INLINE_DELETE_MAX_VARIABLES = 900
 
 
 def _is_missing_table_error(error: Exception, *, table_names: tuple[str, ...]) -> bool:
@@ -147,8 +148,26 @@ def _delete_stale_sessions_cursor(
     cursor: sqlite3.Cursor,
     active_session_ids: list[str],
 ) -> None:
-    if not active_session_ids:
+    normalized_session_ids = list(
+        dict.fromkeys(
+            str(session_id)
+            for session_id in active_session_ids
+            if str(session_id)
+        )
+    )
+    if not normalized_session_ids:
         _clear_all_sessions_cursor(cursor=cursor)
+        return
+
+    if len(normalized_session_ids) <= _SQLITE_INLINE_DELETE_MAX_VARIABLES:
+        placeholders = ", ".join("?" for _ in normalized_session_ids)
+        cursor.execute(
+            f"""
+            DELETE FROM chatbot_sessions
+            WHERE session_id NOT IN ({placeholders})
+            """,
+            tuple(normalized_session_ids),
+        )
         return
 
     cursor.execute(
@@ -161,7 +180,7 @@ def _delete_stale_sessions_cursor(
     cursor.execute("DELETE FROM _tmp_chatbot_session_ids")
     cursor.executemany(
         "INSERT OR IGNORE INTO _tmp_chatbot_session_ids(session_id) VALUES (?)",
-        [(session_id,) for session_id in active_session_ids],
+        [(session_id,) for session_id in normalized_session_ids],
     )
     cursor.execute(
         """
@@ -323,7 +342,8 @@ def load_history_sessions_from_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
+                read_only=True,
             ) as conn:
                 conn.row_factory = sqlite3.Row
 
@@ -493,7 +513,7 @@ def save_history_sessions_to_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 _ensure_message_table_accessible_cursor(cursor=cursor)
@@ -562,7 +582,7 @@ def upsert_history_session_with_messages(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 _ensure_message_table_accessible_cursor(cursor=cursor)
@@ -618,7 +638,7 @@ def apply_history_session_deltas_in_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 _ensure_message_table_accessible_cursor(cursor=cursor)
@@ -693,7 +713,7 @@ def delete_history_session_from_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 conn.execute(
                     """
@@ -744,7 +764,7 @@ def clear_history_sessions_in_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 _clear_all_sessions_cursor(cursor=conn.cursor())
                 conn.commit()

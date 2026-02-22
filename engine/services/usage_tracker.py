@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 from datetime import datetime
 
 from services.sqlite_utils import (
@@ -7,6 +8,7 @@ from services.sqlite_utils import (
     connect_sqlite,
     is_sqlite_missing_table_error,
     run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 # 데이터 디렉토리 확보
@@ -33,6 +35,10 @@ class UsageTracker:
     )
 
     def __init__(self):
+        self._db_init_lock = threading.Lock()
+        self._db_init_condition = threading.Condition(self._db_init_lock)
+        self._db_init_in_progress = False
+        self._db_ready = False
         self._init_db()
 
     @staticmethod
@@ -41,15 +47,37 @@ class UsageTracker:
         return str(email or "").strip().lower()
 
     def _connect(self):
+        return self._connect_with_mode(read_only=False)
+
+    def _connect_read_only(self):
+        return self._connect_with_mode(read_only=True)
+
+    def _connect_with_mode(self, *, read_only: bool):
         timeout_seconds = max(1, self.SQLITE_BUSY_TIMEOUT_MS // 1000)
         return connect_sqlite(
             DB_PATH,
             timeout_seconds=timeout_seconds,
             pragmas=self.SQLITE_SESSION_PRAGMAS,
+            read_only=read_only,
         )
 
-    def _init_db(self):
+    def _init_db(self, *, force_recheck: bool = False) -> bool:
         """DB 초기화"""
+        with self._db_init_condition:
+            if self._db_ready and not force_recheck:
+                if sqlite_db_path_exists(DB_PATH):
+                    return True
+                self._db_ready = False
+
+            while self._db_init_in_progress:
+                self._db_init_condition.wait()
+                if self._db_ready and not force_recheck:
+                    if sqlite_db_path_exists(DB_PATH):
+                        return True
+                    self._db_ready = False
+
+            self._db_init_in_progress = True
+
         def _initialize() -> None:
             with connect_sqlite(
                 DB_PATH,
@@ -72,14 +100,23 @@ class UsageTracker:
                 )
                 conn.commit()
 
+        initialization_succeeded = False
         try:
             run_sqlite_with_retry(
                 _initialize,
                 max_retries=self.SQLITE_RETRY_ATTEMPTS,
                 retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
             )
+            initialization_succeeded = True
+            return True
         except Exception as e:
             logger.error(f"Usage DB Initialization Error: {e}")
+            return False
+        finally:
+            with self._db_init_condition:
+                self._db_init_in_progress = False
+                self._db_ready = bool(initialization_succeeded)
+                self._db_init_condition.notify_all()
 
     @staticmethod
     def _is_missing_usage_table_error(error: Exception) -> bool:
@@ -126,8 +163,9 @@ class UsageTracker:
             
         except Exception as e:
             if (not _retried) and self._is_missing_usage_table_error(e):
-                self._init_db()
-                return self.check_and_increment(email, _retried=True)
+                if self._init_db(force_recheck=True):
+                    return self.check_and_increment(email, _retried=True)
+                return True
             logger.error(f"Usage Tracking Error: {e}")
             # DB 에러 시 일단 허용 (Fail-open)
             return True
@@ -139,7 +177,7 @@ class UsageTracker:
             return 0
 
         def _load_usage() -> int:
-            with self._connect() as conn:
+            with self._connect_read_only() as conn:
                 cursor = conn.cursor()
                 cursor.execute('SELECT count FROM api_usage WHERE email = ?', (normalized_email,))
                 result = cursor.fetchone()
@@ -153,8 +191,9 @@ class UsageTracker:
             )
         except Exception as e:
             if (not _retried) and self._is_missing_usage_table_error(e):
-                self._init_db()
-                return self.get_usage(email, _retried=True)
+                if self._init_db(force_recheck=True):
+                    return self.get_usage(email, _retried=True)
+                return 0
             logger.error(f"Usage lookup error: {e}")
             return 0
 

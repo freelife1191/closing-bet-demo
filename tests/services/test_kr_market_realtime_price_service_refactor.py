@@ -10,6 +10,8 @@ import logging
 import os
 import sqlite3
 import sys
+import threading
+import time
 from types import SimpleNamespace
 
 import pandas as pd
@@ -200,6 +202,207 @@ def test_fill_missing_prices_from_csv_uses_sqlite_latest_close_cache_after_memor
     assert int(row_count) == 1
 
 
+def test_fill_missing_prices_from_csv_latest_close_memory_cache_reuses_alias_path(
+    monkeypatch, tmp_path
+):
+    latest_close_cache.clear_latest_close_map_cache()
+    monkeypatch.chdir(tmp_path)
+    pd.DataFrame(
+        [
+            {"date": "2026-02-22", "ticker": "005930", "close": 120.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 98.0},
+        ]
+    ).to_csv(tmp_path / "daily_prices.csv", index=False)
+
+    prices: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: filename,
+        logger=logging.getLogger(__name__),
+    )
+    assert prices == {"005930": 120.0, "000660": 98.0}
+
+    monkeypatch.setattr(
+        latest_close_cache,
+        "connect_sqlite",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should reuse latest-close alias memory cache")
+        ),
+    )
+
+    prices_2: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_2,
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("load_csv_file should not run when alias memory cache is warm")
+        ),
+        get_data_path=lambda filename: str((tmp_path / filename).resolve()),
+        logger=logging.getLogger(__name__),
+    )
+    assert prices_2 == {"005930": 120.0, "000660": 98.0}
+
+
+def test_fill_missing_prices_from_csv_reads_legacy_latest_close_sqlite_source_path_key(
+    monkeypatch, tmp_path
+):
+    latest_close_cache.clear_latest_close_map_cache()
+    monkeypatch.chdir(tmp_path)
+    source_csv = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-22", "ticker": "005930", "close": 120.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 98.0},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    prices: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: filename,
+        logger=logging.getLogger(__name__),
+    )
+    assert prices == {"005930": 120.0, "000660": 98.0}
+
+    with sqlite3.connect(tmp_path / "runtime_cache.db") as conn:
+        conn.execute(
+            """
+            UPDATE realtime_latest_close_map_cache
+            SET source_path = ?
+            WHERE source_path = ?
+            """,
+            ("daily_prices.csv", str(source_csv.resolve())),
+        )
+        conn.commit()
+
+    latest_close_cache.clear_latest_close_map_cache()
+    prices_from_legacy: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_from_legacy,
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should load latest-close cache from legacy sqlite key")
+        ),
+        get_data_path=lambda filename: str((tmp_path / filename).resolve()),
+        logger=logging.getLogger(__name__),
+    )
+    assert prices_from_legacy == {"005930": 120.0, "000660": 98.0}
+
+
+def test_fill_missing_prices_from_csv_legacy_latest_close_lookup_runs_single_select_query(
+    monkeypatch, tmp_path
+):
+    latest_close_cache.clear_latest_close_map_cache()
+    monkeypatch.chdir(tmp_path)
+    source_csv = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-22", "ticker": "005930", "close": 120.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 98.0},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    prices: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: filename,
+        logger=logging.getLogger(__name__),
+    )
+    assert prices == {"005930": 120.0, "000660": 98.0}
+
+    with sqlite3.connect(tmp_path / "runtime_cache.db") as conn:
+        conn.execute(
+            """
+            UPDATE realtime_latest_close_map_cache
+            SET source_path = ?
+            WHERE source_path = ?
+            """,
+            ("daily_prices.csv", str(source_csv.resolve())),
+        )
+        conn.commit()
+
+    latest_close_cache.clear_latest_close_map_cache()
+    traced_sql: list[str] = []
+    original_connect = latest_close_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(latest_close_cache, "connect_sqlite", _traced_connect)
+
+    prices_from_legacy: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_from_legacy,
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should load latest-close cache from legacy sqlite key")
+        ),
+        get_data_path=lambda filename: str((tmp_path / filename).resolve()),
+        logger=logging.getLogger(__name__),
+    )
+
+    select_count = sum(
+        1
+        for sql in traced_sql
+        if "select payload_json" in sql.lower()
+        and "from realtime_latest_close_map_cache" in sql.lower()
+    )
+    assert prices_from_legacy == {"005930": 120.0, "000660": 98.0}
+    assert select_count == 1
+
+
+def test_fill_missing_prices_from_csv_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):
+    latest_close_cache.clear_latest_close_map_cache()
+    daily_prices_path = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-22", "ticker": "005930", "close": 120.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 98.0},
+        ]
+    ).to_csv(daily_prices_path, index=False)
+
+    get_data_path = lambda filename: str(tmp_path / filename)
+    prices: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=get_data_path,
+        logger=logging.getLogger(__name__),
+    )
+    assert prices["005930"] == 120.0
+
+    latest_close_cache.clear_latest_close_map_cache()
+    read_only_flags: list[bool] = []
+    original_connect = latest_close_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(latest_close_cache, "connect_sqlite", _traced_connect)
+
+    prices_after: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_after,
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should load latest-close map from sqlite")),
+        get_data_path=get_data_path,
+        logger=logging.getLogger(__name__),
+    )
+    assert prices_after["005930"] == 120.0
+    assert True in read_only_flags
+
+
 def test_fill_missing_prices_from_csv_creates_latest_close_sqlite_parent_dir(monkeypatch, tmp_path):
     clear_market_map_cache()
     daily_prices_path = tmp_path / "daily_prices.csv"
@@ -313,6 +516,108 @@ def test_fill_missing_prices_from_csv_skips_latest_close_delete_when_rows_within
     assert not any("DELETE FROM realtime_latest_close_map_cache" in sql for sql in traced_sql)
 
 
+def test_fill_missing_prices_from_csv_repeated_source_path_prunes_once(monkeypatch, tmp_path):
+    latest_close_cache.clear_latest_close_map_cache()
+    monkeypatch.setattr(latest_close_cache, "_LATEST_CLOSE_MAP_SQLITE_PRUNE_FORCE_INTERVAL", 10_000)
+
+    prune_calls = {"count": 0}
+    original_prune = latest_close_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(latest_close_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    daily_prices_path = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-22", "ticker": "005930", "close": 120.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 98.0},
+        ]
+    ).to_csv(daily_prices_path, index=False)
+
+    prices_first: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_first,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+        logger=logging.getLogger(__name__),
+    )
+    assert prices_first["005930"] == 120.0
+
+    time.sleep(0.001)
+    pd.DataFrame(
+        [
+            {"date": "2026-02-23", "ticker": "005930", "close": 121.0},
+            {"date": "2026-02-22", "ticker": "000660", "close": 99.0},
+        ]
+    ).to_csv(daily_prices_path, index=False)
+
+    prices_second: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_second,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+        logger=logging.getLogger(__name__),
+    )
+    assert prices_second["005930"] == 121.0
+    assert prune_calls["count"] == 1
+
+
+def test_fill_missing_prices_from_csv_forces_prune_on_configured_interval(monkeypatch, tmp_path):
+    latest_close_cache.clear_latest_close_map_cache()
+    monkeypatch.setattr(latest_close_cache, "_LATEST_CLOSE_MAP_SQLITE_PRUNE_FORCE_INTERVAL", 2)
+
+    prune_calls = {"count": 0}
+    original_prune = latest_close_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(latest_close_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    daily_prices_path = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-22", "ticker": "005930", "close": 120.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 98.0},
+        ]
+    ).to_csv(daily_prices_path, index=False)
+
+    prices_first: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_first,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+        logger=logging.getLogger(__name__),
+    )
+    assert prices_first["005930"] == 120.0
+
+    time.sleep(0.001)
+    pd.DataFrame(
+        [
+            {"date": "2026-02-23", "ticker": "005930", "close": 121.0},
+            {"date": "2026-02-22", "ticker": "000660", "close": 99.0},
+        ]
+    ).to_csv(daily_prices_path, index=False)
+
+    prices_second: dict[str, float] = {}
+    fill_missing_prices_from_csv(
+        ["005930", "000660"],
+        prices_second,
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+        logger=logging.getLogger(__name__),
+    )
+    assert prices_second["005930"] == 121.0
+    assert prune_calls["count"] == 2
+
+
 def test_fill_missing_prices_from_csv_stores_compact_latest_close_payload_json(tmp_path):
     latest_close_cache.clear_latest_close_map_cache()
     pd.DataFrame(
@@ -344,6 +649,47 @@ def test_fill_missing_prices_from_csv_stores_compact_latest_close_payload_json(t
     assert ", " not in payload_json
 
 
+def test_fill_missing_prices_from_csv_latest_close_memory_cache_is_bounded_lru(monkeypatch, tmp_path):
+    latest_close_cache.clear_latest_close_map_cache()
+    monkeypatch.setattr(latest_close_cache, "_LATEST_CLOSE_MAP_MEMORY_MAX_ENTRIES", 2)
+
+    data_dirs = [tmp_path / f"latest_close_dataset_{idx}" for idx in range(3)]
+    for idx, data_dir in enumerate(data_dirs):
+        data_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            [
+                {"date": "2026-02-22", "ticker": "005930", "close": 120.0 + idx},
+                {"date": "2026-02-21", "ticker": "000660", "close": 98.0 + idx},
+            ]
+        ).to_csv(data_dir / "daily_prices.csv", index=False)
+
+    def _fill_for(data_dir):
+        prices: dict[str, float] = {}
+        fill_missing_prices_from_csv(
+            ["005930", "000660"],
+            prices,
+            lambda name, **kwargs: pd.read_csv(data_dir / name, usecols=kwargs.get("usecols")),
+            get_data_path=lambda filename: str(data_dir / filename),
+            logger=logging.getLogger(__name__),
+        )
+        return prices
+
+    _fill_for(data_dirs[0])
+    _fill_for(data_dirs[1])
+    _fill_for(data_dirs[0])  # 최근 접근 갱신
+    _fill_for(data_dirs[2])
+
+    source_paths = [str(data_dir / "daily_prices.csv") for data_dir in data_dirs]
+    with latest_close_cache._LATEST_CLOSE_MAP_CACHE_LOCK:
+        cache_keys = list(latest_close_cache._LATEST_CLOSE_MAP_CACHE.keys())
+        cached_source_paths = {key[0] for key in cache_keys}
+
+    assert len(cache_keys) == 2
+    assert source_paths[0] in cached_source_paths
+    assert source_paths[2] in cached_source_paths
+    assert source_paths[1] not in cached_source_paths
+
+
 def test_latest_close_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path):
     latest_close_cache.clear_latest_close_map_cache()
     latest_close_cache._LATEST_CLOSE_MAP_SQLITE_READY.clear()
@@ -366,6 +712,104 @@ def test_latest_close_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path)
 
     assert connect_calls["count"] == 1
     assert os.path.exists(absolute_db_path)
+
+
+def test_latest_close_sqlite_init_is_single_flight_under_concurrency(monkeypatch, tmp_path):
+    latest_close_cache.clear_latest_close_map_cache()
+    db_path = str(tmp_path / "runtime_cache.db")
+    with latest_close_cache._LATEST_CLOSE_MAP_SQLITE_CONDITION:
+        latest_close_cache._LATEST_CLOSE_MAP_SQLITE_READY.clear()
+        latest_close_cache._LATEST_CLOSE_MAP_SQLITE_INIT_IN_PROGRESS.clear()
+
+    monkeypatch.setattr(latest_close_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _run_once(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+        return None
+
+    monkeypatch.setattr(latest_close_cache, "run_sqlite_with_retry", _run_once)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(
+            latest_close_cache._ensure_latest_close_map_sqlite(db_path, logging.getLogger(__name__))
+        )
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 1
+    assert results == {"first": True, "second": True}
+
+
+def test_latest_close_sqlite_waiter_retries_after_initializer_failure(monkeypatch, tmp_path):
+    latest_close_cache.clear_latest_close_map_cache()
+    db_path = str(tmp_path / "runtime_cache.db")
+    with latest_close_cache._LATEST_CLOSE_MAP_SQLITE_CONDITION:
+        latest_close_cache._LATEST_CLOSE_MAP_SQLITE_READY.clear()
+        latest_close_cache._LATEST_CLOSE_MAP_SQLITE_INIT_IN_PROGRESS.clear()
+
+    monkeypatch.setattr(latest_close_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(latest_close_cache, "run_sqlite_with_retry", _fail_then_succeed)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(
+            latest_close_cache._ensure_latest_close_map_sqlite(db_path, logging.getLogger(__name__))
+        )
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 2
+    assert results.get("first") is False
+    assert results.get("second") is True
 
 
 def test_build_market_map_normalizes_ticker_and_drops_invalid_rows():
@@ -445,6 +889,188 @@ def test_build_market_map_reuses_sqlite_cache_after_memory_clear(tmp_path):
     with sqlite3.connect(db_path) as conn:
         row_count = conn.execute("SELECT COUNT(*) FROM realtime_market_map_cache").fetchone()[0]
     assert int(row_count) == 1
+
+
+def test_build_market_map_reuses_alias_memory_cache_without_sqlite_query(
+    monkeypatch, tmp_path
+):
+    clear_market_map_cache()
+    monkeypatch.chdir(tmp_path)
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSDAQ"},
+        ]
+    ).to_csv(tmp_path / "korean_stocks_list.csv", index=False)
+
+    first = build_market_map(
+        lambda name, **kwargs: pd.read_csv(
+            tmp_path / name,
+            dtype={"ticker": str},
+            usecols=kwargs.get("usecols"),
+        ),
+        get_data_path=lambda filename: filename,
+    )
+    assert first == {"005930": "KOSPI", "000660": "KOSDAQ"}
+
+    monkeypatch.setattr(
+        market_map_cache,
+        "connect_sqlite",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should reuse market map alias memory cache")
+        ),
+    )
+    second = build_market_map(
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("load_csv_file should not run when alias memory cache is warm")
+        ),
+        get_data_path=lambda filename: str((tmp_path / filename).resolve()),
+    )
+    assert second == first
+
+
+def test_build_market_map_reads_legacy_sqlite_source_path_key(
+    monkeypatch, tmp_path
+):
+    clear_market_map_cache()
+    monkeypatch.chdir(tmp_path)
+    source_csv = tmp_path / "korean_stocks_list.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSDAQ"},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    first = build_market_map(
+        lambda name, **kwargs: pd.read_csv(
+            tmp_path / name,
+            dtype={"ticker": str},
+            usecols=kwargs.get("usecols"),
+        ),
+        get_data_path=lambda filename: filename,
+    )
+    assert first == {"005930": "KOSPI", "000660": "KOSDAQ"}
+
+    with sqlite3.connect(tmp_path / "runtime_cache.db") as conn:
+        conn.execute(
+            """
+            UPDATE realtime_market_map_cache
+            SET source_path = ?
+            WHERE source_path = ?
+            """,
+            ("korean_stocks_list.csv", str(source_csv.resolve())),
+        )
+        conn.commit()
+
+    clear_market_map_cache()
+    second = build_market_map(
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should load market map from legacy sqlite key")
+        ),
+        get_data_path=lambda filename: str((tmp_path / filename).resolve()),
+    )
+    assert second == first
+
+
+def test_build_market_map_legacy_lookup_runs_single_select_query(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    monkeypatch.chdir(tmp_path)
+    source_csv = tmp_path / "korean_stocks_list.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSDAQ"},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    first = build_market_map(
+        lambda name, **kwargs: pd.read_csv(
+            tmp_path / name,
+            dtype={"ticker": str},
+            usecols=kwargs.get("usecols"),
+        ),
+        get_data_path=lambda filename: filename,
+    )
+    assert first == {"005930": "KOSPI", "000660": "KOSDAQ"}
+
+    with sqlite3.connect(tmp_path / "runtime_cache.db") as conn:
+        conn.execute(
+            """
+            UPDATE realtime_market_map_cache
+            SET source_path = ?
+            WHERE source_path = ?
+            """,
+            ("korean_stocks_list.csv", str(source_csv.resolve())),
+        )
+        conn.commit()
+
+    clear_market_map_cache()
+    traced_sql: list[str] = []
+    original_connect = market_map_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(market_map_cache, "connect_sqlite", _traced_connect)
+
+    second = build_market_map(
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should load market map from legacy sqlite key")
+        ),
+        get_data_path=lambda filename: str((tmp_path / filename).resolve()),
+    )
+
+    select_count = sum(
+        1
+        for sql in traced_sql
+        if "select payload_json" in sql.lower()
+        and "from realtime_market_map_cache" in sql.lower()
+    )
+    assert second == first
+    assert select_count == 1
+
+
+def test_build_market_map_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    stocks_path = tmp_path / "korean_stocks_list.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSDAQ"},
+        ]
+    ).to_csv(stocks_path, index=False)
+
+    get_data_path = lambda filename: str(tmp_path / filename)
+    first = build_market_map(
+        lambda name, **kwargs: pd.read_csv(
+            tmp_path / name,
+            dtype={"ticker": str},
+            usecols=kwargs.get("usecols"),
+        ),
+        get_data_path=get_data_path,
+    )
+    assert first == {"005930": "KOSPI", "000660": "KOSDAQ"}
+
+    clear_market_map_cache()
+    read_only_flags: list[bool] = []
+    original_connect = market_map_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(market_map_cache, "connect_sqlite", _traced_connect)
+
+    second = build_market_map(
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should load market map from sqlite")),
+        get_data_path=get_data_path,
+    )
+    assert second == first
+    assert True in read_only_flags
 
 
 def test_build_market_map_creates_sqlite_parent_dir_when_missing(monkeypatch, tmp_path):
@@ -540,6 +1166,92 @@ def test_build_market_map_skips_delete_when_rows_within_limit(monkeypatch, tmp_p
     assert not any("DELETE FROM realtime_market_map_cache" in sql for sql in traced_sql)
 
 
+def test_build_market_map_repeated_source_path_prunes_once(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    monkeypatch.setattr(market_map_cache, "_MARKET_MAP_SQLITE_PRUNE_FORCE_INTERVAL", 10_000)
+
+    prune_calls = {"count": 0}
+    original_prune = market_map_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(market_map_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    source_csv = tmp_path / "korean_stocks_list.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSDAQ"},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    first = build_market_map(
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, dtype={"ticker": str}, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+    )
+    assert first == {"005930": "KOSPI", "000660": "KOSDAQ"}
+
+    time.sleep(0.001)
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSPI"},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    second = build_market_map(
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, dtype={"ticker": str}, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+    )
+    assert second == {"005930": "KOSPI", "000660": "KOSPI"}
+    assert prune_calls["count"] == 1
+
+
+def test_build_market_map_forces_prune_on_configured_interval(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    monkeypatch.setattr(market_map_cache, "_MARKET_MAP_SQLITE_PRUNE_FORCE_INTERVAL", 2)
+
+    prune_calls = {"count": 0}
+    original_prune = market_map_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(market_map_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    source_csv = tmp_path / "korean_stocks_list.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSDAQ"},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    first = build_market_map(
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, dtype={"ticker": str}, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+    )
+    assert first == {"005930": "KOSPI", "000660": "KOSDAQ"}
+
+    time.sleep(0.001)
+    pd.DataFrame(
+        [
+            {"ticker": "5930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSPI"},
+        ]
+    ).to_csv(source_csv, index=False)
+
+    second = build_market_map(
+        lambda name, **kwargs: pd.read_csv(tmp_path / name, dtype={"ticker": str}, usecols=kwargs.get("usecols")),
+        get_data_path=lambda filename: str(tmp_path / filename),
+    )
+    assert second == {"005930": "KOSPI", "000660": "KOSPI"}
+    assert prune_calls["count"] == 2
+
+
 def test_build_market_map_stores_compact_payload_json(tmp_path):
     clear_market_map_cache()
     pd.DataFrame(
@@ -567,6 +1279,43 @@ def test_build_market_map_stores_compact_payload_json(tmp_path):
     assert ", " not in payload_json
 
 
+def test_build_market_map_memory_cache_is_bounded_lru(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    monkeypatch.setattr(market_map_cache, "_MARKET_MAP_MEMORY_MAX_ENTRIES", 2)
+
+    data_dirs = [tmp_path / f"market_map_dataset_{idx}" for idx in range(3)]
+    for idx, data_dir in enumerate(data_dirs):
+        data_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            [
+                {"ticker": "005930", "market": f"KOSPI-{idx}"},
+                {"ticker": "000660", "market": f"KOSDAQ-{idx}"},
+            ]
+        ).to_csv(data_dir / "korean_stocks_list.csv", index=False)
+
+    def _build_for(data_dir):
+        return build_market_map(
+            load_csv_file=lambda name, **kwargs: pd.read_csv(data_dir / name, usecols=kwargs.get("usecols")),
+            logger=logging.getLogger(__name__),
+            get_data_path=lambda filename: str(data_dir / filename),
+        )
+
+    _build_for(data_dirs[0])
+    _build_for(data_dirs[1])
+    _build_for(data_dirs[0])  # 최근 접근 갱신
+    _build_for(data_dirs[2])
+
+    source_paths = [str(data_dir / "korean_stocks_list.csv") for data_dir in data_dirs]
+    with market_map_cache._MARKET_MAP_CACHE_LOCK:
+        cache_keys = list(market_map_cache._MARKET_MAP_CACHE.keys())
+        cached_source_paths = {key[0] for key in cache_keys}
+
+    assert len(cache_keys) == 2
+    assert source_paths[0] in cached_source_paths
+    assert source_paths[2] in cached_source_paths
+    assert source_paths[1] not in cached_source_paths
+
+
 def test_market_map_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path):
     clear_market_map_cache()
     market_map_cache._MARKET_MAP_SQLITE_READY.clear()
@@ -589,6 +1338,100 @@ def test_market_map_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path):
 
     assert connect_calls["count"] == 1
     assert os.path.exists(absolute_db_path)
+
+
+def test_market_map_sqlite_init_is_single_flight_under_concurrency(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    db_path = str(tmp_path / "runtime_cache.db")
+    with market_map_cache._MARKET_MAP_SQLITE_CONDITION:
+        market_map_cache._MARKET_MAP_SQLITE_READY.clear()
+        market_map_cache._MARKET_MAP_SQLITE_INIT_IN_PROGRESS.clear()
+
+    monkeypatch.setattr(market_map_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _run_once(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+        return None
+
+    monkeypatch.setattr(market_map_cache, "run_sqlite_with_retry", _run_once)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(market_map_cache._ensure_market_map_sqlite(db_path, logging.getLogger(__name__)))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 1
+    assert results == {"first": True, "second": True}
+
+
+def test_market_map_sqlite_waiter_retries_after_initializer_failure(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    db_path = str(tmp_path / "runtime_cache.db")
+    with market_map_cache._MARKET_MAP_SQLITE_CONDITION:
+        market_map_cache._MARKET_MAP_SQLITE_READY.clear()
+        market_map_cache._MARKET_MAP_SQLITE_INIT_IN_PROGRESS.clear()
+
+    monkeypatch.setattr(market_map_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(market_map_cache, "run_sqlite_with_retry", _fail_then_succeed)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(market_map_cache._ensure_market_map_sqlite(db_path, logging.getLogger(__name__)))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 2
+    assert results.get("first") is False
+    assert results.get("second") is True
 
 
 def test_fetch_naver_missing_prices_reuses_session_per_worker(monkeypatch):

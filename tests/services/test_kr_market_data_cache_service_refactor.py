@@ -9,6 +9,9 @@ from __future__ import annotations
 import logging
 import json
 import os
+import sqlite3
+import threading
+import time
 
 import pandas as pd
 
@@ -171,6 +174,44 @@ def test_load_jongga_result_payloads_uses_sqlite_snapshot_after_memory_clear(mon
 
     assert len(second) == 1
     assert second[0][1]["date"] == "2026-02-22"
+
+
+def test_load_jongga_result_payloads_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(
+        cache_jongga,
+        "_JONGGA_PAYLOAD_SQLITE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+
+    result_file = tmp_path / "jongga_v2_results_20260222.json"
+    result_file.write_text(
+        json.dumps({"date": "2026-02-22", "signals": [{"stock_code": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    first = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(first) == 1
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["signature"] = None
+        cache_service.JONGGA_RESULT_PAYLOADS_CACHE["payloads"] = []
+
+    read_only_flags: list[bool] = []
+    original_connect = cache_jongga.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(cache_jongga, "connect_sqlite", _traced_connect)
+
+    second = cache_service.load_jongga_result_payloads(data_dir=str(tmp_path), limit=0)
+    assert len(second) == 1
+    assert second[0][1]["date"] == "2026-02-22"
+    assert True in read_only_flags
 
 
 def test_load_jongga_result_payloads_prunes_sqlite_cache_rows(monkeypatch, tmp_path):
@@ -340,6 +381,104 @@ def test_jongga_payload_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_pat
 
     assert connect_calls["count"] == 1
     assert os.path.exists(absolute_db_path)
+
+
+def test_jongga_payload_sqlite_init_is_single_flight_under_concurrency(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    db_path = str(tmp_path / "runtime_cache.db")
+    monkeypatch.setattr(cache_jongga, "_JONGGA_PAYLOAD_SQLITE_DB_PATH", db_path)
+
+    with cache_jongga._JONGGA_PAYLOAD_SQLITE_CONDITION:
+        cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+        cache_jongga._JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS.clear()
+
+    monkeypatch.setattr(cache_jongga, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _run_once(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+        return None
+
+    monkeypatch.setattr(cache_jongga, "run_sqlite_with_retry", _run_once)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(cache_jongga._ensure_jongga_payload_sqlite(logging.getLogger(__name__)))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 1
+    assert results == {"first": True, "second": True}
+
+
+def test_jongga_payload_sqlite_waiter_retries_after_initializer_failure(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    db_path = str(tmp_path / "runtime_cache.db")
+    monkeypatch.setattr(cache_jongga, "_JONGGA_PAYLOAD_SQLITE_DB_PATH", db_path)
+
+    with cache_jongga._JONGGA_PAYLOAD_SQLITE_CONDITION:
+        cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+        cache_jongga._JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS.clear()
+
+    monkeypatch.setattr(cache_jongga, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(cache_jongga, "run_sqlite_with_retry", _fail_then_succeed)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(cache_jongga._ensure_jongga_payload_sqlite(logging.getLogger(__name__)))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 2
+    assert results.get("first") is False
+    assert results.get("second") is True
 
 
 def test_load_latest_price_map_normalizes_ticker_and_picks_latest_on_unsorted_dates(tmp_path):
@@ -639,3 +778,69 @@ def test_load_json_file_prunes_sqlite_rows(monkeypatch, tmp_path):
         row_count = int(cursor.fetchone()[0])
 
     assert row_count == 2
+
+
+def test_load_json_file_memory_cache_is_bounded_lru(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(cache_core, "_JSON_FILE_CACHE_MAX_ENTRIES", 2)
+
+    (tmp_path / "cache_a.json").write_text(
+        json.dumps({"id": "A"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "cache_b.json").write_text(
+        json.dumps({"id": "B"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "cache_c.json").write_text(
+        json.dumps({"id": "C"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    _ = cache_service.load_json_file(str(tmp_path), "cache_a.json")
+    _ = cache_service.load_json_file(str(tmp_path), "cache_b.json")
+    _ = cache_service.load_json_file(str(tmp_path), "cache_a.json")
+    _ = cache_service.load_json_file(str(tmp_path), "cache_c.json")
+
+    with cache_service.FILE_CACHE_LOCK:
+        cached_keys = list(cache_service.JSON_FILE_CACHE.keys())
+
+    key_a = os.path.abspath(str(tmp_path / "cache_a.json"))
+    key_b = os.path.abspath(str(tmp_path / "cache_b.json"))
+    key_c = os.path.abspath(str(tmp_path / "cache_c.json"))
+
+    assert len(cached_keys) == 2
+    assert key_a in cached_keys
+    assert key_c in cached_keys
+    assert key_b not in cached_keys
+
+
+def test_load_csv_file_memory_cache_is_bounded_lru(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    monkeypatch.setattr(cache_core, "_CSV_FILE_CACHE_MAX_ENTRIES", 2)
+
+    for index in range(1, 4):
+        (tmp_path / f"cache_{index}.csv").write_text(
+            "date,ticker,close\n2026-02-20,005930,100\n",
+            encoding="utf-8",
+        )
+
+    usecols = ["date", "ticker", "close"]
+    usecols_signature = tuple(usecols)
+
+    _ = cache_service.load_csv_file(str(tmp_path), "cache_1.csv", deep_copy=False, usecols=usecols)
+    _ = cache_service.load_csv_file(str(tmp_path), "cache_2.csv", deep_copy=False, usecols=usecols)
+    _ = cache_service.load_csv_file(str(tmp_path), "cache_1.csv", deep_copy=False, usecols=usecols)
+    _ = cache_service.load_csv_file(str(tmp_path), "cache_3.csv", deep_copy=False, usecols=usecols)
+
+    with cache_service.FILE_CACHE_LOCK:
+        cached_keys = list(cache_service.CSV_FILE_CACHE.keys())
+
+    key_1 = (os.path.abspath(str(tmp_path / "cache_1.csv")), usecols_signature)
+    key_2 = (os.path.abspath(str(tmp_path / "cache_2.csv")), usecols_signature)
+    key_3 = (os.path.abspath(str(tmp_path / "cache_3.csv")), usecols_signature)
+
+    assert len(cached_keys) == 2
+    assert key_1 in cached_keys
+    assert key_3 in cached_keys
+    assert key_2 not in cached_keys

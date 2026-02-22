@@ -172,6 +172,66 @@ def test_build_data_status_payload_invalidates_cache_when_file_mtime_changes(tmp
     assert calls["json"] > first_calls["json"]
 
 
+def test_build_data_status_payload_cache_is_bounded_lru(monkeypatch, tmp_path):
+    clear_data_status_cache()
+    file_row_count_cache.clear_file_row_count_cache()
+    monkeypatch.setattr(analytics_service, "_DATA_STATUS_CACHE_MAX_ENTRIES", 2)
+
+    def _prepare_data_dir(base_dir, status):
+        base_dir.mkdir(parents=True, exist_ok=True)
+        (base_dir / "korean_stocks_list.csv").write_text("ticker\n005930\n", encoding="utf-8")
+        (base_dir / "daily_prices.csv").write_text("date,ticker,close\n2026-02-20,005930,100\n", encoding="utf-8")
+        (base_dir / "signals_log.csv").write_text("ticker\n005930\n", encoding="utf-8")
+        (base_dir / "market_gate.json").write_text(f'{{"status":"{status}"}}', encoding="utf-8")
+        (base_dir / "jongga_v2_latest.json").write_text('{"date":"2026-02-21"}', encoding="utf-8")
+
+    dir_a = tmp_path / "set_a"
+    dir_b = tmp_path / "set_b"
+    dir_c = tmp_path / "set_c"
+    _prepare_data_dir(dir_a, "A")
+    _prepare_data_dir(dir_b, "B")
+    _prepare_data_dir(dir_c, "C")
+
+    def _get_data_path_factory(base_dir):
+        return lambda filename: str(base_dir / filename)
+
+    def _load_json_file_factory(status):
+        def _loader(name: str):
+            if name == "market_gate.json":
+                return {"status": status}
+            return {}
+
+        return _loader
+
+    _ = build_data_status_payload(
+        _get_data_path_factory(dir_a),
+        lambda _name: pd.DataFrame(),
+        _load_json_file_factory("A"),
+    )
+    _ = build_data_status_payload(
+        _get_data_path_factory(dir_b),
+        lambda _name: pd.DataFrame(),
+        _load_json_file_factory("B"),
+    )
+    _ = build_data_status_payload(
+        _get_data_path_factory(dir_a),
+        lambda _name: pd.DataFrame(),
+        _load_json_file_factory("A"),
+    )
+    _ = build_data_status_payload(
+        _get_data_path_factory(dir_c),
+        lambda _name: pd.DataFrame(),
+        _load_json_file_factory("C"),
+    )
+
+    with analytics_service._DATA_STATUS_CACHE_LOCK:
+        cache_statuses = {payload.get("market_status") for payload in analytics_service._DATA_STATUS_CACHE.values()}
+        cache_size = len(analytics_service._DATA_STATUS_CACHE)
+
+    assert cache_size == 2
+    assert cache_statuses == {"A", "C"}
+
+
 def test_build_backtest_summary_payload_reuses_signature_cache(tmp_path, monkeypatch):
     clear_backtest_summary_cache()
     monkeypatch.setattr(

@@ -19,11 +19,12 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
 )
 
-from .storage_sqlite_common import _SQLITE_PRAGMAS, ensure_chatbot_storage_schema
+from .storage_sqlite_common import _SQLITE_SESSION_PRAGMAS, ensure_chatbot_storage_schema
 
 _SQLITE_TIMEOUT_SECONDS = 30
 _SQLITE_RETRY_ATTEMPTS = 2
 _SQLITE_RETRY_DELAY_SECONDS = 0.03
+_SQLITE_INLINE_DELETE_MAX_VARIABLES = 900
 
 
 def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
@@ -57,8 +58,26 @@ def _delete_stale_memory_rows_cursor(
     cursor: sqlite3.Cursor,
     active_keys: list[str],
 ) -> None:
-    if not active_keys:
+    normalized_active_keys = list(
+        dict.fromkeys(
+            str(key)
+            for key in active_keys
+            if str(key)
+        )
+    )
+    if not normalized_active_keys:
         cursor.execute("DELETE FROM chatbot_memories")
+        return
+
+    if len(normalized_active_keys) <= _SQLITE_INLINE_DELETE_MAX_VARIABLES:
+        placeholders = ", ".join("?" for _ in normalized_active_keys)
+        cursor.execute(
+            f"""
+            DELETE FROM chatbot_memories
+            WHERE memory_key NOT IN ({placeholders})
+            """,
+            tuple(normalized_active_keys),
+        )
         return
 
     cursor.execute(
@@ -71,7 +90,7 @@ def _delete_stale_memory_rows_cursor(
     cursor.execute("DELETE FROM _tmp_chatbot_memory_keys")
     cursor.executemany(
         "INSERT OR IGNORE INTO _tmp_chatbot_memory_keys(memory_key) VALUES (?)",
-        [(key,) for key in active_keys],
+        [(key,) for key in normalized_active_keys],
     )
     cursor.execute(
         """
@@ -101,7 +120,8 @@ def load_memories_from_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
+                read_only=True,
             ) as conn:
                 conn.row_factory = sqlite3.Row
                 return conn.execute(
@@ -176,7 +196,7 @@ def save_memories_to_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 cursor = conn.cursor()
                 _upsert_memory_rows_cursor(
@@ -231,7 +251,7 @@ def upsert_memory_entry_in_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 conn.execute(
                     """
@@ -287,7 +307,7 @@ def delete_memory_entry_in_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 conn.execute(
                     """
@@ -335,7 +355,7 @@ def clear_memories_in_sqlite(
             with connect_sqlite(
                 db_path_text,
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_SQLITE_PRAGMAS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
                 conn.execute("DELETE FROM chatbot_memories")
                 conn.commit()

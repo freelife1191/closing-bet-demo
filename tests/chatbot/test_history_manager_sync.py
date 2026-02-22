@@ -171,6 +171,30 @@ def test_get_messages_reuses_sanitized_cache_until_session_changes(monkeypatch, 
     assert sanitize_calls["count"] == 2
 
 
+def test_get_messages_sanitized_cache_is_bounded_lru(monkeypatch, tmp_path):
+    """메시지 sanitize 캐시는 LRU 기준 상한 내에서 유지되어야 한다."""
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(chatbot_storage, "_SANITIZED_MESSAGES_CACHE_MAX_ENTRIES", 2)
+
+    manager = chatbot_core.HistoryManager(user_id="u1")
+    session_one = manager.create_session(owner_id="owner")
+    manager.add_message(session_one, "user", "첫 세션")
+    session_two = manager.create_session(owner_id="owner")
+    manager.add_message(session_two, "user", "둘째 세션")
+    session_three = manager.create_session(owner_id="owner")
+    manager.add_message(session_three, "user", "셋째 세션")
+
+    manager.get_messages(session_one)
+    manager.get_messages(session_two)
+    manager.get_messages(session_one)  # 최근 접근으로 갱신
+    manager.get_messages(session_three)
+
+    assert len(manager._sanitized_messages_cache) == 2
+    assert session_one in manager._sanitized_messages_cache
+    assert session_three in manager._sanitized_messages_cache
+    assert session_two not in manager._sanitized_messages_cache
+
+
 def test_add_message_auto_create_session_saves_once(monkeypatch, tmp_path):
     """없는 세션에 add_message 시 자동 생성되더라도 저장은 한 번만 발생해야 한다."""
     monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
@@ -220,6 +244,26 @@ def test_get_all_sessions_reuses_filtered_cache_until_session_changes(monkeypatc
 
     assert len(third) == 1
     assert meaningful_calls["count"] == 2
+
+
+def test_get_all_sessions_cache_is_bounded_lru(monkeypatch, tmp_path):
+    """세션 목록 캐시는 owner_id별 LRU 상한을 지켜야 한다."""
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(chatbot_storage, "_SESSION_LIST_CACHE_MAX_ENTRIES", 2)
+
+    manager = chatbot_core.HistoryManager(user_id="u1")
+    session_id = manager.create_session(owner_id="owner-a")
+    manager.add_message(session_id, "user", "owner-a 질문")
+
+    manager.get_all_sessions(owner_id="owner-a")
+    manager.get_all_sessions(owner_id="owner-b")
+    manager.get_all_sessions(owner_id="owner-a")  # owner-a 최근 접근
+    manager.get_all_sessions(owner_id="owner-c")
+
+    assert len(manager._session_list_cache) == 2
+    assert "owner-a" in manager._session_list_cache
+    assert "owner-c" in manager._session_list_cache
+    assert "owner-b" not in manager._session_list_cache
 
 
 def test_get_all_sessions_cache_invalidates_when_file_signature_changes(monkeypatch, tmp_path):

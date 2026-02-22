@@ -10,6 +10,7 @@ import sqlite3
 import threading
 
 from services.sqlite_utils import (
+    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
     normalize_sqlite_db_key,
@@ -26,6 +27,7 @@ SQLITE_RETRY_DELAY_SECONDS = 0.03
 DB_INIT_READY_LOCK = threading.Lock()
 DB_INIT_READY_CONDITION = threading.Condition(DB_INIT_READY_LOCK)
 DB_INIT_READY_PATHS: set[str] = set()
+DB_INIT_READY_MAX_ENTRIES = 2_048
 DB_INIT_IN_PROGRESS_PATHS: set[str] = set()
 
 
@@ -225,7 +227,11 @@ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
         with DB_INIT_READY_CONDITION:
             DB_INIT_IN_PROGRESS_PATHS.discard(db_key)
             if initialization_succeeded:
-                DB_INIT_READY_PATHS.add(db_key)
+                add_bounded_ready_key(
+                    DB_INIT_READY_PATHS,
+                    db_key,
+                    max_entries=DB_INIT_READY_MAX_ENTRIES,
+                )
             else:
                 DB_INIT_READY_PATHS.discard(db_key)
             DB_INIT_READY_CONDITION.notify_all()

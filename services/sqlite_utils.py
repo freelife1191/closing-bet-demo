@@ -6,6 +6,7 @@ SQLite 공통 연결 유틸.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 import os
 import re
@@ -13,7 +14,7 @@ import sqlite3
 import threading
 import time
 from typing import Callable, Iterable, TypeVar
-from urllib.parse import parse_qsl, unquote, urlparse
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse
 
 
 class AutoClosingSQLiteConnection(sqlite3.Connection):
@@ -33,7 +34,8 @@ SQLITE_BALANCED_PRAGMAS: tuple[str, ...] = (
     "PRAGMA cache_size=-8000",
 )
 _SQLITE_PARENT_DIRS_LOCK = threading.Lock()
-_SQLITE_PARENT_DIRS_READY: set[str] = set()
+_SQLITE_PARENT_DIRS_READY: OrderedDict[str, None] = OrderedDict()
+_SQLITE_PARENT_DIRS_MAX_ENTRIES = 2_048
 _SQLITE_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SQLITE_PRAGMA_ASSIGNMENT_PATTERN = re.compile(
     r"^\s*PRAGMA\s+([A-Za-z_][A-Za-z0-9_]*)\s*=",
@@ -42,12 +44,15 @@ _SQLITE_PRAGMA_ASSIGNMENT_PATTERN = re.compile(
 _SQLITE_TRANSIENT_ERROR_MARKERS: tuple[str, ...] = (
     "database is locked",
     "database schema is locked",
+    "database schema has changed",
     "database table is locked",
     "database is busy",
     "locking protocol",
 )
 _SQLITE_PERSISTENT_PRAGMA_NAMES = frozenset({"journal_mode", "synchronous"})
+_SQLITE_READ_ONLY_BLOCKED_PRAGMA_NAMES = frozenset({"journal_mode", "synchronous"})
 _SQLITE_PERSISTENT_PRAGMAS_LOCK = threading.Lock()
+_SQLITE_PERSISTENT_PRAGMAS_MAX_ENTRIES = 2_048
 
 _T = TypeVar("_T")
 
@@ -58,7 +63,7 @@ class _SQLitePersistentPragmaState:
     file_signature: tuple[int, int] | None = None
 
 
-_SQLITE_PERSISTENT_PRAGMAS_READY: dict[str, _SQLitePersistentPragmaState] = {}
+_SQLITE_PERSISTENT_PRAGMAS_READY: OrderedDict[str, _SQLitePersistentPragmaState] = OrderedDict()
 
 
 def _extract_sqlite_filesystem_path_from_uri(db_uri: str) -> str | None:
@@ -67,9 +72,11 @@ def _extract_sqlite_filesystem_path_from_uri(db_uri: str) -> str | None:
         return None
 
     parsed = urlparse(normalized_uri)
-    query_map = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    mode = str(query_map.get("mode", "")).strip().lower()
-    if mode == "memory":
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    if any(
+        str(key).strip().lower() == "mode" and str(value).strip().lower() == "memory"
+        for key, value in query_pairs
+    ):
         return None
 
     raw_path = parsed.path or ""
@@ -124,8 +131,8 @@ def _load_sqlite_file_signature(db_key: str) -> tuple[int, int] | None:
 def sqlite_db_path_exists(db_path: str) -> bool:
     resolved_path = _resolve_sqlite_filesystem_path(db_path)
     if resolved_path is None:
-        normalized_path = str(db_path).strip()
-        return normalized_path in {":memory:"} or normalized_path.startswith("file:")
+        # :memory: 및 mode=memory URI는 비영속 스토리지이므로 파일 존재로 간주하지 않는다.
+        return False
     return os.path.exists(
         os.path.realpath(os.path.expanduser(str(resolved_path))),
     )
@@ -221,6 +228,52 @@ def _is_persistent_pragma(pragma_sql: str) -> bool:
     return bool(pragma_name) and pragma_name in _SQLITE_PERSISTENT_PRAGMA_NAMES
 
 
+def _is_read_only_blocked_pragma(pragma_sql: str) -> bool:
+    pragma_name = _extract_pragma_name(pragma_sql)
+    return bool(pragma_name) and pragma_name in _SQLITE_READ_ONLY_BLOCKED_PRAGMA_NAMES
+
+
+def _build_read_only_sqlite_uri(db_path: str) -> tuple[str, bool]:
+    normalized_path = str(db_path).strip()
+    if not normalized_path or normalized_path == ":memory:":
+        return db_path, False
+
+    if normalized_path.startswith("file:"):
+        uri_without_fragment, has_fragment, fragment_text = normalized_path.partition("#")
+        base_uri, has_query, raw_query = uri_without_fragment.partition("?")
+        raw_pairs = parse_qsl(raw_query if has_query else "", keep_blank_values=True)
+        query_pairs = [(str(key), str(value)) for key, value in raw_pairs]
+        parsed_uri = urlparse(uri_without_fragment)
+        normalized_uri_path = str(parsed_uri.path or "").strip().lower()
+        has_memory_mode = any(
+            str(key).strip().lower() == "mode"
+            and str(value).strip().lower() == "memory"
+            for key, value in query_pairs
+        )
+        is_memory_file_uri = (
+            normalized_uri_path == ":memory:"
+            or uri_without_fragment.lower().startswith("file::memory:")
+        )
+        if has_memory_mode or is_memory_file_uri:
+            return normalized_path, True
+
+        normalized_pairs = [
+            (key, value)
+            for key, value in query_pairs
+            if str(key).strip().lower() != "mode"
+        ]
+        normalized_pairs.append(("mode", "ro"))
+        encoded_query = urlencode(normalized_pairs, doseq=True)
+        read_only_uri = f"{base_uri}?{encoded_query}" if encoded_query else base_uri
+        if has_fragment:
+            read_only_uri = f"{read_only_uri}#{fragment_text}"
+        return read_only_uri, True
+
+    absolute_path = os.path.realpath(os.path.expanduser(normalized_path))
+    quoted_path = quote(absolute_path, safe="/")
+    return f"file:{quoted_path}?mode=ro", True
+
+
 def _compute_pending_persistent_pragmas(
     db_key: str | None,
     persistent_pragmas: Iterable[str],
@@ -242,6 +295,8 @@ def _compute_pending_persistent_pragmas(
         elif state.file_signature != current_signature:
             state.applied_pragmas.clear()
             state.file_signature = current_signature
+        _SQLITE_PERSISTENT_PRAGMAS_READY.move_to_end(db_key)
+        _prune_persistent_pragmas_ready_locked()
         return normalized_persistent_pragmas - state.applied_pragmas
 
 
@@ -267,6 +322,26 @@ def _mark_persistent_pragmas_applied(
             state.applied_pragmas.clear()
             state.file_signature = current_signature
         state.applied_pragmas.update(normalized_applied_pragmas)
+        _SQLITE_PERSISTENT_PRAGMAS_READY.move_to_end(db_key)
+        _prune_persistent_pragmas_ready_locked()
+
+
+def _prune_persistent_pragmas_ready_locked() -> None:
+    normalized_max_entries = max(1, int(_SQLITE_PERSISTENT_PRAGMAS_MAX_ENTRIES))
+    while len(_SQLITE_PERSISTENT_PRAGMAS_READY) > normalized_max_entries:
+        _SQLITE_PERSISTENT_PRAGMAS_READY.popitem(last=False)
+
+
+def _mark_parent_dir_ready_locked(parent_key: str) -> None:
+    _SQLITE_PARENT_DIRS_READY[parent_key] = None
+    _SQLITE_PARENT_DIRS_READY.move_to_end(parent_key)
+    _prune_parent_dirs_ready_locked()
+
+
+def _prune_parent_dirs_ready_locked() -> None:
+    normalized_max_entries = max(1, int(_SQLITE_PARENT_DIRS_MAX_ENTRIES))
+    while len(_SQLITE_PARENT_DIRS_READY) > normalized_max_entries:
+        _SQLITE_PARENT_DIRS_READY.popitem(last=False)
 
 
 def _ensure_sqlite_parent_dir(db_path: str) -> None:
@@ -278,14 +353,15 @@ def _ensure_sqlite_parent_dir(db_path: str) -> None:
         parent_key = os.path.realpath(os.path.expanduser(parent))
         with _SQLITE_PARENT_DIRS_LOCK:
             if parent_key in _SQLITE_PARENT_DIRS_READY:
+                _SQLITE_PARENT_DIRS_READY.move_to_end(parent_key)
                 if os.path.isdir(parent_key):
                     return
-                _SQLITE_PARENT_DIRS_READY.discard(parent_key)
+                _SQLITE_PARENT_DIRS_READY.pop(parent_key, None)
             if os.path.isdir(parent_key):
-                _SQLITE_PARENT_DIRS_READY.add(parent_key)
+                _mark_parent_dir_ready_locked(parent_key)
                 return
             os.makedirs(parent_key, exist_ok=True)
-            _SQLITE_PARENT_DIRS_READY.add(parent_key)
+            _mark_parent_dir_ready_locked(parent_key)
 
 
 def _normalize_sqlite_identifier(identifier: str, *, label: str) -> str:
@@ -293,6 +369,56 @@ def _normalize_sqlite_identifier(identifier: str, *, label: str) -> str:
     if not normalized or _SQLITE_IDENTIFIER_PATTERN.fullmatch(normalized) is None:
         raise ValueError(f"Invalid SQLite identifier for {label}: {identifier!r}")
     return normalized
+
+
+def add_bounded_ready_key(
+    ready_keys: set[str],
+    db_key: str,
+    *,
+    max_entries: int = 2_048,
+) -> None:
+    """
+    SQLite ready-key set의 크기를 상한 내로 유지한다.
+    상한 초과 시 필요한 수만큼만 제거해 캐시 히트율 저하를 줄인다.
+    """
+    normalized_max_entries = max(1, int(max_entries))
+    if db_key in ready_keys:
+        return
+    overflow_count = len(ready_keys) - normalized_max_entries + 1
+    while overflow_count > 0 and ready_keys:
+        ready_keys.pop()
+        overflow_count -= 1
+    ready_keys.add(db_key)
+
+
+def build_sqlite_in_placeholders(lookup_keys: Iterable[object]) -> str:
+    """
+    SQL IN (...) 절용 placeholder 문자열을 생성한다.
+    """
+    normalized_lookup_keys = tuple(lookup_keys)
+    if not normalized_lookup_keys:
+        raise ValueError("lookup_keys must not be empty")
+    return ",".join("?" for _ in normalized_lookup_keys)
+
+
+def build_sqlite_order_case_sql(
+    *,
+    column_name: str,
+    lookup_keys: Iterable[object],
+) -> str:
+    """
+    lookup key 우선순위를 보장하는 CASE ORDER BY 절을 생성한다.
+    """
+    normalized_lookup_keys = tuple(lookup_keys)
+    if not normalized_lookup_keys:
+        raise ValueError("lookup_keys must not be empty")
+    normalized_column_name = _normalize_sqlite_identifier(
+        column_name,
+        label="column_name",
+    )
+    return f"CASE {normalized_column_name} " + " ".join(
+        f"WHEN ? THEN {index}" for index, _ in enumerate(normalized_lookup_keys)
+    ) + f" ELSE {len(normalized_lookup_keys)} END"
 
 
 def prune_rows_by_updated_at_if_needed(
@@ -319,7 +445,7 @@ def prune_rows_by_updated_at_if_needed(
         f"""
         SELECT rowid
         FROM {normalized_table_name}
-        ORDER BY {normalized_updated_at_column} DESC
+        ORDER BY {normalized_updated_at_column} DESC, rowid DESC
         LIMIT 1 OFFSET ?
         """,
         (normalized_max_rows,),
@@ -333,7 +459,7 @@ def prune_rows_by_updated_at_if_needed(
         WHERE rowid IN (
             SELECT rowid
             FROM {normalized_table_name}
-            ORDER BY {normalized_updated_at_column} DESC
+            ORDER BY {normalized_updated_at_column} DESC, rowid DESC
             LIMIT -1 OFFSET ?
         )
         """,
@@ -367,6 +493,7 @@ def connect_sqlite(
     pragmas: Iterable[str] | None = None,
     cached_statements: int = 256,
     ensure_parent_dir: bool = True,
+    read_only: bool = False,
     connect_retries: int = 2,
     connect_retry_delay_seconds: float = 0.03,
 ) -> sqlite3.Connection:
@@ -374,19 +501,35 @@ def connect_sqlite(
     normalized_path = str(db_path).strip()
     is_uri = bool(normalized_path) and normalized_path.startswith("file:")
     connect_path = normalized_path if normalized_path else db_path
-    if ensure_parent_dir:
+    if read_only:
+        connect_path, is_uri = _build_read_only_sqlite_uri(connect_path)
+    if ensure_parent_dir and not read_only:
         _ensure_sqlite_parent_dir(connect_path)
 
     normalized_cached_statements = max(1, int(cached_statements))
     normalized_pragmas = _deduplicate_pragmas(pragmas or ())
-    persistent_db_key = _normalize_sqlite_filesystem_key(connect_path)
+    if read_only:
+        normalized_pragmas = tuple(
+            pragma_sql
+            for pragma_sql in normalized_pragmas
+            if not _is_read_only_blocked_pragma(pragma_sql)
+        )
+        if not any(
+            _extract_pragma_name(pragma_sql) == "query_only"
+            for pragma_sql in normalized_pragmas
+        ):
+            normalized_pragmas = ("PRAGMA query_only=ON", *normalized_pragmas)
     persistent_pragmas = {
         pragma_sql for pragma_sql in normalized_pragmas if _is_persistent_pragma(pragma_sql)
     }
-    pending_persistent_pragmas = _compute_pending_persistent_pragmas(
-        persistent_db_key,
-        persistent_pragmas,
-    )
+    persistent_db_key: str | None = None
+    pending_persistent_pragmas: set[str] = set()
+    if persistent_pragmas:
+        persistent_db_key = _normalize_sqlite_filesystem_key(connect_path)
+        pending_persistent_pragmas = _compute_pending_persistent_pragmas(
+            persistent_db_key,
+            persistent_pragmas,
+        )
 
     def _open_connection() -> sqlite3.Connection:
         conn = sqlite3.connect(

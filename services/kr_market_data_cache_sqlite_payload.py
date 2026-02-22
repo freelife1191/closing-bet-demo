@@ -11,6 +11,7 @@ import logging
 import os
 import sqlite3
 import threading
+from collections import OrderedDict
 from datetime import datetime
 from io import StringIO
 from typing import Any
@@ -18,6 +19,9 @@ from typing import Any
 import pandas as pd
 
 from services.sqlite_utils import (
+    add_bounded_ready_key,
+    build_sqlite_in_placeholders,
+    build_sqlite_order_case_sql,
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
@@ -30,7 +34,10 @@ from services.sqlite_utils import (
 
 _LOGGER = logging.getLogger(__name__)
 _PAYLOAD_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
-_PAYLOAD_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
+_PAYLOAD_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=30_000,
+    base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-4000"),
+)
 _PAYLOAD_SQLITE_RETRY_ATTEMPTS = 2
 _PAYLOAD_SQLITE_RETRY_DELAY_SECONDS = 0.03
 
@@ -38,16 +45,51 @@ JSON_PAYLOAD_SQLITE_READY: set[str] = set()
 JSON_PAYLOAD_SQLITE_READY_LOCK = threading.Lock()
 JSON_PAYLOAD_SQLITE_READY_CONDITION = threading.Condition(JSON_PAYLOAD_SQLITE_READY_LOCK)
 JSON_PAYLOAD_SQLITE_IN_PROGRESS: set[str] = set()
+JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
+JSON_PAYLOAD_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+JSON_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+JSON_PAYLOAD_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
+JSON_PAYLOAD_SQLITE_PRUNE_FORCE_INTERVAL = 64
+JSON_PAYLOAD_SQLITE_SAVE_COUNTER = 0
+JSON_PAYLOAD_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
 DEFAULT_JSON_PAYLOAD_SQLITE_MAX_ROWS = 256
 CSV_PAYLOAD_SQLITE_READY: set[str] = set()
 CSV_PAYLOAD_SQLITE_READY_LOCK = threading.Lock()
 CSV_PAYLOAD_SQLITE_READY_CONDITION = threading.Condition(CSV_PAYLOAD_SQLITE_READY_LOCK)
 CSV_PAYLOAD_SQLITE_IN_PROGRESS: set[str] = set()
+CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
+CSV_PAYLOAD_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+CSV_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+CSV_PAYLOAD_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
+CSV_PAYLOAD_SQLITE_PRUNE_FORCE_INTERVAL = 64
+CSV_PAYLOAD_SQLITE_SAVE_COUNTER = 0
+CSV_PAYLOAD_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
 DEFAULT_CSV_PAYLOAD_SQLITE_MAX_ROWS = 256
 
 
+def _normalize_payload_filepath(path: str) -> str:
+    return normalize_sqlite_db_key(path)
+
+
+def _payload_filepath_lookup_keys(path: str) -> tuple[str, ...]:
+    normalized_path = _normalize_payload_filepath(path)
+    raw_path = str(path)
+    keys: list[str] = [normalized_path]
+    if raw_path not in keys:
+        keys.append(raw_path)
+
+    try:
+        relative_path = os.path.relpath(normalized_path, os.getcwd())
+        if relative_path not in keys:
+            keys.append(relative_path)
+    except Exception:
+        pass
+    return tuple(keys)
+
+
 def resolve_payload_sqlite_db_path(filepath: str) -> str:
-    return os.path.join(os.path.dirname(filepath), "runtime_cache.db")
+    normalized_filepath = _normalize_payload_filepath(filepath)
+    return os.path.join(os.path.dirname(normalized_filepath), "runtime_cache.db")
 
 
 def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
@@ -58,12 +100,76 @@ def _invalidate_json_payload_sqlite_ready(db_path: str) -> None:
     db_key = normalize_sqlite_db_key(db_path)
     with JSON_PAYLOAD_SQLITE_READY_LOCK:
         JSON_PAYLOAD_SQLITE_READY.discard(db_key)
+    with JSON_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK:
+        stale_keys = [key for key in JSON_PAYLOAD_SQLITE_KNOWN_KEYS if key[0] == db_key]
+        for tracker_key in stale_keys:
+            JSON_PAYLOAD_SQLITE_KNOWN_KEYS.pop(tracker_key, None)
 
 
 def _invalidate_csv_payload_sqlite_ready(db_path: str) -> None:
     db_key = normalize_sqlite_db_key(db_path)
     with CSV_PAYLOAD_SQLITE_READY_LOCK:
         CSV_PAYLOAD_SQLITE_READY.discard(db_key)
+    with CSV_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK:
+        stale_keys = [key for key in CSV_PAYLOAD_SQLITE_KNOWN_KEYS if key[0] == db_key]
+        for tracker_key in stale_keys:
+            CSV_PAYLOAD_SQLITE_KNOWN_KEYS.pop(tracker_key, None)
+
+
+def _mark_json_payload_sqlite_snapshot_key_seen(*, db_path: str, snapshot_key: str) -> bool:
+    """
+    (db_path, snapshot_key) 조합을 추적한다.
+    return True면 신규 key로 간주해 prune을 수행한다.
+    """
+    db_key = normalize_sqlite_db_key(db_path)
+    tracker_key = (db_key, str(snapshot_key))
+    with JSON_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK:
+        if tracker_key in JSON_PAYLOAD_SQLITE_KNOWN_KEYS:
+            JSON_PAYLOAD_SQLITE_KNOWN_KEYS.move_to_end(tracker_key)
+            return False
+
+        JSON_PAYLOAD_SQLITE_KNOWN_KEYS[tracker_key] = None
+        JSON_PAYLOAD_SQLITE_KNOWN_KEYS.move_to_end(tracker_key)
+        normalized_max_entries = max(1, int(JSON_PAYLOAD_SQLITE_KNOWN_KEYS_MAX_ENTRIES))
+        while len(JSON_PAYLOAD_SQLITE_KNOWN_KEYS) > normalized_max_entries:
+            JSON_PAYLOAD_SQLITE_KNOWN_KEYS.popitem(last=False)
+        return True
+
+
+def _should_force_json_payload_sqlite_prune() -> bool:
+    global JSON_PAYLOAD_SQLITE_SAVE_COUNTER
+    with JSON_PAYLOAD_SQLITE_SAVE_COUNTER_LOCK:
+        JSON_PAYLOAD_SQLITE_SAVE_COUNTER += 1
+        normalized_interval = max(1, int(JSON_PAYLOAD_SQLITE_PRUNE_FORCE_INTERVAL))
+        return (JSON_PAYLOAD_SQLITE_SAVE_COUNTER % normalized_interval) == 0
+
+
+def _mark_csv_payload_sqlite_snapshot_key_seen(*, db_path: str, snapshot_key: str) -> bool:
+    """
+    (db_path, snapshot_key) 조합을 추적한다.
+    return True면 신규 key로 간주해 prune을 수행한다.
+    """
+    db_key = normalize_sqlite_db_key(db_path)
+    tracker_key = (db_key, str(snapshot_key))
+    with CSV_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK:
+        if tracker_key in CSV_PAYLOAD_SQLITE_KNOWN_KEYS:
+            CSV_PAYLOAD_SQLITE_KNOWN_KEYS.move_to_end(tracker_key)
+            return False
+
+        CSV_PAYLOAD_SQLITE_KNOWN_KEYS[tracker_key] = None
+        CSV_PAYLOAD_SQLITE_KNOWN_KEYS.move_to_end(tracker_key)
+        normalized_max_entries = max(1, int(CSV_PAYLOAD_SQLITE_KNOWN_KEYS_MAX_ENTRIES))
+        while len(CSV_PAYLOAD_SQLITE_KNOWN_KEYS) > normalized_max_entries:
+            CSV_PAYLOAD_SQLITE_KNOWN_KEYS.popitem(last=False)
+        return True
+
+
+def _should_force_csv_payload_sqlite_prune() -> bool:
+    global CSV_PAYLOAD_SQLITE_SAVE_COUNTER
+    with CSV_PAYLOAD_SQLITE_SAVE_COUNTER_LOCK:
+        CSV_PAYLOAD_SQLITE_SAVE_COUNTER += 1
+        normalized_interval = max(1, int(CSV_PAYLOAD_SQLITE_PRUNE_FORCE_INTERVAL))
+        return (CSV_PAYLOAD_SQLITE_SAVE_COUNTER % normalized_interval) == 0
 
 
 def _ensure_json_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bool:
@@ -125,7 +231,11 @@ def _ensure_json_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> b
         with JSON_PAYLOAD_SQLITE_READY_CONDITION:
             JSON_PAYLOAD_SQLITE_IN_PROGRESS.discard(db_key)
             if initialization_succeeded:
-                JSON_PAYLOAD_SQLITE_READY.add(db_key)
+                add_bounded_ready_key(
+                    JSON_PAYLOAD_SQLITE_READY,
+                    db_key,
+                    max_entries=JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+                )
             else:
                 JSON_PAYLOAD_SQLITE_READY.discard(db_key)
             JSON_PAYLOAD_SQLITE_READY_CONDITION.notify_all()
@@ -143,27 +253,43 @@ def load_json_payload_from_sqlite(
     logger: logging.Logger | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     logger = logger or _LOGGER
-    db_path = resolve_payload_sqlite_db_path(filepath)
+    lookup_keys = _payload_filepath_lookup_keys(filepath)
+    lookup_placeholders = build_sqlite_in_placeholders(lookup_keys)
+    order_case_sql = build_sqlite_order_case_sql(
+        column_name="filepath",
+        lookup_keys=lookup_keys,
+    )
+    normalized_filepath = lookup_keys[0]
+    db_path = resolve_payload_sqlite_db_path(normalized_filepath)
     if not _ensure_json_payload_sqlite_cache(db_path, logger):
         return False, {}
+
+    query_params = (
+        *lookup_keys,
+        int(signature[0]),
+        int(signature[1]),
+        *lookup_keys,
+    )
 
     def _query_row() -> tuple[object, ...] | None:
         with connect_sqlite(
             db_path,
             timeout_seconds=30,
             pragmas=_PAYLOAD_SQLITE_SESSION_PRAGMAS,
+            read_only=True,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """
+                f"""
                 SELECT payload_json
                 FROM json_file_payload_cache
-                WHERE filepath = ?
+                WHERE filepath IN ({lookup_placeholders})
                   AND mtime_ns = ?
                   AND size = ?
+                ORDER BY {order_case_sql}
                 LIMIT 1
                 """,
-                (filepath, int(signature[0]), int(signature[1])),
+                query_params,
             )
             return cursor.fetchone()
 
@@ -218,7 +344,8 @@ def save_json_payload_to_sqlite(
     logger: logging.Logger | None = None,
 ) -> None:
     logger = logger or _LOGGER
-    db_path = resolve_payload_sqlite_db_path(filepath)
+    normalized_filepath = _normalize_payload_filepath(filepath)
+    db_path = resolve_payload_sqlite_db_path(normalized_filepath)
     if not _ensure_json_payload_sqlite_cache(db_path, logger):
         return
 
@@ -229,6 +356,12 @@ def save_json_payload_to_sqlite(
         return
 
     normalized_max_rows = max(1, int(max_rows))
+    should_prune_for_new_key = _mark_json_payload_sqlite_snapshot_key_seen(
+        db_path=db_path,
+        snapshot_key=normalized_filepath,
+    )
+    should_force_prune = _should_force_json_payload_sqlite_prune()
+    should_prune_after_upsert = should_prune_for_new_key or should_force_prune
     def _upsert_json_payload() -> None:
         now_iso = datetime.now().isoformat()
         with connect_sqlite(
@@ -253,18 +386,19 @@ def save_json_payload_to_sqlite(
                     updated_at = excluded.updated_at
                 """,
                 (
-                    filepath,
+                    normalized_filepath,
                     int(signature[0]),
                     int(signature[1]),
                     serialized,
                     now_iso,
                 ),
             )
-            _prune_payload_cache_rows_if_needed(
-                cursor,
-                table_name="json_file_payload_cache",
-                max_rows=normalized_max_rows,
-            )
+            if should_prune_after_upsert:
+                _prune_payload_cache_rows_if_needed(
+                    cursor,
+                    table_name="json_file_payload_cache",
+                    max_rows=normalized_max_rows,
+                )
             conn.commit()
 
     try:
@@ -296,7 +430,10 @@ def save_json_payload_to_sqlite(
 
 def delete_json_payload_from_sqlite(filepath: str, logger: logging.Logger | None = None) -> None:
     logger = logger or _LOGGER
-    db_path = resolve_payload_sqlite_db_path(filepath)
+    lookup_keys = _payload_filepath_lookup_keys(filepath)
+    lookup_placeholders = build_sqlite_in_placeholders(lookup_keys)
+    normalized_filepath = lookup_keys[0]
+    db_path = resolve_payload_sqlite_db_path(normalized_filepath)
     if not _ensure_json_payload_sqlite_cache(db_path, logger):
         return
     def _delete_payload() -> None:
@@ -306,11 +443,11 @@ def delete_json_payload_from_sqlite(filepath: str, logger: logging.Logger | None
             pragmas=_PAYLOAD_SQLITE_SESSION_PRAGMAS,
         ) as conn:
             conn.execute(
-                """
+                f"""
                 DELETE FROM json_file_payload_cache
-                WHERE filepath = ?
+                WHERE filepath IN ({lookup_placeholders})
                 """,
-                (filepath,),
+                lookup_keys,
             )
             conn.commit()
 
@@ -408,7 +545,11 @@ def _ensure_csv_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bo
         with CSV_PAYLOAD_SQLITE_READY_CONDITION:
             CSV_PAYLOAD_SQLITE_IN_PROGRESS.discard(db_key)
             if initialization_succeeded:
-                CSV_PAYLOAD_SQLITE_READY.add(db_key)
+                add_bounded_ready_key(
+                    CSV_PAYLOAD_SQLITE_READY,
+                    db_key,
+                    max_entries=CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+                )
             else:
                 CSV_PAYLOAD_SQLITE_READY.discard(db_key)
             CSV_PAYLOAD_SQLITE_READY_CONDITION.notify_all()
@@ -443,29 +584,45 @@ def load_csv_payload_from_sqlite(
     logger: logging.Logger | None = None,
 ) -> pd.DataFrame | None:
     logger = logger or _LOGGER
-    db_path = resolve_payload_sqlite_db_path(filepath)
+    lookup_keys = _payload_filepath_lookup_keys(filepath)
+    lookup_placeholders = build_sqlite_in_placeholders(lookup_keys)
+    order_case_sql = build_sqlite_order_case_sql(
+        column_name="filepath",
+        lookup_keys=lookup_keys,
+    )
+    normalized_filepath = lookup_keys[0]
+    db_path = resolve_payload_sqlite_db_path(normalized_filepath)
     if not _ensure_csv_payload_sqlite_cache(db_path, logger):
         return None
 
     usecols_signature = serialize_usecols_signature(usecols)
+    query_params = (
+        *lookup_keys,
+        usecols_signature,
+        int(signature[0]),
+        int(signature[1]),
+        *lookup_keys,
+    )
     def _query_row() -> tuple[object, ...] | None:
         with connect_sqlite(
             db_path,
             timeout_seconds=30,
             pragmas=_PAYLOAD_SQLITE_SESSION_PRAGMAS,
+            read_only=True,
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """
+                f"""
                 SELECT payload_json
                 FROM csv_file_payload_cache
-                WHERE filepath = ?
+                WHERE filepath IN ({lookup_placeholders})
                   AND usecols_signature = ?
                   AND mtime_ns = ?
                   AND size = ?
+                ORDER BY {order_case_sql}
                 LIMIT 1
                 """,
-                (filepath, usecols_signature, int(signature[0]), int(signature[1])),
+                query_params,
             )
             return cursor.fetchone()
 
@@ -518,7 +675,8 @@ def save_csv_payload_to_sqlite(
     logger: logging.Logger | None = None,
 ) -> None:
     logger = logger or _LOGGER
-    db_path = resolve_payload_sqlite_db_path(filepath)
+    normalized_filepath = _normalize_payload_filepath(filepath)
+    db_path = resolve_payload_sqlite_db_path(normalized_filepath)
     if not _ensure_csv_payload_sqlite_cache(db_path, logger):
         return
 
@@ -530,6 +688,13 @@ def save_csv_payload_to_sqlite(
 
     usecols_signature = serialize_usecols_signature(usecols)
     normalized_max_rows = max(1, int(max_rows))
+    snapshot_key = f"{normalized_filepath}::{usecols_signature}"
+    should_prune_for_new_key = _mark_csv_payload_sqlite_snapshot_key_seen(
+        db_path=db_path,
+        snapshot_key=snapshot_key,
+    )
+    should_force_prune = _should_force_csv_payload_sqlite_prune()
+    should_prune_after_upsert = should_prune_for_new_key or should_force_prune
     def _upsert_csv_payload() -> None:
         now_iso = datetime.now().isoformat()
         with connect_sqlite(
@@ -555,7 +720,7 @@ def save_csv_payload_to_sqlite(
                     updated_at = excluded.updated_at
                 """,
                 (
-                    filepath,
+                    normalized_filepath,
                     usecols_signature,
                     int(signature[0]),
                     int(signature[1]),
@@ -563,11 +728,12 @@ def save_csv_payload_to_sqlite(
                     now_iso,
                 ),
             )
-            _prune_payload_cache_rows_if_needed(
-                cursor,
-                table_name="csv_file_payload_cache",
-                max_rows=normalized_max_rows,
-            )
+            if should_prune_after_upsert:
+                _prune_payload_cache_rows_if_needed(
+                    cursor,
+                    table_name="csv_file_payload_cache",
+                    max_rows=normalized_max_rows,
+                )
             conn.commit()
 
     try:
@@ -599,7 +765,10 @@ def save_csv_payload_to_sqlite(
 
 def delete_csv_payload_from_sqlite(filepath: str, logger: logging.Logger | None = None) -> None:
     logger = logger or _LOGGER
-    db_path = resolve_payload_sqlite_db_path(filepath)
+    lookup_keys = _payload_filepath_lookup_keys(filepath)
+    lookup_placeholders = build_sqlite_in_placeholders(lookup_keys)
+    normalized_filepath = lookup_keys[0]
+    db_path = resolve_payload_sqlite_db_path(normalized_filepath)
     if not _ensure_csv_payload_sqlite_cache(db_path, logger):
         return
     def _delete_payload() -> None:
@@ -609,11 +778,11 @@ def delete_csv_payload_from_sqlite(filepath: str, logger: logging.Logger | None 
             pragmas=_PAYLOAD_SQLITE_SESSION_PRAGMAS,
         ) as conn:
             conn.execute(
-                """
+                f"""
                 DELETE FROM csv_file_payload_cache
-                WHERE filepath = ?
+                WHERE filepath IN ({lookup_placeholders})
                 """,
-                (filepath,),
+                lookup_keys,
             )
             conn.commit()
 

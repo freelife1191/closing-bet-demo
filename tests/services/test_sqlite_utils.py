@@ -6,9 +6,11 @@ SQLite 공통 유틸 회귀 테스트
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import shutil
 from pathlib import Path
+from urllib.parse import parse_qsl, urlparse
 
 import pytest
 
@@ -66,6 +68,40 @@ def test_build_sqlite_pragmas_includes_busy_timeout_and_foreign_keys():
     assert "PRAGMA cache_size=-8000" in pragmas
     assert "PRAGMA busy_timeout=3210" in pragmas
     assert "PRAGMA foreign_keys=ON" in pragmas
+
+
+def test_build_sqlite_in_placeholders_returns_expected_sequence():
+    placeholders = sqlite_utils.build_sqlite_in_placeholders(("a", "b", "c"))
+    assert placeholders == "?,?,?"
+
+
+def test_build_sqlite_in_placeholders_raises_for_empty_input():
+    with pytest.raises(ValueError):
+        sqlite_utils.build_sqlite_in_placeholders(())
+
+
+def test_build_sqlite_order_case_sql_returns_expected_clause():
+    order_case_sql = sqlite_utils.build_sqlite_order_case_sql(
+        column_name="cache_key",
+        lookup_keys=("first", "second"),
+    )
+    assert order_case_sql == "CASE cache_key WHEN ? THEN 0 WHEN ? THEN 1 ELSE 2 END"
+
+
+def test_build_sqlite_order_case_sql_raises_for_invalid_column_name():
+    with pytest.raises(ValueError):
+        sqlite_utils.build_sqlite_order_case_sql(
+            column_name="cache key",
+            lookup_keys=("first",),
+        )
+
+
+def test_build_sqlite_order_case_sql_raises_for_empty_lookup_keys():
+    with pytest.raises(ValueError):
+        sqlite_utils.build_sqlite_order_case_sql(
+            column_name="cache_key",
+            lookup_keys=(),
+        )
 
 
 def test_connect_sqlite_forwards_cached_statements(monkeypatch):
@@ -192,6 +228,335 @@ def test_connect_sqlite_disables_uri_mode_for_regular_path(monkeypatch):
     conn.close()
 
     assert captured["uri"] is False
+
+
+def test_connect_sqlite_enables_read_only_uri_mode_for_regular_path(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    def _fake_connect(path, *_args, **kwargs):
+        captured["path"] = str(path)
+        captured["uri"] = bool(kwargs.get("uri"))
+        return _FakeConnection()
+
+    monkeypatch.setattr(sqlite_utils.sqlite3, "connect", _fake_connect)
+
+    conn = sqlite_utils.connect_sqlite(
+        "/tmp/sqlite_utils_read_only.db",
+        ensure_parent_dir=False,
+        read_only=True,
+        pragmas=("PRAGMA busy_timeout=900",),
+    )
+    conn.close()
+
+    assert captured["uri"] is True
+    assert str(captured["path"]).startswith("file:")
+    assert "mode=ro" in str(captured["path"])
+
+
+def test_connect_sqlite_read_only_preserves_relative_file_uri_path(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    def _fake_connect(path, *_args, **kwargs):
+        captured["path"] = str(path)
+        captured["uri"] = bool(kwargs.get("uri"))
+        return _FakeConnection()
+
+    monkeypatch.setattr(sqlite_utils.sqlite3, "connect", _fake_connect)
+
+    conn = sqlite_utils.connect_sqlite(
+        "file:runtime_cache.db?cache=shared",
+        ensure_parent_dir=False,
+        read_only=True,
+    )
+    conn.close()
+
+    assert captured["uri"] is True
+    assert str(captured["path"]).startswith("file:runtime_cache.db?")
+    assert "mode=ro" in str(captured["path"])
+    assert not str(captured["path"]).startswith("file:///runtime_cache.db")
+
+
+def test_connect_sqlite_read_only_preserves_file_uri_fragment(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    def _fake_connect(path, *_args, **kwargs):
+        captured["path"] = str(path)
+        captured["uri"] = bool(kwargs.get("uri"))
+        return _FakeConnection()
+
+    monkeypatch.setattr(sqlite_utils.sqlite3, "connect", _fake_connect)
+
+    conn = sqlite_utils.connect_sqlite(
+        "file:runtime_cache.db?cache=shared#readonly-anchor",
+        ensure_parent_dir=False,
+        read_only=True,
+    )
+    conn.close()
+
+    assert captured["uri"] is True
+    assert str(captured["path"]).startswith("file:runtime_cache.db?")
+    assert "mode=ro" in str(captured["path"])
+    assert str(captured["path"]).endswith("#readonly-anchor")
+
+
+def test_connect_sqlite_read_only_preserves_duplicate_query_pairs(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    def _fake_connect(path, *_args, **kwargs):
+        captured["path"] = str(path)
+        captured["uri"] = bool(kwargs.get("uri"))
+        return _FakeConnection()
+
+    monkeypatch.setattr(sqlite_utils.sqlite3, "connect", _fake_connect)
+
+    conn = sqlite_utils.connect_sqlite(
+        "file:runtime_cache.db?cache=shared&cache=private&x=1",
+        ensure_parent_dir=False,
+        read_only=True,
+    )
+    conn.close()
+
+    parsed = urlparse(str(captured["path"]))
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+
+    assert captured["uri"] is True
+    assert query_pairs == [
+        ("cache", "shared"),
+        ("cache", "private"),
+        ("x", "1"),
+        ("mode", "ro"),
+    ]
+
+
+def test_connect_sqlite_read_only_replaces_existing_mode_parameter_once(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    def _fake_connect(path, *_args, **kwargs):
+        captured["path"] = str(path)
+        captured["uri"] = bool(kwargs.get("uri"))
+        return _FakeConnection()
+
+    monkeypatch.setattr(sqlite_utils.sqlite3, "connect", _fake_connect)
+
+    conn = sqlite_utils.connect_sqlite(
+        "file:runtime_cache.db?mode=rwc&cache=shared&mode=rw",
+        ensure_parent_dir=False,
+        read_only=True,
+    )
+    conn.close()
+
+    parsed = urlparse(str(captured["path"]))
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    mode_values = [value for key, value in query_pairs if key == "mode"]
+
+    assert captured["uri"] is True
+    assert mode_values == ["ro"]
+    assert ("cache", "shared") in query_pairs
+
+
+def test_extract_sqlite_filesystem_path_from_uri_treats_any_memory_mode_as_memory():
+    db_uri = "file:runtime_cache.db?mode=ro&cache=shared&mode=memory"
+
+    assert sqlite_utils._extract_sqlite_filesystem_path_from_uri(db_uri) is None
+    assert sqlite_utils._resolve_sqlite_filesystem_path(db_uri) is None
+
+
+def test_connect_sqlite_read_only_filters_write_pragmas(monkeypatch):
+    executed_sqls: list[str] = []
+
+    class _FakeConnection:
+        def execute(self, sql):
+            executed_sqls.append(str(sql).strip())
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        sqlite_utils.sqlite3,
+        "connect",
+        lambda *_args, **_kwargs: _FakeConnection(),
+    )
+
+    conn = sqlite_utils.connect_sqlite(
+        "/tmp/sqlite_utils_read_only_pragmas.db",
+        ensure_parent_dir=False,
+        read_only=True,
+        pragmas=(
+            "PRAGMA journal_mode=WAL",
+            "PRAGMA synchronous=NORMAL",
+            "PRAGMA busy_timeout=777",
+        ),
+    )
+    conn.close()
+
+    assert executed_sqls == ["PRAGMA query_only=ON", "PRAGMA busy_timeout=777"]
+
+
+def test_connect_sqlite_read_only_keeps_single_query_only_pragma(monkeypatch):
+    executed_sqls: list[str] = []
+
+    class _FakeConnection:
+        def execute(self, sql):
+            executed_sqls.append(str(sql).strip())
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        sqlite_utils.sqlite3,
+        "connect",
+        lambda *_args, **_kwargs: _FakeConnection(),
+    )
+
+    conn = sqlite_utils.connect_sqlite(
+        "/tmp/sqlite_utils_read_only_query_only.db",
+        ensure_parent_dir=False,
+        read_only=True,
+        pragmas=(
+            "PRAGMA query_only=ON",
+            "PRAGMA busy_timeout=444",
+        ),
+    )
+    conn.close()
+
+    assert executed_sqls == ["PRAGMA query_only=ON", "PRAGMA busy_timeout=444"]
+
+
+def test_connect_sqlite_read_only_memory_uri_enforces_query_only():
+    db_uri = "file:sqlite_utils_read_only_memory?mode=memory&cache=shared"
+
+    with sqlite_utils.connect_sqlite(
+        db_uri,
+        ensure_parent_dir=False,
+        read_only=True,
+    ) as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA query_only")
+        query_only_value = int(cursor.fetchone()[0])
+
+        with pytest.raises(sqlite3.OperationalError):
+            cursor.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY)")
+
+    assert query_only_value == 1
+
+
+def test_connect_sqlite_read_only_file_path_blocks_write(tmp_path: Path):
+    db_path = tmp_path / "sqlite_utils_read_only_write_block.db"
+    with sqlite_utils.connect_sqlite(str(db_path)) as conn:
+        conn.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT)")
+        conn.execute("INSERT INTO sample (value) VALUES (?)", ("seed",))
+        conn.commit()
+
+    with sqlite_utils.connect_sqlite(
+        str(db_path),
+        read_only=True,
+    ) as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA query_only")
+        query_only_value = int(cursor.fetchone()[0])
+        with pytest.raises(sqlite3.OperationalError):
+            cursor.execute("INSERT INTO sample (value) VALUES (?)", ("blocked",))
+
+    assert query_only_value == 1
+
+
+def test_connect_sqlite_skips_persistent_signature_lookup_for_read_only_connections(
+    monkeypatch,
+):
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        sqlite_utils.sqlite3,
+        "connect",
+        lambda *_args, **_kwargs: _FakeConnection(),
+    )
+    monkeypatch.setattr(
+        sqlite_utils,
+        "_load_sqlite_file_signature",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("persistent signature lookup should be skipped for read-only connection"),
+        ),
+    )
+
+    conn = sqlite_utils.connect_sqlite(
+        "/tmp/sqlite_utils_read_only_no_signature.db",
+        ensure_parent_dir=False,
+        read_only=True,
+    )
+    conn.close()
+
+
+def test_connect_sqlite_skips_persistent_signature_lookup_when_no_persistent_pragmas(
+    monkeypatch,
+):
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        sqlite_utils.sqlite3,
+        "connect",
+        lambda *_args, **_kwargs: _FakeConnection(),
+    )
+    monkeypatch.setattr(
+        sqlite_utils,
+        "_load_sqlite_file_signature",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("persistent signature lookup should be skipped without persistent pragmas"),
+        ),
+    )
+
+    conn = sqlite_utils.connect_sqlite(
+        "/tmp/sqlite_utils_no_persistent_pragma.db",
+        ensure_parent_dir=False,
+        pragmas=("PRAGMA busy_timeout=1000",),
+    )
+    conn.close()
 
 
 def test_connect_sqlite_skips_reapplying_persistent_pragmas_for_same_file_db(
@@ -394,6 +759,19 @@ def test_connect_sqlite_creates_parent_directory_for_file_uri(tmp_path: Path):
     assert sqlite_utils.sqlite_db_path_exists(db_uri) is True
 
 
+def test_sqlite_db_path_exists_returns_false_for_memory_path():
+    assert sqlite_utils.sqlite_db_path_exists(":memory:") is False
+
+
+def test_sqlite_db_path_exists_returns_false_for_memory_file_uri():
+    assert sqlite_utils.sqlite_db_path_exists("file:test.db?mode=memory&cache=shared") is False
+    assert sqlite_utils.sqlite_db_path_exists("file::memory:?cache=shared") is False
+
+
+def test_sqlite_db_path_exists_returns_false_for_empty_file_uri():
+    assert sqlite_utils.sqlite_db_path_exists("file:?cache=shared") is False
+
+
 def test_build_sqlite_pragmas_deduplicates_entries():
     pragmas = sqlite_utils.build_sqlite_pragmas(
         busy_timeout_ms=5000,
@@ -447,6 +825,50 @@ def test_connect_sqlite_parent_directory_creation_is_memoized(monkeypatch, tmp_p
     assert makedirs_calls["count"] == first_call_count
 
 
+def test_parent_dir_ready_cache_is_bounded(monkeypatch, tmp_path: Path):
+    with sqlite_utils._SQLITE_PARENT_DIRS_LOCK:
+        sqlite_utils._SQLITE_PARENT_DIRS_READY.clear()
+
+    monkeypatch.setattr(sqlite_utils, "_SQLITE_PARENT_DIRS_MAX_ENTRIES", 2)
+
+    first_parent = os.path.realpath(str(tmp_path / "parent_0"))
+    for idx in range(3):
+        db_path = tmp_path / f"parent_{idx}" / "sqlite_utils_parent_bound.db"
+        sqlite_utils._ensure_sqlite_parent_dir(str(db_path))
+
+    with sqlite_utils._SQLITE_PARENT_DIRS_LOCK:
+        parent_keys = list(sqlite_utils._SQLITE_PARENT_DIRS_READY.keys())
+
+    assert len(parent_keys) == 2
+    assert first_parent not in parent_keys
+
+
+def test_persistent_pragmas_ready_cache_is_bounded(monkeypatch, tmp_path: Path):
+    with sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_LOCK:
+        sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_READY.clear()
+
+    monkeypatch.setattr(sqlite_utils, "_SQLITE_PERSISTENT_PRAGMAS_MAX_ENTRIES", 2)
+
+    first_db_key = sqlite_utils.normalize_sqlite_db_key(str(tmp_path / "persistent_0.db"))
+    for idx in range(3):
+        db_key = sqlite_utils.normalize_sqlite_db_key(str(tmp_path / f"persistent_{idx}.db"))
+        pending = sqlite_utils._compute_pending_persistent_pragmas(
+            db_key,
+            ("PRAGMA journal_mode=WAL",),
+        )
+        assert pending == {"PRAGMA journal_mode=WAL"}
+        sqlite_utils._mark_persistent_pragmas_applied(
+            db_key,
+            ("PRAGMA journal_mode=WAL",),
+        )
+
+    with sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_LOCK:
+        cached_keys = list(sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_READY.keys())
+
+    assert len(cached_keys) == 2
+    assert first_db_key not in cached_keys
+
+
 def test_ensure_sqlite_parent_dir_recreates_directory_when_removed_after_memoization(tmp_path: Path):
     db_path = tmp_path / "nested" / "recreated" / "sqlite_utils_recreate.db"
 
@@ -486,6 +908,29 @@ def test_run_sqlite_with_retry_retries_transient_lock_error(monkeypatch):
     assert sleep_calls == [0.01, 0.02]
 
 
+def test_run_sqlite_with_retry_retries_on_schema_changed_error(monkeypatch):
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    monkeypatch.setattr(sqlite_utils.time, "sleep", lambda delay: sleep_calls.append(float(delay)))
+
+    def _flaky_operation() -> str:
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise sqlite3.OperationalError("database schema has changed")
+        return "ok"
+
+    result = sqlite_utils.run_sqlite_with_retry(
+        _flaky_operation,
+        max_retries=3,
+        retry_delay_seconds=0.01,
+    )
+
+    assert result == "ok"
+    assert calls["count"] == 3
+    assert sleep_calls == [0.01, 0.02]
+
+
 def test_run_sqlite_with_retry_does_not_retry_non_transient_error(monkeypatch):
     calls = {"count": 0}
     sleep_calls: list[float] = []
@@ -505,6 +950,24 @@ def test_run_sqlite_with_retry_does_not_retry_non_transient_error(monkeypatch):
 
     assert calls["count"] == 1
     assert sleep_calls == []
+
+
+def test_add_bounded_ready_key_prunes_when_capacity_exceeded():
+    ready_keys: set[str] = {"a", "b"}
+
+    sqlite_utils.add_bounded_ready_key(ready_keys, "c", max_entries=2)
+
+    assert len(ready_keys) == 2
+    assert "c" in ready_keys
+    assert ready_keys.intersection({"a", "b"})
+
+
+def test_add_bounded_ready_key_keeps_existing_key_without_reset():
+    ready_keys: set[str] = {"a", "b"}
+
+    sqlite_utils.add_bounded_ready_key(ready_keys, "b", max_entries=2)
+
+    assert ready_keys == {"a", "b"}
 
 
 def test_is_sqlite_missing_table_error_matches_single_table_name():
@@ -616,6 +1079,55 @@ def test_prune_rows_by_updated_at_if_needed_deletes_excess_rows(tmp_path: Path):
 
     assert did_prune is True
     assert remaining == ["k5", "k4"]
+
+
+def test_prune_rows_by_updated_at_if_needed_uses_rowid_tiebreaker_for_same_updated_at(
+    tmp_path: Path,
+):
+    db_path = tmp_path / "sqlite_utils_prune_tiebreaker.db"
+
+    with sqlite_utils.connect_sqlite(str(db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sample_cache (
+                cache_key TEXT PRIMARY KEY,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        cursor.executemany(
+            """
+            INSERT INTO sample_cache (cache_key, updated_at)
+            VALUES (?, ?)
+            """,
+            [
+                ("k1", "2026-02-20T10:00:00"),
+                ("k2", "2026-02-20T10:00:00"),
+                ("k3", "2026-02-20T10:00:00"),
+                ("k4", "2026-02-20T10:00:00"),
+            ],
+        )
+
+        did_prune = sqlite_utils.prune_rows_by_updated_at_if_needed(
+            cursor,
+            table_name="sample_cache",
+            max_rows=2,
+        )
+        conn.commit()
+        remaining = [
+            row[0]
+            for row in conn.execute(
+                """
+                SELECT cache_key
+                FROM sample_cache
+                ORDER BY rowid DESC
+                """
+            ).fetchall()
+        ]
+
+    assert did_prune is True
+    assert remaining == ["k4", "k3"]
 
 
 def test_prune_rows_by_updated_at_if_needed_rejects_invalid_identifier(tmp_path: Path):

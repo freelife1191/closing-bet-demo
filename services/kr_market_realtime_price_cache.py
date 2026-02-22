@@ -10,10 +10,13 @@ import logging
 import os
 import sqlite3
 import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any, Callable, Iterator
 
 from services.sqlite_utils import (
+    add_bounded_ready_key,
+    build_sqlite_in_placeholders,
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
@@ -24,21 +27,27 @@ from services.sqlite_utils import (
 
 _REALTIME_PRICE_SQLITE_READY: set[str] = set()
 _REALTIME_PRICE_SQLITE_READY_LOCK = threading.Lock()
+_REALTIME_PRICE_SQLITE_READY_CONDITION = threading.Condition(_REALTIME_PRICE_SQLITE_READY_LOCK)
+_REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+_REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES = 2_048
 _REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS = 5
 _YFINANCE_FAILURE_CACHE_RETENTION_DAYS = 7
 _SQLITE_TICKER_QUERY_CHUNK_SIZE = 900
 _SQLITE_PRUNE_MIN_INTERVAL_SECONDS = 300
+_SQLITE_PRUNE_STATE_MAX_ENTRIES = 256
 _YFINANCE_FAILED_MEMORY_CACHE_LOCK = threading.Lock()
 _SQLITE_PRUNE_STATE_LOCK = threading.Lock()
-_YFINANCE_FAILED_MEMORY_CACHE: dict[
+_YFINANCE_FAILED_MEMORY_CACHE: OrderedDict[
     str,
     tuple[
         tuple[tuple[int, int, int] | None, tuple[int, int, int] | None, tuple[int, int, int] | None] | None,
-        dict[str, float | None],
+        OrderedDict[str, float | None],
     ],
-] = {}
-_REALTIME_PRICE_LAST_PRUNED_AT: dict[str, float] = {}
-_YFINANCE_FAILED_LAST_PRUNED_AT: dict[str, float] = {}
+] = OrderedDict()
+_YFINANCE_FAILED_MEMORY_CACHE_MAX_DBS = 64
+_YFINANCE_FAILED_MEMORY_PER_DB_MAX_ENTRIES = 4_096
+_REALTIME_PRICE_LAST_PRUNED_AT: OrderedDict[str, float] = OrderedDict()
+_YFINANCE_FAILED_LAST_PRUNED_AT: OrderedDict[str, float] = OrderedDict()
 _REALTIME_PRICE_INIT_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS * 1000,
 )
@@ -117,26 +126,98 @@ def _invalidate_realtime_price_sqlite_ready(db_path: str) -> None:
     db_key = normalize_sqlite_db_key(db_path)
     with _REALTIME_PRICE_SQLITE_READY_LOCK:
         _REALTIME_PRICE_SQLITE_READY.discard(db_key)
-    _reset_sqlite_prune_state(db_path)
+    _reset_sqlite_prune_state(db_key)
+    _reset_failed_ticker_memory_cache(db_key)
 
 
-def _is_sqlite_cache_prune_due(last_pruned_map: dict[str, float], db_path: str, now_ts: float) -> bool:
+def _bound_ordered_map_size(
+    ordered_map: OrderedDict[str, Any],
+    *,
+    max_entries: int,
+) -> None:
+    normalized_max_entries = max(1, int(max_entries))
+    while len(ordered_map) > normalized_max_entries:
+        ordered_map.popitem(last=False)
+
+
+def _bound_failed_memory_cache_map(
+    cache_map: OrderedDict[str, float | None],
+) -> None:
+    _bound_ordered_map_size(
+        cache_map,
+        max_entries=_YFINANCE_FAILED_MEMORY_PER_DB_MAX_ENTRIES,
+    )
+
+
+def _bound_failed_memory_cache_dbs() -> None:
+    _bound_ordered_map_size(
+        _YFINANCE_FAILED_MEMORY_CACHE,
+        max_entries=_YFINANCE_FAILED_MEMORY_CACHE_MAX_DBS,
+    )
+
+
+def _bound_prune_state_map(last_pruned_map: OrderedDict[str, float]) -> None:
+    _bound_ordered_map_size(
+        last_pruned_map,
+        max_entries=_SQLITE_PRUNE_STATE_MAX_ENTRIES,
+    )
+
+
+def _is_sqlite_cache_prune_due(last_pruned_map: OrderedDict[str, float], db_path: str, now_ts: float) -> bool:
     with _SQLITE_PRUNE_STATE_LOCK:
         last_pruned_at = last_pruned_map.get(db_path)
+        if last_pruned_at is not None:
+            last_pruned_map.move_to_end(db_path)
         if last_pruned_at is None:
             return True
         return (now_ts - last_pruned_at) >= max(1, int(_SQLITE_PRUNE_MIN_INTERVAL_SECONDS))
 
 
-def _mark_sqlite_cache_pruned(last_pruned_map: dict[str, float], db_path: str, now_ts: float) -> None:
+def _mark_sqlite_cache_pruned(last_pruned_map: OrderedDict[str, float], db_path: str, now_ts: float) -> None:
     with _SQLITE_PRUNE_STATE_LOCK:
         last_pruned_map[db_path] = now_ts
+        last_pruned_map.move_to_end(db_path)
+        _bound_prune_state_map(last_pruned_map)
 
 
 def _reset_sqlite_prune_state(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
+    legacy_key = str(db_path)
+    candidate_keys = {db_key, legacy_key}
     with _SQLITE_PRUNE_STATE_LOCK:
-        _REALTIME_PRICE_LAST_PRUNED_AT.pop(db_path, None)
-        _YFINANCE_FAILED_LAST_PRUNED_AT.pop(db_path, None)
+        for key in candidate_keys:
+            _REALTIME_PRICE_LAST_PRUNED_AT.pop(key, None)
+            _YFINANCE_FAILED_LAST_PRUNED_AT.pop(key, None)
+
+
+def _reset_failed_ticker_memory_cache(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
+    legacy_key = str(db_path)
+    candidate_keys = {db_key, legacy_key}
+    with _YFINANCE_FAILED_MEMORY_CACHE_LOCK:
+        for key in candidate_keys:
+            _YFINANCE_FAILED_MEMORY_CACHE.pop(key, None)
+
+
+def _get_or_reset_failed_memory_cache_map(
+    db_cache_key: str,
+    *,
+    storage_signature: tuple[
+        tuple[int, int, int] | None,
+        tuple[int, int, int] | None,
+        tuple[int, int, int] | None,
+    ]
+    | None,
+) -> OrderedDict[str, float | None]:
+    entry = _YFINANCE_FAILED_MEMORY_CACHE.get(db_cache_key)
+    if entry is None or entry[0] != storage_signature:
+        cache_map: OrderedDict[str, float | None] = OrderedDict()
+        _YFINANCE_FAILED_MEMORY_CACHE[db_cache_key] = (storage_signature, cache_map)
+    else:
+        cache_map = entry[1]
+    _YFINANCE_FAILED_MEMORY_CACHE.move_to_end(db_cache_key)
+    _bound_failed_memory_cache_dbs()
+    return cache_map
 
 
 def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
@@ -153,63 +234,85 @@ def _recover_realtime_price_sqlite_schema(
 
 def _ensure_realtime_price_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
     db_key = normalize_sqlite_db_key(db_path)
-    with _REALTIME_PRICE_SQLITE_READY_LOCK:
+    with _REALTIME_PRICE_SQLITE_READY_CONDITION:
         if db_key in _REALTIME_PRICE_SQLITE_READY:
             if sqlite_db_path_exists(db_path):
                 return True
             _REALTIME_PRICE_SQLITE_READY.discard(db_key)
 
-        def _initialize_schema() -> None:
-            with connect_sqlite(
-                db_path,
-                timeout_seconds=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS,
-                pragmas=_REALTIME_PRICE_INIT_PRAGMAS,
-            ) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS realtime_price_cache (
-                        ticker TEXT PRIMARY KEY,
-                        price REAL NOT NULL,
-                        source TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
-                    )
-                    """
-                )
-                cursor.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_realtime_price_cache_updated_at
-                    ON realtime_price_cache(updated_at DESC)
-                    """
-                )
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS yfinance_failed_ticker_cache (
-                        ticker TEXT PRIMARY KEY,
-                        updated_at TEXT NOT NULL
-                    )
-                    """
-                )
-                cursor.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_yfinance_failed_ticker_cache_updated_at
-                    ON yfinance_failed_ticker_cache(updated_at DESC)
-                    """
-                )
-                conn.commit()
+        while db_key in _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS:
+            _REALTIME_PRICE_SQLITE_READY_CONDITION.wait()
+            if db_key in _REALTIME_PRICE_SQLITE_READY:
+                if sqlite_db_path_exists(db_path):
+                    return True
+                _REALTIME_PRICE_SQLITE_READY.discard(db_key)
 
-        try:
-            run_sqlite_with_retry(
-                _initialize_schema,
-                max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
-                retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+        _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS.add(db_key)
+
+    def _initialize_schema() -> None:
+        with connect_sqlite(
+            db_path,
+            timeout_seconds=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS,
+            pragmas=_REALTIME_PRICE_INIT_PRAGMAS,
+        ) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS realtime_price_cache (
+                    ticker TEXT PRIMARY KEY,
+                    price REAL NOT NULL,
+                    source TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
             )
-            _REALTIME_PRICE_SQLITE_READY.add(db_key)
-            return True
-        except Exception as error:
-            if logger is not None:
-                logger.debug(f"Failed to initialize realtime price sqlite cache: {error}")
-            return False
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_realtime_price_cache_updated_at
+                ON realtime_price_cache(updated_at DESC)
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS yfinance_failed_ticker_cache (
+                    ticker TEXT PRIMARY KEY,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_yfinance_failed_ticker_cache_updated_at
+                ON yfinance_failed_ticker_cache(updated_at DESC)
+                """
+            )
+            conn.commit()
+
+    initialization_succeeded = False
+    try:
+        run_sqlite_with_retry(
+            _initialize_schema,
+            max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+        )
+        initialization_succeeded = True
+        return True
+    except Exception as error:
+        if logger is not None:
+            logger.debug(f"Failed to initialize realtime price sqlite cache: {error}")
+        return False
+    finally:
+        with _REALTIME_PRICE_SQLITE_READY_CONDITION:
+            _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+            if initialization_succeeded:
+                add_bounded_ready_key(
+                    _REALTIME_PRICE_SQLITE_READY,
+                    db_key,
+                    max_entries=_REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES,
+                )
+            else:
+                _REALTIME_PRICE_SQLITE_READY.discard(db_key)
+            _REALTIME_PRICE_SQLITE_READY_CONDITION.notify_all()
 
 
 def load_cached_realtime_prices(
@@ -236,11 +339,12 @@ def load_cached_realtime_prices(
             db_path,
             timeout_seconds=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS,
             pragmas=_REALTIME_PRICE_SESSION_PRAGMAS,
+            read_only=True,
         ) as conn:
             cursor = conn.cursor()
             rows: list[tuple[Any, Any]] = []
             for chunk in _iter_ticker_chunks(unique_tickers):
-                placeholders = ",".join("?" for _ in chunk)
+                placeholders = build_sqlite_in_placeholders(chunk)
                 cursor.execute(
                     f"""
                     SELECT ticker, price
@@ -302,6 +406,7 @@ def save_realtime_prices_to_cache(
         return
 
     db_path = _resolve_runtime_cache_db_path(get_data_path)
+    db_cache_key = normalize_sqlite_db_key(db_path)
     if not _ensure_realtime_price_sqlite(db_path, logger):
         return
 
@@ -324,7 +429,7 @@ def save_realtime_prices_to_cache(
     now_ts = now_dt.timestamp()
     should_prune = _is_sqlite_cache_prune_due(
         _REALTIME_PRICE_LAST_PRUNED_AT,
-        db_path,
+        db_cache_key,
         now_ts,
     )
     prune_cutoff_iso = (now_dt - timedelta(days=3)).isoformat() if should_prune else None
@@ -357,7 +462,7 @@ def save_realtime_prices_to_cache(
                 )
             conn.commit()
         if should_prune:
-            _mark_sqlite_cache_pruned(_REALTIME_PRICE_LAST_PRUNED_AT, db_path, now_ts)
+            _mark_sqlite_cache_pruned(_REALTIME_PRICE_LAST_PRUNED_AT, db_cache_key, now_ts)
 
     try:
         run_sqlite_with_retry(
@@ -395,6 +500,7 @@ def load_recent_yfinance_failed_tickers(
         return set()
 
     db_path = _resolve_runtime_cache_db_path(get_data_path)
+    db_cache_key = normalize_sqlite_db_key(db_path)
     if not _ensure_realtime_price_sqlite(db_path, logger):
         return set()
 
@@ -410,17 +516,18 @@ def load_recent_yfinance_failed_tickers(
     unresolved_tickers: list[str] = unique_tickers
 
     with _YFINANCE_FAILED_MEMORY_CACHE_LOCK:
-        entry = _YFINANCE_FAILED_MEMORY_CACHE.get(db_path)
-        if entry is None or entry[0] != storage_signature:
-            memory_map: dict[str, float | None] = {}
-            _YFINANCE_FAILED_MEMORY_CACHE[db_path] = (storage_signature, memory_map)
-        else:
-            memory_map = entry[1]
-            unresolved_tickers = [ticker for ticker in unique_tickers if ticker not in memory_map]
-            for ticker in unique_tickers:
-                updated_ts = memory_map.get(ticker)
-                if updated_ts is not None and updated_ts >= cutoff_ts:
-                    resolved_from_memory.add(ticker)
+        memory_map = _get_or_reset_failed_memory_cache_map(
+            db_cache_key,
+            storage_signature=storage_signature,
+        )
+        unresolved_tickers = [ticker for ticker in unique_tickers if ticker not in memory_map]
+        for ticker in unique_tickers:
+            updated_ts = memory_map.get(ticker)
+            if ticker in memory_map:
+                memory_map.move_to_end(ticker)
+            if updated_ts is not None and updated_ts >= cutoff_ts:
+                resolved_from_memory.add(ticker)
+        _bound_failed_memory_cache_map(memory_map)
 
     if not unresolved_tickers:
         return resolved_from_memory
@@ -432,11 +539,12 @@ def load_recent_yfinance_failed_tickers(
             db_path,
             timeout_seconds=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS,
             pragmas=_REALTIME_PRICE_SESSION_PRAGMAS,
+            read_only=True,
         ) as conn:
             cursor = conn.cursor()
             rows: list[tuple[Any, Any]] = []
             for chunk in _iter_ticker_chunks(unresolved_tickers):
-                placeholders = ",".join("?" for _ in chunk)
+                placeholders = build_sqlite_in_placeholders(chunk)
                 cursor.execute(
                     f"""
                     SELECT ticker, updated_at
@@ -486,13 +594,14 @@ def load_recent_yfinance_failed_tickers(
 
     refreshed_signature = _sqlite_storage_signature(db_path)
     with _YFINANCE_FAILED_MEMORY_CACHE_LOCK:
-        entry = _YFINANCE_FAILED_MEMORY_CACHE.get(db_path)
-        if entry is None or entry[0] != refreshed_signature:
-            cache_map: dict[str, float | None] = {}
-            _YFINANCE_FAILED_MEMORY_CACHE[db_path] = (refreshed_signature, cache_map)
-        else:
-            cache_map = entry[1]
-        cache_map.update(fetched_map)
+        cache_map = _get_or_reset_failed_memory_cache_map(
+            db_cache_key,
+            storage_signature=refreshed_signature,
+        )
+        for ticker, updated_ts in fetched_map.items():
+            cache_map[ticker] = updated_ts
+            cache_map.move_to_end(ticker)
+        _bound_failed_memory_cache_map(cache_map)
 
     for ticker, updated_ts in fetched_map.items():
         if updated_ts is not None and updated_ts >= cutoff_ts:
@@ -511,6 +620,7 @@ def save_yfinance_failed_tickers(
         return
 
     db_path = _resolve_runtime_cache_db_path(get_data_path)
+    db_cache_key = normalize_sqlite_db_key(db_path)
     if not _ensure_realtime_price_sqlite(db_path, logger):
         return
 
@@ -524,7 +634,7 @@ def save_yfinance_failed_tickers(
     now_ts = now_dt.timestamp()
     should_prune = _is_sqlite_cache_prune_due(
         _YFINANCE_FAILED_LAST_PRUNED_AT,
-        db_path,
+        db_cache_key,
         now_ts,
     )
     prune_cutoff_iso = (
@@ -557,7 +667,7 @@ def save_yfinance_failed_tickers(
                 )
             conn.commit()
         if should_prune:
-            _mark_sqlite_cache_pruned(_YFINANCE_FAILED_LAST_PRUNED_AT, db_path, now_ts)
+            _mark_sqlite_cache_pruned(_YFINANCE_FAILED_LAST_PRUNED_AT, db_cache_key, now_ts)
 
     try:
         run_sqlite_with_retry(
@@ -591,14 +701,14 @@ def save_yfinance_failed_tickers(
     now_ts = datetime.now().timestamp()
     refreshed_signature = _sqlite_storage_signature(db_path)
     with _YFINANCE_FAILED_MEMORY_CACHE_LOCK:
-        entry = _YFINANCE_FAILED_MEMORY_CACHE.get(db_path)
-        if entry is None or entry[0] != refreshed_signature:
-            cache_map: dict[str, float | None] = {}
-            _YFINANCE_FAILED_MEMORY_CACHE[db_path] = (refreshed_signature, cache_map)
-        else:
-            cache_map = entry[1]
+        cache_map = _get_or_reset_failed_memory_cache_map(
+            db_cache_key,
+            storage_signature=refreshed_signature,
+        )
         for ticker in unique_tickers:
             cache_map[ticker] = now_ts
+            cache_map.move_to_end(ticker)
+        _bound_failed_memory_cache_map(cache_map)
 
 
 __all__ = [

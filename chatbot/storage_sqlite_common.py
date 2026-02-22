@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 
 from services.sqlite_utils import (
+    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
     normalize_sqlite_db_key,
@@ -20,9 +21,14 @@ from services.sqlite_utils import (
 )
 
 
-_SQLITE_PRAGMAS = build_sqlite_pragmas(
+_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=30_000,
     include_foreign_keys=True,
+)
+_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
+    busy_timeout_ms=30_000,
+    include_foreign_keys=True,
+    base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-8000"),
 )
 _SQLITE_TIMEOUT_SECONDS = 30
 _SQLITE_RETRY_ATTEMPTS = 2
@@ -30,6 +36,7 @@ _SQLITE_RETRY_DELAY_SECONDS = 0.03
 _SCHEMA_READY_LOCK = threading.Lock()
 _SCHEMA_READY_CONDITION = threading.Condition(_SCHEMA_READY_LOCK)
 _SCHEMA_READY_DB_PATHS: set[str] = set()
+_SCHEMA_READY_MAX_ENTRIES = 2_048
 _SCHEMA_INIT_IN_PROGRESS: set[str] = set()
 
 
@@ -114,7 +121,7 @@ def ensure_chatbot_storage_schema(
         with connect_sqlite(
             db_path_text,
             timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
-            pragmas=_SQLITE_PRAGMAS,
+            pragmas=_SQLITE_INIT_PRAGMAS,
         ) as conn:
             cursor = conn.cursor()
             cursor.executescript(
@@ -173,7 +180,11 @@ def ensure_chatbot_storage_schema(
         with _SCHEMA_READY_CONDITION:
             _SCHEMA_INIT_IN_PROGRESS.discard(db_key)
             if initialization_succeeded:
-                _SCHEMA_READY_DB_PATHS.add(db_key)
+                add_bounded_ready_key(
+                    _SCHEMA_READY_DB_PATHS,
+                    db_key,
+                    max_entries=_SCHEMA_READY_MAX_ENTRIES,
+                )
             else:
                 _SCHEMA_READY_DB_PATHS.discard(db_key)
             _SCHEMA_READY_CONDITION.notify_all()
@@ -185,7 +196,8 @@ def ensure_chatbot_storage_schema(
 
 
 __all__ = [
-    "_SQLITE_PRAGMAS",
+    "_SQLITE_INIT_PRAGMAS",
+    "_SQLITE_SESSION_PRAGMAS",
     "ensure_chatbot_storage_schema",
     "resolve_chatbot_storage_db_path",
 ]

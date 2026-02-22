@@ -313,6 +313,58 @@ def test_get_stock_info_reloads_latest_signal_index_when_signature_changes(monke
     assert calls["count"] == 2
 
 
+def test_latest_signal_index_cache_is_bounded_lru(monkeypatch, tmp_path):
+    path_a = os.path.abspath(str(tmp_path / "signals_a.csv"))
+    path_b = os.path.abspath(str(tmp_path / "signals_b.csv"))
+    path_c = os.path.abspath(str(tmp_path / "signals_c.csv"))
+
+    signature_map = {
+        path_a: (1, 10),
+        path_b: (2, 20),
+        path_c: (3, 30),
+    }
+
+    with kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE_LOCK:
+        kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE.clear()
+    monkeypatch.setattr(kr_ai_data_service_module, "_LATEST_SIGNAL_INDEX_CACHE_MAX_ENTRIES", 2)
+    monkeypatch.setattr(
+        kr_ai_data_service_module,
+        "_file_signature",
+        lambda path: signature_map.get(path),
+    )
+
+    load_calls = {"count": 0}
+
+    def _fake_load_latest_signal_source_frame(*, signals_file, file_signature):
+        load_calls["count"] += 1
+        ticker = {
+            path_a: "005930",
+            path_b: "000660",
+            path_c: "035420",
+        }[signals_file]
+        return pd.DataFrame([{"ticker": ticker, "name": f"name_{ticker}"}])
+
+    monkeypatch.setattr(
+        KrAiDataService,
+        "_load_latest_signal_source_frame",
+        staticmethod(_fake_load_latest_signal_source_frame),
+    )
+
+    _ = KrAiDataService._load_latest_signal_index(path_a)
+    _ = KrAiDataService._load_latest_signal_index(path_b)
+    _ = KrAiDataService._load_latest_signal_index(path_a)
+    _ = KrAiDataService._load_latest_signal_index(path_c)
+
+    with kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE_LOCK:
+        cache_keys = list(kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE.keys())
+
+    assert len(cache_keys) == 2
+    assert path_a in cache_keys
+    assert path_c in cache_keys
+    assert path_b not in cache_keys
+    assert load_calls["count"] == 3
+
+
 def test_get_stock_info_handles_invalid_numeric_values_gracefully(monkeypatch):
     service = KrAiDataService()
     monkeypatch.setattr(kr_ai_data_service_module.os.path, "exists", lambda _path: True)

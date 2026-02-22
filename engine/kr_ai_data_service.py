@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import threading
+from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -63,7 +64,32 @@ LATEST_SIGNAL_USECOLS = [
     "inst_5d",
 ]
 _LATEST_SIGNAL_INDEX_CACHE_LOCK = threading.Lock()
-_LATEST_SIGNAL_INDEX_CACHE: dict[str, tuple[tuple[int, int], dict[str, dict[str, object]]]] = {}
+_LATEST_SIGNAL_INDEX_CACHE: OrderedDict[
+    str,
+    tuple[tuple[int, int], dict[str, dict[str, object]]],
+] = OrderedDict()
+_LATEST_SIGNAL_INDEX_CACHE_MAX_ENTRIES = 256
+
+
+def _get_latest_signal_index_cache(
+    signals_path: str,
+) -> tuple[tuple[int, int], dict[str, dict[str, object]]] | None:
+    cached = _LATEST_SIGNAL_INDEX_CACHE.get(signals_path)
+    if cached is None:
+        return None
+    _LATEST_SIGNAL_INDEX_CACHE.move_to_end(signals_path)
+    return cached
+
+
+def _set_latest_signal_index_cache(
+    signals_path: str,
+    cache_value: tuple[tuple[int, int], dict[str, dict[str, object]]],
+) -> None:
+    _LATEST_SIGNAL_INDEX_CACHE[signals_path] = cache_value
+    _LATEST_SIGNAL_INDEX_CACHE.move_to_end(signals_path)
+    normalized_max_entries = max(1, int(_LATEST_SIGNAL_INDEX_CACHE_MAX_ENTRIES))
+    while len(_LATEST_SIGNAL_INDEX_CACHE) > normalized_max_entries:
+        _LATEST_SIGNAL_INDEX_CACHE.popitem(last=False)
 
 def _file_signature(path: str) -> tuple[int, int] | None:
     try:
@@ -141,7 +167,7 @@ class KrAiDataService:
             return {}
 
         with _LATEST_SIGNAL_INDEX_CACHE_LOCK:
-            cached = _LATEST_SIGNAL_INDEX_CACHE.get(signals_path)
+            cached = _get_latest_signal_index_cache(signals_path)
             if cached and cached[0] == file_signature:
                 return cached[1]
 
@@ -152,7 +178,10 @@ class KrAiDataService:
         latest_index = KrAiDataService._build_latest_signal_index(source_df)
 
         with _LATEST_SIGNAL_INDEX_CACHE_LOCK:
-            _LATEST_SIGNAL_INDEX_CACHE[signals_path] = (file_signature, latest_index)
+            _set_latest_signal_index_cache(
+                signals_path,
+                (file_signature, latest_index),
+            )
         return latest_index
 
     @staticmethod

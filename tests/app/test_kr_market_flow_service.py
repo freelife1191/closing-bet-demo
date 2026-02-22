@@ -12,6 +12,7 @@ from threading import Event
 
 import pandas as pd
 
+import services.kr_market_flow_service as flow_service
 from services.kr_market_flow_service import (
     build_market_status_payload,
     collect_jongga_v2_dates,
@@ -59,6 +60,8 @@ def test_build_market_status_payload_caches_ticker_padding_column_on_dataframe()
 
 
 def test_collect_jongga_v2_dates_reads_files_and_latest(tmp_path: Path):
+    with flow_service._JONGGA_DATES_CACHE_LOCK:
+        flow_service._JONGGA_DATES_CACHE.clear()
     (tmp_path / "jongga_v2_results_20260220.json").write_text("{}", encoding="utf-8")
     (tmp_path / "jongga_v2_results_custom.json").write_text("{}", encoding="utf-8")
 
@@ -74,6 +77,8 @@ def test_collect_jongga_v2_dates_reads_files_and_latest(tmp_path: Path):
 
 
 def test_collect_jongga_v2_dates_uses_cache_when_signature_is_same(tmp_path: Path):
+    with flow_service._JONGGA_DATES_CACHE_LOCK:
+        flow_service._JONGGA_DATES_CACHE.clear()
     (tmp_path / "jongga_v2_results_20260220.json").write_text("{}", encoding="utf-8")
     latest_file = tmp_path / "jongga_v2_latest.json"
     latest_file.write_text("{}", encoding="utf-8")
@@ -99,6 +104,8 @@ def test_collect_jongga_v2_dates_uses_cache_when_signature_is_same(tmp_path: Pat
 
 
 def test_collect_jongga_v2_dates_invalidates_cache_when_latest_file_changes(tmp_path: Path):
+    with flow_service._JONGGA_DATES_CACHE_LOCK:
+        flow_service._JONGGA_DATES_CACHE.clear()
     (tmp_path / "jongga_v2_results_20260220.json").write_text("{}", encoding="utf-8")
     latest_file = tmp_path / "jongga_v2_latest.json"
     latest_file.write_text("{}", encoding="utf-8")
@@ -124,6 +131,46 @@ def test_collect_jongga_v2_dates_invalidates_cache_when_latest_file_changes(tmp_
         logger=types.SimpleNamespace(warning=lambda *_args, **_kwargs: None),
     )
     assert calls["count"] == 2
+
+
+def test_collect_jongga_v2_dates_cache_is_bounded_lru(monkeypatch, tmp_path: Path):
+    with flow_service._JONGGA_DATES_CACHE_LOCK:
+        flow_service._JONGGA_DATES_CACHE.clear()
+    monkeypatch.setattr(flow_service, "_JONGGA_DATES_CACHE_MAX_ENTRIES", 2)
+
+    data_dirs = [tmp_path / f"dataset_{idx}" for idx in range(3)]
+    for idx, data_dir in enumerate(data_dirs):
+        data_dir.mkdir(parents=True, exist_ok=True)
+        (data_dir / f"jongga_v2_results_2026022{idx}.json").write_text("{}", encoding="utf-8")
+
+    collect_jongga_v2_dates(
+        data_dir=data_dirs[0],
+        load_json_file=lambda _name: {},
+        logger=types.SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+    collect_jongga_v2_dates(
+        data_dir=data_dirs[1],
+        load_json_file=lambda _name: {},
+        logger=types.SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+    collect_jongga_v2_dates(
+        data_dir=data_dirs[0],
+        load_json_file=lambda _name: {},
+        logger=types.SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+    collect_jongga_v2_dates(
+        data_dir=data_dirs[2],
+        load_json_file=lambda _name: {},
+        logger=types.SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+
+    with flow_service._JONGGA_DATES_CACHE_LOCK:
+        cached_keys = list(flow_service._JONGGA_DATES_CACHE.keys())
+
+    assert len(cached_keys) == 2
+    assert str(data_dirs[0].resolve()) in cached_keys
+    assert str(data_dirs[2].resolve()) in cached_keys
+    assert str(data_dirs[1].resolve()) not in cached_keys
 
 
 def test_start_vcp_screener_run_sets_status_and_invokes_runner():

@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
+import threading
+import time
 
 import pandas as pd
 
@@ -81,7 +84,65 @@ def _build_payload(
 def _reset_vcp_signals_cache_state() -> None:
     with vcp_signals_cache._VCP_SIGNALS_CACHE_LOCK:
         vcp_signals_cache._VCP_SIGNALS_MEMORY_CACHE.clear()
-    vcp_signals_cache._VCP_SIGNALS_SQLITE_READY.clear()
+    with vcp_signals_cache._VCP_SIGNALS_SQLITE_READY_CONDITION:
+        vcp_signals_cache._VCP_SIGNALS_SQLITE_READY.clear()
+        vcp_signals_cache._VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS.clear()
+    with vcp_signals_cache._VCP_SIGNALS_SQLITE_KNOWN_HASHES_LOCK:
+        vcp_signals_cache._VCP_SIGNALS_SQLITE_KNOWN_HASHES.clear()
+    with vcp_signals_cache._VCP_SIGNALS_SQLITE_SAVE_COUNTER_LOCK:
+        vcp_signals_cache._VCP_SIGNALS_SQLITE_SAVE_COUNTER = 0
+
+
+def test_vcp_signals_memory_cache_keeps_recently_used_entry_on_eviction(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    monkeypatch.setattr(vcp_signals_cache, "_VCP_SIGNALS_MEMORY_MAX_ENTRIES", 2)
+
+    signature1 = ("vcp-signals", "2026-02-01", "2026-02-01", 1, 10)
+    signature2 = ("vcp-signals", "2026-02-02", "2026-02-02", 2, 20)
+    signature3 = ("vcp-signals", "2026-02-03", "2026-02-03", 3, 30)
+
+    payload1 = [{"ticker": "000001", "score": 80}]
+    payload2 = [{"ticker": "000002", "score": 81}]
+    payload3 = [{"ticker": "000003", "score": 82}]
+
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=signature1,
+        payload=payload1,
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=signature2,
+        payload=payload2,
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+
+    loaded_first = vcp_signals_cache.get_cached_vcp_signals(
+        signature=signature1,
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+    assert loaded_first == payload1
+
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=signature3,
+        payload=payload3,
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+
+    digest1, _ = vcp_signals_cache._signature_digest(signature1)
+    digest2, _ = vcp_signals_cache._signature_digest(signature2)
+    digest3, _ = vcp_signals_cache._signature_digest(signature3)
+
+    with vcp_signals_cache._VCP_SIGNALS_CACHE_LOCK:
+        cache_keys = list(vcp_signals_cache._VCP_SIGNALS_MEMORY_CACHE.keys())
+
+    assert len(cache_keys) == 2
+    assert digest1 in cache_keys
+    assert digest2 not in cache_keys
+    assert digest3 in cache_keys
 
 
 def test_build_vcp_payload_reuses_sqlite_cache_after_memory_clear(monkeypatch, tmp_path):
@@ -104,6 +165,31 @@ def test_build_vcp_payload_reuses_sqlite_cache_after_memory_clear(monkeypatch, t
 
     assert second["count"] == 1
     assert second["signals"][0]["ticker"] == "005930"
+
+
+def test_build_vcp_payload_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    first = _build_payload(tmp_path, req_date="2026-02-22")
+    assert first["count"] == 1
+
+    with vcp_signals_cache._VCP_SIGNALS_CACHE_LOCK:
+        vcp_signals_cache._VCP_SIGNALS_MEMORY_CACHE.clear()
+
+    read_only_flags: list[bool] = []
+    original_connect = vcp_signals_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(vcp_signals_cache, "connect_sqlite", _traced_connect)
+
+    second = _build_payload(tmp_path, req_date="2026-02-22")
+    assert second["count"] == 1
+    assert True in read_only_flags
 
 
 def test_build_vcp_payload_prunes_sqlite_cache_rows(monkeypatch, tmp_path):
@@ -214,6 +300,66 @@ def test_build_vcp_payload_skips_delete_when_rows_within_limit(monkeypatch, tmp_
     assert not any("DELETE FROM vcp_signals_payload_cache" in sql for sql in traced_sql)
 
 
+def test_save_cached_vcp_signals_repeated_signature_prunes_once(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    monkeypatch.setattr(vcp_signals_cache, "_VCP_SIGNALS_SQLITE_PRUNE_FORCE_INTERVAL", 10_000)
+
+    prune_calls = {"count": 0}
+    original_prune = vcp_signals_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(vcp_signals_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    signature = ("vcp-signals", "2026-02-22", "2026-02-22", 1, 10)
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=signature,
+        payload=[{"ticker": "005930", "score": 80}],
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=signature,
+        payload=[{"ticker": "005930", "score": 81}],
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+
+    assert prune_calls["count"] == 1
+
+
+def test_save_cached_vcp_signals_forces_prune_on_configured_interval(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    monkeypatch.setattr(vcp_signals_cache, "_VCP_SIGNALS_SQLITE_PRUNE_FORCE_INTERVAL", 2)
+
+    prune_calls = {"count": 0}
+    original_prune = vcp_signals_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(vcp_signals_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    signature = ("vcp-signals", "2026-02-22", "2026-02-22", 1, 10)
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=signature,
+        payload=[{"ticker": "005930", "score": 80}],
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=signature,
+        payload=[{"ticker": "005930", "score": 81}],
+        data_dir=str(tmp_path),
+        logger=None,
+    )
+
+    assert prune_calls["count"] == 2
+
+
 def test_vcp_signals_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_path):
     _reset_vcp_signals_cache_state()
     db_path = tmp_path / "runtime_cache.db"
@@ -234,3 +380,93 @@ def test_vcp_signals_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_
     assert vcp_signals_cache._ensure_sqlite_cache(relative_db_path, logger) is True
 
     assert connect_calls["count"] == 1
+
+
+def test_vcp_signals_sqlite_init_is_single_flight_under_concurrency(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    db_path = str(tmp_path / "runtime_cache.db")
+    logger = logging.getLogger("vcp-single-flight-test")
+
+    monkeypatch.setattr(vcp_signals_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _run_once(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+        return None
+
+    monkeypatch.setattr(vcp_signals_cache, "run_sqlite_with_retry", _run_once)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(vcp_signals_cache._ensure_sqlite_cache(db_path, logger))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 1
+    assert results == {"first": True, "second": True}
+
+
+def test_vcp_signals_sqlite_waiter_retries_after_initializer_failure(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    db_path = str(tmp_path / "runtime_cache.db")
+    logger = logging.getLogger("vcp-waiter-retry-test")
+
+    monkeypatch.setattr(vcp_signals_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(vcp_signals_cache, "run_sqlite_with_retry", _fail_then_succeed)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(vcp_signals_cache._ensure_sqlite_cache(db_path, logger))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 2
+    assert results.get("first") is False
+    assert results.get("second") is True

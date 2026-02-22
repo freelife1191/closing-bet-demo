@@ -300,6 +300,66 @@ def test_save_history_sessions_syncs_snapshot_without_full_clear(monkeypatch, tm
     assert _count_rows(db_path, "chatbot_messages") == 1
     assert any("DELETE FROM chatbot_sessions" in sql for sql in traced_sql)
     assert not any(_is_full_table_delete(sql, table="chatbot_sessions") for sql in traced_sql)
+    assert not any(
+        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_session_ids" in sql
+        for sql in traced_sql
+    )
+
+
+def test_save_history_sessions_uses_temp_table_fallback_for_large_snapshot(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    baseline_sessions = {
+        "s1": {
+            "id": "s1",
+            "title": "세션1",
+            "messages": [{"role": "user", "parts": [{"text": "a"}], "timestamp": "2026-02-22T00:00:00"}],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:00",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-a",
+        },
+        "s2": {
+            "id": "s2",
+            "title": "세션2",
+            "messages": [{"role": "user", "parts": [{"text": "b"}], "timestamp": "2026-02-22T00:00:00"}],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:00",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-b",
+        },
+        "s3": {
+            "id": "s3",
+            "title": "세션3",
+            "messages": [{"role": "user", "parts": [{"text": "c"}], "timestamp": "2026-02-22T00:00:00"}],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:00",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-c",
+        },
+    }
+    assert save_history_sessions_to_sqlite(db_path, baseline_sessions, chatbot_core.logger) is True
+
+    traced_sql: list[str] = []
+    original_connect = storage_sqlite_history.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(storage_sqlite_history, "connect_sqlite", _traced_connect)
+    monkeypatch.setattr(storage_sqlite_history, "_SQLITE_INLINE_DELETE_MAX_VARIABLES", 1)
+
+    next_snapshot = {
+        "s1": baseline_sessions["s1"],
+        "s2": baseline_sessions["s2"],
+    }
+    assert save_history_sessions_to_sqlite(db_path, next_snapshot, chatbot_core.logger) is True
+
+    assert any(
+        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_session_ids" in sql
+        for sql in traced_sql
+    )
 
 
 def test_clear_history_sessions_uses_session_delete_only(monkeypatch, tmp_path: Path):
@@ -675,6 +735,62 @@ def test_ensure_chatbot_storage_schema_deduplicates_concurrent_initialization(mo
     assert connect_calls["count"] == 1
 
 
+def test_ensure_chatbot_storage_schema_waiter_retries_after_initializer_failure(
+    monkeypatch,
+    tmp_path: Path,
+):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    with sqlite_common._SCHEMA_READY_LOCK:
+        sqlite_common._SCHEMA_READY_DB_PATHS.clear()
+        sqlite_common._SCHEMA_INIT_IN_PROGRESS.clear()
+
+    monkeypatch.setattr(sqlite_common, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(sqlite_common, "run_sqlite_with_retry", _fail_then_succeed)
+
+    first_result: list[bool] = []
+    second_result: list[bool] = []
+
+    thread_first = threading.Thread(
+        target=lambda: first_result.append(
+            sqlite_common.ensure_chatbot_storage_schema(db_path, chatbot_core.logger)
+        )
+    )
+    thread_second = threading.Thread(
+        target=lambda: second_result.append(
+            sqlite_common.ensure_chatbot_storage_schema(db_path, chatbot_core.logger)
+        )
+    )
+
+    thread_first.start()
+    assert entered_event.wait(timeout=2.0)
+    thread_second.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    thread_first.join(timeout=2.0)
+    thread_second.join(timeout=2.0)
+
+    assert thread_first.is_alive() is False
+    assert thread_second.is_alive() is False
+    assert run_calls["count"] == 2
+    assert first_result == [False]
+    assert second_result == [True]
+
+
 def test_ensure_chatbot_storage_schema_normalizes_relative_db_key(monkeypatch, tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     relative_db_path = Path("chatbot_storage.db")
@@ -856,6 +972,63 @@ def test_load_memories_retries_on_transient_sqlite_lock(monkeypatch, tmp_path: P
     assert loaded["risk"]["value"] == "aggressive"
 
 
+def test_load_history_sessions_uses_read_only_connection(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    sessions = {
+        "s1": {
+            "id": "s1",
+            "title": "세션1",
+            "messages": [{"role": "user", "parts": [{"text": "a"}], "timestamp": "2026-02-22T00:00:00"}],
+            "created_at": "2026-02-22T00:00:00",
+            "updated_at": "2026-02-22T00:00:00",
+            "model": "gemini-2.0-flash-lite",
+            "owner_id": "owner-a",
+        }
+    }
+    assert save_history_sessions_to_sqlite(db_path, sessions, chatbot_core.logger) is True
+
+    read_only_flags: list[bool] = []
+    original_connect = storage_sqlite_history.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(storage_sqlite_history, "connect_sqlite", _traced_connect)
+
+    loaded = load_history_sessions_from_sqlite(db_path, chatbot_core.logger)
+    assert loaded is not None
+    assert loaded["s1"]["title"] == "세션1"
+    assert True in read_only_flags
+
+
+def test_load_memories_uses_read_only_connection(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    memories = {
+        "risk": {
+            "value": "aggressive",
+            "updated_at": "2026-02-22T00:00:00",
+        }
+    }
+    assert save_memories_to_sqlite(db_path, memories, chatbot_core.logger) is True
+
+    read_only_flags: list[bool] = []
+    original_connect = storage_sqlite_memory.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(storage_sqlite_memory, "connect_sqlite", _traced_connect)
+
+    loaded = load_memories_from_sqlite(db_path, chatbot_core.logger)
+    assert loaded is not None
+    assert loaded["risk"]["value"] == "aggressive"
+    assert True in read_only_flags
+
+
 def test_save_memories_uses_upsert_and_stale_cleanup_without_full_clear(monkeypatch, tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     baseline_memories = {
@@ -884,6 +1057,42 @@ def test_save_memories_uses_upsert_and_stale_cleanup_without_full_clear(monkeypa
     assert set(loaded.keys()) == {"risk"}
     assert loaded["risk"]["value"] == "conservative"
     assert not any(_is_full_table_delete(sql, table="chatbot_memories") for sql in traced_sql)
+    assert not any(
+        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_keys" in sql
+        for sql in traced_sql
+    )
+
+
+def test_save_memories_uses_temp_table_fallback_for_large_snapshot(monkeypatch, tmp_path: Path):
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    baseline_memories = {
+        "risk": {"value": "aggressive", "updated_at": "2026-02-22T00:00:00"},
+        "style": {"value": "momentum", "updated_at": "2026-02-22T00:00:00"},
+        "horizon": {"value": "swing", "updated_at": "2026-02-22T00:00:00"},
+    }
+    assert save_memories_to_sqlite(db_path, baseline_memories, chatbot_core.logger) is True
+
+    traced_sql: list[str] = []
+    original_connect = storage_sqlite_memory.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        conn = original_connect(*args, **kwargs)
+        conn.set_trace_callback(traced_sql.append)
+        return conn
+
+    monkeypatch.setattr(storage_sqlite_memory, "connect_sqlite", _traced_connect)
+    monkeypatch.setattr(storage_sqlite_memory, "_SQLITE_INLINE_DELETE_MAX_VARIABLES", 1)
+
+    next_snapshot = {
+        "risk": {"value": "aggressive", "updated_at": "2026-02-23T00:00:00"},
+        "style": {"value": "momentum", "updated_at": "2026-02-23T00:00:00"},
+    }
+    assert save_memories_to_sqlite(db_path, next_snapshot, chatbot_core.logger) is True
+
+    assert any(
+        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_keys" in sql
+        for sql in traced_sql
+    )
 
 
 def test_save_history_sessions_skips_redundant_session_updates(tmp_path: Path):

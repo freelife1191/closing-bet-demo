@@ -183,3 +183,52 @@ def test_init_db_deduplicates_concurrent_initialization(monkeypatch, tmp_path):
     assert first_result == [True]
     assert second_result == [True]
     assert connect_calls["count"] == 1
+
+
+def test_init_db_waiter_retries_after_initializer_failure(monkeypatch, tmp_path):
+    db_path = tmp_path / "paper_trading_waiter_retry.db"
+    with db_setup.DB_INIT_READY_LOCK:
+        db_setup.DB_INIT_READY_PATHS.clear()
+        db_setup.DB_INIT_IN_PROGRESS_PATHS.clear()
+
+    monkeypatch.setattr(db_setup, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(db_setup, "run_sqlite_with_retry", _fail_then_succeed)
+
+    first_result: list[bool] = []
+    second_result: list[bool] = []
+
+    thread_first = threading.Thread(
+        target=lambda: first_result.append(init_db(db_path=str(db_path), logger=_logger_stub()))
+    )
+    thread_second = threading.Thread(
+        target=lambda: second_result.append(init_db(db_path=str(db_path), logger=_logger_stub()))
+    )
+
+    thread_first.start()
+    assert entered_event.wait(timeout=2.0)
+    thread_second.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    thread_first.join(timeout=2.0)
+    thread_second.join(timeout=2.0)
+
+    assert thread_first.is_alive() is False
+    assert thread_second.is_alive() is False
+    assert run_calls["count"] == 2
+    assert first_result == [False]
+    assert second_result == [True]

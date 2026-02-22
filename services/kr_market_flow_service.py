@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -20,7 +21,16 @@ from services.kr_market_csv_utils import (
     get_ticker_padded_series as _get_ticker_padded_series,
     load_csv_readonly as _load_csv_readonly,
 )
-_JONGGA_DATES_CACHE: dict[str, dict[str, Any]] = {}
+
+_JONGGA_DATES_CACHE_LOCK = threading.Lock()
+_JONGGA_DATES_CACHE: OrderedDict[str, dict[str, Any]] = OrderedDict()
+_JONGGA_DATES_CACHE_MAX_ENTRIES = 256
+
+
+def _prune_jongga_dates_cache_locked() -> None:
+    normalized_max_entries = max(1, int(_JONGGA_DATES_CACHE_MAX_ENTRIES))
+    while len(_JONGGA_DATES_CACHE) > normalized_max_entries:
+        _JONGGA_DATES_CACHE.popitem(last=False)
 
 
 def _safe_mtime_ns(path: Path) -> int:
@@ -138,9 +148,11 @@ def collect_jongga_v2_dates(
     cache_key = str(data_dir_path.resolve())
     signature = _build_jongga_dates_signature(data_dir_path)
 
-    cached = _JONGGA_DATES_CACHE.get(cache_key)
-    if cached and cached.get("signature") == signature:
-        return list(cached.get("dates", []))
+    with _JONGGA_DATES_CACHE_LOCK:
+        cached = _JONGGA_DATES_CACHE.get(cache_key)
+        if cached and cached.get("signature") == signature:
+            _JONGGA_DATES_CACHE.move_to_end(cache_key)
+            return list(cached.get("dates", []))
 
     dates = _collect_jongga_result_dates_from_files(data_dir_path)
 
@@ -153,10 +165,13 @@ def collect_jongga_v2_dates(
         logger.warning(f"Failed to read latest jongga date: {e}")
 
     deduped_dates = sorted(dates, reverse=True)
-    _JONGGA_DATES_CACHE[cache_key] = {
-        "signature": signature,
-        "dates": deduped_dates,
-    }
+    with _JONGGA_DATES_CACHE_LOCK:
+        _JONGGA_DATES_CACHE[cache_key] = {
+            "signature": signature,
+            "dates": deduped_dates,
+        }
+        _JONGGA_DATES_CACHE.move_to_end(cache_key)
+        _prune_jongga_dates_cache_locked()
     return deduped_dates
 
 

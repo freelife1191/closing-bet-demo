@@ -12,6 +12,7 @@ import logging
 import os
 import tempfile
 import threading
+from collections import OrderedDict
 from typing import Any, Callable
 
 import pandas as pd
@@ -21,8 +22,11 @@ from services import kr_market_data_cache_sqlite_payload as sqlite_payload_cache
 
 
 FILE_CACHE_LOCK = threading.Lock()
-JSON_FILE_CACHE: dict[str, tuple[tuple[int, int], Any]] = {}
-CSV_FILE_CACHE: dict[tuple[str, tuple[str, ...] | None], tuple[tuple[int, int], pd.DataFrame]] = {}
+JSON_FILE_CACHE: OrderedDict[str, tuple[tuple[int, int], Any]] = OrderedDict()
+CSV_FILE_CACHE: OrderedDict[
+    tuple[str, tuple[str, ...] | None],
+    tuple[tuple[int, int], pd.DataFrame],
+] = OrderedDict()
 LATEST_VCP_PRICE_MAP_CACHE: dict[str, Any] = {
     "signature": None,
     "value": {},
@@ -45,7 +49,38 @@ _JSON_PAYLOAD_SQLITE_MAX_ROWS = sqlite_payload_cache.DEFAULT_JSON_PAYLOAD_SQLITE
 _CSV_PAYLOAD_SQLITE_READY = sqlite_payload_cache.CSV_PAYLOAD_SQLITE_READY
 _CSV_PAYLOAD_SQLITE_MAX_ROWS = sqlite_payload_cache.DEFAULT_CSV_PAYLOAD_SQLITE_MAX_ROWS
 _FULL_CSV_SQLITE_MAX_BYTES = 8 * 1024 * 1024
+_JSON_FILE_CACHE_MAX_ENTRIES = 256
+_CSV_FILE_CACHE_MAX_ENTRIES = 128
 _LOGGER = logging.getLogger(__name__)
+
+
+def _normalize_cache_path(filepath: str) -> str:
+    return os.path.abspath(filepath)
+
+
+def _get_lru_cache_entry(
+    cache: OrderedDict[Any, Any],
+    key: Any,
+) -> Any | None:
+    if key not in cache:
+        return None
+    value = cache[key]
+    cache.move_to_end(key)
+    return value
+
+
+def _set_bounded_lru_cache_entry(
+    cache: OrderedDict[Any, Any],
+    key: Any,
+    value: Any,
+    *,
+    max_entries: int,
+) -> None:
+    cache[key] = value
+    cache.move_to_end(key)
+    normalized_max_entries = max(1, int(max_entries))
+    while len(cache) > normalized_max_entries:
+        cache.popitem(last=False)
 
 
 def file_signature(filepath: str) -> tuple[int, int] | None:
@@ -57,32 +92,33 @@ def file_signature(filepath: str) -> tuple[int, int] | None:
 
 
 def invalidate_file_cache(filepath: str) -> None:
+    normalized_path = _normalize_cache_path(filepath)
     should_delete_json_sqlite = False
     should_delete_csv_sqlite = False
     with FILE_CACHE_LOCK:
-        JSON_FILE_CACHE.pop(filepath, None)
-        csv_keys_to_remove = [key for key in CSV_FILE_CACHE if key[0] == filepath]
+        JSON_FILE_CACHE.pop(normalized_path, None)
+        csv_keys_to_remove = [key for key in CSV_FILE_CACHE if key[0] == normalized_path]
         for key in csv_keys_to_remove:
             CSV_FILE_CACHE.pop(key, None)
-        if filepath.endswith("daily_prices.csv"):
+        if normalized_path.endswith("daily_prices.csv"):
             LATEST_VCP_PRICE_MAP_CACHE["signature"] = None
             LATEST_VCP_PRICE_MAP_CACHE["value"] = {}
             BACKTEST_PRICE_SNAPSHOT_CACHE["signature"] = None
             BACKTEST_PRICE_SNAPSHOT_CACHE["df"] = pd.DataFrame()
             BACKTEST_PRICE_SNAPSHOT_CACHE["price_map"] = {}
-        if filepath.endswith("korean_stocks_list.csv"):
+        if normalized_path.endswith("korean_stocks_list.csv"):
             SCANNED_STOCK_COUNT_CACHE["signature"] = None
             SCANNED_STOCK_COUNT_CACHE["value"] = 0
-        if "jongga_v2_results_" in filepath and filepath.endswith(".json"):
+        if "jongga_v2_results_" in normalized_path and normalized_path.endswith(".json"):
             JONGGA_RESULT_PAYLOADS_CACHE["signature"] = None
             JONGGA_RESULT_PAYLOADS_CACHE["payloads"] = []
-        should_delete_json_sqlite = filepath.endswith(".json")
-        should_delete_csv_sqlite = filepath.endswith(".csv")
+        should_delete_json_sqlite = normalized_path.endswith(".json")
+        should_delete_csv_sqlite = normalized_path.endswith(".csv")
 
     if should_delete_json_sqlite:
-        _delete_json_payload_from_sqlite(filepath)
+        _delete_json_payload_from_sqlite(normalized_path)
     if should_delete_csv_sqlite:
-        _delete_csv_payload_from_sqlite(filepath)
+        _delete_csv_payload_from_sqlite(normalized_path)
 
 
 def atomic_write_text(
@@ -119,33 +155,44 @@ def _load_json_payload_from_path(
     filepath: str,
     *,
     signature: tuple[int, int] | None = None,
-) -> dict[str, Any]:
+) -> Any:
     """절대경로 JSON 파일을 시그니처 기반으로 캐시 로드한다."""
-    file_sig = signature if signature is not None else file_signature(filepath)
+    normalized_path = _normalize_cache_path(filepath)
+    file_sig = signature if signature is not None else file_signature(normalized_path)
     if file_sig is None:
         return {}
 
     with FILE_CACHE_LOCK:
-        cached = JSON_FILE_CACHE.get(filepath)
+        cached = _get_lru_cache_entry(JSON_FILE_CACHE, normalized_path)
         if cached and cached[0] == file_sig:
             return copy.deepcopy(cached[1])
 
     found_in_sqlite, sqlite_payload = _load_json_payload_from_sqlite(
-        filepath=filepath,
+        filepath=normalized_path,
         signature=file_sig,
     )
     if found_in_sqlite:
         with FILE_CACHE_LOCK:
-            JSON_FILE_CACHE[filepath] = (file_sig, sqlite_payload)
+            _set_bounded_lru_cache_entry(
+                JSON_FILE_CACHE,
+                normalized_path,
+                (file_sig, sqlite_payload),
+                max_entries=_JSON_FILE_CACHE_MAX_ENTRIES,
+            )
         return copy.deepcopy(sqlite_payload)
 
-    with open(filepath, "r", encoding="utf-8") as file:
+    with open(normalized_path, "r", encoding="utf-8") as file:
         payload = json.load(file)
 
     with FILE_CACHE_LOCK:
-        JSON_FILE_CACHE[filepath] = (file_sig, payload)
+        _set_bounded_lru_cache_entry(
+            JSON_FILE_CACHE,
+            normalized_path,
+            (file_sig, payload),
+            max_entries=_JSON_FILE_CACHE_MAX_ENTRIES,
+        )
     _save_json_payload_to_sqlite(
-        filepath=filepath,
+        filepath=normalized_path,
         signature=file_sig,
         payload=payload,
     )
@@ -153,7 +200,7 @@ def _load_json_payload_from_path(
     return copy.deepcopy(payload)
 
 
-def load_json_payload_from_path(filepath: str) -> dict[str, Any]:
+def load_json_payload_from_path(filepath: str) -> Any:
     """절대경로 JSON 파일을 시그니처 기반으로 캐시 로드한다."""
     return _load_json_payload_from_path(filepath)
 
@@ -231,8 +278,11 @@ def _delete_csv_payload_from_sqlite(filepath: str) -> None:
 
 
 def load_json_file(data_dir: str, filename: str) -> dict[str, Any]:
-    filepath = os.path.join(data_dir, filename)
-    return _load_json_payload_from_path(filepath)
+    filepath = _normalize_cache_path(os.path.join(data_dir, filename))
+    loaded = _load_json_payload_from_path(filepath)
+    if isinstance(loaded, dict):
+        return loaded
+    return {}
 
 
 def load_csv_file(
@@ -249,7 +299,7 @@ def load_csv_file(
     deep_copy=True (기본): 호출자 변경이 캐시에 영향을 주지 않도록 완전 복사 반환
     deep_copy=False: 읽기 전용 경로에서 복사 비용을 줄이기 위해 얕은 복사 반환
     """
-    filepath = os.path.join(data_dir, filename)
+    filepath = _normalize_cache_path(os.path.join(data_dir, filename))
     normalized_usecols = tuple(str(col) for col in usecols) if usecols is not None else None
     cache_key = (filepath, normalized_usecols)
     file_sig = signature if signature is not None else file_signature(filepath)
@@ -257,7 +307,7 @@ def load_csv_file(
         return pd.DataFrame()
 
     with FILE_CACHE_LOCK:
-        cached = CSV_FILE_CACHE.get(cache_key)
+        cached = _get_lru_cache_entry(CSV_FILE_CACHE, cache_key)
         if cached and cached[0] == file_sig:
             return cached[1].copy(deep=deep_copy)
 
@@ -273,7 +323,12 @@ def load_csv_file(
         )
         if sqlite_cached is not None:
             with FILE_CACHE_LOCK:
-                CSV_FILE_CACHE[cache_key] = (file_sig, sqlite_cached)
+                _set_bounded_lru_cache_entry(
+                    CSV_FILE_CACHE,
+                    cache_key,
+                    (file_sig, sqlite_cached),
+                    max_entries=_CSV_FILE_CACHE_MAX_ENTRIES,
+                )
             return sqlite_cached.copy(deep=deep_copy)
 
     read_kwargs: dict[str, Any] = {"low_memory": False}
@@ -281,7 +336,12 @@ def load_csv_file(
         read_kwargs["usecols"] = list(normalized_usecols)
     df = pd.read_csv(filepath, **read_kwargs)
     with FILE_CACHE_LOCK:
-        CSV_FILE_CACHE[cache_key] = (file_sig, df)
+        _set_bounded_lru_cache_entry(
+            CSV_FILE_CACHE,
+            cache_key,
+            (file_sig, df),
+            max_entries=_CSV_FILE_CACHE_MAX_ENTRIES,
+        )
     if use_sqlite_snapshot:
         _save_csv_payload_to_sqlite(
             filepath=filepath,

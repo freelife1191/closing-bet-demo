@@ -29,3 +29,28 @@ def test_market_schedule_fallback_holidays_cover_known_2026_cases(monkeypatch):
 def test_market_schedule_prefers_pykrx_when_available(monkeypatch):
     monkeypatch.setattr(MarketSchedule, "_lookup_pykrx_market_open", classmethod(lambda cls, _d: True))
     assert MarketSchedule.is_market_open(date(2026, 2, 17)) is True
+
+
+def test_market_schedule_open_cache_is_bounded_lru(monkeypatch):
+    monkeypatch.setattr(MarketSchedule, "_lookup_pykrx_market_open", classmethod(lambda cls, _d: None))
+    monkeypatch.setattr(MarketSchedule, "_open_cache_max_entries", 2)
+
+    with MarketSchedule._cache_lock:
+        MarketSchedule._open_cache.clear()
+
+    first_day = date(2026, 2, 19)
+    second_day = date(2026, 2, 20)
+    third_day = date(2026, 2, 23)
+
+    _ = MarketSchedule.is_market_open(first_day)
+    _ = MarketSchedule.is_market_open(second_day)
+    _ = MarketSchedule.is_market_open(first_day)
+    _ = MarketSchedule.is_market_open(third_day)
+
+    with MarketSchedule._cache_lock:
+        cached_days = list(MarketSchedule._open_cache.keys())
+
+    assert len(cached_days) == 2
+    assert first_day in cached_days
+    assert third_day in cached_days
+    assert second_day not in cached_days

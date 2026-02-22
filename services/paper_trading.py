@@ -11,6 +11,7 @@ import os
 import sqlite3
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Callable, Dict, TypeVar
 
@@ -39,6 +40,7 @@ from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
+    prune_rows_by_updated_at_if_needed,
     run_sqlite_with_retry,
 )
 
@@ -58,6 +60,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
     SQLITE_RETRY_ATTEMPTS = 2
     SQLITE_RETRY_DELAY_SECONDS = 0.03
     PRICE_CACHE_WARMUP_LIMIT = 5_000
+    PRICE_CACHE_MAX_ROWS = PRICE_CACHE_WARMUP_LIMIT
+    PRICE_CACHE_PRUNE_FORCE_INTERVAL = 64
+    PRICE_CACHE_KNOWN_TICKERS_MAX_ENTRIES = 8_192
     _RECOVERABLE_TABLE_NAMES = (
         "portfolio",
         "trade_log",
@@ -83,7 +88,13 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         self.is_running = False
         self.bg_thread = None
         self._initial_sync_wait_done = False
+        self._price_cache_schema_lock = threading.Lock()
+        self._price_cache_schema_condition = threading.Condition(self._price_cache_schema_lock)
+        self._price_cache_schema_init_in_progress = False
         self._price_cache_schema_ready = False
+        self._price_cache_prune_lock = threading.Lock()
+        self._price_cache_known_tickers: OrderedDict[str, None] = OrderedDict()
+        self._price_cache_save_counter = 0
 
         self._price_cache_schema_ready = self._init_db()
         if not self._price_cache_schema_ready:
@@ -111,6 +122,16 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             self.db_path,
             timeout_seconds=timeout_seconds,
             pragmas=self.SQLITE_SESSION_PRAGMAS,
+        )
+
+    def get_read_context(self):
+        """조회 전용 SQLite 연결을 반환한다."""
+        timeout_seconds = max(1, self.SQLITE_BUSY_TIMEOUT_MS // 1000)
+        return connect_sqlite(
+            self.db_path,
+            timeout_seconds=timeout_seconds,
+            pragmas=self.SQLITE_SESSION_PRAGMAS,
+            read_only=True,
         )
 
     @staticmethod
@@ -144,8 +165,21 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         )
 
     def _ensure_price_cache_table(self, force_recheck: bool = False) -> bool:
-        if self._price_cache_schema_ready and not force_recheck:
-            return True
+        with self._price_cache_schema_condition:
+            if force_recheck:
+                self._price_cache_schema_ready = False
+            elif self._price_cache_schema_ready:
+                return True
+
+            while self._price_cache_schema_init_in_progress:
+                self._price_cache_schema_condition.wait()
+                if force_recheck:
+                    self._price_cache_schema_ready = False
+                    continue
+                if self._price_cache_schema_ready:
+                    return True
+
+            self._price_cache_schema_init_in_progress = True
 
         def _ensure_schema() -> None:
             with self.get_context() as conn:
@@ -153,27 +187,60 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                 self._create_price_cache_schema(cursor)
                 conn.commit()
 
+        initialization_succeeded = False
         try:
             run_sqlite_with_retry(
                 _ensure_schema,
                 max_retries=self.SQLITE_RETRY_ATTEMPTS,
                 retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
             )
-            self._price_cache_schema_ready = True
+            initialization_succeeded = True
             return True
         except Exception as error:
-            self._price_cache_schema_ready = False
             logger.warning(f"Failed to ensure price cache table: {error}")
             return False
+        finally:
+            with self._price_cache_schema_condition:
+                self._price_cache_schema_init_in_progress = False
+                self._price_cache_schema_ready = bool(initialization_succeeded)
+                self._price_cache_schema_condition.notify_all()
 
     def _recover_paper_trading_schema(self) -> bool:
-        self._price_cache_schema_ready = False
+        with self._price_cache_schema_condition:
+            self._price_cache_schema_ready = False
+        self._reset_price_cache_prune_state()
         recovered = self._init_db(force_recheck=True)
         if not recovered:
             recovered = self._ensure_price_cache_table(force_recheck=True)
         if recovered:
-            self._price_cache_schema_ready = True
+            with self._price_cache_schema_condition:
+                self._price_cache_schema_ready = True
         return recovered
+
+    def _reset_price_cache_prune_state(self) -> None:
+        with self._price_cache_prune_lock:
+            self._price_cache_known_tickers.clear()
+            self._price_cache_save_counter = 0
+
+    def _mark_price_cache_ticker_seen(self, ticker: str) -> bool:
+        ticker_key = str(ticker).zfill(6)
+        with self._price_cache_prune_lock:
+            if ticker_key in self._price_cache_known_tickers:
+                self._price_cache_known_tickers.move_to_end(ticker_key)
+                return False
+
+            self._price_cache_known_tickers[ticker_key] = None
+            self._price_cache_known_tickers.move_to_end(ticker_key)
+            normalized_max_entries = max(1, int(self.PRICE_CACHE_KNOWN_TICKERS_MAX_ENTRIES))
+            while len(self._price_cache_known_tickers) > normalized_max_entries:
+                self._price_cache_known_tickers.popitem(last=False)
+            return True
+
+    def _should_force_price_cache_prune(self) -> bool:
+        with self._price_cache_prune_lock:
+            self._price_cache_save_counter += 1
+            normalized_interval = max(1, int(self.PRICE_CACHE_PRUNE_FORCE_INTERVAL))
+            return (self._price_cache_save_counter % normalized_interval) == 0
 
     def _execute_db_operation_with_schema_retry(
         self,
@@ -198,13 +265,12 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
 
     def _load_price_cache_from_db(self, *, _retried: bool = False) -> None:
         """SQLite에 저장된 최신 가격 캐시를 메모리로 워밍업한다."""
+        if not self._ensure_price_cache_table():
+            return
+
         def _load_rows() -> list[tuple[str, int]]:
-            with self.get_context() as conn:
+            with self.get_read_context() as conn:
                 cursor = conn.cursor()
-                if not self._price_cache_schema_ready:
-                    self._create_price_cache_schema(cursor)
-                    conn.commit()
-                    self._price_cache_schema_ready = True
                 has_holdings_row = cursor.execute(
                     """
                     SELECT 1
@@ -242,7 +308,8 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                 retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
             )
         except Exception as error:
-            self._price_cache_schema_ready = False
+            with self._price_cache_schema_condition:
+                self._price_cache_schema_ready = False
             if (not _retried) and self._is_missing_paper_trading_table_error(error):
                 if self._recover_paper_trading_schema():
                     self._load_price_cache_from_db(_retried=True)
@@ -264,6 +331,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         if not warmed_cache:
             return
 
+        for warmed_ticker in warmed_cache:
+            self._mark_price_cache_ticker_seen(warmed_ticker)
+
         with self.cache_lock:
             self.price_cache.update(warmed_cache)
 
@@ -274,6 +344,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
 
         updated_at = datetime.now().isoformat()
         upsert_rows: list[tuple[str, int, str]] = []
+        should_prune_for_new_ticker = False
         for ticker, price in prices.items():
             ticker_key = str(ticker).zfill(6)
             try:
@@ -283,16 +354,21 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             if price_int <= 0:
                 continue
             upsert_rows.append((ticker_key, price_int, updated_at))
+            should_prune_for_new_ticker = self._mark_price_cache_ticker_seen(ticker_key) or should_prune_for_new_ticker
 
         if not upsert_rows:
             return
 
+        if not self._ensure_price_cache_table():
+            return
+
+        should_force_prune = self._should_force_price_cache_prune()
+        should_prune_after_upsert = should_prune_for_new_ticker or should_force_prune
+
         def _upsert_rows() -> None:
+            max_rows = max(1, int(self.PRICE_CACHE_MAX_ROWS))
             with self.get_context() as conn:
                 cursor = conn.cursor()
-                if not self._price_cache_schema_ready:
-                    self._create_price_cache_schema(cursor)
-                    self._price_cache_schema_ready = True
                 cursor.executemany(
                     """
                     INSERT INTO price_cache (ticker, price, updated_at)
@@ -303,6 +379,12 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                     """,
                     upsert_rows,
                 )
+                if should_prune_after_upsert:
+                    prune_rows_by_updated_at_if_needed(
+                        cursor,
+                        table_name="price_cache",
+                        max_rows=max_rows,
+                    )
                 conn.commit()
 
         try:
@@ -312,7 +394,8 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                 retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
             )
         except Exception as error:
-            self._price_cache_schema_ready = False
+            with self._price_cache_schema_condition:
+                self._price_cache_schema_ready = False
             if (not _retried) and self._is_missing_paper_trading_table_error(error):
                 if self._recover_paper_trading_schema():
                     self._persist_price_cache(prices, _retried=True)
@@ -330,10 +413,13 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         logger.info("PaperTrading Price Sync Started")
 
     def _get_portfolio_tickers(self) -> list[str]:
-        with self.get_context() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT ticker FROM portfolio")
-            return [row[0] for row in cursor.fetchall()]
+        def _operation() -> list[str]:
+            with self.get_read_context() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT ticker FROM portfolio")
+                return [row[0] for row in cursor.fetchall()]
+
+        return self._execute_db_operation_with_schema_retry(_operation)
 
     def _fetch_prices_toss(self, session: Any, tickers: list[str]) -> Dict[str, int]:
         """Toss API에서 여러 종목 가격을 한 번에 조회한다."""
@@ -502,7 +588,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
     def get_portfolio_valuation(self):
         """Get portfolio with cached prices (Fast)"""
         return get_portfolio_valuation_impl(
-            get_context_fn=self.get_context,
+            get_read_context_fn=self.get_read_context,
             cache_lock=self.cache_lock,
             price_cache=self.price_cache,
             wait_for_initial_price_sync_fn=self._wait_for_initial_price_sync,

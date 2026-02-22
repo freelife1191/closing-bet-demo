@@ -8,6 +8,7 @@ import logging
 import os
 import time
 import uuid
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -30,6 +31,8 @@ from .storage_memory_manager import MemoryManager
 
 
 logger = logging.getLogger(__name__)
+_SANITIZED_MESSAGES_CACHE_MAX_ENTRIES = 2_048
+_SESSION_LIST_CACHE_MAX_ENTRIES = 256
 
 
 class HistoryManager:
@@ -43,8 +46,12 @@ class HistoryManager:
         self._legacy_snapshot_interval_seconds = self._resolve_legacy_snapshot_interval_seconds()
         self._last_legacy_snapshot_monotonic: float | None = None
         self._last_reload_signature: Any = None
-        self._sanitized_messages_cache: dict[str, tuple[tuple[str, int], list[dict[str, Any]]]] = {}
-        self._session_list_cache: dict[str | None, tuple[int, list[dict[str, Any]]]] = {}
+        self._sanitized_messages_cache: OrderedDict[
+            str, tuple[tuple[str, int], list[dict[str, Any]]]
+        ] = OrderedDict()
+        self._session_list_cache: OrderedDict[
+            str | None, tuple[int, list[dict[str, Any]]]
+        ] = OrderedDict()
         self._session_list_version = 0
         self._pending_changed_session_ids: set[str] = set()
         self._pending_deleted_session_ids: set[str] = set()
@@ -191,6 +198,16 @@ class HistoryManager:
         self._session_list_cache.clear()
         self._session_list_version += 1
 
+    @staticmethod
+    def _prune_ordered_cache(
+        cache: OrderedDict[Any, Any],
+        *,
+        max_entries: int,
+    ) -> None:
+        normalized_max_entries = max(1, int(max_entries))
+        while len(cache) > normalized_max_entries:
+            cache.popitem(last=False)
+
     def _mark_session_changed(self, session_id: str) -> None:
         if not session_id:
             return
@@ -333,6 +350,7 @@ class HistoryManager:
         self._reload_sessions()  # [Fix] Multi-worker Sync
         cached = self._session_list_cache.get(owner_id)
         if cached and cached[0] == self._session_list_version:
+            self._session_list_cache.move_to_end(owner_id)
             return list(cached[1])
 
         # Filter out empty or ephemeral-only sessions AND filter by owner
@@ -355,6 +373,11 @@ class HistoryManager:
             reverse=True,
         )
         self._session_list_cache[owner_id] = (self._session_list_version, sorted_sessions)
+        self._session_list_cache.move_to_end(owner_id)
+        self._prune_ordered_cache(
+            self._session_list_cache,
+            max_entries=_SESSION_LIST_CACHE_MAX_ENTRIES,
+        )
         return list(sorted_sessions)
 
     def add_message(self, session_id: str, role: str, message: str, save: bool = True) -> None:
@@ -408,10 +431,16 @@ class HistoryManager:
             )
             cached = self._sanitized_messages_cache.get(session_id)
             if cached and cached[0] == fingerprint:
+                self._sanitized_messages_cache.move_to_end(session_id)
                 return self._clone_sanitized_messages(cached[1])
 
             sanitized = sanitize_session_messages(session)
             self._sanitized_messages_cache[session_id] = (fingerprint, sanitized)
+            self._sanitized_messages_cache.move_to_end(session_id)
+            self._prune_ordered_cache(
+                self._sanitized_messages_cache,
+                max_entries=_SANITIZED_MESSAGES_CACHE_MAX_ENTRIES,
+            )
             return self._clone_sanitized_messages(sanitized)
         return []
 

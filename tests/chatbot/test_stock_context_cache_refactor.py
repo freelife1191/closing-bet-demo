@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
+import threading
+import time
 from pathlib import Path
 
 
@@ -21,8 +23,9 @@ import chatbot.stock_context_cache as stock_context_cache
 
 def _reset_cache_state() -> None:
     stock_context_cache.clear_result_text_cache()
-    with stock_context_cache._RESULT_TEXT_SQLITE_LOCK:
+    with stock_context_cache._RESULT_TEXT_SQLITE_READY_CONDITION:
         stock_context_cache._RESULT_TEXT_SQLITE_READY.clear()
+        stock_context_cache._RESULT_TEXT_SQLITE_INIT_IN_PROGRESS.clear()
 
 
 def test_save_cached_result_text_evicts_oldest_memory_entry(monkeypatch, tmp_path: Path):
@@ -61,6 +64,55 @@ def test_save_cached_result_text_evicts_oldest_memory_entry(monkeypatch, tmp_pat
     assert len(cache_keys) == 2
     assert all("000001" not in key for key in cache_keys)
     assert any("000002" in key for key in cache_keys)
+    assert any("000003" in key for key in cache_keys)
+
+
+def test_save_cached_result_text_keeps_recently_used_entry_on_eviction(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    monkeypatch.setattr(stock_context_cache, "_RESULT_TEXT_MEMORY_MAX_ENTRIES", 2)
+
+    source_path = tmp_path / "daily_prices.csv"
+    signature = (5, 6)
+
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="000001",
+        signature=signature,
+        payload_text="first",
+    )
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="000002",
+        signature=signature,
+        payload_text="second",
+    )
+
+    loaded = stock_context_cache.load_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="000001",
+        signature=signature,
+    )
+    assert loaded == "first"
+
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="000003",
+        signature=signature,
+        payload_text="third",
+    )
+
+    cache_keys = list(stock_context_cache._RESULT_TEXT_CACHE.keys())
+    assert len(cache_keys) == 2
+    assert any("000001" in key for key in cache_keys)
+    assert all("000002" not in key for key in cache_keys)
     assert any("000003" in key for key in cache_keys)
 
 
@@ -165,6 +217,74 @@ def test_save_cached_result_text_skips_delete_when_rows_within_limit(monkeypatch
     assert not any("DELETE FROM chatbot_stock_context_cache" in sql for sql in traced_sql)
 
 
+def test_save_cached_result_text_repeated_key_prunes_once(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    monkeypatch.setattr(stock_context_cache, "_RESULT_TEXT_SQLITE_PRUNE_FORCE_INTERVAL", 10_000)
+
+    prune_calls = {"count": 0}
+    original_prune = stock_context_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(stock_context_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    source_path = tmp_path / "daily_prices.csv"
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=(10, 20),
+        payload_text="cached payload #1",
+    )
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=(11, 21),
+        payload_text="cached payload #2",
+    )
+
+    assert prune_calls["count"] == 1
+
+
+def test_save_cached_result_text_forces_prune_on_configured_interval(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    monkeypatch.setattr(stock_context_cache, "_RESULT_TEXT_SQLITE_PRUNE_FORCE_INTERVAL", 2)
+
+    prune_calls = {"count": 0}
+    original_prune = stock_context_cache.prune_rows_by_updated_at_if_needed
+
+    def _counted_prune(*args, **kwargs):
+        prune_calls["count"] += 1
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(stock_context_cache, "prune_rows_by_updated_at_if_needed", _counted_prune)
+
+    source_path = tmp_path / "daily_prices.csv"
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=(10, 20),
+        payload_text="cached payload #1",
+    )
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=(11, 21),
+        payload_text="cached payload #2",
+    )
+
+    assert prune_calls["count"] == 2
+
+
 def test_load_cached_result_text_retries_on_transient_sqlite_lock(monkeypatch, tmp_path: Path):
     _reset_cache_state()
 
@@ -202,6 +322,148 @@ def test_load_cached_result_text_retries_on_transient_sqlite_lock(monkeypatch, t
     assert loaded == "cached payload"
 
 
+def test_load_cached_result_text_uses_read_only_connection(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+
+    source_path = tmp_path / "daily_prices.csv"
+    signature = (10, 20)
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+        payload_text="cached payload",
+    )
+    stock_context_cache.clear_result_text_cache()
+
+    read_only_flags: list[bool] = []
+    original_connect = stock_context_cache.connect_sqlite
+
+    def _traced_connect(*args, **kwargs):
+        if "read_only" in kwargs:
+            read_only_flags.append(bool(kwargs["read_only"]))
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(stock_context_cache, "connect_sqlite", _traced_connect)
+
+    loaded = stock_context_cache.load_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+    )
+    assert loaded == "cached payload"
+    assert True in read_only_flags
+
+
+def test_load_cached_result_text_reuses_alias_memory_cache_without_sqlite_query(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    monkeypatch.chdir(tmp_path)
+
+    signature = (10, 20)
+    relative_path = Path("daily_prices.csv")
+    absolute_path = (tmp_path / "daily_prices.csv").resolve()
+    data_dir = Path(".")
+
+    stock_context_cache.save_cached_result_text(
+        data_dir=data_dir,
+        path=relative_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+        payload_text="alias cached payload",
+    )
+
+    monkeypatch.setattr(
+        stock_context_cache,
+        "connect_sqlite",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should reuse stock context alias memory cache")
+        ),
+    )
+
+    loaded = stock_context_cache.load_cached_result_text(
+        data_dir=tmp_path,
+        path=absolute_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+    )
+    assert loaded == "alias cached payload"
+
+
+def test_load_cached_result_text_reads_legacy_sqlite_cache_key(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    monkeypatch.chdir(tmp_path)
+
+    signature = (21, 31)
+    absolute_path = (tmp_path / "daily_prices.csv").resolve()
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=absolute_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+        payload_text="legacy sqlite payload",
+    )
+
+    canonical_key = stock_context_cache._build_result_cache_key(
+        absolute_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+    )
+    legacy_key = "daily_prices.csv::stock_history::005930"
+    with sqlite3.connect(tmp_path / "runtime_cache.db") as conn:
+        conn.execute(
+            """
+            UPDATE chatbot_stock_context_cache
+            SET cache_key = ?
+            WHERE cache_key = ?
+            """,
+            (legacy_key, canonical_key),
+        )
+        conn.commit()
+
+    stock_context_cache.clear_result_text_cache()
+    loaded = stock_context_cache.load_cached_result_text(
+        data_dir=tmp_path,
+        path=absolute_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+    )
+    assert loaded == "legacy sqlite payload"
+
+
+def test_stock_context_cache_key_normalizes_relative_and_absolute_paths(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+
+    source_path = tmp_path / "daily_prices.csv"
+    signature = (10, 20)
+
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+        payload_text="cached payload",
+    )
+    stock_context_cache.clear_result_text_cache()
+
+    monkeypatch.chdir(tmp_path)
+    loaded = stock_context_cache.load_cached_result_text(
+        data_dir=tmp_path,
+        path=Path("daily_prices.csv"),
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+    )
+    assert loaded == "cached payload"
+
+
 def test_ensure_result_text_sqlite_cache_retries_on_transient_lock(monkeypatch, tmp_path: Path):
     _reset_cache_state()
     db_path = tmp_path / "runtime_cache.db"
@@ -219,3 +481,91 @@ def test_ensure_result_text_sqlite_cache_retries_on_transient_lock(monkeypatch, 
 
     assert stock_context_cache._ensure_result_text_sqlite_cache(db_path) is True
     assert failure_state["count"] == 1
+
+
+def test_ensure_result_text_sqlite_cache_single_flight_under_concurrency(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    db_path = tmp_path / "runtime_cache.db"
+
+    monkeypatch.setattr(stock_context_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _run_once(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+        return None
+
+    monkeypatch.setattr(stock_context_cache, "run_sqlite_with_retry", _run_once)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(stock_context_cache._ensure_result_text_sqlite_cache(db_path))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 1
+    assert results == {"first": True, "second": True}
+
+
+def test_ensure_result_text_sqlite_waiter_retries_after_initializer_failure(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    db_path = tmp_path / "runtime_cache.db"
+
+    monkeypatch.setattr(stock_context_cache, "sqlite_db_path_exists", lambda _path: True)
+
+    entered_event = threading.Event()
+    release_event = threading.Event()
+    run_calls = {"count": 0}
+
+    def _fail_then_succeed(_operation, *, max_retries, retry_delay_seconds):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            entered_event.set()
+            assert release_event.wait(timeout=2.0)
+            raise sqlite3.OperationalError("forced init failure")
+        return None
+
+    monkeypatch.setattr(stock_context_cache, "run_sqlite_with_retry", _fail_then_succeed)
+
+    results: dict[str, bool] = {}
+
+    def _worker(name: str) -> None:
+        results[name] = bool(stock_context_cache._ensure_result_text_sqlite_cache(db_path))
+
+    first_thread = threading.Thread(target=_worker, args=("first",))
+    second_thread = threading.Thread(target=_worker, args=("second",))
+
+    first_thread.start()
+    assert entered_event.wait(timeout=2.0)
+    second_thread.start()
+    time.sleep(0.05)
+    assert run_calls["count"] == 1
+
+    release_event.set()
+    first_thread.join(timeout=2.0)
+    second_thread.join(timeout=2.0)
+
+    assert first_thread.is_alive() is False
+    assert second_thread.is_alive() is False
+    assert run_calls["count"] == 2
+    assert results.get("first") is False
+    assert results.get("second") is True

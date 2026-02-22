@@ -12,6 +12,7 @@ import copy
 import logging
 import os
 import threading
+from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Callable
 
@@ -35,8 +36,9 @@ CHART_REQUIRED_COLUMNS = ["date", *CHART_NUMERIC_COLUMNS]
 _DATA_STATUS_CACHE: dict[
     tuple[tuple[str, str, tuple[int, int] | None], ...],
     dict[str, Any],
-] = {}
+] = OrderedDict()
 _DATA_STATUS_CACHE_LOCK = threading.Lock()
+_DATA_STATUS_CACHE_MAX_ENTRIES = 32
 
 
 def _file_signature(filepath: str) -> tuple[int, int] | None:
@@ -188,8 +190,9 @@ def build_data_status_payload(
     cache_signature = tuple(file_entries)
     with _DATA_STATUS_CACHE_LOCK:
         cached_payload = _DATA_STATUS_CACHE.get(cache_signature)
-    if cached_payload is not None:
-        return copy.deepcopy(cached_payload)
+        if cached_payload is not None:
+            _DATA_STATUS_CACHE.move_to_end(cache_signature)
+            return copy.deepcopy(cached_payload)
 
     latest_mtime: datetime | None = None
     for key, filepath, signature in file_entries:
@@ -240,8 +243,11 @@ def build_data_status_payload(
         app_logger.warning(f"Failed to enrich data status payload: {e}")
 
     with _DATA_STATUS_CACHE_LOCK:
-        _DATA_STATUS_CACHE.clear()
         _DATA_STATUS_CACHE[cache_signature] = copy.deepcopy(status)
+        _DATA_STATUS_CACHE.move_to_end(cache_signature)
+        normalized_max_entries = max(1, int(_DATA_STATUS_CACHE_MAX_ENTRIES))
+        while len(_DATA_STATUS_CACHE) > normalized_max_entries:
+            _DATA_STATUS_CACHE.popitem(last=False)
 
     return status
 
