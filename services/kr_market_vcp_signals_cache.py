@@ -18,7 +18,11 @@ from typing import Any
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 
@@ -30,6 +34,8 @@ _VCP_SIGNALS_SQLITE_READY: set[str] = set()
 _VCP_SIGNALS_SQLITE_READY_LOCK = threading.Lock()
 _VCP_SIGNALS_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
 _VCP_SIGNALS_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
+_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS = 2
+_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS = 0.03
 
 
 def _file_signature(path: str) -> tuple[int, int] | None:
@@ -51,15 +57,13 @@ def _signature_digest(signature: tuple[Any, ...]) -> tuple[str, str]:
 
 
 def _invalidate_vcp_signals_sqlite_ready(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
     with _VCP_SIGNALS_SQLITE_READY_LOCK:
-        _VCP_SIGNALS_SQLITE_READY.discard(db_path)
+        _VCP_SIGNALS_SQLITE_READY.discard(db_key)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "vcp_signals_payload_cache" in message
+    return is_sqlite_missing_table_error(error, table_names="vcp_signals_payload_cache")
 
 
 def _recover_vcp_signals_sqlite_schema(db_path: str, logger: Any) -> bool:
@@ -68,12 +72,14 @@ def _recover_vcp_signals_sqlite_schema(db_path: str, logger: Any) -> bool:
 
 
 def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
+    db_key = normalize_sqlite_db_key(db_path)
     with _VCP_SIGNALS_SQLITE_READY_LOCK:
-        if db_path in _VCP_SIGNALS_SQLITE_READY:
-            if os.path.exists(db_path):
+        if db_key in _VCP_SIGNALS_SQLITE_READY:
+            if sqlite_db_path_exists(db_path):
                 return True
-            _VCP_SIGNALS_SQLITE_READY.discard(db_path)
-        try:
+            _VCP_SIGNALS_SQLITE_READY.discard(db_key)
+
+        def _initialize_schema() -> None:
             with connect_sqlite(
                 db_path,
                 timeout_seconds=30,
@@ -97,7 +103,13 @@ def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
                     """
                 )
                 conn.commit()
-            _VCP_SIGNALS_SQLITE_READY.add(db_path)
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
+            )
+            _VCP_SIGNALS_SQLITE_READY.add(db_key)
             return True
         except Exception as error:
             if logger:
@@ -157,11 +169,19 @@ def get_cached_vcp_signals(
             return cursor.fetchone()
 
     try:
-        row = _query_payload()
+        row = run_sqlite_with_retry(
+            _query_payload,
+            max_retries=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_vcp_signals_sqlite_schema(db_path, logger):
             try:
-                row = _query_payload()
+                row = run_sqlite_with_retry(
+                    _query_payload,
+                    max_retries=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger:
                     logger.debug("Failed to load cached vcp signals payload after schema recovery: %s", retry_error)
@@ -253,11 +273,19 @@ def save_cached_vcp_signals(
             conn.commit()
 
     try:
-        _upsert_payload()
+        run_sqlite_with_retry(
+            _upsert_payload,
+            max_retries=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_vcp_signals_sqlite_schema(db_path, logger):
             try:
-                _upsert_payload()
+                run_sqlite_with_retry(
+                    _upsert_payload,
+                    max_retries=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger:
                     logger.debug("Failed to save cached vcp signals payload after schema recovery: %s", retry_error)

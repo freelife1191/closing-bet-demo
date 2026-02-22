@@ -7,6 +7,7 @@ KR Market Realtime Price Service 리팩토링 테스트
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import sys
 from types import SimpleNamespace
@@ -343,6 +344,30 @@ def test_fill_missing_prices_from_csv_stores_compact_latest_close_payload_json(t
     assert ", " not in payload_json
 
 
+def test_latest_close_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path):
+    latest_close_cache.clear_latest_close_map_cache()
+    latest_close_cache._LATEST_CLOSE_MAP_SQLITE_READY.clear()
+    monkeypatch.chdir(tmp_path)
+
+    connect_calls = {"count": 0}
+    original_connect = latest_close_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(latest_close_cache, "connect_sqlite", _counted_connect)
+
+    relative_db_path = "./runtime_cache.db"
+    absolute_db_path = str((tmp_path / "runtime_cache.db").resolve())
+
+    assert latest_close_cache._ensure_latest_close_map_sqlite(relative_db_path, logging.getLogger(__name__)) is True
+    assert latest_close_cache._ensure_latest_close_map_sqlite(absolute_db_path, logging.getLogger(__name__)) is True
+
+    assert connect_calls["count"] == 1
+    assert os.path.exists(absolute_db_path)
+
+
 def test_build_market_map_normalizes_ticker_and_drops_invalid_rows():
     def _load_csv_file(_name: str) -> pd.DataFrame:
         return pd.DataFrame(
@@ -540,6 +565,30 @@ def test_build_market_map_stores_compact_payload_json(tmp_path):
     payload_json = str(row[0])
     assert ": " not in payload_json
     assert ", " not in payload_json
+
+
+def test_market_map_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path):
+    clear_market_map_cache()
+    market_map_cache._MARKET_MAP_SQLITE_READY.clear()
+    monkeypatch.chdir(tmp_path)
+
+    connect_calls = {"count": 0}
+    original_connect = market_map_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(market_map_cache, "connect_sqlite", _counted_connect)
+
+    relative_db_path = "./runtime_cache.db"
+    absolute_db_path = str((tmp_path / "runtime_cache.db").resolve())
+
+    assert market_map_cache._ensure_market_map_sqlite(relative_db_path, logging.getLogger(__name__)) is True
+    assert market_map_cache._ensure_market_map_sqlite(absolute_db_path, logging.getLogger(__name__)) is True
+
+    assert connect_calls["count"] == 1
+    assert os.path.exists(absolute_db_path)
 
 
 def test_fetch_naver_missing_prices_reuses_session_per_worker(monkeypatch):

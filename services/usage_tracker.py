@@ -9,15 +9,21 @@ Usage Tracker Service
 
 import os
 import logging
-import sqlite3
 from datetime import datetime
 
-from services.sqlite_utils import build_sqlite_pragmas, connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    is_sqlite_missing_table_error,
+    run_sqlite_with_retry,
+)
 
 logger = logging.getLogger(__name__)
 
 class UsageTracker:
     SQLITE_BUSY_TIMEOUT_MS = 30_000
+    SQLITE_RETRY_ATTEMPTS = 2
+    SQLITE_RETRY_DELAY_SECONDS = 0.03
     SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(
         busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS,
     )
@@ -47,7 +53,7 @@ class UsageTracker:
 
     def _init_db(self):
         """Initialize SQLite database table"""
-        try:
+        def _initialize() -> None:
             with connect_sqlite(
                 self.db_path,
                 timeout_seconds=max(1, self.SQLITE_BUSY_TIMEOUT_MS // 1000),
@@ -68,15 +74,19 @@ class UsageTracker:
                     '''
                 )
                 conn.commit()
+
+        try:
+            run_sqlite_with_retry(
+                _initialize,
+                max_retries=self.SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
+            )
         except Exception as e:
             logger.error(f"Failed to initialize usage db: {e}")
 
     @staticmethod
     def _is_missing_usage_table_error(error: Exception) -> bool:
-        if not isinstance(error, sqlite3.OperationalError):
-            return False
-        message = str(error).lower()
-        return "no such table" in message and "usage_log" in message
+        return is_sqlite_missing_table_error(error, table_names="usage_log")
 
     def check_and_increment(self, email: str, *, _retried: bool = False) -> bool:
         """
@@ -87,8 +97,9 @@ class UsageTracker:
         if not normalized_email:
             return False
 
-        try:
-            now = datetime.now().isoformat()
+        now = datetime.now().isoformat()
+
+        def _check_and_increment() -> bool:
             with self._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -106,6 +117,16 @@ class UsageTracker:
                     return False
 
                 conn.commit()
+            return True
+
+        try:
+            allowed = run_sqlite_with_retry(
+                _check_and_increment,
+                max_retries=self.SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
+            )
+            if not allowed:
+                return False
 
             logger.info(f"User {normalized_email} usage incremented (limit={self.limit})")
             return True
@@ -124,12 +145,20 @@ class UsageTracker:
         normalized_email = self._normalize_email(email)
         if not normalized_email:
             return 0
-        try:
+
+        def _load_usage() -> int:
             with self._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute('SELECT count FROM usage_log WHERE email = ?', (normalized_email,))
                 row = cursor.fetchone()
-            return row[0] if row else 0
+            return int(row[0]) if row else 0
+
+        try:
+            return run_sqlite_with_retry(
+                _load_usage,
+                max_retries=self.SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
+            )
         except Exception as e:
             if (not _retried) and self._is_missing_usage_table_error(e):
                 self._init_db()

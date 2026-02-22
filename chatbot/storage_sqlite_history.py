@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import sqlite3
@@ -13,18 +14,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    connect_sqlite,
+    is_sqlite_missing_table_error,
+    run_sqlite_with_retry,
+)
 
 from .storage_sqlite_common import _SQLITE_PRAGMAS, ensure_chatbot_storage_schema
 
+_SQLITE_TIMEOUT_SECONDS = 30
+_SQLITE_RETRY_ATTEMPTS = 2
+_SQLITE_RETRY_DELAY_SECONDS = 0.03
+
 
 def _is_missing_table_error(error: Exception, *, table_names: tuple[str, ...]) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    if "no such table" not in message:
-        return False
-    return any(table_name.lower() in message for table_name in table_names)
+    return is_sqlite_missing_table_error(error, table_names=table_names)
 
 
 def _serialize_message_parts(parts: Any) -> str:
@@ -58,20 +62,29 @@ def _upsert_session_metadata_cursor(
     updated_at: str,
     model_name: str,
     owner_id: Any,
+    messages_hash: str,
 ) -> None:
     cursor.execute(
         """
         INSERT INTO chatbot_sessions (
-            session_id, title, created_at, updated_at, model_name, owner_id
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            session_id, title, created_at, updated_at, model_name, owner_id, messages_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET
             title=excluded.title,
             created_at=excluded.created_at,
             updated_at=excluded.updated_at,
             model_name=excluded.model_name,
-            owner_id=excluded.owner_id
+            owner_id=excluded.owner_id,
+            messages_hash=excluded.messages_hash
+        WHERE
+            chatbot_sessions.title IS NOT excluded.title
+            OR chatbot_sessions.created_at IS NOT excluded.created_at
+            OR chatbot_sessions.updated_at IS NOT excluded.updated_at
+            OR chatbot_sessions.model_name IS NOT excluded.model_name
+            OR chatbot_sessions.owner_id IS NOT excluded.owner_id
+            OR chatbot_sessions.messages_hash IS NOT excluded.messages_hash
         """,
-        (session_id, title, created_at, updated_at, model_name, owner_id),
+        (session_id, title, created_at, updated_at, model_name, owner_id, messages_hash),
     )
 
 
@@ -129,6 +142,38 @@ def _clear_all_sessions_cursor(*, cursor: sqlite3.Cursor) -> None:
     cursor.execute("DELETE FROM chatbot_sessions")
 
 
+def _delete_stale_sessions_cursor(
+    *,
+    cursor: sqlite3.Cursor,
+    active_session_ids: list[str],
+) -> None:
+    if not active_session_ids:
+        _clear_all_sessions_cursor(cursor=cursor)
+        return
+
+    cursor.execute(
+        """
+        CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_session_ids (
+            session_id TEXT PRIMARY KEY
+        )
+        """
+    )
+    cursor.execute("DELETE FROM _tmp_chatbot_session_ids")
+    cursor.executemany(
+        "INSERT OR IGNORE INTO _tmp_chatbot_session_ids(session_id) VALUES (?)",
+        [(session_id,) for session_id in active_session_ids],
+    )
+    cursor.execute(
+        """
+        DELETE FROM chatbot_sessions
+        WHERE session_id NOT IN (
+            SELECT session_id
+            FROM _tmp_chatbot_session_ids
+        )
+        """
+    )
+
+
 def _load_last_message_row_cursor(
     *,
     cursor: sqlite3.Cursor,
@@ -184,6 +229,83 @@ def _decode_message_parts(parts_json: str) -> list[Any]:
     return [{"text": str(parts_json)}]
 
 
+def _ensure_message_table_accessible_cursor(*, cursor: sqlite3.Cursor) -> None:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM chatbot_messages
+        LIMIT 1
+        """
+    ).fetchone()
+
+
+def _is_same_message_tail_snapshot(
+    *,
+    cursor: sqlite3.Cursor,
+    session_id: str,
+    message_rows: list[tuple[int, str, str, str]],
+) -> bool:
+    if not message_rows:
+        return _load_last_message_row_cursor(cursor=cursor, session_id=session_id) is None
+
+    existing_last = _load_last_message_row_cursor(
+        cursor=cursor,
+        session_id=session_id,
+    )
+    if existing_last is None:
+        return False
+    existing_count = int(existing_last[0]) + 1
+    if existing_count != len(message_rows):
+        return False
+
+    _, last_role, last_parts_json, last_timestamp = message_rows[-1]
+    return (
+        existing_last[1] == last_role
+        and existing_last[2] == last_parts_json
+        and existing_last[3] == last_timestamp
+    )
+
+
+def _normalize_owner_id(owner_id: Any) -> str | None:
+    if owner_id is None:
+        return None
+    return str(owner_id)
+
+
+def _message_rows_hash(message_rows: list[tuple[int, str, str, str]]) -> str:
+    serialized = json.dumps(
+        message_rows,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _load_existing_session_metadata_cursor(
+    *,
+    cursor: sqlite3.Cursor,
+    session_id: str,
+) -> tuple[str, str, str, str, str | None, str] | None:
+    row = cursor.execute(
+        """
+        SELECT title, created_at, updated_at, model_name, owner_id, messages_hash
+        FROM chatbot_sessions
+        WHERE session_id = ?
+        """,
+        (session_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return (
+        str(row[0]),
+        str(row[1]),
+        str(row[2]),
+        str(row[3]),
+        _normalize_owner_id(row[4]),
+        str(row[5] or ""),
+    )
+
+
 def load_history_sessions_from_sqlite(
     db_path: Path,
     logger: logging.Logger,
@@ -194,55 +316,67 @@ def load_history_sessions_from_sqlite(
         return None
     if not ensure_chatbot_storage_schema(db_path, logger):
         return None
+    db_path_text = str(db_path)
 
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            conn.row_factory = sqlite3.Row
+        def _load_sessions() -> dict[str, dict[str, Any]]:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                conn.row_factory = sqlite3.Row
 
-            session_rows = conn.execute(
-                """
-                SELECT session_id, title, created_at, updated_at, model_name, owner_id
-                FROM chatbot_sessions
-                ORDER BY updated_at DESC, session_id ASC
-                """
-            ).fetchall()
+                session_rows = conn.execute(
+                    """
+                    SELECT session_id, title, created_at, updated_at, model_name, owner_id
+                    FROM chatbot_sessions
+                    ORDER BY updated_at DESC, session_id ASC
+                    """
+                ).fetchall()
 
-            sessions: dict[str, dict[str, Any]] = {}
-            for row in session_rows:
-                session_id = str(row["session_id"])
-                sessions[session_id] = {
-                    "id": session_id,
-                    "title": row["title"],
-                    "messages": [],
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
-                    "model": row["model_name"],
-                    "owner_id": row["owner_id"],
-                }
-
-            if not sessions:
-                return {}
-
-            message_rows = conn.execute(
-                """
-                SELECT session_id, message_index, role, parts_json, timestamp
-                FROM chatbot_messages
-                ORDER BY session_id ASC, message_index ASC
-                """
-            ).fetchall()
-            for row in message_rows:
-                session = sessions.get(str(row["session_id"]))
-                if session is None:
-                    continue
-                session["messages"].append(
-                    {
-                        "role": row["role"],
-                        "parts": _decode_message_parts(row["parts_json"]),
-                        "timestamp": row["timestamp"],
+                sessions: dict[str, dict[str, Any]] = {}
+                for row in session_rows:
+                    session_id = str(row["session_id"])
+                    sessions[session_id] = {
+                        "id": session_id,
+                        "title": row["title"],
+                        "messages": [],
+                        "created_at": row["created_at"],
+                        "updated_at": row["updated_at"],
+                        "model": row["model_name"],
+                        "owner_id": row["owner_id"],
                     }
-                )
 
-            return sessions
+                if not sessions:
+                    return {}
+
+                message_rows = conn.execute(
+                    """
+                    SELECT session_id, message_index, role, parts_json, timestamp
+                    FROM chatbot_messages
+                    ORDER BY session_id ASC, message_index ASC
+                    """
+                ).fetchall()
+                for row in message_rows:
+                    session = sessions.get(str(row["session_id"]))
+                    if session is None:
+                        continue
+                    session["messages"].append(
+                        {
+                            "role": row["role"],
+                            "parts": _decode_message_parts(row["parts_json"]),
+                            "timestamp": row["timestamp"],
+                        }
+                    )
+
+                return sessions
+
+        return run_sqlite_with_retry(
+            _load_sessions,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if (not _retried) and _is_missing_table_error(
             error,
@@ -262,36 +396,6 @@ def load_history_sessions_from_sqlite(
         return None
 
 
-def _upsert_history_session_with_messages_cursor(
-    *,
-    cursor: sqlite3.Cursor,
-    raw_session_id: str,
-    raw_session: Dict[str, Any],
-) -> None:
-    session_id = str(raw_session.get("id") or raw_session_id)
-    title = str(raw_session.get("title") or "새로운 대화")
-    created_at = str(raw_session.get("created_at") or datetime.now().isoformat())
-    updated_at = str(raw_session.get("updated_at") or created_at)
-    model_name = str(raw_session.get("model") or "gemini-2.0-flash-lite")
-    owner_id = raw_session.get("owner_id")
-    message_rows = _build_message_rows(raw_session.get("messages", []), updated_at)
-
-    _upsert_session_metadata_cursor(
-        cursor=cursor,
-        session_id=session_id,
-        title=title,
-        created_at=created_at,
-        updated_at=updated_at,
-        model_name=model_name,
-        owner_id=owner_id,
-    )
-    _insert_message_rows_cursor(
-        cursor=cursor,
-        session_id=session_id,
-        message_rows=message_rows,
-    )
-
-
 def _upsert_history_session_with_messages_delta_cursor(
     *,
     cursor: sqlite3.Cursor,
@@ -305,6 +409,40 @@ def _upsert_history_session_with_messages_delta_cursor(
     model_name = str(raw_session.get("model") or "gemini-2.0-flash-lite")
     owner_id = raw_session.get("owner_id")
     message_rows = _build_message_rows(raw_session.get("messages", []), updated_at)
+    messages_hash = _message_rows_hash(message_rows)
+    normalized_owner_id = _normalize_owner_id(owner_id)
+    existing_metadata = _load_existing_session_metadata_cursor(
+        cursor=cursor,
+        session_id=session_id,
+    )
+    has_same_messages = False
+
+    if existing_metadata is not None:
+        (
+            existing_title,
+            existing_created_at,
+            existing_updated_at,
+            existing_model_name,
+            existing_owner_id,
+            existing_messages_hash,
+        ) = existing_metadata
+        has_same_messages = (
+            existing_messages_hash == messages_hash
+            and _is_same_message_tail_snapshot(
+                cursor=cursor,
+                session_id=session_id,
+                message_rows=message_rows,
+            )
+        )
+        if (
+            existing_title == title
+            and existing_created_at == created_at
+            and existing_updated_at == updated_at
+            and existing_model_name == model_name
+            and existing_owner_id == normalized_owner_id
+            and has_same_messages
+        ):
+            return
 
     _upsert_session_metadata_cursor(
         cursor=cursor,
@@ -314,7 +452,10 @@ def _upsert_history_session_with_messages_delta_cursor(
         updated_at=updated_at,
         model_name=model_name,
         owner_id=owner_id,
+        messages_hash=messages_hash,
     )
+    if has_same_messages:
+        return
 
     is_append_only, existing_count = _is_append_only_message_update(
         cursor=cursor,
@@ -345,21 +486,41 @@ def save_history_sessions_to_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
 
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            cursor = conn.cursor()
-            _clear_all_sessions_cursor(cursor=cursor)
+        def _save_sessions() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                _ensure_message_table_accessible_cursor(cursor=cursor)
+                active_session_ids: list[str] = []
 
-            for raw_session_id, raw_session in sessions.items():
-                if not isinstance(raw_session, dict):
-                    continue
-                _upsert_history_session_with_messages_cursor(
+                for raw_session_id, raw_session in sessions.items():
+                    if not isinstance(raw_session, dict):
+                        continue
+                    normalized_session_id = str(raw_session.get("id") or raw_session_id)
+                    active_session_ids.append(normalized_session_id)
+                    _upsert_history_session_with_messages_delta_cursor(
+                        cursor=cursor,
+                        raw_session_id=normalized_session_id,
+                        raw_session=raw_session,
+                    )
+
+                _delete_stale_sessions_cursor(
                     cursor=cursor,
-                    raw_session_id=str(raw_session_id),
-                    raw_session=raw_session,
+                    active_session_ids=active_session_ids,
                 )
-            conn.commit()
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _save_sessions,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(
@@ -390,20 +551,33 @@ def upsert_history_session_with_messages(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
 
     try:
         raw_session_id = str(session.get("id") or "")
         if not raw_session_id:
             return False
 
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            cursor = conn.cursor()
-            _upsert_history_session_with_messages_delta_cursor(
-                cursor=cursor,
-                raw_session_id=raw_session_id,
-                raw_session=session,
-            )
-            conn.commit()
+        def _upsert_session() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                _ensure_message_table_accessible_cursor(cursor=cursor)
+                _upsert_history_session_with_messages_delta_cursor(
+                    cursor=cursor,
+                    raw_session_id=raw_session_id,
+                    raw_session=session,
+                )
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _upsert_session,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(
@@ -437,35 +611,50 @@ def apply_history_session_deltas_in_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
 
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            cursor = conn.cursor()
-            if clear_all:
-                _clear_all_sessions_cursor(cursor=cursor)
+        def _apply_deltas() -> bool:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                _ensure_message_table_accessible_cursor(cursor=cursor)
+                if clear_all:
+                    _clear_all_sessions_cursor(cursor=cursor)
+                    conn.commit()
+                    return True
+
+                if deleted_session_ids:
+                    cursor.executemany(
+                        """
+                        DELETE FROM chatbot_sessions
+                        WHERE session_id = ?
+                        """,
+                        [(str(item),) for item in sorted(deleted_session_ids)],
+                    )
+
+                for session_id in sorted(changed_session_ids):
+                    raw_session = sessions.get(session_id)
+                    if not isinstance(raw_session, dict):
+                        continue
+                    _upsert_history_session_with_messages_delta_cursor(
+                        cursor=cursor,
+                        raw_session_id=str(session_id),
+                        raw_session=raw_session,
+                    )
                 conn.commit()
-                return True
+            return True
 
-            if deleted_session_ids:
-                cursor.executemany(
-                    """
-                    DELETE FROM chatbot_sessions
-                    WHERE session_id = ?
-                    """,
-                    [(str(item),) for item in sorted(deleted_session_ids)],
-                )
-
-            for session_id in sorted(changed_session_ids):
-                raw_session = sessions.get(session_id)
-                if not isinstance(raw_session, dict):
-                    continue
-                _upsert_history_session_with_messages_delta_cursor(
-                    cursor=cursor,
-                    raw_session_id=str(session_id),
-                    raw_session=raw_session,
-                )
-            conn.commit()
-        return True
+        return bool(
+            run_sqlite_with_retry(
+                _apply_deltas,
+                max_retries=_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+            )
+        )
     except Exception as error:
         if (not _retried) and _is_missing_table_error(
             error,
@@ -498,16 +687,28 @@ def delete_history_session_from_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            conn.execute(
-                """
-                DELETE FROM chatbot_sessions
-                WHERE session_id = ?
-                """,
-                (session_id,),
-            )
-            conn.commit()
+        def _delete_session() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                conn.execute(
+                    """
+                    DELETE FROM chatbot_sessions
+                    WHERE session_id = ?
+                    """,
+                    (session_id,),
+                )
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _delete_session,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(
@@ -537,10 +738,22 @@ def clear_history_sessions_in_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            _clear_all_sessions_cursor(cursor=conn.cursor())
-            conn.commit()
+        def _clear_sessions() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                _clear_all_sessions_cursor(cursor=conn.cursor())
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _clear_sessions,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(

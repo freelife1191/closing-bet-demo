@@ -162,3 +162,63 @@ def test_save_stock_map_cache_skips_delete_when_rows_within_limit(monkeypatch, t
     )
 
     assert not any("DELETE FROM chatbot_stock_map_cache" in sql for sql in traced_sql)
+
+
+def test_load_stock_map_cache_retries_on_transient_sqlite_lock(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    logger = _logger_stub()
+    source_path = tmp_path / "stocks_retry.csv"
+    signature = (10, 20)
+
+    runtime_stock_map_cache.save_stock_map_cache(
+        data_dir=tmp_path,
+        source_path=source_path,
+        signature=signature,
+        stock_map={"삼성전자": "005930"},
+        ticker_map={"005930": "삼성전자"},
+        logger=logger,
+    )
+    runtime_stock_map_cache.clear_stock_map_cache()
+
+    original_connect = runtime_stock_map_cache.connect_sqlite
+    failure_state = {"failed": False}
+
+    def _flaky_connect(*args, **kwargs):
+        if not failure_state["failed"]:
+            failure_state["failed"] = True
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(runtime_stock_map_cache, "connect_sqlite", _flaky_connect)
+    loaded = runtime_stock_map_cache.load_stock_map_cache(
+        data_dir=tmp_path,
+        source_path=source_path,
+        signature=signature,
+        logger=logger,
+    )
+
+    assert failure_state["failed"] is True
+    assert loaded is not None
+    stock_map, ticker_map = loaded
+    assert stock_map["삼성전자"] == "005930"
+    assert ticker_map["005930"] == "삼성전자"
+
+
+def test_ensure_stock_map_sqlite_retries_on_transient_lock(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    logger = _logger_stub()
+    db_path = tmp_path / "runtime_cache.db"
+
+    original_connect = runtime_stock_map_cache.connect_sqlite
+    failure_state = {"count": 0}
+
+    def _flaky_connect(*args, **kwargs):
+        if failure_state["count"] == 0:
+            failure_state["count"] += 1
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(runtime_stock_map_cache, "connect_sqlite", _flaky_connect)
+
+    assert runtime_stock_map_cache._ensure_stock_map_sqlite(db_path, logger) is True
+    assert failure_state["count"] == 1

@@ -21,7 +21,11 @@ import pandas as pd
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 
@@ -32,6 +36,8 @@ _SOURCE_SQLITE_READY_LOCK = threading.Lock()
 _SOURCE_SQLITE_MAX_ROWS = 128
 _SOURCE_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
 _SOURCE_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=30_000)
+_SOURCE_SQLITE_RETRY_ATTEMPTS = 2
+_SOURCE_SQLITE_RETRY_DELAY_SECONDS = 0.03
 
 
 def _file_signature(path: str) -> tuple[int, int] | None:
@@ -51,15 +57,13 @@ def _resolve_db_path(path: str) -> str:
 
 
 def _invalidate_source_cache_sqlite_ready(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
     with _SOURCE_SQLITE_READY_LOCK:
-        _SOURCE_SQLITE_READY.discard(db_path)
+        _SOURCE_SQLITE_READY.discard(db_key)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "signal_tracker_source_cache" in message
+    return is_sqlite_missing_table_error(error, table_names="signal_tracker_source_cache")
 
 
 def _recover_source_cache_sqlite_schema(db_path: str, logger: logging.Logger | None) -> bool:
@@ -90,13 +94,14 @@ def clear_signal_tracker_source_cache(*, reset_sqlite_state: bool = False) -> No
 
 
 def _ensure_source_cache_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
+    db_key = normalize_sqlite_db_key(db_path)
     with _SOURCE_SQLITE_READY_LOCK:
-        if db_path in _SOURCE_SQLITE_READY:
-            if os.path.exists(db_path):
+        if db_key in _SOURCE_SQLITE_READY:
+            if sqlite_db_path_exists(db_path):
                 return True
-            _SOURCE_SQLITE_READY.discard(db_path)
+            _SOURCE_SQLITE_READY.discard(db_key)
 
-        try:
+        def _initialize_schema() -> None:
             with connect_sqlite(
                 db_path,
                 timeout_seconds=30,
@@ -125,7 +130,14 @@ def _ensure_source_cache_sqlite(db_path: str, logger: logging.Logger | None) -> 
                     """
                 )
                 conn.commit()
-            _SOURCE_SQLITE_READY.add(db_path)
+
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_SOURCE_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+            )
+            _SOURCE_SQLITE_READY.add(db_key)
             return True
         except Exception as error:
             if logger is not None:
@@ -145,6 +157,7 @@ def _load_from_sqlite(
     db_path = _resolve_db_path(path)
     if not _ensure_source_cache_sqlite(db_path, logger):
         return None
+    normalized_path = str(path)
 
     def _query_row() -> tuple[Any, ...] | None:
         with connect_sqlite(
@@ -166,7 +179,7 @@ def _load_from_sqlite(
                 LIMIT 1
                 """,
                 (
-                    path,
+                    normalized_path,
                     cache_kind,
                     usecols_signature,
                     dtype_signature,
@@ -177,11 +190,19 @@ def _load_from_sqlite(
             return cursor.fetchone()
 
     try:
-        row = _query_row()
+        row = run_sqlite_with_retry(
+            _query_row,
+            max_retries=_SOURCE_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_source_cache_sqlite_schema(db_path, logger):
             try:
-                row = _query_row()
+                row = run_sqlite_with_retry(
+                    _query_row,
+                    max_retries=_SOURCE_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug(
@@ -223,6 +244,7 @@ def _save_to_sqlite(
     db_path = _resolve_db_path(path)
     if not _ensure_source_cache_sqlite(db_path, logger):
         return
+    normalized_path = str(path)
 
     try:
         payload_json = payload.to_json(orient="split", force_ascii=False, date_format="iso")
@@ -267,7 +289,7 @@ def _save_to_sqlite(
                     updated_at = excluded.updated_at
                 """,
                 (
-                    path,
+                    normalized_path,
                     cache_kind,
                     usecols_signature,
                     dtype_signature,
@@ -281,11 +303,19 @@ def _save_to_sqlite(
             conn.commit()
 
     try:
-        _upsert_payload()
+        run_sqlite_with_retry(
+            _upsert_payload,
+            max_retries=_SOURCE_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_source_cache_sqlite_schema(db_path, logger):
             try:
-                _upsert_payload()
+                run_sqlite_with_retry(
+                    _upsert_payload,
+                    max_retries=_SOURCE_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug(

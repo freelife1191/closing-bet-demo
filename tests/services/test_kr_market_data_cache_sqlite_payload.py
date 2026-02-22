@@ -6,6 +6,11 @@ KR Market Data Cache SQLite payload helper 회귀 테스트
 
 from __future__ import annotations
 
+import logging
+import os
+import threading
+import time
+
 import pandas as pd
 
 import services.kr_market_data_cache_sqlite_payload as sqlite_payload_cache
@@ -13,8 +18,12 @@ from services.sqlite_utils import connect_sqlite
 
 
 def _reset_sqlite_payload_state() -> None:
-    sqlite_payload_cache.JSON_PAYLOAD_SQLITE_READY.clear()
-    sqlite_payload_cache.CSV_PAYLOAD_SQLITE_READY.clear()
+    with sqlite_payload_cache.JSON_PAYLOAD_SQLITE_READY_LOCK:
+        sqlite_payload_cache.JSON_PAYLOAD_SQLITE_READY.clear()
+        sqlite_payload_cache.JSON_PAYLOAD_SQLITE_IN_PROGRESS.clear()
+    with sqlite_payload_cache.CSV_PAYLOAD_SQLITE_READY_LOCK:
+        sqlite_payload_cache.CSV_PAYLOAD_SQLITE_READY.clear()
+        sqlite_payload_cache.CSV_PAYLOAD_SQLITE_IN_PROGRESS.clear()
 
 
 def test_json_payload_sqlite_roundtrip_and_delete(tmp_path):
@@ -304,3 +313,117 @@ def test_csv_payload_sqlite_skips_delete_when_row_count_within_limit(tmp_path, m
     )
 
     assert not any("DELETE FROM csv_file_payload_cache" in sql for sql in traced_sql)
+
+
+def test_json_payload_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_path):
+    _reset_sqlite_payload_state()
+    db_path = tmp_path / "runtime_cache.db"
+    logger = logging.getLogger("test-json-payload-normalized-key")
+    connect_calls = {"count": 0}
+    original_connect = sqlite_payload_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite_payload_cache, "connect_sqlite", _counted_connect)
+
+    assert sqlite_payload_cache._ensure_json_payload_sqlite_cache(str(db_path), logger) is True
+
+    monkeypatch.chdir(tmp_path)
+    relative_db_path = os.path.relpath(str(db_path), str(tmp_path))
+    assert sqlite_payload_cache._ensure_json_payload_sqlite_cache(relative_db_path, logger) is True
+
+    assert connect_calls["count"] == 1
+
+
+def test_json_payload_sqlite_cache_deduplicates_concurrent_initialization(monkeypatch, tmp_path):
+    _reset_sqlite_payload_state()
+    db_path = str(tmp_path / "runtime_cache.db")
+    logger = logging.getLogger("test-json-payload-concurrent-init")
+    connect_calls = {"count": 0}
+    connect_calls_lock = threading.Lock()
+    first_connect_entered = threading.Event()
+    original_connect = sqlite_payload_cache.connect_sqlite
+
+    def _slow_counted_connect(*args, **kwargs):
+        with connect_calls_lock:
+            connect_calls["count"] += 1
+            call_index = connect_calls["count"]
+        if call_index == 1:
+            first_connect_entered.set()
+            time.sleep(0.05)
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite_payload_cache, "connect_sqlite", _slow_counted_connect)
+
+    first_result: list[bool] = []
+    second_result: list[bool] = []
+
+    thread_first = threading.Thread(
+        target=lambda: first_result.append(
+            sqlite_payload_cache._ensure_json_payload_sqlite_cache(db_path, logger)
+        )
+    )
+    thread_first.start()
+    assert first_connect_entered.wait(timeout=1.0)
+
+    thread_second = threading.Thread(
+        target=lambda: second_result.append(
+            sqlite_payload_cache._ensure_json_payload_sqlite_cache(db_path, logger)
+        )
+    )
+    thread_second.start()
+
+    thread_first.join(timeout=2.0)
+    thread_second.join(timeout=2.0)
+
+    assert first_result == [True]
+    assert second_result == [True]
+    assert connect_calls["count"] == 1
+
+
+def test_csv_payload_sqlite_cache_deduplicates_concurrent_initialization(monkeypatch, tmp_path):
+    _reset_sqlite_payload_state()
+    db_path = str(tmp_path / "runtime_cache.db")
+    logger = logging.getLogger("test-csv-payload-concurrent-init")
+    connect_calls = {"count": 0}
+    connect_calls_lock = threading.Lock()
+    first_connect_entered = threading.Event()
+    original_connect = sqlite_payload_cache.connect_sqlite
+
+    def _slow_counted_connect(*args, **kwargs):
+        with connect_calls_lock:
+            connect_calls["count"] += 1
+            call_index = connect_calls["count"]
+        if call_index == 1:
+            first_connect_entered.set()
+            time.sleep(0.05)
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite_payload_cache, "connect_sqlite", _slow_counted_connect)
+
+    first_result: list[bool] = []
+    second_result: list[bool] = []
+
+    thread_first = threading.Thread(
+        target=lambda: first_result.append(
+            sqlite_payload_cache._ensure_csv_payload_sqlite_cache(db_path, logger)
+        )
+    )
+    thread_first.start()
+    assert first_connect_entered.wait(timeout=1.0)
+
+    thread_second = threading.Thread(
+        target=lambda: second_result.append(
+            sqlite_payload_cache._ensure_csv_payload_sqlite_cache(db_path, logger)
+        )
+    )
+    thread_second.start()
+
+    thread_first.join(timeout=2.0)
+    thread_second.join(timeout=2.0)
+
+    assert first_result == [True]
+    assert second_result == [True]
+    assert connect_calls["count"] == 1

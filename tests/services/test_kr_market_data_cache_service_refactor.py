@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import json
+import os
 
 import pandas as pd
 
@@ -312,6 +313,33 @@ def test_load_jongga_result_payloads_stores_compact_sqlite_payload_json(monkeypa
     payload_json = str(row[0])
     assert ": " not in payload_json
     assert ", " not in payload_json
+
+
+def test_jongga_payload_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    cache_jongga._JONGGA_PAYLOAD_SQLITE_READY.clear()
+    monkeypatch.chdir(tmp_path)
+
+    connect_calls = {"count": 0}
+    original_connect = cache_jongga.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(cache_jongga, "connect_sqlite", _counted_connect)
+
+    relative_db_path = "./runtime_cache.db"
+    absolute_db_path = str((tmp_path / "runtime_cache.db").resolve())
+
+    monkeypatch.setattr(cache_jongga, "_JONGGA_PAYLOAD_SQLITE_DB_PATH", relative_db_path)
+    assert cache_jongga._ensure_jongga_payload_sqlite(logging.getLogger(__name__)) is True
+
+    monkeypatch.setattr(cache_jongga, "_JONGGA_PAYLOAD_SQLITE_DB_PATH", absolute_db_path)
+    assert cache_jongga._ensure_jongga_payload_sqlite(logging.getLogger(__name__)) is True
+
+    assert connect_calls["count"] == 1
+    assert os.path.exists(absolute_db_path)
 
 
 def test_load_latest_price_map_normalizes_ticker_and_picks_latest_on_unsorted_dates(tmp_path):

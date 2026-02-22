@@ -15,7 +15,11 @@ from threading import Lock
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 
@@ -28,6 +32,8 @@ _RESULT_TEXT_SQLITE_READY: set[str] = set()
 _RESULT_TEXT_MEMORY_MAX_ENTRIES = 2048
 _RESULT_TEXT_SQLITE_MAX_ROWS = 1024
 _RESULT_TEXT_SQLITE_TIMEOUT_SECONDS = 30
+_RESULT_TEXT_SQLITE_RETRY_ATTEMPTS = 2
+_RESULT_TEXT_SQLITE_RETRY_DELAY_SECONDS = 0.03
 _RESULT_TEXT_SQLITE_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS * 1000,
 )
@@ -42,16 +48,13 @@ def _resolve_runtime_cache_db_path(data_dir: Path) -> Path:
 
 
 def _invalidate_result_text_sqlite_ready(db_path: Path) -> None:
-    cache_key = str(db_path)
+    cache_key = normalize_sqlite_db_key(str(db_path))
     with _RESULT_TEXT_SQLITE_LOCK:
         _RESULT_TEXT_SQLITE_READY.discard(cache_key)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "chatbot_stock_context_cache" in message
+    return is_sqlite_missing_table_error(error, table_names="chatbot_stock_context_cache")
 
 
 def _recover_result_text_sqlite_schema(db_path: Path) -> bool:
@@ -60,16 +63,17 @@ def _recover_result_text_sqlite_schema(db_path: Path) -> bool:
 
 
 def _ensure_result_text_sqlite_cache(db_path: Path) -> bool:
-    cache_key = str(db_path)
+    db_path_text = str(db_path)
+    cache_key = normalize_sqlite_db_key(db_path_text)
     with _RESULT_TEXT_SQLITE_LOCK:
         if cache_key in _RESULT_TEXT_SQLITE_READY:
-            if db_path.exists():
+            if sqlite_db_path_exists(db_path_text):
                 return True
             _RESULT_TEXT_SQLITE_READY.discard(cache_key)
 
-        try:
+        def _initialize_schema() -> None:
             with connect_sqlite(
-                str(db_path),
+                db_path_text,
                 timeout_seconds=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS,
                 pragmas=_RESULT_TEXT_SQLITE_PRAGMAS,
             ) as conn:
@@ -94,6 +98,13 @@ def _ensure_result_text_sqlite_cache(db_path: Path) -> bool:
                     """
                 )
                 conn.commit()
+
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_RESULT_TEXT_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_RESULT_TEXT_SQLITE_RETRY_DELAY_SECONDS,
+            )
 
             _RESULT_TEXT_SQLITE_READY.add(cache_key)
             return True
@@ -122,10 +133,11 @@ def _load_result_text_from_sqlite(
     db_path = _resolve_runtime_cache_db_path(data_dir)
     if not _ensure_result_text_sqlite_cache(db_path):
         return None
+    db_path_text = str(db_path)
 
     def _query_row() -> tuple[object, ...] | None:
         with connect_sqlite(
-            str(db_path),
+            db_path_text,
             timeout_seconds=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS,
             pragmas=_RESULT_TEXT_SQLITE_PRAGMAS,
         ) as conn:
@@ -144,11 +156,19 @@ def _load_result_text_from_sqlite(
             return cursor.fetchone()
 
     try:
-        row = _query_row()
+        row = run_sqlite_with_retry(
+            _query_row,
+            max_retries=_RESULT_TEXT_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_RESULT_TEXT_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as exc:
         if _is_missing_table_error(exc) and _recover_result_text_sqlite_schema(db_path):
             try:
-                row = _query_row()
+                row = run_sqlite_with_retry(
+                    _query_row,
+                    max_retries=_RESULT_TEXT_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_RESULT_TEXT_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_exc:
                 LOGGER.debug("Failed to load stock context sqlite cache after schema recovery (%s): %s", cache_key, retry_exc)
                 return None
@@ -178,6 +198,7 @@ def _save_result_text_to_sqlite(
     db_path = _resolve_runtime_cache_db_path(data_dir)
     if not _ensure_result_text_sqlite_cache(db_path):
         return
+    db_path_text = str(db_path)
 
     normalized_max_rows = max(1, int(_RESULT_TEXT_SQLITE_MAX_ROWS))
 
@@ -190,7 +211,7 @@ def _save_result_text_to_sqlite(
 
     def _upsert_payload_text() -> None:
         with connect_sqlite(
-            str(db_path),
+            db_path_text,
             timeout_seconds=_RESULT_TEXT_SQLITE_TIMEOUT_SECONDS,
             pragmas=_RESULT_TEXT_SQLITE_PRAGMAS,
         ) as conn:
@@ -229,11 +250,19 @@ def _save_result_text_to_sqlite(
             conn.commit()
 
     try:
-        _upsert_payload_text()
+        run_sqlite_with_retry(
+            _upsert_payload_text,
+            max_retries=_RESULT_TEXT_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_RESULT_TEXT_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as exc:
         if _is_missing_table_error(exc) and _recover_result_text_sqlite_schema(db_path):
             try:
-                _upsert_payload_text()
+                run_sqlite_with_retry(
+                    _upsert_payload_text,
+                    max_retries=_RESULT_TEXT_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_RESULT_TEXT_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_exc:
                 LOGGER.debug(
                     "Failed to save stock context sqlite cache after schema recovery (%s): %s",

@@ -13,16 +13,75 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from services.sqlite_utils import connect_sqlite
+from services.sqlite_utils import (
+    connect_sqlite,
+    is_sqlite_missing_table_error,
+    run_sqlite_with_retry,
+)
 
 from .storage_sqlite_common import _SQLITE_PRAGMAS, ensure_chatbot_storage_schema
 
+_SQLITE_TIMEOUT_SECONDS = 30
+_SQLITE_RETRY_ATTEMPTS = 2
+_SQLITE_RETRY_DELAY_SECONDS = 0.03
+
 
 def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and table_name.lower() in message
+    return is_sqlite_missing_table_error(error, table_names=table_name)
+
+
+def _upsert_memory_rows_cursor(
+    *,
+    cursor: sqlite3.Cursor,
+    rows: list[tuple[str, str, str]],
+) -> None:
+    if not rows:
+        return
+    cursor.executemany(
+        """
+        INSERT INTO chatbot_memories (memory_key, value_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(memory_key) DO UPDATE SET
+            value_json = excluded.value_json,
+            updated_at = excluded.updated_at
+        WHERE
+            chatbot_memories.value_json IS NOT excluded.value_json
+            OR chatbot_memories.updated_at IS NOT excluded.updated_at
+        """,
+        rows,
+    )
+
+
+def _delete_stale_memory_rows_cursor(
+    *,
+    cursor: sqlite3.Cursor,
+    active_keys: list[str],
+) -> None:
+    if not active_keys:
+        cursor.execute("DELETE FROM chatbot_memories")
+        return
+
+    cursor.execute(
+        """
+        CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_keys (
+            memory_key TEXT PRIMARY KEY
+        )
+        """
+    )
+    cursor.execute("DELETE FROM _tmp_chatbot_memory_keys")
+    cursor.executemany(
+        "INSERT OR IGNORE INTO _tmp_chatbot_memory_keys(memory_key) VALUES (?)",
+        [(key,) for key in active_keys],
+    )
+    cursor.execute(
+        """
+        DELETE FROM chatbot_memories
+        WHERE memory_key NOT IN (
+            SELECT memory_key
+            FROM _tmp_chatbot_memory_keys
+        )
+        """
+    )
 
 
 def load_memories_from_sqlite(
@@ -35,29 +94,40 @@ def load_memories_from_sqlite(
         return None
     if not ensure_chatbot_storage_schema(db_path, logger):
         return None
+    db_path_text = str(db_path)
 
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                """
-                SELECT memory_key, value_json, updated_at
-                FROM chatbot_memories
-                ORDER BY memory_key ASC
-                """
-            ).fetchall()
+        def _load_rows() -> list[sqlite3.Row]:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                conn.row_factory = sqlite3.Row
+                return conn.execute(
+                    """
+                    SELECT memory_key, value_json, updated_at
+                    FROM chatbot_memories
+                    ORDER BY memory_key ASC
+                    """
+                ).fetchall()
 
-            memories: dict[str, dict[str, Any]] = {}
-            for row in rows:
-                try:
-                    value = json.loads(row["value_json"])
-                except Exception:
-                    value = row["value_json"]
-                memories[row["memory_key"]] = {
-                    "value": value,
-                    "updated_at": row["updated_at"],
-                }
-            return memories
+        rows = run_sqlite_with_retry(
+            _load_rows,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
+        memories: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            try:
+                value = json.loads(row["value_json"])
+            except Exception:
+                value = row["value_json"]
+            memories[row["memory_key"]] = {
+                "value": value,
+                "updated_at": row["updated_at"],
+            }
+        return memories
     except Exception as error:
         if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
             if ensure_chatbot_storage_schema(
@@ -83,36 +153,47 @@ def save_memories_to_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
 
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM chatbot_memories")
+        rows: list[tuple[str, str, str]] = []
+        for key, raw_value in memories.items():
+            value = raw_value.get("value") if isinstance(raw_value, dict) else raw_value
+            updated_at = (
+                str(raw_value.get("updated_at"))
+                if isinstance(raw_value, dict) and raw_value.get("updated_at")
+                else datetime.now().isoformat()
+            )
+            rows.append(
+                (
+                    str(key),
+                    json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    updated_at,
+                )
+            )
 
-            rows: list[tuple[str, str, str]] = []
-            for key, raw_value in memories.items():
-                value = raw_value.get("value") if isinstance(raw_value, dict) else raw_value
-                updated_at = (
-                    str(raw_value.get("updated_at"))
-                    if isinstance(raw_value, dict) and raw_value.get("updated_at")
-                    else datetime.now().isoformat()
+        def _save_rows() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                _upsert_memory_rows_cursor(
+                    cursor=cursor,
+                    rows=rows,
                 )
-                rows.append(
-                    (
-                        str(key),
-                        json.dumps(value, ensure_ascii=False, separators=(",", ":")),
-                        updated_at,
-                    )
+                _delete_stale_memory_rows_cursor(
+                    cursor=cursor,
+                    active_keys=[row[0] for row in rows],
                 )
-            if rows:
-                cursor.executemany(
-                    """
-                    INSERT INTO chatbot_memories (memory_key, value_json, updated_at)
-                    VALUES (?, ?, ?)
-                    """,
-                    rows,
-                )
-            conn.commit()
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _save_rows,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
@@ -141,21 +222,37 @@ def upsert_memory_entry_in_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
     try:
         value = record.get("value")
         updated_at = str(record.get("updated_at") or datetime.now().isoformat())
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            conn.execute(
-                """
-                INSERT INTO chatbot_memories (memory_key, value_json, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(memory_key) DO UPDATE SET
-                    value_json=excluded.value_json,
-                    updated_at=excluded.updated_at
-                """,
-                (str(key), json.dumps(value, ensure_ascii=False, separators=(",", ":")), updated_at),
-            )
-            conn.commit()
+
+        def _upsert_entry() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO chatbot_memories (memory_key, value_json, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(memory_key) DO UPDATE SET
+                        value_json=excluded.value_json,
+                        updated_at=excluded.updated_at
+                    WHERE
+                        chatbot_memories.value_json IS NOT excluded.value_json
+                        OR chatbot_memories.updated_at IS NOT excluded.updated_at
+                    """,
+                    (str(key), json.dumps(value, ensure_ascii=False, separators=(",", ":")), updated_at),
+                )
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _upsert_entry,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
@@ -184,16 +281,28 @@ def delete_memory_entry_in_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            conn.execute(
-                """
-                DELETE FROM chatbot_memories
-                WHERE memory_key = ?
-                """,
-                (str(key),),
-            )
-            conn.commit()
+        def _delete_entry() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                conn.execute(
+                    """
+                    DELETE FROM chatbot_memories
+                    WHERE memory_key = ?
+                    """,
+                    (str(key),),
+                )
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _delete_entry,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
@@ -220,10 +329,22 @@ def clear_memories_in_sqlite(
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
+    db_path_text = str(db_path)
     try:
-        with connect_sqlite(str(db_path), timeout_seconds=30, pragmas=_SQLITE_PRAGMAS) as conn:
-            conn.execute("DELETE FROM chatbot_memories")
-            conn.commit()
+        def _clear_rows() -> None:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_PRAGMAS,
+            ) as conn:
+                conn.execute("DELETE FROM chatbot_memories")
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _clear_rows,
+            max_retries=_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        )
         return True
     except Exception as error:
         if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sqlite3
 
@@ -246,3 +247,54 @@ def test_get_cached_file_row_count_skips_delete_when_within_limit(monkeypatch, t
 
     assert row_count == 1
     assert not any("DELETE FROM file_row_count_cache" in sql for sql in traced_sql)
+
+
+def test_row_count_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path: Path):
+    file_row_count_cache.clear_file_row_count_cache()
+    file_row_count_cache._ROW_COUNT_SQLITE_READY.clear()
+    monkeypatch.chdir(tmp_path)
+
+    connect_calls = {"count": 0}
+    original_connect = file_row_count_cache.connect_sqlite
+    logger = type("L", (), {"debug": lambda *_a, **_k: None})()
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(file_row_count_cache, "connect_sqlite", _counted_connect)
+
+    relative_db_path = "./runtime_cache.db"
+    absolute_db_path = str((tmp_path / "runtime_cache.db").resolve())
+
+    monkeypatch.setattr(file_row_count_cache, "_ROW_COUNT_CACHE_DB_PATH", relative_db_path)
+    assert file_row_count_cache._ensure_row_count_sqlite_cache(logger) is True
+
+    monkeypatch.setattr(file_row_count_cache, "_ROW_COUNT_CACHE_DB_PATH", absolute_db_path)
+    assert file_row_count_cache._ensure_row_count_sqlite_cache(logger) is True
+
+    assert connect_calls["count"] == 1
+    assert os.path.exists(absolute_db_path)
+
+
+def test_row_count_sqlite_schema_init_retries_on_transient_lock(monkeypatch, tmp_path: Path):
+    file_row_count_cache.clear_file_row_count_cache()
+    file_row_count_cache._ROW_COUNT_SQLITE_READY.clear()
+    logger = type("L", (), {"debug": lambda *_a, **_k: None})()
+
+    sqlite_cache_path = tmp_path / "runtime_cache.db"
+    monkeypatch.setattr(file_row_count_cache, "_ROW_COUNT_CACHE_DB_PATH", str(sqlite_cache_path))
+
+    original_connect = file_row_count_cache.connect_sqlite
+    failure_state = {"count": 0}
+
+    def _flaky_connect(*args, **kwargs):
+        if failure_state["count"] == 0:
+            failure_state["count"] += 1
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(file_row_count_cache, "connect_sqlite", _flaky_connect)
+
+    assert file_row_count_cache._ensure_row_count_sqlite_cache(logger) is True
+    assert failure_state["count"] == 1

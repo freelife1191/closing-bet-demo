@@ -163,3 +163,59 @@ def test_save_cached_result_text_skips_delete_when_rows_within_limit(monkeypatch
     )
 
     assert not any("DELETE FROM chatbot_stock_context_cache" in sql for sql in traced_sql)
+
+
+def test_load_cached_result_text_retries_on_transient_sqlite_lock(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+
+    source_path = tmp_path / "daily_prices.csv"
+    signature = (10, 20)
+    stock_context_cache.save_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+        payload_text="cached payload",
+    )
+    stock_context_cache.clear_result_text_cache()
+
+    original_connect = stock_context_cache.connect_sqlite
+    failure_state = {"failed": False}
+
+    def _flaky_connect(*args, **kwargs):
+        if not failure_state["failed"]:
+            failure_state["failed"] = True
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(stock_context_cache, "connect_sqlite", _flaky_connect)
+    loaded = stock_context_cache.load_cached_result_text(
+        data_dir=tmp_path,
+        path=source_path,
+        dataset="stock_history",
+        ticker_padded="005930",
+        signature=signature,
+    )
+
+    assert failure_state["failed"] is True
+    assert loaded == "cached payload"
+
+
+def test_ensure_result_text_sqlite_cache_retries_on_transient_lock(monkeypatch, tmp_path: Path):
+    _reset_cache_state()
+    db_path = tmp_path / "runtime_cache.db"
+
+    original_connect = stock_context_cache.connect_sqlite
+    failure_state = {"count": 0}
+
+    def _flaky_connect(*args, **kwargs):
+        if failure_state["count"] == 0:
+            failure_state["count"] += 1
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(stock_context_cache, "connect_sqlite", _flaky_connect)
+
+    assert stock_context_cache._ensure_result_text_sqlite_cache(db_path) is True
+    assert failure_state["count"] == 1

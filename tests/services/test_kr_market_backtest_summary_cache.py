@@ -173,3 +173,29 @@ def test_backtest_summary_cache_skips_delete_when_rows_within_limit(tmp_path, mo
 
     assert not any("DELETE FROM backtest_summary_cache" in sql for sql in traced_sql)
     assert not any("SELECT COUNT(*) FROM backtest_summary_cache" in sql for sql in traced_sql)
+
+
+def test_backtest_summary_sqlite_ready_uses_normalized_db_key(tmp_path, monkeypatch):
+    _reset_cache_state()
+    monkeypatch.chdir(tmp_path)
+
+    original_connect = summary_cache.connect_sqlite
+    connect_calls = {"count": 0}
+    logger = logging.getLogger("test-backtest-ready-normalized")
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(summary_cache, "connect_sqlite", _counted_connect)
+
+    relative_db_path = "./runtime_cache.db"
+    absolute_db_path = str((tmp_path / "runtime_cache.db").resolve())
+
+    monkeypatch.setattr(summary_cache, "_BACKTEST_SUMMARY_CACHE_DB_PATH", relative_db_path)
+    assert summary_cache._ensure_backtest_summary_sqlite(logger) is True
+
+    monkeypatch.setattr(summary_cache, "_BACKTEST_SUMMARY_CACHE_DB_PATH", absolute_db_path)
+    assert summary_cache._ensure_backtest_summary_sqlite(logger) is True
+
+    assert connect_calls["count"] == 1

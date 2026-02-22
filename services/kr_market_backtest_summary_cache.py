@@ -26,7 +26,11 @@ from services.file_row_count_cache import file_signature
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 
@@ -40,6 +44,8 @@ _BACKTEST_SUMMARY_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache
 _BACKTEST_SUMMARY_MEMORY_MAX_ENTRIES = 16
 _BACKTEST_SUMMARY_SQLITE_MAX_ROWS = 64
 _BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS = 5
+_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS = 2
+_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS = 0.03
 _BACKTEST_SUMMARY_INIT_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS * 1000,
 )
@@ -50,15 +56,13 @@ _BACKTEST_SUMMARY_SESSION_PRAGMAS = build_sqlite_pragmas(
 
 
 def _invalidate_backtest_summary_sqlite_ready(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
     with _BACKTEST_SUMMARY_SQLITE_LOCK:
-        _BACKTEST_SUMMARY_SQLITE_READY.discard(db_path)
+        _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "backtest_summary_cache" in message
+    return is_sqlite_missing_table_error(error, table_names="backtest_summary_cache")
 
 
 def _recover_backtest_summary_sqlite_schema(logger: Any) -> bool:
@@ -206,13 +210,15 @@ def build_backtest_summary_cache_signature(
 
 def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
     db_path = _BACKTEST_SUMMARY_CACHE_DB_PATH
+    db_key = normalize_sqlite_db_key(db_path)
 
     with _BACKTEST_SUMMARY_SQLITE_LOCK:
-        if db_path in _BACKTEST_SUMMARY_SQLITE_READY:
-            if os.path.exists(db_path):
+        if db_key in _BACKTEST_SUMMARY_SQLITE_READY:
+            if sqlite_db_path_exists(db_path):
                 return True
-            _BACKTEST_SUMMARY_SQLITE_READY.discard(db_path)
-        try:
+            _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
+
+        def _initialize_schema() -> None:
             with connect_sqlite(
                 db_path,
                 timeout_seconds=_BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS,
@@ -236,7 +242,13 @@ def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
                     """
                 )
                 conn.commit()
-            _BACKTEST_SUMMARY_SQLITE_READY.add(db_path)
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
+            )
+            _BACKTEST_SUMMARY_SQLITE_READY.add(db_key)
             return True
         except Exception as error:
             logger.debug("Failed to initialize backtest summary sqlite cache: %s", error)
@@ -271,11 +283,19 @@ def _load_backtest_summary_from_sqlite(
             return cursor.fetchone()
 
     try:
-        row = _query_row()
+        row = run_sqlite_with_retry(
+            _query_row,
+            max_retries=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_backtest_summary_sqlite_schema(logger):
             try:
-                row = _query_row()
+                row = run_sqlite_with_retry(
+                    _query_row,
+                    max_retries=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 logger.debug(
                     "Failed to load backtest summary sqlite cache after schema recovery: %s",
@@ -355,11 +375,19 @@ def _save_backtest_summary_to_sqlite(
             conn.commit()
 
     try:
-        _upsert_payload()
+        run_sqlite_with_retry(
+            _upsert_payload,
+            max_retries=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_backtest_summary_sqlite_schema(logger):
             try:
-                _upsert_payload()
+                run_sqlite_with_retry(
+                    _upsert_payload,
+                    max_retries=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 logger.debug(
                     "Failed to save backtest summary sqlite cache after schema recovery: %s",

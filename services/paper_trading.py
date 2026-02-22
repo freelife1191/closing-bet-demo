@@ -35,7 +35,12 @@ from services.paper_trading_valuation_helpers import (
 from services.paper_trading_valuation_service import (
     get_portfolio_valuation as get_portfolio_valuation_impl,
 )
-from services.sqlite_utils import build_sqlite_pragmas, connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    is_sqlite_missing_table_error,
+    run_sqlite_with_retry,
+)
 
 logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
@@ -50,6 +55,8 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
     INITIAL_SYNC_WAIT_TRIES = 50
     INITIAL_SYNC_WAIT_SEC = 0.1
     SQLITE_BUSY_TIMEOUT_MS = 30_000
+    SQLITE_RETRY_ATTEMPTS = 2
+    SQLITE_RETRY_DELAY_SECONDS = 0.03
     PRICE_CACHE_WARMUP_LIMIT = 5_000
     _RECOVERABLE_TABLE_NAMES = (
         "portfolio",
@@ -108,12 +115,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
 
     @staticmethod
     def _is_missing_table_error(error: Exception, *, table_names: tuple[str, ...]) -> bool:
-        if not isinstance(error, sqlite3.OperationalError):
-            return False
-        message = str(error).lower()
-        if "no such table" not in message:
-            return False
-        return any(table_name.lower() in message for table_name in table_names)
+        return is_sqlite_missing_table_error(error, table_names=table_names)
 
     @classmethod
     def _is_missing_price_cache_table_error(cls, error: Exception) -> bool:
@@ -144,11 +146,19 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
     def _ensure_price_cache_table(self, force_recheck: bool = False) -> bool:
         if self._price_cache_schema_ready and not force_recheck:
             return True
-        try:
+
+        def _ensure_schema() -> None:
             with self.get_context() as conn:
                 cursor = conn.cursor()
                 self._create_price_cache_schema(cursor)
                 conn.commit()
+
+        try:
+            run_sqlite_with_retry(
+                _ensure_schema,
+                max_retries=self.SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
+            )
             self._price_cache_schema_ready = True
             return True
         except Exception as error:
@@ -172,7 +182,11 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         _retried: bool = False,
     ) -> _T:
         try:
-            return operation()
+            return run_sqlite_with_retry(
+                operation,
+                max_retries=self.SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
+            )
         except Exception as error:
             if (not _retried) and self._is_missing_paper_trading_table_error(error):
                 if self._recover_paper_trading_schema():
@@ -184,7 +198,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
 
     def _load_price_cache_from_db(self, *, _retried: bool = False) -> None:
         """SQLite에 저장된 최신 가격 캐시를 메모리로 워밍업한다."""
-        try:
+        def _load_rows() -> list[tuple[str, int]]:
             with self.get_context() as conn:
                 cursor = conn.cursor()
                 if not self._price_cache_schema_ready:
@@ -219,7 +233,14 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                         """,
                         (self.PRICE_CACHE_WARMUP_LIMIT,),
                     )
-                rows = cursor.fetchall()
+                return cursor.fetchall()
+
+        try:
+            rows = run_sqlite_with_retry(
+                _load_rows,
+                max_retries=self.SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
+            )
         except Exception as error:
             self._price_cache_schema_ready = False
             if (not _retried) and self._is_missing_paper_trading_table_error(error):
@@ -266,7 +287,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         if not upsert_rows:
             return
 
-        try:
+        def _upsert_rows() -> None:
             with self.get_context() as conn:
                 cursor = conn.cursor()
                 if not self._price_cache_schema_ready:
@@ -283,6 +304,13 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                     upsert_rows,
                 )
                 conn.commit()
+
+        try:
+            run_sqlite_with_retry(
+                _upsert_rows,
+                max_retries=self.SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=self.SQLITE_RETRY_DELAY_SECONDS,
+            )
         except Exception as error:
             self._price_cache_schema_ready = False
             if (not _retried) and self._is_missing_paper_trading_table_error(error):

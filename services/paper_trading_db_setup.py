@@ -6,18 +6,27 @@ PaperTrading SQLite 스키마/마이그레이션 초기화 유틸.
 
 from __future__ import annotations
 
-import os
 import sqlite3
 import threading
 
-from services.sqlite_utils import build_sqlite_pragmas, connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    normalize_sqlite_db_key,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
+)
 
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS,
 )
+SQLITE_RETRY_ATTEMPTS = 2
+SQLITE_RETRY_DELAY_SECONDS = 0.03
 DB_INIT_READY_LOCK = threading.Lock()
+DB_INIT_READY_CONDITION = threading.Condition(DB_INIT_READY_LOCK)
 DB_INIT_READY_PATHS: set[str] = set()
+DB_INIT_IN_PROGRESS_PATHS: set[str] = set()
 
 
 def is_duplicate_column_error(error: Exception) -> bool:
@@ -55,10 +64,7 @@ def _create_indexes(cursor: sqlite3.Cursor) -> None:
 
 
 def _normalize_db_key(path: str) -> str:
-    try:
-        return os.path.realpath(os.path.expanduser(path))
-    except Exception:
-        return path
+    return normalize_sqlite_db_key(path)
 
 
 def _load_table_columns(cursor: sqlite3.Cursor, table_name: str) -> set[str]:
@@ -104,13 +110,27 @@ def _ensure_balance_columns(cursor: sqlite3.Cursor, logger) -> None:
 def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
     """Paper trading DB 초기화."""
     db_key = _normalize_db_key(db_path)
-    with DB_INIT_READY_LOCK:
-        if not force_recheck and db_key in DB_INIT_READY_PATHS:
-            if os.path.exists(db_path):
+    with DB_INIT_READY_CONDITION:
+        if force_recheck:
+            DB_INIT_READY_PATHS.discard(db_key)
+        elif db_key in DB_INIT_READY_PATHS:
+            if sqlite_db_path_exists(db_path):
                 return True
             DB_INIT_READY_PATHS.discard(db_key)
 
-    try:
+        while db_key in DB_INIT_IN_PROGRESS_PATHS:
+            DB_INIT_READY_CONDITION.wait()
+            if force_recheck:
+                DB_INIT_READY_PATHS.discard(db_key)
+                continue
+            if db_key in DB_INIT_READY_PATHS:
+                if sqlite_db_path_exists(db_path):
+                    return True
+                DB_INIT_READY_PATHS.discard(db_key)
+
+        DB_INIT_IN_PROGRESS_PATHS.add(db_key)
+
+    def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
             timeout_seconds=30,
@@ -188,11 +208,24 @@ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
             )
             _create_indexes(cursor)
             conn.commit()
-        with DB_INIT_READY_LOCK:
-            DB_INIT_READY_PATHS.add(db_key)
+
+    initialization_succeeded = False
+    try:
+        run_sqlite_with_retry(
+            _initialize_schema,
+            max_retries=SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=SQLITE_RETRY_DELAY_SECONDS,
+        )
+        initialization_succeeded = True
         return True
     except Exception as error:
-        with DB_INIT_READY_LOCK:
-            DB_INIT_READY_PATHS.discard(db_key)
         logger.error(f"Failed to initialize paper trading db: {error}")
         return False
+    finally:
+        with DB_INIT_READY_CONDITION:
+            DB_INIT_IN_PROGRESS_PATHS.discard(db_key)
+            if initialization_succeeded:
+                DB_INIT_READY_PATHS.add(db_key)
+            else:
+                DB_INIT_READY_PATHS.discard(db_key)
+            DB_INIT_READY_CONDITION.notify_all()

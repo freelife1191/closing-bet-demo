@@ -18,7 +18,11 @@ from numpy_json_encoder import NumpyEncoder
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 
@@ -30,6 +34,8 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _UPDATE_STATUS_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
 _UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS = 5
 _UPDATE_STATUS_SQLITE_MAX_ROWS = 256
+_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS = 2
+_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS = 0.03
 _UPDATE_STATUS_INIT_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS * 1000,
 )
@@ -54,10 +60,7 @@ def _status_file_signature(update_status_file: str) -> tuple[int, int] | None:
 
 
 def _normalize_db_key(path: str) -> str:
-    try:
-        return os.path.realpath(os.path.expanduser(path))
-    except Exception:
-        return str(path)
+    return normalize_sqlite_db_key(path)
 
 
 def _invalidate_update_status_sqlite_ready(db_path: str) -> None:
@@ -67,10 +70,7 @@ def _invalidate_update_status_sqlite_ready(db_path: str) -> None:
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "update_status_snapshot" in message
+    return is_sqlite_missing_table_error(error, table_names="update_status_snapshot")
 
 
 def _recover_update_status_sqlite(logger) -> bool:
@@ -85,10 +85,11 @@ def _ensure_update_status_sqlite(logger) -> bool:
 
     with _UPDATE_STATUS_DB_INIT_LOCK:
         if db_key in _UPDATE_STATUS_DB_READY:
-            if os.path.exists(db_path):
+            if sqlite_db_path_exists(db_path):
                 return True
             _UPDATE_STATUS_DB_READY.discard(db_key)
-        try:
+
+        def _initialize_schema() -> None:
             with connect_sqlite(
                 db_path,
                 timeout_seconds=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS,
@@ -111,6 +112,12 @@ def _ensure_update_status_sqlite(logger) -> bool:
                     """
                 )
                 conn.commit()
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS,
+            )
             _UPDATE_STATUS_DB_READY.add(db_key)
             return True
         except Exception as error:
@@ -127,7 +134,7 @@ def _load_update_status_from_sqlite(
     if not _ensure_update_status_sqlite(logger):
         return None
 
-    try:
+    def _query_snapshot() -> tuple[Any, ...] | None:
         with connect_sqlite(
             _UPDATE_STATUS_CACHE_DB_PATH,
             timeout_seconds=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS,
@@ -142,7 +149,14 @@ def _load_update_status_from_sqlite(
                 """,
                 (update_status_file,),
             )
-            row = cursor.fetchone()
+            return cursor.fetchone()
+
+    try:
+        row = run_sqlite_with_retry(
+            _query_snapshot,
+            max_retries=_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS,
+        )
         if row is None:
             return None
         payload = json.loads(row[0])
@@ -190,27 +204,35 @@ def _save_update_status_to_sqlite(
             separators=(",", ":"),
             cls=NumpyEncoder,
         )
-        with connect_sqlite(
-            _UPDATE_STATUS_CACHE_DB_PATH,
-            timeout_seconds=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS,
-            pragmas=_UPDATE_STATUS_SESSION_PRAGMAS,
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO update_status_snapshot (file_path, payload_json, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(file_path) DO UPDATE SET
-                    payload_json = excluded.payload_json,
-                    updated_at = excluded.updated_at
-                """,
-                (update_status_file, payload_json, datetime.now().isoformat()),
-            )
-            _prune_update_status_snapshot_if_needed(
-                cursor,
-                max_rows=normalized_max_rows,
-            )
-            conn.commit()
+
+        def _upsert_snapshot() -> None:
+            with connect_sqlite(
+                _UPDATE_STATUS_CACHE_DB_PATH,
+                timeout_seconds=_UPDATE_STATUS_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_UPDATE_STATUS_SESSION_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO update_status_snapshot (file_path, payload_json, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(file_path) DO UPDATE SET
+                        payload_json = excluded.payload_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (update_status_file, payload_json, datetime.now().isoformat()),
+                )
+                _prune_update_status_snapshot_if_needed(
+                    cursor,
+                    max_rows=normalized_max_rows,
+                )
+                conn.commit()
+
+        run_sqlite_with_retry(
+            _upsert_snapshot,
+            max_retries=_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if (not _retried) and _is_missing_table_error(error):
             if _recover_update_status_sqlite(logger):

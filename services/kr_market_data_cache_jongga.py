@@ -26,7 +26,11 @@ from services.kr_market_data_cache_core import (
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 
@@ -37,18 +41,18 @@ _JONGGA_PAYLOAD_SQLITE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.
 _JONGGA_PAYLOAD_SQLITE_MAX_ROWS = 64
 _JONGGA_PAYLOAD_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=5_000)
 _JONGGA_PAYLOAD_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=5_000)
+_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS = 2
+_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS = 0.03
 
 
 def _invalidate_jongga_payload_sqlite_ready(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
     with _JONGGA_PAYLOAD_SQLITE_LOCK:
-        _JONGGA_PAYLOAD_SQLITE_READY.discard(db_path)
+        _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "jongga_results_payload_cache" in message
+    return is_sqlite_missing_table_error(error, table_names="jongga_results_payload_cache")
 
 
 def _recover_jongga_payload_sqlite_schema(logger: Any | None) -> bool:
@@ -87,13 +91,15 @@ def _signature_hash(signature: tuple[Any, ...]) -> tuple[str, str]:
 
 def _ensure_jongga_payload_sqlite(logger: Any | None) -> bool:
     db_path = _JONGGA_PAYLOAD_SQLITE_DB_PATH
+    db_key = normalize_sqlite_db_key(db_path)
 
     with _JONGGA_PAYLOAD_SQLITE_LOCK:
-        if db_path in _JONGGA_PAYLOAD_SQLITE_READY:
-            if os.path.exists(db_path):
+        if db_key in _JONGGA_PAYLOAD_SQLITE_READY:
+            if sqlite_db_path_exists(db_path):
                 return True
-            _JONGGA_PAYLOAD_SQLITE_READY.discard(db_path)
-        try:
+            _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
+
+        def _initialize_schema() -> None:
             with connect_sqlite(
                 db_path,
                 timeout_seconds=5,
@@ -117,7 +123,13 @@ def _ensure_jongga_payload_sqlite(logger: Any | None) -> bool:
                     """
                 )
                 conn.commit()
-            _JONGGA_PAYLOAD_SQLITE_READY.add(db_path)
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+            )
+            _JONGGA_PAYLOAD_SQLITE_READY.add(db_key)
             return True
         except Exception as error:
             if logger is not None:
@@ -166,11 +178,19 @@ def _load_payloads_from_sqlite(
             return cursor.fetchone()
 
     try:
-        row = _query_row()
+        row = run_sqlite_with_retry(
+            _query_row,
+            max_retries=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_jongga_payload_sqlite_schema(logger):
             try:
-                row = _query_row()
+                row = run_sqlite_with_retry(
+                    _query_row,
+                    max_retries=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug("Failed to load jongga payload sqlite cache after schema recovery: %s", retry_error)
@@ -256,11 +276,19 @@ def _save_payloads_to_sqlite(
             conn.commit()
 
     try:
-        _upsert_payloads()
+        run_sqlite_with_retry(
+            _upsert_payloads,
+            max_retries=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_jongga_payload_sqlite_schema(logger):
             try:
-                _upsert_payloads()
+                run_sqlite_with_retry(
+                    _upsert_payloads,
+                    max_retries=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug("Failed to save jongga payload sqlite cache after schema recovery: %s", retry_error)

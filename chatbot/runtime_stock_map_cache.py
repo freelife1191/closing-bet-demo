@@ -16,7 +16,11 @@ from typing import Any
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 
@@ -27,6 +31,8 @@ _STOCK_MAP_SQLITE_READY: set[str] = set()
 _STOCK_MAP_MEMORY_MAX_ENTRIES = 256
 _STOCK_MAP_SQLITE_MAX_ROWS = 128
 _STOCK_MAP_SQLITE_TIMEOUT_SECONDS = 30
+_STOCK_MAP_SQLITE_RETRY_ATTEMPTS = 2
+_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS = 0.03
 _STOCK_MAP_SQLITE_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS * 1000,
 )
@@ -49,16 +55,13 @@ def _stock_map_cache_db_path(data_dir: Path) -> Path:
 
 
 def _invalidate_stock_map_sqlite_ready(db_path: Path) -> None:
-    db_key = str(db_path)
+    db_key = normalize_sqlite_db_key(str(db_path))
     with _STOCK_MAP_SQLITE_READY_LOCK:
         _STOCK_MAP_SQLITE_READY.discard(db_key)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "chatbot_stock_map_cache" in message
+    return is_sqlite_missing_table_error(error, table_names="chatbot_stock_map_cache")
 
 
 def _recover_stock_map_sqlite_schema(db_path: Path, logger: Any) -> bool:
@@ -67,16 +70,17 @@ def _recover_stock_map_sqlite_schema(db_path: Path, logger: Any) -> bool:
 
 
 def _ensure_stock_map_sqlite(db_path: Path, logger: Any) -> bool:
-    db_key = str(db_path)
+    db_path_text = str(db_path)
+    db_key = normalize_sqlite_db_key(db_path_text)
     with _STOCK_MAP_SQLITE_READY_LOCK:
         if db_key in _STOCK_MAP_SQLITE_READY:
-            if db_path.exists():
+            if sqlite_db_path_exists(db_path_text):
                 return True
             _STOCK_MAP_SQLITE_READY.discard(db_key)
 
-        try:
+        def _initialize_schema() -> None:
             with connect_sqlite(
-                str(db_path),
+                db_path_text,
                 timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
                 pragmas=_STOCK_MAP_SQLITE_PRAGMAS,
             ) as conn:
@@ -100,6 +104,13 @@ def _ensure_stock_map_sqlite(db_path: Path, logger: Any) -> bool:
                     """
                 )
                 conn.commit()
+
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+            )
             _STOCK_MAP_SQLITE_READY.add(db_key)
             return True
         except Exception as error:
@@ -133,10 +144,12 @@ def _load_stock_map_from_sqlite(
     db_path = _stock_map_cache_db_path(data_dir)
     if not _ensure_stock_map_sqlite(db_path, logger):
         return None
+    db_path_text = str(db_path)
+    source_path_key = str(source_path.resolve())
 
     def _query_row() -> tuple[Any, ...] | None:
         with connect_sqlite(
-            str(db_path),
+            db_path_text,
             timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
             pragmas=_STOCK_MAP_SQLITE_PRAGMAS,
         ) as conn:
@@ -150,16 +163,24 @@ def _load_stock_map_from_sqlite(
                   AND size = ?
                 LIMIT 1
                 """,
-                (str(source_path.resolve()), int(signature[0]), int(signature[1])),
+                (source_path_key, int(signature[0]), int(signature[1])),
             )
             return cursor.fetchone()
 
     try:
-        row = _query_row()
+        row = run_sqlite_with_retry(
+            _query_row,
+            max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_stock_map_sqlite_schema(db_path, logger):
             try:
-                row = _query_row()
+                row = run_sqlite_with_retry(
+                    _query_row,
+                    max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 logger.debug("Failed to load stock map sqlite cache after schema recovery: %s", retry_error)
                 return None
@@ -195,6 +216,8 @@ def _save_stock_map_to_sqlite(
     db_path = _stock_map_cache_db_path(data_dir)
     if not _ensure_stock_map_sqlite(db_path, logger):
         return
+    db_path_text = str(db_path)
+    source_path_key = str(source_path.resolve())
 
     try:
         stock_map_json = json.dumps(stock_map, ensure_ascii=False, separators=(",", ":"))
@@ -214,7 +237,7 @@ def _save_stock_map_to_sqlite(
 
     def _upsert_stock_map() -> None:
         with connect_sqlite(
-            str(db_path),
+            db_path_text,
             timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
             pragmas=_STOCK_MAP_SQLITE_PRAGMAS,
         ) as conn:
@@ -238,7 +261,7 @@ def _save_stock_map_to_sqlite(
                     updated_at = excluded.updated_at
                 """,
                 (
-                    str(source_path.resolve()),
+                    source_path_key,
                     int(signature[0]),
                     int(signature[1]),
                     stock_map_json,
@@ -250,11 +273,19 @@ def _save_stock_map_to_sqlite(
             conn.commit()
 
     try:
-        _upsert_stock_map()
+        run_sqlite_with_retry(
+            _upsert_stock_map,
+            max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_stock_map_sqlite_schema(db_path, logger):
             try:
-                _upsert_stock_map()
+                run_sqlite_with_retry(
+                    _upsert_stock_map,
+                    max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 logger.debug("Failed to save stock map sqlite cache after schema recovery: %s", retry_error)
         else:

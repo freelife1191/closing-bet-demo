@@ -111,6 +111,67 @@ def test_connect_sqlite_enables_uri_mode_for_file_scheme(monkeypatch):
     assert captured["uri"] is True
 
 
+def test_connect_sqlite_retries_transient_connect_error(monkeypatch):
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    class _FakeConnection:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    def _fake_connect(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return _FakeConnection()
+
+    monkeypatch.setattr(sqlite_utils.sqlite3, "connect", _fake_connect)
+    monkeypatch.setattr(sqlite_utils.time, "sleep", lambda delay: sleep_calls.append(float(delay)))
+
+    conn = sqlite_utils.connect_sqlite("/tmp/retry_connect.db")
+    conn.close()
+
+    assert calls["count"] == 2
+    assert sleep_calls == [0.03]
+
+
+def test_connect_sqlite_retries_transient_pragma_error_and_closes_failed_connection(monkeypatch):
+    calls = {"count": 0}
+    closed_counts: list[int] = []
+
+    class _FakeConnection:
+        def __init__(self, call_index: int):
+            self.call_index = call_index
+            self.closed = 0
+
+        def execute(self, _sql):
+            if self.call_index == 1:
+                raise sqlite3.OperationalError("database is locked")
+            return None
+
+        def close(self):
+            self.closed += 1
+            closed_counts.append(self.call_index)
+
+    def _fake_connect(*_args, **_kwargs):
+        calls["count"] += 1
+        return _FakeConnection(calls["count"])
+
+    monkeypatch.setattr(sqlite_utils.sqlite3, "connect", _fake_connect)
+
+    conn = sqlite_utils.connect_sqlite(
+        "/tmp/retry_pragma.db",
+        pragmas=("PRAGMA busy_timeout=1000",),
+    )
+    conn.close()
+
+    assert calls["count"] == 2
+    assert closed_counts.count(1) == 1
+
+
 def test_connect_sqlite_disables_uri_mode_for_regular_path(monkeypatch):
     captured: dict[str, bool] = {}
 
@@ -131,6 +192,206 @@ def test_connect_sqlite_disables_uri_mode_for_regular_path(monkeypatch):
     conn.close()
 
     assert captured["uri"] is False
+
+
+def test_connect_sqlite_skips_reapplying_persistent_pragmas_for_same_file_db(
+    monkeypatch,
+    tmp_path: Path,
+):
+    db_path = tmp_path / "sqlite_utils_persistent_once.db"
+    executed_sqls: list[list[str]] = []
+
+    class _FakeConnection:
+        def __init__(self):
+            self.sqls: list[str] = []
+
+        def execute(self, sql):
+            self.sqls.append(str(sql).strip())
+            return None
+
+        def close(self):
+            executed_sqls.append(list(self.sqls))
+
+    with sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_LOCK:
+        sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_READY.clear()
+
+    signature = {"value": (11, 7)}
+    monkeypatch.setattr(
+        sqlite_utils,
+        "_load_sqlite_file_signature",
+        lambda _db_key: signature["value"],
+    )
+    monkeypatch.setattr(
+        sqlite_utils.sqlite3,
+        "connect",
+        lambda *_args, **_kwargs: _FakeConnection(),
+    )
+
+    pragmas = (
+        "PRAGMA journal_mode=WAL",
+        "PRAGMA synchronous=NORMAL",
+        "PRAGMA busy_timeout=1200",
+    )
+
+    first_conn = sqlite_utils.connect_sqlite(
+        str(db_path),
+        ensure_parent_dir=False,
+        pragmas=pragmas,
+    )
+    first_conn.close()
+    second_conn = sqlite_utils.connect_sqlite(
+        str(db_path),
+        ensure_parent_dir=False,
+        pragmas=pragmas,
+    )
+    second_conn.close()
+
+    assert executed_sqls[0] == [
+        "PRAGMA journal_mode=WAL",
+        "PRAGMA synchronous=NORMAL",
+        "PRAGMA busy_timeout=1200",
+    ]
+    assert executed_sqls[1] == ["PRAGMA busy_timeout=1200"]
+
+
+def test_connect_sqlite_reapplies_persistent_pragmas_when_file_signature_changes(
+    monkeypatch,
+    tmp_path: Path,
+):
+    db_path = tmp_path / "sqlite_utils_persistent_signature.db"
+    executed_sqls: list[list[str]] = []
+
+    class _FakeConnection:
+        def __init__(self):
+            self.sqls: list[str] = []
+
+        def execute(self, sql):
+            self.sqls.append(str(sql).strip())
+            return None
+
+        def close(self):
+            executed_sqls.append(list(self.sqls))
+
+    with sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_LOCK:
+        sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_READY.clear()
+
+    signature = {"value": (21, 3)}
+    monkeypatch.setattr(
+        sqlite_utils,
+        "_load_sqlite_file_signature",
+        lambda _db_key: signature["value"],
+    )
+    monkeypatch.setattr(
+        sqlite_utils.sqlite3,
+        "connect",
+        lambda *_args, **_kwargs: _FakeConnection(),
+    )
+
+    pragmas = (
+        "PRAGMA journal_mode=WAL",
+        "PRAGMA synchronous=NORMAL",
+    )
+
+    first_conn = sqlite_utils.connect_sqlite(
+        str(db_path),
+        ensure_parent_dir=False,
+        pragmas=pragmas,
+    )
+    first_conn.close()
+
+    signature["value"] = (21, 4)
+    second_conn = sqlite_utils.connect_sqlite(
+        str(db_path),
+        ensure_parent_dir=False,
+        pragmas=pragmas,
+    )
+    second_conn.close()
+
+    assert executed_sqls[0] == ["PRAGMA journal_mode=WAL", "PRAGMA synchronous=NORMAL"]
+    assert executed_sqls[1] == ["PRAGMA journal_mode=WAL", "PRAGMA synchronous=NORMAL"]
+
+
+def test_connect_sqlite_applies_persistent_pragmas_for_memory_db_on_every_connection(monkeypatch):
+    executed_sqls: list[list[str]] = []
+
+    class _FakeConnection:
+        def __init__(self):
+            self.sqls: list[str] = []
+
+        def execute(self, sql):
+            self.sqls.append(str(sql).strip())
+            return None
+
+        def close(self):
+            executed_sqls.append(list(self.sqls))
+
+    with sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_LOCK:
+        sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_READY.clear()
+
+    monkeypatch.setattr(
+        sqlite_utils.sqlite3,
+        "connect",
+        lambda *_args, **_kwargs: _FakeConnection(),
+    )
+
+    pragmas = (
+        "PRAGMA journal_mode=WAL",
+        "PRAGMA synchronous=NORMAL",
+        "PRAGMA busy_timeout=600",
+    )
+
+    first_conn = sqlite_utils.connect_sqlite(
+        ":memory:",
+        ensure_parent_dir=False,
+        pragmas=pragmas,
+    )
+    first_conn.close()
+
+    second_conn = sqlite_utils.connect_sqlite(
+        ":memory:",
+        ensure_parent_dir=False,
+        pragmas=pragmas,
+    )
+    second_conn.close()
+
+    assert executed_sqls[0] == [
+        "PRAGMA journal_mode=WAL",
+        "PRAGMA synchronous=NORMAL",
+        "PRAGMA busy_timeout=600",
+    ]
+    assert executed_sqls[1] == [
+        "PRAGMA journal_mode=WAL",
+        "PRAGMA synchronous=NORMAL",
+        "PRAGMA busy_timeout=600",
+    ]
+    with sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_LOCK:
+        assert sqlite_utils._SQLITE_PERSISTENT_PRAGMAS_READY == {}
+
+
+def test_normalize_sqlite_db_key_normalizes_relative_path_and_file_uri(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    relative_path = "nested/sqlite_utils_normalize.db"
+    absolute_path = tmp_path / "nested" / "sqlite_utils_normalize.db"
+    file_uri = f"file:{absolute_path}?mode=rwc"
+
+    key_from_relative = sqlite_utils.normalize_sqlite_db_key(relative_path)
+    key_from_uri = sqlite_utils.normalize_sqlite_db_key(file_uri)
+
+    assert key_from_relative == key_from_uri
+
+
+def test_connect_sqlite_creates_parent_directory_for_file_uri(tmp_path: Path):
+    db_path = tmp_path / "nested" / "uri" / "sqlite_utils_uri_parent.db"
+    db_uri = f"file:{db_path}?mode=rwc"
+    assert not db_path.parent.exists()
+
+    with sqlite_utils.connect_sqlite(db_uri, pragmas=("PRAGMA busy_timeout=222",)) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY)")
+        conn.commit()
+
+    assert db_path.parent.exists()
+    assert db_path.exists()
+    assert sqlite_utils.sqlite_db_path_exists(db_uri) is True
 
 
 def test_build_sqlite_pragmas_deduplicates_entries():
@@ -200,6 +461,79 @@ def test_ensure_sqlite_parent_dir_recreates_directory_when_removed_after_memoiza
 
     sqlite_utils._ensure_sqlite_parent_dir(str(db_path))
     assert db_path.parent.exists()
+
+
+def test_run_sqlite_with_retry_retries_transient_lock_error(monkeypatch):
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    monkeypatch.setattr(sqlite_utils.time, "sleep", lambda delay: sleep_calls.append(float(delay)))
+
+    def _flaky_operation() -> str:
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise sqlite3.OperationalError("database is locked")
+        return "ok"
+
+    result = sqlite_utils.run_sqlite_with_retry(
+        _flaky_operation,
+        max_retries=3,
+        retry_delay_seconds=0.01,
+    )
+
+    assert result == "ok"
+    assert calls["count"] == 3
+    assert sleep_calls == [0.01, 0.02]
+
+
+def test_run_sqlite_with_retry_does_not_retry_non_transient_error(monkeypatch):
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    monkeypatch.setattr(sqlite_utils.time, "sleep", lambda delay: sleep_calls.append(float(delay)))
+
+    def _broken_operation() -> None:
+        calls["count"] += 1
+        raise sqlite3.OperationalError("no such table: missing_table")
+
+    with pytest.raises(sqlite3.OperationalError):
+        sqlite_utils.run_sqlite_with_retry(
+            _broken_operation,
+            max_retries=3,
+            retry_delay_seconds=0.01,
+        )
+
+    assert calls["count"] == 1
+    assert sleep_calls == []
+
+
+def test_is_sqlite_missing_table_error_matches_single_table_name():
+    error = sqlite3.OperationalError("no such table: update_status_snapshot")
+
+    assert sqlite_utils.is_sqlite_missing_table_error(error, table_names="update_status_snapshot") is True
+    assert sqlite_utils.is_sqlite_missing_table_error(error, table_names="another_table") is False
+
+
+def test_is_sqlite_missing_table_error_handles_iterable_and_non_operational():
+    missing_table_error = sqlite3.OperationalError("no such table: realtime_price_cache")
+    non_missing_table_error = sqlite3.OperationalError("database is locked")
+    type_error = RuntimeError("no such table: realtime_price_cache")
+
+    assert (
+        sqlite_utils.is_sqlite_missing_table_error(
+            missing_table_error,
+            table_names=("realtime_price_cache", "fallback_table"),
+        )
+        is True
+    )
+    assert (
+        sqlite_utils.is_sqlite_missing_table_error(
+            non_missing_table_error,
+            table_names=("realtime_price_cache",),
+        )
+        is False
+    )
+    assert sqlite_utils.is_sqlite_missing_table_error(type_error, table_names=("realtime_price_cache",)) is False
 
 
 def test_prune_rows_by_updated_at_if_needed_skips_delete_when_within_limit(tmp_path: Path):

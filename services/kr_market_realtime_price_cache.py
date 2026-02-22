@@ -13,7 +13,14 @@ import threading
 from datetime import datetime, timedelta
 from typing import Any, Callable, Iterator
 
-from services.sqlite_utils import build_sqlite_pragmas, connect_sqlite
+from services.sqlite_utils import (
+    build_sqlite_pragmas,
+    connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
+)
 
 _REALTIME_PRICE_SQLITE_READY: set[str] = set()
 _REALTIME_PRICE_SQLITE_READY_LOCK = threading.Lock()
@@ -39,6 +46,8 @@ _REALTIME_PRICE_SESSION_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS * 1000,
     base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-4000"),
 )
+_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS = 2
+_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS = 0.03
 
 
 def _normalize_ticker(ticker: Any) -> str:
@@ -105,8 +114,9 @@ def _resolve_runtime_cache_db_path(get_data_path: Callable[[str], str] | None) -
 
 
 def _invalidate_realtime_price_sqlite_ready(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
     with _REALTIME_PRICE_SQLITE_READY_LOCK:
-        _REALTIME_PRICE_SQLITE_READY.discard(db_path)
+        _REALTIME_PRICE_SQLITE_READY.discard(db_key)
     _reset_sqlite_prune_state(db_path)
 
 
@@ -130,10 +140,7 @@ def _reset_sqlite_prune_state(db_path: str) -> None:
 
 
 def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and table_name.lower() in message
+    return is_sqlite_missing_table_error(error, table_names=table_name)
 
 
 def _recover_realtime_price_sqlite_schema(
@@ -145,13 +152,14 @@ def _recover_realtime_price_sqlite_schema(
 
 
 def _ensure_realtime_price_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
+    db_key = normalize_sqlite_db_key(db_path)
     with _REALTIME_PRICE_SQLITE_READY_LOCK:
-        if db_path in _REALTIME_PRICE_SQLITE_READY:
-            if os.path.exists(db_path):
+        if db_key in _REALTIME_PRICE_SQLITE_READY:
+            if sqlite_db_path_exists(db_path):
                 return True
-            _REALTIME_PRICE_SQLITE_READY.discard(db_path)
+            _REALTIME_PRICE_SQLITE_READY.discard(db_key)
 
-        try:
+        def _initialize_schema() -> None:
             with connect_sqlite(
                 db_path,
                 timeout_seconds=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS,
@@ -189,7 +197,14 @@ def _ensure_realtime_price_sqlite(db_path: str, logger: logging.Logger | None) -
                     """
                 )
                 conn.commit()
-            _REALTIME_PRICE_SQLITE_READY.add(db_path)
+
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+            )
+            _REALTIME_PRICE_SQLITE_READY.add(db_key)
             return True
         except Exception as error:
             if logger is not None:
@@ -239,14 +254,22 @@ def load_cached_realtime_prices(
             return rows
 
     try:
-        rows = _query_rows()
+        rows = run_sqlite_with_retry(
+            _query_rows,
+            max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error, table_name="realtime_price_cache") and _recover_realtime_price_sqlite_schema(
             db_path,
             logger,
         ):
             try:
-                rows = _query_rows()
+                rows = run_sqlite_with_retry(
+                    _query_rows,
+                    max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug("Failed to load realtime price cache after schema recovery: %s", retry_error)
@@ -337,14 +360,22 @@ def save_realtime_prices_to_cache(
             _mark_sqlite_cache_pruned(_REALTIME_PRICE_LAST_PRUNED_AT, db_path, now_ts)
 
     try:
-        _upsert_rows()
+        run_sqlite_with_retry(
+            _upsert_rows,
+            max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error, table_name="realtime_price_cache") and _recover_realtime_price_sqlite_schema(
             db_path,
             logger,
         ):
             try:
-                _upsert_rows()
+                run_sqlite_with_retry(
+                    _upsert_rows,
+                    max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug("Failed to save realtime price cache after schema recovery: %s", retry_error)
@@ -419,14 +450,22 @@ def load_recent_yfinance_failed_tickers(
             return rows
 
     try:
-        rows = _query_failed_tickers()
+        rows = run_sqlite_with_retry(
+            _query_failed_tickers,
+            max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error, table_name="yfinance_failed_ticker_cache") and _recover_realtime_price_sqlite_schema(
             db_path,
             logger,
         ):
             try:
-                rows = _query_failed_tickers()
+                rows = run_sqlite_with_retry(
+                    _query_failed_tickers,
+                    max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug(
@@ -521,14 +560,22 @@ def save_yfinance_failed_tickers(
             _mark_sqlite_cache_pruned(_YFINANCE_FAILED_LAST_PRUNED_AT, db_path, now_ts)
 
     try:
-        _upsert_failed_tickers()
+        run_sqlite_with_retry(
+            _upsert_failed_tickers,
+            max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error, table_name="yfinance_failed_ticker_cache") and _recover_realtime_price_sqlite_schema(
             db_path,
             logger,
         ):
             try:
-                _upsert_failed_tickers()
+                run_sqlite_with_retry(
+                    _upsert_failed_tickers,
+                    max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 if logger is not None:
                     logger.debug(

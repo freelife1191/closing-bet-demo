@@ -7,6 +7,7 @@ KR Market VCP Payload Service SQLite 캐시 회귀 테스트
 from __future__ import annotations
 
 import logging
+import os
 
 import pandas as pd
 
@@ -211,3 +212,25 @@ def test_build_vcp_payload_skips_delete_when_rows_within_limit(monkeypatch, tmp_
     payload = _build_payload(tmp_path, req_date="2026-02-22")
     assert payload["count"] == 1
     assert not any("DELETE FROM vcp_signals_payload_cache" in sql for sql in traced_sql)
+
+
+def test_vcp_signals_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_path):
+    _reset_vcp_signals_cache_state()
+    db_path = tmp_path / "runtime_cache.db"
+    connect_calls = {"count": 0}
+    logger = logging.getLogger("vcp-ready-normalized-test")
+    original_connect = vcp_signals_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(vcp_signals_cache, "connect_sqlite", _counted_connect)
+
+    assert vcp_signals_cache._ensure_sqlite_cache(str(db_path), logger) is True
+
+    monkeypatch.chdir(tmp_path)
+    relative_db_path = os.path.relpath(str(db_path), str(tmp_path))
+    assert vcp_signals_cache._ensure_sqlite_cache(relative_db_path, logger) is True
+
+    assert connect_calls["count"] == 1

@@ -316,3 +316,23 @@ def test_find_recent_valid_jongga_payload_skips_delete_when_rows_within_limit(mo
 
     assert loaded is not None
     assert not any("DELETE FROM jongga_recent_valid_payload_cache" in sql for sql in traced_sql)
+
+
+def test_recent_jongga_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path):
+    payload_helpers._RECENT_JONGGA_PAYLOAD_CACHE.clear()
+    payload_helpers._RECENT_JONGGA_SQLITE_READY.clear()
+    monkeypatch.chdir(tmp_path)
+
+    connect_calls = {"count": 0}
+    original_connect = payload_helpers.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(payload_helpers, "connect_sqlite", _counted_connect)
+
+    assert payload_helpers._ensure_recent_payload_sqlite(str(tmp_path), _logger_stub()) is True
+    assert payload_helpers._ensure_recent_payload_sqlite(".", _logger_stub()) is True
+
+    assert connect_calls["count"] == 1

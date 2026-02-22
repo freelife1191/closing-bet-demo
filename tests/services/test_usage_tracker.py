@@ -101,3 +101,23 @@ def test_usage_tracker_recovers_when_usage_table_missing(tmp_path):
             "SELECT name FROM sqlite_master WHERE type='table' AND name='usage_log'"
         ).fetchone()
     assert row is not None
+
+
+def test_usage_tracker_retries_on_transient_sqlite_lock(monkeypatch, tmp_path):
+    tracker = _build_tracker(tmp_path, limit=3)
+    email = "retry@example.com"
+
+    original_connect = tracker._connect
+    failure_state = {"failed": False}
+
+    def _flaky_connect():
+        if not failure_state["failed"]:
+            failure_state["failed"] = True
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect()
+
+    monkeypatch.setattr(tracker, "_connect", _flaky_connect)
+
+    assert tracker.check_and_increment(email) is True
+    assert tracker.get_usage(email) == 1
+    assert failure_state["failed"] is True

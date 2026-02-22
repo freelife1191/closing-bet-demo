@@ -6,6 +6,8 @@ KR AI stock info cache 리팩토링 테스트
 
 from __future__ import annotations
 
+import os
+import sqlite3
 import types
 
 import engine.kr_ai_stock_info_cache as stock_info_cache
@@ -190,3 +192,43 @@ def test_save_cached_stock_info_skips_delete_when_rows_within_limit(tmp_path, mo
     )
 
     assert not any("DELETE FROM kr_ai_stock_info_cache" in sql for sql in traced_sql)
+
+
+def test_stock_info_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_path):
+    _reset_stock_info_cache_state()
+    db_path = tmp_path / "runtime_cache.db"
+    connect_calls = {"count": 0}
+    original_connect = stock_info_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(stock_info_cache, "connect_sqlite", _counted_connect)
+
+    assert stock_info_cache._ensure_stock_info_sqlite(str(db_path), _logger_stub()) is True
+
+    monkeypatch.chdir(tmp_path)
+    relative_db_path = os.path.relpath(str(db_path), str(tmp_path))
+    assert stock_info_cache._ensure_stock_info_sqlite(relative_db_path, _logger_stub()) is True
+
+    assert connect_calls["count"] == 1
+
+
+def test_stock_info_sqlite_schema_init_retries_on_transient_lock(monkeypatch, tmp_path):
+    _reset_stock_info_cache_state()
+    db_path = tmp_path / "runtime_cache.db"
+
+    original_connect = stock_info_cache.connect_sqlite
+    failure_state = {"count": 0}
+
+    def _flaky_connect(*args, **kwargs):
+        if failure_state["count"] == 0:
+            failure_state["count"] += 1
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(stock_info_cache, "connect_sqlite", _flaky_connect)
+
+    assert stock_info_cache._ensure_stock_info_sqlite(str(db_path), _logger_stub()) is True
+    assert failure_state["count"] == 1

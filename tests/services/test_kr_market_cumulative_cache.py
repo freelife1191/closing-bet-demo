@@ -186,3 +186,29 @@ def test_cumulative_cache_skips_delete_when_rows_within_limit(tmp_path, monkeypa
 
     assert not any("DELETE FROM cumulative_performance_cache" in sql for sql in traced_sql)
     assert not any("SELECT COUNT(*) FROM cumulative_performance_cache" in sql for sql in traced_sql)
+
+
+def test_cumulative_cache_sqlite_ready_uses_normalized_db_key(tmp_path, monkeypatch):
+    _reset_cache_state()
+    monkeypatch.chdir(tmp_path)
+
+    original_connect = cumulative_cache.connect_sqlite
+    connect_calls = {"count": 0}
+    logger = logging.getLogger("test-cumulative-ready-normalized")
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(cumulative_cache, "connect_sqlite", _counted_connect)
+
+    relative_db_path = "./runtime_cache.db"
+    absolute_db_path = str((tmp_path / "runtime_cache.db").resolve())
+
+    monkeypatch.setattr(cumulative_cache, "_CUMULATIVE_CACHE_DB_PATH", relative_db_path)
+    assert cumulative_cache._ensure_cumulative_sqlite(logger) is True
+
+    monkeypatch.setattr(cumulative_cache, "_CUMULATIVE_CACHE_DB_PATH", absolute_db_path)
+    assert cumulative_cache._ensure_cumulative_sqlite(logger) is True
+
+    assert connect_calls["count"] == 1

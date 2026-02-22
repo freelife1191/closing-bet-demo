@@ -6,6 +6,7 @@ Signal Tracker source cache 리팩토링 테스트
 
 from __future__ import annotations
 
+import os
 import sqlite3
 
 import pandas as pd
@@ -149,3 +150,24 @@ def test_load_signal_tracker_csv_cached_skips_delete_when_rows_within_limit(monk
     )
     assert len(loaded) == 1
     assert not any("DELETE FROM signal_tracker_source_cache" in sql for sql in traced_sql)
+
+
+def test_signal_tracker_source_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_path):
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    db_path = tmp_path / "runtime_cache.db"
+    connect_calls = {"count": 0}
+    original_connect = source_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(source_cache, "connect_sqlite", _counted_connect)
+
+    assert source_cache._ensure_source_cache_sqlite(str(db_path), None) is True
+
+    monkeypatch.chdir(tmp_path)
+    relative_db_path = os.path.relpath(str(db_path), str(tmp_path))
+    assert source_cache._ensure_source_cache_sqlite(relative_db_path, None) is True
+
+    assert connect_calls["count"] == 1

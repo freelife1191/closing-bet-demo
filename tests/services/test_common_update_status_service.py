@@ -256,6 +256,28 @@ def test_update_status_sqlite_ready_cache_uses_normalized_db_key(tmp_path: Path,
     assert connect_calls["count"] == 1
 
 
+def test_update_status_sqlite_schema_init_retries_on_transient_lock(tmp_path: Path, monkeypatch):
+    status_service.clear_update_status_cache()
+    status_service._UPDATE_STATUS_DB_READY.clear()
+
+    sqlite_cache_path = tmp_path / "runtime_cache.db"
+    monkeypatch.setattr(status_service, "_UPDATE_STATUS_CACHE_DB_PATH", str(sqlite_cache_path))
+
+    original_connect = status_service.connect_sqlite
+    failure_state = {"count": 0}
+
+    def _flaky_connect(*args, **kwargs):
+        if failure_state["count"] == 0:
+            failure_state["count"] += 1
+            raise sqlite3.OperationalError("database is locked")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(status_service, "connect_sqlite", _flaky_connect)
+
+    assert status_service._ensure_update_status_sqlite(_logger()) is True
+    assert failure_state["count"] == 1
+
+
 def test_save_update_status_skips_delete_when_within_limit(tmp_path: Path, monkeypatch):
     status_service.clear_update_status_cache()
     sqlite_cache_path = tmp_path / "runtime_cache.db"

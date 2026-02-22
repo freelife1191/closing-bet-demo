@@ -215,3 +215,23 @@ def test_load_csv_with_signature_cache_skips_delete_when_rows_within_limit(monke
     )
     assert len(loaded) == 1
     assert not any("DELETE FROM signal_tracker_csv_source_cache" in sql for sql in traced_sql)
+
+
+def test_csv_source_sqlite_ready_cache_uses_normalized_db_key(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime_cache.db"
+    source_cache.CSV_SOURCE_SQLITE_READY.clear()
+    connect_calls = {"count": 0}
+    original_connect = source_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(source_cache, "connect_sqlite", _counted_connect)
+
+    assert source_cache._ensure_csv_source_sqlite_cache(str(db_path)) is True
+
+    monkeypatch.chdir(tmp_path)
+    assert source_cache._ensure_csv_source_sqlite_cache("runtime_cache.db") is True
+
+    assert connect_calls["count"] == 1

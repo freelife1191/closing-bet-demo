@@ -6,6 +6,7 @@ KR Market realtime price cache(SQLite) 테스트
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -422,3 +423,29 @@ def test_yfinance_failed_cache_prune_runs_only_after_interval(tmp_path: Path):
             ("999999",),
         ).fetchone()[0]
     assert int(stale_count_after_due_save) == 0
+
+
+def test_realtime_price_sqlite_ready_uses_normalized_db_key(monkeypatch, tmp_path: Path):
+    realtime_price_cache._REALTIME_PRICE_SQLITE_READY.clear()
+    with realtime_price_cache._SQLITE_PRUNE_STATE_LOCK:
+        realtime_price_cache._REALTIME_PRICE_LAST_PRUNED_AT.clear()
+        realtime_price_cache._YFINANCE_FAILED_LAST_PRUNED_AT.clear()
+
+    monkeypatch.chdir(tmp_path)
+    connect_calls = {"count": 0}
+    original_connect = realtime_price_cache.connect_sqlite
+
+    def _counted_connect(*args, **kwargs):
+        connect_calls["count"] += 1
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(realtime_price_cache, "connect_sqlite", _counted_connect)
+
+    relative_db_path = "./runtime_cache.db"
+    absolute_db_path = str((tmp_path / "runtime_cache.db").resolve())
+
+    assert realtime_price_cache._ensure_realtime_price_sqlite(relative_db_path, None) is True
+    assert realtime_price_cache._ensure_realtime_price_sqlite(absolute_db_path, None) is True
+
+    assert connect_calls["count"] == 1
+    assert os.path.exists(absolute_db_path)

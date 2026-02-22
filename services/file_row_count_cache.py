@@ -19,7 +19,11 @@ from typing import Any, Callable
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
+    normalize_sqlite_db_key,
     prune_rows_by_updated_at_if_needed,
+    run_sqlite_with_retry,
+    sqlite_db_path_exists,
 )
 
 _ROW_COUNT_CACHE: dict[str, tuple[tuple[int, int], int | None]] = {}
@@ -32,6 +36,8 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _ROW_COUNT_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
 _ROW_COUNT_SQLITE_TIMEOUT_SECONDS = 5
 _ROW_COUNT_SQLITE_MAX_ROWS = 8_192
+_ROW_COUNT_SQLITE_RETRY_ATTEMPTS = 2
+_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS = 0.03
 _ROW_COUNT_INIT_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_ROW_COUNT_SQLITE_TIMEOUT_SECONDS * 1000,
 )
@@ -42,15 +48,13 @@ _ROW_COUNT_SESSION_PRAGMAS = build_sqlite_pragmas(
 
 
 def _invalidate_row_count_sqlite_ready(db_path: str) -> None:
+    db_key = normalize_sqlite_db_key(db_path)
     with _ROW_COUNT_SQLITE_LOCK:
-        _ROW_COUNT_SQLITE_READY.discard(db_path)
+        _ROW_COUNT_SQLITE_READY.discard(db_key)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "no such table" in message and "file_row_count_cache" in message
+    return is_sqlite_missing_table_error(error, table_names="file_row_count_cache")
 
 
 def _recover_row_count_sqlite_schema(logger: Any) -> bool:
@@ -118,12 +122,14 @@ def _save_row_count_memory_entry(path: str, signature: tuple[int, int], row_coun
 
 def _ensure_row_count_sqlite_cache(logger: Any) -> bool:
     db_path = _ROW_COUNT_CACHE_DB_PATH
+    db_key = normalize_sqlite_db_key(db_path)
     with _ROW_COUNT_SQLITE_LOCK:
-        if db_path in _ROW_COUNT_SQLITE_READY:
-            if os.path.exists(db_path):
+        if db_key in _ROW_COUNT_SQLITE_READY:
+            if sqlite_db_path_exists(db_path):
                 return True
-            _ROW_COUNT_SQLITE_READY.discard(db_path)
-        try:
+            _ROW_COUNT_SQLITE_READY.discard(db_key)
+
+        def _initialize_schema() -> None:
             with connect_sqlite(
                 db_path,
                 timeout_seconds=_ROW_COUNT_SQLITE_TIMEOUT_SECONDS,
@@ -148,7 +154,13 @@ def _ensure_row_count_sqlite_cache(logger: Any) -> bool:
                     """
                 )
                 conn.commit()
-            _ROW_COUNT_SQLITE_READY.add(db_path)
+        try:
+            run_sqlite_with_retry(
+                _initialize_schema,
+                max_retries=_ROW_COUNT_SQLITE_RETRY_ATTEMPTS,
+                retry_delay_seconds=_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS,
+            )
+            _ROW_COUNT_SQLITE_READY.add(db_key)
             return True
         except Exception as error:
             logger.debug("Failed to initialize row count sqlite cache: %s", error)
@@ -182,11 +194,19 @@ def _load_row_count_from_sqlite(
             return cursor.fetchone()
 
     try:
-        row = _query_row()
+        row = run_sqlite_with_retry(
+            _query_row,
+            max_retries=_ROW_COUNT_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_row_count_sqlite_schema(logger):
             try:
-                row = _query_row()
+                row = run_sqlite_with_retry(
+                    _query_row,
+                    max_retries=_ROW_COUNT_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 logger.debug(
                     "Failed to load row count cache from sqlite after schema recovery (%s): %s",
@@ -263,11 +283,19 @@ def _save_row_count_to_sqlite(
             conn.commit()
 
     try:
-        _upsert_row_count()
+        run_sqlite_with_retry(
+            _upsert_row_count,
+            max_retries=_ROW_COUNT_SQLITE_RETRY_ATTEMPTS,
+            retry_delay_seconds=_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS,
+        )
     except Exception as error:
         if _is_missing_table_error(error) and _recover_row_count_sqlite_schema(logger):
             try:
-                _upsert_row_count()
+                run_sqlite_with_retry(
+                    _upsert_row_count,
+                    max_retries=_ROW_COUNT_SQLITE_RETRY_ATTEMPTS,
+                    retry_delay_seconds=_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS,
+                )
             except Exception as retry_error:
                 logger.debug(
                     "Failed to persist row count cache into sqlite after schema recovery (%s): %s",
