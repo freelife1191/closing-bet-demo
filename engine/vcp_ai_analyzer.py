@@ -16,11 +16,13 @@ from engine.vcp_ai_analyzer_helpers import (
     build_perplexity_request,
     build_vcp_prompt,
     extract_perplexity_response_text,
+    is_perplexity_quota_exceeded,
     parse_json_response,
 )
 from engine.vcp_ai_provider_init_helpers import (
     init_gemini_client,
     init_gpt_client,
+    init_zai_client,
     resolve_perplexity_disabled,
 )
 from engine.vcp_ai_orchestration_helpers import (
@@ -49,15 +51,17 @@ class VCPMultiAIAnalyzer:
 
         self.gemini_client = init_gemini_client(self.providers, app_config, logger)
         self.gpt_client = init_gpt_client(self.providers, app_config, logger)
+        self.zai_client = init_zai_client(app_config, logger)
 
         # Perplexity - httpx 직접 사용하므로 클라이언트 초기화 불필요
-        self.perplexity_client = None 
+        self.perplexity_client = None
         self.perplexity_disabled = resolve_perplexity_disabled(
             providers=self.providers,
             second_provider=app_config.VCP_SECOND_PROVIDER,
             has_api_key=bool(app_config.PERPLEXITY_API_KEY),
             logger=logger,
         )
+        self.perplexity_quota_exhausted = False
     
     def _build_vcp_prompt(self, stock_name: str, stock_data: Dict) -> str:
         """VCP 분석용 프롬프트 생성"""
@@ -204,13 +208,21 @@ class VCPMultiAIAnalyzer:
         prompt: str | None = None,
     ) -> Optional[Dict]:
         """Perplexity로 분석 (httpx 사용 - Retry Logic 적용)"""
-        if not app_config.PERPLEXITY_API_KEY or self.perplexity_disabled:
+        if not app_config.PERPLEXITY_API_KEY or getattr(self, "perplexity_disabled", False):
             return None
-        
+
         max_retries = 3
         base_delay = 2
 
         resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
+        if getattr(self, "perplexity_quota_exhausted", False):
+            return await self._fallback_to_zai(
+                stock_name=stock_name,
+                stock_data=stock_data,
+                prompt=resolved_prompt,
+                reason="Perplexity quota exhausted (session cache)",
+            )
+
         model = app_config.VCP_PERPLEXITY_MODEL
         url, headers, payload = build_perplexity_request(
             prompt=resolved_prompt,
@@ -234,9 +246,28 @@ class VCPMultiAIAnalyzer:
                             await asyncio.sleep(delay)
                             continue
                         logger.error(f"[Perplexity] Max retries exceeded for {stock_name}")
-                        return None
+                        self.perplexity_quota_exhausted = True
+                        return await self._fallback_to_zai(
+                            stock_name=stock_name,
+                            stock_data=stock_data,
+                            prompt=resolved_prompt,
+                            reason="Perplexity repeated 429",
+                        )
 
                     if response.status_code != 200:
+                        if is_perplexity_quota_exceeded(response.status_code, response.text):
+                            logger.warning(
+                                "[Perplexity] 할당량 소진 또는 크레딧 제한 감지 "
+                                f"({response.status_code}). Z.ai fallback 수행"
+                            )
+                            self.perplexity_quota_exhausted = True
+                            return await self._fallback_to_zai(
+                                stock_name=stock_name,
+                                stock_data=stock_data,
+                                prompt=resolved_prompt,
+                                reason=f"Perplexity quota-like response ({response.status_code})",
+                            )
+
                         logger.error(f"[Perplexity] API Error: {response.status_code} - {response.text[:200]}")
                         if response.status_code in [401, 403]:
                             logger.warning("[Perplexity] 인증 오류 발생. 이번 세션에서 Perplexity 분석을 비활성화합니다.")
@@ -259,6 +290,78 @@ class VCPMultiAIAnalyzer:
             logger.error(f"[Perplexity] {stock_name} 분석 실패: {e}")
             return None
         return None
+
+    async def _analyze_with_zai(
+        self,
+        stock_name: str,
+        stock_data: Dict,
+        prompt: str | None = None,
+    ) -> Optional[Dict]:
+        """Z.ai(OpenAI 호환)로 분석."""
+        if not getattr(self, "zai_client", None):
+            return None
+
+        try:
+            resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
+            model = app_config.ZAI_MODEL
+
+            start = time.time()
+
+            def _call():
+                response = self.zai_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a technical analyst researcher. "
+                                "Respond ONLY in JSON format."
+                            ),
+                        },
+                        {"role": "user", "content": resolved_prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=500,
+                )
+
+                choices = getattr(response, "choices", None)
+                if not choices:
+                    return ""
+                first_choice = choices[0]
+                message = getattr(first_choice, "message", None)
+                return getattr(message, "content", "")
+
+            response_text = await asyncio.to_thread(_call)
+            elapsed = time.time() - start
+            logger.debug(f"[Z.ai] {stock_name} 분석 완료 ({elapsed:.2f}s)")
+
+            result = self._parse_json_response(response_text)
+            if not result:
+                logger.warning(
+                    f"[Z.ai] JSON 파싱 실패 for {stock_name}. Raw Output: {str(response_text)[:300]}..."
+                )
+            return result
+        except Exception as e:
+            logger.error(f"[Z.ai] {stock_name} 분석 실패: {e}")
+            return None
+
+    async def _fallback_to_zai(
+        self,
+        *,
+        stock_name: str,
+        stock_data: Dict,
+        prompt: str,
+        reason: str,
+    ) -> Optional[Dict]:
+        """Perplexity 실패 시 Z.ai로 폴백 분석."""
+        if not getattr(self, "zai_client", None):
+            logger.error(
+                f"[Perplexity->Z.ai fallback] {stock_name} 폴백 불가: Z.ai 클라이언트 미초기화 ({reason})"
+            )
+            return None
+
+        logger.warning(f"[Perplexity->Z.ai fallback] {stock_name} 사유: {reason}")
+        return await self._analyze_with_zai(stock_name, stock_data, prompt)
     
     async def analyze_batch(self, stocks: List[Dict]) -> Dict[str, Dict]:
         """여러 종목 일괄 분석 (완전 병렬 처리 + 진행률 로그)"""

@@ -51,6 +51,25 @@ def init_gpt_client(providers: list[str], app_config: Any, logger: Any) -> Any:
         return None
 
 
+def init_zai_client(app_config: Any, logger: Any) -> Any:
+    """Z.ai(OpenAI 호환) client를 초기화해 반환한다."""
+    api_key = app_config.ZAI_API_KEY
+    if not api_key:
+        logger.warning("ZAI_API_KEY가 설정되지 않아 Z.ai fallback 사용 불가")
+        return None
+
+    try:
+        from openai import OpenAI
+
+        base_url = app_config.ZAI_BASE_URL
+        client = OpenAI(api_key=api_key, base_url=base_url)
+        logger.info("✅ Z.ai 클라이언트 초기화 성공")
+        return client
+    except Exception as error:
+        logger.error(f"Z.ai 초기화 실패: {error}")
+        return None
+
+
 def resolve_perplexity_disabled(
     providers: list[str],
     second_provider: str,
@@ -63,4 +82,3 @@ def resolve_perplexity_disabled(
         logger.warning("PERPLEXITY_API_KEY가 설정되지 않아 Perplexity 사용 불가")
         return True
     return False
-

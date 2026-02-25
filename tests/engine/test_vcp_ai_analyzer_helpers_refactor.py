@@ -16,6 +16,7 @@ from engine.vcp_ai_analyzer_helpers import (
     build_perplexity_request,
     build_vcp_prompt,
     extract_perplexity_response_text,
+    is_perplexity_quota_exceeded,
     parse_json_response,
 )
 
@@ -55,3 +56,9 @@ def test_perplexity_request_and_response_helpers():
     )
     assert text == "{\"action\":\"HOLD\",\"confidence\":60}"
 
+
+def test_is_perplexity_quota_exceeded_detects_quota_like_errors():
+    assert is_perplexity_quota_exceeded(402, "payment required") is True
+    assert is_perplexity_quota_exceeded(429, "Quota exceeded for this month") is True
+    assert is_perplexity_quota_exceeded(403, "insufficient credits") is True
+    assert is_perplexity_quota_exceeded(429, "temporary network issue") is False

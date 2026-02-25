@@ -12,6 +12,16 @@ from typing import Any, Optional
 
 
 _JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
+_PERPLEXITY_QUOTA_KEYWORDS = (
+    "quota",
+    "resource exhausted",
+    "insufficient",
+    "credit",
+    "billing",
+    "rate limit",
+    "limit exceeded",
+    "too many requests",
+)
 
 
 def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
@@ -130,10 +140,24 @@ def extract_perplexity_response_text(response_json: dict[str, Any]) -> str | Non
     return None
 
 
+def is_perplexity_quota_exceeded(status_code: int, response_text: str | None) -> bool:
+    """Perplexity 응답이 할당량 소진(또는 유사 제한)인지 판별한다."""
+    if status_code == 402:
+        return True
+
+    normalized = (response_text or "").lower()
+    if not normalized:
+        return False
+
+    if status_code in (400, 403, 429):
+        return any(keyword in normalized for keyword in _PERPLEXITY_QUOTA_KEYWORDS)
+    return False
+
+
 __all__ = [
     "build_perplexity_request",
     "build_vcp_prompt",
     "extract_perplexity_response_text",
+    "is_perplexity_quota_exceeded",
     "parse_json_response",
 ]
-
