@@ -20,6 +20,7 @@ from engine.vcp_ai_analyzer_helpers import (
     classify_perplexity_error,
     extract_openai_message_text,
     extract_perplexity_response_text,
+    is_low_quality_recommendation,
     is_perplexity_quota_exceeded,
     parse_json_response,
 )
@@ -551,10 +552,17 @@ class VCPMultiAIAnalyzer:
                         )
 
                         result = self._parse_json_response(last_response_text)
+                        quality_low = False
                         if result:
-                            return result
+                            if not is_low_quality_recommendation(result):
+                                return result
+                            quality_low = True
+                            logger.warning(
+                                f"[Z.ai] {stock_name} 응답 품질 미달 감지. "
+                                f"모델 전환 후보로 표시합니다 (model={model}, attempt={attempt+1})"
+                            )
 
-                        # 1차 응답이 JSON이 아닐 경우, 동일 모델에 "JSON 변환" 보정 요청을 추가로 수행한다.
+                        # 1차 응답이 JSON이 아니거나 품질 미달일 경우, 동일 모델에 JSON 보정 요청을 추가로 수행한다.
                         if last_response_text.strip():
                             repair_input = last_response_text.strip()
                             if len(repair_input) > 4000:
@@ -585,11 +593,32 @@ class VCPMultiAIAnalyzer:
                             repaired_text = await asyncio.to_thread(_call, repair_messages, True, 250)
                             repaired_result = self._parse_json_response(str(repaired_text or ""))
                             if repaired_result:
-                                logger.info(
-                                    f"[Z.ai] {stock_name} JSON 변환 보정 성공 "
+                                if not is_low_quality_recommendation(repaired_result):
+                                    logger.info(
+                                        f"[Z.ai] {stock_name} JSON 변환 보정 성공 "
+                                        f"(model={model}, attempt={attempt+1})"
+                                    )
+                                    return repaired_result
+                                quality_low = True
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} JSON 보정 응답도 품질 미달입니다 "
                                     f"(model={model}, attempt={attempt+1})"
                                 )
-                                return repaired_result
+
+                        if quality_low:
+                            if model_idx < len(model_chain) - 1:
+                                next_model = model_chain[model_idx + 1]
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} 응답 품질 미달로 모델 전환 "
+                                    f"({model} -> {next_model})"
+                                )
+                                should_try_next_model = True
+                            else:
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} 마지막 모델 {model}도 응답 품질 미달로 "
+                                    "추가 모델 전환 없이 fallback으로 종료합니다."
+                                )
+                            break
 
                         if attempt < max_parse_attempts - 1:
                             logger.warning(

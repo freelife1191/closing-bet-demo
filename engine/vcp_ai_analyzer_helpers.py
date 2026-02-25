@@ -87,6 +87,12 @@ _LOW_QUALITY_REASON_PATTERNS = (
     re.compile(r"json\s+only", re.IGNORECASE),
     re.compile(r"brief\s+explanation\s+in\s+korean", re.IGNORECASE),
 )
+_GENERIC_REASON_FALLBACKS = {
+    "외국인·기관 순매수와 VCP 패턴을 근거로 매수 관점이 우세합니다.",
+    "VCP 패턴과 수급 흐름을 종합할 때 매수 관점이 우세합니다.",
+    "VCP 패턴 약화와 수급 부담을 고려할 때 매도 관점이 우세합니다.",
+    "VCP 패턴과 수급 신호가 혼재해 현재는 관망 관점이 적절합니다.",
+}
 
 
 def _build_korean_reason_fallback(action_value: str, source_text: str = "") -> str:
@@ -121,9 +127,31 @@ def _is_low_quality_reason(raw_reason: str) -> bool:
         return True
     if normalized.lower() in {"n/a", "none", "null", "...", "tbd"}:
         return True
-    if len(normalized) < 8:
-        return True
     return any(pattern.search(normalized) for pattern in _LOW_QUALITY_REASON_PATTERNS)
+
+
+def is_low_quality_recommendation(result: Optional[dict[str, Any]]) -> bool:
+    """파싱 결과가 모델 전환이 필요한 저품질 응답인지 판단한다."""
+    if not isinstance(result, dict):
+        return True
+
+    action_value = _normalize_action_value(result.get("action"))
+    if action_value is None:
+        return True
+
+    try:
+        confidence = int(float(result.get("confidence")))
+    except (TypeError, ValueError):
+        return True
+    if confidence < 0 or confidence > 100:
+        return True
+
+    reason = " ".join(str(result.get("reason") or "").split()).strip()
+    if not reason:
+        return True
+    if reason in _GENERIC_REASON_FALLBACKS:
+        return True
+    return _is_low_quality_reason(reason)
 
 
 def _normalize_reason_value(value: Any, action_value: str) -> str:
@@ -675,6 +703,7 @@ __all__ = [
     "classify_perplexity_error",
     "extract_openai_message_text",
     "extract_perplexity_response_text",
+    "is_low_quality_recommendation",
     "is_perplexity_quota_exceeded",
     "parse_json_response",
 ]

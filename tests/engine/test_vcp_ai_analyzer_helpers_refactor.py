@@ -18,6 +18,7 @@ from engine.vcp_ai_analyzer_helpers import (
     build_vcp_prompt,
     extract_openai_message_text,
     extract_perplexity_response_text,
+    is_low_quality_recommendation,
     is_perplexity_quota_exceeded,
     parse_json_response,
 )
@@ -96,6 +97,22 @@ def test_parse_json_response_replaces_placeholder_korean_reason():
     assert parsed["confidence"] == 70
     assert "기술적 분석 요약" not in parsed["reason"]
     assert any("가" <= ch <= "힣" for ch in parsed["reason"])
+
+
+def test_is_low_quality_recommendation_detects_generic_reason_fallback():
+    low_quality = {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "VCP 패턴과 수급 흐름을 종합할 때 매수 관점이 우세합니다.",
+    }
+    high_quality = {
+        "action": "BUY",
+        "confidence": 80,
+        "reason": "VCP 점수 82점과 5일 순매수 전환을 근거로 단기 돌파 가능성이 높습니다.",
+    }
+
+    assert is_low_quality_recommendation(low_quality) is True
+    assert is_low_quality_recommendation(high_quality) is False
 
 
 def test_parse_json_response_handles_narrative_recommendation_without_json():

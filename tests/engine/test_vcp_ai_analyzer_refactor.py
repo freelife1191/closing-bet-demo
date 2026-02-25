@@ -541,24 +541,43 @@ def test_analyze_with_zai_uses_openai_client(monkeypatch):
     assert called["to_thread"] == 1
 
 
-def test_analyze_with_zai_normalizes_english_reason_to_korean(monkeypatch):
+def test_analyze_with_zai_switches_model_when_response_quality_is_low(monkeypatch):
+    calls: list[str] = []
+
+    def _create(**kwargs):
+        model = str(kwargs.get("model"))
+        calls.append(model)
+        if model == "primary-zai-model":
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=(
+                                '{"action":"BUY","confidence":81,"reason":"'
+                                "Brief explanation in Korean highlighting the VCP pattern and positive institutional/foreign buying"
+                                '"}'
+                            )
+                        )
+                    )
+                ]
+            )
+        if model == "glm-4.5-Flash":
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='{"action":"BUY","confidence":79,"reason":"VCP 점수와 수급 개선 신호를 근거로 단기 매수 우위입니다."}'
+                        )
+                    )
+                ]
+            )
+        raise AssertionError(f"Unexpected model call: {model}")
+
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.zai_client = SimpleNamespace(
         chat=SimpleNamespace(
             completions=SimpleNamespace(
-                create=lambda **_kwargs: SimpleNamespace(
-                    choices=[
-                        SimpleNamespace(
-                            message=SimpleNamespace(
-                                content=(
-                                    '{"action":"BUY","confidence":81,"reason":"'
-                                    "Brief explanation in Korean highlighting the VCP pattern and positive institutional/foreign buying"
-                                    '"}'
-                                )
-                            )
-                        )
-                    ]
-                )
+                create=_create
             )
         )
     )
@@ -567,14 +586,16 @@ def test_analyze_with_zai_normalizes_english_reason_to_korean(monkeypatch):
     async def _fake_to_thread(func, *args, **kwargs):
         return func(*args, **kwargs)
 
+    monkeypatch.setenv("ZAI_MODEL", "primary-zai-model")
     monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
 
     result = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
 
     assert result is not None
     assert result["action"] == "BUY"
-    assert result["confidence"] == 81
-    assert "Brief explanation in Korean" not in result["reason"]
+    assert result["confidence"] == 79
+    assert calls.count("primary-zai-model") >= 1
+    assert "glm-4.5-Flash" in calls
     assert any("가" <= ch <= "힣" for ch in result["reason"])
 
 
@@ -629,7 +650,7 @@ def test_analyze_with_zai_uses_reasoning_content_when_content_is_blank(monkeypat
                         SimpleNamespace(
                             message=SimpleNamespace(
                                 content="   ",
-                                reasoning_content='{"action":"BUY","confidence":71,"reason":"fallback"}',
+                                reasoning_content='{"action":"BUY","confidence":71,"reason":"수급 개선"}',
                             )
                         )
                     ]
@@ -808,7 +829,7 @@ def test_analyze_with_zai_switches_model_on_429_failure_response(monkeypatch):
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content='{"action":"BUY","confidence":73,"reason":"fallback model success"}'
+                            content='{"action":"BUY","confidence":73,"reason":"수급 유입으로 매수 우위"}'
                         )
                     )
                 ]
@@ -904,7 +925,7 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content='{"action":"HOLD","confidence":66,"reason":"third model success"}'
+                            content='{"action":"HOLD","confidence":66,"reason":"수급 혼조로 관망 유지"}'
                         )
                     )
                 ]
