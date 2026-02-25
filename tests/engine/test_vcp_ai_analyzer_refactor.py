@@ -541,6 +541,43 @@ def test_analyze_with_zai_uses_openai_client(monkeypatch):
     assert called["to_thread"] == 1
 
 
+def test_analyze_with_zai_normalizes_english_reason_to_korean(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **_kwargs: SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(
+                                content=(
+                                    '{"action":"BUY","confidence":81,"reason":"'
+                                    "Brief explanation in Korean highlighting the VCP pattern and positive institutional/foreign buying"
+                                    '"}'
+                                )
+                            )
+                        )
+                    ]
+                )
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    result = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+
+    assert result is not None
+    assert result["action"] == "BUY"
+    assert result["confidence"] == 81
+    assert "Brief explanation in Korean" not in result["reason"]
+    assert any("가" <= ch <= "힣" for ch in result["reason"])
+
+
 def test_analyze_with_zai_retries_when_first_response_not_json(monkeypatch):
     calls = {"count": 0}
 
@@ -715,7 +752,7 @@ def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkey
     assert result is not None
     assert result["action"] == "BUY"
     assert result["confidence"] >= 60
-    assert "규칙 기반 보정 결과" in result["reason"]
+    assert "현재 판단은 BUY" in result["reason"]
     assert calls["count"] == 4
 
 

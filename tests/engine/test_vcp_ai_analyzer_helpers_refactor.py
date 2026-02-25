@@ -68,6 +68,36 @@ def test_parse_json_response_pattern_fallback_handles_truncated_payload():
     assert "변동성" in parsed["reason"]
 
 
+def test_parse_json_response_normalizes_english_reason_to_korean():
+    text = (
+        '{"action":"BUY","confidence":82,'
+        '"reason":"Brief explanation in Korean highlighting the VCP pattern and positive institutional/foreign buying"}'
+    )
+
+    parsed = parse_json_response(text)
+
+    assert parsed is not None
+    assert parsed["action"] == "BUY"
+    assert parsed["confidence"] == 82
+    assert "Brief explanation in Korean" not in parsed["reason"]
+    assert any("가" <= ch <= "힣" for ch in parsed["reason"])
+
+
+def test_parse_json_response_replaces_placeholder_korean_reason():
+    text = (
+        '{"action":"HOLD","confidence":70,'
+        '"reason":"기술적 분석 요약 (한국어, 2-3문장)"}'
+    )
+
+    parsed = parse_json_response(text)
+
+    assert parsed is not None
+    assert parsed["action"] == "HOLD"
+    assert parsed["confidence"] == 70
+    assert "기술적 분석 요약" not in parsed["reason"]
+    assert any("가" <= ch <= "힣" for ch in parsed["reason"])
+
+
 def test_parse_json_response_handles_narrative_recommendation_without_json():
     text = """
     Position Recommendation:
@@ -194,3 +224,22 @@ def test_build_vcp_rule_based_recommendation_changes_by_signal_state():
     assert hold_case["action"] == "HOLD"
     assert sell_case["action"] == "SELL"
     assert buy_case["confidence"] > hold_case["confidence"]
+
+
+def test_build_vcp_rule_based_recommendation_handles_nan_without_literal_nan_text():
+    result = build_vcp_rule_based_recommendation(
+        stock_name="올릭스",
+        stock_data={
+            "score": 77,
+            "contraction_ratio": 1.49,
+            "foreign_5d": 119099532900,
+            "inst_5d": 0,
+            "foreign_1d": "nan",
+            "inst_1d": 0,
+        },
+    )
+
+    assert result["action"] in {"BUY", "SELL", "HOLD"}
+    assert "nan" not in result["reason"].lower()
+    assert "올릭스는" in result["reason"]
+    assert "수급은" in result["reason"]

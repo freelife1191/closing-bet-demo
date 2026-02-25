@@ -527,6 +527,9 @@ class VCPMultiAIAnalyzer:
                         {
                             "role": "system",
                             "content": (
+                                "당신은 한국 주식 기술적 분석가입니다. "
+                                "반드시 JSON 객체 1개만 출력하고 코드블록/설명문/마크다운을 금지합니다. "
+                                "reason은 한국어 1~2문장으로 작성하십시오. "
                                 "You are a technical analyst. "
                                 "Return exactly one compact JSON object and nothing else. "
                                 "Required keys: action, confidence, reason. "
@@ -561,9 +564,13 @@ class VCPMultiAIAnalyzer:
                                 {
                                     "role": "system",
                                     "content": (
+                                        "당신은 주식 분석 텍스트를 JSON으로 정규화하는 변환기입니다. "
+                                        "출력은 JSON 객체 1개만 허용됩니다. "
+                                        "reason은 한국어 문장으로 작성하십시오. "
                                         "You convert stock analysis text into strict JSON only. "
                                         "Return exactly one JSON object with keys: action, confidence, reason. "
-                                        "action must be BUY, SELL, or HOLD. confidence must be integer 0-100."
+                                        "action must be BUY, SELL, or HOLD. confidence must be integer 0-100. "
+                                        "reason must be a Korean sentence."
                                     ),
                                 },
                                 {

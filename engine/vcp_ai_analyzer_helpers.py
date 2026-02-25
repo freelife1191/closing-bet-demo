@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import re
 from typing import Any, Optional
 
@@ -76,6 +77,72 @@ _AMBIGUOUS_ACTION_PATTERNS = (
     re.compile(r"""\b(buy|sell|hold)\b\s*(?:/|\||,|or)\s*\b(buy|sell|hold)\b""", re.IGNORECASE),
     re.compile(r"""(매수|매도|관망|보유)\s*(?:/|\||,|또는)\s*(매수|매도|관망|보유)"""),
 )
+_LOW_QUALITY_REASON_PATTERNS = (
+    re.compile(r"기술적\s*분석\s*요약", re.IGNORECASE),
+    re.compile(r"분석\s*근거\s*없음", re.IGNORECASE),
+    re.compile(r"llm\s*응답\s*파싱", re.IGNORECASE),
+    re.compile(r"json\s*응답\s*복구", re.IGNORECASE),
+    re.compile(r"buy\|sell\|hold", re.IGNORECASE),
+    re.compile(r"return\s+exactly\s+one\s+.*json", re.IGNORECASE),
+    re.compile(r"json\s+only", re.IGNORECASE),
+    re.compile(r"brief\s+explanation\s+in\s+korean", re.IGNORECASE),
+)
+
+
+def _build_korean_reason_fallback(action_value: str, source_text: str = "") -> str:
+    normalized_action = str(action_value or "").upper()
+    lowered = str(source_text or "").lower()
+    has_buying_flow_hint = any(
+        keyword in lowered
+        for keyword in (
+            "institution",
+            "institutional",
+            "foreign",
+            "net buy",
+            "buying",
+            "inflow",
+            "순매수",
+            "수급",
+        )
+    )
+
+    if normalized_action == "BUY":
+        if has_buying_flow_hint:
+            return "외국인·기관 순매수와 VCP 패턴을 근거로 매수 관점이 우세합니다."
+        return "VCP 패턴과 수급 흐름을 종합할 때 매수 관점이 우세합니다."
+    if normalized_action == "SELL":
+        return "VCP 패턴 약화와 수급 부담을 고려할 때 매도 관점이 우세합니다."
+    return "VCP 패턴과 수급 신호가 혼재해 현재는 관망 관점이 적절합니다."
+
+
+def _is_low_quality_reason(raw_reason: str) -> bool:
+    normalized = " ".join(str(raw_reason or "").split()).strip()
+    if not normalized:
+        return True
+    if normalized.lower() in {"n/a", "none", "null", "...", "tbd"}:
+        return True
+    if len(normalized) < 8:
+        return True
+    return any(pattern.search(normalized) for pattern in _LOW_QUALITY_REASON_PATTERNS)
+
+
+def _normalize_reason_value(value: Any, action_value: str) -> str:
+    raw_reason = " ".join(str(value or "").split()).strip()
+    if _is_low_quality_reason(raw_reason):
+        return _build_korean_reason_fallback(action_value)
+
+    if re.search(r"[가-힣]", raw_reason):
+        return raw_reason[:600]
+
+    english_chars = len(re.findall(r"[A-Za-z]", raw_reason))
+    ascii_chars = sum(1 for ch in raw_reason if ord(ch) < 128 and not ch.isspace())
+    is_english_like = english_chars >= 5 and ascii_chars >= max(5, int(len(raw_reason) * 0.6))
+    has_instruction_phrase = "brief explanation in korean" in raw_reason.lower()
+
+    if is_english_like or has_instruction_phrase:
+        return _build_korean_reason_fallback(action_value, raw_reason)[:600]
+
+    return raw_reason[:600]
 
 
 def _normalize_action_value(value: Any) -> str | None:
@@ -216,7 +283,9 @@ def _parse_recommendation_by_pattern(text: str) -> Optional[dict[str, Any]]:
     if action_value is None:
         return None
     confidence_value = _normalize_confidence_value(confidence_match.group(1), default=0)
-    reason_value = _extract_reason_by_pattern(text) or "LLM 응답 파싱(부분 성공)"
+    reason_value = _extract_reason_by_pattern(text)
+    if _is_low_quality_reason(reason_value):
+        reason_value = _build_korean_reason_fallback(action_value, text)
 
     return {
         "action": action_value,
@@ -313,9 +382,41 @@ def _parse_recommendation_from_narrative(text: str) -> Optional[dict[str, Any]]:
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
-        return float(value)
+        numeric = float(value)
     except (TypeError, ValueError):
         return float(default)
+    if not math.isfinite(numeric):
+        return float(default)
+    return numeric
+
+
+def _describe_vcp_state(score: float, contraction_ratio: float) -> str:
+    if score >= 80 and contraction_ratio <= 0.80:
+        return "변동성 수축 신호가 강한 편입니다"
+    if score >= 70 and contraction_ratio <= 1.00:
+        return "변동성 수축 신호가 유지되는 구간입니다"
+    if score < 62 or contraction_ratio > 1.15:
+        return "변동성 수축 신호가 약화된 구간입니다"
+    return "변동성 수축 신호가 혼재한 구간입니다"
+
+
+def _describe_flow_state(flow_value: float, window_label: str) -> str:
+    if flow_value > 0:
+        return f"{window_label} 수급은 순매수 우위입니다"
+    if flow_value < 0:
+        return f"{window_label} 수급은 순매도 우위입니다"
+    return f"{window_label} 수급은 중립입니다"
+
+
+def _topic_particle(word: str) -> str:
+    normalized = str(word or "").strip()
+    if not normalized:
+        return "는"
+    last = normalized[-1]
+    code = ord(last)
+    if 0xAC00 <= code <= 0xD7A3:
+        return "은" if (code - 0xAC00) % 28 else "는"
+    return "는"
 
 
 def build_vcp_rule_based_recommendation(
@@ -345,10 +446,14 @@ def build_vcp_rule_based_recommendation(
         action = "HOLD"
         confidence = max(52, min(82, int(58 + max(0.0, score - 60) * 0.4)))
 
+    vcp_state = _describe_vcp_state(score, contraction_ratio)
+    flow_5d_state = _describe_flow_state(flow_5d, "5일")
+    flow_1d_state = _describe_flow_state(flow_1d, "1일")
+    topic_particle = _topic_particle(stock_name)
     reason = (
-        "LLM JSON 응답을 복구하지 못해 규칙 기반 보정 결과를 사용했습니다. "
-        f"{stock_name}의 VCP 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}, "
-        f"수급(5일 {flow_5d:.0f}주 / 1일 {flow_1d:.0f}주)을 반영해 {action}로 판단합니다."
+        f"{stock_name}{topic_particle} VCP 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}로 {vcp_state}. "
+        f"{flow_5d_state}. {flow_1d_state}. "
+        f"이 신호를 종합해 현재 판단은 {action}입니다."
     )
     return {
         "action": action,
@@ -395,7 +500,7 @@ def parse_json_response(text: str) -> Optional[dict[str, Any]]:
                 return None
             parsed["action"] = action_value
             parsed["confidence"] = _normalize_confidence_value(parsed.get("confidence"), default=0)
-            parsed["reason"] = str(parsed.get("reason") or "분석 근거 없음")[:600]
+            parsed["reason"] = _normalize_reason_value(parsed.get("reason"), action_value)
             return parsed
         return None
 
