@@ -243,7 +243,8 @@ class VCPMultiAIAnalyzer:
 
         start = time.time()
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            perplexity_timeout = float(getattr(app_config, "VCP_PERPLEXITY_API_TIMEOUT", 60))
+            async with httpx.AsyncClient(timeout=perplexity_timeout) as client:
                 for attempt in range(max_retries + 1):
                     response = await client.post(url, headers=headers, json=payload)
 
@@ -353,7 +354,9 @@ class VCPMultiAIAnalyzer:
             resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
             model = app_config.ZAI_MODEL
             max_parse_attempts = 2
+            request_timeout = float(getattr(app_config, "VCP_ZAI_API_TIMEOUT", 180))
             last_response_text = ""
+            last_error: Exception | None = None
 
             for attempt in range(max_parse_attempts):
                 start = time.time()
@@ -364,6 +367,7 @@ class VCPMultiAIAnalyzer:
                         "messages": messages,
                         "temperature": 0.0,
                         "max_tokens": max_tokens,
+                        "timeout": request_timeout,
                     }
                     if use_json_mode:
                         request_args["response_format"] = {"type": "json_object"}
@@ -417,56 +421,80 @@ class VCPMultiAIAnalyzer:
                     },
                     {"role": "user", "content": resolved_prompt},
                 ]
-                response_text = await asyncio.to_thread(_call, primary_messages, attempt == 0)
-                last_response_text = str(response_text or "")
+                try:
+                    response_text = await asyncio.to_thread(_call, primary_messages, attempt == 0)
+                    last_response_text = str(response_text or "")
 
-                elapsed = time.time() - start
-                logger.debug(f"[Z.ai] {stock_name} 분석 완료 ({elapsed:.2f}s, attempt={attempt+1})")
+                    elapsed = time.time() - start
+                    logger.debug(
+                        f"[Z.ai] {stock_name} 분석 완료 "
+                        f"({elapsed:.2f}s, attempt={attempt+1}, timeout={request_timeout:.0f}s)"
+                    )
 
-                result = self._parse_json_response(last_response_text)
-                if result:
-                    return result
+                    result = self._parse_json_response(last_response_text)
+                    if result:
+                        return result
 
-                # 1차 응답이 JSON이 아닐 경우, 동일 모델에 "JSON 변환" 보정 요청을 추가로 수행한다.
-                if last_response_text.strip():
-                    repair_input = last_response_text.strip()
-                    if len(repair_input) > 4000:
-                        repair_input = repair_input[:4000]
+                    # 1차 응답이 JSON이 아닐 경우, 동일 모델에 "JSON 변환" 보정 요청을 추가로 수행한다.
+                    if last_response_text.strip():
+                        repair_input = last_response_text.strip()
+                        if len(repair_input) > 4000:
+                            repair_input = repair_input[:4000]
 
-                    repair_messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You convert stock analysis text into strict JSON only. "
-                                "Return exactly one JSON object with keys: action, confidence, reason. "
-                                "action must be BUY, SELL, or HOLD. confidence must be integer 0-100."
-                            ),
-                        },
-                        {
-                            "role": "user",
-                            "content": (
-                                "Original analysis request:\n"
-                                f"{resolved_prompt}\n\n"
-                                "Previous model output:\n"
-                                f"{repair_input}\n\n"
-                                "Return only valid JSON."
-                            ),
-                        },
-                    ]
-                    repaired_text = await asyncio.to_thread(_call, repair_messages, True, 250)
-                    repaired_result = self._parse_json_response(str(repaired_text or ""))
-                    if repaired_result:
-                        logger.info(f"[Z.ai] {stock_name} JSON 변환 보정 성공 (attempt={attempt+1})")
-                        return repaired_result
+                        repair_messages = [
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You convert stock analysis text into strict JSON only. "
+                                    "Return exactly one JSON object with keys: action, confidence, reason. "
+                                    "action must be BUY, SELL, or HOLD. confidence must be integer 0-100."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Original analysis request:\n"
+                                    f"{resolved_prompt}\n\n"
+                                    "Previous model output:\n"
+                                    f"{repair_input}\n\n"
+                                    "Return only valid JSON."
+                                ),
+                            },
+                        ]
+                        repaired_text = await asyncio.to_thread(_call, repair_messages, True, 250)
+                        repaired_result = self._parse_json_response(str(repaired_text or ""))
+                        if repaired_result:
+                            logger.info(f"[Z.ai] {stock_name} JSON 변환 보정 성공 (attempt={attempt+1})")
+                            return repaired_result
 
-                if attempt < max_parse_attempts - 1:
-                    logger.warning(
-                        f"[Z.ai] JSON 파싱 실패 for {stock_name}. 재시도합니다 ({attempt+1}/{max_parse_attempts-1})"
+                    if attempt < max_parse_attempts - 1:
+                        logger.warning(
+                            f"[Z.ai] JSON 파싱 실패 for {stock_name}. 재시도합니다 "
+                            f"({attempt+1}/{max_parse_attempts-1})"
+                        )
+                except Exception as error:
+                    last_error = error
+                    elapsed = time.time() - start
+                    if attempt < max_parse_attempts - 1:
+                        logger.warning(
+                            f"[Z.ai] {stock_name} 호출 실패({error}) -> 재시도 "
+                            f"({attempt+1}/{max_parse_attempts-1}, elapsed={elapsed:.2f}s, "
+                            f"timeout={request_timeout:.0f}s)"
+                        )
+                        await asyncio.sleep(1.0 + attempt)
+                        continue
+                    logger.error(
+                        f"[Z.ai] {stock_name} 호출 실패(최종): {error} "
+                        f"(elapsed={elapsed:.2f}s, timeout={request_timeout:.0f}s)"
                     )
 
             logger.warning(
                 f"[Z.ai] JSON 파싱 실패 for {stock_name}. Raw Output: {last_response_text[:300]}..."
             )
+            if last_error is not None:
+                logger.warning(
+                    f"[Z.ai] {stock_name} API 오류 이후 규칙 기반 fallback 사용: {last_error}"
+                )
             fallback_result = build_vcp_rule_based_recommendation(
                 stock_name=stock_name,
                 stock_data=stock_data,

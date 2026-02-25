@@ -87,8 +87,13 @@ def init_zai_client(app_config: Any, logger: Any) -> Any:
         from openai import OpenAI
 
         base_url = app_config.ZAI_BASE_URL
-        client = OpenAI(api_key=api_key, base_url=base_url)
-        logger.info("✅ Z.ai 클라이언트 초기화 성공")
+        timeout_seconds = float(getattr(app_config, "VCP_ZAI_API_TIMEOUT", 180))
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout_seconds,
+        )
+        logger.info(f"✅ Z.ai 클라이언트 초기화 성공 (timeout={timeout_seconds:.0f}s)")
         return client
     except Exception as error:
         logger.error(f"Z.ai 초기화 실패: {error}")

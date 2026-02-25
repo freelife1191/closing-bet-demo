@@ -236,7 +236,11 @@ export const krAPI = {
     return response.json();
   },
 
-  getVCPStatus: () => fetchAPI<VCPStatus>('/api/kr/signals/status'),
+  getVCPStatus: () =>
+    fetchAPI<VCPStatus>(`/api/kr/signals/status?_t=${Date.now()}`, {
+      cache: 'no-store',
+      timeout: 30000,
+    }),
 
   // Market Gate 개별 업데이트
   updateMarketGate: async (target_date?: string) => {

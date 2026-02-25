@@ -207,6 +207,26 @@ class AppConfig:
         return os.getenv("VCP_PERPLEXITY_MODEL", "sonar-pro")
 
     @property
+    def VCP_ZAI_API_TIMEOUT(self):
+        raw = os.getenv("VCP_ZAI_API_TIMEOUT", "").strip()
+        if not raw:
+            raw = os.getenv("ANALYSIS_LLM_API_TIMEOUT", "").strip()
+        try:
+            return max(30, int(float(raw)))
+        except (TypeError, ValueError):
+            return 180
+
+    @property
+    def VCP_PERPLEXITY_API_TIMEOUT(self):
+        raw = os.getenv("VCP_PERPLEXITY_API_TIMEOUT", "").strip()
+        if not raw:
+            raw = os.getenv("ANALYSIS_LLM_API_TIMEOUT", "").strip()
+        try:
+            return max(30, int(float(raw)))
+        except (TypeError, ValueError):
+            return 120
+
+    @property
     def PERPLEXITY_API_KEY(self):
         return os.getenv("PERPLEXITY_API_KEY", "").strip()
 

@@ -145,7 +145,11 @@ def _register_vcp_status_route(kr_bp: Any, *, vcp_status: dict[str, Any]) -> Non
     @kr_bp.route('/signals/status')
     def get_vcp_status():
         """VCP 스크리너 상태 조회"""
-        return jsonify(vcp_status)
+        response = jsonify(vcp_status)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
 
 def _register_vcp_run_route(
@@ -350,13 +354,19 @@ def _register_vcp_reanalyze_route(
     def stop_reanalyze_vcp_failed_ai():
         """실패 AI 재분석 중지 요청"""
         def _handler():
-            if not vcp_status.get('running') or vcp_status.get('task_type') != 'reanalysis_failed_ai':
+            message_text = str(vcp_status.get("message", ""))
+            is_reanalysis_running = bool(vcp_status.get("running")) and (
+                vcp_status.get("task_type") == "reanalysis_failed_ai"
+                or "재분석" in message_text
+            )
+            if not is_reanalysis_running:
                 return jsonify({
                     'status': 'error',
                     'message': '진행 중인 실패 AI 재분석 작업이 없습니다.'
                 }), 409
 
             _update_status(
+                task_type='reanalysis_failed_ai',
                 cancel_requested=True,
                 status='running',
                 message='실패 AI 재분석 중지 요청을 처리 중입니다...',

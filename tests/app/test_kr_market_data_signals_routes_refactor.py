@@ -312,6 +312,34 @@ def test_reanalyze_failed_ai_stop_returns_conflict_when_not_running():
     assert response.status_code == 409
 
 
+def test_reanalyze_failed_ai_stop_accepts_running_state_without_task_type():
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    deps["vcp_status"].update(
+        {
+            "running": True,
+            "task_type": None,
+            "status": "running",
+            "message": "실패 AI 재분석 진행 중... (3/10)",
+        }
+    )
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_reanalyze_stop_missing_task_type_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.post("/api/kr/signals/reanalyze-failed-ai/stop", json={})
+    assert response.status_code == 202
+    assert deps["vcp_status"]["cancel_requested"] is True
+    assert deps["vcp_status"]["task_type"] == "reanalysis_failed_ai"
+
+
 def test_reanalyze_failed_ai_route_forwards_force_provider_to_service():
     deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
     captured: dict[str, Any] = {}

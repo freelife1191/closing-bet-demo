@@ -445,12 +445,21 @@ export default function VCPSignalsPage() {
     }
   };
 
+  const isFailedAIReanalysisRunning = (status: any): boolean => {
+    const taskType = String(status?.task_type || '').toLowerCase();
+    if (Boolean(status?.running) && taskType === 'reanalysis_failed_ai') {
+      return true;
+    }
+    const msg = String(status?.message || '');
+    return Boolean(status?.running) && msg.includes('재분석');
+  };
+
   const startReanalysisPolling = (targetDate?: string) => {
     clearReanalysisPolling();
     reanalysisPollRef.current = setInterval(async () => {
       try {
         const status = await krAPI.getVCPStatus();
-        if (status.running && status.task_type === 'reanalysis_failed_ai') {
+        if (isFailedAIReanalysisRunning(status)) {
           const progress = status.progress || 0;
           setReanalyzingFailedAI(true);
           setStoppingReanalysis(Boolean(status.cancel_requested));
@@ -491,7 +500,7 @@ export default function VCPSignalsPage() {
     try {
       const status = await krAPI.getVCPStatus();
       if (status.running) {
-        if (status.task_type === 'reanalysis_failed_ai') {
+        if (isFailedAIReanalysisRunning(status)) {
           setReanalyzingFailedAI(true);
           setStoppingReanalysis(Boolean(status.cancel_requested));
           setScreenerRunning(false);

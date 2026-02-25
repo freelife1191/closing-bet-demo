@@ -54,18 +54,24 @@ def test_init_zai_client_initializes_openai_compatible_client(monkeypatch):
     captured = {}
 
     class _FakeOpenAI:
-        def __init__(self, api_key=None, base_url=None):
+        def __init__(self, api_key=None, base_url=None, timeout=None):
             captured["api_key"] = api_key
             captured["base_url"] = base_url
+            captured["timeout"] = timeout
 
     monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=_FakeOpenAI))
 
-    config = SimpleNamespace(ZAI_API_KEY="zai-key", ZAI_BASE_URL="https://api.z.ai/v1")
+    config = SimpleNamespace(
+        ZAI_API_KEY="zai-key",
+        ZAI_BASE_URL="https://api.z.ai/v1",
+        VCP_ZAI_API_TIMEOUT=240,
+    )
     client = init_zai_client(config, _Logger())
 
     assert isinstance(client, _FakeOpenAI)
     assert captured["api_key"] == "zai-key"
     assert captured["base_url"] == "https://api.z.ai/v1"
+    assert captured["timeout"] == 240.0
 
 
 def test_init_zai_client_returns_none_when_openai_missing(monkeypatch):
