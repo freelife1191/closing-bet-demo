@@ -92,7 +92,7 @@ def register_market_data_http_route_group(
     load_json_file_fn: Callable[[str], dict[str, Any]],
     get_data_path_fn: Callable[[str], str],
     vcp_status: dict[str, Any],
-    update_vcp_ai_cache_files_fn: Callable[[str, dict[str, Any]], int],
+    update_vcp_ai_cache_files_fn: Callable[[str, dict[str, Any], dict[str, Any] | None], int],
     load_latest_vcp_price_map_fn: Callable[[], dict[str, float]],
     count_total_scanned_stocks_fn: Callable[[str], int],
     load_jongga_result_payloads_fn: Callable[..., list[Any]],

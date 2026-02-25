@@ -13,9 +13,13 @@ from services.kr_market_vcp_payload_service import build_vcp_signals_payload
 from services.kr_market_vcp_reanalysis_service import (
     build_vcp_reanalysis_no_targets_payload,
     build_vcp_reanalysis_success_payload,
+    collect_missing_vcp_ai_rows,
     collect_failed_vcp_rows,
     execute_vcp_failed_ai_reanalysis,
+    load_vcp_ai_cache_map,
+    merge_vcp_reanalysis_target_rows,
     prepare_vcp_signals_scope,
+    resolve_vcp_second_recommendation_key,
     run_async_analyzer_batch,
     validate_vcp_reanalysis_source_frame,
 )
@@ -24,6 +28,10 @@ from services.kr_market_vcp_reanalysis_service import (
 __all__ = [
     "prepare_vcp_signals_scope",
     "collect_failed_vcp_rows",
+    "resolve_vcp_second_recommendation_key",
+    "load_vcp_ai_cache_map",
+    "collect_missing_vcp_ai_rows",
+    "merge_vcp_reanalysis_target_rows",
     "run_async_analyzer_batch",
     "build_vcp_signals_payload",
     "run_vcp_background_pipeline",

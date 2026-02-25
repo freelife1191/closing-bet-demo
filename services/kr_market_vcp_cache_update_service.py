@@ -20,9 +20,10 @@ def update_vcp_ai_cache_files(
     get_data_path: Callable[[str], str],
     load_json_file: Callable[[str], dict[str, Any]],
     logger: Any,
+    ai_results: dict[str, Any] | None = None,
 ) -> int:
     """VCP AI 캐시 파일(ai_analysis_results/kr_ai_analysis)에 재분석 결과를 반영한다."""
-    if not updated_recommendations:
+    if not updated_recommendations and not ai_results:
         return 0
 
     date_str = str(target_date or "").replace("-", "")
@@ -58,6 +59,24 @@ def update_vcp_ai_cache_files(
                 if ticker in updated_recommendations:
                     item["gemini_recommendation"] = updated_recommendations[ticker]
                     changed = True
+
+                if not isinstance(ai_results, dict):
+                    continue
+
+                ai_payload = ai_results.get(ticker)
+                if not isinstance(ai_payload, dict):
+                    continue
+
+                for key in (
+                    "gemini_recommendation",
+                    "gpt_recommendation",
+                    "perplexity_recommendation",
+                ):
+                    recommendation = ai_payload.get(key)
+                    if isinstance(recommendation, dict) and recommendation:
+                        if item.get(key) != recommendation:
+                            item[key] = recommendation
+                            changed = True
 
             if not changed:
                 continue

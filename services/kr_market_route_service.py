@@ -199,10 +199,12 @@ def update_vcp_ai_cache_files(
     get_data_path: Callable[[str], str],
     load_json_file: Callable[[str], dict[str, Any]],
     logger: logging.Logger,
+    ai_results: dict[str, Any] | None = None,
 ) -> int:
     return update_vcp_ai_cache_files_service(
         target_date=target_date,
         updated_recommendations=updated_recommendations,
+        ai_results=ai_results,
         get_data_path=get_data_path,
         load_json_file=load_json_file,
         logger=logger,

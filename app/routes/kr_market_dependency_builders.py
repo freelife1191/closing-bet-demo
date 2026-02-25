@@ -20,7 +20,7 @@ def build_market_data_route_deps(
     start_vcp_screener_run: Callable[..., tuple[int, dict[str, Any]]],
     validate_vcp_reanalysis_source_frame: Callable[..., tuple[int, dict[str, Any] | None]],
     execute_vcp_failed_ai_reanalysis: Callable[..., tuple[int, dict[str, Any]]],
-    update_vcp_ai_cache_files: Callable[[str, dict[str, Any]], int],
+    update_vcp_ai_cache_files: Callable[[str, dict[str, Any], dict[str, Any] | None], int],
     build_market_status_payload: Callable[..., dict[str, Any]],
     build_vcp_signals_payload: Callable[..., dict[str, Any]],
     filter_signals_dataframe_by_date: Callable[..., Any],

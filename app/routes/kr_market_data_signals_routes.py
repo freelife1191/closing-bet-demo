@@ -192,7 +192,7 @@ def _register_vcp_reanalyze_route(
     get_data_path: Callable[[str], str],
     validate_vcp_reanalysis_source_frame: Callable[..., tuple[int, dict[str, Any] | None]],
     execute_vcp_failed_ai_reanalysis: Callable[..., tuple[int, dict[str, Any]]],
-    update_vcp_ai_cache_files: Callable[[str | None, dict[str, Any]], int],
+    update_vcp_ai_cache_files: Callable[[str | None, dict[str, Any], dict[str, Any] | None], int],
 ) -> None:
     @kr_bp.route('/signals/reanalyze-failed-ai', methods=['POST'])
     def reanalyze_vcp_failed_ai():

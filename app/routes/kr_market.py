@@ -130,10 +130,15 @@ _run_jongga_news_reanalysis_batch = lambda analyzer, app_config, items_to_analyz
 )
 
 
-def _update_vcp_ai_cache_files(target_date: str, updated_recommendations: dict) -> int:
+def _update_vcp_ai_cache_files(
+    target_date: str,
+    updated_recommendations: dict,
+    ai_results: dict | None = None,
+) -> int:
     return update_vcp_ai_cache_files(
         target_date=target_date,
         updated_recommendations=updated_recommendations,
+        ai_results=ai_results,
         get_data_path=get_data_path,
         load_json_file=load_json_file,
         logger=logger,
@@ -175,9 +180,10 @@ register_market_data_http_route_group(
     load_json_file_fn=lambda filename: load_json_file(filename),
     get_data_path_fn=lambda filename: get_data_path(filename),
     vcp_status=VCP_STATUS,
-    update_vcp_ai_cache_files_fn=lambda target_date, updated_recommendations: _update_vcp_ai_cache_files(
+    update_vcp_ai_cache_files_fn=lambda target_date, updated_recommendations, ai_results=None: _update_vcp_ai_cache_files(
         target_date,
         updated_recommendations,
+        ai_results,
     ),
     load_latest_vcp_price_map_fn=lambda: _load_latest_vcp_price_map(),
     count_total_scanned_stocks_fn=_count_total_scanned_stocks,

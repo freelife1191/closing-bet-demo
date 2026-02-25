@@ -7,10 +7,21 @@ KR Market VCP Reanalysis Service
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 from typing import Any, Callable
 
 import pandas as pd
+
+from engine.config import app_config
+
+
+_VCP_SECOND_RECOMMENDATION_KEY_MAP = {
+    "gpt": "gpt_recommendation",
+    "openai": "gpt_recommendation",
+    "perplexity": "perplexity_recommendation",
+}
 
 
 def prepare_vcp_signals_scope(
@@ -49,6 +60,120 @@ def collect_failed_vcp_rows(
     return failed_rows, len(scoped_df)
 
 
+def resolve_vcp_second_recommendation_key(second_provider: str) -> str:
+    """second_provider 문자열을 recommendation 필드명으로 변환한다."""
+    provider = str(second_provider or "").strip().lower()
+    return _VCP_SECOND_RECOMMENDATION_KEY_MAP.get(provider, "gpt_recommendation")
+
+
+def load_vcp_ai_cache_map(
+    *,
+    target_date: str | None,
+    signals_path: str,
+    logger: logging.Logger,
+) -> tuple[bool, dict[str, dict[str, Any]]]:
+    """
+    VCP AI 캐시 파일들을 읽어 ticker 기준 추천 맵을 구성한다.
+
+    반환값:
+      - bool: AI 캐시 파일 존재 여부
+      - dict: {ticker: {"gemini_recommendation": ..., "gpt_recommendation": ..., "perplexity_recommendation": ...}}
+    """
+    date_str = str(target_date or "").replace("-", "")
+    data_dir = os.path.dirname(str(signals_path))
+    candidate_files = [
+        f"ai_analysis_results_{date_str}.json" if date_str else "",
+        "ai_analysis_results.json",
+        f"kr_ai_analysis_{date_str}.json" if date_str else "",
+        "kr_ai_analysis.json",
+    ]
+
+    ai_data_map: dict[str, dict[str, Any]] = {}
+    cache_file_exists = False
+    recommendation_keys = (
+        "gemini_recommendation",
+        "gpt_recommendation",
+        "perplexity_recommendation",
+    )
+
+    for filename in candidate_files:
+        if not filename:
+            continue
+
+        file_path = os.path.join(data_dir, filename)
+        if not os.path.exists(file_path):
+            continue
+        cache_file_exists = True
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as fp:
+                payload = json.load(fp)
+        except Exception as error:
+            logger.warning(f"VCP AI 캐시 로드 실패 ({filename}): {error}")
+            continue
+
+        signals = payload.get("signals", []) if isinstance(payload, dict) else []
+        if not isinstance(signals, list):
+            continue
+
+        for item in signals:
+            if not isinstance(item, dict):
+                continue
+            ticker = str(item.get("ticker") or item.get("stock_code") or "").zfill(6)
+            if ticker == "000000":
+                continue
+
+            ticker_entry = ai_data_map.setdefault(ticker, {})
+            for key in recommendation_keys:
+                value = item.get(key)
+                if isinstance(value, dict) and value and not isinstance(ticker_entry.get(key), dict):
+                    ticker_entry[key] = value
+
+    return cache_file_exists, ai_data_map
+
+
+def collect_missing_vcp_ai_rows(
+    *,
+    scoped_df: pd.DataFrame,
+    ai_data_map: dict[str, dict[str, Any]],
+    second_recommendation_key: str,
+) -> list[tuple[int, dict[str, Any]]]:
+    """
+    Gemini/Second AI 추천이 누락된 행을 수집한다.
+    """
+    missing_rows: list[tuple[int, dict[str, Any]]] = []
+    columns = list(scoped_df.columns)
+
+    for idx, row_values in zip(scoped_df.index, scoped_df.itertuples(index=False, name=None)):
+        row_dict = dict(zip(columns, row_values))
+        ticker = str(row_dict.get("ticker", "")).zfill(6)
+        ai_item = ai_data_map.get(ticker, {})
+
+        gemini_missing = not isinstance(ai_item.get("gemini_recommendation"), dict)
+        second_missing = not isinstance(ai_item.get(second_recommendation_key), dict)
+        if gemini_missing or second_missing:
+            missing_rows.append((idx, row_dict))
+
+    return missing_rows
+
+
+def merge_vcp_reanalysis_target_rows(
+    primary_rows: list[tuple[int, dict[str, Any]]],
+    additional_rows: list[tuple[int, dict[str, Any]]],
+) -> list[tuple[int, dict[str, Any]]]:
+    """기본 대상(primary)과 추가 대상(additional)을 index 기준으로 병합한다."""
+    merged_rows = list(primary_rows)
+    seen_indexes = {idx for idx, _ in primary_rows}
+
+    for idx, row in additional_rows:
+        if idx in seen_indexes:
+            continue
+        merged_rows.append((idx, row))
+        seen_indexes.add(idx)
+
+    return merged_rows
+
+
 def run_async_analyzer_batch(analyzer: Any, stocks_to_analyze: list[dict[str, Any]]) -> dict[str, Any]:
     """비동기 analyzer 배치를 동기 컨텍스트에서 실행한다."""
     loop = asyncio.new_event_loop()
@@ -82,7 +207,7 @@ def build_vcp_reanalysis_no_targets_payload(
 ) -> dict[str, Any]:
     return {
         "status": "success",
-        "message": "재분석이 필요한 실패 항목이 없습니다.",
+        "message": "재분석이 필요한 실패/누락 항목이 없습니다.",
         "target_date": target_date,
         "total_in_scope": total_in_scope,
         "failed_targets": 0,
@@ -144,7 +269,26 @@ def execute_vcp_failed_ai_reanalysis(
             scoped_df=scoped_df,
             is_failed=_is_vcp_ai_analysis_failed,
         )
-        failed_targets = len(failed_rows)
+
+        second_recommendation_key = resolve_vcp_second_recommendation_key(
+            app_config.VCP_SECOND_PROVIDER
+        )
+        cache_exists, ai_data_map = load_vcp_ai_cache_map(
+            target_date=normalized_target_date,
+            signals_path=signals_path,
+            logger=logger,
+        )
+
+        target_rows = list(failed_rows)
+        if cache_exists:
+            missing_rows = collect_missing_vcp_ai_rows(
+                scoped_df=scoped_df,
+                ai_data_map=ai_data_map,
+                second_recommendation_key=second_recommendation_key,
+            )
+            target_rows = merge_vcp_reanalysis_target_rows(target_rows, missing_rows)
+
+        failed_targets = len(target_rows)
 
         if failed_targets == 0:
             return 200, build_vcp_reanalysis_no_targets_payload(
@@ -159,7 +303,7 @@ def execute_vcp_failed_ai_reanalysis(
                 "message": "사용 가능한 AI Provider가 없습니다.",
             }
 
-        stocks_to_analyze = _build_vcp_stock_payloads([row for _, row in failed_rows])
+        stocks_to_analyze = _build_vcp_stock_payloads([row for _, row in target_rows])
         ai_results = run_async_analyzer_batch(
             analyzer=analyzer,
             stocks_to_analyze=stocks_to_analyze,
@@ -167,12 +311,19 @@ def execute_vcp_failed_ai_reanalysis(
 
         updated_count, still_failed_count, updated_recommendations = _apply_vcp_reanalysis_updates(
             signals_df,
-            failed_rows,
+            target_rows,
             ai_results,
         )
 
         signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
-        cache_files_updated = update_cache_files(normalized_target_date, updated_recommendations)
+        try:
+            cache_files_updated = update_cache_files(
+                normalized_target_date,
+                updated_recommendations,
+                ai_results,
+            )
+        except TypeError:
+            cache_files_updated = update_cache_files(normalized_target_date, updated_recommendations)
 
         return 200, build_vcp_reanalysis_success_payload(
             target_date=normalized_target_date,
@@ -190,6 +341,10 @@ def execute_vcp_failed_ai_reanalysis(
 __all__ = [
     "prepare_vcp_signals_scope",
     "collect_failed_vcp_rows",
+    "resolve_vcp_second_recommendation_key",
+    "load_vcp_ai_cache_map",
+    "collect_missing_vcp_ai_rows",
+    "merge_vcp_reanalysis_target_rows",
     "run_async_analyzer_batch",
     "validate_vcp_reanalysis_source_frame",
     "build_vcp_reanalysis_no_targets_payload",
