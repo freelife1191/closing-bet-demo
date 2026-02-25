@@ -494,3 +494,45 @@ def load_csv_with_signature_cache(
     else:
         cache.pop(normalized_path, None)
     return loaded
+
+
+def refresh_csv_signature_cache_snapshot(
+    *,
+    path: str,
+    frame: pd.DataFrame,
+    cache: dict[str, tuple[tuple[int, int, int], pd.DataFrame]],
+    sqlite_cache_kind: str | None = None,
+    usecols_filter: set[str] | None = None,
+) -> tuple[int, int, int] | None:
+    """
+    파일 저장 직후 in-memory/SQLite source cache를 최신 스냅샷으로 갱신한다.
+    """
+    normalized_path = _normalize_source_path(path)
+    if not isinstance(frame, pd.DataFrame):
+        cache.pop(normalized_path, None)
+        return None
+
+    signature = get_file_signature(normalized_path)
+    if signature is None:
+        cache.pop(normalized_path, None)
+        return None
+
+    normalized_frame = frame.copy()
+    if usecols_filter is not None:
+        selected_columns = [column for column in normalized_frame.columns if column in usecols_filter]
+        normalized_frame = normalized_frame.loc[:, selected_columns]
+
+    _set_bounded_source_cache_entry(
+        cache,
+        normalized_path,
+        (signature, normalized_frame),
+    )
+    if sqlite_cache_kind:
+        _save_csv_source_to_sqlite(
+            path=normalized_path,
+            signature=signature,
+            usecols_filter=usecols_filter,
+            cache_kind=sqlite_cache_kind,
+            payload=normalized_frame,
+        )
+    return signature

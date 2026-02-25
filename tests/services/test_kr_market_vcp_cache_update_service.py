@@ -78,3 +78,56 @@ def test_update_vcp_ai_cache_files_updates_second_ai_recommendations(tmp_path: P
     assert updated == 1
     payload = json.loads(target_file.read_text(encoding="utf-8"))
     assert payload["signals"][0]["perplexity_recommendation"]["action"] == "BUY"
+
+
+def test_update_vcp_ai_cache_files_normalizes_ticker_keys_for_updates(tmp_path: Path):
+    target_file = tmp_path / "ai_analysis_results.json"
+    target_file.write_text(
+        json.dumps(
+            {
+                "signals": [
+                    {"ticker": "005930", "gemini_recommendation": {"action": "HOLD"}},
+                    {"ticker": "000660", "gemini_recommendation": {"action": "HOLD"}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    updated = update_vcp_ai_cache_files(
+        target_date=None,
+        updated_recommendations={"5930": {"action": "BUY"}},
+        get_data_path=lambda filename: str(tmp_path / filename),
+        load_json_file=lambda filename: json.loads((tmp_path / filename).read_text(encoding="utf-8")),
+        logger=type("L", (), {"warning": lambda *_a, **_k: None})(),
+    )
+
+    assert updated == 1
+    payload = json.loads(target_file.read_text(encoding="utf-8"))
+    assert payload["signals"][0]["gemini_recommendation"]["action"] == "BUY"
+    assert payload["signals"][1]["gemini_recommendation"]["action"] == "HOLD"
+
+
+def test_update_vcp_ai_cache_files_returns_zero_when_ai_results_have_no_dict_payload(tmp_path: Path):
+    target_file = tmp_path / "ai_analysis_results.json"
+    target_file.write_text(
+        json.dumps(
+            {
+                "signals": [
+                    {"ticker": "005930", "gemini_recommendation": {"action": "HOLD"}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    updated = update_vcp_ai_cache_files(
+        target_date=None,
+        updated_recommendations={},
+        get_data_path=lambda filename: str(tmp_path / filename),
+        load_json_file=lambda filename: json.loads((tmp_path / filename).read_text(encoding="utf-8")),
+        logger=type("L", (), {"warning": lambda *_a, **_k: None})(),
+        ai_results={"005930": {"perplexity_recommendation": None}},
+    )
+
+    assert updated == 0

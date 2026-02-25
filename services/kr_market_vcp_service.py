@@ -23,6 +23,7 @@ from services.kr_market_vcp_reanalysis_service import (
     resolve_vcp_second_recommendation_key,
     run_async_analyzer_batch,
     run_async_analyzer_batch_with_control,
+    write_vcp_signals_csv_atomic,
     validate_vcp_reanalysis_source_frame,
 )
 
@@ -34,6 +35,7 @@ __all__ = [
     "load_vcp_ai_cache_map",
     "collect_missing_vcp_ai_rows",
     "merge_vcp_reanalysis_target_rows",
+    "write_vcp_signals_csv_atomic",
     "run_async_analyzer_batch",
     "run_async_analyzer_batch_with_control",
     "build_vcp_signals_payload",

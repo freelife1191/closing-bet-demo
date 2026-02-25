@@ -10,6 +10,7 @@ import os
 import sqlite3
 import threading
 import time
+from io import StringIO
 
 import pandas as pd
 
@@ -608,3 +609,44 @@ def test_load_csv_with_signature_cache_memory_cache_is_bounded_lru(monkeypatch, 
     assert first_key in cached_keys
     assert third_key in cached_keys
     assert second_key not in cached_keys
+
+
+def test_refresh_csv_signature_cache_snapshot_updates_memory_and_sqlite(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime_cache.db"
+    _reset_csv_source_cache_state()
+    monkeypatch.setattr(source_cache, "_source_cache_db_path", lambda _path: str(db_path))
+
+    csv_path = tmp_path / "signals_refresh.csv"
+    pd.DataFrame(
+        [
+            {"status": "OPEN", "return_pct": 1.5, "signal_date": "2026-02-22", "hold_days": 1},
+        ]
+    ).to_csv(csv_path, index=False, encoding="utf-8-sig")
+    frame = pd.read_csv(csv_path, encoding="utf-8-sig")
+
+    cache: dict[str, tuple[tuple[int, int, int], pd.DataFrame]] = {}
+    signature = source_cache.refresh_csv_signature_cache_snapshot(
+        path=str(csv_path),
+        frame=frame,
+        cache=cache,
+        sqlite_cache_kind="performance_source",
+        usecols_filter={"status", "return_pct"},
+    )
+
+    assert signature is not None
+    normalized_path = os.path.abspath(str(csv_path))
+    assert normalized_path in cache
+    assert set(cache[normalized_path][1].columns) == {"status", "return_pct"}
+
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute(
+            """
+            SELECT payload_json
+            FROM signal_tracker_csv_source_cache
+            WHERE source_path = ? AND cache_kind = ?
+            """,
+            (normalized_path, "performance_source"),
+        ).fetchone()
+    assert row is not None
+    payload = pd.read_json(StringIO(row[0]), orient="records")
+    assert set(payload.columns) == {"status", "return_pct"}

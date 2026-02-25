@@ -689,6 +689,40 @@ def test_load_performance_source_frame_reuses_sqlite_cache_after_memory_clear(tm
     assert row and row[0] >= 1
 
 
+def test_refresh_signals_log_source_cache_primes_performance_sqlite_cache(tmp_path, monkeypatch):
+    signals_path = tmp_path / "signals_log.csv"
+    pd.DataFrame(
+        [
+            {
+                "ticker": "000001",
+                "status": "CLOSED",
+                "return_pct": 2.3,
+                "signal_date": "2026-02-20",
+                "exit_date": "2026-02-22",
+                "hold_days": 2,
+            }
+        ]
+    ).to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    tracker = object.__new__(SignalTracker)
+    tracker._refresh_signals_log_source_cache(
+        str(signals_path),
+        pd.read_csv(signals_path, encoding="utf-8-sig", dtype={"ticker": str}),
+    )
+
+    signal_tracker_analysis_mixin._PERFORMANCE_SOURCE_CACHE.clear()
+    monkeypatch.setattr(
+        signal_tracker_analysis_mixin.pd,
+        "read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("should use sqlite cache")),
+    )
+
+    loaded = SignalTracker._load_performance_source_frame(str(signals_path))
+
+    assert len(loaded) == 1
+    assert float(loaded.iloc[0]["return_pct"]) == 2.3
+
+
 def test_load_supply_source_frame_invalidates_signature_cache_on_file_change(tmp_path, monkeypatch):
     inst_path = tmp_path / "all_institutional_trend_data.csv"
     inst_path.write_text("dummy\n", encoding="utf-8-sig")

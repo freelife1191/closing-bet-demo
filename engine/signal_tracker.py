@@ -89,10 +89,8 @@ class SignalTracker(SignalTrackerAnalysisMixin):
 
         numeric_cols = [col for col in PRICE_NUMERIC_COLUMNS if col in df.columns]
         if numeric_cols:
-            df.loc[:, numeric_cols] = df.loc[:, numeric_cols].apply(
-                pd.to_numeric,
-                errors="coerce",
-            )
+            for column in numeric_cols:
+                df[column] = pd.to_numeric(df[column], errors="coerce")
 
         df = df.sort_values(["ticker", "date"])
         logger.info(f"   📊 가격 데이터 로드: {len(df):,}개 레코드")

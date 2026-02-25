@@ -24,8 +24,8 @@ from engine.signal_tracker_analysis_source_cache import (
     PERFORMANCE_SOURCE_CACHE as _PERFORMANCE_SOURCE_CACHE,
     SIGNALS_LOG_SOURCE_CACHE as _SIGNALS_LOG_SOURCE_CACHE,
     SUPPLY_SOURCE_CACHE as _SUPPLY_SOURCE_CACHE,
-    get_file_signature as _get_file_signature,
     load_csv_with_signature_cache as _load_csv_with_signature_cache,
+    refresh_csv_signature_cache_snapshot as _refresh_csv_signature_cache_snapshot,
 )
 from engine.signal_tracker_log_helpers import (
     append_signals_log,
@@ -150,15 +150,31 @@ class SignalTrackerAnalysisMixin:
         """signals_log 저장 직후 메모리 source cache를 최신 스냅샷으로 갱신한다."""
         if not isinstance(frame, pd.DataFrame):
             _SIGNALS_LOG_SOURCE_CACHE.pop(signals_log_path, None)
-            return
-        signature = _get_file_signature(signals_log_path)
-        if signature is None:
-            _SIGNALS_LOG_SOURCE_CACHE.pop(signals_log_path, None)
+            _PERFORMANCE_SOURCE_CACHE.pop(signals_log_path, None)
             return
         normalized = frame.copy()
         if "_ticker_padded" in normalized.columns:
             normalized = normalized.drop(columns=["_ticker_padded"])
-        _SIGNALS_LOG_SOURCE_CACHE[signals_log_path] = (signature, normalized)
+
+        signature = _refresh_csv_signature_cache_snapshot(
+            path=signals_log_path,
+            frame=normalized,
+            cache=_SIGNALS_LOG_SOURCE_CACHE,
+            sqlite_cache_kind="signals_log_update",
+            usecols_filter=None,
+        )
+        if signature is None:
+            _SIGNALS_LOG_SOURCE_CACHE.pop(signals_log_path, None)
+            _PERFORMANCE_SOURCE_CACHE.pop(signals_log_path, None)
+            return
+
+        _refresh_csv_signature_cache_snapshot(
+            path=signals_log_path,
+            frame=normalized,
+            cache=_PERFORMANCE_SOURCE_CACHE,
+            sqlite_cache_kind="performance_source",
+            usecols_filter=PERFORMANCE_SOURCE_COLUMN_SET,
+        )
 
     @staticmethod
     def _normalize_performance_frame(df: pd.DataFrame) -> pd.DataFrame:

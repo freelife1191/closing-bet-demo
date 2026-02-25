@@ -7,7 +7,6 @@ KR Market VCP Reanalysis Service
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from typing import Any, Callable
@@ -15,6 +14,10 @@ from typing import Any, Callable
 import pandas as pd
 
 from engine.config import app_config
+from services.kr_market_data_cache_service import (
+    atomic_write_text,
+    load_json_payload_from_path,
+)
 
 
 _VCP_SECOND_RECOMMENDATION_KEY_MAP = {
@@ -93,6 +96,9 @@ def load_vcp_ai_cache_map(
     target_date: str | None,
     signals_path: str,
     logger: logging.Logger,
+    load_json_payload_from_path_fn: Callable[[str], Any] | None = None,
+    ticker_filter: set[str] | None = None,
+    required_recommendation_keys: set[str] | None = None,
 ) -> tuple[bool, dict[str, dict[str, Any]]]:
     """
     VCP AI 캐시 파일들을 읽어 ticker 기준 추천 맵을 구성한다.
@@ -112,11 +118,32 @@ def load_vcp_ai_cache_map(
 
     ai_data_map: dict[str, dict[str, Any]] = {}
     cache_file_exists = False
+    json_loader = load_json_payload_from_path_fn or load_json_payload_from_path
+    normalized_ticker_filter: set[str] | None = None
+    if ticker_filter:
+        normalized_ticker_filter = {
+            str(ticker).strip().zfill(6)
+            for ticker in ticker_filter
+            if str(ticker).strip()
+        }
     recommendation_keys = (
         "gemini_recommendation",
         "gpt_recommendation",
         "perplexity_recommendation",
     )
+    normalized_required_keys: set[str] | None = None
+    if required_recommendation_keys:
+        allowed_keys = set(recommendation_keys)
+        filtered_required_keys = {
+            str(key).strip()
+            for key in required_recommendation_keys
+            if str(key).strip() in allowed_keys
+        }
+        if filtered_required_keys:
+            normalized_required_keys = filtered_required_keys
+    unresolved_tickers: set[str] | None = None
+    if normalized_ticker_filter and normalized_required_keys:
+        unresolved_tickers = set(normalized_ticker_filter)
 
     for filename in candidate_files:
         if not filename:
@@ -128,8 +155,7 @@ def load_vcp_ai_cache_map(
         cache_file_exists = True
 
         try:
-            with open(file_path, "r", encoding="utf-8") as fp:
-                payload = json.load(fp)
+            payload = json_loader(file_path)
         except Exception as error:
             logger.warning(f"VCP AI 캐시 로드 실패 ({filename}): {error}")
             continue
@@ -144,12 +170,30 @@ def load_vcp_ai_cache_map(
             ticker = str(item.get("ticker") or item.get("stock_code") or "").zfill(6)
             if ticker == "000000":
                 continue
+            if (
+                normalized_ticker_filter is not None
+                and ticker not in normalized_ticker_filter
+            ):
+                continue
 
             ticker_entry = ai_data_map.setdefault(ticker, {})
             for key in recommendation_keys:
                 value = item.get(key)
                 if isinstance(value, dict) and value and not isinstance(ticker_entry.get(key), dict):
                     ticker_entry[key] = value
+            if (
+                unresolved_tickers is not None
+                and ticker in unresolved_tickers
+                and all(
+                    isinstance(ticker_entry.get(required_key), dict)
+                    for required_key in normalized_required_keys or ()
+                )
+            ):
+                unresolved_tickers.discard(ticker)
+                if not unresolved_tickers:
+                    break
+        if unresolved_tickers is not None and not unresolved_tickers:
+            break
 
     return cache_file_exists, ai_data_map
 
@@ -177,6 +221,13 @@ def collect_missing_vcp_ai_rows(
             missing_rows.append((idx, row_dict))
 
     return missing_rows
+
+
+def write_vcp_signals_csv_atomic(signals_df: pd.DataFrame, signals_path: str) -> None:
+    """signals_log.csv를 원자적으로 저장하고 캐시를 무효화한다."""
+    csv_content = signals_df.to_csv(index=False)
+    # 기존 utf-8-sig 저장 형식을 유지한다.
+    atomic_write_text(signals_path, f"\ufeff{csv_content}")
 
 
 def merge_vcp_reanalysis_target_rows(
@@ -389,6 +440,11 @@ def execute_vcp_failed_ai_reanalysis(
             (idx, dict(zip(scoped_columns, row_values)))
             for idx, row_values in zip(scoped_df.index, scoped_df.itertuples(index=False, name=None))
         ]
+        scoped_tickers: set[str] = {
+            str(row.get("ticker", "")).zfill(6)
+            for _, row in all_scoped_rows
+            if str(row.get("ticker", "")).strip()
+        }
 
         failed_rows, total_in_scope = collect_failed_vcp_rows(
             scoped_df=scoped_df,
@@ -398,11 +454,19 @@ def execute_vcp_failed_ai_reanalysis(
         second_recommendation_key = resolve_vcp_second_recommendation_key(
             app_config.VCP_SECOND_PROVIDER
         )
-        cache_exists, ai_data_map = load_vcp_ai_cache_map(
-            target_date=normalized_target_date,
-            signals_path=signals_path,
-            logger=logger,
-        )
+        cache_exists = False
+        ai_data_map: dict[str, dict[str, Any]] = {}
+        if normalized_force_provider not in {"gemini", "second"}:
+            cache_exists, ai_data_map = load_vcp_ai_cache_map(
+                target_date=normalized_target_date,
+                signals_path=signals_path,
+                logger=logger,
+                ticker_filter=scoped_tickers,
+                required_recommendation_keys={
+                    "gemini_recommendation",
+                    second_recommendation_key,
+                },
+            )
 
         if normalized_force_provider in {"gemini", "second"}:
             target_rows = list(all_scoped_rows)
@@ -517,7 +581,7 @@ def execute_vcp_failed_ai_reanalysis(
         updated_count += second_only_success_count
         still_failed_count += second_only_failed_count
 
-        signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+        write_vcp_signals_csv_atomic(signals_df, signals_path)
         try:
             cache_files_updated = update_cache_files(
                 normalized_target_date,
@@ -560,6 +624,7 @@ __all__ = [
     "load_vcp_ai_cache_map",
     "collect_missing_vcp_ai_rows",
     "merge_vcp_reanalysis_target_rows",
+    "write_vcp_signals_csv_atomic",
     "run_async_analyzer_batch",
     "run_async_analyzer_batch_with_control",
     "validate_vcp_reanalysis_source_frame",

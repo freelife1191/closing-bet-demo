@@ -144,6 +144,253 @@ def test_load_vcp_ai_cache_map_reads_existing_cache_files(tmp_path):
     assert isinstance(ai_map["000660"]["gpt_recommendation"], dict)
 
 
+def test_load_vcp_ai_cache_map_uses_injected_json_loader(tmp_path):
+    cache_payload = {
+        "signals": [
+            {
+                "ticker": "005930",
+                "gemini_recommendation": {"action": "BUY"},
+            }
+        ]
+    }
+    (tmp_path / "ai_analysis_results.json").write_text("{}", encoding="utf-8")
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text("ticker,signal_date\n005930,2026-02-21\n", encoding="utf-8")
+
+    loaded_paths: list[str] = []
+
+    def _loader(path: str):
+        loaded_paths.append(path)
+        return cache_payload
+
+    cache_exists, ai_map = load_vcp_ai_cache_map(
+        target_date="2026-02-21",
+        signals_path=str(signals_path),
+        logger=logging.getLogger(__name__),
+        load_json_payload_from_path_fn=_loader,
+    )
+
+    assert cache_exists is True
+    assert loaded_paths
+    assert isinstance(ai_map["005930"]["gemini_recommendation"], dict)
+
+
+def test_load_vcp_ai_cache_map_applies_ticker_filter(tmp_path):
+    cache_payload = {
+        "signals": [
+            {
+                "ticker": "005930",
+                "gemini_recommendation": {"action": "BUY"},
+            },
+            {
+                "ticker": "000660",
+                "gemini_recommendation": {"action": "SELL"},
+            },
+        ]
+    }
+    (tmp_path / "ai_analysis_results.json").write_text(
+        json.dumps(cache_payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text("ticker,signal_date\n005930,2026-02-21\n", encoding="utf-8")
+
+    cache_exists, ai_map = load_vcp_ai_cache_map(
+        target_date="2026-02-21",
+        signals_path=str(signals_path),
+        logger=logging.getLogger(__name__),
+        ticker_filter={"005930"},
+    )
+
+    assert cache_exists is True
+    assert "005930" in ai_map
+    assert "000660" not in ai_map
+
+
+def test_load_vcp_ai_cache_map_stops_early_when_required_keys_resolved(tmp_path):
+    cache_payload = {
+        "signals": [
+            {
+                "ticker": "005930",
+                "gemini_recommendation": {"action": "BUY"},
+                "perplexity_recommendation": {"action": "HOLD"},
+            },
+            {
+                "ticker": "000660",
+                "gemini_recommendation": {"action": "SELL"},
+                "perplexity_recommendation": {"action": "BUY"},
+            },
+        ]
+    }
+    (tmp_path / "ai_analysis_results.json").write_text("{}", encoding="utf-8")
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text("ticker,signal_date\n005930,2026-02-21\n", encoding="utf-8")
+
+    call_count = {"count": 0}
+
+    def _loader(_path: str):
+        call_count["count"] += 1
+        return cache_payload
+
+    cache_exists, ai_map = load_vcp_ai_cache_map(
+        target_date="2026-02-21",
+        signals_path=str(signals_path),
+        logger=logging.getLogger(__name__),
+        load_json_payload_from_path_fn=_loader,
+        ticker_filter={"005930"},
+        required_recommendation_keys={"gemini_recommendation", "perplexity_recommendation"},
+    )
+
+    assert cache_exists is True
+    assert call_count["count"] == 1
+    assert "005930" in ai_map
+    assert "000660" not in ai_map
+
+
+def test_execute_vcp_failed_ai_reanalysis_writes_signals_csv_atomically(monkeypatch, tmp_path):
+    signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "N/A",
+                "ai_reason": "분석 실패",
+                "ai_confidence": 0,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+            }
+        ]
+    )
+    signals_path = tmp_path / "signals_log.csv"
+    signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    class _DummyAnalyzer:
+        @staticmethod
+        def get_available_providers():
+            return ["gemini", "perplexity"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            return {
+                "005930": {
+                    "gemini_recommendation": {
+                        "action": "BUY",
+                        "confidence": 80,
+                        "reason": "재분석 완료",
+                    },
+                    "perplexity_recommendation": {
+                        "action": "HOLD",
+                        "confidence": 65,
+                        "reason": "보조 분석",
+                    },
+                }
+            }
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+    import services.kr_market_vcp_reanalysis_service as reanalysis_service
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
+
+    write_calls: dict[str, str] = {}
+
+    def _atomic_write(path: str, content: str, *, invalidate_fn=None):
+        del invalidate_fn
+        write_calls["path"] = path
+        write_calls["content"] = content
+
+    monkeypatch.setattr(reanalysis_service, "atomic_write_text", _atomic_write)
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 0,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert status_code == 200
+    assert payload["updated_count"] == 1
+    assert write_calls["path"] == str(signals_path)
+    assert write_calls["content"].startswith("\ufeff")
+    assert "005930" in write_calls["content"]
+
+
+def test_execute_vcp_failed_ai_reanalysis_force_gemini_skips_cache_load(monkeypatch, tmp_path):
+    signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "BUY",
+                "ai_reason": "기존 분석",
+                "ai_confidence": 80,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+            }
+        ]
+    )
+    signals_path = tmp_path / "signals_log.csv"
+    signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    class _DummyAnalyzer:
+        @staticmethod
+        def get_available_providers():
+            return ["gemini", "perplexity"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            return {
+                "005930": {
+                    "gemini_recommendation": {
+                        "action": "SELL",
+                        "confidence": 70,
+                        "reason": "Gemini 강제 재분석",
+                    }
+                }
+            }
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+    import services.kr_market_vcp_reanalysis_service as reanalysis_service
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
+
+    def _must_not_call(*_args, **_kwargs):
+        raise AssertionError("force gemini 경로에서 AI 캐시 로드를 호출하면 안됩니다.")
+
+    monkeypatch.setattr(reanalysis_service, "load_vcp_ai_cache_map", _must_not_call)
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 0,
+        logger=logging.getLogger(__name__),
+        force_provider="gemini",
+    )
+
+    assert status_code == 200
+    assert payload["failed_targets"] == 1
+    assert payload["updated_count"] == 1
+
+
 def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch, tmp_path):
     signals_df = pd.DataFrame(
         [
