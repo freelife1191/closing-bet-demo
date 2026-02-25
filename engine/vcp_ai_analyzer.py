@@ -308,10 +308,10 @@ class VCPMultiAIAnalyzer:
 
                         if error_type == "auth":
                             logger.warning(
-                                "[Perplexity] 인증 오류로 판단되어 Perplexity를 비활성화합니다. "
-                                "추가 Provider fallback을 시도합니다."
+                                "[Perplexity] 인증 오류(401/403) 감지. "
+                                "이번 세션에서는 Perplexity 직접 호출을 중단하고 fallback으로 전환합니다."
                             )
-                            self.perplexity_disabled = True
+                            self.perplexity_quota_exhausted = True
                             return await self._fallback_from_perplexity(
                                 stock_name=stock_name,
                                 stock_data=stock_data,
@@ -403,7 +403,18 @@ class VCPMultiAIAnalyzer:
                     content = getattr(message_obj, "content", None)
                     if content is None and isinstance(message_obj, dict):
                         content = message_obj.get("content")
-                    return extract_openai_message_text(content)
+                    response_text = extract_openai_message_text(content)
+                    if response_text and response_text.strip():
+                        return response_text
+
+                    reasoning_content = getattr(message_obj, "reasoning_content", None)
+                    if reasoning_content is None and isinstance(message_obj, dict):
+                        reasoning_content = message_obj.get("reasoning_content")
+                    response_text = extract_openai_message_text(reasoning_content)
+                    if response_text and response_text.strip():
+                        return response_text
+
+                    return ""
 
                 response_text = await asyncio.to_thread(_call, attempt == 0)
                 last_response_text = str(response_text or "")
@@ -431,7 +442,13 @@ class VCPMultiAIAnalyzer:
     def _build_perplexity_fallback_chain(self, providers: List[str] | None = None) -> List[str]:
         """Perplexity 실패 시 사용할 보조 Provider 순서를 구성한다."""
         source = providers if providers is not None else getattr(self, "providers", [])
+        normalized_source = [normalize_provider_name(provider) for provider in source]
         chain: list[str] = []
+        # 요구사항: Perplexity 실패 시 다음 Provider는 Z.ai를 우선 시도
+        if "zai" in normalized_source:
+            chain.append("zai")
+        if "gpt" in normalized_source:
+            chain.append("gpt")
         for provider in source:
             key = normalize_provider_name(provider)
             if key in {"gpt", "zai"} and key not in chain:
@@ -439,22 +456,23 @@ class VCPMultiAIAnalyzer:
         return chain
 
     def _resolve_perplexity_fallback_providers(self) -> List[str]:
+        providers = getattr(self, "providers", None)
+        allowed_chain: list[str] = []
+        if isinstance(providers, list) and providers:
+            allowed_chain = self._build_perplexity_fallback_chain(providers)
+        allowed_set = set(allowed_chain)
+
         configured = getattr(self, "perplexity_fallback_providers", None)
         if isinstance(configured, list) and configured:
-            return configured
+            if allowed_set:
+                return [provider for provider in configured if provider in allowed_set]
+            return []
 
-        providers = getattr(self, "providers", None)
-        if isinstance(providers, list) and providers:
-            chain = self._build_perplexity_fallback_chain(providers)
-            if chain:
-                return chain
+        if allowed_chain:
+            return allowed_chain
 
-        fallback: list[str] = []
-        if getattr(self, "zai_client", None):
-            fallback.append("zai")
-        if getattr(self, "gpt_client", None):
-            fallback.append("gpt")
-        return fallback
+        # fallback 대상은 반드시 VCP_AI_PROVIDERS 설정값 기반으로만 결정한다.
+        return []
 
     async def _fallback_from_perplexity(
         self,

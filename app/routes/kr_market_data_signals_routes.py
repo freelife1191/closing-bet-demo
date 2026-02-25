@@ -197,6 +197,22 @@ def _register_vcp_reanalyze_route(
     update_vcp_ai_cache_files: Callable[[str | None, dict[str, Any], dict[str, Any] | None], int],
 ) -> None:
     reanalysis_status_lock = threading.Lock()
+    force_provider_labels = {
+        "gemini": "Gemini",
+        "second": "Second AI",
+    }
+
+    def _normalize_force_provider(raw_value: Any) -> str | None | object:
+        normalized = str(raw_value or "").strip().lower()
+        if normalized in {"", "auto", "default", "failed", "none"}:
+            return None
+        if normalized in {"gemini"}:
+            return "gemini"
+        if normalized in {"second", "secondary", "2nd"}:
+            return "second"
+        return _INVALID_FORCE_PROVIDER
+
+    _INVALID_FORCE_PROVIDER = object()
 
     def _update_status(**kwargs: Any) -> None:
         with reanalysis_status_lock:
@@ -220,6 +236,14 @@ def _register_vcp_reanalyze_route(
             req_data = request.get_json(silent=True) or {}
             target_date = req_data.get('target_date')
             background_mode = bool(req_data.get('background'))
+            force_provider = _normalize_force_provider(req_data.get("force_provider"))
+            if force_provider is _INVALID_FORCE_PROVIDER:
+                return jsonify({
+                    "status": "error",
+                    "message": "force_provider는 gemini 또는 second만 사용할 수 있습니다.",
+                }), 400
+            force_label = force_provider_labels.get(str(force_provider or ""), "")
+            start_prefix = f"{force_label} 강제 " if force_label else ""
 
             signals_df = load_csv_file('signals_log.csv')
             error_code, error_payload = validate_vcp_reanalysis_source_frame(signals_df)
@@ -233,6 +257,7 @@ def _register_vcp_reanalyze_route(
                     signals_path=get_data_path('signals_log.csv'),
                     update_cache_files=update_vcp_ai_cache_files,
                     logger=logger,
+                    force_provider=force_provider,
                 )
                 return jsonify(payload), int(status_code)
 
@@ -242,7 +267,7 @@ def _register_vcp_reanalyze_route(
                 task_type='reanalysis_failed_ai',
                 cancel_requested=False,
                 progress=0,
-                message='실패 AI 재분석 시작...',
+                message=f'{start_prefix}실패 AI 재분석 시작...',
             )
 
             def _should_stop() -> bool:
@@ -255,7 +280,7 @@ def _register_vcp_reanalyze_route(
                 _update_status(
                     status='running',
                     progress=max(0, min(progress, 100)),
-                    message=f'실패 AI 재분석 진행 중... ({current}/{total}) {ticker}',
+                    message=f'{start_prefix}실패 AI 재분석 진행 중... ({current}/{total}) {ticker}',
                 )
 
             def _run_background_reanalysis() -> None:
@@ -266,6 +291,7 @@ def _register_vcp_reanalyze_route(
                         signals_path=get_data_path('signals_log.csv'),
                         update_cache_files=update_vcp_ai_cache_files,
                         logger=logger,
+                        force_provider=force_provider,
                         should_stop=_should_stop,
                         on_progress=_on_progress,
                     )
@@ -305,8 +331,9 @@ def _register_vcp_reanalyze_route(
             threading.Thread(target=_run_background_reanalysis, daemon=True).start()
             return jsonify({
                 'status': 'started',
-                'message': '실패 AI 재분석을 백그라운드에서 시작했습니다.',
+                'message': f'{start_prefix}실패 AI 재분석을 백그라운드에서 시작했습니다.',
                 'target_date': target_date,
+                'force_provider': force_provider,
             }), 202
 
         return _execute_json_route(

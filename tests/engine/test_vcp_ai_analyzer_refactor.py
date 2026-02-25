@@ -24,7 +24,7 @@ def test_parse_json_response_normalizes_action_for_embedded_json():
     parsed = analyzer._parse_json_response(payload)
 
     assert parsed is not None
-    assert parsed["action"] == "HOLD"
+    assert parsed["action"] == "BUY"
     assert parsed["confidence"] == 77
 
 
@@ -122,9 +122,12 @@ def test_analyze_with_perplexity_reuses_single_async_client_for_retries(monkeypa
     assert _FakeAsyncClient.post_count == 2
 
 
-def test_analyze_with_perplexity_disables_provider_on_auth_error(monkeypatch):
+def test_analyze_with_perplexity_auth_401_marks_quota_cache_and_fallbacks(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
+    analyzer.perplexity_quota_exhausted = False
+    analyzer.providers = ["gemini", "perplexity", "zai"]
+    analyzer.perplexity_fallback_providers = ["zai"]
     analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
     analyzer.zai_client = object()
 
@@ -164,13 +167,16 @@ def test_analyze_with_perplexity_disables_provider_on_auth_error(monkeypatch):
 
     assert result is not None
     assert result["action"] == "HOLD"
-    assert analyzer.perplexity_disabled is True
+    assert analyzer.perplexity_quota_exhausted is True
+    assert analyzer.perplexity_disabled is False
 
 
 def test_analyze_with_perplexity_ambiguous_401_marks_quota_and_fallbacks(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
     analyzer.perplexity_quota_exhausted = False
+    analyzer.providers = ["gemini", "perplexity", "zai"]
+    analyzer.perplexity_fallback_providers = ["zai"]
     analyzer.zai_client = object()
     analyzer.gpt_client = None
     analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
@@ -215,10 +221,64 @@ def test_analyze_with_perplexity_ambiguous_401_marks_quota_and_fallbacks(monkeyp
     assert analyzer.perplexity_disabled is False
 
 
+def test_analyze_with_perplexity_after_first_401_uses_session_cached_fallback(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.perplexity_disabled = False
+    analyzer.perplexity_quota_exhausted = False
+    analyzer.providers = ["gemini", "perplexity", "zai"]
+    analyzer.perplexity_fallback_providers = ["zai"]
+    analyzer.zai_client = object()
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+    calls = {"http": 0, "zai": 0}
+
+    async def _zai(_name, _data, prompt=None):
+        calls["zai"] += 1
+        assert prompt == "prompt"
+        return {"action": "BUY", "confidence": 67}
+
+    analyzer._analyze_with_zai = _zai
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
+
+    class _Resp:
+        status_code = 401
+        text = "unauthorized"
+
+        @staticmethod
+        def json():
+            return {}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, _url, headers=None, json=None):
+            del headers, json
+            calls["http"] += 1
+            return _Resp()
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
+
+    first = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
+    second = asyncio.run(analyzer._analyze_with_perplexity("LG화학", {"ticker": "051910"}))
+
+    assert first is not None and second is not None
+    assert analyzer.perplexity_quota_exhausted is True
+    assert calls["http"] == 1
+    assert calls["zai"] == 2
+
+
 def test_analyze_with_perplexity_falls_back_to_zai_after_repeated_429(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
     analyzer.perplexity_quota_exhausted = False
+    analyzer.providers = ["gemini", "perplexity", "zai"]
+    analyzer.perplexity_fallback_providers = ["zai"]
     analyzer.zai_client = object()
     analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
 
@@ -300,6 +360,8 @@ def test_analyze_with_perplexity_uses_cached_quota_fallback_without_http(monkeyp
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
     analyzer.perplexity_quota_exhausted = True
+    analyzer.providers = ["gemini", "perplexity", "zai"]
+    analyzer.perplexity_fallback_providers = ["zai"]
     analyzer.zai_client = object()
     analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
     calls = {"zai": 0}
@@ -323,6 +385,35 @@ def test_analyze_with_perplexity_uses_cached_quota_fallback_without_http(monkeyp
     assert result is not None
     assert result["action"] == "BUY"
     assert calls["zai"] == 1
+
+
+def test_analyze_with_perplexity_does_not_fallback_when_provider_not_in_vcp_ai_providers(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.perplexity_disabled = False
+    analyzer.perplexity_quota_exhausted = True
+    analyzer.providers = ["gemini", "perplexity"]
+    analyzer.perplexity_fallback_providers = []
+    analyzer.zai_client = object()
+    analyzer.gpt_client = object()
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+    calls = {"zai": 0, "gpt": 0}
+
+    async def _zai(_name, _data, prompt=None):
+        calls["zai"] += 1
+        return {"action": "BUY", "confidence": 70}
+
+    async def _gpt(_name, _data, prompt=None):
+        calls["gpt"] += 1
+        return {"action": "BUY", "confidence": 70}
+
+    analyzer._analyze_with_zai = _zai
+    analyzer._analyze_with_gpt = _gpt
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
+
+    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
+
+    assert result is None
+    assert calls == {"zai": 0, "gpt": 0}
 
 
 def test_analyze_with_zai_uses_openai_client(monkeypatch):
@@ -396,6 +487,38 @@ def test_analyze_with_zai_retries_when_first_response_not_json(monkeypatch):
     assert result is not None
     assert result["action"] == "HOLD"
     assert calls["count"] == 2
+
+
+def test_analyze_with_zai_uses_reasoning_content_when_content_is_blank(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **_kwargs: SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(
+                                content="   ",
+                                reasoning_content='{"action":"BUY","confidence":71,"reason":"fallback"}',
+                            )
+                        )
+                    ]
+                )
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    result = asyncio.run(analyzer._analyze_with_zai("현대차", {"ticker": "005380"}))
+
+    assert result is not None
+    assert result["action"] == "BUY"
+    assert result["confidence"] == 71
 
 
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):

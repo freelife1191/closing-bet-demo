@@ -24,6 +24,10 @@ _VCP_SECOND_RECOMMENDATION_KEY_MAP = {
     "z.ai": "gpt_recommendation",
     "perplexity": "perplexity_recommendation",
 }
+_VCP_FORCE_PROVIDER_LABELS = {
+    "gemini": "Gemini",
+    "second": "Second AI",
+}
 
 
 def prepare_vcp_signals_scope(
@@ -66,6 +70,22 @@ def resolve_vcp_second_recommendation_key(second_provider: str) -> str:
     """second_provider 문자열을 recommendation 필드명으로 변환한다."""
     provider = str(second_provider or "").strip().lower()
     return _VCP_SECOND_RECOMMENDATION_KEY_MAP.get(provider, "gpt_recommendation")
+
+
+def normalize_vcp_force_provider(force_provider: str | None) -> str | None:
+    """강제 재분석 provider 파라미터를 정규화한다."""
+    provider = str(force_provider or "").strip().lower()
+    if provider in {"", "auto", "default", "failed", "none"}:
+        return None
+    if provider in {"gemini"}:
+        return "gemini"
+    if provider in {"second", "secondary", "2nd"}:
+        return "second"
+    return None
+
+
+def _resolve_reanalysis_mode_label(force_provider: str | None) -> str | None:
+    return _VCP_FORCE_PROVIDER_LABELS.get(str(force_provider or "").strip().lower())
 
 
 def load_vcp_ai_cache_map(
@@ -263,10 +283,15 @@ def validate_vcp_reanalysis_source_frame(
 def build_vcp_reanalysis_no_targets_payload(
     target_date: str,
     total_in_scope: int,
+    mode_label: str | None = None,
 ) -> dict[str, Any]:
+    if mode_label:
+        message = f"{mode_label} 강제 재분석 대상이 없습니다."
+    else:
+        message = "재분석이 필요한 실패/누락 항목이 없습니다."
     return {
         "status": "success",
-        "message": "재분석이 필요한 실패/누락 항목이 없습니다.",
+        "message": message,
         "target_date": target_date,
         "total_in_scope": total_in_scope,
         "failed_targets": 0,
@@ -283,10 +308,15 @@ def build_vcp_reanalysis_success_payload(
     updated_count: int,
     still_failed_count: int,
     cache_files_updated: int,
+    mode_label: str | None = None,
 ) -> dict[str, Any]:
+    if mode_label:
+        message = f"{mode_label} 강제 재분석 {failed_targets}건 중 {updated_count}건 완료"
+    else:
+        message = f"실패 {failed_targets}건 중 {updated_count}건 재분석 완료"
     return {
         "status": "success",
-        "message": f"실패 {failed_targets}건 중 {updated_count}건 재분석 완료",
+        "message": message,
         "target_date": target_date,
         "total_in_scope": total_in_scope,
         "failed_targets": failed_targets,
@@ -303,10 +333,15 @@ def build_vcp_reanalysis_cancelled_payload(
     updated_count: int,
     still_failed_count: int,
     cache_files_updated: int,
+    mode_label: str | None = None,
 ) -> dict[str, Any]:
+    if mode_label:
+        message = f"사용자 요청으로 {mode_label} 강제 재분석이 중지되었습니다."
+    else:
+        message = "사용자 요청으로 실패 AI 재분석이 중지되었습니다."
     return {
         "status": "cancelled",
-        "message": "사용자 요청으로 실패 AI 재분석이 중지되었습니다.",
+        "message": message,
         "target_date": target_date,
         "total_in_scope": total_in_scope,
         "failed_targets": failed_targets,
@@ -322,6 +357,7 @@ def execute_vcp_failed_ai_reanalysis(
     signals_path: str,
     update_cache_files: Callable[[str, dict[str, Any]], int],
     logger: logging.Logger,
+    force_provider: str | None = None,
     should_stop: Callable[[], bool] | None = None,
     on_progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple[int, dict[str, Any]]:
@@ -339,12 +375,20 @@ def execute_vcp_failed_ai_reanalysis(
             signals_df=signals_df,
             target_date=normalized_target_date,
         )
+        normalized_force_provider = normalize_vcp_force_provider(force_provider)
+        mode_label = _resolve_reanalysis_mode_label(normalized_force_provider)
 
         if scoped_df.empty:
             return 404, {
                 "status": "error",
                 "message": f"해당 날짜({normalized_target_date})의 VCP 시그널 데이터가 없습니다.",
             }
+
+        scoped_columns = list(scoped_df.columns)
+        all_scoped_rows: list[tuple[int, dict[str, Any]]] = [
+            (idx, dict(zip(scoped_columns, row_values)))
+            for idx, row_values in zip(scoped_df.index, scoped_df.itertuples(index=False, name=None))
+        ]
 
         failed_rows, total_in_scope = collect_failed_vcp_rows(
             scoped_df=scoped_df,
@@ -360,14 +404,17 @@ def execute_vcp_failed_ai_reanalysis(
             logger=logger,
         )
 
-        target_rows = list(failed_rows)
-        if cache_exists:
-            missing_rows = collect_missing_vcp_ai_rows(
-                scoped_df=scoped_df,
-                ai_data_map=ai_data_map,
-                second_recommendation_key=second_recommendation_key,
-            )
-            target_rows = merge_vcp_reanalysis_target_rows(target_rows, missing_rows)
+        if normalized_force_provider in {"gemini", "second"}:
+            target_rows = list(all_scoped_rows)
+        else:
+            target_rows = list(failed_rows)
+            if cache_exists:
+                missing_rows = collect_missing_vcp_ai_rows(
+                    scoped_df=scoped_df,
+                    ai_data_map=ai_data_map,
+                    second_recommendation_key=second_recommendation_key,
+                )
+                target_rows = merge_vcp_reanalysis_target_rows(target_rows, missing_rows)
 
         failed_targets = len(target_rows)
 
@@ -375,6 +422,7 @@ def execute_vcp_failed_ai_reanalysis(
             return 200, build_vcp_reanalysis_no_targets_payload(
                 target_date=normalized_target_date,
                 total_in_scope=total_in_scope,
+                mode_label=mode_label,
             )
 
         analyzer = get_vcp_analyzer()
@@ -384,36 +432,47 @@ def execute_vcp_failed_ai_reanalysis(
                 "message": "사용 가능한 AI Provider가 없습니다.",
             }
 
-        failed_indexes = {idx for idx, _ in failed_rows}
         apply_rows: list[tuple[int, dict[str, Any]]] = []
         second_only_rows: list[tuple[int, dict[str, Any]]] = []
         skip_gemini_tickers: set[str] = set()
         skip_second_tickers: set[str] = set()
 
-        for idx, row in target_rows:
-            ticker = str(row.get("ticker", "")).zfill(6)
-            ai_item = ai_data_map.get(ticker, {})
-            has_cached_gemini = isinstance(ai_item.get("gemini_recommendation"), dict)
-            has_cached_second = isinstance(ai_item.get(second_recommendation_key), dict)
-
-            is_second_only = (
-                idx not in failed_indexes
-                and has_cached_gemini
-                and not has_cached_second
-            )
-            is_gemini_only = (
-                idx not in failed_indexes
-                and not has_cached_gemini
-                and has_cached_second
-            )
-            if is_second_only:
-                second_only_rows.append((idx, row))
-                skip_gemini_tickers.add(ticker)
-                continue
-            if is_gemini_only:
+        if normalized_force_provider == "gemini":
+            apply_rows = list(target_rows)
+            for _, row in target_rows:
+                ticker = str(row.get("ticker", "")).zfill(6)
                 skip_second_tickers.add(ticker)
+        elif normalized_force_provider == "second":
+            second_only_rows = list(target_rows)
+            for _, row in target_rows:
+                ticker = str(row.get("ticker", "")).zfill(6)
+                skip_gemini_tickers.add(ticker)
+        else:
+            failed_indexes = {idx for idx, _ in failed_rows}
+            for idx, row in target_rows:
+                ticker = str(row.get("ticker", "")).zfill(6)
+                ai_item = ai_data_map.get(ticker, {})
+                has_cached_gemini = isinstance(ai_item.get("gemini_recommendation"), dict)
+                has_cached_second = isinstance(ai_item.get(second_recommendation_key), dict)
 
-            apply_rows.append((idx, row))
+                is_second_only = (
+                    idx not in failed_indexes
+                    and has_cached_gemini
+                    and not has_cached_second
+                )
+                is_gemini_only = (
+                    idx not in failed_indexes
+                    and not has_cached_gemini
+                    and has_cached_second
+                )
+                if is_second_only:
+                    second_only_rows.append((idx, row))
+                    skip_gemini_tickers.add(ticker)
+                    continue
+                if is_gemini_only:
+                    skip_second_tickers.add(ticker)
+
+                apply_rows.append((idx, row))
 
         stocks_to_analyze = _build_vcp_stock_payloads([row for _, row in target_rows])
         for stock_item in stocks_to_analyze:
@@ -476,6 +535,7 @@ def execute_vcp_failed_ai_reanalysis(
                 updated_count=updated_count,
                 still_failed_count=still_failed_count,
                 cache_files_updated=cache_files_updated,
+                mode_label=mode_label,
             )
 
         return 200, build_vcp_reanalysis_success_payload(
@@ -485,6 +545,7 @@ def execute_vcp_failed_ai_reanalysis(
             updated_count=updated_count,
             still_failed_count=still_failed_count,
             cache_files_updated=cache_files_updated,
+            mode_label=mode_label,
         )
     except Exception as e:
         logger.error(f"Error reanalyzing VCP failed AI: {e}")
@@ -495,6 +556,7 @@ __all__ = [
     "prepare_vcp_signals_scope",
     "collect_failed_vcp_rows",
     "resolve_vcp_second_recommendation_key",
+    "normalize_vcp_force_provider",
     "load_vcp_ai_cache_map",
     "collect_missing_vcp_ai_rows",
     "merge_vcp_reanalysis_target_rows",

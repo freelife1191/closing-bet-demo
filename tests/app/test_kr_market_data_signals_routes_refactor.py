@@ -310,3 +310,56 @@ def test_reanalyze_failed_ai_stop_returns_conflict_when_not_running():
 
     response = client.post("/api/kr/signals/reanalyze-failed-ai/stop", json={})
     assert response.status_code == 409
+
+
+def test_reanalyze_failed_ai_route_forwards_force_provider_to_service():
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    captured: dict[str, Any] = {}
+
+    def _execute(**kwargs):
+        captured.update(kwargs)
+        return 200, {"status": "success", "message": "ok"}
+
+    deps["execute_vcp_failed_ai_reanalysis"] = _execute
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_reanalyze_force_provider_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.post(
+        "/api/kr/signals/reanalyze-failed-ai",
+        json={"background": False, "target_date": "2026-02-21", "force_provider": "gemini"},
+    )
+
+    assert response.status_code == 200
+    assert captured.get("force_provider") == "gemini"
+
+
+def test_reanalyze_failed_ai_route_rejects_invalid_force_provider():
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_reanalyze_force_provider_invalid_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.post(
+        "/api/kr/signals/reanalyze-failed-ai",
+        json={"background": False, "force_provider": "not-supported"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["status"] == "error"

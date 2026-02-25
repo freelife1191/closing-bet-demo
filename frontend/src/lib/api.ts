@@ -206,12 +206,16 @@ export const krAPI = {
     return response.json();
   },
 
-  // VCP 실패 AI만 재분석
-  reanalyzeVCPFailedAI: async (target_date?: string, background = true) => {
+  // VCP 실패 AI 재분석 (옵션: provider 강제 재분석)
+  reanalyzeVCPFailedAI: async (
+    target_date?: string,
+    background = true,
+    force_provider?: 'gemini' | 'second'
+  ) => {
     const response = await fetch('/api/kr/signals/reanalyze-failed-ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_date, background }),
+      body: JSON.stringify({ target_date, background, force_provider }),
     });
     if (!response.ok) {
       const error = await response.json();

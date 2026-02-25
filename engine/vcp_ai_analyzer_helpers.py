@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from typing import Any, Optional
 
 
@@ -32,6 +33,63 @@ _PERPLEXITY_AUTH_KEYWORDS = (
     "api key",
     "bearer",
 )
+_ACTION_PATTERN = re.compile(
+    r"""["']?action["']?\s*:\s*["']?([A-Za-z가-힣_ ]+)""",
+    re.IGNORECASE,
+)
+_CONFIDENCE_PATTERN = re.compile(
+    r"""["']?confidence["']?\s*:\s*["']?\s*([0-9]+(?:\.[0-9]+)?)\s*%?""",
+    re.IGNORECASE,
+)
+_REASON_QUOTED_PATTERN = re.compile(
+    r"""["']?reason["']?\s*:\s*(["'])(.*?)\1""",
+    re.IGNORECASE | re.DOTALL,
+)
+_REASON_RAW_PATTERN = re.compile(
+    r"""["']?reason["']?\s*:\s*([^,\n}]+)""",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _normalize_action_value(value: Any) -> str | None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+
+    lowered = normalized.lower()
+    keyword_hits = {
+        "buy": ("매수" in normalized) or ("buy" in lowered),
+        "sell": ("매도" in normalized) or ("sell" in lowered),
+        "hold": ("관망" in normalized)
+        or ("보유" in normalized)
+        or ("중립" in normalized)
+        or ("hold" in lowered),
+    }
+    if sum(1 for hit in keyword_hits.values() if hit) > 1:
+        # 예: "BUY|SELL|HOLD", "매수/매도/관망" 같은 모호 표현은 폐기
+        return None
+
+    upper = normalized.upper()
+    if upper in {"BUY", "SELL", "HOLD"}:
+        return upper
+
+    if "매수" in normalized or "buy" in lowered:
+        return "BUY"
+    if "매도" in normalized or "sell" in lowered:
+        return "SELL"
+    if "관망" in normalized or "보유" in normalized or "hold" in lowered or "중립" in normalized:
+        return "HOLD"
+    return None
+
+
+def _normalize_confidence_value(value: Any, default: int = 0) -> int:
+    if isinstance(value, str):
+        value = value.replace("%", "").replace(",", "").strip()
+    try:
+        numeric = int(float(value))
+    except (TypeError, ValueError):
+        numeric = int(default)
+    return max(0, min(100, numeric))
 
 
 def _extract_json_fenced_content(text: str) -> str:
@@ -110,6 +168,36 @@ def _find_recommendation_payload(payload: Any) -> Optional[dict[str, Any]]:
     return None
 
 
+def _extract_reason_by_pattern(text: str) -> str:
+    quoted_match = _REASON_QUOTED_PATTERN.search(text)
+    if quoted_match:
+        return str(quoted_match.group(2)).strip()
+
+    raw_match = _REASON_RAW_PATTERN.search(text)
+    if raw_match:
+        return str(raw_match.group(1)).strip().strip("\"' ")
+    return ""
+
+
+def _parse_recommendation_by_pattern(text: str) -> Optional[dict[str, Any]]:
+    action_match = _ACTION_PATTERN.search(text)
+    confidence_match = _CONFIDENCE_PATTERN.search(text)
+    if not action_match or not confidence_match:
+        return None
+
+    action_value = _normalize_action_value(action_match.group(1))
+    if action_value is None:
+        return None
+    confidence_value = _normalize_confidence_value(confidence_match.group(1), default=0)
+    reason_value = _extract_reason_by_pattern(text) or "LLM 응답 파싱(부분 성공)"
+
+    return {
+        "action": action_value,
+        "confidence": confidence_value,
+        "reason": reason_value[:600],
+    }
+
+
 def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
     """VCP 분석용 프롬프트 생성"""
     return f"""
@@ -143,8 +231,12 @@ def parse_json_response(text: str) -> Optional[dict[str, Any]]:
 
     def _normalize(parsed: dict[str, Any]) -> Optional[dict[str, Any]]:
         if "action" in parsed and "confidence" in parsed:
-            action = str(parsed["action"]).upper()
-            parsed["action"] = action if action in ["BUY", "SELL", "HOLD"] else "HOLD"
+            action_value = _normalize_action_value(parsed["action"])
+            if action_value is None:
+                return None
+            parsed["action"] = action_value
+            parsed["confidence"] = _normalize_confidence_value(parsed.get("confidence"), default=0)
+            parsed["reason"] = str(parsed.get("reason") or "분석 근거 없음")[:600]
             return parsed
         return None
 
@@ -160,6 +252,10 @@ def parse_json_response(text: str) -> Optional[dict[str, Any]]:
         if found_payload is not None:
             return _normalize(dict(found_payload))
 
+    by_pattern = _parse_recommendation_by_pattern(str(text or ""))
+    if by_pattern is not None:
+        return _normalize(by_pattern)
+
     return None
 
 
@@ -171,7 +267,7 @@ def extract_openai_message_text(content: Any) -> str:
         return ""
 
     if isinstance(content, dict):
-        for key in ("text", "content", "output_text"):
+        for key in ("text", "content", "output_text", "reasoning_content"):
             value = content.get(key)
             if isinstance(value, str):
                 return value
@@ -185,21 +281,21 @@ def extract_openai_message_text(content: Any) -> str:
                     parts.append(item)
                 continue
             if isinstance(item, dict):
-                for key in ("text", "content", "output_text"):
+                for key in ("text", "content", "output_text", "reasoning_content"):
                     value = item.get(key)
                     if isinstance(value, str) and value.strip():
                         parts.append(value)
                         break
                 continue
 
-            for attr in ("text", "content", "output_text"):
+            for attr in ("text", "content", "output_text", "reasoning_content"):
                 value = getattr(item, attr, None)
                 if isinstance(value, str) and value.strip():
                     parts.append(value)
                     break
         return "\n".join(parts).strip()
 
-    for attr in ("text", "content", "output_text"):
+    for attr in ("text", "content", "output_text", "reasoning_content"):
         value = getattr(content, attr, None)
         if isinstance(value, str):
             return value

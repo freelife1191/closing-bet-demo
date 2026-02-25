@@ -46,7 +46,7 @@ def test_parse_json_response_handles_nested_and_json_like_payload():
 
     assert parsed_nested is not None
     assert parsed_nested["action"] == "SELL"
-    assert parsed_nested["confidence"] == "61"
+    assert parsed_nested["confidence"] == 61
 
     json_like_text = "{'action': 'buy', 'confidence': 72, 'reason': 'ok'}"
     parsed_json_like = parse_json_response(json_like_text)
@@ -54,6 +54,17 @@ def test_parse_json_response_handles_nested_and_json_like_payload():
     assert parsed_json_like is not None
     assert parsed_json_like["action"] == "BUY"
     assert parsed_json_like["confidence"] == 72
+
+
+def test_parse_json_response_pattern_fallback_handles_truncated_payload():
+    text = 'action: "관망", confidence: "70%", reason: "변동성 축소 구간"'
+
+    parsed = parse_json_response(text)
+
+    assert parsed is not None
+    assert parsed["action"] == "HOLD"
+    assert parsed["confidence"] == 70
+    assert "변동성" in parsed["reason"]
 
 
 def test_extract_openai_message_text_handles_segmented_content():
@@ -66,6 +77,16 @@ def test_extract_openai_message_text_handles_segmented_content():
 
     assert '"action":"HOLD"' in extracted
     assert '"confidence":64' in extracted
+
+
+def test_extract_openai_message_text_handles_reasoning_content_only():
+    content = {
+        "reasoning_content": '{"action":"BUY","confidence":79,"reason":"수급 개선"}'
+    }
+
+    extracted = extract_openai_message_text(content)
+
+    assert '"action":"BUY"' in extracted
 
 
 def test_perplexity_request_and_response_helpers():

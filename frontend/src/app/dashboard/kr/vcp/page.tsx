@@ -205,6 +205,7 @@ export default function VCPSignalsPage() {
   const [screenerRunning, setScreenerRunning] = useState(false);
   const [reanalyzingFailedAI, setReanalyzingFailedAI] = useState(false);
   const [stoppingReanalysis, setStoppingReanalysis] = useState(false);
+  const [reanalysisMode, setReanalysisMode] = useState<'failed' | 'gemini' | 'second'>('failed');
   const [screenerMessage, setScreenerMessage] = useState<string | null>(null);
   const reanalysisPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -662,11 +663,13 @@ export default function VCPSignalsPage() {
     if (screenerRunning) return;
 
     const targetDate = activeDateTab === 'history' ? (selectedHistoryDate || undefined) : undefined;
+    const forceProvider = reanalysisMode === 'failed' ? undefined : reanalysisMode;
+    const modeLabel = reanalysisMode === 'gemini' ? 'Gemini 강제' : reanalysisMode === 'second' ? 'Second 강제' : '실패/누락';
     setReanalyzingFailedAI(true);
     setStoppingReanalysis(false);
-    setScreenerMessage('🤖 실패 AI 재분석 시작 요청 중...');
+    setScreenerMessage(`🤖 ${modeLabel} 재분석 시작 요청 중...`);
     try {
-      const res: any = await krAPI.reanalyzeVCPFailedAI(targetDate, true);
+      const res: any = await krAPI.reanalyzeVCPFailedAI(targetDate, true, forceProvider);
       setScreenerMessage(`🤖 ${res?.message || '실패 AI 재분석 시작됨'}`);
       startReanalysisPolling(targetDate);
     } catch (e: any) {
@@ -979,6 +982,17 @@ export default function VCPSignalsPage() {
             </span>
           )}
           {/* [MOVED] VCP 기준표 버튼 removed from here */}
+          <select
+            value={reanalysisMode}
+            onChange={(e) => setReanalysisMode(e.target.value as 'failed' | 'gemini' | 'second')}
+            disabled={screenerRunning || reanalyzingFailedAI}
+            className="px-3 py-2.5 md:py-2 rounded-xl bg-white/5 border border-white/10 text-gray-200 text-xs font-semibold disabled:opacity-60"
+            title="재분석 실행 모드 선택"
+          >
+            <option value="failed">실패/누락만</option>
+            <option value="gemini">Gemini 강제</option>
+            <option value="second">Second 강제</option>
+          </select>
 
           <button
             onClick={handleReanalyzeFailedAI}
