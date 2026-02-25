@@ -167,6 +167,8 @@ def handle_interval_config():
 VCP_STATUS = {
     'running': False,
     'status': 'idle',  # idle, running, success, error
+    'task_type': None,  # screener | reanalysis_failed_ai
+    'cancel_requested': False,
     'message': '',
     'last_run': None,
     'progress': 0

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from typing import Any
 
 import pandas as pd
@@ -25,12 +26,21 @@ from app.routes.kr_market_data_signals_routes import register_market_data_signal
 def _build_deps(fetch_realtime_prices_fn):
     return {
         "data_dir_getter": lambda: "/tmp",
-        "load_csv_file": lambda _name: __import__("pandas").DataFrame(),
+        "load_csv_file": lambda _name: __import__("pandas").DataFrame(
+            [{"ticker": "005930", "signal_date": "2026-02-21"}]
+        ),
         "get_data_path": lambda name: name,
-        "vcp_status": {"running": False},
+        "vcp_status": {
+            "running": False,
+            "task_type": None,
+            "cancel_requested": False,
+            "status": "idle",
+            "message": "",
+            "progress": 0,
+        },
         "run_vcp_background_pipeline": lambda **_kwargs: None,
         "start_vcp_screener_run": lambda **_kwargs: (200, {"status": "started"}),
-        "validate_vcp_reanalysis_source_frame": lambda **_kwargs: (200, {}),
+        "validate_vcp_reanalysis_source_frame": lambda _df: (None, None),
         "execute_vcp_failed_ai_reanalysis": lambda **_kwargs: (200, {}),
         "update_vcp_ai_cache_files": lambda _date, _data: 0,
         "build_market_status_payload": lambda **_kwargs: {"status": "OK"},
@@ -232,3 +242,71 @@ def test_signals_route_count_callback_allows_legacy_noarg_callback():
     assert captured["data_dir"] == "/tmp"
     assert captured["total_scanned"] == 77
     assert response.get_json()["total_scanned"] == 77
+
+
+def test_reanalyze_failed_ai_background_supports_stop_request():
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    status_state = deps["vcp_status"]
+
+    def _execute(**kwargs):
+        should_stop = kwargs.get("should_stop")
+        on_progress = kwargs.get("on_progress")
+        for idx in range(5):
+            if callable(on_progress):
+                on_progress(idx + 1, 5, f"{idx + 1:06d}")
+            if callable(should_stop) and should_stop():
+                return 200, {"status": "cancelled", "message": "사용자 중지"}
+            time.sleep(0.01)
+        return 200, {"status": "success", "message": "완료"}
+
+    deps["execute_vcp_failed_ai_reanalysis"] = _execute
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_reanalyze_background_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    start_response = client.post(
+        "/api/kr/signals/reanalyze-failed-ai",
+        json={"background": True, "target_date": "2026-02-21"},
+    )
+    assert start_response.status_code == 202
+    assert status_state["running"] is True
+    assert status_state["task_type"] == "reanalysis_failed_ai"
+
+    stop_response = client.post("/api/kr/signals/reanalyze-failed-ai/stop", json={})
+    assert stop_response.status_code == 202
+    assert status_state["cancel_requested"] is True
+
+    deadline = time.time() + 1.0
+    while status_state.get("running") and time.time() < deadline:
+        time.sleep(0.01)
+
+    assert status_state["running"] is False
+    assert status_state["task_type"] is None
+    assert status_state["cancel_requested"] is False
+    assert status_state["status"] in {"cancelled", "success"}
+
+
+def test_reanalyze_failed_ai_stop_returns_conflict_when_not_running():
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_reanalyze_stop_conflict_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.post("/api/kr/signals/reanalyze-failed-ai/stop", json={})
+    assert response.status_code == 409

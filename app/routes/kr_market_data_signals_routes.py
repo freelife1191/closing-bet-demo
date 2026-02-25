@@ -7,7 +7,9 @@ KR Market Data Routes - Signals/Chart/Realtime
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from flask import jsonify, request
@@ -190,15 +192,26 @@ def _register_vcp_reanalyze_route(
     vcp_status: dict[str, Any],
     load_csv_file: Callable[..., Any],
     get_data_path: Callable[[str], str],
-    validate_vcp_reanalysis_source_frame: Callable[..., tuple[int, dict[str, Any] | None]],
+    validate_vcp_reanalysis_source_frame: Callable[..., tuple[int | None, dict[str, Any] | None]],
     execute_vcp_failed_ai_reanalysis: Callable[..., tuple[int, dict[str, Any]]],
     update_vcp_ai_cache_files: Callable[[str | None, dict[str, Any], dict[str, Any] | None], int],
 ) -> None:
+    reanalysis_status_lock = threading.Lock()
+
+    def _update_status(**kwargs: Any) -> None:
+        with reanalysis_status_lock:
+            vcp_status.update(kwargs)
+
     @kr_bp.route('/signals/reanalyze-failed-ai', methods=['POST'])
     def reanalyze_vcp_failed_ai():
         """VCP 시그널 중 AI 분석 실패 건만 재분석"""
         def _handler():
             if vcp_status.get('running'):
+                if vcp_status.get('task_type') == 'reanalysis_failed_ai':
+                    return jsonify({
+                        'status': 'error',
+                        'message': '실패 AI 재분석이 이미 진행 중입니다.'
+                    }), 409
                 return jsonify({
                     'status': 'error',
                     'message': 'VCP 스크리너가 실행 중입니다. 완료 후 다시 시도해 주세요.'
@@ -206,25 +219,130 @@ def _register_vcp_reanalyze_route(
 
             req_data = request.get_json(silent=True) or {}
             target_date = req_data.get('target_date')
+            background_mode = bool(req_data.get('background'))
 
             signals_df = load_csv_file('signals_log.csv')
             error_code, error_payload = validate_vcp_reanalysis_source_frame(signals_df)
             if error_payload is not None:
                 return jsonify(error_payload), int(error_code)
 
-            status_code, payload = execute_vcp_failed_ai_reanalysis(
-                target_date=target_date,
-                signals_df=signals_df,
-                signals_path=get_data_path('signals_log.csv'),
-                update_cache_files=update_vcp_ai_cache_files,
-                logger=logger,
+            if not background_mode:
+                status_code, payload = execute_vcp_failed_ai_reanalysis(
+                    target_date=target_date,
+                    signals_df=signals_df,
+                    signals_path=get_data_path('signals_log.csv'),
+                    update_cache_files=update_vcp_ai_cache_files,
+                    logger=logger,
+                )
+                return jsonify(payload), int(status_code)
+
+            _update_status(
+                running=True,
+                status='running',
+                task_type='reanalysis_failed_ai',
+                cancel_requested=False,
+                progress=0,
+                message='실패 AI 재분석 시작...',
             )
-            return jsonify(payload), int(status_code)
+
+            def _should_stop() -> bool:
+                return bool(vcp_status.get('cancel_requested'))
+
+            def _on_progress(current: int, total: int, ticker: str) -> None:
+                progress = int((current * 100) / total) if total > 0 else 0
+                if current < total and progress >= 100:
+                    progress = 99
+                _update_status(
+                    status='running',
+                    progress=max(0, min(progress, 100)),
+                    message=f'실패 AI 재분석 진행 중... ({current}/{total}) {ticker}',
+                )
+
+            def _run_background_reanalysis() -> None:
+                try:
+                    status_code, payload = execute_vcp_failed_ai_reanalysis(
+                        target_date=target_date,
+                        signals_df=signals_df,
+                        signals_path=get_data_path('signals_log.csv'),
+                        update_cache_files=update_vcp_ai_cache_files,
+                        logger=logger,
+                        should_stop=_should_stop,
+                        on_progress=_on_progress,
+                    )
+                    payload_status = str(payload.get('status', '')).lower()
+                    payload_message = str(payload.get('message', ''))
+
+                    if status_code >= 400 or payload_status == 'error':
+                        _update_status(
+                            status='error',
+                            message=payload_message or '실패 AI 재분석 실패',
+                        )
+                    elif payload_status == 'cancelled':
+                        _update_status(
+                            status='cancelled',
+                            message=payload_message or '사용자 요청으로 재분석이 중지되었습니다.',
+                        )
+                    else:
+                        _update_status(
+                            status='success',
+                            progress=100,
+                            message=payload_message or '실패 AI 재분석 완료',
+                        )
+                except Exception as error:
+                    logger.error(f"Failed AI reanalysis background error: {error}")
+                    _update_status(
+                        status='error',
+                        message=f'실패 AI 재분석 실패: {error}',
+                    )
+                finally:
+                    _update_status(
+                        running=False,
+                        last_run=datetime.now().isoformat(),
+                        task_type=None,
+                        cancel_requested=False,
+                    )
+
+            threading.Thread(target=_run_background_reanalysis, daemon=True).start()
+            return jsonify({
+                'status': 'started',
+                'message': '실패 AI 재분석을 백그라운드에서 시작했습니다.',
+                'target_date': target_date,
+            }), 202
 
         return _execute_json_route(
             handler=_handler,
             logger=logger,
             error_label="Error reanalyzing VCP failed AI",
+            error_response_builder=lambda error: (
+                jsonify({"status": "error", "message": str(error)}),
+                500,
+            ),
+        )
+
+    @kr_bp.route('/signals/reanalyze-failed-ai/stop', methods=['POST'])
+    def stop_reanalyze_vcp_failed_ai():
+        """실패 AI 재분석 중지 요청"""
+        def _handler():
+            if not vcp_status.get('running') or vcp_status.get('task_type') != 'reanalysis_failed_ai':
+                return jsonify({
+                    'status': 'error',
+                    'message': '진행 중인 실패 AI 재분석 작업이 없습니다.'
+                }), 409
+
+            _update_status(
+                cancel_requested=True,
+                status='running',
+                message='실패 AI 재분석 중지 요청을 처리 중입니다...',
+            )
+            return jsonify({
+                'status': 'stopping',
+                'message': '중지 요청이 접수되었습니다.',
+            }), 202
+
+        return _execute_json_route(
+            handler=_handler,
+            logger=logger,
+            error_label="Error stopping VCP failed AI reanalysis",
             error_response_builder=lambda error: (
                 jsonify({"status": "error", "message": str(error)}),
                 500,

@@ -191,6 +191,8 @@ def start_vcp_screener_run(
         {
             "running": True,
             "status": "running",
+            "task_type": "screener",
+            "cancel_requested": False,
             "progress": 0,
             "message": "분석 요청 중...",
         }

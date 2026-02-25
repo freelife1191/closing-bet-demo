@@ -18,7 +18,7 @@ def build_market_data_route_deps(
     vcp_status: dict[str, Any],
     run_vcp_background_pipeline: Callable[..., None],
     start_vcp_screener_run: Callable[..., tuple[int, dict[str, Any]]],
-    validate_vcp_reanalysis_source_frame: Callable[..., tuple[int, dict[str, Any] | None]],
+    validate_vcp_reanalysis_source_frame: Callable[..., tuple[int | None, dict[str, Any] | None]],
     execute_vcp_failed_ai_reanalysis: Callable[..., tuple[int, dict[str, Any]]],
     update_vcp_ai_cache_files: Callable[[str, dict[str, Any], dict[str, Any] | None], int],
     build_market_status_payload: Callable[..., dict[str, Any]],

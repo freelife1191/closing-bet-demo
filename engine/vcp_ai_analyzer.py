@@ -272,6 +272,12 @@ class VCPMultiAIAnalyzer:
                         if response.status_code in [401, 403]:
                             logger.warning("[Perplexity] 인증 오류 발생. 이번 세션에서 Perplexity 분석을 비활성화합니다.")
                             self.perplexity_disabled = True
+                            return await self._fallback_to_zai(
+                                stock_name=stock_name,
+                                stock_data=stock_data,
+                                prompt=resolved_prompt,
+                                reason=f"Perplexity auth error ({response.status_code})",
+                            )
                         return None
 
                     response_json = response.json()

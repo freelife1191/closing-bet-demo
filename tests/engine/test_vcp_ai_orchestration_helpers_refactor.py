@@ -92,3 +92,102 @@ def test_analyze_batch_with_limit_collects_success_count():
     assert "A1" in results
     assert "B1" not in results
 
+
+def test_orchestrate_stock_analysis_skips_gemini_when_flag_is_set():
+    calls = {"gemini": 0, "perplexity": 0}
+
+    def _build_prompt(_name, _data):
+        return "PROMPT"
+
+    async def _gemini(_name, _data, prompt=None):
+        del prompt
+        calls["gemini"] += 1
+        return {"action": "BUY"}
+
+    async def _gpt(_name, _data, prompt=None):
+        del prompt
+        return None
+
+    async def _perplexity(_name, _data, prompt=None):
+        assert prompt == "PROMPT"
+        calls["perplexity"] += 1
+        return {"action": "SELL"}
+
+    class _Logger:
+        @staticmethod
+        def warning(_msg):
+            return None
+
+        @staticmethod
+        def error(_msg):
+            return None
+
+    result = asyncio.run(
+        orchestrate_stock_analysis(
+            stock_name="SKIP 종목",
+            stock_data={"ticker": "005930", "skip_gemini": True},
+            providers=["gemini", "perplexity"],
+            second_provider="perplexity",
+            perplexity_disabled=False,
+            build_prompt_fn=_build_prompt,
+            analyze_with_gemini_fn=_gemini,
+            analyze_with_gpt_fn=_gpt,
+            analyze_with_perplexity_fn=_perplexity,
+            logger=_Logger(),
+        )
+    )
+
+    assert calls["gemini"] == 0
+    assert calls["perplexity"] == 1
+    assert result["gemini_recommendation"] is None
+    assert result["perplexity_recommendation"]["action"] == "SELL"
+
+
+def test_orchestrate_stock_analysis_skips_second_provider_when_flag_is_set():
+    calls = {"gemini": 0, "gpt": 0}
+
+    def _build_prompt(_name, _data):
+        return "PROMPT"
+
+    async def _gemini(_name, _data, prompt=None):
+        assert prompt == "PROMPT"
+        calls["gemini"] += 1
+        return {"action": "BUY"}
+
+    async def _gpt(_name, _data, prompt=None):
+        del prompt
+        calls["gpt"] += 1
+        return {"action": "SELL"}
+
+    async def _perplexity(_name, _data, prompt=None):
+        del prompt
+        return None
+
+    class _Logger:
+        @staticmethod
+        def warning(_msg):
+            return None
+
+        @staticmethod
+        def error(_msg):
+            return None
+
+    result = asyncio.run(
+        orchestrate_stock_analysis(
+            stock_name="SKIP Second",
+            stock_data={"ticker": "005930", "skip_second": True},
+            providers=["gemini", "gpt"],
+            second_provider="gpt",
+            perplexity_disabled=False,
+            build_prompt_fn=_build_prompt,
+            analyze_with_gemini_fn=_gemini,
+            analyze_with_gpt_fn=_gpt,
+            analyze_with_perplexity_fn=_perplexity,
+            logger=_Logger(),
+        )
+    )
+
+    assert calls["gemini"] == 1
+    assert calls["gpt"] == 0
+    assert result["gemini_recommendation"]["action"] == "BUY"
+    assert result["gpt_recommendation"] is None

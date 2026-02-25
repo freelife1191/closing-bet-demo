@@ -126,8 +126,15 @@ def test_analyze_with_perplexity_disables_provider_on_auth_error(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
     analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+    analyzer.zai_client = object()
 
     monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
+
+    async def _zai(_name, _data, prompt=None):
+        assert prompt == "prompt"
+        return {"action": "HOLD", "confidence": 61}
+
+    analyzer._analyze_with_zai = _zai
 
     class _Resp:
         status_code = 401
@@ -155,7 +162,8 @@ def test_analyze_with_perplexity_disables_provider_on_auth_error(monkeypatch):
 
     result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
 
-    assert result is None
+    assert result is not None
+    assert result["action"] == "HOLD"
     assert analyzer.perplexity_disabled is True
 
 

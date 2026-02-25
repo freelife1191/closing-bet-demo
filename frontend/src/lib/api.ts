@@ -138,6 +138,16 @@ export interface DataStatus {
   files: Record<string, { exists: boolean; updated_at?: string; size?: number }>;
 }
 
+export interface VCPStatus {
+  running: boolean;
+  status?: string;
+  message: string;
+  progress: number;
+  task_type?: 'screener' | 'reanalysis_failed_ai' | null;
+  cancel_requested?: boolean;
+  last_run?: string | null;
+}
+
 // Chart Types
 export interface KRChartData {
   date: string;
@@ -197,11 +207,11 @@ export const krAPI = {
   },
 
   // VCP 실패 AI만 재분석
-  reanalyzeVCPFailedAI: async (target_date?: string) => {
+  reanalyzeVCPFailedAI: async (target_date?: string, background = true) => {
     const response = await fetch('/api/kr/signals/reanalyze-failed-ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_date }),
+      body: JSON.stringify({ target_date, background }),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -210,7 +220,19 @@ export const krAPI = {
     return response.json();
   },
 
-  getVCPStatus: () => fetchAPI<{ running: boolean; status?: string; message: string; progress: number }>('/api/kr/signals/status'),
+  stopVCPFailedAIReanalysis: async () => {
+    const response = await fetch('/api/kr/signals/reanalyze-failed-ai/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'VCP failed AI reanalysis stop failed');
+    }
+    return response.json();
+  },
+
+  getVCPStatus: () => fetchAPI<VCPStatus>('/api/kr/signals/status'),
 
   // Market Gate 개별 업데이트
   updateMarketGate: async (target_date?: string) => {

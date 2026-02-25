@@ -185,6 +185,63 @@ def run_async_analyzer_batch(analyzer: Any, stocks_to_analyze: list[dict[str, An
         asyncio.set_event_loop(None)
 
 
+def run_async_analyzer_batch_with_control(
+    *,
+    analyzer: Any,
+    stocks_to_analyze: list[dict[str, Any]],
+    should_stop: Callable[[], bool] | None,
+    on_progress: Callable[[int, int, str], None] | None,
+    logger: logging.Logger,
+) -> tuple[dict[str, Any], bool]:
+    """중지/진행률 콜백을 지원하는 비동기 analyzer 배치 실행."""
+    if not stocks_to_analyze:
+        return {}, False
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    results: dict[str, Any] = {}
+    cancelled = False
+    total = len(stocks_to_analyze)
+
+    try:
+        for idx, stock in enumerate(stocks_to_analyze, start=1):
+            ticker = str(stock.get("ticker", "")).zfill(6)
+            stock_name = str(stock.get("name") or ticker)
+
+            if callable(should_stop) and should_stop():
+                cancelled = True
+                break
+
+            try:
+                if hasattr(analyzer, "analyze_stock"):
+                    analyzed = loop.run_until_complete(analyzer.analyze_stock(stock_name, stock))
+                    if isinstance(analyzed, dict):
+                        results[ticker] = analyzed
+                else:
+                    batch_result = loop.run_until_complete(analyzer.analyze_batch([stock]))
+                    if isinstance(batch_result, dict):
+                        batch_item = batch_result.get(ticker)
+                        if isinstance(batch_item, dict):
+                            results[ticker] = batch_item
+            except Exception as error:
+                logger.error(f"[VCP Reanalysis] {stock_name} 분석 실패: {error}")
+            finally:
+                if callable(on_progress):
+                    try:
+                        on_progress(idx, total, ticker)
+                    except Exception as callback_error:
+                        logger.debug(f"[VCP Reanalysis] progress callback 실패: {callback_error}")
+
+        if callable(should_stop) and should_stop():
+            cancelled = True
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
+    return results, cancelled
+
+
 def validate_vcp_reanalysis_source_frame(
     signals_df: pd.DataFrame,
 ) -> tuple[int | None, dict[str, Any] | None]:
@@ -237,12 +294,34 @@ def build_vcp_reanalysis_success_payload(
     }
 
 
+def build_vcp_reanalysis_cancelled_payload(
+    target_date: str,
+    total_in_scope: int,
+    failed_targets: int,
+    updated_count: int,
+    still_failed_count: int,
+    cache_files_updated: int,
+) -> dict[str, Any]:
+    return {
+        "status": "cancelled",
+        "message": "사용자 요청으로 실패 AI 재분석이 중지되었습니다.",
+        "target_date": target_date,
+        "total_in_scope": total_in_scope,
+        "failed_targets": failed_targets,
+        "updated_count": updated_count,
+        "still_failed_count": still_failed_count,
+        "cache_files_updated": cache_files_updated,
+    }
+
+
 def execute_vcp_failed_ai_reanalysis(
     target_date: str | None,
     signals_df: pd.DataFrame,
     signals_path: str,
     update_cache_files: Callable[[str, dict[str, Any]], int],
     logger: logging.Logger,
+    should_stop: Callable[[], bool] | None = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """VCP 실패 AI 재분석 전체 파이프라인을 실행한다."""
     try:
@@ -303,17 +382,79 @@ def execute_vcp_failed_ai_reanalysis(
                 "message": "사용 가능한 AI Provider가 없습니다.",
             }
 
+        failed_indexes = {idx for idx, _ in failed_rows}
+        apply_rows: list[tuple[int, dict[str, Any]]] = []
+        second_only_rows: list[tuple[int, dict[str, Any]]] = []
+        skip_gemini_tickers: set[str] = set()
+        skip_second_tickers: set[str] = set()
+
+        for idx, row in target_rows:
+            ticker = str(row.get("ticker", "")).zfill(6)
+            ai_item = ai_data_map.get(ticker, {})
+            has_cached_gemini = isinstance(ai_item.get("gemini_recommendation"), dict)
+            has_cached_second = isinstance(ai_item.get(second_recommendation_key), dict)
+
+            is_second_only = (
+                idx not in failed_indexes
+                and has_cached_gemini
+                and not has_cached_second
+            )
+            is_gemini_only = (
+                idx not in failed_indexes
+                and not has_cached_gemini
+                and has_cached_second
+            )
+            if is_second_only:
+                second_only_rows.append((idx, row))
+                skip_gemini_tickers.add(ticker)
+                continue
+            if is_gemini_only:
+                skip_second_tickers.add(ticker)
+
+            apply_rows.append((idx, row))
+
         stocks_to_analyze = _build_vcp_stock_payloads([row for _, row in target_rows])
-        ai_results = run_async_analyzer_batch(
-            analyzer=analyzer,
-            stocks_to_analyze=stocks_to_analyze,
-        )
+        for stock_item in stocks_to_analyze:
+            ticker = str(stock_item.get("ticker", "")).zfill(6)
+            if ticker in skip_gemini_tickers:
+                stock_item["skip_gemini"] = True
+            if ticker in skip_second_tickers:
+                stock_item["skip_second"] = True
+
+        if callable(should_stop) or callable(on_progress):
+            ai_results, cancelled = run_async_analyzer_batch_with_control(
+                analyzer=analyzer,
+                stocks_to_analyze=stocks_to_analyze,
+                should_stop=should_stop,
+                on_progress=on_progress,
+                logger=logger,
+            )
+        else:
+            ai_results = run_async_analyzer_batch(
+                analyzer=analyzer,
+                stocks_to_analyze=stocks_to_analyze,
+            )
+            cancelled = False
 
         updated_count, still_failed_count, updated_recommendations = _apply_vcp_reanalysis_updates(
             signals_df,
-            target_rows,
+            apply_rows,
             ai_results,
         )
+
+        second_only_success_count = 0
+        second_only_failed_count = 0
+        for _, row in second_only_rows:
+            ticker = str(row.get("ticker", "")).zfill(6)
+            rec_payload = ai_results.get(ticker, {}) if isinstance(ai_results, dict) else {}
+            second_rec = rec_payload.get(second_recommendation_key) if isinstance(rec_payload, dict) else None
+            if isinstance(second_rec, dict) and second_rec:
+                second_only_success_count += 1
+            else:
+                second_only_failed_count += 1
+
+        updated_count += second_only_success_count
+        still_failed_count += second_only_failed_count
 
         signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
         try:
@@ -324,6 +465,16 @@ def execute_vcp_failed_ai_reanalysis(
             )
         except TypeError:
             cache_files_updated = update_cache_files(normalized_target_date, updated_recommendations)
+
+        if cancelled:
+            return 200, build_vcp_reanalysis_cancelled_payload(
+                target_date=normalized_target_date,
+                total_in_scope=total_in_scope,
+                failed_targets=failed_targets,
+                updated_count=updated_count,
+                still_failed_count=still_failed_count,
+                cache_files_updated=cache_files_updated,
+            )
 
         return 200, build_vcp_reanalysis_success_payload(
             target_date=normalized_target_date,
@@ -346,8 +497,10 @@ __all__ = [
     "collect_missing_vcp_ai_rows",
     "merge_vcp_reanalysis_target_rows",
     "run_async_analyzer_batch",
+    "run_async_analyzer_batch_with_control",
     "validate_vcp_reanalysis_source_frame",
     "build_vcp_reanalysis_no_targets_payload",
     "build_vcp_reanalysis_success_payload",
+    "build_vcp_reanalysis_cancelled_payload",
     "execute_vcp_failed_ai_reanalysis",
 ]

@@ -40,6 +40,8 @@ def run_vcp_background_pipeline(
         status_state,
         running=True,
         status="running",
+        task_type="screener",
+        cancel_requested=False,
         progress=0,
         message=start_msg,
     )
@@ -89,6 +91,8 @@ def run_vcp_background_pipeline(
             status_state,
             running=False,
             last_run=datetime.now().isoformat(),
+            task_type=None,
+            cancel_requested=False,
         )
 
 

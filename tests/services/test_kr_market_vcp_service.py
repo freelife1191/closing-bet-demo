@@ -183,6 +183,8 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
         encoding="utf-8",
     )
 
+    captured_stocks = {"items": []}
+
     class _DummyAnalyzer:
         @staticmethod
         def get_available_providers():
@@ -190,6 +192,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
 
         @staticmethod
         async def analyze_batch(_stocks):
+            captured_stocks["items"] = list(_stocks)
             return {
                 "005930": {
                     "gemini_recommendation": {
@@ -231,3 +234,90 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
     assert payload["cache_files_updated"] == 1
     assert captured["called"] == 1
     assert isinstance(captured["ai_results"]["005930"]["perplexity_recommendation"], dict)
+    assert captured_stocks["items"]
+    assert captured_stocks["items"][0].get("skip_gemini") is True
+
+
+def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatch, tmp_path):
+    signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "BUY",
+                "ai_reason": "기존 분석 완료",
+                "ai_confidence": 80,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+            }
+        ]
+    )
+    signals_path = tmp_path / "signals_log.csv"
+    signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    # second provider(perplexity)는 있고 gemini만 누락된 상태.
+    (tmp_path / "ai_analysis_results.json").write_text(
+        json.dumps(
+            {
+                "signals": [
+                    {
+                        "ticker": "005930",
+                        "perplexity_recommendation": {
+                            "action": "BUY",
+                            "confidence": 72,
+                            "reason": "기존 Second 분석",
+                        }
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    captured_stocks = {"items": []}
+
+    class _DummyAnalyzer:
+        @staticmethod
+        def get_available_providers():
+            return ["gemini", "perplexity"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            captured_stocks["items"] = list(_stocks)
+            return {
+                "005930": {
+                    "gemini_recommendation": {
+                        "action": "HOLD",
+                        "confidence": 66,
+                        "reason": "Gemini 재분석",
+                    },
+                }
+            }
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 1,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert status_code == 200
+    assert payload["failed_targets"] == 1
+    assert payload["updated_count"] == 1
+    assert captured_stocks["items"]
+    assert captured_stocks["items"][0].get("skip_second") is True

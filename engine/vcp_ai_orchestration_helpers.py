@@ -36,15 +36,17 @@ async def orchestrate_stock_analysis(
     providers_map: list[str] = []
     shared_prompt = build_prompt_fn(stock_name, stock_data)
 
-    if "gemini" in providers:
+    skip_gemini = bool(stock_data.get("skip_gemini"))
+    skip_second = bool(stock_data.get("skip_second"))
+    if "gemini" in providers and not skip_gemini:
         tasks.append(analyze_with_gemini_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("gemini")
 
-    if second_provider == "perplexity" and ("perplexity" in providers or "gpt" in providers):
+    if not skip_second and second_provider == "perplexity" and ("perplexity" in providers or "gpt" in providers):
         if not perplexity_disabled:
             tasks.append(analyze_with_perplexity_fn(stock_name, stock_data, shared_prompt))
             providers_map.append("perplexity")
-    elif second_provider == "gpt" and ("gpt" in providers or "openai" in providers):
+    elif not skip_second and second_provider == "gpt" and ("gpt" in providers or "openai" in providers):
         tasks.append(analyze_with_gpt_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("gpt")
 
@@ -111,4 +113,3 @@ async def analyze_batch_with_limit(
 
 
 __all__ = ["orchestrate_stock_analysis", "analyze_batch_with_limit"]
-

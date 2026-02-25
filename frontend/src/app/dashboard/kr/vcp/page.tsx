@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate, AIRecommendation } from '@/lib/api';
 import StockChart from './StockChart';
 import BuyStockModal from '@/app/components/BuyStockModal';
@@ -204,7 +204,9 @@ export default function VCPSignalsPage() {
 
   const [screenerRunning, setScreenerRunning] = useState(false);
   const [reanalyzingFailedAI, setReanalyzingFailedAI] = useState(false);
+  const [stoppingReanalysis, setStoppingReanalysis] = useState(false);
   const [screenerMessage, setScreenerMessage] = useState<string | null>(null);
+  const reanalysisPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Slash Command State for Embedded Chat
   const [showCommands, setShowCommands] = useState(false);
@@ -435,6 +437,48 @@ export default function VCPSignalsPage() {
   const [historyDates, setHistoryDates] = useState<string[]>([]);
   const [selectedHistoryDate, setSelectedHistoryDate] = useState<string | null>(null);
 
+  const clearReanalysisPolling = () => {
+    if (reanalysisPollRef.current) {
+      clearInterval(reanalysisPollRef.current);
+      reanalysisPollRef.current = null;
+    }
+  };
+
+  const startReanalysisPolling = (targetDate?: string) => {
+    clearReanalysisPolling();
+    reanalysisPollRef.current = setInterval(async () => {
+      try {
+        const status = await krAPI.getVCPStatus();
+        if (status.running && status.task_type === 'reanalysis_failed_ai') {
+          const progress = status.progress || 0;
+          setReanalyzingFailedAI(true);
+          setStoppingReanalysis(Boolean(status.cancel_requested));
+          setScreenerMessage(`🤖 ${status.message || '실패 AI 재분석 진행 중...'} (${progress}%)`);
+          return;
+        }
+
+        clearReanalysisPolling();
+        setReanalyzingFailedAI(false);
+        setStoppingReanalysis(false);
+
+        if (status.status === 'success' || status.status === 'cancelled' || status.status === 'error') {
+          await loadSignals(targetDate);
+          const prefix = status.status === 'success' ? '✅' : status.status === 'cancelled' ? '🛑' : '❌';
+          setScreenerMessage(`${prefix} ${status.message || '실패 AI 재분석 종료'}`);
+          setTimeout(() => setScreenerMessage(null), 5000);
+        }
+      } catch (e) {
+        console.error('Failed to poll failed-ai reanalysis status:', e);
+      }
+    }, 2000);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearReanalysisPolling();
+    };
+  }, []);
+
   useEffect(() => {
     loadSignals();
     loadMarketGate();
@@ -446,6 +490,15 @@ export default function VCPSignalsPage() {
     try {
       const status = await krAPI.getVCPStatus();
       if (status.running) {
+        if (status.task_type === 'reanalysis_failed_ai') {
+          setReanalyzingFailedAI(true);
+          setStoppingReanalysis(Boolean(status.cancel_requested));
+          setScreenerRunning(false);
+          setScreenerMessage(`🤖 ${status.message} (재개됨)`);
+          startReanalysisPolling(activeDateTab === 'history' ? (selectedHistoryDate || undefined) : undefined);
+          return;
+        }
+
         setScreenerRunning(true);
         setScreenerMessage(`🔄 ${status.message} (재개됨)`);
 
@@ -591,22 +644,37 @@ export default function VCPSignalsPage() {
       setPermissionModal(true);
       return;
     }
-    if (screenerRunning || reanalyzingFailedAI) return;
+
+    if (reanalyzingFailedAI) {
+      if (stoppingReanalysis) return;
+      try {
+        setStoppingReanalysis(true);
+        await krAPI.stopVCPFailedAIReanalysis();
+        setScreenerMessage('🛑 실패 AI 재분석 중지 요청을 전송했습니다...');
+      } catch (e: any) {
+        setStoppingReanalysis(false);
+        setScreenerMessage(`❌ ${e?.message || '재분석 중지 요청 실패'}`);
+        setTimeout(() => setScreenerMessage(null), 5000);
+      }
+      return;
+    }
+
+    if (screenerRunning) return;
 
     const targetDate = activeDateTab === 'history' ? (selectedHistoryDate || undefined) : undefined;
-
     setReanalyzingFailedAI(true);
-    setScreenerMessage('🤖 실패 AI 재분석 요청 중...');
+    setStoppingReanalysis(false);
+    setScreenerMessage('🤖 실패 AI 재분석 시작 요청 중...');
     try {
-      const res: any = await krAPI.reanalyzeVCPFailedAI(targetDate);
-      await loadSignals(targetDate);
-      setScreenerMessage(`✅ ${res?.message || '실패 AI 재분석 완료'}`);
-      setTimeout(() => setScreenerMessage(null), 5000);
+      const res: any = await krAPI.reanalyzeVCPFailedAI(targetDate, true);
+      setScreenerMessage(`🤖 ${res?.message || '실패 AI 재분석 시작됨'}`);
+      startReanalysisPolling(targetDate);
     } catch (e: any) {
+      clearReanalysisPolling();
       setScreenerMessage(`❌ ${e?.message || '실패 AI 재분석 실패'}`);
       setTimeout(() => setScreenerMessage(null), 7000);
-    } finally {
       setReanalyzingFailedAI(false);
+      setStoppingReanalysis(false);
     }
   };
 
@@ -914,16 +982,16 @@ export default function VCPSignalsPage() {
 
           <button
             onClick={handleReanalyzeFailedAI}
-            disabled={screenerRunning || reanalyzingFailedAI}
+            disabled={screenerRunning}
             className={`flex-1 md:flex-none justify-center px-4 py-3 md:py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${reanalyzingFailedAI
-              ? 'bg-indigo-600/80 text-white/80 cursor-wait'
+              ? 'bg-red-600/80 hover:bg-red-500 text-white'
               : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg hover:shadow-indigo-500/25'
               }`}
           >
             {reanalyzingFailedAI ? (
               <>
-                <i className="fas fa-circle-notch fa-spin text-lg"></i>
-                <span>Retrying...</span>
+                <i className={`fas ${stoppingReanalysis ? 'fa-circle-notch fa-spin' : 'fa-stop-circle'} text-lg`}></i>
+                <span>{stoppingReanalysis ? '중지 요청 중...' : '재분석 중지'}</span>
               </>
             ) : (
               <>
