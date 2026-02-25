@@ -449,7 +449,8 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             lock_handle.close()
-            logger.info("PaperTrading Price Sync already active in another process. Skip this instance.")
+            # 정상적인 중복 실행 방지 경로이므로 INFO 스팸을 피하기 위해 DEBUG로만 기록한다.
+            logger.debug("PaperTrading Price Sync already active in another process. Skip this instance.")
             return False
         except OSError as error:
             lock_handle.close()
