@@ -22,10 +22,13 @@ from scripts import init_data
 class _DummyScreener:
     """create_signals_log 테스트용 스크리너 더미"""
 
+    last_max_stocks: int | None = None
+
     def __init__(self, target_date=None):
         self.target_date = target_date
 
     def run_screening(self, max_stocks: int = 600) -> pd.DataFrame:
+        self.__class__.last_max_stocks = max_stocks
         return pd.DataFrame(
             [
                 {
@@ -101,6 +104,23 @@ def test_create_signals_log_persists_detected_signal(monkeypatch, tmp_path):
     assert len(df) == 1
     assert df.iloc[0]["ticker"] == "005930"
     assert df.iloc[0]["grade"] == "B"
+
+
+def test_create_signals_log_passes_max_stocks(monkeypatch, tmp_path):
+    """create_signals_log의 max_stocks 인자가 screener.run_screening으로 전달되어야 한다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    _DummyScreener.last_max_stocks = None
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _DummyScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+
+    result = init_data.create_signals_log(target_date="2026-02-19", run_ai=False, max_stocks=123)
+
+    assert result is True
+    assert _DummyScreener.last_max_stocks == 123
 
 
 def test_send_jongga_notification_sends_message_when_no_signals(monkeypatch, tmp_path):

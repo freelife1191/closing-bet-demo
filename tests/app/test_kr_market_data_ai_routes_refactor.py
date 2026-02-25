@@ -153,3 +153,46 @@ def test_cumulative_route_reuses_sqlite_cache_after_memory_clear(tmp_path, monke
     second = client.get("/api/kr/closing-bet/cumulative")
     assert second.status_code == 200
     assert second.get_json()["kpi"]["count"] == 1
+
+
+def test_cumulative_route_handles_invalid_page_limit_query_params(tmp_path):
+    cumulative_cache.clear_cumulative_cache()
+    cumulative_cache._CUMULATIVE_SQLITE_READY.clear()
+
+    deps = {
+        "build_ai_analysis_payload_for_target_date": lambda **_k: {"signals": []},
+        "build_latest_ai_analysis_payload": lambda **_k: {"signals": []},
+        "load_json_file": lambda _name: {},
+        "build_ai_signals_from_jongga_results": lambda **_k: [],
+        "normalize_ai_payload_tickers": lambda payload: payload,
+        "should_use_jongga_ai_payload": lambda *_a, **_k: False,
+        "format_signal_date": lambda value: str(value),
+        "load_jongga_result_payloads": lambda: [],
+        "load_backtest_price_snapshot": lambda: (pd.DataFrame(), {}),
+        "load_csv_file": lambda _name: pd.DataFrame(),
+        "prepare_cumulative_price_dataframe": lambda df: df,
+        "build_ticker_price_index": lambda _df: {},
+        "extract_stats_date_from_results_filename": lambda _fp, fallback_date="": str(fallback_date),
+        "build_cumulative_trade_record": lambda *_a, **_k: None,
+        "aggregate_cumulative_kpis": lambda trades, _price_df, _now: {"count": len(trades)},
+        "paginate_items": lambda items, page, limit: (
+            items[(page - 1) * limit : page * limit],
+            {"page": page, "limit": limit, "total": len(items)},
+        ),
+        "get_data_path": lambda filename: str(tmp_path / filename),
+        "data_dir_getter": lambda: str(tmp_path),
+    }
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr-invalid-query-test", __name__)
+    ai_routes.register_market_data_ai_routes(bp, logger=logging.getLogger(__name__), deps=deps)
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.get("/api/kr/closing-bet/cumulative?page=abc&limit=-10")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["pagination"]["page"] == 1
+    assert payload["pagination"]["limit"] == 50

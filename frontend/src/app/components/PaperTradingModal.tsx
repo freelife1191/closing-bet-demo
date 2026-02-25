@@ -13,8 +13,10 @@ interface PaperTradingModalProps {
   onClose: () => void;
 }
 
+type PaperTradingTabId = 'overview' | 'holdings' | 'history' | 'chart';
+
 export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'holdings' | 'history' | 'chart'>('overview');
+  const [activeTab, setActiveTab] = useState<PaperTradingTabId>('overview');
   const [portfolio, setPortfolio] = useState<PaperTradingPortfolio | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -38,6 +40,12 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   const [sellModalOpen, setSellModalOpen] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [selectedStock, setSelectedStock] = useState<any>(null); // 매수/매도용 선택된 종목
+  const tabs: { id: PaperTradingTabId; label: string; icon: string }[] = [
+    { id: 'overview', label: '자산 개요', icon: 'fa-wallet' },
+    { id: 'holdings', label: '보유 종목', icon: 'fa-list' },
+    { id: 'chart', label: '수익 차트', icon: 'fa-chart-area' },
+    { id: 'history', label: '거래 내역', icon: 'fa-history' },
+  ];
 
   const fetchPortfolio = async () => {
     setLoading(true);
@@ -534,15 +542,10 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
           {/* Tabs */}
           <div className="flex border-b border-white/10 bg-[#1c1c1e] overflow-x-auto no-scrollbar flex-shrink-0">
-            {[
-              { id: 'overview', label: '자산 개요', icon: 'fa-wallet' },
-              { id: 'holdings', label: '보유 종목', icon: 'fa-list' },
-              { id: 'chart', label: '수익 차트', icon: 'fa-chart-area' },
-              { id: 'history', label: '거래 내역', icon: 'fa-history' }
-            ].map(tab => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`flex-none flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors relative whitespace-nowrap focus:outline-none focus:ring-0 ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-300'
                   }`}
               >

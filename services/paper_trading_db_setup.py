@@ -17,6 +17,7 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.paper_trading_constants import INITIAL_CASH_KRW
 
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(
@@ -184,10 +185,10 @@ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
             )
 
             cursor.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS balance (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
-                    cash REAL DEFAULT 100000000,
+                    cash REAL DEFAULT {INITIAL_CASH_KRW},
                     total_deposit REAL DEFAULT 0
                 )
                 """
@@ -206,7 +207,8 @@ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
             _ensure_balance_columns(cursor, logger)
 
             cursor.execute(
-                "INSERT OR IGNORE INTO balance (id, cash, total_deposit) VALUES (1, 100000000, 0)"
+                "INSERT OR IGNORE INTO balance (id, cash, total_deposit) VALUES (1, ?, 0)",
+                (INITIAL_CASH_KRW,),
             )
             _create_indexes(cursor)
             conn.commit()

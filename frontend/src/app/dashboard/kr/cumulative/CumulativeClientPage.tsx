@@ -22,6 +22,12 @@ interface Trade {
   themes: string[];
 }
 
+interface GradeRoiData {
+  count: number;
+  avgRoi: number;
+  totalRoi: number;
+}
+
 interface KPIData {
   totalSignals: number;
   winRate: number;
@@ -30,6 +36,11 @@ interface KPIData {
   open: number;
   avgRoi: number;
   totalRoi: number;
+  roiByGrade: {
+    S: GradeRoiData;
+    A: GradeRoiData;
+    B: GradeRoiData;
+  };
   avgDays: number;
   priceDate: string;
   profitFactor: number;
@@ -72,15 +83,15 @@ const TOOLTIP_CONTENT = {
   },
   avgRoi: {
     title: "평균 수익률 (Average ROI)",
-    desc: "모든 청산(익절/손절) 건의 수익률을 단순 평균한 값입니다.",
-    criteria: "(총 수익률 합계) / (청산된 매매 횟수)",
-    interpretation: "양수(+)를 유지해야 계좌가 성장합니다. 손익비 관리가 잘 되고 있는지 보여줍니다."
+    desc: "S/A/B 등급별 평균 수익률을 동시에 보여줍니다.",
+    criteria: "각 등급별 (등급 총 수익률 합계) / (등급 매매 수)",
+    interpretation: "S/A/B의 평균 수익률을 비교해 어떤 등급이 실제 수익에 기여하는지 확인할 수 있습니다."
   },
   totalRoi: {
     title: "누적 수익률 (Total ROI)",
-    desc: "초기 자본금 대비 현재까지 발생한 총 수익률의 합계(단리)입니다.",
-    criteria: "모든 개별 매매 수익률의 단순 합산",
-    interpretation: "복리 효과를 적용하면 실제 계좌 수익률은 더 높을 수 있습니다."
+    desc: "S/A/B 등급별 누적 수익률을 동시에 보여줍니다.",
+    criteria: "각 등급의 개별 매매 수익률 단순 합산",
+    interpretation: "S/A/B별 누적 수익률을 비교하면 전체 성과에서 등급별 기여도를 명확하게 볼 수 있습니다."
   },
   avgDays: {
     title: "평균 보유일 (Average Days)",
@@ -98,29 +109,22 @@ const TOOLTIP_CONTENT = {
   // --- Grades ---
   gradeS: {
     title: "S등급 (Super) 성과",
-    desc: "초대형 주도주(거래대금 1조↑, 점수 15점↑)에 대한 매매 성과입니다.",
+    desc: "초대형 주도주(거래대금 1조↑, 점수 10점↑)에 대한 매매 성과입니다.",
     criteria: "가장 강력한 수급과 상승 모멘텀을 가진 종목군",
     interpretation: "시장 주도주로 승률이 가장 안정적이어야 하는 등급입니다."
   },
   gradeA: {
     title: "A등급 (Ace) 성과",
-    desc: "대형 주도주(거래대금 5천억↑, 점수 12점↑)에 대한 매매 성과입니다.",
+    desc: "대형 주도주(거래대금 5천억↑, 점수 8점↑)에 대한 매매 성과입니다.",
     criteria: "확실한 재료와 수급이 받쳐주는 종목군",
     interpretation: "가장 많은 매매 기회가 발생하며 수익의 허리를 담당합니다."
   },
   gradeB: {
     title: "B등급 (Basic) 성과",
-    desc: "중형 수급주(거래대금 1천억↑, 점수 10점↑)에 대한 매매 성과입니다.",
+    desc: "중형 수급주(거래대금 1천억↑, 점수 6점↑)에 대한 매매 성과입니다.",
     criteria: "테마의 2등주나 개별 호재주가 포함될 수 있음",
     interpretation: "변동성이 클 수 있어 선별적인 접근이 필요합니다."
   },
-  gradeC: {
-    title: "C등급 (Challenge) 성과",
-    desc: "소형 급등주(거래대금 500억↑, 점수 8점↑)에 대한 매매 성과입니다.",
-    criteria: "시총이 작고 가벼워 등락폭이 매우 큼",
-    interpretation: "하이리스크 하이리턴 영역으로 비중 조절이 필수입니다."
-  },
-
   // --- Distribution ---
   distribution: {
     title: "승패 분포 (Win/Loss Distribution)",
@@ -139,7 +143,7 @@ const TOOLTIP_CONTENT = {
   table_grade: {
     title: "등급 (Grade)",
     desc: "AI가 분석한 종목의 상승 잠재력 등급입니다.",
-    criteria: "S > A > B > C 순으로 강력함",
+    criteria: "S > A > B 순으로 강력함",
     interpretation: "등급이 높을수록 성공 확률과 기대 수익률이 높은 경향이 있습니다."
   },
   table_entry: {
@@ -342,14 +346,14 @@ function renderStatTooltip(key: keyof typeof TOOLTIP_CONTENT, kpi: KPIData) {
 }
 
 
-function StatCard({ title, value, colorClass = 'text-white', subtext, kpi, tooltipKey }: { title: string, value: string | number, colorClass?: string, subtext?: string, kpi?: KPIData, tooltipKey?: keyof typeof TOOLTIP_CONTENT }) {
+function StatCard({ title, value, colorClass = 'text-white', subtext, kpi, tooltipKey, valueClassName = 'text-2xl' }: { title: string, value: React.ReactNode, colorClass?: string, subtext?: string, kpi?: KPIData, tooltipKey?: keyof typeof TOOLTIP_CONTENT, valueClassName?: string }) {
   const content = (
     <div className="bg-[#1c1c1e] p-4 rounded-xl border border-white/5 flex flex-col justify-between h-24 hover:border-white/20 transition-colors relative group cursor-help">
       <div className="flex justify-between items-start">
         <div className="text-[10px] text-gray-500 font-bold tracking-wider uppercase">{title}</div>
         {tooltipKey && <i className="fas fa-question-circle text-gray-700 text-[10px] group-hover:text-gray-500 transition-colors"></i>}
       </div>
-      <div className={`text-2xl font-bold ${colorClass}`}>{value}</div>
+      <div className={`${valueClassName} font-bold ${colorClass}`}>{value}</div>
       {subtext && <div className="text-xs text-gray-500">{subtext}</div>}
     </div>
   );
@@ -434,22 +438,19 @@ function CumulativeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: (
             </div>
             <div className="border-t border-white/10 pt-4">
               <h4 className="font-bold text-white text-sm mb-1">등급 분류 (Ranking)</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                <div className="p-2 border border-purple-500/30 bg-purple-500/10 rounded-lg">
-                  <span className="text-purple-400 font-bold text-xs">[S등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1조↑ + 점수 15점↑ (초대형 주도주)</span>
-                </div>
-                <div className="p-2 border border-rose-500/30 bg-rose-500/10 rounded-lg">
-                  <span className="text-rose-400 font-bold text-xs">[A등급]</span> <span className="text-gray-400 text-[10px]">거래대금 5천억↑ + 점수 12점↑ (대형 주도주)</span>
-                </div>
-                <div className="p-2 border border-blue-500/30 bg-blue-500/10 rounded-lg">
-                  <span className="text-blue-400 font-bold text-xs">[B등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1천억↑ + 점수 10점↑ (준수한 수급주)</span>
-                </div>
-                <div className="p-2 border border-emerald-500/30 bg-emerald-500/10 rounded-lg">
-                  <span className="text-emerald-400 font-bold text-xs">[C등급]</span> <span className="text-gray-400 text-[10px]">거래대금 500억↑ + 점수 8점↑ (강소 주도주)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                  <div className="p-2 border border-purple-500/30 bg-purple-500/10 rounded-lg">
+                    <span className="text-purple-400 font-bold text-xs">[S등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1조↑ + 점수 10점↑ (초대형 주도주)</span>
+                  </div>
+                  <div className="p-2 border border-rose-500/30 bg-rose-500/10 rounded-lg">
+                    <span className="text-rose-400 font-bold text-xs">[A등급]</span> <span className="text-gray-400 text-[10px]">거래대금 5천억↑ + 점수 8점↑ (대형 주도주)</span>
+                  </div>
+                  <div className="p-2 border border-blue-500/30 bg-blue-500/10 rounded-lg">
+                    <span className="text-blue-400 font-bold text-xs">[B등급]</span> <span className="text-gray-400 text-[10px]">거래대금 1천억↑ + 점수 6점↑ (준수한 수급주)</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
         </div>
       </div>
     </Modal>
@@ -748,7 +749,15 @@ function DailyBarGraph({ data }: { data: number[] }) {
 }
 
 // [FIX] Adjusted Tooltip position to prevent clipping in table header
-function TableHeader({ label, tooltipKey, align = "left" }: { label: string, tooltipKey?: keyof typeof TOOLTIP_CONTENT, align?: string }) {
+function TableHeader({
+  label,
+  tooltipKey,
+  align = "left",
+}: {
+  label: string,
+  tooltipKey?: keyof typeof TOOLTIP_CONTENT,
+  align?: 'left' | 'center' | 'right'
+}) {
   // Map text alignment to tooltip alignment for better positioning
   // Left text -> Left tooltip (expands right)
   // Right text -> Right tooltip (expands left)
@@ -760,7 +769,7 @@ function TableHeader({ label, tooltipKey, align = "left" }: { label: string, too
       <div className={`flex items-center gap-1.5 ${align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start"}`}>
         {label}
         {tooltipKey && (
-          <Tooltip content={renderTooltipContent(tooltipKey)} position="bottom" align={tooltipAlign as any}>
+          <Tooltip content={renderTooltipContent(tooltipKey)} position="bottom" align={tooltipAlign}>
             <i className="fas fa-info-circle text-gray-600 text-[10px] hover:text-gray-400 cursor-help transition-colors"></i>
           </Tooltip>
         )}
@@ -792,7 +801,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
           </thead>
           <tbody className="text-xs divide-y divide-white/5">
             {trades.map((trade, idx) => (
-              <tr key={trade.id} className="hover:bg-white/5 transition-colors group">
+              <tr key={`${trade.id}-${idx}`} className="hover:bg-white/5 transition-colors group">
                 <td className="py-3 px-4 text-center text-gray-600">{trades.length - idx}</td>
                 <td className="py-3 px-4 text-gray-400 font-mono tracking-tight">{trade.date}</td>
                 <td className="py-3 px-4">
@@ -865,6 +874,13 @@ function TradeTable({ trades }: { trades: Trade[] }) {
 }
 
 export default function CumulativeClientPage() {
+  const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
+  const createEmptyRoiByGrade = () => ({
+    S: { count: 0, avgRoi: 0, totalRoi: 0 },
+    A: { count: 0, avgRoi: 0, totalRoi: 0 },
+    B: { count: 0, avgRoi: 0, totalRoi: 0 }
+  });
+
   const [outcomeFilter, setOutcomeFilter] = useState('All');
   const [gradeFilter, setGradeFilter] = useState('All');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -878,6 +894,7 @@ export default function CumulativeClientPage() {
     open: 0,
     avgRoi: 0,
     totalRoi: 0,
+    roiByGrade: createEmptyRoiByGrade(),
     avgDays: 0,
     priceDate: '-',
     profitFactor: 0
@@ -899,7 +916,16 @@ export default function CumulativeClientPage() {
         const res = await fetch(`/api/kr/closing-bet/cumulative?page=${currentPage}&limit=${itemsPerPage}`);
         if (!res.ok) throw new Error('Failed to fetch data');
         const data = await res.json();
-        setKpi(data.kpi);
+        const emptyRoiByGrade = createEmptyRoiByGrade();
+        const apiRoiByGrade = data.kpi?.roiByGrade || {};
+        setKpi({
+          ...data.kpi,
+          roiByGrade: {
+            S: { ...emptyRoiByGrade.S, ...(apiRoiByGrade.S || {}) },
+            A: { ...emptyRoiByGrade.A, ...(apiRoiByGrade.A || {}) },
+            B: { ...emptyRoiByGrade.B, ...(apiRoiByGrade.B || {}) }
+          }
+        });
         setPagination(data.pagination);
         // D등급 제외 필터링 (Server should handle this ideally, but keeping frontend filter for safety/consistency)
         const filtered = (data.trades || []).filter((t: Trade) => t.grade !== 'D');
@@ -939,13 +965,11 @@ export default function CumulativeClientPage() {
   const sStats = calculateGradeStats('S');
   const aStats = calculateGradeStats('A');
   const bStats = calculateGradeStats('B');
-  const cStats = calculateGradeStats('C');
 
   const gradeCards = [
     { grade: 'S', ...sStats, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', tooltipKey: 'gradeS' as const },
     { grade: 'A', ...aStats, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', tooltipKey: 'gradeA' as const },
     { grade: 'B', ...bStats, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', tooltipKey: 'gradeB' as const },
-    { grade: 'C', ...cStats, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', tooltipKey: 'gradeC' as const },
   ];
 
   if (loading) {
@@ -1009,13 +1033,39 @@ export default function CumulativeClientPage() {
         <StatCard title="성공" value={kpi.wins} colorClass="text-emerald-400" tooltipKey="wins" kpi={kpi} />
         <StatCard title="실패" value={kpi.losses} colorClass="text-rose-400" tooltipKey="losses" kpi={kpi} />
         <StatCard title="보유중" value={kpi.open} colorClass="text-yellow-500" tooltipKey="open" kpi={kpi} />
-        <StatCard title="평균 수익률" value={`${kpi.avgRoi > 0 ? '+' : ''}${kpi.avgRoi}%`} colorClass={kpi.avgRoi >= 0 ? "text-emerald-400" : "text-rose-400"} tooltipKey="avgRoi" kpi={kpi} />
+        <StatCard
+          title="평균 수익률 (S/A/B)"
+          value={
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm font-semibold leading-tight">
+              <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.avgRoi)}</span>
+              <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.avgRoi)}</span>
+              <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.avgRoi)}</span>
+            </div>
+          }
+          valueClassName="text-sm leading-tight"
+          colorClass="text-white"
+          tooltipKey="avgRoi"
+          kpi={kpi}
+        />
       </div>
 
 
       {/* Metric Cards - Row 2 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard title="누적 수익률" value={`${kpi.totalRoi > 0 ? '+' : ''}${kpi.totalRoi}%`} colorClass={kpi.totalRoi >= 0 ? "text-emerald-400" : "text-rose-400"} tooltipKey="totalRoi" kpi={kpi} />
+        <StatCard
+          title="누적 수익률 (S/A/B)"
+          value={
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm font-semibold leading-tight">
+              <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.totalRoi)}</span>
+              <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.totalRoi)}</span>
+              <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.totalRoi)}</span>
+            </div>
+          }
+          valueClassName="text-sm leading-tight"
+          colorClass="text-white"
+          tooltipKey="totalRoi"
+          kpi={kpi}
+        />
         <StatCard title="평균 보유일" value={kpi.avgDays} tooltipKey="avgDays" kpi={kpi} />
         <StatCard title="데이터 기준일" value={kpi.priceDate} />
         <StatCard title="손익비 (Profit Factor)" value={kpi.profitFactor} colorClass="text-cyan-400" tooltipKey="profitFactor" kpi={kpi} />
@@ -1053,7 +1103,6 @@ export default function CumulativeClientPage() {
                 <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
                 <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
                 <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
-                <FilterButton label="C" count={cStats.count} active={gradeFilter === 'C'} onClick={() => setGradeFilter('C')} />
               </div>
             </div>
           </div>

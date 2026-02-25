@@ -5,7 +5,7 @@ KR AI Analyzer 전략 모듈
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from engine.constants import AI_ANALYSIS
 from engine.kr_ai_templates import MockAnalysisTemplates
@@ -13,6 +13,37 @@ from engine.models import NewsItem
 
 
 logger = logging.getLogger(__name__)
+_VALID_ACTIONS = {"BUY", "SELL", "HOLD"}
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _normalize_action(value: Any, default: str = "HOLD") -> str:
+    action = str(value or default).strip().upper()
+    return action if action in _VALID_ACTIONS else default
+
+
+def _normalize_recommendation_payload(payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return None
+
+    normalized = dict(payload)
+    normalized["action"] = _normalize_action(normalized.get("action"), default="HOLD")
+    normalized["confidence"] = _safe_float(normalized.get("confidence"), 0.0)
+    normalized["reason"] = str(normalized.get("reason") or "근거 부족")
+    return normalized
 
 
 class AIStrategy:
@@ -32,10 +63,8 @@ class GeminiStrategy(AIStrategy):
 
     def analyze(self, stock_info: Dict, news_items: List[NewsItem]) -> Optional[Dict]:
         """
-        Gemini로 종목 분석
-
-        TODO: 실제 API 키가 있으면 google.generativeai 호출
-        현재는 Mock 데이터 반환 (풍부한 샘플)
+        Gemini 전략 분석.
+        현재는 안정성을 위해 Mock 기반 분석 결과를 반환한다.
         """
         _ = news_items
         if not self.is_available:
@@ -69,10 +98,10 @@ class GeminiStrategy(AIStrategy):
 
             return {
                 "action": "BUY",
-                "confidence": random.randint(
+                "confidence": _safe_int(random.randint(
                     AI_ANALYSIS.CONFIDENCE_BUY_MIN,
                     AI_ANALYSIS.CONFIDENCE_MAX,
-                ),
+                )),
                 "reason": rich_reason.strip(),
                 "news_sentiment": random.choice(["positive", "positive", "neutral"]),
             }
@@ -87,10 +116,8 @@ class GPTStrategy(AIStrategy):
 
     def analyze(self, stock_info: Dict, news_items: List[NewsItem]) -> Optional[Dict]:
         """
-        GPT로 종목 분석
-
-        TODO: 실제 OpenAI API 호출 구현
-        현재는 Mock 데이터 반환
+        GPT 전략 분석.
+        현재는 안정성을 위해 Mock 기반 분석 결과를 반환한다.
         """
         _ = news_items
         if not self.is_available:
@@ -98,16 +125,17 @@ class GPTStrategy(AIStrategy):
 
         try:
             import random
+            price = _safe_float(stock_info.get("price"), 0.0)
 
             return {
                 "action": "BUY",
-                "confidence": random.randint(
+                "confidence": _safe_int(random.randint(
                     AI_ANALYSIS.CONFIDENCE_MIN,
                     AI_ANALYSIS.CONFIDENCE_MAX,
-                ),
+                )),
                 "reason": "VCP 패턴 및 외인 매집 추이 확인",
-                "target_price": stock_info["price"] * AI_ANALYSIS.TARGET_PRICE_RATIO,
-                "stop_loss": stock_info["price"] * AI_ANALYSIS.STOP_LOSS_RATIO,
+                "target_price": price * AI_ANALYSIS.TARGET_PRICE_RATIO,
+                "stop_loss": price * AI_ANALYSIS.STOP_LOSS_RATIO,
             }
 
         except Exception as e:
@@ -130,37 +158,46 @@ class RecommendationCombiner:
            - 액션이 일치하면 -> 평균 confidence
            - 액션이 다르면 -> 높은 confidence 선택
         """
-        if not gemini_result and not gpt_result:
+        normalized_gemini = _normalize_recommendation_payload(gemini_result)
+        normalized_gpt = _normalize_recommendation_payload(gpt_result)
+
+        if not normalized_gemini and not normalized_gpt:
             return {
                 "action": "HOLD",
                 "confidence": 0,
                 "reason": "AI 분석 불가",
             }
 
-        if gemini_result and not gpt_result:
-            return gemini_result
+        if normalized_gemini and not normalized_gpt:
+            return normalized_gemini
 
-        if gpt_result and not gemini_result:
-            return gpt_result
+        if normalized_gpt and not normalized_gemini:
+            return normalized_gpt
 
-        if gemini_result["action"] == gpt_result["action"]:
+        assert normalized_gemini is not None
+        assert normalized_gpt is not None
+
+        if normalized_gemini["action"] == normalized_gpt["action"]:
             return {
-                "action": gemini_result["action"],
-                "confidence": (gemini_result["confidence"] + gpt_result["confidence"]) / 2,
-                "reason": f"{gemini_result['reason']} / {gpt_result['reason']}",
+                "action": normalized_gemini["action"],
+                "confidence": (
+                    _safe_float(normalized_gemini.get("confidence"), 0.0)
+                    + _safe_float(normalized_gpt.get("confidence"), 0.0)
+                ) / 2,
+                "reason": f"{normalized_gemini['reason']} / {normalized_gpt['reason']}",
             }
 
-        if gemini_result["confidence"] > gpt_result["confidence"]:
+        if _safe_float(normalized_gemini.get("confidence"), 0.0) > _safe_float(normalized_gpt.get("confidence"), 0.0):
             return {
-                "action": gemini_result["action"],
-                "confidence": gemini_result["confidence"],
-                "reason": gemini_result["reason"] + " (우선권)",
+                "action": normalized_gemini["action"],
+                "confidence": _safe_float(normalized_gemini.get("confidence"), 0.0),
+                "reason": str(normalized_gemini["reason"]) + " (우선권)",
             }
 
         return {
-            "action": gpt_result["action"],
-            "confidence": gpt_result["confidence"],
-            "reason": gpt_result["reason"] + " (우선권)",
+            "action": normalized_gpt["action"],
+            "confidence": _safe_float(normalized_gpt.get("confidence"), 0.0),
+            "reason": str(normalized_gpt["reason"]) + " (우선권)",
         }
 
 

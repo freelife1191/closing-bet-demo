@@ -22,6 +22,10 @@ class Grade(Enum):
 @dataclass
 class SignalConfig:
     """시그널 생성 설정"""
+    # 런타임 I/O
+    DATA_DIR: str = "data"
+    USE_TOSS_DATA: bool = True
+
     # 18점 점수 시스템 (종가베팅)
     max_score: int = 18
 
@@ -29,6 +33,7 @@ class SignalConfig:
     min_s_grade: int = 10
     min_a_grade: int = 8
     min_b_grade: int = 6
+    min_change_pct: float = 0.0  # 등락률 하한 (0 이상이면 포함)
 
     # 거래대금 기준 (원) - 2026-02-08 업데이트 (Dos 조건 반영)
     trading_value_s: int = 1_000_000_000_000  # 1조
@@ -46,6 +51,47 @@ class SignalConfig:
     stop_loss_pct: float = 0.03  # -3%
     take_profit_pct: float = 0.05  # +5%
     r_multiplier: int = 3  # R:Reward = 3:5 approx (Not strictly 1:3 anymore, but keeping field)
+
+    def __post_init__(self) -> None:
+        """환경변수 기반 런타임 설정을 반영한다."""
+        data_dir_env = os.getenv("DATA_DIR", "").strip()
+        if data_dir_env:
+            self.DATA_DIR = data_dir_env
+
+        use_toss_env = os.getenv("USE_TOSS_DATA")
+        if use_toss_env is not None:
+            normalized = str(use_toss_env).strip().lower()
+            self.USE_TOSS_DATA = normalized in {"1", "true", "yes", "on"}
+
+        def _apply_int_override(env_key: str, attr_name: str) -> None:
+            raw = os.getenv(env_key)
+            if raw is None:
+                return
+            try:
+                setattr(self, attr_name, int(float(raw)))
+            except (TypeError, ValueError):
+                return
+
+        def _apply_float_override(env_key: str, attr_name: str) -> None:
+            raw = os.getenv(env_key)
+            if raw is None:
+                return
+            try:
+                setattr(self, attr_name, float(raw))
+            except (TypeError, ValueError):
+                return
+
+        _apply_float_override("MIN_CHANGE_PCT", "min_change_pct")
+
+        _apply_int_override("MIN_S_GRADE", "min_s_grade")
+        _apply_int_override("MIN_A_GRADE", "min_a_grade")
+        _apply_int_override("MIN_B_GRADE", "min_b_grade")
+
+        _apply_int_override("TRADING_VALUE_S", "trading_value_s")
+        _apply_int_override("TRADING_VALUE_A", "trading_value_a")
+        _apply_int_override("TRADING_VALUE_B", "trading_value_b")
+        _apply_int_override("TRADING_VALUE_C", "trading_value_c")
+        _apply_int_override("TRADING_VALUE_MIN", "trading_value_min")
 
 
 @dataclass 

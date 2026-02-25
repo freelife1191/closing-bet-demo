@@ -129,6 +129,20 @@ def test_recalculate_jongga_grade_promotes_to_s_on_threshold():
     assert signal["grade"] == "S"
 
 
+def test_recalculate_jongga_grade_allows_zero_change_pct():
+    signal = {
+        "grade": "D",
+        "trading_value": 1_000_000_000_000,
+        "change_pct": 0.0,
+        "score": {"total": 10},
+        "score_details": {"foreign_net_buy": 1, "inst_net_buy": 1},
+    }
+    grade, changed = _recalculate_jongga_grade(signal)
+    assert grade == "S"
+    assert changed is True
+    assert signal["grade"] == "S"
+
+
 def test_recalculate_jongga_grade_returns_d_when_parse_fails():
     signal = {
         "grade": "D",
@@ -140,6 +154,38 @@ def test_recalculate_jongga_grade_returns_d_when_parse_fails():
     grade, changed = _recalculate_jongga_grade(signal)
     assert grade == "D"
     assert changed is False
+
+
+def test_recalculate_jongga_grade_uses_signal_level_supply_fallback_keys():
+    signal = {
+        "grade": "A",
+        "trading_value": 1_000_000_000_000,
+        "change_pct": 0.5,
+        "score": {"total": 10},
+        "foreign_5d": 1_000_000,
+        "inst_5d": 2_000_000,
+        "score_details": {},
+    }
+    grade, changed = _recalculate_jongga_grade(signal)
+    assert grade == "S"
+    assert changed is True
+    assert signal["grade"] == "S"
+
+
+def test_recalculate_jongga_grade_parses_percent_and_currency_strings():
+    signal = {
+        "grade": "A",
+        "trading_value": "1,000,000,000,000원",
+        "change_pct": "0.5%",
+        "score": {"total": "10"},
+        "score_details": {"foreign_net_buy": "1", "inst_net_buy": "1"},
+    }
+
+    grade, changed = _recalculate_jongga_grade(signal)
+
+    assert grade == "S"
+    assert changed is True
+    assert signal["grade"] == "S"
 
 
 def test_recalculate_jongga_grades_updates_by_grade_and_unknown_grade_count():
@@ -206,6 +252,17 @@ def test_apply_latest_prices_to_jongga_signals_updates_current_and_return():
     assert "current_price" not in signals[2]
 
 
+def test_apply_latest_prices_to_jongga_signals_normalizes_prefixed_ticker():
+    signals = [{"ticker": "A005930", "entry_price": 70_000}]
+    latest_price_map = {"005930": 71_000}
+
+    updated = _apply_latest_prices_to_jongga_signals(signals, latest_price_map)
+
+    assert updated == 1
+    assert signals[0]["current_price"] == 71_000
+    assert signals[0]["return_pct"] == round(((71_000 - 70_000) / 70_000) * 100, 2)
+
+
 def test_normalize_jongga_signals_for_frontend_fills_required_fields():
     signals = [
         {
@@ -249,6 +306,27 @@ def test_normalize_jongga_signals_for_frontend_handles_string_supply_values():
 
     checklist = signals[0]["checklist"]
     assert checklist["supply_demand"] is True
+
+
+def test_normalize_jongga_signals_for_frontend_backfills_ticker_and_name_from_stock_fields():
+    signals = [
+        {
+            "stock_code": "5930",
+            "stock_name": "삼성전자",
+            "score": {"total": 9},
+            "entry_price": "100,000",
+            "current_price": "101,500",
+        }
+    ]
+
+    _normalize_jongga_signals_for_frontend(signals)
+    normalized = signals[0]
+
+    assert normalized["stock_code"] == "005930"
+    assert normalized["ticker"] == "005930"
+    assert normalized["stock_name"] == "삼성전자"
+    assert normalized["name"] == "삼성전자"
+    assert normalized["change_pct"] == 1.5
 
 
 def test_build_vcp_stock_payloads_maps_numeric_fields_safely():
@@ -422,6 +500,25 @@ def test_filter_signals_dataframe_by_date_prefers_latest_when_date_missing():
     assert today == "2026-02-21"
     assert len(filtered_df) == 1
     assert str(filtered_df.iloc[0]["ticker"]) == "2"
+
+
+def test_filter_signals_dataframe_by_date_normalizes_datetime_date_values():
+    signals_df = pd.DataFrame(
+        [
+            {"signal_date": "2025-11-26 00:00:00", "ticker": "1"},
+            {"signal_date": "2025-11-27 00:00:00", "ticker": "2"},
+        ]
+    )
+
+    filtered_df, today = _filter_signals_dataframe_by_date(
+        signals_df,
+        req_date="2025-11-26",
+        default_today="2025-11-28",
+    )
+
+    assert today == "2025-11-28"
+    assert len(filtered_df) == 1
+    assert str(filtered_df.iloc[0]["ticker"]) == "1"
 
 
 def test_build_vcp_signals_from_dataframe_filters_closed_and_low_score():

@@ -93,15 +93,16 @@ class FilterValidator:
         return FilterResult(passed=True)
 
     def _validate_price_change(self, change_pct: float) -> FilterResult:
+        min_change = float(getattr(self.config, "min_change_pct", PRICE_CHANGE.MIN))
         max_change = max(
             30.0,
             PRICE_CHANGE.MAX,
             getattr(PRICE_CHANGE, "LIMIT", PRICE_CHANGE.MAX),
         )
-        if not (PRICE_CHANGE.MIN <= change_pct <= max_change):
+        if not (min_change <= change_pct <= max_change):
             return FilterResult(
                 passed=False,
-                reason=f"등락률 조건 위배: {change_pct:.1f}% (Target: {PRICE_CHANGE.MIN}~{max_change}%)",
+                reason=f"등락률 조건 위배: {change_pct:.1f}% (Target: {min_change}~{max_change}%)",
             )
         return FilterResult(passed=True)
 
@@ -123,9 +124,11 @@ class FilterValidator:
             upper_shadow = high_p - max(open_p, close_p)
 
             if body > 0 and upper_shadow > body * 0.5:
-                return FilterResult(
-                    passed=False,
-                    reason=f"윗꼬리 과다: Shadow({upper_shadow}) > Body({body}*0.5)",
+                # 윗꼬리는 하드 필터로 탈락시키지 않고 캔들 점수에서 반영한다.
+                logger.debug(
+                    "윗꼬리 과다 감지(하드필터 미적용): Shadow(%s) > Body(%s*0.5)",
+                    upper_shadow,
+                    body,
                 )
         except (IndexError, TypeError, ValueError) as error:
             logger.debug(f"윗꼬리 필터 계산 실패, 필터 통과 처리: {error}")

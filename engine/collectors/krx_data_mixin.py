@@ -93,9 +93,10 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
             if column in working.columns:
                 working[column] = pd.to_numeric(working[column], errors="coerce")
 
+        min_change_pct = float(getattr(getattr(self, "config", None), "min_change_pct", 0.0))
         mask_price = working["종가"].fillna(0) >= 1000
         mask_vol = working["거래대금"].fillna(0) >= 1_000_000_000
-        mask_rise = working["등락률"].fillna(0) > 0
+        mask_rise = working["등락률"].fillna(0) >= min_change_pct
 
         top_df = (
             working[mask_price & mask_vol & mask_rise]

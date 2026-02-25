@@ -22,7 +22,7 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine.config import config as default_config
+from engine.config import SignalConfig
 from engine.generator_result_storage import (
     save_result_to_json as _save_result_to_json_impl,
     update_single_signal_json as _update_single_signal_json_impl,
@@ -72,8 +72,8 @@ class SignalGenerator(SignalGeneratorRuntimeMixin):
             capital: 총 자본금 (기본 5천만원)
             config: 설정 (기본 설정 사용)
         """
-        # [Fix] config가 None으로 전달되면 기본 설정(default_config) 사용
-        self.config = config if config else default_config
+        # config 미지정 시 런타임 환경변수를 반영한 SignalConfig를 생성한다.
+        self.config = config if config else SignalConfig()
         self.capital = capital
 
         self.scorer = Scorer(self.config)

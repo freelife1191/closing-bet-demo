@@ -10,6 +10,7 @@ import pandas as pd
 
 from services.common_update_ai_analysis_service import (
     _normalize_ai_target_dataframe,
+    _resolve_ai_target_limit,
     _resolve_ai_target_dataframe,
     _select_top_ai_targets,
 )
@@ -91,3 +92,12 @@ def test_resolve_ai_target_dataframe_loads_minimum_columns_from_signal_file(tmp_
     assert analysis_date == "2026-02-21"
     assert set(target_df.columns) == {"signal_date", "ticker", "score"}
     assert len(target_df) == 1
+
+
+def test_resolve_ai_target_limit_delegates_to_runtime_parser(monkeypatch):
+    monkeypatch.setattr(
+        "services.common_update_ai_analysis_service.resolve_vcp_signals_to_show",
+        lambda **_kwargs: 17,
+    )
+
+    assert _resolve_ai_target_limit() == 17

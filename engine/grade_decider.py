@@ -26,6 +26,12 @@ class GradeClassifier:
     def __init__(self, config: SignalConfig = None):
         self.config = config or SignalConfig()
 
+    def _min_change_pct(self) -> float:
+        try:
+            return float(getattr(self.config, "min_change_pct", PRICE_CHANGE.MIN))
+        except (TypeError, ValueError):
+            return float(PRICE_CHANGE.MIN)
+
     def classify(
         self,
         stock: StockData,
@@ -68,11 +74,12 @@ class GradeClassifier:
         total_score: float,
         supply: SupplyData,
     ) -> bool:
-        """S급 조건: 1조 이상, 10점 이상, 상승률 3% 이상, 외인+기관 양매수"""
+        """S급 조건: 1조 이상, 10점 이상, 최소 등락률 이상, 외인+기관 양매수"""
+        min_change = self._min_change_pct()
         return (
             trading_value >= self.config.trading_value_s
             and total_score >= self.config.min_s_grade
-            and change_pct >= PRICE_CHANGE.MIN
+            and change_pct >= min_change
             and self._has_dual_buy(supply)
         )
 
@@ -83,11 +90,12 @@ class GradeClassifier:
         total_score: float,
         supply: SupplyData,
     ) -> bool:
-        """A급 조건: 5000억 이상, 8점 이상, 상승률 3% 이상, 외인+기관 양매수"""
+        """A급 조건: 5000억 이상, 8점 이상, 최소 등락률 이상, 외인+기관 양매수"""
+        min_change = self._min_change_pct()
         return (
             trading_value >= self.config.trading_value_a
             and total_score >= self.config.min_a_grade
-            and change_pct >= PRICE_CHANGE.MIN
+            and change_pct >= min_change
             and self._has_dual_buy(supply)
         )
 
@@ -98,11 +106,12 @@ class GradeClassifier:
         total_score: float,
         supply: SupplyData,
     ) -> bool:
-        """B급 조건: 1,000억 이상, 6점 이상, 상승률 3% 이상, 외인+기관 양매수"""
+        """B급 조건: 1,000억 이상, 6점 이상, 최소 등락률 이상, 외인+기관 양매수"""
+        min_change = self._min_change_pct()
         return (
             trading_value >= self.config.trading_value_b
             and total_score >= self.config.min_b_grade
-            and change_pct >= PRICE_CHANGE.MIN
+            and change_pct >= min_change
             and self._has_dual_buy(supply)
         )
 
@@ -110,4 +119,3 @@ class GradeClassifier:
     def _has_dual_buy(supply: SupplyData) -> bool:
         """외인+기관 동반 매수 여부"""
         return supply.foreign_buy_5d > 0 and supply.inst_buy_5d > 0
-

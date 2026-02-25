@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable
 import logging
+import math
 
 
 def resolve_market_gate_filename(target_date: str | None) -> str:
@@ -166,5 +167,85 @@ def normalize_market_gate_payload(gate_data: dict[str, Any]) -> dict[str, Any]:
             gate_data["kospi_close"] = metrics.get("kospi", 0)
         if "kosdaq_close" not in gate_data:
             gate_data["kosdaq_close"] = metrics.get("kosdaq", 0)
+
+    def _coerce_float(raw: Any) -> float | None:
+        if isinstance(raw, (int, float)):
+            number = float(raw)
+            return number if math.isfinite(number) else None
+        if isinstance(raw, str):
+            text = raw.strip()
+            if not text:
+                return None
+            # 숫자 문자열 포맷 보정: "29,585", "₩29,585", "1.2%" 등
+            normalized = (
+                text.replace(",", "")
+                .replace("₩", "")
+                .replace("$", "")
+                .replace("%", "")
+                .strip()
+            )
+            if not normalized:
+                return None
+            try:
+                number = float(normalized)
+                return number if math.isfinite(number) else None
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _normalize_commodity_item(raw: Any) -> dict[str, float] | None:
+        if isinstance(raw, (int, float, str)):
+            value_num = _coerce_float(raw)
+            if value_num is None:
+                return None
+            return {"value": value_num, "change_pct": 0.0}
+        if not isinstance(raw, dict):
+            return None
+
+        value_raw = raw.get("value", raw.get("price", raw.get("close", raw.get("current"))))
+        value_num = _coerce_float(value_raw)
+        if value_num is None:
+            return None
+
+        change_raw = raw.get("change_pct", raw.get("changePct", raw.get("change", 0.0)))
+        change_num = _coerce_float(change_raw)
+        if change_num is None:
+            change_num = 0.0
+
+        return {"value": value_num, "change_pct": change_num}
+
+    commodities = gate_data.get("commodities")
+    if not isinstance(commodities, dict):
+        commodities = {}
+        gate_data["commodities"] = commodities
+
+    def _resolve_commodity(*keys: str) -> dict[str, float] | None:
+        for key in keys:
+            normalized = _normalize_commodity_item(commodities.get(key))
+            if normalized:
+                return normalized
+        for key in keys:
+            normalized = _normalize_commodity_item(gate_data.get(key))
+            if normalized:
+                return normalized
+        return None
+
+    krx_gold = _resolve_commodity("krx_gold", "krxGold", "KRX_GOLD")
+    krx_silver = _resolve_commodity("krx_silver", "krxSilver", "KRX_SILVER")
+    us_gold = _resolve_commodity("us_gold", "usGold", "US_GOLD", "gold")
+    us_silver = _resolve_commodity("us_silver", "usSilver", "US_SILVER", "silver")
+
+    if krx_gold:
+        commodities["krx_gold"] = krx_gold
+        commodities.setdefault("gold", krx_gold)
+    if krx_silver:
+        commodities["krx_silver"] = krx_silver
+        commodities.setdefault("silver", krx_silver)
+    if us_gold:
+        commodities["us_gold"] = us_gold
+        commodities.setdefault("gold", us_gold)
+    if us_silver:
+        commodities["us_silver"] = us_silver
+        commodities.setdefault("silver", us_silver)
 
     return gate_data

@@ -10,10 +10,23 @@ import logging
 import sqlite3
 from datetime import datetime
 
+from services.paper_trading_constants import (
+    DEFAULT_ASSET_HISTORY_LIMIT,
+    MAX_HISTORY_LIMIT,
+)
+
 logger = logging.getLogger(__name__)
 
 
 class PaperTradingHistoryMixin:
+    @staticmethod
+    def _normalize_asset_history_limit(limit: object, *, default: int) -> int:
+        try:
+            parsed = int(float(limit))
+        except (TypeError, ValueError):
+            parsed = int(default)
+        return min(max(parsed, 1), int(MAX_HISTORY_LIMIT))
+
     def _asset_history_snapshot_changed(
         self,
         *,
@@ -53,15 +66,15 @@ class PaperTradingHistoryMixin:
         self,
         *,
         cursor,
-        cash: int,
-        current_stock_value: int,
-    ) -> dict[str, int | str] | None:
+        cash: float,
+        current_stock_value: float,
+    ) -> dict[str, float | str] | None:
         """주어진 cursor에 자산 히스토리를 upsert한다. 변경 스냅샷을 반환한다."""
-        total_asset = int(cash) + int(current_stock_value)
+        total_asset = cash + current_stock_value
         today = datetime.now().strftime('%Y-%m-%d')
         if not self._asset_history_snapshot_changed(
             date=today,
-            total_asset=total_asset,
+            total_asset=int(total_asset),
             cash=int(cash),
             stock_value=int(current_stock_value),
         ):
@@ -78,27 +91,27 @@ class PaperTradingHistoryMixin:
                 stock_value = excluded.stock_value,
                 timestamp = excluded.timestamp
         ''',
-            (today, total_asset, int(cash), int(current_stock_value), datetime.now().isoformat()),
+            (today, total_asset, cash, current_stock_value, datetime.now().isoformat()),
         )
 
         return {
             "date": today,
-            "total_asset": int(total_asset),
-            "cash": int(cash),
-            "stock_value": int(current_stock_value),
+            "total_asset": total_asset,
+            "cash": cash,
+            "stock_value": current_stock_value,
         }
 
-    def _record_asset_history_with_cash_value(self, *, cash: int, current_stock_value: int) -> None:
+    def _record_asset_history_with_cash_value(self, *, cash: float, current_stock_value: float) -> None:
         """현재 현금/주식 평가값으로 자산 히스토리를 upsert한다."""
-        normalized_cash = int(cash)
-        normalized_stock_value = int(current_stock_value)
+        normalized_cash = cash
+        normalized_stock_value = current_stock_value
         total_asset = normalized_cash + normalized_stock_value
         today = datetime.now().strftime('%Y-%m-%d')
         if not self._asset_history_snapshot_changed(
             date=today,
-            total_asset=total_asset,
-            cash=normalized_cash,
-            stock_value=normalized_stock_value,
+            total_asset=int(total_asset),
+            cash=int(normalized_cash),
+            stock_value=int(normalized_stock_value),
         ):
             return
 
@@ -114,19 +127,19 @@ class PaperTradingHistoryMixin:
                     conn.commit()
                     self._set_last_asset_history_snapshot(
                         date=str(snapshot["date"]),
-                        total_asset=int(snapshot["total_asset"]),
-                        cash=int(snapshot["cash"]),
-                        stock_value=int(snapshot["stock_value"]),
+                        total_asset=int(float(snapshot["total_asset"])),
+                        cash=int(float(snapshot["cash"])),
+                        stock_value=int(float(snapshot["stock_value"])),
                     )
 
         self._execute_db_operation_with_schema_retry(_operation)
 
-    def record_asset_history_with_cash(self, *, cash: int, current_stock_value: int) -> None:
+    def record_asset_history_with_cash(self, *, cash: float, current_stock_value: float) -> None:
         """외부에서 이미 계산한 cash 값을 재사용해 히스토리를 기록한다."""
         try:
             self._record_asset_history_with_cash_value(
-                cash=int(cash),
-                current_stock_value=int(current_stock_value),
+                cash=cash,
+                current_stock_value=current_stock_value,
             )
         except Exception as e:
             logger.error(f"Failed to record asset history with cash: {e}")
@@ -139,27 +152,32 @@ class PaperTradingHistoryMixin:
                     cursor = conn.cursor()
                     cursor.execute('SELECT cash FROM balance WHERE id = 1')
                     balance_row = cursor.fetchone()
-                    cash = int(balance_row[0]) if balance_row else 0
+                    cash = balance_row[0] if balance_row else 0
                     snapshot = self._upsert_asset_history_row(
                         cursor=cursor,
-                        cash=int(cash),
-                        current_stock_value=int(current_stock_value),
+                        cash=cash,
+                        current_stock_value=current_stock_value,
                     )
                     if snapshot:
                         conn.commit()
                         self._set_last_asset_history_snapshot(
                             date=str(snapshot["date"]),
-                            total_asset=int(snapshot["total_asset"]),
-                            cash=int(snapshot["cash"]),
-                            stock_value=int(snapshot["stock_value"]),
+                            total_asset=int(float(snapshot["total_asset"])),
+                            cash=int(float(snapshot["cash"])),
+                            stock_value=int(float(snapshot["stock_value"])),
                         )
 
             self._execute_db_operation_with_schema_retry(_operation)
         except Exception as e:
             logger.error(f"Failed to record asset history: {e}")
 
-    def get_asset_history(self, limit=30):
+    def get_asset_history(self, limit=DEFAULT_ASSET_HISTORY_LIMIT):
         """Get asset history for chart"""
+        normalized_limit = self._normalize_asset_history_limit(
+            limit,
+            default=DEFAULT_ASSET_HISTORY_LIMIT,
+        )
+
         def _operation():
             with self.get_read_context() as conn:
                 conn.row_factory = sqlite3.Row
@@ -172,7 +190,7 @@ class PaperTradingHistoryMixin:
                     ORDER BY date DESC
                     LIMIT ?
                 ''',
-                    (limit,),
+                    (normalized_limit,),
                 )
                 rows = [dict(row) for row in cursor.fetchall()]
                 rows.reverse()  # Sort by date ASC for chart
@@ -182,7 +200,7 @@ class PaperTradingHistoryMixin:
                     # Calculate current total asset dynamically for better dummy data
                     cursor.execute('SELECT cash FROM balance WHERE id = 1')
                     balance_row = cursor.fetchone()
-                    current_cash = int(balance_row['cash']) if balance_row else 0
+                    current_cash = balance_row['cash'] if balance_row else 0
 
                     # Calculate current stock value from portfolio
                     cursor.execute('SELECT quantity, avg_price, ticker FROM portfolio')

@@ -20,11 +20,8 @@ def _resolve_price_for_ticker(
     current_prices: Dict[str, int],
 ) -> int | None:
     raw_ticker = str(ticker)
-    normalized_ticker = _normalize_ticker(raw_ticker)
     if raw_ticker in current_prices:
         return current_prices[raw_ticker]
-    if normalized_ticker in current_prices:
-        return current_prices[normalized_ticker]
     return None
 
 

@@ -13,6 +13,7 @@ from typing import Any
 from flask import jsonify, request
 
 from app.routes.route_execution import execute_json_route as _execute_json_route
+from app.routes.kr_market_signal_common import _format_signal_date
 from services.kr_market_csv_utils import load_csv_readonly
 
 def _create_signal_dates_reader(
@@ -43,7 +44,14 @@ def _create_signal_dates_reader(
             usecols=["signal_date"],
         )
         if not df.empty and "signal_date" in df.columns:
-            dates = sorted(df["signal_date"].unique().tolist(), reverse=True)
+            normalized_dates = (
+                df["signal_date"]
+                .dropna()
+                .astype(str)
+                .map(_format_signal_date)
+                .tolist()
+            )
+            dates = sorted({item for item in normalized_dates if item}, reverse=True)
 
         cache["path"] = signals_path
         cache["mtime"] = mtime

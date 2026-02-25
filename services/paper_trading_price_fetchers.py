@@ -75,6 +75,28 @@ def _extract_krx_close_map(df: pd.DataFrame) -> Dict[str, int]:
     return close_map
 
 
+def _normalize_positive_float(value: Any, *, default: float, minimum: float) -> float:
+    """실수 설정값을 안전하게 정규화한다."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = float(default)
+    return max(float(minimum), parsed)
+
+
+def _compute_retry_delay_seconds(
+    *,
+    attempt_index: int,
+    base_delay_sec: float,
+    max_delay_sec: float,
+) -> float:
+    """지수 백오프 지연 시간을 계산한다."""
+    base = _normalize_positive_float(base_delay_sec, default=1.0, minimum=0.1)
+    max_delay = _normalize_positive_float(max_delay_sec, default=8.0, minimum=base)
+    delay = base * (2 ** max(0, int(attempt_index)))
+    return min(max_delay, delay)
+
+
 def _fetch_pykrx_batch_close_map(
     *,
     pykrx_stock: Any,
@@ -103,6 +125,9 @@ def fetch_prices_toss(
     tickers: list[str],
     chunk_size: int,
     retry_count: int,
+    request_timeout_sec: float,
+    retry_base_delay_sec: float,
+    retry_max_delay_sec: float,
     logger: Any,
 ) -> Dict[str, int]:
     """Toss API에서 여러 종목 가격을 한 번에 조회한다."""
@@ -121,6 +146,12 @@ def fetch_prices_toss(
     }
     ticker_map = {ticker: ticker for ticker in normalized_tickers}
     toss_codes = [f"A{ticker}" for ticker in normalized_tickers]
+    normalized_timeout_sec = _normalize_positive_float(
+        request_timeout_sec,
+        default=8.0,
+        minimum=1.0,
+    )
+    normalized_retry_count = max(1, int(retry_count))
 
     prices: Dict[str, int] = {}
     for i in range(0, len(toss_codes), chunk_size):
@@ -131,9 +162,9 @@ def fetch_prices_toss(
             f"?productCodes={codes_str}"
         )
 
-        for attempt in range(retry_count):
+        for attempt in range(normalized_retry_count):
             try:
-                response = session.get(url, headers=headers, timeout=5)
+                response = session.get(url, headers=headers, timeout=normalized_timeout_sec)
                 if response.status_code == 200:
                     results = response.json().get("result", [])
                     for item in results:
@@ -146,10 +177,30 @@ def fetch_prices_toss(
                     break
 
                 if response.status_code == 429:
-                    wait_seconds = (attempt + 1) * 2
+                    wait_seconds = _compute_retry_delay_seconds(
+                        attempt_index=attempt,
+                        base_delay_sec=retry_base_delay_sec,
+                        max_delay_sec=retry_max_delay_sec,
+                    )
                     logger.warning(f"Toss API Rate Limit. Waiting {wait_seconds}s...")
                     time.sleep(wait_seconds)
                     continue
+
+                if 500 <= response.status_code < 600:
+                    if attempt < normalized_retry_count - 1:
+                        wait_seconds = _compute_retry_delay_seconds(
+                            attempt_index=attempt,
+                            base_delay_sec=retry_base_delay_sec,
+                            max_delay_sec=retry_max_delay_sec,
+                        )
+                        logger.warning(
+                            f"Toss API returned {response.status_code}. "
+                            f"Retrying in {wait_seconds}s..."
+                        )
+                        time.sleep(wait_seconds)
+                        continue
+                    logger.warning(f"Toss API returned {response.status_code} after retries")
+                    break
 
                 logger.warning(
                     f"Toss API returned {response.status_code}: {response.text[:100]}"
@@ -157,10 +208,16 @@ def fetch_prices_toss(
                 if 400 <= response.status_code < 500:
                     break
             except Exception as error:
-                if attempt < retry_count - 1:
-                    time.sleep(1)
+                if attempt < normalized_retry_count - 1:
+                    wait_seconds = _compute_retry_delay_seconds(
+                        attempt_index=attempt,
+                        base_delay_sec=retry_base_delay_sec,
+                        max_delay_sec=retry_max_delay_sec,
+                    )
+                    time.sleep(wait_seconds)
                     logger.warning(
-                        f"Toss API Retry {attempt + 1}/{retry_count} failed: {error}"
+                        f"Toss API Retry {attempt + 1}/{normalized_retry_count} failed "
+                        f"(timeout={normalized_timeout_sec}s, next_wait={wait_seconds}s): {error}"
                     )
                 else:
                     logger.error(f"Toss API Error after retries: {error}")

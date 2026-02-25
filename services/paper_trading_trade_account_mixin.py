@@ -10,26 +10,35 @@ import logging
 import sqlite3
 from datetime import datetime
 
+from services.paper_trading_constants import (
+    DEFAULT_TRADE_HISTORY_LIMIT,
+    INITIAL_CASH_KRW,
+    MAX_HISTORY_LIMIT,
+)
+
 logger = logging.getLogger(__name__)
 
 
 class PaperTradingTradeAccountMixin:
+    @staticmethod
+    def _normalize_trade_history_limit(limit: object, *, default: int) -> int:
+        try:
+            parsed = int(float(limit))
+        except (TypeError, ValueError):
+            parsed = int(default)
+        return min(max(parsed, 1), int(MAX_HISTORY_LIMIT))
+
     @staticmethod
     def _normalize_ticker(ticker: str) -> str:
         return str(ticker).zfill(6)
 
     @classmethod
     def _ticker_lookup_candidates(cls, ticker: str) -> tuple[str, ...]:
-        normalized_ticker = cls._normalize_ticker(ticker)
-        raw_ticker = str(ticker)
-        candidates: list[str] = [normalized_ticker]
-        if raw_ticker and raw_ticker not in candidates:
-            candidates.append(raw_ticker)
-
-        unpadded_ticker = normalized_ticker.lstrip("0")
-        if unpadded_ticker and unpadded_ticker not in candidates:
-            candidates.append(unpadded_ticker)
-        return tuple(candidates)
+        raw_ticker = str(ticker).strip()
+        normalized_ticker = cls._normalize_ticker(raw_ticker)
+        if normalized_ticker == raw_ticker:
+            return (raw_ticker,)
+        return (raw_ticker, normalized_ticker)
 
     @classmethod
     def _select_portfolio_position_by_ticker(
@@ -39,7 +48,7 @@ class PaperTradingTradeAccountMixin:
         ticker: str,
     ):
         lookup_candidates = cls._ticker_lookup_candidates(ticker)
-        if len(lookup_candidates) == 1:
+        for candidate in lookup_candidates:
             cursor.execute(
                 """
                 SELECT ticker, name, avg_price, quantity, total_cost
@@ -47,28 +56,12 @@ class PaperTradingTradeAccountMixin:
                 WHERE ticker = ?
                 LIMIT 1
                 """,
-                (lookup_candidates[0],),
+                (candidate,),
             )
-        else:
-            placeholders = ", ".join("?" for _ in lookup_candidates)
-            case_clauses = " ".join(
-                f"WHEN ? THEN {rank}"
-                for rank, _candidate in enumerate(lookup_candidates)
-            )
-            cursor.execute(
-                f"""
-                SELECT ticker, name, avg_price, quantity, total_cost
-                FROM portfolio 
-                WHERE ticker IN ({placeholders})
-                ORDER BY CASE ticker
-                    {case_clauses}
-                    ELSE {len(lookup_candidates)}
-                END
-                LIMIT 1
-                """,
-                (*lookup_candidates, *lookup_candidates),
-            )
-        return cursor.fetchone()
+            row = cursor.fetchone()
+            if row:
+                return row
+        return None
 
     def get_balance(self):
         """Get current cash balance"""
@@ -125,12 +118,21 @@ class PaperTradingTradeAccountMixin:
         if quantity <= 0:
             return {'status': 'error', 'message': 'Quantity must be positive'}
 
+        try:
+            execution_price = float(price)
+        except (TypeError, ValueError):
+            return {'status': 'error', 'message': 'Price must be a positive number'}
+        if execution_price <= 0:
+            return {'status': 'error', 'message': 'Price must be a positive number'}
+
         # [User Request] Trust Client Price
         # 사용자가 보고 매수한 가격(프론트엔드 가격)을 그대로 체결 가격으로 사용합니다.
         # 서버에서 다시 조회하면 소스/시간 차이로 가격이 달라져 혼란을 줄 수 있음.
-        execution_price = price
-
-        ticker_key = self._normalize_ticker(ticker)
+        ticker_key = str(ticker)
+        # main 동작과 동일하게 체결 시도 시점에 즉시 캐시를 반영한다.
+        with self.cache_lock:
+            self.price_cache[ticker_key] = int(execution_price)
+            self.last_update = datetime.now()
 
         total_cost = int(execution_price * quantity)  # 정수로 처리
 
@@ -197,10 +199,7 @@ class PaperTradingTradeAccountMixin:
             result = self._execute_db_operation_with_schema_retry(_operation)
 
             if result.get("status") == "success":
-                # [Sync Cache] DB 트랜잭션 성공 후에만 캐시를 반영한다.
-                with self.cache_lock:
-                    self.price_cache[ticker_key] = int(execution_price)
-                    self.last_update = datetime.now()
+                # DB 반영이 완료된 경우에만 영속 price_cache를 갱신한다.
                 if hasattr(self, "_persist_price_cache"):
                     self._persist_price_cache({ticker_key: int(execution_price)})
             return result
@@ -215,9 +214,14 @@ class PaperTradingTradeAccountMixin:
             return {'status': 'error', 'message': 'Quantity must be positive'}
 
         try:
+            try:
+                execution_price = float(price)
+            except (TypeError, ValueError):
+                return {'status': 'error', 'message': 'Price must be a positive number'}
+            if execution_price <= 0:
+                return {'status': 'error', 'message': 'Price must be a positive number'}
             # [User Request] Trust Client Price
-            execution_price = price
-            ticker_key = self._normalize_ticker(ticker)
+            ticker_key = str(ticker)
 
             def _operation():
                 with self.get_context() as conn:
@@ -233,6 +237,10 @@ class PaperTradingTradeAccountMixin:
                         return {'status': 'error', 'message': 'Not enough shares to sell'}
 
                     db_ticker, name, avg_price, current_qty, _current_total_cost = row
+                    # main 동작과 동일하게 실제 매도 처리 직전에 캐시를 즉시 반영한다.
+                    with self.cache_lock:
+                        self.price_cache[ticker_key] = int(execution_price)
+                        self.last_update = datetime.now()
 
                     # 2. Update/Remove Portfolio
                     remaining_qty = current_qty - quantity
@@ -282,10 +290,7 @@ class PaperTradingTradeAccountMixin:
             result = self._execute_db_operation_with_schema_retry(_operation)
 
             if result.get("status") == "success":
-                # [Sync Cache] DB 트랜잭션 성공 후에만 캐시를 반영한다.
-                with self.cache_lock:
-                    self.price_cache[ticker_key] = int(execution_price)
-                    self.last_update = datetime.now()
+                # DB 반영이 완료된 경우에만 영속 price_cache를 갱신한다.
                 if hasattr(self, "_persist_price_cache"):
                     self._persist_price_cache({ticker_key: int(execution_price)})
             return result
@@ -308,8 +313,6 @@ class PaperTradingTradeAccountMixin:
                     '''
                 )
                 holdings = [dict(row) for row in cursor.fetchall()]
-                for holding in holdings:
-                    holding["ticker"] = self._normalize_ticker(holding.get("ticker", ""))
 
                 cursor.execute('SELECT cash, total_deposit FROM balance WHERE id = 1')
                 balance_row = cursor.fetchone()
@@ -321,7 +324,7 @@ class PaperTradingTradeAccountMixin:
                 )
 
                 # Initial Principal is 100,000,000. Total Principal = 100M + Deposits
-                total_principal = 100000000 + total_deposit
+                total_principal = INITIAL_CASH_KRW + total_deposit
 
                 return {
                     'holdings': holdings,
@@ -342,7 +345,10 @@ class PaperTradingTradeAccountMixin:
                     cursor.execute('DELETE FROM trade_log')
                     cursor.execute('DELETE FROM asset_history')  # 히스토리도 초기화
                     cursor.execute('DELETE FROM price_cache')
-                    cursor.execute('UPDATE balance SET cash = 100000000, total_deposit = 0 WHERE id = 1')
+                    cursor.execute(
+                        'UPDATE balance SET cash = ?, total_deposit = 0 WHERE id = 1',
+                        (INITIAL_CASH_KRW,),
+                    )
                     conn.commit()
                 return True
 
@@ -359,8 +365,13 @@ class PaperTradingTradeAccountMixin:
             logger.error(f"Failed to reset paper trading account: {error}")
             return False
 
-    def get_trade_history(self, limit=50):
+    def get_trade_history(self, limit=DEFAULT_TRADE_HISTORY_LIMIT):
         """Get trade history"""
+        normalized_limit = self._normalize_trade_history_limit(
+            limit,
+            default=DEFAULT_TRADE_HISTORY_LIMIT,
+        )
+
         def _operation():
             with self.get_read_context() as conn:
                 conn.row_factory = sqlite3.Row
@@ -372,7 +383,7 @@ class PaperTradingTradeAccountMixin:
                     ORDER BY timestamp DESC
                     LIMIT ?
                 ''',
-                    (limit,),
+                    (normalized_limit,),
                 )
                 trades = [dict(row) for row in cursor.fetchall()]
                 return {'trades': trades}

@@ -65,6 +65,37 @@ def clear_data_status_cache() -> None:
         _DATA_STATUS_CACHE.clear()
 
 
+def _normalize_chart_date(value: Any) -> str:
+    """차트 날짜를 lightweight-charts 호환(YYYY-MM-DD) 형식으로 보정한다."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+
+    if isinstance(value, pd.Timestamp):
+        return value.strftime("%Y-%m-%d")
+
+    date_str = str(value).strip()
+    if not date_str:
+        return ""
+    if len(date_str) == 8 and date_str.isdigit():
+        return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+
+    normalized = date_str.replace("/", "-")
+    base_date = normalized.split("T", 1)[0].split(" ", 1)[0]
+    if len(base_date) == 10 and base_date[4] == "-" and base_date[7] == "-":
+        return base_date
+
+    parsed = pd.to_datetime(date_str, errors="coerce")
+    if pd.notna(parsed):
+        return parsed.strftime("%Y-%m-%d")
+
+    return ""
+
+
 def _build_chart_rows(stock_df: pd.DataFrame) -> list[dict[str, Any]]:
     if stock_df.empty:
         return []
@@ -75,7 +106,7 @@ def _build_chart_rows(stock_df: pd.DataFrame) -> list[dict[str, Any]]:
     chart_df = chart_df.reindex(columns=CHART_REQUIRED_COLUMNS, fill_value=0)
     return [
         {
-            "date": str(date_value),
+            "date": _normalize_chart_date(date_value),
             "open": float(open_value),
             "high": float(high_value),
             "low": float(low_value),

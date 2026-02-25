@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 import pandas as pd
+from engine.constants import SCREENING
 
 
 def _set_vcp_status(status_state: dict[str, Any], **kwargs: Any) -> None:
@@ -24,7 +25,15 @@ def run_vcp_background_pipeline(
     logger: logging.Logger,
 ) -> None:
     """백그라운드 VCP 스크리너 실행 파이프라인."""
-    _ = max_stocks  # create_signals_log는 max_stocks를 직접 받지 않음
+    default_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
+    effective_max_stocks = default_max_stocks
+    if max_stocks is not None:
+        try:
+            parsed = int(max_stocks)
+            if parsed > 0:
+                effective_max_stocks = parsed
+        except (TypeError, ValueError):
+            effective_max_stocks = default_max_stocks
 
     start_msg = f"[VCP] 지정 날짜 분석 시작: {target_date}" if target_date else "[VCP] 실시간 분석 시작..."
     _set_vcp_status(
@@ -51,7 +60,11 @@ def run_vcp_background_pipeline(
 
         _set_vcp_status(status_state, message="VCP 패턴 분석 및 AI 진단 중...")
         logger.info("[VCP Screener] VCP 시그널 분석 및 AI 수행")
-        result_df = init_data.create_signals_log(target_date=target_date, run_ai=True)
+        result_df = init_data.create_signals_log(
+            target_date=target_date,
+            run_ai=True,
+            max_stocks=effective_max_stocks,
+        )
         _set_vcp_status(status_state, progress=80)
 
         _set_vcp_status(status_state, message="최신 가격 동기화 중...")

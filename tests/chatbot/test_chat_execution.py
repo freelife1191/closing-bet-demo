@@ -48,15 +48,24 @@ class _FakeChats:
     def __init__(
         self,
         non_stream_response=None,
+        non_stream_behaviors=None,
         stream_behaviors=None,
         default_stream_behavior=None,
     ):
         self.non_stream_response = non_stream_response
+        self.non_stream_behaviors = non_stream_behaviors
         self.stream_behaviors = stream_behaviors or {}
         self.default_stream_behavior = default_stream_behavior
 
     def create(self, model, history):
         _ = history
+        if self.non_stream_behaviors is not None:
+            behavior = self.non_stream_behaviors.get(model)
+            if behavior is None:
+                raise RuntimeError(f"unexpected model: {model}")
+            if isinstance(behavior, Exception):
+                raise behavior
+            return _FakeNonStreamSession(behavior)
         if self.non_stream_response is not None:
             return _FakeNonStreamSession(self.non_stream_response)
         behavior = self.stream_behaviors.get(model, self.default_stream_behavior)
@@ -89,6 +98,29 @@ def test_run_non_stream_response_returns_normalized_text_and_usage():
 
     assert bot_response == "[N]hello"
     assert usage_metadata["total_token_count"] == 8
+
+
+def test_run_non_stream_response_retries_with_fallback_on_retryable_error():
+    recovered = SimpleNamespace(text="복구 응답", usage_metadata=SimpleNamespace(total_token_count=2))
+    client = _FakeClient(
+        _FakeChats(
+            non_stream_behaviors={
+                "gemini-2.0-flash-lite": RuntimeError("503 UNAVAILABLE"),
+                "gemini-2.5-flash-lite": recovered,
+            }
+        )
+    )
+
+    bot_response, usage_metadata = run_non_stream_response(
+        active_client=client,
+        target_model_name="gemini-2.0-flash-lite",
+        api_history=[],
+        content_parts=["msg"],
+        normalize_response=lambda text: text,
+    )
+
+    assert bot_response == "복구 응답"
+    assert usage_metadata["total_token_count"] == 2
 
 
 def test_run_stream_response_retries_and_returns_success():

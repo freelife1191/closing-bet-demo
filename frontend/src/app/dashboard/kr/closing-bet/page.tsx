@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAPI } from '@/lib/api';
 import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
+import VCPCriteriaModal from '@/app/components/VCPCriteriaModal';
 import { useAdmin } from '@/hooks/useAdmin';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
@@ -61,6 +62,12 @@ interface ScoreDetail {
   };
 }
 
+interface BonusBreakdown {
+  volume?: number;
+  candle?: number;
+  limit_up?: number;
+}
+
 interface ChecklistDetail {
   has_news: boolean;
   news_sources: string[];
@@ -105,6 +112,9 @@ interface Signal {
     inst_net_buy?: number;
     base_score?: number;
     bonus_score?: number;
+    bonus_breakdown?: BonusBreakdown;
+    is_new_high?: boolean;
+    is_limit_up?: boolean;
     candle?: number;
     consolidation?: number;
   };
@@ -861,6 +871,7 @@ export default function JonggaV2Page() {
   // Buy Modal State
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
+  const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false); // [NEW] VCP Modal State
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -878,7 +889,6 @@ export default function JonggaV2Page() {
   // Filters
   const [filterTradingValue, setFilterTradingValue] = useState(0);
   const [filterRise, setFilterRise] = useState(0);
-  const [filterVol, setFilterVol] = useState(0);
   const [filterGrade, setFilterGrade] = useState<string>('ALL');
   const [filterScore, setFilterScore] = useState(0);
 
@@ -892,21 +902,18 @@ export default function JonggaV2Page() {
       const rise = s.score_details?.rise_pct ?? s.change_pct;
       if (filterRise > 0 && rise < filterRise) return false;
 
-      // 3. Volume Ratio Filter
-      const vol = s.volume_ratio ?? s.score_details?.volume_ratio ?? 0;
-      if (filterVol > 0 && vol < filterVol) return false;
-
-      // 4. Grade Filter
+      // 3. Grade Filter
       if (filterGrade !== 'ALL') {
-        const gradeWeight: Record<string, number> = { 'S': 4, 'A': 3, 'B': 2, 'C': 1, 'D': 0 };
-        const sGrade = typeof s.grade === 'string' ? s.grade : (s.grade as any).value;
+        const gradeWeight: Record<string, number> = { 'S': 3, 'A': 2, 'B': 1 };
+        const sGrade = String(s.grade || '').trim().toUpperCase();
+        const fGrade = String(filterGrade || '').trim().toUpperCase();
         const sWeight = gradeWeight[sGrade] ?? -1;
-        const fWeight = gradeWeight[filterGrade] ?? -1;
+        const fWeight = gradeWeight[fGrade] ?? -1;
 
         if (sWeight < fWeight) return false;
       }
 
-      // 5. Total Score Filter
+      // 4. Total Score Filter
       if (filterScore > 0 && s.score.total < filterScore) return false;
 
       return true;
@@ -915,6 +922,8 @@ export default function JonggaV2Page() {
 
   const filteredSignals = getFilteredSignals();
   const matchCount = filteredSignals.length;
+  const candidatesCount = data?.total_candidates ?? 0;
+  const filteredCount = data?.filtered_count ?? data?.signals?.length ?? 0;
 
   const handleRetryAnalysis = async (stockCode: string) => {
     if (!isAdmin) {
@@ -1049,6 +1058,10 @@ export default function JonggaV2Page() {
       {/* Header with Trending Themes */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
         <div>
+          <div className="inline-flex items-center gap-2 text-xs text-gray-400 font-medium mb-2">
+            <i className="fas fa-robot text-indigo-400"></i>
+            스마트 머니 봇
+          </div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/5 text-xs text-indigo-400 font-medium mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping"></span>
             AI 기반 전략
@@ -1067,8 +1080,8 @@ export default function JonggaV2Page() {
 
       <div className="flex flex-col gap-6 pb-6 border-b border-white/5">
         <div className="flex gap-6">
-          <StatBox label="CANDIDATES" value={data?.filtered_count || 0} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
-          <StatBox label="FILTERED" value={data?.total_candidates || 0} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
+          <StatBox label="CANDIDATES" value={candidatesCount} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
+          <StatBox label="FILTERED" value={filteredCount} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
           <DataStatusBox
             updatedAt={data?.updated_at || null}
             analyzingGemini={analyzingGemini}
@@ -1078,6 +1091,8 @@ export default function JonggaV2Page() {
 
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 w-full">
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* [MOVED] VCP 기준표 버튼 removed from here */}
+
             {/* Trading Value Filter */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-[9px] text-gray-500">
@@ -1092,7 +1107,6 @@ export default function JonggaV2Page() {
                 className={`bg-[#1c1c1e] border text-xs rounded-xl px-3 py-2 outline-none transition-colors ${filterTradingValue > 0 ? 'border-indigo-500 text-indigo-400' : 'border-white/10 text-gray-400'}`}
               >
                 <option value={0}>전체</option>
-                <option value={50000000000}>500억 이상</option>
                 <option value={100000000000}>1000억 이상</option>
                 <option value={500000000000}>5000억 이상</option>
                 <option value={1000000000000}>1조 이상</option>
@@ -1124,33 +1138,11 @@ export default function JonggaV2Page() {
               </select>
             </div>
 
-            {/* Volume Ratio Filter */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-1 text-[9px] text-gray-500">
-                거래량
-                <Tooltip content="20일 평균 대비 오늘 거래량 배수입니다. 2배 이상이면 관심 증가, 5배 이상이면 급등 가능성입니다.">
-                  <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
-                </Tooltip>
-              </div>
-              <select
-                value={filterVol}
-                onChange={(e) => setFilterVol(Number(e.target.value))}
-                className={`bg-[#1c1c1e] border text-xs rounded-xl px-3 py-2 outline-none transition-colors ${filterVol > 0 ? 'border-amber-500 text-amber-400' : 'border-white/10 text-gray-400'}`}
-              >
-                <option value={0}>전체</option>
-                <option value={1.5}>1.5배 이상</option>
-                <option value={2}>2배 이상 (Standard)</option>
-                <option value={3}>3배 이상</option>
-                <option value={5}>5배 이상 (Surge)</option>
-                <option value={10}>10배 이상 (Explosion)</option>
-              </select>
-            </div>
-
             {/* Grade Filter */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-[9px] text-gray-500">
                 등급
-                <Tooltip content="AI가 평가한 종합 등급입니다. S(최고), A(우수), B(양호), D(주의) 순서입니다.">
+                <Tooltip content="AI가 평가한 종합 등급입니다. S(최고), A(우수), B(양호) 순서입니다.">
                   <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
                 <button
@@ -1167,8 +1159,6 @@ export default function JonggaV2Page() {
               >
                 <option value="ALL">전체</option>
                 <option value="S">S급 이상</option>
-                <option value="A">A급 이상</option>
-                <option value="B">B급 이상</option>
                 <option value="A">A급 이상</option>
                 <option value="B">B급 이상</option>
               </select>
@@ -1197,6 +1187,14 @@ export default function JonggaV2Page() {
 
           <div className="flex items-center gap-3 md:ml-auto">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
+
+            {/* [NEW] VCP 기준표 버튼 (Moved here) */}
+            <button
+              onClick={() => setIsVCPCriteriaModalOpen(true)}
+              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10"
+            >
+              <i className="fas fa-table"></i> VCP 기준표
+            </button>
 
             <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" wide>
               <select
@@ -1310,7 +1308,7 @@ export default function JonggaV2Page() {
                   <i className="fas fa-check-circle"></i> 공통 조건
                 </h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-gray-300">
-                  <div className="flex items-center gap-1.5"><span className="text-indigo-500">•</span> <span>거래대금 500억↑ (대형주 1000억↑) + 거래량 3~5배↑</span></div>
+                  <div className="flex items-center gap-1.5"><span className="text-indigo-500">•</span> <span>거래대금 1,000억↑ + 외인/기관 양매수</span></div>
                   <div className="flex items-center gap-1.5"><span className="text-indigo-500">•</span> <span>고점비율 90%↑ 종가 (상한가 제외)</span></div>
                   <div className="flex items-center gap-1.5"><span className="text-indigo-500">•</span> <span>외인/기관 양매수 (수급 확인 필수)</span></div>
                   <div className="flex items-center gap-1.5"><span className="text-indigo-500">•</span> <span>(20일선 OR 5일선 OR 7일선 지지) 패턴 부합</span></div>
@@ -1337,7 +1335,7 @@ export default function JonggaV2Page() {
             .filter(s => s.grade !== 'D') // D등급 원천 필터링 (안전장치)
             .map((signal, idx) => (
               <SignalCard
-                key={signal.stock_code}
+                key={`${signal.stock_code}-${idx}`}
                 signal={signal}
                 index={idx}
                 onOpenChart={() => setChartModal({ isOpen: true, symbol: signal.stock_code, name: signal.stock_name })}
@@ -1440,6 +1438,12 @@ export default function JonggaV2Page() {
       >
         <p>{alertModal.content}</p>
       </Modal>
+
+      {/* VCP Criteria Modal */}
+      <VCPCriteriaModal
+        isOpen={isVCPCriteriaModalOpen}
+        onClose={() => setIsVCPCriteriaModalOpen(false)}
+      />
     </div>
   );
 }
@@ -1598,7 +1602,7 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
             <i className="fas fa-sync-alt text-[10px]"></i>
           </button>
         </Tooltip>
-        <Tooltip content="기존 데이터를 기반으로 Gemini AI를 재호출하여 분석 결과만 업데이트합니다." position="bottom" align="right" wide>
+        <Tooltip content="기존 데이터를 기반으로 Gemini AI를 재호출합니다. 전체 실행 시 미분석/실패 항목만 재분석됩니다." position="bottom" align="right" wide>
           <button
             onClick={handleGeminiReanalyze}
             disabled={updating || analyzingGemini}
@@ -1692,7 +1696,6 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
     S: { bg: 'bg-indigo-500/20', text: 'text-indigo-400', border: 'border-indigo-500/30' },
     A: { bg: 'bg-rose-500/20', text: 'text-rose-400', border: 'border-rose-500/30' },
     B: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
-    C: { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/30' },
     D: { bg: 'bg-slate-500/20', text: 'text-slate-400', border: 'border-slate-500/30' },
   };
 
@@ -1846,9 +1849,23 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                 (signal.score_details?.foreign_net_buy || 0) < 0 ? 'text-blue-400' : 'text-gray-400'
                 }`}>
                 {(signal.score_details?.foreign_net_buy)
-                  ? Math.abs(signal.score_details.foreign_net_buy) >= 100000000
-                    ? `${(signal.score_details.foreign_net_buy / 100000000).toFixed(0)}억`
-                    : `${(signal.score_details.foreign_net_buy / 10000).toFixed(0)}만`
+                  ? (() => {
+                    const value = signal.score_details.foreign_net_buy;
+                    const abs = Math.abs(value);
+                    const sign = value < 0 ? '-' : '';
+
+                    if (abs >= 1_000_000_000_000) {
+                      const jo = Math.floor(abs / 1_000_000_000_000);
+                      const uk = Math.floor((abs % 1_000_000_000_000) / 100_000_000);
+                      return uk > 0
+                        ? `${sign}${jo}조 ${uk}억`
+                        : `${sign}${jo}조`;
+                    }
+
+                    return abs >= 100_000_000
+                      ? `${sign}${Math.floor(abs / 100_000_000)}억`
+                      : `${sign}${Math.floor(abs / 10000)}만`;
+                  })()
                   : '-'
                 }
               </div>
@@ -1864,9 +1881,23 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                 (signal.score_details?.inst_net_buy || 0) < 0 ? 'text-blue-400' : 'text-gray-400'
                 }`}>
                 {(signal.score_details?.inst_net_buy)
-                  ? Math.abs(signal.score_details.inst_net_buy) >= 100000000
-                    ? `${(signal.score_details.inst_net_buy / 100000000).toFixed(0)}억`
-                    : `${(signal.score_details.inst_net_buy / 10000).toFixed(0)}만`
+                  ? (() => {
+                    const value = signal.score_details.inst_net_buy;
+                    const abs = Math.abs(value);
+                    const sign = value < 0 ? '-' : '';
+
+                    if (abs >= 1_000_000_000_000) {
+                      const jo = Math.floor(abs / 1_000_000_000_000);
+                      const uk = Math.floor((abs % 1_000_000_000_000) / 100_000_000);
+                      return uk > 0
+                        ? `${sign}${jo}조 ${uk}억`
+                        : `${sign}${jo}조`;
+                    }
+
+                    return abs >= 100_000_000
+                      ? `${sign}${Math.floor(abs / 100_000_000)}억`
+                      : `${sign}${Math.floor(abs / 10000)}만`;
+                  })()
                   : '-'
                 }
               </div>
@@ -2050,11 +2081,11 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div>
               <h5 className="text-[10px] text-gray-500 mb-2 font-bold">체크리스트</h5>
               <div className="space-y-1">
-                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist.has_news ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
-                  {signal.checklist.has_news ? '뉴스/호재 있음' : '특별한 호재 없음'}
+                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist?.has_news ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
+                  {signal.checklist?.has_news ? '뉴스/호재 있음' : '특별한 호재 없음'}
                 </div>
-                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist.supply_positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
-                  {signal.checklist.supply_positive ? '수급 양호 (외인/기관)' : '수급 보통'}
+                <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist?.supply_positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
+                  {signal.checklist?.supply_positive ? '수급 양호 (외인/기관)' : '수급 보통'}
                 </div>
               </div>
             </div>
@@ -2105,22 +2136,22 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                   strokeWidth="8"
                   fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 40}`}
-                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - signal.score.total / 21)}`}
+                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - signal.score.total / 19)}`}
                   className="transition-all duration-1000 ease-out"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-3xl font-bold text-white">{signal.score.total}</span>
-                <span className="text-[10px] text-gray-500">/ 21점</span>
+                <span className="text-[10px] text-gray-500">/ 19점</span>
               </div>
             </div>
             <div className="text-xs text-gray-400 mt-2 font-medium flex items-center justify-center gap-1">
               TOTAL SCORE
               <Tooltip content={
                 <div className="text-left space-y-2">
-                  <p><strong>합계 점수: {signal.score.total}점</strong> (최대 21점)</p>
+                  <p><strong>합계 점수: {signal.score.total}점</strong> (최대 19점)</p>
                   <p className="text-[9px] text-gray-400">● 기본 점수 (Max 12): 뉴스(3), 거래량(3), 차트(2), 수급(2), 캔들(1), 기간조정(1)</p>
-                  <p className="text-[9px] text-gray-400">● 가산점 (Max 9): 거래량 급증(최대 4), 장대양봉(최대 5)</p>
+                  <p className="text-[9px] text-gray-400">● 가산점 (Max 7): 거래량 급증(최대 5), 장대양봉(최대 1), 상한가(최대 1)</p>
                   <p className="text-indigo-400 font-bold mt-1">※ 8점 이상 강력 매수 신호</p>
                 </div>
               } position="bottom" wide>
@@ -2167,13 +2198,24 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               </Tooltip>
               <div className="text-white font-bold">{signal.score.timing}/1</div>
             </div>
-            <div className={`col-span-2 bg-indigo-500/10 rounded py-1 hover:bg-indigo-500/20 transition-colors border ${(signal.score_details?.bonus_score || 0) > 0 ? 'border-indigo-500/50' : 'border-transparent'}`}>
-              <Tooltip content="가산점: 거래량 급증(최대 4점) + 장대양봉(최대 5점) (최대 9점)">
-                <div className="cursor-help text-indigo-300 font-bold">보너스 (가산점)</div>
-              </Tooltip>
-              <div className="text-indigo-400 font-bold">+{signal.score_details?.bonus_score || 0}/9</div>
+                <div className={`col-span-2 bg-indigo-500/10 rounded py-1 hover:bg-indigo-500/20 transition-colors border ${(signal.score_details?.bonus_score || 0) > 0 ? 'border-indigo-500/50' : 'border-transparent'}`}>
+                  <Tooltip
+                    content={
+                      <div className="text-left space-y-1">
+                    <p>가산점: 거래량 급증/장대양봉/상한가 (최대 7점)</p>
+                    <p className="text-emerald-300">● 거래량 급증: +{signal.score_details?.bonus_breakdown?.volume || 0}/5</p>
+                    <p className="text-emerald-300">● 장대양봉: +{signal.score_details?.bonus_breakdown?.candle || 0}/1</p>
+                    <p className="text-emerald-300">● 상한가: +{signal.score_details?.bonus_breakdown?.limit_up || 0}/1</p>
+                  </div>
+                }>
+                  <div className="cursor-help text-indigo-300 font-bold">보너스 (가산점)</div>
+                </Tooltip>
+                <div className="text-indigo-400 font-bold">+{signal.score_details?.bonus_score || 0}/7</div>
+                {signal.score_details?.bonus_breakdown && (
+                  <div className="text-[9px] text-gray-500 mt-1">거래량/{signal.score_details.bonus_breakdown.volume || 0} | 장대양봉/{signal.score_details.bonus_breakdown.candle || 0}/1 | 상한가/{signal.score_details.bonus_breakdown.limit_up || 0}/1</div>
+                )}
+              </div>
             </div>
-          </div>
 
           <div className="mt-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-2.5">
             {/* Primary Actions: Stacked for better mobile/narrow visibility */}
@@ -2233,7 +2275,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
               <i className="fas fa-list-ol text-indigo-400"></i>
               통합 등급 산정 기준
             </h3>
-            <span className="text-xs text-slate-500">※ 거래대금 500억 미만 자동 제외</span>
+            <span className="text-xs text-slate-500">※ 외인+기관 동반 매수 필수</span>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-white/10">
@@ -2242,8 +2284,8 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                 <tr>
                   <th className="px-4 py-3 w-16 text-center whitespace-nowrap">등급</th>
                   <th className="px-4 py-3 whitespace-nowrap">거래대금 & 등락률</th>
-                  <th className="px-4 py-3 whitespace-nowrap">점수 (Total / 21)</th>
-                  <th className="px-4 py-3 whitespace-nowrap">추가 조건 (거래량/수급)</th>
+                  <th className="px-4 py-3 whitespace-nowrap">점수 (Total / 19)</th>
+                  <th className="px-4 py-3 whitespace-nowrap">추가 조건</th>
                   <th className="px-4 py-3 whitespace-nowrap">비고</th>
                 </tr>
               </thead>
@@ -2252,11 +2294,10 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                   <td className="px-4 py-3 font-bold text-indigo-400 text-center text-sm whitespace-nowrap">S 급</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-indigo-300 font-bold mb-1">1조 원 이상</span>
-                    <span className="text-rose-400 font-bold">+10% 이상</span>
+                    <span className="text-rose-400 font-bold">+3% 이상</span>
                   </td>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">10점 이상</td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div>거래량 5배↑</div>
                     <div className="text-emerald-400">외인+기관 양매수</div>
                   </td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">초대형 수급 폭발</td>
@@ -2265,12 +2306,11 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                   <td className="px-4 py-3 font-bold text-rose-400 text-center text-sm whitespace-nowrap">A 급</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-rose-300 font-bold mb-1">5,000억 이상</span>
-                    <span className="text-rose-400 font-bold">+5% 이상</span>
+                    <span className="text-rose-400 font-bold">+3% 이상</span>
                   </td>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">8점 이상</td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div>거래량 3배↑</div>
-                    <div>외인 or 기관</div>
+                    <div className="text-emerald-400">외인+기관 양매수</div>
                   </td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">대형 우량주</td>
                 </tr>
@@ -2278,27 +2318,13 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                   <td className="px-4 py-3 font-bold text-blue-400 text-center text-sm whitespace-nowrap">B 급</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className="block text-blue-300 font-bold mb-1">1,000억 이상</span>
-                    <span className="text-rose-400 font-bold">+4% 이상</span>
+                    <span className="text-rose-400 font-bold">+3% 이상</span>
                   </td>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">6점 이상</td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div>거래량 2배↑</div>
-                    <div>외인 or 기관</div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">중형 주도주</td>
-                </tr>
-                <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-emerald-400 text-center text-sm whitespace-nowrap">C 급</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="block text-emerald-300 font-bold mb-1">500억 이상</span>
-                    <span className="text-rose-400 font-bold">+10% 이상</span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">8점 이상</td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div>거래량 5배↑</div>
                     <div className="text-emerald-400">외인+기관 양매수</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">강소 주도주</td>
+                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">중형 주도주</td>
                 </tr>
               </tbody>
             </table>
@@ -2308,10 +2334,10 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
         <div className="space-y-4">
           <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-indigo-500/30 pb-2">
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-xs">2</span>
-            핵심 평가 요소 (Score 21점 만점)
+            핵심 평가 요소 (Score 19점 만점)
           </h3>
           <p className="text-xs text-gray-400">
-            기본 점수(12점)와 가산점(9점)으로 구성됩니다.
+            기본 점수(12점)와 가산점(7점)으로 구성됩니다.
           </p>
 
           <div className="space-y-4">
@@ -2326,29 +2352,39 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                     <span>📰 뉴스/재료</span>
                     <span className="text-indigo-400 font-mono">3점</span>
                   </div>
-                  <div className="text-[10px] text-gray-500">호재 강도 및 AI 평가</div>
+                  <div className="text-[10px] text-gray-500 space-y-1">
+                    <div>LLM 뉴스 점수: 0~3점(최대 3점)</div>
+                    <div>신규 뉴스 부재 시 거래대금 보정 적용</div>
+                  </div>
                 </div>
                 <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
                   <div className="flex justify-between items-center text-xs font-bold text-white">
                     <span>💰 거래대금</span>
                     <span className="text-indigo-400 font-mono">3점</span>
                   </div>
-                  <div className="text-[10px] text-gray-500">시장 주도력 (유동성)</div>
+                  <div className="text-[10px] text-gray-500 space-y-1">
+                    <div>1조원 이상: 3점</div>
+                    <div>5,000억 이상: 2점</div>
+                    <div>1,000억 이상: 1점</div>
+                  </div>
                 </div>
                 <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
                   <div className="flex justify-between items-center text-xs font-bold text-white">
                     <span>📈 차트</span>
                     <span className="text-indigo-400 font-mono">2점</span>
                   </div>
-                  <div className="text-[10px] text-gray-500">추세 및 패턴 분석</div>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>🤝 수급</span>
-                    <span className="text-indigo-400 font-mono">2점</span>
+                  <div className="text-[10px] text-gray-500 space-y-1">
+                    <div>52주 신고가 돌파: +1점</div>
+                    <div>MA20&gt;MA60 &amp; 종가&gt;MA20: +1점</div>
                   </div>
-                  <div className="text-[10px] text-gray-500">외인/기관 동반 매수</div>
                 </div>
+                  <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                    <div className="flex justify-between items-center text-xs font-bold text-white">
+                      <span>🤝 수급</span>
+                      <span className="text-indigo-400 font-mono">2점</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500">외인+기관 5일 순매수 합계 (거래대금 대비 5%/10%)</div>
+                  </div>
                 <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
                   <div className="flex justify-between items-center text-xs font-bold text-white">
                     <span>🕯 캔들</span>
@@ -2367,24 +2403,31 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
             </div>
 
             {/* 가산점 섹션 */}
-            <div className="bg-indigo-500/5 rounded-xl p-4 border border-indigo-500/20">
-              <h4 className="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
-                <i className="fas fa-plus-circle"></i> 가산점 항목 (Max 9점)
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-indigo-500/5 rounded-xl p-4 border border-indigo-500/20">
+                  <h4 className="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
+                    <i className="fas fa-plus-circle"></i> 가산점 항목 (Max 7점)
+                  </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
                   <div className="flex justify-between items-center text-xs font-bold text-white">
                     <span>📊 거래량 급증</span>
-                    <span className="text-emerald-400 font-mono">+4점</span>
+                    <span className="text-emerald-400 font-mono">+5점</span>
                   </div>
-                  <div className="text-[10px] text-gray-500">전일비 2배~10배 거래량 폭발</div>
+                  <div className="text-[10px] text-gray-500">2배(1점), 3배(2점), 4배(3점), 5배(4점), 6배 이상(5점)</div>
                 </div>
                 <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
                   <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>🚀 당일 상승률</span>
-                    <span className="text-emerald-400 font-mono">+5점</span>
+                    <span>📈 장대양봉</span>
+                    <span className="text-emerald-400 font-mono">+1점</span>
                   </div>
-                  <div className="text-[10px] text-gray-500">5%~25% 이상 강한 상승 마감</div>
+                  <div className="text-[10px] text-gray-500">상승폭이 큰 장대양봉 마감</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-white">
+                    <span>🧯 상한가</span>
+                    <span className="text-emerald-400 font-mono">+1점</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">상한가(거래일 등락률) 돌파 시</div>
                 </div>
               </div>
             </div>

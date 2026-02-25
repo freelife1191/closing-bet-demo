@@ -4,7 +4,12 @@
 KR Market 종가베팅 시그널 등급/정렬 헬퍼
 """
 
-from typing import List
+from functools import lru_cache
+from typing import Any, List
+
+from engine.config import SignalConfig
+from engine.grade_classifier import create_grade_classifier
+from engine.models import Grade, ScoreDetail, StockData, SupplyData
 
 from app.routes.kr_market_signal_common import (
     _is_meaningful_ai_reason,
@@ -13,6 +18,77 @@ from app.routes.kr_market_signal_common import (
 )
 
 _JONGGA_GRADE_PRIORITY = {"S": 3, "A": 2, "B": 1}
+
+
+def _normalize_numeric_text(value: str) -> str:
+    return (
+        str(value)
+        .replace(",", "")
+        .replace("₩", "")
+        .replace("$", "")
+        .replace("%", "")
+        .replace("원", "")
+        .strip()
+    )
+
+
+def _to_float(value: object, default: float) -> float:
+    if isinstance(value, str):
+        value = _normalize_numeric_text(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_int(value: object, default: int) -> int:
+    if isinstance(value, str):
+        value = _normalize_numeric_text(value)
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = _normalize_numeric_text(value)
+        if not normalized:
+            return None
+        value = normalized
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_stock_code(signal: dict[str, Any]) -> str:
+    raw_code = signal.get("stock_code") or signal.get("ticker") or signal.get("code") or ""
+    digits = "".join(ch for ch in str(raw_code) if ch.isdigit())
+    return digits.zfill(6) if digits else "000000"
+
+
+def _resolve_supply_value(
+    signal: dict[str, Any],
+    score_details: dict[str, Any],
+    *keys: str,
+) -> float:
+    for key in keys:
+        value = _to_optional_float(score_details.get(key))
+        if value is not None:
+            return value
+    for key in keys:
+        value = _to_optional_float(signal.get(key))
+        if value is not None:
+            return value
+    return 0.0
+
+
+@lru_cache(maxsize=1)
+def _get_grade_classifier():
+    return create_grade_classifier(SignalConfig())
 
 
 def _is_jongga_ai_analysis_completed(signal: dict) -> bool:
@@ -49,40 +125,62 @@ def _is_jongga_ai_analysis_completed(signal: dict) -> bool:
 def _recalculate_jongga_grade(signal: dict) -> tuple[str, bool]:
     """종가베팅 단일 시그널 등급을 현재 기준으로 재산정."""
     try:
-        tv = float(signal.get("trading_value", 0) or 0)
-        change_pct = float(signal.get("change_pct", 0) or 0)
         score = signal.get("score") or {}
-        score_total = int((score.get("total") if isinstance(score, dict) else score) or 0)
-        score_details = signal.get("score_details") or {}
-        foreign_net_buy = float(score_details.get("foreign_net_buy", 0) or 0)
-        inst_net_buy = float(score_details.get("inst_net_buy", 0) or 0)
-        has_dual_buy = foreign_net_buy > 0 and inst_net_buy > 0
+        score_total = _to_int(score.get("total") if isinstance(score, dict) else score, 0)
+        score_details = signal.get("score_details")
+        if not isinstance(score_details, dict):
+            score_details = {}
+
+        stock = StockData(
+            code=_normalize_stock_code(signal),
+            name=str(signal.get("stock_name") or signal.get("name") or "").strip(),
+            market=str(signal.get("market") or "KOSPI").strip() or "KOSPI",
+            close=_to_float(
+                signal.get("current_price", signal.get("entry_price", signal.get("close", 0))),
+                0.0,
+            ),
+            change_pct=_to_float(signal.get("change_pct", 0), 0.0),
+            trading_value=_to_float(signal.get("trading_value", 0), 0.0),
+            volume=_to_int(signal.get("volume", 0), 0),
+            high_52w=_to_float(signal.get("high_52w", 0), 0.0),
+            low_52w=_to_float(signal.get("low_52w", 0), 0.0),
+        )
+
+        supply = SupplyData(
+            foreign_buy_5d=_to_int(
+                _resolve_supply_value(
+                    signal,
+                    score_details,
+                    "foreign_net_buy",
+                    "foreign_5d",
+                    "foreign_buy_5d",
+                ),
+                0,
+            ),
+            inst_buy_5d=_to_int(
+                _resolve_supply_value(
+                    signal,
+                    score_details,
+                    "inst_net_buy",
+                    "inst_5d",
+                    "institutional_net_buy_5d",
+                    "inst_buy_5d",
+                ),
+                0,
+            ),
+        )
+
+        grade = _get_grade_classifier().classify(
+            stock=stock,
+            score=ScoreDetail(total=score_total),
+            score_details=score_details,
+            supply=supply,
+        )
     except Exception:
         return "D", False
 
     prev_grade = str(signal.get("grade", "")).strip().upper()
-    new_grade = "D"
-    if (
-        tv >= 1_000_000_000_000
-        and score_total >= 10
-        and change_pct >= 3.0
-        and has_dual_buy
-    ):
-        new_grade = "S"
-    elif (
-        tv >= 500_000_000_000
-        and score_total >= 8
-        and change_pct >= 3.0
-        and has_dual_buy
-    ):
-        new_grade = "A"
-    elif (
-        tv >= 100_000_000_000
-        and score_total >= 6
-        and change_pct >= 3.0
-        and has_dual_buy
-    ):
-        new_grade = "B"
+    new_grade = grade.value if isinstance(grade, Grade) else "D"
 
     if prev_grade != new_grade:
         signal["grade"] = new_grade
@@ -101,7 +199,7 @@ def _recalculate_jongga_grades(data: dict) -> bool:
         return False
 
     changed = False
-    grade_count = {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0}
+    grade_count = {"S": 0, "A": 0, "B": 0, "D": 0}
 
     for sig in signals:
         if not isinstance(sig, dict):
@@ -114,7 +212,7 @@ def _recalculate_jongga_grades(data: dict) -> bool:
         grade_count[grade] += 1
 
     prev_by_grade = data.get("by_grade")
-    new_by_grade = {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0}
+    new_by_grade = {"S": 0, "A": 0, "B": 0, "D": 0}
     if isinstance(prev_by_grade, dict):
         for grade_key in new_by_grade:
             if grade_key in prev_by_grade:

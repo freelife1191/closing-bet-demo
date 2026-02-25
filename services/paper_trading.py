@@ -15,6 +15,11 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Callable, Dict, TypeVar
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX 환경 방어
+    fcntl = None
+
 from services.paper_trading_db_setup import init_db as init_db_impl
 from services.paper_trading_history_mixin import PaperTradingHistoryMixin
 from services.paper_trading_price_fetchers import (
@@ -53,6 +58,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
     EMPTY_PORTFOLIO_SLEEP_SEC = 10
     TOSS_CHUNK_SIZE = 50
     TOSS_RETRY_COUNT = 3
+    TOSS_REQUEST_TIMEOUT_SEC = 8.0
+    TOSS_RETRY_BASE_DELAY_SEC = 1.0
+    TOSS_RETRY_MAX_DELAY_SEC = 8.0
     NAVER_THROTTLE_SEC = 0.2
     INITIAL_SYNC_WAIT_TRIES = 50
     INITIAL_SYNC_WAIT_SEC = 0.1
@@ -87,7 +95,6 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         self.last_update = None
         self.is_running = False
         self.bg_thread = None
-        self._initial_sync_wait_done = False
         self._price_cache_schema_lock = threading.Lock()
         self._price_cache_schema_condition = threading.Condition(self._price_cache_schema_lock)
         self._price_cache_schema_init_in_progress = False
@@ -95,6 +102,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         self._price_cache_prune_lock = threading.Lock()
         self._price_cache_known_tickers: OrderedDict[str, None] = OrderedDict()
         self._price_cache_save_counter = 0
+        self._sync_loop_lock_path = os.path.join(os.path.dirname(self.db_path), "paper_trading_sync.lock")
+        self._sync_loop_lock_handle: Any | None = None
+        self._sync_loop_lock_owned = False
 
         self._price_cache_schema_ready = self._init_db()
         if not self._price_cache_schema_ready:
@@ -407,10 +417,67 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         if self.is_running:
             return
 
+        if not self._acquire_sync_loop_lock():
+            return
+
         self.is_running = True
-        self.bg_thread = threading.Thread(target=self._update_prices_loop, daemon=True)
-        self.bg_thread.start()
-        logger.info("PaperTrading Price Sync Started")
+        try:
+            self.bg_thread = threading.Thread(target=self._update_prices_loop, daemon=True)
+            self.bg_thread.start()
+            logger.info("PaperTrading Price Sync Started")
+        except Exception:
+            self.is_running = False
+            self.bg_thread = None
+            self._release_sync_loop_lock()
+            raise
+
+    def _acquire_sync_loop_lock(self) -> bool:
+        """프로세스 간 가격 동기화 루프 중복 실행을 방지한다."""
+        if self._sync_loop_lock_owned:
+            return True
+        if fcntl is None:
+            return True
+
+        os.makedirs(os.path.dirname(self._sync_loop_lock_path), exist_ok=True)
+        try:
+            lock_handle = open(self._sync_loop_lock_path, "a+", encoding="utf-8")
+        except Exception as error:
+            logger.warning(f"PaperTrading sync lock file open failed. Continue without lock: {error}")
+            return True
+
+        try:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock_handle.close()
+            logger.info("PaperTrading Price Sync already active in another process. Skip this instance.")
+            return False
+        except OSError as error:
+            lock_handle.close()
+            logger.warning(f"PaperTrading sync lock acquisition failed. Continue without lock: {error}")
+            return True
+
+        self._sync_loop_lock_handle = lock_handle
+        self._sync_loop_lock_owned = True
+        return True
+
+    def _release_sync_loop_lock(self) -> None:
+        """보유 중인 프로세스 간 sync lock을 해제한다."""
+        lock_handle = self._sync_loop_lock_handle
+        self._sync_loop_lock_handle = None
+        self._sync_loop_lock_owned = False
+
+        if lock_handle is None or fcntl is None:
+            return
+
+        try:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        except Exception as error:
+            logger.debug(f"PaperTrading sync lock unlock failed: {error}")
+
+        try:
+            lock_handle.close()
+        except Exception as error:
+            logger.debug(f"PaperTrading sync lock close failed: {error}")
 
     def _get_portfolio_tickers(self) -> list[str]:
         def _operation() -> list[str]:
@@ -428,6 +495,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             tickers=tickers,
             chunk_size=self.TOSS_CHUNK_SIZE,
             retry_count=self.TOSS_RETRY_COUNT,
+            request_timeout_sec=self.TOSS_REQUEST_TIMEOUT_SEC,
+            retry_base_delay_sec=self.TOSS_RETRY_BASE_DELAY_SEC,
+            retry_max_delay_sec=self.TOSS_RETRY_MAX_DELAY_SEC,
             logger=logger,
         )
 
@@ -502,55 +572,44 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
 
     def _update_prices_loop(self):
         """Background loop to fetch prices"""
-        run_price_update_loop_impl(
-            is_running_fn=lambda: self.is_running,
-            refresh_price_cache_once_fn=lambda session, yf_module, pykrx_stock: self._refresh_price_cache_once(
-                session=session,
-                yf_module=yf_module,
-                pykrx_stock=pykrx_stock,
-            ),
-            update_interval_sec=self.UPDATE_INTERVAL_SEC,
-            logger=logger,
-        )
+        try:
+            run_price_update_loop_impl(
+                is_running_fn=lambda: self.is_running,
+                refresh_price_cache_once_fn=lambda session, yf_module, pykrx_stock: self._refresh_price_cache_once(
+                    session=session,
+                    yf_module=yf_module,
+                    pykrx_stock=pykrx_stock,
+                ),
+                update_interval_sec=self.UPDATE_INTERVAL_SEC,
+                logger=logger,
+            )
+        finally:
+            self.is_running = False
+            self.bg_thread = None
+            self._release_sync_loop_lock()
 
     def _wait_for_initial_price_sync(
         self,
         holdings: list[dict],
         current_prices: Dict[str, int],
     ) -> Dict[str, int]:
-        """초기 캐시가 비어있을 때 1회만 짧게 동기화를 대기한다."""
+        """초기 캐시가 비어있을 때 짧게 동기화를 대기한다."""
         should_wait_for_initial_sync = (
             not current_prices
             and bool(holdings)
             and self.bg_thread is not None
             and self.bg_thread.is_alive()
-            and not self._initial_sync_wait_done
         )
         if not should_wait_for_initial_sync:
             return current_prices
 
         logger.info("Portfolio Valuation: Waiting for initial price sync...")
-        wait_started_at = time.monotonic()
-        minimum_wait_seconds = 0.8
-        target_tickers = {
-            str(holding.get("ticker")).zfill(6)
-            for holding in holdings
-            if holding.get("ticker")
-        }
-
         for _ in range(self.INITIAL_SYNC_WAIT_TRIES):
             time.sleep(self.INITIAL_SYNC_WAIT_SEC)
             with self.cache_lock:
-                if not self.price_cache:
-                    continue
-                if target_tickers and not target_tickers.issubset(self.price_cache.keys()):
-                    continue
-                if (time.monotonic() - wait_started_at) < minimum_wait_seconds:
-                    continue
-
-                current_prices = self.price_cache.copy()
-                break
-        self._initial_sync_wait_done = True
+                if self.price_cache:
+                    current_prices = self.price_cache.copy()
+                    break
         if current_prices:
             logger.info("Portfolio Valuation: Synced successfully waited.")
         return current_prices

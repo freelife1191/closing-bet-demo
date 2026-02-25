@@ -76,6 +76,7 @@ sys.path.insert(0, BASE_DIR)
 import asyncio
 
 from engine.config import config, app_config
+from engine.constants import SCREENING
 from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
 from engine.market_gate import MarketGate
@@ -844,7 +845,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                     # (중요) 종목 수 체크 - 새로 추가된 종목이 있을 수 있음
                     # 현재 등록된 종목 수(600개)와 마지막 날짜의 데이터 개수 비게
                     stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
-                    total_stocks_count = 600
+                    total_stocks_count = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
                     if os.path.exists(stocks_file):
                         try:
                             stocks_df = pd.read_csv(stocks_file)
@@ -1196,50 +1197,69 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
         return False
 
 
-def create_signals_log(target_date=None, run_ai=True):
+def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_limit=None):
     """VCP 시그널 로그 생성 - Using SmartMoneyScreener (engine.screener)"""
     log("VCP 시그널 분석 중 (SmartMoneyScreener)...")
     try:
         from engine.screener import SmartMoneyScreener
 
         def _grade_from_score(score: float) -> str:
+            vcp_min_score = float(SCREENING.VCP_MIN_SCORE)
             if score >= 85:
                 return "S"
             if score >= 75:
                 return "A"
-            if score >= 60:
+            if score >= vcp_min_score:
                 return "B"
-            if score >= 50:
+            if score >= (vcp_min_score - 10):
                 return "C"
             return "D"
         
+        resolved_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
+        if max_stocks is not None:
+            try:
+                parsed_max_stocks = int(max_stocks)
+                if parsed_max_stocks > 0:
+                    resolved_max_stocks = parsed_max_stocks
+            except (TypeError, ValueError):
+                resolved_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
+
+        resolved_signal_limit = int(SCREENING.VCP_SIGNALS_TO_SHOW)
+        if signal_limit is not None:
+            try:
+                parsed_signal_limit = int(signal_limit)
+                if parsed_signal_limit > 0:
+                    resolved_signal_limit = parsed_signal_limit
+            except (TypeError, ValueError):
+                resolved_signal_limit = int(SCREENING.VCP_SIGNALS_TO_SHOW)
+
         # 스크리너 실행 (KOSPI+KOSDAQ 전체 분석)
         screener = SmartMoneyScreener(target_date=target_date)
-        df_result = screener.run_screening(max_stocks=600)
+        df_result = screener.run_screening(max_stocks=resolved_max_stocks)
         
         signals = []
         if not df_result.empty:
-            for _, row in df_result.iterrows():
+            for row in df_result.itertuples(index=False):
                 signals.append({
-                    'ticker': row['ticker'],
-                    'name': row['name'],
+                    'ticker': str(getattr(row, 'ticker', '')),
+                    'name': str(getattr(row, 'name', '')),
                     'signal_date': target_date if target_date else datetime.now().strftime('%Y-%m-%d'),
-                    'market': row['market'],
+                    'market': str(getattr(row, 'market', '')),
                     'status': 'OPEN',
-                    'score': round(row['score'], 1),
-                    'grade': _grade_from_score(float(row.get('score', 0) or 0)),
-                    'contraction_ratio': row.get('contraction_ratio', 0),
-                    'entry_price': int(row['entry_price']),
-                    'foreign_5d': int(row['foreign_net_5d']),
-                    'inst_5d': int(row['inst_net_5d']),
-                    'vcp_score': 0, # Screener doesn't expose sub-score directly, optional
-                    'current_price': int(row.get('entry_price', 0)) # Approximation or need fetch
+                    'score': round(float(getattr(row, 'score', 0) or 0), 1),
+                    'grade': _grade_from_score(float(getattr(row, 'score', 0) or 0)),
+                    'contraction_ratio': float(getattr(row, 'contraction_ratio', 0) or 0),
+                    'entry_price': int(float(getattr(row, 'entry_price', 0) or 0)),
+                    'foreign_5d': int(float(getattr(row, 'foreign_net_5d', 0) or 0)),
+                    'inst_5d': int(float(getattr(row, 'inst_net_5d', 0) or 0)),
+                    'vcp_score': int(float(getattr(row, 'vcp_score', 0) or 0)),
+                    'current_price': int(float(getattr(row, 'entry_price', 0) or 0)) # Approximation or need fetch
                 })
         
         log(f"총 {len(signals)}개 시그널 감지")
         
-        # 점수 높은 순 정렬 (Top 20 제한)
-        signals = sorted(signals, key=lambda x: x['score'], reverse=True)[:20]
+        # 점수 높은 순 정렬 (상위 N개 제한)
+        signals = sorted(signals, key=lambda x: x['score'], reverse=True)[:resolved_signal_limit]
         
         # AI 분석 실행 (옵션)
         if run_ai and signals:
@@ -1709,12 +1729,16 @@ def create_kr_ai_analysis(target_date=None):
             except Exception as e:
                 log(f"파일 삭제 실패: {e}", "WARNING")
 
-        # 분석 대상 선정 (Score 상위 20개)
+        # 분석 대상 선정 (Score 상위 N개)
+        ai_target_limit = int(SCREENING.VCP_SIGNALS_TO_SHOW)
+        if ai_target_limit <= 0:
+            ai_target_limit = 20
+
         if 'score' in target_df.columns:
             target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
             target_df = target_df.sort_values('score', ascending=False)
             
-        target_df = target_df.head(20)
+        target_df = target_df.head(ai_target_limit)
         tickers = target_df['ticker'].tolist()
         
         log(f"AI 분석 대상: {len(tickers)} 종목")
@@ -1881,8 +1905,11 @@ def create_kr_ai_analysis_with_key(target_dates=None, api_key=None):
                 target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
                 target_df = target_df.sort_values('score', ascending=False)
             
-            # 최대 20개 (Rate Limit 및 시간 고려)
-            target_df = target_df.head(20)
+            # 최대 N개 (Rate Limit 및 시간 고려)
+            ai_target_limit = int(SCREENING.VCP_SIGNALS_TO_SHOW)
+            if ai_target_limit <= 0:
+                ai_target_limit = 20
+            target_df = target_df.head(ai_target_limit)
             tickers = target_df['ticker'].tolist()
             
             # 분석 실행

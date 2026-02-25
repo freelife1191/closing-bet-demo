@@ -20,6 +20,26 @@ from services.kr_market_cumulative_cache import (
 from services.kr_market_csv_utils import load_csv_readonly
 
 
+def _parse_positive_int_query_arg(
+    raw_value: Any,
+    *,
+    default: int,
+    minimum: int = 1,
+    maximum: int | None = None,
+) -> int:
+    """query string 정수 파라미터를 안전하게 파싱한다."""
+    try:
+        parsed = int(float(str(raw_value).strip()))
+    except (TypeError, ValueError):
+        return int(default)
+
+    if parsed < int(minimum):
+        return int(default)
+    if maximum is not None and parsed > int(maximum):
+        return int(maximum)
+    return parsed
+
+
 def _load_cumulative_price_source(
     *,
     deps: dict[str, Any],
@@ -150,8 +170,17 @@ def _register_cumulative_performance_route(
                 if not isinstance(trades, list):
                     trades = []
 
-            page = int(request.args.get("page", 1))
-            limit = int(request.args.get("limit", 50))
+            page = _parse_positive_int_query_arg(
+                request.args.get("page", 1),
+                default=1,
+                minimum=1,
+            )
+            limit = _parse_positive_int_query_arg(
+                request.args.get("limit", 50),
+                default=50,
+                minimum=1,
+                maximum=500,
+            )
             paginated_trades, pagination = deps["paginate_items"](trades, page, limit)
 
             return jsonify({"kpi": kpi, "trades": paginated_trades, "pagination": pagination})

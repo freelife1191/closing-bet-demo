@@ -10,6 +10,7 @@ import logging
 import os
 
 from engine.market_gate import MarketGate
+from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 from engine.toss_collector import TossCollector # [NEW] Toss Collector 연동
 from engine.screener_data_loader import (
     load_inst_frame,
@@ -217,6 +218,7 @@ class SmartMoneyScreener:
 
             # 결과 저장 리스트
             results = []
+            min_score = resolve_vcp_min_score(default=60.0)
             
             count = 0
             for stock_row in prioritized_stocks.itertuples(index=False):
@@ -227,7 +229,7 @@ class SmartMoneyScreener:
                 
                 try:
                     result = self._analyze_stock(stock_dict)
-                    if result and result['score'] > 60:  # 60점 이상만 포함
+                    if result and float(result.get("score", 0) or 0) >= min_score:
                         result['market_status'] = gate_status['status']
                         results.append(result)
                         
@@ -337,8 +339,8 @@ class SmartMoneyScreener:
             if results.empty:
                 return []
 
-            # 상위 20개 종목
-            top_stocks = results.head(20)
+            top_limit = resolve_vcp_signals_to_show(default=20, minimum=0)
+            top_stocks = results.head(top_limit)
 
             signals = []
             for row in top_stocks.itertuples(index=False):

@@ -10,16 +10,30 @@ from collections.abc import Mapping
 from typing import Any
 
 import pandas as pd
+from engine.screening_runtime import resolve_vcp_signals_to_show
 
 
-def cap_ai_target_signals(signals_df: pd.DataFrame, limit: int = 20) -> pd.DataFrame:
+def _resolve_ai_target_limit(limit: int | None) -> int:
+    if limit is None:
+        return resolve_vcp_signals_to_show(default=20, minimum=1)
+    try:
+        return max(int(limit), 0)
+    except (TypeError, ValueError):
+        return resolve_vcp_signals_to_show(default=20, minimum=1)
+
+
+def cap_ai_target_signals(
+    signals_df: pd.DataFrame,
+    limit: int | None = None,
+) -> pd.DataFrame:
     """AI 분석 대상을 score 기준 상위 N개로 제한."""
-    if len(signals_df) <= limit:
+    resolved_limit = _resolve_ai_target_limit(limit)
+    if len(signals_df) <= resolved_limit:
         return signals_df
     if "score" not in signals_df.columns:
-        return signals_df.head(limit)
+        return signals_df.head(resolved_limit)
     scores = pd.to_numeric(signals_df["score"], errors="coerce").fillna(0)
-    top_indices = scores.nlargest(limit).index
+    top_indices = scores.nlargest(resolved_limit).index
     return signals_df.loc[top_indices]
 
 

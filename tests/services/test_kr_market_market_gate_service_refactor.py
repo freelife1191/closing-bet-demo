@@ -12,6 +12,7 @@ from datetime import datetime
 from services.kr_market_market_gate_service import (
     build_latest_ai_analysis_payload,
     evaluate_market_gate_validity,
+    normalize_market_gate_payload,
     resolve_market_gate_filename,
 )
 
@@ -79,3 +80,39 @@ def test_build_ai_analysis_payload_for_target_date_handles_exceptions_gracefully
     )
 
     assert payload is None
+
+
+def test_normalize_market_gate_payload_parses_string_commodity_values():
+    payload = {
+        "total_score": 72,
+        "status": "GREEN",
+        "commodities": {
+            "krx_gold": {"value": "29,585", "change_pct": "0.31%"},
+            "krx_silver": {"value": "14,650", "change_pct": "1.31"},
+        },
+    }
+
+    normalized = normalize_market_gate_payload(payload)
+
+    assert normalized["score"] == 72
+    assert normalized["commodities"]["krx_gold"]["value"] == 29585.0
+    assert normalized["commodities"]["krx_gold"]["change_pct"] == 0.31
+    assert normalized["commodities"]["krx_silver"]["value"] == 14650.0
+    assert normalized["commodities"]["krx_silver"]["change_pct"] == 1.31
+
+
+def test_normalize_market_gate_payload_maps_generic_gold_to_us_commodity():
+    payload = {
+        "status": "GREEN",
+        "commodities": {
+            "gold": {"value": 5190.0, "change_pct": -0.3},
+            "silver": {"value": 88.0, "change_pct": 1.7},
+        },
+    }
+
+    normalized = normalize_market_gate_payload(payload)
+
+    assert "krx_gold" not in normalized["commodities"]
+    assert "krx_silver" not in normalized["commodities"]
+    assert normalized["commodities"]["us_gold"]["value"] == 5190.0
+    assert normalized["commodities"]["us_silver"]["value"] == 88.0

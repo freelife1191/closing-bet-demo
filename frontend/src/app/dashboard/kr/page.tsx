@@ -509,6 +509,64 @@ export default function KRMarketOverview() {
     };
   };
 
+  const parseNumericValue = (raw: unknown): number | undefined => {
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw === 'string') {
+      const normalized = raw.replace(/[,₩$%]/g, '').trim();
+      if (!normalized) return undefined;
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  };
+
+  const normalizeCommodity = (raw: unknown): { value: number; change_pct: number } | undefined => {
+    if (raw === null || raw === undefined) return undefined;
+
+    const directNumber = parseNumericValue(raw);
+    if (directNumber !== undefined) {
+      return { value: directNumber, change_pct: 0 };
+    }
+
+    if (typeof raw === 'object' && raw !== null) {
+      const item = raw as Record<string, unknown>;
+      const valueRaw = item.value ?? item.price ?? item.close ?? item.current ?? item.last;
+      const valueNum = parseNumericValue(valueRaw);
+      if (valueNum === undefined) return undefined;
+
+      const changeRaw = item.change_pct ?? item.changePct ?? item.change ?? 0;
+      const changeNum = parseNumericValue(changeRaw);
+      return {
+        value: valueNum,
+        change_pct: changeNum ?? 0,
+      };
+    }
+
+    return undefined;
+  };
+
+  const resolveCommodity = (keys: string[]): { value: number; change_pct: number } | undefined => {
+    const gateDataRecord: Record<string, unknown> =
+      gateData && typeof gateData === 'object'
+        ? (gateData as unknown as Record<string, unknown>)
+        : {};
+    const rawCommodities = gateDataRecord.commodities;
+    const commodities: Record<string, unknown> =
+      rawCommodities && typeof rawCommodities === 'object'
+        ? (rawCommodities as Record<string, unknown>)
+        : {};
+
+    for (const key of keys) {
+      const normalized = normalizeCommodity(commodities[key] ?? gateDataRecord[key]);
+      if (normalized) return normalized;
+    }
+
+    return undefined;
+  };
+
+  const krxGold = resolveCommodity(['krx_gold', 'krxGold', 'KRX_GOLD']);
+  const krxSilver = resolveCommodity(['krx_silver', 'krxSilver', 'KRX_SILVER']);
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -985,12 +1043,12 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KRX GOLD</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.gold?.value)}
+                  {loading ? '--' : formatFinancialValue(krxGold?.value)}
                 </span>
-                {gateData?.commodities?.gold && (
-                  <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.gold.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                    <i className={`fas fa-caret-${(gateData.commodities.gold.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
-                    {(gateData.commodities.gold.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.commodities.gold.change_pct?.toFixed(1)}%
+                {krxGold && (
+                  <span className={`text-xs font-bold mb-0.5 ${(krxGold.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                    <i className={`fas fa-caret-${(krxGold.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
+                    {(krxGold.change_pct ?? 0) >= 0 ? '+' : ''}{krxGold.change_pct?.toFixed(1)}%
                   </span>
                 )}
               </div>
@@ -1000,12 +1058,12 @@ export default function KRMarketOverview() {
               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">KRX SILVER</div>
               <div className="flex items-end gap-2">
                 <span className="text-xl font-black text-white">
-                  {loading ? '--' : formatFinancialValue(gateData?.commodities?.silver?.value)}
+                  {loading ? '--' : formatFinancialValue(krxSilver?.value)}
                 </span>
-                {gateData?.commodities?.silver && (
-                  <span className={`text-xs font-bold mb-0.5 ${(gateData.commodities.silver.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                    <i className={`fas fa-caret-${(gateData.commodities.silver.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
-                    {(gateData.commodities.silver.change_pct ?? 0) >= 0 ? '+' : ''}{gateData.commodities.silver.change_pct?.toFixed(1)}%
+                {krxSilver && (
+                  <span className={`text-xs font-bold mb-0.5 ${(krxSilver.change_pct ?? 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                    <i className={`fas fa-caret-${(krxSilver.change_pct ?? 0) >= 0 ? 'up' : 'down'} mr-0.5`}></i>
+                    {(krxSilver.change_pct ?? 0) >= 0 ? '+' : ''}{krxSilver.change_pct?.toFixed(1)}%
                   </span>
                 )}
               </div>

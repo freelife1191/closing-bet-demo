@@ -7,6 +7,7 @@ SignalTracker AI 헬퍼 리팩토링 테스트
 from __future__ import annotations
 
 import pandas as pd
+import engine.signal_tracker_ai_helpers as ai_helpers_module
 
 from engine.signal_tracker_ai_helpers import (
     apply_ai_results,
@@ -115,3 +116,17 @@ def test_cap_ai_target_signals_handles_non_numeric_scores():
     capped = cap_ai_target_signals(signals_df, limit=2)
 
     assert set(capped["ticker"].tolist()) == {"000001", "000003"}
+
+
+def test_cap_ai_target_signals_uses_runtime_limit_when_limit_not_provided(monkeypatch):
+    signals_df = pd.DataFrame([{"ticker": f"{i:06d}", "score": i} for i in range(5)])
+    monkeypatch.setattr(
+        ai_helpers_module,
+        "resolve_vcp_signals_to_show",
+        lambda **_kwargs: 2,
+    )
+
+    capped = cap_ai_target_signals(signals_df)
+
+    assert len(capped) == 2
+    assert capped["ticker"].tolist() == ["000004", "000003"]

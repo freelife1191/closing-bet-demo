@@ -9,6 +9,12 @@ from __future__ import annotations
 from flask import jsonify, request
 
 from app.routes.common_route_context import CommonRouteContext
+from services.paper_trading_constants import (
+    DEFAULT_ASSET_HISTORY_LIMIT,
+    DEFAULT_TRADE_HISTORY_LIMIT,
+    INITIAL_CASH_KRW,
+    MAX_HISTORY_LIMIT,
+)
 
 
 def _execute_portfolio_route(
@@ -23,6 +29,27 @@ def _execute_portfolio_route(
     except Exception as error:
         ctx.logger.error(f"{error_label}: {error}")
         return jsonify(error_payload_builder(error)), 500
+
+
+def _parse_positive_int(value: object, *, default: int) -> int:
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        return int(default)
+    return parsed if parsed > 0 else int(default)
+
+
+def _parse_positive_float(value: object, *, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return parsed if parsed > 0 else float(default)
+
+
+def _parse_history_limit(raw_value: object, *, default: int) -> int:
+    parsed = _parse_positive_int(raw_value, default=default)
+    return min(parsed, int(MAX_HISTORY_LIMIT))
 
 
 def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> None:
@@ -45,7 +72,12 @@ def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> N
     def reset_portfolio():
         """모의 투자 초기화."""
         ctx.paper_trading.reset_account()
-        return jsonify({"status": "success", "message": "Account reset to 100M KRW"})
+        return jsonify(
+            {
+                "status": "success",
+                "message": f"Account reset to {int(INITIAL_CASH_KRW):,} KRW",
+            }
+        )
 
 
 def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None:
@@ -53,16 +85,16 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
     def buy_stock():
         """모의 투자 매수."""
         def _handler():
-            data = request.get_json()
+            data = request.get_json(silent=True) or {}
             ticker = data.get("ticker")
             name = data.get("name")
-            price = data.get("price")
-            quantity = int(data.get("quantity", 0))
+            price = _parse_positive_float(data.get("price"), default=0.0)
+            quantity = _parse_positive_int(data.get("quantity", 0), default=0)
 
             if not all([ticker, name, price, quantity]):
                 return jsonify({"status": "error", "message": "Missing data"}), 400
 
-            result = ctx.paper_trading.buy_stock(ticker, name, float(price), quantity)
+            result = ctx.paper_trading.buy_stock(ticker, name, price, quantity)
             return jsonify(result)
 
         return _execute_portfolio_route(
@@ -76,15 +108,15 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
     def sell_stock():
         """모의 투자 매도."""
         def _handler():
-            data = request.get_json()
+            data = request.get_json(silent=True) or {}
             ticker = data.get("ticker")
-            price = data.get("price")
-            quantity = int(data.get("quantity", 0))
+            price = _parse_positive_float(data.get("price"), default=0.0)
+            quantity = _parse_positive_int(data.get("quantity", 0), default=0)
 
             if not all([ticker, price, quantity]):
                 return jsonify({"status": "error", "message": "Missing data"}), 400
 
-            result = ctx.paper_trading.sell_stock(ticker, float(price), quantity)
+            result = ctx.paper_trading.sell_stock(ticker, price, quantity)
             return jsonify(result)
 
         return _execute_portfolio_route(
@@ -98,8 +130,8 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
     def deposit_cash():
         """예수금 충전."""
         def _handler():
-            data = request.get_json()
-            amount = int(data.get("amount", 0))
+            data = request.get_json(silent=True) or {}
+            amount = _parse_positive_int(data.get("amount", 0), default=0)
             result = ctx.paper_trading.deposit_cash(amount)
             return jsonify(result)
 
@@ -116,7 +148,10 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
     def get_trade_history():
         """거래 내역 조회."""
         def _handler():
-            limit = request.args.get("limit", 50, type=int)
+            limit = _parse_history_limit(
+                request.args.get("limit", DEFAULT_TRADE_HISTORY_LIMIT),
+                default=DEFAULT_TRADE_HISTORY_LIMIT,
+            )
             data = ctx.paper_trading.get_trade_history(limit)
             return jsonify(data)
 
@@ -131,7 +166,10 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
     def get_asset_history():
         """자산 변동 내역 조회 (차트용)."""
         def _handler():
-            limit = request.args.get("limit", 30, type=int)
+            limit = _parse_history_limit(
+                request.args.get("limit", DEFAULT_ASSET_HISTORY_LIMIT),
+                default=DEFAULT_ASSET_HISTORY_LIMIT,
+            )
             data = ctx.paper_trading.get_asset_history(limit)
             return jsonify({"history": data})
 

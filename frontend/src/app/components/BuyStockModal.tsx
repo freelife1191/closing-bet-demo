@@ -41,7 +41,10 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
       })
         .then(res => res.json())
         .then(data => {
-          if (data[stock.ticker]) {
+          if (data.prices && data.prices[stock.ticker]) {
+            setFetchedPrice(data.prices[stock.ticker]);
+          } else if (data[stock.ticker]) {
+            // Fallback for any legacy format (though backend is updated)
             setFetchedPrice(data[stock.ticker]);
           }
         })

@@ -52,6 +52,23 @@ def test_build_stock_chart_payload_filters_by_ticker_and_numeric_validity():
     assert payload["data"][1]["close"] == 112.0
 
 
+def test_build_stock_chart_payload_normalizes_datetime_like_date_strings():
+    df = pd.DataFrame(
+        [
+            {"date": "2025-11-26 00:00:00", "ticker": "005930", "open": 100, "high": 110, "low": 95, "close": 105, "volume": 1000},
+            {"date": "20251127", "ticker": "005930", "open": 106, "high": 112, "low": 101, "close": 109, "volume": 1200},
+        ]
+    )
+
+    payload = build_stock_chart_payload(
+        ticker="005930",
+        period_days=365,
+        load_csv_file=lambda _name: df,
+    )
+
+    assert [row["date"] for row in payload["data"]] == ["2025-11-26", "2025-11-27"]
+
+
 def test_build_stock_chart_payload_handles_missing_numeric_columns_and_reuses_ticker_padding():
     df = pd.DataFrame(
         [

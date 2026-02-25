@@ -30,6 +30,19 @@ def test_recommendation_combiner_handles_empty_and_conflict_cases():
     assert "(우선권)" in conflict["reason"]
 
 
+def test_recommendation_combiner_normalizes_malformed_payload():
+    malformed_gemini = {"action": "STRONG_BUY", "confidence": "77.5"}
+    malformed_gpt = {"action": "sell", "confidence": "bad", "reason": None}
+
+    result = RecommendationCombiner.combine(malformed_gemini, malformed_gpt)
+
+    # malformed_gemini는 HOLD로 정규화되고, malformed_gpt는 SELL(0점)으로 정규화됨
+    # confidence 비교에서 77.5 > 0 이므로 gemini 쪽이 우선된다.
+    assert result["action"] == "HOLD"
+    assert float(result["confidence"]) == 77.5
+    assert "(우선권)" in result["reason"]
+
+
 def test_analyze_stock_preserves_response_schema_with_unavailable_strategies():
     analyzer = KrAiAnalyzer(api_key="", openai_api_key="")
     analyzer._get_stock_info = lambda _ticker: {

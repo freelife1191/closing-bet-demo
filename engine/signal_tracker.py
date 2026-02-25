@@ -14,6 +14,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from engine.constants import VCP_THRESHOLDS
 from engine.signal_tracker_analysis_mixin import SignalTrackerAnalysisMixin
 from engine.signal_tracker_source_cache import load_signal_tracker_csv_cached
 from services.kr_market_csv_utils import get_ticker_padded_series as _get_ticker_padded_series
@@ -39,8 +40,8 @@ class SignalTracker(SignalTrackerAnalysisMixin):
         self.strategy_params = {
             "foreign_min": 50000,
             "consecutive_min": 3,
-            "contraction_max": 0.8,
-            "near_high_pct": 0.92,
+            "contraction_max": float(VCP_THRESHOLDS.CONTRACTION_RATIO),
+            "near_high_pct": float(VCP_THRESHOLDS.PRICE_NEAR_HIGH_RATIO),
             "hold_days": 5,
             "stop_loss_pct": 7.0,
         }

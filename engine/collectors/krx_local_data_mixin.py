@@ -236,9 +236,10 @@ class KRXCollectorLocalDataMixin:
                         latest_df.loc[mask_zero, "volume"] * latest_df.loc[mask_zero, "close"]
                     )
 
+            min_change_pct = float(getattr(getattr(self, "config", None), "min_change_pct", 0.0))
             mask_price = latest_df["close"] >= 1000
             mask_vol = latest_df["trading_value"] >= 1_000_000_000
-            mask_rise = latest_df["change_pct"] > 0
+            mask_rise = latest_df["change_pct"] >= min_change_pct
 
             logger.info(f"TopGainers Filter ({market}): Rise={mask_rise.sum()}, ValidVol={mask_vol.sum()}")
 

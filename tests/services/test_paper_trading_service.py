@@ -172,7 +172,41 @@ def test_fetch_prices_toss_normalizes_and_deduplicates_input_tickers():
         _cleanup_service(service)
 
 
-def test_get_portfolio_valuation_waits_only_once_for_initial_sync(monkeypatch):
+def test_start_background_sync_skips_when_lock_not_acquired(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(service, "_acquire_sync_loop_lock", lambda: False)
+        service.start_background_sync()
+        assert service.is_running is False
+        assert service.bg_thread is None
+    finally:
+        _cleanup_service(service)
+
+
+def test_update_prices_loop_resets_state_and_releases_lock(monkeypatch):
+    service = _build_service()
+    try:
+        released = {"called": False}
+
+        monkeypatch.setattr("services.paper_trading.run_price_update_loop_impl", lambda **_kwargs: None)
+        monkeypatch.setattr(
+            service,
+            "_release_sync_loop_lock",
+            lambda: released.__setitem__("called", True),
+        )
+        service.is_running = True
+        service.bg_thread = object()
+
+        service._update_prices_loop()
+
+        assert service.is_running is False
+        assert service.bg_thread is None
+        assert released["called"] is True
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_valuation_waits_for_initial_sync_on_each_call(monkeypatch):
     service = _build_service()
     try:
         _insert_portfolio_row(service, "005930", "삼성전자")
@@ -196,8 +230,7 @@ def test_get_portfolio_valuation_waits_only_once_for_initial_sync(monkeypatch):
 
         assert first["holdings"][0]["is_stale"] is True
         assert second["holdings"][0]["is_stale"] is True
-        assert sleep_calls["count"] == service.INITIAL_SYNC_WAIT_TRIES
-        assert service._initial_sync_wait_done is True
+        assert sleep_calls["count"] == service.INITIAL_SYNC_WAIT_TRIES * 2
     finally:
         _cleanup_service(service)
 
@@ -286,7 +319,7 @@ def test_buy_stock_does_not_call_get_balance_for_cash_check(monkeypatch):
         _cleanup_service(service)
 
 
-def test_buy_stock_normalizes_ticker_for_portfolio_and_trade_log():
+def test_buy_stock_preserves_input_ticker_for_portfolio_and_trade_log():
     service = _build_service()
     try:
         result = service.buy_stock("5930", "삼성전자", 1_000, 1)
@@ -294,31 +327,31 @@ def test_buy_stock_normalizes_ticker_for_portfolio_and_trade_log():
 
         with service.get_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("005930",))
-            normalized_count = int(cursor.fetchone()[0])
             cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("5930",))
             raw_count = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("005930",))
+            normalized_count = int(cursor.fetchone()[0])
             cursor.execute(
                 "SELECT ticker FROM trade_log WHERE action = 'BUY' ORDER BY id DESC LIMIT 1"
             )
             trade_ticker_row = cursor.fetchone()
 
-        assert normalized_count == 1
-        assert raw_count == 0
+        assert raw_count == 1
+        assert normalized_count == 0
         assert trade_ticker_row is not None
-        assert str(trade_ticker_row[0]) == "005930"
+        assert str(trade_ticker_row[0]) == "5930"
     finally:
         _cleanup_service(service)
 
 
-def test_buy_stock_insufficient_funds_does_not_update_price_cache():
+def test_buy_stock_insufficient_funds_updates_memory_cache_only():
     service = _build_service()
     try:
         result = service.buy_stock("005930", "삼성전자", 100_000_000, 2)
         assert result["status"] == "error"
 
         with service.cache_lock:
-            assert "005930" not in service.price_cache
+            assert service.price_cache.get("005930") == 100_000_000
 
         with service.get_context() as conn:
             cursor = conn.cursor()
@@ -330,7 +363,21 @@ def test_buy_stock_insufficient_funds_does_not_update_price_cache():
         _cleanup_service(service)
 
 
-def test_sell_stock_resolves_legacy_unpadded_ticker_row():
+def test_buy_stock_rejects_non_positive_or_non_numeric_price():
+    service = _build_service()
+    try:
+        zero_price_result = service.buy_stock("005930", "삼성전자", 0, 1)
+        assert zero_price_result["status"] == "error"
+        assert "Price must be a positive number" in zero_price_result["message"]
+
+        invalid_price_result = service.buy_stock("005930", "삼성전자", "bad-price", 1)
+        assert invalid_price_result["status"] == "error"
+        assert "Price must be a positive number" in invalid_price_result["message"]
+    finally:
+        _cleanup_service(service)
+
+
+def test_sell_stock_requires_exact_ticker_match():
     service = _build_service()
     try:
         with service.get_context() as conn:
@@ -345,20 +392,19 @@ def test_sell_stock_resolves_legacy_unpadded_ticker_row():
             conn.commit()
 
         result = service.sell_stock("005930", 1_100, 1)
-        assert result["status"] == "success"
+        assert result["status"] == "error"
 
         with service.get_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker IN (?, ?)", ("5930", "005930"))
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("5930",))
             remaining_positions = int(cursor.fetchone()[0])
             cursor.execute(
                 "SELECT ticker FROM trade_log WHERE action = 'SELL' ORDER BY id DESC LIMIT 1"
             )
             trade_ticker_row = cursor.fetchone()
 
-        assert remaining_positions == 0
-        assert trade_ticker_row is not None
-        assert str(trade_ticker_row[0]) == "005930"
+        assert remaining_positions == 1
+        assert trade_ticker_row is None
     finally:
         _cleanup_service(service)
 
@@ -378,7 +424,7 @@ def test_reset_account_clears_positions_and_restores_cash():
         _cleanup_service(service)
 
 
-def test_get_portfolio_normalizes_legacy_ticker_format():
+def test_get_portfolio_preserves_legacy_ticker_format():
     service = _build_service()
     try:
         with service.get_context() as conn:
@@ -394,7 +440,7 @@ def test_get_portfolio_normalizes_legacy_ticker_format():
 
         portfolio = service.get_portfolio()
         assert len(portfolio["holdings"]) == 1
-        assert portfolio["holdings"][0]["ticker"] == "005930"
+        assert portfolio["holdings"][0]["ticker"] == "5930"
     finally:
         _cleanup_service(service)
 
@@ -425,7 +471,23 @@ def test_sell_stock_insufficient_quantity_does_not_overwrite_price_cache():
         _cleanup_service(service)
 
 
-def test_get_portfolio_valuation_uses_normalized_cache_for_legacy_ticker():
+def test_sell_stock_rejects_non_positive_or_non_numeric_price():
+    service = _build_service()
+    try:
+        _insert_portfolio_row(service, "005930", "삼성전자")
+
+        zero_price_result = service.sell_stock("005930", 0, 1)
+        assert zero_price_result["status"] == "error"
+        assert "Price must be a positive number" in zero_price_result["message"]
+
+        invalid_price_result = service.sell_stock("005930", "bad-price", 1)
+        assert invalid_price_result["status"] == "error"
+        assert "Price must be a positive number" in invalid_price_result["message"]
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_valuation_ignores_normalized_cache_for_legacy_ticker():
     service = _build_service()
     try:
         with service.get_context() as conn:
@@ -444,10 +506,82 @@ def test_get_portfolio_valuation_uses_normalized_cache_for_legacy_ticker():
 
         valuation = service.get_portfolio_valuation()
         assert len(valuation["holdings"]) == 1
-        assert valuation["holdings"][0]["ticker"] == "005930"
-        assert valuation["holdings"][0]["current_price"] == 7_000
-        assert valuation["holdings"][0]["is_stale"] is False
-        assert valuation["total_stock_value"] == 21_000
+        assert valuation["holdings"][0]["ticker"] == "5930"
+        assert valuation["holdings"][0]["current_price"] == 1_000
+        assert valuation["holdings"][0]["is_stale"] is True
+        assert valuation["total_stock_value"] == 3_000
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_trade_history_normalizes_invalid_limit_and_caps_upper_bound():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            rows = [
+                (
+                    "BUY",
+                    "005930",
+                    "삼성전자",
+                    1000,
+                    1,
+                    f"2026-02-22T00:00:{i % 60:02d}",
+                    0,
+                    0,
+                )
+                for i in range(600)
+            ]
+            cursor.executemany(
+                """
+                INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            conn.commit()
+
+        invalid_limit_payload = service.get_trade_history(limit="bad-limit")
+        assert len(invalid_limit_payload["trades"]) == 50
+
+        capped_limit_payload = service.get_trade_history(limit=999999)
+        assert len(capped_limit_payload["trades"]) == 500
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_asset_history_normalizes_invalid_limit_and_caps_upper_bound():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            base = datetime(2024, 1, 1)
+            rows = []
+            for i in range(600):
+                day = (base + timedelta(days=i)).strftime("%Y-%m-%d")
+                rows.append(
+                    (
+                        day,
+                        100_000_000 + i,
+                        50_000_000 + i,
+                        50_000_000,
+                        f"{day}T15:30:00",
+                    )
+                )
+            cursor.executemany(
+                """
+                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            conn.commit()
+
+        invalid_limit_history = service.get_asset_history(limit="bad-limit")
+        assert len(invalid_limit_history) == 30
+
+        capped_limit_history = service.get_asset_history(limit=999999)
+        assert len(capped_limit_history) == 500
     finally:
         _cleanup_service(service)
 

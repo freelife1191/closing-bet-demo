@@ -10,6 +10,7 @@ import logging
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
 from .response_flow import (
+    build_fallback_models,
     extract_usage_metadata,
     friendly_error_message,
     is_retryable_stream_error,
@@ -26,15 +27,27 @@ def run_non_stream_response(
     normalize_response: Callable[[str], str],
 ) -> Tuple[str, Dict[str, int]]:
     """단일 응답 요청을 실행하고 정규화/usage 메타를 반환한다."""
-    chat_session = active_client.chats.create(
-        model=target_model_name,
-        history=api_history,
-    )
-    response = chat_session.send_message(content_parts)
-    raw_text = getattr(response, "text", "") or ""
-    bot_response = normalize_response(raw_text)
-    usage_metadata = extract_usage_metadata(response)
-    return bot_response, usage_metadata
+    last_error: Exception | None = None
+    for current_model in build_fallback_models(target_model_name):
+        try:
+            chat_session = active_client.chats.create(
+                model=current_model,
+                history=api_history,
+            )
+            response = chat_session.send_message(content_parts)
+            raw_text = getattr(response, "text", "") or ""
+            bot_response = normalize_response(raw_text)
+            usage_metadata = extract_usage_metadata(response)
+            return bot_response, usage_metadata
+        except Exception as error:
+            last_error = error
+            if is_retryable_stream_error(str(error)):
+                continue
+            raise
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("No available model for non-stream response")
 
 
 def _build_stream_fallback_error(error_msg: str) -> str:
@@ -100,4 +113,3 @@ __all__ = [
     "run_non_stream_response",
     "run_stream_response",
 ]
-

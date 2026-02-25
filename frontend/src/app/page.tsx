@@ -17,7 +17,7 @@ export default function HomePage() {
               <i className="fas fa-chart-line text-white text-sm"></i>
             </div>
             <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-              KR Market Package
+              Smart Money Bot
             </span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
@@ -55,7 +55,7 @@ export default function HomePage() {
             </h1>
 
             <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-              VCP 패턴 인식, 기관/외국인 수급 추적, 그리고 <span className="text-indigo-400 font-semibold">Gemini & GPT Dual AI 엔진</span>이 결합된 올인원 주식 분석 패키지입니다.
+              VCP 패턴 인식, 기관/외국인 수급 추적, 그리고 <span className="text-indigo-400 font-semibold">Gemini + GPT + Perplexity 멀티 AI 엔진</span>이 결합된 올인원 주식 분석 패키지입니다.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -80,9 +80,10 @@ export default function HomePage() {
               <div className="flex items-center gap-2 text-sm font-semibold"><i className="fab fa-react text-xl"></i> Next.js</div>
               <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-flask text-xl"></i> Flask</div>
               <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-brain text-xl"></i> Gemini</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-robot text-xl"></i> GPT</div>
               <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-robot text-xl"></i> Perplexity</div>
             </div>
-          </div>
+            </div>
         </section>
 
         {/* System Architecture Section */}
@@ -106,7 +107,7 @@ export default function HomePage() {
                 <p className="text-center text-xs text-gray-500 font-mono mb-6"></p>
                 <ul className="space-y-3 text-sm text-gray-300">
                   <li className="flex items-center gap-2"><i className="fas fa-check text-green-500 text-xs"></i> Signals (/api/kr/signals)</li>
-                  <li className="flex items-center gap-2"><i className="fas fa-check text-green-500 text-xs"></i> AI Analysis (/api/kr/ai)</li>
+                  <li className="flex items-center gap-2"><i className="fas fa-check text-green-500 text-xs"></i> AI Analysis (/api/kr/ai-analysis)</li>
                   <li className="flex items-center gap-2"><i className="fas fa-check text-green-500 text-xs"></i> Market Gate</li>
                 </ul>
               </div>
@@ -125,11 +126,11 @@ export default function HomePage() {
                 <div className="space-y-4">
                   <div className="p-4 rounded-xl bg-white/5 border border-white/5">
                     <div className="text-xs font-bold text-amber-400 mb-2">Data Sources</div>
-                    <div className="text-sm text-gray-300">pykrx, yfinance, FDR</div>
+                    <div className="text-sm text-gray-300">Toss, Naver, pykrx, yfinance</div>
                   </div>
                   <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
                     <div className="text-xs font-bold text-indigo-400 mb-2">AI Models</div>
-                    <div className="text-sm text-gray-300">Gemini + Perplexity</div>
+                    <div className="text-sm text-gray-300">Gemini + GPT + Perplexity</div>
                   </div>
                 </div>
               </div>
@@ -183,12 +184,12 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-bold mb-3">수급 추적 (Smart Money)</h3>
                 <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                  외국인과 기관의 매집 흐름을 100점 만점 기준으로 평가합니다.
+                  수급 70점 + 거래량 20점 + VCP 10점 구조로 종목 우선순위를 계산합니다.
                 </p>
                 <div className="space-y-2 text-sm bg-black/20 p-4 rounded-xl">
-                  <div className="flex justify-between"><span className="text-gray-400">외인 순매매</span> <span className="text-emerald-400 font-bold">25점</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">기관 순매매</span> <span className="text-emerald-400 font-bold">20점</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">연속 매수일</span> <span className="text-emerald-400 font-bold">15점</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">외인 5일 순매수</span> <span className="text-emerald-400 font-bold">25점</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">기관 5일 순매수</span> <span className="text-emerald-400 font-bold">20점</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">연속 순매수(외인+기관)</span> <span className="text-emerald-400 font-bold">25점</span></div>
                 </div>
               </div>
 
@@ -199,23 +200,29 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-bold mb-3">종가베팅</h3>
                 <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                  장 마감 전 최적의 매수 기회를 포착하는 18점 만점 시스템입니다.
+                  장 마감 직전 모멘텀 종목을 선별해 익일 초반 대응하는 단기 전략입니다.
                 </p>
-                <div className="flex gap-2 mb-4">
-                  <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded">S급: 15점+</span>
-                  <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs font-bold rounded">A급: 12점+</span>
+                <ul className="space-y-2 text-sm text-gray-300 mb-5">
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>점수 체계: 기본 12점 + 가산 7점 (총 19점)</li>
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>등급 기준: S 10점+, A 8점+, B 6점+</li>
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>핵심 조건: 거래대금·뉴스·수급 동시 검증</li>
+                </ul>
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded text-center">S급 10+</span>
+                  <span className="px-2 py-1 bg-gray-500/20 text-gray-300 text-xs font-bold rounded text-center">A급 8+</span>
+                  <span className="px-2 py-1 bg-white/10 text-gray-400 text-xs font-bold rounded text-center">B급 6+</span>
                 </div>
-                <p className="text-xs text-gray-500">거래대금 1조 이상 시 가산점 부여</p>
+                <p className="text-xs text-gray-500">거래대금(1조/5000억/1000억)과 외인·기관 동반 순매수 조건을 함께 확인</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Dual AI Section & Market Gate */}
+        {/* Multi AI Section & Market Gate */}
         <section id="ai-analysis" className="py-24 px-6 bg-[#0E1117] relative">
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-            {/* Dual AI Analysis System (2/3) */}
+            {/* Multi AI Analysis System (2/3) */}
             <div className="lg:col-span-2 p-1 rounded-3xl bg-gradient-to-r from-purple-500/20 via-indigo-500/20 to-blue-500/20 h-full">
               <div className="bg-[#13151A] rounded-[22px] p-8 md:p-12 h-full flex flex-col justify-between">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
@@ -223,15 +230,15 @@ export default function HomePage() {
                     <div className="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center mb-4">
                       <i className="fas fa-brain text-2xl text-white"></i>
                     </div>
-                    <h2 className="text-3xl font-bold mb-2">Dual AI Analysis System</h2>
-                    <p className="text-gray-400">최신 LLM 모델들의 상호 검증을 통한 신뢰도 높은 분석</p>
+                    <h2 className="text-3xl font-bold mb-2">Multi AI Analysis System</h2>
+                    <p className="text-gray-400">Gemini 주분석 + GPT/Perplexity 보조 검증으로 신뢰도를 높이는 멀티 AI 구조</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-full border border-purple-500/30">DUAL ENGINE</span>
+                    <span className="px-3 py-1 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-full border border-purple-500/30">MULTI ENGINE</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-indigo-500/20 hover:bg-[#252529] transition-colors">
                     <h3 className="text-lg font-bold text-indigo-400 mb-2 flex items-center gap-2">
                       <i className="fas fa-star"></i> Gemini (Main)
@@ -240,12 +247,20 @@ export default function HomePage() {
                       뉴스 종합 분석, 호재 점수(0~3), 매매 추천(Buy/Hold/Sell) 및 신뢰도 산출. 최신 시장 데이터를 실시간으로 해석합니다.
                     </p>
                   </div>
+                  <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-sky-500/20 hover:bg-[#252529] transition-colors">
+                    <h3 className="text-lg font-bold text-sky-400 mb-2 flex items-center gap-2">
+                      <i className="fas fa-robot"></i> GPT (Sub)
+                    </h3>
+                    <p className="text-sm text-gray-400 leading-relaxed">
+                      VCP 보조 분석 모델로 활용되며, Gemini 결과를 교차 검증합니다.
+                    </p>
+                  </div>
                   <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-green-500/20 hover:bg-[#252529] transition-colors">
                     <h3 className="text-lg font-bold text-green-400 mb-2 flex items-center gap-2">
                       <i className="fas fa-robot"></i> Perplexity (Sub)
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      VCP 패턴 해석, 심층 수급 분석, 목표가 및 손절가 제안 (Cross-Check). Gemini의 분석 결과를 검증합니다.
+                      VCP 보조 분석 모델로 활용되며, Gemini 결과를 교차 검증합니다.
                     </p>
                   </div>
                 </div>
@@ -273,6 +288,10 @@ export default function HomePage() {
                 <li className="flex items-center gap-2">
                   <i className="fas fa-check-circle text-orange-500"></i>
                   <span>거래량 & 상대강도 (30점)</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <i className="fas fa-check-circle text-orange-500"></i>
+                  <span>Gate Open: 기술점수 40점 이상</span>
                 </li>
               </ul>
               <div className="mt-8 pt-6 border-t border-white/5 text-center">
@@ -412,7 +431,7 @@ export default function HomePage() {
                       <ul className="space-y-3 text-sm text-gray-300 text-left">
                         <li className="flex items-center gap-2">
                           <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                          거래대금 500억 이상 (유동성)
+                          거래대금 1000억 이상 (유동성)
                         </li>
                         <li className="flex items-center gap-2">
                           <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
@@ -453,9 +472,9 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  {/* Score Logic Table (21 Points) - Rich Design */}
+                  {/* Score Logic Table (19 Points) - Rich Design */}
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-8">종가베팅 점수표 (21점 만점)</h3>
+                    <h3 className="text-xl font-bold text-white mb-8">종가베팅 점수표 (19점 만점)</h3>
 
                     {/* Basic Score (12) */}
                     <div className="mb-8">
@@ -513,34 +532,46 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* Bonus Score (9) */}
+                    {/* Bonus Score (7) */}
                     <div>
                       <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-yellow-500"></span> 가산점 (Max 9점)
+                        <span className="w-2 h-2 rounded-full bg-yellow-500"></span> 가산점 (Max 7점)
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* Volume Surge Score */}
                         <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-yellow-500/20">
                           <div className="flex justify-between items-end mb-2">
                             <span className="font-bold text-gray-200">거래량 급증</span>
-                            <span className="text-2xl font-black text-yellow-400">+4<span className="text-sm text-gray-500 ml-1">점</span></span>
-                          </div>
-                          <div className="h-2 bg-gray-800 rounded-full mb-3 overflow-hidden">
-                            <div className="h-full bg-yellow-500 w-[80%]"></div>
-                          </div>
-                          <p className="text-xs text-gray-500">전일 대비 10배 이상 폭증</p>
-                        </div>
-
-                        {/* Daily Rise Score */}
-                        <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-yellow-500/20">
-                          <div className="flex justify-between items-end mb-2">
-                            <span className="font-bold text-gray-200">당일 상승률</span>
                             <span className="text-2xl font-black text-yellow-400">+5<span className="text-sm text-gray-500 ml-1">점</span></span>
                           </div>
                           <div className="h-2 bg-gray-800 rounded-full mb-3 overflow-hidden">
                             <div className="h-full bg-yellow-500 w-[100%]"></div>
                           </div>
-                          <p className="text-xs text-gray-500">25% 이상 급등 시 (상한가 임박)</p>
+                          <p className="text-xs text-gray-500">2x~6x+ 구간별 차등 (최대 +5)</p>
+                        </div>
+
+                        {/* Candle Bonus */}
+                        <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-yellow-500/20">
+                          <div className="flex justify-between items-end mb-2">
+                            <span className="font-bold text-gray-200">장대양봉 보너스</span>
+                            <span className="text-2xl font-black text-yellow-400">+1<span className="text-sm text-gray-500 ml-1">점</span></span>
+                          </div>
+                          <div className="h-2 bg-gray-800 rounded-full mb-3 overflow-hidden">
+                            <div className="h-full bg-yellow-500 w-[20%]"></div>
+                          </div>
+                          <p className="text-xs text-gray-500">차트 점수 충족 시 +1</p>
+                        </div>
+
+                        {/* Limit Up Bonus */}
+                        <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-yellow-500/20">
+                          <div className="flex justify-between items-end mb-2">
+                            <span className="font-bold text-gray-200">상한가 보너스</span>
+                            <span className="text-2xl font-black text-yellow-400">+1<span className="text-sm text-gray-500 ml-1">점</span></span>
+                          </div>
+                          <div className="h-2 bg-gray-800 rounded-full mb-3 overflow-hidden">
+                            <div className="h-full bg-yellow-500 w-[20%]"></div>
+                          </div>
+                          <p className="text-xs text-gray-500">등락률 29.5% 이상 시 +1</p>
                         </div>
                       </div>
                     </div>
@@ -554,7 +585,7 @@ export default function HomePage() {
                     <i className="fas fa-chart-bar"></i> VCP 패턴이란?
                   </h3>
                   <p className="text-lg text-gray-300 mb-8 leading-relaxed">
-                    마크 미너비니(Mark Minervini)의 <span className="text-white font-bold">변동성 축소 패턴(Validation Contraction Pattern)</span>을 의미하며, 주가가 상승하기 전 변동폭이 점진적으로 줄어드는 현상을 포착합니다.
+                    마크 미너비니(Mark Minervini)의 <span className="text-white font-bold">변동성 축소 패턴(Volatility Contraction Pattern)</span>을 의미하며, 주가가 상승하기 전 변동폭이 점진적으로 줄어드는 현상을 포착합니다.
                   </p>
 
                   <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-rose-500/20 mb-8">
@@ -595,7 +626,7 @@ export default function HomePage() {
                       <h4 className="text-sm font-bold text-emerald-400 mb-4">분석 가중치 (Total 100점)</h4>
                       <div className="space-y-4">
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-300">외국인 순매매량 (5/20/60일)</span>
+                          <span className="text-gray-300">외국인 5일 순매수</span>
                           <span className="font-bold text-white">25점</span>
                         </div>
                         <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
@@ -603,7 +634,7 @@ export default function HomePage() {
                         </div>
 
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-300">기관 순매매량 (5/20/60일)</span>
+                          <span className="text-gray-300">기관 5일 순매수</span>
                           <span className="font-bold text-white">20점</span>
                         </div>
                         <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
@@ -611,19 +642,27 @@ export default function HomePage() {
                         </div>
 
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-300">거래량 대비 비율 (수급강도)</span>
-                          <span className="font-bold text-white">20점</span>
-                        </div>
-                        <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-500 w-[20%]"></div>
-                        </div>
-
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-300">연속 매수일 (지속성)</span>
+                          <span className="text-gray-300">연속 순매수일(외인+기관)</span>
                           <span className="font-bold text-white">25점</span>
                         </div>
                         <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
                           <div className="h-full bg-emerald-500 w-[25%]"></div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-300">거래량 배수 점수</span>
+                          <span className="font-bold text-white">20점</span>
+                        </div>
+                        <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 w-[20%]"></div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-300">VCP 점수 스케일</span>
+                          <span className="font-bold text-white">10점</span>
+                        </div>
+                        <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 w-[10%]"></div>
                         </div>
                       </div>
                     </div>
@@ -633,15 +672,15 @@ export default function HomePage() {
                       <ul className="space-y-3 text-sm text-gray-300">
                         <li className="flex items-center gap-3">
                           <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">1</span>
-                          <span><span className="text-white font-bold">pykrx</span> - KRX 공식 데이터 (가장 정확)</span>
+                          <span><span className="text-white font-bold">Toss API</span> - 실시간 수급/가격 데이터 우선 사용</span>
                         </li>
                         <li className="flex items-center gap-3">
                           <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">2</span>
-                          <span><span className="text-white font-bold">FinanceDataReader</span> - 네이버 금융 크롤링</span>
+                          <span><span className="text-white font-bold">CSV Fallback</span> - `all_institutional_trend_data.csv` 보조</span>
                         </li>
                         <li className="flex items-center gap-3">
                           <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">3</span>
-                          <span><span className="text-white font-bold">yfinance</span> - Yahoo Finance API (보조)</span>
+                          <span><span className="text-white font-bold">Naver / yfinance</span> - 실시간 가격 폴백</span>
                         </li>
                       </ul>
                     </div>

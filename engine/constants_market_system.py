@@ -70,6 +70,9 @@ class ScreeningConfig:
     MAX_CANDIDATES: int = 50
     MIN_PRE_SCORE: int = 2
     SIGNALS_TO_SHOW: int = 20
+    VCP_SIGNALS_TO_SHOW: int = 20
+    VCP_MIN_SCORE: int = 60
+    VCP_SCREENING_DEFAULT_MAX_STOCKS: int = 600
     MARKETS: tuple = ("KOSPI", "KOSDAQ")
 
 
@@ -150,4 +153,3 @@ __all__ = [
     "StatusLabels",
     "TickerSymbols",
 ]
-

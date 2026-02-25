@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from app.routes.kr_market_signal_common import (
+    _format_signal_date,
     _is_meaningful_ai_reason,
     _none_if_nan,
     _normalize_text,
@@ -16,6 +17,7 @@ from app.routes.kr_market_signal_common import (
     _safe_int,
     _VALID_AI_ACTIONS,
 )
+from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 
 
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
@@ -150,14 +152,17 @@ def _filter_signals_dataframe_by_date(
         return signals_df, today
 
     filtered_df = signals_df
+    normalized_dates = filtered_df["signal_date"].astype(str).map(_format_signal_date)
+
     if req_date:
-        filtered_df = filtered_df[filtered_df["signal_date"].astype(str) == req_date]
+        normalized_req_date = _format_signal_date(req_date)
+        filtered_df = filtered_df[normalized_dates == normalized_req_date]
         return filtered_df, today
 
-    latest_date = filtered_df["signal_date"].max()
+    latest_date = normalized_dates[normalized_dates != ""].max()
     if pd.notna(latest_date):
-        latest_str = str(latest_date)
-        filtered_df = filtered_df[filtered_df["signal_date"].astype(str) == latest_str]
+        latest_str = _format_signal_date(latest_date)
+        filtered_df = filtered_df[normalized_dates == latest_str]
         today = latest_str
 
     return filtered_df, today
@@ -186,13 +191,13 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
     status = str(_row_get(row, "status", "OPEN"))
     if status != "OPEN":
         return None
-    if score < 60:
+    if score < resolve_vcp_min_score(default=60.0):
         return None
 
     return {
         "ticker": str(_row_get(row, "ticker", "")).zfill(6),
         "name": _row_get(row, "name"),
-        "signal_date": str(_row_get(row, "signal_date")),
+        "signal_date": _format_signal_date(_row_get(row, "signal_date")),
         "market": _row_get(row, "market"),
         "status": _row_get(row, "status"),
         "score": score,
@@ -222,12 +227,24 @@ def _build_vcp_signals_from_dataframe(signals_df: Any) -> List[dict]:
     return signals
 
 
-def _sort_and_limit_vcp_signals(signals: List[dict], limit: int = 20) -> List[dict]:
+def _sort_and_limit_vcp_signals(
+    signals: List[dict],
+    limit: int | None = None,
+) -> List[dict]:
     """점수 내림차순 정렬 후 상위 N개를 반환한다."""
     if not isinstance(signals, list):
         return []
+
+    if limit is None:
+        resolved_limit = resolve_vcp_signals_to_show(default=20, minimum=0)
+    else:
+        try:
+            resolved_limit = max(int(limit), 0)
+        except (TypeError, ValueError):
+            resolved_limit = resolve_vcp_signals_to_show(default=20, minimum=0)
+
     sorted_signals = sorted(signals, key=lambda x: x.get("score", 0), reverse=True)
-    return sorted_signals[: max(limit, 0)]
+    return sorted_signals[:resolved_limit]
 
 
 def _build_ai_data_map(ai_payload: Any) -> Dict[str, dict]:

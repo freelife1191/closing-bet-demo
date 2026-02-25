@@ -46,6 +46,14 @@ def _is_meaningful_ai_reason(reason: Any) -> bool:
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     """숫자 변환 실패 시 기본값을 반환한다."""
+    if isinstance(value, str):
+        value = (
+            value.replace(",", "")
+            .replace("₩", "")
+            .replace("$", "")
+            .replace("%", "")
+            .strip()
+        )
     try:
         return float(value or 0)
     except (TypeError, ValueError):
@@ -54,6 +62,14 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
 
 def _safe_int(value: Any, default: int = 0) -> int:
     """정수 변환 실패 시 기본값을 반환한다."""
+    if isinstance(value, str):
+        value = (
+            value.replace(",", "")
+            .replace("₩", "")
+            .replace("$", "")
+            .replace("%", "")
+            .strip()
+        )
     try:
         return int(float(value or 0))
     except (TypeError, ValueError):
@@ -73,8 +89,21 @@ def _none_if_nan(value: Any) -> Any:
 def _format_signal_date(value: Any) -> str:
     """신호 날짜를 YYYY-MM-DD 형태로 정규화한다."""
     date_str = str(value or "").strip()
+    if not date_str:
+        return ""
+
+    parsed = _parse_datetime_safe(date_str)
+    if parsed is not None:
+        return parsed.strftime("%Y-%m-%d")
+
     if len(date_str) == 8 and "-" not in date_str and date_str.isdigit():
         return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+
+    if "T" in date_str:
+        return date_str.split("T", 1)[0]
+    if " " in date_str:
+        return date_str.split(" ", 1)[0]
+
     return date_str
 
 
@@ -100,12 +129,16 @@ def _parse_datetime_safe(value: Any) -> Optional[datetime]:
     if not value_str:
         return None
 
+    iso_candidate = value_str
+    if iso_candidate.endswith("Z"):
+        iso_candidate = iso_candidate[:-1] + "+00:00"
+
     try:
-        return datetime.fromisoformat(value_str)
+        return datetime.fromisoformat(iso_candidate)
     except ValueError:
         pass
 
-    for fmt in ("%Y-%m-%d", "%Y%m%d"):
+    for fmt in ("%Y-%m-%d", "%Y%m%d", "%Y/%m/%d"):
         try:
             return datetime.strptime(value_str, fmt)
         except ValueError:

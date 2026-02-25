@@ -13,6 +13,7 @@ from typing import Any, Dict, Tuple
 
 import pandas as pd
 
+from engine.screening_runtime import resolve_vcp_signals_to_show
 from engine.signal_tracker_ai_helpers import (
     apply_ai_results,
     build_ai_batch_payload,
@@ -410,11 +411,15 @@ class SignalTrackerAnalysisMixin:
             logger.warning("사용 가능한 AI Provider가 없습니다")
             return signals_df
 
-        if len(signals_df) > 20:
-            logger.info(f"   AI 분석 대상 {len(signals_df)}개 -> 상위 20개로 제한")
-            signals_df = cap_ai_target_signals(signals_df, limit=20)
+        ai_target_limit = resolve_vcp_signals_to_show(default=20, minimum=1)
 
-        logger.info(f"🤖 AI 분석 시작: {len(signals_df)}개 종목 (TOP 20)")
+        if len(signals_df) > ai_target_limit:
+            logger.info(
+                f"   AI 분석 대상 {len(signals_df)}개 -> 상위 {ai_target_limit}개로 제한"
+            )
+            signals_df = cap_ai_target_signals(signals_df, limit=ai_target_limit)
+
+        logger.info(f"🤖 AI 분석 시작: {len(signals_df)}개 종목 (TOP {ai_target_limit})")
 
         stocks_to_analyze = build_ai_batch_payload(signals_df)
 

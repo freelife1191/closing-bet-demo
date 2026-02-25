@@ -46,3 +46,11 @@ def test_classify_none_when_no_dual_buy():
     grade = classifier.classify(stock=stock, score=score, score_details={}, supply=supply)
     assert grade is None
 
+
+def test_classify_b_grade_when_change_pct_is_zero():
+    classifier = GradeClassifier()
+    stock = _build_stock(change_pct=0.0, trading_value=200_000_000_000)
+    score = ScoreDetail(total=8, news=1)
+
+    grade = classifier.classify(stock=stock, score=score, score_details={}, supply=_dual_buy_supply())
+    assert grade == Grade.B

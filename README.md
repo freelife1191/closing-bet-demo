@@ -1,12 +1,36 @@
 # 🚀 Smart Money Bot: AI 기반 종가 베팅 & VCP 시그널 시스템
 
-**🌐 데모 페이지 (Live Demo)**: [https://close.highvalue.kr/dashboard/kr](https://close.highvalue.kr/dashboard/kr)
+**🌐 데모 페이지 (Live Demo)**: [https://close.highvalue.kr](https://close.highvalue.kr)
 
 ![랜딩 페이지](assets/1.png)
 
 ![아키텍처 소개](assets/2.png)
 
 ![핵심 분석 기능](assets/3.png)
+
+---
+
+## 🎯 핵심 가치 제안
+
+- **Rule-based Screening + AI Reasoning**: 엄격한 기술적 필터링과 AI의 맥락 이해력을 결합하여 신호 품질을 극대화
+- **Multi-Model AI Cross-Validation**: 세 가지 모델(Gemini, GPT, Perplexity)을 조화롭게 운용하여 분석 신뢰도 극대화
+- **Market-First Approach**: 개별 종목 분석 전에 시장 상태를 먼저 판단하여 하락장 리스크 사전 차단
+- **Real-time Multi-Channel Notification**: Telegram, Discord, Slack, Email로 분석 결과를 즉시 전달
+
+ ### 1. Market-First Philosophy (시장 우선주의)
+> *"시장을 이기는 종목은 없다."*
+- 개별 종목 분석 이전에 **Market Gate(시장 신호등)** 가 시장의 건전성을 먼저 판단합니다.
+- 환율, 수급, 기술적 지표가 위험 수준일 경우, 아무리 좋은 종목이 포착되어도 매수를 **원천 차단(Gate Closed)** 하여 계좌를 보호합니다.        
+
+### 2. Rule-based Screening + AI Reasoning (하이브리드 분석)
+- **1차 필터(Rule)**: **거래대금 1,000억 이상**의 엄격한 기준으로 종목을 압축합니다.
+- **2차 필터(AI)**: 선별된 종목의 뉴스와 재료를 AI가 정성적으로 분석하여 "가짜 반등"과 "진짜 호재"를 구분합니다.  
+
+### 3. Multi-Model AI Cross-Validation (이중 검증)
+- **Gemini**: 긴 문맥(Context) 이해와 심층 추론을 담당하여 상세한 투자 리포트를 작성합니다.
+- **GPT/Perplexity**: VCP 분석에서는 `VCP_SECOND_PROVIDER` 설정에 따라 Gemini의 보조 검증 모델로 동작합니다.
+
+---
 
 ## 🚀 빠른 시작 (Quick Start)
 
@@ -48,14 +72,14 @@ PERPLEXITY_API_KEY=your_perplexity_key_here
 ZAI_API_KEY=your_zai_key_here
 
 # VCP AI 설정
-VCP_AI_PROVIDERS=gemini,gpt,perplexity
+VCP_AI_PROVIDERS=gemini,gpt
+VCP_SECOND_PROVIDER=gpt         # gpt 또는 perplexity 중 1개 선택
 VCP_GEMINI_MODEL=gemini-2.0-flash
-VCP_GPT_MODEL=gpt-4o
-VCP_PERPLEXITY_MODEL=sonar-pro
+VCP_GPT_MODEL=gpt-5-nano
+VCP_PERPLEXITY_MODEL=sonar
 
 # 스케줄러 시간 설정 (KST)
-JONGGA_SCHEDULE_TIME=15:20
-CLOSING_SCHEDULE_TIME=15:40
+CLOSING_SCHEDULE_TIME=16:00
 MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
 
 # 스케줄러 활성화
@@ -85,56 +109,6 @@ SCHEDULER_ENABLED=true
   ```bash
   tail -f logs/backend.log logs/frontend.log
   ```
-
----
-
-## 📊 데이터 동기화 및 스케줄러 (Data Sync & Scheduler)
-
-서버가 구동되면 백그라운드에서 다음 작업들이 정해진 시간에 자동으로 수행되거나, 사용자 요청 시 실시간으로 데이터를 갱신합니다.
-
-### 1. 실시간 업데이트 (Real-time)
-페이지 접속 시 또는 브라우저에서 요청 시 즉시 갱신되는 항목입니다.
-- **글로벌 지수**: S&P 500, NASDAQ, KOSPI, KOSDAQ 실시간 지수 (`yfinance`)
-- **원자재 및 자산**: 금(Gold), 은(Silver), 비트코인(BTC), 이더리움(ETH) 시세
-- **Market Gate 점수**: 위 실시간 지표와 현재 환율을 결합하여 **접속 즉시** 동적 계산
-
-![스마트머니 추적](assets/7.png)
-*스마트머니 추적을 통한 데이터 확인*
-
-![AI전략 성과 지표](assets/8.png)
-*AI전략 성과 지표*
-
-### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
-- **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
-- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (기본 30분, **1분~60분 단위 설정 가능**)
-- **스케줄 분석**: AI 분석(15:20 KST), 일일 전체 분석 및 시그널 확정(15:40 KST)
-- **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
-
-![데이터 상태](assets/25.png)
-*실시간 데이터 동기화 및 마켓 게이트 상태 확인*
-
----
-
-## 🎯 핵심 가치 제안
-
-- **Rule-based Screening + AI Reasoning**: 엄격한 기술적 필터링과 AI의 맥락 이해력을 결합하여 신호 품질을 극대화
-- **Multi-Model AI Cross-Validation**: 세 가지 모델(Gemini, GPT, Perplexity)을 조화롭게 운용하여 분석 신뢰도 극대화
-- **Market-First Approach**: 개별 종목 분석 전에 시장 상태를 먼저 판단하여 하락장 리스크 사전 차단
-- **Real-time Multi-Channel Notification**: Telegram, Discord, Slack, Email로 분석 결과를 즉시 전달
-
- ### 1. Market-First Philosophy (시장 우선주의)
-> *"시장을 이기는 종목은 없다."*
-- 개별 종목 분석 이전에 **Market Gate(시장 신호등)**가 시장의 건전성을 먼저 판단합니다.
-- 환율, 수급, 기술적 지표가 위험 수준일 경우, 아무리 좋은 종목이 포착되어도 매수를 **원천 차단(Gate Closed)**하여 계좌를 보호합니다.        
-
-### 2. Rule-based Screening + AI Reasoning (하이브리드 분석)
-- **1차 필터(Rule)**: **거래대금 500억 이상**, **전일 대비 거래량 200% 이상**의 엄격한 기준으로 종목을 압축합니다.
-- **2차 필터(AI)**: 선별된 종목의 뉴스와 재료를 AI가 정성적으로 분석하여 "가짜 반등"과 "진짜 호재"를 구분합니다.  
-
-### 3. Multi-Model AI Cross-Validation (이중 검증)
-- **Gemini**: 긴 문맥(Context) 이해와 심층 추론을 담당하여 상세한 투자 리포트를 작성합니다.
-- **GPT/Perplexity**: Gemini의 분석 결과를 제3자 관점에서 검증(Critic)하여 편향(Bias)을 제거합니다.
-
 ---
 
 ## 🏗 시스템 아키텍처
@@ -155,10 +129,10 @@ graph TD
 
     subgraph "Engine Layer (Modular Pipeline)"
         B & D --> I{Phase1: Base Analysis}
-        I -->|Filter 500억+| J[Phase2: News Collector]
+        I -->|Filter 1,000억+| J[Phase2: News Collector]
         J --> K[Phase3: LLM Analyzer]
         K -->|Gemini + GPT/Perplexity| L[Phase4: Signal Finalizer]
-        L --> M[Grade System S/A/B/C]
+        L --> M[Grade System S/A/B]
 
         M --> N{Market Gate Check}
         N -->|OPEN| O[Signal Output]
@@ -178,8 +152,8 @@ graph TD
         S --> W[Scheduler Service]
         O --> X[Notification Service]
         O --> Y[Paper Trading Service]
-        W -->|15:20 KST| Z[종가베팅 Analysis]
-        W -->|15:40 KST| AA[VCP Analysis]
+        W -->|16:00 KST| AA[VCP Analysis]
+        AA --> Z[종가베팅 Analysis]
     end
 
     subgraph "Frontend Layer (Next.js)"
@@ -202,9 +176,10 @@ graph TD
 
 | 설계 원칙                       | 적용 방식                                                | 이유                                            |
 | ------------------------------- | -------------------------------------------------------- | ----------------------------------------------- |
-| **Multi-Model AI Verification** | Gemini와 GPT/Perplexity를 병렬로 실행하여 결과 교차 검증 | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
-| **Async Batch Processing**      | `asyncio`와 `Semaphore`로 동시에 5~10개 종목 뉴스 분석   | API 호출 시간 최적화, Rate Limit 방지           |
+| **Multi-Model AI Verification** | Gemini + 설정된 보조모델(GPT 또는 Perplexity) 병렬 실행  | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
+| **Async Batch Processing**      | `asyncio` + `Semaphore`로 환경변수 기반 동시성 제어       | API 호출 시간 최적화, Rate Limit 방지           |
 | **Market Gate Pattern**         | 개별 종목 분석 전 시장 전체 상태 먼저 점검               | 하락장에서의 무분별한 매수 방지, 계좌 보호      |
+| **Chain Execution Pattern**     | 데이터 수집 → VCP 분석 → AI 종가베팅 순차 실행           | 데이터 정합성 보장 및 분석 단계별 의존성 해결   |
 | **Persona-Based Prompting**     | 일관된 투자 철학(스마트머니봇)을 시스템 프롬프트에 탑재  | AI 응답의 편차 최소화, 신뢰할 수 있는 조언 생성 |
 | **Modular Phase Pipeline**      | `phases.py`의 4단계 파이프라인으로 시그널 생성 분리      | 단일 책임 원칙(SRP), 테스트 가능성 향상         |
 | **Centralized Constants**       | `constants.py`의 dataclass로 모든 임계값 중앙화          | 유지보수성 향상, 설정 변경 용이성               |
@@ -219,6 +194,11 @@ graph TD
 
 ```python
 engine/
+├── market_gate.py         # 시장 신호등 (최상위 관문)
+│   └── MarketGate         # 지수/환율/기술적 지표 종합 분석 및 판정
+├── grade_classifier.py    # 종목 등급 판정 (S/A/B) 및 필터링 로직
+├── scorer.py              # 기본 12점 + 가산점 7점(총 19점) 점수 산출 시스템
+├── vcp.py                 # 변동성 수축 패턴(VCP) 감지 엔진 (Technical Scanner)
 ├── phases.py              # 4단계 시그널 생성 파이프라인
 │   ├── BasePhase          # 추상 기본 클래스
 │   ├── Phase1Analyzer     # 기본 분석 및 사전 필터링
@@ -226,34 +206,42 @@ engine/
 │   ├── Phase3LLMAnalyzer   # AI 배치 분석
 │   ├── Phase4SignalFinalizer # 시그널 생성
 │   └── SignalGenerationPipeline # 오케스트레이터
-│
+├── collectors/            # 로우 데이터 수집기 모듈
+│   ├── base.py            # 수집기 기본 추상 클래스
+│   ├── krx.py             # KRX 정보데이터시스템 수집기
+│   ├── naver.py           # 네이버 금융 데이터 수집기
+│   └── news.py            # 뉴스 정보 수집기
+├── generator.py           # 시그널 및 분석 리포트 생성 엔진
+│   ├── SignalGenerator    # VCP/종가베팅 최종 시그널 생성
+│   └── ReportGenerator    # AI 기반 종목 상세 리포트 구성
+├── llm_analyzer.py        # 뉴스 감성 및 배치 분석 (Gemini/GPT)
+├── vcp_ai_analyzer.py     # VCP 기술적 분석 전용 AI 모듈
+├── data_sources.py        # 전략 패턴 기반 데이터 소스
+│   ├── DataSourceStrategy # 추상 인터페이스
+│   ├── FDRSource          # FinanceDataReader (오픈소스 데이터)
+│   ├── PykrxSource        # KRX 공식 데이터 (pykrx)
+│   ├── YFinanceSource     # 글로벌 실시간/지수 데이터 (yfinance)
+│   └── DataSourceManager  # 우선순위 기반 폴백 체인 오케스트레이터
+├── toss_collector.py      # 토스증권 API 기반 실시간 데이터 수집
+├── kis_collector.py       # 한국투자증권(KIS) API 연동 모듈
+├── messenger.py           # 멀티채널(텔레그램/디스코드 등) 알림 허브
+│   └── messenger_formatters.py # 채널별 메시지 포맷팅 로직
 ├── constants.py           # 모든 임계값 중앙화 (dataclass)
 │   ├── TradingValueThresholds  # 거래대금 기준
 │   ├── VCPThresholds           # VCP 패턴 기준
 │   ├── ScoringThresholds       # 점수 기준
 │   └── MarketGateThresholds    # Market Gate 기준
-│
-├── data_sources.py        # 전략 패턴 기반 데이터 소스
-│   ├── DataSourceStrategy     # 추상 인터페이스
-│   ├── FDRSource              # 한국투자증권 API
-│   ├── PykrxSource            # KRX 데이터
-│   ├── YFinanceSource         # 글로벌 데이터
-│   └── DataSourceManager      # 폴백 체인 관리자
-│
 ├── error_handler.py       # 표준화된 에러 처리
 │   ├── @handle_data_error     # 데이터 에러 처리
 │   ├── @handle_llm_error      # LLM 에러 처리
 │   └── safe_execute()         # 안전 실행 래퍼
-│
 ├── exceptions.py          # 커스텀 예외 계층
 │   ├── MarketDataError        # 마켓 데이터 에러
 │   ├── LLMAnalysisError       # LLM 분석 에러
 │   └── GradeCalculationError  # 등급 계산 에러
-│
 ├── llm_utils.py           # LLM 재시도 로직
 │   ├── @async_retry_with_backoff  # 비동기 재시도
 │   └── process_batch_with_concurrency() # 배치 처리
-│
 └── pandas_utils.py        # DataFrame 유틸리티
     ├── safe_value()            # NaN 안전 처리
     ├── filter_by_date()        # 날짜 필터링
@@ -280,7 +268,7 @@ engine/
   - `engine/llm_utils.py`: LLM 재시도 로직 (async/sync decorators)
   - `engine/pandas_utils.py`: DataFrame 유틸리티 및 NaN 처리
 - **AI Engine**:
-  - Google Gemini 2.0 Flash (긴 컨텍스트 윈도우, 심층 추론)
+  - Google Gemini 2.5 Flash (긴 컨텍스트 윈도우, 심층 추론 지원)
   - OpenAI GPT via Z.ai (빠른 응답, 크로스 밸리데이션)
   - Perplexity Sonar (실시간 웹 검색, 최신 뉴스/정보 반영)
   - LangChain-style Prompt Composition (Chain of Thought, Intent Injection)
@@ -307,7 +295,7 @@ graph TD
 - 상승률 상위 종목에 대해 기본 분석 수행
 - 차트, 수급 데이터 수집
 - Pre-Score 계산 (뉴스/LLM 제외)
-- 필터 조건 검증 (거래대금 500억+, 거래량 2배+)
+        - 필터 조건 검증 (거래대금 1,000억+)
 
 **Phase 2: 뉴스 수집**
 - 네이버 금융, 다음 뉴스에서 최신 뉴스 수집
@@ -320,59 +308,88 @@ graph TD
 - 교차 검증 및 신뢰도 산출
 
 **Phase 4: 시그널 생성**
-- 등급 산정 (S/A/B/C)
+- 등급 산정 (S/A/B)
 - 목표가/손절가 계산
 - 최종 시그널 출력 및 저장
 
 #### Flask API 구조 (Blueprint-based)
 
-시스템은 Flask Blueprint를 사용하여 모듈형 라우팅을 구현합니다:
+시스템은 Flask Blueprint를 사용하여 모듈형 라우팅과 관심사 분리를 구현합니다.
+
+**한국 시장 API (`kr_market` Blueprint - `/api/kr`):**
+- `GET /api/kr/market-status`: 한국 시장 현황 (KOSPI/KOSDAQ 지수, 환율, 수급)
+- `GET /api/kr/signals`: 최신 VCP 및 외인매집 시그널 분석 결과 조회
+- `GET /api/kr/jongga-v2/latest`: 최신 AI 종가베팅(V2) 분석 결과 조회
+- `GET /api/kr/closing-bet/cumulative`: 종가베팅 전략의 누적 성과 및 승률 통계
+- `POST /api/kr/realtime-prices`: 전 종목 실시간 가격 통합 조회 (Toss/YF 폴백)
+- `GET /api/kr/market-gate`: Market Gate 상태 및 상세 스코어링 데이터
+- `POST /api/kr/market-gate/update`: 시장 데이터 및 Market Gate 강제 동기화
+- `POST /api/kr/signals/run`: VCP 시그널 생성 엔진 백그라운드 실행
+- `POST /api/kr/jongga-v2/run`: AI 종가베팅 V2 엔진 백그라운드 실행
+- `POST /api/kr/chatbot`: AI 투자 어드바이저(스마트머니봇)와 대화
+
+**공통 API (`common` Blueprint - `/api`):**
+- `GET /api/admin/check`: 관리자 권한 확인 (설치 및 설정용)
+- `GET /api/portfolio`: 모의투자 포트폴리오 및 자산 현황 조회
+- `POST /api/portfolio/buy`: 모의투자 매수 주문 체결
+- `POST /api/portfolio/sell`: 모의투자 매도 주문 체결
+- `GET /api/system/env`: 시스템 전체 환경 변수 관리 (관리자 전용)
+- `GET /health`: 시스템 상태 및 API 가동 여부 체크 (Root)
 
 ```python
 app/
-├── __init__.py          # 애플리케이션 팩토리
 ├── routes/
 │   ├── kr_market.py     # 한국 시장 관련 API (Blueprint: 'kr')
-│   └── common.py        # 공통 API (Blueprint: 'common')
-└── utils/               # 유틸리티 함수
+│   │   ├── get_kr_market_status  # /market-status (지수/환율/수급)
+│   │   ├── get_kr_signals        # /signals (VCP 시그널)
+│   │   ├── get_kr_market_gate    # /market-gate (시장 신호등)
+│   │   ├── get_kr_realtime_prices # /realtime-prices (실시간 시세)
+│   │   ├── get_jongga_v2_latest  # /jongga-v2/latest (V2 결과)
+│   │   ├── get_cumulative_performance # /closing-bet/cumulative (성과)
+│   │   ├── run_vcp_signals_screener # /signals/run (엔진 실행)
+│   │   ├── run_jongga_v2_screener # /jongga-v2/run (엔진 실행)
+│   │   └── chatbot               # /chatbot (AI 대화 엔진)
+│   └── common.py        # 공통 및 유틸리티 API (Blueprint: 'common')
+│       ├── check_admin           # /admin/check
+│       ├── get_portfolio_data    # /portfolio
+│       ├── buy_stock / sell_stock # /portfolio/buy, /portfolio/sell
+│       ├── manage_env            # /system/env
+│       └── send_test_notification # /notification/send
+└── __init__.py          # 애플리케이션 팩토리 및 /health (Root)
 ```
-
-**한국 시장 API (`kr_market` Blueprint):**
-- `GET /market-status`: 한국 시장 현황 (KOSPI/KOSDAQ, 지수, 수급)
-- `GET|POST /config/interval`: Market Gate 업데이트 주기 설정
-- `GET /signals`: 최신 시그널 조회
-- `GET /vcp-signals`: VCP 패턴 시그널 조회
-- `GET /market-gate`: Market Gate 상태 및 점수
-
-**공통 API (`common` Blueprint):**
-- `GET /admin/check`: 관리자 권한 확인 (이메일 기반)
-- `POST /screening`: 시그널 스크리닝 요청
-- `GET /health`: 시스템 헬스체크
-- `POST /chat`: AI 챗봇 대화
 
 #### 서비스 레이어 (Services Layer)
 
-백그라운드에서 실행되는 핵심 서비스들:
+백그라운드에서 독립적인 생애주기를 가지며 비즈니스 로직을 수행하는 핵심 서비스들입니다.
 
 ```python
 services/
 ├── scheduler.py      # 자동화된 스케줄링 서비스
+│   ├── run_daily_closing_analysis # 장 마감 메인 체인 실행 (16:00)
+│   ├── run_jongga_v2_analysis     # AI 종가베팅 심층 분석 엔진
+│   ├── run_market_gate_sync       # 주기적 지표 동기화 (30분 단위)
+│   └── start_scheduler            # 백그라운드 스레드 및 중복 실행 방지
 ├── notifier.py       # 멀티채널 알림 서비스
+│   ├── NotificationService       # 핵심 알림 관리 클래스
+│   ├── format_jongga_message     # 등급별 메시지 포맷팅 로직
+│   └── send_all (Telegram/Discord/Slack/Email) # 전 채널 동시 발송
 ├── paper_trading.py  # 모의투자 서비스
-├── activity_logger.py # 활동 로깅
-└── usage_tracker.py   # 사용량 추적
+│   ├── PaperTradingService       # 자산/포트폴리오 관리 클래스
+│   ├── buy_stock / sell_stock    # 주문 체결 로직 및 DB 연동
+│   ├── get_portfolio_valuation   # Toss API 연동 실시간 자산 평가
+│   └── record_asset_history      # 누적 수익률 시계열 데이터 기록
+├── activity_logger.py # 시스템 주요 이벤트 및 활동 로깅
+└── usage_tracker.py   # API 호출 제한 및 토큰 사용량 모니터링
 ```
 
 **스케줄러 서비스 (`scheduler.py`):**
-- **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락으로 중복 실행 방지
-- **15:20 KST - 종가베팅 분석**: 장중 데이터 기반 AI 분석
-  - 장중 주가 데이터 업데이트
-  - 종가베팅 V2 시그널 생성
-  - 알림 발송
-- **15:40 KST - 장 마감 분석**: 확정 데이터 기반 전체 분석
-  - 일별 주가 데이터 수집
-  - 기관/외인 수급 데이터 수집
-  - VCP 시그널 분석
+- **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락(`scheduler.lock`)으로 프로세스 중복 실행 원천 차단
+- **16:00 KST - 장 마감 체인 분석 (Chain Execution)**: 모든 작업을 정해진 순서에 따라 원스톱으로 병렬/순차 실행
+  1. **데이터 수집**: 일별 종가 및 투자자별 수급 데이터 확정본 동기화
+  2. **VCP 분석**: 전 종목 기술적 패턴 필터링 및 VCP 시그널 생성
+  3. **AI 종가베팅**: VCP 시그널 기반 AI(Gemini) 심층 정성적 분석 수행
+  4. **알림 전송**: 모든 분석 완료 즉시 4개 채널(텔레그램 등)로 결과 발송
+- **주기적 동기화**: 설정된 인터벌(기본 30분)에 따라 Market Gate 및 환율 실시간 최신화
 
 **알림 서비스 (`notifier.py`):**
 - **NotificationService 클래스**: 4채널 지원 알림 시스템
@@ -382,7 +399,7 @@ services/
   - Slack Incoming Webhooks (Markdown)
   - Email SMTP (Gmail, Office 365)
 - **D등급 자동 필터링**: 저품질 신호 제외
-- **정렬 로직**: 등급순(S→A→B→C) → 점수순 정렬
+- **정렬 로직**: 등급순(S→A→B) → 점수순 정렬
 
 **모의투자 서비스 (`paper_trading.py`):**
 - **포트폴리오 관리**: 보유 종목, 매수 평단가, 수익률
@@ -391,20 +408,36 @@ services/
 - **성과 분석**: 총 수익률, CAGR, MDD, 승률 계산
 
 #### Frontend (Next.js)
+
+Next.js 16의 App Router를 기반으로 한 반응형 웹 인터페이스입니다.
+
+```python
+frontend/src/app/
+├── dashboard/           # 메인 대시보드 (종가베팅/VCP/마켓게이트)
+├── chatbot/             # 스마트머니봇 AI 채팅 인터페이스
+├── components/          # 공통 UI 컴포넌트 라이브러리 (Atomic Design)
+│   ├── charts/          # 기술적 분석용 인터랙티브 차트
+│   ├── signals/         # 시그널 리스트 및 상세 뷰
+│   └── layout/          # 헤더, 사이드바, 푸터
+├── api/                 # 프론트엔드 전용 API 프록시 및 핸들러
+├── layout.tsx           # 전역 레이아웃 및 테마(Tailwind) 설정
+└── page.tsx             # 메인 랜딩 페이지 및 상태 관리
+```
+
 - **Framework**: Next.js 16 (App Router, TypeScript)
 - **UI Components**: React with Tailwind CSS
-- **Real-time Updates**: WebSocket connection for live signal updates
-- **Testing**: Vitest (단위 테스트, UI 테스트, 커버리지)
-- **Linting**: ESLint + TypeScript strict mode
+- **Real-time Updates**: WebSocket (or Interval Sync) for live updates
+- **Testing**: Vitest (Unit & UI Tests)
 
 #### Data & Storage (데이터 인프라)
 
 본 프로젝트는 외부 API 의존성을 최소화하고 데이터 신뢰성을 보장하기 위해 검증된 오픈소스 라이브러리를 활용합니다.
 
-**한국 시장 데이터 우선순위:**
+**한국 시장 데이터 우선순위 및 폴백:**
 1. **Toss Securities API** (최우선): 초고속 실시간 시세 (<1초 지연)
-2. **pykrx**: KRX 정보데이터시스템 Wrapper (폴백)
-3. **yfinance**: 글로벌 지수/원자재/크립토
+2. **Naver Securities API**: 안정적인 국내 주식 가격 정보 (폴백 1)
+3. **yfinance**: 글로벌 지수/원자재/크립토 및 최종 가격 보완 (폴백 2)
+4. **pykrx**: KRX 정보데이터시스템 기반 역사적 데이터 (폴백 3)
 
 **Coverage:**
 - KOSPI/KOSDAQ 지수 및 구성 종목
@@ -433,15 +466,16 @@ services/
 
 이 시스템의 핵심 경쟁력은 **Rule-based Screening**과 **AI Reasoning**의 결합입니다. 단순한 지표 추천이 아닌, AI가 시장의 문맥(Context)을 이해하고 논리적인 "투자 가설(Investment Hypothesis)"을 생성합니다.
 
-이 시스템의 백엔드는 단순한 API 호출이 아닌, **고성능 동시성 제어(Concurrency Control)**와 **프롬프트 엔지니어링**의 집약체입니다.
+이 시스템의 백엔드는 단순한 API 호출이 아닌, **고성능 동시성 제어(Concurrency Control)** 와 **프롬프트 엔지니어링**의 집약체입니다.
 
 ### 1. Multi-Model AI Engine Architecture
 
-서로 다른 특성을 가진 세 가지 모델을 **하이브리드로 운용**하여 비용 효율성, 최신성, 분석 깊이를 동시에 달성했습니다.
+서로 다른 특성을 가진 모델을 역할별로 분리해 운용합니다.  
+VCP 분석은 **Gemini + (GPT 또는 Perplexity 중 1개)** 조합으로 실행되고, 결과는 모델별 필드로 분리 저장됩니다.
 
 | 모델           | 역할                           | 사용 시나리오                                                 | 장점                                                              |
 | -------------- | ------------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **Gemini**     | **Analysis Agent** (심층 추론) | 복잡한 뉴스 분석, 긴 컨텍스트 윈도우 필요, 다차원 데이터 통합 | 긴 컨텍스트(1M+ tokens), 한-영문 혼용 처리, 복잡한 논리 사고      |
+| **Gemini**     | **Analysis Agent** (심층 추론) | 복잡한 뉴스 분석, 긴 컨텍스트 윈도우 필요, 다차원 데이터 통합 | **심층 추론(Thinking)** 지원, 한-영문 혼용 처리, 복잡한 논리 사고 |
 | **Perplexity** | **Search Agent** (실시간 정보) | 최신 뉴스 검색, 팩트 체크, 실시간 시장 이슈 파악              | **실시간 웹 검색(Web Search)**, 최신 정보 반영, 출처(Source) 명시 |
 | **Z.ai / GPT** | **Speed Agent** (빠른 검증)    | 챗봇 대화, 단순 뉴스 감성 분석, 크로스 밸리데이션             | 빠른 응답 시간, OpenAI 호환성, 비용 효율적                        |
 
@@ -450,19 +484,17 @@ services/
 ```mermaid
 graph LR
     A[Input Data] --> B[Gemini Analysis]
-    A --> C[GPT/Perplexity Analysis]
-    B --> D{Result Agreement?}
-    C --> D
-    D -->|Yes| E[Average Confidence]
-    D -->|No| F[Higher Confidence Model]
-    E --> G[Final Recommendation]
-    F --> G
+    A --> C[Secondary Analysis\nGPT or Perplexity]
+    B --> D[gemini_recommendation]
+    C --> E[gpt_recommendation or\nperplexity_recommendation]
+    D --> F[Persist to JSON/API]
+    E --> F
 ```
 
-**검증 규칙:**
-1. **일치(Agreement)**: 두 AI의 액션(BUY/SELL/HOLD)이 일치하면 → `신뢰도 평균`
-2. **불일치(Disagreement)**: 더 높은 신뢰도(Confidence)를 가진 모델 선택 (동점 시 Gemini 우선)
-3. **실패(Fallback)**: 한쪽 API 실패 시 다른 쪽 결과 사용
+**검증 규칙 (VCP 기준):**
+1. Gemini는 기본 분석 모델로 실행됩니다.
+2. 보조 모델은 `VCP_SECOND_PROVIDER` 값(`gpt` 또는 `perplexity`)에 따라 1개만 실행됩니다.
+3. 결과는 자동 합의(평균/우선선택) 없이 모델별로 저장되며, 프론트엔드에서 탭으로 비교합니다.
 
 ### Concurrency Architecture
 Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)으로 동작하는 LLM 클라이언트 라이브러리들을 비동기 논블로킹(Non-blocking) 환경에서 병렬 실행합니다.
@@ -470,9 +502,9 @@ Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)
 *   **구현 파일**: `engine/vcp_ai_analyzer.py`
 *   **작동 방식**:
     1.  `VCPMultiAIAnalyzer`가 분석 요청을 수신합니다.
-    2.  **Gemini**와 **GPT/Perplexity** 분석 작업을 각각의 스레드 풀로 위임(`loop.run_in_executor`)합니다.
-    3.  두 모델이 동시에 추론을 수행하며, 가장 먼저 도착하거나 타임아웃 내에 도착한 응답을 수집합니다.
-    4.  **Consensus Logic**: 두 모델의 의견이 일치(Agree)하면 신뢰도 점수를 상향하고, 불일치(Disagree)하면 더 보수적인 의견을 채택합니다.
+    2.  **Gemini/GPT**는 스레드 풀(`loop.run_in_executor`)로 실행하고, **Perplexity**는 `httpx.AsyncClient`로 비동기 호출합니다.
+    3.  두 모델이 동시에 추론을 수행하고 응답을 개별 필드에 저장합니다.
+    4.  합의 점수 산출 없이 `gemini_recommendation`, `gpt_recommendation`, `perplexity_recommendation` 형태로 반환합니다.
 
 ---
 
@@ -490,43 +522,45 @@ Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)
 **투자 철학 (Investment Philosophy):**
 
 ```python
-# engine/chatbot/prompts.py
-SYSTEM_PERSONA = """
-너는 VCP 기반 한국 주식 투자 어드바이저 '스마트머니봇'이야.
+# 메인 페르소나 (AI 상담 챗봇용)
+SYSTEM_PERSONA = """너는 VCP 기반 한국 주식 투자 어드바이저 '스마트머니봇'이야.
 
-## 핵심 투자 원칙 (Core Constraints)
-1. 수급이 곧 진실이다 (Supply is Truth):
-   외국인/기관 순매수가 동반되지 않은 상승은 신뢰하지 않는다.
-   단순 개인 매수세로 인한 급등은 매집(Markup)이 아니다.
+## 전문 분야
+- 외국인/기관 수급 분석 (60일 트렌드)
+- VCP(Volatility Contraction Pattern) 진입 시점 판단
+- Market Gate 섹터별 강도 분석
+- 마크 미너비니 스타일 투자 전략
 
-2. Market Gate 우선 (Market First):
-   시장 지표(환율, 지수)가 악화되면 개별 종목 추천을 멈춘다.
-   하락장에서는 아무리 좋은 종목도 5~10% 급락 가능성이 있다.
+## 핵심 원칙
+1. 수급이 곧 진실이다 - 외국인/기관 순매수가 핵심
+2. 쌍끌이(외인+기관 동시 매수)가 가장 강력한 시그널
+3. Market Gate가 GREEN일 때만 공격적 진입
+4. 손절은 -5%, 목표는 +15~20%
 
-3. 리스크 관리 (Risk Management):
-   손절가(-5%)를 생명처럼 지킨다.
-   전저점 이탈 시 즉시 손절. 이것이 계좌를 지키는 유일한 방법이다.
+## 🔥 RAG 데이터 활용 지침 (최우선 준수)
+**아래 [데이터] 섹션에 제공되는 정보를 반드시 우선적으로 참고하여 답변해야 해:**
+1. **[Market Gate 상세 분석]**: 시장 상태, 점수, 섹터 동향 → 시장 질문에 활용
+2. **[VCP AI 분석 결과]**: Gemini/GPT/Perplexity AI 분석(설정 기반), 매수/매도 추천 → 종목 추천에 활용
+3. **[종가베팅 추천 종목]**: S/A급 종목, 점수, AI 분석 → 종가베팅 질문에 활용
+4. **[최근 뉴스]**: 수집된 최신 뉴스 제목 → 뉴스/이슈 질문에 활용
 
-## 추론 프로세스 (Chain of Thought)
-사용자 질문에 답변할 때 반드시 다음 단계를 거쳐라:
+**데이터가 제공되면 반드시 해당 데이터를 인용하여 답변하고, 일반적인 지식보다 실시간 수집 데이터를 우선해.**
+**데이터가 없거나 부족하면 솔직하게 "현재 수집된 데이터가 없습니다"라고 답변해.**
 
-Step 1. [상황 인식 - Situation Awareness]
-- 현재 시장이 Bull/Bear/Neutral 인지 판단
-- KOSPI/KOSDAQ 지수와 USD/KRW 환율 확인
+## 답변 스타일
+1. **[추론 과정]** 섹션을 먼저 작성: 질문을 분석하고 데이터에 기반해 결론에 도달하는 과정을 **한글로 상세히** 서술해. (사용자에게 논리적 근거를 보여주기 위함)
+2. **[답변]** 섹션 작성: 추론을 바탕으로 최종 답변을 깔끔하게 정리해.
+   - 구체적 수치와 근거 제시
+   - 리스크 언급 (손절가 등)
+   - 마크다운 포맷 활용 (가독성 높임)
 
-Step 2. [데이터 분석 - Data Analysis]
-- 사용자가 물어본 종목의 5일/20일/60일 수급 누적 확인
-- 최근 VCP 패턴 여부 확인 (변동성 축소 구간)
-- 뉴스 호재/악재 문맥 파악
-
-Step 3. [결론 도출 - Conclusion]
-- 매수/매도/관망 의견 제시 및 근거 서술
-- 목표가와 손절가 구체적으로 제시
-
-## 응답 톤 (Tone & Style)
-- 전문적이면서도 이해하기 쉬운 표현 사용
-- 불확실한 추측은 "추정", "가능성" 등으로 표시
-- 수치는 반올림하여 깔끔하게 제시
+## ✨ 필수: 추천 질문 생성
+답변 마지막에는 **반드시** 사용자가 이어서 할 만한 질문 3가지를 리스트 형태로 제안해줘.
+예시:
+[추천 질문]
+1. 이 종목의 구체적인 진입가는 얼마인가요?
+2. 현재 수급 상황은 어떤가요?
+3. 관련된 최신 뉴스가 있나요?
 """
 ```
 
@@ -536,12 +570,16 @@ Step 3. [결론 도출 - Conclusion]
 
 사용자의 질문 의도(Intent)를 파악하여, 그에 맞는 최적화된 프롬프트를 동적으로 로딩합니다.
 
-| 의도 (Intent)         | 프롬프트 전략   | 주요 내용                                                                   |
-| --------------------- | --------------- | --------------------------------------------------------------------------- |
-| **`recommendation`**  | **종목 발굴**   | 수급 점수 상위 종목 중심, 사용자의 관심 섹터 반영, 보유 종목 중복 배제      |
-| **`analysis`**        | **정밀 분석**   | 60일 누적 수급 트렌드 분석, VCP 패턴 단계(Phase 1~4) 진단, 뉴스 악재 필터링 |
-| **`market_overview`** | **시장 브리핑** | Market Gate 상태(Open/Closed), 주도 테마 및 순환매 흐름 파악                |
-| **`risk_check`**      | **리스크 관리** | 구체적인 손절가 계산, 현금 비중 조절 조언, 거시경제(환율) 위험 경고         |
+| 의도 (Intent)         | 프롬프트 전략   | 주요 내용                                                                  |
+| --------------------- | --------------- | -------------------------------------------------------------------------- |
+| **`recommendation`**  | **종목 추천**   | 수급 점수 상위 종목 중심, 사용자의 관심 섹터 반영, 진입 타이밍/손절가 제시 |
+| **`analysis`**        | **종목 분석**   | 60일 수급 현황, 연속 매수일/비율 제공, VCP 패턴 충족 여부 진단             |
+| **`market_overview`** | **시장 현황**   | Market Gate 기준 주도 테마, 전반적인 수급 동향 및 시장 분위기 요약         |
+| **`closing_bet`**     | **종가베팅**    | S/A급 종목 우선 추천, 15:20분 진입 전략 가이드                             |
+| **`risk_check`**      | **리스크 관리** | 구체적인 손절가(-5%) 제시, 포지션 비중 조절 및 거시 위험 대응              |
+| **`market_gate`**     | **시장 신호등** | 시장 상태(GREEN/YELLOW/RED)별 구체적 비중 및 공격성 조절 가이드            |
+| **`vcp_analysis`**    | **VCP 시그널**  | Gemini/GPT/Perplexity AI 추천 결과 분석, VCP 점수 및 수축 비율 설명        |
+| **`news_analysis`**   | **뉴스 분석**   | 최근 뉴스 데이터(제목/출처) 기반 인용, 종목 영향력 및 호재/악재 평가       |
 
 **A. 뉴스 감성 분석 프롬프트 (News Sentiment Analysis)**
 
@@ -590,6 +628,10 @@ BATCH_ANALYSIS_PROMPT = """
 {stocks_text}
 
 [평가 기준]
+0. **VCP 분석 (필수)**:
+   - 변동성 수축(Contraction Ratio)이 **0.7 이하**로 건전한가?
+   - 거래량(Volume)이 급감하며 매물 소화가 잘 되었는가?
+   - 이 기술적 지표가 점수에 **가장 큰 영향**을 미쳐야 함.
 1. **Score (0-3)**: 뉴스/재료 기반 호재 강도
    - 3점: 확실한 호재 (대규모 수주, 상한가 재료, 어닝 서프라이즈)
    - 2점: 긍정적 호재 (실적 개선, 기대감, 테마 상승)
@@ -597,10 +639,12 @@ BATCH_ANALYSIS_PROMPT = """
    - 0점: 악재 또는 별다른 호재 없음
 2. **Action**: BUY / HOLD / SELL
 3. **Confidence**: 확신도 (0-100%)
-4. **Reason**: 다음 요소를 종합하여 간결하게 작성하세요.
-   - 뉴스/재료 분석 (호재 여부)
-   - 수급 동향 (외인/기관)
-   - 종합 투자 의견
+4. **Reason**: 다음 요소를 종합하여 **3~5줄**로 구체적 근거를 포함하여 작성하세요.
+   - 뉴스/재료 분석: 구체적 호재/악재 내용과 산업 영향도
+   - VCP 기술적 분석: 수축 비율, 거래량 추이, 패턴 완성도 평가
+   - 수급 동향: 외인/기관 매매 추이와 의미
+   - 리스크 요인: 단기 과열, 밸류에이션, 업종 리스크 등
+   - 매매 전략: 매수 시점, 목표가, 손절 기준 구체적 제시
 
 [출력 형식]
 반드시 아래 포맷의 **JSON 배열**로만 답하세요. (Markdown code block 없이)
@@ -644,12 +688,12 @@ VCP_ANALYSIS_PROMPT = """
 3. 신뢰도(0-100%) 평가
 
 [출력 형식 - 반드시 JSON만 출력]
-{{"action": "BUY|SELL|HOLD", "confidence": 75, "reason": "분석 요약 (한국어, 2-3문장)"}}
+{"action": "BUY|SELL|HOLD", "confidence": 75, "reason": "기술적 분석 요약 (한국어, 2-3문장)"}
 """
 ```
 
 **VCP 분석의 특징:**
-- **변동성 수축(Contraction)**: 가격 폭이 줄어들면서 거래량이 줄어드는 구간 포착
+- **변동성 수축(Contraction)**: 가격 폭이 줄어들면서 거래량이 줄어드는 구간 포착 (Range Contraction Ratio **0.7 이하** 필수)
 - **매집(Accumulation)**: 외국인/기관의 지속적인 순매수 확인
 - **AI 패턴 인식**: 단순 지표가 아닌, 패턴의 질적(Quality) 평가
 
@@ -660,9 +704,7 @@ VCP_ANALYSIS_PROMPT = """
 ```python
 # engine/llm_analyzer.py - generate_market_summary()
 MARKET_SUMMARY_PROMPT = """
-당신은 주식 시장 분석 전문가입니다. 오늘의 포착된 종목들을 바탕으로 시장의 주도 테마와 분위기를 요약해주세요.
-
-오늘 '종가베팅' 알고리즘에 포착된 상위 종목 리스트입니다.
+당신은 주식 시장 분석 전문가입니다. 오늘 '종가베팅' 알고리즘에 포착된 상위 종목 리스트입니다.
 이들을 분석하여 다음 내용을 포함한 3~5줄 내외의 시장 요약 리포트를 작성해주세요.
 
 1. 오늘의 주도 섹터/테마
@@ -813,10 +855,9 @@ INVESTMENT_HYPOTHESIS = """
 
 시장의 거시적/미시적 데이터를 정량화하여 **"매수 버튼을 활성화할지"** 결정하는 최상위 관문입니다. 코드 레벨(`engine/market_gate.py`)에서 구현된 실제 스코어링 로직은 다음과 같습니다.
 
-*   **총점 100점 만점** (60점 이상 Open)
+*   **총점 100점 만점** (40점 이상 Open)
 
 | 카테고리      | 지표       | 상세 조건                       | 배점     | 비고                              |
-| 카테고리      | 지표       | 상세 조건                       | 배점     | 비고               |
 | ------------- | ---------- | ------------------------------- | -------- | ------------------ |
 | **Technical** | **Trend**  | KODEX 200 20일 > 60일 (정배열)  | **25점** | 추세 추종          |
 | **(100점)**   | **RSI**    | RSI 14일 기준 50~70 구간 (강세) | **25점** | 과매수/과매도 회피 |
@@ -824,17 +865,19 @@ INVESTMENT_HYPOTHESIS = """
 |               | **Volume** | 거래량 > 20일 평균거래량        | **15점** | 거래 활성화        |
 |               | **RS**     | KOSPI 대비 상대 수익률          | **15점** | 시장 주도력 확인   |
 
-*   **Gate Closed 트리거**: 총점이 **40점 미만(Bearish)**인 경우 '기술적 약세장'으로 판단하여 매매를 보류합니다. (환율 1480원 이상은 Warning으로 표시)
+*   **Gate Closed 트리거**: 총점이 **40점 미만(Bearish)** 인 경우 '기술적 약세장'으로 판단하여 매매를 보류합니다. (환율 1480원 이상은 Warning으로 표시)
 
 #### 1.1 구성 지표
 
-| 카테고리      | 지표            | 임계값          | 점수 배점 |
-| ------------- | --------------- | --------------- | --------- |
-| **Technical** | KODEX 200 지수  | 정배열 여부     | 25점      |
-|               | RSI (KODEX 200) | 50~70 최적구간  | 25점      |
-|               | MACD Signal     | 골든크로스      | 20점      |
-|               | 거래량 (Liquid) | 20일 평균 상회  | 15점      |
-|               | 상대강도 (RS)   | KOSPI 대비 우위 | 15점      |
+| 카테고리      | 지표            | 임계값                   | 점수 배점 |
+| ------------- | --------------- | ------------------------ | --------- |
+| **Technical** | KODEX 200 지수  | 정배열 여부              | 25점      |
+|               | RSI (KODEX 200) | 50~70 최적구간           | 25점      |
+|               | MACD Signal     | 골든크로스               | 20점      |
+|               | 거래량 (Liquid) | 20일 평균 상회           | 15점      |
+|               | 상대강도 (RS)   | KOSPI 대비 2%p 이상 우위 | 15점      |
+|               |                 | KOSPI 대비 0~2%p 우위    | 10점      |
+|               |                 | KOSPI 대비 -2~0%p 열위   | 5점       |
 
 **총점 100점 만점** (40점 미만 시 Gate Closed)
 
@@ -861,9 +904,13 @@ def evaluate_market_gate():
     if volume > avg_volume_20d:
         score += 15
 
-    # 5. 상대강도 (RS)
-    if rs_score > 0: # KOSPI 대비 우위
+    # 5. 상대강도 (RS) - Tiered Score
+    if rs_score > 2.0:
         score += 15
+    elif rs_score >= 0:
+        score += 10
+    elif rs_score >= -2.0:
+        score += 5
 
     # 판정
     if score >= 40:
@@ -871,6 +918,22 @@ def evaluate_market_gate():
     else:
         return MarketStatus.GATE_CLOSED, f"{score}점: 매수 보류"
 ```
+
+#### 1.3 Rule-Based Scorer (기본 12점 + 가산 7점)
+`engine/scorer.py`는 AI 분석 전, 순수 데이터 기반으로 종목의 기술적/수급적 완성도를 평가합니다.
+
+- **기본 점수 (Max 12점)**:
+  - **뉴스/재료 (3점)**: LLM 감성 분석 및 거래대금 연동
+  - **거래대금 (3점)**: 절대 규모 및 상대적 폭발성
+  - **캔들/추세 (1점)**: 캔들의 형태 및 정배열 여부
+  - **타이밍/수축 (1점)**: 볼린저밴드 수축 및 횡보 구간
+  - **차트/패턴 (2점)**: VCP 완성도 및 주요 이평선 돌파
+  - **수급 (2점)**: 외국인/기관 동반 순매수 및 기여도
+- **가산점 (Max 7점)**: 거래량·차트 신호 기반
+- **등급 판정 (`GradeClassifier`)**:
+  - **S급**: 거래대금 1조+ / 10점+ / +3% 이상 (풀배팅)
+  - **A급**: 거래대금 5000억+ / 8점+ / +3% 이상 (기본배팅)
+  - **B급**: 거래대금 1000억+ / 6점+ / +3% 이상 (절반배팅)
 
 #### 1.3 왜 Market Gate가 필요한가?
 
@@ -976,8 +1039,8 @@ AI 통합 순서:
 마크 미너비니의 VCP 이론을 파이썬 알고리즘으로 구현했습니다.
 
 *   **수집 알고리즘 (`engine/screener.py`)**:
-    *   **거래대금(Liquidity)**: 최소 500억 원 이상.
-    *   **거래량 폭발(Volume Breakout)**: 전일 대비 거래량 200% (2배) 이상 급증 필수.
+    *   **거래대금(Liquidity)**: 최소 1,000억 원 이상.
+    *   **거래량 급증(Volume Breakout)**: 전일 대비 거래량 급증은 보조 지표로 활용.
     *   **Pivot Point**: 최근 저점을 높이며 5일 이평선 위에 안착.
 
 #### 3.1 VCP 정의와 이론
@@ -1000,46 +1063,49 @@ graph LR
 
 #### 3.2 기술적 스크리닝 및 점수 산정 (Scoring System)
 
-종가베팅 시스템은 **기본 점수(12점)**와 **가산점(최대 9점)**을 결합한 **총 21점 만점** 체계를 따릅니다.
+종가베팅 시스템은 **기본 점수(12점)** 와 **가산점(최대 7점)** 을 결합한 **총 19점 만점** 체계를 따릅니다.
+
+![종가베팅 등급기준](assets/12.png)
+*시스템에 적용된 3단계(S/A/B) 등급 산정 세부 기준*
 
 **A. 기본 배점 항목 (Max 12점)**
 | 항목            | 배점  | 상세 기준                                      | 평가 목적          |
 | :-------------- | :---: | :--------------------------------------------- | :----------------- |
-| **📰 뉴스/재료** |  3점  | AI 기사 분석 및 강도 평가 (Fallback: 거래대금) | 재료의 지속성 판단 |
-| **💰 거래대금**  |  3점  | 1조(3점), 5,000억(2점), 1,000억(1점)           | 시장 주도력 평가   |
-| **📈 차트 패턴** |  2점  | 52주 신고가 돌파(+1), 이평선 정배열(+1)        | 기술적 추세 확인   |
-| **🤝 수급**      |  2점  | 외인 순매수(+1), 기관 순매수(+1)               | 메이저 자금 유입   |
+| **📰 뉴스/재료** |  3점  | LLM 뉴스 점수: 0~3점 (최근 3일 내 재료 강도 기반)<br>0점: 명확한 호재 부족, 1~2점: 보완/단기성, 3점: 지속성 있는 대형 호재<br>재료 부재 시 거래대금 보정 적용 | 재료의 지속성 판단 |
+| **💰 거래대금**  |  3점  | 1조 이상: 3점<br>5,000억 이상: 2점<br>1,000억 이상: 1점 | 시장 주도력 평가   |
+| **📈 차트 패턴** |  2점  | 52주 신고가 돌파: +1점<br>MA20 > MA60 and 종가 > MA20: +1점 | 기술적 추세 확인   |
+| **🤝 수급**      |  2점  | 외국인+기관 5일 순매수 합계(거래대금 대비 5%/10%) | 메이저 자금 유입   |
 | **🕯️ 캔들 형태** |  1점  | 장대양봉 및 윗꼬리 관리 (몸통 > 꼬리×2)        | 매수 세력 강도     |
 | **⏱️ 기간조정**  |  1점  | 볼린저밴드 수축 및 횡보 후 돌파                | 에너지 응축 확인   |
 
-**B. 가산점 항목 (Max 9점)**
+**B. 가산점 항목 (Max 7점)**
 | 항목              | 배점  | 상세 조건                                                          |
 | :---------------- | :---: | :----------------------------------------------------------------- |
-| **📊 거래량 급증** | +4점  | 전일 대비 거래량 비율 (10배: 4점, 5배: 3점, 3배: 2점, 2배: 1점)    |
-| **🚀 당일 상승률** | +5점  | 당일 종가 상승률 (25%: 5점, 20%: 4점, 15%: 3점, 10%: 2점, 5%: 1점) |
+| **📊 거래량 급증** | +5점  | 전일 대비 거래량 비율 (2배: 1점, 3배: 2점, 4배: 3점, 5배: 4점, 6배 이상: 5점) |
+| **🕯️ 장대양봉**   | +1점  | 장대양봉 형태 및 유효성 (몸통/꼬리 기반)                            |
+| **🧯 상한가**     | +1점  | 상한가(거래일 등락률) 돌파 여부                                      |
 
 ##### 📋 점수별 의미
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  18~21점   │  최강 주도주 (기본 만점 + 가산점 대량 획득)     │
-│  13~17점   │  강력 주도주 (기본 고득점 + 가산점 포함)        │
+│  17~19점   │  최강 주도주 (기본 만점 + 가산점 대량 획득)     │
+│  13~16점   │  강력 주도주 (기본 고득점 + 가산점 포함)        │
 │  8~12점    │  우량 시그널 (전통적인 수급/차트 우량주)        │
 │  6~7점     │  관망/조건부 (최소 요건 충족)                   │
 │  5점 이하  │  등급 미달 (시그널 제외)                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**C. 통합 등급 산정 기준 (Grade Logic)** <p align="right">※ 거래대금 500억 미만 자동 제외</p>
-|  등급   | 거래대금 & 등락률          | 점수 (Total / 21) | 추가 조건 (거래량/수급)               | 비고             |
+**C. 통합 등급 산정 기준 (Grade Logic)**
+|  등급   | 거래대금 & 등락률          | 점수 (Total / 19) | 추가 조건 (외인+기관 양매수)           | 비고             |
 | :-----: | :------------------------- | :---------------: | :------------------------------------ | :--------------- |
-| **S급** | **1조원 이상**, +10% 이상  |   **10점 이상**   | 거래량 **5배↑**, 외인+기관 **양매수** | 초대형 수급 폭발 |
-| **A급** | **5,000억 이상**, +5% 이상 |   **8점 이상**    | 거래량 **3배↑**, 외인 or 기관         | 대형 우량주      |
-| **B급** | **1,000억 이상**, +4% 이상 |   **6점 이상**    | 거래량 **2배↑**, 외인 or 기관         | 중형 주도주      |
-| **C급** | **500억 이상**, +10% 이상  |   **8점 이상**    | 거래량 **5배↑**, 외인+기관 **양매수** | 강소 주도주      |
+| **S급** | **1조원 이상**, +3% 이상  |   **10점 이상**   | 외인+기관 **양매수**                   | 초대형 수급 폭발 |
+| **A급** | **5,000억 이상**, +3% 이상 |   **8점 이상**    | 외인+기관 **양매수**                   | 대형 우량주      |
+| **B급** | **1,000억 이상**, +3% 이상 |   **6점 이상**    | 외인+기관 **양매수**                   | 중형 주도주      |
 
 > [!NOTE]
-> **등급 판정 우선순위**: S급 → A급 → B급 → C급 순으로 판정하며, 상위 등급 조건을 만족하면 해당 등급이 부여됩니다.
-> **주의**: 점수만으로는 등급이 결정되지 않습니다. 거래대금, 등락률, 거래량배수 조건을 **모두 만족**해야 해당 등급이 부여됩니다.
+> **등급 판정 우선순위**: S급 → A급 → B급 순으로 판정하며, 상위 등급 조건을 만족하면 해당 등급이 부여됩니다.
+> **주의**: 점수만으로는 등급이 결정되지 않습니다. 거래대금, 등락률, 외인+기관 양매수 조건을 **모두 만족**해야 해당 등급이 부여됩니다.
 
 #### 3.3 기술적 스크리닝 조건 (Screening Rules)
 ```python
@@ -1059,6 +1125,9 @@ vcp_conditions = {
 }
 ```
 
+![VCP 기준표](assets/34.png)
+*VCP 기준표*
+
 **B. VCP 점수 산정 (0~100점)**
 | 구성 요소            | 점수 | 계산 방식                             |
 | -------------------- | ---- | ------------------------------------- |
@@ -1071,7 +1140,7 @@ vcp_conditions = {
 **등급 부여 기준:**
 - **VCP 점수 85점 이상**: A급 (Strong VCP)
 - **VCP 점수 70~84점**: B급 (Moderate VCP)
-- **VCP 점수 60~69점**: C급 (Weak VCP)
+- **VCP 점수 60~69점**: 약화 패턴 (권장 신호 아님)
 - **VCP 점수 60점 미만**: 자동 제외 (D등급 필터링)
 
 #### 3.3 VCP Signals 주요 기능 (New)
@@ -1084,7 +1153,7 @@ vcp_conditions = {
 - **Entry Price 대비 수익률**: 진입가 대비 현재 수익률을 실시간으로 계산하여 표시합니다.
 
 ** B. AI 심층 분석 및 뉴스 연동 (AI & News)**
-- **Multi-Model Analysis**: Gemini(심층 추론), Perplexity(실시간 정보), GPT(검증) 3가지 모델이 종목을 다각도로 분석합니다.
+- **Multi-Model Analysis**: VCP는 Gemini(주분석) + 보조모델 1개(GPT 또는 Perplexity) 조합으로 실행되며, 모델별 결과를 비교합니다.
 - **뉴스 자동 수집**: `EnhancedNewsCollector`가 각 시그널 발생 종목의 최신 뉴스를 자동으로 수집하여 AI에게 제공합니다.
 - **AI 추천 배지**: AI의 분석 결과(매수/관망/매도)를 직관적인 배지로 시각화하여 제공합니다.
 
@@ -1103,10 +1172,6 @@ vcp_conditions = {
 ![종가 베팅 차트 상세](assets/11.png)
 *종목 차트 상세 리포트*
 
-![종가베팅 등급기준](assets/12.png)
-*시스템에 적용된 4단계(S/A/B/C) 등급 산정 세부 기준*
-
-> **공통 제외 조건**: 거래대금 **500억 미만** 또는 거래량 배수 **2.0배 미만**인 종목은 등급과 무관하게 **자동 제외**됩니다.
 
 ---
 
@@ -1209,48 +1274,47 @@ VCP 패턴과 수급 상황을 종합 분석하세요.
 
 **Phase 1: 유동성 필터링 (Liquidity Filter)**
 ```python
-# engine/jongga_v2_screener.py
+# engine/phases.py + engine/config.py
 liquidity_filters = {
-    # 당일 거래대금 상위 500종목
-    "trading_value_rank": 500,
+    # 1차 후보군은 별도 거래량/상위 정렬 단계에서 전달됨
+    "trading_value_rank": 500,  # 내부 선별 기본값
 
-    # 최소 거래대금 (500억원 이상)
-    "min_trading_value": 50_000_000_000,
-
-    # 시가총액 상위 30% (유동성 확보)
-    "market_cap_rank": 0.3
+    # 최소 거래대금 (1,000억원 이상)
+    "min_trading_value": 100_000_000_000,
 }
 ```
 
 **Phase 2: 모멘텀 필터링 (Momentum Filter)**
 ```python
+# engine/phases.py + engine/constants.py(PRICE_CHANGE)
 momentum_filters = {
-    # 주가 등락률 2%~15% (과매수/과매도 기피)
-    "change_pct_min": 0.02,
-    "change_pct_max": 0.15,
+    # 주가 등락률 3%~29.5% (과매수/과매도 구간 제외)
+    "change_pct_min": 0.03,
+    "change_pct_max": 0.295,
 
-    # 거래량 증가 (관심도 상승)
-    "volume_ratio_min": 1.2,  # 전일 대비 120% 이상
+    # 거래량 배수 사전 필터는 현재 파이프라인에서 제외 (가산점에서만 반영)
+    "volume_ratio_min": None,
 }
 ```
 
-**Phase 3: 수급 필터링 (Supply/Demand Filter)**
+**Phase 3: 등급 사전 판정 (Grade Pre-check)**
 ```python
-supply_filters = {
-    # 외국인 골든크로스 (5일 > 20일)
-    "foreign_golden_cross": True,
-
-    # 기관 골든크로스 (5일 > 20일)
-    "inst_golden_cross": True,
-
-    # 외국인 5일 순매수 금액
-    "foreign_5d_net_buy_min": 10_000_000,  # 10억원 이상
-
-    # 기관 5일 순매수 금액
-    "inst_5d_net_buy_min": 10_000_000,  # 10억원 이상
-
-    # 프로그램 순매수 유입
-    "program_net_buy": True
+# 엔진 내부에서 동시 적용되는 핵심 판정 조건
+grade_filters = {
+    # 외인+기관 양매수, 상승률, 거래대금, 총점 기준 동시 충족
+    "S": {
+        "min_trading_value": 1_000_000_000_000,
+        "min_score": 10,
+    },
+    "A": {
+        "min_trading_value": 500_000_000_000,
+        "min_score": 8,
+    },
+    "B": {
+        "min_trading_value": 100_000_000_000,
+        "min_score": 6,
+    },
+    "change_pct_min": 0.03,
 }
 ```
 
@@ -1259,7 +1323,7 @@ supply_filters = {
 **AI가 수행하는 역할:**
 1. **재료 지속성(Durability) 판단**: 일시적인 호재 vs 지속 가능한 모멘텀
 2. **악재 노출**: 뉴스에 숨겨진 리스크 식별
-3. **등급 최종 결정**: S/A/B/C 등급 부여
+3. **등급 최종 결정**: S/A/B 등급 부여
 
 **AI 입력 데이터:**
 ```json
@@ -1278,20 +1342,19 @@ supply_filters = {
 }
 ```
 
-**AI 출력 및 등급 부여:**
-| AI 점수       | 등급            | 의미          | 손절가        | 목표가 |
+**AI 출력 및 등급 부여 (19점 기준):**
+| 총점(19점 만점) | 등급            | 의미          | 손절가        | 목표가 |
 | ------------- | --------------- | ------------- | ------------- | ------ |
 | **10점 이상** | **S급**         | 매수가 × 0.97 | 매수가 × 1.05 |
 | **8~9점**     | **A급**         | 매수가 × 0.97 | 매수가 × 1.05 |
 | **6~7점**     | **B급**         | 매수가 × 0.97 | 매수가 × 1.05 |
-| **8점 이상**  | **C급**         | 매수가 × 0.97 | 매수가 × 1.05 |
 | **6점 미만**  | **미달 (거부)** | -             | -             |
 
 **AI 평가 요소:**
 - **뉴스/재료 점수 (0~3점)**: 호재 강도
 - **수급 동향 (0~3점)**: 외국인/기관 매수 강도
 - **기술적 패턴 (0~2점)**: 모멘텀, 거래량 패턴
-- **최대 점수**: 8점 (S급 기준)
+- **최대 점수**: 19점 (S급 기준)
 
 ![종가베팅 상세](assets/10.png)
 *AI가 분석한 종가 베팅 종목의 뉴스 재료 및 투자 가설 상세 리포트*
@@ -1484,7 +1547,7 @@ python services/scheduler.py test
 
 **분석 기능:**
 - 일별/주별/월별 성과 추이
-- 등급별(S/A/B/C) 승률 분석
+- 등급별(S/A/B) 승률 분석
 - 손익 비율 분석
 - 최대 연승/연패 기록
 
@@ -1898,6 +1961,33 @@ Response 200 OK:
 - **장점**: AI가 최신 데이터를 바탕으로 개인화된 답변 생성
 - **결과**: 사용자 참여도 상승, 빠른 의사결정 지원
 
+
+---
+
+## 📊 데이터 동기화 및 스케줄러 (Data Sync & Scheduler)
+
+서버가 구동되면 백그라운드에서 다음 작업들이 정해진 시간에 자동으로 수행되거나, 사용자 요청 시 실시간으로 데이터를 갱신합니다.
+
+### 1. 실시간 업데이트 (Real-time)
+페이지 접속 시 또는 브라우저에서 요청 시 즉시 갱신되는 항목입니다.
+- **글로벌 지수**: S&P 500, NASDAQ, KOSPI, KOSDAQ 실시간 지수 (`yfinance`)
+- **원자재 및 자산**: 금(Gold), 은(Silver), 비트코인(BTC), 이더리움(ETH) 시세
+- **Market Gate 점수**: 위 실시간 지표와 현재 환율을 결합하여 **접속 즉시** 동적 계산
+
+![스마트머니 추적](assets/7.png)
+*스마트머니 추적을 통한 데이터 확인*
+
+![AI전략 성과 지표](assets/8.png)
+*AI전략 성과 지표*
+
+### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
+- **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
+- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (기본 30분, **1분~60분 단위 설정 가능**)
+- **장 마감 순차 분석 (16:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution)
+- **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
+
+![데이터 상태](assets/25.png)
+*실시간 데이터 동기화 및 마켓 게이트 상태 확인*
 
 ---
 

@@ -135,3 +135,69 @@ def test_get_trade_history_returns_error_payload_on_exception():
     assert response.status_code == 500
     payload = response.get_json()
     assert "history failed" in payload["error"]
+
+
+def test_buy_stock_returns_400_when_quantity_is_not_numeric():
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    response = client.post(
+        "/api/portfolio/buy",
+        json={"ticker": "005930", "name": "삼성전자", "price": 1000, "quantity": "abc"},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert payload["message"] == "Missing data"
+
+
+def test_buy_stock_returns_400_when_price_is_not_numeric():
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    response = client.post(
+        "/api/portfolio/buy",
+        json={"ticker": "005930", "name": "삼성전자", "price": "abc", "quantity": 1},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert payload["message"] == "Missing data"
+
+
+def test_sell_stock_returns_400_when_price_is_not_numeric():
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    response = client.post(
+        "/api/portfolio/sell",
+        json={"ticker": "005930", "price": "abc", "quantity": 1},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert payload["message"] == "Missing data"
+
+
+def test_trade_history_limit_is_normalized_and_capped():
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    invalid_limit_response = client.get("/api/portfolio/history?limit=abc")
+    assert invalid_limit_response.status_code == 200
+    assert invalid_limit_response.get_json()["limit"] == 50
+
+    capped_limit_response = client.get("/api/portfolio/history?limit=999999")
+    assert capped_limit_response.status_code == 200
+    assert capped_limit_response.get_json()["limit"] == 500
+
+
+def test_asset_history_limit_is_normalized_and_capped():
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    invalid_limit_response = client.get("/api/portfolio/history/asset?limit=abc")
+    assert invalid_limit_response.status_code == 200
+    assert invalid_limit_response.get_json()["history"][0]["limit"] == 30
+
+    capped_limit_response = client.get("/api/portfolio/history/asset?limit=999999")
+    assert capped_limit_response.status_code == 200
+    assert capped_limit_response.get_json()["history"][0]["limit"] == 500

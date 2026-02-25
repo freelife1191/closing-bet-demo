@@ -7,7 +7,17 @@ KR Market 종가베팅 시그널 정규화/가격 반영 헬퍼
 from typing import Dict, List
 
 
+def _normalize_ticker(value: object) -> str:
+    text = str(value or "").strip()
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if not digits:
+        return ""
+    return digits.zfill(6)
+
+
 def _safe_float(value, default: float = 0.0) -> float:
+    if isinstance(value, str):
+        value = value.replace(",", "").replace("₩", "").replace("$", "").strip()
     try:
         return float(value or 0)
     except (TypeError, ValueError):
@@ -15,6 +25,8 @@ def _safe_float(value, default: float = 0.0) -> float:
 
 
 def _safe_int(value, default: int = 0) -> int:
+    if isinstance(value, str):
+        value = value.replace(",", "").replace("₩", "").replace("$", "").strip()
     try:
         return int(float(value or 0))
     except (TypeError, ValueError):
@@ -38,7 +50,7 @@ def _apply_latest_prices_to_jongga_signals(
             continue
 
         raw_code = signal.get("code") or signal.get("ticker") or signal.get("stock_code")
-        ticker = str(raw_code).strip().zfill(6) if raw_code else ""
+        ticker = _normalize_ticker(raw_code)
         if not ticker or ticker == "000000":
             continue
         if ticker not in latest_price_map:
@@ -66,10 +78,19 @@ def _normalize_jongga_signal_for_frontend(signal: dict) -> None:
     if not isinstance(signal, dict):
         return
 
-    if "stock_code" not in signal:
-        signal["stock_code"] = str(signal.get("ticker", signal.get("code", ""))).zfill(6)
-    if "stock_name" not in signal:
-        signal["stock_name"] = signal.get("name", "")
+    stock_code = _normalize_ticker(
+        signal.get("stock_code") or signal.get("ticker") or signal.get("code")
+    )
+    if stock_code:
+        signal["stock_code"] = stock_code
+        if not signal.get("ticker"):
+            signal["ticker"] = stock_code
+
+    stock_name = str(signal.get("stock_name") or signal.get("name") or "").strip()
+    if stock_name:
+        signal["stock_name"] = stock_name
+        if not signal.get("name"):
+            signal["name"] = stock_name
 
     if "change_pct" not in signal and "return_pct" in signal:
         signal["change_pct"] = signal["return_pct"]

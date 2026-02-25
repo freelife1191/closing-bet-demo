@@ -51,6 +51,23 @@ def test_price_change_29_9_passes_filter():
     assert result.passed is True
 
 
+def test_price_change_zero_passes_filter():
+    """종가베팅 최소 등락률(0%) 기준에서는 보합도 필터를 통과한다."""
+    validator = FilterValidator()
+    stock, score, charts, supply = _build_inputs(0.0)
+
+    result = validator.validate(
+        stock=stock,
+        score=score,
+        score_details={},
+        supply=supply,
+        charts=charts,
+        allow_no_news=True,
+    )
+
+    assert result.passed is True
+
+
 def test_price_change_above_30_fails_filter():
     """30% 초과는 비정상 데이터로 간주해 필터에서 제외한다."""
     validator = FilterValidator()

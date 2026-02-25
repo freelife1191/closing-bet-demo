@@ -126,6 +126,36 @@ def test_signal_dates_route_requests_only_signal_date_column_when_supported():
     assert captured["kwargs"]["usecols"] == ["signal_date"]
 
 
+def test_signal_dates_route_normalizes_datetime_strings_and_deduplicates():
+    def _load_csv_file(_name: str, **_kwargs):
+        return pd.DataFrame(
+            [
+                {"signal_date": "2026-02-21 00:00:00"},
+                {"signal_date": "20260222"},
+                {"signal_date": "2026-02-21"},
+            ]
+        )
+
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    deps["load_csv_file"] = _load_csv_file
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_dates_normalize_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.get("/api/kr/signals/dates")
+
+    assert response.status_code == 200
+    assert response.get_json() == ["2026-02-22", "2026-02-21"]
+
+
 def test_signals_route_count_callback_accepts_data_dir_argument():
     captured: dict[str, Any] = {}
 

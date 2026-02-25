@@ -14,11 +14,16 @@ from typing import Any, Callable
 import pandas as pd
 from numpy_json_encoder import NumpyEncoder
 
+from engine.screening_runtime import resolve_vcp_signals_to_show
 from services.common_update_pipeline_steps import is_stop_requested, raise_if_stopped
 from services.kr_market_data_cache_service import atomic_write_text, load_csv_file
 
 
 _AI_TARGET_SIGNAL_COLUMNS = {"signal_date", "ticker", "score"}
+
+
+def _resolve_ai_target_limit() -> int:
+    return resolve_vcp_signals_to_show(default=20, minimum=1)
 
 
 def _load_ai_signal_targets(signals_path: str) -> pd.DataFrame:
@@ -99,7 +104,7 @@ def _write_ai_analysis_files(
         atomic_write_text(latest_file, serialized)
 
 
-def _select_top_ai_targets(target_df: pd.DataFrame, limit: int = 20) -> pd.DataFrame:
+def _select_top_ai_targets(target_df: pd.DataFrame, limit: int) -> pd.DataFrame:
     """AI 분석 대상 상위 N개를 선택한다."""
     if target_df.empty:
         return target_df
@@ -174,7 +179,10 @@ def run_ai_analysis_step(
             update_item_status("AI Analysis", "done")
             return
 
-        selected_targets = _select_top_ai_targets(normalized_targets, limit=20)
+        selected_targets = _select_top_ai_targets(
+            normalized_targets,
+            limit=_resolve_ai_target_limit(),
+        )
         tickers = selected_targets["ticker"].tolist()
 
         _delete_existing_ai_result_file(data_dir, analysis_date, logger)

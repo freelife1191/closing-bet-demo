@@ -145,9 +145,10 @@ class KRXCollector:
         from pykrx import stock
         
         # 필터링
+        min_change_pct = float(getattr(self.config, "min_change_pct", 0.0))
         mask_price = df['종가'] >= 1000
         mask_vol = df['거래대금'] >= 1_000_000_000
-        mask_rise = df['등락률'] > 0
+        mask_rise = df['등락률'] >= min_change_pct
         
         filtered_df = df[mask_price & mask_vol & mask_rise].copy()
         filtered_df = filtered_df.sort_values(by='등락률', ascending=False)
@@ -253,9 +254,10 @@ class KRXCollector:
                      latest_df.loc[mask_zero, 'trading_value'] = latest_df.loc[mask_zero, 'volume'] * latest_df.loc[mask_zero, 'close']
             
             # 필터링
+            min_change_pct = float(getattr(self.config, "min_change_pct", 0.0))
             mask_price = latest_df['close'] >= 1000
             mask_vol = latest_df['trading_value'] >= 1_000_000_000
-            mask_rise = latest_df['change_pct'] > 0
+            mask_rise = latest_df['change_pct'] >= min_change_pct
             
             logger.info(f"TopGainers Filter ({market}): Rise={mask_rise.sum()}, ValidVol={mask_vol.sum()}")
             

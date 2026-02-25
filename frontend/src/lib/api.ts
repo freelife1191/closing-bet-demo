@@ -61,6 +61,7 @@ export interface KRSignal {
 export interface KRSignalsResponse {
   signals: KRSignal[];
   total_scanned?: number;
+  generated_at?: string;
   error?: string;
   source?: string;
 }
@@ -74,8 +75,10 @@ export interface KRMarketGate {
   kosdaq_close: number;
   kosdaq_change_pct: number;
   commodities?: {
-    gold: { value: number; change_pct: number };
-    silver: { value: number; change_pct: number };
+    gold?: { value: number; change_pct: number };
+    silver?: { value: number; change_pct: number };
+    krx_gold?: { value: number; change_pct: number };
+    krx_silver?: { value: number; change_pct: number };
     us_gold?: { value: number; change_pct: number };
     us_silver?: { value: number; change_pct: number };
   };
@@ -193,7 +196,21 @@ export const krAPI = {
     return response.json();
   },
 
-  getVCPStatus: () => fetchAPI<{ running: boolean; message: string; progress: number }>('/api/kr/signals/status'),
+  // VCP 실패 AI만 재분석
+  reanalyzeVCPFailedAI: async (target_date?: string) => {
+    const response = await fetch('/api/kr/signals/reanalyze-failed-ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_date }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'VCP failed AI reanalysis failed');
+    }
+    return response.json();
+  },
+
+  getVCPStatus: () => fetchAPI<{ running: boolean; status?: string; message: string; progress: number }>('/api/kr/signals/status'),
 
   // Market Gate 개별 업데이트
   updateMarketGate: async (target_date?: string) => {

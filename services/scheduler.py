@@ -9,9 +9,14 @@ from __future__ import annotations
 import fcntl
 import logging
 import os
+import sys
 import threading
 import time
 from typing import TextIO
+
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 try:
     import schedule

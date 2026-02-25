@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 import pandas as pd
+from engine.screening_runtime import resolve_vcp_signals_to_show
 
 from services.kr_market_csv_utils import load_csv_readonly as _load_csv_readonly
 from services.kr_market_vcp_signals_cache import (
@@ -57,7 +58,10 @@ def build_vcp_signals_payload(
         logger.warning(f"Failed to inject real-time prices: {e}")
 
     if signals:
-        signals = sort_and_limit_vcp_signals(signals, limit=20)
+        signals = sort_and_limit_vcp_signals(
+            signals,
+            limit=resolve_vcp_signals_to_show(default=20, minimum=0),
+        )
         try:
             _merge_ai_into_vcp_signals(
                 signals=signals,

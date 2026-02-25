@@ -13,12 +13,10 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Callable, Dict
 
-
-def _normalize_ticker(ticker: str) -> str:
-    return str(ticker).zfill(6)
+from services.paper_trading_constants import INITIAL_CASH_KRW
 
 
-def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[list[dict], int, int]:
+def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[list[dict], float, float]:
     """DB에서 보유 종목과 현금/입금 총액을 로드한다."""
     with get_read_context_fn() as conn:
         conn.row_factory = sqlite3.Row
@@ -31,8 +29,6 @@ def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[
             """
         )
         holdings = [dict(row) for row in cursor.fetchall()]
-        for holding in holdings:
-            holding["ticker"] = _normalize_ticker(holding.get("ticker", ""))
 
         cursor.execute("SELECT cash, total_deposit FROM balance WHERE id = 1")
         balance_row = cursor.fetchone()
@@ -43,7 +39,7 @@ def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[
             else 0
         )
 
-    return holdings, int(cash), int(total_deposit)
+    return holdings, cash, total_deposit
 
 
 def get_portfolio_valuation(
@@ -90,15 +86,15 @@ def get_portfolio_valuation(
         updated_holdings.append(valued_holding)
 
     total_asset = cash + total_stock_value
-    total_principal = 100_000_000 + total_deposit
+    total_principal = INITIAL_CASH_KRW + total_deposit
     total_profit = total_asset - total_principal
     total_profit_rate = (total_profit / total_principal * 100) if total_principal > 0 else 0
 
     try:
         if callable(record_asset_history_with_cash_fn):
             record_asset_history_with_cash_fn(
-                cash=int(cash),
-                current_stock_value=int(total_stock_value),
+                cash=cash,
+                current_stock_value=total_stock_value,
             )
         else:
             record_asset_history_fn(total_stock_value)

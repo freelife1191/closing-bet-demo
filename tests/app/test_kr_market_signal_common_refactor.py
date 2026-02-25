@@ -20,9 +20,11 @@ from app.routes.kr_market_signal_common import (
 
 def test_safe_number_converters_return_default_on_invalid_values():
     assert _safe_float("12.5") == 12.5
+    assert _safe_float("₩1,234.5%") == 1234.5
     assert _safe_float("bad", default=1.5) == 1.5
 
     assert _safe_int("12") == 12
+    assert _safe_int("$1,234%") == 1234
     assert _safe_int("bad", default=3) == 3
 
 
@@ -43,6 +45,8 @@ def test_normalize_and_reason_helpers():
 def test_format_signal_date_supports_compact_and_iso():
     assert _format_signal_date("20260221") == "2026-02-21"
     assert _format_signal_date("2026-02-21") == "2026-02-21"
+    assert _format_signal_date("2026-02-21 00:00:00") == "2026-02-21"
+    assert _format_signal_date("2026-02-21T15:30:00Z") == "2026-02-21"
 
 
 def test_normalize_ai_payload_tickers_updates_signal_items():
@@ -58,4 +62,5 @@ def test_parse_datetime_safe_handles_supported_formats_and_invalid_input():
     assert _parse_datetime_safe("2026-02-21") is not None
     assert _parse_datetime_safe("20260221") is not None
     assert _parse_datetime_safe("2026-02-21T10:30:00") is not None
+    assert _parse_datetime_safe("2026-02-21T10:30:00Z") is not None
     assert _parse_datetime_safe("invalid") is None
