@@ -67,13 +67,59 @@ def test_analyze_with_gpt_uses_to_thread(monkeypatch):
     assert result["action"] == "BUY"
 
 
-def test_analyze_with_perplexity_reuses_single_async_client_for_retries(monkeypatch):
+def test_analyze_with_gemini_429_blocks_model_for_session(monkeypatch):
+    calls: list[str] = []
+
+    def _generate_content(*, model, contents):
+        del contents
+        calls.append(model)
+        if model == "gemini-2.0-flash-lite":
+            raise RuntimeError("429 resource_exhausted")
+        return SimpleNamespace(text='{"action":"BUY","confidence":74,"reason":"ok"}')
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.gemini_client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=_generate_content)
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
+
+    first = asyncio.run(analyzer._analyze_with_gemini("LG화학", {"ticker": "051910"}))
+    second = asyncio.run(analyzer._analyze_with_gemini("고려아연", {"ticker": "010130"}))
+
+    assert first is not None and second is not None
+    assert first["action"] == "BUY"
+    assert second["action"] == "BUY"
+    # 429가 발생한 모델은 세션에서 제외되어 두 번째 종목에서는 재시도하지 않는다.
+    assert calls.count("gemini-2.0-flash-lite") == 1
+
+
+def test_analyze_with_perplexity_429_switches_to_fallback_without_retry(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
+    analyzer.perplexity_quota_exhausted = False
+    analyzer.perplexity_blocked_reason = None
+    analyzer.providers = ["gemini", "perplexity", "zai"]
+    analyzer.perplexity_fallback_providers = ["zai"]
+    analyzer.zai_client = object()
     analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
 
     monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
     monkeypatch.setenv("VCP_PERPLEXITY_MODEL", "sonar-pro")
+
+    async def _zai(_name, _data, prompt=None):
+        assert prompt == "prompt"
+        return {"action": "BUY", "confidence": 81}
+
+    analyzer._analyze_with_zai = _zai
 
     class _Resp:
         def __init__(self, status_code, payload=None, text=""):
@@ -92,7 +138,6 @@ def test_analyze_with_perplexity_reuses_single_async_client_for_retries(monkeypa
             self.timeout = timeout
             self._responses = [
                 _Resp(429, text="rate limit"),
-                _Resp(200, payload={"choices": [{"message": {"content": '{"action":"BUY","confidence":81}'}}]}),
             ]
 
         async def __aenter__(self):
@@ -107,19 +152,70 @@ def test_analyze_with_perplexity_reuses_single_async_client_for_retries(monkeypa
             _FakeAsyncClient.post_count += 1
             return self._responses.pop(0)
 
-    async def _no_sleep(_seconds):
-        return None
-
     monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
-    monkeypatch.setattr("engine.vcp_ai_analyzer.random.randint", lambda _a, _b: 0)
 
     result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
 
     assert result is not None
     assert result["action"] == "BUY"
+    assert analyzer.perplexity_quota_exhausted is True
+    assert analyzer.perplexity_blocked_reason == "429"
     assert _FakeAsyncClient.enter_count == 1
-    assert _FakeAsyncClient.post_count == 2
+    assert _FakeAsyncClient.post_count == 1
+
+
+def test_analyze_with_perplexity_503_blocks_session_and_uses_cached_fallback(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.perplexity_disabled = False
+    analyzer.perplexity_quota_exhausted = False
+    analyzer.perplexity_blocked_reason = None
+    analyzer.providers = ["gemini", "perplexity", "zai"]
+    analyzer.perplexity_fallback_providers = ["zai"]
+    analyzer.zai_client = object()
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+    calls = {"http": 0, "zai": 0}
+
+    async def _zai(_name, _data, prompt=None):
+        calls["zai"] += 1
+        assert prompt == "prompt"
+        return {"action": "HOLD", "confidence": 65}
+
+    analyzer._analyze_with_zai = _zai
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
+
+    class _Resp:
+        status_code = 503
+        text = "service unavailable"
+
+        @staticmethod
+        def json():
+            return {}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, _url, headers=None, json=None):
+            del headers, json
+            calls["http"] += 1
+            return _Resp()
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
+
+    first = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
+    second = asyncio.run(analyzer._analyze_with_perplexity("LG화학", {"ticker": "051910"}))
+
+    assert first is not None and second is not None
+    assert analyzer.perplexity_quota_exhausted is True
+    assert analyzer.perplexity_blocked_reason == "503"
+    assert calls["http"] == 1
+    assert calls["zai"] == 2
 
 
 def test_analyze_with_perplexity_auth_401_marks_quota_cache_and_fallbacks(monkeypatch):
@@ -277,6 +373,7 @@ def test_analyze_with_perplexity_falls_back_to_zai_after_repeated_429(monkeypatc
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
     analyzer.perplexity_quota_exhausted = False
+    analyzer.perplexity_blocked_reason = None
     analyzer.providers = ["gemini", "perplexity", "zai"]
     analyzer.perplexity_fallback_providers = ["zai"]
     analyzer.zai_client = object()
@@ -315,19 +412,15 @@ def test_analyze_with_perplexity_falls_back_to_zai_after_repeated_429(monkeypatc
             _FakeAsyncClient.post_count += 1
             return _Resp()
 
-    async def _no_sleep(_seconds):
-        return None
-
     monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
-    monkeypatch.setattr("engine.vcp_ai_analyzer.random.randint", lambda _a, _b: 0)
 
     result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
 
     assert result is not None
     assert result["action"] == "SELL"
     assert analyzer.perplexity_quota_exhausted is True
-    assert _FakeAsyncClient.post_count == 4
+    assert analyzer.perplexity_blocked_reason == "429"
+    assert _FakeAsyncClient.post_count == 1
 
 
 def test_analyze_with_perplexity_fallback_uses_gpt_when_configured(monkeypatch):
@@ -709,8 +802,54 @@ def test_analyze_with_zai_switches_model_on_429_failure_response(monkeypatch):
 
     assert result is not None
     assert result["action"] == "BUY"
-    assert calls.count("primary-zai-model") == 2
+    assert calls.count("primary-zai-model") == 1
     assert "glm-4.5-Flash" in calls
+
+
+def test_analyze_with_zai_429_blocks_model_for_next_requests(monkeypatch):
+    calls: list[str] = []
+
+    def _create(**kwargs):
+        model = str(kwargs.get("model"))
+        calls.append(model)
+        if model == "primary-zai-model":
+            raise RuntimeError("status=429")
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content='{"action":"BUY","confidence":72,"reason":"ok"}'
+                    )
+                )
+            ]
+        )
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setenv("ZAI_MODEL", "primary-zai-model")
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
+
+    first = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+    second = asyncio.run(analyzer._analyze_with_zai("고려아연", {"ticker": "010130"}))
+
+    assert first is not None and second is not None
+    # 429 모델은 세션에서 제외되어 두 번째 호출에서는 더 이상 사용되지 않는다.
+    assert calls.count("primary-zai-model") == 1
 
 
 def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
@@ -759,8 +898,8 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
 
     assert result is not None
     assert result["action"] == "HOLD"
-    assert calls.count("primary-zai-model") == 2
-    assert calls.count("glm-4.5-Flash") == 2
+    assert calls.count("primary-zai-model") == 1
+    assert calls.count("glm-4.5-Flash") == 1
     assert "glm-4.6V-Flash" in calls
 
 

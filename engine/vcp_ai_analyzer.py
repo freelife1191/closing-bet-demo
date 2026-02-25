@@ -73,7 +73,10 @@ class VCPMultiAIAnalyzer:
             logger=logger,
         )
         self.perplexity_quota_exhausted = False
+        self.perplexity_blocked_reason: str | None = None
         self.perplexity_fallback_providers = self._build_perplexity_fallback_chain()
+        self.gemini_blocked_models: set[str] = set()
+        self.zai_blocked_models: set[str] = set()
     
     def _build_vcp_prompt(self, stock_name: str, stock_data: Dict) -> str:
         """VCP 분석용 프롬프트 생성"""
@@ -88,11 +91,36 @@ class VCPMultiAIAnalyzer:
         """Gemini로 분석 (Retry Logic 적용)"""
         if not self.gemini_client:
             return None
-        
+
+        blocked_models = getattr(self, "gemini_blocked_models", None)
+        if not isinstance(blocked_models, set):
+            blocked_models = set()
+            self.gemini_blocked_models = blocked_models
+
         resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
         base_delay = 2
-        model_chain = list(GEMINI_RETRY_MODEL_CHAIN)
+        model_chain = [model for model in GEMINI_RETRY_MODEL_CHAIN if model not in blocked_models]
+        if not model_chain:
+            logger.warning("[Gemini] 사용 가능한 모델이 없습니다. 모든 모델이 세션에서 제외되었습니다.")
+            return None
         max_retries = len(model_chain) - 1
+
+        def _extract_status_code(error: Exception) -> int | None:
+            for attr in ("status_code", "http_status", "code"):
+                value = getattr(error, attr, None)
+                if isinstance(value, int) and 100 <= value <= 599:
+                    return value
+            response_obj = getattr(error, "response", None)
+            status_code = getattr(response_obj, "status_code", None)
+            if isinstance(status_code, int) and 100 <= status_code <= 599:
+                return status_code
+            match = re.search(r"\b([45][0-9]{2})\b", str(error))
+            if match:
+                try:
+                    return int(match.group(1))
+                except (TypeError, ValueError):
+                    return None
+            return None
 
         for attempt, current_model in enumerate(model_chain):
             try:
@@ -131,8 +159,19 @@ class VCPMultiAIAnalyzer:
                 
             except Exception as e:
                 error_msg = str(e).lower()
+                status_code = _extract_status_code(e)
                 # 429: Rate Limit, 503/500: Server Error/Overloaded
                 retry_conditions = ['429', 'resource exhausted', 'quota exceeded', '503', '502', '500', 'overloaded']
+                is_model_unavailable = (
+                    status_code in {429, 503}
+                    or "resource exhausted" in error_msg
+                )
+                if is_model_unavailable:
+                    if current_model not in blocked_models:
+                        blocked_models.add(current_model)
+                    logger.warning(
+                        f"[Gemini] {stock_name} {current_model} 모델을 429/503 계열 오류로 세션에서 제외합니다."
+                    )
 
                 if attempt < max_retries:
                     delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
@@ -231,6 +270,14 @@ class VCPMultiAIAnalyzer:
         base_delay = 2
 
         resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
+        blocked_reason = str(getattr(self, "perplexity_blocked_reason", "") or "").strip()
+        if blocked_reason:
+            return await self._fallback_from_perplexity(
+                stock_name=stock_name,
+                stock_data=stock_data,
+                prompt=resolved_prompt,
+                reason=f"Perplexity blocked (session cache: {blocked_reason})",
+            )
         if getattr(self, "perplexity_quota_exhausted", False):
             return await self._fallback_from_perplexity(
                 stock_name=stock_name,
@@ -254,21 +301,28 @@ class VCPMultiAIAnalyzer:
                     response = await client.post(url, headers=headers, json=payload)
 
                     if response.status_code == 429:
-                        if attempt < max_retries:
-                            delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
-                            logger.warning(
-                                f"[Perplexity] {stock_name} 429 Error. Retrying in {delay:.2f}s... "
-                                f"({attempt+1}/{max_retries})"
-                            )
-                            await asyncio.sleep(delay)
-                            continue
-                        logger.error(f"[Perplexity] Max retries exceeded for {stock_name}")
                         self.perplexity_quota_exhausted = True
+                        self.perplexity_blocked_reason = "429"
+                        logger.warning(
+                            f"[Perplexity] {stock_name} 429 응답 감지. 세션에서 Perplexity 모델을 제외하고 fallback 전환."
+                        )
                         return await self._fallback_from_perplexity(
                             stock_name=stock_name,
                             stock_data=stock_data,
                             prompt=resolved_prompt,
-                            reason="Perplexity repeated 429",
+                            reason="Perplexity 429",
+                        )
+                    if response.status_code == 503:
+                        self.perplexity_quota_exhausted = True
+                        self.perplexity_blocked_reason = "503"
+                        logger.warning(
+                            f"[Perplexity] {stock_name} 503 응답 감지. 세션에서 Perplexity 모델을 제외하고 fallback 전환."
+                        )
+                        return await self._fallback_from_perplexity(
+                            stock_name=stock_name,
+                            stock_data=stock_data,
+                            prompt=resolved_prompt,
+                            reason="Perplexity 503",
                         )
 
                     if response.status_code != 200:
@@ -358,6 +412,10 @@ class VCPMultiAIAnalyzer:
         try:
             resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
             primary_model = str(app_config.ZAI_MODEL or "").strip()
+            blocked_models = getattr(self, "zai_blocked_models", None)
+            if not isinstance(blocked_models, set):
+                blocked_models = set()
+                self.zai_blocked_models = blocked_models
             model_chain: list[str] = []
             seen_models: set[str] = set()
             for candidate in [primary_model, *ZAI_FALLBACK_MODEL_CHAIN]:
@@ -365,12 +423,21 @@ class VCPMultiAIAnalyzer:
                 if not model_name:
                     continue
                 key = model_name.lower()
-                if key in seen_models:
+                if key in seen_models or key in blocked_models:
                     continue
                 seen_models.add(key)
                 model_chain.append(model_name)
             if not model_chain:
-                model_chain = ["glm-4.5-Flash", "glm-4.6V-Flash"]
+                logger.warning("[Z.ai] 사용 가능한 모델이 없습니다. 모든 모델이 세션에서 제외되었습니다.")
+                fallback_result = build_vcp_rule_based_recommendation(
+                    stock_name=stock_name,
+                    stock_data=stock_data,
+                )
+                logger.warning(
+                    f"[Z.ai] {stock_name} 모델 체인 소진으로 규칙 기반 fallback 사용: "
+                    f"{fallback_result.get('action')} ({fallback_result.get('confidence')}%)"
+                )
+                return fallback_result
 
             max_parse_attempts = 2
             request_timeout = float(getattr(app_config, "VCP_ZAI_API_TIMEOUT", 180))
@@ -526,6 +593,24 @@ class VCPMultiAIAnalyzer:
                         last_error = error
                         elapsed = time.time() - start
                         status_code = _extract_status_code(error)
+                        is_model_unavailable = status_code in {429, 503}
+
+                        if is_model_unavailable:
+                            blocked_models.add(str(model).lower())
+                            if model_idx < len(model_chain) - 1:
+                                next_model = model_chain[model_idx + 1]
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} 모델 전환(429/503): "
+                                    f"{model} -> {next_model} (status={status_code})"
+                                )
+                                should_try_next_model = True
+                            else:
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} 마지막 모델 {model}이(가) 429/503 실패하여 "
+                                    "추가 모델 전환 없이 fallback으로 종료합니다."
+                                )
+                            break
+
                         if attempt < max_parse_attempts - 1:
                             logger.warning(
                                 f"[Z.ai] {stock_name} 호출 실패({error}) -> 재시도 "
