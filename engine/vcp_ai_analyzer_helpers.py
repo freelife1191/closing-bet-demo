@@ -198,6 +198,52 @@ def _parse_recommendation_by_pattern(text: str) -> Optional[dict[str, Any]]:
     }
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def build_vcp_rule_based_recommendation(
+    *,
+    stock_name: str,
+    stock_data: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    LLM JSON 응답 복구 실패 시 사용하는 규칙 기반 보정 추천.
+    """
+    score = _safe_float(stock_data.get("score"), 0.0)
+    contraction_ratio = _safe_float(stock_data.get("contraction_ratio"), 1.0)
+    foreign_5d = _safe_float(stock_data.get("foreign_5d"), 0.0)
+    inst_5d = _safe_float(stock_data.get("inst_5d"), 0.0)
+    foreign_1d = _safe_float(stock_data.get("foreign_1d"), 0.0)
+    inst_1d = _safe_float(stock_data.get("inst_1d"), 0.0)
+    flow_5d = foreign_5d + inst_5d
+    flow_1d = foreign_1d + inst_1d
+
+    if score >= 78 and contraction_ratio <= 0.80 and flow_5d > 0 and flow_1d >= 0:
+        action = "BUY"
+        confidence = max(60, min(90, int(score * 0.95 + (4 if contraction_ratio <= 0.70 else 0))))
+    elif score <= 62 or (flow_5d < 0 and flow_1d < 0):
+        action = "SELL"
+        confidence = max(55, min(88, int(72 - max(0.0, score - 50) * 0.35)))
+    else:
+        action = "HOLD"
+        confidence = max(52, min(82, int(58 + max(0.0, score - 60) * 0.4)))
+
+    reason = (
+        "LLM JSON 응답을 복구하지 못해 규칙 기반 보정 결과를 사용했습니다. "
+        f"{stock_name}의 VCP 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}, "
+        f"수급(5일 {flow_5d:.0f}주 / 1일 {flow_1d:.0f}주)을 반영해 {action}로 판단합니다."
+    )
+    return {
+        "action": action,
+        "confidence": confidence,
+        "reason": reason[:600],
+    }
+
+
 def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
     """VCP 분석용 프롬프트 생성"""
     return f"""
@@ -401,6 +447,7 @@ def classify_perplexity_error(status_code: int, response_text: str | None) -> st
 
 
 __all__ = [
+    "build_vcp_rule_based_recommendation",
     "build_perplexity_request",
     "build_vcp_prompt",
     "classify_perplexity_error",

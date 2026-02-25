@@ -521,6 +521,111 @@ def test_analyze_with_zai_uses_reasoning_content_when_content_is_blank(monkeypat
     assert result["confidence"] == 71
 
 
+def test_analyze_with_zai_repairs_non_json_response_with_followup_call(monkeypatch):
+    calls = {"count": 0}
+
+    def _create(**kwargs):
+        calls["count"] += 1
+        messages = kwargs.get("messages", [])
+        first_system = messages[0]["content"] if messages else ""
+        if "convert stock analysis text into strict json only" in str(first_system).lower():
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='{"action":"HOLD","confidence":68,"reason":"보정 성공"}'
+                        )
+                    )
+                ]
+            )
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            "Let me analyze this stock first.\n"
+                            "VCP score is high and supply is stable.\n"
+                            "I will provide detailed reasoning."
+                        )
+                    )
+                )
+            ]
+        )
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    result = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+
+    assert result is not None
+    assert result["action"] == "HOLD"
+    assert result["confidence"] == 68
+    assert calls["count"] == 2
+
+
+def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkeypatch):
+    calls = {"count": 0}
+
+    def _create(**_kwargs):
+        calls["count"] += 1
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            "Let me analyze the stock and provide a detailed narrative "
+                            "without strict JSON format."
+                        )
+                    )
+                )
+            ]
+        )
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    stock_data = {
+        "ticker": "010130",
+        "score": 82,
+        "contraction_ratio": 0.74,
+        "foreign_5d": 1200,
+        "inst_5d": 500,
+        "foreign_1d": 100,
+        "inst_1d": 50,
+    }
+    result = asyncio.run(analyzer._analyze_with_zai("고려아연", stock_data))
+
+    assert result is not None
+    assert result["action"] == "BUY"
+    assert result["confidence"] >= 60
+    assert "규칙 기반 보정 결과" in result["reason"]
+    assert calls["count"] == 4
+
+
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.providers = ["gemini", "gpt"]

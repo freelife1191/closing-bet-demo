@@ -13,6 +13,7 @@ sys.path.insert(
 )
 
 from engine.vcp_ai_analyzer_helpers import (
+    build_vcp_rule_based_recommendation,
     build_perplexity_request,
     build_vcp_prompt,
     extract_openai_message_text,
@@ -112,3 +113,44 @@ def test_is_perplexity_quota_exceeded_detects_quota_like_errors():
     assert is_perplexity_quota_exceeded(429, "Quota exceeded for this month") is True
     assert is_perplexity_quota_exceeded(403, "insufficient credits") is True
     assert is_perplexity_quota_exceeded(429, "temporary network issue") is False
+
+
+def test_build_vcp_rule_based_recommendation_changes_by_signal_state():
+    buy_case = build_vcp_rule_based_recommendation(
+        stock_name="A",
+        stock_data={
+            "score": 83,
+            "contraction_ratio": 0.72,
+            "foreign_5d": 1000,
+            "inst_5d": 400,
+            "foreign_1d": 100,
+            "inst_1d": 50,
+        },
+    )
+    hold_case = build_vcp_rule_based_recommendation(
+        stock_name="B",
+        stock_data={
+            "score": 69,
+            "contraction_ratio": 0.9,
+            "foreign_5d": 10,
+            "inst_5d": -5,
+            "foreign_1d": 0,
+            "inst_1d": 0,
+        },
+    )
+    sell_case = build_vcp_rule_based_recommendation(
+        stock_name="C",
+        stock_data={
+            "score": 58,
+            "contraction_ratio": 1.03,
+            "foreign_5d": -500,
+            "inst_5d": -300,
+            "foreign_1d": -80,
+            "inst_1d": -40,
+        },
+    )
+
+    assert buy_case["action"] == "BUY"
+    assert hold_case["action"] == "HOLD"
+    assert sell_case["action"] == "SELL"
+    assert buy_case["confidence"] > hold_case["confidence"]

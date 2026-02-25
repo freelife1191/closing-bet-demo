@@ -13,6 +13,7 @@ from typing import List, Dict, Optional
 
 from engine.config import app_config
 from engine.vcp_ai_analyzer_helpers import (
+    build_vcp_rule_based_recommendation,
     build_perplexity_request,
     build_vcp_prompt,
     classify_perplexity_error,
@@ -357,22 +358,12 @@ class VCPMultiAIAnalyzer:
             for attempt in range(max_parse_attempts):
                 start = time.time()
 
-                def _call(use_json_mode: bool):
-                    messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a technical analyst researcher. "
-                                "Respond ONLY in JSON format."
-                            ),
-                        },
-                        {"role": "user", "content": resolved_prompt},
-                    ]
+                def _call(messages: list[dict[str, str]], use_json_mode: bool, max_tokens: int = 500):
                     request_args = {
                         "model": model,
                         "messages": messages,
                         "temperature": 0.0,
-                        "max_tokens": 500,
+                        "max_tokens": max_tokens,
                     }
                     if use_json_mode:
                         request_args["response_format"] = {"type": "json_object"}
@@ -416,7 +407,17 @@ class VCPMultiAIAnalyzer:
 
                     return ""
 
-                response_text = await asyncio.to_thread(_call, attempt == 0)
+                primary_messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a technical analyst researcher. "
+                            "Respond ONLY in JSON format."
+                        ),
+                    },
+                    {"role": "user", "content": resolved_prompt},
+                ]
+                response_text = await asyncio.to_thread(_call, primary_messages, attempt == 0)
                 last_response_text = str(response_text or "")
 
                 elapsed = time.time() - start
@@ -426,6 +427,38 @@ class VCPMultiAIAnalyzer:
                 if result:
                     return result
 
+                # 1차 응답이 JSON이 아닐 경우, 동일 모델에 "JSON 변환" 보정 요청을 추가로 수행한다.
+                if last_response_text.strip():
+                    repair_input = last_response_text.strip()
+                    if len(repair_input) > 4000:
+                        repair_input = repair_input[:4000]
+
+                    repair_messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You convert stock analysis text into strict JSON only. "
+                                "Return exactly one JSON object with keys: action, confidence, reason. "
+                                "action must be BUY, SELL, or HOLD. confidence must be integer 0-100."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                "Original analysis request:\n"
+                                f"{resolved_prompt}\n\n"
+                                "Previous model output:\n"
+                                f"{repair_input}\n\n"
+                                "Return only valid JSON."
+                            ),
+                        },
+                    ]
+                    repaired_text = await asyncio.to_thread(_call, repair_messages, True, 250)
+                    repaired_result = self._parse_json_response(str(repaired_text or ""))
+                    if repaired_result:
+                        logger.info(f"[Z.ai] {stock_name} JSON 변환 보정 성공 (attempt={attempt+1})")
+                        return repaired_result
+
                 if attempt < max_parse_attempts - 1:
                     logger.warning(
                         f"[Z.ai] JSON 파싱 실패 for {stock_name}. 재시도합니다 ({attempt+1}/{max_parse_attempts-1})"
@@ -434,7 +467,15 @@ class VCPMultiAIAnalyzer:
             logger.warning(
                 f"[Z.ai] JSON 파싱 실패 for {stock_name}. Raw Output: {last_response_text[:300]}..."
             )
-            return None
+            fallback_result = build_vcp_rule_based_recommendation(
+                stock_name=stock_name,
+                stock_data=stock_data,
+            )
+            logger.warning(
+                f"[Z.ai] {stock_name} 규칙 기반 fallback 사용: "
+                f"{fallback_result.get('action')} ({fallback_result.get('confidence')}%)"
+            )
+            return fallback_result
         except Exception as e:
             logger.error(f"[Z.ai] {stock_name} 분석 실패: {e}")
             return None
