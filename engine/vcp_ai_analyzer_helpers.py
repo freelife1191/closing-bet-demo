@@ -49,6 +49,33 @@ _REASON_RAW_PATTERN = re.compile(
     r"""["']?reason["']?\s*:\s*([^,\n}]+)""",
     re.IGNORECASE | re.DOTALL,
 )
+_ACTION_NARRATIVE_PATTERNS = (
+    re.compile(
+        r"""(?:position\s+recommendation|final\s+recommendation|recommendation|action|opinion|conclusion)"""
+        r"""[^A-Za-z가-힣]{0,30}(buy|sell|hold|매수|매도|관망|보유)""",
+        re.IGNORECASE,
+    ),
+    re.compile(r"""\b(buy|sell|hold)\s+position\b""", re.IGNORECASE),
+    re.compile(
+        r"""(?:추천|의견|결론|판단)[^\n]{0,120}?(매수|매도|관망|보유|buy|sell|hold)""",
+        re.IGNORECASE,
+    ),
+)
+_CONFIDENCE_NARRATIVE_PATTERNS = (
+    re.compile(
+        r"""confidence(?:\s+(?:level|score|assessment|rating))?"""
+        r"""[^0-9]{0,20}([0-9]{1,3})(?:\s*/\s*100|%)""",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"""(?:신뢰도|확신도|신뢰\s*수준)[^0-9]{0,20}([0-9]{1,3})(?:\s*/\s*100|%)?""",
+        re.IGNORECASE,
+    ),
+)
+_AMBIGUOUS_ACTION_PATTERNS = (
+    re.compile(r"""\b(buy|sell|hold)\b\s*(?:/|\||,|or)\s*\b(buy|sell|hold)\b""", re.IGNORECASE),
+    re.compile(r"""(매수|매도|관망|보유)\s*(?:/|\||,|또는)\s*(매수|매도|관망|보유)"""),
+)
 
 
 def _normalize_action_value(value: Any) -> str | None:
@@ -198,6 +225,92 @@ def _parse_recommendation_by_pattern(text: str) -> Optional[dict[str, Any]]:
     }
 
 
+def _extract_action_from_narrative(text: str) -> str | None:
+    for pattern in _AMBIGUOUS_ACTION_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        left = _normalize_action_value(match.group(1))
+        right = _normalize_action_value(match.group(2))
+        if left and right and left != right:
+            return None
+
+    candidates: list[str] = []
+    for pattern in _ACTION_NARRATIVE_PATTERNS:
+        for match in pattern.finditer(text):
+            action = _normalize_action_value(match.group(1))
+            if action:
+                candidates.append(action)
+
+    if not candidates:
+        return None
+
+    unique = []
+    for item in candidates:
+        if item not in unique:
+            unique.append(item)
+
+    if len(unique) != 1:
+        return None
+    return unique[0]
+
+
+def _extract_confidence_from_narrative(text: str) -> int | None:
+    for pattern in _CONFIDENCE_NARRATIVE_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        try:
+            value = int(float(match.group(1)))
+        except (TypeError, ValueError):
+            continue
+        return max(0, min(100, value))
+    return None
+
+
+def _extract_reason_from_narrative(text: str, action_value: str) -> str:
+    explicit_reason = _extract_reason_by_pattern(text)
+    if explicit_reason:
+        return explicit_reason[:600]
+
+    keywords = [
+        action_value.lower(),
+        "recommendation",
+        "confidence",
+        "recommend",
+        "추천",
+        "의견",
+        "결론",
+        "신뢰도",
+        "확신도",
+        "매수",
+        "매도",
+        "관망",
+        "보유",
+    ]
+    compact = " ".join(str(text or "").split())
+    for sentence in re.split(r"(?<=[.!?。])\s+", compact):
+        normalized = sentence.lower()
+        if any(keyword in normalized or keyword in sentence for keyword in keywords):
+            if len(sentence.strip()) >= 10:
+                return sentence.strip()[:600]
+
+    return compact[:600] if compact else "LLM 서술 응답에서 추론한 결과"
+
+
+def _parse_recommendation_from_narrative(text: str) -> Optional[dict[str, Any]]:
+    action_value = _extract_action_from_narrative(text)
+    confidence_value = _extract_confidence_from_narrative(text)
+    if action_value is None or confidence_value is None:
+        return None
+
+    return {
+        "action": action_value,
+        "confidence": confidence_value,
+        "reason": _extract_reason_from_narrative(text, action_value),
+    }
+
+
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -301,6 +414,10 @@ def parse_json_response(text: str) -> Optional[dict[str, Any]]:
     by_pattern = _parse_recommendation_by_pattern(str(text or ""))
     if by_pattern is not None:
         return _normalize(by_pattern)
+
+    from_narrative = _parse_recommendation_from_narrative(str(text or ""))
+    if from_narrative is not None:
+        return _normalize(from_narrative)
 
     return None
 

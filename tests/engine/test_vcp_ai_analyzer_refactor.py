@@ -626,6 +626,144 @@ def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkey
     assert calls["count"] == 4
 
 
+def test_analyze_with_zai_uses_rule_based_fallback_when_exception_occurs(monkeypatch):
+    def _create(**_kwargs):
+        raise RuntimeError("z.ai temporary timeout")
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
+
+    stock_data = {
+        "ticker": "051910",
+        "score": 80,
+        "contraction_ratio": 0.75,
+        "foreign_5d": 1000,
+        "inst_5d": 500,
+        "foreign_1d": 100,
+        "inst_1d": 80,
+    }
+    result = asyncio.run(analyzer._analyze_with_zai("LG화학", stock_data))
+
+    assert result is not None
+    assert result["action"] in {"BUY", "HOLD", "SELL"}
+    assert isinstance(result["confidence"], int)
+
+
+def test_analyze_with_zai_switches_model_on_429_failure_response(monkeypatch):
+    calls: list[str] = []
+
+    def _create(**kwargs):
+        model = str(kwargs.get("model"))
+        calls.append(model)
+        if model == "primary-zai-model":
+            raise RuntimeError("Request failed with status code 429")
+        if model == "glm-4.5-Flash":
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='{"action":"BUY","confidence":73,"reason":"fallback model success"}'
+                        )
+                    )
+                ]
+            )
+        raise AssertionError(f"Unexpected model call: {model}")
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setenv("ZAI_MODEL", "primary-zai-model")
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
+
+    result = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+
+    assert result is not None
+    assert result["action"] == "BUY"
+    assert calls.count("primary-zai-model") == 2
+    assert "glm-4.5-Flash" in calls
+
+
+def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
+    calls: list[str] = []
+
+    def _create(**kwargs):
+        model = str(kwargs.get("model"))
+        calls.append(model)
+        if model == "primary-zai-model":
+            raise RuntimeError("status=429 rate limited")
+        if model == "glm-4.5-Flash":
+            raise RuntimeError("Service Unavailable (503)")
+        if model == "glm-4.6V-Flash":
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='{"action":"HOLD","confidence":66,"reason":"third model success"}'
+                        )
+                    )
+                ]
+            )
+        raise AssertionError(f"Unexpected model call: {model}")
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setenv("ZAI_MODEL", "primary-zai-model")
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
+
+    result = asyncio.run(analyzer._analyze_with_zai("고려아연", {"ticker": "010130"}))
+
+    assert result is not None
+    assert result["action"] == "HOLD"
+    assert calls.count("primary-zai-model") == 2
+    assert calls.count("glm-4.5-Flash") == 2
+    assert "glm-4.6V-Flash" in calls
+
+
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.providers = ["gemini", "gpt"]

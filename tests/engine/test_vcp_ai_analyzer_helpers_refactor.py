@@ -68,6 +68,46 @@ def test_parse_json_response_pattern_fallback_handles_truncated_payload():
     assert "변동성" in parsed["reason"]
 
 
+def test_parse_json_response_handles_narrative_recommendation_without_json():
+    text = """
+    Position Recommendation:
+    Therefore, a BUY position appears reasonable.
+
+    Confidence Assessment:
+    I would assign a confidence level of 75% to this recommendation.
+    """
+
+    parsed = parse_json_response(text)
+
+    assert parsed is not None
+    assert parsed["action"] == "BUY"
+    assert parsed["confidence"] == 75
+
+
+def test_parse_json_response_handles_korean_narrative_recommendation_without_json():
+    text = """
+    최종 의견: 현재 구간에서는 관망이 적절합니다.
+    신뢰도는 68% 수준으로 판단합니다.
+    """
+
+    parsed = parse_json_response(text)
+
+    assert parsed is not None
+    assert parsed["action"] == "HOLD"
+    assert parsed["confidence"] == 68
+
+
+def test_parse_json_response_ignores_ambiguous_narrative_actions():
+    text = """
+    Recommendation: BUY or SELL both could be possible.
+    Confidence level: 80%
+    """
+
+    parsed = parse_json_response(text)
+
+    assert parsed is None
+
+
 def test_extract_openai_message_text_handles_segmented_content():
     content = [
         {"type": "text", "text": '{"action":"HOLD",'},

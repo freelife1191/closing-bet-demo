@@ -9,6 +9,7 @@ import time
 import asyncio
 import httpx
 import random
+import re
 from typing import List, Dict, Optional
 
 from engine.config import app_config
@@ -43,6 +44,10 @@ GEMINI_RETRY_MODEL_CHAIN = [
     "gemini-2.0-flash",
     "gemini-2.5-flash",
     "gemini-3-flash-preview",
+]
+ZAI_FALLBACK_MODEL_CHAIN = [
+    "glm-4.5-Flash",
+    "glm-4.6V-Flash",
 ]
 
 
@@ -352,141 +357,202 @@ class VCPMultiAIAnalyzer:
 
         try:
             resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
-            model = app_config.ZAI_MODEL
+            primary_model = str(app_config.ZAI_MODEL or "").strip()
+            model_chain: list[str] = []
+            seen_models: set[str] = set()
+            for candidate in [primary_model, *ZAI_FALLBACK_MODEL_CHAIN]:
+                model_name = str(candidate or "").strip()
+                if not model_name:
+                    continue
+                key = model_name.lower()
+                if key in seen_models:
+                    continue
+                seen_models.add(key)
+                model_chain.append(model_name)
+            if not model_chain:
+                model_chain = ["glm-4.5-Flash", "glm-4.6V-Flash"]
+
             max_parse_attempts = 2
             request_timeout = float(getattr(app_config, "VCP_ZAI_API_TIMEOUT", 180))
             last_response_text = ""
             last_error: Exception | None = None
 
-            for attempt in range(max_parse_attempts):
-                start = time.time()
-
-                def _call(messages: list[dict[str, str]], use_json_mode: bool, max_tokens: int = 500):
-                    request_args = {
-                        "model": model,
-                        "messages": messages,
-                        "temperature": 0.0,
-                        "max_tokens": max_tokens,
-                        "timeout": request_timeout,
-                    }
-                    if use_json_mode:
-                        request_args["response_format"] = {"type": "json_object"}
-
+            def _extract_status_code(error: Exception) -> int | None:
+                for attr in ("status_code", "http_status"):
+                    value = getattr(error, attr, None)
+                    if isinstance(value, int) and 100 <= value <= 599:
+                        return value
+                response_obj = getattr(error, "response", None)
+                status_code = getattr(response_obj, "status_code", None)
+                if isinstance(status_code, int) and 100 <= status_code <= 599:
+                    return status_code
+                match = re.search(r"\b([45][0-9]{2})\b", str(error))
+                if match:
                     try:
-                        response = zai_client.chat.completions.create(**request_args)
-                    except Exception as error:
-                        message = str(error).lower()
-                        if use_json_mode and "response_format" in message:
-                            request_args.pop("response_format", None)
+                        return int(match.group(1))
+                    except (TypeError, ValueError):
+                        return None
+                return None
+
+            def _is_failure_response(error: Exception) -> bool:
+                status_code = _extract_status_code(error)
+                if status_code is None:
+                    return False
+                return 400 <= status_code <= 599
+
+            for model_idx, model in enumerate(model_chain):
+                should_try_next_model = False
+
+                for attempt in range(max_parse_attempts):
+                    start = time.time()
+
+                    def _call(messages: list[dict[str, str]], use_json_mode: bool, max_tokens: int = 500):
+                        request_args = {
+                            "model": model,
+                            "messages": messages,
+                            "temperature": 0.0,
+                            "max_tokens": max_tokens,
+                            "timeout": request_timeout,
+                        }
+                        if use_json_mode:
+                            request_args["response_format"] = {"type": "json_object"}
+
+                        try:
                             response = zai_client.chat.completions.create(**request_args)
-                        else:
-                            raise
+                        except Exception as error:
+                            message = str(error).lower()
+                            if use_json_mode and "response_format" in message:
+                                request_args.pop("response_format", None)
+                                response = zai_client.chat.completions.create(**request_args)
+                            else:
+                                raise
 
-                    choices = getattr(response, "choices", None)
-                    if not choices and isinstance(response, dict):
-                        choices = response.get("choices")
-                    if not choices:
+                        choices = getattr(response, "choices", None)
+                        if not choices and isinstance(response, dict):
+                            choices = response.get("choices")
+                        if not choices:
+                            return ""
+
+                        first_choice = choices[0]
+                        message_obj = getattr(first_choice, "message", None)
+                        if message_obj is None and isinstance(first_choice, dict):
+                            message_obj = first_choice.get("message")
+                        if message_obj is None:
+                            return ""
+
+                        content = getattr(message_obj, "content", None)
+                        if content is None and isinstance(message_obj, dict):
+                            content = message_obj.get("content")
+                        response_text = extract_openai_message_text(content)
+                        if response_text and response_text.strip():
+                            return response_text
+
+                        reasoning_content = getattr(message_obj, "reasoning_content", None)
+                        if reasoning_content is None and isinstance(message_obj, dict):
+                            reasoning_content = message_obj.get("reasoning_content")
+                        response_text = extract_openai_message_text(reasoning_content)
+                        if response_text and response_text.strip():
+                            return response_text
+
                         return ""
 
-                    first_choice = choices[0]
-                    message_obj = getattr(first_choice, "message", None)
-                    if message_obj is None and isinstance(first_choice, dict):
-                        message_obj = first_choice.get("message")
-                    if message_obj is None:
-                        return ""
+                    primary_messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a technical analyst. "
+                                "Return exactly one compact JSON object and nothing else. "
+                                "Required keys: action, confidence, reason. "
+                                "action must be BUY, SELL, or HOLD. "
+                                "confidence must be an integer 0-100. "
+                                "reason must be a short Korean sentence."
+                            ),
+                        },
+                        {"role": "user", "content": resolved_prompt},
+                    ]
+                    try:
+                        response_text = await asyncio.to_thread(_call, primary_messages, attempt == 0)
+                        last_response_text = str(response_text or "")
 
-                    content = getattr(message_obj, "content", None)
-                    if content is None and isinstance(message_obj, dict):
-                        content = message_obj.get("content")
-                    response_text = extract_openai_message_text(content)
-                    if response_text and response_text.strip():
-                        return response_text
-
-                    reasoning_content = getattr(message_obj, "reasoning_content", None)
-                    if reasoning_content is None and isinstance(message_obj, dict):
-                        reasoning_content = message_obj.get("reasoning_content")
-                    response_text = extract_openai_message_text(reasoning_content)
-                    if response_text and response_text.strip():
-                        return response_text
-
-                    return ""
-
-                primary_messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a technical analyst researcher. "
-                            "Respond ONLY in JSON format."
-                        ),
-                    },
-                    {"role": "user", "content": resolved_prompt},
-                ]
-                try:
-                    response_text = await asyncio.to_thread(_call, primary_messages, attempt == 0)
-                    last_response_text = str(response_text or "")
-
-                    elapsed = time.time() - start
-                    logger.debug(
-                        f"[Z.ai] {stock_name} 분석 완료 "
-                        f"({elapsed:.2f}s, attempt={attempt+1}, timeout={request_timeout:.0f}s)"
-                    )
-
-                    result = self._parse_json_response(last_response_text)
-                    if result:
-                        return result
-
-                    # 1차 응답이 JSON이 아닐 경우, 동일 모델에 "JSON 변환" 보정 요청을 추가로 수행한다.
-                    if last_response_text.strip():
-                        repair_input = last_response_text.strip()
-                        if len(repair_input) > 4000:
-                            repair_input = repair_input[:4000]
-
-                        repair_messages = [
-                            {
-                                "role": "system",
-                                "content": (
-                                    "You convert stock analysis text into strict JSON only. "
-                                    "Return exactly one JSON object with keys: action, confidence, reason. "
-                                    "action must be BUY, SELL, or HOLD. confidence must be integer 0-100."
-                                ),
-                            },
-                            {
-                                "role": "user",
-                                "content": (
-                                    "Original analysis request:\n"
-                                    f"{resolved_prompt}\n\n"
-                                    "Previous model output:\n"
-                                    f"{repair_input}\n\n"
-                                    "Return only valid JSON."
-                                ),
-                            },
-                        ]
-                        repaired_text = await asyncio.to_thread(_call, repair_messages, True, 250)
-                        repaired_result = self._parse_json_response(str(repaired_text or ""))
-                        if repaired_result:
-                            logger.info(f"[Z.ai] {stock_name} JSON 변환 보정 성공 (attempt={attempt+1})")
-                            return repaired_result
-
-                    if attempt < max_parse_attempts - 1:
-                        logger.warning(
-                            f"[Z.ai] JSON 파싱 실패 for {stock_name}. 재시도합니다 "
-                            f"({attempt+1}/{max_parse_attempts-1})"
+                        elapsed = time.time() - start
+                        logger.debug(
+                            f"[Z.ai] {stock_name} 분석 완료 "
+                            f"(model={model}, {elapsed:.2f}s, attempt={attempt+1}, timeout={request_timeout:.0f}s)"
                         )
-                except Exception as error:
-                    last_error = error
-                    elapsed = time.time() - start
-                    if attempt < max_parse_attempts - 1:
-                        logger.warning(
-                            f"[Z.ai] {stock_name} 호출 실패({error}) -> 재시도 "
-                            f"({attempt+1}/{max_parse_attempts-1}, elapsed={elapsed:.2f}s, "
-                            f"timeout={request_timeout:.0f}s)"
+
+                        result = self._parse_json_response(last_response_text)
+                        if result:
+                            return result
+
+                        # 1차 응답이 JSON이 아닐 경우, 동일 모델에 "JSON 변환" 보정 요청을 추가로 수행한다.
+                        if last_response_text.strip():
+                            repair_input = last_response_text.strip()
+                            if len(repair_input) > 4000:
+                                repair_input = repair_input[:4000]
+
+                            repair_messages = [
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        "You convert stock analysis text into strict JSON only. "
+                                        "Return exactly one JSON object with keys: action, confidence, reason. "
+                                        "action must be BUY, SELL, or HOLD. confidence must be integer 0-100."
+                                    ),
+                                },
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "Previous model output:\n"
+                                        f"{repair_input}\n\n"
+                                        "Return only valid JSON."
+                                    ),
+                                },
+                            ]
+                            repaired_text = await asyncio.to_thread(_call, repair_messages, True, 250)
+                            repaired_result = self._parse_json_response(str(repaired_text or ""))
+                            if repaired_result:
+                                logger.info(
+                                    f"[Z.ai] {stock_name} JSON 변환 보정 성공 "
+                                    f"(model={model}, attempt={attempt+1})"
+                                )
+                                return repaired_result
+
+                        if attempt < max_parse_attempts - 1:
+                            logger.warning(
+                                f"[Z.ai] JSON 파싱 실패 for {stock_name}. 재시도합니다 "
+                                f"(model={model}, {attempt+1}/{max_parse_attempts-1})"
+                            )
+                    except Exception as error:
+                        last_error = error
+                        elapsed = time.time() - start
+                        status_code = _extract_status_code(error)
+                        if attempt < max_parse_attempts - 1:
+                            logger.warning(
+                                f"[Z.ai] {stock_name} 호출 실패({error}) -> 재시도 "
+                                f"(model={model}, {attempt+1}/{max_parse_attempts-1}, "
+                                f"elapsed={elapsed:.2f}s, timeout={request_timeout:.0f}s)"
+                            )
+                            await asyncio.sleep(1.0 + attempt)
+                            continue
+
+                        if _is_failure_response(error) and model_idx < len(model_chain) - 1:
+                            next_model = model_chain[model_idx + 1]
+                            reason = f"status={status_code}" if status_code is not None else str(error)
+                            logger.warning(
+                                f"[Z.ai] {stock_name} 모델 실패 응답으로 모델 전환 "
+                                f"({model} -> {next_model}, reason={reason})"
+                            )
+                            should_try_next_model = True
+                            break
+
+                        logger.error(
+                            f"[Z.ai] {stock_name} 호출 실패(최종): {error} "
+                            f"(model={model}, elapsed={elapsed:.2f}s, timeout={request_timeout:.0f}s)"
                         )
-                        await asyncio.sleep(1.0 + attempt)
-                        continue
-                    logger.error(
-                        f"[Z.ai] {stock_name} 호출 실패(최종): {error} "
-                        f"(elapsed={elapsed:.2f}s, timeout={request_timeout:.0f}s)"
-                    )
+
+                if should_try_next_model:
+                    continue
+                break
 
             logger.warning(
                 f"[Z.ai] JSON 파싱 실패 for {stock_name}. Raw Output: {last_response_text[:300]}..."
@@ -505,8 +571,16 @@ class VCPMultiAIAnalyzer:
             )
             return fallback_result
         except Exception as e:
-            logger.error(f"[Z.ai] {stock_name} 분석 실패: {e}")
-            return None
+            logger.error(f"[Z.ai] {stock_name} 분석 실패(예외): {e}")
+            fallback_result = build_vcp_rule_based_recommendation(
+                stock_name=stock_name,
+                stock_data=stock_data,
+            )
+            logger.warning(
+                f"[Z.ai] {stock_name} 예외 발생으로 규칙 기반 fallback 사용: "
+                f"{fallback_result.get('action')} ({fallback_result.get('confidence')}%)"
+            )
+            return fallback_result
 
     def _build_perplexity_fallback_chain(self, providers: List[str] | None = None) -> List[str]:
         """Perplexity 실패 시 사용할 보조 Provider 순서를 구성한다."""
