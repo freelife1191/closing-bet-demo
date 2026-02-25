@@ -167,6 +167,54 @@ def test_analyze_with_perplexity_disables_provider_on_auth_error(monkeypatch):
     assert analyzer.perplexity_disabled is True
 
 
+def test_analyze_with_perplexity_ambiguous_401_marks_quota_and_fallbacks(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.perplexity_disabled = False
+    analyzer.perplexity_quota_exhausted = False
+    analyzer.zai_client = object()
+    analyzer.gpt_client = None
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _zai(_name, _data, prompt=None):
+        assert prompt == "prompt"
+        return {"action": "BUY", "confidence": 67}
+
+    analyzer._analyze_with_zai = _zai
+
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
+
+    class _Resp:
+        status_code = 401
+        text = "<html><center><h1>401 Authorization Required</h1></center><hr><center>openresty</center>"
+
+        @staticmethod
+        def json():
+            return {}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, _url, headers=None, json=None):
+            del headers, json
+            return _Resp()
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
+
+    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
+
+    assert result is not None
+    assert result["action"] == "BUY"
+    assert analyzer.perplexity_quota_exhausted is True
+    assert analyzer.perplexity_disabled is False
+
+
 def test_analyze_with_perplexity_falls_back_to_zai_after_repeated_429(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
@@ -222,6 +270,32 @@ def test_analyze_with_perplexity_falls_back_to_zai_after_repeated_429(monkeypatc
     assert _FakeAsyncClient.post_count == 4
 
 
+def test_analyze_with_perplexity_fallback_uses_gpt_when_configured(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.perplexity_disabled = False
+    analyzer.perplexity_quota_exhausted = True
+    analyzer.zai_client = None
+    analyzer.gpt_client = object()
+    analyzer.providers = ["gemini", "gpt"]
+    analyzer.perplexity_fallback_providers = ["gpt"]
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+    calls = {"gpt": 0}
+
+    async def _gpt(_name, _data, prompt=None):
+        calls["gpt"] += 1
+        assert prompt == "prompt"
+        return {"action": "SELL", "confidence": 55}
+
+    analyzer._analyze_with_gpt = _gpt
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
+
+    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
+
+    assert result is not None
+    assert result["action"] == "SELL"
+    assert calls["gpt"] == 1
+
+
 def test_analyze_with_perplexity_uses_cached_quota_fallback_without_http(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.perplexity_disabled = False
@@ -249,6 +323,38 @@ def test_analyze_with_perplexity_uses_cached_quota_fallback_without_http(monkeyp
     assert result is not None
     assert result["action"] == "BUY"
     assert calls["zai"] == 1
+
+
+def test_analyze_with_zai_uses_openai_client(monkeypatch):
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **_kwargs: SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(
+                                content='{"action":"BUY","confidence":88,"reason":"ok"}'
+                            )
+                        )
+                    ]
+                )
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+    called = {"to_thread": 0}
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        called["to_thread"] += 1
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+    result = asyncio.run(analyzer._analyze_with_zai("삼성전자", {"ticker": "005930"}))
+
+    assert result is not None
+    assert result["action"] == "BUY"
+    assert called["to_thread"] == 1
 
 
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):

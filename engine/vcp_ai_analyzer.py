@@ -15,6 +15,7 @@ from engine.config import app_config
 from engine.vcp_ai_analyzer_helpers import (
     build_perplexity_request,
     build_vcp_prompt,
+    classify_perplexity_error,
     extract_perplexity_response_text,
     is_perplexity_quota_exceeded,
     parse_json_response,
@@ -23,6 +24,8 @@ from engine.vcp_ai_provider_init_helpers import (
     init_gemini_client,
     init_gpt_client,
     init_zai_client,
+    normalize_provider_list,
+    normalize_provider_name,
     resolve_perplexity_disabled,
 )
 from engine.vcp_ai_orchestration_helpers import (
@@ -45,7 +48,8 @@ class VCPMultiAIAnalyzer:
     """VCP 시그널 멀티 AI 분석기 (Gemini + GPT/Perplexity 동시 분석)"""
 
     def __init__(self):
-        self.providers = app_config.VCP_AI_PROVIDERS
+        self.providers = normalize_provider_list(app_config.VCP_AI_PROVIDERS)
+        self.second_provider = normalize_provider_name(app_config.VCP_SECOND_PROVIDER)
 
         logger.info(f"VCP MultiAI 분석기 초기화: {self.providers}")
 
@@ -57,11 +61,12 @@ class VCPMultiAIAnalyzer:
         self.perplexity_client = None
         self.perplexity_disabled = resolve_perplexity_disabled(
             providers=self.providers,
-            second_provider=app_config.VCP_SECOND_PROVIDER,
+            second_provider=self.second_provider,
             has_api_key=bool(app_config.PERPLEXITY_API_KEY),
             logger=logger,
         )
         self.perplexity_quota_exhausted = False
+        self.perplexity_fallback_providers = self._build_perplexity_fallback_chain()
     
     def _build_vcp_prompt(self, stock_name: str, stock_data: Dict) -> str:
         """VCP 분석용 프롬프트 생성"""
@@ -192,7 +197,11 @@ class VCPMultiAIAnalyzer:
             stock_name=stock_name,
             stock_data=stock_data,
             providers=self.providers,
-            second_provider=app_config.VCP_SECOND_PROVIDER,
+            second_provider=getattr(
+                self,
+                "second_provider",
+                normalize_provider_name(app_config.VCP_SECOND_PROVIDER),
+            ),
             perplexity_disabled=self.perplexity_disabled,
             build_prompt_fn=self._build_vcp_prompt,
             analyze_with_gemini_fn=self._analyze_with_gemini,
@@ -216,7 +225,7 @@ class VCPMultiAIAnalyzer:
 
         resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
         if getattr(self, "perplexity_quota_exhausted", False):
-            return await self._fallback_to_zai(
+            return await self._fallback_from_perplexity(
                 stock_name=stock_name,
                 stock_data=stock_data,
                 prompt=resolved_prompt,
@@ -247,7 +256,7 @@ class VCPMultiAIAnalyzer:
                             continue
                         logger.error(f"[Perplexity] Max retries exceeded for {stock_name}")
                         self.perplexity_quota_exhausted = True
-                        return await self._fallback_to_zai(
+                        return await self._fallback_from_perplexity(
                             stock_name=stock_name,
                             stock_data=stock_data,
                             prompt=resolved_prompt,
@@ -258,10 +267,10 @@ class VCPMultiAIAnalyzer:
                         if is_perplexity_quota_exceeded(response.status_code, response.text):
                             logger.warning(
                                 "[Perplexity] 할당량 소진 또는 크레딧 제한 감지 "
-                                f"({response.status_code}). Z.ai fallback 수행"
+                                f"({response.status_code}). 보조 Provider fallback 수행"
                             )
                             self.perplexity_quota_exhausted = True
-                            return await self._fallback_to_zai(
+                            return await self._fallback_from_perplexity(
                                 stock_name=stock_name,
                                 stock_data=stock_data,
                                 prompt=resolved_prompt,
@@ -269,10 +278,40 @@ class VCPMultiAIAnalyzer:
                             )
 
                         logger.error(f"[Perplexity] API Error: {response.status_code} - {response.text[:200]}")
-                        if response.status_code in [401, 403]:
-                            logger.warning("[Perplexity] 인증 오류 발생. 이번 세션에서 Perplexity 분석을 비활성화합니다.")
+                        error_type = classify_perplexity_error(response.status_code, response.text)
+                        if error_type == "quota":
+                            logger.warning(
+                                "[Perplexity] 할당량 초과로 판단되어 fallback 수행 "
+                                f"({response.status_code})"
+                            )
+                            self.perplexity_quota_exhausted = True
+                            return await self._fallback_from_perplexity(
+                                stock_name=stock_name,
+                                stock_data=stock_data,
+                                prompt=resolved_prompt,
+                                reason=f"Perplexity quota exceeded ({response.status_code})",
+                            )
+
+                        if error_type == "auth_or_quota":
+                            logger.warning(
+                                "[Perplexity] 401/403 원인이 인증 또는 할당량 소진으로 모호합니다. "
+                                "할당량 소진 가능성을 고려해 fallback 수행합니다."
+                            )
+                            self.perplexity_quota_exhausted = True
+                            return await self._fallback_from_perplexity(
+                                stock_name=stock_name,
+                                stock_data=stock_data,
+                                prompt=resolved_prompt,
+                                reason=f"Perplexity ambiguous 401/403 ({response.status_code})",
+                            )
+
+                        if error_type == "auth":
+                            logger.warning(
+                                "[Perplexity] 인증 오류로 판단되어 Perplexity를 비활성화합니다. "
+                                "추가 Provider fallback을 시도합니다."
+                            )
                             self.perplexity_disabled = True
-                            return await self._fallback_to_zai(
+                            return await self._fallback_from_perplexity(
                                 stock_name=stock_name,
                                 stock_data=stock_data,
                                 prompt=resolved_prompt,
@@ -304,7 +343,8 @@ class VCPMultiAIAnalyzer:
         prompt: str | None = None,
     ) -> Optional[Dict]:
         """Z.ai(OpenAI 호환)로 분석."""
-        if not getattr(self, "zai_client", None):
+        zai_client = getattr(self, "zai_client", None)
+        if not zai_client:
             return None
 
         try:
@@ -314,7 +354,7 @@ class VCPMultiAIAnalyzer:
             start = time.time()
 
             def _call():
-                response = self.zai_client.chat.completions.create(
+                response = zai_client.chat.completions.create(
                     model=model,
                     messages=[
                         {
@@ -351,6 +391,73 @@ class VCPMultiAIAnalyzer:
             logger.error(f"[Z.ai] {stock_name} 분석 실패: {e}")
             return None
 
+    def _build_perplexity_fallback_chain(self, providers: List[str] | None = None) -> List[str]:
+        """Perplexity 실패 시 사용할 보조 Provider 순서를 구성한다."""
+        source = providers if providers is not None else getattr(self, "providers", [])
+        chain: list[str] = []
+        for provider in source:
+            key = normalize_provider_name(provider)
+            if key in {"gpt", "zai"} and key not in chain:
+                chain.append(key)
+        return chain
+
+    def _resolve_perplexity_fallback_providers(self) -> List[str]:
+        configured = getattr(self, "perplexity_fallback_providers", None)
+        if isinstance(configured, list) and configured:
+            return configured
+
+        providers = getattr(self, "providers", None)
+        if isinstance(providers, list) and providers:
+            chain = self._build_perplexity_fallback_chain(providers)
+            if chain:
+                return chain
+
+        fallback: list[str] = []
+        if getattr(self, "zai_client", None):
+            fallback.append("zai")
+        if getattr(self, "gpt_client", None):
+            fallback.append("gpt")
+        return fallback
+
+    async def _fallback_from_perplexity(
+        self,
+        *,
+        stock_name: str,
+        stock_data: Dict,
+        prompt: str,
+        reason: str,
+    ) -> Optional[Dict]:
+        """Perplexity 실패 시 설정된 보조 Provider(gpt/zai)로 폴백 분석."""
+        fallback_providers = self._resolve_perplexity_fallback_providers()
+        if not fallback_providers:
+            logger.error(
+                f"[Perplexity fallback] {stock_name} 폴백 불가: "
+                f"VCP_AI_PROVIDERS에 gpt/z.ai가 없거나 클라이언트 미초기화 ({reason})"
+            )
+            return None
+
+        for provider in fallback_providers:
+            if provider == "zai":
+                if not getattr(self, "zai_client", None):
+                    logger.warning(f"[Perplexity->Z.ai fallback] {stock_name} 건너뜀: Z.ai 미초기화")
+                    continue
+                logger.warning(f"[Perplexity->Z.ai fallback] {stock_name} 사유: {reason}")
+                result = await self._analyze_with_zai(stock_name, stock_data, prompt)
+            elif provider == "gpt":
+                if not getattr(self, "gpt_client", None):
+                    logger.warning(f"[Perplexity->GPT fallback] {stock_name} 건너뜀: GPT 미초기화")
+                    continue
+                logger.warning(f"[Perplexity->GPT fallback] {stock_name} 사유: {reason}")
+                result = await self._analyze_with_gpt(stock_name, stock_data, prompt)
+            else:
+                continue
+
+            if result:
+                return result
+
+        logger.error(f"[Perplexity fallback] {stock_name} 폴백 실패: 사용 가능한 보조 Provider 응답 없음")
+        return None
+
     async def _fallback_to_zai(
         self,
         *,
@@ -359,13 +466,12 @@ class VCPMultiAIAnalyzer:
         prompt: str,
         reason: str,
     ) -> Optional[Dict]:
-        """Perplexity 실패 시 Z.ai로 폴백 분석."""
+        """하위 호환용 Z.ai 직접 폴백."""
         if not getattr(self, "zai_client", None):
             logger.error(
                 f"[Perplexity->Z.ai fallback] {stock_name} 폴백 불가: Z.ai 클라이언트 미초기화 ({reason})"
             )
             return None
-
         logger.warning(f"[Perplexity->Z.ai fallback] {stock_name} 사유: {reason}")
         return await self._analyze_with_zai(stock_name, stock_data, prompt)
     
@@ -391,6 +497,8 @@ class VCPMultiAIAnalyzer:
             available.append('gemini')
         if self.gpt_client:
             available.append('gpt')
+        if getattr(self, "zai_client", None):
+            available.append('zai')
         if app_config.PERPLEXITY_API_KEY and not self.perplexity_disabled:
             available.append('perplexity')
         return available

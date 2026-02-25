@@ -9,9 +9,33 @@ from __future__ import annotations
 from typing import Any
 
 
+def normalize_provider_name(name: str | None) -> str:
+    """Provider 이름을 내부 표준 키로 정규화한다."""
+    provider = str(name or "").strip().lower()
+    if provider in {"z.ai", "z_ai", "zai"}:
+        return "zai"
+    if provider in {"openai"}:
+        return "gpt"
+    return provider
+
+
+def normalize_provider_list(providers: list[str]) -> list[str]:
+    """Provider 목록을 정규화하고 순서를 유지한 채 중복 제거한다."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for provider in providers:
+        key = normalize_provider_name(provider)
+        if not key or key in seen:
+            continue
+        normalized.append(key)
+        seen.add(key)
+    return normalized
+
+
 def init_gemini_client(providers: list[str], app_config: Any, logger: Any) -> Any:
     """Gemini client를 초기화해 반환한다."""
-    if "gemini" not in providers:
+    normalized = normalize_provider_list(providers)
+    if "gemini" not in normalized:
         return None
 
     api_key = app_config.GOOGLE_API_KEY
@@ -32,7 +56,8 @@ def init_gemini_client(providers: list[str], app_config: Any, logger: Any) -> An
 
 def init_gpt_client(providers: list[str], app_config: Any, logger: Any) -> Any:
     """GPT(OpenAI) client를 초기화해 반환한다."""
-    if "gpt" not in providers and "openai" not in providers:
+    normalized = normalize_provider_list(providers)
+    if "gpt" not in normalized:
         return None
 
     api_key = app_config.OPENAI_API_KEY
@@ -77,8 +102,20 @@ def resolve_perplexity_disabled(
     logger: Any,
 ) -> bool:
     """Perplexity 사용 가능 여부(비활성화 플래그)를 계산한다."""
-    needs_perplexity = "perplexity" in providers or second_provider == "perplexity"
+    normalized_providers = normalize_provider_list(providers)
+    normalized_second = normalize_provider_name(second_provider)
+    needs_perplexity = "perplexity" in normalized_providers or normalized_second == "perplexity"
     if needs_perplexity and not has_api_key:
         logger.warning("PERPLEXITY_API_KEY가 설정되지 않아 Perplexity 사용 불가")
         return True
     return False
+
+
+__all__ = [
+    "init_gemini_client",
+    "init_gpt_client",
+    "init_zai_client",
+    "normalize_provider_name",
+    "normalize_provider_list",
+    "resolve_perplexity_disabled",
+]

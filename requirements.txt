@@ -10,3 +10,4 @@ pykrx
 gunicorn
 pytz
 schedule
+openai

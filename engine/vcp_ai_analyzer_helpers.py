@@ -22,6 +22,17 @@ _PERPLEXITY_QUOTA_KEYWORDS = (
     "limit exceeded",
     "too many requests",
 )
+_PERPLEXITY_AUTH_KEYWORDS = (
+    "invalid api key",
+    "invalid_api_key",
+    "invalid token",
+    "unauthorized",
+    "authentication",
+    "forbidden",
+    "token",
+    "api key",
+    "bearer",
+)
 
 
 def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
@@ -154,9 +165,37 @@ def is_perplexity_quota_exceeded(status_code: int, response_text: str | None) ->
     return False
 
 
+def classify_perplexity_error(status_code: int, response_text: str | None) -> str:
+    """
+    Perplexity 오류 유형 분류.
+
+    return:
+      - "quota": 할당량/크레딧/레이트 리밋 가능성 높음
+      - "auth": 인증/권한 문제 가능성 높음
+      - "auth_or_quota": 401/403 등으로 원인이 모호함
+      - "other": 기타 오류
+    """
+    normalized = (response_text or "").lower()
+
+    if status_code in (402, 429):
+        return "quota"
+    if is_perplexity_quota_exceeded(status_code, response_text):
+        return "quota"
+
+    if status_code in (401, 403):
+        if any(keyword in normalized for keyword in _PERPLEXITY_QUOTA_KEYWORDS):
+            return "quota"
+        if any(keyword in normalized for keyword in _PERPLEXITY_AUTH_KEYWORDS):
+            return "auth"
+        return "auth_or_quota"
+
+    return "other"
+
+
 __all__ = [
     "build_perplexity_request",
     "build_vcp_prompt",
+    "classify_perplexity_error",
     "extract_perplexity_response_text",
     "is_perplexity_quota_exceeded",
     "parse_json_response",
