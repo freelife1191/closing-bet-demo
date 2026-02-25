@@ -32,6 +32,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [chartData, setChartData] = useState<PaperTradingAssetHistory[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
   const [maToggle, setMaToggle] = useState<{ [key: number]: boolean }>({ 10: true });
   const [timeRange, setTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'ALL'>('1Y');
 
@@ -46,6 +48,59 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
     { id: 'chart', label: '수익 차트', icon: 'fa-chart-area' },
     { id: 'history', label: '거래 내역', icon: 'fa-history' },
   ];
+
+  const buildFallbackAssetHistory = (
+    totalAsset: number,
+    cash: number,
+    stockValue: number,
+  ): PaperTradingAssetHistory[] => {
+    const safeTotal = Number.isFinite(totalAsset) && totalAsset > 0 ? totalAsset : 100000000;
+    const safeCash = Number.isFinite(cash) && cash >= 0 ? cash : safeTotal;
+    const safeStock = Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : Math.max(0, safeTotal - safeCash);
+    const now = new Date();
+    return Array.from({ length: 5 }, (_, idx) => {
+      const dayOffset = 4 - idx;
+      const dt = new Date(now);
+      dt.setDate(now.getDate() - dayOffset);
+      return {
+        date: dt.toISOString().split('T')[0],
+        total_asset: safeTotal,
+        cash: safeCash,
+        stock_value: safeStock,
+      };
+    });
+  };
+
+  const normalizeAssetHistory = (rawHistory: unknown): PaperTradingAssetHistory[] => {
+    if (!Array.isArray(rawHistory)) return [];
+
+    const normalizedRows = rawHistory
+      .map((entry) => {
+        const row = (entry ?? {}) as Record<string, unknown>;
+        const rawDate = String(row.date ?? '').trim();
+        const parsedDate = rawDate ? new Date(rawDate) : null;
+        const date = parsedDate && !Number.isNaN(parsedDate.getTime())
+          ? parsedDate.toISOString().split('T')[0]
+          : '';
+        const totalAsset = Number(row.total_asset);
+        const cash = Number(row.cash);
+        const stockValue = Number(row.stock_value);
+        return {
+          date,
+          total_asset: Number.isFinite(totalAsset) ? totalAsset : NaN,
+          cash: Number.isFinite(cash) ? cash : NaN,
+          stock_value: Number.isFinite(stockValue) ? stockValue : NaN,
+        };
+      })
+      .filter((row) => row.date && Number.isFinite(row.total_asset))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const dedupedByDate = new Map<string, PaperTradingAssetHistory>();
+    normalizedRows.forEach((row) => {
+      dedupedByDate.set(row.date, row);
+    });
+    return Array.from(dedupedByDate.values());
+  };
 
   const fetchPortfolio = async () => {
     setLoading(true);
@@ -71,6 +126,36 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   };
 
   useEffect(() => {
+    let isCancelled = false;
+
+    const fetchChartHistory = async (days: number) => {
+      setChartLoading(true);
+      setChartError(null);
+      try {
+        const res = await paperTradingAPI.getAssetHistory(days);
+        if (isCancelled) return;
+        const normalized = normalizeAssetHistory((res as { history?: unknown })?.history);
+        if (normalized.length > 0) {
+          setChartData(normalized);
+        } else {
+          const total = Number(portfolio?.total_asset_value ?? 100000000);
+          const cash = Number(portfolio?.cash ?? total);
+          setChartData(buildFallbackAssetHistory(total, cash, total - cash));
+        }
+      } catch (e) {
+        if (isCancelled) return;
+        console.error("Failed to fetch asset history", e);
+        setChartError('차트 데이터를 불러오지 못해 로컬 기준 데이터로 표시합니다.');
+        const total = Number(portfolio?.total_asset_value ?? 100000000);
+        const cash = Number(portfolio?.cash ?? total);
+        setChartData(buildFallbackAssetHistory(total, cash, total - cash));
+      } finally {
+        if (!isCancelled) {
+          setChartLoading(false);
+        }
+      }
+    };
+
     if (isOpen) {
       fetchPortfolio();
 
@@ -82,11 +167,12 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
       else if (timeRange === '1Y') days = 365;
       else if (timeRange === 'ALL') days = 3650;
 
-      // 차트 데이터 로드
-      paperTradingAPI.getAssetHistory(days).then(res => {
-        if (res.history) setChartData(res.history);
-      }).catch(console.error);
+      fetchChartHistory(days);
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [isOpen, refreshKey, timeRange]);
 
   // 탭 변경 시 데이터 로드
@@ -190,11 +276,13 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
           const formattedData = chartData
             .map(d => {
               const dateStr = typeof d.date === 'string' ? d.date.split('T')[0] : d.date;
+              const value = Number(d.total_asset);
               return {
                 time: dateStr,
-                value: d.total_asset
+                value
               };
             })
+            .filter(d => typeof d.time === 'string' && d.time.length > 0 && Number.isFinite(d.value))
             .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
           if (formattedData.length === 0) {
@@ -234,7 +322,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
               if (i < period - 1) continue;
               let sum = 0;
               for (let j = 0; j < period; j++) {
-                sum += chartData[i - j].total_asset;
+                sum += Number(chartData[i - j].total_asset) || 0;
               }
               const dateStr = typeof chartData[i].date === 'string' ? chartData[i].date.split('T')[0] : chartData[i].date;
               maData.push({
@@ -775,7 +863,20 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                     {/* Chart Container */}
                     <div className="bg-[#252529] rounded-xl border border-white/5 p-4 relative" style={{ minHeight: '250px' }}>
                       <div ref={chartContainerRef} className="w-full" style={{ height: '220px' }} />
-                      {chartData.length === 0 && (
+                      {chartLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-black/50 z-10 backdrop-blur-sm rounded-xl">
+                          <div className="text-center">
+                            <i className="fas fa-spinner fa-spin text-lg mb-2"></i>
+                            <p className="text-sm font-bold">수익 차트 로딩 중</p>
+                          </div>
+                        </div>
+                      )}
+                      {!chartLoading && chartError && (
+                        <div className="absolute top-3 left-3 right-3 z-20 text-xs md:text-sm text-amber-300 bg-amber-900/30 border border-amber-500/30 rounded-lg px-3 py-2">
+                          {chartError}
+                        </div>
+                      )}
+                      {!chartLoading && !chartError && chartData.length === 0 && (
                         <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-black/50 z-10 backdrop-blur-sm rounded-xl">
                           <div className="text-center">
                             <p className="mb-2 font-bold text-gray-400">자산 데이터 수집 중</p>
