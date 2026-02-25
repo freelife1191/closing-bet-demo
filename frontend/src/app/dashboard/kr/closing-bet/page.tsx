@@ -871,6 +871,7 @@ export default function JonggaV2Page() {
   // Buy Modal State
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
+  const [isBulkBuyingClosingBet, setIsBulkBuyingClosingBet] = useState(false);
   const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false); // [NEW] VCP Modal State
 
   // Alert Modal State
@@ -961,6 +962,111 @@ export default function JonggaV2Page() {
     } finally {
       setAnalyzingGemini(false);
       setRetryingTicker(null);
+    }
+  };
+
+  const isLatestReportToday = (() => {
+    if (!data?.updated_at) return false;
+    try {
+      const todayKst = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
+      const updatedKst = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(data.updated_at));
+      return todayKst === updatedKst;
+    } catch {
+      return selectedDate === 'latest';
+    }
+  })();
+
+  const handleBulkBuyClosingBet = async () => {
+    if (isBulkBuyingClosingBet) return;
+    if (selectedDate !== 'latest' || !isLatestReportToday) {
+      setAlertModal({
+        isOpen: true,
+        type: 'default',
+        title: '오늘 데이터만 가능',
+        content: '최신(오늘) 종가베팅 리포트에서만 일괄 매수를 실행할 수 있습니다.'
+      });
+      return;
+    }
+
+    const sourceSignals = (data?.signals || []).filter((signal) => String(signal.grade || '').toUpperCase() !== 'D');
+    if (sourceSignals.length === 0) {
+      setAlertModal({
+        isOpen: true,
+        type: 'default',
+        title: '매수 대상 없음',
+        content: '오늘 종가베팅 매수 대상 종목이 없습니다.'
+      });
+      return;
+    }
+
+    const uniqueTargets = new Map<string, { ticker: string; name: string; price: number }>();
+    sourceSignals.forEach((signal) => {
+      const ticker = signal.stock_code;
+      if (!ticker || uniqueTargets.has(ticker)) return;
+      const price = signal.current_price || signal.buy_price || signal.entry_price || 0;
+      uniqueTargets.set(ticker, {
+        ticker,
+        name: signal.stock_name,
+        price
+      });
+    });
+
+    setIsBulkBuyingClosingBet(true);
+    let successCount = 0;
+    let failCount = 0;
+    let skippedCount = 0;
+    const failedItems: string[] = [];
+
+    try {
+      for (const target of uniqueTargets.values()) {
+        if (!Number.isFinite(target.price) || target.price <= 0) {
+          skippedCount += 1;
+          failedItems.push(`${target.name}(가격 정보 없음)`);
+          continue;
+        }
+
+        try {
+          const res = await fetch('/api/portfolio/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ticker: target.ticker,
+              name: target.name,
+              price: target.price,
+              quantity: 10
+            })
+          });
+
+          const result = await res.json();
+          if (result.status === 'success') {
+            successCount += 1;
+          } else {
+            failCount += 1;
+            failedItems.push(`${target.name}(${result.message || '매수 실패'})`);
+          }
+        } catch (error) {
+          console.error('[Closing Bet Bulk Buy] buy failed:', target.ticker, error);
+          failCount += 1;
+          failedItems.push(`${target.name}(요청 오류)`);
+        }
+      }
+
+      const summary: string[] = [`성공 ${successCount}건`];
+      if (failCount > 0) summary.push(`실패 ${failCount}건`);
+      if (skippedCount > 0) summary.push(`스킵 ${skippedCount}건`);
+      const failedPreview = failedItems.slice(0, 3).join(', ');
+      const failedSuffix = failedItems.length > 3 ? ' 외' : '';
+      const resultType: 'default' | 'success' | 'danger' =
+        failCount > 0 ? (successCount > 0 ? 'default' : 'danger') : (successCount > 0 ? 'success' : 'default');
+
+      setAlertModal({
+        isOpen: true,
+        type: resultType,
+        title: '종가베팅 일괄 매수 결과',
+        content: `오늘 종가베팅 종목 10주씩 매수 완료\n${summary.join(' / ')}${failedPreview ? `\n실패/스킵: ${failedPreview}${failedSuffix}` : ''}`
+      });
+    } finally {
+      setIsBulkBuyingClosingBet(false);
     }
   };
 
@@ -1187,6 +1293,16 @@ export default function JonggaV2Page() {
 
           <div className="flex items-center gap-3 md:ml-auto">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
+
+            <button
+              onClick={handleBulkBuyClosingBet}
+              disabled={isBulkBuyingClosingBet || loading || !data?.signals?.length || selectedDate !== 'latest' || !isLatestReportToday}
+              className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="오늘 종가베팅 종목 전체를 10주씩 매수합니다."
+            >
+              <i className={`fas ${isBulkBuyingClosingBet ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
+              <span>{isBulkBuyingClosingBet ? '일괄 매수 중...' : '종가베팅 전체 10주 매수'}</span>
+            </button>
 
             {/* [NEW] VCP 기준표 버튼 (Moved here) */}
             <button

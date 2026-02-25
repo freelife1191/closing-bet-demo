@@ -216,6 +216,7 @@ export default function VCPSignalsPage() {
   // Buy Modal State
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
+  const [isBulkBuyingVCP, setIsBulkBuyingVCP] = useState(false);
   const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false); // [NEW] State
 
   // Alert Modal State
@@ -690,6 +691,122 @@ export default function VCPSignalsPage() {
     }
   };
 
+  const getKstDateKey = (value?: string | null): string | null => {
+    if (!value) return null;
+    const directMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (directMatch) return directMatch[1];
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(parsed);
+  };
+
+  const handleBulkBuyVCP = async () => {
+    if (isBulkBuyingVCP) return;
+
+    if (activeDateTab !== 'latest') {
+      setAlertModal({
+        isOpen: true,
+        type: 'default',
+        title: '오늘 데이터만 가능',
+        content: '최신(오늘) VCP 시그널 탭에서만 일괄 매수를 실행할 수 있습니다.'
+      });
+      return;
+    }
+
+    if (!signals.length) {
+      setAlertModal({
+        isOpen: true,
+        type: 'default',
+        title: '매수 대상 없음',
+        content: '오늘 VCP 시그널 종목이 없습니다.'
+      });
+      return;
+    }
+
+    const todayKst = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
+    const parsedSignalDates = signals
+      .map((signal) => getKstDateKey(signal.signal_date))
+      .filter((date): date is string => Boolean(date));
+    const hasTodaySignal = parsedSignalDates.length === 0 || parsedSignalDates.some((date) => date === todayKst);
+
+    if (!hasTodaySignal) {
+      setAlertModal({
+        isOpen: true,
+        type: 'default',
+        title: '오늘 데이터 아님',
+        content: '현재 로딩된 VCP 시그널 날짜가 오늘이 아닙니다. 최신 데이터를 먼저 불러와 주세요.'
+      });
+      return;
+    }
+
+    const uniqueTargets = new Map<string, { ticker: string; name: string; price: number }>();
+    signals.forEach((signal) => {
+      if (!signal.ticker || uniqueTargets.has(signal.ticker)) return;
+      uniqueTargets.set(signal.ticker, {
+        ticker: signal.ticker,
+        name: signal.name,
+        price: signal.current_price || signal.entry_price || 0
+      });
+    });
+
+    setIsBulkBuyingVCP(true);
+    let successCount = 0;
+    let failCount = 0;
+    let skippedCount = 0;
+    const failedItems: string[] = [];
+
+    try {
+      for (const target of uniqueTargets.values()) {
+        if (!Number.isFinite(target.price) || target.price <= 0) {
+          skippedCount += 1;
+          failedItems.push(`${target.name}(가격 정보 없음)`);
+          continue;
+        }
+
+        try {
+          const res = await fetch('/api/portfolio/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ticker: target.ticker,
+              name: target.name,
+              price: target.price,
+              quantity: 10
+            })
+          });
+          const result = await res.json();
+          if (result.status === 'success') {
+            successCount += 1;
+          } else {
+            failCount += 1;
+            failedItems.push(`${target.name}(${result.message || '매수 실패'})`);
+          }
+        } catch (error) {
+          console.error('[VCP Bulk Buy] buy failed:', target.ticker, error);
+          failCount += 1;
+          failedItems.push(`${target.name}(요청 오류)`);
+        }
+      }
+
+      const summary: string[] = [`성공 ${successCount}건`];
+      if (failCount > 0) summary.push(`실패 ${failCount}건`);
+      if (skippedCount > 0) summary.push(`스킵 ${skippedCount}건`);
+      const failedPreview = failedItems.slice(0, 3).join(', ');
+      const failedSuffix = failedItems.length > 3 ? ' 외' : '';
+      const resultType: 'default' | 'success' | 'danger' =
+        failCount > 0 ? (successCount > 0 ? 'default' : 'danger') : (successCount > 0 ? 'success' : 'default');
+
+      setAlertModal({
+        isOpen: true,
+        type: resultType,
+        title: 'VCP 일괄 매수 결과',
+        content: `오늘 VCP 시그널 종목 10주씩 매수 완료\n${summary.join(' / ')}${failedPreview ? `\n실패/스킵: ${failedPreview}${failedSuffix}` : ''}`
+      });
+    } finally {
+      setIsBulkBuyingVCP(false);
+    }
+  };
+
   const openChart = async (ticker: string, name: string, period?: string) => {
     setSelectedStock({ name, ticker });
     setIsModalOpen(true);
@@ -1147,6 +1264,16 @@ export default function VCPSignalsPage() {
         </div>
 
         <div className="flex items-center gap-2 relative self-end md:self-auto">
+          <button
+            onClick={handleBulkBuyVCP}
+            disabled={isBulkBuyingVCP || loading || !signals.length || activeDateTab !== 'latest'}
+            className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            title="오늘 VCP 시그널 전체를 10주씩 매수합니다."
+          >
+            <i className={`fas ${isBulkBuyingVCP ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
+            <span>{isBulkBuyingVCP ? '일괄 매수 중...' : 'VCP 전체 10주 매수'}</span>
+          </button>
+
           {/* [NEW] VCP 기준표 버튼 (Moved here) */}
           <button
             onClick={() => setIsVCPCriteriaModalOpen(true)}
