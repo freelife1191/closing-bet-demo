@@ -20,6 +20,8 @@ from engine.config import app_config
 _VCP_SECOND_RECOMMENDATION_KEY_MAP = {
     "gpt": "gpt_recommendation",
     "openai": "gpt_recommendation",
+    "zai": "gpt_recommendation",
+    "z.ai": "gpt_recommendation",
     "perplexity": "perplexity_recommendation",
 }
 

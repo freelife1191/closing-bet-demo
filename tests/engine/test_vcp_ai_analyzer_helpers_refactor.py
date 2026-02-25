@@ -15,6 +15,7 @@ sys.path.insert(
 from engine.vcp_ai_analyzer_helpers import (
     build_perplexity_request,
     build_vcp_prompt,
+    extract_openai_message_text,
     extract_perplexity_response_text,
     is_perplexity_quota_exceeded,
     parse_json_response,
@@ -37,6 +38,34 @@ def test_parse_json_response_handles_markdown_fenced_json():
     assert parsed is not None
     assert parsed["action"] == "BUY"
     assert parsed["confidence"] == 88
+
+
+def test_parse_json_response_handles_nested_and_json_like_payload():
+    nested_text = '분석 결과: {"result": {"action":"SELL","confidence":"61","reason":"약세"}}'
+    parsed_nested = parse_json_response(nested_text)
+
+    assert parsed_nested is not None
+    assert parsed_nested["action"] == "SELL"
+    assert parsed_nested["confidence"] == "61"
+
+    json_like_text = "{'action': 'buy', 'confidence': 72, 'reason': 'ok'}"
+    parsed_json_like = parse_json_response(json_like_text)
+
+    assert parsed_json_like is not None
+    assert parsed_json_like["action"] == "BUY"
+    assert parsed_json_like["confidence"] == 72
+
+
+def test_extract_openai_message_text_handles_segmented_content():
+    content = [
+        {"type": "text", "text": '{"action":"HOLD",'},
+        {"type": "output_text", "output_text": '"confidence":64,"reason":"중립"}'},
+    ]
+
+    extracted = extract_openai_message_text(content)
+
+    assert '"action":"HOLD"' in extracted
+    assert '"confidence":64' in extracted
 
 
 def test_perplexity_request_and_response_helpers():

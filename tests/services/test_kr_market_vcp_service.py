@@ -23,6 +23,7 @@ from services.kr_market_vcp_service import (
     load_vcp_ai_cache_map,
     merge_vcp_reanalysis_target_rows,
     prepare_vcp_signals_scope,
+    resolve_vcp_second_recommendation_key,
 )
 
 
@@ -103,6 +104,11 @@ def test_merge_vcp_reanalysis_target_rows_deduplicates_by_index():
     merged = merge_vcp_reanalysis_target_rows(primary, additional)
 
     assert [idx for idx, _ in merged] == [10, 20]
+
+
+def test_resolve_vcp_second_recommendation_key_supports_zai_aliases():
+    assert resolve_vcp_second_recommendation_key("zai") == "gpt_recommendation"
+    assert resolve_vcp_second_recommendation_key("z.ai") == "gpt_recommendation"
 
 
 def test_load_vcp_ai_cache_map_reads_existing_cache_files(tmp_path):

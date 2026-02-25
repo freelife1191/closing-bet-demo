@@ -357,6 +357,47 @@ def test_analyze_with_zai_uses_openai_client(monkeypatch):
     assert called["to_thread"] == 1
 
 
+def test_analyze_with_zai_retries_when_first_response_not_json(monkeypatch):
+    calls = {"count": 0}
+
+    def _create(**_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="..."))]
+            )
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content='{"action":"HOLD","confidence":63,"reason":"재시도 성공"}'
+                    )
+                )
+            ]
+        )
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    result = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+
+    assert result is not None
+    assert result["action"] == "HOLD"
+    assert calls["count"] == 2
+
+
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.providers = ["gemini", "gpt"]

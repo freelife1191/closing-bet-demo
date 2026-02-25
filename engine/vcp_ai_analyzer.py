@@ -16,6 +16,7 @@ from engine.vcp_ai_analyzer_helpers import (
     build_perplexity_request,
     build_vcp_prompt,
     classify_perplexity_error,
+    extract_openai_message_text,
     extract_perplexity_response_text,
     is_perplexity_quota_exceeded,
     parse_json_response,
@@ -350,13 +351,14 @@ class VCPMultiAIAnalyzer:
         try:
             resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
             model = app_config.ZAI_MODEL
+            max_parse_attempts = 2
+            last_response_text = ""
 
-            start = time.time()
+            for attempt in range(max_parse_attempts):
+                start = time.time()
 
-            def _call():
-                response = zai_client.chat.completions.create(
-                    model=model,
-                    messages=[
+                def _call(use_json_mode: bool):
+                    messages = [
                         {
                             "role": "system",
                             "content": (
@@ -365,28 +367,63 @@ class VCPMultiAIAnalyzer:
                             ),
                         },
                         {"role": "user", "content": resolved_prompt},
-                    ],
-                    temperature=0.2,
-                    max_tokens=500,
-                )
+                    ]
+                    request_args = {
+                        "model": model,
+                        "messages": messages,
+                        "temperature": 0.0,
+                        "max_tokens": 500,
+                    }
+                    if use_json_mode:
+                        request_args["response_format"] = {"type": "json_object"}
 
-                choices = getattr(response, "choices", None)
-                if not choices:
-                    return ""
-                first_choice = choices[0]
-                message = getattr(first_choice, "message", None)
-                return getattr(message, "content", "")
+                    try:
+                        response = zai_client.chat.completions.create(**request_args)
+                    except Exception as error:
+                        message = str(error).lower()
+                        if use_json_mode and "response_format" in message:
+                            request_args.pop("response_format", None)
+                            response = zai_client.chat.completions.create(**request_args)
+                        else:
+                            raise
 
-            response_text = await asyncio.to_thread(_call)
-            elapsed = time.time() - start
-            logger.debug(f"[Z.ai] {stock_name} 분석 완료 ({elapsed:.2f}s)")
+                    choices = getattr(response, "choices", None)
+                    if not choices and isinstance(response, dict):
+                        choices = response.get("choices")
+                    if not choices:
+                        return ""
 
-            result = self._parse_json_response(response_text)
-            if not result:
-                logger.warning(
-                    f"[Z.ai] JSON 파싱 실패 for {stock_name}. Raw Output: {str(response_text)[:300]}..."
-                )
-            return result
+                    first_choice = choices[0]
+                    message_obj = getattr(first_choice, "message", None)
+                    if message_obj is None and isinstance(first_choice, dict):
+                        message_obj = first_choice.get("message")
+                    if message_obj is None:
+                        return ""
+
+                    content = getattr(message_obj, "content", None)
+                    if content is None and isinstance(message_obj, dict):
+                        content = message_obj.get("content")
+                    return extract_openai_message_text(content)
+
+                response_text = await asyncio.to_thread(_call, attempt == 0)
+                last_response_text = str(response_text or "")
+
+                elapsed = time.time() - start
+                logger.debug(f"[Z.ai] {stock_name} 분석 완료 ({elapsed:.2f}s, attempt={attempt+1})")
+
+                result = self._parse_json_response(last_response_text)
+                if result:
+                    return result
+
+                if attempt < max_parse_attempts - 1:
+                    logger.warning(
+                        f"[Z.ai] JSON 파싱 실패 for {stock_name}. 재시도합니다 ({attempt+1}/{max_parse_attempts-1})"
+                    )
+
+            logger.warning(
+                f"[Z.ai] JSON 파싱 실패 for {stock_name}. Raw Output: {last_response_text[:300]}..."
+            )
+            return None
         except Exception as e:
             logger.error(f"[Z.ai] {stock_name} 분석 실패: {e}")
             return None

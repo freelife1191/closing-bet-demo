@@ -6,12 +6,11 @@ VCP AI Analyzer Helpers
 
 from __future__ import annotations
 
+import ast
 import json
-import re
 from typing import Any, Optional
 
 
-_JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 _PERPLEXITY_QUOTA_KEYWORDS = (
     "quota",
     "resource exhausted",
@@ -33,6 +32,82 @@ _PERPLEXITY_AUTH_KEYWORDS = (
     "api key",
     "bearer",
 )
+
+
+def _extract_json_fenced_content(text: str) -> str:
+    normalized = text.strip()
+    if not normalized.startswith("```"):
+        return normalized
+
+    lines = normalized.split("\n")
+    if len(lines) < 2:
+        return normalized
+    if lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return "\n".join(lines[1:]).strip()
+
+
+def _iter_json_object_candidates(text: str):
+    length = len(text)
+    for start in range(length):
+        if text[start] != "{":
+            continue
+        depth = 0
+        in_string = False
+        escaped = False
+
+        for idx in range(start, length):
+            ch = text[idx]
+            if in_string:
+                if escaped:
+                    escaped = False
+                    continue
+                if ch == "\\":
+                    escaped = True
+                    continue
+                if ch == "\"":
+                    in_string = False
+                continue
+
+            if ch == "\"":
+                in_string = True
+                continue
+            if ch == "{":
+                depth += 1
+                continue
+            if ch == "}":
+                depth -= 1
+                if depth == 0:
+                    yield text[start:idx + 1]
+                    break
+
+
+def _load_json_like(text: str) -> Any:
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        try:
+            return ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            return None
+
+
+def _find_recommendation_payload(payload: Any) -> Optional[dict[str, Any]]:
+    if isinstance(payload, dict):
+        if "action" in payload and "confidence" in payload:
+            return payload
+        for value in payload.values():
+            found = _find_recommendation_payload(value)
+            if found is not None:
+                return found
+        return None
+
+    if isinstance(payload, list):
+        for item in payload:
+            found = _find_recommendation_payload(item)
+            if found is not None:
+                return found
+    return None
 
 
 def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
@@ -73,25 +148,62 @@ def parse_json_response(text: str) -> Optional[dict[str, Any]]:
             return parsed
         return None
 
-    try:
-        normalized = text.strip()
-        if normalized.startswith("```"):
-            lines = normalized.split("\n")
-            normalized = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+    normalized = _extract_json_fenced_content(str(text or ""))
+    parsed_payload = _load_json_like(normalized)
+    found_payload = _find_recommendation_payload(parsed_payload)
+    if found_payload is not None:
+        return _normalize(dict(found_payload))
 
-        result = json.loads(normalized)
-        if isinstance(result, dict):
-            return _normalize(result)
-    except json.JSONDecodeError:
-        match = _JSON_OBJECT_PATTERN.search(text)
-        if match:
-            try:
-                parsed = json.loads(match.group())
-                if isinstance(parsed, dict):
-                    return _normalize(parsed)
-            except (json.JSONDecodeError, TypeError):
-                pass
+    for candidate in _iter_json_object_candidates(str(text or "")):
+        parsed_candidate = _load_json_like(candidate)
+        found_payload = _find_recommendation_payload(parsed_candidate)
+        if found_payload is not None:
+            return _normalize(dict(found_payload))
+
     return None
+
+
+def extract_openai_message_text(content: Any) -> str:
+    """OpenAI 호환 message.content(문자열/배열/객체)에서 텍스트를 추출한다."""
+    if isinstance(content, str):
+        return content
+    if content is None:
+        return ""
+
+    if isinstance(content, dict):
+        for key in ("text", "content", "output_text"):
+            value = content.get(key)
+            if isinstance(value, str):
+                return value
+        return ""
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                if item.strip():
+                    parts.append(item)
+                continue
+            if isinstance(item, dict):
+                for key in ("text", "content", "output_text"):
+                    value = item.get(key)
+                    if isinstance(value, str) and value.strip():
+                        parts.append(value)
+                        break
+                continue
+
+            for attr in ("text", "content", "output_text"):
+                value = getattr(item, attr, None)
+                if isinstance(value, str) and value.strip():
+                    parts.append(value)
+                    break
+        return "\n".join(parts).strip()
+
+    for attr in ("text", "content", "output_text"):
+        value = getattr(content, attr, None)
+        if isinstance(value, str):
+            return value
+    return ""
 
 
 def build_perplexity_request(
@@ -196,6 +308,7 @@ __all__ = [
     "build_perplexity_request",
     "build_vcp_prompt",
     "classify_perplexity_error",
+    "extract_openai_message_text",
     "extract_perplexity_response_text",
     "is_perplexity_quota_exceeded",
     "parse_json_response",
