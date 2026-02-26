@@ -333,6 +333,7 @@ class VCPMultiAIAnalyzer:
                                 f"({response.status_code}). 보조 Provider fallback 수행"
                             )
                             self.perplexity_quota_exhausted = True
+                            self.perplexity_blocked_reason = f"quota-like-{response.status_code}"
                             return await self._fallback_from_perplexity(
                                 stock_name=stock_name,
                                 stock_data=stock_data,
@@ -348,6 +349,7 @@ class VCPMultiAIAnalyzer:
                                 f"({response.status_code})"
                             )
                             self.perplexity_quota_exhausted = True
+                            self.perplexity_blocked_reason = f"quota-{response.status_code}"
                             return await self._fallback_from_perplexity(
                                 stock_name=stock_name,
                                 stock_data=stock_data,
@@ -361,6 +363,7 @@ class VCPMultiAIAnalyzer:
                                 "할당량 소진 가능성을 고려해 fallback 수행합니다."
                             )
                             self.perplexity_quota_exhausted = True
+                            self.perplexity_blocked_reason = f"auth-or-quota-{response.status_code}"
                             return await self._fallback_from_perplexity(
                                 stock_name=stock_name,
                                 stock_data=stock_data,
@@ -374,6 +377,7 @@ class VCPMultiAIAnalyzer:
                                 "이번 세션에서는 Perplexity 직접 호출을 중단하고 fallback으로 전환합니다."
                             )
                             self.perplexity_quota_exhausted = True
+                            self.perplexity_blocked_reason = f"auth-{response.status_code}"
                             return await self._fallback_from_perplexity(
                                 stock_name=stock_name,
                                 stock_data=stock_data,
@@ -468,7 +472,24 @@ class VCPMultiAIAnalyzer:
                     return False
                 return 400 <= status_code <= 599
 
+            def _block_model_for_session(model_name: str, reason: str) -> None:
+                model_key = str(model_name or "").strip().lower()
+                if not model_key:
+                    return
+                if model_key in blocked_models:
+                    return
+                blocked_models.add(model_key)
+                logger.warning(
+                    f"[Z.ai] {stock_name} {model_name} 모델을 세션에서 제외합니다 ({reason})."
+                )
+
             for model_idx, model in enumerate(model_chain):
+                model_key = str(model).strip().lower()
+                if model_key in blocked_models:
+                    logger.info(
+                        f"[Z.ai] {stock_name} 세션 차단 모델 건너뜀: {model}"
+                    )
+                    continue
                 should_try_next_model = False
 
                 for attempt in range(max_parse_attempts):
@@ -606,6 +627,7 @@ class VCPMultiAIAnalyzer:
                                 )
 
                         if quality_low:
+                            _block_model_for_session(model, "low-quality response")
                             if model_idx < len(model_chain) - 1:
                                 next_model = model_chain[model_idx + 1]
                                 logger.warning(
@@ -632,7 +654,7 @@ class VCPMultiAIAnalyzer:
                         is_model_unavailable = status_code in {429, 503}
 
                         if is_model_unavailable:
-                            blocked_models.add(str(model).lower())
+                            _block_model_for_session(model, f"http {status_code}")
                             if model_idx < len(model_chain) - 1:
                                 next_model = model_chain[model_idx + 1]
                                 logger.warning(

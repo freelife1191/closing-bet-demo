@@ -264,6 +264,7 @@ def test_analyze_with_perplexity_auth_401_marks_quota_cache_and_fallbacks(monkey
     assert result is not None
     assert result["action"] == "HOLD"
     assert analyzer.perplexity_quota_exhausted is True
+    assert analyzer.perplexity_blocked_reason == "auth-401"
     assert analyzer.perplexity_disabled is False
 
 
@@ -314,6 +315,7 @@ def test_analyze_with_perplexity_ambiguous_401_marks_quota_and_fallbacks(monkeyp
     assert result is not None
     assert result["action"] == "BUY"
     assert analyzer.perplexity_quota_exhausted is True
+    assert analyzer.perplexity_blocked_reason == "auth-or-quota-401"
     assert analyzer.perplexity_disabled is False
 
 
@@ -365,6 +367,7 @@ def test_analyze_with_perplexity_after_first_401_uses_session_cached_fallback(mo
 
     assert first is not None and second is not None
     assert analyzer.perplexity_quota_exhausted is True
+    assert analyzer.perplexity_blocked_reason == "auth-401"
     assert calls["http"] == 1
     assert calls["zai"] == 2
 
@@ -597,6 +600,65 @@ def test_analyze_with_zai_switches_model_when_response_quality_is_low(monkeypatc
     assert calls.count("primary-zai-model") >= 1
     assert "glm-4.5-Flash" in calls
     assert any("가" <= ch <= "힣" for ch in result["reason"])
+
+
+def test_analyze_with_zai_low_quality_model_is_blocked_for_next_requests(monkeypatch):
+    calls: list[str] = []
+
+    def _create(**kwargs):
+        model = str(kwargs.get("model"))
+        calls.append(model)
+        if model == "primary-zai-model":
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=(
+                                '{"action":"BUY","confidence":81,"reason":"'
+                                "Brief explanation in Korean highlighting the VCP pattern and positive institutional/foreign buying"
+                                '"}'
+                            )
+                        )
+                    )
+                ]
+            )
+        if model == "glm-4.5-Flash":
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='{"action":"BUY","confidence":77,"reason":"수급 유입과 거래량 수축이 확인되어 매수 우위입니다."}'
+                        )
+                    )
+                ]
+            )
+        raise AssertionError(f"Unexpected model call: {model}")
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setenv("ZAI_MODEL", "primary-zai-model")
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    first = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+    second = asyncio.run(analyzer._analyze_with_zai("LG이노텍", {"ticker": "011070"}))
+
+    assert first is not None and second is not None
+    # 첫 호출에서는 primary 모델 1차+보정 호출(2회) 후 차단되고,
+    # 두 번째 호출에서는 차단 상태가 유지되어 primary 모델을 재시도하지 않는다.
+    assert calls.count("primary-zai-model") == 2
+    assert calls.count("glm-4.5-Flash") >= 2
+    assert "primary-zai-model" in analyzer.zai_blocked_models
 
 
 def test_analyze_with_zai_retries_when_first_response_not_json(monkeypatch):
