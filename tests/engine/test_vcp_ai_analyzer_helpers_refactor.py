@@ -144,6 +144,21 @@ def test_parse_json_response_handles_korean_narrative_recommendation_without_jso
     assert parsed["confidence"] == 68
 
 
+def test_parse_json_response_recovers_confidence_from_vcp_score_narrative():
+    text = """
+    이 데이터를 기반으로 기술적 분석을 진행합니다.
+    VCP 시그널 점수: 64.0점이며 패턴은 유지되고 있습니다.
+    현재 구간은 매수 신호로 해석될 수 있습니다.
+    """
+
+    parsed = parse_json_response(text)
+
+    assert parsed is not None
+    assert parsed["action"] == "BUY"
+    assert parsed["confidence"] == 64
+    assert any("가" <= ch <= "힣" for ch in parsed["reason"])
+
+
 def test_parse_json_response_ignores_ambiguous_narrative_actions():
     text = """
     Recommendation: BUY or SELL both could be possible.

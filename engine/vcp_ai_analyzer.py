@@ -77,7 +77,6 @@ class VCPMultiAIAnalyzer:
         self.perplexity_blocked_reason: str | None = None
         self.perplexity_fallback_providers = self._build_perplexity_fallback_chain()
         self.gemini_blocked_models: set[str] = set()
-        self.zai_blocked_models: set[str] = set()
     
     def _build_vcp_prompt(self, stock_name: str, stock_data: Dict) -> str:
         """VCP 분석용 프롬프트 생성"""
@@ -417,10 +416,6 @@ class VCPMultiAIAnalyzer:
         try:
             resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
             primary_model = str(app_config.ZAI_MODEL or "").strip()
-            blocked_models = getattr(self, "zai_blocked_models", None)
-            if not isinstance(blocked_models, set):
-                blocked_models = set()
-                self.zai_blocked_models = blocked_models
             model_chain: list[str] = []
             seen_models: set[str] = set()
             for candidate in [primary_model, *ZAI_FALLBACK_MODEL_CHAIN]:
@@ -428,12 +423,12 @@ class VCPMultiAIAnalyzer:
                 if not model_name:
                     continue
                 key = model_name.lower()
-                if key in seen_models or key in blocked_models:
+                if key in seen_models:
                     continue
                 seen_models.add(key)
                 model_chain.append(model_name)
             if not model_chain:
-                logger.warning("[Z.ai] 사용 가능한 모델이 없습니다. 모든 모델이 세션에서 제외되었습니다.")
+                logger.warning("[Z.ai] 사용 가능한 모델이 없습니다.")
                 fallback_result = build_vcp_rule_based_recommendation(
                     stock_name=stock_name,
                     stock_data=stock_data,
@@ -444,7 +439,11 @@ class VCPMultiAIAnalyzer:
                 )
                 return fallback_result
 
-            max_parse_attempts = 2
+            # 요청사항: 모델 전환 전 동일 모델 최소 3회 증분 재시도
+            max_parse_attempts = max(
+                3,
+                int(getattr(app_config, "VCP_ZAI_MIN_ATTEMPTS_PER_MODEL", 3) or 3),
+            )
             request_timeout = float(getattr(app_config, "VCP_ZAI_API_TIMEOUT", 180))
             last_response_text = ""
             last_error: Exception | None = None
@@ -466,42 +465,29 @@ class VCPMultiAIAnalyzer:
                         return None
                 return None
 
-            def _is_failure_response(error: Exception) -> bool:
-                status_code = _extract_status_code(error)
-                if status_code is None:
-                    return False
-                return 400 <= status_code <= 599
-
-            def _block_model_for_session(model_name: str, reason: str) -> None:
-                model_key = str(model_name or "").strip().lower()
-                if not model_key:
-                    return
-                if model_key in blocked_models:
-                    return
-                blocked_models.add(model_key)
-                logger.warning(
-                    f"[Z.ai] {stock_name} {model_name} 모델을 세션에서 제외합니다 ({reason})."
-                )
+            def _retry_delay(attempt_index: int) -> float:
+                # 1.5s -> 3.0s -> 4.5s 형태의 증분 지연
+                return min(1.5 * float(attempt_index + 1), 6.0)
 
             for model_idx, model in enumerate(model_chain):
-                model_key = str(model).strip().lower()
-                if model_key in blocked_models:
-                    logger.info(
-                        f"[Z.ai] {stock_name} 세션 차단 모델 건너뜀: {model}"
-                    )
-                    continue
                 should_try_next_model = False
 
                 for attempt in range(max_parse_attempts):
                     start = time.time()
+                    attempt_timeout = request_timeout + (attempt * 20.0)
 
-                    def _call(messages: list[dict[str, str]], use_json_mode: bool, max_tokens: int = 500):
+                    def _call(
+                        messages: list[dict[str, str]],
+                        use_json_mode: bool,
+                        max_tokens: int = 500,
+                        timeout_value: float = request_timeout,
+                    ):
                         request_args = {
                             "model": model,
                             "messages": messages,
                             "temperature": 0.0,
                             "max_tokens": max_tokens,
-                            "timeout": request_timeout,
+                            "timeout": timeout_value,
                         }
                         if use_json_mode:
                             request_args["response_format"] = {"type": "json_object"}
@@ -563,13 +549,20 @@ class VCPMultiAIAnalyzer:
                         {"role": "user", "content": resolved_prompt},
                     ]
                     try:
-                        response_text = await asyncio.to_thread(_call, primary_messages, attempt == 0)
+                        response_text = await asyncio.to_thread(
+                            _call,
+                            primary_messages,
+                            attempt == 0,
+                            500,
+                            attempt_timeout,
+                        )
                         last_response_text = str(response_text or "")
 
                         elapsed = time.time() - start
                         logger.debug(
                             f"[Z.ai] {stock_name} 분석 완료 "
-                            f"(model={model}, {elapsed:.2f}s, attempt={attempt+1}, timeout={request_timeout:.0f}s)"
+                            f"(model={model}, {elapsed:.2f}s, attempt={attempt+1}/{max_parse_attempts}, "
+                            f"timeout={attempt_timeout:.0f}s)"
                         )
 
                         result = self._parse_json_response(last_response_text)
@@ -611,7 +604,13 @@ class VCPMultiAIAnalyzer:
                                     ),
                                 },
                             ]
-                            repaired_text = await asyncio.to_thread(_call, repair_messages, True, 250)
+                            repaired_text = await asyncio.to_thread(
+                                _call,
+                                repair_messages,
+                                True,
+                                250,
+                                attempt_timeout,
+                            )
                             repaired_result = self._parse_json_response(str(repaired_text or ""))
                             if repaired_result:
                                 if not is_low_quality_recommendation(repaired_result):
@@ -626,13 +625,23 @@ class VCPMultiAIAnalyzer:
                                     f"(model={model}, attempt={attempt+1})"
                                 )
 
+                        has_more_retries = attempt < max_parse_attempts - 1
+
                         if quality_low:
-                            _block_model_for_session(model, "low-quality response")
+                            if has_more_retries:
+                                delay = _retry_delay(attempt)
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} 응답 품질 미달. 동일 모델 재시도 "
+                                    f"(model={model}, {attempt+1}/{max_parse_attempts-1}, delay={delay:.1f}s)"
+                                )
+                                await asyncio.sleep(delay)
+                                continue
+
                             if model_idx < len(model_chain) - 1:
                                 next_model = model_chain[model_idx + 1]
                                 logger.warning(
-                                    f"[Z.ai] {stock_name} 응답 품질 미달로 모델 전환 "
-                                    f"({model} -> {next_model})"
+                                    f"[Z.ai] {stock_name} 응답 품질 미달 최대 재시도 소진으로 모델 전환 "
+                                    f"({model} -> {next_model}, attempts={max_parse_attempts})"
                                 )
                                 should_try_next_model = True
                             else:
@@ -642,56 +651,53 @@ class VCPMultiAIAnalyzer:
                                 )
                             break
 
-                        if attempt < max_parse_attempts - 1:
+                        if has_more_retries:
+                            delay = _retry_delay(attempt)
                             logger.warning(
-                                f"[Z.ai] JSON 파싱 실패 for {stock_name}. 재시도합니다 "
-                                f"(model={model}, {attempt+1}/{max_parse_attempts-1})"
+                                f"[Z.ai] JSON 파싱 실패 for {stock_name}. 동일 모델 재시도 "
+                                f"(model={model}, {attempt+1}/{max_parse_attempts-1}, delay={delay:.1f}s)"
                             )
+                            await asyncio.sleep(delay)
+                            continue
+
+                        if model_idx < len(model_chain) - 1:
+                            next_model = model_chain[model_idx + 1]
+                            logger.warning(
+                                f"[Z.ai] {stock_name} JSON 파싱 재시도 소진으로 모델 전환 "
+                                f"({model} -> {next_model}, attempts={max_parse_attempts})"
+                            )
+                            should_try_next_model = True
+                        break
                     except Exception as error:
                         last_error = error
                         elapsed = time.time() - start
                         status_code = _extract_status_code(error)
-                        is_model_unavailable = status_code in {429, 503}
-
-                        if is_model_unavailable:
-                            _block_model_for_session(model, f"http {status_code}")
-                            if model_idx < len(model_chain) - 1:
-                                next_model = model_chain[model_idx + 1]
-                                logger.warning(
-                                    f"[Z.ai] {stock_name} 모델 전환(429/503): "
-                                    f"{model} -> {next_model} (status={status_code})"
-                                )
-                                should_try_next_model = True
-                            else:
-                                logger.warning(
-                                    f"[Z.ai] {stock_name} 마지막 모델 {model}이(가) 429/503 실패하여 "
-                                    "추가 모델 전환 없이 fallback으로 종료합니다."
-                                )
-                            break
-
                         if attempt < max_parse_attempts - 1:
+                            delay = _retry_delay(attempt)
+                            reason = f"status={status_code}" if status_code is not None else str(error)
                             logger.warning(
-                                f"[Z.ai] {stock_name} 호출 실패({error}) -> 재시도 "
+                                f"[Z.ai] {stock_name} 호출 실패({reason}) -> 동일 모델 재시도 "
                                 f"(model={model}, {attempt+1}/{max_parse_attempts-1}, "
-                                f"elapsed={elapsed:.2f}s, timeout={request_timeout:.0f}s)"
+                                f"elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s, delay={delay:.1f}s)"
                             )
-                            await asyncio.sleep(1.0 + attempt)
+                            await asyncio.sleep(delay)
                             continue
 
-                        if _is_failure_response(error) and model_idx < len(model_chain) - 1:
+                        if model_idx < len(model_chain) - 1:
                             next_model = model_chain[model_idx + 1]
                             reason = f"status={status_code}" if status_code is not None else str(error)
                             logger.warning(
-                                f"[Z.ai] {stock_name} 모델 실패 응답으로 모델 전환 "
-                                f"({model} -> {next_model}, reason={reason})"
+                                f"[Z.ai] {stock_name} 동일 모델 재시도 소진으로 모델 전환 "
+                                f"({model} -> {next_model}, reason={reason}, attempts={max_parse_attempts})"
                             )
                             should_try_next_model = True
                             break
 
                         logger.error(
                             f"[Z.ai] {stock_name} 호출 실패(최종): {error} "
-                            f"(model={model}, elapsed={elapsed:.2f}s, timeout={request_timeout:.0f}s)"
+                            f"(model={model}, elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s)"
                         )
+                        break
 
                 if should_try_next_model:
                     continue

@@ -61,6 +61,10 @@ _ACTION_NARRATIVE_PATTERNS = (
         r"""(?:추천|의견|결론|판단)[^\n]{0,120}?(매수|매도|관망|보유|buy|sell|hold)""",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"""(매수|매도|관망|보유|buy|sell|hold)\s*(?:신호|관점|의견|우세|전략|권고|추천)""",
+        re.IGNORECASE,
+    ),
 )
 _CONFIDENCE_NARRATIVE_PATTERNS = (
     re.compile(
@@ -70,6 +74,16 @@ _CONFIDENCE_NARRATIVE_PATTERNS = (
     ),
     re.compile(
         r"""(?:신뢰도|확신도|신뢰\s*수준)[^0-9]{0,20}([0-9]{1,3})(?:\s*/\s*100|%)?""",
+        re.IGNORECASE,
+    ),
+)
+_SCORE_NARRATIVE_PATTERNS = (
+    re.compile(
+        r"""(?:vcp(?:\s*시그널)?\s*점수|vcp\s*score)[^0-9]{0,20}([0-9]{1,3}(?:\.[0-9]+)?)\s*점?""",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"""(?:점수|score)[^0-9]{0,12}([0-9]{1,3}(?:\.[0-9]+)?)\s*(?:점|/100|%)""",
         re.IGNORECASE,
     ),
 )
@@ -362,6 +376,18 @@ def _extract_confidence_from_narrative(text: str) -> int | None:
         except (TypeError, ValueError):
             continue
         return max(0, min(100, value))
+
+    # 장문 서술형 응답에서 신뢰도 항목이 없더라도 VCP 점수 기반으로 confidence를 복원한다.
+    for pattern in _SCORE_NARRATIVE_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        try:
+            value = int(round(float(match.group(1))))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= value <= 100:
+            return value
     return None
 
 

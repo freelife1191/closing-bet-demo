@@ -602,7 +602,7 @@ def test_analyze_with_zai_switches_model_when_response_quality_is_low(monkeypatc
     assert any("가" <= ch <= "힣" for ch in result["reason"])
 
 
-def test_analyze_with_zai_low_quality_model_is_blocked_for_next_requests(monkeypatch):
+def test_analyze_with_zai_low_quality_model_is_retried_for_next_requests(monkeypatch):
     calls: list[str] = []
 
     def _create(**kwargs):
@@ -651,14 +651,16 @@ def test_analyze_with_zai_low_quality_model_is_blocked_for_next_requests(monkeyp
     monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
 
     first = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+    first_primary_calls = calls.count("primary-zai-model")
     second = asyncio.run(analyzer._analyze_with_zai("LG이노텍", {"ticker": "011070"}))
+    total_primary_calls = calls.count("primary-zai-model")
 
     assert first is not None and second is not None
-    # 첫 호출에서는 primary 모델 1차+보정 호출(2회) 후 차단되고,
-    # 두 번째 호출에서는 차단 상태가 유지되어 primary 모델을 재시도하지 않는다.
-    assert calls.count("primary-zai-model") == 2
+    # 모델 전환 전 동일 모델을 최소 3회 증분 재시도하고,
+    # 다음 종목에서도 primary 모델을 다시 시도한다.
+    assert first_primary_calls >= 3
+    assert total_primary_calls > first_primary_calls
     assert calls.count("glm-4.5-Flash") >= 2
-    assert "primary-zai-model" in analyzer.zai_blocked_models
 
 
 def test_analyze_with_zai_retries_when_first_response_not_json(monkeypatch):
@@ -836,7 +838,7 @@ def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkey
     assert result["action"] == "BUY"
     assert result["confidence"] >= 60
     assert "현재 판단은 BUY" in result["reason"]
-    assert calls["count"] == 4
+    assert calls["count"] == 18
 
 
 def test_analyze_with_zai_uses_rule_based_fallback_when_exception_occurs(monkeypatch):
@@ -922,11 +924,11 @@ def test_analyze_with_zai_switches_model_on_429_failure_response(monkeypatch):
 
     assert result is not None
     assert result["action"] == "BUY"
-    assert calls.count("primary-zai-model") == 1
+    assert calls.count("primary-zai-model") == 3
     assert "glm-4.5-Flash" in calls
 
 
-def test_analyze_with_zai_429_blocks_model_for_next_requests(monkeypatch):
+def test_analyze_with_zai_429_does_not_block_model_for_next_requests(monkeypatch):
     calls: list[str] = []
 
     def _create(**kwargs):
@@ -965,11 +967,15 @@ def test_analyze_with_zai_429_blocks_model_for_next_requests(monkeypatch):
     monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
 
     first = asyncio.run(analyzer._analyze_with_zai("LG화학", {"ticker": "051910"}))
+    first_primary_calls = calls.count("primary-zai-model")
     second = asyncio.run(analyzer._analyze_with_zai("고려아연", {"ticker": "010130"}))
+    total_primary_calls = calls.count("primary-zai-model")
 
     assert first is not None and second is not None
-    # 429 모델은 세션에서 제외되어 두 번째 호출에서는 더 이상 사용되지 않는다.
-    assert calls.count("primary-zai-model") == 1
+    # 429가 발생해도 동일 모델 최소 3회 재시도 후 다음 모델로 전환하며,
+    # 다음 종목에서도 primary 모델을 다시 시도한다.
+    assert first_primary_calls == 3
+    assert total_primary_calls > first_primary_calls
 
 
 def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
@@ -1018,8 +1024,8 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
 
     assert result is not None
     assert result["action"] == "HOLD"
-    assert calls.count("primary-zai-model") == 1
-    assert calls.count("glm-4.5-Flash") == 1
+    assert calls.count("primary-zai-model") == 3
+    assert calls.count("glm-4.5-Flash") == 3
     assert "glm-4.6V-Flash" in calls
 
 
