@@ -516,6 +516,12 @@ def load_signal_tracker_csv_cached(
         existing_columns = [column for column in requested_usecols if column in loaded.columns]
         if existing_columns:
             loaded = loaded.loc[:, existing_columns]
+        else:
+            # usecols가 전부 누락된 경우 pandas.read_csv(usecols=...)와 동일하게 예외로 처리한다.
+            # 전체 컬럼 payload가 source cache/SQLite에 저장되는 것을 방지한다.
+            raise ValueError(
+                f"Usecols do not match columns (path={path_abs}, usecols={requested_usecols})"
+            )
 
     refreshed_signature = _file_signature(path_abs)
     if refreshed_signature is None:

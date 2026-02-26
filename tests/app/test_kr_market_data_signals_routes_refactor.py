@@ -21,6 +21,7 @@ sys.path.insert(
 )
 
 from app.routes.kr_market_data_signals_routes import register_market_data_signal_routes
+import app.routes.kr_market_data_signals_routes as signals_routes
 
 
 def _build_deps(fetch_realtime_prices_fn):
@@ -103,6 +104,48 @@ def test_realtime_prices_route_passes_latest_price_loader_to_service():
     assert captured["sample_data_path"] == "korean_stocks_list.csv"
     assert captured["latest_price_map"]["005930"] == 321.0
     assert response.get_json()["prices"]["005930"] == 321.0
+
+
+def test_vcp_status_route_reflects_scheduler_vcp_running(monkeypatch):
+    monkeypatch.setattr(
+        signals_routes,
+        "get_scheduler_runtime_status",
+        lambda data_dir="data": {
+            "is_data_scheduling_running": True,
+            "is_jongga_scheduling_running": False,
+            "is_vcp_scheduling_running": True,
+        },
+    )
+
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    deps["vcp_status"] = {
+        "running": False,
+        "task_type": None,
+        "cancel_requested": False,
+        "status": "idle",
+        "message": "",
+        "progress": 0,
+    }
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_status_scheduler_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.get("/api/kr/signals/status")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["running"] is True
+    assert payload["status"] == "running"
+    assert payload["message"] == "VCP 시그널 스케쥴링 진행 중인 상태"
+    assert payload["schedulerRunning"] is True
 
 
 def test_signal_dates_route_requests_only_signal_date_column_when_supported():
@@ -368,6 +411,67 @@ def test_reanalyze_failed_ai_route_forwards_force_provider_to_service():
 
     assert response.status_code == 200
     assert captured.get("force_provider") == "gemini"
+
+
+def test_reanalyze_failed_ai_route_loads_min_columns_and_forwards_persist_loader():
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    captured_loader: list[tuple[str, dict[str, Any]]] = []
+    captured_execute: dict[str, Any] = {}
+
+    def _load_csv_file(name: str, **kwargs):
+        captured_loader.append((name, dict(kwargs)))
+        return pd.DataFrame(
+            [
+                {
+                    "ticker": "005930",
+                    "signal_date": "2026-02-21",
+                    "name": "삼성전자",
+                    "current_price": 10_000,
+                    "entry_price": 9_900,
+                    "score": 8,
+                    "vcp_score": 7,
+                    "contraction_ratio": 10,
+                    "foreign_5d": 1,
+                    "inst_5d": 1,
+                    "foreign_1d": 1,
+                    "inst_1d": 1,
+                    "ai_action": "N/A",
+                    "ai_reason": "분석 실패",
+                    "ai_confidence": 0,
+                }
+            ]
+        )
+
+    def _execute(**kwargs):
+        captured_execute.update(kwargs)
+        return 200, {"status": "success", "message": "ok"}
+
+    deps["load_csv_file"] = _load_csv_file
+    deps["execute_vcp_failed_ai_reanalysis"] = _execute
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_reanalyze_usecols_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.post(
+        "/api/kr/signals/reanalyze-failed-ai",
+        json={"background": False, "target_date": "2026-02-21"},
+    )
+
+    assert response.status_code == 200
+    assert captured_loader
+    first_name, first_kwargs = captured_loader[0]
+    assert first_name == "signals_log.csv"
+    assert first_kwargs.get("deep_copy") is False
+    assert first_kwargs.get("usecols") == signals_routes._VCP_REANALYSIS_SIGNAL_USECOLS
+    assert callable(captured_execute.get("load_csv_file_for_persist"))
 
 
 def test_reanalyze_failed_ai_route_rejects_invalid_force_provider():

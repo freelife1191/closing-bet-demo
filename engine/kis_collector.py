@@ -44,7 +44,10 @@ class KisCollector:
         """저장된 토큰 로드"""
         if os.path.exists(self.token_file):
             try:
-                data = load_json_payload_from_path(self.token_file)
+                try:
+                    data = load_json_payload_from_path(self.token_file, deep_copy=False)
+                except TypeError:
+                    data = load_json_payload_from_path(self.token_file)
                 if not isinstance(data, dict):
                     return
                 self.access_token = data.get("access_token")

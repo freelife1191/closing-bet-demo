@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 from engine.market_schedule import MarketSchedule
+from services.scheduler_runtime_status_service import set_scheduler_runtime_status
 
 logger = logging.getLogger(__name__)
 
@@ -57,36 +58,50 @@ def run_jongga_v2_analysis(test_mode: bool = False) -> None:
     now = datetime.now()
 
     if not test_mode and not MarketSchedule.is_market_open(now.date()):
+        set_scheduler_runtime_status(jongga_scheduling_running=False)
         logger.info(
             f"[Scheduler] 오늘은 휴장일({now.strftime('%Y-%m-%d')})이므로 종가베팅 분석을 건너뜁니다."
         )
         return
 
-    logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (16:00 - After Closing Analysis)")
+    set_scheduler_runtime_status(jongga_scheduling_running=True)
+    logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)")
     try:
         init_data_functions = _load_init_data_functions()
         analysis_ok = init_data_functions["create_jongga_v2_latest"]()
         if analysis_ok is False:
             logger.error("[Scheduler] 종가베팅 결과 생성 실패 감지")
         else:
-            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료 (16:30)")
+            logger.info("<<< [Scheduler] AI 종가베팅 분석 완료")
 
         init_data_functions["send_jongga_notification"]()
         logger.info("<<< [Scheduler] AI 종가베팅 분석 완료")
     except Exception as e:
         logger.error(f"[Scheduler] AI 종가베팅 분석 실패: {e}")
+    finally:
+        set_scheduler_runtime_status(jongga_scheduling_running=False)
 
 
 def run_daily_closing_analysis(test_mode: bool = False) -> None:
-    """장 마감 후 전체 데이터 수집 및 분석 (16:00 - First)."""
+    """장 마감 후 전체 데이터 수집 및 분석."""
     now = datetime.now()
 
     if not test_mode and not MarketSchedule.is_market_open(now.date()):
+        set_scheduler_runtime_status(
+            data_scheduling_running=False,
+            vcp_scheduling_running=False,
+            jongga_scheduling_running=False,
+        )
         logger.info(
             f"[Scheduler] 오늘은 휴장일({now.strftime('%Y-%m-%d')})이므로 정기 분석을 건너뜁니다."
         )
         return
 
+    set_scheduler_runtime_status(
+        data_scheduling_running=True,
+        vcp_scheduling_running=False,
+        jongga_scheduling_running=False,
+    )
     logger.info(">>> [Scheduler] 장 마감 정기 분석 시작")
     try:
         init_data_functions = _load_init_data_functions()
@@ -101,10 +116,12 @@ def run_daily_closing_analysis(test_mode: bool = False) -> None:
         if inst_ok is False:
             logger.error("[Scheduler] 기관/외인 수급 데이터 수집 실패 감지")
 
+        set_scheduler_runtime_status(vcp_scheduling_running=True)
         logger.info("[Scheduler] VCP 시그널 분석...")
         vcp_ok = init_data_functions["create_signals_log"](run_ai=True)
         if vcp_ok is False:
             logger.error("[Scheduler] VCP 시그널 분석 실패 감지")
+        set_scheduler_runtime_status(vcp_scheduling_running=False)
 
         logger.info(">>> [Scheduler] Chaining: 데이터 수집 완료 후 AI 종가베팅 분석 즉시 시작")
         run_jongga_v2_analysis(test_mode=test_mode)
@@ -112,6 +129,12 @@ def run_daily_closing_analysis(test_mode: bool = False) -> None:
         logger.info("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
     except Exception as e:
         logger.error(f"[Scheduler] 장 마감 정기 분석 실패: {e}")
+    finally:
+        set_scheduler_runtime_status(
+            data_scheduling_running=False,
+            vcp_scheduling_running=False,
+            jongga_scheduling_running=False,
+        )
 
 
 def run_market_gate_sync() -> None:

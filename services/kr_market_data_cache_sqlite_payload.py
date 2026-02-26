@@ -484,6 +484,26 @@ def serialize_usecols_signature(usecols: tuple[str, ...] | None) -> str:
     return json.dumps([str(column) for column in usecols], ensure_ascii=False, separators=(",", ":"))
 
 
+def _project_existing_usecols_columns(
+    frame: pd.DataFrame,
+    usecols: tuple[str, ...] | None,
+) -> pd.DataFrame | None:
+    """
+    usecols 서명이 있는 CSV payload를 로드할 때 요청 컬럼만 유지한다.
+
+    과거 fallback 버전이 전체 payload를 저장했어도, 로드시 투영해 메모리/캐시 비용을 줄인다.
+    요청 컬럼이 하나도 없으면 None을 반환해 호출부가 파일 원본 fallback을 수행하도록 한다.
+    """
+    if usecols is None:
+        return frame
+
+    requested_columns = [str(column) for column in usecols]
+    existing_columns = [column for column in requested_columns if column in frame.columns]
+    if not existing_columns:
+        return None
+    return frame.loc[:, existing_columns]
+
+
 def _ensure_csv_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bool:
     db_key = normalize_sqlite_db_key(db_path)
     with CSV_PAYLOAD_SQLITE_READY_CONDITION:
@@ -658,7 +678,7 @@ def load_csv_payload_from_sqlite(
             return None
         loaded = pd.read_json(StringIO(payload_json), orient="split")
         if isinstance(loaded, pd.DataFrame):
-            return loaded
+            return _project_existing_usecols_columns(loaded, usecols)
         return None
     except Exception as error:
         logger.debug(f"Failed to load CSV payload SQLite cache ({filepath}): {error}")
@@ -680,8 +700,17 @@ def save_csv_payload_to_sqlite(
     if not _ensure_csv_payload_sqlite_cache(db_path, logger):
         return
 
+    payload_to_store = _project_existing_usecols_columns(payload, usecols)
+    if payload_to_store is None:
+        logger.debug(
+            "Skip saving CSV payload SQLite cache because requested usecols are all missing (%s, usecols=%s)",
+            filepath,
+            usecols,
+        )
+        return
+
     try:
-        serialized = payload.to_json(orient="split", force_ascii=False, date_format="iso")
+        serialized = payload_to_store.to_json(orient="split", force_ascii=False, date_format="iso")
     except Exception as error:
         logger.debug(f"Failed to serialize CSV payload cache ({filepath}): {error}")
         return

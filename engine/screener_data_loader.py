@@ -67,8 +67,8 @@ def _read_csv_min_columns_cached(
                 pass
         return load_signal_tracker_csv_cached(
             **common_kwargs,
-            usecols=None,
-            fallback_without_usecols=False,
+            usecols=required_cols,
+            fallback_without_usecols=True,
         )
 
 

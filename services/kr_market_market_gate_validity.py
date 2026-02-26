@@ -83,7 +83,7 @@ def apply_market_gate_snapshot_fallback(
     gate_data: dict[str, Any],
     is_valid: bool,
     target_date: str | None,
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     logger: logging.Logger,
 ) -> tuple[dict[str, Any], bool]:
     """실시간 요청에서 gate 데이터가 부실할 때 jongga_v2 snapshot으로 보완한다."""
@@ -91,7 +91,10 @@ def apply_market_gate_snapshot_fallback(
         return gate_data, is_valid
 
     try:
-        snapshot = load_json_file("jongga_v2_latest.json")
+        try:
+            snapshot = load_json_file("jongga_v2_latest.json", deep_copy=False)
+        except TypeError:
+            snapshot = load_json_file("jongga_v2_latest.json")
     except Exception as e:
         logger.warning(f"Market Gate Fallback 실패: {e}")
         return gate_data, is_valid
@@ -99,7 +102,8 @@ def apply_market_gate_snapshot_fallback(
     if not snapshot or "market_status" not in snapshot:
         return gate_data, is_valid
 
-    snap_status = snapshot.get("market_status") or {}
+    raw_snap_status = snapshot.get("market_status") or {}
+    snap_status = dict(raw_snap_status) if isinstance(raw_snap_status, dict) else {}
     if not (snap_status.get("sectors") and len(snap_status["sectors"]) > 0):
         return gate_data, is_valid
 

@@ -217,13 +217,22 @@ def test_load_data_falls_back_to_full_read_when_usecols_mismatch(monkeypatch, tm
     stocks_path = str(data_dir / "korean_stocks_list.csv")
     prices_path = str(data_dir / "daily_prices.csv")
     inst_path = str(data_dir / "all_institutional_trend_data.csv")
-    assert calls[stocks_path] == [["ticker", "name", "market"], None]
+    assert calls[stocks_path] == [
+        ["ticker", "name", "market"],
+        ["ticker", "name", "market"],
+        None,
+    ]
     assert calls[prices_path] == [
         ["ticker", "date", "open", "high", "low", "close", "volume", "current_price"],
         ["ticker", "date", "open", "high", "low", "close", "volume"],
+        ["ticker", "date", "open", "high", "low", "close", "volume"],
         None,
     ]
-    assert calls[inst_path] == [["ticker", "date", "foreign_buy", "inst_buy"], None]
+    assert calls[inst_path] == [
+        ["ticker", "date", "foreign_buy", "inst_buy"],
+        ["ticker", "date", "foreign_buy", "inst_buy"],
+        None,
+    ]
 
 
 def test_load_data_retries_prices_with_required_columns_when_optional_missing(monkeypatch, tmp_path: Path):

@@ -847,6 +847,31 @@ def test_load_json_file_uses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp
     assert second["signals"][0]["ticker"] == "005930"
 
 
+def test_load_json_file_supports_deep_copy_false_for_read_only_path(tmp_path):
+    _reset_data_cache_state()
+    target_file = tmp_path / "kr_ai_analysis.json"
+    target_file.write_text(
+        json.dumps({"signals": [{"ticker": "005930"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    first = cache_service.load_json_file(
+        str(tmp_path),
+        "kr_ai_analysis.json",
+        deep_copy=False,
+    )
+    second = cache_service.load_json_file(
+        str(tmp_path),
+        "kr_ai_analysis.json",
+        deep_copy=False,
+    )
+    third = cache_service.load_json_file(str(tmp_path), "kr_ai_analysis.json")
+
+    assert first is second
+    assert third is not first
+    assert third["signals"][0]["ticker"] == "005930"
+
+
 def test_load_json_file_prunes_sqlite_rows(monkeypatch, tmp_path):
     _reset_data_cache_state()
     monkeypatch.setattr(cache_core, "_JSON_PAYLOAD_SQLITE_MAX_ROWS", 2)

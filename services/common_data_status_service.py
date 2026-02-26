@@ -34,7 +34,7 @@ def _format_size(size_bytes: int) -> str:
 def build_common_data_status_payload(
     *,
     data_files_to_check: list[dict[str, Any]],
-    load_update_status: Callable[[], dict[str, Any]],
+    load_update_status: Callable[..., dict[str, Any]],
     logger: Any,
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -78,11 +78,13 @@ def build_common_data_status_payload(
             }
         )
 
-    current_status = load_update_status()
+    try:
+        current_status = load_update_status(deep_copy=False)
+    except TypeError:
+        current_status = load_update_status()
     update_status = {
         "isRunning": current_status.get("isRunning", False),
         "lastRun": current_status.get("startTime") or current_time.isoformat(),
         "progress": current_status.get("currentItem") or "",
     }
     return {"files": files_status, "update_status": update_status}
-

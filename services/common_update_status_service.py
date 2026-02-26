@@ -112,6 +112,26 @@ def _is_missing_table_error(error: Exception) -> bool:
     return is_sqlite_missing_table_error(error, table_names="update_status_snapshot")
 
 
+def _ensure_update_status_snapshot_columns(cursor: sqlite3.Cursor, logger) -> None:
+    rows = cursor.execute("PRAGMA table_info(update_status_snapshot)").fetchall()
+    existing_columns = {str(row[1]) for row in rows if len(row) > 1}
+
+    if "mtime_ns" not in existing_columns:
+        try:
+            cursor.execute("ALTER TABLE update_status_snapshot ADD COLUMN mtime_ns INTEGER")
+        except sqlite3.OperationalError as error:
+            if "duplicate column name" not in str(error).lower():
+                logger.error(f"Failed to add update_status_snapshot.mtime_ns column: {error}")
+                raise
+    if "size_bytes" not in existing_columns:
+        try:
+            cursor.execute("ALTER TABLE update_status_snapshot ADD COLUMN size_bytes INTEGER")
+        except sqlite3.OperationalError as error:
+            if "duplicate column name" not in str(error).lower():
+                logger.error(f"Failed to add update_status_snapshot.size_bytes column: {error}")
+                raise
+
+
 def _mark_update_status_snapshot_key_seen(*, db_path: str, file_path: str) -> bool:
     """
     (db_path, file_path) 조합의 SQLite snapshot key를 추적한다.
@@ -177,10 +197,13 @@ def _ensure_update_status_sqlite(logger) -> bool:
                 CREATE TABLE IF NOT EXISTS update_status_snapshot (
                     file_path TEXT PRIMARY KEY,
                     payload_json TEXT NOT NULL,
+                    mtime_ns INTEGER,
+                    size_bytes INTEGER,
                     updated_at TEXT NOT NULL
                 )
                 """
             )
+            _ensure_update_status_snapshot_columns(cursor, logger)
             cursor.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_update_status_snapshot_updated_at
@@ -219,6 +242,7 @@ def _load_update_status_from_sqlite(
     *,
     update_status_file: str,
     logger,
+    expected_signature: tuple[int, int] | None = None,
     _retried: bool = False,
 ) -> Dict[str, Any] | None:
     if not _ensure_update_status_sqlite(logger):
@@ -229,7 +253,31 @@ def _load_update_status_from_sqlite(
         column_name="file_path",
         lookup_keys=lookup_keys,
     )
-    lookup_params = (*lookup_keys, *lookup_keys)
+    if expected_signature is None:
+        query_sql = f"""
+            SELECT payload_json
+            FROM update_status_snapshot
+            WHERE file_path IN ({lookup_placeholders})
+            ORDER BY {order_case_sql}
+            LIMIT 1
+        """
+        lookup_params: tuple[Any, ...] = (*lookup_keys, *lookup_keys)
+    else:
+        query_sql = f"""
+            SELECT payload_json
+            FROM update_status_snapshot
+            WHERE file_path IN ({lookup_placeholders})
+              AND mtime_ns = ?
+              AND size_bytes = ?
+            ORDER BY {order_case_sql}
+            LIMIT 1
+        """
+        lookup_params = (
+            *lookup_keys,
+            int(expected_signature[0]),
+            int(expected_signature[1]),
+            *lookup_keys,
+        )
 
     def _query_snapshot() -> tuple[Any, ...] | None:
         with connect_sqlite(
@@ -240,13 +288,7 @@ def _load_update_status_from_sqlite(
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                f"""
-                SELECT payload_json
-                FROM update_status_snapshot
-                WHERE file_path IN ({lookup_placeholders})
-                ORDER BY {order_case_sql}
-                LIMIT 1
-                """,
+                query_sql,
                 lookup_params,
             )
             return cursor.fetchone()
@@ -291,6 +333,7 @@ def _save_update_status_to_sqlite(
     update_status_file: str,
     status: Dict[str, Any],
     logger,
+    file_signature: tuple[int, int] | None = None,
     _retried: bool = False,
 ) -> None:
     if not _ensure_update_status_sqlite(logger):
@@ -321,13 +364,27 @@ def _save_update_status_to_sqlite(
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT INTO update_status_snapshot (file_path, payload_json, updated_at)
-                    VALUES (?, ?, ?)
+                    INSERT INTO update_status_snapshot (
+                        file_path,
+                        payload_json,
+                        mtime_ns,
+                        size_bytes,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(file_path) DO UPDATE SET
                         payload_json = excluded.payload_json,
+                        mtime_ns = excluded.mtime_ns,
+                        size_bytes = excluded.size_bytes,
                         updated_at = excluded.updated_at
                     """,
-                    (file_key, payload_json, datetime.now().isoformat()),
+                    (
+                        file_key,
+                        payload_json,
+                        int(file_signature[0]) if file_signature is not None else None,
+                        int(file_signature[1]) if file_signature is not None else None,
+                        datetime.now().isoformat(),
+                    ),
                 )
                 if should_prune_after_upsert:
                     _prune_update_status_snapshot_if_needed(
@@ -348,6 +405,7 @@ def _save_update_status_to_sqlite(
                     update_status_file=update_status_file,
                     status=status,
                     logger=logger,
+                    file_signature=file_signature,
                     _retried=True,
                 )
                 return
@@ -375,7 +433,12 @@ def default_update_status() -> Dict[str, Any]:
     }
 
 
-def load_update_status(*, update_status_file: str, logger) -> Dict[str, Any]:
+def load_update_status(
+    *,
+    update_status_file: str,
+    logger,
+    deep_copy: bool = True,
+) -> Dict[str, Any]:
     """상태 파일 로드."""
     default_status = default_update_status()
     cache_key = _normalize_update_status_file_key(update_status_file)
@@ -385,13 +448,33 @@ def load_update_status(*, update_status_file: str, logger) -> Dict[str, Any]:
             update_status_file=update_status_file,
             logger=logger,
         )
-        return sqlite_status if sqlite_status is not None else default_status
+        if sqlite_status is None:
+            return default_status
+        if deep_copy:
+            return copy.deepcopy(sqlite_status)
+        return sqlite_status
 
     with _UPDATE_STATUS_CACHE_LOCK:
         cached = _UPDATE_STATUS_CACHE.get(cache_key)
         if cached is not None and cached[0] == signature:
             _UPDATE_STATUS_CACHE.move_to_end(cache_key)
-            return copy.deepcopy(cached[1])
+            if deep_copy:
+                return copy.deepcopy(cached[1])
+            return cached[1]
+
+    sqlite_status = _load_update_status_from_sqlite(
+        update_status_file=update_status_file,
+        logger=logger,
+        expected_signature=signature,
+    )
+    if sqlite_status is not None:
+        with _UPDATE_STATUS_CACHE_LOCK:
+            _UPDATE_STATUS_CACHE[cache_key] = (signature, copy.deepcopy(sqlite_status))
+            _UPDATE_STATUS_CACHE.move_to_end(cache_key)
+            _prune_update_status_cache_locked()
+        if deep_copy:
+            return copy.deepcopy(sqlite_status)
+        return sqlite_status
 
     try:
         with open(update_status_file, "r", encoding="utf-8") as handle:
@@ -402,13 +485,25 @@ def load_update_status(*, update_status_file: str, logger) -> Dict[str, Any]:
             update_status_file=update_status_file,
             logger=logger,
         )
-        return sqlite_status if sqlite_status is not None else default_status
+        if sqlite_status is None:
+            return default_status
+        if deep_copy:
+            return copy.deepcopy(sqlite_status)
+        return sqlite_status
 
     loaded_status = loaded if isinstance(loaded, dict) else default_status
     with _UPDATE_STATUS_CACHE_LOCK:
         _UPDATE_STATUS_CACHE[cache_key] = (signature, copy.deepcopy(loaded_status))
         _UPDATE_STATUS_CACHE.move_to_end(cache_key)
         _prune_update_status_cache_locked()
+    _save_update_status_to_sqlite(
+        update_status_file=update_status_file,
+        status=loaded_status,
+        logger=logger,
+        file_signature=signature,
+    )
+    if deep_copy:
+        return copy.deepcopy(loaded_status)
     return loaded_status
 
 
@@ -433,6 +528,7 @@ def save_update_status(*, status: Dict[str, Any], update_status_file: str, logge
             update_status_file=update_status_file,
             status=status,
             logger=logger,
+            file_signature=signature,
         )
     except Exception as error:
         logger.error(f"Failed to save update status: {error}")

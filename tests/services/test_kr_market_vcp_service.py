@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import json
+from typing import Any
 
 import pandas as pd
 
@@ -157,10 +158,10 @@ def test_load_vcp_ai_cache_map_uses_injected_json_loader(tmp_path):
     signals_path = tmp_path / "signals_log.csv"
     signals_path.write_text("ticker,signal_date\n005930,2026-02-21\n", encoding="utf-8")
 
-    loaded_paths: list[str] = []
+    loaded_calls: list[tuple[str, dict[str, Any]]] = []
 
-    def _loader(path: str):
-        loaded_paths.append(path)
+    def _loader(path: str, **kwargs):
+        loaded_calls.append((path, dict(kwargs)))
         return cache_payload
 
     cache_exists, ai_map = load_vcp_ai_cache_map(
@@ -171,7 +172,8 @@ def test_load_vcp_ai_cache_map_uses_injected_json_loader(tmp_path):
     )
 
     assert cache_exists is True
-    assert loaded_paths
+    assert loaded_calls
+    assert loaded_calls[0][1].get("deep_copy") is False
     assert isinstance(ai_map["005930"]["gemini_recommendation"], dict)
 
 
@@ -322,6 +324,222 @@ def test_execute_vcp_failed_ai_reanalysis_writes_signals_csv_atomically(monkeypa
     assert write_calls["path"] == str(signals_path)
     assert write_calls["content"].startswith("\ufeff")
     assert "005930" in write_calls["content"]
+
+
+def test_execute_vcp_failed_ai_reanalysis_preserves_full_csv_columns_with_partial_source(
+    monkeypatch,
+    tmp_path,
+):
+    full_signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "N/A",
+                "ai_reason": "분석 실패",
+                "ai_confidence": 0,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+                "extra_note": "보존필드",
+            }
+        ]
+    )
+    partial_signals_df = full_signals_df[
+        [
+            "ticker",
+            "signal_date",
+            "name",
+            "current_price",
+            "entry_price",
+            "score",
+            "vcp_score",
+            "contraction_ratio",
+            "foreign_5d",
+            "inst_5d",
+            "foreign_1d",
+            "inst_1d",
+            "ai_action",
+            "ai_reason",
+            "ai_confidence",
+        ]
+    ].copy()
+    signals_path = tmp_path / "signals_log.csv"
+    full_signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    class _DummyAnalyzer:
+        @staticmethod
+        def get_available_providers():
+            return ["gemini", "perplexity"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            return {
+                "005930": {
+                    "gemini_recommendation": {
+                        "action": "BUY",
+                        "confidence": 80,
+                        "reason": "재분석 완료",
+                    },
+                    "perplexity_recommendation": {
+                        "action": "HOLD",
+                        "confidence": 65,
+                        "reason": "보조 분석",
+                    },
+                }
+            }
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+    import services.kr_market_vcp_reanalysis_service as reanalysis_service
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
+
+    write_calls = {}
+
+    def _atomic_write(path: str, content: str, *, invalidate_fn=None):
+        del invalidate_fn
+        write_calls["path"] = path
+        write_calls["content"] = content
+
+    loader_calls = []
+
+    def _load_csv_file_for_persist(filename: str):
+        loader_calls.append(filename)
+        return full_signals_df.copy()
+
+    monkeypatch.setattr(reanalysis_service, "atomic_write_text", _atomic_write)
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=partial_signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 0,
+        logger=logging.getLogger(__name__),
+        load_csv_file_for_persist=_load_csv_file_for_persist,
+    )
+
+    assert status_code == 200
+    assert payload["updated_count"] == 1
+    assert write_calls["path"] == str(signals_path)
+    assert loader_calls == ["signals_log.csv"]
+    assert "extra_note" in write_calls["content"]
+    assert "보존필드" in write_calls["content"]
+
+
+def test_execute_vcp_failed_ai_reanalysis_prefers_deep_copy_false_for_persist_loader(
+    monkeypatch,
+    tmp_path,
+):
+    full_signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "N/A",
+                "ai_reason": "분석 실패",
+                "ai_confidence": 0,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+                "extra_note": "보존필드",
+            }
+        ]
+    )
+    partial_signals_df = full_signals_df[
+        [
+            "ticker",
+            "signal_date",
+            "name",
+            "current_price",
+            "entry_price",
+            "score",
+            "vcp_score",
+            "contraction_ratio",
+            "foreign_5d",
+            "inst_5d",
+            "foreign_1d",
+            "inst_1d",
+            "ai_action",
+            "ai_reason",
+            "ai_confidence",
+        ]
+    ].copy()
+    signals_path = tmp_path / "signals_log.csv"
+    full_signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    class _DummyAnalyzer:
+        @staticmethod
+        def get_available_providers():
+            return ["gemini", "perplexity"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            return {
+                "005930": {
+                    "gemini_recommendation": {
+                        "action": "BUY",
+                        "confidence": 80,
+                        "reason": "재분석 완료",
+                    },
+                    "perplexity_recommendation": {
+                        "action": "HOLD",
+                        "confidence": 65,
+                        "reason": "보조 분석",
+                    },
+                }
+            }
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+    import services.kr_market_vcp_reanalysis_service as reanalysis_service
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
+
+    write_calls: dict[str, str] = {}
+
+    def _atomic_write(path: str, content: str, *, invalidate_fn=None):
+        del invalidate_fn
+        write_calls["path"] = path
+        write_calls["content"] = content
+
+    persist_loader_calls: list[tuple[str, dict[str, object]]] = []
+
+    def _load_csv_file_for_persist(filename: str, **kwargs):
+        persist_loader_calls.append((filename, dict(kwargs)))
+        return full_signals_df.copy()
+
+    monkeypatch.setattr(reanalysis_service, "atomic_write_text", _atomic_write)
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=partial_signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 0,
+        logger=logging.getLogger(__name__),
+        load_csv_file_for_persist=_load_csv_file_for_persist,
+    )
+
+    assert status_code == 200
+    assert payload["updated_count"] == 1
+    assert write_calls["path"] == str(signals_path)
+    assert persist_loader_calls
+    assert persist_loader_calls[0][0] == "signals_log.csv"
+    assert persist_loader_calls[0][1].get("deep_copy") is False
 
 
 def test_execute_vcp_failed_ai_reanalysis_force_gemini_skips_cache_load(monkeypatch, tmp_path):

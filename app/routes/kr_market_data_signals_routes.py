@@ -17,6 +17,27 @@ from flask import jsonify, request
 from app.routes.route_execution import execute_json_route as _execute_json_route
 from app.routes.kr_market_signal_common import _format_signal_date
 from services.kr_market_csv_utils import load_csv_readonly
+from services.scheduler_runtime_status_service import get_scheduler_runtime_status
+
+
+_VCP_REANALYSIS_SIGNAL_USECOLS = [
+    "ticker",
+    "signal_date",
+    "name",
+    "current_price",
+    "entry_price",
+    "score",
+    "vcp_score",
+    "contraction_ratio",
+    "foreign_5d",
+    "inst_5d",
+    "foreign_1d",
+    "inst_1d",
+    "ai_action",
+    "ai_reason",
+    "ai_confidence",
+]
+
 
 def _create_signal_dates_reader(
     *,
@@ -141,11 +162,32 @@ def _register_signal_dates_route(
         )
 
 
-def _register_vcp_status_route(kr_bp: Any, *, vcp_status: dict[str, Any]) -> None:
+def _register_vcp_status_route(
+    kr_bp: Any,
+    *,
+    vcp_status: dict[str, Any],
+    data_dir_getter: Callable[[], str],
+) -> None:
     @kr_bp.route('/signals/status')
     def get_vcp_status():
         """VCP 스크리너 상태 조회"""
-        response = jsonify(vcp_status)
+        scheduler_status = get_scheduler_runtime_status(data_dir=data_dir_getter())
+        scheduler_running = bool(scheduler_status.get("is_vcp_scheduling_running"))
+
+        payload = dict(vcp_status)
+        if scheduler_running and not bool(payload.get("running")):
+            payload.update(
+                {
+                    "running": True,
+                    "status": "running",
+                    "task_type": "screener",
+                    "message": "VCP 시그널 스케쥴링 진행 중인 상태",
+                    "progress": int(payload.get("progress", 0) or 0),
+                }
+            )
+        payload["schedulerRunning"] = scheduler_running
+
+        response = jsonify(payload)
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -249,7 +291,13 @@ def _register_vcp_reanalyze_route(
             force_label = force_provider_labels.get(str(force_provider or ""), "")
             start_prefix = f"{force_label} 강제 " if force_label else ""
 
-            signals_df = load_csv_file('signals_log.csv')
+            # 재분석 계산에는 최소 컬럼만 로드해 I/O/메모리 비용을 줄이고,
+            # 저장 시에는 서비스에서 원본 전체 CSV에 업데이트 컬럼만 병합한다.
+            signals_df = load_csv_readonly(
+                load_csv_file,
+                "signals_log.csv",
+                usecols=_VCP_REANALYSIS_SIGNAL_USECOLS,
+            ).copy(deep=True)
             error_code, error_payload = validate_vcp_reanalysis_source_frame(signals_df)
             if error_payload is not None:
                 return jsonify(error_payload), int(error_code)
@@ -262,6 +310,7 @@ def _register_vcp_reanalyze_route(
                     update_cache_files=update_vcp_ai_cache_files,
                     logger=logger,
                     force_provider=force_provider,
+                    load_csv_file_for_persist=load_csv_file,
                 )
                 return jsonify(payload), int(status_code)
 
@@ -296,6 +345,7 @@ def _register_vcp_reanalyze_route(
                         update_cache_files=update_vcp_ai_cache_files,
                         logger=logger,
                         force_provider=force_provider,
+                        load_csv_file_for_persist=load_csv_file,
                         should_stop=_should_stop,
                         on_progress=_on_progress,
                     )
@@ -504,7 +554,11 @@ def register_market_data_signal_routes(
         logger=logger,
         read_signal_dates=read_signal_dates,
     )
-    _register_vcp_status_route(kr_bp, vcp_status=vcp_status)
+    _register_vcp_status_route(
+        kr_bp,
+        vcp_status=vcp_status,
+        data_dir_getter=deps["data_dir_getter"],
+    )
     _register_vcp_run_route(
         kr_bp,
         logger=logger,

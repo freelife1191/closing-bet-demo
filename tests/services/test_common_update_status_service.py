@@ -54,6 +54,41 @@ def test_load_update_status_reuses_signature_cache(monkeypatch, tmp_path: Path):
     assert json_load_calls["count"] == 2
 
 
+def test_load_update_status_supports_deep_copy_false(monkeypatch, tmp_path: Path):
+    status_service.clear_update_status_cache()
+    status_path = tmp_path / "update_status.json"
+    status_path.write_text(
+        json.dumps({"isRunning": True, "items": []}),
+        encoding="utf-8",
+    )
+
+    first = status_service.load_update_status(
+        update_status_file=str(status_path),
+        logger=_logger(),
+        deep_copy=False,
+    )
+    second = status_service.load_update_status(
+        update_status_file=str(status_path),
+        logger=_logger(),
+        deep_copy=False,
+    )
+    third = status_service.load_update_status(
+        update_status_file=str(status_path),
+        logger=_logger(),
+        deep_copy=False,
+    )
+    fourth = status_service.load_update_status(
+        update_status_file=str(status_path),
+        logger=_logger(),
+        deep_copy=True,
+    )
+
+    assert third is second
+    assert fourth is not second
+    assert first["isRunning"] is True
+    assert fourth["isRunning"] is True
+
+
 def test_update_status_signature_cache_is_bounded_lru(monkeypatch, tmp_path: Path):
     status_service.clear_update_status_cache()
     monkeypatch.setattr(status_service, "_UPDATE_STATUS_CACHE_MAX_ENTRIES", 2)
@@ -265,6 +300,96 @@ def test_load_update_status_falls_back_to_sqlite_snapshot_when_file_missing(tmp_
     loaded = status_service.load_update_status(update_status_file=str(status_path), logger=_logger())
     assert loaded["isRunning"] is True
     assert loaded["currentItem"] == "AI Analysis"
+
+
+def test_load_update_status_uses_signature_matched_sqlite_snapshot_even_when_file_exists(
+    tmp_path: Path,
+    monkeypatch,
+):
+    status_service.clear_update_status_cache()
+    sqlite_cache_path = tmp_path / "runtime_cache.db"
+    monkeypatch.setattr(status_service, "_UPDATE_STATUS_CACHE_DB_PATH", str(sqlite_cache_path))
+    status_service._UPDATE_STATUS_DB_READY.clear()
+
+    status_path = tmp_path / "update_status.json"
+    saved_status = {
+        "isRunning": True,
+        "startTime": "2026-02-22T13:10:00",
+        "currentItem": "SQLite Hot Path",
+        "items": [{"name": "SQLite Hot Path", "status": "running"}],
+    }
+    status_service.save_update_status(
+        status=saved_status,
+        update_status_file=str(status_path),
+        logger=_logger(),
+    )
+
+    status_service.clear_update_status_cache()
+
+    def _json_load_should_not_run(_handle):
+        raise AssertionError("json.load should not run when signature-matched sqlite snapshot exists")
+
+    monkeypatch.setattr(status_service.json, "load", _json_load_should_not_run)
+
+    loaded = status_service.load_update_status(update_status_file=str(status_path), logger=_logger())
+    assert loaded["isRunning"] is True
+    assert loaded["currentItem"] == "SQLite Hot Path"
+
+
+def test_load_update_status_signature_mismatch_reloads_file_and_warms_sqlite(
+    tmp_path: Path,
+    monkeypatch,
+):
+    status_service.clear_update_status_cache()
+    sqlite_cache_path = tmp_path / "runtime_cache.db"
+    monkeypatch.setattr(status_service, "_UPDATE_STATUS_CACHE_DB_PATH", str(sqlite_cache_path))
+    status_service._UPDATE_STATUS_DB_READY.clear()
+
+    status_path = tmp_path / "update_status.json"
+    initial_status = {
+        "isRunning": True,
+        "startTime": "2026-02-22T13:20:00",
+        "currentItem": "Old",
+        "items": [{"name": "Old", "status": "running"}],
+    }
+    status_service.save_update_status(
+        status=initial_status,
+        update_status_file=str(status_path),
+        logger=_logger(),
+    )
+
+    updated_status = {
+        "isRunning": False,
+        "startTime": "2026-02-22T13:21:00",
+        "currentItem": "New",
+        "items": [{"name": "New", "status": "done"}],
+    }
+    status_path.write_text(json.dumps(updated_status), encoding="utf-8")
+    status_service.clear_update_status_cache()
+
+    json_load_calls = {"count": 0}
+    original_json_load = status_service.json.load
+
+    def _json_load_spy(handle):
+        json_load_calls["count"] += 1
+        return original_json_load(handle)
+
+    monkeypatch.setattr(status_service.json, "load", _json_load_spy)
+
+    loaded = status_service.load_update_status(update_status_file=str(status_path), logger=_logger())
+    assert loaded["isRunning"] is False
+    assert loaded["currentItem"] == "New"
+    assert json_load_calls["count"] == 1
+
+    status_service.clear_update_status_cache()
+
+    def _json_load_should_not_run(_handle):
+        raise AssertionError("json.load should not run after sqlite warm-up")
+
+    monkeypatch.setattr(status_service.json, "load", _json_load_should_not_run)
+    warmed = status_service.load_update_status(update_status_file=str(status_path), logger=_logger())
+    assert warmed["isRunning"] is False
+    assert warmed["currentItem"] == "New"
 
 
 def test_load_update_status_falls_back_to_sqlite_snapshot_when_json_corrupted(tmp_path: Path, monkeypatch):

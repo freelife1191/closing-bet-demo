@@ -150,6 +150,34 @@ def test_build_data_status_payload_reuses_cache_when_file_signature_unchanged(tm
     assert json_calls == ["market_gate.json"]
 
 
+def test_build_data_status_payload_requests_readonly_market_gate_load(tmp_path):
+    clear_data_status_cache()
+    file_row_count_cache.clear_file_row_count_cache()
+    (tmp_path / "korean_stocks_list.csv").write_text("ticker\n005930\n", encoding="utf-8")
+    (tmp_path / "daily_prices.csv").write_text("date,ticker,close\n2026-02-20,005930,100\n", encoding="utf-8")
+    (tmp_path / "signals_log.csv").write_text("ticker\n005930\n", encoding="utf-8")
+    (tmp_path / "market_gate.json").write_text('{"status":"BULL"}', encoding="utf-8")
+    (tmp_path / "jongga_v2_latest.json").write_text('{"date":"2026-02-21"}', encoding="utf-8")
+
+    captured = {"kwargs": None}
+
+    def _load_json_file(name: str, **kwargs):
+        if name == "market_gate.json":
+            captured["kwargs"] = dict(kwargs)
+            return {"status": "BULL"}
+        return {}
+
+    get_data_path = lambda filename: str(tmp_path / filename)
+    payload = build_data_status_payload(
+        get_data_path,
+        lambda _name: pd.DataFrame(),
+        _load_json_file,
+    )
+
+    assert payload["market_status"] == "BULL"
+    assert captured["kwargs"]["deep_copy"] is False
+
+
 def test_build_data_status_payload_invalidates_cache_when_file_mtime_changes(tmp_path):
     clear_data_status_cache()
     file_row_count_cache.clear_file_row_count_cache()
@@ -338,6 +366,61 @@ def test_build_backtest_summary_payload_reuses_signature_cache(tmp_path, monkeyp
 
     assert first == second
     assert calls == {"json": 1, "price": 1, "history": 1, "signals": 1, "jb": 1, "vcp": 1}
+
+
+def test_build_backtest_summary_payload_requests_readonly_latest_payload(tmp_path):
+    clear_backtest_summary_cache()
+    (tmp_path / "daily_prices.csv").write_text(
+        "date,ticker,close,high,low\n2026-02-20,005930,100,110,90\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "signals_log.csv").write_text(
+        "ticker,signal_date,entry_price\n005930,2026-02-20,100\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "jongga_v2_latest.json").write_text(
+        '{"signals":[{"stock_code":"005930","entry_price":100}]}',
+        encoding="utf-8",
+    )
+
+    captured = {"kwargs": None}
+
+    def _load_json_file(_name: str, **kwargs):
+        captured["kwargs"] = dict(kwargs)
+        return {"signals": [{"stock_code": "005930", "entry_price": 100}]}
+
+    payload = build_backtest_summary_payload(
+        load_json_file=_load_json_file,
+        load_backtest_price_snapshot=lambda: (
+            pd.DataFrame(
+                [{"date": "2026-02-20", "ticker": "005930", "close": 100, "high": 110, "low": 90}]
+            ),
+            {"005930": 105.0},
+        ),
+        load_jongga_result_payloads=lambda _limit: [],
+        calculate_jongga_backtest_stats=lambda *_args, **_kwargs: {
+            "status": "Accumulating",
+            "count": 0,
+            "win_rate": 0,
+            "avg_return": 0,
+            "candidates": [],
+        },
+        load_csv_file=lambda _name: pd.DataFrame(
+            [{"ticker": "005930", "signal_date": "2026-02-20", "entry_price": 100}]
+        ),
+        calculate_vcp_backtest_stats=lambda *_args, **_kwargs: {
+            "status": "Accumulating",
+            "count": 0,
+            "win_rate": 0,
+            "avg_return": 0,
+        },
+        logger=logging.getLogger("test-backtest-readonly"),
+        get_data_path=lambda filename: str(tmp_path / filename),
+        data_dir_getter=lambda: str(tmp_path),
+    )
+
+    assert payload["closing_bet"]["status"] == "Accumulating"
+    assert captured["kwargs"]["deep_copy"] is False
 
 
 def test_build_backtest_summary_payload_invalidates_cache_on_signature_change(tmp_path, monkeypatch):

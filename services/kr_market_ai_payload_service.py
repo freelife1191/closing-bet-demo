@@ -18,9 +18,36 @@ def _has_non_empty_signals(payload: dict[str, Any] | None) -> bool:
     return isinstance(signals, list) and len(signals) > 0
 
 
+def _load_json_readonly(
+    load_json_file: Callable[..., dict[str, Any]],
+    filename: str,
+) -> dict[str, Any]:
+    try:
+        loaded = load_json_file(filename, deep_copy=False)
+    except TypeError:
+        loaded = load_json_file(filename)
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _clone_payload_for_signal_normalization(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    ticker 정규화용 최소 복사 payload를 만든다.
+
+    load_json_file(deep_copy=False) 경로에서도 캐시 원본을 직접 수정하지 않도록 보장한다.
+    """
+    cloned: dict[str, Any] = dict(payload)
+    raw_signals = payload.get("signals")
+    if isinstance(raw_signals, list):
+        cloned["signals"] = [
+            dict(signal) if isinstance(signal, dict) else signal
+            for signal in raw_signals
+        ]
+    return cloned
+
+
 def build_ai_analysis_payload_for_target_date(
     target_date: str | None,
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     build_ai_signals_from_jongga_results: Callable[..., list[dict[str, Any]]],
     normalize_ai_payload_tickers: Callable[[dict[str, Any]], dict[str, Any]],
     logger: logging.Logger,
@@ -34,7 +61,7 @@ def build_ai_analysis_payload_for_target_date(
 
     try:
         date_str = str(target_date).replace("-", "")
-        v2_result = load_json_file(f"jongga_v2_results_{date_str}.json")
+        v2_result = _load_json_readonly(load_json_file, f"jongga_v2_results_{date_str}.json")
         v2_signals = build_ai_signals_from_jongga_results(
             v2_result.get("signals", []),
             include_without_ai=False,
@@ -48,11 +75,13 @@ def build_ai_analysis_payload_for_target_date(
                 "source": "jongga_v2_integrated_history",
             }
 
-        analysis = load_json_file(f"kr_ai_analysis_{date_str}.json")
+        analysis = _load_json_readonly(load_json_file, f"kr_ai_analysis_{date_str}.json")
         if not analysis:
-            analysis = load_json_file(f"ai_analysis_results_{date_str}.json")
+            analysis = _load_json_readonly(load_json_file, f"ai_analysis_results_{date_str}.json")
         if analysis:
-            return normalize_ai_payload_tickers(analysis)
+            return normalize_ai_payload_tickers(
+                _clone_payload_for_signal_normalization(analysis)
+            )
 
         return {
             "signals": [],
@@ -66,7 +95,7 @@ def build_ai_analysis_payload_for_target_date(
 
 
 def build_latest_ai_analysis_payload(
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     should_use_jongga_ai_payload: Callable[[dict[str, Any], dict[str, Any]], bool],
     build_ai_signals_from_jongga_results: Callable[..., list[dict[str, Any]]],
     normalize_ai_payload_tickers: Callable[[dict[str, Any]], dict[str, Any]],
@@ -75,8 +104,8 @@ def build_latest_ai_analysis_payload(
 ) -> dict[str, Any]:
     """최신 AI 분석 payload를 우선순위에 따라 구성한다."""
     current_time = now or datetime.now()
-    jongga_data = load_json_file("jongga_v2_latest.json")
-    vcp_data = load_json_file("ai_analysis_results.json")
+    jongga_data = _load_json_readonly(load_json_file, "jongga_v2_latest.json")
+    vcp_data = _load_json_readonly(load_json_file, "ai_analysis_results.json")
 
     if should_use_jongga_ai_payload(jongga_data, vcp_data):
         ai_signals = build_ai_signals_from_jongga_results(
@@ -92,12 +121,16 @@ def build_latest_ai_analysis_payload(
                 "source": "jongga_v2_integrated_history",
             }
 
-    kr_ai_data = load_json_file("kr_ai_analysis.json")
+    kr_ai_data = _load_json_readonly(load_json_file, "kr_ai_analysis.json")
     if _has_non_empty_signals(kr_ai_data):
-        return normalize_ai_payload_tickers(kr_ai_data)
+        return normalize_ai_payload_tickers(
+            _clone_payload_for_signal_normalization(kr_ai_data)
+        )
 
     # 성능: 이미 로드한 vcp_data(ai_analysis_results.json)를 재사용한다.
     if _has_non_empty_signals(vcp_data):
-        return normalize_ai_payload_tickers(vcp_data)
+        return normalize_ai_payload_tickers(
+            _clone_payload_for_signal_normalization(vcp_data)
+        )
 
     return {"signals": [], "message": "AI 분석 데이터가 없습니다."}

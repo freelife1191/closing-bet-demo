@@ -195,7 +195,7 @@ def build_stock_chart_payload(
 def build_data_status_payload(
     get_data_path: Callable[[str], str],
     load_csv_file: Callable[[str], pd.DataFrame],
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     logger: logging.Logger | None = None,
 ) -> dict[str, Any]:
     """데이터 수집 상태 payload를 구성한다."""
@@ -267,7 +267,10 @@ def build_data_status_payload(
             if signals_count is not None:
                 status["signals_count"] = int(signals_count)
 
-        gate_data = load_json_file("market_gate.json")
+        try:
+            gate_data = load_json_file("market_gate.json", deep_copy=False)
+        except TypeError:
+            gate_data = load_json_file("market_gate.json")
         if gate_data:
             status["market_status"] = gate_data.get("status", "UNKNOWN")
     except Exception as e:
@@ -284,7 +287,7 @@ def build_data_status_payload(
 
 
 def build_backtest_summary_payload(
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     load_backtest_price_snapshot: Callable[[], tuple[pd.DataFrame, dict[str, float]]],
     load_jongga_result_payloads: Callable[[int], list[tuple[str, dict[str, Any]]]],
     calculate_jongga_backtest_stats: Callable[
@@ -312,9 +315,15 @@ def build_backtest_summary_payload(
         return cached_payload
 
     candidates: list[dict[str, Any]] = []
-    latest_payload = load_json_file("jongga_v2_latest.json")
+    try:
+        latest_payload = load_json_file("jongga_v2_latest.json", deep_copy=False)
+    except TypeError:
+        latest_payload = load_json_file("jongga_v2_latest.json")
     if isinstance(latest_payload, dict) and isinstance(latest_payload.get("signals"), list):
-        candidates = latest_payload.get("signals", [])
+        candidates = [
+            dict(signal) if isinstance(signal, dict) else signal
+            for signal in latest_payload.get("signals", [])
+        ]
 
     try:
         price_df_full, price_map = load_backtest_price_snapshot()

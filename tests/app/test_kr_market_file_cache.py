@@ -60,6 +60,26 @@ def test_load_json_file_returns_copy_and_refreshes_on_file_change(monkeypatch, t
     assert payload_3["nested"]["x"] == 20
 
 
+def test_load_json_file_forwards_optional_kwargs_to_cache_service(monkeypatch):
+    captured = {"data_dir": None, "filename": None, "kwargs": None}
+
+    def _loader(data_dir: str, filename: str, **kwargs):
+        captured["data_dir"] = data_dir
+        captured["filename"] = filename
+        captured["kwargs"] = dict(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(kr_market, "DATA_DIR", "/tmp/kr_market_file_cache")
+    monkeypatch.setattr(kr_market, "load_json_file_service", _loader)
+
+    payload = kr_market.load_json_file("sample.json", deep_copy=False)
+
+    assert payload["ok"] is True
+    assert captured["data_dir"] == "/tmp/kr_market_file_cache"
+    assert captured["filename"] == "sample.json"
+    assert captured["kwargs"]["deep_copy"] is False
+
+
 def test_load_csv_file_returns_copy_and_refreshes_on_file_change(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(kr_market, "DATA_DIR", str(tmp_path))
     _reset_route_file_cache()

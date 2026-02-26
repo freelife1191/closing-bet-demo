@@ -21,6 +21,7 @@ from services.common_env_service import (
     resolve_env_path,
     update_env_file,
 )
+from services.scheduler_runtime_status_service import get_scheduler_runtime_status
 
 
 _ACTIVITY_LOGGER = None
@@ -105,7 +106,18 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
     def get_update_status():
         """업데이트 상태만 조회 (가벼운 폴링용)."""
         with ctx.update_lock:
-            status = ctx.load_update_status()
+            try:
+                loaded_status = ctx.load_update_status(deep_copy=False)
+            except TypeError:
+                loaded_status = ctx.load_update_status()
+
+            # 상태 폴링 응답에서 파생 필드를 주입하므로 원본 캐시 객체를 직접 변경하지 않는다.
+            status = dict(loaded_status) if isinstance(loaded_status, dict) else {}
+            scheduler_data_dir = os.path.dirname(ctx.update_status_file) or "data"
+            scheduler_status = get_scheduler_runtime_status(data_dir=scheduler_data_dir)
+            if scheduler_status.get("is_data_scheduling_running"):
+                status["isRunning"] = True
+                status["currentItem"] = "전체 스케쥴링 작업 진행 중인 상태"
             status["_debug_path"] = ctx.update_status_file
             status["_debug_exists"] = os.path.exists(ctx.update_status_file)
             return jsonify(status)
@@ -118,7 +130,10 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
         target_date = data.get("target_date")
         force = data.get("force", False)
 
-        current_status = ctx.load_update_status()
+        try:
+            current_status = ctx.load_update_status(deep_copy=False)
+        except TypeError:
+            current_status = ctx.load_update_status()
         if current_status.get("isRunning", False):
             return jsonify({"status": "error", "message": "Already running"}), 400
 

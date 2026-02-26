@@ -70,6 +70,32 @@ def test_load_csv_readonly_reuses_fallback_strategy_cache_on_second_call():
     ]
 
 
+def test_load_csv_readonly_projects_columns_when_plain_strategy_cached():
+    calls: list[dict[str, object]] = []
+
+    def _loader(_name: str, **kwargs):
+        calls.append(dict(kwargs))
+        if kwargs:
+            raise TypeError("unexpected kwargs")
+        return pd.DataFrame(
+            [
+                {"signal_date": "2026-02-21", "ticker": "005930", "score": 10},
+            ]
+        )
+
+    first = load_csv_readonly(_loader, "signals_log.csv", usecols=["signal_date"])
+    second = load_csv_readonly(_loader, "signals_log.csv", usecols=["signal_date"])
+
+    assert list(first.columns) == ["signal_date"]
+    assert list(second.columns) == ["signal_date"]
+    assert calls == [
+        {"deep_copy": False, "usecols": ["signal_date"]},
+        {"usecols": ["signal_date"]},
+        {},
+        {},
+    ]
+
+
 def test_load_csv_readonly_retries_without_usecols_on_value_error():
     calls: list[dict[str, object]] = []
 
@@ -82,8 +108,32 @@ def test_load_csv_readonly_retries_without_usecols_on_value_error():
     result = load_csv_readonly(_loader, "signals_log.csv", usecols=["signal_date"])
 
     assert len(result) == 1
+    assert list(result.columns) == ["ok"]
     assert calls == [
         {"deep_copy": False, "usecols": ["signal_date"]},
+        {"deep_copy": False},
+    ]
+
+
+def test_load_csv_readonly_projects_existing_columns_on_value_error_fallback():
+    calls: list[dict[str, object]] = []
+
+    def _loader(_name: str, **kwargs):
+        calls.append(dict(kwargs))
+        if "usecols" in kwargs:
+            raise ValueError("bad usecols")
+        return pd.DataFrame([{"signal_date": "2026-02-21", "ticker": "005930", "score": 10}])
+
+    result = load_csv_readonly(
+        _loader,
+        "signals_log.csv",
+        usecols=["signal_date", "missing_column"],
+    )
+
+    assert len(result) == 1
+    assert list(result.columns) == ["signal_date"]
+    assert calls == [
+        {"deep_copy": False, "usecols": ["signal_date", "missing_column"]},
         {"deep_copy": False},
     ]
 

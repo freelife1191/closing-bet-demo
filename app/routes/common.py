@@ -56,11 +56,12 @@ UPDATE_STATUS_FILE = os.path.join(
 update_lock = Lock()
 
 
-def load_update_status():
+def load_update_status(*, deep_copy: bool = True):
     """상태 파일 로드."""
     return load_update_status_impl(
         update_status_file=UPDATE_STATUS_FILE,
         logger=logger,
+        deep_copy=deep_copy,
     )
 
 

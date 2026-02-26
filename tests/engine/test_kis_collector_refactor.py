@@ -28,10 +28,11 @@ def test_load_token_from_file_uses_shared_json_loader(monkeypatch, tmp_path: Pat
     collector.access_token = None
     collector.token_expired_at = None
 
-    captured = {"path": None}
+    captured = {"path": None, "kwargs": None}
 
-    def _loader(path: str):
+    def _loader(path: str, **kwargs):
         captured["path"] = path
+        captured["kwargs"] = dict(kwargs)
         return {"access_token": "abc", "expired_at": "2026-02-23T09:00:00"}
 
     monkeypatch.setattr(kis_module, "load_json_payload_from_path", _loader)
@@ -39,6 +40,7 @@ def test_load_token_from_file_uses_shared_json_loader(monkeypatch, tmp_path: Pat
     collector._load_token_from_file()
 
     assert captured["path"] == str(token_path)
+    assert captured["kwargs"]["deep_copy"] is False
     assert collector.access_token == "abc"
     assert collector.token_expired_at == datetime.fromisoformat("2026-02-23T09:00:00")
 

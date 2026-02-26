@@ -51,12 +51,15 @@ def _build_payload(
     *,
     req_date: str | None,
     count_total_scanned_stocks_fn=lambda _data_dir: 1,
+    load_json_file_fn=None,
 ):
     logger = logging.getLogger("vcp-payload-cache-test")
+    if load_json_file_fn is None:
+        load_json_file_fn = lambda _name, **_kwargs: {}
     return vcp_payload_service.build_vcp_signals_payload(
         req_date=req_date,
         load_csv_file=lambda name: pd.read_csv(tmp_path / name),
-        load_json_file=lambda _name: {},
+        load_json_file=load_json_file_fn,
         filter_signals_dataframe_by_date=lambda df, req, _today: (
             df if not req else df[df["signal_date"] == req],
             req or "",
@@ -165,6 +168,28 @@ def test_build_vcp_payload_reuses_sqlite_cache_after_memory_clear(monkeypatch, t
 
     assert second["count"] == 1
     assert second["signals"][0]["ticker"] == "005930"
+
+
+def test_build_vcp_payload_requests_readonly_ai_json_load(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    captured_calls: list[tuple[str, dict[str, object]]] = []
+
+    def _load_json_file(name: str, **kwargs):
+        captured_calls.append((name, dict(kwargs)))
+        return {"signals": []}
+
+    payload = _build_payload(
+        tmp_path,
+        req_date="2026-02-22",
+        load_json_file_fn=_load_json_file,
+    )
+
+    assert payload["count"] == 1
+    assert captured_calls
+    assert captured_calls[0][0] == "ai_analysis_results_20260222.json"
+    assert all(kwargs.get("deep_copy") is False for _, kwargs in captured_calls)
 
 
 def test_build_vcp_payload_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):

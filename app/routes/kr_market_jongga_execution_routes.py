@@ -21,6 +21,7 @@ from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
 )
+from services.scheduler_runtime_status_service import get_scheduler_runtime_status
 
 
 def _build_v2_status_io(
@@ -50,7 +51,10 @@ def _build_v2_status_io(
         try:
             if not os.path.exists(v2_status_file):
                 return {"isRunning": False}
-            loaded = load_json_payload_from_path(v2_status_file)
+            try:
+                loaded = load_json_payload_from_path(v2_status_file, deep_copy=False)
+            except TypeError:
+                loaded = load_json_payload_from_path(v2_status_file)
             return loaded if isinstance(loaded, dict) else {"isRunning": False}
         except Exception:
             return {"isRunning": False}
@@ -83,8 +87,9 @@ def _build_jongga_background_runner(
 def _register_jongga_run_status_routes(
     kr_bp: Any,
     *,
+    data_dir: str,
     logger: Any,
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     launch_jongga_v2_screener: Callable[..., tuple[int, dict[str, Any]]],
     load_v2_status: Callable[[], dict[str, Any]],
     save_v2_status: Callable[[bool], None],
@@ -106,15 +111,28 @@ def _register_jongga_run_status_routes(
     @kr_bp.route("/jongga-v2/status", methods=["GET"])
     def get_jongga_v2_status_route():
         """종가베팅 v2 엔진 상태 조회"""
-        latest_data = load_json_file("jongga_v2_latest.json")
+        try:
+            latest_data = load_json_file("jongga_v2_latest.json", deep_copy=False)
+        except TypeError:
+            latest_data = load_json_file("jongga_v2_latest.json")
         updated_at = latest_data.get("updated_at") if latest_data else None
         status = load_v2_status()
-        is_running = status.get("isRunning", False)
+        manual_running = bool(status.get("isRunning", False))
+        scheduler_status = get_scheduler_runtime_status(data_dir=data_dir)
+        scheduler_running = bool(scheduler_status.get("is_jongga_scheduling_running"))
+        is_running = manual_running or scheduler_running
+        message = ""
+        if scheduler_running:
+            message = "종가베팅 스케쥴링 진행 중인 상태"
+        elif manual_running:
+            message = "종가베팅 분석 진행 중..."
         return jsonify(
             {
                 "isRunning": is_running,
                 "updated_at": updated_at,
                 "status": "RUNNING" if is_running else "IDLE",
+                "message": message,
+                "schedulerRunning": scheduler_running,
             }
         )
 
@@ -168,7 +186,7 @@ def _register_jongga_message_route(
     kr_bp: Any,
     *,
     logger: Any,
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     resolve_jongga_message_filename: Callable[[str | None], str],
     build_screener_result_for_message: Callable[[dict[str, Any]], tuple[Any, int, Any]],
 ) -> None:
@@ -180,7 +198,10 @@ def _register_jongga_message_route(
             target_date = data.get("target_date")
 
             filename = resolve_jongga_message_filename(target_date)
-            file_data = load_json_file(filename)
+            try:
+                file_data = load_json_file(filename, deep_copy=False)
+            except TypeError:
+                file_data = load_json_file(filename)
             if not file_data or not file_data.get("signals"):
                 return jsonify({"status": "error", "message": "발송할 데이터가 없습니다."}), 404
 
@@ -214,7 +235,7 @@ def register_jongga_execution_routes(
     *,
     data_dir: str,
     logger: Any,
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     launch_jongga_v2_screener: Callable[..., tuple[int, dict[str, Any]]],
     run_jongga_v2_background_pipeline: Callable[..., None],
     execute_single_stock_analysis: Callable[..., tuple[int, dict[str, Any]]],
@@ -234,6 +255,7 @@ def register_jongga_execution_routes(
     )
     _register_jongga_run_status_routes(
         kr_bp,
+        data_dir=data_dir,
         logger=logger,
         load_json_file=load_json_file,
         launch_jongga_v2_screener=launch_jongga_v2_screener,

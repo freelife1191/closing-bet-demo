@@ -18,6 +18,7 @@ from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
 )
+from services.scheduler_runtime_status_service import reset_scheduler_runtime_status
 
 # Load environment variables
 load_dotenv()
@@ -92,7 +93,8 @@ def _reset_startup_status_files() -> None:
 
         if os.path.exists(common_status_file):
             try:
-                status = load_json_payload_from_path(common_status_file)
+                # 시작 시점에는 읽기 전용 접근이므로 deep_copy 비용을 줄인다.
+                status = load_json_payload_from_path(common_status_file, deep_copy=False)
 
                 if isinstance(status, dict) and status.get('isRunning', False):
                     status['isRunning'] = False
@@ -109,6 +111,7 @@ def _reset_startup_status_files() -> None:
             v2_status_file,
             json.dumps({'isRunning': False}, ensure_ascii=False, indent=2),
         )
+        reset_scheduler_runtime_status(data_dir=data_dir)
         logging.debug("[Startup] 🧹 Reset v2_screener_status.json")
     except Exception as error:
         print(f"[Startup] Failed to reset status files: {error}")

@@ -24,7 +24,7 @@ from services.kr_market_vcp_signals_cache import (
 def build_vcp_signals_payload(
     req_date: str | None,
     load_csv_file: Callable[[str], pd.DataFrame],
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     filter_signals_dataframe_by_date: Callable[[pd.DataFrame, str | None, str], tuple[pd.DataFrame, str]],
     build_vcp_signals_from_dataframe: Callable[[pd.DataFrame], list[dict[str, Any]]],
     load_latest_vcp_price_map: Callable[[], dict[str, Any]],
@@ -188,7 +188,7 @@ def _load_vcp_signals(
 
 def _merge_ai_into_vcp_signals(
     signals: list[dict[str, Any]],
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     build_ai_data_map: Callable[[dict[str, Any]], dict[str, Any]],
     merge_legacy_ai_fields_into_map: Callable[[dict[str, Any], dict[str, Any]], None],
     merge_ai_data_into_vcp_signals: Callable[[list[dict[str, Any]], dict[str, Any]], int],
@@ -200,10 +200,16 @@ def _merge_ai_into_vcp_signals(
 
     sig_date = signals[0].get("signal_date", "")
     date_str = sig_date.replace("-", "") if sig_date else current_time.strftime("%Y%m%d")
-    ai_json = load_json_file(f"ai_analysis_results_{date_str}.json")
+    try:
+        ai_json = load_json_file(f"ai_analysis_results_{date_str}.json", deep_copy=False)
+    except TypeError:
+        ai_json = load_json_file(f"ai_analysis_results_{date_str}.json")
     if not ai_json or "signals" not in ai_json:
         logger.info("Falling back to kr_ai_analysis.json")
-        ai_json = load_json_file("kr_ai_analysis.json")
+        try:
+            ai_json = load_json_file("kr_ai_analysis.json", deep_copy=False)
+        except TypeError:
+            ai_json = load_json_file("kr_ai_analysis.json")
 
     logger.debug(
         "AI JSON Loaded: %s, Signals in JSON: %d",
@@ -211,9 +217,17 @@ def _merge_ai_into_vcp_signals(
         len(ai_json.get("signals", [])) if isinstance(ai_json, dict) else 0,
     )
 
-    ai_data_map = build_ai_data_map(ai_json)
+    # ai map 병합 단계에서 필드를 덮어쓰기 때문에 캐시 원본과 분리된 얕은 복사 맵을 사용한다.
+    ai_data_map = {
+        ticker: dict(item)
+        for ticker, item in build_ai_data_map(ai_json).items()
+        if isinstance(item, dict)
+    }
     try:
-        legacy_json = load_json_file("kr_ai_analysis.json")
+        try:
+            legacy_json = load_json_file("kr_ai_analysis.json", deep_copy=False)
+        except TypeError:
+            legacy_json = load_json_file("kr_ai_analysis.json")
         merge_legacy_ai_fields_into_map(ai_data_map, legacy_json)
     except Exception as legacy_error:
         logger.warning(f"Legacy merge failed: {legacy_error}")

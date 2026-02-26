@@ -76,6 +76,25 @@ def test_collect_jongga_v2_dates_reads_files_and_latest(tmp_path: Path):
     assert "custom" in dates
 
 
+def test_collect_jongga_v2_dates_requests_readonly_latest_payload(tmp_path: Path):
+    with flow_service._JONGGA_DATES_CACHE_LOCK:
+        flow_service._JONGGA_DATES_CACHE.clear()
+    (tmp_path / "jongga_v2_results_20260220.json").write_text("{}", encoding="utf-8")
+    captured = {"kwargs": None}
+
+    def _load_latest(_name: str, **kwargs):
+        captured["kwargs"] = dict(kwargs)
+        return {"date": "2026-02-21T15:30:00"}
+
+    collect_jongga_v2_dates(
+        data_dir=tmp_path,
+        load_json_file=_load_latest,
+        logger=types.SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+
+    assert captured["kwargs"]["deep_copy"] is False
+
+
 def test_collect_jongga_v2_dates_uses_cache_when_signature_is_same(tmp_path: Path):
     with flow_service._JONGGA_DATES_CACHE_LOCK:
         flow_service._JONGGA_DATES_CACHE.clear()
@@ -229,6 +248,27 @@ def test_launch_background_update_job_and_conflict():
     )
     assert status_code == 409
     assert payload["message"] == "Update already in progress"
+
+
+def test_launch_background_update_job_requests_readonly_status_load():
+    captured = {"kwargs": None}
+
+    def _load_update_status(**kwargs):
+        captured["kwargs"] = dict(kwargs)
+        return {"isRunning": False}
+
+    status_code, payload = launch_background_update_job(
+        items_list=["A"],
+        target_date=None,
+        load_update_status=_load_update_status,
+        start_update=lambda _items: None,
+        run_background_update=lambda *_args: None,
+        logger=types.SimpleNamespace(info=lambda *_args, **_kwargs: None),
+    )
+
+    assert status_code == 200
+    assert payload["status"] == "started"
+    assert captured["kwargs"]["deep_copy"] is False
 
 
 def test_launch_init_data_update_maps_type_and_validates():

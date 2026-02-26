@@ -1605,6 +1605,7 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
   setAnalyzingGemini: (v: boolean) => void
 }) {
   const [updating, setUpdating] = useState(false);
+  const [runningMessage, setRunningMessage] = useState('');
   const [currentUpdatedAt, setCurrentUpdatedAt] = useState(updatedAt);
 
   // ADMIN 권한 체크
@@ -1628,17 +1629,24 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
         // 변경: 상태 전용 엔드포인트 폴링
         const res: any = await fetchAPI('/api/kr/jongga-v2/status');
         const data = res; // fetchAPI returns JSON directly
+        const isRunning = Boolean(data?.isRunning ?? data?.is_running);
 
         if (data) {
           // 실행 중이면 계속 폴링
-          if (data.is_running) {
+          if (isRunning) {
             if (!updating) setUpdating(true); // 강제 상태 동기화
+            if (data.message) {
+              setRunningMessage(String(data.message));
+            } else {
+              setRunningMessage('종가베팅 스케쥴링 진행 중인 상태');
+            }
           } else {
             // 실행 끝남 (is_running: false)
             // 만약 내가 '업데이트 중'이라고 알고 있었다면 -> 완료 처리
             if (updating) {
               clearInterval(interval);
               setUpdating(false);
+              setRunningMessage('');
               // 데이터 리프레시 (리로드 대신 fetch)
               window.location.reload();
             }
@@ -1653,6 +1661,7 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
     setTimeout(() => {
       clearInterval(interval);
       if (updating) setUpdating(false);
+      setRunningMessage('');
     }, 350000);
   }, [updating]);
 
@@ -1679,6 +1688,7 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
 
     if (updating) return;
 
+    setRunningMessage('');
     setUpdating(true);
     try {
       // fetchAPI를 사용하여 타임아웃 적용 (엔진 실행은 오래 걸릴 수 있으므로 타임아웃 넉넉히 주거나, 비동기 확인만 하므로 기본값 사용)
@@ -1700,6 +1710,7 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
       } else {
         console.error('업데이트 요청 중 오류 발생', error);
         setUpdating(false);
+        setRunningMessage('');
       }
     }
   };
@@ -1770,7 +1781,9 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
         </span>
       </div>
 
-      <span className="text-[10px] text-gray-600 font-mono mt-0.5">{updating || analyzingGemini ? 'Please wait...' : timeStr}</span>
+      <span className="text-[10px] text-gray-600 font-mono mt-0.5">
+        {analyzingGemini ? 'Please wait...' : (updating ? (runningMessage || 'Please wait...') : timeStr)}
+      </span>
 
       {/* Permission Denied Modal */}
       <Modal

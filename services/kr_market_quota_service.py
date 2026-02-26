@@ -20,9 +20,12 @@ def safe_usage_count(value: Any) -> int:
         return 0
 
 
-def load_quota_data_unlocked(load_json_file: Callable[[str], dict[str, Any]]) -> dict[str, int]:
+def load_quota_data_unlocked(load_json_file: Callable[..., dict[str, Any]]) -> dict[str, int]:
     """quota json을 읽어 정규화된 dict를 반환한다 (lock 외부 호출 금지)."""
-    raw_data = load_json_file("user_quota.json")
+    try:
+        raw_data = load_json_file("user_quota.json", deep_copy=False)
+    except TypeError:
+        raw_data = load_json_file("user_quota.json")
     if not isinstance(raw_data, dict):
         return {}
 

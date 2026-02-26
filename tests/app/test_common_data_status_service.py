@@ -114,3 +114,20 @@ def test_build_common_data_status_payload_uses_sqlite_row_count_cache_after_memo
 
     second_payload = build_common_data_status_payload(**kwargs)
     assert second_payload["files"][0]["rowCount"] == 1
+
+
+def test_build_common_data_status_payload_requests_readonly_update_status():
+    captured = {"kwargs": None}
+
+    def _load_update_status(**kwargs):
+        captured["kwargs"] = dict(kwargs)
+        return {"isRunning": False, "startTime": None, "currentItem": None}
+
+    payload = build_common_data_status_payload(
+        data_files_to_check=[],
+        load_update_status=_load_update_status,
+        logger=types.SimpleNamespace(debug=lambda *_a, **_k: None),
+    )
+
+    assert payload["update_status"]["isRunning"] is False
+    assert captured["kwargs"]["deep_copy"] is False

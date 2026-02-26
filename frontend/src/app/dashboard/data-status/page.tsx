@@ -141,12 +141,25 @@ export default function DataStatusPage() {
 
       setUpdating(status.isRunning);
 
-      // 상태가 있으면 무조건 표시 (완료 후에도 결과 확인 가능하도록)
-      if (status.items && status.items.length > 0) {
-        setUpdateItems(status.items);
+      if (status.isRunning) {
+        if (status.items && status.items.length > 0) {
+          setUpdateItems(status.items);
+        }
+        if (status.currentItem) {
+          const currentItemText = String(status.currentItem);
+          if (currentItemText.includes('스케쥴링')) {
+            setUpdateProgress(currentItemText);
+          } else {
+            setUpdateProgress(`${currentItemText} 업데이트 중...`);
+          }
+        } else {
+          setUpdateProgress('');
+        }
+      } else {
+        // 진행 중이 아닐 때는 진행/완료 표시를 숨긴다.
+        setUpdateItems([]);
+        setUpdateProgress('');
       }
-
-      setUpdateProgress(status.isRunning && status.currentItem ? `${status.currentItem} 업데이트 중...` : '');
 
       // 완료되면 폴링 중지 및 데이터 새로고침
       if (!status.isRunning && pollingRef.current) {
@@ -485,7 +498,7 @@ export default function DataStatusPage() {
 
         <div className="flex flex-col items-end gap-3">
           {/* Update Items Progress */}
-          {updateItems.length > 0 && (
+          {(updating || !!updatingItem) && updateItems.length > 0 && (
             <div className="flex flex-wrap gap-2 justify-end">
               {updateItems.map((item) => (
                 <div

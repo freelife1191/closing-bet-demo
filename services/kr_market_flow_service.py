@@ -140,7 +140,7 @@ def execute_market_gate_update(
 
 def collect_jongga_v2_dates(
     data_dir: str | Path,
-    load_json_file: Callable[[str], dict[str, Any]],
+    load_json_file: Callable[..., dict[str, Any]],
     logger: logging.Logger,
 ) -> list[str]:
     """종가베팅 결과 파일에서 사용 가능한 날짜 목록을 수집한다."""
@@ -157,7 +157,10 @@ def collect_jongga_v2_dates(
     dates = _collect_jongga_result_dates_from_files(data_dir_path)
 
     try:
-        latest_data = load_json_file("jongga_v2_latest.json")
+        try:
+            latest_data = load_json_file("jongga_v2_latest.json", deep_copy=False)
+        except TypeError:
+            latest_data = load_json_file("jongga_v2_latest.json")
         if latest_data and "date" in latest_data:
             latest_date = str(latest_data["date"])[:10]
             dates.add(latest_date)
@@ -219,13 +222,16 @@ def start_vcp_screener_run(
 def launch_background_update_job(
     items_list: list[str],
     target_date: str | None,
-    load_update_status: Callable[[], dict[str, Any]],
+    load_update_status: Callable[..., dict[str, Any]],
     start_update: Callable[[list[str]], None],
     run_background_update: Callable[[str | None, list[str]], None],
     logger: logging.Logger,
 ) -> tuple[int, dict[str, Any]]:
     """공통 백그라운드 업데이트 작업을 시작한다."""
-    status = load_update_status()
+    try:
+        status = load_update_status(deep_copy=False)
+    except TypeError:
+        status = load_update_status()
     if status.get("isRunning", False):
         return 409, {"status": "error", "message": "Update already in progress"}
 
@@ -249,7 +255,7 @@ def launch_background_update_job(
 def launch_init_data_update(
     data_type: str,
     target_date: str | None,
-    load_update_status: Callable[[], dict[str, Any]],
+    load_update_status: Callable[..., dict[str, Any]],
     start_update: Callable[[list[str]], None],
     run_background_update: Callable[[str | None, list[str]], None],
     logger: logging.Logger,

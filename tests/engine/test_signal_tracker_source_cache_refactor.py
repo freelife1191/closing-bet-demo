@@ -12,6 +12,7 @@ import threading
 import time
 
 import pandas as pd
+import pytest
 
 import engine.signal_tracker_source_cache as source_cache
 
@@ -134,6 +135,43 @@ def test_load_signal_tracker_csv_cached_projects_existing_columns_on_usecols_mis
 
     assert list(second.columns) == ["ticker"]
     assert len(second) == 2
+
+
+def test_load_signal_tracker_csv_cached_raises_when_all_usecols_missing(tmp_path):
+    csv_path = tmp_path / "daily_prices_all_missing_cols.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "005930", "close": 100.0, "volume": 1_000},
+            {"ticker": "000660", "close": 200.0, "volume": 2_000},
+        ]
+    ).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    calls = {"usecols": 0, "full": 0}
+    original_read_csv = pd.read_csv
+
+    def _fake_read_csv(path, *args, **kwargs):
+        if kwargs.get("usecols") is not None:
+            calls["usecols"] += 1
+            raise ValueError("Usecols do not match columns")
+        calls["full"] += 1
+        return original_read_csv(path, *args, **kwargs)
+
+    with pytest.raises(ValueError):
+        source_cache.load_signal_tracker_csv_cached(
+            path=str(csv_path),
+            cache_kind="price_source",
+            usecols=["missing_col_a", "missing_col_b"],
+            read_csv=_fake_read_csv,
+        )
+
+    assert calls == {"usecols": 1, "full": 1}
+
+    db_path = tmp_path / "runtime_cache.db"
+    if db_path.exists():
+        with sqlite3.connect(str(db_path)) as conn:
+            row_count = int(conn.execute("SELECT COUNT(*) FROM signal_tracker_source_cache").fetchone()[0])
+        assert row_count == 0
 
 
 def test_load_signal_tracker_csv_cached_recovers_when_sqlite_table_missing(monkeypatch, tmp_path):

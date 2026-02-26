@@ -104,7 +104,7 @@ def start_scheduler() -> None:
     schedule.every(interval).minutes.do(run_market_gate_sync).tag("market_gate")
     logger.info(f"Scheduled Market Gate sync every {interval} minutes")
 
-    closing_time = os.getenv("CLOSING_SCHEDULE_TIME", "16:00")
+    closing_time = os.getenv("CLOSING_SCHEDULE_TIME", "17:00")
     schedule.every().day.at(closing_time).do(run_daily_closing_analysis)
     logger.info(f"Scheduled Daily Closing Analysis at {closing_time} (Chains Jongga V2)")
 

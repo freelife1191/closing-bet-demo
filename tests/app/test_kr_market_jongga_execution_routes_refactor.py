@@ -19,6 +19,7 @@ sys.path.insert(
 )
 
 from app.routes.kr_market_jongga_execution_routes import register_jongga_execution_routes
+import app.routes.kr_market_jongga_execution_routes as jongga_routes
 
 
 def _build_deps(**overrides):
@@ -116,15 +117,62 @@ def test_get_jongga_v2_status_route_returns_idle_when_status_file_is_corrupt(tmp
     assert payload["updated_at"] == "2026-02-22T09:00:00"
 
 
+def test_get_jongga_v2_status_route_reflects_scheduler_jongga_running(monkeypatch, tmp_path: Path):
+    status_file = tmp_path / "v2_screener_status.json"
+    status_file.write_text(json.dumps({"isRunning": False}), encoding="utf-8")
+    monkeypatch.setattr(
+        jongga_routes,
+        "get_scheduler_runtime_status",
+        lambda data_dir="data": {
+            "is_data_scheduling_running": True,
+            "is_jongga_scheduling_running": True,
+            "is_vcp_scheduling_running": False,
+        },
+    )
+
+    client = _create_client(
+        str(tmp_path),
+        _build_deps(load_json_file=lambda _filename: {"updated_at": "2026-02-22T09:00:00"}),
+    )
+    response = client.get("/api/kr/jongga-v2/status")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["isRunning"] is True
+    assert payload["status"] == "RUNNING"
+    assert payload["message"] == "종가베팅 스케쥴링 진행 중인 상태"
+    assert payload["schedulerRunning"] is True
+
+
+def test_get_jongga_v2_status_route_requests_latest_json_without_deep_copy(tmp_path: Path):
+    captured = {"filename": None, "kwargs": None}
+
+    def _load_json_file(filename: str, **kwargs):
+        captured["filename"] = filename
+        captured["kwargs"] = dict(kwargs)
+        return {"updated_at": "2026-02-22T09:00:00"}
+
+    client = _create_client(
+        str(tmp_path),
+        _build_deps(load_json_file=_load_json_file),
+    )
+    response = client.get("/api/kr/jongga-v2/status")
+
+    assert response.status_code == 200
+    assert captured["filename"] == "jongga_v2_latest.json"
+    assert captured["kwargs"]["deep_copy"] is False
+
+
 def test_get_jongga_v2_status_route_uses_shared_json_loader(monkeypatch, tmp_path: Path):
     import app.routes.kr_market_jongga_execution_routes as route_module
 
     status_file = tmp_path / "v2_screener_status.json"
     status_file.write_text("{}", encoding="utf-8")
-    captured = {"path": None}
+    captured = {"path": None, "kwargs": None}
 
-    def _loader(path: str):
+    def _loader(path: str, **kwargs):
         captured["path"] = path
+        captured["kwargs"] = dict(kwargs)
         return {"isRunning": True, "updated_at": "2026-02-22T10:00:00"}
 
     monkeypatch.setattr(route_module, "load_json_payload_from_path", _loader)
@@ -139,6 +187,7 @@ def test_get_jongga_v2_status_route_uses_shared_json_loader(monkeypatch, tmp_pat
 
     assert response.status_code == 200
     assert captured["path"] == str(status_file)
+    assert captured["kwargs"]["deep_copy"] is False
     payload = response.get_json()
     assert payload["isRunning"] is True
     assert payload["status"] == "RUNNING"

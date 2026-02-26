@@ -83,6 +83,44 @@ def test_run_daily_closing_analysis_chains_jongga(monkeypatch):
     ]
 
 
+def test_run_daily_closing_analysis_updates_scheduler_runtime_status(monkeypatch):
+    monkeypatch.setattr(
+        scheduler_jobs.MarketSchedule,
+        "is_market_open",
+        lambda _date: True,
+    )
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "_load_init_data_functions",
+        lambda: {
+            "create_daily_prices": lambda: True,
+            "create_institutional_trend": lambda: True,
+            "create_signals_log": lambda run_ai: True,
+        },
+    )
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "run_jongga_v2_analysis",
+        lambda test_mode=False: None,
+    )
+
+    scheduler_updates: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "set_scheduler_runtime_status",
+        lambda **kwargs: scheduler_updates.append(kwargs),
+    )
+
+    scheduler_jobs.run_daily_closing_analysis(test_mode=True)
+
+    assert scheduler_updates[0]["data_scheduling_running"] is True
+    assert scheduler_updates[0]["vcp_scheduling_running"] is False
+    assert any(update.get("vcp_scheduling_running") is True for update in scheduler_updates)
+    assert scheduler_updates[-1]["data_scheduling_running"] is False
+    assert scheduler_updates[-1]["vcp_scheduling_running"] is False
+    assert scheduler_updates[-1]["jongga_scheduling_running"] is False
+
+
 def test_run_market_gate_sync_skips_when_market_closed(monkeypatch):
     monkeypatch.setattr(
         scheduler_jobs.MarketSchedule,

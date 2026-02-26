@@ -114,7 +114,7 @@ _apply_market_gate_interval = lambda interval: apply_market_gate_interval_servic
     logger=logger,
 )
 get_data_path = lambda filename: os.path.join(DATA_DIR, filename)
-load_json_file = lambda filename: load_json_file_service(DATA_DIR, filename)
+load_json_file = lambda filename, **kwargs: load_json_file_service(DATA_DIR, filename, **kwargs)
 load_csv_file = lambda filename, **kwargs: load_csv_file_service(DATA_DIR, filename, **kwargs)
 _load_latest_vcp_price_map = lambda: load_latest_vcp_price_map_service(DATA_DIR, logger=logger)
 _count_total_scanned_stocks = count_total_scanned_stocks_service
@@ -186,7 +186,7 @@ register_market_data_http_route_group(
     logger=logger,
     data_dir_getter=lambda: DATA_DIR,
     load_csv_file_fn=lambda filename, **kwargs: load_csv_file(filename, **kwargs),
-    load_json_file_fn=lambda filename: load_json_file(filename),
+    load_json_file_fn=lambda filename, **kwargs: load_json_file(filename, **kwargs),
     get_data_path_fn=lambda filename: get_data_path(filename),
     vcp_status=VCP_STATUS,
     update_vcp_ai_cache_files_fn=lambda target_date, updated_recommendations, ai_results=None: _update_vcp_ai_cache_files(
@@ -266,7 +266,7 @@ register_system_and_execution_route_groups(
     kr_bp,
     logger=logger,
     data_dir=DATA_DIR,
-    load_json_file_fn=lambda filename: load_json_file(filename),
+    load_json_file_fn=lambda filename, **kwargs: load_json_file(filename, **kwargs),
     load_csv_file_fn=lambda filename, **kwargs: load_csv_file(filename, **kwargs),
     get_data_path_fn=lambda filename: get_data_path(filename),
     trigger_market_gate_background_refresh_fn=_trigger_market_gate_background_refresh,

@@ -90,6 +90,25 @@ def _call_loader_with_strategy(
     return load_csv_file(filename)
 
 
+def _project_existing_usecols_columns(
+    frame: pd.DataFrame,
+    usecols: list[str] | tuple[str, ...] | None,
+) -> pd.DataFrame:
+    """
+    usecols 불일치 fallback 경로에서 존재하는 요청 컬럼만 투영한다.
+
+    요청 컬럼이 전혀 없으면 기존 동작 호환을 위해 원본 frame을 반환한다.
+    """
+    if not isinstance(frame, pd.DataFrame) or usecols is None:
+        return frame
+
+    requested = [str(column) for column in usecols]
+    existing = [column for column in requested if column in frame.columns]
+    if not existing:
+        return frame
+    return frame.loc[:, existing]
+
+
 def load_csv_readonly(
     load_csv_file: Callable[..., pd.DataFrame],
     filename: str,
@@ -104,12 +123,13 @@ def load_csv_readonly(
     )
     if cached_strategy:
         try:
-            return _call_loader_with_strategy(
+            loaded = _call_loader_with_strategy(
                 load_csv_file,
                 filename,
                 usecols=usecols,
                 strategy=cached_strategy,
             )
+            return _project_existing_usecols_columns(loaded, usecols)
         except TypeError:
             _clear_cached_loader_strategy(load_csv_file, key=cache_key)
         except ValueError:
@@ -128,7 +148,7 @@ def load_csv_readonly(
             key=cache_key,
             strategy="deep_copy_usecols",
         )
-        return result
+        return _project_existing_usecols_columns(result, usecols)
     except TypeError:
         try:
             result = _call_loader_with_strategy(
@@ -142,7 +162,7 @@ def load_csv_readonly(
                 key=cache_key,
                 strategy="usecols",
             )
-            return result
+            return _project_existing_usecols_columns(result, usecols)
         except TypeError:
             result = _call_loader_with_strategy(
                 load_csv_file,
@@ -155,22 +175,24 @@ def load_csv_readonly(
                 key=cache_key,
                 strategy="plain",
             )
-            return result
+            return _project_existing_usecols_columns(result, usecols)
     except ValueError:
         try:
-            return _call_loader_with_strategy(
+            fallback = _call_loader_with_strategy(
                 load_csv_file,
                 filename,
                 usecols=usecols,
                 strategy="deep_copy",
             )
+            return _project_existing_usecols_columns(fallback, usecols)
         except TypeError:
-            return _call_loader_with_strategy(
+            fallback = _call_loader_with_strategy(
                 load_csv_file,
                 filename,
                 usecols=usecols,
                 strategy="plain",
             )
+            return _project_existing_usecols_columns(fallback, usecols)
 
 
 def get_ticker_padded_series(

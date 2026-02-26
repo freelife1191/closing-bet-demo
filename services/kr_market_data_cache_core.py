@@ -177,6 +177,7 @@ def _load_json_payload_from_path(
     filepath: str,
     *,
     signature: tuple[int, int] | None = None,
+    deep_copy: bool = True,
 ) -> Any:
     """절대경로 JSON 파일을 시그니처 기반으로 캐시 로드한다."""
     normalized_path = _normalize_cache_path(filepath)
@@ -187,7 +188,9 @@ def _load_json_payload_from_path(
     with FILE_CACHE_LOCK:
         cached = _get_lru_cache_entry(JSON_FILE_CACHE, normalized_path)
         if cached and cached[0] == file_sig:
-            return copy.deepcopy(cached[1])
+            if deep_copy:
+                return copy.deepcopy(cached[1])
+            return cached[1]
 
     found_in_sqlite, sqlite_payload = _load_json_payload_from_sqlite(
         filepath=normalized_path,
@@ -201,7 +204,9 @@ def _load_json_payload_from_path(
                 (file_sig, sqlite_payload),
                 max_entries=_JSON_FILE_CACHE_MAX_ENTRIES,
             )
-        return copy.deepcopy(sqlite_payload)
+        if deep_copy:
+            return copy.deepcopy(sqlite_payload)
+        return sqlite_payload
 
     with open(normalized_path, "r", encoding="utf-8") as file:
         payload = json.load(file)
@@ -219,12 +224,14 @@ def _load_json_payload_from_path(
         payload=payload,
     )
 
-    return copy.deepcopy(payload)
+    if deep_copy:
+        return copy.deepcopy(payload)
+    return payload
 
 
-def load_json_payload_from_path(filepath: str) -> Any:
+def load_json_payload_from_path(filepath: str, *, deep_copy: bool = True) -> Any:
     """절대경로 JSON 파일을 시그니처 기반으로 캐시 로드한다."""
-    return _load_json_payload_from_path(filepath)
+    return _load_json_payload_from_path(filepath, deep_copy=deep_copy)
 
 
 def _load_json_payload_from_sqlite(
@@ -323,9 +330,14 @@ def _read_csv_with_usecols_fallback(
         raise
 
 
-def load_json_file(data_dir: str, filename: str) -> dict[str, Any]:
+def load_json_file(
+    data_dir: str,
+    filename: str,
+    *,
+    deep_copy: bool = True,
+) -> dict[str, Any]:
     filepath = _normalize_cache_path(os.path.join(data_dir, filename))
-    loaded = _load_json_payload_from_path(filepath)
+    loaded = _load_json_payload_from_path(filepath, deep_copy=deep_copy)
     if isinstance(loaded, dict):
         return loaded
     return {}

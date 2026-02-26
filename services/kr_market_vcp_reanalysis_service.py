@@ -31,6 +31,7 @@ _VCP_FORCE_PROVIDER_LABELS = {
     "gemini": "Gemini",
     "second": "Second AI",
 }
+_VCP_REANALYSIS_UPDATED_COLUMNS = ("ai_action", "ai_confidence", "ai_reason")
 
 
 def prepare_vcp_signals_scope(
@@ -67,6 +68,17 @@ def collect_failed_vcp_rows(
         if is_failed(row_dict):
             failed_rows.append((idx, row_dict))
     return failed_rows, len(scoped_df)
+
+
+def collect_scoped_vcp_rows(
+    scoped_df: pd.DataFrame,
+) -> list[tuple[int, dict[str, Any]]]:
+    """스코프 내 전체 행을 index/row_dict 목록으로 수집한다."""
+    rows: list[tuple[int, dict[str, Any]]] = []
+    columns = list(scoped_df.columns)
+    for idx, row_values in zip(scoped_df.index, scoped_df.itertuples(index=False, name=None)):
+        rows.append((idx, dict(zip(columns, row_values))))
+    return rows
 
 
 def resolve_vcp_second_recommendation_key(second_provider: str) -> str:
@@ -155,7 +167,10 @@ def load_vcp_ai_cache_map(
         cache_file_exists = True
 
         try:
-            payload = json_loader(file_path)
+            try:
+                payload = json_loader(file_path, deep_copy=False)
+            except TypeError:
+                payload = json_loader(file_path)
         except Exception as error:
             logger.warning(f"VCP AI 캐시 로드 실패 ({filename}): {error}")
             continue
@@ -223,9 +238,60 @@ def collect_missing_vcp_ai_rows(
     return missing_rows
 
 
-def write_vcp_signals_csv_atomic(signals_df: pd.DataFrame, signals_path: str) -> None:
+def _merge_reanalysis_updates_into_full_signals_frame(
+    *,
+    updated_signals_df: pd.DataFrame,
+    signals_path: str,
+    load_csv_file: Callable[[str], Any],
+) -> pd.DataFrame:
+    """부분 컬럼 DataFrame의 AI 업데이트를 원본 전체 CSV 프레임에 병합한다."""
+    filename = os.path.basename(str(signals_path))
+    try:
+        # cache-backed loader가 지원하면 deep_copy=False 경로를 우선 사용해
+        # 전체 CSV 재로드 시 불필요한 복사 비용을 줄인다.
+        full_frame = load_csv_file(filename, deep_copy=False)
+    except TypeError:
+        # 하위 호환: kwargs를 받지 않는 테스트/legacy loader
+        full_frame = load_csv_file(filename)
+    if not isinstance(full_frame, pd.DataFrame):
+        raise TypeError("load_csv_file_for_persist must return pandas.DataFrame")
+    if full_frame.empty and not updated_signals_df.empty:
+        raise ValueError("Full signals frame is empty while updated rows exist.")
+
+    merged = full_frame.copy()
+    target_index = merged.index.intersection(updated_signals_df.index)
+    if len(target_index) != len(updated_signals_df.index):
+        raise ValueError("Updated row index does not match full signals frame index.")
+
+    for column in _VCP_REANALYSIS_UPDATED_COLUMNS:
+        if column not in updated_signals_df.columns:
+            continue
+        merged.loc[target_index, column] = updated_signals_df.loc[target_index, column].to_numpy()
+    return merged
+
+
+def write_vcp_signals_csv_atomic(
+    signals_df: pd.DataFrame,
+    signals_path: str,
+    *,
+    load_csv_file: Callable[[str], Any] | None = None,
+    logger: logging.Logger | None = None,
+) -> None:
     """signals_log.csv를 원자적으로 저장하고 캐시를 무효화한다."""
-    csv_content = signals_df.to_csv(index=False)
+    persist_frame = signals_df
+    if callable(load_csv_file):
+        try:
+            persist_frame = _merge_reanalysis_updates_into_full_signals_frame(
+                updated_signals_df=signals_df,
+                signals_path=signals_path,
+                load_csv_file=load_csv_file,
+            )
+        except Exception as error:
+            if logger is not None:
+                logger.error("Failed to merge VCP reanalysis updates into full signals frame: %s", error)
+            raise
+
+    csv_content = persist_frame.to_csv(index=False)
     # 기존 utf-8-sig 저장 형식을 유지한다.
     atomic_write_text(signals_path, f"\ufeff{csv_content}")
 
@@ -409,6 +475,7 @@ def execute_vcp_failed_ai_reanalysis(
     update_cache_files: Callable[[str, dict[str, Any]], int],
     logger: logging.Logger,
     force_provider: str | None = None,
+    load_csv_file_for_persist: Callable[[str], Any] | None = None,
     should_stop: Callable[[], bool] | None = None,
     on_progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple[int, dict[str, Any]]:
@@ -435,15 +502,11 @@ def execute_vcp_failed_ai_reanalysis(
                 "message": f"해당 날짜({normalized_target_date})의 VCP 시그널 데이터가 없습니다.",
             }
 
-        scoped_columns = list(scoped_df.columns)
-        all_scoped_rows: list[tuple[int, dict[str, Any]]] = [
-            (idx, dict(zip(scoped_columns, row_values)))
-            for idx, row_values in zip(scoped_df.index, scoped_df.itertuples(index=False, name=None))
-        ]
+        ticker_series = scoped_df["ticker"].astype(str).str.strip().str.zfill(6)
         scoped_tickers: set[str] = {
-            str(row.get("ticker", "")).zfill(6)
-            for _, row in all_scoped_rows
-            if str(row.get("ticker", "")).strip()
+            ticker
+            for ticker in ticker_series.tolist()
+            if ticker and ticker != "000000"
         }
 
         failed_rows, total_in_scope = collect_failed_vcp_rows(
@@ -469,7 +532,7 @@ def execute_vcp_failed_ai_reanalysis(
             )
 
         if normalized_force_provider in {"gemini", "second"}:
-            target_rows = list(all_scoped_rows)
+            target_rows = collect_scoped_vcp_rows(scoped_df)
         else:
             target_rows = list(failed_rows)
             if cache_exists:
@@ -581,7 +644,12 @@ def execute_vcp_failed_ai_reanalysis(
         updated_count += second_only_success_count
         still_failed_count += second_only_failed_count
 
-        write_vcp_signals_csv_atomic(signals_df, signals_path)
+        write_vcp_signals_csv_atomic(
+            signals_df,
+            signals_path,
+            load_csv_file=load_csv_file_for_persist,
+            logger=logger,
+        )
         try:
             cache_files_updated = update_cache_files(
                 normalized_target_date,

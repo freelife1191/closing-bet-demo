@@ -17,7 +17,7 @@ class CommonRouteContext:
     logger: Any
     update_lock: Any
     update_status_file: str
-    load_update_status: Callable[[], dict[str, Any]]
+    load_update_status: Callable[..., dict[str, Any]]
     start_update: Callable[[list[str]], None]
     update_item_status: Callable[[str, str], None]
     stop_update: Callable[[], None]

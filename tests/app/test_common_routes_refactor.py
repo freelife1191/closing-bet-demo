@@ -44,6 +44,71 @@ def test_system_update_status_returns_debug_fields():
     assert "_debug_exists" in payload
 
 
+def test_system_update_status_merges_scheduler_running_message(monkeypatch):
+    monkeypatch.setattr(
+        common_update_routes,
+        "get_scheduler_runtime_status",
+        lambda data_dir="data": {
+            "is_data_scheduling_running": True,
+            "is_jongga_scheduling_running": False,
+            "is_vcp_scheduling_running": False,
+        },
+    )
+
+    client = _create_client()
+    response = client.get("/api/system/update-status")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["isRunning"] is True
+    assert payload["currentItem"] == "전체 스케쥴링 작업 진행 중인 상태"
+
+
+def test_system_update_status_passes_context_data_dir_to_scheduler_status(monkeypatch):
+    captured = {"data_dir": None}
+
+    def _get_scheduler_runtime_status(*, data_dir="data"):
+        captured["data_dir"] = data_dir
+        return {
+            "is_data_scheduling_running": False,
+            "is_jongga_scheduling_running": False,
+            "is_vcp_scheduling_running": False,
+        }
+
+    monkeypatch.setattr(
+        common_update_routes,
+        "get_scheduler_runtime_status",
+        _get_scheduler_runtime_status,
+    )
+
+    client = _create_client()
+    response = client.get("/api/system/update-status")
+
+    assert response.status_code == 200
+    assert captured["data_dir"] == os.path.dirname(common.route_context.update_status_file)
+
+
+def test_system_update_status_requests_readonly_status_load(monkeypatch):
+    captured = {"kwargs": None}
+
+    def _load_update_status(**kwargs):
+        captured["kwargs"] = dict(kwargs)
+        return {
+            "isRunning": False,
+            "startTime": None,
+            "currentItem": None,
+            "items": [],
+        }
+
+    monkeypatch.setattr(common.route_context, "load_update_status", _load_update_status)
+
+    client = _create_client()
+    response = client.get("/api/system/update-status")
+
+    assert response.status_code == 200
+    assert captured["kwargs"]["deep_copy"] is False
+
+
 def test_send_test_notification_uses_messenger_compat_interface(monkeypatch):
     created = []
 

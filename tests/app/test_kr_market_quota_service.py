@@ -26,6 +26,19 @@ def test_load_quota_data_unlocked_filters_and_normalizes():
     assert payload == {"u1": 3, "u2": 0, "u3": 0}
 
 
+def test_load_quota_data_unlocked_requests_readonly_json_load():
+    captured = {"kwargs": None}
+
+    def _load_json_file(_name: str, **kwargs):
+        captured["kwargs"] = dict(kwargs)
+        return {"u1": "1"}
+
+    payload = load_quota_data_unlocked(load_json_file=_load_json_file)
+
+    assert payload == {"u1": 1}
+    assert captured["kwargs"]["deep_copy"] is False
+
+
 def test_resolve_quota_usage_key_prefers_authenticated_email():
     assert resolve_quota_usage_key("user@test.com", "session-a") == "user@test.com"
     assert resolve_quota_usage_key("user@example.com", "session-a") == "session-a"

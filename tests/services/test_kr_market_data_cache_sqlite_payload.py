@@ -11,6 +11,7 @@ import os
 import sqlite3
 import threading
 import time
+from io import StringIO
 
 import pandas as pd
 
@@ -132,6 +133,116 @@ def test_csv_payload_sqlite_roundtrip_with_usecols_none(tmp_path):
         usecols=None,
     )
     assert deleted_df is None
+
+
+def test_csv_payload_sqlite_load_projects_existing_usecols_columns(tmp_path):
+    _reset_sqlite_payload_state()
+    filepath = str(tmp_path / "daily_prices_usecols_projection.csv")
+    signature = (741, 852)
+    payload = pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "005930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "000660", "close": 200.0},
+        ]
+    )
+
+    sqlite_payload_cache.save_csv_payload_to_sqlite(
+        filepath=filepath,
+        signature=signature,
+        usecols=("date", "ticker"),
+        payload=payload,
+        max_rows=8,
+    )
+
+    loaded_df = sqlite_payload_cache.load_csv_payload_from_sqlite(
+        filepath=filepath,
+        signature=signature,
+        usecols=("date", "ticker"),
+    )
+    assert isinstance(loaded_df, pd.DataFrame)
+    assert list(loaded_df.columns) == ["date", "ticker"]
+    assert len(loaded_df) == 2
+
+
+def test_csv_payload_sqlite_save_projects_usecols_before_persisting(tmp_path):
+    _reset_sqlite_payload_state()
+    filepath = str(tmp_path / "daily_prices_save_projection.csv")
+    signature = (258, 369)
+    payload = pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "005930", "close": 100.0, "volume": 1000},
+            {"date": "2026-02-21", "ticker": "000660", "close": 200.0, "volume": 2000},
+        ]
+    )
+
+    usecols = ("date", "ticker")
+    sqlite_payload_cache.save_csv_payload_to_sqlite(
+        filepath=filepath,
+        signature=signature,
+        usecols=usecols,
+        payload=payload,
+        max_rows=8,
+    )
+
+    db_path = tmp_path / "runtime_cache.db"
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute(
+            """
+            SELECT payload_json
+            FROM csv_file_payload_cache
+            WHERE filepath = ?
+              AND usecols_signature = ?
+            """,
+            (
+                filepath,
+                sqlite_payload_cache.serialize_usecols_signature(usecols),
+            ),
+        ).fetchone()
+
+    assert row is not None
+    stored = pd.read_json(StringIO(row[0]), orient="split")
+    assert list(stored.columns) == ["date", "ticker"]
+
+
+def test_csv_payload_sqlite_load_returns_none_when_all_usecols_missing(tmp_path):
+    _reset_sqlite_payload_state()
+    filepath = str(tmp_path / "daily_prices_usecols_all_missing.csv")
+    signature = (963, 147)
+    payload = pd.DataFrame(
+        [
+            {"close": 100.0, "volume": 1000},
+            {"close": 200.0, "volume": 2000},
+        ]
+    )
+
+    sqlite_payload_cache.save_csv_payload_to_sqlite(
+        filepath=filepath,
+        signature=signature,
+        usecols=("date", "ticker"),
+        payload=payload,
+        max_rows=8,
+    )
+
+    db_path = tmp_path / "runtime_cache.db"
+    with sqlite3.connect(str(db_path)) as conn:
+        row_count = int(
+            conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM csv_file_payload_cache
+                WHERE filepath = ?
+                """,
+                (filepath,),
+            ).fetchone()[0]
+        )
+    assert row_count == 0
+
+    loaded_df = sqlite_payload_cache.load_csv_payload_from_sqlite(
+        filepath=filepath,
+        signature=signature,
+        usecols=("date", "ticker"),
+    )
+    assert loaded_df is None
 
 
 def test_json_payload_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):
