@@ -70,13 +70,24 @@ def test_process_ohlcv_dataframe_uses_internal_stock_name_lookup(monkeypatch):
     assert collector.name_calls == ["000660"]
 
 
-def test_get_stock_name_caches_pykrx_lookup(monkeypatch):
+def test_get_stock_name_caches_pykrx_lookup(monkeypatch, tmp_path):
     fake_stock = _FakeStock()
     fake_pykrx = types.ModuleType("pykrx")
     fake_pykrx.stock = fake_stock
     monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(
+        KRXCollector,
+        "_stock_name_sqlite_context",
+        classmethod(
+            lambda cls, ticker: (
+                str(tmp_path / f"{str(ticker).zfill(6)}.snapshot"),
+                (41, 41),
+            )
+        ),
+    )
 
     collector = KRXCollector()
+    collector._stock_name_cache.clear()
 
     name1 = collector._get_stock_name("5930")
     name2 = collector._get_stock_name("005930")
@@ -84,6 +95,45 @@ def test_get_stock_name_caches_pykrx_lookup(monkeypatch):
     assert name1 == "삼성전자"
     assert name2 == "삼성전자"
     assert fake_stock.calls == 1
+
+
+def test_get_stock_name_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+    collector = KRXCollector()
+    collector._stock_name_cache.clear()
+
+    monkeypatch.setattr(
+        KRXCollector,
+        "_stock_name_sqlite_context",
+        classmethod(
+            lambda cls, ticker: (
+                str(tmp_path / f"{str(ticker).zfill(6)}.snapshot"),
+                (91, 91),
+            )
+        ),
+    )
+
+    calls = {"count": 0}
+
+    def _fake_get_market_ticker_name(_ticker: str) -> str:
+        calls["count"] += 1
+        return "삼성전자"
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = types.SimpleNamespace(get_market_ticker_name=_fake_get_market_ticker_name)
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+
+    first = collector._get_stock_name("5930")
+    assert first == "삼성전자"
+    assert calls["count"] == 1
+
+    collector._stock_name_cache.clear()
+    fake_pykrx.stock.get_market_ticker_name = lambda _ticker: (_ for _ in ()).throw(
+        AssertionError("SQLite snapshot hit이면 pykrx 재조회가 발생하면 안 됩니다.")
+    )
+
+    second = collector._get_stock_name("005930")
+    assert second == "삼성전자"
+    assert calls["count"] == 1
 
 
 def test_process_ohlcv_dataframe_handles_non_numeric_fields_gracefully():
@@ -105,3 +155,48 @@ def test_process_ohlcv_dataframe_handles_non_numeric_fields_gracefully():
     assert result[0].code == "000660"
     assert result[0].volume == 0
     assert result[0].marcap == 0
+
+
+def test_get_latest_market_date_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+    collector = KRXCollector()
+    KRXCollector.clear_latest_market_date_cache()
+
+    monkeypatch.setattr(
+        KRXCollector,
+        "_latest_market_date_cache_token",
+        classmethod(lambda cls, _now: "20260226:postclose"),
+    )
+    monkeypatch.setattr(
+        KRXCollector,
+        "_latest_market_date_sqlite_context",
+        classmethod(
+            lambda cls, cache_token: (
+                str(tmp_path / f"{cache_token}.snapshot"),
+                (81, 81),
+            )
+        ),
+    )
+
+    calls = {"count": 0}
+
+    def _fake_get_index_ohlcv_by_date(*_args, **_kwargs):
+        calls["count"] += 1
+        index = pd.to_datetime(["2026-02-25"])
+        return pd.DataFrame({"종가": [2600]}, index=index)
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = types.SimpleNamespace(get_index_ohlcv_by_date=_fake_get_index_ohlcv_by_date)
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+
+    first = collector._get_latest_market_date()
+    assert first == "20260225"
+    assert calls["count"] == 1
+
+    KRXCollector.clear_latest_market_date_cache()
+    fake_pykrx.stock.get_index_ohlcv_by_date = lambda *_a, **_k: (_ for _ in ()).throw(
+        AssertionError("SQLite snapshot hit이면 pykrx 재조회가 발생하면 안 됩니다.")
+    )
+
+    second = collector._get_latest_market_date()
+    assert second == "20260225"
+    assert calls["count"] == 1

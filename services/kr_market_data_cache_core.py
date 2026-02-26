@@ -91,6 +91,28 @@ def file_signature(filepath: str) -> tuple[int, int] | None:
     return int(stat.st_mtime_ns), int(stat.st_size)
 
 
+def _annotate_csv_cache_metadata(
+    *,
+    frame: pd.DataFrame,
+    filepath: str,
+    signature: tuple[int, int],
+    usecols: tuple[str, ...] | None,
+) -> None:
+    """
+    CSV 원본 식별 메타데이터를 DataFrame attrs에 주입한다.
+
+    하위 서비스에서 frame 객체 id가 바뀌어도(얕은 복사) 동일 원본임을 빠르게 식별해
+    추가 집계/파싱 비용을 줄일 수 있다.
+    """
+    try:
+        frame.attrs["kr_cache_filepath"] = str(filepath)
+        frame.attrs["kr_cache_signature"] = (int(signature[0]), int(signature[1]))
+        frame.attrs["kr_cache_usecols"] = tuple(usecols) if usecols is not None else None
+    except Exception:
+        # attrs 미지원/readonly 변형 프레임 방어
+        return
+
+
 def invalidate_file_cache(filepath: str) -> None:
     normalized_path = _normalize_cache_path(filepath)
     should_delete_json_sqlite = False
@@ -277,6 +299,30 @@ def _delete_csv_payload_from_sqlite(filepath: str) -> None:
     )
 
 
+def _read_csv_with_usecols_fallback(
+    *,
+    filepath: str,
+    usecols: tuple[str, ...] | None,
+) -> pd.DataFrame:
+    """usecols 스키마 불일치 시 전체 로드 후 가능한 컬럼만 투영해 반환한다."""
+    read_kwargs: dict[str, Any] = {"low_memory": False}
+    if usecols is not None:
+        read_kwargs["usecols"] = list(usecols)
+
+    try:
+        return pd.read_csv(filepath, **read_kwargs)
+    except ValueError as error:
+        if usecols is None:
+            raise
+
+        _LOGGER.debug("CSV usecols fallback to full read (%s): %s", filepath, error)
+        loaded = pd.read_csv(filepath, low_memory=False)
+        existing_columns = [column for column in usecols if column in loaded.columns]
+        if existing_columns:
+            return loaded.loc[:, existing_columns]
+        raise
+
+
 def load_json_file(data_dir: str, filename: str) -> dict[str, Any]:
     filepath = _normalize_cache_path(os.path.join(data_dir, filename))
     loaded = _load_json_payload_from_path(filepath)
@@ -309,6 +355,12 @@ def load_csv_file(
     with FILE_CACHE_LOCK:
         cached = _get_lru_cache_entry(CSV_FILE_CACHE, cache_key)
         if cached and cached[0] == file_sig:
+            _annotate_csv_cache_metadata(
+                frame=cached[1],
+                filepath=filepath,
+                signature=file_sig,
+                usecols=normalized_usecols,
+            )
             return cached[1].copy(deep=deep_copy)
 
     use_sqlite_snapshot = normalized_usecols is not None
@@ -322,6 +374,12 @@ def load_csv_file(
             usecols=normalized_usecols,
         )
         if sqlite_cached is not None:
+            _annotate_csv_cache_metadata(
+                frame=sqlite_cached,
+                filepath=filepath,
+                signature=file_sig,
+                usecols=normalized_usecols,
+            )
             with FILE_CACHE_LOCK:
                 _set_bounded_lru_cache_entry(
                     CSV_FILE_CACHE,
@@ -331,10 +389,16 @@ def load_csv_file(
                 )
             return sqlite_cached.copy(deep=deep_copy)
 
-    read_kwargs: dict[str, Any] = {"low_memory": False}
-    if normalized_usecols is not None:
-        read_kwargs["usecols"] = list(normalized_usecols)
-    df = pd.read_csv(filepath, **read_kwargs)
+    df = _read_csv_with_usecols_fallback(
+        filepath=filepath,
+        usecols=normalized_usecols,
+    )
+    _annotate_csv_cache_metadata(
+        frame=df,
+        filepath=filepath,
+        signature=file_sig,
+        usecols=normalized_usecols,
+    )
     with FILE_CACHE_LOCK:
         _set_bounded_lru_cache_entry(
             CSV_FILE_CACHE,

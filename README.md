@@ -23,7 +23,7 @@
 - 환율, 수급, 기술적 지표가 위험 수준일 경우, 아무리 좋은 종목이 포착되어도 매수를 **원천 차단(Gate Closed)** 하여 계좌를 보호합니다.        
 
 ### 2. Rule-based Screening + AI Reasoning (하이브리드 분석)
-- **1차 필터(Rule)**: **거래대금 1,000억 이상**의 엄격한 기준으로 종목을 압축합니다.
+- **1차 후보군 필터(Rule)**: `get_top_gainers` 단계에서 **거래대금 10억 이상 + 등락률 하한(`MIN_CHANGE_PCT`, 기본 0%)** 조건으로 후보를 압축합니다.
 - **2차 필터(AI)**: 선별된 종목의 뉴스와 재료를 AI가 정성적으로 분석하여 "가짜 반등"과 "진짜 호재"를 구분합니다.  
 
 ### 3. Multi-Model AI Cross-Validation (이중 검증)
@@ -295,7 +295,7 @@ graph TD
 - 상승률 상위 종목에 대해 기본 분석 수행
 - 차트, 수급 데이터 수집
 - Pre-Score 계산 (뉴스/LLM 제외)
-        - 필터 조건 검증 (거래대금 1,000억+)
+- 필터 조건 검증 (Phase1 하드컷: 거래대금 500억+)
 
 **Phase 2: 뉴스 수집**
 - 네이버 금융, 다음 뉴스에서 최신 뉴스 수집
@@ -575,7 +575,7 @@ SYSTEM_PERSONA = """너는 VCP 기반 한국 주식 투자 어드바이저 '스�
 | **`recommendation`**  | **종목 추천**   | 수급 점수 상위 종목 중심, 사용자의 관심 섹터 반영, 진입 타이밍/손절가 제시 |
 | **`analysis`**        | **종목 분석**   | 60일 수급 현황, 연속 매수일/비율 제공, VCP 패턴 충족 여부 진단             |
 | **`market_overview`** | **시장 현황**   | Market Gate 기준 주도 테마, 전반적인 수급 동향 및 시장 분위기 요약         |
-| **`closing_bet`**     | **종가베팅**    | S/A급 종목 우선 추천, 15:20분 진입 전략 가이드                             |
+| **`closing_bet`**     | **종가베팅**    | S/A급 종목 우선 추천, 장 마감 전후 진입 전략 가이드                        |
 | **`risk_check`**      | **리스크 관리** | 구체적인 손절가(-5%) 제시, 포지션 비중 조절 및 거시 위험 대응              |
 | **`market_gate`**     | **시장 신호등** | 시장 상태(GREEN/YELLOW/RED)별 구체적 비중 및 공격성 조절 가이드            |
 | **`vcp_analysis`**    | **VCP 시그널**  | Gemini/GPT/Perplexity AI 추천 결과 분석, VCP 점수 및 수축 비율 설명        |
@@ -931,9 +931,9 @@ def evaluate_market_gate():
   - **수급 (2점)**: 외국인/기관 동반 순매수 및 기여도
 - **가산점 (Max 7점)**: 거래량·차트 신호 기반
 - **등급 판정 (`GradeClassifier`)**:
-  - **S급**: 거래대금 1조+ / 10점+ / +3% 이상 (풀배팅)
-  - **A급**: 거래대금 5000억+ / 8점+ / +3% 이상 (기본배팅)
-  - **B급**: 거래대금 1000억+ / 6점+ / +3% 이상 (절반배팅)
+  - **S급**: 거래대금 1조+ / 10점+ / 등락률 하한(`MIN_CHANGE_PCT`, 기본 0%) 이상 (풀배팅)
+  - **A급**: 거래대금 5000억+ / 8점+ / 등락률 하한(`MIN_CHANGE_PCT`, 기본 0%) 이상 (기본배팅)
+  - **B급**: 거래대금 1000억+ / 6점+ / 등락률 하한(`MIN_CHANGE_PCT`, 기본 0%) 이상 (절반배팅)
 
 #### 1.3 왜 Market Gate가 필요한가?
 
@@ -1097,15 +1097,15 @@ graph LR
 ```
 
 **C. 통합 등급 산정 기준 (Grade Logic)**
-|  등급   | 거래대금 & 등락률          | 점수 (Total / 19) | 추가 조건 (외인+기관 양매수)           | 비고             |
+|  등급   | 거래대금 기준              | 점수 (Total / 19) | 추가 조건 (외인+기관 양매수)           | 비고             |
 | :-----: | :------------------------- | :---------------: | :------------------------------------ | :--------------- |
-| **S급** | **1조원 이상**, +3% 이상  |   **10점 이상**   | 외인+기관 **양매수**                   | 초대형 수급 폭발 |
-| **A급** | **5,000억 이상**, +3% 이상 |   **8점 이상**    | 외인+기관 **양매수**                   | 대형 우량주      |
-| **B급** | **1,000억 이상**, +3% 이상 |   **6점 이상**    | 외인+기관 **양매수**                   | 중형 주도주      |
+| **S급** | **1조원 이상**             |   **10점 이상**   | 외인+기관 **양매수**                   | 초대형 수급 폭발 |
+| **A급** | **5,000억 이상**           |   **8점 이상**    | 외인+기관 **양매수**                   | 대형 우량주      |
+| **B급** | **1,000억 이상**           |   **6점 이상**    | 외인+기관 **양매수**                   | 중형 주도주      |
 
 > [!NOTE]
 > **등급 판정 우선순위**: S급 → A급 → B급 순으로 판정하며, 상위 등급 조건을 만족하면 해당 등급이 부여됩니다.
-> **주의**: 점수만으로는 등급이 결정되지 않습니다. 거래대금, 등락률, 외인+기관 양매수 조건을 **모두 만족**해야 해당 등급이 부여됩니다.
+> **주의**: 점수만으로는 등급이 결정되지 않습니다. 거래대금, 등락률 하한(`MIN_CHANGE_PCT`, 기본 0%) 이상, 외인+기관 양매수 조건을 **모두 만족**해야 해당 등급이 부여됩니다.
 
 #### 3.3 기술적 스크리닝 조건 (Screening Rules)
 ```python
@@ -1260,8 +1260,7 @@ VCP 패턴과 수급 상황을 종합 분석하세요.
 
 #### 4.1 종가베팅 (Closing Bet) 알고리즘
 **전략 시나리오:**
-- **15:20 장중**: 후보군 스크리닝 → AI 필터링 → 최종 신호 생성
-- **15:30 장 마감**: 시가초가/지정가 확정
+- **장 마감 직후 (기본 16:00 체인)**: 후보군 스크리닝 → AI 필터링 → 최종 신호 생성
 - **익일 09:00~09:30**: 목표가/손절가에 따라 자동 매도 추천
 
 ![종가 매매 전략](assets/4.png)
@@ -1276,11 +1275,13 @@ VCP 패턴과 수급 상황을 종합 분석하세요.
 ```python
 # engine/phases.py + engine/config.py
 liquidity_filters = {
-    # 1차 후보군은 별도 거래량/상위 정렬 단계에서 전달됨
-    "trading_value_rank": 500,  # 내부 선별 기본값
+    # 1차 후보군 (get_top_gainers): 상승률 상위 top_n + 거래대금 하한
+    "candidate_top_n": 300,
+    "candidate_min_trading_value": 1_000_000_000,   # 10억
+    "candidate_min_change_pct": "MIN_CHANGE_PCT (default: 0.0)",
 
-    # 최소 거래대금 (1,000억원 이상)
-    "min_trading_value": 100_000_000_000,
+    # Phase1 하드 필터 (SignalConfig.trading_value_min)
+    "phase1_min_trading_value": 50_000_000_000,     # 500억
 }
 ```
 
@@ -1288,9 +1289,9 @@ liquidity_filters = {
 ```python
 # engine/phases.py + engine/constants.py(PRICE_CHANGE)
 momentum_filters = {
-    # 주가 등락률 3%~29.5% (과매수/과매도 구간 제외)
-    "change_pct_min": 0.03,
-    "change_pct_max": 0.295,
+    # 등락률 하한은 환경변수로 제어 (기본 0%)
+    "change_pct_min": "MIN_CHANGE_PCT (default: 0.0)",
+    "change_pct_max": 30.0,
 
     # 거래량 배수 사전 필터는 현재 파이프라인에서 제외 (가산점에서만 반영)
     "volume_ratio_min": None,
@@ -1314,7 +1315,7 @@ grade_filters = {
         "min_trading_value": 100_000_000_000,
         "min_score": 6,
     },
-    "change_pct_min": 0.03,
+    "change_pct_min": "MIN_CHANGE_PCT (default: 0.0)",
 }
 ```
 
@@ -1376,8 +1377,8 @@ grade_filters = {
 ### 5. Data Status & Integrity
 
 **A. 데이터 업데이트 자동화**
-- **매일 15:20**: 장중 데이터 업데이트 (종가베팅용)
-- **매일 15:40**: 장 마감 후 전체 데이터 수집 (VCP용)
+- **장중 주기 동기화**: `MARKET_GATE_UPDATE_INTERVAL_MINUTES` (기본 30분) 간격으로 Market Gate 갱신
+- **매일 장 마감 체인 실행**: `CLOSING_SCHEDULE_TIME` (기본 16:00) 기준으로 일별 데이터 수집 → VCP → 종가베팅 순차 실행
 - **수동 실행**: `python scripts/run_full_update.py`
 
 **B. 데이터 무결성(Integrity)**
@@ -1387,29 +1388,28 @@ grade_filters = {
 
 ### 6. Scheduler & Notification (자동화된 스케줄러)
 
-시스템은 `services/scheduler.py`에 의해 전자동으로 운영되며, 하루 두 번의 결정적인 모멘텀을 포착합니다.
+시스템은 `services/scheduler.py`에 의해 전자동으로 운영되며, **장중 주기 동기화 + 장 마감 체인 실행** 구조로 동작합니다.
 
-### 1. 15:20 - Pre-Close Analysis (종가베팅)
-*   **목적**: 장 마감 전 진입하여 익일 갭상승을 노림.
+### 1. 장중 주기 동기화 (Market Gate Sync)
+*   **목적**: 장중 시장 상태를 일정 주기로 최신화.
 *   **프로세스**:
-    1.  장중 실시간 추정가 수집 (pykrx).
-    2.  `JonggaV2` 알고리즘으로 급등주 1차 필터링.
-    3.  **AI 긴급 분석**: 선별된 TOP 10 종목의 당일 뉴스 분석.
-    4.  **Telegram/Slack 긴급 알림 발송**.
+    1.  `run_market_gate_sync()` 실행
+    2.  Market Gate 점수/상태 갱신
+    3.  장중 대시보드 상태 반영
 
-### 2. 15:40 - Post-Close Analysis (VCP & 정산)
-*   **목적**: 정규장 종료 후 확정 데이터를 기반으로 정밀 분석.
+### 2. 장 마감 체인 실행 (Daily Closing Chain)
+*   **목적**: 장 마감 확정 데이터 기반으로 하루 분석을 일괄 처리.
 *   **프로세스**:
-    1.  일별 확정 종가, 외국인/기관 확정 수급 집계.
-    2.  **Market Gate** 최종 점수 산출 및 DB 저장.
-    3.  전 종목 대상 **VCP 패턴 정밀 스캔**.
-    4.  일일 리포트(Daily Report) 이메일 발송.
+    1.  일별 주가 데이터 수집
+    2.  외국인/기관 수급 데이터 수집
+    3.  VCP 시그널 분석
+    4.  `run_jongga_v2_analysis()` 체인 실행 및 알림 발송
 
 
 | 시간 (KST)     | 작업(Job)                      | 세부 내용                                                                     |
 | -------------- | ------------------------------ | ----------------------------------------------------------------------------- |
-| **매일 15:20** | `run_jongga_v2_analysis()`     | 1. 장중 시세 업데이트<br>2. 종가베팅 스크리닝<br>3. AI 필터링<br>4. 알림 발송 |
-| **매일 15:40** | `run_daily_closing_analysis()` | 1. 장 마감 시세 확정<br>2. VCP 신호 생성<br>3. 수급 데이터 업데이트           |
+| **장중 N분마다** | `run_market_gate_sync()`       | 1. Market Gate 동기화<br>2. 시장 상태 업데이트                              |
+| **매일 16:00(기본)** | `run_daily_closing_analysis()` | 1. 장 마감 데이터 수집<br>2. VCP 신호 생성<br>3. 종가베팅 체인 실행<br>4. 알림 발송 |
 
 #### 6.1 스케줄러 아키텍처
 
@@ -1418,14 +1418,12 @@ grade_filters = {
 ```mermaid
 graph TD
     A[Application Start] --> B[Background Scheduler Thread]
-    B --> C[15:20<br>Jongga V2 Analysis]
-    B --> D[15:40<br>Daily Closing Analysis]
-    C --> E[Data Collection]
-    C --> F[AI Analysis]
-    C --> G[Signal Generation]
-    D --> H[VCP Signal Analysis]
+    B --> C[Every N Minutes<br>Market Gate Sync]
+    B --> D[Daily 16:00<br>Daily Closing Analysis]
+    D --> E[Daily Prices + Supply]
+    D --> F[VCP Analysis]
+    D --> G[Chain: Jongga V2 Analysis]
     G --> I[Notification Service]
-    H --> I
     I --> J[Telegram]
     I --> K[Discord]
     I --> L[Slack]
@@ -1647,7 +1645,7 @@ EMAIL_RECIPIENTS=user1@email.com,user2@email.com
 **C. 시장 상황 요약 (Market Summary)**
 
 ```
-🌐 시장 요약 (15:40 KST)
+🌐 시장 요약 (16:00 KST)
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 Market Gate: [OPEN] - 68점 (매수 허용)

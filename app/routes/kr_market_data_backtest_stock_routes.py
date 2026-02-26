@@ -55,10 +55,12 @@ def register_market_data_backtest_stock_routes(
     def get_stock_detail(ticker: str):
         """종목 상세 정보 조회 API (Toss -> Naver -> 기본값 fallback)."""
         try:
+            resolved_data_dir = data_dir_getter() if callable(data_dir_getter) else None
             payload = fetch_stock_detail_payload(
                 ticker=ticker,
                 load_csv_file=load_csv_file,
                 logger=logger,
+                data_dir=resolved_data_dir,
             )
             return jsonify(payload)
         except Exception as e:

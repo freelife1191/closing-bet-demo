@@ -40,28 +40,40 @@ def is_duplicate_column_error(error: Exception) -> bool:
 
 
 def _create_indexes(cursor: sqlite3.Cursor) -> None:
+    # 구형 단일 timestamp 인덱스는 (timestamp, id) 복합 인덱스로 대체 가능하므로 정리한다.
+    # 불필요한 중복 인덱스를 제거해 trade_log write 비용을 줄인다.
+    cursor.execute("DROP INDEX IF EXISTS idx_trade_log_timestamp")
+    # ticker 조건 trade_log 조회가 현재 서비스 경로에 없어 ticker 기반 인덱스도 정리한다.
+    cursor.execute("DROP INDEX IF EXISTS idx_trade_log_ticker_timestamp")
+    # asset_history는 date PRIMARY KEY(auto index) 기준으로 조회하므로 timestamp 인덱스는 불필요하다.
+    cursor.execute("DROP INDEX IF EXISTS idx_asset_history_timestamp")
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_trade_log_timestamp
-        ON trade_log(timestamp DESC)
-        """
-    )
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_trade_log_ticker_timestamp
-        ON trade_log(ticker, timestamp DESC)
-        """
-    )
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_asset_history_timestamp
-        ON asset_history(timestamp DESC)
+        CREATE INDEX IF NOT EXISTS idx_trade_log_timestamp_id
+        ON trade_log(timestamp DESC, id DESC)
         """
     )
     cursor.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_price_cache_updated_at
         ON price_cache(updated_at DESC)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_portfolio_normalized_ticker
+        ON portfolio(
+            CASE
+                WHEN length(ticker) >= 6 THEN ticker
+                ELSE substr('000000' || ticker, -6)
+            END
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_portfolio_last_updated
+        ON portfolio(last_updated DESC, ticker ASC)
         """
     )
 

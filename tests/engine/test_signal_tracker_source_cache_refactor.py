@@ -90,6 +90,52 @@ def test_load_signal_tracker_csv_cached_prunes_sqlite_rows(monkeypatch, tmp_path
     assert row_count == 2
 
 
+def test_load_signal_tracker_csv_cached_projects_existing_columns_on_usecols_mismatch(
+    tmp_path,
+):
+    csv_path = tmp_path / "daily_prices_usecols_mismatch.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "005930", "close": 100.0, "volume": 1_000},
+            {"ticker": "000660", "close": 200.0, "volume": 2_000},
+        ]
+    ).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)
+    calls = {"usecols": 0, "full": 0}
+    original_read_csv = pd.read_csv
+
+    def _fake_read_csv(path, *args, **kwargs):
+        if kwargs.get("usecols") is not None:
+            calls["usecols"] += 1
+            raise ValueError("Usecols do not match columns")
+        calls["full"] += 1
+        return original_read_csv(path, *args, **kwargs)
+
+    first = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "missing_col"],
+        read_csv=_fake_read_csv,
+    )
+    assert list(first.columns) == ["ticker"]
+    assert len(first) == 2
+    assert calls == {"usecols": 1, "full": 1}
+
+    source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=False)
+    second = source_cache.load_signal_tracker_csv_cached(
+        path=str(csv_path),
+        cache_kind="price_source",
+        usecols=["ticker", "missing_col"],
+        read_csv=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("read_csv should not run when sqlite snapshot is warm")
+        ),
+    )
+
+    assert list(second.columns) == ["ticker"]
+    assert len(second) == 2
+
+
 def test_load_signal_tracker_csv_cached_recovers_when_sqlite_table_missing(monkeypatch, tmp_path):
     db_path = tmp_path / "runtime_cache.db"
     source_cache.clear_signal_tracker_source_cache(reset_sqlite_state=True)

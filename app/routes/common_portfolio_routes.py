@@ -104,6 +104,25 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             error_payload_builder=lambda error: {"status": "error", "message": str(error)},
         )
 
+    @common_bp.route("/portfolio/buy/bulk", methods=["POST"])
+    def buy_stocks_bulk():
+        """모의 투자 일괄 매수."""
+        def _handler():
+            data = request.get_json(silent=True) or {}
+            orders = data.get("orders")
+            if not isinstance(orders, list) or not orders:
+                return jsonify({"status": "error", "message": "Missing orders"}), 400
+
+            result = ctx.paper_trading.buy_stocks_bulk(orders)
+            return jsonify(result)
+
+        return _execute_portfolio_route(
+            handler=_handler,
+            ctx=ctx,
+            error_label="Error bulk buying stocks",
+            error_payload_builder=lambda error: {"status": "error", "message": str(error)},
+        )
+
     @common_bp.route("/portfolio/sell", methods=["POST"])
     def sell_stock():
         """모의 투자 매도."""

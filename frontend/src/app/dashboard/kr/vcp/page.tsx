@@ -14,7 +14,17 @@ import ThinkingProcess from '@/app/components/ThinkingProcess';
 
 // Simple Tooltip Component
 // Simple Tooltip Component
-const SimpleTooltip = ({ text, children, align = 'center' }: { text: string; children: React.ReactNode; align?: 'left' | 'center' | 'right' }) => {
+const SimpleTooltip = ({
+  text,
+  children,
+  align = 'center',
+  position = 'bottom'
+}: {
+  text: string;
+  children: React.ReactNode;
+  align?: 'left' | 'center' | 'right';
+  position?: 'top' | 'bottom';
+}) => {
   let positionClass = 'left-1/2 -translate-x-1/2';
   let arrowClass = 'left-1/2 -translate-x-1/2';
 
@@ -29,9 +39,9 @@ const SimpleTooltip = ({ text, children, align = 'center' }: { text: string; chi
   return (
     <div className="group relative flex items-center justify-center gap-1 cursor-help">
       {children}
-      <div className={`absolute top-full mt-2 hidden group-hover:block min-w-[120px] w-max max-w-[180px] p-2 bg-gray-900 text-white text-[10px] rounded shadow-lg z-[100] text-center border border-white/10 pointer-events-none whitespace-normal break-keep ${positionClass}`}>
+      <div className={`absolute ${position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'} hidden group-hover:block min-w-[120px] w-max max-w-[180px] p-2 bg-gray-900 text-white text-[10px] rounded shadow-lg z-[100] text-center border border-white/10 pointer-events-none whitespace-normal break-keep ${positionClass}`}>
         {text}
-        <div className={`absolute bottom-full border-4 border-transparent border-b-gray-900 ${arrowClass}`}></div>
+        <div className={`absolute border-4 border-transparent ${position === 'top' ? 'top-full border-t-gray-900' : 'bottom-full border-b-gray-900'} ${arrowClass}`}></div>
       </div>
     </div>
   );
@@ -756,35 +766,51 @@ export default function VCPSignalsPage() {
     const failedItems: string[] = [];
 
     try {
+      const buyOrders: Array<{ ticker: string; name: string; price: number; quantity: number }> = [];
       for (const target of uniqueTargets.values()) {
         if (!Number.isFinite(target.price) || target.price <= 0) {
           skippedCount += 1;
           failedItems.push(`${target.name}(가격 정보 없음)`);
           continue;
         }
+        buyOrders.push({
+          ticker: target.ticker,
+          name: target.name,
+          price: target.price,
+          quantity: 10
+        });
+      }
 
+      if (buyOrders.length > 0) {
         try {
-          const res = await fetch('/api/portfolio/buy', {
+          const res = await fetch('/api/portfolio/buy/bulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ticker: target.ticker,
-              name: target.name,
-              price: target.price,
-              quantity: 10
-            })
+            body: JSON.stringify({ orders: buyOrders })
           });
           const result = await res.json();
-          if (result.status === 'success') {
-            successCount += 1;
+          const resultRows = Array.isArray(result?.results) ? result.results : [];
+
+          if (resultRows.length > 0) {
+            resultRows.forEach((row: any) => {
+              const rowName = row?.name || row?.ticker || '종목';
+              if (row?.status === 'success') {
+                successCount += 1;
+              } else {
+                failCount += 1;
+                failedItems.push(`${rowName}(${row?.message || '매수 실패'})`);
+              }
+            });
+          } else if (result?.status === 'success') {
+            successCount += buyOrders.length;
           } else {
-            failCount += 1;
-            failedItems.push(`${target.name}(${result.message || '매수 실패'})`);
+            failCount += buyOrders.length;
+            failedItems.push(`일괄 매수(${result?.message || '매수 실패'})`);
           }
         } catch (error) {
-          console.error('[VCP Bulk Buy] buy failed:', target.ticker, error);
-          failCount += 1;
-          failedItems.push(`${target.name}(요청 오류)`);
+          console.error('[VCP Bulk Buy] bulk buy failed:', error);
+          failCount += buyOrders.length;
+          failedItems.push(`일괄 매수(요청 오류)`);
         }
       }
 
@@ -835,6 +861,22 @@ export default function VCPSignalsPage() {
     setChartData([]);
     setSelectedStock(null);
   };
+
+  const isBulkBuyVCPDisabled =
+    isBulkBuyingVCP ||
+    loading ||
+    !signals.length ||
+    activeDateTab !== 'latest';
+
+  const bulkBuyVCPDisabledReason = (() => {
+    if (isBulkBuyingVCP) return 'VCP 일괄 매수를 진행 중입니다.';
+    if (loading) return 'VCP 시그널 데이터를 불러오는 중입니다.';
+    if (activeDateTab !== 'latest') return '최신(오늘) VCP 시그널 탭에서만 일괄 매수를 실행할 수 있습니다.';
+    if (!signals.length) return '오늘 VCP 시그널 매수 대상 종목이 없습니다.';
+    return '';
+  })();
+
+  const bulkBuyVCPTooltip = bulkBuyVCPDisabledReason || '오늘 VCP 시그널 전체를 10주씩 매수합니다.';
 
   const formatFlow = (value: number | undefined) => {
     if (value === undefined || value === null) return '-';
@@ -1264,15 +1306,19 @@ export default function VCPSignalsPage() {
         </div>
 
         <div className="flex items-center gap-2 relative self-end md:self-auto">
-          <button
-            onClick={handleBulkBuyVCP}
-            disabled={isBulkBuyingVCP || loading || !signals.length || activeDateTab !== 'latest'}
-            className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-            title="오늘 VCP 시그널 전체를 10주씩 매수합니다."
-          >
-            <i className={`fas ${isBulkBuyingVCP ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
-            <span>{isBulkBuyingVCP ? '일괄 매수 중...' : 'VCP 전체 10주 매수'}</span>
-          </button>
+          <SimpleTooltip text={bulkBuyVCPTooltip} align="right" position="top">
+            <span className="inline-flex">
+              <button
+                onClick={handleBulkBuyVCP}
+                disabled={isBulkBuyVCPDisabled}
+                className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                title={bulkBuyVCPTooltip}
+              >
+                <i className={`fas ${isBulkBuyingVCP ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
+                <span>{isBulkBuyingVCP ? '일괄 매수 중...' : 'VCP 전체 10주 매수'}</span>
+              </button>
+            </span>
+          </SimpleTooltip>
 
           {/* [NEW] VCP 기준표 버튼 (Moved here) */}
           <button

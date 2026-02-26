@@ -277,6 +277,34 @@ def test_update_balance_uses_single_connection_without_get_balance_call(monkeypa
         _cleanup_service(service)
 
 
+def test_update_balance_uses_in_place_sql_arithmetic_update(monkeypatch):
+    service = _build_service()
+    try:
+        traced_sql: list[str] = []
+        original_get_context = service.get_context
+
+        def _traced_get_context():
+            conn = original_get_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_context", _traced_get_context)
+
+        added_balance = service.update_balance(5000, operation="add")
+        subtracted_balance = service.update_balance(2000, operation="subtract")
+
+        assert int(added_balance) == 100_005_000
+        assert int(subtracted_balance) == 100_003_000
+        assert any("UPDATE balance SET cash = cash + 5000" in sql for sql in traced_sql)
+        assert any("UPDATE balance SET cash = cash - 2000" in sql for sql in traced_sql)
+        assert not any("UPDATE balance SET cash = ?" in sql for sql in traced_sql)
+        if sqlite3.sqlite_version_info >= (3, 35, 0):
+            assert any("RETURNING cash" in sql for sql in traced_sql)
+            assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
 def test_buy_and_sell_stock_updates_portfolio_and_trade_log():
     service = _build_service()
     try:
@@ -349,6 +377,8 @@ def test_buy_stock_insufficient_funds_updates_memory_cache_only():
     try:
         result = service.buy_stock("005930", "삼성전자", 100_000_000, 2)
         assert result["status"] == "error"
+        assert "잔고 부족" in result["message"]
+        assert "보유" in result["message"]
 
         with service.cache_lock:
             assert service.price_cache.get("005930") == 100_000_000
@@ -363,6 +393,54 @@ def test_buy_stock_insufficient_funds_updates_memory_cache_only():
         _cleanup_service(service)
 
 
+def test_buy_stock_insufficient_funds_uses_single_balance_snapshot_statement(monkeypatch):
+    service = _build_service()
+    try:
+        traced_sql: list[str] = []
+        original_get_context = service.get_context
+
+        def _traced_get_context():
+            conn = original_get_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_context", _traced_get_context)
+        result = service.buy_stock("005930", "삼성전자", 100_000_000, 2)
+
+        assert result["status"] == "error"
+        assert "잔고 부족" in result["message"]
+        assert "보유" in result["message"]
+        if sqlite3.sqlite_version_info >= (3, 35, 0):
+            assert any(
+                "UPDATE balance SET cash = cash - 200000000" in sql and "RETURNING cash" in sql
+                for sql in traced_sql
+            )
+            # 잔고 부족 메시지 생성을 위해 실패 경로에서는 현재 잔고 조회가 1회 필요하다.
+            assert any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stock_success_path_skips_balance_select(monkeypatch):
+    service = _build_service()
+    try:
+        original_get_context = service.get_context
+        traced_sql: list[str] = []
+
+        def _traced_get_context():
+            conn = original_get_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_context", _traced_get_context)
+
+        result = service.buy_stock("005930", "삼성전자", 1_000, 1)
+        assert result["status"] == "success"
+        assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
 def test_buy_stock_rejects_non_positive_or_non_numeric_price():
     service = _build_service()
     try:
@@ -373,6 +451,295 @@ def test_buy_stock_rejects_non_positive_or_non_numeric_price():
         invalid_price_result = service.buy_stock("005930", "삼성전자", "bad-price", 1)
         assert invalid_price_result["status"] == "error"
         assert "Price must be a positive number" in invalid_price_result["message"]
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stock_uses_sqlite_upsert_without_portfolio_select(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(
+            service,
+            "_select_portfolio_position_by_ticker",
+            lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("portfolio select should not run")),
+        )
+
+        first = service.buy_stock("005930", "삼성전자", 1_000, 1)
+        second = service.buy_stock("005930", "삼성전자", 2_000, 2)
+        assert first["status"] == "success"
+        assert second["status"] == "success"
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT quantity, total_cost, avg_price FROM portfolio WHERE ticker = ?", ("005930",))
+            row = cursor.fetchone()
+
+        assert row is not None
+        assert int(row[0]) == 3
+        assert int(row[1]) == 5_000
+        assert float(row[2]) == (5_000 / 3)
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_updates_portfolio_and_trade_log_with_single_request():
+    service = _build_service()
+    try:
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": 1_000, "quantity": 10},
+                {"ticker": "000660", "name": "SK하이닉스", "price": 2_000, "quantity": 5},
+            ]
+        )
+
+        assert result["status"] == "success"
+        assert result["summary"]["total"] == 2
+        assert result["summary"]["success"] == 2
+        assert result["summary"]["failed"] == 0
+        assert len(result["results"]) == 2
+
+        portfolio = service.get_portfolio()
+        tickers = {holding["ticker"] for holding in portfolio["holdings"]}
+        assert tickers == {"005930", "000660"}
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM trade_log WHERE action = 'BUY'")
+            buy_count = int(cursor.fetchone()[0])
+            cursor.execute("SELECT cash FROM balance WHERE id = 1")
+            cash = int(cursor.fetchone()[0])
+
+        assert buy_count == 2
+        assert cash == 100_000_000 - (1_000 * 10) - (2_000 * 5)
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_reports_invalid_orders_and_insufficient_funds():
+    service = _build_service()
+    try:
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": "bad", "quantity": 10},
+                {"ticker": "000660", "name": "SK하이닉스", "price": 1_000, "quantity": 10},
+                {"ticker": "035420", "name": "NAVER", "price": 100_000_000, "quantity": 2},
+            ]
+        )
+
+        assert result["status"] == "success"
+        assert result["summary"]["total"] == 3
+        assert result["summary"]["success"] == 1
+        assert result["summary"]["failed"] == 2
+        assert any("Missing or invalid order fields" in row["message"] for row in result["results"])
+        assert any("잔고 부족" in row["message"] for row in result["results"] if row["status"] == "error")
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM trade_log WHERE action = 'BUY'")
+            buy_count = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("000660",))
+            holding_count = int(cursor.fetchone()[0])
+
+        assert buy_count == 1
+        assert holding_count == 1
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_preserves_input_ticker_for_trade_log():
+    service = _build_service()
+    try:
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "5930", "name": "삼성전자", "price": 1_000, "quantity": 1},
+            ]
+        )
+        assert result["status"] == "success"
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("5930",))
+            raw_count = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM portfolio WHERE ticker = ?", ("005930",))
+            normalized_count = int(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT ticker FROM trade_log WHERE action = 'BUY' ORDER BY id DESC LIMIT 1"
+            )
+            trade_ticker_row = cursor.fetchone()
+
+        assert raw_count == 1
+        assert normalized_count == 0
+        assert trade_ticker_row is not None
+        assert str(trade_ticker_row[0]) == "5930"
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_accumulates_duplicate_ticker_orders():
+    service = _build_service()
+    try:
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": 1_000, "quantity": 2},
+                {"ticker": "005930", "name": "삼성전자", "price": 2_000, "quantity": 3},
+            ]
+        )
+        assert result["status"] == "success"
+        assert result["summary"]["success"] == 2
+
+        portfolio = service.get_portfolio()
+        assert len(portfolio["holdings"]) == 1
+        assert int(portfolio["holdings"][0]["quantity"]) == 5
+        assert float(portfolio["holdings"][0]["avg_price"]) == 1_600.0
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM trade_log WHERE action = 'BUY'")
+            trade_count = int(cursor.fetchone()[0])
+        assert trade_count == 2
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_error_summary_includes_valid_orders_when_db_operation_fails(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(
+            service,
+            "_execute_db_operation_with_schema_retry",
+            lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("forced-db-error")),
+        )
+
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": "bad", "quantity": 1},
+                {"ticker": "000660", "name": "SK하이닉스", "price": 1_000, "quantity": 1},
+            ]
+        )
+
+        assert result["status"] == "error"
+        assert result["summary"]["total"] == 2
+        assert result["summary"]["success"] == 0
+        assert result["summary"]["failed"] == 2
+        assert len(result["results"]) == 2
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_skips_portfolio_lookup_when_no_order_is_affordable(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(
+            service,
+            "_load_portfolio_positions_map_for_tickers",
+            lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("portfolio lookup should be skipped")),
+        )
+
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": 100_000_000, "quantity": 2},
+                {"ticker": "000660", "name": "SK하이닉스", "price": 100_000_000, "quantity": 2},
+            ]
+        )
+
+        assert result["status"] == "error"
+        assert result["summary"]["success"] == 0
+        assert result["summary"]["failed"] == 2
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_skips_write_context_when_no_order_is_affordable(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(
+            service,
+            "get_context",
+            lambda: (_ for _ in ()).throw(AssertionError("write context should be skipped")),
+        )
+
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": 100_000_000, "quantity": 2},
+                {"ticker": "000660", "name": "SK하이닉스", "price": 100_000_000, "quantity": 2},
+            ]
+        )
+
+        assert result["status"] == "error"
+        assert result["summary"]["success"] == 0
+        assert result["summary"]["failed"] == 2
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_uses_sqlite_upsert_without_portfolio_preload(monkeypatch):
+    service = _build_service()
+    try:
+        _insert_portfolio_row(service, "005930", "삼성전자")
+        monkeypatch.setattr(
+            service,
+            "_load_portfolio_positions_map_for_tickers",
+            lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("preload lookup should not run")),
+        )
+
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": 2_000, "quantity": 2},
+            ]
+        )
+
+        assert result["status"] == "success"
+        assert result["summary"]["success"] == 1
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT quantity, total_cost, avg_price FROM portfolio WHERE ticker = ?",
+                ("005930",),
+            )
+            row = cursor.fetchone()
+
+        assert row is not None
+        assert int(row[0]) == 3
+        assert int(row[1]) == 14_000
+        assert float(row[2]) == (14_000 / 3)
+    finally:
+        _cleanup_service(service)
+
+
+def test_buy_stocks_bulk_single_order_uses_buy_stock_fast_path_without_read_context(monkeypatch):
+    service = _build_service()
+    try:
+        monkeypatch.setattr(
+            service,
+            "get_read_context",
+            lambda: (_ for _ in ()).throw(AssertionError("single-order bulk should not use read context")),
+        )
+        result = service.buy_stocks_bulk(
+            [
+                {"ticker": "005930", "name": "삼성전자", "price": 1_000, "quantity": 1},
+            ]
+        )
+
+        assert result["status"] == "success"
+        assert result["summary"]["total"] == 1
+        assert result["summary"]["success"] == 1
+        assert result["summary"]["failed"] == 0
+    finally:
+        _cleanup_service(service)
+
+
+def test_load_portfolio_positions_map_for_tickers_handles_large_lookup_set():
+    service = _build_service()
+    try:
+        large_tickers = [str(index).zfill(6) for index in range(1, 1300)]
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            positions = service._load_portfolio_positions_map_for_tickers(
+                cursor=cursor,
+                tickers=large_tickers,
+            )
+        assert positions == {}
     finally:
         _cleanup_service(service)
 
@@ -597,6 +964,8 @@ def test_record_asset_history_skips_duplicate_daily_snapshot_writes(monkeypatch)
             base + timedelta(seconds=3),
             base + timedelta(seconds=4),
             base + timedelta(seconds=5),
+            base + timedelta(seconds=6),
+            base + timedelta(seconds=7),
         ]
 
         class _FakeDateTime:
@@ -675,7 +1044,88 @@ def test_record_asset_history_with_cash_skips_write_context_for_duplicate_snapsh
         _cleanup_service(service)
 
 
-def test_paper_trading_db_has_indexes_for_history_queries():
+def test_record_asset_history_skips_write_context_for_duplicate_snapshot(monkeypatch):
+    service = _build_service()
+    try:
+        fixed_now = datetime(2026, 2, 22, 9, 0, 0)
+        original_get_context = service.get_context
+
+        class _FakeDateTime:
+            @classmethod
+            def now(cls):
+                return fixed_now
+
+        monkeypatch.setattr(paper_trading_history_mixin, "datetime", _FakeDateTime)
+        service._set_last_asset_history_snapshot(
+            date="2026-02-22",
+            total_asset=100_000_000,
+            cash=100_000_000,
+            stock_value=0,
+        )
+
+        monkeypatch.setattr(
+            service,
+            "get_context",
+            lambda: (_ for _ in ()).throw(AssertionError("get_context should be skipped on duplicate snapshot")),
+        )
+
+        service.record_asset_history(current_stock_value=0)
+
+        with original_get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM asset_history")
+            row_count = int(cursor.fetchone()[0])
+        assert row_count == 0
+    finally:
+        _cleanup_service(service)
+
+
+def test_record_asset_history_skips_noop_upsert_when_snapshot_cache_is_empty(monkeypatch):
+    service = _build_service()
+    try:
+        fixed_now = datetime(2026, 2, 22, 9, 0, 0)
+        original_get_context = service.get_context
+
+        class _FakeDateTime:
+            @classmethod
+            def now(cls):
+                return fixed_now
+
+        monkeypatch.setattr(paper_trading_history_mixin, "datetime", _FakeDateTime)
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_asset = excluded.total_asset,
+                    cash = excluded.cash,
+                    stock_value = excluded.stock_value,
+                    timestamp = excluded.timestamp
+                """,
+                ("2026-02-22", 100_000_000, 100_000_000, 0, "2026-02-22T09:00:00"),
+            )
+            conn.commit()
+
+        if hasattr(service, "_last_asset_history_snapshot"):
+            service._last_asset_history_snapshot = None
+
+        service.record_asset_history(current_stock_value=0)
+
+        with original_get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT timestamp, stock_value FROM asset_history WHERE date = ?", ("2026-02-22",))
+            row = cursor.fetchone()
+
+        assert row is not None
+        assert str(row[0]) == "2026-02-22T09:00:00"
+        assert int(float(row[1])) == 0
+    finally:
+        _cleanup_service(service)
+
+
+def test_paper_trading_db_keeps_only_required_history_indexes():
     service = _build_service()
     try:
         with service.get_context() as conn:
@@ -686,19 +1136,136 @@ def test_paper_trading_db_has_indexes_for_history_queries():
                 FROM sqlite_master
                 WHERE type = 'index'
                   AND name IN (
-                    'idx_trade_log_timestamp',
-                    'idx_trade_log_ticker_timestamp',
-                    'idx_asset_history_timestamp',
+                    'idx_trade_log_timestamp_id',
                     'idx_price_cache_updated_at'
                   )
                 """
             )
             index_names = {row[0] for row in cursor.fetchall()}
 
-        assert "idx_trade_log_timestamp" in index_names
-        assert "idx_trade_log_ticker_timestamp" in index_names
-        assert "idx_asset_history_timestamp" in index_names
+        assert "idx_trade_log_timestamp_id" in index_names
         assert "idx_price_cache_updated_at" in index_names
+        assert "idx_asset_history_timestamp" not in index_names
+        assert "idx_trade_log_timestamp" not in index_names
+        assert "idx_trade_log_ticker_timestamp" not in index_names
+    finally:
+        _cleanup_service(service)
+
+
+def test_paper_trading_db_creates_portfolio_normalized_ticker_index():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT 1
+                FROM sqlite_master
+                WHERE type = 'index'
+                  AND name = 'idx_portfolio_normalized_ticker'
+                """
+            )
+            row = cursor.fetchone()
+
+        assert row is not None
+    finally:
+        _cleanup_service(service)
+
+
+def test_paper_trading_db_creates_portfolio_last_updated_index():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT 1
+                FROM sqlite_master
+                WHERE type = 'index'
+                  AND name = 'idx_portfolio_last_updated'
+                """
+            )
+            row = cursor.fetchone()
+
+        assert row is not None
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_tickers_uses_normalized_ticker_expression_index():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            rows = [
+                (
+                    str(index),
+                    f"종목{index}",
+                    1_000,
+                    1,
+                    1_000,
+                    "2026-01-01T00:00:00",
+                )
+                for index in range(1, 1300)
+            ]
+            rows.extend(
+                [
+                    ("5930", "삼성전자", 1_000, 1, 1_000, "2026-01-01T00:00:00"),
+                    ("005930", "삼성전자", 1_000, 1, 1_000, "2026-01-01T00:00:00"),
+                ]
+            )
+            cursor.executemany(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            cursor.execute(
+                """
+                EXPLAIN QUERY PLAN
+                SELECT DISTINCT
+                    CASE
+                        WHEN length(ticker) >= 6 THEN ticker
+                        ELSE substr('000000' || ticker, -6)
+                    END AS normalized_ticker
+                FROM portfolio
+                WHERE ticker IS NOT NULL
+                """
+            )
+            plan_rows = [str(row) for row in cursor.fetchall()]
+            conn.commit()
+
+        assert any("idx_portfolio_normalized_ticker" in row for row in plan_rows)
+
+        normalized_tickers = service._get_portfolio_tickers()
+        assert normalized_tickers.count("005930") == 1
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_trade_history_orders_by_id_when_timestamp_is_identical():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            rows = [
+                ("BUY", "005930", "삼성전자", 1000, 1, "2026-02-22T09:00:00", 0, 0),
+                ("BUY", "000660", "SK하이닉스", 2000, 1, "2026-02-22T09:00:00", 0, 0),
+            ]
+            cursor.executemany(
+                """
+                INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            conn.commit()
+
+        history = service.get_trade_history(limit=2)["trades"]
+        assert len(history) == 2
+        assert history[0]["ticker"] == "000660"
+        assert history[1]["ticker"] == "005930"
     finally:
         _cleanup_service(service)
 
@@ -949,6 +1516,112 @@ def test_get_asset_history_dummy_path_does_not_call_get_balance(monkeypatch):
         _cleanup_service(service)
 
 
+def test_get_asset_history_uses_today_single_snapshot_without_extra_queries(monkeypatch):
+    service = _build_service()
+    try:
+        class _FakeDateTime:
+            @classmethod
+            def now(cls):
+                return datetime(2026, 2, 22, 9, 0, 0)
+
+        monkeypatch.setattr(paper_trading_history_mixin, "datetime", _FakeDateTime)
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_asset = excluded.total_asset,
+                    cash = excluded.cash,
+                    stock_value = excluded.stock_value,
+                    timestamp = excluded.timestamp
+                """,
+                ("2026-02-22", 100_500_000, 100_000_000, 500_000, "2026-02-22T09:00:00"),
+            )
+            conn.commit()
+
+        monkeypatch.setattr(
+            service,
+            "_calculate_stock_value_from_rows",
+            lambda *_a, **_k: (_ for _ in ()).throw(
+                AssertionError("portfolio fallback query path should not run")
+            ),
+        )
+
+        traced_sql: list[str] = []
+        original_get_read_context = service.get_read_context
+
+        def _traced_read_context():
+            conn = original_get_read_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
+        history = service.get_asset_history(limit=30)
+
+        assert len(history) >= 2
+        assert any("FROM asset_history" in sql for sql in traced_sql)
+        assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+        assert not any("FROM portfolio" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_asset_history_low_history_fallback_uses_single_join_query(monkeypatch):
+    service = _build_service()
+    try:
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_asset = excluded.total_asset,
+                    cash = excluded.cash,
+                    stock_value = excluded.stock_value,
+                    timestamp = excluded.timestamp
+                """,
+                (yesterday, 100_000_000, 100_000_000, 0, f"{yesterday}T09:00:00"),
+            )
+            cursor.execute(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticker) DO UPDATE SET
+                    name = excluded.name,
+                    avg_price = excluded.avg_price,
+                    quantity = excluded.quantity,
+                    total_cost = excluded.total_cost,
+                    last_updated = excluded.last_updated
+                """,
+                ("005930", "삼성전자", 70_000, 1, 70_000, f"{yesterday}T09:00:00"),
+            )
+            conn.commit()
+
+        traced_sql: list[str] = []
+        original_get_read_context = service.get_read_context
+
+        def _traced_read_context():
+            conn = original_get_read_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
+        history = service.get_asset_history(limit=30)
+
+        assert len(history) >= 2
+        assert any("FROM balance b" in sql for sql in traced_sql)
+        assert any("SELECT COALESCE(SUM(p.quantity * p.avg_price), 0)" in sql for sql in traced_sql)
+        assert not any("LEFT JOIN portfolio p ON 1 = 1" in sql for sql in traced_sql)
+        assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+        assert not any("SELECT quantity, avg_price, ticker FROM portfolio" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
 def test_refresh_price_cache_once_persists_prices_to_sqlite(monkeypatch):
     service = _build_service()
     try:
@@ -1055,7 +1728,7 @@ def test_persist_price_cache_keeps_max_rows_on_sequential_upserts(monkeypatch):
         _cleanup_service(service)
 
 
-def test_persist_price_cache_repeated_ticker_prunes_once(monkeypatch):
+def test_persist_price_cache_repeated_ticker_skips_prune_when_within_max_rows(monkeypatch):
     service = _build_service()
     try:
         service._reset_price_cache_prune_state()
@@ -1072,7 +1745,7 @@ def test_persist_price_cache_repeated_ticker_prunes_once(monkeypatch):
         service._persist_price_cache({"005930": 70_500})
         service._persist_price_cache({"005930": 70_600})
 
-        assert prune_calls["count"] == 1
+        assert prune_calls["count"] == 0
     finally:
         _cleanup_service(service)
 
@@ -1094,7 +1767,7 @@ def test_persist_price_cache_forces_prune_on_configured_interval(monkeypatch):
         service._persist_price_cache({"005930": 70_500})
         service._persist_price_cache({"005930": 70_600})
 
-        assert prune_calls["count"] == 2
+        assert prune_calls["count"] == 1
     finally:
         _cleanup_service(service)
 
@@ -1161,7 +1834,24 @@ def test_service_warms_up_price_cache_for_active_holdings_first():
         _cleanup_service(first_service)
 
 
-def test_service_warmup_skips_count_query_for_portfolio_presence(monkeypatch):
+def test_service_warms_up_price_cache_for_legacy_ticker_using_normalized_lookup():
+    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
+    first_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+    second_service = None
+    try:
+        first_service._persist_price_cache({"005930": 70900})
+        _insert_portfolio_row(first_service, "5930", "삼성전자")
+
+        second_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+
+        assert second_service.price_cache.get("005930") == 70900
+    finally:
+        if second_service is not None:
+            _cleanup_service(second_service)
+        _cleanup_service(first_service)
+
+
+def test_service_warmup_uses_single_portfolio_ticker_query(monkeypatch):
     service = _build_service()
     try:
         service._persist_price_cache({"005930": 70900})
@@ -1176,8 +1866,86 @@ def test_service_warmup_skips_count_query_for_portfolio_presence(monkeypatch):
         monkeypatch.setattr(service, "get_read_context", _traced_read_context)
         service._load_price_cache_from_db()
 
+        portfolio_selects = [sql for sql in traced_sql if "FROM portfolio" in sql]
         assert not any("SELECT COUNT(*) FROM portfolio" in sql for sql in traced_sql)
-        assert any("SELECT 1" in sql and "FROM portfolio" in sql for sql in traced_sql)
+        assert not any("SELECT 1" in sql and "FROM portfolio" in sql for sql in traced_sql)
+        assert len(portfolio_selects) == 1
+        assert any("SELECT ticker" in sql and "FROM portfolio" in sql for sql in traced_sql)
+        assert any("LIMIT 901" in sql and "FROM portfolio" in sql for sql in traced_sql)
+    finally:
+        _cleanup_service(service)
+
+
+def test_service_warmup_uses_in_query_without_sort_for_small_portfolio(monkeypatch):
+    service = _build_service()
+    try:
+        service._persist_price_cache({"005930": 70900, "000660": 123400})
+        _insert_portfolio_row(service, "005930", "삼성전자")
+        traced_sql: list[str] = []
+        original_get_read_context = service.get_read_context
+
+        def _traced_read_context():
+            conn = original_get_read_context()
+            conn.set_trace_callback(traced_sql.append)
+            return conn
+
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
+        service._load_price_cache_from_db()
+
+        in_queries = [sql for sql in traced_sql if "FROM price_cache" in sql and "WHERE ticker IN" in sql]
+        assert len(in_queries) >= 1
+        assert not any("ORDER BY" in sql for sql in in_queries)
+        assert not any("LIMIT" in sql for sql in in_queries)
+    finally:
+        _cleanup_service(service)
+
+
+def test_service_warmup_uses_limited_subquery_path_for_large_portfolio(monkeypatch):
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            portfolio_rows = [
+                (
+                    str(index).zfill(6),
+                    f"종목{index}",
+                    1000,
+                    1,
+                    1000,
+                    "2026-01-01T00:00:00",
+                )
+                for index in range(1, 903)
+            ]
+            cursor.executemany(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                portfolio_rows,
+            )
+            conn.commit()
+
+        traced_sql: list[str] = []
+        original_get_read_context = service.get_read_context
+
+        def _traced_read_context():
+            conn = original_get_read_context()
+            conn.set_trace_callback(traced_sql.append)
+            return conn
+
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
+        service._load_price_cache_from_db()
+
+        assert any("FROM portfolio" in sql and "LIMIT 901" in sql for sql in traced_sql)
+        assert any(
+            "FROM price_cache" in sql
+            and "WHERE ticker IN" in sql
+            and "FROM portfolio" in sql
+            and "LIMIT 901" in sql
+            and "ORDER BY last_updated DESC" in sql
+            for sql in traced_sql
+        )
+        assert not any("INNER JOIN portfolio" in sql for sql in traced_sql)
     finally:
         _cleanup_service(service)
 
@@ -1219,6 +1987,77 @@ def test_get_portfolio_tickers_recovers_when_portfolio_table_missing():
             cursor.execute("SELECT COUNT(*) FROM portfolio")
             row_count = int(cursor.fetchone()[0])
         assert row_count == 0
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_tickers_returns_normalized_unique_values():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticker) DO UPDATE SET
+                    name = excluded.name,
+                    avg_price = excluded.avg_price,
+                    quantity = excluded.quantity,
+                    total_cost = excluded.total_cost,
+                    last_updated = excluded.last_updated
+                """,
+                ("5930", "삼성전자", 70_000, 1, 70_000, "2026-02-22T09:00:00"),
+            )
+            conn.commit()
+
+        tickers = service._get_portfolio_tickers()
+        assert tickers == ["005930"]
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_tickers_deduplicates_raw_and_normalized_rows_in_sql():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    ("5930", "삼성전자", 70_000, 1, 70_000, "2026-02-22T09:00:00"),
+                    ("005930", "삼성전자", 71_000, 1, 71_000, "2026-02-22T09:01:00"),
+                ],
+            )
+            conn.commit()
+
+        tickers = service._get_portfolio_tickers()
+        assert tickers == ["005930"]
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_tickers_uses_sql_distinct_normalization_query(monkeypatch):
+    service = _build_service()
+    try:
+        _insert_portfolio_row(service, "5930", "삼성전자")
+        traced_sql: list[str] = []
+        original_get_read_context = service.get_read_context
+
+        def _traced_read_context():
+            conn = original_get_read_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
+        tickers = service._get_portfolio_tickers()
+
+        assert tickers == ["005930"]
+        assert any("SELECT DISTINCT" in sql and "FROM portfolio" in sql for sql in traced_sql)
+        assert any("substr('000000' || ticker, -6)" in sql for sql in traced_sql)
     finally:
         _cleanup_service(service)
 
@@ -1302,6 +2141,13 @@ def test_record_asset_history_uses_single_context_without_get_balance(monkeypatc
             "get_balance",
             lambda: (_ for _ in ()).throw(AssertionError("get_balance should not be called")),
         )
+        monkeypatch.setattr(
+            service,
+            "get_read_context",
+            lambda: (_ for _ in ()).throw(
+                AssertionError("record_asset_history changed path should not use read context")
+            ),
+        )
 
         service.record_asset_history(current_stock_value=0)
 
@@ -1337,6 +2183,69 @@ def test_get_portfolio_valuation_prefers_record_asset_history_with_cash(monkeypa
 
         assert captured["cash"] == int(valuation["cash"])
         assert captured["stock_value"] == int(valuation["total_stock_value"])
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_valuation_loads_holdings_and_balance_with_single_query(monkeypatch):
+    service = _build_service()
+    try:
+        _insert_portfolio_row(service, "005930", "삼성전자")
+        traced_sql: list[str] = []
+        original_get_read_context = service.get_read_context
+
+        def _traced_read_context():
+            conn = original_get_read_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
+        monkeypatch.setattr(service, "record_asset_history_with_cash", lambda **_kwargs: None)
+        monkeypatch.setattr(service, "record_asset_history", lambda *_args, **_kwargs: None)
+
+        valuation = service.get_portfolio_valuation()
+
+        assert valuation["holdings"]
+        combined_queries = [
+            sql
+            for sql in traced_sql
+            if "FROM balance b" in sql and "LEFT JOIN portfolio p" in sql
+        ]
+        assert combined_queries
+        assert not any(
+            "SELECT cash, total_deposit FROM balance WHERE id = 1" in sql
+            for sql in traced_sql
+        )
+    finally:
+        _cleanup_service(service)
+
+
+def test_get_portfolio_loads_holdings_and_balance_with_single_query(monkeypatch):
+    service = _build_service()
+    try:
+        _insert_portfolio_row(service, "005930", "삼성전자")
+        traced_sql: list[str] = []
+        original_get_read_context = service.get_read_context
+
+        def _traced_read_context():
+            conn = original_get_read_context()
+            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
+            return conn
+
+        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
+        portfolio = service.get_portfolio()
+
+        assert portfolio["holdings"]
+        combined_queries = [
+            sql
+            for sql in traced_sql
+            if "FROM balance b" in sql and "LEFT JOIN portfolio p" in sql
+        ]
+        assert combined_queries
+        assert not any(
+            "SELECT cash, total_deposit FROM balance WHERE id = 1" in sql
+            for sql in traced_sql
+        )
     finally:
         _cleanup_service(service)
 

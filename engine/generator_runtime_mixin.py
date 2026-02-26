@@ -13,7 +13,15 @@ import time
 from datetime import date, datetime
 from typing import Dict, List, Optional
 
-from engine.collectors import EnhancedNewsCollector, KRXCollector, NaverFinanceCollector
+from engine.collectors import KRXCollector
+try:
+    from engine.collectors.naver import NaverFinanceCollector
+except Exception:  # pragma: no cover - legacy collectors 모듈 fallback
+    from engine.collectors import NaverFinanceCollector
+try:
+    from engine.collectors.news import EnhancedNewsCollector
+except Exception:  # pragma: no cover - legacy collectors 모듈 fallback
+    from engine.collectors import EnhancedNewsCollector
 from engine.exceptions import NoCandidatesError
 from engine.generator_helpers import (
     analyze_base as _analyze_base_impl,

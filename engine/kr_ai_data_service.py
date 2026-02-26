@@ -24,7 +24,12 @@ from engine.kr_ai_stock_info_cache import (
     resolve_stock_info_cache_db_path as _resolve_stock_info_cache_db_path_impl,
     save_cached_stock_info as _save_cached_stock_info_impl,
 )
+from engine.signal_tracker_source_cache import load_signal_tracker_csv_cached
 from services.kr_market_data_cache_service import load_csv_file
+from services.kr_market_data_cache_sqlite_payload import (
+    load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
+    save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +74,16 @@ _LATEST_SIGNAL_INDEX_CACHE: OrderedDict[
     tuple[tuple[int, int], dict[str, dict[str, object]]],
 ] = OrderedDict()
 _LATEST_SIGNAL_INDEX_CACHE_MAX_ENTRIES = 256
+_LATEST_SIGNAL_INDEX_SQLITE_MAX_ROWS = 512
+_LATEST_SIGNAL_INDEX_SQLITE_KEY_SUFFIX = "::kr_ai_latest_signal_index"
+
+
+def _project_latest_signal_columns_if_possible(df: pd.DataFrame) -> pd.DataFrame:
+    """usecols fallback 시 필요한 컬럼만 유지해 후속 연산/캐시 비용을 줄인다."""
+    existing_columns = [column for column in LATEST_SIGNAL_USECOLS if column in df.columns]
+    if not existing_columns:
+        return df
+    return df.loc[:, existing_columns]
 
 
 def _get_latest_signal_index_cache(
@@ -90,6 +105,96 @@ def _set_latest_signal_index_cache(
     normalized_max_entries = max(1, int(_LATEST_SIGNAL_INDEX_CACHE_MAX_ENTRIES))
     while len(_LATEST_SIGNAL_INDEX_CACHE) > normalized_max_entries:
         _LATEST_SIGNAL_INDEX_CACHE.popitem(last=False)
+
+
+def _stat_file_signature(path: str) -> tuple[int, int] | None:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return int(stat.st_mtime_ns), int(stat.st_size)
+
+
+def _latest_signal_index_sqlite_cache_key(signals_path: str) -> str:
+    normalized_signals_path = os.path.abspath(signals_path)
+    return f"{normalized_signals_path}{_LATEST_SIGNAL_INDEX_SQLITE_KEY_SUFFIX}"
+
+
+def _can_use_latest_signal_index_sqlite_cache(
+    *,
+    signals_path: str,
+    file_signature: tuple[int, int],
+) -> bool:
+    # 테스트에서 monkeypatch된 signature가 들어오면 SQLite 오염/오탐을 방지한다.
+    stat_signature = _stat_file_signature(signals_path)
+    if stat_signature is None:
+        return False
+    return stat_signature == file_signature
+
+
+def _load_latest_signal_index_from_sqlite(
+    *,
+    signals_path: str,
+    file_signature: tuple[int, int],
+) -> dict[str, dict[str, object]] | None:
+    if not _can_use_latest_signal_index_sqlite_cache(
+        signals_path=signals_path,
+        file_signature=file_signature,
+    ):
+        return None
+
+    loaded, payload = _load_json_payload_from_sqlite(
+        filepath=_latest_signal_index_sqlite_cache_key(signals_path),
+        signature=file_signature,
+        logger=logger,
+    )
+    if not loaded:
+        return None
+
+    rows_payload = payload.get("rows")
+    if not isinstance(rows_payload, dict):
+        return None
+
+    latest_index: dict[str, dict[str, object]] = {}
+    for ticker, row_payload in rows_payload.items():
+        if not isinstance(row_payload, dict):
+            continue
+        ticker_key = str(ticker).zfill(6)
+        if not ticker_key:
+            continue
+        normalized_row = dict(row_payload)
+        normalized_row["ticker"] = ticker_key
+        latest_index[ticker_key] = normalized_row
+    return latest_index
+
+
+def _save_latest_signal_index_to_sqlite(
+    *,
+    signals_path: str,
+    file_signature: tuple[int, int],
+    latest_index: dict[str, dict[str, object]],
+) -> None:
+    if not _can_use_latest_signal_index_sqlite_cache(
+        signals_path=signals_path,
+        file_signature=file_signature,
+    ):
+        return
+
+    try:
+        _save_json_payload_to_sqlite(
+            filepath=_latest_signal_index_sqlite_cache_key(signals_path),
+            signature=file_signature,
+            payload={"rows": latest_index},
+            max_rows=_LATEST_SIGNAL_INDEX_SQLITE_MAX_ROWS,
+            logger=logger,
+        )
+    except Exception as error:
+        logger.debug(
+            "Failed to save latest signal index SQLite cache (%s): %s",
+            signals_path,
+            error,
+        )
+
 
 def _file_signature(path: str) -> tuple[int, int] | None:
     try:
@@ -171,6 +276,18 @@ class KrAiDataService:
             if cached and cached[0] == file_signature:
                 return cached[1]
 
+        sqlite_cached = _load_latest_signal_index_from_sqlite(
+            signals_path=signals_path,
+            file_signature=file_signature,
+        )
+        if sqlite_cached is not None:
+            with _LATEST_SIGNAL_INDEX_CACHE_LOCK:
+                _set_latest_signal_index_cache(
+                    signals_path,
+                    (file_signature, sqlite_cached),
+                )
+            return sqlite_cached
+
         source_df = KrAiDataService._load_latest_signal_source_frame(
             signals_file=signals_path,
             file_signature=file_signature,
@@ -182,6 +299,11 @@ class KrAiDataService:
                 signals_path,
                 (file_signature, latest_index),
             )
+        _save_latest_signal_index_to_sqlite(
+            signals_path=signals_path,
+            file_signature=file_signature,
+            latest_index=latest_index,
+        )
         return latest_index
 
     @staticmethod
@@ -203,6 +325,17 @@ class KrAiDataService:
                     usecols=LATEST_SIGNAL_USECOLS,
                     signature=file_signature,
                 )
+            except ValueError:
+                try:
+                    loaded = load_csv_file(
+                        data_dir,
+                        filename,
+                        deep_copy=False,
+                        signature=file_signature,
+                    )
+                    return _project_latest_signal_columns_if_possible(loaded)
+                except Exception:
+                    pass
             except Exception:
                 try:
                     return load_csv_file(
@@ -214,6 +347,23 @@ class KrAiDataService:
                 except Exception:
                     pass
 
+        # 공용 캐시(load_csv_file) 실패 시 signal_tracker 전용 SQLite source 캐시를 재시도한다.
+        # dtype/usecols 시그니처까지 포함된 스냅샷을 활용해 direct read 빈도를 줄인다.
+        try:
+            return load_signal_tracker_csv_cached(
+                path=signals_file,
+                cache_kind="kr_ai:latest_signal_source",
+                usecols=LATEST_SIGNAL_USECOLS,
+                dtype={"ticker": str},
+                read_csv=pd.read_csv,
+                logger=logger,
+                low_memory=False,
+                fallback_without_usecols=True,
+                deep_copy=False,
+            )
+        except Exception:
+            pass
+
         try:
             return pd.read_csv(
                 signals_file,
@@ -222,7 +372,8 @@ class KrAiDataService:
                 low_memory=False,
             )
         except ValueError:
-            return pd.read_csv(signals_file, dtype={"ticker": str}, low_memory=False)
+            loaded = pd.read_csv(signals_file, dtype={"ticker": str}, low_memory=False)
+            return _project_latest_signal_columns_if_possible(loaded)
 
     @staticmethod
     def _build_latest_signal_index(df: pd.DataFrame) -> dict[str, dict[str, object]]:

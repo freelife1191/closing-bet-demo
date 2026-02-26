@@ -36,6 +36,8 @@ from services.kr_market_stock_detail_service import (
     to_market_code as _to_market_code_impl,
 )
 
+_BULK_CACHE_SHORT_CIRCUIT_MAX_AGE_SECONDS = 60
+
 
 def _normalize_ticker(ticker: Any) -> str:
     return _normalize_ticker_impl(ticker)
@@ -177,6 +179,30 @@ def _has_complete_positive_prices(
     return True
 
 
+def _to_positive_float(value: object) -> float:
+    try:
+        resolved = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return resolved if resolved > 0 else 0.0
+
+
+def _collect_refreshed_prices(
+    tickers: list[str],
+    prices: dict[str, float],
+    baseline_prices: dict[str, float],
+) -> dict[str, float]:
+    refreshed_prices: dict[str, float] = {}
+    for ticker_str in tickers:
+        resolved_price = _to_positive_float(prices.get(ticker_str, 0))
+        if resolved_price <= 0:
+            continue
+        baseline_price = _to_positive_float(baseline_prices.get(ticker_str, 0))
+        if baseline_price <= 0 or baseline_price != resolved_price:
+            refreshed_prices[ticker_str] = resolved_price
+    return refreshed_prices
+
+
 def fetch_realtime_prices(
     tickers: list[Any],
     load_csv_file: Callable[[str], pd.DataFrame],
@@ -207,15 +233,20 @@ def fetch_realtime_prices(
                 logger=logger,
             )
             return small_prices
-        cached_prices = _load_cached_realtime_prices(
-            normalized_tickers,
-            get_data_path=get_data_path,
-            logger=logger,
-        )
-        for ticker_str in normalized_tickers:
-            current = float(small_prices.get(ticker_str, 0) or 0)
-            if current <= 0:
-                fallback = float(cached_prices.get(ticker_str, 0) or 0)
+        unresolved_for_cache = [
+            ticker_str
+            for ticker_str in normalized_tickers
+            if _to_positive_float(small_prices.get(ticker_str, 0)) <= 0
+        ]
+        cached_prices: dict[str, float] = {}
+        if unresolved_for_cache:
+            cached_prices = _load_cached_realtime_prices(
+                unresolved_for_cache,
+                get_data_path=get_data_path,
+                logger=logger,
+            )
+            for ticker_str in unresolved_for_cache:
+                fallback = _to_positive_float(cached_prices.get(ticker_str, 0))
                 if fallback > 0:
                     small_prices[ticker_str] = fallback
         _save_realtime_prices_to_cache(
@@ -225,6 +256,16 @@ def fetch_realtime_prices(
             logger=logger,
         )
         return small_prices
+
+    # 대량 요청은 네트워크 fan-out 비용이 크므로, 매우 최근 SQLite 캐시가 완전하면 즉시 반환한다.
+    recent_cached_prices = _load_cached_realtime_prices(
+        normalized_tickers,
+        get_data_path=get_data_path,
+        logger=logger,
+        max_age_seconds=_BULK_CACHE_SHORT_CIRCUIT_MAX_AGE_SECONDS,
+    )
+    if _has_complete_positive_prices(normalized_tickers, recent_cached_prices):
+        return recent_cached_prices
 
     prices = _fetch_toss_bulk_prices(
         normalized_tickers,
@@ -251,20 +292,57 @@ def fetch_realtime_prices(
         get_data_path=get_data_path,
         logger=logger,
     )
-    if load_latest_price_map is None and _has_complete_positive_prices(normalized_tickers, prices):
+    baseline_resolved_prices: dict[str, float] = {
+        ticker_str: _to_positive_float(prices.get(ticker_str, 0))
+        for ticker_str in normalized_tickers
+        if _to_positive_float(prices.get(ticker_str, 0)) > 0
+    }
+    if _has_complete_positive_prices(normalized_tickers, prices):
         return prices
 
-    cached_prices = _load_cached_realtime_prices(
-        normalized_tickers,
-        get_data_path=get_data_path,
-        logger=logger,
-    )
+    cached_prices: dict[str, float] = {
+        ticker: _to_positive_float(price)
+        for ticker, price in recent_cached_prices.items()
+        if _to_positive_float(price) > 0
+    }
+    unresolved_for_cache = [
+        ticker_str
+        for ticker_str in normalized_tickers
+        if _to_positive_float(prices.get(ticker_str, 0)) <= 0
+        and _to_positive_float(cached_prices.get(ticker_str, 0)) <= 0
+    ]
+    if unresolved_for_cache:
+        stale_cached_prices = _load_cached_realtime_prices(
+            unresolved_for_cache,
+            get_data_path=get_data_path,
+            logger=logger,
+        )
+        for ticker_str, stale_price in stale_cached_prices.items():
+            resolved_stale_price = _to_positive_float(stale_price)
+            if resolved_stale_price > 0:
+                cached_prices[str(ticker_str)] = resolved_stale_price
+
     for ticker_str in normalized_tickers:
-        current = float(prices.get(ticker_str, 0) or 0)
+        current = _to_positive_float(prices.get(ticker_str, 0))
         if current <= 0:
-            fallback = float(cached_prices.get(ticker_str, 0) or 0)
+            fallback = _to_positive_float(cached_prices.get(ticker_str, 0))
             if fallback > 0:
                 prices[ticker_str] = fallback
+
+    if _has_complete_positive_prices(normalized_tickers, prices):
+        refreshed_prices = _collect_refreshed_prices(
+            normalized_tickers,
+            prices,
+            baseline_resolved_prices,
+        )
+        if refreshed_prices:
+            _save_realtime_prices_to_cache(
+                refreshed_prices,
+                source="bulk_resolved",
+                get_data_path=get_data_path,
+                logger=logger,
+            )
+        return prices
 
     latest_price_map: dict[str, float] | None = None
     if load_latest_price_map is not None:
@@ -284,6 +362,21 @@ def fetch_realtime_prices(
         get_data_path=get_data_path,
         logger=logger,
     )
+
+    # 네트워크 체인 이후 cache/CSV 보완으로 새로 해소된 값은 updated_at을 갱신해
+    # 다음 호출의 recent SQLite short-circuit 적중률을 높인다.
+    refreshed_prices = _collect_refreshed_prices(
+        normalized_tickers,
+        prices,
+        baseline_resolved_prices,
+    )
+    if refreshed_prices:
+        _save_realtime_prices_to_cache(
+            refreshed_prices,
+            source="bulk_resolved",
+            get_data_path=get_data_path,
+            logger=logger,
+        )
     return prices
 
 
@@ -300,8 +393,15 @@ def _append_investor_trend_5day(
     ticker_padded: str,
     load_csv_file: Callable[[str], pd.DataFrame],
     logger: logging.Logger,
+    data_dir: str | None = None,
 ) -> None:
-    _append_investor_trend_5day_impl(payload, ticker_padded, load_csv_file, logger)
+    _append_investor_trend_5day_impl(
+        payload,
+        ticker_padded,
+        load_csv_file,
+        logger,
+        data_dir=data_dir,
+    )
 
 
 def _build_toss_detail_payload(ticker_padded: str, toss_data: dict[str, Any]) -> dict[str, Any]:
@@ -316,5 +416,11 @@ def fetch_stock_detail_payload(
     ticker: str,
     load_csv_file: Callable[[str], pd.DataFrame],
     logger: logging.Logger,
+    data_dir: str | None = None,
 ) -> dict[str, Any]:
-    return _fetch_stock_detail_payload_impl(ticker, load_csv_file, logger)
+    return _fetch_stock_detail_payload_impl(
+        ticker,
+        load_csv_file,
+        logger,
+        data_dir=data_dir,
+    )

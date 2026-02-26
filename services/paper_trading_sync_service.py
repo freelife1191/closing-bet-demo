@@ -133,6 +133,7 @@ def _build_provider_chain(
 def refresh_price_cache_once(
     *,
     tickers: list[str],
+    tickers_already_normalized: bool = False,
     session: Any,
     yf_module: Any,
     pykrx_stock: Any,
@@ -154,7 +155,12 @@ def refresh_price_cache_once(
         return {}, empty_portfolio_sleep_sec
 
     resolved_prices: dict[str, int] = {}
-    missing_tickers = _normalize_unique_tickers(tickers)
+    if tickers_already_normalized:
+        # 호출자가 정규화/중복제거 완료를 보장한 fast-path.
+        # 대량 포트폴리오 루프에서 매 사이클 O(n) 검증 비용을 피한다.
+        missing_tickers = list(tickers)
+    else:
+        missing_tickers = _normalize_unique_tickers(tickers)
 
     provider_chain = _build_provider_chain(
         session=session,

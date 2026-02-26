@@ -11,6 +11,10 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from services.kr_market_data_cache_sqlite_payload import (
+    load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
+    save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
+)
 from services.kr_market_csv_utils import build_latest_close_map_from_prices_df
 from services.kr_market_data_cache_core import (
     BACKTEST_PRICE_SNAPSHOT_CACHE,
@@ -20,9 +24,92 @@ from services.kr_market_data_cache_core import (
     load_csv_file,
 )
 
+_LATEST_VCP_PRICE_MAP_SQLITE_MAX_ROWS = 256
+_LATEST_VCP_PRICE_MAP_SQLITE_CACHE_KEY_SUFFIX = "::latest_vcp_price_map"
+
 
 def _build_latest_price_map(df_prices: pd.DataFrame) -> dict[str, float]:
     return build_latest_close_map_from_prices_df(df_prices)
+
+
+def _latest_vcp_price_map_sqlite_cache_key(price_file: str) -> str:
+    return f"{os.path.abspath(price_file)}{_LATEST_VCP_PRICE_MAP_SQLITE_CACHE_KEY_SUFFIX}"
+
+
+def _serialize_latest_vcp_price_map(price_map: dict[str, float]) -> dict[str, object]:
+    rows: dict[str, float] = {}
+    for ticker, value in price_map.items():
+        ticker_key = str(ticker).zfill(6)
+        if not ticker_key:
+            continue
+        try:
+            normalized_value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if pd.isna(normalized_value):
+            continue
+        rows[ticker_key] = normalized_value
+    return {"rows": rows}
+
+
+def _deserialize_latest_vcp_price_map(payload: dict[str, object]) -> dict[str, float] | None:
+    rows_payload = payload.get("rows")
+    if not isinstance(rows_payload, dict):
+        return None
+
+    latest_price_map: dict[str, float] = {}
+    for ticker, value in rows_payload.items():
+        ticker_key = str(ticker).zfill(6)
+        if not ticker_key:
+            continue
+        try:
+            normalized_value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if pd.isna(normalized_value):
+            continue
+        latest_price_map[ticker_key] = normalized_value
+    return latest_price_map
+
+
+def _load_latest_vcp_price_map_from_sqlite(
+    *,
+    price_file: str,
+    signature: tuple[int, int],
+    logger: Any,
+) -> dict[str, float] | None:
+    try:
+        loaded, payload = _load_json_payload_from_sqlite(
+            filepath=_latest_vcp_price_map_sqlite_cache_key(price_file),
+            signature=signature,
+            logger=logger,
+        )
+    except Exception as error:
+        logger.debug("Failed to load latest price map SQLite cache: %s", error)
+        return None
+
+    if not loaded or not isinstance(payload, dict):
+        return None
+    return _deserialize_latest_vcp_price_map(payload)
+
+
+def _save_latest_vcp_price_map_to_sqlite(
+    *,
+    price_file: str,
+    signature: tuple[int, int],
+    price_map: dict[str, float],
+    logger: Any,
+) -> None:
+    try:
+        _save_json_payload_to_sqlite(
+            filepath=_latest_vcp_price_map_sqlite_cache_key(price_file),
+            signature=signature,
+            payload=_serialize_latest_vcp_price_map(price_map),
+            max_rows=_LATEST_VCP_PRICE_MAP_SQLITE_MAX_ROWS,
+            logger=logger,
+        )
+    except Exception as error:
+        logger.debug("Failed to save latest price map SQLite cache: %s", error)
 
 
 def _load_daily_prices_subset(
@@ -61,6 +148,17 @@ def load_latest_vcp_price_map(data_dir: str, logger: Any) -> dict[str, float]:
             LATEST_VCP_PRICE_MAP_CACHE["value"] = dict(backtest_price_map)
             return dict(backtest_price_map)
 
+    sqlite_cached = _load_latest_vcp_price_map_from_sqlite(
+        price_file=price_file,
+        signature=signature,
+        logger=logger,
+    )
+    if sqlite_cached is not None:
+        with FILE_CACHE_LOCK:
+            LATEST_VCP_PRICE_MAP_CACHE["signature"] = signature
+            LATEST_VCP_PRICE_MAP_CACHE["value"] = dict(sqlite_cached)
+        return dict(sqlite_cached)
+
     df_prices = _load_daily_prices_subset(
         data_dir=data_dir,
         usecols=["date", "ticker", "close"],
@@ -73,6 +171,12 @@ def load_latest_vcp_price_map(data_dir: str, logger: Any) -> dict[str, float]:
     with FILE_CACHE_LOCK:
         LATEST_VCP_PRICE_MAP_CACHE["signature"] = signature
         LATEST_VCP_PRICE_MAP_CACHE["value"] = dict(latest_price_map)
+    _save_latest_vcp_price_map_to_sqlite(
+        price_file=price_file,
+        signature=signature,
+        price_map=latest_price_map,
+        logger=logger,
+    )
     logger.debug(f"Loaded latest prices for {len(latest_price_map)} tickers")
     return latest_price_map
 

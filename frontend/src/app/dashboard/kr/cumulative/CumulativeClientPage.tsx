@@ -346,9 +346,27 @@ function renderStatTooltip(key: keyof typeof TOOLTIP_CONTENT, kpi: KPIData) {
 }
 
 
-function StatCard({ title, value, colorClass = 'text-white', subtext, kpi, tooltipKey, valueClassName = 'text-2xl' }: { title: string, value: React.ReactNode, colorClass?: string, subtext?: string, kpi?: KPIData, tooltipKey?: keyof typeof TOOLTIP_CONTENT, valueClassName?: string }) {
+function StatCard({
+  title,
+  value,
+  colorClass = 'text-white',
+  subtext,
+  kpi,
+  tooltipKey,
+  valueClassName = 'text-2xl',
+  containerClassName = 'h-24'
+}: {
+  title: string,
+  value: React.ReactNode,
+  colorClass?: string,
+  subtext?: string,
+  kpi?: KPIData,
+  tooltipKey?: keyof typeof TOOLTIP_CONTENT,
+  valueClassName?: string,
+  containerClassName?: string
+}) {
   const content = (
-    <div className="bg-[#1c1c1e] p-4 rounded-xl border border-white/5 flex flex-col justify-between h-24 hover:border-white/20 transition-colors relative group cursor-help">
+    <div className={`bg-[#1c1c1e] p-4 rounded-xl border border-white/5 flex flex-col justify-between ${containerClassName} hover:border-white/20 transition-colors relative group cursor-help`}>
       <div className="flex justify-between items-start">
         <div className="text-[10px] text-gray-500 font-bold tracking-wider uppercase">{title}</div>
         {tooltipKey && <i className="fas fa-question-circle text-gray-700 text-[10px] group-hover:text-gray-500 transition-colors"></i>}
@@ -875,6 +893,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
 
 export default function CumulativeClientPage() {
   const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
+  const roundToOne = (value: number) => Math.round(value * 10) / 10;
   const createEmptyRoiByGrade = () => ({
     S: { count: 0, avgRoi: 0, totalRoi: 0 },
     A: { count: 0, avgRoi: 0, totalRoi: 0 },
@@ -972,6 +991,11 @@ export default function CumulativeClientPage() {
     { grade: 'B', ...bStats, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', tooltipKey: 'gradeB' as const },
   ];
 
+  const sabTotalCount = kpi.roiByGrade.S.count + kpi.roiByGrade.A.count + kpi.roiByGrade.B.count;
+  const sabTotalRoiRaw = kpi.roiByGrade.S.totalRoi + kpi.roiByGrade.A.totalRoi + kpi.roiByGrade.B.totalRoi;
+  const sabTotalRoi = roundToOne(sabTotalRoiRaw);
+  const sabAvgRoi = sabTotalCount > 0 ? roundToOne(sabTotalRoiRaw / sabTotalCount) : 0;
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -1034,15 +1058,20 @@ export default function CumulativeClientPage() {
         <StatCard title="실패" value={kpi.losses} colorClass="text-rose-400" tooltipKey="losses" kpi={kpi} />
         <StatCard title="보유중" value={kpi.open} colorClass="text-yellow-500" tooltipKey="open" kpi={kpi} />
         <StatCard
-          title="평균 수익률 (S/A/B)"
+          title="평균 수익률 (S+A+B 합산)"
           value={
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm font-semibold leading-tight">
-              <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.avgRoi)}</span>
-              <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.avgRoi)}</span>
-              <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.avgRoi)}</span>
+            <div className="space-y-1">
+              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${sabAvgRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formatSignedPercent(sabAvgRoi)}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs font-semibold leading-tight">
+                <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.avgRoi)}</span>
+                <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.avgRoi)}</span>
+                <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.avgRoi)}</span>
+              </div>
             </div>
           }
-          valueClassName="text-sm leading-tight"
+          valueClassName="text-base leading-tight"
           colorClass="text-white"
           tooltipKey="avgRoi"
           kpi={kpi}
@@ -1053,15 +1082,20 @@ export default function CumulativeClientPage() {
       {/* Metric Cards - Row 2 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
-          title="누적 수익률 (S/A/B)"
+          title="누적 수익률 (S+A+B 합산)"
           value={
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm font-semibold leading-tight">
-              <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.totalRoi)}</span>
-              <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.totalRoi)}</span>
-              <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.totalRoi)}</span>
+            <div className="space-y-1">
+              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${sabTotalRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formatSignedPercent(sabTotalRoi)}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs font-semibold leading-tight">
+                <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.totalRoi)}</span>
+                <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.totalRoi)}</span>
+                <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.totalRoi)}</span>
+              </div>
             </div>
           }
-          valueClassName="text-sm leading-tight"
+          valueClassName="text-base leading-tight"
           colorClass="text-white"
           tooltipKey="totalRoi"
           kpi={kpi}

@@ -484,7 +484,7 @@ export default function KRMarketOverview() {
 
   const getSignalCountTheme = (count: number) => {
     if (count >= 5) return {
-      label: '매수',
+      label: '강세',
       border: 'hover:border-emerald-500/30',
       glow: 'bg-emerald-500/10',
       text: 'group-hover:text-emerald-400',

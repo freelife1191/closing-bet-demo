@@ -555,6 +555,42 @@ def test_load_latest_price_map_reuses_core_csv_cache(monkeypatch, tmp_path):
     assert calls["count"] == 1
 
 
+def test_load_latest_price_map_uses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "5930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "5930", "close": 111.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    first = cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+    assert first["005930"] == 111.0
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.LATEST_VCP_PRICE_MAP_CACHE["signature"] = None
+        cache_service.LATEST_VCP_PRICE_MAP_CACHE["value"] = {}
+        cache_service.BACKTEST_PRICE_SNAPSHOT_CACHE["signature"] = None
+        cache_service.BACKTEST_PRICE_SNAPSHOT_CACHE["df"] = pd.DataFrame()
+        cache_service.BACKTEST_PRICE_SNAPSHOT_CACHE["price_map"] = {}
+
+    monkeypatch.setattr(
+        cache_prices,
+        "_load_daily_prices_subset",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("daily prices loader should not run")),
+    )
+    second = cache_service.load_latest_vcp_price_map(
+        data_dir=str(tmp_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert second["005930"] == 111.0
+
+
 def test_load_csv_file_uses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
     _reset_data_cache_state()
     daily_prices = tmp_path / "daily_prices.csv"
@@ -589,6 +625,57 @@ def test_load_csv_file_uses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_
     )
     assert len(second) == 2
     assert float(second.iloc[-1]["close"]) == 111.0
+
+
+def test_load_csv_file_retries_without_usecols_on_schema_mismatch(monkeypatch, tmp_path):
+    _reset_data_cache_state()
+    daily_prices = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-02-20", "ticker": "005930", "close": 100.0},
+            {"date": "2026-02-21", "ticker": "005930", "close": 111.0},
+        ]
+    ).to_csv(daily_prices, index=False)
+
+    calls = {"usecols": 0, "full": 0}
+    original_read_csv = cache_core.pd.read_csv
+
+    def _fake_read_csv(*args, **kwargs):
+        if kwargs.get("usecols") is not None:
+            calls["usecols"] += 1
+            raise ValueError("Usecols do not match columns")
+        calls["full"] += 1
+        return original_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(cache_core.pd, "read_csv", _fake_read_csv)
+
+    first = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=["ticker", "missing_col"],
+    )
+    assert list(first.columns) == ["ticker"]
+    assert len(first) == 2
+    assert calls == {"usecols": 1, "full": 1}
+
+    with cache_service.FILE_CACHE_LOCK:
+        cache_service.CSV_FILE_CACHE.clear()
+
+    monkeypatch.setattr(
+        cache_core.pd,
+        "read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("read_csv should not run")),
+    )
+    second = cache_service.load_csv_file(
+        str(tmp_path),
+        "daily_prices.csv",
+        deep_copy=False,
+        usecols=["ticker", "missing_col"],
+    )
+
+    assert list(second.columns) == ["ticker"]
+    assert len(second) == 2
 
 
 def test_load_csv_file_full_snapshot_uses_sqlite_after_memory_clear(monkeypatch, tmp_path):

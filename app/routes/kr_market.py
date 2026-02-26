@@ -2,6 +2,12 @@ import os
 import logging
 import threading
 from datetime import timedelta
+from typing import TextIO
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX 환경 호환
+    fcntl = None
 
 from flask import Blueprint, jsonify, request
 from services.kr_market_route_service import (
@@ -82,6 +88,7 @@ is_jongga_updating = False
 _jongga_lock = threading.Lock()
 _market_gate_lock = threading.Lock()
 _signals_lock = threading.Lock()
+_market_gate_process_lock_handle: TextIO | None = None
 
 # Timestamp tracking to prevent infinite loops
 _jongga_last_run = None
@@ -178,7 +185,7 @@ register_market_data_http_route_group(
     kr_bp,
     logger=logger,
     data_dir_getter=lambda: DATA_DIR,
-    load_csv_file_fn=lambda filename: load_csv_file(filename),
+    load_csv_file_fn=lambda filename, **kwargs: load_csv_file(filename, **kwargs),
     load_json_file_fn=lambda filename: load_json_file(filename),
     get_data_path_fn=lambda filename: get_data_path(filename),
     vcp_status=VCP_STATUS,
@@ -194,17 +201,40 @@ register_market_data_http_route_group(
 )
 
 
-def _trigger_market_gate_background_refresh() -> None:
+def _trigger_market_gate_background_refresh() -> bool:
     """Market Gate 분석을 백그라운드에서 1회 트리거한다."""
     global is_market_gate_updating
+    global _market_gate_process_lock_handle
 
     with _market_gate_lock:
         if is_market_gate_updating:
-            return
+            return False
+
+        if fcntl is not None:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            lock_path = os.path.join(DATA_DIR, '.market_gate_refresh.lock')
+            lock_handle: TextIO | None = None
+            try:
+                lock_handle = open(lock_path, 'a+', encoding='utf-8')
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _market_gate_process_lock_handle = lock_handle
+            except BlockingIOError:
+                if lock_handle is not None:
+                    lock_handle.close()
+                return False
+            except Exception:
+                try:
+                    if lock_handle is not None:
+                        lock_handle.close()
+                except Exception:
+                    pass
+                raise
+
         is_market_gate_updating = True
 
     def run_analysis():
         global is_market_gate_updating
+        global _market_gate_process_lock_handle
         try:
             from engine.market_gate import MarketGate
 
@@ -217,8 +247,19 @@ def _trigger_market_gate_background_refresh() -> None:
         finally:
             with _market_gate_lock:
                 is_market_gate_updating = False
+                if _market_gate_process_lock_handle is not None and fcntl is not None:
+                    try:
+                        fcntl.flock(_market_gate_process_lock_handle.fileno(), fcntl.LOCK_UN)
+                    except Exception:
+                        pass
+                    try:
+                        _market_gate_process_lock_handle.close()
+                    except Exception:
+                        pass
+                    _market_gate_process_lock_handle = None
 
     threading.Thread(target=run_analysis, daemon=True).start()
+    return True
 
 
 register_system_and_execution_route_groups(
@@ -226,7 +267,7 @@ register_system_and_execution_route_groups(
     logger=logger,
     data_dir=DATA_DIR,
     load_json_file_fn=lambda filename: load_json_file(filename),
-    load_csv_file_fn=lambda filename: load_csv_file(filename),
+    load_csv_file_fn=lambda filename, **kwargs: load_csv_file(filename, **kwargs),
     get_data_path_fn=lambda filename: get_data_path(filename),
     trigger_market_gate_background_refresh_fn=_trigger_market_gate_background_refresh,
     run_user_gemini_reanalysis_fn=lambda **kwargs: run_user_gemini_reanalysis(**kwargs),

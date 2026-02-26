@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 
+import services.paper_trading_sync_service as paper_trading_sync_service
 from services.paper_trading_sync_service import refresh_price_cache_once
 
 
@@ -100,3 +101,70 @@ def test_refresh_price_cache_once_logs_actual_next_provider_name():
 
     assert resolved == {"005930": 70000}
     assert any("Trying pykrx" in msg for msg in fake_logger.messages)
+
+
+def test_refresh_price_cache_once_uses_pre_normalized_fast_path():
+    captured: dict[str, list[str]] = {}
+
+    def _fetch_toss(_session, tickers):
+        captured["tickers"] = list(tickers)
+        return {"005930": 71000}
+
+    resolved, _ = refresh_price_cache_once(
+        tickers=["005930", "000660"],
+        tickers_already_normalized=True,
+        session=object(),
+        yf_module=None,
+        pykrx_stock=None,
+        fetch_prices_toss_fn=_fetch_toss,
+        fetch_prices_naver_fn=lambda *_args: {},
+        fetch_prices_yfinance_fn=lambda *_args: {},
+        fetch_prices_pykrx_fn=lambda *_args: {},
+        update_interval_sec=60,
+        empty_portfolio_sleep_sec=10,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert captured["tickers"] == ["005930", "000660"]
+    assert resolved == {"005930": 71000}
+
+
+def test_refresh_price_cache_once_pre_normalized_path_skips_validation_and_normalization(monkeypatch):
+    captured: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(
+        paper_trading_sync_service,
+        "_is_normalized_unique_ticker_list",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("pre-normalized fast-path should skip list validation")
+        ),
+    )
+    monkeypatch.setattr(
+        paper_trading_sync_service,
+        "_normalize_unique_tickers",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("pre-normalized fast-path should skip normalization")
+        ),
+    )
+
+    def _fetch_toss(_session, tickers):
+        captured["tickers"] = list(tickers)
+        return {"005930": 71000}
+
+    resolved, _ = paper_trading_sync_service.refresh_price_cache_once(
+        tickers=["005930", "000660"],
+        tickers_already_normalized=True,
+        session=object(),
+        yf_module=None,
+        pykrx_stock=None,
+        fetch_prices_toss_fn=_fetch_toss,
+        fetch_prices_naver_fn=lambda *_args: {},
+        fetch_prices_yfinance_fn=lambda *_args: {},
+        fetch_prices_pykrx_fn=lambda *_args: {},
+        update_interval_sec=60,
+        empty_portfolio_sleep_sec=10,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert captured["tickers"] == ["005930", "000660"]
+    assert resolved == {"005930": 71000}

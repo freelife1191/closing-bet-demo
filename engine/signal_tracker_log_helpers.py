@@ -6,11 +6,21 @@ Signal Tracker 로그/성과 업데이트 헬퍼.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from engine.signal_tracker_source_cache import (
+    load_signal_tracker_csv_cached as _load_signal_tracker_csv_cached,
+)
+from services.kr_market_data_cache_service import (
+    file_signature as _shared_file_signature,
+    load_csv_file as _load_shared_csv_file,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
@@ -36,6 +46,48 @@ def _normalize_price_map_keys(latest_price_map: dict[str, float]) -> dict[str, f
         except (TypeError, ValueError):
             normalized[ticker_key] = 0.0
     return normalized
+
+
+def _load_existing_signals_log(signals_log_path: str) -> pd.DataFrame:
+    """signals_log.csv를 공용 SQLite-backed 캐시 우선으로 로드한다."""
+    normalized_path = os.path.abspath(signals_log_path)
+    data_dir = os.path.dirname(normalized_path)
+    filename = os.path.basename(normalized_path)
+    if not filename:
+        return pd.DataFrame()
+
+    signature = _shared_file_signature(normalized_path)
+    if signature is not None:
+        try:
+            return _load_shared_csv_file(
+                data_dir,
+                filename,
+                deep_copy=False,
+                signature=signature,
+            )
+        except Exception:
+            pass
+
+    try:
+        # 공용 캐시 실패 시 signal-tracker 전용 SQLite source 캐시를 재시도한다.
+        return _load_signal_tracker_csv_cached(
+            path=normalized_path,
+            cache_kind="signal_tracker_log_helpers:signals_log",
+            dtype={"ticker": str},
+            read_csv=pd.read_csv,
+            logger=_LOGGER,
+            low_memory=False,
+            deep_copy=False,
+        )
+    except Exception:
+        pass
+
+    return pd.read_csv(
+        normalized_path,
+        encoding="utf-8-sig",
+        dtype={"ticker": str},
+        low_memory=False,
+    )
 
 
 def normalize_new_signals_for_log(new_signals: pd.DataFrame) -> pd.DataFrame:
@@ -64,12 +116,7 @@ def append_signals_log(
     else:
         if not os.path.exists(signals_log_path):
             return working_new
-        existing = pd.read_csv(
-            signals_log_path,
-            encoding="utf-8-sig",
-            dtype={"ticker": str},
-            low_memory=False,
-        )
+        existing = _load_existing_signals_log(signals_log_path)
     if existing.empty:
         return working_new
 

@@ -21,7 +21,6 @@ from engine.screener_scoring_helpers import (
     build_ticker_index,
     calculate_volume_score,
     scale_vcp_score,
-    score_supply_from_csv,
     score_supply_from_toss_trend,
 )
 from engine.screener_runtime_helpers import (
@@ -33,8 +32,10 @@ from engine.screener_result_builders import (
     build_signal_item,
 )
 from engine.screener_supply_helpers import (
-    calculate_supply_score_from_csv as calculate_supply_score_from_csv_impl,
     calculate_supply_score_with_toss as calculate_supply_score_with_toss_impl,
+)
+from services.investor_trend_5day_service import (
+    get_investor_trend_5day_for_ticker,
 )
 
 logger = logging.getLogger(__name__)
@@ -322,15 +323,42 @@ class SmartMoneyScreener:
             toss_collector=self.toss_collector,
             fallback_fn=self._calculate_supply_score_csv,
             score_supply_from_toss_trend_fn=score_supply_from_toss_trend,
+            cache_data_dir=os.path.join(BASE_DIR, "data"),
         )
 
+    @staticmethod
+    def _has_csv_anomaly_flags(trend_data: dict[str, object] | None) -> bool:
+        if not isinstance(trend_data, dict):
+            return False
+        quality = trend_data.get("quality")
+        if not isinstance(quality, dict):
+            return False
+        csv_flags = quality.get("csv_anomaly_flags")
+        return isinstance(csv_flags, list) and len(csv_flags) > 0
+
     def _calculate_supply_score_csv(self, ticker: str) -> Dict:
-        """수급 점수 계산 (CSV Fallback - 기존 로직 이동)"""
-        return calculate_supply_score_from_csv_impl(
+        """수급 점수 계산 (CSV Fallback - 단일 5일 합산 서비스 사용)."""
+        trend_data = get_investor_trend_5day_for_ticker(
             ticker=ticker,
-            inst_by_ticker=self._inst_by_ticker,
+            data_dir=os.path.join(BASE_DIR, "data"),
             target_datetime=self._target_datetime,
-            score_supply_from_csv_fn=score_supply_from_csv,
+            verify_with_references=False,
+        )
+        if self._has_csv_anomaly_flags(trend_data):
+            trend_data = get_investor_trend_5day_for_ticker(
+                ticker=ticker,
+                data_dir=os.path.join(BASE_DIR, "data"),
+                target_datetime=self._target_datetime,
+                verify_with_references=True,
+            )
+        if not trend_data:
+            return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+        return score_supply_from_toss_trend(
+            {
+                "foreign": trend_data.get("foreign", 0),
+                "institution": trend_data.get("institution", 0),
+                "details": trend_data.get("details", []),
+            }
         )
     
     def generate_signals(self, results: pd.DataFrame) -> List[Dict]:

@@ -149,6 +149,64 @@ def test_get_stock_info_retries_without_usecols_on_value_error(monkeypatch):
     assert calls["usecols"][1] is None
 
 
+def test_load_latest_signal_source_frame_projects_existing_columns_on_usecols_mismatch(monkeypatch):
+    calls = {"count": 0, "usecols": []}
+
+    def _fake_load_csv_file(_data_dir, _filename, **kwargs):
+        calls["count"] += 1
+        calls["usecols"].append(kwargs.get("usecols"))
+        if kwargs.get("usecols") is not None:
+            raise ValueError("Usecols do not match columns")
+        return pd.DataFrame(
+            [
+                {"ticker": "005930", "name": "삼성전자", "unknown_col": "x"},
+            ]
+        )
+
+    monkeypatch.setattr(kr_ai_data_service_module, "load_csv_file", _fake_load_csv_file)
+
+    loaded = KrAiDataService._load_latest_signal_source_frame(
+        signals_file="/tmp/signals_log.csv",
+        file_signature=(1, 1),
+    )
+
+    assert calls["count"] == 2
+    assert calls["usecols"][0] is not None
+    assert calls["usecols"][1] is None
+    assert list(loaded.columns) == ["ticker", "name"]
+
+
+def test_load_latest_signal_source_frame_uses_signal_tracker_sqlite_fallback(monkeypatch):
+    monkeypatch.setattr(
+        kr_ai_data_service_module,
+        "load_csv_file",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("shared cache unavailable")),
+    )
+    monkeypatch.setattr(
+        kr_ai_data_service_module,
+        "load_signal_tracker_csv_cached",
+        lambda **_kwargs: pd.DataFrame(
+            [
+                {"ticker": "005930", "name": "삼성전자", "current_price": 71000},
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        kr_ai_data_service_module.pd,
+        "read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("pd.read_csv should not run")),
+    )
+
+    loaded = KrAiDataService._load_latest_signal_source_frame(
+        signals_file="/tmp/signals_log.csv",
+        file_signature=(1, 1),
+    )
+
+    assert isinstance(loaded, pd.DataFrame)
+    assert not loaded.empty
+    assert str(loaded.iloc[0]["ticker"]).zfill(6) == "005930"
+
+
 def test_get_stock_info_reuses_sqlite_cache_after_memory_clear(monkeypatch, tmp_path):
     service = KrAiDataService()
     monkeypatch.setattr(kr_ai_data_service_module.os.path, "exists", lambda _path: True)
@@ -363,6 +421,122 @@ def test_latest_signal_index_cache_is_bounded_lru(monkeypatch, tmp_path):
     assert path_c in cache_keys
     assert path_b not in cache_keys
     assert load_calls["count"] == 3
+
+
+def test_latest_signal_index_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text(
+        "ticker,name,current_price\n005930,삼성전자,71000\n000660,SK하이닉스,121000\n",
+        encoding="utf-8",
+    )
+
+    with kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE_LOCK:
+        kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE.clear()
+
+    load_calls = {"count": 0}
+
+    def _fake_source_loader(*, signals_file, file_signature):
+        load_calls["count"] += 1
+        assert signals_file == os.path.abspath(str(signals_path))
+        assert isinstance(file_signature, tuple)
+        return pd.DataFrame(
+            [
+                {"ticker": "005930", "name": "삼성전자", "current_price": 71000},
+                {"ticker": "000660", "name": "SK하이닉스", "current_price": 121000},
+            ]
+        )
+
+    monkeypatch.setattr(
+        KrAiDataService,
+        "_load_latest_signal_source_frame",
+        staticmethod(_fake_source_loader),
+    )
+
+    first = KrAiDataService._load_latest_signal_index(str(signals_path))
+    assert first["005930"]["name"] == "삼성전자"
+    assert first["000660"]["name"] == "SK하이닉스"
+    assert load_calls["count"] == 1
+
+    with kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE_LOCK:
+        kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE.clear()
+
+    monkeypatch.setattr(
+        KrAiDataService,
+        "_load_latest_signal_source_frame",
+        staticmethod(
+            lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("sqlite snapshot should be reused")
+            )
+        ),
+    )
+
+    second = KrAiDataService._load_latest_signal_index(str(signals_path))
+    assert second["005930"]["name"] == "삼성전자"
+    assert second["000660"]["name"] == "SK하이닉스"
+
+    cache_db_path = tmp_path / "runtime_cache.db"
+    sqlite_cache_key = kr_ai_data_service_module._latest_signal_index_sqlite_cache_key(
+        os.path.abspath(str(signals_path))
+    )
+    with sqlite3.connect(cache_db_path) as conn:
+        row_count = int(
+            conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM json_file_payload_cache
+                WHERE filepath = ?
+                """,
+                (sqlite_cache_key,),
+            ).fetchone()[0]
+        )
+    assert row_count >= 1
+
+
+def test_latest_signal_index_sqlite_cache_skips_mocked_signature(monkeypatch, tmp_path):
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text(
+        "ticker,name,current_price\n005930,삼성전자,71000\n",
+        encoding="utf-8",
+    )
+
+    with kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE_LOCK:
+        kr_ai_data_service_module._LATEST_SIGNAL_INDEX_CACHE.clear()
+
+    monkeypatch.setattr(kr_ai_data_service_module, "_file_signature", lambda _path: (1, 1))
+
+    sqlite_calls = {"load": 0, "save": 0}
+
+    def _fake_sqlite_load(*, filepath, signature, logger):
+        sqlite_calls["load"] += 1
+        return False, {}
+
+    def _fake_sqlite_save(*, filepath, signature, payload, max_rows, logger):
+        sqlite_calls["save"] += 1
+
+    monkeypatch.setattr(
+        kr_ai_data_service_module,
+        "_load_json_payload_from_sqlite",
+        _fake_sqlite_load,
+    )
+    monkeypatch.setattr(
+        kr_ai_data_service_module,
+        "_save_json_payload_to_sqlite",
+        _fake_sqlite_save,
+    )
+    monkeypatch.setattr(
+        KrAiDataService,
+        "_load_latest_signal_source_frame",
+        staticmethod(
+            lambda **_kwargs: pd.DataFrame(
+                [{"ticker": "005930", "name": "삼성전자", "current_price": 71000}]
+            )
+        ),
+    )
+
+    _ = KrAiDataService._load_latest_signal_index(str(signals_path))
+
+    assert sqlite_calls["load"] == 0
+    assert sqlite_calls["save"] == 0
 
 
 def test_get_stock_info_handles_invalid_numeric_values_gracefully(monkeypatch):

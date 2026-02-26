@@ -17,6 +17,7 @@ from typing import Any
 
 import pandas as pd
 
+from services.kr_market_data_cache_service import load_csv_file as _load_shared_csv_file
 from services.sqlite_utils import (
     add_bounded_ready_key,
     build_sqlite_in_placeholders,
@@ -172,6 +173,72 @@ def _usecols_signature(usecols_filter: set[str] | None) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+def _load_csv_source_via_shared_cache(
+    *,
+    path: str,
+    signature: tuple[int, int, int],
+    usecols_filter: set[str] | None,
+    dtype: dict[str, Any] | None,
+) -> pd.DataFrame | None:
+    """공용 SQLite-backed CSV 캐시를 우선 사용한다."""
+    data_dir = os.path.dirname(path)
+    filename = os.path.basename(path)
+    if not filename:
+        return None
+
+    normalized_usecols: list[str] | None = None
+    if usecols_filter is not None:
+        normalized_usecols = sorted(str(column) for column in usecols_filter)
+    shared_signature = (int(signature[1]), int(signature[2]))
+
+    try:
+        loaded = _load_shared_csv_file(
+            data_dir,
+            filename,
+            deep_copy=False,
+            usecols=normalized_usecols,
+            signature=shared_signature,
+        )
+    except ValueError as error:
+        # usecols 스키마가 달라질 때 shared(SQLite) 경로를 usecols=None으로 한 번 더 시도한다.
+        # direct read fallback 빈도를 줄이되, 요청 컬럼이 전혀 없으면 기존 fallback 동작을 유지한다.
+        logger.debug("Shared analysis source usecols fallback (%s): %s", path, error)
+        if normalized_usecols is None:
+            return None
+        try:
+            loaded = _load_shared_csv_file(
+                data_dir,
+                filename,
+                deep_copy=False,
+                usecols=None,
+                signature=shared_signature,
+            )
+        except Exception as fallback_error:
+            logger.debug(
+                "Shared analysis source cache fallback to direct read (%s): %s",
+                path,
+                fallback_error,
+            )
+            return None
+        existing_columns = [column for column in normalized_usecols if column in loaded.columns]
+        if existing_columns:
+            loaded = loaded.loc[:, existing_columns]
+        else:
+            return None
+    except Exception as error:
+        logger.debug("Shared analysis source cache fallback to direct read (%s): %s", path, error)
+        return None
+
+    if dtype is None:
+        return loaded
+
+    try:
+        return loaded.astype(dtype, copy=False)
+    except Exception as error:
+        logger.debug("Shared analysis source cache dtype cast fallback (%s): %s", path, error)
+        return None
 
 
 def _ensure_csv_source_sqlite_cache(db_path: str) -> bool:
@@ -463,6 +530,32 @@ def load_csv_with_signature_cache(
                     (signature, sqlite_cached),
                 )
                 return sqlite_cached
+
+        shared_cached = _load_csv_source_via_shared_cache(
+            path=normalized_path,
+            signature=signature,
+            usecols_filter=usecols_filter,
+            dtype=dtype,
+        )
+        if shared_cached is not None:
+            refreshed_signature = get_file_signature(normalized_path)
+            if refreshed_signature is not None:
+                _set_bounded_source_cache_entry(
+                    cache,
+                    normalized_path,
+                    (refreshed_signature, shared_cached),
+                )
+                if sqlite_cache_kind:
+                    _save_csv_source_to_sqlite(
+                        path=normalized_path,
+                        signature=refreshed_signature,
+                        usecols_filter=usecols_filter,
+                        cache_kind=sqlite_cache_kind,
+                        payload=shared_cached,
+                    )
+            else:
+                cache.pop(normalized_path, None)
+            return shared_cached
     else:
         cache.pop(normalized_path, None)
 

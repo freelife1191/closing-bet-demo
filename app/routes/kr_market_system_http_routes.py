@@ -61,27 +61,33 @@ def _register_market_gate_routes(
         def _handler():
             target_date = request.args.get('date')
             filename = deps["resolve_market_gate_filename"](target_date)
-            gate_data = deps["load_json_file"](filename)
-            gate_data = gate_data if isinstance(gate_data, dict) else {}
-            is_valid, needs_update = deps["evaluate_market_gate_validity"](
-                gate_data=gate_data,
+            raw_gate_data = deps["load_json_file"](filename)
+            raw_gate_data = raw_gate_data if isinstance(raw_gate_data, dict) else {}
+
+            source_is_valid, needs_update = deps["evaluate_market_gate_validity"](
+                gate_data=raw_gate_data,
                 target_date=target_date,
             )
+
             gate_data, is_valid = deps["apply_market_gate_snapshot_fallback"](
-                gate_data=gate_data,
-                is_valid=is_valid,
+                gate_data=raw_gate_data,
+                is_valid=source_is_valid,
                 target_date=target_date,
                 load_json_file=deps["load_json_file"],
                 logger=logger,
             )
 
-            if not is_valid or needs_update:
-                if not is_valid:
-                    logger.info("[Market Gate] 유효한 데이터 없음. 백그라운드 분석 자동 시작.")
-                elif needs_update:
-                    logger.info("[Market Gate] 데이터 갱신 필요. 백그라운드 분석 자동 시작.")
+            should_trigger_refresh = (not source_is_valid) or needs_update
 
-                deps["trigger_market_gate_background_refresh"]()
+            if should_trigger_refresh:
+                refresh_started = bool(deps["trigger_market_gate_background_refresh"]())
+                if refresh_started:
+                    if not source_is_valid:
+                        logger.info("[Market Gate] 유효한 데이터 없음. 백그라운드 분석 자동 시작.")
+                    elif needs_update:
+                        logger.info("[Market Gate] 데이터 갱신 필요. 백그라운드 분석 자동 시작.")
+                # 스냅샷 fallback 값으로 점수가 고정되어 보이는 문제를 막기 위해
+                # 갱신 필요 시에는 initializing payload를 우선 노출한다.
                 gate_data = deps["build_market_gate_initializing_payload"]()
 
             if not gate_data:

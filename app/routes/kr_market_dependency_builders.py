@@ -118,7 +118,7 @@ def build_system_route_deps(
     load_json_file: Callable[[str], dict[str, Any]],
     evaluate_market_gate_validity: Callable[..., tuple[bool, str, Any]],
     apply_market_gate_snapshot_fallback: Callable[..., dict[str, Any]],
-    trigger_market_gate_background_refresh: Callable[[], None],
+    trigger_market_gate_background_refresh: Callable[[], bool],
     build_market_gate_initializing_payload: Callable[..., dict[str, Any]],
     build_market_gate_empty_payload: Callable[..., dict[str, Any]],
     normalize_market_gate_payload: Callable[..., dict[str, Any]],

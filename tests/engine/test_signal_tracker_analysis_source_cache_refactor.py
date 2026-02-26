@@ -69,6 +69,104 @@ def test_load_csv_with_signature_cache_normalizes_relative_and_absolute_path(mon
     assert list(cache.keys()) == [os.path.abspath(str(csv_path))]
 
 
+def test_load_csv_with_signature_cache_prefers_shared_loader(monkeypatch, tmp_path):
+    csv_path = tmp_path / "sample_shared.csv"
+    pd.DataFrame([{"ticker": "005930", "score": 90}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    shared_calls = {"count": 0}
+    stat = os.stat(csv_path)
+
+    def _fake_shared_loader(data_dir, filename, *, deep_copy, usecols=None, signature=None):
+        shared_calls["count"] += 1
+        assert data_dir == str(tmp_path)
+        assert filename == "sample_shared.csv"
+        assert deep_copy is False
+        assert usecols == ["score", "ticker"]
+        assert signature == (int(stat.st_mtime_ns), int(stat.st_size))
+        return pd.DataFrame([{"ticker": "005930", "score": 90}])
+
+    monkeypatch.setattr(source_cache, "_load_shared_csv_file", _fake_shared_loader)
+    monkeypatch.setattr(
+        source_cache.pd,
+        "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("pd.read_csv should not be used")),
+    )
+
+    loaded = source_cache.load_csv_with_signature_cache(
+        path=str(csv_path),
+        usecols_filter={"ticker", "score"},
+        cache={},
+        sqlite_cache_kind=None,
+    )
+
+    assert len(loaded) == 1
+    assert shared_calls["count"] == 1
+
+
+def test_load_csv_with_signature_cache_retries_shared_loader_without_usecols_on_schema_mismatch(
+    monkeypatch,
+    tmp_path,
+):
+    csv_path = tmp_path / "sample_shared_schema_mismatch.csv"
+    pd.DataFrame([{"ticker": "005930", "score": 90}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    shared_calls = {"count": 0}
+
+    def _fake_shared_loader(_data_dir, _filename, *, deep_copy, usecols=None, signature=None):
+        shared_calls["count"] += 1
+        assert deep_copy is False
+        assert signature is not None
+        if usecols is not None:
+            raise ValueError("Usecols do not match columns")
+        return pd.DataFrame([{"ticker": "005930", "score": 90}])
+
+    monkeypatch.setattr(source_cache, "_load_shared_csv_file", _fake_shared_loader)
+    monkeypatch.setattr(
+        source_cache.pd,
+        "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("pd.read_csv should not be used"),
+        ),
+    )
+
+    loaded = source_cache.load_csv_with_signature_cache(
+        path=str(csv_path),
+        usecols_filter={"ticker", "missing_col"},
+        cache={},
+        sqlite_cache_kind=None,
+    )
+
+    assert len(loaded) == 1
+    assert list(loaded.columns) == ["ticker"]
+    assert shared_calls["count"] == 2
+
+
+def test_load_csv_with_signature_cache_shared_loader_applies_dtype(monkeypatch, tmp_path):
+    csv_path = tmp_path / "sample_shared_dtype.csv"
+    pd.DataFrame([{"ticker": 5930, "score": "12.5"}]).to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    def _fake_shared_loader(*_args, **_kwargs):
+        return pd.DataFrame([{"ticker": 5930, "score": "12.5"}])
+
+    monkeypatch.setattr(source_cache, "_load_shared_csv_file", _fake_shared_loader)
+    monkeypatch.setattr(
+        source_cache.pd,
+        "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("pd.read_csv should not be used")),
+    )
+
+    loaded = source_cache.load_csv_with_signature_cache(
+        path=str(csv_path),
+        usecols_filter={"ticker", "score"},
+        cache={},
+        sqlite_cache_kind=None,
+        dtype={"ticker": str, "score": float},
+    )
+
+    assert loaded.iloc[0]["ticker"] == "5930"
+    assert float(loaded.iloc[0]["score"]) == 12.5
+
+
 def test_load_csv_with_signature_cache_creates_sqlite_parent_dir_when_missing(monkeypatch, tmp_path):
     csv_path = tmp_path / "signals_log.csv"
     pd.DataFrame(

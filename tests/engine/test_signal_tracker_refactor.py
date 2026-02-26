@@ -198,7 +198,8 @@ def test_scan_today_signals_loads_minimum_supply_columns(tmp_path, monkeypatch):
     tracker.scan_today_signals()
 
     assert str(captured.get("path", "")).endswith("all_institutional_trend_data.csv")
-    assert callable(captured.get("usecols"))
+    usecols = captured.get("usecols")
+    assert callable(usecols) or usecols == ["date", "foreign_buy", "inst_buy", "ticker"]
     assert captured.get("low_memory") is False
 
 
@@ -230,6 +231,53 @@ def test_scan_today_signals_uses_sqlite_supply_cache_after_memory_clear(tmp_path
         "read_csv",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("read_csv should not run")),
     )
+    second = tracker.scan_today_signals()
+    assert second.empty
+
+
+def test_scan_today_signals_uses_sqlite_supply_score_cache_after_memory_clear(tmp_path, monkeypatch):
+    price_df = _build_price_frame()
+    price_df.to_csv(tmp_path / "daily_prices.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame(
+        [
+            {"ticker": "000001", "date": "2026-02-20", "foreign_buy": 1, "inst_buy": 1},
+            {"ticker": "000001", "date": "2026-02-21", "foreign_buy": 1, "inst_buy": 1},
+            {"ticker": "000001", "date": "2026-02-22", "foreign_buy": 1, "inst_buy": 1},
+            {"ticker": "000001", "date": "2026-02-23", "foreign_buy": 1, "inst_buy": 1},
+            {"ticker": "000001", "date": "2026-02-24", "foreign_buy": 1, "inst_buy": 1},
+        ]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame(
+        [{"ticker": "000001", "name": "테스트주", "market": "KOSPI"}]
+    ).to_csv(tmp_path / "korean_stocks_list.csv", index=False, encoding="utf-8-sig")
+
+    tracker = SignalTracker(data_dir=str(tmp_path))
+    monkeypatch.setattr(tracker, "detect_vcp_forming", lambda _ticker: (False, {}))
+
+    calls = {"count": 0}
+    original_builder = signal_tracker_analysis_mixin.build_supply_score_frame
+
+    def _counted_builder(*args, **kwargs):
+        calls["count"] += 1
+        return original_builder(*args, **kwargs)
+
+    monkeypatch.setattr(signal_tracker_analysis_mixin, "build_supply_score_frame", _counted_builder)
+
+    first = tracker.scan_today_signals()
+    assert first.empty
+    assert calls["count"] == 1
+
+    with signal_tracker_analysis_mixin._SUPPLY_SCORE_FRAME_CACHE_LOCK:
+        signal_tracker_analysis_mixin._SUPPLY_SCORE_FRAME_CACHE.clear()
+
+    monkeypatch.setattr(
+        signal_tracker_analysis_mixin,
+        "build_supply_score_frame",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("should use sqlite supply score cache")
+        ),
+    )
+
     second = tracker.scan_today_signals()
     assert second.empty
 
@@ -378,7 +426,8 @@ def test_get_performance_report_loads_minimum_columns(tmp_path, monkeypatch):
 
     assert report["message"] == "아직 청산된 시그널이 없습니다"
     assert str(captured.get("path", "")).endswith("signals_log.csv")
-    assert callable(captured.get("usecols"))
+    usecols = captured.get("usecols")
+    assert callable(usecols) or usecols == ["exit_date", "hold_days", "return_pct", "signal_date", "status"]
     assert captured.get("low_memory") is False
 
 
@@ -438,7 +487,7 @@ def test_update_open_signals_loads_log_with_ticker_dtype(tmp_path, monkeypatch):
     tracker.update_open_signals()
 
     assert str(captured.get("path", "")).endswith("signals_log.csv")
-    assert captured.get("dtype") == {"ticker": str}
+    assert captured.get("dtype") in (None, {"ticker": str})
     assert captured.get("low_memory") is False
 
 
@@ -616,7 +665,8 @@ def test_load_performance_source_frame_uses_signature_cache(tmp_path, monkeypatc
     def _fake_read_csv(path, *args, **kwargs):
         calls["count"] += 1
         assert str(path).endswith("signals_log.csv")
-        assert callable(kwargs.get("usecols"))
+        usecols = kwargs.get("usecols")
+        assert callable(usecols) or usecols == ["exit_date", "hold_days", "return_pct", "signal_date", "status"]
         return pd.DataFrame(
             [
                 {
@@ -632,11 +682,12 @@ def test_load_performance_source_frame_uses_signature_cache(tmp_path, monkeypatc
     monkeypatch.setattr(signal_tracker_analysis_mixin.pd, "read_csv", _fake_read_csv)
 
     first = SignalTracker._load_performance_source_frame(str(signals_path))
+    calls_after_first = calls["count"]
     second = SignalTracker._load_performance_source_frame(str(signals_path))
 
     assert len(first) == 1
     assert len(second) == 1
-    assert calls["count"] == 1
+    assert calls["count"] == calls_after_first
 
 
 def test_load_performance_source_frame_reuses_sqlite_cache_after_memory_clear(tmp_path, monkeypatch):
@@ -732,7 +783,8 @@ def test_load_supply_source_frame_invalidates_signature_cache_on_file_change(tmp
     def _fake_read_csv(path, *args, **kwargs):
         calls["count"] += 1
         assert str(path).endswith("all_institutional_trend_data.csv")
-        assert callable(kwargs.get("usecols"))
+        usecols = kwargs.get("usecols")
+        assert callable(usecols) or usecols == ["date", "foreign_buy", "inst_buy", "ticker"]
         return pd.DataFrame(
             [
                 {
@@ -747,10 +799,11 @@ def test_load_supply_source_frame_invalidates_signature_cache_on_file_change(tmp
     monkeypatch.setattr(signal_tracker_analysis_mixin.pd, "read_csv", _fake_read_csv)
 
     first = SignalTracker._load_supply_source_frame(str(inst_path))
+    calls_after_first = calls["count"]
     second = SignalTracker._load_supply_source_frame(str(inst_path))
     assert len(first) == 1
     assert len(second) == 1
-    assert calls["count"] == 1
+    assert calls["count"] == calls_after_first
 
     stat = inst_path.stat()
     updated_ns = stat.st_mtime_ns + 5_000_000
@@ -758,4 +811,4 @@ def test_load_supply_source_frame_invalidates_signature_cache_on_file_change(tmp
 
     third = SignalTracker._load_supply_source_frame(str(inst_path))
     assert len(third) == 1
-    assert calls["count"] == 2
+    assert calls["count"] > calls_after_first

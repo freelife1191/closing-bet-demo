@@ -42,6 +42,25 @@ class _DummyPaperTrading:
     def sell_stock(self, ticker, price, quantity):
         return {"status": "success", "ticker": ticker, "price": price, "quantity": quantity}
 
+    def buy_stocks_bulk(self, orders):
+        return {
+            "status": "success",
+            "summary": {
+                "total": len(orders),
+                "success": len(orders),
+                "failed": 0,
+            },
+            "results": [
+                {
+                    "ticker": str(item.get("ticker", "")),
+                    "name": str(item.get("name", "")),
+                    "status": "success",
+                    "message": "ok",
+                }
+                for item in orders
+            ],
+        }
+
     def reset_account(self):
         return True
 
@@ -58,6 +77,9 @@ class _DummyPaperTrading:
 class _FailingPaperTrading(_DummyPaperTrading):
     def buy_stock(self, *_a, **_k):
         raise RuntimeError("buy failed")
+
+    def buy_stocks_bulk(self, *_a, **_k):
+        raise RuntimeError("bulk buy failed")
 
     def get_trade_history(self, *_a, **_k):
         raise RuntimeError("history failed")
@@ -125,6 +147,53 @@ def test_buy_stock_returns_error_shape_on_exception():
     payload = response.get_json()
     assert payload["status"] == "error"
     assert "buy failed" in payload["message"]
+
+
+def test_bulk_buy_returns_400_when_orders_are_missing():
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    response = client.post("/api/portfolio/buy/bulk", json={})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert payload["message"] == "Missing orders"
+
+
+def test_bulk_buy_returns_summary_payload():
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    response = client.post(
+        "/api/portfolio/buy/bulk",
+        json={
+            "orders": [
+                {"ticker": "005930", "name": "삼성전자", "price": 1000, "quantity": 10},
+                {"ticker": "000660", "name": "SK하이닉스", "price": 2000, "quantity": 10},
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "success"
+    assert payload["summary"]["total"] == 2
+    assert payload["summary"]["success"] == 2
+    assert payload["summary"]["failed"] == 0
+    assert len(payload["results"]) == 2
+
+
+def test_bulk_buy_returns_error_shape_on_exception():
+    client = _create_client(_build_ctx(_FailingPaperTrading()))
+
+    response = client.post(
+        "/api/portfolio/buy/bulk",
+        json={"orders": [{"ticker": "005930", "name": "삼성전자", "price": 1000, "quantity": 10}]},
+    )
+
+    assert response.status_code == 500
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert "bulk buy failed" in payload["message"]
 
 
 def test_get_trade_history_returns_error_payload_on_exception():

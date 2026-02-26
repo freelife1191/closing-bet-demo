@@ -512,6 +512,10 @@ def load_signal_tracker_csv_cached(
         fallback_kwargs = dict(read_kwargs)
         fallback_kwargs.pop("usecols", None)
         loaded = read_csv(path_abs, **fallback_kwargs)
+        requested_usecols = [str(column) for column in usecols]
+        existing_columns = [column for column in requested_usecols if column in loaded.columns]
+        if existing_columns:
+            loaded = loaded.loc[:, existing_columns]
 
     refreshed_signature = _file_signature(path_abs)
     if refreshed_signature is None:

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, Tuple
 
@@ -24,6 +26,7 @@ from engine.signal_tracker_analysis_source_cache import (
     PERFORMANCE_SOURCE_CACHE as _PERFORMANCE_SOURCE_CACHE,
     SIGNALS_LOG_SOURCE_CACHE as _SIGNALS_LOG_SOURCE_CACHE,
     SUPPLY_SOURCE_CACHE as _SUPPLY_SOURCE_CACHE,
+    get_file_signature as _get_source_file_signature,
     load_csv_with_signature_cache as _load_csv_with_signature_cache,
     refresh_csv_signature_cache_snapshot as _refresh_csv_signature_cache_snapshot,
 )
@@ -33,6 +36,10 @@ from engine.signal_tracker_log_helpers import (
     update_open_signals_frame,
 )
 from engine.signal_tracker_supply_helpers import build_supply_score_frame
+from services.kr_market_data_cache_sqlite_payload import (
+    load_csv_payload_from_sqlite as _load_csv_payload_from_sqlite,
+    save_csv_payload_to_sqlite as _save_csv_payload_to_sqlite,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +60,30 @@ PERFORMANCE_DEFAULTS: dict[str, Any] = {
     "exit_date": "",
     "hold_days": 0,
 }
+_SUPPLY_SCORE_FRAME_CACHE_LOCK = threading.Lock()
+_SUPPLY_SCORE_FRAME_CACHE: OrderedDict[
+    tuple[str, tuple[int, int, int], float],
+    pd.DataFrame,
+] = OrderedDict()
+_SUPPLY_SCORE_FRAME_CACHE_MAX_ENTRIES = 32
+_SUPPLY_SCORE_FRAME_SQLITE_MAX_ROWS = 256
+_SUPPLY_SCORE_FRAME_SQLITE_CACHE_KEY_SUFFIX = "::signal_tracker_supply_score_frame"
+
+
+def _supply_score_frame_sqlite_cache_key(source_path: str, foreign_min: float) -> str:
+    normalized_path = os.path.abspath(source_path)
+    return f"{normalized_path}{_SUPPLY_SCORE_FRAME_SQLITE_CACHE_KEY_SUFFIX}::{foreign_min:.6f}"
+
+
+def _set_bounded_supply_score_frame_cache_entry(
+    key: tuple[str, tuple[int, int, int], float],
+    frame: pd.DataFrame,
+) -> None:
+    _SUPPLY_SCORE_FRAME_CACHE[key] = frame
+    _SUPPLY_SCORE_FRAME_CACHE.move_to_end(key)
+    normalized_max_entries = max(1, int(_SUPPLY_SCORE_FRAME_CACHE_MAX_ENTRIES))
+    while len(_SUPPLY_SCORE_FRAME_CACHE) > normalized_max_entries:
+        _SUPPLY_SCORE_FRAME_CACHE.popitem(last=False)
 
 
 class SignalTrackerAnalysisMixin:
@@ -103,14 +134,74 @@ class SignalTrackerAnalysisMixin:
             logger.warning(f"⚠️ {ticker} VCP 감지 실패: {error}")
             return False, {}
 
-    def _build_supply_score_frame(self, raw_df: pd.DataFrame) -> pd.DataFrame:
+    def _build_supply_score_frame(
+        self,
+        raw_df: pd.DataFrame,
+        *,
+        source_path: str | None = None,
+        source_signature: tuple[int, int, int] | None = None,
+    ) -> pd.DataFrame:
         """최근 5일 수급 집계 및 점수 프레임을 생성한다."""
-        return build_supply_score_frame(
+        foreign_min = float(self.strategy_params["foreign_min"])
+        normalized_source_path = os.path.abspath(source_path) if source_path else None
+        cache_key: tuple[str, tuple[int, int, int], float] | None = None
+        if normalized_source_path and isinstance(source_signature, tuple) and len(source_signature) == 3:
+            try:
+                normalized_signature = (
+                    int(source_signature[0]),
+                    int(source_signature[1]),
+                    int(source_signature[2]),
+                )
+                cache_key = (normalized_source_path, normalized_signature, float(foreign_min))
+            except (TypeError, ValueError):
+                cache_key = None
+
+        if cache_key is not None:
+            with _SUPPLY_SCORE_FRAME_CACHE_LOCK:
+                cached = _SUPPLY_SCORE_FRAME_CACHE.get(cache_key)
+                if isinstance(cached, pd.DataFrame):
+                    _SUPPLY_SCORE_FRAME_CACHE.move_to_end(cache_key)
+                    return cached
+
+            sqlite_cache_key = _supply_score_frame_sqlite_cache_key(
+                normalized_source_path,
+                foreign_min,
+            )
+            sqlite_signature = (int(cache_key[1][1]), int(cache_key[1][2]))
+            sqlite_cached = _load_csv_payload_from_sqlite(
+                filepath=sqlite_cache_key,
+                signature=sqlite_signature,
+                usecols=None,
+                logger=logger,
+            )
+            if isinstance(sqlite_cached, pd.DataFrame):
+                with _SUPPLY_SCORE_FRAME_CACHE_LOCK:
+                    _set_bounded_supply_score_frame_cache_entry(cache_key, sqlite_cached)
+                return sqlite_cached
+
+        built = build_supply_score_frame(
             raw_df,
-            foreign_min=self.strategy_params["foreign_min"],
+            foreign_min=foreign_min,
             count_consecutive_positive=self._count_consecutive_positive,
             logger=logger,
         )
+        if cache_key is not None:
+            with _SUPPLY_SCORE_FRAME_CACHE_LOCK:
+                _set_bounded_supply_score_frame_cache_entry(cache_key, built)
+            sqlite_cache_key = _supply_score_frame_sqlite_cache_key(
+                normalized_source_path,
+                foreign_min,
+            )
+            sqlite_signature = (int(cache_key[1][1]), int(cache_key[1][2]))
+            _save_csv_payload_to_sqlite(
+                filepath=sqlite_cache_key,
+                signature=sqlite_signature,
+                usecols=None,
+                payload=built,
+                max_rows=_SUPPLY_SCORE_FRAME_SQLITE_MAX_ROWS,
+                logger=logger,
+            )
+        return built
 
     @staticmethod
     def _load_supply_source_frame(inst_path: str) -> pd.DataFrame:
@@ -203,7 +294,12 @@ class SignalTrackerAnalysisMixin:
 
         try:
             raw_df = self._load_supply_source_frame(inst_path)
-            scored_df = self._build_supply_score_frame(raw_df)
+            source_signature = _get_source_file_signature(os.path.abspath(inst_path))
+            scored_df = self._build_supply_score_frame(
+                raw_df,
+                source_path=inst_path,
+                source_signature=source_signature,
+            )
             if scored_df.empty:
                 logger.info("   조건을 만족하는 수급 종목이 없습니다.")
                 return pd.DataFrame()

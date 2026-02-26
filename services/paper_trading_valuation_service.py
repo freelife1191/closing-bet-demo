@@ -9,7 +9,6 @@ Paper Trading Valuation Service
 from __future__ import annotations
 
 import logging
-import sqlite3
 from datetime import datetime
 from typing import Any, Callable, Dict
 
@@ -19,25 +18,45 @@ from services.paper_trading_constants import INITIAL_CASH_KRW
 def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[list[dict], float, float]:
     """DB에서 보유 종목과 현금/입금 총액을 로드한다."""
     with get_read_context_fn() as conn:
-        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
         cursor.execute(
             """
-            SELECT ticker, name, avg_price, quantity, total_cost, last_updated
-            FROM portfolio
+            SELECT
+                p.ticker,
+                p.name,
+                p.avg_price,
+                p.quantity,
+                p.total_cost,
+                p.last_updated,
+                b.cash AS cash,
+                b.total_deposit AS total_deposit
+            FROM balance b
+            LEFT JOIN portfolio p ON 1 = 1
+            WHERE b.id = 1
             """
         )
-        holdings = [dict(row) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
 
-        cursor.execute("SELECT cash, total_deposit FROM balance WHERE id = 1")
-        balance_row = cursor.fetchone()
-        cash = balance_row["cash"] if balance_row else 0
-        total_deposit = (
-            balance_row["total_deposit"]
-            if balance_row and "total_deposit" in balance_row.keys()
-            else 0
-        )
+    if not rows:
+        return [], 0, 0
+
+    first_row = rows[0]
+    cash = first_row[6] if first_row[6] is not None else 0
+    total_deposit = first_row[7] if first_row[7] is not None else 0
+
+    holdings: list[dict] = [
+        {
+            "ticker": row[0],
+            "name": row[1],
+            "avg_price": row[2],
+            "quantity": row[3],
+            "total_cost": row[4],
+            "last_updated": row[5],
+        }
+        for row in rows
+        if row[0] is not None
+    ]
 
     return holdings, cash, total_deposit
 

@@ -12,7 +12,11 @@ try:
 except ImportError:
     LLMAnalyzer = None
     print("Warning: LLMAnalyzer could not be imported (missing dependencies?)")
-from .collectors import KRXCollector, EnhancedNewsCollector
+from .collectors import KRXCollector
+try:
+    from .collectors.news import EnhancedNewsCollector
+except Exception:
+    from .collectors import EnhancedNewsCollector
 
 __all__ = [
     'models', 'config', 'scorer', 'position_sizer', 'llm_analyzer', 'collectors',

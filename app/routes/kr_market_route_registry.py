@@ -164,7 +164,7 @@ def register_system_and_execution_route_groups(
     load_json_file_fn: Callable[[str], dict[str, Any]],
     load_csv_file_fn: Callable[[str], Any],
     get_data_path_fn: Callable[[str], str],
-    trigger_market_gate_background_refresh_fn: Callable[[], None],
+    trigger_market_gate_background_refresh_fn: Callable[[], bool],
     run_user_gemini_reanalysis_fn: Callable[..., dict[str, Any]],
     project_root_getter: Callable[[], str],
 ) -> None:

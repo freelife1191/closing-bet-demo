@@ -103,6 +103,44 @@ def test_fetch_realtime_prices_small_batch_uses_sqlite_fallback(monkeypatch):
     assert captured["prices"] == {"005930": 70000.0, "000660": 71000.0}
 
 
+def test_fetch_realtime_prices_small_batch_queries_sqlite_for_unresolved_tickers_only(monkeypatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_small_batch_prices",
+        lambda _tickers, _logger, **_kwargs: {
+            "005930": 70000.0,
+            "000660": 0.0,
+            "035420": 0.0,
+        },
+    )
+
+    def _fake_load_cached(tickers, **_kwargs):
+        captured["cache_lookup_tickers"] = list(tickers)
+        return {"000660": 120000.0}
+
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._load_cached_realtime_prices",
+        _fake_load_cached,
+    )
+
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._save_realtime_prices_to_cache",
+        lambda *_args, **_kwargs: None,
+    )
+
+    result = fetch_realtime_prices(
+        tickers=["005930", "000660", "035420"],
+        load_csv_file=lambda _name: None,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert captured["cache_lookup_tickers"] == ["000660", "035420"]
+    assert result["005930"] == 70000.0
+    assert result["000660"] == 120000.0
+    assert result["035420"] == 0.0
+
+
 def test_fetch_realtime_prices_passes_cached_latest_price_map_to_fill(monkeypatch):
     captured: dict[str, object] = {}
 
@@ -117,6 +155,10 @@ def test_fetch_realtime_prices_passes_cached_latest_price_map_to_fill(monkeypatc
     monkeypatch.setattr(
         "services.kr_market_realtime_service._fetch_yfinance_missing_prices",
         lambda _tickers, _prices, _load_csv_file, _logger, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._load_cached_realtime_prices",
+        lambda *_args, **_kwargs: {},
     )
 
     def _fake_fill(tickers, prices, _load_csv_file, latest_price_map=None, **kwargs):
@@ -143,6 +185,7 @@ def test_fetch_realtime_prices_passes_cached_latest_price_map_to_fill(monkeypatc
 
 def test_fetch_realtime_prices_bulk_chain_uses_sqlite_fallback_before_csv(monkeypatch):
     captured: dict[str, object] = {}
+    saved_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(
         "services.kr_market_realtime_service._fetch_toss_bulk_prices",
@@ -162,8 +205,12 @@ def test_fetch_realtime_prices_bulk_chain_uses_sqlite_fallback_before_csv(monkey
     )
 
     def _fake_save(prices, **kwargs):
-        captured["saved_prices"] = dict(prices)
-        captured["saved_source"] = kwargs.get("source")
+        saved_calls.append(
+            {
+                "prices": dict(prices),
+                "source": kwargs.get("source"),
+            }
+        )
 
     monkeypatch.setattr(
         "services.kr_market_realtime_service._save_realtime_prices_to_cache",
@@ -187,14 +234,138 @@ def test_fetch_realtime_prices_bulk_chain_uses_sqlite_fallback_before_csv(monkey
         get_data_path=lambda filename: f"/tmp/{filename}",
     )
 
-    assert captured["saved_source"] == "bulk_chain"
-    assert captured["saved_prices"] == {"005930": 50000.0}
+    assert saved_calls[0]["source"] == "bulk_chain"
+    assert saved_calls[0]["prices"] == {"005930": 50000.0}
+    assert saved_calls[1]["source"] == "bulk_resolved"
+    assert saved_calls[1]["prices"] == {"000660": 120000.0}
     assert captured["price_before_fill"]["005930"] == 50000.0
     assert captured["price_before_fill"]["000660"] == 120000.0
     assert result["000660"] == 120000.0
 
 
+def test_fetch_realtime_prices_bulk_chain_skips_csv_when_cache_fallback_completes_prices(monkeypatch):
+    saved_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_toss_bulk_prices",
+        lambda _tickers, _logger, **_kwargs: {"005930": 50000.0},
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_naver_missing_prices",
+        lambda _tickers, _prices, _logger, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_yfinance_missing_prices",
+        lambda _tickers, _prices, _load_csv_file, _logger, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._load_cached_realtime_prices",
+        lambda _tickers, **_kwargs: {
+            "000660": 120000.0,
+            "035420": 210000.0,
+            "051910": 320000.0,
+            "068270": 430000.0,
+            "207940": 540000.0,
+        },
+    )
+
+    def _fake_save(prices, **kwargs):
+        saved_calls.append(
+            {
+                "source": kwargs.get("source"),
+                "prices": dict(prices),
+            }
+        )
+
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._save_realtime_prices_to_cache",
+        _fake_save,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fill_missing_prices_from_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("cache fallback으로 가격이 완전히 해소되면 CSV fallback은 생략되어야 합니다.")
+        ),
+    )
+
+    result = fetch_realtime_prices(
+        tickers=["005930", "000660", "035420", "051910", "068270", "207940"],
+        load_csv_file=lambda _name: None,
+        logger=logging.getLogger(__name__),
+        load_latest_price_map=lambda: (_ for _ in ()).throw(
+            AssertionError("가격이 이미 complete면 latest price map 조회도 생략되어야 합니다.")
+        ),
+    )
+
+    assert result == {
+        "005930": 50000.0,
+        "000660": 120000.0,
+        "035420": 210000.0,
+        "051910": 320000.0,
+        "068270": 430000.0,
+        "207940": 540000.0,
+    }
+    assert saved_calls[0]["source"] == "bulk_chain"
+    assert saved_calls[0]["prices"] == {"005930": 50000.0}
+    assert saved_calls[1]["source"] == "bulk_resolved"
+    assert saved_calls[1]["prices"] == {
+        "000660": 120000.0,
+        "035420": 210000.0,
+        "051910": 320000.0,
+        "068270": 430000.0,
+        "207940": 540000.0,
+    }
+
+
+def test_fetch_realtime_prices_reuses_recent_sqlite_cache_without_second_lookup(monkeypatch):
+    cache_calls = {"count": 0}
+    requested_tickers: list[list[str]] = []
+
+    def _fake_load_cached(_tickers, **_kwargs):
+        cache_calls["count"] += 1
+        requested_tickers.append(list(_tickers))
+        if cache_calls["count"] == 1:
+            return {"000660": 120000.0}
+        return {}
+
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._load_cached_realtime_prices",
+        _fake_load_cached,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_toss_bulk_prices",
+        lambda _tickers, _logger, **_kwargs: {"005930": 50000.0},
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_naver_missing_prices",
+        lambda _tickers, _prices, _logger, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_yfinance_missing_prices",
+        lambda _tickers, _prices, _load_csv_file, _logger, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fill_missing_prices_from_csv",
+        lambda _tickers, _prices, _load_csv_file, latest_price_map=None, **_kwargs: None,
+    )
+
+    result = fetch_realtime_prices(
+        tickers=["005930", "000660", "035420", "051910", "068270", "207940"],
+        load_csv_file=lambda _name: None,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert cache_calls["count"] == 2
+    assert requested_tickers[0] == ["005930", "000660", "035420", "051910", "068270", "207940"]
+    # 1차 recent cache에서 해결된 000660과 네트워크로 해결된 005930은 2차 조회 대상에서 제외된다.
+    assert requested_tickers[1] == ["035420", "051910", "068270", "207940"]
+    assert result["005930"] == 50000.0
+    assert result["000660"] == 120000.0
+
+
 def test_fetch_realtime_prices_skips_csv_fallback_when_prices_are_complete(monkeypatch):
+    cache_calls = {"count": 0}
+
     monkeypatch.setattr(
         "services.kr_market_realtime_service._fetch_toss_bulk_prices",
         lambda _tickers, _logger, **_kwargs: {
@@ -216,9 +387,7 @@ def test_fetch_realtime_prices_skips_csv_fallback_when_prices_are_complete(monke
     )
     monkeypatch.setattr(
         "services.kr_market_realtime_service._load_cached_realtime_prices",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("SQLite fallback should be skipped when prices are complete")
-        ),
+        lambda *_args, **_kwargs: cache_calls.__setitem__("count", cache_calls["count"] + 1) or {},
     )
     monkeypatch.setattr(
         "services.kr_market_realtime_service._fill_missing_prices_from_csv",
@@ -235,6 +404,100 @@ def test_fetch_realtime_prices_skips_csv_fallback_when_prices_are_complete(monke
 
     assert result["005930"] == 70000.0
     assert result["207940"] == 500000.0
+    # 대량 경로 선행 cache short-circuit 1회만 호출되고, complete 응답이므로 후속 fallback은 생략된다.
+    assert cache_calls["count"] == 1
+
+
+def test_fetch_realtime_prices_skips_latest_map_when_network_result_is_complete(monkeypatch):
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_toss_bulk_prices",
+        lambda _tickers, _logger, **_kwargs: {
+            "005930": 70000.0,
+            "000660": 120000.0,
+            "035420": 200000.0,
+            "051910": 300000.0,
+            "068270": 400000.0,
+            "207940": 500000.0,
+        },
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_naver_missing_prices",
+        lambda _tickers, _prices, _logger, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_yfinance_missing_prices",
+        lambda _tickers, _prices, _load_csv_file, _logger, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._load_cached_realtime_prices",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fill_missing_prices_from_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("네트워크 결과가 complete면 CSV fallback은 호출되면 안 됩니다.")
+        ),
+    )
+
+    result = fetch_realtime_prices(
+        tickers=["005930", "000660", "035420", "051910", "068270", "207940"],
+        load_csv_file=lambda _name: None,
+        logger=logging.getLogger(__name__),
+        load_latest_price_map=lambda: (_ for _ in ()).throw(
+            AssertionError("네트워크 결과가 complete면 latest map 로드는 호출되면 안 됩니다.")
+        ),
+    )
+
+    assert result["005930"] == 70000.0
+    assert result["207940"] == 500000.0
+
+
+def test_fetch_realtime_prices_bulk_short_circuits_when_recent_sqlite_cache_is_complete(monkeypatch):
+    expected = {
+        "005930": 70000.0,
+        "000660": 120000.0,
+        "035420": 200000.0,
+        "051910": 300000.0,
+        "068270": 400000.0,
+        "207940": 500000.0,
+    }
+
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._load_cached_realtime_prices",
+        lambda _tickers, **_kwargs: dict(expected),
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_toss_bulk_prices",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("완전한 최근 SQLite 캐시 hit 시 네트워크 bulk 호출은 생략되어야 합니다.")
+        ),
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_naver_missing_prices",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("완전한 최근 SQLite 캐시 hit 시 네이버 fallback 호출은 생략되어야 합니다.")
+        ),
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fetch_yfinance_missing_prices",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("완전한 최근 SQLite 캐시 hit 시 yfinance fallback 호출은 생략되어야 합니다.")
+        ),
+    )
+    monkeypatch.setattr(
+        "services.kr_market_realtime_service._fill_missing_prices_from_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("완전한 최근 SQLite 캐시 hit 시 CSV fallback 호출은 생략되어야 합니다.")
+        ),
+    )
+
+    result = fetch_realtime_prices(
+        tickers=["005930", "000660", "035420", "051910", "068270", "207940"],
+        load_csv_file=lambda _name: None,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert result == expected
 
 
 def test_fetch_realtime_prices_uses_small_batch_for_duplicated_requests(monkeypatch):

@@ -219,20 +219,64 @@ def test_load_csv_file_uses_shared_sqlite_cache_after_memory_clear(monkeypatch, 
     assert float(second.iloc[-1]["close"]) == 111.0
 
 
-def test_load_csv_file_skips_shared_cache_when_dtype_requested(monkeypatch, tmp_path) -> None:
+def test_load_csv_file_uses_shared_cache_when_dtype_requested(monkeypatch, tmp_path) -> None:
+    _reset_data_cache_state()
     csv_path = tmp_path / "sample_dtype.csv"
     pd.DataFrame([{"ticker": "005930", "close": 111.0}]).to_csv(csv_path, index=False)
+
+    called = {"shared": 0}
+
+    def _shared_loader(*_args, **_kwargs):
+        called["shared"] += 1
+        return pd.DataFrame([{"ticker": "005930", "close": 111.0}])
 
     monkeypatch.setattr(
         pandas_utils_io,
         "_load_csv_via_shared_cache",
-        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("shared cache should not run")),
+        _shared_loader,
+    )
+    monkeypatch.setattr(
+        pandas_utils_io.pd,
+        "read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("direct read_csv should not run")),
     )
 
     loaded = pandas_utils_io.load_csv_file(
         str(csv_path),
         dtype={"ticker": str},
     )
+    assert called["shared"] == 1
+    assert len(loaded) == 1
+    assert loaded.iloc[0]["ticker"] == "005930"
+
+
+def test_load_csv_file_falls_back_to_direct_read_when_cached_dtype_cast_fails(monkeypatch, tmp_path) -> None:
+    csv_path = tmp_path / "sample_dtype_fallback.csv"
+    pd.DataFrame([{"ticker": "005930", "close": 111.0}]).to_csv(csv_path, index=False)
+
+    monkeypatch.setattr(
+        pandas_utils_io,
+        "_load_csv_via_shared_cache",
+        lambda *_a, **_k: (_ for _ in ()).throw(ValueError("dtype cast failed")),
+    )
+
+    captured: dict[str, object] = {}
+    original_read_csv = pandas_utils_io.pd.read_csv
+
+    def _counted_read_csv(path, *args, **kwargs):
+        captured["path"] = str(path)
+        captured["dtype"] = kwargs.get("dtype")
+        return original_read_csv(path, *args, **kwargs)
+
+    monkeypatch.setattr(pandas_utils_io.pd, "read_csv", _counted_read_csv)
+
+    loaded = pandas_utils_io.load_csv_file(
+        str(csv_path),
+        dtype={"ticker": str},
+    )
+
+    assert str(captured.get("path", "")).endswith("sample_dtype_fallback.csv")
+    assert captured.get("dtype") == {"ticker": str}
     assert len(loaded) == 1
     assert loaded.iloc[0]["ticker"] == "005930"
 
@@ -256,3 +300,40 @@ def test_load_csv_file_returns_cached_empty_dataframe_without_direct_reread(monk
     second = pandas_utils_io.load_csv_file(str(csv_path), usecols=["ticker", "close"])
     assert second.empty
     assert list(second.columns) == ["ticker", "close"]
+
+
+def test_load_csv_file_retries_shared_cache_without_usecols_on_schema_mismatch(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _reset_data_cache_state()
+    csv_path = tmp_path / "schema_mismatch.csv"
+    pd.DataFrame([{"ticker": "005930", "close": 111.0}]).to_csv(csv_path, index=False)
+
+    calls = {"shared": 0}
+
+    def _fake_shared_loader(_data_dir, _filename, *, deep_copy, usecols=None, signature=None):
+        calls["shared"] += 1
+        assert deep_copy is True
+        assert signature is not None
+        if usecols is not None:
+            raise ValueError("Usecols do not match columns")
+        return pd.DataFrame([{"ticker": "005930", "close": 111.0}])
+
+    monkeypatch.setattr(pandas_utils_io, "load_shared_csv_file", _fake_shared_loader)
+    monkeypatch.setattr(
+        pandas_utils_io.pd,
+        "read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("direct read_csv should not run"),
+        ),
+    )
+
+    loaded = pandas_utils_io.load_csv_file(
+        str(csv_path),
+        usecols=["ticker", "missing_col"],
+    )
+
+    assert calls["shared"] == 2
+    assert list(loaded.columns) == ["ticker"]
+    assert str(loaded.iloc[0]["ticker"]) == "005930"

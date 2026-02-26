@@ -42,6 +42,7 @@ from services.paper_trading_valuation_service import (
     get_portfolio_valuation as get_portfolio_valuation_impl,
 )
 from services.sqlite_utils import (
+    build_sqlite_in_placeholders,
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
@@ -68,6 +69,8 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
     SQLITE_RETRY_ATTEMPTS = 2
     SQLITE_RETRY_DELAY_SECONDS = 0.03
     PRICE_CACHE_WARMUP_LIMIT = 5_000
+    PRICE_CACHE_WARMUP_IN_QUERY_MAX_TICKERS = 900
+    PRICE_CACHE_WARMUP_PORTFOLIO_SAMPLE_LIMIT = PRICE_CACHE_WARMUP_IN_QUERY_MAX_TICKERS + 1
     PRICE_CACHE_MAX_ROWS = PRICE_CACHE_WARMUP_LIMIT
     PRICE_CACHE_PRUNE_FORCE_INTERVAL = 64
     PRICE_CACHE_KNOWN_TICKERS_MAX_ENTRIES = 8_192
@@ -252,6 +255,29 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             normalized_interval = max(1, int(self.PRICE_CACHE_PRUNE_FORCE_INTERVAL))
             return (self._price_cache_save_counter % normalized_interval) == 0
 
+    def _should_prune_price_cache_for_new_ticker(self, *, max_rows: int) -> bool:
+        """신규 티커 유입 시 현재 추적 개수가 최대치 초과일 때만 prune이 필요하다."""
+        normalized_max_rows = max(1, int(max_rows))
+        with self._price_cache_prune_lock:
+            return len(self._price_cache_known_tickers) > normalized_max_rows
+
+    @staticmethod
+    def _build_price_cache_lookup_candidates(tickers: list[str]) -> list[str]:
+        """price_cache 조회용 raw/정규화 ticker 후보를 중복 없이 생성한다."""
+        lookup_candidates: list[str] = []
+        seen_candidates: set[str] = set()
+        for ticker in tickers:
+            raw_ticker = str(ticker)
+            if not raw_ticker:
+                continue
+            normalized_ticker = raw_ticker.zfill(6)
+            for candidate in (raw_ticker, normalized_ticker):
+                if candidate in seen_candidates:
+                    continue
+                seen_candidates.add(candidate)
+                lookup_candidates.append(candidate)
+        return lookup_candidates
+
     def _execute_db_operation_with_schema_retry(
         self,
         operation: Callable[[], _T],
@@ -281,24 +307,89 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         def _load_rows() -> list[tuple[str, int]]:
             with self.get_read_context() as conn:
                 cursor = conn.cursor()
-                has_holdings_row = cursor.execute(
+                holding_rows = cursor.execute(
                     """
-                    SELECT 1
+                    SELECT ticker
                     FROM portfolio
-                    LIMIT 1
-                    """
-                ).fetchone()
-                if has_holdings_row is not None:
-                    cursor.execute(
-                        """
-                        SELECT pc.ticker, pc.price
-                        FROM price_cache pc
-                        INNER JOIN portfolio p ON p.ticker = pc.ticker
-                        ORDER BY pc.updated_at DESC
-                        LIMIT ?
-                        """,
-                        (self.PRICE_CACHE_WARMUP_LIMIT,),
-                    )
+                    ORDER BY last_updated DESC, ticker ASC
+                    LIMIT ?
+                    """,
+                    (self.PRICE_CACHE_WARMUP_PORTFOLIO_SAMPLE_LIMIT,),
+                ).fetchall()
+                if holding_rows:
+                    # 포트폴리오가 큰 경우 전체 ticker를 파이썬 메모리로 가져오지 않고
+                    # 곧바로 JOIN 경로를 사용해 워밍업 조회 비용을 제한한다.
+                    if len(holding_rows) <= self.PRICE_CACHE_WARMUP_IN_QUERY_MAX_TICKERS:
+                        holding_tickers = [
+                            str(row[0])
+                            for row in holding_rows
+                            if row and row[0] is not None
+                        ]
+                        if holding_tickers:
+                            # 보유 종목 수가 일반적인 범위일 때는 ticker IN 조회가 전체 조인 스캔보다 효율적이다.
+                            # legacy/raw ticker와 zfill 정규화 ticker를 함께 조회해 warmup miss를 줄인다.
+                            lookup_tickers = self._build_price_cache_lookup_candidates(holding_tickers)
+                            if lookup_tickers:
+                                rows: list[tuple[str, int]] = []
+                                chunk_size = max(1, int(self.PRICE_CACHE_WARMUP_IN_QUERY_MAX_TICKERS))
+                                for start in range(0, len(lookup_tickers), chunk_size):
+                                    chunk = lookup_tickers[start:start + chunk_size]
+                                    placeholders = build_sqlite_in_placeholders(chunk)
+                                    query = f"""
+                                        SELECT ticker, price
+                                        FROM price_cache
+                                        WHERE ticker IN ({placeholders})
+                                    """
+                                    cursor.execute(query, tuple(chunk))
+                                    rows.extend(cursor.fetchall())
+                                return rows
+                            cursor.execute(
+                                """
+                                SELECT ticker, price
+                                FROM price_cache
+                                ORDER BY updated_at DESC
+                                LIMIT ?
+                                """,
+                                (self.PRICE_CACHE_WARMUP_LIMIT,),
+                            )
+                        else:
+                            cursor.execute(
+                                """
+                                SELECT ticker, price
+                                FROM price_cache
+                                ORDER BY updated_at DESC
+                                LIMIT ?
+                                """,
+                                (self.PRICE_CACHE_WARMUP_LIMIT,),
+                            )
+                    else:
+                        cursor.execute(
+                            """
+                            SELECT ticker, price
+                            FROM price_cache
+                            WHERE ticker IN (
+                                WITH sampled_portfolio AS (
+                                    SELECT ticker
+                                    FROM portfolio
+                                    ORDER BY last_updated DESC, ticker ASC
+                                    LIMIT ?
+                                ),
+                                lookup_tickers AS (
+                                    SELECT ticker AS lookup_ticker
+                                    FROM sampled_portfolio
+                                    UNION ALL
+                                    SELECT CASE
+                                        WHEN length(ticker) >= 6 THEN ticker
+                                        ELSE substr('000000' || ticker, -6)
+                                    END AS lookup_ticker
+                                    FROM sampled_portfolio
+                                )
+                                SELECT lookup_ticker
+                                FROM lookup_tickers
+                            )
+                            """,
+                            (self.PRICE_CACHE_WARMUP_PORTFOLIO_SAMPLE_LIMIT,),
+                        )
                 else:
                     cursor.execute(
                         """
@@ -372,11 +463,15 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         if not self._ensure_price_cache_table():
             return
 
+        max_rows = max(1, int(self.PRICE_CACHE_MAX_ROWS))
+        should_prune_for_new_ticker = (
+            should_prune_for_new_ticker
+            and self._should_prune_price_cache_for_new_ticker(max_rows=max_rows)
+        )
         should_force_prune = self._should_force_price_cache_prune()
         should_prune_after_upsert = should_prune_for_new_ticker or should_force_prune
 
         def _upsert_rows() -> None:
-            max_rows = max(1, int(self.PRICE_CACHE_MAX_ROWS))
             with self.get_context() as conn:
                 cursor = conn.cursor()
                 cursor.executemany(
@@ -484,8 +579,18 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         def _operation() -> list[str]:
             with self.get_read_context() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT ticker FROM portfolio")
-                return [row[0] for row in cursor.fetchall()]
+                cursor.execute(
+                    """
+                    SELECT DISTINCT
+                        CASE
+                            WHEN length(ticker) >= 6 THEN ticker
+                            ELSE substr('000000' || ticker, -6)
+                        END AS normalized_ticker
+                    FROM portfolio
+                    WHERE ticker IS NOT NULL
+                    """
+                )
+                return [str(row[0]) for row in cursor.fetchall() if row and row[0] is not None]
 
         return self._execute_db_operation_with_schema_retry(_operation)
 
@@ -543,6 +648,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         tickers = self._get_portfolio_tickers()
         resolved_prices, sleep_seconds = refresh_price_cache_once_impl(
             tickers=tickers,
+            tickers_already_normalized=True,
             session=session,
             yf_module=yf_module,
             pykrx_stock=pykrx_stock,

@@ -47,6 +47,7 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
         target_date: str = None,
     ) -> List[StockData]:
         """상승률 상위 종목 조회 (pykrx 실데이터 + 로컬 CSV Fallback)."""
+        min_change_pct = float(getattr(getattr(self, "config", None), "min_change_pct", 0.0))
         try:
             from pykrx import stock
 
@@ -57,6 +58,14 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
                 target_date_str = self._get_latest_market_date()
 
             logger.info(f"목표 날짜: {target_date_str}")
+            cached_pykrx = self._load_pykrx_top_gainers_snapshot(
+                market=market,
+                top_n=top_n,
+                target_date=target_date_str,
+                min_change_pct=min_change_pct,
+            )
+            if cached_pykrx is not None:
+                return cached_pykrx
 
             df = None
             base_date = datetime.strptime(target_date_str, "%Y%m%d")
@@ -71,7 +80,15 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
                     continue
 
             if df is not None and not df.empty:
-                return self._process_ohlcv_dataframe(df, market, top_n)
+                results = self._process_ohlcv_dataframe(df, market, top_n)
+                self._save_pykrx_top_gainers_snapshot(
+                    market=market,
+                    top_n=top_n,
+                    target_date=target_date_str,
+                    min_change_pct=min_change_pct,
+                    results=results,
+                )
+                return results
 
         except ImportError:
             logger.warning("pykrx 미설치 - CSV fallback 사용")

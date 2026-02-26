@@ -55,6 +55,7 @@ def test_append_signals_log_reads_with_ticker_dtype_and_low_memory_disabled(tmp_
         captured["low_memory"] = kwargs.get("low_memory")
         return pd.DataFrame([{"signal_date": "2026-02-20", "ticker": "000002", "status": "CLOSED"}])
 
+    monkeypatch.setattr("engine.signal_tracker_log_helpers._shared_file_signature", lambda _path: None)
     monkeypatch.setattr("engine.signal_tracker_log_helpers.pd.read_csv", _fake_read_csv)
 
     append_signals_log(
@@ -66,6 +67,101 @@ def test_append_signals_log_reads_with_ticker_dtype_and_low_memory_disabled(tmp_
     assert str(captured.get("path", "")).endswith("signals_log.csv")
     assert captured.get("dtype") == {"ticker": str}
     assert captured.get("low_memory") is False
+
+
+def test_append_signals_log_uses_shared_loader_before_read_csv(tmp_path, monkeypatch):
+    today = "2026-02-21"
+    log_path = tmp_path / "signals_log.csv"
+    log_path.write_text("dummy\n", encoding="utf-8-sig")
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "engine.signal_tracker_log_helpers._shared_file_signature",
+        lambda _path: (1, 1),
+    )
+
+    def _fake_shared_loader(data_dir, filename, *, deep_copy=True, signature=None):
+        captured["data_dir"] = str(data_dir)
+        captured["filename"] = filename
+        captured["deep_copy"] = deep_copy
+        captured["signature"] = signature
+        return pd.DataFrame([{"signal_date": "2026-02-20", "ticker": "2", "status": "CLOSED"}])
+
+    monkeypatch.setattr(
+        "engine.signal_tracker_log_helpers._load_shared_csv_file",
+        _fake_shared_loader,
+    )
+    monkeypatch.setattr(
+        "engine.signal_tracker_log_helpers.pd.read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("read_csv should not run")),
+    )
+
+    combined = append_signals_log(
+        signals_log_path=str(log_path),
+        new_signals=pd.DataFrame([{"signal_date": today, "ticker": "1", "status": "OPEN"}]),
+        today=today,
+    )
+
+    assert len(combined) == 2
+    assert captured["filename"] == "signals_log.csv"
+    assert captured["deep_copy"] is False
+    assert captured["signature"] == (1, 1)
+
+
+def test_append_signals_log_uses_signal_tracker_sqlite_cache_before_read_csv(tmp_path, monkeypatch):
+    today = "2026-02-21"
+    log_path = tmp_path / "signals_log.csv"
+    log_path.write_text("dummy\n", encoding="utf-8-sig")
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "engine.signal_tracker_log_helpers._shared_file_signature",
+        lambda _path: (1, 1),
+    )
+    monkeypatch.setattr(
+        "engine.signal_tracker_log_helpers._load_shared_csv_file",
+        lambda *_a, **_k: (_ for _ in ()).throw(ValueError("force shared loader fallback")),
+    )
+
+    def _fake_source_cache_loader(
+        *,
+        path: str,
+        cache_kind: str,
+        dtype=None,
+        read_csv=None,
+        logger=None,
+        low_memory=False,
+        deep_copy=True,
+        **_kwargs,
+    ):
+        captured["path"] = path
+        captured["cache_kind"] = cache_kind
+        captured["dtype"] = dtype
+        captured["low_memory"] = low_memory
+        captured["deep_copy"] = deep_copy
+        return pd.DataFrame([{"signal_date": "2026-02-20", "ticker": "2", "status": "CLOSED"}])
+
+    monkeypatch.setattr(
+        "engine.signal_tracker_log_helpers._load_signal_tracker_csv_cached",
+        _fake_source_cache_loader,
+    )
+    monkeypatch.setattr(
+        "engine.signal_tracker_log_helpers.pd.read_csv",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("read_csv should not run")),
+    )
+
+    combined = append_signals_log(
+        signals_log_path=str(log_path),
+        new_signals=pd.DataFrame([{"signal_date": today, "ticker": "1", "status": "OPEN"}]),
+        today=today,
+    )
+
+    assert len(combined) == 2
+    assert str(captured.get("path", "")).endswith("signals_log.csv")
+    assert captured.get("cache_kind") == "signal_tracker_log_helpers:signals_log"
+    assert captured.get("dtype") == {"ticker": str}
+    assert captured.get("low_memory") is False
+    assert captured.get("deep_copy") is False
 
 
 def test_append_signals_log_uses_existing_signals_without_read_csv(monkeypatch):

@@ -976,6 +976,24 @@ export default function JonggaV2Page() {
     }
   })();
 
+  const isBulkBuyClosingBetDisabled =
+    isBulkBuyingClosingBet ||
+    loading ||
+    !data?.signals?.length ||
+    selectedDate !== 'latest' ||
+    !isLatestReportToday;
+
+  const bulkBuyClosingBetDisabledReason = (() => {
+    if (isBulkBuyingClosingBet) return '종가베팅 일괄 매수를 진행 중입니다.';
+    if (loading) return '종가베팅 데이터를 불러오는 중입니다.';
+    if (selectedDate !== 'latest') return 'Latest Report(최신 리포트)에서만 일괄 매수를 실행할 수 있습니다.';
+    if (!isLatestReportToday) return '현재 최신 리포트가 오늘 데이터가 아닙니다.';
+    if (!data?.signals?.length) return '오늘 종가베팅 매수 대상 종목이 없습니다.';
+    return '';
+  })();
+
+  const bulkBuyClosingBetTooltip = bulkBuyClosingBetDisabledReason || '오늘 종가베팅 종목 전체를 10주씩 매수합니다.';
+
   const handleBulkBuyClosingBet = async () => {
     if (isBulkBuyingClosingBet) return;
     if (selectedDate !== 'latest' || !isLatestReportToday) {
@@ -1018,36 +1036,51 @@ export default function JonggaV2Page() {
     const failedItems: string[] = [];
 
     try {
+      const buyOrders: Array<{ ticker: string; name: string; price: number; quantity: number }> = [];
       for (const target of uniqueTargets.values()) {
         if (!Number.isFinite(target.price) || target.price <= 0) {
           skippedCount += 1;
           failedItems.push(`${target.name}(가격 정보 없음)`);
           continue;
         }
+        buyOrders.push({
+          ticker: target.ticker,
+          name: target.name,
+          price: target.price,
+          quantity: 10
+        });
+      }
 
+      if (buyOrders.length > 0) {
         try {
-          const res = await fetch('/api/portfolio/buy', {
+          const res = await fetch('/api/portfolio/buy/bulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ticker: target.ticker,
-              name: target.name,
-              price: target.price,
-              quantity: 10
-            })
+            body: JSON.stringify({ orders: buyOrders })
           });
-
           const result = await res.json();
-          if (result.status === 'success') {
-            successCount += 1;
+          const resultRows = Array.isArray(result?.results) ? result.results : [];
+
+          if (resultRows.length > 0) {
+            resultRows.forEach((row: any) => {
+              const rowName = row?.name || row?.ticker || '종목';
+              if (row?.status === 'success') {
+                successCount += 1;
+              } else {
+                failCount += 1;
+                failedItems.push(`${rowName}(${row?.message || '매수 실패'})`);
+              }
+            });
+          } else if (result?.status === 'success') {
+            successCount += buyOrders.length;
           } else {
-            failCount += 1;
-            failedItems.push(`${target.name}(${result.message || '매수 실패'})`);
+            failCount += buyOrders.length;
+            failedItems.push(`일괄 매수(${result?.message || '매수 실패'})`);
           }
         } catch (error) {
-          console.error('[Closing Bet Bulk Buy] buy failed:', target.ticker, error);
-          failCount += 1;
-          failedItems.push(`${target.name}(요청 오류)`);
+          console.error('[Closing Bet Bulk Buy] bulk buy failed:', error);
+          failCount += buyOrders.length;
+          failedItems.push(`일괄 매수(요청 오류)`);
         }
       }
 
@@ -1294,15 +1327,17 @@ export default function JonggaV2Page() {
           <div className="flex items-center gap-3 md:ml-auto">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
 
-            <button
-              onClick={handleBulkBuyClosingBet}
-              disabled={isBulkBuyingClosingBet || loading || !data?.signals?.length || selectedDate !== 'latest' || !isLatestReportToday}
-              className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="오늘 종가베팅 종목 전체를 10주씩 매수합니다."
-            >
-              <i className={`fas ${isBulkBuyingClosingBet ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
-              <span>{isBulkBuyingClosingBet ? '일괄 매수 중...' : '종가베팅 전체 10주 매수'}</span>
-            </button>
+            <Tooltip content={bulkBuyClosingBetTooltip} position="top" align="right" wide>
+              <button
+                onClick={handleBulkBuyClosingBet}
+                disabled={isBulkBuyClosingBetDisabled}
+                className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                title={bulkBuyClosingBetTooltip}
+              >
+                <i className={`fas ${isBulkBuyingClosingBet ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
+                <span>{isBulkBuyingClosingBet ? '일괄 매수 중...' : '종가베팅 전체 10주 매수'}</span>
+              </button>
+            </Tooltip>
 
             {/* [NEW] VCP 기준표 버튼 (Moved here) */}
             <button
@@ -2399,7 +2434,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
               <thead className="bg-white/5 text-slate-400 font-medium">
                 <tr>
                   <th className="px-4 py-3 w-16 text-center whitespace-nowrap">등급</th>
-                  <th className="px-4 py-3 whitespace-nowrap">거래대금 & 등락률</th>
+                  <th className="px-4 py-3 whitespace-nowrap">거래대금 기준</th>
                   <th className="px-4 py-3 whitespace-nowrap">점수 (Total / 19)</th>
                   <th className="px-4 py-3 whitespace-nowrap">추가 조건</th>
                   <th className="px-4 py-3 whitespace-nowrap">비고</th>
@@ -2409,8 +2444,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                 <tr className="bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors">
                   <td className="px-4 py-3 font-bold text-indigo-400 text-center text-sm whitespace-nowrap">S 급</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="block text-indigo-300 font-bold mb-1">1조 원 이상</span>
-                    <span className="text-rose-400 font-bold">+3% 이상</span>
+                    <span className="text-indigo-300 font-bold">1조 원 이상</span>
                   </td>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">10점 이상</td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
@@ -2421,8 +2455,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                 <tr className="hover:bg-white/5 transition-colors">
                   <td className="px-4 py-3 font-bold text-rose-400 text-center text-sm whitespace-nowrap">A 급</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="block text-rose-300 font-bold mb-1">5,000억 이상</span>
-                    <span className="text-rose-400 font-bold">+3% 이상</span>
+                    <span className="text-rose-300 font-bold">5,000억 이상</span>
                   </td>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">8점 이상</td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
@@ -2433,8 +2466,7 @@ function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
                 <tr className="hover:bg-white/5 transition-colors">
                   <td className="px-4 py-3 font-bold text-blue-400 text-center text-sm whitespace-nowrap">B 급</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="block text-blue-300 font-bold mb-1">1,000억 이상</span>
-                    <span className="text-rose-400 font-bold">+3% 이상</span>
+                    <span className="text-blue-300 font-bold">1,000억 이상</span>
                   </td>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">6점 이상</td>
                   <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
