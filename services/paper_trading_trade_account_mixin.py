@@ -13,6 +13,8 @@ from datetime import datetime
 from services.paper_trading_constants import (
     DEFAULT_TRADE_HISTORY_LIMIT,
     INITIAL_CASH_KRW,
+    MAX_DEPOSIT_PER_REQUEST_KRW,
+    MAX_TOTAL_DEPOSIT_KRW,
     MAX_HISTORY_LIMIT,
 )
 from services.sqlite_utils import prune_rows_by_updated_at_if_needed
@@ -408,19 +410,50 @@ class PaperTradingTradeAccountMixin:
 
     def deposit_cash(self, amount):
         """Deposit cash (Charging)"""
-        if amount <= 0:
-            return {'status': 'error', 'message': 'Amount must be positive'}
+        try:
+            normalized_amount = int(float(amount))
+        except (TypeError, ValueError):
+            return {'status': 'error', 'message': 'Amount must be a positive number'}
+
+        if normalized_amount <= 0:
+            return {'status': 'error', 'message': 'Amount must be a positive number'}
+
+        if normalized_amount > MAX_DEPOSIT_PER_REQUEST_KRW:
+            return {
+                'status': 'error',
+                'message': f'Deposit per request limit exceeded (max: {MAX_DEPOSIT_PER_REQUEST_KRW:,} KRW)',
+            }
 
         try:
             def _operation():
                 with self.get_context() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
-                        'UPDATE balance SET cash = cash + ?, total_deposit = total_deposit + ? WHERE id = 1',
-                        (amount, amount),
+                        '''
+                        UPDATE balance
+                        SET cash = cash + ?, total_deposit = total_deposit + ?
+                        WHERE id = 1 AND total_deposit + ? <= ?
+                        ''',
+                        (
+                            normalized_amount,
+                            normalized_amount,
+                            normalized_amount,
+                            MAX_TOTAL_DEPOSIT_KRW,
+                        ),
                     )
+                    if cursor.rowcount == 0:
+                        cursor.execute('SELECT total_deposit FROM balance WHERE id = 1')
+                        row = cursor.fetchone()
+                        current_total_deposit = int(float(row[0])) if row and row[0] is not None else 0
+                        return {
+                            'status': 'error',
+                            'message': (
+                                f'Total deposit limit exceeded '
+                                f'(current: {current_total_deposit:,} KRW, max: {MAX_TOTAL_DEPOSIT_KRW:,} KRW)'
+                            ),
+                        }
                     conn.commit()
-                return {'status': 'success', 'message': f'Deposited {amount:,} KRW'}
+                return {'status': 'success', 'message': f'Deposited {normalized_amount:,} KRW'}
 
             return self._execute_db_operation_with_schema_retry(_operation)
         except Exception as e:

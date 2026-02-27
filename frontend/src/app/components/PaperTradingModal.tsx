@@ -272,8 +272,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             lineWidth: 2,
           });
 
-          // 데이터 포맷팅
-          const formattedData = chartData
+          // 데이터 포맷팅 (lightweight-charts v5 입력 제한 대응)
+          const rawFormattedData = chartData
             .map(d => {
               const dateStr = typeof d.date === 'string' ? d.date.split('T')[0] : d.date;
               const value = Number(d.total_asset);
@@ -285,25 +285,36 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             .filter(d => typeof d.time === 'string' && d.time.length > 0 && Number.isFinite(d.value))
             .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
-          if (formattedData.length === 0) {
+          if (rawFormattedData.length === 0) {
             // 데이터가 아예 없으면 3일 전부터 오늘까지의 가상 데이터 생성 (사용자 요청)
             const today = new Date();
             const threeDaysAgo = new Date(today);
             threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
-            formattedData.push({ time: threeDaysAgo.toISOString().split('T')[0], value: 100000000 });
-            formattedData.push({ time: today.toISOString().split('T')[0], value: 100000000 });
-          } else if (formattedData.length === 1) {
+            rawFormattedData.push({ time: threeDaysAgo.toISOString().split('T')[0], value: 100000000 });
+            rawFormattedData.push({ time: today.toISOString().split('T')[0], value: 100000000 });
+          } else if (rawFormattedData.length === 1) {
             // 데이터가 1개뿐이면 3일 전 데이터를 시작점으로 추가
-            const firstDate = new Date(formattedData[0].time);
+            const firstDate = new Date(rawFormattedData[0].time);
             const prevDate = new Date(firstDate);
             prevDate.setDate(prevDate.getDate() - 3);
-            formattedData.unshift({
+            rawFormattedData.unshift({
               time: prevDate.toISOString().split('T')[0],
               value: 100000000 // 기본 초기 자산
             });
           }
 
+          // lightweight-charts v5는 약 ±9e13 범위를 넘는 값을 허용하지 않으므로 동적 축소
+          const MAX_CHART_ABS_VALUE = 90_000_000_000_000;
+          const maxAbsValue = rawFormattedData.reduce((max, item) => Math.max(max, Math.abs(item.value)), 0);
+          const scaleDivisor = maxAbsValue > MAX_CHART_ABS_VALUE
+            ? Math.ceil(maxAbsValue / MAX_CHART_ABS_VALUE)
+            : 1;
+
+          const formattedData = rawFormattedData.map((item) => ({
+            time: item.time,
+            value: item.value / scaleDivisor,
+          }));
 
           mainSeries.setData(formattedData);
 
@@ -318,16 +329,15 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             if (!isVisible) return;
 
             const maData = [];
-            for (let i = 0; i < chartData.length; i++) {
+            for (let i = 0; i < rawFormattedData.length; i++) {
               if (i < period - 1) continue;
               let sum = 0;
               for (let j = 0; j < period; j++) {
-                sum += Number(chartData[i - j].total_asset) || 0;
+                sum += Number(rawFormattedData[i - j].value) || 0;
               }
-              const dateStr = typeof chartData[i].date === 'string' ? chartData[i].date.split('T')[0] : chartData[i].date;
               maData.push({
-                time: dateStr,
-                value: sum / period
+                time: rawFormattedData[i].time,
+                value: (sum / period) / scaleDivisor
               });
             }
             maData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
@@ -346,7 +356,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
           // Y-Axis Formatting (Korean currency units or commas)
           chart.applyOptions({
             localization: {
-              priceFormatter: (p: number) => Math.round(p).toLocaleString(),
+              priceFormatter: (p: number) => Math.round(p * scaleDivisor).toLocaleString(),
             },
           });
 
@@ -385,9 +395,10 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
             toolTip.style.display = 'block';
 
-            const totalAsset = data.value;
-            const profit = totalAsset - 100000000;
-            const profitRate = (profit / 100000000) * 100;
+            const totalAsset = Number(data.value) * scaleDivisor;
+            const principalBase = Number(portfolio?.total_principal ?? 100000000);
+            const profit = totalAsset - principalBase;
+            const profitRate = principalBase > 0 ? (profit / principalBase) * 100 : 0;
             const isPlus = profit >= 0;
             const colorClass = isPlus ? 'text-rose-400' : 'text-blue-400';
             const sign = isPlus ? '+' : '';
@@ -434,6 +445,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
         } catch (err) {
           console.error("Failed to load/render chart:", err);
+          setChartError('차트 렌더링 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
         }
       }
     };
@@ -456,7 +468,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
         chartRef.current = null;
       }
     };
-  }, [activeTab, chartData, maToggle]);
+  }, [activeTab, chartData, maToggle, portfolio]);
 
 
   const handleDeposit = async () => {

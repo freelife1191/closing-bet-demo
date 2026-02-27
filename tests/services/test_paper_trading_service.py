@@ -16,6 +16,11 @@ from pathlib import Path
 import services.paper_trading as paper_trading_module
 from services.paper_trading import PaperTradingService
 import services.paper_trading_history_mixin as paper_trading_history_mixin
+from services.paper_trading_constants import (
+    INITIAL_CASH_KRW,
+    MAX_DEPOSIT_PER_REQUEST_KRW,
+    MAX_TOTAL_DEPOSIT_KRW,
+)
 
 
 class _FakeResponse:
@@ -251,6 +256,46 @@ def test_deposit_cash_updates_balance_and_total_deposit():
             row = cursor.fetchone()
             assert row is not None
             assert int(row[0]) == 1_000_000
+    finally:
+        _cleanup_service(service)
+
+
+def test_deposit_cash_rejects_amount_over_per_request_limit():
+    service = _build_service()
+    try:
+        before = service.get_balance()
+        result = service.deposit_cash(MAX_DEPOSIT_PER_REQUEST_KRW + 1)
+        after = service.get_balance()
+
+        assert result["status"] == "error"
+        assert "per request limit exceeded" in result["message"]
+        assert int(after) == int(before)
+    finally:
+        _cleanup_service(service)
+
+
+def test_deposit_cash_rejects_when_total_deposit_limit_exceeded():
+    service = _build_service()
+    try:
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE balance SET cash = ?, total_deposit = ? WHERE id = 1",
+                (INITIAL_CASH_KRW + MAX_TOTAL_DEPOSIT_KRW, MAX_TOTAL_DEPOSIT_KRW),
+            )
+            conn.commit()
+
+        result = service.deposit_cash(1)
+        assert result["status"] == "error"
+        assert "Total deposit limit exceeded" in result["message"]
+
+        with service.get_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT cash, total_deposit FROM balance WHERE id = 1")
+            row = cursor.fetchone()
+            assert row is not None
+            assert int(row[0]) == INITIAL_CASH_KRW + MAX_TOTAL_DEPOSIT_KRW
+            assert int(row[1]) == MAX_TOTAL_DEPOSIT_KRW
     finally:
         _cleanup_service(service)
 
