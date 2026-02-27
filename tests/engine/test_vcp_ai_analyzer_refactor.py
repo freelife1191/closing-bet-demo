@@ -521,7 +521,7 @@ def test_analyze_with_zai_uses_openai_client(monkeypatch):
                     choices=[
                         SimpleNamespace(
                             message=SimpleNamespace(
-                                content='{"action":"BUY","confidence":88,"reason":"ok"}'
+                                content='{"action":"BUY","confidence":88,"reason":"VCP 점수와 수급 개선 흐름이 동시에 확인되어 단기 추세 상방 가능성이 높습니다. 다만 전고점 저항 부근에서 거래량이 둔화되면 변동성 확대가 나올 수 있어 분할 진입이 필요합니다."}'
                             )
                         )
                     ]
@@ -569,7 +569,7 @@ def test_analyze_with_zai_switches_model_when_response_quality_is_low(monkeypatc
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content='{"action":"BUY","confidence":79,"reason":"VCP 점수와 수급 개선 신호를 근거로 단기 매수 우위입니다."}'
+                            content='{"action":"BUY","confidence":79,"reason":"VCP 점수와 수급 개선 신호를 근거로 단기 매수 우위가 유지됩니다. 다만 추세 확인 전까지는 거래량 동반 여부를 점검하면서 단계적으로 비중을 확대하는 접근이 바람직합니다."}'
                         )
                     )
                 ]
@@ -627,7 +627,7 @@ def test_analyze_with_zai_low_quality_model_is_retried_for_next_requests(monkeyp
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content='{"action":"BUY","confidence":77,"reason":"수급 유입과 거래량 수축이 확인되어 매수 우위입니다."}'
+                            content='{"action":"BUY","confidence":77,"reason":"수급 유입과 거래량 수축이 동시에 확인되어 매수 우위 시나리오가 유효합니다. 다만 장중 변동성 확대 시 손절 기준을 명확히 두고 분할 매수로 대응하는 전략이 필요합니다."}'
                         )
                     )
                 ]
@@ -676,7 +676,7 @@ def test_analyze_with_zai_retries_when_first_response_not_json(monkeypatch):
             choices=[
                 SimpleNamespace(
                     message=SimpleNamespace(
-                        content='{"action":"HOLD","confidence":63,"reason":"재시도 성공"}'
+                        content='{"action":"HOLD","confidence":63,"reason":"VCP 패턴은 유지되지만 수급 강도가 혼조라 추세 확신이 부족합니다. 단기 방향성이 확인될 때까지 관망하며 거래량 회복 여부를 추가 확인하는 전략이 적절합니다."}'
                     )
                 )
             ]
@@ -714,7 +714,7 @@ def test_analyze_with_zai_uses_reasoning_content_when_content_is_blank(monkeypat
                         SimpleNamespace(
                             message=SimpleNamespace(
                                 content="   ",
-                                reasoning_content='{"action":"BUY","confidence":71,"reason":"수급 개선"}',
+                                reasoning_content='{"action":"BUY","confidence":71,"reason":"외국인·기관 수급이 개선되고 변동성 수축이 유지되어 단기 상방 가능성이 높습니다. 다만 전고점 부근에서는 차익 매물 출회 가능성이 있어 분할 진입과 리스크 관리가 필요합니다."}',
                             )
                         )
                     ]
@@ -748,7 +748,7 @@ def test_analyze_with_zai_repairs_non_json_response_with_followup_call(monkeypat
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content='{"action":"HOLD","confidence":68,"reason":"보정 성공"}'
+                            content='{"action":"HOLD","confidence":68,"reason":"VCP 신호는 유효하지만 수급 모멘텀이 강하지 않아 즉시 추격 매수는 부담이 있습니다. 추세 재확인 전까지는 관망하고 거래량 회복 여부를 확인하는 것이 유리합니다."}'
                         )
                     )
                 ]
@@ -838,7 +838,23 @@ def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkey
     assert result["action"] == "BUY"
     assert result["confidence"] >= 60
     assert "현재 판단은 BUY" in result["reason"]
-    assert calls["count"] == 18
+    from engine.config import app_config
+    from engine.vcp_ai_analyzer import ZAI_FALLBACK_MODEL_CHAIN
+
+    model_chain: list[str] = []
+    seen_models: set[str] = set()
+    for candidate in [str(app_config.ZAI_MODEL or "").strip(), *ZAI_FALLBACK_MODEL_CHAIN]:
+        model_name = str(candidate or "").strip()
+        if not model_name:
+            continue
+        key = model_name.lower()
+        if key in seen_models:
+            continue
+        seen_models.add(key)
+        model_chain.append(model_name)
+
+    # 각 모델당 최대 3회 시도, 시도마다 본응답+JSON보정 2회 호출
+    assert calls["count"] == len(model_chain) * 3 * 2
 
 
 def test_analyze_with_zai_uses_rule_based_fallback_when_exception_occurs(monkeypatch):
@@ -893,7 +909,7 @@ def test_analyze_with_zai_switches_model_on_429_failure_response(monkeypatch):
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content='{"action":"BUY","confidence":73,"reason":"수급 유입으로 매수 우위"}'
+                                content='{"action":"BUY","confidence":73,"reason":"수급 유입과 변동성 수축이 동시에 나타나 단기 매수 우위 시나리오가 성립됩니다. 다만 저항 구간 돌파 실패 가능성을 고려해 분할 진입과 손절 기준을 병행해야 합니다."}'
                         )
                     )
                 ]
@@ -940,7 +956,7 @@ def test_analyze_with_zai_429_does_not_block_model_for_next_requests(monkeypatch
             choices=[
                 SimpleNamespace(
                     message=SimpleNamespace(
-                        content='{"action":"BUY","confidence":72,"reason":"ok"}'
+                        content='{"action":"BUY","confidence":72,"reason":"외국인·기관 수급이 개선되고 VCP 패턴도 유지되어 단기 상방 가능성이 높습니다. 다만 추세 확인 전에는 거래량 변화와 지지선 이탈 여부를 함께 점검해야 합니다."}'
                     )
                 )
             ]
@@ -993,7 +1009,7 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content='{"action":"HOLD","confidence":66,"reason":"수급 혼조로 관망 유지"}'
+                                content='{"action":"HOLD","confidence":66,"reason":"수급 혼조와 추세 모멘텀 둔화가 함께 나타나 단기 방향성 확신이 부족합니다. 돌파 거래량이 확인될 때까지 관망하며 변동성 확대 구간을 피하는 전략이 적절합니다."}'
                         )
                     )
                 ]

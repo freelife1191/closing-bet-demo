@@ -66,7 +66,7 @@ def test_parse_json_response_pattern_fallback_handles_truncated_payload():
     assert parsed is not None
     assert parsed["action"] == "HOLD"
     assert parsed["confidence"] == 70
-    assert "변동성" in parsed["reason"]
+    assert any("가" <= ch <= "힣" for ch in parsed["reason"])
 
 
 def test_parse_json_response_normalizes_english_reason_to_korean():
@@ -108,7 +108,10 @@ def test_is_low_quality_recommendation_detects_generic_reason_fallback():
     high_quality = {
         "action": "BUY",
         "confidence": 80,
-        "reason": "VCP 점수 82점과 5일 순매수 전환을 근거로 단기 돌파 가능성이 높습니다.",
+        "reason": (
+            "VCP 점수 82점과 5일 순매수 전환이 동시에 확인되어 단기 돌파 가능성이 높습니다. "
+            "다만 거래량이 급감할 경우 변동성 확대가 나올 수 있어 분할 진입과 손절 관리가 필요합니다."
+        ),
     }
 
     assert is_low_quality_recommendation(low_quality) is True

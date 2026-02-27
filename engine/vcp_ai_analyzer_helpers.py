@@ -100,6 +100,12 @@ _LOW_QUALITY_REASON_PATTERNS = (
     re.compile(r"return\s+exactly\s+one\s+.*json", re.IGNORECASE),
     re.compile(r"json\s+only", re.IGNORECASE),
     re.compile(r"brief\s+explanation\s+in\s+korean", re.IGNORECASE),
+    re.compile(r"let\s+me\s+analy[sz]e", re.IGNORECASE),
+    re.compile(r"need\s+to\s+combine", re.IGNORECASE),
+    re.compile(r"maybe\s+something\s+like", re.IGNORECASE),
+    re.compile(r"determine\s+the\s+action", re.IGNORECASE),
+    re.compile(r"vcp\s+pattern\s+confirmed", re.IGNORECASE),
+    re.compile(r"vcp\s*패턴\s*확인", re.IGNORECASE),
 )
 _GENERIC_REASON_FALLBACKS = {
     "외국인·기관 순매수와 VCP 패턴을 근거로 매수 관점이 우세합니다.",
@@ -107,6 +113,37 @@ _GENERIC_REASON_FALLBACKS = {
     "VCP 패턴 약화와 수급 부담을 고려할 때 매도 관점이 우세합니다.",
     "VCP 패턴과 수급 신호가 혼재해 현재는 관망 관점이 적절합니다.",
 }
+_STRUCTURED_REASON_SECTIONS = (
+    "[핵심 투자 포인트]",
+    "[리스크 요인]",
+    "[종합 의견]",
+)
+_MIN_REASON_CHARS = 70
+_MIN_REASON_SENTENCE_UNITS = 2
+
+
+def _normalize_reason_text(raw_reason: Any) -> str:
+    text = str(raw_reason or "")
+    if not text:
+        return ""
+
+    lines: list[str] = []
+    for line in text.splitlines():
+        compact = re.sub(r"\s+", " ", line).strip()
+        if compact:
+            lines.append(compact)
+    if lines:
+        return "\n".join(lines).strip()
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _count_sentence_like_units(text: str) -> int:
+    normalized = " ".join(str(text or "").replace("\n", " ").split()).strip()
+    if not normalized:
+        return 0
+    chunks = [chunk.strip() for chunk in re.split(r"[.!?]+", normalized) if chunk.strip()]
+    meaningful_chunks = [chunk for chunk in chunks if len(chunk) >= 8]
+    return len(meaningful_chunks)
 
 
 def _build_korean_reason_fallback(action_value: str, source_text: str = "") -> str:
@@ -136,10 +173,15 @@ def _build_korean_reason_fallback(action_value: str, source_text: str = "") -> s
 
 
 def _is_low_quality_reason(raw_reason: str) -> bool:
-    normalized = " ".join(str(raw_reason or "").split()).strip()
+    normalized = _normalize_reason_text(raw_reason)
     if not normalized:
         return True
     if normalized.lower() in {"n/a", "none", "null", "...", "tbd"}:
+        return True
+    if len(normalized) <= 12:
+        return True
+    lowered = normalized.lower()
+    if lowered.endswith((" and", " or", " 및", " 그리고", " 또는", "으로")):
         return True
     return any(pattern.search(normalized) for pattern in _LOW_QUALITY_REASON_PATTERNS)
 
@@ -160,25 +202,42 @@ def is_low_quality_recommendation(result: Optional[dict[str, Any]]) -> bool:
     if confidence < 0 or confidence > 100:
         return True
 
-    reason = " ".join(str(result.get("reason") or "").split()).strip()
+    reason = _normalize_reason_text(result.get("reason") or "")
     if not reason:
         return True
     if reason in _GENERIC_REASON_FALLBACKS:
         return True
-    return _is_low_quality_reason(reason)
+    if _is_low_quality_reason(reason):
+        return True
+
+    has_structured_sections = all(section in reason for section in _STRUCTURED_REASON_SECTIONS)
+    sentence_units = _count_sentence_like_units(reason)
+    if not has_structured_sections:
+        if len(reason) < _MIN_REASON_CHARS:
+            return True
+        if sentence_units < _MIN_REASON_SENTENCE_UNITS:
+            return True
+
+    hangul_chars = len(re.findall(r"[가-힣]", reason))
+    english_chars = len(re.findall(r"[A-Za-z]", reason))
+    if english_chars >= 20 and english_chars > max(10, int(hangul_chars * 1.2)):
+        return True
+    return False
 
 
 def _normalize_reason_value(value: Any, action_value: str) -> str:
-    raw_reason = " ".join(str(value or "").split()).strip()
+    raw_reason = _normalize_reason_text(value)
     if _is_low_quality_reason(raw_reason):
         return _build_korean_reason_fallback(action_value)
 
-    if re.search(r"[가-힣]", raw_reason):
-        return raw_reason[:600]
-
     english_chars = len(re.findall(r"[A-Za-z]", raw_reason))
+    hangul_chars = len(re.findall(r"[가-힣]", raw_reason))
     ascii_chars = sum(1 for ch in raw_reason if ord(ch) < 128 and not ch.isspace())
-    is_english_like = english_chars >= 5 and ascii_chars >= max(5, int(len(raw_reason) * 0.6))
+    is_english_like = (
+        english_chars >= 15
+        and english_chars > max(8, int(hangul_chars * 1.2))
+        and ascii_chars >= max(10, int(len(raw_reason) * 0.5))
+    )
     has_instruction_phrase = "brief explanation in korean" in raw_reason.lower()
 
     if is_english_like or has_instruction_phrase:
@@ -538,9 +597,21 @@ def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
 1. VCP 패턴과 수급 상황을 기술적 관점에서 분석
 2. 데이터에 기반한 포지션 의견(매수/매도/관망) 제시
 3. 신뢰도(0-100%) 평가
+4. reason은 반드시 한국어로 상세히 작성
+   - 2개 이상의 문장(최소 90자 이상)
+   - 가능하면 아래 섹션 구조 유지:
+     [핵심 투자 포인트]
+     • 포인트 1
+     • 포인트 2
+
+     [리스크 요인]
+     • 리스크 1
+
+     [종합 의견]
+     종합 코멘트
 
 [출력 형식 - 반드시 JSON만 출력]
-{{"action": "BUY|SELL|HOLD", "confidence": 75, "reason": "기술적 분석 요약 (한국어, 2-3문장)"}}
+{{"action": "BUY|SELL|HOLD", "confidence": 75, "reason": "[핵심 투자 포인트]\\n• ...\\n• ...\\n\\n[리스크 요인]\\n• ...\\n\\n[종합 의견]\\n..."}}
 """
 
 
