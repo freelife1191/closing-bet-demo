@@ -564,7 +564,7 @@ def test_analyze_with_zai_switches_model_when_response_quality_is_low(monkeypatc
                     )
                 ]
             )
-        if model == "glm-4.5-Flash":
+        if model == "glm-4.6V-Flash":
             return SimpleNamespace(
                 choices=[
                     SimpleNamespace(
@@ -598,7 +598,7 @@ def test_analyze_with_zai_switches_model_when_response_quality_is_low(monkeypatc
     assert result["action"] == "BUY"
     assert result["confidence"] == 79
     assert calls.count("primary-zai-model") >= 1
-    assert "glm-4.5-Flash" in calls
+    assert "glm-4.6V-Flash" in calls
     assert any("가" <= ch <= "힣" for ch in result["reason"])
 
 
@@ -622,7 +622,7 @@ def test_analyze_with_zai_low_quality_model_is_retried_for_next_requests(monkeyp
                     )
                 ]
             )
-        if model == "glm-4.5-Flash":
+        if model == "glm-4.6V-Flash":
             return SimpleNamespace(
                 choices=[
                     SimpleNamespace(
@@ -656,11 +656,11 @@ def test_analyze_with_zai_low_quality_model_is_retried_for_next_requests(monkeyp
     total_primary_calls = calls.count("primary-zai-model")
 
     assert first is not None and second is not None
-    # 모델 전환 전 동일 모델을 최소 3회 증분 재시도하고,
+    # 품질 미달 시 동일 모델 반복 없이 즉시 다음 모델로 전환하고,
     # 다음 종목에서도 primary 모델을 다시 시도한다.
-    assert first_primary_calls >= 3
+    assert first_primary_calls == 1
     assert total_primary_calls > first_primary_calls
-    assert calls.count("glm-4.5-Flash") >= 2
+    assert calls.count("glm-4.6V-Flash") >= 2
 
 
 def test_analyze_with_zai_retries_when_first_response_not_json(monkeypatch):
@@ -853,8 +853,8 @@ def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkey
         seen_models.add(key)
         model_chain.append(model_name)
 
-    # 각 모델당 최대 3회 시도, 시도마다 본응답+JSON보정 2회 호출
-    assert calls["count"] == len(model_chain) * 3 * 2
+    # 각 모델당 1회 시도 + JSON 보정 1회 호출
+    assert calls["count"] == len(model_chain) * 2
 
 
 def test_analyze_with_zai_uses_rule_based_fallback_when_exception_occurs(monkeypatch):
@@ -904,7 +904,7 @@ def test_analyze_with_zai_switches_model_on_429_failure_response(monkeypatch):
         calls.append(model)
         if model == "primary-zai-model":
             raise RuntimeError("Request failed with status code 429")
-        if model == "glm-4.5-Flash":
+        if model == "glm-4.6V-Flash":
             return SimpleNamespace(
                 choices=[
                     SimpleNamespace(
@@ -940,8 +940,8 @@ def test_analyze_with_zai_switches_model_on_429_failure_response(monkeypatch):
 
     assert result is not None
     assert result["action"] == "BUY"
-    assert calls.count("primary-zai-model") == 3
-    assert "glm-4.5-Flash" in calls
+    assert calls.count("primary-zai-model") == 1
+    assert "glm-4.6V-Flash" in calls
 
 
 def test_analyze_with_zai_429_does_not_block_model_for_next_requests(monkeypatch):
@@ -988,9 +988,9 @@ def test_analyze_with_zai_429_does_not_block_model_for_next_requests(monkeypatch
     total_primary_calls = calls.count("primary-zai-model")
 
     assert first is not None and second is not None
-    # 429가 발생해도 동일 모델 최소 3회 재시도 후 다음 모델로 전환하며,
+    # 429가 발생하면 동일 모델 반복 없이 다음 모델로 전환하며,
     # 다음 종목에서도 primary 모델을 다시 시도한다.
-    assert first_primary_calls == 3
+    assert first_primary_calls == 1
     assert total_primary_calls > first_primary_calls
 
 
@@ -1002,9 +1002,9 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
         calls.append(model)
         if model == "primary-zai-model":
             raise RuntimeError("status=429 rate limited")
-        if model == "glm-4.5-Flash":
-            raise RuntimeError("Service Unavailable (503)")
         if model == "glm-4.6V-Flash":
+            raise RuntimeError("Service Unavailable (503)")
+        if model == "glm-4.7":
             return SimpleNamespace(
                 choices=[
                     SimpleNamespace(
@@ -1040,9 +1040,9 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
 
     assert result is not None
     assert result["action"] == "HOLD"
-    assert calls.count("primary-zai-model") == 3
-    assert calls.count("glm-4.5-Flash") == 3
-    assert "glm-4.6V-Flash" in calls
+    assert calls.count("primary-zai-model") == 1
+    assert calls.count("glm-4.6V-Flash") == 1
+    assert "glm-4.7" in calls
 
 
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):

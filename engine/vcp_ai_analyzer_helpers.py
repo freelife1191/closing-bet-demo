@@ -611,6 +611,7 @@ def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
      종합 코멘트
 
 [출력 형식 - 반드시 JSON만 출력]
+JSON 외 어떤 설명/코드블록/머리말도 출력하지 말고, 반드시 '{{'로 시작해 '}}'로 끝나는 단일 JSON 객체만 출력하십시오.
 {{"action": "BUY|SELL|HOLD", "confidence": 75, "reason": "[핵심 투자 포인트]\\n• ...\\n• ...\\n\\n[리스크 요인]\\n• ...\\n\\n[종합 의견]\\n..."}}
 """
 

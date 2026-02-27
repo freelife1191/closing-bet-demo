@@ -47,8 +47,8 @@ GEMINI_RETRY_MODEL_CHAIN = [
     "gemini-3-flash-preview",
 ]
 ZAI_FALLBACK_MODEL_CHAIN = [
-    "glm-4.5-Flash",
     "glm-4.6V-Flash",
+    "glm-4.7",
 ]
 
 
@@ -439,11 +439,8 @@ class VCPMultiAIAnalyzer:
                 )
                 return fallback_result
 
-            # 요청사항: 모델 전환 전 동일 모델 최소 3회 증분 재시도
-            max_parse_attempts = max(
-                3,
-                int(getattr(app_config, "VCP_ZAI_MIN_ATTEMPTS_PER_MODEL", 3) or 3),
-            )
+            # 요청사항: 재시도는 동일 모델 반복이 아닌 모델 전환 기반으로 수행
+            max_parse_attempts = 1
             request_timeout = float(getattr(app_config, "VCP_ZAI_API_TIMEOUT", 180))
             last_response_text = ""
             last_error: Exception | None = None
@@ -464,10 +461,6 @@ class VCPMultiAIAnalyzer:
                     except (TypeError, ValueError):
                         return None
                 return None
-
-            def _retry_delay(attempt_index: int) -> float:
-                # 1.5s -> 3.0s -> 4.5s 형태의 증분 지연
-                return min(1.5 * float(attempt_index + 1), 6.0)
 
             for model_idx, model in enumerate(model_chain):
                 should_try_next_model = False
@@ -537,6 +530,7 @@ class VCPMultiAIAnalyzer:
                             "content": (
                                 "당신은 한국 주식 기술적 분석가입니다. "
                                 "반드시 JSON 객체 1개만 출력하고 코드블록/설명문/마크다운을 금지합니다. "
+                                "JSON 외 텍스트를 단 한 글자도 출력하지 말고, 반드시 '{'로 시작해 '}'로 끝내십시오. "
                                 "reason은 반드시 한국어로 상세하게 작성하십시오. "
                                 "reason은 최소 2문장, 최소 90자 이상이어야 합니다. "
                                 "가능하면 아래 섹션 구조를 포함하십시오: "
@@ -555,7 +549,7 @@ class VCPMultiAIAnalyzer:
                         response_text = await asyncio.to_thread(
                             _call,
                             primary_messages,
-                            attempt == 0,
+                            True,
                             900,
                             attempt_timeout,
                         )
@@ -580,7 +574,7 @@ class VCPMultiAIAnalyzer:
                             )
 
                         # 1차 응답이 JSON이 아니거나 품질 미달일 경우, 동일 모델에 JSON 보정 요청을 추가로 수행한다.
-                        if last_response_text.strip():
+                        if (not quality_low) and last_response_text.strip():
                             repair_input = last_response_text.strip()
                             if len(repair_input) > 4000:
                                 repair_input = repair_input[:4000]
@@ -591,6 +585,7 @@ class VCPMultiAIAnalyzer:
                                     "content": (
                                         "당신은 주식 분석 텍스트를 JSON으로 정규화하는 변환기입니다. "
                                         "출력은 JSON 객체 1개만 허용됩니다. "
+                                        "JSON 외 텍스트를 단 한 글자도 출력하지 말고, 반드시 '{'로 시작해 '}'로 끝내십시오. "
                                         "reason은 반드시 한국어로 상세하게 작성하십시오. "
                                         "reason은 최소 2문장, 최소 90자 이상이어야 합니다. "
                                         "가능하면 [핵심 투자 포인트], [리스크 요인], [종합 의견] 섹션을 포함하십시오. "
@@ -613,7 +608,7 @@ class VCPMultiAIAnalyzer:
                                 _call,
                                 repair_messages,
                                 True,
-                                600,
+                                800,
                                 attempt_timeout,
                             )
                             repaired_result = self._parse_json_response(str(repaired_text or ""))
@@ -630,23 +625,12 @@ class VCPMultiAIAnalyzer:
                                     f"(model={model}, attempt={attempt+1})"
                                 )
 
-                        has_more_retries = attempt < max_parse_attempts - 1
-
                         if quality_low:
-                            if has_more_retries:
-                                delay = _retry_delay(attempt)
-                                logger.warning(
-                                    f"[Z.ai] {stock_name} 응답 품질 미달. 동일 모델 재시도 "
-                                    f"(model={model}, {attempt+1}/{max_parse_attempts-1}, delay={delay:.1f}s)"
-                                )
-                                await asyncio.sleep(delay)
-                                continue
-
                             if model_idx < len(model_chain) - 1:
                                 next_model = model_chain[model_idx + 1]
                                 logger.warning(
-                                    f"[Z.ai] {stock_name} 응답 품질 미달 최대 재시도 소진으로 모델 전환 "
-                                    f"({model} -> {next_model}, attempts={max_parse_attempts})"
+                                    f"[Z.ai] {stock_name} 응답 품질 미달로 모델 전환 "
+                                    f"({model} -> {next_model})"
                                 )
                                 should_try_next_model = True
                             else:
@@ -656,20 +640,11 @@ class VCPMultiAIAnalyzer:
                                 )
                             break
 
-                        if has_more_retries:
-                            delay = _retry_delay(attempt)
-                            logger.warning(
-                                f"[Z.ai] JSON 파싱 실패 for {stock_name}. 동일 모델 재시도 "
-                                f"(model={model}, {attempt+1}/{max_parse_attempts-1}, delay={delay:.1f}s)"
-                            )
-                            await asyncio.sleep(delay)
-                            continue
-
                         if model_idx < len(model_chain) - 1:
                             next_model = model_chain[model_idx + 1]
                             logger.warning(
-                                f"[Z.ai] {stock_name} JSON 파싱 재시도 소진으로 모델 전환 "
-                                f"({model} -> {next_model}, attempts={max_parse_attempts})"
+                                f"[Z.ai] {stock_name} JSON 파싱 실패로 모델 전환 "
+                                f"({model} -> {next_model})"
                             )
                             should_try_next_model = True
                         break
@@ -677,23 +652,13 @@ class VCPMultiAIAnalyzer:
                         last_error = error
                         elapsed = time.time() - start
                         status_code = _extract_status_code(error)
-                        if attempt < max_parse_attempts - 1:
-                            delay = _retry_delay(attempt)
-                            reason = f"status={status_code}" if status_code is not None else str(error)
-                            logger.warning(
-                                f"[Z.ai] {stock_name} 호출 실패({reason}) -> 동일 모델 재시도 "
-                                f"(model={model}, {attempt+1}/{max_parse_attempts-1}, "
-                                f"elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s, delay={delay:.1f}s)"
-                            )
-                            await asyncio.sleep(delay)
-                            continue
-
                         if model_idx < len(model_chain) - 1:
                             next_model = model_chain[model_idx + 1]
                             reason = f"status={status_code}" if status_code is not None else str(error)
                             logger.warning(
-                                f"[Z.ai] {stock_name} 동일 모델 재시도 소진으로 모델 전환 "
-                                f"({model} -> {next_model}, reason={reason}, attempts={max_parse_attempts})"
+                                f"[Z.ai] {stock_name} 호출 실패로 모델 전환 "
+                                f"({model} -> {next_model}, reason={reason}, "
+                                f"elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s)"
                             )
                             should_try_next_model = True
                             break
