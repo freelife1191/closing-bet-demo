@@ -129,6 +129,46 @@ class _CrashHighTechGate(_FakeMarketGate):
         }
 
 
+class _MissingIndicesButSectorCrashGate(_FakeMarketGate):
+    def _score_trend(self, _row):
+        return 25
+
+    def _score_rsi(self, _row):
+        return 25
+
+    def _score_macd(self, _row):
+        return 20
+
+    def _score_volume(self, _row):
+        return 15
+
+    def _score_rs(self, _row):
+        return 10
+
+    def _get_global_data(self, _target_date):
+        return {
+            "indices": {},
+            "commodities": {},
+            "crypto": {},
+        }
+
+    def _get_sector_data(self, _target_date, global_data=None):
+        del global_data
+        return {
+            "반도체": -7.29,
+            "2차전지": -9.11,
+            "자동차": -2.53,
+            "헬스케어": -8.04,
+            "IT": -9.65,
+            "은행": -5.14,
+            "철강": -4.46,
+            "증권": -7.98,
+            "조선": -4.44,
+            "에너지": -0.54,
+            "KOSPI 200": -7.24,
+        }
+
+
 def test_analyze_market_state_builds_expected_payload():
     result = analyze_market_state(_FakeMarketGate(), target_date="2026-02-21", logger=logging.getLogger("test"))
 
@@ -152,6 +192,18 @@ def test_analyze_market_state_does_not_require_supply_side_path():
 
 def test_analyze_market_state_applies_intraday_market_crash_penalty():
     result = analyze_market_state(_CrashHighTechGate(), target_date="2026-02-21", logger=logging.getLogger("test"))
+
+    assert result["details"]["tech_score"] == 95
+    assert result["total_score"] < 40
+    assert result["status"] == "약세장 (Bearish)"
+
+
+def test_analyze_market_state_penalizes_sector_crash_when_indices_missing():
+    result = analyze_market_state(
+        _MissingIndicesButSectorCrashGate(),
+        target_date="2026-02-21",
+        logger=logging.getLogger("test"),
+    )
 
     assert result["details"]["tech_score"] == 95
     assert result["total_score"] < 40

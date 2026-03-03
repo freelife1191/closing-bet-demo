@@ -9,6 +9,7 @@ MarketGate.analyze 본문을 분리해 MarketGate 클래스를 오케스트레�
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime
 from typing import Any
 
@@ -56,6 +57,52 @@ def _calculate_intraday_market_drop_penalty(
     return 0
 
 
+def _resolve_kospi_change(
+    *,
+    global_kospi_change: Any,
+    sector_data: dict[str, Any],
+    fallback_change: float,
+) -> float:
+    resolved = _to_float_or_none(global_kospi_change)
+    if resolved is not None:
+        return resolved
+
+    sector_kospi200 = _to_float_or_none(sector_data.get("KOSPI 200"))
+    if sector_kospi200 is not None:
+        return sector_kospi200
+
+    return float(fallback_change)
+
+
+def _calculate_sector_crash_penalty(sector_data: dict[str, Any]) -> int:
+    """지수 수집 실패 시에도 섹터 급락 폭을 기반으로 강세 오판을 방지한다."""
+    if not isinstance(sector_data, dict) or not sector_data:
+        return 0
+
+    changes: list[float] = []
+    for raw_value in sector_data.values():
+        value = _to_float_or_none(raw_value)
+        if value is not None and math.isfinite(value):
+            changes.append(value)
+
+    if len(changes) < 4:
+        return 0
+
+    negative_ratio = sum(1 for value in changes if value < 0) / len(changes)
+    average_change = sum(changes) / len(changes)
+    kospi200_change = _to_float_or_none(sector_data.get("KOSPI 200"))
+
+    if kospi200_change is not None and kospi200_change <= -5.0 and negative_ratio >= 0.7:
+        return 60
+    if kospi200_change is not None and kospi200_change <= -3.5 and negative_ratio >= 0.6:
+        return 45
+    if average_change <= -2.0 and negative_ratio >= 0.7:
+        return 30
+    if average_change <= -1.0 and negative_ratio >= 0.6:
+        return 15
+    return 0
+
+
 def analyze_market_state(market_gate: Any, target_date: str | None, logger: logging.Logger) -> dict[str, Any]:
     """MarketGate 인스턴스 의존성을 이용해 시장 상태 분석을 수행한다."""
     try:
@@ -86,14 +133,21 @@ def analyze_market_state(market_gate: Any, target_date: str | None, logger: logg
 
         real_kospi = global_data.get("indices", {}).get("kospi", {})
         kospi_close = real_kospi.get("value", float(current_tech["close"]))
-        kospi_change = real_kospi.get("change_pct", float(current_tech["change_pct"]))
-        kosdaq_change = global_data.get("indices", {}).get("kosdaq", {}).get("change_pct", 0)
+        kospi_change = _resolve_kospi_change(
+            global_kospi_change=real_kospi.get("change_pct"),
+            sector_data=sector_data,
+            fallback_change=float(current_tech["change_pct"]),
+        )
+        raw_kosdaq_change = global_data.get("indices", {}).get("kosdaq", {}).get("change_pct")
+        kosdaq_change = _to_float_or_none(raw_kosdaq_change)
 
         intraday_penalty = _calculate_intraday_market_drop_penalty(
             kospi_change=_to_float_or_none(kospi_change),
-            kosdaq_change=_to_float_or_none(kosdaq_change),
+            kosdaq_change=kosdaq_change,
         )
-        total_score = min(max(tech_score - intraday_penalty, 0), 100)
+        sector_penalty = _calculate_sector_crash_penalty(sector_data)
+        market_drop_penalty = max(intraday_penalty, sector_penalty)
+        total_score = min(max(tech_score - market_drop_penalty, 0), 100)
 
         is_open = total_score >= 40
         gate_reason = build_gate_reason_impl(total_score, macro_status)
@@ -104,7 +158,7 @@ def analyze_market_state(market_gate: Any, target_date: str | None, logger: logg
             "kospi_close": kospi_close,
             "kospi_change": kospi_change,
             "kosdaq_close": global_data.get("indices", {}).get("kosdaq", {}).get("value", 0),
-            "kosdaq_change_pct": kosdaq_change,
+            "kosdaq_change_pct": kosdaq_change if kosdaq_change is not None else 0,
             "usd_krw": usd_krw,
             "total_score": total_score,
             "label": label,
@@ -116,6 +170,8 @@ def analyze_market_state(market_gate: Any, target_date: str | None, logger: logg
             "details": {
                 "tech_score": int(tech_score),
                 "intraday_penalty": int(intraday_penalty),
+                "sector_penalty": int(sector_penalty),
+                "market_drop_penalty": int(market_drop_penalty),
                 "rs_score": score_rs,
                 "trend_score": score_trend,
                 "rsi_score": score_rsi,
