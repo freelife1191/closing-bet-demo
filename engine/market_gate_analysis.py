@@ -25,6 +25,37 @@ def _to_date_text(value: Any) -> str:
     return str(value)[:10]
 
 
+def _to_float_or_none(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _calculate_intraday_market_drop_penalty(
+    *,
+    kospi_change: float | None,
+    kosdaq_change: float | None,
+) -> int:
+    """실시간 지수 급락을 Market Gate 점수에 반영하는 보정치."""
+    if kospi_change is None or kosdaq_change is None:
+        return 0
+
+    if kospi_change <= -3.5 and kosdaq_change <= -3.5:
+        return 60
+    if kospi_change <= -2.5 and kosdaq_change <= -2.5:
+        return 45
+    if kospi_change <= -1.5 and kosdaq_change <= -1.5:
+        return 30
+    if min(kospi_change, kosdaq_change) <= -2.0:
+        return 20
+    if min(kospi_change, kosdaq_change) <= -1.0:
+        return 10
+    return 0
+
+
 def analyze_market_state(market_gate: Any, target_date: str | None, logger: logging.Logger) -> dict[str, Any]:
     """MarketGate 인스턴스 의존성을 이용해 시장 상태 분석을 수행한다."""
     try:
@@ -48,13 +79,7 @@ def analyze_market_state(market_gate: Any, target_date: str | None, logger: logg
         score_rs = market_gate._score_rs(current_tech)
 
         tech_score = score_trend + score_rsi + score_macd + score_vol + score_rs
-        total_score = min(tech_score, 100)
-
         _, macro_status = market_gate._score_macro(usd_krw)
-
-        is_open = total_score >= 40
-        gate_reason = build_gate_reason_impl(total_score, macro_status)
-        status, label, color = build_market_status_impl(total_score)
 
         global_data = market_gate._get_global_data(target_date)
         sector_data = market_gate._get_sector_data(target_date, global_data=global_data)
@@ -62,13 +87,24 @@ def analyze_market_state(market_gate: Any, target_date: str | None, logger: logg
         real_kospi = global_data.get("indices", {}).get("kospi", {})
         kospi_close = real_kospi.get("value", float(current_tech["close"]))
         kospi_change = real_kospi.get("change_pct", float(current_tech["change_pct"]))
+        kosdaq_change = global_data.get("indices", {}).get("kosdaq", {}).get("change_pct", 0)
+
+        intraday_penalty = _calculate_intraday_market_drop_penalty(
+            kospi_change=_to_float_or_none(kospi_change),
+            kosdaq_change=_to_float_or_none(kosdaq_change),
+        )
+        total_score = min(max(tech_score - intraday_penalty, 0), 100)
+
+        is_open = total_score >= 40
+        gate_reason = build_gate_reason_impl(total_score, macro_status)
+        status, label, color = build_market_status_impl(total_score)
 
         return {
             "timestamp": datetime.now().isoformat(),
             "kospi_close": kospi_close,
             "kospi_change": kospi_change,
             "kosdaq_close": global_data.get("indices", {}).get("kosdaq", {}).get("value", 0),
-            "kosdaq_change_pct": global_data.get("indices", {}).get("kosdaq", {}).get("change_pct", 0),
+            "kosdaq_change_pct": kosdaq_change,
             "usd_krw": usd_krw,
             "total_score": total_score,
             "label": label,
@@ -78,7 +114,8 @@ def analyze_market_state(market_gate: Any, target_date: str | None, logger: logg
             "color": color,
             "dataset_date": str(current_tech["date"]),
             "details": {
-                "tech_score": int(total_score),
+                "tech_score": int(tech_score),
+                "intraday_penalty": int(intraday_penalty),
                 "rs_score": score_rs,
                 "trend_score": score_trend,
                 "rsi_score": score_rsi,

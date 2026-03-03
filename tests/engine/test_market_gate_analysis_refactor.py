@@ -102,6 +102,33 @@ class _SupplyFailureGate(_FakeMarketGate):
         raise AssertionError("supply score should not be calculated")
 
 
+class _CrashHighTechGate(_FakeMarketGate):
+    def _score_trend(self, _row):
+        return 25
+
+    def _score_rsi(self, _row):
+        return 25
+
+    def _score_macd(self, _row):
+        return 20
+
+    def _score_volume(self, _row):
+        return 15
+
+    def _score_rs(self, _row):
+        return 10
+
+    def _get_global_data(self, _target_date):
+        return {
+            "indices": {
+                "kospi": {"value": 2520.0, "change_pct": -3.8},
+                "kosdaq": {"value": 780.0, "change_pct": -4.2},
+            },
+            "commodities": {},
+            "crypto": {},
+        }
+
+
 def test_analyze_market_state_builds_expected_payload():
     result = analyze_market_state(_FakeMarketGate(), target_date="2026-02-21", logger=logging.getLogger("test"))
 
@@ -121,3 +148,11 @@ def test_analyze_market_state_returns_default_when_price_data_empty():
 def test_analyze_market_state_does_not_require_supply_side_path():
     result = analyze_market_state(_SupplyFailureGate(), target_date="2026-02-21", logger=logging.getLogger("test"))
     assert result["total_score"] == 75
+
+
+def test_analyze_market_state_applies_intraday_market_crash_penalty():
+    result = analyze_market_state(_CrashHighTechGate(), target_date="2026-02-21", logger=logging.getLogger("test"))
+
+    assert result["details"]["tech_score"] == 95
+    assert result["total_score"] < 40
+    assert result["status"] == "약세장 (Bearish)"
