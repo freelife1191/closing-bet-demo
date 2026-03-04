@@ -7,11 +7,14 @@ Common Update Pipeline Step Services
 from __future__ import annotations
 
 import asyncio
+import os
+from datetime import datetime
 from typing import Any, Callable, TypeVar
 
 import pandas as pd
 
 T = TypeVar("T")
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def is_stop_requested(shared_state: Any) -> bool:
@@ -21,6 +24,72 @@ def is_stop_requested(shared_state: Any) -> bool:
 def raise_if_stopped(shared_state: Any) -> None:
     if is_stop_requested(shared_state):
         raise RuntimeError("Stopped by user")
+
+
+def _resolve_data_file_path(filename: str) -> str:
+    return os.path.join(_BASE_DIR, "data", filename)
+
+
+def _resolve_reference_datetime(target_date: str | None) -> datetime:
+    if not target_date:
+        return datetime.now()
+
+    try:
+        return datetime.strptime(str(target_date), "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return datetime.now()
+
+
+def _resolve_expected_trading_date_str(init_data: Any, target_date: str | None) -> str | None:
+    get_last_trading_date = getattr(init_data, "get_last_trading_date", None)
+    if not callable(get_last_trading_date):
+        return None
+
+    try:
+        last_trading_date_str, _ = get_last_trading_date(
+            reference_date=_resolve_reference_datetime(target_date),
+        )
+    except Exception:
+        return None
+
+    normalized = str(last_trading_date_str).strip().replace("-", "")
+    if len(normalized) == 8 and normalized.isdigit():
+        return f"{normalized[0:4]}-{normalized[4:6]}-{normalized[6:8]}"
+    return None
+
+
+def _validate_latest_date_not_stale(
+    *,
+    file_path: str,
+    expected_date_str: str | None,
+    step_name: str,
+    logger: Any,
+) -> bool:
+    if not expected_date_str:
+        return True
+    if not os.path.exists(file_path):
+        logger.error(f"{step_name} Failed: output file missing ({file_path})")
+        return False
+
+    try:
+        latest_df = pd.read_csv(file_path, usecols=["date"], dtype={"date": str})
+    except Exception as error:
+        logger.error(f"{step_name} Failed: failed to read {file_path}: {error}")
+        return False
+
+    if latest_df.empty or "date" not in latest_df.columns:
+        logger.error(f"{step_name} Failed: date column missing or empty in {file_path}")
+        return False
+
+    date_series = latest_df["date"].astype(str).str.slice(0, 10)
+    latest_date = date_series.max()
+    if not latest_date or latest_date < expected_date_str:
+        logger.error(
+            f"{step_name} Failed: stale data detected ({latest_date} < {expected_date_str})"
+        )
+        return False
+
+    return True
 
 
 def _run_update_step(
@@ -36,6 +105,10 @@ def _run_update_step(
     update_item_status(step_name, "running")
     try:
         result = execute_fn()
+        if result is False:
+            logger.error(f"{step_name} Failed: step returned False")
+            update_item_status(step_name, "error")
+            return None
         update_item_status(step_name, "done")
         return result
     except Exception as error:
@@ -55,9 +128,23 @@ def run_daily_prices_step(
     shared_state: Any,
     logger: Any,
 ) -> None:
+    expected_date_str = _resolve_expected_trading_date_str(init_data, target_date)
+    daily_prices_path = _resolve_data_file_path("daily_prices.csv")
+
+    def _execute() -> bool:
+        result = init_data.create_daily_prices(target_date, force=force)
+        if result is False:
+            return False
+        return _validate_latest_date_not_stale(
+            file_path=daily_prices_path,
+            expected_date_str=expected_date_str,
+            step_name="Daily Prices",
+            logger=logger,
+        )
+
     _run_update_step(
         step_name="Daily Prices",
-        execute_fn=lambda: init_data.create_daily_prices(target_date, force=force),
+        execute_fn=_execute,
         update_item_status=update_item_status,
         shared_state=shared_state,
         logger=logger,
@@ -73,9 +160,23 @@ def run_institutional_trend_step(
     shared_state: Any,
     logger: Any,
 ) -> None:
+    expected_date_str = _resolve_expected_trading_date_str(init_data, target_date)
+    trend_file_path = _resolve_data_file_path("all_institutional_trend_data.csv")
+
+    def _execute() -> bool:
+        result = init_data.create_institutional_trend(target_date, force=force)
+        if result is False:
+            return False
+        return _validate_latest_date_not_stale(
+            file_path=trend_file_path,
+            expected_date_str=expected_date_str,
+            step_name="Institutional Trend",
+            logger=logger,
+        )
+
     _run_update_step(
         step_name="Institutional Trend",
-        execute_fn=lambda: init_data.create_institutional_trend(target_date, force=force),
+        execute_fn=_execute,
         update_item_status=update_item_status,
         shared_state=shared_state,
         logger=logger,
