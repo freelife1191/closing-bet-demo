@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import logging
 import os
@@ -34,6 +35,7 @@ from services.scheduler_loop import compute_scheduler_sleep_seconds
 logger = logging.getLogger(__name__)
 
 _scheduler_lock_file: TextIO | None = None
+_lock_contention_log_emitted = False
 
 
 def _is_schedule_available() -> bool:
@@ -89,6 +91,7 @@ def update_market_gate_interval(minutes: int) -> None:
 def _acquire_scheduler_lock() -> bool:
     """다중 워커 중 단일 스케줄러 인스턴스만 실행되도록 파일 잠금을 획득한다."""
     global _scheduler_lock_file
+    global _lock_contention_log_emitted
 
     if _scheduler_lock_file is not None and not _scheduler_lock_file.closed:
         return True
@@ -100,11 +103,34 @@ def _acquire_scheduler_lock() -> bool:
         lock_handle = open(lock_file_path, "w")
         fcntl.lockf(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         _scheduler_lock_file = lock_handle
-        logger.info("Scheduler lock acquired. Starting scheduler service...")
+        _lock_contention_log_emitted = False
+        logger.info(
+            "Scheduler lock acquired. Starting scheduler service... (pid=%s)",
+            os.getpid(),
+        )
         return True
     except OSError as error:
         if lock_handle is not None and not lock_handle.closed:
             lock_handle.close()
+
+        if error.errno in {errno.EAGAIN, errno.EACCES}:
+            if not _lock_contention_log_emitted:
+                logger.info(
+                    "[Scheduler] 다른 프로세스가 Scheduler lock 보유 중이므로 현재 프로세스는 스케줄러를 시작하지 않습니다. (path=%s, pid=%s, error=%s)",
+                    lock_file_path,
+                    os.getpid(),
+                    error,
+                )
+                _lock_contention_log_emitted = True
+            else:
+                logger.debug(
+                    "[Scheduler] lock contention 지속: path=%s, pid=%s, error=%s",
+                    lock_file_path,
+                    os.getpid(),
+                    error,
+                )
+            return False
+
         logger.warning(
             "[Scheduler] lock 획득 실패(%s): %s",
             lock_file_path,

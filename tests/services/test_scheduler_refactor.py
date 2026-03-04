@@ -7,6 +7,7 @@ Scheduler 모듈 회귀 테스트
 from __future__ import annotations
 
 import builtins
+import errno
 import logging
 from types import SimpleNamespace
 
@@ -15,6 +16,7 @@ import services.scheduler as scheduler_module
 
 def test_acquire_scheduler_lock_is_idempotent_without_reopening():
     scheduler_module._scheduler_lock_file = None
+    scheduler_module._lock_contention_log_emitted = False
     opened_handles: list[object] = []
     lock_calls = {"count": 0}
 
@@ -61,6 +63,7 @@ def test_acquire_scheduler_lock_is_idempotent_without_reopening():
 
 def test_acquire_scheduler_lock_closes_handle_on_lock_failure(monkeypatch):
     scheduler_module._scheduler_lock_file = None
+    scheduler_module._lock_contention_log_emitted = False
     opened_handles: list[object] = []
 
     class _DummyFile:
@@ -86,8 +89,9 @@ def test_acquire_scheduler_lock_closes_handle_on_lock_failure(monkeypatch):
     assert opened_handles[0].closed is True
 
 
-def test_acquire_scheduler_lock_logs_warning_on_lock_failure(monkeypatch, caplog):
+def test_acquire_scheduler_lock_logs_warning_on_unexpected_lock_failure(monkeypatch, caplog):
     scheduler_module._scheduler_lock_file = None
+    scheduler_module._lock_contention_log_emitted = False
 
     class _DummyFile:
         closed = False
@@ -99,7 +103,7 @@ def test_acquire_scheduler_lock_logs_warning_on_lock_failure(monkeypatch, caplog
     monkeypatch.setattr(
         scheduler_module.fcntl,
         "lockf",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("lock denied")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError(errno.EBADF, "lock denied")),
     )
 
     with caplog.at_level(logging.WARNING):
@@ -107,6 +111,33 @@ def test_acquire_scheduler_lock_logs_warning_on_lock_failure(monkeypatch, caplog
 
     assert acquired is False
     assert "lock denied" in caplog.text
+
+
+def test_acquire_scheduler_lock_logs_info_when_lock_is_held(monkeypatch, caplog):
+    scheduler_module._scheduler_lock_file = None
+    scheduler_module._lock_contention_log_emitted = False
+
+    class _DummyFile:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(builtins, "open", lambda *_args, **_kwargs: _DummyFile())
+    monkeypatch.setattr(
+        scheduler_module.fcntl,
+        "lockf",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            OSError(errno.EAGAIN, "Resource temporarily unavailable")
+        ),
+    )
+
+    with caplog.at_level(logging.INFO):
+        acquired = scheduler_module._acquire_scheduler_lock()
+
+    assert acquired is False
+    assert "다른 프로세스가 Scheduler lock 보유 중" in caplog.text
+    assert all(record.levelno < logging.WARNING for record in caplog.records)
 
 
 def test_apply_scheduler_timezone_uses_asia_seoul_by_default(monkeypatch):
