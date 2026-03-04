@@ -40,6 +40,36 @@ def _is_schedule_available() -> bool:
     return schedule is not None
 
 
+def _resolve_scheduler_timezone() -> str:
+    configured_timezone = os.getenv("SCHEDULER_TIMEZONE", "").strip()
+    if configured_timezone:
+        return configured_timezone
+    current_timezone = os.getenv("TZ", "").strip()
+    if current_timezone:
+        return current_timezone
+    return "Asia/Seoul"
+
+
+def _apply_scheduler_timezone() -> str:
+    """스케줄러 기준 타임존을 프로세스에 적용한다."""
+    scheduler_timezone = _resolve_scheduler_timezone()
+    if os.getenv("TZ", "").strip() != scheduler_timezone:
+        os.environ["TZ"] = scheduler_timezone
+
+    tzset = getattr(time, "tzset", None)
+    if callable(tzset):
+        try:
+            tzset()
+        except Exception as e:
+            logger.warning("[Scheduler] TZ 적용 실패(%s): %s", scheduler_timezone, e)
+        else:
+            logger.info("[Scheduler] Timezone applied: %s", scheduler_timezone)
+    else:
+        logger.info("[Scheduler] time.tzset unavailable; timezone=%s", scheduler_timezone)
+
+    return scheduler_timezone
+
+
 def update_market_gate_interval(minutes: int) -> None:
     """실시간으로 Market Gate 업데이트 주기를 변경한다."""
     if not _is_schedule_available():
@@ -72,19 +102,37 @@ def _acquire_scheduler_lock() -> bool:
         _scheduler_lock_file = lock_handle
         logger.info("Scheduler lock acquired. Starting scheduler service...")
         return True
-    except OSError:
+    except OSError as error:
         if lock_handle is not None and not lock_handle.closed:
             lock_handle.close()
+        logger.warning(
+            "[Scheduler] lock 획득 실패(%s): %s",
+            lock_file_path,
+            error,
+        )
         return False
+
+
+def _run_scheduler_tick() -> None:
+    if not _is_schedule_available():
+        time.sleep(compute_scheduler_sleep_seconds(None))
+        return
+
+    idle_seconds: float | None = None
+    try:
+        schedule.run_pending()
+        idle_seconds = schedule.idle_seconds()
+    except Exception as error:
+        logger.exception("[Scheduler] scheduler tick failed: %s", error)
+
+    time.sleep(compute_scheduler_sleep_seconds(idle_seconds))
 
 
 def _scheduler_loop() -> None:
     if not _is_schedule_available():
         return
     while True:
-        schedule.run_pending()
-        idle_seconds = schedule.idle_seconds()
-        time.sleep(compute_scheduler_sleep_seconds(idle_seconds))
+        _run_scheduler_tick()
 
 
 def start_scheduler() -> None:
@@ -100,13 +148,24 @@ def start_scheduler() -> None:
         logger.info("Scheduler is disabled in configuration. Skipping start.")
         return
 
+    scheduler_timezone = _apply_scheduler_timezone()
+
     interval = app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES
-    schedule.every(interval).minutes.do(run_market_gate_sync).tag("market_gate")
-    logger.info(f"Scheduled Market Gate sync every {interval} minutes")
+    market_gate_job = schedule.every(interval).minutes.do(run_market_gate_sync).tag("market_gate")
+    logger.info(
+        "Scheduled Market Gate sync every %s minutes (next_run=%s)",
+        interval,
+        market_gate_job.next_run,
+    )
 
     closing_time = os.getenv("CLOSING_SCHEDULE_TIME", "17:00")
-    schedule.every().day.at(closing_time).do(run_daily_closing_analysis)
-    logger.info(f"Scheduled Daily Closing Analysis at {closing_time} (Chains Jongga V2)")
+    closing_job = schedule.every().day.at(closing_time).do(run_daily_closing_analysis)
+    logger.info(
+        "Scheduled Daily Closing Analysis at %s (timezone=%s, next_run=%s)",
+        closing_time,
+        scheduler_timezone,
+        closing_job.next_run,
+    )
 
     threading.Thread(target=_scheduler_loop, daemon=True).start()
     logger.info("Scheduler started successfully")

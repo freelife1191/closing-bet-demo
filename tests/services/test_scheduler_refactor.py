@@ -7,6 +7,8 @@ Scheduler 모듈 회귀 테스트
 from __future__ import annotations
 
 import builtins
+import logging
+from types import SimpleNamespace
 
 import services.scheduler as scheduler_module
 
@@ -82,3 +84,61 @@ def test_acquire_scheduler_lock_closes_handle_on_lock_failure(monkeypatch):
     assert scheduler_module._scheduler_lock_file is None
     assert len(opened_handles) == 1
     assert opened_handles[0].closed is True
+
+
+def test_acquire_scheduler_lock_logs_warning_on_lock_failure(monkeypatch, caplog):
+    scheduler_module._scheduler_lock_file = None
+
+    class _DummyFile:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(builtins, "open", lambda *_args, **_kwargs: _DummyFile())
+    monkeypatch.setattr(
+        scheduler_module.fcntl,
+        "lockf",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("lock denied")),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        acquired = scheduler_module._acquire_scheduler_lock()
+
+    assert acquired is False
+    assert "lock denied" in caplog.text
+
+
+def test_apply_scheduler_timezone_uses_asia_seoul_by_default(monkeypatch):
+    monkeypatch.delenv("SCHEDULER_TIMEZONE", raising=False)
+    monkeypatch.delenv("TZ", raising=False)
+    tzset_calls: list[bool] = []
+    monkeypatch.setattr(
+        scheduler_module.time,
+        "tzset",
+        lambda: tzset_calls.append(True),
+        raising=False,
+    )
+
+    scheduler_module._apply_scheduler_timezone()
+
+    assert scheduler_module.os.environ.get("TZ") == "Asia/Seoul"
+    assert tzset_calls == [True]
+
+
+def test_run_scheduler_tick_survives_run_pending_error(monkeypatch):
+    sleep_calls: list[float] = []
+
+    monkeypatch.setattr(
+        scheduler_module,
+        "schedule",
+        SimpleNamespace(
+            run_pending=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+            idle_seconds=lambda: None,
+        ),
+    )
+    monkeypatch.setattr(scheduler_module.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    scheduler_module._run_scheduler_tick()
+
+    assert sleep_calls == [1.0]
