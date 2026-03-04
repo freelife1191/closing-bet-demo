@@ -111,3 +111,50 @@ def test_run_background_update_pipeline_ai_jongga_marks_ai_analysis_done(monkeyp
     assert ("AI Jongga V2", "running") in statuses
     assert ("AI Jongga V2", "done") in statuses
     assert ("AI Analysis", "done") in statuses
+
+
+def test_run_background_update_pipeline_skips_vcp_when_institutional_trend_failed(monkeypatch):
+    statuses: list[tuple[str, str]] = []
+    calls = {"vcp": 0, "ai": 0, "finish": 0}
+
+    fake_scripts = types.ModuleType("scripts")
+    fake_scripts.init_data = types.SimpleNamespace(
+        create_daily_prices=lambda *_a, **_k: None,
+        create_institutional_trend=lambda *_a, **_k: None,
+        create_signals_log=lambda *_a, **_k: None,
+    )
+    monkeypatch.setitem(sys.modules, "scripts", fake_scripts)
+
+    from services import common_update_service as update_service
+
+    monkeypatch.setattr(
+        update_service,
+        "run_institutional_trend_step",
+        lambda **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        update_service,
+        "run_vcp_signals_step",
+        lambda **_kwargs: calls.__setitem__("vcp", calls["vcp"] + 1),
+    )
+    monkeypatch.setattr(
+        update_service,
+        "run_ai_analysis_step",
+        lambda **_kwargs: calls.__setitem__("ai", calls["ai"] + 1),
+    )
+
+    run_background_update_pipeline(
+        target_date="2026-03-04",
+        selected_items=["Institutional Trend", "VCP Signals", "AI Analysis"],
+        force=True,
+        update_item_status=lambda name, status: statuses.append((name, status)),
+        finish_update=lambda: calls.__setitem__("finish", calls["finish"] + 1),
+        shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
+        logger=_noop_logger(),
+    )
+
+    assert calls["vcp"] == 0
+    assert calls["ai"] == 0
+    assert calls["finish"] == 1
+    assert ("VCP Signals", "error") in statuses
+    assert ("AI Analysis", "error") in statuses

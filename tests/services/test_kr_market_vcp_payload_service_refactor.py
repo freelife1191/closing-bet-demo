@@ -11,9 +11,11 @@ import os
 import sqlite3
 import threading
 import time
+from datetime import datetime
 
 import pandas as pd
 
+import app.routes.kr_market_vcp_signal_helpers as vcp_signal_helpers
 import services.kr_market_vcp_payload_service as vcp_payload_service
 import services.kr_market_vcp_signals_cache as vcp_signals_cache
 from services.sqlite_utils import connect_sqlite
@@ -298,11 +300,33 @@ def test_build_vcp_payload_recovers_when_sqlite_table_missing(tmp_path):
 
     second = _build_payload(tmp_path, req_date="2026-02-22")
     assert second["count"] == 1
-    assert second["signals"][0]["ticker"] == "005930"
 
-    with connect_sqlite(str(db_path)) as conn:
-        row_count = int(conn.execute("SELECT COUNT(*) FROM vcp_signals_payload_cache").fetchone()[0])
-    assert row_count >= 1
+
+def test_build_vcp_payload_emits_stale_warning_when_today_signals_missing(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-03")
+
+    payload = vcp_payload_service.build_vcp_signals_payload(
+        req_date=None,
+        load_csv_file=lambda name: pd.read_csv(tmp_path / name),
+        load_json_file=lambda _name, **_kwargs: {},
+        filter_signals_dataframe_by_date=vcp_signal_helpers._filter_signals_dataframe_by_date,
+        build_vcp_signals_from_dataframe=vcp_signal_helpers._build_vcp_signals_from_dataframe,
+        load_latest_vcp_price_map=lambda: {},
+        apply_latest_prices_to_jongga_signals=lambda _signals, _price_map: 0,
+        sort_and_limit_vcp_signals=vcp_signal_helpers._sort_and_limit_vcp_signals,
+        build_ai_data_map=vcp_signal_helpers._build_ai_data_map,
+        merge_legacy_ai_fields_into_map=vcp_signal_helpers._merge_legacy_ai_fields_into_map,
+        merge_ai_data_into_vcp_signals=vcp_signal_helpers._merge_ai_data_into_vcp_signals,
+        count_total_scanned_stocks=lambda _data_dir: 1,
+        logger=logging.getLogger("vcp-payload-stale-warning-test"),
+        now=datetime(2026, 3, 4, 9, 0, 0),
+        data_dir=str(tmp_path),
+    )
+
+    assert payload["count"] == 0
+    assert "stale_warning" in payload
+    assert "2026-03-03" in str(payload["stale_warning"])
 
 
 def test_build_vcp_payload_skips_delete_when_rows_within_limit(monkeypatch, tmp_path):

@@ -483,7 +483,7 @@ def test_apply_gemini_reanalysis_results_matches_name_and_updates_fields():
     assert signals[1]["ai_evaluation"]["action"] == "HOLD"
 
 
-def test_filter_signals_dataframe_by_date_prefers_latest_when_date_missing():
+def test_filter_signals_dataframe_by_date_uses_today_when_date_missing():
     signals_df = pd.DataFrame(
         [
             {"signal_date": "2026-02-20", "ticker": "1"},
@@ -497,9 +497,8 @@ def test_filter_signals_dataframe_by_date_prefers_latest_when_date_missing():
         default_today="2026-02-19",
     )
 
-    assert today == "2026-02-21"
-    assert len(filtered_df) == 1
-    assert str(filtered_df.iloc[0]["ticker"]) == "2"
+    assert today == "2026-02-19"
+    assert len(filtered_df) == 0
 
 
 def test_filter_signals_dataframe_by_date_normalizes_datetime_date_values():
@@ -524,9 +523,9 @@ def test_filter_signals_dataframe_by_date_normalizes_datetime_date_values():
 def test_build_vcp_signals_from_dataframe_filters_closed_and_low_score():
     signals_df = pd.DataFrame(
         [
-            {"ticker": "1", "status": "OPEN", "score": 70, "signal_date": "2026-02-21"},
-            {"ticker": "2", "status": "CLOSED", "score": 95, "signal_date": "2026-02-21"},
-            {"ticker": "3", "status": "OPEN", "score": 55, "signal_date": "2026-02-21"},
+            {"ticker": "1", "status": "OPEN", "score": 70, "signal_date": "2026-02-21", "vcp_score": 6},
+            {"ticker": "2", "status": "CLOSED", "score": 95, "signal_date": "2026-02-21", "vcp_score": 8},
+            {"ticker": "3", "status": "OPEN", "score": 55, "signal_date": "2026-02-21", "vcp_score": 9},
         ]
     )
 

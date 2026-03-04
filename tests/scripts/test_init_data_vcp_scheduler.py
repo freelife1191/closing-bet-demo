@@ -67,6 +67,62 @@ class _FailingScreener:
         raise RuntimeError("forced failure")
 
 
+class _VcpGateScreener:
+    """VCP 게이트 테스트용 스크리너"""
+
+    def __init__(self, target_date=None):
+        self.target_date = target_date
+
+    def run_screening(self, max_stocks: int = 600) -> pd.DataFrame:
+        _ = max_stocks
+        return pd.DataFrame(
+            [
+                {
+                    "ticker": "005930",
+                    "name": "삼성전자",
+                    "score": 80.0,
+                    "market": "KOSPI",
+                    "entry_price": 70000,
+                    "contraction_ratio": 0.95,
+                    "foreign_net_5d": 100,
+                    "inst_net_5d": 200,
+                    "foreign_net_1d": 10,
+                    "inst_net_1d": 20,
+                    "vcp_score": 4,
+                    "is_vcp": False,
+                },
+                {
+                    "ticker": "000660",
+                    "name": "SK하이닉스",
+                    "score": 81.0,
+                    "market": "KOSPI",
+                    "entry_price": 120000,
+                    "contraction_ratio": 0.68,
+                    "foreign_net_5d": 110,
+                    "inst_net_5d": 210,
+                    "foreign_net_1d": 11,
+                    "inst_net_1d": 21,
+                    "vcp_score": 6,
+                    "is_vcp": False,
+                },
+                {
+                    "ticker": "035420",
+                    "name": "NAVER",
+                    "score": 82.0,
+                    "market": "KOSPI",
+                    "entry_price": 180000,
+                    "contraction_ratio": 0.72,
+                    "foreign_net_5d": 120,
+                    "inst_net_5d": 220,
+                    "foreign_net_1d": 12,
+                    "inst_net_1d": 22,
+                    "vcp_score": 1,
+                    "is_vcp": True,
+                },
+            ]
+        )
+
+
 class _DummyMessenger:
     """알림 호출 여부 검증용 Messenger 더미"""
 
@@ -163,6 +219,25 @@ def test_create_signals_log_returns_false_on_exception(monkeypatch, tmp_path):
     result = init_data.create_signals_log(target_date="2026-02-19", run_ai=False)
 
     assert result is False
+
+
+def test_create_signals_log_applies_vcp_gate_filter(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _VcpGateScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+
+    result = init_data.create_signals_log(target_date="2026-03-04", run_ai=False)
+
+    assert result is True
+
+    df = pd.read_csv(data_dir / "signals_log.csv", dtype={"ticker": str})
+    tickers = set(df["ticker"].astype(str).str.zfill(6).tolist())
+    assert "005930" not in tickers
+    assert "000660" in tickers
+    assert "035420" in tickers
 
 
 def test_should_abort_daily_pykrx_bulk_fetch_detects_known_error_signature():

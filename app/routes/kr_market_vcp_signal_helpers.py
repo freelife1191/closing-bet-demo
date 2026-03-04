@@ -19,6 +19,9 @@ from app.routes.kr_market_signal_common import (
 )
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 
+_VCP_SCORE_GATE = 5.0
+_TRUE_VALUES = {"1", "true", "yes", "y", "on"}
+
 
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
     if isinstance(row, dict):
@@ -159,11 +162,10 @@ def _filter_signals_dataframe_by_date(
         filtered_df = filtered_df[normalized_dates == normalized_req_date]
         return filtered_df, today
 
-    latest_date = normalized_dates[normalized_dates != ""].max()
-    if pd.notna(latest_date):
-        latest_str = _format_signal_date(latest_date)
-        filtered_df = filtered_df[normalized_dates == latest_str]
-        today = latest_str
+    normalized_today = _format_signal_date(default_today)
+    if normalized_today:
+        filtered_df = filtered_df[normalized_dates == normalized_today]
+        today = normalized_today
 
     return filtered_df, today
 
@@ -189,9 +191,19 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
     """signals_log 단일 행을 API 응답 스키마 시그널로 변환한다."""
     score = _safe_float(_row_get(row, "score", 0), default=0.0)
     status = str(_row_get(row, "status", "OPEN"))
+    vcp_score = _safe_float(_row_get(row, "vcp_score", 0), default=0.0)
+    is_vcp_raw = _row_get(row, "is_vcp", False)
+    is_vcp = (
+        is_vcp_raw
+        if isinstance(is_vcp_raw, bool)
+        else str(is_vcp_raw).strip().lower() in _TRUE_VALUES
+    )
+
     if status != "OPEN":
         return None
     if score < resolve_vcp_min_score(default=60.0):
+        return None
+    if not (is_vcp or vcp_score >= _VCP_SCORE_GATE):
         return None
 
     return {
@@ -207,7 +219,8 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
         "stop_price": _none_if_nan(_row_get(row, "stop_price")),
         "foreign_5d": _safe_int(_row_get(row, "foreign_5d", 0), default=0),
         "inst_5d": _safe_int(_row_get(row, "inst_5d", 0), default=0),
-        "vcp_score": _safe_int(_row_get(row, "vcp_score", 0), default=0),
+        "vcp_score": _safe_int(vcp_score, default=0),
+        "is_vcp": is_vcp,
         "current_price": _none_if_nan(_row_get(row, "current_price")),
         "return_pct": _none_if_nan(_row_get(row, "return_pct")),
         "gemini_recommendation": _build_vcp_gemini_recommendation(row),

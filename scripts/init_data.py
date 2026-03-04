@@ -1439,6 +1439,23 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             if score >= (vcp_min_score - 10):
                 return "C"
             return "D"
+
+        def _as_bool(value) -> bool:
+            if isinstance(value, bool):
+                return value
+            if value is None:
+                return False
+            if isinstance(value, (int, float)):
+                return bool(value)
+            normalized = str(value).strip().lower()
+            return normalized in {"1", "true", "yes", "y", "on"}
+
+        def _passes_vcp_signal_gate(vcp_score_value, is_vcp_value) -> bool:
+            try:
+                vcp_score_float = float(vcp_score_value or 0)
+            except (TypeError, ValueError):
+                vcp_score_float = 0.0
+            return _as_bool(is_vcp_value) or vcp_score_float >= 5.0
         
         resolved_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
         if max_stocks is not None:
@@ -1463,8 +1480,15 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         df_result = screener.run_screening(max_stocks=resolved_max_stocks)
         
         signals = []
+        excluded_by_vcp_gate = 0
         if not df_result.empty:
             for row in df_result.itertuples(index=False):
+                row_vcp_score = float(getattr(row, "vcp_score", 0) or 0)
+                row_is_vcp = _as_bool(getattr(row, "is_vcp", False))
+                if not _passes_vcp_signal_gate(row_vcp_score, row_is_vcp):
+                    excluded_by_vcp_gate += 1
+                    continue
+
                 signals.append({
                     'ticker': str(getattr(row, 'ticker', '')),
                     'name': str(getattr(row, 'name', '')),
@@ -1477,10 +1501,17 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     'entry_price': int(float(getattr(row, 'entry_price', 0) or 0)),
                     'foreign_5d': int(float(getattr(row, 'foreign_net_5d', 0) or 0)),
                     'inst_5d': int(float(getattr(row, 'inst_net_5d', 0) or 0)),
-                    'vcp_score': int(float(getattr(row, 'vcp_score', 0) or 0)),
+                    'vcp_score': int(row_vcp_score),
+                    'is_vcp': row_is_vcp,
                     'current_price': int(float(getattr(row, 'entry_price', 0) or 0)) # Approximation or need fetch
                 })
-        
+        if excluded_by_vcp_gate > 0:
+            log(
+                f"VCP 패턴 게이트 미충족으로 {excluded_by_vcp_gate}건 제외 "
+                f"(조건: vcp_score>=5 또는 is_vcp=True)",
+                "INFO",
+            )
+
         log(f"총 {len(signals)}개 시그널 감지")
         
         # 점수 높은 순 정렬 (상위 N개 제한)

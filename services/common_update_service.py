@@ -46,6 +46,8 @@ def run_background_update_pipeline(
     """백그라운드에서 순차적으로 데이터 업데이트 실행."""
     items = selected_items or list(DEFAULT_UPDATE_ITEMS)
     vcp_df: pd.DataFrame | None = None
+    institutional_trend_ok = True
+    vcp_step_blocked = False
 
     try:
         from scripts import init_data
@@ -61,7 +63,7 @@ def run_background_update_pipeline(
             )
 
         if "Institutional Trend" in items:
-            run_institutional_trend_step(
+            institutional_trend_ok = run_institutional_trend_step(
                 init_data=init_data,
                 target_date=target_date,
                 force=force,
@@ -79,23 +81,36 @@ def run_background_update_pipeline(
             )
 
         if "VCP Signals" in items:
-            vcp_df = run_vcp_signals_step(
-                init_data=init_data,
-                target_date=target_date,
-                update_item_status=update_item_status,
-                shared_state=shared_state,
-                logger=logger,
-            )
+            if not institutional_trend_ok:
+                vcp_step_blocked = True
+                logger.error(
+                    "VCP Signals skipped: Institutional Trend step failed; stale supply data cannot be used."
+                )
+                update_item_status("VCP Signals", "error")
+            else:
+                vcp_df = run_vcp_signals_step(
+                    init_data=init_data,
+                    target_date=target_date,
+                    update_item_status=update_item_status,
+                    shared_state=shared_state,
+                    logger=logger,
+                )
 
         if "AI Analysis" in items:
-            run_ai_analysis_step(
-                target_date=target_date,
-                selected_items=items,
-                vcp_df=vcp_df,
-                update_item_status=update_item_status,
-                shared_state=shared_state,
-                logger=logger,
-            )
+            if vcp_step_blocked:
+                logger.error(
+                    "AI Analysis skipped: VCP Signals step was blocked by Institutional Trend failure."
+                )
+                update_item_status("AI Analysis", "error")
+            else:
+                run_ai_analysis_step(
+                    target_date=target_date,
+                    selected_items=items,
+                    vcp_df=vcp_df,
+                    update_item_status=update_item_status,
+                    shared_state=shared_state,
+                    logger=logger,
+                )
 
         if "AI Jongga V2" in items:
             run_ai_jongga_v2_step(
@@ -114,4 +129,3 @@ def run_background_update_pipeline(
 
 
 __all__ = ["DEFAULT_UPDATE_ITEMS", "run_background_update_pipeline"]
-

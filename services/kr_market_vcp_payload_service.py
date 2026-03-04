@@ -40,7 +40,7 @@ def build_vcp_signals_payload(
 ) -> dict[str, Any]:
     """VCP 시그널 응답 payload를 구성한다."""
     current_time = now or datetime.now()
-    signals, source = _load_vcp_signals(
+    signals, source, stale_warning = _load_vcp_signals(
         req_date=req_date,
         load_csv_file=load_csv_file,
         filter_signals_dataframe_by_date=filter_signals_dataframe_by_date,
@@ -81,13 +81,16 @@ def build_vcp_signals_payload(
         logger=logger,
     )
 
-    return {
+    payload = {
         "signals": signals,
         "count": len(signals),
         "total_scanned": total_scanned,
         "generated_at": current_time.isoformat(),
         "source": source,
     }
+    if stale_warning:
+        payload["stale_warning"] = stale_warning
+    return payload
 
 
 def _resolve_total_scanned_stocks_count(
@@ -125,7 +128,7 @@ def _load_vcp_signals(
     logger: logging.Logger,
     current_time: datetime,
     data_dir: str,
-) -> tuple[list[dict[str, Any]], str]:
+) -> tuple[list[dict[str, Any]], str, str | None]:
     source = "no_data"
     today = current_time.strftime("%Y-%m-%d")
     cache_signature = build_vcp_signals_cache_signature(
@@ -141,7 +144,7 @@ def _load_vcp_signals(
     if cached_signals is not None:
         if cached_signals:
             source = "signals_log.csv"
-        return cached_signals, source
+        return cached_signals, source, None
 
     signals_df = _load_csv_readonly(
         load_csv_file,
@@ -160,6 +163,7 @@ def _load_vcp_signals(
             "foreign_5d",
             "inst_5d",
             "vcp_score",
+            "is_vcp",
             "current_price",
             "return_pct",
             "ai_action",
@@ -168,6 +172,12 @@ def _load_vcp_signals(
         ],
     )
     signals_df, _ = filter_signals_dataframe_by_date(signals_df, req_date, today)
+    stale_warning = _resolve_stale_warning_message(
+        req_date=req_date,
+        source_df=_load_csv_readonly(load_csv_file, "signals_log.csv", usecols=["signal_date"]),
+        filtered_df=signals_df,
+        today=today,
+    )
 
     if req_date:
         logger.debug(f"Signals requested for explicit date: {req_date}")
@@ -183,7 +193,37 @@ def _load_vcp_signals(
         data_dir=data_dir,
         logger=logger,
     )
-    return signals, source
+    return signals, source, stale_warning
+
+
+def _resolve_stale_warning_message(
+    *,
+    req_date: str | None,
+    source_df: pd.DataFrame,
+    filtered_df: pd.DataFrame,
+    today: str,
+) -> str | None:
+    if req_date:
+        return None
+    if not isinstance(source_df, pd.DataFrame) or source_df.empty or "signal_date" not in source_df.columns:
+        return None
+    if isinstance(filtered_df, pd.DataFrame) and not filtered_df.empty:
+        return None
+
+    latest_series = pd.to_datetime(source_df["signal_date"], errors="coerce")
+    latest_timestamp = latest_series.max()
+    today_timestamp = pd.to_datetime(str(today), errors="coerce")
+    if pd.isna(latest_timestamp) or pd.isna(today_timestamp):
+        return None
+    if latest_timestamp.date() >= today_timestamp.date():
+        return None
+
+    latest_date_str = latest_timestamp.strftime("%Y-%m-%d")
+    today_date_str = today_timestamp.strftime("%Y-%m-%d")
+    return (
+        f"오늘({today_date_str}) 기준 VCP 시그널이 없습니다. "
+        f"최신 저장 데이터는 {latest_date_str}입니다."
+    )
 
 
 def _merge_ai_into_vcp_signals(

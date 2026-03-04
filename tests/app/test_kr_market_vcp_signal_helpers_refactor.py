@@ -31,3 +31,22 @@ def test_build_vcp_signal_from_row_respects_runtime_min_score(monkeypatch):
     }
 
     assert vcp_helpers._build_vcp_signal_from_row(row) is None
+
+
+def test_build_vcp_signal_from_row_requires_vcp_gate():
+    low_vcp_row = {
+        "ticker": "005930",
+        "name": "삼성전자",
+        "signal_date": "2026-02-24",
+        "market": "KOSPI",
+        "status": "OPEN",
+        "score": 90.0,
+        "vcp_score": 4,
+        "is_vcp": False,
+    }
+    high_vcp_row = {**low_vcp_row, "ticker": "000660", "vcp_score": 6}
+    explicit_vcp_row = {**low_vcp_row, "ticker": "035420", "is_vcp": True, "vcp_score": 0}
+
+    assert vcp_helpers._build_vcp_signal_from_row(low_vcp_row) is None
+    assert vcp_helpers._build_vcp_signal_from_row(high_vcp_row) is not None
+    assert vcp_helpers._build_vcp_signal_from_row(explicit_vcp_row) is not None

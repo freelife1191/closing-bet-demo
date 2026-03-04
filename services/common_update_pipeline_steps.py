@@ -127,7 +127,7 @@ def run_daily_prices_step(
     update_item_status: Callable[[str, str], None],
     shared_state: Any,
     logger: Any,
-) -> None:
+) -> bool:
     expected_date_str = _resolve_expected_trading_date_str(init_data, target_date)
     daily_prices_path = _resolve_data_file_path("daily_prices.csv")
 
@@ -142,13 +142,14 @@ def run_daily_prices_step(
             logger=logger,
         )
 
-    _run_update_step(
+    result = _run_update_step(
         step_name="Daily Prices",
         execute_fn=_execute,
         update_item_status=update_item_status,
         shared_state=shared_state,
         logger=logger,
     )
+    return bool(result)
 
 
 def run_institutional_trend_step(
@@ -159,7 +160,7 @@ def run_institutional_trend_step(
     update_item_status: Callable[[str, str], None],
     shared_state: Any,
     logger: Any,
-) -> None:
+) -> bool:
     expected_date_str = _resolve_expected_trading_date_str(init_data, target_date)
     trend_file_path = _resolve_data_file_path("all_institutional_trend_data.csv")
 
@@ -174,13 +175,14 @@ def run_institutional_trend_step(
             logger=logger,
         )
 
-    _run_update_step(
+    result = _run_update_step(
         step_name="Institutional Trend",
         execute_fn=_execute,
         update_item_status=update_item_status,
         shared_state=shared_state,
         logger=logger,
     )
+    return bool(result)
 
 
 def run_market_gate_step(
