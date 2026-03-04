@@ -173,3 +173,36 @@ def test_run_scheduler_tick_survives_run_pending_error(monkeypatch):
     scheduler_module._run_scheduler_tick()
 
     assert sleep_calls == [1.0]
+
+
+def test_start_scheduler_skips_lock_when_disabled(monkeypatch):
+    monkeypatch.setenv("SCHEDULER_ENABLED", "false")
+    monkeypatch.setattr(scheduler_module, "schedule", object())
+    lock_calls = {"count": 0}
+    monkeypatch.setattr(
+        scheduler_module,
+        "_acquire_scheduler_lock",
+        lambda: lock_calls.__setitem__("count", lock_calls["count"] + 1) or True,
+    )
+
+    scheduler_module.start_scheduler()
+
+    assert lock_calls["count"] == 0
+
+
+def test_start_scheduler_starts_retry_thread_on_lock_contention(monkeypatch):
+    monkeypatch.setenv("SCHEDULER_ENABLED", "true")
+    monkeypatch.setattr(scheduler_module, "schedule", object())
+    monkeypatch.setattr(scheduler_module, "_acquire_scheduler_lock", lambda: False)
+    monkeypatch.setattr(scheduler_module, "_last_lock_error_errno", errno.EAGAIN, raising=False)
+    retry_calls = {"count": 0}
+    monkeypatch.setattr(
+        scheduler_module,
+        "_start_scheduler_retry_thread",
+        lambda: retry_calls.__setitem__("count", retry_calls["count"] + 1),
+        raising=False,
+    )
+
+    scheduler_module.start_scheduler()
+
+    assert retry_calls["count"] == 1
