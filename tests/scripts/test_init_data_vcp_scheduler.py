@@ -8,6 +8,8 @@ import os
 import sys
 from typing import Dict
 import json
+import datetime
+import types
 
 import pandas as pd
 
@@ -159,5 +161,272 @@ def test_create_signals_log_returns_false_on_exception(monkeypatch, tmp_path):
     monkeypatch.setattr("engine.screener.SmartMoneyScreener", _FailingScreener)
 
     result = init_data.create_signals_log(target_date="2026-02-19", run_ai=False)
+
+    assert result is False
+
+
+def test_should_abort_daily_pykrx_bulk_fetch_detects_known_error_signature():
+    known_error = KeyError(
+        "None of [Index(['시가', '고가', '저가', '종가'], dtype='object')] are in the [columns]"
+    )
+    unknown_error = RuntimeError("temporary failure")
+
+    assert init_data._should_abort_daily_pykrx_bulk_fetch(known_error) is True
+    assert init_data._should_abort_daily_pykrx_bulk_fetch(unknown_error) is False
+
+
+def test_create_daily_prices_switches_to_yfinance_on_known_pykrx_error(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: ("20260304", datetime.datetime(2026, 3, 4)),
+    )
+
+    class _FailingStock:
+        @staticmethod
+        def get_market_ohlcv(*_args, **_kwargs):
+            raise KeyError(
+                "None of [Index(['시가', '고가', '저가', '종가'], dtype='object')] are in the [columns]"
+            )
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _FailingStock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+
+    logs: list[tuple[str, str]] = []
+    monkeypatch.setattr(init_data, "log", lambda message, level="INFO": logs.append((level, str(message))))
+
+    fallback_calls = {"count": 0}
+
+    def _fake_fallback(*_args, **_kwargs):
+        fallback_calls["count"] += 1
+        return True
+
+    monkeypatch.setattr(init_data, "fetch_prices_yfinance", _fake_fallback)
+
+    result = init_data.create_daily_prices(target_date="2026-03-04", force=True, lookback_days=1)
+
+    assert result is True
+    assert fallback_calls["count"] == 1
+    assert any("yfinance 폴백으로 전환" in message for _, message in logs)
+    assert not any("날짜별 수집 실패" in message for _, message in logs)
+
+
+def test_extract_yfinance_ohlcv_handles_price_first_multiindex():
+    index = pd.DatetimeIndex(
+        [datetime.datetime(2026, 3, 3), datetime.datetime(2026, 3, 4)], name="Date"
+    )
+    columns = pd.MultiIndex.from_product(
+        [["Open", "High", "Low", "Close", "Volume"], ["005930.KS"]]
+    )
+    values = [
+        [10, 12],
+        [11, 13],
+        [9, 11],
+        [10.5, 12.5],
+        [1000, 1200],
+    ]
+    raw_df = pd.DataFrame(
+        [list(row) for row in zip(*values)],
+        index=index,
+        columns=columns,
+    )
+
+    normalized = init_data._extract_yfinance_ohlcv(raw_df, "005930.KS")
+
+    assert list(normalized.columns) == ["open", "high", "low", "close", "volume"]
+    assert len(normalized) == 2
+    assert int(normalized.iloc[0]["open"]) == 10
+
+
+def test_fetch_prices_yfinance_uses_chunked_download_with_timeout(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    stocks_df = pd.DataFrame(
+        [
+            {"ticker": "005930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSPI"},
+            {"ticker": "035420", "market": "KOSPI"},
+            {"ticker": "247540", "market": "KOSDAQ"},
+            {"ticker": "086520", "market": "KOSDAQ"},
+        ]
+    )
+    stocks_df.to_csv(data_dir / "korean_stocks_list.csv", index=False, encoding="utf-8-sig")
+
+    calls = []
+
+    def _fake_download(symbols, **kwargs):
+        symbols_list = [symbols] if isinstance(symbols, str) else list(symbols)
+        calls.append({"symbols": symbols_list, "kwargs": kwargs})
+
+        index = pd.DatetimeIndex(
+            [datetime.datetime(2026, 3, 3), datetime.datetime(2026, 3, 4)], name="Date"
+        )
+        per_symbol = {}
+        for symbol in symbols_list:
+            per_symbol[symbol] = pd.DataFrame(
+                {
+                    "Open": [100, 101],
+                    "High": [102, 103],
+                    "Low": [99, 100],
+                    "Close": [101, 102],
+                    "Volume": [1000, 1100],
+                },
+                index=index,
+            )
+
+        if len(symbols_list) == 1:
+            return per_symbol[symbols_list[0]]
+        return pd.concat(per_symbol, axis=1)
+
+    fake_yf = types.ModuleType("yfinance")
+    fake_yf.download = _fake_download
+    monkeypatch.setitem(sys.modules, "yfinance", fake_yf)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+
+    output_file = data_dir / "daily_prices.csv"
+    result = init_data.fetch_prices_yfinance(
+        datetime.datetime(2026, 3, 2),
+        datetime.datetime(2026, 3, 4),
+        pd.DataFrame(),
+        str(output_file),
+        chunk_size=2,
+        request_timeout=3,
+        use_threads=False,
+    )
+
+    assert result is True
+    assert len(calls) == 3
+    assert all(len(call["symbols"]) <= 2 for call in calls)
+    assert all(call["kwargs"]["timeout"] == 3 for call in calls)
+
+    saved = pd.read_csv(output_file, dtype={"ticker": str})
+    assert set(saved["ticker"].unique()) == {"005930", "000660", "035420", "247540", "086520"}
+
+
+def test_fetch_prices_yfinance_aborts_on_max_runtime(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    stocks_df = pd.DataFrame(
+        [
+            {"ticker": "005930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSPI"},
+            {"ticker": "035420", "market": "KOSPI"},
+        ]
+    )
+    stocks_df.to_csv(data_dir / "korean_stocks_list.csv", index=False, encoding="utf-8-sig")
+
+    calls = []
+
+    def _fake_download(symbols, **_kwargs):
+        symbols_list = [symbols] if isinstance(symbols, str) else list(symbols)
+        calls.append(symbols_list)
+        index = pd.DatetimeIndex([datetime.datetime(2026, 3, 4)], name="Date")
+        if len(symbols_list) == 1:
+            return pd.DataFrame(
+                {
+                    "Open": [100],
+                    "High": [101],
+                    "Low": [99],
+                    "Close": [100],
+                    "Volume": [1000],
+                },
+                index=index,
+            )
+        return pd.concat(
+            {
+                symbol: pd.DataFrame(
+                    {
+                        "Open": [100],
+                        "High": [101],
+                        "Low": [99],
+                        "Close": [100],
+                        "Volume": [1000],
+                    },
+                    index=index,
+                )
+                for symbol in symbols_list
+            },
+            axis=1,
+        )
+
+    fake_yf = types.ModuleType("yfinance")
+    fake_yf.download = _fake_download
+    monkeypatch.setitem(sys.modules, "yfinance", fake_yf)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+
+    tick = {"value": 0.0}
+
+    def _fake_time():
+        tick["value"] += 2.0
+        return tick["value"]
+
+    monkeypatch.setattr(init_data.time, "time", _fake_time)
+
+    result = init_data.fetch_prices_yfinance(
+        datetime.datetime(2026, 3, 2),
+        datetime.datetime(2026, 3, 4),
+        pd.DataFrame(),
+        str(data_dir / "daily_prices.csv"),
+        chunk_size=1,
+        request_timeout=3,
+        use_threads=False,
+        max_runtime_seconds=3,
+    )
+
+    assert result is False
+    assert len(calls) == 1
+
+
+def test_create_institutional_trend_returns_false_when_latest_date_is_stale(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    stocks_df = pd.DataFrame(
+        [
+            {"ticker": "005930", "market": "KOSPI"},
+            {"ticker": "000660", "market": "KOSPI"},
+        ]
+    )
+    stocks_df.to_csv(data_dir / "korean_stocks_list.csv", index=False, encoding="utf-8-sig")
+
+    stale_df = pd.DataFrame(
+        [
+            {"date": "2026-02-27", "ticker": "005930", "foreign_buy": 100, "inst_buy": 200},
+            {"date": "2026-02-27", "ticker": "000660", "foreign_buy": 120, "inst_buy": 220},
+        ]
+    )
+    stale_df.to_csv(
+        data_dir / "all_institutional_trend_data.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    class _EmptyStock:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(*_args, **_kwargs):
+            return pd.DataFrame()
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _EmptyStock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: ("20260304", datetime.datetime(2026, 3, 4)),
+    )
+
+    result = init_data.create_institutional_trend(
+        target_date="2026-03-04",
+        force=True,
+        lookback_days=1,
+    )
 
     assert result is False

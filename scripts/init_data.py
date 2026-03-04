@@ -17,6 +17,7 @@ import yfinance as yf
 import time
 import random
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timedelta
 
 # [FIX] Filter out pykrx's broken logging calls
@@ -690,113 +691,301 @@ def create_korean_stocks_list():
 
 
 
-def fetch_prices_yfinance(start_date, end_date, existing_df, file_path):
-    """yfinance를 이용한 가격 데이터 수집 폴백"""
+def _chunk_items(items, chunk_size):
+    """리스트를 chunk_size 단위로 나눈다."""
+    safe_chunk_size = max(1, int(chunk_size or 1))
+    for idx in range(0, len(items), safe_chunk_size):
+        yield items[idx: idx + safe_chunk_size]
+
+
+def _extract_yfinance_ohlcv(raw_df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """yfinance download 결과에서 특정 심볼의 OHLCV를 표준 컬럼으로 정규화한다."""
+    if raw_df is None or raw_df.empty:
+        return pd.DataFrame()
+
+    target_df = raw_df
+    if isinstance(raw_df.columns, pd.MultiIndex):
+        level0_values = raw_df.columns.get_level_values(0)
+        level1_values = raw_df.columns.get_level_values(1)
+        if symbol in level0_values:
+            target_df = raw_df[symbol].copy()
+        elif symbol in level1_values:
+            target_df = raw_df.xs(symbol, axis=1, level=1, drop_level=True).copy()
+        else:
+            return pd.DataFrame()
+    else:
+        target_df = raw_df.copy()
+
+    rename_map = {}
+    for col in target_df.columns:
+        normalized = str(col).strip().lower()
+        if normalized in {"open", "high", "low", "close", "volume"}:
+            rename_map[col] = normalized
+        elif normalized == "adj close":
+            rename_map[col] = "adj_close"
+    target_df = target_df.rename(columns=rename_map)
+
+    required_cols = ["open", "high", "low", "close", "volume"]
+    if not all(col in target_df.columns for col in required_cols):
+        return pd.DataFrame()
+
+    normalized_df = target_df[required_cols].copy()
+
+    if not isinstance(normalized_df.index, pd.DatetimeIndex):
+        normalized_df.index = pd.to_datetime(normalized_df.index, errors="coerce")
+    normalized_df = normalized_df[~normalized_df.index.isna()]
+    if normalized_df.empty:
+        return pd.DataFrame()
+
+    for col in required_cols:
+        normalized_df[col] = pd.to_numeric(normalized_df[col], errors="coerce")
+    normalized_df = normalized_df.dropna(subset=required_cols)
+    if normalized_df.empty:
+        return pd.DataFrame()
+
+    normalized_df[required_cols] = normalized_df[required_cols].astype(int)
+    return normalized_df
+
+
+def _append_yfinance_rows(new_data_list: list, ticker: str, normalized_df: pd.DataFrame) -> int:
+    """정규화된 OHLCV DataFrame을 최종 저장 포맷으로 변환해 리스트에 추가한다."""
+    if normalized_df is None or normalized_df.empty:
+        return 0
+
+    subset = normalized_df.reset_index()
+    date_col = subset.columns[0]
+    subset = subset.rename(columns={date_col: "date"})
+    subset["date"] = pd.to_datetime(subset["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    subset = subset.dropna(subset=["date"])
+    if subset.empty:
+        return 0
+
+    subset["ticker"] = str(ticker).zfill(6)
+    subset = subset[["date", "ticker", "open", "high", "low", "close", "volume"]]
+    new_data_list.append(subset)
+    return len(subset)
+
+
+def _download_yfinance_with_timeout(
+    yf_module,
+    symbols,
+    *,
+    start: str,
+    end: str,
+    use_threads: bool,
+    request_timeout: int,
+    call_timeout_seconds: int,
+    group_by: str | None = None,
+) -> pd.DataFrame:
+    """yfinance 호출 자체를 별도 스레드로 실행해 하드 타임아웃을 보장한다."""
+
+    def _run_download():
+        kwargs = {
+            "start": start,
+            "end": end,
+            "progress": False,
+            "threads": bool(use_threads),
+            "timeout": request_timeout,
+        }
+        if group_by:
+            kwargs["group_by"] = group_by
+        return yf_module.download(symbols, **kwargs)
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_run_download)
+    try:
+        return future.result(timeout=call_timeout_seconds)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def fetch_prices_yfinance(
+    start_date,
+    end_date,
+    existing_df,
+    file_path,
+    chunk_size=100,
+    request_timeout=8,
+    use_threads=True,
+    call_timeout_seconds=20,
+    max_runtime_seconds=300,
+):
+    """yfinance를 이용한 가격 데이터 수집 폴백 (배치 다운로드 + 타임아웃)."""
     try:
         if start_date.date() > end_date.date():
-            log(f"yfinance 수집: 시작일({start_date.strftime('%Y-%m-%d')})이 종료일({end_date.strftime('%Y-%m-%d')})보다 미래입니다. (최신 상태)", "SUCCESS")
+            log(
+                f"yfinance 수집: 시작일({start_date.strftime('%Y-%m-%d')})이 종료일({end_date.strftime('%Y-%m-%d')})보다 미래입니다. (최신 상태)",
+                "SUCCESS",
+            )
             return True
 
         import yfinance as yf
+
         log("yfinance 백업 수집 모드 가동...", "DEBUG")
-        
-        # 종목 리스트 로드
-        stocks_file = os.path.join(BASE_DIR, 'data', 'korean_stocks_list.csv')
+        stocks_file = os.path.join(BASE_DIR, "data", "korean_stocks_list.csv")
         if not os.path.exists(stocks_file):
             log("종목 리스트 파일이 없어 yfinance 수집 불가", "ERROR")
             return False
-            
-        stocks_df = pd.read_csv(stocks_file, dtype={'ticker': str})
-        tickers = stocks_df['ticker'].tolist()
-        
-        new_data_list = []
-        
-        total = len(tickers)
-        for idx, ticker in enumerate(tickers):
-            try:
-                # 마켓 확인
-                market_info = stocks_df[stocks_df['ticker'] == ticker]['market'].values
-                suffix = ".KS" if len(market_info) > 0 and market_info[0] == 'KOSPI' else ".KQ"
-                yf_ticker = f"{ticker}{suffix}"
-                
-                # yfinance 에러 로그 억제
-                import logging as _logging
-                yf_logger = _logging.getLogger('yfinance')
-                original_level = yf_logger.level
-                yf_logger.setLevel(_logging.CRITICAL)
-                
-                try:
-                    # 데이터 다운로드 (진행률 표시 없이, 스레드 비활성화)
-                    df = yf.download(yf_ticker, start=start_date.strftime('%Y-%m-%d'), end=(end_date + timedelta(days=1)).strftime('%Y-%m-%d'), progress=False, threads=False)
-                finally:
-                    yf_logger.setLevel(original_level)
-                
-                if not df.empty:
-                    # MultiIndex 컬럼 처리
-                    if isinstance(df.columns, pd.MultiIndex):
-                         # yfinance 0.2.x+ returns MultiIndex if configured or sometimes by default
-                         # It usually is (Price, Ticker) or just Price.
-                         # Dropping level if it exists
-                        try:
-                            df.columns = df.columns.droplevel(1)
-                        except:
-                            pass
-                        
-                    df = df.reset_index()
-                    # 컬럼 이름이 Date, Open, High ...
-                    
-                    # Rename columns to standard lowercase
-                    df = df.rename(columns={
-                        'Date': 'date', 'Open': 'open', 'High': 'high', 
-                        'Low': 'low', 'Close': 'close', 'Volume': 'volume'
-                    })
-                    
-                    # Ensure columns exist
-                    required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
-                    if not all(col in df.columns for col in required_cols):
-                         continue
 
-                    df['date'] = df['date'].dt.strftime('%Y-%m-%d')
-                    df['ticker'] = ticker
-                    
-                    # Type conversion
-                    df['open'] = df['open'].astype(int)
-                    df['high'] = df['high'].astype(int)
-                    df['low'] = df['low'].astype(int)
-                    df['close'] = df['close'].astype(int)
-                    df['volume'] = df['volume'].astype(int)
-                    
-                    subset = df[['date', 'ticker', 'open', 'high', 'low', 'close', 'volume']]
-                    new_data_list.append(subset)
-                    
-            except Exception as e:
-                continue
-                
-            if idx % 50 == 0:
-                print(f"  -> yfinance 진행: {idx}/{total}")
+        stocks_df = pd.read_csv(stocks_file, dtype={"ticker": str})
+        if stocks_df.empty or "ticker" not in stocks_df.columns:
+            log("종목 리스트가 비어 있어 yfinance 수집을 건너뜁니다.", "WARNING")
+            return True
+
+        stocks_df["ticker"] = stocks_df["ticker"].astype(str).str.zfill(6)
+        market_by_ticker = (
+            stocks_df.set_index("ticker")["market"].to_dict()
+            if "market" in stocks_df.columns
+            else {}
+        )
+
+        ticker_symbols = []
+        for ticker in stocks_df["ticker"].tolist():
+            market = str(market_by_ticker.get(ticker, "KOSPI")).upper()
+            suffix = ".KS" if market == "KOSPI" else ".KQ"
+            ticker_symbols.append((ticker, f"{ticker}{suffix}"))
+
+        safe_chunk_size = max(1, int(chunk_size or 100))
+        safe_timeout = max(1, int(request_timeout or 8))
+        safe_call_timeout = max(safe_timeout + 2, int(call_timeout_seconds or 20))
+        safe_max_runtime = max(1, int(max_runtime_seconds or 300))
+        total = len(ticker_symbols)
+        total_chunks = (total + safe_chunk_size - 1) // safe_chunk_size
+        if total == 0:
+            log("yfinance 수집 대상 종목이 없습니다.", "WARNING")
+            return True
+
+        download_start = start_date.strftime("%Y-%m-%d")
+        download_end = (end_date + timedelta(days=1)).strftime("%Y-%m-%d")
+        process_start_ts = time.time()
+        processed_tickers = 0
+        collected_rows = 0
+        new_data_list = []
+        runtime_exceeded = False
+
+        for chunk_index, chunk in enumerate(_chunk_items(ticker_symbols, safe_chunk_size), start=1):
+            if shared_state.STOP_REQUESTED:
+                log("⛔️ 사용자 요청으로 yfinance 수집을 중단합니다.", "WARNING")
+                break
+
+            elapsed_before_chunk = time.time() - process_start_ts
+            if elapsed_before_chunk > safe_max_runtime:
+                runtime_exceeded = True
+                log(
+                    f"yfinance 백업 수집 최대 실행시간 초과({safe_max_runtime}s). "
+                    f"중단 시점: {processed_tickers}/{total}",
+                    "ERROR",
+                )
+                break
+
+            symbols = [item[1] for item in chunk]
+            batch_df = pd.DataFrame()
+            try:
+                batch_df = _download_yfinance_with_timeout(
+                    yf,
+                    symbols if len(symbols) > 1 else symbols[0],
+                    start=download_start,
+                    end=download_end,
+                    use_threads=bool(use_threads),
+                    request_timeout=safe_timeout,
+                    call_timeout_seconds=safe_call_timeout,
+                    group_by="ticker",
+                )
+            except FuturesTimeoutError:
+                log(
+                    f"yfinance 배치 다운로드 타임아웃(chunk {chunk_index}/{total_chunks}, "
+                    f"size={len(symbols)}, {safe_call_timeout}s). 개별 재시도합니다.",
+                    "WARNING",
+                )
+            except Exception as batch_error:
+                log(
+                    f"yfinance 배치 다운로드 실패(chunk {chunk_index}/{total_chunks}, size={len(symbols)}): {batch_error}. 개별 재시도합니다.",
+                    "WARNING",
+                )
+
+            chunk_rows = 0
+            for ticker, symbol in chunk:
+                normalized = _extract_yfinance_ohlcv(batch_df, symbol)
+                chunk_rows += _append_yfinance_rows(new_data_list, ticker, normalized)
+
+            if chunk_rows == 0 and len(chunk) > 1:
+                for ticker, symbol in chunk:
+                    try:
+                        single_df = _download_yfinance_with_timeout(
+                            yf,
+                            symbol,
+                            start=download_start,
+                            end=download_end,
+                            use_threads=False,
+                            request_timeout=safe_timeout,
+                            call_timeout_seconds=safe_call_timeout,
+                        )
+                        normalized = _extract_yfinance_ohlcv(single_df, symbol)
+                        chunk_rows += _append_yfinance_rows(new_data_list, ticker, normalized)
+                    except FuturesTimeoutError:
+                        continue
+                    except Exception:
+                        continue
+
+            processed_tickers += len(chunk)
+            collected_rows += chunk_rows
+            elapsed = max(0.001, time.time() - process_start_ts)
+            speed = processed_tickers / elapsed
+            remain = max(0, total - processed_tickers)
+            eta_seconds = int(remain / speed) if speed > 0 else -1
+            eta_text = f"{eta_seconds}s" if eta_seconds >= 0 else "계산중"
+            progress_pct = (processed_tickers / total) * 100
+            log(
+                f"yfinance 진행: {processed_tickers}/{total} ({progress_pct:.1f}%) "
+                f"- chunk {chunk_index}/{total_chunks}, 누적행 {collected_rows}, ETA {eta_text}",
+                "INFO",
+            )
+
+        if runtime_exceeded:
+            return False
 
         if new_data_list:
-            new_df = pd.concat(new_data_list)
-            
+            new_df = pd.concat(new_data_list, ignore_index=True)
+            new_df = new_df.drop_duplicates(subset=["ticker", "date"], keep="last")
+
             if not existing_df.empty:
-                if 'date' in existing_df.columns and not pd.api.types.is_string_dtype(existing_df['date']):
-                     existing_df['date'] = existing_df['date'].dt.strftime('%Y-%m-%d')
-                     
-                final_df = pd.concat([existing_df, new_df])
-                final_df = final_df.drop_duplicates(subset=['ticker', 'date'], keep='last')
+                existing_copy = existing_df.copy()
+                if "date" in existing_copy.columns and not pd.api.types.is_string_dtype(existing_copy["date"]):
+                    existing_copy["date"] = pd.to_datetime(
+                        existing_copy["date"], errors="coerce"
+                    ).dt.strftime("%Y-%m-%d")
+                final_df = pd.concat([existing_copy, new_df], ignore_index=True)
+                final_df = final_df.drop_duplicates(subset=["ticker", "date"], keep="last")
             else:
                 final_df = new_df
-                
-            final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+
+            final_df.to_csv(file_path, index=False, encoding="utf-8-sig")
             log(f"yfinance 백업 수집 완료 ({len(final_df)}행)", "SUCCESS")
             return True
-        else:
-            log("yfinance 수집 데이터 없음", "WARNING")
-            return True
-            
+
+        log("yfinance 수집 데이터 없음", "WARNING")
+        return True
+
     except Exception as e:
         log(f"yfinance 폴백 실패: {e}", "ERROR")
         return False
+
+
+def _should_abort_daily_pykrx_bulk_fetch(error: Exception) -> bool:
+    """pykrx 전종목 일괄 조회 오류 중 즉시 폴백이 필요한 패턴인지 판별."""
+    if isinstance(error, json.JSONDecodeError):
+        return True
+
+    message = str(error or "").strip().lower()
+    if not message:
+        return False
+
+    known_error_signatures = [
+        "none of [index(['시가', '고가', '저가', '종가']",
+        "expecting value: line 1 column 1",
+        "logout",
+    ]
+    return any(signature in message for signature in known_error_signatures)
 
 
 def create_daily_prices(target_date=None, force=False, lookback_days=5):
@@ -889,6 +1078,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
         
         new_data_list = []
         processed_days = 0
+        pykrx_bulk_fetch_unavailable = False
         
         for dt in date_range:
             if shared_state.STOP_REQUESTED:
@@ -972,8 +1162,18 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 time.sleep(random.uniform(0.05, 0.1))
                 
             except Exception as e:
+                if _should_abort_daily_pykrx_bulk_fetch(e):
+                    pykrx_bulk_fetch_unavailable = True
+                    log(
+                        f"pykrx 전종목 시세 수집 불가 감지 ({cur_date_str}): {e}. yfinance 폴백으로 전환합니다.",
+                        "WARNING",
+                    )
+                    break
                 log(f"날짜별 수집 실패 ({cur_date_str}): {e}", "WARNING")
                 processed_days += 1
+
+        if pykrx_bulk_fetch_unavailable:
+            return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
                 
         # 병합 및 저장
         if new_data_list:
@@ -1187,6 +1387,31 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             log(f"수급 데이터 업데이트 완료: 총 {len(final_df)}행 (신규 {len(new_data_list)}행)", "DEBUG")
             return True
         else:
+            expected_latest_dt = end_date_obj
+            latest_existing_dt = None
+
+            if not existing_df.empty and "date" in existing_df.columns:
+                latest_existing_dt = pd.to_datetime(
+                    existing_df["date"], errors="coerce"
+                ).max()
+                if pd.isna(latest_existing_dt):
+                    latest_existing_dt = None
+
+            if latest_existing_dt is None:
+                log(
+                    "수급 데이터: 신규 수집 데이터가 없고 기존 데이터의 최신 날짜도 확인할 수 없습니다.",
+                    "ERROR",
+                )
+                return False
+
+            if latest_existing_dt.date() < expected_latest_dt.date():
+                log(
+                    f"수급 데이터 stale 감지: latest={latest_existing_dt.strftime('%Y-%m-%d')}, "
+                    f"expected>={expected_latest_dt.strftime('%Y-%m-%d')}",
+                    "ERROR",
+                )
+                return False
+
             log("수급 데이터: 신규 수집된 데이터가 없습니다.", "SUCCESS")
             return True
 
