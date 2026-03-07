@@ -19,7 +19,6 @@ from app.routes.kr_market_signal_common import (
 )
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 
-_VCP_SCORE_GATE = 5.0
 _TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
 
@@ -202,8 +201,6 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
     if status != "OPEN":
         return None
     if score < resolve_vcp_min_score(default=60.0):
-        return None
-    if not (is_vcp or vcp_score >= _VCP_SCORE_GATE):
         return None
 
     return {

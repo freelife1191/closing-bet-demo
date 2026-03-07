@@ -47,6 +47,8 @@ interface FileStatus {
   lastModified: string;
   size: string;
   rowCount: number | null;
+  dataDate?: string | null;
+  dataTimestamp?: string | null;
   link: string;
   menu: string;
 }
@@ -654,6 +656,13 @@ export default function DataStatusPage() {
                   <div className="text-right">
                     <div className="text-gray-300">{formatTimeAgo(file.lastModified)}</div>
                     <div className="text-[10px] text-gray-600">{file.lastModified || '-'}</div>
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">데이터 기준일</span>
+                  <div className="text-right">
+                    <div className="text-gray-300">{file.dataDate || '-'}</div>
+                    <div className="text-[10px] text-gray-600">{file.dataTimestamp || '-'}</div>
                   </div>
                 </div>
               </div>

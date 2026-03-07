@@ -1491,7 +1491,12 @@ class KRXCollector:
             logger.error(f"종목 상세 조회 실패 ({code}): {e}")
             return None
 
-    async def get_chart_data(self, code: str, days: int) -> Optional[ChartData]:
+    async def get_chart_data(
+        self,
+        code: str,
+        days: int,
+        target_date: str | date | datetime | None = None,
+    ) -> Optional[ChartData]:
         """차트 데이터 조회"""
         try:
             # logger.info(f"Chart data generation for {code} (FIX_V2)") # 디버그용 로그
@@ -1501,8 +1506,12 @@ class KRXCollector:
             from pykrx import stock
             normalized_code = str(code).zfill(6)
 
-            # 종료일: 최신 장 마감일
-            end_date_str = self._get_latest_market_date()
+            # 종료일: explicit target_date가 있으면 해당 날짜를 사용한다.
+            end_date_str = self._normalize_top_gainers_target_token(
+                str(target_date) if target_date is not None else None
+            )
+            if end_date_str == "latest":
+                end_date_str = self._get_latest_market_date()
             cached_chart = self._load_cached_pykrx_chart_data(
                 ticker=normalized_code,
                 end_date=end_date_str,
@@ -1552,7 +1561,11 @@ class KRXCollector:
             logger.error(f"차트 데이터 조회 실패 ({code}): {e}")
             return None
 
-    async def get_supply_data(self, code: str) -> Optional[SupplyData]:
+    async def get_supply_data(
+        self,
+        code: str,
+        target_date: str | date | datetime | None = None,
+    ) -> Optional[SupplyData]:
         """수급 데이터 조회 - 단일 5일 합산 서비스(CSV 캐시) 우선."""
         try:
             data_dir = str(getattr(getattr(self, "config", None), "DATA_DIR", "data") or "data")
@@ -1560,18 +1573,28 @@ class KRXCollector:
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 data_dir = os.path.join(base_dir, data_dir)
 
+            normalized_target_date = self._normalize_top_gainers_target_token(
+                str(target_date) if target_date is not None else None
+            )
+            target_datetime = None if normalized_target_date == "latest" else normalized_target_date
+            explicit_target_requested = target_datetime is not None
             trend_data = get_investor_trend_5day_for_ticker(
                 ticker=str(code).zfill(6),
                 data_dir=data_dir,
+                target_datetime=target_datetime,
                 verify_with_references=False,
             )
-            if isinstance(trend_data, dict) and not self._has_csv_anomaly_flags(trend_data):
+            if (
+                not explicit_target_requested
+                and isinstance(trend_data, dict)
+                and not self._has_csv_anomaly_flags(trend_data)
+            ):
                 return SupplyData(
                     foreign_buy_5d=int(trend_data.get("foreign", 0)),
                     inst_buy_5d=int(trend_data.get("institution", 0)),
                     retail_buy_5d=0,
                 )
-            if isinstance(trend_data, dict):
+            if not explicit_target_requested and isinstance(trend_data, dict):
                 logger.debug(
                     "통합 5일 수급 이상징후 감지(%s): pykrx fallback 사용",
                     str(code).zfill(6),
@@ -1579,7 +1602,9 @@ class KRXCollector:
 
             from pykrx import stock
 
-            end_date = self._get_latest_market_date()
+            end_date = normalized_target_date
+            if end_date == "latest":
+                end_date = self._get_latest_market_date()
             cached_supply = self._load_cached_pykrx_supply_summary(
                 ticker=str(code).zfill(6),
                 end_date=end_date,
@@ -1596,6 +1621,12 @@ class KRXCollector:
 
             df = stock.get_market_trading_value_by_date(start_date, end_date, code)
             if df.empty:
+                if isinstance(trend_data, dict):
+                    return SupplyData(
+                        foreign_buy_5d=int(trend_data.get("foreign", 0)),
+                        inst_buy_5d=int(trend_data.get("institution", 0)),
+                        retail_buy_5d=0,
+                    )
                 empty_payload = {
                     "foreign_buy_5d": 0,
                     "inst_buy_5d": 0,
@@ -1629,6 +1660,12 @@ class KRXCollector:
             )
             return SupplyData(**resolved_payload)
         except Exception as e:
+            if isinstance(locals().get("trend_data"), dict):
+                return SupplyData(
+                    foreign_buy_5d=int(trend_data.get("foreign", 0)),
+                    inst_buy_5d=int(trend_data.get("institution", 0)),
+                    retail_buy_5d=0,
+                )
             logger.error(f"수급 데이터 조회 실패 ({code}): {e}")
             return None
 

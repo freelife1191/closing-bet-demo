@@ -7,6 +7,7 @@ Screener 수급 통합 서비스 연동 테스트
 from __future__ import annotations
 
 from datetime import datetime
+from types import SimpleNamespace
 
 from engine.screener import SmartMoneyScreener
 
@@ -94,3 +95,54 @@ def test_calculate_supply_score_csv_retries_reference_verify_only_on_anomaly(mon
     assert captured_calls[1]["verify_with_references"] is True
     assert result["foreign_5d"] == 333
     assert result["inst_5d"] == 444
+
+
+def test_calculate_supply_score_uses_csv_only_for_historical_target_date(monkeypatch):
+    screener = object.__new__(SmartMoneyScreener)
+    screener._target_datetime = datetime(2000, 2, 24)
+    screener.toss_collector = SimpleNamespace()
+
+    called: dict[str, object] = {"toss": False, "csv": False}
+
+    def _fake_csv(_ticker: str) -> dict[str, int]:
+        called["csv"] = True
+        return {"score": 11, "foreign_1d": 1, "inst_1d": 2}
+
+    monkeypatch.setattr(
+        screener,
+        "_calculate_supply_score_csv",
+        _fake_csv,
+    )
+    monkeypatch.setattr(
+        "engine.screener.calculate_supply_score_with_toss_impl",
+        lambda **_kwargs: called.__setitem__("toss", True) or {"score": 99},
+    )
+
+    result = SmartMoneyScreener._calculate_supply_score(screener, "005930")
+
+    assert result == {"score": 11, "foreign_1d": 1, "inst_1d": 2}
+    assert called["csv"] is True
+    assert called["toss"] is False
+
+
+def test_calculate_supply_score_keeps_toss_for_current_target_date(monkeypatch):
+    screener = object.__new__(SmartMoneyScreener)
+    screener._target_datetime = datetime.now()
+    screener.toss_collector = SimpleNamespace()
+
+    called: dict[str, object] = {"toss": False}
+
+    monkeypatch.setattr(
+        screener,
+        "_calculate_supply_score_csv",
+        lambda _ticker: {"score": 11, "foreign_1d": 1, "inst_1d": 2},
+    )
+    monkeypatch.setattr(
+        "engine.screener.calculate_supply_score_with_toss_impl",
+        lambda **_kwargs: called.__setitem__("toss", True) or {"score": 99},
+    )
+
+    result = SmartMoneyScreener._calculate_supply_score(screener, "005930")
+
+    assert result == {"score": 99}
+    assert called["toss"] is True

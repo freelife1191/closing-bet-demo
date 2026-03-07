@@ -6,6 +6,10 @@ Common Update AI Analysis Service 리팩토링 테스트
 
 from __future__ import annotations
 
+import json
+import sys
+import types
+
 import pandas as pd
 
 from services.common_update_ai_analysis_service import (
@@ -13,6 +17,7 @@ from services.common_update_ai_analysis_service import (
     _resolve_ai_target_limit,
     _resolve_ai_target_dataframe,
     _select_top_ai_targets,
+    run_ai_analysis_step,
 )
 
 
@@ -101,3 +106,99 @@ def test_resolve_ai_target_limit_delegates_to_runtime_parser(monkeypatch):
     )
 
     assert _resolve_ai_target_limit() == 17
+
+
+def test_run_ai_analysis_step_writes_empty_placeholder_when_no_signals(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "signals_log.csv").write_text("signal_date,ticker,score\n", encoding="utf-8")
+
+    fake_module = types.ModuleType("engine.kr_ai_analyzer")
+    fake_module.KrAiAnalyzer = type("KrAiAnalyzer", (), {})
+    monkeypatch.setitem(sys.modules, "engine.kr_ai_analyzer", fake_module)
+    monkeypatch.setattr(
+        "services.common_update_ai_analysis_service.__file__",
+        str(tmp_path / "services" / "common_update_ai_analysis_service.py"),
+    )
+
+    statuses: list[tuple[str, str]] = []
+    logger = type(
+        "L",
+        (),
+        {
+            "info": lambda *_a, **_k: None,
+            "warning": lambda *_a, **_k: None,
+            "error": lambda *_a, **_k: None,
+        },
+    )()
+
+    run_ai_analysis_step(
+        target_date="2026-03-06",
+        selected_items=["AI Analysis"],
+        vcp_df=None,
+        update_item_status=lambda name, status: statuses.append((name, status)),
+        shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
+        logger=logger,
+    )
+
+    latest_payload = json.loads((data_dir / "kr_ai_analysis.json").read_text(encoding="utf-8"))
+    dated_payload = json.loads((data_dir / "kr_ai_analysis_20260306.json").read_text(encoding="utf-8"))
+
+    assert statuses == [("AI Analysis", "running"), ("AI Analysis", "done")]
+    assert latest_payload["signal_date"] == "2026-03-06"
+    assert latest_payload["signals"] == []
+    assert dated_payload["signal_date"] == "2026-03-06"
+    assert dated_payload["signals"] == []
+
+
+def test_run_ai_analysis_step_writes_kr_ai_analysis_files_for_targets(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "signals_log.csv").write_text(
+        "signal_date,ticker,score\n2026-03-06,5930,88\n",
+        encoding="utf-8",
+    )
+
+    class _DummyAnalyzer:
+        def analyze_multiple_stocks(self, tickers):
+            assert tickers == ["005930"]
+            return {
+                "signals": [{"ticker": "005930", "name": "삼성전자"}],
+                "market_indices": {"kospi": {"value": 1}},
+            }
+
+    fake_module = types.ModuleType("engine.kr_ai_analyzer")
+    fake_module.KrAiAnalyzer = _DummyAnalyzer
+    monkeypatch.setitem(sys.modules, "engine.kr_ai_analyzer", fake_module)
+    monkeypatch.setattr(
+        "services.common_update_ai_analysis_service.__file__",
+        str(tmp_path / "services" / "common_update_ai_analysis_service.py"),
+    )
+
+    statuses: list[tuple[str, str]] = []
+    logger = type(
+        "L",
+        (),
+        {
+            "info": lambda *_a, **_k: None,
+            "warning": lambda *_a, **_k: None,
+            "error": lambda *_a, **_k: None,
+        },
+    )()
+
+    run_ai_analysis_step(
+        target_date="2026-03-06",
+        selected_items=["AI Analysis"],
+        vcp_df=None,
+        update_item_status=lambda name, status: statuses.append((name, status)),
+        shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
+        logger=logger,
+    )
+
+    latest_payload = json.loads((data_dir / "kr_ai_analysis.json").read_text(encoding="utf-8"))
+    dated_payload = json.loads((data_dir / "kr_ai_analysis_20260306.json").read_text(encoding="utf-8"))
+
+    assert statuses == [("AI Analysis", "running"), ("AI Analysis", "done")]
+    assert latest_payload["signal_date"] == "2026-03-06"
+    assert latest_payload["signals"] == [{"ticker": "005930", "name": "삼성전자"}]
+    assert dated_payload["signals"] == [{"ticker": "005930", "name": "삼성전자"}]

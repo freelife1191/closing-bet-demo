@@ -17,6 +17,7 @@ def test_build_screening_result_calculates_change_pct_and_maps_fields():
         entry_price=70000,
         contraction_ratio=0.55,
         vcp_score=8,
+        is_vcp=True,
         first_close=100.0,
         last_close=110.0,
     )
@@ -26,6 +27,7 @@ def test_build_screening_result_calculates_change_pct_and_maps_fields():
     assert result["change_pct"] == 10.0
     assert result["current_price"] == 110.0
     assert result["vcp_score"] == 8
+    assert result["is_vcp"] is True
 
 
 def test_build_signal_item_uses_target_date_and_defaults():
@@ -50,4 +52,3 @@ def test_build_signal_item_uses_target_date_and_defaults():
     assert signal["signal_date"] == "2026-02-21"
     assert signal["foreign_5d"] == 11
     assert signal["inst_5d"] == 12
-

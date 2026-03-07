@@ -732,6 +732,163 @@ def test_get_chart_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeypa
     assert calls["count"] == 1
 
 
+def test_get_chart_data_uses_explicit_target_date_for_end_date(monkeypatch, tmp_path):
+    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with collectors_module.KRXCollector._pykrx_chart_cache_lock:
+        collectors_module.KRXCollector._pykrx_chart_cache.clear()
+
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_pykrx_chart_sqlite_context",
+        classmethod(
+            lambda cls, **kwargs: (
+                str(tmp_path / f"{kwargs['ticker']}__{kwargs['end_date']}__{kwargs['days']}.snapshot"),
+                (321, 654),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_get_latest_market_date",
+        lambda self: (_ for _ in ()).throw(AssertionError("latest market date should not be used")),
+    )
+
+    captured: dict[str, str] = {}
+
+    def _fake_get_market_ohlcv_by_date(start_date, end_date, _ticker):
+        captured["start_date"] = start_date
+        captured["end_date"] = end_date
+        index = pd.to_datetime(["2026-03-02", "2026-03-03", "2026-03-04"])
+        return pd.DataFrame(
+            {
+                "시가": [100, 101, 102],
+                "고가": [110, 111, 112],
+                "저가": [90, 91, 92],
+                "종가": [105, 106, 107],
+                "거래량": [1000, 1100, 1200],
+            },
+            index=index,
+        )
+
+    fake_stock_ns = types.SimpleNamespace(
+        get_market_ohlcv_by_date=_fake_get_market_ohlcv_by_date,
+    )
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = fake_stock_ns
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+
+    chart = asyncio.run(collector.get_chart_data("005930", 3, target_date="20260304"))
+
+    assert chart is not None
+    assert captured["end_date"] == "20260304"
+
+
+def test_get_supply_data_uses_explicit_target_date_for_pykrx_window(monkeypatch, tmp_path):
+    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(DATA_DIR=str(tmp_path)))
+    with collectors_module.KRXCollector._pykrx_supply_cache_lock:
+        collectors_module.KRXCollector._pykrx_supply_cache.clear()
+
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_pykrx_supply_sqlite_context",
+        classmethod(
+            lambda cls, **kwargs: (
+                str(tmp_path / f"{kwargs['ticker']}__{kwargs['end_date']}.snapshot"),
+                (123, 456),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        collectors_module,
+        "get_investor_trend_5day_for_ticker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_get_latest_market_date",
+        lambda self: (_ for _ in ()).throw(AssertionError("latest market date should not be used")),
+    )
+
+    captured: dict[str, str] = {}
+
+    def _fake_get_market_trading_value_by_date(start_date, end_date, _ticker):
+        captured["start_date"] = start_date
+        captured["end_date"] = end_date
+        return pd.DataFrame(
+            {
+                "외국인합계": [1, 2, 3, 4, 5],
+                "기관합계": [10, 20, 30, 40, 50],
+                "개인": [-11, -22, -33, -44, -55],
+            }
+        )
+
+    fake_stock_ns = types.SimpleNamespace(
+        get_market_trading_value_by_date=_fake_get_market_trading_value_by_date,
+    )
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = fake_stock_ns
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+
+    supply = asyncio.run(collector.get_supply_data("005930", target_date="20260304"))
+
+    assert supply is not None
+    assert captured["end_date"] == "20260304"
+    assert supply.foreign_buy_5d == 15
+    assert supply.inst_buy_5d == 150
+
+
+def test_get_supply_data_prefers_pykrx_for_explicit_historical_target(monkeypatch, tmp_path):
+    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(DATA_DIR=str(tmp_path)))
+    with collectors_module.KRXCollector._pykrx_supply_cache_lock:
+        collectors_module.KRXCollector._pykrx_supply_cache.clear()
+
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_pykrx_supply_sqlite_context",
+        classmethod(
+            lambda cls, **kwargs: (
+                str(tmp_path / f"{kwargs['ticker']}__{kwargs['end_date']}.snapshot"),
+                (111, 222),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        collectors_module,
+        "get_investor_trend_5day_for_ticker",
+        lambda **_kwargs: {
+            "foreign": 9_999,
+            "institution": 8_888,
+            "quality": {"csv_anomaly_flags": []},
+        },
+    )
+
+    captured = {"count": 0}
+
+    def _fake_get_market_trading_value_by_date(_start_date, _end_date, _ticker):
+        captured["count"] += 1
+        return pd.DataFrame(
+            {
+                "외국인합계": [10, 20, 30, 40, 50],
+                "기관합계": [1, 2, 3, 4, 5],
+                "개인": [-11, -22, -33, -44, -55],
+            }
+        )
+
+    fake_stock_ns = types.SimpleNamespace(
+        get_market_trading_value_by_date=_fake_get_market_trading_value_by_date,
+    )
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = fake_stock_ns
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+
+    supply = asyncio.run(collector.get_supply_data("005930", target_date="20260304"))
+
+    assert supply is not None
+    assert captured["count"] == 1
+    assert supply.foreign_buy_5d == 150
+    assert supply.inst_buy_5d == 15
+
+
 def test_naver_finance_investor_trend_prefers_unified_service(monkeypatch):
     collector = collectors_module.NaverFinanceCollector(
         config=types.SimpleNamespace(DATA_DIR="data")

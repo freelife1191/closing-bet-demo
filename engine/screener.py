@@ -6,6 +6,7 @@
 import pandas as pd
 from typing import List, Dict, Optional
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 import os
 
@@ -295,6 +296,7 @@ class SmartMoneyScreener:
                 entry_price=vcp_result.entry_price,
                 contraction_ratio=vcp_result.contraction_ratio,
                 vcp_score=vcp_score_final,
+                is_vcp=vcp_result.is_vcp,
                 first_close=first_close,
                 last_close=last_close,
             )
@@ -318,6 +320,8 @@ class SmartMoneyScreener:
 
     def _calculate_supply_score(self, ticker: str) -> Dict:
         """수급 점수 계산 (Toss API 기반)"""
+        if self._should_use_csv_supply_for_target_date():
+            return self._calculate_supply_score_csv(ticker)
         return calculate_supply_score_with_toss_impl(
             ticker=ticker,
             toss_collector=self.toss_collector,
@@ -325,6 +329,16 @@ class SmartMoneyScreener:
             score_supply_from_toss_trend_fn=score_supply_from_toss_trend,
             cache_data_dir=os.path.join(BASE_DIR, "data"),
         )
+
+    def _should_use_csv_supply_for_target_date(self) -> bool:
+        """과거 target_date 분석은 CSV 5일 수급만 사용한다."""
+        if self._target_datetime is None:
+            return False
+
+        try:
+            return self._target_datetime.date() < datetime.now().date()
+        except Exception:
+            return False
 
     @staticmethod
     def _has_csv_anomaly_flags(trend_data: dict[str, object] | None) -> bool:

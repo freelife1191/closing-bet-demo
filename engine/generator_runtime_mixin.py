@@ -263,10 +263,11 @@ class SignalGeneratorRuntimeMixin:
             current_drop_stats=self.drop_stats,
         )
 
-    async def _analyze_base(self, stock: StockData) -> Optional[Dict]:
+    async def _analyze_base(self, stock: StockData, target_date: date | None = None) -> Optional[Dict]:
         """1단계: 기본 분석 (차트, 수급, Pre-Score)"""
         return await _analyze_base_impl(
             stock=stock,
+            target_date=target_date,
             collector=self._collector,
             scorer=self.scorer,
             config=self.config,

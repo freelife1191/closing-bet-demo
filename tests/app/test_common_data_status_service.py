@@ -131,3 +131,103 @@ def test_build_common_data_status_payload_requests_readonly_update_status():
 
     assert payload["update_status"]["isRunning"] is False
     assert captured["kwargs"]["deep_copy"] is False
+
+
+def test_build_common_data_status_payload_includes_logical_data_dates(tmp_path: Path):
+    common_data_status_service.clear_common_data_status_cache()
+    prices_path = tmp_path / "daily_prices.csv"
+    prices_path.write_text(
+        "date,ticker,close\n2026-03-05,005930,100\n2026-03-06,005930,110\n",
+        encoding="utf-8",
+    )
+
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text(
+        "signal_date,ticker,score\n2026-03-04,005930,60\n2026-03-06,000660,70\n",
+        encoding="utf-8",
+    )
+
+    market_gate_path = tmp_path / "market_gate.json"
+    market_gate_path.write_text(
+        json.dumps({"dataset_date": "2026-03-06", "status": "중립"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    ai_path = tmp_path / "kr_ai_analysis.json"
+    ai_path.write_text(
+        json.dumps({"generated_at": "2026-03-06T16:10:00+09:00", "signals": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    payload = build_common_data_status_payload(
+        data_files_to_check=[
+            {"name": "Daily Prices", "path": str(prices_path)},
+            {"name": "VCP Signals", "path": str(signals_path)},
+            {"name": "Market Gate", "path": str(market_gate_path)},
+            {"name": "AI Analysis", "path": str(ai_path)},
+        ],
+        load_update_status=lambda **_kwargs: {"isRunning": False},
+        logger=types.SimpleNamespace(debug=lambda *_a, **_k: None),
+    )
+
+    files = {item["name"]: item for item in payload["files"]}
+    assert files["Daily Prices"]["dataDate"] == "2026-03-06"
+    assert files["VCP Signals"]["dataDate"] == "2026-03-06"
+    assert files["Market Gate"]["dataDate"] == "2026-03-06"
+    assert files["AI Analysis"]["dataDate"] == "2026-03-06"
+    assert files["AI Analysis"]["dataTimestamp"] == "2026-03-06T16:10:00+09:00"
+
+
+def test_build_common_data_status_payload_prefers_signal_date_over_generated_at(tmp_path: Path):
+    common_data_status_service.clear_common_data_status_cache()
+    ai_path = tmp_path / "kr_ai_analysis.json"
+    ai_path.write_text(
+        json.dumps(
+            {
+                "signal_date": "2026-03-06",
+                "generated_at": "2026-03-07T18:34:07.914903",
+                "signals": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_common_data_status_payload(
+        data_files_to_check=[{"name": "AI Analysis", "path": str(ai_path)}],
+        load_update_status=lambda **_kwargs: {"isRunning": False},
+        logger=types.SimpleNamespace(debug=lambda *_a, **_k: None),
+    )
+
+    ai_file = payload["files"][0]
+    assert ai_file["dataDate"] == "2026-03-06"
+    assert ai_file["dataTimestamp"] == "2026-03-07T18:34:07.914903"
+
+
+def test_build_common_data_status_payload_uses_vcp_metadata_when_signal_csv_is_empty(tmp_path: Path):
+    common_data_status_service.clear_common_data_status_cache()
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text("signal_date,ticker,score\n", encoding="utf-8")
+
+    (tmp_path / "vcp_signals_latest.json").write_text(
+        json.dumps(
+            {
+                "date": "2026-03-06",
+                "generated_at": "2026-03-07T18:22:23.376962",
+                "signals": [],
+                "total_candidates": 0,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_common_data_status_payload(
+        data_files_to_check=[{"name": "VCP Signals", "path": str(signals_path)}],
+        load_update_status=lambda **_kwargs: {"isRunning": False},
+        logger=types.SimpleNamespace(debug=lambda *_a, **_k: None),
+    )
+
+    vcp_file = payload["files"][0]
+    assert vcp_file["dataDate"] == "2026-03-06"
+    assert vcp_file["dataTimestamp"] == "2026-03-07T18:22:23.376962"

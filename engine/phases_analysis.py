@@ -53,7 +53,11 @@ class Phase1Analyzer(BasePhase):
             "other": 0,
         }
 
-    async def execute(self, candidates: List[StockData]) -> List[Dict]:
+    async def execute(
+        self,
+        candidates: List[StockData],
+        target_date: date | None = None,
+    ) -> List[Dict]:
         """1단계 분석 실행."""
         self.stats["processed"] += len(candidates)
         results = []
@@ -62,7 +66,7 @@ class Phase1Analyzer(BasePhase):
             self._check_stop_requested()
 
             try:
-                result = await self._analyze_stock(stock)
+                result = await self._analyze_stock(stock, target_date=target_date)
                 if result:
                     results.append(result)
                     self.stats["passed"] += 1
@@ -84,7 +88,7 @@ class Phase1Analyzer(BasePhase):
 
         return results
 
-    async def _analyze_stock(self, stock: StockData) -> Optional[Dict]:
+    async def _analyze_stock(self, stock: StockData, target_date: date | None = None) -> Optional[Dict]:
         """개별 종목 분석."""
         try:
             detail = await self.collector.get_stock_detail(stock.code)
@@ -92,8 +96,14 @@ class Phase1Analyzer(BasePhase):
                 stock.high_52w = detail.get('high_52w', stock.high_52w)
                 stock.low_52w = detail.get('low_52w', stock.low_52w)
 
-            charts = await self.collector.get_chart_data(stock.code, 60)
-            supply = await self.collector.get_supply_data(stock.code)
+            try:
+                charts = await self.collector.get_chart_data(stock.code, 60, target_date=target_date)
+            except TypeError:
+                charts = await self.collector.get_chart_data(stock.code, 60)
+            try:
+                supply = await self.collector.get_supply_data(stock.code, target_date=target_date)
+            except TypeError:
+                supply = await self.collector.get_supply_data(stock.code)
 
             pre_score, _, score_details = self.scorer.calculate(stock, charts, [], supply, None)
 

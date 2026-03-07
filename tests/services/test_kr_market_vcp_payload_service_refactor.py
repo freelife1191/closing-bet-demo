@@ -54,18 +54,22 @@ def _build_payload(
     req_date: str | None,
     count_total_scanned_stocks_fn=lambda _data_dir: 1,
     load_json_file_fn=None,
+    filter_signals_dataframe_by_date_fn=None,
+    now=None,
 ):
     logger = logging.getLogger("vcp-payload-cache-test")
     if load_json_file_fn is None:
         load_json_file_fn = lambda _name, **_kwargs: {}
+    if filter_signals_dataframe_by_date_fn is None:
+        filter_signals_dataframe_by_date_fn = lambda df, req, _today: (
+            df if not req else df[df["signal_date"] == req],
+            req or "",
+        )
     return vcp_payload_service.build_vcp_signals_payload(
         req_date=req_date,
         load_csv_file=lambda name: pd.read_csv(tmp_path / name),
         load_json_file=load_json_file_fn,
-        filter_signals_dataframe_by_date=lambda df, req, _today: (
-            df if not req else df[df["signal_date"] == req],
-            req or "",
-        ),
+        filter_signals_dataframe_by_date=filter_signals_dataframe_by_date_fn,
         build_vcp_signals_from_dataframe=lambda df: [
             {
                 "ticker": str(row["ticker"]).zfill(6),
@@ -82,6 +86,7 @@ def _build_payload(
         merge_ai_data_into_vcp_signals=lambda _signals, _ai_map: 0,
         count_total_scanned_stocks=count_total_scanned_stocks_fn,
         logger=logger,
+        now=now,
         data_dir=str(tmp_path),
     )
 
@@ -192,6 +197,41 @@ def test_build_vcp_payload_requests_readonly_ai_json_load(tmp_path):
     assert captured_calls
     assert captured_calls[0][0] == "ai_analysis_results_20260222.json"
     assert all(kwargs.get("deep_copy") is False for _, kwargs in captured_calls)
+
+
+def test_build_vcp_payload_falls_back_to_latest_available_date_when_today_is_empty(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    payload = _build_payload(
+        tmp_path,
+        req_date=None,
+        filter_signals_dataframe_by_date_fn=lambda df, req, today: (
+            df[df["signal_date"] == today],
+            today,
+        ),
+        now=datetime(2026, 2, 23, 9, 0, 0),
+    )
+
+    assert payload["count"] == 1
+    assert payload["signals"][0]["signal_date"] == "2026-02-22"
+    assert payload["stale_warning"] == (
+        "오늘(2026-02-23) 기준 VCP 시그널이 없습니다. 최신 저장 데이터는 2026-02-22입니다."
+    )
+
+
+def test_build_vcp_signals_cache_signature_includes_schema_version(tmp_path):
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    signature = vcp_signals_cache.build_vcp_signals_cache_signature(
+        data_dir=str(tmp_path),
+        req_date=None,
+        today="2026-02-23",
+    )
+
+    assert signature is not None
+    assert signature[0] == "vcp-signals"
+    assert signature[1] == vcp_signals_cache._VCP_SIGNALS_CACHE_SCHEMA_VERSION
 
 
 def test_build_vcp_payload_sqlite_load_uses_read_only_connection(monkeypatch, tmp_path):

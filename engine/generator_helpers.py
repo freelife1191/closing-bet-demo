@@ -111,6 +111,7 @@ def update_pipeline_drop_stats(*, pipeline, current_drop_stats: Dict[str, int]) 
 async def analyze_base(
     *,
     stock: StockData,
+    target_date: date | None,
     collector,
     scorer,
     config,
@@ -122,7 +123,10 @@ async def analyze_base(
             stock.high_52w = detail.get("high_52w", stock.high_52w)
             stock.low_52w = detail.get("low_52w", stock.low_52w)
 
-        charts = await collector.get_chart_data(stock.code, 60)
+        try:
+            charts = await collector.get_chart_data(stock.code, 60, target_date=target_date)
+        except TypeError:
+            charts = await collector.get_chart_data(stock.code, 60)
 
         if config.USE_TOSS_DATA and charts and getattr(stock, "trading_value", 0) > 0 and charts.closes:
             try:
@@ -137,7 +141,10 @@ async def analyze_base(
             except Exception:
                 pass
 
-        supply = await collector.get_supply_data(stock.code)
+        try:
+            supply = await collector.get_supply_data(stock.code, target_date=target_date)
+        except TypeError:
+            supply = await collector.get_supply_data(stock.code)
         pre_score, _, score_details = scorer.calculate(stock, charts, [], supply, None)
 
         return {
@@ -244,6 +251,7 @@ async def analyze_stock(
     """단일 종목 분석 (기존 호환용 - Batch 미사용)."""
     base_data = await analyze_base(
         stock=stock,
+        target_date=target_date,
         collector=collector,
         scorer=scorer,
         config=config,
@@ -297,4 +305,3 @@ def build_signal_summary(signals: List[Signal]) -> Dict:
             summary["total_risk"] += signal.r_value * signal.r_multiplier
 
     return summary
-

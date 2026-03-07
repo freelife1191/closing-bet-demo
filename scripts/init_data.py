@@ -17,7 +17,7 @@ import yfinance as yf
 import time
 import random
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timedelta
 
 # [FIX] Filter out pykrx's broken logging calls
@@ -580,6 +580,147 @@ def ensure_directory(dir_path):
         log(f"디렉토리 생성됨: {dir_path}", "SUCCESS")
     else:
         log(f"디렉토리 확인됨: {dir_path}")
+
+
+def _normalize_trend_date_token(value):
+    """수급 상세 응답의 날짜 토큰을 YYYY-MM-DD 문자열로 정규화한다."""
+    token = str(value or "").strip()
+    if not token:
+        return None
+
+    if len(token) >= 10:
+        token = token[:10]
+
+    for fmt in ("%Y-%m-%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(token, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def _collect_toss_trend_rows_for_ticker(ticker: str, expected_latest_dt: datetime) -> list[dict]:
+    """Toss 최신 5거래일 상세를 date/ticker/foreign_buy/inst_buy 행으로 변환한다."""
+    try:
+        from engine.toss_collector import TossCollector
+
+        trend_payload = TossCollector().get_investor_trend(ticker, days=5) or {}
+    except Exception as error:
+        log(f"[Supply Trend][Toss] {ticker} 조회 실패: {error}", "DEBUG")
+        return []
+
+    details = trend_payload.get("details", [])
+    if not isinstance(details, list):
+        return []
+
+    rows = []
+    for item in details:
+        if not isinstance(item, dict):
+            continue
+
+        normalized_date = _normalize_trend_date_token(
+            item.get("baseDate") or item.get("tradeDate") or item.get("date")
+        )
+        if not normalized_date:
+            continue
+
+        try:
+            row_dt = datetime.strptime(normalized_date, "%Y-%m-%d")
+        except ValueError:
+            continue
+
+        if row_dt.date() > expected_latest_dt.date():
+            continue
+
+        close = float(item.get("close", 0) or 0)
+        foreign_volume = float(item.get("netForeignerBuyVolume", 0) or 0)
+        institution_volume = float(item.get("netInstitutionBuyVolume", 0) or 0)
+        rows.append(
+            {
+                "date": normalized_date,
+                "ticker": str(ticker).zfill(6),
+                "foreign_buy": int(foreign_volume * close),
+                "inst_buy": int(institution_volume * close),
+            }
+        )
+
+    return rows
+
+
+def _backfill_institutional_trend_from_toss(
+    *,
+    tickers_set: set[str],
+    existing_df: pd.DataFrame,
+    file_path: str,
+    expected_latest_dt: datetime,
+) -> bool:
+    """
+    pykrx 수급 배치 응답이 비었을 때 Toss 최신 5거래일 상세로 CSV를 백필한다.
+
+    Toss는 과거 arbitrary 날짜 조회가 불가능하므로, 요청 기준일 이하 최신 5거래일만 채운다.
+    """
+    tickers = sorted(str(ticker).zfill(6) for ticker in tickers_set if str(ticker).strip())
+    if not tickers:
+        return False
+
+    collected_rows: list[dict] = []
+    max_workers = max(1, min(8, len(tickers)))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_collect_toss_trend_rows_for_ticker, ticker, expected_latest_dt): ticker
+            for ticker in tickers
+        }
+        total = len(futures)
+        for index, future in enumerate(as_completed(futures), start=1):
+            ticker = futures[future]
+            try:
+                ticker_rows = future.result()
+            except Exception as error:
+                log(f"[Supply Trend][Toss] {ticker} 백필 실패: {error}", "DEBUG")
+                continue
+
+            if ticker_rows:
+                collected_rows.extend(ticker_rows)
+
+            if index % 200 == 0 or index == total:
+                log(f"[Supply Trend][Toss] {index}/{total} 종목 처리", "DEBUG")
+
+    if not collected_rows:
+        return False
+
+    fallback_df = pd.DataFrame(collected_rows)
+    final_df = fallback_df if existing_df.empty else pd.concat([existing_df, fallback_df], ignore_index=True)
+    final_df = final_df.drop_duplicates(subset=["date", "ticker"], keep="last")
+    final_df = final_df.sort_values(["ticker", "date"])
+    final_df.to_csv(file_path, index=False, encoding="utf-8-sig")
+
+    latest_backfilled_dt = pd.to_datetime(final_df["date"], errors="coerce").max()
+    if pd.isna(latest_backfilled_dt):
+        return False
+
+    log(
+        f"수급 데이터 업데이트 완료 (Toss 백필): 총 {len(final_df)}행",
+        "WARNING",
+    )
+    return latest_backfilled_dt.date() >= expected_latest_dt.date()
+
+
+def _write_vcp_signals_latest_payload(
+    *,
+    target_date: str | None,
+    signals: list[dict] | None,
+) -> None:
+    payload = {
+        "date": str(target_date or datetime.now().strftime("%Y-%m-%d")),
+        "generated_at": datetime.now().isoformat(),
+        "total_candidates": len(signals or []),
+        "filtered_count": len(signals or []),
+        "signals": signals or [],
+    }
+    latest_path = os.path.join(BASE_DIR, "data", "vcp_signals_latest.json")
+    with open(latest_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2, cls=NumpyEncoder)
 
 def create_korean_stocks_list():
     """한국 주식 목록 생성 - pykrx로 시가총액 상위 종목 조회"""
@@ -1398,6 +1539,13 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
                     latest_existing_dt = None
 
             if latest_existing_dt is None:
+                if _backfill_institutional_trend_from_toss(
+                    tickers_set=tickers_set,
+                    existing_df=existing_df,
+                    file_path=file_path,
+                    expected_latest_dt=expected_latest_dt,
+                ):
+                    return True
                 log(
                     "수급 데이터: 신규 수집 데이터가 없고 기존 데이터의 최신 날짜도 확인할 수 없습니다.",
                     "ERROR",
@@ -1405,6 +1553,13 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
                 return False
 
             if latest_existing_dt.date() < expected_latest_dt.date():
+                if _backfill_institutional_trend_from_toss(
+                    tickers_set=tickers_set,
+                    existing_df=existing_df,
+                    file_path=file_path,
+                    expected_latest_dt=expected_latest_dt,
+                ):
+                    return True
                 log(
                     f"수급 데이터 stale 감지: latest={latest_existing_dt.strftime('%Y-%m-%d')}, "
                     f"expected>={expected_latest_dt.strftime('%Y-%m-%d')}",
@@ -1449,13 +1604,6 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 return bool(value)
             normalized = str(value).strip().lower()
             return normalized in {"1", "true", "yes", "y", "on"}
-
-        def _passes_vcp_signal_gate(vcp_score_value, is_vcp_value) -> bool:
-            try:
-                vcp_score_float = float(vcp_score_value or 0)
-            except (TypeError, ValueError):
-                vcp_score_float = 0.0
-            return _as_bool(is_vcp_value) or vcp_score_float >= 5.0
         
         resolved_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
         if max_stocks is not None:
@@ -1480,14 +1628,10 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         df_result = screener.run_screening(max_stocks=resolved_max_stocks)
         
         signals = []
-        excluded_by_vcp_gate = 0
         if not df_result.empty:
             for row in df_result.itertuples(index=False):
                 row_vcp_score = float(getattr(row, "vcp_score", 0) or 0)
                 row_is_vcp = _as_bool(getattr(row, "is_vcp", False))
-                if not _passes_vcp_signal_gate(row_vcp_score, row_is_vcp):
-                    excluded_by_vcp_gate += 1
-                    continue
 
                 signals.append({
                     'ticker': str(getattr(row, 'ticker', '')),
@@ -1505,12 +1649,6 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     'is_vcp': row_is_vcp,
                     'current_price': int(float(getattr(row, 'entry_price', 0) or 0)) # Approximation or need fetch
                 })
-        if excluded_by_vcp_gate > 0:
-            log(
-                f"VCP 패턴 게이트 미충족으로 {excluded_by_vcp_gate}건 제외 "
-                f"(조건: vcp_score>=5 또는 is_vcp=True)",
-                "INFO",
-            )
 
         log(f"총 {len(signals)}개 시그널 감지")
         
@@ -1685,6 +1823,10 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         if signals:
             df_new = pd.DataFrame(signals)
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
+            _write_vcp_signals_latest_payload(
+                target_date=str(df_new['signal_date'].iloc[0]) if 'signal_date' in df_new.columns and not df_new.empty else target_date,
+                signals=signals,
+            )
             
             # 기존 로그가 있으면 로드하여 병합 (Append & Deduplicate)
             if os.path.exists(file_path):
@@ -1750,6 +1892,10 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             )
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
             df.to_csv(file_path, index=False, encoding='utf-8-sig')
+            _write_vcp_signals_latest_payload(
+                target_date=target_date,
+                signals=[],
+            )
             log("VCP 조건 충족 종목 없음 - 빈 결과 저장", "INFO")
             return True
             
@@ -1773,6 +1919,10 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         )
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
         df.to_csv(file_path, index=False, encoding='utf-8-sig')
+        _write_vcp_signals_latest_payload(
+            target_date=target_date,
+            signals=[],
+        )
         log("VCP 분석 오류 - 빈 결과 저장", "INFO")
         return False
 

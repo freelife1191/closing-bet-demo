@@ -86,22 +86,34 @@ def _delete_existing_ai_result_file(data_dir: str, analysis_date: str, logger: A
         logger.warning(f"기존 AI 파일 삭제 실패: {delete_error}")
 
 
+def _build_empty_ai_analysis_payload(analysis_date: str) -> dict[str, Any]:
+    return {
+        "signals": [],
+        "generated_at": datetime.now().isoformat(),
+        "signal_date": analysis_date,
+        "message": "해당 날짜의 AI 분석 대상 시그널이 없습니다.",
+    }
+
+
 def _write_ai_analysis_files(
     *,
     data_dir: str,
     analysis_date: str,
-    target_date: str | None,
     results: dict[str, Any],
 ) -> None:
     date_str = analysis_date.replace("-", "")
-    date_file = os.path.join(data_dir, f"ai_analysis_results_{date_str}.json")
     serialized = json.dumps(results, ensure_ascii=False, indent=2, cls=NumpyEncoder)
-    atomic_write_text(date_file, serialized)
+    ai_result_files = [
+        os.path.join(data_dir, f"ai_analysis_results_{date_str}.json"),
+        os.path.join(data_dir, "ai_analysis_results.json"),
+    ]
+    kr_ai_files = [
+        os.path.join(data_dir, f"kr_ai_analysis_{date_str}.json"),
+        os.path.join(data_dir, "kr_ai_analysis.json"),
+    ]
 
-    is_today = analysis_date == datetime.now().strftime("%Y-%m-%d")
-    if not target_date or is_today:
-        latest_file = os.path.join(data_dir, "ai_analysis_results.json")
-        atomic_write_text(latest_file, serialized)
+    for filepath in [*ai_result_files, *kr_ai_files]:
+        atomic_write_text(filepath, serialized)
 
 
 def _select_top_ai_targets(target_df: pd.DataFrame, limit: int) -> pd.DataFrame:
@@ -170,12 +182,22 @@ def run_ai_analysis_step(
 
         if target_df.empty:
             logger.info(f"[{analysis_date}] 시그널 데이터가 없어 AI 분석 생략")
+            _write_ai_analysis_files(
+                data_dir=data_dir,
+                analysis_date=analysis_date,
+                results=_build_empty_ai_analysis_payload(analysis_date),
+            )
             update_item_status("AI Analysis", "done")
             return
 
         normalized_targets = _normalize_ai_target_dataframe(target_df, logger=logger)
         if normalized_targets.empty:
             logger.info(f"[{analysis_date}] 유효 ticker 데이터가 없어 AI 분석 생략")
+            _write_ai_analysis_files(
+                data_dir=data_dir,
+                analysis_date=analysis_date,
+                results=_build_empty_ai_analysis_payload(analysis_date),
+            )
             update_item_status("AI Analysis", "done")
             return
 
@@ -196,7 +218,6 @@ def run_ai_analysis_step(
         _write_ai_analysis_files(
             data_dir=data_dir,
             analysis_date=analysis_date,
-            target_date=target_date,
             results=results,
         )
         logger.info(f"AI 분석 결과 저장 완료: {analysis_date}")

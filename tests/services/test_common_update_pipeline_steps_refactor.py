@@ -171,7 +171,7 @@ def test_run_vcp_signals_step_returns_dataframe_and_marks_done(monkeypatch):
     assert statuses == [("VCP Signals", "running"), ("VCP Signals", "done")]
 
 
-def test_run_ai_jongga_v2_step_marks_ai_analysis_done(monkeypatch):
+def test_run_ai_jongga_v2_step_marks_only_ai_jongga_status(monkeypatch):
     statuses: list[tuple[str, str]] = []
 
     async def _run_screener(*_a, **_k):
@@ -188,8 +188,4 @@ def test_run_ai_jongga_v2_step_marks_ai_analysis_done(monkeypatch):
         logger=_logger(),
     )
 
-    assert statuses == [
-        ("AI Jongga V2", "running"),
-        ("AI Analysis", "done"),
-        ("AI Jongga V2", "done"),
-    ]
+    assert statuses == [("AI Jongga V2", "running"), ("AI Jongga V2", "done")]

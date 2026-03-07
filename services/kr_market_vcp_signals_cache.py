@@ -28,6 +28,7 @@ from services.sqlite_utils import (
 
 
 _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
+_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 2
 _VCP_SIGNALS_MEMORY_CACHE: OrderedDict[
     str,
     tuple[tuple[Any, ...], list[dict[str, Any]]],
@@ -225,7 +226,14 @@ def build_vcp_signals_cache_signature(
     signature = _file_signature(signals_file)
     if signature is None:
         return None
-    return ("vcp-signals", req_date or "__latest__", today, signature[0], signature[1])
+    return (
+        "vcp-signals",
+        _VCP_SIGNALS_CACHE_SCHEMA_VERSION,
+        req_date or "__latest__",
+        today,
+        signature[0],
+        signature[1],
+    )
 
 
 def get_cached_vcp_signals(

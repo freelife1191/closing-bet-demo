@@ -142,6 +142,15 @@ class _DummyMessenger:
         )
 
 
+class _EmptyScreener:
+    def __init__(self, target_date=None):
+        self.target_date = target_date
+
+    def run_screening(self, max_stocks: int = 600) -> pd.DataFrame:
+        _ = max_stocks
+        return pd.DataFrame()
+
+
 def test_create_signals_log_persists_detected_signal(monkeypatch, tmp_path):
     """VCP 결과 1건이 감지되면 signals_log.csv에 실제로 저장되어야 한다."""
     data_dir = tmp_path / "data"
@@ -221,7 +230,7 @@ def test_create_signals_log_returns_false_on_exception(monkeypatch, tmp_path):
     assert result is False
 
 
-def test_create_signals_log_applies_vcp_gate_filter(monkeypatch, tmp_path):
+def test_create_signals_log_persists_all_screening_results_without_vcp_gate(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -235,9 +244,27 @@ def test_create_signals_log_applies_vcp_gate_filter(monkeypatch, tmp_path):
 
     df = pd.read_csv(data_dir / "signals_log.csv", dtype={"ticker": str})
     tickers = set(df["ticker"].astype(str).str.zfill(6).tolist())
-    assert "005930" not in tickers
+    assert "005930" in tickers
     assert "000660" in tickers
     assert "035420" in tickers
+
+
+def test_create_signals_log_writes_latest_metadata_when_no_signals(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _EmptyScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+
+    result = init_data.create_signals_log(target_date="2026-03-06", run_ai=False)
+
+    assert result is True
+
+    latest_payload = json.loads((data_dir / "vcp_signals_latest.json").read_text(encoding="utf-8"))
+    assert latest_payload["date"] == "2026-03-06"
+    assert latest_payload["signals"] == []
+    assert latest_payload["total_candidates"] == 0
 
 
 def test_should_abort_daily_pykrx_bulk_fetch_detects_known_error_signature():
@@ -491,6 +518,16 @@ def test_create_institutional_trend_returns_false_when_latest_date_is_stale(monk
     fake_pykrx = types.ModuleType("pykrx")
     fake_pykrx.stock = _EmptyStock
     monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+
+    class _EmptyTossCollector:
+        def get_investor_trend(self, code, days=5):
+            _ = code, days
+            return {"details": []}
+
+    fake_toss_module = types.ModuleType("engine.toss_collector")
+    fake_toss_module.TossCollector = _EmptyTossCollector
+    monkeypatch.setitem(sys.modules, "engine.toss_collector", fake_toss_module)
+
     monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
     monkeypatch.setattr(
         init_data,
@@ -505,3 +542,97 @@ def test_create_institutional_trend_returns_false_when_latest_date_is_stale(monk
     )
 
     assert result is False
+
+
+def test_create_institutional_trend_uses_toss_backfill_when_pykrx_is_empty(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    pd.DataFrame([{"ticker": "005930", "market": "KOSPI"}]).to_csv(
+        data_dir / "korean_stocks_list.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    pd.DataFrame(
+        [{"date": "2026-02-26", "ticker": "005930", "foreign_buy": 100, "inst_buy": 200}]
+    ).to_csv(
+        data_dir / "all_institutional_trend_data.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    class _EmptyStock:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(*_args, **_kwargs):
+            return pd.DataFrame()
+
+    class _DummyTossCollector:
+        def get_investor_trend(self, code, days=5):
+            assert code == "005930"
+            assert days == 5
+            return {
+                "foreign": 0,
+                "institution": 0,
+                "individual": 0,
+                "days": 5,
+                "details": [
+                    {
+                        "baseDate": "2026-03-06",
+                        "close": 1000,
+                        "netForeignerBuyVolume": 10,
+                        "netInstitutionBuyVolume": 5,
+                    },
+                    {
+                        "baseDate": "2026-03-05",
+                        "close": 900,
+                        "netForeignerBuyVolume": -2,
+                        "netInstitutionBuyVolume": 4,
+                    },
+                ],
+            }
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _EmptyStock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: ("20260306", datetime.datetime(2026, 3, 6)),
+    )
+    monkeypatch.setattr(init_data, "shared_state", types.SimpleNamespace(STOP_REQUESTED=False))
+
+    fake_toss_module = types.ModuleType("engine.toss_collector")
+    fake_toss_module.TossCollector = _DummyTossCollector
+    monkeypatch.setitem(sys.modules, "engine.toss_collector", fake_toss_module)
+
+    result = init_data.create_institutional_trend(
+        target_date="2026-03-06",
+        force=True,
+        lookback_days=1,
+    )
+
+    assert result is True
+
+    updated = pd.read_csv(
+        data_dir / "all_institutional_trend_data.csv",
+        dtype={"ticker": str, "date": str},
+    ).sort_values(["date", "ticker"])
+    latest_rows = updated[updated["date"].isin(["2026-03-05", "2026-03-06"])]
+
+    assert updated["date"].max() == "2026-03-06"
+    assert latest_rows.to_dict("records") == [
+        {
+            "date": "2026-03-05",
+            "ticker": "005930",
+            "foreign_buy": -1800,
+            "inst_buy": 3600,
+        },
+        {
+            "date": "2026-03-06",
+            "ticker": "005930",
+            "foreign_buy": 10000,
+            "inst_buy": 5000,
+        },
+    ]

@@ -253,7 +253,6 @@ def run_ai_jongga_v2_step(
             await run_screener(capital=50_000_000, target_date=target_date)
 
         asyncio.run(run_async_screener())
-        update_item_status("AI Analysis", "done")
 
     _run_update_step(
         step_name="AI Jongga V2",

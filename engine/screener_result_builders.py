@@ -18,6 +18,7 @@ def build_screening_result(
     entry_price: float,
     contraction_ratio: float,
     vcp_score: int,
+    is_vcp: bool,
     first_close: float,
     last_close: float,
 ) -> dict[str, Any]:
@@ -38,6 +39,7 @@ def build_screening_result(
         "market_status": "UNKNOWN",
         "contraction_ratio": contraction_ratio,
         "vcp_score": vcp_score,
+        "is_vcp": bool(is_vcp),
     }
 
 
@@ -59,4 +61,3 @@ def build_signal_item(row: Any, signal_date: str | None) -> dict[str, Any]:
 
 
 __all__ = ["build_screening_result", "build_signal_item"]
-

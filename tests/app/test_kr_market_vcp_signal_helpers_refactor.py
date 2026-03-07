@@ -33,8 +33,8 @@ def test_build_vcp_signal_from_row_respects_runtime_min_score(monkeypatch):
     assert vcp_helpers._build_vcp_signal_from_row(row) is None
 
 
-def test_build_vcp_signal_from_row_requires_vcp_gate():
-    low_vcp_row = {
+def test_build_vcp_signal_from_row_keeps_vcp_fields_without_extra_gate():
+    row = {
         "ticker": "005930",
         "name": "삼성전자",
         "signal_date": "2026-02-24",
@@ -44,9 +44,9 @@ def test_build_vcp_signal_from_row_requires_vcp_gate():
         "vcp_score": 4,
         "is_vcp": False,
     }
-    high_vcp_row = {**low_vcp_row, "ticker": "000660", "vcp_score": 6}
-    explicit_vcp_row = {**low_vcp_row, "ticker": "035420", "is_vcp": True, "vcp_score": 0}
+    result = vcp_helpers._build_vcp_signal_from_row(row)
 
-    assert vcp_helpers._build_vcp_signal_from_row(low_vcp_row) is None
-    assert vcp_helpers._build_vcp_signal_from_row(high_vcp_row) is not None
-    assert vcp_helpers._build_vcp_signal_from_row(explicit_vcp_row) is not None
+    assert result is not None
+    assert result["ticker"] == "005930"
+    assert result["vcp_score"] == 4
+    assert result["is_vcp"] is False
