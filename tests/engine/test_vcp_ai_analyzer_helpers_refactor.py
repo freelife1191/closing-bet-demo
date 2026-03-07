@@ -18,6 +18,7 @@ from engine.vcp_ai_analyzer_helpers import (
     build_vcp_prompt,
     extract_openai_message_text,
     extract_perplexity_response_text,
+    is_prompt_echo_response,
     is_low_quality_recommendation,
     is_perplexity_quota_exceeded,
     parse_json_response,
@@ -32,6 +33,21 @@ def test_build_vcp_prompt_includes_stock_name_and_score():
     assert "JSON" in prompt
 
 
+def test_build_vcp_prompt_avoids_hardcoded_threshold_and_mentions_score_context():
+    prompt = build_vcp_prompt(
+        "고영",
+        {
+            "score": 7,
+            "vcp_score": 15,
+            "current_price": 33100,
+        },
+    )
+
+    assert "(최소 60점 이상)" not in prompt
+    assert "VCP 패턴 보조 점수" in prompt
+    assert "점수의 절대 임계값을 임의로 가정하지 말고" in prompt
+
+
 def test_parse_json_response_handles_markdown_fenced_json():
     text = "```json\n{\"action\":\"buy\",\"confidence\":88,\"reason\":\"ok\"}\n```"
 
@@ -40,6 +56,19 @@ def test_parse_json_response_handles_markdown_fenced_json():
     assert parsed is not None
     assert parsed["action"] == "BUY"
     assert parsed["confidence"] == 88
+
+
+def test_is_prompt_echo_response_detects_meta_instruction_restatement():
+    meta_text = """
+    1.  **Analyze the Request:**
+        *   **Role:** Financial data analyst.
+        *   **Task:** Analyze the provided stock data and return JSON.
+        *   **Constraints:** Output only valid JSON.
+    """
+    json_text = '{"action":"BUY","confidence":75,"reason":"수급 개선이 확인됩니다."}'
+
+    assert is_prompt_echo_response(meta_text) is True
+    assert is_prompt_echo_response(json_text) is False
 
 
 def test_parse_json_response_handles_nested_and_json_like_payload():

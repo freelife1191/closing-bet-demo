@@ -50,6 +50,25 @@ def test_init_zai_client_returns_none_when_key_missing():
     assert init_zai_client(config, _Logger()) is None
 
 
+def test_init_zai_client_returns_none_when_vcp_zai_fallback_disabled(monkeypatch):
+    captured = {"called": False}
+
+    class _FakeOpenAI:
+        def __init__(self, **_kwargs):
+            captured["called"] = True
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=_FakeOpenAI))
+
+    config = SimpleNamespace(
+        ZAI_API_KEY="zai-key",
+        ZAI_BASE_URL="https://api.z.ai/v1",
+        VCP_ZAI_FALLBACK_ENABLED=False,
+    )
+
+    assert init_zai_client(config, _Logger()) is None
+    assert captured["called"] is False
+
+
 def test_init_zai_client_initializes_openai_compatible_client(monkeypatch):
     captured = {}
 

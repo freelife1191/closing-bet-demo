@@ -78,6 +78,10 @@ def init_gpt_client(providers: list[str], app_config: Any, logger: Any) -> Any:
 
 def init_zai_client(app_config: Any, logger: Any) -> Any:
     """Z.ai(OpenAI 호환) client를 초기화해 반환한다."""
+    if not bool(getattr(app_config, "VCP_ZAI_FALLBACK_ENABLED", True)):
+        logger.info("VCP_ZAI_FALLBACK_ENABLED=false 설정으로 Z.ai fallback 비활성화")
+        return None
+
     api_key = app_config.ZAI_API_KEY
     if not api_key:
         logger.warning("ZAI_API_KEY가 설정되지 않아 Z.ai fallback 사용 불가")

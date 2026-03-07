@@ -217,6 +217,11 @@ class AppConfig:
             return 180
 
     @property
+    def VCP_ZAI_FALLBACK_ENABLED(self):
+        raw = os.getenv("VCP_ZAI_FALLBACK_ENABLED", "true").strip().lower()
+        return raw in {"1", "true", "yes", "on"}
+
+    @property
     def VCP_PERPLEXITY_API_TIMEOUT(self):
         raw = os.getenv("VCP_PERPLEXITY_API_TIMEOUT", "").strip()
         if not raw:

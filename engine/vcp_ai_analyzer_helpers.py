@@ -107,6 +107,16 @@ _LOW_QUALITY_REASON_PATTERNS = (
     re.compile(r"vcp\s+pattern\s+confirmed", re.IGNORECASE),
     re.compile(r"vcp\s*패턴\s*확인", re.IGNORECASE),
 )
+_PROMPT_ECHO_PATTERNS = (
+    re.compile(r"^\s*1\.\s+\*\*Analyze the (?:Request|User's Request)\*\*:", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\*\*\s*Role:\s*\*\*", re.IGNORECASE),
+    re.compile(r"\*\*\s*Task:\s*\*\*", re.IGNORECASE),
+    re.compile(r"\*\*\s*Goal:\s*\*\*", re.IGNORECASE),
+    re.compile(r"\*\*\s*Constraints:\s*\*\*", re.IGNORECASE),
+    re.compile(r"\binput data\b", re.IGNORECASE),
+    re.compile(r"the user wants a json output", re.IGNORECASE),
+    re.compile(r"previous model output", re.IGNORECASE),
+)
 _GENERIC_REASON_FALLBACKS = {
     "외국인·기관 순매수와 VCP 패턴을 근거로 매수 관점이 우세합니다.",
     "VCP 패턴과 수급 흐름을 종합할 때 매수 관점이 우세합니다.",
@@ -184,6 +194,18 @@ def _is_low_quality_reason(raw_reason: str) -> bool:
     if lowered.endswith((" and", " or", " 및", " 그리고", " 또는", "으로")):
         return True
     return any(pattern.search(normalized) for pattern in _LOW_QUALITY_REASON_PATTERNS)
+
+
+def is_prompt_echo_response(text: str) -> bool:
+    """LLM이 분석 결과 대신 요청/제약 조건을 재진술하는 메타 응답인지 판별한다."""
+    normalized = str(text or "").strip()
+    if not normalized:
+        return False
+    if normalized.startswith("{") and normalized.endswith("}"):
+        return False
+
+    hits = sum(1 for pattern in _PROMPT_ECHO_PATTERNS if pattern.search(normalized))
+    return hits >= 2
 
 
 def is_low_quality_recommendation(result: Optional[dict[str, Any]]) -> bool:
@@ -577,6 +599,13 @@ def build_vcp_rule_based_recommendation(
 
 def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
     """VCP 분석용 프롬프트 생성"""
+    score = stock_data.get("score", "N/A")
+    vcp_score = stock_data.get("vcp_score", "N/A")
+    score_lines = [f"- 종합 시그널 점수: {score}점"]
+    if vcp_score not in ("", None, "N/A"):
+        score_lines.append(f"- VCP 패턴 보조 점수: {vcp_score}점")
+    score_block = "\n".join(score_lines)
+
     return f"""
 당신은 금융 데이터 분석가이자 기술적 분석 연구원입니다.
 제공된 데이터를 바탕으로 VCP(Volatility Contraction Pattern) 패턴과 수급 현황을 객관적으로 분석하십시오.
@@ -585,13 +614,14 @@ def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
 [종목 정보]
 - 종목명: {stock_name}
 - 현재가: {stock_data.get('current_price', 'N/A')}
-- VCP 시그널 점수: {stock_data.get('score', 'N/A')}점 (최소 60점 이상)
+{score_block}
 - 수축 비율: {stock_data.get('contraction_ratio', 'N/A')}
 - 외국인 5일 순매수: {stock_data.get('foreign_5d', 'N/A')}주
 - 기관 5일 순매수: {stock_data.get('inst_5d', 'N/A')}주
 - 외국인 1일(오늘) 순매수: {stock_data.get('foreign_1d', 'N/A')}주
 - 기관 1일(오늘) 순매수: {stock_data.get('inst_1d', 'N/A')}주
 (주의: 5일 누적과 오늘의 수급 방향이 다를 경우, 오늘의 변화를 중요하게 고려하십시오)
+(주의: 점수의 절대 임계값을 임의로 가정하지 말고, 제공된 숫자의 상대적 강약과 다른 지표와의 조합을 중심으로 해석하십시오)
 
 [분석 요청]
 1. VCP 패턴과 수급 상황을 기술적 관점에서 분석
@@ -801,6 +831,7 @@ __all__ = [
     "classify_perplexity_error",
     "extract_openai_message_text",
     "extract_perplexity_response_text",
+    "is_prompt_echo_response",
     "is_low_quality_recommendation",
     "is_perplexity_quota_exceeded",
     "parse_json_response",

@@ -1045,6 +1045,80 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
     assert "glm-4.7" in calls
 
 
+def test_analyze_with_zai_disables_session_after_prompt_echo_responses(monkeypatch):
+    calls: list[str] = []
+
+    def _create(**kwargs):
+        model = str(kwargs.get("model"))
+        calls.append(model)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            "1.  **Analyze the Request:**\n"
+                            "    *   **Role:** Financial data analyst.\n"
+                            "    *   **Task:** Analyze the stock and return JSON.\n"
+                            "    *   **Constraints:** Output only valid JSON.\n"
+                        )
+                    )
+                )
+            ]
+        )
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=_create
+            )
+        )
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setenv("ZAI_MODEL", "primary-zai-model")
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    first = asyncio.run(
+        analyzer._analyze_with_zai(
+            "고영",
+            {
+                "ticker": "098460",
+                "score": 77,
+                "contraction_ratio": 0.74,
+                "foreign_5d": 1000,
+                "inst_5d": 500,
+                "foreign_1d": 100,
+                "inst_1d": 50,
+            },
+        )
+    )
+    first_call_count = len(calls)
+    second = asyncio.run(
+        analyzer._analyze_with_zai(
+            "대덕전자",
+            {
+                "ticker": "353200",
+                "score": 79,
+                "contraction_ratio": 0.7,
+                "foreign_5d": 900,
+                "inst_5d": 400,
+                "foreign_1d": 80,
+                "inst_1d": 40,
+            },
+        )
+    )
+
+    assert first is not None and second is not None
+    assert first["action"] in {"BUY", "HOLD", "SELL"}
+    assert second["action"] in {"BUY", "HOLD", "SELL"}
+    assert first_call_count == 3
+    assert len(calls) == first_call_count
+
+
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.providers = ["gemini", "gpt"]

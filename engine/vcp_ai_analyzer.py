@@ -20,6 +20,7 @@ from engine.vcp_ai_analyzer_helpers import (
     classify_perplexity_error,
     extract_openai_message_text,
     extract_perplexity_response_text,
+    is_prompt_echo_response,
     is_low_quality_recommendation,
     is_perplexity_quota_exceeded,
     parse_json_response,
@@ -413,6 +414,19 @@ class VCPMultiAIAnalyzer:
         if not zai_client:
             return None
 
+        disabled_reason = str(getattr(self, "zai_disabled_reason", "") or "").strip()
+        if disabled_reason:
+            logger.warning(f"[Z.ai] {stock_name} 세션 비활성화 상태로 건너뜀: {disabled_reason}")
+            fallback_result = build_vcp_rule_based_recommendation(
+                stock_name=stock_name,
+                stock_data=stock_data,
+            )
+            logger.warning(
+                f"[Z.ai] {stock_name} 세션 비활성화로 규칙 기반 fallback 사용: "
+                f"{fallback_result.get('action')} ({fallback_result.get('confidence')}%)"
+            )
+            return fallback_result
+
         try:
             resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
             primary_model = str(app_config.ZAI_MODEL or "").strip()
@@ -561,6 +575,26 @@ class VCPMultiAIAnalyzer:
                             f"(model={model}, {elapsed:.2f}s, attempt={attempt+1}/{max_parse_attempts}, "
                             f"timeout={attempt_timeout:.0f}s)"
                         )
+
+                        if is_prompt_echo_response(last_response_text):
+                            logger.warning(
+                                f"[Z.ai] {stock_name} 프롬프트 에코/메타 응답 감지 "
+                                f"(model={model}, attempt={attempt+1})"
+                            )
+                            if model_idx < len(model_chain) - 1:
+                                next_model = model_chain[model_idx + 1]
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} 메타 응답으로 모델 전환 "
+                                    f"({model} -> {next_model})"
+                                )
+                                should_try_next_model = True
+                            else:
+                                self.zai_disabled_reason = "prompt-echo responses"
+                                logger.warning(
+                                    f"[Z.ai] {stock_name} 마지막 모델 {model}까지 메타 응답이 반복되어 "
+                                    "이번 세션에서 Z.ai를 비활성화합니다."
+                                )
+                            break
 
                         result = self._parse_json_response(last_response_text)
                         quality_low = False

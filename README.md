@@ -77,6 +77,7 @@ VCP_SECOND_PROVIDER=gpt         # gpt 또는 perplexity 중 1개 선택
 VCP_GEMINI_MODEL=gemini-2.0-flash
 VCP_GPT_MODEL=gpt-5-nano
 VCP_PERPLEXITY_MODEL=sonar
+VCP_ZAI_FALLBACK_ENABLED=true   # Perplexity 차단 시 Z.ai fallback 사용 여부
 
 # 스케줄러 시간 설정 (KST)
 CLOSING_SCHEDULE_TIME=16:00
