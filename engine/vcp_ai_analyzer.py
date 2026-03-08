@@ -51,6 +51,31 @@ ZAI_FALLBACK_MODEL_CHAIN = [
     "glm-4.6V-Flash",
     "glm-4.7",
 ]
+GPT_FALLBACK_TRIGGER_STATUS_CODES = {429, 503}
+GPT_RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
+GPT_RETRYABLE_KEYWORDS = (
+    "timeout",
+    "timed out",
+    "temporarily unavailable",
+    "server error",
+    "connection reset",
+    "connection aborted",
+    "rate limit",
+    "too many requests",
+    "overloaded",
+    "resource exhausted",
+    "quota exceeded",
+)
+GPT_CREDIT_EXHAUSTED_KEYWORDS = (
+    "insufficient_quota",
+    "credit exhausted",
+    "quota exceeded",
+    "quota exhausted",
+    "out of credits",
+    "billing",
+    "insufficient balance",
+    "exceeded your current quota",
+)
 
 
 class VCPMultiAIAnalyzer:
@@ -78,10 +103,251 @@ class VCPMultiAIAnalyzer:
         self.perplexity_blocked_reason: str | None = None
         self.perplexity_fallback_providers = self._build_perplexity_fallback_chain()
         self.gemini_blocked_models: set[str] = set()
+        self.gpt_quota_exhausted = False
+        self.gpt_blocked_reason: str | None = None
     
     def _build_vcp_prompt(self, stock_name: str, stock_data: Dict) -> str:
         """VCP 분석용 프롬프트 생성"""
         return build_vcp_prompt(stock_name, stock_data)
+
+    def _build_gpt_system_prompt(self) -> str:
+        """GPT용 VCP 시스템 프롬프트."""
+        return (
+            "당신은 한국 주식 VCP(Volatility Contraction Pattern) 전문 기술적 분석가입니다. "
+            "제공된 종목 데이터만 근거로 수급과 패턴을 평가하고, 연구/교육 목적의 객관적 의견만 제시하십시오. "
+            "반드시 JSON 객체 1개만 출력하고 코드블록, 머리말, 설명문, 마크다운을 금지합니다. "
+            "JSON 외 텍스트를 단 한 글자도 출력하지 말고 반드시 '{'로 시작해 '}'로 끝내십시오. "
+            "필수 키는 action, confidence, reason 입니다. "
+            "action은 BUY, SELL, HOLD 중 하나여야 합니다. "
+            "action must be BUY, SELL, or HOLD. "
+            "action에는 설명 문장을 넣지 말고 정확히 BUY, SELL, HOLD 중 하나만 넣으십시오. "
+            "confidence는 0-100 사이 정수여야 합니다. "
+            "confidence must be an integer between 0 and 100. "
+            "reason은 반드시 한국어 2문장 이상, 최소 90자 이상으로 작성하고 "
+            "[핵심 투자 포인트], [리스크 요인], [종합 의견] 구조를 우선 사용하십시오. "
+            "수급 방향이 최근 5일과 오늘 사이에서 엇갈리면 오늘 변화를 더 중요하게 해석하십시오. "
+            "Return exactly one compact JSON object and nothing else."
+        )
+
+    def _build_gpt_repair_system_prompt(self) -> str:
+        """GPT 응답 복구용 시스템 프롬프트."""
+        return (
+            "당신은 한국 주식 분석 텍스트를 strict JSON으로 정규화하는 변환기입니다. "
+            "반드시 JSON 객체 1개만 출력하고 JSON 외 텍스트는 절대 출력하지 마십시오. "
+            "반드시 '{'로 시작해 '}'로 끝내십시오. "
+            "필수 키는 action, confidence, reason 입니다. "
+            "action은 BUY, SELL, HOLD 중 하나여야 합니다. "
+            "action에는 설명 문장을 넣지 말고 정확히 BUY, SELL, HOLD 중 하나만 넣으십시오. "
+            "confidence는 0-100 사이 정수여야 합니다. "
+            "reason은 반드시 한국어 2문장 이상, 최소 90자 이상으로 작성하고 "
+            "[핵심 투자 포인트], [리스크 요인], [종합 의견] 구조를 우선 사용하십시오. "
+            "Return exactly one JSON object with keys action, confidence, reason."
+        )
+
+    def _extract_status_code(self, error: Exception) -> int | None:
+        """예외 객체에서 HTTP status code를 추출한다."""
+        for attr in ("status_code", "http_status", "code"):
+            value = getattr(error, attr, None)
+            if isinstance(value, int) and 100 <= value <= 599:
+                return value
+        response_obj = getattr(error, "response", None)
+        status_code = getattr(response_obj, "status_code", None)
+        if isinstance(status_code, int) and 100 <= status_code <= 599:
+            return status_code
+        match = re.search(r"\b([45][0-9]{2})\b", str(error))
+        if match:
+            try:
+                return int(match.group(1))
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _is_retryable_gpt_error(self, error_msg: str, status_code: int | None) -> bool:
+        """GPT 호출 실패가 재시도 가능한 오류인지 판별한다."""
+        if status_code in GPT_RETRYABLE_STATUS_CODES:
+            return True
+        lowered = str(error_msg or "").lower()
+        return any(keyword in lowered for keyword in GPT_RETRYABLE_KEYWORDS)
+
+    def _is_gpt_credit_exhausted_error(self, error_msg: str, status_code: int | None) -> bool:
+        """GPT 오류가 크레딧/쿼터 소진에 해당하는지 판별한다."""
+        lowered = str(error_msg or "").lower()
+        if status_code == 402:
+            return True
+        return any(keyword in lowered for keyword in GPT_CREDIT_EXHAUSTED_KEYWORDS)
+
+    async def _call_openai_chat_json(
+        self,
+        *,
+        client,
+        model: str,
+        messages: list[dict[str, str]],
+        timeout_value: float,
+        max_tokens: int,
+    ) -> str:
+        """OpenAI 호환 chat.completions 호출 후 텍스트를 추출한다."""
+
+        def _call():
+            normalized_model = str(model or "").strip().lower()
+            if normalized_model.startswith("gpt-5"):
+                instructions = "\n\n".join(
+                    message.get("content", "")
+                    for message in messages
+                    if message.get("role") == "system" and message.get("content")
+                ).strip()
+                input_text = "\n\n".join(
+                    message.get("content", "")
+                    for message in messages
+                    if message.get("role") != "system" and message.get("content")
+                ).strip()
+                request_args = {
+                    "model": model,
+                    "instructions": instructions,
+                    "input": input_text,
+                    "max_output_tokens": max_tokens,
+                    "reasoning": {"effort": "minimal"},
+                    "text": {"verbosity": "low"},
+                    "timeout": timeout_value,
+                }
+            else:
+                request_args = {
+                    "model": model,
+                    "messages": messages,
+                    "timeout": timeout_value,
+                    "response_format": {"type": "json_object"},
+                }
+                request_args["temperature"] = 0.1
+                request_args["max_tokens"] = max_tokens
+
+            last_error = None
+            response = None
+            for _ in range(3):
+                try:
+                    if normalized_model.startswith("gpt-5"):
+                        response = client.responses.create(**request_args)
+                    else:
+                        response = client.chat.completions.create(**request_args)
+                    break
+                except Exception as error:
+                    last_error = error
+                    lowered = str(error).lower()
+                    if "text" in lowered and "verbosity" in lowered and "text" in request_args:
+                        request_args.pop("text", None)
+                        continue
+                    if "reasoning" in lowered and "reasoning" in request_args:
+                        request_args.pop("reasoning", None)
+                        continue
+                    if "response_format" in lowered and "response_format" in request_args:
+                        request_args.pop("response_format", None)
+                        continue
+                    if "temperature" in lowered and "temperature" in request_args:
+                        request_args.pop("temperature", None)
+                        continue
+                    if (
+                        "max_tokens" in lowered
+                        and "max_completion_tokens" in lowered
+                        and "max_tokens" in request_args
+                    ):
+                        request_args.pop("max_tokens", None)
+                        request_args["max_completion_tokens"] = max_tokens
+                        continue
+                    if (
+                        "max_completion_tokens" in lowered
+                        and "max_tokens" in lowered
+                        and "max_completion_tokens" in request_args
+                    ):
+                        request_args.pop("max_completion_tokens", None)
+                        request_args["max_tokens"] = max_tokens
+                        continue
+                    raise
+
+            if response is None:
+                raise last_error or RuntimeError("OpenAI chat.completions 응답이 비어 있습니다.")
+
+            if normalized_model.startswith("gpt-5"):
+                output_text = getattr(response, "output_text", None)
+                if isinstance(output_text, str) and output_text.strip():
+                    return output_text
+
+                output_items = getattr(response, "output", None)
+                if isinstance(output_items, list):
+                    for item in output_items:
+                        content = getattr(item, "content", None)
+                        extracted = extract_openai_message_text(content)
+                        if extracted and extracted.strip():
+                            return extracted
+                        if isinstance(item, dict):
+                            extracted = extract_openai_message_text(item.get("content"))
+                            if extracted and extracted.strip():
+                                return extracted
+                return ""
+
+            choices = getattr(response, "choices", None)
+            if not choices and isinstance(response, dict):
+                choices = response.get("choices")
+            if not choices:
+                return ""
+
+            first_choice = choices[0]
+            message_obj = getattr(first_choice, "message", None)
+            if message_obj is None and isinstance(first_choice, dict):
+                message_obj = first_choice.get("message")
+            if message_obj is None:
+                return ""
+
+            content = getattr(message_obj, "content", None)
+            if content is None and isinstance(message_obj, dict):
+                content = message_obj.get("content")
+            response_text = extract_openai_message_text(content)
+            if response_text and response_text.strip():
+                return response_text
+
+            reasoning_content = getattr(message_obj, "reasoning_content", None)
+            if reasoning_content is None and isinstance(message_obj, dict):
+                reasoning_content = message_obj.get("reasoning_content")
+            return extract_openai_message_text(reasoning_content)
+
+        return await asyncio.to_thread(_call)
+
+    async def _repair_gpt_response(
+        self,
+        *,
+        model: str,
+        response_text: str,
+        timeout_value: float,
+    ) -> Optional[Dict]:
+        """비정형 GPT 응답을 JSON으로 보정 시도한다."""
+        repair_input = str(response_text or "").strip()
+        if not repair_input:
+            return None
+        if len(repair_input) > 4000:
+            repair_input = repair_input[:4000]
+
+        repair_messages = [
+            {"role": "system", "content": self._build_gpt_repair_system_prompt()},
+            {
+                "role": "user",
+                "content": (
+                    "Previous model output:\n"
+                    f"{repair_input}\n\n"
+                    "Return only valid JSON."
+                ),
+            },
+        ]
+        repaired_text = await self._call_openai_chat_json(
+            client=self.gpt_client,
+            model=model,
+            messages=repair_messages,
+            timeout_value=timeout_value,
+            max_tokens=800,
+        )
+        repaired_result = self._parse_json_response(str(repaired_text or ""))
+        if not repaired_result:
+            return None
+        if is_low_quality_recommendation(repaired_result):
+            return None
+        repaired_result["model"] = model
+        return repaired_result
     
     async def _analyze_with_gemini(
         self,
@@ -200,39 +466,151 @@ class VCPMultiAIAnalyzer:
         """GPT로 분석"""
         if not self.gpt_client:
             return None
-        
-        try:
-            resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
-            model = app_config.VCP_GPT_MODEL
-            
-            start = time.time()
-            
-            # GPT API 호출 (동기 호출을 executor로 실행)
-            def _call():
-                response = self.gpt_client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": "You are a technical analyst researcher. Respond ONLY in JSON format."},
-                        {"role": "user", "content": resolved_prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=500
-                )
-                return response.choices[0].message.content
 
-            # 호출당 Executor 생성 비용을 줄이기 위해 to_thread 사용
-            response_text = await asyncio.to_thread(_call)
-            
-            elapsed = time.time() - start
-            logger.debug(f"[GPT] {stock_name} 분석 완료 ({elapsed:.2f}s)")
-            
-            # JSON 파싱
-            result = self._parse_json_response(response_text)
-            return result
-            
-        except Exception as e:
-            logger.error(f"[GPT] {stock_name} 분석 실패: {e}")
-            return None
+        resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
+        blocked_reason = str(getattr(self, "gpt_blocked_reason", "") or "").strip()
+        if blocked_reason:
+            return await self._fallback_from_gpt(
+                stock_name=stock_name,
+                stock_data=stock_data,
+                prompt=resolved_prompt,
+                reason=f"GPT blocked (session cache: {blocked_reason})",
+            )
+        if getattr(self, "gpt_quota_exhausted", False):
+            return await self._fallback_from_gpt(
+                stock_name=stock_name,
+                stock_data=stock_data,
+                prompt=resolved_prompt,
+                reason="GPT quota exhausted (session cache)",
+            )
+        primary_model = str(app_config.VCP_GPT_MODEL or "").strip() or "gpt-5-nano"
+        fallback_model = str(getattr(app_config, "VCP_GPT_FALLBACK_MODEL", "gpt-5-mini") or "").strip()
+        current_model = primary_model
+        max_attempts = max(1, int(getattr(app_config, "VCP_GPT_MAX_ATTEMPTS", 3)))
+        request_timeout = float(getattr(app_config, "VCP_GPT_API_TIMEOUT", 120))
+        base_delay = 2
+        last_error: Exception | None = None
+        last_response_text = ""
+
+        messages = [
+            {"role": "system", "content": self._build_gpt_system_prompt()},
+            {"role": "user", "content": resolved_prompt},
+        ]
+
+        for attempt in range(max_attempts):
+            attempt_timeout = request_timeout + (attempt * 10.0)
+            try:
+                start = time.time()
+                response_text = await self._call_openai_chat_json(
+                    client=self.gpt_client,
+                    model=current_model,
+                    messages=messages,
+                    timeout_value=attempt_timeout,
+                    max_tokens=900,
+                )
+                last_response_text = str(response_text or "")
+                elapsed = time.time() - start
+                logger.debug(
+                    f"[GPT] {stock_name} 분석 완료 "
+                    f"(model={current_model}, {elapsed:.2f}s, attempt={attempt+1}/{max_attempts})"
+                )
+
+                if is_prompt_echo_response(last_response_text):
+                    logger.warning(
+                        f"[GPT] {stock_name} 프롬프트 에코/메타 응답 감지 "
+                        f"(model={current_model}, attempt={attempt+1})"
+                    )
+                else:
+                    result = self._parse_json_response(last_response_text)
+                    if result and not is_low_quality_recommendation(result):
+                        result["model"] = current_model
+                        return result
+
+                    repaired_result = await self._repair_gpt_response(
+                        model=current_model,
+                        response_text=last_response_text,
+                        timeout_value=attempt_timeout,
+                    )
+                    if repaired_result:
+                        logger.info(
+                            f"[GPT] {stock_name} JSON 보정 성공 "
+                            f"(model={current_model}, attempt={attempt+1})"
+                        )
+                        return repaired_result
+
+                    if result and is_low_quality_recommendation(result):
+                        logger.warning(
+                            f"[GPT] {stock_name} 응답 품질 미달 "
+                            f"(model={current_model}, attempt={attempt+1})"
+                        )
+                    else:
+                        logger.warning(
+                            f"[GPT] {stock_name} JSON 파싱 실패 "
+                            f"(model={current_model}, attempt={attempt+1})"
+                        )
+            except Exception as error:
+                last_error = error
+                status_code = self._extract_status_code(error)
+                error_msg = str(error or "")
+                retryable = self._is_retryable_gpt_error(error_msg, status_code)
+                credit_exhausted = self._is_gpt_credit_exhausted_error(error_msg, status_code)
+
+                if credit_exhausted:
+                    self.gpt_quota_exhausted = True
+                    self.gpt_blocked_reason = (
+                        f"quota-like-{status_code}" if status_code is not None else "quota-like"
+                    )
+                    logger.warning(
+                        f"[GPT] {stock_name} 크레딧/쿼터 소진 감지. "
+                        "z.ai fallback으로 전환합니다."
+                    )
+                    return await self._fallback_from_gpt(
+                        stock_name=stock_name,
+                        stock_data=stock_data,
+                        prompt=resolved_prompt,
+                        reason=f"GPT credit exhausted ({status_code or 'unknown'})",
+                    )
+
+                if (
+                    status_code in GPT_FALLBACK_TRIGGER_STATUS_CODES
+                    and fallback_model
+                    and fallback_model != current_model
+                ):
+                    logger.warning(
+                        f"[GPT] {stock_name} {status_code} 응답으로 모델 전환 "
+                        f"({current_model} -> {fallback_model})"
+                    )
+                    current_model = fallback_model
+
+                if not retryable:
+                    logger.error(
+                        f"[GPT] {stock_name} 재시도 불가 오류: {error} "
+                        f"(model={current_model}, attempt={attempt+1}/{max_attempts})"
+                    )
+                    return None
+
+                logger.warning(
+                    f"[GPT] {stock_name} 재시도 가능 오류: {error} "
+                    f"(model={current_model}, attempt={attempt+1}/{max_attempts})"
+                )
+
+            if attempt >= max_attempts - 1:
+                break
+
+            delay = base_delay * (2 ** attempt) + (random.randint(0, 1000) / 1000)
+            logger.warning(
+                f"[GPT] {stock_name} {delay:.2f}초 후 재시도 "
+                f"(model={current_model}, next_attempt={attempt+2}/{max_attempts})"
+            )
+            await asyncio.sleep(delay)
+
+        if last_response_text:
+            logger.error(f"[GPT] {stock_name} 최종 JSON 파싱 실패: {last_response_text[:300]}...")
+        elif last_error is not None:
+            logger.error(f"[GPT] {stock_name} 분석 실패(최종): {last_error}")
+        else:
+            logger.error(f"[GPT] {stock_name} 분석 실패: 빈 응답")
+        return None
     
     def _parse_json_response(self, text: str) -> Optional[Dict]:
         """LLM 응답에서 JSON 추출"""
@@ -808,6 +1186,32 @@ class VCPMultiAIAnalyzer:
 
         logger.error(f"[Perplexity fallback] {stock_name} 폴백 실패: 사용 가능한 보조 Provider 응답 없음")
         return None
+
+    async def _fallback_from_gpt(
+        self,
+        *,
+        stock_name: str,
+        stock_data: Dict,
+        prompt: str,
+        reason: str,
+    ) -> Optional[Dict]:
+        """GPT 크레딧/쿼터 소진 시 z.ai로 폴백 분석."""
+        normalized_providers = [normalize_provider_name(provider) for provider in getattr(self, "providers", [])]
+        if "zai" not in normalized_providers:
+            logger.error(
+                f"[GPT fallback] {stock_name} 폴백 불가: "
+                f"VCP_AI_PROVIDERS에 z.ai가 없습니다. ({reason})"
+            )
+            return None
+        if not getattr(self, "zai_client", None):
+            logger.error(
+                f"[GPT fallback] {stock_name} 폴백 불가: "
+                f"z.ai 클라이언트 미초기화 ({reason})"
+            )
+            return None
+
+        logger.warning(f"[GPT->Z.ai fallback] {stock_name} 사유: {reason}")
+        return await self._analyze_with_zai(stock_name, stock_data, prompt)
 
     async def _fallback_to_zai(
         self,

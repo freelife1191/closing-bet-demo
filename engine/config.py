@@ -200,7 +200,30 @@ class AppConfig:
 
     @property
     def VCP_GPT_MODEL(self):
-        return os.getenv("VCP_GPT_MODEL", "gpt-4o")
+        return os.getenv("VCP_GPT_MODEL", "gpt-5-nano")
+
+    @property
+    def VCP_GPT_FALLBACK_MODEL(self):
+        return os.getenv("VCP_GPT_FALLBACK_MODEL", "gpt-5-mini")
+
+    @property
+    def VCP_GPT_MAX_ATTEMPTS(self):
+        raw = os.getenv("VCP_GPT_MAX_ATTEMPTS", "3").strip()
+        try:
+            parsed = int(float(raw))
+        except (TypeError, ValueError):
+            parsed = 3
+        return max(1, min(5, parsed))
+
+    @property
+    def VCP_GPT_API_TIMEOUT(self):
+        raw = os.getenv("VCP_GPT_API_TIMEOUT", "").strip()
+        if not raw:
+            raw = os.getenv("ANALYSIS_LLM_API_TIMEOUT", "").strip()
+        try:
+            return max(30, int(float(raw)))
+        except (TypeError, ValueError):
+            return 120
 
     @property
     def VCP_PERPLEXITY_MODEL(self):
