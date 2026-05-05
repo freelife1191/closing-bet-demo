@@ -29,7 +29,7 @@ import re
 import statistics
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -119,9 +119,11 @@ async def run_once(items: list[dict[str, Any]], market_status: dict | None) -> d
         raise RuntimeError("LLM client not initialized — check API key/Vertex auth")
     phase3 = Phase3LLMAnalyzer(analyzer)
     t0 = time.time()
-    results = await phase3.execute(items, market_status=market_status)
+    try:
+        results = await phase3.execute(items, market_status=market_status)
+    finally:
+        await analyzer.close()
     elapsed = time.time() - t0
-    await analyzer.close()
     return {
         "results": results,
         "elapsed_sec": round(elapsed, 2),
@@ -224,7 +226,7 @@ async def main() -> int:
     payload = {
         "trials": runs,
         "config": {"n": args.n, "limit": args.limit},
-        "ts": datetime.utcnow().isoformat(),
+        "ts": datetime.now(timezone.utc).isoformat(),
     }
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"\n[saved] {out_path}")

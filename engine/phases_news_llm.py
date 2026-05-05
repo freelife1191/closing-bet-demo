@@ -18,15 +18,38 @@ from engine.phases_base import BasePhase
 logger = logging.getLogger(__name__)
 
 
+def _get_field(obj: Any, *attrs: str, default: Any = 0) -> Any:
+    """객체 attr 또는 dict key 모두에서 첫 번째 non-None 값을 꺼낸다."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        for attr in attrs:
+            if attr in obj and obj[attr] is not None:
+                return obj[attr]
+        return default
+    for attr in attrs:
+        value = getattr(obj, attr, None)
+        if value is not None:
+            return value
+    return default
+
+
+def _coerce_int(value: Any) -> int:
+    """bool/None/문자열 등을 안전하게 int로 변환. 실패 시 0."""
+    if value is None or isinstance(value, bool):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _adapt_to_jongga_signal(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Phase1+2 결과 item을 종가베팅(jongga) 재분석과 동일한 dict 형태로 변환.
+    """Phase1+2 결과 item을 jongga 프롬프트가 기대하는 dict shape으로 변환.
 
-    매일 종가베팅 생성 파이프라인의 Phase3 입력은 stock=StockData 객체,
-    supply=SupplyData 객체, score는 별도 키(pre_score)로 분리된 형태이지만,
-    재분석/jongga 프롬프트가 기대하는 입력은 stock=dict(score/score_details
-    inline), supply=dict(foreign_buy_5d/inst_buy_5d) 형태이다.
-
-    이 어댑터는 양쪽 입력 shape의 차이만 흡수한다. 별도 계산은 하지 않는다.
+    stock=StockData/dict, supply=SupplyData/dict, pre_score=ScoreDetail/dict 등
+    혼합 입력을 모두 흡수하고 score/score_details를 stock dict 안에 inline한다.
+    별도 계산은 하지 않는 순수 어댑터.
     """
     stock_obj = item.get("stock")
     pre_score = item.get("pre_score")
@@ -34,57 +57,28 @@ def _adapt_to_jongga_signal(item: Dict[str, Any]) -> Dict[str, Any]:
     supply_obj = item.get("supply")
     news = item.get("news") or []
 
-    def _g(obj: Any, *attrs: str, default: Any = 0) -> Any:
-        """객체 attr 또는 dict key 모두에서 값을 꺼낸다.
-
-        attrs는 우선순위 순으로 시도한다. 첫 번째로 None 이외 값이 나오면 반환.
-        """
-        if obj is None:
-            return default
-        if isinstance(obj, dict):
-            for attr in attrs:
-                if attr in obj and obj[attr] is not None:
-                    return obj[attr]
-            return default
-        for attr in attrs:
-            value = getattr(obj, attr, None)
-            if value is not None:
-                return value
-        return default
-
     score = {
-        "total": _g(pre_score, "total", default=0),
-        "news": _g(pre_score, "news", default=0),
-        "volume": _g(pre_score, "volume", default=0),
-        "chart": _g(pre_score, "chart", default=0),
-        "candle": _g(pre_score, "candle", default=0),
-        "timing": _g(pre_score, "timing", default=0),
-        "supply": _g(pre_score, "supply", default=0),
+        "total": _get_field(pre_score, "total", default=0),
+        "news": _get_field(pre_score, "news", default=0),
+        "volume": _get_field(pre_score, "volume", default=0),
+        "chart": _get_field(pre_score, "chart", default=0),
+        "candle": _get_field(pre_score, "candle", default=0),
+        "timing": _get_field(pre_score, "timing", default=0),
+        "supply": _get_field(pre_score, "supply", default=0),
     }
 
     signal_stock: Dict[str, Any] = {
-        "stock_code": _g(stock_obj, "code", "stock_code", default="") or "",
-        "stock_name": _g(stock_obj, "name", "stock_name", default="") or "",
-        "current_price": _g(stock_obj, "close", "current_price", default=0) or 0,
-        "change_pct": _g(stock_obj, "change_pct", default=0) or 0,
-        "trading_value": _g(stock_obj, "trading_value", default=0) or 0,
+        "stock_code": _get_field(stock_obj, "code", "stock_code", default="") or "",
+        "stock_name": _get_field(stock_obj, "name", "stock_name", default="") or "",
+        "current_price": _get_field(stock_obj, "close", "current_price", default=0) or 0,
+        "change_pct": _get_field(stock_obj, "change_pct", default=0) or 0,
+        "trading_value": _get_field(stock_obj, "trading_value", default=0) or 0,
         "score": score,
         "score_details": score_details,
     }
 
-    def _coerce_int(value: Any) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return 0
-
-    foreign = inst = None
-    if isinstance(supply_obj, dict):
-        foreign = supply_obj.get("foreign_buy_5d")
-        inst = supply_obj.get("inst_buy_5d")
-    elif supply_obj is not None:
-        foreign = getattr(supply_obj, "foreign_buy_5d", None)
-        inst = getattr(supply_obj, "inst_buy_5d", None)
+    foreign = _get_field(supply_obj, "foreign_buy_5d", default=None)
+    inst = _get_field(supply_obj, "inst_buy_5d", default=None)
     if foreign is None:
         foreign = score_details.get("foreign_net_buy", 0)
     if inst is None:
@@ -175,7 +169,9 @@ class Phase3LLMAnalyzer(BasePhase):
 
         self.chunk_size = chunk_size or LLM_THRESHOLD.CHUNK_SIZE_ANALYSIS
         self.concurrency = concurrency or LLM_THRESHOLD.CONCURRENCY_ANALYSIS
-        self.request_delay = request_delay or LLM_THRESHOLD.REQUEST_DELAY
+        self.request_delay = (
+            LLM_THRESHOLD.REQUEST_DELAY if request_delay is None else request_delay
+        )
 
     async def execute(self, items: List[Dict], market_status: Dict = None) -> Dict[str, Dict]:
         """LLM 배치 분석 실행."""
@@ -203,16 +199,10 @@ class Phase3LLMAnalyzer(BasePhase):
                 )
 
                 try:
-                    # 종가베팅 매일 생성 파이프라인은 reanalyze와 완전히 동일한
-                    # 입력 shape(dict)으로 변환한 뒤 jongga 전용 프롬프트를 호출한다.
-                    # (VCP 메타 누설 제거 + 19점 만점 명시 + 5섹션 350자 강제)
                     adapted_chunk = [_adapt_to_jongga_signal(it) for it in chunk_data]
                     chunk_result = await self.llm_analyzer.analyze_news_batch_jongga(
                         adapted_chunk, market_status
                     )
-
-                    if self.request_delay > 0:
-                        await asyncio.sleep(self.request_delay)
 
                     elapsed = time.time() - start
                     logger.info(f"[LLM Batch] Chunk {chunk_idx} done in {elapsed:.2f}s")
@@ -223,6 +213,9 @@ class Phase3LLMAnalyzer(BasePhase):
                     logger.warning(f"[LLM Batch] Chunk {chunk_idx} error: {e}")
                     self.stats["failed"] += len(chunk_data)
                     return {}
+                finally:
+                    if self.request_delay > 0:
+                        await asyncio.sleep(self.request_delay)
 
         tasks = [process_chunk(i, chunk) for i, chunk in enumerate(chunks, 1)]
         chunk_results = await asyncio.gather(*tasks)
