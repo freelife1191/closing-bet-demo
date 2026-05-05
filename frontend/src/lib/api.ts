@@ -432,8 +432,9 @@ export const paperTradingAPI = {
     return res.json();
   },
 
-  async getAssetHistory(limit = 30) {
-    const res = await fetch(`/api/portfolio/history/asset?limit=${limit}`);
+  async getAssetHistory(days = 365) {
+    // days = 기간 필터(최근 N일). 백엔드에서 기간에 맞는 자산 히스토리를 잘라서 반환한다.
+    const res = await fetch(`/api/portfolio/history/asset?days=${days}`);
     if (!res.ok) throw new Error('Failed to fetch asset history');
     return res.json();
   }

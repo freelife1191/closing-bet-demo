@@ -13,6 +13,7 @@ from services.paper_trading_constants import (
     DEFAULT_ASSET_HISTORY_LIMIT,
     DEFAULT_TRADE_HISTORY_LIMIT,
     INITIAL_CASH_KRW,
+    MAX_ASSET_HISTORY_LIMIT,
     MAX_HISTORY_LIMIT,
 )
 
@@ -47,9 +48,9 @@ def _parse_positive_float(value: object, *, default: float) -> float:
     return parsed if parsed > 0 else float(default)
 
 
-def _parse_history_limit(raw_value: object, *, default: int) -> int:
+def _parse_history_limit(raw_value: object, *, default: int, cap: int = MAX_HISTORY_LIMIT) -> int:
     parsed = _parse_positive_int(raw_value, default=default)
-    return min(parsed, int(MAX_HISTORY_LIMIT))
+    return min(parsed, int(cap))
 
 
 def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> None:
@@ -185,11 +186,27 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
     def get_asset_history():
         """자산 변동 내역 조회 (차트용)."""
         def _handler():
-            limit = _parse_history_limit(
-                request.args.get("limit", DEFAULT_ASSET_HISTORY_LIMIT),
-                default=DEFAULT_ASSET_HISTORY_LIMIT,
+            raw_days = request.args.get("days")
+            days_param: int | None = None
+            if raw_days is not None:
+                try:
+                    parsed_days = int(float(raw_days))
+                    if parsed_days > 0:
+                        days_param = parsed_days
+                except (TypeError, ValueError):
+                    days_param = None
+            # 자산 히스토리는 하루 1건 스냅샷이므로 일반 캡(MAX_HISTORY_LIMIT)이 아닌
+            # MAX_ASSET_HISTORY_LIMIT(약 10년치)을 캡으로 사용한다.
+            # 기간 필터(days)가 있으면 그 기간을 모두 담을 수 있도록 limit 기본값을 캡까지 늘린다.
+            default_limit = (
+                MAX_ASSET_HISTORY_LIMIT if days_param is not None else DEFAULT_ASSET_HISTORY_LIMIT
             )
-            data = ctx.paper_trading.get_asset_history(limit)
+            limit = _parse_history_limit(
+                request.args.get("limit", default_limit),
+                default=default_limit,
+                cap=MAX_ASSET_HISTORY_LIMIT,
+            )
+            data = ctx.paper_trading.get_asset_history(limit, days=days_param)
             return jsonify({"history": data})
 
         return _execute_portfolio_route(

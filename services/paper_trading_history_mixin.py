@@ -11,7 +11,7 @@ from datetime import datetime
 
 from services.paper_trading_constants import (
     DEFAULT_ASSET_HISTORY_LIMIT,
-    MAX_HISTORY_LIMIT,
+    MAX_ASSET_HISTORY_LIMIT,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,8 @@ class PaperTradingHistoryMixin:
             parsed = int(float(limit))
         except (TypeError, ValueError):
             parsed = int(default)
-        return min(max(parsed, 1), int(MAX_HISTORY_LIMIT))
+        # 자산 히스토리(하루 1건 스냅샷)는 별도의 더 큰 캡을 사용한다.
+        return min(max(parsed, 1), int(MAX_ASSET_HISTORY_LIMIT))
 
     def _asset_history_snapshot_changed(
         self,
@@ -205,26 +206,52 @@ class PaperTradingHistoryMixin:
         except Exception as e:
             logger.error(f"Failed to record asset history: {e}")
 
-    def get_asset_history(self, limit=DEFAULT_ASSET_HISTORY_LIMIT):
-        """Get asset history for chart"""
+    def get_asset_history(self, limit=DEFAULT_ASSET_HISTORY_LIMIT, days: int | None = None):
+        """Get asset history for chart.
+
+        Args:
+            limit: 반환 행 상한 (안전 캡)
+            days: 지정 시 최근 N일 이내 데이터만 반환 (1M/3M/6M/1Y/ALL 필터용)
+        """
         normalized_limit = self._normalize_asset_history_limit(
             limit,
             default=DEFAULT_ASSET_HISTORY_LIMIT,
         )
 
+        normalized_days: int | None = None
+        if days is not None:
+            try:
+                parsed_days = int(days)
+                if parsed_days > 0:
+                    normalized_days = parsed_days
+            except (TypeError, ValueError):
+                normalized_days = None
+
         def _operation():
             with self.get_read_context() as conn:
                 cursor = conn.cursor()
                 # Fetch latest N records (DESC), then sort by date (ASC) for chart
-                cursor.execute(
-                    '''
-                    SELECT date, total_asset, cash, stock_value
-                    FROM asset_history
-                    ORDER BY date DESC
-                    LIMIT ?
-                ''',
-                    (normalized_limit,),
-                )
+                if normalized_days is not None:
+                    cursor.execute(
+                        '''
+                        SELECT date, total_asset, cash, stock_value
+                        FROM asset_history
+                        WHERE date >= date('now', ?)
+                        ORDER BY date DESC
+                        LIMIT ?
+                    ''',
+                        (f'-{normalized_days} day', normalized_limit),
+                    )
+                else:
+                    cursor.execute(
+                        '''
+                        SELECT date, total_asset, cash, stock_value
+                        FROM asset_history
+                        ORDER BY date DESC
+                        LIMIT ?
+                    ''',
+                        (normalized_limit,),
+                    )
                 rows = [
                     {
                         'date': row[0],

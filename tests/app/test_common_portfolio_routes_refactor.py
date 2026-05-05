@@ -70,8 +70,8 @@ class _DummyPaperTrading:
     def get_trade_history(self, limit):
         return {"trades": [], "limit": limit}
 
-    def get_asset_history(self, limit):
-        return [{"value": 1, "limit": limit}]
+    def get_asset_history(self, limit, days=None):
+        return [{"value": 1, "limit": limit, "days": days}]
 
 
 class _FailingPaperTrading(_DummyPaperTrading):
@@ -267,6 +267,42 @@ def test_asset_history_limit_is_normalized_and_capped():
     assert invalid_limit_response.status_code == 200
     assert invalid_limit_response.get_json()["history"][0]["limit"] == 30
 
+    # 자산 히스토리 캡은 MAX_ASSET_HISTORY_LIMIT(=4000)
     capped_limit_response = client.get("/api/portfolio/history/asset?limit=999999")
     assert capped_limit_response.status_code == 200
-    assert capped_limit_response.get_json()["history"][0]["limit"] == 500
+    assert capped_limit_response.get_json()["history"][0]["limit"] == 4000
+
+
+def test_asset_history_days_parameter_routing():
+    """기간 필터(days) 파라미터 처리 검증."""
+    client = _create_client(_build_ctx(_DummyPaperTrading()))
+
+    # 정상 days 값은 그대로 전달되고, default_limit이 MAX_ASSET_HISTORY_LIMIT로 확장된다.
+    valid_response = client.get("/api/portfolio/history/asset?days=30")
+    assert valid_response.status_code == 200
+    payload = valid_response.get_json()["history"][0]
+    assert payload["days"] == 30
+    assert payload["limit"] == 4000
+
+    # 비숫자 값은 None으로 폴백 → 일반 default_limit(30)이 적용된다.
+    invalid_response = client.get("/api/portfolio/history/asset?days=abc")
+    assert invalid_response.status_code == 200
+    invalid_payload = invalid_response.get_json()["history"][0]
+    assert invalid_payload["days"] is None
+    assert invalid_payload["limit"] == 30
+
+    # 음수/0은 None으로 폴백한다.
+    negative_response = client.get("/api/portfolio/history/asset?days=-1")
+    assert negative_response.status_code == 200
+    assert negative_response.get_json()["history"][0]["days"] is None
+
+    zero_response = client.get("/api/portfolio/history/asset?days=0")
+    assert zero_response.status_code == 200
+    assert zero_response.get_json()["history"][0]["days"] is None
+
+    # days 와 limit 동시 지정 시 limit 사용자 값이 캡(4000) 내에서 존중된다.
+    combined_response = client.get("/api/portfolio/history/asset?days=180&limit=100")
+    assert combined_response.status_code == 200
+    combined_payload = combined_response.get_json()["history"][0]
+    assert combined_payload["days"] == 180
+    assert combined_payload["limit"] == 100

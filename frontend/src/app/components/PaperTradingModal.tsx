@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { paperTradingAPI, PaperTradingPortfolio, PaperTradingAssetHistory, PaperTradingHolding } from '@/lib/api';
 // Dynamic import usage below
-import type { IChartApi } from 'lightweight-charts';
+import type { IChartApi, Time } from 'lightweight-charts';
 import BuyStockModal from './BuyStockModal';
 import SellStockModal from './SellStockModal';
 import ConfirmationModal from './ConfirmationModal';
@@ -16,6 +16,28 @@ interface PaperTradingModalProps {
 }
 
 type PaperTradingTabId = 'overview' | 'holdings' | 'history' | 'chart';
+
+// 작은 비율을 0.0%/0.00%로 잘라버리지 않도록 자릿수를 동적으로 조정한다.
+// 입력 value 는 이미 퍼센트 단위 숫자다 (예: 1.23 = 1.23%, 0.000429 = 0.000429%).
+// 임계값도 같은 단위로 비교한다: 0.01 = 0.01%, 0.0001 = 0.0001%.
+// 예) 0.000429 (=0.000429%) → "0.000429" 부근 6자리 / 12.34 → "12.34"
+const formatSmartPercent = (value: number, defaultDigits = 2): string => {
+  if (!Number.isFinite(value)) return (0).toFixed(defaultDigits);
+  const abs = Math.abs(value);
+  if (abs === 0) return value.toFixed(defaultDigits);
+  if (abs < 0.0001) return value.toFixed(6);
+  if (abs < 0.01) return value.toFixed(4);
+  if (abs < 0.1) return value.toFixed(3);
+  return value.toFixed(defaultDigits);
+};
+
+const TIME_RANGE_DAYS: Record<'1M' | '3M' | '6M' | '1Y' | 'ALL', number> = {
+  '1M': 30,
+  '3M': 90,
+  '6M': 180,
+  '1Y': 365,
+  ALL: 3650,
+};
 
 export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModalProps) {
   const [activeTab, setActiveTab] = useState<PaperTradingTabId>('overview');
@@ -160,16 +182,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
     if (isOpen) {
       fetchPortfolio();
-
-      // Calculate days based on timeRange
-      let days = 365;
-      if (timeRange === '1M') days = 30;
-      else if (timeRange === '3M') days = 90;
-      else if (timeRange === '6M') days = 180;
-      else if (timeRange === '1Y') days = 365;
-      else if (timeRange === 'ALL') days = 3650;
-
-      fetchChartHistory(days);
+      fetchChartHistory(TIME_RANGE_DAYS[timeRange]);
     }
 
     return () => {
@@ -334,6 +347,26 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
           mainSeries.setData(formattedData);
 
+          // 기간 필터(1M/3M/6M/1Y/ALL)에 맞춰 X축 표시 범위를 강제로 설정한다.
+          // 데이터가 적어도 사용자가 선택한 기간만큼 X축이 펼쳐지도록 한다.
+          try {
+            const rangeDays = TIME_RANGE_DAYS[timeRange] ?? 365;
+            const lastDateStr = formattedData[formattedData.length - 1]?.time as string | undefined;
+            const endDate = lastDateStr ? new Date(lastDateStr) : new Date();
+            if (!Number.isNaN(endDate.getTime())) {
+              const startDate = new Date(endDate);
+              startDate.setDate(startDate.getDate() - rangeDays);
+              const fmt = (d: Date) => d.toISOString().split('T')[0];
+              chart.timeScale().setVisibleRange({
+                from: fmt(startDate) as Time,
+                to: fmt(endDate) as Time,
+              });
+            }
+          } catch (rangeErr) {
+            // visible range 설정 실패는 차트 자체 동작에는 영향 없으므로 silent fallback
+            console.debug('Failed to set chart visible range', rangeErr);
+          }
+
           // 이평선 추가
           const maColors: Record<number, string> = {
             3: '#4ade80', 5: '#f87171', 10: '#60a5fa', 20: '#facc15',
@@ -433,7 +466,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 text-xs">수익률</span>
-                <span class="font-bold ${colorClass}">${sign}${profitRate.toFixed(2)}%</span>
+                <span class="font-bold ${colorClass}">${sign}${formatSmartPercent(profitRate, 2)}%</span>
               </div>
             `;
 
@@ -482,7 +515,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
         chartRef.current = null;
       }
     };
-  }, [activeTab, chartData, maToggle, portfolio]);
+  }, [activeTab, chartData, maToggle, portfolio, timeRange]);
 
 
   const handleDeposit = async () => {
@@ -687,7 +720,27 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
             ) : (
               <>
                 {/* Overview Tab */}
-                {activeTab === 'overview' && (
+                {activeTab === 'overview' && (() => {
+                  // 백엔드는 이제 사전 반올림 없는 float를 내려주므로 그대로 사용하고,
+                  // 누락/비유한 값일 때만 total_profit/total_principal 로컬 계산으로 폴백한다.
+                  const principal = Number(portfolio.total_principal ?? 0);
+                  const profitAbs = Number(portfolio.total_profit ?? 0);
+                  const fallbackRate = principal > 0 ? (profitAbs / principal) * 100 : 0;
+                  const backendRate = portfolio.total_profit_rate;
+                  const displayRate = typeof backendRate === 'number' && Number.isFinite(backendRate)
+                    ? backendRate
+                    : fallbackRate;
+
+                  const totalAssetValue = Number(portfolio.total_asset_value || 0);
+                  const stockValue = Number(portfolio.total_stock_value || 0);
+                  const cashValue = Number(portfolio.cash || 0);
+                  const stockPct = totalAssetValue > 0 ? (stockValue / totalAssetValue) * 100 : 0;
+                  const cashPct = totalAssetValue > 0 ? (cashValue / totalAssetValue) * 100 : 0;
+                  // 막대 시각화는 0.5% 미만이라도 보이도록 최소 폭을 보장한다(값이 0인 경우는 제외).
+                  const stockBarWidth = stockValue > 0 ? Math.max(stockPct, 0.8) : 0;
+                  const cashBarWidth = cashValue > 0 ? Math.max(cashPct, 0.8) : 0;
+
+                  return (
                   <div className="max-w-4xl mx-auto space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-[#252529] p-5 md:p-6 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-colors">
@@ -705,12 +758,12 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                             </div>
                           </div>
                         </div>
-                        <div className={`text-3xl md:text-4xl font-bold mb-2 tracking-tight ${(portfolio.total_profit || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                          {(portfolio.total_profit || 0) > 0 ? '+' : ''}{(portfolio.total_profit || 0).toLocaleString()}원
+                        <div className={`text-3xl md:text-4xl font-bold mb-2 tracking-tight ${profitAbs >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                          {profitAbs > 0 ? '+' : ''}{profitAbs.toLocaleString()}원
                         </div>
-                        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${(portfolio.total_profit_rate || 0) >= 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                          <i className={`fas fa-caret-${(portfolio.total_profit_rate || 0) >= 0 ? 'up' : 'down'}`}></i>
-                          {(portfolio.total_profit_rate || 0) > 0 ? '+' : ''}{(portfolio.total_profit_rate || 0).toFixed(2)}%
+                        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${displayRate >= 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                          <i className={`fas fa-caret-${displayRate >= 0 ? 'up' : 'down'}`}></i>
+                          {displayRate > 0 ? '+' : ''}{formatSmartPercent(displayRate, 2)}%
                         </div>
                       </div>
 
@@ -723,26 +776,29 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                           <div className="flex-1">
                             <div className="flex justify-between text-xs mb-1 whitespace-nowrap gap-2">
                               <span className="text-gray-300">주식</span>
-                              <span className="text-white font-bold">{((portfolio?.total_stock_value || 0) / portfolio.total_asset_value * 100).toFixed(1)}%</span>
+                              <span className="text-white font-bold">{formatSmartPercent(stockPct, 1)}%</span>
                             </div>
                             <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                              <div className="h-full bg-rose-500" style={{ width: `${((portfolio?.total_stock_value || 0) / portfolio.total_asset_value * 100)}%` }}></div>
+                              <div className="h-full bg-rose-500" style={{ width: `${Math.min(stockBarWidth, 100)}%` }}></div>
                             </div>
+                            <div className="text-[10px] text-gray-500 mt-1 text-right">{Math.floor(stockValue).toLocaleString()}원</div>
                           </div>
                           <div className="flex-1">
                             <div className="flex justify-between text-xs mb-1 whitespace-nowrap gap-2">
                               <span className="text-gray-300">현금</span>
-                              <span className="text-white font-bold">{(portfolio.cash / portfolio.total_asset_value * 100).toFixed(1)}%</span>
+                              <span className="text-white font-bold">{formatSmartPercent(cashPct, 1)}%</span>
                             </div>
                             <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500" style={{ width: `${(portfolio.cash / portfolio.total_asset_value * 100)}%` }}></div>
+                              <div className="h-full bg-blue-500" style={{ width: `${Math.min(cashBarWidth, 100)}%` }}></div>
                             </div>
+                            <div className="text-[10px] text-gray-500 mt-1 text-right">{Math.floor(cashValue).toLocaleString()}원</div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Holdings Tab */}
                 {activeTab === 'holdings' && (
@@ -762,7 +818,25 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                            {portfolio.holdings.map((stock) => (
+                            {portfolio.holdings.map((stock) => {
+                              // current_price가 0/undefined일 때만 평단가 fallback (단, 0은 비정상이므로 평단가로 대체).
+                              const currentPrice = stock.current_price && stock.current_price > 0
+                                ? stock.current_price
+                                : stock.avg_price;
+                              // market_value가 백엔드에서 내려오면 그대로 쓰고, 없으면 즉석 계산.
+                              const marketValue = typeof stock.market_value === 'number'
+                                ? stock.market_value
+                                : Math.floor(currentPrice * stock.quantity);
+                              // 손익은 가능한 한 백엔드 값을 사용하되, 누락 시 평단가/현재가/수량으로 직접 계산.
+                              const profitLoss = typeof stock.profit_loss === 'number'
+                                ? stock.profit_loss
+                                : Math.round((currentPrice - stock.avg_price) * stock.quantity);
+                              const profitRate = typeof stock.profit_rate === 'number'
+                                ? stock.profit_rate
+                                : (stock.avg_price > 0 ? ((currentPrice - stock.avg_price) / stock.avg_price) * 100 : 0);
+                              const isPlus = profitRate >= 0;
+
+                              return (
                               <tr key={stock.ticker} className="hover:bg-white/5 transition-colors group">
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center gap-3">
@@ -783,7 +857,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-white">
                                   <div className="flex items-center justify-end gap-1">
-                                    {(stock.current_price || stock.avg_price).toLocaleString()}원
+                                    {currentPrice.toLocaleString()}원
                                     {stock.is_stale && (
                                       <div className="group/stale relative">
                                         <i className="fas fa-exclamation-triangle text-amber-500 text-[10px] cursor-help"></i>
@@ -795,14 +869,14 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-white">
-                                  {(stock.market_value || Math.floor((stock.current_price || stock.avg_price) * stock.quantity)).toLocaleString()}원
+                                  {marketValue.toLocaleString()}원
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                                  <div className={`text-sm font-bold ${(stock.profit_rate || 0) >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                                    {(stock.profit_rate || 0) > 0 ? '+' : ''}{(stock.profit_rate || 0).toFixed(2)}%
+                                  <div className={`text-sm font-bold ${isPlus ? 'text-rose-400' : 'text-blue-400'}`}>
+                                    {profitRate > 0 ? '+' : ''}{formatSmartPercent(profitRate, 2)}%
                                   </div>
-                                  <div className={`text-xs ${(stock.profit_loss || 0) >= 0 ? 'text-rose-500/70' : 'text-blue-500/70'}`}>
-                                    {(stock.profit_loss || 0).toLocaleString()}원
+                                  <div className={`text-xs ${isPlus ? 'text-rose-500/70' : 'text-blue-500/70'}`}>
+                                    {profitLoss > 0 ? '+' : ''}{profitLoss.toLocaleString()}원
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -822,7 +896,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                                   </div>
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                             {portfolio.holdings.length === 0 && (
                               <tr>
                                 <td colSpan={7} className="px-6 py-12 text-center text-gray-500">

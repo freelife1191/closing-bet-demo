@@ -969,7 +969,9 @@ def test_get_asset_history_normalizes_invalid_limit_and_caps_upper_bound():
             cursor = conn.cursor()
             base = datetime(2024, 1, 1)
             rows = []
-            for i in range(600):
+            # MAX_ASSET_HISTORY_LIMIT(4000) 캡 검증을 위해 그 이상의 행을 넣는다.
+            row_count = 4100
+            for i in range(row_count):
                 day = (base + timedelta(days=i)).strftime("%Y-%m-%d")
                 rows.append(
                     (
@@ -992,8 +994,9 @@ def test_get_asset_history_normalizes_invalid_limit_and_caps_upper_bound():
         invalid_limit_history = service.get_asset_history(limit="bad-limit")
         assert len(invalid_limit_history) == 30
 
+        # 자산 히스토리 캡은 MAX_ASSET_HISTORY_LIMIT(=4000)
         capped_limit_history = service.get_asset_history(limit=999999)
-        assert len(capped_limit_history) == 500
+        assert len(capped_limit_history) == 4000
     finally:
         _cleanup_service(service)
 

@@ -126,7 +126,8 @@ def get_portfolio_valuation(
         "total_asset_value": total_asset,
         "total_stock_value": total_stock_value,
         "total_profit": int(total_profit),
-        "total_profit_rate": round(total_profit_rate, 2),
+        # 프런트가 작은 비율(예: 0.0001%)을 직접 포맷할 수 있도록 사전 반올림하지 않는다.
+        "total_profit_rate": float(total_profit_rate),
         "total_principal": total_principal,
         "last_update": last_update.isoformat() if last_update else None,
     }
