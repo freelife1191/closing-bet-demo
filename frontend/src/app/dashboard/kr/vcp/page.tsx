@@ -983,15 +983,11 @@ export default function VCPSignalsPage() {
         localStorage.setItem(sessionKey, sessionId);
       }
 
-      let apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
-      if (apiKey === 'null' || apiKey === 'undefined') apiKey = null;
-
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-User-Email': userEmail || '',
-          'X-Gemini-Key': apiKey || '',
           'X-Session-Id': sessionId
         },
         body: JSON.stringify({

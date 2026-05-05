@@ -19,11 +19,13 @@ export default function VCPCriteriaModal({ isOpen, onClose }: VCPCriteriaModalPr
       <div className="space-y-6">
         <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-sm text-blue-200">
           <p className="mb-2">
-            <strong>💡 VCP (Volatility Contraction Pattern) 점수란?</strong>
+            <strong>VCP (Volatility Contraction Pattern) 점수란?</strong>
           </p>
-          주가의 변동성이 줄어들며 에너지가 응축되는 과정을 정량화한 지표입니다.
+          주가의 변동성이 줄어들며 에너지가 응축되는 과정을 정량화한 지표(<strong>100점 만점</strong>)입니다.
           <br />
-          종가베팅과 VCP 시그널 모두 <strong>동일한 로직</strong>으로 계산됩니다.
+          <span className="text-amber-300">
+            ※ 종가베팅 점수(19점 만점)와는 별개의 시스템입니다. 종가베팅 점수표는 종가베팅 페이지에서 확인하세요.
+          </span>
         </div>
 
         <div className="space-y-4">

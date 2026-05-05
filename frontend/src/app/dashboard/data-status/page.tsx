@@ -119,7 +119,7 @@ export default function DataStatusPage() {
     }, 10000);
 
     try {
-      const data: DataStatusResponse = await fetchAPI('/api/system/data-status');
+      const data: DataStatusResponse = await fetchAPI('/api/system/data-status', { timeout: 30000 });
       setData(data);
     } catch (error) {
       console.error('Failed to load data status:', error);
@@ -131,7 +131,7 @@ export default function DataStatusPage() {
   // 업데이트 상태만 폴링 (가벼움)
   const pollUpdateStatus = useCallback(async () => {
     try {
-      const status: UpdateStatusResponse = await fetchAPI('/api/system/update-status');
+      const status: UpdateStatusResponse = await fetchAPI('/api/system/update-status', { timeout: 30000 });
 
       // 로컬 updating 상태를 우선시하되, 백엔드가 실행 중이고 로컬이 아니면 동기화 (선택적)
       // 여기서는 handleUpdateAll이 클라이언트 주도이므로 백엔드 isRunning을 강제로 반영하지 않음
@@ -226,7 +226,7 @@ export default function DataStatusPage() {
   useEffect(() => {
     const checkRunningStatus = async () => {
       try {
-        const data: any = await fetchAPI('/api/kr/jongga-v2/status');
+        const data: any = await fetchAPI('/api/kr/jongga-v2/status', { timeout: 30000 });
 
         // 백엔드에서 실행 중이면 스피너 복구 및 폴링 시작
         if (data.isRunning) {
@@ -238,7 +238,7 @@ export default function DataStatusPage() {
             while (!completed) {
               await new Promise(r => setTimeout(r, 2000));
               try {
-                const statusData: any = await fetchAPI('/api/kr/jongga-v2/status');
+                const statusData: any = await fetchAPI('/api/kr/jongga-v2/status', { timeout: 30000 });
                 if (!statusData.isRunning) {
                   completed = true;
                   setUpdatingItem(null);
@@ -262,7 +262,7 @@ export default function DataStatusPage() {
   useEffect(() => {
     const checkVcpStatus = async () => {
       try {
-        const status: any = await fetchAPI('/api/kr/signals/status');
+        const status: any = await fetchAPI('/api/kr/signals/status', { timeout: 30000 });
         if (status.running) {
           setUpdatingItem('VCP Signals');
 
@@ -272,7 +272,7 @@ export default function DataStatusPage() {
             while (running) {
               await new Promise(r => setTimeout(r, 2000));
               try {
-                const newStatus: any = await fetchAPI('/api/kr/signals/status');
+                const newStatus: any = await fetchAPI('/api/kr/signals/status', { timeout: 30000 });
                 if (!newStatus.running) {
                   running = false;
                   setUpdatingItem(null);

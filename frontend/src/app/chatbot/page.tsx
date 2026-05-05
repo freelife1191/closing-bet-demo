@@ -474,10 +474,6 @@ export default function ChatbotPage() {
       } catch (e) { }
     }
 
-    // API Key
-    const apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
-    if (apiKey) headers['X-Gemini-Key'] = apiKey;
-
     return headers;
   };
 

@@ -212,26 +212,6 @@ export default function ChatWidget() {
     if (isOpen) scrollToBottom();
   }, [messages, isOpen]);
 
-  // [Fix] Re-render when API Key changes
-  const [hasApiKey, setHasApiKey] = useState(false);
-  useEffect(() => {
-    const checkKey = () => {
-      const k1 = localStorage.getItem('X-Gemini-Key');
-      const k2 = localStorage.getItem('GOOGLE_API_KEY');
-      const valid = (k1 && k1 !== 'null' && k1 !== 'undefined') || (k2 && k2 !== 'null' && k2 !== 'undefined');
-      setHasApiKey(!!valid);
-    };
-    checkKey();
-    window.addEventListener('api-key-updated', checkKey);
-    const interval = setInterval(checkKey, 2000);
-    return () => {
-      window.removeEventListener('api-key-updated', checkKey);
-      clearInterval(interval);
-    };
-  }, []);
-
-
-
   const handleSend = async (msgOverride?: string) => {
     const messageToSend = msgOverride || input;
     if (!messageToSend.trim() || isLoading) return;
@@ -258,30 +238,11 @@ export default function ChatWidget() {
 
       // Auth Info Retrieval
       const userEmail = session?.user?.email || null;
-      let apiKey = null;
       let sessionId = localStorage.getItem('browser_session_id');
 
-      // 세션 ID가 없으면 생성
       if (!sessionId) {
         sessionId = 'anon_' + crypto.randomUUID();
         localStorage.setItem('browser_session_id', sessionId);
-      }
-
-      // [Fix] API Key Retrieval Logic Enhanced
-      // 1. Try X-Gemini-Key
-      // 2. Try GOOGLE_API_KEY
-      // 3. Ensure not "null", "undefined", or empty string
-      // Removed intermediate catch block to fix Syntax Error and Scope Issue
-
-      let rawKey = localStorage.getItem('X-Gemini-Key');
-      if (!rawKey || rawKey === 'null' || rawKey === 'undefined') {
-        rawKey = localStorage.getItem('GOOGLE_API_KEY');
-      }
-
-      if (rawKey && rawKey !== 'null' && rawKey !== 'undefined' && rawKey.trim().length > 0) {
-        apiKey = rawKey.trim();
-      } else {
-        apiKey = null;
       }
 
       const res = await fetch('/api/kr/chatbot', {
@@ -289,7 +250,6 @@ export default function ChatWidget() {
         headers: {
           'Content-Type': 'application/json',
           'X-User-Email': userEmail || '',
-          'X-Gemini-Key': apiKey || '',
           'X-Session-Id': sessionId
         },
         body: JSON.stringify({ message: messageToSend, watchlist }),

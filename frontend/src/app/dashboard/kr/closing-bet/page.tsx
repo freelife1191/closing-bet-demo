@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAPI } from '@/lib/api';
 import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
-import VCPCriteriaModal from '@/app/components/VCPCriteriaModal';
+import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
 import { useAdmin } from '@/hooks/useAdmin';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
@@ -872,7 +872,7 @@ export default function JonggaV2Page() {
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
   const [isBulkBuyingClosingBet, setIsBulkBuyingClosingBet] = useState(false);
-  const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false); // [NEW] VCP Modal State
+  const [isClosingBetCriteriaModalOpen, setIsClosingBetCriteriaModalOpen] = useState(false);
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -1339,12 +1339,12 @@ export default function JonggaV2Page() {
               </button>
             </Tooltip>
 
-            {/* [NEW] VCP 기준표 버튼 (Moved here) */}
+            {/* 종가베팅 점수표 버튼 */}
             <button
-              onClick={() => setIsVCPCriteriaModalOpen(true)}
+              onClick={() => setIsClosingBetCriteriaModalOpen(true)}
               className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10"
             >
-              <i className="fas fa-table"></i> VCP 기준표
+              <i className="fas fa-table"></i> 종가베팅 점수표
             </button>
 
             <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" wide>
@@ -1590,10 +1590,10 @@ export default function JonggaV2Page() {
         <p>{alertModal.content}</p>
       </Modal>
 
-      {/* VCP Criteria Modal */}
-      <VCPCriteriaModal
-        isOpen={isVCPCriteriaModalOpen}
-        onClose={() => setIsVCPCriteriaModalOpen(false)}
+      {/* 종가베팅 점수표 Modal */}
+      <ClosingBetCriteriaModal
+        isOpen={isClosingBetCriteriaModalOpen}
+        onClose={() => setIsClosingBetCriteriaModalOpen(false)}
       />
     </div>
   );
