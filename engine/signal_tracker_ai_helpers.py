@@ -56,11 +56,31 @@ def build_ai_batch_payload(signals_df: pd.DataFrame) -> list[dict[str, Any]]:
     return payload
 
 
+_PROVIDER_PRIORITY: tuple[tuple[str, str], ...] = (
+    ("gemini", "gemini_recommendation"),
+    ("gpt", "gpt_recommendation"),
+    ("perplexity", "perplexity_recommendation"),
+)
+
+
+def _pick_recommendation(payload: Mapping[str, Any]) -> tuple[str, Mapping[str, Any] | None]:
+    """우선순위(gemini→gpt→perplexity) 순으로 첫 유효 추천을 고른다."""
+    for provider, key in _PROVIDER_PRIORITY:
+        rec = payload.get(key)
+        if isinstance(rec, Mapping):
+            return provider, rec
+    return "N/A", None
+
+
 def apply_ai_results(
     signals_df: pd.DataFrame,
     ai_results: Mapping[str, dict[str, Any]],
 ) -> pd.DataFrame:
-    """AI 분석 결과를 시그널 프레임에 병합."""
+    """AI 분석 결과를 시그널 프레임에 병합.
+
+    Provider 우선순위(gemini → gpt → perplexity)를 적용해 첫 번째 유효 추천을 선택하고,
+    어느 provider가 응답했는지 ai_provider 컬럼에 기록한다.
+    """
     if signals_df.empty:
         return signals_df.copy()
 
@@ -73,25 +93,27 @@ def apply_ai_results(
     actions: list[Any] = []
     confidences: list[Any] = []
     reasons: list[Any] = []
+    providers: list[str] = []
 
     for ticker in ticker_series:
         ai_payload = ai_results.get(ticker, {}) if isinstance(ai_results, Mapping) else {}
-        gemini = (
-            ai_payload.get("gemini_recommendation")
-            if isinstance(ai_payload, Mapping)
-            else None
-        )
+        if not isinstance(ai_payload, Mapping):
+            ai_payload = {}
 
-        if isinstance(gemini, Mapping):
-            actions.append(gemini.get("action"))
-            confidences.append(gemini.get("confidence"))
-            reasons.append(gemini.get("reason"))
-        else:
+        provider, rec = _pick_recommendation(ai_payload)
+        if rec is None:
             actions.append("N/A")
             confidences.append(0)
             reasons.append("분석 실패")
+            providers.append("N/A")
+        else:
+            actions.append(rec.get("action"))
+            confidences.append(rec.get("confidence"))
+            reasons.append(rec.get("reason"))
+            providers.append(provider)
 
     result["ai_action"] = actions
     result["ai_confidence"] = confidences
     result["ai_reason"] = reasons
+    result["ai_provider"] = providers
     return result
