@@ -42,14 +42,27 @@ def test_get_available_providers_excludes_perplexity_when_disabled(monkeypatch):
 
 def test_analyze_with_gpt_uses_to_thread(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
+    quality_reason = (
+        "VCP 점수와 외국인·기관 수급이 동시에 개선되어 단기 매수 우위 시나리오가 유효합니다. "
+        "다만 전고점 저항 부근에서 거래량이 둔화될 가능성을 고려해 분할 매수와 손절 기준을 함께 운영하는 전략이 필요합니다."
+    )
+    payload = (
+        '{"action":"BUY","confidence":80,"reason":"' + quality_reason + '"}'
+    )
     analyzer.gpt_client = SimpleNamespace(
         chat=SimpleNamespace(
             completions=SimpleNamespace(
                 create=lambda **_kwargs: SimpleNamespace(
-                    choices=[SimpleNamespace(message=SimpleNamespace(content='{"action":"BUY","confidence":80}'))]
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=payload))]
                 )
             )
-        )
+        ),
+        responses=SimpleNamespace(
+            create=lambda **_kwargs: SimpleNamespace(
+                output_text=payload,
+                output=[],
+            )
+        ),
     )
     analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
     called = {"to_thread": 0}
@@ -73,7 +86,7 @@ def test_analyze_with_gemini_429_blocks_model_for_session(monkeypatch):
     def _generate_content(*, model, contents):
         del contents
         calls.append(model)
-        if model == "gemini-2.0-flash-lite":
+        if model == "gemini-3.1-flash-lite-preview":
             raise RuntimeError("429 resource_exhausted")
         return SimpleNamespace(text='{"action":"BUY","confidence":74,"reason":"ok"}')
 
@@ -99,7 +112,7 @@ def test_analyze_with_gemini_429_blocks_model_for_session(monkeypatch):
     assert first["action"] == "BUY"
     assert second["action"] == "BUY"
     # 429가 발생한 모델은 세션에서 제외되어 두 번째 종목에서는 재시도하지 않는다.
-    assert calls.count("gemini-2.0-flash-lite") == 1
+    assert calls.count("gemini-3.1-flash-lite-preview") == 1
 
 
 def test_analyze_with_perplexity_429_switches_to_fallback_without_retry(monkeypatch):
@@ -1003,8 +1016,6 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
         if model == "primary-zai-model":
             raise RuntimeError("status=429 rate limited")
         if model == "glm-4.6V-Flash":
-            raise RuntimeError("Service Unavailable (503)")
-        if model == "glm-4.7":
             return SimpleNamespace(
                 choices=[
                     SimpleNamespace(
@@ -1042,7 +1053,7 @@ def test_analyze_with_zai_switches_through_fallback_model_chain(monkeypatch):
     assert result["action"] == "HOLD"
     assert calls.count("primary-zai-model") == 1
     assert calls.count("glm-4.6V-Flash") == 1
-    assert "glm-4.7" in calls
+    assert "glm-4.7" not in calls
 
 
 def test_analyze_with_zai_disables_session_after_prompt_echo_responses(monkeypatch):
@@ -1115,7 +1126,9 @@ def test_analyze_with_zai_disables_session_after_prompt_echo_responses(monkeypat
     assert first is not None and second is not None
     assert first["action"] in {"BUY", "HOLD", "SELL"}
     assert second["action"] in {"BUY", "HOLD", "SELL"}
-    assert first_call_count == 3
+    # 모델 체인 [primary, glm-4.6V-Flash]에 대해 prompt-echo 감지 시
+    # 같은 모델로 2회 재시도하므로 모델당 3회 = 총 6회 호출 후 세션 비활성화.
+    assert first_call_count == 6
     assert len(calls) == first_call_count
 
 

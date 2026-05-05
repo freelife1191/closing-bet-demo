@@ -13,6 +13,7 @@ import re
 from typing import List, Dict, Optional
 
 from engine.config import app_config
+from engine.llm_analyzer_retry import GEMINI_RETRY_MODEL_CHAIN
 from engine.vcp_ai_analyzer_helpers import (
     build_vcp_rule_based_recommendation,
     build_perplexity_request,
@@ -40,16 +41,8 @@ from engine.vcp_ai_orchestration_helpers import (
 
 logger = logging.getLogger(__name__)
 
-GEMINI_RETRY_MODEL_CHAIN = [
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
-    "gemini-3-flash-preview",
-]
 ZAI_FALLBACK_MODEL_CHAIN = [
     "glm-4.6V-Flash",
-    "glm-4.7",
 ]
 GPT_FALLBACK_TRIGGER_STATUS_CODES = {429, 503}
 GPT_RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
@@ -76,6 +69,18 @@ GPT_CREDIT_EXHAUSTED_KEYWORDS = (
     "insufficient balance",
     "exceeded your current quota",
 )
+
+_ZAI_ASSISTANT_PREFILL = '{"action":"'
+
+
+def _restore_zai_prefill(response_text: str) -> str:
+    """assistant prefill로 시작 토큰을 강제했을 때 응답이 prefix를 생략하면 복원한다."""
+    if not response_text:
+        return response_text
+    stripped = response_text.lstrip()
+    if stripped.startswith("{"):
+        return response_text
+    return _ZAI_ASSISTANT_PREFILL + response_text
 
 
 class VCPMultiAIAnalyzer:
@@ -856,6 +861,8 @@ class VCPMultiAIAnalyzer:
 
             for model_idx, model in enumerate(model_chain):
                 should_try_next_model = False
+                same_model_echo_retries_used = 0
+                same_model_echo_retries_max = 2
 
                 for attempt in range(max_parse_attempts):
                     start = time.time()
@@ -864,13 +871,14 @@ class VCPMultiAIAnalyzer:
                     def _call(
                         messages: list[dict[str, str]],
                         use_json_mode: bool,
-                        max_tokens: int = 900,
+                        max_tokens: int = 2500,
                         timeout_value: float = request_timeout,
+                        temperature: float = 0.0,
                     ):
                         request_args = {
                             "model": model,
                             "messages": messages,
-                            "temperature": 0.0,
+                            "temperature": temperature,
                             "max_tokens": max_tokens,
                             "timeout": timeout_value,
                         }
@@ -905,14 +913,14 @@ class VCPMultiAIAnalyzer:
                             content = message_obj.get("content")
                         response_text = extract_openai_message_text(content)
                         if response_text and response_text.strip():
-                            return response_text
+                            return _restore_zai_prefill(response_text)
 
                         reasoning_content = getattr(message_obj, "reasoning_content", None)
                         if reasoning_content is None and isinstance(message_obj, dict):
                             reasoning_content = message_obj.get("reasoning_content")
                         response_text = extract_openai_message_text(reasoning_content)
                         if response_text and response_text.strip():
-                            return response_text
+                            return _restore_zai_prefill(response_text)
 
                         return ""
 
@@ -936,13 +944,14 @@ class VCPMultiAIAnalyzer:
                             ),
                         },
                         {"role": "user", "content": resolved_prompt},
+                        {"role": "assistant", "content": '{"action":"'},
                     ]
                     try:
                         response_text = await asyncio.to_thread(
                             _call,
                             primary_messages,
                             True,
-                            900,
+                            2500,
                             attempt_timeout,
                         )
                         last_response_text = str(response_text or "")
@@ -959,20 +968,51 @@ class VCPMultiAIAnalyzer:
                                 f"[Z.ai] {stock_name} 프롬프트 에코/메타 응답 감지 "
                                 f"(model={model}, attempt={attempt+1})"
                             )
-                            if model_idx < len(model_chain) - 1:
-                                next_model = model_chain[model_idx + 1]
-                                logger.warning(
-                                    f"[Z.ai] {stock_name} 메타 응답으로 모델 전환 "
-                                    f"({model} -> {next_model})"
+                            recovered_text: str | None = None
+                            while same_model_echo_retries_used < same_model_echo_retries_max:
+                                same_model_echo_retries_used += 1
+                                # 결정론적 echo를 깨기 위해 retry마다 temperature를 점진적으로 올린다.
+                                retry_temperature = 0.3 + 0.2 * (same_model_echo_retries_used - 1)
+                                logger.info(
+                                    f"[Z.ai] {stock_name} 같은 모델로 재시도 "
+                                    f"(model={model}, retry={same_model_echo_retries_used}/{same_model_echo_retries_max}, temp={retry_temperature:.1f})"
                                 )
-                                should_try_next_model = True
+                                try:
+                                    retry_text = await asyncio.to_thread(
+                                        _call,
+                                        primary_messages,
+                                        True,
+                                        2500,
+                                        attempt_timeout,
+                                        retry_temperature,
+                                    )
+                                except Exception as retry_error:
+                                    logger.warning(
+                                        f"[Z.ai] {stock_name} 재시도 호출 실패: {retry_error}"
+                                    )
+                                    retry_text = ""
+                                retry_text = str(retry_text or "")
+                                if retry_text and not is_prompt_echo_response(retry_text):
+                                    recovered_text = retry_text
+                                    break
+                            if recovered_text is not None:
+                                last_response_text = recovered_text
+                                # 재시도 응답으로 정상 흐름 재진입을 위해 아래 파싱 단계로 이어진다.
                             else:
-                                self.zai_disabled_reason = "prompt-echo responses"
-                                logger.warning(
-                                    f"[Z.ai] {stock_name} 마지막 모델 {model}까지 메타 응답이 반복되어 "
-                                    "이번 세션에서 Z.ai를 비활성화합니다."
-                                )
-                            break
+                                if model_idx < len(model_chain) - 1:
+                                    next_model = model_chain[model_idx + 1]
+                                    logger.warning(
+                                        f"[Z.ai] {stock_name} 재시도도 메타 응답이라 모델 전환 "
+                                        f"({model} -> {next_model})"
+                                    )
+                                    should_try_next_model = True
+                                else:
+                                    self.zai_disabled_reason = "prompt-echo responses"
+                                    logger.warning(
+                                        f"[Z.ai] {stock_name} 마지막 모델 {model} 재시도까지 메타 응답이 반복되어 "
+                                        "이번 세션에서 Z.ai를 비활성화합니다."
+                                    )
+                                break
 
                         result = self._parse_json_response(last_response_text)
                         quality_low = False
@@ -1015,12 +1055,13 @@ class VCPMultiAIAnalyzer:
                                         "Return only valid JSON."
                                     ),
                                 },
+                                {"role": "assistant", "content": '{"action":"'},
                             ]
                             repaired_text = await asyncio.to_thread(
                                 _call,
                                 repair_messages,
                                 True,
-                                800,
+                                2000,
                                 attempt_timeout,
                             )
                             repaired_result = self._parse_json_response(str(repaired_text or ""))
