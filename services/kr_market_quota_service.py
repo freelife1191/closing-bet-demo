@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
+from services.admin_helpers import is_admin_email
+
 
 def safe_usage_count(value: Any) -> int:
     """저장된 사용량 값을 0 이상의 정수로 정규화한다."""
@@ -59,6 +61,16 @@ def build_quota_info_payload(
     server_key_available: bool,
 ) -> dict[str, Any]:
     """쿼터 조회 응답 payload를 생성한다."""
+    if is_admin_email(usage_key):
+        return {
+            "usage": 0,
+            "limit": -1,
+            "remaining": -1,
+            "is_admin": True,
+            "unlimited": True,
+            "server_key_configured": server_key_available,
+        }
+
     if not usage_key:
         return {
             "usage": 0,

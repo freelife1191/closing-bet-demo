@@ -233,7 +233,11 @@ export default function Sidebar() {
                 <div className="p-3 border-b border-white/5">
                   <div className="text-sm font-bold text-white mb-0.5">{profile.name}</div>
                   <div className="text-xs text-gray-400">{profile.email}</div>
-                  {quota && (
+                  {isAdmin ? (
+                    <div className="text-[10px] text-rose-400 mt-1 font-medium bg-rose-500/10 px-1.5 py-0.5 rounded inline-block">
+                      Admin · 무제한
+                    </div>
+                  ) : quota && (
                     <div className="text-[10px] text-blue-400 mt-1 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded inline-block">
                       {quota.remaining}회 남음 (총 {quota.limit}회)
                     </div>
@@ -278,8 +282,8 @@ export default function Sidebar() {
             </>
           )}
 
-          {/* Quota Display above Profile */}
-          {quota && (
+          {/* Quota Display above Profile (Admin은 무제한이라 숨김) */}
+          {!isAdmin && quota && (
             <div className="mb-2 px-3">
               {(
                 <div className="bg-white/5 border border-white/5 rounded-lg p-2">
@@ -345,7 +349,9 @@ export default function Sidebar() {
                 )}
               </div>
               <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
-                {quota ? (
+                {isAdmin ? (
+                  <span className="text-rose-400 text-[11px] font-semibold">Admin · 무제한 사용</span>
+                ) : quota ? (
                   <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
                 ) : (
                   <span className="text-gray-500 text-[11px]">Free Tier (무료 10회)</span>
