@@ -13,9 +13,13 @@ ENV/
 backup/
 .backup/
 *.bak
+.env.bak*
 
 # Environment
 .env
+
+# Secrets (service account keys, etc.)
+secrets/
 
 # Logs
 logs/
@@ -50,6 +54,10 @@ response.json
 .sisyphus/
 .ipynb_checkpoints/
 services/*.lock
+data/*.lock
+
+# Manual QA harness output
+tests/manual/qa_jongga_runs/
 
 # Project showcase generated artifacts
 project/video/scenes/
