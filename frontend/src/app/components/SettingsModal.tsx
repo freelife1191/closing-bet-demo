@@ -411,9 +411,16 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
                     {/* Quota Display for General Settings */}
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">무료 사용량 상태</label>
+                      <label className="block text-xs font-bold text-gray-500 mb-1.5">
+                        {isAdmin ? '관리자 사용 권한' : '무료 사용량 상태'}
+                      </label>
                       <div className="bg-[#18181b] border border-white/10 rounded-lg p-3">
-                        {quota ? (
+                        {isAdmin ? (
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-rose-400 font-bold">Admin</span>
+                            <span className="text-gray-300">· 무제한 사용 가능</span>
+                          </div>
+                        ) : quota ? (
                           <div className="w-full">
                             <div className="flex justify-between text-xs text-blue-400 mb-1.5">
                               <span>사용량: {quota.usage} / {quota.limit}회</span>
@@ -541,7 +548,12 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                               )}
                             </div>
                             <div className="text-sm text-gray-400">{googleUserInfo?.email}</div>
-                            {quota && (
+                            {isAdmin ? (
+                              <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2 py-0.5 rounded">
+                                <i className="fas fa-infinity text-[10px]"></i>
+                                <span>Admin · 무제한</span>
+                              </div>
+                            ) : quota && (
                               <div className="mt-1.5 w-full max-w-[200px]">
                                 <div className="text-[11px] text-blue-400 flex justify-between mb-1">
                                   <span>무료 사용량</span>

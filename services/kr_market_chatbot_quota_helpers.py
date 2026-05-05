@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from services.admin_helpers import is_admin_email
+
 
 def check_chatbot_quota_guard(
     user_api_key: str | None,
@@ -43,6 +45,10 @@ def check_chatbot_quota_guard(
                 "code": "SERVER_CONFIG_MISSING",
             },
         )
+
+    if is_admin_email(usage_key):
+        # 관리자: 서버 키 사용하되 무료 쿼터 차감/제한을 우회한다.
+        return False, None
 
     used = get_user_usage_fn(usage_key)
     if used >= max_free_usage:

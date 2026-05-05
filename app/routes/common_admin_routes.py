@@ -6,11 +6,10 @@ Common Admin Routes
 
 from __future__ import annotations
 
-import os
-
 from flask import jsonify, request
 
 from app.routes.common_route_context import CommonRouteContext
+from services.admin_helpers import is_admin_email
 
 
 def register_common_admin_routes(common_bp, ctx: CommonRouteContext) -> None:
@@ -27,8 +26,6 @@ def register_common_admin_routes(common_bp, ctx: CommonRouteContext) -> None:
         if not email:
             return jsonify({"isAdmin": False, "error": "Email required"}), 400
 
-        admin_emails_str = os.environ.get("ADMIN_EMAILS", "")
-        admin_emails = [entry.strip().lower() for entry in admin_emails_str.split(",") if entry.strip()]
-        is_admin = email in admin_emails
+        is_admin = is_admin_email(email)
         ctx.logger.debug(f"Admin check: {email} -> {is_admin}")
         return jsonify({"isAdmin": is_admin})
