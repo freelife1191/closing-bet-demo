@@ -18,6 +18,64 @@ from engine.phases_base import BasePhase
 logger = logging.getLogger(__name__)
 
 
+def _adapt_to_jongga_signal(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Phase1+2 결과 item을 종가베팅(jongga) 재분석과 동일한 dict 형태로 변환.
+
+    매일 종가베팅 생성 파이프라인의 Phase3 입력은 stock=StockData 객체,
+    supply=SupplyData 객체, score는 별도 키(pre_score)로 분리된 형태이지만,
+    재분석/jongga 프롬프트가 기대하는 입력은 stock=dict(score/score_details
+    inline), supply=dict(foreign_buy_5d/inst_buy_5d) 형태이다.
+
+    이 어댑터는 양쪽 입력 shape의 차이만 흡수한다. 별도 계산은 하지 않는다.
+    """
+    stock_obj = item.get("stock")
+    pre_score = item.get("pre_score")
+    score_details = item.get("score_details") or {}
+    supply_obj = item.get("supply")
+    news = item.get("news") or []
+
+    def _g(obj: Any, attr: str, default: Any = 0) -> Any:
+        if obj is None:
+            return default
+        return getattr(obj, attr, default)
+
+    score = {
+        "total": _g(pre_score, "total", 0),
+        "news": _g(pre_score, "news", 0),
+        "volume": _g(pre_score, "volume", 0),
+        "chart": _g(pre_score, "chart", 0),
+        "candle": _g(pre_score, "candle", 0),
+        "timing": _g(pre_score, "timing", 0),
+        "supply": _g(pre_score, "supply", 0),
+    }
+
+    signal_stock: Dict[str, Any] = {
+        "stock_code": _g(stock_obj, "code", "") or "",
+        "stock_name": _g(stock_obj, "name", "") or "",
+        "current_price": _g(stock_obj, "close", 0) or 0,
+        "change_pct": _g(stock_obj, "change_pct", 0) or 0,
+        "trading_value": _g(stock_obj, "trading_value", 0) or 0,
+        "score": score,
+        "score_details": score_details,
+    }
+
+    foreign = inst = None
+    if supply_obj is not None:
+        foreign = getattr(supply_obj, "foreign_buy_5d", None)
+        inst = getattr(supply_obj, "inst_buy_5d", None)
+    if foreign is None:
+        foreign = score_details.get("foreign_net_buy", 0)
+    if inst is None:
+        inst = score_details.get("inst_net_buy", 0)
+
+    supply_dict = {
+        "foreign_buy_5d": int(foreign or 0),
+        "inst_buy_5d": int(inst or 0),
+    }
+
+    return {"stock": signal_stock, "news": news, "supply": supply_dict}
+
+
 class Phase2NewsCollector(BasePhase):
     """
     2단계: 뉴스 수집
@@ -123,7 +181,13 @@ class Phase3LLMAnalyzer(BasePhase):
                 )
 
                 try:
-                    chunk_result = await self.llm_analyzer.analyze_news_batch(chunk_data, market_status)
+                    # 종가베팅 매일 생성 파이프라인은 reanalyze와 완전히 동일한
+                    # 입력 shape(dict)으로 변환한 뒤 jongga 전용 프롬프트를 호출한다.
+                    # (VCP 메타 누설 제거 + 19점 만점 명시 + 5섹션 350자 강제)
+                    adapted_chunk = [_adapt_to_jongga_signal(it) for it in chunk_data]
+                    chunk_result = await self.llm_analyzer.analyze_news_batch_jongga(
+                        adapted_chunk, market_status
+                    )
 
                     if self.request_delay > 0:
                         await asyncio.sleep(self.request_delay)
