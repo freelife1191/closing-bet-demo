@@ -7,6 +7,7 @@ import type { IChartApi, Time } from 'lightweight-charts';
 import BuyStockModal from './BuyStockModal';
 import SellStockModal from './SellStockModal';
 import ConfirmationModal from './ConfirmationModal';
+import StockTradeHistoryModal from './StockTradeHistoryModal';
 
 const MAX_DEPOSIT_PER_TX = 1_000_000_000_000; // 1조원
 
@@ -66,6 +67,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   const [sellModalOpen, setSellModalOpen] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [selectedStock, setSelectedStock] = useState<any>(null); // 매수/매도용 선택된 종목
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyStock, setHistoryStock] = useState<{ ticker: string; name: string } | null>(null);
   const tabs: { id: PaperTradingTabId; label: string; icon: string }[] = [
     { id: 'overview', label: '자산 개요', icon: 'fa-wallet' },
     { id: 'holdings', label: '보유 종목', icon: 'fa-list' },
@@ -557,6 +560,11 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
     setBuyModalOpen(true);
   };
 
+  const openHistoryModal = (stock: PaperTradingHolding) => {
+    setHistoryStock({ ticker: stock.ticker, name: stock.name });
+    setHistoryModalOpen(true);
+  };
+
   const openSellModal = (stock: PaperTradingHolding) => {
     setSelectedStock({
       ticker: stock.ticker,
@@ -837,14 +845,30 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                               const isPlus = profitRate >= 0;
 
                               return (
-                              <tr key={stock.ticker} className="hover:bg-white/5 transition-colors group">
+                              <tr
+                                key={stock.ticker}
+                                className="hover:bg-white/5 transition-colors group cursor-pointer"
+                                onClick={() => openHistoryModal(stock)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openHistoryModal(stock);
+                                  }
+                                }}
+                                title="클릭하여 거래 내역 보기"
+                              >
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs font-bold text-gray-400 group-hover:text-white group-hover:bg-white/10 transition-colors">
                                       {stock.ticker.slice(0, 2)}
                                     </div>
                                     <div>
-                                      <div className="text-sm font-bold text-white">{stock.name}</div>
+                                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                                        {stock.name}
+                                        <i className="fas fa-receipt text-[10px] text-gray-600 group-hover:text-rose-400 transition-colors"></i>
+                                      </div>
                                       <div className="text-xs text-gray-500">{stock.ticker}</div>
                                     </div>
                                   </div>
@@ -882,13 +906,19 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                   <div className="flex items-center justify-center gap-2">
                                     <button
-                                      onClick={() => openBuyModal(stock)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openBuyModal(stock);
+                                      }}
                                       className="px-3 py-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white text-xs font-bold transition-colors"
                                     >
                                       매수
                                     </button>
                                     <button
-                                      onClick={() => openSellModal(stock)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openSellModal(stock);
+                                      }}
                                       className="px-3 py-1.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-bold transition-colors"
                                     >
                                       매도
@@ -1099,6 +1129,11 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
         onCancel={() => setResetModalOpen(false)}
         confirmText="초기화"
         cancelText="취소"
+      />
+      <StockTradeHistoryModal
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        stock={historyStock}
       />
     </>
   );

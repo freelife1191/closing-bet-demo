@@ -967,25 +967,40 @@ class PaperTradingTradeAccountMixin:
             logger.error(f"Failed to reset paper trading account: {error}")
             return False
 
-    def get_trade_history(self, limit=DEFAULT_TRADE_HISTORY_LIMIT):
-        """Get trade history"""
+    def get_trade_history(self, limit=DEFAULT_TRADE_HISTORY_LIMIT, ticker: str | None = None):
+        """Get trade history. Optionally filter by ticker."""
         normalized_limit = self._normalize_trade_history_limit(
             limit,
             default=DEFAULT_TRADE_HISTORY_LIMIT,
         )
 
+        ticker_candidates: tuple[str, ...] = ()
+        if ticker is not None and str(ticker).strip():
+            ticker_candidates = self._ticker_lookup_candidates(ticker)
+
         def _operation():
             with self.get_read_context() as conn:
                 cursor = conn.cursor()
-                cursor.execute(
+                if ticker_candidates:
+                    placeholders = ",".join("?" for _ in ticker_candidates)
+                    query = f'''
+                        SELECT id, action, ticker, name, price, quantity, timestamp, profit, profit_rate
+                        FROM trade_log
+                        WHERE ticker IN ({placeholders})
+                        ORDER BY timestamp DESC, id DESC
+                        LIMIT ?
                     '''
-                    SELECT id, action, ticker, name, price, quantity, timestamp, profit, profit_rate
-                    FROM trade_log
-                    ORDER BY timestamp DESC, id DESC
-                    LIMIT ?
-                ''',
-                    (normalized_limit,),
-                )
+                    cursor.execute(query, (*ticker_candidates, normalized_limit))
+                else:
+                    cursor.execute(
+                        '''
+                        SELECT id, action, ticker, name, price, quantity, timestamp, profit, profit_rate
+                        FROM trade_log
+                        ORDER BY timestamp DESC, id DESC
+                        LIMIT ?
+                    ''',
+                        (normalized_limit,),
+                    )
                 trades = [
                     {
                         'id': row[0],

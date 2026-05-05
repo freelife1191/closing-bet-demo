@@ -166,13 +166,15 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
 def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> None:
     @common_bp.route("/portfolio/history")
     def get_trade_history():
-        """거래 내역 조회."""
+        """거래 내역 조회. ticker 쿼리 파라미터로 종목별 필터링 가능."""
         def _handler():
             limit = _parse_history_limit(
                 request.args.get("limit", DEFAULT_TRADE_HISTORY_LIMIT),
                 default=DEFAULT_TRADE_HISTORY_LIMIT,
             )
-            data = ctx.paper_trading.get_trade_history(limit)
+            ticker_param = request.args.get("ticker")
+            ticker_filter = ticker_param.strip() if ticker_param else None
+            data = ctx.paper_trading.get_trade_history(limit, ticker=ticker_filter)
             return jsonify(data)
 
         return _execute_portfolio_route(

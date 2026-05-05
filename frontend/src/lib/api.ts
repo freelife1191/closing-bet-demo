@@ -426,8 +426,10 @@ export const paperTradingAPI = {
     return res.json();
   },
 
-  async getTradeHistory(limit = 50) {
-    const res = await fetch(`/api/portfolio/history?limit=${limit}`);
+  async getTradeHistory(limit = 50, ticker?: string) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (ticker) params.set('ticker', ticker);
+    const res = await fetch(`/api/portfolio/history?${params.toString()}`);
     if (!res.ok) throw new Error('Failed to fetch trade history');
     return res.json();
   },

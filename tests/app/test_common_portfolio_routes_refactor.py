@@ -67,8 +67,8 @@ class _DummyPaperTrading:
     def deposit_cash(self, amount):
         return {"status": "success", "amount": amount}
 
-    def get_trade_history(self, limit):
-        return {"trades": [], "limit": limit}
+    def get_trade_history(self, limit, ticker=None):
+        return {"trades": [], "limit": limit, "ticker": ticker}
 
     def get_asset_history(self, limit, days=None):
         return [{"value": 1, "limit": limit, "days": days}]
