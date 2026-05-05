@@ -34,33 +34,55 @@ def _adapt_to_jongga_signal(item: Dict[str, Any]) -> Dict[str, Any]:
     supply_obj = item.get("supply")
     news = item.get("news") or []
 
-    def _g(obj: Any, attr: str, default: Any = 0) -> Any:
+    def _g(obj: Any, *attrs: str, default: Any = 0) -> Any:
+        """객체 attr 또는 dict key 모두에서 값을 꺼낸다.
+
+        attrs는 우선순위 순으로 시도한다. 첫 번째로 None 이외 값이 나오면 반환.
+        """
         if obj is None:
             return default
-        return getattr(obj, attr, default)
+        if isinstance(obj, dict):
+            for attr in attrs:
+                if attr in obj and obj[attr] is not None:
+                    return obj[attr]
+            return default
+        for attr in attrs:
+            value = getattr(obj, attr, None)
+            if value is not None:
+                return value
+        return default
 
     score = {
-        "total": _g(pre_score, "total", 0),
-        "news": _g(pre_score, "news", 0),
-        "volume": _g(pre_score, "volume", 0),
-        "chart": _g(pre_score, "chart", 0),
-        "candle": _g(pre_score, "candle", 0),
-        "timing": _g(pre_score, "timing", 0),
-        "supply": _g(pre_score, "supply", 0),
+        "total": _g(pre_score, "total", default=0),
+        "news": _g(pre_score, "news", default=0),
+        "volume": _g(pre_score, "volume", default=0),
+        "chart": _g(pre_score, "chart", default=0),
+        "candle": _g(pre_score, "candle", default=0),
+        "timing": _g(pre_score, "timing", default=0),
+        "supply": _g(pre_score, "supply", default=0),
     }
 
     signal_stock: Dict[str, Any] = {
-        "stock_code": _g(stock_obj, "code", "") or "",
-        "stock_name": _g(stock_obj, "name", "") or "",
-        "current_price": _g(stock_obj, "close", 0) or 0,
-        "change_pct": _g(stock_obj, "change_pct", 0) or 0,
-        "trading_value": _g(stock_obj, "trading_value", 0) or 0,
+        "stock_code": _g(stock_obj, "code", "stock_code", default="") or "",
+        "stock_name": _g(stock_obj, "name", "stock_name", default="") or "",
+        "current_price": _g(stock_obj, "close", "current_price", default=0) or 0,
+        "change_pct": _g(stock_obj, "change_pct", default=0) or 0,
+        "trading_value": _g(stock_obj, "trading_value", default=0) or 0,
         "score": score,
         "score_details": score_details,
     }
 
+    def _coerce_int(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
     foreign = inst = None
-    if supply_obj is not None:
+    if isinstance(supply_obj, dict):
+        foreign = supply_obj.get("foreign_buy_5d")
+        inst = supply_obj.get("inst_buy_5d")
+    elif supply_obj is not None:
         foreign = getattr(supply_obj, "foreign_buy_5d", None)
         inst = getattr(supply_obj, "inst_buy_5d", None)
     if foreign is None:
@@ -69,8 +91,8 @@ def _adapt_to_jongga_signal(item: Dict[str, Any]) -> Dict[str, Any]:
         inst = score_details.get("inst_net_buy", 0)
 
     supply_dict = {
-        "foreign_buy_5d": int(foreign or 0),
-        "inst_buy_5d": int(inst or 0),
+        "foreign_buy_5d": _coerce_int(foreign),
+        "inst_buy_5d": _coerce_int(inst),
     }
 
     return {"stock": signal_stock, "news": news, "supply": supply_dict}
