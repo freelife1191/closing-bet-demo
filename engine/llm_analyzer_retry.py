@@ -48,11 +48,14 @@ class RetryConfig:
 
 
 GEMINI_RETRY_MODEL_CHAIN = [
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
+    # Main (Gemini 3.x preview) - tier 순서 유지
+    "gemini-3.1-flash-lite-preview",
     "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview",
+    # Fallback (Gemini 2.5 stable) - 동일 tier 순서로 페어링
+    "gemini-2.5-flash-lite",   # ↔ 3.1-flash-lite-preview
+    "gemini-2.5-flash",        # ↔ 3-flash-preview
+    "gemini-2.5-pro",          # ↔ 3.1-pro-preview
 ]
 
 
@@ -76,7 +79,11 @@ class LLMRetryStrategy(ABC):
 class GeminiRetryStrategy(LLMRetryStrategy):
     """Gemini 재시도 전략."""
 
-    def __init__(self, client, model: str = "gemini-2.0-flash"):
+    # Batch 분석 응답이 잘리지 않도록 충분한 출력 토큰을 요청한다.
+    # (10종목 × reason 450자 ≈ 4500자 ≈ 7K 토큰. 2배 여유.)
+    MAX_OUTPUT_TOKENS = 16384
+
+    def __init__(self, client, model: str = "gemini-3-flash-preview"):
         self.client = client
         self.model = model
         self._model_chain = list(GEMINI_RETRY_MODEL_CHAIN)
@@ -86,13 +93,30 @@ class GeminiRetryStrategy(LLMRetryStrategy):
         """Gemini 호출 실행."""
         self._current_model = self._model_chain[0]
 
+        config = self._build_generation_config()
+
         def _call_gemini():
-            return self.client.models.generate_content(
-                model=self._current_model,
-                contents=prompt,
-            )
+            kwargs = {
+                "model": self._current_model,
+                "contents": prompt,
+            }
+            if config is not None:
+                kwargs["config"] = config
+            return self.client.models.generate_content(**kwargs)
 
         return await self._call_with_retry(_call_gemini, timeout)
+
+    @classmethod
+    def _build_generation_config(cls):
+        """generate_content용 config 빌더. 실패 시 None으로 폴백."""
+        try:
+            from google.genai import types as genai_types  # type: ignore
+        except ImportError:
+            return None
+        try:
+            return genai_types.GenerateContentConfig(max_output_tokens=cls.MAX_OUTPUT_TOKENS)
+        except Exception:
+            return None
 
     async def _call_with_retry(self, call_fn: Callable, timeout: float) -> str:
         """Gemini 재시도 로직."""

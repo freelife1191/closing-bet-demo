@@ -1,22 +1,40 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Vertex AI 환경에서 사용 가능한 Gemini 모델 목록 출력."""
 
 import os
-import google.generativeai as genai
-from engine.config import app_config
+import sys
+from pathlib import Path
 
-def list_models():
-    api_key = app_config.GOOGLE_API_KEY
-    if not api_key:
-        print("Error: GOOGLE_API_KEY not found in environment or config.")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from engine.genai_client import build_genai_client, vertex_configured
+
+
+def list_models() -> None:
+    if not vertex_configured():
+        print("Error: Vertex AI 설정이 비어있습니다. "
+              "GOOGLE_GENAI_USE_VERTEXAI=true / GOOGLE_CLOUD_PROJECT / "
+              "GOOGLE_APPLICATION_CREDENTIALS를 .env에 지정하세요.")
         return
 
+    print(f"Project : {os.getenv('GOOGLE_CLOUD_PROJECT')}")
+    print(f"Location: {os.getenv('GOOGLE_CLOUD_LOCATION', 'global')}")
+    print("Fetching available models from Vertex AI...")
+
     try:
-        genai.configure(api_key=api_key)
-        print("Fetching available models...")
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                print(f"- {m.name}")
-    except Exception as e:
-        print(f"Error listing models: {e}")
+        client = build_genai_client()
+        for m in client.models.list():
+            name = getattr(m, "name", "?")
+            display = getattr(m, "display_name", "")
+            print(f"- {name}  ({display})")
+    except Exception as exc:
+        print(f"Error listing models: {exc}")
+
 
 if __name__ == "__main__":
     list_models()

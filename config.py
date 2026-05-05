@@ -195,12 +195,16 @@ class AppConfig:
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE = os.getenv("LOG_FILE", "logs/app.log")
 
-    # API Keys
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+    # GCP / Vertex AI (Gemini 호출은 Vertex AI 단일 경로로 일원화됨)
+    GOOGLE_GENAI_USE_VERTEXAI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "true").lower() in ("1", "true", "yes", "on")
+    GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+    GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+
+    # API Keys (non-Gemini)
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
     # AI Models
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Cache
