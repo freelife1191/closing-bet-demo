@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   devIndicators: false,
+  // Turbopack/Tailwind file watcher가 상위 디렉토리(홈)의 stale package-lock.json을
+  // workspace root로 잘못 추론해 page.tsx 경로 ENOENT가 발생하는 문제를 막는다.
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   async rewrites() {
     return [
       {
