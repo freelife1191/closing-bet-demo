@@ -106,9 +106,11 @@ def run_jongga_news_reanalysis_batch(
     asyncio.set_event_loop(loop)
 
     try:
+        analyze_fn = getattr(analyzer, "analyze_news_batch_jongga", None) or analyzer.analyze_news_batch
+
         async def process_chunk(chunk_idx: int, chunk_data: list[dict[str, Any]]) -> dict[str, Any]:
             logger.debug("[Jongga Reanalyze] processing chunk %d/%d", chunk_idx + 1, len(chunks))
-            chunk_results = await analyzer.analyze_news_batch(chunk_data, market_status)
+            chunk_results = await analyze_fn(chunk_data, market_status)
             return chunk_results or {}
 
         async def process_all_chunks() -> list[dict[str, Any]]:
