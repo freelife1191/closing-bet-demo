@@ -65,10 +65,17 @@ async def verify_pipeline():
     # 3. AI 분석 실행
     logger.info("3. AI (Gemini/GPT) 분석 요청 중...")
     
-    # API 키 확인
-    if not app_config.GOOGLE_API_KEY and not app_config.OPENAI_API_KEY:
-         logger.error("❌ API Key가 설정되지 않았습니다 (.env 확인 필요)")
-         return
+    # 인증 확인 (Vertex AI 또는 OpenAI)
+    vertex_ok = bool(
+        app_config.GOOGLE_GENAI_USE_VERTEXAI and app_config.GOOGLE_CLOUD_PROJECT
+    )
+    if not vertex_ok and not app_config.OPENAI_API_KEY:
+        logger.error(
+            "❌ AI 인증이 설정되지 않았습니다. "
+            "Vertex AI(GOOGLE_GENAI_USE_VERTEXAI/GOOGLE_CLOUD_PROJECT) 또는 "
+            "OPENAI_API_KEY를 .env에 설정해주세요."
+        )
+        return
 
     # 상위 3개만 테스트
     test_signals = signals_df.head(3)

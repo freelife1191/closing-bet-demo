@@ -278,7 +278,7 @@ async def main():
     for i, signal in enumerate(result.signals, 1):
         print(f"\n[{i}] {signal.stock_name} ({signal.stock_code})")
         print(f"    등급: {getattr(signal.grade, 'value', signal.grade)}")
-        print(f"    점수: {signal.score.total}/12")
+        print(f"    점수: {signal.score.total}/19")
         print(f"    등락률: {signal.change_pct:+.2f}%")
         print(f"    진입가: {signal.entry_price:,}원")
         print(f"    손절가: {signal.stop_price:,}원")

@@ -170,16 +170,25 @@ def handle_interval_config():
         logger.error(f"Interval Config Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# VCP Screener Status State
-VCP_STATUS = {
-    'running': False,
-    'status': 'idle',  # idle, running, success, error
-    'task_type': None,  # screener | reanalysis_failed_ai
-    'cancel_requested': False,
-    'message': '',
-    'last_run': None,
-    'progress': 0
-}
+# VCP Screener Status State (file-backed for multi-worker gunicorn)
+from services.file_backed_status import FileBackedStatus
+
+VCP_STATUS = FileBackedStatus(
+    file_path=os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        'data',
+        'vcp_status.json',
+    ),
+    defaults={
+        'running': False,
+        'status': 'idle',  # idle, running, success, error, cancelled
+        'task_type': None,  # screener | reanalysis_failed_ai
+        'cancel_requested': False,
+        'message': '',
+        'last_run': None,
+        'progress': 0,
+    },
+)
 
 register_market_data_http_route_group(
     kr_bp,

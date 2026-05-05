@@ -170,7 +170,7 @@ def execute_user_gemini_reanalysis_request(
             return 402, {
                 "status": "error",
                 "code": "LIMIT_EXCEEDED",
-                "message": "무료 AI 분석 횟수(10회)를 모두 소진했습니다. 개인 API Key를 설정해주세요.",
+                "message": "무료 AI 분석 횟수(10회)를 모두 소진했습니다. 잠시 후 다시 시도하시거나 관리자에게 문의해 주세요.",
             }
 
     target_dates = parse_target_dates(req_data)

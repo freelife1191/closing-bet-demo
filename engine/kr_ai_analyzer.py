@@ -48,14 +48,22 @@ class KrAiAnalyzer:
         openai_api_key: Optional[str] = None,
         data_service: Optional[KrAiDataService] = None,
     ):
-        google_api_key = api_key if api_key is not None else os.getenv("GOOGLE_API_KEY", "")
+        # Vertex AI 전환 후 Gemini는 ADC 인증 사용. is_available 체크만을 위해
+        # 프로젝트가 설정되어 있으면 의미 있는 플래그 문자열을 전달한다.
+        if api_key is not None:
+            google_token = api_key
+        else:
+            from engine.genai_client import vertex_configured
+
+            google_token = "vertex" if vertex_configured() else ""
+
         openai_key = (
             openai_api_key
             if openai_api_key is not None
             else os.getenv("OPENAI_API_KEY", "")
         )
 
-        self.gemini_strategy = GeminiStrategy(google_api_key)
+        self.gemini_strategy = GeminiStrategy(google_token)
         self.gpt_strategy = GPTStrategy(openai_key)
         self.data_service = data_service or KrAiDataService()
 
