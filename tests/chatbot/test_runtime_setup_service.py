@@ -68,12 +68,12 @@ def _clear_runtime_setup_cache():
     clear_stock_map_cache()
 
 
-def test_resolve_api_key_priority(monkeypatch):
+def test_resolve_api_key_returns_empty_after_vertex_migration(monkeypatch):
+    """Vertex AI 전환 후 사용자별 API 키 기능은 제거됨 - 항상 빈 문자열."""
     monkeypatch.setenv("GEMINI_API_KEY", "g1")
-    monkeypatch.setenv("GOOGLE_API_KEY", "g2")
     monkeypatch.setenv("ZAI_API_KEY", "z1")
-    assert resolve_api_key("explicit") == "explicit"
-    assert resolve_api_key(None) == "g1"
+    assert resolve_api_key("explicit") == ""
+    assert resolve_api_key(None) == ""
 
 
 def test_init_models_uses_first_when_current_missing(monkeypatch):
@@ -84,15 +84,23 @@ def test_init_models_uses_first_when_current_missing(monkeypatch):
 
 
 def test_create_genai_client_with_factory_success():
+    """factory를 통해 Vertex 클라이언트가 반환되는지 확인. api_key 인자는 무시된다."""
     logger = _FakeLogger()
+    captured = {}
+
+    def _factory(received_api_key):
+        captured["api_key"] = received_api_key
+        return {"vertex_stub": True}
+
     client = create_genai_client(
-        api_key="k",
+        api_key="k",  # ignored after Vertex migration
         gemini_available=True,
         user_id="u1",
         logger=logger,
-        client_factory=lambda api_key: {"client_key": api_key},
+        client_factory=_factory,
     )
-    assert client == {"client_key": "k"}
+    assert client == {"vertex_stub": True}
+    assert captured["api_key"] == ""  # 사용자 키 무시
 
 
 def test_create_genai_client_returns_none_when_unavailable():
@@ -106,20 +114,18 @@ def test_create_genai_client_returns_none_when_unavailable():
     assert client is None
 
 
-def test_resolve_active_client_error_on_bad_api_key():
+def test_resolve_active_client_returns_current_client():
+    """Vertex 전환 후 resolve_active_client는 current_client를 그대로 반환한다."""
     logger = _FakeLogger()
-
-    def _raise(_api_key):
-        raise RuntimeError("bad")
-
+    sentinel = object()
     client, err = resolve_active_client(
-        current_client=None,
-        api_key="bad",
+        current_client=sentinel,
+        api_key="ignored",
         logger=logger,
-        client_factory=_raise,
+        client_factory=lambda _k: (_ for _ in ()).throw(AssertionError("factory must not be invoked")),
     )
-    assert client is None
-    assert "API Key 오류" in err
+    assert client is sentinel
+    assert err is None
 
 
 def test_resolve_active_client_without_any_client_returns_guide():
@@ -130,7 +136,7 @@ def test_resolve_active_client_without_any_client_returns_guide():
         logger=logger,
     )
     assert client is None
-    assert "AI 모델이 설정되지 않았습니다" in err
+    assert "AI 모델이 초기화되지 않았습니다" in err
 
 
 def test_load_stock_map_reads_csv(tmp_path: Path):
