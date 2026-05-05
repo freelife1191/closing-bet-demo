@@ -259,6 +259,7 @@ class Phase4SignalFinalizer(BasePhase):
             news_items=serialize_news_items_impl(news),
             position=position,
             themes=themes,
+            ai_evaluation=llm_result,
         )
 
     def _update_grade_stats(self, grade: str) -> None:
