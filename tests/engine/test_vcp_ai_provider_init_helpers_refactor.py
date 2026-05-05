@@ -34,13 +34,23 @@ class _Logger:
 
 
 def test_init_clients_return_none_when_provider_not_selected():
-    config = SimpleNamespace(GOOGLE_API_KEY="x", OPENAI_API_KEY="y")
+    config = SimpleNamespace(
+        GOOGLE_GENAI_USE_VERTEXAI=True,
+        GOOGLE_CLOUD_PROJECT="proj",
+        GOOGLE_CLOUD_LOCATION="global",
+        OPENAI_API_KEY="y",
+    )
     assert init_gemini_client(["gpt"], config, _Logger()) is None
     assert init_gpt_client(["gemini"], config, _Logger()) is None
 
 
 def test_init_clients_return_none_when_key_missing():
-    config = SimpleNamespace(GOOGLE_API_KEY="", OPENAI_API_KEY="")
+    config = SimpleNamespace(
+        GOOGLE_GENAI_USE_VERTEXAI=False,
+        GOOGLE_CLOUD_PROJECT="",
+        GOOGLE_CLOUD_LOCATION="",
+        OPENAI_API_KEY="",
+    )
     assert init_gemini_client(["gemini"], config, _Logger()) is None
     assert init_gpt_client(["gpt"], config, _Logger()) is None
 

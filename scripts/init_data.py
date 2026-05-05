@@ -18,7 +18,7 @@ import time
 import random
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # [FIX] Filter out pykrx's broken logging calls
 class PykrxFilter(logging.Filter):
@@ -159,9 +159,15 @@ def get_last_trading_date(reference_date=None):
     """
     if reference_date is None:
         reference_date = datetime.now()
-    
+
+    # 한국 정규장 마감(15:30 KST) + 데이터 갱신 마진 이전이면, 오늘이 거래일이어도
+    # 종가 데이터가 없거나 불완전하므로 직전 거래일을 기준으로 잡는다.
+    now_kst = datetime.now(timezone(timedelta(hours=9)))
+    if reference_date.date() == now_kst.date() and now_kst.hour < 16:
+        reference_date = reference_date - timedelta(days=1)
+
     target_date = reference_date
-    
+
     # 1차: 주말 처리 (토/일 → 금요일로 이동)
     if target_date.weekday() == 5:  # 토요일
         target_date -= timedelta(days=1)

@@ -39,7 +39,10 @@ def register_quota_routes(
                 usage_key=usage_key,
                 max_free_usage=max_free_usage,
                 get_user_usage_fn=get_user_usage_fn,
-                server_key_available=bool(app_config.GOOGLE_API_KEY or app_config.ZAI_API_KEY),
+                server_key_available=bool(
+                    (app_config.GOOGLE_GENAI_USE_VERTEXAI and app_config.GOOGLE_CLOUD_PROJECT)
+                    or app_config.ZAI_API_KEY
+                ),
             )
             return jsonify(payload)
 

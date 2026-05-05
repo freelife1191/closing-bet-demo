@@ -116,8 +116,17 @@ class AppConfig:
     """애플리케이션 설정 (Dynamic)"""
     
     @property
-    def GOOGLE_API_KEY(self):
-        return os.getenv("GOOGLE_API_KEY", "")
+    def GOOGLE_GENAI_USE_VERTEXAI(self):
+        """Vertex AI 모드 사용 여부 (이 프로젝트는 항상 True 권장)"""
+        return os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "true").lower() in ("1", "true", "yes", "on")
+
+    @property
+    def GOOGLE_CLOUD_PROJECT(self):
+        return os.getenv("GOOGLE_CLOUD_PROJECT", "")
+
+    @property
+    def GOOGLE_CLOUD_LOCATION(self):
+        return os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 
     @property
     def OPENAI_API_KEY(self):
@@ -125,13 +134,13 @@ class AppConfig:
 
     @property
     def GEMINI_MODEL(self):
-        """챗봇용 Gemini 모델"""
-        return os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        """챗봇용 / 사전 분석 배치용 (대량 호출이라 lite 기본)"""
+        return os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
 
     @property
     def ANALYSIS_GEMINI_MODEL(self):
-        """종가베팅 분석 엔진용 Gemini 모델"""
-        return os.getenv("ANALYSIS_GEMINI_MODEL", "gemini-2.0-flash")
+        """종가베팅 분석 엔진용 - Phase 3 의미 합성에 사용"""
+        return os.getenv("ANALYSIS_GEMINI_MODEL", "gemini-3-flash-preview")
 
     @property
     def OPENAI_MODEL(self):
@@ -196,7 +205,7 @@ class AppConfig:
 
     @property
     def VCP_GEMINI_MODEL(self):
-        return os.getenv("VCP_GEMINI_MODEL", "gemini-flash-latest")
+        return os.getenv("VCP_GEMINI_MODEL", "gemini-3-flash-preview")
 
     @property
     def VCP_GPT_MODEL(self):

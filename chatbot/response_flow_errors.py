@@ -30,10 +30,9 @@ def friendly_error_message(error_msg: str, default_prefix: str) -> str:
     ):
         return (
             "⚠️ **AI 서버 요청 한도 초과**\n\n"
-            "Google AI 서버의 분당 요청 한도에 도달했습니다.\n"
+            "Vertex AI 서버의 분당 요청 한도에 도달했습니다.\n"
             "**약 30초~1분 후에 다시 시도해주세요.**\n\n"
-            "💡 안정적인 사용을 위해 **[설정] > [API Key]** 메뉴에서 "
-            "개인 API Key를 등록하시면 이 제한을 피할 수 있습니다."
+            "💡 사용량이 자주 초과되면 관리자에게 문의해 주세요."
         )
 
     if (
@@ -42,11 +41,10 @@ def friendly_error_message(error_msg: str, default_prefix: str) -> str:
         or "API key not valid" in error_msg
     ):
         return (
-            "⚠️ **API Key 설정 오류**\n\n"
-            "시스템에 설정된 API Key가 유효하지 않습니다.\n"
-            "관리자에게 문의하거나 **[설정] > [API Key]** 메뉴에서 "
-            "올바른 API Key를 다시 등록해주세요.\n"
-            "(Google 서비스 문제일 수도 있습니다.)"
+            "⚠️ **AI 서버 인증 오류**\n\n"
+            "Vertex AI 서비스 계정 인증에 문제가 발생했습니다.\n"
+            "관리자에게 문의해 주세요.\n"
+            "(Google Cloud 서비스 일시 장애일 수도 있습니다.)"
         )
 
     return f"{default_prefix}{error_msg}"

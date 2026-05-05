@@ -42,7 +42,10 @@ def _select_signals_for_gemini_reanalysis(
 
 
 def _build_jongga_news_analysis_items(signals: List[dict]) -> List[dict]:
-    """LLM 뉴스 배치 분석용 입력 아이템을 생성한다."""
+    """LLM 뉴스 배치 분석용 입력 아이템을 생성한다.
+
+    score_details에서 외인/기관 5일 합 정보를 추출해 supply dict를 채운다.
+    """
     if not isinstance(signals, list):
         return []
 
@@ -52,8 +55,17 @@ def _build_jongga_news_analysis_items(signals: List[dict]) -> List[dict]:
             continue
         stock_name = signal.get("stock_name")
         news_items = signal.get("news_items", [])
-        if stock_name and news_items:
-            items.append({"stock": signal, "news": news_items, "supply": None})
+        if not (stock_name and news_items):
+            continue
+
+        details = signal.get("score_details") or {}
+        if not isinstance(details, dict):
+            details = {}
+        supply_info = {
+            "foreign_buy_5d": int(details.get("foreign_net_buy", 0) or 0),
+            "inst_buy_5d": int(details.get("inst_net_buy", 0) or 0),
+        }
+        items.append({"stock": signal, "news": news_items, "supply": supply_info})
     return items
 
 

@@ -73,15 +73,12 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
   const isInsufficient = totalRequired > cash;
 
   const handleSubmit = async () => {
-    console.log('[BuyStockModal] Submit Clicked. Qty:', estimatedQty, 'Insufficient:', isInsufficient);
     if (isSubmitting || estimatedQty <= 0) return;
     if (isInsufficient) return;
 
     setIsSubmitting(true);
     try {
-      console.log('[BuyStockModal] Calling onBuy...');
       const success = await onBuy(stock.ticker, stock.name, price, estimatedQty);
-      console.log('[BuyStockModal] onBuy result:', success);
       if (success) onClose();
     } catch (e) {
       console.error('[BuyStockModal] Error:', e);

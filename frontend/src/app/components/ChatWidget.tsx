@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from "next-auth/react";
 import ThinkingProcess from './ThinkingProcess';
+import { getStoredModel, shouldSendOnEnter } from './chatHelpers';
 
 interface Message {
   role: 'user' | 'model';
@@ -175,7 +176,7 @@ export default function ChatWidget() {
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const { data: session } = useSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null); // [Fix] IME 조합 초기화용
+  const isComposingRef = useRef(false);
   const pathname = usePathname();
 
   const SLASH_COMMANDS = [
@@ -212,26 +213,6 @@ export default function ChatWidget() {
     if (isOpen) scrollToBottom();
   }, [messages, isOpen]);
 
-  // [Fix] Re-render when API Key changes
-  const [hasApiKey, setHasApiKey] = useState(false);
-  useEffect(() => {
-    const checkKey = () => {
-      const k1 = localStorage.getItem('X-Gemini-Key');
-      const k2 = localStorage.getItem('GOOGLE_API_KEY');
-      const valid = (k1 && k1 !== 'null' && k1 !== 'undefined') || (k2 && k2 !== 'null' && k2 !== 'undefined');
-      setHasApiKey(!!valid);
-    };
-    checkKey();
-    window.addEventListener('api-key-updated', checkKey);
-    const interval = setInterval(checkKey, 2000);
-    return () => {
-      window.removeEventListener('api-key-updated', checkKey);
-      clearInterval(interval);
-    };
-  }, []);
-
-
-
   const handleSend = async (msgOverride?: string) => {
     const messageToSend = msgOverride || input;
     if (!messageToSend.trim() || isLoading) return;
@@ -243,11 +224,6 @@ export default function ChatWidget() {
     };
     setMessages(prev => [...prev, userMsg]);
 
-    // [Fix] 한글 IME 조합 강제 종료 후 입력창 초기화
-    if (textareaRef.current) {
-      textareaRef.current.blur();  // IME 조합 종료
-      textareaRef.current.value = ''; // 직접 값 초기화
-    }
     setInput('');
     setIsLoading(true);
 
@@ -258,41 +234,25 @@ export default function ChatWidget() {
 
       // Auth Info Retrieval
       const userEmail = session?.user?.email || null;
-      let apiKey = null;
       let sessionId = localStorage.getItem('browser_session_id');
 
-      // 세션 ID가 없으면 생성
       if (!sessionId) {
         sessionId = 'anon_' + crypto.randomUUID();
         localStorage.setItem('browser_session_id', sessionId);
       }
 
-      // [Fix] API Key Retrieval Logic Enhanced
-      // 1. Try X-Gemini-Key
-      // 2. Try GOOGLE_API_KEY
-      // 3. Ensure not "null", "undefined", or empty string
-      // Removed intermediate catch block to fix Syntax Error and Scope Issue
-
-      let rawKey = localStorage.getItem('X-Gemini-Key');
-      if (!rawKey || rawKey === 'null' || rawKey === 'undefined') {
-        rawKey = localStorage.getItem('GOOGLE_API_KEY');
-      }
-
-      if (rawKey && rawKey !== 'null' && rawKey !== 'undefined' && rawKey.trim().length > 0) {
-        apiKey = rawKey.trim();
-      } else {
-        apiKey = null;
-      }
+      const storedModel = getStoredModel();
+      const requestBody: Record<string, unknown> = { message: messageToSend, watchlist };
+      if (storedModel) requestBody.model = storedModel;
 
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-User-Email': userEmail || '',
-          'X-Gemini-Key': apiKey || '',
           'X-Session-Id': sessionId
         },
-        body: JSON.stringify({ message: messageToSend, watchlist }),
+        body: JSON.stringify(requestBody),
       });
       const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
@@ -425,7 +385,6 @@ export default function ChatWidget() {
 
         if (data.response) {
           setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
-          // [Fix] 성공 응답 후 Sidebar quota 실시간 업데이트
           if (!data.response.startsWith('⚠️')) {
             window.dispatchEvent(new CustomEvent('quota-updated'));
           }
@@ -480,7 +439,9 @@ export default function ChatWidget() {
     handleSend(cmd);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const isComposing = e.nativeEvent.isComposing || isComposingRef.current;
+
     if (input.startsWith('/') && filteredCommands.length > 0) {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -488,14 +449,14 @@ export default function ChatWidget() {
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedCommandIndex(prev => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
-      } else if (e.key === 'Enter') {
+      } else if (shouldSendOnEnter(e.key, e.shiftKey, isComposing)) {
         e.preventDefault();
         const selectedCmd = filteredCommands[selectedCommandIndex];
         if (selectedCmd) {
           handleSend(selectedCmd.cmd);
         }
       }
-    } else if (e.key === 'Enter' && !e.shiftKey) {
+    } else if (shouldSendOnEnter(e.key, e.shiftKey, isComposing)) {
       e.preventDefault();
       handleSend();
     }
@@ -704,6 +665,8 @@ export default function ChatWidget() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onCompositionStart={() => { isComposingRef.current = true; }}
+                onCompositionEnd={() => { isComposingRef.current = false; }}
                 placeholder={isLoading ? "답변을 기다리고 있습니다..." : "메시지를 입력하세요... (슬래시 커맨드 '/' 사용 가능)"}
                 disabled={isLoading}
                 className="w-full bg-[#18181b] text-white text-sm rounded-xl pl-4 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 border border-white/5 placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"

@@ -104,21 +104,17 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
       if (res.ok) {
         const data = await res.json();
 
-        // [Fix] 서버에서 반환한 마스킹된 값(*포함)은 제거 (실제 값이 아니므로)
-        const apiKeyFields = ['GOOGLE_API_KEY', 'OPENAI_API_KEY', 'PERPLEXITY_API_KEY'];
+        // 서버 마스킹 값(*포함)은 입력 필드에 노출하지 않는다.
+        const apiKeyFields = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY'];
         for (const key of apiKeyFields) {
           if (data[key] && data[key].includes('*')) {
-            delete data[key]; // 마스킹된 값은 입력 필드에 표시하지 않음
+            delete data[key];
           }
         }
 
-        // [Fix] Merge Client-side API Keys from localStorage
-        // localStorage에 유효한 값이 있으면 그것을 사용
-        const googleKey = localStorage.getItem('GOOGLE_API_KEY');
         const openaiKey = localStorage.getItem('OPENAI_API_KEY');
         const perplexityKey = localStorage.getItem('PERPLEXITY_API_KEY');
 
-        if (isApiKeyValid(googleKey)) data['GOOGLE_API_KEY'] = googleKey!;
         if (isApiKeyValid(openaiKey)) data['OPENAI_API_KEY'] = openaiKey!;
         if (isApiKeyValid(perplexityKey)) data['PERPLEXITY_API_KEY'] = perplexityKey!;
 
@@ -134,18 +130,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   const handleEnvChange = (key: string, value: string) => {
     setEnvVars(prev => ({ ...prev, [key]: value }));
 
-    // [Fix] Save API Keys to localStorage immediately for ChatWidget access
-    if (key === 'GOOGLE_API_KEY') {
-      if (!value) {
-        localStorage.removeItem(key);
-        localStorage.removeItem('X-Gemini-Key'); // [Fix] Ensures legacy key is also removed
-      } else {
-        localStorage.setItem(key, value);
-        localStorage.setItem('X-Gemini-Key', value); // [Fix] Sync legacy key for compatibility
-      }
-      // Notify Sidebar immediately about API key change
-      window.dispatchEvent(new Event('api-key-updated'));
-    } else if (key === 'OPENAI_API_KEY') {
+    if (key === 'OPENAI_API_KEY') {
       if (!value) {
         localStorage.removeItem(key);
       } else {
@@ -194,9 +179,6 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
       // 3. Save Watchlist to localStorage
       localStorage.setItem('watchlist', JSON.stringify(watchlist));
-
-      // 4. Dispatch custom event to notify Sidebar of API key change
-      window.dispatchEvent(new Event('api-key-updated'));
 
       setTestModal({
         isOpen: true,
@@ -266,28 +248,14 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
     signOut();
   };
 
-  // Google API Key handling in localStorage (Client Only)
+  // 서버가 Vertex AI ADC를 사용하므로 클라이언트는 GOOGLE_API_KEY/X-Gemini-Key를 더 이상 보관하지 않는다.
+  // 잔존하는 legacy 값이 있으면 정리.
   useEffect(() => {
     if (isOpen) {
-      const storedKey = localStorage.getItem('X-Gemini-Key');
-      // [Fix] 쓰레기값(null, undefined, 빈 문자열) 필터링
-      if (isApiKeyValid(storedKey)) {
-        handleEnvChange('GOOGLE_API_KEY', storedKey!); // UI 상에 표시
-      } else {
-        // 유효하지 않은 값은 localStorage에서 제거
-        localStorage.removeItem('X-Gemini-Key');
-        localStorage.removeItem('GOOGLE_API_KEY');
-      }
+      localStorage.removeItem('X-Gemini-Key');
+      localStorage.removeItem('GOOGLE_API_KEY');
     }
   }, [isOpen]);
-
-  const saveLocalApiKey = (key: string) => {
-    if (key) {
-      localStorage.setItem('X-Gemini-Key', key);
-    } else {
-      localStorage.removeItem('X-Gemini-Key');
-    }
-  };
 
   // Notification Test
   const [isTesting, setIsTesting] = useState(false);
@@ -445,12 +413,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1.5">무료 사용량 상태</label>
                       <div className="bg-[#18181b] border border-white/10 rounded-lg p-3">
-                        {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
-                          <div className="flex items-center gap-2 text-purple-400">
-                            <i className="fas fa-key"></i>
-                            <span className="text-sm font-bold">API Key 사용 중 (무제한 이용 가능)</span>
-                          </div>
-                        ) : quota ? (
+                        {quota ? (
                           <div className="w-full">
                             <div className="flex justify-between text-xs text-blue-400 mb-1.5">
                               <span>사용량: {quota.usage} / {quota.limit}회</span>
@@ -550,11 +513,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           <div className="text-xs text-gray-400 break-keep leading-relaxed">
                             구글 계정으로 로그인하여 설정을 동기화하세요.
                             <div className="mt-1">
-                              {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
-                                <span className="text-purple-400 font-bold block break-keep">✨ API Key가 감지되었습니다 (무제한 이용 가능)</span>
-                              ) : (
-                                <span className="text-blue-400 font-bold block break-keep">(무료 10회 AI 사용 가능)</span>
-                              )}
+                              <span className="text-blue-400 font-bold block break-keep">(무료 10회 AI 사용 가능)</span>
                             </div>
                           </div>
                         </div>
@@ -582,11 +541,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                               )}
                             </div>
                             <div className="text-sm text-gray-400">{googleUserInfo?.email}</div>
-                            {isApiKeyValid(envVars['GOOGLE_API_KEY']) ? (
-                              <div className="text-[11px] text-purple-400 mt-1 font-bold">
-                                API Key 사용 중 (무제한 이용 가능)
-                              </div>
-                            ) : quota && (
+                            {quota && (
                               <div className="mt-1.5 w-full max-w-[200px]">
                                 <div className="text-[11px] text-blue-400 flex justify-between mb-1">
                                   <span>무료 사용량</span>
@@ -713,40 +668,15 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                 <section>
                   <h3 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
                     <div className="w-2 h-6 bg-blue-500 rounded-sm"></div>
-                    Gemini
+                    Gemini (Vertex AI)
                   </h3>
-                  <div className="bg-[#27272a] rounded-xl border border-white/5 p-5 space-y-5">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">GOOGLE_API_KEY (Gemini)</label>
-                      <div className="relative">
-                        <input
-                          type="password"
-                          value={envVars['GOOGLE_API_KEY'] || ''}
-                          onChange={(e) => handleEnvChange('GOOGLE_API_KEY', e.target.value)}
-                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-blue-500 transition-colors"
-                          placeholder="sk-..."
-                          autoComplete="new-password"
-                          data-lpignore="true"
-                        />
-                        {envVars['GOOGLE_API_KEY'] && (
-                          <button
-                            onClick={() => handleEnvChange('GOOGLE_API_KEY', '')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-500 transition-colors"
-                            title="API Key 삭제"
-                          >
-                            <i className="fas fa-trash-alt"></i>
-                          </button>
-                        )}
-                      </div>
-                      <div className="mt-2 text-[11px] text-gray-500 text-yellow-500">
-                        <i className="fas fa-lock mr-1"></i>
-                        이 키는 브라우저(Local Storage)에만 저장되며 서버로 전송되지 않습니다. (AI 분석 요청 시에만 헤더에 포함됨)
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-white/5">
-                      <div className="text-[11px] text-gray-500">
-                        Google Cloud Console에서 OAuth 2.0 자격 증명을 생성하여 서버 환경변수(Vercel 등)에 설정해야 합니다.
+                  <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
+                    <div className="text-[12px] text-gray-300 leading-relaxed break-keep">
+                      <i className="fas fa-shield-alt mr-1 text-blue-400"></i>
+                      Gemini는 서버 측 <span className="font-bold text-blue-400">Vertex AI 서비스 계정 인증</span>으로 호출됩니다.
+                      <div className="mt-2 text-[11px] text-gray-500">
+                        사용자별 API Key 입력 기능은 Vertex AI 전환과 함께 제거되었습니다.
+                        무료 사용량은 일반 탭에서 확인할 수 있습니다.
                       </div>
                     </div>
                   </div>

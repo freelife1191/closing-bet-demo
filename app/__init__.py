@@ -154,7 +154,9 @@ def _register_request_context(app: Flask) -> None:
     def check_api_key():
         if request.method == 'OPTIONS':
             return
-        g.user_api_key = request.headers.get('X-Gemini-Key')
+        # Vertex AI 전환 후 X-Gemini-Key는 무시한다 (사용자별 API 키 기능 제거).
+        # 하위 호환을 위해 g.user_api_key 속성은 None으로 유지.
+        g.user_api_key = None
         g.user_email = request.headers.get('X-User-Email')
         g.session_id = request.headers.get('X-Session-Id')
 

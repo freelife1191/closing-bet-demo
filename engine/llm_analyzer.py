@@ -31,6 +31,7 @@ from engine.llm_analyzer_formatters import (
 )
 from engine.llm_analyzer_prompts import (
     build_batch_prompt as build_batch_prompt_impl,
+    build_jongga_batch_prompt as build_jongga_batch_prompt_impl,
     build_sentiment_prompt as build_sentiment_prompt_impl,
     build_summary_prompt as build_summary_prompt_impl,
 )
@@ -220,6 +221,86 @@ class LLMAnalyzer:
         finally:
             elapsed = time.time() - start_time
             logger.info(f"[{self.provider.upper()}] Batch Analysis ({len(items)} stocks): {elapsed:.2f}s")
+
+    async def analyze_news_batch_jongga(
+        self,
+        items: List[Dict],
+        market_status: Dict = None,
+    ) -> Dict[str, Dict]:
+        """closing-bet(종가베팅) 전용 batch 분석.
+
+        - VCP 강제 평가를 제거한 jongga 전용 프롬프트(build_jongga_batch_prompt) 사용.
+        - 응답 스키마는 기존 batch와 동일.
+        - 사용처: 종가베팅 재분석 파이프라인.
+        """
+        if not self.client or not items:
+            return {}
+
+        start_time = time.time()
+        try:
+            prompt = build_jongga_batch_prompt_impl(
+                items=items,
+                market_status=market_status,
+            )
+            response_content = await self._execute_llm_call(
+                prompt=prompt,
+                timeout=app_config.ANALYSIS_LLM_API_TIMEOUT,
+            )
+            results_list = parse_batch_response_impl(
+                response_text=response_content,
+                logger=logger,
+            )
+            model_name = self._retry_strategy.get_model_name() if self._retry_strategy else "unknown"
+            results = build_result_map_impl(results_list=results_list, model_name=model_name)
+            self._log_jongga_action_distribution(results)
+            return results
+        except Exception as e:
+            logger.error(f"{self.provider} jongga 배치 분석 실패: {e}")
+            return {}
+        finally:
+            elapsed = time.time() - start_time
+            logger.info(
+                f"[{self.provider.upper()}] Jongga Batch Analysis ({len(items)} stocks): {elapsed:.2f}s"
+            )
+
+    @staticmethod
+    def _log_jongga_action_distribution(results: Dict[str, Dict]) -> None:
+        """closing-bet 배치 결과의 action 분포를 모니터링한다.
+
+        BUY 비율이 낮으면 시스템적 편향 가능성을 경고로 남긴다.
+        """
+        if not results:
+            return
+        actions = [str((r or {}).get("action", "")).upper() for r in results.values()]
+        total = len(actions)
+        buy = sum(1 for a in actions if a == "BUY")
+        buy_ratio = buy / total if total else 0.0
+        logger.info(
+            "[Jongga Action Distribution] total=%d BUY=%d (%.1f%%) HOLD=%d SELL=%d",
+            total,
+            buy,
+            buy_ratio * 100,
+            sum(1 for a in actions if a == "HOLD"),
+            sum(1 for a in actions if a == "SELL"),
+        )
+        if total >= 5 and buy_ratio < 0.10:
+            logger.warning(
+                "[Jongga Action Distribution] BUY 비율 %.1f%% (< 10%%) — 프롬프트/입력 편향 가능성 점검 필요",
+                buy_ratio * 100,
+            )
+
+        short_reason_threshold = 250
+        short_reason_count = sum(
+            1 for r in results.values()
+            if len(str((r or {}).get("reason", "") or "")) < short_reason_threshold
+        )
+        if total >= 5 and short_reason_count / total >= 0.5:
+            logger.warning(
+                "[Jongga Reason Quality] reason이 짧은 비율 %.1f%% (>= 50%%, threshold %d자) — "
+                "프롬프트 길이 강제 효과 점검 필요",
+                short_reason_count / total * 100,
+                short_reason_threshold,
+            )
 
     async def generate_market_summary(self, signals: List[Dict]) -> str:
         """

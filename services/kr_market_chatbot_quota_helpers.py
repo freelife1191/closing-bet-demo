@@ -49,7 +49,7 @@ def check_chatbot_quota_guard(
         return False, (
             402,
             {
-                "error": "무료 사용량(10회)을 초과했습니다. [설정 > API]에서 개인 API Key를 등록해주세요.",
+                "error": "무료 사용량(10회)을 초과했습니다. 잠시 후 다시 시도하시거나 관리자에게 문의해 주세요.",
                 "code": "QUOTA_EXCEEDED",
             },
         )

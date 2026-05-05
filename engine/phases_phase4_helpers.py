@@ -47,6 +47,7 @@ def build_signal(
     news_items: List[Dict[str, Any]],
     position: Any,
     themes: List[str],
+    ai_evaluation: Dict[str, Any] | None = None,
 ) -> Signal:
     """Signal 객체 생성."""
     return Signal(
@@ -74,6 +75,7 @@ def build_signal(
         status=SignalStatus.PENDING,
         created_at=datetime.now(),
         score_details=score_details,
+        ai_evaluation=ai_evaluation,
         themes=themes,
     )
 

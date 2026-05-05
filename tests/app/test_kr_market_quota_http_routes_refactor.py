@@ -44,7 +44,11 @@ def test_get_user_quota_info_returns_expected_payload(monkeypatch):
     monkeypatch.setattr(
         engine_config_module,
         "app_config",
-        SimpleNamespace(GOOGLE_API_KEY="", ZAI_API_KEY="zai-key"),
+        SimpleNamespace(
+            GOOGLE_GENAI_USE_VERTEXAI=True,
+            GOOGLE_CLOUD_PROJECT="vertex-project",
+            ZAI_API_KEY="zai-key",
+        ),
     )
     client = _create_client(get_user_usage_fn=lambda _usage_key: 3)
 
@@ -61,7 +65,11 @@ def test_get_user_quota_info_returns_error_payload_on_exception(monkeypatch):
     monkeypatch.setattr(
         engine_config_module,
         "app_config",
-        SimpleNamespace(GOOGLE_API_KEY="", ZAI_API_KEY=""),
+        SimpleNamespace(
+            GOOGLE_GENAI_USE_VERTEXAI=False,
+            GOOGLE_CLOUD_PROJECT="",
+            ZAI_API_KEY="",
+        ),
     )
     client = _create_client(
         get_user_usage_fn=lambda _usage_key: (_ for _ in ()).throw(RuntimeError("quota boom"))

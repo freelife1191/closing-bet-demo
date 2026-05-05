@@ -171,9 +171,10 @@ export default function HomePage() {
                   변동성 축소 패턴(Volatility Contraction Pattern)을 자동으로 탐지합니다.
                 </p>
                 <ul className="space-y-2 text-sm text-gray-300">
-                  <li className="flex items-center gap-2"><span className="w-1 h-1 bg-rose-500 rounded-full"></span>수축 임계값: 0.7 (70%)</li>
-                  <li className="flex items-center gap-2"><span className="w-1 h-1 bg-rose-500 rounded-full"></span>ATR 기반 변동성 점수</li>
-                  <li className="flex items-center gap-2"><span className="w-1 h-1 bg-rose-500 rounded-full"></span>고가-저가 범위 축소 확인</li>
+                  <li className="flex items-center gap-2"><span className="w-1 h-1 bg-rose-500 rounded-full"></span>수축 임계값: 0.7 (인정 조건)</li>
+                  <li className="flex items-center gap-2"><span className="w-1 h-1 bg-rose-500 rounded-full"></span>변동폭(고가-저가) 5일/15일 비율</li>
+                  <li className="flex items-center gap-2"><span className="w-1 h-1 bg-rose-500 rounded-full"></span>거래량 드라이업 + MA 정배열</li>
+                  <li className="flex items-center gap-2"><span className="w-1 h-1 bg-rose-500 rounded-full"></span>총 100점 만점 · 50점 이상 유효</li>
                 </ul>
               </div>
 
@@ -205,14 +206,14 @@ export default function HomePage() {
                 <ul className="space-y-2 text-sm text-gray-300 mb-5">
                   <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>점수 체계: 기본 12점 + 가산 7점 (총 19점)</li>
                   <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>등급 기준: S 10점+, A 8점+, B 6점+</li>
-                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>핵심 조건: 거래대금·뉴스·수급 동시 검증</li>
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>익절 +9% / 손절 -5% / 최대 보유 15일</li>
                 </ul>
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded text-center">S급 10+</span>
                   <span className="px-2 py-1 bg-gray-500/20 text-gray-300 text-xs font-bold rounded text-center">A급 8+</span>
                   <span className="px-2 py-1 bg-white/10 text-gray-400 text-xs font-bold rounded text-center">B급 6+</span>
                 </div>
-                <p className="text-xs text-gray-500">거래대금(1조/5000억/1000억)과 외인·기관 동반 순매수 조건을 함께 확인</p>
+                <p className="text-xs text-gray-500">거래대금(1조 / 5천억 / 1천억) + 외인·기관 동반 순매수 + 등락률 하한 동시 충족 시 등급 부여</p>
               </div>
             </div>
           </div>
@@ -241,18 +242,18 @@ export default function HomePage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-indigo-500/20 hover:bg-[#252529] transition-colors">
                     <h3 className="text-lg font-bold text-indigo-400 mb-2 flex items-center gap-2">
-                      <i className="fas fa-star"></i> Gemini (Main)
+                      <i className="fas fa-star"></i> Gemini (Main · Vertex AI)
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      뉴스 종합 분석, 호재 점수(0~3), 매매 추천(Buy/Hold/Sell) 및 신뢰도 산출. 최신 시장 데이터를 실시간으로 해석합니다.
+                      종가베팅 Phase3 뉴스 종합 분석 + 호재 점수(0~3) + VCP 1차 추론. 심층 추론과 긴 컨텍스트가 강점이며 서비스 계정 기반 Vertex AI로 운영됩니다.
                     </p>
                   </div>
                   <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-sky-500/20 hover:bg-[#252529] transition-colors">
                     <h3 className="text-lg font-bold text-sky-400 mb-2 flex items-center gap-2">
-                      <i className="fas fa-robot"></i> GPT (Sub)
+                      <i className="fas fa-robot"></i> GPT (Sub · Z.ai fallback)
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      VCP 보조 분석 모델로 활용되며, Gemini 결과를 교차 검증합니다.
+                      VCP 신호 보조 검증용 빠른 추론 엔진. OpenAI 장애 시 Z.ai로 자동 폴백되며, Gemini 추천을 교차 검증해 provider 우선순위(gemini→gpt→perplexity)에서 두 번째로 채택됩니다.
                     </p>
                   </div>
                   <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-green-500/20 hover:bg-[#252529] transition-colors">
@@ -260,7 +261,7 @@ export default function HomePage() {
                       <i className="fas fa-robot"></i> Perplexity (Sub)
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      VCP 보조 분석 모델로 활용되며, Gemini 결과를 교차 검증합니다.
+                      실시간 웹 검색 기반 보조 검증. 최신 뉴스/공시 반영이 강점이며, Gemini·GPT 모두 응답하지 않을 때 최종 fallback으로 동작합니다.
                     </p>
                   </div>
                 </div>
@@ -412,11 +413,11 @@ export default function HomePage() {
                         </div>
                         <div className="flex justify-between text-sm py-2 border-b border-white/5">
                           <span className="text-gray-400">익절 / 손절</span>
-                          <span className="font-mono font-bold text-white">+5% / -3%</span>
+                          <span className="font-mono font-bold text-white">+9% / -5%</span>
                         </div>
                         <div className="bg-[#13151A] p-4 rounded-xl text-center border border-green-500/20">
-                          <div className="text-xs text-gray-500 mb-1">1회 매매 기대수익</div>
-                          <div className="text-2xl font-black text-green-400">+1.8%</div>
+                          <div className="text-xs text-gray-500 mb-1">1회 매매 기대수익 (60% × 9% − 40% × 5%)</div>
+                          <div className="text-2xl font-black text-green-400">+3.4%</div>
                         </div>
                       </div>
                     </div>
@@ -515,7 +516,7 @@ export default function HomePage() {
                           <div className="h-2 bg-gray-800 rounded-full mb-3 overflow-hidden">
                             <div className="h-full bg-blue-500 w-[100%]"></div>
                           </div>
-                          <p className="text-xs text-gray-500">신고가(+2), 외인/기관 수급(+2)</p>
+                          <p className="text-xs text-gray-500">신고가+1, MA20&gt;MA60 정배열+1, 외인+기관 5일/거래대금≥10%면 +2</p>
                         </div>
 
                         {/* Candle Score */}
@@ -589,23 +590,27 @@ export default function HomePage() {
                   </p>
 
                   <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-rose-500/20 mb-8">
-                    <h4 className="text-sm font-bold text-rose-400 mb-4">감지 로직 상세</h4>
+                    <h4 className="text-sm font-bold text-rose-400 mb-4">감지 로직 상세 (100점 만점)</h4>
                     <ul className="space-y-3 text-sm text-gray-300">
                       <li className="flex items-center gap-3">
                         <i className="fas fa-check text-rose-500"></i>
-                        <span>ATR(변동성)의 점진적 감소 확인</span>
+                        <span><span className="text-white font-bold">변동성 수축 (40점)</span>: 최근 5일 고가-저가 평균 ÷ 직전 15일 평균 ≤ 0.5/0.7/0.9 차등</span>
                       </li>
                       <li className="flex items-center gap-3">
                         <i className="fas fa-check text-rose-500"></i>
-                        <span>고가-저가 범위의 축소 비율 계산</span>
+                        <span><span className="text-white font-bold">거래량 드라이업 (30점)</span>: 5일 평균 거래량 ÷ 직전 15일 ≤ 0.5/0.7/0.9 차등</span>
                       </li>
                       <li className="flex items-center gap-3">
                         <i className="fas fa-check text-rose-500"></i>
-                        <span>현재가가 최근 고점 근처 위치 (매물 소화)</span>
+                        <span><span className="text-white font-bold">이평선 정렬 (30점)</span>: 주가 &gt; MA5 &gt; MA20 정배열, 또는 주가 &gt; MA20</span>
                       </li>
                       <li className="flex items-center gap-3">
                         <i className="fas fa-check text-rose-500"></i>
-                        <span><span className="text-white font-bold">Contraction Threshold: 0.7</span> (70% 이하 축소 시 인정)</span>
+                        <span>현재가가 최근 고점의 <span className="text-white font-bold">85% 이상</span>일 때만 후보 진입 (매물 소화 확인)</span>
+                      </li>
+                      <li className="flex items-center gap-3">
+                        <i className="fas fa-check text-rose-500"></i>
+                        <span>VCP 인정: <span className="text-white font-bold">수축비율 ≤ 0.7 AND 총점 ≥ 50</span></span>
                       </li>
                     </ul>
                   </div>

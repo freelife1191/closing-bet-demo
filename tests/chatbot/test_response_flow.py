@@ -66,7 +66,7 @@ def test_friendly_error_message_maps_rate_limit_and_api_key_errors():
     )
 
     assert "요청 한도 초과" in rate_msg
-    assert "API Key 설정 오류" in key_msg
+    assert "AI 서버 인증 오류" in key_msg
 
 
 def test_build_fallback_models_starts_with_target_and_deduplicates():

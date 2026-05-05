@@ -15,8 +15,6 @@ export default function Sidebar() {
   const [profile, setProfile] = useState({ name: 'User', email: 'user@example.com', persona: '' });
 
   const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
   const [isPaperTradingOpen, setIsPaperTradingOpen] = useState(false);
 
   const [alertModal, setAlertModal] = useState<{
@@ -38,29 +36,8 @@ export default function Sidebar() {
   }, [pathname]);
 
   useEffect(() => {
-    // Check for API Key in localStorage (both keys for compatibility)
-    // [Fix] 빈 문자열, null, undefined는 유효하지 않은 키로 처리
-    const checkApiKey = () => {
-      const googleKey = localStorage.getItem('GOOGLE_API_KEY');
-      const geminiKey = localStorage.getItem('X-Gemini-Key');
-      const isGoogleKeyValid = googleKey && googleKey.trim() !== '' && googleKey !== 'null' && googleKey !== 'undefined';
-      const isGeminiKeyValid = geminiKey && geminiKey.trim() !== '' && geminiKey !== 'null' && geminiKey !== 'undefined';
-      setHasApiKey(!!(isGoogleKeyValid || isGeminiKeyValid));
-    };
-    checkApiKey();
-
-    // Listen for storage changes (in case Settings updates it)
-    window.addEventListener('storage', checkApiKey);
-
-    // Listen for custom event when API key is updated in same tab
-    window.addEventListener('api-key-updated', checkApiKey);
-
-    // Listen for mobile sidebar toggle
     const handleSidebarToggle = () => setIsMobileOpen(prev => !prev);
     window.addEventListener('sidebar-toggle', handleSidebarToggle);
-
-    // Also check periodically or on window focus
-    const interval = setInterval(checkApiKey, 2000);
 
     const savedProfile = localStorage.getItem('user_profile');
     if (savedProfile) {
@@ -69,26 +46,16 @@ export default function Sidebar() {
       } catch (e) { console.error("Profile parse error", e); }
     }
 
-    // Custom event listener for Header button
     const handleOpenSettings = () => setIsSettingsOpen(true);
     window.addEventListener('open-settings', handleOpenSettings);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', checkApiKey);
-      window.removeEventListener('api-key-updated', checkApiKey);
       window.removeEventListener('sidebar-toggle', handleSidebarToggle);
       window.removeEventListener('open-settings', handleOpenSettings);
     };
   }, []);
 
-  // Fetch quota - API Key가 없을 때만 무료 사용량 조회
   const refreshQuota = useCallback(() => {
-    if (hasApiKey) {
-      setQuota(null);
-      return;
-    }
-
     let sessionId = localStorage.getItem('browser_session_id');
     if (!sessionId) {
       sessionId = 'anon_' + crypto.randomUUID();
@@ -99,11 +66,10 @@ export default function Sidebar() {
     fetch(`/api/kr/user/quota?email=${email}&session_id=${sessionId}`)
       .then(res => res.json())
       .then(data => {
-        setServerKeyConfigured(data.server_key_configured || false);
         setQuota(data);
       })
       .catch(e => console.error(e));
-  }, [hasApiKey, profile.email]);
+  }, [profile.email]);
 
   useEffect(() => {
     refreshQuota();
@@ -313,13 +279,9 @@ export default function Sidebar() {
           )}
 
           {/* Quota Display above Profile */}
-          {(hasApiKey || quota) && (
+          {quota && (
             <div className="mb-2 px-3">
-              {hasApiKey ? (
-                <div className="text-[10px] font-bold text-center text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded py-1">
-                  ✨ API Key 사용 중 (무제한)
-                </div>
-              ) : quota && (
+              {(
                 <div className="bg-white/5 border border-white/5 rounded-lg p-2">
                   <div className="flex justify-between items-center text-[10px] text-gray-400 mb-1">
                     <span>무료 사용량</span>
@@ -383,9 +345,7 @@ export default function Sidebar() {
                 )}
               </div>
               <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
-                {hasApiKey ? (
-                  <span className="text-gray-500 text-[11px]">Personal Pro Plan</span>
-                ) : quota ? (
+                {quota ? (
                   <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
                 ) : (
                   <span className="text-gray-500 text-[11px]">Free Tier (무료 10회)</span>

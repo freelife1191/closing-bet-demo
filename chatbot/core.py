@@ -25,11 +25,6 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 if GEMINI_AVAILABLE:
-    if not hasattr(genai, "configure"):
-        def _compat_configure(**_kwargs):
-            return None
-        genai.configure = _compat_configure  # type: ignore[attr-defined]
-
     if not hasattr(genai, "GenerativeModel"):
         class _CompatGenerativeModel:  # pragma: no cover - 레거시 테스트 호환용
             def __init__(self, *_args, **_kwargs):
@@ -53,7 +48,6 @@ from .chat_handlers import handle_chat, handle_chat_stream
 from .core_command_mixin import CoreCommandMixin
 from .core_data_context_mixin import CoreDataContextMixin
 from .runtime_setup_service import (
-    resolve_api_key as _resolve_api_key_impl,
     init_models as _init_models_impl,
     create_genai_client as _create_genai_client_impl,
     close_client as _close_client_impl,
@@ -66,7 +60,7 @@ from .runtime_setup_service import (
 logger = logging.getLogger(__name__)
 
 # 기본 설정 (env에서 오버라이드 가능)
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash-lite"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
 # ... import lines ...
 
@@ -144,20 +138,14 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         # .env에서 사용자 프로필 초기화 (기본값이 없을 때만 설정)
         self._init_user_profile_from_env()
 
-        # Gemini 초기화 - ZAI_API_KEY도 확인 (무료 티어 지원)
-        self.api_key = _resolve_api_key_impl(api_key)
-        if GEMINI_AVAILABLE and callable(getattr(genai, "configure", None)):
-            try:
-                genai.configure(api_key=self.api_key)
-            except Exception as e:
-                logger.debug("Legacy genai.configure skipped: %s", e)
+        # Gemini 초기화 - Vertex AI 모드. 사용자별 API 키 인자는 무시된다.
+        self.api_key = ""  # legacy attribute; Vertex 전환 후 사용 안 됨
+        del api_key  # 외부 인자는 명시적으로 폐기
 
         self.available_models = []
         self.current_model_name = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
-        self.client = None
-
         self.client = _create_genai_client_impl(
-            api_key=self.api_key,
+            api_key="",
             gemini_available=GEMINI_AVAILABLE,
             user_id=user_id,
             logger=logger,

@@ -17,20 +17,18 @@ class TestChatbotFeature(unittest.TestCase):
         self.user_id = 'test_user'
 
     @patch('chatbot.core.genai.GenerativeModel')
-    @patch('chatbot.core.genai.configure')
-    def test_chatbot_initialization_and_model_loading(self, mock_configure, mock_model_cls):
-        """Test if chatbot initializes and loads models from env correctly"""
-        # Mock env vars
+    def test_chatbot_initialization_and_model_loading(self, mock_model_cls):
+        """Vertex 전환 후: configure() 호출 없이 환경변수의 모델 목록만 정상 로드되는지 확인."""
+        # Vertex 전환 후 사용자별 API Key 입력은 무시되며 서비스 계정 인증만 사용된다.
         with patch.dict(os.environ, {
             'CHATBOT_AVAILABLE_MODELS': 'gemini-pro, gemini-flash',
-            'GEMINI_API_KEY': 'fake_key'
         }):
             bot = KRStockChatbot(self.user_id)
-            
-            # Check if configure was called
-            mock_configure.assert_called_with(api_key='fake_key')
-            
-            # Check available models
+
+            # Vertex 전환 후 사용자 API Key는 빈 문자열로 무시된다.
+            self.assertEqual(bot.api_key, "")
+
+            # 환경변수에서 사용 가능한 모델 목록이 로드되는지 확인.
             models = bot.get_available_models()
             self.assertIn('gemini-pro', models)
             self.assertIn('gemini-flash', models)

@@ -68,7 +68,7 @@ def test_reset_sensitive_env_and_user_data_clears_and_deletes(tmp_path: Path):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     env_path.write_text(
-        "GOOGLE_API_KEY=secret\nKEEP=value\nUSER_PROFILE=test\n",
+        "OPENAI_API_KEY=secret\nKEEP=value\nUSER_PROFILE=test\n",
         encoding="utf-8",
     )
     (data_dir / "user_quota.json").write_text("{}", encoding="utf-8")
@@ -88,7 +88,7 @@ def test_reset_sensitive_env_and_user_data_clears_and_deletes(tmp_path: Path):
     )
 
     content = env_path.read_text(encoding="utf-8")
-    assert "GOOGLE_API_KEY=\n" in content
+    assert "OPENAI_API_KEY=\n" in content
     assert "USER_PROFILE=\n" in content
     assert "KEEP=value" in content
     assert not (data_dir / "user_quota.json").exists()

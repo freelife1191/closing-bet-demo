@@ -33,21 +33,27 @@ def normalize_provider_list(providers: list[str]) -> list[str]:
 
 
 def init_gemini_client(providers: list[str], app_config: Any, logger: Any) -> Any:
-    """Gemini client를 초기화해 반환한다."""
+    """Vertex AI 기반 Gemini client를 초기화해 반환한다."""
     normalized = normalize_provider_list(providers)
     if "gemini" not in normalized:
         return None
 
-    api_key = app_config.GOOGLE_API_KEY
-    if not api_key:
-        logger.warning("GOOGLE_API_KEY가 설정되지 않아 Gemini 사용 불가")
+    if not getattr(app_config, "GOOGLE_GENAI_USE_VERTEXAI", False):
+        logger.warning("GOOGLE_GENAI_USE_VERTEXAI=true가 아니어서 Gemini 사용 불가")
+        return None
+    if not getattr(app_config, "GOOGLE_CLOUD_PROJECT", "").strip():
+        logger.warning("GOOGLE_CLOUD_PROJECT가 설정되지 않아 Gemini 사용 불가")
         return None
 
     try:
-        from google import genai
+        from engine.genai_client import build_genai_client
 
-        client = genai.Client(api_key=api_key)
-        logger.info("✅ Gemini 클라이언트 초기화 성공")
+        client = build_genai_client()
+        logger.info(
+            "✅ Gemini(Vertex AI) 클라이언트 초기화 성공 (project=%s, location=%s)",
+            app_config.GOOGLE_CLOUD_PROJECT,
+            app_config.GOOGLE_CLOUD_LOCATION,
+        )
         return client
     except Exception as error:
         logger.error(f"Gemini 초기화 실패: {error}")

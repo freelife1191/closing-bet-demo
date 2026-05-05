@@ -106,6 +106,10 @@ def _project_existing_usecols_columns(
     existing = [column for column in requested if column in frame.columns]
     if not existing:
         return frame
+    # 프레임이 이미 요청 컬럼만 보유(순서 무관)한 경우 슬라이싱으로 인한 복사를 피해
+    # 호출 측이 _ticker_padded 등 캐시 컬럼을 원본 DF에 다시 쓸 수 있도록 한다.
+    if set(frame.columns) == set(existing):
+        return frame
     return frame.loc[:, existing]
 
 

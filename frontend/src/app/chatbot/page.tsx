@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { fetchAPI } from '@/lib/api';
 
@@ -12,6 +12,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import Modal from '../components/Modal';
 import PaperTradingModal from '../components/PaperTradingModal';
 import ThinkingProcess from '../components/ThinkingProcess';
+import { getStoredModel, setStoredModel, shouldSendOnEnter } from '../components/chatHelpers';
 
 // Types
 interface Message {
@@ -246,7 +247,11 @@ export default function ChatbotPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [models, setModels] = useState<string[]>([]);
-  const [currentModel, setCurrentModel] = useState<string>('');
+  const [currentModel, setCurrentModelState] = useState<string>('');
+  const setCurrentModel = useCallback((model: string) => {
+    setCurrentModelState(model);
+    setStoredModel(model);
+  }, []);
 
   // Session State
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -400,11 +405,6 @@ export default function ChatbotPage() {
   // Load History when Session Changes
   useEffect(() => {
     if (currentSessionId) {
-      // [Fix] Always fetch history unless it's a brand new session we just created AND we already have messages
-      // isCreatingSessionRef is used to avoid re-fetching right after we receive the first response
-      // But we should be careful. 
-      console.log(`[SessionChange] ID: ${currentSessionId}, isCreating: ${isCreatingSessionRef.current}`);
-
       if (isCreatingSessionRef.current) {
         isCreatingSessionRef.current = false;
       } else {
@@ -412,7 +412,6 @@ export default function ChatbotPage() {
       }
       localStorage.setItem('chatbot_last_session_id', currentSessionId);
     } else {
-      console.log('[SessionChange] New Chat (No ID)');
       setMessages([]); // New Chat
     }
   }, [currentSessionId]);
@@ -438,8 +437,13 @@ export default function ChatbotPage() {
       const data = await fetchAPI<ChatbotModelsResponse>('/api/kr/chatbot/models');
       if (data.models) {
         setModels(data.models);
-        // Don't override user selection if possible, but for now set default
-        if (!currentModel) setCurrentModel(data.current || data.models[0]);
+        if (!currentModel) {
+          const stored = getStoredModel();
+          const next = (stored && data.models.includes(stored))
+            ? stored
+            : (data.current || data.models[0]);
+          setCurrentModel(next);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
@@ -474,10 +478,6 @@ export default function ChatbotPage() {
       } catch (e) { }
     }
 
-    // API Key
-    const apiKey = localStorage.getItem('X-Gemini-Key') || localStorage.getItem('GOOGLE_API_KEY');
-    if (apiKey) headers['X-Gemini-Key'] = apiKey;
-
     return headers;
   };
 
@@ -505,7 +505,6 @@ export default function ChatbotPage() {
         headers
       });
       if (data.history) {
-        console.log(`[History] Loaded ${data.history.length} messages for session ${sessionId}`);
         setMessages(data.history);
       } else {
         setMessages([]);
@@ -576,8 +575,8 @@ export default function ChatbotPage() {
       }
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
-      if (e.nativeEvent.isComposing || isComposing.current) return;
+    const composing = e.nativeEvent.isComposing || isComposing.current;
+    if (shouldSendOnEnter(e.key, e.shiftKey, composing)) {
       e.preventDefault();
       handleSend();
     }

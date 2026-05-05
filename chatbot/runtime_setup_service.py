@@ -28,13 +28,13 @@ DEFAULT_PROFILE = {
 
 
 def resolve_api_key(api_key: Optional[str]) -> str:
-    """요청/환경변수 기준 API 키 우선순위를 적용한다."""
-    return (
-        api_key
-        or os.getenv("GEMINI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY", "")
-        or os.getenv("ZAI_API_KEY", "")
-    )
+    """[Deprecated] 사용자별 API 키 기능 제거됨 - 항상 빈 문자열 반환.
+
+    Vertex AI 전환 후 인증은 프로젝트 단위 IAM(서비스 계정)으로만 이뤄진다.
+    함수 시그니처는 하위 호환을 위해 유지하되 입력값을 무시한다.
+    """
+    del api_key
+    return ""
 
 
 def init_models(
@@ -44,7 +44,7 @@ def init_models(
     """사용 가능한 모델 목록과 현재 모델명을 초기화한다."""
     env_models = os.getenv(
         "CHATBOT_AVAILABLE_MODELS",
-        "gemini-2.0-flash,gemini-2.5-flash,gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview,gemini-3-flash-preview,gemini-3.1-pro-preview,gemini-2.5-flash",
     )
     model_names = [m.strip() for m in env_models.split(",") if m.strip()]
     if not model_names:
@@ -57,11 +57,14 @@ def init_models(
     return model_names, resolved_model
 
 
-def _default_client_factory(api_key: str) -> Any:
-    """google-genai Client 기본 팩토리."""
-    from google import genai
+def _default_client_factory(_api_key: str = "") -> Any:
+    """Vertex AI 기반 google-genai Client 기본 팩토리.
 
-    return genai.Client(api_key=api_key)
+    api_key 인자는 하위 호환을 위해 받지만 무시된다 (Vertex 전환 이후).
+    """
+    from engine.genai_client import build_genai_client
+
+    return build_genai_client()
 
 
 def create_genai_client(
@@ -71,22 +74,22 @@ def create_genai_client(
     logger: Any,
     client_factory: Optional[Callable[[str], Any]] = None,
 ) -> Optional[Any]:
-    """Gemini 클라이언트를 생성한다."""
-    if not gemini_available or not api_key:
-        logger.warning(
-            "Gemini not available or API Config missing (GEMINI_AVAILABLE=%s, api_key=%s)",
-            gemini_available,
-            bool(api_key),
-        )
+    """Vertex AI 기반 Gemini 클라이언트를 생성한다.
+
+    api_key 인자는 무시된다 (Vertex 모드는 ADC 사용).
+    """
+    del api_key  # ignored - Vertex 모드는 ADC 사용
+    if not gemini_available:
+        logger.warning("google-genai 패키지 미설치로 Gemini 사용 불가")
         return None
 
     try:
         factory = client_factory or _default_client_factory
-        client = factory(api_key)
-        logger.debug("Gemini initialized for user: %s (KeyLen: %s)", user_id, len(api_key))
+        client = factory("")
+        logger.debug("Gemini(Vertex) initialized for user: %s", user_id)
         return client
     except Exception as e:
-        logger.error("Gemini initialization failed: %s", e)
+        logger.error("Gemini(Vertex) initialization failed: %s", e)
         return None
 
 
@@ -189,25 +192,19 @@ def resolve_active_client(
     logger: Any,
     client_factory: Optional[Callable[[str], Any]] = None,
 ) -> Tuple[Optional[Any], Optional[str]]:
-    """요청별 활성 클라이언트를 선택한다 (사용자 키 우선)."""
-    active_client = current_client
-    if api_key:
-        try:
-            factory = client_factory or _default_client_factory
-            active_client = factory(api_key)
-        except Exception as e:
-            logger.error("Temp client init failed: %s", e)
-            return None, f"⚠️ API Key 오류: {str(e)}"
+    """활성 클라이언트를 반환한다.
 
-    if not active_client:
-        debug_info = f"KeyLen: {len(str(api_key))} " if api_key else "Key: None "
+    Vertex AI 전환 이후 사용자별 API 키 입력 기능은 제거되었다.
+    api_key/client_factory 인자는 하위 호환을 위해 받지만 무시된다.
+    """
+    del api_key, client_factory
+    if not current_client:
         return (
             None,
             (
-                "⚠️ AI 모델이 설정되지 않았습니다. "
-                f"({debug_info}) [설정 > API & 기능]에서 API Key를 등록하거나, "
-                "구글 로그인을 진행해주세요. (데이터 초기화 후에는 재설정이 필요합니다)"
+                "⚠️ AI 모델이 초기화되지 않았습니다. "
+                "GOOGLE_GENAI_USE_VERTEXAI / GOOGLE_CLOUD_PROJECT 설정과 "
+                "서비스 계정 키(GOOGLE_APPLICATION_CREDENTIALS)를 확인해주세요."
             ),
         )
-
-    return active_client, None
+    return current_client, None

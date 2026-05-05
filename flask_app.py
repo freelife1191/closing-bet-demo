@@ -35,15 +35,21 @@ if __name__ == '__main__':
     if provider == 'zai':
         active_key = app_config.ZAI_API_KEY
         active_model = app_config.ZAI_MODEL
+        masked_key = active_key[:6] + "*"*10 if active_key else "None"
+        auth_info = f"API Key: {masked_key}"
     else:
-        active_key = app_config.GOOGLE_API_KEY
         active_model = app_config.GEMINI_MODEL
-        
-    masked_key = active_key[:6] + "*"*10 if active_key else "None"
-    
+        if app_config.GOOGLE_GENAI_USE_VERTEXAI and app_config.GOOGLE_CLOUD_PROJECT:
+            auth_info = (
+                f"Vertex AI ✓ (project={app_config.GOOGLE_CLOUD_PROJECT}, "
+                f"location={app_config.GOOGLE_CLOUD_LOCATION})"
+            )
+        else:
+            auth_info = "Vertex AI ✗ (GOOGLE_GENAI_USE_VERTEXAI/GOOGLE_CLOUD_PROJECT 미설정)"
+
     print(f"📡 [DIAGNOSTIC] LLM Provider: {provider}")
-    print(f"🔑 [DIAGNOSTIC] Active API Key: {masked_key}")
-    print(f"🤖 [DIAGNOSTIC] Active Model:   {active_model}")
+    print(f"🔑 [DIAGNOSTIC] Auth:          {auth_info}")
+    print(f"🤖 [DIAGNOSTIC] Active Model:  {active_model}")
     print("="*60 + "\n")
 
     # Scheduler is now started inside create_app() with Singleton lock protection

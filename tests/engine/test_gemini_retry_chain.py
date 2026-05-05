@@ -20,11 +20,12 @@ from engine.vcp_ai_analyzer import VCPMultiAIAnalyzer, GEMINI_RETRY_MODEL_CHAIN 
 
 
 EXPECTED_CHAIN = [
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
+    "gemini-3.1-flash-lite-preview",
     "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
 ]
 
 
@@ -35,7 +36,7 @@ class RecordingModels:
         self._outcomes = outcomes
         self.calls = []
 
-    def generate_content(self, model: str, contents: str):
+    def generate_content(self, model: str, contents: str, config=None):
         self.calls.append(model)
         idx = len(self.calls) - 1
         outcome = self._outcomes[idx]

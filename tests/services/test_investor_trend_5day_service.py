@@ -240,13 +240,19 @@ def test_get_investor_trend_5day_for_ticker_skips_toss_when_pykrx_available(monk
 
 
 def test_get_investor_trend_5day_for_ticker_skips_reference_when_csv_is_normal(monkeypatch, tmp_path):
+    # 오늘 기준 최근 5영업일을 사용해 stale_csv 플래그가 발생하지 않도록 한다.
+    today = datetime.now().date()
+    recent_dates = [
+        (today - pd.Timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in (4, 3, 2, 1, 0)
+    ]
     pd.DataFrame(
         [
-            {"ticker": "005930", "date": "2026-02-20", "foreign_buy": 10, "inst_buy": 20},
-            {"ticker": "005930", "date": "2026-02-21", "foreign_buy": 11, "inst_buy": 21},
-            {"ticker": "005930", "date": "2026-02-22", "foreign_buy": 12, "inst_buy": 22},
-            {"ticker": "005930", "date": "2026-02-23", "foreign_buy": 13, "inst_buy": 23},
-            {"ticker": "005930", "date": "2026-02-24", "foreign_buy": 14, "inst_buy": 24},
+            {"ticker": "005930", "date": recent_dates[0], "foreign_buy": 10, "inst_buy": 20},
+            {"ticker": "005930", "date": recent_dates[1], "foreign_buy": 11, "inst_buy": 21},
+            {"ticker": "005930", "date": recent_dates[2], "foreign_buy": 12, "inst_buy": 22},
+            {"ticker": "005930", "date": recent_dates[3], "foreign_buy": 13, "inst_buy": 23},
+            {"ticker": "005930", "date": recent_dates[4], "foreign_buy": 14, "inst_buy": 24},
         ]
     ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
 

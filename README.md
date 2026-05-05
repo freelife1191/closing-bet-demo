@@ -58,34 +58,60 @@
 루트 디렉토리의 `.env` 파일에 API 키를 설정합니다.
 
 ```env
-# 서버 포트 설정
+# === 서버 포트 ===
 FRONTEND_PORT=3500
 FLASK_PORT=5501
 FLASK_HOST=0.0.0.0
 
-# AI API 키 (필수)
-GOOGLE_API_KEY=your_gemini_key_here
-OPENAI_API_KEY=your_openai_key_here
-PERPLEXITY_API_KEY=your_perplexity_key_here
+# === Gemini (Vertex AI 단일 경로) ===
+# Gemini 호출은 Vertex AI로 일원화되어 있습니다. 서비스 계정 JSON 키를 발급해 경로를 지정하세요.
+GOOGLE_GENAI_USE_VERTEXAI=true
+GOOGLE_CLOUD_PROJECT=your_gcp_project_id_here
+GOOGLE_CLOUD_LOCATION=global
+GOOGLE_APPLICATION_CREDENTIALS=./secrets/vertex-ai-runtime.json
 
-# 선택사항 (Z.ai 통한 GPT)
-ZAI_API_KEY=your_zai_key_here
+# === 기타 AI API 키 ===
+OPENAI_API_KEY=your_openai_api_key_here
+PERPLEXITY_API_KEY=your_perplexity_api_key_here
 
-# VCP AI 설정
-VCP_AI_PROVIDERS=gemini,gpt
-VCP_SECOND_PROVIDER=gpt         # gpt 또는 perplexity 중 1개 선택
-VCP_GEMINI_MODEL=gemini-2.0-flash
-VCP_GPT_MODEL=gpt-5-nano
-VCP_PERPLEXITY_MODEL=sonar
-VCP_ZAI_FALLBACK_ENABLED=true   # Perplexity 차단 시 Z.ai fallback 사용 여부
+# === Z.ai (GPT 호환 fallback) ===
+ZAI_API_KEY=your_zai_api_key_here
+ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
+ZAI_MODEL=glm-4.7-flash
 
-# 스케줄러 시간 설정 (KST)
-CLOSING_SCHEDULE_TIME=16:00
-MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
+# === 챗봇/사전 분석용 모델 ===
+GEMINI_MODEL=gemini-3.1-flash-lite-preview                 # 대량 사전 분석 (lite 권장)
+CHATBOT_AVAILABLE_MODELS=gemini-3.1-flash-lite-preview,gemini-3-flash-preview,gemini-3.1-pro-preview,gemini-2.5-flash
 
-# 스케줄러 활성화
+# === 종가베팅(Phase3) 분석 모델 ===
+ANALYSIS_GEMINI_MODEL=gemini-3-flash-preview
+ANALYSIS_LLM_CONCURRENCY=1
+ANALYSIS_LLM_CHUNK_SIZE=2
+ANALYSIS_LLM_API_TIMEOUT=120
+ANALYSIS_LLM_REQUEST_DELAY=4         # API 호출 간 대기(초). 429 방지용 (None만 기본값으로 대체, 0 명시 가능)
+
+# === VCP 멀티 AI 설정 ===
+VCP_AI_PROVIDERS=gemini,perplexity   # 활성 provider (gemini/gpt/perplexity 조합)
+VCP_SECOND_PROVIDER=perplexity       # gemini 외 보조모델 1개 (gpt 또는 perplexity)
+VCP_GEMINI_MODEL=gemini-3-flash-preview
+VCP_GPT_MODEL=gpt-5-nano             # gpt-5-nano | gpt-5-mini | gpt-5.1 | gpt-5.2
+VCP_PERPLEXITY_MODEL=sonar           # sonar | sonar-pro
+VCP_PERPLEXITY_API_TIMEOUT=120
+VCP_ZAI_FALLBACK_ENABLED=true        # Perplexity 차단 시 Z.ai 폴백
+VCP_ZAI_API_TIMEOUT=180
+
+# === 스케줄러 시간(KST) ===
+JONGGA_SCHEDULE_TIME=15:20           # AI 종가베팅 분석
+CLOSING_SCHEDULE_TIME=17:00          # 장 마감 후 일괄 체인
+MARKET_GATE_UPDATE_INTERVAL_MINUTES=5
 SCHEDULER_ENABLED=true
+
+# === 데이터 소스 ===
+DATA_SOURCE=krx                      # krx | fdr | both
+PRICE_CACHE_TTL=300
 ```
+
+> 전체 키 목록과 알림(Slack/Telegram/Email/Discord), KIS, NextAuth 설정은 `.env.example`을 참조하세요.
 
 ![내 설정](assets/33.png)
 *사용자 설정 및 API 키 관리 화면*
@@ -153,13 +179,13 @@ graph TD
         S --> W[Scheduler Service]
         O --> X[Notification Service]
         O --> Y[Paper Trading Service]
-        W -->|16:00 KST| AA[VCP Analysis]
+        W -->|17:00 KST 기본| AA[VCP Analysis]
         AA --> Z[종가베팅 Analysis]
     end
 
     subgraph "Frontend Layer (Next.js)"
         Q --> AB[Dashboard UI]
-        Q --> AC[Chatbot ULW]
+        Q --> AC[Smart Money Chatbot]
         X --> AD[Multi-Channel Alert]
     end
 
@@ -195,58 +221,52 @@ graph TD
 
 ```python
 engine/
-├── market_gate.py         # 시장 신호등 (최상위 관문)
-│   └── MarketGate         # 지수/환율/기술적 지표 종합 분석 및 판정
-├── grade_classifier.py    # 종목 등급 판정 (S/A/B) 및 필터링 로직
-├── scorer.py              # 기본 12점 + 가산점 7점(총 19점) 점수 산출 시스템
-├── vcp.py                 # 변동성 수축 패턴(VCP) 감지 엔진 (Technical Scanner)
-├── phases.py              # 4단계 시그널 생성 파이프라인
-│   ├── BasePhase          # 추상 기본 클래스
-│   ├── Phase1Analyzer     # 기본 분석 및 사전 필터링
-│   ├── Phase2NewsCollector # 뉴스 수집
-│   ├── Phase3LLMAnalyzer   # AI 배치 분석
-│   ├── Phase4SignalFinalizer # 시그널 생성
-│   └── SignalGenerationPipeline # 오케스트레이터
-├── collectors/            # 로우 데이터 수집기 모듈
-│   ├── base.py            # 수집기 기본 추상 클래스
-│   ├── krx.py             # KRX 정보데이터시스템 수집기
-│   ├── naver.py           # 네이버 금융 데이터 수집기
-│   └── news.py            # 뉴스 정보 수집기
-├── generator.py           # 시그널 및 분석 리포트 생성 엔진
-│   ├── SignalGenerator    # VCP/종가베팅 최종 시그널 생성
-│   └── ReportGenerator    # AI 기반 종목 상세 리포트 구성
-├── llm_analyzer.py        # 뉴스 감성 및 배치 분석 (Gemini/GPT)
-├── vcp_ai_analyzer.py     # VCP 기술적 분석 전용 AI 모듈
-├── data_sources.py        # 전략 패턴 기반 데이터 소스
-│   ├── DataSourceStrategy # 추상 인터페이스
-│   ├── FDRSource          # FinanceDataReader (오픈소스 데이터)
-│   ├── PykrxSource        # KRX 공식 데이터 (pykrx)
-│   ├── YFinanceSource     # 글로벌 실시간/지수 데이터 (yfinance)
-│   └── DataSourceManager  # 우선순위 기반 폴백 체인 오케스트레이터
-├── toss_collector.py      # 토스증권 API 기반 실시간 데이터 수집
-├── kis_collector.py       # 한국투자증권(KIS) API 연동 모듈
-├── messenger.py           # 멀티채널(텔레그램/디스코드 등) 알림 허브
-│   └── messenger_formatters.py # 채널별 메시지 포맷팅 로직
-├── constants.py           # 모든 임계값 중앙화 (dataclass)
-│   ├── TradingValueThresholds  # 거래대금 기준
-│   ├── VCPThresholds           # VCP 패턴 기준
-│   ├── ScoringThresholds       # 점수 기준
-│   └── MarketGateThresholds    # Market Gate 기준
-├── error_handler.py       # 표준화된 에러 처리
-│   ├── @handle_data_error     # 데이터 에러 처리
-│   ├── @handle_llm_error      # LLM 에러 처리
-│   └── safe_execute()         # 안전 실행 래퍼
-├── exceptions.py          # 커스텀 예외 계층
-│   ├── MarketDataError        # 마켓 데이터 에러
-│   ├── LLMAnalysisError       # LLM 분석 에러
-│   └── GradeCalculationError  # 등급 계산 에러
-├── llm_utils.py           # LLM 재시도 로직
-│   ├── @async_retry_with_backoff  # 비동기 재시도
-│   └── process_batch_with_concurrency() # 배치 처리
-└── pandas_utils.py        # DataFrame 유틸리티
-    ├── safe_value()            # NaN 안전 처리
-    ├── filter_by_date()        # 날짜 필터링
-    └── merge_realtime_prices() # 실시간 가격 병합
+├── market_gate.py / market_gate_*.py    # 시장 신호등 (최상위 관문) + 외부 지표 패치/분석 분할
+├── grade_classifier.py / grade_decider.py / grade_filter_validator.py  # 등급 판정·검증 책임 분리
+├── scorer.py                            # 기본 12점 + 가산 7점(총 19점) 점수 산출
+├── vcp.py                               # VCP 패턴 감지 엔진 (Technical Scanner)
+│
+├── phases.py                            # 파이프라인 facade (호환용)
+├── phases_pipeline.py                   # SignalGenerationPipeline 오케스트레이터
+├── phases_base.py                       # BasePhase 추상 클래스
+├── phases_analysis.py                   # Phase1Analyzer / Phase4SignalFinalizer
+├── phases_phase1_helpers.py             # Phase1 보조 (VCP 분석 등)
+├── phases_phase4_helpers.py             # Phase4 보조 (build_signal, ai_evaluation 전파 포함)
+├── phases_news_llm.py                   # Phase2NewsCollector + Phase3LLMAnalyzer (배치 어댑터)
+│
+├── signal_tracker.py                    # VCP 시그널 추적기
+├── signal_tracker_ai_helpers.py         # apply_ai_results, _PROVIDER_PRIORITY (gemini→gpt→perplexity), ai_provider 컬럼
+├── signal_tracker_*_mixin.py / *_helpers.py   # 분석/소스 캐시/수급 헬퍼 분리
+│
+├── collectors/                          # 로우 데이터 수집기 모듈 (KRX / Naver / News)
+├── toss_collector.py                    # 토스증권 실시간 시세
+├── kis_collector.py                     # KIS API 연동
+│
+├── generator.py + generator_*.py        # SignalGenerator / ReportGenerator (런타임/스토리지 분리)
+│
+├── llm_analyzer.py                      # 뉴스 감성·배치 분석 (Gemini/GPT)
+├── llm_analyzer_client_factory.py       # provider별 클라이언트 팩토리
+├── llm_analyzer_prompts.py / _formatters.py / _parsers.py / _retry.py
+├── llm_utils.py + llm_utils_*.py        # 동시성/재시도/파싱/폴백 유틸
+│
+├── vcp_ai_analyzer.py                   # VCPMultiAIAnalyzer 진입점
+├── vcp_ai_analyzer_helpers.py           # VCP 데이터 어댑터
+├── vcp_ai_orchestration_helpers.py      # gemini/gpt/perplexity 병렬 오케스트레이션
+├── vcp_ai_provider_init_helpers.py      # provider 초기화/검증
+├── kr_ai_analyzer.py + kr_ai_*.py       # KR 시장 분석 (전략/템플릿/캐시 분리)
+├── genai_client.py                      # Vertex AI Gemini 단일 진입점
+│
+├── data_sources.py + data_sources_*.py  # 전략 패턴 데이터 소스 (FDR / pykrx / yfinance / 폴백 매니저)
+│
+├── constants.py (facade)                # 임계값 중앙화 — constants_market_*.py 로 분할
+│   ├── TradingValueThresholds  # 거래대금 (S=1조, A=5천억, B=1천억, MINIMUM=1천억)
+│   ├── VCPThresholds           # VCP 수축 비율/패턴 기준
+│   ├── ScoringThresholds       # 점수 기준 (MIN_S_GRADE=15 등)
+│   └── MarketGateThresholds    # Market Gate 점수 기준
+│
+├── error_handler.py + error_handler_*.py    # 데코레이터/컨텍스트/검증/응답 분리
+├── exceptions.py + exceptions_*.py          # 커스텀 예외 계층
+└── pandas_utils.py                          # DataFrame 유틸 (NaN/날짜/실시간가 병합)
 ```
 
 **설계 패턴 적용:**
@@ -269,9 +289,9 @@ engine/
   - `engine/llm_utils.py`: LLM 재시도 로직 (async/sync decorators)
   - `engine/pandas_utils.py`: DataFrame 유틸리티 및 NaN 처리
 - **AI Engine**:
-  - Google Gemini 2.5 Flash (긴 컨텍스트 윈도우, 심층 추론 지원)
-  - OpenAI GPT via Z.ai (빠른 응답, 크로스 밸리데이션)
-  - Perplexity Sonar (실시간 웹 검색, 최신 뉴스/정보 반영)
+  - Google Gemini (Vertex AI 경로 일원화) — `gemini-3-flash-preview`(분석), `gemini-3.1-flash-lite-preview`(챗봇/사전 분석) 등 환경변수로 선택
+  - OpenAI GPT (직접 호출 또는 Z.ai 호환 경로) — `gpt-5-nano` 기본
+  - Perplexity Sonar (실시간 웹 검색, 출처 명시)
   - LangChain-style Prompt Composition (Chain of Thought, Intent Injection)
 - **Financial Services**:
   - **Toss Securities API**: 초고속 실시간 국내 주가 데이터 연동 (최우선 순위)
@@ -296,7 +316,7 @@ graph TD
 - 상승률 상위 종목에 대해 기본 분석 수행
 - 차트, 수급 데이터 수집
 - Pre-Score 계산 (뉴스/LLM 제외)
-- 필터 조건 검증 (Phase1 하드컷: 거래대금 500억+)
+- 필터 조건 검증 (Phase1 하드컷: `TRADING_VALUES.MINIMUM` = 1,000억원, 환경변수 `JONGGA_MIN_TRADING_VALUE`로 오버라이드 가능)
 
 **Phase 2: 뉴스 수집**
 - 네이버 금융, 다음 뉴스에서 최신 뉴스 수집
@@ -311,6 +331,8 @@ graph TD
 **Phase 4: 시그널 생성**
 - 등급 산정 (S/A/B)
 - 목표가/손절가 계산
+- LLM 결과를 `Signal.ai_evaluation` top-level 필드로 전파(저장 JSON에 그대로 직렬화)
+- VCP 보조 지표(`vcp_score`, `contraction_ratio`, `is_vcp`)를 `score_details`에 병합
 - 최종 시그널 출력 및 저장
 
 #### Flask API 구조 (Blueprint-based)
@@ -339,24 +361,30 @@ graph TD
 
 ```python
 app/
-├── routes/
-│   ├── kr_market.py     # 한국 시장 관련 API (Blueprint: 'kr')
-│   │   ├── get_kr_market_status  # /market-status (지수/환율/수급)
-│   │   ├── get_kr_signals        # /signals (VCP 시그널)
-│   │   ├── get_kr_market_gate    # /market-gate (시장 신호등)
-│   │   ├── get_kr_realtime_prices # /realtime-prices (실시간 시세)
-│   │   ├── get_jongga_v2_latest  # /jongga-v2/latest (V2 결과)
-│   │   ├── get_cumulative_performance # /closing-bet/cumulative (성과)
-│   │   ├── run_vcp_signals_screener # /signals/run (엔진 실행)
-│   │   ├── run_jongga_v2_screener # /jongga-v2/run (엔진 실행)
-│   │   └── chatbot               # /chatbot (AI 대화 엔진)
-│   └── common.py        # 공통 및 유틸리티 API (Blueprint: 'common')
-│       ├── check_admin           # /admin/check
-│       ├── get_portfolio_data    # /portfolio
-│       ├── buy_stock / sell_stock # /portfolio/buy, /portfolio/sell
-│       ├── manage_env            # /system/env
-│       └── send_test_notification # /notification/send
-└── __init__.py          # 애플리케이션 팩토리 및 /health (Root)
+├── __init__.py                                     # 애플리케이션 팩토리 + /health
+└── routes/
+    ├── kr_market.py                                # Blueprint 'kr' 등록 facade
+    ├── kr_market_route_registry.py                 # 하위 라우트 모듈 일괄 등록
+    │
+    ├── kr_market_data_http_routes.py               # 시장 상태/지수/환율
+    ├── kr_market_data_signals_routes.py            # VCP 시그널 조회/실행
+    ├── kr_market_data_jongga_routes.py             # 종가베팅 V2 조회/실행
+    ├── kr_market_data_ai_routes.py                 # AI 분석 결과/리포트
+    ├── kr_market_data_backtest_stock_routes.py     # 종목별 백테스트
+    ├── kr_market_jongga_execution_routes.py        # 종가베팅 실행 진입점
+    ├── kr_market_chatbot_http_routes.py            # 챗봇 HTTP (스트리밍/요청)
+    ├── kr_market_chatbot_routes.py                 # 챗봇 비-스트리밍 진입점
+    ├── kr_market_quota_http_routes.py              # 사용자 quota 관리
+    ├── kr_market_system_http_routes.py             # 시스템/엔진 상태
+    ├── kr_market_*_helpers.py                      # 정규화/payload/grade 등 헬퍼
+    │
+    ├── common.py                                   # Blueprint 'common' facade
+    ├── common_admin_routes.py                      # /admin/check
+    ├── common_portfolio_routes.py                  # 모의투자 매수/매도/조회
+    ├── common_notification_routes.py               # 알림 발송 테스트
+    ├── common_update_routes.py                     # 데이터 동기화 트리거
+    ├── common_market_mock_routes.py                # 모의 데이터 (개발/테스트)
+    └── route_execution.py                          # 백그라운드 실행 공통 헬퍼
 ```
 
 #### 서비스 레이어 (Services Layer)
@@ -365,32 +393,40 @@ app/
 
 ```python
 services/
-├── scheduler.py      # 자동화된 스케줄링 서비스
-│   ├── run_daily_closing_analysis # 장 마감 메인 체인 실행 (16:00)
-│   ├── run_jongga_v2_analysis     # AI 종가베팅 심층 분석 엔진
-│   ├── run_market_gate_sync       # 주기적 지표 동기화 (30분 단위)
-│   └── start_scheduler            # 백그라운드 스레드 및 중복 실행 방지
-├── notifier.py       # 멀티채널 알림 서비스
-│   ├── NotificationService       # 핵심 알림 관리 클래스
-│   ├── format_jongga_message     # 등급별 메시지 포맷팅 로직
-│   └── send_all (Telegram/Discord/Slack/Email) # 전 채널 동시 발송
-├── paper_trading.py  # 모의투자 서비스
-│   ├── PaperTradingService       # 자산/포트폴리오 관리 클래스
-│   ├── buy_stock / sell_stock    # 주문 체결 로직 및 DB 연동
-│   ├── get_portfolio_valuation   # Toss API 연동 실시간 자산 평가
-│   └── record_asset_history      # 누적 수익률 시계열 데이터 기록
-├── activity_logger.py # 시스템 주요 이벤트 및 활동 로깅
-└── usage_tracker.py   # API 호출 제한 및 토큰 사용량 모니터링
+├── scheduler.py / scheduler_*.py                   # 스케줄러 본체 + 잡 정의
+│   ├── run_daily_closing_analysis (CLOSING_SCHEDULE_TIME, 기본 17:00)
+│   ├── run_jongga_v2_analysis     (JONGGA_SCHEDULE_TIME, 기본 15:20)
+│   └── run_market_gate_sync       (MARKET_GATE_UPDATE_INTERVAL_MINUTES)
+│
+├── notifier.py + notifier_*.py                     # 멀티채널 알림 (Telegram/Discord/Slack/Email)
+│
+├── paper_trading.py + paper_trading_*.py           # 모의투자 (포트폴리오/매매/평가/이력)
+│
+├── kr_market_route_service.py                      # 라우트 진입점 비즈니스 로직
+├── kr_market_chatbot_service.py + *_helpers.py     # 챗봇 quota/스트리밍/요청 헬퍼
+├── kr_market_analytics_service.py                  # 누적 통계/대시보드 데이터
+├── kr_market_backtest_*.py                         # 백테스트 시나리오/누적/KPI/통계
+├── kr_market_csv_utils.py / cumulative_cache.py    # CSV 적재 + 누적 캐시
+├── kr_market_ai_payload_service.py                 # AI payload 생성 (jongga/VCP)
+├── investor_trend_5day_service.py                  # 외인/기관 5일 트렌드
+│
+├── common_env_service.py                           # 환경변수 read/write
+├── common_update_service.py + *_pipeline_steps.py  # 일괄 데이터 동기화 단계
+├── common_update_ai_analysis_service.py            # AI 분석 통합 단계
+├── common_data_status_service.py                   # 데이터 상태 점검
+├── activity_logger.py                              # 활동 로그
+├── file_backed_status.py / file_row_count_cache.py # 파일 기반 상태/캐시
+└── usage_tracker.py                                # API 사용량/토큰 모니터링
 ```
 
 **스케줄러 서비스 (`scheduler.py`):**
 - **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락(`scheduler.lock`)으로 프로세스 중복 실행 원천 차단
-- **16:00 KST - 장 마감 체인 분석 (Chain Execution)**: 모든 작업을 정해진 순서에 따라 원스톱으로 병렬/순차 실행
+- **17:00 KST(기본) - 장 마감 체인 분석 (Chain Execution)**: 모든 작업을 정해진 순서에 따라 원스톱으로 병렬/순차 실행
   1. **데이터 수집**: 일별 종가 및 투자자별 수급 데이터 확정본 동기화
   2. **VCP 분석**: 전 종목 기술적 패턴 필터링 및 VCP 시그널 생성
   3. **AI 종가베팅**: VCP 시그널 기반 AI(Gemini) 심층 정성적 분석 수행
   4. **알림 전송**: 모든 분석 완료 즉시 4개 채널(텔레그램 등)로 결과 발송
-- **주기적 동기화**: 설정된 인터벌(기본 30분)에 따라 Market Gate 및 환율 실시간 최신화
+- **주기적 동기화**: 설정된 인터벌(`MARKET_GATE_UPDATE_INTERVAL_MINUTES`, 기본 5분)에 따라 Market Gate 및 환율 실시간 최신화
 
 **알림 서비스 (`notifier.py`):**
 - **NotificationService 클래스**: 4채널 지원 알림 시스템
@@ -412,23 +448,32 @@ services/
 
 Next.js 16의 App Router를 기반으로 한 반응형 웹 인터페이스입니다.
 
-```python
+```text
 frontend/src/app/
-├── dashboard/           # 메인 대시보드 (종가베팅/VCP/마켓게이트)
-├── chatbot/             # 스마트머니봇 AI 채팅 인터페이스
-├── components/          # 공통 UI 컴포넌트 라이브러리 (Atomic Design)
-│   ├── charts/          # 기술적 분석용 인터랙티브 차트
-│   ├── signals/         # 시그널 리스트 및 상세 뷰
-│   └── layout/          # 헤더, 사이드바, 푸터
-├── api/                 # 프론트엔드 전용 API 프록시 및 핸들러
-├── layout.tsx           # 전역 레이아웃 및 테마(Tailwind) 설정
-└── page.tsx             # 메인 랜딩 페이지 및 상태 관리
+├── dashboard/           # 메인 대시보드 (kr/vcp, kr/closing-bet 등)
+├── chatbot/             # 스마트머니봇 AI 채팅 페이지 (page.tsx)
+├── components/          # 공통 UI 컴포넌트
+│   ├── ChatWidget.tsx              # 챗봇 위젯
+│   ├── Sidebar.tsx / Header.tsx    # 레이아웃
+│   ├── SettingsModal.tsx           # 사용자 설정/API 키
+│   ├── BuyStockModal.tsx / SellStockModal.tsx / PaperTradingModal.tsx  # 모의투자
+│   ├── ClosingBetCriteriaModal.tsx / VCPCriteriaModal.tsx              # 등급/패턴 기준 안내
+│   ├── ConfirmationModal.tsx / Modal.tsx / Tooltip.tsx                 # 공통 UI
+│   ├── ThinkingProcess.tsx         # AI 추론 과정 시각화
+│   └── Providers.tsx               # NextAuth/zustand provider
+├── api/                 # Next.js API Routes (백엔드 프록시)
+├── layout.tsx / globals.css        # 전역 레이아웃 / Tailwind
+├── error.tsx / loading.tsx / not-found.tsx
+└── page.tsx             # 메인 랜딩 페이지
 ```
 
-- **Framework**: Next.js 16 (App Router, TypeScript)
-- **UI Components**: React with Tailwind CSS
-- **Real-time Updates**: WebSocket (or Interval Sync) for live updates
-- **Testing**: Vitest (Unit & UI Tests)
+- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
+- **State Management**: Zustand 5 (`zustand`)
+- **Auth**: NextAuth 4 (Google OAuth)
+- **Charts**: `lightweight-charts` (TradingView 오픈소스)
+- **Markdown**: `react-markdown` + `remark-gfm` (챗봇 렌더링)
+- **Styling**: Tailwind CSS
+- **Testing**: Vitest (Unit & UI), `tests/baseline/upgrade-baseline.test.ts`로 업그레이드 회귀 잠금
 
 #### Data & Storage (데이터 인프라)
 
@@ -472,40 +517,46 @@ frontend/src/app/
 ### 1. Multi-Model AI Engine Architecture
 
 서로 다른 특성을 가진 모델을 역할별로 분리해 운용합니다.  
-VCP 분석은 **Gemini + (GPT 또는 Perplexity 중 1개)** 조합으로 실행되고, 결과는 모델별 필드로 분리 저장됩니다.
+VCP 분석은 **Gemini + (GPT 또는 Perplexity 중 1개)** 조합으로 실행되고, 결과는 모델별 필드로 분리 저장됩니다. 종가베팅(Phase3)은 Vertex AI Gemini 단일 경로로 실행됩니다.
 
 | 모델           | 역할                           | 사용 시나리오                                                 | 장점                                                              |
 | -------------- | ------------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **Gemini**     | **Analysis Agent** (심층 추론) | 복잡한 뉴스 분석, 긴 컨텍스트 윈도우 필요, 다차원 데이터 통합 | **심층 추론(Thinking)** 지원, 한-영문 혼용 처리, 복잡한 논리 사고 |
-| **Perplexity** | **Search Agent** (실시간 정보) | 최신 뉴스 검색, 팩트 체크, 실시간 시장 이슈 파악              | **실시간 웹 검색(Web Search)**, 최신 정보 반영, 출처(Source) 명시 |
-| **Z.ai / GPT** | **Speed Agent** (빠른 검증)    | 챗봇 대화, 단순 뉴스 감성 분석, 크로스 밸리데이션             | 빠른 응답 시간, OpenAI 호환성, 비용 효율적                        |
+| **Gemini (Vertex AI)** | **Analysis Agent** (심층 추론) | 종가베팅 Phase3 분석, VCP 1차 추론, 다차원 데이터 통합 | **심층 추론(Thinking)** 지원, 긴 컨텍스트, 한-영문 혼용 처리 |
+| **Perplexity** | **Search Agent** (실시간 정보) | VCP 보조 검증, 최신 뉴스/팩트 체크              | **실시간 웹 검색(Web Search)**, 최신 정보 반영, 출처(Source) 명시 |
+| **GPT (OpenAI / Z.ai)** | **Speed Agent** (빠른 검증)    | VCP 보조 검증, 챗봇 대화, Perplexity 차단 시 Z.ai fallback             | 빠른 응답 시간, OpenAI 호환성, 비용 효율적                        |
 
-#### 교차 검증(Cross-Validation) 로직
+#### 교차 검증(Cross-Validation) 로직 및 Provider Fallback
 
 ```mermaid
 graph LR
     A[Input Data] --> B[Gemini Analysis]
-    A --> C[Secondary Analysis\nGPT or Perplexity]
+    A --> C[Secondary Analysis<br/>GPT or Perplexity]
     B --> D[gemini_recommendation]
-    C --> E[gpt_recommendation or\nperplexity_recommendation]
-    D --> F[Persist to JSON/API]
+    C --> E[gpt_recommendation or<br/>perplexity_recommendation]
+    D --> F{apply_ai_results<br/>provider priority}
     E --> F
+    F -->|gemini → gpt → perplexity| G[ai_action / ai_confidence /<br/>ai_reason / ai_provider]
 ```
 
 **검증 규칙 (VCP 기준):**
 1. Gemini는 기본 분석 모델로 실행됩니다.
 2. 보조 모델은 `VCP_SECOND_PROVIDER` 값(`gpt` 또는 `perplexity`)에 따라 1개만 실행됩니다.
-3. 결과는 자동 합의(평균/우선선택) 없이 모델별로 저장되며, 프론트엔드에서 탭으로 비교합니다.
+3. 결과는 자동 합의(평균/우선선택) 없이 모델별로 분리 저장되며, 프론트엔드에서 탭으로 비교합니다.
+4. **Provider 우선순위 체인**: `engine/signal_tracker_ai_helpers.py::apply_ai_results`가 `gemini → gpt → perplexity` 순으로 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 기록합니다. 모든 provider가 응답하지 않으면 `ai_provider="N/A"`로 표시됩니다.
+5. **Z.ai fallback**: Perplexity가 차단되거나 5xx 응답을 줄 경우 `VCP_ZAI_FALLBACK_ENABLED=true`이면 Z.ai(OpenAI 호환) 경로로 자동 폴백합니다.
 
 ### Concurrency Architecture
 Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)으로 동작하는 LLM 클라이언트 라이브러리들을 비동기 논블로킹(Non-blocking) 환경에서 병렬 실행합니다.
 
-*   **구현 파일**: `engine/vcp_ai_analyzer.py`
-*   **작동 방식**:
-    1.  `VCPMultiAIAnalyzer`가 분석 요청을 수신합니다.
+*   **VCP 경로 (`engine/vcp_ai_analyzer.py` + `vcp_ai_orchestration_helpers.py`)**:
+    1.  `VCPMultiAIAnalyzer.analyze_batch()`가 분석 요청을 수신합니다.
     2.  **Gemini/GPT**는 스레드 풀(`loop.run_in_executor`)로 실행하고, **Perplexity**는 `httpx.AsyncClient`로 비동기 호출합니다.
-    3.  두 모델이 동시에 추론을 수행하고 응답을 개별 필드에 저장합니다.
-    4.  합의 점수 산출 없이 `gemini_recommendation`, `gpt_recommendation`, `perplexity_recommendation` 형태로 반환합니다.
+    3.  두 모델이 동시에 추론을 수행하고 응답을 개별 필드(`gemini_recommendation`, `gpt_recommendation`, `perplexity_recommendation`)에 저장합니다.
+    4.  `apply_ai_results`가 우선순위 체인(`gemini → gpt → perplexity`)에 따라 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 통합합니다.
+*   **종가베팅 경로 (`engine/phases_news_llm.py` + `engine/llm_analyzer*.py`)**:
+    1.  `Phase3LLMAnalyzer`가 후보 종목과 뉴스를 받아 `analyze_news_batch_jongga()`를 호출합니다.
+    2.  Vertex AI Gemini 단일 경로로 배치 분석을 수행하며, `ANALYSIS_LLM_CONCURRENCY` / `ANALYSIS_LLM_CHUNK_SIZE` / `ANALYSIS_LLM_REQUEST_DELAY`로 동시성·청크·지연을 제어합니다.
+    3.  결과는 `Signal.ai_evaluation` top-level 필드 + `score_details["ai_evaluation"]`에 동시에 기록됩니다.
 
 ---
 
@@ -1039,9 +1090,9 @@ AI 통합 순서:
 
 마크 미너비니의 VCP 이론을 파이썬 알고리즘으로 구현했습니다.
 
-*   **수집 알고리즘 (`engine/screener.py`)**:
-    *   **거래대금(Liquidity)**: 최소 1,000억 원 이상.
-    *   **거래량 급증(Volume Breakout)**: 전일 대비 거래량 급증은 보조 지표로 활용.
+*   **수집 알고리즘 (`engine/scorer.py` + `engine/vcp.py`)**:
+    *   **거래대금(Liquidity)**: 최소 1,000억 원 이상 (`TRADING_VALUES.MINIMUM`).
+    *   **거래량 급증(Volume Breakout)**: 전일 대비 거래량 급증은 보조 지표(가산점)로 활용.
     *   **Pivot Point**: 최근 저점을 높이며 5일 이평선 위에 안착.
 
 #### 3.1 VCP 정의와 이론
@@ -1261,7 +1312,7 @@ VCP 패턴과 수급 상황을 종합 분석하세요.
 
 #### 4.1 종가베팅 (Closing Bet) 알고리즘
 **전략 시나리오:**
-- **장 마감 직후 (기본 16:00 체인)**: 후보군 스크리닝 → AI 필터링 → 최종 신호 생성
+- **장 마감 직후 (기본 17:00 체인 / 사전 15:20 단독 실행)**: 후보군 스크리닝 → AI 필터링 → 최종 신호 생성
 - **익일 09:00~09:30**: 목표가/손절가에 따라 자동 매도 추천
 
 ![종가 매매 전략](assets/4.png)
@@ -1345,12 +1396,12 @@ grade_filters = {
 ```
 
 **AI 출력 및 등급 부여 (19점 기준):**
-| 총점(19점 만점) | 등급            | 의미          | 손절가        | 목표가 |
-| ------------- | --------------- | ------------- | ------------- | ------ |
-| **10점 이상** | **S급**         | 매수가 × 0.97 | 매수가 × 1.05 |
-| **8~9점**     | **A급**         | 매수가 × 0.97 | 매수가 × 1.05 |
-| **6~7점**     | **B급**         | 매수가 × 0.97 | 매수가 × 1.05 |
-| **6점 미만**  | **미달 (거부)** | -             | -             |
+| 총점(19점 만점) | 등급            | 의미                     | 손절가        | 목표가        |
+| --------------- | --------------- | ------------------------ | ------------- | ------------- |
+| **10점 이상**   | **S급**         | 풀배팅 후보              | 매수가 × 0.95 | 매수가 × 1.05 |
+| **8~9점**       | **A급**         | 기본 배팅                | 매수가 × 0.95 | 매수가 × 1.05 |
+| **6~7점**       | **B급**         | 절반 배팅                | 매수가 × 0.95 | 매수가 × 1.05 |
+| **6점 미만**    | **미달 (거부)** | 시그널 제외              | -             | -             |
 
 **AI 평가 요소:**
 - **뉴스/재료 점수 (0~3점)**: 호재 강도
@@ -1378,8 +1429,8 @@ grade_filters = {
 ### 5. Data Status & Integrity
 
 **A. 데이터 업데이트 자동화**
-- **장중 주기 동기화**: `MARKET_GATE_UPDATE_INTERVAL_MINUTES` (기본 30분) 간격으로 Market Gate 갱신
-- **매일 장 마감 체인 실행**: `CLOSING_SCHEDULE_TIME` (기본 16:00) 기준으로 일별 데이터 수집 → VCP → 종가베팅 순차 실행
+- **장중 주기 동기화**: `MARKET_GATE_UPDATE_INTERVAL_MINUTES` (기본 5분) 간격으로 Market Gate 갱신
+- **매일 장 마감 체인 실행**: `CLOSING_SCHEDULE_TIME` (기본 17:00) 기준으로 일별 데이터 수집 → VCP → 종가베팅 순차 실행. 별도로 `JONGGA_SCHEDULE_TIME` (기본 15:20) 시점에 AI 종가베팅 단독 실행
 - **수동 실행**: `python scripts/run_full_update.py`
 
 **B. 데이터 무결성(Integrity)**
@@ -1409,8 +1460,9 @@ grade_filters = {
 
 | 시간 (KST)     | 작업(Job)                      | 세부 내용                                                                     |
 | -------------- | ------------------------------ | ----------------------------------------------------------------------------- |
-| **장중 N분마다** | `run_market_gate_sync()`       | 1. Market Gate 동기화<br>2. 시장 상태 업데이트                              |
-| **매일 16:00(기본)** | `run_daily_closing_analysis()` | 1. 장 마감 데이터 수집<br>2. VCP 신호 생성<br>3. 종가베팅 체인 실행<br>4. 알림 발송 |
+| **장중 N분마다** | `run_market_gate_sync()`       | 1. Market Gate 동기화<br>2. 시장 상태 업데이트 (기본 5분)                  |
+| **매일 15:20(기본)** | `run_jongga_v2_analysis()` | AI 종가베팅 V2 단독 실행 (`JONGGA_SCHEDULE_TIME`)                          |
+| **매일 17:00(기본)** | `run_daily_closing_analysis()` | 1. 장 마감 데이터 수집<br>2. VCP 신호 생성<br>3. 종가베팅 체인 실행<br>4. 알림 발송 (`CLOSING_SCHEDULE_TIME`) |
 
 #### 6.1 스케줄러 아키텍처
 
@@ -1420,7 +1472,7 @@ grade_filters = {
 graph TD
     A[Application Start] --> B[Background Scheduler Thread]
     B --> C[Every N Minutes<br>Market Gate Sync]
-    B --> D[Daily 16:00<br>Daily Closing Analysis]
+    B --> D[Daily 17:00 KST 기본<br>Daily Closing Analysis]
     D --> E[Daily Prices + Supply]
     D --> F[VCP Analysis]
     D --> G[Chain: Jongga V2 Analysis]
@@ -1516,7 +1568,7 @@ python services/scheduler.py test
    - 시장 지표가 악화되면 개별 종목 추천 중단
 
 3. 리스크 관리
-   - 손절가(-3%)를 생명처럼 지킴
+   - 손절가(-5%)를 생명처럼 지킴 (chatbot/prompts.py SYSTEM_PERSONA 기준)
    - 전저점 이탈 시 즉시 손절
 ```
 
@@ -1573,7 +1625,6 @@ python services/scheduler.py test
 
 ![Email 알림](assets/30.png)
 *Email 알림*
-     다만 환율이 1450원 이상으로 상승 시 수출주 악재 가능성 있어 주의가 필요합니다."
 
 #### 9.2 환경 설정 (.env)
 
@@ -1706,24 +1757,36 @@ class NotificationService:
 
 ---
 
-### 10. Chatbot ULW (AI 투자 어드바이저)
+### 10. Smart Money Bot (AI 투자 어드바이저)
 
-**ULW (Ultra-Lightweight Chatbot)** 은 실시간으로 시장 상황을 질문하고, 종목 분석을 요청할 수 있는 인터랙티브 챗봇입니다.
+실시간으로 시장 상황을 질문하고, 종목 분석을 요청할 수 있는 인터랙티브 챗봇입니다. 백엔드는 `chatbot/` 패키지가 담당합니다.
+
+```text
+chatbot/
+├── core.py + core_*_mixin.py            # 챗봇 본체 (command/data_access/data_context/intent_context/payload mixin)
+├── chat_execution.py / chat_handlers.py # 요청 실행 & 응답 처리
+├── command_service.py                   # 슬래시 명령 처리 (/add, /mylist 등)
+├── data_service.py / payload_service.py # 시장 데이터 + payload 빌드 (RAG 컨텍스트)
+├── intent_context.py / intent_detail_service.py  # Intent 분류/상세
+├── daily_suggestions_service.py         # 매일 변하는 추천 질문 동적 생성
+├── prompts.py                           # SYSTEM_PERSONA + 동적 system prompt builder
+├── response_flow.py / response_flow_errors.py    # 응답 흐름 + 오류 분기
+└── markdown_utils.py                    # 마크다운 렌더 보조
+```
 
 #### 10.1 챗봇 아키텍처
 
 ```mermaid
 graph TD
-    A[User Input] --> B[Chatbot Core]
-    B --> C{Query Type?}
-    C -->|Market| D[System Prompt + Market Data]
-    C -->|Stock Analysis| E[Stock Data + News]
-    D --> F[Gemini]
-    E --> F
-    F --> G[LLM Response]
-    G --> H[Context Management]
-    H --> I[Output to User]
-    H --> J[Memory Storage]
+    A[User Input] --> B[chatbot.core.Chatbot]
+    B --> C{Intent 분류}
+    C -->|Market| D[payload_service: Market Gate + 지수/환율]
+    C -->|Stock Analysis| E[data_service: 종목/수급/뉴스]
+    C -->|Recommendation/VCP/Closing| F[RAG 컨텍스트 조립]
+    D & E & F --> G[Vertex AI Gemini]
+    G --> H[response_flow: 추론/답변/추천 질문]
+    H --> I[Streaming to User]
+    H --> J[대화 이력/관심종목 저장]
 ```
 
 #### 10.2 페르소나: 스마트머니봇 (Black Knight)
@@ -1855,7 +1918,7 @@ Bot: """
 [투자 전략]
 • 매수가: 75,000원
 • 목표가: 78,750원 (+5%)
-• 손절가: 72,750원 (-3%)
+• 손절가: 71,250원 (-5%)
 • 진입 시기: 오늘 종가 매수 추천
 """
 ```
@@ -1943,7 +2006,7 @@ Response 200 OK:
 
     [투자 제안]
     환율 1400원 초과 리스크로 분할 매수를 권장합니다.
-    각 종목 -3% 손절가 준수가 필수적입니다.
+    각 종목 -5% 손절가 준수가 필수적입니다.
     """
 }
 ```
@@ -1981,8 +2044,8 @@ Response 200 OK:
 
 ### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
 - **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
-- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (기본 30분, **1분~60분 단위 설정 가능**)
-- **장 마감 순차 분석 (16:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution)
+- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (`MARKET_GATE_UPDATE_INTERVAL_MINUTES` 기본 5분, **1분~60분 단위 설정 가능**)
+- **장 마감 순차 분석 (`CLOSING_SCHEDULE_TIME`, 기본 17:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution). `JONGGA_SCHEDULE_TIME`(기본 15:20)에는 AI 종가베팅 단독 실행
 - **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
 
 ![데이터 상태](assets/25.png)

@@ -130,3 +130,77 @@ def test_cap_ai_target_signals_uses_runtime_limit_when_limit_not_provided(monkey
 
     assert len(capped) == 2
     assert capped["ticker"].tolist() == ["000004", "000003"]
+
+
+# ---------------------------------------------------------------------------
+# ai_provider 컬럼 + 멀티 provider fallback (회귀 잠금)
+# ---------------------------------------------------------------------------
+
+
+class TestApplyAiResultsProvider:
+    def _df(self, tickers):
+        return pd.DataFrame([{"ticker": t, "name": t} for t in tickers])
+
+    def test_ai_provider_column_set_when_gemini_succeeds(self):
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": {"action": "BUY", "confidence": 80, "reason": "ok"}
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_provider"] == "gemini"
+        assert merged.iloc[0]["ai_action"] == "BUY"
+
+    def test_falls_back_to_gpt_when_gemini_missing(self):
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": None,
+                "gpt_recommendation": {"action": "HOLD", "confidence": 60, "reason": "gpt"},
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_provider"] == "gpt"
+        assert merged.iloc[0]["ai_action"] == "HOLD"
+        assert merged.iloc[0]["ai_reason"] == "gpt"
+
+    def test_falls_back_to_perplexity_when_gemini_and_gpt_missing(self):
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": None,
+                "gpt_recommendation": None,
+                "perplexity_recommendation": {"action": "BUY", "confidence": 70, "reason": "ppl"},
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_provider"] == "perplexity"
+        assert merged.iloc[0]["ai_action"] == "BUY"
+
+    def test_all_providers_missing_marks_failed(self):
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": None,
+                "gpt_recommendation": None,
+                "perplexity_recommendation": None,
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_provider"] == "N/A"
+        assert merged.iloc[0]["ai_action"] == "N/A"
+        assert merged.iloc[0]["ai_reason"] == "분석 실패"
+
+    def test_missing_ticker_in_results_marks_failed(self):
+        merged = apply_ai_results(self._df(["000001"]), {})
+        assert merged.iloc[0]["ai_provider"] == "N/A"
+        assert merged.iloc[0]["ai_action"] == "N/A"
+
+    def test_gemini_priority_over_others_when_all_present(self):
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": {"action": "BUY", "confidence": 80, "reason": "g"},
+                "gpt_recommendation": {"action": "SELL", "confidence": 50, "reason": "x"},
+                "perplexity_recommendation": {"action": "HOLD", "confidence": 30, "reason": "p"},
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_provider"] == "gemini"
+        assert merged.iloc[0]["ai_action"] == "BUY"
