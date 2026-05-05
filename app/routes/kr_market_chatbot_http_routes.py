@@ -128,7 +128,7 @@ def _register_chatbot_stream_route(
             from engine.config import app_config
 
             context = resolve_chatbot_usage_context(
-                user_api_key_header=request.headers.get("X-Gemini-Key"),
+                user_api_key_header=None,  # Vertex 전환 후 사용자별 API 키 미지원
                 user_email_header=request.headers.get("X-User-Email"),
                 session_id_header=request.headers.get("X-Session-Id"),
             )
@@ -150,7 +150,10 @@ def _register_chatbot_stream_route(
                     usage_key=usage_key,
                     max_free_usage=max_free_usage,
                     get_user_usage_fn=get_user_usage_fn,
-                    server_key_available=bool(app_config.GOOGLE_API_KEY or app_config.ZAI_API_KEY),
+                    server_key_available=bool(
+                        (app_config.GOOGLE_GENAI_USE_VERTEXAI and app_config.GOOGLE_CLOUD_PROJECT)
+                        or app_config.ZAI_API_KEY
+                    ),
                 )
                 if quota_error:
                     status_code, payload = quota_error
