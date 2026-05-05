@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate, AIRecommendation } from '@/lib/api';
 import StockChart from './StockChart';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
 import Modal from '@/app/components/Modal';
-import VCPCriteriaModal from '@/app/components/VCPCriteriaModal'; // [NEW] Import
+import VCPCriteriaModal from '@/app/components/VCPCriteriaModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAdmin } from '@/hooks/useAdmin';
 import ThinkingProcess from '@/app/components/ThinkingProcess';
+import { decideSecondaryAI } from './aiHelpers';
 
-// Simple Tooltip Component
 // Simple Tooltip Component
 const SimpleTooltip = ({
   text,
@@ -227,7 +227,7 @@ export default function VCPSignalsPage() {
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buyingStock, setBuyingStock] = useState<{ ticker: string; name: string; price: number } | null>(null);
   const [isBulkBuyingVCP, setIsBulkBuyingVCP] = useState(false);
-  const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false); // [NEW] State
+  const [isVCPCriteriaModalOpen, setIsVCPCriteriaModalOpen] = useState(false);
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -299,7 +299,6 @@ export default function VCPSignalsPage() {
           const sessionId = localStorage.getItem(sessionKey);
           if (sessionId) {
             await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&index=${msgIndex}`, { method: 'DELETE' });
-            console.log("Deleted message at index", msgIndex);
           }
         } catch (e) {
           console.error("Failed to sync partial deletion with DB", e);
@@ -411,12 +410,16 @@ export default function VCPSignalsPage() {
   // AI 탭 상태 (GPT vs Gemini vs Perplexity)
   const [activeAiTab, setActiveAiTab] = useState<'gpt' | 'gemini' | 'perplexity'>('gemini');
 
-  // Determine Primary AI (GPT or Perplexity) based on data availability
-  // If GPT data exists and NO Perplexity data exists, use GPT (Legacy support)
-  // Otherwise default to Perplexity (assuming current config)
-  const hasPerplexity = signals.some(s => s.perplexity_recommendation) || aiData?.signals?.some(s => s.perplexity_recommendation);
-  const hasGpt = signals.some(s => s.gpt_recommendation) || aiData?.signals?.some(s => s.gpt_recommendation);
-  const primaryAI = (hasGpt && !hasPerplexity) ? 'gpt' : 'perplexity';
+  // Determine secondary AI (GPT or Perplexity) based on actual data availability.
+  // Priority: Perplexity (when data exists) → GPT (when Perplexity is absent but GPT exists)
+  //           → 'gpt' safe default (neither has data; column renders no badge instead of empty Perplexity column)
+  const secondaryAI = useMemo(() => {
+    const hasPerplexity = signals.some(s => s.perplexity_recommendation)
+      || aiData?.signals?.some(s => s.perplexity_recommendation);
+    const hasGpt = signals.some(s => s.gpt_recommendation)
+      || aiData?.signals?.some(s => s.gpt_recommendation);
+    return decideSecondaryAI(!!hasPerplexity, !!hasGpt);
+  }, [signals, aiData]);
 
   // 선택된 종목 변경 시 AI 탭 자동 조정
   useEffect(() => {
@@ -1316,7 +1319,7 @@ export default function VCPSignalsPage() {
             </span>
           </SimpleTooltip>
 
-          {/* [NEW] VCP 기준표 버튼 (Moved here) */}
+          {/* VCP 기준표 버튼 */}
           <button
             onClick={() => setIsVCPCriteriaModalOpen(true)}
             className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10"
@@ -1421,8 +1424,7 @@ export default function VCPSignalsPage() {
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
                   <SimpleTooltip text="Second AI 기반 매매 의견">
-                    {/* Priority check for Perplexity if available in any signal, or default to Perplexity */}
-                    {primaryAI === 'perplexity' ? 'Perplexity' : 'GPT'}
+                    {secondaryAI === 'perplexity' ? 'Perplexity' : 'GPT'}
                   </SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
@@ -1526,7 +1528,7 @@ export default function VCPSignalsPage() {
                     </td>
 
                     <td className="px-4 py-3 text-center">
-                      {primaryAI === 'perplexity'
+                      {secondaryAI === 'perplexity'
                         ? getAIBadge(signal, 'perplexity')
                         : getAIBadge(signal, 'gpt')}
                     </td>

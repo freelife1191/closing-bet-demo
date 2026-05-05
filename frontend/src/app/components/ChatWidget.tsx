@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from "next-auth/react";
 import ThinkingProcess from './ThinkingProcess';
+import { getStoredModel, shouldSendOnEnter } from './chatHelpers';
 
 interface Message {
   role: 'user' | 'model';
@@ -175,7 +176,7 @@ export default function ChatWidget() {
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const { data: session } = useSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null); // [Fix] IME 조합 초기화용
+  const isComposingRef = useRef(false);
   const pathname = usePathname();
 
   const SLASH_COMMANDS = [
@@ -223,11 +224,6 @@ export default function ChatWidget() {
     };
     setMessages(prev => [...prev, userMsg]);
 
-    // [Fix] 한글 IME 조합 강제 종료 후 입력창 초기화
-    if (textareaRef.current) {
-      textareaRef.current.blur();  // IME 조합 종료
-      textareaRef.current.value = ''; // 직접 값 초기화
-    }
     setInput('');
     setIsLoading(true);
 
@@ -245,6 +241,10 @@ export default function ChatWidget() {
         localStorage.setItem('browser_session_id', sessionId);
       }
 
+      const storedModel = getStoredModel();
+      const requestBody: Record<string, unknown> = { message: messageToSend, watchlist };
+      if (storedModel) requestBody.model = storedModel;
+
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
         headers: {
@@ -252,7 +252,7 @@ export default function ChatWidget() {
           'X-User-Email': userEmail || '',
           'X-Session-Id': sessionId
         },
-        body: JSON.stringify({ message: messageToSend, watchlist }),
+        body: JSON.stringify(requestBody),
       });
       const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
@@ -385,7 +385,6 @@ export default function ChatWidget() {
 
         if (data.response) {
           setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
-          // [Fix] 성공 응답 후 Sidebar quota 실시간 업데이트
           if (!data.response.startsWith('⚠️')) {
             window.dispatchEvent(new CustomEvent('quota-updated'));
           }
@@ -440,7 +439,9 @@ export default function ChatWidget() {
     handleSend(cmd);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const isComposing = e.nativeEvent.isComposing || isComposingRef.current;
+
     if (input.startsWith('/') && filteredCommands.length > 0) {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -448,14 +449,14 @@ export default function ChatWidget() {
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedCommandIndex(prev => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
-      } else if (e.key === 'Enter') {
+      } else if (shouldSendOnEnter(e.key, e.shiftKey, isComposing)) {
         e.preventDefault();
         const selectedCmd = filteredCommands[selectedCommandIndex];
         if (selectedCmd) {
           handleSend(selectedCmd.cmd);
         }
       }
-    } else if (e.key === 'Enter' && !e.shiftKey) {
+    } else if (shouldSendOnEnter(e.key, e.shiftKey, isComposing)) {
       e.preventDefault();
       handleSend();
     }
@@ -664,6 +665,8 @@ export default function ChatWidget() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onCompositionStart={() => { isComposingRef.current = true; }}
+                onCompositionEnd={() => { isComposingRef.current = false; }}
                 placeholder={isLoading ? "답변을 기다리고 있습니다..." : "메시지를 입력하세요... (슬래시 커맨드 '/' 사용 가능)"}
                 disabled={isLoading}
                 className="w-full bg-[#18181b] text-white text-sm rounded-xl pl-4 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 border border-white/5 placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"

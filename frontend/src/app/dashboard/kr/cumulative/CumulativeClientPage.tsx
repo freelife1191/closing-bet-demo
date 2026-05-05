@@ -1123,20 +1123,20 @@ export default function CumulativeClientPage() {
             <div className="flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">결과:</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
-                <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => setOutcomeFilter('All')} />
-                <FilterButton label="성공" count={kpi.wins} active={outcomeFilter === 'WIN'} onClick={() => setOutcomeFilter('WIN')} />
-                <FilterButton label="실패" count={kpi.losses} active={outcomeFilter === 'LOSS'} onClick={() => setOutcomeFilter('LOSS')} />
-                <FilterButton label="보유" count={kpi.open} active={outcomeFilter === 'OPEN'} onClick={() => setOutcomeFilter('OPEN')} />
+                <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => { setOutcomeFilter('All'); setCurrentPage(1); }} />
+                <FilterButton label="성공" count={kpi.wins} active={outcomeFilter === 'WIN'} onClick={() => { setOutcomeFilter('WIN'); setCurrentPage(1); }} />
+                <FilterButton label="실패" count={kpi.losses} active={outcomeFilter === 'LOSS'} onClick={() => { setOutcomeFilter('LOSS'); setCurrentPage(1); }} />
+                <FilterButton label="보유" count={kpi.open} active={outcomeFilter === 'OPEN'} onClick={() => { setOutcomeFilter('OPEN'); setCurrentPage(1); }} />
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">등급:</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
-                <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => setGradeFilter('All')} />
-                <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
-                <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
-                <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
+                <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => { setGradeFilter('All'); setCurrentPage(1); }} />
+                <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => { setGradeFilter('S'); setCurrentPage(1); }} />
+                <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => { setGradeFilter('A'); setCurrentPage(1); }} />
+                <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => { setGradeFilter('B'); setCurrentPage(1); }} />
               </div>
             </div>
           </div>

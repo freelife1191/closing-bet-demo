@@ -63,8 +63,39 @@ export default function ClosingBetCriteriaModal({ isOpen, onClose }: ClosingBetC
           </div>
         </div>
 
+        <div className="border border-white/10 rounded-xl overflow-hidden">
+          <div className="bg-white/5 px-4 py-2 border-b border-white/10 flex justify-between items-center">
+            <h4 className="font-bold text-white">등급 분류 (S/A/B)</h4>
+            <span className="text-xs font-bold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">최종 산정</span>
+          </div>
+          <div className="p-4 space-y-2 text-sm text-gray-400">
+            <ul className="list-disc list-inside space-y-1 text-gray-300">
+              <li><span className="text-purple-400 font-bold">S급</span>: 거래대금 <strong>1조↑</strong> + 점수 <strong>10점↑</strong> + 외인·기관 동반 순매수</li>
+              <li><span className="text-rose-400 font-bold">A급</span>: 거래대금 <strong>5천억↑</strong> + 점수 <strong>8점↑</strong> + 외인·기관 동반 순매수</li>
+              <li><span className="text-blue-400 font-bold">B급</span>: 거래대금 <strong>1천억↑</strong> + 점수 <strong>6점↑</strong> + 외인·기관 동반 순매수</li>
+            </ul>
+            <p className="text-[11px] text-gray-500 mt-2">
+              * 모든 등급은 <span className="text-amber-300">등락률 하한(MIN_CHANGE_PCT)</span>도 함께 충족해야 부여됩니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="border border-white/10 rounded-xl overflow-hidden">
+          <div className="bg-white/5 px-4 py-2 border-b border-white/10 flex justify-between items-center">
+            <h4 className="font-bold text-white">매매 원칙 (Exit Strategy)</h4>
+            <span className="text-xs font-bold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">고정값</span>
+          </div>
+          <div className="p-4 space-y-1 text-sm text-gray-300">
+            <div className="flex justify-between"><span><span className="text-emerald-400 font-bold">익절</span> 목표</span><span className="font-mono text-emerald-400">+9%</span></div>
+            <div className="flex justify-between"><span><span className="text-rose-400 font-bold">손절</span> 기준</span><span className="font-mono text-rose-400">-5%</span></div>
+            <p className="text-[11px] text-gray-500 mt-2">
+              * 누적 성과 백테스트(<code className="text-gray-400">backtest_trade_helpers</code>)는 익절(+9%)·손절(-5%) 도달 시 청산하며, 미도달 시 OPEN 상태로 추적합니다.
+            </p>
+          </div>
+        </div>
+
         <div className="text-xs text-gray-500 text-center pt-2">
-          * <strong>8점 이상</strong>이 강력 매수 신호이며, 등급 산정(S/A/B/C/D)은 점수 + 추가 조건(거래대금/등락률 등)을 종합하여 결정됩니다.
+          * 점수 <strong>8점 이상</strong>부터 의미 있는 매수 신호로 간주하며, 최종 등급(S/A/B)은 점수 + 거래대금 + 등락률 + 수급 동반 매수 조건을 모두 만족해야 부여됩니다.
         </div>
       </div>
     </Modal>

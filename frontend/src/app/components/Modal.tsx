@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface ModalProps {
 
 export default function Modal({ isOpen, onClose, title, children, footer, type = 'default', wide = false, maxWidth }: ModalProps & { maxWidth?: string }) {
   const [show, setShow] = useState(isOpen);
+  const titleId = useId();
 
   useEffect(() => {
     if (isOpen) {
@@ -24,6 +25,15 @@ export default function Modal({ isOpen, onClose, title, children, footer, type =
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!show && !isOpen) return null;
 
   return (
@@ -32,10 +42,15 @@ export default function Modal({ isOpen, onClose, title, children, footer, type =
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal Content */}
-      <div className={`relative bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl w-full ${maxWidth ? maxWidth : (wide ? 'max-w-4xl' : 'max-w-md')} overflow-hidden flex flex-col max-h-[90vh] transform transition-all duration-200 ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={`relative bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl w-full ${maxWidth ? maxWidth : (wide ? 'max-w-4xl' : 'max-w-md')} overflow-hidden flex flex-col max-h-[90vh] transform transition-all duration-200 ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/5">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <h3 id={titleId} className="text-lg font-bold text-white flex items-center gap-2">
             {type === 'success' && <i className="fas fa-check-circle text-emerald-500"></i>}
             {type === 'danger' && <i className="fas fa-exclamation-circle text-red-500"></i>}
             {title}

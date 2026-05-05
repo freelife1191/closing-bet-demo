@@ -41,14 +41,11 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
   const isInvalid = numericQty <= 0 || numericQty > maxQty;
 
   const handleSubmit = async () => {
-    console.log('[SellStockModal] Submit Clicked. Qty:', numericQty, 'Max:', maxQty, 'Invalid:', isInvalid);
     if (isSubmitting || isInvalid) return;
 
     setIsSubmitting(true);
     try {
-      console.log('[SellStockModal] Calling onSell...');
       const success = await onSell(stock.ticker, stock.name, price, numericQty);
-      console.log('[SellStockModal] onSell result:', success);
       if (success) onClose();
     } catch (e: any) {
       console.error('[SellStockModal] Error:', e);

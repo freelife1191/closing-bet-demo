@@ -942,15 +942,13 @@ export default function JonggaV2Page() {
     setAnalyzingGemini(true);
     setRetryingTicker(stockCode);
     try {
-      console.log(`Retry Analysis for ${stockCode}...`);
       await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_tickers: [stockCode] }),
         timeout: 120000 // 120s timeout for LLM
       });
-      console.log('개별 분석 완료!');
-      window.location.reload();
+      setRefreshKey(prev => prev + 1);
     } catch (error: any) {
       console.error('개별 분석 실패', error);
       setAlertModal({
@@ -1131,15 +1129,10 @@ export default function JonggaV2Page() {
       url = `/api/kr/jongga-v2/history/${selectedDate}`;
     }
 
-    console.log(`Fetching Closing Bet data: ${url}`);
-
     fetchAPI(url)
       .then((data: any) => {
-        console.log("Closing Bet data loaded successfully");
-
         // [Auto-Recovery] If initializing, retry in 5s
         if (selectedDate === 'latest' && (data?.status === 'initializing' || data?.message?.includes('분석 중'))) {
-          console.log("[Auto-Recovery] Initializing... Retrying in 5s");
           if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
           retryTimerRef.current = setTimeout(() => {
             setRefreshKey(prev => prev + 1);
@@ -1163,7 +1156,6 @@ export default function JonggaV2Page() {
         }
 
         // [Auto-Recovery] Retry on other errors (e.g. timeout, 500)
-        console.log("[Auto-Recovery] Fetch failed. Retrying in 5s...");
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
         retryTimerRef.current = setTimeout(() => {
           setRefreshKey(prev => prev + 1);
@@ -1225,6 +1217,7 @@ export default function JonggaV2Page() {
             updatedAt={data?.updated_at || null}
             analyzingGemini={analyzingGemini}
             setAnalyzingGemini={setAnalyzingGemini}
+            onRefresh={() => setRefreshKey(prev => prev + 1)}
           />
         </div>
 
@@ -1599,10 +1592,11 @@ export default function JonggaV2Page() {
   );
 }
 
-function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
+function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini, onRefresh }: {
   updatedAt: string | null,
   analyzingGemini: boolean,
-  setAnalyzingGemini: (v: boolean) => void
+  setAnalyzingGemini: (v: boolean) => void,
+  onRefresh: () => void,
 }) {
   const [updating, setUpdating] = useState(false);
   const [runningMessage, setRunningMessage] = useState('');
@@ -1647,8 +1641,7 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
               clearInterval(interval);
               setUpdating(false);
               setRunningMessage('');
-              // 데이터 리프레시 (리로드 대신 fetch)
-              window.location.reload();
+              onRefresh();
             }
           }
         }
@@ -1700,12 +1693,10 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
       // fetchAPI signature: async function fetchAPI<T = any>(url: string, options: RequestInit = {}): Promise<T>
       // It returns data directly and throws error with status attached if possible.
 
-      console.log('Engine started in background');
       pollStatus();
 
     } catch (error: any) {
       if (error.status === 409) {
-        console.log('Engine is already running.');
         pollStatus();
       } else {
         console.error('업데이트 요청 중 오류 발생', error);
@@ -1726,15 +1717,12 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini }: {
 
     setAnalyzingGemini(true);
     try {
-      console.log('Gemini Analysis Request Triggered...');
-      // Use fetchAPI
-      const data: any = await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
+      await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         timeout: 240000 // 4분 (Global은 오래 걸림)
       });
-      console.log(data.message || 'Gemini 분석 완료!');
-      window.location.reload();
+      onRefresh();
     } catch (error: any) {
       console.error('Gemini 분석 요청 중 오류 발생', error);
       setAlertModal({

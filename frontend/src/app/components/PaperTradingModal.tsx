@@ -8,6 +8,8 @@ import BuyStockModal from './BuyStockModal';
 import SellStockModal from './SellStockModal';
 import ConfirmationModal from './ConfirmationModal';
 
+const MAX_DEPOSIT_PER_TX = 1_000_000_000_000; // 1조원
+
 interface PaperTradingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -181,6 +183,20 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
       fetchHistory();
     }
   }, [isOpen, activeTab, refreshKey]);
+
+  // ESC key closes the modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   // 차트 렌더링 (Dynamic Import 적용 + 데이터 포맷팅 강화)
   useEffect(() => {
@@ -459,8 +475,6 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
         try {
           chartInstance.remove();
         } catch (e) { /* ignore */ }
-        // 툴팁 제거 로직은 chart.remove()시 DOM은 알아서 정리되나? 
-        // chartContainerRef.current 내부를 비우는게 확실함.
         if (chartContainerRef.current) {
           chartContainerRef.current.innerHTML = '';
         }
@@ -474,6 +488,10 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   const handleDeposit = async () => {
     const amt = parseInt(depositAmount.replace(/,/g, ''), 10);
     if (!amt || amt <= 0) return;
+    if (amt > MAX_DEPOSIT_PER_TX) {
+      alert('1회 최대 입금 한도(1조원)를 초과했습니다.');
+      return;
+    }
     try {
       await paperTradingAPI.deposit(amt);
       alert(`${amt.toLocaleString()}원이 충전되었습니다.`);
@@ -548,7 +566,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
     <>
       <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" role="dialog" aria-modal="true" aria-labelledby="paper-trading-modal-title">
 
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between p-4 md:p-5 border-b border-white/10 bg-[#252529] gap-4 md:gap-0 flex-shrink-0">
@@ -557,7 +575,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                 <i className="fas fa-chart-line text-white text-lg md:text-xl"></i>
               </div>
               <div>
-                <h2 className="text-lg md:text-xl font-bold text-white whitespace-nowrap">모의투자 포트폴리오</h2>
+                <h2 id="paper-trading-modal-title" className="text-lg md:text-xl font-bold text-white whitespace-nowrap">모의투자 포트폴리오</h2>
                 <div className="text-xs text-slate-400 font-medium">Paper Trading Account</div>
               </div>
               <button onClick={onClose} className="ml-auto md:hidden w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white">
@@ -692,7 +710,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                         </div>
                         <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${(portfolio.total_profit_rate || 0) >= 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-blue-500/10 text-blue-400'}`}>
                           <i className={`fas fa-caret-${(portfolio.total_profit_rate || 0) >= 0 ? 'up' : 'down'}`}></i>
-                          {(portfolio.total_profit_rate || 0)}%
+                          {(portfolio.total_profit_rate || 0) > 0 ? '+' : ''}{(portfolio.total_profit_rate || 0).toFixed(2)}%
                         </div>
                       </div>
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { krAPI, KRMarketGate, KRSignalsResponse, DataStatus, fetchAPI } from '@/lib/api';
+import { MAX_AUTO_RETRIES, shouldScheduleAutoRetry } from './retryHelpers';
 import Modal from '@/app/components/Modal';
 
 import Tooltip from '@/app/components/Tooltip';
@@ -62,7 +63,7 @@ function StrategyGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () 
               <p className="text-xs text-gray-400 leading-relaxed">
                 모든 매매(익절+손절)의 손익률 평균입니다.
                 <br />
-                <span className="text-gray-500 mt-1 block">손절(-3%~-5%)이 포함되므로 낮게 보일 수 있습니다.</span>
+                <span className="text-gray-500 mt-1 block">손절(-5%)이 포함되므로 낮게 보일 수 있습니다.</span>
               </p>
             </div>
 
@@ -177,6 +178,13 @@ export default function KRMarketOverview() {
   const [updateInterval, setUpdateInterval] = useState(30); // Default 30min
   const [isStrategyGuideOpen, setIsStrategyGuideOpen] = useState(false);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const [autoRetryExhausted, setAutoRetryExhausted] = useState(false);
+
+  const resetAutoRetry = useCallback(() => {
+    retryCountRef.current = 0;
+    setAutoRetryExhausted(prev => (prev ? false : prev));
+  }, []);
 
   // 설정값 로드
   useEffect(() => {
@@ -197,7 +205,6 @@ export default function KRMarketOverview() {
         body: JSON.stringify({ interval: minutes })
       });
       if (!res.ok) throw new Error('Failed to update interval');
-      console.log(`Update interval changed to ${minutes} min`);
     } catch (error) {
       console.error('Error changing interval:', error);
       // 실패 시 롤백 로직이 필요할 수 있음
@@ -213,7 +220,6 @@ export default function KRMarketOverview() {
     const intervalId = setInterval(() => {
       // Only refresh if looking at today's data ("Realtime" mode)
       if (useTodayMode) {
-        console.log(`[Auto-Refresh] Fetching data... (Interval: ${updateInterval}m)`);
         loadData();
       }
     }, intervalMs);
@@ -239,6 +245,12 @@ export default function KRMarketOverview() {
 
   useEffect(() => {
     loadData();
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
   }, [useTodayMode, targetDate]); // 의존성 추가 (날짜 변경 시 자동 로드)
 
   const loadData = async () => {
@@ -310,9 +322,17 @@ export default function KRMarketOverview() {
           (gateResult.status === 'fulfilled' && (gateResult.value?.status === 'initializing' || gateResult.value?.message?.includes('대기')));
 
         if (isInitializing) {
-          console.log('[Auto-Recovery] Data not ready. Retrying in 5s...');
-          if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-          retryTimerRef.current = setTimeout(loadData, 5000);
+          retryCountRef.current += 1;
+          if (shouldScheduleAutoRetry(retryCountRef.current, MAX_AUTO_RETRIES, isInitializing)) {
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = setTimeout(loadData, 5000);
+          } else {
+            console.error(`[Auto-Recovery] Retry limit (${MAX_AUTO_RETRIES}) exceeded after ~${MAX_AUTO_RETRIES * 5}s. Stopping auto-retry.`);
+            setAutoRetryExhausted(true);
+          }
+        } else {
+          // Gate data is ready — reset the retry counter
+          resetAutoRetry();
         }
       }
 
@@ -327,6 +347,8 @@ export default function KRMarketOverview() {
 
   const refreshMarketGate = async () => {
     if (mgLoading) return;
+    // Reset retry state so a user-initiated refresh starts fresh
+    resetAutoRetry();
     setMgLoading(true);
     try {
       const dateParam = useTodayMode ? undefined : (targetDate || getLastBusinessDay());
@@ -342,6 +364,8 @@ export default function KRMarketOverview() {
   };
 
   const refreshData = async () => {
+    // Reset retry state so a user-initiated refresh starts fresh
+    resetAutoRetry();
     setLoading(true);
     try {
       const dateParam = useTodayMode ? undefined : (targetDate || getLastBusinessDay());
@@ -435,8 +459,8 @@ export default function KRMarketOverview() {
   const getStrategyTooltip = (rate: number, avgReturn: number, count: number, strategyName: string) => {
     const isVCP = strategyName.includes("VCP");
     const criteriaText = isVCP
-      ? "돌파 매매 진입 후 익절(+15%) 성공 비율"
-      : "종가 매수 후 보유 시 익절(+15%) 성공 비율";
+      ? "돌파 매매 진입 후 익절(+9%) 성공 비율"
+      : "종가 매수 후 보유 시 익절(+9%) 성공 비율";
 
     return (
       <div className="space-y-3">
@@ -463,7 +487,7 @@ export default function KRMarketOverview() {
         <div className="space-y-2 text-[11px] text-gray-300">
           <div className="flex gap-2">
             <span className="text-gray-500 min-w-[30px]">기준:</span>
-            <span>익절 +15%, 손절 -5% 기준 백테스팅 결과입니다.</span>
+            <span>익절 +9%, 손절 -5% 기준 백테스팅 결과입니다.</span>
           </div>
           <div className="flex gap-2">
             <span className="text-gray-500 min-w-[30px]">해석:</span>
@@ -569,6 +593,22 @@ export default function KRMarketOverview() {
 
   return (
     <div className="space-y-8">
+      {autoRetryExhausted && (
+        <div role="alert" aria-live="assertive" className="flex items-center justify-between gap-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+          <span>
+            자동 갱신이 50초 동안 실패했습니다. 새로고침을 시도하거나 잠시 후 다시 확인해주세요.
+          </span>
+          <button
+            onClick={() => {
+              resetAutoRetry();
+              loadData();
+            }}
+            className="shrink-0 rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/30"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-rose-500/20 bg-rose-500/5 text-xs text-rose-400 font-medium mb-4">
@@ -584,7 +624,7 @@ export default function KRMarketOverview() {
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3 bg-[#1c1c1e] p-1 rounded-lg border border-white/10">
             <button
-              onClick={() => { setUseTodayMode(true); setTargetDate(''); }} // 실시간 복귀 시 날짜 초기화
+              onClick={() => { resetAutoRetry(); setUseTodayMode(true); setTargetDate(''); }} // 실시간 복귀 시 날짜 초기화
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${useTodayMode
                 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -594,7 +634,7 @@ export default function KRMarketOverview() {
               실시간
             </button>
             <button
-              onClick={() => { setUseTodayMode(false); if (!targetDate) setTargetDate(getLastBusinessDay()); }}
+              onClick={() => { resetAutoRetry(); setUseTodayMode(false); if (!targetDate) setTargetDate(getLastBusinessDay()); }}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${!useTodayMode
                 ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
