@@ -703,7 +703,7 @@ export default function ChatWidget() {
         </button>
 
         {!isOpen && messages.length === 0 && showTooltip && (
-          <div className="absolute right-16 top-1/2 -translate-y-1/2 bg-white text-black px-4 py-2 rounded-xl shadow-lg whitespace-nowrap animate-fade-in origin-right z-50">
+          <div className="hidden md:block absolute right-16 top-1/2 -translate-y-1/2 bg-white text-black px-4 py-2 rounded-xl shadow-lg whitespace-nowrap animate-fade-in origin-right z-50">
             <button
               onClick={(e) => {
                 e.stopPropagation();
