@@ -9,7 +9,7 @@ from enum import Enum
 import os
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv()
 
 
 class Grade(Enum):
