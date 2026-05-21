@@ -87,6 +87,23 @@ def test_send_all_dispatches_channels_and_ignores_unknown(monkeypatch):
     ]
 
 
+def test_notification_service_strips_inline_comments_and_dedupes_channels(monkeypatch):
+    _set_notifier_env(monkeypatch)
+    monkeypatch.setenv(
+        "NOTIFICATION_CHANNELS",
+        "discord,telegram,email  # discord, telegram, slack, email",
+    )
+    monkeypatch.setenv(
+        "EMAIL_RECIPIENTS",
+        "USER@example.com,user@example.com,second@example.com # sample",
+    )
+
+    service = NotificationService()
+
+    assert service.channels == ["discord", "telegram", "email"]
+    assert service.email_recipients == ["user@example.com", "second@example.com"]
+
+
 def test_send_all_returns_empty_when_disabled_or_signal_empty(monkeypatch):
     _set_notifier_env(monkeypatch)
     monkeypatch.setenv("NOTIFICATION_ENABLED", "false")

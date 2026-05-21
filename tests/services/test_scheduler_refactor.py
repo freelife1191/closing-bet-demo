@@ -175,6 +175,24 @@ def test_run_scheduler_tick_survives_run_pending_error(monkeypatch):
     assert sleep_calls == [1.0]
 
 
+def test_test_scheduler_runs_closing_chain_once(monkeypatch):
+    calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        scheduler_module,
+        "run_jongga_v2_analysis",
+        lambda test_mode=False: calls.append(("jongga", test_mode)),
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "run_daily_closing_analysis",
+        lambda test_mode=False: calls.append(("closing", test_mode)),
+    )
+
+    scheduler_module.test_scheduler()
+
+    assert calls == [("closing", True)]
+
+
 def test_start_scheduler_skips_lock_when_disabled(monkeypatch):
     monkeypatch.setenv("SCHEDULER_ENABLED", "false")
     monkeypatch.setattr(scheduler_module, "schedule", object())

@@ -289,14 +289,8 @@ def start_scheduler() -> None:
 
 
 def test_scheduler() -> None:
-    """테스트 실행: 모든 잡을 즉시 1회 실행."""
+    """테스트 실행: 장 마감 전체 체인을 즉시 1회 실행."""
     logger.info("========== [TEST MODE] 스케줄러 잡 테스트 시작 ==========")
-
-    logger.info(">>> 테스트: run_jongga_v2_analysis()")
-    try:
-        run_jongga_v2_analysis(test_mode=True)
-    except Exception as e:
-        logger.error(f"FAILED: {e}")
 
     logger.info(">>> 테스트: run_daily_closing_analysis()")
     try:

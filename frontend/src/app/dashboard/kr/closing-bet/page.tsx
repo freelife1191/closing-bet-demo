@@ -149,6 +149,11 @@ interface ScreenerResult {
   filtered_count: number;
   signals: Signal[];
   updated_at: string;
+  status?: string;
+  is_stale?: boolean;
+  stale_warning?: string;
+  latest_available_date?: string;
+  message?: string;
 }
 
 interface StockDetailInfo {
@@ -1220,6 +1225,20 @@ export default function JonggaV2Page() {
             onRefresh={() => setRefreshKey(prev => prev + 1)}
           />
         </div>
+
+        {selectedDate === 'latest' && (data?.is_stale || data?.status === 'stale' || data?.stale_warning) && (
+          <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            <div className="flex items-start gap-3">
+              <i className="fas fa-triangle-exclamation mt-0.5 text-amber-300"></i>
+              <div>
+                <div className="font-semibold">오늘 종가베팅 데이터가 아직 없습니다.</div>
+                <div className="mt-1 text-amber-100/80">
+                  {data?.stale_warning || data?.message || `최신 저장 데이터는 ${data?.latest_available_date || data?.date}입니다.`}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 w-full">
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">

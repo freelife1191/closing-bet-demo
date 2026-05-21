@@ -711,6 +711,7 @@ def test_route_service_jongga_latest_updates_prices_and_writes_latest_file(tmp_p
         normalize_jongga_signals_for_frontend=_normalize,
         apply_latest_prices_to_jongga_signals=_apply_prices,
         logger=TEST_LOGGER,
+        now=datetime(2026, 2, 21, 18, 0, 0),
     )
 
     assert flags["price_updated"] is True

@@ -13,6 +13,7 @@ sys.path.insert(
 )
 
 from engine.messenger import Messenger
+from engine.messenger_config import MessengerConfig
 
 
 def _sample_payload() -> dict:
@@ -49,6 +50,22 @@ def test_compat_properties_map_to_config():
     assert messenger.telegram_token == messenger.config.telegram_token
     assert messenger.telegram_chat_id == messenger.config.telegram_chat_id
     assert messenger.smtp_user == messenger.config.smtp_user
+
+
+def test_messenger_config_strips_inline_comments_and_dedupes_channels(monkeypatch):
+    monkeypatch.setenv(
+        "NOTIFICATION_CHANNELS",
+        "discord,telegram,email  # discord, telegram, slack, email",
+    )
+    monkeypatch.setenv(
+        "EMAIL_RECIPIENTS",
+        "USER@example.com,user@example.com,second@example.com # sample",
+    )
+
+    config = MessengerConfig()
+
+    assert config.channels == ["discord", "telegram", "email"]
+    assert config.email_recipients == ["user@example.com", "second@example.com"]
 
 
 def test_compat_send_methods_convert_payload_and_dispatch_to_sender():

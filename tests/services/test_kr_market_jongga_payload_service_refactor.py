@@ -7,10 +7,12 @@ KR Market Jongga Payload Service 리팩토링 회귀 테스트
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 import pandas as pd
 
 from services.kr_market_jongga_payload_service import build_jongga_latest_payload
+import services.kr_market_jongga_payload_latest as latest_payload_module
 import services.kr_market_data_cache_core as cache_core
 
 
@@ -49,6 +51,7 @@ def test_build_jongga_latest_payload_prefers_preloaded_price_map(tmp_path):
         apply_latest_prices_to_jongga_signals=_apply_prices,
         load_latest_price_map=_load_latest_price_map,
         logger=logging.getLogger(__name__),
+        now=datetime(2026, 2, 21, 18, 0, 0),
     )
 
     assert called["load_csv"] == 0
@@ -83,9 +86,48 @@ def test_build_jongga_latest_payload_uses_latest_price_by_date_when_csv_unsorted
         normalize_jongga_signals_for_frontend=lambda _signals: None,
         apply_latest_prices_to_jongga_signals=_apply_prices,
         logger=logging.getLogger(__name__),
+        now=datetime(2026, 2, 21, 18, 0, 0),
     )
 
     assert result["signals"][0]["current_price"] == 120.0
+
+
+def test_build_jongga_latest_payload_hides_stale_latest_on_market_day(monkeypatch, tmp_path):
+    latest_payload = {
+        "date": "2026-03-03",
+        "signals": [{"ticker": "005930", "entry_price": 10000, "grade": "A"}],
+    }
+    price_calls = {"count": 0}
+    monkeypatch.setattr(
+        latest_payload_module.MarketSchedule,
+        "is_market_open",
+        lambda _date: True,
+    )
+
+    result = build_jongga_latest_payload(
+        data_dir=str(tmp_path),
+        load_json_file=lambda _name: dict(latest_payload),
+        load_csv_file=lambda _name: pd.DataFrame(),
+        get_data_path=lambda filename: str(tmp_path / filename),
+        recalculate_jongga_grades=lambda _payload: False,
+        sort_jongga_signals=lambda _signals: None,
+        normalize_jongga_signals_for_frontend=lambda _signals: None,
+        apply_latest_prices_to_jongga_signals=(
+            lambda _signals, _price_map: price_calls.__setitem__(
+                "count",
+                price_calls["count"] + 1,
+            )
+        ),
+        logger=logging.getLogger(__name__),
+        now=datetime(2026, 3, 4, 18, 0, 0),
+    )
+
+    assert result["status"] == "stale"
+    assert result["signals"] == []
+    assert result["is_stale"] is True
+    assert result["latest_available_date"] == "2026-03-03"
+    assert "2026-03-03" in result["stale_warning"]
+    assert price_calls["count"] == 0
 
 
 def test_build_jongga_latest_payload_uses_sqlite_snapshot_when_load_csv_file_is_none(tmp_path, monkeypatch):
@@ -115,6 +157,7 @@ def test_build_jongga_latest_payload_uses_sqlite_snapshot_when_load_csv_file_is_
         normalize_jongga_signals_for_frontend=lambda _signals: None,
         apply_latest_prices_to_jongga_signals=_apply_prices,
         logger=logging.getLogger(__name__),
+        now=datetime(2026, 2, 21, 18, 0, 0),
     )
     assert first["signals"][0]["current_price"] == 121.0
 
@@ -136,5 +179,6 @@ def test_build_jongga_latest_payload_uses_sqlite_snapshot_when_load_csv_file_is_
         normalize_jongga_signals_for_frontend=lambda _signals: None,
         apply_latest_prices_to_jongga_signals=_apply_prices,
         logger=logging.getLogger(__name__),
+        now=datetime(2026, 2, 21, 18, 0, 0),
     )
     assert second["signals"][0]["current_price"] == 121.0

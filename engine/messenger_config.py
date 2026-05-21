@@ -11,12 +11,26 @@ import os
 logger = logging.getLogger(__name__)
 
 
+def _split_env_list(value: str) -> list[str]:
+    """쉼표 구분 환경변수를 주석 제거 및 중복 제거하여 파싱한다."""
+    values: list[str] = []
+    seen: set[str] = set()
+    uncommented_value = value.split("#", 1)[0]
+    for raw_item in uncommented_value.split(","):
+        item = raw_item.strip().lower()
+        if not item or item in seen:
+            continue
+        values.append(item)
+        seen.add(item)
+    return values
+
+
 class MessengerConfig:
     """메신저 설정"""
 
     def __init__(self):
         channels_str = os.getenv("NOTIFICATION_CHANNELS", "discord")
-        self.channels = [c.strip().lower() for c in channels_str.split(",")]
+        self.channels = _split_env_list(channels_str)
 
         self.disabled = os.getenv("NOTIFICATION_ENABLED", "true").lower() != "true"
 
@@ -32,9 +46,7 @@ class MessengerConfig:
         self.smtp_port = self._safe_int(os.getenv("SMTP_PORT", "587"))
         self.smtp_user = os.getenv("SMTP_USER")
         self.smtp_password = os.getenv("SMTP_PASSWORD")
-        self.email_recipients = [
-            e.strip() for e in os.getenv("EMAIL_RECIPIENTS", "").split(",") if e.strip()
-        ]
+        self.email_recipients = _split_env_list(os.getenv("EMAIL_RECIPIENTS", ""))
 
         if not any([self.telegram_token, self.discord_url, self.smtp_user]):
             logger.warning(

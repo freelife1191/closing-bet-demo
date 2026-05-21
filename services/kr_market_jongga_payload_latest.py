@@ -7,10 +7,11 @@ KR Market Jongga Latest Payload Builder
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Callable
 
 import pandas as pd
+from engine.market_schedule import MarketSchedule
 
 from services.kr_market_csv_utils import (
     build_latest_close_map_from_prices_df,
@@ -25,6 +26,59 @@ from services.kr_market_jongga_payload_helpers import (
     has_non_empty_signals,
     write_json_to_path,
 )
+
+
+def _parse_payload_date(payload: dict[str, Any]) -> date | None:
+    """종가베팅 payload의 기준일을 date로 정규화한다."""
+    raw_date = payload.get("date")
+    if isinstance(raw_date, date):
+        return raw_date
+    if isinstance(raw_date, str) and raw_date.strip():
+        try:
+            return datetime.strptime(raw_date.strip()[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    signals = payload.get("signals")
+    if isinstance(signals, list) and signals:
+        signal_date = signals[0].get("signal_date") if isinstance(signals[0], dict) else None
+        if isinstance(signal_date, str) and signal_date.strip():
+            try:
+                return datetime.strptime(signal_date.strip()[:10], "%Y-%m-%d").date()
+            except ValueError:
+                return None
+    return None
+
+
+def _is_latest_payload_stale(payload: dict[str, Any], current_time: datetime) -> bool:
+    """오늘 개장일인데 latest payload 기준일이 오늘보다 과거인지 확인한다."""
+    payload_date = _parse_payload_date(payload)
+    current_date = current_time.date()
+    if payload_date is None or payload_date >= current_date:
+        return False
+    return MarketSchedule.is_market_open(current_date)
+
+
+def _build_stale_jongga_data_payload(
+    current_time: datetime,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    latest_date = _parse_payload_date(payload)
+    latest_date_str = latest_date.isoformat() if latest_date else str(payload.get("date") or "")
+    today_str = current_time.date().isoformat()
+    return {
+        "date": today_str,
+        "signals": [],
+        "filtered_count": 0,
+        "status": "stale",
+        "is_stale": True,
+        "latest_available_date": latest_date_str,
+        "stale_warning": (
+            f"오늘({today_str}) 기준 종가베팅 데이터가 없습니다. "
+            f"최신 저장 데이터는 {latest_date_str or '알 수 없음'}입니다."
+        ),
+        "message": "오래된 종가베팅 데이터가 최신 리포트로 표시되지 않도록 숨겼습니다. [업데이트] 버튼을 눌러 분석을 실행해주세요.",
+    }
 
 
 def _build_latest_price_map_from_dataframe(df_prices: pd.DataFrame) -> dict[str, float]:
@@ -153,6 +207,14 @@ def build_jongga_latest_payload(
             return recent_payload
         logger.info("[Jongga V2] 종가베팅 데이터 없음. 자동 실행 비활성화 상태.")
         return build_no_jongga_data_payload(current_time)
+
+    if _is_latest_payload_stale(data, current_time):
+        logger.info(
+            "[Jongga V2] 최신 종가베팅 데이터가 오래되었습니다. payload_date=%s, today=%s",
+            _parse_payload_date(data),
+            current_time.date(),
+        )
+        return _build_stale_jongga_data_payload(current_time, data)
 
     inject_latest_prices_into_jongga_payload(
         payload=data,

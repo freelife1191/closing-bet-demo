@@ -22,16 +22,26 @@ from services.notifier_formatters import format_jongga_message
 logger = logging.getLogger(__name__)
 
 
+def _split_env_list(value: str) -> list[str]:
+    """쉼표 구분 환경변수를 주석 제거 및 중복 제거하여 파싱한다."""
+    values: list[str] = []
+    seen: set[str] = set()
+    uncommented_value = value.split("#", 1)[0]
+    for raw_item in uncommented_value.split(","):
+        item = raw_item.strip().lower()
+        if not item or item in seen:
+            continue
+        values.append(item)
+        seen.add(item)
+    return values
+
+
 class NotificationService:
     """메신저 알림 서비스 퍼사드"""
 
     def __init__(self) -> None:
         self.enabled = os.getenv("NOTIFICATION_ENABLED", "false").lower() == "true"
-        self.channels = [
-            channel.strip()
-            for channel in os.getenv("NOTIFICATION_CHANNELS", "").split(",")
-            if channel.strip()
-        ]
+        self.channels = _split_env_list(os.getenv("NOTIFICATION_CHANNELS", ""))
 
         self.discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "")
         self.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -42,11 +52,7 @@ class NotificationService:
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.smtp_user = os.getenv("SMTP_USER", "")
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
-        self.email_recipients = [
-            recipient.strip()
-            for recipient in os.getenv("EMAIL_RECIPIENTS", "").split(",")
-            if recipient.strip()
-        ]
+        self.email_recipients = _split_env_list(os.getenv("EMAIL_RECIPIENTS", ""))
 
     def format_jongga_message(
         self,
