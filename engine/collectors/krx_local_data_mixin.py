@@ -136,9 +136,11 @@ def _top_gainers_sqlite_signature(
 ) -> tuple[int, int]:
     daily_token = f"{int(daily_signature[0])}:{int(daily_signature[1])}" if daily_signature else "0:0"
     stocks_token = f"{int(stocks_signature[0])}:{int(stocks_signature[1])}" if stocks_signature else "0:0"
+    versioned_daily_token = f"exact-target-v2:{daily_token}"
+    versioned_stocks_token = f"exact-target-v2:{stocks_token}"
     return (
-        _stable_token_to_int(daily_token),
-        _stable_token_to_int(stocks_token),
+        _stable_token_to_int(versioned_daily_token),
+        _stable_token_to_int(versioned_stocks_token),
     )
 
 
@@ -167,7 +169,7 @@ def _pykrx_top_gainers_sqlite_signature(
     min_change_pct: float,
 ) -> tuple[int, int]:
     signature_seed = (
-        f"{str(market or '').strip().upper()}::{_normalize_top_gainers_target_key(target_date)}"
+        f"exact-target-v2::{str(market or '').strip().upper()}::{_normalize_top_gainers_target_key(target_date)}"
         f"::{int(top_n)}::{float(min_change_pct):.6f}"
     )
     return (
@@ -1033,9 +1035,8 @@ class KRXCollectorLocalDataMixin:
 
                 latest_df = df[df["date"].dt.date == dt.date()].copy()
                 if latest_df.empty:
-                    logger.warning(f"로컬 CSV에 {target_date} 데이터 없음. 최신 날짜로 대체 시도.")
-                    latest_date = df["date"].max()
-                    latest_df = df[df["date"] == latest_date].copy()
+                    logger.warning(f"로컬 CSV에 {target_date} 데이터 없음. 과거 날짜로 대체하지 않습니다.")
+                    return []
             else:
                 latest_date = df["date"].max()
                 latest_df = df[df["date"] == latest_date].copy()

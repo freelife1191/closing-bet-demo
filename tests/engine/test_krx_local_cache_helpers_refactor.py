@@ -413,6 +413,29 @@ def test_load_from_local_csv_reuses_cached_files(monkeypatch, tmp_path):
     assert calls["count"] == 2  # daily_prices.csv + korean_stocks_list.csv 최초 1회씩만 로드
 
 
+def test_load_from_local_csv_does_not_backfill_explicit_missing_date(tmp_path):
+    pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "date": "2026-05-04",
+                "open": 224000,
+                "close": 232500,
+                "volume": 32_920_816,
+            }
+        ]
+    ).to_csv(tmp_path / "daily_prices.csv", index=False)
+    pd.DataFrame(
+        [{"ticker": "005930", "name": "삼성전자", "market": "KOSPI"}]
+    ).to_csv(tmp_path / "korean_stocks_list.csv", index=False)
+
+    collector = _DummyCollector(str(tmp_path))
+
+    result = collector._load_from_local_csv("KOSPI", top_n=5, target_date="20260522")
+
+    assert result == []
+
+
 def test_load_from_local_csv_converts_cached_date_column_once(monkeypatch, tmp_path):
     pd.DataFrame(
         [

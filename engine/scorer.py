@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Engine - Scorer (12점 점수 시스템)
+Engine - Scorer (19점 점수 시스템)
 
 Refactored to use GradeClassifier module for grade determination logic.
 """
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class Scorer(ScorerScoringMixin):
     """
-    12점 점수 시스템.
+    19점 점수 시스템.
 
     Changes:
     - Grade determination logic extracted to GradeClassifier
@@ -33,7 +33,7 @@ class Scorer(ScorerScoringMixin):
 
     def __init__(self, config: SignalConfig = None):
         self.config = config or SignalConfig()
-        self.max_score = 12
+        self.max_score = 19
         self.filter_validator = FilterValidator(self.config)
         self.grade_classifier = GradeClassifier(self.config)
 

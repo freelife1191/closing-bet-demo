@@ -174,6 +174,101 @@ def test_load_from_local_csv_falls_back_when_usecols_mismatch(monkeypatch, tmp_p
     assert stocks_calls[1][1] is None
 
 
+def test_load_from_local_csv_does_not_backfill_explicit_missing_date(monkeypatch, tmp_path):
+    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with collectors_module.KRXCollector._top_gainers_cache_lock:
+        collectors_module.KRXCollector._top_gainers_cache.clear()
+    collectors_module.KRXCollector.clear_stock_lookup_cache()
+
+    daily_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "date": "2026-05-04",
+                "open": 224000,
+                "close": 232500,
+                "volume": 32_920_816,
+            }
+        ]
+    )
+    stocks_df = pd.DataFrame(
+        [{"ticker": "005930", "name": "삼성전자", "market": "KOSPI"}]
+    )
+
+    def _fake_signature(path: str):
+        if path.endswith("daily_prices.csv"):
+            return (51, 51)
+        if path.endswith("korean_stocks_list.csv"):
+            return (52, 52)
+        return None
+
+    def _fake_load_shared_csv_file(
+        data_dir: str,
+        filename: str,
+        *,
+        deep_copy: bool = True,
+        usecols: list[str] | None = None,
+        signature: tuple[int, int] | None = None,
+    ) -> pd.DataFrame:
+        del data_dir, deep_copy, usecols, signature
+        if filename == "daily_prices.csv":
+            return daily_df.copy()
+        if filename == "korean_stocks_list.csv":
+            return stocks_df.copy()
+        return pd.DataFrame()
+
+    monkeypatch.setattr(collectors_module, "_shared_file_signature", _fake_signature)
+    monkeypatch.setattr(collectors_module, "_load_shared_csv_file", _fake_load_shared_csv_file)
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_top_gainers_sqlite_context",
+        classmethod(lambda cls, **_kwargs: (str(tmp_path / "missing_date.snapshot"), (53, 53))),
+    )
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_stock_lookup_sqlite_context",
+        classmethod(lambda cls, **_kwargs: (str(tmp_path / "lookup.snapshot"), (54, 54))),
+    )
+
+    results = collector._load_from_local_csv("KOSPI", top_n=5, target_date="20260522")
+
+    assert results == []
+
+
+def test_get_top_gainers_explicit_target_does_not_probe_previous_dates(monkeypatch):
+    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with collectors_module.KRXCollector._top_gainers_cache_lock:
+        collectors_module.KRXCollector._top_gainers_cache.clear()
+
+    calls: list[str] = []
+
+    def _fake_get_market_ohlcv_by_ticker(check_date: str, market: str):
+        calls.append(check_date)
+        return pd.DataFrame()
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = types.SimpleNamespace(
+        get_market_ohlcv_by_ticker=_fake_get_market_ohlcv_by_ticker
+    )
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_load_cached_top_gainers",
+        classmethod(lambda cls, **_kwargs: None),
+    )
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_save_cached_top_gainers",
+        classmethod(lambda cls, **_kwargs: None),
+    )
+    monkeypatch.setattr(collector, "_load_from_local_csv", lambda *_args, **_kwargs: [])
+
+    results = asyncio.run(collector.get_top_gainers("KOSPI", top_n=5, target_date="20260522"))
+
+    assert results == []
+    assert calls == ["20260522"]
+
+
 def test_get_latest_market_date_uses_memory_cache_before_pykrx(monkeypatch, tmp_path):
     collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
     collectors_module.KRXCollector.clear_latest_market_date_cache()

@@ -459,7 +459,7 @@ class KRXCollector:
         stocks_sig = stocks_signature or (0, 0)
 
         signature_seed = (
-            f"{source_token}:{market_token}:{int(top_n)}:{target_token}:{min_change_token}:"
+            f"exact-target-v2:{source_token}:{market_token}:{int(top_n)}:{target_token}:{min_change_token}:"
             f"{int(csv_sig[0])}:{int(csv_sig[1])}:{int(stocks_sig[0])}:{int(stocks_sig[1])}"
         )
         signature = (
@@ -1175,6 +1175,7 @@ class KRXCollector:
             import pandas as pd
             min_change_pct = float(getattr(self.config, "min_change_pct", 0.0))
             
+            explicit_target_requested = bool(target_date)
             # 테스트 모드: 특정 날짜 지정 시 해당 날짜 사용
             if target_date:
                 target_date_str = target_date  # YYYYMMDD 형식
@@ -1205,9 +1206,10 @@ class KRXCollector:
             
             df = None
             
-            # 목표 날짜부터 최대 7일 전까지 시도 (공휴일 대응)
+            # 명시 날짜 분석은 과거 날짜로 대체하지 않는다.
             base_date = datetime.strptime(target_date_str, '%Y%m%d')
-            for days_ago in range(7):
+            lookback_days = 1 if explicit_target_requested else 7
+            for days_ago in range(lookback_days):
                 try:
                     check_date = (base_date - timedelta(days=days_ago)).strftime('%Y%m%d')
                     df = stock.get_market_ohlcv_by_ticker(check_date, market=market)
@@ -1387,9 +1389,8 @@ class KRXCollector:
                 # 해당 날짜 데이터 검색
                 latest_df = df[df['date'].dt.date == dt.date()].copy()
                 if latest_df.empty:
-                    logger.warning(f"로컬 CSV에 {target_date} 데이터 없음. 최신 날짜로 대체 시도.")
-                    latest_date = df['date'].max()
-                    latest_df = df[df['date'] == latest_date].copy()
+                    logger.warning(f"로컬 CSV에 {target_date} 데이터 없음. 과거 날짜로 대체하지 않습니다.")
+                    return []
             else:
                 latest_date = df['date'].max()
                 latest_df = df[df['date'] == latest_date].copy()

@@ -898,6 +898,19 @@ export default function JonggaV2Page() {
   const [filterGrade, setFilterGrade] = useState<string>('ALL');
   const [filterScore, setFilterScore] = useState(0);
 
+  const formatFilterTradingValue = (value: number) => {
+    if (value >= 1_000_000_000_000) return `${Math.floor(value / 1_000_000_000_000)}조 이상`;
+    if (value >= 100_000_000) return `${Math.floor(value / 100_000_000)}억 이상`;
+    return `${value.toLocaleString()}원 이상`;
+  };
+
+  const resetSignalFilters = () => {
+    setFilterTradingValue(0);
+    setFilterRise(0);
+    setFilterGrade('ALL');
+    setFilterScore(0);
+  };
+
   const getFilteredSignals = () => {
     if (!data?.signals) return [];
     return data.signals.filter(s => {
@@ -928,6 +941,14 @@ export default function JonggaV2Page() {
 
   const filteredSignals = getFilteredSignals();
   const matchCount = filteredSignals.length;
+  const totalSignalCount = data?.signals?.length ?? 0;
+  const activeFilterLabels = [
+    filterTradingValue > 0 ? `거래대금 ${formatFilterTradingValue(filterTradingValue)}` : null,
+    filterRise > 0 ? `상승률 ${filterRise}% 이상` : null,
+    filterGrade !== 'ALL' ? `${filterGrade}급 이상` : null,
+    filterScore > 0 ? `총점 ${filterScore}점 이상` : null,
+  ].filter((label): label is string => Boolean(label));
+  const hasActiveFilters = activeFilterLabels.length > 0;
   const candidatesCount = data?.total_candidates ?? 0;
   const filteredCount = data?.filtered_count ?? data?.signals?.length ?? 0;
 
@@ -1319,7 +1340,7 @@ export default function JonggaV2Page() {
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-[9px] text-gray-500">
                 총점
-                <Tooltip content="6개 항목(뉴스, 거래량, 차트, 수급, 타이밍, 캔들)의 총 점수입니다. 최대 12점, 8점 이상이면 강력 추천입니다.">
+                <Tooltip content="기본 6개 항목 12점과 가산점 7점을 더한 총점입니다. 최대 19점, 8점 이상이면 강한 신호입니다.">
                   <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
@@ -1335,6 +1356,26 @@ export default function JonggaV2Page() {
               </select>
             </div>
           </div>
+
+          {hasActiveFilters && (
+            <div className="w-full md:w-auto flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-gray-400">
+              <span className="font-medium text-gray-300">
+                표시 {matchCount} / 전체 {totalSignalCount}
+              </span>
+              {activeFilterLabels.map((label) => (
+                <span key={label} className="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2 py-0.5 text-indigo-200">
+                  {label}
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={resetSignalFilters}
+                className="ml-auto rounded-full border border-white/10 px-2 py-0.5 text-gray-300 hover:border-white/20 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                필터 초기화
+              </button>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 md:ml-auto">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>

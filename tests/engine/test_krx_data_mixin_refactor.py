@@ -6,6 +6,7 @@ KRX collector data mixin 리팩토링 테스트
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 
@@ -68,6 +69,29 @@ def test_process_ohlcv_dataframe_uses_internal_stock_name_lookup(monkeypatch):
     assert result[0].code == "000660"
     assert result[0].name == "NAME-000660"
     assert collector.name_calls == ["000660"]
+
+
+def test_get_top_gainers_explicit_target_does_not_probe_previous_dates(monkeypatch):
+    collector = KRXCollector()
+    calls: list[str] = []
+
+    def _fake_get_market_ohlcv_by_ticker(check_date: str, market: str):
+        calls.append(check_date)
+        return pd.DataFrame()
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = types.SimpleNamespace(
+        get_market_ohlcv_by_ticker=_fake_get_market_ohlcv_by_ticker
+    )
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(KRXCollector, "_load_pykrx_top_gainers_snapshot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(KRXCollector, "_save_pykrx_top_gainers_snapshot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(collector, "_load_from_local_csv", lambda *_args, **_kwargs: [])
+
+    result = asyncio.run(collector.get_top_gainers("KOSPI", top_n=5, target_date="20260522"))
+
+    assert result == []
+    assert calls == ["20260522"]
 
 
 def test_get_stock_name_caches_pykrx_lookup(monkeypatch, tmp_path):

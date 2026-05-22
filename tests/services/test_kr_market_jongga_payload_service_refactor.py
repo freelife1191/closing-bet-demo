@@ -130,6 +130,39 @@ def test_build_jongga_latest_payload_hides_stale_latest_on_market_day(monkeypatc
     assert price_calls["count"] == 0
 
 
+def test_build_jongga_latest_payload_keeps_today_empty_result_without_recent_fallback(tmp_path):
+    latest_payload = {
+        "date": "2026-05-22",
+        "signals": [],
+        "filtered_count": 0,
+        "by_grade": {"S": 0, "A": 0, "B": 0},
+    }
+    fallback_file = tmp_path / "jongga_v2_results_20260505.json"
+    fallback_file.write_text(
+        '{"date":"2026-05-05","signals":[{"ticker":"005930","grade":"S","score":{"total":12}}]}',
+        encoding="utf-8",
+    )
+
+    result = build_jongga_latest_payload(
+        data_dir=str(tmp_path),
+        load_json_file=lambda _name: dict(latest_payload),
+        load_csv_file=lambda _name: pd.DataFrame(),
+        get_data_path=lambda filename: str(tmp_path / filename),
+        recalculate_jongga_grades=lambda _payload: False,
+        sort_jongga_signals=lambda _signals: None,
+        normalize_jongga_signals_for_frontend=lambda _signals: None,
+        apply_latest_prices_to_jongga_signals=lambda _signals, _price_map: 0,
+        logger=logging.getLogger(__name__),
+        now=datetime(2026, 5, 22, 18, 0, 0),
+    )
+
+    assert result["date"] == "2026-05-22"
+    assert result["status"] == "no_data"
+    assert result["signals"] == []
+    assert result["filtered_count"] == 0
+    assert result["by_grade"]["S"] == 0
+
+
 def test_build_jongga_latest_payload_uses_sqlite_snapshot_when_load_csv_file_is_none(tmp_path, monkeypatch):
     _reset_csv_cache_state()
     latest_payload = {

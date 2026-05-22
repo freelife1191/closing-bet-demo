@@ -81,6 +81,23 @@ def _build_stale_jongga_data_payload(
     }
 
 
+def _build_empty_latest_jongga_data_payload(
+    current_time: datetime,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    payload_date = _parse_payload_date(payload) or current_time.date()
+    return {
+        **payload,
+        "date": payload_date.isoformat(),
+        "signals": [],
+        "filtered_count": 0,
+        "by_grade": payload.get("by_grade") or {"S": 0, "A": 0, "B": 0, "D": 0},
+        "status": payload.get("status") or "no_data",
+        "message": payload.get("message")
+        or "해당 기준일의 종가베팅 추천 종목이 없습니다. 과거 리포트로 대체하지 않았습니다.",
+    }
+
+
 def _build_latest_price_map_from_dataframe(df_prices: pd.DataFrame) -> dict[str, float]:
     return build_latest_close_map_from_prices_df(df_prices)
 
@@ -197,6 +214,18 @@ def build_jongga_latest_payload(
     current_time = now or datetime.now()
     data = load_json_file("jongga_v2_latest.json")
 
+    if isinstance(data, dict) and data:
+        if _is_latest_payload_stale(data, current_time):
+            logger.info(
+                "[Jongga V2] 최신 종가베팅 데이터가 오래되었습니다. payload_date=%s, today=%s",
+                _parse_payload_date(data),
+                current_time.date(),
+            )
+            return _build_stale_jongga_data_payload(current_time, data)
+
+        if not has_non_empty_signals(data):
+            return _build_empty_latest_jongga_data_payload(current_time, data)
+
     if not has_non_empty_signals(data):
         recent_payload = find_recent_valid_jongga_payload(
             data_dir=data_dir,
@@ -207,14 +236,6 @@ def build_jongga_latest_payload(
             return recent_payload
         logger.info("[Jongga V2] 종가베팅 데이터 없음. 자동 실행 비활성화 상태.")
         return build_no_jongga_data_payload(current_time)
-
-    if _is_latest_payload_stale(data, current_time):
-        logger.info(
-            "[Jongga V2] 최신 종가베팅 데이터가 오래되었습니다. payload_date=%s, today=%s",
-            _parse_payload_date(data),
-            current_time.date(),
-        )
-        return _build_stale_jongga_data_payload(current_time, data)
 
     inject_latest_prices_into_jongga_payload(
         payload=data,

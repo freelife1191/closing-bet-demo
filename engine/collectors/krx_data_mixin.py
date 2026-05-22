@@ -51,6 +51,7 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
         try:
             from pykrx import stock
 
+            explicit_target_requested = bool(target_date)
             if target_date:
                 target_date_str = target_date
                 logger.info(f"지정 날짜 기준 조회: {target_date_str}")
@@ -69,7 +70,8 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
 
             df = None
             base_date = datetime.strptime(target_date_str, "%Y%m%d")
-            for days_ago in range(7):
+            lookback_days = 1 if explicit_target_requested else 7
+            for days_ago in range(lookback_days):
                 try:
                     check_date = (base_date - timedelta(days=days_ago)).strftime("%Y%m%d")
                     df = stock.get_market_ohlcv_by_ticker(check_date, market=market)
