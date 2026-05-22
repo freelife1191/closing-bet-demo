@@ -217,6 +217,87 @@ def test_send_jongga_notification_sends_message_when_no_signals(monkeypatch, tmp
     assert "신호 없음" in messenger.sent_custom_messages[0]["title"]
 
 
+def test_send_jongga_notification_skips_duplicate_payload(monkeypatch, tmp_path):
+    """동일 종가베팅 결과 payload는 스케줄러가 재호출되어도 한 번만 발송되어야 한다."""
+    _DummyMessenger.instances = []
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "date": "2026-02-19",
+        "signals": [],
+        "by_grade": {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0},
+        "by_market": {},
+    }
+    with open(data_dir / "jongga_v2_latest.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.messenger.Messenger", _DummyMessenger)
+
+    init_data.send_jongga_notification()
+    init_data.send_jongga_notification()
+
+    sent_messages = [
+        message
+        for messenger in _DummyMessenger.instances
+        for message in messenger.sent_custom_messages
+    ]
+    assert len(sent_messages) == 1
+
+
+def test_send_jongga_notification_skips_duplicate_signal_payload(monkeypatch, tmp_path):
+    """신호가 있는 동일 종가베팅 결과도 한 번만 send_screener_result로 전달되어야 한다."""
+    _DummyMessenger.instances = []
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "date": "2026-02-19",
+        "signals": [
+            {
+                "stock_code": "005930",
+                "stock_name": "삼성전자",
+                "market": "KOSPI",
+                "sector": "반도체",
+                "signal_date": "2026-02-19",
+                "grade": "S",
+                "status": "PENDING",
+                "score": {"total": 92, "volume": 20, "chart": 18},
+                "checklist": {"has_news": True, "supply_positive": True},
+                "current_price": 70000,
+                "entry_price": 70500,
+                "stop_price": 68000,
+                "target_price": 76000,
+                "trading_value": 1_200_000_000_000,
+                "change_pct": 8.2,
+                "volume_ratio": 4.1,
+                "created_at": "2026-02-19T16:10:00",
+            }
+        ],
+        "by_grade": {"S": 1},
+        "by_market": {"KOSPI": 1},
+    }
+    with open(data_dir / "jongga_v2_latest.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.messenger.Messenger", _DummyMessenger)
+
+    init_data.send_jongga_notification()
+    init_data.send_jongga_notification()
+
+    sent_results = [
+        result
+        for messenger in _DummyMessenger.instances
+        for result in messenger.sent_results
+    ]
+    assert len(sent_results) == 1
+    assert sent_results[0].signals[0].stock_code == "005930"
+
+
 def test_create_signals_log_returns_false_on_exception(monkeypatch, tmp_path):
     """VCP 내부 예외 시 create_signals_log은 실패(False)를 반환해야 한다."""
     data_dir = tmp_path / "data"

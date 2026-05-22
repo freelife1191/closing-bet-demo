@@ -2355,23 +2355,48 @@ def create_kr_ai_analysis_with_key(target_dates=None, api_key=None):
 
 def send_jongga_notification():
     """종가베팅 V2 결과 알림 발송"""
+    data_dir = os.path.join(BASE_DIR, 'data')
+    guard_key = None
+    guard_claimed = False
+    guard_marked = False
     try:
         import json
-        import os
         from engine.messenger import Messenger
         from engine.models import ScreenerResult, Signal, ScoreDetail, ChecklistDetail, SignalStatus, Grade
         from datetime import datetime
+        from services.jongga_notification_guard_service import (
+            claim_jongga_notification_send,
+            mark_jongga_notification_sent,
+        )
         
-        data_file = os.path.join(BASE_DIR, 'data', 'jongga_v2_latest.json')
+        data_file = os.path.join(data_dir, 'jongga_v2_latest.json')
         
         if os.path.exists(data_file):
             with open(data_file, 'r', encoding='utf-8') as f:
                 file_data = json.load(f)
             
-            if file_data and file_data.get('signals'):
+            raw_signals = file_data.get('signals', []) if file_data else []
+            notification_type = "signals" if raw_signals else "empty"
+
+            messenger = Messenger()
+            if getattr(getattr(messenger, "config", None), "disabled", False):
+                log("종가베팅 알림 비활성화 상태 - 발송 생략", "INFO")
+                return
+
+            guard_claimed, guard_key = claim_jongga_notification_send(
+                data_dir=data_dir,
+                date_str=file_data.get('date') if file_data else None,
+                signals=raw_signals,
+                notification_type=notification_type,
+            )
+            if not guard_claimed:
+                log(f"중복 종가베팅 알림 생략: {guard_key}", "INFO")
+                return
+
+            if raw_signals:
                 # 객체 복원 (Messenger 호환성)
                 signals = []
-                for i, s in enumerate(file_data.get('signals', [])):
+                for i, s in enumerate(raw_signals):
                     # ScoreDetail 복원 (total 포함)
                     sc = s.get('score', {})
                     score_obj = ScoreDetail(**sc)
@@ -2475,19 +2500,28 @@ def send_jongga_notification():
                     trending_themes=file_data.get('trending_themes', [])
                 )
                 
-                messenger = Messenger()
                 messenger.send_screener_result(result)
+                mark_jongga_notification_sent(data_dir, guard_key)
+                guard_marked = True
                 log(f"알림 발송 완료: {len(signals)}개 신호", "SUCCESS")
             else:
-                messenger = Messenger()
                 messenger.send_custom_message(
                     title="종가베팅 신호 없음",
                     message="오늘은 발송할 종가베팅 신호가 없습니다. (0개)",
                     channels=None,
                 )
+                mark_jongga_notification_sent(data_dir, guard_key)
+                guard_marked = True
                 log("발송할 신호 없음 (0개)", "INFO")
                 
     except Exception as notify_error:
+        if guard_claimed and guard_key and not guard_marked:
+            try:
+                from services.jongga_notification_guard_service import release_jongga_notification_claim
+
+                release_jongga_notification_claim(data_dir, guard_key)
+            except Exception:
+                pass
         log(f"알림 발송 중 오류: {notify_error}", "ERROR")
         import traceback
         traceback.print_exc()

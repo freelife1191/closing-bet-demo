@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 import threading
 from datetime import datetime
@@ -36,6 +37,10 @@ def _run_coro_in_fresh_loop(coro: Any, logger: logging.Logger) -> Any:
 
 
 def _send_jongga_notification_from_result(result: Any, logger: logging.Logger) -> None:
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    guard_key: str | None = None
+    guard_claimed = False
+    guard_marked = False
     try:
         raw_signals = getattr(result, "signals", []) or []
         signals = []
@@ -54,11 +59,39 @@ def _send_jongga_notification_from_result(result: Any, logger: logging.Logger) -
         else:
             date_str = str(result_date or datetime.now().date())
 
-        from services.notifier import send_jongga_notification
+        from services.jongga_notification_guard_service import (
+            claim_jongga_notification_send,
+            mark_jongga_notification_sent,
+        )
+        from services.notifier import NotificationService
 
-        results = send_jongga_notification(signals, date_str)
+        notifier = NotificationService()
+        if not notifier.enabled:
+            logger.info("[Notification] 알림 비활성화 상태 - 발송 생략")
+            return
+
+        guard_claimed, guard_key = claim_jongga_notification_send(
+            data_dir=data_dir,
+            date_str=date_str,
+            signals=signals,
+            notification_type="signals",
+        )
+        if not guard_claimed:
+            logger.info(f"[Notification] 중복 종가베팅 알림 생략: {guard_key}")
+            return
+
+        results = notifier.send_all(signals, date_str)
+        mark_jongga_notification_sent(data_dir, guard_key)
+        guard_marked = True
         logger.info(f"[Notification] 메신저 발송 결과: {results}")
     except Exception as e:
+        if guard_claimed and guard_key and not guard_marked:
+            try:
+                from services.jongga_notification_guard_service import release_jongga_notification_claim
+
+                release_jongga_notification_claim(data_dir, guard_key)
+            except Exception:
+                pass
         logger.error(f"[Notification] 메신저 발송 중 오류: {e}")
 
 
