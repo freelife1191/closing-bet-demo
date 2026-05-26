@@ -65,12 +65,16 @@ def test_run_daily_closing_analysis_chains_jongga(monkeypatch):
             "create_daily_prices": lambda: events.append(("daily_prices", None)) or True,
             "create_institutional_trend": lambda: events.append(("institutional_trend", None)) or True,
             "create_signals_log": lambda run_ai: events.append(("create_signals_log", run_ai)) or True,
+            "send_jongga_notification": lambda: events.append(("send_jongga_notification", None)),
         },
     )
     monkeypatch.setattr(
         scheduler_jobs,
         "run_jongga_v2_analysis",
-        lambda test_mode=False: events.append(("run_jongga_v2_analysis", test_mode)),
+        lambda test_mode=False, send_notification=True: events.append(
+            ("run_jongga_v2_analysis", (test_mode, send_notification))
+        )
+        or True,
     )
 
     scheduler_jobs.run_daily_closing_analysis(test_mode=True)
@@ -79,7 +83,8 @@ def test_run_daily_closing_analysis_chains_jongga(monkeypatch):
         ("daily_prices", None),
         ("institutional_trend", None),
         ("create_signals_log", True),
-        ("run_jongga_v2_analysis", True),
+        ("run_jongga_v2_analysis", (True, False)),
+        ("send_jongga_notification", None),
     ]
 
 
@@ -96,12 +101,13 @@ def test_run_daily_closing_analysis_updates_scheduler_runtime_status(monkeypatch
             "create_daily_prices": lambda: True,
             "create_institutional_trend": lambda: True,
             "create_signals_log": lambda run_ai: True,
+            "send_jongga_notification": lambda: True,
         },
     )
     monkeypatch.setattr(
         scheduler_jobs,
         "run_jongga_v2_analysis",
-        lambda test_mode=False: None,
+        lambda test_mode=False, send_notification=True: True,
     )
 
     scheduler_updates: list[dict[str, object]] = []

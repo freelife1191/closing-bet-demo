@@ -53,7 +53,7 @@ def _run_market_gate_analysis() -> None:
     market_gate.save_analysis(result)
 
 
-def run_jongga_v2_analysis(test_mode: bool = False) -> None:
+def run_jongga_v2_analysis(test_mode: bool = False, send_notification: bool = True) -> bool:
     """장 마감 후 AI 종가베팅 분석."""
     now = datetime.now()
 
@@ -62,7 +62,7 @@ def run_jongga_v2_analysis(test_mode: bool = False) -> None:
         logger.info(
             f"[Scheduler] 오늘은 휴장일({now.strftime('%Y-%m-%d')})이므로 종가베팅 분석을 건너뜁니다."
         )
-        return
+        return False
 
     set_scheduler_runtime_status(jongga_scheduling_running=True)
     logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)")
@@ -71,13 +71,18 @@ def run_jongga_v2_analysis(test_mode: bool = False) -> None:
         analysis_ok = init_data_functions["create_jongga_v2_latest"]()
         if analysis_ok is False:
             logger.error("[Scheduler] 종가베팅 결과 생성 실패 감지")
+            return False
         else:
             logger.info("<<< [Scheduler] AI 종가베팅 분석 완료")
 
-        init_data_functions["send_jongga_notification"]()
-        logger.info("<<< [Scheduler] AI 종가베팅 분석 완료")
+        if send_notification:
+            init_data_functions["send_jongga_notification"]()
+            logger.info("<<< [Scheduler] AI 종가베팅 알림 발송 완료")
+
+        return True
     except Exception as e:
         logger.error(f"[Scheduler] AI 종가베팅 분석 실패: {e}")
+        return False
     finally:
         set_scheduler_runtime_status(jongga_scheduling_running=False)
 
@@ -124,9 +129,14 @@ def run_daily_closing_analysis(test_mode: bool = False) -> None:
         set_scheduler_runtime_status(vcp_scheduling_running=False)
 
         logger.info(">>> [Scheduler] Chaining: 데이터 수집 완료 후 AI 종가베팅 분석 즉시 시작")
-        run_jongga_v2_analysis(test_mode=test_mode)
+        jongga_ok = run_jongga_v2_analysis(test_mode=test_mode, send_notification=False)
 
         logger.info("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
+        if jongga_ok:
+            init_data_functions["send_jongga_notification"]()
+            logger.info("<<< [Scheduler] 최종 완료 후 종가베팅 알림 발송 완료")
+        else:
+            logger.error("[Scheduler] 종가베팅 결과 생성 실패로 최종 알림 발송을 건너뜁니다.")
     except Exception as e:
         logger.error(f"[Scheduler] 장 마감 정기 분석 실패: {e}")
     finally:
