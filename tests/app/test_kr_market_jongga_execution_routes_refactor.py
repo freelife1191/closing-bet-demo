@@ -254,6 +254,45 @@ def test_send_jongga_v2_message_route_sends_message(monkeypatch, tmp_path: Path)
     assert sent["count"] == 1
 
 
+def test_send_jongga_v2_message_route_skips_duplicate_without_force(monkeypatch, tmp_path: Path):
+    sent = {"count": 0}
+
+    class _DummyMessenger:
+        def send_screener_result(self, _result):
+            sent["count"] += 1
+
+    import engine.messenger as messenger_module
+
+    monkeypatch.setattr(messenger_module, "Messenger", _DummyMessenger)
+
+    client = _create_client(
+        str(tmp_path),
+        _build_deps(
+            load_json_file=lambda _filename: {
+                "signals": [
+                    {
+                        "stock_code": "005930",
+                        "stock_name": "삼성전자",
+                        "grade": "S",
+                        "entry_price": 70500,
+                    }
+                ]
+            },
+            build_screener_result_for_message=lambda _file_data: ({"ok": True}, 1, "2026-02-22"),
+        ),
+    )
+
+    first_response = client.post("/api/kr/jongga-v2/message", json={"target_date": "2026-02-22"})
+    second_response = client.post("/api/kr/jongga-v2/message", json={"target_date": "2026-02-22"})
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.get_json()["status"] == "success"
+    assert second_response.get_json()["status"] == "skipped"
+    assert second_response.get_json()["duplicate"] is True
+    assert sent["count"] == 1
+
+
 def test_run_jongga_v2_screener_route_persists_status_with_atomic_writer(monkeypatch, tmp_path: Path):
     import app.routes.kr_market_jongga_execution_routes as route_module
 

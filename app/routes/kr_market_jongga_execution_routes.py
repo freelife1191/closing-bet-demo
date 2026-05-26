@@ -185,6 +185,7 @@ def _register_jongga_analysis_routes(
 def _register_jongga_message_route(
     kr_bp: Any,
     *,
+    data_dir: str,
     logger: Any,
     load_json_file: Callable[..., dict[str, Any]],
     resolve_jongga_message_filename: Callable[[str | None], str],
@@ -206,10 +207,44 @@ def _register_jongga_message_route(
                 return jsonify({"status": "error", "message": "발송할 데이터가 없습니다."}), 404
 
             from engine.messenger import Messenger
+            from services.jongga_notification_guard_service import (
+                claim_jongga_notification_send,
+                mark_jongga_notification_sent,
+                release_jongga_notification_claim,
+            )
 
+            force_send = bool(data.get("force"))
             result, signal_count, result_date = build_screener_result_for_message(file_data)
+            guard_key = None
+            guard_claimed = False
+            guard_marked = False
+            if not force_send:
+                guard_claimed, guard_key = claim_jongga_notification_send(
+                    data_dir=data_dir,
+                    date_str=str(result_date),
+                    signals=file_data.get("signals", []),
+                    notification_type="daily",
+                )
+                if not guard_claimed:
+                    return jsonify(
+                        {
+                            "status": "skipped",
+                            "message": f"이미 발송된 종가베팅 메시지입니다. ({result_date})",
+                            "target_date": str(result_date),
+                            "duplicate": True,
+                        }
+                    ), 200
+
             messenger = Messenger()
-            messenger.send_screener_result(result)
+            try:
+                messenger.send_screener_result(result)
+                if guard_claimed and guard_key:
+                    mark_jongga_notification_sent(data_dir, guard_key)
+                    guard_marked = True
+            except Exception:
+                if guard_claimed and guard_key and not guard_marked:
+                    release_jongga_notification_claim(data_dir, guard_key)
+                raise
 
             return jsonify(
                 {
@@ -275,6 +310,7 @@ def register_jongga_execution_routes(
     )
     _register_jongga_message_route(
         kr_bp,
+        data_dir=data_dir,
         logger=logger,
         load_json_file=load_json_file,
         resolve_jongga_message_filename=resolve_jongga_message_filename,

@@ -74,7 +74,7 @@ def _send_jongga_notification_from_result(result: Any, logger: logging.Logger) -
             data_dir=data_dir,
             date_str=date_str,
             signals=signals,
-            notification_type="signals",
+            notification_type="daily",
         )
         if not guard_claimed:
             logger.info(f"[Notification] 중복 종가베팅 알림 생략: {guard_key}")

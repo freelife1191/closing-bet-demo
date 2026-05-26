@@ -8,13 +8,14 @@ from datetime import datetime, timedelta
 
 from services.jongga_notification_guard_service import (
     build_jongga_notification_key,
+    build_jongga_notification_payload_digest,
     claim_jongga_notification_send,
     mark_jongga_notification_sent,
 )
 
 
 def test_build_jongga_notification_key_ignores_volatile_fields():
-    """시각/설명문만 다른 동일 신호는 같은 알림 payload로 취급해야 한다."""
+    """기준일이 같으면 payload 세부 내용과 무관하게 같은 알림 키를 써야 한다."""
     base_signal = {
         "stock_code": "005930",
         "stock_name": "삼성전자",
@@ -37,7 +38,7 @@ def test_build_jongga_notification_key_ignores_volatile_fields():
 
 
 def test_claim_jongga_notification_send_rejects_duplicate_payload(tmp_path):
-    """동일 payload는 최초 claim 후 중복 claim이 거절되어야 한다."""
+    """동일 기준일은 최초 claim 후 중복 claim이 거절되어야 한다."""
     signal = {
         "stock_code": "005930",
         "stock_name": "삼성전자",
@@ -66,6 +67,50 @@ def test_claim_jongga_notification_send_rejects_duplicate_payload(tmp_path):
     assert claimed is True
     assert duplicate_claimed is False
     assert duplicate_key == key
+
+
+def test_claim_jongga_notification_send_rejects_changed_payload_same_date(tmp_path):
+    """같은 기준일이면 가격/점수가 바뀐 재분석 결과도 두 번째 발송하면 안 된다."""
+    first_signal = {
+        "stock_code": "005930",
+        "stock_name": "삼성전자",
+        "grade": "S",
+        "current_price": 70000,
+        "entry_price": 70500,
+        "score": {"total": 92},
+    }
+    changed_signal = {
+        **first_signal,
+        "current_price": 70100,
+        "entry_price": 70600,
+        "score": {"total": 93},
+    }
+
+    assert build_jongga_notification_payload_digest([first_signal]) != (
+        build_jongga_notification_payload_digest([changed_signal])
+    )
+
+    first_claimed, key = claim_jongga_notification_send(
+        data_dir=str(tmp_path),
+        date_str="2026-05-26",
+        signals=[first_signal],
+        now=datetime(2026, 5, 26, 17, 7, 0),
+    )
+    mark_jongga_notification_sent(
+        data_dir=str(tmp_path),
+        key=key,
+        now=datetime(2026, 5, 26, 17, 7, 30),
+    )
+    second_claimed, second_key = claim_jongga_notification_send(
+        data_dir=str(tmp_path),
+        date_str="2026-05-26",
+        signals=[changed_signal],
+        now=datetime(2026, 5, 26, 17, 10, 0),
+    )
+
+    assert first_claimed is True
+    assert second_claimed is False
+    assert second_key == key
 
 
 def test_claim_jongga_notification_send_allows_stale_sending_claim(tmp_path):

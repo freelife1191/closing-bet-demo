@@ -298,6 +298,60 @@ def test_send_jongga_notification_skips_duplicate_signal_payload(monkeypatch, tm
     assert sent_results[0].signals[0].stock_code == "005930"
 
 
+def test_send_jongga_notification_skips_changed_signal_payload_same_date(monkeypatch, tmp_path):
+    """같은 기준일 결과가 재생성되어 가격/점수가 바뀌어도 메일은 한 번만 발송되어야 한다."""
+    _DummyMessenger.instances = []
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    def _write_payload(current_price: int, score_total: int) -> None:
+        payload = {
+            "date": "2026-05-26",
+            "signals": [
+                {
+                    "stock_code": "005930",
+                    "stock_name": "삼성전자",
+                    "market": "KOSPI",
+                    "sector": "반도체",
+                    "signal_date": "2026-05-26",
+                    "grade": "S",
+                    "status": "PENDING",
+                    "score": {"total": score_total, "volume": 20, "chart": 18},
+                    "checklist": {"has_news": True, "supply_positive": True},
+                    "current_price": current_price,
+                    "entry_price": current_price + 500,
+                    "stop_price": current_price - 2000,
+                    "target_price": current_price + 6000,
+                    "trading_value": 1_200_000_000_000,
+                    "change_pct": 8.2,
+                    "volume_ratio": 4.1,
+                    "created_at": "2026-05-26T17:07:00",
+                }
+            ],
+            "by_grade": {"S": 1},
+            "by_market": {"KOSPI": 1},
+        }
+        with open(data_dir / "jongga_v2_latest.json", "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.messenger.Messenger", _DummyMessenger)
+
+    _write_payload(current_price=70000, score_total=92)
+    init_data.send_jongga_notification()
+    _write_payload(current_price=70100, score_total=93)
+    init_data.send_jongga_notification()
+
+    sent_results = [
+        result
+        for messenger in _DummyMessenger.instances
+        for result in messenger.sent_results
+    ]
+    assert len(sent_results) == 1
+    assert sent_results[0].signals[0].current_price == 70000
+
+
 def test_create_signals_log_returns_false_on_exception(monkeypatch, tmp_path):
     """VCP 내부 예외 시 create_signals_log은 실패(False)를 반환해야 한다."""
     data_dir = tmp_path / "data"

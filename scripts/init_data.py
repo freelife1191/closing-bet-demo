@@ -2376,7 +2376,7 @@ def send_jongga_notification():
                 file_data = json.load(f)
             
             raw_signals = file_data.get('signals', []) if file_data else []
-            notification_type = "signals" if raw_signals else "empty"
+            notification_type = "daily"
 
             messenger = Messenger()
             if getattr(getattr(messenger, "config", None), "disabled", False):

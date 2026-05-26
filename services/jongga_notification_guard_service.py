@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover - Windows fallback
 STATE_FILENAME = "jongga_notification_sent.json"
 LOCK_FILENAME = "jongga_notification_sent.lock"
 STALE_SENDING_MINUTES = 30
+DEFAULT_NOTIFICATION_TYPE = "daily"
 
 _VOLATILE_KEYS = {
     "analysis_timestamp",
@@ -56,12 +57,19 @@ _STABLE_SIGNAL_KEYS = {
 def build_jongga_notification_key(
     date_str: str | None,
     signals: list[dict[str, Any]] | None,
-    notification_type: str = "signals",
+    notification_type: str = DEFAULT_NOTIFICATION_TYPE,
 ) -> str:
-    """날짜와 의미 있는 신호 payload로 중복 방지 키를 만든다."""
+    """종가베팅 기준일 단위의 중복 방지 키를 만든다."""
+    _ = signals
+    normalized_date = date_str or datetime.now().strftime("%Y-%m-%d")
+    return f"{normalized_date}:{notification_type}"
+
+
+def build_jongga_notification_payload_digest(
+    signals: list[dict[str, Any]] | None,
+) -> str:
+    """진단용 payload digest를 만든다. 중복 판정에는 사용하지 않는다."""
     normalized_payload = {
-        "date": date_str or datetime.now().strftime("%Y-%m-%d"),
-        "notification_type": notification_type,
         "signals": _normalize_signals(signals or []),
     }
     payload_json = json.dumps(
@@ -71,25 +79,25 @@ def build_jongga_notification_key(
         separators=(",", ":"),
         default=str,
     )
-    digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()[:24]
-    return f"{normalized_payload['date']}:{notification_type}:{digest}"
+    return hashlib.sha256(payload_json.encode("utf-8")).hexdigest()[:24]
 
 
 def claim_jongga_notification_send(
     data_dir: str,
     date_str: str | None,
     signals: list[dict[str, Any]] | None,
-    notification_type: str = "signals",
+    notification_type: str = DEFAULT_NOTIFICATION_TYPE,
     now: datetime | None = None,
 ) -> tuple[bool, str]:
     """
     알림 발송 권한을 원자적으로 claim한다.
 
     Returns:
-        (claimed, key): claimed가 False면 이미 동일 payload가 발송 중이거나 발송 완료된 상태다.
+        (claimed, key): claimed가 False면 해당 기준일 알림이 이미 발송 중이거나 발송 완료된 상태다.
     """
     current_time = now or datetime.now()
     key = build_jongga_notification_key(date_str, signals, notification_type)
+    payload_digest = build_jongga_notification_payload_digest(signals)
     os.makedirs(data_dir, exist_ok=True)
 
     with _locked_state(data_dir) as state:
@@ -102,6 +110,7 @@ def claim_jongga_notification_send(
             "status": "sending",
             "date": date_str or current_time.strftime("%Y-%m-%d"),
             "notification_type": notification_type,
+            "payload_digest": payload_digest,
             "claimed_at": current_time.isoformat(timespec="seconds"),
         }
         _write_state(data_dir, state)
