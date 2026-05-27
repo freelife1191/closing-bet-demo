@@ -22,6 +22,7 @@ from services.kr_market_data_cache_sqlite_payload import (
 from services.investor_trend_5day_service import (
     get_investor_trend_5day_for_ticker,
 )
+from engine.toss_collector import TossCollector
 
 logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1168,21 +1169,18 @@ class KRXCollector:
             top_n: 조회할 종목 수
             target_date: (Optional) 특정 날짜 기준 데이터 조회 (YYYYMMDD 형식, 테스트용)
         """
-        
+        min_change_pct = float(getattr(self.config, "min_change_pct", 0.0))
+        explicit_target_requested = bool(target_date)
+        if target_date:
+            target_date_str = self._normalize_top_gainers_target_token(target_date)
+            logger.info(f"[테스트 모드] 지정 날짜 기준 조회: {target_date_str}")
+        else:
+            target_date_str = self._get_latest_market_date()
+
         # 1. pykrx 실시간 데이터 시도
         try:
             from pykrx import stock
             import pandas as pd
-            min_change_pct = float(getattr(self.config, "min_change_pct", 0.0))
-            
-            explicit_target_requested = bool(target_date)
-            # 테스트 모드: 특정 날짜 지정 시 해당 날짜 사용
-            if target_date:
-                target_date_str = target_date  # YYYYMMDD 형식
-                logger.info(f"[테스트 모드] 지정 날짜 기준 조회: {target_date_str}")
-            else:
-                # 가장 최근 장 마감 날짜 계산
-                target_date_str = self._get_latest_market_date()
                 
             logger.info(f"목표 날짜: {target_date_str}")
 
@@ -1238,7 +1236,122 @@ class KRXCollector:
         
         # 2. Fallback: 로컬 daily_prices.csv 사용
         logger.info(f"Fallback: 로컬 daily_prices.csv 사용 ({market}) Target={target_date}")
-        return self._load_from_local_csv(market, top_n, target_date)
+        local_results = self._load_from_local_csv(market, top_n, target_date)
+        if local_results:
+            return local_results
+
+        # 3. Fallback: 오늘/최신 거래일은 Toss 현재가로 후보를 복구한다.
+        if self._should_use_toss_top_gainers_fallback(target_date_str):
+            logger.info(
+                "Fallback: Toss 현재가 기준 상승률 후보 복구 (%s, target=%s)",
+                market,
+                target_date_str,
+            )
+            toss_results = self._load_from_toss_prices(market, top_n)
+            if toss_results:
+                return toss_results
+
+        return []
+
+    def _should_use_toss_top_gainers_fallback(self, target_date_str: str | None) -> bool:
+        """Toss 현재가 fallback 사용 가능 여부."""
+        if not bool(getattr(self.config, "USE_TOSS_DATA", True)):
+            return False
+
+        target_token = self._normalize_top_gainers_target_token(target_date_str)
+        if target_token == "latest":
+            return True
+
+        try:
+            latest_token = self._normalize_top_gainers_target_token(self._get_latest_market_date())
+        except Exception:
+            latest_token = datetime.now().strftime("%Y%m%d")
+        return target_token == latest_token
+
+    def _load_from_toss_prices(self, market: str, top_n: int) -> List[StockData]:
+        """Toss 현재가 배치 API로 최신 상승률 후보를 생성한다."""
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        stocks_path = os.path.join(data_dir, 'korean_stocks_list.csv')
+        stocks_signature = _shared_file_signature(stocks_path)
+        if stocks_signature is None:
+            logger.warning("Toss fallback skipped: korean_stocks_list.csv 파일 없음")
+            return []
+
+        stock_usecols = ['ticker', 'name', 'market', 'sector']
+        try:
+            stocks_df = _load_shared_csv_file(
+                data_dir,
+                'korean_stocks_list.csv',
+                deep_copy=False,
+                usecols=stock_usecols,
+                signature=stocks_signature,
+            )
+        except ValueError:
+            stocks_df = _load_shared_csv_file(
+                data_dir,
+                'korean_stocks_list.csv',
+                deep_copy=False,
+                signature=stocks_signature,
+            )
+            existing_columns = [column for column in stock_usecols if column in stocks_df.columns]
+            if existing_columns:
+                stocks_df = stocks_df.loc[:, existing_columns]
+        except Exception as error:
+            logger.warning("Toss fallback stock list load failed: %s", error)
+            return []
+
+        if stocks_df.empty or 'ticker' not in stocks_df.columns:
+            logger.warning("Toss fallback skipped: 종목 리스트가 비어 있습니다.")
+            return []
+
+        normalized_market = str(market or "").strip().upper()
+        working = stocks_df.copy()
+        working['ticker'] = working['ticker'].astype(str).str.zfill(6)
+        if 'market' in working.columns:
+            working['market'] = working['market'].astype(str).str.upper()
+            working = working[working['market'] == normalized_market]
+        if working.empty:
+            logger.warning("Toss fallback skipped: %s 종목 리스트가 비어 있습니다.", normalized_market)
+            return []
+
+        codes = working['ticker'].dropna().astype(str).str.zfill(6).tolist()
+        try:
+            prices = TossCollector(self.config).get_prices_batch(codes)
+        except Exception as error:
+            logger.warning("Toss fallback price fetch failed: %s", error)
+            return []
+
+        min_change_pct = float(getattr(self.config, "min_change_pct", 0.0))
+        results: list[StockData] = []
+        for row in working.itertuples(index=False):
+            ticker = str(getattr(row, 'ticker', '')).zfill(6)
+            price = prices.get(ticker)
+            if not isinstance(price, dict):
+                continue
+
+            close = float(price.get('current') or 0)
+            change_pct = float(price.get('change_pct') or 0.0)
+            trading_value = float(price.get('trading_value') or 0.0)
+            if close < 1000 or trading_value < 1_000_000_000 or change_pct < min_change_pct:
+                continue
+
+            results.append(StockData(
+                code=ticker,
+                name=str(getattr(row, 'name', '') or ticker),
+                market=normalized_market,
+                sector=str(getattr(row, 'sector', '') or ''),
+                close=close,
+                change_pct=change_pct,
+                trading_value=trading_value,
+                volume=int(price.get('volume') or 0),
+                marcap=int(price.get('market_cap') or 0),
+                high_52w=0,
+                low_52w=0,
+            ))
+
+        results.sort(key=lambda item: item.change_pct, reverse=True)
+        logger.info("Toss fallback에서 %s개 종목 로드 완료 (%s)", len(results[:top_n]), normalized_market)
+        return results[:top_n]
     
     def _process_ohlcv_dataframe(self, df, market: str, top_n: int) -> List[StockData]:
         """pykrx DataFrame을 StockData 리스트로 변환"""

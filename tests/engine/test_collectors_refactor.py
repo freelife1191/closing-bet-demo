@@ -269,6 +269,134 @@ def test_get_top_gainers_explicit_target_does_not_probe_previous_dates(monkeypat
     assert calls == ["20260522"]
 
 
+def test_get_top_gainers_uses_toss_fallback_for_current_date(monkeypatch):
+    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with collectors_module.KRXCollector._top_gainers_cache_lock:
+        collectors_module.KRXCollector._top_gainers_cache.clear()
+
+    def _fake_get_market_ohlcv_by_ticker(_check_date: str, _market: str):
+        return pd.DataFrame()
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = types.SimpleNamespace(
+        get_market_ohlcv_by_ticker=_fake_get_market_ohlcv_by_ticker
+    )
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_load_cached_top_gainers",
+        classmethod(lambda cls, **_kwargs: None),
+    )
+    monkeypatch.setattr(collector, "_load_from_local_csv", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(collector, "_get_latest_market_date", lambda: "20260527")
+    monkeypatch.setattr(
+        collectors_module,
+        "_shared_file_signature",
+        lambda path: (10, 20) if path.endswith("korean_stocks_list.csv") else None,
+    )
+
+    stocks_df = pd.DataFrame(
+        [
+            {"ticker": "000001", "name": "현재강세1", "market": "KOSPI", "sector": "반도체"},
+            {"ticker": "000002", "name": "현재강세2", "market": "KOSPI", "sector": "IT"},
+            {"ticker": "000003", "name": "코스닥제외", "market": "KOSDAQ", "sector": "바이오"},
+            {"ticker": "000004", "name": "하락제외", "market": "KOSPI", "sector": "소재"},
+            {"ticker": "000005", "name": "대금제외", "market": "KOSPI", "sector": "기계"},
+        ]
+    )
+
+    def _fake_load_shared_csv_file(
+        data_dir: str,
+        filename: str,
+        *,
+        deep_copy: bool = True,
+        usecols: list[str] | None = None,
+        signature: tuple[int, int] | None = None,
+    ) -> pd.DataFrame:
+        del data_dir, deep_copy, usecols, signature
+        assert filename == "korean_stocks_list.csv"
+        return stocks_df.copy()
+
+    class FakeTossCollector:
+        def __init__(self, config):
+            self.config = config
+
+        def get_prices_batch(self, codes: list[str]) -> dict[str, dict[str, float]]:
+            assert codes == ["000001", "000002", "000004", "000005"]
+            return {
+                "000001": {
+                    "current": 2_000,
+                    "change_pct": 8.0,
+                    "trading_value": 3_000_000_000,
+                    "volume": 1_500_000,
+                    "market_cap": 200_000_000_000,
+                },
+                "000002": {
+                    "current": 5_000,
+                    "change_pct": 15.0,
+                    "trading_value": 5_000_000_000,
+                    "volume": 1_000_000,
+                    "market_cap": 500_000_000_000,
+                },
+                "000004": {
+                    "current": 1_500,
+                    "change_pct": -1.0,
+                    "trading_value": 4_000_000_000,
+                    "volume": 2_000_000,
+                    "market_cap": 150_000_000_000,
+                },
+                "000005": {
+                    "current": 3_000,
+                    "change_pct": 20.0,
+                    "trading_value": 500_000_000,
+                    "volume": 100_000,
+                    "market_cap": 300_000_000_000,
+                },
+            }
+
+    monkeypatch.setattr(collectors_module, "_load_shared_csv_file", _fake_load_shared_csv_file)
+    monkeypatch.setattr(collectors_module, "TossCollector", FakeTossCollector)
+
+    results = asyncio.run(collector.get_top_gainers("KOSPI", top_n=2, target_date="20260527"))
+
+    assert [item.code for item in results] == ["000002", "000001"]
+    assert [item.name for item in results] == ["현재강세2", "현재강세1"]
+    assert results[0].change_pct == 15.0
+    assert results[0].trading_value == 5_000_000_000
+
+
+def test_get_top_gainers_skips_toss_fallback_for_historical_missing_date(monkeypatch):
+    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with collectors_module.KRXCollector._top_gainers_cache_lock:
+        collectors_module.KRXCollector._top_gainers_cache.clear()
+
+    def _fake_get_market_ohlcv_by_ticker(_check_date: str, _market: str):
+        return pd.DataFrame()
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = types.SimpleNamespace(
+        get_market_ohlcv_by_ticker=_fake_get_market_ohlcv_by_ticker
+    )
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(
+        collectors_module.KRXCollector,
+        "_load_cached_top_gainers",
+        classmethod(lambda cls, **_kwargs: None),
+    )
+    monkeypatch.setattr(collector, "_load_from_local_csv", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(collector, "_get_latest_market_date", lambda: "20260527")
+
+    class FailingTossCollector:
+        def __init__(self, _config):
+            raise AssertionError("과거 명시 날짜는 Toss 현재가 fallback을 호출하면 안 됩니다.")
+
+    monkeypatch.setattr(collectors_module, "TossCollector", FailingTossCollector)
+
+    results = asyncio.run(collector.get_top_gainers("KOSPI", top_n=2, target_date="20260522"))
+
+    assert results == []
+
+
 def test_get_latest_market_date_uses_memory_cache_before_pykrx(monkeypatch, tmp_path):
     collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
     collectors_module.KRXCollector.clear_latest_market_date_cache()
