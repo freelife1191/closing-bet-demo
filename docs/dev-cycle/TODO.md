@@ -11,28 +11,6 @@
 
 ## P0 — 즉시
 
-### [INFRA-014] 실행 코드를 바꾸는 모든 사이클에 `/qa-only` 를 배정한다
-- 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-01 VCP-006 직후 사용자 지적
-- `tier-rules.md` §1 은 `/qa-only` 를 "T3 이면서 화면이 바뀌는 경우" 로만 한정하고,
-  "백엔드만 바꾸는 T2 나 T3 에는 열어 볼 화면이 없다" 고 적었습니다. 이 전제가 스킬의
-  실제 동작과 어긋납니다. `~/.claude/skills/qa-only/SKILL.md:576` 의 diff-aware 모드는
-  diff 에서 화면이 매핑되지 않으면 검사를 건너뛰는 대신 Quick 모드로 내려가며,
-  "Backend, config, and infrastructure changes affect app behavior" 라고 명시합니다.
-- `[VCP-006]` 이 반례입니다. 백엔드만 바꿨지만 결함이 드러난 자리는 브라우저였고,
-  `curl` 로는 정상으로 보였습니다. 지금 규약대로면 이 항목에는 시나리오가 배정되지
-  않았을 것입니다.
-- 실제로 완료한 일곱 사이클 가운데 `/qa-only` 가 배정된 사이클은 한 건도 없습니다.
-  T3 였던 두 건은 화면이 바뀌지 않았고, 화면이 바뀐 두 건은 T2 였습니다.
-- [ ] `tier-rules.md` §1 표의 검증 열을 고쳐 T1·T2·T3 모두에 `/qa-only` 를 배정
-- [ ] "화면이 바뀌지 않는 항목에는 실측과 시나리오를 요구하지 않는다" 문단을 교체하고,
-      제외 대상을 문서 트랙 하나로 한정
-- [ ] `/qa-only` 와 `agent-browser` 의 역할 분담을 명시 (전자는 앱 전반의 생존 확인,
-      후자는 특정 화면의 특정 값 대조)
-- [ ] `/qa-only` 실행 전제를 적는다 (Flask 5501 과 Next.js 3500 이 모두 떠 있어야 하고,
-      `~/.claude/skills/gstack/browse/dist/browse` 가 빌드되어 있어야 함)
-- [ ] `SKILL.md` 의 [3] 검증 절에 같은 내용을 반영
-- [ ] `tier-rules.md` §5 에 따라 TODO 의 39개 항목 전부를 바뀐 규정에 대조
-
 ### [CHAT-001] 새 대화 스트리밍의 세션 전환 결함 수정
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §1.1
 - 티어 판정: 건드릴 파일은 `frontend/src/app/chatbot/page.tsx` 하나이고 `tier-rules.md` §2 의
@@ -154,7 +132,8 @@
 ### [FE-001] 낡은 업그레이드 베이스라인 테스트 정리
 - 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: 2026-09-01 vitest 실행
 - 대상 두 파일이 합계 513줄이고 구현 파일은 건드리지 않으므로, `tier-rules.md` §1 의
-  제외 조항이 적용되지 않아 그대로 셉니다. 화면이 바뀌지 않으므로 실측할 대상은 없습니다.
+  제외 조항이 적용되지 않아 그대로 셉니다. 테스트 파일만 바꾸므로 `tier-rules.md` §1 의
+  `/qa-only` 제외에 해당하고, agent-browser 로 대조할 화면도 없습니다.
 - 세 건이 과거 업그레이드 시점의 버전을 고정 검사해 항상 실패합니다.
   현재 Next 16.1.6 / React 19.2.4 인데 각각 14.x, 18.x, 15.x 를 기대합니다.
 - [ ] `tests/baseline/upgrade-baseline.test.ts` 의 버전 고정 검사 처리
@@ -383,7 +362,8 @@
 - 카테고리: VCP 시그널 | 티어: T3 | 근거: AUDIT-VCP §3.1, §2.1
 - 티어 근거: `engine/vcp_ai_analyzer.py` 는 `tier-rules.md` §2 의 "VCP 판정" 위험 경로에
   올라 있으므로 줄 수와 무관하게 T3 입니다. 리뷰는 `/ponytail-review` → `/code-review` →
-  `/review` 순서를 지킵니다. 화면이 바뀌지 않으므로 실측과 시나리오는 돌리지 않습니다.
+  `/review` 순서를 지킵니다. 실행 코드를 바꾸므로 `/qa-only` 는 돌립니다. 화면이 바뀌지는
+  않으므로 agent-browser 로 값을 대조할 자리는 없습니다.
 - [ ] 호출자가 없는 `_fallback_to_zai` 제거
 - [ ] `_resolve_perplexity_fallback_providers` 와 `_build_perplexity_fallback_chain` 의
       실행되지 않는 분기 정리
