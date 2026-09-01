@@ -11,6 +11,7 @@ import logging
 import os
 
 from engine.market_gate import MarketGate
+from engine.pandas_utils_safe import safe_bool
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 from engine.toss_collector import TossCollector # [NEW] Toss Collector 연동
 from engine.screener_data_loader import (
@@ -228,19 +229,18 @@ class SmartMoneyScreener:
                     break
                     
                 stock_dict = build_stock_candidate(stock_row)
-                
+                # 분석에 실패한 종목도 max_stocks 예산에서 차감한다.
+                count += 1
+
                 try:
                     result = self._analyze_stock(stock_dict)
-                    if not result or not bool(result.get("is_vcp", False)):
-                        count += 1
+                    if not result or not safe_bool(result.get("is_vcp", False)):
                         continue
 
                     if float(result.get("score", 0) or 0) >= min_score:
                         result['market_status'] = gate_status['status']
                         results.append(result)
-                        
-                    count += 1
-                    
+
                 except Exception as e:
                     logger.debug(
                         "종목 분석 스킵 ticker=%s: %s",

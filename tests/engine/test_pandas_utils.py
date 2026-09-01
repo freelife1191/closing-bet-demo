@@ -22,6 +22,7 @@ from engine.pandas_utils import (
     get_latest_values,
     load_json_file,
     merge_realtime_prices,
+    safe_bool,
     safe_float,
     safe_int,
     safe_str,
@@ -337,3 +338,26 @@ def test_load_csv_file_retries_shared_cache_without_usecols_on_schema_mismatch(
     assert calls["shared"] == 2
     assert list(loaded.columns) == ["ticker"]
     assert str(loaded.iloc[0]["ticker"]) == "005930"
+
+
+def test_safe_bool_reads_csv_style_truthy_strings():
+    """CSV로 왕복한 문자열 표현을 원래 불리언으로 되돌린다."""
+    assert safe_bool("True") is True
+    assert safe_bool(" true ") is True
+    assert safe_bool("yes") is True
+    assert safe_bool("False") is False
+    assert safe_bool("아무말") is False
+
+
+def test_safe_bool_treats_numeric_flags_as_boolean():
+    """NaN이 섞여 float으로 읽힌 is_vcp 컬럼도 참으로 해석해야 한다."""
+    assert safe_bool(1.0) is True
+    assert safe_bool(1) is True
+    assert safe_bool(0.0) is False
+
+
+def test_safe_bool_falls_back_on_missing_values():
+    """None과 NaN은 기본값을 그대로 사용한다."""
+    assert safe_bool(None) is False
+    assert safe_bool(float("nan")) is False
+    assert safe_bool(None, default=True) is True

@@ -21,6 +21,7 @@ from engine.pandas_utils_dataframe import (
 )
 from engine.pandas_utils_io import load_csv_file, load_json_file, save_json_file
 from engine.pandas_utils_safe import (
+    safe_bool,
     safe_float,
     safe_int,
     safe_str,
@@ -35,6 +36,7 @@ from engine.pandas_utils_signal_ops import (
 
 __all__ = [
     'safe_value',
+    'safe_bool',
     'safe_int',
     'safe_float',
     'safe_str',

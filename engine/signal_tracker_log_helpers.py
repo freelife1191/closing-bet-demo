@@ -127,7 +127,10 @@ def append_signals_log(
             ~((existing["signal_date"] == today) & (existing["ticker"].isin(working_new["ticker"])))
         ]
 
-    return pd.concat([existing, working_new], ignore_index=True)
+    combined = pd.concat([existing, working_new], ignore_index=True)
+    if "_ticker_padded" in combined.columns:
+        combined = combined.drop(columns=["_ticker_padded"])
+    return combined
 
 
 def update_open_signals_frame(

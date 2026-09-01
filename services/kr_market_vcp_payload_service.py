@@ -145,7 +145,8 @@ def _load_vcp_signals(
         if cached_signals:
             source = "signals_log.csv"
         stale_warning = None
-        if req_date is None:
+        # 캐시에 시그널이 있으면 stale 경고 대상이 아니므로 CSV를 다시 읽지 않는다.
+        if req_date is None and not cached_signals:
             stale_warning = _resolve_stale_warning_message(
                 req_date=req_date,
                 source_df=_load_csv_readonly(load_csv_file, "signals_log.csv", usecols=["signal_date"]),
@@ -179,13 +180,17 @@ def _load_vcp_signals(
             "ai_confidence",
         ],
     )
+    source_df = signals_df
     signals_df, _ = filter_signals_dataframe_by_date(signals_df, req_date, today)
-    stale_warning = _resolve_stale_warning_message(
-        req_date=req_date,
-        source_df=_load_csv_readonly(load_csv_file, "signals_log.csv", usecols=["signal_date"]),
-        filtered_df=signals_df,
-        today=today,
-    )
+    stale_warning = None
+    # 필터 결과가 비었을 때만 경고 대상이므로, 그 경우에만 원본 프레임을 참조한다.
+    if req_date is None and (not isinstance(signals_df, pd.DataFrame) or signals_df.empty):
+        stale_warning = _resolve_stale_warning_message(
+            req_date=req_date,
+            source_df=source_df,
+            filtered_df=signals_df,
+            today=today,
+        )
     if req_date:
         logger.debug(f"Signals requested for explicit date: {req_date}")
     elif not signals_df.empty:

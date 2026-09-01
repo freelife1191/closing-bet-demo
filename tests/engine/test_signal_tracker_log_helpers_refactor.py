@@ -261,3 +261,24 @@ def test_update_open_signals_frame_normalizes_unpadded_price_map_keys():
     assert row["ticker"] == "000001"
     assert float(row["return_pct"]) == 10.0
     assert closed_logs.empty
+
+
+def test_append_signals_log_drops_internal_ticker_cache_column(tmp_path):
+    """내부 캐시 컬럼 _ticker_padded 가 저장 프레임으로 새면 안 된다."""
+    today = "2026-02-21"
+    log_path = tmp_path / "signals_log.csv"
+
+    pd.DataFrame(
+        [{"signal_date": "2026-02-20", "ticker": "000002", "status": "CLOSED"}]
+    ).to_csv(log_path, index=False, encoding="utf-8-sig")
+
+    combined = append_signals_log(
+        signals_log_path=str(log_path),
+        new_signals=pd.DataFrame(
+            [{"signal_date": today, "ticker": "3", "status": "OPEN"}]
+        ),
+        today=today,
+    )
+
+    assert "_ticker_padded" not in combined.columns
+    assert set(combined["ticker"]) == {"000002", "000003"}

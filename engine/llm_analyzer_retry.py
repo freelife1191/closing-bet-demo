@@ -47,28 +47,34 @@ class RetryConfig:
         )
 
 
+# 설정 모델(GEMINI_MODEL / VCP_GEMINI_MODEL)이 build_gemini_retry_model_chain 에서
+# 맨 앞으로 올라가므로, 아래 순서는 설정 모델을 제외한 나머지의 소진 순서다.
 GEMINI_RETRY_MODEL_CHAIN = [
-    # Main (Gemini 3.x) - tier 순서 유지
+    # Main (Gemini 3.x)
     "gemini-3.5-flash-lite",
     "gemini-3.7-flash",
     "gemini-3.1-pro-preview",
-    # Fallback (Gemini 2.5 stable) - 동일 tier 순서로 페어링
+    # Fallback (Gemini 2.5 stable) - 3.x 가 전부 실패한 뒤 동일 tier 순서로 재시도
     "gemini-2.5-flash-lite",   # ↔ 3.5-flash-lite
     "gemini-2.5-flash",        # ↔ 3.7-flash
     "gemini-2.5-pro",          # ↔ 3.1-pro-preview
 ]
 
 
-def build_gemini_retry_model_chain(
+def build_model_chain(
     primary_model: str | None,
+    fallback_chain: Iterable[str],
     blocked_models: Iterable[str] | None = None,
 ) -> list[str]:
-    """설정 모델을 우선하고 기본 Gemini 재시도 체인을 이어 붙인다."""
+    """설정 모델을 맨 앞에 두고 폴백 체인을 이어 붙인다.
+
+    공백 항목과 차단된 모델은 제외하고, 대소문자를 구분하지 않고 중복을 제거한다.
+    """
     blocked = set(blocked_models or [])
     model_chain: list[str] = []
     seen_models: set[str] = set()
 
-    for candidate in [primary_model, *GEMINI_RETRY_MODEL_CHAIN]:
+    for candidate in [primary_model, *fallback_chain]:
         model_name = str(candidate or "").strip()
         if not model_name or model_name in blocked:
             continue
@@ -79,6 +85,14 @@ def build_gemini_retry_model_chain(
         model_chain.append(model_name)
 
     return model_chain
+
+
+def build_gemini_retry_model_chain(
+    primary_model: str | None,
+    blocked_models: Iterable[str] | None = None,
+) -> list[str]:
+    """설정 모델을 우선하고 기본 Gemini 재시도 체인을 이어 붙인다."""
+    return build_model_chain(primary_model, GEMINI_RETRY_MODEL_CHAIN, blocked_models)
 
 
 class LLMRetryStrategy(ABC):

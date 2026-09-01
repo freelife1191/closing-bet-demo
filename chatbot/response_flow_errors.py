@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from engine.llm_analyzer_retry import build_model_chain
+
 
 def extract_usage_metadata(response: Any) -> Dict[str, int]:
     """Gemini 응답에서 토큰 사용량 메타데이터를 추출한다."""
@@ -50,19 +52,18 @@ def friendly_error_message(error_msg: str, default_prefix: str) -> str:
     return f"{default_prefix}{error_msg}"
 
 
+# 3.x / 2.5 tier를 번갈아 소진하도록 의도한 순서로, Gemini 재시도 체인과 별개다.
+CHATBOT_STREAM_FALLBACK_CHAIN = [
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-2.5-flash",
+]
+
+
 def build_fallback_models(target_model_name: str) -> List[str]:
     """스트리밍 재시도용 모델 후보 리스트."""
-    fallback_sequence = [
-        "gemini-3.5-flash-lite",
-        "gemini-2.5-flash-lite",
-        "gemini-3.7-flash",
-        "gemini-2.5-flash",
-    ]
-    models = [target_model_name]
-    for model_name in fallback_sequence:
-        if model_name not in models:
-            models.append(model_name)
-    return models
+    return build_model_chain(target_model_name, CHATBOT_STREAM_FALLBACK_CHAIN)
 
 
 def is_retryable_stream_error(error_msg: str) -> bool:

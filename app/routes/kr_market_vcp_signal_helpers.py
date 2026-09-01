@@ -17,9 +17,8 @@ from app.routes.kr_market_signal_common import (
     _safe_int,
     _VALID_AI_ACTIONS,
 )
+from engine.pandas_utils_safe import safe_bool
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
-
-_TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
 
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
@@ -191,12 +190,7 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
     score = _safe_float(_row_get(row, "score", 0), default=0.0)
     status = str(_row_get(row, "status", "OPEN"))
     vcp_score = _safe_float(_row_get(row, "vcp_score", 0), default=0.0)
-    is_vcp_raw = _row_get(row, "is_vcp", False)
-    is_vcp = (
-        is_vcp_raw
-        if isinstance(is_vcp_raw, bool)
-        else str(is_vcp_raw).strip().lower() in _TRUE_VALUES
-    )
+    is_vcp = safe_bool(_row_get(row, "is_vcp", False))
 
     if status != "OPEN":
         return None

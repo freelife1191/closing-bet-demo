@@ -13,7 +13,7 @@ import re
 from typing import List, Dict, Optional
 
 from engine.config import app_config
-from engine.llm_analyzer_retry import GEMINI_RETRY_MODEL_CHAIN, build_gemini_retry_model_chain
+from engine.llm_analyzer_retry import build_gemini_retry_model_chain, build_model_chain
 from engine.vcp_ai_analyzer_helpers import (
     build_vcp_rule_based_recommendation,
     build_perplexity_request,
@@ -488,8 +488,16 @@ class VCPMultiAIAnalyzer:
                 prompt=resolved_prompt,
                 reason="GPT quota exhausted (session cache)",
             )
-        primary_model = str(app_config.VCP_GPT_MODEL or "").strip() or "gpt-5-nano"
-        fallback_model = str(getattr(app_config, "VCP_GPT_FALLBACK_MODEL", "gpt-5-mini") or "").strip()
+        primary_model = str(app_config.VCP_GPT_MODEL or "").strip()
+        fallback_model = str(app_config.VCP_GPT_FALLBACK_MODEL or "").strip()
+        if not primary_model:
+            logger.warning("[GPT] VCP_GPT_MODEL 이 비어 있어 GPT 분석을 건너뜁니다.")
+            return await self._fallback_from_gpt(
+                stock_name=stock_name,
+                stock_data=stock_data,
+                prompt=resolved_prompt,
+                reason="VCP_GPT_MODEL not configured",
+            )
         current_model = primary_model
         max_attempts = max(1, int(getattr(app_config, "VCP_GPT_MAX_ATTEMPTS", 3)))
         request_timeout = float(getattr(app_config, "VCP_GPT_API_TIMEOUT", 120))
@@ -812,18 +820,7 @@ class VCPMultiAIAnalyzer:
 
         try:
             resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
-            primary_model = str(app_config.ZAI_MODEL or "").strip()
-            model_chain: list[str] = []
-            seen_models: set[str] = set()
-            for candidate in [primary_model, *ZAI_FALLBACK_MODEL_CHAIN]:
-                model_name = str(candidate or "").strip()
-                if not model_name:
-                    continue
-                key = model_name.lower()
-                if key in seen_models:
-                    continue
-                seen_models.add(key)
-                model_chain.append(model_name)
+            model_chain = build_model_chain(app_config.ZAI_MODEL, ZAI_FALLBACK_MODEL_CHAIN)
             if not model_chain:
                 logger.warning("[Z.ai] 사용 가능한 모델이 없습니다.")
                 fallback_result = build_vcp_rule_based_recommendation(

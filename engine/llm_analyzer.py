@@ -36,7 +36,6 @@ from engine.llm_analyzer_prompts import (
     build_summary_prompt as build_summary_prompt_impl,
 )
 from engine.llm_analyzer_retry import (
-    GEMINI_RETRY_MODEL_CHAIN,
     GeminiRetryStrategy,
     LLMRetryStrategy,
     RetryConfig,

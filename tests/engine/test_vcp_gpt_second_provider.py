@@ -233,3 +233,21 @@ def test_second_provider_gpt_falls_back_to_zai_on_quota_exhausted(monkeypatch):
     assert result["gpt_recommendation"]["model"] == "glm-4.6V-Flash"
     assert len(calls) == 1
     assert [call["model"] for call in client.responses.calls] == ["gpt-5-nano"]
+
+
+def test_second_provider_gpt_skips_call_when_model_env_is_blank(monkeypatch):
+    """VCP_GPT_MODEL 이 빈 값이면 빈 모델명으로 API 를 호출하지 않아야 한다."""
+    analyzer, client = _build_analyzer(
+        monkeypatch,
+        ['{"action":"BUY","confidence":81,"reason":"테스트"}'],
+    )
+    monkeypatch.setenv("VCP_GPT_MODEL", "")
+
+    result = asyncio.run(analyzer.analyze_stock("테스트종목", _sample_stock()))
+
+    requested_models = [
+        call.get("model")
+        for call in client.responses.calls + client.chat.completions.calls
+    ]
+    assert requested_models == []
+    assert result["gpt_recommendation"] is None

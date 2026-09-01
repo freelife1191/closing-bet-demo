@@ -480,7 +480,7 @@ async def main_async(report_path: Path, vcp_iters: int, perplexity_iters: int, c
                 r.latency_s,
             )
 
-    # GPT (Z.ai gpt-5-nano via responses.create)
+    # GPT (Z.ai VCP_GPT_MODEL via responses.create)
     for case in VCP_CASES:
         for i in range(1, vcp_iters + 1):
             r = await run_gpt_iteration(analyzer, case, i)

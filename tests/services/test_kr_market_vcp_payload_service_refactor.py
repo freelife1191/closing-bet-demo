@@ -589,3 +589,45 @@ def test_vcp_signals_sqlite_waiter_retries_after_initializer_failure(monkeypatch
     assert run_calls["count"] == 2
     assert results.get("first") is False
     assert results.get("second") is True
+
+
+def test_build_vcp_payload_cache_hit_skips_signals_csv_reread(tmp_path):
+    """캐시에 시그널이 있으면 stale 판정용 CSV를 다시 읽지 않는다."""
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-03")
+
+    read_filenames: list[str] = []
+
+    def _counting_load_csv(name):
+        read_filenames.append(name)
+        return pd.read_csv(tmp_path / name)
+
+    kwargs = {
+        "req_date": None,
+        "load_csv_file": _counting_load_csv,
+        "load_json_file": lambda _name, **_kwargs: {},
+        "filter_signals_dataframe_by_date": lambda df, _req, _today: (df, ""),
+        "build_vcp_signals_from_dataframe": lambda df: [
+            {"ticker": str(row["ticker"]).zfill(6), "signal_date": row["signal_date"]}
+            for _, row in df.iterrows()
+        ],
+        "load_latest_vcp_price_map": lambda: {},
+        "apply_latest_prices_to_jongga_signals": lambda _signals, _price_map: 0,
+        "sort_and_limit_vcp_signals": lambda signals, limit=100: list(signals)[:limit],
+        "build_ai_data_map": lambda _payload: {},
+        "merge_legacy_ai_fields_into_map": lambda _ai_map, _legacy: None,
+        "merge_ai_data_into_vcp_signals": lambda _signals, _ai_map: 0,
+        "count_total_scanned_stocks": lambda _data_dir: 1,
+        "logger": logging.getLogger("vcp-payload-cache-hit-reread-test"),
+        "now": datetime(2026, 3, 3, 9, 0, 0),
+        "data_dir": str(tmp_path),
+    }
+
+    first = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+    reads_after_first = len(read_filenames)
+    second = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+
+    assert first["count"] == 1
+    assert second["count"] == 1
+    assert second.get("stale_warning") is None
+    assert len(read_filenames) == reads_after_first

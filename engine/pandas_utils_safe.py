@@ -49,6 +49,25 @@ def safe_str(value: Any, default: str = "") -> str:
     return str(value)
 
 
+_TRUE_STRINGS = {"1", "true", "yes", "y", "on"}
+
+
+def safe_bool(value: Any, default: bool = False) -> bool:
+    """CSV/DataFrame에서 읽은 불리언 값을 일관되게 해석한다."""
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return bool(value)
+    return str(value).strip().lower() in _TRUE_STRINGS
+
+
 def sanitize_for_json(data: Any) -> Any:
     """JSON 직렬화를 위해 NaN, Infinity 등을 안전한 값으로 변환 (재귀)."""
     if isinstance(data, dict):

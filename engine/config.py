@@ -161,7 +161,7 @@ class AppConfig:
 
     @property
     def ZAI_MODEL(self):
-        return os.getenv("ZAI_MODEL", "coding-plan")
+        return os.getenv("ZAI_MODEL", "glm-5.3-flash")
         
     @property
     def LLM_CONCURRENCY(self):
@@ -209,11 +209,11 @@ class AppConfig:
 
     @property
     def VCP_GPT_MODEL(self):
-        return os.getenv("VCP_GPT_MODEL", "gpt-5-nano")
+        return os.getenv("VCP_GPT_MODEL", "gpt-5.6-luna")
 
     @property
     def VCP_GPT_FALLBACK_MODEL(self):
-        return os.getenv("VCP_GPT_FALLBACK_MODEL", "gpt-5-mini")
+        return os.getenv("VCP_GPT_FALLBACK_MODEL", "gpt-5.4-nano")
 
     @property
     def VCP_GPT_MAX_ATTEMPTS(self):

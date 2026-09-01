@@ -81,6 +81,7 @@ from engine.constants import SCREENING
 from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
 from engine.market_gate import MarketGate
+from engine.pandas_utils_safe import safe_bool
 
 # =====================================================
 # 주말/휴일 처리를 위한 유틸리티 함수
@@ -1601,19 +1602,6 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 return "C"
             return "D"
 
-        def _as_bool(value) -> bool:
-            if isinstance(value, bool):
-                return value
-            if value is None:
-                return False
-            if isinstance(value, (int, float)):
-                return bool(value)
-            normalized = str(value).strip().lower()
-            return normalized in {"1", "true", "yes", "y", "on"}
-
-        def _passes_vcp_signal_gate(is_vcp_value) -> bool:
-            return _as_bool(is_vcp_value)
-        
         resolved_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
         if max_stocks is not None:
             try:
@@ -1637,13 +1625,12 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         df_result = screener.run_screening(max_stocks=resolved_max_stocks)
         
         signals = []
-        excluded_by_vcp_gate = 0
         if not df_result.empty:
             for row in df_result.itertuples(index=False):
                 row_vcp_score = float(getattr(row, "vcp_score", 0) or 0)
-                row_is_vcp = _as_bool(getattr(row, "is_vcp", False))
-                if not _passes_vcp_signal_gate(row_is_vcp):
-                    excluded_by_vcp_gate += 1
+                row_is_vcp = safe_bool(getattr(row, "is_vcp", False))
+                if not row_is_vcp:
+                    # run_screening 이 이미 걸러내므로 정상 경로에서는 도달하지 않는다.
                     continue
 
                 signals.append({
@@ -1662,12 +1649,6 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     'is_vcp': row_is_vcp,
                     'current_price': int(float(getattr(row, 'entry_price', 0) or 0)) # Approximation or need fetch
                 })
-        if excluded_by_vcp_gate > 0:
-            log(
-                f"VCP 패턴 게이트 미충족으로 {excluded_by_vcp_gate}건 제외 "
-                f"(조건: is_vcp=True)",
-                "INFO",
-            )
 
         log(f"총 {len(signals)}개 시그널 감지")
         
@@ -1879,16 +1860,12 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                         df_combined = df_combined.sort_values(by=['signal_date', 'score'], ascending=[False, False])
                     
                     df_combined.to_csv(file_path, index=False, encoding='utf-8-sig')
-                    # 해당 날짜 데이터 반환 (common.py 연동용) -> init_data.py에서는 True 반환해야 함
-                    return True
                 except Exception as e:
                     log(f"기존 로그 병합 실패: {e}, 새로 생성합니다(덮어쓰기).", "WARNING")
                     df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
-                    return True
             else:
                 df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
-                return True
-                
+
             log(f"VCP 시그널 분석 완료: {len(signals)} 종목 감지 (누적 저장)", "SUCCESS")
             return True
         else:
@@ -1910,6 +1887,13 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 'vcp_score',
                 'is_vcp',
                 'current_price',
+                'ai_action',
+                'ai_confidence',
+                'ai_reason',
+                'return_pct',
+                'exit_price',
+                'exit_date',
+                'hold_days',
             ]
             if os.path.exists(file_path):
                 try:

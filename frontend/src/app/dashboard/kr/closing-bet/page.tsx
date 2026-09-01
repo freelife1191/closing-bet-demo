@@ -1913,7 +1913,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
   // Helper function to format model names (handles legacy names and formatting)
   const formatAiModelName = (modelName: string | undefined): string => {
-    if (!modelName) return 'Gemini 2.0 Flash';
+    if (!modelName) return 'Gemini 3.7 Flash';
 
     // Alias Mapping (Legacy or Configuration nicknames)
     const lowerName = modelName.toLowerCase();
