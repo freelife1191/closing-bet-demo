@@ -23,17 +23,9 @@ describe('Next.js Upgrade Baseline Tests', () => {
     }
   })
 
-  describe('Current Version Check', () => {
-    it('should have Next.js 14.x installed', () => {
-      expect(currentVersions.next).toMatch(/^14\./)
-      console.log(`Current Next.js version: ${currentVersions.next}`)
-    })
-
-    it('should have React 18.x installed', () => {
-      expect(currentVersions.react).toMatch(/^18\./)
-      console.log(`Current React version: ${currentVersions.react}`)
-    })
-  })
+  // 업그레이드 전 버전(Next.js 14.x / React 18.x)을 고정 검사하던 'Current Version
+  // Check' 블록은 제거했다. 업그레이드가 끝난 지금은 항상 실패하며, 현재 버전 검사는
+  // upgrade-nextjs16.test.ts 의 'Version Verification' 이 맡는다.
 
   describe('Type System Compatibility', () => {
     it('should support current TypeScript configuration', () => {

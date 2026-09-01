@@ -27,25 +27,18 @@ def _row_get(row: Any, key: str, default: Any = None) -> Any:
     return getattr(row, key, default)
 
 
-def _is_vcp_ai_analysis_failed(row: dict) -> bool:
-    """
-    VCP 시그널의 AI 분석 실패 여부 판별.
-    - action이 BUY/SELL/HOLD가 아니면 실패
-    - reason이 비어있거나 실패/placeholder 문구면 실패
-    """
-    if not isinstance(row, dict):
-        return True
+def _is_vcp_ai_analysis_failed(row: Any) -> bool:
+    """VCP 시그널의 AI 분석 실패 여부 판별.
 
-    action = _normalize_text(row.get("ai_action")).upper()
-    reason = row.get("ai_reason")
-
+    action 이 BUY/SELL/HOLD 가 아니거나 사유가 비어 있으면 실패다. dict 와
+    itertuples 가 만드는 namedtuple 을 모두 받는다. 응답을 조립하는 경로가
+    namedtuple 을 넘기기 때문이다.
+    """
+    action = _normalize_text(_row_get(row, "ai_action")).upper()
     if action not in _VALID_AI_ACTIONS:
         return True
 
-    if not _is_meaningful_ai_reason(reason):
-        return True
-
-    return False
+    return not _is_meaningful_ai_reason(_row_get(row, "ai_reason"))
 
 
 def _build_vcp_stock_payload(row: dict) -> dict:
@@ -168,19 +161,22 @@ def _filter_signals_dataframe_by_date(
     return filtered_df, today
 
 
-def _build_vcp_gemini_recommendation(row: dict) -> Optional[dict]:
-    """CSV 행에서 gemini_recommendation 형태를 생성한다."""
-    ai_action = _none_if_nan(_row_get(row, "ai_action"))
-    ai_reason = _none_if_nan(_row_get(row, "ai_reason"))
-    ai_confidence = _none_if_nan(_row_get(row, "ai_confidence"))
+def _build_vcp_gemini_recommendation(row: Any) -> Optional[dict]:
+    """CSV 행에서 gemini_recommendation 형태를 생성한다.
 
-    if not ai_action or not ai_reason:
+    분석에 실패한 행은 추천을 만들지 않는다. 실패해도 action 에는 "N/A" 가,
+    reason 에는 "분석 실패" 가 채워지므로 값의 존재만 보면 정상으로 통과하고,
+    화면은 그 행에 관망 배지를 단다.
+    """
+    if _is_vcp_ai_analysis_failed(row):
         return None
 
     return {
-        "action": ai_action,
-        "confidence": _safe_int(ai_confidence, default=0),
-        "reason": ai_reason,
+        # 판정은 정규화한 값으로 했으므로 내보내는 값도 같은 형태여야 한다. "buy " 를
+        # 그대로 내보내면 화면이 배지 표에서 찾지 못해 미분석으로 표시한다.
+        "action": _normalize_text(_row_get(row, "ai_action")).upper(),
+        "confidence": _safe_int(_none_if_nan(_row_get(row, "ai_confidence")), default=0),
+        "reason": _row_get(row, "ai_reason"),
         "news_sentiment": "positive",
     }
 

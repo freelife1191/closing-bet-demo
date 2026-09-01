@@ -181,6 +181,15 @@ const parseAIResponse = (text: string, isStreaming: boolean = false, streamReaso
 
 const getVcpWelcomeMessage = (stockName?: string) => `👋 안녕하세요! **VCP 전문가 챗봇**입니다.\n\n**${stockName || '선택 종목'}** 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n\n명령어 예시:\n* \`/status\` - 현재 상태 확인\n* \`/help\` - 도움말`;
 
+// AI 매매 의견 배지의 표기. 표에 없는 action 은 배지를 그리지 않는다. 재분석이
+// 실패한 행은 action 에 'N/A' 가 채워져 오는데, 기본값을 관망으로 두면 사용자가
+// 실패한 분석을 정상적인 AI 의견으로 읽게 된다.
+const AI_ACTION_BADGES = {
+  BUY: { bgClass: 'bg-green-500/20 text-green-400', icon: '▲', label: '매수' },
+  SELL: { bgClass: 'bg-red-500/20 text-red-400', icon: '▼', label: '매도' },
+  HOLD: { bgClass: 'bg-yellow-500/20 text-yellow-400', icon: '■', label: '관망' },
+} as const;
+
 export default function VCPSignalsPage() {
   const [signals, setSignals] = useState<KRSignal[]>([]);
   const [staleWarning, setStaleWarning] = useState<string | null>(null);
@@ -922,24 +931,13 @@ export default function VCPSignalsPage() {
 
     if (!rec) return <span className="text-gray-500 text-[10px]">-</span>;
 
-    const action = rec.action?.toUpperCase();
-    let bgClass = 'bg-yellow-500/20 text-yellow-400';
-    let icon = '■';
-    let label = '관망';
-
-    if (action === 'BUY') {
-      bgClass = 'bg-green-500/20 text-green-400';
-      icon = '▲';
-      label = '매수';
-    } else if (action === 'SELL') {
-      bgClass = 'bg-red-500/20 text-red-400';
-      icon = '▼';
-      label = '매도';
-    }
+    const badge =
+      AI_ACTION_BADGES[rec.action?.toUpperCase() as keyof typeof AI_ACTION_BADGES];
+    if (!badge) return <span className="text-gray-500 text-[10px]">-</span>;
 
     return (
-      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${bgClass} border border-current/30 whitespace-nowrap`} title={rec.reason}>
-        {icon} {label}
+      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${badge.bgClass} border border-current/30 whitespace-nowrap`} title={rec.reason}>
+        {badge.icon} {badge.label}
       </span>
     );
   };

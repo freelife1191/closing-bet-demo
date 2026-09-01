@@ -37,8 +37,12 @@ def _normalize_text(value: Any) -> str:
 
 
 def _is_meaningful_ai_reason(reason: Any) -> bool:
-    """AI 분석 사유 텍스트가 실질적인 내용인지 판별."""
-    reason_text = _normalize_text(reason)
+    """AI 분석 사유 텍스트가 실질적인 내용인지 판별.
+
+    NaN 을 먼저 None 으로 바꾼다. DataFrame 에서 온 빈 칸을 그대로 문자열로
+    만들면 "nan" 이 되어, 사유가 없는 행이 사유가 있는 행으로 통과한다.
+    """
+    reason_text = _normalize_text(_none_if_nan(reason))
     if not reason_text:
         return False
     return reason_text.lower() not in _INVALID_AI_REASONS

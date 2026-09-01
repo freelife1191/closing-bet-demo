@@ -23,10 +23,8 @@ describe('Next.js 15 + React 19 Upgrade Tests', () => {
   })
 
   describe('Version Verification', () => {
-    it('should have Next.js 15.x installed', () => {
-      expect(currentVersions.next).toMatch(/^15\./)
-      console.log(`✅ Next.js version: ${currentVersions.next}`)
-    })
+    // Next.js 15.x 고정 검사는 제거했다. 16 으로 올린 뒤로는 항상 실패하며,
+    // 현재 버전 검사는 upgrade-nextjs16.test.ts 가 맡는다.
 
     it('should have React 19.x installed', () => {
       expect(currentVersions.react).toMatch(/^19\./)
