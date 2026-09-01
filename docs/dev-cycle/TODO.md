@@ -413,14 +413,6 @@
 - [ ] 분리 대상 함수 가운데 테스트가 없는 `create_jongga_v2_latest` 등에 회귀 테스트 추가
 - [ ] 이동한 파일 경로를 `tier-rules.md` §2 위험 경로 목록에 반영
 
-### [FLOW-001] 장중 실시간 수급 데이터 KIS API 연동
-- 카테고리: 수급·백테스트 | 티어: T3 | 근거: docs/plans/TO_DO_LIST.md 이관
-- 선행 조건: 한국투자증권 계좌 개설과 Open API 키 발급이 끝나야 착수할 수 있습니다
-- [ ] `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ACCOUNT_NO` 를 `.env.example` 에 추가
-- [ ] `engine/kis_collector.py` 연동 활성화
-- [ ] 장중 수급 점수가 0 으로 고정되던 동작 해소 확인
-- [ ] 참고 문서: `docs/KIS_API_GUIDE.md`
-
 ### [FLOW-002] 수급 데이터 분석 고도화
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: docs/plans/TO_DO_LIST.md 이관
 - [ ] 섹터별 수급 집계 설계
