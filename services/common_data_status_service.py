@@ -58,9 +58,12 @@ def _extract_csv_data_date(path: str) -> str | None:
             continue
         if frame.empty or column_name not in frame.columns:
             continue
-        series = frame[column_name].astype(str).map(_normalize_data_date_token).dropna()
-        if not series.empty:
-            return str(series.max())
+        # 전체 행을 strptime 하면 89K행 CSV에서만 초 단위가 걸린다.
+        # 정규화 결과는 %Y-%m-%d 문자열이라 최댓값이 곧 최신 날짜이므로 고유 토큰만 처리한다.
+        unique_tokens = pd.unique(frame[column_name].astype(str))
+        normalized = [token for token in map(_normalize_data_date_token, unique_tokens) if token]
+        if normalized:
+            return max(normalized)
     return None
 
 
