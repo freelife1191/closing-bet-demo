@@ -440,3 +440,50 @@ def test_cumulative_cache_sqlite_waiter_retries_after_initializer_failure(tmp_pa
     assert run_calls["count"] == 2
     assert results.get("first") is False
     assert results.get("second") is True
+
+
+def test_bumping_schema_version_drops_payloads_saved_under_the_old_rule(tmp_path, monkeypatch):
+    """계산 규칙이 바뀌면 데이터 파일이 그대로여도 옛 캐시가 적중하면 안 된다."""
+    _reset_cache_state()
+    monkeypatch.setattr(
+        cumulative_cache,
+        "_CUMULATIVE_CACHE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    (tmp_path / "daily_prices.csv").write_text("date,ticker,close\n", encoding="utf-8")
+    logger = logging.getLogger("test-cumulative-schema-version")
+
+    old_signature = cumulative_cache.build_cumulative_cache_signature(
+        data_dir_getter=lambda: str(tmp_path),
+    )
+    assert old_signature is not None
+    assert old_signature[0] == (
+        "schema_version",
+        cumulative_cache._CUMULATIVE_CACHE_SCHEMA_VERSION,
+    )
+
+    payload = {"kpi": {"winRate": 100.0}, "trades": [{"id": "old-rule", "outcome": "WIN"}]}
+    cumulative_cache.save_cached_cumulative_payload(
+        signature=old_signature,
+        payload=payload,
+        logger=logger,
+    )
+    assert (
+        cumulative_cache.get_cached_cumulative_payload(signature=old_signature, logger=logger)
+        == payload
+    )
+
+    monkeypatch.setattr(
+        cumulative_cache,
+        "_CUMULATIVE_CACHE_SCHEMA_VERSION",
+        cumulative_cache._CUMULATIVE_CACHE_SCHEMA_VERSION + 1,
+    )
+    new_signature = cumulative_cache.build_cumulative_cache_signature(
+        data_dir_getter=lambda: str(tmp_path),
+    )
+
+    assert new_signature != old_signature
+    assert (
+        cumulative_cache.get_cached_cumulative_payload(signature=new_signature, logger=logger)
+        is None
+    )

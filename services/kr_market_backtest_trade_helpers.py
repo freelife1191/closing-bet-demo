@@ -11,7 +11,14 @@ from typing import Any
 
 import pandas as pd
 
-from services.kr_market_backtest_common import format_signal_date, safe_float
+from services.kr_market_backtest_common import (
+    JONGGA_STOP_PCT,
+    JONGGA_TARGET_PCT,
+    format_signal_date,
+    pct_to_percent,
+    resolve_hit_outcome,
+    safe_float,
+)
 
 
 def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
@@ -90,8 +97,14 @@ def calculate_cumulative_trade_metrics(
     entry_price: float,
     stats_date: str,
     stock_prices: Any,
+    target_pct: float = JONGGA_TARGET_PCT,
+    stop_pct: float = JONGGA_STOP_PCT,
 ) -> dict[str, Any]:
-    """종가베팅 1건의 Outcome/ROI/Trail/기간/최대상승률을 계산한다."""
+    """종가베팅 1건의 Outcome/ROI/Trail/기간/최대상승률을 계산한다.
+
+    폭의 기본값은 종가베팅 통계가 `calculate_scenario_return` 에 넘기는 값과 같은
+    상수에서 온다.
+    """
     outcome = "OPEN"
     roi = 0.0
     max_high = 0.0
@@ -131,8 +144,8 @@ def calculate_cumulative_trade_metrics(
             & (period_prices["close"] > 0)
         ]
 
-    target_price = entry_price * 1.09
-    stop_price = entry_price * 0.95
+    target_price = entry_price * (1 + target_pct)
+    stop_price = entry_price * (1 - stop_pct)
 
     exit_date = None
     if has_required_cols:
@@ -141,23 +154,14 @@ def calculate_cumulative_trade_metrics(
         first_win_date = hit_target.index[0] if not hit_target.empty else None
         first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
 
-        if first_win_date is not None and first_loss_date is not None:
-            if first_win_date <= first_loss_date:
-                outcome = "WIN"
-                roi = 9.0
-                exit_date = first_win_date
-            else:
-                outcome = "LOSS"
-                roi = -5.0
-                exit_date = first_loss_date
-        elif first_win_date is not None:
-            outcome = "WIN"
-            roi = 9.0
-            exit_date = first_win_date
-        elif first_loss_date is not None:
-            outcome = "LOSS"
-            roi = -5.0
-            exit_date = first_loss_date
+        outcome, exit_date = resolve_hit_outcome(
+            first_target=first_win_date,
+            first_stop=first_loss_date,
+        )
+        if outcome == "WIN":
+            roi = pct_to_percent(target_pct)
+        elif outcome == "LOSS":
+            roi = -pct_to_percent(stop_pct)
 
     trade_period = period_prices[period_prices.index <= exit_date] if exit_date is not None else period_prices
 

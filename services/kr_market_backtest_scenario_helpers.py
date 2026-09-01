@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from services.kr_market_backtest_common import safe_float
+from services.kr_market_backtest_common import pct_to_percent, resolve_hit_outcome, safe_float
 
 
 def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
@@ -133,10 +133,10 @@ def calculate_scenario_return(
 
     if "high" not in price_df.columns or "low" not in price_df.columns:
         ret = _calculate_raw_return(entry, current)
-        if ret > (target_pct * 100):
-            return target_pct * 100
-        if ret < -(stop_pct * 100):
-            return -(stop_pct * 100)
+        if ret > pct_to_percent(target_pct):
+            return pct_to_percent(target_pct)
+        if ret < -pct_to_percent(stop_pct):
+            return -pct_to_percent(stop_pct)
         return ret
 
     if isinstance(stock_prices, pd.DataFrame):
@@ -164,17 +164,13 @@ def calculate_scenario_return(
     low_hits = np.flatnonzero(lows <= stop_price)
     high_hits = np.flatnonzero(highs >= target_price)
 
-    # 기존 규칙 유지: 같은 날짜에 동시 충족 시 손절 우선.
     first_low = int(low_hits[0]) if low_hits.size > 0 else None
     first_high = int(high_hits[0]) if high_hits.size > 0 else None
 
-    if first_low is not None and first_high is not None:
-        if first_low <= first_high:
-            return -(stop_pct * 100)
-        return target_pct * 100
-    if first_low is not None:
-        return -(stop_pct * 100)
-    if first_high is not None:
-        return target_pct * 100
+    outcome, _exit_pos = resolve_hit_outcome(first_target=first_high, first_stop=first_low)
+    if outcome == "LOSS":
+        return -pct_to_percent(stop_pct)
+    if outcome == "WIN":
+        return pct_to_percent(target_pct)
 
     return _calculate_raw_return(entry, current)

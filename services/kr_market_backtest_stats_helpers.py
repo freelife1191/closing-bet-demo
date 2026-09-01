@@ -10,7 +10,13 @@ from typing import Any
 
 import pandas as pd
 
-from services.kr_market_backtest_common import determine_backtest_status, safe_float
+from services.kr_market_backtest_common import (
+    JONGGA_STOP_PCT,
+    JONGGA_TARGET_PCT,
+    determine_backtest_status,
+    pct_to_percent,
+    safe_float,
+)
 from services.kr_market_backtest_cumulative import build_ticker_price_index
 from services.kr_market_backtest_scenario_helpers import (
     calculate_scenario_return,
@@ -79,15 +85,15 @@ def calculate_jongga_backtest_stats(
                 signal_date,
                 current_price,
                 price_df,
-                target_pct=0.09,
-                stop_pct=0.05,
+                target_pct=JONGGA_TARGET_PCT,
+                stop_pct=JONGGA_STOP_PCT,
                 stock_prices=resolved_price_index.get(code),
             )
             total_signals += 1
             total_return += ret
-            if ret >= 9.0:
+            if ret >= pct_to_percent(JONGGA_TARGET_PCT):
                 wins += 1
-            elif ret <= -5.0:
+            elif ret <= -pct_to_percent(JONGGA_STOP_PCT):
                 losses += 1
 
     if total_signals > 0:

@@ -48,6 +48,10 @@ _CUMULATIVE_SQLITE_PRUNE_FORCE_INTERVAL = 64
 _CUMULATIVE_SQLITE_SAVE_COUNTER = 0
 _CUMULATIVE_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
 
+# 저장한 값의 계산 규칙이 바뀌면 이 번호를 올린다. 시그니처에 섞여 들어가므로
+# 옛 규칙으로 계산해 둔 항목은 데이터 파일이 그대로여도 더 이상 적중하지 않는다.
+_CUMULATIVE_CACHE_SCHEMA_VERSION = 2
+
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CUMULATIVE_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
 _CUMULATIVE_MEMORY_MAX_ENTRIES = 8
@@ -186,6 +190,7 @@ def build_cumulative_cache_signature(
 
     jongga_sigs = _collect_jongga_signatures(data_dir or "")
     return (
+        ("schema_version", _CUMULATIVE_CACHE_SCHEMA_VERSION),
         ("data_dir", str(data_dir or "")),
         ("daily_prices", file_signature(daily_prices_path) if daily_prices_path else None),
         ("jongga_results", jongga_sigs),
