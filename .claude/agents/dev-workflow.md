@@ -13,6 +13,11 @@ model: opus
 `.claude/skills/dev-cycle/references/archive-format.md` §2 표에 있다. 그 표를 먼저 읽고
 담당 경로를 확정한 뒤에 감사를 시작한다.
 
+프론트엔드 카테고리를 받았다면 `.claude/skills/dev-cycle/references/frontend-skills.md`
+§1 을 함께 읽어 현재 버전과 라우터 구성을 확인하고, `next-best-practices` 와
+`vercel-react-best-practices` 두 스킬의 규칙을 판정 기준으로 삼는다. 특히 서버 컴포넌트로
+둘 수 있는데 `'use client'` 가 붙어 있는 파일은 감사 관점 3번(과잉 설계)에 해당한다.
+
 ## 하지 않을 일
 
 - 코드를 수정하지 않는다. `Edit` 과 `Write` 를 코드 파일에 쓰지 않는다.

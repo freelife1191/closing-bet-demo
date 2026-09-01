@@ -221,7 +221,12 @@ SCHEDULER_ENABLED=true
 - 사이클 절차: `.claude/skills/dev-cycle/SKILL.md`
 - 티어와 위험 경로: `.claude/skills/dev-cycle/references/tier-rules.md`
 - 기록 형식: `.claude/skills/dev-cycle/references/archive-format.md`
+- 프론트엔드 스킬 매핑: `.claude/skills/dev-cycle/references/frontend-skills.md`
 - 카테고리 감사: `dev-workflow` 에이전트
+
+`frontend/` 를 건드리는 작업은 프론트엔드 스킬 매핑을 먼저 읽습니다. Next.js 관련 스킬
+가운데 네 개는 16.3 을 하한선으로 두고 있어서, 현재 버전인 16.1.6 에서는 호출할 수
+없습니다. 이 제약과 해소 방법은 매핑 문서에 정리되어 있습니다.
 
 승인 게이트는 두 곳입니다. 계획이 확정되는 시점과 결과가 저장소에 반영되는 시점입니다.
 

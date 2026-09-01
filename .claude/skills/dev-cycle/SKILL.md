@@ -20,8 +20,9 @@ description: Use when working through this project's backlog — runs one TODO i
 
 - 티어 판정과 위험 경로: `references/tier-rules.md`
 - TODO 및 아카이브 형식: `references/archive-format.md`
+- 프론트엔드 스킬 매핑: `references/frontend-skills.md` (`frontend/` 를 건드릴 때만)
 
-두 파일의 내용을 이 문서에 복제하지 않는다. 판정이나 기록이 필요한 시점에 해당 파일을 읽는다.
+세 파일의 내용을 이 문서에 복제하지 않는다. 판정이나 기록이 필요한 시점에 해당 파일을 읽는다.
 
 ## 절차
 
@@ -49,7 +50,8 @@ description: Use when working through this project's backlog — runs one TODO i
 
 ### [2] 구현
 
-1. 계획대로 구현한다.
+1. 계획대로 구현한다. 건드릴 파일이 `frontend/` 아래에 있으면
+   `references/frontend-skills.md` §2 를 먼저 읽고 해당 상황에 배정된 스킬을 적용한다.
 2. `git diff --stat` 으로 실제 변경 규모를 확인하고 티어를 재판정한다. 상위 티어에
    해당하면 올린다. 낮게 나와도 내리지 않는다.
 3. 티어에 해당하는 리뷰를 `references/tier-rules.md` §1 의 순서대로 실행한다.
@@ -59,7 +61,8 @@ description: Use when working through this project's backlog — runs one TODO i
 
 ### [3] 검증
 
-1. 티어에 해당하는 검증을 실행한다.
+1. 티어에 해당하는 검증을 실행한다. `frontend/` 를 건드렸다면 브라우저 실측 방식은
+   `references/frontend-skills.md` §3 이 정하는 대로 고른다.
 2. 실패하면 고치고 다시 실행한다. 실패를 남긴 채 다음 단계로 넘어가지 않는다.
 
 ### [4] 마감
