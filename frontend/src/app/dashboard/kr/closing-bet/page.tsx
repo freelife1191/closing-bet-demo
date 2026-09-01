@@ -1241,6 +1241,7 @@ export default function JonggaV2Page() {
           <StatBox label="FILTERED" value={filteredCount} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
           <DataStatusBox
             updatedAt={data?.updated_at || null}
+            loading={loading}
             analyzingGemini={analyzingGemini}
             setAnalyzingGemini={setAnalyzingGemini}
             onRefresh={() => setRefreshKey(prev => prev + 1)}
@@ -1652,8 +1653,9 @@ export default function JonggaV2Page() {
   );
 }
 
-function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini, onRefresh }: {
+function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini, onRefresh }: {
   updatedAt: string | null,
+  loading: boolean,
   analyzingGemini: boolean,
   setAnalyzingGemini: (v: boolean) => void,
   onRefresh: () => void,
@@ -1718,7 +1720,10 @@ function DataStatusBox({ updatedAt, analyzingGemini, setAnalyzingGemini, onRefre
     }, 350000);
   }, [updating]);
 
-  if (!updatedAt && !updating && !analyzingGemini) return <StatBox label="Data Status" value={0} customValue="LOADING..." />;
+  // 조회가 끝났는데도 updatedAt이 없으면 데이터가 없는 것이므로 LOADING에 머물지 않는다.
+  if (!updatedAt && !updating && !analyzingGemini) {
+    return <StatBox label="Data Status" value={0} customValue={loading ? 'LOADING...' : 'NO DATA'} />;
+  }
 
   const updateDate = updatedAt ? new Date(updatedAt) : new Date();
   const today = new Date();
