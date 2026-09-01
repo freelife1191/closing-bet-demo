@@ -394,23 +394,22 @@ export interface TradeResponse {
 export const paperTradingAPI = {
   getPortfolio: () => fetchAPI<PaperTradingPortfolio>('/api/portfolio'),
 
-  buy: async (data: BuyRequest): Promise<TradeResponse> => {
-    const response = await fetch('/api/portfolio/buy', {
+  // 주문은 fetchAPI 를 거쳐야 타임아웃과 4xx 응답이 예외로 올라온다. 다만 백엔드는
+  // 잔고 부족 같은 거절을 HTTP 200 + {status:'error'} 로 돌려주므로, 호출부에서
+  // 응답 본문의 status 를 한 번 더 확인해야 실패가 드러난다.
+  buy: (data: BuyRequest): Promise<TradeResponse> =>
+    fetchAPI<TradeResponse>('/api/portfolio/buy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-    });
-    return response.json();
-  },
+    }),
 
-  sell: async (data: SellRequest): Promise<TradeResponse> => {
-    const response = await fetch('/api/portfolio/sell', {
+  sell: (data: SellRequest): Promise<TradeResponse> =>
+    fetchAPI<TradeResponse>('/api/portfolio/sell', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-    });
-    return response.json();
-  },
+    }),
 
   async reset() {
     const res = await fetch('/api/portfolio/reset', { method: 'POST' });

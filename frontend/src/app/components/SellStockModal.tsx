@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { paperTradingAPI } from '@/lib/api';
 
 interface SellStockModalProps {
   isOpen: boolean;
@@ -17,7 +16,6 @@ interface SellStockModalProps {
 }
 
 export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellStockModalProps) {
-  const [mode, setMode] = useState<'quantity'>('quantity'); // 매도는 수량 매도만 기본 지원 (금액 매도는 복잡)
   const [quantity, setQuantity] = useState<string>('0');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -33,10 +31,9 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
   const numericQty = parseInt(quantity.replace(/[^0-9]/g, ''), 10) || 0;
   const maxQty = stock.quantity;
 
+  // 백엔드는 가격 × 수량을 그대로 입금한다. 수수료와 세금을 화면에서만 빼면
+  // 안내 금액이 실제로 늘어나는 예수금과 어긋난다.
   const estimatedTotal = numericQty * price;
-  const commission = Math.floor(estimatedTotal * 0.00015); // 0.015%
-  const tax = Math.floor(estimatedTotal * 0.002); // 0.2% (국내주식 매도세 가정)
-  const finalReceive = estimatedTotal - commission - tax;
 
   const isInvalid = numericQty <= 0 || numericQty > maxQty;
 
@@ -115,11 +112,6 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
             />
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">QTY</span>
 
-            {/* 증감 버튼 (Overlay) */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 hover:opacity-100 transition-opacity">
-              {/* UI 복잡도를 줄이기 위해 여기 넣지 않고 아래 별도 버튼 제공이 나을 수도 있음 */}
-            </div>
-
             <button
               onClick={handleMax}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 px-2 py-1 rounded transition-colors font-medium"
@@ -145,18 +137,10 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
         </div>
 
         {/* Summary */}
-        <div className="bg-[#18181b] rounded-xl p-4 border border-white/5 space-y-2 mb-6 text-sm shadow-inner">
-          <div className="flex justify-between">
-            <span className="text-gray-400">매도 금액</span>
-            <span className="text-white font-medium">{estimatedTotal.toLocaleString()} 원</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-gray-500">예상 수수료 + 세금</span>
-            <span className="text-gray-500">{(commission + tax).toLocaleString()} 원</span>
-          </div>
-          <div className="border-t border-white/10 pt-3 flex justify-between items-center mt-2">
-            <span className="text-blue-400 font-bold">정산 예상 금액</span>
-            <span className="text-blue-400 font-bold text-lg">{finalReceive.toLocaleString()} 원</span>
+        <div className="bg-[#18181b] rounded-xl p-4 border border-white/5 mb-6 text-sm shadow-inner">
+          <div className="flex justify-between items-center">
+            <span className="text-blue-400 font-bold">정산 금액</span>
+            <span className="text-blue-400 font-bold text-lg">{estimatedTotal.toLocaleString()} 원</span>
           </div>
         </div>
 

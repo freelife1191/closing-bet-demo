@@ -40,6 +40,11 @@ const TIME_RANGE_DAYS: Record<'1M' | '3M' | '6M' | '1Y' | 'ALL', number> = {
   ALL: 3650,
 };
 
+// fetchAPI 가 4xx 응답의 본문을 error.data 에 담아 준다. 그쪽을 먼저 읽어야
+// 사용자에게 `API Error: 400` 대신 서버가 적어 보낸 사유를 보여 줄 수 있다.
+const tradeErrorMessage = (error: any): string =>
+  error?.data?.message || error?.message || '알 수 없는 오류';
+
 export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModalProps) {
   const [activeTab, setActiveTab] = useState<PaperTradingTabId>('overview');
   const [portfolio, setPortfolio] = useState<PaperTradingPortfolio | null>(null);
@@ -578,24 +583,33 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
   const handleBuySubmit = async (ticker: string, name: string, price: number, quantity: number) => {
     try {
-      await paperTradingAPI.buy({ ticker, name, price, quantity });
+      // 잔고 부족 같은 거절은 예외가 아니라 HTTP 200 + {status:'error'} 로 온다.
+      const result = await paperTradingAPI.buy({ ticker, name, price, quantity });
+      if (result?.status === 'error') {
+        alert(`매수 실패: ${result.message}`);
+        return false;
+      }
       alert(`${name} ${quantity}주 매수 완료`);
       setRefreshKey(p => p + 1);
       return true;
     } catch (e: any) {
-      alert(`매수 실패: ${e.message}`);
+      alert(`매수 실패: ${tradeErrorMessage(e)}`);
       return false;
     }
   };
 
   const handleSellSubmit = async (ticker: string, name: string, price: number, quantity: number) => {
     try {
-      await paperTradingAPI.sell({ ticker, price, quantity });
+      const result = await paperTradingAPI.sell({ ticker, price, quantity });
+      if (result?.status === 'error') {
+        alert(`매도 실패: ${result.message}`);
+        return false;
+      }
       alert(`${name} ${quantity}주 매도 완료`);
       setRefreshKey(p => p + 1);
       return true;
     } catch (e: any) {
-      alert(`매도 실패: ${e.message}`);
+      alert(`매도 실패: ${tradeErrorMessage(e)}`);
       return false;
     }
   };

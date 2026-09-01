@@ -63,14 +63,14 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
 
   // 계산
   const estimatedQty = mode === 'quantity' ? numericQty : (price > 0 ? Math.floor(numericAmount / price) : 0);
-  // 실제 체결 금액 (주 단위 절삭 반영)
+  // 실제 체결 금액 (주 단위 절삭 반영). 백엔드는 가격 × 수량만 차감하므로
+  // 수수료를 화면에서만 얹으면 안내 금액이 실제 정산액과 어긋난다.
   const finalCost = estimatedQty * price;
 
-  const commission = Math.floor(finalCost * 0.00015); // 0.015%
-  const totalRequired = finalCost + commission;
-
   const cash = portfolio ? portfolio.cash : 0;
-  const isInsufficient = totalRequired > cash;
+  // 가격을 못 받아 온 상태에서 나누면 Infinity 가 되어 `가능: ∞주` 로 표시된다.
+  const maxBuyableQty = price > 0 ? Math.floor(cash / price) : 0;
+  const isInsufficient = finalCost > cash;
 
   const handleSubmit = async () => {
     if (isSubmitting || estimatedQty <= 0) return;
@@ -91,39 +91,22 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
   // 최대 매수 버튼
   const handleMax = () => {
     if (mode === 'quantity') {
-      // 수수료 고려: Cash = Q * P * (1 + 0.00015) -> Q = Cash / (P * 1.00015)
-      if (price <= 0) return;
-      const maxQty = Math.floor(cash / (price * 1.00015));
-      setQuantity(maxQty.toString());
+      setQuantity(maxBuyableQty.toString());
     } else {
-      // 금액 모드: 수수료 제외한 안전 금액
-      const safeAmount = Math.max(0, Math.floor(cash / 1.00015));
-      setAmount(safeAmount.toString());
+      setAmount(cash.toString());
     }
   };
 
   const handleAdjust = (delta: number) => {
     if (mode === 'quantity') {
-      const numericQty = parseInt(quantity.replace(/[^0-9]/g, ''), 10) || 0;
-      const maxQty = Math.floor(cash / (price * 1.00015));
-      const newVal = Math.max(0, Math.min(maxQty, numericQty + delta));
+      const currentQty = parseInt(quantity.replace(/[^0-9]/g, ''), 10) || 0;
+      const newVal = Math.max(0, Math.min(maxBuyableQty, currentQty + delta));
       setQuantity(newVal.toString());
     } else {
-      const numericAmt = parseInt(amount.replace(/[^0-9]/g, ''), 10) || 0;
-      const maxAmt = Math.floor(cash / 1.00015);
-      // 금액 증감 시 현재 주가를 기준으로 증감 (like 1주 추가 매수 금액)하거나 고정 단위 사용
-      // 여기서는 delta가 작으면 주가 단위, 크면 고정 단위로 사용
-      let amountDelta = 0;
-      if (Math.abs(delta) <= 10) amountDelta = delta * price; // 1주 단위 증감
-      else amountDelta = delta * 10000; // 큰 단위 증감 (사용 안함 예상)
-
-      // 버튼별 커스텀 로직 적용을 위해 delta 인터페이스를 단순 숫자로 가정하고 내부에서 분기 처리
-      // 하지만 호출부에서 직접 값을 넘기는게 나음. 단순하게 구현:
-      // handleAdjust 호출 시 delta가 수량이 아닌 '단위'라고 가정.
-
-      // 재정의: handleAdjust는 수량 모드에서만 사용하거나, 금액 모드에서도 1주 가격 단위로 증감
+      // 금액 모드에서는 1주 가격만큼 증감한다. 가격을 못 받아 온 동안에는 1만 원 단위로 움직인다.
+      const currentAmount = parseInt(amount.replace(/[^0-9]/g, ''), 10) || 0;
       const step = price > 0 ? price : 10000;
-      const newVal = Math.max(0, Math.min(maxAmt, numericAmt + (delta * step)));
+      const newVal = Math.max(0, Math.min(cash, currentAmount + (delta * step)));
       setAmount(newVal.toString());
     }
   };
@@ -195,7 +178,7 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
           <label className="block text-xs font-semibold text-gray-500 mb-2">
             {mode === 'quantity' ? '구매 수량 (주)' : '구매 금액 (원)'}
             <span className="float-right text-gray-600 font-normal">
-              가능: {portfolio ? Math.floor(portfolio.cash / (price * 1.00015)).toLocaleString() : '-'}주
+              가능: {portfolio ? maxBuyableQty.toLocaleString() : '-'}주
             </span>
           </label>
 
@@ -232,7 +215,7 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
           {isInsufficient && (
             <div className="text-red-400 text-xs mt-2 flex items-center gap-1 animate-pulse">
               <i className="fas fa-exclamation-circle"></i>
-              예수금이 부족합니다 (부족: {(totalRequired - cash).toLocaleString()}원)
+              예수금이 부족합니다 (부족: {(finalCost - cash).toLocaleString()}원)
             </div>
           )}
         </div>
@@ -243,17 +226,9 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
             <span className="text-gray-400">주문 수량</span>
             <span className="text-white font-medium">{estimatedQty.toLocaleString()} 주</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">주문 금액</span>
-            <span className="text-white font-medium">{finalCost.toLocaleString()} 원</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-gray-500">예상 수수료 (0.015%)</span>
-            <span className="text-gray-500">{commission.toLocaleString()} 원</span>
-          </div>
           <div className="border-t border-white/10 pt-3 flex justify-between items-center mt-2">
-            <span className="text-rose-400 font-bold">총 결제 예상 금액</span>
-            <span className="text-rose-400 font-bold text-lg">{totalRequired.toLocaleString()} 원</span>
+            <span className="text-rose-400 font-bold">결제 금액</span>
+            <span className="text-rose-400 font-bold text-lg">{finalCost.toLocaleString()} 원</span>
           </div>
         </div>
 
