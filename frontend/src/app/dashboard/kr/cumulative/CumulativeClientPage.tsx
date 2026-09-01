@@ -595,12 +595,13 @@ function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
   // 1. Filter closed trades (Win or Loss) and sort by date descending (assuming 'data' is already sorted or we sort here)
   // We assume 'trades' passed here are the current page's trades. For better accuracy, we might need global history, 
   // but using visible recent trades is a good proxy for "recent trend".
-  const closedTrades = trades.filter(t => t.outcome === 'Win' || t.outcome === 'Loss');
+  // API 는 outcome 을 대문자(WIN/LOSS)로 내려준다. 소문자 표기로 비교하면 항상 빈 배열이 된다.
+  const closedTrades = trades.filter(t => t.outcome === 'WIN' || t.outcome === 'LOSS');
 
   // Calculate Consecutive Losses
   let consecutiveLosses = 0;
   for (let i = 0; i < closedTrades.length; i++) {
-    if (closedTrades[i].outcome === 'Loss') {
+    if (closedTrades[i].outcome === 'LOSS') {
       consecutiveLosses++;
     } else {
       break;
@@ -609,7 +610,7 @@ function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
 
   // Calculate Recent Win Rate (Last 10)
   const recentTrades = closedTrades.slice(0, 10);
-  const recentWins = recentTrades.filter(t => t.outcome === 'Win').length;
+  const recentWins = recentTrades.filter(t => t.outcome === 'WIN').length;
   const recentWinRate = recentTrades.length > 0 ? (recentWins / recentTrades.length) * 100 : 0;
 
   // Determine Advice
