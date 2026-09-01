@@ -4,8 +4,133 @@
 > `.claude/skills/dev-cycle/references/archive-format.md` 를 따릅니다.
 > 완료된 항목은 아카이브로 옮기고 이 파일에서 제거합니다.
 > 진행은 `/dev-cycle next` 로 시작합니다.
+>
+> 2026-09-01 여섯 카테고리 감사(`[INFRA-004]`)로 30개 항목이 들어왔습니다. 각 항목의
+> 근거에 적힌 `AUDIT-*` 문서는 `docs/dev-cycle/audits/` 에 있으며, 항목마다 위치를
+> 절 번호까지 적어 두었으므로 사이클을 시작할 때 그 절을 먼저 읽습니다.
 
 ## P0 — 즉시
+
+### [INFRA-011] dev-cycle 이 호출하는 자산의 오인을 바로잡는다
+- 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-01 skill-creator 검수
+- 규약이 존재하지 않거나 성격이 다른 스킬을 부르고 있어, 다음 T2·T3 사이클이 시작되는
+  즉시 잘못된 도구를 호출하거나 게이트를 우회하게 됩니다.
+- [ ] `autoplan` 호출을 `SKILL.md` [1] 계획에서 걷어냅니다. 이 스킬은 계획 도구가 아니라
+      이미 만들어진 계획을 CEO·디자인·엔지니어링·DX 관점으로 검토하는 리뷰 파이프라인이며,
+      이 저장소의 백로그 항목에는 맞지 않습니다
+- [ ] T3 검증의 `qa` 를 조건부로 바꿉니다. 이 스킬은 웹 애플리케이션 전용이라 백엔드 전용
+      항목에는 돌릴 대상이 없고, 무엇보다 고친 버그를 스스로 커밋하므로 게이트 2 를
+      우회합니다. 화면이 바뀐 항목에만, 리포트 전용인 `/qa-only` 로 한정하는 방안을 검토
+- [ ] `simplify` 와 `security-review` 의 정의 위치를 확인해 기록합니다. 두 이름 모두
+      스킬 디렉터리와 플러그인 캐시에서 찾지 못했고 내장 명령으로 보입니다
+- [ ] `/dev-cycle status` 의 처리 절차를 추가합니다. 호출 표에만 있고 절차에 없습니다
+- [ ] 커밋 메시지 형식 규정을 `[4] 마감`에 추가합니다. 저장소는 conventional commits 를
+      쓰는데 스킬은 "초안을 작성한다" 로만 되어 있습니다
+- [ ] 중단 절에서 컨텍스트 관리 절의 재개 방법을 가리키도록 연결
+
+### [INFRA-005] 종가베팅 단독 스케줄 등록 복구
+- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §1.1, §5.1
+- `services/scheduler.py` 가 `tier-rules.md` §2 의 "스케줄러와 데이터 적재" 위험 경로에
+  해당하므로 줄 수와 무관하게 T3 입니다.
+- [ ] `_bootstrap_scheduler_after_lock_acquired` 에 `JONGGA_SCHEDULE_TIME` 기반
+      `run_jongga_v2_analysis` 잡을 `jongga` 태그로 등록
+- [ ] 재등록 시 중복이 쌓이지 않도록 `schedule.clear("jongga")` 를 함께 배치
+- [ ] 세 잡의 태그와 등록 시각을 확인하는 테스트를 `tests/services/test_scheduler_refactor.py`
+      에 추가
+- [ ] 17:00 체인과 15:20 단독 실행이 같은 날 겹칠 때 알림이 두 번 나가지 않는지 확인
+- [ ] pytest 전체 통과 확인
+
+### [FLOW-003] 종가베팅 승패 판정을 한 곳으로 모은다
+- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW §1.1, §5.1
+- 두 계산 경로를 함께 고치고 회귀 테스트를 새로 붙이므로 50줄을 넘을 것으로 봅니다.
+  위험 경로에는 닿지 않습니다.
+- [ ] 동시 충족 시 익절과 손절 중 무엇을 우선할지 결정하고 근거를 항목에 남김
+- [ ] 판정 규칙과 익절·손절 폭을 공용 함수 하나로 모아 두 호출부가 함께 쓰도록 교체
+- [ ] `calculate_cumulative_trade_metrics` 의 `1.09`/`0.95` 하드코딩 제거
+- [ ] `calculate_cumulative_trade_metrics` 의 동시 충족·ROI·최대상승률 회귀 테스트 추가
+- [ ] 대시보드 승률과 누적성과 승률이 같은 시그널 집합에서 일치하는지 확인
+
+### [VCP-001] AI 분석 실패 시그널이 관망 추천으로 표시되는 결함 수정
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: AUDIT-VCP §1.1
+- 티어 근거: 건드릴 파일이 `tier-rules.md` §2 의 위험 경로에 닿지 않고 구현 변경도 50줄
+  안쪽으로 예상되지만, 화면에 보이는 배지가 바뀌므로 실측이 필요합니다. T1 의 검증 열은
+  실측을 포함하지 않으므로 T2 로 올립니다. Next.js 가 16.1.6 이라 `next-dev-loop` 은
+  쓸 수 없고 agent-browser 를 직접 씁니다(`frontend-skills.md` §3).
+- [ ] `_build_vcp_gemini_recommendation` 이 `_is_vcp_ai_analysis_failed` 와 같은 기준으로
+      실패 행을 걸러내도록 수정
+- [ ] `getAIBadge` 가 알 수 없는 action 을 관망으로 표시하지 않고 미분석 상태로 구분하도록 수정
+- [ ] 실패 행이 추천 객체를 만들지 않는지 확인하는 pytest 회귀 테스트 추가
+- [ ] 미분석 종목의 배지 표기를 확인하는 vitest 추가
+- [ ] agent-browser 로 VCP 화면에서 실패 종목의 표기를 실측
+
+### [CHAT-001] 새 대화 스트리밍의 세션 전환 결함 수정
+- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §1.1
+- 티어 판정: 건드릴 파일은 `frontend/src/app/chatbot/page.tsx` 하나이고 `tier-rules.md` §2 의
+  위험 경로에 닿지 않습니다. SSE 수신 블록(`page.tsx:676-785`)의 구조와 세션 전환
+  `useEffect`(`page.tsx:406-417`)를 함께 손봐야 하므로 60줄에서 90줄 사이로 봅니다.
+- [ ] SSE 루프의 세션 비교를 렌더 고정 값 대신 최신 값을 보는 방식으로 교체
+- [ ] 세션 갱신 분기와 `done` 분기를 서로 배타적이지 않게 분리
+- [ ] `isCreatingSessionRef` 가 스트림 종료 후 남지 않도록 소비 시점 정리
+- [ ] 스트리밍 중 `fetchSessions()` 가 세션이 실제로 바뀔 때만 호출되는지 확인
+- [ ] 회귀 테스트 추가 (`page.regression-*.test.tsx` 관례를 따름)
+
+### [FE-003] 모의투자 주문 실패 처리와 정산 금액을 실제와 맞춘다
+- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: AUDIT-FE §1.1, §1.2, §5.1
+- 건드릴 파일은 `frontend/src/lib/api.ts`, `PaperTradingModal.tsx`, `BuyStockModal.tsx`,
+  `SellStockModal.tsx` 네 개이며 위험 경로에 닿지 않아 `T2` 입니다. 다만 수수료와 세금을
+  프론트엔드에서 걷어내는 대신 백엔드에 도입하는 쪽을 고르면
+  `services/paper_trading_trade_account_mixin.py` 가 `tier-rules.md` §2 의 위험 경로이므로
+  그 시점에 `T3` 으로 올립니다.
+- [ ] `paperTradingAPI.buy` 와 `sell` 을 `fetchAPI` 로 옮겨 상태 코드를 확인하게 만듦
+- [ ] `handleBuySubmit` 과 `handleSellSubmit` 이 응답의 `status` 를 읽고 실패를 표시하도록 수정
+- [ ] 수수료와 세금을 프론트엔드 표기에서 걷어낼지 백엔드에 도입할지 결정하고 한쪽으로 통일
+- [ ] 수수료율 상수 여섯 자리를 한 곳으로 모음
+- [ ] 매수 가능 수량과 정산 금액 계산에 vitest 검사 추가
+- [ ] 가격이 0일 때 `가능: ∞주` 로 표시되는 경계 처리
+
+### [FE-004] 사이드바 로그아웃과 사용자 표시를 실제 세션에 연결한다
+- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: AUDIT-FE §1.3, §3.3
+- 인증에 닿으므로 `tier-rules.md` §1 마지막 문단에 따라 `/security-review` 를 추가합니다.
+- [ ] `Sidebar.tsx` 의 로그아웃 버튼이 `signOut` 을 호출하도록 수정
+- [ ] `localStorage` 의 `user_profile` 과 `next-auth` 세션 가운데 어느 쪽을 표시의 기준으로
+      삼을지 정하고 사이드바 표기를 그 기준에 맞춤
+- [ ] `SettingsModal` 의 `isGoogleLoggedIn` 과 `googleUserInfo` 파생 상태 제거
+- [ ] 로그아웃 후 관리자 전용 화면이 닫히는지 확인
+- [ ] `/security-review` 실행
+
+### [JONGGA-002] Gemini 재분석 결과의 AI 사유 유실 수정
+- 카테고리: 종가베팅 | 티어: T1 | 근거: AUDIT-JONGGA §1.1
+- 구현 변경은 두 파일에서 30줄 이내로 끝날 것으로 봅니다. 테스트 파일은 `tier-rules.md`
+  §1 마지막 문단의 제외 조항에 따라 합계에서 뺐습니다.
+- [ ] `_apply_gemini_reanalysis_results` 가 `ai_evaluation` 에 `reason` 을 함께 담도록 수정
+- [ ] `_extract_jongga_ai_evaluation` 이 사유가 빈 항목을 만나면 `score.llm_reason` 으로
+      내려가도록 우선순위 체인 보강
+- [ ] 재분석 전후로 `gemini_recommendation.reason` 이 유지되는지 검사하는 회귀 테스트 추가
+- [ ] AI 분석 payload 를 소비하는 VCP 화면의 분석 사유 표시가 복구되는지 확인
+
+### [JONGGA-003] 체크리스트 수급 항목의 키 이름 통일
+- 카테고리: 종가베팅 | 티어: T1 | 근거: AUDIT-JONGGA §1.2
+- 프론트엔드와 목 데이터 생성기가 이미 `supply_positive` 를 쓰고 있으므로, 백엔드를
+  그쪽에 맞추는 방향이 변경 범위가 작습니다.
+- [ ] `_normalize_jongga_signal_for_frontend` 가 만드는 체크리스트 키를 `supply_positive`
+      로 맞춤
+- [ ] `tests/app/test_kr_market_helpers_contract.py:308` 의 단언을 새 키로 갱신
+- [ ] 저장소에 남은 `supply_demand` 표기를 전수 확인해 종가 체크리스트 경로에서 제거
+- [ ] 외국인·기관 5일 순매수가 양수일 때 배지가 켜지는지 화면에서 확인
+
+### [JONGGA-004] AI 미분석 종목의 확신도 추정치 표기 정리
+- 카테고리: 종가베팅 | 티어: T2 | 근거: AUDIT-JONGGA §1.3
+- 폴백 블록(1959-1966행)과 확신도 렌더 블록(2128-2154행)을 함께 손대고 대체 표기를
+  넣으면 50줄을 넘길 것으로 보아 T2 로 판정했습니다. 화면 표시가 바뀌므로 T2 검증이
+  요구하는 실측이 실제로 필요합니다. Next.js 가 16.1.6 이므로
+  `frontend-skills.md` §3 에 따라 `next-dev-loop` 이 아니라 agent-browser 로 실측합니다.
+- [ ] 등급에서 확신도를 유도하는 계산식을 제거하거나, 산출값을 확신도가 아닌 별도 이름으로
+      분리
+- [ ] AI 분석 결과가 없는 상태에서는 확신도 막대와 매매 추천 배지를 감추거나 추정임을
+      배지 자리에서 바로 알 수 있게 표기
+- [ ] 두 툴팁 문구를 실제 데이터 출처에 맞게 수정
+- [ ] AI 결과가 없는 시그널과 있는 시그널을 각각 렌더링하는 vitest 추가
+- [ ] agent-browser 로 카드 표시를 실측
 
 ### [INFRA-001] 파이썬 의존성 버전 고정
 - 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-01 실측
@@ -42,6 +167,18 @@
 - [ ] `next-dev-loop` 의 preflight 가 통과하는지 확인해 문턱이 실제로 열렸는지 검증
 - [ ] `frontend-skills.md` §1 의 실측 표를 갱신
 
+### [INFRA-010] 규약 문서의 담당 경로 공백을 메운다
+- 카테고리: 인프라 | 티어: 문서 | 근거: AUDIT-FE 와 AUDIT-VCP 의 담당 경로 밖 관찰
+- 두 감사가 각각 짚었습니다. 담당 카테고리가 없는 코드가 있으면 그 코드는 어느 감사에서도
+  다뤄지지 않고 남습니다.
+- [ ] `archive-format.md` §2 표에 `frontend/src/app/dashboard/kr/page.tsx` 와
+      `cumulative/`, `data-status/` 세 경로의 담당 카테고리를 배정
+- [ ] 같은 표에 `services/kr_market_vcp_*.py` 여섯 파일의 담당 카테고리를 배정.
+      실제 VCP 응답을 만드는 파일인데 어느 행에도 잡히지 않습니다
+- [ ] `frontend-skills.md` §1 의 `'use client'` 파일 수를 26개에서 25개로 정정.
+      `not-found.tsx` 는 주석 문구가 검색에 잡혔을 뿐 서버 컴포넌트입니다
+- [ ] 표에 적은 경로가 모두 실재하는지 확인
+
 ### [JONGGA-001] generator.py 의 인라인 페이즈 로직을 phases 모듈로 교체
 - 카테고리: 종가베팅 | 티어: T3 | 근거: CLAUDE.md 이관
 - [ ] `engine/generator.py` 의 인라인 페이즈 로직 범위 확정
@@ -49,22 +186,233 @@
 - [ ] 신호 생성 결과가 교체 전후로 동일한지 확인
 - [ ] 회귀 테스트 추가
 
-### [INFRA-004] 여섯 개 카테고리 감사로 백로그를 채운다
-- 카테고리: 인프라 | 티어: T1 | 근거: 최초 요청의 카테고리별 검토 단계
-- `dev-workflow` 에이전트를 카테고리마다 한 번씩 돌려 감사 리포트와 항목 초안을 받습니다.
-  에이전트는 코드를 고치지 않으므로 이 항목 자체의 산출물은 문서뿐입니다.
-- 현재 백로그에 챗봇과 VCP 항목이 하나도 없는 것은 두 카테고리를 아직 감사하지 않았기
-  때문입니다. 이 항목이 끝나야 카테고리별 개선을 시작할 수 있습니다.
-- [ ] 챗봇 감사
-- [ ] 종가베팅 감사
-- [ ] VCP 시그널 감사
-- [ ] 수급·백테스트 감사
-- [ ] 프론트엔드 공통 감사
-- [ ] 인프라·패키지 감사
-- [ ] 여섯 리포트에서 나온 항목 초안을 중복 제거하고 우선순위를 매겨 `TODO.md` 에 반영
-- [ ] 감사 리포트는 `docs/dev-cycle/audits/` 에 남김
+### [VCP-003] 두 번째 AI 프로바이더 폴백 누락 수정
+- 카테고리: VCP 시그널 | 티어: T1 | 근거: AUDIT-VCP §1.3
+- 티어 근거: `engine/vcp_ai_orchestration_helpers.py` 한 파일이며 `tier-rules.md` §2 의
+  위험 경로 목록에 없습니다. 구현 변경은 다섯 줄 안팎입니다. 다만 이 파일이 VCP 판정
+  경로인데도 위험 경로 목록에서 빠져 있다는 점은 별도로 확인이 필요하므로 체크박스에
+  넣었습니다.
+- [ ] Perplexity 가 비활성일 때 GPT 분기로 이어지도록 조건 수정
+- [ ] `.env.example` 의 `VCP_SECOND_PROVIDER` 권장 값과 `engine/config.py:199` 의 기본값이
+      어긋난 상태를 정리
+- [ ] 키가 없는 환경에서 GPT 가 두 번째 프로바이더로 선택되는지 확인하는 pytest 추가
+- [ ] `engine/vcp_ai_orchestration_helpers.py` 를 `tier-rules.md` §2 위험 경로에 넣을지
+      판단하고, 넣는다면 같은 커밋에서 목록을 갱신
+
+### [CHAT-002] 계산해 놓고 버려지는 세 값 복구
+- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §1.2, §1.3, §1.4
+- 티어 판정: `chatbot/chat_execution.py`, `chatbot/chat_handlers.py`,
+  `chatbot/payload_service.py`, `chatbot/intent_context.py`, `chatbot/session_access.py` 는
+  모두 위험 경로 밖입니다. 세 건 합계 150줄에서 250줄로 봅니다.
+- [ ] 스트리밍 응답에서 `usage_metadata` 를 실제로 수집해 이벤트로 방출
+- [ ] 의도 지시문을 종가베팅 외 네 의도에도 실을지, 네 의도의 지시문 생성을 걷어낼지 결정하고
+      한쪽으로 통일
+- [ ] `is_ephemeral_command` 가 `_EPHEMERAL_COMMANDS` 를 실제로 참조하도록 수정
+- [ ] `tests/chatbot/test_chat_execution.py` 의 `usage_metadata == {}` 단언 갱신
+- [ ] `tests/chatbot/test_payload_service.py:97` 의 지시문 테스트를 결정된 사양에 맞게 갱신
+- [ ] `/clear`, `/model` 이 히스토리에 남는지 확인하는 회귀 테스트 추가
+
+### [VCP-002] VCP 화면의 현재가 갱신 대상과 폴링 정리 결함 수정
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: AUDIT-VCP §1.2, §4.1
+- 티어 근거: `frontend/src/app/dashboard/kr/vcp/page.tsx` 한 파일이며 위험 경로가
+  아닙니다. 변경은 30줄 안쪽으로 예상되지만 장중 갱신 동작이 바뀌므로 실측이 필요해
+  T2 로 올립니다.
+- [ ] 현재가 갱신 effect 가 목록 내용 변화를 반영하도록 의존성 수정
+- [ ] `checkRunningStatus` 가 만드는 `setInterval` 핸들을 ref 에 담아 언마운트에서 정리
+- [ ] 날짜를 바꿔도 개수가 같을 때 갱신 대상이 따라 바뀌는지 확인하는 vitest 추가
+- [ ] agent-browser 로 날짜 전환 후 현재가 갱신을 실측
+
+### [FLOW-004] 백테스트 상태 어휘와 손익비 계산을 바로잡는다
+- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW §1.3, §1.4, §5.2
+- [ ] 전패(승 0건, 패 N건)와 미집계(종료 거래 0건)를 구분하도록 `determine_backtest_status` 수정
+- [ ] 상태 문자열 집합을 확정하고 프론트엔드의 `status === 'OK'` 비교를 그 집합에 맞춤
+- [ ] 손실이 0일 때의 손익비 표기 방식을 결정해 반영 (비율이 아닌 값을 내보내지 않음)
+- [ ] `aggregate_cumulative_kpis` 실구현 테스트 추가 (승률·평균 ROI·손익비·등급별 ROI)
+- [ ] `determine_backtest_status` 경계값 테스트 추가
+
+### [JONGGA-005] 종가 라우트의 숫자·티커 정규화 헬퍼 통합
+- 카테고리: 종가베팅 | 티어: T2 | 근거: AUDIT-JONGGA §2.1, §5.1
+- [ ] `kr_market_signal_common` 의 `_safe_float` 와 `_safe_int` 로 변환 규칙을 일원화하고,
+      퍼센트 기호와 "원" 글자 처리 기준을 한 곳에서 정함
+- [ ] 종가 정규화 헬퍼와 등급 헬퍼의 지역 사본을 제거
+- [ ] 티커 정규화의 빈 값 규약을 하나로 정하고, `"000000"` 방어 코드를 정리
+- [ ] `_jongga_sort_key` 와 `_normalize_jongga_signal_for_frontend` 에 대한 테스트를
+      함께 추가하고, 목표가·손절가 계수 1.09 와 0.95 의 근거를 상수로 옮길지 판단
+- [ ] pytest 전체 통과 확인
+
+### [FE-005] HTTP 호출 경로를 `fetchAPI` 로 통일하고 세션 조회 중복을 없앤다
+- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: AUDIT-FE §2.1, §2.3, §5.2
+- `api.ts` 열한 개 함수와 컴포넌트 세 개를 건드리므로 300줄에 근접합니다. 구현 후
+  `git diff --stat` 이 300줄을 넘으면 `T3` 으로 올립니다.
+- [ ] `krAPI` 와 `paperTradingAPI` 의 raw `fetch` 열한 곳을 `fetchAPI` 로 이관
+- [ ] 409 응답 구분과 `error.error` 읽기 같은 개별 처리를 `fetchAPI` 위에서 표현
+- [ ] `browser_session_id` 발급을 공용 헬퍼 하나로 모음. 챗봇 카테고리의 사본은
+      해당 카테고리와 경계를 맞춘 뒤 정리
+- [ ] 사용량 조회 두 곳에 `encodeURIComponent` 적용
+- [ ] `src/lib/api.test.ts` 를 만들어 타임아웃, `AbortError`, 실패 상태 코드 분기 검사
+
+### [FE-006] API 키 저장 경로를 정리하고 죽은 코드를 걷어낸다
+- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: AUDIT-FE §1.4, §3.1
+- 삭제 위주라서 줄 수로는 `T1` 에 해당할 수 있으나, 의존성이 함께 빠지면서 번들 구성이
+  달라지므로 `tier-rules.md` §1 의 의존성 관련 조항 취지에 따라 `T2` 로 둡니다.
+- [ ] `src/utils/secureStorage.ts` 삭제
+- [ ] `crypto-js`, `@types/crypto-js`, 그리고 미사용인 `zustand` 와 `react-icons` 제거.
+      `frontend/package.json` 은 인프라 카테고리 소관이므로 그쪽과 조율
+- [ ] `PERPLEXITY_API_KEY` 를 읽는 쪽과 쓰는 쪽의 비대칭 해소
+- [ ] API 키를 클라이언트에 남길지 서버에만 둘지 결정하고 한쪽으로 정리
+- [ ] `npm run build` 와 vitest 전체 통과 확인
+
+### [INFRA-006] init_data 임포트 경로를 하나로 통일
+- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §1.2, §2.1
+- `[INFRA-007]` 을 흡수했습니다. 같은 파일을 같은 티어로 두 번 여는 대신 한 사이클에서
+  함께 처리합니다. 흡수된 번호는 재사용하지 않습니다.
+- `scripts/init_data.py` 와 `services/scheduler_jobs.py` 가 모두 위험 경로에 있어 T3 입니다.
+- [ ] `scripts/__init__.py` 를 추가할지, `sys.path` 주입을 걷어낼지 방식을 확정
+- [ ] `services/scheduler_jobs.py:32-36` 의 `importlib` 지연 로드를
+      `from scripts import init_data` 방식으로 통일
+- [ ] `services/kr_market_route_service.py:142` 와 `tests/test_grading_logic.py:9` 의
+      최상위 임포트를 같은 방식으로 정리
+- [ ] `sys.modules` 에 `init_data` 와 `scripts.init_data` 가 동시에 올라가지 않음을
+      확인하는 테스트 추가
+- [ ] `scripts/init_data.py:55-65` 의 `NumpyEncoder` 사본을 삭제하고 공용
+      `numpy_json_encoder` 를 import
+- [ ] `cls=NumpyEncoder` 를 넘기는 다섯 곳(730, 1785, 1790, 1978, 2680)이 공용 구현을
+      쓰는지 확인
+- [ ] `datetime` 이 섞인 payload 가 정상 저장되는지 확인하는 테스트 추가
+- [ ] pytest 전체 통과 확인
+
+### [VCP-004] VCP 응답 생성 헬퍼의 검증 공백 메우기
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: AUDIT-VCP §5.1
+- 티어 근거: 테스트 파일만 바꾸므로 `tier-rules.md` §1 의 제외 조항을 적용할 수 없고,
+  추가되는 줄 수를 그대로 셉니다. 다섯 함수 분량이면 300줄 안쪽으로 예상됩니다.
+- 선행 조건: `[VCP-001]` 이 끝난 뒤에 착수합니다. 지금 상태를 그대로 고정하는 테스트를
+  먼저 쓰면 결함을 정답으로 굳히게 됩니다.
+- [ ] `_apply_vcp_reanalysis_updates` 의 성공·실패 분기 테스트 추가
+- [ ] `_build_ai_data_map` 과 `_merge_legacy_ai_fields_into_map` 의 병합 규칙 테스트 추가
+- [ ] `_merge_ai_data_into_vcp_signals` 의 필드 덮어쓰기 동작 테스트 추가
+- [ ] pytest 전체 통과 확인
+
+### [FLOW-005] 수급 교차검증을 서비스 안에서 끝낸다
+- 카테고리: 수급·백테스트 | 티어: T3 | 근거: AUDIT-FLOW §1.2, §2.1, §3.1
+- `services/investor_trend_5day_service.py` 는 `tier-rules.md` §2 "수급 집계" 위험 경로이므로
+  줄 수와 무관하게 T3 입니다. 호출자 정리는 `engine/` 과 종목상세 카테고리에 걸치므로,
+  서비스 쪽 진입점을 먼저 만들고 호출자는 뒤이어 옮깁니다.
+- [ ] `_resolve_best_payload` 의 교체 조건을 다시 정의해 `_is_large_disagreement` 가 실제로
+      판정에 쓰이도록 하거나, 쓰지 않기로 하면 함수와 세 상수를 함께 제거
+- [ ] `stale_csv` 단독으로 무조건 교체하던 동작을 의도한 규칙으로 고침
+- [ ] 이상징후 재조회를 서비스 내부에서 수행하는 단일 진입점 추가
+- [ ] 호출자 다섯 곳의 `_has_csv_anomaly_flags` 와 두 번 호출 패턴을 그 진입점으로 교체
+- [ ] 호출자가 없는 `load_investor_trend_5day_map` 의 존치 여부 결정
+- [ ] 교체 규칙 회귀 테스트 추가 (일치·불일치·지연 각 경우)
+
+### [FE-007] 모달 셸을 통합하고 대형 클라이언트 컴포넌트를 나눈다
+- 카테고리: 프론트엔드 공통 | 티어: T3 | 근거: AUDIT-FE §2.2, §3.2, §4.1
+- `PaperTradingModal.tsx` 1,140줄 분해만으로 300줄을 넘기므로 `T3` 입니다.
+- [ ] 다섯 벌의 모달 셸을 `Modal.tsx` 하나로 모으고 Escape 키와 ARIA 속성을 한 자리에서 보장
+- [ ] `PaperTradingModal.tsx` 에서 자산 차트를 별도 컴포넌트로 분리
+- [ ] `PaperTradingModal.tsx` 에서 입금과 계좌 초기화를 별도 컴포넌트로 분리
+- [ ] `src/app/page.tsx` 의 탭 전환부만 클라이언트 컴포넌트로 떼어내고 나머지를 서버 컴포넌트로 환원
+- [ ] `SellStockModal` 의 단일 값 상태와 빈 오버레이 제거
+- [ ] agent-browser 로 모의투자 화면과 랜딩 화면을 실측. Next.js 가 16.1.6 이므로
+      `frontend-skills.md` §3 에 따라 `npm run build` 결과를 함께 확인
+
+### [JONGGA-006] 종가베팅 페이지에서 범용 컴포넌트와 정적 모달 분리
+- 카테고리: 종가베팅 | 티어: T3 | 근거: AUDIT-JONGGA §2.2, §4.1
+- 선행 조건: `[FE-007]` 이 모달 셸을 `Modal.tsx` 로 통합한 뒤에 착수합니다. 통합 전에
+  `GradeGuideModal` 을 옮기면 곧 다시 옮기게 됩니다.
+- 이동만으로도 추가와 삭제의 합계가 300줄을 크게 넘으므로 T3 입니다. 분량이 부담되면
+  범용 프리미티브 이동과 정적 모달 이동을 두 항목으로 쪼개는 방안을 먼저 검토합니다.
+- [ ] `Tooltip` 지역 정의를 제거하고 `frontend/src/app/components/Tooltip.tsx` 를 사용.
+      필요한 `wide` 와 `width` 프롭은 공용 컴포넌트 쪽에 반영
+- [ ] `data-status/page.tsx` 의 세 번째 Tooltip 사본도 같은 방향으로 정리
+- [ ] `PriceRangeBar`, `StatBox`, `ScoreBar` 를 컴포넌트 디렉터리로 이동
+- [ ] `GradeGuideModal` 을 `ClosingBetCriteriaModal` 과 같은 자리로 이동
+- [ ] `npm run build`, `npm run type-check`, vitest 전체 통과 확인
+- [ ] agent-browser 로 종가베팅 화면과 데이터 상태 화면을 실측
+
+### [CHAT-003] 두 SQLite 캐시 모듈을 공용 골격으로 통합
+- 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT §2.1
+- 티어 판정: 949줄을 다루므로 300줄을 확실히 넘습니다. 공용 골격을
+  `services/sqlite_utils.py` 에 두는 방안을 택하면 파일명에 `sqlite` 가 들어가 위험 경로에도
+  닿으므로, 어느 쪽으로 가든 `T3` 입니다.
+- [ ] 두 모듈의 실제 차이(테이블 이름, 페이로드 모양, 서명 계산)를 목록으로 확정
+- [ ] 2단 캐시 골격을 한 곳으로 모으고 차이 부분만 주입받도록 정리
+- [ ] `runtime_stock_map_cache` 와 `stock_context_cache` 의 공개 함수 시그니처 유지
+- [ ] 기존 두 회귀 테스트가 그대로 통과하는지 확인
+- [ ] 스키마 복구와 프루닝 동작이 양쪽에서 동일한지 검증하는 테스트 추가
+
+### [CHAT-004] 챗봇 페이지 분할과 응답 파서 단일화
+- 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT §2.2, §4.1, §5.1
+- 티어 판정: 1,718줄 파일을 쪼개므로 300줄을 넘습니다. 선행 조건으로 `[CHAT-001]` 이
+  끝나 있어야 합니다. 같은 SSE 블록을 두 항목이 동시에 건드리면 충돌합니다.
+- [ ] 마크다운 교정과 추론·추천 질문 파싱을 별도 모듈로 분리
+- [ ] 백엔드가 이미 나눠 보내는 `reasoning_chunk` / `answer_chunk` 를 신뢰하고, 프런트의
+      중복 헤더 파싱 범위를 히스토리 복원 경로로 한정
+- [ ] SSE 수신, 세션 관리, 음성 입력을 각각 훅이나 컴포넌트로 분리
+- [ ] 파서 호출을 메모이제이션해 스트리밍 중 전체 메시지 재파싱을 제거
+- [ ] 분리한 파서와 SSE 처리에 vitest 테스트 추가
 
 ## P2 — 대기
+
+### [VCP-005] `vcp_ai_analyzer.py` 의 죽은 폴백 코드와 중복 헬퍼 정리
+- 카테고리: VCP 시그널 | 티어: T3 | 근거: AUDIT-VCP §3.1, §2.1
+- 티어 근거: `engine/vcp_ai_analyzer.py` 는 `tier-rules.md` §2 의 "VCP 판정" 위험 경로에
+  올라 있으므로 줄 수와 무관하게 T3 입니다. 리뷰는 `/ponytail-review` → `/simplify` →
+  `/code-review` → `/review` 순서를 지킵니다.
+- [ ] 호출자가 없는 `_fallback_to_zai` 제거
+- [ ] `_resolve_perplexity_fallback_providers` 와 `_build_perplexity_fallback_chain` 의
+      실행되지 않는 분기 정리
+- [ ] `_extract_status_code` 세 사본을 하나로 통합
+- [ ] `max_parse_attempts = 1` 로 죽어 있는 재시도 구조 정리
+- [ ] 기존 27건의 Z.ai 테스트가 그대로 통과하는지 확인
+
+### [CHAT-005] 죽은 프롬프트 상수와 레거시 경로 정리
+- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §3.1, §3.2
+- 티어 판정: 삭제 위주이며 위험 경로에 닿지 않습니다. 170줄에서 250줄 사이로 보지만,
+  구현 후 `git diff --stat` 이 300줄을 넘으면 `tier-rules.md` §3-6 에 따라 `T3` 으로
+  올립니다. 위임 믹스인 다섯 개를 평탄화하는 작업은 규모가 따로여서 이 항목에 넣지
+  않았습니다.
+- [ ] `INTENT_PROMPTS`, `VCP_EXPERT_PERSONA`, `VCP_EXPERT_SUGGESTIONS` 제거
+- [ ] 호출자 없는 래퍼 세 개(`_fetch_mock_data`, `_detect_stock_query_from_stock_map`,
+      `_fallback_response`) 처리 방향 결정 후 정리
+- [ ] `close()` 에 남은 초기화 잔재 제거 (종료 시 종목 맵 재로드 중단)
+- [ ] `_CompatGenerativeModel` 과 `_run_legacy_model_chat` 이 아직 필요한지 확인 후 정리
+- [ ] 삭제한 심볼을 참조하던 테스트 정리 및 pytest 전체 통과 확인
+
+### [FLOW-006] 백테스트 재노출 전용 계층을 걷어낸다
+- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW §3.1
+- [ ] `..._service`, `..._calculators`, `..._cumulative`, `..._signal_stats` 네 파일의
+      외부 호출자를 확인한 뒤 남길 진입점 하나를 결정
+- [ ] 나머지 재노출 계층 제거하고 `app/routes/kr_market_backtest_helpers.py` 의 import 정리
+- [ ] `tests/services/test_kr_market_backtest_service.py` 의 import 경로 갱신
+- [ ] pytest 전체 통과 확인
+
+### [FLOW-007] 티커 패딩 헬퍼를 공용 유틸로 통합한다
+- 카테고리: 수급·백테스트 | 티어: T1 | 근거: AUDIT-FLOW §2.2
+- [ ] `..._scenario_helpers` 와 `..._trade_helpers` 의 자체 구현을
+      `services.kr_market_csv_utils.get_ticker_padded_series` 로 교체
+- [ ] 캐시 컬럼(`_ticker_padded`) 동작이 교체 전후로 같은지 확인
+- [ ] `tests/services/test_kr_market_backtest_service.py` 통과 확인
+
+### [INFRA-008] init_data 의 죽은 진입점 정리
+- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §3.1, §3.2
+- `scripts/init_data.py` 가 위험 경로에 있어 T3 입니다.
+- [ ] `create_market_gate`(1993-2096)를 삭제하고 Market Gate 생성 경로가
+      `engine/market_gate.MarketGate` 하나임을 확인
+- [ ] `reset_cache`(529-534)의 존치 여부를 판단하고 불필요하면 삭제
+- [ ] `assign_grade`(91-145)를 실제 등급 판정 경로에 연결하거나,
+      `tests/test_grading_logic.py` 와 함께 폐기
+- [ ] pytest 전체 통과 확인
+
+### [INFRA-009] init_data 를 책임 단위로 분리
+- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §4.1, §5.2
+- 선행 조건: `[INFRA-008]` 로 죽은 코드를 걷어낸 뒤 남은 규모로 분리 범위를 다시
+  잡습니다. `scripts/init_data.py` 가 위험 경로에 있어 T3 입니다.
+- [ ] 열세 가지 책임을 묶어 분리 단위를 확정 (수집 / 생성 / 알림 / CLI 를 후보로 검토)
+- [ ] 한 번에 300줄을 넘기지 않도록 여러 사이클로 나누어 진행할 순서를 결정
+- [ ] `scripts/debug_details.py:13` 의 깨진 import 를 정리 대상에 포함
+- [ ] 분리 대상 함수 가운데 테스트가 없는 `create_jongga_v2_latest` 등에 회귀 테스트 추가
+- [ ] 이동한 파일 경로를 `tier-rules.md` §2 위험 경로 목록에 반영
 
 ### [FLOW-001] 장중 실시간 수급 데이터 KIS API 연동
 - 카테고리: 수급·백테스트 | 티어: T3 | 근거: docs/plans/TO_DO_LIST.md 이관
