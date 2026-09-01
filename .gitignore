@@ -76,7 +76,9 @@ build/
 dist/
 *.egg-info/
 .agent/
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/agents/
 .omc/
 
 *.backup

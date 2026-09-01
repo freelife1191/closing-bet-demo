@@ -15,6 +15,7 @@
 - 새로 추가되는 실행 코드는 없다. 산출물은 Markdown 파일과 `.gitignore` 수정뿐이다.
 - 프로젝트 로컬 자산은 `.claude/skills/dev-cycle/` 과 `.claude/agents/` 아래에만 둔다. 전역 스킬 디렉터리(`~/.claude/skills/`)를 건드리지 않는다.
 - 기록 파일은 `docs/dev-cycle/` 아래에 둔다. 이 경로는 커밋 `30645f0` 에서 `.gitignore` 예외로 이미 등록되었다.
+- `.claude/` 도 통째로 무시되고 있었다. Task 1 실행 중에 발견해 `.claude/*` 로 바꾸고 `skills` 와 `agents` 를 예외로 되살렸다. 로컬 설정인 `settings.local.json` 은 계속 무시된다.
 - 항목 ID 는 `CHAT` `JONGGA` `VCP` `FLOW` `FE` `INFRA` 여섯 카테고리 약어와 세 자리 일련번호를 하이픈으로 잇는다. 예: `INFRA-001`.
 - 우선순위는 `P0`(즉시) `P1`(이번 주기) `P2`(대기) 세 단계뿐이다.
 - 티어는 `T1` `T2` `T3` 세 단계뿐이며, 구현 후 상향만 허용하고 하향은 금지한다.
