@@ -624,6 +624,10 @@ export default function ChatbotPage() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // 이 요청이 속한 세션. 화면에 표시 중인 세션(currentSessionId)과는 다른 값이다.
+    // 응답이 흐르는 동안 사용자가 다른 세션을 열 수 있기 때문에 둘을 섞으면 안 된다.
+    let streamSessionId = currentSessionId;
+
     try {
       let res;
       const savedWatchlist = localStorage.getItem('watchlist');
@@ -752,12 +756,18 @@ export default function ChatbotPage() {
                       return newMsgs;
                     });
                   }
-                  if (data.session_id && data.session_id !== currentSessionId) {
+                  // 서버는 모든 청크에 session_id 를 싣는다. 새 대화에서 첫 청크가 세션을
+                  // 배정한 뒤에도 갱신으로 판정되지 않도록 이 스트림의 세션을 갱신해 둔다.
+                  const sessionChanged = Boolean(data.session_id) && data.session_id !== streamSessionId;
+                  if (sessionChanged) {
+                    streamSessionId = data.session_id;
                     isCreatingSessionRef.current = true;
                     setCurrentSessionId(data.session_id);
+                  }
+                  if (sessionChanged || data.done) {
                     fetchSessions();
-                  } else if (data.done) {
-                    fetchSessions();
+                  }
+                  if (data.done) {
                     setMessages(prev => {
                       const newMsgs = [...prev];
                       newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], isStreaming: false };
@@ -788,7 +798,8 @@ export default function ChatbotPage() {
 
         if (data.response) {
           // If it's a new session, update state
-          if (data.session_id && data.session_id !== currentSessionId) {
+          if (data.session_id && data.session_id !== streamSessionId) {
+            streamSessionId = data.session_id;
             isCreatingSessionRef.current = true; // Prevent history fetch overwriting optimistic state
             setCurrentSessionId(data.session_id);
             fetchSessions();
