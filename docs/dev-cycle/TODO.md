@@ -11,20 +11,6 @@
 
 ## P0 — 즉시
 
-### [VCP-006] 응답에 실리는 NaN 때문에 VCP 화면이 통째로 비는 결함 수정
-- 카테고리: VCP 시그널 | 티어: T2 | 근거: 2026-09-01 VCP-001 실측 중 발견
-- `_build_vcp_signal_from_row` 이 `market` 을 `_none_if_nan` 없이 그대로 담습니다
-  (`app/routes/kr_market_vcp_signal_helpers.py:206`). CSV 의 `market` 칸이 비어 있으면
-  응답에 `"market": NaN` 이 실리고, 파이썬은 이를 읽지만 브라우저의 `JSON.parse` 는
-  거부합니다. 그 결과 백엔드가 200 과 시그널 세 건을 돌려줘도 화면은
-  `No signals found.` 만 보여 줍니다. VCP-001 실측에서 실제로 재현했습니다.
-- 응답에 담기는 다른 필드들은 `_none_if_nan` 을 거치고 있어서, 빠진 자리를 메우는 것이
-  수정 방향입니다. 다만 같은 실수가 되풀이되지 않도록 직렬화 직전에 한 번 거르는 쪽이
-  나은지 함께 판단합니다.
-- [ ] `market` 을 비롯해 `_none_if_nan` 을 거치지 않는 필드를 전수 확인
-- [ ] 빈 칸이 섞인 CSV 로 응답을 만들어 `json.loads` 가 아닌 엄격한 파서로 검증하는 테스트 추가
-- [ ] agent-browser 로 빈 `market` 이 섞인 목록이 화면에 그려지는지 실측
-
 ### [CHAT-001] 새 대화 스트리밍의 세션 전환 결함 수정
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §1.1
 - 티어 판정: 건드릴 파일은 `frontend/src/app/chatbot/page.tsx` 하나이고 `tier-rules.md` §2 의
@@ -359,6 +345,17 @@
       되돌려 반영
 
 ## P2 — 대기
+
+### [CHAT-006] 챗봇 SSE 스트림이 NaN 방어를 우회하는지 점검
+- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-01 VCP-006 의 code-review 지적
+- `[VCP-006]` 이 붙인 JSON provider 는 `jsonify` 를 지나는 응답만 덮습니다. 챗봇 스트림은
+  `services/kr_market_chatbot_stream_helpers.py:87,91` 에서 `json.dumps` 로 직접 직렬화하므로
+  provider 를 지나지 않습니다. 청크에 NaN 이 실리면 프론트엔드의 `JSON.parse` 가 그 줄에서
+  예외를 던져 스트림 처리가 끊깁니다.
+- 다만 청크에 담기는 값은 모델이 준 문자열과 `usage_metadata` 의 토큰 수라서 NaN 이 생길
+  여지가 좁습니다. 실재 여부를 먼저 확인하고, 없으면 항목을 닫습니다.
+- [ ] 청크에 담기는 값의 출처를 확인해 NaN 이 실릴 수 있는지 판단
+- [ ] 실릴 수 있으면 `sanitize_for_json` 을 거치도록 고치고 회귀 테스트 추가
 
 ### [VCP-005] `vcp_ai_analyzer.py` 의 죽은 폴백 코드와 중복 헬퍼 정리
 - 카테고리: VCP 시그널 | 티어: T3 | 근거: AUDIT-VCP §3.1, §2.1

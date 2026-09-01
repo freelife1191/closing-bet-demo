@@ -10,10 +10,13 @@ import logging
 import json
 import importlib
 from datetime import datetime
+from typing import Any
 
 from flask import Flask, jsonify, request, g
+from flask.json.provider import DefaultJSONProvider
 from flask_cors import CORS
 from dotenv import load_dotenv
+from engine.pandas_utils_safe import sanitize_for_json
 from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
@@ -139,9 +142,21 @@ def _start_scheduler() -> None:
         app_logger.error(f"Failed to start scheduler: {error}")
 
 
+class NaNSafeJSONProvider(DefaultJSONProvider):
+    """NaN 과 Infinity 를 null 로 바꿔 직렬화한다.
+
+    파이썬은 이 세 토큰을 읽고 쓰지만 브라우저의 JSON.parse 는 거부하므로, 한 자리만
+    섞여도 본문 전체가 파싱되지 않는다. 필드마다 막으면 새 필드에서 되풀이된다.
+    """
+
+    def dumps(self, obj: Any, **kwargs: Any) -> str:
+        return super().dumps(sanitize_for_json(obj), **kwargs)
+
+
 def _configure_app(app: Flask) -> None:
     app.config['JSON_AS_ASCII'] = False
     app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() in ['true', '1']
+    app.json = NaNSafeJSONProvider(app)
 
 
 def _configure_cors(app: Flask) -> None:

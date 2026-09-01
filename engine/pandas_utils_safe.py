@@ -72,7 +72,9 @@ def sanitize_for_json(data: Any) -> Any:
     """JSON 직렬화를 위해 NaN, Infinity 등을 안전한 값으로 변환 (재귀)."""
     if isinstance(data, dict):
         return {k: sanitize_for_json(v) for k, v in data.items()}
-    if isinstance(data, list):
+    # tuple 도 함께 받는다. json 은 tuple 을 배열로 직렬화하므로, 여기서 걸러 두지
+    # 않으면 그 안의 NaN 이 그대로 응답에 실린다.
+    if isinstance(data, (list, tuple)):
         return [sanitize_for_json(v) for v in data]
     if isinstance(data, float):
         if np.isnan(data) or np.isinf(data):
