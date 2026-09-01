@@ -1227,7 +1227,7 @@ export default function JonggaV2Page() {
             종가 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">베팅</span>
           </h2>
           <p className="text-gray-400 text-lg">
-            Gemini 3.0 분석 + 기관 수급 추세
+            Gemini 분석 + 기관 수급 추세
           </p>
         </div>
 
@@ -1558,7 +1558,7 @@ export default function JonggaV2Page() {
       </div>
 
       <div className="text-center text-xs text-gray-600 pt-8">
-        Engine: v2.0.1 (Gemini 3.0 Flash) • Updated: {data?.updated_at || '-'}
+        Engine: v2.0.1 (Gemini Flash) • Updated: {data?.updated_at || '-'}
       </div>
 
       {chartModal.isOpen && (
@@ -1899,6 +1899,9 @@ function StatBox({ label, value, highlight = false, customValue, tooltip }: { la
   )
 }
 
+// AI 평가에 모델명이 없을 때 쓰는 표시용 기본값. 두 곳에서 갈라지지 않도록 한 자리에 둔다.
+const DEFAULT_AI_MODEL_LABEL = 'Gemini 3.7 Flash';
+
 function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, isRetrying, isAdmin }: {
   signal: Signal,
   index: number,
@@ -1918,7 +1921,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
   // Helper function to format model names (handles legacy names and formatting)
   const formatAiModelName = (modelName: string | undefined): string => {
-    if (!modelName) return 'Gemini 3.7 Flash';
+    if (!modelName) return DEFAULT_AI_MODEL_LABEL;
 
     // Alias Mapping (Legacy or Configuration nicknames)
     const lowerName = modelName.toLowerCase();
@@ -1949,7 +1952,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
       action: isBuy ? 'BUY' : (isSell ? 'SELL' : 'HOLD'),
       confidence: 0, // 신뢰도 데이터 없음
       reason: reasonText,
-      model: signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || 'Gemini 2.0 Flash'
+      model: signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || DEFAULT_AI_MODEL_LABEL
     };
   }
 

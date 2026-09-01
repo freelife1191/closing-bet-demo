@@ -948,7 +948,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                             }`}
                         >
                           <i className="fas fa-brain text-xl mb-2"></i>
-                          <span className="text-sm font-bold">OpenAI GPT-4</span>
+                          <span className="text-sm font-bold">OpenAI GPT</span>
                         </button>
 
                         <button

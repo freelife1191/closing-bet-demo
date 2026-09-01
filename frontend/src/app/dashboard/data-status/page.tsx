@@ -93,7 +93,7 @@ export default function DataStatusPage() {
     'Institutional Trend': '전 종목의 최근 30일간 외국인/기관 순매수 수급 동향 데이터입니다.',
     'VCP Signals': '가격 변동성 축소(VCP)와 수급 패턴을 분석하여 포착된 급등 예상 종목 리스트입니다.',
     'AI Analysis': '기본적인 마켓 데이터와 지표를 바탕으로 생성된 1차 AI 시장 분석 리포트입니다.',
-    'AI Jongga V2': '실시간 Toss 증권 데이터, 뉴스, 재무제표를 Gemini 3.0이 심층 분석한 종가베팅 추천 종목입니다.',
+    'AI Jongga V2': '실시간 Toss 증권 데이터, 뉴스, 재무제표를 Gemini가 심층 분석한 종가베팅 추천 종목입니다.',
     'Market Gate': 'KOSPI, KOSDAQ 지수 및 주요 섹터별 등락률을 포함한 시장 전체 현황 데이터입니다.' // 표시용만 유지, 수집 대상 X
   };
 
