@@ -285,7 +285,7 @@ class HistoryManager:
 
     def create_session(
         self,
-        model_name: str = "gemini-2.0-flash-lite",
+        model_name: str = "gemini-3.7-flash",
         save_immediate: bool = True,
         owner_id: str = None,
         session_id: str = None,
@@ -390,7 +390,7 @@ class HistoryManager:
             now_iso = self._now_iso()
             self.sessions[session_id] = self._build_session_record(
                 session_id=session_id,
-                model_name="gemini-2.0-flash-lite",
+                model_name="gemini-3.7-flash",
                 owner_id=None,
                 now_iso=now_iso,
             )

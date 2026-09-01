@@ -22,7 +22,7 @@ async def main():
         }
     ]
     
-    # Test batch size 2 with gemini-3-flash-preview
+    # Test batch size 2 with gemini-3.5-flash
     print(f"Testing with model: {app_config.ANALYSIS_GEMINI_MODEL}, chunk size: {len(mock_items)}")
     
     result = await analyzer.analyze_news_batch(mock_items)

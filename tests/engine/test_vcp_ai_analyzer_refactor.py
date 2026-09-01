@@ -81,12 +81,13 @@ def test_analyze_with_gpt_uses_to_thread(monkeypatch):
 
 
 def test_analyze_with_gemini_429_blocks_model_for_session(monkeypatch):
+    monkeypatch.setenv("VCP_GEMINI_MODEL", "gemini-3.1-flash-lite")
     calls: list[str] = []
 
     def _generate_content(*, model, contents):
         del contents
         calls.append(model)
-        if model == "gemini-3.1-flash-lite-preview":
+        if model == "gemini-3.1-flash-lite":
             raise RuntimeError("429 resource_exhausted")
         return SimpleNamespace(text='{"action":"BUY","confidence":74,"reason":"ok"}')
 
@@ -112,7 +113,7 @@ def test_analyze_with_gemini_429_blocks_model_for_session(monkeypatch):
     assert first["action"] == "BUY"
     assert second["action"] == "BUY"
     # 429가 발생한 모델은 세션에서 제외되어 두 번째 종목에서는 재시도하지 않는다.
-    assert calls.count("gemini-3.1-flash-lite-preview") == 1
+    assert calls.count("gemini-3.1-flash-lite") == 1
 
 
 def test_analyze_with_perplexity_429_switches_to_fallback_without_retry(monkeypatch):

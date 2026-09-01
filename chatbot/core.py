@@ -60,7 +60,7 @@ from .runtime_setup_service import (
 logger = logging.getLogger(__name__)
 
 # 기본 설정 (env에서 오버라이드 가능)
-DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+DEFAULT_GEMINI_MODEL = "gemini-3.7-flash"
 
 # ... import lines ...
 

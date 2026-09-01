@@ -12,6 +12,7 @@ import os
 import sys
 import types
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -258,8 +259,9 @@ def test_get_kr_signals_dates_uses_file_mtime_cache(monkeypatch, tmp_path: Path)
 
 
 def test_get_jongga_v2_latest_recalculates_grades_and_sorts(monkeypatch, tmp_path: Path):
+    # 기준일이 과거면 stale 가드가 signals를 비워버리므로 오늘 날짜로 고정한다.
     latest_data = {
-        "date": "2026-02-20",
+        "date": date.today().isoformat(),
         "signals": [
             {
                 "ticker": "000001",

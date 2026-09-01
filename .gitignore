@@ -17,6 +17,8 @@ backup/
 
 # Environment
 .env
+.env.*
+!.env.example
 
 # Secrets (service account keys, etc.)
 secrets/

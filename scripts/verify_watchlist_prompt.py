@@ -19,7 +19,7 @@ def test_prompt_generation():
     prompt = build_system_prompt(
         market_data=market_data,
         watchlist=watchlist,
-        current_model="gemini-2.0-flash"
+        current_model="gemini-3.7-flash"
     )
     
     if "User's Interested Stocks" in prompt and "삼성전자" in prompt:

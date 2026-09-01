@@ -523,9 +523,9 @@ def test_filter_signals_dataframe_by_date_normalizes_datetime_date_values():
 def test_build_vcp_signals_from_dataframe_filters_closed_and_low_score():
     signals_df = pd.DataFrame(
         [
-            {"ticker": "1", "status": "OPEN", "score": 70, "signal_date": "2026-02-21", "vcp_score": 6},
-            {"ticker": "2", "status": "CLOSED", "score": 95, "signal_date": "2026-02-21", "vcp_score": 8},
-            {"ticker": "3", "status": "OPEN", "score": 55, "signal_date": "2026-02-21", "vcp_score": 9},
+            {"ticker": "1", "status": "OPEN", "score": 70, "signal_date": "2026-02-21", "vcp_score": 6, "is_vcp": True},
+            {"ticker": "2", "status": "CLOSED", "score": 95, "signal_date": "2026-02-21", "vcp_score": 8, "is_vcp": True},
+            {"ticker": "3", "status": "OPEN", "score": 55, "signal_date": "2026-02-21", "vcp_score": 9, "is_vcp": True},
         ]
     )
 

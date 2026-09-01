@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_target_model_name(bot: Any, model: Optional[str]) -> str:
-    return model or getattr(bot, "current_model_name", "gemini-2.0-flash-lite")
+    return model or getattr(bot, "current_model_name", "gemini-3.7-flash")
 
 
 def _prepare_request(

@@ -121,7 +121,7 @@ def _apply_gemini_reanalysis_results(
         signal["ai_evaluation"] = {
             "action": matched_result.get("action", "HOLD"),
             "confidence": matched_result.get("confidence", 0),
-            "model": matched_result.get("model", "gemini-2.0-flash"),
+            "model": matched_result.get("model", "gemini-3.7-flash"),
         }
         updated_count += 1
 

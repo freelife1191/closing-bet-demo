@@ -80,11 +80,11 @@ ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
 ZAI_MODEL=glm-4.7-flash
 
 # === 챗봇/사전 분석용 모델 ===
-GEMINI_MODEL=gemini-3.1-flash-lite-preview                 # 대량 사전 분석 (lite 권장)
-CHATBOT_AVAILABLE_MODELS=gemini-3.1-flash-lite-preview,gemini-3-flash-preview,gemini-3.1-pro-preview,gemini-2.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite                 # 대량 사전 분석 (lite 권장)
+CHATBOT_AVAILABLE_MODELS=gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.1-pro-preview,gemini-2.5-flash
 
 # === 종가베팅(Phase3) 분석 모델 ===
-ANALYSIS_GEMINI_MODEL=gemini-3-flash-preview
+ANALYSIS_GEMINI_MODEL=gemini-3.5-flash
 ANALYSIS_LLM_CONCURRENCY=1
 ANALYSIS_LLM_CHUNK_SIZE=2
 ANALYSIS_LLM_API_TIMEOUT=120
@@ -93,7 +93,7 @@ ANALYSIS_LLM_REQUEST_DELAY=4         # API 호출 간 대기(초). 429 방지용
 # === VCP 멀티 AI 설정 ===
 VCP_AI_PROVIDERS=gemini,perplexity   # 활성 provider (gemini/gpt/perplexity 조합)
 VCP_SECOND_PROVIDER=perplexity       # gemini 외 보조모델 1개 (gpt 또는 perplexity)
-VCP_GEMINI_MODEL=gemini-3-flash-preview
+VCP_GEMINI_MODEL=gemini-3.5-flash
 VCP_GPT_MODEL=gpt-5-nano             # gpt-5-nano | gpt-5-mini | gpt-5.1 | gpt-5.2
 VCP_PERPLEXITY_MODEL=sonar           # sonar | sonar-pro
 VCP_PERPLEXITY_API_TIMEOUT=120
@@ -289,7 +289,7 @@ engine/
   - `engine/llm_utils.py`: LLM 재시도 로직 (async/sync decorators)
   - `engine/pandas_utils.py`: DataFrame 유틸리티 및 NaN 처리
 - **AI Engine**:
-  - Google Gemini (Vertex AI 경로 일원화) — `gemini-3-flash-preview`(분석), `gemini-3.1-flash-lite-preview`(챗봇/사전 분석) 등 환경변수로 선택
+  - Google Gemini (Vertex AI 경로 일원화) — `gemini-3.5-flash`(분석), `gemini-3.1-flash-lite`(챗봇/사전 분석) 등 환경변수로 선택
   - OpenAI GPT (직접 호출 또는 Z.ai 호환 경로) — `gpt-5-nano` 기본
   - Perplexity Sonar (실시간 웹 검색, 출처 명시)
   - LangChain-style Prompt Composition (Chain of Thought, Intent Injection)

@@ -525,7 +525,7 @@ async def main_async(report_path: Path, vcp_iters: int, perplexity_iters: int, c
             )
 
     # Chatbot streaming
-    chatbot_model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
+    chatbot_model = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
     client = build_genai_client()
     for case in CHATBOT_CASES:
         for i in range(1, chatbot_iters + 1):

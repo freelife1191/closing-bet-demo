@@ -199,7 +199,7 @@ def test_build_vcp_payload_requests_readonly_ai_json_load(tmp_path):
     assert all(kwargs.get("deep_copy") is False for _, kwargs in captured_calls)
 
 
-def test_build_vcp_payload_falls_back_to_latest_available_date_when_today_is_empty(tmp_path):
+def test_build_vcp_payload_keeps_today_empty_without_recent_fallback(tmp_path):
     _reset_vcp_signals_cache_state()
     _write_signals_csv(tmp_path, "2026-02-22")
 
@@ -213,8 +213,8 @@ def test_build_vcp_payload_falls_back_to_latest_available_date_when_today_is_emp
         now=datetime(2026, 2, 23, 9, 0, 0),
     )
 
-    assert payload["count"] == 1
-    assert payload["signals"][0]["signal_date"] == "2026-02-22"
+    assert payload["count"] == 0
+    assert payload["signals"] == []
     assert payload["stale_warning"] == (
         "오늘(2026-02-23) 기준 VCP 시그널이 없습니다. 최신 저장 데이터는 2026-02-22입니다."
     )
@@ -367,6 +367,36 @@ def test_build_vcp_payload_emits_stale_warning_when_today_signals_missing(tmp_pa
     assert payload["count"] == 0
     assert "stale_warning" in payload
     assert "2026-03-03" in str(payload["stale_warning"])
+
+
+def test_build_vcp_payload_cached_empty_keeps_stale_warning(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-03")
+
+    kwargs = {
+        "req_date": None,
+        "load_csv_file": lambda name: pd.read_csv(tmp_path / name),
+        "load_json_file": lambda _name, **_kwargs: {},
+        "filter_signals_dataframe_by_date": vcp_signal_helpers._filter_signals_dataframe_by_date,
+        "build_vcp_signals_from_dataframe": vcp_signal_helpers._build_vcp_signals_from_dataframe,
+        "load_latest_vcp_price_map": lambda: {},
+        "apply_latest_prices_to_jongga_signals": lambda _signals, _price_map: 0,
+        "sort_and_limit_vcp_signals": vcp_signal_helpers._sort_and_limit_vcp_signals,
+        "build_ai_data_map": vcp_signal_helpers._build_ai_data_map,
+        "merge_legacy_ai_fields_into_map": vcp_signal_helpers._merge_legacy_ai_fields_into_map,
+        "merge_ai_data_into_vcp_signals": vcp_signal_helpers._merge_ai_data_into_vcp_signals,
+        "count_total_scanned_stocks": lambda _data_dir: 1,
+        "logger": logging.getLogger("vcp-payload-cached-stale-warning-test"),
+        "now": datetime(2026, 3, 4, 9, 0, 0),
+        "data_dir": str(tmp_path),
+    }
+
+    first = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+    second = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+
+    assert first["count"] == 0
+    assert second["count"] == 0
+    assert "2026-03-03" in str(second.get("stale_warning"))
 
 
 def test_build_vcp_payload_skips_delete_when_rows_within_limit(monkeypatch, tmp_path):

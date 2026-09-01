@@ -4,7 +4,7 @@
 **Type:** Korean Stock Market Analysis System (Python Flask + Next.js)
 
 ## OVERVIEW
-AI-powered Korean stock market analysis system combining institutional flow analysis with VCP technical analysis. Uses Gemini 2.0 Flash and GPT via Z.ai for AI reasoning, Flask for backend API, and Next.js for dashboard UI.
+AI-powered Korean stock market analysis system combining institutional flow analysis with VCP technical analysis. Uses Gemini 3.7 Flash and GPT via Z.ai for AI reasoning, Flask for backend API, and Next.js for dashboard UI.
 
 ## BUILD / LINT / TEST COMMANDS
 
@@ -179,7 +179,7 @@ export default function StockChart({ data, ticker, vcpRange }: StockChartProps) 
 
 ## UNIQUE STYLES
 
-- **Dual AI:** Gemini 2.0 Flash (deep reasoning) + Z.ai/GPT/Perplexity (fast batch)
+- **Dual AI:** Gemini 3.7 Flash (deep reasoning) + Z.ai/GPT/Perplexity (fast batch)
 - **Market Gate:** Top-level market check before stock analysis
 - **Korean-English Mix:** `class Grade(Enum): S = "S"  # 최고`
 - **Dataclass config:** All config as typed dataclasses with defaults
@@ -205,13 +205,13 @@ OPENAI_API_KEY=your_openai_key
 PERPLEXITY_API_KEY=your_perplexity_key
 ZAI_API_KEY=your_zai_key
 
-# Models
-GEMINI_MODEL=gemini-2.0-flash
-ANALYSIS_GEMINI_MODEL=gemini-2.0-flash
+# Models — see .env.example for the authoritative list
+GEMINI_MODEL=gemini-3.7-flash
+ANALYSIS_GEMINI_MODEL=gemini-3.7-flash
 OPENAI_MODEL=gpt-4o
-VCP_GEMINI_MODEL=gemini-flash-latest
-VCP_GPT_MODEL=gpt-4o
-VCP_PERPLEXITY_MODEL=sonar-pro
+VCP_GEMINI_MODEL=gemini-3.7-flash
+VCP_GPT_MODEL=gpt-5.6-luna
+VCP_PERPLEXITY_MODEL=sonar
 
 # Concurrency
 LLM_CONCURRENCY=2

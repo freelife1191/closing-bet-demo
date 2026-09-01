@@ -144,7 +144,15 @@ def _load_vcp_signals(
     if cached_signals is not None:
         if cached_signals:
             source = "signals_log.csv"
-        return cached_signals, source, None
+        stale_warning = None
+        if req_date is None:
+            stale_warning = _resolve_stale_warning_message(
+                req_date=req_date,
+                source_df=_load_csv_readonly(load_csv_file, "signals_log.csv", usecols=["signal_date"]),
+                filtered_df=pd.DataFrame(cached_signals),
+                today=today,
+            )
+        return cached_signals, source, stale_warning
 
     signals_df = _load_csv_readonly(
         load_csv_file,
@@ -171,7 +179,6 @@ def _load_vcp_signals(
             "ai_confidence",
         ],
     )
-    source_signals_df = signals_df.copy()
     signals_df, _ = filter_signals_dataframe_by_date(signals_df, req_date, today)
     stale_warning = _resolve_stale_warning_message(
         req_date=req_date,
@@ -179,9 +186,6 @@ def _load_vcp_signals(
         filtered_df=signals_df,
         today=today,
     )
-    if req_date is None and signals_df.empty:
-        signals_df = _fallback_to_latest_available_signal_rows(source_signals_df)
-
     if req_date:
         logger.debug(f"Signals requested for explicit date: {req_date}")
     elif not signals_df.empty:
@@ -197,21 +201,6 @@ def _load_vcp_signals(
         logger=logger,
     )
     return signals, source, stale_warning
-
-
-def _fallback_to_latest_available_signal_rows(source_df: pd.DataFrame) -> pd.DataFrame:
-    """오늘 데이터가 없으면 최신 저장 signal_date 행으로 fallback 한다."""
-    if not isinstance(source_df, pd.DataFrame) or source_df.empty or "signal_date" not in source_df.columns:
-        return pd.DataFrame()
-
-    normalized_dates = pd.to_datetime(source_df["signal_date"], errors="coerce")
-    latest_timestamp = normalized_dates.max()
-    if pd.isna(latest_timestamp):
-        return pd.DataFrame(columns=source_df.columns)
-
-    latest_date = latest_timestamp.strftime("%Y-%m-%d")
-    latest_mask = normalized_dates.dt.strftime("%Y-%m-%d") == latest_date
-    return source_df[latest_mask].copy()
 
 
 def _resolve_stale_warning_message(

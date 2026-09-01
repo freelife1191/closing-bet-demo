@@ -426,7 +426,7 @@ def _upsert_history_session_with_messages_delta_cursor(
     title = str(raw_session.get("title") or "새로운 대화")
     created_at = str(raw_session.get("created_at") or datetime.now().isoformat())
     updated_at = str(raw_session.get("updated_at") or created_at)
-    model_name = str(raw_session.get("model") or "gemini-2.0-flash-lite")
+    model_name = str(raw_session.get("model") or "gemini-3.7-flash")
     owner_id = raw_session.get("owner_id")
     message_rows = _build_message_rows(raw_session.get("messages", []), updated_at)
     messages_hash = _message_rows_hash(message_rows)

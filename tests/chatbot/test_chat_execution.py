@@ -90,7 +90,7 @@ def test_run_non_stream_response_returns_normalized_text_and_usage():
 
     bot_response, usage_metadata = run_non_stream_response(
         active_client=client,
-        target_model_name="gemini-2.0-flash-lite",
+        target_model_name="gemini-3.7-flash",
         api_history=[],
         content_parts=["msg"],
         normalize_response=lambda text: f"[N]{text}",
@@ -105,15 +105,15 @@ def test_run_non_stream_response_retries_with_fallback_on_retryable_error():
     client = _FakeClient(
         _FakeChats(
             non_stream_behaviors={
-                "gemini-2.0-flash-lite": RuntimeError("503 UNAVAILABLE"),
-                "gemini-2.5-flash-lite": recovered,
+                "gemini-3.7-flash": RuntimeError("503 UNAVAILABLE"),
+                "gemini-3.5-flash-lite": recovered,
             }
         )
     )
 
     bot_response, usage_metadata = run_non_stream_response(
         active_client=client,
-        target_model_name="gemini-2.0-flash-lite",
+        target_model_name="gemini-3.7-flash",
         api_history=[],
         content_parts=["msg"],
         normalize_response=lambda text: text,
@@ -127,15 +127,15 @@ def test_run_stream_response_retries_and_returns_success():
     client = _FakeClient(
         _FakeChats(
             stream_behaviors={
-                "gemini-2.0-flash-lite": RuntimeError("503 UNAVAILABLE"),
-                "gemini-2.5-flash-lite": [SimpleNamespace(text="[답변]\n복구 완료")],
+                "gemini-3.7-flash": RuntimeError("503 UNAVAILABLE"),
+                "gemini-3.5-flash-lite": [SimpleNamespace(text="[답변]\n복구 완료")],
             }
         )
     )
 
     gen = run_stream_response(
         active_client=client,
-        target_model_name="gemini-2.0-flash-lite",
+        target_model_name="gemini-3.7-flash",
         api_history=[],
         content_parts=["msg"],
         session_id="s1",
@@ -160,7 +160,7 @@ def test_run_stream_response_returns_user_friendly_error_when_all_fallbacks_fail
 
     gen = run_stream_response(
         active_client=client,
-        target_model_name="gemini-2.0-flash-lite",
+        target_model_name="gemini-3.7-flash",
         api_history=[],
         content_parts=["msg"],
         session_id="s1",

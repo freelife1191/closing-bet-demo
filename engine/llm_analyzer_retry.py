@@ -10,7 +10,7 @@ import asyncio
 import logging
 import random
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Callable, Iterable
 
 
 logger = logging.getLogger(__name__)
@@ -48,15 +48,37 @@ class RetryConfig:
 
 
 GEMINI_RETRY_MODEL_CHAIN = [
-    # Main (Gemini 3.x preview) - tier 순서 유지
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3-flash-preview",
+    # Main (Gemini 3.x) - tier 순서 유지
+    "gemini-3.5-flash-lite",
+    "gemini-3.7-flash",
     "gemini-3.1-pro-preview",
     # Fallback (Gemini 2.5 stable) - 동일 tier 순서로 페어링
-    "gemini-2.5-flash-lite",   # ↔ 3.1-flash-lite-preview
-    "gemini-2.5-flash",        # ↔ 3-flash-preview
+    "gemini-2.5-flash-lite",   # ↔ 3.5-flash-lite
+    "gemini-2.5-flash",        # ↔ 3.7-flash
     "gemini-2.5-pro",          # ↔ 3.1-pro-preview
 ]
+
+
+def build_gemini_retry_model_chain(
+    primary_model: str | None,
+    blocked_models: Iterable[str] | None = None,
+) -> list[str]:
+    """설정 모델을 우선하고 기본 Gemini 재시도 체인을 이어 붙인다."""
+    blocked = set(blocked_models or [])
+    model_chain: list[str] = []
+    seen_models: set[str] = set()
+
+    for candidate in [primary_model, *GEMINI_RETRY_MODEL_CHAIN]:
+        model_name = str(candidate or "").strip()
+        if not model_name or model_name in blocked:
+            continue
+        key = model_name.lower()
+        if key in seen_models:
+            continue
+        seen_models.add(key)
+        model_chain.append(model_name)
+
+    return model_chain
 
 
 class LLMRetryStrategy(ABC):
@@ -83,10 +105,10 @@ class GeminiRetryStrategy(LLMRetryStrategy):
     # (10종목 × reason 450자 ≈ 4500자 ≈ 7K 토큰. 2배 여유.)
     MAX_OUTPUT_TOKENS = 16384
 
-    def __init__(self, client, model: str = "gemini-3-flash-preview"):
+    def __init__(self, client, model: str = "gemini-3.7-flash"):
         self.client = client
         self.model = model
-        self._model_chain = list(GEMINI_RETRY_MODEL_CHAIN)
+        self._model_chain = build_gemini_retry_model_chain(model)
         self._current_model = self._model_chain[0]
 
     async def execute(self, prompt: str, timeout: float, model: str) -> str:

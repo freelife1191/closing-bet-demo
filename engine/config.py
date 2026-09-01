@@ -134,13 +134,13 @@ class AppConfig:
 
     @property
     def GEMINI_MODEL(self):
-        """챗봇용 / 사전 분석 배치용 (대량 호출이라 lite 기본)"""
-        return os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
+        """챗봇용 / 사전 분석 배치용"""
+        return os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
 
     @property
     def ANALYSIS_GEMINI_MODEL(self):
         """종가베팅 분석 엔진용 - Phase 3 의미 합성에 사용"""
-        return os.getenv("ANALYSIS_GEMINI_MODEL", "gemini-3-flash-preview")
+        return os.getenv("ANALYSIS_GEMINI_MODEL", "gemini-3.7-flash")
 
     @property
     def OPENAI_MODEL(self):
@@ -205,7 +205,7 @@ class AppConfig:
 
     @property
     def VCP_GEMINI_MODEL(self):
-        return os.getenv("VCP_GEMINI_MODEL", "gemini-3-flash-preview")
+        return os.getenv("VCP_GEMINI_MODEL", "gemini-3.7-flash")
 
     @property
     def VCP_GPT_MODEL(self):

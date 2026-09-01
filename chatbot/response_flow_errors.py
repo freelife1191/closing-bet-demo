@@ -53,11 +53,10 @@ def friendly_error_message(error_msg: str, default_prefix: str) -> str:
 def build_fallback_models(target_model_name: str) -> List[str]:
     """스트리밍 재시도용 모델 후보 리스트."""
     fallback_sequence = [
-        "gemini-2.0-flash-lite",
+        "gemini-3.5-flash-lite",
         "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
+        "gemini-3.7-flash",
         "gemini-2.5-flash",
-        "gemini-3-flash-preview",
     ]
     models = [target_model_name]
     for model_name in fallback_sequence:

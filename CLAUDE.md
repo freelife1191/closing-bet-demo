@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Smart Money Bot: AI 기반 종가 베팅 & VCP 시그널 시스템**
 
-AI-powered Korean stock market analysis system combining institutional flow analysis with VCP (Volatility Contraction Pattern) technical analysis. Uses hybrid AI approach (Gemini 2.0 Flash, GPT via Z.ai, Perplexity) with Flask backend and Next.js dashboard.
+AI-powered Korean stock market analysis system combining institutional flow analysis with VCP (Volatility Contraction Pattern) technical analysis. Uses hybrid AI approach (Gemini 3.7 Flash, GPT via Z.ai, Perplexity) with Flask backend and Next.js dashboard.
 
 **Live Demo**: https://close.highvalue.kr/dashboard/kr
 
@@ -110,7 +110,9 @@ PRICE_CHANGE.MIN            # 5%
 - `chatbot.py` - AI chatbot entry
 
 ### Configuration
-- `.env` - Environment variables (API keys, ports)
+- `.env` - Environment variables (API keys, ports). `.env.production`, `.env.vertex`
+  hold real secrets too; `.gitignore` covers `.env.*` with `.env.example` as the only exception.
+- `.env.example` - The tracked reference for every variable. Update it when adding one.
 - `config.py` - Main configuration (dataclass-based)
 - `engine/config.py` - Engine-specific config
 
@@ -138,6 +140,41 @@ PRICE_CHANGE.MIN            # 5%
 
 ---
 
+## Code Philosophy — ponytail
+
+Code work, reviews, and tests in this repo default to ponytail rules. Where the
+ponytail plugin is installed, its SessionStart hook injects the full ruleset
+automatically (flag file: `~/.claude/.ponytail-active`), so this section carries
+only the repo-specific reading of it — and keeps it available where the plugin
+is not installed.
+
+**The ladder** — stop at the first rung that holds, before writing new code:
+1. Does this need to exist at all? (YAGNI)
+2. Does this repo already have it? Check `engine/constants.py`,
+   `engine/pandas_utils.py`, `engine/error_handler.py`, `engine/llm_utils.py`
+   before writing a new helper.
+3. Does stdlib or an already-installed dependency (pandas, pykrx) cover it?
+4. Only then: the minimum code that works.
+
+**Relation to "Design Patterns to Follow" above**: that list applies when
+*modifying modules that already use those structures*, not as a mandate to
+introduce them in new code. No interface with one implementation, no config for
+a value that never changes, no scaffolding "for later". Items under "Remaining
+Refactoring Tasks" start when a real problem is observed, not preemptively.
+
+**Bug fixes hit root cause**: one guard in the shared function beats a guard in
+every caller. `grep` the callers before editing.
+
+**Tests**: any branch, loop, parser, or signal/scoring decision leaves one
+runnable check behind. Follow the existing `tests/**/test_*_refactor.py`
+pattern; do not add a new framework or fixture layer. Trivial one-liners need
+no test.
+
+**Deliberate shortcuts**: when leaving a known ceiling in place, mark it —
+`# ponytail: global lock, per-account locks if throughput matters`.
+
+---
+
 ## Environment Variables
 
 Required for AI functionality:
@@ -147,8 +184,11 @@ OPENAI_API_KEY=your_openai_key
 PERPLEXITY_API_KEY=your_perplexity_key
 ZAI_API_KEY=your_zai_key
 
-GEMINI_MODEL=gemini-2.0-flash
-ANALYSIS_GEMINI_MODEL=gemini-2.0-flash
+# Models — see .env.example for the authoritative list
+GEMINI_MODEL=gemini-3.7-flash            # chatbot / bulk pre-analysis
+ANALYSIS_GEMINI_MODEL=gemini-3.7-flash   # Phase 3 synthesis
+VCP_GEMINI_MODEL=gemini-3.7-flash        # VCP signal analysis
+CHATBOT_AVAILABLE_MODELS=gemini-3.5-flash-lite,gemini-3.7-flash,gemini-3.6-flash
 ```
 
 Ports and data source:

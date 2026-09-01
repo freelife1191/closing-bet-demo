@@ -13,7 +13,7 @@ import re
 from typing import List, Dict, Optional
 
 from engine.config import app_config
-from engine.llm_analyzer_retry import GEMINI_RETRY_MODEL_CHAIN
+from engine.llm_analyzer_retry import GEMINI_RETRY_MODEL_CHAIN, build_gemini_retry_model_chain
 from engine.vcp_ai_analyzer_helpers import (
     build_vcp_rule_based_recommendation,
     build_perplexity_request,
@@ -371,7 +371,7 @@ class VCPMultiAIAnalyzer:
 
         resolved_prompt = prompt or self._build_vcp_prompt(stock_name, stock_data)
         base_delay = 2
-        model_chain = [model for model in GEMINI_RETRY_MODEL_CHAIN if model not in blocked_models]
+        model_chain = build_gemini_retry_model_chain(app_config.VCP_GEMINI_MODEL, blocked_models)
         if not model_chain:
             logger.warning("[Gemini] 사용 가능한 모델이 없습니다. 모든 모델이 세션에서 제외되었습니다.")
             return None

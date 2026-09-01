@@ -63,7 +63,7 @@ def _migrate_legacy_list_history(data: list[Any]) -> Dict[str, Any]:
             "messages": data,
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "model": "gemini-2.0-flash-lite",
+            "model": "gemini-3.7-flash",
         }
     }
 

@@ -70,9 +70,9 @@ def test_friendly_error_message_maps_rate_limit_and_api_key_errors():
 
 
 def test_build_fallback_models_starts_with_target_and_deduplicates():
-    models = build_fallback_models("gemini-2.0-flash-lite")
-    assert models[0] == "gemini-2.0-flash-lite"
-    assert models.count("gemini-2.0-flash-lite") == 1
+    models = build_fallback_models("gemini-3.7-flash")
+    assert models[0] == "gemini-3.7-flash"
+    assert models.count("gemini-3.7-flash") == 1
     assert "gemini-2.5-flash" in models
 
 
@@ -171,14 +171,14 @@ class _FakeClient:
 
 def test_stream_with_fallback_models_retries_then_succeeds():
     model_behaviors = {
-        "gemini-2.0-flash-lite": RuntimeError("503 UNAVAILABLE"),
-        "gemini-2.5-flash-lite": [SimpleNamespace(text="[답변]\n복구 응답")],
+        "gemini-3.7-flash": RuntimeError("503 UNAVAILABLE"),
+        "gemini-3.5-flash-lite": [SimpleNamespace(text="[답변]\n복구 응답")],
     }
     fake_client = _FakeClient(model_behaviors)
 
     gen = stream_with_fallback_models(
         active_client=fake_client,
-        target_model_name="gemini-2.0-flash-lite",
+        target_model_name="gemini-3.7-flash",
         api_history=[],
         content_parts=["hello"],
         session_id="s1",

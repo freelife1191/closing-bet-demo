@@ -231,7 +231,11 @@ class SmartMoneyScreener:
                 
                 try:
                     result = self._analyze_stock(stock_dict)
-                    if result and float(result.get("score", 0) or 0) >= min_score:
+                    if not result or not bool(result.get("is_vcp", False)):
+                        count += 1
+                        continue
+
+                    if float(result.get("score", 0) or 0) >= min_score:
                         result['market_status'] = gate_status['status']
                         results.append(result)
                         

@@ -377,7 +377,7 @@ class LLMAnalyzer:
         if not hasattr(self._client, "models") or not hasattr(self._client.models, "generate_content"):
             raise RuntimeError("Retry strategy not initialized")
 
-        model_name = getattr(app_config, "GEMINI_MODEL", "gemini-2.0-flash-lite")
+        model_name = getattr(app_config, "GEMINI_MODEL", "gemini-3.7-flash")
         max_retries = RetryConfig.MAX_RETRIES
 
         for attempt in range(max_retries):

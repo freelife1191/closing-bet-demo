@@ -44,7 +44,7 @@ def init_models(
     """사용 가능한 모델 목록과 현재 모델명을 초기화한다."""
     env_models = os.getenv(
         "CHATBOT_AVAILABLE_MODELS",
-        "gemini-3.1-flash-lite-preview,gemini-3-flash-preview,gemini-3.1-pro-preview,gemini-2.5-flash",
+        "gemini-3.5-flash-lite,gemini-3.7-flash,gemini-3.6-flash",
     )
     model_names = [m.strip() for m in env_models.split(",") if m.strip()]
     if not model_names:

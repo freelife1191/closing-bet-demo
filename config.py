@@ -204,7 +204,7 @@ class AppConfig:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
     # AI Models
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Cache

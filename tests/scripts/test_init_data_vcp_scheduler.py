@@ -45,6 +45,7 @@ class _DummyScreener:
                     "foreign_net_1d": 11111111,
                     "inst_net_1d": 22222222,
                     "vcp_score": 8,
+                    "is_vcp": True,
                 }
             ]
         )
@@ -365,7 +366,7 @@ def test_create_signals_log_returns_false_on_exception(monkeypatch, tmp_path):
     assert result is False
 
 
-def test_create_signals_log_persists_all_screening_results_without_vcp_gate(monkeypatch, tmp_path):
+def test_create_signals_log_persists_only_vcp_screening_results(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -379,14 +380,20 @@ def test_create_signals_log_persists_all_screening_results_without_vcp_gate(monk
 
     df = pd.read_csv(data_dir / "signals_log.csv", dtype={"ticker": str})
     tickers = set(df["ticker"].astype(str).str.zfill(6).tolist())
-    assert "005930" in tickers
-    assert "000660" in tickers
+    assert "005930" not in tickers
+    assert "000660" not in tickers
     assert "035420" in tickers
 
 
 def test_create_signals_log_writes_latest_metadata_when_no_signals(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {"ticker": "005930", "signal_date": "2026-03-05", "score": 80},
+            {"ticker": "000660", "signal_date": "2026-03-06", "score": 81},
+        ]
+    ).to_csv(data_dir / "signals_log.csv", index=False)
 
     monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
     monkeypatch.setattr("engine.screener.SmartMoneyScreener", _EmptyScreener)
@@ -400,6 +407,9 @@ def test_create_signals_log_writes_latest_metadata_when_no_signals(monkeypatch, 
     assert latest_payload["date"] == "2026-03-06"
     assert latest_payload["signals"] == []
     assert latest_payload["total_candidates"] == 0
+
+    log_df = pd.read_csv(data_dir / "signals_log.csv", dtype={"ticker": str})
+    assert log_df["signal_date"].tolist() == ["2026-03-05"]
 
 
 def test_should_abort_daily_pykrx_bulk_fetch_detects_known_error_signature():

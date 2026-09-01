@@ -28,7 +28,7 @@ from services.sqlite_utils import (
 
 
 _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
-_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 2
+_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 3
 _VCP_SIGNALS_MEMORY_CACHE: OrderedDict[
     str,
     tuple[tuple[Any, ...], list[dict[str, Any]]],

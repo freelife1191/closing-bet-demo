@@ -202,6 +202,8 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
         return None
     if score < resolve_vcp_min_score(default=60.0):
         return None
+    if not is_vcp:
+        return None
 
     return {
         "ticker": str(_row_get(row, "ticker", "")).zfill(6),

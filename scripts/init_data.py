@@ -1610,6 +1610,9 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 return bool(value)
             normalized = str(value).strip().lower()
             return normalized in {"1", "true", "yes", "y", "on"}
+
+        def _passes_vcp_signal_gate(is_vcp_value) -> bool:
+            return _as_bool(is_vcp_value)
         
         resolved_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
         if max_stocks is not None:
@@ -1634,10 +1637,14 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         df_result = screener.run_screening(max_stocks=resolved_max_stocks)
         
         signals = []
+        excluded_by_vcp_gate = 0
         if not df_result.empty:
             for row in df_result.itertuples(index=False):
                 row_vcp_score = float(getattr(row, "vcp_score", 0) or 0)
                 row_is_vcp = _as_bool(getattr(row, "is_vcp", False))
+                if not _passes_vcp_signal_gate(row_is_vcp):
+                    excluded_by_vcp_gate += 1
+                    continue
 
                 signals.append({
                     'ticker': str(getattr(row, 'ticker', '')),
@@ -1655,6 +1662,12 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     'is_vcp': row_is_vcp,
                     'current_price': int(float(getattr(row, 'entry_price', 0) or 0)) # Approximation or need fetch
                 })
+        if excluded_by_vcp_gate > 0:
+            log(
+                f"VCP 패턴 게이트 미충족으로 {excluded_by_vcp_gate}건 제외 "
+                f"(조건: is_vcp=True)",
+                "INFO",
+            )
 
         log(f"총 {len(signals)}개 시그널 감지")
         
@@ -1880,24 +1893,35 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             return True
         else:
             log("VCP 조건 충족 종목 없음", "WARNING")
-            # 빈 결과 파일 생성 (샘플 데이터 생성 안함)
-            df = pd.DataFrame(
-                columns=[
-                    'ticker',
-                    'name',
-                    'signal_date',
-                    'market',
-                    'status',
-                    'score',
-                    'grade',
-                    'contraction_ratio',
-                    'entry_price',
-                    'foreign_5d',
-                    'inst_5d',
-                ]
-            )
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
-            df.to_csv(file_path, index=False, encoding='utf-8-sig')
+            current_date = str(target_date or datetime.now().strftime('%Y-%m-%d'))
+            empty_columns = [
+                'ticker',
+                'name',
+                'signal_date',
+                'market',
+                'status',
+                'score',
+                'grade',
+                'contraction_ratio',
+                'entry_price',
+                'foreign_5d',
+                'inst_5d',
+                'vcp_score',
+                'is_vcp',
+                'current_price',
+            ]
+            if os.path.exists(file_path):
+                try:
+                    existing_df = pd.read_csv(file_path, dtype={'ticker': str, 'signal_date': str})
+                    if 'signal_date' in existing_df.columns:
+                        existing_df = existing_df[existing_df['signal_date'].astype(str) != current_date]
+                    existing_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+                except Exception as e:
+                    log(f"기존 VCP 로그 정리 실패: {e}, 빈 로그로 초기화합니다.", "WARNING")
+                    pd.DataFrame(columns=empty_columns).to_csv(file_path, index=False, encoding='utf-8-sig')
+            else:
+                pd.DataFrame(columns=empty_columns).to_csv(file_path, index=False, encoding='utf-8-sig')
             _write_vcp_signals_latest_payload(
                 target_date=target_date,
                 signals=[],

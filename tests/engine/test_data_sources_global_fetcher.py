@@ -61,3 +61,20 @@ def test_fetch_commodities_merges_global_and_krx_results():
     assert set(result.keys()) == {"gold", "silver", "krx_gold", "krx_silver"}
     assert result["gold"]["value"] == 2020.0
     assert result["krx_gold"]["value"] == 10100.0
+
+
+def test_fetch_crypto_maps_symbols_and_skips_invalid_series():
+    manager = _DummyManager(
+        index_map={
+            "BTC-USD": _build_close_df([90000, 91800]),
+            "ETH-USD": _build_close_df([3000, 2940]),
+            "XRP-USD": _build_close_df([0, float("nan")]),
+        }
+    )
+    fetcher = GlobalDataFetcher(manager=manager)
+
+    result = fetcher.fetch_crypto(start_date="2026-01-01", end_date="2026-02-21")
+
+    assert set(result.keys()) == {"btc", "eth"}
+    assert result["btc"] == {"value": 91800.0, "change_pct": 2.0}
+    assert result["eth"]["change_pct"] == -2.0
