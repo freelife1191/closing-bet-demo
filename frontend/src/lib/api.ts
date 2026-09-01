@@ -64,6 +64,8 @@ export interface KRSignalsResponse {
   generated_at?: string;
   error?: string;
   source?: string;
+  /** 오늘 기준 시그널이 없을 때 백엔드가 내려주는 안내 문구 */
+  stale_warning?: string;
 }
 
 export interface KRMarketGate {

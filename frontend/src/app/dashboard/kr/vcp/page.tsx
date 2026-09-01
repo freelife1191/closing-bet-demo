@@ -183,6 +183,7 @@ const getVcpWelcomeMessage = (stockName?: string) => `👋 안녕하세요! **VC
 
 export default function VCPSignalsPage() {
   const [signals, setSignals] = useState<KRSignal[]>([]);
+  const [staleWarning, setStaleWarning] = useState<string | null>(null);
   const [aiData, setAiData] = useState<KRAIAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -619,6 +620,7 @@ export default function VCPSignalsPage() {
       const signalsRes = await krAPI.getSignals(date || undefined);
       const loadedSignals = signalsRes.signals || [];
       setSignals(loadedSignals);
+      setStaleWarning(signalsRes.stale_warning || null);
       setScannedCount(signalsRes.total_scanned ?? loadedSignals.length);
 
       // 날짜 설정
@@ -636,6 +638,7 @@ export default function VCPSignalsPage() {
     } catch (error) {
       console.error('Failed to load signals:', error);
       setSignals([]);
+      setStaleWarning(null);
     } finally {
       // Signals 로드 완료 즉시 로딩 해제 (AI 데이터 기다리지 않음)
       setLoading(false);
@@ -1287,6 +1290,14 @@ export default function VCPSignalsPage() {
 
       {/* Inline Chart + AI Analysis Grid (BLUEPRINT Layout) */}
 
+
+      {/* 오늘 기준 시그널이 없을 때 백엔드 안내 문구를 그대로 보여준다 */}
+      {staleWarning && (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <i className="fas fa-triangle-exclamation text-amber-400 mt-0.5"></i>
+          <p className="text-sm text-amber-200">{staleWarning}</p>
+        </div>
+      )}
 
       {/* 실시간 VCP 시그널 테이블 */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
