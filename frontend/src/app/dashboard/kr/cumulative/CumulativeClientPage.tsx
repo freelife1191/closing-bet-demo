@@ -1124,10 +1124,12 @@ export default function CumulativeClientPage() {
             <div className="flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">결과:</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
+                {/* 필터는 현재 페이지의 trades 만 거르므로 건수도 같은 기준으로 센다.
+                    전체 기간 집계는 위쪽 KPI 카드가 이미 보여준다. */}
                 <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => { setOutcomeFilter('All'); setCurrentPage(1); }} />
-                <FilterButton label="성공" count={kpi.wins} active={outcomeFilter === 'WIN'} onClick={() => { setOutcomeFilter('WIN'); setCurrentPage(1); }} />
-                <FilterButton label="실패" count={kpi.losses} active={outcomeFilter === 'LOSS'} onClick={() => { setOutcomeFilter('LOSS'); setCurrentPage(1); }} />
-                <FilterButton label="보유" count={kpi.open} active={outcomeFilter === 'OPEN'} onClick={() => { setOutcomeFilter('OPEN'); setCurrentPage(1); }} />
+                <FilterButton label="성공" count={trades.filter(t => t.outcome === 'WIN').length} active={outcomeFilter === 'WIN'} onClick={() => { setOutcomeFilter('WIN'); setCurrentPage(1); }} />
+                <FilterButton label="실패" count={trades.filter(t => t.outcome === 'LOSS').length} active={outcomeFilter === 'LOSS'} onClick={() => { setOutcomeFilter('LOSS'); setCurrentPage(1); }} />
+                <FilterButton label="보유" count={trades.filter(t => t.outcome === 'OPEN').length} active={outcomeFilter === 'OPEN'} onClick={() => { setOutcomeFilter('OPEN'); setCurrentPage(1); }} />
               </div>
             </div>
 
