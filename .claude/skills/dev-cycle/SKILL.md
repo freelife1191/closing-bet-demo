@@ -26,6 +26,16 @@ description: Use when working through this project's backlog — runs one TODO i
 
 ## 절차
 
+### [S] status
+
+`status` 로 호출되면 이 절에서 끝난다. 아래 [0] 부터의 절차를 밟지 않는다.
+
+1. `docs/dev-cycle/TODO.md` 를 읽는다.
+2. 우선순위별 항목 수와 각 우선순위의 첫 항목을 보고한다.
+3. 체크박스가 일부만 채워진 항목이 있으면 진행 중인 사이클이 있다는 뜻이므로 함께 알린다.
+4. `git status --short` 의 결과가 비어 있지 않으면 그 사실도 알린다. 다음 사이클을 시작할
+   수 없는 상태이기 때문이다.
+
 ### [0] 준비
 
 1. `git status --short` 로 작업 트리가 깨끗한지 확인한다. 커밋되지 않은 변경이 있으면
@@ -39,8 +49,11 @@ description: Use when working through this project's backlog — runs one TODO i
 ### [1] 계획
 
 1. 건드릴 파일 목록을 뽑고 `references/tier-rules.md` 의 §3 절차로 티어를 어림잡는다.
-2. 실행 계획을 세운다. T2 와 T3 은 `autoplan` 스킬을 쓰고, T1 은 계획을 직접 작성한다.
-   50줄 이하의 변경에 계획 스킬을 얹으면 계획이 구현보다 길어진다.
+2. 실행 계획을 세운다. T1 과 T2 는 계획을 직접 작성한다. 백로그 항목 하나에 계획 문서를
+   얹으면 계획이 구현보다 길어진다. T3 만 `superpowers:writing-plans` 로 계획 문서를
+   남긴다. 되돌리기 어려운 변경이므로 다음 사람이 읽을 근거가 필요하다.
+   `autoplan` 을 부르지 않는다. 이 스킬은 계획을 세우는 도구가 아니라 이미 만들어진
+   계획을 네 관점으로 검토하는 리뷰 파이프라인이다.
 3. 계획이 확정되면 티어를 다시 확인한다. 계획이 처음 어림잡은 것보다 커졌으면 올린다.
 4. 사용자에게 다음을 제시한다.
    - 항목 ID 와 제목
@@ -68,7 +81,10 @@ description: Use when working through this project's backlog — runs one TODO i
 
 ### [4] 마감
 
-1. 커밋 메시지 초안을 작성한다.
+1. 커밋 메시지 초안을 작성한다. 저장소는 conventional commits 를 쓴다. 제목 줄은
+   `<유형>(<범위>): <한 줄 요약>` 형식이며, 유형은 `feat` `fix` `refactor` `test`
+   `docs` `chore` 가운데 하나이고 범위에는 카테고리 이름을 적는다. 본문에는 무엇을 왜
+   바꿨는지 적고, 반영하지 않은 리뷰 지적이 있으면 그 이유도 남긴다.
 2. `references/archive-format.md` 의 §5 와 §6 형식으로 기록할 내용을 작성한다.
 3. 사용자에게 다음을 제시한다.
    - 커밋 메시지
@@ -126,4 +142,6 @@ description: Use when working through this project's backlog — runs one TODO i
 ## 중단
 
 어느 단계에서든 중단되면 작업 트리를 그대로 두고 상황을 보고한다. `TODO.md` 의 항목은
-제거하지 않는다. 다음 호출에서 같은 항목을 이어서 진행할 수 있다.
+제거하지 않는다. 다음 호출에서 같은 항목을 이어서 진행할 수 있다. 어디까지 진행했는지
+판단하는 방법은 `## 컨텍스트 관리` 의 마지막 문단과 같다. `TODO.md` 의 체크박스와
+`git diff` 를 읽고 그 지점부터 이어 간다.

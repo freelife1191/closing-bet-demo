@@ -11,23 +11,6 @@
 
 ## P0 — 즉시
 
-### [INFRA-011] dev-cycle 이 호출하는 자산의 오인을 바로잡는다
-- 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-01 skill-creator 검수
-- 규약이 존재하지 않거나 성격이 다른 스킬을 부르고 있어, 다음 T2·T3 사이클이 시작되는
-  즉시 잘못된 도구를 호출하거나 게이트를 우회하게 됩니다.
-- [ ] `autoplan` 호출을 `SKILL.md` [1] 계획에서 걷어냅니다. 이 스킬은 계획 도구가 아니라
-      이미 만들어진 계획을 CEO·디자인·엔지니어링·DX 관점으로 검토하는 리뷰 파이프라인이며,
-      이 저장소의 백로그 항목에는 맞지 않습니다
-- [ ] T3 검증의 `qa` 를 조건부로 바꿉니다. 이 스킬은 웹 애플리케이션 전용이라 백엔드 전용
-      항목에는 돌릴 대상이 없고, 무엇보다 고친 버그를 스스로 커밋하므로 게이트 2 를
-      우회합니다. 화면이 바뀐 항목에만, 리포트 전용인 `/qa-only` 로 한정하는 방안을 검토
-- [ ] `simplify` 와 `security-review` 의 정의 위치를 확인해 기록합니다. 두 이름 모두
-      스킬 디렉터리와 플러그인 캐시에서 찾지 못했고 내장 명령으로 보입니다
-- [ ] `/dev-cycle status` 의 처리 절차를 추가합니다. 호출 표에만 있고 절차에 없습니다
-- [ ] 커밋 메시지 형식 규정을 `[4] 마감`에 추가합니다. 저장소는 conventional commits 를
-      쓰는데 스킬은 "초안을 작성한다" 로만 되어 있습니다
-- [ ] 중단 절에서 컨텍스트 관리 절의 재개 방법을 가리키도록 연결
-
 ### [INFRA-005] 종가베팅 단독 스케줄 등록 복구
 - 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §1.1, §5.1
 - `services/scheduler.py` 가 `tier-rules.md` §2 의 "스케줄러와 데이터 적재" 위험 경로에
@@ -90,13 +73,13 @@
 
 ### [FE-004] 사이드바 로그아웃과 사용자 표시를 실제 세션에 연결한다
 - 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: AUDIT-FE §1.3, §3.3
-- 인증에 닿으므로 `tier-rules.md` §1 마지막 문단에 따라 `/security-review` 를 추가합니다.
+- 인증에 닿으므로 `tier-rules.md` §1 마지막의 시크릿 확인 세 가지를 검증에 더합니다.
 - [ ] `Sidebar.tsx` 의 로그아웃 버튼이 `signOut` 을 호출하도록 수정
 - [ ] `localStorage` 의 `user_profile` 과 `next-auth` 세션 가운데 어느 쪽을 표시의 기준으로
       삼을지 정하고 사이드바 표기를 그 기준에 맞춤
 - [ ] `SettingsModal` 의 `isGoogleLoggedIn` 과 `googleUserInfo` 파생 상태 제거
 - [ ] 로그아웃 후 관리자 전용 화면이 닫히는지 확인
-- [ ] `/security-review` 실행
+- [ ] 세션 토큰이 로그와 API 응답에 실려 나가지 않는지 확인
 
 ### [JONGGA-002] Gemini 재분석 결과의 AI 사유 유실 수정
 - 카테고리: 종가베팅 | 티어: T1 | 근거: AUDIT-JONGGA §1.1
@@ -313,8 +296,8 @@
 - [ ] `PaperTradingModal.tsx` 에서 입금과 계좌 초기화를 별도 컴포넌트로 분리
 - [ ] `src/app/page.tsx` 의 탭 전환부만 클라이언트 컴포넌트로 떼어내고 나머지를 서버 컴포넌트로 환원
 - [ ] `SellStockModal` 의 단일 값 상태와 빈 오버레이 제거
-- [ ] agent-browser 로 모의투자 화면과 랜딩 화면을 실측. Next.js 가 16.1.6 이므로
-      `frontend-skills.md` §3 에 따라 `npm run build` 결과를 함께 확인
+- [ ] `/qa-only` 로 모의투자 화면과 랜딩 화면의 시나리오를 돌리고 지적 사항을 [2] 구현으로
+      되돌려 반영. `npm run build` 결과도 함께 확인
 
 ### [JONGGA-006] 종가베팅 페이지에서 범용 컴포넌트와 정적 모달 분리
 - 카테고리: 종가베팅 | 티어: T3 | 근거: AUDIT-JONGGA §2.2, §4.1
@@ -328,7 +311,8 @@
 - [ ] `PriceRangeBar`, `StatBox`, `ScoreBar` 를 컴포넌트 디렉터리로 이동
 - [ ] `GradeGuideModal` 을 `ClosingBetCriteriaModal` 과 같은 자리로 이동
 - [ ] `npm run build`, `npm run type-check`, vitest 전체 통과 확인
-- [ ] agent-browser 로 종가베팅 화면과 데이터 상태 화면을 실측
+- [ ] `/qa-only` 로 종가베팅 화면과 데이터 상태 화면의 시나리오를 돌리고 지적 사항을
+      [2] 구현으로 되돌려 반영
 
 ### [CHAT-003] 두 SQLite 캐시 모듈을 공용 골격으로 통합
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT §2.1
@@ -351,14 +335,16 @@
 - [ ] SSE 수신, 세션 관리, 음성 입력을 각각 훅이나 컴포넌트로 분리
 - [ ] 파서 호출을 메모이제이션해 스트리밍 중 전체 메시지 재파싱을 제거
 - [ ] 분리한 파서와 SSE 처리에 vitest 테스트 추가
+- [ ] `/qa-only` 로 챗봇 화면의 스트리밍 시나리오를 돌리고 지적 사항을 [2] 구현으로
+      되돌려 반영
 
 ## P2 — 대기
 
 ### [VCP-005] `vcp_ai_analyzer.py` 의 죽은 폴백 코드와 중복 헬퍼 정리
 - 카테고리: VCP 시그널 | 티어: T3 | 근거: AUDIT-VCP §3.1, §2.1
 - 티어 근거: `engine/vcp_ai_analyzer.py` 는 `tier-rules.md` §2 의 "VCP 판정" 위험 경로에
-  올라 있으므로 줄 수와 무관하게 T3 입니다. 리뷰는 `/ponytail-review` → `/simplify` →
-  `/code-review` → `/review` 순서를 지킵니다.
+  올라 있으므로 줄 수와 무관하게 T3 입니다. 리뷰는 `/ponytail-review` → `/code-review` →
+  `/review` 순서를 지킵니다. 화면이 바뀌지 않으므로 실측과 시나리오는 돌리지 않습니다.
 - [ ] 호출자가 없는 `_fallback_to_zai` 제거
 - [ ] `_resolve_perplexity_fallback_providers` 와 `_build_perplexity_fallback_chain` 의
       실행되지 않는 분기 정리

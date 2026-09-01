@@ -89,7 +89,7 @@ grep -rhoE 'CHAT-[0-9]{3}' docs/dev-cycle/ | sort -u | tail -1
 ## [INFRA-001] 파이썬 의존성 버전 고정
 - 완료 2026-09-01 14:32 | 티어 T3 | 커밋 abc1234, def5678
 - 변경: requirements.txt, engine/genai_client.py (+42 -18)
-- 리뷰: ponytail-review(net -12) · simplify(3건 적용) · code-review(0건) · review(1건 반영)
+- 리뷰: ponytail-review(net -12) · code-review(3건 적용) · review(1건 반영)
 - 검증: pytest 1515 통과 · vitest 160 통과 · qa 헬스 99
 - 메모: google-genai 2.x 에서 GenerateContentConfig 시그니처가 바뀌어 대응했다
 ```
@@ -97,8 +97,8 @@ grep -rhoE 'CHAT-[0-9]{3}' docs/dev-cycle/ | sort -u | tail -1
 - **완료** 줄에는 시각, 티어, 커밋 해시를 적는다. 커밋이 여럿이면 쉼표로 잇는다.
 - **변경** 줄에는 건드린 파일과 `git diff --stat` 의 증감을 적는다. 파일이 다섯 개를
   넘으면 대표 파일 세 개와 `외 N개` 로 줄인다.
-- **리뷰** 줄에는 실제로 돌린 자산만 적는다. 티어가 T1 이면 `simplify` 하나만 적힌다.
-  각 자산 뒤 괄호 안에 결과를 요약한다.
+- **리뷰** 줄에는 실제로 돌린 자산만 적는다. 티어가 T1 이면 `ponytail-review` 하나만
+  적힌다. 각 자산 뒤 괄호 안에 결과를 요약한다.
 - **검증** 줄에는 실행한 테스트와 그 결과를 적는다.
 - **메모** 줄은 다음에 같은 자리를 건드릴 사람이 알아야 할 사실이 있을 때만 적는다.
   없으면 줄 자체를 뺀다.
