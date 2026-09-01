@@ -163,6 +163,32 @@ def _resolve_lock_retry_interval_seconds() -> float:
         return 15.0
 
 
+def _resolve_daily_schedule_time(env_name: str, default_time: str) -> str:
+    """일간 잡의 실행 시각을 읽는다. schedule 이 거부하는 값이면 기본값으로 되돌린다.
+
+    받아들이는 형식을 이 자리에서 다시 정의하면 라이브러리의 규칙과 어긋나므로,
+    등록에 쓸 값을 schedule 에 직접 물어본다. `at()` 은 `do()` 를 부르기 전까지
+    잡을 등록하지 않으므로 이 확인은 부작용을 남기지 않는다.
+    """
+    configured = os.getenv(env_name, "").strip()
+    if not configured:
+        return default_time
+
+    try:
+        schedule.every().day.at(configured)
+    except Exception as e:
+        logger.warning(
+            "[Scheduler] %s 값 %r 을 schedule 이 받지 못했습니다(%s). 기본값 %s 를 사용합니다.",
+            env_name,
+            configured,
+            e,
+            default_time,
+        )
+        return default_time
+
+    return configured
+
+
 def _bootstrap_scheduler_after_lock_acquired() -> None:
     global _scheduler_loop_started
     scheduler_timezone = _apply_scheduler_timezone()
@@ -177,7 +203,7 @@ def _bootstrap_scheduler_after_lock_acquired() -> None:
         market_gate_job.next_run,
     )
 
-    closing_time = os.getenv("CLOSING_SCHEDULE_TIME", "17:00")
+    closing_time = _resolve_daily_schedule_time("CLOSING_SCHEDULE_TIME", "17:00")
     closing_job = (
         schedule.every()
         .day.at(closing_time)
