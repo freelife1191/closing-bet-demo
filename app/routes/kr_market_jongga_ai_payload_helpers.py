@@ -36,7 +36,16 @@ def _extract_jongga_ai_evaluation(signal: dict) -> Optional[dict]:
     if isinstance(ai_eval, str):
         return {"reason": ai_eval, "action": "HOLD", "confidence": 0}
 
-    return ai_eval if isinstance(ai_eval, dict) else None
+    if not isinstance(ai_eval, dict):
+        return None
+
+    # 사유를 ai_evaluation 이 아닌 자리에 저장하는 생산자가 있으므로, 앞에서 고른 객체의
+    # 사유가 비어 있으면 score.llm_reason 으로 한 번 더 내려간다. 원본은 건드리지 않는다.
+    llm_reason = score.get("llm_reason") if isinstance(score, dict) else None
+    if not ai_eval.get("reason") and isinstance(llm_reason, str) and llm_reason:
+        return {**ai_eval, "reason": llm_reason}
+
+    return ai_eval
 
 
 def _extract_jongga_score_value(signal: dict, allow_numeric_fallback: bool) -> float:

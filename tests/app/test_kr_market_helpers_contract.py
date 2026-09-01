@@ -43,6 +43,7 @@ from app.routes.kr_market_helpers import (
     _build_ai_signals_from_jongga_results,
     _build_cumulative_trade_record,
     _build_vcp_signals_from_dataframe,
+    _extract_jongga_ai_evaluation,
     _filter_signals_dataframe_by_date,
     _paginate_items,
     _prepare_cumulative_price_dataframe,
@@ -481,6 +482,45 @@ def test_apply_gemini_reanalysis_results_matches_name_and_updates_fields():
     assert signals[0]["ai_evaluation"]["action"] == "BUY"
     assert signals[1]["score"]["news"] == 1
     assert signals[1]["ai_evaluation"]["action"] == "HOLD"
+
+
+def test_apply_gemini_reanalysis_results_keeps_reason_in_ai_payload():
+    """재분석 사유가 AI payload 의 gemini_recommendation.reason 까지 살아서 도달한다."""
+    signals = [{"stock_name": "삼성전자", "stock_code": "005930", "score": {}}]
+    results_map = {
+        "삼성전자 (005930)": {
+            "action": "BUY",
+            "confidence": 80,
+            "reason": "외국인 순매수가 5일 연속 이어졌다",
+            "score": 2,
+        }
+    }
+
+    _apply_gemini_reanalysis_results(signals, results_map)
+    ai_signals = _build_ai_signals_from_jongga_results(
+        signals,
+        include_without_ai=False,
+        allow_numeric_score_fallback=False,
+    )
+
+    assert len(ai_signals) == 1
+    recommendation = ai_signals[0]["gemini_recommendation"]
+    assert recommendation["reason"] == "외국인 순매수가 5일 연속 이어졌다"
+    assert recommendation["action"] == "BUY"
+
+
+def test_extract_jongga_ai_evaluation_falls_back_to_llm_reason():
+    """ai_evaluation 의 사유가 비어 있으면 score.llm_reason 으로 채우되 원본은 그대로 둔다."""
+    signal = {
+        "score": {"llm_reason": "기관 수급이 개선되었다"},
+        "ai_evaluation": {"action": "BUY", "confidence": 70},
+    }
+
+    ai_eval = _extract_jongga_ai_evaluation(signal)
+
+    assert ai_eval["reason"] == "기관 수급이 개선되었다"
+    assert ai_eval["action"] == "BUY"
+    assert "reason" not in signal["ai_evaluation"]
 
 
 def test_filter_signals_dataframe_by_date_uses_today_when_date_missing():
