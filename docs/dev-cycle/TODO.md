@@ -11,16 +11,6 @@
 
 ## P0 — 즉시
 
-### [FE-004] 사이드바 로그아웃과 사용자 표시를 실제 세션에 연결한다
-- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: AUDIT-FE §1.3, §3.3
-- 인증에 닿으므로 `tier-rules.md` §1 의 시크릿 확인 세 가지를 검증에 더합니다.
-- [ ] `Sidebar.tsx` 의 로그아웃 버튼이 `signOut` 을 호출하도록 수정
-- [ ] `localStorage` 의 `user_profile` 과 `next-auth` 세션 가운데 어느 쪽을 표시의 기준으로
-      삼을지 정하고 사이드바 표기를 그 기준에 맞춤
-- [ ] `SettingsModal` 의 `isGoogleLoggedIn` 과 `googleUserInfo` 파생 상태 제거
-- [ ] 로그아웃 후 관리자 전용 화면이 닫히는지 확인
-- [ ] 세션 토큰이 로그와 API 응답에 실려 나가지 않는지 확인
-
 ### [JONGGA-002] Gemini 재분석 결과의 AI 사유 유실 수정
 - 카테고리: 종가베팅 | 티어: T1 | 근거: AUDIT-JONGGA §1.1
 - 구현 변경은 두 파일에서 30줄 이내로 끝날 것으로 봅니다. 테스트 파일은 `tier-rules.md`
@@ -417,6 +407,16 @@
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: docs/plans/TO_DO_LIST.md 이관
 - [ ] 섹터별 수급 집계 설계
 - [ ] 기존 `services/investor_trend_5day_service.py` 와의 경계 정리
+
+### [INFRA-017] 존재하지 않는 API 경로가 404 대신 500 을 돌려준다
+- 카테고리: 인프라 | 티어: T2 | 근거: [FE-004] 사이클의 실측
+- 관찰: `curl http://localhost:5501/api/health` 가 500 과 함께 본문에
+  `"error": "Internal Server Error", "message": "404 Not Found: ..."` 를 돌려줍니다.
+  존재하지 않는 경로이므로 404 가 나가야 하는데, 전역 예외 처리기가 `NotFound` 까지
+  삼켜 500 으로 바꾸고 `logs/backend.log` 에 `CRITICAL SERVER ERROR` 로 남깁니다.
+- [ ] 전역 예외 처리기가 `werkzeug.exceptions.HTTPException` 을 그대로 통과시키도록 수정
+- [ ] 오탐 로그가 사라지는지 `logs/backend.log` 로 확인
+- [ ] 없는 경로와 실제 서버 오류를 구분하는 회귀 검사 추가
 
 ### [INFRA-002] 타입 힌트 보강
 - 카테고리: 인프라 | 티어: T2 | 근거: CLAUDE.md 이관

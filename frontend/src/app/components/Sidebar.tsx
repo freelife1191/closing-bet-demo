@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import Modal from './Modal';
 import PaperTradingModal from './PaperTradingModal';
+import { useSession, signOut } from 'next-auth/react';
 import { useAdmin } from '@/hooks/useAdmin';
 
 export default function Sidebar() {
@@ -29,6 +30,12 @@ export default function Sidebar() {
 
   // ADMIN 권한 체크
   const { isAdmin } = useAdmin();
+
+  // 표시의 기준은 세션이다. 권한 판정(useAdmin)과 사용량 집계가 모두 세션 이메일을 쓰므로,
+  // 사이드바만 localStorage 프로필을 보여 주면 어느 계정으로 로그인했는지 오해하게 된다.
+  const { data: session, status } = useSession();
+  const displayName = (status === 'authenticated' && session?.user?.name) || profile.name;
+  const displayEmail = (status === 'authenticated' && session?.user?.email) || profile.email;
 
   // Close mobile sidebar on path change
   useEffect(() => {
@@ -56,20 +63,24 @@ export default function Sidebar() {
   }, []);
 
   const refreshQuota = useCallback(() => {
+    // 세션이 확정되기 전에는 어느 계정의 사용량인지 알 수 없다. localStorage 에 남아 있는
+    // 이전 사용자의 이메일로 조회하면 엉뚱한 계정의 잔여 횟수가 잠깐 표시된다.
+    if (status === 'loading') return;
+
     let sessionId = localStorage.getItem('browser_session_id');
     if (!sessionId) {
       sessionId = 'anon_' + crypto.randomUUID();
       localStorage.setItem('browser_session_id', sessionId);
     }
 
-    const email = profile.email !== 'user@example.com' ? profile.email : '';
+    const email = displayEmail !== 'user@example.com' ? displayEmail : '';
     fetch(`/api/kr/user/quota?email=${email}&session_id=${sessionId}`)
       .then(res => res.json())
       .then(data => {
         setQuota(data);
       })
       .catch(e => console.error(e));
-  }, [profile.email]);
+  }, [displayEmail, status]);
 
   useEffect(() => {
     refreshQuota();
@@ -231,8 +242,8 @@ export default function Sidebar() {
               <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setIsUserMenuOpen(false)} />
               <div className="absolute bottom-full left-4 right-4 mb-2 bg-[#252529] border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
                 <div className="p-3 border-b border-white/5">
-                  <div className="text-sm font-bold text-white mb-0.5">{profile.name}</div>
-                  <div className="text-xs text-gray-400">{profile.email}</div>
+                  <div className="text-sm font-bold text-white mb-0.5">{displayName}</div>
+                  <div className="text-xs text-gray-400">{displayEmail}</div>
                   {isAdmin ? (
                     <div className="text-[10px] text-rose-400 mt-1 font-medium bg-rose-500/10 px-1.5 py-0.5 rounded inline-block">
                       Admin · 무제한
@@ -264,13 +275,8 @@ export default function Sidebar() {
                   <div className="h-px bg-white/5 mx-2 my-1"></div>
                   <button
                     onClick={() => {
-                      setAlertModal({
-                        isOpen: true,
-                        type: 'success',
-                        title: '로그아웃',
-                        content: '로그아웃 되었습니다.'
-                      });
                       setIsUserMenuOpen(false);
+                      signOut({ callbackUrl: '/' });
                     }}
                     className="w-full text-left px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2"
                   >
@@ -297,7 +303,7 @@ export default function Sidebar() {
                         onClick={async (e) => {
                           e.stopPropagation();
                           const sessionId = localStorage.getItem('browser_session_id');
-                          const email = profile.email !== 'user@example.com' ? profile.email : '';
+                          const email = displayEmail !== 'user@example.com' ? displayEmail : '';
                           try {
                             const res = await fetch('/api/kr/user/quota/recharge', {
                               method: 'POST',
@@ -334,14 +340,14 @@ export default function Sidebar() {
             className={`relative z-30 flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-white/5 text-left transition-colors ${isUserMenuOpen ? 'bg-white/5' : ''}`}
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white relative">
-              {profile.name[0]}
+              {displayName[0]}
               {isAdmin && (
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 border-2 border-[#1c1c1e] rounded-full" title="ADMIN"></div>
               )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <div className="text-sm font-medium text-white truncate">{profile.name}</div>
+                <div className="text-sm font-medium text-white truncate">{displayName}</div>
                 {isAdmin && (
                   <span className="text-[10px] font-bold bg-rose-500/20 text-rose-400 px-1 rounded border border-rose-500/30">
                     ADMIN

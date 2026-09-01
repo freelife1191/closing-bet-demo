@@ -33,9 +33,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   // ADMIN 권한 체크
   const { isAdmin } = useAdmin();
 
-  // Google Login State
-  const [isGoogleLoggedIn, setIsGoogleLoggedIn] = useState(false);
-  const [googleUserInfo, setGoogleUserInfo] = useState<{ name: string, email: string } | null>(null);
+  // Google Login State — useSession 이 이미 주는 값이므로 렌더 중에 그대로 읽는다.
+  const isGoogleLoggedIn = status === 'authenticated';
+  const googleUserInfo = isGoogleLoggedIn && session?.user
+    ? { name: session.user.name || "User", email: session.user.email || "" }
+    : null;
   const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
@@ -223,19 +225,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   // NextAuth
   // const { data: session, status } = useSession(); // Moved to top
 
+  // 세션이 붙으면 비어 있는 프로필 입력만 채운다.
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
-      setIsGoogleLoggedIn(true);
-      setGoogleUserInfo({
-        name: session.user.name || "User",
-        email: session.user.email || ""
-      });
-      // 프로필 자동 동기화 (옵션)
       if (!name) setName(session.user.name || "");
       if (!email || email === 'user@example.com') setEmail(session.user.email || "");
-    } else {
-      setIsGoogleLoggedIn(false);
-      setGoogleUserInfo(null);
     }
   }, [status, session]);
 
