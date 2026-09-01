@@ -206,13 +206,25 @@ SCHEDULER_ENABLED=true
 1. **Ports**: Flask 5501, Next.js 3500
 2. **Logs**: `logs/backend.log`, `logs/frontend.log`
 3. **Data sources**: pykrx (default), Toss Securities API (priority for real-time), yfinance (fallback)
-4. **Scheduler**: `app/services/scheduler.py` (15:20, 15:40 KST)
+4. **Scheduler**: `services/scheduler.py` (15:20, 15:40 KST). 관련 모듈: `scheduler_jobs.py`, `scheduler_loop.py`, `scheduler_runtime_status_service.py`
 5. **Tests**: pytest (Python), vitest (TypeScript)
 
 ---
 
-## Remaining Refactoring Tasks
+## 개발 사이클 — dev-cycle
 
-1. **Refactor market_gate.py** (HIGH): Extract 400-line `_get_global_data()` using `DataSourceStrategy`
-2. **Refactor generator.py** (HIGH): Replace inline phase logic with `phases.py` classes
-3. **Add type hints** (MEDIUM): Missing in many functions
+작업은 `docs/dev-cycle/TODO.md` 의 항목 단위로 진행합니다.
+`/dev-cycle next` 로 시작하며, 절차와 티어 규칙은 스킬 정의를 따릅니다.
+
+- 백로그: `docs/dev-cycle/TODO.md` (단일 관리 지점)
+- 완료 기록: `docs/dev-cycle/archive/` (월별 요약 + 일별 상세)
+- 사이클 절차: `.claude/skills/dev-cycle/SKILL.md`
+- 티어와 위험 경로: `.claude/skills/dev-cycle/references/tier-rules.md`
+- 기록 형식: `.claude/skills/dev-cycle/references/archive-format.md`
+- 카테고리 감사: `dev-workflow` 에이전트
+
+승인 게이트는 두 곳입니다. 계획이 확정되는 시점과 결과가 저장소에 반영되는 시점입니다.
+
+TODO 에 없는 작업을 즉흥으로 시작하지 않습니다. 새로 발견한 개선점은
+`TODO.md` 에 항목으로 추가한 뒤 순서에 따라 처리합니다. 이 파일에 할 일 목록을
+따로 적지 않습니다. 백로그가 두 곳에 존재하면 반드시 어긋납니다.
