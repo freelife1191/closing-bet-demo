@@ -87,7 +87,9 @@ project/project-showcase-kit/out/
 
 # Untrack directories
 project/
-docs/
+docs/*
+!docs/dev-cycle/
+!docs/superpowers/
 
 # oh-my-codex
 .omx
