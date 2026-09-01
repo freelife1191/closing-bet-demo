@@ -119,15 +119,18 @@
 | T2 보통 | 변경 300줄 이하이면서 위험 경로에 닿지 않는다 |
 | T3 중량 | 변경 300줄을 초과하거나, 위험 경로에 한 줄이라도 닿는다 |
 
-위험 경로는 이 저장소의 실제 파일 기준으로 다음과 같다.
+위험 경로의 정본은 `.claude/skills/dev-cycle/references/tier-rules.md` §2 이며,
+2026-09-01 실측 기준 파이썬 파일 47개다. 범주는 다음과 같다.
 
-- 신호·등급 결정: `engine/grade_*.py`, `engine/generator*.py`, `engine/phases.py`
+- 신호·등급 결정: `engine/grade_*.py`, `engine/generator*.py`, `engine/phases*.py`
+- 시장 진입 판정: `engine/market_gate*.py`
 - VCP 판정: `engine/vcp_ai_analyzer*.py`
 - 모의투자 계좌와 거래: `services/paper_trading*.py`
 - 수급 집계: `services/investor_trend*.py`, `services/kr_market_flow_service.py`
-- 스케줄러와 데이터 적재: `app/services/scheduler.py`, `scripts/init_data.py`
-- 시크릿과 인증: `.env*`, `secrets/`
+- 스케줄러와 데이터 적재: `services/scheduler*.py`, `scripts/init_data.py`
 - 저장소 스키마: 파일명에 `sqlite` 를 포함하는 모듈
+- 시크릿과 인증: `.env` 로 시작하는 파일과 `secrets/` 아래 전부. 이 항목은 파일 목록이
+  아니라 접촉 패턴이므로 해당 파일의 존재 여부와 무관하게 적용한다
 
 티어는 계획 단계에서 판정하되, 구현 후 실제 diff 가 상위 티어에 해당하면 상향만 허용하고
 하향은 금지한다. 리뷰를 줄이려고 티어를 낮추는 일을 구조적으로 막기 위해서다.
@@ -201,9 +204,14 @@
     TODO 에 없는 작업을 즉흥으로 시작하지 않는다. 새로 발견한 개선점은
     TODO.md 에 항목으로 추가한 뒤 순서에 따라 처리한다.
 
-아울러 기존 "Remaining Refactoring Tasks" 섹션의 세 항목(`market_gate.py` 리팩토링,
-`generator.py` 리팩토링, 타입 힌트 보강)을 `TODO.md` 로 이관하고, CLAUDE.md 에는 포인터만
-남긴다. 같은 백로그가 두 곳에 존재하면 반드시 어긋난다.
+아울러 기존 "Remaining Refactoring Tasks" 섹션을 정리한다. 세 항목 중 `generator.py`
+리팩토링과 타입 힌트 보강은 `TODO.md` 로 이관하고, `market_gate.py` 리팩토링은 폐기한다.
+해당 파일은 이미 216줄 8개 모듈로 분리되어 있고 400줄짜리 `_get_global_data()` 는 존재하지
+않으므로, 완료된 작업이 백로그에 남아 있던 것이다. CLAUDE.md 에는 포인터만 남긴다.
+같은 백로그가 두 곳에 존재하면 반드시 어긋난다.
+
+같은 작업에서 "Important Notes" 4번의 `app/services/scheduler.py` 를 정정한다. 실재하지
+않는 경로이며 실제로는 `services/scheduler.py` 이고 관련 모듈이 넷이다.
 
 `docs/plans/TO_DO_LIST.md` 의 KIS API 연동 항목도 `TODO.md` 로 이관하고 원본 파일은
 삭제한다.
