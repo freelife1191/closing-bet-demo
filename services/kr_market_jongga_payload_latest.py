@@ -59,17 +59,20 @@ def _is_latest_payload_stale(payload: dict[str, Any], current_time: datetime) ->
     return MarketSchedule.is_market_open(current_date)
 
 
-def _build_stale_jongga_data_payload(
+def _build_stale_notice(
     current_time: datetime,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """오늘 자료가 아님을 알리는 표식을 만든다.
+
+    신호를 지우지 않고 표식만 덧붙인다. 배너가 지목한 날짜와 화면에 실린 자료가
+    어긋나면 사용자는 존재하는 리포트를 선택기에서 스스로 다시 찾아야 한다.
+    """
     latest_date = _parse_payload_date(payload)
     latest_date_str = latest_date.isoformat() if latest_date else str(payload.get("date") or "")
     today_str = current_time.date().isoformat()
     return {
-        "date": today_str,
-        "signals": [],
-        "filtered_count": 0,
+        "date": latest_date_str or today_str,
         "status": "stale",
         "is_stale": True,
         "latest_available_date": latest_date_str,
@@ -77,7 +80,10 @@ def _build_stale_jongga_data_payload(
             f"오늘({today_str}) 기준 종가베팅 데이터가 없습니다. "
             f"최신 저장 데이터는 {latest_date_str or '알 수 없음'}입니다."
         ),
-        "message": "오래된 종가베팅 데이터가 최신 리포트로 표시되지 않도록 숨겼습니다. [업데이트] 버튼을 눌러 분석을 실행해주세요.",
+        "message": (
+            "오늘 분석이 아직 없어서 가장 최근 저장분을 그대로 보여주고 있습니다. "
+            "[업데이트] 버튼을 눌러 오늘 분석을 실행해주세요."
+        ),
     }
 
 
@@ -221,7 +227,16 @@ def build_jongga_latest_payload(
                 _parse_payload_date(data),
                 current_time.date(),
             )
-            return _build_stale_jongga_data_payload(current_time, data)
+            stale_notice = _build_stale_notice(current_time, data)
+            if not has_non_empty_signals(data):
+                return {
+                    **_build_empty_latest_jongga_data_payload(current_time, data),
+                    **stale_notice,
+                }
+            # 오늘 자료가 아니므로 오늘 시세를 덮어쓰지 않고 저장 파일도 다시 쓰지 않는다.
+            sort_jongga_signals(data["signals"])
+            normalize_jongga_signals_for_frontend(data["signals"])
+            return {**data, **stale_notice}
 
         if not has_non_empty_signals(data):
             return _build_empty_latest_jongga_data_payload(current_time, data)

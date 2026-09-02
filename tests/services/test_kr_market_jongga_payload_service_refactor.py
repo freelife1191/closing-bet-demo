@@ -92,42 +92,103 @@ def test_build_jongga_latest_payload_uses_latest_price_by_date_when_csv_unsorted
     assert result["signals"][0]["current_price"] == 120.0
 
 
-def test_build_jongga_latest_payload_hides_stale_latest_on_market_day(monkeypatch, tmp_path):
-    latest_payload = {
-        "date": "2026-03-03",
-        "signals": [{"ticker": "005930", "entry_price": 10000, "grade": "A"}],
-    }
-    price_calls = {"count": 0}
+def _build_stale_latest_payload(monkeypatch, tmp_path, latest_payload, counters):
+    """오늘이 개장일인데 저장분이 과거인 상황을 만들어 최신 payload를 구성한다."""
     monkeypatch.setattr(
         latest_payload_module.MarketSchedule,
         "is_market_open",
         lambda _date: True,
     )
 
-    result = build_jongga_latest_payload(
+    def _count(key):
+        counters[key] = counters.get(key, 0) + 1
+
+    return build_jongga_latest_payload(
         data_dir=str(tmp_path),
         load_json_file=lambda _name: dict(latest_payload),
         load_csv_file=lambda _name: pd.DataFrame(),
         get_data_path=lambda filename: str(tmp_path / filename),
-        recalculate_jongga_grades=lambda _payload: False,
-        sort_jongga_signals=lambda _signals: None,
-        normalize_jongga_signals_for_frontend=lambda _signals: None,
+        recalculate_jongga_grades=lambda _payload: _count("recalculated") or False,
+        sort_jongga_signals=lambda _signals: _count("sorted"),
+        normalize_jongga_signals_for_frontend=lambda _signals: _count("normalized"),
         apply_latest_prices_to_jongga_signals=(
-            lambda _signals, _price_map: price_calls.__setitem__(
-                "count",
-                price_calls["count"] + 1,
-            )
+            lambda _signals, _price_map: _count("price_applied")
         ),
         logger=logging.getLogger(__name__),
         now=datetime(2026, 3, 4, 18, 0, 0),
     )
 
+
+def test_build_jongga_latest_payload_serves_latest_saved_report_when_today_is_missing(
+    monkeypatch, tmp_path
+):
+    """오늘 자료가 없으면 가장 최근 저장분을 그대로 내보낸다.
+
+    신호를 지우면 배너는 최신 저장 날짜를 알리는데 화면은 비어 있어서, 사용자가
+    존재하는 리포트를 선택기에서 스스로 다시 찾아야 한다.
+    """
+    counters: dict[str, int] = {}
+    latest_payload = {
+        "date": "2026-03-03",
+        "signals": [{"ticker": "005930", "entry_price": 10000, "grade": "A"}],
+    }
+
+    result = _build_stale_latest_payload(monkeypatch, tmp_path, latest_payload, counters)
+
     assert result["status"] == "stale"
-    assert result["signals"] == []
     assert result["is_stale"] is True
+    assert [signal["ticker"] for signal in result["signals"]] == ["005930"]
+    assert counters.get("sorted") == 1
+    assert counters.get("normalized") == 1
+
+
+def test_build_jongga_latest_payload_stale_date_matches_the_banner_date(
+    monkeypatch, tmp_path
+):
+    """배너가 지목한 날짜와 화면에 실린 자료의 기준일이 같아야 한다."""
+    counters: dict[str, int] = {}
+    latest_payload = {
+        "date": "2026-03-03",
+        "signals": [{"ticker": "005930", "entry_price": 10000, "grade": "A"}],
+    }
+
+    result = _build_stale_latest_payload(monkeypatch, tmp_path, latest_payload, counters)
+
+    assert result["date"] == "2026-03-03"
     assert result["latest_available_date"] == "2026-03-03"
     assert "2026-03-03" in result["stale_warning"]
-    assert price_calls["count"] == 0
+    assert "2026-03-04" in result["stale_warning"]
+
+
+def test_build_jongga_latest_payload_stale_keeps_stored_prices_and_file(monkeypatch, tmp_path):
+    """오래된 저장분에 오늘 시세를 덮어쓰거나 저장 파일을 다시 쓰지 않는다."""
+    counters: dict[str, int] = {}
+    latest_payload = {
+        "date": "2026-03-03",
+        "signals": [{"ticker": "005930", "entry_price": 10000, "grade": "A"}],
+    }
+
+    _build_stale_latest_payload(monkeypatch, tmp_path, latest_payload, counters)
+
+    assert counters.get("price_applied") is None
+    assert counters.get("recalculated") is None
+    assert not (tmp_path / "jongga_v2_latest.json").exists()
+
+
+def test_build_jongga_latest_payload_stale_without_signals_stays_empty(monkeypatch, tmp_path):
+    """저장분 자체에 신호가 없으면 빈 상태를 유지하되 오래됐다는 표식은 남긴다."""
+    counters: dict[str, int] = {}
+    latest_payload = {
+        "date": "2026-03-03",
+        "signals": [],
+        "filtered_count": 0,
+    }
+
+    result = _build_stale_latest_payload(monkeypatch, tmp_path, latest_payload, counters)
+
+    assert result["signals"] == []
+    assert result["is_stale"] is True
+    assert result["date"] == "2026-03-03"
 
 
 def test_build_jongga_latest_payload_keeps_today_empty_result_without_recent_fallback(tmp_path):
