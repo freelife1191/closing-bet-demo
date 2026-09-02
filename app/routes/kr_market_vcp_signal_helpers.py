@@ -27,18 +27,33 @@ def _row_get(row: Any, key: str, default: Any = None) -> Any:
     return getattr(row, key, default)
 
 
-def _is_vcp_ai_analysis_failed(row: Any) -> bool:
-    """VCP 시그널의 AI 분석 실패 여부 판별.
+def _is_valid_ai_verdict(action: Any, reason: Any) -> bool:
+    """AI 판정 한 건이 실제 분석 결과인지 가린다.
 
-    action 이 BUY/SELL/HOLD 가 아니거나 사유가 비어 있으면 실패다. dict 와
-    itertuples 가 만드는 namedtuple 을 모두 받는다. 응답을 조립하는 경로가
-    namedtuple 을 넘기기 때문이다.
+    action 이 BUY/SELL/HOLD 가 아니거나 사유가 비어 있으면 실패다. 실패해도 두
+    필드는 "N/A" 와 "분석 실패" 로 채워지므로 값의 존재만 보면 정상으로 통과한다.
+    CSV 행과 캐시의 추천 dict 는 필드 이름이 다를 뿐 같은 문턱을 넘어야 하므로,
+    기준을 한 곳에 두어 한쪽만 고쳐지는 일을 막는다.
     """
-    action = _normalize_text(_row_get(row, "ai_action")).upper()
-    if action not in _VALID_AI_ACTIONS:
-        return True
+    if _normalize_text(action).upper() not in _VALID_AI_ACTIONS:
+        return False
+    return _is_meaningful_ai_reason(reason)
 
-    return not _is_meaningful_ai_reason(_row_get(row, "ai_reason"))
+
+def _is_vcp_ai_analysis_failed(row: Any) -> bool:
+    """CSV 행의 AI 분석 실패 여부 판별.
+
+    dict 와 itertuples 가 만드는 namedtuple 을 모두 받는다. 응답을 조립하는
+    경로가 namedtuple 을 넘기기 때문이다.
+    """
+    return not _is_valid_ai_verdict(_row_get(row, "ai_action"), _row_get(row, "ai_reason"))
+
+
+def _is_valid_ai_recommendation(recommendation: Any) -> bool:
+    """캐시에서 온 추천 dict 가 실제 분석 결과인지 판별한다."""
+    if not isinstance(recommendation, dict):
+        return False
+    return _is_valid_ai_verdict(recommendation.get("action"), recommendation.get("reason"))
 
 
 def _build_vcp_stock_payload(row: dict) -> dict:
@@ -80,17 +95,15 @@ def _extract_vcp_ai_recommendation(
         return False, "N/A", 0, "분석 실패"
 
     gemini = ai_res.get("gemini_recommendation")
-    if not isinstance(gemini, dict):
+    if not _is_valid_ai_recommendation(gemini):
         return False, "N/A", 0, "분석 실패"
 
-    action = _normalize_text(gemini.get("action")).upper()
-    confidence_val = _safe_int(gemini.get("confidence", 0), default=0)
-    reason = _normalize_text(gemini.get("reason"))
-
-    if action in _VALID_AI_ACTIONS and _is_meaningful_ai_reason(reason):
-        return True, action, confidence_val, reason
-
-    return False, "N/A", 0, "분석 실패"
+    return (
+        True,
+        _normalize_text(gemini.get("action")).upper(),
+        _safe_int(gemini.get("confidence", 0), default=0),
+        _normalize_text(gemini.get("reason")),
+    )
 
 
 def _apply_vcp_reanalysis_updates(
@@ -299,9 +312,11 @@ def _merge_ai_data_into_vcp_signals(signals: List[dict], ai_data_map: Dict[str, 
         if ticker not in ai_data_map:
             continue
         ai_item = ai_data_map[ticker]
-        signal["gemini_recommendation"] = ai_item.get("gemini_recommendation")
-        signal["gpt_recommendation"] = ai_item.get("gpt_recommendation")
-        signal["perplexity_recommendation"] = ai_item.get("perplexity_recommendation")
+        # 캐시에 없거나 실패 기록인 추천으로 기존 값을 덮어쓰지 않는다.
+        for field in ("gemini_recommendation", "gpt_recommendation", "perplexity_recommendation"):
+            recommendation = ai_item.get(field)
+            if _is_valid_ai_recommendation(recommendation):
+                signal[field] = recommendation
         if "news" in ai_item and not signal.get("news"):
             signal["news"] = ai_item["news"]
         merged_count += 1
