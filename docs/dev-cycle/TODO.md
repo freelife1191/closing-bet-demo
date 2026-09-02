@@ -13,13 +13,6 @@
 
 ## P1 — 이번 주기
 
-### [JONGGA-001] generator.py 의 인라인 페이즈 로직을 phases 모듈로 교체
-- 카테고리: 종가베팅 | 티어: T3 | 근거: CLAUDE.md 이관
-- [ ] `engine/generator.py` 의 인라인 페이즈 로직 범위 확정
-- [ ] `engine/phases_*.py` 의 기존 클래스로 대체
-- [ ] 신호 생성 결과가 교체 전후로 동일한지 확인
-- [ ] 회귀 테스트 추가
-
 ### [VCP-003] 두 번째 AI 프로바이더 폴백 누락 수정
 - 카테고리: VCP 시그널 | 티어: T1 | 근거: AUDIT-VCP §1.3
 - 티어 근거: `engine/vcp_ai_orchestration_helpers.py` 한 파일이며 `tier-rules.md` §2 의
@@ -353,6 +346,23 @@
 - [ ] 전역 예외 처리기가 `werkzeug.exceptions.HTTPException` 을 그대로 통과시키도록 수정
 - [ ] 오탐 로그가 사라지는지 `logs/backend.log` 로 확인
 - [ ] 없는 경로가 404 를, 실제 서버 오류가 500 을 돌려주는지 구분하는 회귀 검사 추가
+
+### [JONGGA-014] 파이프라인 Phase 1 호출의 죽은 TypeError 폴백을 걷어낸다
+- 카테고리: 종가베팅 | 티어: T3 | 근거: `[JONGGA-001]` 사이클에서 관찰
+- 관찰: `engine/phases_pipeline.py:51-54` 가 Phase 1 을 호출할 때 `target_date` 를 받지
+  못하는 구현을 대비해 `try` / `except TypeError` 폴백을 두고 있습니다. 예외를 잡으면
+  `target_date` 없이 `self.phase1.execute(candidates)` 를 한 번 더 호출합니다.
+- 걷어내야 하는 이유가 둘입니다. 첫째, `Phase1Analyzer.execute` 는 지금 `target_date` 를
+  정식 인자로 받으므로 첫 호출이 `TypeError` 로 끝날 일이 없습니다. 죽은 코드입니다.
+  둘째, `except TypeError` 는 시그니처 불일치뿐 아니라 페이즈 안쪽에서 발생한
+  `TypeError` 까지 함께 삼킵니다. 그러면 후보 수백 개의 수집과 점수 계산을 통째로 다시
+  실행하고, 두 번째 시도도 같은 오류로 실패합니다. 실행 시간이 두 배가 되고, 밖으로
+  나가는 예외가 두 번째 호출의 것으로 바뀌어 원인을 추적하기 어려워집니다.
+- `engine/phases_pipeline.py` 는 `tier-rules.md` §2 의 위험 경로이므로 T3 입니다.
+- [ ] `Phase1Analyzer.execute` 의 시그니처를 확인해 폴백이 정말 죽은 코드인지 확정
+- [ ] `try` / `except TypeError` 를 걷어내고 단일 호출로 정리
+- [ ] 페이즈 안쪽에서 난 `TypeError` 가 삼켜지지 않고 그대로 올라오는지 확인하는 검사를
+      `tests/engine/test_phases_pipeline_refactor.py` 에 추가
 
 ## P2 — 대기
 
