@@ -13,25 +13,6 @@
 
 ## P1 — 이번 주기
 
-### [FE-002] Next.js 16.1.6 을 16.3.4 로 올린다
-- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: 2026-09-01 실측
-- 선행 조건이던 `[FE-001]` 은 2026-09-02 에 끝났습니다. 베이스라인 테스트는
-  `tests/baseline/upgrade-nextjs16.test.ts` 하나로 모였고 vitest 23파일 168개가 모두
-  통과하므로, 승격이 만든 실패는 그 자리에서 구별됩니다.
-- 그 파일의 `/^16\./` 검사 세 자리는 16.3.4 에서도 그대로 통과하므로 손댈 필요가
-  없습니다. 설치본을 보는 `:27`, `eslint-config-next` 선언을 보는 `:169`, 요약 블록의
-  `:297` 입니다.
-- `next-dev-loop`, `next-cache-components-adoption`, `next-cache-components-optimizer`,
-  `next-partial-prefetching-adoption` 네 스킬이 모두 16.3 을 하한선으로 두고 있어,
-  이 항목이 끝나기 전까지 호출할 수 없습니다.
-  자세한 내용은 `.claude/skills/dev-cycle/references/frontend-skills.md` 에 있습니다.
-- [ ] `next-upgrade` 스킬로 공식 마이그레이션 가이드와 코드모드를 적용
-- [ ] `eslint-config-next` 를 같은 버전으로 맞춤
-- [ ] `npm run build`, `npm run type-check`, `npm run lint` 통과 확인
-- [ ] vitest 전체 통과 확인
-- [ ] `next-dev-loop` 의 preflight 가 통과하는지 확인해 문턱이 실제로 열렸는지 검증
-- [ ] `frontend-skills.md` §1 의 실측 표를 갱신
-
 ### [INFRA-010] 규약 문서의 담당 경로 공백을 메운다
 - 카테고리: 인프라 | 티어: 문서 | 근거: AUDIT-FE 와 AUDIT-VCP 의 담당 경로 밖 관찰
 - 두 감사가 각각 짚었습니다. 담당 카테고리가 없는 코드가 있으면 그 코드는 어느 감사에서도
@@ -42,6 +23,9 @@
       실제 VCP 응답을 만드는 파일인데 어느 행에도 잡히지 않습니다
 - [ ] `frontend-skills.md` §1 의 `'use client'` 파일 수를 26개에서 25개로 정정.
       `not-found.tsx` 는 주석 문구가 검색에 잡혔을 뿐 서버 컴포넌트입니다
+- [ ] 같은 표의 라우트 수를 「페이지 6개」에서 7개로 정정.
+      `find frontend/src/app -name 'page.tsx'` 가 일곱 개를 돌려줍니다. API 라우트는
+      `api/auth/[...nextauth]/route.ts` 하나뿐이므로 1개가 맞습니다
 - [ ] 표에 적은 경로가 모두 실재하는지 확인
 
 ### [JONGGA-001] generator.py 의 인라인 페이즈 로직을 phases 모듈로 교체
@@ -362,6 +346,27 @@
 - [ ] `.env.example:123` 의 `JONGGA_SCHEDULE_TIME` 줄 처리
 - [ ] Market Gate 간격의 기본값 표기를 `engine/config.py:280` 과 맞춤
 - [ ] 시크릿 확인 세 가지 수행
+
+
+### [INFRA-020] Flask 가 존재하지 않는 경로에 404 대신 500 을 돌려준다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-02 FE-002 마감 qa-only ISSUE-001
+- 없는 API 경로를 부르면 HTTP 상태가 500 으로 나갑니다. 본문에는 사유가 404 였다고
+  적혀 있는데도 상태 코드만 바뀝니다. 응답의 `type` 필드에 `NotFound` 가 그대로
+  실려 나오므로, 전역 예외 핸들러가 werkzeug 의 `NotFound` 를 일반 예외와 함께
+  잡아 500 으로 감싸고 있는 것으로 보입니다.
+- 한 경로만의 문제가 아닙니다. `/api/chat/sessions`, `/api/chatbot/sessions`,
+  `/api/chat/history`, `/api/chat/session`, `/api/kr/chat/sessions` 다섯 개가 모두
+  같은 형태로 500 을 돌려주는 것을 확인했습니다.
+- 재현: `curl -i http://localhost:5501/api/chat/sessions` 를 실행하면 첫 줄이
+  `HTTP/1.1 500 INTERNAL SERVER ERROR` 이고 본문에 `"type": "NotFound"` 가 실립니다.
+- 호출하는 쪽이 「경로가 없음」과 「서버가 고장남」을 구분할 수 없습니다. 프론트엔드의
+  재시도 로직은 5xx 를 일시적 장애로 보고 무의미하게 반복하게 되고, 운영 환경의
+  모니터링에서는 경로 오타 하나가 서버 장애로 집계됩니다.
+- 전역 오류 처리를 바꾸면 모든 API 응답의 상태 코드에 영향을 주므로 T2 로 봅니다.
+  계획 단계에서 실제 수정 파일로 다시 판정합니다.
+- [ ] 전역 예외 핸들러가 등록된 자리를 찾아 `HTTPException` 계열이 어떻게 처리되는지 확인
+- [ ] `NotFound` 를 비롯한 `HTTPException` 이 자신의 상태 코드를 그대로 유지하도록 수정
+- [ ] 없는 경로가 404 를, 실제 예외가 500 을 돌려주는지 확인하는 검사 추가
 
 
 ## P2 — 대기
