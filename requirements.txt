@@ -1,14 +1,34 @@
-flask
-flask-cors
-pandas
-requests
-python-dotenv
-google-genai
-apscheduler
-yfinance
-pykrx
-finance-datareader
-gunicorn
-pytz
-schedule
-openai
+# 파이썬 의존성. 직접 의존성 16개를 2026-09-02 기준 pytest 1536건을 통과시킨 버전으로
+# 고정한다. 전이 의존성은 pip 이 그때그때 결정하므로 이 파일은 완전한 잠금이 아니다.
+# 갱신할 때는 venv 에서 `pip install -U <패키지>` 로 올린 뒤 pytest 전체를 돌리고
+# 이 파일의 핀을 함께 바꾼다.
+
+flask==3.1.2
+flask-cors==6.0.2
+gunicorn==25.0.3
+
+pandas==2.3.3
+# ponytail: numpy 1.x 고정. pykrx 1.2.3 이 numpy<2.0 을 요구하고 numpy_json_encoder.py:38
+# 이 numpy 2.x 가 제거한 np.float_ 을 참조한다. 둘을 함께 푸는 작업은 [INFRA-018].
+numpy==1.26.4
+
+# 1.2.7 부터 numpy>=2.0 으로 뒤집히므로 numpy 핀과 같이 움직인다([INFRA-018]).
+pykrx==1.2.3
+yfinance==1.1.0
+finance-datareader==0.9.102
+
+requests==2.32.5
+httpx==0.28.1
+beautifulsoup4==4.14.3
+
+# google-genai 2.21.0 은 이 저장소가 쓰는 API 표면이 1.62.0 과 같고 필수 의존성도
+# 10개로 동일하다. 다만 실제 호출 동작은 Vertex 과금 호출 없이 확인할 수 없어
+# 승격을 분리한다([INFRA-001]). 아래 openai 핀에는 해당하지 않는다.
+google-genai==1.62.0
+openai==2.24.0
+
+python-dotenv==1.2.1
+schedule==1.2.2
+
+# 개발과 검증. CLAUDE.md 가 이 파일 하나로 환경을 세우도록 안내한다.
+pytest==9.0.2
