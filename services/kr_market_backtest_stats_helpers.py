@@ -102,7 +102,7 @@ def calculate_jongga_backtest_stats(
         win_rate = round((wins / closed_trades) * 100, 1) if closed_trades > 0 else 0.0
         stats["win_rate"] = win_rate
         stats["avg_return"] = round(total_return / total_signals, 1)
-        stats["status"] = determine_backtest_status(win_rate)
+        stats["status"] = determine_backtest_status(win_rate, closed_trades)
     elif stats["candidates"]:
         stats["status"] = "OK (New)"
 
@@ -128,7 +128,9 @@ def calculate_vcp_backtest_stats(
     if not isinstance(vcp_df, pd.DataFrame) or vcp_df.empty:
         return stats
 
-    stats["status"] = "OK"
+    # 행은 있으나 아직 한 건도 집계하지 못한 상태다. 종가베팅 쪽이 후보만 있을 때
+    # 쓰는 값과 같은 뜻이므로 어휘를 맞춘다. 아래에서 거래를 세면 덮어쓴다.
+    stats["status"] = "OK (New)"
 
     total_count = 0
     wins = 0
@@ -171,6 +173,6 @@ def calculate_vcp_backtest_stats(
         win_rate = round((wins / closed_count) * 100, 1) if closed_count > 0 else 0.0
         stats["win_rate"] = win_rate
         stats["avg_return"] = round(total_return / total_count, 1)
-        stats["status"] = determine_backtest_status(win_rate)
+        stats["status"] = determine_backtest_status(win_rate, closed_count)
 
     return stats

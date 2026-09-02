@@ -35,6 +35,10 @@ from services.sqlite_utils import (
 )
 
 
+# 저장한 값의 계산 규칙이 바뀌면 이 번호를 올린다. 시그니처에 섞여 들어가므로
+# 옛 규칙으로 계산해 둔 항목은 데이터 파일이 그대로여도 더 이상 적중하지 않는다.
+_BACKTEST_SUMMARY_CACHE_SCHEMA_VERSION = 1
+
 _BACKTEST_SUMMARY_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
 _BACKTEST_SUMMARY_CACHE_LOCK = threading.Lock()
 _BACKTEST_SUMMARY_SQLITE_LOCK = threading.Lock()
@@ -247,6 +251,7 @@ def build_backtest_summary_cache_signature(
     )
 
     return (
+        ("schema_version", _BACKTEST_SUMMARY_CACHE_SCHEMA_VERSION),
         ("data_dir", str(data_dir or "")),
         ("daily_prices", _safe_file_signature(daily_prices_path)),
         ("signals_log", _safe_file_signature(signals_path)),

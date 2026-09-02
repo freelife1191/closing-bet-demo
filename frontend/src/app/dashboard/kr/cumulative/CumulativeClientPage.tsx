@@ -43,7 +43,8 @@ interface KPIData {
   };
   avgDays: number;
   priceDate: string;
-  profitFactor: number;
+  // 손실 거래가 한 건도 없으면 비율이 정의되지 않으므로 백엔드가 null 을 보낸다.
+  profitFactor: number | null;
 }
 
 // ----------------------------------------------------------------------
@@ -256,7 +257,10 @@ function renderStatTooltip(key: keyof typeof TOOLTIP_CONTENT, kpi: KPIData) {
       break;
 
     case 'profitFactor':
-      if (kpi.profitFactor >= 2.0) {
+      if (kpi.profitFactor === null) {
+        advice = "손실 거래가 없어 손익비를 계산할 수 없습니다.";
+        adviceColor = "text-gray-400";
+      } else if (kpi.profitFactor >= 2.0) {
         advice = "탁월한 손익비입니다. 강력한 수익 모델입니다.";
         adviceColor = "text-emerald-400 font-bold";
       } else if (kpi.profitFactor >= 1.5) {
@@ -917,7 +921,7 @@ export default function CumulativeClientPage() {
     roiByGrade: createEmptyRoiByGrade(),
     avgDays: 0,
     priceDate: '-',
-    profitFactor: 0
+    profitFactor: null
   });
   const [trades, setTrades] = useState<Trade[]>([]);
   const [pagination, setPagination] = useState<any>(null); // Pagination Metadata
@@ -1103,7 +1107,7 @@ export default function CumulativeClientPage() {
         />
         <StatCard title="평균 보유일" value={kpi.avgDays} tooltipKey="avgDays" kpi={kpi} />
         <StatCard title="데이터 기준일" value={kpi.priceDate} />
-        <StatCard title="손익비 (Profit Factor)" value={kpi.profitFactor} colorClass="text-cyan-400" tooltipKey="profitFactor" kpi={kpi} />
+        <StatCard title="손익비 (Profit Factor)" value={kpi.profitFactor ?? '—'} colorClass="text-cyan-400" tooltipKey="profitFactor" kpi={kpi} />
       </div>
 
 

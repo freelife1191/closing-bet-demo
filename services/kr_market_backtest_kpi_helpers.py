@@ -75,7 +75,10 @@ def aggregate_cumulative_kpis(
             "totalRoi": round(grade_total_roi, 1),
         }
 
-    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else round(gross_profit, 2)
+    # 손실 거래가 한 건도 없으면 비율이 정의되지 않는다. 앞서 이 자리는 분자인
+    # 총이익을 그대로 돌려주었는데, 그 값이 화면에서 2.0 이라는 비율 기준에 걸려
+    # 언제나 최고 등급으로 평가되었다. 비율이 아닌 값을 비율 자리에 넣지 않는다.
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else None
 
     if isinstance(price_df, pd.DataFrame) and not price_df.empty and len(price_df.index) > 0:
         max_price_date = price_df.index.max()

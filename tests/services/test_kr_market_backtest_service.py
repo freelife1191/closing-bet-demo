@@ -4,9 +4,12 @@
 KR Market Backtest Service 단위 테스트
 """
 
+from datetime import datetime
+
 import pandas as pd
 
 from services import kr_market_backtest_stats_helpers as stats_helpers
+from services.kr_market_backtest_common import determine_backtest_status
 from services.kr_market_backtest_kpi_helpers import aggregate_cumulative_kpis
 from services.kr_market_backtest_service import (
     build_latest_price_map,
@@ -405,7 +408,6 @@ def test_dashboard_and_cumulative_report_the_same_win_rate():
     두 화면은 서로 다른 함수로 승패를 세므로, 폭이나 우선순위가 한쪽만 바뀌면
     사용자는 같은 시그널을 놓고 어긋난 승률 두 개를 보게 된다.
     """
-    from datetime import datetime
 
     stats_date = "2026-02-20"
     # 동시 충족 / 익절만 / 손절만.
@@ -476,3 +478,137 @@ def test_jongga_stats_counts_a_win_when_the_width_carries_a_float_tail(monkeypat
 
     assert stats["count"] == 1
     assert stats["win_rate"] == 100.0
+
+
+# ---------------------------------------------------------------------------
+# [FLOW-004] 상태 어휘와 KPI 집계
+# ---------------------------------------------------------------------------
+
+
+def test_determine_backtest_status_separates_total_loss_from_no_closed_trade():
+    """승률 0 이 나오는 두 상황을 갈라 놓는지 확인한다.
+
+    앞서 이 함수는 승률만 보고 0 이면 곧바로 PENDING 을 돌려주었다. 그래서 승 0건
+    패 10건인 전패 구간이 아직 집계 중인 구간과 똑같이 "대기" 로 보였다.
+    """
+    assert determine_backtest_status(0.0, 10) == "BAD"
+    assert determine_backtest_status(0.0, 0) == "PENDING"
+
+
+def test_determine_backtest_status_boundaries():
+    """등급 경계와 종료 거래 수의 우선순위를 고정한다."""
+    assert determine_backtest_status(39.9, 5) == "BAD"
+    assert determine_backtest_status(40.0, 5) == "GOOD"
+    assert determine_backtest_status(59.9, 5) == "GOOD"
+    assert determine_backtest_status(60.0, 5) == "EXCELLENT"
+
+    # 종료된 거래가 없으면 승률이 무엇이든 판정하지 않는다.
+    assert determine_backtest_status(100.0, 0) == "PENDING"
+
+
+def test_jongga_stats_marks_total_loss_as_bad():
+    """전패한 구간에 BAD 가 붙는지 실제 집계 경로로 확인한다."""
+    raw_prices = pd.DataFrame(
+        [{"date": "2026-02-21", "ticker": "005930", "high": 101, "low": 94, "close": 95}]
+    )
+    price_df = prepare_cumulative_price_dataframe(raw_prices)
+
+    stats = stats_helpers.calculate_jongga_backtest_stats(
+        candidates=[],
+        history_payloads=[
+            {
+                "date": "2026-02-20",
+                "signals": [{"ticker": "005930", "stock_code": "005930", "entry_price": 100}],
+            }
+        ],
+        price_map={"005930": 95.0},
+        price_df=price_df,
+        price_index=build_ticker_price_index(price_df),
+    )
+
+    assert stats["count"] == 1
+    assert stats["win_rate"] == 0.0
+    assert stats["status"] == "BAD"
+
+
+def test_jongga_stats_marks_open_only_window_as_pending():
+    """익절도 손절도 없는 구간은 종료 거래가 0건이므로 판정을 미룬다."""
+    raw_prices = pd.DataFrame(
+        [{"date": "2026-02-21", "ticker": "005930", "high": 103, "low": 98, "close": 102}]
+    )
+    price_df = prepare_cumulative_price_dataframe(raw_prices)
+
+    stats = stats_helpers.calculate_jongga_backtest_stats(
+        candidates=[],
+        history_payloads=[
+            {
+                "date": "2026-02-20",
+                "signals": [{"ticker": "005930", "stock_code": "005930", "entry_price": 100}],
+            }
+        ],
+        price_map={"005930": 102.0},
+        price_df=price_df,
+        price_index=build_ticker_price_index(price_df),
+    )
+
+    assert stats["count"] == 1
+    assert stats["win_rate"] == 0.0
+    assert stats["status"] == "PENDING"
+
+
+def test_vcp_stats_uses_the_same_word_as_jongga_for_an_uncounted_window():
+    """행은 있으나 한 건도 집계하지 못한 상태의 어휘를 두 경로가 함께 쓴다.
+
+    앞서 이 자리만 OK 였고, 화면의 확인 아이콘이 그 값을 기다렸다. 그래서 거래가
+    0건일 때만 아이콘이 켜지고 종가베팅 쪽에서는 영영 켜지지 않았다.
+    """
+    vcp_df = pd.DataFrame(
+        [{"ticker": "005930", "signal_date": "2026-02-20", "entry_price": 100}]
+    )
+
+    stats = stats_helpers.calculate_vcp_backtest_stats(
+        vcp_df,
+        price_map={},
+        price_df=pd.DataFrame(),
+    )
+
+    assert stats["count"] == 0
+    assert stats["status"] == "OK (New)"
+
+
+def test_aggregate_cumulative_kpis_computes_every_reported_metric():
+    """승률·평균 ROI·평균 보유일·손익비·등급별 ROI 를 한 번에 고정한다."""
+    trades = [
+        {"outcome": "WIN", "roi": 9.0, "days": 2, "grade": "S"},
+        {"outcome": "WIN", "roi": 9.0, "days": 4, "grade": "A"},
+        {"outcome": "LOSS", "roi": -5.0, "days": 1, "grade": "B"},
+    ]
+
+    kpi = aggregate_cumulative_kpis(trades, pd.DataFrame(), datetime(2026, 2, 21))
+
+    assert kpi["totalSignals"] == 3
+    assert (kpi["wins"], kpi["losses"], kpi["open"]) == (2, 1, 0)
+    assert kpi["winRate"] == 66.7
+    assert kpi["avgRoi"] == 4.33
+    assert kpi["totalRoi"] == 13.0
+    assert kpi["avgDays"] == 2.3
+    assert kpi["profitFactor"] == 3.6
+    assert kpi["priceDate"] == "2026-02-21"
+    assert kpi["roiByGrade"]["S"] == {"count": 1, "avgRoi": 9.0, "totalRoi": 9.0}
+    assert kpi["roiByGrade"]["A"] == {"count": 1, "avgRoi": 9.0, "totalRoi": 9.0}
+    assert kpi["roiByGrade"]["B"] == {"count": 1, "avgRoi": -5.0, "totalRoi": -5.0}
+
+
+def test_aggregate_cumulative_kpis_reports_no_profit_factor_without_a_loss():
+    """손실이 없으면 비율이 정의되지 않으므로 값을 내지 않는다.
+
+    앞서 이 자리는 분자인 총이익을 그대로 돌려주었다. ROI +9% 짜리 다섯 건이면
+    손익비가 45.0 으로 표시되어, 화면의 2.0 기준에 걸려 언제나 최고 등급이었다.
+    """
+    trades = [{"outcome": "WIN", "roi": 9.0, "days": 1, "grade": "S"} for _ in range(5)]
+
+    kpi = aggregate_cumulative_kpis(trades, pd.DataFrame(), datetime(2026, 2, 21))
+
+    assert kpi["totalRoi"] == 45.0
+    assert kpi["profitFactor"] is None
+

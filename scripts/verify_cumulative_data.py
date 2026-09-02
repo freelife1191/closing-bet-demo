@@ -25,10 +25,8 @@ def verify_data():
         else:
             print(f"✅ Total Signals: {kpi['totalSignals']}")
             
-        if kpi['profitFactor'] == 0.0 and kpi['totalRoi'] != 0:
-             # It's possible to be 0 if gross loss is huge or logic err? 
-             # Wait, if gross_loss is 0, we set it to gross_profit.
-             print(f"ℹ️ Profit Factor: {kpi['profitFactor']}")
+        profit_factor = kpi['profitFactor']
+        print(f"ℹ️ Profit Factor: {profit_factor if profit_factor is not None else '손실 거래가 없어 계산하지 않음'}")
 
         # 2. Trades Validation
         trades = data.get('trades', [])

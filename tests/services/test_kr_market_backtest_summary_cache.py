@@ -451,3 +451,24 @@ def test_backtest_summary_sqlite_waiter_retries_after_initializer_failure(tmp_pa
     assert run_calls["count"] == 2
     assert results.get("first") is False
     assert results.get("second") is True
+
+
+def test_schema_version_participates_in_the_signature(monkeypatch, tmp_path):
+    """계산 규칙이 바뀌었을 때 버전만 올리면 옛 항목이 적중하지 않아야 한다.
+
+    이 배선이 빠지면 데이터 파일이 그대로인 한 옛 규칙으로 계산해 둔 응답이
+    계속 나가므로, 고친 계산이 화면까지 닿지 않는다.
+    """
+    data_dir = str(tmp_path)
+
+    before = summary_cache.build_backtest_summary_cache_signature(
+        data_dir_getter=lambda: data_dir
+    )
+    monkeypatch.setattr(summary_cache, "_BACKTEST_SUMMARY_CACHE_SCHEMA_VERSION", 99)
+    after = summary_cache.build_backtest_summary_cache_signature(
+        data_dir_getter=lambda: data_dir
+    )
+
+    assert before is not None and after is not None
+    assert before != after
+

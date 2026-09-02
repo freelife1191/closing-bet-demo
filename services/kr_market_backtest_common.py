@@ -48,9 +48,14 @@ def format_signal_date(value: Any) -> str:
     return value_str[:10]
 
 
-def determine_backtest_status(win_rate: float) -> str:
-    """승률 기반 백테스트 상태를 계산한다."""
-    if win_rate == 0:
+def determine_backtest_status(win_rate: float, closed_trades: int) -> str:
+    """승률과 종료 거래 수로 백테스트 상태를 판정한다.
+
+    승률 0 은 서로 다른 두 상황에서 나온다. 승 0건에 패 N건인 전패와, 종료된
+    거래가 한 건도 없어 승률을 계산할 수조차 없는 미집계다. 앞의 것은 성적이
+    가장 나쁜 구간이고 뒤의 것은 아직 판정할 수 없는 구간이므로 갈라 놓는다.
+    """
+    if closed_trades <= 0:
         return "PENDING"
     if win_rate >= 60:
         return "EXCELLENT"

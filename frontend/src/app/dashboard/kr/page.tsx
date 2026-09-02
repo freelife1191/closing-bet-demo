@@ -8,12 +8,17 @@ import Modal from '@/app/components/Modal';
 import Tooltip from '@/app/components/Tooltip';
 
 
+// 백엔드가 내는 상태 어휘는 여섯 가지다. 거래를 세기 전의 Accumulating 과 OK (New),
+// 종료된 거래가 없는 PENDING, 승률로 판정한 EXCELLENT·GOOD·BAD. 뒤의 셋만 집계가
+// 끝난 상태이므로 그때만 확인 아이콘을 켠다.
+const isBacktestJudged = (status?: string) =>
+  ['EXCELLENT', 'GOOD', 'BAD'].includes(status ?? '');
+
 interface BacktestStats {
   status: string;
   count: number;
   win_rate: number;
   avg_return: number;
-  profit_factor?: number;
   message?: string;
 }
 
@@ -897,7 +902,7 @@ export default function KRMarketOverview() {
               </div>
               <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
                 <span>{renderTradeCount(backtestData?.vcp?.count ?? 0)}</span>
-                {backtestData?.vcp?.status === 'OK' && <i className={`fas fa-check-circle ${vcpTheme.icon}`}></i>}
+                {isBacktestJudged(backtestData?.vcp?.status) && <i className={`fas fa-check-circle ${vcpTheme.icon}`}></i>}
               </div>
             </div>
           );
@@ -960,7 +965,7 @@ export default function KRMarketOverview() {
                   </div>
                   <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
                     <span>{renderTradeCount(backtestData?.closing_bet?.count ?? 0)}</span>
-                    {backtestData?.closing_bet?.status === 'OK' && <i className={`fas fa-check-circle ${cbTheme.icon}`}></i>}
+                    {isBacktestJudged(backtestData?.closing_bet?.status) && <i className={`fas fa-check-circle ${cbTheme.icon}`}></i>}
                   </div>
                 </>
               )}
