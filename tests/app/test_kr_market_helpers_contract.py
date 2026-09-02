@@ -21,6 +21,7 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
+from app.routes import kr_market_jongga_normalize_helpers as jongga_normalize
 from app.routes.kr_market import (
     _apply_gemini_reanalysis_results,
     _apply_vcp_reanalysis_updates,
@@ -321,6 +322,20 @@ def test_normalize_jongga_checklist_uses_supply_positive_key():
     _normalize_jongga_signals_for_frontend(signals)
 
     assert [s["checklist"]["supply_positive"] for s in signals] == [True, True, False]
+
+
+def test_normalize_jongga_target_and_stop_follow_backtest_constants(monkeypatch):
+    """[JONGGA-007] 회귀 검사. 화면에 채워 넣는 목표가와 손절가는 백테스트가 승패를
+    재는 폭과 같은 상수에서 나와야 한다. 폭을 바꿨는데 표시값이 따라오지 않으면
+    화면이 말하는 목표가와 백테스트가 재는 목표가가 갈라진다."""
+    monkeypatch.setattr(jongga_normalize, "JONGGA_TARGET_PCT", 0.20)
+    monkeypatch.setattr(jongga_normalize, "JONGGA_STOP_PCT", 0.10)
+
+    signals = [{"ticker": "1", "name": "폭변경", "entry_price": 10_000}]
+    _normalize_jongga_signals_for_frontend(signals)
+
+    assert signals[0]["target_price"] == 12_000
+    assert signals[0]["stop_price"] == 9_000
 
 
 def test_normalize_jongga_signals_for_frontend_backfills_ticker_and_name_from_stock_fields():

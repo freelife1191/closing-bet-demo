@@ -6,6 +6,8 @@ KR Market 종가베팅 시그널 정규화/가격 반영 헬퍼
 
 from typing import Dict, List
 
+from services.kr_market_backtest_common import JONGGA_STOP_PCT, JONGGA_TARGET_PCT
+
 
 def _normalize_ticker(value: object) -> str:
     text = str(value or "").strip()
@@ -121,9 +123,9 @@ def _normalize_jongga_signal_for_frontend(signal: dict) -> None:
 
     entry_float = _safe_float(signal.get("entry_price", 0))
     if not signal.get("target_price") and entry_float > 0:
-        signal["target_price"] = round(entry_float * 1.09)
+        signal["target_price"] = round(entry_float * (1 + JONGGA_TARGET_PCT))
     if not signal.get("stop_price") and entry_float > 0:
-        signal["stop_price"] = round(entry_float * 0.95)
+        signal["stop_price"] = round(entry_float * (1 - JONGGA_STOP_PCT))
 
     if "ai_evaluation" not in signal and signal.get("ai_action"):
         signal["ai_evaluation"] = {
