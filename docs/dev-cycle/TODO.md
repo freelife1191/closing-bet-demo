@@ -11,20 +11,6 @@
 
 ## P0 — 즉시
 
-### [JONGGA-004] AI 미분석 종목의 확신도 추정치 표기 정리
-- 카테고리: 종가베팅 | 티어: T2 | 근거: AUDIT-JONGGA §1.3
-- 폴백 블록(1959-1966행)과 확신도 렌더 블록(2128-2154행)을 함께 손대고 대체 표기를
-  넣으면 50줄을 넘길 것으로 보아 T2 로 판정했습니다. 화면 표시가 바뀌므로 T2 검증이
-  요구하는 실측이 실제로 필요합니다. Next.js 가 16.1.6 이므로
-  `frontend-skills.md` §3 에 따라 `next-dev-loop` 이 아니라 agent-browser 로 실측합니다.
-- [ ] 등급에서 확신도를 유도하는 계산식을 제거하거나, 산출값을 확신도가 아닌 별도 이름으로
-      분리
-- [ ] AI 분석 결과가 없는 상태에서는 확신도 막대와 매매 추천 배지를 감추거나 추정임을
-      배지 자리에서 바로 알 수 있게 표기
-- [ ] 두 툴팁 문구를 실제 데이터 출처에 맞게 수정
-- [ ] AI 결과가 없는 시그널과 있는 시그널을 각각 렌더링하는 vitest 추가
-- [ ] agent-browser 로 카드 표시를 실측
-
 ### [INFRA-001] 파이썬 의존성 버전 고정
 - 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-01 실측
 - [ ] `requirements.txt` 의 14개 패키지에 버전 핀 적용
@@ -322,6 +308,26 @@
 - [ ] 히스토리 탭에서도 데이터가 없는 이유를 알리는 안내 표시
 - [ ] 두 응답이 어긋나지 않는지 확인하는 회귀 검사 추가
 - [ ] agent-browser 로 히스토리 날짜 선택 결과를 실측
+
+### [JONGGA-008] 백엔드가 확신도 없음을 0 으로 표현하는 자리를 정리
+- 카테고리: 종가베팅 | 티어: T2 | 근거: 2026-09-02 JONGGA-004 진행 중 발견
+- `[JONGGA-004]` 에서 화면 쪽은 확신도가 없는 상태를 값 없음으로 표현하고 "미산출" 로
+  그리도록 고쳤습니다. 그런데 백엔드는 값이 없을 때 여전히 0 을 채워 보내므로, 그 응답을
+  받으면 화면은 "AI 가 0% 확신한다" 로 읽히는 막대를 그립니다. AI 가 실제로 0 을 낸
+  경우와 값이 아예 없는 경우가 구분되지 않습니다.
+- 해당하는 자리는 다섯 곳입니다. 마지막 두 곳은 `[JONGGA-004]` 의 code-review 가 짚었습니다.
+  - `app/routes/kr_market_jongga_normalize_helpers.py:131` 의 `signal.get("ai_confidence", 0)`
+  - `app/routes/kr_market_jongga_ai_payload_helpers.py:37` 의 사유가 문자열일 때 붙는 `confidence: 0`
+  - `app/routes/kr_market_vcp_signal_helpers.py:178` 의 `_safe_int(..., default=0)`
+  - `app/routes/kr_market_jongga_reanalysis_helpers.py:123` 의 `matched_result.get("confidence", 0)`
+  - `engine/llm_analyzer_parsers.py:102` 의 `item.get("confidence", 0)`. 여기는 형 변환도
+    없어서 LLM 이 낸 문자열이 그대로 흐릅니다. `engine/vcp_ai_analyzer_helpers.py:221` 의
+    `_normalize_confidence_value` 가 같은 일을 이미 하고 있으므로 그것을 재사용합니다
+- [ ] 다섯 자리가 값 없음을 `None` 으로 돌려주도록 수정하고, 값이 있으면 숫자로 정규화
+- [ ] `tests/app/test_vcp_failed_ai_filter.py` 가 `ai_confidence: 0` 을 실패 판정의 입력으로
+      쓰고 있으므로 판정 기준이 어긋나지 않는지 확인
+- [ ] VCP 화면의 확신도 표시도 값 없음을 처리하는지 확인하고 필요하면 함께 수정
+- [ ] pytest·vitest 전체 통과와 두 화면 실측
 
 ## P2 — 대기
 

@@ -56,7 +56,7 @@ interface ScoreDetail {
   total: number;
   ai_evaluation?: {
     action: 'BUY' | 'HOLD' | 'SELL';
-    confidence: number;
+    confidence?: number;
     model?: string;
     reason?: string;
   };
@@ -120,7 +120,7 @@ interface Signal {
   };
   ai_evaluation?: {
     action: 'BUY' | 'HOLD' | 'SELL';
-    confidence: number;
+    confidence?: number;
     model?: string;
     reason?: string;
   };
@@ -1947,23 +1947,26 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
     const isBuy = reasonText.includes('BUY') || reasonText.includes('매수') || reasonText.includes('긍정') || reasonText.includes('상승');
     const isSell = reasonText.includes('SELL') || reasonText.includes('매도') || reasonText.includes('부정') || reasonText.includes('하락');
 
-    // 단순 텍스트만 있는 경우
+    // 단순 텍스트만 있는 경우. 확신도는 값 자체가 없으므로 채우지 않는다.
     aiEval = {
       action: isBuy ? 'BUY' : (isSell ? 'SELL' : 'HOLD'),
-      confidence: 0, // 신뢰도 데이터 없음
       reason: reasonText,
       model: signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || DEFAULT_AI_MODEL_LABEL
     };
   }
 
-  // 여전히 없다면 등급 기반 추정 (또는 대기 상태 표시)
-  if (!aiEval) {
-    aiEval = {
-      action: ['S', 'A'].includes(signal.grade) ? 'BUY' : 'HOLD',
-      confidence: signal.score.total * 8 + (signal.grade === 'S' ? 10 : 0),
-      model: signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || 'Est. (Waiting for AI)'
-    };
-  }
+  // [JONGGA-004] 여기서 등급으로 확신도를 지어내지 않는다. AI 결과가 없는 상태는
+  // aiEval 이 없는 것으로 두고, 렌더 쪽에서 대기 상태로 표시한다.
+  // 재분석 경로(engine/llm_analyzer_parsers.py:102)는 LLM 이 낸 값을 형 변환 없이
+  // 넘기므로 "80" 같은 문자열이 올라올 수 있다. 숫자로 읽히면 살리고, 그렇지 않으면
+  // 값이 없는 것으로 본다. 상한과 하한을 함께 조여 막대 너비가 음수가 되지 않게 한다.
+  const rawConfidence: unknown = aiEval?.confidence;
+  const parsedConfidence = typeof rawConfidence === 'number'
+    ? rawConfidence
+    : (typeof rawConfidence === 'string' ? parseFloat(rawConfidence) : NaN);
+  const confidencePct = Number.isFinite(parsedConfidence)
+    ? Math.min(Math.max(parsedConfidence, 0), 100)
+    : null;
 
   return (
     <div className="rounded-2xl border border-white/10 bg-[#1c1c1e] overflow-hidden transition-all hover:border-white/20">
@@ -2124,34 +2127,43 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </div>
           </div>
 
-          {/* AI Analysis Result (Action / Confidence) - NEW */}
-          {aiEval && (
-            <div className="flex items-center justify-between bg-white/5 rounded-lg p-2 mb-3">
-              <Tooltip content="Gemini AI의 매매 추천입니다. BUY(매수), HOLD(관망), SELL(매도) 중 하나입니다." position="bottom" align="left" wide>
-                <div className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-help ${aiEval.action === 'BUY' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' :
-                  aiEval.action === 'SELL' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                    'bg-gray-500/20 text-gray-400 border-gray-500/30'
-                  }`}>
-                  {aiEval.action}
-                </div>
-              </Tooltip>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                  확신도
-                  <Tooltip content="AI가 평가한 추천 신뢰도입니다. 높을수록 강력한 시그널입니다.">
-                    <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
-                  </Tooltip>
-                </span>
-                <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${aiEval.confidence >= 80 ? 'bg-purple-500' : aiEval.confidence >= 60 ? 'bg-indigo-500' : 'bg-gray-500'}`}
-                    style={{ width: `${Math.min(aiEval.confidence, 100)}%` }}
-                  ></div>
-                </div>
-                <span className="text-[10px] font-mono text-white">{Math.min(aiEval.confidence, 100).toFixed(0)}%</span>
+          {/* AI Analysis Result (Action / Confidence) */}
+          <div className="flex items-center justify-between bg-white/5 rounded-lg p-2 mb-3">
+            <Tooltip
+              content={aiEval
+                ? 'Gemini AI가 분석한 결과에서 읽은 매매 추천입니다. BUY(매수), HOLD(관망), SELL(매도) 중 하나입니다.'
+                : '이 종목은 아직 AI 분석을 받지 않았습니다. 매매 추천과 확신도는 AI 분석이 끝난 뒤에 표시됩니다.'}
+              position="bottom" align="left" wide
+            >
+              <div className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-help ${aiEval?.action === 'BUY' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' :
+                aiEval?.action === 'SELL' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                  'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                }`}>
+                {aiEval?.action ?? 'AI 분석 대기'}
               </div>
+            </Tooltip>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                확신도
+                <Tooltip content="Gemini AI가 산출한 추천 신뢰도입니다. 높을수록 강력한 시그널이며, 값이 없으면 미산출로 표시합니다.">
+                  <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
+                </Tooltip>
+              </span>
+              {confidencePct !== null ? (
+                <>
+                  <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${confidencePct >= 80 ? 'bg-purple-500' : confidencePct >= 60 ? 'bg-indigo-500' : 'bg-gray-500'}`}
+                      style={{ width: `${confidencePct}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-[10px] font-mono text-white">{confidencePct.toFixed(0)}%</span>
+                </>
+              ) : (
+                <span className="text-[10px] font-mono text-gray-500">미산출</span>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Chart Area */}
           {/* Chart Area */}
