@@ -1000,32 +1000,34 @@ export default function JonggaV2Page() {
     }
   })();
 
-  const isBulkBuyClosingBetDisabled =
-    isBulkBuyingClosingBet ||
-    loading ||
-    !data?.signals?.length ||
-    selectedDate !== 'latest' ||
-    !isLatestReportToday;
+  // 날짜 조건은 일괄 매수와 카드별 매수가 함께 쓴다. 한쪽만 막으면 개별 주문을 종목 수만큼
+  // 반복해 일괄 매수가 막으려던 결과에 그대로 도달한다.
+  const buyDisabledReason = (() => {
+    if (selectedDate !== 'latest') return 'Latest Report(최신 리포트)에서만 매수를 실행할 수 있습니다.';
+    if (!isLatestReportToday) return '현재 최신 리포트가 오늘 데이터가 아닙니다.';
+    return '';
+  })();
 
   const bulkBuyClosingBetDisabledReason = (() => {
     if (isBulkBuyingClosingBet) return '종가베팅 일괄 매수를 진행 중입니다.';
     if (loading) return '종가베팅 데이터를 불러오는 중입니다.';
-    if (selectedDate !== 'latest') return 'Latest Report(최신 리포트)에서만 일괄 매수를 실행할 수 있습니다.';
-    if (!isLatestReportToday) return '현재 최신 리포트가 오늘 데이터가 아닙니다.';
+    if (buyDisabledReason) return buyDisabledReason;
     if (!data?.signals?.length) return '오늘 종가베팅 매수 대상 종목이 없습니다.';
     return '';
   })();
+
+  const isBulkBuyClosingBetDisabled = Boolean(bulkBuyClosingBetDisabledReason);
 
   const bulkBuyClosingBetTooltip = bulkBuyClosingBetDisabledReason || '오늘 종가베팅 종목 전체를 10주씩 매수합니다.';
 
   const handleBulkBuyClosingBet = async () => {
     if (isBulkBuyingClosingBet) return;
-    if (selectedDate !== 'latest' || !isLatestReportToday) {
+    if (buyDisabledReason) {
       setAlertModal({
         isOpen: true,
         type: 'default',
         title: '오늘 데이터만 가능',
-        content: '최신(오늘) 종가베팅 리포트에서만 일괄 매수를 실행할 수 있습니다.'
+        content: buyDisabledReason
       });
       return;
     }
@@ -1552,6 +1554,7 @@ export default function JonggaV2Page() {
                 onRetry={handleRetryAnalysis}
                 isRetrying={retryingTicker === signal.stock_code}
                 isAdmin={isAdmin}
+                buyDisabledReason={buyDisabledReason}
               />
             ))
         )}
@@ -1902,7 +1905,7 @@ function StatBox({ label, value, highlight = false, customValue, tooltip }: { la
 // AI 평가에 모델명이 없을 때 쓰는 표시용 기본값. 두 곳에서 갈라지지 않도록 한 자리에 둔다.
 const DEFAULT_AI_MODEL_LABEL = 'Gemini 3.7 Flash';
 
-function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, isRetrying, isAdmin }: {
+function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, isRetrying, isAdmin, buyDisabledReason }: {
   signal: Signal,
   index: number,
   onOpenChart: () => void,
@@ -1910,8 +1913,10 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
   onBuy: () => void,
   onRetry: (code: string) => void,
   isRetrying: boolean,
-  isAdmin: boolean
+  isAdmin: boolean,
+  buyDisabledReason: string
 }) {
+  const buyTooltip = buyDisabledReason || '모의 계좌로 매수 주문을 실행합니다.';
   const gradeStyles: Record<string, { bg: string, text: string, border: string }> = {
     S: { bg: 'bg-indigo-500/20', text: 'text-indigo-400', border: 'border-indigo-500/30' },
     A: { bg: 'bg-rose-500/20', text: 'text-rose-400', border: 'border-rose-500/30' },
@@ -2460,7 +2465,9 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </button>
             <button
               onClick={onBuy}
-              className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] flex items-center justify-center gap-2 group/buy"
+              disabled={Boolean(buyDisabledReason)}
+              title={buyTooltip}
+              className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] flex items-center justify-center gap-2 group/buy disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-amber-600 disabled:hover:to-orange-600 disabled:active:scale-100"
             >
               <i className="fas fa-shopping-cart transition-transform group-hover/buy:scale-110"></i>
               모의 매수
