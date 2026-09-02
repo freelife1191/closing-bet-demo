@@ -4,15 +4,16 @@
 
 ## 1. 현재 전제
 
-2026-09-01 실측 결과이며, Next.js 행은 `[FE-002]` 가 끝난 2026-09-02 에 갱신했다.
+2026-09-01 실측 결과이며, Next.js 행은 `[FE-002]` 가, 라우트와 클라이언트 컴포넌트 행은
+`[INFRA-010]` 이 2026-09-02 에 갱신했다.
 
 | 항목 | 값 |
 |---|---|
 | Next.js | 16.3.4 (2026-09-02 기준 최신) |
 | React | 19.2.4 |
 | 라우터 | App Router, 루트는 `frontend/src/app` |
-| 라우트 | 페이지 6개, API 라우트 1개 |
-| 클라이언트 컴포넌트 | 49개 중 26개가 `'use client'` |
+| 라우트 | 페이지 7개, API 라우트 1개 |
+| 클라이언트 컴포넌트 | 25개. `frontend/src` 의 `.tsx` 47개 가운데 24개와 `useAdmin.ts` |
 | Cache Components | 미적용. `next.config.js` 에 `cacheComponents` 키가 없다 |
 | agent-browser | 0.31.1 |
 

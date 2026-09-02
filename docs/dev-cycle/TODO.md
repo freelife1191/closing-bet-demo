@@ -13,21 +13,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-010] 규약 문서의 담당 경로 공백을 메운다
-- 카테고리: 인프라 | 티어: 문서 | 근거: AUDIT-FE 와 AUDIT-VCP 의 담당 경로 밖 관찰
-- 두 감사가 각각 짚었습니다. 담당 카테고리가 없는 코드가 있으면 그 코드는 어느 감사에서도
-  다뤄지지 않고 남습니다.
-- [ ] `archive-format.md` §2 표에 `frontend/src/app/dashboard/kr/page.tsx` 와
-      `cumulative/`, `data-status/` 세 경로의 담당 카테고리를 배정
-- [ ] 같은 표에 `services/kr_market_vcp_*.py` 여섯 파일의 담당 카테고리를 배정.
-      실제 VCP 응답을 만드는 파일인데 어느 행에도 잡히지 않습니다
-- [ ] `frontend-skills.md` §1 의 `'use client'` 파일 수를 26개에서 25개로 정정.
-      `not-found.tsx` 는 주석 문구가 검색에 잡혔을 뿐 서버 컴포넌트입니다
-- [ ] 같은 표의 라우트 수를 「페이지 6개」에서 7개로 정정.
-      `find frontend/src/app -name 'page.tsx'` 가 일곱 개를 돌려줍니다. API 라우트는
-      `api/auth/[...nextauth]/route.ts` 하나뿐이므로 1개가 맞습니다
-- [ ] 표에 적은 경로가 모두 실재하는지 확인
-
 ### [JONGGA-001] generator.py 의 인라인 페이즈 로직을 phases 모듈로 교체
 - 카테고리: 종가베팅 | 티어: T3 | 근거: CLAUDE.md 이관
 - [ ] `engine/generator.py` 의 인라인 페이즈 로직 범위 확정
@@ -348,15 +333,16 @@
 - [ ] 시크릿 확인 세 가지 수행
 
 
-### [INFRA-020] Flask 가 존재하지 않는 경로에 404 대신 500 을 돌려준다
-- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-02 FE-002 마감 qa-only ISSUE-001
-- 없는 API 경로를 부르면 HTTP 상태가 500 으로 나갑니다. 본문에는 사유가 404 였다고
-  적혀 있는데도 상태 코드만 바뀝니다. 응답의 `type` 필드에 `NotFound` 가 그대로
-  실려 나오므로, 전역 예외 핸들러가 werkzeug 의 `NotFound` 를 일반 예외와 함께
-  잡아 500 으로 감싸고 있는 것으로 보입니다.
-- 한 경로만의 문제가 아닙니다. `/api/chat/sessions`, `/api/chatbot/sessions`,
-  `/api/chat/history`, `/api/chat/session`, `/api/kr/chat/sessions` 다섯 개가 모두
-  같은 형태로 500 을 돌려주는 것을 확인했습니다.
+### [INFRA-017] 존재하지 않는 API 경로가 404 대신 500 을 돌려준다
+- 카테고리: 인프라 | 티어: T2 | 근거: [FE-004] 사이클의 실측, [FE-002] 마감 qa-only ISSUE-001
+- 관찰: `curl http://localhost:5501/api/health` 가 500 과 함께 본문에
+  `"error": "Internal Server Error", "message": "404 Not Found: ..."` 를 돌려줍니다.
+  존재하지 않는 경로이므로 404 가 나가야 하는데, 전역 예외 처리기가 `NotFound` 까지
+  삼켜 500 으로 바꾸고 `logs/backend.log` 에 `CRITICAL SERVER ERROR` 로 남깁니다.
+- 한 경로만의 문제가 아닙니다. 2026-09-02 실측에서 `/api/chat/sessions`,
+  `/api/chatbot/sessions`, `/api/chat/history`, `/api/chat/session`,
+  `/api/kr/chat/sessions` 다섯 개가 모두 같은 형태로 500 을 돌려주는 것을
+  확인했습니다. 응답의 `type` 필드에는 `NotFound` 가 그대로 실려 나옵니다.
 - 재현: `curl -i http://localhost:5501/api/chat/sessions` 를 실행하면 첫 줄이
   `HTTP/1.1 500 INTERNAL SERVER ERROR` 이고 본문에 `"type": "NotFound"` 가 실립니다.
 - 호출하는 쪽이 「경로가 없음」과 「서버가 고장남」을 구분할 수 없습니다. 프론트엔드의
@@ -364,10 +350,9 @@
   모니터링에서는 경로 오타 하나가 서버 장애로 집계됩니다.
 - 전역 오류 처리를 바꾸면 모든 API 응답의 상태 코드에 영향을 주므로 T2 로 봅니다.
   계획 단계에서 실제 수정 파일로 다시 판정합니다.
-- [ ] 전역 예외 핸들러가 등록된 자리를 찾아 `HTTPException` 계열이 어떻게 처리되는지 확인
-- [ ] `NotFound` 를 비롯한 `HTTPException` 이 자신의 상태 코드를 그대로 유지하도록 수정
-- [ ] 없는 경로가 404 를, 실제 예외가 500 을 돌려주는지 확인하는 검사 추가
-
+- [ ] 전역 예외 처리기가 `werkzeug.exceptions.HTTPException` 을 그대로 통과시키도록 수정
+- [ ] 오탐 로그가 사라지는지 `logs/backend.log` 로 확인
+- [ ] 없는 경로가 404 를, 실제 서버 오류가 500 을 돌려주는지 구분하는 회귀 검사 추가
 
 ## P2 — 대기
 
@@ -480,16 +465,6 @@
   의 백로그 대조에서 T2 오기를 발견해 정정했습니다.
 - [ ] 섹터별 수급 집계 설계
 - [ ] 기존 `services/investor_trend_5day_service.py` 와의 경계 정리
-
-### [INFRA-017] 존재하지 않는 API 경로가 404 대신 500 을 돌려준다
-- 카테고리: 인프라 | 티어: T2 | 근거: [FE-004] 사이클의 실측
-- 관찰: `curl http://localhost:5501/api/health` 가 500 과 함께 본문에
-  `"error": "Internal Server Error", "message": "404 Not Found: ..."` 를 돌려줍니다.
-  존재하지 않는 경로이므로 404 가 나가야 하는데, 전역 예외 처리기가 `NotFound` 까지
-  삼켜 500 으로 바꾸고 `logs/backend.log` 에 `CRITICAL SERVER ERROR` 로 남깁니다.
-- [ ] 전역 예외 처리기가 `werkzeug.exceptions.HTTPException` 을 그대로 통과시키도록 수정
-- [ ] 오탐 로그가 사라지는지 `logs/backend.log` 로 확인
-- [ ] 없는 경로와 실제 서버 오류를 구분하는 회귀 검사 추가
 
 ### [INFRA-002] 타입 힌트 보강
 - 카테고리: 인프라 | 티어: T2 | 근거: CLAUDE.md 이관

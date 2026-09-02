@@ -24,10 +24,16 @@ docs/dev-cycle/
 |---|---|---|
 | `CHAT` | 챗봇 | `chatbot/`, `app/routes/kr_market_chatbot_*`, `frontend/src/app/chatbot/` |
 | `JONGGA` | 종가베팅 | `app/routes/kr_market_jongga_*`, `frontend/src/app/dashboard/kr/closing-bet/` |
-| `VCP` | VCP 시그널 | `engine/vcp_ai_analyzer*`, `app/routes/kr_market_vcp_*`, `frontend/src/app/dashboard/kr/vcp/` |
-| `FLOW` | 수급·백테스트 | `services/investor_trend*`, `services/kr_market_backtest_*`, `services/kr_market_flow_service.py` |
-| `FE` | 프론트엔드 공통 | `frontend/src/app/components/`, `frontend/src/lib/` |
-| `INFRA` | 인프라·패키지 | `requirements.txt`, `frontend/package.json`, `services/scheduler*`, `scripts/init_data.py` |
+| `VCP` | VCP 시그널 | `engine/vcp_ai_analyzer*`, `app/routes/kr_market_vcp_*`, `services/kr_market_vcp_*`, `frontend/src/app/dashboard/kr/vcp/` |
+| `FLOW` | 수급·백테스트 | `services/investor_trend*`, `services/kr_market_backtest_*`, `services/kr_market_flow_service.py`, `frontend/src/app/dashboard/kr/cumulative/` |
+| `FE` | 프론트엔드 공통 | `frontend/src/app/components/`, `frontend/src/lib/`, `frontend/src/app/dashboard/kr/page.tsx` |
+| `INFRA` | 인프라·패키지 | `requirements.txt`, `frontend/package.json`, `services/scheduler*`, `scripts/init_data.py`, `frontend/src/app/dashboard/data-status/` |
+
+대시보드 화면 세 개는 담당 API 로 갈랐다. `dashboard/kr/` 홈은 백테스트 요약과 갱신
+설정을 얕게 걸칠 뿐 특정 기능에 속하지 않아 `FE` 다. `cumulative/` 는
+`/api/kr/closing-bet/cumulative` 하나만 부르므로 백테스트를 이미 담당하는 `FLOW` 이고,
+`data-status/` 는 `/api/system/*` 과 수집 갱신 제어를 부르므로 스케줄러를 담당하는
+`INFRA` 다. 한 항목이 여러 경로를 건드리면 주된 대상이 있는 카테고리를 쓴다.
 
 일련번호는 카테고리별로 독립 증가하며 완료 후에도 재사용하지 않는다. 다음 번호는
 `TODO.md` 와 `archive/` 전체에서 해당 약어의 최대 번호에 1을 더해 정한다.
