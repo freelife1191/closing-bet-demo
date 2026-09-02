@@ -11,20 +11,50 @@
 
 ## P0 — 즉시
 
-## P1 — 이번 주기
+### [VCP-015] 두 번째 AI 프로바이더의 폴백 결과를 재분석 캐시 판정이 따라가게 한다
+- 카테고리: VCP 시그널 | 티어: T3 | 근거: `[VCP-003]` 사이클의 리뷰 네 종이 독립적으로 확인
+- 관찰: `[VCP-003]` 이 `engine/vcp_ai_orchestration_helpers.py:44-45` 에 넣은 폴백은 함수의
+  지역 변수만 바꿉니다. `engine/vcp_ai_analyzer.py:91` 의 `self.second_provider` 와
+  `app_config.VCP_SECOND_PROVIDER` 원본에는 반영되지 않습니다.
+- 그래서 `services/kr_market_vcp_reanalysis_service.py:517-518` 이 설정값만 읽어
+  `resolve_vcp_second_recommendation_key` 로 캐시 키를 정합니다. `VCP_SECOND_PROVIDER=perplexity`
+  이고 `PERPLEXITY_API_KEY` 가 없는 환경에서 이 함수는 `perplexity_recommendation` 을
+  돌려주는데, 폴백이 만든 실제 결과는 `gpt_recommendation` 에 담깁니다. 그러면
+  `collect_missing_vcp_ai_rows`(`:216-238`)의 `second_missing` 이 모든 종목에서 항상 참이
+  되어, 재분석을 부를 때마다 스코프 안의 전 종목이 Gemini 와 GPT 를 다시 호출합니다.
+- P0 인 이유는 이렇습니다. `[VCP-003]` 이전에는 두 번째 프로바이더를 아예 부르지 않아
+  호출 비용이 들지 않았습니다. 지금은 GPT 를 매번 부른 뒤 그 결과를 캐시 판정에서 버리므로
+  비용 측면에서는 오히려 나빠졌습니다.
+- `.env.example` 을 `gpt` 로 맞춘 것은 새로 만드는 환경만 보호합니다. 이미 배포된 `.env` 에
+  `perplexity` 가 남아 있으면 그대로 재현됩니다. 이 저장소의 `.env` 와 `.env.production` 은
+  이미 `gpt` 이지만 다른 배포 환경은 확인하지 못했습니다.
+- 함께 볼 것이 하나 더 있습니다. `providers` 에 `gpt` 가 없는 구성(예:
+  `VCP_AI_PROVIDERS=gemini,perplexity`)에서는 폴백을 해도 두 번째 열이 빕니다. 그런데
+  `orchestrate_stock_analysis:59` 의 경고는 `tasks` 가 통째로 빌 때만 나오므로, Gemini 가
+  도는 운영 상황에서는 로그에 아무것도 남지 않습니다. 두 번째 열이 왜 비었는지 알아낼
+  방법이 없습니다. 이 침묵은 `[VCP-003]` 이전에도 같았으나 폴백을 넣은 지금은 "폴백이
+  있으니 채워질 것" 이라는 기대와 어긋나므로 함께 정리합니다.
+- `engine/vcp_ai_analyzer.py` 가 `tier-rules.md` §2 의 위험 경로이므로 T3 입니다.
+- [ ] 폴백 판정을 `engine/vcp_ai_provider_init_helpers.py` 의 함수 하나로 뽑아 오케스트레이터와
+      재분석 서비스가 같은 규칙을 쓰게 한다
+- [ ] 두 번째 프로바이더를 실행할 수 없는 조합에서 경고를 남긴다. 지금 그 침묵을 고정하고
+      있는 `test_disabled_perplexity_without_gpt_leaves_second_column_silently_empty` 를
+      새 동작에 맞게 고친다
+- [ ] `VCPMultiAIAnalyzer.__init__` 에서 `self.second_provider` 를 확정할지, 재분석 서비스가
+      analyzer 의 값을 읽게 할지 결정하고 한쪽으로 통일
+- [ ] 설정이 `perplexity` 이고 키가 없을 때 캐시 판정이 `gpt_recommendation` 을 보는지 확인하는
+      pytest 추가
+- [ ] 종목당 호출이 두 배가 되는 구간에서 GPT 레이트 리밋에 걸리는지 관측. 캐시 판정을 고치면
+      정상 범위로 돌아온다는 것이 성능 리뷰의 판단이므로 먼저 고친 뒤에 본다
+- [ ] 두 번째 프로바이더의 이름을 화면 세 곳에서 통일한다. `[VCP-003]` 사이클의 `/qa-only`
+      실측(`.gstack/qa-reports/qa-report-localhost-3500-2026-09-02-vcp-003.md` ISSUE-001)이
+      찾은 불일치다. VCP 표 헤더는 `GPT` 로 고정되어 있고, 재분석 모드 셀렉트는
+      `Second 강제`(내부 값 `second`)이며, VCP 기준표 모달은 "설정에 따라 GPT 또는
+      Perplexity" 라고 안내한다. 설정이 `perplexity` 인 환경에서는 열 이름이 실제
+      프로바이더와 어긋난다. 백엔드가 실제로 고른 프로바이더를 응답에 실어 헤더가 그 값을
+      따라가게 하는 것이 이 항목의 나머지 체크박스와 같은 뿌리다
 
-### [VCP-003] 두 번째 AI 프로바이더 폴백 누락 수정
-- 카테고리: VCP 시그널 | 티어: T1 | 근거: AUDIT-VCP §1.3
-- 티어 근거: `engine/vcp_ai_orchestration_helpers.py` 한 파일이며 `tier-rules.md` §2 의
-  위험 경로 목록에 없습니다. 구현 변경은 다섯 줄 안팎입니다. 다만 이 파일이 VCP 판정
-  경로인데도 위험 경로 목록에서 빠져 있다는 점은 별도로 확인이 필요하므로 체크박스에
-  넣었습니다.
-- [ ] Perplexity 가 비활성일 때 GPT 분기로 이어지도록 조건 수정
-- [ ] `.env.example` 의 `VCP_SECOND_PROVIDER` 권장 값과 `engine/config.py:199` 의 기본값이
-      어긋난 상태를 정리
-- [ ] 키가 없는 환경에서 GPT 가 두 번째 프로바이더로 선택되는지 확인하는 pytest 추가
-- [ ] `engine/vcp_ai_orchestration_helpers.py` 를 `tier-rules.md` §2 위험 경로에 넣을지
-      판단하고, 넣는다면 같은 커밋에서 목록을 갱신
+## P1 — 이번 주기
 
 ### [CHAT-002] 계산해 놓고 버려지는 세 값 복구
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §1.2, §1.3, §1.4

@@ -38,15 +38,21 @@ async def orchestrate_stock_analysis(
 
     skip_gemini = bool(stock_data.get("skip_gemini"))
     skip_second = bool(stock_data.get("skip_second"))
+
+    # Perplexity 를 쓸 수 없으면 두 번째 자리를 GPT 에 넘긴다. 넘기지 않으면 아래 분기가
+    # perplexity 쪽에서 멈춰 두 번째 AI 열이 모든 종목에서 비어 버린다. 다만 providers 에
+    # gpt 가 없으면 이 폴백으로도 두 번째 열은 빈 채로 남는다.
+    if second_provider == "perplexity" and perplexity_disabled:
+        second_provider = "gpt"
+
     if "gemini" in providers and not skip_gemini:
         tasks.append(analyze_with_gemini_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("gemini")
 
     if not skip_second and second_provider == "perplexity" and ("perplexity" in providers or "gpt" in providers):
-        if not perplexity_disabled:
-            tasks.append(analyze_with_perplexity_fn(stock_name, stock_data, shared_prompt))
-            providers_map.append("perplexity")
-    elif not skip_second and second_provider == "gpt" and ("gpt" in providers or "openai" in providers):
+        tasks.append(analyze_with_perplexity_fn(stock_name, stock_data, shared_prompt))
+        providers_map.append("perplexity")
+    elif not skip_second and second_provider == "gpt" and "gpt" in providers:
         tasks.append(analyze_with_gpt_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("gpt")
 
