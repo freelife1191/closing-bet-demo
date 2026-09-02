@@ -9,6 +9,9 @@ from typing import Any, Optional
 
 import pandas as pd
 
+# 이 두 상수는 프론트엔드에도 같은 내용이 있다. 화면은 병합된 응답이 비면 원시
+# 캐시를 다시 보므로, 그쪽에서도 같은 기준으로 실패 기록을 걸러야 한다.
+# 여기를 고치면 frontend/src/app/dashboard/kr/vcp/aiHelpers.ts 도 함께 고친다.
 _VALID_AI_ACTIONS = {"BUY", "SELL", "HOLD"}
 _INVALID_AI_REASONS = {
     "",

@@ -11,7 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAdmin } from '@/hooks/useAdmin';
 import ThinkingProcess from '@/app/components/ThinkingProcess';
-import { decideSecondaryAI } from './aiHelpers';
+import { decideSecondaryAI, isValidAIRecommendation } from './aiHelpers';
 
 // Simple Tooltip Component
 const SimpleTooltip = ({
@@ -424,10 +424,10 @@ export default function VCPSignalsPage() {
   // Priority: Perplexity (when data exists) → GPT (when Perplexity is absent but GPT exists)
   //           → 'gpt' safe default (neither has data; column renders no badge instead of empty Perplexity column)
   const secondaryAI = useMemo(() => {
-    const hasPerplexity = signals.some(s => s.perplexity_recommendation)
-      || aiData?.signals?.some(s => s.perplexity_recommendation);
-    const hasGpt = signals.some(s => s.gpt_recommendation)
-      || aiData?.signals?.some(s => s.gpt_recommendation);
+    const hasPerplexity = signals.some(s => isValidAIRecommendation(s.perplexity_recommendation))
+      || aiData?.signals?.some(s => isValidAIRecommendation(s.perplexity_recommendation));
+    const hasGpt = signals.some(s => isValidAIRecommendation(s.gpt_recommendation))
+      || aiData?.signals?.some(s => isValidAIRecommendation(s.gpt_recommendation));
     return decideSecondaryAI(!!hasPerplexity, !!hasGpt);
   }, [signals, aiData]);
 
@@ -441,9 +441,9 @@ export default function VCPSignalsPage() {
 
     // Helper to check existence
     const hasData = (type: 'gpt' | 'gemini' | 'perplexity') => {
-      if (type === 'gpt') return !!(signal?.gpt_recommendation || stock?.gpt_recommendation);
-      if (type === 'perplexity') return !!(signal?.perplexity_recommendation || stock?.perplexity_recommendation);
-      return !!(signal?.gemini_recommendation || stock?.gemini_recommendation);
+      if (type === 'gpt') return [signal?.gpt_recommendation, stock?.gpt_recommendation].some(isValidAIRecommendation);
+      if (type === 'perplexity') return [signal?.perplexity_recommendation, stock?.perplexity_recommendation].some(isValidAIRecommendation);
+      return [signal?.gemini_recommendation, stock?.gemini_recommendation].some(isValidAIRecommendation);
     };
 
     // 현재 탭에 데이터가 없으면 다른 탭으로 자동 전환
@@ -920,7 +920,7 @@ export default function VCPSignalsPage() {
     else rec = signal.gemini_recommendation;
 
     // 2. Fallback to aiData (legacy/separate load)
-    if (!rec && aiData) {
+    if (!isValidAIRecommendation(rec) && aiData) {
       const stock = aiData.signals?.find((s) => s.ticker === signal.ticker);
       if (stock) {
         if (model === 'gpt') rec = stock.gpt_recommendation;
@@ -929,7 +929,7 @@ export default function VCPSignalsPage() {
       }
     }
 
-    if (!rec) return <span className="text-gray-500 text-[10px]">-</span>;
+    if (!isValidAIRecommendation(rec)) return <span className="text-gray-500 text-[10px]">-</span>;
 
     const badge =
       AI_ACTION_BADGES[rec.action?.toUpperCase() as keyof typeof AI_ACTION_BADGES];
@@ -1676,9 +1676,9 @@ export default function VCPSignalsPage() {
 
                 // Helper to get rec from either source (Explicit access to avoid TS index errors)
                 const getRec = (type: 'gpt' | 'gemini' | 'perplexity'): AIRecommendation | undefined => {
-                  if (type === 'gpt') return signal?.gpt_recommendation || stock?.gpt_recommendation;
-                  if (type === 'perplexity') return signal?.perplexity_recommendation || stock?.perplexity_recommendation;
-                  return signal?.gemini_recommendation || stock?.gemini_recommendation;
+                  if (type === 'gpt') return [signal?.gpt_recommendation, stock?.gpt_recommendation].find(isValidAIRecommendation);
+                  if (type === 'perplexity') return [signal?.perplexity_recommendation, stock?.perplexity_recommendation].find(isValidAIRecommendation);
+                  return [signal?.gemini_recommendation, stock?.gemini_recommendation].find(isValidAIRecommendation);
                 };
 
                 let rec;
