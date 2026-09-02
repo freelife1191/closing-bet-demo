@@ -27,6 +27,9 @@ from app.routes import kr_market
 
 
 class _DummyVcpAnalyzer:
+    # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+    second_provider = "gpt"
+
     def get_available_providers(self):
         return ["gemini"]
 

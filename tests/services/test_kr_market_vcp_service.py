@@ -275,6 +275,9 @@ def test_execute_vcp_failed_ai_reanalysis_writes_signals_csv_atomically(monkeypa
     signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -300,7 +303,6 @@ def test_execute_vcp_failed_ai_reanalysis_writes_signals_csv_atomically(monkeypa
     import services.kr_market_vcp_reanalysis_service as reanalysis_service
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     write_calls: dict[str, str] = {}
 
@@ -375,6 +377,9 @@ def test_execute_vcp_failed_ai_reanalysis_preserves_full_csv_columns_with_partia
     full_signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -400,7 +405,6 @@ def test_execute_vcp_failed_ai_reanalysis_preserves_full_csv_columns_with_partia
     import services.kr_market_vcp_reanalysis_service as reanalysis_service
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     write_calls = {}
 
@@ -483,6 +487,9 @@ def test_execute_vcp_failed_ai_reanalysis_prefers_deep_copy_false_for_persist_lo
     full_signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -508,7 +515,6 @@ def test_execute_vcp_failed_ai_reanalysis_prefers_deep_copy_false_for_persist_lo
     import services.kr_market_vcp_reanalysis_service as reanalysis_service
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     write_calls: dict[str, str] = {}
 
@@ -568,6 +574,9 @@ def test_execute_vcp_failed_ai_reanalysis_force_gemini_skips_cache_load(monkeypa
     signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -588,7 +597,6 @@ def test_execute_vcp_failed_ai_reanalysis_force_gemini_skips_cache_load(monkeypa
     import services.kr_market_vcp_reanalysis_service as reanalysis_service
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     def _must_not_call(*_args, **_kwargs):
         raise AssertionError("force gemini 경로에서 AI 캐시 로드를 호출하면 안됩니다.")
@@ -657,6 +665,9 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
     captured_stocks = {"items": []}
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -682,7 +693,6 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
     import engine.vcp_ai_analyzer as vcp_ai_analyzer
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     captured = {"called": 0, "ai_results": None}
 
@@ -707,6 +717,315 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
     assert isinstance(captured["ai_results"]["005930"]["perplexity_recommendation"], dict)
     assert captured_stocks["items"]
     assert captured_stocks["items"][0].get("skip_gemini") is True
+
+
+def test_collect_missing_vcp_ai_rows_ignores_second_column_when_key_is_none():
+    """두 번째 provider 를 실행할 수 없으면 그 열의 공백을 누락으로 세지 않는다.
+
+    채울 수 없는 열을 계속 기다리면 재분석을 부를 때마다 스코프 전체가 대상이 되어
+    Gemini 호출이 매번 다시 일어난다.
+    """
+    scoped_df = pd.DataFrame(
+        [{"ticker": "000001"}, {"ticker": "000002"}],
+        index=[1, 2],
+    )
+    ai_data_map = {
+        "000001": {"gemini_recommendation": {"action": "BUY"}},
+        "000002": {"perplexity_recommendation": {"action": "SELL"}},
+    }
+
+    rows = collect_missing_vcp_ai_rows(
+        scoped_df=scoped_df,
+        ai_data_map=ai_data_map,
+        second_recommendation_key=None,
+    )
+
+    assert [idx for idx, _ in rows] == [2]
+
+
+def test_execute_vcp_failed_ai_reanalysis_cache_key_follows_analyzer_fallback(
+    monkeypatch, tmp_path
+):
+    """설정이 perplexity 여도 analyzer 가 GPT 로 확정했으면 캐시 판정도 GPT 를 본다.
+
+    설정값만 읽던 시절에는 폴백이 채운 gpt_recommendation 을 못 보고
+    perplexity_recommendation 을 기다려, second_missing 이 항상 참이 되었다. 그러면
+    재분석 버튼을 누를 때마다 스코프 안의 전 종목이 Gemini 와 GPT 를 다시 호출한다.
+    """
+    signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "BUY",
+                "ai_reason": "기존 분석 완료",
+                "ai_confidence": 80,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+            }
+        ]
+    )
+    signals_path = tmp_path / "signals_log.csv"
+    signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    # 폴백이 만든 결과는 gpt_recommendation 에 담긴다. perplexity_recommendation 은 없다.
+    (tmp_path / "ai_analysis_results.json").write_text(
+        json.dumps(
+            {
+                "signals": [
+                    {
+                        "ticker": "005930",
+                        "gemini_recommendation": {
+                            "action": "BUY",
+                            "confidence": 80,
+                            "reason": "기존 Gemini 분석",
+                        },
+                        "gpt_recommendation": {
+                            "action": "HOLD",
+                            "confidence": 70,
+                            "reason": "폴백으로 실행한 GPT",
+                        },
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    called = {"analyze_batch": 0}
+
+    class _DummyAnalyzer:
+        # VCP_SECOND_PROVIDER 는 perplexity 이지만 키가 없어 GPT 로 확정된 상태.
+        second_provider = "gpt"
+
+        @staticmethod
+        def get_available_providers():
+            return ["gemini", "gpt"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            called["analyze_batch"] += 1
+            return {}
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+    # 이 설정은 서비스가 읽지 않지만 지우면 안 된다. 설정과 확정값이 서로 다른 상태를
+    # 만들어 두어야, 캐시 키를 app_config 에서 다시 읽도록 되돌리는 회귀를 이 검사가
+    # 잡아낸다. VCP_SECOND_PROVIDER 의 기본값이 gpt 라서 이 줄이 없으면 되돌린 코드도
+    # 같은 키를 보게 되어 검사가 그냥 통과한다.
+    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 0,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert status_code == 200
+    assert payload["failed_targets"] == 0
+    assert called["analyze_batch"] == 0
+
+
+def test_execute_vcp_failed_ai_reanalysis_skips_second_column_when_provider_is_unset(
+    monkeypatch, tmp_path
+):
+    """두 번째 provider 가 없으면 그 열의 공백을 재분석 사유로 삼지 않는다.
+
+    Gemini 가 캐시된 종목은 대상에서 빠지고, Gemini 만 빠진 종목은 대상이 되되
+    두 번째 자리를 건너뛰라는 표시를 달고 넘어간다. 채울 수 없는 열을 기다리면 재분석을
+    부를 때마다 스코프 전체가 Gemini 를 다시 호출한다.
+    """
+    signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "BUY",
+                "ai_reason": "기존 분석 완료",
+                "ai_confidence": 80,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+            },
+            {
+                "ticker": "000660",
+                "signal_date": "2026-02-21",
+                "name": "SK하이닉스",
+                "ai_action": "BUY",
+                "ai_reason": "기존 분석 완료",
+                "ai_confidence": 75,
+                "current_price": 20000,
+                "entry_price": 19800,
+                "score": 9,
+                "vcp_score": 8,
+                "contraction_ratio": 12,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+            },
+        ]
+    )
+    signals_path = tmp_path / "signals_log.csv"
+    signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    # 005930 은 Gemini 가 있고 두 번째 열만 비었다. 000660 은 그 반대다.
+    (tmp_path / "ai_analysis_results.json").write_text(
+        json.dumps(
+            {
+                "signals": [
+                    {
+                        "ticker": "005930",
+                        "gemini_recommendation": {
+                            "action": "BUY",
+                            "confidence": 80,
+                            "reason": "기존 Gemini 분석",
+                        },
+                    },
+                    {
+                        "ticker": "000660",
+                        "gpt_recommendation": {
+                            "action": "HOLD",
+                            "confidence": 70,
+                            "reason": "예전에 남은 GPT 결과",
+                        },
+                    },
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    captured_stocks = {"items": []}
+
+    class _DummyAnalyzer:
+        # 두 번째 provider 를 실행할 수 없는 구성.
+        second_provider = None
+
+        @staticmethod
+        def get_available_providers():
+            return ["gemini"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            captured_stocks["items"] = list(_stocks)
+            return {
+                "000660": {
+                    "gemini_recommendation": {
+                        "action": "HOLD",
+                        "confidence": 60,
+                        "reason": "재분석 갱신",
+                    }
+                }
+            }
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+
+    import services.kr_market_vcp_reanalysis_service as reanalysis_service
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+    monkeypatch.setattr(reanalysis_service, "atomic_write_text", lambda *_a, **_k: None)
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 0,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert status_code == 200
+    # Gemini 가 이미 있는 005930 은 두 번째 열이 비어도 대상이 아니다.
+    assert payload["failed_targets"] == 1
+    tickers = [str(item.get("ticker", "")).zfill(6) for item in captured_stocks["items"]]
+    assert tickers == ["000660"]
+    assert captured_stocks["items"][0].get("skip_second") is True
+
+
+def test_execute_vcp_failed_ai_reanalysis_force_second_reports_unavailable_provider(
+    monkeypatch, tmp_path
+):
+    """두 번째 provider 를 실행할 수 없으면 Second 강제 재분석을 원인과 함께 거절한다.
+
+    get_available_providers 는 클라이언트가 떠 있는지만 본다. 이 가드가 없으면 스코프
+    전체가 대상으로 잡힌 뒤 오케스트레이터가 아무것도 실행하지 못해, 사용자에게는 이유를
+    알 수 없는 전 종목 실패로 보인다.
+    """
+    signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "005930",
+                "signal_date": "2026-02-21",
+                "name": "삼성전자",
+                "ai_action": "BUY",
+                "ai_reason": "기존 분석 완료",
+                "ai_confidence": 80,
+                "current_price": 10000,
+                "entry_price": 9900,
+                "score": 8,
+                "vcp_score": 7,
+                "contraction_ratio": 10,
+                "foreign_5d": 1,
+                "inst_5d": 1,
+                "foreign_1d": 1,
+                "inst_1d": 1,
+            }
+        ]
+    )
+    signals_path = tmp_path / "signals_log.csv"
+    signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    called = {"analyze_batch": 0}
+
+    class _DummyAnalyzer:
+        # Gemini 만 활성이고 두 번째 자리는 확정되지 않은 상태.
+        second_provider = None
+
+        @staticmethod
+        def get_available_providers():
+            return ["gemini"]
+
+        @staticmethod
+        async def analyze_batch(_stocks):
+            called["analyze_batch"] += 1
+            return {}
+
+    import engine.vcp_ai_analyzer as vcp_ai_analyzer
+
+    monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
+
+    status_code, payload = execute_vcp_failed_ai_reanalysis(
+        target_date="2026-02-21",
+        signals_df=signals_df,
+        signals_path=str(signals_path),
+        update_cache_files=lambda *_args, **_kwargs: 0,
+        logger=logging.getLogger(__name__),
+        force_provider="second",
+    )
+
+    assert status_code == 503
+    assert "VCP_SECOND_PROVIDER" in payload["message"]
+    assert called["analyze_batch"] == 0
 
 
 def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatch, tmp_path):
@@ -757,6 +1076,9 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatc
     captured_stocks = {"items": []}
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -777,7 +1099,6 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatc
     import engine.vcp_ai_analyzer as vcp_ai_analyzer
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     status_code, payload = execute_vcp_failed_ai_reanalysis(
         target_date="2026-02-21",
@@ -842,6 +1163,9 @@ def test_execute_vcp_failed_ai_reanalysis_force_gemini_reanalyzes_all_scoped_row
     captured_stocks = {"items": []}
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -869,7 +1193,6 @@ def test_execute_vcp_failed_ai_reanalysis_force_gemini_reanalyzes_all_scoped_row
     import engine.vcp_ai_analyzer as vcp_ai_analyzer
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     status_code, payload = execute_vcp_failed_ai_reanalysis(
         target_date="2026-02-21",
@@ -918,6 +1241,9 @@ def test_execute_vcp_failed_ai_reanalysis_force_second_reanalyzes_all_scoped_row
     captured_stocks = {"items": []}
 
     class _DummyAnalyzer:
+        # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
+        second_provider = "perplexity"
+
         @staticmethod
         def get_available_providers():
             return ["gemini", "perplexity"]
@@ -938,7 +1264,6 @@ def test_execute_vcp_failed_ai_reanalysis_force_second_reanalyzes_all_scoped_row
     import engine.vcp_ai_analyzer as vcp_ai_analyzer
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     status_code, payload = execute_vcp_failed_ai_reanalysis(
         target_date="2026-02-21",

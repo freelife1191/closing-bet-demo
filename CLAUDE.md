@@ -199,6 +199,12 @@ DATA_SOURCE=krx
 SCHEDULER_ENABLED=true
 ```
 
+`VCP_AI_PROVIDERS` 와 `VCP_SECOND_PROVIDER`, 그리고 `PERPLEXITY_API_KEY` 의 유무는
+`VCPMultiAIAnalyzer` 가 만들어질 때 한 번 읽혀 두 번째 AI 프로바이더를 확정합니다. 확정한
+값은 실행 경로와 재분석 캐시 판정이 함께 씁니다. 그래서 `.env` 에서 이 값을 바꾸면 워커를
+모두 재기동해야 반영됩니다. gunicorn 이 워커별로 이 값을 따로 확정하므로, 일부 워커만
+재기동하면 같은 요청이 어느 워커에 닿느냐에 따라 다르게 동작합니다.
+
 ---
 
 ## Important Notes

@@ -217,10 +217,14 @@ def collect_missing_vcp_ai_rows(
     *,
     scoped_df: pd.DataFrame,
     ai_data_map: dict[str, dict[str, Any]],
-    second_recommendation_key: str,
+    second_recommendation_key: str | None,
 ) -> list[tuple[int, dict[str, Any]]]:
     """
     Gemini/Second AI 추천이 누락된 행을 수집한다.
+
+    second_recommendation_key 가 None 이면 두 번째 provider 를 실행할 수 없는 구성이므로
+    두 번째 열은 보지 않는다. 그러지 않으면 채울 수 없는 열을 기다리며 재분석을 부를
+    때마다 스코프 전체가 대상이 된다.
     """
     missing_rows: list[tuple[int, dict[str, Any]]] = []
     columns = list(scoped_df.columns)
@@ -231,7 +235,9 @@ def collect_missing_vcp_ai_rows(
         ai_item = ai_data_map.get(ticker, {})
 
         gemini_missing = not isinstance(ai_item.get("gemini_recommendation"), dict)
-        second_missing = not isinstance(ai_item.get(second_recommendation_key), dict)
+        second_missing = bool(second_recommendation_key) and not isinstance(
+            ai_item.get(second_recommendation_key), dict
+        )
         if gemini_missing or second_missing:
             missing_rows.append((idx, row_dict))
 
@@ -514,9 +520,20 @@ def execute_vcp_failed_ai_reanalysis(
             is_failed=_is_vcp_ai_analysis_failed,
         )
 
-        second_recommendation_key = resolve_vcp_second_recommendation_key(
-            app_config.VCP_SECOND_PROVIDER
+        # 설정값이 아니라 analyzer 가 폴백까지 반영해 확정한 provider 를 읽는다. 설정값만
+        # 읽으면 폴백이 GPT 를 실행한 환경에서 캐시 판정은 Perplexity 를 기다려, 재분석을
+        # 부를 때마다 스코프 전체가 다시 호출된다.
+        analyzer = get_vcp_analyzer()
+        effective_second_provider = analyzer.second_provider
+        second_recommendation_key = (
+            resolve_vcp_second_recommendation_key(effective_second_provider)
+            if effective_second_provider
+            else None
         )
+        required_recommendation_keys = {"gemini_recommendation"}
+        if second_recommendation_key:
+            required_recommendation_keys.add(second_recommendation_key)
+
         cache_exists = False
         ai_data_map: dict[str, dict[str, Any]] = {}
         if normalized_force_provider not in {"gemini", "second"}:
@@ -525,10 +542,7 @@ def execute_vcp_failed_ai_reanalysis(
                 signals_path=signals_path,
                 logger=logger,
                 ticker_filter=scoped_tickers,
-                required_recommendation_keys={
-                    "gemini_recommendation",
-                    second_recommendation_key,
-                },
+                required_recommendation_keys=required_recommendation_keys,
             )
 
         if normalized_force_provider in {"gemini", "second"}:
@@ -552,11 +566,22 @@ def execute_vcp_failed_ai_reanalysis(
                 mode_label=mode_label,
             )
 
-        analyzer = get_vcp_analyzer()
         if not analyzer.get_available_providers():
             return 503, {
                 "status": "error",
                 "message": "사용 가능한 AI Provider가 없습니다.",
+            }
+
+        # get_available_providers 는 클라이언트가 떠 있는지만 보고 두 번째 자리가 확정되었는지는
+        # 보지 않는다. 이 검사가 없으면 Second 강제 재분석이 스코프 전체를 대상으로 잡은 뒤
+        # 아무 provider 도 실행하지 못해, 원인을 알리지 않은 채 전 종목을 실패로 집계한다.
+        if normalized_force_provider == "second" and not effective_second_provider:
+            return 503, {
+                "status": "error",
+                "message": (
+                    "두 번째 AI Provider를 실행할 수 없습니다. "
+                    "VCP_SECOND_PROVIDER 와 VCP_AI_PROVIDERS 설정을 확인하세요."
+                ),
             }
 
         apply_rows: list[tuple[int, dict[str, Any]]] = []
@@ -580,7 +605,9 @@ def execute_vcp_failed_ai_reanalysis(
                 ticker = str(row.get("ticker", "")).zfill(6)
                 ai_item = ai_data_map.get(ticker, {})
                 has_cached_gemini = isinstance(ai_item.get("gemini_recommendation"), dict)
-                has_cached_second = isinstance(ai_item.get(second_recommendation_key), dict)
+                has_cached_second = not second_recommendation_key or isinstance(
+                    ai_item.get(second_recommendation_key), dict
+                )
 
                 is_second_only = (
                     idx not in failed_indexes

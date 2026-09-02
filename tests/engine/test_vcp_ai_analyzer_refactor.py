@@ -1133,10 +1133,73 @@ def test_analyze_with_zai_disables_session_after_prompt_echo_responses(monkeypat
     assert len(calls) == first_call_count
 
 
-def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):
+def _build_analyzer_without_clients(monkeypatch, *, providers, second_provider, has_perplexity_key):
+    """클라이언트 초기화를 막고 실제 생성자를 태워 provider 배선만 본다."""
+    import engine.vcp_ai_analyzer as analyzer_module
+
+    monkeypatch.setenv("VCP_AI_PROVIDERS", providers)
+    monkeypatch.setenv("VCP_SECOND_PROVIDER", second_provider)
+    if has_perplexity_key:
+        monkeypatch.setenv("PERPLEXITY_API_KEY", "test-perplexity-key")
+    else:
+        monkeypatch.delenv("PERPLEXITY_API_KEY", raising=False)
+
+    monkeypatch.setattr(analyzer_module, "init_gemini_client", lambda *a, **k: None)
+    monkeypatch.setattr(analyzer_module, "init_gpt_client", lambda *a, **k: None)
+    monkeypatch.setattr(analyzer_module, "init_zai_client", lambda *a, **k: None)
+
+    return analyzer_module.VCPMultiAIAnalyzer()
+
+
+def test_init_confirms_second_provider_with_fallback_applied(monkeypatch):
+    """생성자가 perplexity_disabled 를 계산한 뒤 그 값으로 두 번째 provider 를 확정한다.
+
+    resolve_effective_second_provider 자체는 단위 검사로 덮여 있지만, 생성자가 두 함수를
+    올바른 순서와 인자로 잇는지는 이 검사만 본다. 이 배선이 `[VCP-015]` 가 고친 결함의
+    자리다. 설정값을 그대로 self.second_provider 에 넣던 예전 방식으로 되돌리면 실패한다.
+    """
+    analyzer = _build_analyzer_without_clients(
+        monkeypatch,
+        providers="gemini,gpt",
+        second_provider="perplexity",
+        has_perplexity_key=False,
+    )
+
+    assert analyzer.perplexity_disabled is True
+    assert analyzer.second_provider == "gpt"
+
+
+def test_init_keeps_perplexity_when_key_is_present(monkeypatch):
+    """키가 있으면 설정한 provider 를 그대로 지킨다."""
+    analyzer = _build_analyzer_without_clients(
+        monkeypatch,
+        providers="gemini,perplexity",
+        second_provider="perplexity",
+        has_perplexity_key=True,
+    )
+
+    assert analyzer.perplexity_disabled is False
+    assert analyzer.second_provider == "perplexity"
+
+
+def test_init_leaves_second_provider_unset_when_nothing_can_run(monkeypatch):
+    """폴백할 GPT 가 허용 목록에 없으면 두 번째 자리를 비운 채로 둔다."""
+    analyzer = _build_analyzer_without_clients(
+        monkeypatch,
+        providers="gemini,perplexity",
+        second_provider="perplexity",
+        has_perplexity_key=False,
+    )
+
+    assert analyzer.second_provider is None
+
+
+def test_analyze_stock_builds_prompt_once_and_shares_to_providers():
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.providers = ["gemini", "gpt"]
     analyzer.perplexity_disabled = True
+    # __init__ 을 거치지 않으므로 resolve_effective_second_provider 의 결과를 직접 심는다.
+    analyzer.second_provider = "gpt"
 
     calls = {"prompt": 0, "gemini": 0, "gpt": 0}
 
@@ -1159,7 +1222,6 @@ def test_analyze_stock_builds_prompt_once_and_shares_to_providers(monkeypatch):
     analyzer._analyze_with_gpt = _gpt
     analyzer._analyze_with_perplexity = lambda *_a, **_k: None
 
-    monkeypatch.setenv("VCP_SECOND_PROVIDER", "gpt")
     result = asyncio.run(analyzer.analyze_stock("삼성전자", {"ticker": "005930"}))
 
     assert calls == {"prompt": 1, "gemini": 1, "gpt": 1}

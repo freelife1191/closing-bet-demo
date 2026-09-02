@@ -15,8 +15,7 @@ async def orchestrate_stock_analysis(
     stock_name: str,
     stock_data: dict[str, Any],
     providers: list[str],
-    second_provider: str,
-    perplexity_disabled: bool,
+    second_provider: str | None,
     build_prompt_fn: Callable[[str, dict[str, Any]], str],
     analyze_with_gemini_fn: Callable[[str, dict[str, Any], str | None], Awaitable[dict[str, Any] | None]],
     analyze_with_gpt_fn: Callable[[str, dict[str, Any], str | None], Awaitable[dict[str, Any] | None]],
@@ -39,20 +38,16 @@ async def orchestrate_stock_analysis(
     skip_gemini = bool(stock_data.get("skip_gemini"))
     skip_second = bool(stock_data.get("skip_second"))
 
-    # Perplexity 를 쓸 수 없으면 두 번째 자리를 GPT 에 넘긴다. 넘기지 않으면 아래 분기가
-    # perplexity 쪽에서 멈춰 두 번째 AI 열이 모든 종목에서 비어 버린다. 다만 providers 에
-    # gpt 가 없으면 이 폴백으로도 두 번째 열은 빈 채로 남는다.
-    if second_provider == "perplexity" and perplexity_disabled:
-        second_provider = "gpt"
-
     if "gemini" in providers and not skip_gemini:
         tasks.append(analyze_with_gemini_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("gemini")
 
-    if not skip_second and second_provider == "perplexity" and ("perplexity" in providers or "gpt" in providers):
+    # second_provider 는 resolve_effective_second_provider 가 폴백까지 반영해 확정한 값이다.
+    # 실행할 수 없는 조합이면 None 이 넘어오므로 두 번째 자리를 비운다.
+    if not skip_second and second_provider == "perplexity":
         tasks.append(analyze_with_perplexity_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("perplexity")
-    elif not skip_second and second_provider == "gpt" and "gpt" in providers:
+    elif not skip_second and second_provider == "gpt":
         tasks.append(analyze_with_gpt_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("gpt")
 

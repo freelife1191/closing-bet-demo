@@ -32,6 +32,7 @@ from engine.vcp_ai_provider_init_helpers import (
     init_zai_client,
     normalize_provider_list,
     normalize_provider_name,
+    resolve_effective_second_provider,
     resolve_perplexity_disabled,
 )
 from engine.vcp_ai_orchestration_helpers import (
@@ -88,7 +89,7 @@ class VCPMultiAIAnalyzer:
 
     def __init__(self):
         self.providers = normalize_provider_list(app_config.VCP_AI_PROVIDERS)
-        self.second_provider = normalize_provider_name(app_config.VCP_SECOND_PROVIDER)
+        configured_second_provider = normalize_provider_name(app_config.VCP_SECOND_PROVIDER)
 
         logger.info(f"VCP MultiAI 분석기 초기화: {self.providers}")
 
@@ -100,8 +101,16 @@ class VCPMultiAIAnalyzer:
         self.perplexity_client = None
         self.perplexity_disabled = resolve_perplexity_disabled(
             providers=self.providers,
-            second_provider=self.second_provider,
+            second_provider=configured_second_provider,
             has_api_key=bool(app_config.PERPLEXITY_API_KEY),
+            logger=logger,
+        )
+        # 폴백까지 반영한 확정값. 재분석 서비스가 캐시 키를 정할 때 이 값을 읽으므로,
+        # 실행 결과가 담기는 필드와 재분석이 기다리는 필드가 갈리지 않는다.
+        self.second_provider = resolve_effective_second_provider(
+            providers=self.providers,
+            second_provider=configured_second_provider,
+            perplexity_disabled=self.perplexity_disabled,
             logger=logger,
         )
         self.perplexity_quota_exhausted = False
@@ -635,12 +644,7 @@ class VCPMultiAIAnalyzer:
             stock_name=stock_name,
             stock_data=stock_data,
             providers=self.providers,
-            second_provider=getattr(
-                self,
-                "second_provider",
-                normalize_provider_name(app_config.VCP_SECOND_PROVIDER),
-            ),
-            perplexity_disabled=self.perplexity_disabled,
+            second_provider=self.second_provider,
             build_prompt_fn=self._build_vcp_prompt,
             analyze_with_gemini_fn=self._analyze_with_gemini,
             analyze_with_gpt_fn=self._analyze_with_gpt,
@@ -1302,6 +1306,9 @@ _vcp_analyzer = None
 
 def get_vcp_analyzer() -> VCPMultiAIAnalyzer:
     """VCP Analyzer 싱글톤 인스턴스 반환"""
+    # ponytail: 무잠금 싱글톤. __init__ 이 클라이언트 객체만 만들고 네트워크를 타지 않아
+    # 동시 초기화가 겹쳐도 가벼운 객체가 중복 생성되는 정도다. 실측으로 비용이 확인되면
+    # threading.Lock 기반 double-checked locking 을 넣는다.
     global _vcp_analyzer
     if _vcp_analyzer is None:
         _vcp_analyzer = VCPMultiAIAnalyzer()

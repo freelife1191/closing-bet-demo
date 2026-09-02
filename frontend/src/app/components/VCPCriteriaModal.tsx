@@ -86,7 +86,7 @@ export default function VCPCriteriaModal({ isOpen, onClose }: VCPCriteriaModalPr
               <span className="text-xs font-bold bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded">보조 검증</span>
             </div>
             <div className="p-4 space-y-2 text-sm text-gray-400">
-              <p>VCP 1차 통과 종목에 대해 <span className="text-indigo-400">Gemini</span>가 1차 추론을 수행하고, 환경 설정(<code className="text-gray-400">VCP_AI_PROVIDERS</code>)에 따라 <span className="text-sky-400">GPT</span> 또는 <span className="text-green-400">Perplexity</span>가 보조 검증해 매매 추천(BUY/HOLD/SELL)과 신뢰도를 산출합니다.</p>
+              <p>VCP 1차 통과 종목에 대해 <span className="text-indigo-400">Gemini</span>가 1차 추론을 수행하고, 환경 설정(<code className="text-gray-400">VCP_SECOND_PROVIDER</code>)에 따라 <span className="text-sky-400">GPT</span> 또는 <span className="text-green-400">Perplexity</span>가 보조 검증해 매매 추천(BUY/HOLD/SELL)과 신뢰도를 산출합니다.</p>
               <ul className="list-disc list-inside space-y-1 mt-2 text-gray-300">
                 <li><span className="text-indigo-400 font-bold">Gemini (Vertex AI)</span>: 1차 추론 (심층 추론·긴 컨텍스트, 기본 활성)</li>
                 <li><span className="text-sky-400 font-bold">GPT</span>: 빠른 보조 검증 (Z.ai fallback 지원, 기본 활성)</li>

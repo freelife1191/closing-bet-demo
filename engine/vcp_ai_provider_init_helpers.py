@@ -110,6 +110,37 @@ def init_zai_client(app_config: Any, logger: Any) -> Any:
         return None
 
 
+def resolve_effective_second_provider(
+    providers: list[str],
+    second_provider: str | None,
+    perplexity_disabled: bool,
+    logger: Any,
+) -> str | None:
+    """실제로 실행할 두 번째 provider 를 확정한다. 실행할 수 없으면 None 을 돌려준다.
+
+    Perplexity 를 쓸 수 없으면 GPT 로 넘긴다. 넘기지 않으면 두 번째 AI 열이 모든 종목에서
+    빈 채로 남는다. 넘긴 뒤에도 실행할 수 없는 조합이면 경고를 남긴다. 호출부가 이 값을
+    캐시 키 판정에도 쓰므로, 실행 결과가 담기는 필드와 판정이 기다리는 필드가 갈리지 않는다.
+    """
+    normalized_providers = normalize_provider_list(providers)
+    provider = normalize_provider_name(second_provider)
+
+    if provider == "perplexity" and perplexity_disabled:
+        provider = "gpt"
+
+    # Perplexity 는 자체 fallback 체인(GPT·Z.ai)을 갖고 있어 providers 에 gpt 만 있어도 실행한다.
+    if provider == "perplexity" and ("perplexity" in normalized_providers or "gpt" in normalized_providers):
+        return "perplexity"
+    if provider == "gpt" and "gpt" in normalized_providers:
+        return "gpt"
+
+    logger.warning(
+        "두 번째 AI Provider를 실행할 수 없어 VCP 표의 두 번째 AI 열이 비게 됩니다 "
+        f"(VCP_SECOND_PROVIDER={second_provider}, VCP_AI_PROVIDERS={normalized_providers})"
+    )
+    return None
+
+
 def resolve_perplexity_disabled(
     providers: list[str],
     second_provider: str,
@@ -132,5 +163,6 @@ __all__ = [
     "init_zai_client",
     "normalize_provider_name",
     "normalize_provider_list",
+    "resolve_effective_second_provider",
     "resolve_perplexity_disabled",
 ]
