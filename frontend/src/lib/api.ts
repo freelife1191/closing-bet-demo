@@ -47,6 +47,10 @@ export interface KRSignal {
   signal_date: string;
   entry_price: number;
   current_price: number;
+  /** 진입가 기준 목표가. 진입가가 없으면 백엔드가 비워 둔다. */
+  target_price?: number | null;
+  /** 진입가 기준 손절가. 진입가가 없으면 백엔드가 비워 둔다. */
+  stop_price?: number | null;
   return_pct: number;
   foreign_5d: number;
   inst_5d: number;

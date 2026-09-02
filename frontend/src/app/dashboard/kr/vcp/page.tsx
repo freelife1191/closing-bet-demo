@@ -1420,10 +1420,10 @@ export default function VCPSignalsPage() {
                   <SimpleTooltip text="시그널 발생 당시 진입 추천가">Entry</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="손절가 (현재가 -3%)">Stop</SimpleTooltip>
+                  <SimpleTooltip text="손절가 (진입가 -3%)">Stop</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="목표가 (현재가 +5%)">Target</SimpleTooltip>
+                  <SimpleTooltip text="목표가 (진입가 +5%)">Target</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="현재 주가 (실시간 업데이트 아님)">Current</SimpleTooltip>
@@ -1509,20 +1509,11 @@ export default function VCPSignalsPage() {
                       ₩{signal.entry_price?.toLocaleString() ?? '-'}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-rose-400">
-                      {/* 손절가: 현재가 기준 -3% (0.97) */}
-                      {(() => {
-                        const price = signal.current_price || signal.entry_price || 0;
-                        const stop = Math.floor(price * 0.97);
-                        return price > 0 ? `₩${stop.toLocaleString()}` : '-';
-                      })()}
+                      {/* 진입가에서 나온 값이므로 백엔드가 내려준 것을 그대로 쓴다 */}
+                      {signal.stop_price ? `₩${signal.stop_price.toLocaleString()}` : '-'}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-green-400">
-                      {/* 목표가: 현재가 기준 +5% (1.05) */}
-                      {(() => {
-                        const price = signal.current_price || signal.entry_price || 0;
-                        const target = Math.floor(price * 1.05);
-                        return price > 0 ? `₩${target.toLocaleString()}` : '-';
-                      })()}
+                      {signal.target_price ? `₩${signal.target_price.toLocaleString()}` : '-'}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-white">
                       ₩{signal.current_price?.toLocaleString() ?? '-'}

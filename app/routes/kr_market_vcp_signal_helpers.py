@@ -4,6 +4,7 @@
 KR Market VCP 시그널 헬퍼
 """
 
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -17,6 +18,7 @@ from app.routes.kr_market_signal_common import (
     _safe_int,
     _VALID_AI_ACTIONS,
 )
+from engine.config import config as signal_config
 from engine.pandas_utils_safe import safe_bool
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 
@@ -194,6 +196,33 @@ def _build_vcp_gemini_recommendation(row: Any) -> Optional[dict]:
     }
 
 
+def _resolve_vcp_exit_prices(
+    entry_price: Any, target_price: Any, stop_price: Any
+) -> Tuple[Optional[float], Optional[float]]:
+    """목표가와 손절가를 진입가 기준으로 확정한다.
+
+    signals_log 에는 두 열이 아예 없어서 값이 늘 비어 있다. 그 자리를 화면이
+    현재가로 메우면, 신호 발생 뒤 주가가 오른 종목은 손절가가 진입가 위에 놓인다.
+    매수 포지션에서 그 주문은 체결되는 순간 이익 실현이 되므로 성립하지 않는다.
+    기준가는 진입가이며, 비율은 engine/position_sizer.py 가 쓰는 SignalConfig 와
+    같은 출처를 본다. 진입가가 없으면 임의로 만들지 않고 비워 둔다.
+    """
+    entry = _safe_float(entry_price, default=0.0)
+    resolved_target = _none_if_nan(target_price)
+    resolved_stop = _none_if_nan(stop_price)
+
+    # NaN 과 inf 도 여기서 함께 걸린다. 걸러 두지 않으면 round() 가 한 행 때문에
+    # OverflowError 를 내고 응답 전체가 무너진다.
+    if not math.isfinite(entry) or entry <= 0:
+        return resolved_target, resolved_stop
+
+    if not resolved_target:
+        resolved_target = round(entry * (1 + signal_config.take_profit_pct))
+    if not resolved_stop:
+        resolved_stop = round(entry * (1 - signal_config.stop_loss_pct))
+    return resolved_target, resolved_stop
+
+
 def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
     """signals_log 단일 행을 API 응답 스키마 시그널로 변환한다."""
     score = _safe_float(_row_get(row, "score", 0), default=0.0)
@@ -208,6 +237,13 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
     if not is_vcp:
         return None
 
+    entry_price = _none_if_nan(_row_get(row, "entry_price"))
+    target_price, stop_price = _resolve_vcp_exit_prices(
+        entry_price,
+        _row_get(row, "target_price"),
+        _row_get(row, "stop_price"),
+    )
+
     return {
         "ticker": str(_row_get(row, "ticker", "")).zfill(6),
         "name": _row_get(row, "name"),
@@ -216,9 +252,9 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
         "status": _row_get(row, "status"),
         "score": score,
         "contraction_ratio": _none_if_nan(_row_get(row, "contraction_ratio")),
-        "entry_price": _none_if_nan(_row_get(row, "entry_price")),
-        "target_price": _none_if_nan(_row_get(row, "target_price")),
-        "stop_price": _none_if_nan(_row_get(row, "stop_price")),
+        "entry_price": entry_price,
+        "target_price": target_price,
+        "stop_price": stop_price,
         "foreign_5d": _safe_int(_row_get(row, "foreign_5d", 0), default=0),
         "inst_5d": _safe_int(_row_get(row, "inst_5d", 0), default=0),
         "vcp_score": _safe_int(vcp_score, default=0),

@@ -28,7 +28,9 @@ from services.sqlite_utils import (
 
 
 _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
-_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 3
+# 4: target_price·stop_price 를 진입가 기준으로 채우기 시작했다. 3 으로 굳어 있던
+#    캐시에는 두 값이 null 로 들어 있어 무효화가 필요하다.
+_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 4
 _VCP_SIGNALS_MEMORY_CACHE: OrderedDict[
     str,
     tuple[tuple[Any, ...], list[dict[str, Any]]],
