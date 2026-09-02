@@ -11,16 +11,6 @@
 
 ## P0 — 즉시
 
-### [JONGGA-003] 체크리스트 수급 항목의 키 이름 통일
-- 카테고리: 종가베팅 | 티어: T1 | 근거: AUDIT-JONGGA §1.2
-- 프론트엔드와 목 데이터 생성기가 이미 `supply_positive` 를 쓰고 있으므로, 백엔드를
-  그쪽에 맞추는 방향이 변경 범위가 작습니다.
-- [ ] `_normalize_jongga_signal_for_frontend` 가 만드는 체크리스트 키를 `supply_positive`
-      로 맞춤
-- [ ] `tests/app/test_kr_market_helpers_contract.py:308` 의 단언을 새 키로 갱신
-- [ ] 저장소에 남은 `supply_demand` 표기를 전수 확인해 종가 체크리스트 경로에서 제거
-- [ ] 외국인·기관 5일 순매수가 양수일 때 배지가 켜지는지 화면에서 확인
-
 ### [JONGGA-004] AI 미분석 종목의 확신도 추정치 표기 정리
 - 카테고리: 종가베팅 | 티어: T2 | 근거: AUDIT-JONGGA §1.3
 - 폴백 블록(1959-1966행)과 확신도 렌더 블록(2128-2154행)을 함께 손대고 대체 표기를

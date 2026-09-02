@@ -306,7 +306,21 @@ def test_normalize_jongga_signals_for_frontend_handles_string_supply_values():
     _normalize_jongga_signals_for_frontend(signals)
 
     checklist = signals[0]["checklist"]
-    assert checklist["supply_demand"] is True
+    assert checklist["supply_positive"] is True
+
+
+def test_normalize_jongga_checklist_uses_supply_positive_key():
+    """[JONGGA-003] 회귀 검사. 체크리스트의 수급 키는 화면과 engine.models.ChecklistDetail
+    이 함께 쓰는 supply_positive 여야 하고, 외국인과 기관 가운데 한쪽만 순매수여도 켜진다."""
+    signals = [
+        {"ticker": "1", "name": "외국인만", "foreign_5d": 500, "inst_5d": -100},
+        {"ticker": "2", "name": "기관만", "foreign_5d": -100, "inst_5d": 500},
+        {"ticker": "3", "name": "둘다순매도", "foreign_5d": -100, "inst_5d": -200},
+    ]
+
+    _normalize_jongga_signals_for_frontend(signals)
+
+    assert [s["checklist"]["supply_positive"] for s in signals] == [True, True, False]
 
 
 def test_normalize_jongga_signals_for_frontend_backfills_ticker_and_name_from_stock_fields():

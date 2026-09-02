@@ -115,7 +115,7 @@ def _normalize_jongga_signal_for_frontend(signal: dict) -> None:
         signal["checklist"] = {
             "has_news": False,
             "volume_surge": False,
-            "supply_demand": _safe_float(signal.get("foreign_5d", 0)) > 0
+            "supply_positive": _safe_float(signal.get("foreign_5d", 0)) > 0
             or _safe_float(signal.get("inst_5d", 0)) > 0,
         }
 
