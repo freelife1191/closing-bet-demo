@@ -728,12 +728,12 @@ export default function VCPSignalsPage() {
   const handleBulkBuyVCP = async () => {
     if (isBulkBuyingVCP) return;
 
-    if (activeDateTab !== 'latest') {
+    if (buyDisabledReason) {
       setAlertModal({
         isOpen: true,
         type: 'default',
         title: '오늘 데이터만 가능',
-        content: '최신(오늘) VCP 시그널 탭에서만 일괄 매수를 실행할 수 있습니다.'
+        content: buyDisabledReason
       });
       return;
     }
@@ -877,21 +877,25 @@ export default function VCPSignalsPage() {
     setSelectedStock(null);
   };
 
-  const isBulkBuyVCPDisabled =
-    isBulkBuyingVCP ||
-    loading ||
-    !signals.length ||
-    activeDateTab !== 'latest';
+  // 날짜 조건은 일괄 매수와 행별 매수가 함께 쓴다. 한쪽만 막으면 개별 주문을 종목 수만큼
+  // 반복해 일괄 매수가 막으려던 결과에 그대로 도달한다.
+  const buyDisabledReason =
+    activeDateTab !== 'latest'
+      ? '최신(오늘) VCP 시그널 탭에서만 매수를 실행할 수 있습니다.'
+      : '';
 
   const bulkBuyVCPDisabledReason = (() => {
     if (isBulkBuyingVCP) return 'VCP 일괄 매수를 진행 중입니다.';
     if (loading) return 'VCP 시그널 데이터를 불러오는 중입니다.';
-    if (activeDateTab !== 'latest') return '최신(오늘) VCP 시그널 탭에서만 일괄 매수를 실행할 수 있습니다.';
+    if (buyDisabledReason) return buyDisabledReason;
     if (!signals.length) return '오늘 VCP 시그널 매수 대상 종목이 없습니다.';
     return '';
   })();
 
+  const isBulkBuyVCPDisabled = Boolean(bulkBuyVCPDisabledReason);
+
   const bulkBuyVCPTooltip = bulkBuyVCPDisabledReason || '오늘 VCP 시그널 전체를 10주씩 매수합니다.';
+  const rowBuyTooltip = buyDisabledReason || '모의 계좌로 매수 주문을 실행합니다.';
 
   const formatFlow = (value: number | undefined) => {
     if (value === undefined || value === null) return '-';
@@ -1484,13 +1488,15 @@ export default function VCPSignalsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <SimpleTooltip text="모의 계좌로 매수 주문을 실행합니다.">
+                      <SimpleTooltip text={rowBuyTooltip}>
                         <button
                           onClick={() => {
                             setBuyingStock({ ticker: signal.ticker, name: signal.name, price: signal.current_price || signal.entry_price || 0 });
                             setIsBuyModalOpen(true);
                           }}
-                          className="w-8 h-8 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex items-center justify-center"
+                          disabled={Boolean(buyDisabledReason)}
+                          title={rowBuyTooltip}
+                          className="w-8 h-8 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-500/10 disabled:hover:text-rose-500"
                         >
                           <i className="fas fa-shopping-cart text-xs"></i>
                         </button>
