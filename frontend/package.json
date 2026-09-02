@@ -10,7 +10,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "test:baseline": "vitest run tests/baseline/upgrade-baseline.test.ts",
+    "test:baseline": "vitest run tests/baseline/upgrade-nextjs16.test.ts",
     "type-check": "tsc --noEmit",
     "upgrade:check": "npm run test:baseline && npm run type-check && npm run lint"
   },

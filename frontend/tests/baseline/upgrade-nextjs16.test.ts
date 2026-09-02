@@ -37,6 +37,13 @@ describe('Next.js 16 + React 19 Upgrade Tests', () => {
       expect(currentVersions['react-dom']).toMatch(/^19\./)
       console.log(`✅ React DOM version: ${currentVersions['react-dom']}`)
     })
+
+    it('should declare react-dom in package.json', () => {
+      // 위의 세 검사는 설치본을 본다. 선언이 빠져도 node_modules 에 남은 잔여물이
+      // 있으면 통과하므로, 선언 자체를 따로 확인한다.
+      const pkg = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf-8'))
+      expect(pkg.dependencies['react-dom']).toBeDefined()
+    })
   })
 
   describe('Type System Compatibility', () => {
@@ -69,6 +76,14 @@ describe('Next.js 16 + React 19 Upgrade Tests', () => {
       const configContent = readFileSync(configPath, 'utf-8')
       expect(configContent).toContain('transpilePackages')
     })
+
+    it('should keep the API proxy rewrite', () => {
+      // 이 rewrite 가 빠지면 프런트엔드가 Flask 에 닿지 못해 화면 전체가 빈다.
+      const configPath = join(ROOT_DIR, 'next.config.js')
+      const configContent = readFileSync(configPath, 'utf-8')
+      expect(configContent).toContain('rewrites')
+      expect(configContent).toContain('/api/:path')
+    })
   })
 
   describe('React 19 Features', () => {
@@ -92,18 +107,33 @@ describe('Next.js 16 + React 19 Upgrade Tests', () => {
     })
 
     it('should have all required files', () => {
+      // 대시보드 라우트가 사라진 것은 빌드 성공만으로는 드러나지 않으므로 함께 센다.
       const requiredFiles = [
         'src/app/layout.tsx',
         'src/app/page.tsx',
         'src/lib/auth.ts',
         'src/lib/api.ts',
         'src/app/components/Providers.tsx',
+        'src/app/dashboard/layout.tsx',
+        'src/app/dashboard/kr/page.tsx',
+        'src/app/dashboard/kr/vcp/page.tsx',
+        'src/app/dashboard/kr/cumulative/page.tsx',
+        'src/app/dashboard/kr/closing-bet/page.tsx',
       ]
 
       requiredFiles.forEach((file) => {
         const filePath = join(ROOT_DIR, file)
         expect(existsSync(filePath), `${file} should exist`).toBe(true)
       })
+    })
+
+    it('should wire SessionProvider in the Providers component', () => {
+      // 세션 공급자가 빠지면 인증이 조용히 끊긴다.
+      const providersPath = join(ROOT_DIR, 'src/app/components/Providers.tsx')
+      const content = readFileSync(providersPath, 'utf-8')
+
+      expect(content).toContain('SessionProvider')
+      expect(content).toContain("'use client'")
     })
   })
 
@@ -128,6 +158,7 @@ describe('Next.js 16 + React 19 Upgrade Tests', () => {
       const pkgContent = readFileSync(pkgPath, 'utf-8')
       const pkg = JSON.parse(pkgContent)
 
+      expect(pkg.devDependencies.typescript).toBeDefined()
       expect(pkg.devDependencies.eslint).toBeDefined()
       expect(pkg.devDependencies['eslint-config-next']).toBeDefined()
 

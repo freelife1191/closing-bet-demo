@@ -474,7 +474,7 @@ frontend/src/app/
 - **Charts**: `lightweight-charts` (TradingView 오픈소스)
 - **Markdown**: `react-markdown` + `remark-gfm` (챗봇 렌더링)
 - **Styling**: Tailwind CSS
-- **Testing**: Vitest (Unit & UI), `tests/baseline/upgrade-baseline.test.ts`로 업그레이드 회귀 잠금
+- **Testing**: Vitest (Unit & UI), `tests/baseline/upgrade-nextjs16.test.ts`로 업그레이드 회귀 잠금
 
 #### Data & Storage (데이터 인프라)
 
