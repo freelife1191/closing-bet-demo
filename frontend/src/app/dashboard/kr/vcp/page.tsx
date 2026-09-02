@@ -853,7 +853,13 @@ export default function VCPSignalsPage() {
     setIsModalOpen(true);
     setChartLoading(true);
     try {
-      const res = await krAPI.getStockChart(ticker, period || chartPeriod.toLowerCase());
+      // 히스토리 날짜를 보고 있으면 그 날짜까지의 구간을 받아야 한다. 그러지 않으면
+      // 시그널이 발생한 캔들이 차트 범위 밖으로 밀려나 화면에서 볼 수 없다.
+      const res = await krAPI.getStockChart(
+        ticker,
+        period || chartPeriod.toLowerCase(),
+        activeDateTab === 'history' ? (selectedHistoryDate ?? undefined) : undefined,
+      );
       if (res && res.data) {
         setChartData(res.data);
       }
@@ -876,6 +882,17 @@ export default function VCPSignalsPage() {
     setChartData([]);
     setSelectedStock(null);
   };
+
+  // 차트에 겹쳐 그리는 VCP 범위. 차트 자체와 하단 정보 막대가 같은 값을 써야 하므로
+  // 두 곳에서 따로 계산하지 않고 여기서 한 번만 만든다. 60초마다 도는 현재가 갱신이
+  // 이 페이지를 통째로 다시 그리므로 chartData 가 그대로일 때는 다시 세지 않는다.
+  const { firstHalfHigh, secondHalfLow } = useMemo(() => {
+    const valid = chartData.filter(d => d.close > 0 && d.high > 0);
+    return {
+      firstHalfHigh: Math.max(0, ...valid.slice(-30).map(d => d.high)),
+      secondHalfLow: valid.length > 0 ? Math.min(...valid.slice(-10).map(d => d.low)) : 0,
+    };
+  }, [chartData]);
 
   // 날짜 조건은 일괄 매수와 행별 매수가 함께 쓴다. 한쪽만 막으면 개별 주문을 종목 수만큼
   // 반복해 일괄 매수가 막으려던 결과에 그대로 도달한다.
@@ -1507,7 +1524,8 @@ export default function VCPSignalsPage() {
                         {signal.score ? Math.round(signal.score) : '-'}
                       </span>
                     </td>
-                    <td className={`px-4 py-3 text-center font-mono text-xs ${signal.contraction_ratio && signal.contraction_ratio <= 0.6 ? 'text-emerald-400' : 'text-purple-400'
+                    {/* 0 은 완벽한 수축이다. falsy 검사로 두면 차트 하단과 색이 갈린다. */}
+                    <td className={`px-4 py-3 text-center font-mono text-xs ${signal.contraction_ratio != null && signal.contraction_ratio <= 0.6 ? 'text-emerald-400' : 'text-purple-400'
                       }`}>
                       {signal.contraction_ratio?.toFixed(2) ?? '-'}
                     </td>
@@ -1572,28 +1590,16 @@ export default function VCPSignalsPage() {
                     <p>Loading chart data...</p>
                   </div>
                 ) : chartData.length > 0 ? (
-                  (() => {
-                    const signal = signals.find(s => s.ticker === selectedStock.ticker);
-                    // VCP 범위 계산: 차트 데이터에서 직접 계산
-                    const validData = chartData.filter(d => d.close > 0 && d.high > 0);
-                    const recentData = validData.slice(-30); // 최근 30일
-                    const last10Days = validData.slice(-10); // 최근 10일
-                    const firstHalfHigh = recentData.length > 0 ? Math.max(...recentData.map(d => d.high)) : 0; // 전반부: 30일 고점
-                    const secondHalfLow = last10Days.length > 0 ? Math.min(...last10Days.map(d => d.low)) : 0; // 후반부: 10일 저점
-
-                    return (
-                      <StockChart
-                        data={chartData}
-                        ticker={selectedStock.ticker}
-                        name={selectedStock.name}
-                        vcpRange={{
-                          enabled: showVcpRange,
-                          firstHalf: firstHalfHigh,
-                          secondHalf: secondHalfLow
-                        }}
-                      />
-                    );
-                  })()
+                  <StockChart
+                    data={chartData}
+                    ticker={selectedStock.ticker}
+                    name={selectedStock.name}
+                    vcpRange={{
+                      enabled: showVcpRange,
+                      firstHalf: firstHalfHigh,
+                      secondHalf: secondHalfLow
+                    }}
+                  />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-gray-500">
                     <i className="fas fa-exclamation-circle text-3xl mb-3"></i>
@@ -1606,13 +1612,11 @@ export default function VCPSignalsPage() {
                 const signal = signals.find(s => s.ticker === selectedStock.ticker);
                 if (!signal || chartData.length === 0) return null;
 
-                // VCP 범위 계산: 차트 데이터에서 직접 계산
-                const validData = chartData.filter(d => d.close > 0 && d.high > 0);
-                const recentData = validData.slice(-30);
-                const last10Days = validData.slice(-10);
-                const firstHalfHigh = recentData.length > 0 ? Math.max(...recentData.map(d => d.high)) : 0;
-                const secondHalfLow = last10Days.length > 0 ? Math.min(...last10Days.map(d => d.low)) : 0;
-                const vcpRatio = firstHalfHigh > 0 ? (secondHalfLow / firstHalfHigh).toFixed(2) : '-';
+                // 수축비율은 표와 AI 요약이 쓰는 값을 그대로 쓴다. 여기서 따로 계산하던
+                // (10일 저점 / 30일 고점) 은 백엔드의 수축비율(최근 5일 평균 고저폭을
+                // 이전 15일 평균 고저폭으로 나눈 값)과 아예 다른 지표여서, 한 화면에
+                // 서로 다른 두 값이 나란히 놓였다.
+                const contractionRatio = signal.contraction_ratio ?? null;
 
                 return (
                   <div className="relative auto-cols-min grid grid-cols-2 lg:flex lg:items-center lg:justify-start lg:gap-8 px-4 py-3 bg-black/30 border-t border-white/5 text-xs text-gray-300">
@@ -1631,10 +1635,12 @@ export default function VCPSignalsPage() {
                       </label>
                     </div>
 
-                    {/* Ratio */}
+                    {/* 수축비율 — 표의 CONT. 열과 같은 값 */}
                     <div className="flex items-center gap-2 font-mono justify-end lg:justify-start">
-                      <span className="text-gray-500">Ratio:</span>
-                      <span className={`font-bold ${parseFloat(vcpRatio) <= 0.6 ? 'text-emerald-400' : 'text-cyan-400'}`}>{vcpRatio}</span>
+                      <span className="text-gray-500">수축비율:</span>
+                      <span className={`font-bold ${contractionRatio !== null && contractionRatio <= 0.6 ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                        {contractionRatio?.toFixed(2) ?? '-'}
+                      </span>
                     </div>
 
                     {/* First Half */}

@@ -495,3 +495,37 @@ def test_reanalyze_failed_ai_route_rejects_invalid_force_provider():
 
     assert response.status_code == 400
     assert response.get_json()["status"] == "error"
+
+
+def test_stock_chart_route_forwards_end_query_to_payload_builder():
+    """`?end=` 이 서비스까지 닿는지 라우트 계층에서 확인한다.
+
+    서비스 단위 테스트는 `build_stock_chart_payload` 를 직접 부르므로, 여기서 이름이
+    어긋나면 과거 시그널의 차트가 조용히 오늘 구간으로 돌아가도 아무도 알아채지 못한다.
+    """
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    captured: dict[str, Any] = {}
+
+    def _build(**kwargs):
+        captured.update(kwargs)
+        return {"ticker": kwargs.get("ticker"), "data": []}
+
+    deps["build_stock_chart_payload"] = _build
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_stock_chart_end_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    assert client.get("/api/kr/stock-chart/034730?period=3m&end=2026-05-05").status_code == 200
+    assert captured.get("end_date") == "2026-05-05"
+
+    captured.clear()
+    assert client.get("/api/kr/stock-chart/034730?period=3m").status_code == 200
+    assert captured.get("end_date") is None

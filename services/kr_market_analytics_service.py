@@ -144,11 +144,20 @@ def resolve_chart_period_days(period: str | None) -> int:
     return period_map.get(str(period or "3m").lower(), 90)
 
 
+def _parse_chart_anchor(end_date: str | None) -> datetime | None:
+    """차트 구간의 끝으로 쓸 날짜. 값이 없거나 형식이 어긋나면 None 이다."""
+    try:
+        return datetime.strptime(str(end_date).strip(), "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return None
+
+
 def build_stock_chart_payload(
     ticker: str,
     period_days: int,
     load_csv_file: Callable[[str], pd.DataFrame],
     now: datetime | None = None,
+    end_date: str | None = None,
 ) -> dict[str, Any]:
     """종목 차트 응답 payload를 구성한다."""
     current_time = now or datetime.now()
@@ -177,8 +186,17 @@ def build_stock_chart_payload(
         }
 
     if "date" in stock_df.columns:
-        cutoff_date = (current_time - pd.Timedelta(days=period_days)).strftime("%Y-%m-%d")
+        # 자르기 전에 날짜 표기를 맞춘다. 원본에는 "20251127" 이나 "2025-11-26 00:00:00"
+        # 같은 표기가 섞여 있는데, 사전식으로 비교하면 '-'(0x2D)가 '0'(0x30)보다 작아
+        # "20260101" 이 "2026-04-05" 보다 뒤로 밀린다.
+        stock_df["date"] = stock_df["date"].map(_normalize_chart_date)
+        # 과거 시그널을 열었을 때 그 날짜가 구간 밖에 놓이면, 시그널을 만든 캔들을
+        # 화면에서 볼 수 없다. 끝을 옮기면 시작도 함께 옮긴다.
+        anchor = _parse_chart_anchor(end_date)
+        cutoff_date = ((anchor or current_time) - pd.Timedelta(days=period_days)).strftime("%Y-%m-%d")
         stock_df = stock_df[stock_df["date"] >= cutoff_date]
+        if anchor:
+            stock_df = stock_df[stock_df["date"] <= anchor.strftime("%Y-%m-%d")]
 
     stock_df = _normalize_chart_numeric_columns(stock_df)
 

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import logging
+from datetime import datetime
+
 import pandas as pd
 
 import services.file_row_count_cache as file_row_count_cache
@@ -679,3 +681,83 @@ def test_build_backtest_summary_payload_supports_legacy_stats_callable_signature
     assert payload["closing_bet"]["status"] == "OK"
     assert payload["vcp"]["status"] == "OK"
     assert calls == {"jb": 1, "vcp": 1}
+
+
+def test_build_stock_chart_payload_anchors_range_to_end_date():
+    """과거 시그널을 열면 그 날짜가 구간 안에 들어와야 한다.
+
+    기준일을 주지 않으면 오늘부터 거슬러 자르므로, 시그널을 만든 캔들이 범위 밖으로
+    밀려나 화면에서 볼 수 없다.
+    """
+    df = pd.DataFrame(
+        [
+            {"date": "2026-04-20", "ticker": "034730", "open": 90, "high": 95, "low": 88, "close": 92, "volume": 1000},
+            {"date": "2026-05-05", "ticker": "034730", "open": 100, "high": 110, "low": 98, "close": 105, "volume": 1200},
+            {"date": "2026-06-10", "ticker": "034730", "open": 120, "high": 130, "low": 118, "close": 125, "volume": 1500},
+            {"date": "2026-09-01", "ticker": "034730", "open": 140, "high": 150, "low": 138, "close": 145, "volume": 1800},
+        ]
+    )
+    now = datetime(2026, 9, 2)
+
+    anchored = build_stock_chart_payload(
+        ticker="034730",
+        period_days=30,
+        load_csv_file=lambda _name: df,
+        now=now,
+        end_date="2026-05-05",
+    )
+    assert [row["date"] for row in anchored["data"]] == ["2026-04-20", "2026-05-05"]
+
+    default = build_stock_chart_payload(
+        ticker="034730",
+        period_days=30,
+        load_csv_file=lambda _name: df,
+        now=now,
+    )
+    assert [row["date"] for row in default["data"]] == ["2026-09-01"]
+
+
+def test_build_stock_chart_payload_ignores_malformed_end_date():
+    """형식이 어긋난 기준일은 무시하고 오늘 기준으로 돌아간다."""
+    df = pd.DataFrame(
+        [
+            {"date": "2026-05-05", "ticker": "034730", "open": 100, "high": 110, "low": 98, "close": 105, "volume": 1200},
+            {"date": "2026-09-01", "ticker": "034730", "open": 140, "high": 150, "low": 138, "close": 145, "volume": 1800},
+        ]
+    )
+
+    for bad in ("", "2026/05/05", "notadate", None):
+        payload = build_stock_chart_payload(
+            ticker="034730",
+            period_days=30,
+            load_csv_file=lambda _name: df,
+            now=datetime(2026, 9, 2),
+            end_date=bad,
+        )
+        assert [row["date"] for row in payload["data"]] == ["2026-09-01"], bad
+
+
+def test_build_stock_chart_payload_cuts_on_normalized_dates():
+    """표기가 섞여 있어도 구간을 날짜 순서대로 자른다.
+
+    사전식 비교에서는 '-'(0x2D)가 '0'(0x30)보다 작아 "20260101" 이 "2026-04-05" 보다
+    뒤로 밀린다. 정규화하지 않으면 1월 행이 4월 하한선을 통과한다.
+    """
+    df = pd.DataFrame(
+        [
+            {"date": "20260101", "ticker": "034730", "open": 80, "high": 85, "low": 78, "close": 82, "volume": 900},
+            {"date": "2026-04-20 00:00:00", "ticker": "034730", "open": 90, "high": 95, "low": 88, "close": 92, "volume": 1000},
+            {"date": "20260504", "ticker": "034730", "open": 100, "high": 110, "low": 98, "close": 105, "volume": 1200},
+            {"date": "2026-06-10", "ticker": "034730", "open": 120, "high": 130, "low": 118, "close": 125, "volume": 1500},
+        ]
+    )
+
+    payload = build_stock_chart_payload(
+        ticker="034730",
+        period_days=30,
+        load_csv_file=lambda _name: df,
+        now=datetime(2026, 9, 2),
+        end_date="2026-05-05",
+    )
+
+    assert [row["date"] for row in payload["data"]] == ["2026-04-20", "2026-05-04"]

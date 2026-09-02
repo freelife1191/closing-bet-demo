@@ -177,7 +177,9 @@ export const krAPI = {
   getMarketGate: (date?: string) => fetchAPI<KRMarketGate>(`/api/kr/market-gate?_t=${Date.now()}${date ? `&date=${date}` : ''}`),
   getAIAnalysis: (date?: string) => fetchAPI<KRAIAnalysis>(`/api/kr/ai-analysis?_t=${Date.now()}${date ? `&date=${date}` : ''}`),
   getDataStatus: () => fetchAPI<{ status: string; data: DataStatus }>('/api/kr/status'),
-  getStockChart: (ticker: string, period?: string) => fetchAPI<KRChartResponse>(`/api/kr/stock-chart/${ticker}${period ? `?period=${period}` : ''}`),
+  // end 를 주면 그 날짜까지의 구간을 돌려준다. 과거 시그널을 열었을 때 시그널이 발생한
+  // 캔들이 차트 범위 밖으로 밀려나지 않게 하려는 것이다.
+  getStockChart: (ticker: string, period?: string, end?: string) => fetchAPI<KRChartResponse>(`/api/kr/stock-chart/${ticker}?period=${period || '3m'}${end ? `&end=${end}` : ''}`),
   getHistoryDates: () => fetchAPI<{ dates: string[] }>('/api/kr/ai-history-dates'),
   getHistory: (date: string) => fetchAPI<KRAIAnalysis>(`/api/kr/ai-history/${date}`),
 

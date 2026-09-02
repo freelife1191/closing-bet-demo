@@ -454,6 +454,7 @@ def _register_stock_chart_route(
                 ticker=ticker,
                 period_days=resolve_chart_period_days(period),
                 load_csv_file=load_csv_file,
+                end_date=request.args.get('end'),
             )
             return jsonify(payload)
 
