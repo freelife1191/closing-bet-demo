@@ -13,15 +13,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-013] 위험 경로의 저장소 스키마 규칙을 파일명 대신 실제 스키마로 판정
-- 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-01 FLOW-003 진행 중 발견
-- `tier-rules.md` §2 가 저장소 스키마를 "파일명에 `sqlite` 를 포함하는 모듈" 로
-  정의하는데, `CREATE TABLE` 을 실제로 정의하는 모듈은 21개이고 그 규칙이 잡는 것은
-  3개입니다. FLOW-003 에서 `services/kr_market_cumulative_cache.py` 가 목록 밖이라
-  판정이 T2 로 나왔고, 실질을 보고 손으로 T3 으로 올렸습니다.
-- [ ] 판정 기준을 파일명에서 `CREATE TABLE` 정의 유무로 바꿈
-- [ ] 해당하는 21개 모듈을 §2 목록에 반영
-
 ### [JONGGA-007] 화면에 보여주는 목표가·손절가를 백테스트와 같은 상수에서 만든다
 - 카테고리: 종가베팅 | 티어: T1 | 근거: 2026-09-01 FLOW-003 진행 중 발견
 - `app/routes/kr_market_jongga_normalize_helpers.py:124,126` 이 `entry * 1.09` 와
@@ -233,9 +224,10 @@
 
 ### [CHAT-003] 두 SQLite 캐시 모듈을 공용 골격으로 통합
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT §2.1
-- 티어 판정: 949줄을 다루므로 300줄을 확실히 넘습니다. 공용 골격을
-  `services/sqlite_utils.py` 에 두는 방안을 택하면 파일명에 `sqlite` 가 들어가 위험 경로에도
-  닿으므로, 어느 쪽으로 가든 `T3` 입니다.
+- 티어 판정: 949줄을 다루므로 300줄을 확실히 넘습니다. 통합 대상인
+  `runtime_stock_map_cache` 와 `stock_context_cache` 는 둘 다 `CREATE TABLE` 로 테이블을
+  정의하므로 그 자체로 위험 경로이고, 공용 골격을 `services/sqlite_utils.py` 에 두는
+  방안을 택하면 공통 접속 계층에도 닿습니다. 어느 쪽으로 가든 `T3` 입니다.
 - [ ] 두 모듈의 실제 차이(테이블 이름, 페이로드 모양, 서명 계산)를 목록으로 확정
 - [ ] 2단 캐시 골격을 한 곳으로 모으고 차이 부분만 주입받도록 정리
 - [ ] `runtime_stock_map_cache` 와 `stock_context_cache` 의 공개 함수 시그니처 유지
@@ -302,6 +294,10 @@
   - `engine/llm_analyzer_parsers.py:102` 의 `item.get("confidence", 0)`. 여기는 형 변환도
     없어서 LLM 이 낸 문자열이 그대로 흐릅니다. `engine/vcp_ai_analyzer_helpers.py:221` 의
     `_normalize_confidence_value` 가 같은 일을 이미 하고 있으므로 그것을 재사용합니다
+- 티어 판정: `_normalize_confidence_value` 를 그대로 호출만 하면 T2 이지만, 재사용하려고
+  `engine/vcp_ai_analyzer_helpers.py` 를 한 줄이라도 고치면 §2 의 「VCP 판정」에 닿아 T3 이
+  됩니다. 계획 단계에서 어느 쪽인지 먼저 정합니다. 2026-09-02 `[INFRA-013]` 의 백로그
+  대조에서 확인했습니다.
 - [ ] 다섯 자리가 값 없음을 `None` 으로 돌려주도록 수정하고, 값이 있으면 숫자로 정규화
 - [ ] `tests/app/test_vcp_failed_ai_filter.py` 가 `ai_confidence: 0` 을 실패 판정의 입력으로
       쓰고 있으므로 판정 기준이 어긋나지 않는지 확인
@@ -458,7 +454,10 @@
 - [ ] 이동한 파일 경로를 `tier-rules.md` §2 위험 경로 목록에 반영
 
 ### [FLOW-002] 수급 데이터 분석 고도화
-- 카테고리: 수급·백테스트 | 티어: T2 | 근거: docs/plans/TO_DO_LIST.md 이관
+- 카테고리: 수급·백테스트 | 티어: T3 | 근거: docs/plans/TO_DO_LIST.md 이관
+- 티어 판정: `services/investor_trend_5day_service.py` 는 `tier-rules.md` §2 의 「수급 집계」에
+  있습니다. 경계를 정리하려면 그 파일을 수정하게 되므로 T3 입니다. 2026-09-02 `[INFRA-013]`
+  의 백로그 대조에서 T2 오기를 발견해 정정했습니다.
 - [ ] 섹터별 수급 집계 설계
 - [ ] 기존 `services/investor_trend_5day_service.py` 와의 경계 정리
 

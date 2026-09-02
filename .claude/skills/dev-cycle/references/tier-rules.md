@@ -67,7 +67,7 @@ dev-cycle 의 리뷰와 검증 강도를 정하는 규칙이다. 판정은 계�
    브라우저로 나가므로 그 접두사가 붙은 목록을 먼저 본다.
 
 줄 수는 `git diff --stat` 의 추가와 삭제 합계를 쓴다. 구현 파일이 함께 바뀌는 경우에
-한해, 거기에 딸린 테스트 파일과 의존성 잠금 파일(`package-lock.json`, `requirements.txt`
+한해, 거기에 딸린 테스트 파일과 의존성 잠금 파일(`frontend/package-lock.json`, `requirements.txt`
 의 버전 핀 갱신)을 합계에서 제외한다. 구현 파일을 건드리지 않는 작업에서는 제외하지 않고
 그대로 센다. 이 조항의 목적은 구현 변경의 규모를 테스트 분량에 가려지지 않게 보는 것이지,
 테스트나 의존성만 바꾸는 작업을 합계 0줄로 만들어 T1 으로 떨어뜨리는 것이 아니다.
@@ -78,7 +78,7 @@ dev-cycle 의 리뷰와 검증 강도를 정하는 규칙이다. 판정은 계�
 
 ## 2. 위험 경로
 
-한 줄이라도 닿으면 T3 이다. 2026-09-01 기준 실측 결과이며 47개 파일, 약 16,197줄이다.
+한 줄이라도 닿으면 T3 이다. 2026-09-02 기준 실측 결과이며 61개 파일, 23,044줄이다.
 
 ### 신호와 등급 결정
 - `engine/grade_classifier.py`
@@ -134,13 +134,61 @@ dev-cycle 의 리뷰와 검증 강도를 정하는 규칙이다. 판정은 계�
 - `scripts/init_data.py`
 
 ### 저장소 스키마
-파일명에 `sqlite` 를 포함하는 모든 모듈이 해당한다.
-- `chatbot/storage_sqlite_common.py`
-- `chatbot/storage_sqlite_helpers.py`
-- `chatbot/storage_sqlite_history.py`
-- `chatbot/storage_sqlite_memory.py`
-- `services/kr_market_data_cache_sqlite_payload.py`
+
+판정 기준은 파일명이 아니라 그 모듈이 실제로 하는 일이다. 두 갈래가 해당한다.
+
+1. `CREATE TABLE` 로 테이블을 정의하는 모듈. 스키마가 바뀌면 이미 저장된 파일과
+   어긋나므로 마이그레이션 없이는 되돌릴 수 없다.
+2. 모든 SQLite 접속이 거쳐 가는 공통 계층. 여기가 바뀌면 1번의 모든 모듈이 한꺼번에
+   영향을 받는다.
+
+앞서 이 자리에는 "파일명에 `sqlite` 를 포함하는 모든 모듈" 이라고 적혀 있었다. 그 규칙이
+잡아낸 여섯 개 가운데 실제로 테이블을 정의하는 것은 `chatbot/storage_sqlite_common.py` 와
+`services/kr_market_data_cache_sqlite_payload.py` 둘뿐인데, 저장소 전체에서 테이블을
+정의하는 모듈은 스물한 개다. `[FLOW-003]` 에서 `services/kr_market_cumulative_cache.py` 가 목록 밖이라
+판정이 T2 로 나왔고 실질을 보고 손으로 T3 으로 올렸다.
+
+반대로 `chatbot/storage_sqlite_helpers.py`(재수출 파사드), `chatbot/storage_sqlite_history.py`,
+`chatbot/storage_sqlite_memory.py` 는 파일명에 `sqlite` 가 들어가지만 스키마를 정의하지 않고 읽고
+쓰기만 하므로 이 절에서 빠진다.
+
+**테이블을 정의하는 모듈** — 뒤에 그 모듈이 만드는 테이블 이름을 적는다.
+
+- `chatbot/runtime_stock_map_cache.py` — `chatbot_stock_map_cache`
+- `chatbot/stock_context_cache.py` — `chatbot_stock_context_cache`
+- `chatbot/storage_sqlite_common.py` — `chatbot_sessions`, `chatbot_messages`, `chatbot_memories`
+- `engine/kr_ai_stock_info_cache.py` — `kr_ai_stock_info_cache`
+- `engine/services/usage_tracker.py` — `api_usage`
+- `engine/signal_tracker_analysis_source_cache.py` — `signal_tracker_csv_source_cache`
+- `engine/signal_tracker_source_cache.py` — `signal_tracker_source_cache`
+- `services/common_update_status_service.py` — `update_status_snapshot`
+- `services/file_row_count_cache.py` — `file_row_count_cache`
+- `services/kr_market_backtest_summary_cache.py` — `backtest_summary_cache`
+- `services/kr_market_cumulative_cache.py` — `cumulative_performance_cache`
+- `services/kr_market_data_cache_jongga.py` — `jongga_results_payload_cache`
+- `services/kr_market_data_cache_sqlite_payload.py` — `csv_file_payload_cache`, `json_file_payload_cache`
+- `services/kr_market_jongga_payload_helpers.py` — `jongga_recent_valid_payload_cache`
+- `services/kr_market_realtime_latest_close_cache.py` — `realtime_latest_close_map_cache`
+- `services/kr_market_realtime_market_map_cache.py` — `realtime_market_map_cache`
+- `services/kr_market_realtime_price_cache.py` — `realtime_price_cache`, `yfinance_failed_ticker_cache`
+- `services/kr_market_vcp_signals_cache.py` — `vcp_signals_payload_cache`
+- `services/usage_tracker.py` — `usage_log`
+
+`services/paper_trading.py`(`price_cache`)와 `services/paper_trading_db_setup.py`
+(`balance`, `portfolio`, `trade_log`, `asset_history`, `price_cache`)도 테이블을 정의하지만
+「모의투자 계좌와 거래」 절에 이미 있으므로 여기에 다시 적지 않는다.
+
+**공통 접속 계층**
+
 - `services/sqlite_utils.py`
+
+`CREATE TABLE` 은 한 줄도 없지만 위 스물한 개 모듈이 모두 이 파일을 import 한다.
+`connect_sqlite`, `build_sqlite_pragmas`, `prune_rows_by_updated_at_if_needed` 가 여기에
+있어서, 접속 방식이나 프루닝 조건이 바뀌면 모든 저장소가 함께 달라진다.
+
+목록을 갱신할 때는 다음 명령으로 다시 센다.
+
+    git ls-files '*.py' | grep -v '^tests/' | xargs grep -li 'CREATE TABLE' | sort
 
 ### 시크릿과 인증
 
@@ -165,6 +213,10 @@ dev-cycle 의 리뷰와 검증 강도를 정하는 규칙이다. 판정은 계�
 
 위험 경로에 해당하는 파일이 새로 생기거나 이동하면, 그 파일을 만든 사이클의 첫 커밋에서
 이 목록을 함께 갱신한다. 목록에 적힌 경로는 모두 실재해야 한다.
+
+이미 목록 밖에 있던 파일에 `CREATE TABLE` 을 새로 넣는 경우도 같다. §2 의 저장소 스키마
+판정은 파일명이 아니라 그 파일이 하는 일을 보므로, 테이블 정의가 들어온 순간 그 파일은
+위험 경로가 된다. 그 변경을 담은 커밋에서 목록에 추가한다.
 
 ## 5. 문서만 바꾸는 작업
 
