@@ -63,7 +63,7 @@ class _FakeBot:
 
     def _build_additional_context(self, **kwargs):
         _ = kwargs
-        return "ADD", "INST", False
+        return "ADD", "INST"
 
     def _compose_system_prompt(self, **kwargs):
         return "SYS"
@@ -94,14 +94,14 @@ def test_build_api_history_keeps_role_and_parts_only():
     assert result == [{"role": "user", "parts": "hi"}, {"role": "model", "parts": "hello"}]
 
 
-def test_build_content_parts_includes_intent_only_for_jongga():
+def test_build_content_parts_includes_intent_instruction_for_every_intent():
     files = [{"mime_type": "text/plain", "data": "abc"}]
-    with_intent = build_content_parts(files, "SYS", "INST", "Q", True)
-    without_intent = build_content_parts(files, "SYS", "INST", "Q", False)
+    with_intent = build_content_parts(files, "SYS", "INST", "Q")
+    without_intent = build_content_parts(files, "SYS", "", "Q")
 
     assert with_intent[0]["mime_type"] == "text/plain"
     assert "INST" in with_intent[-1]
-    assert "INST" not in without_intent[-1]
+    assert "[질의 의도 가이드]" not in without_intent[-1]
 
 
 def test_build_chat_payload_orchestrates_substeps():

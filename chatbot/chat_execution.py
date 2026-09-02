@@ -81,6 +81,7 @@ def run_stream_response(
             bot_response,
             streamed_reasoning,
             streamed_answer,
+            usage_metadata,
             fallback_error,
         ) = yield from stream_with_fallback_models(
             active_client=active_client,

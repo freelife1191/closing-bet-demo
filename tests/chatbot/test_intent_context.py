@@ -34,7 +34,7 @@ def test_build_news_intent_context_uses_data_when_available():
 
 
 def test_resolve_primary_intent_context_market_branch():
-    context, instruction, jongga = resolve_primary_intent_context(
+    context, instruction = resolve_primary_intent_context(
         user_message="오늘 시장 시황 어때?",
         market_gate_data={"status": "GREEN"},
         contains_any_keyword=lambda message, keys: any(k in message for k in keys),
@@ -45,7 +45,6 @@ def test_resolve_primary_intent_context_market_branch():
     )
     assert context == "MG-GREEN"
     assert "Market Gate" in instruction
-    assert jongga is False
 
 
 def test_build_watchlist_context_bundle_detailed_and_summary():
@@ -73,14 +72,13 @@ def test_build_watchlist_context_bundle_detailed_and_summary():
 
 
 def test_build_additional_context_overrides_instruction_with_watchlist_instruction():
-    additional, instruction, jongga = build_additional_context(
+    additional, instruction = build_additional_context(
         user_message="msg",
         watchlist=["A"],
         vcp_data=[],
         market_gate_data={},
-        resolve_primary_intent_context_fn=lambda message, market: ("INTENT", "BASE", False),
+        resolve_primary_intent_context_fn=lambda message, market: ("INTENT", "BASE"),
         build_watchlist_context_bundle_fn=lambda message, watchlist, vcp: ("WATCH", "OVERRIDE"),
     )
     assert additional == "INTENTWATCH"
     assert instruction == "OVERRIDE"
-    assert jongga is False

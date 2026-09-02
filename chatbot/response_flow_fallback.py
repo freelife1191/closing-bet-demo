@@ -22,7 +22,7 @@ def stream_with_fallback_models(
     session_id: str,
     user_id: str,
     logger: logging.Logger,
-) -> Generator[Dict[str, Any], None, Tuple[str, str, str, Optional[str]]]:
+) -> Generator[Dict[str, Any], None, Tuple[str, str, str, Dict[str, int], Optional[str]]]:
     """폴백 모델 순회로 스트리밍을 수행한다."""
     last_error = None
 
@@ -33,11 +33,16 @@ def stream_with_fallback_models(
                 history=api_history,
             )
             response_stream = chat_session.send_message_stream(content_parts)
-            bot_response, streamed_reasoning, streamed_answer = yield from stream_single_model_response(
+            (
+                bot_response,
+                streamed_reasoning,
+                streamed_answer,
+                usage_metadata,
+            ) = yield from stream_single_model_response(
                 response_stream=response_stream,
                 session_id=session_id,
             )
-            return bot_response, streamed_reasoning, streamed_answer, None
+            return bot_response, streamed_reasoning, streamed_answer, usage_metadata, None
         except Exception as e:
             last_error = str(e)
             if is_retryable_stream_error(last_error):
@@ -51,7 +56,7 @@ def stream_with_fallback_models(
                 continue
             raise
 
-    return "", "", "", (last_error or "알 수 없는 오류")
+    return "", "", "", {}, (last_error or "알 수 없는 오류")
 
 
 def sync_stream_with_final_response(

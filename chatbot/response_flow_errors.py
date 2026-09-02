@@ -13,9 +13,9 @@ from engine.llm_analyzer_retry import build_model_chain
 
 def extract_usage_metadata(response: Any) -> Dict[str, int]:
     """Gemini 응답에서 토큰 사용량 메타데이터를 추출한다."""
-    if not hasattr(response, "usage_metadata"):
+    meta = getattr(response, "usage_metadata", None)
+    if meta is None:
         return {}
-    meta = response.usage_metadata
     return {
         "prompt_token_count": getattr(meta, "prompt_token_count", 0),
         "candidates_token_count": getattr(meta, "candidates_token_count", 0),

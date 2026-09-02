@@ -127,15 +127,17 @@ class TestChatbotFeature(unittest.TestCase):
         """Test slash commands logic"""
         bot = KRStockChatbot(self.user_id)
         
-        # 1. Status
+        # 1. Status — 경량 명령이므로 히스토리에 남지 않는다.
         status_msg = bot.chat("/status")
         self.assertIn("📊 **현재 상태**", status_msg)
         self.assertIn(self.user_id, status_msg)
+        self.assertEqual(bot.history.count(), 0)
         
-        # 2. Help
+        # 2. Help — 마찬가지로 남지 않는다.
         help_msg = bot.chat("/help")
         self.assertIn("🤖 **스마트머니봇 도움말**", help_msg)
         self.assertIn("/memory", help_msg)
+        self.assertEqual(bot.history.count(), 0)
         
         # 3. Memory
         # Add
@@ -152,11 +154,12 @@ class TestChatbotFeature(unittest.TestCase):
         bot.chat("/memory remove topic")
         self.assertNotIn("topic", bot.get_memory())
         
-        # 4. Clear
+        # 4. Clear — /clear 는 세션을 비운 뒤 그 명령 자체를 기록으로 남긴다.
+        before_add = bot.history.count()
         bot.history.add("user", "test")
-        self.assertEqual(bot.history.count(), 1)
+        self.assertEqual(bot.history.count(), before_add + 1)
         bot.chat("/clear")
-        self.assertEqual(bot.history.count(), 0)
+        self.assertEqual(bot.history.count(), 2)
 
 if __name__ == '__main__':
     unittest.main()

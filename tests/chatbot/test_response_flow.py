@@ -40,6 +40,12 @@ def test_extract_usage_metadata_returns_empty_when_usage_missing():
     assert extract_usage_metadata(response) == {}
 
 
+def test_extract_usage_metadata_returns_empty_when_usage_is_none():
+    # 스트리밍 청크는 usage_metadata 속성을 갖되 값이 None 인 채로 오는 경우가 많다.
+    response = SimpleNamespace(text="ok", usage_metadata=None)
+    assert extract_usage_metadata(response) == {}
+
+
 def test_extract_usage_metadata_reads_all_known_fields():
     usage = SimpleNamespace(
         prompt_token_count=11,
@@ -89,7 +95,7 @@ def test_stream_single_model_response_emits_reasoning_and_answer_chunks():
     ]
     gen = stream_single_model_response(chunks, session_id="s1")
     events, result = _drain_generator(gen)
-    bot_response, streamed_reasoning, streamed_answer = result
+    bot_response, streamed_reasoning, streamed_answer, _usage = result
 
     assert any(e.get("reasoning_chunk") for e in events)
     assert any(e.get("answer_chunk") for e in events)
@@ -107,7 +113,7 @@ def test_stream_single_model_response_handles_split_headers_across_chunks():
     ]
     gen = stream_single_model_response(chunks, session_id="s1")
     events, result = _drain_generator(gen)
-    _, streamed_reasoning, streamed_answer = result
+    _, streamed_reasoning, streamed_answer, _usage = result
 
     assert any("근거 A" in (e.get("reasoning_chunk") or "") for e in events)
     assert any("결론 B" in (e.get("answer_chunk") or "") for e in events)
@@ -120,7 +126,7 @@ def test_stream_single_model_response_flushes_pending_tail_without_headers():
 
     gen = stream_single_model_response(chunks, session_id="s1")
     events, result = _drain_generator(gen)
-    _, streamed_reasoning, streamed_answer = result
+    _, streamed_reasoning, streamed_answer, _usage = result
 
     assert streamed_reasoning == ""
     assert streamed_answer == "헤더 없이 바로 답변"
@@ -186,7 +192,7 @@ def test_stream_with_fallback_models_retries_then_succeeds():
         logger=logging.getLogger("test.response_flow"),
     )
     events, result = _drain_generator(gen)
-    bot_response, streamed_reasoning, streamed_answer, fallback_error = result
+    bot_response, streamed_reasoning, streamed_answer, _usage, fallback_error = result
 
     assert events[0] == {"clear": True, "session_id": "s1"}
     assert "복구 응답" in bot_response

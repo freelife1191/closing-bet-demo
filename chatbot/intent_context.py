@@ -46,26 +46,23 @@ def resolve_primary_intent_context(
     build_market_gate_context: Callable[[Dict[str, Any]], str],
     build_vcp_intent_context_fn: Callable[[], Tuple[str, str]],
     build_news_intent_context_fn: Callable[[], Tuple[str, str]],
-) -> Tuple[str, str, bool]:
-    """1차 의도에 따른 컨텍스트/지시문/종가베팅 여부를 반환한다."""
+) -> Tuple[str, str]:
+    """1차 의도에 따른 컨텍스트와 지시문을 반환한다."""
     if contains_any_keyword(user_message, _CLOSING_BET_KEYWORDS):
-        context, instruction = build_closing_bet_context()
-        return context, instruction, True
+        return build_closing_bet_context()
 
     if contains_any_keyword(user_message, _MARKET_KEYWORDS):
         context = build_market_gate_context(market_gate_data)
         instruction = "Market Gate 상태를 중심으로 시장 요약과 대응 전략을 안내하세요."
-        return context, instruction, False
+        return context, instruction
 
     if contains_any_keyword(user_message, _NEWS_KEYWORDS):
-        context, instruction = build_news_intent_context_fn()
-        return context, instruction, False
+        return build_news_intent_context_fn()
 
     if contains_any_keyword(user_message, _VCP_KEYWORDS):
-        context, instruction = build_vcp_intent_context_fn()
-        return context, instruction, False
+        return build_vcp_intent_context_fn()
 
-    return "", "", False
+    return "", ""
 
 
 def build_watchlist_context_bundle(
@@ -94,11 +91,11 @@ def build_additional_context(
     watchlist: Optional[list],
     vcp_data: List[dict],
     market_gate_data: Dict[str, Any],
-    resolve_primary_intent_context_fn: Callable[[str, Dict[str, Any]], Tuple[str, str, bool]],
+    resolve_primary_intent_context_fn: Callable[[str, Dict[str, Any]], Tuple[str, str]],
     build_watchlist_context_bundle_fn: Callable[[str, Optional[list], List[dict]], Tuple[str, str]],
-) -> Tuple[str, str, bool]:
+) -> Tuple[str, str]:
     """의도 컨텍스트와 관심종목 컨텍스트를 병합한다."""
-    intent_context, intent_instruction, jongga_context = resolve_primary_intent_context_fn(
+    intent_context, intent_instruction = resolve_primary_intent_context_fn(
         user_message,
         market_gate_data,
     )
@@ -110,7 +107,7 @@ def build_additional_context(
 
     additional_context = f"{intent_context}{watchlist_context}"
     final_instruction = watchlist_instruction or intent_instruction
-    return additional_context, final_instruction, jongga_context
+    return additional_context, final_instruction
 
 
 __all__ = [

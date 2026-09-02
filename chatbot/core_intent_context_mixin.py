@@ -76,7 +76,7 @@ class CoreIntentContextMixin:
         self,
         user_message: str,
         market_gate_data: Dict[str, Any],
-    ) -> Tuple[str, str, bool]:
+    ) -> Tuple[str, str]:
         """메시지의 1차 의도를 해석해 컨텍스트/지시문을 반환한다."""
         return _resolve_primary_intent_context_impl(
             user_message=user_message,
@@ -110,7 +110,7 @@ class CoreIntentContextMixin:
         watchlist: Optional[list],
         vcp_data: List[dict],
         market_gate_data: Dict[str, Any],
-    ) -> Tuple[str, str, bool]:
+    ) -> Tuple[str, str]:
         """질문 의도별 추가 컨텍스트와 intent 문구를 구성한다."""
         return _build_additional_context_impl(
             user_message=user_message,

@@ -92,7 +92,6 @@ def build_content_parts(
     system_prompt: str,
     intent_instruction: str,
     user_message: str,
-    jongga_context: bool,
 ) -> List[Any]:
     """멀티모달 요청 body(parts)를 생성한다."""
     content_parts: list[Any] = []
@@ -100,7 +99,7 @@ def build_content_parts(
         content_parts.append(file_obj)
 
     sections = [system_prompt]
-    if jongga_context and intent_instruction:
+    if intent_instruction:
         sections.append(f"[질의 의도 가이드]\n{intent_instruction}")
     sections.append(f"[사용자 메시지]: {user_message}")
     content_parts.append("\n\n".join(sections))
@@ -118,7 +117,7 @@ def build_chat_payload(
 ) -> Tuple[List[dict], List[Any]]:
     """단일/스트림 공통 요청 payload(history + parts)를 빌드한다."""
     market_gate_data, vcp_data, sector_scores, market_data = bot._collect_market_context()
-    additional_context, intent_instruction, jongga_context = bot._build_additional_context(
+    additional_context, intent_instruction = bot._build_additional_context(
         user_message=user_message,
         watchlist=watchlist,
         vcp_data=vcp_data,
@@ -141,7 +140,6 @@ def build_chat_payload(
         system_prompt=system_prompt,
         intent_instruction=intent_instruction,
         user_message=user_message,
-        jongga_context=jongga_context,
     )
     return api_history, content_parts
 

@@ -51,6 +51,15 @@ def test_is_ephemeral_command_detects_lightweight_commands():
     assert not is_ephemeral_command("/status", files=[{"name": "a.png"}])
 
 
+def test_is_ephemeral_command_ignores_case_and_arguments():
+    assert is_ephemeral_command("/STATUS", files=None)
+    assert is_ephemeral_command("  /help  ", files=None)
+    # command_service.handle_command 와 같은 split() 이라 탭 구분도 같게 잘린다.
+    assert is_ephemeral_command("/status\t추가", files=None)
+    assert not is_ephemeral_command("", files=None)
+    assert not is_ephemeral_command("   ", files=None)
+
+
 def test_ensure_session_access_owner_mismatch_reuses_or_recreates_based_on_flag():
     history = _FakeHistory()
     logger = _FakeLogger()

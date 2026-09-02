@@ -19,10 +19,8 @@ def is_ephemeral_command(user_message: str, files: Optional[list]) -> bool:
     if not isinstance(user_message, str):
         return False
 
-    stripped = user_message.strip()
-    if not stripped.startswith("/"):
-        return False
-    return True
+    # command_service.handle_command 와 같은 split() 으로 첫 토큰을 뽑아야 두 판정이 어긋나지 않는다.
+    return next(iter(user_message.lower().split()), "") in _EPHEMERAL_COMMANDS
 
 
 def _persist_owner_update(history: Any, session_id: str) -> None:

@@ -62,7 +62,6 @@ class CorePayloadMixin:
         system_prompt: str,
         intent_instruction: str,
         user_message: str,
-        jongga_context: bool,
     ) -> List[Any]:
         """멀티모달 요청 payload(parts) 생성."""
         return _build_content_parts_impl(
@@ -70,7 +69,6 @@ class CorePayloadMixin:
             system_prompt=system_prompt,
             intent_instruction=intent_instruction,
             user_message=user_message,
-            jongga_context=jongga_context,
         )
 
     def _build_chat_payload(

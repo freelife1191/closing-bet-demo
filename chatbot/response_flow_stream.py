@@ -14,6 +14,7 @@ from .markdown_utils import (
     REASONING_START_REGEX,
     _compute_stream_delta,
 )
+from .response_flow_errors import extract_usage_metadata
 
 
 _STREAM_HEADER_TAIL_GUARD = 20
@@ -301,12 +302,18 @@ def _flush_pending_piece(
 def stream_single_model_response(
     response_stream: Any,
     session_id: str,
-) -> Generator[Dict[str, Any], None, Tuple[str, str, str]]:
+) -> Generator[Dict[str, Any], None, Tuple[str, str, str, Dict[str, int]]]:
     """단일 모델 응답 스트림을 증분 파싱으로 처리한다."""
     bot_response_parts: list[str] = []
     state = _StreamParseState()
+    usage_metadata: Dict[str, int] = {}
 
     for chunk in response_stream:
+        # google-genai 의 usage_metadata 는 Optional 이라 대부분의 청크에서 None 이고,
+        # total_token_count 가 "entire request" 의 합계라 증분이 아닌 누적값이다.
+        # 그래서 유효한 값이 올 때마다 덮어써서 마지막 값을 남긴다.
+        usage_metadata = extract_usage_metadata(chunk) or usage_metadata
+
         chunk_text = getattr(chunk, "text", "")
         if not chunk_text:
             continue
@@ -339,7 +346,7 @@ def stream_single_model_response(
     yield from _flush_pending_piece(session_id=session_id, state=state)
 
     bot_response = "".join(bot_response_parts)
-    return bot_response, state.streamed_reasoning, state.streamed_answer
+    return bot_response, state.streamed_reasoning, state.streamed_answer, usage_metadata
 
 
 __all__ = [

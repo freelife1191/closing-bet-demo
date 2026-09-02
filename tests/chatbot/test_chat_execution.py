@@ -153,6 +153,45 @@ def test_run_stream_response_retries_and_returns_success():
     assert stream_error is None
 
 
+def test_run_stream_response_collects_usage_metadata_from_last_chunk():
+    usage = SimpleNamespace(
+        prompt_token_count=7,
+        candidates_token_count=5,
+        total_token_count=12,
+    )
+    client = _FakeClient(
+        _FakeChats(
+            stream_behaviors={
+                "gemini-3.7-flash": [
+                    SimpleNamespace(text="[답변]\n부분", usage_metadata=None),
+                    SimpleNamespace(text=" 응답", usage_metadata=usage),
+                ]
+            }
+        )
+    )
+
+    gen = run_stream_response(
+        active_client=client,
+        target_model_name="gemini-3.7-flash",
+        api_history=[],
+        content_parts=["msg"],
+        session_id="s1",
+        user_id="u1",
+        logger=logging.getLogger("test.chat_execution"),
+        normalize_response=lambda text: text,
+    )
+    _events, result = _drain_generator(gen)
+    bot_response, usage_metadata, stream_error = result
+
+    assert "부분 응답" in bot_response
+    assert stream_error is None
+    assert usage_metadata == {
+        "prompt_token_count": 7,
+        "candidates_token_count": 5,
+        "total_token_count": 12,
+    }
+
+
 def test_run_stream_response_returns_user_friendly_error_when_all_fallbacks_fail():
     client = _FakeClient(
         _FakeChats(default_stream_behavior=RuntimeError("503 UNAVAILABLE"))
