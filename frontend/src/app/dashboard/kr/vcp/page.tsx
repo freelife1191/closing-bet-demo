@@ -228,6 +228,7 @@ export default function VCPSignalsPage() {
   const [reanalysisMode, setReanalysisMode] = useState<'failed' | 'gemini' | 'second'>('failed');
   const [screenerMessage, setScreenerMessage] = useState<string | null>(null);
   const reanalysisPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const screenerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Slash Command State for Embedded Chat
   const [showCommands, setShowCommands] = useState(false);
@@ -469,6 +470,13 @@ export default function VCPSignalsPage() {
     }
   };
 
+  const clearScreenerPolling = () => {
+    if (screenerPollRef.current) {
+      clearInterval(screenerPollRef.current);
+      screenerPollRef.current = null;
+    }
+  };
+
   const isFailedAIReanalysisRunning = (status: any): boolean => {
     const taskType = String(status?.task_type || '').toLowerCase();
     if (Boolean(status?.running) && taskType === 'reanalysis_failed_ai') {
@@ -510,6 +518,7 @@ export default function VCPSignalsPage() {
   useEffect(() => {
     return () => {
       clearReanalysisPolling();
+      clearScreenerPolling();
     };
   }, []);
 
@@ -537,13 +546,14 @@ export default function VCPSignalsPage() {
         setScreenerMessage(`🔄 ${status.message} (재개됨)`);
 
         // 폴링 재시작
-        const pollInterval = setInterval(async () => {
+        clearScreenerPolling();
+        screenerPollRef.current = setInterval(async () => {
           try {
             const s = await krAPI.getVCPStatus();
             if (s.running) {
               setScreenerMessage(`🔄 ${s.message} (${s.progress || 0}%)`);
             } else {
-              clearInterval(pollInterval);
+              clearScreenerPolling();
               setScreenerMessage('✅ 업데이트 완료! 데이터 로딩...');
               await loadSignals();
               await loadMarketGate();
@@ -569,18 +579,19 @@ export default function VCPSignalsPage() {
     }
   };
 
+  // signals 를 통째로 의존성에 두면 아래 setSignals 가 effect 를 다시 불러 무한 루프가
+  // 되고, 개수만 두면 목록이 교체되어도 개수가 같을 때 클로저가 이전 종목을 붙든다.
+  const priceTickerKey = signals.map(s => s.ticker).join(',');
+
   useEffect(() => {
-    if (loading || signals.length === 0) return;
+    if (loading || !priceTickerKey) return;
 
     const updatePrices = async () => {
       try {
-        const tickers = signals.map(s => s.ticker);
-        if (tickers.length === 0) return;
-
         const res = await fetch('/api/kr/realtime-prices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tickers })
+          body: JSON.stringify({ tickers: priceTickerKey.split(',') })
         });
         const prices = await res.json();
 
@@ -610,7 +621,7 @@ export default function VCPSignalsPage() {
     // 이후 1분 간격으로 업데이트
     const interval = setInterval(updatePrices, 60000);
     return () => clearInterval(interval);
-  }, [signals.length, loading]);
+  }, [priceTickerKey, loading]);
 
   const loadHistoryDates = async () => {
     try {
@@ -1226,12 +1237,13 @@ export default function VCPSignalsPage() {
                 let pollCount = 0;
                 const MAX_POLLS = 150; // 5분 (2초 * 150 = 300초) 안전 타임아웃
 
-                const pollInterval = setInterval(async () => {
+                clearScreenerPolling();
+                screenerPollRef.current = setInterval(async () => {
                   pollCount++;
 
                   // 안전 타임아웃: 5분 초과 시 강제 종료
                   if (pollCount > MAX_POLLS) {
-                    clearInterval(pollInterval);
+                    clearScreenerPolling();
                     setScreenerMessage('⏰ 시간 초과 - 백그라운드에서 계속 진행 중일 수 있습니다.');
                     setScreenerRunning(false);
                     setTimeout(() => setScreenerMessage(null), 7000);
@@ -1244,7 +1256,7 @@ export default function VCPSignalsPage() {
                     if (status.status === 'running' || status.running) {
                       setScreenerMessage(`🔄 ${status.message} (${status.progress || 0}%)`);
                     } else if (status.status === 'success') {
-                      clearInterval(pollInterval);
+                      clearScreenerPolling();
                       setScreenerMessage('✅ 데이터 로딩 중...');
 
                       // 데이터 새로고침
@@ -1259,14 +1271,14 @@ export default function VCPSignalsPage() {
                       setScreenerRunning(false);
                       setTimeout(() => setScreenerMessage(null), 5000);
                     } else if (status.status === 'error') {
-                      clearInterval(pollInterval);
+                      clearScreenerPolling();
                       setScreenerMessage(`❌ 오류: ${status.message}`);
                       setScreenerRunning(false);
                       setTimeout(() => setScreenerMessage(null), 7000);
                     } else {
                       // IDLE 등 예외적 상태
                       if (!status.running && sawRunning) {
-                        clearInterval(pollInterval);
+                        clearScreenerPolling();
                         setScreenerRunning(false);
                         setScreenerMessage(null);
                       }
