@@ -107,7 +107,7 @@ PRICE_CHANGE.MIN            # 5%
 ### Entry Points
 - `flask_app.py` - Flask application entry (port 5501)
 - `run.py` - Interactive CLI menu
-- `chatbot.py` - AI chatbot entry
+- `chatbot/` - AI chatbot package (`chatbot/core.py` is the orchestrator)
 
 ### Configuration
 - `.env` - Environment variables (API keys, ports). `.env.production`, `.env.vertex`
@@ -230,6 +230,7 @@ SCHEDULER_ENABLED=true
 
 - 백로그: `docs/dev-cycle/TODO.md` (단일 관리 지점)
 - 완료 기록: `docs/dev-cycle/archive/` (월별 요약 + 일별 상세)
+- QA 시나리오: `docs/dev-cycle/qa/` (항목별 검사 목록과 실행 결과)
 - 사이클 절차: `.claude/skills/dev-cycle/SKILL.md`
 - 티어와 위험 경로: `.claude/skills/dev-cycle/references/tier-rules.md`
 - 기록 형식: `.claude/skills/dev-cycle/references/archive-format.md`
@@ -243,8 +244,8 @@ SCHEDULER_ENABLED=true
 승인 게이트를 두지 않습니다. 계획과 결과는 알리되 승인을 기다리지 않고 사이클을 끝까지
 진행합니다. 커밋도 묻지 않고 진행하며, 무엇을 어떻게 반영했는지는 커밋한 뒤에 보고합니다.
 
-멈추는 자리는 압축 지점 세 곳입니다. `/qa-only` 를 부르기 직전, T3 항목의 구현이 끝난 뒤,
-그리고 사이클을 마친 직후입니다. 그 자리에서 턴을 끝내고 알리므로 `/compact` 를 실행하면
+멈추는 자리는 압축 지점 네 곳입니다. `/qa-only` 를 부르기 직전, `/qa` 를 부르기 직전,
+T3 항목의 구현이 끝난 뒤, 그리고 사이클을 마친 직후입니다. 그 자리에서 턴을 끝내고 알리므로 `/compact` 를 실행하면
 다음 턴에서 이어집니다. 그 밖에는 되돌릴 수 없어 사용자만 결정할 수 있는 사항을 만났을
 때만 멈춥니다. 압축 지점의 근거와 복구 방법은 스킬 정의의 `## 컨텍스트 관리` 절에
 있습니다.
