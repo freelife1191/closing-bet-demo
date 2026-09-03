@@ -37,3 +37,10 @@ export function formatBigNumber(num: number | undefined | null) {
 export function stockChartUrl(symbol: string, period: ChartPeriod) {
   return `https://ssl.pstatic.net/imgfinance/chart/item/candle/${period}/${encodeURIComponent(symbol)}.png`;
 }
+
+// 시세 자리에 그릴 수 있는 값인지 판정한다. 백엔드는 시세를 못 받았을 때 값을 비우는
+// 대신 0 으로 채우므로, 0 을 값 없음으로 읽어야 「₩0」을 정상 시세처럼 적지 않는다.
+// 주가에 0 원은 없다. 액면가가 가장 낮은 종목도 100 원부터 시작한다.
+export function isPositivePrice(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}

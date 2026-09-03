@@ -6,7 +6,7 @@ import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
 import { useAdmin } from '@/hooks/useAdmin';
-import { CHART_PERIODS, formatBigNumber, stockChartUrl } from './displayHelpers';
+import { CHART_PERIODS, formatBigNumber, isPositivePrice, stockChartUrl } from './displayHelpers';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
 function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false, width }: {
@@ -313,7 +313,34 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
 }
 
 // Price Range Progress Bar Component
-function PriceRangeBar({ low, high, current, label }: { low: number; high: number; current: number; label: string }) {
+//
+// 시세를 못 받은 종목은 백엔드가 값을 비우는 대신 0 으로 채운 응답을 돌려준다. 세 갈래가
+// 모두 그렇게 한다(services/kr_market_stock_detail_service.py 의 기본값 payload 와
+// engine/collectors/naver_extractors_mixin.py 의 빈 결과 딕셔너리). 그 0 을 그대로 그리면
+// 「₩0」과 「L: ₩0 / H: ₩0」이 정상 시세처럼 보이고 손잡이가 범위 한가운데에 놓인다.
+// 주가에 0 원은 없으므로 값을 구하지 못한 것으로 보고 그 사실을 적는다.
+//
+// 키가 아예 빠진 응답도 같은 자리에서 걸러야 한다. 캐시를 읽는 쪽이 code 가 문자열인지만
+// 검사하고 통과시키므로(kr_market_stock_detail_service.py 의 _normalize_stock_detail_payload)
+// 시세 키가 빠진 채로 화면까지 닿을 수 있고, 그러면 toLocaleString 이 터져 모달이 통째로
+// 그려지지 않는다. 값을 받는 이 함수에서 한 번 막으면 호출하는 두 자리가 함께 고쳐진다.
+function PriceRangeBar({ low, high, current, label }: {
+  low?: number | null;
+  high?: number | null;
+  current?: number | null;
+  label: string;
+}) {
+  if (!isPositivePrice(low) || !isPositivePrice(high) || !isPositivePrice(current)) {
+    return (
+      <div className="mb-5">
+        <div className="flex justify-between items-end mb-2">
+          <span className="text-xs text-gray-400 font-medium">{label}</span>
+          <span className="text-xs text-gray-500">시세를 불러오지 못했습니다</span>
+        </div>
+      </div>
+    );
+  }
+
   const range = high - low;
   const position = range > 0 ? ((current - low) / range) * 100 : 50;
   const positionClamped = Math.max(0, Math.min(100, position));
@@ -611,16 +638,20 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                     <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                   </Tooltip>
                 </h4>
+                {/* 두 호출 모두 폴백 없이 원값을 넘긴다. 1일 범위에는 값이 없을 때
+                    전일종가에 0.97 과 1.03 을 곱해 범위를 지어내는 폴백이 있었으나,
+                    그렇게 만든 숫자가 「L: ₩36,133」처럼 실제 저가인 것처럼 적혔다.
+                    값이 없으면 없다고 적는 쪽이 낫다. 판정은 PriceRangeBar 가 한다. */}
                 <PriceRangeBar
-                  low={detail.priceInfo.low || detail.priceInfo.prevClose * 0.97}
-                  high={detail.priceInfo.high || detail.priceInfo.prevClose * 1.03}
-                  current={detail.priceInfo.current || detail.priceInfo.prevClose}
+                  low={detail.priceInfo?.low}
+                  high={detail.priceInfo?.high}
+                  current={detail.priceInfo?.current}
                   label="1일 범위"
                 />
                 <PriceRangeBar
-                  low={detail.yearRange.low_52w}
-                  high={detail.yearRange.high_52w}
-                  current={detail.priceInfo.current}
+                  low={detail.yearRange?.low_52w}
+                  high={detail.yearRange?.high_52w}
+                  current={detail.priceInfo?.current}
                   label="52주 범위"
                 />
 
