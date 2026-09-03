@@ -10,7 +10,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import JonggaV2Page, { stockChartUrl } from './page';
+import JonggaV2Page from './page';
+import { stockChartUrl } from './displayHelpers';
 
 const KST_DATE = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' });
 const TODAY = () => `${KST_DATE.format(new Date())}T12:00:00+09:00`;

@@ -6,6 +6,7 @@ import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
 import { useAdmin } from '@/hooks/useAdmin';
+import { CHART_PERIODS, formatBigNumber, stockChartUrl } from './displayHelpers';
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
 function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false, width }: {
@@ -204,26 +205,6 @@ interface StockDetailInfo {
     debtRatio: number;
     currentRatio: number;
   };
-}
-
-// 종목 차트. 네이버 금융이 종목코드로 직접 만들어 주는 이미지를 그대로 쓴다.
-// 앞서 쓰던 TradingView 임베드 위젯은 무료 등급이 KRX 시세를 제공하지 않아, 심볼이
-// 실재해도 기본 심볼(애플)로 조용히 바꿔 그렸다. iframe 이 교차 출처라서 앱이 그
-// 대체를 감지할 수도 없었다. 이미지 주소는 종목코드로 조립되므로 다른 종목이 섞이지
-// 않고, 없는 종목에는 404 가 오므로 실패를 화면에 드러낼 수 있다.
-const CHART_PERIODS = [
-  { key: 'day', label: '일봉' },
-  { key: 'week', label: '주봉' },
-  { key: 'month', label: '월봉' },
-] as const;
-
-type ChartPeriod = (typeof CHART_PERIODS)[number]['key'];
-
-// 종목코드는 백엔드 응답에서 오는 값이므로 경로에 끼우기 전에 인코딩한다. 형식을
-// 여섯 자리 숫자로 좁히지는 않는다. KRX 가 아크릴(0007C0)처럼 영문자가 든 코드를
-// 이미 쓰고 있어서, 좁히는 쪽이 오히려 멀쩡한 종목을 떨어뜨린다.
-export function stockChartUrl(symbol: string, period: ChartPeriod) {
-  return `https://ssl.pstatic.net/imgfinance/chart/item/candle/${period}/${encodeURIComponent(symbol)}.png`;
 }
 
 function StockChart({ symbol, name }: { symbol: string, name: string }) {
@@ -572,19 +553,10 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
       });
   }, [code]);
 
-  const formatBigNumber = (num: number | undefined | null) => {
-    if (num === undefined || num === null || num === 0) return '-';
-
-    const abs = Math.abs(num);
-    const sign = num < 0 ? '-' : '';
-
-    if (abs >= 10000000000000000) return `${sign}${(abs / 10000000000000000).toFixed(1)}경`;
-    if (abs >= 1000000000000) return `${sign}${(abs / 1000000000000).toFixed(1)}조`;
-    if (abs >= 100000000) return `${sign}${(abs / 100000000).toFixed(0)}억`;
-    if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(0)}만`;
-
-    return num.toLocaleString();
-  };
+  // 외국인·기관 5일 순매수는 카드가 쓰는 KRX 확정 집계(investorTrend5Day)를 그대로 쓴다.
+  // 응답에 그 키가 없으면 실시간 시세 제공처가 낸 5일 집계로 물러선다.
+  const foreign5Day = detail?.investorTrend5Day?.foreign ?? detail?.investorTrend?.foreign ?? 0;
+  const institution5Day = detail?.investorTrend5Day?.institution ?? detail?.investorTrend?.institution ?? 0;
 
   return (
     <div
@@ -632,8 +604,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
               {/* Price Range Section */}
               <div className="bg-white/5 rounded-xl p-4">
                 <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                  <i className="fas fa-chart-bar text-indigo-400"></i> 시세 정보
-                  <Tooltip content="오늘의 가격 움직임(1일 범위)과 최근 52주간 최저/최고가를 비교하여 현재 가격 위치를 보여줍니다.">
+                  <i className="fas fa-chart-bar text-indigo-400"></i> 시세 정보 (실시간)
+                  <Tooltip content="당일의 가격 움직임(1일 범위)과 최근 52주간 최저·최고가를 견주어 지금의 가격 위치를 보여줍니다. 카드에 적힌 값은 신호가 나온 거래일에 확정된 것이라 이 값과 다릅니다.">
                     <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                   </Tooltip>
                 </h4>
@@ -683,7 +655,12 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-gray-500">거래대금 (Val)</span>
+                    <span className="text-gray-500 flex items-center gap-1">
+                      거래대금 (Val)
+                      <Tooltip content="장이 시작한 뒤 지금까지 쌓인 거래대금이라 장이 끝날 때까지 계속 늘어납니다. 카드의 「거래대금」은 신호가 나온 거래일에 확정된 하루치이므로 두 값은 다릅니다. 등급 판정은 카드의 확정값을 씁니다.">
+                        <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
+                      </Tooltip>
+                    </span>
                     <span className="font-mono text-emerald-400">
                       {formatBigNumber(detail.priceInfo.trading_value)}
                     </span>
@@ -761,7 +738,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
               <div className="bg-white/5 rounded-xl p-4">
                 <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                   <i className="fas fa-users text-purple-400"></i> 투자자 동향 (5일 합계)
-                  <Tooltip content="최근 5영업일 동안 각 투자자 유형의 순매수/순매도 금액입니다. 외국인/기관 순매수는 호재로 해석됩니다.">
+                  <Tooltip content="최근 5영업일 동안 각 투자자 유형이 순매수하거나 순매도한 금액입니다. 외국인과 기관의 순매수는 호재로 해석됩니다. 개인은 집계처가 달라 세 값의 합이 맞지 않을 수 있습니다.">
                     <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                   </Tooltip>
                 </h4>
@@ -769,29 +746,29 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       외국인
-                      <Tooltip content="외국인 투자자의 순매수 금액. 양수면 매수우위.">
+                      <Tooltip content="외국인 투자자가 최근 5영업일 동안 순매수한 금액입니다. 양수면 매수우위입니다. 카드의 「외인 (5일)」과 같은 값입니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${detail.investorTrend.foreign >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                      {detail.investorTrend.foreign >= 0 ? '+' : ''}{formatBigNumber(detail.investorTrend.foreign)}
+                    <div className={`text-sm font-bold ${foreign5Day >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                      {foreign5Day >= 0 ? '+' : ''}{formatBigNumber(foreign5Day)}
                     </div>
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       기관
-                      <Tooltip content="기관 투자자(연기금, 자산운용사 등)의 순매수 금액.">
+                      <Tooltip content="기관 투자자(연기금, 자산운용사 등)가 최근 5영업일 동안 순매수한 금액입니다. 카드의 「기관 (5일)」과 같은 값입니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${detail.investorTrend.institution >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                      {detail.investorTrend.institution >= 0 ? '+' : ''}{formatBigNumber(detail.investorTrend.institution)}
+                    <div className={`text-sm font-bold ${institution5Day >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                      {institution5Day >= 0 ? '+' : ''}{formatBigNumber(institution5Day)}
                     </div>
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       개인
-                      <Tooltip content="개인 투자자의 순매수 금액. 보통 외국인/기관과 반대.">
+                      <Tooltip content="개인 투자자가 최근 5영업일 동안 순매수한 금액입니다. 보통 외국인·기관과 방향이 반대입니다. 이 값만 실시간 시세 제공처가 집계하므로 위의 외국인·기관과 기준일이 달라질 수 있습니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
@@ -2119,26 +2096,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               <div className={`text-sm font-bold ${(signal.score_details?.foreign_net_buy || 0) > 0 ? 'text-rose-400' :
                 (signal.score_details?.foreign_net_buy || 0) < 0 ? 'text-blue-400' : 'text-gray-400'
                 }`}>
-                {(signal.score_details?.foreign_net_buy)
-                  ? (() => {
-                    const value = signal.score_details.foreign_net_buy;
-                    const abs = Math.abs(value);
-                    const sign = value < 0 ? '-' : '';
-
-                    if (abs >= 1_000_000_000_000) {
-                      const jo = Math.floor(abs / 1_000_000_000_000);
-                      const uk = Math.floor((abs % 1_000_000_000_000) / 100_000_000);
-                      return uk > 0
-                        ? `${sign}${jo}조 ${uk}억`
-                        : `${sign}${jo}조`;
-                    }
-
-                    return abs >= 100_000_000
-                      ? `${sign}${Math.floor(abs / 100_000_000)}억`
-                      : `${sign}${Math.floor(abs / 10000)}만`;
-                  })()
-                  : '-'
-                }
+                {formatBigNumber(signal.score_details?.foreign_net_buy)}
               </div>
             </div>
             <div className="text-center">
@@ -2151,26 +2109,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               <div className={`text-sm font-bold ${(signal.score_details?.inst_net_buy || 0) > 0 ? 'text-rose-400' :
                 (signal.score_details?.inst_net_buy || 0) < 0 ? 'text-blue-400' : 'text-gray-400'
                 }`}>
-                {(signal.score_details?.inst_net_buy)
-                  ? (() => {
-                    const value = signal.score_details.inst_net_buy;
-                    const abs = Math.abs(value);
-                    const sign = value < 0 ? '-' : '';
-
-                    if (abs >= 1_000_000_000_000) {
-                      const jo = Math.floor(abs / 1_000_000_000_000);
-                      const uk = Math.floor((abs % 1_000_000_000_000) / 100_000_000);
-                      return uk > 0
-                        ? `${sign}${jo}조 ${uk}억`
-                        : `${sign}${jo}조`;
-                    }
-
-                    return abs >= 100_000_000
-                      ? `${sign}${Math.floor(abs / 100_000_000)}억`
-                      : `${sign}${Math.floor(abs / 10000)}만`;
-                  })()
-                  : '-'
-                }
+                {formatBigNumber(signal.score_details?.inst_net_buy)}
               </div>
             </div>
           </div>
