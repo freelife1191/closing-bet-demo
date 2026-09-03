@@ -13,6 +13,16 @@ dev-cycle 의 리뷰와 검증 강도를 정하는 규칙이다. 판정은 계�
 
 「QA 2단계」의 내용은 아래 §1-1 에 있다.
 
+검증 열의 「pytest」와 「vitest」가 어느 명령인지 여기에 적어 둔다. 매 사이클이 다시
+알아내면 그만큼 시간이 든다.
+
+    source venv/bin/activate && pytest      # 파이썬. 저장소 루트에서 실행한다
+    cd frontend && npx vitest run           # `npm run test` 는 watch 모드라 끝나지 않는다
+    cd frontend && npm run type-check       # tsc --noEmit
+
+`tsc` 는 표의 검증 열에 적혀 있지 않지만 `frontend/` 를 건드리는 항목에서는 함께 돌린다.
+vitest 는 타입 오류를 잡지 못하고, 이 저장소의 화면 코드는 전부 타입스크립트다.
+
 `/ponytail-review` 를 `/code-review` 앞에 두는 순서를 지킨다. 지울 코드를 먼저 걷어내야
 곧 사라질 코드를 다듬는 낭비가 생기지 않는다.
 
