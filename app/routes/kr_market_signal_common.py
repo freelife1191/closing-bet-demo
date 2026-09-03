@@ -4,6 +4,7 @@
 KR Market 시그널 헬퍼 공통 유틸리티
 """
 
+import re
 from datetime import datetime
 from typing import Any, Optional
 
@@ -102,8 +103,23 @@ def _safe_optional_float(value: Any) -> Optional[float]:
         return None
 
 
+# 국내 종목코드는 여섯 자리이고 첫 자리와 끝 자리가 숫자이며 그 사이에 영문자가 올 수
+# 있다. 아크릴이 `0007C0` 다. 숫자만 남기면 `000070` 이라는 남의 코드가 된다.
+# `A005930`(KRX 단축코드)이나 `005930.KS`(yfinance 심볼)처럼 앞뒤에 시장 표시가 붙어
+# 들어와도 이 패턴이 코드 부분만 집어낸다.
+#
+# 자료에서 확인한 세 종목은 모두 다섯째 자리에 영문자가 오지만 그 자리로 고정하지
+# 않았다. 체계가 그 자리로 정했다는 근거를 찾지 못했고, 좁혀서 틀리면 코드가 훼손되지만
+# 넓혀서 틀리면 훼손되지 않는다.
+#
+# 앞뒤의 숫자를 배제하는 것은 `20260211` 같은 긴 숫자열에서 앞 여섯 자리를 잘라 내지
+# 않기 위해서다. 자르면 `202602` 라는 실재할 수 있는 코드가 되어, 종목이 아닌 값이
+# 종목의 자리를 차지한다. 영문자는 배제하지 않는다. 시장 표시가 영문자이기 때문이다.
+_TICKER_PATTERN = re.compile(r"(?<![0-9])[0-9][0-9A-Z]{4}[0-9](?![0-9])")
+
+
 def _normalize_ticker(value: Any) -> str:
-    """티커를 6자리 숫자 문자열로 정규화한다. 유효하지 않으면 빈 문자열이다.
+    """티커를 여섯 자리 종목코드 문자열로 정규화한다. 유효하지 않으면 빈 문자열이다.
 
     숫자가 하나도 없는 값과 전부 0 인 값을 모두 빈 문자열로 돌린다. 전부 0 인
     코드는 국내 시장에 존재하지 않으며, 결측을 채워 넣은 자리채움이다. 그것을
@@ -111,10 +127,14 @@ def _normalize_ticker(value: Any) -> str:
     가격 맵처럼 티커를 키로 쓰는 자리에서 엉뚱한 값이 매칭된다. 받는 쪽마다
     그 값을 다시 거르는 방어 코드가 생기는 것도 같은 이유다.
     """
-    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
-    if not digits.strip("0"):
-        return ""
-    return digits.zfill(6)
+    text = str(value or "").upper()
+    matched = _TICKER_PATTERN.search(text)
+    # 여섯 자리에 못 미치는 순수 숫자는 앞을 0 으로 채운다. `5930` 이 `005930` 이다.
+    code = matched.group() if matched else re.sub(r"\D", "", text).zfill(6)
+    # 여섯 자리를 넘는 폴백 결과는 종목코드가 아니다. `zfill` 은 모자란 자리만 채우므로
+    # `20260211` 같은 값이 그대로 통과한다. 그것을 앞 여섯 자리로 자르면 실재하는
+    # 종목코드와 형태가 같아지므로, 자르지 않고 버려서 다음 후보 키로 넘어가게 한다.
+    return code if code.strip("0") and len(code) == 6 else ""
 
 
 def _resolve_ticker(signal: dict, *keys: str) -> str:

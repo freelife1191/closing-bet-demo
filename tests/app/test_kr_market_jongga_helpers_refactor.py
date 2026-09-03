@@ -71,6 +71,54 @@ def test_normalize_stock_code_shares_the_empty_convention():
     assert _normalize_stock_code({"stock_code": "미상"}) == ""
 
 
+# Regression: [JONGGA-017] — 영문자가 든 종목코드가 조회 경로에 따라 다른 코드가 되었다
+# 근거: docs/dev-cycle/TODO.md [JONGGA-017] (2026-09-03 JONGGA-005 사이클의 /qa NEW-003)
+#
+# 국내 종목코드는 여섯 자리이고 가운데에 영문자가 온다. 정규화가 숫자만 남기는 바람에
+# 아크릴 `0007C0` 이 `000070` 이 되었는데, 그것은 실재하는 다른 종목의 코드다. 이력
+# 조회는 정규화를 거치지 않아 원본이 살아 있고 최신 조회만 이 함수를 지나므로, 최신
+# 자료에 이런 종목이 들어오는 날 두 경로가 서로 다른 회사를 가리켰다.
+
+
+def test_normalize_ticker_keeps_letters_that_belong_to_the_code():
+    """자료에 실재하는 세 종목이다. 영문자를 버리면 각각 남의 코드가 된다."""
+    assert _normalize_ticker("0007C0") == "0007C0"  # 아크릴
+    assert _normalize_ticker("0015N0") == "0015N0"  # 아로마티카
+    assert _normalize_ticker("0126Z0") == "0126Z0"  # 삼성에피스홀딩스
+
+    # 대소문자가 섞여 들어와도 같은 코드로 모은다.
+    assert _normalize_ticker("0007c0") == "0007C0"
+
+    # 앞뒤에 붙는 시장 표시는 코드가 아니다. 여섯 자리만 집어낸다.
+    assert _normalize_ticker("005930.KS") == "005930"
+
+    # 여섯 자리를 넘는 값은 앞을 잘라 쓰지 않고 버린다. 자르면 `20260211` 이 `202602`
+    # 라는 실재할 수 있는 코드가 되어, 없는 종목이 있는 종목의 자리를 차지한다.
+    assert _normalize_ticker("20260211") == ""
+    assert _normalize_ticker("2026-02-11") == ""
+
+
+def test_frontend_normalization_keeps_the_code_history_path_returns():
+    """이력 조회는 정규화를 거치지 않는다. 최신 조회가 같은 코드를 내야 두 경로가 맞다."""
+    signal = {"stock_code": "0007C0", "stock_name": "아크릴"}
+
+    _normalize_jongga_signal_for_frontend(signal)
+
+    assert signal["stock_code"] == "0007C0"
+    assert signal["ticker"] == "0007C0"
+
+
+def test_price_map_does_not_match_a_different_stock():
+    """티커를 키로 쓰는 가격 맵에서 남의 가격이 붙던 자리다."""
+    signal = {"stock_code": "0007C0", "entry_price": 1000}
+
+    assert _apply_latest_prices_to_jongga_signals([signal], {"000070": 9999}) == 0
+    assert "current_price" not in signal
+
+    assert _apply_latest_prices_to_jongga_signals([signal], {"0007C0": 1200}) == 1
+    assert signal["current_price"] == 1200
+
+
 def test_apply_latest_prices_skips_signals_without_a_usable_ticker():
     signals = [
         {"code": "005930", "entry_price": 1000},
