@@ -125,6 +125,7 @@ interface Signal {
     reason?: string;
   };
   themes?: string[]; // 관련 테마 태그 (예: 원전, SMR, 전력인프라)
+  signal_date?: string; // 신호가 나온 거래일. 매수가가 어느 날 종가인지 밝히는 데 쓴다
 }
 
 interface ExpertAdvice {
@@ -313,7 +314,7 @@ function PriceRangeBar({ low, high, current, label }: { low: number; high: numbe
       <div className="flex justify-between items-end mb-2">
         <span className="text-xs text-gray-400 font-medium">{label}</span>
         <div className="text-right">
-          <span className="text-[10px] text-gray-500 mr-2">현재</span>
+          <span className="text-[10px] text-gray-500 mr-2">실시간</span>
           <span className="text-sm font-bold text-white">₩{current.toLocaleString()}</span>
         </div>
       </div>
@@ -674,7 +675,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       시가총액
-                      <Tooltip content="발행주식수 × 현재가. 기업의 시장가치를 나타냅니다.">
+                      <Tooltip content="발행주식수 × 주가. 기업의 시장가치를 나타냅니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
@@ -1973,6 +1974,20 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
     ? Math.min(Math.max(parsedConfidence, 0), 100)
     : null;
 
+  // [JONGGA-015] 목표가와 손절가는 매수가에서 파생되고, 같은 카드에 놓인 「종가」와는
+  // 무관하다. 두 값이 나란히 보이므로 어느 쪽이 기준인지 화면에 적어 둔다.
+  const basePrice = Math.round(signal.buy_price || signal.entry_price || 0);
+  const pctFromBase = (price?: number) => {
+    if (!(basePrice > 0) || !price) return null;
+    // 옆에 찍히는 금액이 반올림된 값이므로 비율도 같은 값에서 뽑는다.
+    const pct = ((Math.round(price) - basePrice) / basePrice) * 100;
+    return (
+      <span className="text-gray-500 text-[10px] ml-1 whitespace-nowrap">
+        (매수가 {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)
+      </span>
+    );
+  };
+
   return (
     <div className="rounded-2xl border border-white/10 bg-[#1c1c1e] overflow-hidden transition-all hover:border-white/20">
       {/* Main Content - 3 Column Layout */}
@@ -2010,7 +2025,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                 상승률
-                <Tooltip content="전일 종가 대비 현재가의 상승/하락률입니다. 양수(+)면 상승, 음수(-)면 하락입니다.">
+                <Tooltip content="신호가 나온 거래일의 상승률입니다. 그날의 전일 종가 대비 종가를 비교한 값이며, 실시간 등락률이 아닙니다.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
@@ -2031,8 +2046,8 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </div>
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
-                현재가
-                <Tooltip content="현재 주식의 거래 가격입니다. 실시간으로 업데이트되지 않을 수 있습니다.">
+                종가
+                <Tooltip content="가장 최근 거래일의 종가입니다. 장중에는 갱신되지 않으므로 실시간 시세와 다를 수 있습니다. 실시간 시세는 「상세 분석 보기」에서 확인하세요.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
@@ -2274,7 +2289,10 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                     }>
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-emerald-500 hover:text-emerald-400 transition-colors">매수가</span>
                     </Tooltip>
-                    : <span className="text-emerald-400 font-mono">₩{Math.round(signal.buy_price || signal.entry_price || 0).toLocaleString()}</span>
+                    : <span className="text-emerald-400 font-mono">₩{basePrice.toLocaleString()}</span>
+                    {signal.signal_date && (
+                      <span className="text-gray-500 text-[10px] ml-1 whitespace-nowrap">({signal.signal_date} 종가)</span>
+                    )}
                   </span>
                 </li>
                 <li className="flex items-start gap-1.5">
@@ -2294,6 +2312,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-amber-500 hover:text-amber-400 transition-colors">목표가</span>
                     </Tooltip>
                     : <span className="text-amber-400 font-mono">₩{Math.round(signal.target_price || 0).toLocaleString()}</span>
+                    {pctFromBase(signal.target_price)}
                   </span>
                 </li>
                 <li className="flex items-start gap-1.5">
@@ -2311,6 +2330,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-rose-500 hover:text-rose-400 transition-colors">손절가</span>
                     </Tooltip>
                     : <span className="text-rose-400 font-mono">₩{Math.round(signal.stop_price || 0).toLocaleString()}</span>
+                    {pctFromBase(signal.stop_price)}
                   </span>
                 </li>
               </ul>
