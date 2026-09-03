@@ -103,7 +103,7 @@ vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null
 const openDetailModal = async () => {
   render(<JonggaV2Page />);
   fireEvent.click(await screen.findByText('상세 분석 보기'));
-  await waitFor(() => expect(screen.getByText('투자자 동향 (5일 합계)')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText('투자자 동향 (오늘 기준 5영업일)')).toBeTruthy());
 };
 
 describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
@@ -165,6 +165,31 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
     // 장중 누적 324억과 카드의 확정 1,085억이 함께 있어도 사용자가 이유를 알 수 있다.
     expect(screen.getByText('324억')).toBeTruthy();
     expect(document.body.textContent).toContain('신호가 나온 거래일에 확정된 하루치');
+  });
+
+  // Regression: ISSUE-001 — 모달 수급이 어느 날짜에서든 「카드와 같은 값」이라고 단언했다
+  // Found by /qa on 2026-09-03
+  // Report: .gstack/qa-reports/qa-report-localhost-3500-2026-09-03-jongga-022-scenarios.md
+  //
+  // 상세 API 는 종목코드만 받고 날짜를 받지 않아 늘 오늘 기준의 5일 집계를 돌려준다.
+  // 카드는 신호가 나온 거래일 기준이므로 지난 날짜를 고르면 두 값이 어긋나고,
+  // 2026-02-11 현대제철은 카드 109억(순매수) 대 모달 -113억(순매도)으로 부호까지 반대다.
+  // 값을 맞출 수 없으니 이름과 문구로 시점을 구분한다.
+  it('수급 절의 이름이 오늘 기준임을 밝힌다', async () => {
+    await openDetailModal();
+
+    // 툴팁은 마우스를 올려야 보이므로 늘 보이는 제목이 시점을 말해야 한다.
+    expect(screen.getByText('투자자 동향 (오늘 기준 5영업일)')).toBeTruthy();
+  });
+
+  it('카드와 같은 값이라고 단언하지 않는다', async () => {
+    await openDetailModal();
+
+    // 지난 날짜에서 거짓이 되는 단언이라 지웠다.
+    expect(document.body.textContent).not.toContain('카드의 「외인 (5일)」과 같은 값입니다');
+    expect(document.body.textContent).not.toContain('카드의 「기관 (5일)」과 같은 값입니다');
+    // 대신 두 값이 갈리는 조건을 밝힌다.
+    expect(document.body.textContent).toContain('지난 날짜를 골랐다면 두 값이 다릅니다');
   });
 });
 
