@@ -1,6 +1,6 @@
 ---
 name: dev-cycle
-description: Use when working through this project's backlog — runs one TODO item from planning to archive without stopping for approval, choosing review depth and verification scope by tier. Triggers on "/dev-cycle", "다음 작업 진행", "todo 진행", "백로그 진행".
+description: Use when working through this project's backlog — runs one TODO item from planning to archive without stopping for approval, choosing review depth and verification scope by tier. Triggers on "/dev-cycle", "다음 작업 진행", "다음 사이클 진행", "다음 항목 검토", "todo 진행", "백로그 진행".
 ---
 
 # dev-cycle
@@ -76,6 +76,12 @@ description: Use when working through this project's backlog — runs one TODO i
 4. 각 리뷰의 지적 사항을 반영한다. 반영하지 않기로 한 지적은 그 이유를 남겨 두었다가
    [4] 마감의 보고에 함께 적는다.
 
+   **리뷰 하나를 마친 자리는 압축 지점이 아니다.** 지적을 그 턴 안에서 반영하고 곧바로
+   다음 리뷰를 실행한다. 리뷰 스킬은 저마다 리포트를 산출하는 형식을 갖고 있어서 리포트를
+   출력하면 할 일이 끝난 것처럼 보이는데, 사이클에서 그 리포트는 결과물이 아니라 다음
+   단계의 입력이다. T3 에 압축 지점이 있는 자리는 리뷰 하나를 마친 뒤가 아니라 목록의
+   리뷰를 **전부** 돌리고 반영까지 끝낸 뒤다.
+
 ### [3] 검증
 
 QA 는 두 단계로 나뉜다. 시나리오를 먼저 확정하고 그다음 그대로 실행한다. 절차와 근거는
@@ -86,9 +92,12 @@ QA 는 두 단계로 나뉜다. 시나리오를 먼저 확정하고 그다음 �
 2. **QA 2단계를 거칠 항목인지 판정한다.** 기준은 `references/tier-rules.md` §1-1 의
    「적용 범위」다. 제외 대상이면 3번부터 10번까지를 건너뛰고 [4] 마감으로 간다. 건너뛴
    사실과 그 근거를 마감 보고에 한 줄로 적는다.
-3. **화면에 그려지는 값이 이번 변경으로 달라졌다면 브라우저로 실측한다.** 판단 기준은
-   `frontend/` 를 건드렸는지가 아니라 화면의 숫자나 문구가 달라지는지다. 백엔드만 바꿔도
-   화면이 그 값을 그리면 실측 대상이다. 실측 방식은 `frontend/` 를 건드렸을 때만
+3. **시나리오의 기대값을 실측 없이 쓸 수 없다면 브라우저로 실측한다.** 판단 기준은
+   `frontend/` 를 건드렸는지가 아니다. 백엔드만 바꿔도 화면이 그 값을 그리면 실측
+   대상이다. 화면의 값이 달라지지 않는 변경도 마찬가지다. 잠복해 있던 결함을 고치면
+   오늘의 화면은 그대로인데, 그 화면이 지금 무엇을 그리고 있는지는 여전히 눈으로 확인해야
+   기대값이 된다. 바꾼 것이 화면에 아무것도 그리지 않는 경로라면 그 사실을 시나리오
+   문서에 한 줄로 적고 넘어간다. 실측 방식은 `frontend/` 를 건드렸을 때만
    `references/frontend-skills.md` §3 이 정하는 대로 고르고, 백엔드만 바꿨다면
    agent-browser 를 직접 쓴다. **여기서 읽은 값이 다음 단계에서 시나리오의 기대값이
    된다.** 이 단계를 건너뛰면 기대값을 지어내게 되므로 시나리오가 검사 구실을 못 한다.
