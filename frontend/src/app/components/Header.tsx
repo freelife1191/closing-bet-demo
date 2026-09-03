@@ -47,6 +47,7 @@ export default function Header() {
         {/* Mobile Menu Button */}
         <button
           onClick={() => window.dispatchEvent(new Event('sidebar-toggle'))}
+          aria-label="메뉴 열고 닫기"
           className="lg:hidden text-gray-400 hover:text-white p-2 -ml-2 transition-colors"
         >
           <i className="fas fa-bars text-xl"></i>
@@ -72,13 +73,14 @@ export default function Header() {
           </div>
         </div>
         {/* Mobile Search Icon */}
-        <button className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400">
+        <button aria-label="검색" className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400">
           <i className="fas fa-search"></i>
         </button>
 
-        {/* Notifications */}
+        {/* Notifications: 종 아이콘이지만 여는 것은 사이드바의 설정 창이다 */}
         <button
           onClick={() => window.dispatchEvent(new Event('open-settings'))}
+          aria-label="설정 열기"
           className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors relative"
         >
           <i className="far fa-bell text-lg"></i>

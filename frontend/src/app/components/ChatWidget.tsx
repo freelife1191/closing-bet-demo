@@ -485,6 +485,7 @@ export default function ChatWidget() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleNewChat}
+                aria-label="새 대화 시작"
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
                 title="New Chat"
               >
@@ -492,6 +493,7 @@ export default function ChatWidget() {
               </button>
               <button
                 onClick={() => setIsOpen(false)}
+                aria-label="AI 상담 닫기"
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors md:hidden"
               >
                 <i className="fas fa-times"></i>
@@ -674,6 +676,7 @@ export default function ChatWidget() {
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading}
+                aria-label="보내기"
                 className="absolute right-2 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-700 transition-all shadow-lg shadow-blue-500/20"
               >
                 {isLoading ? (
@@ -692,8 +695,13 @@ export default function ChatWidget() {
 
       {/* Toggle Button (Always Visible) */}
       <div className="fixed bottom-3 right-3 md:bottom-6 md:right-6 z-[120] flex flex-col items-end">
+        {/* 이름은 고정하고 상태는 aria-expanded 로만 알린다. 둘 다 상태를 말하면 스크린
+            리더가 「AI 상담 닫기, 확장됨」처럼 같은 사실을 두 번 읽고, 활성화할 때마다
+            이름이 바뀌어 초점 문맥을 다시 읽는다. WAI-ARIA APG 의 disclosure 표기다. */}
         <button
           onClick={toggleChat}
+          aria-label="AI 상담"
+          aria-expanded={isOpen}
           className={`w-11 h-11 md:w-14 md:h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
         >
           <div className="relative w-full h-full flex items-center justify-center">
@@ -709,6 +717,7 @@ export default function ChatWidget() {
                 e.stopPropagation();
                 setShowTooltip(false);
               }}
+              aria-label="안내 문구 닫기"
               className="absolute -top-2 -left-2 w-5 h-5 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600 shadow-sm transition-colors z-10"
             >
               <i className="fas fa-times text-[10px]"></i>

@@ -55,7 +55,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, type =
             {type === 'danger' && <i className="fas fa-exclamation-circle text-red-500"></i>}
             {title}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10">
+          <button onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10">
             <i className="fas fa-times"></i>
           </button>
         </div>

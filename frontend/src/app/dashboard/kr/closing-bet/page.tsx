@@ -7,6 +7,28 @@ import BuyStockModal from '@/app/components/BuyStockModal';
 import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
 import { useAdmin } from '@/hooks/useAdmin';
 import { CHART_PERIODS, formatBigNumber, isPositivePrice, stockChartUrl } from './displayHelpers';
+import ConfirmationModal from '@/app/components/ConfirmationModal';
+
+// 이 화면에서 되돌릴 수 없는 지출을 일으키는 조작은 셋이다. 앞의 둘은 DATA STATUS 의
+// 아이콘 버튼이고, 셋째는 카드마다 있는 「이 종목만 재분석」이다. 셋 모두 아이콘만 두지
+// 않고 이름을 붙이며, 실행 전에 확인 모달을 한 번 거친다. 버튼 이름과 모달 제목이 같은
+// 문구를 쓰도록 여기에 모은다.
+const COSTLY_ACTIONS = {
+  update: {
+    name: '스크리너 전체 업데이트',
+    body: '스크리너 엔진을 실행해 모든 종목의 뉴스와 수급과 점수를 다시 계산합니다.',
+  },
+  gemini: {
+    name: 'GEMINI AI 재분석',
+    body: '기존 데이터를 기반으로 Gemini AI 를 재호출합니다. 미분석 항목과 실패 항목만 다시 분석합니다.',
+  },
+} as const;
+
+type CostlyAction = keyof typeof COSTLY_ACTIONS;
+
+const COSTLY_WARNING = '외부 API 를 호출하므로 실제 요금이 발생하며, 실행한 뒤에는 되돌릴 수 없습니다.';
+
+const costlyMessage = (body: string) => `${body}\n\n${COSTLY_WARNING}`;
 
 // Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
 function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false, width }: {
@@ -297,6 +319,7 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
           </div>
           <button
             onClick={onClose}
+            aria-label="닫기"
             className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
           >
             <i className="fas fa-times text-xl"></i>
@@ -613,6 +636,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
           </div>
           <button
             onClick={onClose}
+            aria-label="닫기"
             className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
           >
             <i className="fas fa-times text-xl"></i>
@@ -896,6 +920,7 @@ export default function JonggaV2Page() {
   const { isAdmin } = useAdmin();
   const [analyzingGemini, setAnalyzingGemini] = useState(false);
   const [retryingTicker, setRetryingTicker] = useState<string | null>(null);
+  const [retryConfirmCode, setRetryConfirmCode] = useState<string | null>(null);
   const [data, setData] = useState<ScreenerResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [dates, setDates] = useState<string[]>([]);
@@ -990,7 +1015,9 @@ export default function JonggaV2Page() {
   const candidatesCount = data?.total_candidates ?? 0;
   const filteredCount = data?.filtered_count ?? data?.signals?.length ?? 0;
 
-  const handleRetryAnalysis = async (stockCode: string) => {
+  // 이 조작은 DATA STATUS 의 「GEMINI AI 재분석」과 같은 엔드포인트를 부르므로 같은
+  // 비용이 든다. 카드마다 있어서 오히려 실수로 누르기 쉬우므로 같은 확인 절차를 거친다.
+  const requestRetryAnalysis = (stockCode: string) => {
     if (!isAdmin) {
       setAlertModal({
         isOpen: true,
@@ -1003,6 +1030,11 @@ export default function JonggaV2Page() {
 
     if (analyzingGemini) return;
 
+    setRetryConfirmCode(stockCode);
+  };
+
+  const handleRetryAnalysis = async (stockCode: string) => {
+    setRetryConfirmCode(null);
     setAnalyzingGemini(true);
     setRetryingTicker(stockCode);
     try {
@@ -1456,8 +1488,12 @@ export default function JonggaV2Page() {
               </select>
             </Tooltip>
             <Tooltip content="현재 선택된 날짜의 데이터를 다시 불러옵니다." position="bottom" align="right">
+              {/* 종전에는 setSelectedDate(selectedDate) 였다. 같은 값이므로 React 가 상태
+                  갱신을 건너뛰어 조회 이펙트가 다시 돌지 않았고 버튼이 죽어 있었다. 이름을
+                  붙이면서 하지 않는 일을 약속하게 되므로 여기서 함께 고친다. */}
               <button
-                onClick={() => setSelectedDate(selectedDate)}
+                onClick={() => setRefreshKey(prev => prev + 1)}
+                aria-label="선택한 날짜의 리포트 다시 불러오기"
                 className="p-2 bg-[#1c1c1e] border border-white/10 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-all"
               >
                 <i className="fas fa-sync-alt"></i>
@@ -1589,7 +1625,7 @@ export default function JonggaV2Page() {
                   setBuyingStock({ ticker: signal.stock_code, name: signal.stock_name, price: signal.current_price || signal.entry_price || 0 });
                   setIsBuyModalOpen(true);
                 }}
-                onRetry={handleRetryAnalysis}
+                onRetry={requestRetryAnalysis}
                 isRetrying={retryingTicker === signal.stock_code}
                 isAdmin={isAdmin}
                 buyDisabledReason={buyDisabledReason}
@@ -1664,6 +1700,16 @@ export default function JonggaV2Page() {
         }}
       />
 
+      {/* 카드별 재분석의 확인 모달. DATA STATUS 의 두 조작과 같은 비용이 든다 */}
+      <ConfirmationModal
+        isOpen={retryConfirmCode !== null}
+        title="이 종목만 재분석"
+        message={costlyMessage(`${retryConfirmCode ?? ''} 한 종목을 Gemini AI 로 다시 분석합니다.`)}
+        confirmText="실행"
+        onCancel={() => setRetryConfirmCode(null)}
+        onConfirm={() => retryConfirmCode && handleRetryAnalysis(retryConfirmCode)}
+      />
+
       {/* Alert Modal */}
       <Modal
         isOpen={alertModal.isOpen}
@@ -1708,6 +1754,7 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
   // ADMIN 권한 체크
   const { isAdmin } = useAdmin();
   const [permissionModal, setPermissionModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<CostlyAction | null>(null);
   const [alertModal, setAlertModal] = useState<{
     isOpen: boolean;
     type: 'default' | 'success' | 'danger';
@@ -1778,15 +1825,18 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
 
   // ... (existing code)
 
-  const handleUpdate = async () => {
-    // ADMIN 권한 체크
+  // 버튼은 곧바로 실행하지 않고 확인 모달만 연다. 권한과 중복 실행 검사는 두 조작이
+  // 같으므로 이 자리에 모은다.
+  const requestCostlyAction = (action: CostlyAction) => {
     if (!isAdmin) {
       setPermissionModal(true);
       return;
     }
+    if (updating || analyzingGemini) return;
+    setConfirmAction(action);
+  };
 
-    if (updating) return;
-
+  const runUpdate = async () => {
     setRunningMessage('');
     setUpdating(true);
     try {
@@ -1812,15 +1862,7 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
     }
   };
 
-  const handleGeminiReanalyze = async () => {
-    // ADMIN 권한 체크
-    if (!isAdmin) {
-      setPermissionModal(true);
-      return;
-    }
-
-    if (analyzingGemini) return;
-
+  const runGeminiReanalyze = async () => {
     setAnalyzingGemini(true);
     try {
       await fetchAPI('/api/kr/jongga-v2/reanalyze-gemini', {
@@ -1843,7 +1885,11 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
     }
   };
 
-
+  const runCostlyAction = (action: CostlyAction) => {
+    setConfirmAction(null);
+    if (action === 'update') runUpdate();
+    else runGeminiReanalyze();
+  };
 
   return (
     <div className="flex flex-col">
@@ -1851,8 +1897,9 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
         Data Status
         <Tooltip content="스크리너 엔진을 실행하여 모든 종목에 대해 전체 업데이트(뉴스, 수급, 점수 등)를 수행합니다." position="bottom" align="right" wide>
           <button
-            onClick={handleUpdate}
+            onClick={() => requestCostlyAction('update')}
             disabled={updating || analyzingGemini}
+            aria-label={COSTLY_ACTIONS.update.name}
             className={`p-1 rounded bg-white/5 hover:bg-white/10 transition-all ${updating ? 'animate-spin text-indigo-400' : 'text-gray-500 hover:text-white'}`}
           >
             <i className="fas fa-sync-alt text-[10px]"></i>
@@ -1860,8 +1907,9 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
         </Tooltip>
         <Tooltip content="기존 데이터를 기반으로 Gemini AI를 재호출합니다. 전체 실행 시 미분석/실패 항목만 재분석됩니다." position="bottom" align="right" wide>
           <button
-            onClick={handleGeminiReanalyze}
+            onClick={() => requestCostlyAction('gemini')}
             disabled={updating || analyzingGemini}
+            aria-label={COSTLY_ACTIONS.gemini.name}
             className={`p-1 rounded bg-white/5 hover:bg-white/10 transition-all ${analyzingGemini ? 'text-purple-400' : 'text-gray-500 hover:text-purple-400'}`}
           >
             <i className={`fas fa-brain text-[10px] ${analyzingGemini ? 'animate-spin' : ''}`}></i>
@@ -1878,6 +1926,16 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
       <span className="text-[10px] text-gray-600 font-mono mt-0.5">
         {analyzingGemini ? 'Please wait...' : (updating ? (runningMessage || 'Please wait...') : timeStr)}
       </span>
+
+      {/* 비용을 일으키는 조작의 확인 모달 */}
+      <ConfirmationModal
+        isOpen={confirmAction !== null}
+        title={confirmAction ? COSTLY_ACTIONS[confirmAction].name : ''}
+        message={confirmAction ? costlyMessage(COSTLY_ACTIONS[confirmAction].body) : ''}
+        confirmText="실행"
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction && runCostlyAction(confirmAction)}
+      />
 
       {/* Permission Denied Modal */}
       <Modal
@@ -2238,6 +2296,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                   }}
                   disabled={isRetrying}
                   className={`transition-colors p-1 ${isRetrying ? 'text-indigo-400' : 'text-gray-600 hover:text-indigo-400'}`}
+                  aria-label={`${signal.stock_name} 이 종목만 재분석`}
                   title="이 종목만 재분석 (Admin)"
                 >
                   <i className={`fas fa-redo-alt text-[10px] ${isRetrying ? 'animate-spin' : ''}`}></i>
