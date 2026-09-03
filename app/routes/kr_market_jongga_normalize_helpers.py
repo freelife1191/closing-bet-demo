@@ -8,31 +8,11 @@ from typing import Dict, List
 
 from services.kr_market_backtest_common import JONGGA_STOP_PCT, JONGGA_TARGET_PCT
 
-
-def _normalize_ticker(value: object) -> str:
-    text = str(value or "").strip()
-    digits = "".join(ch for ch in text if ch.isdigit())
-    if not digits:
-        return ""
-    return digits.zfill(6)
-
-
-def _safe_float(value, default: float = 0.0) -> float:
-    if isinstance(value, str):
-        value = value.replace(",", "").replace("₩", "").replace("$", "").strip()
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return default
-
-
-def _safe_int(value, default: int = 0) -> int:
-    if isinstance(value, str):
-        value = value.replace(",", "").replace("₩", "").replace("$", "").strip()
-    try:
-        return int(float(value or 0))
-    except (TypeError, ValueError):
-        return default
+from app.routes.kr_market_signal_common import (
+    _resolve_ticker,
+    _safe_float,
+    _safe_int,
+)
 
 
 def _apply_latest_prices_to_jongga_signals(
@@ -51,9 +31,8 @@ def _apply_latest_prices_to_jongga_signals(
         if not isinstance(signal, dict):
             continue
 
-        raw_code = signal.get("code") or signal.get("ticker") or signal.get("stock_code")
-        ticker = _normalize_ticker(raw_code)
-        if not ticker or ticker == "000000":
+        ticker = _resolve_ticker(signal, "code", "ticker", "stock_code")
+        if not ticker:
             continue
         if ticker not in latest_price_map:
             continue
@@ -80,13 +59,13 @@ def _normalize_jongga_signal_for_frontend(signal: dict) -> None:
     if not isinstance(signal, dict):
         return
 
-    stock_code = _normalize_ticker(
-        signal.get("stock_code") or signal.get("ticker") or signal.get("code")
-    )
-    if stock_code:
-        signal["stock_code"] = stock_code
-        if not signal.get("ticker"):
-            signal["ticker"] = stock_code
+    # 정규화 결과를 조건 없이 덮어쓴다. 유효하지 않은 코드를 원본 모양 그대로
+    # 두면 `"0"` 이나 `"00"` 같은 값이 화면까지 흘러가고, 받는 쪽은 그것들을
+    # 하나씩 걸러야 한다. 빈 문자열 하나로 모으면 「코드 없음」 판정이 한 번으로 끝난다.
+    stock_code = _resolve_ticker(signal, "stock_code", "ticker", "code")
+    signal["stock_code"] = stock_code
+    if stock_code and not signal.get("ticker"):
+        signal["ticker"] = stock_code
 
     stock_name = str(signal.get("stock_name") or signal.get("name") or "").strip()
     if stock_name:

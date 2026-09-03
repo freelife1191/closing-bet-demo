@@ -14,60 +14,19 @@ from engine.models import Grade, ScoreDetail, StockData, SupplyData
 from app.routes.kr_market_signal_common import (
     _is_meaningful_ai_reason,
     _normalize_text,
+    _resolve_ticker,
+    _safe_float,
+    _safe_int,
+    _safe_optional_float,
     _VALID_AI_ACTIONS,
 )
 
 _JONGGA_GRADE_PRIORITY = {"S": 3, "A": 2, "B": 1}
 
 
-def _normalize_numeric_text(value: str) -> str:
-    return (
-        str(value)
-        .replace(",", "")
-        .replace("₩", "")
-        .replace("$", "")
-        .replace("%", "")
-        .replace("원", "")
-        .strip()
-    )
-
-
-def _to_float(value: object, default: float) -> float:
-    if isinstance(value, str):
-        value = _normalize_numeric_text(value)
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _to_int(value: object, default: int) -> int:
-    if isinstance(value, str):
-        value = _normalize_numeric_text(value)
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return default
-
-
-def _to_optional_float(value: object) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        normalized = _normalize_numeric_text(value)
-        if not normalized:
-            return None
-        value = normalized
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _normalize_stock_code(signal: dict[str, Any]) -> str:
-    raw_code = signal.get("stock_code") or signal.get("ticker") or signal.get("code") or ""
-    digits = "".join(ch for ch in str(raw_code) if ch.isdigit())
-    return digits.zfill(6) if digits else "000000"
+    """시그널이 담고 있는 세 후보 키에서 종목코드를 뽑아 정규화한다."""
+    return _resolve_ticker(signal, "stock_code", "ticker", "code")
 
 
 def _resolve_supply_value(
@@ -76,11 +35,11 @@ def _resolve_supply_value(
     *keys: str,
 ) -> float:
     for key in keys:
-        value = _to_optional_float(score_details.get(key))
+        value = _safe_optional_float(score_details.get(key))
         if value is not None:
             return value
     for key in keys:
-        value = _to_optional_float(signal.get(key))
+        value = _safe_optional_float(signal.get(key))
         if value is not None:
             return value
     return 0.0
@@ -126,7 +85,7 @@ def _recalculate_jongga_grade(signal: dict) -> tuple[str, bool]:
     """종가베팅 단일 시그널 등급을 현재 기준으로 재산정."""
     try:
         score = signal.get("score") or {}
-        score_total = _to_int(score.get("total") if isinstance(score, dict) else score, 0)
+        score_total = _safe_int(score.get("total") if isinstance(score, dict) else score, 0)
         score_details = signal.get("score_details")
         if not isinstance(score_details, dict):
             score_details = {}
@@ -135,19 +94,19 @@ def _recalculate_jongga_grade(signal: dict) -> tuple[str, bool]:
             code=_normalize_stock_code(signal),
             name=str(signal.get("stock_name") or signal.get("name") or "").strip(),
             market=str(signal.get("market") or "KOSPI").strip() or "KOSPI",
-            close=_to_float(
+            close=_safe_float(
                 signal.get("current_price", signal.get("entry_price", signal.get("close", 0))),
                 0.0,
             ),
-            change_pct=_to_float(signal.get("change_pct", 0), 0.0),
-            trading_value=_to_float(signal.get("trading_value", 0), 0.0),
-            volume=_to_int(signal.get("volume", 0), 0),
-            high_52w=_to_float(signal.get("high_52w", 0), 0.0),
-            low_52w=_to_float(signal.get("low_52w", 0), 0.0),
+            change_pct=_safe_float(signal.get("change_pct", 0), 0.0),
+            trading_value=_safe_float(signal.get("trading_value", 0), 0.0),
+            volume=_safe_int(signal.get("volume", 0), 0),
+            high_52w=_safe_float(signal.get("high_52w", 0), 0.0),
+            low_52w=_safe_float(signal.get("low_52w", 0), 0.0),
         )
 
         supply = SupplyData(
-            foreign_buy_5d=_to_int(
+            foreign_buy_5d=_safe_int(
                 _resolve_supply_value(
                     signal,
                     score_details,
@@ -157,7 +116,7 @@ def _recalculate_jongga_grade(signal: dict) -> tuple[str, bool]:
                 ),
                 0,
             ),
-            inst_buy_5d=_to_int(
+            inst_buy_5d=_safe_int(
                 _resolve_supply_value(
                     signal,
                     score_details,
