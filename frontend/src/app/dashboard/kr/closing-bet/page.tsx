@@ -206,43 +206,71 @@ interface StockDetailInfo {
   };
 }
 
-// TradingView Simple Chart Widget
-function TradingViewChart({ symbol }: { symbol: string }) {
-  useEffect(() => {
-    // TradingView 위젯 스크립트 로드
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
-    script.async = true;
-    script.onload = () => {
-      if (typeof (window as unknown as { TradingView: unknown }).TradingView !== 'undefined') {
-        new (window as unknown as { TradingView: { widget: new (config: unknown) => unknown } }).TradingView.widget({
-          'autosize': true,
-          'symbol': `KRX:${symbol}`,
-          'interval': 'D',
-          'timezone': 'Asia/Seoul',
-          'theme': 'dark',
-          'style': '1',
-          'locale': 'kr',
-          'toolbar_bg': '#1c1c1e',
-          'enable_publishing': false,
-          'allow_symbol_change': false,
-          'container_id': 'tradingview_chart',
-          'hide_side_toolbar': false,
-          'studies': ['RSI@tv-basicstudies', 'MASimple@tv-basicstudies'],
-        });
-      }
-    };
-    document.head.appendChild(script);
+// 종목 차트. 네이버 금융이 종목코드로 직접 만들어 주는 이미지를 그대로 쓴다.
+// 앞서 쓰던 TradingView 임베드 위젯은 무료 등급이 KRX 시세를 제공하지 않아, 심볼이
+// 실재해도 기본 심볼(애플)로 조용히 바꿔 그렸다. iframe 이 교차 출처라서 앱이 그
+// 대체를 감지할 수도 없었다. 이미지 주소는 종목코드로 조립되므로 다른 종목이 섞이지
+// 않고, 없는 종목에는 404 가 오므로 실패를 화면에 드러낼 수 있다.
+const CHART_PERIODS = [
+  { key: 'day', label: '일봉' },
+  { key: 'week', label: '주봉' },
+  { key: 'month', label: '월봉' },
+] as const;
 
-    return () => {
-      const container = document.getElementById('tradingview_chart');
-      if (container) container.innerHTML = '';
-    };
-  }, [symbol]);
+type ChartPeriod = (typeof CHART_PERIODS)[number]['key'];
+
+// 종목코드는 백엔드 응답에서 오는 값이므로 경로에 끼우기 전에 인코딩한다. 형식을
+// 여섯 자리 숫자로 좁히지는 않는다. KRX 가 아크릴(0007C0)처럼 영문자가 든 코드를
+// 이미 쓰고 있어서, 좁히는 쪽이 오히려 멀쩡한 종목을 떨어뜨린다.
+export function stockChartUrl(symbol: string, period: ChartPeriod) {
+  return `https://ssl.pstatic.net/imgfinance/chart/item/candle/${period}/${encodeURIComponent(symbol)}.png`;
+}
+
+function StockChart({ symbol, name }: { symbol: string, name: string }) {
+  const [period, setPeriod] = useState<(typeof CHART_PERIODS)[number]>(CHART_PERIODS[0]);
+  const [failed, setFailed] = useState(false);
 
   return (
     <div className="flex flex-col h-full bg-[#131722]">
-      <div id="tradingview_chart" className="flex-1 min-h-[400px]" />
+      <div className="flex items-center gap-2 px-4 pt-4">
+        {CHART_PERIODS.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => { setPeriod(p); setFailed(false); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              period.key === p.key
+                ? 'bg-indigo-500 text-white'
+                : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        <span className="ml-auto text-[11px] text-gray-500">네이버 금융 제공</span>
+      </div>
+
+      <div className="flex items-center justify-center p-4">
+        {failed ? (
+          <div className="text-center px-6">
+            <i className="fas fa-chart-line text-4xl text-gray-600 mb-3"></i>
+            <p className="text-gray-200 font-bold">{name} ({symbol}) 차트를 불러오지 못했습니다</p>
+            <p className="text-sm text-gray-500 mt-2">
+              다른 종목의 차트를 대신 보여주지 않습니다. 아래 네이버 금융이나 토스 증권에서 확인하세요.
+            </p>
+          </div>
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={stockChartUrl(symbol, period.key)}
+            alt={`${name} ${symbol} ${period.label} 차트`}
+            onError={() => setFailed(true)}
+            width={700}
+            height={289}
+            className="max-w-full h-auto object-contain"
+          />
+        )}
+      </div>
+
       <div className="flex gap-3 p-4 bg-[#1c1c1e] border-t border-white/5">
         <a
           href={`https://m.stock.naver.com/domestic/stock/${symbol}/chart`}
@@ -279,7 +307,7 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in duration-200" onClick={onClose}>
       <div
-        className="bg-[#1c1c1e] w-full max-w-7xl h-[80vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200"
+        className="bg-[#1c1c1e] w-full max-w-4xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#1c1c1e]">
@@ -295,8 +323,8 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
           </button>
         </div>
 
-        <div className="flex-1 relative">
-          <TradingViewChart symbol={symbol} />
+        <div className="flex-1 relative overflow-y-auto">
+          <StockChart symbol={symbol} name={name} />
         </div>
       </div>
     </div>
@@ -2187,7 +2215,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
           {/* Chart Area */}
           {/* Chart Area */}
-          <div className="relative h-24 bg-[#131722] rounded-xl overflow-hidden mb-2 cursor-pointer group/chart" onClick={onOpenChart}>
+          <div data-testid="mini-chart" className="relative h-24 bg-[#131722] rounded-xl overflow-hidden mb-2 cursor-pointer group/chart" onClick={onOpenChart}>
             {/* Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/10 to-transparent" />
 
