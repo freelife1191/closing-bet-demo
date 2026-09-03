@@ -45,6 +45,15 @@ function Tooltip({ children, content, className = "", position = "top", align = 
 }
 
 
+// 응답은 이 판정을 최상위와 score 두 자리에 담는다. 지난 자료는 score 안에만 넣고
+// 최상위를 null 로 두므로 두 자리 모두 null 을 허용해야 한다.
+interface AiEvaluation {
+  action: 'BUY' | 'HOLD' | 'SELL';
+  confidence?: number;
+  model?: string;
+  reason?: string;
+}
+
 interface ScoreDetail {
   news: number;
   volume: number;
@@ -55,12 +64,7 @@ interface ScoreDetail {
   supply: number;
   llm_reason: string;
   total: number;
-  ai_evaluation?: {
-    action: 'BUY' | 'HOLD' | 'SELL';
-    confidence?: number;
-    model?: string;
-    reason?: string;
-  };
+  ai_evaluation?: AiEvaluation | null;
 }
 
 interface BonusBreakdown {
@@ -119,12 +123,7 @@ interface Signal {
     candle?: number;
     consolidation?: number;
   };
-  ai_evaluation?: {
-    action: 'BUY' | 'HOLD' | 'SELL';
-    confidence?: number;
-    model?: string;
-    reason?: string;
-  };
+  ai_evaluation?: AiEvaluation | null;
   themes?: string[]; // 관련 테마 태그 (예: 원전, SMR, 전력인프라)
   signal_date?: string; // 신호가 나온 거래일. 매수가가 어느 날 종가인지 밝히는 데 쓴다
 }
@@ -1941,9 +1940,6 @@ function StatBox({ label, value, highlight = false, customValue, tooltip }: { la
   )
 }
 
-// AI 평가에 모델명이 없을 때 쓰는 표시용 기본값. 두 곳에서 갈라지지 않도록 한 자리에 둔다.
-const DEFAULT_AI_MODEL_LABEL = 'Gemini 3.7 Flash';
-
 function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, isRetrying, isAdmin, buyDisabledReason }: {
   signal: Signal,
   index: number,
@@ -1964,9 +1960,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
   };
 
   // Helper function to format model names (handles legacy names and formatting)
-  const formatAiModelName = (modelName: string | undefined): string => {
-    if (!modelName) return DEFAULT_AI_MODEL_LABEL;
-
+  const formatAiModelName = (modelName: string): string => {
     // Alias Mapping (Legacy or Configuration nicknames)
     const lowerName = modelName.toLowerCase();
     if (lowerName === 'gemini-flash-latest' || lowerName === 'gemini flash latest') {
@@ -1982,22 +1976,11 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
   const style = gradeStyles[signal.grade] || gradeStyles.D;
 
-  // AI Evaluation Logic with robust fallback
-  let aiEval = signal.ai_evaluation;
-
-  // 만약 구조화된 AI 결과가 없다면, 텍스트 분석 결과(llm_reason)를 기반으로 추정
-  if (!aiEval && signal.score?.llm_reason && signal.score.llm_reason.length > 5) {
-    const reasonText = signal.score.llm_reason;
-    const isBuy = reasonText.includes('BUY') || reasonText.includes('매수') || reasonText.includes('긍정') || reasonText.includes('상승');
-    const isSell = reasonText.includes('SELL') || reasonText.includes('매도') || reasonText.includes('부정') || reasonText.includes('하락');
-
-    // 단순 텍스트만 있는 경우. 확신도는 값 자체가 없으므로 채우지 않는다.
-    aiEval = {
-      action: isBuy ? 'BUY' : (isSell ? 'SELL' : 'HOLD'),
-      reason: reasonText,
-      model: signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || DEFAULT_AI_MODEL_LABEL
-    };
-  }
+  // [JONGGA-016] 판정은 응답의 두 자리에 담긴다. 지난 자료는 score 안에만 넣고 최상위를
+  // null 로 두므로, 최상위만 읽으면 판정과 확신도가 함께 사라진다. 그 빈자리를 llm_reason
+  // 텍스트로 추정하던 폴백은 걷어냈다. 부정 맥락의 「상승」과 「매수」까지 BUY 로 읽어
+  // 아홉 건 가운데 일곱 건을 틀렸다. 경위는 page.regression-jongga-016.test.tsx 에 있다.
+  const aiEval = signal.ai_evaluation ?? signal.score.ai_evaluation;
 
   // [JONGGA-004] 여기서 등급으로 확신도를 지어내지 않는다. AI 결과가 없는 상태는
   // aiEval 이 없는 것으로 두고, 렌더 쪽에서 대기 상태로 표시한다.
@@ -2240,9 +2223,9 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <h4 className="text-xs font-bold text-gray-400 mb-3 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <i className="fas fa-microscope text-indigo-400"></i> AI 분석 리포트
-                {(aiEval?.model || signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model || signal.score.llm_reason) && (
+                {aiEval?.model && (
                   <span className="text-[10px] font-normal text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
-                    {formatAiModelName(aiEval?.model || signal.ai_evaluation?.model || signal.score?.ai_evaluation?.model)}
+                    {formatAiModelName(aiEval.model)}
                   </span>
                 )}
               </span>

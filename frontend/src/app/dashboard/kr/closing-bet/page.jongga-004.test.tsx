@@ -5,14 +5,16 @@
 //
 // 세 가지 상태를 각각 확인한다.
 //   1. ai_evaluation 이 있는 종목  -> action 배지와 확신도 막대를 그대로 표시
-//   2. llm_reason 만 있는 종목     -> action 배지는 표시하되 확신도는 "미산출"
+//   2. llm_reason 만 있는 종목     -> "AI 분석 대기" 배지와 "미산출"
 //   3. 둘 다 없는 종목             -> "AI 분석 대기" 배지와 "미산출"
+//
+// 2번은 [JONGGA-016] 이 뒤집었다. 옛 코드는 사유 텍스트에서 매매 추천을 추정했으나
+// 그 추정이 2026-02-11 자료 아홉 건 가운데 일곱 건을 틀려서 걷어냈다.
 
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import JonggaV2Page from './page';
-import type { ComponentProps } from 'react';
 
 type Signal = Record<string, unknown>;
 
@@ -124,15 +126,20 @@ describe('[JONGGA-004] SignalCard 의 AI 평가 표시', () => {
     expect(within(card).queryByText('BUY')).toBeNull();
   });
 
-  it('사유 텍스트만 있으면 매매 추천은 표시하되 확신도는 미산출로 둔다', async () => {
+  // [JONGGA-016] 이 검사는 뒤집혔다. 사유 텍스트로 매매 추천을 추정하던 폴백을 걷어냈다.
+  it('사유 텍스트만 있으면 매매 추천을 지어내지 않는다', async () => {
     render(<JonggaV2Page />);
     const card = await findCard('사유만존재');
 
-    expect(within(card).queryByText('BUY')).not.toBeNull();
+    expect(within(card).queryByText('AI 분석 대기')).not.toBeNull();
     expect(within(card).queryByText('미산출')).not.toBeNull();
+    // 이 사유에는 「매수 우위」가 들어 있어 옛 추정 폴백이 BUY 를 그렸다.
+    expect(within(card).queryByText('BUY')).toBeNull();
     // 확신도 데이터가 없는 상태를 0% 막대로 그리면 "AI 가 0% 신뢰한다" 로 읽힌다.
     expect(within(card).queryByText('0%')).toBeNull();
-    expect(within(card).queryByText('AI 분석 대기')).toBeNull();
+    // 분석하지 않은 카드에 분석 주체를 적지 않는다. 옛 코드는 사유가 있다는 이유만으로
+    // 기본 라벨을 배지에 달아, 같은 카드가 대기 상태와 모델 이름을 함께 말했다.
+    expect(within(card).queryByText('Gemini 3.7 Flash')).toBeNull();
   });
 
   it('AI 확신도가 있으면 그 값을 그대로 표시한다', async () => {
