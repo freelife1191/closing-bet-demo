@@ -737,8 +737,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
               {/* Investor Trend */}
               <div className="bg-white/5 rounded-xl p-4">
                 <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                  <i className="fas fa-users text-purple-400"></i> 투자자 동향 (5일 합계)
-                  <Tooltip content="최근 5영업일 동안 각 투자자 유형이 순매수하거나 순매도한 금액입니다. 외국인과 기관의 순매수는 호재로 해석됩니다. 개인은 집계처가 달라 세 값의 합이 맞지 않을 수 있습니다.">
+                  <i className="fas fa-users text-purple-400"></i> 투자자 동향 (오늘 기준 5영업일)
+                  <Tooltip content="오늘을 기준으로 최근 5영업일 동안 각 투자자 유형이 순매수하거나 순매도한 금액입니다. 선택한 날짜와 무관하게 늘 오늘 기준으로 집계하므로, 지난 날짜를 골랐다면 카드에 적힌 5일 순매수와 다릅니다. 외국인과 기관의 순매수는 호재로 해석됩니다. 개인은 집계처가 달라 세 값의 합이 맞지 않을 수 있습니다.">
                     <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                   </Tooltip>
                 </h4>
@@ -746,7 +746,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       외국인
-                      <Tooltip content="외국인 투자자가 최근 5영업일 동안 순매수한 금액입니다. 양수면 매수우위입니다. 카드의 「외인 (5일)」과 같은 값입니다.">
+                      <Tooltip content="외국인 투자자가 오늘 기준 최근 5영업일 동안 순매수한 금액입니다. 양수면 매수우위입니다. 카드의 「외인 (5일)」은 신호가 나온 거래일 기준이므로, 지난 날짜를 골랐다면 두 값이 다릅니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
@@ -757,7 +757,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       기관
-                      <Tooltip content="기관 투자자(연기금, 자산운용사 등)가 최근 5영업일 동안 순매수한 금액입니다. 카드의 「기관 (5일)」과 같은 값입니다.">
+                      <Tooltip content="기관 투자자(연기금, 자산운용사 등)가 오늘 기준 최근 5영업일 동안 순매수한 금액입니다. 카드의 「기관 (5일)」은 신호가 나온 거래일 기준이므로, 지난 날짜를 골랐다면 두 값이 다릅니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
