@@ -26,6 +26,9 @@ interface GradeRoiData {
   count: number;
   avgRoi: number;
   totalRoi: number;
+  wins: number;
+  losses: number;
+  winRate: number;
 }
 
 interface KPIData {
@@ -899,11 +902,10 @@ function TradeTable({ trades }: { trades: Trade[] }) {
 export default function CumulativeClientPage() {
   const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
   const roundToOne = (value: number) => Math.round(value * 10) / 10;
-  const createEmptyRoiByGrade = () => ({
-    S: { count: 0, avgRoi: 0, totalRoi: 0 },
-    A: { count: 0, avgRoi: 0, totalRoi: 0 },
-    B: { count: 0, avgRoi: 0, totalRoi: 0 }
-  });
+  const createEmptyRoiByGrade = () => {
+    const empty = { count: 0, avgRoi: 0, totalRoi: 0, wins: 0, losses: 0, winRate: 0 };
+    return { S: { ...empty }, A: { ...empty }, B: { ...empty } };
+  };
 
   const [outcomeFilter, setOutcomeFilter] = useState('All');
   const [gradeFilter, setGradeFilter] = useState('All');
@@ -971,30 +973,18 @@ export default function CumulativeClientPage() {
     return true;
   });
 
-  // Derived Data for Grade Cards (Real-time calculation based on trades)
-  const calculateGradeStats = (targetGrade: string) => {
-    const gradeTrades = trades.filter(t => t.grade === targetGrade);
-    const count = gradeTrades.length;
-    if (count === 0) return { count: 0, winRate: 0, avgRoi: 0, wins: 0, losses: 0 };
-
-    const wins = gradeTrades.filter(t => t.outcome === 'WIN').length;
-    const losses = gradeTrades.filter(t => t.outcome === 'LOSS').length;
-    const closed = wins + losses; // Open excluded from WR usually, or included? Keeping consistent with API
-    const winRate = closed > 0 ? (wins / closed) * 100 : 0;
-    const avgRoi = gradeTrades.reduce((acc, t) => acc + t.roi, 0) / count;
-
-    return { count, winRate: parseFloat(winRate.toFixed(1)), avgRoi: parseFloat(avgRoi.toFixed(1)), wins, losses };
-  };
-
-  const sStats = calculateGradeStats('S');
-  const aStats = calculateGradeStats('A');
-  const bStats = calculateGradeStats('B');
-
+  // 등급 카드는 전체 기간을 집계한 kpi.roiByGrade 만 읽는다. 표에 그려지는 trades 는
+  // 현재 페이지분이므로 그것으로 다시 계산하면 페이지를 넘길 때마다 값이 달라진다.
   const gradeCards = [
-    { grade: 'S', ...sStats, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', tooltipKey: 'gradeS' as const },
-    { grade: 'A', ...aStats, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', tooltipKey: 'gradeA' as const },
-    { grade: 'B', ...bStats, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', tooltipKey: 'gradeB' as const },
-  ];
+    { grade: 'S' as const, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', tooltipKey: 'gradeS' as const },
+    { grade: 'A' as const, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', tooltipKey: 'gradeA' as const },
+    { grade: 'B' as const, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', tooltipKey: 'gradeB' as const },
+  ].map(card => ({
+    ...card,
+    ...kpi.roiByGrade[card.grade],
+    // 화면 표기는 소수 첫째 자리다. 백엔드는 둘째 자리까지 보낸다.
+    avgRoi: roundToOne(kpi.roiByGrade[card.grade].avgRoi),
+  }));
 
   const sabTotalCount = kpi.roiByGrade.S.count + kpi.roiByGrade.A.count + kpi.roiByGrade.B.count;
   const sabTotalRoiRaw = kpi.roiByGrade.S.totalRoi + kpi.roiByGrade.A.totalRoi + kpi.roiByGrade.B.totalRoi;
@@ -1070,9 +1060,11 @@ export default function CumulativeClientPage() {
                 {formatSignedPercent(sabAvgRoi)}
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs font-semibold leading-tight">
-                <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.avgRoi)}</span>
-                <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.avgRoi)}</span>
-                <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.avgRoi)}</span>
+                {/* 백엔드는 소수 둘째 자리로 보낸다. 화면 표기는 첫째 자리이므로 등급
+                    카드와 같은 반올림을 거쳐야 한 화면에서 같은 값이 두 표기로 갈리지 않는다. */}
+                <span className="text-purple-300">S {formatSignedPercent(roundToOne(kpi.roiByGrade.S.avgRoi))}</span>
+                <span className="text-rose-300">A {formatSignedPercent(roundToOne(kpi.roiByGrade.A.avgRoi))}</span>
+                <span className="text-blue-300">B {formatSignedPercent(roundToOne(kpi.roiByGrade.B.avgRoi))}</span>
               </div>
             </div>
           }
@@ -1141,9 +1133,9 @@ export default function CumulativeClientPage() {
               <span className="text-gray-500 text-sm font-medium">등급:</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
                 <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => { setGradeFilter('All'); setCurrentPage(1); }} />
-                <FilterButton label="S" count={sStats.count} active={gradeFilter === 'S'} onClick={() => { setGradeFilter('S'); setCurrentPage(1); }} />
-                <FilterButton label="A" count={aStats.count} active={gradeFilter === 'A'} onClick={() => { setGradeFilter('A'); setCurrentPage(1); }} />
-                <FilterButton label="B" count={bStats.count} active={gradeFilter === 'B'} onClick={() => { setGradeFilter('B'); setCurrentPage(1); }} />
+                <FilterButton label="S" count={trades.filter(t => t.grade === 'S').length} active={gradeFilter === 'S'} onClick={() => { setGradeFilter('S'); setCurrentPage(1); }} />
+                <FilterButton label="A" count={trades.filter(t => t.grade === 'A').length} active={gradeFilter === 'A'} onClick={() => { setGradeFilter('A'); setCurrentPage(1); }} />
+                <FilterButton label="B" count={trades.filter(t => t.grade === 'B').length} active={gradeFilter === 'B'} onClick={() => { setGradeFilter('B'); setCurrentPage(1); }} />
               </div>
             </div>
           </div>

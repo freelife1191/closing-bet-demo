@@ -580,23 +580,54 @@ def test_aggregate_cumulative_kpis_computes_every_reported_metric():
     """승률·평균 ROI·평균 보유일·손익비·등급별 ROI 를 한 번에 고정한다."""
     trades = [
         {"outcome": "WIN", "roi": 9.0, "days": 2, "grade": "S"},
+        {"outcome": "OPEN", "roi": 3.0, "days": 1, "grade": "S"},
         {"outcome": "WIN", "roi": 9.0, "days": 4, "grade": "A"},
         {"outcome": "LOSS", "roi": -5.0, "days": 1, "grade": "B"},
     ]
 
     kpi = aggregate_cumulative_kpis(trades, pd.DataFrame(), datetime(2026, 2, 21))
 
-    assert kpi["totalSignals"] == 3
-    assert (kpi["wins"], kpi["losses"], kpi["open"]) == (2, 1, 0)
+    assert kpi["totalSignals"] == 4
+    assert (kpi["wins"], kpi["losses"], kpi["open"]) == (2, 1, 1)
     assert kpi["winRate"] == 66.7
-    assert kpi["avgRoi"] == 4.33
-    assert kpi["totalRoi"] == 13.0
-    assert kpi["avgDays"] == 2.3
-    assert kpi["profitFactor"] == 3.6
+    assert kpi["avgRoi"] == 4.0
+    assert kpi["totalRoi"] == 16.0
+    assert kpi["avgDays"] == 2.0
+    assert kpi["profitFactor"] == 4.2
     assert kpi["priceDate"] == "2026-02-21"
-    assert kpi["roiByGrade"]["S"] == {"count": 1, "avgRoi": 9.0, "totalRoi": 9.0}
-    assert kpi["roiByGrade"]["A"] == {"count": 1, "avgRoi": 9.0, "totalRoi": 9.0}
-    assert kpi["roiByGrade"]["B"] == {"count": 1, "avgRoi": -5.0, "totalRoi": -5.0}
+    # S 등급: 승률의 분모는 종료된 1건이고, 평균 수익률의 분모는 OPEN 을 포함한 2건이다.
+    assert kpi["roiByGrade"]["S"] == {
+        "count": 2, "avgRoi": 6.0, "totalRoi": 12.0,
+        "wins": 1, "losses": 0, "winRate": 100.0,
+    }
+    assert kpi["roiByGrade"]["A"] == {
+        "count": 1, "avgRoi": 9.0, "totalRoi": 9.0,
+        "wins": 1, "losses": 0, "winRate": 100.0,
+    }
+    assert kpi["roiByGrade"]["B"] == {
+        "count": 1, "avgRoi": -5.0, "totalRoi": -5.0,
+        "wins": 0, "losses": 1, "winRate": 0.0,
+    }
+
+
+def test_aggregate_cumulative_kpis_counts_every_trade_for_grade_stats():
+    """등급 통계는 화면이 몇 건을 그리든 넘겨받은 전부를 센다.
+
+    화면이 페이지당 50행만 그리던 시절에는 등급 카드가 그 50행으로 다시 계산되어,
+    페이지를 넘기면 같은 등급의 승률과 부호가 통째로 바뀌었다.
+    """
+    trades = [
+        {"outcome": "WIN", "roi": 1.0, "days": 1, "grade": "S"} for _ in range(60)
+    ] + [
+        {"outcome": "LOSS", "roi": -1.0, "days": 1, "grade": "S"} for _ in range(40)
+    ]
+
+    kpi = aggregate_cumulative_kpis(trades, pd.DataFrame(), datetime(2026, 2, 21))
+
+    assert kpi["roiByGrade"]["S"]["count"] == 100
+    assert kpi["roiByGrade"]["S"]["wins"] == 60
+    assert kpi["roiByGrade"]["S"]["losses"] == 40
+    assert kpi["roiByGrade"]["S"]["winRate"] == 60.0
 
 
 def test_aggregate_cumulative_kpis_reports_no_profit_factor_without_a_loss():

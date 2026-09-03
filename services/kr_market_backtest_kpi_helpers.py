@@ -26,9 +26,8 @@ def aggregate_cumulative_kpis(
     total_days = 0.0
 
     grade_acc: dict[str, dict[str, float]] = {
-        "S": {"count": 0, "total_roi": 0.0},
-        "A": {"count": 0, "total_roi": 0.0},
-        "B": {"count": 0, "total_roi": 0.0},
+        grade: {"count": 0, "total_roi": 0.0, "wins": 0, "losses": 0}
+        for grade in ("S", "A", "B")
     }
 
     gross_profit = 0.0
@@ -58,21 +57,37 @@ def aggregate_cumulative_kpis(
         if grade in grade_acc:
             grade_acc[grade]["count"] += 1
             grade_acc[grade]["total_roi"] += roi
+            if outcome == "WIN":
+                grade_acc[grade]["wins"] += 1
+            elif outcome == "LOSS":
+                grade_acc[grade]["losses"] += 1
 
     closed_trades = wins + losses
     win_rate = round((wins / closed_trades) * 100, 1) if closed_trades > 0 else 0.0
     avg_roi = round(total_roi / total_signals, 2) if total_signals > 0 else 0.0
     avg_days = round(total_days / total_signals, 1) if total_signals > 0 else 0
 
+    # 등급 카드는 이 값만 읽는다. 앞서 화면이 현재 페이지의 거래 목록으로 등급 통계를
+    # 다시 계산했는데, 그러면 페이지를 넘길 때마다 같은 등급의 건수와 승률과 부호가
+    # 통째로 달라졌다. 승률의 분모는 전체 KPI 와 같이 종료된 거래만 센다.
     roi_by_grade: dict[str, dict[str, Any]] = {}
     for grade in ["S", "A", "B"]:
         grade_count = int(grade_acc[grade]["count"])
         grade_total_roi = float(grade_acc[grade]["total_roi"])
         grade_avg_roi = round(grade_total_roi / grade_count, 2) if grade_count > 0 else 0.0
+        grade_wins = int(grade_acc[grade]["wins"])
+        grade_losses = int(grade_acc[grade]["losses"])
+        grade_closed = grade_wins + grade_losses
+        grade_win_rate = (
+            round((grade_wins / grade_closed) * 100, 1) if grade_closed > 0 else 0.0
+        )
         roi_by_grade[grade] = {
             "count": grade_count,
             "avgRoi": grade_avg_roi,
             "totalRoi": round(grade_total_roi, 1),
+            "wins": grade_wins,
+            "losses": grade_losses,
+            "winRate": grade_win_rate,
         }
 
     # 손실 거래가 한 건도 없으면 비율이 정의되지 않는다. 앞서 이 자리는 분자인
