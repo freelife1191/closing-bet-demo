@@ -555,6 +555,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
 
   // 외국인·기관 5일 순매수는 카드가 쓰는 KRX 확정 집계(investorTrend5Day)를 그대로 쓴다.
   // 응답에 그 키가 없으면 실시간 시세 제공처가 낸 5일 집계로 물러선다.
+  // 같은 집계이되 같은 값은 아니다. 상세 API 는 날짜를 받지 않아 늘 오늘 기준으로
+  // 돌려주므로, 지난 날짜의 리포트를 보고 있으면 카드의 신호일 기준값과 어긋난다.
   const foreign5Day = detail?.investorTrend5Day?.foreign ?? detail?.investorTrend?.foreign ?? 0;
   const institution5Day = detail?.investorTrend5Day?.institution ?? detail?.investorTrend?.institution ?? 0;
 
@@ -2089,7 +2091,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                 외인 (5일)
-                <Tooltip content="최근 5일간 외국인 순매수 합계입니다. 양수는 순매수, 음수는 순매도를 의미합니다.">
+                <Tooltip content="신호가 나온 거래일까지 5일간 외국인이 순매수한 금액입니다. 양수는 순매수, 음수는 순매도를 의미합니다.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
@@ -2102,7 +2104,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                 기관 (5일)
-                <Tooltip content="최근 5일간 기관 순매수 합계입니다. 양수는 순매수, 음수는 순매도를 의미합니다.">
+                <Tooltip content="신호가 나온 거래일까지 5일간 기관이 순매수한 금액입니다. 양수는 순매수, 음수는 순매도를 의미합니다.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
