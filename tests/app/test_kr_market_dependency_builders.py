@@ -92,7 +92,6 @@ def test_build_system_route_deps_preserves_required_contract_keys():
         execute_market_gate_update=lambda **_k: (200, {}),
         execute_user_gemini_reanalysis_request=lambda **_k: (200, {}),
         run_user_gemini_reanalysis=lambda **_k: {},
-        project_root_getter=lambda: ".",
         launch_background_update_job=lambda **_k: (True, ""),
         launch_init_data_update=lambda **_k: (True, ""),
         build_data_status_payload=lambda **_k: {},

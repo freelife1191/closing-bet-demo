@@ -52,13 +52,12 @@ def _build_base_deps(**overrides: Any) -> dict[str, Any]:
         "normalize_market_gate_payload": lambda payload: payload,
         "execute_market_gate_update": lambda target_date, logger: (200, {"status": "success"}),
         "execute_user_gemini_reanalysis_request": (
-            lambda user_api_key, user_email, req_data, usage_tracker, project_root, logger, run_reanalysis_func: (
+            lambda user_api_key, user_email, req_data, usage_tracker, logger, run_reanalysis_func: (
                 200,
                 {"status": "success"},
             )
         ),
         "run_user_gemini_reanalysis": lambda **_kwargs: {"count": 1},
-        "project_root_getter": lambda: "/tmp",
         "launch_background_update_job": (
             lambda items_list, target_date, load_update_status, start_update, run_background_update, logger: (
                 200,

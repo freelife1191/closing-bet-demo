@@ -798,18 +798,17 @@ def test_route_service_parse_target_dates_normalizes_scalar_and_list():
     assert route_service.parse_target_dates({"target_dates": ["2026-02-20", "", None]}) == ["2026-02-20"]
 
 
-def test_route_service_run_user_gemini_reanalysis_imports_scripts_module(tmp_path, monkeypatch):
-    scripts_dir = tmp_path / "scripts"
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    (scripts_dir / "init_data.py").write_text(
-        "def create_kr_ai_analysis_with_key(target_dates=None, api_key=None):\n"
-        "    return {'count': len(target_dates or []), 'has_key': bool(api_key)}\n",
-        encoding="utf-8",
+def test_route_service_run_user_gemini_reanalysis_uses_scripts_package(monkeypatch):
+    fake_scripts = types.ModuleType("scripts")
+    fake_scripts.init_data = types.SimpleNamespace(
+        create_kr_ai_analysis_with_key=lambda target_dates=None, api_key=None: {
+            "count": len(target_dates or []),
+            "has_key": bool(api_key),
+        }
     )
+    monkeypatch.setitem(sys.modules, "scripts", fake_scripts)
 
-    monkeypatch.delitem(sys.modules, "init_data", raising=False)
     result = route_service.run_user_gemini_reanalysis(
-        project_root=str(tmp_path),
         target_dates=["2026-02-20", "2026-02-21"],
         api_key="user-key",
     )

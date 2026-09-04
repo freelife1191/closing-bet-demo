@@ -10,7 +10,6 @@
 import os
 import sys
 import pandas as pd
-import numpy as np
 import json
 import socket
 import yfinance as yf
@@ -51,19 +50,6 @@ except ImportError:
             STOP_REQUESTED = False
         shared_state = MockShared()
 
-# Custom JSON encoder for numpy types
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        if isinstance(obj, np.floating):
-            return float(obj)
-        if isinstance(obj, np.bool_):
-            return bool(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return super().default(obj)
-
 # yfinance for real market data
 try:
     import yfinance as yf
@@ -76,6 +62,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 import asyncio
 
+from numpy_json_encoder import NumpyEncoder
 from engine.config import config, app_config
 from engine.constants import SCREENING
 from engine.collectors import EnhancedNewsCollector
@@ -2098,12 +2085,6 @@ def create_kr_ai_analysis(target_date=None):
     """AI 분석 결과 생성 (실제 데이터 기반)"""
     log("AI 분석 시작 (Real Mode)...")
     try:
-        import sys
-        # Root path 추가
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if root_dir not in sys.path:
-            sys.path.append(root_dir)
-            
         from engine.kr_ai_analyzer import KrAiAnalyzer
         import pandas as pd
         import json
@@ -2275,13 +2256,7 @@ def create_kr_ai_analysis_with_key(target_dates=None, api_key=None):
     log(f"AI 재분석 요청 (Key Present: {bool(api_key)})", "INFO")
     
     try:
-        import sys
-        # Root path 추가
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if root_dir not in sys.path:
-            sys.path.append(root_dir)
-            
-        from kr_ai_analyzer import KrAiAnalyzer
+        from engine.kr_ai_analyzer import KrAiAnalyzer
         import pandas as pd
         import json
         

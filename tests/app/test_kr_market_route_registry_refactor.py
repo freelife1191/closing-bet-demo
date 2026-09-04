@@ -97,7 +97,6 @@ def test_register_system_and_execution_route_groups_registers_both(monkeypatch):
         get_data_path_fn=lambda filename: f"data/{filename}",
         trigger_market_gate_background_refresh_fn=lambda: None,
         run_user_gemini_reanalysis_fn=run_user,
-        project_root_getter=lambda: "/tmp/project",
     )
 
     assert system_register_calls

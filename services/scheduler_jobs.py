@@ -8,10 +8,7 @@ Scheduler job 실행 로직.
 
 from __future__ import annotations
 
-import importlib
 import logging
-import os
-import sys
 from datetime import datetime
 from typing import Any, Callable
 
@@ -20,28 +17,18 @@ from services.scheduler_runtime_status_service import set_scheduler_runtime_stat
 
 logger = logging.getLogger(__name__)
 
-_INIT_DATA_FUNCTIONS_CACHE: dict[str, Callable[..., Any]] | None = None
-
 
 def _load_init_data_functions() -> dict[str, Callable[..., Any]]:
     """scripts/init_data.py의 진입 함수를 지연 로드한다."""
-    global _INIT_DATA_FUNCTIONS_CACHE
-    if _INIT_DATA_FUNCTIONS_CACHE is not None:
-        return _INIT_DATA_FUNCTIONS_CACHE
+    from scripts import init_data
 
-    scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts"))
-    if scripts_dir not in sys.path:
-        sys.path.append(scripts_dir)
-
-    init_data = importlib.import_module("init_data")
-    _INIT_DATA_FUNCTIONS_CACHE = {
-        "create_signals_log": getattr(init_data, "create_signals_log"),
-        "create_jongga_v2_latest": getattr(init_data, "create_jongga_v2_latest"),
-        "create_daily_prices": getattr(init_data, "create_daily_prices"),
-        "create_institutional_trend": getattr(init_data, "create_institutional_trend"),
-        "send_jongga_notification": getattr(init_data, "send_jongga_notification"),
+    return {
+        "create_signals_log": init_data.create_signals_log,
+        "create_jongga_v2_latest": init_data.create_jongga_v2_latest,
+        "create_daily_prices": init_data.create_daily_prices,
+        "create_institutional_trend": init_data.create_institutional_trend,
+        "send_jongga_notification": init_data.send_jongga_notification,
     }
-    return _INIT_DATA_FUNCTIONS_CACHE
 
 
 def _run_market_gate_analysis() -> None:

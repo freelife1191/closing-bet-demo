@@ -166,7 +166,6 @@ def register_system_and_execution_route_groups(
     get_data_path_fn: Callable[[str], str],
     trigger_market_gate_background_refresh_fn: Callable[[], bool],
     run_user_gemini_reanalysis_fn: Callable[..., dict[str, Any]],
-    project_root_getter: Callable[[], str],
 ) -> None:
     """시스템/실행 라우트 그룹을 등록한다."""
 
@@ -185,7 +184,6 @@ def register_system_and_execution_route_groups(
             execute_market_gate_update=execute_market_gate_update,
             execute_user_gemini_reanalysis_request=execute_user_gemini_reanalysis_request,
             run_user_gemini_reanalysis=run_user_gemini_reanalysis_fn,
-            project_root_getter=project_root_getter,
             launch_background_update_job=launch_background_update_job,
             launch_init_data_update=launch_init_data_update,
             build_data_status_payload=build_data_status_payload,

@@ -280,7 +280,6 @@ register_system_and_execution_route_groups(
     get_data_path_fn=lambda filename: get_data_path(filename),
     trigger_market_gate_background_refresh_fn=_trigger_market_gate_background_refresh,
     run_user_gemini_reanalysis_fn=lambda **kwargs: run_user_gemini_reanalysis(**kwargs),
-    project_root_getter=lambda: os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
 )
 
 def calculate_scenario_return(ticker, entry_price, signal_date, current_price, price_df, target_pct=0.15, stop_pct=0.05):

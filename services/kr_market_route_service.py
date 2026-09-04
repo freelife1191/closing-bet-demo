@@ -9,7 +9,6 @@ KR Market Route Service
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from typing import Any, Callable
 
@@ -130,18 +129,13 @@ def parse_target_dates(req_data: dict[str, Any]) -> list[str]:
 
 
 def run_user_gemini_reanalysis(
-    project_root: str,
     target_dates: list[str],
     api_key: str | None,
 ) -> dict[str, Any]:
     """사용자 키 기반 Gemini 재분석을 실행한다."""
-    scripts_dir = os.path.join(project_root, "scripts")
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
+    from scripts import init_data
 
-    from init_data import create_kr_ai_analysis_with_key
-
-    result = create_kr_ai_analysis_with_key(target_dates or None, api_key=api_key)
+    result = init_data.create_kr_ai_analysis_with_key(target_dates or None, api_key=api_key)
     if isinstance(result, dict):
         return result
     return {"count": 0}
@@ -152,7 +146,6 @@ def execute_user_gemini_reanalysis_request(
     user_email: str | None,
     req_data: dict[str, Any],
     usage_tracker: Any,
-    project_root: str,
     logger: logging.Logger,
     run_reanalysis_func: Callable[..., dict[str, Any]] | None = None,
 ) -> tuple[int, dict[str, Any]]:
@@ -177,7 +170,6 @@ def execute_user_gemini_reanalysis_request(
     logger.info(f"Gemini Re-analysis triggered by user (Key provided: {bool(user_api_key)})")
     reanalysis_runner = run_reanalysis_func or run_user_gemini_reanalysis
     result = reanalysis_runner(
-        project_root=project_root,
         target_dates=target_dates,
         api_key=user_api_key,
     )

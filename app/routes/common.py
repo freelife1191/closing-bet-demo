@@ -31,13 +31,6 @@ from services.common_update_status_service import (
 from services.paper_trading import paper_trading
 
 
-scripts_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "scripts",
-)
-if scripts_dir not in sys.path:
-    sys.path.append(scripts_dir)
-
 logger = logging.getLogger(__name__)
 common_bp = Blueprint("common", __name__)
 

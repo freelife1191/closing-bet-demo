@@ -6,10 +6,18 @@ Scheduler job 리팩토링 회귀 테스트
 
 from __future__ import annotations
 
+import sys
+import types
+
 import services.scheduler_jobs as scheduler_jobs
 
 
 def test_run_jongga_v2_analysis_skips_when_market_closed(monkeypatch):
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "set_scheduler_runtime_status",
+        lambda **_kwargs: None,
+    )
     monkeypatch.setattr(
         scheduler_jobs.MarketSchedule,
         "is_market_open",
@@ -32,6 +40,11 @@ def test_run_jongga_v2_analysis_skips_when_market_closed(monkeypatch):
 
 def test_run_jongga_v2_analysis_runs_analysis_and_notification(monkeypatch):
     monkeypatch.setattr(
+        scheduler_jobs,
+        "set_scheduler_runtime_status",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
         scheduler_jobs.MarketSchedule,
         "is_market_open",
         lambda _date: True,
@@ -52,6 +65,11 @@ def test_run_jongga_v2_analysis_runs_analysis_and_notification(monkeypatch):
 
 
 def test_run_daily_closing_analysis_chains_jongga(monkeypatch):
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "set_scheduler_runtime_status",
+        lambda **_kwargs: None,
+    )
     monkeypatch.setattr(
         scheduler_jobs.MarketSchedule,
         "is_market_open",
@@ -161,3 +179,40 @@ def test_run_market_gate_sync_runs_when_market_open(monkeypatch):
     scheduler_jobs.run_market_gate_sync()
 
     assert called["market_gate"] == 1
+
+
+def test_scheduler_path_resolves_init_data_through_scripts_package(monkeypatch):
+    """scripts 패키지에 심은 대역이 스케줄러 잡에도 그대로 적용된다.
+
+    임포트 경로를 통일하기 전에는 이 경로만 최상위 init_data 를 따로 열었다. 그래서
+    다른 검사들이 쓰는 fake_scripts 대역이 스케줄러 잡에는 닿지 않았고, 그 경로만
+    검증에서 빠져 있었다. 이 검사는 `_load_init_data_functions` 를 바꿔치기하지 않고
+    실제 임포트를 그대로 태워서 그 구멍이 메워졌음을 고정한다.
+    """
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "set_scheduler_runtime_status",
+        lambda **_kwargs: None,
+    )
+    # 회귀가 나면 대역을 우회해 진짜 init_data 가 열리고 실제 수집과 알림 발송까지
+    # 돌아 버린다. 최상위 이름을 미리 막아 그 전에 ImportError 로 끝나게 한다.
+    monkeypatch.setitem(sys.modules, "init_data", None)
+
+    calls = {"analyze": 0, "notify": 0}
+    fake_scripts = types.ModuleType("scripts")
+    fake_scripts.init_data = types.SimpleNamespace(
+        create_signals_log=lambda **_k: None,
+        create_jongga_v2_latest=lambda: calls.__setitem__("analyze", calls["analyze"] + 1) or True,
+        create_daily_prices=lambda **_k: None,
+        create_institutional_trend=lambda **_k: None,
+        send_jongga_notification=lambda: calls.__setitem__("notify", calls["notify"] + 1),
+    )
+    monkeypatch.setitem(sys.modules, "scripts", fake_scripts)
+    monkeypatch.setattr(
+        scheduler_jobs.MarketSchedule,
+        "is_market_open",
+        lambda _date: True,
+    )
+
+    assert scheduler_jobs.run_jongga_v2_analysis(test_mode=False) is True
+    assert calls == {"analyze": 1, "notify": 1}

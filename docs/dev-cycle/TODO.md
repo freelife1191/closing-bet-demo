@@ -16,25 +16,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-006] init_data 임포트 경로를 하나로 통일
-- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §1.2, §2.1
-- `[INFRA-007]` 을 흡수했습니다. 같은 파일을 같은 티어로 두 번 여는 대신 한 사이클에서
-  함께 처리합니다. 흡수된 번호는 재사용하지 않습니다.
-- `scripts/init_data.py` 와 `services/scheduler_jobs.py` 가 모두 위험 경로에 있어 T3 입니다.
-- [ ] `scripts/__init__.py` 를 추가할지, `sys.path` 주입을 걷어낼지 방식을 확정
-- [ ] `services/scheduler_jobs.py:32-36` 의 `importlib` 지연 로드를
-      `from scripts import init_data` 방식으로 통일
-- [ ] `services/kr_market_route_service.py:142` 와 `tests/test_grading_logic.py:9` 의
-      최상위 임포트를 같은 방식으로 정리
-- [ ] `sys.modules` 에 `init_data` 와 `scripts.init_data` 가 동시에 올라가지 않음을
-      확인하는 테스트 추가
-- [ ] `scripts/init_data.py:55-65` 의 `NumpyEncoder` 사본을 삭제하고 공용
-      `numpy_json_encoder` 를 import
-- [ ] `cls=NumpyEncoder` 를 넘기는 다섯 곳(730, 1785, 1790, 1978, 2680)이 공용 구현을
-      쓰는지 확인
-- [ ] `datetime` 이 섞인 payload 가 정상 저장되는지 확인하는 테스트 추가
-- [ ] pytest 전체 통과 확인
-
 ### [VCP-004] VCP 응답 생성 헬퍼의 검증 공백 메우기
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: AUDIT-VCP §5.1
 - 티어 근거: 테스트 파일만 바꾸므로 `tier-rules.md` §1 의 제외 조항을 적용할 수 없고,
@@ -332,6 +313,23 @@
 - [ ] 응답 구조가 바뀌면 `_CUMULATIVE_CACHE_SCHEMA_VERSION` 을 함께 올림
 - [ ] 화면의 표와 등급 필터를 맞추고, 행 수와 「누적 추천수」가 같은 것을 vitest 로 고정
 
+### [INFRA-027] 요청 헤더 한 줄이 그대로 신원이 되어 유료 쿼터를 우회한다
+- 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
+  보안 스페셜리스트 지적(확신도 90). 코드를 직접 열어 확인했다.
+- `app/__init__.py:175` 가 `g.user_email = request.headers.get('X-User-Email')` 로
+  헤더 값을 검증 없이 신원으로 삼는다. 서명도 만료도 확인하지 않는다.
+- `services/kr_market_route_service.py:153-165` 는 그 값 하나로 두 가지를 판정한다.
+  값이 없으면 401 을 돌려주고, 있으면 `usage_tracker.check_and_increment(user_email)` 로
+  무료 10회 쿼터를 집계한다. 그래서 헤더 문자열만 바꾸면 쿼터가 새로 시작되어 Gemini
+  분석을 무제한으로 부를 수 있고, 남의 이메일을 넣으면 그 사람의 쿼터를 대신 소진시킨다.
+- 티어 근거: 인증 경계를 바꾸는 작업이고 `app/__init__.py` 의 `before_request` 를
+  건드리므로 `tier-rules.md` §2 의 위험 경로에 닿는다.
+- [ ] `g.user_email` 을 신원 근거로 쓰는 자리를 전수 조사 (`app/__init__.py:186` 포함)
+- [ ] 서버가 서명을 검증할 수 있는 자격 증명으로 신원을 확정하는 방식을 정한다
+- [ ] 당장 도입이 어려우면 이 엔드포인트에 IP 단위 속도 제한을 먼저 건다
+- [ ] 위조한 헤더가 쿼터를 우회하지 못함을 고정하는 검사 추가
+- [ ] pytest 전체 통과 확인
+
 ### [INFRA-025] `/api/system/env` 가 인증 없이 서버 `.env` 를 읽고 쓴다
 - 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-04 FE-006 사이클의 code-review
 - `app/routes/common_update_routes.py:221` 의 `manage_env` 에 권한 검사가 없습니다.
@@ -406,6 +404,64 @@
 - [ ] 연결 상태를 vitest 로 고정
 
 ## P2 — 대기
+
+### [INFRA-026] 공용 JSON 인코더가 결측 날짜를 `"NaT"` 문자열로 저장한다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 code-review 관찰(확신도 30)
+- `numpy_json_encoder.py:44-45` 의 `isinstance(obj, (datetime, date))` 분기에 pandas 의
+  `NaT` 도 걸린다. `NaTType` 이 `datetime` 을 상속하기 때문이다. `NaT.isoformat()` 은
+  `"NaT"` 라는 문자열을 돌려주므로, 결측 날짜가 값처럼 JSON 에 실린다.
+- 이 인코더를 쓰는 모듈은 여덟 개다. `engine/generator_result_storage.py`,
+  `engine/market_gate.py`, `services/kr_market_data_cache_jongga.py`,
+  `services/common_update_status_service.py`, `services/kr_market_backtest_summary_cache.py`,
+  `services/kr_market_cumulative_cache.py`, `services/common_update_ai_analysis_service.py`
+  이며 `[INFRA-006]` 이 `scripts/init_data.py` 를 여기에 더했다.
+- 티어 근거: `numpy_json_encoder.py` 는 위험 경로 목록에 없으나 여덟 모듈의 저장 경로가
+  모두 이 파일 하나를 지난다. 고칠 때 `tier-rules.md` §2 에 추가할지 함께 판정한다.
+- [ ] `data/` 아래 저장된 JSON 에 `"NaT"` 문자열이 실제로 들어 있는지 확인
+- [ ] 들어 있으면 `numpy_json_encoder.py` 가 `pd.isna` 를 먼저 보고 `None` 을 돌려주게 고친다
+- [ ] 화면이 그 자리를 어떻게 그리는지 확인. `[JONGGA-019]` 가 값 없음을 값처럼 그리던 문제를
+      고쳤으므로 같은 처리가 필요한지 본다
+- [ ] 회귀 검사 추가. `numpy_json_encoder.py` 에는 지금 전용 검사가 하나도 없다
+- 같은 파일의 numpy 분기도 함께 본다. 삭제한 `scripts/init_data.py` 의 사본은
+  `np.integer` 와 `np.floating` 이라는 추상 기반 클래스로 판정했으나 공용 구현은 구체
+  타입을 열거한다. 그래서 `np.longdouble` 이 직렬화되지 않는다(실행으로 확인). 다만
+  추상 기반 클래스로 넓히면 `np.timedelta64` 까지 걸려 단위 없는 정수로 조용히 바뀌므로,
+  `NaT` 와 같은 성격의 판단이 필요하다. 지금 자료 경로는 float64 만 만들어 실제 피해는 없다.
+- `np.float_` 는 numpy 2.0 에서 없어진 이름이라 그때 이 파일이 임포트 단계에서 깨진다.
+  `[INFRA-018]` 의 numpy 핀과 함께 판정한다.
+- [ ] `np.longdouble` 을 열거 목록에 더할지, 추상 기반 클래스로 바꿀지 판정
+
+### [INFRA-028] Gemini 재분석 요청의 날짜 목록에 형식 검사도 개수 상한도 없다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
+  보안 스페셜리스트 지적(확신도 70, 60, 40)
+- `services/kr_market_route_service.py:113` 의 `parse_target_dates` 는 신뢰 경계를 넘어온
+  값을 문자열로 바꾸고 공백만 없앤다. 날짜 형식도 목록 길이도 보지 않는다.
+- 그 값이 `scripts/init_data.py` 의 파일명 조립부까지 그대로 닿는다. 지금 경로 탈출이
+  성립하지 않는 이유는 파일명 조립부의 방어가 아니라 그보다 앞의
+  `df['signal_date'] == str(t_date)` 필터가 실재하지 않는 날짜를 걸러 내기 때문이다.
+  방어가 우연히 다른 자리에 놓여 있어 필터 조건이 느슨해지는 순간 취약해진다.
+- 같은 값이 필터를 적용하기 전에 `log(f"Deep Analysis for date: {t_date}")` 로 기록되므로
+  개행 문자를 넣으면 로그에 가짜 항목을 만들 수 있다. 이 로그를 파싱하는 소비자는 확인하지
+  못했으므로 영향은 제한적이다.
+- Flask 의 `MAX_CONTENT_LENGTH` 가 설정되어 있지 않아 항목이 수만 개인 배열도 받는다.
+- [ ] `parse_target_dates` 에서 `\d{4}-\d{2}-\d{2}` 형식과 목록 길이 상한을 확정
+- [ ] 형식에 맞지 않는 값을 이 한 자리에서 걸러 파일명 조립부까지 닿지 않게 한다
+- [ ] `MAX_CONTENT_LENGTH` 를 설정할지 판정
+- [ ] 잘못된 형식이 거부됨을 고정하는 검사 추가
+- [ ] pytest 전체 통과 확인
+
+### [INFRA-029] 장 마감 정기 분석의 완료 로그가 실패한 단계를 덮는다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
+  유지보수성 스페셜리스트 지적(확신도 45)
+- `services/scheduler_jobs.py:102-115` 의 일별 주가, 수급, VCP 세 단계는 실패해도 오류만
+  기록하고 계속 진행하는데, 121 행의 완료 로그는 그 결과를 보지 않는다.
+- 게다가 이 로그는 122 행에서 `jongga_ok` 를 판정하기 전에 나오므로, 종가베팅이 실패해
+  126 행의 오류가 뒤따르는 경우에도 「완료」가 먼저 찍힌다. 사람이 지켜보지 않는 야간
+  작업이라 로그가 유일한 판단 근거인데, 완료로 grep 하면 실패한 밤을 성공으로 읽는다.
+- [ ] `prices_ok`, `inst_ok`, `vcp_ok`, `jongga_ok` 를 모아 완료와 부분 실패를 나눠 기록
+- [ ] 최소한 완료 로그를 `jongga_ok` 판정 이후로 옮긴다
+- [ ] 부분 실패 시 완료 로그가 나오지 않음을 고정하는 검사 추가
+- [ ] pytest 전체 통과 확인
 
 ### [FE-031] 국내 시장 화면이 갱신 실패를 콘솔에만 남긴다
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-005 사이클의 code-reviewer

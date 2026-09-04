@@ -146,7 +146,6 @@ def _register_reanalyze_gemini_route(
                 user_email=user_email,
                 req_data=req_data,
                 usage_tracker=usage_tracker,
-                project_root=deps["project_root_getter"](),
                 logger=logger,
                 run_reanalysis_func=deps["run_user_gemini_reanalysis"],
             )

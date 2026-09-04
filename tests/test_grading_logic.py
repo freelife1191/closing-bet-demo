@@ -1,12 +1,7 @@
 
 import unittest
-import sys
-import os
 
-# Add scripts directory to path to import init_data
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-
-from init_data import assign_grade
+from scripts.init_data import assign_grade
 
 class TestJonggaGrading(unittest.TestCase):
     def test_grade_S(self):
