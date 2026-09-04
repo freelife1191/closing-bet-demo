@@ -230,21 +230,6 @@ describe('Regression Tests - Complete Upgrade', () => {
     expect(existsSync(componentsDir)).toBe(true)
   })
 
-  it('should maintain all dependencies', () => {
-    const pkgPath = join(ROOT_DIR, 'package.json')
-    const pkgContent = readFileSync(pkgPath, 'utf-8')
-    const pkg = JSON.parse(pkgContent)
-
-    // 모든 원래 의존성이 존재해야 함
-    expect(pkg.dependencies['next-auth']).toBeDefined()
-    expect(pkg.dependencies['crypto-js']).toBeDefined()
-    expect(pkg.dependencies['lightweight-charts']).toBeDefined()
-    expect(pkg.dependencies['react-icons']).toBeDefined()
-    expect(pkg.dependencies['react-markdown']).toBeDefined()
-    expect(pkg.dependencies['remark-gfm']).toBeDefined()
-    expect(pkg.dependencies['zustand']).toBeDefined()
-  })
-
   it('should maintain all test scripts', () => {
     const pkgPath = join(ROOT_DIR, 'package.json')
     const pkgContent = readFileSync(pkgPath, 'utf-8')

@@ -461,7 +461,7 @@ frontend/src/app/
 │   ├── ClosingBetCriteriaModal.tsx / VCPCriteriaModal.tsx              # 등급/패턴 기준 안내
 │   ├── ConfirmationModal.tsx / Modal.tsx / Tooltip.tsx                 # 공통 UI
 │   ├── ThinkingProcess.tsx         # AI 추론 과정 시각화
-│   └── Providers.tsx               # NextAuth/zustand provider
+│   └── Providers.tsx               # NextAuth SessionProvider
 ├── api/                 # Next.js API Routes (백엔드 프록시)
 ├── layout.tsx / globals.css        # 전역 레이아웃 / Tailwind
 ├── error.tsx / loading.tsx / not-found.tsx
@@ -469,7 +469,6 @@ frontend/src/app/
 ```
 
 - **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
-- **State Management**: Zustand 5 (`zustand`)
 - **Auth**: NextAuth 4 (Google OAuth)
 - **Charts**: `lightweight-charts` (TradingView 오픈소스)
 - **Markdown**: `react-markdown` + `remark-gfm` (챗봇 렌더링)

@@ -5,7 +5,7 @@
  * 핵심 기능이 정상 작동하는지 확인합니다.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { execSync } from 'child_process'
@@ -155,21 +155,6 @@ describe('Next.js 16 Smoke Tests', () => {
 })
 
 describe('Regression Prevention', () => {
-  it('should maintain all original dependencies', () => {
-    const pkgPath = join(ROOT_DIR, 'package.json')
-    const pkgContent = readFileSync(pkgPath, 'utf-8')
-    const pkg = JSON.parse(pkgContent)
-
-    // 모든 원래 의존성이 존재해야 함
-    expect(pkg.dependencies['next-auth']).toBeDefined()
-    expect(pkg.dependencies['crypto-js']).toBeDefined()
-    expect(pkg.dependencies['lightweight-charts']).toBeDefined()
-    expect(pkg.dependencies['react-icons']).toBeDefined()
-    expect(pkg.dependencies['react-markdown']).toBeDefined()
-    expect(pkg.dependencies['remark-gfm']).toBeDefined()
-    expect(pkg.dependencies['zustand']).toBeDefined()
-  })
-
   it('should maintain project structure', () => {
     const expectedDirs = [
       'src/app',

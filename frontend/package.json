@@ -15,17 +15,13 @@
     "upgrade:check": "npm run test:baseline && npm run type-check && npm run lint"
   },
   "dependencies": {
-    "@types/crypto-js": "^4.2.2",
-    "crypto-js": "^4.2.0",
     "lightweight-charts": "^5.1.0",
     "next": "^16.3.4",
     "next-auth": "^4.24.13",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-icons": "^5.5.0",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
-    "zustand": "^5.0.11"
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.0",

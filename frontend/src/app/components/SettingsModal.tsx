@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useAdmin } from '@/hooks/useAdmin';
 import { getBrowserSessionId } from '@/lib/session';
+import { apiKeyFieldProps, pickNotificationEnv } from './settingsEnv';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -41,11 +42,6 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
     : null;
   const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-
-  // [Fix] API 키 유효성 검사 헬퍼 함수
-  const isApiKeyValid = (key: string | undefined | null): boolean => {
-    return !!(key && key.trim() !== '' && key !== 'null' && key !== 'undefined');
-  };
 
   useEffect(() => {
     if (session?.user?.email && isOpen) {
@@ -107,20 +103,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
       if (res.ok) {
         const data = await res.json();
 
-        // 서버 마스킹 값(*포함)은 입력 필드에 노출하지 않는다.
-        const apiKeyFields = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY'];
-        for (const key of apiKeyFields) {
-          if (data[key] && data[key].includes('*')) {
-            delete data[key];
-          }
-        }
-
-        const openaiKey = localStorage.getItem('OPENAI_API_KEY');
-        const perplexityKey = localStorage.getItem('PERPLEXITY_API_KEY');
-
-        if (isApiKeyValid(openaiKey)) data['OPENAI_API_KEY'] = openaiKey!;
-        if (isApiKeyValid(perplexityKey)) data['PERPLEXITY_API_KEY'] = perplexityKey!;
-
+        // 마스킹 값은 그대로 둔다. apiKeyFieldProps 가 입력 필드의 값이 아니라
+        // 자리 표시자로 돌리고, 서버의 update_env_file 도 `*` 가 섞인 값을 받으면
+        // 기존 키를 유지하므로 되돌려 보내도 덮어쓰지 않는다.
         setEnvVars(data);
       }
     } catch (error) {
@@ -132,14 +117,6 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
   const handleEnvChange = (key: string, value: string) => {
     setEnvVars(prev => ({ ...prev, [key]: value }));
-
-    if (key === 'OPENAI_API_KEY') {
-      if (!value) {
-        localStorage.removeItem(key);
-      } else {
-        localStorage.setItem(key, value);
-      }
-    }
   };
 
   const handleResetData = () => {
@@ -243,12 +220,14 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
     signOut();
   };
 
-  // 서버가 Vertex AI ADC를 사용하므로 클라이언트는 GOOGLE_API_KEY/X-Gemini-Key를 더 이상 보관하지 않는다.
-  // 잔존하는 legacy 값이 있으면 정리.
+  // API 키는 서버의 .env 에만 둔다. 브라우저에 남기면 보호 수단이 없는 평문이 되고,
+  // 서버가 이미 마스킹한 값을 돌려주므로 캐시할 이유도 없다.
+  // 예전 버전이 남겨 둔 값이 있으면 설정을 열 때 정리한다.
   useEffect(() => {
     if (isOpen) {
-      localStorage.removeItem('X-Gemini-Key');
-      localStorage.removeItem('GOOGLE_API_KEY');
+      for (const key of ['X-Gemini-Key', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'PERPLEXITY_API_KEY']) {
+        localStorage.removeItem(key);
+      }
     }
   }, [isOpen]);
 
@@ -264,11 +243,12 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   const handleTestNotification = async (platform: 'discord' | 'telegram' | 'email') => {
     setIsTesting(true);
     try {
-      // 먼저 현재 설정을 저장 (환경변수 업데이트가 되어야 서버에서 읽을 수 있음)
+      // 먼저 알림 설정을 저장한다. 서버가 .env 에서 읽어야 발송할 수 있기 때문이다.
+      // 저장 버튼을 누르지 않은 요청이므로 알림에 필요한 키만 보낸다.
       await fetch('/api/system/env', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(envVars)
+        body: JSON.stringify(pickNotificationEnv(envVars))
       });
 
       const res = await fetch('/api/notification/send', {
@@ -702,10 +682,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                       <div className="relative">
                         <input
                           type="password"
-                          value={envVars['OPENAI_API_KEY'] || ''}
+                          {...apiKeyFieldProps(envVars['OPENAI_API_KEY'], 'sk-...')}
                           onChange={(e) => handleEnvChange('OPENAI_API_KEY', e.target.value)}
                           className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-green-500 transition-colors"
-                          placeholder="sk-..."
                           autoComplete="new-password"
                           data-lpignore="true"
                         />
@@ -734,10 +713,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                       <div className="relative">
                         <input
                           type="password"
-                          value={envVars['PERPLEXITY_API_KEY'] || ''}
+                          {...apiKeyFieldProps(envVars['PERPLEXITY_API_KEY'], 'pplx-...')}
                           onChange={(e) => handleEnvChange('PERPLEXITY_API_KEY', e.target.value)}
                           className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition-colors"
-                          placeholder="pplx-..."
                           autoComplete="new-password"
                           data-lpignore="true"
                         />
