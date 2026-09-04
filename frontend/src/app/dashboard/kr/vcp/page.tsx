@@ -715,7 +715,7 @@ export default function VCPSignalsPage() {
     setStoppingReanalysis(false);
     setScreenerMessage(`🤖 ${modeLabel} 재분석 시작 요청 중...`);
     try {
-      const res: any = await krAPI.reanalyzeVCPFailedAI(targetDate, true, forceProvider);
+      const res: any = await krAPI.reanalyzeVCPFailedAI(targetDate, forceProvider);
       setScreenerMessage(`🤖 ${res?.message || '실패 AI 재분석 시작됨'}`);
       startReanalysisPolling(targetDate);
     } catch (e: any) {

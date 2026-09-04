@@ -5,6 +5,7 @@ import Modal from './Modal';
 import { useRouter } from 'next/navigation';
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useAdmin } from '@/hooks/useAdmin';
+import { getBrowserSessionId } from '@/lib/session';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
   useEffect(() => {
     if (session?.user?.email && isOpen) {
-      fetch(`/api/kr/user/quota?email=${session.user.email}`)
+      fetch(`/api/kr/user/quota?email=${encodeURIComponent(session.user.email)}`)
         .then(res => res.json())
         .then(data => setQuota(data))
         .catch(e => console.error(e));
@@ -423,7 +424,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                                 <button
                                   onClick={async (e) => {
                                     e.preventDefault();
-                                    const sessionId = localStorage.getItem('browser_session_id');
+                                    const sessionId = getBrowserSessionId();
                                     try {
                                       const res = await fetch('/api/kr/user/quota/recharge', {
                                         method: 'POST',

@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { useSession } from "next-auth/react";
 import ThinkingProcess from './ThinkingProcess';
 import { getStoredModel, shouldSendOnEnter } from './chatHelpers';
+import { getBrowserSessionId } from '@/lib/session';
 
 interface Message {
   role: 'user' | 'model';
@@ -234,12 +235,7 @@ export default function ChatWidget() {
 
       // Auth Info Retrieval
       const userEmail = session?.user?.email || null;
-      let sessionId = localStorage.getItem('browser_session_id');
-
-      if (!sessionId) {
-        sessionId = 'anon_' + crypto.randomUUID();
-        localStorage.setItem('browser_session_id', sessionId);
-      }
+      const sessionId = getBrowserSessionId();
 
       const storedModel = getStoredModel();
       const requestBody: Record<string, unknown> = { message: messageToSend, watchlist };

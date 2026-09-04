@@ -7,6 +7,7 @@ import Modal from './Modal';
 import PaperTradingModal from './PaperTradingModal';
 import { useSession, signOut } from 'next-auth/react';
 import { useAdmin } from '@/hooks/useAdmin';
+import { getBrowserSessionId } from '@/lib/session';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -67,14 +68,10 @@ export default function Sidebar() {
     // 이전 사용자의 이메일로 조회하면 엉뚱한 계정의 잔여 횟수가 잠깐 표시된다.
     if (status === 'loading') return;
 
-    let sessionId = localStorage.getItem('browser_session_id');
-    if (!sessionId) {
-      sessionId = 'anon_' + crypto.randomUUID();
-      localStorage.setItem('browser_session_id', sessionId);
-    }
+    const sessionId = getBrowserSessionId();
 
     const email = displayEmail !== 'user@example.com' ? displayEmail : '';
-    fetch(`/api/kr/user/quota?email=${email}&session_id=${sessionId}`)
+    fetch(`/api/kr/user/quota?email=${encodeURIComponent(email)}&session_id=${encodeURIComponent(sessionId)}`)
       .then(res => res.json())
       .then(data => {
         setQuota(data);
@@ -105,13 +102,13 @@ export default function Sidebar() {
 
     // [Log] Update Profile Event
     try {
-      let sessionId = localStorage.getItem('browser_session_id');
+      const sessionId = getBrowserSessionId();
       await fetch('/api/system/log-event', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-User-Email': email,
-          'X-Session-Id': sessionId || ''
+          'X-Session-Id': sessionId
         },
         body: JSON.stringify({
           action: 'PROFILE_UPDATE',
@@ -302,7 +299,7 @@ export default function Sidebar() {
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
-                          const sessionId = localStorage.getItem('browser_session_id');
+                          const sessionId = getBrowserSessionId();
                           const email = displayEmail !== 'user@example.com' ? displayEmail : '';
                           try {
                             const res = await fetch('/api/kr/user/quota/recharge', {

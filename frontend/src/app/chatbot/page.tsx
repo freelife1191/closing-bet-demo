@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { fetchAPI } from '@/lib/api';
+import { getBrowserSessionId } from '@/lib/session';
 
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
@@ -452,16 +453,7 @@ export default function ChatbotPage() {
 
   // Helper: Get Auth Headers
   const getAuthHeaders = () => {
-    let sessionId = localStorage.getItem('browser_session_id');
-    if (!sessionId) {
-      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        sessionId = 'anon_' + crypto.randomUUID();
-      } else {
-        // Fallback for non-secure contexts or older browsers
-        sessionId = 'anon_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-      }
-      localStorage.setItem('browser_session_id', sessionId);
-    }
+    const sessionId = getBrowserSessionId();
 
     const headers: Record<string, string> = {
       'X-Session-Id': sessionId

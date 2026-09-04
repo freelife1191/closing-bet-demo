@@ -22,12 +22,19 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
     clearTimeout(id);
 
     if (!response.ok) {
-      // 에러 객체에 status 등을 담아서 던질 수도 있음
-      const error: any = new Error(`API Error: ${response.status}`);
-      error.status = response.status;
+      // 백엔드는 실패 사유를 `message` 나 `error` 중 한 자리에 적어 보낸다. 그 문구를
+      // Error.message 로 올려야 호출부가 `e.message` 를 그대로 화면에 띄울 수 있다.
+      // 여기서 올리지 않으면 사유를 꺼내는 코드를 호출부마다 따로 두게 된다.
+      let data: any;
       try {
-        error.data = await response.json();
-      } catch (e) { /* ignore */ }
+        data = await response.json();
+      } catch (e) { /* 본문이 JSON 이 아니면 상태 코드만 가지고 간다 */ }
+
+      const error: any = new Error(
+        data?.message || data?.error || `API Error: ${response.status}`
+      );
+      error.status = response.status;
+      error.data = data;
       throw error;
     }
     return response.json();
@@ -36,6 +43,10 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
       throw new Error('Request timed out');
     }
     throw e;
+  } finally {
+    // fetch 자체가 거부하면(백엔드 다운, DNS 실패) 위의 clearTimeout 에 닿지 못한다.
+    // 그대로 두면 타이머가 만료 시각까지 남는다. 폴링이 도는 화면에서는 계속 쌓인다.
+    clearTimeout(id);
   }
 }
 
@@ -183,66 +194,34 @@ export const krAPI = {
   getHistoryDates: () => fetchAPI<{ dates: string[] }>('/api/kr/ai-history-dates'),
   getHistory: (date: string) => fetchAPI<KRAIAnalysis>(`/api/kr/ai-history/${date}`),
 
-  // 스크리너 실행 (Closing Bet)
-  runScreener: async (capital = 50_000_000, markets = ['KOSPI', 'KOSDAQ'], target_date?: string) => {
-    const response = await fetch('/api/kr/jongga-v2/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ capital, markets, target_date }),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Screener execution failed');
-    }
-    return response.json();
-  },
-
   // VCP 스크리너 실행 (VCP Signals + AI)
-  runVCPScreener: async (target_date?: string, max_stocks = 50) => {
-    const response = await fetch('/api/kr/signals/run', {
+  runVCPScreener: (target_date?: string, max_stocks = 50) =>
+    fetchAPI<any>('/api/kr/signals/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_date, max_stocks }),
-    });
-    if (!response.ok) {
-      if (response.status === 409) {
-        throw new Error('이미 분석이 진행 중입니다.');
-      }
-      const error = await response.json();
-      throw new Error(error.message || 'VCP Screener execution failed');
-    }
-    return response.json();
-  },
+      // 이 엔드포인트의 409 만 사유를 영어("Already running")로 답한다. 화면이 예외의
+      // message 를 그대로 띄우므로 여기서 한국어로 바꾼다.
+    }).catch((e: any) => {
+      if (e?.status === 409) throw new Error('이미 분석이 진행 중입니다.');
+      throw e;
+    }),
 
-  // VCP 실패 AI 재분석 (옵션: provider 강제 재분석)
-  reanalyzeVCPFailedAI: async (
-    target_date?: string,
-    background = true,
-    force_provider?: 'gemini' | 'second'
-  ) => {
-    const response = await fetch('/api/kr/signals/reanalyze-failed-ai', {
+  // VCP 실패 AI 재분석 (옵션: provider 강제 재분석).
+  // background 를 거짓으로 보내면 백엔드가 요청 스레드에서 LLM 을 돌려 분 단위로 걸린다.
+  // 그런 호출자가 없으므로 참으로 고정한다. 인자로 열어 두면 10초에 끊기는 길이 생긴다.
+  reanalyzeVCPFailedAI: (target_date?: string, force_provider?: 'gemini' | 'second') =>
+    fetchAPI<any>('/api/kr/signals/reanalyze-failed-ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_date, background, force_provider }),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'VCP failed AI reanalysis failed');
-    }
-    return response.json();
-  },
+      body: JSON.stringify({ target_date, background: true, force_provider }),
+    }),
 
-  stopVCPFailedAIReanalysis: async () => {
-    const response = await fetch('/api/kr/signals/reanalyze-failed-ai/stop', {
+  stopVCPFailedAIReanalysis: () =>
+    fetchAPI<any>('/api/kr/signals/reanalyze-failed-ai/stop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'VCP failed AI reanalysis stop failed');
-    }
-    return response.json();
-  },
+    }),
 
   getVCPStatus: () =>
     fetchAPI<VCPStatus>(`/api/kr/signals/status?_t=${Date.now()}`, {
@@ -250,19 +229,16 @@ export const krAPI = {
       timeout: 30000,
     }),
 
-  // Market Gate 개별 업데이트
-  updateMarketGate: async (target_date?: string) => {
-    const response = await fetch('/api/kr/market-gate/update', {
+  // Market Gate 개별 업데이트.
+  // 수급 수집과 Market Gate 분석을 백엔드가 동기로 돌리므로 기본 10초로는 모자란다.
+  // gunicorn 이 워커를 120초에 끊으니(`--timeout 120`) 그보다 오래 기다릴 이유도 없다.
+  updateMarketGate: (target_date?: string) =>
+    fetchAPI<any>('/api/kr/market-gate/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_date }),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Market Gate update failed');
-    }
-    return response.json();
-  },
+      timeout: 120000,
+    }),
 };
 
 // Closing Bet API
@@ -417,34 +393,22 @@ export const paperTradingAPI = {
       body: JSON.stringify(data),
     }),
 
-  async reset() {
-    const res = await fetch('/api/portfolio/reset', { method: 'POST' });
-    if (!res.ok) throw new Error('Account reset failed');
-    return res.json();
-  },
+  reset: () => fetchAPI<any>('/api/portfolio/reset', { method: 'POST' }),
 
-  async deposit(amount: number) {
-    const res = await fetch('/api/portfolio/deposit', {
+  deposit: (amount: number) =>
+    fetchAPI<any>('/api/portfolio/deposit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount }),
-    });
-    if (!res.ok) throw new Error('Deposit failed');
-    return res.json();
-  },
+    }),
 
-  async getTradeHistory(limit = 50, ticker?: string) {
+  getTradeHistory: (limit = 50, ticker?: string) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (ticker) params.set('ticker', ticker);
-    const res = await fetch(`/api/portfolio/history?${params.toString()}`);
-    if (!res.ok) throw new Error('Failed to fetch trade history');
-    return res.json();
+    return fetchAPI<any>(`/api/portfolio/history?${params.toString()}`);
   },
 
-  async getAssetHistory(days = 365) {
-    // days = 기간 필터(최근 N일). 백엔드에서 기간에 맞는 자산 히스토리를 잘라서 반환한다.
-    const res = await fetch(`/api/portfolio/history/asset?days=${days}`);
-    if (!res.ok) throw new Error('Failed to fetch asset history');
-    return res.json();
-  }
+  // days = 기간 필터(최근 N일). 백엔드에서 기간에 맞는 자산 히스토리를 잘라서 반환한다.
+  getAssetHistory: (days = 365) =>
+    fetchAPI<any>(`/api/portfolio/history/asset?days=${days}`),
 };
