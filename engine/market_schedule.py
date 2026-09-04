@@ -44,6 +44,20 @@ class MarketSchedule:
     }
 
     @classmethod
+    def known_holidays(cls) -> tuple[date, ...]:
+        """pykrx 없이 알 수 있는 휴장일을 날짜 순으로 돌려준다.
+
+        is_market_open 은 하루를 판정하려고 pykrx 를 조회할 수 있다. 날짜 구간을
+        훑어야 하는 쪽은 그 비용을 감당할 수 없으므로, 네트워크 없이 아는 만큼만
+        내주는 자리를 따로 둔다.
+
+        _fallback_holidays 는 해마다 손으로 채우는 목록이다. 채워지지 않은 해에는
+        빈 것이나 다름없으므로, 이 값을 쓰는 쪽은 휴장일을 놓칠 수 있다는 전제로
+        써야 한다.
+        """
+        return tuple(sorted(cls._fallback_holidays))
+
+    @classmethod
     def _stable_token_to_int(cls, token: str) -> int:
         normalized = str(token or "")
         if normalized.isdigit():

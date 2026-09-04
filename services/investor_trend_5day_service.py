@@ -15,6 +15,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 
@@ -37,10 +38,10 @@ _PYKRX_MARKET_DATE_SQLITE_MAX_ROWS = 256
 _MEMORY_CACHE_MAX_ENTRIES = 32
 _REFERENCE_CACHE_MAX_ENTRIES = 4_096
 _CSV_EXTREME_ABS_TOTAL = 20_000_000_000_000
-_CSV_STALE_DAYS = 4
-_DISAGREE_RATIO_THRESHOLD = 2.5
-_DISAGREE_SIGNIFICANT_TOTAL = 10_000_000_000
-_DISAGREE_SIGNIFICANT_SIDE = 3_000_000_000
+# 영업일로 센다. 달력 날짜로 세면 주말만 끼어도 최신 자료가 낡은 것으로 판정된다.
+_CSV_STALE_BUSINESS_DAYS = 4
+# 하루 급등 판정에서 "의미 있는 규모"의 하한이다.
+_SPIKE_SIGNIFICANT_TOTAL = 10_000_000_000
 _TREND_CACHE_LOCK = threading.Lock()
 _TREND_CACHE: OrderedDict[
     tuple[str, int, int, str],
@@ -88,14 +89,6 @@ def _safe_int(value: Any) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return 0
-
-
-def _safe_sign(value: int) -> int:
-    if value > 0:
-        return 1
-    if value < 0:
-        return -1
-    return 0
 
 
 def _extract_abs_total(payload: dict[str, Any] | None) -> int:
@@ -464,40 +457,6 @@ def _normalize_external_trend_payload(
     }
 
 
-def _is_large_disagreement(
-    base_payload: dict[str, Any],
-    reference_payload: dict[str, Any],
-) -> bool:
-    base_foreign = _safe_int(base_payload.get("foreign", 0))
-    base_inst = _safe_int(base_payload.get("institution", 0))
-    ref_foreign = _safe_int(reference_payload.get("foreign", 0))
-    ref_inst = _safe_int(reference_payload.get("institution", 0))
-
-    base_total = abs(base_foreign) + abs(base_inst)
-    ref_total = abs(ref_foreign) + abs(ref_inst)
-    high_total = max(base_total, ref_total)
-    low_total = max(1, min(base_total, ref_total))
-
-    if high_total < _DISAGREE_SIGNIFICANT_TOTAL:
-        return False
-
-    ratio = float(high_total) / float(low_total)
-    if ratio >= _DISAGREE_RATIO_THRESHOLD:
-        return True
-
-    foreign_sign_mismatch = (
-        _safe_sign(base_foreign) != _safe_sign(ref_foreign)
-        and abs(base_foreign) >= _DISAGREE_SIGNIFICANT_SIDE
-        and abs(ref_foreign) >= _DISAGREE_SIGNIFICANT_SIDE
-    )
-    inst_sign_mismatch = (
-        _safe_sign(base_inst) != _safe_sign(ref_inst)
-        and abs(base_inst) >= _DISAGREE_SIGNIFICANT_SIDE
-        and abs(ref_inst) >= _DISAGREE_SIGNIFICANT_SIDE
-    )
-    return foreign_sign_mismatch or inst_sign_mismatch
-
-
 def _detect_csv_anomaly_flags(
     csv_payload: dict[str, Any] | None,
     *,
@@ -523,7 +482,7 @@ def _detect_csv_anomaly_flags(
             peak = max(day_abs_totals)
             baseline_values = sorted(day_abs_totals)[:-1]
             baseline = int(sum(baseline_values) / max(1, len(baseline_values)))
-            if peak >= _DISAGREE_SIGNIFICANT_TOTAL and peak >= max(1, baseline) * 10:
+            if peak >= _SPIKE_SIGNIFICANT_TOTAL and peak >= max(1, baseline) * 10:
                 flags.append("single_day_spike")
 
     abs_total = _extract_abs_total(csv_payload)
@@ -533,8 +492,22 @@ def _detect_csv_anomaly_flags(
     if target_datetime is None:
         latest_date = _parse_date_string(csv_payload.get("latest_date"))
         if latest_date is not None:
-            day_gap = (datetime.now().date() - latest_date.date()).days
-            if day_gap > _CSV_STALE_DAYS:
+            # 주말과 휴장일을 세지 않는다. 달력 날짜로 세면 금요일 자료가 그 주
+            # 수요일에 이미 낡은 것으로 판정되고, 설·추석 연휴에는 온 시장이 한꺼번에
+            # 교체 대상이 되면서 종목마다 참조 조회가 붙는다. 휴장일 목록은 해마다
+            # 손으로 채우는 것이라 비어 있는 해에는 주말까지만 걸러진다.
+            # engine 패키지가 초기화될 때 이 모듈을 도로 임포트하므로 함수 안에서
+            # 가져온다. 같은 파일의 _get_toss_collector 도 같은 이유로 그렇게 한다.
+            from engine.market_schedule import MarketSchedule
+
+            business_gap = int(
+                np.busday_count(
+                    latest_date.date(),
+                    datetime.now().date(),
+                    holidays=MarketSchedule.known_holidays(),
+                )
+            )
+            if business_gap > _CSV_STALE_BUSINESS_DAYS:
                 flags.append("stale_csv")
 
     return flags
@@ -879,24 +852,16 @@ def _resolve_best_payload(
             reference_sources=[],
         )
 
-    disagreement_flags = [
-        _is_large_disagreement(normalized_csv, reference_payload)
-        for reference_payload in references
-    ]
-    should_replace = any(disagreement_flags) or bool(csv_flags)
-
-    if should_replace:
-        selected = next((item for item in references if item.get("source") == "pykrx"), references[0])
-        return _attach_selection_metadata(
-            selected,
-            selected_source=str(selected.get("source", "reference")),
-            csv_flags=csv_flags,
-            reference_sources=reference_sources,
-        )
-
+    # 여기까지 왔다면 CSV 에 이상징후가 있고(그 조건에서만 참조를 조회한다) 참조를 받아
+    # 왔다. 그러면 참조를 쓴다. 두 값을 견주어 고르지 않는 이유는 같은 기간을 잰다는
+    # 보장이 없기 때문이다. stale_csv 는 정의상 CSV 가 다른 5거래일을 본다는 뜻이고
+    # insufficient_days 는 CSV 가 불완전하다는 뜻이라, 5일 합계가 비슷해도 하루별 값이
+    # 같다고 볼 수 없다. engine/screener_scoring_helpers.py 의 _score_supply_core 는
+    # details[0] 와 연속 부호로 25점까지 매긴다.
+    selected = next((item for item in references if item.get("source") == "pykrx"), references[0])
     return _attach_selection_metadata(
-        normalized_csv,
-        selected_source="csv",
+        selected,
+        selected_source=str(selected.get("source", "reference")),
         csv_flags=csv_flags,
         reference_sources=reference_sources,
     )
@@ -968,37 +933,6 @@ def _get_or_build_trend_map(
     return trend_map
 
 
-def load_investor_trend_5day_map(
-    *,
-    data_dir: str,
-    filename: str = _TREND_FILENAME,
-    target_datetime: datetime | pd.Timestamp | str | None = None,
-) -> dict[str, dict[str, Any]]:
-    """
-    ticker별 5거래일 수급 합산 맵을 반환한다.
-
-    Returns:
-        {
-            "005930": {
-                "foreign": int,
-                "institution": int,
-                "details": [
-                    {"netForeignerBuyVolume": int, "netInstitutionBuyVolume": int},
-                    ...
-                ],
-                "days": 5,
-            }
-        }
-    """
-    normalized_data_dir = _normalize_data_dir(data_dir)
-    trend_map = _get_or_build_trend_map(
-        data_dir=normalized_data_dir,
-        filename=filename,
-        target_datetime=target_datetime,
-    )
-    return dict(trend_map)
-
-
 def get_investor_trend_5day_for_ticker(
     *,
     ticker: str,
@@ -1010,8 +944,14 @@ def get_investor_trend_5day_for_ticker(
     """
     단일 ticker의 5거래일 수급 합산 데이터를 반환한다.
 
-    verify_with_references=True이면 CSV 이상징후가 감지될 때 Toss/pykrx를 교차검증해
-    더 신뢰 가능한 수급값으로 자동 교체한다.
+    verify_with_references=True 는 그 자체가 「이상징후일 때만 참조를 조회한다」는
+    정책이다. 플래그가 붙지 않으면 조회하지 않으므로, False 로 먼저 부르고 플래그를
+    확인한 뒤 True 로 다시 부르는 것은 첫 반환값을 버리는 중복 호출이다.
+
+    참조를 받아 왔다면 그것을 쓴다. 이상징후가 붙은 CSV 와 값을 견주어 고르지 않는다.
+    stale_csv 는 CSV 가 참조와 다른 5거래일을 본다는 뜻이고 insufficient_days 는 CSV 가
+    불완전하다는 뜻이라, 두 자료의 합계가 비슷하더라도 하루별 값까지 같다고 볼 근거가
+    없기 때문이다.
     """
     normalized_data_dir = _normalize_data_dir(data_dir)
     trend_map = _get_or_build_trend_map(
@@ -1042,7 +982,6 @@ def clear_investor_trend_5day_memory_cache() -> None:
 
 
 __all__ = [
-    "load_investor_trend_5day_map",
     "get_investor_trend_5day_for_ticker",
     "clear_investor_trend_5day_memory_cache",
 ]

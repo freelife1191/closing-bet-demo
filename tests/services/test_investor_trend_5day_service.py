@@ -17,7 +17,7 @@ import services.investor_trend_5day_service as trend_service
 import services.kr_market_data_cache_sqlite_payload as sqlite_payload_cache
 
 
-def test_load_investor_trend_5day_map_aggregates_with_latest_first_details(tmp_path):
+def test_trend_map_aggregates_with_latest_first_details(tmp_path):
     pd.DataFrame(
         [
             {"ticker": "005930", "date": "2026-02-20", "foreign_buy": 1, "inst_buy": 10},
@@ -31,7 +31,10 @@ def test_load_investor_trend_5day_map_aggregates_with_latest_first_details(tmp_p
     ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
 
     trend_service.clear_investor_trend_5day_memory_cache()
-    trend_map = trend_service.load_investor_trend_5day_map(data_dir=str(tmp_path))
+    trend_map = trend_service._get_or_build_trend_map(
+        data_dir=trend_service._normalize_data_dir(str(tmp_path)),
+        filename=trend_service._TREND_FILENAME,
+    )
 
     assert "005930" in trend_map
     assert "000660" not in trend_map
@@ -43,7 +46,7 @@ def test_load_investor_trend_5day_map_aggregates_with_latest_first_details(tmp_p
     }
 
 
-def test_load_investor_trend_5day_map_applies_target_date_filter(tmp_path):
+def test_trend_map_applies_target_date_filter(tmp_path):
     pd.DataFrame(
         [
             {"ticker": "005930", "date": "2026-02-19", "foreign_buy": 1, "inst_buy": 10},
@@ -56,8 +59,9 @@ def test_load_investor_trend_5day_map_applies_target_date_filter(tmp_path):
     ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
 
     trend_service.clear_investor_trend_5day_memory_cache()
-    trend_map = trend_service.load_investor_trend_5day_map(
-        data_dir=str(tmp_path),
+    trend_map = trend_service._get_or_build_trend_map(
+        data_dir=trend_service._normalize_data_dir(str(tmp_path)),
+        filename=trend_service._TREND_FILENAME,
         target_datetime=datetime(2026, 2, 23),
     )
 
@@ -107,7 +111,10 @@ def test_investor_trend_5day_service_reuses_sqlite_snapshot_after_memory_clear(m
     ).to_csv(trend_path, index=False)
 
     trend_service.clear_investor_trend_5day_memory_cache()
-    first = trend_service.load_investor_trend_5day_map(data_dir=str(tmp_path))
+    first = trend_service._get_or_build_trend_map(
+        data_dir=trend_service._normalize_data_dir(str(tmp_path)),
+        filename=trend_service._TREND_FILENAME,
+    )
     assert first["005930"]["foreign"] == 15
 
     trend_service.clear_investor_trend_5day_memory_cache()
@@ -117,7 +124,10 @@ def test_investor_trend_5day_service_reuses_sqlite_snapshot_after_memory_clear(m
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("should use sqlite snapshot")),
     )
 
-    second = trend_service.load_investor_trend_5day_map(data_dir=str(tmp_path))
+    second = trend_service._get_or_build_trend_map(
+        data_dir=trend_service._normalize_data_dir(str(tmp_path)),
+        filename=trend_service._TREND_FILENAME,
+    )
     assert second["005930"]["institution"] == 150
 
     sqlite_key = trend_service._sqlite_cache_key(str(trend_path), "latest")
@@ -240,6 +250,11 @@ def test_get_investor_trend_5day_for_ticker_skips_toss_when_pykrx_available(monk
 
 
 def test_get_investor_trend_5day_for_ticker_skips_reference_when_csv_is_normal(monkeypatch, tmp_path):
+    """verify_with_references 의 기본값 True 가 곧 「이상징후일 때만 참조 조회」다.
+
+    호출자가 False 로 먼저 부르고 플래그를 확인한 뒤 True 로 다시 부르는 패턴은 첫
+    반환값을 버리는 중복 호출이다. 이 검사가 그 계약을 고정한다.
+    """
     # 오늘 기준 최근 5영업일을 사용해 stale_csv 플래그가 발생하지 않도록 한다.
     today = datetime.now().date()
     recent_dates = [
@@ -275,8 +290,156 @@ def test_get_investor_trend_5day_for_ticker_skips_reference_when_csv_is_normal(m
 
     assert result is not None
     assert result["source"] == "csv"
+    assert result["quality"]["csv_anomaly_flags"] == []
     assert result["foreign"] == 60
     assert result["institution"] == 110
+
+
+def test_stale_csv_is_replaced_by_the_reference(monkeypatch, tmp_path):
+    """영업일로 세어도 낡은 CSV 는 참조로 갈아 끼운다.
+
+    stale_csv 는 CSV 가 참조와 다른 5거래일을 본다는 뜻이다. 두 자료의 5일 합계가
+    우연히 비슷하더라도 하루별 값까지 같다고 볼 근거가 없다. 스크리너 점수는
+    details[0](당일 수급)과 연속 부호로 25점까지 매기므로, 합계만 보고 낡은 CSV 를
+    남기면 지난달 수급이 오늘 점수로 들어간다.
+    """
+    pd.DataFrame(
+        [
+            {"ticker": "005930", "date": date, "foreign_buy": 2_000_000_000, "inst_buy": 1_600_000_000}
+            for date in ("2026-02-20", "2026-02-21", "2026-02-22", "2026-02-23", "2026-02-24")
+        ]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 10_000_000_000,
+            "institution": 8_000_000_000,
+            "details": [
+                {"netForeignerBuyVolume": 2_000_000_000, "netInstitutionBuyVolume": 1_600_000_000}
+                for _ in range(5)
+            ],
+            "latest_date": "2026-09-04",
+            "source": "pykrx",
+        },
+    )
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+    )
+
+    assert result is not None
+    assert "stale_csv" in result["quality"]["csv_anomaly_flags"]
+    assert result["source"] == "pykrx"
+    assert result["latest_date"] == "2026-09-04"
+
+
+def test_stale_flag_counts_business_days_not_calendar_days(monkeypatch, tmp_path):
+    """주말만 낀 자료는 낡은 것으로 보지 않는다.
+
+    달력 날짜로 세면 금요일에 갱신된 자료가 그 주 수요일에 이미 4일을 넘긴다. 주말이
+    낀 것만으로 온 시장에 stale_csv 가 붙고, 종목마다 참조 조회가 따라붙는다.
+    이 검사는 금요일 자료를 그다음 주 수요일에 읽는 상황을 세운다. 달력으로는 닷새라
+    옛 판정에서는 stale 이 붙지만, 영업일로는 사흘이라 붙지 않는다.
+    """
+    friday = datetime(2026, 8, 21)
+    csv_dates = [
+        (friday - pd.Timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in (6, 5, 4, 3, 0)
+    ]
+    payload = {
+        "foreign": 100,
+        "institution": 200,
+        "details": [{"netForeignerBuyVolume": 20, "netInstitutionBuyVolume": 40} for _ in range(5)],
+        "days": 5,
+        "latest_date": csv_dates[-1],
+    }
+
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 8, 26)  # 수요일. 달력으로 닷새, 영업일로 사흘
+
+    monkeypatch.setattr(trend_service, "datetime", _FrozenDatetime)
+
+    flags = trend_service._detect_csv_anomaly_flags(payload, target_datetime=None)
+    assert flags == []
+
+    class _LaterDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 8, 28)  # 그다음 금요일. 영업일로 다섯째 날
+
+    monkeypatch.setattr(trend_service, "datetime", _LaterDatetime)
+    assert "stale_csv" in trend_service._detect_csv_anomaly_flags(payload, target_datetime=None)
+
+
+def test_stale_flag_skips_market_holidays(monkeypatch, tmp_path):
+    """설 연휴처럼 평일에 걸린 휴장일도 세지 않는다.
+
+    주말만 걸러서는 부족하다. 2026년 설 연휴는 2월 16일부터 18일까지 사흘이 평일에
+    걸리므로, 2월 13일 금요일에 갱신된 자료를 2월 20일 금요일에 읽으면 주말만 뺀
+    영업일이 닷새가 되어 낡은 것으로 판정된다. 그 사이 실제로 열린 장은 2월 19일
+    하루뿐이다. 연휴 직후 온 시장에 참조 조회가 붙던 것이 이 자리에서 갈린다.
+    """
+    payload = {
+        "foreign": 100,
+        "institution": 200,
+        "details": [{"netForeignerBuyVolume": 20, "netInstitutionBuyVolume": 40} for _ in range(5)],
+        "days": 5,
+        "latest_date": "2026-02-13",
+    }
+
+    class _AfterLunarNewYear(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 2, 20)
+
+    monkeypatch.setattr(trend_service, "datetime", _AfterLunarNewYear)
+    assert trend_service._detect_csv_anomaly_flags(payload, target_datetime=None) == []
+
+
+def test_missing_csv_takes_the_reference(monkeypatch, tmp_path):
+    """CSV 에 그 종목이 아예 없어도 참조가 있으면 값을 돌려준다.
+
+    이 분기가 사라지면 CSV 에 없는 종목은 참조가 값을 갖고 있어도 None 으로 떨어지고,
+    호출자는 수급 점수를 0 으로 매긴다.
+    """
+    pd.DataFrame(
+        [
+            {"ticker": "000660", "date": date, "foreign_buy": 10, "inst_buy": 20}
+            for date in ("2026-02-20", "2026-02-21", "2026-02-22", "2026-02-23", "2026-02-24")
+        ]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 3_000_000_000,
+            "institution": 2_000_000_000,
+            "details": [
+                {"netForeignerBuyVolume": 600_000_000, "netInstitutionBuyVolume": 400_000_000}
+                for _ in range(5)
+            ],
+            "latest_date": "2026-02-24",
+            "source": "pykrx",
+        },
+    )
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+    )
+
+    assert result is not None
+    assert result["source"] == "pykrx"
+    assert result["foreign"] == 3_000_000_000
+    assert "missing_csv" in result["quality"]["csv_anomaly_flags"]
 
 
 def test_get_investor_trend_5day_for_ticker_reuses_reference_sqlite_after_memory_clear(
