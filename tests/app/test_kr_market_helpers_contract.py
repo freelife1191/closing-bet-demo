@@ -449,6 +449,36 @@ def test_apply_vcp_reanalysis_updates_writes_success_and_failure_rows():
     assert signals_df.at[1, "ai_action"] == "N/A"
 
 
+def test_reanalysis_updates_find_results_by_padded_ticker():
+    """CSV 의 종목 코드에서 앞자리 0 이 사라져도 재분석 결과를 찾아낸다.
+
+    signals_log.csv 를 pandas 로 읽으면 "005930" 이 정수 5930 이 되는 열이 생긴다.
+    재분석 결과 쪽 키는 여섯 자리이므로, 조회 전에 자릿수를 맞추지 않으면 모든
+    행이 실패로 집계되어 정상 분석까지 "분석 실패" 로 덮인다.
+    """
+    import pandas as pd
+
+    signals_df = pd.DataFrame(
+        [{"ticker": 5930, "ai_action": "", "ai_confidence": 0, "ai_reason": ""}]
+    )
+    ai_results = {
+        "005930": {
+            "gemini_recommendation": {
+                "action": "BUY",
+                "confidence": 80,
+                "reason": "수급이 개선되었습니다.",
+            }
+        }
+    }
+
+    updated_count, still_failed_count, recommendations = _apply_vcp_reanalysis_updates(
+        signals_df, [(0, {"ticker": 5930})], ai_results
+    )
+
+    assert (updated_count, still_failed_count) == (1, 0)
+    assert recommendations["005930"]["action"] == "BUY"
+
+
 def test_select_signals_for_gemini_reanalysis_with_target_tickers():
     all_signals = [
         {"stock_code": "000001", "stock_name": "Alpha"},

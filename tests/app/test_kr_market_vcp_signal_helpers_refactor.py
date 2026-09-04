@@ -144,3 +144,84 @@ def test_exit_prices_survive_unusable_entry_price():
         assert result is not None
         assert result["stop_price"] is None
         assert result["target_price"] is None
+
+
+def test_ai_data_map_pads_ticker_to_six_digits():
+    """AI 분석 파일의 종목 코드는 여섯 자리로 맞춰서 키로 삼는다.
+
+    시그널 쪽 ticker 는 _build_vcp_signal_from_row 가 항상 zfill(6) 으로 만든다.
+    분석 파일은 JSON 이라 종목 코드가 정수 5930 으로 저장되어 있을 수 있는데,
+    그 값을 그대로 키로 쓰면 두 자료가 한 종목도 만나지 못해 AI 추천 열이 통째로
+    빈다.
+    """
+    ai_data_map = vcp_helpers._build_ai_data_map(
+        {"signals": [{"ticker": 5930, "gemini_recommendation": {"action": "BUY"}}]}
+    )
+
+    assert list(ai_data_map) == ["005930"]
+
+
+def test_ai_data_map_drops_entries_without_a_ticker():
+    """종목 코드가 없는 항목은 맵에 넣지 않는다.
+
+    zfill(6) 은 빈 문자열도 "000000" 으로 만든다. 그것을 키로 받아 주면 코드가
+    빠진 여러 항목이 한 자리에 겹쳐 쌓이고, 마지막 항목의 분석이 그 자리를
+    차지한다.
+    """
+    ai_data_map = vcp_helpers._build_ai_data_map(
+        {
+            "signals": [
+                {"gemini_recommendation": {"action": "BUY"}},
+                {"ticker": 0, "gemini_recommendation": {"action": "HOLD"}},
+                {"ticker": "034730", "gemini_recommendation": {"action": "BUY"}},
+            ]
+        }
+    )
+
+    assert list(ai_data_map) == ["034730"]
+
+
+def test_ai_data_map_survives_an_unusable_payload():
+    """파일 모양이 어긋나도 빈 맵으로 끝내고 응답을 무너뜨리지 않는다."""
+    assert vcp_helpers._build_ai_data_map(None) == {}
+    assert vcp_helpers._build_ai_data_map({"signals": ["034730"]}) == {}
+
+
+def test_legacy_merge_fills_only_the_missing_recommendation():
+    """legacy 파일은 비어 있는 자리만 채우고 이미 있는 추천은 건드리지 않는다.
+
+    legacy 는 예전 형식의 분석 파일이라 오늘 것보다 오래된 판정을 담고 있다.
+    조건 없이 대입하면 방금 재분석한 추천이 지난 판정으로 되돌아간다.
+    """
+    today = {"action": "BUY", "confidence": 80, "reason": "오늘 재분석한 사유입니다."}
+    legacy = {"action": "HOLD", "confidence": 50, "reason": "지난 분석의 사유입니다."}
+    ai_data_map = {"034730": {"ticker": "034730", "gemini_recommendation": today}}
+
+    vcp_helpers._merge_legacy_ai_fields_into_map(
+        ai_data_map,
+        {
+            "signals": [
+                {"ticker": "034730", "gemini_recommendation": legacy,
+                 "perplexity_recommendation": legacy}
+            ]
+        },
+    )
+
+    assert ai_data_map["034730"]["gemini_recommendation"] == today
+    assert ai_data_map["034730"]["perplexity_recommendation"] == legacy
+
+
+def test_legacy_merge_does_not_bring_in_new_tickers():
+    """legacy 에만 있는 종목은 맵에 들이지 않는다.
+
+    이 함수는 오늘 분석의 빈 필드를 보강하는 자리다. 새 종목까지 받아 주면
+    오늘 시그널에 없는 종목의 지난 분석이 응답에 섞인다.
+    """
+    ai_data_map = {"034730": {"ticker": "034730"}}
+
+    vcp_helpers._merge_legacy_ai_fields_into_map(
+        ai_data_map,
+        {"signals": [{"ticker": "005930", "gemini_recommendation": {"action": "BUY"}}]},
+    )
+
+    assert list(ai_data_map) == ["034730"]

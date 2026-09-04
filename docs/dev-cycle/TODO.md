@@ -16,18 +16,6 @@
 
 ## P1 — 이번 주기
 
-### [VCP-004] VCP 응답 생성 헬퍼의 검증 공백 메우기
-- 카테고리: VCP 시그널 | 티어: T2 | 근거: AUDIT-VCP §5.1
-- 티어 근거: 테스트 파일만 바꾸므로 `tier-rules.md` §1 의 제외 조항을 적용할 수 없고,
-  추가되는 줄 수를 그대로 셉니다. 다섯 함수 분량이면 300줄 안쪽으로 예상됩니다.
-- 선행 조건: `[VCP-001]` 과 `[VCP-007]` 이 끝난 뒤에 착수합니다. 지금 상태를 그대로
-  고정하는 테스트를 먼저 쓰면 결함을 정답으로 굳히게 됩니다. 특히 세 번째 항목이 다루는
-  `_merge_ai_data_into_vcp_signals` 는 `[VCP-007]` 이 고칠 대상입니다.
-- [ ] `_apply_vcp_reanalysis_updates` 의 성공·실패 분기 테스트 추가
-- [ ] `_build_ai_data_map` 과 `_merge_legacy_ai_fields_into_map` 의 병합 규칙 테스트 추가
-- [ ] `_merge_ai_data_into_vcp_signals` 의 필드 덮어쓰기 동작 테스트 추가
-- [ ] pytest 전체 통과 확인
-
 ### [FLOW-005] 수급 교차검증을 서비스 안에서 끝낸다
 - 카테고리: 수급·백테스트 | 티어: T3 | 근거: AUDIT-FLOW §1.2, §2.1, §3.1
 - `services/investor_trend_5day_service.py` 는 `tier-rules.md` §2 "수급 집계" 위험 경로이므로
@@ -124,6 +112,28 @@
 - [ ] 히스토리 탭에서도 데이터가 없는 이유를 알리는 안내 표시
 - [ ] 두 응답이 어긋나지 않는지 확인하는 회귀 검사 추가
 - [ ] agent-browser 로 히스토리 날짜 선택 결과를 실측
+
+### [VCP-018] legacy 분석 파일의 GPT 추천이 VCP 화면에 닿지 못한다
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-004]` 사이클의 code-review
+- 관찰: `app/routes/kr_market_vcp_signal_helpers.py:316-336` 의
+  `_merge_legacy_ai_fields_into_map` 은 `perplexity_recommendation` 과
+  `gemini_recommendation` 두 필드만 보강합니다. 그런데 실제 legacy 파일인
+  `data/kr_ai_analysis.json` 을 열어 보면 네 항목 모두 `gpt_recommendation` 을 갖고 있고
+  `perplexity_recommendation` 은 한 건도 없습니다. 보강 대상이 자료와 정반대로 어긋나
+  있습니다.
+- 영향: `frontend/src/app/dashboard/kr/vcp/page.tsx:430` 이 GPT 탭을 보여줄지 판정하고
+  `:950` 과 `:1694` 가 그 값을 읽습니다. 그러므로 오늘 분석 파일에 GPT 판정이 없고 legacy
+  에만 있는 종목은 화면에서 GPT 탭 자체가 사라집니다. 같은 자리를 지나는
+  `_merge_ai_data_into_vcp_signals`(`:352`)는 세 프로바이더를 모두 내보내므로, 비대칭은
+  보강 함수 한 곳에만 있습니다.
+- 확인할 것: 이 비대칭이 의도인지 먼저 가립니다. legacy 파일이 만들어지던 시점에 GPT
+  프로바이더가 없었다면 뒤에 추가된 필드를 보강 목록에 넣지 않은 누락이고, VCP 화면이
+  legacy 의 GPT 판정을 일부러 배제하기로 한 것이라면 `perplexity` 쪽이 죽은 코드입니다.
+  어느 쪽이든 지금 상태는 둘 다 아닙니다.
+- [ ] `data/kr_ai_analysis.json` 을 만드는 경로를 찾아 세 필드가 언제 채워지는지 확인
+- [ ] 보강 목록을 자료와 화면이 실제로 쓰는 필드에 맞춤
+- [ ] 세 프로바이더의 보강 규칙이 같은지 검사하는 회귀 테스트 추가
+- [ ] agent-browser 로 VCP 화면의 AI 탭 구성을 실측
 
 ### [JONGGA-008] 백엔드가 확신도 없음을 0 으로 표현하는 자리를 정리
 - 카테고리: 종가베팅 | 티어: T2 | 근거: 2026-09-02 JONGGA-004 진행 중 발견
