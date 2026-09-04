@@ -85,9 +85,16 @@ def _target_token(target_datetime: datetime | pd.Timestamp | str | None) -> str:
 
 
 def _safe_int(value: Any) -> int:
+    """수치로 바꿀 수 없는 값을 0 으로 눌러 준다.
+
+    OverflowError 를 함께 잡는 이유는 무한대 때문이다. json.loads 는 Infinity 와
+    1e400 을 inf 로 파싱하고 int(float("inf")) 는 ValueError 가 아니라 OverflowError
+    를 던진다. 참조 자료가 비공식 API 에서 오므로 이 값이 들어올 수 있고, 그때
+    신뢰 경계의 검증 장치가 스스로 터지면 그 종목의 조회가 통째로 예외가 된다.
+    """
     try:
         return int(float(value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
@@ -933,6 +940,21 @@ def _get_or_build_trend_map(
     return trend_map
 
 
+def has_csv_anomaly_flags(trend_data: dict[str, Any] | None) -> bool:
+    """반환된 페이로드에 CSV 이상징후 플래그가 붙어 있는지 판정한다.
+
+    수급 조회 결과를 받아 자기 경로로 빠질지 결정하는 호출자를 위한 것이다.
+    None 은 False 다. CSV 에 종목이 없다는 뜻이지 이상징후가 있다는 뜻이 아니다.
+    """
+    if not isinstance(trend_data, dict):
+        return False
+    quality = trend_data.get("quality")
+    if not isinstance(quality, dict):
+        return False
+    csv_flags = quality.get("csv_anomaly_flags")
+    return isinstance(csv_flags, list) and len(csv_flags) > 0
+
+
 def get_investor_trend_5day_for_ticker(
     *,
     ticker: str,
@@ -983,5 +1005,6 @@ def clear_investor_trend_5day_memory_cache() -> None:
 
 __all__ = [
     "get_investor_trend_5day_for_ticker",
+    "has_csv_anomaly_flags",
     "clear_investor_trend_5day_memory_cache",
 ]

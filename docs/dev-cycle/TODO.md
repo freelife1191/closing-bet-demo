@@ -16,26 +16,6 @@
 
 ## P1 — 이번 주기
 
-### [FLOW-011] 수급 조회 호출자를 서비스의 교차검증 하나로 모은다
-- 카테고리: 수급·백테스트 | 티어: T3 | 근거: AUDIT-FLOW §2.1, `[FLOW-005]` 사이클의 실측
-- `[FLOW-005]` 가 서비스 안의 교체 규칙을 고쳤습니다. 남은 것은 호출자 쪽입니다. 감사는
-  「두 번 호출 패턴이 다섯 곳」이라고 적었으나 실측하면 성격이 다른 두 가지가 섞여 있습니다.
-  - 두 번 호출: `engine/screener.py:359-372`,
-    `services/kr_market_stock_detail_service.py:231-267`. `verify_with_references=True`
-    한 번으로 대체할 수 있습니다. 서비스가 이미 「플래그가 있을 때만 참조 조회」를 합니다
-  - 자체 fallback: `engine/collectors.py:1695`, `:2235`,
-    `engine/collectors/krx_local_data_mixin.py:1240`,
-    `engine/collectors/naver_pykrx_mixin.py:452`. 이상징후면 서비스를 다시 부르지 않고
-    자기 pykrx 경로로 빠집니다. 서비스가 이미 pykrx 로 교차검증하므로 같은 일을 두 번 합니다
-- 동작 변화가 따릅니다. `verify=True` 한 번 호출은 CSV 에 아예 없는 종목도 `missing_csv`
-  를 거쳐 참조로 채웁니다. 지금은 그 경우 `None` 이 돌아가 호출자의 fallback 으로 갑니다.
-  screener 는 대량 종목을 돌리므로 네트워크 호출 증가를 먼저 재어 봅니다
-- [ ] 두 번 호출하는 두 자리를 한 번 호출로 바꾸고 그 자리의 `_has_csv_anomaly_flags` 제거
-- [ ] 자체 fallback 네 자리의 동작 변화를 재고 옮길지 결정. 옮기면 도달 불가능해지는
-      fallback 코드를 함께 정리
-- [ ] screener 경로의 pykrx 호출 횟수가 늘지 않는지 확인
-- [ ] `_has_csv_anomaly_flags` 복제 다섯 벌 가운데 남은 것을 정리
-
 ### [FLOW-012] 참조 수급 자료를 믿기 전에 쓸 만한 값인지 본다
 - 카테고리: 수급·백테스트 | 티어: T3 | 근거: `[FLOW-005]` 사이클의 security 리뷰
 - `_fetch_pykrx_reference_trend`(`services/investor_trend_5day_service.py:604`)는 5거래일
@@ -52,6 +32,20 @@
 - [ ] 쓸 만하지 않은 참조는 `references` 에 넣지 않아 CSV 가 살아남게 함
 - [ ] 참조를 버린 사실을 `quality` 에 남겨 화면과 로그에서 원인을 알 수 있게 함
 - [ ] 퇴화한 참조로 정확한 CSV 가 덮이지 않는지 회귀 검사 추가
+- **`missing_csv` 로 채운 값에는 이 항목의 완화책이 원리상 통하지 않습니다.** `[FLOW-011]`
+  사이클의 security 리뷰가 짚었습니다. 다른 부류(`stale_csv`, `insufficient_days`,
+  `extreme_abs_total`)는 견줄 CSV 값이 남아 있지만, `missing_csv` 는 CSV 대응값이 아예
+  없어 외부 자료가 유일한 진실입니다. `[FLOW-011]` 이 호출자를 한 번 호출로 바꾸면서
+  이 부류가 새로 참조 대상이 되었습니다.
+- [ ] 참조 단독으로 채운 값에 표식을 남길지 정함 (예: `quality.reference_only`)
+- [ ] 표식을 남긴다면 `_grade_from_score` 로 흘러가는 경로에서 그 값에 상한이나 감점을
+      둘지 검토
+- 확신도 4 로 보고된 관찰 하나를 함께 적어 둡니다. `ticker` 가 `zfill(6)` 만 거친 채
+  SQLite 캐시의 파일 경로 일부가 됩니다(`services/investor_trend_5day_service.py:199`).
+  Flask 의 기본 `<ticker>` 변환기가 `/` 를 받지 않고 `append_investor_trend_5day` 가
+  Toss 가 이름을 돌려준 뒤에만 불려서 지금은 도달할 수 없으며, 같은 형태가 이미
+  `services/kr_market_stock_detail_service.py:91-95` 에 있어 `[FLOW-011]` 이 만든 것도
+  아닙니다. 검증되지 않은 `ticker` 가 향하는 파일 경로가 하나 늘었다는 사실만 남깁니다.
 
 ### [FLOW-013] SQLite 캐시에서 되살린 수급 항목이 5일치를 갖췄는지 확인한다
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: `[FLOW-005]` 사이클의 codex 리뷰
@@ -482,6 +476,99 @@
 - [ ] 대시보드의 다른 화면에도 같은 구조가 쓰이는지 확인하고 함께 정리
 - [ ] 제목 계층과 빵부스러기 구조를 vitest 로 고정
 
+### [FLOW-014] 자료가 얇은 기준일에서 수급 조회가 종목 수만큼 pykrx 왕복을 낸다
+- 카테고리: 수급·백테스트 | 티어: T2 | 근거: `[FLOW-011]` 사이클의 code-reviewer 지적과 실측
+- `[FLOW-011]` 이 호출자를 `verify_with_references=True` 한 번 호출로 바꾸면서, CSV 에
+  5거래일이 모이지 않은 종목이 참조 조회 대상이 되었습니다. 예전에는 그 자리에서 값 없이
+  끝났으므로 조회가 없었습니다. 정확성을 얻고 시간을 내준 맞바꿈입니다.
+- 대상 종목 수가 기준일에 따라 크게 달라집니다. `_get_or_build_trend_map` 과
+  `_detect_csv_anomaly_flags` 를 직접 돌려 2026-09-04 자료로 잰 값이며, 전체는 1997 종목
+  입니다. **「신규」만 이번 변경이 만든 비용입니다.** 「기존」은 플래그가 붙어 예전에도
+  둘째 호출이 참조를 받아 오던 종목이라 비용이 달라지지 않았습니다.
+
+  | target_date | 신규 (`missing_csv`) | 기존 (플래그 있음) |
+  |---|---|---|
+  | 최신 (`target_date=None`) | **0** | 20 |
+  | 2026-02-23 | 57 | 7 |
+  | 2026-01-15 (CSV 시작일 부근) | **1997** | 0 |
+
+- 비용의 모양이 비대칭입니다. 자료가 정상이면 정확히 0 이고, 자료가 얇아진 순간에만 전
+  종목으로 튑니다. 평소에 재면 아무 문제가 없어 보이는 것이 이 항목의 어려운 점입니다.
+
+- 최악의 경로는 `python scripts/init_data.py vcp-signal <과거날짜>` 입니다. `max_stocks`
+  기본값이 600(`engine/constants_market_system.py`)이고 `engine/screener.py:227` 의 순회가
+  순차이므로, 왕복 0.3~1초로 잡으면 한 번에 3~10분이 붙습니다. 스케줄러와 `all` 경로는
+  `target_date=None` 이라 Toss 우선 경로로 가므로 해당하지 않습니다.
+- 최신 창(`target_datetime=None`)에서는 왕복이 종목당 두 번이 될 수 있습니다.
+  `_resolve_best_payload:823` 의 `if not pykrx_ref and is_latest_reference_window` 때문에
+  pykrx 가 빈손이면 Toss 까지 부릅니다. 위 표의 「왕복 × 종목 수」 계산은 과거 기준일에서만
+  정확합니다. 과거 기준일은 `is_latest_reference_window` 가 거짓이라 Toss 를 건너뜁니다.
+- 상세 조회 라우트(`app/routes/kr_market_data_backtest_stock_routes.py:54` 의
+  `get_stock_detail`)는 끝까지 동기 경로입니다. 그래서 막히는 것은 이벤트 루프가 아니라
+  gunicorn 워커 스레드(`--workers 2 --threads 8`)입니다. 15분 슬롯 캐시가 앞에 있어 평소
+  노출은 좁지만, CSV 가 4영업일 넘게 낡아 `stale_csv` 가 전 종목에 붙으면 모든 상세 조회가
+  이 경로로 들어갑니다.
+- 참조 조회 실패는 캐시되지 않습니다. `services/investor_trend_5day_service.py:763` 이
+  「miss(None)를 장시간 캐시하지 않아 일시 장애 후 재시도를 허용한다」고 명시하며
+  `test_reference_cache_does_not_pin_miss_result` 가 그 동작을 고정합니다. 그래서 pykrx
+  에도 자료가 없는 종목은 매 호출마다 왕복을 새로 냅니다.
+- 요청 처리 경로도 범위에 들어갑니다. Toss 참조는 `timeout=10` 에 재시도 3회라 최악
+  33초가량 워커를 붙잡고, pykrx 쪽은 이 저장소가 시간 제한을 걸지 않습니다. 종목 상세
+  페이로드 캐시가 슬롯마다 한 번으로 눌러 주고 기존에도 `get_full_stock_detail` 이 왕복
+  6회를 내므로 증폭 자체는 크지 않습니다. `[FLOW-011]` 사이클의 security 리뷰가 짚었습니다.
+- [ ] 실패를 짧게(분 단위) 캐시할지, 아니면 호출자가 대량 경로임을 알릴 수단을 둘지 정함
+- [ ] 요청 처리 경로에는 참조 조회의 전체 시간 예산을 두고 초과하면 CSV 로 내려가는 편이
+      나은지 검토. 대량 배치 경로와 요구가 다릅니다
+- [ ] 정한 방식으로 과거 기준일 스크리닝 한 번의 소요 시간을 재고 개선폭을 기록
+- [ ] 실패 캐시를 넣는다면 `test_reference_cache_does_not_pin_miss_result` 의 의도와
+      충돌하지 않는지 확인하고, 충돌하면 그 검사의 겨냥점을 옮김
+- [ ] 참조 조회 횟수를 고정하는 검사를 넣을지 정함. 지금은 `_detect_csv_anomaly_flags`
+      의 판정을 넓혔을 때 종목마다 네트워크가 붙기 시작해도 알려 줄 검사가 없습니다.
+      `test_get_investor_trend_5day_for_ticker_skips_reference_when_csv_is_normal` 이
+      한 종목으로 같은 불변식을 보고 있으므로, 겹치지 않는 형태를 찾아야 합니다
+
+### [INFRA-030] 레거시 `engine/collectors.py` 와 모듈형 `engine/collectors/` 가 공존해 죽은 코드가 남는다
+- 카테고리: 인프라 | 티어: T3 | 근거: `[FLOW-011]` 사이클(수급 호출자 통합)의 실측
+- `engine/collectors.py` 가 `__path__` 를 스스로 지정해 모듈이면서 패키지처럼 동작합니다
+  (`:31-34`). 파일 끝(`:2486-2501`)에서 `EnhancedNewsCollector` 와 `NaverFinanceCollector`
+  만 모듈형으로 덮어쓰고 `KRXCollector` 는 덮어쓰지 않습니다.
+- 그래서 같은 일을 하는 코드가 두 벌 있고 한 벌만 실행됩니다. 실측으로 확인한 것은
+  다음 둘입니다.
+  - `engine/collectors.py` 의 `NaverFinanceCollector._get_investor_trend` 는 모듈형에
+    덮여 실행되지 않습니다. `from engine.collectors import NaverFinanceCollector` 가
+    모듈형을 가져옵니다
+  - `engine/collectors/krx_local_data_mixin.py` 의 `get_supply_data` 는
+    `engine.collectors.krx.KRXCollector` 를 임포트하는 실행 코드가 없어 테스트에서만
+    돕니다. 실행되는 것은 `engine/collectors.py` 의 `KRXCollector` 입니다
+- 두 벌이 갈라지면 어느 쪽을 고쳤는지 알 수 없습니다. `[FLOW-011]` 이 판정 헬퍼를
+  정리할 때 실행되지 않는 자리까지 함께 고쳐야 했습니다.
+- 같은 자리에 개인 수급의 일관성 문제가 하나 겹쳐 있습니다. 서비스는 개인 수급을 돌려주지
+  않으므로 `engine/collectors/krx_local_data_mixin.py:1237` 은 정상 경로에서 `retail_buy_5d=0`
+  을 넣고 `engine/collectors/naver_pykrx_mixin.py:453` 은 `individual` 을 0 으로 둡니다.
+  이상징후로 pykrx 경로에 빠질 때만 실값이 채워집니다. 같은 필드가 어느 경로를 거쳤느냐에
+  따라 0 이기도 실값이기도 합니다. `[FLOW-011]` 사이클의 code-reviewer 가 짚었습니다.
+- [ ] 어느 구현을 남길지 정하고 나머지를 지움
+- [ ] `__path__` 조작을 없앨 수 있는지 확인 (`engine/collectors/__init__.py` 로 대체)
+- [ ] 지운 쪽만 검사하던 테스트를 남긴 쪽으로 옮기거나 지움
+- [ ] 개인 수급을 늘 0 으로 둘지, 서비스가 함께 돌려주게 할지 정하고 두 경로를 맞춤
+
+### [INFRA-031] 백로그에 같은 ID 를 가진 항목이 여덟 개 있다
+- 카테고리: 인프라 | 티어: T1 | 근거: `[FLOW-011]` 사이클에서 새 ID 를 고르다 발견
+- `TODO.md` 안에 `[FLOW-011]`, `[FLOW-012]`, `[FLOW-013]`, `[INFRA-018]` 이 각각 두 벌씩
+  있습니다. 나중에 추가된 쪽이 이미 쓰이던 번호를 다시 썼습니다.
+  - `[FLOW-012]`: 참조 수급 자료의 신뢰성(2026-09-04) ↔ 「최근 10건 승률」(그 이전)
+  - `[FLOW-013]`: SQLite 캐시의 5일치 불변식(2026-09-04) ↔ 「누적 추천수 180」(2026-09-03)
+  - `[INFRA-018]`: 휴장일 목록(2026-09-04) ↔ numpy 2.x 승격(그 이전)
+  - `[FLOW-011]`: 수급 호출자 통합(2026-09-01 감사) ↔ 누적 수익률 두 값(2026-09-03).
+    앞의 것은 완료되어 이 파일에서 빠졌으므로 남은 것은 하나입니다
+- 아카이브는 아직 오염되지 않았습니다. 완료 기록에 겹치는 ID 가 없습니다. 다만 충돌한
+  항목 가운데 하나라도 완료되면 일별 상세와 월별 요약에서 어느 항목인지 알 수 없게 됩니다.
+- 나중에 추가된 쪽의 번호를 바꾸는 것이 안전합니다. 쓰이지 않은 번호는 `FLOW-014` 이후와
+  `INFRA-032` 이후입니다.
+- [ ] 나중에 추가된 셋의 ID 를 빈 번호로 바꿈
+- [ ] 바꾼 ID 를 참조하는 문서가 있는지 확인 (`docs/dev-cycle/qa/`, `docs/superpowers/plans/`)
+- [ ] ID 를 새로 고를 때 쓰던 번호인지 확인하는 절차를 `archive-format.md` 에 한 줄로 적음
+
 ## P2 — 대기
 
 ### [INFRA-026] 공용 JSON 인코더가 결측 날짜를 `"NaT"` 문자열로 저장한다
@@ -601,6 +688,10 @@
   `role="dialog"` 도 `aria-modal` 도 `aria-labelledby` 도 없습니다. 2026-09-04 사이클의
   `/qa-only` ISSUE-002 로 실측했습니다. 공용 둘을 고쳐도 이 모달은 그대로이므로 함께
   다뤄야 합니다. Escape 로 닫히는 것은 확인했습니다.
+- **같은 화면 안에서 두 모달이 갈립니다.** 「종가베팅 점수표」 버튼이 여는 모달에는
+  `role="dialog"` 가 있고 상세 모달에는 없습니다. 다만 초점을 옮기지 않는 것과 배경
+  `overflow` 가 `visible` 로 남는 것은 **둘 다 같습니다.** 그래서 `role` 만 맞추면 나머지
+  절반이 남습니다. `[FLOW-011]` 사이클의 `/qa-only` 가 한 화면에서 둘을 대조했습니다.
 - [ ] 두 컴포넌트에 초기 초점과 초점 가두기를 넣음
 - [ ] `ConfirmationModal` 에 Escape 닫기와 `aria-labelledby` 를 더함
 - [ ] 종가베팅 상세 모달에 `role="dialog"` 와 `aria-modal` 과 `aria-labelledby` 를 더함

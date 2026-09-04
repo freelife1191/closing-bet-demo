@@ -21,6 +21,7 @@ from services.kr_market_data_cache_sqlite_payload import (
 )
 from services.investor_trend_5day_service import (
     get_investor_trend_5day_for_ticker,
+    has_csv_anomaly_flags,
 )
 from engine.toss_collector import TossCollector
 
@@ -170,16 +171,6 @@ class KRXCollector:
             )
         except Exception as error:
             logger.debug("KRX latest market date SQLite cache save failed: %s", error)
-
-    @staticmethod
-    def _has_csv_anomaly_flags(trend_data: dict[str, object] | None) -> bool:
-        if not isinstance(trend_data, dict):
-            return False
-        quality = trend_data.get("quality")
-        if not isinstance(quality, dict):
-            return False
-        csv_flags = quality.get("csv_anomaly_flags")
-        return isinstance(csv_flags, list) and len(csv_flags) > 0
 
     @classmethod
     def clear_latest_market_date_cache(cls) -> None:
@@ -1701,7 +1692,7 @@ class KRXCollector:
             if (
                 not explicit_target_requested
                 and isinstance(trend_data, dict)
-                and not self._has_csv_anomaly_flags(trend_data)
+                and not has_csv_anomaly_flags(trend_data)
             ):
                 return SupplyData(
                     foreign_buy_5d=int(trend_data.get("foreign", 0)),
@@ -2237,7 +2228,7 @@ class NaverFinanceCollector:
                 data_dir=data_dir,
                 verify_with_references=False,
             )
-            if isinstance(trend_data, dict) and not self._has_csv_anomaly_flags(trend_data):
+            if isinstance(trend_data, dict) and not has_csv_anomaly_flags(trend_data):
                 investor_trend["foreign"] = int(trend_data.get("foreign", 0))
                 investor_trend["institution"] = int(trend_data.get("institution", 0))
                 return

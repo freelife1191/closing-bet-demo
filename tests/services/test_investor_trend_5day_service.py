@@ -6,6 +6,7 @@ Investor Trend 5-Day Service 테스트
 
 from __future__ import annotations
 
+import json
 import sys
 import sqlite3
 import types
@@ -704,3 +705,85 @@ def test_resolve_pykrx_latest_market_date_reuses_sqlite_snapshot_after_memory_cl
     second = trend_service._resolve_pykrx_latest_market_date(data_dir=str(tmp_path))
     assert second.strftime("%Y-%m-%d") == "2026-02-24"
     assert call_count["value"] == 1
+
+
+def test_has_csv_anomaly_flags_reads_the_quality_block():
+    assert trend_service.has_csv_anomaly_flags(
+        {"quality": {"csv_anomaly_flags": ["stale_csv"]}}
+    ) is True
+
+
+def test_has_csv_anomaly_flags_is_false_for_missing_or_empty_flags():
+    # None 은 「CSV 에 종목이 없다」는 뜻이지 「이상징후가 있다」는 뜻이 아니다.
+    assert trend_service.has_csv_anomaly_flags(None) is False
+    assert trend_service.has_csv_anomaly_flags({}) is False
+    assert trend_service.has_csv_anomaly_flags({"quality": {}}) is False
+    assert trend_service.has_csv_anomaly_flags(
+        {"quality": {"csv_anomaly_flags": []}}
+    ) is False
+    assert trend_service.has_csv_anomaly_flags(
+        {"quality": {"csv_anomaly_flags": "stale_csv"}}
+    ) is False
+
+
+def test_safe_int_survives_infinite_values_from_external_json():
+    """json.loads 는 Infinity 와 1e400 을 inf 로 파싱하고 int(inf) 는 OverflowError 다.
+
+    참조 자료는 비공식 API 에서 오므로 이 값이 들어올 수 있다. 신뢰 경계의 검증
+    장치가 스스로 터지면 그 종목의 조회가 예외로 끝난다.
+    """
+    assert trend_service._safe_int(float("inf")) == 0
+    assert trend_service._safe_int(float("-inf")) == 0
+    assert trend_service._safe_int(float("nan")) == 0
+    assert trend_service._safe_int(json.loads('{"v": Infinity}')["v"]) == 0
+    assert trend_service._safe_int(json.loads('{"v": 1e400}')["v"]) == 0
+
+
+def test_verify_false_keeps_anomalous_csv_without_touching_references(monkeypatch, tmp_path):
+    """verify_with_references=False 는 이상징후가 있어도 참조를 조회하지 않는다.
+
+    자체 fallback 을 가진 호출자 네 곳(engine/collectors.py 의 get_supply_data 와
+    _get_investor_trend, 두 믹스인의 같은 함수들)이 이 계약에 기댄다. 그들은 False 로
+    부르고 플래그가 붙으면 자기 pykrx 경로로 빠진다. 서비스가 False 를 무시하기
+    시작하면 서비스의 pykrx 와 호출자의 pykrx 가 잇달아 도는데, 그 호출자 검사들은
+    서비스를 대역으로 바꾸므로 인자만 볼 뿐 이 회귀를 잡지 못한다.
+    """
+    # 두 달 전 날짜라 stale_csv 가 붙는다.
+    old_dates = [
+        (datetime.now().date() - pd.Timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in (64, 63, 62, 61, 60)
+    ]
+    pd.DataFrame(
+        [
+            {"ticker": "005930", "date": old_dates[0], "foreign_buy": 10, "inst_buy": 20},
+            {"ticker": "005930", "date": old_dates[1], "foreign_buy": 11, "inst_buy": 21},
+            {"ticker": "005930", "date": old_dates[2], "foreign_buy": 12, "inst_buy": 22},
+            {"ticker": "005930", "date": old_dates[3], "foreign_buy": 13, "inst_buy": 23},
+            {"ticker": "005930", "date": old_dates[4], "foreign_buy": 14, "inst_buy": 24},
+        ]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("reference fetch should be skipped")),
+    )
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_toss_reference_trend",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("reference fetch should be skipped")),
+    )
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+        verify_with_references=False,
+    )
+
+    assert result is not None
+    assert result["source"] == "csv"
+    assert result["foreign"] == 60
+    # 플래그는 그대로 실려 나간다. 호출자가 이것을 보고 자기 경로로 빠지기 때문이다.
+    assert trend_service.has_csv_anomaly_flags(result) is True
+    assert "stale_csv" in result["quality"]["csv_anomaly_flags"]

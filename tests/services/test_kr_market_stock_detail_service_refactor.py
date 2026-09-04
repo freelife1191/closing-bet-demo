@@ -84,10 +84,11 @@ def test_append_investor_trend_5day_prefers_unified_service_when_data_dir_provid
     assert payload["investorTrend5Day"] == {"foreign": 321, "institution": 654}
     assert calls["csv"] == 0
     assert len(captured_calls) == 1
-    assert captured_calls[0]["verify_with_references"] is False
+    assert captured_calls[0]["verify_with_references"] is True
 
 
-def test_append_investor_trend_5day_retries_reference_verify_only_on_anomaly(monkeypatch, tmp_path):
+def test_append_investor_trend_5day_calls_the_service_once(monkeypatch, tmp_path):
+    """서비스가 이상징후일 때만 참조를 조회하므로 호출자가 두 번 부를 이유가 없다."""
     payload: dict[str, object] = {}
     calls = {"csv": 0}
     captured_calls: list[dict[str, object]] = []
@@ -96,13 +97,11 @@ def test_append_investor_trend_5day_retries_reference_verify_only_on_anomaly(mon
 
     def _fake_get_trend(**kwargs):
         captured_calls.append(dict(kwargs))
-        if kwargs.get("verify_with_references") is False:
-            return {
-                "foreign": 111,
-                "institution": 222,
-                "quality": {"csv_anomaly_flags": ["stale_csv"]},
-            }
-        return {"foreign": 333, "institution": 444}
+        return {
+            "foreign": 333,
+            "institution": 444,
+            "quality": {"csv_anomaly_flags": ["stale_csv"]},
+        }
 
     monkeypatch.setattr(
         stock_detail_service,
@@ -124,9 +123,8 @@ def test_append_investor_trend_5day_retries_reference_verify_only_on_anomaly(mon
 
     assert payload["investorTrend5Day"] == {"foreign": 333, "institution": 444}
     assert calls["csv"] == 0
-    assert len(captured_calls) == 2
-    assert captured_calls[0]["verify_with_references"] is False
-    assert captured_calls[1]["verify_with_references"] is True
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["verify_with_references"] is True
 
 
 def test_append_investor_trend_5day_falls_back_to_csv_when_unified_service_has_no_data(monkeypatch):

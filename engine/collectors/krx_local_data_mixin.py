@@ -22,6 +22,7 @@ from services.kr_market_data_cache_sqlite_payload import (
 )
 from services.investor_trend_5day_service import (
     get_investor_trend_5day_for_ticker,
+    has_csv_anomaly_flags,
 )
 
 
@@ -480,16 +481,6 @@ class KRXCollectorLocalDataMixin:
         resolved = os.path.join(base_dir, "data")
         self._local_data_dir = resolved
         return resolved
-
-    @staticmethod
-    def _has_csv_anomaly_flags(trend_data: dict[str, object] | None) -> bool:
-        if not isinstance(trend_data, dict):
-            return False
-        quality = trend_data.get("quality")
-        if not isinstance(quality, dict):
-            return False
-        csv_flags = quality.get("csv_anomaly_flags")
-        return isinstance(csv_flags, list) and len(csv_flags) > 0
 
     def _read_local_csv(
         self,
@@ -1242,7 +1233,7 @@ class KRXCollectorLocalDataMixin:
                 data_dir=data_dir,
                 verify_with_references=False,
             )
-            if isinstance(trend_data, dict) and not self._has_csv_anomaly_flags(trend_data):
+            if isinstance(trend_data, dict) and not has_csv_anomaly_flags(trend_data):
                 return SupplyData(
                     foreign_buy_5d=int(trend_data.get("foreign", 0)),
                     inst_buy_5d=int(trend_data.get("institution", 0)),

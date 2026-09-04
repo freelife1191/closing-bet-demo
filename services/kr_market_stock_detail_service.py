@@ -231,41 +231,25 @@ def append_investor_trend_5day(
             trend_data = get_investor_trend_5day_for_ticker(
                 ticker=normalized_ticker,
                 data_dir=normalized_data_dir,
-                verify_with_references=False,
+                verify_with_references=True,
             )
         except Exception as error:
             logger.debug("Unified 5-day trend service failed (%s): %s", normalized_ticker, error)
         else:
-            if isinstance(trend_data, dict) and not _has_csv_anomaly_flags(trend_data):
+            if isinstance(trend_data, dict):
+                quality = trend_data.get("quality")
+                if isinstance(quality, dict) and quality.get("csv_anomaly_flags"):
+                    logger.debug(
+                        "Unified 5-day trend anomaly (%s): flags=%s source=%s",
+                        normalized_ticker,
+                        quality.get("csv_anomaly_flags"),
+                        trend_data.get("source"),
+                    )
                 payload["investorTrend5Day"] = {
                     "foreign": int(trend_data.get("foreign", 0) or 0),
                     "institution": int(trend_data.get("institution", 0) or 0),
                 }
                 return
-            if isinstance(trend_data, dict):
-                logger.debug(
-                    "Unified 5-day trend anomaly detected (%s): verify_with_references retry",
-                    normalized_ticker,
-                )
-                try:
-                    verified_trend = get_investor_trend_5day_for_ticker(
-                        ticker=normalized_ticker,
-                        data_dir=normalized_data_dir,
-                        verify_with_references=True,
-                    )
-                except Exception as error:
-                    logger.debug(
-                        "Unified 5-day trend verification failed (%s): %s",
-                        normalized_ticker,
-                        error,
-                    )
-                else:
-                    if isinstance(verified_trend, dict):
-                        payload["investorTrend5Day"] = {
-                            "foreign": int(verified_trend.get("foreign", 0) or 0),
-                            "institution": int(verified_trend.get("institution", 0) or 0),
-                        }
-                        return
 
     try:
         trend_df = _load_csv_readonly(
@@ -351,16 +335,6 @@ def _get_or_build_investor_trend_5day_map(
         except Exception as error:
             _LOGGER.debug("Failed to save investor trend 5day sqlite cache: %s", error)
     return trend_map
-
-
-def _has_csv_anomaly_flags(trend_data: dict[str, object] | None) -> bool:
-    if not isinstance(trend_data, dict):
-        return False
-    quality = trend_data.get("quality")
-    if not isinstance(quality, dict):
-        return False
-    csv_flags = quality.get("csv_anomaly_flags")
-    return isinstance(csv_flags, list) and len(csv_flags) > 0
 
 
 def _build_investor_trend_5day_cache_key(trend_df: pd.DataFrame) -> tuple[object, ...]:

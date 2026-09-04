@@ -344,31 +344,28 @@ class SmartMoneyScreener:
         except Exception:
             return False
 
-    @staticmethod
-    def _has_csv_anomaly_flags(trend_data: dict[str, object] | None) -> bool:
-        if not isinstance(trend_data, dict):
-            return False
-        quality = trend_data.get("quality")
-        if not isinstance(quality, dict):
-            return False
-        csv_flags = quality.get("csv_anomaly_flags")
-        return isinstance(csv_flags, list) and len(csv_flags) > 0
-
     def _calculate_supply_score_csv(self, ticker: str) -> Dict:
-        """수급 점수 계산 (CSV Fallback - 단일 5일 합산 서비스 사용)."""
+        """수급 점수 계산 (CSV Fallback - 단일 5일 합산 서비스 사용).
+
+        verify=False 로 먼저 부르는 방식은 CSV 에 5거래일이 모이지 않은 종목을 놓쳤다.
+        그때 반환값이 None 이라 이상징후 판정이 False 가 되고, 참조로 채울 수 있는
+        종목에 점수 0 이 매겨졌다.
+
+        대신 CSV 에 5거래일이 모이지 않은 종목마다 pykrx 왕복이 붙는다. 자료가 정상이면
+        해당 종목이 없어 비용이 0 이다(2026-09-04 최신 날짜 기준 1997 종목 가운데 0 개).
+        반대로 CSV 시작일 부근을 target_date 로 주면 전 종목이 해당한다. 그 경로는 수동
+        CLI(`init_data.py vcp-signal <날짜>`) 뿐이고 예전에는 그 자리에서 전 종목이
+        0 점이었다.
+
+        이미 이상징후 플래그가 붙던 종목은 여기에 들지 않는다. 예전 방식도 둘째 호출로
+        참조를 받아 왔으므로 비용이 같다.
+        """
         trend_data = get_investor_trend_5day_for_ticker(
             ticker=ticker,
             data_dir=os.path.join(BASE_DIR, "data"),
             target_datetime=self._target_datetime,
-            verify_with_references=False,
+            verify_with_references=True,
         )
-        if self._has_csv_anomaly_flags(trend_data):
-            trend_data = get_investor_trend_5day_for_ticker(
-                ticker=ticker,
-                data_dir=os.path.join(BASE_DIR, "data"),
-                target_datetime=self._target_datetime,
-                verify_with_references=True,
-            )
         if not trend_data:
             return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
         return score_supply_from_toss_trend(

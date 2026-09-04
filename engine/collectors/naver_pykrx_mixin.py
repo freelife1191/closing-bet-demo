@@ -12,7 +12,10 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict
 
-from services.investor_trend_5day_service import get_investor_trend_5day_for_ticker
+from services.investor_trend_5day_service import (
+    get_investor_trend_5day_for_ticker,
+    has_csv_anomaly_flags,
+)
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
@@ -433,16 +436,6 @@ class NaverPykrxMixin:
             pass
         return 0.0
 
-    @staticmethod
-    def _has_csv_anomaly_flags(trend_data: dict[str, object] | None) -> bool:
-        if not isinstance(trend_data, dict):
-            return False
-        quality = trend_data.get("quality")
-        if not isinstance(quality, dict):
-            return False
-        csv_flags = quality.get("csv_anomaly_flags")
-        return isinstance(csv_flags, list) and len(csv_flags) > 0
-
     async def _get_investor_trend(self, code: str, result: Dict) -> None:
         """통합 5일 합산 서비스 우선 + pykrx 요약 캐시 fallback."""
         normalized_code = str(code).zfill(6)
@@ -454,7 +447,7 @@ class NaverPykrxMixin:
                 data_dir=self._resolve_data_dir(getattr(self, "config", None)),
                 verify_with_references=False,
             )
-            if isinstance(trend_data, dict) and not self._has_csv_anomaly_flags(trend_data):
+            if isinstance(trend_data, dict) and not has_csv_anomaly_flags(trend_data):
                 investor_trend["foreign"] = int(trend_data.get("foreign", 0))
                 investor_trend["institution"] = int(trend_data.get("institution", 0))
                 investor_trend.setdefault("individual", 0)

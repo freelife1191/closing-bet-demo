@@ -35,7 +35,7 @@ def test_calculate_supply_score_csv_uses_unified_5day_service(monkeypatch):
     result = SmartMoneyScreener._calculate_supply_score_csv(screener, "005930")
 
     assert captured["ticker"] == "005930"
-    assert captured["verify_with_references"] is False
+    assert captured["verify_with_references"] is True
     assert captured["target_datetime"] == datetime(2026, 2, 24)
     assert result["foreign_5d"] == 60_000_000_000
     assert result["inst_5d"] == 25_000_000_000
@@ -57,27 +57,23 @@ def test_calculate_supply_score_csv_returns_zero_when_unified_service_has_no_dat
     result = SmartMoneyScreener._calculate_supply_score_csv(screener, "005930")
 
     assert captured["ticker"] == "005930"
-    assert captured["verify_with_references"] is False
+    assert captured["verify_with_references"] is True
     assert captured["target_datetime"] is None
     assert result == {"score": 0, "foreign_1d": 0, "inst_1d": 0}
 
 
-def test_calculate_supply_score_csv_retries_reference_verify_only_on_anomaly(monkeypatch):
+def test_calculate_supply_score_csv_calls_the_service_once(monkeypatch):
+    """서비스가 이상징후일 때만 참조를 조회하므로 호출자가 두 번 부를 이유가 없다."""
     screener = object.__new__(SmartMoneyScreener)
     screener._target_datetime = datetime(2026, 2, 24)
     captured_calls: list[dict[str, object]] = []
 
     def _fake_trend(**kwargs):
         captured_calls.append(dict(kwargs))
-        if kwargs.get("verify_with_references") is False:
-            return {
-                "foreign": 111,
-                "institution": 222,
-                "quality": {"csv_anomaly_flags": ["stale_csv"]},
-            }
         return {
             "foreign": 333,
             "institution": 444,
+            "quality": {"csv_anomaly_flags": ["stale_csv"]},
             "details": [
                 {"netForeignerBuyVolume": 3, "netInstitutionBuyVolume": 4},
             ],
@@ -90,9 +86,8 @@ def test_calculate_supply_score_csv_retries_reference_verify_only_on_anomaly(mon
 
     result = SmartMoneyScreener._calculate_supply_score_csv(screener, "005930")
 
-    assert len(captured_calls) == 2
-    assert captured_calls[0]["verify_with_references"] is False
-    assert captured_calls[1]["verify_with_references"] is True
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["verify_with_references"] is True
     assert result["foreign_5d"] == 333
     assert result["inst_5d"] == 444
 
