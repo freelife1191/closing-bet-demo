@@ -450,11 +450,16 @@ def test_apply_vcp_reanalysis_updates_writes_success_and_failure_rows():
 
 
 def test_reanalysis_updates_find_results_by_padded_ticker():
-    """CSV 의 종목 코드에서 앞자리 0 이 사라져도 재분석 결과를 찾아낸다.
+    """넘어온 행의 종목 코드가 정수여도 재분석 결과를 찾아낸다.
 
-    signals_log.csv 를 pandas 로 읽으면 "005930" 이 정수 5930 이 되는 열이 생긴다.
-    재분석 결과 쪽 키는 여섯 자리이므로, 조회 전에 자릿수를 맞추지 않으면 모든
-    행이 실패로 집계되어 정상 분석까지 "분석 실패" 로 덮인다.
+    failed_rows 는 호출부가 만들어 넘기는 자유로운 형태의 리스트이고, 이 함수는
+    그 안의 코드로 ai_results 를 조회한다. ai_results 쪽 키는 여섯 자리이므로
+    조회 전에 자릿수를 맞추지 않으면 모든 행이 실패로 집계된다.
+
+    오늘의 유일한 호출부인 services/kr_market_vcp_reanalysis_service.py:654 는
+    prepare_vcp_signals_scope 가 zfill(6) 을 건 행만 넘기므로 이 방어가 지금
+    막고 있는 것은 없다. 그래도 함수가 스스로 지키는 계약이라 검사를 둔다.
+    새 호출부가 정규화를 거치지 않은 행을 넘기면 여기가 마지막 방어선이다.
     """
     import pandas as pd
 
