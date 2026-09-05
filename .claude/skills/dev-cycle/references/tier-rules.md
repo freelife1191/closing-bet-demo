@@ -312,10 +312,20 @@ QA 2단계와 agent-browser 는 겹치지 않는다. 앞의 것은 확정한 시
 **공통 접속 계층**
 
 - `services/sqlite_utils.py`
+- `services/sqlite_ready_gate.py`
 
 `CREATE TABLE` 은 한 줄도 없지만 위 스물한 개 모듈이 모두 이 파일을 import 한다.
 `connect_sqlite`, `build_sqlite_pragmas`, `prune_rows_by_updated_at_if_needed` 가 여기에
 있어서, 접속 방식이나 프루닝 조건이 바뀌면 모든 저장소가 함께 달라진다.
+
+두 번째 파일은 `[CHAT-003]` 이 2026-09-05 에 만들었다. 2단 캐시의 스키마 준비 단일 비행과
+LRU 상한, 신규 키 판정, 강제 프루닝 주기, 스키마 복구 재시도를 담는다. 지금 이 파일을
+import 하는 것은 바로 위 목록의 `chatbot/runtime_stock_map_cache.py` 와
+`chatbot/stock_context_cache.py` 둘뿐이라 import 수만 보면 목록에 들 만하지 않다. 그런데도
+넣는 이유는 그 둘이 이미 위험 경로이고, 이 파일이 두 저장소의 스키마 준비와 프루닝 시점을
+한꺼번에 결정하기 때문이다. 판정 기준 2번이 말하는 「여기가 바뀌면 여러 모듈이 한꺼번에
+영향을 받는다」에 그대로 해당한다. `[CHAT-012]` 와 `[INFRA-032]` 가 끝나면 이 파일을
+import 하는 모듈은 열여섯 개가 된다.
 
 목록을 갱신할 때는 다음 명령으로 다시 센다.
 

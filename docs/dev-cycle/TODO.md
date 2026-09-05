@@ -17,18 +17,6 @@
 ## P1 — 이번 주기
 
 
-### [CHAT-003] 두 SQLite 캐시 모듈을 공용 골격으로 통합
-- 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT §2.1
-- 티어 판정: 949줄을 다루므로 300줄을 확실히 넘습니다. 통합 대상인
-  `runtime_stock_map_cache` 와 `stock_context_cache` 는 둘 다 `CREATE TABLE` 로 테이블을
-  정의하므로 그 자체로 위험 경로이고, 공용 골격을 `services/sqlite_utils.py` 에 두는
-  방안을 택하면 공통 접속 계층에도 닿습니다. 어느 쪽으로 가든 `T3` 입니다.
-- [ ] 두 모듈의 실제 차이(테이블 이름, 페이로드 모양, 서명 계산)를 목록으로 확정
-- [ ] 2단 캐시 골격을 한 곳으로 모으고 차이 부분만 주입받도록 정리
-- [ ] `runtime_stock_map_cache` 와 `stock_context_cache` 의 공개 함수 시그니처 유지
-- [ ] 기존 두 회귀 테스트가 그대로 통과하는지 확인
-- [ ] 스키마 복구와 프루닝 동작이 양쪽에서 동일한지 검증하는 테스트 추가
-
 ### [CHAT-004] 챗봇 페이지 분할과 응답 파서 단일화
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT §2.2, §4.1, §5.1
 - 티어 판정: 1,718줄 파일을 쪼개므로 300줄을 넘습니다. 선행 조건으로 `[CHAT-001]` 이
@@ -57,8 +45,16 @@
 - 티어 판정: `frontend/src/app/chatbot/page.tsx` 의 사이드바 목록 렌더 두 곳만 바꿉니다.
   `div` 를 `button` 으로 바꾸거나 `role`·`tabIndex`·키 핸들러를 붙이는 정도라 50줄 아래입니다.
   `[CHAT-004]` 가 이 파일을 쪼개기 전에 끝내는 편이 충돌이 적습니다.
+- 2026-09-05 `[CHAT-003]` 사이클의 `/qa-only` ISSUE-001 을 여기에 합쳤습니다. 같은 파일의
+  같은 성격(스크린 리더가 읽을 이름)이라 따로 세우면 한 파일을 두 번 건드리게 됩니다.
+  하단 입력 영역의 버튼 넷이 접근성 트리에서 이름이 비어 있습니다. 보내기
+  (`fas fa-paper-plane`)와 모바일 사이드바 열기(`fas fa-bars`)는 `title` 조차 없고,
+  파일 첨부(`fas fa-plus-circle`)와 음성 입력(`fas fa-microphone`)은 `title` 만 있어
+  접근 가능한 이름으로 계산되지 않습니다. 보내기 버튼을 식별하지 못하면 질문을 입력하고도
+  보낼 수단을 찾지 못하고, 모바일에서는 햄버거가 사이드바를 여는 유일한 수단입니다.
 - [ ] 대화 항목에 포커스가 가고 Enter 로 열리도록 수정
 - [ ] 삭제 버튼이 항목 안에 중첩되지 않도록 마크업 정리 (버튼 안의 버튼은 무효한 HTML)
+- [ ] 입력 영역의 버튼 넷에 `aria-label` 을 붙임 (보내기·햄버거·파일 첨부·음성 입력)
 - [ ] `/qa-only` 실행
 
 ### [VCP-008] 히스토리 날짜 목록과 시그널 조회가 서로 다른 자료를 본다
@@ -507,6 +503,83 @@
 - [ ] 기간이 다르다면 화면에 그 기준을 함께 적거나 같은 기간으로 맞춤
 
 ## P2 — 대기
+
+
+### [CHAT-010] 창을 좁히면 사이드바가 챗봇 본문을 덮은 채 남는다
+- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 `/qa-only` ISSUE-002
+- QA 시나리오: 1280px 에서 연 챗봇 화면을 375px 로 줄여도 사이드바가 접히고 본문이 가려지지
+  않는다
+- 뷰포트를 1280×720 으로 두고 `/chatbot` 을 연 다음 새로 고치지 않고 375×812 로 줄이면,
+  사이드바가 오버레이로 남아 추천 질문 카드와 빠른 조회 버튼과 입력창을 덮습니다. 사이드바
+  자체도 왼쪽으로 밀려 잘려서 「스마트 머니 봇」이 「마트 머니 봇」으로 보입니다.
+- 같은 폭에서 페이지를 새로 로드하면 정상입니다. 사이드바가 접히고 왼쪽 위에 햄버거 버튼이
+  나옵니다. 초기 렌더는 반응형 분기를 옳게 타고, 폭이 바뀌는 순간에만 열림 상태가 정리되지
+  않습니다.
+- 새로 고치면 풀리므로 막다른 상태는 아니지만, 그 사이에는 입력창에 손이 닿지 않습니다.
+- [ ] 뷰포트가 `lg` 아래로 내려가면 사이드바 열림 상태를 닫도록 수정
+- [ ] 1280px → 375px 리사이즈와 375px 초기 로드를 모두 실측
+
+### [CHAT-011] 대화 목록 렌더에서 React key 경고가 난다
+- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 `/qa-only` ISSUE-003
+- QA 시나리오: 대화가 한 건 이상 있는 챗봇 화면에서 콘솔 경고가 0건이다
+- 대화가 하나도 없으면 콘솔이 완전히 깨끗합니다. 대화가 한 건이라도 있으면
+  `Each child in a list should have a unique "key" prop` 경고가 두 번 납니다. 즉 대화
+  목록을 그리는 자리에서 `key` 가 빠졌습니다.
+- 화면에 드러나는 오작동은 아직 없습니다. 다만 `key` 없는 목록은 항목을 지우거나 순서를
+  바꿀 때 React 가 잘못된 항목을 재사용할 수 있고, 이 화면에는 「이 메시지 삭제」와
+  「이 질문과 답변 함께 삭제」가 있습니다.
+- `[CHAT-004]` 가 `frontend/src/app/chatbot/page.tsx` 를 쪼개므로 그보다 먼저 끝내는 편이
+  충돌이 적습니다.
+- [ ] 경고를 내는 목록 렌더 두 곳에 안정적인 `key` 를 부여
+- [ ] 대화가 있는 상태에서 콘솔 경고 0건 확인
+
+### [CHAT-012] 챗봇 저장소의 스키마 준비 골격을 공용 게이트로 흡수
+- 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 code-reviewer 지적
+- QA 시나리오: 챗봇 대화 목록과 메시지 이력이 통합 전과 같게 조회된다
+- `chatbot/storage_sqlite_common.py:95-194` 의 `ensure_chatbot_storage_schema` 가
+  `[CHAT-003]` 이 만든 `services/sqlite_ready_gate.py` 의 `SqliteReadyGate` 와 같은
+  골격입니다. 줄 단위로 대응이 맞습니다. 진입 `:103`↔`:66`, 대기 루프 `:111-116`↔`:72-77`,
+  in-progress 등록 `:118`↔`:79`, `finally` 재진입 `:180`↔`:94`, `add_bounded_ready_key`
+  `:183-187`↔`:97-101`, `notify_all` `:190`↔`:104` 입니다.
+- 차이는 `force_recheck: bool = False` 인자 하나뿐입니다. 그 인자를 게이트의 `ensure` 에
+  더하면 흡수됩니다.
+- `[CHAT-003]` 이 이 파일을 범위에서 뺀 것은 그 항목이 정한 대상이 캐시 두 모듈이었고,
+  이 파일은 캐시가 아니라 세션·메시지·메모리 저장소이기 때문입니다.
+- [ ] `SqliteReadyGate.ensure` 에 `force_recheck` 를 더함
+- [ ] `ensure_chatbot_storage_schema` 를 게이트 위임으로 교체
+- [ ] 기존 회귀 테스트가 그대로 통과하는지 확인
+
+### [INFRA-032] 나머지 열다섯 모듈의 SQLite 준비 골격을 공용 게이트로 흡수
+- 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 code-reviewer 지적
+- QA 시나리오: 종가베팅·VCP·실시간 시세·누적 성과 화면이 통합 전과 같은 값을 그린다
+- `services/sqlite_utils.py` 의 `add_bounded_ready_key` 를 쓰는 비테스트 모듈이 열여섯
+  개이고, 그 가운데 `[CHAT-003]` 이 두 개를, `[CHAT-012]` 가 한 개를 가져갑니다. 남는
+  것은 다음 열다섯 개입니다.
+
+      services/kr_market_data_cache_sqlite_payload.py
+      services/kr_market_vcp_signals_cache.py
+      services/kr_market_jongga_payload_helpers.py
+      services/kr_market_realtime_price_cache.py
+      services/kr_market_realtime_latest_close_cache.py
+      services/kr_market_realtime_market_map_cache.py
+      services/kr_market_backtest_summary_cache.py
+      services/kr_market_cumulative_cache.py
+      services/kr_market_data_cache_jongga.py
+      services/common_update_status_service.py
+      services/file_row_count_cache.py
+      services/paper_trading_db_setup.py
+      engine/kr_ai_stock_info_cache.py
+      engine/signal_tracker_source_cache.py
+      engine/signal_tracker_analysis_source_cache.py
+
+- `[CHAT-003]` 은 두 모듈을 옮기면서 코드 줄이 13줄 늘었습니다(주석 제외 820 → 833).
+  중복 로직 354줄이 사라진 자리를 위임 호출의 인자 전달이 채웠기 때문입니다. 나머지가
+  따라오면 순감으로 돌아섭니다.
+- 열다섯 개를 한 사이클에 다 옮기면 규모가 통제를 벗어나므로, 화면 단위로 서너 개씩 나누어
+  진행할지 이 항목을 시작할 때 정합니다.
+- [ ] 옮길 순서를 화면 단위로 묶어 확정
+- [ ] 각 묶음마다 기존 회귀 테스트가 그대로 통과하는지 확인
+- [ ] 옮긴 뒤 주석을 뺀 코드 줄 수가 실제로 줄었는지 측정
 
 
 ### [FE-037] 툴팁이 화면과 스크롤 컨테이너의 경계를 넘어 잘린다

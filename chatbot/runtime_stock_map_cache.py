@@ -2,21 +2,28 @@
 # -*- coding: utf-8 -*-
 """
 chatbot 런타임 종목맵 캐시(SQLite + 메모리).
+
+2단 캐시의 공통 골격은 services/sqlite_ready_gate.py 에 있다. 이 모듈에는
+chatbot_stock_map_cache 테이블의 SQL 과 종목맵 직렬화만 남는다.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import threading
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from services.sqlite_ready_gate import (
+    SeenKeyTracker,
+    SqliteReadyGate,
+    run_with_schema_recovery,
+    save_bounded_lru_entry,
+)
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -34,22 +41,31 @@ _STOCK_MAP_CACHE: OrderedDict[
     str,
     tuple[tuple[int, int], dict[str, str], dict[str, str]],
 ] = OrderedDict()
-_STOCK_MAP_SQLITE_READY_LOCK = threading.Lock()
-_STOCK_MAP_SQLITE_READY_CONDITION = threading.Condition(_STOCK_MAP_SQLITE_READY_LOCK)
-_STOCK_MAP_SQLITE_INIT_IN_PROGRESS: set[str] = set()
-_STOCK_MAP_SQLITE_READY: set[str] = set()
-_STOCK_MAP_SQLITE_READY_MAX_ENTRIES = 2_048
-_STOCK_MAP_SQLITE_KNOWN_PATHS: OrderedDict[tuple[str, str], None] = OrderedDict()
-_STOCK_MAP_SQLITE_KNOWN_PATHS_LOCK = threading.Lock()
-_STOCK_MAP_SQLITE_KNOWN_PATHS_MAX_ENTRIES = 4_096
 _STOCK_MAP_MEMORY_MAX_ENTRIES = 256
 _STOCK_MAP_SQLITE_MAX_ROWS = 128
 _STOCK_MAP_SQLITE_TIMEOUT_SECONDS = 30
 _STOCK_MAP_SQLITE_RETRY_ATTEMPTS = 2
 _STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS = 0.03
 _STOCK_MAP_SQLITE_PRUNE_FORCE_INTERVAL = 64
-_STOCK_MAP_SQLITE_SAVE_COUNTER = 0
-_STOCK_MAP_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
+_STOCK_MAP_SQLITE_READY_MAX_ENTRIES = 2_048
+_STOCK_MAP_SQLITE_KNOWN_PATHS_MAX_ENTRIES = 4_096
+
+_STOCK_MAP_READY_GATE = SqliteReadyGate(
+    max_ready_entries=_STOCK_MAP_SQLITE_READY_MAX_ENTRIES,
+)
+_STOCK_MAP_SEEN_TRACKER = SeenKeyTracker(
+    max_entries=_STOCK_MAP_SQLITE_KNOWN_PATHS_MAX_ENTRIES,
+)
+
+# 회귀 테스트가 모듈 전역으로 이 셋을 직접 조작한다. 게이트가 가진 객체를 그대로
+# 가리키는 별칭이므로 테스트가 clear() 를 부르면 게이트도 함께 비워진다.
+# 반대로 재바인딩은 닿지 않는다. monkeypatch.setattr 로 _STOCK_MAP_SQLITE_READY 에 새 집합을
+# 넣으면 이 이름만 갈리고 _STOCK_MAP_READY_GATE 는 옛 집합을 계속 쓴다. 상태를
+# 갈아 끼워야 하면 게이트를 새로 만들어야 한다.
+_STOCK_MAP_SQLITE_READY_CONDITION = _STOCK_MAP_READY_GATE.condition
+_STOCK_MAP_SQLITE_READY = _STOCK_MAP_READY_GATE.ready_keys
+_STOCK_MAP_SQLITE_INIT_IN_PROGRESS = _STOCK_MAP_READY_GATE.in_progress_keys
+
 _STOCK_MAP_SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(
     busy_timeout_ms=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS * 1000,
 )
@@ -98,13 +114,9 @@ def _stock_map_cache_db_path(data_dir: Path) -> Path:
 
 
 def _invalidate_stock_map_sqlite_ready(db_path: Path) -> None:
-    db_key = normalize_sqlite_db_key(str(db_path))
-    with _STOCK_MAP_SQLITE_READY_LOCK:
-        _STOCK_MAP_SQLITE_READY.discard(db_key)
-    with _STOCK_MAP_SQLITE_KNOWN_PATHS_LOCK:
-        stale_keys = [key for key in _STOCK_MAP_SQLITE_KNOWN_PATHS if key[0] == db_key]
-        for tracker_key in stale_keys:
-            _STOCK_MAP_SQLITE_KNOWN_PATHS.pop(tracker_key, None)
+    db_path_text = str(db_path)
+    _STOCK_MAP_READY_GATE.invalidate(db_path_text)
+    _STOCK_MAP_SEEN_TRACKER.discard_db(db_path_text)
 
 
 def _is_missing_table_error(error: Exception) -> bool:
@@ -116,75 +128,47 @@ def _recover_stock_map_sqlite_schema(db_path: Path, logger: Any) -> bool:
     return _ensure_stock_map_sqlite(db_path, logger)
 
 
+def _create_stock_map_schema(db_path_text: str) -> None:
+    with connect_sqlite(
+        db_path_text,
+        timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
+        pragmas=_STOCK_MAP_SQLITE_INIT_PRAGMAS,
+    ) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chatbot_stock_map_cache (
+                source_path TEXT PRIMARY KEY,
+                mtime_ns INTEGER NOT NULL,
+                size INTEGER NOT NULL,
+                stock_map_json TEXT NOT NULL,
+                ticker_map_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_chatbot_stock_map_cache_updated_at
+            ON chatbot_stock_map_cache(updated_at DESC)
+            """
+        )
+        conn.commit()
+
+
 def _ensure_stock_map_sqlite(db_path: Path, logger: Any) -> bool:
     db_path_text = str(db_path)
-    db_key = normalize_sqlite_db_key(db_path_text)
-    with _STOCK_MAP_SQLITE_READY_CONDITION:
-        if db_key in _STOCK_MAP_SQLITE_READY:
-            if sqlite_db_path_exists(db_path_text):
-                return True
-            _STOCK_MAP_SQLITE_READY.discard(db_key)
-
-        while db_key in _STOCK_MAP_SQLITE_INIT_IN_PROGRESS:
-            _STOCK_MAP_SQLITE_READY_CONDITION.wait()
-            if db_key in _STOCK_MAP_SQLITE_READY:
-                if sqlite_db_path_exists(db_path_text):
-                    return True
-                _STOCK_MAP_SQLITE_READY.discard(db_key)
-
-        _STOCK_MAP_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
-    def _initialize_schema() -> None:
-        with connect_sqlite(
-            db_path_text,
-            timeout_seconds=_STOCK_MAP_SQLITE_TIMEOUT_SECONDS,
-            pragmas=_STOCK_MAP_SQLITE_INIT_PRAGMAS,
-        ) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS chatbot_stock_map_cache (
-                    source_path TEXT PRIMARY KEY,
-                    mtime_ns INTEGER NOT NULL,
-                    size INTEGER NOT NULL,
-                    stock_map_json TEXT NOT NULL,
-                    ticker_map_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_chatbot_stock_map_cache_updated_at
-                ON chatbot_stock_map_cache(updated_at DESC)
-                """
-            )
-            conn.commit()
-
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
-        logger.debug("Failed to initialize stock map sqlite cache: %s", error)
-        return False
-    finally:
-        with _STOCK_MAP_SQLITE_READY_CONDITION:
-            _STOCK_MAP_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _STOCK_MAP_SQLITE_READY,
-                    db_key,
-                    max_entries=_STOCK_MAP_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _STOCK_MAP_SQLITE_READY.discard(db_key)
-            _STOCK_MAP_SQLITE_READY_CONDITION.notify_all()
+    return _STOCK_MAP_READY_GATE.ensure(
+        db_path_text,
+        initialize=lambda: _create_stock_map_schema(db_path_text),
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=lambda error: logger.debug(
+            "Failed to initialize stock map sqlite cache: %s", error
+        ),
+    )
 
 
 def _save_stock_map_memory_entry(
@@ -193,41 +177,13 @@ def _save_stock_map_memory_entry(
     stock_map: dict[str, str],
     ticker_map: dict[str, str],
 ) -> None:
-    max_entries = max(1, int(_STOCK_MAP_MEMORY_MAX_ENTRIES))
     with _STOCK_MAP_CACHE_LOCK:
-        _STOCK_MAP_CACHE[cache_key] = (signature, dict(stock_map), dict(ticker_map))
-        _STOCK_MAP_CACHE.move_to_end(cache_key)
-        while len(_STOCK_MAP_CACHE) > max_entries:
-            _STOCK_MAP_CACHE.popitem(last=False)
-
-
-def _mark_stock_map_sqlite_source_path_seen(*, db_path: Path, source_path_key: str) -> bool:
-    """
-    (db_path, source_path) 조합의 SQLite key를 추적한다.
-    return True면 신규 key로 간주해 prune을 수행한다.
-    """
-    db_key = normalize_sqlite_db_key(str(db_path))
-    normalized_source_key = _normalize_stock_map_source_key(source_path_key)
-    tracker_key = (db_key, normalized_source_key)
-    with _STOCK_MAP_SQLITE_KNOWN_PATHS_LOCK:
-        if tracker_key in _STOCK_MAP_SQLITE_KNOWN_PATHS:
-            _STOCK_MAP_SQLITE_KNOWN_PATHS.move_to_end(tracker_key)
-            return False
-
-        _STOCK_MAP_SQLITE_KNOWN_PATHS[tracker_key] = None
-        _STOCK_MAP_SQLITE_KNOWN_PATHS.move_to_end(tracker_key)
-        normalized_max_entries = max(1, int(_STOCK_MAP_SQLITE_KNOWN_PATHS_MAX_ENTRIES))
-        while len(_STOCK_MAP_SQLITE_KNOWN_PATHS) > normalized_max_entries:
-            _STOCK_MAP_SQLITE_KNOWN_PATHS.popitem(last=False)
-        return True
-
-
-def _should_force_stock_map_sqlite_prune() -> bool:
-    global _STOCK_MAP_SQLITE_SAVE_COUNTER
-    with _STOCK_MAP_SQLITE_SAVE_COUNTER_LOCK:
-        _STOCK_MAP_SQLITE_SAVE_COUNTER += 1
-        normalized_interval = max(1, int(_STOCK_MAP_SQLITE_PRUNE_FORCE_INTERVAL))
-        return (_STOCK_MAP_SQLITE_SAVE_COUNTER % normalized_interval) == 0
+        save_bounded_lru_entry(
+            _STOCK_MAP_CACHE,
+            cache_key,
+            (signature, dict(stock_map), dict(ticker_map)),
+            max_entries=_STOCK_MAP_MEMORY_MAX_ENTRIES,
+        )
 
 
 def _load_stock_map_from_sqlite(
@@ -277,25 +233,17 @@ def _load_stock_map_from_sqlite(
             return cursor.fetchone()
 
     try:
-        row = run_sqlite_with_retry(
+        row = run_with_schema_recovery(
             _query_row,
-            max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+            run_with_retry=run_sqlite_with_retry,
+            retry_attempts=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
             retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+            is_missing_table=_is_missing_table_error,
+            recover=lambda: _recover_stock_map_sqlite_schema(db_path, logger),
         )
     except Exception as error:
-        if _is_missing_table_error(error) and _recover_stock_map_sqlite_schema(db_path, logger):
-            try:
-                row = run_sqlite_with_retry(
-                    _query_row,
-                    max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
-                    retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
-                )
-            except Exception as retry_error:
-                logger.debug("Failed to load stock map sqlite cache after schema recovery: %s", retry_error)
-                return None
-        else:
-            logger.debug("Failed to load stock map sqlite cache: %s", error)
-            return None
+        logger.debug("Failed to load stock map sqlite cache: %s", error)
+        return None
 
     try:
         if not row:
@@ -336,11 +284,15 @@ def _save_stock_map_to_sqlite(
         return
 
     normalized_max_rows = max(1, int(_STOCK_MAP_SQLITE_MAX_ROWS))
-    should_prune_for_new_path = _mark_stock_map_sqlite_source_path_seen(
-        db_path=db_path,
-        source_path_key=source_path_key,
+    # 두 판정을 모두 실행한다. or 로 묶어 단축 평가에 맡기면 신규 키일 때 저장 카운터가
+    # 올라가지 않아 강제 프루닝 주기가 어긋난다.
+    should_prune_for_new_path = _STOCK_MAP_SEEN_TRACKER.mark_seen(
+        db_path_text=db_path_text,
+        item_key=source_path_key,
     )
-    should_force_prune = _should_force_stock_map_sqlite_prune()
+    should_force_prune = _STOCK_MAP_SEEN_TRACKER.should_force_prune(
+        _STOCK_MAP_SQLITE_PRUNE_FORCE_INTERVAL
+    )
     should_prune_after_upsert = should_prune_for_new_path or should_force_prune
 
     def _upsert_stock_map() -> None:
@@ -386,23 +338,16 @@ def _save_stock_map_to_sqlite(
             conn.commit()
 
     try:
-        run_sqlite_with_retry(
+        run_with_schema_recovery(
             _upsert_stock_map,
-            max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
+            run_with_retry=run_sqlite_with_retry,
+            retry_attempts=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
             retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
+            is_missing_table=_is_missing_table_error,
+            recover=lambda: _recover_stock_map_sqlite_schema(db_path, logger),
         )
     except Exception as error:
-        if _is_missing_table_error(error) and _recover_stock_map_sqlite_schema(db_path, logger):
-            try:
-                run_sqlite_with_retry(
-                    _upsert_stock_map,
-                    max_retries=_STOCK_MAP_SQLITE_RETRY_ATTEMPTS,
-                    retry_delay_seconds=_STOCK_MAP_SQLITE_RETRY_DELAY_SECONDS,
-                )
-            except Exception as retry_error:
-                logger.debug("Failed to save stock map sqlite cache after schema recovery: %s", retry_error)
-        else:
-            logger.debug("Failed to save stock map sqlite cache: %s", error)
+        logger.debug("Failed to save stock map sqlite cache: %s", error)
 
 
 def load_stock_map_cache(
@@ -477,8 +422,4 @@ def build_stock_maps(df: Any) -> tuple[dict[str, str], dict[str, str]]:
 def clear_stock_map_cache() -> None:
     with _STOCK_MAP_CACHE_LOCK:
         _STOCK_MAP_CACHE.clear()
-    with _STOCK_MAP_SQLITE_KNOWN_PATHS_LOCK:
-        _STOCK_MAP_SQLITE_KNOWN_PATHS.clear()
-    global _STOCK_MAP_SQLITE_SAVE_COUNTER
-    with _STOCK_MAP_SQLITE_SAVE_COUNTER_LOCK:
-        _STOCK_MAP_SQLITE_SAVE_COUNTER = 0
+    _STOCK_MAP_SEEN_TRACKER.clear()
