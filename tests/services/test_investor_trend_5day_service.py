@@ -787,3 +787,307 @@ def test_verify_false_keeps_anomalous_csv_without_touching_references(monkeypatc
     # 플래그는 그대로 실려 나간다. 호출자가 이것을 보고 자기 경로로 빠지기 때문이다.
     assert trend_service.has_csv_anomaly_flags(result) is True
     assert "stale_csv" in result["quality"]["csv_anomaly_flags"]
+
+
+def _write_five_day_csv(tmp_path, *, ticker: str) -> None:
+    """5거래일이 모인 정상 CSV 를 만든다. 5일 합은 외국인 6000, 기관 11000 이다."""
+    pd.DataFrame(
+        [
+            {"ticker": ticker, "date": "2026-02-20", "foreign_buy": 1_000, "inst_buy": 2_000},
+            {"ticker": ticker, "date": "2026-02-21", "foreign_buy": 1_100, "inst_buy": 2_100},
+            {"ticker": ticker, "date": "2026-02-22", "foreign_buy": 1_200, "inst_buy": 2_200},
+            {"ticker": ticker, "date": "2026-02-23", "foreign_buy": 1_300, "inst_buy": 2_300},
+            {"ticker": ticker, "date": "2026-02-24", "foreign_buy": 1_400, "inst_buy": 2_400},
+        ]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+
+def test_reference_reject_reason_accepts_a_complete_payload():
+    payload = {
+        "foreign": 1_000,
+        "institution": 2_000,
+        "details": [{"netForeignerBuyVolume": 200, "netInstitutionBuyVolume": 400}] * 5,
+    }
+    assert trend_service._reference_reject_reason(payload) is None
+
+
+def test_reference_reject_reason_rejects_short_or_missing_details():
+    assert trend_service._reference_reject_reason(None) == "not_a_dict"
+    assert (
+        trend_service._reference_reject_reason(
+            {"foreign": 1_000, "institution": 0, "details": []}
+        )
+        == "insufficient_days"
+    )
+    assert (
+        trend_service._reference_reject_reason(
+            {
+                "foreign": 1_000,
+                "institution": 0,
+                "details": [{"netForeignerBuyVolume": 1_000, "netInstitutionBuyVolume": 0}] * 4,
+            }
+        )
+        == "insufficient_days"
+    )
+    assert (
+        trend_service._reference_reject_reason(
+            {"foreign": 1_000, "institution": 0, "details": [None] * 5}
+        )
+        == "insufficient_days"
+    )
+
+
+def test_reference_reject_reason_rejects_an_all_zero_payload():
+    payload = {
+        "foreign": 0,
+        "institution": 0,
+        "details": [{"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 0}] * 5,
+    }
+    assert trend_service._reference_reject_reason(payload) == "zero_total"
+
+
+def test_reference_reject_reason_keeps_a_payload_whose_sum_cancels_out():
+    """5일 합계가 0 이어도 하루별 값이 살아 있으면 정상 자료다."""
+    payload = {
+        "foreign": 0,
+        "institution": 0,
+        "details": [
+            {"netForeignerBuyVolume": 500, "netInstitutionBuyVolume": -500},
+            {"netForeignerBuyVolume": -500, "netInstitutionBuyVolume": 500},
+            {"netForeignerBuyVolume": 300, "netInstitutionBuyVolume": -300},
+            {"netForeignerBuyVolume": -300, "netInstitutionBuyVolume": 300},
+            {"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 0},
+        ],
+    }
+    assert trend_service._reference_reject_reason(payload) is None
+
+
+def test_reference_reject_reason_rejects_an_extreme_total():
+    details = [{"netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 0}] * 5
+    at_threshold = {
+        "foreign": trend_service._CSV_EXTREME_ABS_TOTAL,
+        "institution": 0,
+        "details": details,
+    }
+    assert trend_service._reference_reject_reason(at_threshold) == "extreme_abs_total"
+
+    just_below = {
+        "foreign": trend_service._CSV_EXTREME_ABS_TOTAL - 1,
+        "institution": 0,
+        "details": details,
+    }
+    assert trend_service._reference_reject_reason(just_below) is None
+
+
+def test_a_zero_reference_does_not_overwrite_a_stale_but_real_csv(monkeypatch, tmp_path):
+    """퇴화한 참조로 정확한 CSV 가 덮이지 않는다.
+
+    이 검사가 없으면 거래정지 종목이나 파싱 실패로 전 항목이 0 이 된 참조가 5거래일이
+    모인 CSV 를 통째로 덮고, 그 0 이 스크리너 수급 점수와 대시보드로 흘러간다.
+    """
+    _write_five_day_csv(tmp_path, ticker="005930")
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 0,
+            "institution": 0,
+            "details": [{"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 0}] * 5,
+            "latest_date": "2026-02-24",
+            "source": "pykrx",
+        },
+    )
+    monkeypatch.setattr(trend_service, "_fetch_toss_reference_trend", lambda **_kwargs: None)
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+    )
+
+    assert result is not None
+    assert result["source"] == "csv"
+    assert result["foreign"] == 6_000
+    assert result["institution"] == 11_000
+    assert result["quality"]["discarded_references"] == ["pykrx:zero_total"]
+    assert result["quality"]["reference_sources"] == []
+    assert result["quality"]["reference_only"] is False
+
+
+def test_toss_is_tried_when_the_pykrx_reference_is_discarded(monkeypatch, tmp_path):
+    """걸러 낸 참조는 없는 것과 같으므로 대체 자료를 찾아야 한다."""
+    _write_five_day_csv(tmp_path, ticker="000660")
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 0,
+            "institution": 0,
+            "details": [{"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 0}] * 5,
+            "latest_date": "2026-02-24",
+            "source": "pykrx",
+        },
+    )
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_toss_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 7_000,
+            "institution": 3_000,
+            "details": [{"netForeignerBuyVolume": 1_400, "netInstitutionBuyVolume": 600}] * 5,
+            "latest_date": "2026-02-24",
+            "source": "toss",
+        },
+    )
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+    )
+
+    assert result is not None
+    assert result["source"] == "toss"
+    assert result["quality"]["discarded_references"] == ["pykrx:zero_total"]
+    assert result["quality"]["reference_sources"] == ["toss"]
+
+
+def test_missing_csv_with_only_a_bad_reference_returns_nothing(monkeypatch, tmp_path):
+    """CSV 도 없고 쓸 만한 참조도 없으면 자료가 없는 것이다."""
+    _write_five_day_csv(tmp_path, ticker="000660")
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 5_000,
+            "institution": 0,
+            "details": [],
+            "latest_date": "",
+            "source": "pykrx",
+        },
+    )
+    monkeypatch.setattr(trend_service, "_fetch_toss_reference_trend", lambda **_kwargs: None)
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+    )
+
+    assert result is None
+
+
+def test_reference_only_marks_a_payload_built_without_any_csv(monkeypatch, tmp_path):
+    """CSV 대응값이 아예 없어 참조가 유일한 진실인 값에 표식을 남긴다."""
+    _write_five_day_csv(tmp_path, ticker="000660")
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 7_000,
+            "institution": 3_000,
+            "details": [{"netForeignerBuyVolume": 1_400, "netInstitutionBuyVolume": 600}] * 5,
+            "latest_date": "2026-02-24",
+            "source": "pykrx",
+        },
+    )
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+    )
+
+    assert result is not None
+    assert result["source"] == "pykrx"
+    assert result["quality"]["reference_only"] is True
+    assert "missing_csv" in result["quality"]["csv_anomaly_flags"]
+
+
+def test_reference_only_is_false_when_a_csv_row_existed(monkeypatch, tmp_path):
+    """CSV 가 이상징후로 교체된 경우는 reference_only 가 아니다. 견줄 값이 남아 있다.
+
+    _write_five_day_csv 의 날짜는 오늘 기준으로 stale_csv 에 해당하므로 참조가
+    CSV 를 교체한다. 그래도 CSV 대응값 자체는 남아 있으므로 표식은 붙지 않는다.
+    """
+    _write_five_day_csv(tmp_path, ticker="005930")
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 7_000,
+            "institution": 3_000,
+            "details": [{"netForeignerBuyVolume": 1_400, "netInstitutionBuyVolume": 600}] * 5,
+            "latest_date": "2026-02-24",
+            "source": "pykrx",
+        },
+    )
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+    )
+
+    assert result is not None
+    assert result["source"] == "pykrx"
+    assert result["quality"]["reference_only"] is False
+    assert result["quality"]["discarded_references"] == []
+
+
+def test_historical_target_keeps_the_csv_when_the_pykrx_reference_is_discarded(monkeypatch, tmp_path):
+    """과거 기준일에서 pykrx 참조를 걸러 내면 Toss 로 넘어가지 않고 CSV 가 남는다.
+
+    Toss 는 과거 기준일 조회를 지원하지 않으므로 대체 자료가 없다. 백테스트가
+    이 경로로 값을 읽으므로, 거부 판정이 그 자리에서 CSV 를 살리는지 확인한다.
+    """
+    # 하루만 값이 크고 나머지는 작아 single_day_spike 가 붙는다. target_datetime 을
+    # 주면 stale_csv 는 붙지 않으므로 다른 이상징후로 참조 조회를 유도한다.
+    pd.DataFrame(
+        [
+            {"ticker": "005930", "date": "2026-02-20", "foreign_buy": 100_000_000, "inst_buy": 0},
+            {"ticker": "005930", "date": "2026-02-21", "foreign_buy": 100_000_000, "inst_buy": 0},
+            {"ticker": "005930", "date": "2026-02-22", "foreign_buy": 100_000_000, "inst_buy": 0},
+            {"ticker": "005930", "date": "2026-02-23", "foreign_buy": 100_000_000, "inst_buy": 0},
+            {"ticker": "005930", "date": "2026-02-24", "foreign_buy": 50_000_000_000, "inst_buy": 0},
+        ]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(
+        trend_service,
+        "_fetch_pykrx_reference_trend",
+        lambda **_kwargs: {
+            "foreign": 0,
+            "institution": 0,
+            "details": [{"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 0}] * 5,
+            "latest_date": "2026-02-24",
+            "source": "pykrx",
+        },
+    )
+
+    toss_calls: list[dict] = []
+
+    def _record_toss(**kwargs):
+        toss_calls.append(kwargs)
+        return None
+
+    monkeypatch.setattr(trend_service, "_fetch_toss_reference_trend", _record_toss)
+
+    result = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930",
+        data_dir=str(tmp_path),
+        target_datetime="2026-02-24",
+    )
+
+    assert result is not None
+    assert result["source"] == "csv"
+    assert result["foreign"] == 50_400_000_000
+    assert "single_day_spike" in result["quality"]["csv_anomaly_flags"]
+    assert result["quality"]["discarded_references"] == ["pykrx:zero_total"]
+    assert toss_calls == []

@@ -464,6 +464,35 @@ def _normalize_external_trend_payload(
     }
 
 
+def _reference_reject_reason(payload: dict[str, Any] | None) -> str | None:
+    """참조 페이로드를 쓸 수 없는 사유를 돌려준다. 쓸 만하면 None 이다.
+
+    zero_total 은 하루별 절대값의 총합으로 판정한다. 5일 합계만 0 인 것은 매수와
+    매도가 상쇄된 정상 자료라서, 합계로 판정하면 멀쩡한 참조를 버린다.
+    """
+    if not isinstance(payload, dict):
+        return "not_a_dict"
+
+    details = payload.get("details")
+    if not isinstance(details, list) or len(details) < 5:
+        return "insufficient_days"
+
+    day_abs_total = 0
+    for detail in details[:5]:
+        if not isinstance(detail, dict):
+            return "insufficient_days"
+        day_abs_total += abs(_safe_int(detail.get("netForeignerBuyVolume", 0)))
+        day_abs_total += abs(_safe_int(detail.get("netInstitutionBuyVolume", 0)))
+
+    if day_abs_total == 0:
+        return "zero_total"
+
+    if _extract_abs_total(payload) >= _CSV_EXTREME_ABS_TOTAL:
+        return "extreme_abs_total"
+
+    return None
+
+
 def _detect_csv_anomaly_flags(
     csv_payload: dict[str, Any] | None,
     *,
@@ -791,12 +820,16 @@ def _attach_selection_metadata(
     selected_source: str,
     csv_flags: list[str],
     reference_sources: list[str],
+    discarded_references: list[str] | None = None,
+    reference_only: bool = False,
 ) -> dict[str, Any]:
     enriched = dict(payload)
     enriched["source"] = selected_source
     enriched["quality"] = {
         "csv_anomaly_flags": list(csv_flags),
         "reference_sources": list(reference_sources),
+        "discarded_references": list(discarded_references or []),
+        "reference_only": bool(reference_only),
     }
     return enriched
 
@@ -816,6 +849,20 @@ def _resolve_best_payload(
         csv_flags = sorted(set(csv_flags + ["missing_csv"]))
 
     references: list[dict[str, Any]] = []
+    discarded_references: list[str] = []
+
+    def _accept_reference(candidate: dict[str, Any] | None, *, source: str) -> bool:
+        """쓸 만한 참조면 references 에 넣는다. 판정을 두 조회 자리에 복제하지 않으려고 둔다."""
+        if not candidate:
+            return False
+        reason = _reference_reject_reason(candidate)
+        if reason is not None:
+            discarded_references.append(f"{source}:{reason}")
+            logger.debug("Discarded %s reference trend for %s: %s", source, ticker, reason)
+            return False
+        references.append(candidate)
+        return True
+
     if verify_with_references and csv_flags:
         pykrx_ref = _get_reference_trend_cached(
             data_dir=data_dir,
@@ -823,19 +870,19 @@ def _resolve_best_payload(
             ticker=ticker,
             target_datetime=target_datetime,
         )
-        if pykrx_ref:
-            references.append(pykrx_ref)
+        accepted_pykrx = _accept_reference(pykrx_ref, source="pykrx")
 
-        # 기본 우선순위가 pykrx이므로 pykrx가 있으면 Toss 조회를 생략해 지연을 줄인다.
-        if not pykrx_ref and is_latest_reference_window:
+        # 기본 우선순위가 pykrx이므로 쓸 만한 pykrx 참조가 있으면 Toss 조회를 생략해
+        # 지연을 줄인다. pykrx 를 걸러 냈다면 Toss 를 조회한다. 걸러 낸 참조는 없는
+        # 것과 같으므로 대체 자료를 찾아야 한다.
+        if not accepted_pykrx and is_latest_reference_window:
             toss_ref = _get_reference_trend_cached(
                 data_dir=data_dir,
                 source="toss",
                 ticker=ticker,
                 target_datetime=target_datetime,
             )
-            if toss_ref:
-                references.append(toss_ref)
+            _accept_reference(toss_ref, source="toss")
 
     reference_sources = [str(item.get("source", "")) for item in references if isinstance(item, dict)]
 
@@ -848,6 +895,8 @@ def _resolve_best_payload(
                 selected_source=str(selected.get("source", "reference")),
                 csv_flags=csv_flags,
                 reference_sources=reference_sources,
+                discarded_references=discarded_references,
+                reference_only=True,
             )
         return None
 
@@ -857,6 +906,7 @@ def _resolve_best_payload(
             selected_source="csv",
             csv_flags=csv_flags,
             reference_sources=[],
+            discarded_references=discarded_references,
         )
 
     # 여기까지 왔다면 CSV 에 이상징후가 있고(그 조건에서만 참조를 조회한다) 참조를 받아
@@ -871,6 +921,7 @@ def _resolve_best_payload(
         selected_source=str(selected.get("source", "reference")),
         csv_flags=csv_flags,
         reference_sources=reference_sources,
+        discarded_references=discarded_references,
     )
 
 
@@ -974,6 +1025,17 @@ def get_investor_trend_5day_for_ticker(
     stale_csv 는 CSV 가 참조와 다른 5거래일을 본다는 뜻이고 insufficient_days 는 CSV 가
     불완전하다는 뜻이라, 두 자료의 합계가 비슷하더라도 하루별 값까지 같다고 볼 근거가
     없기 때문이다.
+
+    다만 참조를 쓰기 전에 _reference_reject_reason 으로 쓸 만한 값인지 먼저 본다.
+    퇴화한 참조(전 항목이 0, 5일치가 모이지 않음, 20조 상한 초과)는 채택하지 않으므로
+    그 경우 정확한 CSV 가 살아남는다. 버린 참조는 quality.discarded_references 에
+    "<출처>:<사유>" 형식으로 남는다.
+
+    quality.reference_only 는 CSV 대응값이 없어 참조 단독으로 채운 값이라는 표식이다.
+    이 표식에 점수 감점이나 상한을 두지 않는다. 기본 참조인 pykrx 는 KRX 공식 자료라
+    표식이 붙었다는 사실만으로 값이 덜 정확하다고 볼 근거가 없고, 감점을 넣으려면
+    등급으로 바로 이어지는 engine/screener_scoring_helpers.py 의 계수를 관측 자료
+    없이 정해야 하기 때문이다. 이 표식이 실제로 얼마나 붙는지 관측한 뒤에 정한다.
     """
     normalized_data_dir = _normalize_data_dir(data_dir)
     trend_map = _get_or_build_trend_map(
