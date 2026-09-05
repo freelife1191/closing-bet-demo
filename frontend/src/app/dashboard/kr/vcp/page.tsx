@@ -397,6 +397,15 @@ export default function VCPSignalsPage() {
               content: getVcpWelcomeMessage(selectedStock.name)
             }]);
           }
+        } else if (res.status === 404) {
+          // 404 는 「그 세션은 없거나 내 것이 아니다」라는 뜻이다. 소유자가 바뀌면
+          // (로그인, 로그아웃) 저장해 둔 세션 ID 가 그대로 남아 이 응답을 받는다.
+          // 죽은 ID 를 버리지 않으면 모달이 빈 채로 남고 다음에도 같은 404 를 받는다.
+          localStorage.removeItem(sessionKey);
+          if (isMounted) setChatHistory([{
+            role: 'assistant',
+            content: getVcpWelcomeMessage(selectedStock.name)
+          }]);
         }
       } catch (e) {
         console.error('Failed to parse VCP chat history from DB', e);

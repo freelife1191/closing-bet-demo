@@ -55,6 +55,16 @@ export function useChatSessions() {
         setMessages([]);
       }
     } catch (error) {
+      // 404 는 「그 세션은 없거나 내 것이 아니다」라는 뜻이다. 소유자가 바뀌면(로그인,
+      // 로그아웃, 브라우저 세션 ID 재발급) 저장해 둔 세션 ID 가 그대로 남아 이 응답을
+      // 받는다. 오류 문구를 띄우고 멈추면 사용자는 새 대화조차 시작하지 못하므로,
+      // 죽은 세션 ID 를 버리고 새 대화 상태로 넘어간다.
+      if ((error as { status?: number }).status === 404) {
+        localStorage.removeItem(LAST_SESSION_KEY);
+        setCurrentSessionId(null);
+        setMessages([]);
+        return;
+      }
       console.error('Failed to fetch history:', error);
       setMessages([{ role: 'model', parts: ['⚠️ 대화 기록을 불러오는데 실패했습니다.'] }]);
     } finally {
