@@ -206,3 +206,40 @@ def test_market_schedule_fallback_holiday_revalidates_on_token_change(monkeypatc
     token["value"] = "20260227"
     assert MarketSchedule.is_market_open(target_day) is False
     assert calls["count"] == 2
+
+
+def _market_schedule_warnings(caplog):
+    """다른 로거가 같은 구간에 남긴 경고를 섞지 않는다."""
+    return [
+        record
+        for record in caplog.records
+        if record.levelname == "WARNING" and record.name == "engine.market_schedule"
+    ]
+
+def test_known_holidays_warns_once_for_a_year_the_calendar_does_not_cover(monkeypatch, caplog):
+    MarketSchedule._warn_fallback_calendar_expired.cache_clear()
+    # 오늘이 캘린더가 담지 못한 해인 상황을 만든다.
+    monkeypatch.setattr(MarketSchedule, "_fallback_holiday_last_year", 2020)
+
+    with caplog.at_level("WARNING", logger="engine.market_schedule"):
+        first = MarketSchedule.known_holidays()
+        second = MarketSchedule.known_holidays()
+
+    warnings = _market_schedule_warnings(caplog)
+    assert len(warnings) == 1
+    assert str(date.today().year) in warnings[0].getMessage()
+    # 경고는 알림일 뿐이므로 돌려주는 목록 자체는 달라지지 않는다.
+    assert first == second == tuple(sorted(MarketSchedule._fallback_holidays))
+    # 남겨 두면 뒤에 도는 검사가 같은 키에 걸려 경고를 못 본다.
+    MarketSchedule._warn_fallback_calendar_expired.cache_clear()
+
+
+def test_known_holidays_stays_quiet_for_a_year_the_calendar_covers(monkeypatch, caplog):
+    MarketSchedule._warn_fallback_calendar_expired.cache_clear()
+    monkeypatch.setattr(MarketSchedule, "_fallback_holiday_last_year", date.today().year)
+
+    with caplog.at_level("WARNING", logger="engine.market_schedule"):
+        holidays = MarketSchedule.known_holidays()
+
+    assert _market_schedule_warnings(caplog) == []
+    assert holidays == tuple(sorted(MarketSchedule._fallback_holidays))
