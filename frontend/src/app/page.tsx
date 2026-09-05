@@ -1,11 +1,7 @@
-'use client';
-
 import Link from 'next/link';
-import { useState } from 'react';
+import ScoringLogicTabs from './components/ScoringLogicTabs';
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<'vcp' | 'supply' | 'closing'>('closing');
-
   return (
     <div className="min-h-screen bg-[#0E1117] text-white flex flex-col font-sans selection:bg-rose-500/30">
 
@@ -314,32 +310,9 @@ export default function HomePage() {
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-12">Scoring Logic Detail</h2>
 
-            <div className="inline-flex p-1 rounded-xl bg-[#1c1c1e] border border-white/10 mb-12">
-              <button
-                onClick={() => setActiveTab('vcp')}
-                className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'vcp' ? 'bg-[#2c2c2e] text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
-              >
-                VCP 분석
-              </button>
-              <button
-                onClick={() => setActiveTab('supply')}
-                className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'supply' ? 'bg-[#2c2c2e] text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
-              >
-                수급 점수
-              </button>
-              <button
-                onClick={() => setActiveTab('closing')}
-                className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'closing' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25' : 'text-gray-500 hover:text-gray-300'}`}
-              >
-                종가베팅
-              </button>
-            </div>
-
-            <div className="bg-[#13151A] rounded-3xl border border-white/5 p-8 md:p-12 text-left relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-[80px] pointer-events-none"></div>
-
-              {activeTab === 'closing' && (
-                <div className="animate-fade-in relative z-10">
+            <ScoringLogicTabs
+              closing={
+                <div key="closing" className="animate-fade-in relative z-10">
                   <h3 className="text-xl font-bold text-blue-400 mb-6 flex items-center gap-2">
                     <i className="fas fa-question-circle"></i> 종가베팅이란?
                   </h3>
@@ -578,10 +551,9 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
-              )}
-
-              {activeTab === 'vcp' && (
-                <div className="animate-fade-in relative z-10">
+              }
+              vcp={
+                <div key="vcp" className="animate-fade-in relative z-10">
                   <h3 className="text-xl font-bold text-rose-400 mb-6 flex items-center gap-2">
                     <i className="fas fa-chart-bar"></i> VCP 패턴이란?
                   </h3>
@@ -615,10 +587,9 @@ export default function HomePage() {
                     </ul>
                   </div>
                 </div>
-              )}
-
-              {activeTab === 'supply' && (
-                <div className="animate-fade-in relative z-10">
+              }
+              supply={
+                <div key="supply" className="animate-fade-in relative z-10">
                   <h3 className="text-xl font-bold text-emerald-400 mb-6 flex items-center gap-2">
                     <i className="fas fa-hands-helping"></i> 수급 분석이란?
                   </h3>
@@ -691,8 +662,8 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+              }
+            />
           </div>
         </section>
 
