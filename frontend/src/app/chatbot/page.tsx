@@ -290,7 +290,7 @@ export default function ChatbotPage() {
 
       const res = await fetch('/api/kr/chatbot/profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, persona })
       });
       const data = await res.json();

@@ -21,6 +21,11 @@ sys.path.insert(
 import chatbot.core as chatbot_core
 from chatbot.command_service import handle_memory_command
 from chatbot.payload_service import compose_system_prompt
+from chatbot.runtime_setup_service import (
+    DEFAULT_PROFILE,
+    get_user_profile,
+    update_user_profile,
+)
 from chatbot.storage_sqlite_common import (
     _ensure_chatbot_memories_owner_column,
     ensure_chatbot_storage_schema,
@@ -412,3 +417,44 @@ def test_compose_system_prompt_passes_owner_to_memory():
     assert bot.memory.seen_owner_ids == ["owner-a", "owner-b"]
     assert "MEM" in owned
     assert "MEM" not in other
+
+
+def test_user_profile_is_isolated_by_owner(monkeypatch, tmp_path: Path):
+    """프로필도 소유자별로 나뉜다.
+
+    [CHAT-017] 이 메모리 저장소를 나눈 뒤에도 프로필만 공용 한 벌을 함께 쓰고
+    있었다. 프로필 API 가 소유자를 넘기지 않았기 때문이다.
+    """
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    memory = chatbot_core.MemoryManager(user_id="u1")
+
+    update_user_profile(memory, "갑", "공격적", owner_id="owner-a")
+    update_user_profile(memory, "을", "보수적", owner_id="owner-b")
+
+    assert get_user_profile(memory, "owner-a") == {"name": "갑", "persona": "공격적"}
+    assert get_user_profile(memory, "owner-b") == {"name": "을", "persona": "보수적"}
+
+
+def test_user_profile_without_owner_falls_back_to_default(monkeypatch, tmp_path: Path):
+    """소유자를 모르면 남의 프로필이 아니라 기본값이 나온다."""
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    memory = chatbot_core.MemoryManager(user_id="u1")
+
+    update_user_profile(memory, "갑", "공격적", owner_id="owner-a")
+
+    assert get_user_profile(memory) == DEFAULT_PROFILE
+
+
+def test_saved_profile_reaches_only_its_owner_prompt(monkeypatch, tmp_path: Path):
+    """프로필이 소유자 버킷에 들어가면서 그 사용자의 프롬프트에도 실린다.
+
+    종전에는 공용에만 있어 어느 프롬프트에도 실리지 않았다. 의도한 변화이므로
+    고정해 둔다. 남의 프롬프트에는 실리지 않아야 한다.
+    """
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    memory = chatbot_core.MemoryManager(user_id="u1")
+
+    update_user_profile(memory, "갑", "공격적", owner_id="owner-a")
+
+    assert "공격적" in memory.format_for_prompt("owner-a")
+    assert memory.format_for_prompt("owner-b") == ""

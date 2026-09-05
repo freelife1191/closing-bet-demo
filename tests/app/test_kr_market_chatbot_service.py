@@ -74,11 +74,11 @@ class _DummyBot:
     def __init__(self):
         self.history = _DummyHistory()
 
-    def get_user_profile(self):
-        return {"name": "tester", "persona": "swing"}
+    def get_user_profile(self, owner_id=None):
+        return {"name": "tester", "persona": "swing", "owner_id": owner_id}
 
-    def update_user_profile(self, name, persona):
-        return {"name": name, "persona": persona}
+    def update_user_profile(self, name, persona, owner_id=None):
+        return {"name": name, "persona": persona, "owner_id": owner_id}
 
 
 class _StreamBot:
@@ -273,11 +273,14 @@ def test_handle_chatbot_history_request_hides_unknown_session():
 def test_handle_chatbot_profile_request_get_and_post():
     bot = _DummyBot()
 
-    status, payload = handle_chatbot_profile_request(bot, "GET", {})
+    status, payload = handle_chatbot_profile_request(bot, "GET", {}, owner_id="owner-1")
     assert status == 200
     assert payload["profile"]["name"] == "tester"
+    assert payload["profile"]["owner_id"] == "owner-1"
 
-    status, payload = handle_chatbot_profile_request(bot, "POST", {"persona": "value"})
+    status, payload = handle_chatbot_profile_request(
+        bot, "POST", {"persona": "value"}, owner_id="owner-1"
+    )
     assert status == 400
     assert payload["error"] == "Name is required"
 
@@ -285,9 +288,67 @@ def test_handle_chatbot_profile_request_get_and_post():
         bot,
         "POST",
         {"name": "new-user", "persona": "value"},
+        owner_id="owner-1",
     )
     assert status == 200
     assert payload["profile"]["name"] == "new-user"
+    assert payload["profile"]["owner_id"] == "owner-1"
+
+
+def test_profile_route_reads_owner_from_session_header(monkeypatch):
+    """라우트가 X-Session-Id 를 실제로 읽어 헬퍼에 넘기는지 본다.
+
+    헬퍼는 owner_id 가 키워드 전용이라 라우트가 빠뜨리면 TypeError 로 터진다.
+    그런데 헤더 이름을 잘못 적으면 소유자가 조용히 None 이 되어 헬퍼 검사로는
+    잡히지 않는다. 이 검사가 그 구멍을 막는다.
+    """
+    import logging
+
+    import chatbot as chatbot_pkg
+    from flask import Blueprint, Flask
+
+    from app.routes.kr_market_chatbot_http_routes import _register_chatbot_meta_routes
+
+    seen = {}
+
+    class _ProfileBot:
+        def get_user_profile(self, owner_id=None):
+            seen["owner_id"] = owner_id
+            return {"name": "tester", "persona": "swing"}
+
+    monkeypatch.setattr(chatbot_pkg, "get_chatbot", lambda: _ProfileBot())
+
+    app = Flask(__name__)
+    app.testing = True
+    blueprint = Blueprint("kr_test", __name__)
+    _register_chatbot_meta_routes(blueprint, logger=logging.getLogger("test_profile_route"))
+    app.register_blueprint(blueprint, url_prefix="/api/kr")
+
+    response = app.test_client().get(
+        "/api/kr/chatbot/profile",
+        headers={"X-Session-Id": "anon_abc"},
+    )
+
+    assert response.status_code == 200
+    assert seen["owner_id"] == "anon_abc"
+
+
+def test_handle_chatbot_profile_request_without_owner():
+    """소유자를 모르면 저장은 거절하고 조회는 공용을 읽는다."""
+    bot = _DummyBot()
+
+    status, payload = handle_chatbot_profile_request(
+        bot,
+        "POST",
+        {"name": "new-user", "persona": "value"},
+        owner_id=None,
+    )
+    assert status == 400
+    assert payload["error"] == "Session is required"
+
+    status, payload = handle_chatbot_profile_request(bot, "GET", {}, owner_id=None)
+    assert status == 200
+    assert payload["profile"]["owner_id"] is None
 
 
 def test_parse_chatbot_watchlist_query():

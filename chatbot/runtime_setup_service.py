@@ -160,16 +160,16 @@ def load_stock_map(data_dir: Path, logger: Any) -> Tuple[Dict[str, str], Dict[st
 
 
 def init_user_profile_from_env(memory: Any, logger: Any) -> None:
-    """환경변수 USER_PROFILE 기준으로 초기 사용자 프로필을 저장한다."""
+    """환경변수 USER_PROFILE 기준으로 초기 사용자 프로필을 저장한다 (공용 영역)."""
     profile = os.getenv("USER_PROFILE")
     if profile and not memory.memories:
         memory.add("user_profile", {"name": "흑기사", "persona": profile})
         logger.info("Initialized user profile from env")
 
 
-def get_user_profile(memory: Any) -> Dict[str, Any]:
+def get_user_profile(memory: Any, owner_id: Optional[str] = None) -> Dict[str, Any]:
     """사용자 프로필 조회 (레거시 value wrapper 호환)."""
-    profile = memory.get("user_profile")
+    profile = memory.get("user_profile", owner_id)
     if profile and isinstance(profile, dict) and "value" in profile:
         val = profile["value"]
         if isinstance(val, dict):
@@ -179,10 +179,19 @@ def get_user_profile(memory: Any) -> Dict[str, Any]:
     return dict(DEFAULT_PROFILE)
 
 
-def update_user_profile(memory: Any, name: str, persona: str) -> Dict[str, Any]:
-    """사용자 프로필 업데이트."""
+def update_user_profile(
+    memory: Any,
+    name: str,
+    persona: str,
+    owner_id: str,
+) -> Dict[str, Any]:
+    """사용자 프로필 업데이트.
+
+    owner_id 에 기본값을 두지 않는다. 조회와 달리 저장은 소유자를 모르는 채로
+    수행되면 안 된다. 빈 문자열을 넘기면 공용에 쓴다.
+    """
     data = {"name": name, "persona": persona}
-    memory.update("user_profile", data)
+    memory.update("user_profile", data, owner_id)
     return data
 
 

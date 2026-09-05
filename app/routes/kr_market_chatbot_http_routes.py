@@ -299,11 +299,16 @@ def _register_chatbot_meta_routes(kr_bp: Any, *, logger: Any) -> None:
             from chatbot import get_chatbot
 
             bot = get_chatbot()
+            owner_id = resolve_chatbot_owner_id(
+                user_email=request.headers.get("X-User-Email"),
+                session_id_header=request.headers.get("X-Session-Id"),
+            )
             req_data = request.get_json(silent=True) or {}
             status_code, payload = handle_chatbot_profile_request(
                 bot=bot,
                 method=request.method,
                 req_data=req_data,
+                owner_id=owner_id,
             )
             return jsonify(payload), int(status_code)
 

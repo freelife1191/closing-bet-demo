@@ -15,6 +15,9 @@ from typing import Any
 
 def resolve_chatbot_owner_id(user_email: str | None, session_id_header: str | None) -> str | None:
     """로그인/비로그인 사용자별 챗봇 owner_id를 계산한다."""
+    # ponytail: 헤더 값을 검증 없이 소유자로 삼는다. 남의 이메일을 아는 사람은 헤더
+    # 하나로 그 사람의 세션과 프로필에 닿는다. 이 판정을 NextAuth 세션과 대조하는
+    # 방식으로 올린다.
     if user_email and user_email != "user@example.com":
         return user_email
     return session_id_header
@@ -86,18 +89,28 @@ def handle_chatbot_profile_request(
     bot: Any,
     method: str,
     req_data: dict[str, Any],
+    *,
+    owner_id: str | None,
 ) -> tuple[int, dict[str, Any]]:
-    """챗봇 프로필 조회/수정을 처리한다."""
+    """챗봇 프로필 조회/수정을 처리한다.
+
+    조회와 저장의 판정이 다르다. 조회는 소유자를 몰라도 막지 않는다. 사용자가
+    저장한 프로필이 공용에 들어갈 경로가 없어 DEFAULT_PROFILE 이 나오고 화면이
+    그대로 그려진다. 반면 저장은 소유자를 모르면 거절한다. 공용에 쓰도록 두면
+    사용자가 입력한 이름과 페르소나가 다른 사용자의 조회에 그대로 실린다.
+    """
     if method == "GET":
-        profile = bot.get_user_profile()
+        profile = bot.get_user_profile(owner_id)
         return 200, {"profile": profile}
 
     name = req_data.get("name")
     persona = req_data.get("persona")
     if not name:
         return 400, {"error": "Name is required"}
+    if not owner_id:
+        return 400, {"error": "Session is required"}
 
-    updated = bot.update_user_profile(name, persona)
+    updated = bot.update_user_profile(name, persona, owner_id)
     return 200, {"message": "Profile updated", "profile": updated}
 
 

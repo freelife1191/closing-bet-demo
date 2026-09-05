@@ -11,29 +11,26 @@
 
 ## P0 — 즉시
 
-### [CHAT-021] 챗봇 프로필 API 가 소유자 판정 없이 한 벌을 공유한다
-- 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
-- `app/routes/kr_market_chatbot_http_routes.py:296-310` 의 `/api/kr/chatbot/profile` 라우트만
-  `resolve_chatbot_owner_id` 를 부르지 않습니다. 같은 파일의 세션 라우트(98행)와 히스토리
-  라우트(281행)는 모두 부릅니다.
-- 그 결과 `services/kr_market_chatbot_request_helpers.py:92` 의 GET 이 공용 `user_profile`
-  한 건을 읽고, 100행의 POST 가 같은 한 건을 덮어씁니다. `chatbot/runtime_setup_service.py:172,185`
-  가 `owner_id` 없이 `memory.get`/`memory.update` 를 부르기 때문입니다.
-- 영향: 사용자 A 가 프로필 창에 적은 이름과 페르소나 문구를 사용자 B 가 GET 으로 그대로
-  읽습니다. `[CHAT-017]` 이 막은 것과 같은 종류의 유출이 같은 저장소에서 HTTP 로 열려 있습니다.
-  `frontend/src/app/chatbot/page.tsx:231` 의 주석대로 지금 프런트엔드는 GET 대신 localStorage 를
-  먼저 보지만, POST 는 291행에서 여전히 부르고 GET 엔드포인트 자체도 열려 있습니다.
-- 티어 판정: `[CHAT-017]` 이 이미 `MemoryManager` 에 `owner_id` 인자를 만들어 두었으므로
-  라우트와 헬퍼에 소유자를 흘려보내면 됩니다. 다만 기본 프로필의 「흑기사」 하드코딩과
-  `USER_PROFILE` 환경 변수 초기화를 소유자별로 어떻게 다룰지 함께 정해야 합니다.
-- [ ] `/api/kr/chatbot/profile` 이 `resolve_chatbot_owner_id` 를 거치게 함
-- [ ] `get_user_profile` 과 `update_user_profile` 이 소유자별로 읽고 쓰게 함
-- [ ] 공용에 남아 있던 기존 `user_profile` 을 어떻게 다룰지 정함
-- [ ] 소유자가 다른 프로필이 GET 으로 읽히지 않는지 pytest 로 고정
+비어 있습니다. `[CHAT-021]` 을 마지막으로 P0 이 정리되었습니다.
 
 
 ## P1 — 이번 주기
 
+### [CHAT-026] 대시보드 설정창에서 바꾼 프로필이 서버에 반영되지 않는다
+- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰
+- 같은 `SettingsModal` 을 두 자리에서 여는데 저장 경로가 갈립니다.
+  `frontend/src/app/chatbot/page.tsx:283` 의 `updateUserProfile` 은 서버에 POST 하지만,
+  `frontend/src/app/components/Sidebar.tsx:94` 의 `handleSaveSettings` 는 `localStorage` 와
+  `/api/system/log-event` 만 남기고 프로필 API 를 부르지 않습니다. 뒤의 것은
+  `Header.tsx:82` 의 톱니바퀴로 열리며 대시보드 화면에서 쓰입니다.
+- `[CHAT-021]` 이 프로필을 소유자별 메모리로 옮기면서 그 값이 시스템 프롬프트에도 실리게
+  되었으므로, 이제 이 불일치가 「설정창에서 페르소나를 바꿨는데 챗봇이 알 때와 모를 때가
+  갈린다」는 증상으로 드러납니다.
+- 같은 함수의 오류 처리도 빠져 있습니다. `page.tsx:295` 가 `res.ok` 를 보지 않고
+  `await res.json()` 의 결과도 쓰지 않아, 서버가 400 이나 500 을 돌려줘도 화면은 성공으로
+  보이고 `localStorage` 만 갱신됩니다.
+- [ ] 두 저장 경로가 같은 함수를 거치게 함
+- [ ] 저장 실패를 화면에 알림
 
 ### [CHAT-022] 메모리 전체 동기화가 다른 워커가 저장한 행을 지운다
 - 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
@@ -342,7 +339,17 @@
   분석을 무제한으로 부를 수 있고, 남의 이메일을 넣으면 그 사람의 쿼터를 대신 소진시킨다.
 - 티어 근거: 인증 경계를 바꾸는 작업이고 `app/__init__.py` 의 `before_request` 를
   건드리므로 `tier-rules.md` §2 의 위험 경로에 닿는다.
+- 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰가 같은 원인이 챗봇 데이터에도 열려 있음을
+  확인했다. `services/kr_market_chatbot_request_helpers.py:16` 의 `resolve_chatbot_owner_id`
+  가 `X-User-Email` 과 `X-Session-Id` 를 검증 없이 소유자로 삼는다. 그 이메일은
+  `frontend/src/app/components/SettingsModal.tsx:376` 의 자유 입력 필드에서 오고 NextAuth
+  세션과 대조하지 않으며, `frontend/next.config.js:11` 이 `/api/:path((?!auth).*)` 를
+  Flask 로 그대로 넘겨 중간에 검사하는 자리도 없다. 그래서 남의 이메일을 아는 사람은
+  헤더 하나로 그 사람의 대화와 프로필을 읽고 덮어쓸 수 있다. `[CHAT-017]`·`[CHAT-018]`·
+  `[CHAT-021]` 이 막은 것은 모든 사용자가 한 벌을 공유하던 사고였고 고의 접근은 그대로
+  열려 있다. 그 사실을 `resolve_chatbot_owner_id` 에 `# ponytail:` 주석으로 적어 두었다.
 - [ ] `g.user_email` 을 신원 근거로 쓰는 자리를 전수 조사 (`app/__init__.py:186` 포함)
+- [ ] `resolve_chatbot_owner_id` 도 같은 방식으로 신원을 확정하게 함
 - [ ] 서버가 서명을 검증할 수 있는 자격 증명으로 신원을 확정하는 방식을 정한다
 - [ ] 당장 도입이 어려우면 이 엔드포인트에 IP 단위 속도 제한을 먼저 건다
 - [ ] 위조한 헤더가 쿼터를 우회하지 못함을 고정하는 검사 추가
@@ -555,6 +562,24 @@
 
 ## P2 — 대기
 
+
+### [CHAT-027] 프로필이 메모리 영역에 들어오면서 생긴 어긋남 셋
+- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰
+- `[CHAT-021]` 이 `user_profile` 을 소유자 버킷으로 옮기면서 메모리와 같은 취급을 받게
+  되었고, 그 결과 세 자리가 어긋납니다. 셋 다 사소하고 같은 주변이라 한 항목으로 묶습니다.
+- `chatbot/command_service.py:119` 의 `render_memory_view` 가 소유자 버킷을 그대로 보여
+  주므로 사용자가 `/memory` 로 넣은 적 없는 `user_profile` 이 `/memory view` 에 나타나고
+  `/memory remove user_profile` 로 지울 수도 있습니다.
+- `frontend/src/app/chatbot/page.tsx:197` 의 `/clear all` 설명이 「내 대화 전체 초기화」인데
+  실제로는 `chatbot/command_service.py:52` 가 메모리도 지우므로 프로필까지 사라집니다.
+  서버 응답 문구는 정확하고 화면의 명령어 목록만 어긋납니다.
+- `chatbot/runtime_setup_service.py:162` 의 `init_user_profile_from_env` 는 가드가
+  `not memory.memories` 인데 저장소가 2단이 된 뒤로는 어느 소유자에게든 행이 하나라도
+  있으면 거짓입니다. 공용에 캐시 두 행이 이미 있어 영영 발동하지 않으므로 `USER_PROFILE`
+  환경 변수는 어떤 화면에도 영향을 주지 못합니다.
+- [ ] `/memory view` 에서 프로필을 가리거나 별도 표기로 구분
+- [ ] `/clear all` 설명 문구를 실제 동작에 맞춤
+- [ ] `init_user_profile_from_env` 를 지우거나 발동하도록 고침
 
 ### [CHAT-024] 창 높이가 낮으면 빠른 조회 버튼이 추천 질문 카드를 가린다
 - 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 `/qa-only` ISSUE-001

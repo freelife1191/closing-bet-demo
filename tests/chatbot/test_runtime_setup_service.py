@@ -46,19 +46,22 @@ class _FakeLogger:
 
 
 class _FakeMemory:
+    """MemoryManager 와 같은 소유자 규칙을 흉내 낸다 (미지정이면 공용)."""
+
     def __init__(self):
         self.memories = {}
 
-    def add(self, key, value):
-        self.memories[key] = value
+    def add(self, key, value, owner_id=None):
+        self.memories.setdefault(owner_id or "", {})[key] = value
 
-    def get(self, key):
-        if key not in self.memories:
+    def get(self, key, owner_id=None):
+        bucket = self.memories.get(owner_id or "", {})
+        if key not in bucket:
             return None
-        return {"value": self.memories[key]}
+        return {"value": bucket[key]}
 
-    def update(self, key, value):
-        self.memories[key] = value
+    def update(self, key, value, owner_id=None):
+        self.add(key, value, owner_id)
 
 
 @pytest.fixture(autouse=True)
@@ -191,7 +194,7 @@ def test_profile_init_get_update(monkeypatch):
     profile = get_user_profile(memory)
     assert profile["persona"] == "공격적 투자자"
 
-    updated = update_user_profile(memory, "테스터", "중립")
+    updated = update_user_profile(memory, "테스터", "중립", owner_id="")
     assert updated == {"name": "테스터", "persona": "중립"}
     profile2 = get_user_profile(memory)
     assert profile2["name"] == "테스터"

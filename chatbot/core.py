@@ -176,13 +176,13 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         """환경변수에서 초기 사용자 프로필 설정"""
         _init_user_profile_from_env_impl(self.memory, logger)
 
-    def get_user_profile(self) -> Dict[str, Any]:
+    def get_user_profile(self, owner_id: Optional[str] = None) -> Dict[str, Any]:
         """사용자 프로필 조회"""
-        return _get_user_profile_impl(self.memory)
+        return _get_user_profile_impl(self.memory, owner_id)
 
-    def update_user_profile(self, name: str, persona: str):
+    def update_user_profile(self, name: str, persona: str, owner_id: str):
         """사용자 프로필 업데이트"""
-        return _update_user_profile_impl(self.memory, name, persona)
+        return _update_user_profile_impl(self.memory, name, persona, owner_id)
 
     def _init_models(self):
         """Available models setup from env"""
