@@ -8,6 +8,7 @@ import PaperTradingModal from './PaperTradingModal';
 import { useSession, signOut } from 'next-auth/react';
 import { useAdmin } from '@/hooks/useAdmin';
 import { getBrowserSessionId } from '@/lib/session';
+import { saveUserProfile } from './chatHelpers';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -94,11 +95,8 @@ export default function Sidebar() {
   const isGroupActive = (prefix: string) => pathname.startsWith(prefix);
 
   const handleSaveSettings = async (name: string, email: string, persona: string) => {
-    const newProfile = { ...profile, name, email, persona };
-    setProfile(newProfile);
-    localStorage.setItem('user_profile', JSON.stringify(newProfile));
-    // Dispatch event for other components to update
-    window.dispatchEvent(new Event('user-profile-updated'));
+    await saveUserProfile(name, email, persona);
+    setProfile({ name, email, persona });
 
     // [Log] Update Profile Event
     try {

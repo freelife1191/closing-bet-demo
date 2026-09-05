@@ -144,10 +144,19 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
   const handleSave = async () => {
     setIsSaving(true);
+    // 저장 대상이 서로 다른 탭의 값이므로 하나가 실패해도 나머지는 진행한다. 한 줄로
+    // 이어 두면 프로필 저장이 400 을 받았을 때 API 키와 관심종목까지 저장되지 않는데,
+    // 화면에는 「설정 저장 중 오류」만 떠서 어느 탭이 원인인지 알 수 없다.
+    const failed: string[] = [];
     try {
       // 1. Save Profile
       await onSave(name, email, persona);
+    } catch (error) {
+      console.error("Profile save error:", error);
+      failed.push('프로필');
+    }
 
+    try {
       // 2. Save Env Vars
       const res = await fetch('/api/system/env', {
         method: 'POST',
@@ -156,16 +165,28 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
       });
 
       if (!res.ok) throw new Error("Failed to save env vars");
+    } catch (error) {
+      console.error("Env save error:", error);
+      failed.push('API 설정');
+    }
 
+    try {
       // 3. Save Watchlist to localStorage
       localStorage.setItem('watchlist', JSON.stringify(watchlist));
 
-      setTestModal({
-        isOpen: true,
-        type: 'success',
-        title: '저장 완료',
-        content: '설정이 성공적으로 저장되었습니다.'
-      });
+      setTestModal(failed.length === 0
+        ? {
+          isOpen: true,
+          type: 'success',
+          title: '저장 완료',
+          content: '설정이 성공적으로 저장되었습니다.'
+        }
+        : {
+          isOpen: true,
+          type: 'danger',
+          title: '일부 저장 실패',
+          content: `${failed.join(', ')} 저장에 실패했습니다. 나머지 설정은 저장되었습니다.`
+        });
     } catch (error) {
       console.error("Save error:", error);
       setTestModal({

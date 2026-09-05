@@ -9,7 +9,14 @@ import SettingsModal from '../components/SettingsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import Modal from '../components/Modal';
 import PaperTradingModal from '../components/PaperTradingModal';
-import { getAuthHeaders, getStoredModel, setStoredModel, shouldSendOnEnter } from '../components/chatHelpers';
+import {
+  DEFAULT_USER_PROFILE,
+  getAuthHeaders,
+  getStoredModel,
+  saveUserProfile,
+  setStoredModel,
+  shouldSendOnEnter,
+} from '../components/chatHelpers';
 import { useChatSessions } from './useChatSessions';
 import { useChatStream } from './useChatStream';
 import { useSpeechInput } from './useSpeechInput';
@@ -65,7 +72,7 @@ export default function ChatbotPage() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
   // User Profile State
-  const [userProfile, setUserProfile] = useState<{ name: string; email: string; persona: string } | null>(null);
+  const [userProfile, setUserProfile] = useState(DEFAULT_USER_PROFILE);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile Sidebar State
   const [isMenuExpanded, setIsMenuExpanded] = useState(true); // Menu Parsing State
@@ -135,7 +142,7 @@ export default function ChatbotPage() {
   const { isLoading, handleSend, handleStop } = useChatStream({
     currentSessionId,
     currentModel,
-    persona: userProfile?.persona,
+    persona: userProfile.persona,
     attachedFiles,
     isDisabled: isHistoryLoading,
     setMessages,
@@ -174,7 +181,7 @@ export default function ChatbotPage() {
       // ... (Removed auto-fetch logic) ...
     };
     // fetchSuggestions();
-  }, [userProfile?.persona]);
+  }, [userProfile.persona]);
   */
 
   useEffect(() => {
@@ -211,8 +218,7 @@ export default function ChatbotPage() {
           setUserProfile(JSON.parse(cachedProfile));
         } catch (e) { console.error("Cache clean needed"); }
       } else {
-        // Default fallback if no cache
-        setUserProfile({ name: '흑기사', email: 'user@example.com', persona: '' });
+        setUserProfile(DEFAULT_USER_PROFILE);
       }
     };
     loadProfile();
@@ -277,25 +283,6 @@ export default function ChatbotPage() {
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
-    }
-  };
-
-  const updateUserProfile = async (name: string, email: string, persona: string) => {
-    try {
-      // Optimistic UI
-      const newProfile = { name, email, persona };
-      setUserProfile(newProfile);
-      localStorage.setItem('user_profile', JSON.stringify(newProfile));
-      window.dispatchEvent(new Event('user-profile-updated'));
-
-      const res = await fetch('/api/kr/chatbot/profile', {
-        method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, persona })
-      });
-      const data = await res.json();
-    } catch (e) {
-      console.error("Failed to update profile", e);
     }
   };
 
@@ -499,14 +486,12 @@ export default function ChatbotPage() {
       {/* Global Sidebar (Fixed) */}
       <Sidebar />
 
-      {userProfile && (
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          profile={userProfile}
-          onSave={updateUserProfile}
-        />
-      )}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        profile={userProfile}
+        onSave={saveUserProfile}
+      />
 
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
@@ -610,11 +595,11 @@ export default function ChatbotPage() {
             <div className="p-4 border-t border-white/5 bg-[#131314]">
               <button onClick={() => { setIsSettingsOpen(true); setIsMobileSidebarOpen(false); }} className="flex items-center gap-3 w-full text-left">
                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg">
-                  {userProfile?.name.slice(0, 2).toUpperCase()}
+                  {userProfile.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-gray-200 truncate">{userProfile?.name}</div>
-                  <div className="text-xs text-gray-500 truncate">{userProfile?.email}</div>
+                  <div className="text-sm font-bold text-gray-200 truncate">{userProfile.name}</div>
+                  <div className="text-xs text-gray-500 truncate">{userProfile.email}</div>
                 </div>
                 <i className="fas fa-cog text-gray-500"></i>
               </button>
@@ -753,15 +738,13 @@ export default function ChatbotPage() {
             </div>
             <div className="flex items-center gap-3">
               {/* User Avatar - Initials */}
-              {userProfile && (
-                <div
-                  className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg cursor-pointer"
-                  title={userProfile.name}
-                  onClick={() => setIsSettingsOpen(true)}
-                >
-                  {userProfile.name.slice(0, 2).toUpperCase()}
-                </div>
-              )}
+              <div
+                className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg cursor-pointer"
+                title={userProfile.name}
+                onClick={() => setIsSettingsOpen(true)}
+              >
+                {userProfile.name.slice(0, 2).toUpperCase()}
+              </div>
             </div>
           </div>
 
@@ -774,7 +757,7 @@ export default function ChatbotPage() {
                 <div className="flex-1 flex flex-col justify-center items-center space-y-6 md:space-y-8 mt-4 md:mt-20 animate-fade-in">
                   <div className="space-y-2 text-center px-4">
                     <h1 className="text-2xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] animate-fade-in-up break-keep leading-tight">
-                      안녕하세요, {userProfile?.name}님
+                      안녕하세요, {userProfile.name}님
                     </h1>
                     <h2 className="text-lg md:text-4xl font-bold text-[#444746] opacity-50 animate-fade-in-up delay-100 break-keep leading-tight">
                       무엇을 도와드릴까요?

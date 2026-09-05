@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   STORED_MODEL_KEY,
   shouldSendOnEnter,
   getStoredModel,
   setStoredModel,
+  saveUserProfile,
 } from './chatHelpers';
 
 describe('shouldSendOnEnter', () => {
@@ -58,5 +59,62 @@ describe('getStoredModel / setStoredModel', () => {
   it('treats whitespace-only stored value as null', () => {
     window.localStorage.setItem(STORED_MODEL_KEY, '   ');
     expect(getStoredModel()).toBeNull();
+  });
+});
+
+describe('saveUserProfile', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  const okResponse = () => ({ ok: true, status: 200, json: async () => ({}) }) as Response;
+
+  it('서버가 받아들이면 로컬 캐시를 갱신하고 갱신 이벤트를 발행한다', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => okResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const listener = vi.fn();
+    window.addEventListener('user-profile-updated', listener);
+
+    await saveUserProfile('홍길동', 'hong@example.com', '가치투자자');
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/kr/chatbot/profile');
+    expect(init.method).toBe('POST');
+    // 소유자 헤더가 실려야 서버가 프로필을 누구 것으로 저장할지 판정할 수 있다.
+    expect((init.headers as Record<string, string>)['X-Session-Id']).toBeTruthy();
+    expect(JSON.parse(init.body as string)).toEqual({ name: '홍길동', persona: '가치투자자' });
+
+    expect(JSON.parse(window.localStorage.getItem('user_profile') as string)).toEqual({
+      name: '홍길동',
+      email: 'hong@example.com',
+      persona: '가치투자자',
+    });
+    expect(listener).toHaveBeenCalledOnce();
+    window.removeEventListener('user-profile-updated', listener);
+  });
+
+  it('서버가 거절하면 던지고 로컬 캐시를 건드리지 않는다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'Session is required' }),
+    }) as Response));
+
+    await expect(saveUserProfile('홍길동', 'hong@example.com', '')).rejects.toThrow(
+      'Session is required'
+    );
+    expect(window.localStorage.getItem('user_profile')).toBeNull();
+  });
+
+  it('오류 본문을 읽을 수 없어도 상태 코드를 담아 던진다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => { throw new Error('not json'); },
+    }) as unknown as Response));
+
+    await expect(saveUserProfile('홍길동', 'hong@example.com', '')).rejects.toThrow('HTTP 500');
   });
 });
