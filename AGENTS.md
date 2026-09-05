@@ -1,67 +1,105 @@
-# PROJECT KNOWLEDGE BASE
+# AGENTS.md
 
-**Generated:** 2026-02-09
-**Type:** Korean Stock Market Analysis System (Python Flask + Next.js)
+**Smart Money Bot: AI 기반 종가 베팅 & VCP 시그널 시스템**
 
-## OVERVIEW
-AI-powered Korean stock market analysis system combining institutional flow analysis with VCP technical analysis. Uses Gemini 3.7 Flash and GPT via Z.ai for AI reasoning, Flask for backend API, and Next.js for dashboard UI.
+기관 수급 분석과 VCP(변동성 수축 패턴) 기술적 분석을 결합한 한국 주식 시장 분석
+시스템이다. Flask 백엔드와 Next.js 대시보드로 이루어져 있고, 추론에는 Gemini 와
+Z.ai 계열 모델을 함께 쓴다.
 
-## BUILD / LINT / TEST COMMANDS
+**라이브**: https://close.highvalue.kr/dashboard/kr
 
-### Python Backend
+---
+
+## 이 파일의 자리
+
+`AGENTS.md` 를 자동으로 읽는 도구(codex 등)의 진입점이다. **이 저장소의 규범 자체는
+`CLAUDE.md` 에 있다.** 세션을 시작하면 `CLAUDE.md` 를 먼저 읽는다. codex 는 그 파일을
+자동으로 읽지 않으므로 읽지 않으면 규범을 통째로 놓친다.
+
+역할을 이렇게 나눈다. 규범과 아키텍처와 사이클 규정은 `CLAUDE.md` 한 곳에만 두고, 이
+파일에는 진입 방법과 코드 작성 규칙만 둔다. 같은 내용을 두 파일에 적으면 반드시 어긋나기
+때문이다.
+
+읽는 순서는 다음과 같다.
+
+1. `CLAUDE.md` — 규범, 아키텍처, ponytail 원칙, 환경 변수, 사이클 개요
+2. `.claude/skills/dev-cycle/SKILL.md` — 작업을 시작하기 전에. `## 실행 환경` 절이 지금
+   환경에서 부를 수 있는 도구의 이름을 정한다
+3. `docs/dev-cycle/TODO.md` — 무엇을 할지는 여기서만 고른다
+
+---
+
+## 개발 사이클
+
+작업은 `docs/dev-cycle/TODO.md` 의 항목 단위로 진행한다. **TODO 에 없는 작업을 즉흥으로
+시작하지 않는다.** 새로 발견한 개선점은 항목으로 추가한 뒤 순서에 따라 처리한다.
+
+| 문서 | 내용 |
+|---|---|
+| `.claude/skills/dev-cycle/SKILL.md` | 사이클 절차. `[0]` 준비부터 `[4]` 마감까지 |
+| `.claude/skills/dev-cycle/references/tier-rules.md` | 티어 판정, 위험 경로, QA 2단계 |
+| `.claude/skills/dev-cycle/references/archive-format.md` | TODO·아카이브·QA 문서 형식 |
+| `.claude/skills/dev-cycle/references/frontend-skills.md` | `frontend/` 를 건드릴 때만 |
+| `.claude/agents/dev-workflow.md` | 카테고리 감사 에이전트 정의 |
+
+**codex 에서는 `/dev-cycle` 슬래시 호출이 되지 않는다.** codex 는 스킬을 자기 홈의
+`skills/` 아래에서 찾으므로 이 저장소의 `.claude/skills/` 는 그 목록에 들어가지 않는다.
+그래서 위 표의 문서를 파일로 직접 읽고 절차를 따른다. 2026-09-06 에 codex 세션으로 확인한
+결과 이 파일에서 출발해 절차 문서와 도구 대응표까지 도달한다.
+
+사이클이 부르는 리뷰와 QA 도구는 환경에 따라 있기도 하고 없기도 하다. 대응표는 `SKILL.md`
+의 `## 실행 환경` 절에 있다. 없는 도구를 부르며 멈추지 말고 그 표가 정한 대체 수단으로
+같은 판정을 내린 뒤, 무엇으로 대신했는지 마감 보고에 적는다.
+
+승인 게이트를 두지 않는다. 계획과 결과는 알리되 승인을 기다리지 않고 끝까지 진행하며,
+커밋도 묻지 않고 만든 다음에 무엇을 어떻게 반영했는지 보고한다.
+
+---
+
+## 명령
+
 ```bash
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
-# Entry points
-python run.py                    # Interactive menu with 6 options
-python flask_app.py              # Flask server (port 5501)
-
-# Testing with pytest
-pytest                          # Run all tests
-pytest tests/test_vcp.py        # Specific test file
-pytest tests/test_vcp.py::test_function  # Specific function
-pytest -v                       # Verbose output
-pytest --cov=engine             # Coverage report (if pytest-cov installed)
-
-# Interactive scripts
-python scripts/init_data.py     # Initialize data
-python tests/test_vcp.py 2026-01-30  # Test with specific date
-python tests/test_vcp.py 2026-01-30 100  # Test with date + max stocks
+./restart_all.sh                 # venv·의존성·포트 정리까지 하고 두 서비스를 띄운다
+./stop_all.sh                    # 3500 과 5501 을 내린다
 ```
 
-### Next.js Frontend
+검증은 세 가지를 쓴다. 세 명령의 실행 위치가 서로 다르므로 그대로 옮겨 쓴다.
+
 ```bash
-cd frontend && npm install
-npm run dev                     # Dev server (port 3500)
-npm run build                   # Production build
-npm run start                   # Production server
-npm run lint                    # ESLint check
-
-# Testing with vitest
-npm run test                    # Run all tests
-npm run test:ui                 # Interactive test UI
-npm run test:coverage           # Run with coverage report
-npm run test:baseline           # Run specific baseline tests
-
-# Type checking
-npm run type-check              # TypeScript type check (tsc --noEmit)
-
-# Full upgrade check
-npm run upgrade:check           # Run baseline tests + type-check + lint
+source venv/bin/activate && pytest       # 저장소 루트에서 실행한다
+(cd frontend && npx vitest run)          # npm run test 는 watch 모드라 끝나지 않는다
+(cd frontend && npm run type-check)      # tsc --noEmit
 ```
 
-## CODE STYLE GUIDELINES
+`cd frontend` 를 서브셸로 감싸는 이유가 있다. 감싸지 않으면 셸의 작업 디렉터리가 바뀐 채
+남아 뒤따르는 명령이 엉뚱한 위치에서 돈다. `npx vitest --root frontend` 도 쓰지 않는다.
+설정 파일의 경로 해석이 어긋나 다수가 실패한다.
+
+```bash
+python run.py                    # 대화형 메뉴
+python flask_app.py              # Flask 개발 서버 (5501)
+cd frontend && npm run dev       # Next.js 개발 서버 (3500)
+
+gunicorn flask_app:app --bind 0.0.0.0:5501 --workers 2 --threads 8 --timeout 120
+```
+
+**gunicorn 은 `--reload` 없이 돈다.** 파이썬 파일을 고쳤으면 QA 전에
+`kill -HUP <마스터 PID>` 로 워커를 재기동해야 반영된다.
+
+생존 확인 경로는 `/api/kr/market-gate` 다. `/api/health` 는 존재하지 않는다.
+
+---
+
+## 코드 스타일
 
 ### Python
-**File Header:** `#!/usr/bin/env python3` + `# -*- coding: utf-8 -*-`
 
-**Imports:** stdlib → third-party → local (separated by blank lines)
+파일 머리에 `#!/usr/bin/env python3` 와 `# -*- coding: utf-8 -*-` 를 둔다.
+
+임포트는 표준 라이브러리 → 서드파티 → 로컬 순서로 쓰고 사이를 빈 줄로 나눈다.
+
 ```python
-import sys
-import os
 import logging
-
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
@@ -69,169 +107,104 @@ from engine.models import StockData
 from engine.config import config
 ```
 
-**Naming:** Classes `PascalCase`, functions/variables `snake_case`, constants `UPPER_SNAKE_CASE`
+- 이름: 클래스 `PascalCase`, 함수와 변수 `snake_case`, 상수 `UPPER_SNAKE_CASE`
+- 타입 힌트: 인자와 반환값에 모두 붙인다
+- 데이터클래스: 가변 기본값에 `field(default_factory=list)` 를 쓴다
+- Enum: 키는 영어, 값은 한국어를 섞어 쓴다. `class Grade(Enum): S = "S"  # 최고`
+- 로깅: 모듈 수준에 `logger = logging.getLogger(__name__)`
+- 예외: `continue` 나 `return` 이나 `raise` 앞에서 반드시 로그를 남긴다
+- 숫자: 자릿수를 밑줄로 끊는다. `1_000_000_000`
+- 비동기: LLM 호출과 I/O 에 `async`/`await` 를 쓰고 `asyncio.run()` 으로 실행한다
 
-**Type Hints:** Always include `List`, `Dict`, `Optional`, return types
+임계값과 상수는 `engine/constants.py` 에 모여 있다. 새 상수를 파일 안에 직접 쓰기 전에
+그곳을 먼저 본다.
+
 ```python
-def calculate(self, stock: StockData) -> tuple[ScoreDetail, ChecklistDetail, Dict]:
-    ...
-```
-
-**Dataclasses:** Use `@dataclass` with `field(default_factory=list)` for mutable defaults
-```python
-@dataclass
-class ChartData:
-    opens: List[float] = field(default_factory=list)
-    highs: List[float] = field(default_factory=list)
-```
-
-**Enums:** English key, Korean value: `class Grade(Enum): S = "S"  # 최고`
-
-**Logging:** `logger = logging.getLogger(__name__)` at module level
-
-**Error Handling:** Log exceptions before `continue`/`return`/`raise`
-```python
-try:
-    result = risky_operation()
-except Exception as e:
-    logger.error(f"Failed: {e}")
-    raise
-```
-
-**Numeric:** Use underscores: `1_000_000_000` (1조원), `50_000_000` (5천만원)
-
-**Async:** Use `async/await` for LLM calls and I/O, `asyncio.run()` to execute
-
-**Docstrings:** Triple quotes at module and class/function level
-```python
-"""
-Engine - Scorer (12점 점수 시스템)
-"""
-def main():
-    """메인 함수"""
+from engine.constants import TRADING_VALUES, VCP_THRESHOLDS, SCORING, VOLUME, PRICE_CHANGE
 ```
 
 ### TypeScript / React
-**Header:** `'use client';` at top for client components
 
-**Imports:** React/Next.js → external libraries → local components
-```typescript
-'use client';
+클라이언트 컴포넌트는 첫 줄에 `'use client';` 를 둔다. 임포트는 React·Next.js → 외부
+라이브러리 → 로컬 컴포넌트 순서로 쓴다.
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { createChart } from 'lightweight-charts';
+- 이름: 컴포넌트 `PascalCase`, 함수와 변수 `camelCase`, 상수 `UPPER_SNAKE_CASE`
+- 모든 데이터 구조에 인터페이스를 정의한다. props 와 state 를 모두 포함한다
+- 함수형 컴포넌트와 훅을 쓴다
+- 스타일은 Tailwind 유틸리티 클래스로 준다
 
-import Modal from './Modal';
-```
+`frontend/src/app` 아래를 하나라도 고치면
+`frontend/node_modules/next/dist/docs/01-app/` 에서 그 주제의 문서를 예외 없이 읽는다.
+어느 문서를 읽을지는 `frontend-skills.md` §2 의 표가 정한다.
 
-**Naming:** Components `PascalCase`, functions/variables `camelCase`, constants `UPPER_SNAKE_CASE`
+`frontend/AGENTS.md` 와 `frontend/CLAUDE.md` 는 `next dev` 가 실행될 때마다 자동으로
+만들고 되살리는 파일이다. 지우면 다음 실행에서 그대로 다시 생겨 작업 트리가 더러워지므로
+지우지 않는다. 그 지침은 이 파일을 대체하지 않고 `frontend/` 아래 작업에 덧붙는다.
 
-**Interfaces:** Define for all data structures (props, state, etc.)
-```typescript
-interface StockChartProps {
-  data: { date: string; open: number; high: number; low: number; close: number }[];
-  ticker: string;
-  vcpRange?: { enabled: boolean; firstHalf: number; secondHalf: number };
-}
-```
+---
 
-**Components:** Functional with hooks: `useState`, `useEffect`, `useRef`
-```typescript
-export default function StockChart({ data, ticker, vcpRange }: StockChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [isLoading, setIsLoading] = useState(false);
+## 하지 않을 것
 
-  useEffect(() => {
-    // effect logic
-    return () => {
-      // cleanup
-    };
-  }, [dependencies]);
-}
-```
+- **타입 억제**: `as any`, `@ts-ignore`, `@ts-expect-error` 를 쓰지 않는다
+- **빈 except**: 로그 없는 `except:` 를 쓰지 않는다
+- **테스트 손질**: 실패하는 테스트를 통과하도록 고쳐 넘기지 않는다. 지우는 기준은
+  `SKILL.md` 의 `## 테스트 정책` 에 있다
+- **경로 하드코딩**: `os.path` 와 `__file__` 을 쓴다
+- **패턴 혼용**: 주변 코드의 관례를 따른다
 
-**Client vs Server:** Mark client components with `'use client'` at top
+---
 
-**Styling:** Tailwind CSS utility classes
+## 되돌릴 수 없는 조작
 
-## WHERE TO LOOK
+검증이나 실측을 하다가 아래를 실행하면 실제 비용이 발생하거나 데이터가 사라진다. 사용자가
+그 자리에서 명시적으로 요청하지 않는 한 실행하지 않는다.
 
-| Task           | Location                                                |
-| -------------- | ------------------------------------------------------- |
-| Configuration  | `config.py`, `.env`                                    |
-| Entry Points   | `run.py`, `flask_app.py`                                |
-| Core Engine    | `engine/` (screener, models, llm_analyzer, market_gate) |
-| AI Integration | `engine/llm_analyzer.py`, `engine/kr_ai_analyzer.py`    |
-| Data Models    | `engine/models.py`                                      |
-| Flask Routes   | `app/` (Blueprint-based routing)                         |
-| Testing        | `tests/` (pytest), `frontend/src` (vitest)                |
-| Frontend       | `frontend/src/app/` (Next.js App Router)                  |
-| Data Storage   | `data/` (CSV/JSON), `paper_trading.db` (SQLite)         |
+- **`.env` 계열 파일**: `.env`, `.env.production`, `.env.vertex` 가 실제 시크릿을 담고
+  있다. `.gitignore` 가 `.env.*` 를 덮고 `.env.example` 만 예외다. 조사할 일이 생기면
+  변수 이름과 값의 유무만 확인하고 값 자체는 어디에도 옮겨 적지 않는다. 변수의 정본
+  목록은 `.env.example` 이며 변수를 추가하면 그 파일도 함께 갱신한다
+- **설정 모달의 「저장」**: 프로필과 환경 변수와 관심종목을 한꺼번에 저장하며, 환경 변수
+  저장은 `POST /api/system/env` 로 서버의 `.env` 를 덮어쓴다
+- **AI 재분석 버튼**: 종가베팅 화면의 「스크리너 전체 업데이트」와 「GEMINI AI 재분석」,
+  카드마다 있는 「이 종목만 재분석」, VCP 화면의 「실패 AI 재분석」과 「Refresh VCP」
+- **「Refresh Market Gate Only」**: 7일치 수급을 재수집해 3.7MB CSV 와 JSON 을 덮어쓴다
+- **챗봇 전송**: 「보내기」, 입력창의 Enter, 추천 질문 카드, 하단 빠른 조회 버튼, 슬래시
+  명령이 모두 실제 LLM 호출과 무료 사용량 차감을 일으킨다
+- **모의투자**: 「계정 초기화」, 「모의 매수」, 「전체 10주 매수」, 충전 팝오버의
+  「충전하기」가 잔고 상태를 바꾼다
+- **삭제 계열**: 대화 삭제, 메시지 삭제, 「새 대화 시작」, 챗봇의 `/clear all`. 확인
+  모달이 뜨면 「취소」만 누른다
+- **`data/` 아래 파일**: git 추적 대상이 아니다. 실측할 때는 읽기 전용으로만 연다
 
-## ANTI-PATTERNS
+---
 
-- **Type suppression:** Never `as any`, `@ts-ignore`, `@ts-expect-error`
-- **Empty catch:** Never bare `except:` without logging
-- **Deleting tests:** Never modify failing tests to pass
-- **Hardcoded paths:** Use `os.path` and `__file__`
-- **Mixed patterns:** Follow existing conventions
+## 어디를 볼 것인가
 
-## UNIQUE STYLES
+| 대상 | 위치 |
+|---|---|
+| 설정 | `config.py`, `engine/config.py`, `.env`(정본 목록은 `.env.example`) |
+| 진입점 | `run.py`, `flask_app.py` |
+| 엔진 | `engine/` (screener, models, phases, constants, market_gate) |
+| AI 통합 | `engine/llm_analyzer.py`, `engine/kr_ai_analyzer.py` |
+| 챗봇 | `chatbot/` (`chatbot/core.py` 가 오케스트레이터) |
+| 데이터 모델 | `engine/models.py` |
+| Flask 라우트 | `app/routes/` (Blueprint), 팩토리는 `app/__init__.py` |
+| 스케줄러 | `services/scheduler.py` 와 `scheduler_jobs.py`, `scheduler_loop.py` |
+| 테스트 | `tests/` (pytest), `frontend/src` (vitest) |
+| 프론트엔드 | `frontend/src/app/` (App Router) |
+| 데이터 저장 | `data/` (CSV·JSON), `data/paper_trading.db` (SQLite) |
+| 로그 | `logs/backend.log`, `logs/frontend.log` |
 
-- **Dual AI:** Gemini 3.7 Flash (deep reasoning) + Z.ai/GPT/Perplexity (fast batch)
-- **Market Gate:** Top-level market check before stock analysis
-- **Korean-English Mix:** `class Grade(Enum): S = "S"  # 최고`
-- **Dataclass config:** All config as typed dataclasses with defaults
-- **Async LLM:** Non-blocking AI calls with `async/await`
-- **Vectorized:** Pandas/numpy for performance
-- **Vitest for frontend:** Using vitest instead of Jest for Next.js testing
-- **Toss API priority:** Toss Securities API for real-time data, fallback to pykrx/yfinance
+---
 
-## ENVIRONMENT VARIABLES (.env)
+## 이 저장소의 특징
 
-```bash
-# Flask
-FLASK_DEBUG=false
-FLASK_PORT=5501
-FLASK_HOST=0.0.0.0
-
-# Frontend
-FRONTEND_PORT=3500
-
-# AI Keys
-GOOGLE_API_KEY=your_gemini_key
-OPENAI_API_KEY=your_openai_key
-PERPLEXITY_API_KEY=your_perplexity_key
-ZAI_API_KEY=your_zai_key
-
-# Models — see .env.example for the authoritative list
-GEMINI_MODEL=gemini-3.7-flash
-ANALYSIS_GEMINI_MODEL=gemini-3.7-flash
-OPENAI_MODEL=gpt-4o
-VCP_GEMINI_MODEL=gemini-3.7-flash
-VCP_GPT_MODEL=gpt-5.6-luna
-VCP_PERPLEXITY_MODEL=sonar
-
-# Concurrency
-LLM_CONCURRENCY=2
-ANALYSIS_LLM_CONCURRENCY=1
-
-# Data Source
-DATA_SOURCE=krx
-PRICE_CACHE_TTL=300
-MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
-
-# Scheduler
-SCHEDULER_ENABLED=true
-```
-
-## NOTES
-
-- Flask on 5501, Next.js dev on 3500
-- API keys required for AI functionality
-- Logs written to `logs/app.log`
-- Market data sources: pykrx, Toss Securities API (priority), yfinance
-- Scheduler in `app/services/scheduler.py`
-- Test framework: pytest (Python), vitest (TypeScript/React)
-- Use `sys.path.insert(0, os.path.dirname(__file__))` in test files to import project modules
+- **이중 AI**: Gemini 가 심층 추론을, Z.ai 와 Perplexity 가 빠른 배치를 맡는다
+- **Market Gate**: 종목 분석에 앞서 시장 전체를 먼저 판정한다
+- **데이터 소스 이중화**: 기간 데이터는 `DataSourceManager`(FDR → pykrx → yfinance),
+  단일 종목 실시간 시세는 `fetch_stock_price`(Toss → Naver → yfinance)로 서로 다른
+  폴백 사슬을 탄다
+- **한영 혼용**: Enum 의 키는 영어, 값은 한국어
+- **벡터 연산**: 집계와 지표 계산에 pandas 와 numpy 를 쓴다
+- **테스트**: 백엔드 pytest, 프론트엔드 vitest. 테스트 파일에서는
+  `sys.path.insert(0, os.path.dirname(__file__))` 로 프로젝트 모듈을 임포트한다

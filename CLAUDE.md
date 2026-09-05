@@ -214,7 +214,11 @@ SCHEDULER_ENABLED=true
 3. **Data sources**: two separate fallback chains. Period data goes through `DataSourceManager` (FDR → pykrx → yfinance); single-ticker realtime quotes go through `fetch_stock_price` (Toss → Naver → yfinance)
 4. **Scheduler**: `services/scheduler.py` 가 잡 두 개를 등록합니다. Market Gate 동기화는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES`(코드 기본값 30분) 간격으로 돌고, 장 마감 분석은 `CLOSING_SCHEDULE_TIME`(기본 17:00 KST) 에 하루 한 번 돌며 종가베팅은 그 체인 안에서 이어집니다. 관련 모듈: `scheduler_jobs.py`, `scheduler_loop.py`, `scheduler_runtime_status_service.py`
 5. **Tests**: pytest (Python), vitest (TypeScript)
-6. **`frontend/AGENTS.md` 와 `frontend/CLAUDE.md`**: `next dev` 가 실행될 때마다
+6. **루트 `AGENTS.md`**: codex 처럼 `AGENTS.md` 만 자동으로 읽는 도구의 진입점입니다.
+   그 도구들은 이 파일을 읽지 않으므로 `AGENTS.md` 가 첫 절에서 이 파일을 먼저 읽도록
+   지시합니다. 규범과 아키텍처는 이 파일에만 두고 `AGENTS.md` 에는 진입 방법과 코드
+   작성 규칙만 둡니다. 같은 내용을 양쪽에 적으면 반드시 어긋납니다.
+7. **`frontend/AGENTS.md` 와 `frontend/CLAUDE.md`**: `next dev` 가 실행될 때마다
    자동으로 만들고 되살리는 파일입니다. Next.js 16.2 부터 생긴 동작이며 공식 문서가
    커밋을 권합니다. 지우면 다음 실행에서 그대로 다시 생겨 작업 트리가 더러워지므로
    지우지 않습니다. `frontend/CLAUDE.md` 는 `@AGENTS.md` 한 줄이며, 그 지침은 이 파일을
@@ -248,6 +252,10 @@ Next.js 관련 스킬 네 개가 16.3 을 하한선으로 두고 있었으나 `[
 
 승인 게이트를 두지 않습니다. 계획과 결과는 알리되 승인을 기다리지 않고 사이클을 끝까지
 진행합니다. 커밋도 묻지 않고 진행하며, 무엇을 어떻게 반영했는지는 커밋한 뒤에 보고합니다.
+
+사이클은 Claude Code 와 codex 양쪽에서 돕니다. 절차와 판정 기준은 같고 부르는 리뷰·QA
+도구의 이름만 다릅니다. 대응표는 스킬 정의의 `## 실행 환경` 절에 있으며, 없는 도구를
+부르며 멈추지 않고 그 표가 정한 대체 수단으로 같은 판정을 내립니다.
 
 실행 코드를 한 줄이라도 바꾸는 항목은 티어와 무관하게 QA 를 두 단계로 거칩니다. 먼저
 `/qa-only` 로 무엇을 검사할지 확정해 `docs/dev-cycle/qa/<항목 ID>.md` 에 적고, 구현을

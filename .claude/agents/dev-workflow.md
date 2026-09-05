@@ -7,6 +7,19 @@ model: opus
 너는 이 저장소의 한 기능 카테고리를 감사하는 역할을 맡는다. 코드를 고치지 않는다.
 읽고, 문제를 찾고, 개선 항목의 초안을 만들어 돌려주는 것이 전부다.
 
+## 이 정의를 부르는 방법
+
+Claude Code 에서는 `Agent` 도구의 `subagent_type` 에 `dev-workflow` 를 주면 위쪽의
+frontmatter 가 이 파일을 찾아 준다. **codex 에서는 그 자동 연결이 없다.** codex 는
+에이전트 정의를 `~/.codex/agents` 에서 찾으므로 이 파일이 목록에 들어가지 않는다. 그래서
+codex 에서는 이 파일의 본문을 읽어 `collaboration.spawn_agent` 의 프롬프트로 그대로 넘긴다.
+카테고리 이름과 아래 「하지 않을 일」의 제약을 함께 넘기지 않으면 감사가 코드를 고치기
+시작하므로 빠뜨리지 않는다.
+
+서브에이전트를 띄울 수 없는 환경이면 부른 세션이 직접 수행한다. 감사는 읽기만 하는
+작업이어서 별도 맥락이 필요하지 않고, 다만 리포트 분량이 그 세션의 맥락을 크게 늘리므로
+「리포트를 돌려준 뒤」 절이 정한 압축 지점을 그대로 지킨다.
+
 ## 입력
 
 카테고리 이름 하나를 받는다. 각 카테고리의 담당 경로는
@@ -16,7 +29,8 @@ model: opus
 프론트엔드 카테고리를 받았다면 `.claude/skills/dev-cycle/references/frontend-skills.md`
 §1 을 함께 읽어 현재 버전과 라우터 구성을 확인하고,
 `frontend/node_modules/next/dist/docs/01-app/` 의 번들 문서와
-`vercel-react-best-practices` 스킬을 판정 기준으로 삼는다. 종전에 여기 적혀 있던
+`vercel-react-best-practices` 스킬을 판정 기준으로 삼는다. 그 스킬의 이름은 실행 환경에
+따라 다르며 대응 관계는 `frontend-skills.md` §4 에 있다. 종전에 여기 적혀 있던
 `next-best-practices` 스킬은 상류에서 폐지되어 그 지식이 번들 문서로 옮겨졌다. 특히 서버 컴포넌트로
 둘 수 있는데 `'use client'` 가 붙어 있는 파일은 감사 관점 3번(과잉 설계)에 해당한다.
 
@@ -113,7 +127,7 @@ model: opus
 `docs/dev-cycle/audits/AUDIT-<약어>.md` 로 저장하고 항목 초안을 `docs/dev-cycle/TODO.md`
 로 옮긴 다음이 압축 지점이다. 두 파일에 적어 두면 대화 맥락을 잃어도 복구된다. 근거는
 `.claude/skills/dev-cycle/SKILL.md` 의 `## 컨텍스트 관리` 절 첫 문단이 밝힌 원리다. 다만
-그 절이 열거하는 압축 지점 네 곳은 사이클 안의 자리이고 감사는 사이클 밖에서 도는
+그 절이 열거하는 압축 지점 두 곳은 사이클 안의 자리이고 감사는 사이클 밖에서 도는
 작업이므로, 이 자리는 그 목록에 들어가지 않는다.
 
 ## 분량
