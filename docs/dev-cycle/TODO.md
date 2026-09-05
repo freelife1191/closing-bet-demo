@@ -11,7 +11,39 @@
 
 ## P0 — 즉시
 
-(비어 있음)
+### [CHAT-016] 대화 조회와 삭제에 소유자 검사가 없다
+- 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-004]` 사이클의 `/qa` 가 시나리오 밖에서 발견
+- `/api/kr/chatbot/history` 는 세션 ID 만 받고 **누구의 대화인지 확인하지 않습니다**.
+  같은 라우트가 `GET` 과 `DELETE` 를 함께 받으므로 조회와 삭제가 모두 열려 있습니다.
+  - `app/routes/kr_market_chatbot_http_routes.py:280-285` 가
+    `handle_chatbot_history_request` 에 `session_id` 와 `index` 만 넘깁니다
+  - `services/kr_market_chatbot_request_helpers.py:39-43` 의 그 함수는 `owner_id` 를
+    **인자로 받지도 않습니다**
+  - `chatbot/storage.py` 의 `get_messages(:423)`, `delete_session(:309)`,
+    `delete_message(:320)`, `clear_all(:334)` 도 소유자 인자가 없습니다.
+    같은 파일의 `get_all_sessions(:349)` 만 `should_include_session_for_owner` 로 거릅니다
+- 바로 옆의 `/api/kr/chatbot/sessions` 는 `resolve_chatbot_owner_id` 로 소유자를 판정해
+  남의 세션을 목록에서 뺍니다(`:98-101`). 두 API 의 기준이 어긋나 있습니다.
+  `resolve_chatbot_owner_id` 는 저장소 전체에서 그 한 곳에서만 불립니다.
+- 실측으로 확인했습니다. 인증 헤더를 하나도 싣지 않은 요청과, 무관한
+  `X-Session-Id` 를 실은 요청 둘 다 남의 대화 전문 2건을 그대로 돌려주었습니다. 같은
+  헤더로 세션 목록을 물으면 0건이 옵니다.
+- **가장 위험한 것은 `session_id=all` 로 보내는 `DELETE` 입니다.**
+  `kr_market_chatbot_request_helpers.py:52-54` 가 `bot.history.clear_all()` 을 불러
+  **모든 사용자의 대화 기록을 통째로 지웁니다.** 인증이 필요 없습니다. 실행하면 되돌릴 수
+  없으므로 코드로만 확인했고 요청은 보내지 않았습니다.
+- 영향: 세션 ID 를 아는 사람은 남의 대화 전문을 읽고 지울 수 있습니다. 대화에는 사용자가
+  묻는 종목과 투자 판단이 담깁니다. `all` 삭제는 인증 없이 전체 데이터를 날립니다.
+- 티어 판정: 라우트 한 곳, 헬퍼 한 함수, 저장소 메서드 넷의 시그니처를 넓힙니다. 세 파일
+  300줄 아래로 봅니다. 저장소 메서드를 고치면 그 호출자를 전부 훑어야 하므로 범위가
+  넓어지면 T3 로 올립니다.
+- [ ] `handle_chatbot_history_request` 가 `owner_id` 를 받도록 넓히고 라우트에서
+      `resolve_chatbot_owner_id` 를 부름
+- [ ] 저장소의 조회·삭제 넷이 소유자를 검사하도록 고침. 남의 것이면 404 로 응답
+- [ ] `session_id=all` 삭제를 관리자만 쓰거나 아예 없앰. 지금 이 경로를 부르는 화면이
+      있는지 먼저 확인
+- [ ] 소유자가 다른 요청이 조회와 삭제 모두에서 막히는지 pytest 로 고정
+
 
 
 ## P1 — 이번 주기
