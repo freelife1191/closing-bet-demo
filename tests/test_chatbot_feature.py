@@ -3,10 +3,13 @@ from unittest.mock import patch, MagicMock
 import os
 import sys
 import json
+import tempfile
+from pathlib import Path
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import chatbot.core as chatbot_core
 from chatbot.core import KRStockChatbot
 from app import create_app
 
@@ -15,6 +18,15 @@ class TestChatbotFeature(unittest.TestCase):
         self.app = create_app()
         self.client = self.app.test_client()
         self.user_id = 'test_user'
+
+        # 실제 data/ 에 쓰지 않는다. KRStockChatbot 이 DATA_DIR 로 저장소 경로를
+        # 잡으므로 여기서 임시 디렉터리로 돌려놓는다. 그렇게 하지 않으면
+        # /memory 와 /clear 검사가 운영 중인 chatbot_storage.db 를 건드린다.
+        self._data_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._data_dir.cleanup)
+        data_patch = patch.object(chatbot_core, "DATA_DIR", Path(self._data_dir.name))
+        data_patch.start()
+        self.addCleanup(data_patch.stop)
 
     @patch('chatbot.core.genai.GenerativeModel')
     def test_chatbot_initialization_and_model_loading(self, mock_model_cls):
@@ -139,20 +151,24 @@ class TestChatbotFeature(unittest.TestCase):
         self.assertIn("/memory", help_msg)
         self.assertEqual(bot.history.count(), 0)
         
-        # 3. Memory
+        # 3. Memory — [CHAT-017] 이후 소유자를 밝히지 않은 요청은 거부된다.
+        owner_id = "owner-slash-commands"
+        refused = bot.chat("/memory add topic TestValue")
+        self.assertIn("사용자를 식별할 수 없어", refused)
+
         # Add
-        bot.chat("/memory add topic TestValue")
-        memories = bot.get_memory()
-        self.assertIn("topic", memories)
-        self.assertEqual(memories["topic"]["value"], "TestValue")
-        
-        # View
-        view_msg = bot.chat("/memory view")
+        bot.chat("/memory add topic TestValue", owner_id=owner_id)
+        self.assertEqual(bot.memory.view(owner_id)["topic"]["value"], "TestValue")
+
+        # View — 남의 메모리는 보이지 않는다.
+        view_msg = bot.chat("/memory view", owner_id=owner_id)
         self.assertIn("TestValue", view_msg)
-        
+        other_view_msg = bot.chat("/memory view", owner_id="owner-other")
+        self.assertNotIn("TestValue", other_view_msg)
+
         # Remove
-        bot.chat("/memory remove topic")
-        self.assertNotIn("topic", bot.get_memory())
+        bot.chat("/memory remove topic", owner_id=owner_id)
+        self.assertNotIn("topic", bot.memory.view(owner_id))
         
         # 4. Clear — /clear 는 세션을 비운 뒤 그 명령 자체를 기록으로 남긴다.
         before_add = bot.history.count()

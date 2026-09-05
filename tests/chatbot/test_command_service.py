@@ -55,24 +55,24 @@ class _FakeMemory:
         self.store = {}
         self.cleared = False
 
-    def clear(self):
+    def clear(self, owner_id=None):
         self.cleared = True
-        self.store = {}
+        self.store.pop(owner_id or "", None)
         return "OK_CLEAR"
 
-    def view(self):
-        return self.store
+    def view(self, owner_id=None):
+        return self.store.get(owner_id or "", {})
 
-    def add(self, key, value):
-        self.store[key] = {"value": value}
+    def add(self, key, value, owner_id=None):
+        self.store.setdefault(owner_id or "", {})[key] = {"value": value}
         return "OK_ADD"
 
-    def update(self, key, value):
-        self.store[key] = {"value": value}
+    def update(self, key, value, owner_id=None):
+        self.store.setdefault(owner_id or "", {})[key] = {"value": value}
         return "OK_UPDATE"
 
-    def remove(self, key):
-        self.store.pop(key, None)
+    def remove(self, key, owner_id=None):
+        self.store.get(owner_id or "", {}).pop(key, None)
         return "OK_REMOVE"
 
 
@@ -102,7 +102,7 @@ class _FakeBot:
         return {
             "user_id": "u1",
             "model": self.current_model_name,
-            "memory_count": len(self.memory.view()),
+            "memory_count": len(self.memory.view(owner_id)) if owner_id else 0,
             "history_count": len(owned),
         }
 
@@ -124,9 +124,9 @@ def test_handle_clear_command_all_and_current():
 
     result_all = handle_clear_command(bot, ["/clear", "all"], "s1", "owner-a")
     assert "내 대화 1건" in result_all
-    # 전역 삭제와 메모리 삭제는 더 이상 일어나지 않는다.
+    # 전역 삭제는 더 이상 일어나지 않는다. 메모리는 요청자의 것만 지운다.
     assert bot.history.cleared is False
-    assert bot.memory.cleared is False
+    assert bot.memory.cleared is True
 
 
 def test_handle_clear_all_leaves_other_owners_untouched():
@@ -166,11 +166,11 @@ def test_handle_model_command_updates_session_model():
 
 def test_handle_memory_command_view_and_add():
     bot = _FakeBot()
-    assert "없습니다" in handle_memory_command(bot, ["view"])
+    assert "없습니다" in handle_memory_command(bot, ["view"], "owner-a")
 
-    add_result = handle_memory_command(bot, ["add", "risk", "high"])
+    add_result = handle_memory_command(bot, ["add", "risk", "high"], "owner-a")
     assert add_result == "OK_ADD"
-    view_result = handle_memory_command(bot, ["view"])
+    view_result = handle_memory_command(bot, ["view"], "owner-a")
     assert "risk" in view_result
 
 

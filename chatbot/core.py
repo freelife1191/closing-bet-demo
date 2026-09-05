@@ -318,16 +318,6 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         vcp_data = data.get("vcp_stocks", [])
         return get_welcome_message(vcp_data)
 
-    def get_memory(self):
-        return self.memory.to_dict()
-        
-    def update_memory(self, data):
-        for k, v in data.items():
-            self.memory.add(k, v)
-            
-    def clear_memory(self):
-        self.memory.clear()
-        
     def get_history(self):
         return self.history.to_dict()
     
@@ -339,6 +329,6 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
             "user_id": self.user_id,
             "model": self.current_model_name,
             "available_models": self.get_available_models(),
-            "memory_count": len(self.memory.view()),
+            "memory_count": len(self.memory.view(owner_id)) if owner_id else 0,
             "history_count": len(self.history.get_all_sessions(owner_id=owner_id))
         }

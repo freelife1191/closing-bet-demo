@@ -92,6 +92,63 @@ def _drop_redundant_chatbot_messages_index(
         raise
 
 
+def _ensure_chatbot_memories_owner_column(
+    cursor: sqlite3.Cursor,
+    logger: logging.Logger,
+) -> None:
+    """chatbot_memories 의 기본 키를 (owner_id, memory_key) 로 옮긴다.
+
+    SQLite 는 기본 키를 ALTER TABLE 로 바꾸지 못하므로 테이블을 다시 만든다.
+    기존 행은 소유자를 알 수 없으므로 공용('')으로 옮긴다. 공용은 프롬프트에도
+    /memory view 에도 나타나지 않으므로, 옮기는 것만으로 격리된다.
+
+    문장을 하나씩 실행하고 BEGIN IMMEDIATE 로 감싼다. executescript 는 자기
+    문장들을 트랜잭션으로 묶지 않아, 중간에 실패하면 새 빈 테이블과 데이터가 든
+    legacy 테이블이 함께 남는다. 그러면 다음 실행에서는 owner_id 가 이미 있어
+    이 함수가 그냥 돌아 나오므로 갇힌 데이터를 영영 잃는다.
+
+    잠금을 잡은 뒤 컬럼을 한 번 더 본다. 위의 확인과 이 자리 사이에 다른 워커가
+    마이그레이션을 끝냈으면, 그대로 진행하는 것은 이미 옮겨 놓은 테이블을 다시
+    legacy 로 되돌리는 일이 된다. gunicorn 워커는 별개 프로세스라 이 모듈의
+    _SCHEMA_INIT_IN_PROGRESS 잠금이 걸치지 않는다.
+    """
+    columns = _load_table_columns(cursor, "chatbot_memories")
+    if not columns or "owner_id" in columns:
+        return
+
+    try:
+        cursor.execute("BEGIN IMMEDIATE")
+        if "owner_id" in _load_table_columns(cursor, "chatbot_memories"):
+            cursor.execute("ROLLBACK")
+            return
+        cursor.execute(
+            "ALTER TABLE chatbot_memories RENAME TO chatbot_memories_legacy"
+        )
+        cursor.execute(
+            """
+            CREATE TABLE chatbot_memories (
+                owner_id TEXT NOT NULL DEFAULT '',
+                memory_key TEXT NOT NULL,
+                value_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (owner_id, memory_key)
+            )
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO chatbot_memories (owner_id, memory_key, value_json, updated_at)
+            SELECT '', memory_key, value_json, updated_at FROM chatbot_memories_legacy
+            """
+        )
+        cursor.execute("DROP TABLE chatbot_memories_legacy")
+        cursor.execute("COMMIT")
+    except sqlite3.Error as error:
+        cursor.connection.rollback()
+        logger.error(f"Failed to migrate chatbot_memories.owner_id: {error}")
+        raise
+
+
 def ensure_chatbot_storage_schema(
     db_path: Path,
     logger: logging.Logger,
@@ -145,9 +202,11 @@ def ensure_chatbot_storage_schema(
                     FOREIGN KEY (session_id) REFERENCES chatbot_sessions(session_id) ON DELETE CASCADE
                 );
                 CREATE TABLE IF NOT EXISTS chatbot_memories (
-                    memory_key TEXT PRIMARY KEY,
+                    owner_id TEXT NOT NULL DEFAULT '',
+                    memory_key TEXT NOT NULL,
                     value_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (owner_id, memory_key)
                 );
                 CREATE INDEX IF NOT EXISTS idx_chatbot_sessions_owner_updated
                 ON chatbot_sessions(owner_id, updated_at DESC);
@@ -160,6 +219,10 @@ def ensure_chatbot_storage_schema(
                 logger=logger,
             )
             _drop_redundant_chatbot_messages_index(
+                cursor=cursor,
+                logger=logger,
+            )
+            _ensure_chatbot_memories_owner_column(
                 cursor=cursor,
                 logger=logger,
             )

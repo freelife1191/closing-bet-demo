@@ -15,12 +15,9 @@ from .command_service import (
     get_status_message as _get_status_message_impl,
     handle_clear_command as _handle_clear_command_impl,
     handle_command as _handle_command_impl,
-    handle_memory_command as _handle_memory_command_impl,
-    handle_memory_write_action as _handle_memory_write_action_impl,
     handle_model_command as _handle_model_command_impl,
     handle_refresh_command as _handle_refresh_command_impl,
     render_memory_help as _render_memory_help_impl,
-    render_memory_view as _render_memory_view_impl,
     render_model_command_help as _render_model_command_help_impl,
 )
 from .runtime_setup_service import resolve_active_client as _resolve_active_client_impl
@@ -154,17 +151,9 @@ class CoreCommandMixin:
         """`/model` 명령 처리."""
         return _handle_model_command_impl(self, parts, session_id)
 
-    def _render_memory_view(self) -> str:
-        """저장된 메모리 목록 문자열 생성."""
-        return _render_memory_view_impl(self)
-
     def _render_memory_help(self) -> str:
         """메모리 명령어 사용법 문자열."""
         return _render_memory_help_impl()
-
-    def _handle_memory_write_action(self, action: str, args: List[str]) -> Optional[str]:
-        """메모리 쓰기 액션(add/update/remove/clear)을 처리한다."""
-        return _handle_memory_write_action_impl(self, action, args)
 
     def _handle_command(
         self,
@@ -174,10 +163,6 @@ class CoreCommandMixin:
     ) -> str:
         """명령어 처리"""
         return _handle_command_impl(self, command, session_id, owner_id)
-
-    def _handle_memory_command(self, args: list) -> str:
-        """메모리 명령어 처리"""
-        return _handle_memory_command_impl(self, args)
 
     def _get_status_message(self) -> str:
         """현재 상태 확인 메시지"""

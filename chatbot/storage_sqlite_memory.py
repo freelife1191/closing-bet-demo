@@ -24,7 +24,6 @@ from .storage_sqlite_common import _SQLITE_SESSION_PRAGMAS, ensure_chatbot_stora
 _SQLITE_TIMEOUT_SECONDS = 30
 _SQLITE_RETRY_ATTEMPTS = 2
 _SQLITE_RETRY_DELAY_SECONDS = 0.03
-_SQLITE_INLINE_DELETE_MAX_VARIABLES = 900
 
 
 def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
@@ -34,15 +33,15 @@ def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
 def _upsert_memory_rows_cursor(
     *,
     cursor: sqlite3.Cursor,
-    rows: list[tuple[str, str, str]],
+    rows: list[tuple[str, str, str, str]],
 ) -> None:
     if not rows:
         return
     cursor.executemany(
         """
-        INSERT INTO chatbot_memories (memory_key, value_json, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(memory_key) DO UPDATE SET
+        INSERT INTO chatbot_memories (owner_id, memory_key, value_json, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(owner_id, memory_key) DO UPDATE SET
             value_json = excluded.value_json,
             updated_at = excluded.updated_at
         WHERE
@@ -56,48 +55,36 @@ def _upsert_memory_rows_cursor(
 def _delete_stale_memory_rows_cursor(
     *,
     cursor: sqlite3.Cursor,
-    active_keys: list[str],
+    active_pairs: list[tuple[str, str]],
 ) -> None:
-    normalized_active_keys = list(
-        dict.fromkeys(
-            str(key)
-            for key in active_keys
-            if str(key)
-        )
-    )
-    if not normalized_active_keys:
+    """저장 요청에 없는 행을 지운다. 소유자와 키의 쌍으로 판정한다."""
+    if not active_pairs:
         cursor.execute("DELETE FROM chatbot_memories")
-        return
-
-    if len(normalized_active_keys) <= _SQLITE_INLINE_DELETE_MAX_VARIABLES:
-        placeholders = ", ".join("?" for _ in normalized_active_keys)
-        cursor.execute(
-            f"""
-            DELETE FROM chatbot_memories
-            WHERE memory_key NOT IN ({placeholders})
-            """,
-            tuple(normalized_active_keys),
-        )
         return
 
     cursor.execute(
         """
-        CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_keys (
-            memory_key TEXT PRIMARY KEY
+        CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_owner_keys (
+            owner_id TEXT NOT NULL,
+            memory_key TEXT NOT NULL,
+            PRIMARY KEY (owner_id, memory_key)
         )
         """
     )
-    cursor.execute("DELETE FROM _tmp_chatbot_memory_keys")
+    cursor.execute("DELETE FROM _tmp_chatbot_memory_owner_keys")
     cursor.executemany(
-        "INSERT OR IGNORE INTO _tmp_chatbot_memory_keys(memory_key) VALUES (?)",
-        [(key,) for key in normalized_active_keys],
+        """
+        INSERT OR IGNORE INTO _tmp_chatbot_memory_owner_keys(owner_id, memory_key)
+        VALUES (?, ?)
+        """,
+        active_pairs,
     )
     cursor.execute(
         """
         DELETE FROM chatbot_memories
-        WHERE memory_key NOT IN (
-            SELECT memory_key
-            FROM _tmp_chatbot_memory_keys
+        WHERE (owner_id, memory_key) NOT IN (
+            SELECT owner_id, memory_key
+            FROM _tmp_chatbot_memory_owner_keys
         )
         """
     )
@@ -126,9 +113,9 @@ def load_memories_from_sqlite(
                 conn.row_factory = sqlite3.Row
                 return conn.execute(
                     """
-                    SELECT memory_key, value_json, updated_at
+                    SELECT owner_id, memory_key, value_json, updated_at
                     FROM chatbot_memories
-                    ORDER BY memory_key ASC
+                    ORDER BY owner_id ASC, memory_key ASC
                     """
                 ).fetchall()
 
@@ -137,13 +124,13 @@ def load_memories_from_sqlite(
             max_retries=_SQLITE_RETRY_ATTEMPTS,
             retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
         )
-        memories: dict[str, dict[str, Any]] = {}
+        memories: dict[str, dict[str, dict[str, Any]]] = {}
         for row in rows:
             try:
                 value = json.loads(row["value_json"])
             except Exception:
                 value = row["value_json"]
-            memories[row["memory_key"]] = {
+            memories.setdefault(str(row["owner_id"]), {})[row["memory_key"]] = {
                 "value": value,
                 "updated_at": row["updated_at"],
             }
@@ -166,7 +153,7 @@ def load_memories_from_sqlite(
 
 def save_memories_to_sqlite(
     db_path: Path,
-    memories: Dict[str, Any],
+    memories: Dict[str, Dict[str, Any]],
     logger: logging.Logger,
     *,
     _retried: bool = False,
@@ -176,21 +163,23 @@ def save_memories_to_sqlite(
     db_path_text = str(db_path)
 
     try:
-        rows: list[tuple[str, str, str]] = []
-        for key, raw_value in memories.items():
-            value = raw_value.get("value") if isinstance(raw_value, dict) else raw_value
-            updated_at = (
-                str(raw_value.get("updated_at"))
-                if isinstance(raw_value, dict) and raw_value.get("updated_at")
-                else datetime.now().isoformat()
-            )
-            rows.append(
-                (
-                    str(key),
-                    json.dumps(value, ensure_ascii=False, separators=(",", ":")),
-                    updated_at,
+        rows: list[tuple[str, str, str, str]] = []
+        for owner_id, owned in memories.items():
+            for key, raw_value in (owned or {}).items():
+                value = raw_value.get("value") if isinstance(raw_value, dict) else raw_value
+                updated_at = (
+                    str(raw_value.get("updated_at"))
+                    if isinstance(raw_value, dict) and raw_value.get("updated_at")
+                    else datetime.now().isoformat()
                 )
-            )
+                rows.append(
+                    (
+                        str(owner_id),
+                        str(key),
+                        json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                        updated_at,
+                    )
+                )
 
         def _save_rows() -> None:
             with connect_sqlite(
@@ -205,7 +194,7 @@ def save_memories_to_sqlite(
                 )
                 _delete_stale_memory_rows_cursor(
                     cursor=cursor,
-                    active_keys=[row[0] for row in rows],
+                    active_pairs=[(row[0], row[1]) for row in rows],
                 )
                 conn.commit()
 
@@ -234,6 +223,7 @@ def save_memories_to_sqlite(
 
 def upsert_memory_entry_in_sqlite(
     db_path: Path,
+    owner_id: str,
     key: str,
     record: Dict[str, Any],
     logger: logging.Logger,
@@ -255,16 +245,21 @@ def upsert_memory_entry_in_sqlite(
             ) as conn:
                 conn.execute(
                     """
-                    INSERT INTO chatbot_memories (memory_key, value_json, updated_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(memory_key) DO UPDATE SET
+                    INSERT INTO chatbot_memories (owner_id, memory_key, value_json, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(owner_id, memory_key) DO UPDATE SET
                         value_json=excluded.value_json,
                         updated_at=excluded.updated_at
                     WHERE
                         chatbot_memories.value_json IS NOT excluded.value_json
                         OR chatbot_memories.updated_at IS NOT excluded.updated_at
                     """,
-                    (str(key), json.dumps(value, ensure_ascii=False, separators=(",", ":")), updated_at),
+                    (
+                        str(owner_id),
+                        str(key),
+                        json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                        updated_at,
+                    ),
                 )
                 conn.commit()
 
@@ -283,6 +278,7 @@ def upsert_memory_entry_in_sqlite(
             ):
                 return upsert_memory_entry_in_sqlite(
                     db_path,
+                    owner_id,
                     key,
                     record,
                     logger,
@@ -294,6 +290,7 @@ def upsert_memory_entry_in_sqlite(
 
 def delete_memory_entry_in_sqlite(
     db_path: Path,
+    owner_id: str,
     key: str,
     logger: logging.Logger,
     *,
@@ -312,9 +309,9 @@ def delete_memory_entry_in_sqlite(
                 conn.execute(
                     """
                     DELETE FROM chatbot_memories
-                    WHERE memory_key = ?
+                    WHERE owner_id = ? AND memory_key = ?
                     """,
-                    (str(key),),
+                    (str(owner_id), str(key)),
                 )
                 conn.commit()
 
@@ -333,6 +330,7 @@ def delete_memory_entry_in_sqlite(
             ):
                 return delete_memory_entry_in_sqlite(
                     db_path,
+                    owner_id,
                     key,
                     logger,
                     _retried=True,
@@ -345,8 +343,10 @@ def clear_memories_in_sqlite(
     db_path: Path,
     logger: logging.Logger,
     *,
+    owner_id: str,
     _retried: bool = False,
 ) -> bool:
+    """한 소유자의 메모리 행을 지운다. 공용은 owner_id="" 다."""
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
     db_path_text = str(db_path)
@@ -357,7 +357,10 @@ def clear_memories_in_sqlite(
                 timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
                 pragmas=_SQLITE_SESSION_PRAGMAS,
             ) as conn:
-                conn.execute("DELETE FROM chatbot_memories")
+                conn.execute(
+                    "DELETE FROM chatbot_memories WHERE owner_id = ?",
+                    (str(owner_id),),
+                )
                 conn.commit()
 
         run_sqlite_with_retry(
@@ -376,6 +379,7 @@ def clear_memories_in_sqlite(
                 return clear_memories_in_sqlite(
                     db_path,
                     logger,
+                    owner_id=owner_id,
                     _retried=True,
                 )
         logger.error(f"Failed to clear chatbot memories in SQLite: {error}")

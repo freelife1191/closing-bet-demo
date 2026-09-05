@@ -115,7 +115,7 @@ def test_memory_manager_persists_and_restores_from_sqlite(monkeypatch, tmp_path:
     monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
 
     memory = chatbot_core.MemoryManager(user_id="u1")
-    memory.add("risk", "aggressive")
+    memory.add("risk", "aggressive", owner_id="owner-a")
 
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     assert db_path.exists()
@@ -126,7 +126,8 @@ def test_memory_manager_persists_and_restores_from_sqlite(monkeypatch, tmp_path:
         memory_file.unlink()
 
     restored = chatbot_core.MemoryManager(user_id="u2")
-    assert restored.get("risk")["value"] == "aggressive"
+    assert restored.get("risk", owner_id="owner-a")["value"] == "aggressive"
+    assert restored.get("risk") is None
 
 
 def test_apply_history_session_deltas_updates_and_deletes(tmp_path: Path):
@@ -948,9 +949,11 @@ def test_load_history_sessions_retries_on_transient_sqlite_lock(monkeypatch, tmp
 def test_load_memories_retries_on_transient_sqlite_lock(monkeypatch, tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     memories = {
-        "risk": {
-            "value": "aggressive",
-            "updated_at": "2026-02-22T00:00:00",
+        "owner-a": {
+            "risk": {
+                "value": "aggressive",
+                "updated_at": "2026-02-22T00:00:00",
+            }
         }
     }
     assert save_memories_to_sqlite(db_path, memories, chatbot_core.logger) is True
@@ -969,7 +972,7 @@ def test_load_memories_retries_on_transient_sqlite_lock(monkeypatch, tmp_path: P
 
     assert failure_state["failed"] is True
     assert loaded is not None
-    assert loaded["risk"]["value"] == "aggressive"
+    assert loaded["owner-a"]["risk"]["value"] == "aggressive"
 
 
 def test_load_history_sessions_uses_read_only_connection(monkeypatch, tmp_path: Path):
@@ -1006,9 +1009,11 @@ def test_load_history_sessions_uses_read_only_connection(monkeypatch, tmp_path: 
 def test_load_memories_uses_read_only_connection(monkeypatch, tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     memories = {
-        "risk": {
-            "value": "aggressive",
-            "updated_at": "2026-02-22T00:00:00",
+        "owner-a": {
+            "risk": {
+                "value": "aggressive",
+                "updated_at": "2026-02-22T00:00:00",
+            }
         }
     }
     assert save_memories_to_sqlite(db_path, memories, chatbot_core.logger) is True
@@ -1025,15 +1030,17 @@ def test_load_memories_uses_read_only_connection(monkeypatch, tmp_path: Path):
 
     loaded = load_memories_from_sqlite(db_path, chatbot_core.logger)
     assert loaded is not None
-    assert loaded["risk"]["value"] == "aggressive"
+    assert loaded["owner-a"]["risk"]["value"] == "aggressive"
     assert True in read_only_flags
 
 
 def test_save_memories_uses_upsert_and_stale_cleanup_without_full_clear(monkeypatch, tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     baseline_memories = {
-        "risk": {"value": "aggressive", "updated_at": "2026-02-22T00:00:00"},
-        "style": {"value": "momentum", "updated_at": "2026-02-22T00:00:00"},
+        "owner-a": {
+            "risk": {"value": "aggressive", "updated_at": "2026-02-22T00:00:00"},
+            "style": {"value": "momentum", "updated_at": "2026-02-22T00:00:00"},
+        }
     }
     assert save_memories_to_sqlite(db_path, baseline_memories, chatbot_core.logger) is True
 
@@ -1048,49 +1055,20 @@ def test_save_memories_uses_upsert_and_stale_cleanup_without_full_clear(monkeypa
     monkeypatch.setattr(storage_sqlite_memory, "connect_sqlite", _traced_connect)
 
     next_snapshot = {
-        "risk": {"value": "conservative", "updated_at": "2026-02-23T00:00:00"},
+        "owner-a": {
+            "risk": {"value": "conservative", "updated_at": "2026-02-23T00:00:00"},
+        }
     }
     assert save_memories_to_sqlite(db_path, next_snapshot, chatbot_core.logger) is True
 
     loaded = load_memories_from_sqlite(db_path, chatbot_core.logger)
     assert loaded is not None
-    assert set(loaded.keys()) == {"risk"}
-    assert loaded["risk"]["value"] == "conservative"
+    assert set(loaded["owner-a"].keys()) == {"risk"}
+    assert loaded["owner-a"]["risk"]["value"] == "conservative"
     assert not any(_is_full_table_delete(sql, table="chatbot_memories") for sql in traced_sql)
-    assert not any(
-        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_keys" in sql
-        for sql in traced_sql
-    )
-
-
-def test_save_memories_uses_temp_table_fallback_for_large_snapshot(monkeypatch, tmp_path: Path):
-    db_path = resolve_chatbot_storage_db_path(tmp_path)
-    baseline_memories = {
-        "risk": {"value": "aggressive", "updated_at": "2026-02-22T00:00:00"},
-        "style": {"value": "momentum", "updated_at": "2026-02-22T00:00:00"},
-        "horizon": {"value": "swing", "updated_at": "2026-02-22T00:00:00"},
-    }
-    assert save_memories_to_sqlite(db_path, baseline_memories, chatbot_core.logger) is True
-
-    traced_sql: list[str] = []
-    original_connect = storage_sqlite_memory.connect_sqlite
-
-    def _traced_connect(*args, **kwargs):
-        conn = original_connect(*args, **kwargs)
-        conn.set_trace_callback(traced_sql.append)
-        return conn
-
-    monkeypatch.setattr(storage_sqlite_memory, "connect_sqlite", _traced_connect)
-    monkeypatch.setattr(storage_sqlite_memory, "_SQLITE_INLINE_DELETE_MAX_VARIABLES", 1)
-
-    next_snapshot = {
-        "risk": {"value": "aggressive", "updated_at": "2026-02-23T00:00:00"},
-        "style": {"value": "momentum", "updated_at": "2026-02-23T00:00:00"},
-    }
-    assert save_memories_to_sqlite(db_path, next_snapshot, chatbot_core.logger) is True
-
+    # 소유자와 키의 쌍으로 판정해야 하므로 stale 정리는 임시 테이블을 거친다.
     assert any(
-        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_keys" in sql
+        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_owner_keys" in sql
         for sql in traced_sql
     )
 
@@ -1134,7 +1112,9 @@ def test_save_history_sessions_skips_redundant_session_updates(tmp_path: Path):
 def test_save_memories_skips_redundant_memory_updates(tmp_path: Path):
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     memories = {
-        "risk": {"value": "aggressive", "updated_at": "2026-02-22T00:00:00"},
+        "owner-a": {
+            "risk": {"value": "aggressive", "updated_at": "2026-02-22T00:00:00"},
+        }
     }
     assert save_memories_to_sqlite(db_path, memories, chatbot_core.logger) is True
     _install_memory_update_audit_trigger(db_path)

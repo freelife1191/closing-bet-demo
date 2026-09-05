@@ -27,6 +27,28 @@ from .storage_sqlite_helpers import (
 
 logger = logging.getLogger(__name__)
 
+PUBLIC_OWNER_ID = ""
+
+
+def _normalize_memory_owner_id(owner_id: Optional[str]) -> str:
+    """소유자를 모르면 공용으로 본다. 캐시와 user_profile 이 그 자리에 남는다."""
+    return owner_id or PUBLIC_OWNER_ID
+
+
+def _promote_legacy_flat_memories(loaded: Dict[str, Any]) -> Dict[str, Any]:
+    """1단으로 저장된 레거시 스냅샷을 공용 영역으로 옮긴다.
+
+    1단은 값이 전부 {"value": ..., "updated_at": ...} 레코드다. 두 키를 함께
+    보아야 한다. "value" 만 보면 사용자가 `/memory add value 삼성전자` 로 넣은
+    2단 스냅샷을 1단으로 오판해 모든 소유자를 공용 아래로 밀어 넣는다.
+    """
+    if loaded and all(
+        isinstance(value, dict) and "value" in value and "updated_at" in value
+        for value in loaded.values()
+    ):
+        return {PUBLIC_OWNER_ID: loaded}
+    return loaded
+
 
 class MemoryManager:
     """간단한 인메모리 메모리 매니저 (SQLite + JSON 스냅샷)"""
@@ -68,7 +90,7 @@ class MemoryManager:
             return {}
 
         if isinstance(loaded, dict):
-            return loaded
+            return _promote_legacy_flat_memories(loaded)
         logger.warning(f"Unexpected memory format type: {type(loaded).__name__}")
         return {}
 
@@ -107,14 +129,15 @@ class MemoryManager:
             return
         self._save_legacy_memory_snapshot(self.memories)
 
-    def _save_single_entry(self, key: str) -> None:
-        record = self.memories.get(key)
+    def _save_single_entry(self, owner_id: str, key: str) -> None:
+        record = self.memories.get(owner_id, {}).get(key)
         if not isinstance(record, dict):
             self._save()
             return
 
         sqlite_saved = upsert_memory_entry_in_sqlite(
             self.db_path,
+            owner_id=owner_id,
             key=key,
             record=record,
             logger=logger,
@@ -125,58 +148,83 @@ class MemoryManager:
             return
         self._save_legacy_memory_snapshot(self.memories)
 
-    def _delete_single_entry(self, key: str) -> None:
-        sqlite_saved = delete_memory_entry_in_sqlite(self.db_path, key=key, logger=logger)
+    def _delete_single_entry(self, owner_id: str, key: str) -> None:
+        sqlite_saved = delete_memory_entry_in_sqlite(
+            self.db_path,
+            owner_id=owner_id,
+            key=key,
+            logger=logger,
+        )
         if not sqlite_saved:
             logger.warning("SQLite memory delete failed; full sync fallback")
             self._save()
             return
         self._write_legacy_memory_snapshot(self.memories)
 
-    def _clear_storage(self) -> None:
-        sqlite_saved = clear_memories_in_sqlite(self.db_path, logger=logger)
+    def _clear_storage(self, owner_id: str) -> None:
+        sqlite_saved = clear_memories_in_sqlite(
+            self.db_path,
+            logger=logger,
+            owner_id=owner_id,
+        )
         if not sqlite_saved:
             logger.warning("SQLite memory clear failed; full sync fallback")
             self._save()
             return
         self._write_legacy_memory_snapshot(self.memories)
 
-    def view(self) -> Dict[str, Any]:
-        return self.memories
+    def view(self, owner_id: Optional[str] = None) -> Dict[str, Any]:
+        return self.memories.get(_normalize_memory_owner_id(owner_id), {})
 
-    def get(self, key: str) -> Any:
-        return self.memories.get(key)
+    def get(self, key: str, owner_id: Optional[str] = None) -> Any:
+        return self.view(owner_id).get(key)
 
-    def add(self, key: str, value: Any) -> str:
-        self.memories[key] = {"value": value, "updated_at": datetime.now().isoformat()}
-        self._save_single_entry(key)
+    def add(self, key: str, value: Any, owner_id: Optional[str] = None) -> str:
+        owner = _normalize_memory_owner_id(owner_id)
+        self.memories.setdefault(owner, {})[key] = {
+            "value": value,
+            "updated_at": datetime.now().isoformat(),
+        }
+        self._save_single_entry(owner, key)
         return f"✅ 메모리 저장: {key} = {value}"
 
-    def remove(self, key: str) -> str:
-        if key in self.memories:
-            del self.memories[key]
-            self._delete_single_entry(key)
+    def remove(self, key: str, owner_id: Optional[str] = None) -> str:
+        owner = _normalize_memory_owner_id(owner_id)
+        owned = self.memories.get(owner, {})
+        if key in owned:
+            del owned[key]
+            self._delete_single_entry(owner, key)
             return f"🗑️ 메모리 삭제: {key}"
         return "⚠️ 해당 키를 찾을 수 없습니다."
 
-    def update(self, key: str, value: Any) -> str:
-        if key in self.memories:
-            self.memories[key]["value"] = value
-            self.memories[key]["updated_at"] = datetime.now().isoformat()
-            self._save_single_entry(key)
+    def update(self, key: str, value: Any, owner_id: Optional[str] = None) -> str:
+        owner = _normalize_memory_owner_id(owner_id)
+        owned = self.memories.get(owner, {})
+        if key in owned:
+            owned[key]["value"] = value
+            owned[key]["updated_at"] = datetime.now().isoformat()
+            self._save_single_entry(owner, key)
             return f"✅ 메모리 수정: {key} = {value}"
-        return self.add(key, value)
+        return self.add(key, value, owner_id=owner_id)
 
-    def clear(self) -> str:
-        self.memories = {}
-        self._clear_storage()
+    def clear(self, owner_id: Optional[str] = None) -> str:
+        owner = _normalize_memory_owner_id(owner_id)
+        self.memories.pop(owner, None)
+        self._clear_storage(owner)
         return "🧹 메모리가 초기화되었습니다."
 
-    def format_for_prompt(self) -> str:
-        if not self.memories:
+    def format_for_prompt(self, owner_id: Optional[str] = None) -> str:
+        """요청자의 메모리만 프롬프트에 싣는다.
+
+        소유자를 모르면 아무것도 싣지 않는다. 공용도 싣지 않는다. 거기에는
+        추천 질문 캐시처럼 사용자 정보가 아닌 것과 소유자를 알 수 없는 레거시
+        행이 들어 있기 때문이다.
+        """
+        owned = self.memories.get(owner_id) if owner_id else None
+        if not owned:
             return ""
         text = "## 사용자 정보 (Long-term Memory)\n"
-        for k, v in self.memories.items():
+        for k, v in owned.items():
             text += f"- **{k}**: {v['value']}\n"
         return text
 

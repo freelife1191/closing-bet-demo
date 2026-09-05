@@ -46,11 +46,12 @@ def compose_system_prompt(
     watchlist: Optional[list],
     persona: Optional[str],
     additional_context: str,
+    owner_id: Optional[str] = None,
 ) -> str:
     """기본 프롬프트와 추가 컨텍스트를 합성한다."""
     memory_text = ""
     if hasattr(bot.memory, "format_for_prompt"):
-        memory_text = bot.memory.format_for_prompt()
+        memory_text = bot.memory.format_for_prompt(owner_id)
 
     system_prompt = build_system_prompt(
         memory_text=memory_text,
@@ -114,6 +115,7 @@ def build_chat_payload(
     files: Optional[list],
     watchlist: Optional[list],
     persona: Optional[str],
+    owner_id: Optional[str] = None,
 ) -> Tuple[List[dict], List[Any]]:
     """단일/스트림 공통 요청 payload(history + parts)를 빌드한다."""
     market_gate_data, vcp_data, sector_scores, market_data = bot._collect_market_context()
@@ -133,6 +135,7 @@ def build_chat_payload(
         watchlist=watchlist,
         persona=persona,
         additional_context=additional_context,
+        owner_id=owner_id,
     )
     api_history = bot._build_api_history(session_id)
     content_parts = bot._build_content_parts(

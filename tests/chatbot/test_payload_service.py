@@ -30,7 +30,8 @@ class _FakeHistory:
 
 
 class _FakeMemory:
-    def format_for_prompt(self):
+    def format_for_prompt(self, owner_id=None):
+        _ = owner_id
         return "MEM"
 
 

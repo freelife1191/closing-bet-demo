@@ -38,6 +38,7 @@ class CorePayloadMixin:
         watchlist: Optional[list],
         persona: Optional[str],
         additional_context: str,
+        owner_id: Optional[str] = None,
     ) -> str:
         """기본 시스템 프롬프트 + 질의별 컨텍스트 병합."""
         return _compose_system_prompt_impl(
@@ -50,6 +51,7 @@ class CorePayloadMixin:
             watchlist=watchlist,
             persona=persona,
             additional_context=additional_context,
+            owner_id=owner_id,
         )
 
     def _build_api_history(self, session_id: str) -> List[dict]:
@@ -79,6 +81,7 @@ class CorePayloadMixin:
         files: Optional[list],
         watchlist: Optional[list],
         persona: Optional[str],
+        owner_id: Optional[str] = None,
     ) -> Tuple[List[dict], List[Any]]:
         """챗/스트림 공통 요청 payload(history + parts)를 구성한다."""
         return _build_chat_payload_impl(
@@ -89,6 +92,7 @@ class CorePayloadMixin:
             files=files,
             watchlist=watchlist,
             persona=persona,
+            owner_id=owner_id,
         )
 
     def _fetch_jongga_data(self) -> str:

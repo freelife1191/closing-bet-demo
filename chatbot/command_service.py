@@ -43,21 +43,18 @@ def handle_clear_command(
 
     `/clear all` 은 종전에 history.clear_all() 과 memory.clear() 를 불러 **모든
     사용자의** 대화와 메모리를 지웠다. 이 명령은 화면의 명령어 목록에 노출되어
-    있어 누구든 고를 수 있었다. 이제는 요청자 자신의 대화만 지운다.
-
-    메모리는 지우지 않는다. MemoryManager 가 소유자 구분 없이 키-값 하나를
-    공유하고 있어 「내 메모리만」 지울 방법이 없기 때문이다. 그 구조는 별도
-    항목에서 다룬다.
+    있어 누구든 고를 수 있었다. 이제는 요청자 자신의 대화와 메모리만 지운다.
     """
     subcommand = parts[1].lower() if len(parts) > 1 else ""
     if subcommand == "all":
         if not owner_id:
             return "⚠️ 대화를 식별할 수 없어 초기화하지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
         removed = bot.history.clear_for_owner(owner_id)
+        bot.memory.clear(owner_id)
         bot._data_cache = None
         if hasattr(bot, "_cache_timestamp"):
             bot._cache_timestamp = None
-        return f"🧹 내 대화 {removed}건과 데이터 캐시를 초기화했습니다. (메모리는 유지됩니다)"
+        return f"🧹 내 대화 {removed}건과 메모리, 데이터 캐시를 초기화했습니다."
 
     if clear_current_session_messages(bot, session_id):
         return "🧹 현재 대화 세션이 초기화되었습니다."
@@ -119,8 +116,8 @@ def _normalize_memory_value(memory_entry: Any) -> Any:
     return memory_entry
 
 
-def render_memory_view(bot: Any) -> str:
-    memories = bot.memory.view()
+def render_memory_view(bot: Any, owner_id: Optional[str]) -> str:
+    memories = bot.memory.view(owner_id)
     if not memories:
         return "📭 저장된 메모리가 없습니다."
 
@@ -144,12 +141,17 @@ def render_memory_help() -> str:
     )
 
 
-def handle_memory_write_action(bot: Any, action: str, args: list[str]) -> Optional[str]:
+def handle_memory_write_action(
+    bot: Any,
+    action: str,
+    args: list[str],
+    owner_id: Optional[str],
+) -> Optional[str]:
     """메모리 쓰기 액션(add/update/remove/clear)을 처리한다."""
     action = action.lower()
 
     if action == "clear":
-        return bot.memory.clear()
+        return bot.memory.clear(owner_id)
 
     if action in {"add", "update"}:
         if len(args) < 2:
@@ -157,29 +159,37 @@ def handle_memory_write_action(bot: Any, action: str, args: list[str]) -> Option
         key = args[0]
         value = " ".join(args[1:])
         if action == "add":
-            return bot.memory.add(key, value)
-        return bot.memory.update(key, value)
+            return bot.memory.add(key, value, owner_id=owner_id)
+        return bot.memory.update(key, value, owner_id=owner_id)
 
     if action == "remove":
         if not args:
             return "⚠️ 삭제할 key를 입력해주세요."
-        return bot.memory.remove(args[0])
+        return bot.memory.remove(args[0], owner_id=owner_id)
 
     return None
 
 
-def handle_memory_command(bot: Any, args: list[str]) -> str:
-    """`/memory` 명령 처리."""
+def handle_memory_command(bot: Any, args: list[str], owner_id: Optional[str] = None) -> str:
+    """`/memory` 명령 처리. 요청자의 메모리만 다룬다.
+
+    소유자를 모르면 거부한다. 그대로 진행하면 공용 영역에 닿는데, 거기에는
+    추천 질문 캐시와 소유자를 알 수 없는 레거시 행이 들어 있다.
+    """
     if not args:
         return render_memory_help()
 
     action = args[0].lower()
     if action in {"help", "?", "h"}:
         return render_memory_help()
-    if action == "view":
-        return render_memory_view(bot)
 
-    result = handle_memory_write_action(bot, action, args[1:])
+    if not owner_id:
+        return "⚠️ 사용자를 식별할 수 없어 메모리를 다루지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+
+    if action == "view":
+        return render_memory_view(bot, owner_id)
+
+    result = handle_memory_write_action(bot, action, args[1:], owner_id)
     if result is not None:
         return result
     return f"⚠️ 알 수 없는 memory 명령입니다: `{action}`\n{render_memory_help()}"
@@ -243,7 +253,7 @@ def handle_command(
     if root == "/model":
         return handle_model_command(bot, parts, session_id)
     if root == "/memory":
-        return handle_memory_command(bot, parts[1:])
+        return handle_memory_command(bot, parts[1:], owner_id)
 
     return f"⚠️ 알 수 없는 명령어입니다: `{root}`\n`/help`로 사용법을 확인하세요."
 

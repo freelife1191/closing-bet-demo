@@ -77,6 +77,7 @@ def handle_chat(
             files=files,
             watchlist=watchlist,
             persona=persona,
+            owner_id=owner_id,
         )
         bot_response, usage_metadata = run_non_stream_response(
             active_client=active_client,
@@ -164,6 +165,7 @@ def handle_chat_stream(
             files=files,
             watchlist=watchlist,
             persona=persona,
+            owner_id=owner_id,
         )
 
         bot_response, usage_metadata, stream_error = yield from run_stream_response(
