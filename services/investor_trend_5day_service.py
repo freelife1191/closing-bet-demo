@@ -257,6 +257,24 @@ def _serialize_trend_map(trend_map: dict[str, dict[str, Any]]) -> dict[str, obje
 
 
 def _deserialize_trend_map(payload: dict[str, object]) -> dict[str, dict[str, Any]] | None:
+    """SQLite 스냅숏을 되살린다. 5거래일치 불변식을 지키지 못하면 ``None`` 을 돌려준다.
+
+    ``_build_trend_map`` 은 ``details`` 가 다섯 건인 항목만 만드므로 되살린 쪽도 같은
+    불변식을 지킨다. 네 건짜리 항목이 ``days: 5`` 를 달고 나가면 불필요한 참조 조회를
+    부르고 연속 부호 스트릭이 하루를 잃는다.
+
+    ``OverflowError`` 를 함께 잡는 이유는 이 페이로드가 ``json.loads`` 를 거쳐 오기
+    때문이다. 저장소는 프로세스 밖에 있고 JSON 은 ``Infinity`` 를 표현하므로,
+    ``int(float("inf"))`` 가 던지는 ``OverflowError`` 를 놓치면 손상을 버리려던 함수가
+    스스로 터져 종목 상세 요청 하나가 통째로 실패한다.
+
+    행 하나라도 되살릴 수 없으면 남은 행까지 버린다. 그 행만 건너뛰면 해당 종목은
+    호출자에게 「CSV 에 종목이 없다」와 구분되지 않는데, 남은 캐시는 계속 채택되므로
+    재빌드가 영영 일어나지 않는다. 그러면 그 종목만 CSV 경로를 잃고 요청마다 pykrx 나
+    Toss 참조 조회를 타며, 그 참조까지 ``_reference_reject_reason`` 에 걸리면 수급이
+    아예 없는 것으로 나간다. ``None`` 은 호출자 ``_get_or_build_trend_map`` 에게 캐시
+    미스이므로 CSV 에서 다시 만들어진다.
+    """
     rows_payload = payload.get("rows")
     if not isinstance(rows_payload, dict):
         return None
@@ -264,31 +282,45 @@ def _deserialize_trend_map(payload: dict[str, object]) -> dict[str, dict[str, An
     trend_map: dict[str, dict[str, Any]] = {}
     for ticker, row_payload in rows_payload.items():
         if not isinstance(row_payload, (list, tuple)) or len(row_payload) < 2:
-            continue
+            logger.warning("Discarding trend snapshot: malformed row for %s", ticker)
+            return None
 
         try:
             foreign_5d = int(float(row_payload[0]))
             inst_5d = int(float(row_payload[1]))
-        except (TypeError, ValueError):
-            continue
+        except (TypeError, ValueError, OverflowError):
+            logger.warning("Discarding trend snapshot: non-numeric total for %s", ticker)
+            return None
 
         details_payload = row_payload[2] if len(row_payload) >= 3 else []
+        if not isinstance(details_payload, list):
+            logger.warning("Discarding trend snapshot: malformed details for %s", ticker)
+            return None
+
         details: list[dict[str, int]] = []
-        if isinstance(details_payload, list):
-            for item in details_payload:
-                if not isinstance(item, (list, tuple)) or len(item) != 2:
-                    continue
-                try:
-                    foreign_value = int(float(item[0]))
-                    inst_value = int(float(item[1]))
-                except (TypeError, ValueError):
-                    continue
-                details.append(
-                    {
-                        "netForeignerBuyVolume": foreign_value,
-                        "netInstitutionBuyVolume": inst_value,
-                    }
-                )
+        for item in details_payload:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                logger.warning("Discarding trend snapshot: malformed detail for %s", ticker)
+                return None
+            try:
+                foreign_value = int(float(item[0]))
+                inst_value = int(float(item[1]))
+            except (TypeError, ValueError, OverflowError):
+                logger.warning("Discarding trend snapshot: non-numeric detail for %s", ticker)
+                return None
+            details.append(
+                {
+                    "netForeignerBuyVolume": foreign_value,
+                    "netInstitutionBuyVolume": inst_value,
+                }
+            )
+
+        if len(details) != 5:
+            logger.warning(
+                "Discarding trend snapshot: %s has %d days, expected 5", ticker, len(details)
+            )
+            return None
+
         latest_date_value = ""
         if len(row_payload) >= 4 and isinstance(row_payload[3], str):
             latest_date_value = row_payload[3]

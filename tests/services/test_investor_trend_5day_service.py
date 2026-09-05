@@ -1091,3 +1091,45 @@ def test_historical_target_keeps_the_csv_when_the_pykrx_reference_is_discarded(m
     assert "single_day_spike" in result["quality"]["csv_anomaly_flags"]
     assert result["quality"]["discarded_references"] == ["pykrx:zero_total"]
     assert toss_calls == []
+
+
+def _snapshot_payload(details_rows):
+    return {"rows": {"005930": [15, 150, details_rows, "2026-02-24"]}}
+
+
+def test_deserialize_rejects_a_row_whose_details_are_short():
+    four_days = [[5, 50], [4, 40], [3, 30], [2, 20]]
+
+    assert trend_service._deserialize_trend_map(_snapshot_payload(four_days)) is None
+
+
+def test_deserialize_keeps_a_row_with_five_days():
+    five_days = [[5, 50], [4, 40], [3, 30], [2, 20], [1, 10]]
+
+    restored = trend_service._deserialize_trend_map(_snapshot_payload(five_days))
+
+    assert restored is not None
+    assert restored["005930"]["days"] == 5
+    assert len(restored["005930"]["details"]) == 5
+
+
+def test_deserialize_rejects_a_malformed_row_instead_of_dropping_it():
+    payload = {
+        "rows": {
+            "005930": [15, 150, [[5, 50], [4, 40], [3, 30], [2, 20], [1, 10]], "2026-02-24"],
+            "000660": ["not-a-number", 150, [], ""],
+        }
+    }
+
+    assert trend_service._deserialize_trend_map(payload) is None
+
+
+def test_deserialize_rejects_infinity_from_a_corrupted_snapshot():
+    # json.loads 는 Infinity 를 float("inf") 로 파싱하고 int(float("inf")) 는
+    # ValueError 가 아니라 OverflowError 를 던진다.
+    payload = json.loads(
+        '{"rows": {"005930": [15, 150, '
+        '[[Infinity, 50], [4, 40], [3, 30], [2, 20], [1, 10]], "2026-02-24"]}}'
+    )
+
+    assert trend_service._deserialize_trend_map(payload) is None
