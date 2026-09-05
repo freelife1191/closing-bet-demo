@@ -102,7 +102,7 @@ grep -rhoE 'CHAT-[0-9]{3}' docs/dev-cycle/ | sort -u | tail -1
 ## [INFRA-001] 파이썬 의존성 버전 고정
 - 완료 2026-09-01 14:32 | 티어 T3 | 커밋 abc1234, def5678
 - 변경: requirements.txt, engine/genai_client.py (+42 -18)
-- 리뷰: next-best-practices(RSC 경계 확인) · ponytail-review(net -12) · code-review(3건 적용)
+- 리뷰: next 번들 문서 05-server-and-client-components(RSC 경계 확인) · ponytail-review(net -12) · code-review(3건 적용)
 - 검증: pytest 1515 통과 · vitest 160 통과 · QA 시나리오 7/7 통과 (헬스 99)
 - 메모: google-genai 2.x 에서 GenerateContentConfig 시그니처가 바뀌어 대응했다
 ```

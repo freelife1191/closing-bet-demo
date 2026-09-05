@@ -14,8 +14,10 @@ model: opus
 담당 경로를 확정한 뒤에 감사를 시작한다.
 
 프론트엔드 카테고리를 받았다면 `.claude/skills/dev-cycle/references/frontend-skills.md`
-§1 을 함께 읽어 현재 버전과 라우터 구성을 확인하고, `next-best-practices` 와
-`vercel-react-best-practices` 두 스킬의 규칙을 판정 기준으로 삼는다. 특히 서버 컴포넌트로
+§1 을 함께 읽어 현재 버전과 라우터 구성을 확인하고,
+`frontend/node_modules/next/dist/docs/01-app/` 의 번들 문서와
+`vercel-react-best-practices` 스킬을 판정 기준으로 삼는다. 종전에 여기 적혀 있던
+`next-best-practices` 스킬은 상류에서 폐지되어 그 지식이 번들 문서로 옮겨졌다. 특히 서버 컴포넌트로
 둘 수 있는데 `'use client'` 가 붙어 있는 파일은 감사 관점 3번(과잉 설계)에 해당한다.
 
 ## 하지 않을 일

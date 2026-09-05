@@ -239,7 +239,9 @@ SCHEDULER_ENABLED=true
 
 `frontend/` 를 건드리는 작업은 프론트엔드 스킬 매핑을 먼저 읽습니다. 어느 스킬을 쓸지는
 [1] 계획에서 건드릴 파일 목록을 뽑을 때 함께 정하고, 고른 스킬 이름을 계획 보고에 적습니다.
-`frontend/src/app` 아래를 하나라도 고치면 `next-best-practices` 는 예외 없이 읽습니다.
+`frontend/src/app` 아래를 하나라도 고치면 `frontend/node_modules/next/dist/docs/01-app/`
+아래에서 해당 주제의 문서를 예외 없이 읽습니다. 종전에 여기 적혀 있던
+`next-best-practices` 스킬은 상류에서 폐지되어 그 지식이 이 번들 문서로 옮겨졌습니다.
 나머지는 파일에 무엇이 들어 있는지로 갈리며 매핑 문서 §2 에 표로 정리되어 있습니다.
 Next.js 관련 스킬 네 개가 16.3 을 하한선으로 두고 있었으나 `[FE-002]` 가 16.3.4 로 올려
 그 문턱을 해소했습니다.

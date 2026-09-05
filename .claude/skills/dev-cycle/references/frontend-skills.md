@@ -27,13 +27,36 @@
 
 ### 기본으로 읽는 것
 
-`frontend/src/app` 아래 파일을 하나라도 고치면 예외 없이 `next-best-practices` 를 읽는다.
-조건을 따로 판정하지 않는다. 이 스킬은 App Router 의 파일 규약과 서버·클라이언트 경계,
-비동기 API, 데이터 페칭 패턴을 다루는데 이 저장소의 화면 코드는 전부 그 규약 위에 있다.
+`frontend/src/app` 아래 파일을 하나라도 고치면 예외 없이
+`frontend/node_modules/next/dist/docs/01-app/` 아래에서 이번에 건드리는 주제의 문서를
+읽는다. 조건을 따로 판정하지 않는다. App Router 의 파일 규약과 서버·클라이언트 경계,
+비동기 API, 데이터 페칭 패턴이 여기에 있고 이 저장소의 화면 코드는 전부 그 규약 위에
+있기 때문이다.
+
+**이 자리에 종전에는 `next-best-practices` 스킬을 적어 두었으나 그 스킬은 폐지되었다.**
+Vercel 이 2026 년에 `vercel-labs/next-skills` 를 접으면서 참고 지식에 해당하는 세 스킬을
+없앴고, 그 내용을 Next.js 패키지에 번들되는 문서로 옮겼다. 그쪽 README 의 문구는
+「`next-best-practices` is no longer a skill … No separate install」이다. 설치할 대상이
+없으므로 대체 경로를 규정에 직접 적는다. 판정 근거는 §4 에 있다.
+
+번들 문서는 설치된 Next.js 와 버전이 함께 움직인다는 점에서 스킬보다 낫다. 별도 저장소에
+있던 시절에는 프레임워크가 올라가도 스킬이 그대로 남아 어긋났다. `next dev` 가 만들어 두는
+`frontend/AGENTS.md` 도 같은 경로를 가리킨다.
+
+어느 파일을 열지는 이번에 건드리는 것으로 고른다. 전부 읽지 않는다.
+
+| 이번 사이클에서 건드리는 것 | 읽을 문서 (`01-app/01-getting-started/` 기준) |
+|---|---|
+| `'use client'` 경계, 서버 컴포넌트를 프롭으로 넘기는 구조 | `05-server-and-client-components.md` |
+| 데이터 조회와 `fetch`, 서버 액션 | `06-fetching-data.md`, `07-mutating-data.md` |
+| 캐시와 재검증 | `08-caching.md`, `09-revalidating.md` |
+| 라우트 파일 배치, `layout` 과 `page` | `02-project-structure.md`, `03-layouts-and-pages.md` |
+| 오류 경계와 `error.tsx` | `10-error-handling.md` |
+| 라우트 핸들러 (`app/api/`) | `15-route-handlers.md` |
 
 「항상 해당한다」는 사실이 오히려 이 줄을 건너뛰게 만든다. 판정할 것이 없으면 자문할
-계기도 없기 때문이다. 그래서 `SKILL.md` [1] 계획의 4번이 고른 스킬 이름을 사용자에게
-보고하도록 정해 두었다. 프론트엔드를 건드리는 사이클의 보고에 이 이름이 없으면 건너뛴
+계기도 없기 때문이다. 그래서 `SKILL.md` [1] 계획의 4번이 이번에 읽은 것을 사용자에게
+보고하도록 정해 두었다. 프론트엔드를 건드리는 사이클의 보고에 문서 이름이 없으면 건너뛴
 것이고, 보고가 곧 점검이 된다.
 
 ### 건드리는 파일의 내용으로 고르는 것
@@ -42,7 +65,12 @@
 |---|---|
 | 프롭이 여덟 개를 넘거나 불리언 프롭이 셋을 넘는 컴포넌트. 또는 같은 UI 를 두 곳 이상에서 쓰려고 경계를 다시 그을 때 | `vercel-composition-patterns` |
 | `useEffect` 나 `useMemo` 로 렌더링을 제어하는 코드, 폴링·구독·타이머, `dynamic()` 이나 번들 분할 | `vercel-react-best-practices` |
-| `frontend/package.json` 의 `next` 또는 `react` 버전 | `next-upgrade` |
+| `frontend/package.json` 의 `next` 또는 `react` 버전 | `next-upgrade` (아래 각주) |
+
+`next-upgrade` 도 상류에서는 폐지되었다. 다만 2026-09-01 에 받아 둔 사본이
+`~/.claude/skills/next-upgrade/` 에 남아 있어 지금도 동작하므로 그대로 쓴다. 갱신되지
+않는다는 것만 알아 둔다. 상류가 대신 권하는 것은 `npx @next/codemod@latest upgrade` 이고,
+마이그레이션 안내는 번들 문서의 `01-app/01-getting-started/18-upgrading.md` 에 있다.
 
 앞의 두 줄을 「구조를 손볼 때」나 「성능을 손볼 때」처럼 의도로 적지 않은 이유가 있다.
 의도는 사이클 도중에 판정할 계기가 없어서 매번 지나친다. 반면 파일에 무엇이 들어 있는지는
@@ -59,8 +87,9 @@
 2. `TODO.md` 에 항목을 먼저 만들었다. 다른 항목을 진행하다 곁다리로 도입하지 않는다
 3. 그 항목의 티어를 `T3` 으로 판정했다. 셋 모두 여러 PR 에 걸치는 분량이다
 
-`next-cache-components` 는 절차 스킬이 아니라 문법 참고 문서다. `use cache`, `cacheLife`,
-`cacheTag` 의 표기가 필요할 때만 연다.
+`use cache` 와 `cacheLife` 와 `cacheTag` 의 표기가 필요하면 번들 문서의
+`01-app/01-getting-started/08-caching.md` 와 `09-revalidating.md` 를 연다. 종전에 이 자리에
+적혀 있던 `next-cache-components` 스킬은 위 세 스킬로 쪼개지면서 없어졌다.
 
 ## 3. 검증 단계에서의 자리
 
@@ -97,10 +126,29 @@
 ## 4. 설치 상태
 
 전역 스킬 디렉터리 `~/.claude/skills/` 에 설치되어 있다. 이 저장소에는 스킬 본문을 두지
-않는다. 출처는 다음과 같다.
+않는다. 2026-09-05 에 상류 저장소를 직접 조회해 다음을 확인했다.
 
-| 스킬 | 출처 |
-|---|---|
-| `next-best-practices`, `next-cache-components`, `next-upgrade` | `vercel-labs/next-skills` |
-| `next-dev-loop`, `next-cache-components-adoption`, `next-cache-components-optimizer`, `next-partial-prefetching-adoption` | `vercel/next.js` canary 브랜치의 `skills/` |
-| `vercel-composition-patterns`, `vercel-react-best-practices`, `vercel-optimize` 등 | `vercel-labs/skills` |
+| 스킬 | 상태 | 출처 |
+|---|---|---|
+| `next-dev-loop`, `next-cache-components-adoption`, `next-cache-components-optimizer`, `next-partial-prefetching-adoption` | 설치됨 | `vercel/next.js` canary 의 `skills/` |
+| `vercel-composition-patterns`, `vercel-react-best-practices`, `vercel-optimize` 등 | 설치됨 | `vercel-labs/skills` |
+| `next-upgrade` | 사본만 남음 | 상류 폐지. 2026-09-01 사본이 동작한다 |
+| `next-best-practices`, `next-cache-components` | 폐지 | 설치 대상이 존재하지 않는다 |
+
+**폐지된 셋은 설치할 수 없다.** `vercel-labs/next-skills` 는 스킬 본문 없이 안내문만 남은
+저장소가 되었고, 그 README 가 세 스킬을 각각 어디로 보냈는지 적어 두었다.
+`next-best-practices` 의 지식은 번들 문서와 `next dev` 가 만드는 `AGENTS.md` 로,
+`next-cache-components` 는 `-adoption` 과 `-optimizer` 두 절차 스킬로,
+`next-upgrade` 는 번들 문서와 `@next/codemod` 로 갔다. 새 거처인 `vercel/next.js` canary 의
+`skills/` 에 있는 것은 위 표 첫 줄의 넷뿐이며 그 넷은 모두 설치되어 있다. 빠진 것이 없다.
+
+이 판정을 다시 확인하려면 다음 두 가지를 본다. 앞의 것은 상류 목록이고 뒤의 것은 여기의
+설치 상태다.
+
+    curl -s "https://api.github.com/repos/vercel/next.js/contents/skills?ref=canary" \
+      | python3 -c "import json,sys; [print(x['name']) for x in json.load(sys.stdin)]"
+    ls ~/.claude/skills/ | grep -E '^(next|vercel)-'
+
+`next-best-practices` 가 되살아나기를 기다릴 필요는 없다. 번들 문서는 설치된 Next.js 와
+버전이 함께 움직이므로 별도 저장소에 있던 스킬보다 오히려 어긋나지 않는다. §2 의
+「기본으로 읽는 것」이 어느 문서를 열지까지 정해 두었다.
