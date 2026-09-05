@@ -12,6 +12,15 @@ import remarkGfm from 'remark-gfm';
 import { useAdmin } from '@/hooks/useAdmin';
 import ThinkingProcess from '@/app/components/ThinkingProcess';
 import { decideSecondaryAI, isValidAIRecommendation } from './aiHelpers';
+import { getAuthHeaders } from '@/app/components/chatHelpers';
+
+// VCP 채팅은 종목별 대화 세션 ID 를 그대로 X-Session-Id 로 실어 보낸다. 서버의
+// resolve_chatbot_owner_id 는 이메일이 있으면 이메일을, 없으면 이 헤더를 세션 소유자로
+// 삼으므로, 전송과 조회와 삭제가 모두 같은 헤더를 실어야 소유자가 일치한다. 이메일은
+// getAuthHeaders 가 프로필 항목에서 읽어 준다.
+function getVcpChatHeaders(sessionId: string): Record<string, string> {
+  return { ...getAuthHeaders(), 'X-Session-Id': sessionId };
+}
 
 // Simple Tooltip Component
 const SimpleTooltip = ({
@@ -286,7 +295,10 @@ export default function VCPSignalsPage() {
         const sessionId = localStorage.getItem(sessionKey);
 
         if (sessionId) {
-          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, { method: 'DELETE' });
+          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, {
+            method: 'DELETE',
+            headers: getVcpChatHeaders(sessionId),
+          });
         }
 
         setChatHistory([{
@@ -309,7 +321,10 @@ export default function VCPSignalsPage() {
           const sessionKey = `vcp_chat_session_id_${stockTicker}`;
           const sessionId = localStorage.getItem(sessionKey);
           if (sessionId) {
-            await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&index=${msgIndex}`, { method: 'DELETE' });
+            await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&index=${msgIndex}`, {
+              method: 'DELETE',
+              headers: getVcpChatHeaders(sessionId),
+            });
           }
         } catch (e) {
           console.error("Failed to sync partial deletion with DB", e);
@@ -351,10 +366,9 @@ export default function VCPSignalsPage() {
 
         // Fetch from backend
         const headers: Record<string, string> = {
-          'Cache-Control': 'no-cache'
+          ...getVcpChatHeaders(sessionId),
+          'Cache-Control': 'no-cache',
         };
-        const email = localStorage.getItem('user_email');
-        if (email) headers['X-User-Email'] = email;
 
         const res = await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&_t=${Date.now()}`, {
           headers,
@@ -988,7 +1002,10 @@ export default function VCPSignalsPage() {
       let sessionId = localStorage.getItem(sessionKey);
       if (sessionId) {
         try {
-          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, { method: 'DELETE' });
+          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, {
+            method: 'DELETE',
+            headers: getVcpChatHeaders(sessionId),
+          });
         } catch (e) {
           console.error("Failed to clear VCP chat history on server", e);
         }
@@ -1009,8 +1026,6 @@ export default function VCPSignalsPage() {
     setChatLoading(true);
 
     try {
-      // Get auth
-      const userEmail = localStorage.getItem('user_email') || '';
       const stockTicker = selectedStock?.ticker || 'default';
       const sessionKey = `vcp_chat_session_id_${stockTicker}`;
       let sessionId = localStorage.getItem(sessionKey);
@@ -1023,8 +1038,7 @@ export default function VCPSignalsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Email': userEmail || '',
-          'X-Session-Id': sessionId
+          ...getVcpChatHeaders(sessionId),
         },
         body: JSON.stringify({
           message: fullMessage,

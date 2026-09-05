@@ -126,15 +126,31 @@ def has_meaningful_user_message(messages: list[dict[str, Any]]) -> bool:
 
 
 def should_include_session_for_owner(session: dict[str, Any], owner_id: str | None) -> bool:
-    """기존 owner 필터 계약을 유지한다."""
-    if owner_id and session.get("owner_id") != owner_id:
-        if session.get("owner_id"):
-            return False
+    """세션 목록에 포함할지 판정한다. 소유자가 정확히 일치할 때만 포함한다.
 
-    sess_owner = session.get("owner_id")
-    if sess_owner != owner_id:
+    요청자의 소유자를 알 수 없으면 빈 목록을 돌려준다. 그렇게 하지 않으면
+    owner_id 가 None 인 요청과 소유자가 비어 있는 레거시 세션이 서로 같다고
+    판정되어, 인증 헤더를 싣지 않은 요청이 레거시 세션 전부를 목록으로 받는다.
+    목록 응답은 메시지까지 함께 실으므로 그것만으로 대화 전문이 새어 나간다.
+    접근 허용 여부는 기준이 달라서 is_session_accessible_by_owner 가 판정한다.
+    """
+    if not owner_id:
         return False
-    return True
+    return session.get("owner_id") == owner_id
+
+
+def is_session_accessible_by_owner(session: dict[str, Any], owner_id: str | None) -> bool:
+    """세션을 조회하거나 삭제할 수 있는지 판정한다.
+
+    접근은 「확실히 남의 것인가」를 묻는다. 소유자가 기록된 세션은 그 소유자만
+    건드릴 수 있고, 소유자가 비어 있는 레거시 세션은 세션 ID 를 아는 요청에만
+    열어 둔다. 세션 ID 는 uuid4 라 추측할 수 없고, 그 세션으로 대화를 이어 가면
+    session_access._assign_owner_if_empty 가 소유자를 채워 준다.
+    """
+    session_owner = session.get("owner_id")
+    if not session_owner:
+        return True
+    return session_owner == owner_id
 
 
 def sanitize_session_messages(session: dict[str, Any]) -> list[dict[str, Any]]:
@@ -180,6 +196,7 @@ __all__ = [
     "atomic_write_json",
     "backup_corrupt_history",
     "has_meaningful_user_message",
+    "is_session_accessible_by_owner",
     "load_history_sessions",
     "sanitize_session_messages",
     "should_include_session_for_owner",

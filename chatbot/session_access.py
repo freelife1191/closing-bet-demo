@@ -108,7 +108,10 @@ def ensure_session_access(
 def prepare_chat_request(
     resolve_active_client: Callable[[Optional[str]], Tuple[Optional[Any], Optional[str]]],
     ensure_session_access_fn: Callable[[Optional[str], str, bool, Optional[str], bool], str],
-    execute_command: Callable[[str, str, Optional[list], bool], Tuple[bool, Optional[str], Optional[str]]],
+    execute_command: Callable[
+        [str, str, Optional[list], bool, Optional[str]],
+        Tuple[bool, Optional[str], Optional[str]],
+    ],
     user_message: str,
     session_id: Optional[str],
     target_model_name: str,
@@ -136,11 +139,14 @@ def prepare_chat_request(
         reuse_session_id_on_owner_mismatch,
     )
 
+    # 명령 실행에도 소유자를 넘긴다. `/clear all` 이 요청자 자신의 대화만 지우려면
+    # 여기가 유일한 전달 경로다.
     handled, command_response, command_error = execute_command(
         user_message,
         resolved_session_id,
         files,
         ephemeral,
+        owner_id,
     )
     if handled:
         return active_client, resolved_session_id, None, command_response, command_error

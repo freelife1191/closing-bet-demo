@@ -29,8 +29,8 @@ class _CommandBot(CoreCommandMixin):
     def __init__(self):
         self.history = _RecordingHistory()
 
-    def _handle_command(self, command, session_id=None):
-        _ = session_id
+    def _handle_command(self, command, session_id=None, owner_id=None):
+        _ = (session_id, owner_id)
         return f"응답:{command}"
 
 
@@ -42,6 +42,7 @@ def _run_command(command: str):
         session_id="s1",
         files=None,
         is_ephemeral=ephemeral,
+        owner_id="owner-a",
     )
     return bot, handled, response, error
 

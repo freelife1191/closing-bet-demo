@@ -33,16 +33,31 @@ def clear_current_session_messages(bot: Any, session_id: Optional[str]) -> bool:
     return True
 
 
-def handle_clear_command(bot: Any, parts: list[str], session_id: Optional[str]) -> str:
-    """`/clear` 명령 처리."""
+def handle_clear_command(
+    bot: Any,
+    parts: list[str],
+    session_id: Optional[str],
+    owner_id: Optional[str] = None,
+) -> str:
+    """`/clear` 명령 처리.
+
+    `/clear all` 은 종전에 history.clear_all() 과 memory.clear() 를 불러 **모든
+    사용자의** 대화와 메모리를 지웠다. 이 명령은 화면의 명령어 목록에 노출되어
+    있어 누구든 고를 수 있었다. 이제는 요청자 자신의 대화만 지운다.
+
+    메모리는 지우지 않는다. MemoryManager 가 소유자 구분 없이 키-값 하나를
+    공유하고 있어 「내 메모리만」 지울 방법이 없기 때문이다. 그 구조는 별도
+    항목에서 다룬다.
+    """
     subcommand = parts[1].lower() if len(parts) > 1 else ""
     if subcommand == "all":
-        bot.history.clear_all()
-        bot.memory.clear()
+        if not owner_id:
+            return "⚠️ 대화를 식별할 수 없어 초기화하지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+        removed = bot.history.clear_for_owner(owner_id)
         bot._data_cache = None
         if hasattr(bot, "_cache_timestamp"):
             bot._cache_timestamp = None
-        return "🧹 모든 데이터가 초기화되었습니다. (히스토리/메모리/캐시)"
+        return f"🧹 내 대화 {removed}건과 데이터 캐시를 초기화했습니다. (메모리는 유지됩니다)"
 
     if clear_current_session_messages(bot, session_id):
         return "🧹 현재 대화 세션이 초기화되었습니다."
@@ -170,9 +185,12 @@ def handle_memory_command(bot: Any, args: list[str]) -> str:
     return f"⚠️ 알 수 없는 memory 명령입니다: `{action}`\n{render_memory_help()}"
 
 
-def get_status_message(bot: Any) -> str:
-    """현재 상태 메시지."""
-    status = bot.get_status()
+def get_status_message(bot: Any, owner_id: Optional[str] = None) -> str:
+    """현재 상태 메시지. 「세션 개수」는 요청자 자신의 것만 센다.
+
+    owner_id 가 없으면 0 이며, 전체 사용자 수를 보여 주는 것보다 낫다.
+    """
+    status = bot.get_status(owner_id=owner_id)
     return "\n".join(
         [
             "📊 **현재 상태**",
@@ -202,7 +220,12 @@ def get_help() -> str:
     )
 
 
-def handle_command(bot: Any, command: str, session_id: str = None) -> str:
+def handle_command(
+    bot: Any,
+    command: str,
+    session_id: str = None,
+    owner_id: Optional[str] = None,
+) -> str:
     """슬래시 명령 라우팅."""
     parts = (command or "").strip().split()
     if not parts:
@@ -210,11 +233,11 @@ def handle_command(bot: Any, command: str, session_id: str = None) -> str:
 
     root = parts[0].lower()
     if root == "/status":
-        return get_status_message(bot)
+        return get_status_message(bot, owner_id)
     if root == "/help":
         return get_help()
     if root == "/clear":
-        return handle_clear_command(bot, parts, session_id)
+        return handle_clear_command(bot, parts, session_id, owner_id)
     if root == "/refresh":
         return handle_refresh_command(bot)
     if root == "/model":

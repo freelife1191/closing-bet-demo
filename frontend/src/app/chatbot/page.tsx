@@ -194,7 +194,7 @@ export default function ChatbotPage() {
     { cmd: '/status', desc: '현재 상태(모델, 메모리) 확인' },
     { cmd: '/memory view', desc: '저장된 메모리 보기' },
     { cmd: '/clear', desc: '현재 대화 초기화' },
-    { cmd: '/clear all', desc: '모든 대화 및 메모리 초기화' },
+    { cmd: '/clear all', desc: '내 대화 전체 초기화' },
   ];
 
   const filteredCommands = input.startsWith('/')

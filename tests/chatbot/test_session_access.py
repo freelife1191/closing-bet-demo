@@ -101,7 +101,9 @@ def test_prepare_chat_request_returns_command_response_when_handled():
         _ = (target_model_name, is_ephemeral, owner_id, reuse_flag)
         return session_id or "s1"
 
-    def execute_command(user_message, session_id, files, is_ephemeral):
+    def execute_command(user_message, session_id, files, is_ephemeral, owner_id):
+        # 소유자가 명령 실행까지 전달되어야 /clear all 이 자기 대화만 지운다.
+        assert owner_id == "owner"
         _ = (user_message, session_id, files, is_ephemeral)
         return True, "cmd ok", None
 
@@ -130,8 +132,8 @@ def test_prepare_chat_request_returns_client_error_immediately():
         _ = (session_id, target_model_name, is_ephemeral, owner_id, reuse_flag)
         raise AssertionError("should not be called")
 
-    def execute_command(user_message, session_id, files, is_ephemeral):
-        _ = (user_message, session_id, files, is_ephemeral)
+    def execute_command(user_message, session_id, files, is_ephemeral, owner_id):
+        _ = (user_message, session_id, files, is_ephemeral, owner_id)
         raise AssertionError("should not be called")
 
     result = prepare_chat_request(

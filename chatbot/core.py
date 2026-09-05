@@ -334,11 +334,11 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
     def clear_history(self):
         self.history.clear()
         
-    def get_status(self):
+    def get_status(self, owner_id: Optional[str] = None):
         return {
             "user_id": self.user_id,
             "model": self.current_model_name,
             "available_models": self.get_available_models(),
             "memory_count": len(self.memory.view()),
-            "history_count": len(self.history.get_all_sessions())
+            "history_count": len(self.history.get_all_sessions(owner_id=owner_id))
         }

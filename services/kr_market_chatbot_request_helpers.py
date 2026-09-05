@@ -41,20 +41,31 @@ def handle_chatbot_history_request(
     method: str,
     session_id: str | None,
     msg_index_str: str | None,
+    *,
+    owner_id: str | None,
 ) -> tuple[int, dict[str, Any]]:
-    """챗봇 히스토리 조회/삭제를 처리한다."""
-    if method == "GET":
-        if session_id:
-            history = bot.history.get_messages(session_id)
-            return 200, {"history": history}
-        return 200, {"history": []}
+    """챗봇 히스토리 조회/삭제를 처리한다.
 
-    if session_id == "all":
-        bot.history.clear_all()
-        return 200, {"status": "cleared all"}
+    owner_id 에 기본값을 두지 않는다. 넘기지 않아도 부를 수 있으면 소유자 검사를
+    빠뜨린 채 배포되며, 실제로 이 함수가 그렇게 열려 있었다.
+
+    session_id == "all" 로 모든 사용자의 대화를 지우던 분기는 없앴다. 부르는 화면이
+    없었고, 이제는 그 이름의 세션이 없어 아래 접근 검사에서 404 가 된다.
+    """
+    if method == "GET":
+        if not session_id:
+            return 200, {"history": []}
+        if not bot.history.is_session_accessible(session_id, owner_id):
+            return 404, {"error": "Session not found"}
+        return 200, {"history": bot.history.get_messages(session_id)}
 
     if not session_id:
         return 400, {"error": "Missing session_id"}
+
+    # 없는 세션과 남의 세션을 같은 404 로 응답해 세션 ID 의 존재 여부를 감춘다.
+    # 인덱스 형식 검사보다 먼저 두어야 남의 세션에 대해 400 과 404 가 갈리지 않는다.
+    if not bot.history.is_session_accessible(session_id, owner_id):
+        return 404, {"error": "Session not found"}
 
     if msg_index_str is None:
         bot.history.delete_session(session_id)

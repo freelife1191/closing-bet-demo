@@ -187,7 +187,7 @@ export default function ChatWidget() {
     { cmd: '/memory view', desc: '메모리 보기', auto: false },
     { cmd: '/memory add', desc: '메모리 추가', auto: false },
     { cmd: '/clear', desc: '화면 청소', auto: true },
-    { cmd: '/clear all', desc: '전체 데이터 초기화', auto: true },
+    { cmd: '/clear all', desc: '내 대화 전체 초기화', auto: true },
   ];
 
   const DEFAULT_SUGGESTIONS = [

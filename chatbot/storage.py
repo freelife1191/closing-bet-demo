@@ -17,6 +17,7 @@ from .storage_history_helpers import (
     atomic_write_json,
     backup_corrupt_history,
     has_meaningful_user_message,
+    is_session_accessible_by_owner,
     load_history_sessions,
     sanitize_session_messages,
     should_include_session_for_owner,
@@ -332,11 +333,41 @@ class HistoryManager:
         return False
 
     def clear_all(self) -> None:
+        """모든 사용자의 세션을 지운다. HTTP 로 도달하는 경로는 없다.
+
+        요청 하나가 전체 사용자의 대화를 날릴 수 있으므로, 사용자가 부르는
+        「내 대화 전부 지우기」는 clear_for_owner 를 쓴다.
+        """
         self.sessions = {}
         self._mark_clear_all()
         self._invalidate_message_cache()
         self._invalidate_session_list_cache()
         self._save()
+
+    def clear_for_owner(self, owner_id: str) -> int:
+        """해당 소유자의 세션만 지우고 지운 건수를 돌려준다.
+
+        owner_id 가 비어 있으면 아무것도 지우지 않는다. 소유자가 기록되지 않은
+        레거시 세션이 통째로 지워지는 것을 막기 위해서다.
+        """
+        if not owner_id:
+            return 0
+
+        self._reload_sessions()
+        targets = [
+            session_id
+            for session_id, session in self.sessions.items()
+            if session.get("owner_id") == owner_id
+        ]
+        for session_id in targets:
+            del self.sessions[session_id]
+            self._mark_session_deleted(session_id)
+            self._invalidate_message_cache(session_id)
+
+        if targets:
+            self._invalidate_session_list_cache()
+            self._save()
+        return len(targets)
 
     def clear(self) -> None:
         """하위호환용 별칭."""
@@ -345,6 +376,17 @@ class HistoryManager:
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         self._reload_sessions()  # [Fix] Multi-worker Sync
         return self.sessions.get(session_id)
+
+    def is_session_accessible(self, session_id: str, owner_id: Optional[str]) -> bool:
+        """요청자가 이 세션을 조회하거나 삭제할 수 있는지 판정한다.
+
+        없는 세션도 False 를 돌려준다. 호출자가 「없음」과 「남의 것」을 같은
+        404 로 응답해야 세션 ID 의 존재 여부가 새어 나가지 않는다.
+        """
+        session = self.get_session(session_id)
+        if session is None:
+            return False
+        return is_session_accessible_by_owner(session, owner_id)
 
     def get_all_sessions(self, owner_id: str = None) -> list:
         self._reload_sessions()  # [Fix] Multi-worker Sync

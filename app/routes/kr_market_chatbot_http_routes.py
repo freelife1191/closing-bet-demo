@@ -278,11 +278,16 @@ def _register_chatbot_meta_routes(kr_bp: Any, *, logger: Any) -> None:
             from chatbot import get_chatbot
 
             bot = get_chatbot()
+            owner_id = resolve_chatbot_owner_id(
+                user_email=request.headers.get("X-User-Email"),
+                session_id_header=request.headers.get("X-Session-Id"),
+            )
             status_code, payload = handle_chatbot_history_request(
                 bot=bot,
                 method=request.method,
                 session_id=request.args.get("session_id"),
                 msg_index_str=request.args.get("index"),
+                owner_id=owner_id,
             )
             return jsonify(payload), int(status_code)
 

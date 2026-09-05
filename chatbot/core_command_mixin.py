@@ -73,6 +73,7 @@ class CoreCommandMixin:
         session_id: str,
         files: Optional[list],
         is_ephemeral: bool,
+        owner_id: Optional[str] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         슬래시 명령 실행.
@@ -82,7 +83,7 @@ class CoreCommandMixin:
             return False, None, None
 
         try:
-            cmd_resp = self._handle_command(user_message, session_id)
+            cmd_resp = self._handle_command(user_message, session_id, owner_id)
             if not is_ephemeral:
                 self.history.add_message(session_id, "user", user_message, save=True)
                 self.history.add_message(session_id, "model", cmd_resp, save=True)
@@ -136,9 +137,14 @@ class CoreCommandMixin:
         """현재 세션 메시지를 초기화한다."""
         return _clear_current_session_messages_impl(self, session_id)
 
-    def _handle_clear_command(self, parts: List[str], session_id: Optional[str]) -> str:
+    def _handle_clear_command(
+        self,
+        parts: List[str],
+        session_id: Optional[str],
+        owner_id: Optional[str] = None,
+    ) -> str:
         """`/clear` 명령 처리."""
-        return _handle_clear_command_impl(self, parts, session_id)
+        return _handle_clear_command_impl(self, parts, session_id, owner_id)
 
     def _handle_refresh_command(self) -> str:
         """데이터 캐시 초기화."""
@@ -164,9 +170,14 @@ class CoreCommandMixin:
         """메모리 쓰기 액션(add/update/remove/clear)을 처리한다."""
         return _handle_memory_write_action_impl(self, action, args)
 
-    def _handle_command(self, command: str, session_id: str = None) -> str:
+    def _handle_command(
+        self,
+        command: str,
+        session_id: str = None,
+        owner_id: Optional[str] = None,
+    ) -> str:
         """명령어 처리"""
-        return _handle_command_impl(self, command, session_id)
+        return _handle_command_impl(self, command, session_id, owner_id)
 
     def _handle_memory_command(self, args: list) -> str:
         """메모리 명령어 처리"""

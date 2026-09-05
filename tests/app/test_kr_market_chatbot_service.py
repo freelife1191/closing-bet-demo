@@ -27,16 +27,34 @@ from services.kr_market_chatbot_service import (
 
 
 class _DummyHistory:
+    """세션별 소유자를 갖는 최소 저장소. 키가 세션 ID, 값이 owner_id 다."""
+
     def __init__(self):
         self.deleted_session = None
         self.deleted_message = None
         self.cleared_all = False
+        # 값이 None 이면 소유자가 기록되지 않은 레거시 세션이다.
+        self.owners = {
+            "session-a": None,
+            "session-b": None,
+            "session-c": None,
+            "mine": "owner-1",
+            "theirs": "owner-2",
+        }
 
     def get_all_sessions(self, owner_id=None):
         return [{"id": "s1", "owner_id": owner_id}]
 
     def create_session(self, model_name=None, owner_id=None):
         return f"{owner_id or 'anon'}:{model_name or 'default'}"
+
+    def is_session_accessible(self, session_id, owner_id):
+        if session_id not in self.owners:
+            return False
+        session_owner = self.owners[session_id]
+        if not session_owner:
+            return True
+        return session_owner == owner_id
 
     def get_messages(self, session_id):
         return [{"role": "user", "content": f"hello:{session_id}"}]
@@ -134,6 +152,7 @@ def test_handle_chatbot_history_request_get_returns_messages():
         method="GET",
         session_id="session-a",
         msg_index_str=None,
+        owner_id="owner-1",
     )
     assert status == 200
     assert payload["history"][0]["content"] == "hello:session-a"
@@ -142,31 +161,113 @@ def test_handle_chatbot_history_request_get_returns_messages():
 def test_handle_chatbot_history_request_delete_paths():
     bot = _DummyBot()
 
-    status, payload = handle_chatbot_history_request(bot, "DELETE", "all", None)
-    assert status == 200
-    assert payload["status"] == "cleared all"
-    assert bot.history.cleared_all is True
-
-    status, payload = handle_chatbot_history_request(bot, "DELETE", None, None)
+    status, payload = handle_chatbot_history_request(bot, "DELETE", None, None, owner_id="owner-1")
     assert status == 400
     assert payload["error"] == "Missing session_id"
 
-    status, payload = handle_chatbot_history_request(bot, "DELETE", "session-b", None)
+    status, payload = handle_chatbot_history_request(
+        bot, "DELETE", "session-b", None, owner_id="owner-1"
+    )
     assert status == 200
     assert payload["status"] == "deleted session"
     assert bot.history.deleted_session == "session-b"
 
-    status, payload = handle_chatbot_history_request(bot, "DELETE", "session-c", "x")
+    status, payload = handle_chatbot_history_request(
+        bot, "DELETE", "session-c", "x", owner_id="owner-1"
+    )
     assert status == 400
     assert payload["error"] == "Invalid index format"
 
-    status, payload = handle_chatbot_history_request(bot, "DELETE", "session-c", "1")
+    status, payload = handle_chatbot_history_request(
+        bot, "DELETE", "session-c", "1", owner_id="owner-1"
+    )
     assert status == 404
     assert payload["error"] == "Message not found"
 
-    status, payload = handle_chatbot_history_request(bot, "DELETE", "session-c", "0")
+    status, payload = handle_chatbot_history_request(
+        bot, "DELETE", "session-c", "0", owner_id="owner-1"
+    )
     assert status == 200
     assert payload["status"] == "deleted message"
+
+
+def test_handle_chatbot_history_request_get_rejects_other_owner():
+    """남의 세션을 조회하면 대화가 아니라 404 가 온다."""
+    bot = _DummyBot()
+
+    status, payload = handle_chatbot_history_request(
+        bot, "GET", "theirs", None, owner_id="owner-1"
+    )
+    assert status == 404
+    assert payload["error"] == "Session not found"
+
+    # 소유자 본인은 그대로 읽는다.
+    status, payload = handle_chatbot_history_request(
+        bot, "GET", "theirs", None, owner_id="owner-2"
+    )
+    assert status == 200
+    assert payload["history"][0]["content"] == "hello:theirs"
+
+
+def test_handle_chatbot_history_request_get_rejects_anonymous_request():
+    """인증 헤더가 하나도 없으면 owner_id 가 None 이고, 남의 세션은 막힌다."""
+    bot = _DummyBot()
+
+    status, payload = handle_chatbot_history_request(bot, "GET", "mine", None, owner_id=None)
+    assert status == 404
+
+    # 세션 ID 를 주지 않는 조회는 종전대로 빈 목록이다.
+    status, payload = handle_chatbot_history_request(bot, "GET", None, None, owner_id=None)
+    assert status == 200
+    assert payload["history"] == []
+
+
+def test_handle_chatbot_history_request_delete_rejects_other_owner():
+    """남의 세션과 남의 메시지는 지워지지 않는다."""
+    bot = _DummyBot()
+
+    status, payload = handle_chatbot_history_request(
+        bot, "DELETE", "theirs", None, owner_id="owner-1"
+    )
+    assert status == 404
+    assert bot.history.deleted_session is None
+
+    status, payload = handle_chatbot_history_request(
+        bot, "DELETE", "theirs", "0", owner_id="owner-1"
+    )
+    assert status == 404
+    assert bot.history.deleted_message is None
+
+
+def test_handle_chatbot_history_request_delete_all_no_longer_wipes_everyone():
+    """session_id=all 은 더 이상 전체 삭제 명령이 아니다."""
+    bot = _DummyBot()
+
+    status, payload = handle_chatbot_history_request(bot, "DELETE", "all", None, owner_id=None)
+    assert status == 404
+    assert payload["error"] == "Session not found"
+    assert bot.history.cleared_all is False
+    assert bot.history.deleted_session is None
+
+
+def test_handle_chatbot_history_request_keeps_legacy_sessions_reachable():
+    """owner_id 가 비어 있는 레거시 세션은 인증 헤더가 없어도 열려 있다.
+
+    소유자가 일치하는 경우는 get_returns_messages 가 이미 확인한다.
+    """
+    bot = _DummyBot()
+
+    status, payload = handle_chatbot_history_request(bot, "GET", "session-a", None, owner_id=None)
+    assert status == 200
+
+
+def test_handle_chatbot_history_request_hides_unknown_session():
+    """없는 세션과 남의 세션이 같은 404 라 세션 ID 존재 여부가 새지 않는다."""
+    bot = _DummyBot()
+
+    unknown = handle_chatbot_history_request(bot, "GET", "no-such-session", None, owner_id="owner-1")
+    forbidden = handle_chatbot_history_request(bot, "GET", "theirs", None, owner_id="owner-1")
+    assert unknown == forbidden
 
 
 def test_handle_chatbot_profile_request_get_and_post():
