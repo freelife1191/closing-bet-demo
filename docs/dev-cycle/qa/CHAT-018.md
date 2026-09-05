@@ -3,7 +3,7 @@
 - 대상 화면: http://localhost:3500/chatbot, http://localhost:3500/dashboard/kr/vcp
 - 구성 근거: /qa-only 리포트 (.gstack/qa-reports/qa-report-localhost-3500-2026-09-05.md)
   + 이번 사이클의 변경 다섯 파일
-- 구성 2026-09-05 21:30 | 실행 (미정)
+- 구성 2026-09-05 21:30 | 실행 2026-09-05 21:35
 
 ## 검사 방식에 관한 전제
 
@@ -31,31 +31,31 @@ S-4~S-6 에 쓰는 세션 ID 는 2026-09-05 21:2x 에 `data/chatbot_storage.db` 
 - 기대: 통과. 소유자가 `owner-a` 인 세션에 `owner-b` 가 접근하면 다른 세션 ID 가 돌아오고,
   원래 세션의 `owner_id` 는 `owner-a` 로 그대로 남으며, 새 세션의 소유자는 `owner-b` 이고,
   경고 로그가 남는다.
-- 결과:
+- 결과: 통과. `3 passed in 1.27s` 로 세 검사가 함께 통과했다.
 
 ### S-2. 소유자를 모르는 요청이 남의 대화를 프롬프트에 싣지 못한다 (회귀)
 - 조작: `source venv/bin/activate && pytest tests/chatbot/test_session_access.py::test_ensure_session_access_blocks_requests_without_an_owner -v`
 - 기대: 통과. `owner_id=None` 으로 남의 세션 ID 를 보내면 다른 세션 ID 가 돌아오고, 그
   세션의 메시지 목록은 비어 있으며, 피해자 세션의 메시지는 그대로 남는다. 돌려받은 세션이
   비어 있다는 것이 곧 `build_api_history` 가 남의 대화를 싣지 못한다는 뜻이다.
-- 결과:
+- 결과: 통과
 
 ### S-3. 레거시 세션은 이어받고 자기 세션은 그대로 쓴다 (회귀)
 - 조작: `source venv/bin/activate && pytest tests/chatbot/test_session_access.py::test_ensure_session_access_keeps_legacy_and_own_sessions -v`
 - 기대: 통과. 소유자가 비어 있는 세션은 같은 ID 를 돌려주며 소유자가 채워지고, 두 번째
   호출에서도 같은 ID 를 돌려주며 경고 로그가 하나도 남지 않는다.
-- 결과:
+- 결과: 통과
 
 ### S-4. 남의 세션은 조회로도 열리지 않는다 (회귀)
 - 조작: `curl -s -H "X-Session-Id: anon_7a87cbb0-d7ac-49bd-b23c-8e3db9f685e3" "http://localhost:5501/api/kr/chatbot/history?session_id=b8191686-3079-4f8a-85d1-594b882548c5"`
 - 기대: `{"error": "Session not found"}` 가 돌아온다. 그 세션은 다른 익명 소유자의 것이며
   메시지 2건을 갖고 있다.
-- 결과:
+- 결과: 통과. `{"error": "Session not found"}` 가 그대로 돌아왔다.
 
 ### S-5. 소유자 헤더가 없는 조회도 막힌다 (회귀)
 - 조작: `curl -s "http://localhost:5501/api/kr/chatbot/history?session_id=b8191686-3079-4f8a-85d1-594b882548c5"`
 - 기대: `{"error": "Session not found"}` 가 돌아온다. 헤더가 없다고 검사를 지나가지 않는다.
-- 결과:
+- 결과: 통과. 헤더 없이 보내도 `{"error": "Session not found"}` 다.
 
 ### S-6. 레거시 세션 조회는 계속 열려 있다 (인접)
 - 조작: `curl -s -H "X-Session-Id: anon_7a87cbb0-d7ac-49bd-b23c-8e3db9f685e3" "http://localhost:5501/api/kr/chatbot/history?session_id=1b19ec82-c2d7-4750-a8f0-3cc7a6599456"`
@@ -63,7 +63,7 @@ S-4~S-6 에 쓰는 세션 ID 는 2026-09-05 21:2x 에 `data/chatbot_storage.db` 
   `/clear`, 둘째는 `role: "model"` 이고 본문이 「🧹 현재 대화 세션이 초기화되었습니다.」다.
   `[CHAT-016]` 이 정한 「소유자가 비어 있는 세션은 ID 를 아는 요청에 연다」는 설계가
   이번 변경으로 깨지지 않았음을 확인한다.
-- 결과:
+- 결과: 통과. 메시지 2건이 돌아왔고 `user: /clear`, `model: 🧹 현재 대화 세션이 초기화되었습니다.` 로 기대와 같다.
 
 ### S-7. 챗봇 화면이 빈 대화 목록을 정상적으로 그린다 (인접)
 - 조작: http://localhost:3500/chatbot 을 연다. 모델 선택기(`FLASH`)를 누르고, 「새 채팅」을
@@ -72,7 +72,7 @@ S-4~S-6 에 쓰는 세션 ID 는 2026-09-05 21:2x 에 `data/chatbot_storage.db` 
   「안녕하세요, 흑기사님」과 「무엇을 도와드릴까요?」가 보이고 추천 질문 카드가 넷이다.
   모델 선택기에 `gemini-3.5-flash-lite`, `gemini-3.7-flash`, `gemini-3.6-flash` 셋이 나온다.
   「새 채팅」을 눌러도 목록은 그대로이고 콘솔 오류가 0건이다.
-- 결과:
+- 결과: 통과. 사이드바 문구 둘, 인사말 둘, 추천 질문 카드 4건, 모델 세 개(`gemini-3.5-flash-lite`, `gemini-3.6-flash`, `gemini-3.7-flash`)를 모두 확인했고 「새 채팅」 뒤에도 목록이 그대로이며 콘솔 오류가 0건이다.
 
 ### S-8. VCP 채팅 패널이 세션 키 없이 열린다 (인접)
 - 조작: http://localhost:3500/dashboard/kr/vcp 을 열고 우하단 「AI 상담」을 누른다. 그다음
@@ -81,7 +81,7 @@ S-4~S-6 에 쓰는 세션 ID 는 2026-09-05 21:2x 에 `data/chatbot_storage.db` 
   「보내기」 버튼이 `disabled` 다. `localStorage` 에 `vcp_chat_session_id_` 로 시작하는 키가
   하나도 없다. 세션 ID 는 첫 전송 때 만들어지므로 패널을 여는 것만으로는 생기지 않는다.
   콘솔 오류가 0건이다.
-- 결과:
+- 결과: 통과. 「스마트 머니 봇」과 「Online」, 추천 질문 카드 4건, `보내기 [disabled]` 를 확인했고 `localStorage` 의 `vcp_chat_session_id_` 키 조회가 `NONE` 이며 콘솔 오류가 0건이다.
 
 ### S-9. 화면 전환과 뒤로 가기가 깨지지 않는다 (인접)
 - 조작: VCP 화면에서 「과거」 탭을 누르고 나타난 「2026-05-05」를 누른다. 그다음 사이드바의
@@ -89,7 +89,7 @@ S-4~S-6 에 쓰는 세션 ID 는 2026-09-05 21:2x 에 `data/chatbot_storage.db` 
 - 기대: 「과거」 탭에서 「2026-05-05」 버튼이 나타나고 표에 「No signals found.」가 보인다.
   사이드바 이동 뒤 URL 이 `/chatbot` 이고, 뒤로 가기 뒤 URL 이 `/dashboard/kr/vcp` 다.
   전 과정에서 콘솔 오류가 0건이다.
-- 결과:
+- 결과: 통과. 「과거」 탭에서 「2026-05-05」 버튼이 나타나고 표가 「No signals found.」이며, 사이드바 이동 뒤 URL 이 `/chatbot`, 뒤로 가기 뒤 `/dashboard/kr/vcp` 다. 전 과정에서 콘솔 오류가 0건이다.
 
 ## 이월한 발견
 
@@ -111,4 +111,13 @@ S-4~S-6 에 쓰는 세션 ID 는 2026-09-05 21:2x 에 `data/chatbot_storage.db` 
 
 ## 실행 결과
 
-(미실행)
+- 통과 9 / 전체 9
+- 실패한 시나리오: 없음
+- 시나리오 밖에서 새로 발견: 없음
+
+`/qa` 가 고친 것이 없으므로 셋째 커밋도 없습니다. 1단계 리포트가 지적한 Low 4건은 위의
+「이월한 발견」에 정리한 대로 셋이 기존 백로그 항목에 이미 들어 있고 하나는 항목으로
+세우지 않기로 판정했습니다.
+
+`localStorage` 의 `browser_session_id` 는 검사 내내 바꾸지 않았으므로 되돌릴 것이 없습니다.
+S-8 에서 확인한 것은 `vcp_chat_session_id_` 로 시작하는 키의 유무이며 값을 쓰지 않았습니다.
