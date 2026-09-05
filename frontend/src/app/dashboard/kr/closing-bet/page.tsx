@@ -5,8 +5,11 @@ import { fetchAPI } from '@/lib/api';
 import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
+import GradeGuideModal from '@/app/components/GradeGuideModal';
+import Tooltip from '@/app/components/Tooltip';
 import { useAdmin } from '@/hooks/useAdmin';
-import { CHART_PERIODS, formatBigNumber, isPositivePrice, stockChartUrl } from './displayHelpers';
+import { CHART_PERIODS, formatBigNumber, stockChartUrl } from './displayHelpers';
+import { PriceRangeBar, StatBox } from './displayPrimitives';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
 
 // 이 화면에서 되돌릴 수 없는 지출을 일으키는 조작은 셋이다. 앞의 둘은 DATA STATUS 의
@@ -29,42 +32,6 @@ type CostlyAction = keyof typeof COSTLY_ACTIONS;
 const COSTLY_WARNING = '외부 API 를 호출하므로 실제 요금이 발생하며, 실행한 뒤에는 되돌릴 수 없습니다.';
 
 const costlyMessage = (body: string) => `${body}\n\n${COSTLY_WARNING}`;
-
-// Tooltip 컴포넌트 - 아이콘 hover 시에만 표시
-function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false, width }: {
-  children: React.ReactNode,
-  content: React.ReactNode,
-  className?: string,
-  position?: 'top' | 'bottom',
-  align?: 'left' | 'center' | 'right',
-  wide?: boolean,
-  width?: string
-}) {
-  const positionClass = position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2';
-  const arrowClass = position === 'bottom' ? 'bottom-full border-b-gray-900/95 -mb-1' : 'top-full border-t-gray-900/95 -mt-1';
-  const widthClass = width || (wide ? 'w-64 max-w-[280px]' : 'w-52 max-w-[220px]');
-
-  let alignClass = 'left-1/2 -translate-x-1/2';
-  let arrowAlignClass = 'left-1/2 -translate-x-1/2';
-
-  if (align === 'left') {
-    alignClass = 'left-0';
-    arrowAlignClass = 'left-4';
-  } else if (align === 'right') {
-    alignClass = 'right-0';
-    arrowAlignClass = 'right-4';
-  }
-
-  return (
-    <span className={`relative group/tooltip inline-flex items-center ${className}`}>
-      {children}
-      <div className={`absolute ${alignClass} ${positionClass} ${widthClass} px-3 py-2 bg-gray-900/95 text-gray-200 text-[10px] font-medium rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-[100] border border-white/10 shadow-xl backdrop-blur-sm text-center leading-relaxed whitespace-normal`}>
-        {content}
-        <div className={`absolute ${arrowAlignClass} border-4 border-transparent ${arrowClass}`}></div>
-      </div>
-    </span>
-  );
-}
 
 
 // 응답은 이 판정을 최상위와 score 두 자리에 담는다. 지난 자료는 score 안에만 넣고
@@ -329,78 +296,6 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
         <div className="flex-1 relative overflow-y-auto">
           <StockChart symbol={symbol} name={name} />
         </div>
-      </div>
-    </div>
-  );
-}
-
-// Price Range Progress Bar Component
-//
-// 시세를 못 받은 종목은 백엔드가 값을 비우는 대신 0 으로 채운 응답을 돌려준다. 세 갈래가
-// 모두 그렇게 한다(services/kr_market_stock_detail_service.py 의 기본값 payload 와
-// engine/collectors/naver_extractors_mixin.py 의 빈 결과 딕셔너리). 그 0 을 그대로 그리면
-// 「₩0」과 「L: ₩0 / H: ₩0」이 정상 시세처럼 보이고 손잡이가 범위 한가운데에 놓인다.
-// 주가에 0 원은 없으므로 값을 구하지 못한 것으로 보고 그 사실을 적는다.
-//
-// 키가 아예 빠진 응답도 같은 자리에서 걸러야 한다. 캐시를 읽는 쪽이 code 가 문자열인지만
-// 검사하고 통과시키므로(kr_market_stock_detail_service.py 의 _normalize_stock_detail_payload)
-// 시세 키가 빠진 채로 화면까지 닿을 수 있고, 그러면 toLocaleString 이 터져 모달이 통째로
-// 그려지지 않는다. 값을 받는 이 함수에서 한 번 막으면 호출하는 두 자리가 함께 고쳐진다.
-function PriceRangeBar({ low, high, current, label }: {
-  low?: number | null;
-  high?: number | null;
-  current?: number | null;
-  label: string;
-}) {
-  if (!isPositivePrice(low) || !isPositivePrice(high) || !isPositivePrice(current)) {
-    return (
-      <div className="mb-5">
-        <div className="flex justify-between items-end mb-2">
-          <span className="text-xs text-gray-400 font-medium">{label}</span>
-          <span className="text-xs text-gray-500">시세를 불러오지 못했습니다</span>
-        </div>
-      </div>
-    );
-  }
-
-  const range = high - low;
-  const position = range > 0 ? ((current - low) / range) * 100 : 50;
-  const positionClamped = Math.max(0, Math.min(100, position));
-
-  return (
-    <div className="mb-5">
-      <div className="flex justify-between items-end mb-2">
-        <span className="text-xs text-gray-400 font-medium">{label}</span>
-        <div className="text-right">
-          <span className="text-[10px] text-gray-500 mr-2">실시간</span>
-          <span className="text-sm font-bold text-white">₩{current.toLocaleString()}</span>
-        </div>
-      </div>
-
-      <div className="relative h-2.5 bg-[#131722] rounded-full ring-1 ring-white/10">
-        {/* Background Range Gradient (Low -> High indication) */}
-        <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 via-gray-500/10 to-rose-500/20" />
-
-        {/* Active Range Fill (Optional: Low to Current) */}
-        <div
-          className="absolute top-0 left-0 h-full rounded-l-full bg-white/5"
-          style={{ width: `${positionClamped}%` }}
-        />
-
-        {/* Indicator Knob */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full border-2 border-indigo-500 shadow-lg z-10 transition-all duration-500 group cursor-help"
-          style={{ left: `${positionClamped}%`, transform: 'translate(-50%, -50%)' }}
-        >
-          <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-            {positionClamped.toFixed(1)}%
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-between text-[10px] text-gray-500 mt-1.5 font-mono">
-        <span className="text-blue-400">L: ₩{low.toLocaleString()}</span>
-        <span className="text-rose-400">H: ₩{high.toLocaleString()}</span>
       </div>
     </div>
   );
@@ -1453,7 +1348,7 @@ export default function JonggaV2Page() {
           <div className="flex items-center gap-3 md:ml-auto">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
 
-            <Tooltip content={bulkBuyClosingBetTooltip} position="top" align="right" wide>
+            <Tooltip content={bulkBuyClosingBetTooltip} position="top" align="right" size="md">
               <button
                 onClick={handleBulkBuyClosingBet}
                 disabled={isBulkBuyClosingBetDisabled}
@@ -1473,7 +1368,7 @@ export default function JonggaV2Page() {
               <i className="fas fa-table"></i> 종가베팅 점수표
             </button>
 
-            <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" wide>
+            <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" size="md">
               <select
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
@@ -1895,7 +1790,7 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
     <div className="flex flex-col">
       <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1 flex items-center gap-2">
         Data Status
-        <Tooltip content="스크리너 엔진을 실행하여 모든 종목에 대해 전체 업데이트(뉴스, 수급, 점수 등)를 수행합니다." position="bottom" align="right" wide>
+        <Tooltip content="스크리너 엔진을 실행하여 모든 종목에 대해 전체 업데이트(뉴스, 수급, 점수 등)를 수행합니다." position="bottom" align="right" size="md">
           <button
             onClick={() => requestCostlyAction('update')}
             disabled={updating || analyzingGemini}
@@ -1905,7 +1800,7 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
             <i className="fas fa-sync-alt text-[10px]"></i>
           </button>
         </Tooltip>
-        <Tooltip content="기존 데이터를 기반으로 Gemini AI를 재호출합니다. 전체 실행 시 미분석/실패 항목만 재분석됩니다." position="bottom" align="right" wide>
+        <Tooltip content="기존 데이터를 기반으로 Gemini AI를 재호출합니다. 전체 실행 시 미분석/실패 항목만 재분석됩니다." position="bottom" align="right" size="md">
           <button
             onClick={() => requestCostlyAction('gemini')}
             disabled={updating || analyzingGemini}
@@ -1977,24 +1872,6 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
         <p>{alertModal.content}</p>
       </Modal>
     </div >
-  )
-}
-
-function StatBox({ label, value, highlight = false, customValue, tooltip }: { label: string, value: number, highlight?: boolean, customValue?: string, tooltip?: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1 flex items-center gap-1">
-        {label}
-        {tooltip && (
-          <Tooltip content={tooltip}>
-            <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
-          </Tooltip>
-        )}
-      </span>
-      <span className={`text-2xl font-mono font-bold ${highlight ? 'text-indigo-400' : 'text-white'}`}>
-        {customValue || value}
-      </span>
-    </div>
   )
 }
 
@@ -2194,7 +2071,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               content={aiEval
                 ? 'Gemini AI가 분석한 결과에서 읽은 매매 추천입니다. BUY(매수), HOLD(관망), SELL(매도) 중 하나입니다.'
                 : '이 종목은 아직 AI 분석을 받지 않았습니다. 매매 추천과 확신도는 AI 분석이 끝난 뒤에 표시됩니다.'}
-              position="bottom" align="left" wide
+              position="bottom" align="left" size="md"
             >
               <div className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-help ${aiEval?.action === 'BUY' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' :
                 aiEval?.action === 'SELL' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
@@ -2453,7 +2330,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                   <p className="text-[9px] text-gray-400">● 가산점 (Max 7): 거래량 급증(최대 5), 장대양봉(최대 1), 상한가(최대 1)</p>
                   <p className="text-indigo-400 font-bold mt-1">※ 8점 이상 강력 매수 신호</p>
                 </div>
-              } position="bottom" wide>
+              } position="bottom" size="md">
                 <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
               </Tooltip>
             </div>
@@ -2561,201 +2438,3 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
   );
 }
 
-function GradeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-  // 모달이 닫혀있으면 렌더링하지 않음 (Modal 컴포넌트 내부에서 처리하지만, content 생성을 막기 위해)
-  // 단, 애니메이션을 위해 Modal 컴포넌트에 위임
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title="종가베팅 등급 산정 기준" type="default" wide>
-      <div className="space-y-8 max-h-[70vh] overflow-y-auto pr-2">
-
-        {/* Unified Grade Logic */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-indigo-500/30 pb-2">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <i className="fas fa-list-ol text-indigo-400"></i>
-              통합 등급 산정 기준
-            </h3>
-            <span className="text-xs text-slate-500">※ 외인+기관 동반 매수 필수</span>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-white/10">
-            <table className="w-full text-xs text-left min-w-[600px] border-collapse">
-              <thead className="bg-white/5 text-slate-400 font-medium">
-                <tr>
-                  <th className="px-4 py-3 w-16 text-center whitespace-nowrap">등급</th>
-                  <th className="px-4 py-3 whitespace-nowrap">거래대금 기준</th>
-                  <th className="px-4 py-3 whitespace-nowrap">점수 (Total / 19)</th>
-                  <th className="px-4 py-3 whitespace-nowrap">추가 조건</th>
-                  <th className="px-4 py-3 whitespace-nowrap">비고</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 text-slate-300">
-                <tr className="bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors">
-                  <td className="px-4 py-3 font-bold text-indigo-400 text-center text-sm whitespace-nowrap">S 급</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="text-indigo-300 font-bold">1조 원 이상</span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">10점 이상</td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div className="text-emerald-400">외인+기관 양매수</div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">초대형 수급 폭발</td>
-                </tr>
-                <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-rose-400 text-center text-sm whitespace-nowrap">A 급</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="text-rose-300 font-bold">5,000억 이상</span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">8점 이상</td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div className="text-emerald-400">외인+기관 양매수</div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">대형 우량주</td>
-                </tr>
-                <tr className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-blue-400 text-center text-sm whitespace-nowrap">B 급</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="text-blue-300 font-bold">1,000억 이상</span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">6점 이상</td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    <div className="text-emerald-400">외인+기관 양매수</div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">중형 주도주</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-indigo-500/30 pb-2">
-            <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-xs">2</span>
-            핵심 평가 요소 (Score 19점 만점)
-          </h3>
-          <p className="text-xs text-gray-400">
-            기본 점수(12점)와 가산점(7점)으로 구성됩니다.
-          </p>
-
-          <div className="space-y-4">
-            {/* 기본 점수 섹션 */}
-            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-              <h4 className="text-xs font-bold text-indigo-400 mb-3 flex items-center gap-2">
-                <i className="fas fa-check-circle"></i> 기본 배점 항목 (Max 12점)
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>📰 뉴스/재료</span>
-                    <span className="text-indigo-400 font-mono">3점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500 space-y-1">
-                    <div>LLM 뉴스 점수: 0~3점(최대 3점)</div>
-                    <div>신규 뉴스 부재 시 거래대금 보정 적용</div>
-                  </div>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>💰 거래대금</span>
-                    <span className="text-indigo-400 font-mono">3점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500 space-y-1">
-                    <div>1조원 이상: 3점</div>
-                    <div>5,000억 이상: 2점</div>
-                    <div>1,000억 이상: 1점</div>
-                  </div>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>📈 차트</span>
-                    <span className="text-indigo-400 font-mono">2점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500 space-y-1">
-                    <div>52주 신고가 돌파: +1점</div>
-                    <div>MA20&gt;MA60 &amp; 종가&gt;MA20: +1점</div>
-                  </div>
-                </div>
-                  <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                    <div className="flex justify-between items-center text-xs font-bold text-white">
-                      <span>🤝 수급</span>
-                      <span className="text-indigo-400 font-mono">2점</span>
-                    </div>
-                    <div className="text-[10px] text-gray-500">외인+기관 5일 순매수 합계 (거래대금 대비 5%/10%)</div>
-                  </div>
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>🕯 캔들</span>
-                    <span className="text-indigo-400 font-mono">1점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500">장대양봉 및 꼬리 관리</div>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>⏳ 기간조정</span>
-                    <span className="text-indigo-400 font-mono">1점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500">변동성 및 이격 수축</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 가산점 섹션 */}
-                <div className="bg-indigo-500/5 rounded-xl p-4 border border-indigo-500/20">
-                  <h4 className="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
-                    <i className="fas fa-plus-circle"></i> 가산점 항목 (Max 7점)
-                  </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>📊 거래량 급증</span>
-                    <span className="text-emerald-400 font-mono">+5점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500">2배(1점), 3배(2점), 4배(3점), 5배(4점), 6배 이상(5점)</div>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>📈 장대양봉</span>
-                    <span className="text-emerald-400 font-mono">+1점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500">상승폭이 큰 장대양봉 마감</div>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-2.5 border border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-white">
-                    <span>🧯 상한가</span>
-                    <span className="text-emerald-400 font-mono">+1점</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500">상한가(거래일 등락률) 돌파 시</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </Modal >
-  );
-}
-
-
-function ScoreBar({ label, score, max, color, tooltip }: { label: string, score: number, max: number, color: string, tooltip?: string }) {
-  const widthPct = Math.min((score / max) * 100, 100);
-  return (
-    <div className="flex items-center gap-3 group relative">
-      <div className="w-14 text-xs font-medium text-gray-400 cursor-help" title={tooltip || label}>{label}</div>
-      <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${color} transition-all duration-500`}
-          style={{ width: `${widthPct}%` }}
-        ></div>
-      </div>
-      <div className="w-8 text-xs font-mono text-gray-400 text-right">{score}<span className="text-gray-600">/{max}</span></div>
-      {tooltip && (
-        <div className="absolute left-0 bottom-full mb-2 w-52 px-3 py-2 bg-gray-900 text-gray-200 text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 border border-white/10 shadow-2xl whitespace-normal">
-          {tooltip}
-          <div className="absolute top-full left-4 -mt-1 border-4 border-transparent border-t-gray-900"></div>
-        </div>
-      )}
-    </div>
-  );
-}

@@ -744,7 +744,7 @@ export default function KRMarketOverview() {
           </div>
           <h3 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2 relative z-10">
             KR Market Gate
-            <Tooltip content="시장 강도(Score)와 수급 상태를 종합 분석한 마켓 타이밍 지표입니다." position="bottom" align="left">
+            <Tooltip size="lg" content="시장 강도(Score)와 수급 상태를 종합 분석한 마켓 타이밍 지표입니다." position="bottom" align="left">
               <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
             </Tooltip>
             <button
@@ -779,7 +779,7 @@ export default function KRMarketOverview() {
               </div>
             </div>
             <div className={`mt-4 px-4 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-bold ${getGateStatusColor(gateData?.status ?? 'GRAY', gateData?.score)}`}>
-              <Tooltip content={
+              <Tooltip size="lg" content={
                 (gateData?.score && gateData.score >= 70) ? '상승장 (매수 우위)' :
                   (gateData?.score && gateData.score >= 40) ? '중립/혼조세 (방향성 탐색)' :
                     '하락장 (매도 우위)'
@@ -799,18 +799,18 @@ export default function KRMarketOverview() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-bold text-gray-400 flex items-center gap-2">
               KOSPI 200 Sector Index
-              <Tooltip content="KOSPI 200 주요 섹터별 등락 현황입니다." position="bottom">
+              <Tooltip size="lg" content="KOSPI 200 주요 섹터별 등락 현황입니다." position="bottom">
                 <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
               </Tooltip>
             </h3>
             <div className="flex items-center gap-4 text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
-              <Tooltip content="상승세: 20/60일 이평 상회 및 수급 유입" position="bottom">
+              <Tooltip size="lg" content="상승세: 20/60일 이평 상회 및 수급 유입" position="bottom">
                 <span className="flex items-center gap-1 cursor-help"><span className="w-2 h-2 rounded-full bg-green-500"></span> Bullish</span>
               </Tooltip>
-              <Tooltip content="혼조세: 방향성 탐색 중" position="bottom">
+              <Tooltip size="lg" content="혼조세: 방향성 탐색 중" position="bottom">
                 <span className="flex items-center gap-1 cursor-help"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> Neutral</span>
               </Tooltip>
-              <Tooltip content="하락세: 주요 이평 하회 및 수급 이탈" position="bottom">
+              <Tooltip size="lg" content="하락세: 주요 이평 하회 및 수급 이탈" position="bottom">
                 <span className="flex items-center gap-1 cursor-help"><span className="w-2 h-2 rounded-full bg-red-500"></span> Bearish</span>
               </Tooltip>
             </div>
@@ -849,7 +849,7 @@ export default function KRMarketOverview() {
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">오늘의 시그널</div>
-                  <Tooltip content="오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다." position="bottom" align="left">
+                  <Tooltip size="lg" content="오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다." position="bottom" align="left">
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
                 </div>
@@ -873,7 +873,7 @@ export default function KRMarketOverview() {
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">VCP 전략</div>
-                  <Tooltip content={getStrategyTooltip(vcpRate, avgReturn, backtestData?.vcp?.count ?? 0, "VCP 전략")} position="bottom" align="left">
+                  <Tooltip size="lg" content={getStrategyTooltip(vcpRate, avgReturn, backtestData?.vcp?.count ?? 0, "VCP 전략")} position="bottom" align="left">
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
                   <button
@@ -919,7 +919,7 @@ export default function KRMarketOverview() {
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">종가베팅 전략</div>
-                  <Tooltip content={getStrategyTooltip(cbRate, avgReturn, backtestData?.closing_bet?.count ?? 0, "종가베팅 전략")} position="bottom" align="left">
+                  <Tooltip size="lg" content={getStrategyTooltip(cbRate, avgReturn, backtestData?.closing_bet?.count ?? 0, "종가베팅 전략")} position="bottom" align="left">
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
                   <button
@@ -997,7 +997,7 @@ export default function KRMarketOverview() {
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <span className="w-1 h-5 bg-rose-500 rounded-full"></span>
               Market Indices
-              <Tooltip content="주요 국내외 증시 지수 현황입니다.">
+              <Tooltip size="lg" content="주요 국내외 증시 지수 현황입니다.">
                 <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-xs"></i>
               </Tooltip>
             </h3>
@@ -1072,7 +1072,7 @@ export default function KRMarketOverview() {
             <h3 className="text-base font-bold text-gray-400 flex items-center gap-2">
               <span className="w-1 h-5 bg-amber-500 rounded-full"></span>
               Commodities
-              <Tooltip content="금, 은 등 주요 원자재 가격 동향입니다.">
+              <Tooltip size="lg" content="금, 은 등 주요 원자재 가격 동향입니다.">
                 <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-xs"></i>
               </Tooltip>
             </h3>
@@ -1147,7 +1147,7 @@ export default function KRMarketOverview() {
             <h3 className="text-base font-bold text-gray-400 flex items-center gap-2">
               <span className="w-1 h-5 bg-indigo-500 rounded-full"></span>
               Crypto Assets
-              <Tooltip content="주요 암호화폐 실시간 시세입니다.">
+              <Tooltip size="lg" content="주요 암호화폐 실시간 시세입니다.">
                 <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-xs"></i>
               </Tooltip>
             </h3>

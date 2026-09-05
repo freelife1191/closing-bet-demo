@@ -4,41 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Modal from '@/app/components/Modal';
 import { fetchAPI } from '@/lib/api';
 import { useAdmin } from '@/hooks/useAdmin';
-
-// Tooltip 컴포넌트
-function Tooltip({ children, content, className = "", position = "top", align = "center", wide = false }: {
-  children: React.ReactNode,
-  content: string,
-  className?: string,
-  position?: 'top' | 'bottom',
-  align?: 'left' | 'center' | 'right',
-  wide?: boolean
-}) {
-  const positionClass = position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2';
-  const arrowClass = position === 'bottom' ? 'bottom-full border-b-gray-900/95 -mb-1' : 'top-full border-t-gray-900/95 -mt-1';
-  const widthClass = wide ? 'w-64 max-w-[280px]' : 'w-52 max-w-[220px]';
-
-  let alignClass = 'left-1/2 -translate-x-1/2';
-  let arrowAlignClass = 'left-1/2 -translate-x-1/2';
-
-  if (align === 'left') {
-    alignClass = 'left-0';
-    arrowAlignClass = 'left-4';
-  } else if (align === 'right') {
-    alignClass = 'right-0';
-    arrowAlignClass = 'right-4';
-  }
-
-  return (
-    <span className={`relative group/tooltip inline-flex items-center ${className}`}>
-      {children}
-      <div className={`absolute ${alignClass} ${positionClass} ${widthClass} px-3 py-2 bg-gray-900/95 text-gray-200 text-[10px] font-medium rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-[100] border border-white/10 shadow-xl backdrop-blur-sm text-center leading-relaxed whitespace-normal`}>
-        {content}
-        <div className={`absolute ${arrowAlignClass} border-4 border-transparent ${arrowClass}`}></div>
-      </div>
-    </span>
-  );
-}
+import Tooltip from '@/app/components/Tooltip';
 
 interface FileStatus {
   name: string;

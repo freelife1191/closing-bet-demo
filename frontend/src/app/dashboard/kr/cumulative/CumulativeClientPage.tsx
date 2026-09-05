@@ -385,14 +385,14 @@ function StatCard({
 
   if (tooltipKey && kpi) {
     return (
-      <Tooltip content={renderStatTooltip(tooltipKey, kpi)} position="bottom" align="center" className="w-full h-full block" as="div">
+      <Tooltip size="lg" content={renderStatTooltip(tooltipKey, kpi)} position="bottom" align="center" className="w-full h-full block" as="div">
         {content}
       </Tooltip>
     );
   } else if (tooltipKey) {
     // Fallback for static tooltip if no KPI provided (legacy support)
     return (
-      <Tooltip content={renderTooltipContent(tooltipKey)} position="bottom" align="center" className="w-full h-full block" as="div">
+      <Tooltip size="lg" content={renderTooltipContent(tooltipKey)} position="bottom" align="center" className="w-full h-full block" as="div">
         {content}
       </Tooltip>
     );
@@ -585,7 +585,7 @@ function GradeCard({ data }: { data: any }) {
   );
 
   return (
-    <Tooltip content={renderGradeTooltip(data.grade, data)} position="top" align="center" className="w-full h-full block" as="div">
+    <Tooltip size="lg" content={renderGradeTooltip(data.grade, data)} position="top" align="center" className="w-full h-full block" as="div">
       {content}
     </Tooltip>
   );
@@ -698,7 +698,7 @@ function DistributionBar({ kpi, trades }: { kpi: KPIData, trades: Trade[] }) {
     <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-white/5 mb-8">
       <div className="flex items-center gap-2 mb-4">
         <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">승패 분포 (WIN/LOSS)</h3>
-        <Tooltip content={renderDistributionTooltip(kpi, trades)} position="top" align="left">
+        <Tooltip size="lg" content={renderDistributionTooltip(kpi, trades)} position="top" align="left">
           <i className="fas fa-question-circle text-gray-700 text-[10px] hover:text-gray-500 transition-colors cursor-help"></i>
         </Tooltip>
       </div>
@@ -795,7 +795,7 @@ function TableHeader({
       <div className={`flex items-center gap-1.5 ${align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start"}`}>
         {label}
         {tooltipKey && (
-          <Tooltip content={renderTooltipContent(tooltipKey)} position="bottom" align={tooltipAlign}>
+          <Tooltip size="lg" content={renderTooltipContent(tooltipKey)} position="bottom" align={tooltipAlign}>
             <i className="fas fa-info-circle text-gray-600 text-[10px] hover:text-gray-400 cursor-help transition-colors"></i>
           </Tooltip>
         )}
