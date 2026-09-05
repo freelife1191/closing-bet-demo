@@ -1,103 +1,28 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { fetchAPI } from '@/lib/api';
-import { getBrowserSessionId } from '@/lib/session';
 
-import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import Sidebar from '../components/Sidebar';
 import SettingsModal from '../components/SettingsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import Modal from '../components/Modal';
 import PaperTradingModal from '../components/PaperTradingModal';
-import ThinkingProcess from '../components/ThinkingProcess';
-import { getStoredModel, setStoredModel, shouldSendOnEnter } from '../components/chatHelpers';
+import { getAuthHeaders, getStoredModel, setStoredModel, shouldSendOnEnter } from '../components/chatHelpers';
+import { useChatSessions } from './useChatSessions';
+import { useChatStream } from './useChatStream';
+import { useSpeechInput } from './useSpeechInput';
+import { ChatMessage } from './ChatMessage';
+import { getTurnIndicesFromMessage } from './chatMessageParser';
 
 // Types
-interface Message {
-  role: 'user' | 'model';
-  parts: (string | { text: string })[];
-  timestamp?: string;
-  isStreaming?: boolean;
-  reasoning?: string;
-}
-
-interface SpeechRecognitionAlternativeLike {
-  transcript: string;
-}
-
-interface SpeechRecognitionResultLike {
-  isFinal: boolean;
-  length: number;
-  [index: number]: SpeechRecognitionAlternativeLike;
-}
-
-interface SpeechRecognitionEventLike {
-  resultIndex: number;
-  results: {
-    length: number;
-    [index: number]: SpeechRecognitionResultLike;
-  };
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  maxAlternatives: number;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: unknown) => void) | null;
-  onend: (() => void) | null;
-}
-
-type SpeechRecognitionConstructorLike = new () => SpeechRecognitionLike;
-type WindowWithSpeechRecognition = Window & {
-  SpeechRecognition?: SpeechRecognitionConstructorLike;
-  webkitSpeechRecognition?: SpeechRecognitionConstructorLike;
-};
-
-interface Session {
-  id: string;
-  title: string;
-  updated_at: string;
-  model?: string;
-}
-
 interface SuggestionCard {
   title: string;
   desc: string;
   icon: string;
   prompt: string;
 }
-
-const getTurnIndicesFromMessage = (messages: Message[], index: number): number[] => {
-  const current = messages[index];
-  if (!current) return [];
-
-  const prev = messages[index - 1];
-  const next = messages[index + 1];
-
-  if (current.role === 'user' && next?.role === 'model') {
-    return [index, index + 1];
-  }
-
-  if (current.role === 'model' && prev?.role === 'user') {
-    return [index - 1, index];
-  }
-
-  // 비정상 히스토리 대비
-  return [index];
-};
-
-const getMessagePartText = (part: Message['parts'][number] | undefined): string => {
-  if (!part) return '';
-  return typeof part === 'string' ? part : part.text;
-};
 
 const SUGGESTIONS: SuggestionCard[] = [
   { title: '시장 현황', desc: '마켓게이트 상태와 투자 전략', icon: 'fas fa-chart-pie', prompt: '오늘 마켓게이트 상태와 투자 전략 알려줘' },
@@ -107,146 +32,22 @@ const SUGGESTIONS: SuggestionCard[] = [
   { title: '내 관심종목', desc: '관심종목 진단 및 리스크 점검', icon: 'fas fa-heart', prompt: '내 관심종목 리스트 기반으로 현재 상태 진단해줘' },
 ];
 
-// Helper to fix CJK markdown issues and malformed AI output
-const preprocessMarkdown = (text: string) => {
-  let processed = text;
-  const removeLastUnmatchedMarker = (line: string, markerRegex: RegExp, markerLength: number): string => {
-    const matches = [...line.matchAll(markerRegex)];
-    if (matches.length % 2 === 1) {
-      const idx = matches[matches.length - 1].index;
-      if (typeof idx === 'number') {
-        return line.slice(0, idx) + line.slice(idx + markerLength);
-      }
-    }
-    return line;
-  };
-
-  // 1. Remove stray emphasis markers before ordered list starts (e.g. "****1. ")
-  processed = processed.replace(/^\s*\*{3,}(?=\d+[.)]\s)/gm, '');
-
-  // 2. Split section labels and first ordered item when they are stuck together.
-  processed = processed.replace(/((?:\*\*|__)?\[[^\]\n]{1,20}\](?:\*\*|__)?)\s*(?=[1-9]\d?[.)])/g, '$1\n');
-
-  // 3. Ensure space after ordered-list marker (e.g. "1.조선", "1.**제목**" -> "1. 조선", "1. **제목**")
-  processed = processed.replace(/(?<!\d)([1-9]\d?[.)])(?=\*\*|__|[가-힣A-Za-z(])/g, '$1 ');
-
-  // 4. Ensure emphasis opening marker is separated from previous word (opening marker only).
-  // Avoid touching closing markers before punctuation (e.g. "**텍스트**:")
-  processed = processed.replace(/([가-힣A-Za-z0-9])(?=(\*\*|__)\s*[가-힣A-Za-z0-9(])/g, '$1 ');
-
-  // 5. Trim inner spaces in emphasis markers (covers both-sided or one-sided spaces).
-  processed = processed.replace(/\*\*([^*\n]+)\*\*/g, (m, inner: string) => {
-    const trimmed = inner.trim();
-    return trimmed ? `**${trimmed}**` : m;
-  });
-  processed = processed.replace(/__([^_\n]+)__/g, (m, inner: string) => {
-    const trimmed = inner.trim();
-    return trimmed ? `__${trimmed}__` : m;
-  });
-
-  // 5-1. Remove trailing unmatched emphasis marker in a line.
-  processed = processed
-    .split('\n')
-    .map((line) => {
-      const balancedAsterisk = removeLastUnmatchedMarker(line, /(?<!\*)\*\*(?!\*)/g, 2);
-      return removeLastUnmatchedMarker(balancedAsterisk, /(?<!_)__(?!_)/g, 2);
-    })
-    .join('\n');
-
-  // 6. Normalize quoted emphasis wrappers: **"텍스트"** / **'텍스트'** -> **텍스트**
-  processed = processed.replace(/\*\*\s*['"“”‘’]\s*([^*\n]+?)\s*['"“”‘’]\s*\*\*/g, '**$1**');
-  processed = processed.replace(/__\s*['"“”‘’]\s*([^_\n]+?)\s*['"“”‘’]\s*__/g, '__$1__');
-
-  // 7. Ensure spacing after closing emphasis marker when attached to text.
-  processed = processed.replace(/(?<=\S)(\*\*|__)(?=[가-힣A-Za-z0-9])/g, '$1 ');
-
-  // 8. Fix CJK boundary issues: "**Bold**Suffix" -> "**Bold** Suffix"
-  processed = processed.replace(/\*\*([A-Za-z0-9가-힣(][^*\n]*?)\*\*([가-힣])/g, '**$1** $2');
-  processed = processed.replace(/__([A-Za-z0-9가-힣(][^_\n]*?)__([가-힣])/g, '__$1__ $2');
-
-  return processed;
-};
-
-const extractSuggestions = (text: string, isStreaming: boolean = false, streamReasoning?: string) => {
-  let processed = text;
-  let suggestions: string[] = [];
-  const hasStreamReasoning = typeof streamReasoning === 'string' && streamReasoning.length > 0;
-  let reasoning = hasStreamReasoning ? streamReasoning : "";
-
-  const suggestionMatch = processed.match(/(?:\*\*|__)?\\*\[\s*추천\s*질문\s*\\*\](?:\*\*|__)?[\s\S]*$/i);
-  if (suggestionMatch) {
-    const sugText = suggestionMatch[0];
-    processed = processed.replace(sugText, '');
-
-    const lines = sugText.split('\n');
-    suggestions = lines
-      .map(l => l.replace(/^(?:\d+\.|\-|\*)\s*/, '').trim())
-      .filter(l => l.length > 0 && !l.replace(/\*/g, '').includes('[추천 질문]'))
-      .map(l => l.replace(/\*\*/g, '')); // 별표 제거
-  }
-
-  const reasonStartRegex = /(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?/i;
-  const reasonEndRegex = /(?:---|___|\*\*\*|)\s*(?:\n)*\s*(?:\*\*|__)?\**\[\s*답변\s*\]\**(?:\*\*|__)?/i;
-
-  if (!hasStreamReasoning) {
-    // Fallback parser for legacy/history messages where reasoning and answer are mixed in one text.
-    const startMatch = processed.match(reasonStartRegex);
-    const endMatch = processed.match(reasonEndRegex);
-
-    if (startMatch) {
-      if (endMatch) {
-        // Both start and end exist (fully generated or streaming past reasoning)
-        const reasoningBlock = processed.substring(startMatch.index!, endMatch.index!);
-        reasoning = reasoningBlock;
-        processed = processed.substring(0, startMatch.index!) + processed.substring(endMatch.index!); // Remove the reasoning block from the visible chat
-      } else if (isStreaming) {
-        // Stream is active, and only start tag exists. Everything after start is reasoning.
-        reasoning = processed.substring(startMatch.index!);
-        processed = processed.substring(0, startMatch.index!); // The visible text is empty (or whatever was before the reasoning)
-      } else {
-        // Non-streaming fallback:
-        // If [답변] header is missing, do not hide the whole body as reasoning-only.
-        // Keep full text in answer area to prevent empty final answer.
-        reasoning = "";
-      }
-    } else if (isStreaming) {
-      // FALLBACK: Aggressively match incomplete reasoning tags during early streaming
-      if (!endMatch && processed.trim().length > 0 && processed.trim().length < 50) {
-        // If the stream just started and starts with typical tag characters
-        if (processed.trim().startsWith('*') || processed.trim().startsWith('[')) {
-          reasoning = processed;
-          processed = '';
-        }
-      }
-    }
-  }
-
-  // Strip '[답변]' markers and horizontal rules just before it
-  processed = processed.replace(reasonEndRegex, '');
-
-  // FORCE newlines before numbered lists inside dense text
-  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
-  processed = processed.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
-
-  const reasoningHeaderRegex = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\\?\[\s*추론\s*과정\s*\\?\](?:\*\*|__)?\s*\n?/i;
-  let cleanReasoning = preprocessMarkdown(reasoning).replace(reasoningHeaderRegex, '').trim();
-
-  // Cleanup trailing broken markdown
-  if (isStreaming) {
-    cleanReasoning = cleanReasoning.replace(/[\*\_\[\]]+$/, '');
-  }
-
-  // FORCE newlines before numbered lists inside dense text (e.g., "내용 2. ")
-  // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
-  cleanReasoning = cleanReasoning.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
-
-  return { content: processed.trim(), suggestions, reasoning: cleanReasoning };
-};
-
 export default function ChatbotPage() {
+  const {
+    messages,
+    setMessages,
+    sessions,
+    currentSessionId,
+    setCurrentSessionId,
+    isHistoryLoading,
+    fetchSessions,
+    fetchHistory,
+    markSessionAsCreated,
+    restoreLastSession,
+    startNewChat,
+  } = useChatSessions();
+
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [currentModel, setCurrentModelState] = useState<string>('');
   const setCurrentModel = useCallback((model: string) => {
@@ -255,8 +56,6 @@ export default function ChatbotPage() {
   }, []);
 
   // Session State
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   // Command State
   const [showCommands, setShowCommands] = useState(false);
@@ -264,8 +63,6 @@ export default function ChatbotPage() {
 
   // File & Voice States
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null); // To control recognition instance
 
   // User Profile State
   const [userProfile, setUserProfile] = useState<{ name: string; email: string; persona: string } | null>(null);
@@ -279,7 +76,7 @@ export default function ChatbotPage() {
   const [isMessageDeleteModalOpen, setIsMessageDeleteModalOpen] = useState(false);
   const [messageToDeleteIndex, setMessageToDeleteIndex] = useState<number | null>(null);
   const [isTurnDeleteModalOpen, setIsTurnDeleteModalOpen] = useState(false);
-  const [turnDeleteIndices, setTurnDeleteIndices] = useState<number[]>([]);
+  const [turnDeleteTargetIndex, setTurnDeleteTargetIndex] = useState<number | null>(null);
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState<{
@@ -296,7 +93,6 @@ export default function ChatbotPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposing = useRef(false); // Track IME composition state
-  const isCreatingSessionRef = useRef(false); // To prevent history fetch on new session creation
 
   // Loading Steps
   const [loadingStep, setLoadingStep] = useState(0);
@@ -309,7 +105,66 @@ export default function ChatbotPage() {
   ];
 
   // Suggestions State
-  const [suggestions, setSuggestions] = useState<SuggestionCard[]>(SUGGESTIONS);
+  const suggestions = SUGGESTIONS;
+
+  // 전송이 시작될 때 입력 칸과 첨부 목록과 명령 목록을 비운다. 한글 조합 상태도 함께 푼다.
+  const handleSendStart = useCallback(() => {
+    setInput('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'; // Reset height
+    }
+    // Korean IME fix: simpler reset
+    setTimeout(() => {
+      isComposing.current = false;
+    }, 0);
+    // 이미 비어 있으면 그대로 둔다. 새 빈 배열을 넣으면 attachedFiles 를 의존으로
+    // 갖는 handleSend 가 새로 만들어져 ChatMessage 의 memo 가 전송마다 한 번 깨진다.
+    setAttachedFiles(prev => (prev.length === 0 ? prev : []));
+    setShowCommands(false);
+  }, []);
+
+  const handleSessionAssigned = useCallback((sessionId: string) => {
+    markSessionAsCreated(); // Prevent history fetch overwriting optimistic state
+    setCurrentSessionId(sessionId);
+  }, [markSessionAsCreated, setCurrentSessionId]);
+
+  const handleSessionsShouldRefresh = useCallback(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  const { isLoading, handleSend, handleStop } = useChatStream({
+    currentSessionId,
+    currentModel,
+    persona: userProfile?.persona,
+    attachedFiles,
+    isDisabled: isHistoryLoading,
+    setMessages,
+    onSendStart: handleSendStart,
+    onSessionAssigned: handleSessionAssigned,
+    onSessionsShouldRefresh: handleSessionsShouldRefresh,
+  });
+
+  // 옮기기 전에는 전송과 히스토리 조회가 같은 상태 하나를 썼다. 화면과 가드가 보는 것을
+  // 그때와 같게 두려고 둘을 합쳐 쓴다.
+  const isBusy = isLoading || isHistoryLoading;
+
+  const handleTranscript = useCallback((text: string) => {
+    setInput(prev => prev + (prev ? ' ' : '') + text);
+  }, []);
+
+  const handleSpeechUnsupported = useCallback(() => {
+    setAlertModal({
+      isOpen: true,
+      type: 'danger',
+      title: '음성 인식 미지원',
+      content: '이 브라우저는 음성 인식을 지원하지 않습니다.'
+    });
+  }, []);
+
+  const { isRecording, toggleRecording } = useSpeechInput({
+    onTranscript: handleTranscript,
+    onUnsupported: handleSpeechUnsupported,
+  });
 
   /* 
   // [Optimization] 페이지 진입 시 알트(Alt) Gemini API 호출 중단 요청 반영
@@ -324,14 +179,14 @@ export default function ChatbotPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isLoading) {
+    if (isBusy) {
       setLoadingStep(0);
       interval = setInterval(() => {
         setLoadingStep(prev => (prev < LOADING_STEPS.length - 1 ? prev + 1 : prev));
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [isLoading]);
+  }, [isBusy]);
 
   // Commands Definition
   const COMMANDS = [
@@ -366,10 +221,7 @@ export default function ChatbotPage() {
     window.addEventListener('user-profile-updated', loadProfile);
 
     // 2. Load Local Cache for Session ID (Optimistic Restore)
-    const cachedSessionId = localStorage.getItem('chatbot_last_session_id');
-    if (cachedSessionId) {
-      setCurrentSessionId(cachedSessionId);
-    }
+    restoreLastSession();
 
     fetchModels();
 
@@ -384,15 +236,6 @@ export default function ChatbotPage() {
     };
   }, []);
 
-  // UseEffect for cleanup voice
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-    }
-  }, []);
-
   // Update commands selection index when input changes
   useEffect(() => {
     setSelectedCommandIndex(0);
@@ -402,20 +245,6 @@ export default function ChatbotPage() {
       setShowCommands(false);
     }
   }, [input]);
-
-  // Load History when Session Changes
-  useEffect(() => {
-    if (currentSessionId) {
-      if (isCreatingSessionRef.current) {
-        isCreatingSessionRef.current = false;
-      } else {
-        fetchHistory(currentSessionId);
-      }
-      localStorage.setItem('chatbot_last_session_id', currentSessionId);
-    } else {
-      setMessages([]); // New Chat
-    }
-  }, [currentSessionId]);
 
   // Auto-scroll
   useEffect(() => {
@@ -448,77 +277,6 @@ export default function ChatbotPage() {
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
-    }
-  };
-
-  // Helper: Get Auth Headers
-  const getAuthHeaders = () => {
-    const sessionId = getBrowserSessionId();
-
-    const headers: Record<string, string> = {
-      'X-Session-Id': sessionId
-    };
-
-    // User Profile Email
-    const savedProfile = localStorage.getItem('user_profile');
-    if (savedProfile) {
-      try {
-        const p = JSON.parse(savedProfile);
-        if (p.email && p.email !== 'user@example.com') {
-          headers['X-User-Email'] = p.email;
-        }
-      } catch (e) { }
-    }
-
-    return headers;
-  };
-
-  const fetchSessions = async (): Promise<Session[]> => {
-    try {
-      const headers = getAuthHeaders();
-      const data: any = await fetchAPI('/api/kr/chatbot/sessions', {
-        headers
-      });
-      if (data.sessions) {
-        setSessions(data.sessions);
-        return data.sessions;
-      }
-    } catch (e) {
-      console.error("Failed to fetch sessions", e);
-    }
-    return [];
-  };
-
-  const fetchHistory = async (sessionId: string) => {
-    try {
-      setIsLoading(true); // Show loading state
-      const headers = getAuthHeaders();
-      const data: any = await fetchAPI(`/api/kr/chatbot/history?session_id=${sessionId}`, {
-        headers
-      });
-      if (data.history) {
-        setMessages(data.history);
-      } else {
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('Failed to fetch history:', error);
-      setMessages([{ role: 'model', parts: ['⚠️ 대화 기록을 불러오는데 실패했습니다.'] }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchUserProfile = async () => {
-    try {
-      const data: any = await fetchAPI('/api/kr/chatbot/profile');
-      if (data.profile) {
-        setUserProfile(data.profile);
-        // Update Cache
-        localStorage.setItem('chatbot_user_profile', JSON.stringify(data.profile));
-      }
-    } catch (e) {
-      console.error("Failed to fetch profile", e);
     }
   };
 
@@ -570,267 +328,14 @@ export default function ChatbotPage() {
     const composing = e.nativeEvent.isComposing || isComposing.current;
     if (shouldSendOnEnter(e.key, e.shiftKey, composing)) {
       e.preventDefault();
-      handleSend();
+      handleSend(input);
     }
   };
 
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsLoading(false);
-      setMessages(prev => [...prev, { role: 'model', parts: ['🛑 답변 생성이 중단되었습니다.'] }]);
-    }
-  };
-
-  const handleSend = async (text: string = input) => {
-    if ((!text.trim() && attachedFiles.length === 0) || isLoading) return;
-
-    // Display User Message locally first
-    const displayMsg = text + (attachedFiles.length > 0 ? `\n[파일 ${attachedFiles.length}개 첨부]` : '');
-    const userMsg: Message = {
-      role: 'user',
-      parts: [displayMsg],
-      timestamp: new Date().toISOString()
-    };
-
-    // Optimistic update
-    setMessages(prev => [...prev, userMsg]);
-
-    // Korean IME fix: simpler reset
-    setInput('');
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto'; // Reset height
-    }
-    setTimeout(() => {
-      isComposing.current = false;
-    }, 0);
-
-    setAttachedFiles([]);
-    setShowCommands(false);
-    setIsLoading(true);
-
-    // Create new AbortController
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    // 이 요청이 속한 세션. 화면에 표시 중인 세션(currentSessionId)과는 다른 값이다.
-    // 응답이 흐르는 동안 사용자가 다른 세션을 열 수 있기 때문에 둘을 섞으면 안 된다.
-    let streamSessionId = currentSessionId;
-
-    try {
-      let res;
-      const savedWatchlist = localStorage.getItem('watchlist');
-      const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
-
-      // Auth Headers
-      const headers = getAuthHeaders();
-
-      // Prepare Request
-      if (attachedFiles.length > 0) {
-        const formData = new FormData();
-        formData.append('message', text);
-        if (currentModel) formData.append('model', currentModel);
-        if (currentSessionId) formData.append('session_id', currentSessionId);
-        if (watchlist.length > 0) formData.append('watchlist', JSON.stringify(watchlist));
-        if (userProfile?.persona) formData.append('persona', userProfile.persona);
-
-        attachedFiles.forEach(file => {
-          formData.append('file', file);
-        });
-
-        // Add headers to fetch options. 
-        // Note: For FormData, Content-Type is auto-set.
-        // But our getAuthHeaders might not set Content-Type (which is good).
-
-        res = await fetch('/api/kr/chatbot', {
-          method: 'POST',
-          headers: headers, // Pass auth headers
-          body: formData,
-          signal: controller.signal
-        });
-      } else {
-        // For JSON, we need Content-Type
-        headers['Content-Type'] = 'application/json';
-
-        res = await fetch('/api/kr/chatbot', {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({
-            message: text,
-            model: currentModel,
-            session_id: currentSessionId,
-            watchlist: watchlist,
-            persona: userProfile?.persona
-          }),
-          signal: controller.signal
-        });
-      }
-
-      const contentType = (res.headers.get('content-type') || '').toLowerCase();
-
-      if (contentType.includes('text/event-stream') && res.body) {
-        setIsLoading(false);
-        setMessages(prev => [...prev, { role: 'model', parts: [""], reasoning: "", isStreaming: true }]);
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        let done = false;
-        let buffer = "";
-
-        while (!done) {
-          const { value, done: readerDone } = await reader.read();
-          done = readerDone;
-          if (value) {
-            buffer += decoder.decode(value, { stream: true });
-            const parts = buffer.split("\n\n");
-            buffer = parts.pop() || "";
-
-            for (const part of parts) {
-              if (part.startsWith("data: ")) {
-                const dataStr = part.substring(6);
-                if (!dataStr.trim()) continue;
-                try {
-                  const data = JSON.parse(dataStr);
-                  if (data.error) {
-                    setMessages(prev => {
-                      const newMsgs = [...prev];
-                      newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], parts: [data.error], isStreaming: false };
-                      return newMsgs;
-                    });
-                  }
-                  if (data.clear) {
-                    setMessages(prev => {
-                      const newMsgs = [...prev];
-                      newMsgs[newMsgs.length - 1] = {
-                        ...newMsgs[newMsgs.length - 1],
-                        parts: [""],
-                        reasoning: ""
-                      };
-                      return newMsgs;
-                    });
-                  }
-                  if (data.answer_clear) {
-                    setMessages(prev => {
-                      const newMsgs = [...prev];
-                      const lastMsg = newMsgs[newMsgs.length - 1];
-                      newMsgs[newMsgs.length - 1] = { ...lastMsg, parts: [""] };
-                      return newMsgs;
-                    });
-                  }
-                  if (data.reasoning_clear) {
-                    setMessages(prev => {
-                      const newMsgs = [...prev];
-                      const lastMsg = newMsgs[newMsgs.length - 1];
-                      newMsgs[newMsgs.length - 1] = { ...lastMsg, reasoning: "" };
-                      return newMsgs;
-                    });
-                  }
-
-                  const answerDelta = typeof data.answer_chunk === 'string' ? data.answer_chunk : data.chunk;
-                  if (typeof answerDelta === 'string' && answerDelta.length > 0) {
-                    setMessages(prev => {
-                      const newMsgs = [...prev];
-                      const lastMsg = newMsgs[newMsgs.length - 1];
-                      const currentText = getMessagePartText(lastMsg.parts[0]);
-                      newMsgs[newMsgs.length - 1] = { ...lastMsg, parts: [currentText + answerDelta] };
-                      return newMsgs;
-                    });
-                  }
-                  if (typeof data.reasoning_chunk === 'string' && data.reasoning_chunk.length > 0) {
-                    setMessages(prev => {
-                      const newMsgs = [...prev];
-                      const lastMsg = newMsgs[newMsgs.length - 1];
-                      const currentReasoning = lastMsg.reasoning || "";
-                      newMsgs[newMsgs.length - 1] = { ...lastMsg, reasoning: currentReasoning + data.reasoning_chunk };
-                      return newMsgs;
-                    });
-                  }
-                  // 서버는 모든 청크에 session_id 를 싣는다. 새 대화에서 첫 청크가 세션을
-                  // 배정한 뒤에도 갱신으로 판정되지 않도록 이 스트림의 세션을 갱신해 둔다.
-                  const sessionChanged = Boolean(data.session_id) && data.session_id !== streamSessionId;
-                  if (sessionChanged) {
-                    streamSessionId = data.session_id;
-                    isCreatingSessionRef.current = true;
-                    setCurrentSessionId(data.session_id);
-                  }
-                  if (sessionChanged || data.done) {
-                    fetchSessions();
-                  }
-                  if (data.done) {
-                    setMessages(prev => {
-                      const newMsgs = [...prev];
-                      newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], isStreaming: false };
-                      return newMsgs;
-                    });
-                  }
-                } catch (e) {
-                  // ignore JSON parse error for partial chunks
-                }
-              }
-            }
-          }
-        }
-
-        // Safety net: if stream closed without explicit done event,
-        // ensure the last placeholder message does not remain in streaming state.
-        setMessages(prev => {
-          if (prev.length === 0) return prev;
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.role === 'model' && last?.isStreaming) {
-            next[next.length - 1] = { ...last, isStreaming: false };
-          }
-          return next;
-        });
-      } else {
-        const data = await res.json();
-
-        if (data.response) {
-          // If it's a new session, update state
-          if (data.session_id && data.session_id !== streamSessionId) {
-            streamSessionId = data.session_id;
-            isCreatingSessionRef.current = true; // Prevent history fetch overwriting optimistic state
-            setCurrentSessionId(data.session_id);
-            fetchSessions();
-          } else {
-            fetchSessions();
-          }
-
-          setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
-        } else if (data.error) {
-          setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ 오류: ${data.error}`] }]);
-        } else {
-          setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 응답을 받아오지 못했습니다.'] }]);
-        }
-      }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        // Already handled in handleStop usually, but double check
-        return;
-      }
-      const errorMessage = (error && typeof error.message === 'string' && error.message.trim().length > 0)
-        ? `⚠️ 오류가 발생했습니다: ${error.message}`
-        : '⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-      setMessages(prev => [...prev, { role: 'model', parts: [errorMessage] }]);
-    } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
-      // Reset viewport for mobile keyboard fix
-      if (window.innerWidth < 1024) {
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
-      }
-    }
-  };
 
   // Helper Actions
   const handleNewChat = () => {
-    setCurrentSessionId(null);
-    localStorage.removeItem('chatbot_last_session_id'); // Clear cache
-    setMessages([]);
+    startNewChat();
     setAttachedFiles([]);
     setInput('');
     inputRef.current?.focus();
@@ -863,12 +368,12 @@ export default function ChatbotPage() {
     }
   };
 
-  const handleDeleteMessage = (e: React.MouseEvent, msgIndex: number) => {
+  const handleDeleteMessage = useCallback((e: React.MouseEvent, msgIndex: number) => {
     e.stopPropagation();
-    if (isLoading) return;
+    if (isBusy) return;
     setMessageToDeleteIndex(msgIndex);
     setIsMessageDeleteModalOpen(true);
-  };
+  }, [isBusy]);
 
   const confirmDeleteMessage = async () => {
     if (messageToDeleteIndex === null) return;
@@ -916,22 +421,23 @@ export default function ChatbotPage() {
     }
   };
 
-  const handleDeleteTurn = (e: React.MouseEvent, msgIndex: number) => {
+  // 짝이 되는 인덱스 계산을 확인 시점으로 미룬다. 여기서 messages 를 읽으면 이 콜백이
+  // 청크마다 새로 만들어지고, 그러면 ChatMessage 의 memo 가 스트리밍 내내 무효가 된다.
+  const handleDeleteTurn = useCallback((e: React.MouseEvent, msgIndex: number) => {
     e.stopPropagation();
-    if (isLoading) return;
+    if (isBusy) return;
 
-    const indices = getTurnIndicesFromMessage(messages, msgIndex);
-    if (indices.length === 0) return;
-
-    setTurnDeleteIndices(indices);
+    setTurnDeleteTargetIndex(msgIndex);
     setIsTurnDeleteModalOpen(true);
-  };
+  }, [isBusy]);
 
   const confirmDeleteTurn = async () => {
-    if (turnDeleteIndices.length === 0) return;
+    if (turnDeleteTargetIndex === null) return;
+
+    const targetIndices = getTurnIndicesFromMessage(messages, turnDeleteTargetIndex);
+    if (targetIndices.length === 0) return;
 
     const targetSessionId = currentSessionId;
-    const targetIndices = [...turnDeleteIndices];
     const previousMessages = messages;
 
     try {
@@ -972,7 +478,7 @@ export default function ChatbotPage() {
       });
     } finally {
       setIsTurnDeleteModalOpen(false);
-      setTurnDeleteIndices([]);
+      setTurnDeleteTargetIndex(null);
     }
   };
 
@@ -986,64 +492,6 @@ export default function ChatbotPage() {
     setAttachedFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const toggleRecording = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      setAlertModal({
-        isOpen: true,
-        type: 'danger',
-        title: '음성 인식 미지원',
-        content: '이 브라우저는 음성 인식을 지원하지 않습니다.'
-      });
-      return;
-    }
-
-    if (isRecording) {
-      // STOP
-      setIsRecording(false);
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    } else {
-      // START
-      setIsRecording(true);
-      const speechWindow = window as WindowWithSpeechRecognition;
-      const SpeechRecognitionCtor =
-        speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-      if (!SpeechRecognitionCtor) {
-        setIsRecording(false);
-        return;
-      }
-      const recognition = new SpeechRecognitionCtor();
-      recognition.lang = 'ko-KR';
-      recognition.interimResults = false;
-      recognition.continuous = true;
-      recognition.maxAlternatives = 1;
-
-      recognition.onresult = (event: SpeechRecognitionEventLike) => {
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-          setInput(prev => prev + (prev ? ' ' : '') + finalTranscript);
-        }
-      };
-
-      recognition.onerror = (event: unknown) => {
-        console.error("Speech error", event);
-        setIsRecording(false);
-      };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-
-      recognition.start();
-      recognitionRef.current = recognition;
-    }
-  };
 
 
   return (
@@ -1205,7 +653,7 @@ export default function ChatbotPage() {
         onConfirm={confirmDeleteTurn}
         onCancel={() => {
           setIsTurnDeleteModalOpen(false);
-          setTurnDeleteIndices([]);
+          setTurnDeleteTargetIndex(null);
         }}
         confirmText="삭제"
         cancelText="취소"
@@ -1360,137 +808,22 @@ export default function ChatbotPage() {
               ) : (
                 /* Messages List */
                 <div className="space-y-10">
-                  {messages.map((msg, idx) => {
-                    const rawText = getMessagePartText(msg.parts[0]);
-
-                    const { content, suggestions, reasoning } = msg.role === 'model'
-                      ? extractSuggestions(rawText, !!msg.isStreaming, msg.reasoning)
-                      : { content: rawText, suggestions: [], reasoning: "" };
-
-                    return (
-                      <div key={idx} className="flex gap-4 group">
-                        <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mt-1 ${msg.role === 'user'
-                          ? 'bg-gray-700 hidden'
-                          : 'bg-gradient-to-tr from-blue-500 to-purple-500 shadow-lg shadow-purple-500/20'
-                          }`}>
-                          {msg.role === 'model' && <i className="fas fa-sparkles text-xs text-white"></i>}
-                        </div>
-
-                        <div className="flex-1 space-y-1 overflow-hidden">
-                          <div className="text-sm font-bold text-gray-400 mb-1 flex items-center gap-2">
-                            {msg.role === 'model' && '스마트머니봇'}
-                            <span className="text-[10px] text-gray-500 font-normal ml-2">
-                              {msg.timestamp ? new Date(msg.timestamp).toLocaleString('ko-KR', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: true
-                              }) : ''}
-                            </span>
-                            {!msg.isStreaming && (
-                              <span className="ml-1 inline-flex items-center gap-1">
-                                <button
-                                  onClick={(e) => handleDeleteTurn(e, idx)}
-                                  className="h-6 px-2 rounded-full text-[10px] font-bold text-gray-500 hover:text-amber-300 hover:bg-amber-500/10 transition-colors opacity-70 hover:opacity-100"
-                                  title="이 질문과 답변 함께 삭제"
-                                  aria-label="이 질문과 답변 함께 삭제"
-                                >
-                                  질문/답변
-                                </button>
-                                <button
-                                  onClick={(e) => handleDeleteMessage(e, idx)}
-                                  className="w-6 h-6 rounded-full text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-70 hover:opacity-100"
-                                  title="이 메시지 삭제"
-                                  aria-label="이 메시지 삭제"
-                                >
-                                  <i className="fas fa-trash-alt text-[11px]"></i>
-                                </button>
-                              </span>
-                            )}
-                          </div>
-                          <div className={`prose prose-sm prose-invert max-w-none leading-relaxed space-y-4 ${msg.role === 'user' ? 'text-lg text-gray-100 font-medium' : 'text-gray-300'
-                            }`}>
-                            {msg.role === 'model' && (
-                              <ThinkingProcess
-                                reasoning={reasoning}
-                                isStreaming={!!msg.isStreaming}
-                              />
-                            )}
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                ul({ children }) { return <ul className="list-disc pl-5 mb-2 last:mb-0 space-y-1">{children}</ul> },
-                                ol({ children }) { return <ol className="list-decimal pl-5 mb-2 last:mb-0 space-y-1">{children}</ol> },
-                                li({ children }) { return <li className="mb-1 leading-relaxed">{children}</li> },
-                                code({ node, className, children, ...props }) {
-                                  const match = /language-(\w+)/.exec(className || '')
-                                  return match ? (
-                                    <div className="relative bg-[#1e1f20] rounded-lg overflow-hidden border border-white/5 my-2 shadow-inner">
-                                      <div className="px-4 py-1.5 bg-black/20 text-[10px] text-gray-500 font-mono border-b border-white/5 flex justify-between">
-                                        <span>{match[1]}</span>
-                                        <span className="cursor-pointer hover:text-white"><i className="far fa-copy"></i></span>
-                                      </div>
-                                      <pre className="p-4 overflow-x-auto m-0 !bg-transparent">
-                                        <code className={className} {...props}>{children}</code>
-                                      </pre>
-                                    </div>
-                                  ) : (
-                                    <code className="bg-white/10 px-1.5 py-0.5 rounded text-blue-300 font-mono text-sm" {...props}>
-                                      {children}
-                                    </code>
-                                  )
-                                },
-                                table({ children }) {
-                                  return <div className="overflow-x-auto my-4 border border-white/10 rounded-lg"><table className="min-w-full divide-y divide-white/10">{children}</table></div>
-                                },
-                                thead({ children }) {
-                                  return <thead className="bg-white/5">{children}</thead>
-                                },
-                                th({ children }) {
-                                  return <th className="px-4 py-2 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">{children}</th>
-                                },
-                                td({ children }) {
-                                  return <td className="px-4 py-2 text-sm text-gray-400 whitespace-nowrap border-t border-white/5">{children}</td>
-                                },
-                                a({ children, href }) {
-                                  return <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noreferrer">{children}</a>
-                                },
-                                strong({ children }) {
-                                  return <strong className="text-white font-bold">{children}</strong>
-                                }
-                              }}
-                            >
-                              {preprocessMarkdown(content)}
-                            </ReactMarkdown>
-
-                            {/* Render Extracted Suggestions */}
-                            {suggestions.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mt-4 pt-2 border-t border-white/5">
-                                {suggestions.map((s, i) => (
-                                  <button
-                                    key={i}
-                                    onClick={() => handleSend(s)}
-                                    className="px-3 py-1.5 bg-[#1e1f20] hover:bg-blue-600/20 hover:text-blue-300 hover:border-blue-500/30 border border-white/10 rounded-full text-xs text-gray-300 transition-all text-left shadow-sm"
-                                  >
-                                    {s}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {messages.map((msg, idx) => (
+                    <ChatMessage
+                      key={idx}
+                      message={msg}
+                      index={idx}
+                      onDeleteTurn={handleDeleteTurn}
+                      onDeleteMessage={handleDeleteMessage}
+                      onSuggestionClick={handleSend}
+                    />
+                  ))}
 
 
 
 
 
-                  {isLoading && (
+                  {isBusy && (
                     <div className="flex gap-4 animate-fade-in">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex-shrink-0 flex items-center justify-center mt-1 animate-pulse">
                         <i className="fas fa-sparkles text-xs text-white"></i>
@@ -1686,7 +1019,7 @@ export default function ChatbotPage() {
 
                     {/* Send / Stop Button */}
                     <div className="relative">
-                      {isLoading ? (
+                      {isBusy ? (
                         <button
                           onClick={handleStop}
                           className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-gray-700 hover:bg-gray-600 transition-all shadow-lg animate-fade-in"
@@ -1697,7 +1030,7 @@ export default function ChatbotPage() {
                       ) : (
                         (input.trim() || attachedFiles.length > 0) ? (
                           <button
-                            onClick={() => handleSend()}
+                            onClick={() => handleSend(input)}
                             className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 transition-all shadow-lg animate-fade-in"
                           >
                             <i className="fas fa-paper-plane text-xs"></i>

@@ -1,3 +1,5 @@
+import { getBrowserSessionId } from '@/lib/session';
+
 export const STORED_MODEL_KEY = 'chatbot_current_model';
 
 export function shouldSendOnEnter(
@@ -32,4 +34,25 @@ export function setStoredModel(model: string | null | undefined): void {
   } catch {
     // ignore quota / privacy errors
   }
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const sessionId = getBrowserSessionId();
+
+  const headers: Record<string, string> = {
+    'X-Session-Id': sessionId
+  };
+
+  // User Profile Email
+  const savedProfile = localStorage.getItem('user_profile');
+  if (savedProfile) {
+    try {
+      const p = JSON.parse(savedProfile);
+      if (p.email && p.email !== 'user@example.com') {
+        headers['X-User-Email'] = p.email;
+      }
+    } catch (e) { }
+  }
+
+  return headers;
 }
