@@ -163,7 +163,7 @@ describe('중첩 모달의 Escape', () => {
   // 셸이 저마다 document 에 keydown 리스너를 단다. 판정 없이 두면 모의투자 모달 위에
   // 매수 모달이 열린 상태에서 Escape 한 번에 둘 다 닫힌다. 브라우저 실측에서 실제로
   // 그렇게 동작하는 것을 확인해 맨 위의 셸만 반응하도록 고쳤고, 그것을 여기서 고정한다.
-  function 겹친모달({ onOuterClose }: { onOuterClose: () => void }) {
+  function NestedModals({ onOuterClose }: { onOuterClose: () => void }) {
     const [innerOpen, setInnerOpen] = useState(true);
     return (
       <>
@@ -181,7 +181,7 @@ describe('중첩 모달의 Escape', () => {
 
   it('Escape 한 번은 위에 있는 모달만 닫는다', async () => {
     const onOuterClose = vi.fn();
-    render(<겹친모달 onOuterClose={onOuterClose} />);
+    render(<NestedModals onOuterClose={onOuterClose} />);
 
     await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(2));
 
@@ -193,7 +193,7 @@ describe('중첩 모달의 Escape', () => {
 
   it('위의 모달이 닫힌 뒤의 Escape 는 아래 모달에 닿는다', async () => {
     const onOuterClose = vi.fn();
-    render(<겹친모달 onOuterClose={onOuterClose} />);
+    render(<NestedModals onOuterClose={onOuterClose} />);
 
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
