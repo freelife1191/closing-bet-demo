@@ -1091,6 +1091,15 @@ export default function VCPSignalsPage() {
                 if (!dataStr.trim()) continue;
                 try {
                   const data = JSON.parse(dataStr);
+
+                  // 저장해 둔 세션에 접근할 수 없으면(로그인, 로그아웃으로 소유자가 바뀐
+                  // 경우) 서버가 새 세션을 배정한다. 받아 두어야 다음 전송이 이어진다.
+                  const assignedSessionId = data.session_id;
+                  if (typeof assignedSessionId === 'string' && assignedSessionId && assignedSessionId !== sessionId) {
+                    sessionId = assignedSessionId;
+                    localStorage.setItem(sessionKey, assignedSessionId);
+                  }
+
                   if (data.error) {
                     setChatHistory(prev => {
                       const newMsgs = [...prev];

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional, Tuple
 
+from .storage_history_helpers import is_session_accessible_by_owner
+
 
 _EPHEMERAL_COMMANDS = {"/status", "/help"}
 
@@ -52,10 +54,14 @@ def ensure_session_access(
     target_model_name: str,
     is_ephemeral: bool,
     owner_id: Optional[str],
-    reuse_session_id_on_owner_mismatch: bool,
     logger: Any,
 ) -> str:
-    """세션 존재/소유권을 보장하고 최종 세션 ID를 반환한다."""
+    """세션 존재/소유권을 보장하고 최종 세션 ID를 반환한다.
+
+    조회와 삭제가 쓰는 is_session_accessible_by_owner 로 판정해 세 경로의 기준을
+    하나로 둔다. 오류 대신 새 세션을 주는 것은 로그인 상태가 바뀌어도 채팅 자체는
+    이어져야 하기 때문이며, 호출자는 응답의 session_id 로 바뀐 것을 알 수 있다.
+    """
     save_immediate = not is_ephemeral
 
     if not session_id:
@@ -74,19 +80,7 @@ def ensure_session_access(
             session_id=session_id,
         )
 
-    current_owner = session.get("owner_id")
-    if owner_id and current_owner and current_owner != owner_id:
-        if reuse_session_id_on_owner_mismatch:
-            session["owner_id"] = owner_id
-            _persist_owner_update(history, session_id)
-            logger.warning(
-                "Session owner mismatch resolved by reusing session_id=%s (old_owner=%s, new_owner=%s)",
-                session_id,
-                current_owner,
-                owner_id,
-            )
-            return session_id
-
+    if not is_session_accessible_by_owner(session, owner_id):
         new_session_id = history.create_session(
             model_name=target_model_name,
             save_immediate=save_immediate,
@@ -96,7 +90,7 @@ def ensure_session_access(
             "Session owner mismatch detected; created new session (old=%s, new=%s, old_owner=%s, new_owner=%s)",
             session_id,
             new_session_id,
-            current_owner,
+            session.get("owner_id"),
             owner_id,
         )
         return new_session_id
@@ -107,7 +101,7 @@ def ensure_session_access(
 
 def prepare_chat_request(
     resolve_active_client: Callable[[Optional[str]], Tuple[Optional[Any], Optional[str]]],
-    ensure_session_access_fn: Callable[[Optional[str], str, bool, Optional[str], bool], str],
+    ensure_session_access_fn: Callable[[Optional[str], str, bool, Optional[str]], str],
     execute_command: Callable[
         [str, str, Optional[list], bool, Optional[str]],
         Tuple[bool, Optional[str], Optional[str]],
@@ -118,7 +112,6 @@ def prepare_chat_request(
     files: Optional[list],
     api_key: Optional[str],
     owner_id: Optional[str],
-    reuse_session_id_on_owner_mismatch: bool,
 ) -> Tuple[Optional[Any], str, Optional[str], Optional[str], Optional[str]]:
     """
     채팅 요청의 공통 사전 처리.
@@ -136,7 +129,6 @@ def prepare_chat_request(
         target_model_name,
         ephemeral,
         owner_id,
-        reuse_session_id_on_owner_mismatch,
     )
 
     # 명령 실행에도 소유자를 넘긴다. `/clear all` 이 요청자 자신의 대화만 지우려면

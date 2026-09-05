@@ -54,7 +54,6 @@ class CoreCommandMixin:
         target_model_name: str,
         is_ephemeral: bool,
         owner_id: Optional[str],
-        reuse_session_id_on_owner_mismatch: bool,
     ) -> str:
         """세션 생성/검증 및 소유권 확인."""
         return _ensure_session_access_impl(
@@ -63,7 +62,6 @@ class CoreCommandMixin:
             target_model_name=target_model_name,
             is_ephemeral=is_ephemeral,
             owner_id=owner_id,
-            reuse_session_id_on_owner_mismatch=reuse_session_id_on_owner_mismatch,
             logger=logger,
         )
 
@@ -117,7 +115,6 @@ class CoreCommandMixin:
         files: Optional[list],
         api_key: Optional[str],
         owner_id: Optional[str],
-        reuse_session_id_on_owner_mismatch: bool,
     ) -> Tuple[Optional[Any], str, Optional[str], Optional[str], Optional[str]]:
         """채팅 공통 사전 처리 래퍼."""
         return _prepare_chat_request_impl(
@@ -130,7 +127,6 @@ class CoreCommandMixin:
             files=files,
             api_key=api_key,
             owner_id=owner_id,
-            reuse_session_id_on_owner_mismatch=reuse_session_id_on_owner_mismatch,
         )
 
     def _clear_current_session_messages(self, session_id: Optional[str]) -> bool:

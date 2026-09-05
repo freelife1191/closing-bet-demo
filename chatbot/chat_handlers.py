@@ -36,7 +36,6 @@ def _prepare_request(
         files=files,
         api_key=api_key,
         owner_id=owner_id,
-        reuse_session_id_on_owner_mismatch=True,
     )
 
 
