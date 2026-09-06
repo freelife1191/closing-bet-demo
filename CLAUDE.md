@@ -239,6 +239,7 @@ SCHEDULER_ENABLED=true
 - 티어와 위험 경로: `.claude/skills/dev-cycle/references/tier-rules.md`
 - 기록 형식: `.claude/skills/dev-cycle/references/archive-format.md`
 - 프론트엔드 스킬 매핑: `.claude/skills/dev-cycle/references/frontend-skills.md`
+- 브라우저 실측 요령: `.claude/skills/dev-cycle/references/browser-notes.md`
 - 카테고리 감사: `dev-workflow` 에이전트. 리포트는 `docs/dev-cycle/audits/` 에 남깁니다
 
 `frontend/` 를 건드리는 작업은 프론트엔드 스킬 매핑을 먼저 읽습니다. 어느 스킬을 쓸지는

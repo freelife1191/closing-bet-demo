@@ -98,7 +98,8 @@ Vercel 이 2026 년에 `vercel-labs/next-skills` 를 접으면서 참고 지식�
 한다. `frontend/` 를 건드리는 항목에서는 그 대조를 두 관점으로 나눈다.
 
 1. **브라우저 관점** — 화면이 실제로 무엇을 그리는지 읽는다. `next-dev-loop` 이 이 관점을
-   agent-browser 로 다루며, agent-browser 를 직접 써도 같은 것을 본다.
+   agent-browser 로 다루며, agent-browser 를 직접 써도 같은 것을 본다. 직접 쓸 때의
+   요령은 `browser-notes.md` 에 있다.
 2. **프레임워크 관점** — Next.js 가 컴파일과 런타임에서 무엇을 보고 있는지 읽는다.
    `next-dev-loop` 이 `/_next/mcp` 로 다룬다. 스킬을 부르지 않고 직접 확인하려면 아래
    두 가지를 호출한다. 응답이 SSE 이므로 `data:` 줄만 뽑아 읽는다.

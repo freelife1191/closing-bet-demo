@@ -25,7 +25,9 @@ Z.ai 계열 모델을 함께 쓴다.
 1. `CLAUDE.md` — 규범, 아키텍처, ponytail 원칙, 환경 변수, 사이클 개요
 2. `.claude/skills/dev-cycle/SKILL.md` — 작업을 시작하기 전에. `## 실행 환경` 절이 지금
    환경에서 부를 수 있는 도구의 이름을 정한다
-3. `docs/dev-cycle/TODO.md` — 무엇을 할지는 여기서만 고른다
+3. `SKILL.md` 의 `[S] status` 절차 — 최근 완료 3건과 진행 중 사이클과 다음 항목을 이
+   절차로 파악한다. 대화 맥락이 없는 새 세션이 어디까지 왔는지를 잡는 자리다. 무엇을
+   할지는 `docs/dev-cycle/TODO.md` 에서만 고른다
 
 ---
 
