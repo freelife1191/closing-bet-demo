@@ -10,11 +10,11 @@ description: Use when working through this project's backlog — runs one TODO i
 
 ## 호출
 
-| 형식 | 동작 |
-|---|---|
-| `/dev-cycle next` | 백로그에서 다음 항목을 골라 시작한다 |
-| `/dev-cycle <ID>` | 지정한 항목을 시작한다. 예: `/dev-cycle INFRA-001` |
-| `/dev-cycle status` | 백로그 현황만 보고하고 끝낸다 |
+| Claude Code | Codex | 동작 |
+|---|---|---|
+| `/dev-cycle next` | `$dev-cycle next` | 백로그에서 다음 항목을 골라 시작한다 |
+| `/dev-cycle <ID>` | `$dev-cycle <ID>` | 지정한 항목을 시작한다. 예: `INFRA-001` |
+| `/dev-cycle status` | `$dev-cycle status` | 백로그 현황만 보고하고 끝낸다 |
 
 ## 참조
 
@@ -33,14 +33,14 @@ description: Use when working through this project's backlog — runs one TODO i
 
 | 사이클이 부르는 것 | Claude Code | codex |
 |---|---|---|
-| 시나리오 구성 | `/qa-only` | 같다 |
-| 시나리오 실행 | `/qa` | 같다 |
-| 심층 리뷰 (T3) | `/review` | 같다 |
-| 브라우저 실측 | agent-browser | 같다. 셸에서 실행하는 명령이므로 환경을 가리지 않는다 |
-| 과잉설계 리뷰 | `/ponytail-review` | 대응하는 스킬이 없다. 아래 문단을 따른다 |
-| 코드 리뷰 | `feature-dev:code-reviewer` 에이전트 | `/code-review` 스킬 |
-| 계획 문서 (T3) | `superpowers:writing-plans` | `/plan` 스킬 |
-| 카테고리 감사 | `dev-workflow` 에이전트 | `.claude/agents/dev-workflow.md` 의 본문을 `collaboration.spawn_agent` 의 프롬프트로 넘긴다 |
+| 시나리오 구성 | `/qa-only` | `$qa-only` |
+| 시나리오 실행 | `/qa` | `$qa` |
+| 심층 리뷰 (T3) | `/review` | `$review` |
+| 브라우저 실측 | agent-browser | agent-browser. 같은 셸 명령이다 |
+| 과잉설계 리뷰 | `/ponytail-review` | `code-reviewer` 에이전트에 ponytail 기준을 준다. 아래 문단을 따른다 |
+| 코드 리뷰 | `feature-dev:code-reviewer` 에이전트 | `$code-review` 스킬 |
+| 계획 문서 (T3) | `superpowers:writing-plans` | `$superpowers:writing-plans`. 없으면 `$plan` 으로 대체하고 기록한다 |
+| 카테고리 감사 | `dev-workflow` 에이전트 | 역할이 제공되면 `collaboration.spawn_agent` 의 `agent_type: "dev-workflow"`. 미노출 시 역할 문서의 대체 수단을 따른다 |
 
 앞의 넷은 이름이 같다. QA 세 스킬은 양쪽 환경에 같은 것이 설치되어 있고, 호출 이름은
 디렉터리 이름이 아니라 `SKILL.md` frontmatter 의 `name` 이 정한다. codex 쪽 디렉터리가
@@ -48,17 +48,21 @@ description: Use when working through this project's backlog — runs one TODO i
 codex 세션이 이 문서의 초안을 읽고 그 차이를 지적해 확인했다. 이름이 의심스러우면
 디렉터리 목록이 아니라 `name` 필드를 본다.
 
-**과잉설계 리뷰에 대응하는 스킬이 codex 에 없다.** 그 리뷰의 판정 기준 전문이 `CLAUDE.md`
-의 `## Code Philosophy — ponytail` 절에 있으므로 그 절을 읽고 직접 검토한다. 결과는 같은
-형식으로 적는다. 위치와 무엇을 덜어낼지와 무엇으로 대신할지를 한 줄에 담고, 덜어낼 것이
-없으면 그렇게 적는다. 이 리뷰를 건너뛰지 않는다. 사다리의 첫 계단이 「이것이 존재할
-필요가 있는가」이므로, 건너뛰면 뒤따르는 리뷰가 곧 사라질 코드를 다듬게 된다.
+**과잉설계 리뷰는 codex 의 `code-reviewer` 에이전트로 수행한다.** 판정 기준은
+`CLAUDE.md` 의 `## Code Philosophy — ponytail` 절이다. 에이전트에 그 절과 이번 변경만
+읽게 하고 코드를 수정하지 말라고 지시한다. 프롬프트와 출력 형식은
+`docs/dev-cycle/codex-setup.md` 의 「과잉설계 리뷰 프롬프트」를 쓴다. 에이전트를 부를 수
+없으면 같은 기준과 형식으로 직접 검토하고 대체 사실을 기록한다. 이 리뷰를 건너뛰지 않는다.
+사다리의 첫 계단이 「이것이 존재할 필요가 있는가」이므로, 건너뛰면 뒤따르는 리뷰가 곧
+사라질 코드를 다듬게 된다.
 
-**codex 에서는 `/dev-cycle` 로 부를 수 없다.** codex 는 스킬을 자기 홈의 `skills/` 아래에서
-찾는데 그 홈의 위치가 설치 방식마다 다르고, 어느 경우에도 이 저장소의 `.claude/skills/` 는
-그 목록에 들어가지 않는다. 그래서 codex 에서는 이
-파일을 직접 읽고 절차를 따른다. 진입점은 `AGENTS.md` 이며, codex 가 세션마다 자동으로
-읽는 파일이 그것 하나이기 때문에 거기에 이 파일의 경로를 적어 두었다.
+**codex 에서는 `$dev-cycle` 로 부른다.** 저장소의 `.agents/skills/dev-cycle` 이
+`.claude/skills/dev-cycle` 을 가리키는 상대 링크이므로 절차와 참조 문서는 복제하지 않는다.
+스킬을 확인할 위치는 `$CODEX_HOME/skills`, `~/.agents/skills`, 설치된 플러그인,
+저장소의 `.agents/skills` 다. 실제 호출 가능 여부는 현재 세션의 스킬 목록에서 확인한다.
+목록에 `dev-cycle` 이 없으면 `docs/dev-cycle/codex-setup.md` 로 연결을 점검한다.
+링크가 정상이어도 현재 세션에 노출되지 않으면 이 파일을 직접 읽고 같은 절차를 수행하며,
+자동 탐색을 확인한 것으로 기록하지 않는다.
 
 **codex 는 `CLAUDE.md` 를 자동으로 읽지 않는다.** 저장소의 규범과 ponytail 판정 기준이 그
 파일에 있으므로 사이클을 시작할 때 `AGENTS.md` 와 함께 읽는다.

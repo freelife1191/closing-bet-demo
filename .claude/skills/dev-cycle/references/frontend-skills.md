@@ -126,13 +126,16 @@ Vercel 이 2026 년에 `vercel-labs/next-skills` 를 접으면서 참고 지식�
 
 ## 4. 설치 상태
 
-**이 절의 판정은 Claude Code 환경의 것이다.** codex 는 스킬을 `~/.codex/skills` 와 플러그인
-마켓플레이스에서 찾으므로 목록도 이름도 다르다. 2026-09-06 실측 기준으로 `vercel-labs/skills`
-계열은 `vercel:` 네임스페이스로 제공되어 `vercel-react-best-practices` 가
-`vercel:react-best-practices` 에 대응하고, `vercel-composition-patterns` 에 대응하는 것은
-없다. Next.js 번들 문서(`frontend/node_modules/next/dist/docs/01-app/`)는 파일이므로 어느
-환경에서든 그대로 읽는다. §2 의 「기본으로 읽는 것」이 그 문서를 가리키고 있으므로, 스킬이
-없는 환경에서도 판정 근거가 사라지지는 않는다.
+**아래 표의 판정은 Claude Code 환경의 것이다.** 2026-09-06 Codex App 세션에서는
+`vercel-react-best-practices` 와 `vercel-composition-patterns` 가 둘 다 같은 이름으로
+노출되는 것을 확인했다. codex 에서는 각각 `$vercel-react-best-practices` 와
+`$vercel-composition-patterns` 로 부른다. 별도로 보이는 `vercel:react-best-practices` 는
+이름이 비슷한 다른 스킬이므로 같은 것으로 간주하지 않는다. 기기별로 현재 스킬 목록을
+확인하며 누락 시 `docs/dev-cycle/codex-setup.md` 를 따른다.
+
+Next.js 번들 문서(`frontend/node_modules/next/dist/docs/01-app/`)는 파일이므로 어느
+환경에서든 그대로 읽는다. §2 의 「기본으로 읽는 것」이 그 문서를 가리키고 있으므로,
+스킬이 없는 환경에서도 판정 근거가 사라지지는 않는다.
 
 전역 스킬 디렉터리 `~/.claude/skills/` 에 설치되어 있다. 이 저장소에는 스킬 본문을 두지
 않는다. 2026-09-05 에 상류 저장소를 직접 조회해 다음을 확인했다.

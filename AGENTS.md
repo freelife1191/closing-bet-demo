@@ -44,10 +44,11 @@ Z.ai 계열 모델을 함께 쓴다.
 | `.claude/skills/dev-cycle/references/frontend-skills.md` | `frontend/` 를 건드릴 때만 |
 | `.claude/agents/dev-workflow.md` | 카테고리 감사 에이전트 정의 |
 
-**codex 에서는 `/dev-cycle` 슬래시 호출이 되지 않는다.** codex 는 스킬을 자기 홈의
-`skills/` 아래에서 찾으므로 이 저장소의 `.claude/skills/` 는 그 목록에 들어가지 않는다.
-그래서 위 표의 문서를 파일로 직접 읽고 절차를 따른다. 2026-09-06 에 codex 세션으로 확인한
-결과 이 파일에서 출발해 절차 문서와 도구 대응표까지 도달한다.
+**codex 에서는 `$dev-cycle` 로 부른다.** 저장소의 `.agents/skills/dev-cycle` 링크가
+기존 `.claude/skills/dev-cycle/` 을 가리키므로 위 표의 문서가 계속 정본이다.
+현재 스킬 목록(`/skills` 를 제공하는 환경이면 그 목록)에 `dev-cycle` 이 없으면
+`docs/dev-cycle/codex-setup.md` 를 읽고 연결을 점검한다. 링크가 정상이지만 현재 세션에
+노출되지 않으면 위 문서를 직접 읽고 절차를 수행하며, 자동 탐색 확인과 구분해 기록한다.
 
 사이클이 부르는 리뷰와 QA 도구는 환경에 따라 있기도 하고 없기도 하다. 대응표는 `SKILL.md`
 의 `## 실행 환경` 절에 있다. 없는 도구를 부르며 멈추지 말고 그 표가 정한 대체 수단으로

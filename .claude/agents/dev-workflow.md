@@ -9,12 +9,16 @@ model: opus
 
 ## 이 정의를 부르는 방법
 
-Claude Code 에서는 `Agent` 도구의 `subagent_type` 에 `dev-workflow` 를 주면 위쪽의
-frontmatter 가 이 파일을 찾아 준다. **codex 에서는 그 자동 연결이 없다.** codex 는
-에이전트 정의를 `~/.codex/agents` 에서 찾으므로 이 파일이 목록에 들어가지 않는다. 그래서
-codex 에서는 이 파일의 본문을 읽어 `collaboration.spawn_agent` 의 프롬프트로 그대로 넘긴다.
-카테고리 이름과 아래 「하지 않을 일」의 제약을 함께 넘기지 않으면 감사가 코드를 고치기
-시작하므로 빠뜨리지 않는다.
+Claude Code 에서는 `Agent` 도구의 `subagent_type` 에 `dev-workflow` 를 준다.
+codex 에서는 저장소의 `.codex/agents/dev-workflow.toml` 이 이 파일의 본문을 가리킨다.
+현재 도구가 그 역할을 제공하면 `collaboration.spawn_agent` 의
+`agent_type: "dev-workflow"` 와 카테고리 이름 하나를 준다. 역할의 원본을 TOML이나
+프롬프트에 복제하지 않는다.
+
+현재 Codex App에 역할이 노출되지 않으면 사용 가능한 읽기 전용 서브에이전트에 이 파일의
+경로와 카테고리 이름을 주어 본문과 「하지 않을 일」을 따르게 한다. 이는 원본을 참조하는
+대체 수단이며 `dev-workflow` 역할 등록을 확인한 것은 아니다. 설치 검증으로 「하지 않을
+일」만 요청받으면 그 목록만 반환하며 카테고리 감사를 시작하지 않는다.
 
 서브에이전트를 띄울 수 없는 환경이면 부른 세션이 직접 수행한다. 감사는 읽기만 하는
 작업이어서 별도 맥락이 필요하지 않고, 다만 리포트 분량이 그 세션의 맥락을 크게 늘리므로

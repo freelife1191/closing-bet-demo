@@ -4,8 +4,10 @@
 를 읽고 그대로 수행해」라고 하거나 아래 본문을 그대로 붙여 넣는다. 기기마다 한 번 실행하면
 되고, 저장소에 남는 결과물은 커밋되므로 두 번째 기기부터는 홈 디렉터리 쪽만 채우면 된다.
 
-여기 적힌 경로와 명령은 2026-09-06 에 codex-cli 0.153.0 과 oh-my-codex 0.20.3 으로 실측한
-것이다. 실제와 다른 것을 만나면 그 자리에서 이 문서를 고쳐 같은 커밋에 담는다.
+초안은 2026-09-06 에 codex-cli 0.153.0 과 oh-my-codex 0.20.3 을 기준으로 작성했다.
+같은 날 Codex App에서 CLI 0.153.4·OMX 0.21.3 설치를 확인해 아래 절차를 보완했다.
+설치 파일이 존재하는 것과 현재 세션에서 호출되는 것은 별도로 확인한다. 실제와 다른 것을
+만나면 그 자리에서 이 문서를 고쳐 같은 커밋에 담는다. 최신 실측 기록은 §7에 있다.
 
 ---
 
@@ -15,8 +17,10 @@
 카테고리 감사를 부를 수 있게 한다. 구체적으로 다음 넷이다.
 
 1. `$dev-cycle` 로 `.claude/skills/dev-cycle/SKILL.md` 의 절차가 돈다.
-2. `spawn_agent` 의 `agent_type` 에 `dev-workflow` 가 있고, 그것이
-   `.claude/agents/dev-workflow.md` 의 역할 정의를 따른다.
+2. 저장소의 `dev-workflow` 에이전트 정의가 `.claude/agents/dev-workflow.md` 를
+   참조한다. 현재 호스트가 이 역할을 제공하면 `spawn_agent` 의
+   `agent_type: "dev-workflow"` 로 호출한다. 제공하지 않으면 §4의 대체 수단과
+   미검증 범위를 기록한다.
 3. 사이클이 부르는 내부 스킬이 전부 이 기기의 codex 에 있다. codex 에 없는 Claude Code
    전용 스킬은 oh-my-codex(omx) 의 것으로 대체한다.
 4. 문서가 실측한 결과와 같다.
@@ -36,31 +40,40 @@
   않는다. `~/.agents/skills` 는 디렉터리 목록만 본다.
 - 홈 디렉터리의 기존 스킬과 에이전트 정의를 지우거나 덮어쓰지 않는다. 이미 있으면 그대로
   쓴다.
-- 설치가 끝나기 전에 사이클을 시작하지 않는다. 사이클은 사용자가 `$dev-cycle next` 로
-  시작한다.
+- 이 설정 작업에서는 개발 사이클을 시작하지 않는다. 상태만 확인하며 다음 사이클은
+  사용자가 `$dev-cycle next` 로 시작한다.
 - 마지막 보고에 무엇을 확인했고 무엇을 새로 설치했는지 적는다. 확인하지 못한 것은
   했다고 적지 않는다.
 
 ## 0. 환경 확인
 
 ```bash
-echo "${CODEX_HOME:-$HOME/.codex}"   # 스킬 홈. orca 가 관리하는 계정이면 ~/.codex 가 아니다
-omx doctor && omx list | head -3      # oh-my-codex
+printenv CODEX_HOME                  # 미설정이면 기본값은 ~/.codex
+codex --version
+omx list                            # 설치 패키지의 카탈로그. 현재 App의 도구 목록과는 다르다
 git status --short                    # 비어 있어야 한다
 ```
 
-codex 는 스킬을 네 곳에서 읽는다. `$CODEX_HOME/skills`, `~/.agents/skills`, 설치된
-플러그인, 그리고 **저장소의 `.agents/skills`** 다. 에이전트 정의는
-`$CODEX_HOME/agents/*.toml` 과 **저장소의 `.codex/agents/*.toml`** 에서 읽는다. 저장소 안에
-둔 것은 커밋되므로 기기마다 설치할 필요가 없다. 이 두 사실은 2026-09-06 에 저장소 안에
-링크와 정의를 두고 codex 에 목록을 물어 확인했다.
+확인할 스킬 위치는 `$CODEX_HOME/skills`, `~/.agents/skills`, 설치된 플러그인,
+**저장소의 `.agents/skills`** 다. 에이전트 정의는 `$CODEX_HOME/agents/*.toml` 과
+**저장소의 `.codex/agents/*.toml`** 을 확인한다. 저장소에 둔 연결은 커밋되므로
+기기마다 복제할 필요가 없다. 단, 파일 생성만으로 현재 App의 목록이 갱신되었다고
+판정하지 않는다. 현재 세션의 스킬 목록과 사용 가능한 `agent_type` 이 호출 여부의 근거다.
 
-omx 가 없으면 설치한다. 사용자 홈에 `code-review`, `plan`, `ai-slop-cleaner` 등의 스킬과
-`code-reviewer`, `architect`, `critic` 등의 에이전트가 생긴다.
+OMX 0.21.3의 `omx doctor` 는 시작할 때 네이티브 훅 claim journal 복구를 수행한다.
+홈 설정을 보존하는 이번 점검에서는 실행하지 않고 카탈로그·파일 존재·현재 도구 목록으로
+필요한 설치 상태를 확인한다. 이 결과를 `omx doctor` 전체 통과로 보고하지 않는다.
+
+omx 가 없으면 CLI 패키지를 설치한다. 홈 초기화는 별도 단계다.
 
 ```bash
-npm install -g oh-my-codex && omx setup --scope user
+npm install -g oh-my-codex
 ```
+
+`omx setup --scope user` 는 홈 설정과 스킬·에이전트 정의를 만든다. 기존 사용자 설정이나
+정의가 있으면 이번 절차에서 일괄 초기화를 실행하지 않는다. 필요한 스킬·역할 중 부족한
+것과 홈 초기화를 생략한 이유를 보고한다. 기존 설정·정의가 없는 새 환경에서만 홈 초기화를
+수행한다. 이 기기는 이미 필요한 설치가 갖추어져 있으므로 두 단계 모두 실행하지 않았다.
 
 ## 1. dev-cycle 스킬 (저장소에 커밋)
 
@@ -70,30 +83,37 @@ ln -s ../../.claude/skills/dev-cycle .agents/skills/dev-cycle
 test -f .agents/skills/dev-cycle/SKILL.md && echo ok
 ```
 
+위 생성 명령은 경로가 없을 때만 실행한다. 이미 있다면 `readlink .agents/skills/dev-cycle`
+로 대상을 확인한다. 다른 경로를 가리키거나 일반 파일·디렉터리이면 그대로 보존하고
+충돌을 보고한다. `ln -sf` 로 덮어쓰지 않는다.
+
 호출 이름은 디렉터리가 아니라 `SKILL.md` frontmatter 의 `name: dev-cycle` 이 정한다. 링크라서
-원본을 고치면 그대로 반영된다. 확인은 `/skills` 목록에 `dev-cycle` 이 저장소 출처로 보이는
-것으로 한다.
+원본을 고치면 그대로 반영된다. 자동 탐색은 현재 세션의 스킬 목록에 `dev-cycle` 이
+저장소 출처로 보이는 것으로 확인한다. `/skills` 를 제공하는 환경이면 그 목록을 쓴다.
+목록을 새로 읽을 수 없는 App에서는 링크 검증과 자동 탐색 확인을 구분해 기록한다.
 
 ## 2. dev-workflow 에이전트 (저장소에 커밋)
 
-`.codex/agents/dev-workflow.toml` 을 아래 내용 그대로 만든다.
+`.codex/agents/dev-workflow.toml` 이 없으면 아래 내용으로 만든다. 이미 있으면
+원본을 참조하는지 확인하며, 다른 사용자 정의를 덮어쓰지 않는다.
 
 ```toml
-# codex 용 dev-workflow 에이전트. 역할 정의의 원본은 .claude/agents/dev-workflow.md 이며
-# 여기에는 그것을 가리키는 지시만 둔다.
+# 역할 정의의 정본은 .claude/agents/dev-workflow.md 이다.
 name = "dev-workflow"
-description = "이 저장소의 한 기능 카테고리를 감사해 개선 항목 초안을 산출한다. 코드를 수정하지 않고 읽기만 한다. 카테고리 이름(챗봇, 종가베팅, VCP, 수급·백테스트, 프론트엔드, 인프라) 하나를 입력받는다."
+description = "이 저장소의 한 기능 카테고리를 읽기 전용으로 감사해 개선 항목 초안을 산출한다. 카테고리 이름(챗봇, 종가베팅, VCP, 수급·백테스트, 프론트엔드, 인프라) 하나를 입력받는다."
 sandbox_mode = "read-only"
 developer_instructions = """
 작업 디렉터리의 `.claude/agents/dev-workflow.md` 를 먼저 읽고 그 본문을 역할 정의로 따른다.
 그 파일의 「하지 않을 일」이 이 에이전트의 제약이다. 코드를 고치지 않는다.
-받은 프롬프트에서 카테고리 이름 하나를 찾아 그 카테고리만 감사한다.
+설치 검증으로 제약 목록만 요청받으면 그 목록만 반환하고 감사를 시작하지 않는다.
+감사를 요청받으면 프롬프트의 카테고리 이름 하나에 해당하는 범위만 감사한다.
 """
 ```
 
-`model` 을 적지 않으면 `$CODEX_HOME/config.toml` 의 `[agents]` 절에 있는
-`default_subagent_model` 을 쓴다. 필요해지면 그때 더한다. 확인은 `spawn_agent` 도구의
-`agent_type` 목록에 `dev-workflow` 가 있는 것으로 한다.
+모델과 추론 수준은 이 정의에 고정하지 않고 호스트의 서브에이전트 기본 설정을 따른다.
+이 기기의 `$CODEX_HOME/config.toml` 에는 `[agents].default_subagent_model` 과
+`default_subagent_reasoning_effort` 가 있다. 다른 호스트에서도 같은 값이 적용된다고
+가정하지 않는다. 역할 연결 확인 방법은 §4를 따른다.
 
 ## 3. 내부 스킬 (기기마다 확인)
 
@@ -109,10 +129,10 @@ developer_instructions = """
 | 브라우저 실측 | agent-browser | 같다. 셸 명령이다 | `which agent-browser` | `npm install -g agent-browser`. 로그인 세션은 기기별이므로 `--session adguard-cft-extension` 이 없으면 사용자에게 알린다 |
 | 코드 리뷰 | `feature-dev:code-reviewer` 에이전트 | omx `$code-review` 스킬 | `/skills` 에 `code-review`, `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 (0번) |
 | 과잉설계 리뷰 | `/ponytail-review` | omx `code-reviewer` 에이전트를 `spawn_agent` 로 띄운다. 프롬프트는 아래 「과잉설계 리뷰 프롬프트」 | `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 |
-| 계획 문서 (T3) | `superpowers:writing-plans` | 같다. `~/.agents/skills/superpowers` 로 codex 에도 보인다 | `/skills` 에 `superpowers:writing-plans` | 아래 superpowers 설치. 그래도 없으면 omx `$plan` 으로 대신하고 그 사실을 문서에 적는다 |
+| 계획 문서 (T3) | `superpowers:writing-plans` | `$superpowers:writing-plans` | 현재 스킬 목록에 `superpowers:writing-plans` | 아래 superpowers 설치. 그래도 없으면 omx `$plan` 으로 대신하고 그 사실을 문서에 적는다 |
 | 프론트엔드 스킬 | `vercel-react-best-practices`, `vercel-composition-patterns` | 같다 | `/skills` 에 두 이름 | `npx skills add vercel-labs/agent-skills` 뒤 `~/.agents/skills` 에 두 디렉터리가 생겼는지 본다. 이름이 다르면 `npx skills find react --owner vercel-labs` 로 찾는다 |
 | Next.js 번들 문서 | 파일 | 같다 | `ls frontend/node_modules/next/dist/docs/01-app` | `(cd frontend && npm install)` |
-| 카테고리 감사 | `dev-workflow` 에이전트 | `spawn_agent` 에 `agent_type: "dev-workflow"` | 2번 | 2번 |
+| 카테고리 감사 | `dev-workflow` 에이전트 | 역할이 제공되면 `spawn_agent` 에 `agent_type: "dev-workflow"` | 2번과 4번 | 2번. 현재 App의 역할 미노출은 재설치 근거가 아니다 |
 
 **gstack 설치.** 설치 대상은 `${CODEX_HOME:-~/.codex}/skills` 이고 browse 바이너리를 함께
 빌드한다.
@@ -123,8 +143,9 @@ developer_instructions = """
 git clone https://github.com/garrytan/gstack.git ~/gstack && ~/gstack/setup --host codex
 ```
 
-**superpowers 설치.** codex 는 `~/.agents/skills` 아래 디렉터리를 `<디렉터리>:<스킬>` 이름으로
-읽으므로 링크 하나면 `superpowers:writing-plans` 가 보인다.
+**superpowers 설치.** 현재 기기에서는 아래 링크와 `superpowers:writing-plans` 목록 항목이
+확인되어 재설치하지 않는다. 다른 기기에서는 두 경로가 없을 때만 생성하고 현재 스킬
+목록에서 호출 이름을 확인한다. 모든 스킬의 이름에 같은 접두사 규칙을 가정하지 않는다.
 
 ```bash
 git clone https://github.com/obra/superpowers.git ~/.codex/superpowers
@@ -148,14 +169,19 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
 
 ## 4. 검증
 
-1. `/skills` 목록에 다음이 전부 있다. `dev-cycle`(저장소), `qa`, `qa-only`, `review`,
+1. 현재 세션의 스킬 목록에 다음이 있는지 확인한다. `dev-cycle`(저장소), `qa`, `qa-only`, `review`,
    `code-review`, `superpowers:writing-plans`, `vercel-react-best-practices`,
    `vercel-composition-patterns`.
-2. `$dev-cycle status` 를 부른다. `[S] status` 의 브리핑, 즉 최근 완료 3건과 우선순위별 항목
-   수와 진행 중 사이클 여부와 `git status` 가 나오면 된다. 사이클을 시작하지 않는다.
+2. `$dev-cycle status` 를 부른다. 현재 목록에 없으면 연결된
+   `.agents/skills/dev-cycle/SKILL.md` 를 직접 읽어 `[S] status` 를 수행한다.
+   최근 완료 3건·우선순위별 수와 첫 항목·진행 중 사이클·미완료 QA·`git status` 를 보고한다.
+   직접 수행했으면 자동 탐색까지 확인한 것으로 보고하지 않는다. 사이클을 시작하지 않는다.
 3. `spawn_agent` 로 `agent_type: "dev-workflow"` 를 띄우되 프롬프트는 「정의 파일을 읽고
-   「하지 않을 일」 목록만 돌려줘. 감사는 시작하지 마」로 한다. 목록이 돌아오면 정의 파일의
-   포인터가 동작하는 것이다.
+   「하지 않을 일」 목록만 돌려줘. 감사는 시작하지 마」로 한다. 이 호출에 목록이 돌아오면
+   역할 등록과 원본 참조를 확인한 것이다. 역할을 제공하지 않거나 `unknown agent_type`
+   오류가 나면 재설치하지 않는다. 사용 가능한 읽기 전용 서브에이전트에 TOML과 원본의
+   경로를 주어 같은 제약 목록만 요청하고, **원본 참조만 확인했으며 전용 역할 호출은
+   확인하지 못했다**고 기록한다. 새 세션에서 역할이 보이는지는 별도 확인 사항이다.
 4. `$qa-only`, `$qa`, `$review` 는 실행하지 않는다. 앱이 떠 있어야 하고 비용이 든다. 존재만
    확인한다.
 
@@ -165,19 +191,15 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
 
 - `.claude/skills/dev-cycle/SKILL.md` 의 `## 실행 환경`
   - 표의 codex 열을 3번 표의 「codex 에서 부를 이름」 열과 같게 한다. `$` 표기를 쓴다.
-  - 「**codex 에서는 `/dev-cycle` 로 부를 수 없다.**」 문단을 지우고, 저장소의
-    `.agents/skills/dev-cycle` 링크로 `$dev-cycle` 로 부른다는 문단으로 바꾼다. codex 가
-    스킬을 읽는 네 곳을 적는다.
+  - 저장소의 `.agents/skills/dev-cycle` 링크와 `$dev-cycle` 호출, 확인할 스킬 위치 네 곳을
+    안내한다. 현재 App에 스킬이 노출되지 않을 때 파일을 직접 읽는 대체 수단도 적는다.
   - 「**과잉설계 리뷰에 대응하는 스킬이 codex 에 없다.**」 문단을 위의 에이전트 방식으로
     바꾼다. 에이전트를 띄울 수 없을 때 직접 검토한다는 내용은 대체 수단으로 남긴다.
   - 「**codex 는 `CLAUDE.md` 를 자동으로 읽지 않는다.**」 문단은 그대로 둔다.
-- `.claude/agents/dev-workflow.md` 의 「이 정의를 부르는 방법」: codex 에서는
-  `.codex/agents/dev-workflow.toml` 이 이 파일을 가리키므로 `spawn_agent` 에
-  `agent_type: "dev-workflow"` 와 카테고리 이름을 준다고 적는다. 본문을 프롬프트로 복사해
-  넘기는 방법은 지운다.
-- `AGENTS.md`: 「codex 에서는 `/dev-cycle` 슬래시 호출이 되지 않는다」 문단을 `$dev-cycle`
-  로 부른다는 문단으로 바꾸고, `/skills` 에 그 이름이 없으면 이 문서를 수행하라는 한 줄을
-  더한다.
+- `.claude/agents/dev-workflow.md` 의 「이 정의를 부르는 방법」: TOML의 원본 참조,
+  역할이 제공될 때의 `agent_type: "dev-workflow"` 호출, 미노출 시 파일 경로를 주는
+  대체 수단을 적는다. 본문을 프롬프트로 복사하지 않는다.
+- `AGENTS.md`: `$dev-cycle` 연결과 목록 미노출 시 이 문서로 점검하는 절차를 안내한다.
 - `.claude/skills/dev-cycle/references/tier-rules.md` 의 §1 아래와 `Agent` 도구 문단 앞에
   있는 codex 문단, `references/frontend-skills.md` §4 의 codex 문단을 새 이름에 맞춘다.
   `vercel-composition-patterns` 가 codex 에도 보이므로 「대응하는 것은 없다」를 고친다.
@@ -193,3 +215,45 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
 보고는 네 가지다. 확인한 것, 새로 설치한 것, 설치하지 못한 것과 그 이유,
 `$dev-cycle status` 의 브리핑. 그다음 멈춘다. 다음 사이클은 사용자가 `$dev-cycle next` 로
 시작한다.
+
+## 7. 2026-09-06 Codex App 실측 기록
+
+실행 환경은 tmux 밖의 Codex App이며, 시작 브랜치는 `develop`, 시작 작업 트리는 깨끗했다.
+아래는 이 설정 작업에서 확인한 범위다. 다른 기기의 설치·로그인·호출 가능 여부까지
+보장하는 기록은 아니다.
+
+| 대상 | 결과 | 근거 |
+|---|---|---|
+| Codex CLI / OMX / agent-browser | 0.153.4 / 0.21.3 / 0.31.1 | `codex --version`, 설치 패키지의 `package.json` |
+| OMX 카탈로그 | 스킬 33개 중 활성 23개, 에이전트 프롬프트 30개 중 활성 16개 | `omx list --json`. 현재 App의 역할 목록과 별개 |
+| 기존 내부 스킬 | `qa`, `qa-only`, `review`, `code-review`, `plan`, `superpowers:writing-plans`, 두 프론트엔드 스킬 확인 | 현재 세션 스킬 목록과 허용된 설치 경로의 존재 확인 |
+| browse / agent-browser / Next.js 문서 | 실행 파일 두 개와 번들 문서 디렉터리 확인 | 파일 존재·실행 권한·명령 경로 확인 |
+| 브라우저 세션 | 활성 세션 없음 | `agent-browser session list`: `No active sessions`. `adguard-cft-extension` 로그인 상태는 확인하지 못함 |
+| `dev-cycle` 링크 | 정본과 네 참조 파일에 도달 | 상대 경로·frontmatter 이름 검사 통과 |
+| `dev-workflow` 정의 | TOML 구문·읽기 전용 선언·원본 경로·설치 검증 분기 확인 | Python `tomllib` 검사. 이 문서 §2의 예시와 실제 정의도 일치 |
+| 전용 역할 호출 | 현재 App에서 실패 | `agent_type: "dev-workflow"` → `unknown agent_type 'dev-workflow'` |
+| 역할 원본 참조 | 대체 수단으로 확인 | 기존 `code-reviewer` 에 TOML과 원본 경로를 주어 「하지 않을 일」 세 항목을 반환받음. 전용 역할 등록 성공으로 간주하지 않음 |
+| 상태 브리핑 | 연결 파일을 직접 읽어 수행 | `.agents/skills/dev-cycle/SKILL.md` 의 `[S] status`. `$dev-cycle` 자동 탐색은 현재 세션에서 미검증 |
+
+새로 추가한 것은 저장소의 상대 링크와 TOML 정의다. 홈 디렉터리에 새로 설치하거나
+변경한 것은 없다. 기존 도구가 모두 있어 설치 누락은 없으며, 전용 역할 호출과 새 스킬의
+자동 탐색은 위 표처럼 별도로 남겼다. 앱 서버·LLM·데이터 갱신 요청과 실제 QA·감사는
+실행하지 않았다. `omx doctor` 는 §0의 이유로 실행하지 않았다.
+
+`[S] status` 결과는 다음과 같다.
+
+- 최근 완료: 09-05 `CHAT-017` 공용 메모리의 사용자 분리 (`1b1e4bb`),
+  09-06 `CHAT-021` 프로필 API 소유자 판정 (`40b37a2`),
+  09-06 `CHAT-026` 대시보드 프로필 저장 경로 통일 (`b7f790c`).
+- P0: 0건. P1: 27건, 첫 항목은 `CHAT-022` 메모리 전체 동기화의 다른 워커 행 삭제.
+  P2: 72건, 첫 항목은 `CHAT-027` 프로필과 메모리 영역의 어긋남.
+- 진행 중 사이클이나 아카이브되지 않은 QA 문서는 없다. `FE-030`·`FE-038`의 완료
+  체크는 다른 사이클에서 수행한 내용이다.
+- 브리핑 시점 작업 트리에는 이번 설정 변경만 있다. 커밋 후 상태는 최종 보고에서 확인한다.
+
+티어 조건과 제품 동작을 변경하지 않아 백로그 99건의 판정 변경은 없다. 링크·TOML·문서
+참조 검사를 실행하며, 커밋 전에는 `git diff --check` 와 변경 파일 범위를 다시 확인한다.
+독립 문서 검토에서 지적한 역할 호출의 제공 조건과 기존 홈 설정이 있을 때의 OMX 초기화
+제한을 각각 실행 환경 표와 §0에 반영했다.
+애플리케이션 코드를 변경하지 않았으므로 pytest·vitest·타입 검사는 이번 설정 작업에서
+실행하지 않는다.
