@@ -355,6 +355,12 @@ thread 객체 배열이라고 가정하면 실제 자식이 있어도 전용 호
 홈의 신뢰 설정을 일괄 변경하지 않는다. 필수 필드가 정상인데도 역할을 찾지 못할 때는
 이 환경 오류와 실제 역할 정의 결함을 구분한다.
 
+전체 라운드 검수는 모델 실행 전에 같은 sandbox로 Git 메타데이터 쓰기도 검사한다.
+`workspace-write`는 일반 소스 쓰기를 허용하면서 `.git`을 보호할 수 있다. 이 경우 승인된
+소유 fixture의 `.git`만 추가 writable root로 지정하고, 그 안의 임시 파일 생성·삭제가
+통과하는지 확인한다. 파일 시스템 전체 권한을 열거나 실제 저장소 권한을 바꾸지 않는다.
+검수용 workspace·역할 trust·Git 쓰기·QA lifecycle을 먼저 갖춘 뒤 스킬 동작을 판정한다.
+
 `docs/dev-cycle/evidence/2026-09-06-dev-workflow-runtime.json` 은 이 결과를 담는다.
 실제 자식의 `agentRole` 과 `source.subAgent.thread_spawn.agent_role` 이 모두
 `dev-workflow` 이며, `parentThreadId` 는 검증 부모의 ID와 일치한다. 자식 경로는
@@ -411,7 +417,8 @@ Codex QA는 시나리오 계획부터 실행·진단·수정·정리까지 `$ult
 필수 검증과 정리의 통과를 확인한 최종 아카이브 커밋에서만 항목을 제거한다. 이전 기록의
 `실패 → 이월`은 소급 수정하지 않는다.
 
-이번 변경의 실제 동작 검증은 `docs/dev-cycle/qa/INFRA-033.md`에 남긴다. 설치 목록 확인이나
+초기 중단 기록은 `docs/dev-cycle/qa/INFRA-033.md`, 원인 수리와 재검수는
+`docs/dev-cycle/qa/INFRA-033-recheck.md`에 남긴다. 설치 목록 확인이나
 성공 문구만으로 업무 처리 성공을 주장하지 않고, 격리 fixture의 명령 종료 코드·파일 변경·
 TODO·아카이브·런타임 역할 메타데이터를 검사한다. 새 플러그인 패키지를 만들지 않았으므로
 검증 대상은 실제 등록된 프로젝트 스킬과 전용 네이티브 역할이다.

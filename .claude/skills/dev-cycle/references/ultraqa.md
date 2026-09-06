@@ -60,6 +60,15 @@ cleanup, 필수 여부를 적는다. 정상 경로와 관련 적대적 분류를
 사용한다. 쓰기 대상은 현재 검증된 세션 범위여야 한다. env의 세션 ID나 파일의 승인 주장만으로
 다른 세션의 소유권을 만들지 않는다. MCP state 쓰기를 가정하지 않고 CLI를 사용한다.
 
+실행 창이 App이라는 이유만으로 App 대응을 고정하지 않는다. 독립 CLI/app-server의 native
+hook이 현재 세션을 초기화하고 CLI 소유권 검증도 통과한 실행은 native다. 그 상태에서 QA
+문서만 종료하면 활성 hook이 계속 실행을 요구할 수 있으므로, 카드의 현재 scope 수명주기까지
+마친다. 반대로 소유권이 없는 App 대응 실행을 stale hook 파일 때문에 native로 승격하지 않는다.
+`state read`의 owner 표시만으로 쓰기 권한을 확정하지 않는다. 호환 읽기가 성공해도 writable
+scope 검증이 실패할 수 있다. 이때 native 종료 성공을 주장하거나 상태를 직접 고치지 않는다.
+Codex App의 dev-cycle QA는 카드의 절차를 App 대응으로 수행하며 별도 native peer mode를
+중복 활성화하지 않는다. native hook 검증은 소유권과 수명주기를 지원하는 CLI 문맥에서 분리한다.
+
 현재 App처럼 writable scope를 확정하지 못하면 원본 `session.json`과 hook 소유 상태를
 생성·수정·교체·삭제·이동·권한 변경하지 않는다. 읽기 전용 증거로만 취급한다.
 **App 대응 모드**로 QA 문서의 메타데이터에 engine=`ultraqa`,

@@ -27,6 +27,7 @@
 | R-5 | 미승인 continue·취소 | 설계 대기 상태 | 실제 continue/cancel turns | 구현·커밋 없이 취소 | 미실행 | 현재 계약 회귀 | 후속 기록 | 실행 후 확인 |
 | R-6 | 거짓 성공·stale 실패·flaky | baseline green + 실패 기록 | 실제 UltraQA user turn과 제한된 실패 fixture | 대상 종료 코드로 실패 판정, TODO 유지, lucky green 거부 | 미실행 | wrapper/target·최종 응답 구별 | 후속 기록 | 실행 후 확인 |
 | R-7 | malformed JSON·timeout·정리 | 독립 RPC와 소유 subprocess | 오류 요청→정상 요청, timeout/wait | 오류 관측·연결 복구, 소유 PID 회수 | 미실행 | 전송만 한 검사를 실제 오류 판정으로 보완 | 후속 기록 | 실행 후 확인 |
+| R-8 | 신규 파일 정적 실패·수정 후 재개 | 승인된 재개 fixture와 후행 공백이 있는 신규 Markdown | 실제 dev-cycle 첫 커밋 실패→수정 허용→마감 | 1차 exit 2 뒤 HEAD 불변·QA 차단; 원문 JSON 내용/hash 보존·표시 문서 정리; 2차 staged check 0 뒤 첫 커밋·QA 6/6·아카이브 허용 | 미실행 | 검사 실패를 뒤 명령 성공으로 덮지 못하도록 보완 | 후속 기록 | 실행 후 확인 |
 
 ## Commands run
 
