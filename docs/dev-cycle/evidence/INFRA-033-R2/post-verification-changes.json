@@ -1,0 +1,41 @@
+{
+  "observed_at": "2026-09-06T23:29:52+09:00",
+  "verified_core_revision": "c6b84c9",
+  "verified_head": "0eee1ca4a9ec737f673dca963c280d75bc9b96c0",
+  "committed_core_matches_evidence": true,
+  "changed_paths": [
+    ".claude/agents/dev-workflow.md",
+    ".claude/skills/dev-cycle/SKILL.md",
+    ".claude/skills/dev-cycle/references/tier-rules.md",
+    "CLAUDE.md",
+    "docs/dev-cycle/codex-setup.md"
+  ],
+  "scope": "Separate uncommitted workflow additions observed at final check; origin unconfirmed, preserved and not included in completed evidence.",
+  "core_checks": {
+    ".claude/skills/dev-cycle/SKILL.md": {
+      "verified_commit_sha256": "561fcfc8d0e93154fdeddb4d9b3553de673b49e4048b01e24e9cb280c6ea1a8d",
+      "current_worktree_sha256": "70ca02081d8aa2713de3de7988f15cd1852341e25fdb4a72c7eba66c525f7274",
+      "current_matches": false
+    },
+    ".claude/skills/dev-cycle/references/ultraqa.md": {
+      "verified_commit_sha256": "0627aaff3cdb7f32a3356f958f6edcffa5bd4ea3227cad14b88ea4c0869a495e",
+      "current_worktree_sha256": "0627aaff3cdb7f32a3356f958f6edcffa5bd4ea3227cad14b88ea4c0869a495e",
+      "current_matches": true
+    },
+    ".claude/skills/dev-cycle/references/tier-rules.md": {
+      "verified_commit_sha256": "dd246d1fbbcb2d475c1e04e391bce51d6809f4fa6ae6daa4f6623f72564ad13b",
+      "current_worktree_sha256": "106436bedb3a00cb4ea9c11894f65236e0350ffcbe390205a15c311cc44ae868",
+      "current_matches": false
+    },
+    ".claude/agents/dev-workflow.md": {
+      "verified_commit_sha256": "1dc232745733e4680988cc2527c8a4b386bc62fcbc76eecf2f5b035042e5c6ba",
+      "current_worktree_sha256": "5acca2d4e9b67c34a4272c5b5a1e2fda73e06004b6d14244da789d5c74ecd7a1",
+      "current_matches": false
+    },
+    ".codex/agents/dev-workflow.toml": {
+      "verified_commit_sha256": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6",
+      "current_worktree_sha256": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6",
+      "current_matches": true
+    }
+  }
+}

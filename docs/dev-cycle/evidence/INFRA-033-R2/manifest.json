@@ -189,5 +189,10 @@
     },
     "original_state_and_package_preserved": true,
     "native_state_clear_claimed": false
-  }
+  },
+  "verified_core_revision": "c6b84c9",
+  "verification_commit": "664b6cc",
+  "archive_commit": "0eee1ca",
+  "post_verification_worktree_changes": "post-verification-changes.json",
+  "current_worktree_verified": false
 }
