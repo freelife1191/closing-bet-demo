@@ -16,6 +16,18 @@
 
 ## P1 — 이번 주기
 
+### [INFRA-033] 개발 라운드 설계와 Codex UltraQA 흐름을 연결한다
+- 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-06 사용자 요청과 전체 워크플로 리뷰
+- 설계 승인: 2026-09-06 | 승인 확인: 2026-09-06T20:32:31+09:00 | 경로: architectural | 범위: dev-cycle·dev-workflow 규약과 격리 실제 검증 | 근거: 현재 대화의 설계 제안에 대한 사용자 「진행해」
+- 설계: docs/superpowers/specs/2026-09-06-dev-cycle-brainstorming-ultraqa-design.md
+- [x] brainstorming 설계와 사용자 승인 확인
+- [x] 라운드·재개·승인·필수 QA 실패·감사 읽기 전용 계약 반영
+- [x] Codex UltraQA와 App 상태 대응, Claude Code 기존 도구 매핑 정리
+- [ ] 격리 저장소 실제 흐름과 적대적 시나리오 검증
+- [ ] 독립 리뷰와 정적 검사, 증거·정리 확인
+- [ ] 구현 커밋과 완료 아카이브 기록
+
+
 ### [CHAT-022] 메모리 전체 동기화가 다른 워커가 저장한 행을 지운다
 - 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
 - `chatbot/storage_memory_manager.py` 의 `_save()` 가 `save_memories_to_sqlite` 에 자기

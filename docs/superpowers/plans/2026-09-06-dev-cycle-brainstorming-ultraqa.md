@@ -1,0 +1,35 @@
+# 개발 라운드와 UltraQA Implementation Plan
+
+> **For agentic workers:** Use the approved design and execute the bounded tasks below. Record verification evidence before completion.
+
+**Goal:** 새 라운드의 brainstorming과 Codex UltraQA를 연결하고 실제 업무 흐름을 검증한다.
+
+**Architecture:** 기존 Markdown 스킬과 역할 정의를 수정한다. 상태·기록 계약은 기존
+references에 유지하고, App 대응 QA만 별도 참조 문서로 분리한다.
+
+**Tech Stack:** Markdown, TOML, Python 표준 라이브러리, Git, Codex app-server JSON-RPC.
+
+**Spec:** `docs/superpowers/specs/2026-09-06-dev-cycle-brainstorming-ultraqa-design.md`
+
+## Constraints
+
+- 승인된 동일 설계를 다시 승인받지 않는다.
+- 기존 QA·아카이브와 다른 작업의 변경을 보존한다.
+- 운영 앱·시크릿·데이터와 기존 OMX 상태에 쓰지 않는다.
+- 전용 역할은 실제 런타임 메타데이터로 확인한다.
+
+## Task 1: 실행 계약
+
+- [x] `SKILL.md`에 상태 분류·brainstorming·승인 후 자동 진행·필수 실패 차단을 반영한다.
+- [x] `references/ultraqa.md`에 Codex 행렬·실행·재시도·App 상태 대응을 정리한다.
+- [x] `CLAUDE.md`, `AGENTS.md`, `dev-workflow.md`, 설정 안내를 동일 계약에 맞춘다.
+- [x] 독립 담당자가 tier-rules/archive-format/frontend-skills/browser-notes 참조를 맞춘다.
+
+## Task 2: 검증과 마감
+
+- [ ] 격리 하네스에서 정상과 적대적 시나리오를 실제 실행한다. 결과 판정은 Git·파일·종료
+  코드·런타임 메타데이터로 하고, 에이전트의 성공 문구만으로 통과시키지 않는다.
+- [ ] 스킬 형식, 경로·절 참조, 원본 연결과 `git diff --check`를 확인한다.
+- [ ] 독립 리뷰 지적을 반영하고 필요한 시나리오를 재실행한다.
+- [ ] UltraQA Report에 행렬·실행 코드·수정·정리·잔여 위험을 기록한다.
+- [ ] 검증된 변경을 커밋하고 새로 등록한 백로그 항목을 완료 아카이브에 반영한다.

@@ -105,7 +105,7 @@ description = "이 저장소의 한 기능 카테고리를 읽기 전용으로 �
 sandbox_mode = "read-only"
 developer_instructions = """
 작업 디렉터리의 `.claude/agents/dev-workflow.md` 를 먼저 읽고 그 본문을 역할 정의로 따른다.
-그 파일의 「하지 않을 일」이 이 에이전트의 제약이다. 코드를 고치지 않는다.
+그 파일의 「하지 않을 일」이 이 에이전트의 제약이다. 어떤 파일이나 상태도 바꾸지 않는다.
 설치 검증으로 제약 목록만 요청받으면 그 목록만 반환하고 감사를 시작하지 않는다.
 감사를 요청받으면 프롬프트의 카테고리 이름 하나에 해당하는 범위만 감사한다.
 """
@@ -123,8 +123,9 @@ developer_instructions = """
 
 | 사이클이 부르는 것 | Claude Code | codex 에서 부를 이름 | 확인 | 없을 때 |
 |---|---|---|---|---|
-| 시나리오 구성 | `/qa-only` | `$qa-only` | `/skills` 에 `qa-only`. 디렉터리는 `gstack-qa-only` 지만 `name` 이 `qa-only` 다 | gstack 설치 (아래) |
-| 시나리오 실행 | `/qa` | `$qa` | `/skills` 에 `qa` | gstack 설치 |
+| 새 라운드 설계 | `superpowers:brainstorming` | `$superpowers:brainstorming` | 현재 스킬 목록과 설계 승인 단계 | 아래 superpowers 설치 |
+| 시나리오 구성 | `/qa-only` | `$ultraqa`의 행렬 계획 | 현재 스킬 목록에 `ultraqa` | omx 설치 (0번) |
+| 시나리오 실행·진단·정리 | `/qa` | `$ultraqa` | 스킬과 `references/ultraqa.md`의 native/App 대응 확인 | omx 설치 (0번) |
 | 심층 리뷰 (T3) | `/review` | `$review` | `/skills` 에 `review` | gstack 설치 |
 | browse 바이너리 | `/qa` 와 `/qa-only` 가 내부에서 쓴다 | 같다 | `test -x "${CODEX_HOME:-$HOME/.codex}/skills/gstack/browse/dist/browse"` | gstack 설치가 함께 빌드한다 |
 | 브라우저 실측 | agent-browser | 같다. 셸 명령이다 | `which agent-browser` | `npm install -g agent-browser`. 로그인 세션은 기기별이므로 `--session adguard-cft-extension` 이 없으면 사용자에게 알린다 |
@@ -174,8 +175,8 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
 
 ## 4. 검증
 
-1. 현재 세션의 스킬 목록에 다음이 있는지 확인한다. `dev-cycle`(저장소), `qa`, `qa-only`, `review`,
-   `code-review`, `superpowers:writing-plans`, `vercel-react-best-practices`,
+1. 현재 세션의 스킬 목록에 다음이 있는지 확인한다. `dev-cycle`(저장소), `ultraqa`, `review`,
+   `code-review`, `superpowers:brainstorming`, `superpowers:writing-plans`, `vercel-react-best-practices`,
    `vercel-composition-patterns`. 조건부 프론트엔드 작업도 포함해 `next-dev-loop`,
    `next-cache-components-adoption`, `next-cache-components-optimizer`,
    `next-partial-prefetching-adoption`, `vercel:next-upgrade` 를 확인한다.
@@ -193,8 +194,8 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
    확인하지 못했다**고 기록한다. 전용 호출까지 검증하는 작업에서는 여기서 끝내지 않고
    §8의 새 실행 문맥 검증을 수행한다. 같은 작업에서 턴이나 자식만 추가하는 것으로
    역할 목록이 새로 로드된다고 가정하지 않는다.
-4. `$qa-only`, `$qa`, `$review` 는 실행하지 않는다. 앱이 떠 있어야 하고 비용이 든다. 존재만
-   확인한다.
+4. 연결 설치만 확인하는 호출에서는 `$ultraqa`와 `$review`를 실제 업무에 실행하지 않는다.
+   사용자가 동적 검증을 명시하면 격리된 표면에서 해당 흐름을 검증하고 실행 범위를 기록한다.
 
 ## 5. 문서 갱신
 
@@ -214,7 +215,7 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
 - `.claude/skills/dev-cycle/references/tier-rules.md` 의 §1 아래와 `Agent` 도구 문단 앞에
   있는 codex 문단, `references/frontend-skills.md` §4 의 codex 문단을 새 이름에 맞춘다.
   `vercel-composition-patterns` 가 codex 에도 보이므로 「대응하는 것은 없다」를 고친다.
-- `CLAUDE.md` 는 고치지 않는다. 「부르는 리뷰·QA 도구의 이름만 다릅니다」가 여전히 맞다.
+- 연결 설치만 할 때는 `CLAUDE.md`를 고치지 않는다. 개발 라운드 규약을 바꾸는 작업은 공통 요약도 함께 갱신한다.
 
 ## 6. 커밋과 보고
 
@@ -372,3 +373,30 @@ App 내장 바이너리를 `app-server --stdio` 로 독립 실행해 로컬 JSON
 QA·리뷰·업그레이드·캐시 도입을 전부 실행했다는 뜻은 아니다. 특히 새로 설치한 Partial
 Prefetching 스킬은 Cache Components 도입과 통과한 빌드를 먼저 요구하며, 이번 작업에서
 그 기능을 켜지 않았다. 프로젝트의 설치 버전은 Next.js 16.3.4·React 19.2.4로 확인했다.
+
+
+## 10. 개발 라운드 설계와 UltraQA
+
+2026-09-06 승인된 후속 변경부터 새 TODO 라운드는 `superpowers:brainstorming` 설계와
+해당 경로의 승인을 거친다. 이미 승인된 동일 범위의 재개와 QA 재시도는 새 라운드가 아니다.
+상태 조회와 `dev-workflow` 감사는 읽기 전용이다. 과거 §7~§9의 설치 기록은 당시 증거이며
+현재 실행 도구 선택은 §3과 사이클 스킬의 실행 환경 표를 따른다.
+
+Codex QA는 시나리오 계획부터 실행·진단·수정·정리까지 `$ultraqa`를 사용한다.
+`.claude/skills/dev-cycle/references/ultraqa.md`가 현재 입력·행렬·한도·보고·App 대응을
+정한다. Claude Code의 기존 도구 매핑과 이미 저장한 QA 이력은 보존한다.
+
+현재 App의 writable scope 사전 확인은 `session.json is present but unusable`을
+반환했다. 원본 session.json과 hook 상태를 생성·수정·교체·삭제·이동·권한 변경하거나 다른 세션 ID를
+지정하지 않고 App 대응 모드로 QA 문서에
+진행 상태를 기록한다. 이는 네이티브 OMX 상태 관리 성공을 주장하는 방식이 아니다.
+정상 OMX 문맥에서는 스킬의 CLI 수명주기를 사용한다.
+
+필수 실패·차단·미실행·정리 미완료는 완료가 아니다. 구현 커밋에서도 TODO를 유지하고,
+필수 검증과 정리의 통과를 확인한 최종 아카이브 커밋에서만 항목을 제거한다. 이전 기록의
+`실패 → 이월`은 소급 수정하지 않는다.
+
+이번 변경의 실제 동작 검증은 `docs/dev-cycle/qa/INFRA-033.md`에 남긴다. 설치 목록 확인이나
+성공 문구만으로 업무 처리 성공을 주장하지 않고, 격리 fixture의 명령 종료 코드·파일 변경·
+TODO·아카이브·런타임 역할 메타데이터를 검사한다. 새 플러그인 패키지를 만들지 않았으므로
+검증 대상은 실제 등록된 프로젝트 스킬과 전용 네이티브 역할이다.

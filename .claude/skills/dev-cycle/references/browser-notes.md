@@ -13,11 +13,13 @@
 | 도구 | 위치 | 쓰는 자리 |
 |---|---|---|
 | agent-browser | `which agent-browser` 로 찾는다. 이 환경에서는 `~/.local/bin/agent-browser` | 구현 도중의 값 대조, 백엔드만 바꾼 항목의 실측 |
-| browse | Claude Code: `~/.claude/skills/gstack/browse/dist/browse`, Codex: `${CODEX_HOME:-$HOME/.codex}/skills/gstack/browse/dist/browse` | `/qa-only` 와 `/qa` 가 내부에서 쓴다. 직접 써도 된다 |
+| browse | Claude Code: `~/.claude/skills/gstack/browse/dist/browse`, Codex: `${CODEX_HOME:-$HOME/.codex}/skills/gstack/browse/dist/browse` | Claude Code의 `/qa-only`와 `/qa`, Codex `$ultraqa`의 계획·실행이 쓴다. 직접 실측에도 쓸 수 있다 |
 
 둘은 별개이며 브라우저 컨텍스트를 공유하지 않는다. agent-browser 의 탭과 쿠키가 browse 에
-보이지 않고 그 반대도 같다. 둘 다 셸 명령이므로 Claude Code 와 codex 어느 쪽에서든 같은
-방법으로 쓴다. `~/.claude/skills/gstack/bin/agent-browser` 는 존재하지 않는다.
+보이지 않고 그 반대도 같다. 둘 다 셸 명령이므로 Claude Code와 Codex 어느 쪽에서든 같은
+방법으로 쓴다. Codex UltraQA의 실제 단계와 정리 절차는
+[references/ultraqa.md](ultraqa.md)를 따르며, agent-browser는 그와 별개인 브라우저 실측
+도구다. `~/.claude/skills/gstack/bin/agent-browser` 는 존재하지 않는다.
 
 ## agent-browser
 
