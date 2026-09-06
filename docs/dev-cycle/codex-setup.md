@@ -131,7 +131,11 @@ developer_instructions = """
 | 코드 리뷰 | `feature-dev:code-reviewer` 에이전트 | omx `$code-review` 스킬 | `/skills` 에 `code-review`, `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 (0번) |
 | 과잉설계 리뷰 | `/ponytail-review` | omx `code-reviewer` 에이전트를 `spawn_agent` 로 띄운다. 프롬프트는 아래 「과잉설계 리뷰 프롬프트」 | `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 |
 | 계획 문서 (T3) | `superpowers:writing-plans` | `$superpowers:writing-plans` | 현재 스킬 목록에 `superpowers:writing-plans` | 아래 superpowers 설치. 그래도 없으면 omx `$plan` 으로 대신하고 그 사실을 문서에 적는다 |
-| 프론트엔드 스킬 | `vercel-react-best-practices`, `vercel-composition-patterns` | 같다 | `/skills` 에 두 이름 | `npx skills add vercel-labs/agent-skills` 뒤 `~/.agents/skills` 에 두 디렉터리가 생겼는지 본다. 이름이 다르면 `npx skills find react --owner vercel-labs` 로 찾는다 |
+| 프론트엔드 스킬 | `vercel-react-best-practices`, `vercel-composition-patterns` | 같다 | 현재 스킬 목록에 두 이름 | `npx skills add vercel-labs/agent-skills` 뒤 `~/.agents/skills` 에 두 디렉터리가 생겼는지 본다. 이름이 다르면 `npx skills find react --owner vercel-labs` 로 찾는다 |
+| 프론트엔드 실행 검증 | `next-dev-loop` | `$next-dev-loop` | 현재 스킬 목록 | `skill-installer` 로 `vercel/next.js`의 `canary`, `skills/next-dev-loop` 설치 |
+| Cache Components 도입·최적화 | `next-cache-components-adoption`, `next-cache-components-optimizer` | 같은 이름의 `$` 호출 | 현재 스킬 목록에 두 이름 | 같은 저장소·브랜치의 `skills/<스킬 이름>` 설치 |
+| Partial Prefetching 도입 | `next-partial-prefetching-adoption` | `$next-partial-prefetching-adoption` | 현재 스킬 목록 또는 새로 읽은 Codex 스킬 메타데이터 | 같은 저장소·브랜치의 `skills/next-partial-prefetching-adoption` 설치 |
+| Next.js 버전 변경 | `next-upgrade` 사본 | `$vercel:next-upgrade` | 활성 Vercel 플러그인과 현재 스킬 목록 | 설치된 플러그인의 제공 여부 확인. 없으면 번들 업그레이드 문서와 `@next/codemod`를 대체 수단으로 사용 |
 | Next.js 번들 문서 | 파일 | 같다 | `ls frontend/node_modules/next/dist/docs/01-app` | `(cd frontend && npm install)` |
 | 카테고리 감사 | `dev-workflow` 에이전트 | 역할이 제공되면 `spawn_agent` 에 `agent_type: "dev-workflow"` | 2번과 4번 | 2번. 현재 App의 역할 미노출은 재설치 근거가 아니다 |
 
@@ -172,7 +176,11 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
 
 1. 현재 세션의 스킬 목록에 다음이 있는지 확인한다. `dev-cycle`(저장소), `qa`, `qa-only`, `review`,
    `code-review`, `superpowers:writing-plans`, `vercel-react-best-practices`,
-   `vercel-composition-patterns`.
+   `vercel-composition-patterns`. 조건부 프론트엔드 작업도 포함해 `next-dev-loop`,
+   `next-cache-components-adoption`, `next-cache-components-optimizer`,
+   `next-partial-prefetching-adoption`, `vercel:next-upgrade` 를 확인한다.
+   로컬 `skills/list` 가 플러그인 스킬을 반환하지 않으면 현재 App의 플러그인 스킬 목록과
+   활성 설정을 별도로 확인한다. 한 목록에 없다는 이유만으로 재설치하지 않는다.
 2. `$dev-cycle status` 를 부른다. 현재 목록에 없으면 연결된
    `.agents/skills/dev-cycle/SKILL.md` 를 직접 읽어 `[S] status` 를 수행한다.
    최근 완료 3건·우선순위별 수와 첫 항목·진행 중 사이클·미완료 QA·`git status` 를 보고한다.
@@ -239,8 +247,9 @@ omx 의 `code-reviewer` 에이전트(읽기 전용)에 그 절과 출력 형식�
 | 상태 브리핑 | 연결 파일을 직접 읽어 수행 | `.agents/skills/dev-cycle/SKILL.md` 의 `[S] status`. `$dev-cycle` 자동 탐색은 현재 세션에서 미검증 |
 
 새로 추가한 것은 저장소의 상대 링크와 TOML 정의다. 홈 디렉터리에 새로 설치하거나
-변경한 것은 없다. 기존 도구가 모두 있어 설치 누락은 없으며, 전용 역할 호출과 새 스킬의
-자동 탐색은 위 표처럼 별도로 남겼다. 앱 서버·LLM·데이터 갱신 요청과 실제 QA·감사는
+변경한 것은 없다. 당시 확인한 기본 목록의 도구는 있었고, 이후 발견한 조건부 스킬 누락은
+§9에서 보완했다. 전용 역할 호출과 새 스킬의 자동 탐색은 위 표처럼 별도로 남겼다.
+앱 서버·LLM·데이터 갱신 요청과 실제 QA·감사는
 실행하지 않았다. `omx doctor` 는 §0의 이유로 실행하지 않았다.
 
 `[S] status` 결과는 다음과 같다.
@@ -343,3 +352,23 @@ App 내장 바이너리를 `app-server --stdio` 로 독립 실행해 로컬 JSON
 
 기존 작업의 오래된 역할 목록을 제자리에서 갱신한 것으로 보고하지 않는다. 새 역할을
 일상적으로 사용할 때도 그 정의가 존재하는 상태에서 시작한 실행 문맥을 사용한다.
+
+## 9. 조건부 내부 스킬까지 대조한 설치 보완
+
+2026-09-06 후속 전체 대조에서 §3의 초기 목록이 프론트엔드 참조 문서의 조건부 스킬을
+빠뜨린 것을 확인했다. `next-partial-prefetching-adoption` 은 Codex 설치 경로와 현재
+목록에 없었다. `skill-installer` 로 공식 `vercel/next.js` 저장소의 `canary` 브랜치에서
+`skills/next-partial-prefetching-adoption` 을 설치했다. 설치 위치는
+`$CODEX_HOME/skills/next-partial-prefetching-adoption` 이며 기존 스킬은 덮어쓰지 않았다.
+
+설치 후 스킬 형식 검사가 통과했고, App 내장 CLI의 로컬 `skills/list` 를
+`forceReload: true` 로 실행해 새 스킬을 `enabled: true` 로 확인했다. 새로 설치한 스킬은
+다음 대화 턴에서 사용할 수 있다. 기본 스킬과 조건부 로컬 스킬 13개는 같은 스캐너에서
+활성 상태를 확인했다. `next-upgrade` 는 이 로컬 응답에 포함되지 않으므로, 현재 App의
+`vercel:next-upgrade` 항목과 Vercel 플러그인 활성 설정·실제 파일을 별도로 확인했다.
+
+이로써 §3의 기본·조건부 스킬 설치 목록을 모두 대조했다. Claude Code 전용
+`ponytail-review` 는 기존처럼 `code-reviewer` 와 정본의 ponytail 기준으로 대체한다.
+QA·리뷰·업그레이드·캐시 도입을 전부 실행했다는 뜻은 아니다. 특히 새로 설치한 Partial
+Prefetching 스킬은 Cache Components 도입과 통과한 빌드를 먼저 요구하며, 이번 작업에서
+그 기능을 켜지 않았다. 프로젝트의 설치 버전은 Next.js 16.3.4·React 19.2.4로 확인했다.

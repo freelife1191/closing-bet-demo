@@ -193,8 +193,10 @@ critical 과 high 로 한정하는 옵션이고, 뒤의 것은 탐색 범위를 
 2단계에서 다시 확인할 필요는 없다.
 
 1. Flask 가 5501 에, Next.js 가 3500 에 떠 있어야 한다. `./restart_all.sh` 로 함께 띄운다.
-2. `~/.claude/skills/gstack/browse/dist/browse` 가 빌드되어 있어야 한다. 없으면 스킬이
-   `NEEDS_SETUP` 을 알리며 일회성 빌드를 요청한다.
+2. browse 바이너리가 빌드되어 있어야 한다. Claude Code는
+   `~/.claude/skills/gstack/browse/dist/browse`, Codex는
+   `${CODEX_HOME:-$HOME/.codex}/skills/gstack/browse/dist/browse` 를 확인한다.
+   없으면 스킬이 `NEEDS_SETUP` 을 알리며 일회성 빌드를 요청한다.
 
 두 단계는 끊지 않고 이어서 진행한다. 압축 지점은 두 단계를 합친 QA 구간 전체의 직전
 한 곳이며, 근거는 `SKILL.md` 의 `## 컨텍스트 관리` 에 있다.

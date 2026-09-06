@@ -67,10 +67,11 @@ Vercel 이 2026 년에 `vercel-labs/next-skills` 를 접으면서 참고 지식�
 | `useEffect` 나 `useMemo` 로 렌더링을 제어하는 코드, 폴링·구독·타이머, `dynamic()` 이나 번들 분할 | `vercel-react-best-practices` |
 | `frontend/package.json` 의 `next` 또는 `react` 버전 | `next-upgrade` (아래 각주) |
 
-`next-upgrade` 도 상류에서는 폐지되었다. 다만 2026-09-01 에 받아 둔 사본이
+Claude Code의 `next-upgrade` 는 상류에서 폐지되었으나 2026-09-01 에 받아 둔 사본이
 `~/.claude/skills/next-upgrade/` 에 남아 있어 지금도 동작하므로 그대로 쓴다. 갱신되지
 않는다는 것만 알아 둔다. 상류가 대신 권하는 것은 `npx @next/codemod@latest upgrade` 이고,
 마이그레이션 안내는 번들 문서의 `01-app/01-getting-started/18-upgrading.md` 에 있다.
+Codex에서는 현재 활성 Vercel 플러그인이 제공하는 `$vercel:next-upgrade` 를 쓴다.
 
 앞의 두 줄을 「구조를 손볼 때」나 「성능을 손볼 때」처럼 의도로 적지 않은 이유가 있다.
 의도는 사이클 도중에 판정할 계기가 없어서 매번 지나친다. 반면 파일에 무엇이 들어 있는지는
@@ -137,8 +138,16 @@ Next.js 번들 문서(`frontend/node_modules/next/dist/docs/01-app/`)는 파일�
 환경에서든 그대로 읽는다. §2 의 「기본으로 읽는 것」이 그 문서를 가리키고 있으므로,
 스킬이 없는 환경에서도 판정 근거가 사라지지는 않는다.
 
-전역 스킬 디렉터리 `~/.claude/skills/` 에 설치되어 있다. 이 저장소에는 스킬 본문을 두지
-않는다. 2026-09-05 에 상류 저장소를 직접 조회해 다음을 확인했다.
+Codex의 조건부 스킬도 2026-09-06에 따로 대조했다. `next-dev-loop`,
+`next-cache-components-adoption`, `next-cache-components-optimizer` 는 이미 설치되어
+있었고, 누락된 `next-partial-prefetching-adoption` 은 공식 `vercel/next.js`의 `canary`
+브랜치에서 설치했다. 네 이름 모두 Codex 스캐너가 활성 상태로 인식했다. 설치 경로와
+검증 범위는 `docs/dev-cycle/codex-setup.md` §9에 있다. 도입형 스킬의 설치는 §2의
+착수 조건이나 각 스킬의 기능 선행 조건을 충족했다는 뜻이 아니다.
+
+Claude Code 쪽 스킬은 `~/.claude/skills/` 에 설치되어 있다. 이 저장소에는 스킬 본문을 두지
+않는다. 다음 표는 Claude Code 쪽의 2026-09-05 기록이다. 당시 상류 저장소를 직접
+조회해 다음을 확인했다.
 
 | 스킬 | 상태 | 출처 |
 |---|---|---|
