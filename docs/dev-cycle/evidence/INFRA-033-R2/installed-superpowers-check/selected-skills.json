@@ -1,0 +1,14 @@
+[
+  {
+    "name": "superpowers:brainstorming",
+    "path": "/Users/freelife/.codex/superpowers/skills/brainstorming/SKILL.md",
+    "enabled": true,
+    "scope": "user"
+  },
+  {
+    "name": "superpowers:writing-plans",
+    "path": "/Users/freelife/.codex/superpowers/skills/writing-plans/SKILL.md",
+    "enabled": true,
+    "scope": "user"
+  }
+]

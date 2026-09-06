@@ -1,0 +1,20 @@
+{
+  "cases": [
+    "r2-initial",
+    "r2-resume",
+    "r3-untrusted",
+    "r3-positive",
+    "r3-input-and-injection",
+    "r4",
+    "r5",
+    "tier-fix",
+    "r7",
+    "r6-initial",
+    "r6-resume",
+    "r6-native-diagnostic",
+    "r6-app",
+    "stage-gate"
+  ],
+  "rawPolicy": "Selected runtime events; large source-read output bounded with original hashes. Full raw files lived only in owned temporary root.",
+  "referenceHarnessOnly": true
+}

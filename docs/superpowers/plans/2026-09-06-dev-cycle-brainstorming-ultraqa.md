@@ -34,5 +34,17 @@ references에 유지하고, App 대응 QA만 별도 참조 문서로 분리한�
 - [x] UltraQA Report에 행렬·실행 코드·수정·정리·잔여 위험을 기록했다.
 - [ ] 검증된 변경을 커밋하고 새로 등록한 백로그 항목을 완료 아카이브에 반영한다.
 
-검증은 `ULTRAQA STOPPED: Same failure detected 3 times`다. 구현 커밋은 4eaba62이며
-필수 미통과로 완료 아카이브는 작성하지 않았다. 후속 범위는 TODO의 INFRA-033에 남긴다.
+초기 검증은 `ULTRAQA STOPPED: Same failure detected 3 times`였다. 구현 커밋은 4eaba62이며
+당시 필수 미통과로 완료 아카이브를 작성하지 않았다. 이 실패 기록은 보존한다.
+
+## 후속 수리와 재검수
+
+- [x] 직전 체크포인트·리뷰 hash 재사용, 설계 전 위험 티어 판정을 보완했다.
+- [x] 신뢰된 worktree의 전용 역할, Git metadata 쓰기 사전검사, App/native lifecycle 경계를 검증했다.
+- [x] 신규 파일 staged 검사 실패 시 커밋 차단과 원문 JSON 보존 후 재개를 실제 actor로 확인했다.
+- [x] Codex App 필수 시나리오 8/8, T3 fixture QA 6/6·unittest 3/3·전체 아카이브·clean을 확인했다.
+- [x] 독립 최종 증거 검수 APPROVE와 소유 app-server 19개·worktree/fixture 정리를 확인했다.
+
+최종 App 대응 결과는 `ULTRAQA COMPLETE: Goal met after 5 cycles`이며
+`docs/dev-cycle/qa/INFRA-033-recheck.md`에 남긴다. 별도 native CLI lifecycle 진단 중단은
+App 필수 통과에 합산하지 않는다. 원본의 미추적 package.json은 보존했다.

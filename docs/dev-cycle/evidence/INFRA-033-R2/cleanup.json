@@ -1,0 +1,15 @@
+{
+  "completed_at": "2026-09-06T23:20:05+09:00",
+  "owned_temp_root": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf",
+  "removed": true,
+  "worktree_removed": true,
+  "app_server_count": 19,
+  "all_app_servers_reaped": true,
+  "lsof": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "original_state_and_package_preserved": true,
+  "native_state_clear_claimed": false
+}

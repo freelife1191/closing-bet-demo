@@ -1,0 +1,29 @@
+{
+  "head": "6cd02a070059050f780c8a66f2f0c2c4838a4125",
+  "status": "",
+  "tree": {
+    ".claude/agents/dev-workflow.md": "1dc232745733e4680988cc2527c8a4b386bc62fcbc76eecf2f5b035042e5c6ba",
+    ".claude/skills/dev-cycle/SKILL.md": "ca35ad1d13e8f3fc514d8443b42a117b131e531731c61576553734c0a9a30081",
+    ".claude/skills/dev-cycle/references/archive-format.md": "ef9d7a763d51a6c79a6c8f30e22395d545a07148e8e81bef15ccaec761cee8a0",
+    ".claude/skills/dev-cycle/references/browser-notes.md": "1ab97c6624e3e17d01734bc852669f3ea8dfbc83e42a000a608f51059ccd7c24",
+    ".claude/skills/dev-cycle/references/frontend-skills.md": "78b0515da7929d261fd523e8989d1063ea73b7b79938bed751c2d70d3fecf3f2",
+    ".claude/skills/dev-cycle/references/tier-rules.md": "dd246d1fbbcb2d475c1e04e391bce51d6809f4fa6ae6daa4f6623f72564ad13b",
+    ".claude/skills/dev-cycle/references/ultraqa.md": "663eafed45ffd4e9ac6afb6984d8658d7c0c72219541a7e761650eb2b639b12b",
+    ".codex/agents/dev-workflow.toml": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6",
+    ".gitignore": "db09d798cd29bbf48eea944a2ad4d3c10e3720f4ded465b5459a7142adc97738",
+    ".qa-temp/probe-count": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+    "AGENTS.md": "35c8ed3af80b6075d73e764b10fd457d65b884325cb17c7306559b01d8cf56a2",
+    "CLAUDE.md": "82071bd6f0f1d876db24a672ed55c700f8c1ffda13eae7382d2d82bc603564ee",
+    "README.md": "1b685182d38ff59d721de3a12aed625f2f2900ab2b5233995043791556335200",
+    "docs/dev-cycle/TODO.md": "fba71ae2d046f0da9c5bd52476098740120581e1e47e6b49b203b772e38170df",
+    "docs/dev-cycle/codex-setup.md": "1dea35cd4259f2857639b77c9cd50a0382448812d5dc08a701fe2a09e2d3b04a",
+    "docs/dev-cycle/qa/INFRA-002.md": "1d7f8fe2c0c3d80d2825983da25ca05fbd5547afa7c26d90cb03f67101952b86",
+    "qa_probe.py": "e9c10dd9b24b9049797bf5218409b7a1ba37c409174b2f9c8c08ed1a4862f2ee",
+    "qa_retry.py": "a80c0fd891e1377e049466c36cf2d15c567aa929afa244c3902dc0f54f08895b",
+    "scripts/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "scripts/init_data.py": "c7ce18f92da57dfbbc74078b93674465b0d5c211aa2f6cadf78c141260a8ae36",
+    "tests/test_cli.py": "3cea522510276d42a1d9ae7dab774d4350df1650f3ccf5da5c19c3626975642e",
+    "tests/test_main.py": "c7426f61954cb5631f34288ec73292273d6ecf449785472444a9d564ff41caf6"
+  },
+  "hook_owned_observation": {}
+}

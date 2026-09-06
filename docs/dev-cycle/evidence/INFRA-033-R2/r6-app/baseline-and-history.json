@@ -1,0 +1,44 @@
+{
+  "baseline": {
+    "args": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "...\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n"
+  },
+  "history": [
+    {
+      "args": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "qa_probe.py"
+      ],
+      "exit": 1,
+      "stdout": "attempt=1 PASS: smoke says success\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "qa_probe.py"
+      ],
+      "exit": 0,
+      "stdout": "attempt=2 PASS: smoke says success\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "qa_probe.py"
+      ],
+      "exit": 1,
+      "stdout": "attempt=3 PASS: smoke says success\n",
+      "stderr": ""
+    }
+  ]
+}

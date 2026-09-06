@@ -1,0 +1,20 @@
+{
+  "checks": {
+    "turn_completed": false,
+    "same_failure_stop": false,
+    "no_false_complete": true,
+    "only_allowed_changes": false,
+    "head_unchanged": true,
+    "no_sentinel": true,
+    "server_reaped": true
+  },
+  "thread": "01a076e4-ae20-7713-9a76-bf83cf0c4037",
+  "final": [],
+  "changed_paths": [
+    ".omx-state-locks.identity.json",
+    ".qa-temp/probe-count",
+    "docs/dev-cycle/qa/INFRA-002.md"
+  ],
+  "candidate_pass": false,
+  "pending_leader_check": "Actual qa_probe target exit 1 and ordering before same-root final; attempt 4 only; no lucky green accepted."
+}

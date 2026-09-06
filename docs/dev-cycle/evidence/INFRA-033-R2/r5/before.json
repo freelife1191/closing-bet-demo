@@ -1,0 +1,26 @@
+{
+  "head": "cfdeb2249af06f9d045e5dd71b4a1782ab004887",
+  "status": "",
+  "tree": {
+    ".claude/agents/dev-workflow.md": "1dc232745733e4680988cc2527c8a4b386bc62fcbc76eecf2f5b035042e5c6ba",
+    ".claude/skills/dev-cycle/SKILL.md": "79baab393228f269a339392524a6bf1ac6927269851f7b6c2cbf6fc8eefa4730",
+    ".claude/skills/dev-cycle/references/archive-format.md": "ef9d7a763d51a6c79a6c8f30e22395d545a07148e8e81bef15ccaec761cee8a0",
+    ".claude/skills/dev-cycle/references/browser-notes.md": "1ab97c6624e3e17d01734bc852669f3ea8dfbc83e42a000a608f51059ccd7c24",
+    ".claude/skills/dev-cycle/references/frontend-skills.md": "78b0515da7929d261fd523e8989d1063ea73b7b79938bed751c2d70d3fecf3f2",
+    ".claude/skills/dev-cycle/references/tier-rules.md": "dd246d1fbbcb2d475c1e04e391bce51d6809f4fa6ae6daa4f6623f72564ad13b",
+    ".claude/skills/dev-cycle/references/ultraqa.md": "ed510e6773da32a44fb6d3ac6b7e3979edbe26a9291fee4076429aadd483efe1",
+    ".codex/agents/dev-workflow.toml": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6",
+    ".gitignore": "4bfefc00ed87fa9e7b15b5f1b3d494f7510a00d10af28e9839e643a7a38a469b",
+    "AGENTS.md": "aceade5d81a734059bce7e15d040123eaf740e309f7ced5299423cb0e0197f4b",
+    "CLAUDE.md": "82071bd6f0f1d876db24a672ed55c700f8c1ffda13eae7382d2d82bc603564ee",
+    "README.md": "1b685182d38ff59d721de3a12aed625f2f2900ab2b5233995043791556335200",
+    "docs/dev-cycle/TODO.md": "2e6450761567779a24f7735624c89226a13c54fe7ac4496bef2ff9b5d50ed257",
+    "docs/dev-cycle/codex-setup.md": "cdd8408a1899858698d7f6efe9b46a013e6a012e3f522b6b0cce5745d27ba112",
+    "qa_retry.py": "a80c0fd891e1377e049466c36cf2d15c567aa929afa244c3902dc0f54f08895b",
+    "scripts/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "scripts/init_data.py": "cff36814bd9ec10cb0add21506557e009ddfe3a4a199826a8a1c93ce069a5c6e",
+    "tests/test_cli.py": "3cea522510276d42a1d9ae7dab774d4350df1650f3ccf5da5c19c3626975642e",
+    "tests/test_main.py": "c7426f61954cb5631f34288ec73292273d6ecf449785472444a9d564ff41caf6"
+  },
+  "hook_owned_observation": {}
+}

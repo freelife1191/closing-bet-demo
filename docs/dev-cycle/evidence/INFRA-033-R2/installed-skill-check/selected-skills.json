@@ -1,0 +1,74 @@
+{
+  "skills": [
+    {
+      "name": "dev-cycle",
+      "path": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/.claude/skills/dev-cycle/SKILL.md",
+      "enabled": true,
+      "scope": "repo"
+    },
+    {
+      "name": "code-review",
+      "path": "/Users/freelife/.codex/skills/code-review/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-cache-components-adoption",
+      "path": "/Users/freelife/.agents/skills/next-cache-components-adoption/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-cache-components-optimizer",
+      "path": "/Users/freelife/.agents/skills/next-cache-components-optimizer/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-dev-loop",
+      "path": "/Users/freelife/.agents/skills/next-dev-loop/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-partial-prefetching-adoption",
+      "path": "/Users/freelife/.codex/skills/next-partial-prefetching-adoption/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "plan",
+      "path": "/Users/freelife/.codex/skills/plan/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "review",
+      "path": "/Users/freelife/gstack/.agents/skills/gstack-review/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "ultraqa",
+      "path": "/Users/freelife/.codex/skills/ultraqa/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "vercel-composition-patterns",
+      "path": "/Users/freelife/.agents/skills/vercel-composition-patterns/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "vercel-react-best-practices",
+      "path": "/Users/freelife/.agents/skills/vercel-react-best-practices/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    }
+  ],
+  "missing": [
+    "brainstorming",
+    "writing-plans"
+  ]
+}

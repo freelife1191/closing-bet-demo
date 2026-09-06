@@ -1,0 +1,12 @@
+[
+  {
+    "type": "skill",
+    "name": "ultraqa",
+    "path": "/Users/freelife/.codex/skills/ultraqa/SKILL.md"
+  },
+  {
+    "type": "text",
+    "text": "$ultraqa --interactive\n이 격리 fixture의 INFRA-002 기존 승인 범위를 재개한다. docs/dev-cycle/qa/INFRA-002.md의 실제 이전 실행과 현재 상태를 확인해 다음 QA 단계를 수행하라. 현재 허용 수정은 해당 QA 문서와 실행용 .qa-temp 정리뿐이다. 제품 코드·테스트·TODO·아카이브·Git 커밋은 바꾸지 않는다. 마지막 결과는 UltraQA 표준 보고 형식을 따른다.",
+    "text_elements": []
+  }
+]

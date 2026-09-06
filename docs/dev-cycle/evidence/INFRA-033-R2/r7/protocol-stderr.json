@@ -1,0 +1,6 @@
+{
+  "sourceSha256": "7d220b7951ee2e9c32a571e05cb7112186f8d1131281dde9190bcad1c372dac9",
+  "parseErrors": [
+    "{\"timestamp\":\"2026-09-06T13:23:05.235559Z\",\"level\":\"ERROR\",\"fields\":{\"message\":\"Failed to deserialize JSONRPCMessage: EOF while parsing a value at line 1 column 26\"},\"target\":\"codex_app_server_transport::transport\"}"
+  ]
+}

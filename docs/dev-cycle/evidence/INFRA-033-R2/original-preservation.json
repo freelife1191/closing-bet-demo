@@ -1,0 +1,12 @@
+{
+  "package.json": {
+    "before": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+    "after": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+    "unchanged": true
+  },
+  ".omx/state/session.json": {
+    "before": "0fd8cf1d542c622e5df44f7a71f419a8fde87468849cbd41883a4bd6eb0dbaf0",
+    "after": "0fd8cf1d542c622e5df44f7a71f419a8fde87468849cbd41883a4bd6eb0dbaf0",
+    "unchanged": true
+  }
+}

@@ -1,0 +1,7 @@
+[
+  {
+    "type": "text",
+    "text": "전용 dev-workflow 실제 호출 검수다. 첫 동작으로 collaboration.spawn_agent를 agent_type=\"dev-workflow\", task_name=\"audit_infra\", fork_turns=\"none\"으로 호출하라. 일반 역할 대체와 리더 직접 감사는 금지한다. 자식에게 다음을 전달하라: \"인프라 카테고리를 역할 정본대로 읽기 전용 감사하라. 감사 결과와 TODO 초안은 응답으로만 반환하고 파일·Git·런타임 상태를 바꾸지 않는다. 실제 앱·네트워크·검증 명령·.env 계열·data 접근은 하지 않는다. 유효한 발견은 중요도 높은 3건 이내로 제한한다. 하위 에이전트를 만들지 않는다.\" 자식 완료를 기다려 결과를 반환하라. 전용 호출 실패면 오류 원문만 반환하라.",
+    "text_elements": []
+  }
+]

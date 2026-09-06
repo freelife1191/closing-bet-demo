@@ -1,0 +1,72 @@
+{
+  "policy": {
+    "type": "workspaceWrite",
+    "writableRoots": [
+      "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/repo",
+      "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/repo/.git"
+    ],
+    "networkAccess": false
+  },
+  "root_thread": "01a07705-63ca-7533-ab49-b6eaed0a9f1d",
+  "blocked_final": [
+    "정적 게이트에서 실패하여 중단했습니다.\n\n- 승인된 5개 파일만 스테이징 완료\n- 구현 객체 `583e6b2`와 staged blob 모두 일치\n- `git diff --cached --check`: **exit 2**\n- 실패: [INFRA-001.md](/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/repo/docs/dev-cycle/reviews/INFRA-001.md:29)의 후행 공백\n  - `+> **Files Reviewed:** 5  `\n\n지시대로 원문을 수정하지 않았고, 이후 정적 검사·QA·커밋은 실행하지 않았습니다. 스테이징 상태는 유지했으며 hook/OMX도 건드리지 않았습니다."
+  ],
+  "staged_failure": {
+    "args": [
+      "git",
+      "diff",
+      "--cached",
+      "--check"
+    ],
+    "exit": 2,
+    "stdout": "docs/dev-cycle/reviews/INFRA-001.md:29: trailing whitespace.\n+> **Files Reviewed:** 5  \n",
+    "stderr": ""
+  },
+  "final": [
+    "INFRA-001을 완료했습니다.\n\n- 첫 구현 커밋: `4f856de`\n- 완료 아카이브 커밋: `9c7d881`\n- staged diff 검사: exit 0\n- AST: 3/3 통과\n- unittest: 3/3 통과\n- App 대응 UltraQA: 필수 6/6 통과, cleanup 완료\n- 작업 트리: clean\n- OMX CLI/native peer mode: 미실행\n- 기존 T3 리뷰: 코드·테스트 입력 해시 일치로 재실행하지 않음\n\n원문 JSON의 `text` SHA-256 `bc45aa…953951`을 확인했고, 표시본 SHA-256 `767dde…b71c5`와 연결했습니다.\n\n- [원문 JSON](/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/original-review.json)\n- [표시용 리뷰](/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/repo/docs/dev-cycle/reviews/INFRA-001.md)\n- [UltraQA 보고서](/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/repo/docs/dev-cycle/qa/INFRA-001.md)\n- [일별 아카이브](/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/repo/docs/dev-cycle/archive/daily/2026-09-06.md)\n\n`INFRA-001`만 TODO에서 제거했으며 새 항목은 시작하지 않았습니다."
+  ],
+  "commits": [
+    "4f856de5182d1cb554073f074721139c15a30ee9",
+    "9c7d8814e8cf568a591074990d504c54c9709d27"
+  ],
+  "branch_check": {
+    "args": [
+      "git",
+      "diff",
+      "--check",
+      "2b5a3113b6c588233af975f811af731b99e5dc1e..HEAD"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "baseline": {
+    "args": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "...\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n"
+  },
+  "checks": {
+    "negative_turn_completed": true,
+    "no_commit_on_failure": true,
+    "source_and_review_unchanged": true,
+    "actual_staged_failure": true,
+    "positive_turn_completed": true,
+    "all_committed_files_static_pass": true,
+    "baseline_green": true,
+    "todo_removed": true,
+    "both_archives": true,
+    "clean": true,
+    "qa_complete": true,
+    "first_impl_todo_retained": true,
+    "server_reaped": true
+  },
+  "candidate_pass": true
+}

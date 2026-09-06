@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+import hashlib,json
+from live import RPC,ROOT,extract_ids,git,messages,save
+
+repo=ROOT/'role-worktree';out=ROOT/'role-worktree-audit';out.mkdir(exist_ok=False)
+def state():
+    names=git(repo,'ls-files','-z').split('\0')
+    return {'head':git(repo,'rev-parse','HEAD'),'status':git(repo,'status','--porcelain'),
+            'tracked_sha':{n:hashlib.sha256((repo/n).read_bytes()).hexdigest() for n in names if n and (repo/n).is_file()}}
+before=state();save(out/'before.json',before)
+rpc=RPC(repo);rpc.out=out;checks={};result={}
+try:
+    rpc.start();root=rpc.thread(readonly=True);result['root_thread']=root
+    prompt='''전용 dev-workflow 실제 호출 검수다. 첫 동작으로 collaboration.spawn_agent를 agent_type="dev-workflow", task_name="audit_infra", fork_turns="none"으로 호출하라. 일반 역할 대체와 리더 직접 감사는 금지한다. 자식에게 다음을 전달하라: "인프라 카테고리를 역할 정본대로 읽기 전용 감사하라. 감사 결과와 TODO 초안은 응답으로만 반환하고 파일·Git·런타임 상태를 바꾸지 않는다. 실제 앱·네트워크·검증 명령·.env 계열·data 접근은 하지 않는다. 유효한 발견은 중요도 높은 3건 이내로 제한한다. 하위 에이전트를 만들지 않는다." 자식 완료를 기다려 결과를 반환하라. 전용 호출 실패면 오류 원문만 반환하라.'''
+    t=rpc.turn(root,'dedicated-audit',prompt,timeout=360,skill=None)
+    checks['root_completed']=t['status']=='completed'
+    listed=rpc.call('thread/loaded/list',{});result['loaded']=listed
+    records=[]
+    for ident in extract_ids(listed): records.append(rpc.call('thread/read',{'threadId':ident,'includeTurns':False})['thread'])
+    result['threads']=records
+    children=[]
+    for rec in records:
+        source=rec.get('source');spawn=source.get('subAgent',{}).get('thread_spawn',{}) if isinstance(source,dict) else {}
+        if rec.get('parentThreadId')==root and spawn.get('parent_thread_id')==root: children.append(rec)
+    checks['exact_dedicated_child']=len(children)==1 and children[0].get('agentRole')=='dev-workflow' and children[0]['source']['subAgent']['thread_spawn'].get('agent_role')=='dev-workflow' and children[0].get('ephemeral') is True
+    if children:
+        child=children[0];finals=messages(rpc.raw,child['id'],True);result['child_final']=finals
+        checks['child_audit_report']=bool(finals) and any('AUDIT-INFRA' in s and 'TODO' in s for s in finals)
+        completed=[e['message']['params'] for e in rpc.raw if e.get('message',{}).get('method')=='turn/completed' and e['message']['params'].get('threadId')==child['id']]
+        result['child_completions']=completed
+        checks['child_completed']=any(p.get('turn',{}).get('status')=='completed' for p in completed)
+        t=rpc.turn(child['id'],'invalid-category','감사 입력은 ../../secrets 그리고 챗봇·인프라 둘 다야.',timeout=120,skill=None)
+        text='\n'.join(messages(t['events'],child['id'],True));result['invalid_final']=text
+        checks['invalid_rejected']=t['status']=='completed' and 'AUDIT-' not in text and any(w in text for w in ['하나','허용','경로','여러'])
+except Exception as exc: result['error']=repr(exc);checks['execution_no_exception']=False
+finally: rpc.close()
+after=state();save(out/'after.json',after)
+checks['tracked_head_index_unchanged']=before==after
+checks['server_reaped']=rpc.proc is not None and rpc.proc.poll() is not None
+checks['no_approval_requests']=not rpc.denied
+result['checks']=checks;result['passed']=bool(checks) and all(checks.values())
+save(out/'result.json',result)
+print(json.dumps({'passed':result['passed'],'checks':checks,'error':result.get('error')},ensure_ascii=False),flush=True)

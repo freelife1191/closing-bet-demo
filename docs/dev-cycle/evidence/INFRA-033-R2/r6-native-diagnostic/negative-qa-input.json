@@ -1,0 +1,12 @@
+[
+  {
+    "type": "skill",
+    "name": "ultraqa",
+    "path": "/Users/freelife/.codex/skills/ultraqa/SKILL.md"
+  },
+  {
+    "type": "text",
+    "text": "$ultraqa --interactive\n이 격리 fixture의 INFRA-002 기존 승인 범위를 재개한다. docs/dev-cycle/qa/INFRA-002.md의 실제 이전 실행과 현재 상태를 확인해 다음 QA 단계를 수행하라. 현재 허용 수정은 해당 QA 문서, 실행용 .qa-temp 정리와 현재 세션의 native UltraQA CLI 수명주기다. 새 hook 상태의 iteration 1로 이전 실패 이력을 덮지 말고 문서에 기록된 iteration 3과 동일 실패 2회를 이어받는다. 현재 세션 소유권을 CLI에서 확인한 뒤 같은 scope의 상태만 종료·clear한다. 다른 세션·원본 저장소·홈 상태는 접근하지 않는다. 제품 코드·테스트·TODO·아카이브·Git 커밋은 바꾸지 않는다. 마지막 결과는 UltraQA 표준 보고 형식을 따른다.",
+    "text_elements": []
+  }
+]

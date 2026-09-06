@@ -1,0 +1,12 @@
+[
+  {
+    "type": "skill",
+    "name": "dev-cycle",
+    "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r2/repo/.agents/skills/dev-cycle/SKILL.md"
+  },
+  {
+    "type": "text",
+    "text": "격리 fixture의 사용자 역할로 방금 제시한 INFRA-001 설계를 승인한다. scripts/init_data.py의 이름 정규화 결함과 기존 테스트, T3 계획·독립 리뷰·UltraQA 행렬·TODO·완료 아카이브가 승인 범위다. 원본과 현재 diff를 기준으로 dev-cycle 전체를 마감까지 수행하라. 승인된 범위의 실행 단계마다 다시 승인을 묻지 않는다. 실제 진단 실패나 필수 증거 누락은 그대로 보고한다.",
+    "text_elements": []
+  }
+]

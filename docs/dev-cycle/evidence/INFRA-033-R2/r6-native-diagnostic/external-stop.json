@@ -1,0 +1,6 @@
+{
+  "reason": "Native writable-scope validation failed repeatedly; stop this diagnostic branch without more retries. App-adapted dev-cycle validation is separate.",
+  "owned_app_server_pid": 8234,
+  "owned_driver_pid": 8216,
+  "driver_command": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -B /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/r6_native.py"
+}

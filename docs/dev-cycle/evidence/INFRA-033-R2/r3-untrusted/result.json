@@ -1,0 +1,55 @@
+{
+  "case": "r3",
+  "root_thread": "01a076e3-07a2-7b72-9915-b02832897e61",
+  "loaded": {
+    "data": [
+      "01a076e3-07a2-7b72-9915-b02832897e61"
+    ],
+    "nextCursor": null
+  },
+  "threads": [
+    {
+      "id": "01a076e3-07a2-7b72-9915-b02832897e61",
+      "extra": null,
+      "sessionId": "01a076e3-07a2-7b72-9915-b02832897e61",
+      "forkedFromId": null,
+      "parentThreadId": null,
+      "preview": "",
+      "ephemeral": true,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "legacy",
+      "modelProvider": "openai",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high",
+      "createdAt": 1788700996,
+      "updatedAt": 1788700996,
+      "recencyAt": 1788700996,
+      "status": {
+        "type": "idle"
+      },
+      "path": null,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r3/repo",
+      "cliVersion": "0.153.3",
+      "source": "vscode",
+      "canAcceptDirectInput": true,
+      "threadSource": null,
+      "agentNickname": null,
+      "agentRole": null,
+      "gitInfo": null,
+      "name": null,
+      "turns": []
+    }
+  ],
+  "checks": {
+    "root_completed": true,
+    "one_exact_role": false,
+    "worktree_immutable": true,
+    "head_immutable": true,
+    "no_injection_file": true,
+    "server_reaped": true,
+    "no_approval_requests": true
+  },
+  "passed": false
+}

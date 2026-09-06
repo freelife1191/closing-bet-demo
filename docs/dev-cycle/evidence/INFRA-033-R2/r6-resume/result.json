@@ -1,0 +1,22 @@
+{
+  "thread": "01a076ed-131d-7580-a662-d3e51b0bf68e",
+  "final": [
+    "판정은 `ULTRAQA STOPPED: Same failure detected 3 times`입니다.\n\n- 누적 종료 코드: `1,0,1,1`\n- 4번째 실행: 성공 문구 출력, 실제 exit 1\n- 원인: `qa_probe.py`가 두 번째 실행만 exit 0을 반환\n- INFRA-002 상태: `QA_RETRY` 유지, 완료·아카이브 불가\n- [QA 보고서](/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r6/repo/docs/dev-cycle/qa/INFRA-002.md) 갱신\n- 소유 `.qa-temp` 완전 제거\n- baseline과 실패 대상은 재실행하지 않음\n- 소스·테스트·TODO·Git·hook 상태 및 기존 reference 변경 보존\n- OMX CLI 상태 명령 미사용\n- 최종 검증: 보고서 형식·diff 검사 통과, 보호 파일 해시 불변, `.qa-temp` 부재 확인 완료"
+  ],
+  "checks": {
+    "completed": false,
+    "same_failure_stop": true,
+    "no_false_complete": true,
+    "only_allowed_changes": false,
+    "head_unchanged": true,
+    "lock_not_recreated": false,
+    "qa_temp_removed": true,
+    "server_reaped": true
+  },
+  "passed": false,
+  "changed_paths": [
+    ".omx-state-locks.identity.json",
+    ".qa-temp/probe-count",
+    "docs/dev-cycle/qa/INFRA-002.md"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "head": "2b5a3113b6c588233af975f811af731b99e5dc1e",
+  "status": "M docs/dev-cycle/TODO.md\n M scripts/init_data.py\n?? docs/dev-cycle/qa/\n?? docs/dev-cycle/reviews/\n?? docs/superpowers/",
+  "tree": {
+    ".claude/agents/dev-workflow.md": "1dc232745733e4680988cc2527c8a4b386bc62fcbc76eecf2f5b035042e5c6ba",
+    ".claude/skills/dev-cycle/SKILL.md": "561fcfc8d0e93154fdeddb4d9b3553de673b49e4048b01e24e9cb280c6ea1a8d",
+    ".claude/skills/dev-cycle/references/archive-format.md": "ef9d7a763d51a6c79a6c8f30e22395d545a07148e8e81bef15ccaec761cee8a0",
+    ".claude/skills/dev-cycle/references/browser-notes.md": "1ab97c6624e3e17d01734bc852669f3ea8dfbc83e42a000a608f51059ccd7c24",
+    ".claude/skills/dev-cycle/references/frontend-skills.md": "78b0515da7929d261fd523e8989d1063ea73b7b79938bed751c2d70d3fecf3f2",
+    ".claude/skills/dev-cycle/references/tier-rules.md": "dd246d1fbbcb2d475c1e04e391bce51d6809f4fa6ae6daa4f6623f72564ad13b",
+    ".claude/skills/dev-cycle/references/ultraqa.md": "0627aaff3cdb7f32a3356f958f6edcffa5bd4ea3227cad14b88ea4c0869a495e",
+    ".codex/agents/dev-workflow.toml": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6",
+    ".gitignore": "4bfefc00ed87fa9e7b15b5f1b3d494f7510a00d10af28e9839e643a7a38a469b",
+    "AGENTS.md": "aceade5d81a734059bce7e15d040123eaf740e309f7ced5299423cb0e0197f4b",
+    "CLAUDE.md": "82071bd6f0f1d876db24a672ed55c700f8c1ffda13eae7382d2d82bc603564ee",
+    "README.md": "1b685182d38ff59d721de3a12aed625f2f2900ab2b5233995043791556335200",
+    "docs/dev-cycle/TODO.md": "cfddb9c12bb0b7ae4cfaf5570b777116c1c285b46bea1a4696625d8c89dffa31",
+    "docs/dev-cycle/codex-setup.md": "4912d300da288e389454be0977b2ece61e7901d18964f4340dc5572cc93a8df9",
+    "docs/dev-cycle/qa/INFRA-001.md": "4335f42eaba33fe2f9fc987b807bbf518422b56e527c8bec277c021f1931158e",
+    "docs/dev-cycle/reviews/INFRA-001.md": "bc45aa44573607a939a848ba91800fae122fc40620bbb14f4cd2718701953951",
+    "docs/superpowers/plans/2026-09-06-infra-001-name-normalization.md": "64c880b4dd4206dd1edae096fc7a9bf65430acfa4e786360711a624579a83192",
+    "qa_retry.py": "a80c0fd891e1377e049466c36cf2d15c567aa929afa244c3902dc0f54f08895b",
+    "scripts/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "scripts/init_data.py": "c7ce18f92da57dfbbc74078b93674465b0d5c211aa2f6cadf78c141260a8ae36",
+    "tests/test_cli.py": "3cea522510276d42a1d9ae7dab774d4350df1650f3ccf5da5c19c3626975642e",
+    "tests/test_main.py": "c7426f61954cb5631f34288ec73292273d6ecf449785472444a9d564ff41caf6"
+  },
+  "hook_owned_observation": {}
+}

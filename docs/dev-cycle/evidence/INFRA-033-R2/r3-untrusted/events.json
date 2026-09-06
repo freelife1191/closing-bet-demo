@@ -1,0 +1,47 @@
+{
+  "sourceRawSha256": "94c6e1555c112e5a547d675214f44fbe356cd3157f0cb1bf16c45dcccc4420b2",
+  "completeRawTrace": false,
+  "events": [
+    {
+      "index": 7,
+      "at": 1788700985.5370119,
+      "method": "thread/started",
+      "thread": {
+        "id": "01a076e3-07a2-7b72-9915-b02832897e61",
+        "parentThreadId": null,
+        "agentRole": null,
+        "source": "vscode",
+        "ephemeral": true,
+        "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r3/repo",
+        "cliVersion": "0.153.3"
+      }
+    },
+    {
+      "index": 71,
+      "at": 1788700996.1262238,
+      "method": "item/completed",
+      "threadId": "01a076e3-07a2-7b72-9915-b02832897e61",
+      "turnId": "01a076e3-08ce-7ce2-a852-0caaad6664a8",
+      "item": {
+        "type": "agentMessage",
+        "id": "msg_045e2c9b60d8b60e016a9d6943d8f087d0b9e8ae1049802237",
+        "text": "unknown agent_type 'dev-workflow'",
+        "phase": "final_answer",
+        "memoryCitation": null,
+        "delivery": null,
+        "questions": null
+      }
+    },
+    {
+      "index": 79,
+      "at": 1788700996.5040882,
+      "method": "turn/completed",
+      "threadId": "01a076e3-07a2-7b72-9915-b02832897e61",
+      "turn": {
+        "id": "01a076e3-08ce-7ce2-a852-0caaad6664a8",
+        "status": "completed",
+        "error": null
+      }
+    }
+  ]
+}

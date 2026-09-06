@@ -1,0 +1,42 @@
+{
+  "traceSha256": "5582145825ac9a7dde80a6a02d8a05a1d371ec8ec0b0ba06430060eda3185b67",
+  "previousOutput": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r6/raw-events.json",
+  "targetEvidence": [
+    {
+      "index": 580,
+      "threadId": "01a076e4-ae20-7713-9a76-bf83cf0c4037",
+      "item": {
+        "type": "commandExecution",
+        "id": "exec-d3522311-cecd-4393-a742-c6b45a7a3408",
+        "pluginId": null,
+        "scriptPath": null,
+        "command": "/bin/zsh -lc \"env -u OMX_ROOT -u OMX_STATE_ROOT python3 -c 'import json, os, subprocess, sys; from pathlib import Path; repo=Path.cwd(); env=os.environ.copy(); env.pop(\\\"OMX_ROOT\\\", None); env.pop(\\\"OMX_STATE_ROOT\\\", None); p=subprocess.run([sys.executable, str(repo / \\\"qa_probe.py\\\")], cwd=repo, env=env, capture_output=True, text=True, timeout=5); print(json.dumps({\\\"args\\\": p.args, \\\"exit\\\": p.returncode, \\\"stdout\\\": p.stdout, \\\"stderr\\\": p.stderr, \\\"timeout_seconds\\\": 5}, ensure_ascii=False))'\"",
+        "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r6/repo",
+        "processId": "42140",
+        "source": "unifiedExecStartup",
+        "status": "completed",
+        "commandActions": [
+          {
+            "type": "unknown",
+            "command": "env -u OMX_ROOT -u OMX_STATE_ROOT python3 -c 'import json, os, subprocess, sys; from pathlib import Path; repo=Path.cwd(); env=os.environ.copy(); env.pop(\"OMX_ROOT\", None); env.pop(\"OMX_STATE_ROOT\", None); p=subprocess.run([sys.executable, str(repo / \"qa_probe.py\")], cwd=repo, env=env, capture_output=True, text=True, timeout=5); print(json.dumps({\"args\": p.args, \"exit\": p.returncode, \"stdout\": p.stdout, \"stderr\": p.stderr, \"timeout_seconds\": 5}, ensure_ascii=False))'"
+          }
+        ],
+        "aggregatedOutput": "{\"args\": [\"/opt/homebrew/opt/python@3.14/bin/python3.14\", \"/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r6/repo/qa_probe.py\"], \"exit\": 1, \"stdout\": \"attempt=4 PASS: smoke says success\\n\", \"stderr\": \"\", \"timeout_seconds\": 5}\n",
+        "exitCode": 0,
+        "durationMs": 0
+      },
+      "target": {
+        "args": [
+          "/opt/homebrew/opt/python@3.14/bin/python3.14",
+          "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r6/repo/qa_probe.py"
+        ],
+        "exit": 1,
+        "stdout": "attempt=4 PASS: smoke says success\n",
+        "stderr": "",
+        "timeout_seconds": 5
+      }
+    }
+  ],
+  "sameFailureCount": 3,
+  "iteration": 4
+}

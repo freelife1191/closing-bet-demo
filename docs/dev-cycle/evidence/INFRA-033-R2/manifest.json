@@ -1,0 +1,193 @@
+{
+  "evaluation": "INFRA-033-R2",
+  "status": "ULTRAQA COMPLETE: Goal met after 5 cycles",
+  "scope": "Codex App-adapted dev-cycle and fresh trusted dev-workflow runtime",
+  "iteration": 5,
+  "required_pass": 8,
+  "required_total": 8,
+  "scenarios": [
+    {
+      "id": "R-1",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "installed-skill-check/selected-skills.json",
+        "installed-superpowers-check/selected-skills.json"
+      ]
+    },
+    {
+      "id": "R-2",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "r2-initial/events.json",
+        "stage-gate/result.json"
+      ]
+    },
+    {
+      "id": "R-3",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "r3-positive/result.json",
+        "r3-input-and-injection/result.json"
+      ]
+    },
+    {
+      "id": "R-4",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "r4/result.json"
+      ]
+    },
+    {
+      "id": "R-5",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "r5/result.json",
+        "tier-fix/result.json"
+      ]
+    },
+    {
+      "id": "R-6",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "r6-app-proof.json",
+        "r6-app/result.json"
+      ]
+    },
+    {
+      "id": "R-7",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "r7/result.json",
+        "r7/protocol-stderr.json"
+      ]
+    },
+    {
+      "id": "R-8",
+      "required": true,
+      "status": "PASS",
+      "evidence": [
+        "stage-gate/result.json",
+        "stage-gate/events.json"
+      ]
+    }
+  ],
+  "independent_review": "APPROVE: final stage order, source/review hashes, actual CLI exit/output, bounded-stop ordering verified",
+  "prior_evaluation": "../INFRA-033/manifest.json",
+  "historical_failures_preserved": true,
+  "native_lifecycle": "DIAGNOSTIC STOPPED: writable scope unavailable; excluded from App-main success",
+  "installed_local_skills": [
+    {
+      "name": "dev-cycle",
+      "path": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/.claude/skills/dev-cycle/SKILL.md",
+      "enabled": true,
+      "scope": "repo"
+    },
+    {
+      "name": "code-review",
+      "path": "/Users/freelife/.codex/skills/code-review/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-cache-components-adoption",
+      "path": "/Users/freelife/.agents/skills/next-cache-components-adoption/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-cache-components-optimizer",
+      "path": "/Users/freelife/.agents/skills/next-cache-components-optimizer/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-dev-loop",
+      "path": "/Users/freelife/.agents/skills/next-dev-loop/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "next-partial-prefetching-adoption",
+      "path": "/Users/freelife/.codex/skills/next-partial-prefetching-adoption/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "plan",
+      "path": "/Users/freelife/.codex/skills/plan/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "review",
+      "path": "/Users/freelife/gstack/.agents/skills/gstack-review/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "ultraqa",
+      "path": "/Users/freelife/.codex/skills/ultraqa/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "vercel-composition-patterns",
+      "path": "/Users/freelife/.agents/skills/vercel-composition-patterns/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "vercel-react-best-practices",
+      "path": "/Users/freelife/.agents/skills/vercel-react-best-practices/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "superpowers:brainstorming",
+      "path": "/Users/freelife/.codex/superpowers/skills/brainstorming/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    },
+    {
+      "name": "superpowers:writing-plans",
+      "path": "/Users/freelife/.codex/superpowers/skills/writing-plans/SKILL.md",
+      "enabled": true,
+      "scope": "user"
+    }
+  ],
+  "vercel_next_upgrade": {
+    "installed": true,
+    "plugin_enabled": true,
+    "source": "/Users/freelife/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/next-upgrade/SKILL.md"
+  },
+  "core_sha256": {
+    ".claude/skills/dev-cycle/SKILL.md": "561fcfc8d0e93154fdeddb4d9b3553de673b49e4048b01e24e9cb280c6ea1a8d",
+    ".claude/skills/dev-cycle/references/ultraqa.md": "0627aaff3cdb7f32a3356f958f6edcffa5bd4ea3227cad14b88ea4c0869a495e",
+    ".claude/skills/dev-cycle/references/tier-rules.md": "dd246d1fbbcb2d475c1e04e391bce51d6809f4fa6ae6daa4f6623f72564ad13b",
+    ".claude/agents/dev-workflow.md": "1dc232745733e4680988cc2527c8a4b386bc62fcbc76eecf2f5b035042e5c6ba",
+    ".codex/agents/dev-workflow.toml": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6"
+  },
+  "completed_at": "2026-09-06T23:20:05+09:00",
+  "cleanup": {
+    "completed_at": "2026-09-06T23:20:05+09:00",
+    "owned_temp_root": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf",
+    "removed": true,
+    "worktree_removed": true,
+    "app_server_count": 19,
+    "all_app_servers_reaped": true,
+    "lsof": {
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    "original_state_and_package_preserved": true,
+    "native_state_clear_claimed": false
+  }
+}

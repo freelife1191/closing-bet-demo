@@ -1,0 +1,14 @@
+{
+  "root_thread": "01a076ef-4fbd-7630-99bf-c8c02b468328",
+  "final": [
+    "`[INFRA-001]`은 기존 CLI의 한 함수를 고치는 **bounded 변경**입니다.\n\n제안 설계:\n\n- `scripts/init_data.py`: `format_name()`을 `raw.strip().title()` 방식으로 구현\n- `tests/test_cli.py`: 함수 결과뿐 아니라 실제 subprocess의 stdout `Kim Min Su\\n`과 종료 코드 `0` 검증\n- 내부 공백은 보존하고, 요구사항대로 앞뒤 공백 제거와 단어별 제목 형식만 적용\n- `scripts/init_data.py`는 위험 경로이므로 한 줄 변경이어도 **T3**\n- 구현 후 전체 unittest, T3 리뷰, App 대응 UltraQA CLI 행렬을 수행\n\n현재 `develop`은 clean이며 기존 QA·아카이브·승인 기록은 없습니다. 이 설계로 진행할까요?"
+  ],
+  "checks": {
+    "design_completed": true,
+    "t3_before_approval": true,
+    "tree_head_index_unchanged": true,
+    "no_approval_requests": true,
+    "server_reaped": true
+  },
+  "passed": true
+}

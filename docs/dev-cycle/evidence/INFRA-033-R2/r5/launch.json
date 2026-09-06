@@ -1,0 +1,13 @@
+{
+  "pid": 4696,
+  "argv": [
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "-c",
+    "projects.\"/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r5/repo\".trust_level=\"trusted\"",
+    "app-server",
+    "--stdio"
+  ],
+  "removed_env_keys": [],
+  "model": "gpt-5.6-sol",
+  "effort": "high"
+}

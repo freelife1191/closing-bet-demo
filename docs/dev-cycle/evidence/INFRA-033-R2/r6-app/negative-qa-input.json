@@ -1,0 +1,12 @@
+[
+  {
+    "type": "skill",
+    "name": "dev-cycle",
+    "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r6-app/repo/.agents/skills/dev-cycle/SKILL.md"
+  },
+  {
+    "type": "text",
+    "text": "$dev-cycle INFRA-002\n이 격리 fixture의 INFRA-002 기존 승인 범위를 dev-cycle의 App 대응 QA 경로로 재개한다. 프로젝트 references/ultraqa.md와 설치된 UltraQA Task Card를 읽고 같은 엔진의 QA·진단·정리를 수행한다. omx state read/write/clear는 사용하지 않고 hook 소유 상태를 변경하지 않는다. docs/dev-cycle/qa/INFRA-002.md의 실제 이전 실행과 현재 상태를 확인해 다음 QA 단계를 수행하라. 현재 허용 수정은 해당 QA 문서와 실행용 .qa-temp 정리뿐이다. 제품 코드·테스트·TODO·아카이브·Git 커밋은 바꾸지 않는다. 마지막 결과는 UltraQA 표준 보고 형식을 따른다.",
+    "text_elements": []
+  }
+]

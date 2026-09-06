@@ -1,0 +1,173 @@
+[
+  {
+    "case": "supplement-tier",
+    "pid": 69928,
+    "cleanup": {
+      "pid": 69928,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "git-write-preflight",
+    "pid": 93980,
+    "cleanup": {
+      "pid": 93980,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "role-worktree-diagnosis",
+    "pid": 28139,
+    "cleanup": {
+      "pid": 28139,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "installed-skill-check",
+    "pid": 17927,
+    "cleanup": {
+      "pid": 17927,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "supplement-role-invalid",
+    "pid": 78321,
+    "cleanup": {
+      "pid": 78321,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "installed-superpowers-check",
+    "pid": 18986,
+    "cleanup": {
+      "pid": 18986,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "role-config-diagnosis",
+    "pid": 24953,
+    "cleanup": {
+      "pid": 24953,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "role-worktree-audit",
+    "pid": 38926,
+    "cleanup": {
+      "pid": 38926,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r6-native",
+    "pid": 8234,
+    "cleanup": {
+      "pid": 8234,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r2-resume",
+    "pid": 5779,
+    "cleanup": {
+      "pid": 5779,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r6-resume",
+    "pid": 57245,
+    "cleanup": {
+      "pid": 57245,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r7",
+    "pid": 72722,
+    "cleanup": {
+      "pid": 72722,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r6",
+    "pid": 92783,
+    "cleanup": {
+      "pid": 92783,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r6-app",
+    "pid": 49863,
+    "cleanup": {
+      "pid": 49863,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/stage-gate",
+    "pid": 42786,
+    "cleanup": {
+      "pid": 42786,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r3",
+    "pid": 72712,
+    "cleanup": {
+      "pid": 72712,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r4",
+    "pid": 76074,
+    "cleanup": {
+      "pid": 76074,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r5",
+    "pid": 4696,
+    "cleanup": {
+      "pid": 4696,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  },
+  {
+    "case": "live-runs/r2",
+    "pid": 72689,
+    "cleanup": {
+      "pid": 72689,
+      "returncode": -15,
+      "denied_requests": []
+    }
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r6/repo/.omx-state-locks.identity.json",
+  "sha256": "f7f2a0731ff0ad39baa8fb60754f2861b92fb9f7f369355c61746d8e24820a86",
+  "cause": "previous omx state read created this owned fixture lock identity"
+}

@@ -1,0 +1,31 @@
+{
+  "case": "r7",
+  "invalid_params": {
+    "error": {
+      "code": -32600,
+      "message": "Invalid request: missing field `threadId`"
+    },
+    "id": 2
+  },
+  "recovery": {
+    "data": [],
+    "nextCursor": null
+  },
+  "timeout_child": {
+    "pid": 72740,
+    "exit": -15
+  },
+  "checks": {
+    "invalid_params_error": true,
+    "malformed_observed": true,
+    "rpc_recovered": true,
+    "timeout_observed": true,
+    "timeout_child_reaped": true,
+    "worktree_immutable": true,
+    "head_immutable": true,
+    "no_injection_file": true,
+    "server_reaped": true,
+    "no_approval_requests": true
+  },
+  "passed": true
+}

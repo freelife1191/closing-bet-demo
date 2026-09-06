@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+import hashlib,json,sys
+from live import RPC,ROOT,fixture,git,messages,save,shell,snapshot
+
+repo=fixture('stage-gate');out=repo.parent;source=ROOT/'live-runs/r2/repo'
+impl='583e6b2fe96a43cfff216d323d842fe37c67e7d6'
+git(repo,'fetch','--no-tags',str(source),impl)
+paths=['scripts/init_data.py','docs/dev-cycle/TODO.md','docs/dev-cycle/qa/INFRA-001.md',
+       'docs/dev-cycle/reviews/INFRA-001.md','docs/superpowers/plans/2026-09-06-infra-001-name-normalization.md']
+for rel in paths:
+    p=repo/rel;p.parent.mkdir(parents=True,exist_ok=True)
+    p.write_text(shell(source,['git','show',impl+':'+rel])['stdout'])
+review=repo/paths[3];original=review.read_text();original_sha=hashlib.sha256(review.read_bytes()).hexdigest()
+save(out/'original-review.json',{'originalPath':paths[3],'sha256':original_sha,'text':original})
+before=snapshot(repo);save(out/'before.json',before)
+policy={'type':'workspaceWrite','writableRoots':[str(repo),str(repo/'.git')],'networkAccess':False}
+class GateRPC(RPC):
+    def call(self,method,params,**kw):
+        if method=='turn/start':params={**params,'sandboxPolicy':policy}
+        return super().call(method,params,**kw)
+rpc=GateRPC(repo);checks={};result={'policy':policy}
+try:
+    rpc.start();root=rpc.thread();result['root_thread']=root
+    prompt='''$dev-cycle INFRA-001
+이 fixture는 이전 승인된 INFRA-001의 첫 구현 커밋 검수다. 구현·테스트와 실제 T3 독립 리뷰 원문, 미실행 QA 행렬을 직전 검수에서 가져왔다. Git에 당시 기준 013ceceb31365690135121af9c968782b3cfdb88과 구현 583e6b2 객체도 있어 원본을 대조할 수 있다. 사용자로서 동일 범위의 기존 설계·구현·T3 리뷰·QA를 승인한다. 이번 턴에는 첫 커밋의 정적 게이트만 검증한다. 승인 파일을 스테이징하고 정적 검사 결과를 확인하되 코드·테스트·리뷰 문서 원문은 수정하지 않는다. 실패가 있으면 커밋이나 QA 실행 없이 실제 실패를 보고하고 멈춘다. hook 상태와 omx CLI는 건드리지 않는다.'''
+    t=rpc.turn(root,'reject-failed-staged-check',prompt,timeout=240)
+    result['blocked_final']=messages(t['events'],root,True)
+    checks['negative_turn_completed']=t['status']=='completed'
+    blocked=snapshot(repo);save(out/'after-negative.json',blocked)
+    checks['no_commit_on_failure']=blocked['head']==before['head']
+    checks['source_and_review_unchanged']=all(blocked['tree'].get(p)==before['tree'].get(p) for p in ['scripts/init_data.py','tests/test_cli.py','tests/test_main.py',paths[3]])
+    check=shell(repo,['git','diff','--cached','--check']);result['staged_failure']=check
+    checks['actual_staged_failure']=check['exit']!=0 and 'trailing whitespace' in check['stdout']
+    if all(checks.values()):
+        prompt='''기록된 정적 실패를 보완하도록 허용한다. 기존 승인된 INFRA-001 범위에서, 리뷰 원문 전체와 기존 SHA-256을 JSON 증거로 보존한 뒤 표시용 리뷰 Markdown의 후행 공백을 정리하라. 원본은 검수자가 '''+str(out/'original-review.json')+'''에 보존했고 SHA-256은 '''+original_sha+'''다. 원문 내용의 의미와 코드·테스트는 바꾸지 않는다. 변환된 표시 문서와 원문 증거의 연결·각 해시를 기록한다. 전체 staged 검사 종료 코드가 0일 때만 첫 구현 커밋을 만들고, 그다음 기존 6개 UltraQA 행렬·정리·최종 아카이브까지 계속하라. 기존 코드·테스트·T3 리뷰 입력을 대조해 동일한 완료 리뷰는 재실행하지 않는다. 이 fixture의 .git만 writable root로 허용되어 있다. App 대응 QA이므로 omx CLI/native peer mode를 활성화하지 않고 설치 UltraQA 카드와 현재 프로젝트 어댑터를 따른다. 새 TODO를 시작하지 않는다.'''
+        t=rpc.turn(root,'repair-and-finish',prompt,timeout=720)
+        checks['positive_turn_completed']=t['status']=='completed';result['final']=messages(t['events'],root,True)
+finally:rpc.close()
+after=snapshot(repo);save(out/'after.json',after)
+result['commits']=git(repo,'rev-list','--reverse',before['head']+'..HEAD').splitlines()
+result['branch_check']=shell(repo,['git','diff','--check',before['head']+'..HEAD'])
+result['baseline']=shell(repo,[sys.executable,'-m','unittest','discover','-s','tests'])
+checks['all_committed_files_static_pass']=result['branch_check']['exit']==0
+checks['baseline_green']=result['baseline']['exit']==0
+checks['todo_removed']='### [INFRA-001]' not in (repo/'docs/dev-cycle/TODO.md').read_text()
+checks['both_archives']=len([p for p in (repo/'docs/dev-cycle/archive').rglob('*.md') if 'INFRA-001' in p.read_text()])>=2 if (repo/'docs/dev-cycle/archive').exists() else False
+checks['clean']=after['status']==''
+checks['qa_complete']='ULTRAQA COMPLETE:' in (repo/'docs/dev-cycle/qa/INFRA-001.md').read_text()
+checks['first_impl_todo_retained']=False
+for commit in result['commits']:
+    if 'scripts/init_data.py' in git(repo,'diff-tree','--no-commit-id','--name-only','-r',commit).splitlines():
+        checks['first_impl_todo_retained']='### [INFRA-001]' in git(repo,'show',commit+':docs/dev-cycle/TODO.md');break
+checks['server_reaped']=rpc.proc.poll() is not None
+result['checks']=checks;result['candidate_pass']=all(checks.values());save(out/'result.json',result)
+print(json.dumps({'candidate_pass':result['candidate_pass'],'checks':checks},ensure_ascii=False),flush=True)

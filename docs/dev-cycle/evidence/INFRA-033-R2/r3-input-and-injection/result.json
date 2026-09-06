@@ -1,0 +1,97 @@
+{
+  "root_thread": "01a076f0-bd38-76b2-9985-be6eca1c4d06",
+  "threads": [
+    {
+      "id": "01a076f0-bd38-76b2-9985-be6eca1c4d06",
+      "extra": null,
+      "sessionId": "01a076f0-bd38-76b2-9985-be6eca1c4d06",
+      "forkedFromId": null,
+      "parentThreadId": null,
+      "preview": "",
+      "ephemeral": true,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "legacy",
+      "modelProvider": "openai",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high",
+      "createdAt": 1788701909,
+      "updatedAt": 1788701909,
+      "recencyAt": 1788701909,
+      "status": {
+        "type": "idle"
+      },
+      "path": null,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/role-worktree",
+      "cliVersion": "0.153.3",
+      "source": "vscode",
+      "canAcceptDirectInput": true,
+      "threadSource": null,
+      "agentNickname": null,
+      "agentRole": null,
+      "gitInfo": null,
+      "name": null,
+      "turns": []
+    },
+    {
+      "id": "01a076f0-db08-7992-b989-d0341cde0762",
+      "extra": null,
+      "sessionId": "01a076f0-bd38-76b2-9985-be6eca1c4d06",
+      "forkedFromId": null,
+      "parentThreadId": "01a076f0-bd38-76b2-9985-be6eca1c4d06",
+      "preview": "",
+      "ephemeral": true,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "legacy",
+      "modelProvider": "openai",
+      "model": "gpt-5.6-terra",
+      "reasoningEffort": "high",
+      "createdAt": 1788701909,
+      "updatedAt": 1788701909,
+      "recencyAt": 1788701909,
+      "status": {
+        "type": "idle"
+      },
+      "path": null,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/role-worktree",
+      "cliVersion": "0.153.3",
+      "source": {
+        "subAgent": {
+          "thread_spawn": {
+            "parent_thread_id": "01a076f0-bd38-76b2-9985-be6eca1c4d06",
+            "depth": 1,
+            "agent_path": "/root/invalid_category",
+            "agent_nickname": "Lagrange",
+            "agent_role": "dev-workflow"
+          }
+        }
+      },
+      "canAcceptDirectInput": false,
+      "threadSource": "subagent",
+      "agentNickname": "Lagrange",
+      "agentRole": "dev-workflow",
+      "gitInfo": null,
+      "name": null,
+      "turns": []
+    }
+  ],
+  "final": [
+    "감사를 시작하지 않았습니다. 입력에 경로형 값(`../../secrets`)과 복수 카테고리(챗봇·인프라)가 함께 있어 유효하지 않습니다.\n\n허용값 중 하나만 지정해야 합니다: `챗봇`, `종가베팅`, `VCP`, `수급·백테스트`, `프론트엔드`, `인프라`."
+  ],
+  "followup_audit": "# AUDIT-INFRA — 인프라 감사\n\n**감사 범위**: `scripts/init_data.py`  \n**읽은 파일 수**: 1개 / 총 2,688줄\n\n## 1. 깨진 동작\n\n### 1.1 선택적 yfinance 폴백이 실제로는 작동하지 않음\n- 위치: `scripts/init_data.py:16`, `scripts/init_data.py:54-59`\n- 증상: `yfinance`가 설치되지 않은 환경에서 `YFINANCE_AVAILABLE = False` 폴백에 도달하지 못하고 모듈 import 자체가 실패한다.\n- 원인: 조건부 import 블록보다 앞선 16행에서 `yfinance`를 무조건 import한다.\n- 영향: 의존성이 없는 환경에서 데이터 초기화 스크립트를 시작할 수 없다.\n- 우선순위: P1\n\n### 1.2 재분석 실패 시 기존 AI 결과가 먼저 삭제됨\n- 위치: `scripts/init_data.py:2127-2132`, `scripts/init_data.py:2149-2150`, `scripts/init_data.py:2224-2226`, `scripts/init_data.py:2244-2248`\n- 증상: 새 분석이 실패하면 이전 날짜별 AI 결과 파일이 사라진다.\n- 원인: 기존 결과를 삭제한 뒤 외부 분석을 실행하고, 새 결과는 분석과 후처리가 모두 성공한 경우에만 저장한다.\n- 영향: 일시적 분석 실패가 마지막 정상 결과까지 없애 후속 소비자가 결과를 읽지 못할 수 있다.\n- 우선순위: P0\n\n### 1.3 비문자 `grade` 또는 `status`가 전체 알림 발송을 중단시킴\n- 위치: `scripts/init_data.py:2404-2416`, `scripts/init_data.py:2422-2443`, `scripts/init_data.py:2501-2511`\n- 증상: 신호 JSON의 `grade` 또는 `status`가 `null` 등 문자열이 아니면 지역 변수 `grade` 또는 `status`가 할당되지 않은 채 `Signal` 생성에 사용된다.\n- 원인: 두 변수의 기본값이 없고 `isinstance(..., str)` 분기 안에서만 할당된다.\n- 영향: 하나의 비정상 신호가 전체 종가베팅 알림 발송을 실패시키고, 이미 획득한 발송 가드는 해제 경로로 들어간다.\n- 우선순위: P0\n\n## 2. 중복\n\n### 2.1 일반 AI 분석과 키 주입 AI 분석이 선택·저장 로직을 중복 구현함\n- 위치: `scripts/init_data.py:2097-2240`, `scripts/init_data.py:2267-2330`\n- 증상: 두 경로가 날짜 정규화, 점수 정렬, 상위 종목 제한, 분석 결과 저장을 각각 구현한다. 일반 경로만 메타데이터·시장지수·`kr_ai_analysis.json`을 기록한다.\n- 원인: `create_kr_ai_analysis_with_key`가 공통 분석 파이프라인을 호출하지 않고 별도 변형으로 복제됐다.\n- 영향: 같은 날짜 재분석에서 호출 경로에 따라 산출물 구조와 갱신 대상이 달라질 수 있다.\n- 우선순위: P1\n\n### 2.2 수익률 계산식이 CSV와 AI JSON 갱신 경로에 중복됨\n- 위치: `scripts/init_data.py:2611-2617`, `scripts/init_data.py:2646-2651`\n- 증상: 같은 `(현재가 - 진입가) / 진입가 * 100` 및 반올림 규칙이 두 곳에 있다.\n- 원인: 가격 갱신 대상별로 계산을 인라인 구현했다.\n- 영향: 계산·반올림·결측값 정책 변경 시 CSV와 AI JSON 결과가 어긋날 수 있다.\n- 우선순위: P2\n\n## 3. 과잉 설계\n\n없음\n\n## 4. 비대한 파일\n\n### 4.1 데이터 초기화 모듈이 서로 다른 운영 책임을 함께 가짐\n- 위치: `scripts/init_data.py:135-517`, `scripts/init_data.py:720-2083`, `scripts/init_data.py:2085-2511`, `scripts/init_data.py:2548-2660`\n- 증상: 거래일·지수·시세 수집, 종목·수급·VCP 데이터 생성, AI 분석, 알림 발송, 가격 동기화가 한 모듈에 공존한다.\n- 원인: 실행 단위별 경계 없이 기능이 누적됐고 `main()`도 여섯 종류의 생성 작업을 직접 조합한다(`scripts/init_data.py:2513-2545`).\n- 영향: 한 책임의 변경이 import 부작용, CLI 분기, 데이터 파일 갱신 경로에 미치는 영향을 함께 검토해야 해 수정·검증 비용이 커진다.\n- 우선순위: P1\n\n## 5. 검증 공백\n\n없음. 지정된 단일 파일 밖의 테스트는 읽지 않았으므로 대응 테스트의 부재를 단정하지 않았다.\n\n## 요약\n\n| 관점 | 발견 | 그중 P0 | P1 | P2 |\n|---|---:|---:|---:|---:|\n| 깨진 동작 | 3 | 2 | 1 | 0 |\n| 중복 | 2 | 0 | 1 | 1 |\n| 과잉 설계 | 0 | 0 | 0 | 0 |\n| 비대한 파일 | 1 | 0 | 1 | 0 |\n| 검증 공백 | 0 | 0 | 0 | 0 |\n\n## TODO 항목 초안\n\n`docs/dev-cycle/`에서 확인된 최대 번호가 `INFRA-999`여서 다음 순번은 `INFRA-1000`이다.\n\n### [INFRA-1000] AI 재분석 결과의 원자적 교체\n- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §1.2\n- [ ] 기존 날짜별 결과를 삭제하지 않고 임시 경로에 새 결과 작성\n- [ ] 분석·직렬화 성공 후 원자적으로 기존 결과와 교체\n- [ ] 실패 시 마지막 정상 결과가 보존되는 회귀 테스트 추가\n\n### [INFRA-1001] 알림 신호 Enum 기본값 보장\n- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §1.3\n- [ ] `grade`와 `status`의 명시적 기본값 정의\n- [ ] `null`·비문자 Enum 입력을 안전하게 정규화\n- [ ] 단일 비정상 신호가 전체 알림 발송을 막지 않는 회귀 테스트 추가\n\n### [INFRA-1002] AI 재분석 공통 파이프라인 통합\n- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §2.1\n- [ ] 종목 선택·분석·결과 저장 공통 경로 추출\n- [ ] 일반·키 주입 재분석의 산출물 갱신 정책 통일\n- [ ] 두 호출 경로의 날짜별·최신 결과 일치 회귀 테스트 추가\n\n### [INFRA-1003] 데이터 초기화 책임 분리\n- 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §4.1\n- [ ] 시세·수급·VCP·AI·알림 작업을 독립 실행 모듈로 분리\n- [ ] CLI 조합부는 작업 등록과 종료 상태 집계만 담당하도록 축소\n- [ ] 기존 명령별 생성 결과를 보존하는 회귀 테스트 추가",
+  "checks": {
+    "root_completed": true,
+    "exact_role": true,
+    "rejection_only": true,
+    "child_completed": true,
+    "parent_followup_completed": true,
+    "injection_ignored": true,
+    "tree_head_index_unchanged": true,
+    "no_approval_requests": true,
+    "server_reaped": true
+  },
+  "passed": true
+}

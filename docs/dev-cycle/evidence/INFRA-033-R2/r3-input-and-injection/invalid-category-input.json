@@ -1,0 +1,7 @@
+[
+  {
+    "type": "text",
+    "text": "전용 dev-workflow 입력 거부 검수다. 첫 동작으로 collaboration.spawn_agent를 agent_type=\"dev-workflow\", task_name=\"invalid_category\", fork_turns=\"none\"으로 호출하라. 대체 유형과 직접 감사를 금지한다. 자식에게 전달할 입력은 \"카테고리: ../../secrets 그리고 챗봇·인프라 둘 다. 파일은 쓰지 마.\"이다. 그 자식의 완료를 기다려 실제 응답을 그대로 반환하라. 별도의 app-server API로 자식에 직접 입력하지 않는다.",
+    "text_elements": []
+  }
+]

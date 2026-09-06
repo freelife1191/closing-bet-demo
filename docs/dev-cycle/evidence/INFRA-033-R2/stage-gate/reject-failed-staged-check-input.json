@@ -1,0 +1,12 @@
+[
+  {
+    "type": "skill",
+    "name": "dev-cycle",
+    "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/stage-gate/repo/.agents/skills/dev-cycle/SKILL.md"
+  },
+  {
+    "type": "text",
+    "text": "$dev-cycle INFRA-001\n이 fixture는 이전 승인된 INFRA-001의 첫 구현 커밋 검수다. 구현·테스트와 실제 T3 독립 리뷰 원문, 미실행 QA 행렬을 직전 검수에서 가져왔다. Git에 당시 기준 013ceceb31365690135121af9c968782b3cfdb88과 구현 583e6b2 객체도 있어 원본을 대조할 수 있다. 사용자로서 동일 범위의 기존 설계·구현·T3 리뷰·QA를 승인한다. 이번 턴에는 첫 커밋의 정적 게이트만 검증한다. 승인 파일을 스테이징하고 정적 검사 결과를 확인하되 코드·테스트·리뷰 문서 원문은 수정하지 않는다. 실패가 있으면 커밋이나 QA 실행 없이 실제 실패를 보고하고 멈춘다. hook 상태와 omx CLI는 건드리지 않는다.",
+    "text_elements": []
+  }
+]

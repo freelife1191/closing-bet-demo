@@ -1,0 +1,13 @@
+{
+  "pid": 17927,
+  "argv": [
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "-c",
+    "projects.\"/Users/freelife/vibe/lecture/hodu/closing-bet-demo\".trust_level=\"trusted\"",
+    "app-server",
+    "--stdio"
+  ],
+  "removed_env_keys": [],
+  "model": "gpt-5.6-sol",
+  "effort": "high"
+}

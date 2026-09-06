@@ -1,0 +1,17 @@
+{
+  "case": "r5",
+  "root_thread": "01a076e6-52aa-75d2-ace9-247c5df4bb2c",
+  "checks": {
+    "design_completed": true,
+    "before_approval_immutable": true,
+    "design_returned": true,
+    "pending_continue_completed": true,
+    "cancel_completed": true,
+    "worktree_immutable": true,
+    "head_immutable": true,
+    "no_injection_file": true,
+    "server_reaped": true,
+    "no_approval_requests": true
+  },
+  "passed": true
+}

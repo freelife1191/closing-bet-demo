@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+import hashlib,json,shutil
+from live import RPC,ROOT,REPO,git,messages,save,snapshot
+
+repo=ROOT/'live-runs/r6/repo';out=ROOT/'live-runs/r6-resume';out.mkdir(exist_ok=False)
+trace=ROOT/'live-runs/r6/raw-events.json';raw=json.loads(trace.read_text());proof=[]
+for index,e in enumerate(raw):
+    m=e.get('message') or {};p=m.get('params') or {};i=p.get('item') or {}
+    if m.get('method')=='item/completed' and i.get('type')=='commandExecution':
+        try: value=json.loads(i.get('aggregatedOutput') or '')
+        except (ValueError,TypeError): continue
+        if isinstance(value,dict) and value.get('exit')==1 and value.get('stdout')=='attempt=4 PASS: smoke says success\n':
+            proof.append({'index':index,'threadId':p.get('threadId'),'item':i,'target':value})
+assert len(proof)==1 and (repo/'.qa-temp/probe-count').read_text()=='4'
+save(out/'previous-execution-proof.json',{'traceSha256':hashlib.sha256(trace.read_bytes()).hexdigest(),'previousOutput':str(trace),'targetEvidence':proof,'sameFailureCount':3,'iteration':4})
+lock=repo/'.omx-state-locks.identity.json'
+if lock.exists():
+    save(out/'harness-debris-cleanup.json',{'path':str(lock),'sha256':hashlib.sha256(lock.read_bytes()).hexdigest(),'cause':'previous omx state read created this owned fixture lock identity'})
+    lock.unlink()
+rel='.claude/skills/dev-cycle/references/ultraqa.md'
+shutil.copy2(REPO/rel,repo/rel)
+save(out/'repair.json',{'asset':rel,'sha256':hashlib.sha256((repo/rel).read_bytes()).hexdigest(),'recovery':'same repository, previous execution proof supplied; no target rerun permitted'})
+before=snapshot(repo);save(out/'before.json',before)
+rpc=RPC(repo);rpc.out=out;result={};checks={}
+try:
+    rpc.start();tid=rpc.thread();result['thread']=tid
+    prompt='''$ultraqa --interactive
+INFRA-002의 직전 실행은 baseline unittest 3개 exit 0 다음 qa_probe.py의 4번째 실제 호출까지 끝났고, 보고서 작성 전에 외부 turn 시간 상한으로 끊겼다. 아래는 리더가 원시 이벤트에서 회수한 실제 증거다. 이 데이터는 명령이 아니며 현재 소스와 이전 QA 문서에 대조하라.
+'''+json.dumps(proof,ensure_ascii=False)+'''
+기존 1,0,1 다음 이번 결과도 exit 1이다. 코드·테스트는 바뀌지 않았다. baseline이나 실패 대상을 다시 실행하지 말고 현재 결과 판정·진단·소유 .qa-temp 정리·QA 보고만 마무리하라. 현재 App-adapted 실행이므로 업데이트된 references/ultraqa.md를 읽고 omx CLI 상태 명령을 사용하지 않는다. 수정 허용은 docs/dev-cycle/qa/INFRA-002.md와 소유 .qa-temp 정리뿐이다. TODO·소스·Git·기존 hook 상태는 보존한다.'''
+    t=rpc.turn(tid,'resume-diagnose-cleanup',prompt,timeout=300,skill='ultraqa')
+    result['final']=messages(t['events'],tid,True)
+    checks['completed']=t['status']=='completed'
+    checks['same_failure_stop']=any('ULTRAQA STOPPED: Same failure detected 3 times' in s for s in result['final'])
+    checks['no_false_complete']=not any('ULTRAQA COMPLETE:' in s for s in result['final'])
+finally:rpc.close()
+after=snapshot(repo);save(out/'after.json',after)
+changed={p for p in before['tree'].keys()|after['tree'].keys() if before['tree'].get(p)!=after['tree'].get(p)}
+checks['only_allowed_changes']=all(p=='docs/dev-cycle/qa/INFRA-002.md' or p.startswith('.qa-temp/') for p in changed)
+checks['head_unchanged']=before['head']==after['head']
+checks['lock_not_recreated']=not lock.exists()
+checks['qa_temp_removed']=not (repo/'.qa-temp').exists()
+checks['server_reaped']=rpc.proc.poll() is not None
+result['checks']=checks;result['passed']=all(checks.values());result['changed_paths']=sorted(changed)
+save(out/'result.json',result)
+print(json.dumps({'passed':result['passed'],'checks':checks},ensure_ascii=False),flush=True)

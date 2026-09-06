@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+import hashlib,json,sys
+from live import RPC,ROOT,git,messages,save,shell,snapshot
+
+repo=ROOT/'live-runs/r2/repo';out=ROOT/'live-runs/r2-resume';out.mkdir(exist_ok=False)
+before=snapshot(repo);save(out/'before.json',before)
+policy={'type':'workspaceWrite','writableRoots':[str(repo),str(repo/'.git')],'networkAccess':False}
+class GitRPC(RPC):
+    def call(self,method,params,**kw):
+        if method=='turn/start':params={**params,'sandboxPolicy':policy}
+        return super().call(method,params,**kw)
+rpc=GitRPC(repo);rpc.out=out;checks={};result={'policy':policy}
+try:
+    rpc.start()
+    result['preflight']=rpc.call('command/exec',{'command':['python3','-c','from pathlib import Path;p=Path(".git/.qa-preflight");p.write_text("owned");p.unlink();print("OK")'],'cwd':str(repo),'sandboxPolicy':policy,'timeoutMs':10000})
+    assert result['preflight']['exitCode']==0
+    root=rpc.thread();result['root_thread']=root
+    proof={'previous_case':'r2','previous_head':before['head'],'review_path':'docs/dev-cycle/reviews/INFRA-001.md',
+           'review_sha256':hashlib.sha256((repo/'docs/dev-cycle/reviews/INFRA-001.md').read_bytes()).hexdigest(),
+           'previous_final':json.loads((ROOT/'live-runs/r2/result.json').read_text())['round_final']}
+    save(out/'recovery-input.json',proof)
+    prompt='''$dev-cycle INFRA-001
+기존 INFRA-001 승인 범위를 확인하며 마지막 차단 지점부터 재개한다. 직전 실행은 구현·전체 unittest 3개·독립 ponytail·code-reviewer APPROVE·architect CLEAR·T3 심층 review APPROVE·UltraQA 행렬 작성까지 끝났다. 직전 checkpoint 원문과 현재 파일 해시를 먼저 대조하라:
+'''+json.dumps(proof,ensure_ascii=False)+'''
+QA 문서와 리뷰 원문은 이 동일 저장소에 있다. 코드·테스트·계획은 직전 검수와 동일하다. 이전 Git 권한 차단은 실제 외부 파일권한이 아니라 sandbox가 .git을 읽기 전용으로 노출한 것이었다. 이번 turn은 이미 소유된 이 fixture의 .git만 writableRoots에 명시했고 같은 sandbox의 쓰기/정리 사전 검사도 통과했다. chmod나 다른 저장소로 우회하지 않는다. 첫 구현/QA 행렬 커밋부터 UltraQA와 최종 아카이브까지 마무리하라. 같은 입력의 완료 리뷰는 재실행하지 않고 원문과 해시를 확인한다. 누락 증거가 있으면 그 단계만 보완한다. 이 실행은 App 대응 QA이므로 상태 파일 직접 읽기만 허용하고 omx state read/write/clear는 실행하지 않는다(읽기 명령도 잠금 파일을 만들 수 있다). 다음 새 TODO 항목은 시작하지 않는다.'''
+    t=rpc.turn(root,'resume-first-commit-through-archive',prompt,timeout=900)
+    checks['root_completed']=t['status']=='completed';result['final']=messages(t['events'],root,True)
+    listed=rpc.call('thread/loaded/list',{});result['loaded']=listed
+finally:rpc.close()
+after=snapshot(repo);save(out/'after.json',after)
+result['baseline']=shell(repo,[sys.executable,'-m','unittest','discover','-s','tests'])
+result['cli']=shell(repo,[sys.executable,'scripts/init_data.py','  kim min su  '])
+checks['baseline']=result['baseline']['exit']==0 and 'Ran 3 tests' in result['baseline']['stderr']
+checks['cli']=result['cli']['exit']==0 and result['cli']['stdout']=='Kim Min Su\n' and result['cli']['stderr']==''
+checks['todo_removed']='### [INFRA-001]' not in (repo/'docs/dev-cycle/TODO.md').read_text()
+archives=[p for p in (repo/'docs/dev-cycle/archive').rglob('*.md') if 'INFRA-001' in p.read_text()] if (repo/'docs/dev-cycle/archive').exists() else []
+checks['both_archives']=len(archives)>=2
+checks['clean']=git(repo,'status','--porcelain')==''
+commits=git(repo,'rev-list','--reverse',before['head']+'..HEAD').splitlines();result['commits']=commits
+checks['first_impl_commit_retained']=False
+for c in commits:
+    paths=git(repo,'diff-tree','--no-commit-id','--name-only','-r',c).splitlines()
+    if 'scripts/init_data.py' in paths:
+        checks['first_impl_commit_retained']='### [INFRA-001]' in git(repo,'show',c+':docs/dev-cycle/TODO.md');break
+checks['qa_complete']='ULTRAQA COMPLETE:' in (repo/'docs/dev-cycle/qa/INFRA-001.md').read_text()
+checks['server_reaped']=rpc.proc.poll() is not None
+result['checks']=checks;result['candidate_pass']=all(checks.values());save(out/'result.json',result)
+print(json.dumps({'candidate_pass':result['candidate_pass'],'checks':checks},ensure_ascii=False),flush=True)

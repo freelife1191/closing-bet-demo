@@ -1,0 +1,16 @@
+{
+  "policy": {
+    "type": "workspaceWrite",
+    "writableRoots": [
+      "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r2/repo",
+      "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dev-cycle-r2-fcs9_klf/live-runs/r2/repo/.git"
+    ],
+    "networkAccess": false
+  },
+  "result": {
+    "exitCode": 0,
+    "stdout": "git metadata write and cleanup verified\n",
+    "stderr": ""
+  },
+  "probe_absent": true
+}

@@ -20,8 +20,8 @@
 - 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-06 사용자 요청과 전체 워크플로 리뷰
 - 설계 승인: 2026-09-06 | 승인 확인: 2026-09-06T20:32:31+09:00 | 경로: architectural | 범위: dev-cycle·dev-workflow 규약과 격리 실제 검증 | 근거: 현재 대화의 설계 제안에 대한 사용자 「진행해」
 - 설계: docs/superpowers/specs/2026-09-06-dev-cycle-brainstorming-ultraqa-design.md
-- 상태: QA_RETRY — 이전 평가 STOPPED를 보존하고 사용자 요청에 따라 원인 수리·R2 재검수 중
-- 검증 기록: docs/dev-cycle/qa/INFRA-033.md (필수 6/9 통과; S-3·S-5·S-8 미통과/미검증)
+- 상태: RESUME — Codex App 필수 8/8 통과·독립 검수 APPROVE·정리 완료, 최종 아카이브 대기
+- 검증 기록: docs/dev-cycle/qa/INFRA-033-recheck.md (App 필수 8/8 PASS). 초기 STOPPED 6/9 이력은 INFRA-033.md에 보존
 - [x] brainstorming 설계와 사용자 승인 확인
 - [x] 라운드·재개·승인·필수 QA 실패·감사 읽기 전용 계약 반영
 - [x] Codex UltraQA와 App 상태 대응, Claude Code 기존 도구 매핑 정리
@@ -29,7 +29,21 @@
 - [x] 독립 리뷰와 정적 검사, 증거·정리 확인 (임시 app-server 13개 종료, fixture 제거)
 - [x] 구현 커밋 `4eaba62` 기록
 - [x] T3 리뷰의 제한·검토 증거 재사용과 전용 호출·큰 입력 검증을 보완한 새 평가 계획: docs/dev-cycle/qa/INFRA-033-recheck.md
-- [ ] 필수 미통과 해소 후 완료 아카이브 기록 (현재는 TODO 유지)
+- [x] 필수 미통과 원인 수리, 실제 T3 전체 마감·전용 역할·입력/실패/커밋 게이트 회귀 통과
+- [x] 소유 app-server 19개 종료·임시 worktree/fixture 제거, 원본 OMX 상태와 미추적 package.json 보존
+- [ ] 최종 아카이브 커밋에서만 TODO 항목 제거
+
+
+### [INFRA-034] 감사 초안과 설계의 경계를 밝히고 oh-my-claudecode 를 사이클에 연결한다
+- 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-06 사용자 요청과 oh-my-claudecode 5.3.0 스킬·에이전트·도구·훅 대조 검토
+- 설계 승인: 2026-09-06 | 승인 확인: 2026-09-06T23:20:38+09:00 | 경로: bounded | 범위: `dev-workflow` 초안·설계 경계와 다음 단계, 실행 환경 표에 `critic`·`security-reviewer`·`trace`·`session_search` 연결, OMC 키워드 감지 주의 | 근거: 현재 대화의 설계 제안에 대한 사용자 선택 응답 (네 후보 모두 적용, 커밋은 사용자가 수행)
+- 검토 결과: 스킬 29개·에이전트 19개·MCP 도구 11묶음·훅 10이벤트 가운데 위 넷만 채택. `autopilot`·`ralph`·`team`·`ultragoal`·`self-improve`·`launch` 는 설계 승인 게이트나 단일 백로그와 충돌, `wiki`·`remember`·`planner`·`notepad` 는 Git 미추적 `.omc/` 에만 기록, `code-simplifier`·`git-master` 는 `/ponytail-review` 와 두 커밋 구조에 충돌해 제외
+- [ ] `dev-workflow.md` 에 초안·설계 경계와 저장 뒤 다음 단계 기록
+- [ ] `SKILL.md` 실행 환경 표와 [0] 3번·[1] 4번·[3] 8번에 네 도구 연결, OMC 키워드 주의 문단
+- [ ] `tier-rules.md` §1 시크릿 문단에 `security-reviewer` 보강
+- [ ] `CLAUDE.md` 개발 사이클 절과 `codex-setup.md` §3 대응표 교차 반영
+- [ ] 문서 검증: 참조 경로·절·도구 실재 확인, `git diff --stat` 코드 무변경, 네 자리 교차 확인, TODO 티어 재판정 불필요 확인
+- [ ] 첫 커밋과 완료 아카이브 (사용자 커밋 뒤)
 
 
 ### [CHAT-022] 메모리 전체 동기화가 다른 워커가 저장한 행을 지운다
