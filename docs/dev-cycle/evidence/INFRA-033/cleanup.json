@@ -76,5 +76,13 @@
     "interpretation": "no process has an open file or cwd in the owned temporary tree"
   },
   "state_scope": "No existing repository OMX state was modified or cleared.",
-  "preserved": "Sanitized results, prompts, selected events, fixture seed and reference script in this evidence directory."
+  "preserved": "Sanitized results, prompts, selected events, fixture seed and reference script in this evidence directory.",
+  "post_commit_worktree_observation": {
+    "path": "package.json",
+    "status": "untracked",
+    "origin": "not established",
+    "sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+    "mtime": "2026-09-06T21:53:17.806378+09:00",
+    "action": "preserved; excluded from this task commits"
+  }
 }
