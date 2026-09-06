@@ -1,0 +1,25 @@
+[
+  {
+    "method": "thread/start",
+    "params": {
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/a/repo",
+      "ephemeral": true,
+      "sandbox": "workspace-write",
+      "approvalPolicy": "never",
+      "selectedSkills": []
+    }
+  },
+  {
+    "method": "turn/start",
+    "params": {
+      "threadId": "01a07684-a7dd-7851-bdfc-2eeb492d4956",
+      "approvalPolicy": "never",
+      "selectedSkills": [
+        {
+          "name": "dev-cycle",
+          "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/a/repo/.agents/skills/dev-cycle/SKILL.md"
+        }
+      ]
+    }
+  }
+]

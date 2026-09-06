@@ -1,0 +1,55 @@
+[
+  {
+    "method": "thread/start",
+    "params": {
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/e-attempt-2/repo",
+      "model": "gpt-5.6-sol",
+      "ephemeral": true,
+      "sandbox": "workspace-write",
+      "approvalPolicy": "never",
+      "selectedSkills": []
+    }
+  },
+  {
+    "method": "turn/start",
+    "params": {
+      "threadId": "01a076a3-76f8-7453-929a-9ec8264045df",
+      "effort": "high",
+      "approvalPolicy": "never",
+      "selectedSkills": [
+        {
+          "name": "dev-cycle",
+          "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/e-attempt-2/repo/.agents/skills/dev-cycle/SKILL.md"
+        }
+      ]
+    }
+  },
+  {
+    "method": "turn/start",
+    "params": {
+      "threadId": "01a076a3-76f8-7453-929a-9ec8264045df",
+      "effort": "high",
+      "approvalPolicy": "never",
+      "selectedSkills": [
+        {
+          "name": "dev-cycle",
+          "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/e-attempt-2/repo/.agents/skills/dev-cycle/SKILL.md"
+        }
+      ]
+    }
+  },
+  {
+    "method": "turn/start",
+    "params": {
+      "threadId": "01a076a3-76f8-7453-929a-9ec8264045df",
+      "effort": "high",
+      "approvalPolicy": "never",
+      "selectedSkills": [
+        {
+          "name": "dev-cycle",
+          "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/e-attempt-2/repo/.agents/skills/dev-cycle/SKILL.md"
+        }
+      ]
+    }
+  }
+]

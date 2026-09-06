@@ -1,0 +1,23 @@
+[
+  {
+    "label": "f-resume-dirty",
+    "turn_id": "01a076a3-77da-7a51-8fe7-2e5351d97810",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a076a3-76f8-7b10-92ac-8674bb4461fa",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high"
+    }
+  }
+]

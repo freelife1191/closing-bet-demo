@@ -1,0 +1,65 @@
+[
+  {
+    "label": "e-design",
+    "turn_id": "01a076a3-77d6-7d60-8fbd-2812fd5a0d55",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a076a3-76f8-7453-929a-9ec8264045df",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high"
+    }
+  },
+  {
+    "label": "e-continue",
+    "turn_id": "01a076a4-ac04-7e42-b01e-a3c9c78a953a",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a076a3-76f8-7453-929a-9ec8264045df",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high"
+    }
+  },
+  {
+    "label": "e-cancel",
+    "turn_id": "01a076a4-cf8d-7d72-b884-f9add3046601",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a076a3-76f8-7453-929a-9ec8264045df",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high"
+    }
+  }
+]

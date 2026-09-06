@@ -1,0 +1,10 @@
+{
+  "blockers": [],
+  "pid": 14190,
+  "removed_omx_environment_keys": [],
+  "returncode": -15,
+  "session_local_actor": {
+    "effort": "high",
+    "model": "gpt-5.6-sol"
+  }
+}

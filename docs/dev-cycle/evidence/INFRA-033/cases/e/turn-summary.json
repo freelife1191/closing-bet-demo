@@ -1,0 +1,44 @@
+[
+  {
+    "label": "e-design",
+    "turn_id": "01a076a1-d9bf-7403-81c6-b8e69d138dd9",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a076a1-d91d-75b0-a372-3751da15db7a",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high"
+    }
+  },
+  {
+    "label": "e-continue",
+    "turn_id": "01a076a2-cf86-71c1-9e77-d5d352dd11a6",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a076a1-d91d-75b0-a372-3751da15db7a",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high"
+    }
+  }
+]

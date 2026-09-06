@@ -1,0 +1,112 @@
+{
+  "source_commit": "4eaba62",
+  "overall_status": "ULTRAQA STOPPED: Same failure detected 3 times",
+  "cases": {
+    "a": {
+      "passed": true,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/a/result.json"
+    },
+    "b": {
+      "passed": false,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/b/result.json"
+    },
+    "b-recovery": {
+      "passed": false,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/b-recovery/result.json"
+    },
+    "b-recovery-2": {
+      "passed": false,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/b-recovery-2/result.json"
+    },
+    "c-attempt-2": {
+      "passed": false,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/c-attempt-2/result.json"
+    },
+    "c-attempt-3": {
+      "passed": false,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/c-attempt-3/result.json"
+    },
+    "d-attempt-2": {
+      "passed": false,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/d-attempt-2/result.json"
+    },
+    "d-attempt-3": {
+      "passed": false,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/d-attempt-3/result.json"
+    },
+    "e": {
+      "passed": true,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/e/result.json"
+    },
+    "e-attempt-2": {
+      "passed": true,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/e-attempt-2/result.json"
+    },
+    "f": {
+      "passed": true,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/f/result.json"
+    },
+    "local-guard-probes": {
+      "passed": null,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/local-guard-probes/result.json"
+    },
+    "protocol-probes": {
+      "passed": null,
+      "artifact": "docs/dev-cycle/evidence/INFRA-033/cases/protocol-probes/result.json"
+    }
+  },
+  "notes": [
+    "Unrelated persisted thread metadata and full raw RPC responses are excluded.",
+    "Long command output is bounded per field with its original hash.",
+    "Original C wrapper-exit predicate is superseded by c-target-exit-proof.json; no model rerun."
+  ],
+  "scenario_verdicts": {
+    "S-1": {
+      "status": "passed",
+      "evidence": "static checks in INFRA-033.md"
+    },
+    "S-2": {
+      "status": "passed",
+      "evidence": "cases/a"
+    },
+    "S-3": {
+      "status": "stopped",
+      "evidence": [
+        "cases/b",
+        "cases/b-recovery",
+        "cases/b-recovery-2"
+      ],
+      "reason": "T3 root completion timeout at 150/300/600 seconds"
+    },
+    "S-4": {
+      "status": "passed",
+      "evidence": "c-target-exit-proof.json",
+      "note": "Harness wrapper exit 0 differs from captured target returncode 1; verdict corrected from existing events."
+    },
+    "S-5": {
+      "status": "unverified",
+      "evidence": "cases/d-attempt-3",
+      "reason": "Dedicated child role/parent provenance not observed"
+    },
+    "S-6": {
+      "status": "passed",
+      "evidence": "cases/e-attempt-2"
+    },
+    "S-7": {
+      "status": "passed",
+      "evidence": "cases/f"
+    },
+    "S-8": {
+      "status": "unverified",
+      "evidence": "cases/protocol-probes",
+      "reason": "Large Unicode turn reached 40-second timeout; malformed JSON send alone is not a full success proof"
+    },
+    "S-9": {
+      "status": "passed",
+      "evidence": "cases/local-guard-probes",
+      "note": "Local harness guard only"
+    }
+  },
+  "required_passed": 6,
+  "required_total": 9
+}

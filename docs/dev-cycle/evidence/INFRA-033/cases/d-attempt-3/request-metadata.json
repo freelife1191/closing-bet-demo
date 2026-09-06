@@ -1,0 +1,22 @@
+[
+  {
+    "method": "thread/start",
+    "params": {
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/d-attempt-3/repo",
+      "model": "gpt-5.6-sol",
+      "ephemeral": true,
+      "sandbox": "workspace-write",
+      "approvalPolicy": "never",
+      "selectedSkills": []
+    }
+  },
+  {
+    "method": "turn/start",
+    "params": {
+      "threadId": "01a0769f-0522-75d2-a486-0834681d0bf4",
+      "effort": "high",
+      "approvalPolicy": "never",
+      "selectedSkills": []
+    }
+  }
+]

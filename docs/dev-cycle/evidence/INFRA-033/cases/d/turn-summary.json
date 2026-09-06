@@ -1,0 +1,24 @@
+[
+  {
+    "label": "d-audit",
+    "turn_id": "01a07687-1ffa-73f2-ac2e-308baccaa646",
+    "completed": false,
+    "completion_status": null,
+    "timed_out": true,
+    "blocker": "turn-timeout:150s",
+    "thread": {
+      "id": "01a07687-1f41-7483-a67a-ed63c952c056",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "activeFlags": [],
+        "type": "active"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "xhigh"
+    }
+  }
+]

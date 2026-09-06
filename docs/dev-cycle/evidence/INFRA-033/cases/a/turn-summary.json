@@ -1,0 +1,23 @@
+[
+  {
+    "label": "a-status",
+    "turn_id": "01a07684-a88a-7241-97c7-743239fefabf",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a07684-a7dd-7851-bdfc-2eeb492d4956",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "xhigh"
+    }
+  }
+]

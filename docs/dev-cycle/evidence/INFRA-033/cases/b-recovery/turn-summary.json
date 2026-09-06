@@ -1,0 +1,24 @@
+[
+  {
+    "label": "b-recovery",
+    "turn_id": "01a0768e-8347-7af3-a485-21c1ac9b561a",
+    "completed": false,
+    "completion_status": null,
+    "timed_out": true,
+    "blocker": "turn-timeout:300s",
+    "thread": {
+      "id": "01a0768e-82a8-76a2-991e-22cb96f4b360",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "activeFlags": [],
+        "type": "active"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "xhigh"
+    }
+  }
+]

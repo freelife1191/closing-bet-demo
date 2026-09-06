@@ -1,0 +1,20 @@
+[
+  {
+    "method": "thread/start",
+    "params": {
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/d/repo",
+      "ephemeral": true,
+      "sandbox": "workspace-write",
+      "approvalPolicy": "never",
+      "selectedSkills": []
+    }
+  },
+  {
+    "method": "turn/start",
+    "params": {
+      "threadId": "01a07687-1f41-7483-a67a-ed63c952c056",
+      "approvalPolicy": "never",
+      "selectedSkills": []
+    }
+  }
+]

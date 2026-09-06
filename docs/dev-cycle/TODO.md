@@ -20,12 +20,16 @@
 - 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-06 사용자 요청과 전체 워크플로 리뷰
 - 설계 승인: 2026-09-06 | 승인 확인: 2026-09-06T20:32:31+09:00 | 경로: architectural | 범위: dev-cycle·dev-workflow 규약과 격리 실제 검증 | 근거: 현재 대화의 설계 제안에 대한 사용자 「진행해」
 - 설계: docs/superpowers/specs/2026-09-06-dev-cycle-brainstorming-ultraqa-design.md
+- 상태: QA_RETRY — ULTRAQA STOPPED: Same failure detected 3 times
+- 검증 기록: docs/dev-cycle/qa/INFRA-033.md (필수 6/9 통과; S-3·S-5·S-8 미통과/미검증)
 - [x] brainstorming 설계와 사용자 승인 확인
 - [x] 라운드·재개·승인·필수 QA 실패·감사 읽기 전용 계약 반영
 - [x] Codex UltraQA와 App 상태 대응, Claude Code 기존 도구 매핑 정리
-- [ ] 격리 저장소 실제 흐름과 적대적 시나리오 검증
-- [ ] 독립 리뷰와 정적 검사, 증거·정리 확인
-- [ ] 구현 커밋과 완료 아카이브 기록
+- [x] 격리 저장소 실제 흐름과 적대적 시나리오 실행 (필수 전체 통과 아님)
+- [x] 독립 리뷰와 정적 검사, 증거·정리 확인 (임시 app-server 13개 종료, fixture 제거)
+- [x] 구현 커밋 `4eaba62` 기록
+- [ ] T3 리뷰의 제한·검토 증거 재사용과 전용 호출·큰 입력 검증을 보완한 새 평가 계획
+- [ ] 필수 미통과 해소 후 완료 아카이브 기록 (현재는 TODO 유지)
 
 
 ### [CHAT-022] 메모리 전체 동기화가 다른 워커가 저장한 행을 지운다

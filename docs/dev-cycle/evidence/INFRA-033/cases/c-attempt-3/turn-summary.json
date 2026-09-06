@@ -1,0 +1,23 @@
+[
+  {
+    "label": "c-qa-retry",
+    "turn_id": "01a07699-bb3d-7c53-b1b5-4ba357126a64",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a07699-ba48-7f32-a80a-9f1261bbf802",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high"
+    }
+  }
+]

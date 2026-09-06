@@ -1,0 +1,80 @@
+{
+  "completed_at": "2026-09-06T21:44:41+09:00",
+  "temporary_root": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows",
+  "temporary_root_removed": true,
+  "owned_app_servers": [
+    {
+      "case": "e-attempt-2",
+      "pid": 6914,
+      "returncode": -15
+    },
+    {
+      "case": "c-attempt-3",
+      "pid": 81787,
+      "returncode": -15
+    },
+    {
+      "case": "c-attempt-2",
+      "pid": 23279,
+      "returncode": -15
+    },
+    {
+      "case": "d-attempt-3",
+      "pid": 94278,
+      "returncode": -15
+    },
+    {
+      "case": "d-attempt-2",
+      "pid": 23236,
+      "returncode": -15
+    },
+    {
+      "case": "a",
+      "pid": 96456,
+      "returncode": -15
+    },
+    {
+      "case": "f",
+      "pid": 6915,
+      "returncode": -15
+    },
+    {
+      "case": "protocol-probes",
+      "pid": 14190,
+      "returncode": -15
+    },
+    {
+      "case": "b-recovery",
+      "pid": 36076,
+      "returncode": -15
+    },
+    {
+      "case": "b-recovery-2",
+      "pid": 81757,
+      "returncode": -15
+    },
+    {
+      "case": "d",
+      "pid": 9608,
+      "returncode": -15
+    },
+    {
+      "case": "e",
+      "pid": 2925,
+      "returncode": -15
+    },
+    {
+      "case": "b",
+      "pid": 5227,
+      "returncode": -15
+    }
+  ],
+  "lsof_probe": {
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "",
+    "interpretation": "no process has an open file or cwd in the owned temporary tree"
+  },
+  "state_scope": "No existing repository OMX state was modified or cleared.",
+  "preserved": "Sanitized results, prompts, selected events, fixture seed and reference script in this evidence directory."
+}

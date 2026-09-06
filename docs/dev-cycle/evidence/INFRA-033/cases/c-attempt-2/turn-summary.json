@@ -1,0 +1,24 @@
+[
+  {
+    "label": "c-qa-retry",
+    "turn_id": "01a0768a-a042-7832-88e2-4d6c2eff3838",
+    "completed": false,
+    "completion_status": null,
+    "timed_out": true,
+    "blocker": "turn-timeout:150s",
+    "thread": {
+      "id": "01a0768a-9f42-7dd0-b2a2-bd15936d36a7",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "activeFlags": [],
+        "type": "active"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "xhigh"
+    }
+  }
+]

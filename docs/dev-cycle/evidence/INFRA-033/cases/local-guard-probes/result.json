@@ -1,0 +1,15 @@
+{
+  "continue_resume_coverage": "B와 E가 한 thread의 설계·승인·continue 동작을 검증한다.",
+  "dirty_external_file_coverage": "F가 실제 모델 turn에서 외부 dirty 파일 보존을 검증한다.",
+  "own_process_pid": 15709,
+  "own_process_returncode": -15,
+  "own_process_termination_seconds": 0.1063162079990434,
+  "own_process_timeout_observed": true,
+  "repeat_failure_codes": [
+    1,
+    1,
+    1
+  ],
+  "same_failure_stop_after": 3,
+  "scope": "local harness guard only; not a model/workflow verdict"
+}

@@ -1,0 +1,31 @@
+{
+  "commits_after_baseline": "",
+  "diff_from_baseline": "",
+  "head": "8eec61dab0f57f387dc0bf52122b3265a2f564be",
+  "status": "",
+  "tree": {
+    ".claude/agents/dev-workflow.md": "1dc232745733e4680988cc2527c8a4b386bc62fcbc76eecf2f5b035042e5c6ba",
+    ".claude/skills/dev-cycle/SKILL.md": "d0a64bce9e1f9312cfec3497aa0d83a9165cf0bce0f6f71b6a7bdfac8cee6206",
+    ".claude/skills/dev-cycle/references/archive-format.md": "ef9d7a763d51a6c79a6c8f30e22395d545a07148e8e81bef15ccaec761cee8a0",
+    ".claude/skills/dev-cycle/references/browser-notes.md": "1ab97c6624e3e17d01734bc852669f3ea8dfbc83e42a000a608f51059ccd7c24",
+    ".claude/skills/dev-cycle/references/frontend-skills.md": "78b0515da7929d261fd523e8989d1063ea73b7b79938bed751c2d70d3fecf3f2",
+    ".claude/skills/dev-cycle/references/tier-rules.md": "3cbd6b5e5d629f503098d22de0834880c006eee1dadecb4b318771ae0bd506a1",
+    ".claude/skills/dev-cycle/references/ultraqa.md": "ed510e6773da32a44fb6d3ac6b7e3979edbe26a9291fee4076429aadd483efe1",
+    ".codex/agents/dev-workflow.toml": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6",
+    ".gitignore": "4bfefc00ed87fa9e7b15b5f1b3d494f7510a00d10af28e9839e643a7a38a469b",
+    "AGENTS.md": "c686cc704ffa0eb54dfa5be237fd8a8fc307b8d9981080db7057fe68fdf5923a",
+    "CLAUDE.md": "82071bd6f0f1d876db24a672ed55c700f8c1ffda13eae7382d2d82bc603564ee",
+    "README.md": "1b685182d38ff59d721de3a12aed625f2f2900ab2b5233995043791556335200",
+    "WORKFLOW_ASSET_SHA256.txt": "ddeef1c6943212afeacf8a929614ab4b0a5cec825f78621fd02ef61082ab433b",
+    "docs/dev-cycle/TODO.md": "2f3066056d9b3f37cb078c4ddfe431c69edc566e8127470cd2046b7b2912d5b0",
+    "docs/dev-cycle/approvals/INFRA-001.md": "185f46db1fb151801270939ba90e6280d23748e832b42d5a8bbaac81c06a929b",
+    "docs/dev-cycle/archive/2026-09.md": "8641832d5bce85021749657cd4d6b5c33d150d2f37c3ad874cc560884288dcda",
+    "docs/dev-cycle/archive/daily/2026-09-06.md": "dbf07d11fb6ceb950602453c3027a5d65227ce1925489413cfda4e2e68e65b63",
+    "docs/dev-cycle/qa/INFRA-002.md": "a342e5108f49bf5893e76c7ae55e339731c8f82be4acd8df14803a938d8e63d8",
+    "qa_retry.py": "a80c0fd891e1377e049466c36cf2d15c567aa929afa244c3902dc0f54f08895b",
+    "scripts/__init__.py": "81b51761e1ab72ba9c39cef406316dc47b419f04aaa2bf92956620663ca910e0",
+    "scripts/init_data.py": "c7ce18f92da57dfbbc74078b93674465b0d5c211aa2f6cadf78c141260a8ae36",
+    "tests/test_cli.py": "3cea522510276d42a1d9ae7dab774d4350df1650f3ccf5da5c19c3626975642e"
+  },
+  "worktree_diff": ""
+}

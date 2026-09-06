@@ -1,0 +1,27 @@
+[
+  {
+    "method": "thread/start",
+    "params": {
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/b-recovery-2/repo",
+      "model": "gpt-5.6-sol",
+      "ephemeral": true,
+      "sandbox": "workspace-write",
+      "approvalPolicy": "never",
+      "selectedSkills": []
+    }
+  },
+  {
+    "method": "turn/start",
+    "params": {
+      "threadId": "01a07699-b9b7-7f40-969d-255ddf70202e",
+      "effort": "high",
+      "approvalPolicy": "never",
+      "selectedSkills": [
+        {
+          "name": "dev-cycle",
+          "path": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-workflow-qa-XXXXXX.JizFIB9ows/artifacts/b-recovery-2/repo/.agents/skills/dev-cycle/SKILL.md"
+        }
+      ]
+    }
+  }
+]

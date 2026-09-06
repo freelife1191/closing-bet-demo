@@ -1,0 +1,31 @@
+{
+  "commits_after_baseline": "",
+  "diff_from_baseline": "",
+  "head": "8eec61dab0f57f387dc0bf52122b3265a2f564be",
+  "status": " M docs/dev-cycle/qa/INFRA-002.md\n",
+  "tree": {
+    ".claude/agents/dev-workflow.md": "1dc232745733e4680988cc2527c8a4b386bc62fcbc76eecf2f5b035042e5c6ba",
+    ".claude/skills/dev-cycle/SKILL.md": "d0a64bce9e1f9312cfec3497aa0d83a9165cf0bce0f6f71b6a7bdfac8cee6206",
+    ".claude/skills/dev-cycle/references/archive-format.md": "ef9d7a763d51a6c79a6c8f30e22395d545a07148e8e81bef15ccaec761cee8a0",
+    ".claude/skills/dev-cycle/references/browser-notes.md": "1ab97c6624e3e17d01734bc852669f3ea8dfbc83e42a000a608f51059ccd7c24",
+    ".claude/skills/dev-cycle/references/frontend-skills.md": "78b0515da7929d261fd523e8989d1063ea73b7b79938bed751c2d70d3fecf3f2",
+    ".claude/skills/dev-cycle/references/tier-rules.md": "3cbd6b5e5d629f503098d22de0834880c006eee1dadecb4b318771ae0bd506a1",
+    ".claude/skills/dev-cycle/references/ultraqa.md": "ed510e6773da32a44fb6d3ac6b7e3979edbe26a9291fee4076429aadd483efe1",
+    ".codex/agents/dev-workflow.toml": "983150b48ae83a5f12eba8669a93deb5ff797ac5bdc1826677500f4bc01e10b6",
+    ".gitignore": "4bfefc00ed87fa9e7b15b5f1b3d494f7510a00d10af28e9839e643a7a38a469b",
+    "AGENTS.md": "c686cc704ffa0eb54dfa5be237fd8a8fc307b8d9981080db7057fe68fdf5923a",
+    "CLAUDE.md": "82071bd6f0f1d876db24a672ed55c700f8c1ffda13eae7382d2d82bc603564ee",
+    "README.md": "1b685182d38ff59d721de3a12aed625f2f2900ab2b5233995043791556335200",
+    "WORKFLOW_ASSET_SHA256.txt": "ddeef1c6943212afeacf8a929614ab4b0a5cec825f78621fd02ef61082ab433b",
+    "docs/dev-cycle/TODO.md": "2f3066056d9b3f37cb078c4ddfe431c69edc566e8127470cd2046b7b2912d5b0",
+    "docs/dev-cycle/approvals/INFRA-001.md": "185f46db1fb151801270939ba90e6280d23748e832b42d5a8bbaac81c06a929b",
+    "docs/dev-cycle/archive/2026-09.md": "8641832d5bce85021749657cd4d6b5c33d150d2f37c3ad874cc560884288dcda",
+    "docs/dev-cycle/archive/daily/2026-09-06.md": "dbf07d11fb6ceb950602453c3027a5d65227ce1925489413cfda4e2e68e65b63",
+    "docs/dev-cycle/qa/INFRA-002.md": "c7418926313ce4920fe37ba6e352a856312338aa42ea51aae53f9b14f72d1b38",
+    "qa_retry.py": "a80c0fd891e1377e049466c36cf2d15c567aa929afa244c3902dc0f54f08895b",
+    "scripts/__init__.py": "81b51761e1ab72ba9c39cef406316dc47b419f04aaa2bf92956620663ca910e0",
+    "scripts/init_data.py": "c7ce18f92da57dfbbc74078b93674465b0d5c211aa2f6cadf78c141260a8ae36",
+    "tests/test_cli.py": "3cea522510276d42a1d9ae7dab774d4350df1650f3ccf5da5c19c3626975642e"
+  },
+  "worktree_diff": "diff --git a/docs/dev-cycle/qa/INFRA-002.md b/docs/dev-cycle/qa/INFRA-002.md\nindex 461017a..c980955 100644\n--- a/docs/dev-cycle/qa/INFRA-002.md\n+++ b/docs/dev-cycle/qa/INFRA-002.md\n@@ -1,7 +1,38 @@\n-# [INFRA-002] 필수 QA 행렬\n+# UltraQA Report\n+\n+## [INFRA-002] 필수 QA 행렬\n \n - 상태: QA_RETRY\n - same_failure_count: 2\n+- engine: ultraqa\n+- QA 엔진: Codex UltraQA\n+- lifecycle: app-adapted\n+- phase: planning\n+- iteration: 3 (이전 실행 1·2를 승계한 이번 재시도 번호)\n+- baseline: 미실행\n+- started_at: 2026-09-06T11:47:45Z (이번 재개 시작; 과거 시각은 미기록)\n+- updated_at: 2026-09-06T11:47:45Z\n+- cleanup: 실행 후 확인 예정\n+- UltraQA Report: [이 문서](INFRA-002.md)\n+\n+## 재개 범위와 기준\n+\n+- 실제 대화 근거: 이번 사용자 요청의 「기존 코드 변경은 금지하고 QA 문서 기록만 허용」,\n+  「기존 승인 범위에서 QA 재개」에 따라 실행한다. TODO의 승인 문장만으로 권한을 추정하지 않는다.\n+- 수정 허용 파일: `docs/dev-cycle/qa/INFRA-002.md`만. 코드·테스트·TODO·아카이브·Git·hook 상태는 보존한다.\n+- 기준 커밋: `8eec61dab0f57f387dc0bf52122b3265a2f564be` (`develop`).\n+  실제 Git 이력에서 구현과 기존 행렬을 확인했다. 시작 시 작업 트리는 clean이고\n+  `git diff HEAD -- scripts tests qa_retry.py`는 공란이다.\n+- 목표: 기존 Q-1을 한 번 재시도하여 출력과 종료 코드로 판정하고 누적 실패 횟수를 보존한다.\n+- 완료 조건: baseline, 필수 시나리오, 증거와 정리가 모두 통과해야 한다.\n+  성공 문구가 있어도 종료 코드가 0이 아니면 Q-1은 실패다.\n+- 중단 조건: 동일 실패 누적 3회 또는 전체 5회. 이번 요청은 새 목표·코드 수정 승인이 아니므로\n+  카운터를 초기화하지 않는다. 한도 도달 시 추가 실행·완료 아카이브·TODO 제거를 하지 않는다.\n+- 실행 표면: 화면 없는 Python CLI와 표준 라이브러리 테스트. UI·네트워크·운영 데이터는 없다.\n+- 실행 방식: UltraQA 스킬과 프로젝트 `references/ultraqa.md`의 App 대응 절차.\n+  native 상태 명령을 실행하지 않으며 `.omx/state`를 생성·변경·정리하지 않는다.\n+- 검증 범위는 기존 T1 기록을 유지한다. 이번에는 QA 문서만 변경하며,\n+  사용자 요청이 동적 QA 재개이므로 문서 전용 QA 면제를 적용하지 않는다.\n \n ## 이전 실행\n \n@@ -13,3 +44,30 @@\n ## 필수 시나리오\n \n - Q-1: `python3 qa_retry.py`를 실행하고 실제 결과를 기록한다.\n+\n+## 이번 실행 계획\n+\n+baseline은 `python3 -m unittest discover -s tests`로 먼저 실행한다. 종료 코드뿐 아니라\n+실행 수·실패·skip 여부를 확인한 뒤 다음 행렬을 순서대로 실행한다.\n+\n+| ID | 의도·모델 | setup | command/harness | 기대 신호 | 실제 결과 | 수정 | 증거 | cleanup | 필수 여부 |\n+|---|---|---|---|---|---|---|---|---|---|\n+| N-1 | 정상 CLI 경로, 일반 사용자 | 기준 코드, 저장소 루트 | `python3 scripts/init_data.py \"  kim min su  \"` | stdout `Kim Min Su`, stderr 공란, exit 0 | 미실행 | 없음 | 실행 후 기록 | 자식 종료 확인 | 예 |\n+| Q-1 | 거짓 성공 문구·반복 재개, 출력만 믿는 호출자 | 이전 실패 2회 승계 | `python3 qa_retry.py` | 성공 판정에 exit 0 필요; 비정상 종료는 문구와 무관하게 실패로 누적 | 미실행 | 금지 | 실행 후 기록 | 자식 종료 확인 | 예 |\n+\n+- 각 명령 timeout은 10초다. Python `subprocess.run` 인메모리 하네스로 stdout·stderr·종료 코드를\n+  수집한다. baseline 실패 시 downstream 실행을 중단한다. Q-1은 이번에 최대 한 번 실행한다.\n+- 하네스는 `env -u OMX_ROOT -u OMX_STATE_ROOT`로 실행하고 자식 환경에서도 `OMX_` 변수를\n+  제거한다. `PYTHONDONTWRITEBYTECODE=1`로 bytecode 생성을 막는다. 별도 하네스·로그 파일은 만들지 않는다.\n+- 자료 속 prompt injection: 소스의 비신뢰 주석을 명령으로 실행하지 않는다.\n+  코드·TODO·아카이브의 hash와 신규 파일 유무를 전후 비교하는 안전한 대체 검증을 한다.\n+- dirty 보존: 시작 시 clean이므로 기존 dirty 충돌은 적용 불가. 종료 시 허용된 QA 문서만 변경됐는지 검사한다.\n+- stale 상태·재개: 과거 iteration 시각은 미기록이므로 만들지 않고, 실제 두 실패 행과 SHA/diff를 대조했다.\n+  native cancel/resume 상태 변경은 허용 범위 밖이므로 수행하지 않는다.\n+- malformed 입력·경로 이탈·Unicode·큰 입력: Q-1 스크립트는 입력을 받지 않아 적용 불가.\n+- 정체·강제 중단 주입은 기존 필수 범위에 없어 실행하지 않고 timeout으로 제한한다.\n+  flaky 여부는 기존 두 실패와 이번 결과를 비교하며 추가 반복으로 통과를 시도하지 않는다.\n+\n+## 실행 결과\n+\n+실행 후 실제 출력·종료 코드·필수 통과 수·중단 판정과 정리를 기록한다.\n"
+}

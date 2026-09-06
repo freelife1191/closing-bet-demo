@@ -1,0 +1,45 @@
+[
+  {
+    "label": "b-design",
+    "turn_id": "01a07685-f72c-7922-bbb1-a66e4348c893",
+    "completed": true,
+    "completion_status": "completed",
+    "timed_out": false,
+    "blocker": null,
+    "thread": {
+      "id": "01a07685-f692-7d53-9e61-a2382c028c25",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "xhigh"
+    }
+  },
+  {
+    "label": "b-approved-execution",
+    "turn_id": "01a07687-07f0-7130-86c2-8abe4ada5a33",
+    "completed": false,
+    "completion_status": null,
+    "timed_out": true,
+    "blocker": "turn-timeout:150s",
+    "thread": {
+      "id": "01a07685-f692-7d53-9e61-a2382c028c25",
+      "parentThreadId": null,
+      "agentRole": null,
+      "source": "vscode",
+      "status": {
+        "activeFlags": [],
+        "type": "active"
+      },
+      "ephemeral": true,
+      "cliVersion": "0.153.3",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "xhigh"
+    }
+  }
+]
