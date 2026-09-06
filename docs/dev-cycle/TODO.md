@@ -32,9 +32,30 @@
 - 티어 판정: `chatbot/storage.py` 의 히스토리 쪽이 `_mark_session_changed` 로 델타만 반영하는
   구조를 이미 갖고 있습니다. 메모리도 같은 방식으로 바꿀지, 아니면 `_save()` 의 stale 정리
   범위를 자기가 건드린 소유자로 좁힐지 정해야 합니다.
-- [ ] 전체 동기화가 다른 워커의 행을 지우지 않도록 범위를 좁힘
-- [ ] 워커가 다른 워커의 저장을 읽을 수 있는지 확인하고 필요하면 재적재 경로를 둠
-- [ ] 두 워커를 흉내 낸 회귀 검사를 pytest 로 고정
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 (세션 내 AskUserQuestion 응답 직후)
+  | 범위: `chatbot/storage_memory_manager.py` 의 호출 시 SQLite 재적재와 실패 경로 전체 동기화
+  폴백 제거, `chatbot/storage_sqlite_memory.py` 의 `save_memories_to_sqlite` upsert 전용화,
+  두 워커 회귀 검사
+  | 실제 대화 근거: 2026-09-07 사용자 「추천안으로 진행」 응답, 현재 세션의 bounded 설계 제안
+  (TODO 의 다른 두 안은 델타 장부 중복과 같은 사용자 행 삭제 잔존을 이유로 제외)
+- QA 시나리오: gunicorn 워커 2개에서 `/memory add` 뒤 `/memory view` 를 반복 호출하면 모든
+  응답에 방금 저장한 키가 보인다
+- [x] `storage_memory_manager.py`: `_reload()` 를 `view/add/update/remove/clear` 진입에 두고
+  `_save()` 와 세 실패 경로의 전체 동기화 폴백, 도달 불가능한 non-dict 분기를 제거
+- [x] `storage_sqlite_memory.py`: `_delete_stale_memory_rows_cursor` 와 호출 제거,
+  `save_memories_to_sqlite` 는 upsert 전용
+- [x] 두 워커 회귀 검사를 `tests/chatbot/test_memory_owner_access.py` 에 고정하고
+  `test_storage_sqlite.py` 의 stale cleanup 검사를 「스냅샷에 없는 행을 지우지 않는다」로 교체
+  (새 검사 3건은 구현 전 코드에서 실패, 구현 후 통과를 `git stash` 로 확인)
+- [x] `/ponytail-review`: 호출자 하나뿐인 `_delete_single_entry`·`_clear_storage` 를 `remove`·
+  `clear` 에 인라인, `_reload` 설명 축약 → 반영(net -15). `feature-dev:code-reviewer`
+  (`chat022-reviewer`): 결함 0건. 관찰 A(중간, 실패 시 성공 문구를 돌려주는 의도된 한계에
+  `ponytail:` 표시 없음) → `_save_single_entry` 실패 분기에 주석으로 반영. 관찰 B(낮음, diff 밖
+  기존 `_load()` 가 `None`/`{}` 를 구분하지 않아 레거시 JSON 이 되살아날 수 있음) → 미반영,
+  `is not None` 으로 바꾸면 히스토리가 먼저 만든 빈 DB 에서 첫 이관이 막히므로 `[CHAT-028]` 로
+  이월. 관찰 C(낮음, 한 요청 안의 `_reload` 복수 실행) → 미반영, `_reload` 주석의 상한과 같음
+- [x] pytest 전체 1703 통과 · 2 skip (ponytail 반영 후 재실행, exit 0)
+- [ ] QA 2단계 (`/qa-only` 완료 → `/qa`, 워커 2개 `/memory add` → `/memory view`)
 
 
 ### [FE-008] 대시보드 진입 시의 하이드레이션 불일치 제거
@@ -593,6 +614,20 @@
 - [ ] `/memory view` 에서 프로필을 가리거나 별도 표기로 구분
 - [ ] `/clear all` 설명 문구를 실제 동작에 맞춤
 - [ ] `init_user_profile_from_env` 를 지우거나 발동하도록 고침
+
+### [CHAT-028] 메모리 부팅 적재가 빈 SQLite 와 읽기 실패를 같게 본다
+- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-07 `[CHAT-022]` 사이클의 코드 리뷰 관찰 B (확신도 낮음)
+- `chatbot/storage_memory_manager.py` 의 `_load()` 가 `if sqlite_memories:` 로 판정해, 테이블이
+  있으나 모든 소유자가 지워져 비어 있는 상태와 읽기 실패를 같게 봅니다. 그 상태에서 레거시 JSON
+  스냅샷에 지워지기 전 값이 남아 있으면 재기동 시 그 값을 SQLite 로 다시 밀어 넣어 지운 행이
+  되살아납니다. `clear`·`remove` 가 매번 JSON 도 갱신하므로 JSON 쓰기까지 함께 실패해야 생깁니다.
+- 단순히 `is not None` 으로 바꾸면 `HistoryManager` 가 먼저 만든 빈 DB 에서 레거시 JSON 의 첫
+  이관이 막히므로, 이관 완료 표시(예: 이관 뒤 JSON 을 2단 형식으로 다시 쓰고 1단만 이관)를 두는
+  방식이 필요합니다.
+- [ ] 이관 완료를 판정할 기준을 정함
+- [ ] `_load()` 의 판정을 그 기준으로 바꿈
+- [ ] 「빈 SQLite + 낡은 JSON」 재기동 회귀 검사를 pytest 로 고정
+
 
 ### [CHAT-024] 창 높이가 낮으면 빠른 조회 버튼이 추천 질문 카드를 가린다
 - 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 `/qa-only` ISSUE-001

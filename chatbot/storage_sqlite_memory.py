@@ -52,44 +52,6 @@ def _upsert_memory_rows_cursor(
     )
 
 
-def _delete_stale_memory_rows_cursor(
-    *,
-    cursor: sqlite3.Cursor,
-    active_pairs: list[tuple[str, str]],
-) -> None:
-    """저장 요청에 없는 행을 지운다. 소유자와 키의 쌍으로 판정한다."""
-    if not active_pairs:
-        cursor.execute("DELETE FROM chatbot_memories")
-        return
-
-    cursor.execute(
-        """
-        CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_owner_keys (
-            owner_id TEXT NOT NULL,
-            memory_key TEXT NOT NULL,
-            PRIMARY KEY (owner_id, memory_key)
-        )
-        """
-    )
-    cursor.execute("DELETE FROM _tmp_chatbot_memory_owner_keys")
-    cursor.executemany(
-        """
-        INSERT OR IGNORE INTO _tmp_chatbot_memory_owner_keys(owner_id, memory_key)
-        VALUES (?, ?)
-        """,
-        active_pairs,
-    )
-    cursor.execute(
-        """
-        DELETE FROM chatbot_memories
-        WHERE (owner_id, memory_key) NOT IN (
-            SELECT owner_id, memory_key
-            FROM _tmp_chatbot_memory_owner_keys
-        )
-        """
-    )
-
-
 def load_memories_from_sqlite(
     db_path: Path,
     logger: logging.Logger,
@@ -158,6 +120,10 @@ def save_memories_to_sqlite(
     *,
     _retried: bool = False,
 ) -> bool:
+    """스냅샷의 행을 upsert 한다. 스냅샷에 없는 행은 지우지 않는다.
+
+    다른 워커가 저장한 행일 수 있다. 레거시 JSON 을 빈 SQLite 로 옮길 때 쓴다.
+    """
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
     db_path_text = str(db_path)
@@ -191,10 +157,6 @@ def save_memories_to_sqlite(
                 _upsert_memory_rows_cursor(
                     cursor=cursor,
                     rows=rows,
-                )
-                _delete_stale_memory_rows_cursor(
-                    cursor=cursor,
-                    active_pairs=[(row[0], row[1]) for row in rows],
                 )
                 conn.commit()
 

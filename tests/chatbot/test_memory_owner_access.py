@@ -318,6 +318,54 @@ def test_legacy_json_snapshot_keeps_two_level_when_key_is_named_value(
     assert memory.view() == {}
 
 
+def test_worker_sees_rows_saved_by_another_worker(monkeypatch, tmp_path: Path):
+    """다른 워커(다른 인스턴스)가 저장하거나 지운 행이 다음 조회에 반영된다.
+
+    [CHAT-022] 종전에는 생성자에서 한 번 읽은 스냅샷을 다시 읽지 않아, 워커 A 에서
+    `/memory add` 한 값이 워커 B 로 간 `/memory view` 에 보이지 않았다.
+    """
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    worker_a = chatbot_core.MemoryManager(user_id="u1")
+    worker_b = chatbot_core.MemoryManager(user_id="u1")
+
+    worker_a.add("보유종목", "삼성전자", owner_id="owner-a")
+
+    assert worker_b.view("owner-a")["보유종목"]["value"] == "삼성전자"
+    assert "삼성전자" in worker_b.format_for_prompt("owner-a")
+
+    worker_a.clear("owner-a")
+
+    assert worker_b.view("owner-a") == {}
+
+
+def test_failed_single_save_does_not_delete_other_workers_rows(monkeypatch, tmp_path: Path):
+    """단건 저장이 실패해도 다른 워커가 저장한 행을 지우지 않는다.
+
+    [CHAT-022] 종전에는 실패 폴백이 자기 스냅샷으로 전체 동기화를 돌려 스냅샷에
+    없는 행을 전부 지웠다. 워커 B 의 낡은 스냅샷에는 워커 A 가 저장한 행이 없었다.
+    재적재까지 막아 스냅샷이 낡은 상태를 그대로 재현한다.
+    """
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    worker_a = chatbot_core.MemoryManager(user_id="u1")
+    worker_b = chatbot_core.MemoryManager(user_id="u1")
+    worker_a.add("보유종목", "삼성전자", owner_id="owner-a")
+
+    monkeypatch.setattr(
+        "chatbot.storage_memory_manager.load_memories_from_sqlite",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "chatbot.storage_memory_manager.upsert_memory_entry_in_sqlite",
+        lambda *args, **kwargs: False,
+    )
+    worker_b.add("보유종목", "카카오", owner_id="owner-b")
+
+    db_path = resolve_chatbot_storage_db_path(tmp_path)
+    loaded = load_memories_from_sqlite(db_path, _LOGGER)
+    assert loaded is not None
+    assert loaded["owner-a"]["보유종목"]["value"] == "삼성전자"
+
+
 class _FakeOwnedMemory:
     """소유자별 2단 구조를 흉내 낸다."""
 

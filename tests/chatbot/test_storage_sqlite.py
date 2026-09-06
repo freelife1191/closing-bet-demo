@@ -1034,7 +1034,12 @@ def test_load_memories_uses_read_only_connection(monkeypatch, tmp_path: Path):
     assert True in read_only_flags
 
 
-def test_save_memories_uses_upsert_and_stale_cleanup_without_full_clear(monkeypatch, tmp_path: Path):
+def test_save_memories_keeps_rows_absent_from_snapshot(tmp_path: Path):
+    """스냅샷에 없는 행을 지우지 않는다. 다른 워커가 저장한 행일 수 있다.
+
+    [CHAT-022] 종전의 stale 정리는 스냅샷에 없는 (owner_id, memory_key) 를 전부
+    지웠고, 그 스냅샷은 워커마다 달랐다.
+    """
     db_path = resolve_chatbot_storage_db_path(tmp_path)
     baseline_memories = {
         "owner-a": {
@@ -1043,16 +1048,6 @@ def test_save_memories_uses_upsert_and_stale_cleanup_without_full_clear(monkeypa
         }
     }
     assert save_memories_to_sqlite(db_path, baseline_memories, chatbot_core.logger) is True
-
-    traced_sql: list[str] = []
-    original_connect = storage_sqlite_memory.connect_sqlite
-
-    def _traced_connect(*args, **kwargs):
-        conn = original_connect(*args, **kwargs)
-        conn.set_trace_callback(traced_sql.append)
-        return conn
-
-    monkeypatch.setattr(storage_sqlite_memory, "connect_sqlite", _traced_connect)
 
     next_snapshot = {
         "owner-a": {
@@ -1063,14 +1058,8 @@ def test_save_memories_uses_upsert_and_stale_cleanup_without_full_clear(monkeypa
 
     loaded = load_memories_from_sqlite(db_path, chatbot_core.logger)
     assert loaded is not None
-    assert set(loaded["owner-a"].keys()) == {"risk"}
     assert loaded["owner-a"]["risk"]["value"] == "conservative"
-    assert not any(_is_full_table_delete(sql, table="chatbot_memories") for sql in traced_sql)
-    # 소유자와 키의 쌍으로 판정해야 하므로 stale 정리는 임시 테이블을 거친다.
-    assert any(
-        "CREATE TEMP TABLE IF NOT EXISTS _tmp_chatbot_memory_owner_keys" in sql
-        for sql in traced_sql
-    )
+    assert loaded["owner-a"]["style"]["value"] == "momentum"
 
 
 def test_save_history_sessions_skips_redundant_session_updates(tmp_path: Path):

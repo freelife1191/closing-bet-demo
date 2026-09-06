@@ -121,59 +121,32 @@ class MemoryManager:
 
         return sqlite_memories or {}
 
-    def _save(self) -> None:
-        sqlite_saved = save_memories_to_sqlite(self.db_path, self.memories, logger)
-        if not sqlite_saved:
-            logger.warning("SQLite memory save failed; legacy JSON snapshot only")
-            self._write_legacy_memory_snapshot(self.memories)
-            return
-        self._save_legacy_memory_snapshot(self.memories)
+    def _reload(self) -> None:
+        """다른 워커가 저장한 행을 보도록 SQLite 를 다시 읽는다. 읽기 실패면 기존 스냅샷을 둔다."""
+        # ponytail: 호출마다 작은 표 전체를 읽는다. 비용이 보이면 HistoryManager 처럼 파일 서명 비교를 붙인다.
+        loaded = load_memories_from_sqlite(self.db_path, logger)
+        if loaded is not None:
+            self.memories = loaded
 
     def _save_single_entry(self, owner_id: str, key: str) -> None:
-        record = self.memories.get(owner_id, {}).get(key)
-        if not isinstance(record, dict):
-            self._save()
-            return
-
         sqlite_saved = upsert_memory_entry_in_sqlite(
             self.db_path,
             owner_id=owner_id,
             key=key,
-            record=record,
+            record=self.memories[owner_id][key],
             logger=logger,
         )
         if not sqlite_saved:
-            logger.warning("SQLite single memory upsert failed; full sync fallback")
-            self._save()
+            # ponytail: 실패해도 호출자는 성공 문구를 돌려준다(remove·clear 도 같다). 다음 재적재가
+            # 그 변경을 되돌린다. 종전의 전체 동기화 재시도는 다른 워커의 행을 지웠으므로 두지
+            # 않는다. 유실이 실제로 보이면 여기서 예외로 올려 명령 응답을 실패로 바꾼다.
+            logger.warning("SQLite single memory upsert failed; legacy JSON snapshot only")
+            self._write_legacy_memory_snapshot(self.memories)
             return
         self._save_legacy_memory_snapshot(self.memories)
 
-    def _delete_single_entry(self, owner_id: str, key: str) -> None:
-        sqlite_saved = delete_memory_entry_in_sqlite(
-            self.db_path,
-            owner_id=owner_id,
-            key=key,
-            logger=logger,
-        )
-        if not sqlite_saved:
-            logger.warning("SQLite memory delete failed; full sync fallback")
-            self._save()
-            return
-        self._write_legacy_memory_snapshot(self.memories)
-
-    def _clear_storage(self, owner_id: str) -> None:
-        sqlite_saved = clear_memories_in_sqlite(
-            self.db_path,
-            logger=logger,
-            owner_id=owner_id,
-        )
-        if not sqlite_saved:
-            logger.warning("SQLite memory clear failed; full sync fallback")
-            self._save()
-            return
-        self._write_legacy_memory_snapshot(self.memories)
-
     def view(self, owner_id: Optional[str] = None) -> Dict[str, Any]:
+        self._reload()
         return self.memories.get(_normalize_memory_owner_id(owner_id), {})
 
     def get(self, key: str, owner_id: Optional[str] = None) -> Any:
@@ -181,6 +154,7 @@ class MemoryManager:
 
     def add(self, key: str, value: Any, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
+        self._reload()
         self.memories.setdefault(owner, {})[key] = {
             "value": value,
             "updated_at": datetime.now().isoformat(),
@@ -190,15 +164,19 @@ class MemoryManager:
 
     def remove(self, key: str, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
+        self._reload()
         owned = self.memories.get(owner, {})
         if key in owned:
             del owned[key]
-            self._delete_single_entry(owner, key)
+            if not delete_memory_entry_in_sqlite(self.db_path, owner_id=owner, key=key, logger=logger):
+                logger.warning("SQLite memory delete failed; legacy JSON snapshot only")
+            self._write_legacy_memory_snapshot(self.memories)
             return f"🗑️ 메모리 삭제: {key}"
         return "⚠️ 해당 키를 찾을 수 없습니다."
 
     def update(self, key: str, value: Any, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
+        self._reload()
         owned = self.memories.get(owner, {})
         if key in owned:
             owned[key]["value"] = value
@@ -209,8 +187,11 @@ class MemoryManager:
 
     def clear(self, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
+        self._reload()
         self.memories.pop(owner, None)
-        self._clear_storage(owner)
+        if not clear_memories_in_sqlite(self.db_path, logger=logger, owner_id=owner):
+            logger.warning("SQLite memory clear failed; legacy JSON snapshot only")
+        self._write_legacy_memory_snapshot(self.memories)
         return "🧹 메모리가 초기화되었습니다."
 
     def format_for_prompt(self, owner_id: Optional[str] = None) -> str:
@@ -220,7 +201,7 @@ class MemoryManager:
         추천 질문 캐시처럼 사용자 정보가 아닌 것과 소유자를 알 수 없는 레거시
         행이 들어 있기 때문이다.
         """
-        owned = self.memories.get(owner_id) if owner_id else None
+        owned = self.view(owner_id) if owner_id else None
         if not owned:
             return ""
         text = "## 사용자 정보 (Long-term Memory)\n"
