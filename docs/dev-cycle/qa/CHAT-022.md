@@ -4,15 +4,18 @@
   http://localhost:3500/chatbot, http://localhost:3500/dashboard/kr
 - 구성 근거: `/qa-only` 리포트 (`.gstack/qa-reports/qa-report-localhost-3500-2026-09-07.md`)
   + 이번 사이클의 변경 두 파일(`chatbot/storage_memory_manager.py`, `chatbot/storage_sqlite_memory.py`)
-- 구성 2026-09-07 06:52 | 실행 (실행 후 기록)
+- 구성 2026-09-07 06:52 | 실행 2026-09-07 06:55
 - QA 엔진(engine): Claude Code `/qa-only` → `/qa`
-- 단계(phase): 시나리오 구성 완료 | 실행 대기
-- 반복(iteration): 0회
+- 단계(phase): 시나리오 구성 완료 | 실행 완료
+- 반복(iteration): 1회
 - baseline 상태: 기준값 수집 완료 (아래 「기준값」)
 - 필수 여부(required): 예
-- 결과: (실행 후 기록)
-- 증거: (실행 후 기록)
-- 정리(cleanup): (실행 후 기록)
+- 결과: 통과 (필수 5 / 5)
+- 증거: 아래 시나리오별 기록의 접근 로그·응답·DB 조회 발췌. `/qa-only` 관찰은
+  `.gstack/qa-reports/qa-report-localhost-3500-2026-09-07.md`
+- 정리(cleanup): 시험 신원의 세션 1건과 메모리 1행을 `/clear all` 로 제거해 DB 가 기준값(공용 2행)으로
+  돌아옴. QA 를 위해 띄운 gunicorn(마스터 16692)과 Next dev(96887)는 마감 뒤 종료. 잔여물: 시험 신원
+  `qa-chat022@example.test` 의 무료 사용량 카운터 10/10, `logs/gunicorn-access.log`(git 추적 밖)
 
 ## 화면이 아니라 API 하네스를 검사 대상으로 삼는 이유
 
@@ -55,6 +58,13 @@
   add 를 처리하지 않은 워커의 응답이 `📭 저장된 메모리가 없습니다.` 였다.
 - 필수 여부(required): 예
 - PID 집합에 한 워커만 있으면 판정할 수 없으므로 두 번째 신원으로 S-1 을 다시 한다.
+- 실제: add 응답 `✅ 메모리 저장: 보유종목 = 삼성전자`, 처리 워커 54161. view 8건 모두
+  `🧠 **저장된 메모리**\n- \`보유종목\`: 삼성전자`. 처리 워커는 54161 이 4건, 54173 이 4건이다.
+  두 번째 신원은 필요하지 않았다.
+- 결과: 통과
+- 증거: `logs/gunicorn-access.log` 06:55:37 의 `POST /api/kr/chatbot` 9줄 (`<54161>` 5줄 = add 1 +
+  view 4, `<54173>` 4줄 = view 4, 전부 200). 하네스 출력 `view1a`~`view4b` 각 `보유종목` 1회 일치.
+- 정리(cleanup): S-3 에서 함께 정리
 
 ### S-2. 시험 신원의 저장이 공용 메모리 행을 지우지 않는다 (회귀)
 - 조작: S-1 이 끝난 뒤 `data/chatbot_storage.db` 를 읽기 전용으로 열어 `chatbot_memories` 를
@@ -65,6 +75,12 @@
   행이 보존된다는 사실을 고정한다. 실패 폴백 자체는 pytest
   `test_failed_single_save_does_not_delete_other_workers_rows` 가 검사한다.
 - 필수 여부(required): 예
+- 실제: 총 3행. 공용 `''` 키 `daily_suggestions_default_empty`·`interest` 2행 그대로, 시험 신원
+  `보유종목` 1행. 다른 소유자 없음. 시험 신원 세션 1건.
+- 결과: 통과
+- 증거: `sqlite3.connect("file:data/chatbot_storage.db?mode=ro", uri=True)` 읽기 전용 조회 출력
+  (`total rows: 3 | public keys: ['daily_suggestions_default_empty', 'interest'] | qa keys: ['보유종목']`)
+- 정리(cleanup): S-3 에서 함께 정리
 
 ### S-3. `/clear all` 이 시험 신원의 메모리와 대화만 지운다 (인접·정리)
 - 조작: `/clear all` 을 1회 보낸다. 접근 로그에서 처리한 워커 PID 를 읽는다. DB 를 읽기 전용으로
@@ -74,6 +90,12 @@
   신원 소유 세션이 0. 시험 신원의 무료 사용량 카운터(10회 중 10회 사용)는 남는다. 이 값은 API 로
   되돌릴 수 없으며 시험 신원에만 속하므로 잔여물로 기록한다.
 - 필수 여부(required): 예
+- 실제: 응답 `🧹 내 대화 1건과 메모리, 데이터 캐시를 초기화했습니다.`, 처리 워커 54173 (add 를
+  처리한 54161 이 아닌 워커). 조회 결과 총 2행(공용 2행, 키 동일), 시험 신원 세션 0.
+- 결과: 통과
+- 증거: `logs/gunicorn-access.log` 06:55:55 `<54173> "POST /api/kr/chatbot" 200`, 읽기 전용 조회 출력
+  (`after clear total rows: 2 | owners: [''] | qa sessions after clear: 0`)
+- 정리(cleanup): 이 시나리오가 정리 자체다. 시험 신원의 세션·메모리 0. 무료 사용량 카운터 10/10 은 잔여
 
 ### S-4. 백엔드 로그에 메모리 저장·적재 실패가 없다 (인접)
 - 조작: S-1 부터 S-3 까지 마친 뒤 `logs/backend.log` 에서 `Failed to load chatbot memories`,
@@ -82,6 +104,10 @@
 - 기대: 다섯 문구 모두 0건. `[QUOTA]` 로그의 `usage_key=qa-chat022@example.test` 줄은 명령
   수(10)만큼 있다.
 - 필수 여부(required): 예
+- 실제: 다섯 문구 모두 0건. `usage_key=qa-chat022@example.test` 10줄. 06:55 이후 ERROR 레벨 0줄.
+- 결과: 통과
+- 증거: `grep -c` 출력 (`logs/backend.log`)
+- 정리(cleanup): 이 시나리오가 소유한 임시 자료 없음
 
 ### S-5. 화면 두 곳이 콘솔 오류 없이 뜬다 (리포트)
 - 조작: 콘솔 버퍼를 비운 뒤 `/chatbot` 을 열어 헤딩과 콘솔을 읽고, `/dashboard/kr` 을 열어
@@ -89,7 +115,17 @@
 - 기대: `/chatbot` 헤딩 `안녕하세요, 흑기사님`, 두 화면 모두 콘솔 오류 0건. `/qa-only` 관찰과
   같다.
 - 필수 여부(required): 예
+- 실제: `/chatbot` 200, `h1` `안녕하세요, 흑기사님`, 콘솔 오류 0건. `/dashboard/kr` 200, 콘솔 오류 0건.
+- 결과: 통과
+- 증거: browse `console --errors` 출력 `(no console errors)` 두 화면. 스크린샷
+  `.gstack/qa-reports/screenshots/chat022-chatbot-initial.png`, `chat022-dashboard.png`
+- 정리(cleanup): 이 시나리오가 소유한 임시 자료 없음
 
 ## 실행 결과
 
-(실행 후 기록)
+- 필수 시나리오: 통과 5 / 전체 5
+- 미통과 필수: 없음
+- 재개 판정: 완료 가능
+- 시나리오 밖에서 새로 발견: 없음
+- 검사한 커밋: `d990650`
+- `/qa` 가 만든 수정 커밋: 없음 (소스 코드를 한 줄도 바꾸지 않음)

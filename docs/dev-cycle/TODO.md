@@ -16,48 +16,6 @@
 
 ## P1 — 이번 주기
 
-### [CHAT-022] 메모리 전체 동기화가 다른 워커가 저장한 행을 지운다
-- 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
-- `chatbot/storage_memory_manager.py` 의 `_save()` 가 `save_memories_to_sqlite` 에 자기
-  스냅샷을 통째로 넘기고, `_delete_stale_memory_rows_cursor` 가 그 스냅샷에 없는 행을
-  전부 지웁니다. 그런데 `self.memories` 는 `__init__` 에서 한 번 적재한 뒤 다시 읽지
-  않습니다. `_load` 를 부르는 곳이 생성자뿐입니다.
-- gunicorn 워커 두 개가 각자 다른 스냅샷을 들고 있으므로, 워커 B 에서 단건 저장이 실패해
-  `_save()` 로 넘어가면 워커 A 가 저장한 다른 사용자의 행이 사라집니다. 워커 A 에서
-  `/memory add` 한 값이 워커 B 로 간 요청의 `/memory view` 에 보이지 않는 문제도 같은
-  원인입니다.
-- 이 구조 자체는 `[CHAT-017]` 이 만든 것이 아닙니다. 다만 종전에 지워지던 것은 다시 만들 수
-  있는 캐시 두 건이었고, 이제는 사용자가 직접 입력한 개인 메모리입니다. 피해의 성격이
-  달라졌습니다.
-- 티어 판정: `chatbot/storage.py` 의 히스토리 쪽이 `_mark_session_changed` 로 델타만 반영하는
-  구조를 이미 갖고 있습니다. 메모리도 같은 방식으로 바꿀지, 아니면 `_save()` 의 stale 정리
-  범위를 자기가 건드린 소유자로 좁힐지 정해야 합니다.
-- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 (세션 내 AskUserQuestion 응답 직후)
-  | 범위: `chatbot/storage_memory_manager.py` 의 호출 시 SQLite 재적재와 실패 경로 전체 동기화
-  폴백 제거, `chatbot/storage_sqlite_memory.py` 의 `save_memories_to_sqlite` upsert 전용화,
-  두 워커 회귀 검사
-  | 실제 대화 근거: 2026-09-07 사용자 「추천안으로 진행」 응답, 현재 세션의 bounded 설계 제안
-  (TODO 의 다른 두 안은 델타 장부 중복과 같은 사용자 행 삭제 잔존을 이유로 제외)
-- QA 시나리오: gunicorn 워커 2개에서 `/memory add` 뒤 `/memory view` 를 반복 호출하면 모든
-  응답에 방금 저장한 키가 보인다
-- [x] `storage_memory_manager.py`: `_reload()` 를 `view/add/update/remove/clear` 진입에 두고
-  `_save()` 와 세 실패 경로의 전체 동기화 폴백, 도달 불가능한 non-dict 분기를 제거
-- [x] `storage_sqlite_memory.py`: `_delete_stale_memory_rows_cursor` 와 호출 제거,
-  `save_memories_to_sqlite` 는 upsert 전용
-- [x] 두 워커 회귀 검사를 `tests/chatbot/test_memory_owner_access.py` 에 고정하고
-  `test_storage_sqlite.py` 의 stale cleanup 검사를 「스냅샷에 없는 행을 지우지 않는다」로 교체
-  (새 검사 3건은 구현 전 코드에서 실패, 구현 후 통과를 `git stash` 로 확인)
-- [x] `/ponytail-review`: 호출자 하나뿐인 `_delete_single_entry`·`_clear_storage` 를 `remove`·
-  `clear` 에 인라인, `_reload` 설명 축약 → 반영(net -15). `feature-dev:code-reviewer`
-  (`chat022-reviewer`): 결함 0건. 관찰 A(중간, 실패 시 성공 문구를 돌려주는 의도된 한계에
-  `ponytail:` 표시 없음) → `_save_single_entry` 실패 분기에 주석으로 반영. 관찰 B(낮음, diff 밖
-  기존 `_load()` 가 `None`/`{}` 를 구분하지 않아 레거시 JSON 이 되살아날 수 있음) → 미반영,
-  `is not None` 으로 바꾸면 히스토리가 먼저 만든 빈 DB 에서 첫 이관이 막히므로 `[CHAT-028]` 로
-  이월. 관찰 C(낮음, 한 요청 안의 `_reload` 복수 실행) → 미반영, `_reload` 주석의 상한과 같음
-- [x] pytest 전체 1703 통과 · 2 skip (ponytail 반영 후 재실행, exit 0)
-- [ ] QA 2단계 (`/qa-only` 완료 → `/qa`, 워커 2개 `/memory add` → `/memory view`)
-
-
 ### [FE-008] 대시보드 진입 시의 하이드레이션 불일치 제거
 - 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: QA 리포트 2026-09-02 ISSUE-001
 - 티어 판정: 원인 위치를 아직 특정하지 못했습니다. 서버와 클라이언트가 서로 다른 값을
