@@ -132,6 +132,8 @@ developer_instructions = """
 | 코드 리뷰 | `feature-dev:code-reviewer` 에이전트 | omx `$code-review` 스킬 | `/skills` 에 `code-review`, `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 (0번) |
 | 과잉설계 리뷰 | `/ponytail-review` | omx `code-reviewer` 에이전트를 `spawn_agent` 로 띄운다. 프롬프트는 아래 「과잉설계 리뷰 프롬프트」 | `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 |
 | 계획 문서 (T3) | `superpowers:writing-plans` | `$superpowers:writing-plans` | 현재 스킬 목록에 `superpowers:writing-plans` | 아래 superpowers 설치. 그래도 없으면 omx `$plan` 으로 대신하고 그 사실을 문서에 적는다 |
+| 계획 검토 (architectural·T3) | `oh-my-claudecode:critic` 에이전트 | omx `critic` 역할을 `spawn_agent` 의 `agent_type: "critic"` 으로 띄운다 | `$CODEX_HOME/agents/critic.toml` | omx 설치 (0번) |
+| 보안 리뷰 보강 (인증·시크릿) | `oh-my-claudecode:security-reviewer` 에이전트 | `$security-review` | 현재 스킬 목록에 `security-review` | `~/.agents/skills/security-review` 확인. 없으면 `tier-rules.md` §1 의 세 가지 확인만 수행하고 그 사실을 기록한다 |
 | 프론트엔드 스킬 | `vercel-react-best-practices`, `vercel-composition-patterns` | 같다 | 현재 스킬 목록에 두 이름 | `npx skills add vercel-labs/agent-skills` 뒤 `~/.agents/skills` 에 두 디렉터리가 생겼는지 본다. 이름이 다르면 `npx skills find react --owner vercel-labs` 로 찾는다 |
 | 프론트엔드 실행 검증 | `next-dev-loop` | `$next-dev-loop` | 현재 스킬 목록 | `skill-installer` 로 `vercel/next.js`의 `canary`, `skills/next-dev-loop` 설치 |
 | Cache Components 도입·최적화 | `next-cache-components-adoption`, `next-cache-components-optimizer` | 같은 이름의 `$` 호출 | 현재 스킬 목록에 두 이름 | 같은 저장소·브랜치의 `skills/<스킬 이름>` 설치 |

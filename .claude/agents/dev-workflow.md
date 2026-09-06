@@ -139,6 +139,11 @@ codex 에서는 저장소의 `.codex/agents/dev-workflow.toml` 이 이 파일의
 - `P1`: 지금은 동작하지만 곧 문제가 될 구조다
 - `P2`: 고치면 나아지지만 급하지 않다
 
+체크박스는 감사 근거에서 나온 개선 방향이지 확정 설계가 아니다. 실제 설계는 그 항목의
+라운드가 시작될 때 `.claude/skills/dev-cycle/SKILL.md` [1] 이 `superpowers:brainstorming`
+으로 정하고, 그 결과에 따라 체크박스는 바뀔 수 있다. 감사 에이전트는 설계를 제시하거나
+승인을 요청하지 않는다.
+
 ## 리포트를 돌려준 뒤
 
 이 에이전트는 자기 맥락에서 돌지만 리포트는 부른 세션으로 돌아간다. 분량이 커서 그
@@ -148,6 +153,10 @@ codex 에서는 저장소의 `.codex/agents/dev-workflow.toml` 이 이 파일의
 `.claude/skills/dev-cycle/SKILL.md` 의 `## 컨텍스트 관리와 재개` 절 첫 문단이 밝힌 원리다. 다만
 그 절이 열거하는 압축 지점 두 곳은 사이클 안의 자리이고 감사는 사이클 밖에서 도는
 작업이므로, 이 자리는 그 목록에 들어가지 않는다.
+
+저장한 뒤의 다음 단계는 `/dev-cycle next` 또는 `$dev-cycle next` 다. 그 호출이 항목을 고르고
+`superpowers:brainstorming` 으로 설계와 승인을 거친다. 감사가 끝났다는 이유로 라운드를
+이어서 시작하지 않는다.
 
 ## 분량
 

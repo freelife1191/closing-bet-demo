@@ -40,22 +40,34 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 |---|---|---|
 | 새 라운드 설계 | `superpowers:brainstorming` | `$superpowers:brainstorming` |
 | 구현 계획 문서 | `superpowers:writing-plans` | `$superpowers:writing-plans` |
+| 계획 검토 (architectural·T3) | `oh-my-claudecode:critic` | `agent_type: "critic"` |
 | QA 시나리오 계획 | `/qa-only` | `$ultraqa`의 PLAN ADVERSARIAL QA |
 | QA 실행·진단·수정·정리 | `/qa` | 같은 `$ultraqa`의 나머지 절차 |
 | 브라우저 실측 | agent-browser | agent-browser |
 | 과잉설계 리뷰 | `/ponytail-review` | `code-reviewer`에 `CLAUDE.md`의 ponytail 기준 전달 |
 | 코드 리뷰 | `feature-dev:code-reviewer` | `$code-review` |
 | 심층 리뷰(T3) | `/review` | `$review` |
+| 보안 리뷰 보강 (인증·시크릿) | `oh-my-claudecode:security-reviewer` | `$security-review` |
 | 카테고리 감사 | `dev-workflow` | `agent_type: "dev-workflow"` |
 
-이후 본문의 「QA 계획」「QA 실행」은 이 표의 해당 환경 단계를 뜻한다. Codex 라운드에서
-기존 gstack QA 도구로 되돌아가지 않는다. UltraQA의 구체적 호출과 종료 판정은
-`references/ultraqa.md`에 둔다. Claude Code의 도구 순서는 유지한다.
+이후 본문의 「QA 계획」「QA 실행」「계획 검토」「보안 리뷰 보강」은 이 표의 해당 환경 단계를
+뜻한다. Codex 라운드에서 기존 gstack QA 도구로 되돌아가지 않는다. UltraQA의 구체적 호출과
+종료 판정은 `references/ultraqa.md`에 둔다. Claude Code의 도구 순서는 유지한다.
 
 과잉설계 리뷰의 Codex 프롬프트는 `docs/dev-cycle/codex-setup.md`의 「과잉설계 리뷰
 프롬프트」를 쓴다. 에이전트를 사용할 수 없으면 같은 ponytail 기준과 형식으로 직접
 검토하고 대체 사실을 적는다. 계획 스킬이 없으면 설치 상태를 확인하고 기존 `$plan`으로
 대체한 사실을 기록한다. 설계 승인이나 필수 QA를 대체 수단이라는 이유로 생략하지 않는다.
+
+`oh-my-claudecode:` 접두사가 붙은 이름은 oh-my-claudecode 플러그인의 에이전트이며 `Agent`
+도구의 `subagent_type`에 그 이름을 준다. 플러그인이 없으면 그 단계를 건너뛰지 않는다. 계획
+검토는 사용 가능한 읽기 전용 서브에이전트에 계획 파일 경로와 항목 ID를 주고 `ACCEPT`·`REJECT`
+한 단어로 판정하게 해 같은 분기를 적용하고, 보안 리뷰 보강은 `security-review` 스킬을 같은
+입력으로 실행하며, 어느 쪽이든 대체한 사실을 기록한다. 이 플러그인의 키워드 감지기는 사용자
+프롬프트의 「코드 리뷰」·「보안 리뷰」와 `tdd`·`ralph`·`autopilot`·`ralplan`을 잡아 사이클
+위에 자체 모드를 얹는다. 사이클은 그 모드를 쓰지 않으므로 켜졌다는 안내가 보이면
+`/oh-my-claudecode:cancel`로 끄고 절차를 이어간다. `.omc/` 아래 상태 파일은 Git이 추적하지
+않으므로 사이클의 증거 기록 자리로 쓰지 않는다.
 
 현재 목록에 스킬이 없으면 연결·설치를 확인한다. 링크가 정상이나 세션 목록에 없으면
 정본 파일을 직접 읽어 수행하고 자동 탐색 확인과 구분한다. 네이티브 역할은 새 턴의 스킬
@@ -122,7 +134,13 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
    `frontend-skills.md` §2에서 스킬과 Next.js 번들 문서를 고른다. 구현 전에 읽는다.
 4. bounded는 짧은 대화 설계로 충분하다. architectural 또는 저장소가 요구하는 T3는
    `writing-plans`로 구현 계획을 남긴다. 같은 계획을 중복 작성하지 않는다. `autoplan`을
-   새 계획 생성 도구로 사용하지 않는다.
+   새 계획 생성 도구로 사용하지 않는다. 계획을 남긴 항목은 6번 보고 전에 실행 환경 표의
+   「계획 검토」에 계획 파일 경로와 항목 ID를 주어 검토받는다. Claude Code에서는 `Agent`
+   도구에 `name`을 준다(이유는 `tier-rules.md` §1). 판정 어휘는 플러그인 `critic`이
+   `REJECT`·`REVISE`·`ACCEPT-WITH-RESERVATIONS`·`ACCEPT`, Codex `critic`이 `OKAY`·`REJECT`다.
+   `ACCEPT`·`OKAY`가 아니면 지적을 반영해 계획을 고친 뒤 진행하고, 판정 원문과 미반영 사유를
+   TODO 체크에 기록한다. 이 검토는 사용자 승인을 대체하지 않는다. 승인 범위 안의 계획
+   수정에 새 승인을 요청하지 않으며, 범위가 바뀌면 2번에 따라 바뀐 부분만 확인한다.
 5. 승인 후 TODO 항목에 `archive-format.md`의 설계 승인·범위·대화 근거를 기록한다.
    경로·스킬·리뷰·검증 명령을 체크박스로 옮긴다. 작성한 메타가 실제 승인을 대체하지 않는다.
 6. 항목 ID·설계·티어 근거·파일·스킬·검증 범위를 알리고 구현으로 이어간다. 이미 승인된
