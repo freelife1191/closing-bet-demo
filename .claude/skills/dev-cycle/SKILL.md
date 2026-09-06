@@ -110,7 +110,9 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 
 1. NEW는 `superpowers:brainstorming`을 읽고 spike/bounded/architectural을 분류한다.
    새 TODO 라운드와 QA 재시도를 혼동하지 않는다. 사용자 의도·범위·완료 조건을 확인하고
-   설계를 제시한다. 첫 설계 승인 전에는 저장소·Git·TODO·설계 문서·QA·런타임 상태를
+   설계 제시 전에 예상 변경 경로를 `tier-rules.md` §2와 대조한다. TODO에 적힌 티어를
+   그대로 복사하지 않으며, 위험 경로면 한 줄 변경도 T3임을 설계에 알린다.
+   첫 설계 승인 전에는 저장소·Git·TODO·설계 문서·QA·런타임 상태를
    생성·수정·삭제하지 않고 읽기와 대화 설계만 수행한다.
 2. `brainstorming`의 architectural 경로는 첫 설계 승인 후 설계 문서를 작성하고, 그 문서의
    검토·승인까지 구현을 시작하지 않는다. 같은 내용과

@@ -67,6 +67,11 @@ lifecycle=`app-adapted`, phase, iteration, same_failure_count, baseline 결과�
 커밋/diff, 시작·갱신 시각, cleanup 상태를 기록한다. 이것은 이 라운드의 진행 기록이며
 hook 소유 `.omx/state`를 대신 쓴다는 의미가 아니다. 정상 native는 lifecycle=`native`다.
 
+App 대응으로 결정한 뒤에는 `omx state read`도 실행하지 않는다. 설치된 OMX의 읽기 명령이
+잠금 식별 파일을 생성한 사례가 있으므로, 상태 확인은 필요한 파일을 직접 읽는 방법만 쓴다.
+`write/read/clear` 수명주기는 writable scope가 증명된 native 경로에만 적용한다. hook이
+자체 생성한 기록과 에이전트가 만든 파일은 따로 관측하며, hook 기록을 임의로 정리하지 않는다.
+
 App 대응도 실제 baseline과 동적 행렬·진단·수정·정리를 실행해야 한다. 네이티브 상태 명령을
 실행했다고 보고하지 않는다. 설치된 스킬이나 실제 테스트 표면을 사용할 수 없으면 구체적
 이유와 다음 단계를 보고하며 다른 QA 엔진으로 조용히 바꾸지 않는다.

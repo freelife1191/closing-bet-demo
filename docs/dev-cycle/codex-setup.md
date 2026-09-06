@@ -348,6 +348,13 @@ thread 객체 배열이라고 가정하면 실제 자식이 있어도 전용 호
 자식의 완료 turn·최종 응답을 같은 child ID에 결속한다. `thread/list`의 저장된 작업 목록이나
 리더의 성공 문구는 전용 호출 증거가 아니다. 재검수에서도 명시적 `agent_type`을 사용한다.
 
+임의의 새 Git fixture는 원본 저장소의 신뢰 설정을 자동으로 공유하지 않는다. 0.153.3
+재검수에서는 프로세스/turn의 trust override만으로 새 fixture의 프로젝트 계층이 활성화되지
+않았다. `config/read`의 project layer `disabledReason`을 먼저 확인한다. 이 저장소에서 만든
+격리 worktree는 같은 설정 검사에서 계층이 활성화됐다. 검수는 그 worktree에서 수행하고
+홈의 신뢰 설정을 일괄 변경하지 않는다. 필수 필드가 정상인데도 역할을 찾지 못할 때는
+이 환경 오류와 실제 역할 정의 결함을 구분한다.
+
 `docs/dev-cycle/evidence/2026-09-06-dev-workflow-runtime.json` 은 이 결과를 담는다.
 실제 자식의 `agentRole` 과 `source.subAgent.thread_spawn.agent_role` 이 모두
 `dev-workflow` 이며, `parentThreadId` 는 검증 부모의 ID와 일치한다. 자식 경로는
