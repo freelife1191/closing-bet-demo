@@ -23,6 +23,9 @@
 
 ## agent-browser
 
+- zsh 는 `AB="agent-browser --session x"; $AB open …` 처럼 변수에 담은 명령의 인자를 나누지
+  않아 `command not found: agent-browser --session x` 가 난다.
+  `ab() { agent-browser --session x "$@"; }` 함수로 감싼다.
 - 모든 명령에 `--session <이름>` 을 붙인다. 이 환경의 세션 이름은 `adguard-cft-extension`
   이고 로그인 쿠키가 거기 있다. `~/.agent-browser/sessions/` 아래 세션 파일은 그 쿠키를
   담고 있으므로 내용을 출력하지 않는다.
@@ -50,6 +53,12 @@
   뻔했다.
 - `js` 명령에 최상위 `return` 을 쓰면 `SyntaxError: Illegal return statement` 다.
   `(() => { ... })()` 또는 `(async () => { ... })()` 로 감싼다.
+- `viewport` 는 `viewport 1280x800` 처럼 한 인자다. `viewport 1280 800` 은
+  `Unexpected positional arg` 로 거부된다. 기본 뷰포트는 `lg` 이상이라 `lg:hidden` 인 햄버거는
+  `viewport 390x844` 로 바꿔야 접근성 트리에 나타난다.
+- 키보드는 `press Tab`·`press Enter`·`press Escape` 로 보낸다. 초점 위치는
+  `js '(() => document.activeElement.tagName)()'` 처럼 읽는다. 챗봇 화면에서 Enter 는 입력창에
+  초점이 있을 때 전송이므로, 초점이 어느 버튼에 있는지 확인한 뒤 누른다.
 
 ## 공통
 

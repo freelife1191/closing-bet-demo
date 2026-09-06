@@ -328,8 +328,7 @@ export default function ChatbotPage() {
     inputRef.current?.focus();
   };
 
-  const handleDeleteSession = (e: React.MouseEvent, sessionId: string) => {
-    e.stopPropagation();
+  const handleDeleteSession = (sessionId: string) => {
     setSessionToDeleteId(sessionId);
     setIsDeleteModalOpen(true);
   };
@@ -499,11 +498,11 @@ export default function ChatbotPage() {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setIsMobileSidebarOpen(false)}></div>
           <div className="relative w-[280px] bg-[#1e1f20] h-full shadow-2xl flex flex-col animate-slide-in-left border-r border-white/10">
             <div className="p-4 flex justify-between items-center border-b border-white/5 bg-[#131314]">
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsMenuExpanded(!isMenuExpanded)}>
+              <button className="flex items-center gap-2" aria-expanded={isMenuExpanded} onClick={() => setIsMenuExpanded(!isMenuExpanded)}>
                 <span className="font-bold text-gray-200 text-lg">메뉴</span>
                 <i className={`fas fa-chevron-${isMenuExpanded ? 'up' : 'down'} text-xs text-gray-500 transition-transform duration-200`}></i>
-              </div>
-              <button onClick={() => setIsMobileSidebarOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+              </button>
+              <button onClick={() => setIsMobileSidebarOpen(false)} aria-label="메뉴 닫기" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                 <i className="fas fa-times"></i>
               </button>
             </div>
@@ -563,21 +562,26 @@ export default function ChatbotPage() {
                 sessions.map(session => (
                   <div
                     key={session.id}
-                    onClick={() => {
-                      setCurrentSessionId(session.id);
-                      setIsMobileSidebarOpen(false);
-                    }}
-                    className={`group relative w-full text-left px-3 py-3 rounded-lg text-sm transition-colors cursor-pointer flex items-center gap-3 ${currentSessionId === session.id
+                    className={`group relative w-full rounded-lg text-sm transition-colors flex items-center ${currentSessionId === session.id
                       ? 'bg-[#004a77]/40 text-blue-100'
                       : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
                       }`}
                   >
-                    <i className={`far fa-comment-alt text-xs flex-shrink-0 ${currentSessionId === session.id ? 'text-blue-400' : 'text-gray-500'}`}></i>
-                    <span className="truncate flex-1">{session.title}</span>
-
                     <button
-                      onClick={(e) => handleDeleteSession(e, session.id)}
-                      className="p-2 text-gray-500 hover:text-red-400 transition-colors z-10"
+                      onClick={() => {
+                        setCurrentSessionId(session.id);
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      aria-current={currentSessionId === session.id ? 'true' : undefined}
+                      className="flex-1 min-w-0 flex items-center gap-3 text-left px-3 py-3"
+                    >
+                      <i className={`far fa-comment-alt text-xs flex-shrink-0 ${currentSessionId === session.id ? 'text-blue-400' : 'text-gray-500'}`}></i>
+                      <span className="truncate flex-1">{session.title}</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSession(session.id)}
+                      aria-label={`${session.title} 삭제`}
+                      className="p-2 text-gray-500 hover:text-red-400 transition-colors"
                     >
                       <i className="fas fa-trash-alt text-xs"></i>
                     </button>
@@ -690,18 +694,23 @@ export default function ChatbotPage() {
               sessions.map(session => (
                 <div
                   key={session.id}
-                  onClick={() => setCurrentSessionId(session.id)}
-                  className={`group relative w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer flex items-center gap-2 ${currentSessionId === session.id
+                  className={`group relative w-full rounded-lg text-sm transition-colors flex items-center ${currentSessionId === session.id
                     ? 'bg-[#004a77]/40 text-blue-100'
                     : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
                     }`}
                 >
-                  <i className={`far fa-comment-alt text-xs ${currentSessionId === session.id ? 'text-blue-400' : 'text-gray-500'}`}></i>
-                  <span className="truncate flex-1">{session.title}</span>
-
                   <button
-                    onClick={(e) => handleDeleteSession(e, session.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-red-400 transition-opacity absolute right-2 bg-[#1e1f20]/80 rounded shadow-sm"
+                    onClick={() => setCurrentSessionId(session.id)}
+                    aria-current={currentSessionId === session.id ? 'true' : undefined}
+                    className="flex-1 min-w-0 flex items-center gap-2 text-left px-3 py-2.5"
+                  >
+                    <i className={`far fa-comment-alt text-xs ${currentSessionId === session.id ? 'text-blue-400' : 'text-gray-500'}`}></i>
+                    <span className="truncate flex-1">{session.title}</span>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSession(session.id)}
+                    aria-label={`${session.title} 삭제`}
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 text-gray-500 hover:text-red-400 transition-opacity absolute right-2 bg-[#1e1f20]/80 rounded shadow-sm"
                   >
                     <i className="fas fa-trash-alt text-xs"></i>
                   </button>
@@ -726,25 +735,27 @@ export default function ChatbotPage() {
               {/* Hamburger Button (Mobile) */}
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
+                aria-label="메뉴 열기"
                 className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 active:bg-white/20 transition-colors -ml-2"
               >
                 <i className="fas fa-bars text-lg text-gray-300"></i>
               </button>
 
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowCommands(!showCommands)}>
+              <button className="flex items-center gap-2" aria-expanded={showCommands} onClick={() => setShowCommands(!showCommands)}>
                 <span className="text-lg font-bold opacity-90 hover:opacity-100">스마트머니봇</span>
                 {currentModel.includes("pro") && <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold">PRO</span>}
-              </div>
+              </button>
             </div>
             <div className="flex items-center gap-3">
               {/* User Avatar - Initials */}
-              <div
-                className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg cursor-pointer"
+              <button
+                className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg"
                 title={userProfile.name}
+                aria-label="프로필 설정 열기"
                 onClick={() => setIsSettingsOpen(true)}
               >
                 {userProfile.name.slice(0, 2).toUpperCase()}
-              </div>
+              </button>
             </div>
           </div>
 
@@ -926,6 +937,7 @@ export default function ChatbotPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
                     title="파일 첨부"
+                    aria-label="파일 첨부"
                   >
                     <i className="fas fa-plus-circle text-lg"></i>
                   </button>
@@ -996,6 +1008,7 @@ export default function ChatbotPage() {
                       onClick={toggleRecording}
                       className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isRecording ? 'text-red-500 bg-red-500/10 animate-pulse' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
                       title="음성 입력"
+                      aria-label="음성 입력"
                     >
                       <i className={`fas fa-microphone ${isRecording ? 'fa-beat' : ''}`}></i>
                     </button>
@@ -1014,6 +1027,7 @@ export default function ChatbotPage() {
                         (input.trim() || attachedFiles.length > 0) ? (
                           <button
                             onClick={() => handleSend(input)}
+                            aria-label="보내기"
                             className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 transition-all shadow-lg animate-fade-in"
                           >
                             <i className="fas fa-paper-plane text-xs"></i>
