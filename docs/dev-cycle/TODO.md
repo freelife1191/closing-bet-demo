@@ -16,21 +16,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-034] 감사 초안과 설계의 경계를 밝히고 oh-my-claudecode 를 사이클에 연결한다
-- 카테고리: 인프라 | 티어: 문서 | 근거: 2026-09-06 사용자 요청과 oh-my-claudecode 5.3.0 스킬·에이전트·도구·훅 대조 검토
-- 설계 승인: 2026-09-06 | 승인 확인: 2026-09-06T23:20:38+09:00 | 경로: bounded | 범위: `dev-workflow` 초안·설계 경계와 다음 단계, 실행 환경 표에 `critic`·`security-reviewer` 연결, OMC 키워드 감지 주의 | 근거: 현재 대화의 설계 제안에 대한 사용자 선택 응답으로 네 후보를 적용한 뒤, 같은 날 후속 대화에서 `trace`·`session_search` 를 걷어내자는 권장에 「추천대로 진행해」로 승인. 커밋은 사용자가 수행
-- 검토 결과: 스킬 29개·에이전트 19개·MCP 도구 11묶음·훅 10이벤트 가운데 `critic`·`security-reviewer` 둘만 채택. 처음 넣었던 `trace`·`session_search` 는 codex 대응 수단이 없어 두 환경의 절차 대칭을 깨고, 각각 QA 재시도 루프의 반복 계산과 불안정한 MCP 연결에 얽혀 후속 승인으로 제거. `autopilot`·`ralph`·`team`·`ultragoal`·`self-improve`·`launch` 는 설계 승인 게이트나 단일 백로그와 충돌, `wiki`·`remember`·`planner`·`notepad` 는 Git 미추적 `.omc/` 에만 기록, `code-simplifier`·`git-master` 는 `/ponytail-review` 와 두 커밋 구조에 충돌해 제외
-- 기록 주의: 이 블록은 병렬 codex 세션의 `664b6cc` 에 체크 없이 휩쓸려 들어갔다가 `0eee1ca` 아카이브 커밋에서 지워져 다시 넣은 것이다. 완료 아카이브는 아직 없다
-- [x] `dev-workflow.md` 에 초안·설계 경계와 저장 뒤 다음 단계 기록
-- [x] `SKILL.md` 실행 환경 표와 [1] 4번에 두 에이전트 연결, OMC 키워드 주의 문단 (`trace`·`session_search` 는 후속 승인으로 제거)
-- [x] `tier-rules.md` §1 시크릿 문단에 `security-reviewer` 보강
-- [x] `CLAUDE.md` 개발 사이클 절과 `codex-setup.md` §3 대응표 교차 반영
-- [x] 문서 검증: 참조 경로·절·도구 실재 확인, `git diff --stat` 코드 무변경, 네 자리 교차 확인, TODO 티어 재판정 불필요 확인 (2026-09-06 23:2x 와 부분 원복 뒤 재실행, `git diff --check` exit 0, 실행 코드 변경 0줄, 티어 규칙 변경 없음)
-- [x] 검수 라운드 (2026-09-06 사용자 「리뷰 및 검수」 요청): 감지기 `dist/hooks/keyword-detector/index.js` 대조 결과 `team` 은 never-match 로 꺼져 있어 `SKILL.md`·`CLAUDE.md` 의 감지 목록에서 제거. 플러그인 부재 시 대체 수단이 Codex 열을 가리키던 문장을 Claude Code 기준(`feature-dev:code-reviewer`·§1 세 가지 확인)으로 고침. `tier-rules.md` §5 의 「리뷰 스킬 네 종」은 `/simplify` 가 빠진 뒤 셋이라 수효를 뺌. TODO 머리글을 `archive-format.md` §4 템플릿과 일치. 참조 경로·절 번호·frontmatter·TOML·심볼릭 링크 실재 확인
-- [x] 독립 검토 (`oh-my-claudecode:critic` 을 `infra034-critic` 이름으로, 2026-09-06): 판정 REVISE. 반영 1) `tier-rules.md` §1 의 「`/security-review` 가 없다」 전제를 두 도구가 보지 않는 항목의 설명으로 교체 2) 플러그인 부재 시 보안 대체를 `~/.agents/skills` 의 `security-review` 스킬로 3) `critic` 판정 어휘를 플러그인(`REJECT`·`REVISE`·`ACCEPT-WITH-RESERVATIONS`·`ACCEPT`)과 Codex(`OKAY`·`REJECT`) 양쪽으로 명시 4) 계획 검토 대체를 §5 와 충돌하는 `code-reviewer` 대신 읽기 전용 서브에이전트로 5) 실행 환경 대응 문장에 「계획 검토」「보안 리뷰 보강」 추가 6) §5 에 시크릿 확인·보안 보강 면제 한 문장 7) 검토 시점을 6번 보고 전으로 8) `name` 근거를 §1 참조로 10) `CLAUDE.md` 의 「켜지면」을 「켜졌다는 안내가 보이면」으로. 미반영 9) `티어: 문서` 가 미정의라는 지적은 `tier-rules.md` §5 마지막 문단이 그 값을 정의하고 `archive/2026-09.md` 월별 표 다섯 건과 일별 기록이 같은 값을 쓰므로 유지. 재확인 판정 ACCEPT-WITH-RESERVATIONS, 9번은 검토자가 철회. 잔여 두 건 반영: A) `security-review` 대체 문장에서 `~/.agents/skills` 경로 단정 제거(Claude Code 목록의 같은 이름은 내장 스킬로 해석됨) B) 대체 계획 검토에 `ACCEPT`·`REJECT` 판정 요구 추가
-- [ ] 첫 커밋과 완료 아카이브 (사용자 커밋 뒤)
-
-
 ### [CHAT-022] 메모리 전체 동기화가 다른 워커가 저장한 행을 지운다
 - 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
 - `chatbot/storage_memory_manager.py` 의 `_save()` 가 `save_memories_to_sqlite` 에 자기
