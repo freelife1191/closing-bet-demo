@@ -340,6 +340,14 @@ App 내장 바이너리를 `app-server --stdio` 로 독립 실행해 로컬 JSON
 `item/completed` 이벤트에서 실제 자식의 응답도 확인한 뒤 검증 프로세스를 종료했다.
 사용자 App의 실행 중인 작업이나 서비스를 재시작한 것은 아니다.
 
+수집기는 `thread/loaded/list`의 `data`에 들어 있는 **문자열 ID 배열**을 처리해야 한다.
+thread 객체 배열이라고 가정하면 실제 자식이 있어도 전용 호출을 미검증으로 판정한다.
+현재 소유한 독립 app-server에서 얻은 ID만 `thread/read`하고, 정확한 부모와 연결된 자식의
+`agentRole`, `source.subAgent.thread_spawn.agent_role`, 부모 ID 두 필드와 `ephemeral`을
+함께 확인한다. `source`는 문자열일 수도 있으므로 객체 여부를 먼저 판정한다.
+자식의 완료 turn·최종 응답을 같은 child ID에 결속한다. `thread/list`의 저장된 작업 목록이나
+리더의 성공 문구는 전용 호출 증거가 아니다. 재검수에서도 명시적 `agent_type`을 사용한다.
+
 `docs/dev-cycle/evidence/2026-09-06-dev-workflow-runtime.json` 은 이 결과를 담는다.
 실제 자식의 `agentRole` 과 `source.subAgent.thread_spawn.agent_role` 이 모두
 `dev-workflow` 이며, `parentThreadId` 는 검증 부모의 ID와 일치한다. 자식 경로는
