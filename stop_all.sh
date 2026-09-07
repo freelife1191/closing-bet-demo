@@ -9,19 +9,22 @@
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$PROJECT_ROOT"
 
-# ==== .env 로드 ====
+# ==== .env 에서 포트만 읽기 ====
+# 파일을 통째로 실행하지 않는 이유는 scripts/env_value.sh 의 주석에 있다. 이 스크립트에는
+# set -e 가 없으므로 읽기 실패를 직접 잡는다.
+source "$PROJECT_ROOT/scripts/env_value.sh" || {
+  echo "❌ scripts/env_value.sh 를 읽을 수 없다"; exit 1;
+}
 if [ -f .env ]; then
-  echo "📄 Loading .env configuration..."
-  set -a
-  source .env
-  set +a
+  echo "📄 Reading ports from .env..."
 else
   echo "⚠️  .env file not found! (using defaults)"
 fi
 
-# ==== 포트 기본값 ====
-FRONTEND_PORT=${FRONTEND_PORT:-3500}
-FLASK_PORT=${FLASK_PORT:-5501}
+# ==== 포트 결정 ====
+# 숫자가 아니면 여기서 멈춘다. 이유는 scripts/env_value.sh 의 env_port 주석에 있다.
+FRONTEND_PORT=$(env_port FRONTEND_PORT 3500) || exit 1
+FLASK_PORT=$(env_port FLASK_PORT 5501) || exit 1
 
 echo "🛑 Stopping all services on ports $FRONTEND_PORT / $FLASK_PORT ..."
 

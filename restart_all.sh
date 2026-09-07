@@ -7,18 +7,24 @@
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$PROJECT_ROOT"
 
-# .env 로드
-[ -f .env ] && { echo "📄 .env loaded"; set -a; source .env; set +a; }
+# .env 에서 이 스크립트가 쓰는 값만 읽는다. 파일을 통째로 실행하지 않는 이유는
+# scripts/env_value.sh 의 주석에 있다. 이 스크립트에는 set -e 가 없으므로 읽기 실패를
+# 직접 잡는다. 그러지 않으면 함수가 없는 채로 진행해 조용히 코드 기본값으로 떨어진다.
+source "$PROJECT_ROOT/scripts/env_value.sh" || {
+  echo "❌ scripts/env_value.sh 를 읽을 수 없다"; exit 1;
+}
 
-# Frontend .env 심볼릭 링크 연결 (배포 환경 대응)
+# Frontend .env 심볼릭 링크 연결 (배포 환경 대응). 이 블록의 메시지가 .env 존재도 알린다
 if [ -f .env ]; then
   echo "🔗 Linking .env to frontend/.env..."
   mkdir -p frontend
   ln -sf ../.env frontend/.env
 fi
 
-FRONTEND_PORT=${FRONTEND_PORT:-3500}
-FLASK_PORT=${FLASK_PORT:-5501}
+FRONTEND_PORT=$(env_port FRONTEND_PORT 3500) || exit 1
+FLASK_PORT=$(env_port FLASK_PORT 5501) || exit 1
+_env_flask_host=$(env_value FLASK_HOST)
+FLASK_HOST=${_env_flask_host:-$FLASK_HOST}
 
 echo "🛑 Stopping $FRONTEND_PORT/$FLASK_PORT..."
 
@@ -77,7 +83,7 @@ rm -f services/scheduler.lock
 
 source venv/bin/activate
 # Use Gunicorn as in Procfile
-# 바인딩은 11행에서 source 한 .env 의 FLASK_HOST 를 따르며 기본은 loopback 이다.
+# 바인딩은 위에서 env_value 로 읽은 FLASK_HOST 를 따르며 기본은 loopback 이다.
 nohup gunicorn flask_app:app --bind "${FLASK_HOST:-127.0.0.1}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
 deactivate
 BACKEND_PID=$!
