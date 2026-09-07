@@ -105,7 +105,7 @@ S-16 을 선택으로 둔 이유는 로그인이 필요하고 이 사이클이 �
 | S-6 | **통과** | 세션 없는 교차 출처 POST 가 500 (Flask 도달) |
 | S-7 | **통과** | `proxy.test.ts` 의 「INTERNAL_IDENTITY_SECRET 이 비어도 로그인 사용자의 교차 출처 POST 는 막는다」 |
 | S-8 | **통과** | 교차 출처 PUT 과 PATCH 가 각각 403 |
-| S-9 | **통과** | `proxy.test.ts` 의 「메서드가 소문자여도 막는다」. 실제 서버에서는 소문자 메서드가 Node 와 gunicorn 의 HTTP 파서에 400 으로 먼저 끊깁니다 |
+| S-9 | **통과** | `proxy.test.ts` 의 「메서드가 소문자여도 막는다」. 실제 서버에서는 소문자 메서드가 Node 와 gunicorn 의 HTTP 파서에 400 으로 먼저 끊깁니다. 보안 리뷰의 보충: `fetch` 는 `GET`·`POST`·`PUT`·`DELETE`·`HEAD`·`OPTIONS` 만 대문자로 정규화하고 `patch` 는 그대로 보내지만, `PATCH` 는 단순 요청이 아니라 preflight 에서 이미 막힙니다. 즉 이 보정은 브라우저 공격면을 바꾸지 않고 방어의 근거를 저장소 안으로 옮기는 것입니다 |
 | S-10 | **통과** | 403 본문이 `{"error":"교차 출처 요청은 처리하지 않습니다"}` |
 | S-11 | **통과** | `localhost:3500/dashboard/kr` 에서 Market Gate `55 Neutral`, KOSPI 200 섹터 지수 11개 표시. 콘솔 오류 0건 |
 | S-12 | **통과** | `npx vitest run src/proxy.test.ts` 14개 통과 |
