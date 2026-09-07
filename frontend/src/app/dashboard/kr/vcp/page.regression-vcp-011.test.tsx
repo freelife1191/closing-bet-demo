@@ -10,12 +10,14 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { krAPI } from '@/lib/api';
+
 import VCPPage from './page';
 
 const SIGNAL = {
   ticker: '034730',
   name: 'SK',
-  market: 'KOSPI',
+  market: 'KOSPI' as const,
   signal_date: '2026-05-05',
   entry_price: 475500,
   current_price: 475500,
@@ -66,6 +68,19 @@ describe('[VCP-011] VCP 상세의 점수 카드', () => {
     expect(within(card).getByText('100.0')).toBeTruthy();
     expect(within(card).getByText('VCP 패턴 보조 점수')).toBeTruthy();
     expect(within(card).getByText('17.0')).toBeTruthy();
+  });
+
+  it('보조 점수가 없으면 0.0 이 아니라 -를 그린다', async () => {
+    // 백엔드가 기본값 0 을 채워 보내던 동안 이 갈래에는 닿을 수 없었다.
+    vi.mocked(krAPI.getSignals).mockImplementationOnce(async () => ({
+      signals: [{ ...SIGNAL, vcp_score: undefined }],
+      total_scanned: 1,
+      source: 'test',
+    }));
+    const card = await openDetailPanel();
+
+    expect(within(card).getByText('VCP 패턴 보조 점수')).toBeTruthy();
+    expect(within(card).getByText('-')).toBeTruthy();
   });
 
   it('값과 무관하게 낙관적 결론을 단정하지 않는다', async () => {

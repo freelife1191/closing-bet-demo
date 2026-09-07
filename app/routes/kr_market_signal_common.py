@@ -10,6 +10,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from engine.pandas_utils_safe import safe_optional_float
+
 # 이 두 상수는 프론트엔드에도 같은 내용이 있다. 화면은 병합된 응답이 비면 원시
 # 캐시를 다시 보므로, 그쪽에서도 같은 기준으로 실패 기록을 걸러야 한다.
 # 여기를 고치면 frontend/src/app/dashboard/kr/vcp/aiHelpers.ts 도 함께 고친다.
@@ -89,18 +91,15 @@ def _safe_optional_float(value: Any) -> Optional[float]:
     `_safe_float` 와 달리 「값이 없음」과 「값이 0」을 구분해야 하는 자리에서 쓴다.
     수급 값을 여러 키에서 차례로 찾을 때, 0 을 못 찾은 것으로 오인하면 다음 키로
     넘어가 엉뚱한 값을 집는다.
+
+    수치 변환 자체는 `engine.pandas_utils_safe.safe_optional_float` 에 맡긴다. 이 함수가
+    더 하는 일은 `"475,500원"` 처럼 통화 기호와 단위가 붙은 문자열을 먼저 벗기는 것뿐이다.
+    두 벌로 두면 같은 이름의 함수가 NaN·inf 를 서로 다르게 다루게 된다. `[VCP-011]` 이
+    실제로 그 상태를 잠깐 만들었다.
     """
-    if value is None:
-        return None
     if isinstance(value, str):
-        normalized = _normalize_numeric_text(value)
-        if not normalized:
-            return None
-        value = normalized
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+        value = _normalize_numeric_text(value)
+    return safe_optional_float(value)
 
 
 # 국내 종목코드는 여섯 자리이고 첫 자리와 끝 자리가 숫자이며 그 사이에 영문자가 올 수

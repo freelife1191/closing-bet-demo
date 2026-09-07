@@ -445,10 +445,30 @@ def test_vcp_prompt_numbers_match_the_values_the_screen_shows():
 
     assert f"- 수축 비율: {screen['contraction_ratio']}" in prompt
     assert f"- 종합 시그널 점수: {screen['score']}점" in prompt
-    assert f"- VCP 패턴 보조 점수: {float(screen['vcp_score'])}점" in prompt
+    assert f"- VCP 패턴 보조 점수: {screen['vcp_score']}점" in prompt
     # 자료에 없는 1일 수급은 0 이 아니라 N/A 로 나간다.
     assert "- 외국인 1일(오늘) 순매수: N/A주" in prompt
     assert "- 기관 1일(오늘) 순매수: N/A주" in prompt
+
+
+def test_vcp_signal_keeps_the_fractional_part_of_vcp_score():
+    """[VCP-011] 화면이 내보내는 `vcp_score` 를 프롬프트와 같은 값으로 고정한다.
+
+    `_safe_int` 로 버리면 16.5 가 화면에서는 16, AI 사유에서는 16.5 가 되어 같은 값이
+    어긋나 보인다. 값이 없는 행은 `0` 이 아니라 비어야 화면이 `-` 를 그린다.
+    """
+    base = {
+        "ticker": "034730",
+        "name": "SK",
+        "signal_date": "2026-05-05",
+        "status": "OPEN",
+        "score": 100,
+        "entry_price": 475500,
+        "is_vcp": True,
+    }
+
+    assert _build_vcp_signal_from_row({**base, "vcp_score": 16.5})["vcp_score"] == 16.5
+    assert _build_vcp_signal_from_row(base)["vcp_score"] is None
 
 
 def test_extract_vcp_ai_recommendation_valid_and_invalid_cases():

@@ -263,7 +263,6 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
         return None
 
     score = _safe_float(_row_get(row, "score", 0), default=0.0)
-    vcp_score = _safe_float(_row_get(row, "vcp_score", 0), default=0.0)
     is_vcp = safe_bool(_row_get(row, "is_vcp", False))
 
     entry_price = _none_if_nan(_row_get(row, "entry_price"))
@@ -286,7 +285,11 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
         "stop_price": stop_price,
         "foreign_5d": _safe_int(_row_get(row, "foreign_5d", 0), default=0),
         "inst_5d": _safe_int(_row_get(row, "inst_5d", 0), default=0),
-        "vcp_score": _safe_int(vcp_score, default=0),
+        # [VCP-011] 프롬프트는 이 열의 실수 원값을 싣는다. 여기서 `_safe_int` 로 버리면
+        # 16.5 가 화면에서는 16, AI 사유에서는 16.5 가 되어 같은 값이 어긋나 보인다.
+        # 기본값 0 을 두던 것도 없앤다. 값이 없는 행까지 `0.0` 으로 그려서 화면의
+        # `?? '-'` 갈래에 영영 닿지 못했다.
+        "vcp_score": safe_optional_float(_row_get(row, "vcp_score")),
         "is_vcp": is_vcp,
         "current_price": _none_if_nan(_row_get(row, "current_price")),
         "return_pct": _none_if_nan(_row_get(row, "return_pct")),
