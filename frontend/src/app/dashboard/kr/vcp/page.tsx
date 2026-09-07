@@ -1508,20 +1508,7 @@ export default function VCPSignalsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-sm">
-              {loading ? (
-                <tr>
-                  <td colSpan={13} className="p-8 text-center text-gray-500">
-                    <i className="fas fa-spinner fa-spin text-2xl text-blue-500/50 mb-3"></i>
-                    <p className="text-xs">Loading signals...</p>
-                  </td>
-                </tr>
-              ) : signals.length === 0 ? (
-                <tr>
-                  <td colSpan={13} className="p-8 text-center text-gray-500">
-                    <p>No signals found.</p>
-                  </td>
-                </tr>
-              ) : (
+              {loading || signals.length === 0 ? null : (
                 signals.map((signal) => (
                   <tr
                     key={signal.ticker}
@@ -1608,6 +1595,20 @@ export default function VCPSignalsPage() {
             </tbody>
           </table>
         </div>
+        {/* [FE-015] 표가 min-w-[1000px] 이라 안쪽에 둔 안내 문구는 그 폭을 기준으로
+            가운데 정렬되어 중심이 화면 밖에 놓인다. 가로 스크롤 영역 밖에 두면
+            카드 폭을 기준으로 정렬되므로 어느 화면 폭에서든 보인다. */}
+        {loading && (
+          <div className="p-8 text-center text-gray-500">
+            <i className="fas fa-spinner fa-spin text-2xl text-blue-500/50 mb-3"></i>
+            <p className="text-xs">Loading signals...</p>
+          </div>
+        )}
+        {!loading && signals.length === 0 && (
+          <div className="p-8 text-center text-gray-500">
+            <p>No signals found.</p>
+          </div>
+        )}
       </div>
 
       <div className="text-center text-xs text-gray-500">
