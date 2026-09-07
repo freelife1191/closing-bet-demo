@@ -19,8 +19,32 @@
 ## P1 — 이번 주기
 
 ### [INFRA-039] Flask 가 모든 인터페이스에 바인딩해 신원 서명의 전제가 관례에 머문다
-- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
+- 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적(확신도 높음). 코드를 직접 열어 확인했습니다.
+  티어는 T2 로 적혀 있었으나 `.env.example` 을 건드리므로 `tier-rules.md` §2 「시크릿과
+  인증」에 해당해 T3 으로 올렸습니다.
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 20:30
+  | 범위: `config.py`·`restart_all.sh`·`.env`·`.env.production` 의 바인딩을 loopback 으로,
+  `app/__init__.py` 의 `__main__` 블록 삭제, `.env.example`·`Procfile`·`README.md`·
+  `AGENTS.md`·`CLAUDE.md`·`services/identity_helpers.py` 의 설명 갱신. `Procfile` 의 명령
+  줄과 `frontend/` 는 건드리지 않습니다
+  | 실제 대화 근거: 2026-09-07 AskUserQuestion 세 건(바인딩 범위·IP 헤더·개발 진입점)에서
+  모두 권장안을 고르신 응답과, 그 뒤 설계 요약에 「진행해」로 답하신 응답
+  | **승인 범위가 한 번 바뀌었습니다.** 첫 IP 헤더 문항은 「`_resolve_real_ip` 를 지운다」로
+  승인되었으나, 그 문항이 「어차피 지금도 `remote_addr` 뿐이니 지워도 무해하다」는 거짓
+  전제 위에서 제시된 것이 계획 검토에서 드러났습니다. 같은 날 다시 여쭈어 「이번 라운드는
+  바인딩만」으로 정해졌고, 그 결정에 따라 위 범위에서 `_resolve_real_ip` 를 뺐습니다.
+  이월한 곳은 `[INFRA-045]` 입니다
+- 구현 계획: `docs/superpowers/plans/2026-09-07-infra-039-loopback-binding.md`
+- 계획 검토: `oh-my-claudecode:critic` 판정 **REVISE** (2026-09-07). 지적 여덟 건을 모두
+  반영했습니다. 미반영은 없습니다. 심각도 A 두 건은 IP 헤더 실측 해석이 반대였다는 것과
+  같은 패턴이 세 자리인데 하나만 고친다는 것이었고, 전자는 사용자 재확인을 거쳐 이월로,
+  후자는 `[INFRA-045]` 로 묶었습니다. 심각도 B 는 테스트 두 건이 모두 무효라는 것
+  (`reload` 가 `load_dotenv` 를 다시 불러 `.env` 를 검사함, `GET` 이 감사 로그에서 제외되어
+  고치기 전에도 통과함), `create_app()` 이 `SCHEDULER_ENABLED` 로 막히지 않는
+  `_reset_startup_status_files()` 로 `data/` 를 덮어씀, 문서 세 곳이 `0.0.0.0` 을 계속
+  안내함, `Procfile` 예외의 근거가 배포자가 읽을 자리에 없음이었습니다. 심각도 C 는
+  `run.py:95` 가 다섯 번째 바인딩 자리라는 것입니다
 - `[INFRA-027]` 이 만든 `X-Auth-Identity` 는 경로에도 메서드에도 nonce 에도 묶여 있지 않은
   120초 bearer 입니다. 이 설계를 받아들인 근거는 서명이 오가는 구간이 proxy 와 Flask
   사이뿐이고 브라우저로 돌아가지 않는다는 것이었습니다.
@@ -43,9 +67,14 @@
   있었습니다. 지금은 120초 안에 살아 있는 서명을 실제로 관측해야 하므로, 필요 조건이
   「아무것도 없음」에서 「특권적 위치의 실시간 관측」으로 올라갔습니다.
 - QA 시나리오: 로컬에서 `curl` 로 기기의 LAN 주소:5501 에 직접 닿지 않는다
-- [ ] 바인딩 주소를 환경별로 정하는 방식을 결정 (`FLASK_HOST` 기본값과 PaaS 예외)
-- [ ] `config.py`·`restart_all.sh`·`Procfile`·`app/__init__.py` 네 자리를 그 방식에 맞춤
-- [ ] `app.run(debug=True)` 를 개발 진입점에서도 loopback 으로 좁힘
+- [x] 바인딩 주소를 환경별로 정하는 방식을 결정 — 2026-09-07 AskUserQuestion 세 건으로
+  확정했습니다. `config.py` 기본값과 `.env`·`.env.production` 의 실제 값을 함께
+  `127.0.0.1` 로 좁히고, PaaS 전용인 `Procfile` 만 `0.0.0.0` 예외로 둡니다.
+  기본값만 고치면 `.env` 에 명시된 값에 가려 실제 동작이 그대로이기 때문입니다
+- [ ] `config.py`·`restart_all.sh`·`.env`·`.env.production` 네 자리를 그 방식에 맞춤
+  (`Procfile` 은 결정에 따라 그대로 둡니다)
+- [ ] `app.run(debug=True)` 를 지움 — 좁히지 않고 삭제하기로 정했습니다. 실제 진입점은
+  `flask_app.py` 이고 `python app/__init__.py` 를 부르는 자리가 저장소에 없습니다
 - 2026-09-07 `[INFRA-037]` 사이클의 보안 리뷰가 이 항목에 인접한 두 가지를 더 지적했습니다
   (심각도 낮음, 확신도 높음). 첫째, `app/__init__.py:207` 의 `_resolve_real_ip` 가
   `X-Forwarded-For` 를 무조건 신뢰합니다. 신뢰할 수 있는 프록시 없이 Flask 에 직접 닿으면
@@ -54,10 +83,33 @@
   AI 분석이 막힌다」까지만 적고 있는데, `[INFRA-037]` 이후로는 관리자의 알림 테스트 발송도
   같은 이유로 막힙니다. 이 항목이 이미 `.env.example` 을 건드리므로 그때 함께 고칩니다.
 - [ ] `.env.example` 에 이유를 적음 (위의 알림 테스트 문구 보완 포함)
-- [ ] `_resolve_real_ip` 가 신뢰할 수 있는 프록시 뒤에서만 헤더를 읽도록 함 —
-  검토자는 `ProxyFix(app.wsgi_app, x_for=1)` 한 줄을 제안했습니다. 신뢰할 홉 수는 무엇이
-  Flask 앞에 서는지 정해야 나오므로 바인딩 결정과 같은 시점에 처리합니다
+- [x] `_resolve_real_ip` 처리 방향을 결정 — **`[INFRA-045]` 로 이월합니다.** 2026-09-07
+  첫 실측에서 「Next.js 가 `X-Forwarded-For` 를 붙이지 않는다」고 판단했으나 그것이
+  틀렸습니다. `app/__init__.py:187` 의 `_should_skip_activity_logging` 이 `GET` 을 전부
+  건너뛰는데 `GET` 으로 재고 남의 로그 줄을 읽은 것이 원인이었습니다. `POST` 로 다시
+  재니 Next 는 헤더를 붙이고 있었고(`base-server.js:612` 의 `??=`), 클라이언트가 보낸
+  값은 덮어쓰지 않아 위조가 그대로 통과했습니다. 그러므로 함수를 지우면 감사 기록의
+  IP 가 전부 `127.0.0.1` 이 되어 정보를 잃고, `ProxyFix` 로는 위조를 막지 못합니다.
+  같은 패턴이 세 자리에 있어 한 자리만 고치면 의도가 흐려지므로 별도 항목으로 옮깁니다
 - [ ] `services/identity_helpers.py` 의 `# ponytail:` 주석에서 이월 표시를 걷어냄
+- 리뷰 (2026-09-07): `/ponytail-review` → `feature-dev:code-reviewer` → `/review` →
+  `oh-my-claudecode:security-reviewer` 순으로 돌렸습니다. 지적을 모두 반영했으며 미반영은
+  없습니다.
+  - ponytail: 같은 이유가 다섯 파일에 중복으로 적혀 있다는 지적을 받아 `.env.example` 을
+    정본으로 두고 나머지가 그것을 가리키게 줄였습니다 (10줄 감소)
+  - code-reviewer: 다섯 확인 항목 모두 결함 없음. `설계 승인` 범위 문구가 이월된
+    `_resolve_real_ip` 를 여전히 적고 있다는 문서 불일치 하나를 지적받아 고쳤습니다
+  - `/review`: `restart_all.sh` 의 `--bind` 인자에 따옴표가 없어 값에 공백이 들어가면
+    gunicorn 인자가 갈라지는 것을 고쳤습니다. `Procfile` 의 `#` 주석이 파싱을 깨지 않는
+    것도 표준 정규식으로 검증했습니다
+  - security-reviewer: 넷을 반영했습니다. (1) `Procfile` 예외가 구멍이라는 지적 —
+    그 파일이 Flask 만 띄워 proxy 가 없다는 것을 확인하고 주석을 「이 경로로 배포하지
+    않는다」로 고친 뒤 `[INFRA-046]` 으로 올렸습니다. (2) `identity_helpers.py` 주석이
+    실제 보증보다 강하다는 지적 — 「같은 호스트의 다른 프로세스와 넓힌 배포는 전제 밖」임을
+    명시하도록 고쳤습니다. (3) `config.FLASK_HOST` 는 `python flask_app.py` 만 읽고 운영
+    gunicorn 은 `restart_all.sh` 의 셸 변수를 읽으므로 운영 경로 기본값에 검사가 없다는
+    지적 — 단위 테스트로는 덮지 못하므로 QA 시나리오 S-1 의 실측으로 덮습니다.
+    (4) `.env.example` 이 Docker 사례를 빠뜨린다는 지적을 반영했습니다
 
 ### [INFRA-040] 인증이 쿠키 파생으로 바뀌면서 CSRF 노출이 생겼다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
@@ -170,6 +222,69 @@
 - [ ] sender 의 반환 bool 을 응답에 반영
 - [ ] 로그에 비밀이 남지 않는 것을 고정하는 테스트 추가
 
+
+### [INFRA-045] 감사 로그의 IP 를 요청자가 헤더 한 줄로 정할 수 있다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-039]` 사이클의
+  `oh-my-claudecode:critic` 지적(확신도 높음). 실측으로 확인했습니다.
+- Next.js 16.3.4 는 `frontend/node_modules/next/dist/server/base-server.js:612` 에서
+  `req.headers['x-forwarded-for'] ??= originalRequest?.socket?.remoteAddress` 로 헤더를
+  붙입니다. **`??=` 이므로 클라이언트가 보낸 값을 덮어쓰지 않습니다.** 브라우저가
+  `X-Forwarded-For: 203.0.113.9` 를 보내면 그 값이 그대로 감사 기록에 남습니다.
+- `POST /api/system/log-event` 로 실측한 결과입니다. 헤더 없이 Next 를 거치면
+  `::ffff:127.0.0.1`, 위조 헤더를 붙이면 `203.0.113.9`, Flask 에 직접 보내면
+  `198.51.100.4` 가 기록되었습니다.
+- 같은 패턴이 세 자리에 있습니다. `app/__init__.py:207` 의 `_resolve_real_ip`,
+  `app/routes/common_update_routes.py:97` 의 `_resolve_request_ip`,
+  `services/kr_market_chatbot_request_helpers.py:212` 의 `extract_chatbot_client_ip`
+  입니다. 세 번째는 챗봇 대화 로그, 두 번째는 `/api/system/log-event` 의 IP 입니다.
+- **`ProxyFix(app.wsgi_app, x_for=1)` 로는 막지 못합니다.** 위조 값이 이미 헤더에 들어
+  있으므로 홉 수를 세는 것으로는 걸러지지 않습니다.
+- **`proxy.ts` 에서는 헤더를 지울 수는 있어도 다시 쓸 수는 없습니다.** Next 15 에서
+  `request.ip` 가 사라졌고, proxy 는 `??=` 가 실행된 뒤에 돌아 이미 채워진 헤더만
+  봅니다. 그 값이 클라이언트가 보낸 것인지 Next 가 붙인 것인지 구분할 방법이 없습니다.
+  그러므로 proxy 에서 지우는 것은 Flask 에서 헤더를 안 읽는 것과 결과가 같고,
+  「위조를 막으면서 진짜 IP 를 지키는」 길은 어느 쪽에도 없습니다.
+- 그러므로 이 항목은 앞단 배포 구조를 먼저 정해야 합니다. Flask 앞에 신뢰할 수 있는
+  리버스 프록시(nginx·Cloudflare 등)가 서는지, 아니면 Next 가 유일한 앞단인지에 따라
+  답이 갈립니다. 전자면 그 프록시가 헤더를 다시 쓰고 `ProxyFix` 의 홉 수를 그에 맞춥니다.
+  후자면 헤더를 버리고 `remote_addr` 만 쓰는 편이 정직합니다.
+- `[INFRA-039]` 가 바인딩을 좁혀 Flask 직접 경로는 막혔습니다. 남은 것은 Next 경유
+  위조이며, 그 경로로는 브라우저가 보낸 헤더가 그대로 통과합니다.
+- 기존 테스트 `tests/app/test_common_routes_refactor.py:288` 의
+  `assert captured["ip_address"] == "10.0.0.1"` 과
+  `tests/app/test_kr_market_chatbot_service.py:483` 이 지금의 헤더 신뢰 동작을 못 박고
+  있습니다. 방향을 바꾸면 이 둘도 함께 고쳐야 합니다.
+- QA 시나리오: 브라우저 개발자 도구로 `X-Forwarded-For` 를 붙여 요청해도 감사 로그에
+  그 값이 남지 않는다
+- [ ] 앞단 배포 구조를 확인해 헤더를 신뢰할지 버릴지 결정
+- [ ] 세 자리를 그 결정에 맞춤 (한 자리만 고치지 않는다)
+- [ ] 기존 테스트 두 건을 새 계약에 맞게 고침
+- [ ] 감사 로그의 IP 가 무엇을 뜻하는지 코드 주석에 적음
+
+### [INFRA-046] `Procfile` 이 지금 아키텍처에서 동작하지 않는 배포 방식을 남겨 둔다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-039]` 사이클의
+  `oh-my-claudecode:security-reviewer` 지적(심각도 중, 확신도 높음). 파일을 열어 확인했습니다.
+- `Procfile` 은 `web: gunicorn flask_app:app` 한 줄이며 **Flask 만 띄웁니다.** Next.js 를
+  띄우는 줄이 없습니다.
+- 그런데 `[INFRA-027]` 이후 신원 확정은 `frontend/src/proxy.ts` 가 맡습니다. proxy 가 없으면
+  `X-Auth-Identity` 를 붙이는 자리가 없어 **모든 요청이 익명으로 처리됩니다.** 챗봇 소유자
+  판정과 AI 분석, `[INFRA-037]` 이 세운 관리자 알림 게이트가 전부 막힙니다.
+- 동시에 PaaS 라우터가 그 프로세스를 인터넷에 공개하므로 Flask 가 직접 노출됩니다.
+  `[INFRA-039]` 가 다른 자리를 loopback 으로 좁힐 때 이 파일만 `0.0.0.0` 을 남긴 이유가
+  그 노출이며, 그래서 「앞단에서 이 포트를 막는다」는 지시가 성립하지 않습니다. 그 포트가
+  곧 서비스 포트이기 때문입니다.
+- 저장소에 PaaS 설정 파일(`app.json`·`render.yaml`·`fly.toml`·`Dockerfile` 등)이 하나도
+  없고, `Procfile` 은 2026-02-03 「Deployment Ready」 커밋 한 번으로 들어온 뒤 손대지
+  않았으며 어느 문서에도 언급이 없습니다. 실제로 쓰이는 경로가 아닐 가능성이 높습니다.
+- `[INFRA-039]` 는 이 파일에 「이 경로로 배포하지 않는다」는 주석을 달아 두었습니다.
+  주석은 임시 조치이며 파일 자체의 처리를 정해야 합니다.
+- 선택지는 셋입니다. (가) 파일을 지웁니다. 쓰이지 않는 것이 확인되면 가장 정직합니다.
+  (나) Next 와 Flask 를 함께 띄우도록 고칩니다. 그러려면 프로세스 두 개와 그 사이의
+  loopback 연결을 정의해야 합니다. (다) 지금처럼 주석만 두고 남깁니다.
+- 어느 쪽이든 실제 배포 계획을 먼저 확인해야 합니다.
+- [ ] 이 저장소가 PaaS 배포를 쓸 계획이 있는지 확인
+- [ ] 그 답에 따라 파일을 지우거나 두 프로세스로 고침
+- [ ] `services/identity_helpers.py` 와 `.env.example` 의 `Procfile` 언급을 결과에 맞춤
 
 ### [INFRA-038] 500 응답 본문이 서버 내부 경로를 그대로 흘린다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 보안 리뷰

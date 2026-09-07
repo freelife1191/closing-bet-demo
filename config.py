@@ -191,7 +191,8 @@ class AppConfig:
     """애플리케이션 전체 설정"""
     FLASK_DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     FLASK_PORT = int(os.getenv("FLASK_PORT", 5501))
-    FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
+    # 기본값은 loopback 이다. 넓히기 전에 .env.example 의 FLASK_HOST 주석을 읽는다.
+    FLASK_HOST = os.getenv("FLASK_HOST", "127.0.0.1")
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE = os.getenv("LOG_FILE", "logs/app.log")
 

@@ -64,11 +64,12 @@ def verify_identity_header(header: str | None, now: int | None = None) -> str | 
     # proxy 와 Flask 사이뿐이고 브라우저로 돌아가지 않는다는 것이다
     # (`proxy.ts` 가 `NextResponse.next({ request: { headers } })` 를 쓰는 이유다).
     #
-    # **그 전제를 코드가 강제하지 않으며, 현재 구성은 오히려 반대다.** 네 자리가 모두
-    # 모든 인터페이스에 바인딩한다: `config.py:194`(FLASK_HOST 기본값), `restart_all.sh:80`,
-    # `Procfile:1`, `app/__init__.py:299`. 이 함수도 요청이 proxy 를 거쳤는지 보지 않는다
-    # (remote_addr 검사가 없다). 그러므로 「loopback 이라 안전하다」고 읽으면 안 된다.
-    # 전제는 배포할 때 방화벽으로 세워야 하며, 바인딩을 좁히는 일은 `[INFRA-039]` 다.
+    # `[INFRA-039]` 가 그 전제를 좁혔다. 같은 네트워크의 임의 호스트에서 5501 에 직접
+    # 닿는 경로는 닫혔다. 그러나 전제가 완전히 강제된 것은 아니다. 실제 바인딩은 추적하지
+    # 않는 `.env` 의 값이 정하므로 코드가 보장하지 못하고, loopback 은 같은 호스트의 다른
+    # 프로세스를 막지 못하며, `FLASK_HOST` 를 넓힌 배포와 `Procfile` 경로는 그대로 전제
+    # 밖이다. 이 함수는 여전히 요청이 proxy 를 거쳤는지 보지 않는다(remote_addr 검사가
+    # 없다).
     """
     secret = os.environ.get("INTERNAL_IDENTITY_SECRET", "").strip()
     if not secret or not header:

@@ -77,7 +77,8 @@ rm -f services/scheduler.lock
 
 source venv/bin/activate
 # Use Gunicorn as in Procfile
-nohup gunicorn flask_app:app --bind 0.0.0.0:$FLASK_PORT --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
+# 바인딩은 11행에서 source 한 .env 의 FLASK_HOST 를 따르며 기본은 loopback 이다.
+nohup gunicorn flask_app:app --bind "${FLASK_HOST:-127.0.0.1}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
 deactivate
 BACKEND_PID=$!
 

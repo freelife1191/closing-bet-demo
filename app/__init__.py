@@ -293,7 +293,3 @@ def create_app():
     _register_core_routes(app)
     _register_global_error_handler(app)
     return app
-
-if __name__ == '__main__':
-    app = create_app()
-    app.run(host='0.0.0.0', port=5501, debug=True)

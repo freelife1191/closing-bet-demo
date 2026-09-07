@@ -61,7 +61,7 @@
 # === 서버 포트 ===
 FRONTEND_PORT=3500
 FLASK_PORT=5501
-FLASK_HOST=0.0.0.0
+FLASK_HOST=127.0.0.1  # Next 가 loopback 으로만 부른다. 넓히려면 .env.example 의 설명을 먼저 읽자
 
 # === Gemini (Vertex AI 단일 경로) ===
 # Gemini 호출은 Vertex AI로 일원화되어 있습니다. 서비스 계정 JSON 키를 발급해 경로를 지정하세요.
