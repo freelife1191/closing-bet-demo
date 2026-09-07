@@ -69,8 +69,23 @@
   확정된 요청만 보는데 이 라우트들은 신원을 아예 보지 않기 때문입니다. 공개 배포에서는
   공격자가 직접 부를 수 있어 CSRF 가 더할 것이 없고, loopback 으로만 열린 개발기에서는
   브라우저가 유일한 통로라 실질 위험이 남습니다.
+- 2026-09-07 `[INFRA-041]` 사이클의 `oh-my-claudecode:security-reviewer` 가 목록에 없던
+  라우트 하나를 더 찾고 화면 쪽 대응 위치를 짚었습니다(확신도 높음).
+  `app/routes/common_update_routes.py:124` 의 `POST /api/system/start-update` 가 검사 없이
+  백그라운드 갱신 스레드를 띄웁니다. 화면 대응은 `frontend/src/app/dashboard/data-status/page.tsx:303`
+  과 `:330` 의 `handleUpdate`·`handleUpdateAll` 입니다. 나머지 화면 대응은
+  `closing-bet/page.tsx:1728` 의 `requestCostlyAction`(→ `jongga-v2/run`), 같은 파일 `:918`
+  의 `requestRetryAnalysis`(→ `reanalyze-gemini`, 카드마다 붙어 있음),
+  `vcp/page.tsx:1254`(→ `signals/run`) 입니다. **게이트를 세우면 이 자리들의 오류 처리도
+  함께 봐야 합니다.**
+- 같은 리뷰가 확인한 바로, 저장소 전체에서 서버 측 관리자 게이트는 두 자리뿐입니다.
+  `common_notification_routes.py:135` 가 `is_admin_email(g.get("user_email"))` 을,
+  `common_update_routes.py:229` 가 `verify_admin_api_token` 을 씁니다. **판정 방식이 서로
+  다르므로** 데코레이터를 만들 때 어느 쪽을 표준으로 삼을지 먼저 정해야 합니다. 전자는
+  브라우저에서 온 관리자를, 후자는 Next 라우트 핸들러가 중계한 서버 요청을 받습니다.
 - QA 시나리오: 신원 없이 보낸 `POST /api/kr/jongga-v2/message` 가 403 을 받고 발송이 없다
-- [ ] 세 라우트에 요구할 권한 수준을 정함
+- [ ] 세 라우트에 요구할 권한 수준을 정함. 기존 게이트 둘의 판정 방식이 다르므로 어느
+  쪽을 표준으로 삼을지 함께 정한다
 - [ ] 게이트를 데코레이터로 묶고 세 라우트에 적용
 - [ ] `{"force": true}` 로도 우회되지 않는 것을 확인하는 테스트 추가
 - [ ] 발송 없이 확인할 수 있는 QA 수단을 정함 (`.env` 에 실제 자격 증명이 들어 있음)
