@@ -19,8 +19,8 @@ vi.mock('next-auth/jwt', () => ({
 
 import { proxy } from './proxy';
 
-function requestWith(headers: Record<string, string>) {
-  return { headers: new Headers(headers) } as never;
+function requestWith(headers: Record<string, string>, method = 'GET') {
+  return { headers: new Headers(headers), method } as never;
 }
 
 /** NextResponse.next({ request: { headers } }) 가 상류로 넘긴 요청 헤더를 꺼낸다. */
@@ -108,5 +108,77 @@ describe('proxy', () => {
     const res = await proxy(requestWith({ 'X-Session-Id': 'anon_abc' }));
 
     expect(forwardedHeaders(res).get('x-session-id')).toBe('anon_abc');
+  });
+});
+
+// [INFRA-040] 교차 출처 차단 회귀 검사. 지금 이 경로가 뚫려 있지 않은 이유는 이 저장소의
+// 코드가 아니라 next-auth 세션 쿠키의 sameSite: 'lax' 기본값이다. 아래 검사들이 그 방어를
+// 이 파일의 코드로 옮겨 두었음을 고정한다.
+describe('proxy 의 교차 출처 차단', () => {
+  it('로그인한 사용자의 교차 출처 POST 를 403 으로 끊는다', async () => {
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+
+    const res = await proxy(requestWith({ 'Sec-Fetch-Site': 'cross-site' }, 'POST'));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('Sec-Fetch-Site 가 없는 비안전 요청도 끊는다', async () => {
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+
+    const res = await proxy(requestWith({}, 'DELETE'));
+
+    expect(res.status).toBe(403);
+  });
+
+  // 소문자 메서드는 지금 Node 와 gunicorn 의 HTTP 파서가 400 으로 끊는다. 그 방어가
+  // 우리 코드 밖에 있으므로 여기서도 닫아 둔다. 이 항목이 고치는 결함 자체가 「방어의
+  // 근거가 라이브러리 기본값에만 있다」였다.
+  it('메서드가 소문자여도 막는다', async () => {
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+
+    const res = await proxy(requestWith({ 'Sec-Fetch-Site': 'cross-site' }, 'post'));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('같은 오리진의 POST 에는 서명을 붙인다', async () => {
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+
+    const res = await proxy(requestWith({ 'Sec-Fetch-Site': 'same-origin' }, 'POST'));
+
+    expect(res.status).toBe(200);
+    expect(forwardedHeaders(res).get('x-auth-identity')).toBeTruthy();
+  });
+
+  it('교차 출처라도 GET 은 막지 않는다', async () => {
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+
+    const res = await proxy(requestWith({ 'Sec-Fetch-Site': 'cross-site' }, 'GET'));
+
+    expect(res.status).toBe(200);
+    expect(forwardedHeaders(res).get('x-auth-identity')).toBeTruthy();
+  });
+
+  // 아래 둘이 차단을 거는 위치를 고정한다. 첫째는 검사가 익명 요청까지 막지 않는 것을,
+  // 둘째는 검사가 서명 블록 안으로 들어가지 않는 것을 잡는다. 둘째가 특히 조용하다.
+  // INTERNAL_IDENTITY_SECRET 이 빈 배포에서 차단만 꺼지는데, app/api/system/env 의
+  // 관리자 게이트는 그 값을 보지 않아 살아 있고 .env 쓰기까지 닿는다.
+  it('세션이 없으면 교차 출처 POST 도 막지 않고 익명으로 넘긴다', async () => {
+    mockGetToken.mockImplementation(async () => null);
+
+    const res = await proxy(requestWith({ 'Sec-Fetch-Site': 'cross-site' }, 'POST'));
+
+    expect(res.status).toBe(200);
+    expect(forwardedHeaders(res).get('x-auth-identity')).toBeNull();
+  });
+
+  it('INTERNAL_IDENTITY_SECRET 이 비어도 로그인 사용자의 교차 출처 POST 는 막는다', async () => {
+    vi.stubEnv('INTERNAL_IDENTITY_SECRET', '');
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+
+    const res = await proxy(requestWith({ 'Sec-Fetch-Site': 'cross-site' }, 'POST'));
+
+    expect(res.status).toBe(403);
   });
 });
