@@ -7,7 +7,7 @@ Common 라우트 분해 회귀 테스트
 import os
 import sys
 
-from flask import Flask
+from flask import Flask, g
 
 
 sys.path.insert(
@@ -18,7 +18,7 @@ from app.routes import common
 from app.routes import common_update_routes
 
 
-def _create_client():
+def _create_app():
     app = Flask(__name__)
     app.testing = True
     # [INFRA-027] 활동 로그의 user_id 는 before_request 가 검증해 둔 g 에서 온다.
@@ -26,6 +26,29 @@ def _create_client():
 
     _register_request_context(app)
     app.register_blueprint(common.common_bp, url_prefix="/api")
+    return app
+
+
+def _create_client():
+    return _create_app().test_client()
+
+
+def _admin_client(monkeypatch, admin_email="notify-admin@example.com"):
+    """관리자 신원을 세운 클라이언트를 만든다.
+
+    [INFRA-037] 이 알림 발송 라우트에 관리자 게이트를 세웠으므로, 그 뒤의 동작을
+    검증하려면 신원이 있어야 한다. 서명을 실제로 검증하는 경로는
+    tests/app/test_notification_admin_gate.py 가 보므로 여기서는 검증을 마친
+    g.user_email 을 직접 세운다. 따라서 이 파일의 알림 테스트는 게이트를 통과하는지
+    여부를 검증하지 않는다. 게이트를 지워도 이 아래 다섯 건은 그대로 통과한다.
+    """
+    monkeypatch.setenv("ADMIN_EMAILS", admin_email)
+    app = _create_app()
+
+    @app.before_request
+    def _grant_identity():
+        g.user_email = admin_email
+
     return app.test_client()
 
 
@@ -138,7 +161,7 @@ def test_send_test_notification_uses_messenger_compat_interface(monkeypatch):
 
     monkeypatch.setattr(messenger_module, "Messenger", _DummyMessenger)
 
-    client = _create_client()
+    client = _admin_client(monkeypatch)
     response = client.post("/api/notification/send", json={"platform": "discord"})
 
     assert response.status_code == 200
@@ -148,8 +171,8 @@ def test_send_test_notification_uses_messenger_compat_interface(monkeypatch):
     assert created[0].calls[0][1]["title"].startswith("[Test] DISCORD")
 
 
-def test_send_test_notification_rejects_unknown_platform():
-    client = _create_client()
+def test_send_test_notification_rejects_unknown_platform(monkeypatch):
+    client = _admin_client(monkeypatch)
     response = client.post("/api/notification/send", json={"platform": "slack"})
 
     assert response.status_code == 400
@@ -158,8 +181,8 @@ def test_send_test_notification_rejects_unknown_platform():
     assert "Unknown platform" in payload["message"]
 
 
-def test_send_test_notification_requires_platform():
-    client = _create_client()
+def test_send_test_notification_requires_platform(monkeypatch):
+    client = _admin_client(monkeypatch)
     response = client.post("/api/notification/send", json={})
 
     assert response.status_code == 400
@@ -190,7 +213,7 @@ def test_send_test_notification_returns_config_error_for_unconfigured_platform(m
 
     monkeypatch.setattr(messenger_module, "Messenger", _DummyMessenger)
 
-    client = _create_client()
+    client = _admin_client(monkeypatch)
     response = client.post("/api/notification/send", json={"platform": "discord"})
 
     assert response.status_code == 400
@@ -221,7 +244,7 @@ def test_send_test_notification_handles_send_exception(monkeypatch):
 
     monkeypatch.setattr(messenger_module, "Messenger", _DummyMessenger)
 
-    client = _create_client()
+    client = _admin_client(monkeypatch)
     response = client.post("/api/notification/send", json={"platform": "discord"})
 
     assert response.status_code == 500

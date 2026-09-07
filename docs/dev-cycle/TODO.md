@@ -28,14 +28,54 @@
   수행합니다. 발송 대상은 운영자가 설정한 채널이므로 스팸 통로가 됩니다.
 - `[INFRA-025]` 가 화면 쪽 `handleTestNotification` 에 `if (!isAdmin) return;` 을
   두었지만 그것은 화면의 편의일 뿐 엔드포인트를 닫지 않습니다.
-- 같은 사이클이 세운 방식을 그대로 쓸 수 있습니다. `frontend/src/app/api/system/env/`
-  의 라우트 핸들러와 `services/admin_helpers.py` 의 `verify_admin_api_token` 이
-  본보기입니다. 두 번째 호출자가 생기므로 그때 게이트를 함수나 데코레이터로 묶는 것을
-  함께 검토합니다.
-- [ ] 이 경로에 어떤 권한을 요구할지 정함. 관리자 전용인지, 로그인 사용자까지인지
-- [ ] `frontend/src/app/api/notification/send/route.ts` 로 세션 확인을 거치게 함
-- [ ] Flask 에 게이트를 걸고 rewrite 에서 이 경로를 제외
-- [ ] 토큰 없는 요청이 403 을 받는 것을 확인하는 테스트 추가
+- 같은 사이클이 세운 `X-Admin-Token` 방식(`frontend/src/app/api/system/env/` 의 라우트
+  핸들러와 `services/admin_helpers.py` 의 `verify_admin_api_token`)을 본보기로 적었으나,
+  그 뒤 `[INFRA-027]` 이 `frontend/src/proxy.ts` 에 신원 서명을 도입했습니다. 그 파일의
+  `matcher: ['/api/((?!auth/).*)']` 가 이 경로에도 이미 서명을 붙이고 `app/__init__.py:179`
+  가 검증해 `g.user_email` 에 넣으므로, 라우트 핸들러를 새로 만들고 rewrite 를 고칠 필요
+  없이 Flask 한 자리에서 그 값을 읽으면 됩니다.
+- 게이트를 함수나 데코레이터로 묶는 일은 하지 않습니다. `/api/system/env` 는
+  `X-Admin-Token` 을, 이 경로는 `g.user_email` 을 쓰므로 묶을 공통 판정이 없습니다.
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 19:58
+  | 범위: `app/routes/common_notification_routes.py` 에 관리자 게이트를 더하고 회귀 테스트를 붙임
+  | 실제 대화 근거: 2026-09-07 사용자가 「다음 라운드 진행해야할 사항 검토해서 진행해줘」로
+  라운드를 열었고, 같은 세션의 질문에서 게이트 방식 「g.user_email 신원 서명」과 권한 수준
+  「관리자 전용」을 골랐습니다.
+- QA 시나리오: 신원 서명 없이 보낸 `POST /api/notification/send` 가 403 을 받고 발송이 일어나지 않는다
+- [x] 이 경로에 어떤 권한을 요구할지 정함 → 관리자 전용. 발송에 쓰는 자격 증명과 도착
+  채널이 모두 운영자의 것이라, 로그인만 요구하면 가입 한 번으로 같은 스팸 통로가 남습니다
+- [x] Flask 라우트에 `is_admin_email(g.get("user_email"))` 게이트를 검
+- [x] 서명 없는 요청·비관리자 서명·관리자 서명 세 갈래를 고정하는 테스트 추가 —
+  `tests/app/test_notification_admin_gate.py` 9건. 게이트를 임시로 지우면 5건이 실패하고
+  플랫폼 판정 순서를 되돌리면 1건이 실패하는 것으로 실효성을 확인했습니다
+- [x] 게이트 뒤 동작을 보던 기존 테스트 5건에 관리자 신원을 부여 —
+  `tests/app/test_common_routes_refactor.py` 에 `_admin_client` 를 더했습니다. 서명 생성을
+  세 번째로 복제하지 않으려고 검증을 마친 `g.user_email` 을 직접 세우는 방식을 썼습니다
+- [x] `/ponytail-review` — 지적 3건 가운데 2건 반영. 인코딩 우회 주석 두 줄과 가짜 Messenger
+  의 쓰지 않는 telegram·email 속성을 걷어냈습니다. `test_forged_identity_header_is_rejected`
+  삭제 제안은 미반영입니다. 서명이 아예 없는 경우와 서명이 틀린 경우는 다른 층이고,
+  게이트가 `if header is None` 같은 얕은 검사로 퇴화하면 전자만 잡히기 때문입니다
+- [x] `feature-dev:code-reviewer` — 차단 결함 없음. 권고 3건 가운데 2건을 이 항목에서
+  반영했습니다. `_PLATFORM_SPECS` 판정을 `Messenger()` 생성보다 앞으로 옮겨 알 수 없는
+  플랫폼 요청에서 자격 증명으로 Messenger 가 세워지지 않게 했고, `ADMIN_EMAILS` 미설정과
+  `INTERNAL_IDENTITY_SECRET` 미설정에서 403 임을 고정하는 테스트 2건을 더했습니다. 선택
+  사항 두 가지(헬퍼 docstring 한 문장, `identity_helpers.py` 를 가리키는 주석 한 줄)도
+  함께 반영했습니다. 만료 서명 테스트와 `_sign` 중복 정리는 검토자 스스로 지금은 불필요
+  하다고 판단해 미반영입니다. 나머지 1건은 `[INFRA-042]` 로 이월했습니다
+- [x] `oh-my-claudecode:security-reviewer` — 우회로 없음, 새로 만든 보안 위험 없음.
+  `request.get_json()` 에 `silent=True` 를 붙이지 않는 것이 지금 CSRF 를 막고 있다는
+  지적을 받아 그 줄에 이유를 적었습니다. 나머지는 `[INFRA-042]`·`[INFRA-043]` 으로
+  이월하고 인접 지적 둘을 `[INFRA-039]` 에 덧붙였습니다
+- [x] 시크릿 확인 3항 — 추적되는 env 파일은 `.env.example` 하나뿐이고,
+  `NEXT_PUBLIC_` 접두사가 붙은 변수는 `NEXT_PUBLIC_API_URL` 과 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+  둘 다 비밀이 아니며, 403 본문과 로그에 자격 증명이 실리지 않는 것을 확인했습니다
+- [x] pytest 전체 1792건 통과, vitest 전체 328건 통과, `tsc --noEmit` 통과
+- [ ] QA 2단계 — 시나리오 `docs/dev-cycle/qa/INFRA-037.md` 9건
+- **리뷰 중 사고**: 코드 리뷰 에이전트가 경계 조건을 실측하다가 관리자 신원으로 요청을
+  통과시켜 **운영 디스코드 채널에 `[Test] DISCORD Notification` 한 건이 실제로 도착**
+  했습니다. 텔레그램·이메일은 요청조차 없었습니다. 원인은 이 세션의 「알림 테스트 발송을
+  하지 않는다」 제약을 리뷰 프롬프트에 전달하지 않은 것입니다. 두 에이전트에 발송 금지와
+  대체 실측 방법(`carrier-pigeon` 으로 `400 Unknown platform` 확인)을 전달했습니다
 
 ### [INFRA-039] Flask 가 모든 인터페이스에 바인딩해 신원 서명의 전제가 관례에 머문다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
@@ -65,7 +105,15 @@
 - [ ] 바인딩 주소를 환경별로 정하는 방식을 결정 (`FLASK_HOST` 기본값과 PaaS 예외)
 - [ ] `config.py`·`restart_all.sh`·`Procfile`·`app/__init__.py` 네 자리를 그 방식에 맞춤
 - [ ] `app.run(debug=True)` 를 개발 진입점에서도 loopback 으로 좁힘
-- [ ] `.env.example` 에 이유를 적음
+- 2026-09-07 `[INFRA-037]` 사이클의 보안 리뷰가 이 항목에 인접한 두 가지를 더 지적했습니다
+  (심각도 낮음, 확신도 높음). 첫째, `app/__init__.py:207` 의 `_resolve_real_ip` 가
+  `X-Forwarded-For` 를 무조건 신뢰합니다. 신뢰할 수 있는 프록시 없이 Flask 에 직접 닿으면
+  감사 기록의 IP 를 요청자가 정합니다. 바인딩을 좁히면 상당 부분 해소되므로 여기서 함께
+  봅니다. 둘째, `.env.example:170` 의 `INTERNAL_IDENTITY_SECRET` 주석이 「챗봇 소유자 판정과
+  AI 분석이 막힌다」까지만 적고 있는데, `[INFRA-037]` 이후로는 관리자의 알림 테스트 발송도
+  같은 이유로 막힙니다. 이 항목이 이미 `.env.example` 을 건드리므로 그때 함께 고칩니다.
+- [ ] `.env.example` 에 이유를 적음 (위의 알림 테스트 문구 보완 포함)
+- [ ] `_resolve_real_ip` 가 신뢰할 수 있는 프록시 뒤에서만 헤더를 읽도록 함
 - [ ] `services/identity_helpers.py` 의 `# ponytail:` 주석에서 이월 표시를 걷어냄
 
 ### [INFRA-040] 인증이 쿠키 파생으로 바뀌면서 CSRF 노출이 생겼다
@@ -100,6 +148,64 @@
 - QA 시나리오: `?email=<관리자 이메일>` 로 불러도 관리자로 판정되지 않는다
 - [ ] `common_admin_routes.py:25` 를 `g.get("user_email")` 로
 - [ ] 쿼리 파라미터로 판정하던 동작이 사라졌음을 고정하는 검사 추가
+
+### [INFRA-042] 종가베팅 실행·발송 라우트 셋이 권한 검사 없이 열려 있다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
+  `feature-dev:code-reviewer` 와 `oh-my-claudecode:security-reviewer` 가 각각 확신도 높음으로
+  지적했습니다. 코드를 직접 열어 확인했습니다.
+- `[INFRA-037]` 이 `/api/notification/send` 를 닫았지만 **같은 자격 증명으로 같은 채널에
+  발송하는 경로가 그대로 남아 있습니다.** `kr_bp` 에는 블루프린트 수준 게이트가 없고,
+  저장소 전체에서 `before_request` 는 `app/__init__.py:169` 하나뿐인데 그것은 신원을 확정만
+  할 뿐 강제하지 않습니다.
+- `app/routes/kr_market_jongga_execution_routes.py:194` 의 `POST /api/kr/jongga-v2/message` 는
+  권한 검사 없이 `Messenger().send_screener_result` 를 부릅니다. 막아 놓은 쪽보다 나쁩니다.
+  보내는 것이 `[Test]` 표지가 붙은 견본이 아니라 **실제 종가베팅 시그널 메시지**라 구독자는
+  정상 발송과 구분하지 못하고, 본문에 `{"force": true}` 를 넣으면 `claim_jongga_notification_send`
+  중복 가드까지 건너뛰므로 횟수 제한이 없습니다.
+- 같은 파일 `:98` 의 `POST /api/kr/jongga-v2/run` 도 게이트가 없고, 백그라운드 파이프라인이
+  끝에서 `services/kr_market_jongga_runtime_service.py:129` 의 `_send_jongga_notification_from_result`
+  를 부릅니다. 발송에 더해 스크리너 전체 실행과 LLM 호출 비용이 무인증으로 발생합니다.
+  같은 파일 `:167` 의 `reanalyze-gemini` 는 발송은 없지만 같은 비용 문제를 안고 있습니다.
+- **여기가 게이트를 묶을 자리입니다.** `[INFRA-037]` 은 호출자가 하나라 라우트에 두 줄을
+  두었지만, 이 항목이 두 번째와 세 번째 사본을 만듭니다. 라우트마다 붙여 나가면 다음에
+  추가되는 발송 라우트에서 같은 일이 되풀이되므로 작은 데코레이터 하나로 묶습니다.
+- QA 시나리오: 신원 없이 보낸 `POST /api/kr/jongga-v2/message` 가 403 을 받고 발송이 없다
+- [ ] 세 라우트에 요구할 권한 수준을 정함
+- [ ] 게이트를 데코레이터로 묶고 세 라우트에 적용
+- [ ] `{"force": true}` 로도 우회되지 않는 것을 확인하는 테스트 추가
+- [ ] 발송 없이 확인할 수 있는 QA 수단을 정함 (`.env` 에 실제 자격 증명이 들어 있음)
+
+### [INFRA-043] 알림 발송 예외 로그가 텔레그램 봇 토큰과 디스코드 웹훅을 그대로 적는다
+- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
+  `oh-my-claudecode:security-reviewer` 지적(심각도 중간, 메커니즘 확신도 높음)
+- `engine/messenger_senders.py:66` 과 `:92` 가 `logger.error(f"... 오류: {e}")` 로 예외
+  문자열을 그대로 적습니다. `requests` 예외 메시지는 요청 URL 을 통째로 담는데, 텔레그램
+  URL 은 `https://api.telegram.org/bot<TOKEN>/sendMessage` 라 **봇 토큰이 곧 경로**이고
+  디스코드는 웹훅 URL 자체가 비밀입니다. 연결 실패나 타임아웃 한 번이면 `logs/backend.log`
+  에 자격 증명이 평문으로 남습니다.
+- 종전부터 있던 위험이며 `[INFRA-037]` 이 만든 것이 아닙니다. 다만 그 항목이 호출자를
+  관리자로 좁혔으므로 지금이 고치기 쉬운 시점입니다.
+- `type(e).__name__` 만 적으면 진단 가치를 거의 잃지 않고 닫힙니다. 같은 함수의 `:60` 과
+  `:86` 이 쓰는 `resp.text` 는 상대 서버 응답이라 자격 증명이 없으므로 그대로 둡니다.
+- 2026-09-07 시점의 `logs/` 세 파일을 `.env` 의 실제 값과 대조해 지금은 노출이 없음을
+  확인했습니다. 발송이 성공해 예외가 나지 않은 덕입니다.
+- 같은 리뷰가 이 파일 묶음에서 두 가지를 더 지적했고, 검토자가 함께 보기를 권했습니다.
+  - **`NOTIFICATION_ENABLED=false` 가 테스트 발송을 막지 못합니다** (확신도 높음).
+    `MessengerConfig.disabled` 는 `engine/messenger.py:115` 와 `:152` 에서만 확인되고
+    `_send_discord`·`_send_telegram`·`_send_email` 은 그것을 보지 않습니다. 알림을 꺼 둔
+    환경에서도 `/api/notification/send` 는 실제로 발송합니다. **2026-09-07 `[INFRA-037]`
+    사이클에서 검토자가 실수로 운영 디스코드 채널에 테스트 메시지를 한 건 보낸 사고가
+    있었는데, 환경 변수로 그것을 막으려 해도 지금 구조에서는 막히지 않습니다.**
+  - **발송이 실패해도 `success` 가 나갑니다** (보안 사안 아님).
+    `_send_platform_test_notification` 이 sender 의 반환 bool 을 버리므로, 발송기가 내부에서
+    False 를 돌려줘도 화면에는 「발송 성공」이 뜹니다. 「테스트 발송」의 목적과 어긋납니다.
+- QA 시나리오: 웹훅 주소를 닿지 않는 값으로 두고 발송하면 로그에 URL 이 남지 않는다
+- [ ] 두 자리의 예외 로그에서 예외 문자열을 걷어냄
+- [ ] 같은 형태가 다른 sender 나 모듈에 더 있는지 확인
+- [ ] 정지 스위치가 세 sender 를 실제로 덮게 함
+- [ ] sender 의 반환 bool 을 응답에 반영
+- [ ] 로그에 비밀이 남지 않는 것을 고정하는 테스트 추가
+
 
 ### [INFRA-038] 500 응답 본문이 서버 내부 경로를 그대로 흘린다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 보안 리뷰
