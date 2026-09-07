@@ -19,8 +19,9 @@ from app.routes.kr_market_signal_common import (
     _VALID_AI_ACTIONS,
 )
 from engine.config import config as signal_config
-from engine.pandas_utils_safe import safe_bool, safe_confidence
+from engine.pandas_utils_safe import safe_bool, safe_confidence, safe_optional_float
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
+from engine.signal_tracker_ai_helpers import AI_PROMPT_NUMERIC_FIELDS
 
 # AI 추천을 담는 세 필드. legacy 보강과 시그널 병합이 같은 목록을 봐야 한다. 두 번째
 # 프로바이더는 VCP_SECOND_PROVIDER 와 PERPLEXITY_API_KEY 를 읽어 실행 시점에 정해지고
@@ -71,18 +72,22 @@ def _is_valid_ai_recommendation(recommendation: Any) -> bool:
 
 def _build_vcp_stock_payload(row: dict) -> dict:
     """VCP 재분석 요청용 단일 종목 payload 생성."""
-    return {
+    payload: dict = {
         "ticker": str(row.get("ticker", "")).zfill(6),
         "name": row.get("name", ""),
-        "current_price": _safe_float(row.get("current_price", row.get("entry_price", 0))),
-        "score": _safe_float(row.get("score", 0)),
-        "vcp_score": _safe_float(row.get("vcp_score", 0)),
-        "contraction_ratio": _safe_float(row.get("contraction_ratio", 0)),
-        "foreign_5d": _safe_float(row.get("foreign_5d", 0)),
-        "inst_5d": _safe_float(row.get("inst_5d", 0)),
-        "foreign_1d": _safe_float(row.get("foreign_1d", 0)),
-        "inst_1d": _safe_float(row.get("inst_1d", 0)),
     }
+
+    current_price = safe_optional_float(row.get("current_price"))
+    if current_price is None:
+        current_price = safe_optional_float(row.get("entry_price"))
+    if current_price is not None:
+        payload["current_price"] = current_price
+
+    for field in AI_PROMPT_NUMERIC_FIELDS:
+        value = safe_optional_float(row.get(field))
+        if value is not None:
+            payload[field] = value
+    return payload
 
 
 def _build_vcp_stock_payloads(rows: List[dict]) -> List[dict]:

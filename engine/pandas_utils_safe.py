@@ -7,6 +7,7 @@ NaN/Inf-safe value conversion and JSON sanitization helpers.
 """
 
 import logging
+import math
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -40,6 +41,27 @@ def safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (ValueError, TypeError):
         return default
+
+
+def safe_optional_float(value: Any) -> Optional[float]:
+    """유한한 실수로 읽히는 값만 반환하고, 없거나 비었거나 NaN·inf 면 None 을 반환한다.
+
+    `safe_float` 와 달리 「값이 없음」과 「값이 0」을 구분한다. AI 프롬프트에 실을 숫자를
+    고르는 자리에서 이 구분이 필요하다. 없는 값을 0 으로 채우면 프롬프트가 그 0 을 사실로
+    적고, 모델은 있지도 않은 수치를 근거로 판정한다.
+    """
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+
+    # 빈 문자열과 읽을 수 없는 문자열은 float() 이 ValueError 로 알려 준다.
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return numeric if math.isfinite(numeric) else None
 
 
 def safe_confidence(value: Any) -> Optional[int]:

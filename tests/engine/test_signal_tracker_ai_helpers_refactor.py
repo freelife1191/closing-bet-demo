@@ -59,6 +59,46 @@ def test_build_ai_batch_payload_maps_fields():
     assert payload[0]["score"] == 77
 
 
+def test_build_ai_batch_payload_omits_absent_and_unreadable_fields():
+    """[VCP-011] 없는 값은 0 으로 채우지 않고 키째로 뺀다.
+
+    이 payload 는 build_vcp_prompt 로 그대로 들어간다. 0 을 채우면 프롬프트가 그 0 을
+    사실 진술로 적고, 수축 비율 0 은 「완벽한 수축」이라는 정반대의 뜻이 된다.
+    """
+    signals_df = pd.DataFrame(
+        [
+            {
+                "ticker": "000001",
+                "name": "테스트주",
+                "entry_price": 12345,
+                "score": 77,
+                "contraction_ratio": float("nan"),
+            }
+        ]
+    )
+
+    payload = build_ai_batch_payload(signals_df)[0]
+
+    assert payload["score"] == 77
+    assert "contraction_ratio" not in payload
+    assert "vcp_score" not in payload
+    assert "foreign_1d" not in payload
+    assert "inst_1d" not in payload
+
+
+def test_build_ai_batch_payload_prefers_current_price_over_entry_price():
+    """[VCP-011] 프롬프트의 「현재가」 출처를 재분석 경로와 맞춘다.
+
+    예전에는 이 경로만 entry_price 를 현재가로 실어, 같은 화면인데 어느 경로가
+    돌았느냐로 프롬프트가 본 현재가가 달랐다.
+    """
+    signals_df = pd.DataFrame(
+        [{"ticker": "000001", "name": "A", "entry_price": 100, "current_price": 130}]
+    )
+
+    assert build_ai_batch_payload(signals_df)[0]["current_price"] == 130.0
+
+
 def test_apply_ai_results_sets_fallback_when_missing():
     signals_df = pd.DataFrame(
         [

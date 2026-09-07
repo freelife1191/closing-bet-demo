@@ -18,6 +18,39 @@
 
 ### [VCP-011] VCP 상세의 AI 요약이 표·차트와 다른 수축비율과 점수를 말한다
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: 2026-09-02 VCP-010 진행 중 브라우저 실측
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 14:40
+  | 범위: 프롬프트 payload 생성기 두 벌이 자료에 없는 값을 0 으로 지어내지 않게 하고,
+  두 생성기의 필드를 맞추며, 모달 카드의 점수 라벨과 그 아래 고정 서술문을 실제 값에
+  맞춘다. `engine/vcp_ai_analyzer_helpers.py` 는 열지 않는다
+  | 실제 대화 근거: 2026-09-07 사용자 「다음 라운드 진행해야할 사항 검토해서 진행해줘」와
+  같은 세션의 AskUserQuestion 두 건 응답(「payload 에서 키를 빼 N/A 로」,
+  「고정 서술문도 함께 고친다」)
+- 티어 판정: T2. 건드릴 네 파일 모두 `tier-rules.md` §2 위험 경로 밖이다.
+  `engine/signal_tracker_ai_helpers.py` 는 `[VCP-022]` 가 목록 편입을 검토 중이나 그
+  항목이 「그 사이에 다른 항목이 이 파일을 건드리면 현행 목록대로 T2 로 판정한다」고
+  적어 두었다. 프론트엔드 문서는 `01-app/01-getting-started/05-server-and-client-components.md`
+  를 읽었고, 내용 기반 스킬 셋(`vercel-composition-patterns`,
+  `vercel-react-best-practices`, `next-upgrade`)은 어느 조건에도 걸리지 않아 쓰지 않는다
+- QA 시나리오: 2026-05-05 의 SK 상세에서 표의 `Cont.` 열, 모달의 수축비율, 점수 카드,
+  AI 사유 본문이 서로 같은 값을 가리킨다
+- 2026-09-07 진단으로 밝힌 것 넷:
+  1. `data/signals_log.csv` 에는 `foreign_1d`·`inst_1d` 열이 없다(열 21개 확인). 그런데
+     `app/routes/kr_market_vcp_signal_helpers.py:83-84` 가 `row.get("foreign_1d", 0)` 로
+     읽어 언제나 `0.0` 을 싣는다. 프롬프트는 그 값을 「외국인 1일(오늘) 순매수: 0.0주」로
+     사실처럼 적고 바로 다음 줄에서 「오늘의 변화를 중요하게 고려하십시오」라고 지시한다.
+     `data/kr_ai_analysis_20260505.json` 의 Gemini·GPT 두 사유가 실제로 그 0 을 근거로
+     「단기 수급 공백」이라며 관망을 권했다. 없는 사실로 판정이 갈렸다.
+  2. payload 생성기가 두 벌이고 서로 다르다. `engine/signal_tracker_ai_helpers.py:42-58`
+     은 두 열을 아예 싣지 않아 프롬프트가 `N/A` 를 적고 `current_price` 자리에
+     `entry_price` 를 넣는다. 같은 화면인데 어느 경로가 돌았느냐로 입력이 달라진다.
+  3. 점수 어긋남의 절반은 이름 문제다. `score`(종합 시그널 점수 0~100)와
+     `vcp_score`(VCP 패턴 보조 점수 0~20)는 다른 값인데 모달 카드
+     (`frontend/src/app/dashboard/kr/vcp/page.tsx:1807-1808`)가 `score` 를 「VCP Score」
+     라고 부른다. SK 의 CSV 행은 `score` 100, `vcp_score` 17.0 이다. 요약문의
+     「VCP 패턴 보조 점수 3.0점」과 카드의 `100.0` 은 애초에 다른 값을 가리켰다.
+  4. `1.8811` 의 출처는 복구할 수 없다. `data/` 를 전수로 훑었으나 SK 의 수축비율로 그
+     값을 가진 자료 파일이 없고 그 숫자는 AI 사유 본문에만 남아 있다. 프롬프트에 넘긴
+     값을 어디에도 남기지 않기 때문이며, 아래 두 번째 체크박스가 가리키는 구멍이다.
 - `2026-05-05` 의 SK(034730) 상세에서 표와 차트 하단은 수축비율 `0.41` 을 보여 주는데,
   같은 패널의 Gemini 요약문은 "수축 비율 1.8811" 이라고 적습니다. 점수도 어긋나서,
   `VCP SCORE` 카드는 `100.0` 인데 요약문은 "VCP 패턴 보조 점수가 3.0점으로 다소 낮게
@@ -25,8 +58,31 @@
 - `data/kr_ai_analysis_20260505.json` 의 해당 항목에는 `contraction_ratio` 와
   `vcp_score` 가 모두 `None` 이고, `1.8811` 은 `gemini_recommendation` 의 본문 안에만
   있습니다. 즉 AI 를 호출할 때 넘긴 값이 `signals_log.csv` 의 값과 달랐습니다.
-- [ ] AI 프롬프트에 싣는 수축비율과 VCP 점수의 출처를 표·차트와 같은 자리로 통일
-- [ ] 프롬프트에 넘긴 값이 응답 저장분에도 남는지 확인하는 검사 추가
+- [x] AI 프롬프트에 싣는 수축비율과 VCP 점수의 출처를 표·차트와 같은 자리로 통일
+      — 두 payload 생성기가 `engine/signal_tracker_ai_helpers.py:AI_PROMPT_NUMERIC_FIELDS`
+      한 목록을 함께 쓴다. 브라우저 실측으로 표 `0.41`·패널 `0.41`·프롬프트 `0.406` 확인
+- [x] 프롬프트에 넘긴 값이 응답 저장분에도 남는지 확인하는 검사 추가
+      — `test_vcp_prompt_numbers_match_the_values_the_screen_shows` 가 화면 payload
+      (`_build_vcp_signal_from_row`)와 프롬프트 문자열을 직접 대조한다
+- [x] 자료에 없는 열을 0 으로 지어내지 않게 두 payload 생성기를 고침
+      — `safe_optional_float` 로 「값 없음」과 「값 0」을 구분해 키째로 뺀다
+- [x] 모달의 「VCP Score」 카드가 실제로 무엇을 그리는지에 맞춰 라벨을 정정
+      — 「종합 시그널 점수 100.0」과 「VCP 패턴 보조 점수 17.0」 두 줄로 나눴다
+- [x] 카드 아래 고정 서술문에서 값과 무관한 단정을 걷어냄
+- [x] `/ponytail-review` — 지적 3건 전부 반영. 목록 사본 삭제(engine 에서 import),
+      `safe_optional_float` 의 죽은 문자열 분기 삭제, 목록 동등성 검사 삭제.
+      삽입 269줄 → 240줄
+- [x] `feature-dev:code-reviewer`(`vcp011-reviewer`) — 잔여 결함 1건(확신도 상).
+      `engine/vcp_ai_analyzer_helpers.py:566-570` 의 `build_vcp_rule_based_recommendation`
+      이 `_safe_float(stock_data.get("foreign_1d"), 0.0)` 으로 없는 값을 0 으로 채우고
+      그 0 이 BUY/SELL/HOLD 분기와 「1일 수급은 중립입니다」 문장에 들어간다.
+      **이번 라운드에서 고치지 않고 `[VCP-023]` 으로 이월한다.** 그 파일은 `tier-rules.md`
+      §2 의 위험 경로 「VCP 판정」이라 한 줄만 고쳐도 T3 이 되는데, 이 라운드는 위험
+      경로를 열지 않는다는 사용자 결정으로 시작했다. 또 이번 변경이 그 결함을 악화시키지
+      않는다. 고치기 전에도 배치 경로는 그 키를 싣지 않아 `.get()` 이 `None` 이었고,
+      재분석 경로가 싣던 값도 `0.0` 이었으므로 폴백이 보는 값은 전후 모두 `0.0` 이다.
+      나머지 세 확인(키 제거의 downstream 영향, `current_price` 출처 변경, 순환 import,
+      `safe_optional_float` 의 배열 입력)은 모두 문제 없음으로 확인되었다
 
 ### [VCP-012] 차트 조회 응답의 도착 순서를 보장하지 않는다
 - 카테고리: VCP 시그널 | 티어: T1 | 근거: 2026-09-02 VCP-010 마감 code-review

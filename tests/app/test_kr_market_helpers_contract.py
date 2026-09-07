@@ -43,6 +43,7 @@ from app.routes.kr_market_helpers import (
     _aggregate_cumulative_kpis,
     _build_ai_signals_from_jongga_results,
     _build_cumulative_trade_record,
+    _build_vcp_signal_from_row,
     _build_vcp_signals_from_dataframe,
     _extract_jongga_ai_evaluation,
     _filter_signals_dataframe_by_date,
@@ -377,8 +378,77 @@ def test_build_vcp_stock_payloads_maps_numeric_fields_safely():
     assert payloads[0]["ticker"] == "000001"
     assert payloads[0]["current_price"] == 10000.0
     assert payloads[0]["score"] == 7.5
-    assert payloads[0]["vcp_score"] == 0.0
-    assert payloads[0]["contraction_ratio"] == 0.0
+    # [VCP-011] 읽을 수 없는 값은 0 으로 채우지 않고 키째로 뺀다. 예전에는 여기서 0.0 을
+    # 단언했는데, 그 0 이 build_vcp_prompt 를 거쳐 「VCP 패턴 보조 점수: 0.0점」과
+    # 「수축 비율: 0.0」이라는 사실 진술이 되었다. 0 은 완벽한 수축을 뜻하므로 값이 없는
+    # 것과 정반대의 뜻을 AI 에게 전달한다.
+    assert "vcp_score" not in payloads[0]
+    assert "contraction_ratio" not in payloads[0]
+
+
+def test_build_vcp_stock_payloads_omits_columns_absent_from_signals_log():
+    """[VCP-011] signals_log.csv 에 없는 열을 지어내지 않는다.
+
+    그 파일에는 foreign_1d·inst_1d 열이 없다. 예전에는 기본값 0 이 실려 프롬프트가
+    「외국인 1일(오늘) 순매수: 0.0주」를 사실처럼 적었고, 프롬프트는 바로 다음 줄에서
+    오늘의 수급 변화를 중요하게 보라고 지시한다. data/kr_ai_analysis_20260505.json 의
+    Gemini·GPT 두 사유가 실제로 그 0 을 근거 삼아 「단기 수급 공백」이라며 관망을 권했다.
+    """
+    row = {
+        "ticker": "034730",
+        "name": "SK",
+        "entry_price": 475500,
+        "score": 100,
+        "vcp_score": 17.0,
+        "contraction_ratio": 0.406,
+        "foreign_5d": 113011707500,
+        "inst_5d": 32458164500,
+    }
+
+    payload = _build_vcp_stock_payloads([row])[0]
+
+    assert "foreign_1d" not in payload
+    assert "inst_1d" not in payload
+    assert payload["current_price"] == 475500.0
+    assert payload["contraction_ratio"] == 0.406
+    assert payload["vcp_score"] == 17.0
+
+
+def test_vcp_prompt_numbers_match_the_values_the_screen_shows():
+    """[VCP-011] 프롬프트에 넘긴 숫자가 화면이 그리는 숫자와 같은지 고정한다.
+
+    화면 payload(_build_vcp_signal_from_row)와 프롬프트 payload(_build_vcp_stock_payload)는
+    같은 CSV 행에서 나오지만 생성기가 서로 다르다. 어긋나면 AI 사유가 표·차트와 다른
+    수축비율과 점수를 말하게 되고, 프롬프트에 넘긴 값은 어디에도 남지 않으므로 나중에
+    출처를 되짚을 수 없다. 그래서 두 payload 를 실제 프롬프트 문자열까지 끌고 가 대조한다.
+    """
+    from engine.vcp_ai_analyzer_helpers import build_vcp_prompt
+
+    row = {
+        "ticker": "034730",
+        "name": "SK",
+        "signal_date": "2026-05-05",
+        "market": "KOSPI",
+        "status": "OPEN",
+        "score": 100,
+        "vcp_score": 17.0,
+        "contraction_ratio": 0.406,
+        "entry_price": 475500,
+        "current_price": 475500,
+        "foreign_5d": 113011707500,
+        "inst_5d": 32458164500,
+        "is_vcp": True,
+    }
+
+    screen = _build_vcp_signal_from_row(row)
+    prompt = build_vcp_prompt("SK", _build_vcp_stock_payloads([row])[0])
+
+    assert f"- 수축 비율: {screen['contraction_ratio']}" in prompt
+    assert f"- 종합 시그널 점수: {screen['score']}점" in prompt
+    assert f"- VCP 패턴 보조 점수: {float(screen['vcp_score'])}점" in prompt
+    # 자료에 없는 1일 수급은 0 이 아니라 N/A 로 나간다.
+    assert "- 외국인 1일(오늘) 순매수: N/A주" in prompt
+    assert "- 기관 1일(오늘) 순매수: N/A주" in prompt
 
 
 def test_extract_vcp_ai_recommendation_valid_and_invalid_cases():

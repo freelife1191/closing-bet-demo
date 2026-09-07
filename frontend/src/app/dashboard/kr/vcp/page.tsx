@@ -1800,17 +1800,27 @@ export default function VCPSignalsPage() {
                         </div>
                       </div>
 
-                      {/* VCP Score & Stats */}
+                      {/* [VCP-011] 점수 카드.
+                          라벨을 「VCP Score」로 두면 AI 사유가 말하는 「VCP 패턴 보조 점수」와
+                          같은 값처럼 읽힌다. 카드가 그리는 것은 종합 시그널 점수(0~100)이고
+                          AI 가 말하는 보조 점수는 vcp_score(0~20)로 서로 다른 값이다.
+                          아래 줄도 값과 무관하게 「압축이 양호」·「추세 지속 가능성이 높음」을
+                          단정하고 있었다. 수축비율이 1.88 이어도 같은 문장이 나왔다.
+                          판정은 AI 사유와 표에 맡기고 여기에는 근거가 되는 값만 적는다. */}
                       <div className="px-4 pb-4 space-y-3">
                         <div className="bg-black/30 rounded-lg p-3 border border-white/5">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">VCP Score</span>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">종합 시그널 점수</span>
                             <span className="text-lg font-bold text-blue-400">{signal?.score?.toFixed(1) ?? '-'}</span>
                           </div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">VCP 패턴 보조 점수</span>
+                            <span className="text-sm font-bold text-blue-400">{signal?.vcp_score?.toFixed(1) ?? '-'}</span>
+                          </div>
                           <div className="text-xs text-gray-400 leading-relaxed">
-                            수축비율 {signal?.contraction_ratio?.toFixed(2) ?? '-'}로 기술적 압축이 양호하고,
-                            외국인 5일 순매수 {formatFlow(signal?.foreign_5d)}주(강한 수급)가 기관 매도를
-                            압도해 추세 지속 가능성이 높음
+                            수축비율 {signal?.contraction_ratio?.toFixed(2) ?? '-'} · 외국인 5일 순매수{' '}
+                            {formatFlow(signal?.foreign_5d)}주 · 기관 5일 순매수{' '}
+                            {formatFlow(signal?.inst_5d)}주
                           </div>
                         </div>
                       </div>

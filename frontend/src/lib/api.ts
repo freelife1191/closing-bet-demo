@@ -66,6 +66,8 @@ export interface KRSignal {
   foreign_5d: number;
   inst_5d: number;
   score: number;
+  /** VCP 패턴 보조 점수(0~20). 종합 시그널 점수인 score 와 다른 값이다. */
+  vcp_score?: number;
   contraction_ratio: number;
   gpt_recommendation?: AIRecommendation;
   perplexity_recommendation?: AIRecommendation;

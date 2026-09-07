@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from engine.pandas_utils_safe import safe_confidence
+from engine.pandas_utils_safe import safe_confidence, safe_optional_float
 from engine.screening_runtime import resolve_vcp_signals_to_show
 
 
@@ -39,22 +39,46 @@ def cap_ai_target_signals(
     return signals_df.loc[top_indices]
 
 
+# [VCP-011] `build_vcp_prompt` 에 실을 숫자 필드. 행에 없는 값을 0 으로 채우면 프롬프트가
+# 그 0 을 사실처럼 적는다. `signals_log.csv` 에는 `foreign_1d`·`inst_1d` 열이 아예 없어서
+# 「외국인 1일(오늘) 순매수: 0.0주」가 매번 지어졌고, 프롬프트는 바로 다음 줄에서 오늘의
+# 수급 변화를 중요하게 보라고 지시한다. 키를 빼면 `build_vcp_prompt` 가 이미 가진 'N/A'
+# 처리로 넘어간다. 재분석 경로(`app/routes/kr_market_vcp_signal_helpers.py`)가 이 목록을
+# 그대로 가져다 쓴다. 사본을 두면 두 경로가 어긋나 같은 화면인데 프롬프트 입력이 달라진다.
+AI_PROMPT_NUMERIC_FIELDS = (
+    "score",
+    "vcp_score",
+    "contraction_ratio",
+    "foreign_5d",
+    "inst_5d",
+    "foreign_1d",
+    "inst_1d",
+)
+
+
 def build_ai_batch_payload(signals_df: pd.DataFrame) -> list[dict[str, Any]]:
-    """AI 배치 분석 입력 payload를 생성."""
+    """AI 배치 분석 입력 payload를 생성.
+
+    행에 없는 값은 키째로 뺀다. 0 을 채우면 `build_vcp_prompt` 가 그 0 을 사실처럼 적는다.
+    """
     payload: list[dict[str, Any]] = []
     for row in signals_df.itertuples(index=False):
-        payload.append(
-            {
-                "ticker": getattr(row, "ticker", None),
-                "name": getattr(row, "name", None),
-                "current_price": getattr(row, "entry_price", None),
-                "score": getattr(row, "score", 0),
-                "vcp_score": getattr(row, "vcp_score", 0),
-                "contraction_ratio": getattr(row, "contraction_ratio", 0),
-                "foreign_5d": getattr(row, "foreign_5d", None),
-                "inst_5d": getattr(row, "inst_5d", None),
-            }
-        )
+        item: dict[str, Any] = {
+            "ticker": getattr(row, "ticker", None),
+            "name": getattr(row, "name", None),
+        }
+
+        current_price = safe_optional_float(getattr(row, "current_price", None))
+        if current_price is None:
+            current_price = safe_optional_float(getattr(row, "entry_price", None))
+        if current_price is not None:
+            item["current_price"] = current_price
+
+        for field in AI_PROMPT_NUMERIC_FIELDS:
+            value = safe_optional_float(getattr(row, field, None))
+            if value is not None:
+                item[field] = value
+        payload.append(item)
     return payload
 
 
