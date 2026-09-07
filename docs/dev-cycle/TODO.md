@@ -18,124 +18,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-027] 요청 헤더 한 줄이 그대로 신원이 되어 유료 쿼터를 우회한다
-- 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
-  보안 스페셜리스트 지적(확신도 90). 코드를 직접 열어 확인했다.
-- `app/__init__.py:175` 가 `g.user_email = request.headers.get('X-User-Email')` 로
-  헤더 값을 검증 없이 신원으로 삼는다. 서명도 만료도 확인하지 않는다.
-- `services/kr_market_route_service.py:153-165` 는 그 값 하나로 두 가지를 판정한다.
-  값이 없으면 401 을 돌려주고, 있으면 `usage_tracker.check_and_increment(user_email)` 로
-  무료 10회 쿼터를 집계한다. 그래서 헤더 문자열만 바꾸면 쿼터가 새로 시작되어 Gemini
-  분석을 무제한으로 부를 수 있고, 남의 이메일을 넣으면 그 사람의 쿼터를 대신 소진시킨다.
-- 티어 근거: 인증 경계를 바꾸는 작업이고 `app/__init__.py` 의 `before_request` 를
-  건드리므로 `tier-rules.md` §2 의 위험 경로에 닿는다.
-- 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰가 같은 원인이 챗봇 데이터에도 열려 있음을
-  확인했다. `services/kr_market_chatbot_request_helpers.py:16` 의 `resolve_chatbot_owner_id`
-  가 `X-User-Email` 과 `X-Session-Id` 를 검증 없이 소유자로 삼는다. 그 이메일은
-  `frontend/src/app/components/SettingsModal.tsx:376` 의 자유 입력 필드에서 오고 NextAuth
-  세션과 대조하지 않으며, `frontend/next.config.js:11` 이 `/api/:path((?!auth).*)` 를
-  Flask 로 그대로 넘겨 중간에 검사하는 자리도 없다. 그래서 남의 이메일을 아는 사람은
-  헤더 하나로 그 사람의 대화와 프로필을 읽고 덮어쓸 수 있다. `[CHAT-017]`·`[CHAT-018]`·
-  `[CHAT-021]` 이 막은 것은 모든 사용자가 한 벌을 공유하던 사고였고 고의 접근은 그대로
-  열려 있다. 그 사실을 `resolve_chatbot_owner_id` 에 `# ponytail:` 주석으로 적어 두었다.
-- 2026-09-07 설계 단계의 전수 조사로 두 가지를 더 확인했습니다. 첫째,
-  `X-User-Email` 은 NextAuth 세션과 무관합니다. `frontend/src/app/components/chatHelpers.ts:43`
-  의 `getAuthHeaders` 가 `localStorage` 의 `user_profile.email` 을 싣는데, 그 값은 설정
-  모달의 자유 입력 칸에서 옵니다. 브라우저에 이미 검증된 신원이 있는데도 서버로 보낼 때는
-  쓰지 않습니다. 둘째, `frontend/src/app/components/Sidebar.tsx:299` 의 `+` 버튼이
-  `/api/kr/user/quota/recharge` 를 상한도 인증도 없이 부릅니다. **헤더를 위조하지 않아도
-  두 번 누르면 무료 10회가 초기화되므로** 신원만 막아서는 쿼터 제한이 성립하지 않습니다.
-- 쿼터를 실제로 소모하는 경로는 `app/routes/kr_market_system_http_routes.py:129` 의
-  `/api/kr/reanalyze/gemini` 이며 `g.user_email` 을 그대로 씁니다. 같은 이름의
-  `/api/kr/jongga-v2/reanalyze-gemini` 는 신원도 쿼터도 보지 않는 다른 경로입니다.
-- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 17:49
-  | 범위: `frontend/src/proxy.ts` 신설과 HMAC 서명 신원 헤더, Flask 의 서명 검증,
-  익명은 비용 경로에서만 로그인 요구, 충전 하루 1회 제한
-  | 실제 대화 근거: 2026-09-07 세션에서 설계 세 갈래를 AskUserQuestion 으로 제시해
-  「Next 미들웨어 + HMAC 서명」·「익명 유지 + 쿼터 경로만 로그인 필수」·「신원 확정 +
-  recharge 차단」을 선택받고, 충전 처리는 「하루 1회 제한으로 남김」을 선택받은 뒤
-  설계 전문에 사용자가 「승인」으로 응답
-- 구현 계획: `docs/superpowers/plans/2026-09-07-infra-027-identity-signature-gate.md`
-- IP 단위 속도 제한은 채택하지 않았습니다. 위 승인에서 익명의 비용 경로 자체를 막기로
-  정했으므로, 익명 요청에 상한을 거는 대체 수단이 필요 없어졌습니다.
-- QA 시나리오: 위조한 `X-User-Email` 로 남의 챗봇 대화 목록이 보이지 않고, 로그인한
-  사용자의 목록은 그대로 보이며, `+` 버튼은 두 번째에 거절된다
-- [x] Task 1 `services/identity_helpers.py` — `verify_identity_header` 와 `resolve_anonymous_id`.
-  검사 11건 통과
-- [x] Task 2 `frontend/src/lib/identity.ts` 서명 생성. 검사 5건 통과. 두 언어가 같은 문자열을
-  만드는 것을 명령으로 직접 대조했습니다(`b3duZXJAZXhhbXBsZS5jb20.2000.f08e8510...`)
-- [x] Task 3 `frontend/src/proxy.ts` 신설. `.env.example` 에 `INTERNAL_IDENTITY_SECRET` 과
-  `NEXTAUTH_URL` 경고 추가
-- [x] Task 4 `app/__init__.py` 가 `g.user_email` 과 `g.session_id` 를 검증 결과로 확정.
-  검사 5건 통과
-- [x] Task 5 챗봇 라우트 네 자리를 `g` 기반으로. 헤더 직접 읽기 0건 확인
-- [x] Task 6 쿼터 라우트의 쿼리·바디 신원 제거. **익명 쿼터 키 제거는 철회했습니다.**
-  계획 검토 M-3 대로 화면의 「10회 남음」과 서버의 402 가 어긋나기 때문입니다
-- [x] Task 7 충전 하루 1회. 반환 형 `int` → `tuple[int, bool]` 파급 네 자리 반영
-- [x] Task 8 프론트엔드 정리. `X-User-Email` 헤더와 `quota?email=` 쿼리를 모두 걷어냈습니다
-- [x] 계획 검토 `oh-my-claudecode:critic` — CRITICAL 1건, MAJOR 5건, MEDIUM 4건 지적.
-  전부 코드로 확인해 계획에 반영했습니다. 판정 원문은 답변이 두 번 잘려 아직 받지 못했고
-  재요청해 두었습니다.
-  - **C-1 (CRITICAL)**: `X-Session-Id: victim@example.com` 로 게이트 전체가 우회됩니다.
-    챗봇 `owner_id` 와 쿼터 키가 검증된 이메일과 익명 ID 를 같은 문자열 공간에 담기
-    때문입니다. `services/kr_market_chatbot_quota_helpers.py:49` 의 `is_admin_email` 까지
-    통과하므로 관리자 이메일을 넣으면 쿼터가 무제한이 됩니다. → `resolve_anonymous_id` 로
-    `anon_` 접두사를 요구하도록 Task 1·4·5 를 고쳤습니다
-  - **M-2·M-3**: 설계 문구는 「챗봇 호출도 401」이었으나 그렇게 만드는 작업이 없었고,
-    익명 쿼터 키를 없애면 화면의 「10회 남음」과 서버의 402 가 어긋납니다. → 익명 챗봇
-    유지 결정에 맞춰 설계 문구를 고치고 쿼터 키 변경을 철회했습니다. 남는 한계(익명이
-    `browser_session_id` 를 지우면 챗봇 쿼터가 초기화됨)를 계획에 명시했습니다
-  - **M-4**: 「proxy 의 헤더가 rewrite 목적지까지 간다」는 이 계획의 핵심 가정을 어떤
-    검사도 보지 않았습니다. → Task 3 에 임시 로그로 Flask 도달을 직접 확인하는 단계를
-    넣고, 실패 시 설계 변경이 필요하므로 멈추도록 적었습니다
-  - **M-5**: `.env.example:114` 가 `NEXTAUTH_URL=http://localhost:3500` 입니다. `getToken`
-    이 이 값으로 쿠키 이름을 정하므로(`next-auth/jwt/index.js:65`) 운영에서 http 이면
-    로그인 사용자 전원이 조용히 익명이 됩니다. → 경고 주석과 확인 단계를 넣었습니다
-  - **M-6**: `tests/app/test_kr_market_quota_http_routes_refactor.py` 가 함께 깨지는데
-    Files 와 커밋 대상에 없었습니다. → Task 6 에 고칠 내용을 코드로 적었습니다
-  - **m-7**: 서명 헤더가 로그에 남지 않는지 확인하는 명령을 검증 절에 넣었습니다
-  - **m-8**: `Sidebar.tsx:75` 와 `SettingsModal.tsx:48` 의 `quota?email=` 두 자리를
-    Task 8 에 넣었습니다
-  - **m-9**: 하류의 `user@example.com` 비교 중복. 시그니처를 안 바꾸기로 하면서 새로
-    넣을 일이 없어졌고, 기존 비교는 「하류 안전망이며 실제 게이트는 한 자리」라는 주석을
-    달아 남깁니다. 지우면 순수 함수의 단위 검사 두 개를 함께 고쳐야 해 diff 만 커집니다
-  - **m-10**: `datetime` 을 함수 안에서 import 하던 것을 파일 상단으로 올렸습니다
-  - **n-11**: jsdom 환경에서 `node:crypto` 와 `Buffer.toString('base64url')` 이 동작하는
-    것을 임시 검사로 실제 실행해 확인했습니다. 실패 시 대비책(`// @vitest-environment node`)
-    만 계획에 적었습니다
-  - **n-12**: proxy matcher 가 `'/api/((?!auth).*)'` 여서 나중에 `/api/authors` 같은 경로가
-    생기면 게이트에서 조용히 빠집니다. → `'/api/((?!auth/).*)'` 로 고쳤습니다
-  - **n-13**: 「지금 열려 있는 것」 표의 로그 오염 지점을 `app/__init__.py:175` 에서
-    `:186` 의 `_resolve_user_id` 로 바로잡았습니다
-  - **판정 `REVISE`**. 지적을 전부 반영했으므로 dev-cycle `[1]` 4번에 따라 진행합니다.
-    C-1 의 해결책으로는 검토자도 `anon_` 접두사 화이트리스트를 권했습니다. 그 근거로
-    `backup/user_quota.json` 의 접두사 없는 키 둘(`user_a_`, `user_b_`)이 소스 어디에도
-    없는 문자열, 즉 QA 에서 손으로 넣은 값이라는 사실을 확인해 주었고 직접 대조했습니다
-- [x] 리뷰 `/ponytail-review` — 4건 반영, 17줄 감소(406 → 389). 중복 `int()` 변환,
-  proxy.ts 의 상수 배열과 루프, 한 번만 쓰이는 상수, 세 파일에 반복된 같은 docstring
-- [x] 리뷰 `feature-dev:code-reviewer` — 코드 결함 없음. 지적 2건 모두 처리했습니다.
-  `ChatWidget.tsx` 의 죽은 `useSession`·`userEmail` 3줄 제거, 그리고 M-4 실측 요구는
-  아래 QA 의 S-1 로 채웠습니다. `.env.production` 의 `NEXTAUTH_URL` 이 이미 `https://` 인
-  것을 확인해 주어 계획 검토의 M-5 는 충족 상태입니다
-- [x] 리뷰 `/review` — **CRITICAL 1건.** 익명 ID 를 만드는 자리가 셋인데 형식이 제각각인데도
-  `anon_` 접두사만 허용하고 있었습니다. `chatbot/session_access.py:82` 가 소유자 불일치 때
-  배정하는 접두사 없는 uuid 를 VCP 화면이 저장해 쓰므로(`vcp/page.tsx:1101`), 그대로 두었으면
-  비로그인 사용자의 VCP 채팅이 영구히 끊겼습니다. **로그인한 채로 확인하면 이메일이 소유자라
-  멀쩡해 보여 발견하지 못했을 결함입니다.** 판정을 「이메일 모양(`@` 포함)이면 버린다」로
-  바꾸고 세 형식이 모두 통과하는 검사를 더했습니다
-- [ ] 보안 보강 `oh-my-claudecode:security-reviewer` 결과 대기 중
-- [x] 보안 보강 시크릿 확인 — `.env*` 는 `.env.example` 만 추적, `NEXT_PUBLIC_` 비밀 없음,
-  `INTERNAL_IDENTITY_SECRET` 참조는 서버 전용 `proxy.ts` 한 자리, `X-Auth-Identity` 를
-  로그에 남기는 자리 없음, `.env.production` 의 `NEXTAUTH_URL` 이 `https://`
-- [x] 검증 pytest 1780 통과·2 스킵 | vitest 53 파일 321 통과 | type-check exit 0 |
-  lint 오류 0(경고 204는 기존) | build 성공(vitest smoke)
-- [x] QA 2단계 — `docs/dev-cycle/qa/INFRA-027.md`. 필수 11/11 통과.
-  **S-1 이 이 라운드의 핵심 가정을 실측했습니다**: proxy 가 붙인 헤더가 rewrite 를 거쳐
-  Flask 까지 닿고 서명 검증까지 통과하는 것을 `identity_present=True resolved=True` 로
-  확인했습니다. Google 로그인 대신 `next-auth/jwt` 의 `encode` 로 세션 쿠키를 만들어
-  자격 증명을 다루지 않았습니다. S-9(충전)만 `data/` 읽기 전용 제약에 따라 단위·라우트
-  검사 11건으로 대체했습니다
-
 ### [INFRA-037] `/api/notification/send` 가 인증 없이 저장된 자격 증명으로 발송한다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 계획 검토와
   코드 리뷰가 각각 지적했고 코드를 직접 열어 확인했습니다.
@@ -1505,16 +1387,21 @@
 - [ ] 세션이 바뀐 뒤 도착한 델타를 버리도록 스트림에 소속 세션 검사를 더함
 - [ ] 위 셋을 각각 붙잡는 vitest 검사 추가
 
-### [FE-038] 인증 헤더를 만드는 코드가 네 곳에 흩어져 규칙이 서로 다르다
-- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: 2026-09-05 `[CHAT-004]` 사이클의 code-review
+### [FE-038] 세션 헤더를 만드는 코드가 세 곳에 흩어져 있다
+- 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-05 `[CHAT-004]` 사이클의 code-review
 - `[CHAT-004]` 이 챗봇 쪽 `getAuthHeaders` 를
   `frontend/src/app/components/chatHelpers.ts` 로 올렸습니다. 그런데 같은 헤더를
   `ChatWidget.tsx:248`, `Sidebar.tsx:110`, `dashboard/kr/vcp/page.tsx:1026` 이 각자 만들고
   있고 규칙이 다릅니다. 그쪽은 이메일이 없을 때 빈 문자열을 보내며 `user@example.com`
   자리표시자도 거르지 않습니다.
-- 영향: 같은 사용자가 어느 화면에서 요청했는지에 따라 서버가 보는 신원이 달라집니다.
-  `[INFRA-027]` 이 헤더 한 줄로 쿼터를 우회하는 문제를 다루고 있어 그 항목과 함께 보면
-  좋습니다.
+- 2026-09-07 `[INFRA-027]` 이 이 항목의 근거 대부분을 해소했습니다. **신원 헤더 자체가
+  사라졌습니다.** `X-User-Email` 을 만드는 자리가 저장소에 하나도 남지 않았고, 신원은
+  `frontend/src/proxy.ts` 가 NextAuth 세션에서 확정해 서명합니다. 그래서 「이메일이 없을 때
+  빈 문자열을 보낸다」와 「`user@example.com` 자리표시자를 거르지 않는다」, 「어느 화면에서
+  요청했는지에 따라 서버가 보는 신원이 달라진다」는 세 가지가 함께 없어졌습니다.
+- **남은 것은 코드 중복뿐입니다.** `ChatWidget.tsx:246` 과 `Sidebar.tsx:108` 이 아직
+  `getAuthHeaders()` 를 부르지 않고 `'X-Session-Id': getBrowserSessionId()` 를 직접
+  적습니다. 값은 같으므로 동작 차이는 없습니다. 티어를 T2 에서 T1 로 내립니다.
 - 2026-09-05 `[CHAT-016]` 이 VCP 화면 몫을 먼저 해소했습니다. 그 화면이 읽던
   `localStorage` 의 `user_email` 키는 저장소 어디에서도 기록되지 않아 언제나 `null` 이었고,
   그래서 로그인한 사용자가 만든 세션을 본인도 열지 못했습니다. 전송·조회·삭제 다섯 자리를
@@ -1524,8 +1411,9 @@
       쓰도록 통일
 - [x] VCP 화면의 죽은 `user_email` 키를 없애고 전송·조회·삭제 다섯 곳을 함께 고침
       (`[CHAT-016]` 에서 완료)
-- [ ] 이메일이 없을 때와 자리표시자일 때의 규칙을 한 곳에서 정함
-- [ ] 네 경로가 같은 헤더를 만드는지 vitest 로 고정
+- [x] 이메일이 없을 때와 자리표시자일 때의 규칙을 한 곳에서 정함
+      (`[INFRA-027]` 이 신원 헤더 자체를 없애 규칙이 필요 없어졌습니다)
+- [ ] 세 경로가 같은 헤더를 만드는지 vitest 로 고정
 
 ### [CHAT-015] 답변 파서가 소제목을 쪼개고 추천 질문에 상한을 두지 않는다
 - 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-05 `[CHAT-004]` 사이클의 `/qa-only` ISSUE-001 과 `/review`
