@@ -18,17 +18,64 @@
 
 ### [VCP-008] 히스토리 날짜 목록과 시그널 조회가 서로 다른 자료를 본다
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: [JONGGA-002] 사이클의 qa-only 실측
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 09:15
+  | 범위: 날짜 목록 리더와 시그널 판정의 기준 일치, 날짜 지정 조회의 안내 문구, 회귀 검사 두 개.
+  프론트엔드는 건드리지 않는다
+  | 실제 대화 근거: 2026-09-07 사용자 「다음 라운드 진행해야할 사항 검토해서 진행해줘」 요청과
+  AskUserQuestion 「VCP-008 설계」에 대한 「추천안으로 진행」 응답
 - 관찰: `GET /api/kr/signals/dates` 는 `["2026-05-05"]` 를 돌려주는데 같은 날짜로
   `GET /api/kr/signals?date=2026-05-05` 를 부르면 `{"count": 0, "source": "no_data"}`
-  가 돌아옵니다. `data/` 에 `jongga_v2_results_20260505.json` 은 있고
-  `vcp_signals_results_20260505.json` 은 없습니다. 날짜 목록은 종가 계열 파일에서
-  만들어지고 시그널 조회는 VCP 파일을 찾습니다.
+  가 돌아옵니다.
+- 원인(2026-09-07 코드 대조로 정정): 두 응답은 같은 `data/signals_log.csv` 를 읽습니다.
+  종전에 이 자리에 적혀 있던 「날짜 목록은 종가 계열 파일에서 만들어지고 시그널 조회는 VCP
+  파일을 찾습니다」는 사실이 아닙니다. 어긋나는 것은 파일이 아니라 판정 기준입니다.
+  `_read_signal_dates`(`app/routes/kr_market_data_signals_routes.py:53`)는 `signal_date`
+  열만 읽어 날짜를 모으고, `_build_vcp_signal_from_row`
+  (`app/routes/kr_market_vcp_signal_helpers.py:226-238`)는 `status != "OPEN"`,
+  `score < 60`, `is_vcp` 거짓인 행을 버립니다. 현재 CSV 의 15행은 모두 `is_vcp` 가 빈
+  값이어서 전부 탈락하므로, 날짜 목록에만 남고 조회 결과는 비어 있습니다.
 - 화면에서는 유일하게 제시된 히스토리 날짜를 눌러도 `No signals found.` 만 보이고,
   왜 비었는지 알려 주는 안내가 없습니다. 오늘 탭에 있는 안내가 히스토리 탭에는 없습니다.
-- [ ] 날짜 목록을 만드는 근거를 VCP 시그널 파일 존재 여부와 맞춤
-- [ ] 히스토리 탭에서도 데이터가 없는 이유를 알리는 안내 표시
-- [ ] 두 응답이 어긋나지 않는지 확인하는 회귀 검사 추가
-- [ ] agent-browser 로 히스토리 날짜 선택 결과를 실측
+  `_resolve_stale_warning_message`(`services/kr_market_vcp_payload_service.py`)가 `req_date`
+  가 있으면 곧바로 `None` 을 돌려주기 때문입니다.
+- 스킬: 파이썬만 바꾸므로 `frontend-skills.md` 는 적용하지 않습니다. 리뷰는
+  `/ponytail-review` → `feature-dev:code-reviewer` 순서입니다.
+- QA 시나리오: `/api/kr/signals/dates` 가 돌려준 모든 날짜로 `/api/kr/signals?date=` 를
+  부르면 `count` 가 1 이상이다. 시그널이 없는 날짜를 지정하면 `stale_warning` 이 담긴다.
+- [x] 시그널 판정 세 조건을 `_is_vcp_signal_row` 로 뽑아 한 곳에 둠
+- [x] 날짜 목록을 만드는 근거를 그 판정과 맞춤 — `usecols` 에 status·score·is_vcp 를 더하고
+  같은 함수로 거른다. 실측: `GET /api/kr/signals/dates` 가 `["2026-05-05"]` 에서 `[]` 로 바뀌었다
+- [x] 히스토리 탭에서도 데이터가 없는 이유를 알리는 안내 표시 — `stale_warning` 판정을 변환된
+  시그널 기준으로 옮기고 날짜 지정 조회의 조기 반환을 걷어냈다. 화면 코드는 이미 그 값을
+  배너로 렌더하므로(`page.tsx:1358`) 프론트엔드는 건드리지 않았다
+- [x] 두 응답이 어긋나지 않는지 확인하는 회귀 검사 추가 — 라우트 1건, payload 서비스 2건
+- [ ] agent-browser 로 히스토리 날짜 선택 결과를 실측 — QA 2단계에서 수행한다
+- 리뷰: `/ponytail-review` 기준 자체 검토에서 `bool(safe_bool(...))` 이중 변환 1건을 지적해
+  반영했다(`net: -1 line`). `feature-dev:code-reviewer`(`vcp008-reviewer`)는 결함 없음·승인
+  권고를 냈고 낮은 확신도 관찰 두 가지를 남겼다. 첫째, `itertuples` 는 파이썬 식별자가
+  아닌 열 이름을 위치 기반 이름으로 바꾸므로 `_row_get` 이 조용히 기본값을 쓸 수 있다.
+  네 열이 모두 유효한 식별자라 지금은 문제가 없고, 같은 구조를 이미 쓰는
+  `_build_vcp_signals_from_dataframe` 과 어긋나게 만들지 않으려고 바꾸지 않았다.
+  둘째, 날짜를 지정하지 않는 조회의 사각지대는 범위 밖이라 `[VCP-019]` 로 이월했다
+- 실측 중 추가로 고친 것: 날짜로 읽히지 않는 `date=` 값을 안내 문구에 그대로 싣던 자리를
+  「요청한 날짜에 …」 로 바꾸고 회귀 검사를 더했다
+
+### [VCP-019] 날짜를 지정하지 않는 시그널 조회에는 빈 이유를 알리지 못한다
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-008]` 사이클의 code-review 낮은 확신도 관찰
+- 관찰: `services/kr_market_vcp_payload_service.py` 의 `_resolve_stale_warning_message` 는
+  날짜를 지정하지 않은 조회에서 원본 CSV 의 최신 `signal_date` 만 봅니다. 오늘 자 행이
+  원본에 있으면 `latest_timestamp.date() >= today_timestamp.date()` 가 참이 되어 곧바로
+  `None` 을 돌려줍니다. 그러므로 오늘 자 행이 있는데 `status`·`score`·`is_vcp` 판정에서
+  전부 떨어지면 화면은 `No signals found.` 만 보이고 이유를 알 수 없습니다.
+- `[VCP-008]` 이 날짜를 지정한 조회에서는 같은 결함을 고쳤지만, 그 항목의 승인 범위가
+  히스토리 탭이어서 기본 조회는 손대지 않았습니다. 이 동작은 `[VCP-008]` 이전부터
+  같았으므로 회귀가 아닙니다.
+- 확인할 것: `data/signals_log.csv` 의 15행이 모두 `is_vcp` 가 빈 값이므로, 오늘 날짜가
+  그 파일에 들어오는 순간 이 상태가 실제로 재현됩니다. 지금은 최신 행이 2026-05-05 라
+  「오늘 기준 …」 문구가 대신 나오고 있어 드러나지 않습니다.
+- [ ] 오늘 조회에서도 변환된 시그널 수를 기준으로 안내 문구를 만듦
+- [ ] 최신 행이 오늘인데 시그널이 0건인 경우의 회귀 검사 추가
+- [ ] `/api/kr/signals` 응답으로 실측
 
 ### [VCP-018] legacy 분석 파일의 GPT 추천이 VCP 화면에 닿지 못한다
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-004]` 사이클의 code-review

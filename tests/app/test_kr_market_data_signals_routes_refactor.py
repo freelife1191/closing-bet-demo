@@ -148,13 +148,21 @@ def test_vcp_status_route_reflects_scheduler_vcp_running(monkeypatch):
     assert payload["schedulerRunning"] is True
 
 
-def test_signal_dates_route_requests_only_signal_date_column_when_supported():
+def test_signal_dates_route_requests_only_signal_judgement_columns():
+    """날짜와 시그널 판정에 쓰는 세 열만 요청한다.
+
+    판정 열이 늘어난 것은 `[VCP-008]` 때문이다. 날짜 목록이 시그널 조회와 같은
+    기준으로 걸러지려면 status·score·is_vcp 를 함께 읽어야 한다. 그래도 CSV 의
+    나머지 열은 읽지 않는다.
+    """
     captured: dict[str, Any] = {}
 
     def _load_csv_file(name: str, **kwargs):
         captured["name"] = name
         captured["kwargs"] = kwargs
-        return pd.DataFrame([{"signal_date": "2026-02-21"}])
+        return pd.DataFrame(
+            [{"signal_date": "2026-02-21", "status": "OPEN", "score": 85, "is_vcp": True}]
+        )
 
     deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
     deps["load_csv_file"] = _load_csv_file
@@ -176,16 +184,16 @@ def test_signal_dates_route_requests_only_signal_date_column_when_supported():
     assert response.get_json() == ["2026-02-21"]
     assert captured["name"] == "signals_log.csv"
     assert captured["kwargs"]["deep_copy"] is False
-    assert captured["kwargs"]["usecols"] == ["signal_date"]
+    assert captured["kwargs"]["usecols"] == ["signal_date", "status", "score", "is_vcp"]
 
 
 def test_signal_dates_route_normalizes_datetime_strings_and_deduplicates():
     def _load_csv_file(_name: str, **_kwargs):
         return pd.DataFrame(
             [
-                {"signal_date": "2026-02-21 00:00:00"},
-                {"signal_date": "20260222"},
-                {"signal_date": "2026-02-21"},
+                {"signal_date": "2026-02-21 00:00:00", "status": "OPEN", "score": 85, "is_vcp": True},
+                {"signal_date": "20260222", "status": "OPEN", "score": 85, "is_vcp": True},
+                {"signal_date": "2026-02-21", "status": "OPEN", "score": 85, "is_vcp": True},
             ]
         )
 
@@ -207,6 +215,46 @@ def test_signal_dates_route_normalizes_datetime_strings_and_deduplicates():
 
     assert response.status_code == 200
     assert response.get_json() == ["2026-02-22", "2026-02-21"]
+
+
+def test_signal_dates_route_omits_dates_whose_rows_are_not_signals():
+    """[VCP-008] 회귀: 목록에 남은 날짜는 그 날짜로 조회했을 때 반드시 시그널이 있다.
+
+    signals_log.csv 에 행이 있어도 status·score·is_vcp 판정에서 떨어지면 조회 결과가
+    비므로, 날짜 목록에도 그 날짜를 내보내지 않는다. 판정을 통과하는 날짜만 남는다.
+    """
+
+    def _load_csv_file(_name: str, **_kwargs):
+        return pd.DataFrame(
+            [
+                # is_vcp 가 비어 있어 시그널이 되지 못한다. 실제 data/signals_log.csv 의 상태다.
+                {"signal_date": "2026-05-05", "status": "OPEN", "score": 82, "is_vcp": ""},
+                # 이미 종료된 시그널이다.
+                {"signal_date": "2026-04-04", "status": "CLOSED", "score": 90, "is_vcp": True},
+                # 최소 점수 60 에 못 미친다.
+                {"signal_date": "2026-03-03", "status": "OPEN", "score": 41, "is_vcp": True},
+                {"signal_date": "2026-02-21", "status": "OPEN", "score": 85, "is_vcp": True},
+            ]
+        )
+
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    deps["load_csv_file"] = _load_csv_file
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_dates_signal_filter_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    client = app.test_client()
+
+    response = client.get("/api/kr/signals/dates")
+
+    assert response.status_code == 200
+    assert response.get_json() == ["2026-02-21"]
 
 
 def test_signals_route_count_callback_accepts_data_dir_argument():

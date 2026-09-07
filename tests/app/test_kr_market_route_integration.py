@@ -231,10 +231,11 @@ def test_get_kr_signals_dates_uses_file_mtime_cache(monkeypatch, tmp_path: Path)
 
     def _load_csv(_filename):
         call_counter["count"] += 1
+        # status·score·is_vcp 는 `[VCP-008]` 이후 날짜 목록도 함께 보는 판정 열이다.
         return pd.DataFrame(
             [
-                {"signal_date": "2026-02-20"},
-                {"signal_date": "2026-02-19"},
+                {"signal_date": "2026-02-20", "status": "OPEN", "score": 85, "is_vcp": True},
+                {"signal_date": "2026-02-19", "status": "OPEN", "score": 85, "is_vcp": True},
             ]
         )
 

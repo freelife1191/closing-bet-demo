@@ -369,6 +369,59 @@ def test_build_vcp_payload_emits_stale_warning_when_today_signals_missing(tmp_pa
     assert "2026-03-03" in str(payload["stale_warning"])
 
 
+def test_build_vcp_payload_warns_when_requested_date_has_no_signals(tmp_path):
+    """[VCP-008] 회귀: 날짜를 지정한 조회가 비면 그 날짜를 담은 안내를 내려보낸다.
+
+    종전에는 req_date 가 있으면 안내를 만들지 않아, 히스토리 탭이 빈 표만 보이고
+    왜 비었는지 알 수 없었다.
+    """
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    payload = _build_payload(tmp_path, req_date="2026-01-05")
+
+    assert payload["count"] == 0
+    assert payload["stale_warning"] == "2026-01-05에 저장된 VCP 시그널이 없습니다."
+
+    # 요청 값을 그대로 문구에 싣지 않는다. 날짜로 읽히지 않으면 일반 문구를 쓴다.
+    _reset_vcp_signals_cache_state()
+    unparsable = _build_payload(tmp_path, req_date="not-a-date")
+
+    assert unparsable["stale_warning"] == "요청한 날짜에 저장된 VCP 시그널이 없습니다."
+
+
+def test_build_vcp_payload_warns_when_rows_exist_but_no_signal_qualifies(tmp_path):
+    """[VCP-008] 회귀: 날짜 행이 남아도 시그널 판정에서 전부 떨어지면 안내를 만든다.
+
+    안내 판정의 기준은 필터를 통과한 행 수가 아니라 변환된 시그널 수다. fixture 의
+    행은 status 가 OPEN 이 아니어서 판정에서 떨어지며, 실제 data/signals_log.csv 도
+    is_vcp 가 비어 같은 상태다.
+    """
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-22")
+
+    payload = vcp_payload_service.build_vcp_signals_payload(
+        req_date="2026-02-22",
+        load_csv_file=lambda name: pd.read_csv(tmp_path / name),
+        load_json_file=lambda _name, **_kwargs: {},
+        filter_signals_dataframe_by_date=vcp_signal_helpers._filter_signals_dataframe_by_date,
+        build_vcp_signals_from_dataframe=vcp_signal_helpers._build_vcp_signals_from_dataframe,
+        load_latest_vcp_price_map=lambda: {},
+        apply_latest_prices_to_jongga_signals=lambda _signals, _price_map: 0,
+        sort_and_limit_vcp_signals=vcp_signal_helpers._sort_and_limit_vcp_signals,
+        build_ai_data_map=vcp_signal_helpers._build_ai_data_map,
+        merge_legacy_ai_fields_into_map=vcp_signal_helpers._merge_legacy_ai_fields_into_map,
+        merge_ai_data_into_vcp_signals=vcp_signal_helpers._merge_ai_data_into_vcp_signals,
+        count_total_scanned_stocks=lambda _data_dir: 1,
+        logger=logging.getLogger("vcp-payload-unqualified-rows-test"),
+        now=datetime(2026, 2, 23, 9, 0, 0),
+        data_dir=str(tmp_path),
+    )
+
+    assert payload["count"] == 0
+    assert payload["stale_warning"] == "2026-02-22에 저장된 VCP 시그널이 없습니다."
+
+
 def test_build_vcp_payload_cached_empty_keeps_stale_warning(tmp_path):
     _reset_vcp_signals_cache_state()
     _write_signals_csv(tmp_path, "2026-03-03")

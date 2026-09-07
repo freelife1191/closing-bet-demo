@@ -223,19 +223,28 @@ def _resolve_vcp_exit_prices(
     return resolved_target, resolved_stop
 
 
+def _is_vcp_signal_row(row: Any) -> bool:
+    """signals_log 한 행이 VCP 시그널로 노출되는 행인지 가린다.
+
+    날짜 목록과 시그널 조회는 같은 `signals_log.csv` 를 읽는다. 이 판정을 한쪽에만
+    적용하면 목록에 있는 날짜를 눌러도 표가 비고, 화면은 그 이유를 알릴 방법이 없다.
+    `[VCP-008]` 이 그 상태였다. 기준을 이 함수 하나에 둔다.
+    """
+    if str(_row_get(row, "status", "OPEN")) != "OPEN":
+        return False
+    if _safe_float(_row_get(row, "score", 0), default=0.0) < resolve_vcp_min_score(default=60.0):
+        return False
+    return safe_bool(_row_get(row, "is_vcp", False))
+
+
 def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
     """signals_log 단일 행을 API 응답 스키마 시그널로 변환한다."""
+    if not _is_vcp_signal_row(row):
+        return None
+
     score = _safe_float(_row_get(row, "score", 0), default=0.0)
-    status = str(_row_get(row, "status", "OPEN"))
     vcp_score = _safe_float(_row_get(row, "vcp_score", 0), default=0.0)
     is_vcp = safe_bool(_row_get(row, "is_vcp", False))
-
-    if status != "OPEN":
-        return None
-    if score < resolve_vcp_min_score(default=60.0):
-        return None
-    if not is_vcp:
-        return None
 
     entry_price = _none_if_nan(_row_get(row, "entry_price"))
     target_price, stop_price = _resolve_vcp_exit_prices(

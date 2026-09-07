@@ -16,6 +16,7 @@ from flask import jsonify, request
 
 from app.routes.route_execution import execute_json_route as _execute_json_route
 from app.routes.kr_market_signal_common import _format_signal_date
+from app.routes.kr_market_vcp_signal_helpers import _is_vcp_signal_row, _row_get
 from services.kr_market_csv_utils import load_csv_readonly
 from services.scheduler_runtime_status_service import get_scheduler_runtime_status
 
@@ -61,19 +62,19 @@ def _create_signal_dates_reader(
             return list(cache["dates"])
 
         dates: list[str] = []
+        # 시그널 조회와 같은 판정을 걸어야 목록에 남은 날짜가 실제로 내용을 갖는다.
+        # 그래서 signal_date 만이 아니라 판정에 쓰는 세 열을 함께 읽는다.
         df = load_csv_readonly(
             load_csv_file,
             "signals_log.csv",
-            usecols=["signal_date"],
+            usecols=["signal_date", "status", "score", "is_vcp"],
         )
         if not df.empty and "signal_date" in df.columns:
-            normalized_dates = (
-                df["signal_date"]
-                .dropna()
-                .astype(str)
-                .map(_format_signal_date)
-                .tolist()
-            )
+            normalized_dates = [
+                _format_signal_date(_row_get(row, "signal_date"))
+                for row in df.itertuples(index=False)
+                if _is_vcp_signal_row(row)
+            ]
             dates = sorted({item for item in normalized_dates if item}, reverse=True)
 
         cache["path"] = signals_path

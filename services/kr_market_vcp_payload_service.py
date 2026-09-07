@@ -142,18 +142,24 @@ def _load_vcp_signals(
         logger=logger,
     )
     if cached_signals is not None:
-        if cached_signals:
-            source = "signals_log.csv"
-        stale_warning = None
         # 캐시에 시그널이 있으면 stale 경고 대상이 아니므로 CSV를 다시 읽지 않는다.
-        if req_date is None and not cached_signals:
-            stale_warning = _resolve_stale_warning_message(
+        if cached_signals:
+            return cached_signals, "signals_log.csv", None
+        # 날짜를 지정한 조회는 그 날짜만으로 문구를 만들 수 있어 원본을 읽지 않는다.
+        source_df = (
+            pd.DataFrame()
+            if req_date
+            else _load_csv_readonly(load_csv_file, "signals_log.csv", usecols=["signal_date"])
+        )
+        return (
+            cached_signals,
+            source,
+            _resolve_stale_warning_message(
                 req_date=req_date,
-                source_df=_load_csv_readonly(load_csv_file, "signals_log.csv", usecols=["signal_date"]),
-                filtered_df=pd.DataFrame(cached_signals),
+                source_df=source_df,
                 today=today,
-            )
-        return cached_signals, source, stale_warning
+            ),
+        )
 
     signals_df = _load_csv_readonly(
         load_csv_file,
@@ -182,23 +188,23 @@ def _load_vcp_signals(
     )
     source_df = signals_df
     signals_df, _ = filter_signals_dataframe_by_date(signals_df, req_date, today)
-    stale_warning = None
-    # 필터 결과가 비었을 때만 경고 대상이므로, 그 경우에만 원본 프레임을 참조한다.
-    if req_date is None and (not isinstance(signals_df, pd.DataFrame) or signals_df.empty):
-        stale_warning = _resolve_stale_warning_message(
-            req_date=req_date,
-            source_df=source_df,
-            filtered_df=signals_df,
-            today=today,
-        )
     if req_date:
         logger.debug(f"Signals requested for explicit date: {req_date}")
     elif not signals_df.empty:
         logger.debug(f"Filtered latest signal rows: {len(signals_df)}")
 
     signals = build_vcp_signals_from_dataframe(signals_df)
+    stale_warning = None
+    # 날짜 행이 남아 있어도 시그널 판정에서 전부 떨어질 수 있다. 화면이 빈 표를 보이는
+    # 기준은 변환 결과이므로 그 결과를 보고 안내 문구를 만든다.
     if signals:
         source = "signals_log.csv"
+    else:
+        stale_warning = _resolve_stale_warning_message(
+            req_date=req_date,
+            source_df=source_df,
+            today=today,
+        )
     save_cached_vcp_signals(
         signature=cache_signature,
         payload=signals,
@@ -212,14 +218,22 @@ def _resolve_stale_warning_message(
     *,
     req_date: str | None,
     source_df: pd.DataFrame,
-    filtered_df: pd.DataFrame,
     today: str,
 ) -> str | None:
+    """시그널이 하나도 없을 때 그 이유를 알리는 문구를 만든다.
+
+    호출부가 결과가 빈 것을 확인한 뒤에 부른다. 날짜를 지정한 조회에는 그 날짜를
+    그대로 알린다. 종전에는 이 경우 None 을 돌려주어, 히스토리 탭이 빈 표만 보이고
+    왜 비었는지 알릴 수단이 없었다.
+    """
     if req_date:
-        return None
+        parsed_req_date = pd.to_datetime(str(req_date), errors="coerce")
+        if pd.isna(parsed_req_date):
+            # 날짜로 읽히지 않는 입력은 문구에 그대로 싣지 않는다.
+            return "요청한 날짜에 저장된 VCP 시그널이 없습니다."
+        return f"{parsed_req_date.strftime('%Y-%m-%d')}에 저장된 VCP 시그널이 없습니다."
+
     if not isinstance(source_df, pd.DataFrame) or source_df.empty or "signal_date" not in source_df.columns:
-        return None
-    if isinstance(filtered_df, pd.DataFrame) and not filtered_df.empty:
         return None
 
     latest_series = pd.to_datetime(source_df["signal_date"], errors="coerce")
