@@ -496,10 +496,47 @@
   `final_recommendation` 이라는 이름은 저장소에서 `engine/kr_ai_analyzer.py:109` 와 검사
   두 줄에만 나오고 병합은 `_AI_RECOMMENDATION_FIELDS` 세 개만 옮기며 프론트엔드에는 그
   이름이 없다는 것을 확인했습니다. 2026-09-07 직접 grep 으로도 세 자리뿐임을 확인했습니다.
+- 같은 파일에 `inf` 구멍이 두 자리 남아 있습니다. `[JONGGA-008]` 이 `safe_confidence` 에서
+  고친 것과 도달 조건이 같은데, 위험 경로라 그 라운드에서 손대지 못했습니다.
+  `engine/vcp_ai_analyzer_helpers.py:221-223` 의 `is_low_quality_recommendation` 과
+  `:305-307` 의 `_normalize_confidence_value` 가 `int(float(...))` 를
+  `except (TypeError, ValueError)` 로만 감쌉니다. `OverflowError` 는 `ValueError` 가 아니라
+  `ArithmeticError` 의 하위라 걸리지 않습니다. 앞엣것은 입력이 원시 LLM 응답이고 호출부
+  다섯 곳(`engine/vcp_ai_analyzer.py:361`, `547`, `563`, `1021`, `1070`)에 지역 예외 처리가
+  없습니다.
+- 같은 화면 같은 열에 걸린 별건 하나를 함께 다룹니다. `GeminiStrategy.analyze` 와
+  `GPTStrategy.analyze`(`engine/kr_ai_strategies.py:66-68`, `120-122`)의 docstring 이
+  「현재는 안정성을 위해 Mock 기반 분석 결과를 반환한다」이며, 사유를 `random.choice` 로
+  조립하고 확신도를 `random.randint` 로 만들며 `action` 을 `"BUY"` 로 고정합니다. 그
+  산출물이 `scripts/init_data.py:2318-2328` 을 거쳐 `data/ai_analysis_results_*.json` 으로
+  저장되고, `services/kr_market_vcp_payload_service.py:275` 가 읽어 VCP 화면의 gemini·gpt
+  탭에 그려집니다. 호출 지점 둘 다 살아 있습니다(`scripts/init_data.py:2675` 배치와
+  `services/kr_market_route_service.py:138` 의 사용자 재분석).
+  - 2026-09-07 확인: **현재 자료는 모의 산출물이 아닙니다.**
+    `data/ai_analysis_results_20260505.json` 의 사유가 「수축 비율 1.8811」·「외국인과
+    기관이 각각 약 1,450억 원, 1,534억 원」처럼 종목별 실측치를 담고 있어,
+    `MockAnalysisTemplates` 의 일반 문구(「주력 제품의 수출 호조세 지속」 등)와 다릅니다.
+    `engine/vcp_ai_analyzer` 를 쓰는 실제 경로가 쓴 파일입니다. 그러므로 위험은 실현되지
+    않았고, 두 경로 중 어느 쪽이 나중에 쓰느냐에 달린 잠재 문제입니다. 이 항목에서 그
+    선후를 확정합니다.
+- 티어 규칙에 관해 판단이 필요한 것이 하나 있습니다. code-review 가 확신도 중간으로
+  제기했습니다. `engine/signal_tracker_ai_helpers.py` 의 `apply_ai_results` 는
+  `ai_action`·`ai_confidence`·`ai_reason`·`ai_provider` 네 열을 직접 만들어 넣는 자리인데
+  `tier-rules.md` §2 의 「VCP 판정」 목록에 없습니다. 그 절이 두 파일을 목록에 넣은 근거를
+  「이 결정이 VCP 표의 AI 추천 열을 그대로 좌우하므로」라고 적고 있어 실질이 같습니다.
+  다만 §4 의 갱신 조건은 「파일이 새로 생기거나 이동」과 「목록 밖 파일에 `CREATE TABLE` 이
+  새로 들어옴」 둘뿐이라 문언이 곧바로 추가를 요구하지는 않습니다. 목록에 넣으면 그 파일을
+  건드리는 모든 항목이 T3 이 됩니다.
+  2026-09-07 사용자 결정: **이 항목에서 정합니다.** 지금은 목록을 바꾸지 않고, 같은 파일을
+  실제로 여는 이 라운드에서 판단합니다. 그 사이에 다른 항목이 이 파일을 건드리면 현행
+  목록대로 T2 로 판정합니다.
 - QA 시나리오: gpt 탭과 gemini 탭의 확신도 게이지가 같은 규칙으로 그려진다
 - [ ] `_normalize_confidence_value` 와 `safe_confidence` 를 한 벌로 합친다
 - [ ] `getRec` 의 원시 캐시 후보가 병합 결과와 같은 규칙을 쓰는지 확인한다
 - [ ] 0~1 척도로 확신도를 저장하는 생산자가 실제로 있는지 확인한다
+- [ ] 같은 파일의 `inf` 구멍 두 자리를 함께 막는다
+- [ ] 모의 구현 산출물과 실제 분석 산출물 중 어느 쪽이 나중에 파일을 쓰는지 확정한다
+- [ ] `engine/signal_tracker_ai_helpers.py` 를 위험 경로 목록에 넣을지 정한다
 - [ ] 세 탭의 게이지를 같은 자료로 실측해 대조한다
 
 
