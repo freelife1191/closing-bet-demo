@@ -18,47 +18,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-041] `/api/admin/check` 만 검증된 신원을 쓰지 않는다
-- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
-  `oh-my-claudecode:security-reviewer` 지적(확신도 높음)
-- `app/routes/common_admin_routes.py:25` 가 여전히 `request.args.get("email")` 로 판정합니다.
-  실제 권한 게이트는 Next 쪽 `resolveAdminToken` 이므로 권한 상승은 아니지만, 어떤 이메일이
-  `ADMIN_EMAILS` 에 있는지 한 건씩 확인해 주는 오라클이 되고 클라이언트 UI 게이트를 열어
-  줍니다.
-- `[INFRA-027]` 이 `g.user_email` 이라는 검증된 신원을 만들어 두었는데 그것을 쓰지 않는
-  유일한 자리입니다. `g.get("user_email")` 로 바꾸면 두 줄입니다.
-- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 22:52
-  | 범위: `common_admin_routes.py` 의 판정 출처를 `g.user_email` 로 옮기고,
-  `useAdmin.ts` 의 `?email=` 을 지우며, 신원 없는 쿼리 호출이 관리자로 판정되지 않음을
-  고정하는 검사를 더한다
-  | 실제 대화 근거: 2026-09-07 사용자 「진행해」 응답과 그 직전 AskUserQuestion 두 건의
-  선택(응답 형태 「200 과 isAdmin: false」, 변경 범위 「useAdmin.ts 도 함께 고친다」)
-- QA 시나리오: `?email=<관리자 이메일>` 로 불러도 관리자로 판정되지 않는다
-- [x] `common_admin_routes.py:25` 를 `g.get("user_email")` 로. 400 분기는
-  `is_admin_email(None)` 이 이미 False 라 통째로 사라졌다
-- [x] 쿼리 파라미터로 판정하던 동작이 사라졌음을 고정하는 검사 추가
-  (`test_admin_check_ignores_email_query_parameter`). 기존
-  `test_admin_check_reads_admin_emails_from_env` 는 쉼표 목록 파싱과 대소문자 무시를
-  보는 유일한 자리라 지우지 않고 판정 출처만 옮겼다
-- [x] `useAdmin.ts:35` 의 `?email=` 제거 (승인 범위에 포함). 프론트엔드 스킬은
-  `frontend-skills.md` §2 표에 따라 `vercel-react-best-practices`(`useEffect` 안의
-  fetch). `frontend/src/app` 아래가 아니라 번들 문서 의무 조항은 걸리지 않는다
-- [x] 프론트엔드에는 검사를 더하지 않는다. 이 저장소의 훅 검사 관례는
-  `useChatStream.test.ts` 처럼 순수 함수를 뽑아 보는 것이고, URL 문자열 한 줄에
-  `renderHook` 과 `next-auth/react` 모킹을 세우는 배관이 검사보다 크다
-- [x] `/ponytail-review` — 네 건 지적(라우트 docstring, 훅 주석, 검사 둘) 전부 반영,
-  net -11줄
-- [x] 시크릿 확인 세 가지 통과 (`.env.example` 만 추적 · 새 값 노출 없음 ·
-  `NEXT_PUBLIC_` 무관)
-- [x] `oh-my-claudecode:security-reviewer` — 지적 1(응답에 캐시 금지 헤더가 없다) 반영.
-  판정 근거가 URL 에서 헤더로 옮겨져 캐시 키가 요청자마다 갈리지 않게 된 것이 이번
-  변경에 귀속되는 결함이었다. 라우트에 `Cache-Control: no-store`, 훅에
-  `cache: 'no-store'`, 검사 한 줄을 더했다. 지적 3(로그의 이메일)은 「지금 구성에서
-  출력되지 않고 오히려 위조 경로가 닫혔다」는 판정이라 조치 없음. 지적 4(서버 게이트
-  없는 라우트)는 기존 `[INFRA-042]` 가 추적 중. 지적 2 는 `[INFRA-048]` 로 이월
-- [x] pytest 1795 통과 · 2 skip / vitest 335 통과(54 파일) / `tsc --noEmit` exit 0
-- [ ] QA 2단계
-
 ### [INFRA-044] 인가 근거가 된 `ADMIN_EMAILS` 가 워커마다 갈릴 수 있다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적(확신도 중간~높음)
