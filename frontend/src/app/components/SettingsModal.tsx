@@ -90,11 +90,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
     }
   }, [watchlist, isOpen, isWatchlistLoaded]);
 
+  // [INFRA-025] 서버가 이 경로를 관리자 토큰으로 막았다. 비관리자가 모달을 열 때마다
+  // 403 을 받아 올 이유가 없으므로 요청 자체를 보내지 않는다.
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && isAdmin) {
       fetchEnvVars();
     }
-  }, [isOpen]);
+  }, [isOpen, isAdmin]);
 
   const fetchEnvVars = async () => {
     setIsLoadingEnv(true);
@@ -125,9 +127,8 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
   const performResetData = async () => {
     try {
-      // [CRITICAL] Do NOT delete server-side .env file.
-      // await fetch('/api/system/env', { method: 'DELETE' });
-
+      // 이 화면의 「초기화」는 브라우저에 남은 것만 지운다. 서버 .env 를 지우던
+      // DELETE 는 [INFRA-025] 에서 라우트째 없앴다.
       localStorage.clear();
       sessionStorage.clear();
       await signOut({ callbackUrl: '/' });
@@ -156,18 +157,22 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
       failed.push('프로필');
     }
 
-    try {
-      // 2. Save Env Vars
-      const res = await fetch('/api/system/env', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(envVars)
-      });
+    // 비관리자에게는 .env 탭이 아예 없으므로 보낼 값도 없다. 그대로 두면 저장할
+    // 때마다 403 을 받아 「API 설정」이 실패 목록에 남는다.
+    if (isAdmin) {
+      try {
+        // 2. Save Env Vars
+        const res = await fetch('/api/system/env', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(envVars)
+        });
 
-      if (!res.ok) throw new Error("Failed to save env vars");
-    } catch (error) {
-      console.error("Env save error:", error);
-      failed.push('API 설정');
+        if (!res.ok) throw new Error("Failed to save env vars");
+      } catch (error) {
+        console.error("Env save error:", error);
+        failed.push('API 설정');
+      }
     }
 
     try {
@@ -262,6 +267,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   });
 
   const handleTestNotification = async (platform: 'discord' | 'telegram' | 'email') => {
+    // 알림 탭은 관리자에게만 보이지만, 화면 조건 하나가 바뀌어도 .env 저장 요청이
+    // 새지 않도록 여기서도 막는다.
+    if (!isAdmin) return;
     setIsTesting(true);
     try {
       // 먼저 알림 설정을 저장한다. 서버가 .env 에서 읽어야 발송할 수 있기 때문이다.
@@ -345,6 +353,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
               일반
             </button>
 
+            {/* [INFRA-025] 아래 세 탭은 서버 .env 를 읽고 쓴다. 관리자에게만 보인다. */}
+            {isAdmin && (
+              <>
             <div className="hidden md:block h-4"></div>
             <div className="hidden md:block text-xs font-bold text-gray-500 px-3 mb-2 uppercase tracking-wider">설정</div>
             <button
@@ -368,6 +379,8 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
             >
               시스템
             </button>
+              </>
+            )}
           </div>
 
           {/* Content */}
@@ -669,7 +682,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
               </div>
             )}
 
-            {activeTab === 'api' && (
+            {activeTab === 'api' && isAdmin && (
               <div className="space-y-8">
                 {isLoadingEnv && <div className="text-center text-gray-500 py-4"><i className="fas fa-spinner fa-spin"></i> 로딩 중...</div>}
 
@@ -756,7 +769,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
               </div>
             )}
 
-            {activeTab === 'notification' && (
+            {activeTab === 'notification' && isAdmin && (
               <div className="space-y-8">
                 <section>
                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -915,7 +928,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
               </div>
             )}
 
-            {activeTab === 'system' && (
+            {activeTab === 'system' && isAdmin && (
               <div className="space-y-8">
                 <section>
                   <h3 className="text-lg font-bold text-white mb-4">AI 모델 설정</h3>

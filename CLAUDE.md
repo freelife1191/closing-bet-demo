@@ -199,6 +199,17 @@ DATA_SOURCE=krx
 SCHEDULER_ENABLED=true
 ```
 
+`ADMIN_API_TOKEN` 은 `/api/system/env` 의 관리자 게이트가 쓰는 서버 전용 값입니다. Next.js
+라우트 핸들러가 NextAuth 세션으로 관리자를 확인한 뒤 이 토큰을 붙여 Flask 로 넘기고, Flask 는
+그 토큰만 확인합니다. **비어 있으면 그 경로는 모든 요청을 403 으로 막습니다.** `.env` 와
+`.env.production` 양쪽에 각각 두며 `NEXT_PUBLIC_` 접두사를 붙이지 않습니다. 붙이면 브라우저
+번들에 실려 게이트가 무의미해집니다.
+
+설정 화면에서 자격 증명을 바꿔도 **요청을 처리한 워커의 `os.environ` 만 바뀝니다.**
+`services/notifier.py` 와 `engine/messenger_config.py` 는 객체를 만들 때 `os.getenv` 로
+값을 읽으므로, 워커가 둘 이상이면 나머지 워커는 재기동 전까지 옛 값을 계속 씁니다. 유출된
+키를 이 화면으로 교체했다면 반드시 워커를 모두 재기동해야 실제로 바뀝니다.
+
 `VCP_AI_PROVIDERS` 와 `VCP_SECOND_PROVIDER`, 그리고 `PERPLEXITY_API_KEY` 의 유무는
 `VCPMultiAIAnalyzer` 가 만들어질 때 한 번 읽혀 두 번째 AI 프로바이더를 확정합니다. 확정한
 값은 실행 경로와 재분석 캐시 판정이 함께 씁니다. 그래서 `.env` 에서 이 값을 바꾸면 워커를

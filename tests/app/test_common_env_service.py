@@ -5,11 +5,9 @@ Common Env Service 단위 테스트
 """
 
 from pathlib import Path
-import types
 
 from services.common_env_service import (
     read_masked_env_vars,
-    reset_sensitive_env_and_user_data,
     update_env_file,
 )
 
@@ -19,9 +17,12 @@ def test_read_masked_env_vars_masks_sensitive_and_skips_empty(tmp_path: Path):
     env_path.write_text(
         "\n".join(
             [
-                "GOOGLE_API_KEY=abcd1234wxyz",
-                "NORMAL_VALUE=hello",
-                "EMPTY_VALUE=",
+                # 24자를 넘는 값은 앞뒤 네 자를 남긴다
+                "OPENAI_API_KEY=abcd1234567890123456789wxyz",
+                # 24자 이하는 전부 가린다. 16자 앱 비밀번호가 절반을 흘리던 자리다
+                "SMTP_PASSWORD=abcdefghijklmnop",
+                "SMTP_PORT=587",
+                "SMTP_USER=",
                 "# comment",
             ]
         )
@@ -30,15 +31,17 @@ def test_read_masked_env_vars_masks_sensitive_and_skips_empty(tmp_path: Path):
     )
 
     result = read_masked_env_vars(str(env_path))
-    assert result["NORMAL_VALUE"] == "hello"
-    assert result["GOOGLE_API_KEY"].startswith("abcd")
-    assert "EMPTY_VALUE" not in result
+    assert result["SMTP_PORT"] == "587"
+    assert result["OPENAI_API_KEY"].startswith("abcd")
+    assert result["OPENAI_API_KEY"].endswith("wxyz")
+    assert result["SMTP_PASSWORD"] == "*" * 16
+    assert "SMTP_USER" not in result
 
 
 def test_update_env_file_preserves_masked_input_and_deletes_empty(tmp_path: Path):
     env_path = tmp_path / ".env"
     env_path.write_text(
-        "GOOGLE_API_KEY=secret-value\nNORMAL=old\nREMOVE_ME=1\n",
+        "OPENAI_API_KEY=secret-value\nSMTP_HOST=old\nSMTP_USER=1\n",
         encoding="utf-8",
     )
 
@@ -46,53 +49,18 @@ def test_update_env_file_preserves_masked_input_and_deletes_empty(tmp_path: Path
     update_env_file(
         str(env_path),
         {
-            "GOOGLE_API_KEY": "****",  # 마스킹 값은 변경 금지
-            "NORMAL": "new",
-            "REMOVE_ME": "",
-            "ADDED": "ok",
+            "OPENAI_API_KEY": "****",  # 마스킹 값은 변경 금지
+            "SMTP_HOST": "new",
+            "SMTP_USER": "",
+            "TELEGRAM_CHAT_ID": "ok",
         },
         environ,
     )
 
     content = env_path.read_text(encoding="utf-8")
-    assert "GOOGLE_API_KEY=secret-value" in content
-    assert "NORMAL=new" in content
-    assert "REMOVE_ME=" not in content
-    assert "ADDED=ok" in content
-    assert environ["NORMAL"] == "new"
-    assert environ["ADDED"] == "ok"
-
-
-def test_reset_sensitive_env_and_user_data_clears_and_deletes(tmp_path: Path):
-    env_path = tmp_path / ".env"
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    env_path.write_text(
-        "OPENAI_API_KEY=secret\nKEEP=value\nUSER_PROFILE=test\n",
-        encoding="utf-8",
-    )
-    (data_dir / "user_quota.json").write_text("{}", encoding="utf-8")
-    (data_dir / "chatbot_history.json").write_text("{}", encoding="utf-8")
-    (data_dir / "chatbot_storage.db").write_text("sqlite", encoding="utf-8")
-    (data_dir / "chatbot_storage.db-wal").write_text("wal", encoding="utf-8")
-    (data_dir / "chatbot_storage.db-shm").write_text("shm", encoding="utf-8")
-
-    environ: dict[str, str] = {}
-    logger = types.SimpleNamespace(info=lambda *_a, **_k: None, error=lambda *_a, **_k: None)
-
-    reset_sensitive_env_and_user_data(
-        env_path=str(env_path),
-        data_dir=str(data_dir),
-        environ=environ,
-        logger=logger,
-    )
-
-    content = env_path.read_text(encoding="utf-8")
-    assert "OPENAI_API_KEY=\n" in content
-    assert "USER_PROFILE=\n" in content
-    assert "KEEP=value" in content
-    assert not (data_dir / "user_quota.json").exists()
-    assert not (data_dir / "chatbot_history.json").exists()
-    assert not (data_dir / "chatbot_storage.db").exists()
-    assert not (data_dir / "chatbot_storage.db-wal").exists()
-    assert not (data_dir / "chatbot_storage.db-shm").exists()
+    assert "OPENAI_API_KEY=secret-value" in content
+    assert "SMTP_HOST=new" in content
+    assert "SMTP_USER=" not in content
+    assert "TELEGRAM_CHAT_ID=ok" in content
+    assert environ["SMTP_HOST"] == "new"
+    assert environ["TELEGRAM_CHAT_ID"] == "ok"

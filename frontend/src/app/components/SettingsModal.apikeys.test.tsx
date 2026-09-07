@@ -18,8 +18,10 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
+// [INFRA-025] 이후 .env 를 다루는 탭과 저장 요청은 관리자에게만 열린다. 이 파일의
+// 검사 대상은 그 탭 안의 동작이므로 관리자로 둔다.
 vi.mock('@/hooks/useAdmin', () => ({
-  useAdmin: () => ({ isAdmin: false, isLoading: false, userEmail: null }),
+  useAdmin: () => ({ isAdmin: true, isLoading: false, userEmail: 'admin@example.com' }),
 }));
 
 vi.mock('@/lib/session', () => ({

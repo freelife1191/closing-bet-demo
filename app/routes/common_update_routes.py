@@ -13,11 +13,10 @@ from threading import Thread
 from flask import jsonify, request
 
 from app.routes.common_route_context import CommonRouteContext
+from services.admin_helpers import verify_admin_api_token
 from services.common_data_status_service import build_common_data_status_payload
 from services.common_env_service import (
     read_masked_env_vars,
-    reset_sensitive_env_and_user_data,
-    resolve_data_dir,
     resolve_env_path,
     update_env_file,
 )
@@ -218,9 +217,17 @@ def _register_data_status_route(common_bp, ctx: CommonRouteContext) -> None:
 
 
 def _register_manage_env_route(common_bp, ctx: CommonRouteContext) -> None:
-    @common_bp.route("/system/env", methods=["GET", "POST", "DELETE"])
+    @common_bp.route("/system/env", methods=["GET", "POST"])
     def manage_env():
-        """환경 변수 관리 (읽기 및 쓰기)."""
+        """환경 변수 관리 (읽기 및 쓰기). 관리자 토큰이 있는 요청만 처리한다."""
+        # 이 토큰은 Next.js 라우트 핸들러가 NextAuth 세션을 확인한 뒤에만 붙인다.
+        # 브라우저는 값을 알 수 없으므로 헤더를 지어내도 통과하지 못한다.
+        # Next 의 rewrite 예외만으로는 부족하다. `/api/system%2Fenv` 처럼 인코딩한
+        # 경로는 그 부정 전방탐색을 빠져나가 Flask 로 넘어오고, WSGI 가 PATH_INFO 를
+        # 디코딩해 이 라우트에 닿는다. 그때 요청을 세우는 것은 이 검사뿐이다.
+        if not verify_admin_api_token(request.headers.get("X-Admin-Token")):
+            return jsonify({"error": "Forbidden"}), 403
+
         if request.method == "GET":
             def _handle_get():
                 return jsonify(read_masked_env_vars(resolve_env_path()))
@@ -231,38 +238,17 @@ def _register_manage_env_route(common_bp, ctx: CommonRouteContext) -> None:
                 error_label="Error reading .env",
             )
 
-        if request.method == "POST":
-            def _handle_post():
-                data = request.get_json() or {}
-                if not data:
-                    return jsonify({"status": "ok"})
-                update_env_file(resolve_env_path(), data, os.environ)
+        def _handle_post():
+            data = request.get_json() or {}
+            if not data:
                 return jsonify({"status": "ok"})
-
-            return _execute_update_route(
-                handler=_handle_post,
-                ctx=ctx,
-                error_label="Error updating .env",
-            )
-
-        def _handle_delete():
-            reset_sensitive_env_and_user_data(
-                env_path=resolve_env_path(),
-                data_dir=resolve_data_dir(),
-                environ=os.environ,
-                logger=ctx.logger,
-            )
-            return jsonify(
-                {
-                    "status": "ok",
-                    "message": "All sensitive data and user history types wiped.",
-                }
-            )
+            update_env_file(resolve_env_path(), data, os.environ)
+            return jsonify({"status": "ok"})
 
         return _execute_update_route(
-            handler=_handle_delete,
+            handler=_handle_post,
             ctx=ctx,
-            error_label="Error resetting .env",
+            error_label="Error updating .env",
         )
 
 

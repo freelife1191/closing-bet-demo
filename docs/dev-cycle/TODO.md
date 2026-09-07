@@ -28,11 +28,45 @@
   방문자도 화면을 통해 이 경로에 닿습니다.
 - `.env` 로 시작하는 파일을 다루므로 `tier-rules.md` §2 「시크릿과 인증」에 따라 T3 이며,
   §1 의 시크릿 확인 세 가지를 검증에 더합니다.
-- [ ] `useAdmin` 이 쓰는 `/api/admin/check` 와 같은 판정을 서버에서 하도록 데코레이터 추가
-- [ ] 세 메서드 각각에 어떤 권한을 요구할지 정함. `GET` 도 마스킹된 값이나마 변수 이름
-      전체를 노출하므로 함께 막을지 판단
-- [ ] 권한이 없는 요청이 403 을 받는 것을 확인하는 테스트 추가
-- [ ] 화면이 403 을 받았을 때 무엇을 보여줄지 정함
+- 2026-09-07 설계에서 확인한 사실: `services/common_env_service.py:69` 의 마스킹이 키
+  이름에 특정 단어가 있을 때만 값을 가리므로, 현재 `.env` 의 55개 변수 가운데 37개가
+  평문으로 나가고 그 안에 `ADMIN_EMAILS` 가 있습니다. 그 이메일이 새면
+  `common_admin_routes.py:24` 의 `/api/admin/check` 가 이메일 문자열만으로 판정하므로
+  관리자 화면이 열리고, `[INFRA-027]` 의 `X-User-Email` 헤더와 합쳐 쿼터까지 뚫립니다.
+  `DELETE` 는 `SettingsModal.tsx:129` 가 이미 호출을 주석 처리해 죽어 있습니다.
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 16:09
+  | 범위: Next 라우트 핸들러가 NextAuth 세션으로 관리자를 판정하고 `ADMIN_API_TOKEN` 을
+  붙여 Flask 로 중계, Flask 는 그 토큰만 확인. 죽은 `DELETE` 제거. 응답과 저장 대상을
+  화면이 쓰는 12개 키로 제한
+  | 실제 대화 근거: 2026-09-07 사용자의 「다음 라운드 진행해야할 사항 검토해서 진행해줘」
+  요청과, 이어진 두 선택지 응답 「Next 세션 게이트 + Flask 공유 비밀」·「함께 고친다」
+- 계획: `docs/superpowers/plans/2026-09-07-infra-025-system-env-admin-gate.md`
+- 계획 검토: `oh-my-claudecode:critic` 판정 `REVISE`. 지적 여섯 가지를 반영했습니다.
+  (1) `%2F` 로 인코딩한 경로가 rewrite 를 빠져나가므로 Flask 검사가 중복이 아님을 명시,
+  (2) `/api/notification/send` 는 여전히 무인증이라는 사실 명시와 `[INFRA-037]` 이월,
+  (3) 마스킹 판정을 뒤집어도 12개 키 결과가 같다는 대조 추가,
+  (4) `hmac.compare_digest` 가 비ASCII 헤더에서 `TypeError` 를 던져 500 이 나가는 결함
+  수정(바이트 비교), (5) 인가 판정을 `isAdminEmail` 순수 함수로 분리해 검사 추가,
+  (6) 신규 vitest 파일의 `vi.mock` 호이스팅 문제 수정. 회신이 길이 제한으로 두 번 잘려
+  3~5절 세부는 받지 못했으나, 요약이 명시한 지적은 모두 직접 재현·확인해 반영했습니다.
+- QA 시나리오: 비관리자로 로그인해 설정을 열면 프로필 탭만 보이고 `/api/system/env` 요청이
+  나가지 않으며, 토큰 없이 그 경로를 직접 부르면 403 이 온다
+- 과잉설계 리뷰(`/ponytail-review`): `get_admin_api_token`·`ADMIN_TOKEN_HEADER`·
+  `_reject_unless_admin` 세 군데가 호출자 하나짜리 간접층이라는 지적을 받아 인라인해
+  17줄을 걷어냈습니다. `resolveAdminToken` 분리와 `handleTestNotification` 의 가드는
+  각각 가독성과 신뢰 경계 방어를 이유로 남겼습니다.
+- 코드 리뷰(`feature-dev:code-reviewer`): 신뢰 사슬·허용 목록·기존 테스트 수정·
+  `.gitignore` 변경 네 항목 모두 결함 없음. 리뷰어가 pytest·vitest·type-check 를
+  독립적으로 재실행해 통과를 확인했습니다. 지적 한 건은 「`/api/notification/send`
+  이월을 기록했는데 실제 항목이 없다」였고 `[INFRA-037]` 로 이월해 해소했습니다.
+- [x] Flask 가 `ADMIN_API_TOKEN` 을 상수 시간으로 검증한다 (비ASCII 헤더 포함)
+- [x] 라우트에 게이트를 걸고 죽은 `DELETE` 와 `reset_sensitive_env_and_user_data` 를 지운다
+- [x] 응답과 저장 대상을 `EDITABLE_ENV_KEYS` 12개로 제한하고 마스킹 판정을 뒤집는다
+- [x] Next 라우트 핸들러가 세션을 확인해 중계하고 `resolveAdminToken` 판정에 검사를 붙인다
+- [x] 비관리자에게 `.env` 탭 세 개를 감추고 요청을 보내지 않는다
+- [x] `.env.example` 에 `ADMIN_API_TOKEN` 을 적고 README·AGENTS.md 서술을 코드와 맞춘다
+- [x] 범위 밖 발견을 `[INFRA-037]` 로 이월한다
+- [ ] QA 시나리오 계획과 실행
 
 ### [INFRA-027] 요청 헤더 한 줄이 그대로 신원이 되어 유료 쿼터를 우회한다
 - 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
@@ -60,6 +94,39 @@
 - [ ] 당장 도입이 어려우면 이 엔드포인트에 IP 단위 속도 제한을 먼저 건다
 - [ ] 위조한 헤더가 쿼터를 우회하지 못함을 고정하는 검사 추가
 - [ ] pytest 전체 통과 확인
+
+### [INFRA-037] `/api/notification/send` 가 인증 없이 저장된 자격 증명으로 발송한다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 계획 검토와
+  코드 리뷰가 각각 지적했고 코드를 직접 열어 확인했습니다.
+- `app/routes/common_notification_routes.py:123` 의 `send_test_notification` 에 권한
+  검사가 없습니다. `frontend/next.config.js` 의 rewrite 가 이 경로를 Flask 로 그대로
+  넘기므로 Next 라우트 핸들러를 거치지도 않습니다. 그래서 누구든 이 경로로 POST 하면
+  서버가 `.env` 에 저장된 텔레그램 봇 토큰·디스코드 웹훅·SMTP 계정으로 실제 발송을
+  수행합니다. 발송 대상은 운영자가 설정한 채널이므로 스팸 통로가 됩니다.
+- `[INFRA-025]` 가 화면 쪽 `handleTestNotification` 에 `if (!isAdmin) return;` 을
+  두었지만 그것은 화면의 편의일 뿐 엔드포인트를 닫지 않습니다.
+- 같은 사이클이 세운 방식을 그대로 쓸 수 있습니다. `frontend/src/app/api/system/env/`
+  의 라우트 핸들러와 `services/admin_helpers.py` 의 `verify_admin_api_token` 이
+  본보기입니다. 두 번째 호출자가 생기므로 그때 게이트를 함수나 데코레이터로 묶는 것을
+  함께 검토합니다.
+- [ ] 이 경로에 어떤 권한을 요구할지 정함. 관리자 전용인지, 로그인 사용자까지인지
+- [ ] `frontend/src/app/api/notification/send/route.ts` 로 세션 확인을 거치게 함
+- [ ] Flask 에 게이트를 걸고 rewrite 에서 이 경로를 제외
+- [ ] 토큰 없는 요청이 403 을 받는 것을 확인하는 테스트 추가
+
+### [INFRA-038] 500 응답 본문이 서버 내부 경로를 그대로 흘린다
+- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 보안 리뷰
+  (확신도 높음, 우선순위 낮음으로 분류)
+- `app/routes/common_update_routes.py:67` 의 `_build_error_payload` 가 500 본문에
+  `str(error)` 를 그대로 담습니다. `.env` 읽기가 실패하면 그 절대 경로가 응답에
+  실려 나가 서버의 디렉터리 구조를 알려 줍니다.
+- `app/__init__.py:270` 의 전역 예외 처리기도 같은 형태로 `message` 에 `str(error)` 를
+  담습니다. `[INFRA-017]` 이 그 처리기를 손볼 예정이므로 함께 보는 편이 낫습니다.
+- 우선순위가 낮은 이유는 `[INFRA-025]` 가 `/api/system/env` 를 관리자 전용으로 닫아
+  이 본문에 닿는 사람이 이미 관리자로 좁혀졌기 때문입니다. 다른 경로에는 그 게이트가
+  없으므로 완전히 사라진 문제는 아닙니다.
+- [ ] 오류 본문에서 내부 경로를 걷어내고 로그에만 남기도록 바꿈
+- [ ] `[INFRA-017]` 과 겹치는 범위를 정리
 
 ### [VCP-012] 차트 조회 응답의 도착 순서를 보장하지 않는다
 - 카테고리: VCP 시그널 | 티어: T1 | 근거: 2026-09-02 VCP-010 마감 code-review
@@ -156,6 +223,13 @@
 - 호출하는 쪽이 「경로가 없음」과 「서버가 고장남」을 구분할 수 없습니다. 프론트엔드의
   재시도 로직은 5xx 를 일시적 장애로 보고 무의미하게 반복하게 되고, 운영 환경의
   모니터링에서는 경로 오타 하나가 서버 장애로 집계됩니다.
+- 2026-09-07 `[INFRA-025]` 사이클에서 같은 원인이 `NotFound` 뿐 아니라
+  `MethodNotAllowed` 에도 걸리는 것을 확인했습니다. 그 항목이 `/api/system/env` 의
+  `DELETE` 를 없앤 뒤 `curl -X DELETE http://127.0.0.1:5501/api/system/env` 를 실행하면
+  405 가 아니라 500 이 나오고, `logs/backend.log` 에 werkzeug 의 라우팅 예외가
+  `CRITICAL SERVER ERROR` 로 남습니다. 최소 앱으로 도는 `tests/app/` 의 테스트는
+  전역 처리기를 달지 않으므로 405 를 보고, 실제 앱만 500 을 봅니다. 그래서 회귀 검사는
+  블루프린트만 붙인 앱이 아니라 `create_app()` 이 만든 앱으로 확인해야 합니다.
 - 전역 오류 처리를 바꾸면 모든 API 응답의 상태 코드에 영향을 주므로 T2 로 봅니다.
   계획 단계에서 실제 수정 파일로 다시 판정합니다.
 - [ ] 전역 예외 처리기가 `werkzeug.exceptions.HTTPException` 을 그대로 통과시키도록 수정

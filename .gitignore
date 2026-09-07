@@ -6,8 +6,11 @@ __pycache__/
 .Python
 venv/
 .venv
-env/
-ENV/
+# 파이썬 가상환경 규칙이므로 루트에 한정한다. 앞에 `/` 가 없으면 하위 디렉터리의
+# `env` 에도 걸리는데, macOS 는 core.ignorecase 가 true 라 `ENV/` 까지 함께 걸린다.
+# 그래서 `frontend/src/app/api/system/env/` 라우트가 통째로 무시되고 있었다.
+/env/
+/ENV/
 
 # Backup
 backup/

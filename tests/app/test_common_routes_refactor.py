@@ -284,9 +284,12 @@ def test_system_env_get_returns_500_on_read_error(monkeypatch):
         raise RuntimeError("env read fail")
 
     monkeypatch.setattr(common_update_routes, "read_masked_env_vars", _raise_read_error)
+    # 이 경로는 [INFRA-025] 이후 관리자 토큰을 요구한다. 검사 대상은 게이트가 아니라
+    # 읽기 오류의 응답 형태이므로 게이트를 통과시킨 뒤를 본다.
+    monkeypatch.setenv("ADMIN_API_TOKEN", "s3cret-token")
 
     client = _create_client()
-    response = client.get("/api/system/env")
+    response = client.get("/api/system/env", headers={"X-Admin-Token": "s3cret-token"})
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "env read fail"}

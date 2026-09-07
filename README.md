@@ -357,7 +357,7 @@ graph TD
 - `GET /api/portfolio`: 모의투자 포트폴리오 및 자산 현황 조회
 - `POST /api/portfolio/buy`: 모의투자 매수 주문 체결
 - `POST /api/portfolio/sell`: 모의투자 매도 주문 체결
-- `GET /api/system/env`: 시스템 전체 환경 변수 관리 (관리자 전용)
+- `GET`·`POST /api/system/env`: 설정 화면이 다루는 환경 변수 조회와 저장. 관리자 전용이며 `ADMIN_API_TOKEN` 이 없는 요청은 403 을 받는다
 - `GET /health`: 시스템 상태 및 API 가동 여부 체크 (Root)
 
 ```python
