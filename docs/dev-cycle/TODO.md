@@ -18,56 +18,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-025] `/api/system/env` 가 인증 없이 서버 `.env` 를 읽고 쓴다
-- 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-04 FE-006 사이클의 code-review
-- `app/routes/common_update_routes.py:221` 의 `manage_env` 에 권한 검사가 없습니다.
-  `GET` 은 마스킹한 환경 변수 전체를, `POST` 는 `.env` 쓰기를, `DELETE` 는 민감 값과
-  사용자 자료의 초기화를 아무 요청자에게나 허용합니다. `README.md` 는 이 경로를 관리자
-  전용으로 서술하고 있어 문서와 코드가 어긋납니다.
-- 설정 모달은 `Sidebar.tsx:371` 에서 모든 방문자에게 렌더되므로, 로그인하지 않은
-  방문자도 화면을 통해 이 경로에 닿습니다.
-- `.env` 로 시작하는 파일을 다루므로 `tier-rules.md` §2 「시크릿과 인증」에 따라 T3 이며,
-  §1 의 시크릿 확인 세 가지를 검증에 더합니다.
-- 2026-09-07 설계에서 확인한 사실: `services/common_env_service.py:69` 의 마스킹이 키
-  이름에 특정 단어가 있을 때만 값을 가리므로, 현재 `.env` 의 55개 변수 가운데 37개가
-  평문으로 나가고 그 안에 `ADMIN_EMAILS` 가 있습니다. 그 이메일이 새면
-  `common_admin_routes.py:24` 의 `/api/admin/check` 가 이메일 문자열만으로 판정하므로
-  관리자 화면이 열리고, `[INFRA-027]` 의 `X-User-Email` 헤더와 합쳐 쿼터까지 뚫립니다.
-  `DELETE` 는 `SettingsModal.tsx:129` 가 이미 호출을 주석 처리해 죽어 있습니다.
-- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 16:09
-  | 범위: Next 라우트 핸들러가 NextAuth 세션으로 관리자를 판정하고 `ADMIN_API_TOKEN` 을
-  붙여 Flask 로 중계, Flask 는 그 토큰만 확인. 죽은 `DELETE` 제거. 응답과 저장 대상을
-  화면이 쓰는 12개 키로 제한
-  | 실제 대화 근거: 2026-09-07 사용자의 「다음 라운드 진행해야할 사항 검토해서 진행해줘」
-  요청과, 이어진 두 선택지 응답 「Next 세션 게이트 + Flask 공유 비밀」·「함께 고친다」
-- 계획: `docs/superpowers/plans/2026-09-07-infra-025-system-env-admin-gate.md`
-- 계획 검토: `oh-my-claudecode:critic` 판정 `REVISE`. 지적 여섯 가지를 반영했습니다.
-  (1) `%2F` 로 인코딩한 경로가 rewrite 를 빠져나가므로 Flask 검사가 중복이 아님을 명시,
-  (2) `/api/notification/send` 는 여전히 무인증이라는 사실 명시와 `[INFRA-037]` 이월,
-  (3) 마스킹 판정을 뒤집어도 12개 키 결과가 같다는 대조 추가,
-  (4) `hmac.compare_digest` 가 비ASCII 헤더에서 `TypeError` 를 던져 500 이 나가는 결함
-  수정(바이트 비교), (5) 인가 판정을 `isAdminEmail` 순수 함수로 분리해 검사 추가,
-  (6) 신규 vitest 파일의 `vi.mock` 호이스팅 문제 수정. 회신이 길이 제한으로 두 번 잘려
-  3~5절 세부는 받지 못했으나, 요약이 명시한 지적은 모두 직접 재현·확인해 반영했습니다.
-- QA 시나리오: 비관리자로 로그인해 설정을 열면 프로필 탭만 보이고 `/api/system/env` 요청이
-  나가지 않으며, 토큰 없이 그 경로를 직접 부르면 403 이 온다
-- 과잉설계 리뷰(`/ponytail-review`): `get_admin_api_token`·`ADMIN_TOKEN_HEADER`·
-  `_reject_unless_admin` 세 군데가 호출자 하나짜리 간접층이라는 지적을 받아 인라인해
-  17줄을 걷어냈습니다. `resolveAdminToken` 분리와 `handleTestNotification` 의 가드는
-  각각 가독성과 신뢰 경계 방어를 이유로 남겼습니다.
-- 코드 리뷰(`feature-dev:code-reviewer`): 신뢰 사슬·허용 목록·기존 테스트 수정·
-  `.gitignore` 변경 네 항목 모두 결함 없음. 리뷰어가 pytest·vitest·type-check 를
-  독립적으로 재실행해 통과를 확인했습니다. 지적 한 건은 「`/api/notification/send`
-  이월을 기록했는데 실제 항목이 없다」였고 `[INFRA-037]` 로 이월해 해소했습니다.
-- [x] Flask 가 `ADMIN_API_TOKEN` 을 상수 시간으로 검증한다 (비ASCII 헤더 포함)
-- [x] 라우트에 게이트를 걸고 죽은 `DELETE` 와 `reset_sensitive_env_and_user_data` 를 지운다
-- [x] 응답과 저장 대상을 `EDITABLE_ENV_KEYS` 12개로 제한하고 마스킹 판정을 뒤집는다
-- [x] Next 라우트 핸들러가 세션을 확인해 중계하고 `resolveAdminToken` 판정에 검사를 붙인다
-- [x] 비관리자에게 `.env` 탭 세 개를 감추고 요청을 보내지 않는다
-- [x] `.env.example` 에 `ADMIN_API_TOKEN` 을 적고 README·AGENTS.md 서술을 코드와 맞춘다
-- [x] 범위 밖 발견을 `[INFRA-037]` 로 이월한다
-- [ ] QA 시나리오 계획과 실행
-
 ### [INFRA-027] 요청 헤더 한 줄이 그대로 신원이 되어 유료 쿼터를 우회한다
 - 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
   보안 스페셜리스트 지적(확신도 90). 코드를 직접 열어 확인했다.
@@ -605,6 +555,20 @@
 - [ ] 세 탭의 게이지를 같은 자료로 실측해 대조한다
 
 ## P2 — 대기
+
+### [FE-041] 설정 화면의 알림 테스트가 저장 실패를 삼키고 성공으로 표시한다
+- 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 `/review`
+- `frontend/src/app/components/SettingsModal.tsx:277` 의 `handleTestNotification` 은 `.env`
+  저장 요청을 `await fetch(...)` 로 보내고 `res.ok` 를 보지 않습니다. 세션이 끊겨 403 이
+  오거나 네트워크가 끊겨도 곧바로 `/api/notification/send` 를 부르므로, 관리자가 SMTP
+  비밀번호를 고치고 「테스트 발송」을 누르면 **저장되지 않은 옛 값으로 발송된 결과를
+  「발송 성공」으로 읽습니다.** 새 값이 틀렸는지 저장이 실패했는지 화면에서 구분할 수
+  없습니다.
+- 같은 사이클에서 `frontend/src/app/api/system/env/route.ts:44` 의 Flask 로 가는 `fetch` 에
+  오류 처리가 없다는 지적도 받았습니다. 백엔드가 죽어 있으면 라우트가 500 을 냅니다.
+  둘 다 관리자 전용 경로의 오류 표시 문제이므로 한 항목으로 묶습니다.
+- QA 시나리오: 백엔드를 내린 상태로 관리자가 「테스트 발송」을 누르면 성공이 아니라
+  저장 실패가 표시된다
 
 ### [CHAT-029] 챗봇 입력 영역에 이름 없는 버튼이 둘 남아 있다
 - 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-07 `[CHAT-007]` 코드 리뷰(`feature-dev:code-reviewer`)의 범위 밖 발견
