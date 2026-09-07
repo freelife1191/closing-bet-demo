@@ -225,3 +225,104 @@ def test_legacy_merge_does_not_bring_in_new_tickers():
     )
 
     assert list(ai_data_map) == ["034730"]
+
+
+def test_legacy_merge_fills_the_same_three_provider_fields():
+    """[VCP-018] 회귀: 세 프로바이더가 모두 같은 규칙으로 보강된다.
+
+    보강 목록에 gemini 와 perplexity 만 적혀 있던 동안, 지금 자료가 두 번째
+    프로바이더로 쓰는 gpt_recommendation 은 legacy 에만 있으면 응답에 닿지 못했다.
+    `_merge_ai_data_into_vcp_signals` 는 세 필드를 모두 내보내므로 비대칭은 보강
+    함수 한 곳에만 있었다.
+    """
+    legacy = {"action": "BUY", "confidence": 70, "reason": "지난 분석이 남긴 사유입니다."}
+    ai_data_map = {"005930": {"ticker": "005930"}}
+
+    vcp_helpers._merge_legacy_ai_fields_into_map(
+        ai_data_map,
+        {
+            "signals": [
+                {
+                    "ticker": "005930",
+                    "gemini_recommendation": legacy,
+                    "gpt_recommendation": legacy,
+                    "perplexity_recommendation": legacy,
+                }
+            ]
+        },
+    )
+
+    merged = ai_data_map["005930"]
+    assert [merged.get(field) for field in vcp_helpers._AI_RECOMMENDATION_FIELDS] == [
+        legacy,
+        legacy,
+        legacy,
+    ]
+
+
+def test_legacy_merge_keeps_a_failed_verdict_instead_of_reaching_for_legacy():
+    """[VCP-018] 회귀: 오늘 값이 실패 기록이어도 legacy 로 바꾸지 않는다.
+
+    이 맵은 다음 단계에서 CSV 가 만든 시그널 판정을 덮어쓰는 자리다. 실패 기록을
+    legacy 의 정상 판정으로 대체하면 오늘 CSV 의 판정이 지난 달 판정에 밀려난다.
+    보강은 비어 있는 자리를 채우는 데까지만 한다.
+    """
+    failed = {"action": "N/A", "confidence": 0, "reason": "분석 실패"}
+    legacy = {"action": "HOLD", "confidence": 55, "reason": "지난 분석이 남긴 사유입니다."}
+    ai_data_map = {"005930": {"ticker": "005930", "gpt_recommendation": failed}}
+
+    vcp_helpers._merge_legacy_ai_fields_into_map(
+        ai_data_map,
+        {"signals": [{"ticker": "005930", "gpt_recommendation": legacy}]},
+    )
+
+    assert ai_data_map["005930"]["gpt_recommendation"] == failed
+
+
+def test_legacy_merge_does_not_push_todays_csv_verdict_out_of_the_signal():
+    """[VCP-018] 회귀: 오늘 CSV 가 만든 판정이 legacy 판정에 밀려나지 않는다.
+
+    시그널의 gemini_recommendation 은 `_build_vcp_signal_from_row` 가 CSV 행에서
+    만든다. 그러므로 오늘 JSON 의 같은 필드가 실패 기록이어도 시그널 쪽은 정상인
+    상태가 성립한다. 보강이 그 실패 기록을 legacy 로 대체하면, 이어지는 병합이
+    맵의 값으로 시그널을 덮어써서 오늘 BUY 가 지난 달 SELL 로 바뀐다. 세 단계를
+    이어서 태워야 드러나는 경로라 함수 하나만 보는 검사로는 잡히지 않는다.
+    """
+    row = {
+        "ticker": "005930", "name": "삼성전자", "signal_date": "2026-05-05",
+        "market": "KOSPI", "status": "OPEN", "score": 82, "vcp_score": 14.0,
+        "is_vcp": True, "entry_price": 100000, "current_price": 100000,
+        "ai_action": "BUY", "ai_confidence": 80, "ai_reason": "오늘 CSV 가 담은 사유입니다.",
+    }
+    signals = [vcp_helpers._build_vcp_signal_from_row(row)]
+    ai_data_map = vcp_helpers._build_ai_data_map(
+        {
+            "signals": [
+                {
+                    "ticker": "005930",
+                    "gemini_recommendation": {
+                        "action": "N/A", "confidence": 0, "reason": "분석 실패",
+                    },
+                }
+            ]
+        }
+    )
+
+    vcp_helpers._merge_legacy_ai_fields_into_map(
+        ai_data_map,
+        {
+            "signals": [
+                {
+                    "ticker": "005930",
+                    "gemini_recommendation": {
+                        "action": "SELL", "confidence": 40,
+                        "reason": "지난 달 분석이 남긴 사유입니다.",
+                    },
+                }
+            ]
+        },
+    )
+    vcp_helpers._merge_ai_data_into_vcp_signals(signals, ai_data_map)
+
+    assert signals[0]["gemini_recommendation"]["action"] == "BUY"
+    assert signals[0]["gemini_recommendation"]["reason"] == "오늘 CSV 가 담은 사유입니다."

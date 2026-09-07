@@ -22,6 +22,15 @@ from engine.config import config as signal_config
 from engine.pandas_utils_safe import safe_bool
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 
+# AI 추천을 담는 세 필드. legacy 보강과 시그널 병합이 같은 목록을 봐야 한다. 두 곳이
+# 따로 적혀 있던 동안 보강 쪽이 두 번째 프로바이더가 perplexity 이던 시절에 멈춰,
+# 지금 자료가 쓰는 gpt_recommendation 이 legacy 에만 있으면 응답에 닿지 못했다.
+_AI_RECOMMENDATION_FIELDS = (
+    "gemini_recommendation",
+    "gpt_recommendation",
+    "perplexity_recommendation",
+)
+
 
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
     if isinstance(row, dict):
@@ -335,13 +344,14 @@ def _merge_legacy_ai_fields_into_map(ai_data_map: Dict[str, dict], legacy_payloa
             continue
 
         current = ai_data_map[ticker]
-        if (
-            not current.get("perplexity_recommendation")
-            and item.get("perplexity_recommendation")
-        ):
-            current["perplexity_recommendation"] = item["perplexity_recommendation"]
-        if not current.get("gemini_recommendation") and item.get("gemini_recommendation"):
-            current["gemini_recommendation"] = item["gemini_recommendation"]
+        for field in _AI_RECOMMENDATION_FIELDS:
+            # 비어 있는 자리만 채운다. 값이 이미 있으면 그것이 실패 기록이어도 legacy 로
+            # 바꾸지 않는다. 이 맵은 다음 단계에서 CSV 가 만든 시그널 판정을 덮어쓰므로,
+            # 실패 기록을 legacy 의 정상 판정으로 대체하면 오늘 CSV 의 판정이 지난 달
+            # 판정에 밀려난다. 화면의 getAIBadge 는 병합이 끝난 값을 보고 legacy 를
+            # 고르므로, 그 자리에서 같은 일을 이미 안전하게 하고 있다.
+            if not current.get(field) and item.get(field):
+                current[field] = item[field]
 
 
 def _merge_ai_data_into_vcp_signals(signals: List[dict], ai_data_map: Dict[str, dict]) -> int:
@@ -358,7 +368,7 @@ def _merge_ai_data_into_vcp_signals(signals: List[dict], ai_data_map: Dict[str, 
             continue
         ai_item = ai_data_map[ticker]
         # 캐시에 없거나 실패 기록인 추천으로 기존 값을 덮어쓰지 않는다.
-        for field in ("gemini_recommendation", "gpt_recommendation", "perplexity_recommendation"):
+        for field in _AI_RECOMMENDATION_FIELDS:
             recommendation = ai_item.get(field)
             if _is_valid_ai_recommendation(recommendation):
                 signal[field] = recommendation

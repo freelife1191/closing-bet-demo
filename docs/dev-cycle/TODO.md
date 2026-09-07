@@ -18,6 +18,27 @@
 
 ### [VCP-018] legacy 분석 파일의 GPT 추천이 VCP 화면에 닿지 못한다
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-004]` 사이클의 code-review
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 10:40
+  | 범위: `_merge_legacy_ai_fields_into_map` 의 보강 목록과 유효성 판정, 그에 딸린 회귀 검사
+  | 실제 대화 근거: 이번 세션의 「다음 라운드 진행해야할 사항 검토해서 진행해줘」 요청과
+  AskUserQuestion 「[VCP-018] 의 보강 함수를 어느 범위까지 고칠까요?」 의 「세 필드를 한
+  규칙으로 (추천)」 선택
+- 조사로 정정한 관찰: 아래 「영향」 의 「GPT 탭 자체가 사라집니다」 는 모든 조건에서 참이
+  아닙니다. `page.tsx:978` 의 `getAIBadge` 가 `aiData` 로 폴백하고, 그 `aiData` 를 만드는
+  `build_latest_ai_analysis_payload` 는 `kr_ai_analysis.json` 을 직접 읽기 때문입니다.
+  확실히 어긋나는 것은 `/api/kr/signals` 응답 자체이며, 화면에서는 `aiData` 가 jongga
+  갈래를 타거나 그 종목이 `aiData` 에 없을 때 GPT 배지가 `-` 로 떨어집니다.
+- 조사로 확정한 의도 판정: `data/` 의 분석 파일 열여섯 개를 열어 보니 2026-02-11 부터
+  02-26 까지는 `perplexity_recommendation` 이 있고 2026-05-05 자료에는 없으며 그 자리를
+  `gpt_recommendation` 이 대신합니다. 두 번째 프로바이더가 바뀌었는데 보강 목록만 함수가
+  만들어진 시점(`45ad2a6`)에 멈춰 있었습니다. 그러므로 `perplexity` 는 죽은 코드가 아니라
+  과거 자료와 화면 탭이 아직 쓰는 필드이고, `gpt` 가 빠진 것이 누락입니다.
+- 함께 고치는 두 번째 비대칭: 같은 파일의 `_merge_ai_data_into_vcp_signals`(`:361`)는
+  `_is_valid_ai_recommendation` 으로 실패 기록을 거르는데 보강 함수는 단순 truthy 검사만
+  합니다. 그래서 오늘 값이 「분석 실패」 기록이면 legacy 에 정상 판정이 있어도 보강하지
+  않습니다. 화면의 `getAIBadge` 는 이미 반대로 동작하므로 백엔드를 화면에 맞춥니다.
+- QA 시나리오: 오늘 분석 파일에 GPT 판정이 없고 legacy 에만 있는 종목에서 VCP 표의 GPT
+  배지와 상세 모달의 GPT 탭이 legacy 판정을 보인다
 - 관찰: `app/routes/kr_market_vcp_signal_helpers.py:316-336` 의
   `_merge_legacy_ai_fields_into_map` 은 `perplexity_recommendation` 과
   `gemini_recommendation` 두 필드만 보강합니다. 그런데 실제 legacy 파일인
@@ -33,9 +54,42 @@
   프로바이더가 없었다면 뒤에 추가된 필드를 보강 목록에 넣지 않은 누락이고, VCP 화면이
   legacy 의 GPT 판정을 일부러 배제하기로 한 것이라면 `perplexity` 쪽이 죽은 코드입니다.
   어느 쪽이든 지금 상태는 둘 다 아닙니다.
-- [ ] `data/kr_ai_analysis.json` 을 만드는 경로를 찾아 세 필드가 언제 채워지는지 확인
-- [ ] 보강 목록을 자료와 화면이 실제로 쓰는 필드에 맞춤
-- [ ] 세 프로바이더의 보강 규칙이 같은지 검사하는 회귀 테스트 추가
+- [x] `data/kr_ai_analysis.json` 을 만드는 경로를 찾아 세 필드가 언제 채워지는지 확인 —
+  `scripts/init_data.py:1770` 과 `services/common_update_ai_analysis_service.py:111` 이
+  `ai_analysis_results_<날짜>.json` 과 함께 같은 내용을 씁니다. 필드 구성은 그때 확정된
+  두 번째 프로바이더를 따릅니다
+- [ ] 보강 목록을 자료와 화면이 실제로 쓰는 필드에 맞춤 —
+  `app/routes/kr_market_vcp_signal_helpers.py`
+- [ ] 세 프로바이더의 보강 규칙이 같은지 검사하는 회귀 테스트 추가 —
+  `tests/app/test_kr_market_vcp_signal_helpers_refactor.py`
+- [x] `/ponytail-review` → `feature-dev:code-reviewer` 순서로 리뷰 (T2)
+  - 과잉설계 리뷰(자체 검토, ponytail 기준): 두 곳을 지적해 반영했습니다. 루프 안 주석이
+    `_is_valid_ai_verdict` 의 docstring 이 이미 설명하는 대목을 되풀이해 네 줄에서 두 줄로
+    줄였고, 보강 함수의 docstring 이 바뀐 동작을 덜 말하고 있어 함께 다듬었습니다.
+  - 코드 리뷰(`feature-dev:code-reviewer`, 이름 `vcp018-reviewer`): 지적 네 건입니다.
+  - [반영] 확신도 중간 「오늘 CSV 판정이 legacy 판정으로 밀려난다」. 시그널의
+    `gemini_recommendation` 은 `_build_vcp_signal_from_row:282` 가 CSV 행에서 만들므로,
+    오늘 JSON 의 같은 필드가 실패 기록이어도 시그널 쪽은 정상인 상태가 성립합니다. 유효성
+    판정으로 보강하면 legacy 의 지난 판정이 맵에 들어가고, 이어지는 병합이 그 값으로 오늘
+    CSV 판정을 덮어씁니다. 재현하니 오늘 BUY 가 지난 달 SELL 로 바뀌었습니다. 제가 근거로
+    삼았던 화면 규칙은 병합이 끝난 값을 보는데 제 수정은 맵을 보아, 보는 대상이 달랐습니다.
+    사용자 승인(「유효성 판정을 되돌림」)을 받아 판정 기준을 종전 「비어 있을 때만」 으로
+    되돌리고, 세 필드를 한 상수로 묶는 대칭만 남겼습니다. 회귀 검사 둘을 그 자리에 넣었고,
+    되돌리기 전 구현으로 돌려 두 검사가 모두 실패하는 것을 확인했습니다.
+  - [이월] 확신도 중간 「legacy 는 항상 최신이라 과거 날짜 조회에도 병합된다」 → `[VCP-020]`.
+    `gemini` 와 `perplexity` 는 종전부터 이 경로가 열려 있었으므로 이번 변경이 만든 결함이
+    아니고, 한 필드 더 열린 것입니다. 현재 자료로는 과거 날짜 조회가 시그널 0 건이라
+    관측되지 않습니다.
+  - [이월] 「상수 공유는 타당하나 같은 목록이 저장소 네 곳에 더 있다」 → `[VCP-021]`.
+    두 함수의 요구가 실제로 같다는 판정은 받았고, 모듈 밖으로 넓히는 것은 별도 항목입니다.
+  - [반영] 「회귀 검사 셋 중 `..._ignores_a_failed_legacy_verdict` 는 종전 구현에서도
+    통과하므로 방벽이 아니다」. 유효성 판정을 되돌리면서 그 검사가 서술하던 조건 자체가
+    사라졌으므로 지우고, 그 자리에 전체 흐름을 태우는 회귀 검사를 넣었습니다.
+  - [미반영] 확신도 낮음 「`current[field] = item[field]` 가 legacy payload 의 dict 객체를
+    그대로 응답에 싣는다」. 종전에도 두 필드에서 같았고 하류에서 추천 dict 를 제자리
+    변경하는 곳이 없다는 것을 리뷰가 확인했습니다. 별칭 필드가 둘에서 셋으로 늘어난 것뿐이라
+    새 결함이 아니므로 이번 범위에서 다루지 않습니다.
+- [ ] `source venv/bin/activate && pytest` 와 `cd frontend && npx vitest run` 실행
 - [ ] agent-browser 로 VCP 화면의 AI 탭 구성을 실측
 
 ### [JONGGA-008] 백엔드가 확신도 없음을 0 으로 표현하는 자리를 정리
@@ -485,6 +539,28 @@
 - [ ] 챗봇 화면이 세션 없는 방문자에게 쓰는 이름을 정함. 자리표시자 `흑기사` 를 걷어냄
 - [ ] 사이드바와 챗봇이 같은 출처에서 사용자 정보를 읽는지 확인함
 - [ ] 이름을 아직 모를 때의 표시 문구를 두 자리에서 동일하게 정함
+
+### [VCP-020] 과거 날짜를 조회해도 legacy 파일의 최신 AI 판정이 붙는다
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-018]` 사이클의 code-review
+- 관찰: `services/kr_market_vcp_payload_service.py:275-302` 는 시그널의 `signal_date` 로
+  `ai_analysis_results_<날짜>.json` 을 고르지만, 이어지는 legacy 보강은 날짜와 무관하게
+  `kr_ai_analysis.json` 을 무조건 읽습니다. 그런데 그 파일은 `scripts/init_data.py:2229-2240`
+  이 `target_date` 가 오늘일 때만 쓰므로 언제나 최신 날짜의 내용입니다.
+- 영향: 2026-02-13 을 조회하면 그날 시그널에 2026-05-05 의 판정이 붙고, 사유 본문도 5월의
+  수축 비율을 설명합니다. 화면에는 그것이 지난 판정이라는 표시가 없습니다. `[VCP-018]` 의
+  리뷰가 실제 자료로 재현했습니다.
+- 범위 구분: 이 결함은 `[VCP-018]` 이 만든 것이 아닙니다. `gemini_recommendation` 과
+  `perplexity_recommendation` 은 종전부터 이 경로가 열려 있었고, `[VCP-018]` 이
+  `gpt_recommendation` 을 보강 목록에 넣으면서 같은 경로가 한 필드 더 열렸습니다.
+- 지금 관측되지 않는 이유: `data/signals_log.csv` 에 2026-05-05 행 열다섯 개만 있어 과거
+  날짜 조회가 시그널 0 건으로 끝납니다. 자료가 쌓이면 드러납니다.
+- QA 시나리오: 과거 날짜를 선택하면 그 날짜의 AI 판정만 보이고, 그날 판정이 없는 종목은
+  최신 판정을 빌려 오지 않는다
+- [ ] legacy 보강이 요청 날짜와 맞을 때만 일어나게 할지, 아니면 날짜가 다르면 화면이 그
+  사실을 알리게 할지 정함
+- [ ] `kr_ai_analysis_<날짜>.json` 이 이미 날짜별로 있으므로 그 파일을 legacy 자리에 쓸 수
+  있는지 확인
+- [ ] 과거 날짜 조회의 회귀 테스트 추가
 
 
 ## P2 — 대기
@@ -1704,3 +1780,24 @@
 - [ ] 저장된 페르소나가 목록에 없을 때 「직접 입력」이 선택되게 함
 - [ ] 그때 입력창에 저장된 문자열이 채워지는지 확인
 - [ ] vitest 로 목록 밖 값의 표시를 고정
+
+### [VCP-021] 같은 AI 프로바이더 필드 목록이 저장소 다섯 곳에 흩어져 있다
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-018]` 사이클의 code-review
+- 관찰: `gemini_recommendation`·`gpt_recommendation`·`perplexity_recommendation` 세 필드를
+  나열하는 자리가 다섯 곳입니다. `[VCP-018]` 이 그중 두 곳(`app/routes/kr_market_vcp_signal_helpers.py`
+  의 보강 함수와 병합 함수)을 모듈 상수 `_AI_RECOMMENDATION_FIELDS` 하나로 묶었지만, 그
+  상수가 모듈 전용이라 나머지 세 곳은 여전히 각자 적혀 있습니다.
+  - `services/kr_market_vcp_cache_update_service.py:26-30` — 형태까지 같은 튜플
+  - `services/kr_market_vcp_reanalysis_service.py:142-144` — 두 번째 프로바이더가 어느
+    필드에 쓰이는지를 실제로 결정하는 `:24-28` 과 같은 파일에 있습니다
+  - `engine/vcp_ai_orchestration_helpers.py:29-31` — 결과 뼈대 dict
+  - `engine/signal_tracker_ai_helpers.py:60-62` — (프로바이더 이름, 필드) 쌍
+- 영향: `[VCP-018]` 이 고친 종류의 누락, 곧 프로바이더가 바뀌었는데 목록 한 곳만 낡는 일이
+  이 세 곳에서 다시 날 수 있습니다. 실제로 그 결함이 한 번 발생해 GPT 판정이 응답에 닿지
+  못했습니다.
+- 확인할 것: 앞의 두 곳은 목록 모양이 같아 그대로 합칠 수 있습니다. 뒤의 두 곳은 dict 와
+  쌍 목록이라 모양이 달라, 필드 이름의 출처만 공유하고 조립은 각자 두는 편이 나을 수
+  있습니다. 억지로 한 형태로 맞추지 않습니다.
+- [ ] 세 필드 이름의 정본을 둘 자리를 정함
+- [ ] 모양이 같은 두 곳을 그 정본에 연결
+- [ ] 나머지 두 곳이 정본에서 이름만 받아 각자 조립하게 할지 판단하고 근거를 남김
