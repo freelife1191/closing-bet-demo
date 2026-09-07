@@ -22,9 +22,11 @@ from engine.config import config as signal_config
 from engine.pandas_utils_safe import safe_bool
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 
-# AI 추천을 담는 세 필드. legacy 보강과 시그널 병합이 같은 목록을 봐야 한다. 두 곳이
-# 따로 적혀 있던 동안 보강 쪽이 두 번째 프로바이더가 perplexity 이던 시절에 멈춰,
-# 지금 자료가 쓰는 gpt_recommendation 이 legacy 에만 있으면 응답에 닿지 못했다.
+# AI 추천을 담는 세 필드. legacy 보강과 시그널 병합이 같은 목록을 봐야 한다. 두 번째
+# 프로바이더는 VCP_SECOND_PROVIDER 와 PERPLEXITY_API_KEY 를 읽어 실행 시점에 정해지고
+# 저장된 자료도 그에 따라 갈린다. data/ 를 세어 보면 2026-02-11 은 gpt, 02-12~02-20 은
+# perplexity, 02-26 은 둘 다 없고, 05-05 는 다시 gpt 다. 그러므로 보강 목록이 부분집합이면
+# 그때 쓰인 필드가 legacy 에만 있을 때 응답에 닿지 못한다.
 _AI_RECOMMENDATION_FIELDS = (
     "gemini_recommendation",
     "gpt_recommendation",
