@@ -114,6 +114,36 @@ def test_anonymous_id_accepts_every_shape_the_code_makes():
     assert resolve_anonymous_id("") is None
 
 
+def test_verified_identity_requires_email_shape(monkeypatch):
+    """검증된 신원에도 "@" 를 요구해 익명 쪽 배제와 대칭을 이룬다.
+
+    한쪽만 강제하면 서명자가 이메일이 아닌 식별자(Google sub, 내부 사용자 ID)를 넣기
+    시작하는 순간 두 네임스페이스가 겹치기 시작하는데, 그 사고는 조용히 일어난다.
+    """
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
+
+    assert verify_identity_header(_sign("117204951829384756102", 2000), now=1900) is None
+    assert verify_identity_header(_sign("owner@example.com", 2000), now=1900) == "owner@example.com"
+
+
+def test_anonymous_id_rejects_recharge_day_prefix():
+    """`recharge_day:` 는 충전 이력 표지의 접두사라 세션 ID 로 들어오면 안 된다.
+
+    지금은 충전이 로그인 전용이라 이것만으로 사고가 나지 않는다. 다만 익명에 다시 열면
+    자기 날짜 표지를 작은 정수로 덮어써 하루 1회 제한을 무한히 우회할 수 있다.
+    """
+    assert resolve_anonymous_id("recharge_day:anon_self") is None
+
+
+def test_anonymous_id_has_a_length_ceiling():
+    """상한이 없으면 헤더 한도만큼 큰 키가 user_quota.json 에 무제한으로 쌓인다.
+
+    이 파일은 요청마다 전역 락 안에서 통째로 읽고 다시 쓴다.
+    """
+    assert resolve_anonymous_id("a" * 128) == "a" * 128
+    assert resolve_anonymous_id("a" * 129) is None
+
+
 def test_anonymous_id_rejects_email_shaped_values():
     """이 한 줄이 없으면 X-Session-Id 헤더로 게이트 전체가 우회된다.
 
