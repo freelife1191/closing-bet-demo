@@ -90,6 +90,71 @@ S-4 부터 S-7 이 이 항목의 핵심입니다. 차단만 확인하면 「전�
 S-16 을 선택으로 둔 이유는 로그인이 필요하고 이 사이클이 관리자 계정으로 로그인하지 않기
 때문입니다. 같은 오리진의 쓰기가 통과하는 것은 S-4 가 덮습니다.
 
-## 결과
+## 결과 (2026-09-07 실행)
 
-(구현 확정 후 기록합니다)
+기준 커밋은 `e6313bc` 입니다. Next 개발 서버가 `proxy.ts` 변경을 자동으로 다시 컴파일하므로
+재기동 없이 실측했고, `logs/frontend.log` 의 `✓ Compiled` 로 반영을 확인했습니다.
+
+| ID | 결과 | 증거 |
+|---|---|---|
+| S-1 | **통과** | 세션 있는 교차 출처 POST 가 403 |
+| S-2 | **통과** | `Sec-Fetch-Site` 없는 POST 가 403 |
+| S-3 | **통과** | 세션 있는 교차 출처 DELETE 가 403 |
+| S-4 | **통과** | 같은 오리진 POST 가 500 (Flask 도달). `Sec-Fetch-Site: Same-Origin` 처럼 대문자로 보내면 403 이며 브라우저는 항상 소문자를 보냅니다 |
+| S-5 | **통과** | 교차 출처 GET 이 500 (Flask 도달) |
+| S-6 | **통과** | 세션 없는 교차 출처 POST 가 500 (Flask 도달) |
+| S-7 | **통과** | `proxy.test.ts` 의 「INTERNAL_IDENTITY_SECRET 이 비어도 로그인 사용자의 교차 출처 POST 는 막는다」 |
+| S-8 | **통과** | 교차 출처 PUT 과 PATCH 가 각각 403 |
+| S-9 | **통과** | `proxy.test.ts` 의 「메서드가 소문자여도 막는다」. 실제 서버에서는 소문자 메서드가 Node 와 gunicorn 의 HTTP 파서에 400 으로 먼저 끊깁니다 |
+| S-10 | **통과** | 403 본문이 `{"error":"교차 출처 요청은 처리하지 않습니다"}` |
+| S-11 | **통과** | `localhost:3500/dashboard/kr` 에서 Market Gate `55 Neutral`, KOSPI 200 섹터 지수 11개 표시. 콘솔 오류 0건 |
+| S-12 | **통과** | `npx vitest run src/proxy.test.ts` 14개 통과 |
+| S-13 | **통과** | `pytest` 1794 통과 · 2 skip, 종료 코드 0 |
+| S-14 | **통과** | `npx vitest run` 335 통과(54 파일), `npm run type-check` 종료 코드 0 |
+| S-15 | **통과** | 신원으로 상태를 바꾸는 GET 라우트 없음. 아래 절 참조 |
+| S-16 | 미실행 | 선택 항목입니다. 이 사이클은 관리자 계정으로 로그인하지 않습니다 |
+
+필수 15건이 모두 통과했습니다.
+
+### 상태를 바꾸는 GET 라우트 전수 확인 (S-15)
+
+백그라운드 작업을 띄우는 자리를 다음 명령으로 전수 조사했습니다.
+
+    grep -rn "start_background\|trigger_.*background\|Thread(" app/routes/*.py
+
+다섯 곳이 나왔고 그중 GET 라우트는 둘입니다. `GET /api/portfolio` 가
+`paper_trading.start_background_sync()` 를(`common_portfolio_routes.py:61`),
+`GET /api/kr/market-gate` 가 `trigger_market_gate_background_refresh()` 를
+(`kr_market_system_http_routes.py:83`) 부릅니다.
+
+**둘 다 요청자의 신원을 보지 않습니다.** 공격자가 자기 브라우저에서 직접 불러도 결과가
+같고 피해자의 쿠키가 필요하지 않으므로 CSRF 가 아니며 이번 차단의 대상이 아닙니다. 다만
+조회 요청이 외부 호출과 파일 쓰기를 일으키는 것은 별개의 설계 문제이므로 `[INFRA-047]` 로
+이월했습니다.
+
+`g.user_email` 을 읽는 GET 분기는 전부 조회만 합니다. `chatbot/sessions` 는
+`get_all_sessions`, `chatbot/history` 는 `get_messages`, `chatbot/profile` 은
+`get_user_profile`, `user/quota` 는 `build_quota_info_payload` 를 부르고, 생성과 삭제는
+POST·DELETE 분기로 갈라져 있습니다(`services/kr_market_chatbot_request_helpers.py:36,63,105`).
+
+### 실측 도중 겪은 오판
+
+검사를 신원 서명 블록 밖으로 옮긴 뒤 재실측했더니 여섯 경우가 **전부 500** 으로 나왔습니다.
+차단이 통째로 사라진 것으로 보여 구현 결함을 의심했습니다.
+
+원인은 코드가 아니라 **QA 토큰의 만료**였습니다. 처음 만든 토큰의 `maxAge` 가 300초였고
+그 사이 11분이 지났습니다. 만료된 토큰은 `getToken` 이 `null` 을 돌려주므로 모든 요청이
+익명이 되어 차단 대상에서 빠집니다. 토큰을 30분짜리로 다시 만들자 여섯 경우가 모두 기대대로
+나왔습니다.
+
+**결과가 통째로 달라지면 코드보다 토큰을 먼저 의심합니다.** 차단이 부분적으로 실패하면
+코드 문제이고, 막아야 할 것과 막지 말아야 할 것이 함께 무너지면 신원이 사라진 것입니다.
+
+### 정리
+
+- 브라우저 탭을 `about:blank` 로 되돌렸습니다. 다른 작업의 탭은 건드리지 않았습니다.
+- QA 토큰과 생성 스크립트를 삭제했습니다. 스크린샷은 스크래치패드에만 두었습니다.
+- 실측은 존재하지 않는 경로로만 보냈으므로 서버 상태가 바뀌지 않았습니다.
+- 비용이 드는 조작을 하나도 실행하지 않았습니다. 알림 테스트 발송, 재분석, 모의투자,
+  Market Gate 갱신 버튼을 누르지 않았습니다.
+- 서버는 새 코드로 떠 있는 상태를 유지합니다.

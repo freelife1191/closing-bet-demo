@@ -18,56 +18,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-040] 인증이 쿠키 파생으로 바뀌면서 CSRF 노출이 생겼다
-- 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
-  `oh-my-claudecode:security-reviewer` 지적. 「이번 변경이 새로 만든 유일한 위험」으로
-  분류되었고 `[INFRA-039]` 보다 중하게 보라는 의견이 붙었습니다.
-- 종전의 `X-User-Email` 은 커스텀 헤더라 교차 출처 요청이 자동으로 붙일 수 없었고, 그래서
-  인증 방식 자체가 CSRF 에 면역이었습니다. 이제 신원은 세션 쿠키에서 파생되어 `proxy.ts` 가
-  자동으로 붙입니다. 인증이 「헤더 기반」에서 「쿠키 파생」으로 바뀌었는데 Origin 검사나
-  CSRF 토큰은 더해지지 않았습니다.
-- **지금 막히는 이유는 우리 코드가 아니라 라이브러리 기본값입니다.** next-auth v4 의 세션
-  쿠키가 `sameSite: 'lax'` 이고(`frontend/node_modules/next-auth/core/lib/cookie.js:24`),
-  Lax 는 교차 출처 fetch 와 비안전 메서드에 쿠키를 보내지 않습니다. 그래서
-  `POST /api/kr/user/quota/recharge` 와 `DELETE /api/kr/chatbot/history` 는 익명으로 떨어집니다.
-- 남는 위험이 둘입니다. 상태를 바꾸는 `GET` 라우트가 하나라도 생기면 최상위 내비게이션이
-  Lax 쿠키를 실어 보내므로 곧바로 뚫립니다. 그리고 `frontend/src/lib/auth.ts` 에 `cookies`
-  설정을 더하는 누군가가 `sameSite` 를 바꾸면 조용히 무너집니다.
-- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 21:41
-  | 범위: `proxy.ts` 의 교차 출처 비안전 요청 403 차단, 그 판정을 고정하는 vitest 검사,
-  상태를 바꾸는 GET 라우트 전수 확인, `tier-rules.md` 위험 경로 목록 갱신
-  | 실제 대화 근거: 2026-09-07 사용자 「진행해」 응답. 그 직전 AskUserQuestion 세 건에서
-  「403 으로 즉시 거부」·「신원이 확정된 요청에서만 검사하고 헤더 부재도 차단」·「목록에
-  추가하고 T3 으로」를 각각 선택했습니다
-- 티어 정정: TODO 에 T2 로 적혀 있었으나 T3 으로 올렸습니다. `proxy.ts` 는 모든 API
-  요청의 신원을 정하는 유일한 자리인데 `tier-rules.md` §2 목록에 없었습니다.
-  `[INFRA-027]` 이 §4 의 목록 갱신을 이행하지 않은 결과이며 이번 라운드가 함께 고칩니다
-- QA 시나리오: 다른 오리진의 페이지에서 보낸 `POST /api/kr/user/quota/recharge` 가 403 을 받는다
-- [x] `proxy.ts` 에서 비안전 메서드의 `Sec-Fetch-Site` 를 확인 — `same-origin` 만 통과시키고
-  헤더 부재도 막습니다. 검사는 서명 블록 **밖**에 둡니다(보안 리뷰 반영, 아래 참조)
-- [x] 그 판정을 고정하는 검사 추가 — `proxy.test.ts` 에 일곱 개를 더해 열넷이 되었습니다
-- [x] 상태를 바꾸는 `GET` 라우트가 없는지 전수 확인 — 신원으로 상태를 바꾸는 GET 은
-  없습니다. 신원과 무관하게 백그라운드 작업을 띄우는 GET 둘을 `[INFRA-047]` 로 이월했습니다
-- [x] `tier-rules.md` §2 에 「신원 확정」 절 추가 — `proxy.ts` 와 `identity_helpers.py` 를
-  넣고 머리글 수치를 63개·23,357줄에서 66개·23,695줄로 고쳤습니다
-- [x] 계획 검토 (`oh-my-claudecode:critic`) — 판정 **REVISE**. 일곱 건 중 여섯을 반영했습니다.
-  판정 기준 분리, 익명 경로 근거 서술, 403 본문 한국어화, 비밀 부재 검사, 머리글 수치,
-  내부 경로 확인입니다. 미반영 하나는 「사파리 16.4 미만에서 헤더 부재로 쓰기가 막히니
-  `Origin` 을 예비로 대조하자」이며, 사실을 확인해 사용자에게 다시 여쭌 결과
-  **「승인한 대로 헤더 부재를 차단한다」로 결정**되었습니다. 그 결과를 코드 주석에 남겼습니다
-- [x] 과잉설계 리뷰 (`/ponytail-review`) — 두 건 반영해 9줄을 걷어냈습니다.
-  next-auth 기본값 설명 4줄을 1줄로, `tier-rules.md` 의 세는 명령 6줄을 삭제했습니다
-- [x] 심층 리뷰 (`/review`) — Enum & Value Completeness 가 `UNSAFE_METHODS` 의 완전성을
-  물어 소문자 메서드를 실측했습니다. 지금은 Node 와 gunicorn 의 HTTP 파서가 400 으로 끊지만
-  그 방어가 저장소 밖에 있어 `toUpperCase()` 로 닫고 검사를 더했습니다
-- [x] 코드 리뷰 (`feature-dev:code-reviewer`) — 결함 없음. 확신도 낮은 관찰 하나는
-  「Flask 쪽 GET 전수 확인이 리뷰 범위 밖」이었고 그것은 이 사이클이 별도로 수행했습니다
-- [x] 보안 리뷰 (`oh-my-claudecode:security-reviewer`) — **실제 결함 하나를 잡았습니다.**
-  검사가 `if (secret)` 안에 있으면 `INTERNAL_IDENTITY_SECRET` 이 빈 배포에서 차단만 꺼지는데,
-  `app/api/system/env/route.ts` 의 관리자 게이트는 그 값을 보지 않아 살아 있고 `.env` 쓰기까지
-  닿습니다. 검사를 서명 블록 밖으로 빼고 「비밀이 비어도 막는다」로 검사를 뒤집었습니다.
-  범위 밖 지적인 무인증 POST 라우트 여덟은 `[INFRA-042]` 에 덧붙였습니다
-
 ### [INFRA-041] `/api/admin/check` 만 검증된 신원을 쓰지 않는다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적(확신도 높음)
