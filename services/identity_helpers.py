@@ -60,14 +60,15 @@ def verify_identity_header(header: str | None, now: int | None = None) -> str | 
     """서명된 신원 헤더를 검증해 이메일을 돌려준다. 실패하면 None 이다.
 
     # ponytail: 이 서명은 경로에도 메서드에도 nonce 에도 묶여 있지 않아, 한 번 새면 만료
-    # 전까지 어느 엔드포인트에나 쓸 수 있다. 지금 이것을 받아들이는 근거는 서명이 오가는
-    # 구간이 proxy 와 Flask 사이뿐이고 브라우저로 돌아가지 않는다는 것이다
+    # 전까지 어느 엔드포인트에나 쓸 수 있다. 이것을 받아들이는 근거는 서명이 오가는 구간이
+    # proxy 와 Flask 사이뿐이고 브라우저로 돌아가지 않는다는 것이다
     # (`proxy.ts` 가 `NextResponse.next({ request: { headers } })` 를 쓰는 이유다).
     #
-    # 그 구간이 loopback 이라는 보장은 코드에 없다. `restart_all.sh:80` 과 `Procfile`,
-    # `app/__init__.py:299` 가 모두 0.0.0.0 에 바인딩하고, 이 함수도 요청이 proxy 를
-    # 거쳤는지 보지 않는다. 5501 이 망에 열린 배포에서는 방화벽이 그 전제를 대신한다.
-    # 바인딩 주소를 좁히는 일은 `[INFRA-039]` 로 이월했다.
+    # **그 전제를 코드가 강제하지 않으며, 현재 구성은 오히려 반대다.** 네 자리가 모두
+    # 모든 인터페이스에 바인딩한다: `config.py:194`(FLASK_HOST 기본값), `restart_all.sh:80`,
+    # `Procfile:1`, `app/__init__.py:299`. 이 함수도 요청이 proxy 를 거쳤는지 보지 않는다
+    # (remote_addr 검사가 없다). 그러므로 「loopback 이라 안전하다」고 읽으면 안 된다.
+    # 전제는 배포할 때 방화벽으로 세워야 하며, 바인딩을 좁히는 일은 `[INFRA-039]` 다.
     """
     secret = os.environ.get("INTERNAL_IDENTITY_SECRET", "").strip()
     if not secret or not header:

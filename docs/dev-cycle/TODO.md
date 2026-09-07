@@ -172,11 +172,52 @@
   필요도 없기 때문입니다. nonce 저장소는 워커 간 공유가 필요해 이 규모에 과합니다.
 - `Procfile` 로 PaaS 에 올리는 배포에서는 `0.0.0.0` 이 필수이므로 기본값만 바꾸면 그
   경로가 깨집니다. 환경별로 나누는 방식을 먼저 정해야 합니다.
+- **`app/__init__.py:297-299` 를 같은 항목에서 함께 다룹니다.** `if __name__ == '__main__':`
+  아래의 `app.run(host='0.0.0.0', port=5501, debug=True)` 입니다. 개발용 진입점이지만
+  Werkzeug 디버거를 모든 인터페이스에 여는 것이라 gunicorn 바인딩보다 위험이 큽니다.
+- 검토자는 이번 변경이 이 위험을 새로 만들지 않았다고 판정했습니다. 종전에도 같은 네 자리가
+  `0.0.0.0` 이었고 그때는 그 포트에 닿는 사람이 `X-User-Email` 한 줄로 아무나 사칭할 수
+  있었습니다. 지금은 120초 안에 살아 있는 서명을 실제로 관측해야 하므로, 필요 조건이
+  「아무것도 없음」에서 「특권적 위치의 실시간 관측」으로 올라갔습니다.
 - QA 시나리오: 로컬에서 `curl` 로 기기의 LAN 주소:5501 에 직접 닿지 않는다
 - [ ] 바인딩 주소를 환경별로 정하는 방식을 결정 (`FLASK_HOST` 기본값과 PaaS 예외)
-- [ ] `restart_all.sh`·`Procfile`·`app/__init__.py` 세 자리를 그 방식에 맞춤
+- [ ] `config.py`·`restart_all.sh`·`Procfile`·`app/__init__.py` 네 자리를 그 방식에 맞춤
+- [ ] `app.run(debug=True)` 를 개발 진입점에서도 loopback 으로 좁힘
 - [ ] `.env.example` 에 이유를 적음
 - [ ] `services/identity_helpers.py` 의 `# ponytail:` 주석에서 이월 표시를 걷어냄
+
+### [INFRA-040] 인증이 쿠키 파생으로 바뀌면서 CSRF 노출이 생겼다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
+  `oh-my-claudecode:security-reviewer` 지적. 「이번 변경이 새로 만든 유일한 위험」으로
+  분류되었고 `[INFRA-039]` 보다 중하게 보라는 의견이 붙었습니다.
+- 종전의 `X-User-Email` 은 커스텀 헤더라 교차 출처 요청이 자동으로 붙일 수 없었고, 그래서
+  인증 방식 자체가 CSRF 에 면역이었습니다. 이제 신원은 세션 쿠키에서 파생되어 `proxy.ts` 가
+  자동으로 붙입니다. 인증이 「헤더 기반」에서 「쿠키 파생」으로 바뀌었는데 Origin 검사나
+  CSRF 토큰은 더해지지 않았습니다.
+- **지금 막히는 이유는 우리 코드가 아니라 라이브러리 기본값입니다.** next-auth v4 의 세션
+  쿠키가 `sameSite: 'lax'` 이고(`frontend/node_modules/next-auth/core/lib/cookie.js:24`),
+  Lax 는 교차 출처 fetch 와 비안전 메서드에 쿠키를 보내지 않습니다. 그래서
+  `POST /api/kr/user/quota/recharge` 와 `DELETE /api/kr/chatbot/history` 는 익명으로 떨어집니다.
+- 남는 위험이 둘입니다. 상태를 바꾸는 `GET` 라우트가 하나라도 생기면 최상위 내비게이션이
+  Lax 쿠키를 실어 보내므로 곧바로 뚫립니다. 그리고 `frontend/src/lib/auth.ts` 에 `cookies`
+  설정을 더하는 누군가가 `sameSite` 를 바꾸면 조용히 무너집니다.
+- QA 시나리오: 다른 오리진의 페이지에서 보낸 `POST /api/kr/user/quota/recharge` 가 401 을 받는다
+- [ ] `proxy.ts` 에서 비안전 메서드의 `Sec-Fetch-Site` 를 확인
+- [ ] 그 판정을 고정하는 검사 추가
+- [ ] 상태를 바꾸는 `GET` 라우트가 없는지 전수 확인
+
+### [INFRA-041] `/api/admin/check` 만 검증된 신원을 쓰지 않는다
+- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-027]` 사이클의
+  `oh-my-claudecode:security-reviewer` 지적(확신도 높음)
+- `app/routes/common_admin_routes.py:25` 가 여전히 `request.args.get("email")` 로 판정합니다.
+  실제 권한 게이트는 Next 쪽 `resolveAdminToken` 이므로 권한 상승은 아니지만, 어떤 이메일이
+  `ADMIN_EMAILS` 에 있는지 한 건씩 확인해 주는 오라클이 되고 클라이언트 UI 게이트를 열어
+  줍니다.
+- `[INFRA-027]` 이 `g.user_email` 이라는 검증된 신원을 만들어 두었는데 그것을 쓰지 않는
+  유일한 자리입니다. `g.get("user_email")` 로 바꾸면 두 줄입니다.
+- QA 시나리오: `?email=<관리자 이메일>` 로 불러도 관리자로 판정되지 않는다
+- [ ] `common_admin_routes.py:25` 를 `g.get("user_email")` 로
+- [ ] 쿼리 파라미터로 판정하던 동작이 사라졌음을 고정하는 검사 추가
 
 ### [INFRA-038] 500 응답 본문이 서버 내부 경로를 그대로 흘린다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 보안 리뷰
