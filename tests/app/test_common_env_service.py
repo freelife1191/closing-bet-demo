@@ -145,3 +145,40 @@ def test_update_env_file_rejects_newline_in_value(tmp_path: Path):
     # 개행이 없는 값은 그대로 반영되어야 한다.
     assert "SMTP_PORT=587" in content
     assert environ["SMTP_PORT"] == "587"
+
+
+def test_update_env_file_rejects_interpolation_in_value(tmp_path: Path):
+    """[INFRA-044] 값에 다른 키를 참조해 가려 둔 비밀을 끌어다 쓸 수 없다.
+
+    python-dotenv 와 @next/env 가 `${VAR}` 와 맨 `$VAR` 를 보간하므로, 이것이 통과하면
+    서버가 발송 대상 주소에 자기 토큰을 실어 보낸다. 읽는 쪽에서는 막을 수 없다.
+    @next/env 에는 보간을 끄는 인자가 없다.
+    """
+    env_path = tmp_path / ".env"
+    env_path.write_text("SMTP_HOST=old\n", encoding="utf-8")
+
+    environ: dict[str, str] = {}
+    update_env_file(
+        str(env_path),
+        {
+            "DISCORD_WEBHOOK_URL": "https://x.test/${ADMIN_API_TOKEN}",
+            "SMTP_PASSWORD": "$INTERNAL_IDENTITY_SECRET",
+            "SMTP_USER": "u@x.test$(id)",
+            # `$` 로 끝나거나 기호가 이어지는 값은 보간되지 않으므로 통과해야 한다.
+            "TELEGRAM_BOT_TOKEN": "pass!word$",
+            "TELEGRAM_CHAT_ID": "has$!bang",
+            "SMTP_HOST": "new",
+        },
+        environ,
+    )
+
+    content = env_path.read_text(encoding="utf-8")
+    assert "ADMIN_API_TOKEN" not in content
+    assert "INTERNAL_IDENTITY_SECRET" not in content
+    assert "$(id)" not in content
+    assert "SMTP_PASSWORD" not in content
+    assert "SMTP_USER" not in content
+    # 전부 거부하는 코드도 위 다섯 줄을 통과하므로 정상 값 셋을 함께 잰다.
+    assert "SMTP_HOST=new" in content
+    assert "TELEGRAM_BOT_TOKEN=pass!word$" in content
+    assert "TELEGRAM_CHAT_ID=has$!bang" in content

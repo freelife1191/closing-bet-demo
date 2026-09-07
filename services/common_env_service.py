@@ -9,6 +9,7 @@ Common Env Service
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 
@@ -44,6 +45,21 @@ PLAIN_ENV_KEYS = frozenset({"AI_PROVIDER", "SMTP_HOST", "SMTP_PORT"})
 # 16자인 Google 앱 비밀번호가 절반을 그대로 흘렸다. SMTP_HOST 와 SMTP_USER 가 같은
 # 응답에 함께 실리므로 나머지만 맞히면 곧바로 인증된다.
 MASK_KEEP_EDGES_MIN = 24
+
+# 값 하나가 .env 의 한 줄로 끝나지 않게 만드는 문자들. 이 파일은 셋이 읽는다.
+#
+# 개행과 캐리지리턴: 한 항목이 두 줄로 나뉘어 EDITABLE_ENV_KEYS 밖의 키를 그대로 쓸 수
+# 있다. `$` 뒤의 `{`·글자·숫자: python-dotenv 와 @next/env 가 `${VAR}` 와 맨 `$VAR` 를
+# 보간하므로, 편집 가능한 키의 값에 `${ADMIN_API_TOKEN}` 을 넣으면 읽기에서 가려 둔 값이
+# 그 키의 실제 값이 된다. 발송 대상 주소에 그것을 심으면 서버가 스스로 토큰을 보낸다.
+# `$` 뒤의 `(`: restart_all.sh 와 stop_all.sh 가 이 파일을 source 하므로 명령 치환이
+# 다음 기동에서 실행된다. 근본 해법은 그 source 를 걷어내는 것이고 [INFRA-049] 가 맡지만,
+# 한 글자 더 막아 두는 값이 그보다 크다.
+#
+# `$` 하나만으로 막지는 않는다. `$` 로 끝나거나 `$!` 처럼 기호가 이어지는 비밀번호가 있다.
+# 공백도 막지 않는다. Google 앱 비밀번호에 들어 있고 EMAIL_RECIPIENTS 가 `, ` 로 나눈다.
+# 공백은 source 하는 셸에서만 위험하므로 [INFRA-049] 가 그 자리에서 없앤다.
+UNSAFE_ENV_VALUE = re.compile(r"[\r\n]|\$[{(\w]")
 
 
 def resolve_project_root() -> str:
@@ -94,16 +110,13 @@ def update_env_file(
         return
 
     # 게이트를 통과한 관리자라도 화면에서 ADMIN_EMAILS 나 ADMIN_API_TOKEN 을 덮어쓰면
-    # 자기 자신을 잠글 수 있다. 읽기와 같은 목록으로 쓰기도 막는다.
-    #
-    # 키만 보면 부족하다. 값에 개행이 있으면 한 항목이 두 줄로 나뉘어, 목록 밖의 키를
-    # .env 에 그대로 쓸 수 있다. restart_all.sh 와 stop_all.sh 가 이 파일을 source 하므로
-    # 주입한 줄은 다음 기동에서 셸 명령으로도 실행된다. 아래 두 쓰기 경로에 각각 두지
-    # 않고 여기 한 자리에서 함께 막는다.
+    # 자기 자신을 잠글 수 있다. 읽기와 같은 목록으로 쓰기도 막는다. 키만 보면 부족해서
+    # 값도 함께 본다. 막는 것과 이유는 UNSAFE_ENV_VALUE 에 적어 두었다. 아래 두 쓰기
+    # 경로에 각각 두지 않고 여기 한 자리에서 함께 막는다.
     data = {
         key: value
         for key, value in data.items()
-        if key in EDITABLE_ENV_KEYS and "\n" not in str(value) and "\r" not in str(value)
+        if key in EDITABLE_ENV_KEYS and not UNSAFE_ENV_VALUE.search(str(value))
     }
     if not data:
         return
