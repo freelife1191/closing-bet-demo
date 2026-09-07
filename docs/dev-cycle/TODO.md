@@ -16,82 +16,6 @@
 
 ## P1 — 이번 주기
 
-### [VCP-018] legacy 분석 파일의 GPT 추천이 VCP 화면에 닿지 못한다
-- 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-004]` 사이클의 code-review
-- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 10:40
-  | 범위: `_merge_legacy_ai_fields_into_map` 의 보강 목록과 유효성 판정, 그에 딸린 회귀 검사
-  | 실제 대화 근거: 이번 세션의 「다음 라운드 진행해야할 사항 검토해서 진행해줘」 요청과
-  AskUserQuestion 「[VCP-018] 의 보강 함수를 어느 범위까지 고칠까요?」 의 「세 필드를 한
-  규칙으로 (추천)」 선택
-- 조사로 정정한 관찰: 아래 「영향」 의 「GPT 탭 자체가 사라집니다」 는 모든 조건에서 참이
-  아닙니다. `page.tsx:978` 의 `getAIBadge` 가 `aiData` 로 폴백하고, 그 `aiData` 를 만드는
-  `build_latest_ai_analysis_payload` 는 `kr_ai_analysis.json` 을 직접 읽기 때문입니다.
-  확실히 어긋나는 것은 `/api/kr/signals` 응답 자체이며, 화면에서는 `aiData` 가 jongga
-  갈래를 타거나 그 종목이 `aiData` 에 없을 때 GPT 배지가 `-` 로 떨어집니다.
-- 조사로 확정한 의도 판정: `data/` 의 분석 파일 열여섯 개를 열어 보니 2026-02-11 부터
-  02-26 까지는 `perplexity_recommendation` 이 있고 2026-05-05 자료에는 없으며 그 자리를
-  `gpt_recommendation` 이 대신합니다. 두 번째 프로바이더가 바뀌었는데 보강 목록만 함수가
-  만들어진 시점(`45ad2a6`)에 멈춰 있었습니다. 그러므로 `perplexity` 는 죽은 코드가 아니라
-  과거 자료와 화면 탭이 아직 쓰는 필드이고, `gpt` 가 빠진 것이 누락입니다.
-- 함께 고치는 두 번째 비대칭: 같은 파일의 `_merge_ai_data_into_vcp_signals`(`:361`)는
-  `_is_valid_ai_recommendation` 으로 실패 기록을 거르는데 보강 함수는 단순 truthy 검사만
-  합니다. 그래서 오늘 값이 「분석 실패」 기록이면 legacy 에 정상 판정이 있어도 보강하지
-  않습니다. 화면의 `getAIBadge` 는 이미 반대로 동작하므로 백엔드를 화면에 맞춥니다.
-- QA 시나리오: 오늘 분석 파일에 GPT 판정이 없고 legacy 에만 있는 종목에서 VCP 표의 GPT
-  배지와 상세 모달의 GPT 탭이 legacy 판정을 보인다
-- 관찰: `app/routes/kr_market_vcp_signal_helpers.py:316-336` 의
-  `_merge_legacy_ai_fields_into_map` 은 `perplexity_recommendation` 과
-  `gemini_recommendation` 두 필드만 보강합니다. 그런데 실제 legacy 파일인
-  `data/kr_ai_analysis.json` 을 열어 보면 네 항목 모두 `gpt_recommendation` 을 갖고 있고
-  `perplexity_recommendation` 은 한 건도 없습니다. 보강 대상이 자료와 정반대로 어긋나
-  있습니다.
-- 영향: `frontend/src/app/dashboard/kr/vcp/page.tsx:430` 이 GPT 탭을 보여줄지 판정하고
-  `:950` 과 `:1694` 가 그 값을 읽습니다. 그러므로 오늘 분석 파일에 GPT 판정이 없고 legacy
-  에만 있는 종목은 화면에서 GPT 탭 자체가 사라집니다. 같은 자리를 지나는
-  `_merge_ai_data_into_vcp_signals`(`:352`)는 세 프로바이더를 모두 내보내므로, 비대칭은
-  보강 함수 한 곳에만 있습니다.
-- 확인할 것: 이 비대칭이 의도인지 먼저 가립니다. legacy 파일이 만들어지던 시점에 GPT
-  프로바이더가 없었다면 뒤에 추가된 필드를 보강 목록에 넣지 않은 누락이고, VCP 화면이
-  legacy 의 GPT 판정을 일부러 배제하기로 한 것이라면 `perplexity` 쪽이 죽은 코드입니다.
-  어느 쪽이든 지금 상태는 둘 다 아닙니다.
-- [x] `data/kr_ai_analysis.json` 을 만드는 경로를 찾아 세 필드가 언제 채워지는지 확인 —
-  `scripts/init_data.py:1770` 과 `services/common_update_ai_analysis_service.py:111` 이
-  `ai_analysis_results_<날짜>.json` 과 함께 같은 내용을 씁니다. 필드 구성은 그때 확정된
-  두 번째 프로바이더를 따릅니다
-- [ ] 보강 목록을 자료와 화면이 실제로 쓰는 필드에 맞춤 —
-  `app/routes/kr_market_vcp_signal_helpers.py`
-- [ ] 세 프로바이더의 보강 규칙이 같은지 검사하는 회귀 테스트 추가 —
-  `tests/app/test_kr_market_vcp_signal_helpers_refactor.py`
-- [x] `/ponytail-review` → `feature-dev:code-reviewer` 순서로 리뷰 (T2)
-  - 과잉설계 리뷰(자체 검토, ponytail 기준): 두 곳을 지적해 반영했습니다. 루프 안 주석이
-    `_is_valid_ai_verdict` 의 docstring 이 이미 설명하는 대목을 되풀이해 네 줄에서 두 줄로
-    줄였고, 보강 함수의 docstring 이 바뀐 동작을 덜 말하고 있어 함께 다듬었습니다.
-  - 코드 리뷰(`feature-dev:code-reviewer`, 이름 `vcp018-reviewer`): 지적 네 건입니다.
-  - [반영] 확신도 중간 「오늘 CSV 판정이 legacy 판정으로 밀려난다」. 시그널의
-    `gemini_recommendation` 은 `_build_vcp_signal_from_row:282` 가 CSV 행에서 만들므로,
-    오늘 JSON 의 같은 필드가 실패 기록이어도 시그널 쪽은 정상인 상태가 성립합니다. 유효성
-    판정으로 보강하면 legacy 의 지난 판정이 맵에 들어가고, 이어지는 병합이 그 값으로 오늘
-    CSV 판정을 덮어씁니다. 재현하니 오늘 BUY 가 지난 달 SELL 로 바뀌었습니다. 제가 근거로
-    삼았던 화면 규칙은 병합이 끝난 값을 보는데 제 수정은 맵을 보아, 보는 대상이 달랐습니다.
-    사용자 승인(「유효성 판정을 되돌림」)을 받아 판정 기준을 종전 「비어 있을 때만」 으로
-    되돌리고, 세 필드를 한 상수로 묶는 대칭만 남겼습니다. 회귀 검사 둘을 그 자리에 넣었고,
-    되돌리기 전 구현으로 돌려 두 검사가 모두 실패하는 것을 확인했습니다.
-  - [이월] 확신도 중간 「legacy 는 항상 최신이라 과거 날짜 조회에도 병합된다」 → `[VCP-020]`.
-    `gemini` 와 `perplexity` 는 종전부터 이 경로가 열려 있었으므로 이번 변경이 만든 결함이
-    아니고, 한 필드 더 열린 것입니다. 현재 자료로는 과거 날짜 조회가 시그널 0 건이라
-    관측되지 않습니다.
-  - [이월] 「상수 공유는 타당하나 같은 목록이 저장소 네 곳에 더 있다」 → `[VCP-021]`.
-    두 함수의 요구가 실제로 같다는 판정은 받았고, 모듈 밖으로 넓히는 것은 별도 항목입니다.
-  - [반영] 「회귀 검사 셋 중 `..._ignores_a_failed_legacy_verdict` 는 종전 구현에서도
-    통과하므로 방벽이 아니다」. 유효성 판정을 되돌리면서 그 검사가 서술하던 조건 자체가
-    사라졌으므로 지우고, 그 자리에 전체 흐름을 태우는 회귀 검사를 넣었습니다.
-  - [미반영] 확신도 낮음 「`current[field] = item[field]` 가 legacy payload 의 dict 객체를
-    그대로 응답에 싣는다」. 종전에도 두 필드에서 같았고 하류에서 추천 dict 를 제자리
-    변경하는 곳이 없다는 것을 리뷰가 확인했습니다. 별칭 필드가 둘에서 셋으로 늘어난 것뿐이라
-    새 결함이 아니므로 이번 범위에서 다루지 않습니다.
-- [ ] `source venv/bin/activate && pytest` 와 `cd frontend && npx vitest run` 실행
-- [ ] agent-browser 로 VCP 화면의 AI 탭 구성을 실측
-
 ### [JONGGA-008] 백엔드가 확신도 없음을 0 으로 표현하는 자리를 정리
 - 카테고리: 종가베팅 | 티어: T2 | 근거: 2026-09-02 JONGGA-004 진행 중 발견
 - `[JONGGA-004]` 에서 화면 쪽은 확신도가 없는 상태를 값 없음으로 표현하고 "미산출" 로
@@ -964,6 +888,12 @@
   `role="dialog"` 도 `aria-modal` 도 `aria-labelledby` 도 없습니다. 2026-09-04 사이클의
   `/qa-only` ISSUE-002 로 실측했습니다. 공용 둘을 고쳐도 이 모달은 그대로이므로 함께
   다뤄야 합니다. Escape 로 닫히는 것은 확인했습니다.
+- **VCP 화면의 종목 상세 모달은 Escape 로 닫히지 않습니다.** 2026-09-07 `[VCP-018]`
+  마감 `/qa-only` ISSUE-001 로 실측했습니다. 이 모달도 `page.tsx` 가 직접 그리는
+  `fixed inset-0 z-[100]` 오버레이이며 `role` 도 `aria-modal` 도 없습니다. 초점이 모달 안의
+  탭 버튼에 있는 상태에서 `Escape` 를 두 번 눌러도 닫히지 않고, 오버레이가 화면을 덮은 채
+  남아 뒤쪽 버튼 클릭이 실패합니다. 바로 위 항목이 말하는 종가베팅 쪽 모달은 Escape 로
+  닫히므로 두 모달의 상태가 서로 다릅니다. 함께 고칩니다.
 - **같은 화면 안에서 두 모달이 갈립니다.** 「종가베팅 점수표」 버튼이 여는 모달에는
   `role="dialog"` 가 있고 상세 모달에는 없습니다. 2026-09-05 `[JONGGA-006]` 사이클의
   `/qa-only` 도 같은 화면에서 「기준표」 모달과 상세 모달을 대조해 같은 결과를 얻었습니다. 다만 초점을 옮기지 않는 것과 배경
@@ -1470,6 +1400,9 @@
   `button` 이 아니라 `a` 여서 버튼만 세던 이전 조사에서 빠져 있었습니다. 이번에는
   `aria-label` 과 `title` 과 텍스트가 모두 빈 `button` 과 `a` 를 함께 조회했고 VCP
   화면에서 다섯 개가 나왔습니다. 나머지 셋은 모바일 메뉴 토글과 검색과 알림입니다.
+- 2026-09-07 `[VCP-018]` 마감 `/qa-only` 에서 하나를 더 찾았습니다. VCP 종목 상세 모달의
+  닫기(×) 버튼에 텍스트도 `aria-label` 도 없습니다. 모달을 열어야 나타나는 버튼이라 종전의
+  조사에서 빠져 있었습니다. 다른 모달의 닫기 버튼도 같은 상태인지 함께 봅니다.
 - [ ] 이름 없는 버튼 네 개에 `aria-label` 을 붙인다
 - [ ] 브레드크럼 홈 링크와 채팅 위젯 열기 버튼에도 `aria-label` 을 붙인다
 - [ ] 행별 매수 버튼에 `aria-label` 을 붙여 `title` 의존을 줄인다
