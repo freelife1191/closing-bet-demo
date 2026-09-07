@@ -53,12 +53,29 @@ def _admin_client(monkeypatch, admin_email="notify-admin@example.com"):
 
 
 def test_admin_check_reads_admin_emails_from_env(monkeypatch):
+    # [INFRA-041] 판정이 쿼리에서 신원으로 옮겨졌다. 쉼표 목록 파싱과 대소문자 무시를
+    # 보는 자리는 저장소에서 여기뿐이라 목록을 덮어써 남긴다.
+    client = _admin_client(monkeypatch, "BETA@example.com")
     monkeypatch.setenv("ADMIN_EMAILS", "alpha@example.com, beta@example.com")
-    client = _create_client()
 
-    response = client.get("/api/admin/check?email=BETA@example.com")
+    response = client.get("/api/admin/check")
     assert response.status_code == 200
     assert response.get_json() == {"isAdmin": True}
+    # URL 이 요청자마다 갈리지 않게 되었으므로 이 응답은 캐시되면 안 된다.
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_admin_check_ignores_email_query_parameter(monkeypatch):
+    """[INFRA-041] 신원 없이 관리자 이메일을 쿼리에 넣어도 관리자가 아니다.
+
+    종전에는 이것이 true 를 돌려주어 ADMIN_EMAILS 명단을 확인해 주는 오라클이었다.
+    """
+    monkeypatch.setenv("ADMIN_EMAILS", "alpha@example.com")
+    client = _create_client()
+
+    response = client.get("/api/admin/check?email=alpha@example.com")
+    assert response.status_code == 200
+    assert response.get_json() == {"isAdmin": False}
 
 
 def test_system_update_status_returns_debug_fields():

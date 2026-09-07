@@ -32,7 +32,9 @@ export function useAdmin(): UseAdminResult {
       }
 
       try {
-        const res = await fetch(`/api/admin/check?email=${encodeURIComponent(session.user.email)}`);
+        // 이메일을 붙이지 않는다. 서버는 서명된 신원으로만 판정하므로 무시되고, 실어
+        // 보내면 접근 로그와 브라우저 이력에만 남는다.
+        const res = await fetch('/api/admin/check', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           setIsAdmin(data.isAdmin === true);

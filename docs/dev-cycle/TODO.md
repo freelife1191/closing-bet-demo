@@ -27,9 +27,37 @@
   줍니다.
 - `[INFRA-027]` 이 `g.user_email` 이라는 검증된 신원을 만들어 두었는데 그것을 쓰지 않는
   유일한 자리입니다. `g.get("user_email")` 로 바꾸면 두 줄입니다.
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 22:52
+  | 범위: `common_admin_routes.py` 의 판정 출처를 `g.user_email` 로 옮기고,
+  `useAdmin.ts` 의 `?email=` 을 지우며, 신원 없는 쿼리 호출이 관리자로 판정되지 않음을
+  고정하는 검사를 더한다
+  | 실제 대화 근거: 2026-09-07 사용자 「진행해」 응답과 그 직전 AskUserQuestion 두 건의
+  선택(응답 형태 「200 과 isAdmin: false」, 변경 범위 「useAdmin.ts 도 함께 고친다」)
 - QA 시나리오: `?email=<관리자 이메일>` 로 불러도 관리자로 판정되지 않는다
-- [ ] `common_admin_routes.py:25` 를 `g.get("user_email")` 로
-- [ ] 쿼리 파라미터로 판정하던 동작이 사라졌음을 고정하는 검사 추가
+- [x] `common_admin_routes.py:25` 를 `g.get("user_email")` 로. 400 분기는
+  `is_admin_email(None)` 이 이미 False 라 통째로 사라졌다
+- [x] 쿼리 파라미터로 판정하던 동작이 사라졌음을 고정하는 검사 추가
+  (`test_admin_check_ignores_email_query_parameter`). 기존
+  `test_admin_check_reads_admin_emails_from_env` 는 쉼표 목록 파싱과 대소문자 무시를
+  보는 유일한 자리라 지우지 않고 판정 출처만 옮겼다
+- [x] `useAdmin.ts:35` 의 `?email=` 제거 (승인 범위에 포함). 프론트엔드 스킬은
+  `frontend-skills.md` §2 표에 따라 `vercel-react-best-practices`(`useEffect` 안의
+  fetch). `frontend/src/app` 아래가 아니라 번들 문서 의무 조항은 걸리지 않는다
+- [x] 프론트엔드에는 검사를 더하지 않는다. 이 저장소의 훅 검사 관례는
+  `useChatStream.test.ts` 처럼 순수 함수를 뽑아 보는 것이고, URL 문자열 한 줄에
+  `renderHook` 과 `next-auth/react` 모킹을 세우는 배관이 검사보다 크다
+- [x] `/ponytail-review` — 네 건 지적(라우트 docstring, 훅 주석, 검사 둘) 전부 반영,
+  net -11줄
+- [x] 시크릿 확인 세 가지 통과 (`.env.example` 만 추적 · 새 값 노출 없음 ·
+  `NEXT_PUBLIC_` 무관)
+- [x] `oh-my-claudecode:security-reviewer` — 지적 1(응답에 캐시 금지 헤더가 없다) 반영.
+  판정 근거가 URL 에서 헤더로 옮겨져 캐시 키가 요청자마다 갈리지 않게 된 것이 이번
+  변경에 귀속되는 결함이었다. 라우트에 `Cache-Control: no-store`, 훅에
+  `cache: 'no-store'`, 검사 한 줄을 더했다. 지적 3(로그의 이메일)은 「지금 구성에서
+  출력되지 않고 오히려 위조 경로가 닫혔다」는 판정이라 조치 없음. 지적 4(서버 게이트
+  없는 라우트)는 기존 `[INFRA-042]` 가 추적 중. 지적 2 는 `[INFRA-048]` 로 이월
+- [x] pytest 1795 통과 · 2 skip / vitest 335 통과(54 파일) / `tsc --noEmit` exit 0
+- [ ] QA 2단계
 
 ### [INFRA-044] 인가 근거가 된 `ADMIN_EMAILS` 가 워커마다 갈릴 수 있다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
@@ -691,6 +719,30 @@
 - [ ] 두 라우트의 갱신 트리거를 조회에서 떼어낼지, 아니면 별도 POST 로 옮길지 정함
 - [ ] 프론트엔드에서 그 갱신을 부르던 자리를 찾아 함께 고침
 - [ ] 갱신이 조회로 일어나지 않는 것을 고정하는 검사 추가
+
+### [INFRA-048] `INTERNAL_IDENTITY_SECRET` 이 비면 관리자 화면이 말없이 사라진다
+- 카테고리: 인프라 | 티어: T3 (`.env.example` 을 건드리므로 `tier-rules.md` §2 「시크릿과
+  인증」) | 근거: 2026-09-07 `[INFRA-041]` 사이클의
+  `oh-my-claudecode:security-reviewer` 지적 2(확신도 높음)
+- `[INFRA-041]` 이 `/api/admin/check` 의 판정을 `g.user_email` 로 옮기면서
+  `INTERNAL_IDENTITY_SECRET` 이 관리자 화면의 사실상 필수 값이 되었습니다. 그 값이 비면
+  `frontend/src/proxy.ts:70-74` 가 서명 헤더를 붙이지 않고
+  `services/identity_helpers.py:74-76` 이 `None` 을 돌려주므로 관리자 판정이 언제나
+  거짓입니다.
+- **보안 방향으로는 fail-closed 라 개선입니다.** 문제는 안내가 없다는 것입니다.
+  `.env.example:180` 은 이 값을 비운 채 배포되고 `:23-24` 의 경고는 「모든 사용자가
+  익명으로 처리된다」까지만 적습니다. 참조본을 그대로 복사한 배포에서 관리자는 아무
+  메시지 없이 관리 버튼을 잃고, 원인을 짐작할 단서가 화면에도 로그에도 없습니다.
+- 실제 권한 게이트인 `frontend/src/app/api/system/env/route.ts:26-33` 의
+  `resolveAdminToken` 은 이 비밀을 보지 않으므로 **화면은 잠기고 API 는 인가되는
+  비대칭**이 생깁니다. 엄격한 쪽이 화면이라 권한 상승은 아닙니다.
+- `.env.example` 의 경고를 보강할지, 값이 비었을 때 기동 로그에 한 줄 남길지 설계에서
+  정합니다. 후자는 `[INFRA-041]` 이 만든 의존을 코드가 스스로 알리게 합니다.
+- QA 시나리오: `INTERNAL_IDENTITY_SECRET` 을 비운 채 기동하면 그 사실을 알 수 있는
+  단서가 로그나 문서에 남는다
+- [ ] 안내를 문서에 둘지 기동 로그에 둘지 정함
+- [ ] `.env.example` 의 경고에 관리자 화면 영향을 더할지 결정
+- [ ] 값이 빈 상태를 재현해 안내가 실제로 보이는지 확인
 
 ## P2 — 대기
 
