@@ -15,42 +15,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-053] `.env` 가 같은 호스트의 모든 로컬 계정에 읽힌다
-- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-049]` 사이클의
-  `oh-my-claudecode:security-reviewer` 가 확신도 높음으로 지적했습니다. 모드를 직접 확인했습니다.
-- 설계 승인: 승인 일자 2026-09-08 | 승인 확인 시각 2026-09-08 07:19 | 범위: `update_env_file`
-  이 쓰기 뒤 모드를 보장하는 한 줄, `scripts/init_all.sh` 의 `.env` 생성 자리, 이미 존재하는
-  `.env` 계열 파일 일곱 개의 모드 좁히기, 검사 셋. 백업 파일 삭제와 `atomic_write_text` 로의
-  전환은 범위 밖입니다. | 근거: 실측과 설계를 제시한 응답에 사용자가 「진행해」로 답한
-  이 세션의 대화입니다.
-- `.env` 와 `.env.production` 의 모드가 `-rw-r--r--`(0644) 입니다. 그 파일에는 SMTP
-  비밀번호와 API 키 넷, `ADMIN_API_TOKEN`, `INTERNAL_IDENTITY_SECRET` 이 실제 값으로
-  들어 있는데 같은 호스트의 모든 로컬 계정이 읽을 수 있습니다.
-- `services/common_env_service.py:104` 의 `update_env_file` 은 `open(env_path, "w")` 로
-  쓰므로 **기존 모드를 그대로 둡니다.** 파일이 없으면 umask 를 따라 새로 만들 뿐 0600 을
-  강제하지 않습니다. 즉 한 번 넓어진 모드는 설정 화면을 아무리 써도 좁아지지 않습니다.
-- 개발용 단독 Mac 에서는 실질 위험이 낮지만, 운영 호스트에 다른 계정이 있으면 OWASP A01
-  급입니다. `[INFRA-049]` 가 셸 실행 경로를 닫았어도 파일을 그냥 읽는 경로는 그대로입니다.
-- 함께 볼 것: `.env.vertex` 는 이 저장소에 존재하지 않습니다. 대신 `.env.bak.*` 넷과
-  `.env.production.bak.*` 하나가 같은 0644 로 옛 시크릿을 담고 있어 함께 좁힙니다. 배포
-  절차(`Procfile`, 배포 문서)가 파일을 다시 만드는 자리가 있으면 그곳에도 모드를 지정해야
-  되돌아가지 않습니다.
-- 실측(2026-09-08): `.env` 를 쓰는 두 경로의 성질이 반대입니다. `update_env_file` 은
-  `open(w)` 라 기존 0644 를 그대로 두고 새 파일도 umask 를 따르는 반면,
-  `persist_market_gate_interval_to_env` 가 쓰는 `atomic_write_text` 는
-  `NamedTemporaryFile`(0600) 을 `os.replace` 로 옮기므로 이미 0600 을 남깁니다. 그래서
-  고칠 자리는 앞의 하나입니다.
-- QA 시나리오: `chmod 600 .env` 뒤 두 서비스가 정상 기동하고, 설정 화면으로 값을 저장해도
-  모드가 0600 으로 유지된다
-- [ ] 계획 문서 `docs/superpowers/plans/2026-09-08-infra-053-env-file-mode.md` 작성과
-      `oh-my-claudecode:critic` 검토
-- [ ] `update_env_file` 이 쓰기 뒤 모드를 보장하게 함 (검사 셋 포함)
-- [ ] `scripts/init_all.sh` 의 `.env` 생성 자리에 모드 지정
-- [ ] `.env` 계열 파일 일곱 개의 모드를 0600 으로 좁힘
-- [ ] 좁힌 모드로 gunicorn·Next 가 정상 기동하는지 확인
-- [ ] 리뷰 넷(`/ponytail-review` → `feature-dev:code-reviewer` → `/review` →
-      `oh-my-claudecode:security-reviewer`)과 시크릿 확인 세 가지
-
 ### [INFRA-050] `.env` 를 쓰는 두 경로가 서로의 갱신을 지울 수 있다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-044]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적(확신도 중간). 2026-09-08 `[INFRA-053]` 사이클의
