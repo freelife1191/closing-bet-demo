@@ -422,6 +422,59 @@ def test_build_vcp_payload_warns_when_rows_exist_but_no_signal_qualifies(tmp_pat
     assert payload["stale_warning"] == "2026-02-22에 저장된 VCP 시그널이 없습니다."
 
 
+def test_build_vcp_payload_warns_when_today_rows_exist_but_no_signal_qualifies(tmp_path):
+    """[VCP-019] 회귀: 오늘 자 행이 있어도 시그널이 0건이면 그 사실을 알린다.
+
+    종전에는 원본의 최신 signal_date 가 오늘 이상이면 곧바로 None 을 돌려주어, 그 행들이
+    판정에서 전부 떨어져도 화면이 이유 없이 빈 표만 보였다. 캐시를 쓰는 두 번째 호출도
+    같은 문구를 유지해야 하므로 이어서 확인한다.
+    """
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-02-23")
+
+    kwargs = {
+        "req_date": None,
+        "load_csv_file": lambda name: pd.read_csv(tmp_path / name),
+        "load_json_file": lambda _name, **_kwargs: {},
+        "filter_signals_dataframe_by_date": vcp_signal_helpers._filter_signals_dataframe_by_date,
+        "build_vcp_signals_from_dataframe": vcp_signal_helpers._build_vcp_signals_from_dataframe,
+        "load_latest_vcp_price_map": lambda: {},
+        "apply_latest_prices_to_jongga_signals": lambda _signals, _price_map: 0,
+        "sort_and_limit_vcp_signals": vcp_signal_helpers._sort_and_limit_vcp_signals,
+        "build_ai_data_map": vcp_signal_helpers._build_ai_data_map,
+        "merge_legacy_ai_fields_into_map": vcp_signal_helpers._merge_legacy_ai_fields_into_map,
+        "merge_ai_data_into_vcp_signals": vcp_signal_helpers._merge_ai_data_into_vcp_signals,
+        "count_total_scanned_stocks": lambda _data_dir: 1,
+        "logger": logging.getLogger("vcp-payload-today-unqualified-rows-test"),
+        "now": datetime(2026, 2, 23, 9, 0, 0),
+        "data_dir": str(tmp_path),
+    }
+
+    payload = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+    cached_payload = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+
+    assert payload["count"] == 0
+    assert payload["stale_warning"] == "오늘(2026-02-23) 기준 VCP 시그널이 없습니다."
+    assert cached_payload["stale_warning"] == payload["stale_warning"]
+
+
+def test_resolve_stale_warning_names_latest_date_when_it_is_in_the_future():
+    """[VCP-019] 최신 저장 날짜가 미래이면 그 날짜를 감추지 않는다.
+
+    날짜 목록은 같은 판정으로 만들어지므로 미래 날짜도 드롭다운에 나타난다. 배너가
+    그 날짜를 말하지 않으면 사용자는 목록에 보이는 자료를 배너에서 확인할 수 없다.
+    """
+    message = vcp_payload_service._resolve_stale_warning_message(
+        req_date=None,
+        source_df=pd.DataFrame([{"signal_date": "2026-03-01"}]),
+        today="2026-02-23",
+    )
+
+    assert message == (
+        "오늘(2026-02-23) 기준 VCP 시그널이 없습니다. 최신 저장 데이터는 2026-03-01입니다."
+    )
+
+
 def test_build_vcp_payload_cached_empty_keeps_stale_warning(tmp_path):
     _reset_vcp_signals_cache_state()
     _write_signals_csv(tmp_path, "2026-03-03")

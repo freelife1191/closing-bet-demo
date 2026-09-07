@@ -241,11 +241,16 @@ def _resolve_stale_warning_message(
     today_timestamp = pd.to_datetime(str(today), errors="coerce")
     if pd.isna(latest_timestamp) or pd.isna(today_timestamp):
         return None
-    if latest_timestamp.date() >= today_timestamp.date():
-        return None
+
+    today_date_str = today_timestamp.strftime("%Y-%m-%d")
+    if latest_timestamp.date() == today_timestamp.date():
+        # 오늘 자 행이 있어도 status·score·is_vcp 판정에서 전부 떨어질 수 있다. 최신 저장
+        # 날짜가 오늘 그 자체이므로 「최신 저장 데이터는 …」 을 덧붙이면 앞절과 겹친다.
+        # 미래 날짜는 이 갈래에 넣지 않는다. 같은 판정을 쓰는 날짜 목록이 그 날짜를
+        # 드롭다운에 보이므로, 배너도 그 날짜를 그대로 알려야 서로 어긋나지 않는다.
+        return f"오늘({today_date_str}) 기준 VCP 시그널이 없습니다."
 
     latest_date_str = latest_timestamp.strftime("%Y-%m-%d")
-    today_date_str = today_timestamp.strftime("%Y-%m-%d")
     return (
         f"오늘({today_date_str}) 기준 VCP 시그널이 없습니다. "
         f"최신 저장 데이터는 {latest_date_str}입니다."
