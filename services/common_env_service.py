@@ -95,7 +95,16 @@ def update_env_file(
 
     # 게이트를 통과한 관리자라도 화면에서 ADMIN_EMAILS 나 ADMIN_API_TOKEN 을 덮어쓰면
     # 자기 자신을 잠글 수 있다. 읽기와 같은 목록으로 쓰기도 막는다.
-    data = {key: value for key, value in data.items() if key in EDITABLE_ENV_KEYS}
+    #
+    # 키만 보면 부족하다. 값에 개행이 있으면 한 항목이 두 줄로 나뉘어, 목록 밖의 키를
+    # .env 에 그대로 쓸 수 있다. restart_all.sh 와 stop_all.sh 가 이 파일을 source 하므로
+    # 주입한 줄은 다음 기동에서 셸 명령으로도 실행된다. 아래 두 쓰기 경로에 각각 두지
+    # 않고 여기 한 자리에서 함께 막는다.
+    data = {
+        key: value
+        for key, value in data.items()
+        if key in EDITABLE_ENV_KEYS and "\n" not in str(value) and "\r" not in str(value)
+    }
     if not data:
         return
 

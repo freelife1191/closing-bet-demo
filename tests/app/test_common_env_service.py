@@ -64,3 +64,84 @@ def test_update_env_file_preserves_masked_input_and_deletes_empty(tmp_path: Path
     assert "TELEGRAM_CHAT_ID=ok" in content
     assert environ["SMTP_HOST"] == "new"
     assert environ["TELEGRAM_CHAT_ID"] == "ok"
+
+
+def test_read_masked_env_vars_omits_authorization_keys(tmp_path: Path):
+    """[INFRA-044] 인가 판정 근거는 관리자 화면 응답에도 실리지 않는다."""
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "ADMIN_EMAILS=owner@example.com\nADMIN_API_TOKEN=token-value\nSMTP_PORT=587\n",
+        encoding="utf-8",
+    )
+
+    result = read_masked_env_vars(str(env_path))
+    assert "ADMIN_EMAILS" not in result
+    assert "ADMIN_API_TOKEN" not in result
+    # 전부 거르는 코드도 위 두 줄을 통과하므로 허용 키가 실리는 것을 함께 잰다.
+    assert result["SMTP_PORT"] == "587"
+
+
+def test_update_env_file_rejects_authorization_keys(tmp_path: Path):
+    """[INFRA-044] 설정 화면으로 인가 판정 근거를 덮어쓸 수 없다.
+
+    `is_admin_email` 은 매 요청 `os.environ` 을 다시 읽는다. 이 필터가 뚫리면 요청을
+    처리한 워커의 명단만 바뀌어, 같은 관리자의 같은 요청이 어느 워커에 닿느냐에 따라
+    통과와 거부로 갈린다.
+    """
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "ADMIN_EMAILS=owner@example.com\nSMTP_HOST=old\n", encoding="utf-8"
+    )
+
+    environ: dict[str, str] = {}
+    update_env_file(
+        str(env_path),
+        {
+            "ADMIN_EMAILS": "attacker@example.com",
+            "ADMIN_API_TOKEN": "forged",
+            "SMTP_HOST": "new",
+        },
+        environ,
+    )
+
+    content = env_path.read_text(encoding="utf-8")
+    assert "ADMIN_EMAILS=owner@example.com" in content
+    assert "ADMIN_API_TOKEN" not in content
+    assert "ADMIN_EMAILS" not in environ
+    assert "ADMIN_API_TOKEN" not in environ
+    assert "SMTP_HOST=new" in content
+    assert environ["SMTP_HOST"] == "new"
+
+
+def test_update_env_file_rejects_newline_in_value(tmp_path: Path):
+    """[INFRA-044] 허용 키의 값에 개행을 넣어 목록 밖의 줄을 쓸 수 없다.
+
+    키만 검사하면 값 하나가 두 줄이 되어 필터를 그대로 지나간다. `.env` 는
+    restart_all.sh 와 stop_all.sh 가 source 하므로 주입한 줄은 다음 기동에서 셸
+    명령으로도 실행된다.
+    """
+    env_path = tmp_path / ".env"
+    env_path.write_text("SMTP_HOST=old\n", encoding="utf-8")
+
+    environ: dict[str, str] = {}
+    update_env_file(
+        str(env_path),
+        {
+            # 기존 줄을 갱신하는 경로
+            "SMTP_HOST": "smtp.example.com\nADMIN_EMAILS=attacker@example.com",
+            # 새 키를 덧붙이는 경로
+            "EMAIL_RECIPIENTS": "a@b.c\rADMIN_API_TOKEN=forged",
+            "SMTP_PORT": "587",
+        },
+        environ,
+    )
+
+    content = env_path.read_text(encoding="utf-8")
+    assert "ADMIN_EMAILS" not in content
+    assert "ADMIN_API_TOKEN" not in content
+    assert "SMTP_HOST=old" in content
+    assert "EMAIL_RECIPIENTS" not in content
+    assert "SMTP_HOST" not in environ
+    # 개행이 없는 값은 그대로 반영되어야 한다.
+    assert "SMTP_PORT=587" in content
+    assert environ["SMTP_PORT"] == "587"
