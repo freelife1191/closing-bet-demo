@@ -16,6 +16,8 @@ describe('parseAIConfidence', () => {
     [0, 0],
     [150, 100],
     [-5, 0],
+    // 캐시에 남은 소수를 그대로 돌려준다. 두 화면 모두 toFixed(0) 으로 그린다.
+    [78.6, 78.6],
   ])('%o 를 %o 로 읽는다', (value, expected) => {
     expect(parseAIConfidence(value)).toBe(expected);
   });

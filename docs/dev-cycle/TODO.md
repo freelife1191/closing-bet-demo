@@ -467,31 +467,41 @@
 - [ ] 과거 날짜 조회의 회귀 테스트 추가
 
 
-### [VCP-022] 확신도 없음을 0 으로 표현하는 자리가 VCP 분석 캐시 쪽에 남아 있다
+### [VCP-022] VCP 상세 모달의 세 탭 가운데 둘은 아직 0% 를 그릴 수 있다
 - 카테고리: VCP 시그널 | 티어: T3 | 근거: 2026-09-07 JONGGA-008 의 code-review 와 QA
-- `[JONGGA-008]` 이 응답 조립 경로 일곱 자리를 값 없음으로 고쳤지만, VCP 상세 모달의 확신도
-  게이지는 활성 탭에 따라 세 추천 가운데 하나를 봅니다. 그 가운데 `safe_confidence` 를
-  거치는 것은 `_build_vcp_gemini_recommendation` 이 CSV 에서 만드는 gemini 추천 하나뿐입니다.
-  gpt 와 perplexity 추천은 `ai_analysis.json` 캐시에서 오고, 그 캐시는
-  `engine/vcp_ai_analyzer_helpers.py:658` 의 `_normalize_confidence_value(..., default=0)` 을
-  지납니다. 같은 화면의 같은 게이지가 탭에 따라 「미산출」과 「0%」로 갈립니다.
-- `frontend/src/app/dashboard/kr/vcp/page.tsx` 의 `getRec` 이 병합 결과 대신 원시 캐시를
-  다시 보는 두 번째 후보(`stock?.gemini_recommendation`)도 같은 경로입니다.
-- 함께 볼 자리가 하나 더 있습니다. `engine/kr_ai_strategies.py:150` 의
-  `RecommendationCombiner.combine` 이 「둘 다 없음 → HOLD with 0 confidence」 를 명시적
-  설계로 두고, 같은 파일 44행이 `_safe_float(normalized.get("confidence"), 0.0)` 으로 읽습니다.
-  두 AI 판정을 평균하거나 비교하는 계산 자리라 `None` 을 받으면 계산이 성립하지 않으므로,
-  그 0 이 화면까지 확신도로 흘러가는지를 먼저 확인하고 다룰 방법을 정합니다.
+- `[JONGGA-008]` 이 확신도 없음을 값 없음으로 고쳤지만 그 화면의 게이지는 활성 탭에 따라
+  세 추천 가운데 하나를 봅니다. 고쳐진 것은 `_build_vcp_gemini_recommendation` 이 CSV 에서
+  만드는 gemini 추천 하나뿐입니다. gpt 와 perplexity 추천은 `ai_analysis.json` 캐시에서
+  오고 그 캐시는 `engine/vcp_ai_analyzer_helpers.py:658` 의
+  `_normalize_confidence_value(..., default=0)` 을 지납니다. **남는 것은 규칙이 두 벌이라는
+  중복 문제가 아니라, 방금 고친 그 화면의 세 탭 중 둘이 여전히 0% 를 그릴 수 있다는 잔여
+  결함입니다.** `getRec` 이 병합 결과 대신 원시 캐시를 다시 보는 두 번째 후보
+  (`stock?.gemini_recommendation`)도 같은 경로입니다.
+- 남는 창은 좁습니다. `confidence` 키가 있으되 숫자가 아닌 응답이 그 자리에서 0 이 됩니다.
+  `is_low_quality_recommendation` 이 확신도를 숫자로 읽지 못하는 응답을 저품질로 판정해
+  되돌리고, 점수 기반 대체 경로(`engine/vcp_ai_analyzer_helpers.py:576-582`)는 언제나
+  확신도를 만들어 내기 때문입니다. 그래도 창이 닫혀 있지는 않습니다.
 - 티어 판정: `engine/vcp_ai_analyzer_helpers.py` 는 `tier-rules.md` §2 의 위험 경로
-  「VCP 판정」입니다. 한 줄만 고쳐도 T3 입니다. `[JONGGA-008]` 이 T2 를 유지하려고 이 파일을
-  건드리지 않았고, 그 결과 확신도 정규화 규칙이 두 벌로 남았습니다. 이 항목에서 합칩니다.
-- 실제로 화면에 0% 가 보일 확률은 낮습니다. `is_low_quality_recommendation` 이 확신도를
-  숫자로 읽지 못하는 응답을 저품질로 판정해 되돌리고, 점수 기반 대체 경로가 언제나 확신도를
-  만들어 내기 때문입니다. 그래도 규칙이 두 벌이라는 사실 자체가 다음 결함의 씨앗입니다.
+  「VCP 판정」입니다(그 문서 204행). 한 줄만 고쳐도 T3 입니다. `[JONGGA-008]` 이 T2 를
+  유지하려고 이 파일을 건드리지 않았고 그 결과 이 잔여 결함이 남았습니다.
+- 낮은 확신도로 함께 볼 것 하나. `int(float(v))` 는 버림이라 `0.9` 는 0 이 됩니다.
+  `tests/services/test_kr_market_vcp_payload_service_refactor.py:45` 의 픽스처가
+  `"ai_confidence": 0.9` 를 담고 있어 0~1 척도 생산자의 흔적일 가능성이 제기되었습니다.
+  2026-09-07 확인 결과 그 검사는 캐시 동작만 단언하고 확신도 값을 보지 않으며 같은
+  픽스처의 `entry_price: 100.0` 과 `return_pct: 1.0` 도 임의 값입니다. 저장소에서 확신도를
+  만드는 자리는 모두 0~100 정수이므로 재현 경로를 찾지 못했습니다. 이 항목에서 그 척도를
+  쓰는 생산자가 실제로 있는지 한 번 더 확인합니다.
+- 범위에서 뺀 것: `RecommendationCombiner.combine` 의 「둘 다 없음 → confidence 0」은
+  다루지 않습니다. code-review 가 경로를 끝까지 따라가, 그것이 만드는
+  `final_recommendation` 이라는 이름은 저장소에서 `engine/kr_ai_analyzer.py:109` 와 검사
+  두 줄에만 나오고 병합은 `_AI_RECOMMENDATION_FIELDS` 세 개만 옮기며 프론트엔드에는 그
+  이름이 없다는 것을 확인했습니다. 2026-09-07 직접 grep 으로도 세 자리뿐임을 확인했습니다.
 - QA 시나리오: gpt 탭과 gemini 탭의 확신도 게이지가 같은 규칙으로 그려진다
 - [ ] `_normalize_confidence_value` 와 `safe_confidence` 를 한 벌로 합친다
-- [ ] `combine` 의 0 이 화면까지 닿는지 확인하고 필요하면 함께 고친다
+- [ ] `getRec` 의 원시 캐시 후보가 병합 결과와 같은 규칙을 쓰는지 확인한다
+- [ ] 0~1 척도로 확신도를 저장하는 생산자가 실제로 있는지 확인한다
 - [ ] 세 탭의 게이지를 같은 자료로 실측해 대조한다
+
 
 
 ## P2 — 대기

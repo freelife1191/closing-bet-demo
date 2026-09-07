@@ -1785,7 +1785,7 @@ export default function VCPSignalsPage() {
                             )}
                           </svg>
                           <span className={`absolute inset-0 flex items-center justify-center font-bold ${confidence !== null ? 'text-white text-sm' : 'text-gray-500 text-[10px]'}`}>
-                            {confidence !== null ? `${confidence}%` : '미산출'}
+                            {confidence !== null ? `${confidence.toFixed(0)}%` : '미산출'}
                           </span>
                         </div>
                         <div className="flex-1">

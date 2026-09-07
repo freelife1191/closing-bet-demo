@@ -132,9 +132,12 @@ def test_vcp_recommendation_extract_returns_no_confidence_on_failure():
 
 def test_vcp_reanalysis_writes_missing_confidence_as_a_blank_cell():
     """실패한 행의 확신도는 signals_log 에서 0 이 아니라 결측이어야 한다."""
+    # 0.0 이 아니라 0 이라야 열이 int64 가 된다. .at 으로 None 을 넣을 때 pandas 가
+    # 그 열을 float64 로 승격시키는지를 이 검사가 실제로 덮는다.
     signals_df = pd.DataFrame(
-        [{"ticker": "005930", "ai_action": "N/A", "ai_reason": "분석 실패", "ai_confidence": 0.0}]
+        [{"ticker": "005930", "ai_action": "N/A", "ai_reason": "분석 실패", "ai_confidence": 0}]
     )
+    assert signals_df["ai_confidence"].dtype == "int64"
 
     vcp_helpers._apply_vcp_reanalysis_updates(
         signals_df,

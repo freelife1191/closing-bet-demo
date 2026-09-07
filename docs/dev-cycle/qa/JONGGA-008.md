@@ -146,6 +146,32 @@ CSV 판정을 덮어써서 CSV 갈래를 검사할 수 없습니다.
 - 결과: 통과
 - 정리(cleanup): 이 시나리오가 소유한 임시 자료 없음
 
+## 리뷰 회신을 받은 뒤의 후속 반영
+
+QA 를 마치고 커밋한 뒤 `code-review` 의 나머지 회신이 도착해 네 가지를 더 처리했습니다.
+
+1. **`RecommendationCombiner.combine` 의 0 을 이월 목록에서 뺐습니다.** 저는 「화면까지
+   닿는지 확인이 필요하다」고 적었는데, 리뷰가 경로를 끝까지 따라가 `final_recommendation`
+   이라는 이름이 저장소에서 `engine/kr_ai_analyzer.py:109` 와 검사 두 줄에만 나오고 병합은
+   `_AI_RECOMMENDATION_FIELDS` 세 개만 옮기며 프론트엔드에는 그 이름이 없다는 것을
+   확인했습니다. 직접 `grep` 으로도 세 자리뿐임을 확인해 반영했습니다.
+2. **`[VCP-022]` 의 성격을 고쳐 적었습니다.** 「규칙이 두 벌로 남는 중복」이 아니라
+   「방금 고친 화면의 세 탭 중 둘이 여전히 0% 를 그릴 수 있다」는 잔여 결함입니다.
+3. **검사 픽스처를 int64 열로 바꿨습니다.** `test_vcp_reanalysis_writes_missing_confidence_as_a_blank_cell`
+   이 `ai_confidence: 0.0` 을 써서 float64 열을 만들고 있었습니다. `0` 으로 바꾸고
+   `dtype == "int64"` 를 먼저 단언하니, `.at` 으로 `None` 을 넣을 때 pandas 가 그 열을
+   승격시키는지를 검사가 실제로 덮습니다.
+4. **VCP 화면의 확신도 표기를 종가베팅과 맞췄습니다.** 파싱은 한 헬퍼로 모았는데 표기는
+   종가베팅이 `.toFixed(0)`, VCP 가 `${confidence}%` 로 갈려 있어 캐시의 소수가 오면 한쪽만
+   `78.6%` 로 그렸습니다.
+
+리뷰가 낮은 확신도로 제기한 관찰 하나는 재현 경로를 찾지 못해 고치지 않고 `[VCP-022]` 에
+확인 항목으로 남겼습니다. `int(float(v))` 가 버림이라 `0.9` 가 0 이 되는데,
+`tests/services/test_kr_market_vcp_payload_service_refactor.py:45` 의 픽스처가 그 값을 담고
+있어 0~1 척도 생산자의 흔적일 수 있다는 지적입니다. 그 검사는 캐시 동작만 단언하고 확신도
+값을 보지 않으며 같은 픽스처의 `entry_price: 100.0` 과 `return_pct: 1.0` 도 임의 값입니다.
+저장소에서 확신도를 만드는 자리는 모두 0~100 정수입니다.
+
 ## 이월한 발견
 
 - **VCP 상세 모달의 게이지가 탭에 따라 갈린다** → 새 TODO 항목으로 올린다. `code-review`
@@ -155,10 +181,9 @@ CSV 판정을 덮어써서 CSV 갈래를 검사할 수 없습니다.
   `engine/vcp_ai_analyzer_helpers.py:658` 의 `_normalize_confidence_value(..., default=0)`
   를 지난다. 그 파일은 `tier-rules.md` §2 의 위험 경로 「VCP 판정」에 속해 한 줄만 고쳐도
   T3 이 되므로 이번 라운드(T2)의 범위를 넘는다.
-- **`RecommendationCombiner.combine` 의 「둘 다 없음 → confidence 0」** → 같은 항목에
-  함께 적는다. `engine/kr_ai_strategies.py:150` 이 두 AI 판정을 평균하거나 비교하는
-  계산 자리라서 `None` 을 받으면 계산 자체가 성립하지 않는다. 이번 범위 밖으로 두되,
-  그 0 이 화면까지 확신도로 흘러가는지는 확인이 필요하다.
+- ~~`RecommendationCombiner.combine` 의 「둘 다 없음 → confidence 0」~~ → **이월하지
+  않는다.** 위 「리뷰 회신을 받은 뒤의 후속 반영」 1번 참고. 그 값이 만드는
+  `final_recommendation` 은 화면에 닿지 않는다.
 
 ## 실행 결과
 
