@@ -56,6 +56,51 @@ LAN 주소는 `ipconfig getifaddr en0` 으로 구합니다. 기기가 바뀌면 
 S-11 을 선택으로 둔 이유는 로그인이 필요하고, 이 사이클은 관리자 계정으로 로그인하지
 않기 때문입니다. 익명 상태로 화면이 뜨는 것은 S-6 이 덮습니다.
 
-## 결과
+## 결과 (2026-09-07 실행)
 
-(실행 후 기록)
+기준 커밋은 `aaf1c53` 입니다. `./stop_all.sh` 와 `./restart_all.sh` 로 완전히 재기동한 뒤
+실행했습니다.
+
+| ID | 결과 | 증거 |
+|---|---|---|
+| S-1 | **통과** | `lsof` 출력이 `*:5501` → `127.0.0.1:5501`. Next 는 `*:3500` 유지 |
+| S-2 | **통과** | `curl http://192.168.50.7:5501/api/kr/status` 가 종료 코드 7, `http_code=000`. 재기동 직전 같은 명령은 200 이었습니다 |
+| S-3 | **통과** | `curl http://192.168.50.7:3500/api/kr/status` = 200 |
+| S-4 | **통과** | `curl http://127.0.0.1:5501/api/kr/status` = 200 |
+| S-5 | **통과** | Next 경유와 Flask 직접의 응답 본문이 같습니다 (`collected_stocks: 1997`, 같은 `updated_at`) |
+| S-6 | **통과** | `localhost:3500/dashboard/kr` 에서 Market Gate `55 Neutral`, KOSPI 200 섹터 지수 12개 전부 표시, 마지막 업데이트 21:19. 콘솔 오류 0건 |
+| S-7 | **통과** | `pytest tests/app/test_flask_binding.py::test_default_host_is_loopback` |
+| S-8 | **통과** | `pytest tests/app/test_flask_binding.py::test_explicit_host_still_wins` |
+| S-9 | **통과** | 표준 Procfile 정규식으로 파싱해 `web` 프로세스가 잡힙니다. 주석 두 줄은 무시됩니다 |
+| S-10 | **통과** | `bash -n restart_all.sh` 종료 코드 0 |
+| S-11 | 미실행 | 선택 항목입니다. 이 사이클은 관리자 계정으로 로그인하지 않습니다 |
+
+필수 10건이 모두 통과했습니다.
+
+### 정적 검증
+
+- `pytest` 1794 통과 · 2 skip (신규 2건 포함), 종료 코드 0
+- `npx vitest run` 328 통과 (54 파일), `npm run type-check` 종료 코드 0
+- `git diff --cached --check` 종료 코드 0
+
+### S-6 에서 겪은 오판과 그 원인
+
+처음에 `127.0.0.1:3500` 으로 화면을 열었더니 Market Gate 가 `--Score` 와 `Analyzing...`
+에 갇히고 섹터 지수가 빈 상자로 나왔습니다. 이것을 결함으로 판정할 뻔했습니다.
+
+원인은 이번 변경이 아니라 접속 주소였습니다. Next.js 의 `allowedDevOrigins` 가 개발
+서버에서 `localhost` 만 기본 허용하므로, `127.0.0.1` 로 열면 페이지는 200 으로 뜨지만
+클라이언트가 부르는 API 가 막힙니다. 콘솔에는 아무 오류도 남지 않고
+`logs/frontend.log` 에만 「add it to allowedDevOrigins」 안내가 찍힙니다.
+
+`curl` 은 오리진 검사에 걸리지 않아 `127.0.0.1:3500` 으로도 200 을 받습니다. 그래서
+curl 이 통과했다는 사실이 브라우저도 된다는 뜻이 아니었습니다. 같은 함정을 다음 사이클이
+밟지 않도록 `references/browser-notes.md` 에 적었습니다.
+
+### 정리
+
+- 브라우저 탭을 `about:blank` 로 되돌렸습니다. 다른 작업의 탭은 건드리지 않았습니다.
+- 스크린샷 두 장은 스크래치패드에만 두었고 저장소에 남기지 않았습니다.
+- 비용이 드는 조작은 하나도 실행하지 않았습니다. 알림 테스트 발송, 재분석, 모의투자,
+  Market Gate 갱신 버튼을 누르지 않았습니다.
+- 서버는 새 코드로 떠 있는 상태를 유지합니다.

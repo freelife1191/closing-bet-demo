@@ -39,6 +39,16 @@
   미리 알 수 없고, 그 화면의 버튼 대부분이 실제 LLM 호출을 일으킨다. `snapshot` 으로 `@e`
   참조를 뽑아 그 참조를 지정한다.
 - `screenshot` 두 개를 동시에 실행하면 데몬이 교착 상태에 빠진다. 하나씩 찍는다.
+- **화면을 열 때 `localhost:3500` 을 쓴다. `127.0.0.1:3500` 은 자료가 비어 보인다.**
+  Next.js 의 `allowedDevOrigins` 가 개발 서버에서 `localhost` 만 기본 허용하므로,
+  `127.0.0.1` 로 열면 페이지는 200 으로 뜨지만 클라이언트가 부르는 API 가 막혀 화면이
+  로딩 상태에 갇힌다. 콘솔에 오류가 남지 않고 `logs/frontend.log` 에만
+  「add it to allowedDevOrigins」 안내가 찍히므로 결함으로 오판하기 쉽다.
+  `[INFRA-039]` 의 S-6 을 실패로 판정할 뻔했다. `curl` 은 오리진 검사에 걸리지 않아
+  `127.0.0.1` 로도 200 이 나오므로, curl 이 통과했다는 것이 브라우저도 된다는 뜻은 아니다.
+- `js` 명령은 agent-browser 에 없다(`Unknown command: js`). 그 명령은 browse 쪽이다.
+  화면 내용은 `read` 로 읽고, 실제 렌더링은 `screenshot` 으로 확인한다. Next.js 는 SSR
+  이라 `read` 만으로는 클라이언트가 채우는 값을 놓칠 수 있다.
 
 ## browse
 
