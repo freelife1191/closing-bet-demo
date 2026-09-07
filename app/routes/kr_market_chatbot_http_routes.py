@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from flask import Response, jsonify, request, stream_with_context
+from flask import Response, g, jsonify, request, stream_with_context
 
 from app.routes.route_execution import execute_json_route as _execute_json_route
 from services.kr_market_chatbot_service import (
@@ -96,8 +96,8 @@ def _register_chatbot_welcome_session_routes(kr_bp: Any, *, logger: Any) -> None
 
             bot = get_chatbot()
             owner_id = resolve_chatbot_owner_id(
-                user_email=request.headers.get("X-User-Email"),
-                session_id_header=request.headers.get("X-Session-Id"),
+                user_email=g.get("user_email"),
+                session_id_header=g.get("session_id"),
             )
             req_data = request.get_json(silent=True) or {}
             status_code, payload = handle_chatbot_sessions_request(
@@ -129,8 +129,8 @@ def _register_chatbot_stream_route(
 
             context = resolve_chatbot_usage_context(
                 user_api_key_header=None,  # Vertex 전환 후 사용자별 API 키 미지원
-                user_email_header=request.headers.get("X-User-Email"),
-                session_id_header=request.headers.get("X-Session-Id"),
+                user_email_header=g.get("user_email"),
+                session_id_header=g.get("session_id"),
             )
             user_api_key = context["user_api_key"]
             usage_key = context["usage_key"]
@@ -279,8 +279,8 @@ def _register_chatbot_meta_routes(kr_bp: Any, *, logger: Any) -> None:
 
             bot = get_chatbot()
             owner_id = resolve_chatbot_owner_id(
-                user_email=request.headers.get("X-User-Email"),
-                session_id_header=request.headers.get("X-Session-Id"),
+                user_email=g.get("user_email"),
+                session_id_header=g.get("session_id"),
             )
             status_code, payload = handle_chatbot_history_request(
                 bot=bot,
@@ -300,8 +300,8 @@ def _register_chatbot_meta_routes(kr_bp: Any, *, logger: Any) -> None:
 
             bot = get_chatbot()
             owner_id = resolve_chatbot_owner_id(
-                user_email=request.headers.get("X-User-Email"),
-                session_id_header=request.headers.get("X-Session-Id"),
+                user_email=g.get("user_email"),
+                session_id_header=g.get("session_id"),
             )
             req_data = request.get_json(silent=True) or {}
             status_code, payload = handle_chatbot_profile_request(

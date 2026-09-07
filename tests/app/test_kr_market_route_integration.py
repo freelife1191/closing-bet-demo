@@ -70,6 +70,11 @@ class _DummyChatbot:
 def _create_client():
     app = Flask(__name__)
     app.testing = True
+    # [INFRA-027] 라우트는 헤더를 직접 읽지 않고 before_request 가 검증해 둔 g 를 읽는다.
+    # 등록하지 않으면 X-Session-Id 를 넣어도 소유자가 조용히 None 이 된다.
+    from app import _register_request_context
+
+    _register_request_context(app)
     app.register_blueprint(kr_market.kr_bp, url_prefix="/api/kr")
     return app.test_client()
 
@@ -392,15 +397,15 @@ def test_chatbot_free_tier_success_stream_increments_quota(monkeypatch, tmp_path
     response = client.post(
         "/api/kr/chatbot",
         json={"message": "테스트 메시지"},
-        headers={"X-Session-Id": "session-abc"},
+        headers={"X-Session-Id": "anon_session-abc"},
     )
 
     assert response.status_code == 200
     assert response.content_type.startswith("text/event-stream")
     assert "data:" in response.get_data(as_text=True)
 
-    assert kr_market.get_user_usage("session-abc") == 1
-    assert bot.calls[0]["owner_id"] == "session-abc"
+    assert kr_market.get_user_usage("anon_session-abc") == 1
+    assert bot.calls[0]["owner_id"] == "anon_session-abc"
 
 
 def test_chatbot_warning_response_skips_quota_increment(monkeypatch, tmp_path: Path):
@@ -414,11 +419,11 @@ def test_chatbot_warning_response_skips_quota_increment(monkeypatch, tmp_path: P
     response = client.post(
         "/api/kr/chatbot",
         json={"message": "테스트"},
-        headers={"X-Session-Id": "session-warning"},
+        headers={"X-Session-Id": "anon_session-warning"},
     )
 
     assert response.status_code == 200
-    assert kr_market.get_user_usage("session-warning") == 0
+    assert kr_market.get_user_usage("anon_session-warning") == 0
 
 
 def test_chatbot_quota_guard_blocks_when_limit_exceeded(monkeypatch, tmp_path: Path):
@@ -427,7 +432,7 @@ def test_chatbot_quota_guard_blocks_when_limit_exceeded(monkeypatch, tmp_path: P
 
     quota_file = tmp_path / "user_quota.json"
     quota_file.write_text(
-        json.dumps({"session-limit": kr_market.MAX_FREE_USAGE}, ensure_ascii=False),
+        json.dumps({"anon_session-limit": kr_market.MAX_FREE_USAGE}, ensure_ascii=False),
         encoding="utf-8",
     )
 
@@ -438,7 +443,7 @@ def test_chatbot_quota_guard_blocks_when_limit_exceeded(monkeypatch, tmp_path: P
     response = client.post(
         "/api/kr/chatbot",
         json={"message": "테스트"},
-        headers={"X-Session-Id": "session-limit"},
+        headers={"X-Session-Id": "anon_session-limit"},
     )
 
     assert response.status_code == 402

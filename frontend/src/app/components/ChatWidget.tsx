@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useSession } from "next-auth/react";
 import ThinkingProcess from './ThinkingProcess';
 import { getStoredModel, shouldSendOnEnter } from './chatHelpers';
 import { getBrowserSessionId } from '@/lib/session';
@@ -175,7 +174,6 @@ export default function ChatWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [thinkingIndex, setThinkingIndex] = useState(0);
-  const { data: session } = useSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
   const pathname = usePathname();
@@ -234,7 +232,6 @@ export default function ChatWidget() {
       const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
 
       // Auth Info Retrieval
-      const userEmail = session?.user?.email || null;
       const sessionId = getBrowserSessionId();
 
       const storedModel = getStoredModel();
@@ -244,8 +241,8 @@ export default function ChatWidget() {
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
         headers: {
+          // 신원은 proxy.ts 가 세션에서 확정해 서명한다. X-User-Email 을 보내도 지워진다.
           'Content-Type': 'application/json',
-          'X-User-Email': userEmail || '',
           'X-Session-Id': sessionId
         },
         body: JSON.stringify(requestBody),

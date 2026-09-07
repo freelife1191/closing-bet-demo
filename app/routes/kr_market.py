@@ -1,7 +1,7 @@
 import os
 import logging
 import threading
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TextIO
 
 try:
@@ -326,11 +326,17 @@ def increment_user_usage(email):
         quota_file_path=QUOTA_FILE,
     )
 
-def _recharge_user_usage(usage_key: str | None, amount: int) -> int:
-    """사용자 사용량을 amount 만큼 감소(충전)한다."""
+# 한국 시장을 다루는 서비스이므로 하루의 경계도 KST 로 센다. 서버가 UTC 면 자정부터
+# 오전 9시 사이에 하루가 두 번 바뀐 것처럼 보여 충전이 두 번 된다.
+KST = timezone(timedelta(hours=9))
+
+
+def _recharge_user_usage(usage_key: str | None, amount: int) -> tuple[int, bool]:
+    """사용자 사용량을 amount 만큼 감소(충전)한다. 하루 한 번만 허용한다."""
     return recharge_user_usage_service(
         usage_key=usage_key,
         amount=amount,
+        today=int(datetime.now(KST).strftime("%Y%m%d")),
         quota_lock=_quota_lock,
         load_quota_data_unlocked=load_quota_data_unlocked_service,
         save_quota_data_unlocked=save_quota_data_unlocked_service,

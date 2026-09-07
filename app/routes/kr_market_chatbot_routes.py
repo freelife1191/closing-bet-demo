@@ -21,7 +21,7 @@ def register_chatbot_and_quota_routes(
     max_free_usage: int,
     get_user_usage_fn: Callable[[str | None], int],
     increment_user_usage_fn: Callable[[str | None], int],
-    recharge_usage_fn: Callable[[str | None, int], int],
+    recharge_usage_fn: Callable[[str | None, int], tuple[int, bool]],
 ) -> None:
     register_chatbot_routes(
         kr_bp,

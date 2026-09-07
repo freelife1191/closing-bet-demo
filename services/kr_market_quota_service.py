@@ -49,7 +49,11 @@ def save_quota_data_unlocked(
 
 
 def resolve_quota_usage_key(user_email: str | None, session_id: str | None) -> str | None:
-    """로그인 여부를 고려해 quota usage key를 계산한다."""
+    """로그인 여부를 고려해 quota usage key를 계산한다.
+
+    두 인자 모두 `services/identity_helpers.py` 의 검증을 통과한 값만 넣는다. 그 이유는
+    그 파일의 `resolve_anonymous_id` 주석에 있다.
+    """
     is_authenticated = bool(user_email and user_email != "user@example.com")
     return user_email if is_authenticated else session_id
 

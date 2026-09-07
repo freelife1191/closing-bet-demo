@@ -37,24 +37,13 @@ export function setStoredModel(model: string | null | undefined): void {
 }
 
 export function getAuthHeaders(): Record<string, string> {
-  const sessionId = getBrowserSessionId();
-
-  const headers: Record<string, string> = {
-    'X-Session-Id': sessionId
+  // 신원은 `frontend/src/proxy.ts` 가 NextAuth 세션에서 확정해 서명한다. 여기서
+  // X-User-Email 을 실어 보내도 proxy 가 지우므로, 신원인 것처럼 보이는 값을 남기지
+  // 않는다. 종전에는 설정 모달의 자유 입력 칸에 적힌 이메일이 그대로 신원이었다.
+  // X-Session-Id 는 익명 사용자의 챗봇 대화를 잇는 데 계속 쓰인다.
+  return {
+    'X-Session-Id': getBrowserSessionId()
   };
-
-  // User Profile Email
-  const savedProfile = localStorage.getItem('user_profile');
-  if (savedProfile) {
-    try {
-      const p = JSON.parse(savedProfile);
-      if (p.email && p.email !== 'user@example.com') {
-        headers['X-User-Email'] = p.email;
-      }
-    } catch (e) { }
-  }
-
-  return headers;
 }
 
 // 저장된 프로필이 없을 때 화면이 그리는 폴백. 서버 렌더와 첫 클라이언트 렌더가 같은 값을

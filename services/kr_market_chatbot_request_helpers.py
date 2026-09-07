@@ -14,10 +14,12 @@ from typing import Any
 
 
 def resolve_chatbot_owner_id(user_email: str | None, session_id_header: str | None) -> str | None:
-    """로그인/비로그인 사용자별 챗봇 owner_id를 계산한다."""
-    # ponytail: 헤더 값을 검증 없이 소유자로 삼는다. 남의 이메일을 아는 사람은 헤더
-    # 하나로 그 사람의 세션과 프로필에 닿는다. 이 판정을 NextAuth 세션과 대조하는
-    # 방식으로 올린다.
+    """로그인/비로그인 사용자별 챗봇 owner_id를 계산한다.
+
+    이 함수는 검증된 이메일과 익명 ID 를 같은 문자열 공간에 담는다. 그래서 두 인자 모두
+    `services/identity_helpers.py` 의 검증을 통과한 값만 넣는다. 그 이유는 그 파일의
+    `resolve_anonymous_id` 주석에 있다.
+    """
     if user_email and user_email != "user@example.com":
         return user_email
     return session_id_header
@@ -126,7 +128,14 @@ def resolve_chatbot_usage_context(
     user_email_header: str | None,
     session_id_header: str | None,
 ) -> dict[str, Any]:
-    """요청 헤더 기준 사용자/세션/키 컨텍스트를 정규화한다."""
+    """요청 헤더 기준 사용자/세션/키 컨텍스트를 정규화한다.
+
+    두 인자 모두 `services/identity_helpers.py` 의 검증을 통과한 값만 넣는다.
+
+    익명 사용자의 쿼터는 여전히 세션 ID 로 센다. 브라우저에서 그 값을 지우면 새 키가
+    발급되어 무료 10회가 다시 시작되는데, 이 한계는 `[INFRA-027]` 이 막지 않았다.
+    막으려면 서버가 익명 ID 를 발급해야 한다.
+    """
     user_api_key = (user_api_key_header or "").strip() or None
     is_authenticated = bool(user_email_header and user_email_header != "user@example.com")
     usage_key = user_email_header if is_authenticated else session_id_header

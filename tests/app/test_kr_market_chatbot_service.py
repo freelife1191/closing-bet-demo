@@ -301,14 +301,20 @@ def test_profile_route_reads_owner_from_session_header(monkeypatch):
     헬퍼는 owner_id 가 키워드 전용이라 라우트가 빠뜨리면 TypeError 로 터진다.
     그런데 헤더 이름을 잘못 적으면 소유자가 조용히 None 이 되어 헬퍼 검사로는
     잡히지 않는다. 이 검사가 그 구멍을 막는다.
+
+    [INFRA-027] 이후 라우트는 헤더를 직접 읽지 않고 before_request 가 검증해 둔
+    g.session_id 를 읽는다. 그래서 _register_request_context 를 함께 등록해야
+    이 경로가 실제 배포와 같은 모양이 된다.
     """
     import logging
 
     import chatbot as chatbot_pkg
     from flask import Blueprint, Flask
 
+    from app import _register_request_context
     from app.routes.kr_market_chatbot_http_routes import _register_chatbot_meta_routes
 
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", "test-identity-secret")
     seen = {}
 
     class _ProfileBot:
@@ -320,6 +326,7 @@ def test_profile_route_reads_owner_from_session_header(monkeypatch):
 
     app = Flask(__name__)
     app.testing = True
+    _register_request_context(app)
     blueprint = Blueprint("kr_test", __name__)
     _register_chatbot_meta_routes(blueprint, logger=logging.getLogger("test_profile_route"))
     app.register_blueprint(blueprint, url_prefix="/api/kr")
@@ -619,3 +626,98 @@ def test_stream_chatbot_response_runs_finalize_hooks():
     assert len(chunks) == 1
     assert logged["calls"] == 1
     assert increments["calls"] == 1
+
+
+def test_chatbot_sessions_ignores_forged_email_header(monkeypatch):
+    """[INFRA-027] 위조한 X-User-Email 로 남의 세션 목록을 읽지 못한다.
+
+    proxy 를 거치지 않고 Flask 에 직접 닿는 요청을 흉내 낸다. 배포에서는 proxy 가
+    이 헤더를 지우지만, Flask 가 5501 로 직접 노출되는 개발 환경과 잘못된 배포에서는
+    그 방어가 없다. 그래서 Flask 쪽 검증이 유일한 실효 방어선이다.
+    """
+    import logging
+
+    import chatbot as chatbot_pkg
+    from flask import Blueprint, Flask
+
+    from app import _register_request_context
+    from app.routes.kr_market_chatbot_http_routes import (
+        _register_chatbot_welcome_session_routes,
+    )
+
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", "test-identity-secret")
+    seen = {}
+
+    class _FakeHistory:
+        def get_all_sessions(self, owner_id=None):
+            seen["owner_id"] = owner_id
+            return []
+
+    class _SessionBot:
+        history = _FakeHistory()
+
+    monkeypatch.setattr(chatbot_pkg, "get_chatbot", lambda: _SessionBot())
+
+    app = Flask(__name__)
+    app.testing = True
+    _register_request_context(app)
+    blueprint = Blueprint("kr_sessions_test", __name__)
+    _register_chatbot_welcome_session_routes(
+        blueprint, logger=logging.getLogger("test_sessions_route")
+    )
+    app.register_blueprint(blueprint, url_prefix="/api/kr")
+
+    response = app.test_client().get(
+        "/api/kr/chatbot/sessions",
+        headers={"X-User-Email": "victim@example.com", "X-Session-Id": "anon_abc"},
+    )
+
+    assert response.status_code == 200
+    assert seen["owner_id"] == "anon_abc"
+
+
+def test_chatbot_sessions_ignores_email_shaped_session_id(monkeypatch):
+    """[INFRA-027] X-Session-Id 에 이메일을 넣어 남의 대화에 닿지 못한다.
+
+    앞 검사만으로는 이 구멍이 남는다. owner_id 는 검증된 이메일과 익명 ID 를 같은
+    문자열 공간에 담으므로, 세션 ID 에 남의 이메일을 적으면 그대로 소유자가 된다.
+    """
+    import logging
+
+    import chatbot as chatbot_pkg
+    from flask import Blueprint, Flask
+
+    from app import _register_request_context
+    from app.routes.kr_market_chatbot_http_routes import (
+        _register_chatbot_welcome_session_routes,
+    )
+
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", "test-identity-secret")
+    seen = {}
+
+    class _FakeHistory:
+        def get_all_sessions(self, owner_id=None):
+            seen["owner_id"] = owner_id
+            return []
+
+    class _SessionBot:
+        history = _FakeHistory()
+
+    monkeypatch.setattr(chatbot_pkg, "get_chatbot", lambda: _SessionBot())
+
+    app = Flask(__name__)
+    app.testing = True
+    _register_request_context(app)
+    blueprint = Blueprint("kr_sessions_email_test", __name__)
+    _register_chatbot_welcome_session_routes(
+        blueprint, logger=logging.getLogger("test_sessions_email_route")
+    )
+    app.register_blueprint(blueprint, url_prefix="/api/kr")
+
+    response = app.test_client().get(
+        "/api/kr/chatbot/sessions",
+        headers={"X-Session-Id": "victim@example.com"},
+    )
+
+    assert response.status_code == 200
+    assert seen["owner_id"] is None

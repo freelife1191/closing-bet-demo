@@ -65,20 +65,19 @@ export default function Sidebar() {
   }, []);
 
   const refreshQuota = useCallback(() => {
-    // 세션이 확정되기 전에는 어느 계정의 사용량인지 알 수 없다. localStorage 에 남아 있는
-    // 이전 사용자의 이메일로 조회하면 엉뚱한 계정의 잔여 횟수가 잠깐 표시된다.
+    // 세션이 확정되기 전에는 어느 계정의 사용량인지 알 수 없다. 세션 쿠키가 붙기 전에
+    // 조회하면 로그인한 사용자에게 익명 응답이 잠깐 표시된다.
     if (status === 'loading') return;
 
-    const sessionId = getBrowserSessionId();
-
-    const email = displayEmail !== 'user@example.com' ? displayEmail : '';
-    fetch(`/api/kr/user/quota?email=${encodeURIComponent(email)}&session_id=${encodeURIComponent(sessionId)}`)
+    // 신원은 서버가 정한다. 종전에는 쿼리 파라미터로 이메일을 넘겼는데, 그러면 URL 한
+    // 줄로 남의 사용량을 조회할 수 있었다.
+    fetch('/api/kr/user/quota')
       .then(res => res.json())
       .then(data => {
         setQuota(data);
       })
       .catch(e => console.error(e));
-  }, [displayEmail, status]);
+  }, [status]);
 
   useEffect(() => {
     refreshQuota();
@@ -104,8 +103,8 @@ export default function Sidebar() {
       await fetch('/api/system/log-event', {
         method: 'POST',
         headers: {
+          // 신원은 proxy.ts 가 세션에서 확정해 서명한다. X-User-Email 을 보내도 지워진다.
           'Content-Type': 'application/json',
-          'X-User-Email': email,
           'X-Session-Id': sessionId
         },
         body: JSON.stringify({
@@ -297,23 +296,31 @@ export default function Sidebar() {
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
-                          const sessionId = getBrowserSessionId();
-                          const email = displayEmail !== 'user@example.com' ? displayEmail : '';
                           try {
+                            // 신원은 서버가 세션에서 정한다. 바디로 넘기던 email 과
+                            // session_id 는 아무나 지어낼 수 있는 값이었다.
                             const res = await fetch('/api/kr/user/quota/recharge', {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ email, session_id: sessionId })
+                              headers: { 'Content-Type': 'application/json' }
                             });
                             const data = await res.json();
                             if (res.ok) {
                               setQuota(data);
                               setAlertModal({ isOpen: true, type: 'success', title: '충전 완료', content: data.message });
+                            } else {
+                              // 하루 1회 제한(429)과 로그인 필요(401)를 사용자에게 알린다.
+                              // 종전에는 실패를 삼켜 버튼이 먹통인 것처럼 보였다.
+                              setAlertModal({
+                                isOpen: true,
+                                type: 'danger',
+                                title: '충전할 수 없습니다',
+                                content: data.message || data.error || '잠시 후 다시 시도해 주세요.'
+                              });
                             }
                           } catch (e) { console.error(e); }
                         }}
                         className="w-4 h-4 flex items-center justify-center bg-blue-500 hover:bg-blue-400 rounded text-white text-[9px] font-bold transition-colors"
-                        title="5회 충전"
+                        title="5회 충전 (하루 1회)"
                       >
                         +
                       </button>

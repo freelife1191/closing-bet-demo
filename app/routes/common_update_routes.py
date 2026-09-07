@@ -10,7 +10,7 @@ import os
 from collections.abc import Callable
 from threading import Thread
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 from app.routes.common_route_context import CommonRouteContext
 from services.admin_helpers import verify_admin_api_token
@@ -178,9 +178,10 @@ def _register_event_log_route(common_bp, ctx: CommonRouteContext) -> None:
             action = data.get("action", "FRONTEND_EVENT")
             details = data.get("details", {})
 
-            user_email = request.headers.get("X-User-Email")
-            session_id = request.headers.get("X-Session-Id")
-            user_id = user_email if (user_email and user_email != "user@example.com") else session_id
+            # g 의 두 값은 검증을 거쳤다. 헤더를 그대로 읽으면 활동 로그의 사용자 칸을
+            # 아무 문자열로나 채울 수 있다.
+            session_id = g.get("session_id")
+            user_id = g.get("user_email") or session_id
 
             activity_logger = _resolve_activity_logger()
 

@@ -38,12 +38,103 @@
   헤더 하나로 그 사람의 대화와 프로필을 읽고 덮어쓸 수 있다. `[CHAT-017]`·`[CHAT-018]`·
   `[CHAT-021]` 이 막은 것은 모든 사용자가 한 벌을 공유하던 사고였고 고의 접근은 그대로
   열려 있다. 그 사실을 `resolve_chatbot_owner_id` 에 `# ponytail:` 주석으로 적어 두었다.
-- [ ] `g.user_email` 을 신원 근거로 쓰는 자리를 전수 조사 (`app/__init__.py:186` 포함)
-- [ ] `resolve_chatbot_owner_id` 도 같은 방식으로 신원을 확정하게 함
-- [ ] 서버가 서명을 검증할 수 있는 자격 증명으로 신원을 확정하는 방식을 정한다
-- [ ] 당장 도입이 어려우면 이 엔드포인트에 IP 단위 속도 제한을 먼저 건다
-- [ ] 위조한 헤더가 쿼터를 우회하지 못함을 고정하는 검사 추가
-- [ ] pytest 전체 통과 확인
+- 2026-09-07 설계 단계의 전수 조사로 두 가지를 더 확인했습니다. 첫째,
+  `X-User-Email` 은 NextAuth 세션과 무관합니다. `frontend/src/app/components/chatHelpers.ts:43`
+  의 `getAuthHeaders` 가 `localStorage` 의 `user_profile.email` 을 싣는데, 그 값은 설정
+  모달의 자유 입력 칸에서 옵니다. 브라우저에 이미 검증된 신원이 있는데도 서버로 보낼 때는
+  쓰지 않습니다. 둘째, `frontend/src/app/components/Sidebar.tsx:299` 의 `+` 버튼이
+  `/api/kr/user/quota/recharge` 를 상한도 인증도 없이 부릅니다. **헤더를 위조하지 않아도
+  두 번 누르면 무료 10회가 초기화되므로** 신원만 막아서는 쿼터 제한이 성립하지 않습니다.
+- 쿼터를 실제로 소모하는 경로는 `app/routes/kr_market_system_http_routes.py:129` 의
+  `/api/kr/reanalyze/gemini` 이며 `g.user_email` 을 그대로 씁니다. 같은 이름의
+  `/api/kr/jongga-v2/reanalyze-gemini` 는 신원도 쿼터도 보지 않는 다른 경로입니다.
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 17:49
+  | 범위: `frontend/src/proxy.ts` 신설과 HMAC 서명 신원 헤더, Flask 의 서명 검증,
+  익명은 비용 경로에서만 로그인 요구, 충전 하루 1회 제한
+  | 실제 대화 근거: 2026-09-07 세션에서 설계 세 갈래를 AskUserQuestion 으로 제시해
+  「Next 미들웨어 + HMAC 서명」·「익명 유지 + 쿼터 경로만 로그인 필수」·「신원 확정 +
+  recharge 차단」을 선택받고, 충전 처리는 「하루 1회 제한으로 남김」을 선택받은 뒤
+  설계 전문에 사용자가 「승인」으로 응답
+- 구현 계획: `docs/superpowers/plans/2026-09-07-infra-027-identity-signature-gate.md`
+- IP 단위 속도 제한은 채택하지 않았습니다. 위 승인에서 익명의 비용 경로 자체를 막기로
+  정했으므로, 익명 요청에 상한을 거는 대체 수단이 필요 없어졌습니다.
+- QA 시나리오: 위조한 `X-User-Email` 로 남의 챗봇 대화 목록이 보이지 않고, 로그인한
+  사용자의 목록은 그대로 보이며, `+` 버튼은 두 번째에 거절된다
+- [x] Task 1 `services/identity_helpers.py` — `verify_identity_header` 와 `resolve_anonymous_id`.
+  검사 11건 통과
+- [x] Task 2 `frontend/src/lib/identity.ts` 서명 생성. 검사 5건 통과. 두 언어가 같은 문자열을
+  만드는 것을 명령으로 직접 대조했습니다(`b3duZXJAZXhhbXBsZS5jb20.2000.f08e8510...`)
+- [x] Task 3 `frontend/src/proxy.ts` 신설. `.env.example` 에 `INTERNAL_IDENTITY_SECRET` 과
+  `NEXTAUTH_URL` 경고 추가
+- [x] Task 4 `app/__init__.py` 가 `g.user_email` 과 `g.session_id` 를 검증 결과로 확정.
+  검사 5건 통과
+- [x] Task 5 챗봇 라우트 네 자리를 `g` 기반으로. 헤더 직접 읽기 0건 확인
+- [x] Task 6 쿼터 라우트의 쿼리·바디 신원 제거. **익명 쿼터 키 제거는 철회했습니다.**
+  계획 검토 M-3 대로 화면의 「10회 남음」과 서버의 402 가 어긋나기 때문입니다
+- [x] Task 7 충전 하루 1회. 반환 형 `int` → `tuple[int, bool]` 파급 네 자리 반영
+- [x] Task 8 프론트엔드 정리. `X-User-Email` 헤더와 `quota?email=` 쿼리를 모두 걷어냈습니다
+- [x] 계획 검토 `oh-my-claudecode:critic` — CRITICAL 1건, MAJOR 5건, MEDIUM 4건 지적.
+  전부 코드로 확인해 계획에 반영했습니다. 판정 원문은 답변이 두 번 잘려 아직 받지 못했고
+  재요청해 두었습니다.
+  - **C-1 (CRITICAL)**: `X-Session-Id: victim@example.com` 로 게이트 전체가 우회됩니다.
+    챗봇 `owner_id` 와 쿼터 키가 검증된 이메일과 익명 ID 를 같은 문자열 공간에 담기
+    때문입니다. `services/kr_market_chatbot_quota_helpers.py:49` 의 `is_admin_email` 까지
+    통과하므로 관리자 이메일을 넣으면 쿼터가 무제한이 됩니다. → `resolve_anonymous_id` 로
+    `anon_` 접두사를 요구하도록 Task 1·4·5 를 고쳤습니다
+  - **M-2·M-3**: 설계 문구는 「챗봇 호출도 401」이었으나 그렇게 만드는 작업이 없었고,
+    익명 쿼터 키를 없애면 화면의 「10회 남음」과 서버의 402 가 어긋납니다. → 익명 챗봇
+    유지 결정에 맞춰 설계 문구를 고치고 쿼터 키 변경을 철회했습니다. 남는 한계(익명이
+    `browser_session_id` 를 지우면 챗봇 쿼터가 초기화됨)를 계획에 명시했습니다
+  - **M-4**: 「proxy 의 헤더가 rewrite 목적지까지 간다」는 이 계획의 핵심 가정을 어떤
+    검사도 보지 않았습니다. → Task 3 에 임시 로그로 Flask 도달을 직접 확인하는 단계를
+    넣고, 실패 시 설계 변경이 필요하므로 멈추도록 적었습니다
+  - **M-5**: `.env.example:114` 가 `NEXTAUTH_URL=http://localhost:3500` 입니다. `getToken`
+    이 이 값으로 쿠키 이름을 정하므로(`next-auth/jwt/index.js:65`) 운영에서 http 이면
+    로그인 사용자 전원이 조용히 익명이 됩니다. → 경고 주석과 확인 단계를 넣었습니다
+  - **M-6**: `tests/app/test_kr_market_quota_http_routes_refactor.py` 가 함께 깨지는데
+    Files 와 커밋 대상에 없었습니다. → Task 6 에 고칠 내용을 코드로 적었습니다
+  - **m-7**: 서명 헤더가 로그에 남지 않는지 확인하는 명령을 검증 절에 넣었습니다
+  - **m-8**: `Sidebar.tsx:75` 와 `SettingsModal.tsx:48` 의 `quota?email=` 두 자리를
+    Task 8 에 넣었습니다
+  - **m-9**: 하류의 `user@example.com` 비교 중복. 시그니처를 안 바꾸기로 하면서 새로
+    넣을 일이 없어졌고, 기존 비교는 「하류 안전망이며 실제 게이트는 한 자리」라는 주석을
+    달아 남깁니다. 지우면 순수 함수의 단위 검사 두 개를 함께 고쳐야 해 diff 만 커집니다
+  - **m-10**: `datetime` 을 함수 안에서 import 하던 것을 파일 상단으로 올렸습니다
+  - **n-11**: jsdom 환경에서 `node:crypto` 와 `Buffer.toString('base64url')` 이 동작하는
+    것을 임시 검사로 실제 실행해 확인했습니다. 실패 시 대비책(`// @vitest-environment node`)
+    만 계획에 적었습니다
+  - **n-12**: proxy matcher 가 `'/api/((?!auth).*)'` 여서 나중에 `/api/authors` 같은 경로가
+    생기면 게이트에서 조용히 빠집니다. → `'/api/((?!auth/).*)'` 로 고쳤습니다
+  - **n-13**: 「지금 열려 있는 것」 표의 로그 오염 지점을 `app/__init__.py:175` 에서
+    `:186` 의 `_resolve_user_id` 로 바로잡았습니다
+  - **판정 `REVISE`**. 지적을 전부 반영했으므로 dev-cycle `[1]` 4번에 따라 진행합니다.
+    C-1 의 해결책으로는 검토자도 `anon_` 접두사 화이트리스트를 권했습니다. 그 근거로
+    `backup/user_quota.json` 의 접두사 없는 키 둘(`user_a_`, `user_b_`)이 소스 어디에도
+    없는 문자열, 즉 QA 에서 손으로 넣은 값이라는 사실을 확인해 주었고 직접 대조했습니다
+- [x] 리뷰 `/ponytail-review` — 4건 반영, 17줄 감소(406 → 389). 중복 `int()` 변환,
+  proxy.ts 의 상수 배열과 루프, 한 번만 쓰이는 상수, 세 파일에 반복된 같은 docstring
+- [x] 리뷰 `feature-dev:code-reviewer` — 코드 결함 없음. 지적 2건 모두 처리했습니다.
+  `ChatWidget.tsx` 의 죽은 `useSession`·`userEmail` 3줄 제거, 그리고 M-4 실측 요구는
+  아래 QA 의 S-1 로 채웠습니다. `.env.production` 의 `NEXTAUTH_URL` 이 이미 `https://` 인
+  것을 확인해 주어 계획 검토의 M-5 는 충족 상태입니다
+- [x] 리뷰 `/review` — **CRITICAL 1건.** 익명 ID 를 만드는 자리가 셋인데 형식이 제각각인데도
+  `anon_` 접두사만 허용하고 있었습니다. `chatbot/session_access.py:82` 가 소유자 불일치 때
+  배정하는 접두사 없는 uuid 를 VCP 화면이 저장해 쓰므로(`vcp/page.tsx:1101`), 그대로 두었으면
+  비로그인 사용자의 VCP 채팅이 영구히 끊겼습니다. **로그인한 채로 확인하면 이메일이 소유자라
+  멀쩡해 보여 발견하지 못했을 결함입니다.** 판정을 「이메일 모양(`@` 포함)이면 버린다」로
+  바꾸고 세 형식이 모두 통과하는 검사를 더했습니다
+- [ ] 보안 보강 `oh-my-claudecode:security-reviewer` 결과 대기 중
+- [x] 보안 보강 시크릿 확인 — `.env*` 는 `.env.example` 만 추적, `NEXT_PUBLIC_` 비밀 없음,
+  `INTERNAL_IDENTITY_SECRET` 참조는 서버 전용 `proxy.ts` 한 자리, `X-Auth-Identity` 를
+  로그에 남기는 자리 없음, `.env.production` 의 `NEXTAUTH_URL` 이 `https://`
+- [x] 검증 pytest 1780 통과·2 스킵 | vitest 53 파일 321 통과 | type-check exit 0 |
+  lint 오류 0(경고 204는 기존) | build 성공(vitest smoke)
+- [x] QA 2단계 — `docs/dev-cycle/qa/INFRA-027.md`. 필수 11/11 통과.
+  **S-1 이 이 라운드의 핵심 가정을 실측했습니다**: proxy 가 붙인 헤더가 rewrite 를 거쳐
+  Flask 까지 닿고 서명 검증까지 통과하는 것을 `identity_present=True resolved=True` 로
+  확인했습니다. Google 로그인 대신 `next-auth/jwt` 의 `encode` 로 세션 쿠키를 만들어
+  자격 증명을 다루지 않았습니다. S-9(충전)만 `data/` 읽기 전용 제약에 따라 단위·라우트
+  검사 11건으로 대체했습니다
 
 ### [INFRA-037] `/api/notification/send` 가 인증 없이 저장된 자격 증명으로 발송한다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 계획 검토와

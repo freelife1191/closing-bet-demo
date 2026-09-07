@@ -45,7 +45,9 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
 
   useEffect(() => {
     if (session?.user?.email && isOpen) {
-      fetch(`/api/kr/user/quota?email=${encodeURIComponent(session.user.email)}`)
+      // 신원은 서버가 세션에서 정한다. 쿼리로 이메일을 넘기면 URL 한 줄로 남의
+      // 사용량을 조회할 수 있었다.
+      fetch('/api/kr/user/quota')
         .then(res => res.json())
         .then(data => setQuota(data))
         .catch(e => console.error(e));
@@ -438,22 +440,30 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                                 <button
                                   onClick={async (e) => {
                                     e.preventDefault();
-                                    const sessionId = getBrowserSessionId();
                                     try {
+                                      // 신원은 서버가 세션에서 정한다. 바디로 넘기던
+                                      // email 과 session_id 는 아무나 지어낼 수 있었다.
                                       const res = await fetch('/api/kr/user/quota/recharge', {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ email: session?.user?.email || '', session_id: sessionId })
+                                        headers: { 'Content-Type': 'application/json' }
                                       });
                                       const data = await res.json();
                                       if (res.ok) {
                                         setQuota(data);
                                         setTestModal({ isOpen: true, type: 'success', title: '충전 완료', content: data.message });
+                                      } else {
+                                        // 하루 1회 제한(429)과 로그인 필요(401)를 알린다.
+                                        setTestModal({
+                                          isOpen: true,
+                                          type: 'danger',
+                                          title: '충전할 수 없습니다',
+                                          content: data.message || data.error || '잠시 후 다시 시도해 주세요.'
+                                        });
                                       }
                                     } catch (e) { console.error(e); }
                                   }}
                                   className="w-5 h-5 flex items-center justify-center bg-blue-500 hover:bg-blue-400 rounded text-white text-xs font-bold transition-colors"
-                                  title="5회 충전"
+                                  title="5회 충전 (하루 1회)"
                                 >
                                   +
                                 </button>

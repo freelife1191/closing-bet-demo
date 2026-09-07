@@ -21,6 +21,10 @@ from app.routes import common_update_routes
 def _create_client():
     app = Flask(__name__)
     app.testing = True
+    # [INFRA-027] 활동 로그의 user_id 는 before_request 가 검증해 둔 g 에서 온다.
+    from app import _register_request_context
+
+    _register_request_context(app)
     app.register_blueprint(common.common_bp, url_prefix="/api")
     return app.test_client()
 
@@ -248,16 +252,16 @@ def test_system_log_event_injects_session_id_and_extracts_forwarded_ip(monkeypat
         "/api/system/log-event",
         json={"action": "LOGIN", "details": {}},
         headers={
-            "X-Session-Id": "session-123",
+            "X-Session-Id": "anon_session-123",
             "X-Forwarded-For": "10.0.0.1, 192.168.0.1",
         },
     )
 
     assert response.status_code == 200
     assert response.get_json() == {"status": "ok"}
-    assert captured["user_id"] == "session-123"
+    assert captured["user_id"] == "anon_session-123"
     assert captured["action"] == "LOGIN"
-    assert captured["details"]["session_id"] == "session-123"
+    assert captured["details"]["session_id"] == "anon_session-123"
     assert captured["ip_address"] == "10.0.0.1"
 
 

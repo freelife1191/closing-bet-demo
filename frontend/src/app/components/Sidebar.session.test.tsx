@@ -70,12 +70,20 @@ describe('사용량 조회', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('세션이 확정되면 세션 이메일로 조회한다', async () => {
+  it('[INFRA-027] 조회 URL 에 신원을 싣지 않는다', async () => {
+    // 종전에는 화면이 이메일을 쿼리 파라미터로 넘겼고, 서버가 그 값을 그대로 믿었다.
+    // 그래서 URL 한 줄로 남의 사용량을 조회할 수 있었다. 이제 신원은 proxy.ts 가
+    // NextAuth 세션에서 확정하므로, 화면이 무엇을 보내든 서버는 보지 않는다.
     mockSession({ user: { name: '세션이름', email: 'session@example.com' } }, 'authenticated');
     await renderSidebar();
 
     const requested: string[] = (global.fetch as any).mock.calls.map((c: any[]) => String(c[0]));
-    expect(requested.some((url) => url.includes('email=session%40example.com') || url.includes('email=session@example.com'))).toBe(true);
+    const quotaCalls = requested.filter((url) => url.includes('/api/kr/user/quota'));
+
+    expect(quotaCalls.length).toBeGreaterThan(0);
+    expect(quotaCalls.every((url) => !url.includes('email='))).toBe(true);
+    expect(quotaCalls.every((url) => !url.includes('session_id='))).toBe(true);
+    // 이전 사용자의 값이 새어 나가지 않는다는 원래 보장은 그대로 유지된다.
     expect(requested.some((url) => url.includes('saved@example.com'))).toBe(false);
   });
 });

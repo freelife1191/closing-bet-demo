@@ -11,7 +11,7 @@ import logging
 from types import SimpleNamespace
 from typing import Callable
 
-from flask import Blueprint, Flask
+from flask import Blueprint, Flask, g
 
 import app.routes.kr_market_quota_http_routes as quota_routes
 
@@ -23,10 +23,19 @@ def _create_client(
     *,
     max_free_usage: int = 10,
     get_user_usage_fn: Callable[[str | None], int] | None = None,
-    recharge_usage_fn: Callable[[str | None, int], int] | None = None,
+    recharge_usage_fn: Callable[[str | None, int], tuple[int, bool]] | None = None,
+    user_email: str | None = None,
+    session_id: str | None = None,
 ):
     app = Flask(__name__)
     app.testing = True
+
+    # [INFRA-027] 신원은 before_request 가 확정한다. 라우트가 쿼리나 바디에서 신원을
+    # 읽지 않는지 보려면 여기서 g 를 채워 주어야 한다.
+    @app.before_request
+    def _inject_identity():
+        g.user_email = user_email
+        g.session_id = session_id
 
     bp = Blueprint("kr_test_quota_routes", __name__)
     quota_routes.register_quota_routes(
@@ -34,7 +43,7 @@ def _create_client(
         logger=logging.getLogger("test.kr_market_quota_routes"),
         max_free_usage=max_free_usage,
         get_user_usage_fn=get_user_usage_fn or (lambda _usage_key: 0),
-        recharge_usage_fn=recharge_usage_fn or (lambda _usage_key, _amount: 0),
+        recharge_usage_fn=recharge_usage_fn or (lambda _usage_key, _amount: (0, True)),
     )
     app.register_blueprint(bp, url_prefix="/api/kr")
     return app.test_client()
@@ -50,9 +59,10 @@ def test_get_user_quota_info_returns_expected_payload(monkeypatch):
             ZAI_API_KEY="zai-key",
         ),
     )
-    client = _create_client(get_user_usage_fn=lambda _usage_key: 3)
+    client = _create_client(get_user_usage_fn=lambda _usage_key: 3, session_id="anon_1")
 
-    response = client.get("/api/kr/user/quota?session_id=session-1")
+    # 쿼리 파라미터로 신원을 넘겨도 무시되어야 한다.
+    response = client.get("/api/kr/user/quota?email=victim@example.com")
 
     assert response.status_code == 200
     payload = response.get_json()
@@ -72,28 +82,33 @@ def test_get_user_quota_info_returns_error_payload_on_exception(monkeypatch):
         ),
     )
     client = _create_client(
-        get_user_usage_fn=lambda _usage_key: (_ for _ in ()).throw(RuntimeError("quota boom"))
+        get_user_usage_fn=lambda _usage_key: (_ for _ in ()).throw(RuntimeError("quota boom")),
+        session_id="anon_1",
     )
 
-    response = client.get("/api/kr/user/quota?session_id=session-1")
+    response = client.get("/api/kr/user/quota")
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "quota boom"}
 
 
-def test_recharge_user_quota_requires_usage_key():
+def test_recharge_user_quota_requires_identity():
+    """[INFRA-027] 신원 없이는 충전할 수 없다. 종전에는 바디의 session_id 로 충분했다."""
     client = _create_client()
 
-    response = client.post("/api/kr/user/quota/recharge", json={})
+    response = client.post("/api/kr/user/quota/recharge", json={"session_id": "anon_1"})
 
-    assert response.status_code == 400
-    assert response.get_json() == {"error": "세션 정보가 없습니다."}
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "로그인이 필요합니다."}
 
 
 def test_recharge_user_quota_returns_success_payload():
-    client = _create_client(recharge_usage_fn=lambda _usage_key, _amount: 4)
+    client = _create_client(
+        recharge_usage_fn=lambda _usage_key, _amount: (4, True),
+        user_email="owner@example.com",
+    )
 
-    response = client.post("/api/kr/user/quota/recharge", json={"session_id": "session-1"})
+    response = client.post("/api/kr/user/quota/recharge", json={})
 
     assert response.status_code == 200
     payload = response.get_json()
@@ -106,10 +121,11 @@ def test_recharge_user_quota_returns_error_payload_on_exception():
     client = _create_client(
         recharge_usage_fn=lambda _usage_key, _amount: (
             (_ for _ in ()).throw(RuntimeError("recharge boom"))
-        )
+        ),
+        user_email="owner@example.com",
     )
 
-    response = client.post("/api/kr/user/quota/recharge", json={"session_id": "session-1"})
+    response = client.post("/api/kr/user/quota/recharge", json={})
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "recharge boom"}

@@ -21,6 +21,7 @@ from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
 )
+from services.identity_helpers import resolve_anonymous_id, verify_identity_header
 from services.scheduler_runtime_status_service import reset_scheduler_runtime_status
 
 # Load environment variables
@@ -172,8 +173,14 @@ def _register_request_context(app: Flask) -> None:
         # Vertex AI 전환 후 X-Gemini-Key는 무시한다 (사용자별 API 키 기능 제거).
         # 하위 호환을 위해 g.user_api_key 속성은 None으로 유지.
         g.user_api_key = None
-        g.user_email = request.headers.get('X-User-Email')
-        g.session_id = request.headers.get('X-Session-Id')
+        # 브라우저가 보낸 X-User-Email 은 더 이상 읽지 않는다. 그 값은 설정 모달의 자유
+        # 입력 칸에서 왔고 서명도 만료도 없었다. frontend/src/proxy.ts 가 NextAuth 세션을
+        # 확인해 서명한 헤더만 신원으로 삼는다.
+        g.user_email = verify_identity_header(request.headers.get('X-Auth-Identity'))
+        # 익명 ID 도 그대로 믿지 않는다. 이 값과 g.user_email 이 같은 문자열 공간에서
+        # 챗봇 owner_id 와 쿼터 키가 되므로, 걸러 내지 않으면 헤더 이름만 바꿔 서명
+        # 게이트를 우회할 수 있다.
+        g.session_id = resolve_anonymous_id(request.headers.get('X-Session-Id'))
 
 
 def _should_skip_activity_logging(method: str, path: str) -> bool:

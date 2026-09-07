@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 from app.routes.route_execution import execute_json_route as _execute_json_route
 from services.kr_market_quota_service import (
@@ -25,16 +25,19 @@ def register_quota_routes(
     logger: Any,
     max_free_usage: int,
     get_user_usage_fn: Callable[[str | None], int],
-    recharge_usage_fn: Callable[[str | None, int], int],
+    recharge_usage_fn: Callable[[str | None, int], tuple[int, bool]],
 ) -> None:
     @kr_bp.route("/user/quota")
     def get_user_quota_info():
         def _handler():
             from engine.config import app_config
 
-            user_email = request.args.get("email") or request.headers.get("X-User-Email")
-            session_id = request.args.get("session_id") or request.headers.get("X-Session-Id")
-            usage_key = resolve_quota_usage_key(user_email=user_email, session_id=session_id)
+            # 신원은 before_request 가 확정한다. 종전에는 쿼리 파라미터로도 받았는데,
+            # 그러면 헤더를 막아도 URL 한 줄로 남의 쿼터를 조회할 수 있었다.
+            usage_key = resolve_quota_usage_key(
+                user_email=g.get("user_email"),
+                session_id=g.get("session_id"),
+            )
             payload = build_quota_info_payload(
                 usage_key=usage_key,
                 max_free_usage=max_free_usage,
@@ -55,16 +58,29 @@ def register_quota_routes(
     @kr_bp.route("/user/quota/recharge", methods=["POST"])
     def recharge_user_quota():
         def _handler():
-            data = request.get_json() or {}
-            user_email = data.get("email") or request.headers.get("X-User-Email")
-            session_id = data.get("session_id") or request.headers.get("X-Session-Id")
-            usage_key = resolve_quota_usage_key(user_email=user_email, session_id=session_id)
+            # 충전은 익명에게 열지 않는다. 익명 ID 는 브라우저가 지우면 새로 발급되므로
+            # 하루 1회 제한이 성립하지 않는다.
+            usage_key = g.get("user_email")
 
             if not usage_key:
-                return jsonify({"error": "세션 정보가 없습니다."}), 400
+                return jsonify({"error": "로그인이 필요합니다."}), 401
 
-            new_usage = int(recharge_usage_fn(usage_key, 5))
+            new_usage, recharged = recharge_usage_fn(usage_key, 5)
             remaining = max(0, max_free_usage - new_usage)
+            if not recharged:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "code": "ALREADY_RECHARGED_TODAY",
+                            "usage": new_usage,
+                            "limit": max_free_usage,
+                            "remaining": remaining,
+                            "message": f"충전은 하루 한 번만 가능합니다. (남은 횟수: {remaining}회)",
+                        }
+                    ),
+                    429,
+                )
             return jsonify(
                 {
                     "status": "success",
