@@ -172,4 +172,33 @@ def update_env_file(
 
     os.makedirs(os.path.dirname(env_path) or ".", exist_ok=True)
     with open(env_path, "w", encoding="utf-8") as file:
+        # 이 파일에는 SMTP 비밀번호와 API 키, ADMIN_API_TOKEN, INTERNAL_IDENTITY_SECRET 이
+        # 들어 있는데 운영 파일이 0644 였다. open(w) 는 기존 모드를 그대로 두고 새 파일은
+        # umask 를 따르므로, 한 번 넓어진 모드가 이 화면을 아무리 써도 좁아지지 않았다
+        # ([INFRA-053]). 같은 .env 를 쓰는 다른 경로인 persist_market_gate_interval_to_env
+        # 는 atomic_write_text 가 NamedTemporaryFile(0600) 을 os.replace 로 옮기므로 이미
+        # 0600 을 남긴다. 그래서 여기 한 자리만 맞추면 두 경로가 같아진다.
+        #
+        # 이 줄을 with 밖으로 옮겨 os.chmod(env_path, 0o600) 으로 바꾸지 않는다. 검사는
+        # 그래도 전부 통과하지만, open(w) 가 파일을 잘라낸 뒤부터 chmod 까지 새 시크릿이
+        # 0644 아래에 놓이는 창이 되살아난다. 여기서는 이미 0바이트로 잘린 뒤라 비어 있는
+        # 파일의 모드를 좁힌다.
+        #
+        # 다만 이 배치가 닫는 것은 **이 뒤에 새로 여는** 주체의 경로뿐이다. 모드 변경은
+        # 이미 열려 있는 파일 기술자를 회수하지 않으므로, 파일이 0644 이던 동안 열어 둔
+        # 기술자는 같은 inode 에 이어서 쓰이는 값을 계속 읽는다. 그것까지 닫으려면 새
+        # inode 에 쓰고 os.replace 로 갈아 끼워야 하며 그 일은 [INFRA-050] 이 맡는다.
+        # 이 지적은 2026-09-08 라운드에서 보안 리뷰와 Codex 가 각각 독립적으로 냈다.
+        #
+        # 대가는 이 자리가 잘라낸 뒤의 실패 지점 하나를 더한다는 것이다. 여기서 예외가
+        # 나면 .env 가 빈 채로 남고 호출자는 그것을 되돌리지 않는다
+        # (app/routes/common_update_routes.py:69-84 가 500 으로 바꿀 뿐이다). 다만
+        # writelines 가 실패해도 결과는 같으므로 이 함수가 원래 갖고 있던 성질이고, 근본
+        # 해법인 원자적 교체는 [INFRA-050] 이 맡는다.
+        #
+        # 이 배포는 파일 소유자와 gunicorn 워커가 같은 계정이라 계정 불일치로 인한 EPERM 은
+        # 없다. 그것이 유일한 실패 원인은 아니다. macOS 의 chflags uchg 는 소유자가 스스로
+        # 걸 수 있고 open 과 이 줄 사이에 걸리면 계정과 무관하게 실패하며, POSIX 권한 비트를
+        # 지원하지 않는 마운트에서는 언제나 실패한다. 확률이 낮을 뿐 배제된 것이 아니다.
+        os.fchmod(file.fileno(), 0o600)
         file.writelines(new_lines)

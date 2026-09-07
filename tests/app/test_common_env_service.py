@@ -4,6 +4,8 @@
 Common Env Service 단위 테스트
 """
 
+import os
+import stat
 from pathlib import Path
 
 from services.common_env_service import (
@@ -182,3 +184,75 @@ def test_update_env_file_rejects_interpolation_in_value(tmp_path: Path):
     assert "SMTP_HOST=new" in content
     assert "TELEGRAM_BOT_TOKEN=pass!word$" in content
     assert "TELEGRAM_CHAT_ID=has$!bang" in content
+
+
+def test_update_env_file_narrows_file_mode(tmp_path: Path):
+    """0644 로 열려 있던 .env 가 저장 한 번으로 0600 이 된다.
+
+    운영 파일이 실제로 0644 였고, 이 함수가 open(w) 로 쓰는 탓에 설정 화면을 아무리 써도
+    모드가 좁아지지 않았다([INFRA-053]).
+
+    파일이 없을 때 새로 만드는 경로는 따로 재지 않는다. 새 파일의 모드는 0o666 & ~umask 라
+    umask 가 077 인 셸에서는 구현을 통째로 되돌려도 0600 이 나와, 검사가 구현이 아니라
+    실행 환경을 재게 된다. 이 검사는 chmod(0o644) 로 시작 상태를 코드 안에 못박으므로
+    umask 와 무관하게 언제나 결함을 잡는다.
+
+    구현이 아니라 「이 함수가 끝나면 0600」이라는 동작을 재므로, [INFRA-050] 이 이 함수를
+    atomic_write_text 로 옮겨도 그대로 통과한다. NamedTemporaryFile 이 0600 을 남기기
+    때문이다. 그 리팩터링과 함께 지우지 않는다.
+    """
+    env_path = tmp_path / ".env"
+    env_path.write_text("OPENAI_API_KEY=old\n", encoding="utf-8")
+    env_path.chmod(0o644)
+
+    update_env_file(str(env_path), {"OPENAI_API_KEY": "new-value"}, {})
+
+    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
+    # 모드만 보면 쓰기가 실패해도 통과한다. 값이 실제로 바뀌었는지 함께 본다.
+    assert env_path.read_text(encoding="utf-8") == "OPENAI_API_KEY=new-value\n"
+
+
+def test_update_env_file_does_not_create_file_when_nothing_to_write(tmp_path: Path):
+    """버려진 입력만 왔을 때 빈 .env 를 만들어 두지 않는다.
+
+    ADMIN_API_TOKEN 은 EDITABLE_ENV_KEYS 밖이라 필터에서 전부 떨어지고 두 번째 이른 반환에
+    걸린다. 두 이른 반환 가운데 하나라도 사라지면 open(w) 가 존재하지 않던 파일을 빈 채로
+    만들고, 아래 단언이 그때 실패한다. FileNotFoundError 는 나지 않는다. open(w) 가
+    fchmod 보다 먼저 파일을 만들기 때문이다.
+    """
+    env_path = tmp_path / ".env"
+
+    update_env_file(str(env_path), {"ADMIN_API_TOKEN": "blocked"}, {})
+
+    assert not env_path.exists()
+
+
+def test_update_env_file_narrows_mode_before_writing(tmp_path: Path, monkeypatch):
+    """모드를 좁히는 시점에 파일이 아직 비어 있어야 한다.
+
+    위 narrows_file_mode 는 최종 상태만 재므로, 누군가 이 줄을 with 밖으로 옮겨
+    os.chmod(env_path, 0o600) 으로 바꿔도 그대로 통과한다. 그러면 새 시크릿이 0644 아래에
+    쓰이는 창이 되살아나는데 검사는 아무것도 말하지 않는다. 그 회귀를 여기서 막는다.
+
+    파일 크기로 재는 이유는 호출 순서를 직접 세는 것보다 지키려는 성질에 가깝기 때문이다.
+    좁히는 시점에 0바이트라는 것은 곧 아직 아무 값도 쓰이지 않았다는 뜻이다.
+    """
+    env_path = tmp_path / ".env"
+    env_path.write_text("OPENAI_API_KEY=old\n", encoding="utf-8")
+    env_path.chmod(0o644)
+
+    sizes_at_chmod: list[int] = []
+    real_fchmod = os.fchmod
+
+    def spy(fd: int, mode: int) -> None:
+        sizes_at_chmod.append(os.fstat(fd).st_size)
+        real_fchmod(fd, mode)
+
+    monkeypatch.setattr(os, "fchmod", spy)
+    update_env_file(str(env_path), {"OPENAI_API_KEY": "new-value"}, {})
+
+    # 빈 리스트는 fchmod 를 아예 부르지 않았다는 뜻이고, 0 이 아닌 값은 쓰기 뒤에 좁혔다는
+    # 뜻이다. 둘 다 이 검사가 막으려는 회귀다.
+    assert sizes_at_chmod == [0]
+    # 스파이가 실제 fchmod 를 대신 부르므로 최종 모드도 함께 확인한다.
+    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600

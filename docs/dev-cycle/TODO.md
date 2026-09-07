@@ -18,6 +18,11 @@
 ### [INFRA-053] `.env` 가 같은 호스트의 모든 로컬 계정에 읽힌다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-049]` 사이클의
   `oh-my-claudecode:security-reviewer` 가 확신도 높음으로 지적했습니다. 모드를 직접 확인했습니다.
+- 설계 승인: 승인 일자 2026-09-08 | 승인 확인 시각 2026-09-08 07:19 | 범위: `update_env_file`
+  이 쓰기 뒤 모드를 보장하는 한 줄, `scripts/init_all.sh` 의 `.env` 생성 자리, 이미 존재하는
+  `.env` 계열 파일 일곱 개의 모드 좁히기, 검사 셋. 백업 파일 삭제와 `atomic_write_text` 로의
+  전환은 범위 밖입니다. | 근거: 실측과 설계를 제시한 응답에 사용자가 「진행해」로 답한
+  이 세션의 대화입니다.
 - `.env` 와 `.env.production` 의 모드가 `-rw-r--r--`(0644) 입니다. 그 파일에는 SMTP
   비밀번호와 API 키 넷, `ADMIN_API_TOKEN`, `INTERNAL_IDENTITY_SECRET` 이 실제 값으로
   들어 있는데 같은 호스트의 모든 로컬 계정이 읽을 수 있습니다.
@@ -26,13 +31,61 @@
   강제하지 않습니다. 즉 한 번 넓어진 모드는 설정 화면을 아무리 써도 좁아지지 않습니다.
 - 개발용 단독 Mac 에서는 실질 위험이 낮지만, 운영 호스트에 다른 계정이 있으면 OWASP A01
   급입니다. `[INFRA-049]` 가 셸 실행 경로를 닫았어도 파일을 그냥 읽는 경로는 그대로입니다.
-- 함께 볼 것: `.env.vertex` 가 있으면 같이 좁힙니다. 배포 절차(`Procfile`, 배포 문서)가
-  파일을 다시 만드는 자리가 있으면 그곳에도 모드를 지정해야 되돌아가지 않습니다.
+- 함께 볼 것: `.env.vertex` 는 이 저장소에 존재하지 않습니다. 대신 `.env.bak.*` 넷과
+  `.env.production.bak.*` 하나가 같은 0644 로 옛 시크릿을 담고 있어 함께 좁힙니다. 배포
+  절차(`Procfile`, 배포 문서)가 파일을 다시 만드는 자리가 있으면 그곳에도 모드를 지정해야
+  되돌아가지 않습니다.
+- 실측(2026-09-08): `.env` 를 쓰는 두 경로의 성질이 반대입니다. `update_env_file` 은
+  `open(w)` 라 기존 0644 를 그대로 두고 새 파일도 umask 를 따르는 반면,
+  `persist_market_gate_interval_to_env` 가 쓰는 `atomic_write_text` 는
+  `NamedTemporaryFile`(0600) 을 `os.replace` 로 옮기므로 이미 0600 을 남깁니다. 그래서
+  고칠 자리는 앞의 하나입니다.
 - QA 시나리오: `chmod 600 .env` 뒤 두 서비스가 정상 기동하고, 설정 화면으로 값을 저장해도
   모드가 0600 으로 유지된다
-- [ ] `.env` 계열 파일의 모드를 0600 으로 좁힘
-- [ ] `update_env_file` 이 쓰기 뒤 모드를 보장하게 함
+- [ ] 계획 문서 `docs/superpowers/plans/2026-09-08-infra-053-env-file-mode.md` 작성과
+      `oh-my-claudecode:critic` 검토
+- [ ] `update_env_file` 이 쓰기 뒤 모드를 보장하게 함 (검사 셋 포함)
+- [ ] `scripts/init_all.sh` 의 `.env` 생성 자리에 모드 지정
+- [ ] `.env` 계열 파일 일곱 개의 모드를 0600 으로 좁힘
 - [ ] 좁힌 모드로 gunicorn·Next 가 정상 기동하는지 확인
+- [ ] 리뷰 넷(`/ponytail-review` → `feature-dev:code-reviewer` → `/review` →
+      `oh-my-claudecode:security-reviewer`)과 시크릿 확인 세 가지
+
+### [INFRA-050] `.env` 를 쓰는 두 경로가 서로의 갱신을 지울 수 있다
+- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-044]` 사이클의
+  `oh-my-claudecode:security-reviewer` 지적(확신도 중간). 2026-09-08 `[INFRA-053]` 사이클의
+  Codex 적대적 리뷰가 P1 셋으로 재확인하며 P2 에서 P1 으로 올렸습니다.
+- `services/common_env_service.py:152` 의 `update_env_file` 은 `open(env_path, "w")` 로 직접
+  덮어쓰며 잠금도 임시 파일 교체도 없습니다. 반면 같은 파일을 쓰는 다른 경로인
+  `services/kr_market_interval_service.py:22` 는 `atomic_write_text` 를 씁니다.
+- 둘이 겹치면 서로의 갱신을 잃고, 최악의 경우 부분 기록된 `.env` 가 남습니다. `.env` 에서
+  `ADMIN_API_TOKEN` 이 사라지면 `services/admin_helpers.py:39` 가 모든 요청을 403 으로 막고,
+  `ADMIN_EMAILS` 가 사라지면 관리자가 없어집니다. 둘 다 fail-closed 라 침해가 아니라 가용성
+  문제입니다.
+- 실제 창은 매우 좁습니다. 다만 `POST /api/kr/config/interval` 이 인증 없이 호출 가능하므로
+  임의 시점에 경합을 유발할 수 있습니다. 그 게이트는 `[INFRA-042]` 가 다룹니다.
+- 2026-09-08 `[INFRA-053]` 이 `update_env_file` 의 `with` 블록 안에 `os.fchmod` 를 넣으면서
+  잘라낸 뒤의 실패 지점이 하나 늘었습니다. 그 자리에서 예외가 나면 `writelines` 가 실패할
+  때와 같이 `.env` 가 빈 채로 남습니다. 이 배포는 파일 소유자와 워커가 같은 계정이라
+  `fchmod` 의 EPERM 이 발생하지 않지만, 이 항목이 원자적 교체로 옮기면 두 실패 지점이
+  함께 사라집니다. `atomic_write_text` 는 0600 을 남기므로 그때도 `[INFRA-053]` 의 검사
+  `test_update_env_file_narrows_file_mode` 는 그대로 통과합니다.
+- QA 시나리오: 두 경로를 동시에 불러도 `.env` 가 부분 기록되지 않는다
+- [ ] `update_env_file` 을 `atomic_write_text` 로 통일할지 결정
+- [ ] 두 경로가 겹칠 때 마지막 상태가 온전한지 확인하는 검사 추가
+- Codex 가 모형 실행으로 재현한 소실 시퀀스입니다. ① 관리자 저장 A 가 `.env` 를 읽고 쓰기
+  모드로 열어 비웁니다. ② 주기 저장 B 가 그 빈 내용을 읽고 주기 키만 담은 파일로
+  `os.replace` 합니다. ③ A 는 이미 경로에서 분리된 옛 inode 에 마저 씁니다. **두 요청 모두
+  성공을 반환하는데 실제 `.env` 에는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES` 하나만 남습니다.**
+  교체만 통일해도 옛 내용을 읽은 요청이 새 설정을 덮으므로, 잠금이 읽기부터 교체까지를
+  덮어야 합니다.
+- 같은 리뷰가 P2 로 하나 더 냈습니다. `update_env_file` 은 읽기(`:126`)와 쓰기(`:174`)에서
+  경로를 따로 해석하므로, 부모 디렉터리 항목을 교체할 권한이 있으면 그 사이에 `.env` 를
+  다른 파일의 심볼릭 링크로 바꿀 수 있습니다. 그러면 그 대상이 잘리고 모드가 0600 으로
+  바뀐 채 `.env` 내용으로 덮입니다. `exists()` 나 `islink()` 사전 검사를 더해도 검사와 교체
+  사이의 경합이 남으므로, 해법은 같은 원자적 교체입니다.
+- 완료 조건에 「`environ` 갱신을 파일 저장 성공 뒤로 옮긴다」를 넣습니다. 지금은 루프 안에서
+  먼저 갱신하므로 저장이 실패하면 그 워커의 메모리와 디스크가 갈립니다.
 
 ### [INFRA-042] 종가베팅 실행·발송 라우트 셋이 권한 검사 없이 열려 있다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
@@ -99,6 +152,30 @@
 - [ ] 게이트를 데코레이터로 묶고 세 라우트에 적용
 - [ ] `{"force": true}` 로도 우회되지 않는 것을 확인하는 테스트 추가
 - [ ] 발송 없이 확인할 수 있는 QA 수단을 정함 (`.env` 에 실제 자격 증명이 들어 있음)
+
+### [INFRA-055] Next 환경에 백엔드 전용 시크릿이 통째로 올라가 캐시에 평문으로 남는다
+- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-053]` 사이클의
+  `oh-my-claudecode:security-reviewer` 가 확신도 높음으로 지적했고, 바이트 일치로 직접
+  확인했습니다.
+- `restart_all.sh` 의 `ln -sf ../.env frontend/.env` 가 `.env` 전체를 Next 에 넘깁니다.
+  Next 는 프론트엔드에 필요 없는 `SMTP_PASSWORD`, `ZAI_API_KEY`, `OPENAI_API_KEY`,
+  `PERPLEXITY_API_KEY`, `ADMIN_API_TOKEN` 까지 환경에 올립니다.
+- Turbopack 의 FileSystem Cache 가 그 환경을 직렬화해 `frontend/.next` 아래에 남깁니다.
+  2026-09-08 실측으로 `.env` 의 키 **열여섯 개**가 캐시 파일 3,222개에 평문으로 들어 있었고
+  모드는 전부 0644 였습니다. `frontend/.next/cache/turbopack` 에 3,144개,
+  `frontend/.next/dev/cache` 에 78개입니다.
+- `[INFRA-053]` 이 `chmod 700 frontend/.next` 로 디렉터리 순회를 막아 **노출은 이미
+  끊었습니다.** 이 항목은 근본 원인, 즉 필요 없는 시크릿이 애초에 그 환경에 오르는 것을
+  다룹니다. 캐시가 지워지고 다시 만들어져도 값이 들어가지 않게 하는 것이 목표입니다.
+- 완화 요인: `frontend/.gitignore:13` 이 `/.next/` 를 덮어 커밋되지 않고,
+  `.next/static` 과 `.next/server` 에는 일치가 0건이라 HTTP 로는 새지 않습니다.
+- 함께 볼 것: `frontend/node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/turbopackFileSystemCache.md`
+  가 이 캐시의 기본 활성 버전(dev 16.1.0, build 16.3.0)을 적습니다. 이 저장소는 16.3.4 입니다.
+- QA 시나리오: 캐시를 지우고 개발 서버를 다시 띄운 뒤, `.env` 의 백엔드 전용 키가
+  `frontend/.next` 아래에서 발견되지 않는다
+- [ ] Next 가 실제로 쓰는 키 목록을 확정
+- [ ] 심볼릭 링크 대신 그 키만 담은 `frontend/.env.local` 을 만드는 방식 검토
+- [ ] 캐시를 지우고 다시 띄워 백엔드 전용 키가 사라졌는지 바이트 일치로 확인
 
 ### [INFRA-043] 알림 발송 예외 로그가 텔레그램 봇 토큰과 디스코드 웹훅을 그대로 적는다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
@@ -730,6 +807,21 @@
 
 ## P2 — 대기
 
+### [FE-042] vitest 스모크 검사가 실제 `next build` 를 돌려 간헐적으로 실패한다
+- 카테고리: 프론트엔드 | 티어: T1 | 근거: 2026-09-08 `[INFRA-053]` 사이클의 정적 검증에서
+  12회 실행 중 2회 관측했습니다.
+- `frontend/tests/smoke/upgrade-smoke.test.ts:57` 의 `Build Verification` 이
+  `should successfully build the application` 에서 실제 `next build` 를 돌립니다. 4.8초가
+  걸리며 `.next` 를 씁니다.
+- 다른 명령이 같은 시점에 파일 시스템을 건드리면 1건이 실패합니다. 단독으로 연달아 돌린
+  6회는 전부 통과했습니다. **실패한 검사의 이름은 확보하지 못했습니다.** 재현되는 순간의
+  전체 출력을 남기려 반복했으나 그동안 실패가 나오지 않았습니다.
+- 자동화에서 다른 작업과 겹치면 통과 여부가 갈리므로, 사이클마다 「이번 변경 때문인가」를
+  다시 판정하는 비용이 듭니다.
+- QA 시나리오: 다른 명령과 동시에 돌려도 vitest 가 안정적으로 통과한다
+- [ ] 실패 검사의 이름과 오류를 먼저 확보(반복 실행 로그 보존)
+- [ ] 실제 빌드를 돌리는 검사를 기본 실행에서 분리할지 결정
+
 ### [INFRA-054] `restart_all.sh` 의 프로세스 정리 한 줄이 통째로 무동작이다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-08 `[INFRA-049]` 사이클에서 발견했습니다.
   같은 사이클의 `oh-my-claudecode:security-reviewer` 도 종료 코드로 확인했습니다.
@@ -747,22 +839,6 @@
 - QA 시나리오: 세 패턴에 해당하는 프로세스를 띄운 뒤 스크립트를 돌리면 전부 종료된다
 - [ ] `pkill` 호출을 패턴마다 나눔
 - [ ] `stop_all.sh` 와 정리 대상 패턴이 같은지 대조
-
-### [INFRA-050] `.env` 를 쓰는 두 경로가 서로의 갱신을 지울 수 있다
-- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-044]` 사이클의
-  `oh-my-claudecode:security-reviewer` 지적(확신도 중간)
-- `services/common_env_service.py:152` 의 `update_env_file` 은 `open(env_path, "w")` 로 직접
-  덮어쓰며 잠금도 임시 파일 교체도 없습니다. 반면 같은 파일을 쓰는 다른 경로인
-  `services/kr_market_interval_service.py:22` 는 `atomic_write_text` 를 씁니다.
-- 둘이 겹치면 서로의 갱신을 잃고, 최악의 경우 부분 기록된 `.env` 가 남습니다. `.env` 에서
-  `ADMIN_API_TOKEN` 이 사라지면 `services/admin_helpers.py:39` 가 모든 요청을 403 으로 막고,
-  `ADMIN_EMAILS` 가 사라지면 관리자가 없어집니다. 둘 다 fail-closed 라 침해가 아니라 가용성
-  문제입니다.
-- 실제 창은 매우 좁습니다. 다만 `POST /api/kr/config/interval` 이 인증 없이 호출 가능하므로
-  임의 시점에 경합을 유발할 수 있습니다. 그 게이트는 `[INFRA-042]` 가 다룹니다.
-- QA 시나리오: 두 경로를 동시에 불러도 `.env` 가 부분 기록되지 않는다
-- [ ] `update_env_file` 을 `atomic_write_text` 로 통일할지 결정
-- [ ] 두 경로가 겹칠 때 마지막 상태가 온전한지 확인하는 검사 추가
 
 ### [INFRA-051] `POST /api/system/env` 가 버린 값을 성공으로 보고한다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-08 `[INFRA-044]` 사이클의

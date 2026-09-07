@@ -101,6 +101,9 @@ if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
         log_info ".env.example 파일을 복사하여 .env 생성 중..."
         cp .env.example .env
+        # 곧 API 키와 SMTP 비밀번호가 들어가는 파일이다. cp 는 원본 모드가 아니라 umask 를
+        # 따르므로 여기서 좁히지 않으면 같은 호스트의 모든 로컬 계정이 읽는다([INFRA-053]).
+        chmod 600 .env
         log_success ".env 파일 생성 완료 (템플릿 사용)"
         log_warning "!!! 중요: .env 파일에 API 키를 입력해야 합니다 !!!"
         log_warning "에디터를 엽니다: nano .env (또는 code .env)"

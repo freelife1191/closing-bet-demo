@@ -55,6 +55,13 @@ GOOGLE_API_KEY=your_gemini_api_key
 OPENAI_API_KEY=your_openai_api_key
 ```
 
+파일을 만든 뒤 모드를 좁힙니다. API 키와 SMTP 비밀번호가 들어가는 파일이라 기본 모드로
+두면 같은 호스트의 모든 로컬 계정이 읽습니다.
+
+```bash
+chmod 600 .env
+```
+
 ## 5. 데이터 초기화 (필수)
 
 서버 실행 전, 초기 데이터를 생성해야 합니다.
