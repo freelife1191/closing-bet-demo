@@ -7,6 +7,8 @@ KR Market 종가베팅 Gemini 재분석 헬퍼
 import re
 from typing import Dict, List
 
+from engine.pandas_utils_safe import safe_confidence
+
 from app.routes.kr_market_jongga_grade_helpers import _is_jongga_ai_analysis_completed
 
 
@@ -120,7 +122,7 @@ def _apply_gemini_reanalysis_results(
         signal["score"]["news"] = matched_result.get("score", 0)
         signal["ai_evaluation"] = {
             "action": matched_result.get("action", "HOLD"),
-            "confidence": matched_result.get("confidence", 0),
+            "confidence": safe_confidence(matched_result.get("confidence")),
             "reason": matched_result.get("reason", ""),
             "model": matched_result.get("model", "gemini-3.7-flash"),
         }

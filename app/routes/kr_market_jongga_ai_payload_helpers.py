@@ -34,7 +34,8 @@ def _extract_jongga_ai_evaluation(signal: dict) -> Optional[dict]:
         ai_eval = score.get("llm_reason")
 
     if isinstance(ai_eval, str):
-        return {"reason": ai_eval, "action": "HOLD", "confidence": 0}
+        # 사유 문자열만 남은 기록이라 확신도가 존재하지 않는다.
+        return {"reason": ai_eval, "action": "HOLD", "confidence": None}
 
     if not isinstance(ai_eval, dict):
         return None

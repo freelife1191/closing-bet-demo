@@ -403,7 +403,9 @@ def test_extract_vcp_ai_recommendation_valid_and_invalid_cases():
     invalid = _extract_vcp_ai_recommendation(ai_results, "000002")
 
     assert valid == (True, "BUY", 77, "의미 있는 분석")
-    assert invalid == (False, "N/A", 0, "분석 실패")
+    # [JONGGA-008] 추천을 찾지 못한 자리의 확신도는 0 이 아니라 값 없음이다. 0 을 돌려주면
+    # signals_log 에 0 이 저장되고, 화면은 AI 가 실제로 0 을 낸 종목과 구분하지 못한다.
+    assert invalid == (False, "N/A", None, "분석 실패")
 
 
 def test_apply_vcp_reanalysis_updates_writes_success_and_failure_rows():

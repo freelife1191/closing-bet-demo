@@ -19,7 +19,7 @@ from app.routes.kr_market_signal_common import (
     _VALID_AI_ACTIONS,
 )
 from engine.config import config as signal_config
-from engine.pandas_utils_safe import safe_bool
+from engine.pandas_utils_safe import safe_bool, safe_confidence
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 
 # AI 추천을 담는 세 필드. legacy 보강과 시그널 병합이 같은 목록을 봐야 한다. 두 번째
@@ -95,26 +95,30 @@ def _build_vcp_stock_payloads(rows: List[dict]) -> List[dict]:
 def _extract_vcp_ai_recommendation(
     ai_results: Any,
     ticker: str,
-) -> Tuple[bool, str, int, str]:
+) -> Tuple[bool, str, Optional[int], str]:
     """
     ai_results에서 ticker 대상 Gemini 추천을 추출한다.
     반환값: (is_valid, action, confidence, reason)
+
+    추천을 찾지 못하면 확신도는 0 이 아니라 None 이다. 이 값은 signals_log 의
+    ai_confidence 열로 그대로 들어가는데, 그 열은 float64 라서 None 이 결측으로
+    저장된다. 0 을 넣으면 AI 가 0 을 낸 종목과 구분되지 않는다.
     """
     if not isinstance(ai_results, dict):
-        return False, "N/A", 0, "분석 실패"
+        return False, "N/A", None, "분석 실패"
 
     ai_res = ai_results.get(ticker, {})
     if not isinstance(ai_res, dict):
-        return False, "N/A", 0, "분석 실패"
+        return False, "N/A", None, "분석 실패"
 
     gemini = ai_res.get("gemini_recommendation")
     if not _is_valid_ai_recommendation(gemini):
-        return False, "N/A", 0, "분석 실패"
+        return False, "N/A", None, "분석 실패"
 
     return (
         True,
         _normalize_text(gemini.get("action")).upper(),
-        _safe_int(gemini.get("confidence", 0), default=0),
+        safe_confidence(gemini.get("confidence")),
         _normalize_text(gemini.get("reason")),
     )
 
@@ -201,7 +205,7 @@ def _build_vcp_gemini_recommendation(row: Any) -> Optional[dict]:
         # 판정은 정규화한 값으로 했으므로 내보내는 값도 같은 형태여야 한다. "buy " 를
         # 그대로 내보내면 화면이 배지 표에서 찾지 못해 미분석으로 표시한다.
         "action": _normalize_text(_row_get(row, "ai_action")).upper(),
-        "confidence": _safe_int(_none_if_nan(_row_get(row, "ai_confidence")), default=0),
+        "confidence": safe_confidence(_row_get(row, "ai_confidence")),
         "reason": _row_get(row, "ai_reason"),
         "news_sentiment": "positive",
     }

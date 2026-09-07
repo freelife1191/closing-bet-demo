@@ -83,7 +83,9 @@ def test_apply_ai_results_sets_fallback_when_missing():
 
     row2 = merged[merged["ticker"] == "000002"].iloc[0]
     assert row2["ai_action"] == "N/A"
-    assert int(row2["ai_confidence"]) == 0
+    # [JONGGA-008] action 과 reason 에는 실패 표기가 들어가지만 확신도는 값 없음으로
+    # 남는다. 0 을 넣으면 signals_log 를 거쳐 화면이 0% 막대를 그린다.
+    assert pd.isna(row2["ai_confidence"])
     assert row2["ai_reason"] == "분석 실패"
 
 

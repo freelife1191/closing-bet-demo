@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAPI } from '@/lib/api';
+import { parseAIConfidence } from '@/lib/aiConfidence';
 import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
@@ -38,7 +39,8 @@ const costlyMessage = (body: string) => `${body}\n\n${COSTLY_WARNING}`;
 // 최상위를 null 로 두므로 두 자리 모두 null 을 허용해야 한다.
 interface AiEvaluation {
   action: 'BUY' | 'HOLD' | 'SELL';
-  confidence?: number;
+  // [JONGGA-008] 백엔드는 확신도가 없는 상태를 0 이 아니라 null 로 보낸다.
+  confidence?: number | null;
   model?: string;
   reason?: string;
 }
@@ -1919,16 +1921,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
   // [JONGGA-004] 여기서 등급으로 확신도를 지어내지 않는다. AI 결과가 없는 상태는
   // aiEval 이 없는 것으로 두고, 렌더 쪽에서 대기 상태로 표시한다.
-  // 재분석 경로(engine/llm_analyzer_parsers.py:102)는 LLM 이 낸 값을 형 변환 없이
-  // 넘기므로 "80" 같은 문자열이 올라올 수 있다. 숫자로 읽히면 살리고, 그렇지 않으면
-  // 값이 없는 것으로 본다. 상한과 하한을 함께 조여 막대 너비가 음수가 되지 않게 한다.
-  const rawConfidence: unknown = aiEval?.confidence;
-  const parsedConfidence = typeof rawConfidence === 'number'
-    ? rawConfidence
-    : (typeof rawConfidence === 'string' ? parseFloat(rawConfidence) : NaN);
-  const confidencePct = Number.isFinite(parsedConfidence)
-    ? Math.min(Math.max(parsedConfidence, 0), 100)
-    : null;
+  const confidencePct = parseAIConfidence(aiEval?.confidence);
 
   // [JONGGA-015] 목표가와 손절가는 매수가에서 파생되고, 같은 카드에 놓인 「종가」와는
   // 무관하다. 두 값이 나란히 보이므로 어느 쪽이 기준인지 화면에 적어 둔다.

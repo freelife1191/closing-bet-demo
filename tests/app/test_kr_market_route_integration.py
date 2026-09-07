@@ -214,12 +214,15 @@ def test_reanalyze_vcp_failed_ai_filters_failed_rows_and_updates_csv(monkeypatch
 
     row1 = written[written["ticker"] == "000001"].iloc[0]
     assert row1["ai_action"] == "BUY"
-    assert int(row1["ai_confidence"]) == 77
+    # [JONGGA-008] 실패 행이 결측을 담으면서 이 열은 float 이 된다. 실제 signals_log 도
+    # 값이 비어 있는 행이 있어 이미 float 으로 읽히므로, CSV 의 표기가 아니라 값을 본다.
+    assert float(row1["ai_confidence"]) == 77.0
     assert row1["ai_reason"] == "재분석 성공"
 
     row3 = written[written["ticker"] == "000003"].iloc[0]
     assert row3["ai_action"] == "N/A"
-    assert int(row3["ai_confidence"]) == 0
+    # [JONGGA-008] 재분석이 또 실패한 행은 0 이 아니라 빈 칸으로 남는다.
+    assert row3["ai_confidence"] == ""
     assert row3["ai_reason"] == "분석 실패"
 
 

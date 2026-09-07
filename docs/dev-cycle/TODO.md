@@ -34,11 +34,56 @@
   `engine/vcp_ai_analyzer_helpers.py` 를 한 줄이라도 고치면 §2 의 「VCP 판정」에 닿아 T3 이
   됩니다. 계획 단계에서 어느 쪽인지 먼저 정합니다. 2026-09-02 `[INFRA-013]` 의 백로그
   대조에서 확인했습니다.
-- [ ] 다섯 자리가 값 없음을 `None` 으로 돌려주도록 수정하고, 값이 있으면 숫자로 정규화
-- [ ] `tests/app/test_vcp_failed_ai_filter.py` 가 `ai_confidence: 0` 을 실패 판정의 입력으로
-      쓰고 있으므로 판정 기준이 어긋나지 않는지 확인
-- [ ] VCP 화면의 확신도 표시도 값 없음을 처리하는지 확인하고 필요하면 함께 수정
-- [ ] pytest·vitest 전체 통과와 두 화면 실측
+- 2026-09-07 조사에서 위 서술 세 가지가 실제와 다름을 확인했습니다.
+  - 적힌 행 번호가 모두 밀렸습니다. 실제 자리는 `kr_market_jongga_normalize_helpers.py:112`,
+    `kr_market_jongga_ai_payload_helpers.py:37`, `kr_market_vcp_signal_helpers.py:204`,
+    `kr_market_jongga_reanalysis_helpers.py:123`, `engine/llm_analyzer_parsers.py:102` 입니다.
+  - `_normalize_confidence_value`(`engine/vcp_ai_analyzer_helpers.py:302`)는 변환에 실패하면
+    `int(default)` 를 실행하므로 `default=None` 을 받지 못합니다. 그대로 재사용할 수 없습니다.
+  - 실패 판정 함수 `_is_valid_ai_verdict` 는 `ai_action` 과 `ai_reason` 만 읽고
+    `ai_confidence` 를 보지 않습니다. `test_vcp_failed_ai_filter.py` 는 입력 사전에
+    `ai_confidence: 0` 을 담고 있을 뿐이므로 판정 기준이 어긋날 여지가 없습니다.
+- 여섯 번째 자리를 찾았습니다. `kr_market_vcp_signal_helpers.py:117` 의
+  `_safe_int(gemini.get("confidence", 0), default=0)` 도 같은 결함이며, 재분석 결과를 CSV 로
+  되쓰는 자리라서 빼놓으면 재분석을 거친 종목만 다시 0 을 갖습니다.
+- 기존 `_safe_int` 는 이 일을 할 수 없습니다. 본문이 `int(float(value or 0))` 이라
+  `_safe_int(None, default=None)` 이 `None` 이 아니라 0 을 돌려줍니다.
+- 설계 승인: 승인 일자 2026-09-07 | 승인 확인 시각 2026-09-07 12:05
+  | 범위: 여섯 자리를 `Optional[int]` 로 바꾸는 공용 헬퍼 `safe_confidence` 신설,
+    VCP 화면의 확신도 게이지와 `AIRecommendation` 타입 동반 수정
+  | 실제 대화 근거: 2026-09-07 사용자 「다음 라운드 진행해야할 사항 검토해서 진행해줘」와
+    이어진 AskUserQuestion 응답 「위험 경로 밖에 새 헬퍼 (추천)」
+- 티어 확정: T2. 헬퍼를 `engine/pandas_utils_safe.py` 에 두어
+  `engine/vcp_ai_analyzer_helpers.py` 를 건드리지 않습니다. 대신 비슷한 규칙이 VCP 분석
+  내부와 응답 조립 두 곳에 남으며, 그 통합은 `[VCP-021]` 과 함께 다룰 빚으로 남깁니다.
+- 프론트엔드 스킬: 번들 문서 `01-app/01-getting-started/05-server-and-client-components.md`
+  (`vcp/page.tsx` 는 `'use client'` 컴포넌트이고 변경이 그 경계 안쪽의 렌더 로직입니다).
+  프롭 개수·`useEffect`·버전 어느 조건에도 걸리지 않아 별도 스킬은 고르지 않습니다.
+- QA 시나리오: 확신도가 없는 종목의 종가베팅 카드가 0% 막대 대신 「미산출」을 보이고,
+  VCP 상세 모달의 원형 게이지도 `0%` 대신 값 없음을 보인다
+- [x] `engine/pandas_utils_safe.py` 에 `safe_confidence(value) -> Optional[int]` 를 더했다
+- [x] **일곱** 자리가 그 헬퍼를 쓰도록 고쳤다. 조사에서 두 자리를 더 찾았다.
+      `kr_market_vcp_signal_helpers.py:121`(재분석 결과를 CSV 로 되쓰는 자리)과
+      `engine/signal_tracker_ai_helpers.py:107`(signals_log 의 `ai_confidence` 열을 만드는
+      원천)이다. 뒤엣것을 놓치면 앞의 여섯 자리는 이미 0 이 적힌 CSV 를 읽게 된다.
+      사유 문자열만 있는 자리는 `None` 을 그대로 담았다.
+- [x] `_extract_vcp_ai_recommendation` 의 반환 타입을 `Optional[int]` 로 넓혔다
+- [x] VCP 화면의 `rec?.confidence ?? 0` 을 고치고 `AIRecommendation.confidence` 와
+      종가베팅 화면의 지역 `AiEvaluation.confidence` 를 `number | null` 로 넓혔다.
+      두 화면에 두 벌로 있던 파싱을 `frontend/src/lib/aiConfidence.ts` 로 모았다.
+- [x] 검사를 남겼다. `tests/app/test_ai_confidence_missing_value.py`(30건),
+      `frontend/src/lib/aiConfidence.test.ts`(9건),
+      `frontend/src/app/dashboard/kr/vcp/page.regression-jongga-008.test.tsx`(2건).
+      `3aa0ef7` 코드에 걸어 파이썬 9건과 화면 1건이 실패하는 것을 확인했다.
+- [x] `pytest` 1741 통과 · `vitest` 299 통과 · `type-check` 종료 코드 0 · 두 화면 실측 완료
+- [x] 리뷰: `/ponytail-review` 3건 반영 · `feature-dev:code-reviewer` 지적 반영
+      — [B1] 낡은 검사 기대값은 리뷰 회신 전에 이미 고쳤다. [B2] `safe_confidence` 가
+      `inf` 에서 `OverflowError` 를 내던 것을 고치고 회귀 검사 4건을 더했다. `json.loads`
+      가 `Infinity` 를 통과시키므로 LLM 응답으로 실제 들어올 수 있고, 새던 자리가
+      `engine/llm_analyzer_parsers.py` 라 배치 전체가 AI 분석을 잃는 경로였다.
+      [B3] 종가베팅 화면의 지역 타입을 함께 넓혔다. [S1] 탭별 게이지 차이는 위험 경로에
+      속해 `[VCP-022]` 로 이월했다.
+- [x] QA: `docs/dev-cycle/qa/JONGGA-008.md` 필수 8/8 · 선택 1/1 통과
 
 ### [FE-015] 모바일에서 VCP 표의 빈 상태 문구가 화면 밖에 놓인다
 - 카테고리: 프론트엔드 | 티어: T1 | 근거: 2026-09-02 VCP-009 마감 qa-only
@@ -489,6 +534,33 @@
 - [ ] `kr_ai_analysis_<날짜>.json` 이 이미 날짜별로 있으므로 그 파일을 legacy 자리에 쓸 수
   있는지 확인
 - [ ] 과거 날짜 조회의 회귀 테스트 추가
+
+
+### [VCP-022] 확신도 없음을 0 으로 표현하는 자리가 VCP 분석 캐시 쪽에 남아 있다
+- 카테고리: VCP 시그널 | 티어: T3 | 근거: 2026-09-07 JONGGA-008 의 code-review 와 QA
+- `[JONGGA-008]` 이 응답 조립 경로 일곱 자리를 값 없음으로 고쳤지만, VCP 상세 모달의 확신도
+  게이지는 활성 탭에 따라 세 추천 가운데 하나를 봅니다. 그 가운데 `safe_confidence` 를
+  거치는 것은 `_build_vcp_gemini_recommendation` 이 CSV 에서 만드는 gemini 추천 하나뿐입니다.
+  gpt 와 perplexity 추천은 `ai_analysis.json` 캐시에서 오고, 그 캐시는
+  `engine/vcp_ai_analyzer_helpers.py:658` 의 `_normalize_confidence_value(..., default=0)` 을
+  지납니다. 같은 화면의 같은 게이지가 탭에 따라 「미산출」과 「0%」로 갈립니다.
+- `frontend/src/app/dashboard/kr/vcp/page.tsx` 의 `getRec` 이 병합 결과 대신 원시 캐시를
+  다시 보는 두 번째 후보(`stock?.gemini_recommendation`)도 같은 경로입니다.
+- 함께 볼 자리가 하나 더 있습니다. `engine/kr_ai_strategies.py:150` 의
+  `RecommendationCombiner.combine` 이 「둘 다 없음 → HOLD with 0 confidence」 를 명시적
+  설계로 두고, 같은 파일 44행이 `_safe_float(normalized.get("confidence"), 0.0)` 으로 읽습니다.
+  두 AI 판정을 평균하거나 비교하는 계산 자리라 `None` 을 받으면 계산이 성립하지 않으므로,
+  그 0 이 화면까지 확신도로 흘러가는지를 먼저 확인하고 다룰 방법을 정합니다.
+- 티어 판정: `engine/vcp_ai_analyzer_helpers.py` 는 `tier-rules.md` §2 의 위험 경로
+  「VCP 판정」입니다. 한 줄만 고쳐도 T3 입니다. `[JONGGA-008]` 이 T2 를 유지하려고 이 파일을
+  건드리지 않았고, 그 결과 확신도 정규화 규칙이 두 벌로 남았습니다. 이 항목에서 합칩니다.
+- 실제로 화면에 0% 가 보일 확률은 낮습니다. `is_low_quality_recommendation` 이 확신도를
+  숫자로 읽지 못하는 응답을 저품질로 판정해 되돌리고, 점수 기반 대체 경로가 언제나 확신도를
+  만들어 내기 때문입니다. 그래도 규칙이 두 벌이라는 사실 자체가 다음 결함의 씨앗입니다.
+- QA 시나리오: gpt 탭과 gemini 탭의 확신도 게이지가 같은 규칙으로 그려진다
+- [ ] `_normalize_confidence_value` 와 `safe_confidence` 를 한 벌로 합친다
+- [ ] `combine` 의 0 이 화면까지 닿는지 확인하고 필요하면 함께 고친다
+- [ ] 세 탭의 게이지를 같은 자료로 실측해 대조한다
 
 
 ## P2 — 대기

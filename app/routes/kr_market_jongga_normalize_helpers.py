@@ -6,6 +6,7 @@ KR Market 종가베팅 시그널 정규화/가격 반영 헬퍼
 
 from typing import Dict, List
 
+from engine.pandas_utils_safe import safe_confidence
 from services.kr_market_backtest_common import JONGGA_STOP_PCT, JONGGA_TARGET_PCT
 
 from app.routes.kr_market_signal_common import (
@@ -109,7 +110,7 @@ def _normalize_jongga_signal_for_frontend(signal: dict) -> None:
     if "ai_evaluation" not in signal and signal.get("ai_action"):
         signal["ai_evaluation"] = {
             "action": signal.get("ai_action", "HOLD"),
-            "confidence": signal.get("ai_confidence", 0),
+            "confidence": safe_confidence(signal.get("ai_confidence")),
             "reason": signal.get("ai_reason", ""),
             "model": "gemini",
         }

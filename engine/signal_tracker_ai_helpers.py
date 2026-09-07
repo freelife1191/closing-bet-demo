@@ -10,6 +10,8 @@ from collections.abc import Mapping
 from typing import Any
 
 import pandas as pd
+
+from engine.pandas_utils_safe import safe_confidence
 from engine.screening_runtime import resolve_vcp_signals_to_show
 
 
@@ -103,12 +105,14 @@ def apply_ai_results(
         provider, rec = _pick_recommendation(ai_payload)
         if rec is None:
             actions.append("N/A")
-            confidences.append(0)
+            # [JONGGA-008] 추천이 없으면 확신도도 없다. 0 을 넣으면 이 값이 signals_log 를
+            # 거쳐 화면까지 흘러가 "AI 가 0% 확신한다" 는 막대가 된다.
+            confidences.append(None)
             reasons.append("분석 실패")
             providers.append("N/A")
         else:
             actions.append(rec.get("action"))
-            confidences.append(rec.get("confidence"))
+            confidences.append(safe_confidence(rec.get("confidence")))
             reasons.append(rec.get("reason"))
             providers.append(provider)
 

@@ -11,6 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAdmin } from '@/hooks/useAdmin';
 import ThinkingProcess from '@/app/components/ThinkingProcess';
+import { parseAIConfidence } from '@/lib/aiConfidence';
 import { decideSecondaryAI, isValidAIRecommendation } from './aiHelpers';
 import { getAuthHeaders } from '@/app/components/chatHelpers';
 
@@ -1735,7 +1736,7 @@ export default function VCPSignalsPage() {
 
                 // logic moved to top level effect
 
-                const confidence = rec?.confidence ?? 0;
+                const confidence = parseAIConfidence(rec?.confidence);
 
                 return (
                   <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -1772,16 +1773,20 @@ export default function VCPSignalsPage() {
                         <div className="relative w-14 h-14 shrink-0">
                           <svg className="w-full h-full -rotate-90">
                             <circle cx="28" cy="28" r="24" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-white/10" />
-                            <circle
-                              cx="28" cy="28" r="24"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                              fill="transparent"
-                              strokeDasharray={`${(confidence / 100) * 150.8} 150.8`}
-                              className={confidence >= 70 ? 'text-emerald-500' : confidence >= 50 ? 'text-yellow-500' : 'text-red-500'}
-                            />
+                            {confidence !== null && (
+                              <circle
+                                cx="28" cy="28" r="24"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                                fill="transparent"
+                                strokeDasharray={`${(confidence / 100) * 150.8} 150.8`}
+                                className={confidence >= 70 ? 'text-emerald-500' : confidence >= 50 ? 'text-yellow-500' : 'text-red-500'}
+                              />
+                            )}
                           </svg>
-                          <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{confidence}%</span>
+                          <span className={`absolute inset-0 flex items-center justify-center font-bold ${confidence !== null ? 'text-white text-sm' : 'text-gray-500 text-[10px]'}`}>
+                            {confidence !== null ? `${confidence}%` : '미산출'}
+                          </span>
                         </div>
                         <div className="flex-1">
                           {rec ? (

@@ -10,6 +10,8 @@ import json
 import re
 from typing import Dict, List, Optional
 
+from engine.pandas_utils_safe import safe_confidence
+
 
 _JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 _JSON_ARRAY_PATTERN = re.compile(r"\[.*\]", re.DOTALL)
@@ -99,7 +101,7 @@ def build_result_map(*, results_list: List[Dict], model_name: str) -> Dict[str, 
         final_map[name] = {
             "score": item.get("score", 0),
             "action": item.get("action", "HOLD"),
-            "confidence": item.get("confidence", 0),
+            "confidence": safe_confidence(item.get("confidence")),
             "reason": item.get("reason", ""),
             "model": normalized_model,
         }

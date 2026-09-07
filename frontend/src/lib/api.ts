@@ -120,7 +120,8 @@ export interface KRSector {
 
 export interface AIRecommendation {
   action: 'BUY' | 'SELL' | 'HOLD';
-  confidence: number;
+  // [JONGGA-008] 백엔드는 확신도가 없는 상태를 0 이 아니라 값 없음으로 보낸다.
+  confidence: number | null;
   reason: string;
 }
 
