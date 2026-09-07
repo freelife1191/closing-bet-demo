@@ -53,6 +53,13 @@
   뻔했다.
 - `js` 명령에 최상위 `return` 을 쓰면 `SyntaxError: Illegal return statement` 다.
   `(() => { ... })()` 또는 `(async () => { ... })()` 로 감싼다.
+- `snapshot -i` 의 `@e` 참조는 앞선 클릭으로 리렌더가 일어나면 번호가 바뀐다. 클릭 직전에
+  다시 뽑는다. 참조를 담아 둔 셸 변수가 빈 문자열이 되어도 `click` 은 조용히 아무것도
+  누르지 않으므로, 클릭 전후의 DOM 상태를 함께 읽어 실제로 눌렸는지 확인한다.
+- Tailwind 유틸리티 클래스로 요소를 고를 때 흔한 조합은 여러 요소에 걸린다. VCP 화면에서
+  `.absolute.right-0.top-full` 은 히스토리 드롭다운과 `SimpleTooltip` 에 모두 붙어 있어서,
+  드롭다운을 읽으려던 `querySelector` 가 툴팁 문구를 돌려주었다. 그 요소에만 있는 클래스를
+  하나 더 붙여(`div.absolute.right-0.top-full.w-48`) 좁힌다.
 - `viewport` 는 `viewport 1280x800` 처럼 한 인자다. `viewport 1280 800` 은
   `Unexpected positional arg` 로 거부된다. 기본 뷰포트는 `lg` 이상이라 `lg:hidden` 인 햄버거는
   `viewport 390x844` 로 바꿔야 접근성 트리에 나타난다.
