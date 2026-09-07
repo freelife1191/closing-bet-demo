@@ -119,8 +119,13 @@
 - `[INFRA-043]` — `engine/messenger_senders.py:66`·`:92` 의 예외 로그가 텔레그램 봇 토큰과
   디스코드 웹훅을 그대로 적을 수 있다. `NOTIFICATION_ENABLED=false` 가 이 경로를 덮지
   못한다는 지적과 발송 실패에도 `success` 가 나간다는 지적을 같은 항목에 담았다.
-- `[INFRA-039]` 에 덧붙임 — `_resolve_real_ip` 의 `X-Forwarded-For` 무조건 신뢰,
-  `.env.example` 의 `INTERNAL_IDENTITY_SECRET` 주석에 알림 테스트 발송을 더할 것.
+- `[INFRA-044]` — `POST /api/system/env` 가 인가 근거인 `ADMIN_EMAILS` 를 요청을 처리한
+  워커의 `os.environ` 에만 쓰므로, 워커가 둘이면 같은 관리자의 같은 요청이 통과와 거부로
+  갈릴 수 있다. 이번 변경이 그 값을 인가 근거로 만들면서 무게가 커졌다.
+- `[INFRA-039]` 에 덧붙임 — `_resolve_real_ip` 의 `X-Forwarded-For` 무조건 신뢰(검토자는
+  `ProxyFix(app.wsgi_app, x_for=1)` 를 제안했고, 신뢰 홉 수는 바인딩 결정과 같은 시점에
+  정해야 한다고 했다), `.env.example` 의 `INTERNAL_IDENTITY_SECRET` 주석에 알림 테스트
+  발송을 더할 것.
 
 ## 실행 결과
 
