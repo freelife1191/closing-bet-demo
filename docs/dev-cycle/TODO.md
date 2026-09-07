@@ -512,13 +512,26 @@
   저장되고, `services/kr_market_vcp_payload_service.py:275` 가 읽어 VCP 화면의 gemini·gpt
   탭에 그려집니다. 호출 지점 둘 다 살아 있습니다(`scripts/init_data.py:2675` 배치와
   `services/kr_market_route_service.py:138` 의 사용자 재분석).
-  - 2026-09-07 확인: **현재 자료는 모의 산출물이 아닙니다.**
-    `data/ai_analysis_results_20260505.json` 의 사유가 「수축 비율 1.8811」·「외국인과
-    기관이 각각 약 1,450억 원, 1,534억 원」처럼 종목별 실측치를 담고 있어,
-    `MockAnalysisTemplates` 의 일반 문구(「주력 제품의 수출 호조세 지속」 등)와 다릅니다.
-    `engine/vcp_ai_analyzer` 를 쓰는 실제 경로가 쓴 파일입니다. 그러므로 위험은 실현되지
-    않았고, 두 경로 중 어느 쪽이 나중에 쓰느냐에 달린 잠재 문제입니다. 이 항목에서 그
-    선후를 확정합니다.
+  - 2026-09-07 전수 확인: **이미 실제로 발생한 적이 있습니다.** `MockAnalysisTemplates`
+    의 문구가 `data/` 의 아홉 개 분석 파일 어디에 나타나는지 세었습니다.
+
+    | 파일 | 화면에 닿는 두 필드 | `final_recommendation` |
+    |---|---|---|
+    | `ai_analysis_results_20260211.json` | **모의 2** · 실제 2 | 모의 2 |
+    | `ai_analysis_results_20260212·13·20·26` | 모의 0 · 실제 3~6 | 없음 |
+    | `ai_analysis_results_20260505.json` | 모의 0 · 실제 8 | 모의 4 |
+    | `ai_analysis_results.json`, `kr_ai_analysis.json` | 모의 0 · 실제 8 | 모의 4 |
+
+    최신 자료는 화면에 닿는 두 필드가 모두 실제 분석입니다. 실제 분석 경로가 나중에 돌아
+    그 둘을 덮어쓰고, 덮이지 않는 `final_recommendation` 에만 모의가 남기 때문입니다.
+    그런데 **2026-02-11 자료는 그 둘에 모의 산출물이 2건 남아 있습니다.** 그날은 덮어쓰기가
+    일어나지 않았다는 뜻이고, 화면에서 그 날짜를 조회하면 무작위로 조립된 사유가 「Gemini
+    분석」으로 보입니다. 잠재 문제가 아니라 이미 한 번 새어 나온 문제입니다. 이 항목에서
+    두 경로의 선후를 확정하고, 모의 산출물이 화면에 닿는 필드에 들어가지 못하게 막습니다.
+  - 대조 방법 둘을 함께 적어 둡니다. 사유에 `MockAnalysisTemplates` 의 문구(「주력 제품의
+    수출 호조세 지속」·「K-칩스법」·「PER 밴드 하단」 등)가 있는지 보는 것과, `action` 이
+    전 종목 `BUY` 로만 채워져 있는지 보는 것입니다. `engine/kr_ai_strategies.py:99` 가
+    `action` 을 `"BUY"` 로 고정하므로 실제 분석 경로만 `HOLD` 와 `SELL` 을 냅니다.
 - 티어 규칙에 관해 판단이 필요한 것이 하나 있습니다. code-review 가 확신도 중간으로
   제기했습니다. `engine/signal_tracker_ai_helpers.py` 의 `apply_ai_results` 는
   `ai_action`·`ai_confidence`·`ai_reason`·`ai_provider` 네 열을 직접 만들어 넣는 자리인데
