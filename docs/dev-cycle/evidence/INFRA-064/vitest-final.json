@@ -1,0 +1,11 @@
+{
+  "name": "vitest-final",
+  "command": [
+    "./node_modules/.bin/vitest",
+    "run"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/checkout/frontend",
+  "exit": 0,
+  "seconds": 11.57,
+  "policy": "local-network.sb"
+}

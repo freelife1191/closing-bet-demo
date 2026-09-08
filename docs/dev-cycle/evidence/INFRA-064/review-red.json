@@ -1,0 +1,17 @@
+{
+  "name": "review-red",
+  "command": [
+    "./venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/app/test_market_gate_refresh_cooldown.py",
+    "-k",
+    "contention or partial_completion"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/checkout",
+  "exit": 1,
+  "seconds": 1.52,
+  "policy": "no-network.sb"
+}

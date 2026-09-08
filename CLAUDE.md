@@ -292,15 +292,17 @@ Next와 Flask는 같은 릴리스로 적용해야 합니다. 구형·신형 워�
 1. **Ports**: Flask 5501, Next.js 3500
 2. **Logs**: `logs/backend.log`, `logs/frontend.log`
 3. **Data sources**: two separate fallback chains. Period data goes through `DataSourceManager` (FDR → pykrx → yfinance); single-ticker realtime quotes go through `fetch_stock_price` (Toss → Naver → yfinance)
-4. **Market Gate 분석을 돌리는 경로는 둘입니다.** `POST /api/kr/market-gate/update` 는
-   `[INFRA-059]` 가 관리자 전용으로 닫았지만, **`GET /api/kr/market-gate` 는 데이터가 낡으면
-   익명 요청에도 백그라운드 분석을 트리거합니다**(`app/routes/kr_market_system_http_routes.py`
-   의 `_register_market_gate_routes`). 대시보드 첫 로딩 경로라 그 자리는 열어 둔 것이며,
-   `_market_gate_lock` 과 `data/.market_gate_refresh.lock` 이 동시 실행을 막습니다. 그러므로
-   **POST 에 게이트가 있다고 해서 익명이 Market Gate 분석을 돌릴 수 없다는 뜻이 아닙니다.**
-   POST 만 갖는 것은 즉시 실행, 동기 처리(워커를 최대 120초 점유), 날짜 지정,
-   `create_institutional_trend(force=True)` 수급 재수집 넷입니다. 인가 범위를 셀 때 이 둘을
-   합쳐 세지 않습니다.
+4. **Market Gate GET 자동 분석에는 워커 공통 쿨다운이 있습니다.** `[INFRA-064]`부터
+   날짜가 명시된 `GET /api/kr/market-gate?date=...`는 저장 자료만 읽습니다. 날짜 없는
+   최신 조회만 유효하지 않거나 낡은 자료의 자동 분석을 요청하며, 기존
+   `data/.market_gate_refresh.lock`을 모든 워커가 공유해 동시 실행과 완료 후 5분간
+   재실행을 막습니다. 실패와 스레드 기동 실패도 쿨다운에 포함합니다. 실행 중에는
+   initializing, 쿨다운 중에는 저장된 자료/스냅샷 또는 데이터 없음 응답을 반환합니다.
+   잠금이나 쿨다운을 사용할 수 없으면 자동 분석을 억제합니다. 시각은 호스트 시간을
+   사용하며 손상·비정상 미래 기록은 5분 예약으로 복구합니다.
+   관리자 `POST /api/kr/market-gate/update`와 스케줄러는 별도 실행 경로입니다.
+   이 쿨다운이 그 경로까지 직렬화하거나, GET의 부수효과를 완전히 없애는 것은 아닙니다.
+   생존 확인용으로 실제 GET을 호출하면 여전히 외부 수집을 일으킬 수 있습니다.
 5. **Scheduler**: `services/scheduler.py` 가 잡 두 개를 등록합니다. Market Gate 동기화는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES`(코드 기본값 30분) 간격으로 돌고, 장 마감 분석은 `CLOSING_SCHEDULE_TIME`(기본 17:00 KST) 에 하루 한 번 돌며 종가베팅은 그 체인 안에서 이어집니다. 관련 모듈: `scheduler_jobs.py`, `scheduler_loop.py`, `scheduler_runtime_status_service.py`
 6. **Tests**: pytest (Python), vitest (TypeScript)
 7. **루트 `AGENTS.md`**: codex 처럼 `AGENTS.md` 만 자동으로 읽는 도구의 진입점입니다.

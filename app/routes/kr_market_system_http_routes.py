@@ -78,18 +78,15 @@ def _register_market_gate_routes(
                 logger=logger,
             )
 
-            should_trigger_refresh = (not source_is_valid) or needs_update
+            # 날짜가 명시된 조회는 해당 파일만 읽는다. 없는 과거 자료를 위해
+            # 날짜 인자 없는 오늘 분석을 실행해도 그 자료는 생성되지 않는다.
+            should_trigger_refresh = 'date' not in request.args and ((not source_is_valid) or needs_update)
 
-            if should_trigger_refresh:
-                refresh_started = bool(deps["trigger_market_gate_background_refresh"]())
-                if refresh_started:
-                    if not source_is_valid:
-                        logger.info("[Market Gate] 유효한 데이터 없음. 백그라운드 분석 자동 시작.")
-                    elif needs_update:
-                        logger.info("[Market Gate] 데이터 갱신 필요. 백그라운드 분석 자동 시작.")
-                # 스냅샷 fallback 값으로 점수가 고정되어 보이는 문제를 막기 위해
-                # 갱신 필요 시에는 initializing payload를 우선 노출한다.
+            if should_trigger_refresh and deps["trigger_market_gate_background_refresh"]():
+                logger.info("[Market Gate] 백그라운드 분석 실행 중 또는 시작됨.")
                 gate_data = deps["build_market_gate_initializing_payload"]()
+            elif not is_valid:
+                gate_data = deps["build_market_gate_empty_payload"]()
 
             if not gate_data:
                 gate_data = deps["build_market_gate_empty_payload"]()

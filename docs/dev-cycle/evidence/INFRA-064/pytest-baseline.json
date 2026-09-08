@@ -1,0 +1,14 @@
+{
+  "name": "pytest-baseline",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/checkout",
+  "exit": 0,
+  "seconds": 30.89,
+  "policy": "no-network.sb"
+}

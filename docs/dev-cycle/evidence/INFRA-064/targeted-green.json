@@ -1,0 +1,18 @@
+{
+  "name": "targeted-green",
+  "command": [
+    "./venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/app/test_market_gate_refresh_cooldown.py",
+    "tests/app/test_kr_market_system_http_routes_refactor.py",
+    "tests/services/test_kr_market_market_gate_service_refactor.py",
+    "tests/app/test_admin_gated_routes.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/checkout",
+  "exit": 0,
+  "seconds": 4.33,
+  "policy": "no-network.sb"
+}

@@ -84,11 +84,11 @@ def test_market_gate_returns_initializing_payload_and_triggers_refresh_when_inva
         evaluate_market_gate_validity=lambda gate_data, target_date: (False, True),
         trigger_market_gate_background_refresh=lambda: trigger_calls.__setitem__(
             "count", trigger_calls["count"] + 1
-        ),
+        ) or True,
     )
     client = _create_client(deps)
 
-    response = client.get("/api/kr/market-gate?date=2026-02-20")
+    response = client.get("/api/kr/market-gate")
 
     assert response.status_code == 200
     assert response.get_json()["status"] == "INITIALIZING"
