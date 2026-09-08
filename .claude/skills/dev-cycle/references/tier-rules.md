@@ -8,8 +8,8 @@ dev-cycle 의 리뷰와 검증 강도를 정하는 규칙이다. 판정은 계�
 | 티어 | 조건 | 리뷰 | 검증 |
 |---|---|---|---|
 | T1 | 변경 50줄 이하이고 위험 경로에 닿지 않는다 | `/ponytail-review` | 변경 범위의 pytest 또는 vitest + QA 2단계 |
-| T2 | 변경 300줄 이하이고 위험 경로에 닿지 않는다 | `/ponytail-review` → `/code-review` | pytest·vitest 전체 + QA 2단계. 화면이 바뀌면 agent-browser 로 값을 대조한다 |
-| T3 | 변경 300줄을 초과하거나 위험 경로에 닿는다 | T2 전체 + `/review` | pytest·vitest 전체 + QA 2단계. 화면이 바뀌면 agent-browser 로 값을 대조한다 |
+| T2 | 변경 300줄 이하이고 위험 경로에 닿지 않는다 | `/ponytail-review` → `/code-review` | pytest·vitest 전체 + QA 2단계. 웹 흐름은 §1-1에 따라 agent-browser로 실측한다 |
+| T3 | 변경 300줄을 초과하거나 위험 경로에 닿는다 | T2 전체 + `/review` | pytest·vitest 전체 + QA 2단계. 웹 흐름은 §1-1에 따라 agent-browser로 실측한다 |
 
 「QA 2단계」의 내용은 아래 §1-1 에 있다.
 
@@ -161,10 +161,11 @@ Codex의 엔진, 단계, 반복 한도, baseline, 증거와 정리의 실제 절
 
 ### agent-browser 와의 관계
 
-QA 2단계와 agent-browser는 겹치지 않는다. QA는 확정한 시나리오의 계획과 실행을 남기고,
-agent-browser는 구현 도중 특정 값을 실측하는 도구다. 화면이 바뀌는 항목에서는 구현 단계의
-agent-browser 실측값을 시나리오의 기대값으로 쓰고, 이후 QA 2단계로 전체 시나리오를
-실행한다. Codex에서도 이 관계는 같으며, UltraQA가 agent-browser 자체를 대체하지 않는다.
+Codex에서는 UltraQA가 계획한 웹 시나리오를 agent-browser로 실행한다. 구현 도중의 화면
+관찰만으로 마감 QA를 대신하지 않으며, API 하네스만으로 사용자 조작·화면 결과를 검증한
+것으로 세지 않는다. 기존 화면과 연결된 백엔드 변경도 포함하고 T1도 같은 기준을 적용한다.
+필수 여부·안전한 대역·증거·BLOCKED 기준은 `references/ultraqa.md` §1-1이 정본이다.
+Claude Code의 기존 QA 도구 순서는 실행 환경 표를 따른다.
 
 두 도구를 다루는 요령과 겪었던 실수는 `browser-notes.md`에 있다. 실측을 시작하기 전에
 읽는다.

@@ -1,0 +1,328 @@
+{
+  "items_reviewed": 80,
+  "items": [
+    {
+      "id": "INFRA-064",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-065",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-056",
+      "tier": "T3(`.env` 접촉)"
+    },
+    {
+      "id": "INFRA-055",
+      "tier": "T3(`.env` 접촉)"
+    },
+    {
+      "id": "INFRA-043",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-045",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-046",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-038",
+      "tier": "T1"
+    },
+    {
+      "id": "VCP-012",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-018",
+      "tier": "T2"
+    },
+    {
+      "id": "JONGGA-012",
+      "tier": "T3 예상"
+    },
+    {
+      "id": "INFRA-019",
+      "tier": "T3"
+    },
+    {
+      "id": "INFRA-017",
+      "tier": "T2"
+    },
+    {
+      "id": "JONGGA-014",
+      "tier": "T3"
+    },
+    {
+      "id": "CHAT-008",
+      "tier": "T2"
+    },
+    {
+      "id": "FLOW-013",
+      "tier": "T3"
+    },
+    {
+      "id": "FE-032",
+      "tier": "T2"
+    },
+    {
+      "id": "FE-034",
+      "tier": "T1"
+    },
+    {
+      "id": "FLOW-014",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-030",
+      "tier": "T3"
+    },
+    {
+      "id": "JONGGA-033",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-022",
+      "tier": "T1"
+    },
+    {
+      "id": "VCP-020",
+      "tier": "T2"
+    },
+    {
+      "id": "VCP-022",
+      "tier": "T3"
+    },
+    {
+      "id": "INFRA-047",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-048",
+      "tier": "T3 (`.env.example` 을 건드리므로 `tier-rules.md` §2 「시크릿과"
+    },
+    {
+      "id": "INFRA-057",
+      "tier": "T3(`.env` 접촉)"
+    },
+    {
+      "id": "INFRA-058",
+      "tier": "T2"
+    },
+    {
+      "id": "FE-042",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-054",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-051",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-041",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-029",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-027",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-023",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-020",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-019",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-010",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-012",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-032",
+      "tier": "T3"
+    },
+    {
+      "id": "FE-037",
+      "tier": "T2"
+    },
+    {
+      "id": "FE-036",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-028",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-029",
+      "tier": "T2"
+    },
+    {
+      "id": "FE-031",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-030",
+      "tier": "T2"
+    },
+    {
+      "id": "JONGGA-032",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-028",
+      "tier": "T1"
+    },
+    {
+      "id": "JONGGA-030",
+      "tier": "T3"
+    },
+    {
+      "id": "JONGGA-031",
+      "tier": "T1"
+    },
+    {
+      "id": "JONGGA-024",
+      "tier": "T2"
+    },
+    {
+      "id": "JONGGA-023",
+      "tier": "T1"
+    },
+    {
+      "id": "JONGGA-018",
+      "tier": "T3"
+    },
+    {
+      "id": "JONGGA-026",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-016",
+      "tier": "T1"
+    },
+    {
+      "id": "VCP-005",
+      "tier": "T3"
+    },
+    {
+      "id": "CHAT-005",
+      "tier": "T2"
+    },
+    {
+      "id": "FLOW-006",
+      "tier": "T2"
+    },
+    {
+      "id": "INFRA-008",
+      "tier": "T3"
+    },
+    {
+      "id": "FE-010",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-018",
+      "tier": "T2"
+    },
+    {
+      "id": "FE-011",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-017",
+      "tier": "T2"
+    },
+    {
+      "id": "VCP-014",
+      "tier": "T1"
+    },
+    {
+      "id": "JONGGA-013",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-009",
+      "tier": "T1"
+    },
+    {
+      "id": "FLOW-009",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-021",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-021",
+      "tier": "T1"
+    },
+    {
+      "id": "JONGGA-028",
+      "tier": "T2"
+    },
+    {
+      "id": "JONGGA-029",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-013",
+      "tier": "T2"
+    },
+    {
+      "id": "FE-038",
+      "tier": "T1"
+    },
+    {
+      "id": "CHAT-015",
+      "tier": "T1"
+    },
+    {
+      "id": "FE-039",
+      "tier": "T1"
+    },
+    {
+      "id": "VCP-021",
+      "tier": "T2"
+    },
+    {
+      "id": "FE-040",
+      "tier": "T1"
+    },
+    {
+      "id": "INFRA-035",
+      "tier": "T1"
+    },
+    {
+      "id": "VCP-023",
+      "tier": "T3"
+    },
+    {
+      "id": "VCP-024",
+      "tier": "T2"
+    }
+  ],
+  "tier_criteria_changed": false,
+  "tier_updates_required": 0,
+  "qa_rule": "Every future round traces UI consumers and records browser applicability; historical QA results unchanged"
+}

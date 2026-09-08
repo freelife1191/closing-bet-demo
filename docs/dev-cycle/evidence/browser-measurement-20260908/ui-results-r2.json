@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "results": {
+    "B2": "cancel POST0/send0",
+    "B3": "JSON null date -> HTTP200, success modal, send1",
+    "B4": "duplicate HTTP200, message shown, send still1",
+    "B5": "real403, failure modal, send still1",
+    "B6": "authenticated QA Viewer, file visible, send button0",
+    "B7_browser": "page errors0; only expected403 application console error; screenshots captured"
+  },
+  "post_statuses": [
+    200,
+    200,
+    403
+  ],
+  "send": 1,
+  "url": "http://localhost:64847/dashboard/data-status"
+}

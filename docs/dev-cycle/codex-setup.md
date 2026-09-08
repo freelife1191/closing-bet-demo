@@ -128,7 +128,7 @@ developer_instructions = """
 | 시나리오 실행·진단·정리 | `/qa` | `$ultraqa` | 스킬과 `references/ultraqa.md`의 native/App 대응 확인 | omx 설치 (0번) |
 | 심층 리뷰 (T3) | `/review` | `$review` | `/skills` 에 `review` | gstack 설치 |
 | browse 바이너리 | `/qa` 와 `/qa-only` 가 내부에서 쓴다 | 같다 | `test -x "${CODEX_HOME:-$HOME/.codex}/skills/gstack/browse/dist/browse"` | gstack 설치가 함께 빌드한다 |
-| 브라우저 실측 | agent-browser | 같다. 셸 명령이다 | `which agent-browser` | `npm install -g agent-browser`. 로그인 세션은 기기별이므로 `--session adguard-cft-extension` 이 없으면 사용자에게 알린다 |
+| 브라우저 실측 | agent-browser | 같다. 셸 명령이다 | `which agent-browser` | `npm install -g agent-browser`. 검증마다 고유 namespace/session과 가짜 계정·fixture를 준비하며 기존 로그인 세션을 요구하거나 자동 재사용하지 않는다 |
 | 코드 리뷰 | `feature-dev:code-reviewer` 에이전트 | omx `$code-review` 스킬 | `/skills` 에 `code-review`, `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 (0번) |
 | 과잉설계 리뷰 | `/ponytail-review` | omx `code-reviewer` 에이전트를 `spawn_agent` 로 띄운다. 프롬프트는 아래 「과잉설계 리뷰 프롬프트」 | `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 |
 | 계획 문서 (T3) | `superpowers:writing-plans` | `$superpowers:writing-plans` | 현재 스킬 목록에 `superpowers:writing-plans` | 아래 superpowers 설치. 그래도 없으면 omx `$plan` 으로 대신하고 그 사실을 문서에 적는다 |
@@ -456,3 +456,20 @@ TODO·아카이브·런타임 역할 메타데이터를 검사한다. 새 플러
 UltraQA 실행을 대신하지 않는다. 티어 판정·설계 승인·UltraQA 완료 조건은 바뀌지 않았고,
 TODO의 81개 항목(P1 29, P2 52)은 그대로 유지한다. INFRA-063은 아직 설계 승인 대기다.
 이 기기 외의 설치 또는 이후 스킬 업데이트 때에는 위임 대상과 현재 역할 목록을 다시 대조한다.
+
+## 12. 브라우저 실측 누락 보완
+
+2026-09-08 사용자 요청으로 Codex QA 연결을 다시 검토했다. 기존 tier-rules는 화면 코드가
+바뀌는 경우를 중심으로 브라우저를 요구했고, browser-notes는 Codex UltraQA에 browse를
+연결했다. 그 결과 INFRA-062/063은 기존 화면과 연결된 API 변경인데도 “UI 수정 없음”을
+근거로 HTTP 하네스만 실행했다. 당시 보고서는 브라우저 실측을 하지 않았다고 명시했으며
+그 기록을 소급해 브라우저 통과로 바꾸지 않는다.
+
+현재 정본은 ultraqa.md §1-1이다. dev-workflow는 UI 호출부와 실측 시나리오를 초안에 적고,
+dev-cycle의 UltraQA가 agent-browser로 실제 웹 행을 실행한다. backend-only도 기존 화면과
+연결되면 필수다. UI 없는 CLI/배치만 근거 있는 제외를 허용하며, 도구/안전 표면이 없으면
+필수 실측은 BLOCKED다. 설치된 agent-browser의 사용법은 `agent-browser skills get core`로
+읽는다. 전용 세션·격리 URL을 사용하고 기존 로그인 세션이나 원본 서비스로 자동 접속하지 않는다.
+
+이번 보완의 실제 검증 결과는 `docs/dev-cycle/qa/browser-measurement-workflow-2026-09-08.md`에
+남긴다. 스킬 파일 설치 여부나 HTTP 성공만으로 브라우저 검증이 끝났다고 보고하지 않는다.

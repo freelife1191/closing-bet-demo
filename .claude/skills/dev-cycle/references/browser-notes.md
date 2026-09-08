@@ -12,23 +12,31 @@
 
 | 도구 | 위치 | 쓰는 자리 |
 |---|---|---|
-| agent-browser | `which agent-browser` 로 찾는다. 이 환경에서는 `~/.local/bin/agent-browser` | 구현 도중의 값 대조, 백엔드만 바꾼 항목의 실측 |
-| browse | Claude Code: `~/.claude/skills/gstack/browse/dist/browse`, Codex: `${CODEX_HOME:-$HOME/.codex}/skills/gstack/browse/dist/browse` | Claude Code의 `/qa-only`와 `/qa`, Codex `$ultraqa`의 계획·실행이 쓴다. 직접 실측에도 쓸 수 있다 |
+| agent-browser | `which agent-browser`로 찾고 `skills get core`를 읽는다 | Codex UltraQA의 웹 시나리오 실측과 구현 중 관찰 |
+| browse | Claude Code: `~/.claude/skills/gstack/browse/dist/browse` | Claude Code의 기존 `/qa-only`와 `/qa` |
 
 둘은 별개이며 브라우저 컨텍스트를 공유하지 않는다. agent-browser 의 탭과 쿠키가 browse 에
 보이지 않고 그 반대도 같다. 둘 다 셸 명령이므로 Claude Code와 Codex 어느 쪽에서든 같은
 방법으로 쓴다. Codex UltraQA의 실제 단계와 정리 절차는
-[references/ultraqa.md](ultraqa.md)를 따르며, agent-browser는 그와 별개인 브라우저 실측
-도구다. `~/.claude/skills/gstack/bin/agent-browser` 는 존재하지 않는다.
+[references/ultraqa.md](ultraqa.md)를 따르며, agent-browser는 Codex UltraQA 안에서 웹 행을 실행하는 브라우저 드라이버다. `~/.claude/skills/gstack/bin/agent-browser` 는 존재하지 않는다.
 
 ## agent-browser
+
+먼저 `agent-browser skills get core`를 읽는다. 이 절의 예시와 충돌하면 설치된 CLI의
+사용법을 확인해 갱신한다. 자동 업데이트되는 스킬 본문을 저장소에 복제하지 않는다.
 
 - zsh 는 `AB="agent-browser --session x"; $AB open …` 처럼 변수에 담은 명령의 인자를 나누지
   않아 `command not found: agent-browser --session x` 가 난다.
   `ab() { agent-browser --session x "$@"; }` 함수로 감싼다.
-- 모든 명령에 `--session <이름>` 을 붙인다. 이 환경의 세션 이름은 `adguard-cft-extension`
-  이고 로그인 쿠키가 거기 있다. `~/.agent-browser/sessions/` 아래 세션 파일은 그 쿠키를
-  담고 있으므로 내용을 출력하지 않는다.
+- 모든 명령에 이번 검증 전용 `--namespace <고유 이름> --session <이름>`을 붙인다.
+  기존 `adguard-cft-extension` 같은 로그인 세션을 자동으로 재사용하지 않는다. 다른 작업의
+  쿠키·탭·프로필을 가져오지 않고, 격리 앱에는 가짜 계정/전용 테스트 세션을 쓴다.
+  세션 파일의 쿠키 값은 출력하지 않으며 `close --all`이나 일괄 상태 정리를 하지 않는다.
+- 0.31.1 실측에서는 실행 옵션을 명령 사이에 생략하면 브라우저가 다시 만들어질 수 있었다.
+  전용 profile/proxy/allowed-domains/args를 같은 설정으로 전달하고, 재생성이 보고되면
+  쿠키·현재 URL·세션을 다시 확인한다. 도메인 제한을 켰을 때 about:blank는 hostname 오류가
+  날 수 있으므로 허용된 격리 URL을 진입점으로 쓴다. 실행 오류는 해당 namespace에서
+  `doctor --offline --quick`으로 진단하며 다른 세션의 상태를 일괄 수리하지 않는다.
 - 탭 목록은 `tab list` 다. `tabs` 는 `Unknown command` 를 낸다. 전환은 `tab t1` 처럼 `t`
   접두사가 붙은 이름을 받고 정수를 받지 않는다.
 - 다른 작업의 탭을 닫지 않는다. 다른 세션이 활성 탭을 바꾸므로 조작 전에 `tab t<n>` 으로
@@ -39,16 +47,18 @@
   미리 알 수 없고, 그 화면의 버튼 대부분이 실제 LLM 호출을 일으킨다. `snapshot` 으로 `@e`
   참조를 뽑아 그 참조를 지정한다.
 - `screenshot` 두 개를 동시에 실행하면 데몬이 교착 상태에 빠진다. 하나씩 찍는다.
-- **화면을 열 때 `localhost:3500` 을 쓴다. `127.0.0.1:3500` 은 자료가 비어 보인다.**
-  Next.js 의 `allowedDevOrigins` 가 개발 서버에서 `localhost` 만 기본 허용하므로,
-  `127.0.0.1` 로 열면 페이지는 200 으로 뜨지만 클라이언트가 부르는 API 가 막혀 화면이
-  로딩 상태에 갇힌다. 콘솔에 오류가 남지 않고 `logs/frontend.log` 에만
-  「add it to allowedDevOrigins」 안내가 찍히므로 결함으로 오판하기 쉽다.
-  `[INFRA-039]` 의 S-6 을 실패로 판정할 뻔했다. `curl` 은 오리진 검사에 걸리지 않아
-  `127.0.0.1` 로도 200 이 나오므로, curl 이 통과했다는 것이 브라우저도 된다는 뜻은 아니다.
-- `js` 명령은 agent-browser 에 없다(`Unknown command: js`). 그 명령은 browse 쪽이다.
-  화면 내용은 `read` 로 읽고, 실제 렌더링은 `screenshot` 으로 확인한다. Next.js 는 SSR
-  이라 `read` 만으로는 클라이언트가 채우는 값을 놓칠 수 있다.
+- 원본 3500/5501이나 live 주소로 QA를 시작하지 않는다. 격리 앱의 명시된 URL/포트를
+  사용하고 API_URL도 같은 fixture 백엔드에 고정한다. Next 개발 서버는 허용 origin과
+  접속 host가 맞는지 확인한다. 과거 `127.0.0.1` origin 차단 사례를 모든 기기에 적용되는
+  규칙으로 해석하거나 이를 해결하려고 원본 3500으로 접속하지 않는다.
+- `snapshot`과 `get text`, 렌더링 후 `screenshot`으로 실제 화면을 대조한다.
+  `read <url>`은 브라우저 없이 문서를 가져올 수 있으므로 웹 UI 실측 증거로 세지 않는다.
+  설치된 CLI의 JavaScript 명령은 `eval --stdin`이며 API만 eval한 결과와 UI 조작을 구분한다.
+- 페이지 오류와 console을 시나리오별로 확인한다. 의도한 거부 요청의 오류는 예상값과
+  대조하고, 다른 오류를 함께 숨기지 않는다. screenshot은 순차 저장 후 이미지를 열어 본다.
+- 비용이 나는 버튼은 실제 앱 UI를 격리 서비스·가짜 데이터·발송/LLM 대역에 연결한 뒤
+  조작한다. 브라우저 응답 mock을 썼으면 해당 행은 UI 계약 검증이며 실제 API 통과가 아니다.
+
 
 ## browse
 
@@ -86,13 +96,10 @@
 - 한글 앞에 컨텍스트를 붙인 패턴은 ugrep 의 복잡도 한계에 걸린다.
   `grep -o '.\{0,60\}흑기사.\{0,40\}'` 이 `exceeds complexity limits` 를 낸다. 앞쪽
   컨텍스트를 빼고 `grep -o '안녕하세요.\{0,80\}'` 처럼 뒤쪽만 잡는다.
-- 화면에서 만들 수 없는 자료 상태를 검사해야 하면, `data/` 를 고치는 대신 필요한 열만 바꾼
-  사본을 scratchpad 에 만들고 그 디렉터리를 작업 디렉터리로 삼아 백엔드를 다시 띄운다.
-  `app/routes/kr_market.py` 의 `DATA_DIR` 은 `'data'` 상대 경로로 고정되어 있어
-  `engine/config.py` 가 읽는 `DATA_DIR` 환경변수로는 바뀌지 않는다. 명령은
-  `PYTHONPATH=<저장소> SCHEDULER_ENABLED=false gunicorn flask_app:app --chdir <작업디렉터리>`
-  이며 그 아래에 `data/` 와 `logs/` 를 미리 만들어 둔다. 원본은 읽기만 하고, 끝나면 사본과
-  임시 프로세스를 지운 뒤 원래 구성으로 되돌려 기존 값이 다시 나오는지 확인한다.
+- 검증 데이터가 필요하면 독립 clone과 합성 fixture를 사용한다. 원본 .env를 복사하거나
+  원본 PYTHONPATH의 app factory를 scratch cwd에서 실행해 격리됐다고 가정하지 않는다.
+  DATA_DIR 환경변수를 보지 않는 상대경로 모듈도 있으므로 실제 읽기/쓰기 경로를 확인한다.
+  Next의 API_URL과 백엔드 저장 경로를 소유한 fixture에 고정하고 시작 전 검증한다.
 - 사용자가 도달할 수 없는 인공적인 DOM 조작을 하지 않는다. 날짜 select 에 빈 문자열을
   넣거나 `localStorage` 의 `browser_session_id` 를 바꾸는 것이 그 예다. 뒤의 것은 사용자를
   식별하는 값이어서 바꾸면 기존 대화의 소유권을 잃는다.

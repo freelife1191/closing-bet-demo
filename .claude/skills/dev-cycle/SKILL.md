@@ -43,7 +43,7 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 | 계획 검토 (architectural·T3) | `oh-my-claudecode:critic` | `agent_type: "critic"` |
 | QA 시나리오 계획 | `/qa-only` | `$ultraqa`의 PLAN ADVERSARIAL QA |
 | QA 실행·진단·수정·정리 | `/qa` | 같은 `$ultraqa`의 나머지 절차 |
-| 브라우저 실측 | agent-browser | agent-browser |
+| 브라우저 실측 | agent-browser | `$ultraqa` 행렬을 `agent-browser`로 실행 |
 | 과잉설계 리뷰 | `/ponytail-review` | `code-reviewer`에 `CLAUDE.md`의 ponytail 기준 전달 |
 | 코드 리뷰 | `feature-dev:code-reviewer` | `$code-review` |
 | 심층 리뷰(T3) | `/review` | `$review` |
@@ -163,8 +163,10 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 2. `tier-rules.md` §1-1의 QA 적용 범위를 확인한다. 문서·테스트만 변경하는 제외 대상이면
    근거를 기록하고 [4]로 간다. 사용자가 이번 작업의 동적 검증을 명시했으면 제외하지 않는다.
 3. 필요한 화면·CLI·서비스의 실제 값을 읽어 기대값을 정한다. 금융 앱의 비용·상태 변경
-   금지 조작은 실행하지 않는다. 화면이 없는 경로는 해당 CLI·안전한 하네스를 검사 대상으로
-   삼고 그 사실을 적는다. 실행하지 못한 동작을 실행했다고 보고하지 않는다.
+   금지 조작은 실행하지 않는다. 브라우저 필요 여부는 변경 파일이 아니라 사용자 진입 흐름으로
+   판정한다. 기존 화면이 사용하는 API·인증·데이터 변경도 `references/ultraqa.md` §1-1에
+   따라 agent-browser 실측을 필수로 넣는다. 진짜 UI가 없는 CLI/배치만 근거와 함께
+   CLI·서비스 하네스로 검사한다. 실행하지 못한 동작을 실행했다고 보고하지 않는다.
 4. 현재 환경의 **QA 계획**으로 `docs/dev-cycle/qa/<ID>.md`를 만든다. TODO의 QA 시나리오
    초안과 이번 변경을 출발점으로 삼는다. Codex의 정상·적대적 행렬과 필수 여부는
    `references/ultraqa.md`를 따른다. 계획 없이 즉흥적으로 전체 앱을 훑지 않는다.
@@ -175,7 +177,8 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
    실패를 덮지 않는다. 리뷰 원문 보존이 필요하면 원문은 별도 증거로 보존하고 표시용 문서를
    정리한 뒤 다시 검사한다. 해시 변경과 원문 증거의 연결도 기록한다.
 6. 현재 환경의 **QA 실행**에 항목·허용 범위·명령/주소·QA 문서·검증 기준 커밋을 전달한다.
-   같은 턴에서 이어간다. Codex는 UltraQA를 사용한다. 재개 시 기존 행렬·iteration·증거를
+   같은 턴에서 이어간다. Codex는 UltraQA를 사용하며, 웹 흐름의 필수 행은 agent-browser로
+   실행하고 화면·요청·결과 증거를 연결한다. 재개 시 기존 행렬·iteration·증거를
    확인하고 이미 끝낸 설계와 계획을 반복하지 않는다.
 7. 결과·종료 코드·증거·정리를 QA 문서에 기록한다. 성공 문구, exit 0 하나, skip만 있는
    로그로 통과시키지 않는다. 실패를 고쳤으면 해당 수정의 리뷰와 영향받는 검증을 다시 한다.

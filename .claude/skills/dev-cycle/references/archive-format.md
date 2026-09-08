@@ -180,7 +180,7 @@ grep -rhoE 'CHAT-[0-9]{3}' docs/dev-cycle/ | sort -u | tail -1
 ```markdown
 # [FLOW-010] 등급별 성과 카드의 집계 원천 — QA 시나리오
 
-- 대상 화면: http://localhost:3500/dashboard/kr/cumulative
+- 대상 화면: http://localhost:<소유한 격리 포트>/dashboard/kr/cumulative
 - 구성 근거: /qa-only 리포트 (.gstack/qa-reports/qa-report-localhost-3500-2026-09-03.md)
   + 이번 사이클의 변경 세 파일
 - 구성 2026-09-03 09:14 | 실행 2026-09-03 09:41
@@ -241,6 +241,12 @@ grep -rhoE 'CHAT-[0-9]{3}' docs/dev-cycle/ | sort -u | tail -1
   증거, `cleanup`을 모두 적는다. Codex는 `QA 엔진(engine): Codex UltraQA`와 함께
   `- UltraQA Report: <보고서의 Markdown 링크>`를 기록한다. 실제 Codex 절차는
   [references/ultraqa.md](ultraqa.md)를 따른다.
+- **Codex 브라우저 기록**에는 `browser_applicability: required|not-applicable`와 호출부 근거,
+  required이면 `browser_driver: agent-browser`와 전용 namespace/session·실제 진입 URL을,
+  not-applicable이면 `browser_driver: none`과 UI가 없다는 근거를 적는다.
+  웹 시나리오는 조작 전후 DOM/스냅샷·화면 기대값/실제값·요청/응답·스크린샷 확인·오류 판정과
+  대역 적용 범위를 함께 남긴다. 실제 UI와 API 하네스의 결과를 합쳐 어느 쪽을 실행했는지
+  숨기지 않는다. 필수 여부와 예외 판정은 ultraqa.md §1-1을 따른다.
 - **시나리오별 기록**에는 `필수 여부(required)`, 실제 관측값, 결과, 증거, `cleanup`을
   모두 적는다. 문서 전체의 필수 여부만으로 각 시나리오의 필수 여부를 합산하지 않는다.
 - **결과**는 실행 후에 채운다. 신규 시나리오별 결과는 `통과`, `실패 → 고침`, `실패`,

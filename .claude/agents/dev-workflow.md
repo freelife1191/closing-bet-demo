@@ -120,7 +120,8 @@ codex 에서는 저장소의 `.codex/agents/dev-workflow.toml` 이 이 파일의
 ```markdown
 ### [CHAT-003] 챗봇 스트리밍 폴백 정리
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §2.1
-- QA 시나리오: 모델 체인을 실패시킨 뒤 채팅을 보내면 화면에 폴백 안내가 뜬다
+- QA 시나리오: 격리 /chatbot 화면 → 가짜 모델 실패 응답으로 질문 전송 → 폴백 안내 표시
+- 브라우저 실측: required | driver: agent-browser | UI 호출부: frontend/src/app/chatbot/page.tsx
 - [ ] response_flow_fallback 의 중복 경로 통합
 - [ ] 모델 체인 실패 시 UI 표기 추가
 - [ ] 회귀 테스트 추가
@@ -128,7 +129,11 @@ codex 에서는 저장소의 `.codex/agents/dev-workflow.toml` 이 이 파일의
 
 `QA 시나리오` 줄은 그 항목이 **화면에서 무엇을 확인하면 고쳐졌다고 말할 수 있는지**를 한
 줄로 적는다. 사이클의 [3] 검증이 이 줄에서 출발해 시나리오 문서를 만들기 때문이다.
-「조작 → 기대값」 형태로 적고, 화면에서 확인할 것이 없는 항목이면 줄 자체를 뺀다. 형식의
+「진입 화면 → 사용자 조작 → 기대값」 형태로 적는다. 백엔드 항목도 UI 호출부를 추적해
+기존 화면이 사용하는 API·인증·데이터 변경인지 명시한다. UI가 정말 없는 경우에만 그 근거와
+CLI/배치 검사 표면을 적는다. “frontend 수정 없음”으로 화면 실측을 제외하지 않는다.
+웹 항목 초안은 dev-cycle의 UltraQA가 agent-browser로 실행할 대상으로 표시한다.
+감사 에이전트가 브라우저·검증 명령을 실행하는 것은 아니며 읽기 전용 역할은 유지한다. 형식의
 근거는 `.claude/skills/dev-cycle/references/archive-format.md` §8 에 있다.
 
 티어는 `.claude/skills/dev-cycle/references/tier-rules.md` §3 절차로 판정한다. 건드릴

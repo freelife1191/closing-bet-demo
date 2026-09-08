@@ -95,7 +95,8 @@ Codex에서는 현재 활성 Vercel 플러그인이 제공하는 `$vercel:next-u
 ## 3. 검증 단계에서의 자리
 
 `tier-rules.md` §1의 검증 열은 세 티어 모두에 시나리오 구성과 실행으로 이루어진 QA
-2단계를 요구하고, 화면이 바뀌는 `T2`와 `T3`에서는 브라우저로 값을 대조하도록 한다.
+2단계를 요구한다. Codex 웹 흐름은 티어·frontend 파일 수정 여부와 관계없이 브라우저로
+실측한다. 기존 화면에 연결된 API 변경도 포함하며 판정 정본은 ultraqa.md §1-1이다.
 Claude Code는 `/qa-only`와 `/qa`를 쓰고, Codex는 `$ultraqa` 안의 계획·실행 단계를 쓴다.
 Codex의 실제 방법은 [references/ultraqa.md](ultraqa.md)가 정본이며 이 문서는 그 절차를
 복제하지 않는다.
@@ -107,8 +108,10 @@ Codex의 실제 방법은 [references/ultraqa.md](ultraqa.md)가 정본이며 �
 2. **프레임워크 관점** — Next.js 가 컴파일과 런타임에서 무엇을 보고 있는지 읽는다.
    `next-dev-loop` 이 `/_next/mcp` 로 다룬다. 스킬을 부르지 않고 직접 확인하려면 아래
    두 가지를 호출한다. 응답이 SSE 이므로 `data:` 줄만 뽑아 읽는다.
+   실행 전에 fixture 시작 기록의 소유 PID·포트와 Next API_URL이 같은 검증 환경을
+   가리키는지 확인하고 QA_FRONTEND_URL을 설정한다. 원본3500 주소를 기본값으로 쓰지 않는다.
 
-        curl -sN -X POST http://localhost:3500/_next/mcp \
+        curl -sN -X POST "${QA_FRONTEND_URL:?소유한 격리 프론트 URL을 먼저 설정하세요}/_next/mcp" \
           -H 'Content-Type: application/json' \
           -H 'Accept: application/json, text/event-stream' \
           -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_compilation_issues","arguments":{}}}' \

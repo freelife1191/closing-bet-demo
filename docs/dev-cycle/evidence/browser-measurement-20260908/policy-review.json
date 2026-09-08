@@ -1,0 +1,47 @@
+{
+  "role": "code-reviewer",
+  "task": "/root/browser_policy_review",
+  "initial_verdict": "REQUEST CHANGES",
+  "initial_findings": [
+    {
+      "severity": "HIGH",
+      "file": "docs/dev-cycle/codex-setup.md:131",
+      "issue": "old adguard session required",
+      "fix": "unique namespace/session with fake account"
+    },
+    {
+      "severity": "HIGH",
+      "file": ".claude/skills/dev-cycle/references/frontend-skills.md:112",
+      "issue": "original3500 MCP URL example",
+      "fix": "owned QA_FRONTEND_URL required parameter and PID/API_URL verification"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": ".claude/skills/dev-cycle/references/archive-format.md:244",
+      "issue": "NA browser driver conflict",
+      "fix": "required agent-browser, NA none"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": ".claude/agents/dev-workflow.md:123",
+      "issue": "example lacks entry UI/caller/applicability",
+      "fix": "example updated"
+    }
+  ],
+  "final_verdict": "APPROVE",
+  "raw_final": "**APPROVE**\n\n이전 4개 지적이 모두 해소됐습니다. 기존 세션 재사용 금지, 격리 URL 강제, browser_driver 조건 분기, 감사 초안의 UI 호출부·브라우저 적용 표시가 서로 일관됩니다.",
+  "diagnostic_gap": "Markdown LSP tools Transport closed; file review and skill validator used",
+  "input_sha256": {
+    ".claude/agents/dev-workflow.md": "3a562ae3ea41fbb632d37d0af8d24e3c0baab6455fc84d95c23e8e0a29009fad",
+    ".claude/skills/dev-cycle/SKILL.md": "1bfe8272f691c49572623cffdb4e80854f0b1aa7fc3a35f85d467ded65ffada8",
+    ".claude/skills/dev-cycle/references/archive-format.md": "0c1afe8b2169c83dbe116c909c55be64951348fa313f02b5b2c7f960a4d98e6c",
+    ".claude/skills/dev-cycle/references/browser-notes.md": "ca24776b41b9833b537aeee938b8718a8a970ec894e691fccd1c8203c5ef34f8",
+    ".claude/skills/dev-cycle/references/frontend-skills.md": "fffda1310ee85e14458abd861c170b789c281333adda9865e59467e31b464135",
+    ".claude/skills/dev-cycle/references/tier-rules.md": "5e125c12275f191d6a2b31804090cf1733a504c15a9e8bb382c3793350451e7d",
+    ".claude/skills/dev-cycle/references/ultraqa.md": "f08f58e852c744abf240c5723c906a0b1ae940445049aabc7b1148ebd9bd5f22",
+    "CLAUDE.md": "679b757ca33edd74032e29283e7efe52ed0b2192bfd2879f790c314ec33b85bf",
+    "docs/dev-cycle/codex-setup.md": "65939e06ef83702e8a91682cf2c6a0e8013ac62ae090ac38982e8a05173f2254"
+  },
+  "final_template_fix": "Archive QA example now uses owned isolated port placeholder, not original3500",
+  "final_template_review": "APPROVE"
+}

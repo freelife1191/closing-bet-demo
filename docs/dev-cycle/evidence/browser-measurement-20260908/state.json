@@ -1,0 +1,266 @@
+{
+  "requests": [
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/user/quota",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/message",
+      "method": "POST",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"target_date\":null}"
+    },
+    {
+      "path": "/api/kr/jongga-v2/message",
+      "method": "POST",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"target_date\":null}"
+    },
+    {
+      "path": "/api/kr/jongga-v2/message",
+      "method": "POST",
+      "status": 403,
+      "content_type": "application/json",
+      "body": "{\"target_date\":null}"
+    },
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/user/quota",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/data-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/system/update-status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/jongga-v2/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/kr/user/quota",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/check",
+      "method": "GET",
+      "status": 200
+    }
+  ],
+  "send": 1,
+  "construct": 1,
+  "targets": [
+    null,
+    null
+  ]
+}

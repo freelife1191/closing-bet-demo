@@ -1,0 +1,13 @@
+{
+  "posts": [
+    {
+      "path": "/api/kr/jongga-v2/message",
+      "method": "POST",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"target_date\":null}"
+    }
+  ],
+  "send": 1,
+  "passed": true
+}

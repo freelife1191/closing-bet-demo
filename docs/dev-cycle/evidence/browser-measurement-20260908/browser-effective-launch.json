@@ -1,0 +1,10 @@
+[
+  {
+    "pid": 77950,
+    "proxy": "http://127.0.0.1:59369",
+    "owned_profile": true,
+    "bypass": [
+      "localhost;127.0.0.1"
+    ]
+  }
+]

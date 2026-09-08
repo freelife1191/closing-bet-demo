@@ -1,0 +1,20 @@
+{
+  "base": "366d5f9494050be40245f8d0094f7f56bd49c993",
+  "package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "package_preserved": true,
+  "clone_parent_removed": true,
+  "namespaces_removed": [
+    "devcycle-browser-4jfnvrme",
+    "devcycle-browser-4jfnvrme-r2"
+  ],
+  "browser_profiles_cookies_removed": true,
+  "servers_closed": true,
+  "final_run_exits": {
+    "ui_runner": 0,
+    "next_flask_fixture": 0,
+    "proxy": 0
+  },
+  "first_fixture_exit": 1,
+  "first_fixture_reason": "20 minute lifetime expired after UI checks; finally cleaned up; rerun passed",
+  "global_skills_modified": false
+}

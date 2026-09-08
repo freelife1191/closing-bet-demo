@@ -1,0 +1,53 @@
+{
+  "screenshots": {
+    "confirm.png": {
+      "sha256": "f3c98375f1f840a0475b5a5544eb4d60ec531cdb726f065e1bce21be5027d698",
+      "visually_opened": true,
+      "image_pixels": [
+        1280,
+        577
+      ]
+    },
+    "duplicate.png": {
+      "sha256": "77068fdb843c9d352b88928c280c1ff3fcc6466a602041b09e88526a8ae7f908",
+      "visually_opened": true,
+      "image_pixels": [
+        1280,
+        577
+      ]
+    },
+    "revoked.png": {
+      "sha256": "8d84fcccfb1c1c402ff5c41c44afd34e8e968bbf5ffa8c4ab867974789a5af58",
+      "visually_opened": true,
+      "image_pixels": [
+        1280,
+        577
+      ]
+    },
+    "success.png": {
+      "sha256": "58247f68ccadb8d85b74c46bf1bad6b97bb8475de65fb3b30bd216313e53036c",
+      "visually_opened": true,
+      "image_pixels": [
+        1280,
+        577
+      ]
+    },
+    "viewer.png": {
+      "sha256": "6498d0166edd9116ae455f6422bcd148729122469fd8c0bb48b2ee8c30af3685",
+      "visually_opened": true,
+      "image_pixels": [
+        1280,
+        577
+      ]
+    }
+  },
+  "observations": {
+    "confirm": "취소/확인 모달과 최신 메시지 질문 표시",
+    "success": "발송 성공 및1개종목 완료문구",
+    "duplicate": "이미발송된날짜 안내",
+    "revoked": "발송 실패/오류 Forbidden; 예상403 console로dev issue1표시",
+    "viewer": "QA Viewer와파일카드 표시,발송버튼없음"
+  },
+  "unexpected_page_errors": 0,
+  "expected_console_error": "Failed to send message 403 only"
+}

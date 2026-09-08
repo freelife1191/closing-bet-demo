@@ -1,0 +1,12 @@
+{
+  "commit": "366d5f9494050be40245f8d0094f7f56bd49c993",
+  "files": {
+    "frontend/src/app/dashboard/data-status/page.tsx": "dffa7ae43c6943db0292a7520667b1498553d5fadc184fc7cf748f7b81c556a0",
+    "frontend/src/proxy.ts": "07430cf5989f9954480e0e4914c0e069991d9daf146e80dcc98b3204ef8f7909",
+    "frontend/src/lib/api.ts": "d25b60b91916d7b400c66dd9c631fca3bc09d5e7f45935c45f713f0b2861c5c7",
+    "frontend/src/lib/auth.ts": "dbcce81756dba331c44ffdb9d86679bdae514858f6418cea22ea3d2bcf520ce9",
+    "app/routes/kr_market_jongga_execution_routes.py": "5606a745c45823d0cb4f297b686761859cc8e33816053ca0b0ed7d27d67978da",
+    "app/routes/route_guards.py": "b9e79b1a078572a38fc6c0dba0f2988a9d4657956a9ce24e7bf5d52348ed3bd1",
+    "app/__init__.py": "5b26cacfd78d852f61e04981cd13e5d2cad5557bb02a335641f8df51fee2667e"
+  }
+}
