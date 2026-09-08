@@ -28,8 +28,12 @@
   monkeypatch 합니다. 뒤엣것이 작고 `create_app` 의 실제 배선을 그대로 재는 이점을
   유지합니다.
 - QA 시나리오: 검사를 돌린 뒤 `data/` 상태 파일의 수정 시각이 그대로인지 확인
-- [ ] 두 부작용을 막는 방법을 정함
-- [ ] 검사가 여전히 실제 라우트 등록을 재는지 확인
+- 설계 승인: 2026-09-08 현재 대화 사용자 「승인」 | 범위: 테스트 내부 두 startup 함수 차단, 실제 라우트 대조 유지, 격리 UltraQA·리뷰·커밋.
+- [x] 두 부작용을 테스트 내부 monkeypatch로 차단하기로 결정 (bounded/T1)
+- [x] ponytail 독립 리뷰 Lean already, 입력 SHA는 reviews/INFRA-065.md
+- [x] 관련 pytest26 PASS·AST PASS, 두 startup 함수 차단
+- [ ] UltraQA 실제 실행·누락/초과 돌연변이 검증·정리
+- [x] 실제 create_app·blueprint 등록·목록 assertion 유지 확인
 
 ### [INFRA-056] Market Gate 주기 저장이 존재하지 않는 `app/.env` 를 쓴다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-050]` 사이클에서

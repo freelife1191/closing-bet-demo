@@ -570,16 +570,20 @@ def _decorated_paths(app) -> set[str]:
     return found
 
 
-def test_gated_route_list_matches_reality():
+def test_gated_route_list_matches_reality(monkeypatch):
     """게이트가 붙은 자리와 위 목록이 일치한다.
 
     실제 앱을 세워 url_map 을 훑는다. 라우트를 새로 만들면서 게이트를 빠뜨리면 이 검사가
     아니라 목록이 먼저 어긋나므로, 이 검사는 「빠뜨렸다」가 아니라 「목록을 갱신하지
     않았다」를 잡는다. 인가 경계를 한 자리에 모아 두는 것이 목적이다.
     """
-    from app import create_app
+    import app as app_factory
 
-    app = create_app()
+    # 라우트 배선은 실제 factory로 검사하되 서버 기동 부작용은 실행하지 않는다.
+    # 상태 파일 초기화와 스케줄러 시작은 이 검사의 대상이 아니다([INFRA-065]).
+    monkeypatch.setattr(app_factory, "_reset_startup_status_files", lambda: None)
+    monkeypatch.setattr(app_factory, "_start_scheduler", lambda: None)
+    app = app_factory.create_app()
     actual = _decorated_paths(app)
 
     missing = GATED_ROUTES - actual

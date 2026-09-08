@@ -1,0 +1,33 @@
+{
+  "before": {
+    "update_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871154247147868
+    },
+    "v2_screener_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871154247327869
+    },
+    "scheduler_runtime_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871154247438244
+    }
+  },
+  "after": {
+    "update_status.json": {
+      "text": "{\n  \"isRunning\": false,\n  \"items\": []\n}",
+      "mtime_ns": 1788871154253283342
+    },
+    "v2_screener_status.json": {
+      "text": "{\n  \"isRunning\": false\n}",
+      "mtime_ns": 1788871154254986638
+    },
+    "scheduler_runtime_status.json": {
+      "text": "{\n  \"is_data_scheduling_running\": false,\n  \"is_jongga_scheduling_running\": false,\n  \"is_vcp_scheduling_running\": false,\n  \"updated_at\": \"2026-09-08T21:39:14.255891\"\n}",
+      "mtime_ns": 1788871154256053015
+    }
+  },
+  "unchanged": false,
+  "scheduler_calls": 1,
+  "mutation": ""
+}
