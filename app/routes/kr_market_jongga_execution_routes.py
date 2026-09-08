@@ -171,6 +171,11 @@ def _register_jongga_analysis_routes(
     @require_admin
     def reanalyze_gemini_all_route():
         """현재 시그널들의 Gemini LLM 분석만 재실행 (Partial / Retry 지원)"""
+        # 아래 두 줄은 [INFRA-042] 이후 도달하지 않는다. require_admin 이 그 앞에서
+        # Flask 의 기본 OPTIONS 응답을 돌려주고 뷰를 부르지 않기 때문이다. 그래도
+        # 지우지 않는다. 게이트를 떼는 순간 methods 에 OPTIONS 가 있는 이 라우트만
+        # 본문을 실은 OPTIONS 로 뷰 로직에 닿을 수 있고, 그때 이 두 줄이 그것을 막는다.
+        # 적대적 리뷰가 죽은 코드로 지목했으나 남기기로 판단한 자리다.
         if request.method == "OPTIONS":
             return jsonify({"status": "ok"}), 200
 

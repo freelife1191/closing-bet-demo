@@ -551,7 +551,12 @@ export default function DataStatusPage() {
               </span>
             )}
 
-            {updating && (
+            {/* `[INFRA-042]` 가 /api/system/stop-update 에 관리자 게이트를 세웠다.
+                updating 은 :110 의 setUpdating(status.isRunning) 으로 모든 방문자에게
+                세워지므로, isAdmin 을 함께 보지 않으면 비관리자에게 이 버튼이 보이고
+                눌러도 403 만 돌아온다. 아래 catch 가 console.error 뿐이라 화면에는
+                아무 반응도 없다. 진행 상황은 계속 보이고 중지 버튼만 사라진다. */}
+            {updating && !isAdminLoading && isAdmin && (
               <button
                 onClick={handleStopUpdate}
                 className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-red-500/25"
