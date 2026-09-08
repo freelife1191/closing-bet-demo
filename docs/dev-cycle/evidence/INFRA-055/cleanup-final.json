@@ -1,0 +1,20 @@
+{
+  "completed_at": "2026-09-09T07:47:46.774928+09:00",
+  "integrated_head": "a110220edf8dc6d3f9544c1cc3d06db631ed1ef9",
+  "integration": "fast-forward from97113d4",
+  "source_sha_match": "7/7",
+  "owned_service_groups_absent": [
+    4105,
+    4789,
+    85923,
+    85977,
+    99860,
+    99890
+  ],
+  "browser_namespace_removed": true,
+  "temporary_clone_profiles_fake_env_cookies_cache_harness_removed": true,
+  "original_venv_preserved": true,
+  "user_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "original_runtime_restarted": false,
+  "original_old_cache_deleted": false
+}

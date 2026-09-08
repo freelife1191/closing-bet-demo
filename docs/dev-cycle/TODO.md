@@ -15,36 +15,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-055] Next 환경에 백엔드 전용 시크릿이 통째로 올라가 캐시에 평문으로 남는다
-- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-053]` 사이클의
-  `oh-my-claudecode:security-reviewer` 가 확신도 높음으로 지적했고, 바이트 일치로 직접
-  확인했습니다.
-- `restart_all.sh` 의 `ln -sf ../.env frontend/.env` 가 `.env` 전체를 Next 에 넘깁니다.
-  Next 는 프론트엔드에 필요 없는 `SMTP_PASSWORD`, `ZAI_API_KEY`, `OPENAI_API_KEY`,
-  `PERPLEXITY_API_KEY` 까지 환경에 올립니다. `ADMIN_API_TOKEN`은 Next 관리자 중계가
-  실제로 사용하므로 분리 대상에서 제외합니다(2026-09-09 호출부 확인).
-- Turbopack 의 FileSystem Cache 가 그 환경을 직렬화해 `frontend/.next` 아래에 남깁니다.
-  2026-09-08 실측으로 `.env` 의 키 **열여섯 개**가 캐시 파일 3,222개에 평문으로 들어 있었고
-  모드는 전부 0644 였습니다. `frontend/.next/cache/turbopack` 에 3,144개,
-  `frontend/.next/dev/cache` 에 78개입니다.
-- `[INFRA-053]` 이 `chmod 700 frontend/.next` 로 디렉터리 순회를 막아 **노출은 이미
-  끊었습니다.** 이 항목은 근본 원인, 즉 필요 없는 시크릿이 애초에 그 환경에 오르는 것을
-  다룹니다. 캐시가 지워지고 다시 만들어져도 값이 들어가지 않게 하는 것이 목표입니다.
-- 완화 요인: `frontend/.gitignore:13` 이 `/.next/` 를 덮어 커밋되지 않고,
-  `.next/static` 과 `.next/server` 에는 일치가 0건이라 HTTP 로는 새지 않습니다.
-- 함께 볼 것: `frontend/node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/turbopackFileSystemCache.md`
-  가 이 캐시의 기본 활성 버전(dev 16.1.0, build 16.3.0)을 적습니다. 이 저장소는 16.3.4 입니다.
-- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 06:19 KST
-  | 범위: Next 공통 실행기의 필요 키 허용 목록·전체 env 연결/부모 재유입 차단·문서/테스트·T3 리뷰·실측 QA
-  | 실제 대화 근거: 위 bounded/T3 설계 제안에 대한 사용자 「진행해」 응답
-- 진행: RESUME — 독립 clone에서 계획 검토 중. 원본 미추적 package.json 보존.
-- 계획: `docs/superpowers/plans/2026-09-09-infra055-next-environment.md`
-- QA 시나리오: 캐시를 지우고 개발 서버를 다시 띄운 뒤, `.env` 의 백엔드 전용 키가
-  `frontend/.next` 아래에서 발견되지 않는다
-- [ ] Next 가 실제로 쓰는 키 목록을 확정
-- [ ] 심볼릭 링크 대신 그 키만 담은 `frontend/.env.local` 을 만드는 방식 검토
-- [ ] 캐시를 지우고 다시 띄워 백엔드 전용 키가 사라졌는지 바이트 일치로 확인
-
 ### [INFRA-043] 알림 발송 예외 로그가 텔레그램 봇 토큰과 디스코드 웹훅을 그대로 적는다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적(심각도 중간, 메커니즘 확신도 높음)

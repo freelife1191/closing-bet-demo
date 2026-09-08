@@ -2,10 +2,10 @@
 
 - QA 엔진(engine): Codex UltraQA
 - lifecycle: app-adapted
-- phase: cleanup
+- phase: complete
 - iteration: 1
 - same_failure_count: 0
-- active: true
+- active: false
 - browser_applicability: required
 - browser_driver: agent-browser 0.31.1
 - 구성/실행 일자: 2026-09-09
@@ -32,8 +32,8 @@ Next에 필요한 키만 전달하고, 실제 dev의 cold/warm cache 및 build/s
 | S-2 required | 빌드·운영 실행 회귀 / 운영자 | npm build→npm start→admin/viewer 실제dashboard·설정 | build0, 앱 정상, cache/bundle backend 일치0 | build0/start정상, artifacts386·SST7·일치0·0700. public/log35files 비밀전체값0. 통과 | cache-build.json, public-scan-build.json, admin-build.png, viewer-build.png, next.log | 소유 Next/Flask 종료 |
 | S-3 required | 인접 / 관리자 | 실제설정→API & 기능·알림센터, 보강 GET env/admin-check | 관리자탭, 가려진SMTP, env200, admin=true | dev/build 관리자탭 있음·env200·admin=true; Flask서명신원admin. SMTP63자 중간55자별표, UI passwordbullet. 통과 | admin-api-dev.png, admin-masked-dev.png, request-summary.json, browser-commands | admin 브라우저 종료 |
 | S-4 required | 권한 공격 / viewer·익명 | 별도viewer 세션의 설정 UI 및 env직접GET, 무쿠키GET | 관리자탭없음, env403, viewer신원검증/admin=false | dev/build 일반탭만 보임·env403·isAdmin=false, Flask신원viewer; 익명403. 통과 | viewer-dev.png, viewer-build.png, request-summary.json, browser-commands | viewer 브라우저 종료 |
-| S-5 required | 입력·파일·프로세스 공격 / CLI호출자 | 실제launcher subprocess50회귀; 실제Next 추가인수·선택옵션 검사 | 우회차단·실패nonzero·파일보존·자식종료 | 50PASS; 실제추가directory exit1, bare선택옵션 help exit0. 통과 | security-green-v10.log.gz, syntax-and-cli-v10.json 및 RED원문 | pytest tmp/PID 정리 확인, clone삭제 대기 |
-| S-6 required | 보존·정리 / 기존작업자 | 원본package SHA·source SHA·PID/port·namespace·통합후clone 확인 | 사용자파일불변, 동일source, 소유잔여0 | package해시불변·source7/7·포트/PID없음·namespace삭제; 통합후clone삭제 대기 | cleanup-preintegration.json | 최종 통합·임시clone 정리 후 확정 |
+| S-5 required | 입력·파일·프로세스 공격 / CLI호출자 | 실제launcher subprocess50회귀; 실제Next 추가인수·선택옵션 검사 | 우회차단·실패nonzero·파일보존·자식종료 | 50PASS; 실제추가directory exit1, bare선택옵션 help exit0. 통과 | security-green-v10.log.gz, syntax-and-cli-v10.json 및 RED원문 | pytest tmp/PID 및 clone 삭제 완료 |
+| S-6 required | 보존·정리 / 기존작업자 | 원본package SHA·source SHA·PID/port·namespace·통합후clone 확인 | 사용자파일불변, 동일source, 소유잔여0 | package해시불변·source7/7·포트/PID없음·namespace삭제; 원본통합과 clone삭제 완료 | cleanup-preintegration.json, cleanup-final.json | 임시clone·합성자료·실행하네스 삭제 완료; 통과 |
 
 S1-S4는 agent-browser의 open→snapshot→ref click→새snapshot으로 실제 화면을 조작했다. 모든 PNG를 view_image로 직접 열어 확인했다. eval/fetch는 권한 응답과 마스킹의 보강 증거이며 UI를 대체하지 않는다. S5의 browser_driver는 none이다.
 
@@ -68,13 +68,16 @@ prompt injection은 실행기 입력을 명령으로 평가하지 않는 특수�
 
 ## 정리·복구와 잔여 범위
 
-소유 서비스/브라우저/proxy가 종료됐으며 49878·49879·51760 listener없음, browserbackground PID5990·6084 없음, 정확한 browser namespace만 삭제했다. 합성env는 GET 전후 바이트가 같고, legacy frontend/.env 링크는 런처가 제거했다. 원본package SHA256은 `4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8`로 유지됐다. 최종clone·쿠키·프로필·cache·하네스삭제는 원본통합 후 확정한다.
+소유 서비스/브라우저/proxy가 종료됐으며 49878·49879·51760 listener없음, browserbackground PID5990·6084 없음, 정확한 browser namespace만 삭제했다. 합성env는 GET 전후 바이트가 같고, legacy frontend/.env 링크는 런처가 제거했다. 원본package SHA256은 `4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8`로 유지됐다. 검증한 두 커밋을 원본 develop에 fast-forward한 뒤 clone·합성env·쿠키·프로필·cache·실행하네스를 삭제했다. 원본venv와 사용자파일은 보존했다. cleanup-final.json에 최종 결과를 기록했다.
 
 기존 운영 프로세스와 원본의 과거 캐시는 재시작하거나 삭제하지 않았다. 새 실행기 계약은 다음 명시적 npm dev/build/start 또는 restart 때 적용된다. npm audit/외부CVE검사는 의존성변경이 없어 미실행이다. 보안 lane의 fresh MCP transport오류는 같은v10의 코드 lane LSP0/AST0 증거로 보완했다. Python LSP를 통과했다고 주장하지 않는다.
 
 ## 실행 결과
 
-- 필수 통과: 5/6. S6 최종 통합·clone 정리 대기.
+- 필수 통과: 6/6. 미통과 필수: 없음. 정리 완료.
 - 제품 필수실패: 없음. 신규 범위 밖 발견: 없음.
-- 재개 판정: 통합·정리·아카이브 진행.
+- 최종 판정: ULTRAQA COMPLETE: Goal met after 1 cycles
+- 완료 확인: 2026-09-09T07:49:09.322996+09:00
 - 증거: [INFRA-055 evidence](../evidence/INFRA-055/)의 원문gzip·JSON·PNG. 쿠키나 합성env값 파일은 증거에 포함하지 않았다.
+
+증거 커밋 준비 중 raw MCP SSE의 마지막 빈 이벤트 구분자가 staged diff 검사(exit2)에 걸렸다. 원문을 고치지 않고 gzip으로 보존하여 재검사0 후 커밋했다. 제품 변경은 없으며 evidence-format-fix.json에 남겼다.
