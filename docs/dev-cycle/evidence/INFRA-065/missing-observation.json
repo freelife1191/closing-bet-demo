@@ -1,0 +1,33 @@
+{
+  "before": {
+    "update_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871283081340981
+    },
+    "v2_screener_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871283081688941
+    },
+    "scheduler_runtime_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871283081919733
+    }
+  },
+  "after": {
+    "update_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871283081340981
+    },
+    "v2_screener_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871283081688941
+    },
+    "scheduler_runtime_status.json": {
+      "text": "{\"isRunning\":true,\"items\":[\"sentinel\"]}",
+      "mtime_ns": 1788871283081919733
+    }
+  },
+  "unchanged": true,
+  "scheduler_calls": 0,
+  "mutation": "missing"
+}

@@ -32,7 +32,8 @@
 - [x] 두 부작용을 테스트 내부 monkeypatch로 차단하기로 결정 (bounded/T1)
 - [x] ponytail 독립 리뷰 Lean already, 입력 SHA는 reviews/INFRA-065.md
 - [x] 관련 pytest26 PASS·AST PASS, 두 startup 함수 차단
-- [ ] UltraQA 실제 실행·누락/초과 돌연변이 검증·정리
+- [x] UltraQA 필수4/4 동작 통과: 상태3파일 불변·스케줄러0·누락/초과 탐지·26 PASS
+- [ ] 원본 통합·임시 clone/하네스 정리·최종 아카이브
 - [x] 실제 create_app·blueprint 등록·목록 assertion 유지 확인
 
 ### [INFRA-056] Market Gate 주기 저장이 존재하지 않는 `app/.env` 를 쓴다

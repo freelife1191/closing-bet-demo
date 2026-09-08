@@ -5,9 +5,9 @@
 - 항목: INFRA-065, 인가 목록 검사의 상태 초기화·스케줄러 기동 차단
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: static-verified
+- phase: cleanup
 - active: true
-- iteration: 1
+- iteration: 2
 - same_failure_count: 0
 - 기준: b092bfe, 테스트 파일 하나만 변경하는 bounded/T1 설계
 - 승인: 2026-09-08 현재 대화에서 사용자 「승인」. 테스트 내부 두 startup 함수 monkeypatch, 실제 factory/라우트 대조 유지, 격리 QA·리뷰·커밋.
@@ -23,10 +23,10 @@
 
 | ID | 의도·setup | command/harness | 기대 신호 | 실제 결과 | 수정 | 증거 | cleanup |
 |---|---|---|---|---|---|---|---|
-| S-1 | 실행 중 표시된 상태 파일3개, 실제 factory | runner.py safe | 파일 내용/mtime 불변, scheduler 진입0, 목록 일치 | 미실행 | 두 함수 차단 | safe* | tmp_path |
-| S-2 | 관리자 게이트 한 개 제거 대역 | runner.py missing | pytest exit1, /api/kr/refresh 누락 탐지 | 미실행 | 없음 | missing* | monkeypatch |
-| S-3 | 관리자 게이트 한 개 추가 대역 | runner.py extra | pytest exit1, /api/qa-only-extra 초과 탐지 | 미실행 | 없음 | extra* | monkeypatch |
-| S-4 | 인접 인가·route guard 검사 | runner.py related tests/app/test_admin_gated_routes.py tests/app/test_route_guards.py | 전체 PASS, 원본 package 보존 | 미실행 | 없음 | related* | clone |
+| S-1 | 실행 중 표시된 상태 파일3개, 실제 factory | runner.py safe | 파일 내용/mtime 불변, scheduler 진입0, 목록 일치 | PASS: 3파일 불변,0회,1 PASS | 두 함수 차단 | safe* | tmp_path |
+| S-2 | 관리자 게이트 한 개 제거 대역 | runner.py missing | pytest exit1, /api/kr/refresh 누락 탐지 | PASS: 해당 assertion에서1 failed | 없음 | missing* | monkeypatch |
+| S-3 | 관리자 게이트 한 개 추가 대역 | runner.py extra | pytest exit1, /api/qa-only-extra 초과 탐지 | PASS: 해당 assertion에서1 failed | 없음 | extra* | monkeypatch |
+| S-4 | 인접 인가·route guard 검사 | runner.py related tests/app/test_admin_gated_routes.py tests/app/test_route_guards.py | 전체 PASS, 원본 package 보존 | PASS: 대역 없이26 PASS, package SHA 동일 | 없음 | related* | clone |
 
 ## 실행 계획과 판정
 
@@ -51,3 +51,15 @@
 - T1: 테스트 파일 +7 -3. 제품 코드 수정0. lint/typecheck/build는 실행하지 않았으며 통과로 보고하지 않는다.
 - import 자체의 DB 준비·dotenv 읽기·로깅 설정까지 제거한 것은 아니다. 이 때문에 검증은 .env/data가 없는 독립 clone에서만 수행했다. 전체 data 디렉터리 무변경을 주장하지 않는다.
 - 증거: ../evidence/INFRA-065/ 의 baseline*, red*, related*, source.json. 명령·timeout·exit·원문 gzip 포함.
+
+## 실제 실행 결과
+
+- 검증 소스 commit: 5b3851c. source.json SHA와 현재 테스트 파일 일치.
+- S-1: safe exit0/1 PASS, 상태3파일 before/after 내용·mtime_ns 동일, scheduler 진입0.
+- S-2: missing exit1/1 failed, 정확히 `/api/kr/refresh` 누락 assertion에서 실패. teardown 오류0, 상태 불변·scheduler0.
+- S-3: extra exit1/1 failed, 정확히 `/api/qa-only-extra` 초과 assertion에서 실패. teardown 오류0, 상태 불변·scheduler0.
+- S-4: 관측 plugin 포함26 PASS, plugin 없이도26 PASS/skip0/exit0. 원본 package.json SHA는 source.json 기준과 대조한다.
+- 필수 동작4/4 PASS. mutation 두 건의 exit1은 사전 정의된 기대 결과이며 제품 실패를 PASS로 덮은 것이 아니다.
+- 반복2: 최초 baseline 관측 하네스 오류를 수정한 뒤 완료한 회차. RED는 수정 전 결함 재현이고 mutation은 기대 실패다. 같은 미해결 실패0.
+- 잔여: 테스트 전체 실행의 모든 import 부작용을 없앤 것이 아니라 두 startup 부작용만 차단했다. 실제 스케줄러 기동·웹 UI는 실행하지 않았다.
+- 정리와 통합: 진행 중. 완료 표시는 원본 보존·독립 clone/하네스 삭제 후 갱신한다.
