@@ -14,6 +14,7 @@ import threading
 import time
 
 import pandas as pd
+import pytest
 
 import services.kr_market_data_cache_prices as cache_prices
 import services.kr_market_data_cache_core as cache_core
@@ -956,3 +957,64 @@ def test_load_csv_file_memory_cache_is_bounded_lru(monkeypatch, tmp_path):
     assert key_1 in cached_keys
     assert key_3 in cached_keys
     assert key_2 not in cached_keys
+
+
+def test_atomic_write_text_temp_file_carries_target_name(tmp_path, monkeypatch):
+    """임시 파일 이름이 대상 파일명으로 시작한다.
+
+    기본 이름은 `tmpXXXXXXXX` 라 무엇의 임시 파일인지 알 수 없다. .env 를 쓰는 경로에서는
+    그것이 보안 문제가 된다. 이 파일과 os.replace 사이에 프로세스가 죽으면 .env 전체
+    사본이 저장소 루트에 남는데, `tmpXXXXXXXX` 는 .gitignore 의 어느 규칙에도 걸리지 않아
+    `git add -A` 한 번에 커밋으로 실린다. `.env.tmpXXXX` 가 되면 기존 `.env.*` 규칙이
+    그대로 덮는다([INFRA-050] 보안 리뷰 M1).
+
+    교체 뒤에는 임시 파일이 사라지므로 쓰기 중간에 이름을 붙잡아 확인한다.
+    """
+    target = tmp_path / ".env"
+    seen: list[str] = []
+    real_replace = os.replace
+
+    def spy_replace(src, dst):
+        seen.append(os.path.basename(src))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(cache_core.os, "replace", spy_replace)
+    cache_core.atomic_write_text(str(target), "SMTP_HOST=x\n", invalidate_fn=lambda _p: None)
+
+    assert len(seen) == 1
+    assert seen[0].startswith(".env."), f"임시 파일 이름이 대상명으로 시작하지 않는다: {seen[0]!r}"
+    # 접두사만 재면 쓰기가 실패해도 통과하므로 결과를 함께 본다.
+    assert target.read_text(encoding="utf-8") == "SMTP_HOST=x\n"
+    # 교체 뒤 임시 파일이 남지 않는다.
+    assert sorted(p.name for p in tmp_path.iterdir()) == [".env"]
+
+
+def test_atomic_write_text_removes_temp_file_when_write_fails(tmp_path, monkeypatch):
+    """쓰기가 실패해도 임시 파일을 남기지 않는다.
+
+    tmp_path 대입이 with 블록의 마지막에 있으면, write 나 flush, fsync 가 예외를 낼 때
+    그 변수가 빈 문자열 그대로라 finally 의 `if tmp_path` 가 거짓이 되어 아무것도 지우지
+    못한다. 이 함수가 .env 를 쓰게 된 뒤로 그 잔재는 SMTP 비밀번호와 API 키,
+    ADMIN_API_TOKEN 전체를 담은 0600 사본이 되어 저장소 루트에 무기한 쌓인다
+    ([INFRA-050] 적대적 리뷰 H1).
+
+    같은 파일의 test_atomic_write_text_temp_file_carries_target_name 은 성공 경로만
+    재므로 이 회귀를 잡지 못한다. 여기서는 os.fsync 를 ENOSPC 로 만들어 실제 실패
+    경로를 밟는다. atomic_write_text 를 통째로 갈아 끼우는 방식으로는 이 자리를 한 번도
+    지나지 않는다.
+    """
+    target = tmp_path / ".env"
+
+    def no_space(fd):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(cache_core.os, "fsync", no_space)
+
+    with pytest.raises(OSError):
+        cache_core.atomic_write_text(
+            str(target), "SMTP_PASSWORD=secret\n", invalidate_fn=lambda _p: None
+        )
+
+    assert list(tmp_path.iterdir()) == [], (
+        f"임시 파일이 남았다: {[p.name for p in tmp_path.iterdir()]}"
+    )

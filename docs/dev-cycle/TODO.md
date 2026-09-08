@@ -15,41 +15,55 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-050] `.env` 를 쓰는 두 경로가 서로의 갱신을 지울 수 있다
+### [INFRA-050] 겹치는 `.env` 저장이 서로를 깨뜨린다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-044]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적(확신도 중간). 2026-09-08 `[INFRA-053]` 사이클의
   Codex 적대적 리뷰가 P1 셋으로 재확인하며 P2 에서 P1 으로 올렸습니다.
-- `services/common_env_service.py:152` 의 `update_env_file` 은 `open(env_path, "w")` 로 직접
-  덮어쓰며 잠금도 임시 파일 교체도 없습니다. 반면 같은 파일을 쓰는 다른 경로인
-  `services/kr_market_interval_service.py:22` 는 `atomic_write_text` 를 씁니다.
-- 둘이 겹치면 서로의 갱신을 잃고, 최악의 경우 부분 기록된 `.env` 가 남습니다. `.env` 에서
-  `ADMIN_API_TOKEN` 이 사라지면 `services/admin_helpers.py:39` 가 모든 요청을 403 으로 막고,
-  `ADMIN_EMAILS` 가 사라지면 관리자가 없어집니다. 둘 다 fail-closed 라 침해가 아니라 가용성
-  문제입니다.
-- 실제 창은 매우 좁습니다. 다만 `POST /api/kr/config/interval` 이 인증 없이 호출 가능하므로
-  임의 시점에 경합을 유발할 수 있습니다. 그 게이트는 `[INFRA-042]` 가 다룹니다.
-- 2026-09-08 `[INFRA-053]` 이 `update_env_file` 의 `with` 블록 안에 `os.fchmod` 를 넣으면서
-  잘라낸 뒤의 실패 지점이 하나 늘었습니다. 그 자리에서 예외가 나면 `writelines` 가 실패할
-  때와 같이 `.env` 가 빈 채로 남습니다. 이 배포는 파일 소유자와 워커가 같은 계정이라
-  `fchmod` 의 EPERM 이 발생하지 않지만, 이 항목이 원자적 교체로 옮기면 두 실패 지점이
-  함께 사라집니다. `atomic_write_text` 는 0600 을 남기므로 그때도 `[INFRA-053]` 의 검사
-  `test_update_env_file_narrows_file_mode` 는 그대로 통과합니다.
-- QA 시나리오: 두 경로를 동시에 불러도 `.env` 가 부분 기록되지 않는다
-- [ ] `update_env_file` 을 `atomic_write_text` 로 통일할지 결정
-- [ ] 두 경로가 겹칠 때 마지막 상태가 온전한지 확인하는 검사 추가
-- Codex 가 모형 실행으로 재현한 소실 시퀀스입니다. ① 관리자 저장 A 가 `.env` 를 읽고 쓰기
-  모드로 열어 비웁니다. ② 주기 저장 B 가 그 빈 내용을 읽고 주기 키만 담은 파일로
-  `os.replace` 합니다. ③ A 는 이미 경로에서 분리된 옛 inode 에 마저 씁니다. **두 요청 모두
-  성공을 반환하는데 실제 `.env` 에는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES` 하나만 남습니다.**
-  교체만 통일해도 옛 내용을 읽은 요청이 새 설정을 덮으므로, 잠금이 읽기부터 교체까지를
-  덮어야 합니다.
-- 같은 리뷰가 P2 로 하나 더 냈습니다. `update_env_file` 은 읽기(`:126`)와 쓰기(`:174`)에서
-  경로를 따로 해석하므로, 부모 디렉터리 항목을 교체할 권한이 있으면 그 사이에 `.env` 를
-  다른 파일의 심볼릭 링크로 바꿀 수 있습니다. 그러면 그 대상이 잘리고 모드가 0600 으로
-  바뀐 채 `.env` 내용으로 덮입니다. `exists()` 나 `islink()` 사전 검사를 더해도 검사와 교체
-  사이의 경합이 남으므로, 해법은 같은 원자적 교체입니다.
-- 완료 조건에 「`environ` 갱신을 파일 저장 성공 뒤로 옮긴다」를 넣습니다. 지금은 루프 안에서
-  먼저 갱신하므로 저장이 실패하면 그 워커의 메모리와 디스크가 갈립니다.
+- **2026-09-08 근거 정정.** 이 항목은 원래 경합의 주체를 `update_env_file` 과
+  `persist_market_gate_interval_to_env` 로 적었습니다. **그 시퀀스는 현재 배포에서 일어날 수
+  없습니다.** `app/routes/kr_market.py:101` 이 `project_env_path` 에 자기 `__file__` 을
+  넘기는데 그 파일이 `app/routes/` 아래라 `dirname` 두 번이 `app/` 에서 멈춥니다. 결과가
+  `<루트>/app/.env` 이고 그 파일은 존재하지 않으므로 주기 저장은 첫 줄의 존재 검사에서
+  조용히 반환합니다. Codex 가 낸 소실 시퀀스는 두 함수에 같은 경로를 직접 넘긴 모형이며
+  배선을 건너뛰었습니다. 「인증 없이 호출 가능하므로 임의 시점에 경합을 유발할 수 있다」는
+  종전 문장도 근거를 잃었습니다. 그 엔드포인트는 지금 `.env` 를 만지지 않습니다. 경로 버그
+  자체는 `[INFRA-056]` 이 맡습니다.
+- **실재하는 경합은 `update_env_file` 끼리입니다.** 화면이 `POST /api/system/env` 를 내는
+  자리가 둘입니다. `frontend/src/app/components/SettingsModal.tsx:167` 의 「저장」 버튼과
+  `:279` 의 알림 테스트가 각각 보내며, gunicorn 이 `--workers 2 --threads 8` 로 뜨므로
+  동시에 처리됩니다.
+- 결과가 둘로 갈립니다. ① `open(env_path, "w")` 는 여는 시점에만 잘라내므로 두 요청이 각자
+  offset 0 에서 씁니다. 나중에 쓴 쪽이 짧으면 먼저 쓴 쪽의 꼬리가 키 없는 줄로 남고, 이
+  파일의 파서가 `=` 없는 줄을 보존해 영구히 남습니다. 줄 중간에 떨어지면 값 자체가 잘린 채
+  오염되며, 그 자리가 `ADMIN_API_TOKEN` 이나 `ADMIN_EMAILS` 줄이면 관리자 화면이 통째로
+  잠깁니다. 둘 다 fail-closed 입니다. ② 원자적 교체만 넣으면 부분 기록은 사라지지만, 옛
+  내용을 읽은 쪽이 나중에 교체하면 그 사이의 갱신을 통째로 되돌립니다. 둘 다 실측으로
+  재현했습니다.
+- QA 시나리오: 저장 둘이 겹쳐도 부분 기록도 소실도 없다 → `docs/dev-cycle/qa/INFRA-050.md`
+- [x] `update_env_file` 을 `atomic_write_text` 로 통일할지 결정 → 통일했습니다.
+- [x] 두 경로가 겹칠 때 마지막 상태가 온전한지 확인하는 검사 추가 → 주체를 정정해
+  `update_env_file` 두 벌로 재는 검사를 넣었습니다. 두 경로 사이 검사는 지금 같은 파일을
+  보지 않아 잠금이 아니라 인자 전달을 재게 되므로 두지 않았습니다.
+- [x] `environ` 갱신을 파일 저장 성공 뒤로 옮긴다 → `applied`/`removed` 로 모았습니다.
+- 설계 승인: 2026-09-08 대화에서 「이 범위로 진행」과 「경로 버그는 새 TODO 로 이월」을
+  각각 승인받았습니다. 분류는 bounded 이고 `.env` 접촉이라 티어는 T3 입니다.
+- 계획: `docs/superpowers/plans/2026-09-08-infra-050-env-write-serialization.md`
+- 계획 검토: `oh-my-claudecode:critic` 판정 `REVISE`. 지적 전부를 반영했습니다. 경합 주체의
+  정정, 주기 저장 경로에 잠금을 두르는 작업 삭제, 꼬리 잔존을 심각도의 근거로 세운 것,
+  사전 실측의 의존 목록 보정, `_env_file_lock` 의 재진입 불가 명시, 「두 검사 파일이 주기
+  저장 경로를 지나간다」는 틀린 주장 삭제입니다. 마지막 것은 실측으로 확인했습니다. 저장소에
+  `persist_market_gate_interval_to_env` 를 실제로 부르는 검사가 없습니다.
+- 리뷰: `/ponytail-review`(-9줄 적용) → `feature-dev:code-reviewer`(결함 없음) →
+  `oh-my-claudecode:security-reviewer`(M1·L3 반영, L1·L2 는 주석에 한계로 명시) →
+  적대적 리뷰(H1·H2 와 조회 경로 불일치 반영). 적대적 리뷰의 `threading.Barrier(2)` 제안은
+  통과 상태에서 교착하므로 `threading.Event` 로 대신했고, 리뷰도 그 지적에 동의했습니다.
+- **적대적 리뷰가 짚은 셋은 제가 만든 것입니다.** H1 은 임시 파일 이름 대입이 `with`
+  마지막에 있어 `fsync` 실패 시 시크릿을 담은 0600 잔재가 남는 것이고, H2 는 「링크 경로가
+  닫힌다」는 제 주석이 읽기에 대해 거짓이었던 것이며, 셋째는 H2 를 저장 경로만 고쳐
+  `read_masked_env_vars` 와 판정이 갈린 것입니다. 셋 다 제가 쓴 검사가 통과시켰습니다.
+- 범위가 리뷰 과정에서 `services/kr_market_data_cache_core.py` 와
+  `tests/services/test_kr_market_data_cache_service_refactor.py` 로 넓어졌습니다. 보안 리뷰의
+  M1(임시 파일이 `.gitignore` 를 빠져나감)과 H1 이 그 파일의 `atomic_write_text` 에 있습니다.
 
 ### [INFRA-042] 종가베팅 실행·발송 라우트 셋이 권한 검사 없이 열려 있다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
@@ -116,6 +130,40 @@
 - [ ] 게이트를 데코레이터로 묶고 세 라우트에 적용
 - [ ] `{"force": true}` 로도 우회되지 않는 것을 확인하는 테스트 추가
 - [ ] 발송 없이 확인할 수 있는 QA 수단을 정함 (`.env` 에 실제 자격 증명이 들어 있음)
+
+### [INFRA-056] Market Gate 주기 저장이 존재하지 않는 `app/.env` 를 쓴다
+- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-050]` 사이클에서
+  발견했고 `oh-my-claudecode:critic` 이 독립적으로 같은 결론을 냈습니다.
+- **`[INFRA-042]` 이후에 착수합니다.** 순서를 뒤집으면 없던 노출을 스스로 만듭니다.
+- `services/kr_market_interval_service.py:14-20` 의 `project_env_path` 는 넘겨받은
+  `base_file` 에서 디렉터리를 두 단계만 걷어냅니다. 유일한 호출자인
+  `app/routes/kr_market.py:101` 이 자기 `__file__` 을 넘기는데 그 파일은 `app/routes/`
+  아래라 결과가 `<루트>/app/.env` 입니다. 그 파일은 존재하지 않으므로
+  `persist_market_gate_interval_to_env` 는 `:29-30` 의 존재 검사에서 조용히 반환합니다.
+  함수의 docstring 은 「프로젝트 루트 .env 파일 경로를 반환한다」라고 적혀 있어 의도와
+  어긋나며, `45ad2a6 refactor: complete modular split` 에서 들어온 계산입니다.
+- 그래서 관리자가 화면에서 바꾼 Market Gate 주기가 `.env` 에 저장되지 않습니다.
+  `POST /api/kr/config/interval` 은 성공을 반환하고 `apply_market_gate_interval` 이 런타임만
+  바꾸므로, 그 값이 다음 재기동에서 사라집니다.
+- 완료 조건 셋입니다. ① `project_env_path` 와 `base_file` 인자를 지우고
+  `services.common_env_service.resolve_env_path` 를 재사용합니다. 같은 경로를 두 곳에서 따로
+  계산하는 구조가 이 결함의 원인이므로 하나로 합치면 재발이 구조적으로 막힙니다. 두 호출
+  지점이 같은 절대 경로를 만든다는 것을 단언하는 검사를 함께 둡니다. ② 그때
+  `persist_market_gate_interval_to_env` 의 읽기부터 교체까지를 `[INFRA-050]` 이 만든
+  `_env_file_lock` 에 넣습니다. 그 잠금은 재진입이 불가능하므로 `update_env_file` 에 위임하는
+  방식은 쓰지 않습니다. ③ **주기 값이 실제로 `.env` 에 기록되기 시작한다는 동작 변경**을
+  명시합니다. 지금까지 재기동마다 사라지던 값이 남게 되므로 운영자가 인지하지 못한 채 주기가
+  고정될 수 있습니다.
+- 저장소에 `persist_market_gate_interval_to_env` 를 실제로 부르는 검사가 없습니다.
+  `tests/services/test_kr_market_interval_http_service.py` 는 `persist_interval_fn` 에 람다만
+  넘기고, `tests/app/test_kr_market_route_integration.py:483` 은 무동작으로 대체합니다.
+  `tmp_path` 의 `.env` 를 대상으로 이 함수를 직접 부르는 검사를 하나 둡니다.
+- 잠금은 권고 잠금이라 잡지 않는 쓰기 주체를 막지 못합니다. 이 경로를 루트 `.env` 로
+  바로잡는 순간 잠금 없는 두 번째 쓰기가 살아나므로, `[INFRA-050]` 이 막은 갱신 소실이 그
+  조합에서 그대로 돌아옵니다. `POST /api/kr/config/interval` 에 인증이 없다는 점과 겹치면
+  **인증 없는 요청이 관리자 저장과 경합해 인증된 저장을 되돌릴 수 있습니다.**
+  `[INFRA-050]` 사이클의 보안 리뷰가 M2 로 낸 지적입니다.
+- QA 시나리오: 화면에서 바꾼 주기가 `.env` 에 남고 재기동 뒤에도 유지된다
 
 ### [INFRA-055] Next 환경에 백엔드 전용 시크릿이 통째로 올라가 캐시에 평문으로 남는다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-053]` 사이클의
@@ -768,6 +816,40 @@
 - [ ] 안내를 문서에 둘지 기동 로그에 둘지 정함
 - [ ] `.env.example` 의 경고에 관리자 화면 영향을 더할지 결정
 - [ ] 값이 빈 상태를 재현해 안내가 실제로 보이는지 확인
+
+### [INFRA-057] `UNSAFE_ENV_VALUE` 가 NUL 과 이스케이프된 개행을 막지 못한다
+- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-050]` 사이클의
+  `oh-my-claudecode:security-reviewer`(L4)와 Codex 적대적 리뷰가 각각 낸 지적입니다.
+  이번 변경과 무관한 기존 결함이며 `services/common_env_service.py:112` 의 정규식
+  `[\r\n]|\$[{(\w]` 하나가 두 구멍을 함께 갖고 있습니다.
+- **NUL 이 앱을 못 뜨게 합니다.** 값에 NUL 을 넣어 저장하면 이 정규식을 그대로 지나가고,
+  다음 재기동의 `load_dotenv()` 가 `ValueError: embedded null byte` 를 냅니다. 실측으로
+  둘 다 확인했습니다. 관리자가 실수로 붙여넣기만 해도 서비스가 뜨지 않으므로 이 절반이
+  P1 근거입니다.
+- **이스케이프된 개행이 SMTP 헤더 주입을 엽니다.** 값이 큰따옴표로 감싸인 채 `\n` 두
+  글자를 담으면 이 검사를 통과하고, python-dotenv 가 다음 적재에서 이스케이프를 풀어 실제
+  개행으로 되돌립니다. `engine/messenger_config.py:14-20` 의 `_split_env_list` 가 쉼표로
+  나눈 뒤 양끝만 `strip` 하므로 항목 중간의 개행이 살아남아
+  `engine/messenger_senders.py:117` 의 `msg["To"]` 에 들어가고, `smtplib.send_message` 가
+  쓰는 compat32 정책은 헤더 값의 내장 개행을 검사하지 않습니다.
+- 완료 조건: 정규식에 NUL 과 `\\[nrt]` 를 막는 항목을 더하거나 값을 감싸는 큰따옴표 자체를
+  막습니다. 어느 쪽이든 `[INFRA-044]` 가 남긴 기존 검사 셋이 그대로 통과해야 합니다.
+- QA 시나리오: NUL 이 든 값과 큰따옴표로 감싼 `\n` 이 든 값이 저장 단계에서 거부되고,
+  기존 정상 값 셋은 그대로 저장된다
+
+### [INFRA-058] 파일에 없는 키를 화면에서 비우면 `os.environ` 에 옛 값이 남는다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-08 `[INFRA-050]` 사이클의 Claude 적대적
+  리뷰(M1). 종전부터 있던 성질이며 이번 변경이 만든 것이 아닙니다.
+- `services/common_env_service.py` 의 세 번째 루프가 `if "*" in value or not value: continue`
+  로 빠지므로 그 키는 `removed` 에 들어가지 않습니다. 그래서 `.env` 에 그 줄이 없는 상태에서
+  화면으로 값을 비우면 파일에는 아무 일도 일어나지 않고 `os.environ` 의 옛 값이 재기동
+  전까지 계속 쓰입니다.
+- 창이 좁습니다. `environ` 에 값이 있으려면 기동 시 `.env` 에 있었어야 하므로, 기동 뒤
+  누군가 그 줄을 지웠고 그 다음에 화면에서 비우는 순서여야 합니다.
+- 판단이 필요합니다. 파일에 없던 키를 `pop` 하면 이 함수가 「파일에 반영한 것만
+  `environ` 에 반영한다」는 성질을 잃습니다. 그 성질을 지키면서 닫으려면 화면이 보낸 빈 값을
+  삭제 의사로 따로 다뤄야 합니다.
+- QA 시나리오: `.env` 에 없는 키를 화면에서 비우면 `environ` 에서도 사라진다
 
 ## P2 — 대기
 
