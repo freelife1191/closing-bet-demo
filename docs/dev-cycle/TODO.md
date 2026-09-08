@@ -15,56 +15,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-050] 겹치는 `.env` 저장이 서로를 깨뜨린다
-- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-044]` 사이클의
-  `oh-my-claudecode:security-reviewer` 지적(확신도 중간). 2026-09-08 `[INFRA-053]` 사이클의
-  Codex 적대적 리뷰가 P1 셋으로 재확인하며 P2 에서 P1 으로 올렸습니다.
-- **2026-09-08 근거 정정.** 이 항목은 원래 경합의 주체를 `update_env_file` 과
-  `persist_market_gate_interval_to_env` 로 적었습니다. **그 시퀀스는 현재 배포에서 일어날 수
-  없습니다.** `app/routes/kr_market.py:101` 이 `project_env_path` 에 자기 `__file__` 을
-  넘기는데 그 파일이 `app/routes/` 아래라 `dirname` 두 번이 `app/` 에서 멈춥니다. 결과가
-  `<루트>/app/.env` 이고 그 파일은 존재하지 않으므로 주기 저장은 첫 줄의 존재 검사에서
-  조용히 반환합니다. Codex 가 낸 소실 시퀀스는 두 함수에 같은 경로를 직접 넘긴 모형이며
-  배선을 건너뛰었습니다. 「인증 없이 호출 가능하므로 임의 시점에 경합을 유발할 수 있다」는
-  종전 문장도 근거를 잃었습니다. 그 엔드포인트는 지금 `.env` 를 만지지 않습니다. 경로 버그
-  자체는 `[INFRA-056]` 이 맡습니다.
-- **실재하는 경합은 `update_env_file` 끼리입니다.** 화면이 `POST /api/system/env` 를 내는
-  자리가 둘입니다. `frontend/src/app/components/SettingsModal.tsx:167` 의 「저장」 버튼과
-  `:279` 의 알림 테스트가 각각 보내며, gunicorn 이 `--workers 2 --threads 8` 로 뜨므로
-  동시에 처리됩니다.
-- 결과가 둘로 갈립니다. ① `open(env_path, "w")` 는 여는 시점에만 잘라내므로 두 요청이 각자
-  offset 0 에서 씁니다. 나중에 쓴 쪽이 짧으면 먼저 쓴 쪽의 꼬리가 키 없는 줄로 남고, 이
-  파일의 파서가 `=` 없는 줄을 보존해 영구히 남습니다. 줄 중간에 떨어지면 값 자체가 잘린 채
-  오염되며, 그 자리가 `ADMIN_API_TOKEN` 이나 `ADMIN_EMAILS` 줄이면 관리자 화면이 통째로
-  잠깁니다. 둘 다 fail-closed 입니다. ② 원자적 교체만 넣으면 부분 기록은 사라지지만, 옛
-  내용을 읽은 쪽이 나중에 교체하면 그 사이의 갱신을 통째로 되돌립니다. 둘 다 실측으로
-  재현했습니다.
-- QA 시나리오: 저장 둘이 겹쳐도 부분 기록도 소실도 없다 → `docs/dev-cycle/qa/INFRA-050.md`
-- [x] `update_env_file` 을 `atomic_write_text` 로 통일할지 결정 → 통일했습니다.
-- [x] 두 경로가 겹칠 때 마지막 상태가 온전한지 확인하는 검사 추가 → 주체를 정정해
-  `update_env_file` 두 벌로 재는 검사를 넣었습니다. 두 경로 사이 검사는 지금 같은 파일을
-  보지 않아 잠금이 아니라 인자 전달을 재게 되므로 두지 않았습니다.
-- [x] `environ` 갱신을 파일 저장 성공 뒤로 옮긴다 → `applied`/`removed` 로 모았습니다.
-- 설계 승인: 2026-09-08 대화에서 「이 범위로 진행」과 「경로 버그는 새 TODO 로 이월」을
-  각각 승인받았습니다. 분류는 bounded 이고 `.env` 접촉이라 티어는 T3 입니다.
-- 계획: `docs/superpowers/plans/2026-09-08-infra-050-env-write-serialization.md`
-- 계획 검토: `oh-my-claudecode:critic` 판정 `REVISE`. 지적 전부를 반영했습니다. 경합 주체의
-  정정, 주기 저장 경로에 잠금을 두르는 작업 삭제, 꼬리 잔존을 심각도의 근거로 세운 것,
-  사전 실측의 의존 목록 보정, `_env_file_lock` 의 재진입 불가 명시, 「두 검사 파일이 주기
-  저장 경로를 지나간다」는 틀린 주장 삭제입니다. 마지막 것은 실측으로 확인했습니다. 저장소에
-  `persist_market_gate_interval_to_env` 를 실제로 부르는 검사가 없습니다.
-- 리뷰: `/ponytail-review`(-9줄 적용) → `feature-dev:code-reviewer`(결함 없음) →
-  `oh-my-claudecode:security-reviewer`(M1·L3 반영, L1·L2 는 주석에 한계로 명시) →
-  적대적 리뷰(H1·H2 와 조회 경로 불일치 반영). 적대적 리뷰의 `threading.Barrier(2)` 제안은
-  통과 상태에서 교착하므로 `threading.Event` 로 대신했고, 리뷰도 그 지적에 동의했습니다.
-- **적대적 리뷰가 짚은 셋은 제가 만든 것입니다.** H1 은 임시 파일 이름 대입이 `with`
-  마지막에 있어 `fsync` 실패 시 시크릿을 담은 0600 잔재가 남는 것이고, H2 는 「링크 경로가
-  닫힌다」는 제 주석이 읽기에 대해 거짓이었던 것이며, 셋째는 H2 를 저장 경로만 고쳐
-  `read_masked_env_vars` 와 판정이 갈린 것입니다. 셋 다 제가 쓴 검사가 통과시켰습니다.
-- 범위가 리뷰 과정에서 `services/kr_market_data_cache_core.py` 와
-  `tests/services/test_kr_market_data_cache_service_refactor.py` 로 넓어졌습니다. 보안 리뷰의
-  M1(임시 파일이 `.gitignore` 를 빠져나감)과 H1 이 그 파일의 `atomic_write_text` 에 있습니다.
-
 ### [INFRA-042] 종가베팅 실행·발송 라우트 셋이 권한 검사 없이 열려 있다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-037]` 사이클의
   `feature-dev:code-reviewer` 와 `oh-my-claudecode:security-reviewer` 가 각각 확신도 높음으로
