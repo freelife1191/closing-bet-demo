@@ -17,6 +17,7 @@ from typing import Any, Callable
 from flask import jsonify, request
 
 from app.routes.route_execution import execute_json_route
+from app.routes.route_guards import require_admin
 from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
@@ -96,6 +97,7 @@ def _register_jongga_run_status_routes(
     run_jongga_background: Callable[[int, list[str] | None, str | None], None],
 ) -> None:
     @kr_bp.route("/jongga-v2/run", methods=["POST"])
+    @require_admin
     def run_jongga_v2_screener_route():
         """종가베팅 v2 스크리너 실행 (비동기 - 백그라운드 스레드)"""
         req_data = request.get_json(silent=True) or {}
@@ -149,6 +151,7 @@ def _register_jongga_analysis_routes(
     apply_gemini_reanalysis_results: Callable[..., int],
 ) -> None:
     @kr_bp.route("/jongga-v2/analyze", methods=["POST"])
+    @require_admin
     def analyze_single_stock_route():
         """단일 종목 재분석 요청"""
         def _handler():
@@ -165,6 +168,7 @@ def _register_jongga_analysis_routes(
         )
 
     @kr_bp.route("/jongga-v2/reanalyze-gemini", methods=["POST", "OPTIONS"])
+    @require_admin
     def reanalyze_gemini_all_route():
         """현재 시그널들의 Gemini LLM 분석만 재실행 (Partial / Retry 지원)"""
         if request.method == "OPTIONS":
@@ -192,6 +196,7 @@ def _register_jongga_message_route(
     build_screener_result_for_message: Callable[[dict[str, Any]], tuple[Any, int, Any]],
 ) -> None:
     @kr_bp.route("/jongga-v2/message", methods=["POST"])
+    @require_admin
     def send_jongga_v2_message_route():
         """종가베팅 결과 메시지 수동 발송"""
         def _handler():

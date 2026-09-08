@@ -198,7 +198,11 @@ def test_reanalyze_vcp_failed_ai_filters_failed_rows_and_updates_csv(monkeypatch
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyVcpAnalyzer())
 
-    client = _create_client()
+    # [INFRA-042] 가 이 라우트에 require_admin 을 붙였다. 이 검사가 재는 것은 실패 행
+    # 필터와 CSV 갱신이지 인가가 아니므로 관리자 신원을 세우고 그대로 잰다. 게이트는
+    # tests/app/test_admin_gated_routes.py 가 잰다.
+    monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
+    client = _create_client_with_user(user_email="admin@example.com")
     res = client.post(
         "/api/kr/signals/reanalyze-failed-ai",
         json={"target_date": "2026-02-20"},

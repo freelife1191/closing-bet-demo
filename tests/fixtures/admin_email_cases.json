@@ -1,0 +1,19 @@
+{
+  "_comment": "두 언어의 관리자 판정이 같은 답을 내는지 재는 공유 입력이다. services/admin_helpers.py 의 is_admin_email 과 frontend/src/lib/adminEmails.ts 의 isAdminEmail 이 이 목록을 함께 읽는다. 한쪽 규칙만 고치면 반대쪽 검사가 실패한다. 케이스를 더할 때는 양쪽 구현이 실제로 그렇게 동작하는지 먼저 확인한다.",
+  "_ceiling": "이 목록은 ASCII 공백만 다룬다. 파이썬 str.strip() 과 자바스크립트 trim() 은 공백으로 보는 문자 집합이 달라서, U+001C 와 U+0085 는 파이썬만 제거하고 U+FEFF(BOM) 는 자바스크립트만 제거한다(양쪽 런타임에서 실측). 그런 입력은 두 구현이 서로 다른 답을 내므로 기대값을 하나만 적을 수 없고 이 파일로는 표현할 수 없다. BOM 이 섞인 ADMIN_EMAILS 는 화면이 관리자로 보고 서버가 거부하는 상태를 만드는데, 그 값이 들어갈 경로는 .env 를 손으로 고치는 것뿐이다(ADMIN_EMAILS 는 EDITABLE_ENV_KEYS 에 없다). 갈림이 실제로 문제가 되면 양쪽에서 ASCII 공백만 잘라 내도록 맞춘 뒤 케이스를 더한다.",
+  "cases": [
+    {"why": "정확히 일치", "list": "admin@example.com", "email": "admin@example.com", "expected": true},
+    {"why": "대문자를 소문자로 맞춘다", "list": "admin@example.com", "email": "ADMIN@Example.com", "expected": true},
+    {"why": "목록 쪽 대문자도 맞춘다", "list": "Admin@Example.com", "email": "admin@example.com", "expected": true},
+    {"why": "앞뒤 공백을 없앤다", "list": " admin@example.com , other@example.com ", "email": "  admin@example.com  ", "expected": true},
+    {"why": "목록에 없으면 거부", "list": "admin@example.com", "email": "guest@example.com", "expected": false},
+    {"why": "빈 이메일은 거부", "list": "admin@example.com", "email": "", "expected": false},
+    {"why": "공백뿐인 이메일은 거부", "list": "admin@example.com", "email": "   ", "expected": false},
+    {"why": "기본 프로필 이메일은 목록에 있어도 거부", "list": "user@example.com", "email": "user@example.com", "expected": false},
+    {"why": "목록이 비면 아무도 통과 못 한다", "list": "", "email": "admin@example.com", "expected": false},
+    {"why": "쉼표뿐인 목록도 빈 목록이다", "list": " , , ", "email": "admin@example.com", "expected": false},
+    {"why": "부분 일치는 통과가 아니다 (접두사 비교를 막는다)", "list": "admin@example.com", "email": "admin@example.com.evil.test", "expected": false},
+    {"why": "목록의 다른 항목에 붙어도 통과가 아니다 (원본 문자열 비교를 막는다)", "list": "admin@example.com,b@example.com", "email": "example.com", "expected": false},
+    {"why": "줄바꿈은 구분자가 아니다", "list": "admin@example.com\nother@example.com", "email": "admin@example.com", "expected": false}
+  ]
+}

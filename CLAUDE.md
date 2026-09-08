@@ -206,6 +206,50 @@ SCHEDULER_ENABLED=true
 `.env.production` 양쪽에 각각 두며 `NEXT_PUBLIC_` 접두사를 붙이지 않습니다. 붙이면 브라우저
 번들에 실려 게이트가 무의미해집니다.
 
+**이 토큰은 만료도 폐기 목록도 없는 순수 소지 비밀입니다.** `ADMIN_EMAILS` 에서 어떤 관리자를
+지워도 토큰 값을 아는 사람은 loopback 으로 Flask 에 직접 요청해 그대로 통과합니다.
+
+**두 게이트의 차이는 폐기 수단이 하나인가 둘인가입니다.** `services/admin_helpers.py` 의
+`is_admin_email` 은 「이 사람이 누구인가」를 보고 `verify_admin_api_token` 은 「이 값을
+아는가」만 봅니다. 둘 다 매 요청 `os.environ` 을 읽지만, **그 `os.environ` 을 바꾸는 수단은
+워커 재기동 하나뿐입니다.** `ADMIN_EMAILS` 와 `ADMIN_API_TOKEN` 은 둘 다
+`services/common_env_service.py` 의 `EDITABLE_ENV_KEYS` **밖**이라 설정 화면으로 바꿀 수
+없고(관리자가 화면에서 자기 자신을 잠그는 것을 막으려는 의도적 설계입니다), `.env` 파일을
+손으로 고쳐도 돌고 있는 워커에는 반영되지 않습니다.
+
+그런데 `ADMIN_EMAILS` 에는 **두 번째 폐기 수단이 있습니다.** 그 사람의 NextAuth 로그인을
+끊으면 `frontend/src/proxy.ts` 가 매 요청 `getToken` 으로 세션을 확인하므로 **재기동 없이
+즉시 듣습니다.** `ADMIN_API_TOKEN` 뒤에는 계정이 없어 그 길이 없고, 값을 바꾸고 모두
+재기동하는 것 외에는 막을 방법이 없습니다. 그래서 관리자를 내보낼 때는 `ADMIN_EMAILS` 에서
+지우는 것만으로 끝나지 않고 이 토큰도 함께 돌려야 합니다.
+
+**`[INFRA-042]` 이후로는 `INTERNAL_IDENTITY_SECRET` 이 더 넓은 것을 지킵니다.** 관리자
+전용으로 닫은 라우트 열둘의 판정이 그 키로 서명된 신원에 걸려 있으며, 그 안에 구독자에게
+실제 메시지를 보내는 경로가 들어 있습니다. 이 키가 새면 서명을 위조해 그 전부를 통과할 수
+있으므로, 회전 대상을 `ADMIN_API_TOKEN` 하나로 좁혀 생각하지 않습니다.
+
+`frontend/src/lib/identity.ts` 의 `IDENTITY_TTL_SECONDS`(120 초)를 폐기 수단으로 오해하지
+않습니다. 그것은 **서명의 신선도만 정하며 인가와 무관합니다.** 만료되면
+`frontend/src/proxy.ts` 가 NextAuth 세션으로 다시 서명하는데, 그 경로는 `ADMIN_EMAILS` 를
+보지 않습니다.
+
+회전 절차입니다. 순서를 지키지 않으면 관리자 화면이 그 사이 동안 막힙니다.
+
+1. 새 값을 만듭니다. `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+2. `.env` 와 `.env.production` **양쪽**의 `ADMIN_API_TOKEN` 을 새 값으로 바꿉니다. 한쪽만
+   바꾸면 배포 환경에 따라 갈립니다.
+3. **Flask 워커를 모두 재기동합니다.** `verify_admin_api_token` 은 부를 때마다 `os.environ` 을
+   읽지만, `.env` 파일을 고치는 것은 **이미 돌고 있는 워커의 `os.environ` 을 바꾸지
+   않습니다.** 그 값을 채우는 것은 기동 시점의 `load_dotenv()` 한 번뿐입니다. 설정 화면도
+   길이 아닙니다. `ADMIN_API_TOKEN` 은 `EDITABLE_ENV_KEYS` 밖이라 그 화면으로 바꿀 수
+   없습니다. 재기동 외에 다른 수단이 없습니다.
+4. **Next 쪽도 재기동합니다.** 라우트 핸들러는 `process.env` 를 부를 때마다 읽지만
+   (`frontend/src/app/api/system/env/route.ts` 의 `resolveAdminToken`), 그 `process.env` 를
+   `.env` 에서 채우는 것은 기동 시점 한 번뿐입니다. `next dev` 는 `.env` 변경을 감지해 다시
+   읽지만 `next start` 는 그러지 않습니다.
+5. 관리자 화면의 설정 모달을 열어 값이 읽히는지 확인합니다. 403 이 나면 3번이나 4번이 덜
+   끝난 것입니다.
+
 설정 화면에서 자격 증명을 바꿔도 **요청을 처리한 워커의 `os.environ` 만 바뀝니다.**
 `services/notifier.py` 와 `engine/messenger_config.py` 는 객체를 만들 때 `os.getenv` 로
 값을 읽으므로, 워커가 둘 이상이면 나머지 워커는 재기동 전까지 옛 값을 계속 씁니다. 유출된

@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 import pandas as pd
+import pytest
 from flask import Blueprint, Flask
 
 
@@ -62,6 +63,30 @@ def _build_deps(fetch_realtime_prices_fn):
     }
 
 
+@pytest.fixture(autouse=True)
+def _admin_env(monkeypatch):
+    """_seed_admin_identity 가 세우는 이메일이 관리자로 판정되게 한다([INFRA-042])."""
+    monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
+
+
+def _seed_admin_identity(app):
+    """[INFRA-042] 가 이 파일의 라우트 일부에 require_admin 을 붙였다.
+
+    이 파일이 재는 것은 인가가 아니라 그 뒤의 위임 동작이므로 관리자 신원을 세워 두고
+    그대로 잰다. 게이트 자체는 tests/app/test_admin_gated_routes.py 가 잰다.
+
+    OPTIONS 에서 일찍 빠지는 것은 실제 before_request 와 같다(app/__init__.py:171).
+    """
+
+    @app.before_request
+    def _seed():
+        from flask import g, request
+
+        if request.method == "OPTIONS":
+            return
+        g.user_email = "admin@example.com"
+
+
 def _create_client(fetch_realtime_prices_fn):
     app = Flask(__name__)
     app.testing = True
@@ -71,6 +96,7 @@ def _create_client(fetch_realtime_prices_fn):
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=_build_deps(fetch_realtime_prices_fn),
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     return app.test_client()
 
@@ -135,6 +161,7 @@ def test_vcp_status_route_reflects_scheduler_vcp_running(monkeypatch):
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -175,6 +202,7 @@ def test_signal_dates_route_requests_only_signal_judgement_columns():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -208,6 +236,7 @@ def test_signal_dates_route_normalizes_datetime_strings_and_deduplicates():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -248,6 +277,7 @@ def test_signal_dates_route_omits_dates_whose_rows_are_not_signals():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -285,6 +315,7 @@ def test_signals_route_count_callback_accepts_data_dir_argument():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -324,6 +355,7 @@ def test_signals_route_count_callback_allows_legacy_noarg_callback():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -360,6 +392,7 @@ def test_reanalyze_failed_ai_background_supports_stop_request():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -396,6 +429,7 @@ def test_reanalyze_failed_ai_stop_returns_conflict_when_not_running():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -422,6 +456,7 @@ def test_reanalyze_failed_ai_stop_accepts_running_state_without_task_type():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -449,6 +484,7 @@ def test_reanalyze_failed_ai_route_forwards_force_provider_to_service():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -505,6 +541,7 @@ def test_reanalyze_failed_ai_route_loads_min_columns_and_forwards_persist_loader
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -533,6 +570,7 @@ def test_reanalyze_failed_ai_route_rejects_invalid_force_provider():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
@@ -568,6 +606,7 @@ def test_stock_chart_route_forwards_end_query_to_payload_builder():
         logger=logging.getLogger("test.kr_market_data_signals_routes"),
         deps=deps,
     )
+    _seed_admin_identity(app)
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 

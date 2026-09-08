@@ -15,6 +15,7 @@ from typing import Any
 from flask import jsonify, request
 
 from app.routes.route_execution import execute_json_route as _execute_json_route
+from app.routes.route_guards import require_admin
 from app.routes.kr_market_signal_common import _format_signal_date
 from app.routes.kr_market_vcp_signal_helpers import _is_vcp_signal_row, _row_get
 from services.kr_market_csv_utils import load_csv_readonly
@@ -204,6 +205,7 @@ def _register_vcp_run_route(
     run_vcp_background: Callable[[str | None, int | None], None],
 ) -> None:
     @kr_bp.route('/signals/run', methods=['POST'])
+    @require_admin
     def run_vcp_signals_screener():
         """
         VCP 시그널 스크리너 실행 (특정 날짜 지원)
@@ -266,6 +268,7 @@ def _register_vcp_reanalyze_route(
             vcp_status.update(kwargs)
 
     @kr_bp.route('/signals/reanalyze-failed-ai', methods=['POST'])
+    @require_admin
     def reanalyze_vcp_failed_ai():
         """VCP 시그널 중 AI 분석 실패 건만 재분석"""
         def _handler():
@@ -402,6 +405,7 @@ def _register_vcp_reanalyze_route(
         )
 
     @kr_bp.route('/signals/reanalyze-failed-ai/stop', methods=['POST'])
+    @require_admin
     def stop_reanalyze_vcp_failed_ai():
         """실패 AI 재분석 중지 요청"""
         def _handler():

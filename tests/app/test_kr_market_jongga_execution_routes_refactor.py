@@ -11,7 +11,8 @@ import os
 import sys
 from pathlib import Path
 
-from flask import Blueprint, Flask
+import pytest
+from flask import Blueprint, Flask, g, request
 
 
 sys.path.insert(
@@ -39,6 +40,12 @@ def _build_deps(**overrides):
     return base
 
 
+@pytest.fixture(autouse=True)
+def _admin_env(monkeypatch):
+    """_seed_admin_identity 가 세우는 이메일이 실제로 관리자로 판정되게 한다."""
+    monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
+
+
 def _create_client(data_dir: str, deps: dict):
     app = Flask(__name__)
     app.testing = True
@@ -58,6 +65,18 @@ def _create_client(data_dir: str, deps: dict):
         build_jongga_news_analysis_items=deps["build_jongga_news_analysis_items"],
         apply_gemini_reanalysis_results=deps["apply_gemini_reanalysis_results"],
     )
+    @app.before_request
+    def _seed_admin_identity():
+        # [INFRA-042] 가 이 라우트들에 require_admin 을 붙였다. 이 파일이 재는 것은
+        # 게이트가 아니라 그 뒤의 위임 동작이므로, 관리자 신원을 세워 두고 그대로 잰다.
+        # 게이트 자체는 tests/app/test_admin_gated_routes.py 가 잰다.
+        #
+        # OPTIONS 에서 일찍 빠지는 것은 실제 before_request 와 같다(app/__init__.py:171).
+        # 아래 reanalyze-gemini preflight 검사가 신원 없이 200 을 받는 상태를 지킨다.
+        if request.method == "OPTIONS":
+            return
+        g.user_email = "admin@example.com"
+
     app.register_blueprint(bp, url_prefix="/api/kr")
     return app.test_client()
 
@@ -207,11 +226,24 @@ def test_analyze_single_stock_route_returns_500_on_exception(tmp_path: Path):
 
 
 def test_reanalyze_gemini_route_options_short_circuit(tmp_path: Path):
+    """preflight 가 신원 없이 200 을 받는다.
+
+    [INFRA-042] 가 이 라우트에 require_admin 을 붙이면서 응답의 출처가 바뀌었다. 종전에는
+    뷰 본문의 `if request.method == "OPTIONS"` 가 {"status": "ok"} 를 냈는데, 이제 게이트가
+    그 앞에서 Flask 의 기본 OPTIONS 응답을 돌려주고 뷰를 아예 부르지 않는다. 본문을 실은
+    OPTIONS 요청이 무인증으로 뷰에 닿는 경로를 없애기 위해서다.
+
+    그래서 본문 어서트를 상태 코드와 Allow 헤더로 바꿨다. 이 검사가 지키는 성질은 그대로다.
+    게이트가 preflight 를 막으면 브라우저가 본 요청을 보내지 않아 화면이 멈춘다.
+
+    뷰 본문의 OPTIONS 분기는 지우지 않고 남겼다. 지금은 닿지 않지만 게이트를 떼면 다시
+    살아나는 두 번째 방어다.
+    """
     client = _create_client(str(tmp_path), _build_deps())
     response = client.open("/api/kr/jongga-v2/reanalyze-gemini", method="OPTIONS")
 
     assert response.status_code == 200
-    assert response.get_json() == {"status": "ok"}
+    assert "POST" in (response.headers.get("Allow") or "")
 
 
 def test_send_jongga_v2_message_route_returns_404_when_no_signal_data(tmp_path: Path):

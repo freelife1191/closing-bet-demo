@@ -14,6 +14,7 @@ from typing import Any
 from flask import jsonify, request
 
 from app.routes.route_execution import execute_json_route as _execute_json_route
+from app.routes.route_guards import require_admin
 _COMMON_UPDATE_HANDLERS: tuple[Callable[[], dict[str, Any]], Callable[[list[str]], None], Callable[..., None]] | None = None
 
 
@@ -212,6 +213,7 @@ def _register_init_data_route(
     deps: dict[str, Any],
 ) -> None:
     @kr_bp.route('/init-data', methods=['POST'])
+    @require_admin
     def init_data_endpoint():
         """개별 데이터 초기화 API - Background Async"""
         def _handler():

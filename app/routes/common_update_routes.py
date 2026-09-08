@@ -13,6 +13,7 @@ from threading import Thread
 from flask import g, jsonify, request
 
 from app.routes.common_route_context import CommonRouteContext
+from app.routes.route_guards import require_admin
 from services.admin_helpers import verify_admin_api_token
 from services.common_data_status_service import build_common_data_status_payload
 from services.common_env_service import (
@@ -122,6 +123,7 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
             return jsonify(status)
 
     @common_bp.route("/system/start-update", methods=["POST"])
+    @require_admin
     def api_start_update():
         """업데이트 시작 (백그라운드 실행)."""
         data = request.get_json() or {}
@@ -147,6 +149,7 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
         return jsonify({"status": "ok"})
 
     @common_bp.route("/system/update-item-status", methods=["POST"])
+    @require_admin
     def api_update_item_status():
         """아이템 상태 업데이트."""
         data = request.get_json() or {}
@@ -157,12 +160,14 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
         return jsonify({"status": "ok"})
 
     @common_bp.route("/system/finish-update", methods=["POST"])
+    @require_admin
     def api_finish_update():
         """업데이트 완료."""
         ctx.finish_update()
         return jsonify({"status": "ok"})
 
     @common_bp.route("/system/stop-update", methods=["POST"])
+    @require_admin
     def api_stop_update():
         """업데이트 중단 요청."""
         ctx.stop_update()
