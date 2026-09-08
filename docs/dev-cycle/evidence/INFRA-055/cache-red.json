@@ -1,0 +1,14 @@
+{
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "exit": 0,
+  "seconds": 3.67,
+  "scanned": 400,
+  "backend_sentinel_matches": 1,
+  "sample_paths": [
+    "cache/turbopack/v16.3.4-299180d3/00000019.sst"
+  ]
+}

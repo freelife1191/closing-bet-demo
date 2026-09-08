@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/usr/bin/sandbox-exec",
+    "-f",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra055-x_hko9la/local-network.sb",
+    "npm",
+    "run",
+    "build",
+    "--",
+    "unexpected-directory"
+  ],
+  "exit": 0,
+  "expected_exit": 1
+}

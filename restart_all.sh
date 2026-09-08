@@ -14,21 +14,8 @@ source "$PROJECT_ROOT/scripts/env_value.sh" || {
   echo "❌ scripts/env_value.sh 를 읽을 수 없다"; exit 1;
 }
 
-# Frontend .env 심볼릭 링크 연결 (배포 환경 대응). 이 블록의 메시지가 .env 존재도 알린다
-if [ -f .env ]; then
-  echo "🔗 Linking .env to frontend/.env..."
-  mkdir -p frontend
-  ln -sf ../.env frontend/.env
-fi
-
-# Turbopack 의 FileSystem Cache 가 프로세스 환경을 직렬화해 frontend/.next 아래에 남긴다.
-# 위 심볼릭 링크 때문에 Next 환경에는 백엔드 전용 시크릿까지 올라가므로, 실측하면 .env 의
-# 키 열여섯 개가 그 캐시 파일에 평문으로 들어 있고 파일 모드는 umask 를 따라 0644 다
-# ([INFRA-053]). 캐시는 실행마다 새로 만들어져 파일 모드를 좁혀 두어도 되돌아가므로,
-# 디렉터리 순회를 막아 다른 로컬 계정의 접근을 끊는다. Next 16.1(dev)·16.3(build) 부터
-# 이 캐시가 기본으로 켜진다.
-mkdir -p frontend/.next
-chmod 700 frontend/.next
+# Next launcher가 frontend와 루트 .env를 제한된 자식 환경으로 읽고, 낡은 정확한 링크만
+# preflight 뒤 제거한다. .next의 생성·권한 검증도 launcher만 소유한다.
 
 FRONTEND_PORT=$(env_port FRONTEND_PORT 3500) || exit 1
 FLASK_PORT=$(env_port FLASK_PORT 5501) || exit 1

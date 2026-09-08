@@ -21,7 +21,8 @@
   확인했습니다.
 - `restart_all.sh` 의 `ln -sf ../.env frontend/.env` 가 `.env` 전체를 Next 에 넘깁니다.
   Next 는 프론트엔드에 필요 없는 `SMTP_PASSWORD`, `ZAI_API_KEY`, `OPENAI_API_KEY`,
-  `PERPLEXITY_API_KEY`, `ADMIN_API_TOKEN` 까지 환경에 올립니다.
+  `PERPLEXITY_API_KEY` 까지 환경에 올립니다. `ADMIN_API_TOKEN`은 Next 관리자 중계가
+  실제로 사용하므로 분리 대상에서 제외합니다(2026-09-09 호출부 확인).
 - Turbopack 의 FileSystem Cache 가 그 환경을 직렬화해 `frontend/.next` 아래에 남깁니다.
   2026-09-08 실측으로 `.env` 의 키 **열여섯 개**가 캐시 파일 3,222개에 평문으로 들어 있었고
   모드는 전부 0644 였습니다. `frontend/.next/cache/turbopack` 에 3,144개,
@@ -33,6 +34,11 @@
   `.next/static` 과 `.next/server` 에는 일치가 0건이라 HTTP 로는 새지 않습니다.
 - 함께 볼 것: `frontend/node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/turbopackFileSystemCache.md`
   가 이 캐시의 기본 활성 버전(dev 16.1.0, build 16.3.0)을 적습니다. 이 저장소는 16.3.4 입니다.
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 06:19 KST
+  | 범위: Next 공통 실행기의 필요 키 허용 목록·전체 env 연결/부모 재유입 차단·문서/테스트·T3 리뷰·실측 QA
+  | 실제 대화 근거: 위 bounded/T3 설계 제안에 대한 사용자 「진행해」 응답
+- 진행: RESUME — 독립 clone에서 계획 검토 중. 원본 미추적 package.json 보존.
+- 계획: `docs/superpowers/plans/2026-09-09-infra055-next-environment.md`
 - QA 시나리오: 캐시를 지우고 개발 서버를 다시 띄운 뒤, `.env` 의 백엔드 전용 키가
   `frontend/.next` 아래에서 발견되지 않는다
 - [ ] Next 가 실제로 쓰는 키 목록을 확정

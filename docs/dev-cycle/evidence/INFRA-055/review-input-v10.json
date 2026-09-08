@@ -1,0 +1,9 @@
+{
+  "frontend/scripts/run-next.js": "f13c4450b9051c2a388411d25e4aef24d194b781f07554a0280aed33d76e8ee4",
+  "frontend/package.json": "85b8d22ffef6d0e77de62ef4e13abf5c0a00bae8c6969e4ae51c22c033954ddf",
+  "restart_all.sh": "25a70655ce7f1b06a75488348b20ff0e0650e645ae2ae231fb9c231805b0f644",
+  ".env.example": "766628f8824c00f2a36fcf0165de367c5644818e778710faa462a6d7f674b786",
+  "CLAUDE.md": "b59d2f01051c944f38e214b32d66ff2594e057f391e13563fa762952f45a44a4",
+  "tests/scripts/test_next_environment.py": "e447bd66b5819dab6425572d0068b91039f9ac1e572189193826c2c8ab4be87a",
+  "docs/superpowers/plans/2026-09-09-infra055-next-environment.md": "c7735e992ded9dcd0401d32391979f7ed256f66e6b9a7a74ce122b33ac678ce6"
+}
