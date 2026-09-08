@@ -1,0 +1,5 @@
+{
+  "services/common_env_service.py": "d54e934ab1614ba22f100d2f70a678f6785d37fb470599ece51132d5d6eea222",
+  "tests/app/test_env_control_characters.py": "8eae907691b96f5915c2d090986c59aaecd4b3ba8021d08642196c38a1e204d1",
+  "docs/superpowers/plans/2026-09-09-notification-settings.md": "433e97e8b8adfc24c8b34685300b1d5123ccceb6c01cda812182d1039b347f4f"
+}

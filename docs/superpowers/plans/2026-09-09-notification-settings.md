@@ -43,10 +43,10 @@ assert "FAKE_PRIVATE_NOTIFICATION_CANARY" not in caplog.text
 
 **Files:** services/common_env_service.py, tests/app/test_env_control_characters.py.
 
-**Interfaces:** update_env_file의 기존 부분반영/마스킹 정책 유지. 거부 정규식에 NUL과 리터럴 backslash+n/r/t를 추가한다. 실제 CR/LF/변수확장 거부도 유지한다.
+**Interfaces:** update_env_file의 기존 부분반영/마스킹 정책 유지. 거부 정규식에 실제 C0/DEL과 dotenv가 복원하는 리터럴 backslash+a/b/f/n/r/t/v를 추가한다. 실제 CR/LF/변수확장 거부도 유지한다.
 
-- [ ] RED: 기존/신규 키에 `a\x00b`, 큰따옴표 안의 리터럴 `\\n`, `\\r`, `\\t`를 전달하고 파일·environ 불변을 검사한다. `pass!word$`, `has$!bang`, 공백 포함 정상 비밀번호는 저장 후 dotenv_values로 재적재해 원문과 대조한다.
-- [ ] GREEN: `UNSAFE_ENV_VALUE = re.compile(r"[\x00\r\n]|\\[nrt]|\$[{(\w]")`로 두 유입 경로를 공통 검사한다.
+- [ ] RED: 실제 C0 32개·DEL과 dotenv가 복원하는 리터럴 abfnrtv 7개를 기존/신규 키에 전달해 파일·environ 불변을 검사한다. `pass!word$`, `has$!bang`, 공백 포함 정상 비밀번호는 저장 후 dotenv_values로 재적재해 원문과 대조한다.
+- [ ] GREEN: `UNSAFE_ENV_VALUE = re.compile(r"[\x00-\x1f\x7f]|\\[abfnrtv]|\$[{(\w]")`로 두 유입 경로를 공통 검사한다.
 - [ ] 대상 회귀와 기존 INFRA-044/050 검사를 수행한다. 최종 QA에서 실제 설정 화면의 정상 저장과 API 적대 입력의 파일/환경 불변을 대조한다.
 
 ### Task 3: INFRA-058 명시적 삭제
@@ -95,3 +95,7 @@ assert environ["SMTP_PORT"] == "587"
 - [ ] docs/dev-cycle/qa/<ID>.md의 필수 행을 실제 UI·요청·응답·transport·파일/환경 증거에 연결한다. 공유 실행을 재사용할 때 각 ID의 검증 대상과 기준 SHA를 명시한다.
 - [ ] 기본 성공/실패와 스크린샷을 실제로 열어 확인한다. 합성 비밀의 로그·API·프론트 번들 노출0 및 .env 추적 없음 검사. 외부 CDN 차단은 기능 검증과 분리한다.
 - [ ] 구현/QA 증거 커밋과 ID별 아카이브를 남긴 뒤 원본 develop에 fast-forward 통합한다. 원본 package.json SHA 불변 및 소유 PID/포트/fixture 정리를 확인한다. 원본 서비스 재기동/배포는 수행하지 않는다.
+
+### Task 2 보안 리뷰 보완 (동일 입력 검증 범위)
+
+최초 n/r/t 제한은 python-dotenv가 a/b/f/v도 제어문자로 복원하는 것을 놓쳤다. 2026-09-09 독립 보안 리뷰에 따라 실제 C0(U+0000–001F)/DEL 및 리터럴 abfnrtv 이스케이프를 같은 공통 필터에서 거부한다. 위험40개×기존/신규2와 정상3개를검사한다. 실제정규식은 `r"[\x00-\x1f\x7f]|\\[abfnrtv]|\$[{(\w]"`다. Task2의 본문과 예시를 이 보완에 맞췄다. 일반문자·끝달러·달러기호·공백 정상3개보존은그대로다.

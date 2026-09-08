@@ -1,0 +1,16 @@
+{
+  "name": "pytest-057-v2-full",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/pytest-temp"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout",
+  "exit": 0,
+  "seconds": 34.47,
+  "policy": "no-network.sb"
+}

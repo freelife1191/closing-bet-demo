@@ -158,7 +158,9 @@ MASK_KEEP_EDGES_MIN = 24
 # `$` 하나만으로 막지는 않는다. `$` 로 끝나거나 `$!` 처럼 기호가 이어지는 비밀번호가 있다.
 # 공백도 막지 않는다. Google 앱 비밀번호에 들어 있고 EMAIL_RECIPIENTS 가 `, ` 로 나눈다.
 # 공백은 source 하는 셸에서만 위험하므로 [INFRA-049] 가 그 자리에서 없앤다.
-UNSAFE_ENV_VALUE = re.compile(r"[\r\n]|\$[{(\w]")
+# C0/DEL 제어문자는 환경 적재나 전송·로그 표시를 깨뜨릴 수 있다. dotenv가
+# 큰따옴표 안에서 복원하는 제어문자 이스케이프도 저장 전에 함께 거부한다.
+UNSAFE_ENV_VALUE = re.compile(r"[\x00-\x1f\x7f]|\\[abfnrtv]|\$[{(\w]")
 
 
 def resolve_project_root() -> str:

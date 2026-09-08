@@ -1,0 +1,19 @@
+{
+  "name": "pytest-057-v2-green",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/pytest-temp",
+    "tests/app/test_env_control_characters.py",
+    "tests/app/test_common_env_service.py",
+    "tests/services/test_kr_market_interval_persistence.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout",
+  "exit": 0,
+  "seconds": 2.61,
+  "policy": "no-network.sb"
+}
