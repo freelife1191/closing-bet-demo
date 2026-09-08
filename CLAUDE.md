@@ -281,13 +281,22 @@ SCHEDULER_ENABLED=true
 1. **Ports**: Flask 5501, Next.js 3500
 2. **Logs**: `logs/backend.log`, `logs/frontend.log`
 3. **Data sources**: two separate fallback chains. Period data goes through `DataSourceManager` (FDR → pykrx → yfinance); single-ticker realtime quotes go through `fetch_stock_price` (Toss → Naver → yfinance)
-4. **Scheduler**: `services/scheduler.py` 가 잡 두 개를 등록합니다. Market Gate 동기화는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES`(코드 기본값 30분) 간격으로 돌고, 장 마감 분석은 `CLOSING_SCHEDULE_TIME`(기본 17:00 KST) 에 하루 한 번 돌며 종가베팅은 그 체인 안에서 이어집니다. 관련 모듈: `scheduler_jobs.py`, `scheduler_loop.py`, `scheduler_runtime_status_service.py`
-5. **Tests**: pytest (Python), vitest (TypeScript)
-6. **루트 `AGENTS.md`**: codex 처럼 `AGENTS.md` 만 자동으로 읽는 도구의 진입점입니다.
+4. **Market Gate 분석을 돌리는 경로는 둘입니다.** `POST /api/kr/market-gate/update` 는
+   `[INFRA-059]` 가 관리자 전용으로 닫았지만, **`GET /api/kr/market-gate` 는 데이터가 낡으면
+   익명 요청에도 백그라운드 분석을 트리거합니다**(`app/routes/kr_market_system_http_routes.py`
+   의 `_register_market_gate_routes`). 대시보드 첫 로딩 경로라 그 자리는 열어 둔 것이며,
+   `_market_gate_lock` 과 `data/.market_gate_refresh.lock` 이 동시 실행을 막습니다. 그러므로
+   **POST 에 게이트가 있다고 해서 익명이 Market Gate 분석을 돌릴 수 없다는 뜻이 아닙니다.**
+   POST 만 갖는 것은 즉시 실행, 동기 처리(워커를 최대 120초 점유), 날짜 지정,
+   `create_institutional_trend(force=True)` 수급 재수집 넷입니다. 인가 범위를 셀 때 이 둘을
+   합쳐 세지 않습니다.
+5. **Scheduler**: `services/scheduler.py` 가 잡 두 개를 등록합니다. Market Gate 동기화는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES`(코드 기본값 30분) 간격으로 돌고, 장 마감 분석은 `CLOSING_SCHEDULE_TIME`(기본 17:00 KST) 에 하루 한 번 돌며 종가베팅은 그 체인 안에서 이어집니다. 관련 모듈: `scheduler_jobs.py`, `scheduler_loop.py`, `scheduler_runtime_status_service.py`
+6. **Tests**: pytest (Python), vitest (TypeScript)
+7. **루트 `AGENTS.md`**: codex 처럼 `AGENTS.md` 만 자동으로 읽는 도구의 진입점입니다.
    그 도구들은 이 파일을 읽지 않으므로 `AGENTS.md` 가 첫 절에서 이 파일을 먼저 읽도록
    지시합니다. 규범과 아키텍처는 이 파일에만 두고 `AGENTS.md` 에는 진입 방법과 코드
    작성 규칙만 둡니다. 같은 내용을 양쪽에 적으면 반드시 어긋납니다.
-7. **`frontend/AGENTS.md` 와 `frontend/CLAUDE.md`**: `next dev` 가 실행될 때마다
+8. **`frontend/AGENTS.md` 와 `frontend/CLAUDE.md`**: `next dev` 가 실행될 때마다
    자동으로 만들고 되살리는 파일입니다. Next.js 16.2 부터 생긴 동작이며 공식 문서가
    커밋을 권합니다. 지우면 다음 실행에서 그대로 다시 생겨 작업 트리가 더러워지므로
    지우지 않습니다. `frontend/CLAUDE.md` 는 `@AGENTS.md` 한 줄이며, 그 지침은 이 파일을

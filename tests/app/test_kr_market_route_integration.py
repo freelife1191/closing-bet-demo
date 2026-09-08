@@ -476,7 +476,8 @@ def test_increment_user_usage_is_thread_safe(monkeypatch, tmp_path: Path):
 
 
 def test_config_interval_post_parses_string_and_applies_update(monkeypatch):
-    client = _create_client()
+    monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
+    client = _create_client_with_user(user_email="admin@example.com")
     applied = {}
 
     monkeypatch.setattr(
@@ -495,11 +496,41 @@ def test_config_interval_post_parses_string_and_applies_update(monkeypatch):
     assert applied["interval"] == 15
 
 
-def test_config_interval_post_rejects_invalid_value():
-    client = _create_client()
+def test_config_interval_post_rejects_invalid_value(monkeypatch):
+    monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
+    client = _create_client_with_user(user_email="admin@example.com")
     response = client.post("/api/kr/config/interval", json={"interval": "abc"})
     assert response.status_code == 400
     assert response.get_json()["error"] == "Invalid interval"
+
+
+def test_config_interval_post_refuses_anonymous(monkeypatch):
+    """[INFRA-059] 주기는 서버 전역 스케줄러 값이라 관리자만 바꾼다.
+
+    RED 를 도는 동안에는 게이트가 없어 요청이 실제로 뷰를 통과한다. 두 함수를 목하지
+    않으면 app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES 가 바뀌고
+    services.scheduler.update_market_gate_interval 이 불려, 같은 프로세스의 다른 검사로
+    그 값이 새어 들어간다.
+    """
+    monkeypatch.setattr(kr_market, "_apply_market_gate_interval", lambda _interval: None)
+    monkeypatch.setattr(kr_market, "_persist_market_gate_interval_to_env", lambda _interval: None)
+
+    client = _create_client()
+    response = client.post("/api/kr/config/interval", json={"interval": 15})
+    assert response.status_code == 403
+    assert response.get_json() == {"error": "Forbidden"}
+
+
+def test_config_interval_get_stays_open_for_anonymous():
+    """조회까지 막으면 화면이 현재 주기를 보여 주지 못한다.
+
+    handle_interval_config_request 가 GET 에서 apply/persist 를 부르지 않으므로
+    (services/kr_market_interval_http_service.py:21-22) 목이 필요 없다.
+    """
+    client = _create_client()
+    response = client.get("/api/kr/config/interval")
+    assert response.status_code == 200
+    assert "interval" in response.get_json()
 
 
 def test_reanalyze_gemini_requires_login_without_api_key():

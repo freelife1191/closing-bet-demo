@@ -46,12 +46,78 @@
   노출 조건과 오류 처리를 함께 고쳐야 하고, 「로그인하지 않은 방문자가 대시보드를 새로고침할
   수 있는가」는 제품 결정입니다. `[INFRA-042]` 라운드에서 이 결정을 건너뛰고 게이트만 붙였을
   때 무엇이 나오는지는 그 라운드의 `data-status` 중지 버튼이 보여 주었습니다.
-- QA 시나리오: 신원 없이 셋을 각각 쳤을 때 `isRunning` 이 서지 않고 `.env` 와 Market Gate
-  상태가 바뀌지 않는지 확인. 관리자 요청은 계속 통과하는지도 함께 확인
-- [ ] 세 버튼의 노출 대상을 정함 (제품 결정)
-- [ ] 호출 그래프를 핸들러와 상태 파일 기준으로 훑어 같은 것을 공유하는 라우트를 전부 찾음
-- [ ] 게이트를 세우고 화면 노출 조건과 오류 처리를 함께 고침
-- [ ] `tests/app/test_admin_gated_routes.py` 의 `GATED_ROUTES` 목록 갱신
+- 설계 승인: 승인 일자 2026-09-08 | 승인 확인 시각 2026-09-08 (현재 세션)
+  | 범위: 세 라우트에 `require_admin` 게이트, `/config/interval` 을 GET·POST 두 라우트로
+  분리, 화면 세 자리를 `isAdmin` 으로 감춤. 익명 `GET /market-gate` 자동 트리거는 제외
+  | 실제 대화 근거: 현재 세션의 AskUserQuestion 네 번. 제품 결정 셋(새로고침 두 버튼
+  「관리자 전용」, 주기 선택 「관리자 전용」, GET 자동 트리거 「사실만 기록하고 남김」)과
+  설계 승인 하나(「이 설계로 진행」)
+- 계획: `docs/superpowers/plans/2026-09-08-infra-059-unauthenticated-route-guards.md`
+- QA 시나리오: 신원 없이 셋을 각각 쳤을 때 `isRunning` 이 서지 않고 Market Gate 상태와
+  워커의 갱신 주기가 바뀌지 않는지 확인. 관리자 요청은 계속 통과하는지, 비관리자 화면에서
+  세 자리가 사라지는지도 함께 확인
+- [x] 세 버튼의 노출 대상을 정함 (제품 결정) — 셋 다 관리자 전용. 주기 선택은 GET 을 열어
+      두어 현재 값은 모두에게 보인다
+- [x] 호출 그래프를 핸들러와 상태 파일 기준으로 훑어 같은 것을 공유하는 라우트를 전부 찾음
+      — 발견 둘. (1) `GET /api/kr/market-gate` 가 데이터가 낡았을 때
+      `_trigger_market_gate_background_refresh()` 로 같은 `MarketGate().analyze()` 를
+      익명에게도 돌린다(`kr_market_system_http_routes.py:84`). POST 를 막아도 남으므로
+      기록에 그 사실을 적는다. (2) `/config/interval` 이 `.env` 를 쓴다는 위 서술은 현재
+      코드와 어긋난다. `project_env_path(__file__)` 이 존재하지 않는 `app/.env` 를 가리켜
+      저장 함수가 첫 줄에서 반환한다(실측). 지금 바뀌는 것은 그 요청을 처리한 워커의
+      `app_config` 값과 그 워커가 잠금을 쥐었을 때의 `schedule` 등록뿐이다
+- [x] 계획 검토 (`oh-my-claudecode:critic`, `infra059-critic`) — 판정 `REVISE`. 지적 열
+      가운데 차단급 하나(게이트가 기존 검사 `test_kr_market_system_http_routes_refactor.py:112`
+      를 깨뜨린다)와 중대 둘(화면 노출 조건을 재는 검사가 없다, TODO 의 「오류 처리」가
+      계획에서 빠졌다)을 포함한다. **열 가지 모두 코드로 확인한 뒤 반영했고 미반영은 없다.**
+      반영 대응표는 계획 문서의 「계획 검토 반영 기록」 절에 있다
+- [x] 게이트를 세우고 화면 노출 조건과 오류 처리를 함께 고침 — 서버 셋
+      (`kr_market_system_http_routes.py:106`·`:174`, `kr_market.py` 의 새 `set_interval_config`),
+      화면 셋(`page.tsx` 의 `canOperate`)과 드롭다운 화살표, 그리고 `handleIntervalChange`
+      의 실패 롤백
+- [x] `tests/app/test_admin_gated_routes.py` 의 `GATED_ROUTES` 목록 갱신 — 셋 추가.
+      게이트를 붙이자 `test_gated_route_list_matches_reality` 가 먼저 실패해 목록 불변식이
+      의도대로 동작함을 확인했다
+- [x] 과잉설계 리뷰 (`/ponytail-review`) — 지울 것 없음. `canOperate` 는 세 곳에서 쓰이고
+      `_interval_config_response` 는 25줄 중복을 없앤 자리다
+- [x] 코드 리뷰 (`feature-dev:code-reviewer`, `infra059-reviewer`) — 차단 결함 없음.
+      QA 미실행이 유일한 관찰이며 그것은 다음 단계다
+- [x] 심층 리뷰 (`/review`) — `handleIntervalChange` 롤백의 경쟁 상태 하나를 찾아 고쳤다.
+      응답을 기다리는 사이 사용자가 한 번 더 바꾸면 실패한 옛 요청이 성공한 최신 값을
+      덮었다. 함수형 갱신으로 「내가 세운 값일 때만 되돌린다」로 바꿨다.
+      base 는 `main` 대신 `cf80f1d` 로 두었다. `develop` 이 62 커밋 앞서 있어 그대로
+      쓰면 이번 항목과 무관한 변경까지 리뷰 대상이 된다
+- [x] 보안 리뷰 (`oh-my-claudecode:security-reviewer`, `infra059-security`) — 판정 통과,
+      인가 우회 경로 없음. 중간 지적 하나를 반영했다. `NOISY_ACTIVITY_PATHS` 가 접두사
+      일치라 **관리자 전용 POST 다섯이 활동 로그에서 빠지고 있었다**(전수 조사 결과이며
+      리뷰가 짚은 둘보다 넓다). 목록의 의미를 「GET 이 아닌데도 소음인 경로」로 좁혀
+      한 항목으로 만들고 검사 둘을 남겼다. 낮은 지적 둘은 `[INFRA-064]`·`[INFRA-065]` 로
+      이월했고, 기록 정정 하나(`/market-gate/update` 는 LLM 이 아니라 데이터 수집 비용)를
+      QA 문서에 반영했다
+- [x] 적대적 리뷰 (`oh-my-claudecode:critic`, `infra059-adversarial`) — 판정
+      「조건부 통과」. 게이트 셋과 화면 셋의 짝은 맞았으나 **중대 셋**을 찾았고 전부
+      반영했다.
+      **F1** 계획이 「세션이 만료되면 `useAdmin` 이 곧 버튼을 거둔다」를 근거로 권한 모달을
+      뺐는데 코드와 어긋났다. `SessionProvider` 에 `refetchInterval` 이 없어 폴링하지 않고
+      `useAdmin` 의 의존성은 `[session, status]` 뿐이라 재판정하지 않는다. 실제 경로는
+      세션 만료(기본 30일)가 아니라 `ADMIN_EMAILS` 회수이고, 그때 `refreshData` 는 403 을
+      받고도 스피너가 멎어 성공과 구분되지 않았다. → 세 핸들러에 403 처리를 넣고
+      `permissionRevoked` 로 세 자리를 함께 거둔다.
+      **F2** 롤백이 「직전 호출이 세운 값」으로 되돌려 서버에 반영된 적 없는 값이 화면에
+      남을 수 있었다(30→5 실패→60 실패에서 5 가 남는다). → `confirmedIntervalRef` 로 바꿨다.
+      같은 지적이 **내 돌연변이 측정이 얕았음**도 짚었다. 롤백 존재만 재고 함수형 갱신
+      조건은 재지 않아 그 줄을 되돌려도 통과했다. 겹침 검사와 403 검사를 더해 돌연변이
+      둘로 실효를 확인했다.
+      **F3** 익명 `GET /market-gate?date=` 가 매 요청마다 트리거 조건을 다시 세우고
+      공유 파일 덮어쓰기 타이밍을 익명 요청자가 고른다. → `[INFRA-064]` 에 반영했다.
+      **승인 당시 전달한 근거(「잠금이 동시 실행을 막는다」)가 불완전했으므로 사용자에게
+      그대로 보고했다.**
+      **F4** 파이썬 검사 넷이 `g.user_email` 을 직접 심어 서명 검증 구간을 건너뛴다.
+      → `verify_identity_header` 를 실제로 지나는 검사를 추가했다.
+      **F5** README 의 API 목록이 관리자 전용 표기를 빠뜨렸다(`[INFRA-042]` 가 닫은 둘
+      포함). → 다섯 자리에 표기를 더하고 정본이 `GATED_ROUTES` 임을 적었다.
+      **F6** 루트 `package.json` 은 추적하지 않기로 한 사용자 결정이라 그대로 두고 커밋에
+      넣지 않는다. `page.regression-flow-004.test.tsx` 의 목 주석은 근거를 적는 쪽으로 고쳤다
 
 ## P1 — 이번 주기
 
@@ -110,6 +176,57 @@
 - [ ] `silent=True` 유지 여부를 정함
 - [ ] 정한 근거를 발송 라우트 옆에 적음
 - [ ] 폼 인코딩 요청이 막히는지 재는 검사 추가
+
+### [INFRA-064] 익명 GET 하나가 Market Gate 분석을 원하는 만큼 돌릴 수 있다
+- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-08 `[INFRA-059]` 사이클의 보안 리뷰(지적 2)와
+  적대적 리뷰(F3). 그 라운드가 `POST /market-gate/update` 를 관리자 전용으로 닫으면서,
+  같은 분석에 닿는 `GET /api/kr/market-gate` 는 열어 두기로 사용자가 결정한 자리입니다.
+- **승인 당시 전달된 근거가 불완전했습니다.** 그때 「프로세스 잠금이 동시 실행을 막는다」고
+  설명했는데, 잠금은 **겹침만 막고 빈도를 막지 않습니다.** 적대적 리뷰가 그 위에서 결정적
+  재현 경로를 찾았습니다.
+- **`?date=` 가 조종 가능한 손잡이입니다.**
+  `services/kr_market_market_gate_validity.py:67` 은 `target_date` 가 있으면 `needs_update`
+  판정 없이 조기 반환하고, 존재하지 않는 날짜 파일이면 `is_valid=False` 로 트리거 조건이
+  섭니다. 그런데 트리거되는 `_trigger_market_gate_background_refresh`
+  (`app/routes/kr_market.py:234`)는 **인자를 받지 않아** `analyze()` 와 `save_analysis()` 를
+  날짜 없이 부릅니다. 요청한 날짜 파일은 영원히 생기지 않으므로
+  **`GET /api/kr/market-gate?date=19990101` 은 매 요청마다 다시 무장됩니다.**
+  「낡았을 때만」이 사실은 조건이 아닙니다.
+- **더 실질적인 것은 공유 파일 덮어쓰기입니다.** `save_analysis` 가 오늘자
+  `market_gate.json` 을 매번 갈아쓰므로 익명 요청자가 **언제 다시 계산할지를 고릅니다.**
+  외부 데이터 소스가 실패하는 순간을 골라 두드리면 정상 스냅샷이 열화된 결과로 대체되고
+  모든 사용자가 그것을 봅니다.
+- **실패 경로에 억제가 없습니다.** `analyze()` 가 예외로 끝나면 `save_analysis` 에 닿지
+  못해 파일이 낡은 채로 남고 다음 GET 이 곧바로 재시도합니다. 데이터 소스 장애를 방문
+  트래픽이 무한 직렬 재시도로 증폭합니다.
+- **흔적이 남지 않습니다.** `_should_skip_activity_logging` 첫 줄이 GET 을 전부 거르므로
+  `[INFRA-059]` 의 `NOISY_ACTIVITY_PATHS` 정리로도 이 경로는 활동 로그에 남지 않습니다.
+- **비용은 LLM 이 아닙니다.** `engine/market_gate.py` 의 `analyze()` 는 pykrx·FDR·yfinance
+  수집이고 LLM 호출 경로가 없습니다. 쓰이는 것은 CPU·스레드와 외부 데이터 소스 호출량입니다.
+- 같은 파일 `:95-96` 의 `_jongga_last_run` 과 `_MIN_JONGGA_RUN_INTERVAL` 이 이미 쿨다운
+  패턴을 쓰고 있으므로 새 구조 없이 그것을 가져다 쓰면 됩니다.
+- QA 시나리오: `?date=` 를 바꿔 가며 GET 을 연속으로 쳤을 때 두 번째부터 분석이 시작되지
+  않는지 확인. 분석이 실패한 뒤에도 곧바로 재시도되지 않는지 함께 확인
+- [ ] 쿨다운 간격을 정함 (기존 `_MIN_JONGGA_RUN_INTERVAL` 을 참고)
+- [ ] 실패했을 때도 쿨다운이 걸리는지 확인 (성공 경로에만 걸면 실패 재시도가 그대로 남음)
+- [ ] `?date=` 가 트리거 조건을 매번 다시 세우는 갈래를 함께 정리
+- [ ] 연속 트리거가 막히는지 재는 검사 추가
+
+### [INFRA-065] 인가 불변식 검사가 `create_app()` 부작용을 일으킨다
+- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-08 `[INFRA-059]` 사이클의 보안 리뷰(지적 6).
+  `[INFRA-042]` 가 만든 검사의 성질이며 이번 라운드가 그 목록에 세 줄을 더해 비중을
+  올렸습니다.
+- `tests/app/test_admin_gated_routes.py` 의 `test_gated_route_list_matches_reality` 가
+  `create_app()` 을 부르는데, 그 함수가 `_reset_startup_status_files()` 로 `data/` 아래
+  상태 파일을 쓰고 `_start_scheduler()` 로 스케줄러를 띄웁니다(`app/__init__.py:283-295`).
+- **사람이 돌리기를 피하는 가드는 시간이 지나면 가드로 남지 않습니다.** 이 검사는 저장소의
+  인가 경계 전체를 재는 자리라 그렇게 되면 잃는 것이 큽니다.
+- 해법은 둘입니다. `create_app` 에 부작용 없는 갈래를 두거나, 검사에서 두 함수를
+  monkeypatch 합니다. 뒤엣것이 작고 `create_app` 의 실제 배선을 그대로 재는 이점을
+  유지합니다.
+- QA 시나리오: 검사를 돌린 뒤 `data/` 상태 파일의 수정 시각이 그대로인지 확인
+- [ ] 두 부작용을 막는 방법을 정함
+- [ ] 검사가 여전히 실제 라우트 등록을 재는지 확인
 
 ### [INFRA-056] Market Gate 주기 저장이 존재하지 않는 `app/.env` 를 쓴다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-050]` 사이클에서

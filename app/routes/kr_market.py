@@ -50,6 +50,7 @@ from services.kr_market_data_cache_service import (
     load_json_file as load_json_file_service,
     load_latest_vcp_price_map as load_latest_vcp_price_map_service,
 )
+from app.routes.route_guards import require_admin
 from app.routes.kr_market_chatbot_routes import register_chatbot_and_quota_routes
 from app.routes.kr_market_route_registry import (
     register_market_data_http_route_group,
@@ -152,14 +153,17 @@ def _update_vcp_ai_cache_files(
     )
 
 
-@kr_bp.route('/config/interval', methods=['GET', 'POST'])
-def handle_interval_config():
-    """Market Gate 업데이트 주기 조회 및 설정"""
+def _interval_config_response(method: str, req_data: dict):
+    """config/interval 의 두 라우트가 공유하는 몸통.
+
+    GET 에 apply/persist 를 그대로 넘겨도 무해하다. handle_interval_config_request 가
+    GET 에서는 두 함수를 부르지 않고 바로 반환한다.
+    """
     try:
         from engine.config import app_config
         status_code, payload = handle_interval_config_request_service(
-            method=request.method,
-            req_data=request.get_json(silent=True) or {},
+            method=method,
+            req_data=req_data,
             current_interval=app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES,
             apply_interval_fn=_apply_market_gate_interval,
             persist_interval_fn=_persist_market_gate_interval_to_env,
@@ -169,6 +173,30 @@ def handle_interval_config():
     except Exception as e:
         logger.error(f"Interval Config Error: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@kr_bp.route('/config/interval', methods=['GET'])
+def get_interval_config():
+    """Market Gate 업데이트 주기 조회. 화면이 현재 값을 보여 주므로 열어 둔다."""
+    return _interval_config_response("GET", {})
+
+
+# 한 뷰에 두 메서드를 두지 않는 이유가 있다. require_admin 은 메서드를 가리지 않으므로
+# 한 뷰에 붙이면 조회까지 막히고 화면이 현재 주기를 보여 주지 못한다. 나누면 어느
+# 메서드가 열려 있는지가 라우트 선언에서 바로 보이고, tests/app/test_admin_gated_routes.py
+# 의 목록 불변식이 POST 라우트만 훑으므로 이 자리가 그 목록에 자동으로 걸린다([INFRA-059]).
+@kr_bp.route('/config/interval', methods=['POST'])
+@require_admin
+def set_interval_config():
+    """Market Gate 업데이트 주기 설정. 서버 전역 스케줄러 값이라 관리자만 바꾼다.
+
+    지금 이 라우트는 `.env` 를 쓰지 않는다. `_project_env_path()` 가 존재하지 않는
+    `app/.env` 를 가리켜 `persist_market_gate_interval_to_env` 가 첫 줄에서 반환하기
+    때문이다(`[INFRA-056]` 이 그 경로를 고친다). 실제로 바뀌는 것은 이 요청을 처리한
+    워커의 `app_config` 값과, 그 워커가 스케줄러 잠금을 쥐고 있을 때의 `schedule` 등록뿐이다.
+    경로를 고치는 순간 이 자리가 파일 쓰기 경로가 되므로 그때 이 주석을 함께 지운다.
+    """
+    return _interval_config_response("POST", request.get_json(silent=True) or {})
 
 # VCP Screener Status State (file-backed for multi-worker gunicorn)
 from services.file_backed_status import FileBackedStatus

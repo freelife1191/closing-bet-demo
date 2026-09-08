@@ -309,6 +309,123 @@ def test_options_does_not_reach_the_view_even_with_a_body(monkeypatch):
     assert res.status_code == 200
 
 
+def test_refresh_refuses_anonymous(monkeypatch):
+    """[INFRA-059] /refresh 는 /init-data·/start-update 와 같은 핸들러에 닿는다.
+
+    그 둘은 [INFRA-042] 가 닫았는데 이 자리는 열려 있어, 익명 요청이 isRunning 을 세워
+    관리자 전용으로 만든 라우트를 거꾸로 잠글 수 있었다.
+    """
+    from app.routes.kr_market_system_http_routes import _register_refresh_route
+
+    def register(bp):
+        _register_refresh_route(
+            bp,
+            logger=_LOGGER,
+            deps={"launch_background_update_job": _must_not_run},
+        )
+
+    client = _build_app(register, monkeypatch, identity_email=None)
+    res = client.post("/refresh", json={})
+    assert res.status_code == 403
+    assert res.get_json() == {"error": "Forbidden"}
+
+
+def test_refresh_passes_for_admin(monkeypatch):
+    from app.routes.kr_market_system_http_routes import _register_refresh_route
+
+    calls = []
+
+    def register(bp):
+        _register_refresh_route(
+            bp,
+            logger=_LOGGER,
+            deps={
+                "launch_background_update_job": lambda **kwargs: (
+                    calls.append(kwargs["items_list"]),
+                    (200, {"status": "started"}),
+                )[1],
+            },
+        )
+
+    client = _build_app(register, monkeypatch, identity_email="admin@example.com")
+    res = client.post("/refresh", json={})
+    assert res.status_code == 200
+    assert calls == [["Market Gate", "AI Analysis"]]
+
+
+def _market_gate_deps(**overrides):
+    """GET /market-gate 가 쓰는 키까지 채운 최소 deps.
+
+    tests/app/test_kr_market_system_http_routes_refactor.py 의 _build_base_deps 를 쓰고
+    싶지만 tests/app 에 __init__.py 가 없어 import 경로가 실행 위치에 따라 갈린다. 이
+    파일이 쓰는 키는 여섯뿐이라 여기서 채운다.
+    """
+    base = {
+        "resolve_market_gate_filename": lambda _target_date: "market_gate.json",
+        "load_json_file": lambda _filename: {"status": "GREEN"},
+        "evaluate_market_gate_validity": lambda gate_data, target_date: (True, False),
+        "apply_market_gate_snapshot_fallback": (
+            lambda gate_data, is_valid, target_date, load_json_file, logger: (gate_data, is_valid)
+        ),
+        "trigger_market_gate_background_refresh": lambda: False,
+        "build_market_gate_initializing_payload": lambda: {"status": "INITIALIZING"},
+        "build_market_gate_empty_payload": lambda: {"status": "EMPTY"},
+        "normalize_market_gate_payload": lambda payload: payload,
+        "execute_market_gate_update": _must_not_run,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_market_gate_update_refuses_anonymous(monkeypatch):
+    """[INFRA-059] POST 는 동기로 수급 재수집과 분석을 돌려 워커를 최대 120초 점유한다."""
+    from app.routes.kr_market_system_http_routes import _register_market_gate_routes
+
+    def register(bp):
+        _register_market_gate_routes(bp, logger=_LOGGER, deps=_market_gate_deps())
+
+    client = _build_app(register, monkeypatch, identity_email=None)
+    res = client.post("/market-gate/update", json={})
+    assert res.status_code == 403
+    assert res.get_json() == {"error": "Forbidden"}
+
+
+def test_market_gate_update_passes_for_admin(monkeypatch):
+    from app.routes.kr_market_system_http_routes import _register_market_gate_routes
+
+    def register(bp):
+        _register_market_gate_routes(
+            bp,
+            logger=_LOGGER,
+            deps=_market_gate_deps(
+                execute_market_gate_update=lambda target_date, logger: (200, {"status": "success"}),
+            ),
+        )
+
+    client = _build_app(register, monkeypatch, identity_email="admin@example.com")
+    res = client.post("/market-gate/update", json={})
+    assert res.status_code == 200
+    assert res.get_json()["status"] == "success"
+
+
+def test_market_gate_get_stays_open_for_anonymous(monkeypatch):
+    """[INFRA-059] GET 은 그대로 둔다는 결정을 코드에 고정한다.
+
+    이 GET 은 데이터가 낡으면 백그라운드 분석을 트리거하므로 익명이 MarketGate().analyze()
+    를 돌리는 경로가 남는다. 대시보드 첫 로딩 경로라 막으면 화면이 비고, 프로세스 잠금이
+    동시 실행을 이미 막고 있어 이번 라운드는 손대지 않기로 했다. 여기서 재는 것은 그
+    결정이며, 200 이 아니게 되는 순간 결정이 바뀐 것이다.
+    """
+    from app.routes.kr_market_system_http_routes import _register_market_gate_routes
+
+    def register(bp):
+        _register_market_gate_routes(bp, logger=_LOGGER, deps=_market_gate_deps())
+
+    client = _build_app(register, monkeypatch, identity_email=None)
+    res = client.get("/market-gate")
+    assert res.status_code == 200
+
+
 # 아래 목록이 이 저장소의 인가 경계다. 라우트를 더하거나 빼면 여기도 함께 고친다.
 # 이름으로 하나씩 여는 위 검사들만 두면 일곱 번째 관리자 전용 라우트가 조용히 무검사로
 # 들어온다([INFRA-042] 적대적 리뷰 F7).
@@ -326,12 +443,100 @@ GATED_ROUTES = frozenset(
         "/api/system/stop-update",
         "/api/system/finish-update",
         "/api/system/update-item-status",
+        # [INFRA-059] 가 더한 셋이다. /refresh 는 위 /init-data·/start-update 와 같은
+        # launch_background_update_job 에 닿고, /market-gate/update 는 동기로 수급
+        # 재수집과 분석을 돌리며, /config/interval 은 서버 전역 스케줄러 주기를 바꾼다.
+        "/api/kr/refresh",
+        "/api/kr/market-gate/update",
+        # 같은 rule 에 GET 라우트가 따로 있으나 아래 _decorated_paths 가 POST 만 훑는다.
+        "/api/kr/config/interval",
         # 아래는 이번 라운드가 만든 것이 아니라 종전부터 닫혀 있던 자리다. 데코레이터가
         # 아니라 뷰 몸통의 if 문으로 같은 판정을 한다. 방식이 달라도 인가 경계이므로 이
         # 목록에 함께 둔다. 게이트를 지우면 아래 검사가 잡는다.
         "/api/notification/send",
     }
 )
+
+
+def test_gate_passes_through_the_real_identity_path(monkeypatch):
+    """서명 검증 구간을 실제로 지나는 갈래를 하나 잰다.
+
+    위 검사들은 before_request 에서 g.user_email 을 직접 심어 proxy 서명 → Flask 검증
+    구간을 건너뛴다. 그래서 INTERNAL_IDENTITY_SECRET 이 어긋나면 관리자도 403 을 받는데
+    그것을 잡는 검사가 없었다. 버튼도 canOperate 로 함께 사라지므로 조용히 기능이 없어진다.
+    검증 함수 자체는 tests/app/test_identity_helpers.py 가 보고, 여기서는 그 결과가
+    require_admin 까지 이어지는지만 본다([INFRA-059] 적대적 리뷰 F4).
+
+    서명 형식을 여기서 다시 조립하는 것은 의도한 것이다. 검증 쪽 구현을 가져다 쓰면 그
+    구현이 틀려도 검사가 함께 틀려 통과한다. 형식이 바뀌면 이 검사는 조용히 무의미해지는
+    것이 아니라 403 으로 시끄럽게 실패한다. tests/app/test_notification_admin_gate.py 의
+    _sign 도 같은 이유로 형식을 따로 적는다.
+
+    이 검사로도 Next 프록시가 실제로 그 헤더를 붙이는지는 재지 못한다. 그 구간은 QA 의
+    브라우저 갈래에서만 확인된다.
+    """
+    import base64
+    import hashlib
+    import hmac
+
+    from app import _register_request_context
+    from app.routes.kr_market_system_http_routes import _register_refresh_route
+
+    secret = "test-identity-secret"
+    admin = "admin@example.com"
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", secret)
+    monkeypatch.setenv("ADMIN_EMAILS", admin)
+
+    encoded = base64.urlsafe_b64encode(admin.encode("utf-8")).decode("ascii").rstrip("=")
+    payload = f"{encoded}.4000000000"
+    mac = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    app = Flask(__name__)
+    app.testing = True
+    _register_request_context(app)
+    bp = Blueprint("identity_probe_bp", __name__)
+    _register_refresh_route(
+        bp,
+        logger=_LOGGER,
+        deps={"launch_background_update_job": lambda **_k: (200, {"status": "started"})},
+    )
+    app.register_blueprint(bp)
+    client = app.test_client()
+
+    res = client.post("/refresh", json={}, headers={"X-Auth-Identity": f"{payload}.{mac}"})
+    assert res.status_code == 200, "서명된 관리자 신원이 게이트를 통과하지 못한다"
+
+    # 서명이 어긋나면 같은 경로가 막힌다. 통과만 재면 게이트가 전부를 열어도 통과한다.
+    res = client.post("/refresh", json={}, headers={"X-Auth-Identity": f"{payload}.deadbeef"})
+    assert res.status_code == 403
+
+
+def test_gated_routes_are_not_excluded_from_activity_log():
+    """인가 경계를 넘은 요청은 활동 로그에 남는다.
+
+    [INFRA-059] 이전에는 NOISY_ACTIVITY_PATHS 가 접두사 일치라 관리자 전용 POST 다섯이
+    조용히 빠졌다. 누가 언제 실행했는지 모르는 관리자 라우트가 생기는 것을 막는다.
+
+    앱을 세우지 않고 판정 함수를 직접 부른다. create_app 은 data/ 에 상태 파일을 쓰고
+    스케줄러를 띄우므로 이만한 검사에 부르지 않는다.
+    """
+    from app import _should_skip_activity_logging
+
+    skipped = sorted(
+        path for path in GATED_ROUTES if _should_skip_activity_logging("POST", path)
+    )
+    assert not skipped, f"관리자 전용인데 활동 로그에서 빠진다: {skipped}"
+
+
+def test_polling_post_stays_out_of_activity_log():
+    """막는 것만 재면 목록을 비워도 통과한다. 남겨야 할 것이 남는지도 잰다.
+
+    /api/kr/realtime-prices 는 60초 주기로 도는 POST 폴링이라 제외 대상이다.
+    """
+    from app import _should_skip_activity_logging
+
+    assert _should_skip_activity_logging("POST", "/api/kr/realtime-prices")
+    assert _should_skip_activity_logging("GET", "/api/kr/jongga-v2/status")
 
 
 def _decorated_paths(app) -> set[str]:

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { krAPI, KRMarketGate, KRSignalsResponse, DataStatus, fetchAPI } from '@/lib/api';
+import { useAdmin } from '@/hooks/useAdmin';
 import { MAX_AUTO_RETRIES, shouldScheduleAutoRetry } from './retryHelpers';
 import Modal from '@/app/components/Modal';
 
@@ -182,6 +183,30 @@ export default function KRMarketOverview() {
   const [mgLoading, setMgLoading] = useState(false);
   const [updateInterval, setUpdateInterval] = useState(30); // Default 30min
   const [isStrategyGuideOpen, setIsStrategyGuideOpen] = useState(false);
+  // [INFRA-059] 아래 셋은 서버가 require_admin 으로 닫은 라우트를 부른다. 화면이 같은
+  // 조건으로 감추지 않으면 비관리자에게 버튼이 보이고, 눌러도 403 만 돌아오는데 두
+  // 핸들러의 catch 가 console.error 뿐이라 화면에는 아무 반응도 없다.
+  const { isAdmin, isLoading: isAdminLoading } = useAdmin();
+  // 버튼을 감추는 것만으로는 모자란다. useAdmin 은 [session, status] 가 바뀔 때만 다시
+  // 판정하고 SessionProvider 에 refetchInterval 이 없어 폴링하지 않으므로, 열려 있는 탭은
+  // ADMIN_EMAILS 에서 빠진 뒤에도 세 자리를 계속 보인다. 서버는 즉시 403 을 내는데 화면이
+  // 아무 말도 하지 않으면 사용자는 갱신이 된 줄 안다.
+  //
+  // 그래서 403 을 받으면 알리는 데서 그치지 않고 세 자리를 함께 거둔다. useAdmin 을
+  // 고치지 않는 이유는 그 훅이 다른 화면 여섯에서도 쓰이기 때문이다. 여기서 필요한 것은
+  // 「이 탭의 판정이 낡았다」 하나이고 상태 하나로 끝난다.
+  const [permissionRevoked, setPermissionRevoked] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const canOperate = !isAdminLoading && isAdmin && !permissionRevoked;
+
+  const reportPermissionDenied = (message: string) => {
+    setPermissionRevoked(true);
+    setPermissionError(message);
+  };
+  // 서버가 실제로 받아들인 마지막 주기다. updateInterval 은 낙관적 갱신이라 아직 확정되지
+  // 않은 값을 담을 수 있고, 요청이 겹칠 때 그것으로 되돌리면 서버에 반영된 적 없는 값이
+  // 화면에 남는다.
+  const confirmedIntervalRef = useRef(30);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef(0);
   const [autoRetryExhausted, setAutoRetryExhausted] = useState(false);
@@ -196,12 +221,18 @@ export default function KRMarketOverview() {
     fetch('/api/kr/config/interval')
       .then(res => res.json())
       .then(data => {
-        if (data.interval) setUpdateInterval(data.interval);
+        if (data.interval) {
+          setUpdateInterval(data.interval);
+          confirmedIntervalRef.current = data.interval;
+        }
       })
       .catch(err => console.error('Failed to load interval config:', err));
   }, []);
 
   const handleIntervalChange = async (minutes: number) => {
+    // [INFRA-059] 이 값은 서버 전역 스케줄러 주기이고 POST 에 관리자 게이트가 있다.
+    // 낙관적 갱신만 하고 실패를 되돌리지 않으면, 권한을 잃은 관리자가 이 자리를 눌렀을
+    // 때 403 이 오는데도 화면의 주기 값만 바뀌어 서버 값과 조용히 갈린다.
     try {
       setUpdateInterval(minutes); // UI 즉시 반영 (낙관적 업데이트)
       const res = await fetch('/api/kr/config/interval', {
@@ -209,10 +240,20 @@ export default function KRMarketOverview() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ interval: minutes })
       });
-      if (!res.ok) throw new Error('Failed to update interval');
+      if (!res.ok) {
+        if (res.status === 403) {
+          reportPermissionDenied('관리자만 갱신 주기를 바꿀 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
+        }
+        throw new Error('Failed to update interval');
+      }
+      confirmedIntervalRef.current = minutes;
     } catch (error) {
       console.error('Error changing interval:', error);
-      // 실패 시 롤백 로직이 필요할 수 있음
+      // 되돌릴 곳은 「직전 호출이 세운 값」이 아니라 「서버가 실제로 받아들인 값」이다.
+      // 30 → 5(실패) → 60(실패) 순서에서 앞의 값으로 되돌리면 서버에 반영된 적 없는
+      // 5 가 화면에 남는다. 함수형 갱신으로 감싸는 것은 응답을 기다리는 사이에 성공한
+      // 더 최신 변경을 이 실패 응답으로 덮지 않기 위해서다.
+      setUpdateInterval(current => (current === minutes ? confirmedIntervalRef.current : current));
     }
   };
 
@@ -361,8 +402,11 @@ export default function KRMarketOverview() {
       // 업데이트 후 데이터 다시 로드
       const gate = await krAPI.getMarketGate(dateParam);
       setGateData(gate);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Market Gate update failed', e);
+      if (e?.status === 403) {
+        reportPermissionDenied('관리자만 Market Gate 를 강제로 갱신할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
+      }
     } finally {
       setMgLoading(false);
     }
@@ -381,6 +425,11 @@ export default function KRMarketOverview() {
       });
       if (!refreshRes.ok) {
         console.error('Refresh API failed');
+        // 403 을 조용히 지나면 아래 loadData 가 옛 데이터를 다시 그리고 스피너가 멎어
+        // 성공한 갱신과 구분되지 않는다. 권한이 바뀐 뒤에도 열려 있는 탭에서 일어난다.
+        if (refreshRes.status === 403) {
+          reportPermissionDenied('관리자만 데이터 갱신을 시작할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
+        }
       }
       await loadData();
     } catch (error) {
@@ -654,8 +703,12 @@ export default function KRMarketOverview() {
             <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1.5 relative group">
               <span className="w-1 h-1 rounded-full bg-blue-500/50"></span>
               매크로 지표:
-              {/* 커스텀 값인 경우 number input 표시 */}
-              {![1, 5, 10, 15, 30, 60].includes(updateInterval) ? (
+              {/* [INFRA-059] 이 값은 개인 설정이 아니라 서버 전역 스케줄러 주기다.
+                  비관리자에게는 현재 값만 보이고 바꾸는 UI 는 감춘다. 조회(GET)는 열려
+                  있으므로 값 자체는 그대로 온다. */}
+              {!canOperate ? (
+                <span className="font-bold text-gray-400 ml-0.5">{updateInterval}분</span>
+              ) : ![1, 5, 10, 15, 30, 60].includes(updateInterval) ? (
                 <div className="flex items-center gap-1 ml-0.5">
                   <input
                     type="number"
@@ -705,7 +758,10 @@ export default function KRMarketOverview() {
               )}
               <span className="text-gray-500 ml-1">마다 자동 갱신</span>
               {/* Custom Arrow for Dropdown */}
-              {[1, 5, 10, 15, 30, 60].includes(updateInterval) && (
+              {/* canOperate 를 함께 보지 않으면 select 를 감춰도 이 화살표가 남는다.
+                  group 이 위 div 이므로 비관리자가 그 줄에 마우스를 올리면 없는
+                  드롭다운의 화살표가 나타난다([INFRA-059]). */}
+              {canOperate && [1, 5, 10, 15, 30, 60].includes(updateInterval) && (
                 <i className="fas fa-chevron-down text-[8px] text-gray-600 ml-1 group-hover:text-blue-500 transition-colors pointer-events-none absolute right-full mr-1 opacity-0 group-hover:opacity-100"></i>
               )}
             </div>
@@ -747,14 +803,19 @@ export default function KRMarketOverview() {
             <Tooltip size="lg" content="시장 강도(Score)와 수급 상태를 종합 분석한 마켓 타이밍 지표입니다." position="bottom" align="left">
               <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
             </Tooltip>
-            <button
-              onClick={refreshMarketGate}
-              disabled={mgLoading}
-              className={`ml-1 p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-[10px] text-gray-400 hover:text-white transition-all ${mgLoading ? 'animate-spin opacity-50' : ''}`}
-              title="Refresh Market Gate Only"
-            >
-              <i className="fas fa-sync-alt"></i>
-            </button>
+            {/* [INFRA-059] POST /api/kr/market-gate/update 는 관리자 전용이다. 이 버튼이
+                사라져도 데이터는 계속 채워진다. 스케줄러가 주기마다 돌고, 값이 낡으면
+                GET /api/kr/market-gate 가 백그라운드 분석을 알아서 트리거한다. */}
+            {canOperate && (
+              <button
+                onClick={refreshMarketGate}
+                disabled={mgLoading}
+                className={`ml-1 p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-[10px] text-gray-400 hover:text-white transition-all ${mgLoading ? 'animate-spin opacity-50' : ''}`}
+                title="Refresh Market Gate Only"
+              >
+                <i className="fas fa-sync-alt"></i>
+              </button>
+            )}
             <div className="hidden lg:block ml-auto w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
           </h3>
           <div className="flex flex-col items-center justify-center py-2">
@@ -974,19 +1035,24 @@ export default function KRMarketOverview() {
         })()}
 
         {/* 4. Update Button */}
-        <button
-          onClick={refreshData}
-          disabled={loading}
-          className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 flex flex-col justify-center items-center gap-2 cursor-pointer hover:bg-white/5 transition-all group disabled:opacity-50"
-        >
-          <div className={`w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white group-hover:rotate-180 transition-transform duration-500 ${loading ? 'animate-spin' : ''}`}>
-            <i className="fas fa-sync-alt"></i>
-          </div>
-          <div className="text-center">
-            <div className="text-sm font-bold text-white">Refresh Data</div>
-            <div className="text-[10px] text-gray-500">Last: {lastUpdated || '-'}</div>
-          </div>
-        </button>
+        {/* [INFRA-059] POST /api/kr/refresh 는 관리자 전용이다. 그 라우트가 /init-data 와
+            /start-update 와 같은 launch_background_update_job 에 닿아 isRunning 을 세운다.
+            비관리자에게는 이 칸이 빠져 그리드가 넷에서 셋이 된다. */}
+        {canOperate && (
+          <button
+            onClick={refreshData}
+            disabled={loading}
+            className="p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 flex flex-col justify-center items-center gap-2 cursor-pointer hover:bg-white/5 transition-all group disabled:opacity-50"
+          >
+            <div className={`w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white group-hover:rotate-180 transition-transform duration-500 ${loading ? 'animate-spin' : ''}`}>
+              <i className="fas fa-sync-alt"></i>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-bold text-white">Refresh Data</div>
+              <div className="text-[10px] text-gray-500">Last: {lastUpdated || '-'}</div>
+            </div>
+          </button>
+        )}
       </div>
 
 
@@ -1206,6 +1272,18 @@ export default function KRMarketOverview() {
         isOpen={isStrategyGuideOpen}
         onClose={() => setIsStrategyGuideOpen(false)}
       />
+
+      {/* [INFRA-059] 세 조작이 403 을 받았을 때 쓴다. 버튼은 canOperate 로 감추지만
+          useAdmin 이 재판정하지 않아 권한을 잃은 탭에는 계속 보이고, 그 상태에서 누르면
+          서버만 거부하고 화면은 아무 말도 하지 않았다. */}
+      <Modal
+        isOpen={permissionError !== null}
+        onClose={() => setPermissionError(null)}
+        title="권한 없음"
+        type="danger"
+      >
+        <p className="text-sm text-gray-300 whitespace-pre-line">{permissionError}</p>
+      </Modal>
     </div>
   );
 }

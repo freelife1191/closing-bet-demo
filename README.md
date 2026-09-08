@@ -347,10 +347,16 @@ graph TD
 - `GET /api/kr/closing-bet/cumulative`: 종가베팅 전략의 누적 성과 및 승률 통계
 - `POST /api/kr/realtime-prices`: 전 종목 실시간 가격 통합 조회 (Toss/YF 폴백)
 - `GET /api/kr/market-gate`: Market Gate 상태 및 상세 스코어링 데이터
-- `POST /api/kr/market-gate/update`: 시장 데이터 및 Market Gate 강제 동기화
-- `POST /api/kr/signals/run`: VCP 시그널 생성 엔진 백그라운드 실행
-- `POST /api/kr/jongga-v2/run`: AI 종가베팅 V2 엔진 백그라운드 실행
+- `POST /api/kr/market-gate/update`: 시장 데이터 및 Market Gate 강제 동기화. **관리자 전용**이며 서명된 관리자 신원이 없는 요청은 403 을 받는다
+- `GET`·`POST /api/kr/config/interval`: Market Gate 갱신 주기 조회와 설정. 조회는 열려 있고 **설정만 관리자 전용**이다
+- `POST /api/kr/refresh`: Market Gate 와 AI 분석 전체 갱신을 백그라운드로 시작. **관리자 전용**
+- `POST /api/kr/signals/run`: VCP 시그널 생성 엔진 백그라운드 실행. **관리자 전용**
+- `POST /api/kr/jongga-v2/run`: AI 종가베팅 V2 엔진 백그라운드 실행. **관리자 전용**
 - `POST /api/kr/chatbot`: AI 투자 어드바이저(스마트머니봇)와 대화
+
+> 관리자 전용 라우트의 전체 목록은 `tests/app/test_admin_gated_routes.py` 의 `GATED_ROUTES`
+> 가 정본이다. 같은 파일의 목록 불변식 검사가 코드와 어긋나는 순간 실패하므로, 라우트를
+> 더하거나 뺄 때는 그 목록을 먼저 고친다. 이 README 의 표기는 사람이 읽는 요약이다.
 
 **공통 API (`common` Blueprint - `/api`):**
 - `GET /api/admin/check`: 관리자 권한 확인 (설치 및 설정용)

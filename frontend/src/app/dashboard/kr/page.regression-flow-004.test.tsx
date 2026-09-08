@@ -12,6 +12,15 @@ import KRDashboardPage from './page';
 
 const fetchAPIMock = vi.fn();
 
+// [INFRA-059] 화면이 useAdmin 을 쓴다. 목하지 않으면 useSession 이 SessionProvider
+// 없이 불려 터진다. 이 검사가 세는 확인 아이콘은 canOperate 밖에 있으므로 isAdmin 을
+// 어느 값으로 목해도 개수가 같다. 관리자 전용 자리가 그 아이콘 쪽으로 넓어지면 이
+// 전제가 깨지므로, 그때는 값을 골라 목해야 한다. 노출 조건 자체는
+// page.regression-infra-059.test.tsx 가 잰다.
+vi.mock('@/hooks/useAdmin', () => ({
+  useAdmin: () => ({ isAdmin: false, isLoading: false }),
+}));
+
 vi.mock('@/lib/api', () => ({
   fetchAPI: (...args: unknown[]) => fetchAPIMock(...args),
   krAPI: {

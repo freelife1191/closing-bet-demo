@@ -128,7 +128,11 @@ def test_refresh_route_uses_common_update_handlers_and_adds_success_message(monk
         return 200, {"status": "started", "items": items_list, "target_date": target_date}
 
     deps = _build_base_deps(launch_background_update_job=_launch)
-    client = _create_client(deps)
+    # [INFRA-059] 가 이 라우트에 require_admin 을 붙였다. 신원을 심지 않으면 403 이라
+    # 아래 배선 검사가 시작조차 하지 못한다. 게이트 자체는
+    # tests/app/test_admin_gated_routes.py 가 잰다.
+    monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
+    client = _create_client(deps, user_email="admin@example.com")
 
     response = client.post("/api/kr/refresh", json={"target_date": "2026-02-20"})
 

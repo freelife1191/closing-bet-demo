@@ -55,23 +55,23 @@ class PollingLogFilter(logging.Filter):
 werkzeug_logger = logging.getLogger('werkzeug')
 werkzeug_logger.addFilter(PollingLogFilter())
 
+# 이 목록에 담는 것은 「GET 이 아닌데도 소음인 경로」뿐이다. 폴링 GET 은
+# _should_skip_activity_logging 첫 줄이 메서드만 보고 전부 거르므로 여기 적을 이유가 없다.
+#
+# [INFRA-059] 이전에는 폴링 GET 경로 열여섯이 들어 있었고 검사가 접두사 일치였다. GET 은
+# 이미 걸러진 뒤이므로 그 접두사들이 실제로 한 일은 **그 아래 POST 를 거르는 것**뿐이었고,
+# 그 바람에 관리자 전용 POST 다섯이 활동 로그에서 통째로 빠졌다. /api/kr/signals 접두사가
+# signals/run·reanalyze-failed-ai·그 stop 셋을, /api/kr/market-gate 가 market-gate/update
+# 를, /api/kr/config/interval 이 그 POST 를 먹었다. 인가 경계를 넘은 요청이야말로 누가
+# 언제 실행했는지 남아야 하는 것들이다.
+#
+# 여기에 경로를 더할 때는 그 경로의 POST·PUT·DELETE 가 무엇인지 먼저 본다. 접두사 일치라
+# 하위 경로까지 함께 먹는다. tests/app/test_admin_gated_routes.py 가 관리자 전용 라우트에
+# 대해 그것을 잰다.
 NOISY_ACTIVITY_PATHS = [
-    '/health',
-    '/api/system/update-status',
-    '/api/system/data-status',
-    '/api/kr/jongga-v2/status',
-    '/api/kr/status',
+    # 60초 주기 시세 폴링이다(frontend/src/app/dashboard/kr/vcp/page.tsx 의 setInterval).
+    # 이 목록에서 유일하게 GET 이 아닌 소음이며, 하위 경로가 없어 정확 일치처럼 동작한다.
     '/api/kr/realtime-prices',
-    '/api/kr/market-gate',
-    '/api/kr/signals',
-    '/api/kr/backtest-summary',
-    '/api/kr/user/quota',
-    '/api/admin/check',
-    '/api/kr/config/interval',
-    '/api/kr/jongga-v2/dates',
-    '/api/kr/jongga-v2/latest',
-    '/static',
-    '/favicon.ico',
 ]
 
 

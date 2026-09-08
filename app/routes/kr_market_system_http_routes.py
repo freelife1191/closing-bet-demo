@@ -103,6 +103,7 @@ def _register_market_gate_routes(
         )
 
     @kr_bp.route('/market-gate/update', methods=['POST'])
+    @require_admin
     def update_kr_market_gate():
         """Market Gate 및 관련 데이터(Smart Money) 강제 업데이트"""
         def _handler():
@@ -170,6 +171,7 @@ def _register_refresh_route(
     deps: dict[str, Any],
 ) -> None:
     @kr_bp.route('/refresh', methods=['POST'])
+    @require_admin
     def refresh_kr_data():
         """KR 데이터 전체 갱신 (Market Gate + AI Analysis) - Background Async"""
         def _handler():
