@@ -15,53 +15,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-056] Market Gate 주기 저장이 존재하지 않는 `app/.env` 를 쓴다
-- 설계 승인: 2026-09-08 현재 대화 사용자 「진행해」 | bounded/T3, 공통경로/잠금/링크보호/저장후적용/격리실측/리뷰·마감.
-- [x] writing-plans 계획 critic OKAY(1차4지적보완, package오탐철회), reviews/INFRA-056.md
-- [x] TDD 구현·pytest2027 PASS/3skip·vitest373·typecheck·lint0errors(기존199warnings)
-- [x] ponytail -3·code APPROVE·architecture CLEAR·security APPROVE·심층review 수정후이슈0
-- [x] UltraQA/agent-browser 필수7/7동작통과·사진7개직접확인·소유서버/namespace정리
-- [ ] develop통합·clone삭제·최종아카이브
-- 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-050]` 사이클에서
-  발견했고 `oh-my-claudecode:critic` 이 독립적으로 같은 결론을 냈습니다.
-- **선행 조건이 충족되었습니다.** 2026-09-08 `[INFRA-059]` 가
-  `POST /api/kr/config/interval` 을 관리자 전용으로 닫았으므로 이제 착수할 수 있습니다.
-  그 전에 고쳤다면 인증 없는 요청이 운영 `.env` 를 쓰게 되어 없던 노출을 스스로 만들었을
-  것입니다. 선행 조건은 원래 `[INFRA-042]` 로 적혀 있었으나 그 라운드가 이 라우트를 부류 B
-  로 이월하면서 옮겨졌습니다.
-- **경로를 고치면 `set_interval_config` 의 docstring 도 함께 지웁니다.**
-  `app/routes/kr_market.py` 의 그 docstring 은 「지금 이 라우트는 `.env` 를 쓰지 않는다」를
-  적어 두었고, 이 항목이 그 전제를 뒤집습니다.
-- `services/kr_market_interval_service.py:14-20` 의 `project_env_path` 는 넘겨받은
-  `base_file` 에서 디렉터리를 두 단계만 걷어냅니다. 유일한 호출자인
-  `app/routes/kr_market.py:101` 이 자기 `__file__` 을 넘기는데 그 파일은 `app/routes/`
-  아래라 결과가 `<루트>/app/.env` 입니다. 그 파일은 존재하지 않으므로
-  `persist_market_gate_interval_to_env` 는 `:29-30` 의 존재 검사에서 조용히 반환합니다.
-  함수의 docstring 은 「프로젝트 루트 .env 파일 경로를 반환한다」라고 적혀 있어 의도와
-  어긋나며, `45ad2a6 refactor: complete modular split` 에서 들어온 계산입니다.
-- 그래서 관리자가 화면에서 바꾼 Market Gate 주기가 `.env` 에 저장되지 않습니다.
-  `POST /api/kr/config/interval` 은 성공을 반환하고 `apply_market_gate_interval` 이 런타임만
-  바꾸므로, 그 값이 다음 재기동에서 사라집니다.
-- 완료 조건 셋입니다. ① `project_env_path` 와 `base_file` 인자를 지우고
-  `services.common_env_service.resolve_env_path` 를 재사용합니다. 같은 경로를 두 곳에서 따로
-  계산하는 구조가 이 결함의 원인이므로 하나로 합치면 재발이 구조적으로 막힙니다. 두 호출
-  지점이 같은 절대 경로를 만든다는 것을 단언하는 검사를 함께 둡니다. ② 그때
-  `persist_market_gate_interval_to_env` 의 읽기부터 교체까지를 `[INFRA-050]` 이 만든
-  `_env_file_lock` 에 넣습니다. 그 잠금은 재진입이 불가능하므로 `update_env_file` 에 위임하는
-  방식은 쓰지 않습니다. ③ **주기 값이 실제로 `.env` 에 기록되기 시작한다는 동작 변경**을
-  명시합니다. 지금까지 재기동마다 사라지던 값이 남게 되므로 운영자가 인지하지 못한 채 주기가
-  고정될 수 있습니다.
-- 저장소에 `persist_market_gate_interval_to_env` 를 실제로 부르는 검사가 없습니다.
-  `tests/services/test_kr_market_interval_http_service.py` 는 `persist_interval_fn` 에 람다만
-  넘기고, `tests/app/test_kr_market_route_integration.py:483` 은 무동작으로 대체합니다.
-  `tmp_path` 의 `.env` 를 대상으로 이 함수를 직접 부르는 검사를 하나 둡니다.
-- 잠금은 권고 잠금이라 잡지 않는 쓰기 주체를 막지 못합니다. 이 경로를 루트 `.env` 로
-  바로잡는 순간 잠금 없는 두 번째 쓰기가 살아나므로, `[INFRA-050]` 이 막은 갱신 소실이 그
-  조합에서 그대로 돌아옵니다. `POST /api/kr/config/interval` 에 인증이 없다는 점과 겹치면
-  **인증 없는 요청이 관리자 저장과 경합해 인증된 저장을 되돌릴 수 있습니다.**
-  `[INFRA-050]` 사이클의 보안 리뷰가 M2 로 낸 지적입니다.
-- QA 시나리오: 화면에서 바꾼 주기가 `.env` 에 남고 재기동 뒤에도 유지된다
-
 ### [INFRA-055] Next 환경에 백엔드 전용 시크릿이 통째로 올라가 캐시에 평문으로 남는다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-053]` 사이클의
   `oh-my-claudecode:security-reviewer` 가 확신도 높음으로 지적했고, 바이트 일치로 직접

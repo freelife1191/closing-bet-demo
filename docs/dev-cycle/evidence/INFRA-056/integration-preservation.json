@@ -1,0 +1,18 @@
+{
+  "integrated_commit": "9e846dd",
+  "source_hashes": {
+    "services/kr_market_interval_service.py": "d1158ac91188da03ce54694b72c58682ecb4d848fd21d37ed9d882fb6f5f525d",
+    "services/kr_market_interval_http_service.py": "0afde11ebf0803f387f077f0352e99250b0293ed58b73a25794d6557156a2837",
+    "services/common_env_service.py": "196f9b26f39cd2b1ce0d39882a6bcebd4281526155abbe8b60de8d72de144eb9",
+    "app/routes/kr_market.py": "dcfe66d11088970031f5d7b522ffe823ab567920c8bd5c3b309952ca6267d626",
+    "tests/services/test_kr_market_interval_persistence.py": "f2ddf7fefab8e4f9cfebb23ae442243e083f77d21d4bf192bc85a9d645b8c002",
+    "tests/services/test_kr_market_interval_http_service.py": "996700e8c83fd0177c732fca093a9408b76a2cbdeaa2f5a3a76ed1beb97d3db8",
+    "tests/app/test_kr_market_route_integration.py": "e96cb9bc820facc6c99f514a59ff329222445cc198ac42f2fe1c7f39744e5604"
+  },
+  "original_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "clone_parent_removed": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff",
+  "clone_absent": true,
+  "namespace_absent": true,
+  "no_production_restart": true,
+  "time": "2026-09-08T23:44:07.601016+09:00"
+}

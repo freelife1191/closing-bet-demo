@@ -4,10 +4,10 @@
 
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: cleanup
+- phase: complete
 - iteration: 2
 - same_failure_count: 0
-- active: true
+- active: false
 - 승인: 2026-09-08 대화의 INFRA-056 bounded/T3 제안에 사용자 「진행해」.
 - baseline: 49f5264. pytest1996 PASS/3skip(수동Gemini2/격리.env없음1), vitest373 PASS/57files.
 - browser_applicability: required
@@ -26,8 +26,8 @@
 | S-3 | 저장 실패·복구 | 기존UI15, os.replace ENOSPC 경계대역으로30설정, 대역해제재시도 |500,파일/runtime/UI15유지,재시도200 | PASS: ENOSPC500/15유지,재시도200/30 | 저장후적용 | browser+metrics | fault removed |
 | S-4 | 파일/입력 경계 | pytest 실제tmp.env, missing/empty/중복/quoted/export/multiline다른값,invalid범위 |대상키1개/다른값보존,invalid400/쓰기0 | PASS: persistence/HTTP32검사 | parser재사용 | pytest | tmp_path |
 | S-5 | 링크·I/O 경계 | 실제tmp심볼릭링크.env/lock,읽기·replace실패 |링크거부/원본보존/runtime0,실패후재시도성공 | PASS: symlink/read/replace/callback 회귀 | 기존보호재사용 | pytest | tmp_path |
-| S-6 | 두 writer·중단복구 | multiprocessing 공통.env저장과주기저장,락보유child종료/재시도 |두변경보존,잠금해제/자식exit확인,동일workerapply순서일치 | PASS: 프로세스0/0 및 -15/0,양쪽키보존 | 공통잠금 | process probe | owned child |
-| S-7 | 격리·비밀·오류·정리 | git추적.env검사,가짜sentinel 로그/API/번들검색,화면snapshot/png열기,console/errors,sourceSHA |비밀노출0,예상실패만,원본package불변/own프로세스·temp제거 | 검사PASS:509파일비반사/7이미지확인/서버종료,clone정리대기 | 없음 | safety+cleanup | own scope |
+| S-6 | 두 writer·중단복구 | multiprocessing 공통.env저장과주기저장,락보유child종료/재시도 |두변경보존,잠금해제/자식exit확인,동일workerapply순서일치 | 실패 → 고침: 프로세스0/0 및 -15/0,양쪽키보존 | 공통잠금 | process probe | owned child |
+| S-7 | 격리·비밀·오류·정리 | git추적.env검사,가짜sentinel 로그/API/번들검색,화면snapshot/png열기,console/errors,sourceSHA |비밀노출0,예상실패만,원본package불변/own프로세스·temp제거 | PASS:509파일비반사/7이미지확인/서버·namespace·clone정리 | 없음 | safety+cleanup | own scope |
 
 모든 행 필수. HTTP만으로 S-1..3 UI를 대체하지 않는다. UI없는 파일경계/프로세스경합은 pytest/CLI로 직접 실행한다.
 잘못된 JSON/Unicode와 경로형입력은 interval정수변환 및범위 검사 경계에서 검증한다. 이 API는 LLM/프롬프트를 처리하지 않으므로 prompt injection은적용불가. 재시도/중단은 S-3/S-6에 포함.
@@ -35,7 +35,7 @@
 
 ## 정리와 최종 판정
 
-동작검증7/7 통과. 소유서버·브라우저 종료 확인. namespace/clone정리·통합 완료 뒤 최종 종료한다.
+필수7/7 통과. 소유서버·브라우저·namespace·clone정리와develop통합·source/package해시대조완료.
 
 ## 정적검증·리뷰 진입 증거
 
@@ -57,4 +57,10 @@
 - 원본시장분석/스케줄러잡은돌리지않았다. actualapply내scheduler호출만기록대역이고 보조GET(admin/check제외signals/status/marketgate72/quota 등)은fixture이다. 이검증을실제수집·전체대시보드기능검증으로확장하지않는다.
 - 외부Font Awesome CDN은도메인/deny proxy에막혀일부아이콘이표시되지않는다. 주기텍스트/실제select/권한모달검증은수행됐으며전체시각일치판정은아니다.
 - runtime로그/API기록과Next build/dev static/server총509파일에서가짜env sentinel 및합성identity/NextAuth비밀값일치0. .next/cache는공개번들이아니므로검사범위에서구분했다. 실제비밀파일은읽지않았다.
-- fixture/proxy exit0, 두browser close0, NextPGID99511부재와49581/49583/49584 listener0. proxy는199연결차단/외부forward0. 실행임시파일·가짜cookie/env/profile/clone은통합후삭제한다.
+- fixture/proxy exit0, 두browser close0, NextPGID99511부재와49581/49583/49584 listener0. proxy는199연결차단/외부forward0. 실행임시파일·가짜cookie/env/profile/clone을통합후삭제했다.
+
+## 최종 판정
+
+필수7/7 PASS, 미해결실패0, 정리완료. 원본보존/통합은integration-preservation.json에기록했다.
+
+ULTRAQA COMPLETE: Goal met after 2 cycles

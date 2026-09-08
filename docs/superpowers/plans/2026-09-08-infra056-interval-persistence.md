@@ -26,18 +26,18 @@ tests/services/test_kr_market_interval_persistence.py(신규), tests/services/te
 Interfaces: persist_market_gate_interval_to_env(*, interval:int, env_path:str, atomic_write_text:Callable, apply_interval_fn:Callable[[int],None])->None.
 HTTP handle_interval_config_request의 apply_interval_fn/persist_interval_fn 인자를 set_interval_fn:Callable[[int],None]으로 통합한다. GET은 콜백 미호출. route의 기존 _persist helper가 실제 저장+적용을 연결한다.
 
-- [ ] RED: tmp_path의 가짜 .env 저장 시 주기15로 바뀌고 다른키 보존/모드0600, 중복키1개, missing 파일생성, 링크ELOOP, replace실패원본보존/runtime0을 검사한다.
+- [x] RED: tmp_path의 가짜 .env 저장 시 주기15로 바뀌고 다른키 보존/모드0600, 중복키1개, missing 파일생성, 링크ELOOP, replace실패원본보존/runtime0을 검사한다.
 ```python
 applied=[]
 persist_market_gate_interval_to_env(interval=15,env_path=str(env),atomic_write_text=atomic_write_text,apply_interval_fn=applied.append)
 assert dotenv_values(env)['MARKET_GATE_UPDATE_INTERVAL_MINUTES']=='15'
 assert applied==[15]
 ```
-- [ ] 기존 경로 별칭은 common_env_service.resolve_env_path를 사용한다. project_env_path(base_file) 및 import를 삭제한다.
+- [x] 기존 경로 별칭은 common_env_service.resolve_env_path를 사용한다. project_env_path(base_file) 및 import를 삭제한다.
 ```python
 _project_env_path = resolve_env_path
 ```
-- [ ] 저장 함수에 공통 단일 잠금, _read_env_lines 링크보호, 대상키 정규화, atomic_write_text 적용. 교체 성공 뒤 같은잠금 안에서 apply_interval_fn(interval).
+- [x] 저장 함수에 공통 단일 잠금, _read_env_lines 링크보호, 대상키 정규화, atomic_write_text 적용. 교체 성공 뒤 같은잠금 안에서 apply_interval_fn(interval).
 ```python
 with _env_file_lock(env_path):
     lines = _read_env_lines(env_path)
@@ -59,25 +59,25 @@ with _env_file_lock(env_path):
     atomic_write_text(env_path, "".join(parts))
     apply_interval_fn(interval)
 ```
-- [ ] HTTP 서비스는 유효값에 set_interval_fn(new_interval) 한 번 호출. route callback 연결과 오래된 .env 미저장 docstring 수정.
-- [ ] 동시 .env 일반설정 저장과 주기저장 상호 배타/갱신보존 검사, runtime apply 전 다른 같은프로세스 요청이 진행하지 않는지 events+bounded joins로 검증한다. 두 경로 resolver 같은 절대경로임을 코드와 테스트로 검증.
-- [ ] 관련 pytest RED→GREEN, 전체 pytest/vitest·typecheck/lint. frontend 제품변경은 예정 없음. 생성물·원본 보존 확인.
+- [x] HTTP 서비스는 유효값에 set_interval_fn(new_interval) 한 번 호출. route callback 연결과 오래된 .env 미저장 docstring 수정.
+- [x] 동시 .env 일반설정 저장과 주기저장 상호 배타/갱신보존 검사, runtime apply 전 다른 같은프로세스 요청이 진행하지 않는지 events+bounded joins로 검증한다. 두 경로 resolver 같은 절대경로임을 코드와 테스트로 검증.
+- [x] 관련 pytest RED→GREEN, 전체 pytest/vitest·typecheck/lint. frontend 제품변경은 예정 없음. 생성물·원본 보존 확인.
 
 ## Task 2: 리뷰·동적 검증·마감
 
 Files: CLAUDE.md, docs/dev-cycle/TODO.md, docs/dev-cycle/qa/INFRA-056.md, docs/dev-cycle/reviews/INFRA-056.md, docs/dev-cycle/evidence/INFRA-056/, docs/dev-cycle/archive/2026-09.md, docs/dev-cycle/archive/daily/2026-09-08.md.
 
-- [ ] CLAUDE에 주기영속화/재시작반영과 워커정책 경계를 적는다.
-- [ ] ponytail → code-reviewer+architect 병렬 → security 전용 code-reviewer → T3 review 심층. 실제입력SHA/원문/미반영사유 기록.
-- [ ] 시크릿3검사: 추적 .env 파일목록(.env.example만 허용), 가짜 sentinel 로그/API 비반사, frontend private키 번들 미노출. 새 키 없음. 실제 시크릿 읽지 않는다.
-- [ ] 정적PASS+QA행렬 첫커밋. UltraQA App 대응으로 아래행렬 실행:
+- [x] CLAUDE에 주기영속화/재시작반영과 워커정책 경계를 적는다.
+- [x] ponytail → code-reviewer+architect 병렬 → security 전용 code-reviewer → T3 review 심층. 실제입력SHA/원문/미반영사유 기록.
+- [x] 시크릿3검사: 추적 .env 파일목록(.env.example만 허용), 가짜 sentinel 로그/API 비반사, frontend private키 번들 미노출. 새 키 없음. 실제 시크릿 읽지 않는다.
+- [x] 정적PASS+QA행렬 첫커밋. UltraQA App 대응으로 아래행렬 실행:
   - 실제 관리자 /dashboard/kr에서30→15 변경, 실제 Next→Flask POST200, 임시.env 값15, 새 Flask 프로세스의 GET15 및 화면15.
   - 비관리자/권한철회403 및 파일/runtime 불변, UI권한안내/값복원.
   - 빈 파일/없는키/중복키·quoted/export/Unicode 다른값 보존, 입력범위400.
   - 파일/잠금심볼릭링크, 읽기/교체실패: 외부대상·기존파일/runtime 불변, 실패화면복원.
   - multiprocessing 두 writer 경합, 잠금보유프로세스 종료후 복구, timeout/자식종료 확인.
-- [ ] agent-browser 실제 snapshot/ref조작/network/status/스크린샷 열기/console·errors. interval API·저장로직 mock 금지; 외부 MarketGate와 scheduler actual work만 대역. 보조UI GET fixtures 명시.
-- [ ] 검증 소스SHA일치 확인후 ff 통합, 소유서버/브라우저/clone/가짜.env정리, 최종아카이브커밋에서만 TODO제거.
+- [x] agent-browser 실제 snapshot/ref조작/network/status/스크린샷 열기/console·errors. interval API·저장로직 mock 금지; 외부 MarketGate와 scheduler actual work만 대역. 보조UI GET fixtures 명시.
+- [x] 검증 소스SHA일치 확인후 ff 통합, 소유서버/브라우저/clone/가짜.env정리, 최종아카이브커밋에서만 TODO제거.
 
 ## 계획 검토 보완 (2026-09-08)
 
@@ -87,3 +87,7 @@ Files: CLAUDE.md, docs/dev-cycle/TODO.md, docs/dev-cycle/qa/INFRA-056.md, docs/d
 2. 보장하는 실패는 읽기/파싱/교체 이전 실패의 파일/runtime 불변이다. 교체 후 callback 실패는 파일이 새 값인 채 예외가전파되고HTTP500이다. 디스크 롤백은 없으며 임의 callback의 메모리 복구를 약속하지 않는다. 실제 scheduler update는 이미 예외를 로깅해 삼키는 best-effort이다. 기존 워커별 적용정책을 유지하고 로그/문서로 한계를 명시한다. callback가 raise하는 별도검사에서 파일새값·예외·잠금해제 후 재시도 성공을 확인한다.
 3. UI fixture는 clone루트.env만 사용, 부모/Flask재시작child의 MARKET_GATE_UPDATE_INTERVAL_MINUTES를unset하고 새프로세스가 dotenv에서 다시읽는다. ready는소유port/PID/cwd/HEAD/sourceSHA/API_URL과시작·종료정보를 기록한다. synthetic NEXTAUTH_SECRET/INTERNAL_IDENTITY_SECRET/ADMIN_EMAILS와전용관리자세션을 사용한다. 생성불가면필수UI BLOCKED. 보조GET fixtures는 admin/check(실제권한함수), quota, signals, status, backtest-summary, market-gate, signals/status, signals/dates, ai-analysis, system/data-status/update-status로명시한다. intervalAPI/실제writer는대역금지.
 4. QA/리뷰/증거/아카이브 경로를 모두실제 docs/dev-cycle 경로로고쳤다.
+
+## 완료 증거
+
+2026-09-08 구현f702b28·실측9e846dd. QA: docs/dev-cycle/qa/INFRA-056.md. 전체2027/373 PASS·필수7/7·정리완료. 초기계획검토입력hash는당시계획본이며이체크완료기록은결과문서변경이다.

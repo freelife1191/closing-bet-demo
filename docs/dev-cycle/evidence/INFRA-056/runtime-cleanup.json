@@ -17,6 +17,6 @@
   "source_hashes_match": true,
   "namespace": "/Users/freelife/.agent-browser/namespaces/devcycle-infra056-65n43kff",
   "namespace_cleanup": "removed after closed session/PID checks",
-  "clone_cleanup": "pending",
+  "clone_cleanup": "removed including fake env/cookies/profiles/node cache/test fixtures",
   "namespace_pids": []
 }
