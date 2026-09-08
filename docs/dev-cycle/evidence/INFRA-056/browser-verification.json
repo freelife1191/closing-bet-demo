@@ -1,0 +1,72 @@
+{
+  "post_statuses": [
+    200,
+    500,
+    200,
+    403,
+    403
+  ],
+  "applies": [
+    15,
+    30
+  ],
+  "final_file_interval": 30,
+  "file_mode": "0600",
+  "secret_scan_files": 509,
+  "secret_hits": [],
+  "images": [
+    {
+      "file": "interval-before.png",
+      "width": 1280,
+      "height": 577,
+      "sha256": "9dcddf3e2b353aa10caa11f80657b1d98d3951f3b5f31f5ba3086a3a32bb4a91",
+      "opened_by_root": true
+    },
+    {
+      "file": "interval-failed.png",
+      "width": 1280,
+      "height": 577,
+      "sha256": "0876c35fea4ce6b74eb474938347fe04774af6efb15e1b68b312c9b98ba0339f",
+      "opened_by_root": true
+    },
+    {
+      "file": "interval-recovered.png",
+      "width": 1280,
+      "height": 577,
+      "sha256": "18d8a06a33c370295f62419e14424f35f59bb5c606bfaef65280f169952bb2d4",
+      "opened_by_root": true
+    },
+    {
+      "file": "interval-restarted.png",
+      "width": 1280,
+      "height": 577,
+      "sha256": "a04c32997abfea7d762808996bf233e9779e465634dcdcc52bbdb8191a4d291e",
+      "opened_by_root": true
+    },
+    {
+      "file": "interval-revoked.png",
+      "width": 1280,
+      "height": 577,
+      "sha256": "1a96796e09e11223fa4055ed91ebc0fc8aec6b7fc3f6a78c27386704d78a92bd",
+      "opened_by_root": true
+    },
+    {
+      "file": "interval-saved.png",
+      "width": 1280,
+      "height": 577,
+      "sha256": "0816efead0148cd8faaba7ea66bd8a5abcf4550085a57ecc9906fce858f331dd",
+      "opened_by_root": true
+    },
+    {
+      "file": "interval-viewer.png",
+      "width": 1280,
+      "height": 577,
+      "sha256": "72e176e66d00b62a8409efb0847a7dea49abdac5a57ef2e3da2318a9ea356f9e",
+      "opened_by_root": true
+    }
+  ],
+  "expected_console_errors": 2,
+  "page_errors": 0,
+  "normal_console_errors": 0,
+  "external_font_cdn": "blocked; icons partially absent; interval text/controls fully verified"
+}

@@ -1,0 +1,16 @@
+{
+  "url": "http://localhost:49584/dashboard/kr",
+  "flask_port": 49583,
+  "next_port": 49584,
+  "next_pid": 99511,
+  "next_pgid": 99511,
+  "backend_pid": 2665,
+  "backend_generation": 1,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/checkout",
+  "head": "f702b280a3f92739c844442f4db3574cd75a32c1",
+  "source_sha": "bf71b3eb4e41965f1d0bc8e68364d8ea854932a8",
+  "api_url": "http://127.0.0.1:49583",
+  "child_interval_env_unset": true,
+  "admin_cookie_file": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/admin.cookies.json",
+  "viewer_cookie_file": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/viewer.cookies.json"
+}

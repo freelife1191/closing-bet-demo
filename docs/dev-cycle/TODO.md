@@ -20,7 +20,8 @@
 - [x] writing-plans 계획 critic OKAY(1차4지적보완, package오탐철회), reviews/INFRA-056.md
 - [x] TDD 구현·pytest2027 PASS/3skip·vitest373·typecheck·lint0errors(기존199warnings)
 - [x] ponytail -3·code APPROVE·architecture CLEAR·security APPROVE·심층review 수정후이슈0
-- [ ] UltraQA/agent-browser 필수행렬·정리·아카이브
+- [x] UltraQA/agent-browser 필수7/7동작통과·사진7개직접확인·소유서버/namespace정리
+- [ ] develop통합·clone삭제·최종아카이브
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-050]` 사이클에서
   발견했고 `oh-my-claudecode:critic` 이 독립적으로 같은 결론을 냈습니다.
 - **선행 조건이 충족되었습니다.** 2026-09-08 `[INFRA-059]` 가

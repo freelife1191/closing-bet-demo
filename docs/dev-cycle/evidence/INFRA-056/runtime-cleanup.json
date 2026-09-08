@@ -1,0 +1,22 @@
+{
+  "server_exit": 0,
+  "proxy_exit": 0,
+  "browser_closes": [
+    0,
+    0
+  ],
+  "owned_ports_clear": [
+    49581,
+    49583,
+    49584
+  ],
+  "next_pgid_clear": 99511,
+  "browser_command_count": 45,
+  "browser_command_errors": 0,
+  "original_package_preserved": true,
+  "source_hashes_match": true,
+  "namespace": "/Users/freelife/.agent-browser/namespaces/devcycle-infra056-65n43kff",
+  "namespace_cleanup": "removed after closed session/PID checks",
+  "clone_cleanup": "pending",
+  "namespace_pids": []
+}

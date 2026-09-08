@@ -1,0 +1,18 @@
+{
+  "last_post": {
+    "pid": 2665,
+    "generation": 1,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/checkout",
+    "head": "f702b280a3f92739c844442f4db3574cd75a32c1",
+    "source_sha": "bf71b3eb4e41965f1d0bc8e68364d8ea854932a8",
+    "api_url": "http://127.0.0.1:49583",
+    "child_interval_env_unset": true,
+    "method": "POST",
+    "path": "/api/kr/config/interval",
+    "status": 403,
+    "interval": null,
+    "error_kind": "http_error"
+  },
+  "file_interval": 30,
+  "inert_apply_count": 2
+}
