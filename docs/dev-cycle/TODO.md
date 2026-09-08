@@ -15,34 +15,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-063] 가장 무거운 발송 라우트가 가장 얇은 CSRF 방어를 갖는다
-- 카테고리: 인프라 | 티어: T3(인증) | 근거: 2026-09-08 `[INFRA-042]` 사이클의 적대적 리뷰가
-  F6 으로 짚었습니다. 판정은 `INVESTIGATE` 이며 지금 뚫려 있다는 뜻은 아닙니다.
-- `app/routes/common_notification_routes.py:139-144` 는 `request.get_json()` 에
-  `silent=True` 를 붙이지 않는 것이 **의도적인 두 번째 CSRF 층**이라고 명시합니다. 프리플라이트를
-  피할 수 있는 유일한 형태인 폼 인코딩 요청을 415 로 세우는 것이 목적이고, 주석은 「일관성을
-  맞춘다며 이 한 줄을 고치면 그 경로가 열린다」고 못 박습니다.
-- 그런데 `[INFRA-042]` 가 게이트를 붙인 자리들은 `silent=True` 를 씁니다
-  (`kr_market_jongga_execution_routes.py:103`·`:176`·`:202`,
-  `kr_market_data_signals_routes.py:217`). 그래서 **실제 운영 채널로 발송하는
-  `/jongga-v2/message` 는 `frontend/src/proxy.ts:58-68` 의 `Sec-Fetch-Site` 검사 한 겹에만
-  기댑니다.**
-- 지금 막혀 있는 근거는 둘입니다. 그 검사가 헤더가 없을 때도 막는 쪽으로 떨어지고,
-  `silent=True` 덕에 교차 출처 요청은 `force` 를 실을 수 없어 중복 가드가 살아 있습니다.
-- 남는 문제는 배치입니다. **가장 무거운 자리가 가장 얇은 방어를 갖고 있고, 그 근거를 적어 둔
-  주석은 정작 다른 파일에 있습니다.** 다음 사람이 `/jongga-v2/message` 만 보면 왜 한 겹인지
-  알 수 없습니다.
-- 결정할 것: `silent=True` 를 유지할 것인가. 유지한다면 그 근거를 `/jongga-v2/message` 옆에
-  적을 것인가. 바꾼다면 기존 호출부가 본문 없는 POST 를 보내는 자리가 있는지 함께 확인합니다.
-- QA 시나리오: 폼 인코딩 교차 출처 POST 가 발송에 닿지 않는지 확인
-- 설계 승인: 승인 일자 2026-09-08 | 범위: 발송 JSON 객체 경계·T3 리뷰·UltraQA | 실제 대화: 설치 조치 후 사용자 「다음 진행해」, 중단 후 「계속 진행해」
-- 계획: docs/superpowers/plans/2026-09-08-infra-063-json-boundary.md
-- [x] `silent=True` 제거와 발송 전 MIME/문법/객체 검사로 결정
-- [x] JSON-only의2차CSRF방어·wrapper밖415/400보존근거를발송라우트옆에적음
-- [x] 실제HMAC경계29개 추가, 대상62·전체pytest1965·vitest373PASS
-- [x] critic OKAY·ponytail Lean already·code/security APPROVE·architect CLEAR·deep수리후APPROVE
-- [ ] 확정commit UltraQA 실제HTTP28개·정리·통합·최종아카이브
-
 ### [INFRA-064] 익명 GET 하나가 Market Gate 분석을 원하는 만큼 돌릴 수 있다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-08 `[INFRA-059]` 사이클의 보안 리뷰(지적 2)와
   적대적 리뷰(F3). 그 라운드가 `POST /market-gate/update` 를 관리자 전용으로 닫으면서,

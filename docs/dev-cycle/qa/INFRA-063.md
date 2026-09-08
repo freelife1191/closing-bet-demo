@@ -2,7 +2,7 @@
 
 ## Goal and success criteria
 
-- 항목: INFRA-063 | engine: ultraqa | lifecycle: app-adapted | phase: cleanup | active: true | iteration: 2 | same_failure_count: 0
+- 항목: INFRA-063 | engine: ultraqa | lifecycle: app-adapted | phase: complete | active: false | iteration: 2 | same_failure_count: 0
 - 목표: 관리자 JSON 객체만 발송 로직에 진입; 잘못된 입력·교차 사이트 요청은 조회/발송/guard 상태를 바꾸지 않는다.
 - 승인: 현재 대화의 bounded 설계 및 설치 보완 후 사용자 「다음 진행해」/「계속 진행해」.
 - 기준: 5aab1dc에서 독립 clone. 구현 commit 확정 후 HTTP실행.
@@ -19,21 +19,32 @@
 | Q4 | 교차사이트/권한우회 | Next 세션 admin cross-site/same-site/없음, 익명/일반계정 각각 폼 및 malformed JSON·위조헤더 | 403·send0, proxy거부는Flask도달0 | 통과: 권한/CSRF10개403, proxy차단5개Flask도달0 | 기존게이트유지 | transport | servers off | 예 |
 | Q5 | 중복/force/재시도 | 같은 날짜 두 번·force true·발송 예외 후 재시도·OPTIONS | 정상1회·중복skipped·force추가1회·claim회복·OPTIONS무발송 | 통과: 중복skipped·force추가발송·OPTIONS200무발송; claimretry는회귀검사통과 | 기존동작유지 | boundary/transport | guard tmp삭제 | 예 |
 | Q6 | 시크릿/오류노출 | tracked env·client bundle sentinel·HTTP응답/Next/Flask로그 | 시크릿/서명/MAC 노출0 | 통과: 응답·Next/Flask로그·build31JS노출0 | 일반오류본문 | security evidence | fake자격제거 | 예 |
-| Q7 | 회귀/dirty/정체 | 전체pytest/vitest/typecheck/lint·hash·timeout/프로세스정리 | exit0·skip공개·원본(복제본 밖) untracked package.json 보존·소유서버종료 | 정적검사·서버정리·원본hash통과; 원본반영/clone정리대기 | 필요한하네스수리 | full logs/preservation | clone제거 | 예 |
+| Q7 | 회귀/dirty/정체 | 전체pytest/vitest/typecheck/lint·hash·timeout/프로세스정리 | exit0·skip공개·원본(복제본 밖) untracked package.json 보존·소유서버종료 | 통과: pytest1965·vitest373·원본hash·통합/clone정리완료 | 필요한하네스수리 | full logs/preservation | clone제거 | 예 |
 
 ## Commands run
+
 - baseline pytest: 외부 네트워크 차단 sandbox, SCHEDULER_ENABLED=false, exit0; 1936 passed/3 skipped, 28.37s.
 - baseline vitest: frontend에서 npx vitest run, exit0; 57 files/373 passed, 23.50s.
 - skip: Gemini 수동 통합2, 격리 환경 .env없음1. 원문 baseline-pytest.log.gz·baseline-vitest.log.gz를 보존한다.
+- 최종 pytest: gtimeout 180초 + network-outbound 차단 sandbox에서 python -m pytest -q -rs, exit0/1965 passed/3 skipped. final-pytest-exit.json과 로그 참조.
+- 최종 frontend: 환경 allowlist·telemetry/trace 비활성화·localhost-only sandbox에서 npx vitest run(300초), npm run type-check와 npm run lint(180초). 모두 exit0. fresh-loopback-input.json, fresh-loopback-vitest-exit.json, isolated-frontend-checks.json 참조.
+- 실제 HTTP: transport/run-input.json의 정확한 명령·포트·Seatbelt 정책으로 message_transport.py --commit 6b2069b를 실행했다. 1회차 exit1/HTTP0, 수리 후2회차 exit0/28사례, 4.6초. timeout은 하네스600초/요청10초, 외부 실행 상한660초.
 
 ## Failures found / Fixes applied
-준비 중. 제품 실패와 하네스 실패를 구분한다.
+
+- 제품: silent=True가 비JSON·파싱 오류·falsy 값을 정상 빈 객체로 흡수하고 truthy 비객체는 500이 됐다. 발송 전에 MIME·문법·객체를 검사해 415/400으로 고쳤다. 확장 RED17건 실패 → 경계29건 통과.
+- 하네스: 실제 객체생성·날짜 전달·JSON escape 누출 관측을 보완했다. 텔레메트리·자식 환경·분리 프로세스 정리를 강화했고, 실제 실행 전 setuid ps 거부는 non-setuid pgrep으로 수리했다. 각 negative control과 재검토를 보존했다.
+- 빌드 환경: deny-all의 로컬 IPC 차단을 확인했다. loopback 허용 후 남은 실패는 실패한 생성물을 분리한 뒤 같은 정책에서 복구됐다. 구체적인 캐시 엔트리는 미특정이다.
+- 제품과 하네스의 수정·재실행·심층 재검토 결과는 reviews/INFRA-063.md와 evidence/INFRA-063에 연결했다.
 
 ## Cleanup and rollback
-대기. 원본 상태는 clone 부모 preservation.json으로 고정했다.
+
+완료. 서버·소켓·실행 fixture·독립 clone·실패 빌드 생성물을 정리했다. 원본 package.json과 검토 입력은 통합 후 대조했으며 integration-preservation.json에 보존했다. 원본 .env/data 접근·운영 서비스 재시작·배포는 하지 않았다.
 
 ## Residual risks
+
 정상 JSON의 target_date/force 필드 의미·다른 라우트·nonce는 이번 범위 밖이다. 기존 발송 실패500의 str(error)·공통 wrapper 로그 정책은 INFRA-038/043 범위로 유지한다. Q6는 새 입력거부의 본문 sentinel과 통신 fake identity secret/서명/MAC의 비반사 검사다. 화면 변경이 없어 HTTP 하네스를 사용하고 브라우저 실측으로 보고하지 않는다.
+Python LSP는 Transport closed/tsc skipped, Ruff는 미설치여서 AST/pytest를 대체 증거로 사용하고 독립 reviewer가 적합성을 확인했다. 의존성 변경이 없어 npm audit/CVE 조회는 수행하지 않았다.
 프롬프트/CLI인수 입력기능은 없어 관련 prompt injection 분류는 적용 불가. continue는 기존 단계로 복구하며 관련없는 상태를 쓰지 않는다.
 
 
@@ -78,6 +89,15 @@
 - 증거: evidence/INFRA-063/transport/transport.json, run-input.json, run-exit.json, next.log.gz, flask.log.gz, run-2.log.gz; post-qa-check.json.
 - 개발 정적 검증의 격리 환경 수리와 실제 QA 실행 횟수는 구분한다. 첫 구현 커밋 뒤 실제QA는 서버전PermissionError 1회와 통과 1회, 총2회다.
 
-## 남은 마감
+## 최종 판정
 
-필수동작은7/7통과했으며 원본반영·독립clone정리·최종아카이브를이어간다. 완료상태는그정리까지끝난뒤표시한다.
+- 필수 시나리오 **7/7 통과**, 실제 HTTP 세부 시나리오 **28/28 통과**, 미통과 필수 없음.
+- 전체 pytest1965 통과/3 제외(수동 Gemini2·.env 없는 격리환경1), vitest373 통과, typecheck 통과, lint0 errors/199 warnings.
+- 설계9c4ebe9, 구현/행렬6b2069b, 실제QA증거9dc7bbe. 원본 develop에 fast-forward 후16개 검토입력과 package.json의 해시를 확인했다.
+- 임시 Next/Flask·fixture·clone·하네스·실패빌드 생성물 모두 정리. integration-preservation.json 참조.
+- 마감에서는 계획 완료 체크와 QA/아카이브만 갱신했다. 검토 해시는 구현 시점 계획을 가리키며 제품·테스트는 QA 뒤 변경되지 않았다.
+- UltraQA App 대응으로 수행했다. 네이티브 OMX 상태 수명주기, 실제 OAuth·운영 발송·배포 또는 브라우저 화면 실측을 수행했다고 보고하지 않는다.
+
+`ULTRAQA COMPLETE: Goal met after 2 cycles`
+
+완료 확인: 2026-09-08 18:54 KST.

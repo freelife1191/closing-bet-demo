@@ -33,7 +33,7 @@
 
 **Interfaces:** 실제 _register_request_context + _register_jongga_message_route를 bare Flask에 등록한다. 가짜 Messenger만 외부 발송 대역으로 쓰고 실제 중복 guard는 tmp_path를 사용한다. 조회·객체생성·발송 횟수와 guard 디렉터리 불변을 관측한다.
 
-- [ ] 승인된 형식에 대한 경계 테스트를 먼저 만든다. 폼 POST가 현행코드에서 발송 또는 조회에 닿고415기대가 실패하는 RED를 저장한다.
+- [x] 승인된 형식에 대한 경계 테스트를 먼저 만든다. 폼 POST가 현행코드에서 발송 또는 조회에 닿고415기대가 실패하는 RED를 저장한다.
 ```python
 @pytest.mark.parametrize("content_type,body,want", [
     ("application/x-www-form-urlencoded", "force=true", 415),
@@ -47,7 +47,7 @@ def test_invalid_body_never_reaches_send(client, counters, signed_admin, content
     assert response.status_code == want
     assert counters == {"load": 0, "construct": 0, "send": 0}
 ```
-- [ ] 최소 구현. get_json의 BadRequest를 공통 execute_json_route 밖에서 처리해500전환을 피한다.
+- [x] 최소 구현. get_json의 BadRequest를 공통 execute_json_route 밖에서 처리해500전환을 피한다.
 ```python
 from werkzeug.exceptions import BadRequest
 
@@ -63,8 +63,8 @@ if not isinstance(data, dict):
 # 기존 _handler는 검증된 data를 사용한다.
 ```
 - 익명·비관리자 각각에 비JSON 폼과 malformed JSON을 보내403과 load/construct/send/guard변화0을 확인해 인증이 파싱보다 앞임을 증명한다.
-- [ ] 대상 pytest: 새 경계파일 + 기존 jongga 실행·관리자게이트 회귀. 정상 {}·날짜·null날짜·force true/false, 동일 날짜 중복, 발송 오류의 claim release 유지, JSON vendor MIME, 익명/비관리자/OPTIONS, 큰 잘못된 본문·Unicode·로그비반사 포함.
-- [ ] 독립 ponytail 및 코드/아키텍처/보안/심층 리뷰. 원문·입력hash를 보존하고 지적을 반영한다.
+- [x] 대상 pytest: 새 경계파일 + 기존 jongga 실행·관리자게이트 회귀. 정상 {}·날짜·null날짜·force true/false, 동일 날짜 중복, 발송 오류의 claim release 유지, JSON vendor MIME, 익명/비관리자/OPTIONS, 큰 잘못된 본문·Unicode·로그비반사 포함.
+- [x] 독립 ponytail 및 코드/아키텍처/보안/심층 리뷰. 원문·입력hash를 보존하고 지적을 반영한다.
 
 ## Task 2: 확정 커밋 실제 전송 검증과 마감
 
@@ -75,8 +75,8 @@ if not isinstance(data, dict):
 
 **Interfaces:** actual Next dev(proxy/rewrite) → bare Flask + 실제 request-context/admin gate/message route. 합성 NextAuth admin/user JWT와 fake secret, dummy Messenger; load_json_file은 하네스가 만든 임시 fixture만 읽으며 기존 clone/data나 원본 data를 읽지 않는다. 실제 guard는 임시 디렉터리. 서버 도달, load/construct/send, guard 상태를 분리 관측한다.
 
-- [ ] root가 전체 pytest·vitest·typecheck·lint를 실행한다. 외부 네트워크 금지 Python sandbox; 시작/마감 exit와 skip을 보존한다.
-- [ ] 시크릿 검사: tracked .env.example만; client JS sentinel 부재; 응답/Next·Flask 로그 fake secret/서명/MAC 비노출.
-- [ ] 첫 구현/행렬 commit 후 하네스가 HEAD 일치 확인. 정상200/send1 → 중복200/skipped/send1 → force200/send2; admin 비JSON415/invalid400은 load·construct·send·guard 변경0; cross-site/헤더없음403과 upstream0; anonymous/user403; OPTIONS no send.
-- [ ] 실제 결과와 정리를 QA에 기록한다. 정리 시 Next process group과 Flask listener 종료, 임시 fixture 제거를 검증한다. 실패는 원인 수리 후 동일 행렬 재실행.
-- [ ] 증거 commit(TODO 유지), 원본 HEAD/dirty/hash 재확인 후 fast-forward. 복제본 정리 후 최종 archive에서만 TODO 제거.
+- [x] root가 전체 pytest·vitest·typecheck·lint를 실행한다. 외부 네트워크 금지 Python sandbox; 시작/마감 exit와 skip을 보존한다.
+- [x] 시크릿 검사: tracked .env.example만; client JS sentinel 부재; 응답/Next·Flask 로그 fake secret/서명/MAC 비노출.
+- [x] 첫 구현/행렬 commit 후 하네스가 HEAD 일치 확인. 정상200/send1 → 중복200/skipped/send1 → force200/send2; admin 비JSON415/invalid400은 load·construct·send·guard 변경0; cross-site/헤더없음403과 upstream0; anonymous/user403; OPTIONS no send.
+- [x] 실제 결과와 정리를 QA에 기록한다. 정리 시 Next process group과 Flask listener 종료, 임시 fixture 제거를 검증한다. 실패는 원인 수리 후 동일 행렬 재실행.
+- [x] 증거 commit(TODO 유지), 원본 HEAD/dirty/hash 재확인 후 fast-forward. 복제본 정리 후 최종 archive에서만 TODO 제거.

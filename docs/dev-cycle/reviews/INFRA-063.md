@@ -37,3 +37,11 @@ TDD → ponytail → code-reviewer/architect 및 security → deep review → �
 - 심층 재검토: **APPROVE**, HIGH/P1 해결·제품차단없음. deep-review-final.md에최종응답보존. gstack review는로컬기준5aab1dc diff에적용했고홈telemetry/PR/원격조회는프로젝트대응으로생략했다.
 
 - 실제실행1회차의setuid ps금지를non-setuid pgrep으로수리. 동일sandbox동적processnegativecontrol과그룹정리검사통과후 deep-review-pgrep.md 재검토APPROVE. 실제2회차28/28통과, 제품/test16hash불변.
+
+## 마감 대조
+
+- finishing-a-development-branch/verification-before-completion: 승인된develop통합으로진행. 원본운영환경에서테스트를돌리지않고격리QA와원본의동일16hash를대조했다.
+- debugger의sandbox해제제안은미반영했다. 외부통신금지경계를유지한채실패생성물분리로전체검사를복구했다.
+- 원본통합후소유clone/harness/실패빌드생성물정리를확인했다. 제품/test는6b2069b의검증상태와동일하다.
+
+- 마감 검증기의 표 행수=완료 카운터 가정은 철회 등을 포함하는 과거 표와 맞지 않았다(기준93행/완료90). 역사 전체 집계를 이번 기능의 조건으로 삼지 않고, 이번 행1개·완료카운터1개 증가 및 TODO1개 제거를 기준 대비 검증했다. 과거 집계 정확성을 재검산했다고 보고하지 않는다.

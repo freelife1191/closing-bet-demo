@@ -1,0 +1,16 @@
+{
+  "original": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo",
+  "clone": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra063-0mt30h7d/checkout",
+  "base": "5aab1dcd82c71c3b7ffaec7ecedbcb05089d9de5",
+  "integrated_head": "9dc7bbeffa25574335bc3a57c7b07a1dba2add6c",
+  "inputs_verified": 16,
+  "package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "package_preserved": true,
+  "method": "local fetch and fast-forward",
+  "original_tests": "not run against real env/data; verified same reviewed source hashes",
+  "clone_hook_state_absent": true,
+  "clone_parent_removed": true,
+  "temporary_harness_removed": true,
+  "failed_build_output_removed": true,
+  "owned_listeners_absent": true
+}
