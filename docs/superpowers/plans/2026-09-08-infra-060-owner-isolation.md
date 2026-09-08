@@ -55,5 +55,5 @@ if owner_id is None:
 - [x] 구현 전 계획 critic OKAY 확인. 최초 지적(기존 캐시 전환 누락)은 Task1에 보완했다.
 - [x] T3 ponytail·독립 code-reviewer/architect·review·security-review의 차단 지적을 수정한다.
 - [x] 관련/전체 pytest·vitest·type-check를 격리 환경에서 수행한다. 기존 검사 부작용과 manual skip은 별도 기록한다.
-- [ ] App 대응 UltraQA 행렬을 작성하고 staged 신규 파일 검사 성공 후 첫 커밋을 만든다. TODO 유지.
+- [x] App 대응 UltraQA 행렬을 작성하고 staged 신규 파일 검사 성공 후 첫 커밋을 만든다. TODO 유지.
 - [ ] 정상/적대적 QA·정리·최종 검증 후 아카이브 커밋에서만 TODO를 제거한다. 검증 커밋을 원본 develop에 반영한다.

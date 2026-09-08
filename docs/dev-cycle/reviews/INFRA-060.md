@@ -24,7 +24,7 @@
 
 ## 수정과 검증
 
-최종 pytest 1914 PASS/3 기존 수동 skip, vitest 365 PASS(57 files), type-check PASS. lint mock 이름 오류를 고쳐 0 errors/199 warnings. 첫 전체 baseline에서 실패한 5개 검사는 환경/모킹만 현행화했고 업무 assertion은 유지했다. 실제 임시DB HTTP와 브라우저 QA 증거는 `../qa/INFRA-060.md`에 연결했다.
+최종 pytest 1914 PASS/3 기존 skip(수동 Gemini 2·.env 없음 1), vitest 365 PASS(57 files), type-check PASS. lint mock 이름 오류를 고쳐 0 errors/199 warnings. 첫 전체 baseline에서 실패한 5개 검사는 환경/모킹만 현행화했고 업무 assertion은 유지했다. 실제 임시DB HTTP와 브라우저 QA 증거는 `../qa/INFRA-060.md`에 연결했다.
 
 홈 telemetry·외부 댓글·네트워크·원본 DB 접근 없이 저장소 범위에서 검토했다. 설치된 review의 로컬 critical/informational checklist를 적용하고 결과를 이 문서에 보존한다.
 
