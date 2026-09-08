@@ -176,7 +176,11 @@ def _register_request_context(app: Flask) -> None:
         # 브라우저가 보낸 X-User-Email 은 더 이상 읽지 않는다. 그 값은 설정 모달의 자유
         # 입력 칸에서 왔고 서명도 만료도 없었다. frontend/src/proxy.ts 가 NextAuth 세션을
         # 확인해 서명한 헤더만 신원으로 삼는다.
-        g.user_email = verify_identity_header(request.headers.get('X-Auth-Identity'))
+        g.user_email = verify_identity_header(
+            request.headers.get('X-Auth-Identity'),
+            method=request.method,
+            path=request.path,
+        )
         # 익명 ID 도 그대로 믿지 않는다. 이 값과 g.user_email 이 같은 문자열 공간에서
         # 챗봇 owner_id 와 쿼터 키가 되므로, 걸러 내지 않으면 헤더 이름만 바꿔 서명
         # 게이트를 우회할 수 있다.

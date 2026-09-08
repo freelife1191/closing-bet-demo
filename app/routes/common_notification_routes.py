@@ -131,7 +131,8 @@ def register_common_notification_routes(common_bp, ctx: CommonRouteContext) -> N
         # INTERNAL_IDENTITY_SECRET 을 모르므로 헤더를 지어내도 여기까지 오지 못하고,
         # 서명이 없으면 None 이라 관리자 판정에서 떨어진다. 다만 이 게이트의 강도는
         # 그 비밀의 기밀성과 Flask 포트의 접근 통제에 묶여 있다. 근거와 남은 과제는
-        # services/identity_helpers.py 의 verify_identity_header ponytail 주석에 있다.
+        # services/identity_helpers.py 의 verify_identity_header와 CLAUDE.md에 있다.
+        # v2는 실제 메서드·경로도 검증하며 다른 요청에서 복사한 서명은 거부한다.
         if not is_admin_email(g.get("user_email")):
             return _build_error_response("Forbidden", 403)
 

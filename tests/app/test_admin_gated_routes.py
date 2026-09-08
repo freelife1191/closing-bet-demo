@@ -488,8 +488,10 @@ def test_gate_passes_through_the_real_identity_path(monkeypatch):
     monkeypatch.setenv("ADMIN_EMAILS", admin)
 
     encoded = base64.urlsafe_b64encode(admin.encode("utf-8")).decode("ascii").rstrip("=")
-    payload = f"{encoded}.4000000000"
-    mac = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    payload = f"v2.{encoded}.4000000000"
+    encoded_path = base64.urlsafe_b64encode(b"/refresh").decode("ascii").rstrip("=")
+    signing_input = f"{payload}.POST.{encoded_path}"
+    mac = hmac.new(secret.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).hexdigest()
 
     app = Flask(__name__)
     app.testing = True

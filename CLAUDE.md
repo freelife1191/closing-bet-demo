@@ -233,6 +233,17 @@ SCHEDULER_ENABLED=true
 `frontend/src/proxy.ts` 가 NextAuth 세션으로 다시 서명하는데, 그 경로는 `ADMIN_EMAILS` 를
 보지 않습니다.
 
+`[INFRA-062]`부터 신원 헤더는 `v2.<이메일 base64url>.<만료 시각>.<HMAC>` 형식입니다.
+HMAC은 이 버전·이메일·만료와 실제 HTTP 메서드, 한 번 decode한 API pathname을 함께
+검증합니다. Next proxy와 Flask가 각각 관측한 요청을 사용하므로 다른 경로나 메서드로
+옮긴 서명은 인증되지 않습니다. 구형 3-part 서명은 허용하지 않습니다.
+
+경로에는 `/api/`가 포함되고 query·본문은 포함되지 않습니다. 같은 메서드·경로의 재전송을
+막는 nonce 저장소는 두지 않습니다. TTL과 내부 비밀 보호는 계속 필요합니다.
+Next와 Flask는 같은 릴리스로 적용해야 합니다. 구형·신형 워커를 섞으면 정상 로그인 요청도
+검증에 실패할 수 있으며, 호환성을 위해 구형 서명을 다시 허용하지 않습니다.
+
+
 회전 절차입니다. 순서를 지키지 않으면 관리자 화면이 그 사이 동안 막힙니다.
 
 1. 새 값을 만듭니다. `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`

@@ -360,6 +360,11 @@ graph TD
 
 **공통 API (`common` Blueprint - `/api`):**
 - `GET /api/admin/check`: 관리자 권한 확인 (설치 및 설정용)
+보호된 API는 NextAuth 세션에서 만든 신원 서명을 검증합니다. v2 서명은 요청의 HTTP
+메서드와 API 경로에 묶이며 구형 서명은 거부합니다. 이 규약을 적용할 때는 Next와 Flask를
+함께 갱신해야 합니다. 같은 경로·메서드의 재전송과 query·본문 변경을 막는 일회용 토큰은
+포함하지 않습니다.
+
 - `GET /api/portfolio`: 모의투자 포트폴리오 및 자산 현황 조회
 - `POST /api/portfolio/buy`: 모의투자 매수 주문 체결
 - `POST /api/portfolio/sell`: 모의투자 매도 주문 체결

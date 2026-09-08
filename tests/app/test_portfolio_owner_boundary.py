@@ -8,6 +8,7 @@ import hmac
 import logging
 import time
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 import pytest
 from flask import Blueprint, Flask
@@ -28,12 +29,14 @@ ROUTES = [
 ]
 
 
-def signed_identity(email: str, expires: int | None = None) -> str:
+def signed_identity(email: str, expires: int | None = None, *, method: str = "GET", path: str = "/api/portfolio") -> str:
     encoded = base64.urlsafe_b64encode(email.encode()).decode().rstrip("=")
     expiry = int(time.time()) + 120 if expires is None else expires
-    payload = f"{encoded}.{expiry}"
+    prefix = f"v2.{encoded}.{expiry}"
+    encoded_path = base64.urlsafe_b64encode(path.encode()).decode().rstrip("=")
+    payload = f"{prefix}.{method}.{encoded_path}"
     mac = hmac.new(KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{mac}"
+    return f"{prefix}.{mac}"
 
 
 class RecordingService:
@@ -68,7 +71,7 @@ def test_unverified_identity_never_reaches_service(client_and_service, method, p
     client, service = client_and_service
     headers = {"X-User-Email": "victim@example.test", "X-Session-Id": "victim@example.test"}
     if identity:
-        headers["X-Auth-Identity"] = signed_identity("alice@example.test", expires=1) if identity == "expired" else identity
+        headers["X-Auth-Identity"] = signed_identity("alice@example.test", expires=1, method=method, path="/api" + path) if identity == "expired" else identity
     response = client.open("/api" + path, method=method, json=payload, headers=headers)
     assert response.status_code == 401
     assert "로그인" in response.get_json()["message"]
@@ -80,7 +83,7 @@ def test_every_route_passes_only_verified_owner(client_and_service, method, path
     client, service = client_and_service
     body = {**(payload or {}), "owner_id": "victim@example.test"} if method == "POST" else None
     response = client.open("/api" + path + "?owner_id=victim@example.test", method=method, json=body,
-                           headers={"X-Auth-Identity": signed_identity("alice@example.test"), "X-User-Email": "victim@example.test"})
+                           headers={"X-Auth-Identity": signed_identity("alice@example.test", method=method, path="/api" + path), "X-User-Email": "victim@example.test"})
     assert response.status_code == 200
     account_calls = [call for call in service.calls if call[0] == operation]
     assert len(account_calls) == 1
@@ -98,7 +101,7 @@ def test_missing_secret_fails_closed(client_and_service, monkeypatch):
 def test_failed_reset_is_not_reported_as_success(client_and_service):
     client, service = client_and_service
     service.reset_account = lambda **kwargs: False
-    response = client.post("/api/portfolio/reset", headers={"X-Auth-Identity": signed_identity("alice@example.test")})
+    response = client.post("/api/portfolio/reset", headers={"X-Auth-Identity": signed_identity("alice@example.test", method="POST", path="/api/portfolio/reset")})
     assert response.status_code == 500
     assert response.get_json()["status"] == "error"
 
@@ -121,35 +124,38 @@ def real_portfolio_client(tmp_path, monkeypatch):
 
 def test_two_signed_users_have_separate_balances_trades_and_reset(real_portfolio_client):
     client, service = real_portfolio_client
-    alice = {"X-Auth-Identity": signed_identity("alice@example.test")}
-    bob = {"X-Auth-Identity": signed_identity("bob@example.test")}
+    alice, bob = "alice@example.test", "bob@example.test"
 
-    def portfolio(headers):
-        response = client.get("/api/portfolio", headers=headers)
+    def send(owner, method, path, **kwargs):
+        headers = {"X-Auth-Identity": signed_identity(owner, method=method, path=urlsplit(path).path)}
+        return client.open(path, method=method, headers=headers, **kwargs)
+
+    def portfolio(owner):
+        response = send(owner, "GET", "/api/portfolio")
         assert response.status_code == 200
         return response.get_json()
 
     assert portfolio(alice)["cash"] == portfolio(bob)["cash"] == 100_000_000
-    assert client.post("/api/portfolio/deposit", json={"amount": 1000, "owner_id": "bob@example.test"}, headers=alice).get_json()["status"] == "success"
-    assert client.post("/api/portfolio/buy", json={"ticker": "005930", "name": "A 종목", "price": 100, "quantity": 2}, headers=alice).get_json()["status"] == "success"
-    assert client.post("/api/portfolio/buy/bulk", json={"orders": [{"ticker": "005930", "name": "B 종목", "price": 100, "quantity": 3}]}, headers=bob).get_json()["summary"]["success"] == 1
-    assert client.post("/api/portfolio/sell", json={"ticker": "005930", "price": 100, "quantity": 1}, headers=alice).get_json()["status"] == "success"
+    assert send(alice, "POST", "/api/portfolio/deposit", json={"amount": 1000, "owner_id": bob}).get_json()["status"] == "success"
+    assert send(alice, "POST", "/api/portfolio/buy", json={"ticker": "005930", "name": "A 종목", "price": 100, "quantity": 2}).get_json()["status"] == "success"
+    assert send(bob, "POST", "/api/portfolio/buy/bulk", json={"orders": [{"ticker": "005930", "name": "B 종목", "price": 100, "quantity": 3}]}).get_json()["summary"]["success"] == 1
+    assert send(alice, "POST", "/api/portfolio/sell", json={"ticker": "005930", "price": 100, "quantity": 1}).get_json()["status"] == "success"
     a, b = portfolio(alice), portfolio(bob)
     assert a["cash"] == 100_000_900
     assert b["cash"] == 99_999_700
     assert a["holdings"][0]["quantity"] == 1
     assert b["holdings"][0]["quantity"] == 3
-    for headers, name, cash in [(alice, "A 종목", a["cash"]), (bob, "B 종목", b["cash"])]:
-        trades = client.get("/api/portfolio/history?ticker=005930", headers=headers).get_json()["trades"]
+    for owner, name, cash in [(alice, "A 종목", a["cash"]), (bob, "B 종목", b["cash"])]:
+        trades = send(owner, "GET", "/api/portfolio/history?ticker=005930").get_json()["trades"]
         assert trades and all(row["name"] == name for row in trades)
-        history = client.get("/api/portfolio/history/asset?days=30", headers=headers).get_json()["history"]
+        history = send(owner, "GET", "/api/portfolio/history/asset?days=30").get_json()["history"]
         assert history[-1]["cash"] == cash
-    b_history = client.get("/api/portfolio/history", headers=bob).get_json()
-    assert client.post("/api/portfolio/reset", json={"owner_id": "bob@example.test"}, headers=alice).get_json()["status"] == "success"
+    b_history = send(bob, "GET", "/api/portfolio/history").get_json()
+    assert send(alice, "POST", "/api/portfolio/reset", json={"owner_id": bob}).get_json()["status"] == "success"
     assert portfolio(alice)["cash"] == 100_000_000
     assert portfolio(alice)["holdings"] == []
     assert portfolio(bob)["cash"] == b["cash"]
-    assert client.get("/api/portfolio/history", headers=bob).get_json() == b_history
+    assert send(bob, "GET", "/api/portfolio/history").get_json() == b_history
     assert service.price_cache["005930"] == 100
 
 
@@ -166,3 +172,12 @@ def test_personal_portfolio_response_cannot_be_shared_cached(client_and_service)
     response = client.get("/api/portfolio", headers={"X-Auth-Identity": signed_identity("alice@example.test")})
     assert response.cache_control.no_store is True
     assert response.cache_control.private is True
+
+
+@pytest.mark.parametrize("method,path", [("GET", "/api/portfolio/history"), ("POST", "/api/portfolio/reset")])
+def test_replayed_portfolio_signature_never_reaches_service(client_and_service, method, path):
+    client, service = client_and_service
+    headers = {"X-Auth-Identity": signed_identity("alice@example.test")}
+    response = client.open(path, method=method, headers=headers)
+    assert response.status_code == 401
+    assert service.calls == []

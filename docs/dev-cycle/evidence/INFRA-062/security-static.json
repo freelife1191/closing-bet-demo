@@ -1,0 +1,14 @@
+{
+  "vitest_exit": 0,
+  "tracked_env_paths": [
+    ".env.example"
+  ],
+  "public_variable_names": [
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_GOOGLE_CLIENT_ID"
+  ],
+  "client_chunks_scanned": 31,
+  "server_sentinel_in_client_chunks": false,
+  "server_sentinel_in_build_log": false,
+  "actual_transport_checks": "pending first implementation commit"
+}

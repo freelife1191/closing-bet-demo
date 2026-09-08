@@ -27,3 +27,19 @@ MAC 입력은 UTF-8 `v2.<encoded_email>.<expiry>.<UPPERCASE_METHOD>.<base64url(d
 원본 `.env`/`data`, 원본 Next3500/Flask5501/live 및 외부 요청은 금지한다. 독립 clone develop과 복사한 Node 의존성·기존 venv 인터프리터에서 테스트한다. 원본 package.json은 hash로 보존한다. 운영 배포/재기동·키 회전은 하지 않는다. 구형/신형 혼용 중 로그인 기능이 실패하므로 향후 Next/Flask를 함께 적용해야 한다.
 
 T3: critic → 구현 → ponytail → 독립 code/security + architect → deep review → 전체 pytest/vitest/typecheck/lint → 첫 구현/QA 행렬 커밋(TODO 유지) → UltraQA App 동적 검증/정리 → QA 증거 커밋 → 원본 fast-forward/clone 정리 → 완료 아카이브. 필수 미통과는 완료하지 않는다.
+
+## 실제 전송 경로의 기대값
+
+probe는 운영 endpoint가 아닌 `/api/__identity_probe/<path>`를 bare Flask에서 처리한다. CLI `http.client`로 원문 target을 보내 percent를 자동 재인코딩하지 않으며 redirect를 자동 추종하지 않는다. 응답은 검증 이메일·관측 method/path·부수효과 카운터만 담고 서명/secret은 포함하지 않는다. 전달된 서명은 같은 테스트 프로세스의 Flask 메모리에서만 읽어 재생 요청에 사용한다.
+
+| Raw target | Next pathname | 서명에 넣는 decoded path | Flask request.path | HTTP/Flask hit |
+|---|---|---|---|---|
+| `/api/__identity_probe/a` | 동일 | 동일 | 동일 | 200, 1회 |
+| `/api/__identity_probe/a%2Fb` | raw 그대로 | `/api/__identity_probe/a/b` | 같은 decoded path | 200, 1회 |
+| `/api/__identity_probe/%252F` | raw 그대로 | `/api/__identity_probe/%2F` | 같은 decoded path | 200, 1회 |
+| `/api/__identity_probe/%ED%95%9C%EA%B8%80` | raw 그대로 | `/api/__identity_probe/한글` | 같은 decoded path | 200, 1회 |
+| `/api/__identity_probe/tail/` | redirect 전 raw pathname | utility에서는 slash 보존 | 첫 요청은 도달 안 함 | 308 Location `/api/__identity_probe/tail`, 0회 |
+| redirect 목적지 `/api/__identity_probe/tail` | 동일 | 동일 | 동일 | 새 서명으로 200, 1회 |
+| `/api/__identity_probe/%`, `/api/__identity_probe/%ZZ`, `/api/__identity_probe/%FF` | 생성/파싱 가능 여부와 무관 | 잘못된 percent/UTF8 거부 | 도달 안 함 | 실제 raw HTTP 400, 0회 |
+
+trailing slash redirect는 설치된 Next `trailingSlash.md`의 기본 동작을 유지하며 전역 설정을 바꾸지 않는다. 순수 signer/verifier 시험에서는 `/tail`과 `/tail/`가 다른 서명임을 별도로 검사한다. Next가 proxy 이전에 malformed target을 400으로 거부해도 성공 기준은 동일하며, 도달하지 않은 함수가 실행됐다고 보고하지 않는다. OPTIONS 무서명204/부수효과0, HEAD 자체메서드 서명, GET→POST·A→B 재생401/부수효과0도 실제 transport로 확인한다.

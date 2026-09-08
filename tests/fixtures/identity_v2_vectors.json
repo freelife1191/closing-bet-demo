@@ -1,0 +1,71 @@
+{
+  "description": "INFRA-062 v2 request-bound identity fixed known-answer vectors. path is already decoded exactly once and encoded_path is ASCII base64url without padding.",
+  "secret": "infra-062-cross-runtime-fixture-secret",
+  "vectors": [
+    {
+      "id": "get_portfolio",
+      "signer_method": "get",
+      "email": "owner@example.com",
+      "expires_at": 2000000000,
+      "method": "GET",
+      "path": "/api/portfolio",
+      "replay_method": "POST",
+      "replay_path": "/api/portfolio/archive",
+      "encoded_email": "b3duZXJAZXhhbXBsZS5jb20",
+      "encoded_path": "L2FwaS9wb3J0Zm9saW8",
+      "payload": "v2.b3duZXJAZXhhbXBsZS5jb20.2000000000.GET.L2FwaS9wb3J0Zm9saW8",
+      "mac": "7a8bafff4575eecd109a8bc041aee9b3c69425cfa6b573b648aa93187ab38794",
+      "header": "v2.b3duZXJAZXhhbXBsZS5jb20.2000000000.7a8bafff4575eecd109a8bc041aee9b3c69425cfa6b573b648aa93187ab38794",
+      "legacy_header": "b3duZXJAZXhhbXBsZS5jb20.2000000000.1feee210dd4e67d53ba9e44eb06008101e09d15b73e553a841a9ef01c995f653",
+      "unknown_version_header": "v9.b3duZXJAZXhhbXBsZS5jb20.2000000000.94919f2b27c6c7f6ab58c86d40bdc871ad624b44616fd5d6d1ffc5bc5469f6db"
+    },
+    {
+      "id": "post_unicode_email_percent_literal",
+      "email": "홍길동+테스트@예시.한국",
+      "expires_at": 2000000123,
+      "method": "POST",
+      "path": "/api/한글/%2F",
+      "replay_method": "GET",
+      "replay_path": "/api/한글//",
+      "encoded_email": "7ZmN6ri464-ZK-2FjOyKpO2KuEDsmIjsi5wu7ZWc6rWt",
+      "encoded_path": "L2FwaS_tlZzquIAvJTJG",
+      "payload": "v2.7ZmN6ri464-ZK-2FjOyKpO2KuEDsmIjsi5wu7ZWc6rWt.2000000123.POST.L2FwaS_tlZzquIAvJTJG",
+      "mac": "8af1541e7700f4401006bbbe12a0b39e9c293cfc9bf5cf7a320e4fd18c98bd5e",
+      "header": "v2.7ZmN6ri464-ZK-2FjOyKpO2KuEDsmIjsi5wu7ZWc6rWt.2000000123.8af1541e7700f4401006bbbe12a0b39e9c293cfc9bf5cf7a320e4fd18c98bd5e",
+      "legacy_header": "7ZmN6ri464-ZK-2FjOyKpO2KuEDsmIjsi5wu7ZWc6rWt.2000000123.199e5bf2856092b9b92a1c8219503b5d681e4c36fa169899b828ccc7d2a5c3b5",
+      "unknown_version_header": "v9.7ZmN6ri464-ZK-2FjOyKpO2KuEDsmIjsi5wu7ZWc6rWt.2000000123.25e49c0bfde973061eaf409e1e3459c55060c8301b5d11599435361a9c3b07ae"
+    },
+    {
+      "id": "head_tail_with_slash",
+      "email": "head@example.com",
+      "expires_at": 2000000456,
+      "method": "HEAD",
+      "path": "/api/tail/",
+      "replay_method": "GET",
+      "replay_path": "/api/tail",
+      "encoded_email": "aGVhZEBleGFtcGxlLmNvbQ",
+      "encoded_path": "L2FwaS90YWlsLw",
+      "payload": "v2.aGVhZEBleGFtcGxlLmNvbQ.2000000456.HEAD.L2FwaS90YWlsLw",
+      "mac": "1beb26d185afe5909ed134006af2c0259d30ff2e7e977c48e183cab3c487fcd1",
+      "header": "v2.aGVhZEBleGFtcGxlLmNvbQ.2000000456.1beb26d185afe5909ed134006af2c0259d30ff2e7e977c48e183cab3c487fcd1",
+      "legacy_header": "aGVhZEBleGFtcGxlLmNvbQ.2000000456.bd873f5db00200016bdcd65a55b5349a60faf465f18b312df64febb9f1906c3e",
+      "unknown_version_header": "v9.aGVhZEBleGFtcGxlLmNvbQ.2000000456.f9c44804f9d6aefe7b69a10f030c721d52d4e11ec2cd23267ff0fb8972373142"
+    },
+    {
+      "id": "head_tail_without_slash",
+      "email": "head@example.com",
+      "expires_at": 2000000456,
+      "method": "HEAD",
+      "path": "/api/tail",
+      "replay_method": "GET",
+      "replay_path": "/api/tail/",
+      "encoded_email": "aGVhZEBleGFtcGxlLmNvbQ",
+      "encoded_path": "L2FwaS90YWls",
+      "payload": "v2.aGVhZEBleGFtcGxlLmNvbQ.2000000456.HEAD.L2FwaS90YWls",
+      "mac": "a5032400c0fcddccac45dcfe6660fe48297c6f4d9d5708171960e9cfec578bd1",
+      "header": "v2.aGVhZEBleGFtcGxlLmNvbQ.2000000456.a5032400c0fcddccac45dcfe6660fe48297c6f4d9d5708171960e9cfec578bd1",
+      "legacy_header": "aGVhZEBleGFtcGxlLmNvbQ.2000000456.bd873f5db00200016bdcd65a55b5349a60faf465f18b312df64febb9f1906c3e",
+      "unknown_version_header": "v9.aGVhZEBleGFtcGxlLmNvbQ.2000000456.1dfb660106ddd64fdfa0c4bcaf8045053a7b806101b322fc91f69fb833dbb414"
+    }
+  ]
+}

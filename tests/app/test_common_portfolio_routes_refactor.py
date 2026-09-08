@@ -16,7 +16,7 @@ import pytest
 import sys
 import types
 
-from flask import Blueprint, Flask
+from flask import Blueprint, Flask, request
 
 sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -121,12 +121,17 @@ def _create_client(ctx: CommonRouteContext):
     bp = Blueprint("common_test", __name__)
     register_common_portfolio_routes(bp, ctx)
     app.register_blueprint(bp, url_prefix="/api")
-    client = app.test_client()
-    email = base64.urlsafe_b64encode(b"alice@example.test").decode().rstrip("=")
-    payload = f"{email}.{int(time.time()) + 120}"
-    mac = hmac.new(b"portfolio-route-test-key", payload.encode(), hashlib.sha256).hexdigest()
-    client.environ_base["HTTP_X_AUTH_IDENTITY"] = f"{payload}.{mac}"
-    return client
+    @app.before_request
+    def sign_fixture_request():
+        # Business-route fixture only; separate boundary tests exercise forged input.
+        email = base64.urlsafe_b64encode(b"alice@example.test").decode().rstrip("=")
+        prefix = f"v2.{email}.{int(time.time()) + 120}"
+        path = base64.urlsafe_b64encode(request.path.encode()).decode().rstrip("=")
+        payload = f"{prefix}.{request.method}.{path}"
+        mac = hmac.new(b"portfolio-route-test-key", payload.encode(), hashlib.sha256).hexdigest()
+        request.environ["HTTP_X_AUTH_IDENTITY"] = f"{prefix}.{mac}"
+
+    return app.test_client()
 
 
 def test_get_portfolio_data_starts_sync_and_returns_payload():

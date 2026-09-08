@@ -26,7 +26,11 @@ def _require_portfolio_owner(handler: Callable[..., Any]) -> Callable[..., Any]:
     """검증된 로그인 신원만 계정 연산에 전달한다. 익명은 DB 초기화 전 거부한다."""
     @wraps(handler)
     def authenticated_handler(*args: Any, **kwargs: Any) -> Any:
-        owner_id = verify_identity_header(request.headers.get("X-Auth-Identity"))
+        owner_id = verify_identity_header(
+            request.headers.get("X-Auth-Identity"),
+            method=request.method,
+            path=request.path,
+        )
         if owner_id is None:
             response = make_response(jsonify(
                 status="error", message="모의투자는 로그인 후 사용할 수 있습니다."

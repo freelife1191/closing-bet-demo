@@ -16,7 +16,7 @@
 ## P1 — 이번 주기
 
 ### [INFRA-062] 신원 서명이 경로·메서드에 묶이지 않아 다른 경로로 재생할 수 있다
-- 상태: RESUME — 설계 승인, 계획 critic 검토 중
+- 상태: RESUME — 설계·구현·T3 리뷰·전체 검증 완료, 첫 커밋 후 UltraQA 실행
 - 설계 승인: 2026-09-08 현재 대화 사용자 「진행해」. method/path v2결합·구형거부·Next/Flask동시수정·T3/UltraQA.
 - 설계/계획: docs/superpowers/specs/2026-09-08-infra-062-request-bound-identity-design.md, docs/superpowers/plans/2026-09-08-infra-062-request-bound-identity.md
 - 카테고리: 인프라 | 티어: T3(인증) | 근거: 2026-09-08 `[INFRA-042]` 사이클의
@@ -30,9 +30,9 @@
   들어 있습니다.
 - `IDENTITY_TTL_SECONDS` 가 120 초라 창이 좁은 것이 지금의 완화책 전부입니다.
 - QA 시나리오: 한 경로에서 얻은 서명 헤더를 다른 경로로 보냈을 때 거부되는지 확인
-- [ ] 서명 대상에 경로와 메서드를 포함시킬지, nonce 를 쓸지 정함
-- [ ] `frontend/src/proxy.ts` 의 서명 생성과 맞춰 바꿈
-- [ ] 재생 시도가 거부되는지 재는 검사 추가
+- [x] 서명 대상에 경로와 메서드를 포함하고 nonce는 추가하지 않음
+- [x] `frontend/src/proxy.ts` 의 서명 생성과 맞춰 바꿈
+- [x] 다른 method/path 재생·구형 거부 검사 추가. 실제 transport QA는 첫 커밋 뒤 실행
 
 ### [INFRA-063] 가장 무거운 발송 라우트가 가장 얇은 CSRF 방어를 갖는다
 - 카테고리: 인프라 | 티어: T3(인증) | 근거: 2026-09-08 `[INFRA-042]` 사이클의 적대적 리뷰가

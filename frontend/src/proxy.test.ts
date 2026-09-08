@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // [INFRA-027] 신원 게이트 회귀 검사. 이 파일이 저장소에서 보안적으로 가장 중요한 자리인데
@@ -18,9 +19,14 @@ vi.mock('next-auth/jwt', () => ({
 }));
 
 import { proxy } from './proxy';
+import { signIdentity } from './lib/identity';
 
-function requestWith(headers: Record<string, string>, method = 'GET') {
-  return { headers: new Headers(headers), method } as never;
+function requestWith(
+  headers: Record<string, string>,
+  method = 'GET',
+  pathname = '/api/portfolio'
+): NextRequest {
+  return new NextRequest(`http://localhost${pathname}`, { headers, method });
 }
 
 /** NextResponse.next({ request: { headers } }) 가 상류로 넘긴 요청 헤더를 꺼낸다. */
@@ -69,8 +75,9 @@ describe('proxy', () => {
     const signed = forwardedHeaders(res).get('x-auth-identity');
     expect(signed).toBeTruthy();
     expect(signed).not.toBe('forged.9999999999.deadbeef');
-    expect(signed!.split('.')).toHaveLength(3);
-    expect(Buffer.from(signed!.split('.')[0], 'base64url').toString('utf8')).toBe(
+    expect(signed!.split('.')).toHaveLength(4);
+    expect(signed!.split('.')[0]).toBe('v2');
+    expect(Buffer.from(signed!.split('.')[1], 'base64url').toString('utf8')).toBe(
       'owner@example.com'
     );
   });
@@ -109,6 +116,70 @@ describe('proxy', () => {
 
     expect(forwardedHeaders(res).get('x-session-id')).toBe('anon_abc');
   });
+
+  it('실제 NextRequest의 한 번 decode한 pathname과 method로 서명한다', async () => {
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const res = await proxy(requestWith({}, 'HEAD', '/api/%ED%95%9C%EA%B8%80/%252F'));
+      const signed = forwardedHeaders(res).get('x-auth-identity');
+      const expected = signIdentity(
+        'owner@example.com',
+        'test-identity-secret',
+        1_700_000_120,
+        'HEAD',
+        '/api/한글/%2F'
+      );
+
+      expect(signed).toBeTruthy();
+      expect(signed!.split('.')).toHaveLength(4);
+      expect(signed === expected).toBe(true);
+      expect(
+        signed ===
+          forwardedHeaders(
+            await proxy(requestWith({}, 'GET', '/api/%ED%95%9C%EA%B8%80/%252F'))
+          ).get('x-auth-identity')
+      ).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it.each([
+    ['/api/a%2Fb', '/api/a/b'],
+    ['/api/%252F', '/api/%2F'],
+  ])('percent-encoded pathname %s를 한 번만 decode한다', async (pathname, decodedPath) => {
+    mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const signed = forwardedHeaders(await proxy(requestWith({}, 'GET', pathname))).get(
+        'x-auth-identity'
+      );
+      const expected = signIdentity(
+        'owner@example.com',
+        'test-identity-secret',
+        1_700_000_120,
+        'GET',
+        decodedPath
+      );
+
+      expect(signed === expected).toBe(true);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it.each(['/api/%', '/api/%ZZ', '/api/%FF'])(
+    '잘못된 pathname %s는 일반 400으로 끊는다',
+    async (pathname) => {
+      mockGetToken.mockImplementation(async () => ({ email: 'owner@example.com' }));
+
+      const res = await proxy(requestWith({}, 'GET', pathname));
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('x-auth-identity')).toBeNull();
+    }
+  );
 });
 
 // [INFRA-040] 교차 출처 차단 회귀 검사. 지금 이 경로가 뚫려 있지 않은 이유는 이 저장소의

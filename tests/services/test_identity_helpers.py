@@ -22,30 +22,42 @@ from services.identity_helpers import resolve_anonymous_id, verify_identity_head
 SECRET = "test-identity-secret"
 
 
-def _sign(email: str, exp: int, secret: str = SECRET) -> str:
+def _sign(
+    email: str,
+    exp: int,
+    secret: str = SECRET,
+    *,
+    method: str = "GET",
+    path: str = "/api/protected",
+) -> str:
     encoded = base64.urlsafe_b64encode(email.encode("utf-8")).decode("ascii").rstrip("=")
-    payload = f"{encoded}.{exp}"
+    encoded_path = base64.urlsafe_b64encode(path.encode("utf-8")).decode("ascii").rstrip("=")
+    payload = f"v2.{encoded}.{exp}.{method.upper()}.{encoded_path}"
     mac = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{payload}.{mac}"
+    return f"v2.{encoded}.{exp}.{mac}"
 
 
 def test_valid_signature_returns_email(monkeypatch):
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
-    assert verify_identity_header(_sign("owner@example.com", 2000), now=1900) == "owner@example.com"
+    assert verify_identity_header(
+        _sign("owner@example.com", 2000), now=1900, method="GET", path="/api/protected"
+    ) == "owner@example.com"
 
 
 def test_rejects_when_secret_unset(monkeypatch):
     monkeypatch.delenv("INTERNAL_IDENTITY_SECRET", raising=False)
 
-    assert verify_identity_header(_sign("owner@example.com", 2000), now=1900) is None
+    assert verify_identity_header(
+        _sign("owner@example.com", 2000), now=1900, method="GET", path="/api/protected"
+    ) is None
 
 
 def test_rejects_forged_signature(monkeypatch):
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
     forged = _sign("intruder@example.com", 2000, secret="wrong-secret")
-    assert verify_identity_header(forged, now=1900) is None
+    assert verify_identity_header(forged, now=1900, method="GET", path="/api/protected") is None
 
 
 def test_rejects_swapped_email_with_valid_mac(monkeypatch):
@@ -55,43 +67,51 @@ def test_rejects_swapped_email_with_valid_mac(monkeypatch):
     valid = _sign("owner@example.com", 2000)
     mac = valid.rsplit(".", 1)[1]
     other = base64.urlsafe_b64encode(b"intruder@example.com").decode("ascii").rstrip("=")
-    assert verify_identity_header(f"{other}.2000.{mac}", now=1900) is None
+    assert verify_identity_header(
+        f"v2.{other}.2000.{mac}", now=1900, method="GET", path="/api/protected"
+    ) is None
 
 
 def test_rejects_expired_signature(monkeypatch):
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
-    assert verify_identity_header(_sign("owner@example.com", 2000), now=2001) is None
+    assert verify_identity_header(
+        _sign("owner@example.com", 2000), now=2001, method="GET", path="/api/protected"
+    ) is None
 
 
 def test_accepts_at_exact_expiry(monkeypatch):
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
-    assert verify_identity_header(_sign("owner@example.com", 2000), now=2000) == "owner@example.com"
+    assert verify_identity_header(
+        _sign("owner@example.com", 2000), now=2000, method="GET", path="/api/protected"
+    ) == "owner@example.com"
 
 
 def test_rejects_malformed_headers(monkeypatch):
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
-    assert verify_identity_header(None, now=1900) is None
-    assert verify_identity_header("", now=1900) is None
-    assert verify_identity_header("only.two", now=1900) is None
-    assert verify_identity_header("a.b.c.d", now=1900) is None
-    assert verify_identity_header("aaa.not-a-number.bbb", now=1900) is None
+    assert verify_identity_header(None, now=1900, method="GET", path="/api/protected") is None
+    assert verify_identity_header("", now=1900, method="GET", path="/api/protected") is None
+    assert verify_identity_header("only.two", now=1900, method="GET", path="/api/protected") is None
+    assert verify_identity_header("a.b.c.d", now=1900, method="GET", path="/api/protected") is None
+    assert verify_identity_header("aaa.not-a-number.bbb", now=1900, method="GET", path="/api/protected") is None
 
 
 def test_rejects_non_ascii_without_raising(monkeypatch):
     """compare_digest 는 비ASCII str 에 TypeError 를 던진다. 500 이 아니라 None 이어야 한다."""
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
-    assert verify_identity_header("한글.2000.한글", now=1900) is None
+    assert verify_identity_header("v2.한글.2000.한글", now=1900, method="GET", path="/api/protected") is None
 
 
 def test_rejects_default_profile_email(monkeypatch):
     """user@example.com 은 로그인하지 않은 화면의 기본값이라 신원이 아니다."""
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
-    assert verify_identity_header(_sign("user@example.com", 2000), now=1900) is None
+    assert verify_identity_header(
+        _sign("user@example.com", 2000), now=1900, method="GET", path="/api/protected"
+    ) is None
 
 
 def test_anonymous_id_accepts_every_shape_the_code_makes():
@@ -122,8 +142,47 @@ def test_verified_identity_requires_email_shape(monkeypatch):
     """
     monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
 
-    assert verify_identity_header(_sign("117204951829384756102", 2000), now=1900) is None
-    assert verify_identity_header(_sign("owner@example.com", 2000), now=1900) == "owner@example.com"
+    assert verify_identity_header(
+        _sign("117204951829384756102", 2000), now=1900, method="GET", path="/api/protected"
+    ) is None
+    assert verify_identity_header(
+        _sign("owner@example.com", 2000), now=1900, method="GET", path="/api/protected"
+    ) == "owner@example.com"
+
+
+def test_request_bound_signature_rejects_a_different_method_or_path(monkeypatch):
+    """같은 유효 서명이라도 만든 요청과 다른 경계에서는 신원이 될 수 없다."""
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
+    header = _sign("owner@example.com", 2000, method="POST", path="/api/portfolio")
+
+    assert verify_identity_header(
+        header, now=1900, method="POST", path="/api/portfolio"
+    ) == "owner@example.com"
+    assert verify_identity_header(header, now=1900, method="GET", path="/api/portfolio") is None
+    assert verify_identity_header(header, now=1900, method="POST", path="/api/other") is None
+
+
+def test_rejects_legacy_three_part_header(monkeypatch):
+    """구형 서명이 새 보호 경계에 재생되면 인증된 신원이 되어서는 안 된다."""
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
+    encoded = base64.urlsafe_b64encode(b"owner@example.com").decode("ascii").rstrip("=")
+    legacy_payload = f"{encoded}.2000"
+    mac = hmac.new(SECRET.encode("utf-8"), legacy_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    assert verify_identity_header(
+        f"{legacy_payload}.{mac}", now=1900, method="GET", path="/api/protected"
+    ) is None
+
+
+def test_rejects_unknown_version_even_with_a_valid_v2_mac(monkeypatch):
+    """버전 표식을 검사하지 않는 퇴행이 생기면 구형/미지원 형식이 다시 열릴 수 있다."""
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", SECRET)
+    versioned_header = _sign("owner@example.com", 2000)
+    unknown_version_header = f"v1.{versioned_header.split('.', 1)[1]}"
+
+    assert verify_identity_header(
+        unknown_version_header, now=1900, method="GET", path="/api/protected"
+    ) is None
 
 
 def test_anonymous_id_rejects_recharge_day_prefix():

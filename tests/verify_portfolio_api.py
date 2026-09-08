@@ -24,10 +24,12 @@ KEY = "verify-portfolio-api-key"
 OWNER = "verify@example.test"
 
 
-def _identity(email: str) -> str:
+def _identity(email: str, method: str, path: str) -> str:
     encoded = base64.urlsafe_b64encode(email.encode()).decode().rstrip("=")
-    payload = f"{encoded}.{int(time.time()) + 60}"
-    return f"{payload}.{hmac.new(KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()}"
+    prefix = f"v2.{encoded}.{int(time.time()) + 60}"
+    encoded_path = base64.urlsafe_b64encode(path.encode()).decode().rstrip("=")
+    payload = f"{prefix}.{method}.{encoded_path}"
+    return f"{prefix}.{hmac.new(KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()}"
 
 
 def main() -> None:
@@ -45,12 +47,13 @@ def main() -> None:
             app.register_blueprint(blueprint, url_prefix="/api")
             client = app.test_client()
             assert client.get("/api/portfolio").status_code == 401
-            headers = {"X-Auth-Identity": _identity(OWNER)}
-            assert client.post("/api/portfolio/reset", headers=headers).status_code == 200
+            def headers(method: str, path: str) -> dict[str, str]:
+                return {"X-Auth-Identity": _identity(OWNER, method, path)}
+            assert client.post("/api/portfolio/reset", headers=headers("POST", "/api/portfolio/reset")).status_code == 200
             for ticker, name, price, quantity in [("005380", "현대차", 491_500, 2), ("45226K", "한화갤러리아우", 9_970, 2), ("452260", "한화갤러리아", 1_907, 2)]:
-                response = client.post("/api/portfolio/buy", headers=headers, json={"ticker": ticker, "name": name, "price": price, "quantity": quantity})
+                response = client.post("/api/portfolio/buy", headers=headers("POST", "/api/portfolio/buy"), json={"ticker": ticker, "name": name, "price": price, "quantity": quantity})
                 assert response.status_code == 200 and response.get_json()["status"] == "success"
-            response = client.get("/api/portfolio", headers=headers)
+            response = client.get("/api/portfolio", headers=headers("GET", "/api/portfolio"))
             assert response.status_code == 200
             assert {holding["ticker"] for holding in response.get_json()["holdings"]} == {"005380", "45226K", "452260"}
             print("PASS: unsigned GET=401, signed reset/buy/portfolio owner flow verified")

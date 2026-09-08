@@ -28,6 +28,17 @@ export async function proxy(request: NextRequest) {
   requestHeaders.delete('x-user-email');
   requestHeaders.delete('x-auth-identity');
 
+  let path: string;
+  try {
+    // NextURL pathname은 percent-encoded 상태일 수 있다. Flask request.path와 맞추려면
+    // 정확히 한 번만 decode하고, 이중 인코딩은 그대로 남긴다.
+    path = decodeURIComponent(request.nextUrl.pathname);
+  } catch {
+    // 잘못된 percent 또는 UTF-8은 인증된 요청으로 넘기지 않는다. 세부 정보나 헤더를
+    // 응답에 넣지 않아 서명과 비밀이 브라우저로 새지 않는다.
+    return NextResponse.json({ error: '잘못된 요청 경로입니다' }, { status: 400 });
+  }
+
   // getToken 은 NEXTAUTH_SECRET 을 읽으며 INTERNAL_IDENTITY_SECRET 과 무관하다. 쿠키가
   // 없거나 복호화에 실패하면 예외 없이 null 을 돌려준다(next-auth/jwt/index.js:89,95).
   const token = await getToken({ req: request });
@@ -70,7 +81,10 @@ export async function proxy(request: NextRequest) {
   const secret = (process.env.INTERNAL_IDENTITY_SECRET || '').trim();
   if (secret && email) {
     const expiresAt = Math.floor(Date.now() / 1000) + IDENTITY_TTL_SECONDS;
-    requestHeaders.set('X-Auth-Identity', signIdentity(email, secret, expiresAt));
+    requestHeaders.set(
+      'X-Auth-Identity',
+      signIdentity(email, secret, expiresAt, request.method, path)
+    );
   }
 
   // request 안에 넣어야 rewrite 목적지로 간다. NextResponse.next({ headers }) 로 쓰면

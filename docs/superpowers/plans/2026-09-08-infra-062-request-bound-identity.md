@@ -23,7 +23,7 @@ Interface: `verify_identity_header(header, now=None, *, method: str, path: str) 
 
 ## Task 2 — Next signer/proxy
 
-Files: frontend/src/lib/identity.ts, identity.test.ts, frontend/src/proxy.ts, proxy.test.ts.
+Files: frontend/src/lib/identity.ts, frontend/src/lib/identity.test.ts, frontend/src/proxy.ts, frontend/src/proxy.test.ts.
 Interface: `signIdentity(email: string, secret: string, expiresAt: number, method: string, path: string): string`.
 
 - [ ] RED: 실제 NextRequest를 이용해 path/method가 달라지면 서명이 달라지는 검사를 먼저 실행한다.
@@ -33,7 +33,7 @@ Interface: `signIdentity(email: string, secret: string, expiresAt: number, metho
 
 ## Task 3 — Boundary fixtures and independent cross-runtime proof
 
-Files: tests/app/test_identity_gate.py, test_portfolio_owner_boundary.py, test_common_portfolio_routes_refactor.py, test_admin_gated_routes.py, test_notification_admin_gate.py, tests/verify_portfolio_api.py; new tests/fixtures/identity_v2_vectors.json and tests/services/test_identity_cross_runtime.py if needed.
+Files: tests/app/test_identity_gate.py, tests/app/test_portfolio_owner_boundary.py, tests/app/test_common_portfolio_routes_refactor.py, tests/app/test_admin_gated_routes.py, tests/app/test_notification_admin_gate.py, tests/verify_portfolio_api.py. Create: tests/fixtures/identity_v2_vectors.json, tests/services/test_identity_cross_runtime.py, tests/app/test_identity_replay.py.
 
 - [ ] 7개 직접 HMAC fixture를 actual route/method별로 갱신한다. HMAC을 검증한다고 주장하는 테스트에서 g.user_email을 직접 심지 않는다.
 - [ ] 고정 vector에 '/api/portfolio', '/api/한글/%2F', trailing slash와 서로 다른 method를 담고 TS/코어Python이 같은MAC을 만드는 것을 확인한다.
@@ -42,10 +42,21 @@ Files: tests/app/test_identity_gate.py, test_portfolio_owner_boundary.py, test_c
 
 ## Task 4 — Integration, review and UltraQA
 
-Files: CLAUDE.md, README.md, app/routes/common_notification_routes.py(낡은 제한 주석), docs/dev-cycle/TODO.md, qa/INFRA-062.md, reviews/INFRA-062.md, evidence/INFRA-062/.
+Files: CLAUDE.md, README.md, app/routes/common_notification_routes.py(낡은 제한 주석), docs/dev-cycle/TODO.md, docs/dev-cycle/qa/INFRA-062.md, docs/dev-cycle/reviews/INFRA-062.md, docs/dev-cycle/evidence/INFRA-062/.
 
 - [ ] 승인범위/critic판정 기록 후 코드 구현. ponytail→독립code/security/architect→deep review 순서를 지킨다. 각 원문과 입력hash를 기록한다.
 - [ ] 실제 Next→rewrite→bare Flask probe를 합성JWT/가짜secret으로 준비한다. GET과POST정상→서명복사→메서드/경로변경→구형/위조/만료→Unicode/trailing/double encoding을 검사한다. 운영 endpoint 대신 부수효과없는 probe를 사용한다.
 - [ ] 전체검사 후 allowlist staging, staged --check=0 후 첫 구현/행렬커밋(TODO유지). exactcommit QA를 같은턴에 수행한다.
 - [ ] native hook 쓰기 없이 UltraQA app-adapted 보고서에 필수결과/실패/수정/정리를 기록한다. 기준sourcehash와서명/secret의응답·브라우저bundle비노출을 확인한다.
 - [ ] QA실행용 임시프로세스/파일 정리, 증거커밋, 원본 develop ff, clone정리 후 최종 아카이브에서만 TODO를 제거한다. 검증된한항목에서 종료한다.
+
+## Critic 보완 실행 규칙
+
+- spec의 실제 전송 경로 기대값 표를 그대로 assertion으로 구현한다. raw target→Next pathname→decoded path→Flask path와 client-visible status/Location, Flask-hit 증가량을 함께 검사한다.
+- actual HTTP malformed `%`, `%ZZ`, `%FF` 3개는 단위 NextRequest 생성실패로 대신하지 않는다. `http.client` 원문요청 400/Flask hit0을 확인한다.
+- `/tail/`은 Next 기본308(Location slash없음)/Flask hit0, 그 목적지는 재서명200/Flask hit1. utility level에서는 slash 유무 MAC 차이를 별도로 검사한다.
+- probe는 UI변경이 없는 protocol 작업이므로 실제 Next 서버+bare Flask+CLI HTTP로 실행한다. 브라우저 화면을 봤다고 주장하지 않는다. NextAuth JWT는 설치된 next-auth/jwt.encode로 합성하고 실제 proxy getToken 경로를 사용한다. 응답에 서명/secret이 없음을 단언하며 captured header는 Python 프로세스 메모리에서만 controller가 읽는다.
+
+- 인증 필수검증1: `git ls-files`의 basename이 `.env`로 시작하는 모든 추적 경로를 검사해 `.env.example` 외 0개를 단언한다. 실제 .env 내용은 열지 않는다. 결과: docs/dev-cycle/evidence/INFRA-062/security-checks.json.
+- 인증 필수검증2: HTTP 하네스의 unique fake secret, 포착한 전체 v2 header와 MAC가 API본문·client-visible response headers·proxy/backend 실행 로그·증거 로그에 없는지 검사한다. `x-auth-identity`와 `x-middleware-request-*` 응답 header도 부재를 단언한다. 테스트의 의도적인 고정벡터 입력 파일과 가짜값이 적힌 테스트 소스는 실행 로그가 아니며 별도로 표기한다. TDD RED는 boolean/상태 단언으로 민감문자열을 로그에 출력하지 않는다. 결과: docs/dev-cycle/evidence/INFRA-062/security-checks.json.
+- 인증 필수검증3: 소스의 `NEXT_PUBLIC_` 변수 이름 목록을 먼저 수집하고 `NEXT_PUBLIC_INTERNAL_IDENTITY_SECRET` 등 신원비밀공개설정 0개를 단언한다. unique sentinel secret을 server env에 둔 build/실행 뒤 `frontend/.next/static` client chunks에서 그 값과 실제 v2 header/MAC 0건을 단언한다. 결과: docs/dev-cycle/evidence/INFRA-062/security-checks.json. 네트워크 의존성감사는 신규 dependency가 없어 수행하지 않는다.

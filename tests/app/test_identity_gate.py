@@ -24,11 +24,13 @@ from app import _register_request_context
 SECRET = "test-identity-secret"
 
 
-def _sign(email: str, exp: int) -> str:
+def _sign(email: str, exp: int, *, method: str = "GET", path: str = "/probe") -> str:
     encoded = base64.urlsafe_b64encode(email.encode("utf-8")).decode("ascii").rstrip("=")
-    payload = f"{encoded}.{exp}"
+    prefix = f"v2.{encoded}.{exp}"
+    encoded_path = base64.urlsafe_b64encode(path.encode("utf-8")).decode("ascii").rstrip("=")
+    payload = f"{prefix}.{method}.{encoded_path}"
     mac = hmac.new(SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{payload}.{mac}"
+    return f"{prefix}.{mac}"
 
 
 def _create_client():

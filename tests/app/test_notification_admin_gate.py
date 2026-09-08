@@ -30,13 +30,15 @@ ADMIN = "admin@example.com"
 OUTSIDER = "outsider@example.com"
 
 
-def _sign(email: str, exp: int) -> str:
+def _sign(email: str, exp: int, *, method: str = "POST", path: str = "/api/notification/send") -> str:
     encoded = base64.urlsafe_b64encode(email.encode("utf-8")).decode("ascii").rstrip("=")
-    payload = f"{encoded}.{exp}"
+    prefix = f"v2.{encoded}.{exp}"
+    encoded_path = base64.urlsafe_b64encode(path.encode("utf-8")).decode("ascii").rstrip("=")
+    payload = f"{prefix}.{method}.{encoded_path}"
     mac = hmac.new(
         SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
     ).hexdigest()
-    return f"{payload}.{mac}"
+    return f"{prefix}.{mac}"
 
 
 def _identity_headers(email: str) -> dict:
@@ -207,4 +209,12 @@ def test_admin_identity_still_rejects_unknown_platform(client, sent, monkeypatch
 
     assert response.status_code == 400
     assert "Unknown platform" in response.get_json()["message"]
+    assert sent == []
+
+
+@pytest.mark.parametrize("method,path", [("GET", "/api/notification/send"), ("POST", "/api/portfolio/buy")])
+def test_replayed_admin_signature_never_sends(client, sent, method, path):
+    header = _sign(ADMIN, 4_000_000_000, method=method, path=path)
+    response = client.post("/api/notification/send", json={"platform": "discord"}, headers={"X-Auth-Identity": header})
+    assert response.status_code == 403
     assert sent == []

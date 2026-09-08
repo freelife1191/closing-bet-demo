@@ -1,0 +1,6 @@
+{
+  "agent": "infra062_code",
+  "verdict": "APPROVE",
+  "inputs": "review-input-sha256.json",
+  "raw_final": "## Code Review Summary\n\n**판정:** APPROVE  \n**검토 파일:** 고정 입력 24개 + TODO 변경 1개  \n**총 이슈:** 0\n\n### 심각도\n\n- CRITICAL: 0\n- HIGH: 0\n- MEDIUM: 0\n- LOW: 0\n\n### 근거\n\n- v2 HMAC이 이메일·만료·실제 메서드·1회 디코드 경로에 결합됩니다.\n- 구형 3-part와 알 수 없는 버전은 fail-closed로 거부됩니다.\n- 두 Python 호출부 모두 실제 `request.method`와 `request.path`를 전달합니다.\n- 클라이언트 제공 신원 헤더 제거와 응답 비노출 동작이 유지됩니다.\n- 직접 HMAC 픽스처 7곳의 기존 업무 단언과 부수효과 0 검증이 보존·강화됐습니다.\n- OWASP A01/A02/A03/A04/A07/A09 관련 신규 취약점이나 masking fallback을 발견하지 못했습니다.\n- 입력 24개의 SHA-256이 모두 일치했습니다.\n- 제공 증거: pytest 1,936 통과·기존 3 skip, vitest 373 통과, typecheck 통과, lint 오류 0, TS→Python 9 통과, 수동 검증 통과.\n- TypeScript 변경 파일의 정적 진단은 오류 0건입니다. Python LSP 백엔드는 제공되지 않아 Python 판단은 경계 테스트 증거에 근거했습니다.\n\n실제 Next→Flask raw HTTP 전송과 응답·로그의 MAC 비노출 검증은 계획대로 첫 구현 커밋 후 수행해야 합니다. 이를 아직 실행한 것으로 간주하지 않았습니다. 코드 판정 신뢰도는 높음, 실제 transport 정합성은 후속 QA 전까지 중상입니다."
+}

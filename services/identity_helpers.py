@@ -56,33 +56,32 @@ def _decode_email(encoded: str) -> str | None:
         return None
 
 
-def verify_identity_header(header: str | None, now: int | None = None) -> str | None:
+def verify_identity_header(
+    header: str | None,
+    now: int | None = None,
+    *,
+    method: str,
+    path: str,
+) -> str | None:
     """서명된 신원 헤더를 검증해 이메일을 돌려준다. 실패하면 None 이다.
 
-    # ponytail: 이 서명은 경로에도 메서드에도 nonce 에도 묶여 있지 않아, 한 번 새면 만료
-    # 전까지 어느 엔드포인트에나 쓸 수 있다. 이것을 받아들이는 근거는 서명이 오가는 구간이
-    # proxy 와 Flask 사이뿐이고 브라우저로 돌아가지 않는다는 것이다
-    # (`proxy.ts` 가 `NextResponse.next({ request: { headers } })` 를 쓰는 이유다).
-    #
-    # `[INFRA-039]` 가 그 전제를 좁혔다. 같은 네트워크의 임의 호스트에서 5501 에 직접
-    # 닿는 경로는 닫혔다. 그러나 전제가 완전히 강제된 것은 아니다. 실제 바인딩은 추적하지
-    # 않는 `.env` 의 값이 정하므로 코드가 보장하지 못하고, loopback 은 같은 호스트의 다른
-    # 프로세스를 막지 못하며, `FLASK_HOST` 를 넓힌 배포와 `Procfile` 경로는 그대로 전제
-    # 밖이다. 이 함수는 여전히 요청이 proxy 를 거쳤는지 보지 않는다(remote_addr 검사가
-    # 없다).
+    메서드와 경로는 헤더가 아닌 Flask가 실제로 관측한 요청에서 받는다. ``path`` 는 이미
+    한 번 decode된 ``request.path`` 이므로 여기서 다시 해석하지 않는다.
     """
     secret = os.environ.get("INTERNAL_IDENTITY_SECRET", "").strip()
     if not secret or not header:
         return None
 
     parts = header.split(".")
-    if len(parts) != 3:
+    if len(parts) != 4 or parts[0] != "v2":
         return None
-    encoded_email, raw_exp, provided_mac = parts
+    _, encoded_email, raw_exp, provided_mac = parts
+    encoded_path = base64.urlsafe_b64encode(path.encode("utf-8")).decode("ascii").rstrip("=")
+    payload = f"v2.{encoded_email}.{raw_exp}.{method.upper()}.{encoded_path}"
 
     expected_mac = hmac.new(
         secret.encode("utf-8"),
-        f"{encoded_email}.{raw_exp}".encode("utf-8"),
+        payload.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
     # 바이트로 비교한다. compare_digest 는 비ASCII 가 섞인 str 에 TypeError 를 던지므로
