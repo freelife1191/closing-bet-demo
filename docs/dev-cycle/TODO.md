@@ -15,27 +15,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-065] 인가 불변식 검사가 `create_app()` 부작용을 일으킨다
-- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-08 `[INFRA-059]` 사이클의 보안 리뷰(지적 6).
-  `[INFRA-042]` 가 만든 검사의 성질이며 이번 라운드가 그 목록에 세 줄을 더해 비중을
-  올렸습니다.
-- `tests/app/test_admin_gated_routes.py` 의 `test_gated_route_list_matches_reality` 가
-  `create_app()` 을 부르는데, 그 함수가 `_reset_startup_status_files()` 로 `data/` 아래
-  상태 파일을 쓰고 `_start_scheduler()` 로 스케줄러를 띄웁니다(`app/__init__.py:283-295`).
-- **사람이 돌리기를 피하는 가드는 시간이 지나면 가드로 남지 않습니다.** 이 검사는 저장소의
-  인가 경계 전체를 재는 자리라 그렇게 되면 잃는 것이 큽니다.
-- 해법은 둘입니다. `create_app` 에 부작용 없는 갈래를 두거나, 검사에서 두 함수를
-  monkeypatch 합니다. 뒤엣것이 작고 `create_app` 의 실제 배선을 그대로 재는 이점을
-  유지합니다.
-- QA 시나리오: 검사를 돌린 뒤 `data/` 상태 파일의 수정 시각이 그대로인지 확인
-- 설계 승인: 2026-09-08 현재 대화 사용자 「승인」 | 범위: 테스트 내부 두 startup 함수 차단, 실제 라우트 대조 유지, 격리 UltraQA·리뷰·커밋.
-- [x] 두 부작용을 테스트 내부 monkeypatch로 차단하기로 결정 (bounded/T1)
-- [x] ponytail 독립 리뷰 Lean already, 입력 SHA는 reviews/INFRA-065.md
-- [x] 관련 pytest26 PASS·AST PASS, 두 startup 함수 차단
-- [x] UltraQA 필수4/4 동작 통과: 상태3파일 불변·스케줄러0·누락/초과 탐지·26 PASS
-- [ ] 원본 통합·임시 clone/하네스 정리·최종 아카이브
-- [x] 실제 create_app·blueprint 등록·목록 assertion 유지 확인
-
 ### [INFRA-056] Market Gate 주기 저장이 존재하지 않는 `app/.env` 를 쓴다
 - 카테고리: 인프라 | 티어: T3(`.env` 접촉) | 근거: 2026-09-08 `[INFRA-050]` 사이클에서
   발견했고 `oh-my-claudecode:critic` 이 독립적으로 같은 결론을 냈습니다.

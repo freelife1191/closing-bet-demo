@@ -1,0 +1,12 @@
+{
+  "integrated_commit": "4f06ffe",
+  "source_sha256": "196ca55015593d6b5f87fae93e9fb9b0e202ef5d47ab20cda6604d1638c7a77c",
+  "original_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "clone_removed": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra065-0getpiie",
+  "initial_harness_temp_removed": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/pytest-of-freelife/pytest-308",
+  "paths_absent": true,
+  "process_cleanup": "All pytest subprocesses reaped; no servers/browser/native mode launched",
+  "original_env_data": "not accessed",
+  "time": "2026-09-08T21:43:50.753152+09:00",
+  "initial_pytest_current_symlink_removed": true
+}

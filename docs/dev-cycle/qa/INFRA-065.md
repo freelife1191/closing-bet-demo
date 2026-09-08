@@ -5,8 +5,8 @@
 - 항목: INFRA-065, 인가 목록 검사의 상태 초기화·스케줄러 기동 차단
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: cleanup
-- active: true
+- phase: complete
+- active: false
 - iteration: 2
 - same_failure_count: 0
 - 기준: b092bfe, 테스트 파일 하나만 변경하는 bounded/T1 설계
@@ -39,7 +39,7 @@
 
 ## 정리
 
-대기. baseline·행렬·원본 보존·소유 임시 파일 정리를 모두 확인한 후 완료한다.
+완료. 독립 clone·실행 하네스·임시 상태/DB·최초 실패 pytest 임시 디렉터리를 제거했다. subprocess는 종료 코드를 수거했으며 서버·브라우저는 기동하지 않았다. cleanup.json 참고.
 
 ## 수정 전 관측과 정적 검증
 
@@ -62,4 +62,10 @@
 - 필수 동작4/4 PASS. mutation 두 건의 exit1은 사전 정의된 기대 결과이며 제품 실패를 PASS로 덮은 것이 아니다.
 - 반복2: 최초 baseline 관측 하네스 오류를 수정한 뒤 완료한 회차. RED는 수정 전 결함 재현이고 mutation은 기대 실패다. 같은 미해결 실패0.
 - 잔여: 테스트 전체 실행의 모든 import 부작용을 없앤 것이 아니라 두 startup 부작용만 차단했다. 실제 스케줄러 기동·웹 UI는 실행하지 않았다.
-- 정리와 통합: 진행 중. 완료 표시는 원본 보존·독립 clone/하네스 삭제 후 갱신한다.
+- 정리와 통합: develop에 fast-forward 반영. 입력SHA·원본 package 불변, 소유 임시 경로 부재 확인. cleanup.json 참고.
+
+## 최종 판정
+
+필수4/4 PASS, 미해결 실패0, 정리 완료.
+
+ULTRAQA COMPLETE: Goal met after 2 cycles
