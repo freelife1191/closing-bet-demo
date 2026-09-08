@@ -1,0 +1,267 @@
+{
+  "status": "passed",
+  "requested_commit": "c2548b8",
+  "scenarios": [
+    {
+      "id": "Q1-GET",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 1,
+      "hit_count": 1,
+      "expected_arrival_count": 1,
+      "arrival_count": 1,
+      "path": "/api/__identity_probe/a",
+      "location": null
+    },
+    {
+      "id": "Q1-POST",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 2,
+      "hit_count": 2,
+      "expected_arrival_count": 2,
+      "arrival_count": 2,
+      "path": "/api/__identity_probe/a",
+      "location": null
+    },
+    {
+      "id": "Q1-HEAD",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 3,
+      "hit_count": 3,
+      "expected_arrival_count": 3,
+      "arrival_count": 3,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q2-cross-path",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 3,
+      "hit_count": 3,
+      "expected_arrival_count": 4,
+      "arrival_count": 4,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q2-cross-method",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 3,
+      "hit_count": 3,
+      "expected_arrival_count": 5,
+      "arrival_count": 5,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q6-same-path-query",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 4,
+      "hit_count": 4,
+      "expected_arrival_count": 6,
+      "arrival_count": 6,
+      "path": "/api/__identity_probe/a",
+      "location": null
+    },
+    {
+      "id": "Q2-proxy-strips-replay",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 4,
+      "hit_count": 4,
+      "expected_arrival_count": 7,
+      "arrival_count": 7,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q3-legacy",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 4,
+      "hit_count": 4,
+      "expected_arrival_count": 8,
+      "arrival_count": 8,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q3-unknown",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 4,
+      "hit_count": 4,
+      "expected_arrival_count": 9,
+      "arrival_count": 9,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q3-expired",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 4,
+      "hit_count": 4,
+      "expected_arrival_count": 10,
+      "arrival_count": 10,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q3-forged",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 4,
+      "hit_count": 4,
+      "expected_arrival_count": 11,
+      "arrival_count": 11,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q4-a-percent-2f",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 5,
+      "hit_count": 5,
+      "expected_arrival_count": 12,
+      "arrival_count": 12,
+      "path": "/api/__identity_probe/a/b",
+      "location": null
+    },
+    {
+      "id": "Q4-double-encoding",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 6,
+      "hit_count": 6,
+      "expected_arrival_count": 13,
+      "arrival_count": 13,
+      "path": "/api/__identity_probe/%2F",
+      "location": null
+    },
+    {
+      "id": "Q4-unicode",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 7,
+      "hit_count": 7,
+      "expected_arrival_count": 14,
+      "arrival_count": 14,
+      "path": "/api/__identity_probe/한글",
+      "location": null
+    },
+    {
+      "id": "Q4-tail-redirect",
+      "expected_status": 308,
+      "status": 308,
+      "expected_hit_count": 7,
+      "hit_count": 7,
+      "expected_arrival_count": 14,
+      "arrival_count": 14,
+      "path": null,
+      "location": "/api/__identity_probe/tail"
+    },
+    {
+      "id": "Q4-tail-resigned",
+      "expected_status": 200,
+      "status": 200,
+      "expected_hit_count": 8,
+      "hit_count": 8,
+      "expected_arrival_count": 15,
+      "arrival_count": 15,
+      "path": "/api/__identity_probe/tail",
+      "location": null
+    },
+    {
+      "id": "Q5-%",
+      "expected_status": 400,
+      "status": 400,
+      "expected_hit_count": 8,
+      "hit_count": 8,
+      "expected_arrival_count": 15,
+      "arrival_count": 15,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q5-%ZZ",
+      "expected_status": 400,
+      "status": 400,
+      "expected_hit_count": 8,
+      "hit_count": 8,
+      "expected_arrival_count": 15,
+      "arrival_count": 15,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q5-%FF",
+      "expected_status": 400,
+      "status": 400,
+      "expected_hit_count": 8,
+      "hit_count": 8,
+      "expected_arrival_count": 15,
+      "arrival_count": 15,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q6-options",
+      "expected_status": 204,
+      "status": 204,
+      "expected_hit_count": 8,
+      "hit_count": 8,
+      "expected_arrival_count": 16,
+      "arrival_count": 16,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q6-anonymous",
+      "expected_status": 401,
+      "status": 401,
+      "expected_hit_count": 8,
+      "hit_count": 8,
+      "expected_arrival_count": 17,
+      "arrival_count": 17,
+      "path": null,
+      "location": null
+    },
+    {
+      "id": "Q6-csrf",
+      "expected_status": 403,
+      "status": 403,
+      "expected_hit_count": 8,
+      "hit_count": 8,
+      "expected_arrival_count": 17,
+      "arrival_count": 17,
+      "path": null,
+      "location": null
+    }
+  ],
+  "security": {
+    "response_identity_headers": 0,
+    "response_middleware_request_headers": 0,
+    "response_secret_or_mac": 0,
+    "next_log_identity_headers": 0,
+    "next_log_secret_or_mac": 0,
+    "flask_log_identity_headers": 0,
+    "flask_log_secret_or_mac": 0,
+    "client_bundle_secret_or_mac": 0
+  },
+  "cleanup": {
+    "next_process_group": "terminated",
+    "flask_thread": "joined"
+  },
+  "ports": {
+    "next": 63208,
+    "flask": 63207
+  },
+  "commit": "c2548b82945a31678e9140def28cc5ca78268e08"
+}

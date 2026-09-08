@@ -3,7 +3,7 @@
 ## Goal and success criteria
 
 - 목표: actual method/path에 맞는 v2 신원만 허용하고 다른 경로/메서드·구형·위조·만료 서명을 거부한다.
-- engine: ultraqa | lifecycle: app-adapted | phase: ready-for-e2e | iteration: 1 | same_failure_count: 0
+- engine: ultraqa | lifecycle: app-adapted | phase: cleanup | iteration: 1 | same_failure_count: 0
 - 승인: 2026-09-08 현재 대화 사용자 「진행해」. method/path결합, 구형거부, Next/Flask 동시수정, T3 리뷰/UltraQA.
 - 기준: a464a30 → 설계 9fdb1f9. 정확한 구현 커밋은 첫 구현 커밋 후 기록한다.
 - 준비 baseline: 독립 clone pytest 1914 PASS/3 skip(수동Gemini2·.env없음1), vitest365 PASS/57files. 모두exit0.
@@ -14,13 +14,13 @@
 
 | ID | 의도/공격자 | Setup/command | 기대 | 실제 | 수정 | 증거 | cleanup | 필수 |
 |---|---|---|---|---|---|---|---|---|
-| Q1 | 정상 로그인 사용자 | TS signer→Python verifier vectors, 실제 Next→Flask | 이메일보존·GET/POST/HEAD정상 | 대기 | v2계약 | 테스트/HTTP결과 | child종료 | 예 |
-| Q2 | 헤더를 복사한 공격자 | 경로A→B, GET→POST, portfolio/notification gate fake서비스 | None/401/403·부수효과0 | 대기 | method/path MAC | 경계회귀 | tmpDB자동정리 | 예 |
-| Q3 | 구형/위조/만료/잘못된 버전 | unit 및 actualHTTP | 인증거부, 구형fallback없음, secret없는환경차단 | 대기 | 형식검증 | 테스트결과 | fixture정리 | 예 |
-| Q4 | URL해석 차이 | spec transport표 raw HTTP %2F/%252F/한글/tail/ | exact decoded path동일, trailing308뒤새요청성공 | 대기 | 1회decode | 관측값표 | 서버종료 | 예 |
-| Q5 | 비정상URL·Unicode | rawHTTP %/%ZZ/%FF, malformedMAC | 400·Flask hit0, verifier500없음 | 대기 | 경계검사 | rawHTTP기록 | 서버종료 | 예 |
-| Q6 | 인접권한·정보유출 | 익명/OPTIONS/CSRF·samepath재전송·query 차이·응답/번들scan | 기존정책유지, 서명/secret비노출, 승인된잔여범위명시 | 대기 | 기존가드유지 | 테스트/scan | fake자격만 | 예 |
-| Q7 | 회귀/다른작업보존 | 전체pytest/vitest/typecheck/lint·수동verify·원본hash | 새실패없음, sourcehash일치, package보존 | 대기 | 필요한fixture갱신 | 전체로그/manifest | clone정리 | 예 |
+| Q1 | 정상 로그인 사용자 | TS signer→Python verifier vectors, 실제 Next→Flask | 이메일보존·GET/POST/HEAD정상 | 통과: TS→Python9, actual GET/POST/HEAD200 | v2계약 | transport.json Q1 | child종료 | 예 |
+| Q2 | 헤더를 복사한 공격자 | 경로A→B, GET→POST, portfolio/notification gate fake서비스 | None/401/403·부수효과0 | 통과: crosspath/method401, gate403, 처리0 | method/path MAC | 경계112·transport Q2 | tmpDB자동정리 | 예 |
+| Q3 | 구형/위조/만료/잘못된 버전 | unit 및 actualHTTP | 인증거부, 구형fallback없음, secret없는환경차단 | 통과: legacy/unknown/expired/forged401 | 형식검증 | transport Q3·unit | fixture정리 | 예 |
+| Q4 | URL해석 차이 | spec transport표 raw HTTP %2F/%252F/한글/tail/ | exact decoded path동일, trailing308뒤새요청성공 | 통과: a/b·literal%2F·한글, tail308→200 | 1회decode | transport Q4 | 서버종료 | 예 |
+| Q5 | 비정상URL·Unicode | rawHTTP %/%ZZ/%FF, malformedMAC | 400·Flask hit0, verifier500없음 | 통과: %/%ZZ/%FF400·Flask도달증가0 | 경계검사 | transport Q5 | 서버종료 | 예 |
+| Q6 | 인접권한·정보유출 | 익명/OPTIONS/CSRF·samepath재전송·query 차이·응답/번들scan | 기존정책유지, 서명/secret비노출, 승인된잔여범위명시 | 통과: OPTIONS204·익명401·CSRF403·노출0 | 기존가드유지 | transport Q6/security | fake자격정리 | 예 |
+| Q7 | 회귀/다른작업보존 | 전체pytest/vitest/typecheck/lint·수동verify·원본hash | 새실패없음, sourcehash일치, package보존 | 정적/동적PASS·hash24일치, 원본반영대기 | 필요한fixture갱신 | 전체로그/manifest | 서버완료·clone정리대기 | 예 |
 
 ## Commands run
 
@@ -54,3 +54,16 @@ same method/path 재전송과 query/body 변경방어는 승인된범위밖이�
 원본 실행 로그는 `.log.gz`로 압축하여 공백·ANSI를 바꾸지 않고 보존한다. 리뷰 원문의 `.log` 경로는 같은 이름 `.log.gz`를 `gzip -dc`로 푼 내용에 해당한다.
 
 - 준비단계 하네스 수리: Flask/Next 로그를 종료 후 별도 검사하고, alive/dead leader 두 조건의 자식 정리 시험을 통과했다. 정리 보장은 정상·포착한 예외·KeyboardInterrupt에 한정하며 외부 강제 종료까지 보장하지 않는다. 증거: transport/cleanup-selftest.json.
+
+- 실제 QA 시작 확인: 2026-09-08T16:48:45.848741+09:00; 기준 구현 커밋 `c2548b8`, 하네스 SHA `03b069a96563f5f11960dc359e96f429e3188d46ef3f1d1445c68c977d55f2fe`.
+
+## 확정 커밋 QA 결과
+
+- 기준 구현 커밋 `c2548b8`. root가 실제 Next dev → 기존 proxy/rewrite → bare Flask request context를 합성 NextAuth JWT로 실행했다. 실제 OAuth·운영 서버·운영 데이터는 사용하지 않았다.
+- [실제 전송 결과](../evidence/INFRA-062/transport/transport.json): 22/22 통과. 정상 처리 8회, Flask 도달 17회이며 재생/익명 거부는 처리 횟수를 늘리지 않았다. 잘못된 URL 3개와 trailing redirect·CSRF 차단은 Flask에 도달하지 않았다.
+- Next 포트63208·Flask63207을 사용했고, 자체 PGID/스레드/소켓 정리 후 root도 lsof로 두 listener가 없음을 확인했다.
+- 응답 body/headers, Next/Flask 실행 로그, client chunks에서 unique fake secret·전체서명·MAC 미노출. [Next 로그](../evidence/INFRA-062/transport/next.log.gz), [Flask 로그](../evidence/INFRA-062/transport/flask.log.gz)는 검사 후 보존했다.
+- 같은 커밋의 전체 pytest 재검증: exit0, 1936 passed/3 skipped, 26.24s. [원문](../evidence/INFRA-062/qa-pytest-c2548b8.log.gz).
+- [최종 대조](../evidence/INFRA-062/post-qa-check.json): 22개 status/처리횟수/도달횟수 assertion과 리뷰 입력24 SHA가 모두 일치했다.
+- UI를 변경하지 않은 인증 프로토콜 작업이므로 실제 HTTP 하네스를 사용했다. 브라우저 화면 실측이나 네이티브 OMX 상태 수명주기를 실행한 것으로 보고하지 않는다.
+- 필수 동작 7/7과 실행 fixture 정리는 통과했다. 작업 clone 반영·정리 후 최종 완료 판정하며 이 증거 커밋에서는 TODO를 유지한다.

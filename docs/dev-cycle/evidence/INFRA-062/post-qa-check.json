@@ -1,0 +1,11 @@
+{
+  "commit": "c2548b82945a31678e9140def28cc5ca78268e08",
+  "transport_scenarios": 22,
+  "scenario_assertions_matched": true,
+  "review_inputs_matched": 24,
+  "ports_confirmed_closed": {
+    "next": 63208,
+    "flask": 63207
+  },
+  "original_data_env_read": false
+}

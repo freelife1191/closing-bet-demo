@@ -25,3 +25,5 @@
 - deep review: APPROVE. 코드와하네스수리delta 원문은 evidence/INFRA-062/deep-review.json. 미해결0.
 
 심층검토 중 QA하네스의 Next-only 로그검사와 leader종료시잔존child를거짓정리완료로기록하는문제를발견했다. Flask로그분리·종료후scan, exactPGID확인과leader reap을보완하고 alive/dead leader 두조건의network-free cleanup회귀를검증한다. 제품코드는이보완으로바뀌지않는다. 최종delta판정전에는QA실행/완료를주장하지않는다.
+
+최종 transport 필수조건 충족: c2548b8에서 실제22/22 및 Next/Flask 로그·응답·client파일비노출/프로세스정리PASS. root의입력24sha대조도일치했으며제품수정없이QA를마쳤다. 결과는evidence/INFRA-062/transport/transport.json에보존했다.
