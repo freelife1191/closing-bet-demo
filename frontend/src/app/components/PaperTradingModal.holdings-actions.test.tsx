@@ -2,6 +2,10 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import PaperTradingModal from './PaperTradingModal';
 
+vi.mock('next-auth/react', () => ({
+  useSession: () => ({ data: { user: { email: 'modal@example.test' } }, status: 'authenticated' }),
+}));
+
 // [FE-009] 회귀 검사. 보유 종목 행 전체가 거래 내역을 여는 클릭 핸들러를 달고 있어서,
 // 행 안쪽의 매수·매도 버튼이 e.stopPropagation() 을 잃으면 주문 모달과 상세 패널이
 // 함께 열린다. 상세가 z-120 으로 주문 모달(z-110) 을 덮으므로 목록에서 주문을 넣을 수
@@ -33,6 +37,7 @@ const mockPortfolio = {
 };
 
 vi.mock('@/lib/api', () => ({
+  isAuthenticationError: () => false,
   paperTradingAPI: {
     getPortfolio: vi.fn(async () => mockPortfolio),
     getChartData: vi.fn(async () => ({ data: [] })),

@@ -2,6 +2,10 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import PaperTradingModal from './PaperTradingModal';
 
+vi.mock('next-auth/react', () => ({
+  useSession: () => ({ data: { user: { email: 'modal@example.test' } }, status: 'authenticated' }),
+}));
+
 // [FE-003] 회귀 검사. 백엔드는 잔고 부족이나 보유 수량 초과 같은 거절을 예외가 아니라
 // HTTP 200 + {status:'error'} 로 돌려준다. 응답 본문을 읽지 않으면 거절이 완료로 보인다.
 
@@ -46,6 +50,7 @@ const mockPortfolio = {
 };
 
 vi.mock('@/lib/api', () => ({
+  isAuthenticationError: () => false,
   paperTradingAPI: {
     getPortfolio: vi.fn(async () => mockPortfolio),
     getChartData: vi.fn(async () => ({ data: [] })),

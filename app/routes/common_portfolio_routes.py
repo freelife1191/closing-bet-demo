@@ -6,9 +6,13 @@ Common Portfolio Routes
 
 from __future__ import annotations
 
-from flask import jsonify, request
+from functools import wraps
+from typing import Any, Callable
+
+from flask import jsonify, make_response, request
 
 from app.routes.common_route_context import CommonRouteContext
+from services.identity_helpers import verify_identity_header
 from services.paper_trading_constants import (
     DEFAULT_ASSET_HISTORY_LIMIT,
     DEFAULT_TRADE_HISTORY_LIMIT,
@@ -16,6 +20,25 @@ from services.paper_trading_constants import (
     MAX_ASSET_HISTORY_LIMIT,
     MAX_HISTORY_LIMIT,
 )
+
+
+def _require_portfolio_owner(handler: Callable[..., Any]) -> Callable[..., Any]:
+    """검증된 로그인 신원만 계정 연산에 전달한다. 익명은 DB 초기화 전 거부한다."""
+    @wraps(handler)
+    def authenticated_handler(*args: Any, **kwargs: Any) -> Any:
+        owner_id = verify_identity_header(request.headers.get("X-Auth-Identity"))
+        if owner_id is None:
+            response = make_response(jsonify(
+                status="error", message="모의투자는 로그인 후 사용할 수 있습니다."
+            ), 401)
+        else:
+            response = make_response(handler(*args, owner_id=owner_id, **kwargs))
+        response.headers["Cache-Control"] = "private, no-store"
+        response.vary.add("Cookie")
+        response.vary.add("X-Auth-Identity")
+        return response
+
+    return authenticated_handler
 
 
 def _execute_portfolio_route(
@@ -55,11 +78,12 @@ def _parse_history_limit(raw_value: object, *, default: int, cap: int = MAX_HIST
 
 def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> None:
     @common_bp.route("/portfolio")
-    def get_portfolio_data():
+    @_require_portfolio_owner
+    def get_portfolio_data(owner_id: str):
         """포트폴리오 데이터 (Fast - Cached)."""
         def _handler():
             ctx.paper_trading.start_background_sync()
-            data = ctx.paper_trading.get_portfolio_valuation()
+            data = ctx.paper_trading.get_portfolio_valuation(owner_id=owner_id)
             return jsonify(data)
 
         return _execute_portfolio_route(
@@ -70,9 +94,12 @@ def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> N
         )
 
     @common_bp.route("/portfolio/reset", methods=["POST"])
-    def reset_portfolio():
+    @_require_portfolio_owner
+    def reset_portfolio(owner_id: str):
         """모의 투자 초기화."""
-        ctx.paper_trading.reset_account()
+        if not ctx.paper_trading.reset_account(owner_id=owner_id):
+            ctx.logger.error("Failed to reset the requested paper trading account")
+            return jsonify(status="error", message="계정 초기화에 실패했습니다."), 500
         return jsonify(
             {
                 "status": "success",
@@ -83,7 +110,8 @@ def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> N
 
 def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None:
     @common_bp.route("/portfolio/buy", methods=["POST"])
-    def buy_stock():
+    @_require_portfolio_owner
+    def buy_stock(owner_id: str):
         """모의 투자 매수."""
         def _handler():
             data = request.get_json(silent=True) or {}
@@ -95,7 +123,7 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             if not all([ticker, name, price, quantity]):
                 return jsonify({"status": "error", "message": "Missing data"}), 400
 
-            result = ctx.paper_trading.buy_stock(ticker, name, price, quantity)
+            result = ctx.paper_trading.buy_stock(ticker, name, price, quantity, owner_id=owner_id)
             return jsonify(result)
 
         return _execute_portfolio_route(
@@ -106,7 +134,8 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
         )
 
     @common_bp.route("/portfolio/buy/bulk", methods=["POST"])
-    def buy_stocks_bulk():
+    @_require_portfolio_owner
+    def buy_stocks_bulk(owner_id: str):
         """모의 투자 일괄 매수."""
         def _handler():
             data = request.get_json(silent=True) or {}
@@ -114,7 +143,7 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             if not isinstance(orders, list) or not orders:
                 return jsonify({"status": "error", "message": "Missing orders"}), 400
 
-            result = ctx.paper_trading.buy_stocks_bulk(orders)
+            result = ctx.paper_trading.buy_stocks_bulk(orders, owner_id=owner_id)
             return jsonify(result)
 
         return _execute_portfolio_route(
@@ -125,7 +154,8 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
         )
 
     @common_bp.route("/portfolio/sell", methods=["POST"])
-    def sell_stock():
+    @_require_portfolio_owner
+    def sell_stock(owner_id: str):
         """모의 투자 매도."""
         def _handler():
             data = request.get_json(silent=True) or {}
@@ -136,7 +166,7 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             if not all([ticker, price, quantity]):
                 return jsonify({"status": "error", "message": "Missing data"}), 400
 
-            result = ctx.paper_trading.sell_stock(ticker, price, quantity)
+            result = ctx.paper_trading.sell_stock(ticker, price, quantity, owner_id=owner_id)
             return jsonify(result)
 
         return _execute_portfolio_route(
@@ -147,12 +177,13 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
         )
 
     @common_bp.route("/portfolio/deposit", methods=["POST"])
-    def deposit_cash():
+    @_require_portfolio_owner
+    def deposit_cash(owner_id: str):
         """예수금 충전."""
         def _handler():
             data = request.get_json(silent=True) or {}
             amount = _parse_positive_int(data.get("amount", 0), default=0)
-            result = ctx.paper_trading.deposit_cash(amount)
+            result = ctx.paper_trading.deposit_cash(amount, owner_id=owner_id)
             return jsonify(result)
 
         return _execute_portfolio_route(
@@ -165,7 +196,8 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
 
 def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> None:
     @common_bp.route("/portfolio/history")
-    def get_trade_history():
+    @_require_portfolio_owner
+    def get_trade_history(owner_id: str):
         """거래 내역 조회. ticker 쿼리 파라미터로 종목별 필터링 가능."""
         def _handler():
             limit = _parse_history_limit(
@@ -174,7 +206,7 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
             )
             ticker_param = request.args.get("ticker")
             ticker_filter = ticker_param.strip() if ticker_param else None
-            data = ctx.paper_trading.get_trade_history(limit, ticker=ticker_filter)
+            data = ctx.paper_trading.get_trade_history(limit, ticker=ticker_filter, owner_id=owner_id)
             return jsonify(data)
 
         return _execute_portfolio_route(
@@ -185,7 +217,8 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
         )
 
     @common_bp.route("/portfolio/history/asset")
-    def get_asset_history():
+    @_require_portfolio_owner
+    def get_asset_history(owner_id: str):
         """자산 변동 내역 조회 (차트용)."""
         def _handler():
             raw_days = request.args.get("days")
@@ -208,7 +241,7 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
                 default=default_limit,
                 cap=MAX_ASSET_HISTORY_LIMIT,
             )
-            data = ctx.paper_trading.get_asset_history(limit, days=days_param)
+            data = ctx.paper_trading.get_asset_history(limit, days=days_param, owner_id=owner_id)
             return jsonify({"history": data})
 
         return _execute_portfolio_route(

@@ -1,7 +1,9 @@
 'use client';
 
 import { Activity, useState, useEffect } from 'react';
-import { paperTradingAPI, PaperTradingPortfolio, PaperTradingHolding } from '@/lib/api';
+import { useSession } from 'next-auth/react';
+import { isAuthenticationError, paperTradingAPI, PaperTradingPortfolio, PaperTradingHolding } from '@/lib/api';
+import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import { ModalShell } from './Modal';
 import { formatSmartPercent } from './paperTradingFormat';
 import PaperTradingAssetChart from './PaperTradingAssetChart';
@@ -17,26 +19,74 @@ interface PaperTradingModalProps {
 
 type PaperTradingTabId = 'overview' | 'holdings' | 'history' | 'chart';
 
+interface PaperTradingHistoryEntry {
+  id: number;
+  action: 'BUY' | 'SELL';
+  ticker: string;
+  name: string;
+  price: number;
+  quantity: number;
+  timestamp: string;
+  profit?: number | null;
+  profit_rate?: number | null;
+}
+
+interface SelectedStock {
+  ticker: string;
+  name: string;
+  price: number;
+  avg_price: number;
+  current_price?: number;
+  quantity: number;
+}
 
 // fetchAPI 가 4xx 응답의 본문을 error.data 에 담아 준다. 그쪽을 먼저 읽어야
 // 사용자에게 `API Error: 400` 대신 서버가 적어 보낸 사유를 보여 줄 수 있다.
-const tradeErrorMessage = (error: any): string =>
-  error?.data?.message || error?.message || '알 수 없는 오류';
+const tradeErrorMessage = (error: unknown): string => {
+  if (typeof error !== 'object' || error === null) return '알 수 없는 오류';
+  const apiError = error as { status?: unknown; data?: { message?: unknown }; message?: unknown };
+  if (apiError.status === 401) return '모의투자는 로그인 후 사용할 수 있습니다.';
+  if (typeof apiError.data?.message === 'string') return apiError.data.message;
+  return typeof apiError.message === 'string' ? apiError.message : '알 수 없는 오류';
+};
 
 export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModalProps) {
+  const { data: session, status } = useSession();
+  const accountEmail = status === 'authenticated' ? session?.user?.email ?? null : null;
+  return (
+    <PaperTradingModalAccount
+      key={accountEmail ?? 'unauthenticated'}
+      isOpen={isOpen}
+      onClose={onClose}
+      isAuthenticated={Boolean(accountEmail)}
+    />
+  );
+}
+
+interface PaperTradingModalAccountProps extends PaperTradingModalProps {
+  isAuthenticated: boolean;
+}
+
+function PaperTradingModalAccount({
+  isOpen,
+  onClose,
+  isAuthenticated,
+}: PaperTradingModalAccountProps) {
+  const captureAccountAction = useAccountActionGuard(null);
   const [activeTab, setActiveTab] = useState<PaperTradingTabId>('overview');
   const [portfolio, setPortfolio] = useState<PaperTradingPortfolio | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // 거래 내역 state
-  const [tradeHistory, setTradeHistory] = useState<any[]>([]);
+  const [tradeHistory, setTradeHistory] = useState<PaperTradingHistoryEntry[]>([]);
 
 
   // Modals state
   const [buyModalOpen, setBuyModalOpen] = useState(false);
   const [sellModalOpen, setSellModalOpen] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<any>(null); // 매수/매도용 선택된 종목
+  const [selectedStock, setSelectedStock] = useState<SelectedStock | null>(null); // 매수/매도용 선택된 종목
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyStock, setHistoryStock] = useState<{ ticker: string; name: string } | null>(null);
   const tabs: { id: PaperTradingTabId; label: string; icon: string }[] = [
@@ -46,45 +96,68 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
     { id: 'history', label: '거래 내역', icon: 'fa-history' },
   ];
 
-  const fetchPortfolio = async () => {
+  const fetchPortfolio = async (isCancelled: () => boolean) => {
     // 스피너는 첫 조회에만 띄운다. 갱신 때마다 띄우면 콘텐츠 영역이 통째로 갈리면서
     // 그 안의 Activity 경계까지 언마운트되어, 차트 탭에서 입금했을 때 기간과
     // 이동평균선 선택이 사라진다.
     if (!portfolio) setLoading(true);
     try {
       const data = await paperTradingAPI.getPortfolio();
-      setPortfolio(data);
+      if (!isCancelled()) setPortfolio(data);
     } catch (e) {
-      console.error("Failed to fetch portfolio", e);
+      if (!isCancelled()) {
+        const denied = isAuthenticationError(e);
+        setAccessDenied(denied);
+        if (!denied) console.error("Failed to fetch portfolio", e);
+      }
     } finally {
-      setLoading(false);
+      if (!isCancelled()) setLoading(false);
     }
   };
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (isCancelled: () => boolean) => {
     try {
       const data = await paperTradingAPI.getTradeHistory(50);
-      if (data.trades) {
+      if (!isCancelled() && data.trades) {
         setTradeHistory(data.trades);
       }
     } catch (e) {
-      console.error("Failed to fetch trade history", e);
+      if (!isCancelled()) {
+        const denied = isAuthenticationError(e);
+        setAccessDenied(denied);
+        if (!denied) console.error("Failed to fetch trade history", e);
+      }
     }
   };
 
 
   useEffect(() => {
-    if (isOpen) {
-      fetchPortfolio();
+    let cancelled = false;
+    setAccessDenied(false);
+
+    if (!isOpen || !isAuthenticated) {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [isOpen, refreshKey]);
+
+    void fetchPortfolio(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isAuthenticated, refreshKey]);
 
   // 탭 변경 시 데이터 로드
   useEffect(() => {
-    if (isOpen && activeTab === 'history') {
-      fetchHistory();
+    let cancelled = false;
+    if (isOpen && isAuthenticated && activeTab === 'history') {
+      void fetchHistory(() => cancelled);
     }
-  }, [isOpen, activeTab, refreshKey]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isAuthenticated, activeTab, refreshKey]);
 
 
   // Handlers for Buy/Sell
@@ -93,6 +166,8 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
       ticker: stock.ticker,
       name: stock.name,
       price: stock.current_price || stock.avg_price,
+      avg_price: stock.avg_price,
+      quantity: stock.quantity,
       current_price: stock.current_price // BuyStockModal expects this
     });
     setBuyModalOpen(true);
@@ -107,6 +182,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
     setSelectedStock({
       ticker: stock.ticker,
       name: stock.name,
+      price: stock.current_price || stock.avg_price,
       avg_price: stock.avg_price,
       current_price: stock.current_price,
       quantity: stock.quantity
@@ -115,9 +191,11 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
   };
 
   const handleBuySubmit = async (ticker: string, name: string, price: number, quantity: number) => {
+    const isCurrent = captureAccountAction();
     try {
       // 잔고 부족 같은 거절은 예외가 아니라 HTTP 200 + {status:'error'} 로 온다.
       const result = await paperTradingAPI.buy({ ticker, name, price, quantity });
+      if (!isCurrent()) return false;
       if (result?.status === 'error') {
         alert(`매수 실패: ${result.message}`);
         return false;
@@ -126,14 +204,17 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
       setRefreshKey(p => p + 1);
       return true;
     } catch (e: any) {
+      if (!isCurrent()) return false;
       alert(`매수 실패: ${tradeErrorMessage(e)}`);
       return false;
     }
   };
 
   const handleSellSubmit = async (ticker: string, name: string, price: number, quantity: number) => {
+    const isCurrent = captureAccountAction();
     try {
       const result = await paperTradingAPI.sell({ ticker, price, quantity });
+      if (!isCurrent()) return false;
       if (result?.status === 'error') {
         alert(`매도 실패: ${result.message}`);
         return false;
@@ -142,6 +223,7 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
       setRefreshKey(p => p + 1);
       return true;
     } catch (e: any) {
+      if (!isCurrent()) return false;
       alert(`매도 실패: ${tradeErrorMessage(e)}`);
       return false;
     }
@@ -182,7 +264,11 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                   <div className="text-sm md:text-base font-bold text-white whitespace-nowrap">{Math.floor(portfolio.total_asset_value).toLocaleString()}원</div>
                 </div>
                 <div className="h-8 w-px bg-white/10"></div>
-                <DepositPanel cash={portfolio.cash} onDeposited={() => setRefreshKey(p => p + 1)} />
+                  <DepositPanel
+                    cash={portfolio.cash}
+                    captureAccountAction={captureAccountAction}
+                    onDeposited={() => setRefreshKey(p => p + 1)}
+                  />
               </div>
             )}
             <button onClick={onClose} className="hidden md:flex w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 items-center justify-center text-gray-400 hover:text-white transition-colors">
@@ -211,7 +297,11 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#18181b] relative">
-          {loading ? (
+          {!isAuthenticated || accessDenied ? (
+            <div className="flex h-full items-center justify-center text-center text-gray-300">
+              모의투자는 로그인 후 사용할 수 있습니다.
+            </div>
+          ) : loading ? (
             <div className="flex h-full items-center justify-center">
               <i className="fas fa-spinner fa-spin text-3xl text-rose-500"></i>
             </div>
@@ -515,7 +605,10 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
                 </div>
               )}
 
-              <ResetAccountButton onReset={() => { setRefreshKey(p => p + 1); setActiveTab('overview'); }} />
+              <ResetAccountButton
+                captureAccountAction={captureAccountAction}
+                onReset={() => { setRefreshKey(p => p + 1); setActiveTab('overview'); }}
+              />
             </>
           )}
         </div>
@@ -523,19 +616,19 @@ export default function PaperTradingModal({ isOpen, onClose }: PaperTradingModal
 
       {/* Modals */}
       <BuyStockModal
-        isOpen={buyModalOpen}
+        isOpen={isAuthenticated && !accessDenied && buyModalOpen}
         onClose={() => setBuyModalOpen(false)}
         stock={selectedStock}
         onBuy={handleBuySubmit}
       />
       <SellStockModal
-        isOpen={sellModalOpen}
+        isOpen={isAuthenticated && !accessDenied && sellModalOpen}
         onClose={() => setSellModalOpen(false)}
         stock={selectedStock}
         onSell={handleSellSubmit}
       />
       <StockTradeHistoryModal
-        isOpen={historyModalOpen}
+        isOpen={isAuthenticated && !accessDenied && historyModalOpen}
         onClose={() => setHistoryModalOpen(false)}
         stock={historyStock}
       />

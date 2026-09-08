@@ -7,11 +7,14 @@ PaperTradingService 단위 테스트
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 import threading
 import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 import services.paper_trading as paper_trading_module
 from services.paper_trading import PaperTradingService
@@ -21,6 +24,8 @@ from services.paper_trading_constants import (
     MAX_DEPOSIT_PER_REQUEST_KRW,
     MAX_TOTAL_DEPOSIT_KRW,
 )
+TEST_OWNER = "owner@example.test"
+
 
 
 class _FakeResponse:
@@ -47,7 +52,7 @@ class _FakeSession:
 
 def _build_service():
     db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
-    return PaperTradingService(db_name=db_name, auto_start_sync=False)
+    return PaperTradingService(db_path=str(Path(tempfile.gettempdir()) / db_name), auto_start_sync=False)
 
 
 def _cleanup_service(service: PaperTradingService):
@@ -62,10 +67,10 @@ def _insert_portfolio_row(service: PaperTradingService, ticker: str, name: str):
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (ticker, name, 10000, 1, 10000, "2026-01-01T00:00:00"),
+            (TEST_OWNER, ticker, name, 10000, 1, 10000, "2026-01-01T00:00:00"),
         )
         conn.commit()
 
@@ -144,8 +149,8 @@ def test_fetch_prices_toss_parses_bulk_response():
                         ]
                     },
                 )
-            ]
-        )
+                ],
+            )
 
         prices = service._fetch_prices_toss(session, ["005930", "000660"])
 
@@ -165,8 +170,8 @@ def test_fetch_prices_toss_normalizes_and_deduplicates_input_tickers():
                     200,
                     {"result": [{"code": "A005930", "close": 70200}]},
                 )
-            ]
-        )
+                ],
+            )
 
         prices = service._fetch_prices_toss(session, ["5930", "005930"])
 
@@ -230,8 +235,8 @@ def test_get_portfolio_valuation_waits_for_initial_sync_on_each_call(monkeypatch
         service.bg_thread = _FakeThread()
         service.price_cache = {}
 
-        first = service.get_portfolio_valuation()
-        second = service.get_portfolio_valuation()
+        first = service.get_portfolio_valuation(owner_id=TEST_OWNER)
+        second = service.get_portfolio_valuation(owner_id=TEST_OWNER)
 
         assert first["holdings"][0]["is_stale"] is True
         assert second["holdings"][0]["is_stale"] is True
@@ -243,16 +248,16 @@ def test_get_portfolio_valuation_waits_for_initial_sync_on_each_call(monkeypatch
 def test_deposit_cash_updates_balance_and_total_deposit():
     service = _build_service()
     try:
-        before = service.get_balance()
-        result = service.deposit_cash(1_000_000)
-        after = service.get_balance()
+        before = service.get_balance(owner_id=TEST_OWNER)
+        result = service.deposit_cash(1_000_000, owner_id=TEST_OWNER)
+        after = service.get_balance(owner_id=TEST_OWNER)
 
         assert result["status"] == "success"
         assert int(after - before) == 1_000_000
 
         with service.get_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT total_deposit FROM balance WHERE id = 1")
+            cursor.execute("SELECT total_deposit FROM balance WHERE owner_id = 'owner@example.test'")
             row = cursor.fetchone()
             assert row is not None
             assert int(row[0]) == 1_000_000
@@ -263,9 +268,9 @@ def test_deposit_cash_updates_balance_and_total_deposit():
 def test_deposit_cash_rejects_amount_over_per_request_limit():
     service = _build_service()
     try:
-        before = service.get_balance()
-        result = service.deposit_cash(MAX_DEPOSIT_PER_REQUEST_KRW + 1)
-        after = service.get_balance()
+        before = service.get_balance(owner_id=TEST_OWNER)
+        result = service.deposit_cash(MAX_DEPOSIT_PER_REQUEST_KRW + 1, owner_id=TEST_OWNER)
+        after = service.get_balance(owner_id=TEST_OWNER)
 
         assert result["status"] == "error"
         assert "per request limit exceeded" in result["message"]
@@ -277,21 +282,22 @@ def test_deposit_cash_rejects_amount_over_per_request_limit():
 def test_deposit_cash_rejects_when_total_deposit_limit_exceeded():
     service = _build_service()
     try:
+        service.get_balance(owner_id=TEST_OWNER)
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE balance SET cash = ?, total_deposit = ? WHERE id = 1",
+                "UPDATE balance SET cash = ?, total_deposit = ? WHERE owner_id = 'owner@example.test'",
                 (INITIAL_CASH_KRW + MAX_TOTAL_DEPOSIT_KRW, MAX_TOTAL_DEPOSIT_KRW),
             )
             conn.commit()
 
-        result = service.deposit_cash(1)
+        result = service.deposit_cash(1, owner_id=TEST_OWNER)
         assert result["status"] == "error"
         assert "Total deposit limit exceeded" in result["message"]
 
         with service.get_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT cash, total_deposit FROM balance WHERE id = 1")
+            cursor.execute("SELECT cash, total_deposit FROM balance WHERE owner_id = 'owner@example.test'")
             row = cursor.fetchone()
             assert row is not None
             assert int(row[0]) == INITIAL_CASH_KRW + MAX_TOTAL_DEPOSIT_KRW
@@ -309,12 +315,12 @@ def test_update_balance_uses_single_connection_without_get_balance_call(monkeypa
             lambda: (_ for _ in ()).throw(AssertionError("get_balance should not be called")),
         )
 
-        new_balance = service.update_balance(5000, operation="add")
+        new_balance = service.update_balance(5000, operation="add", owner_id=TEST_OWNER)
         assert int(new_balance) == 100_005_000
 
         with service.get_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT cash FROM balance WHERE id = 1")
+            cursor.execute("SELECT cash FROM balance WHERE owner_id = 'owner@example.test'")
             row = cursor.fetchone()
             assert row is not None
             assert int(row[0]) == 100_005_000
@@ -335,8 +341,8 @@ def test_update_balance_uses_in_place_sql_arithmetic_update(monkeypatch):
 
         monkeypatch.setattr(service, "get_context", _traced_get_context)
 
-        added_balance = service.update_balance(5000, operation="add")
-        subtracted_balance = service.update_balance(2000, operation="subtract")
+        added_balance = service.update_balance(5000, operation="add", owner_id=TEST_OWNER)
+        subtracted_balance = service.update_balance(2000, operation="subtract", owner_id=TEST_OWNER)
 
         assert int(added_balance) == 100_005_000
         assert int(subtracted_balance) == 100_003_000
@@ -345,7 +351,7 @@ def test_update_balance_uses_in_place_sql_arithmetic_update(monkeypatch):
         assert not any("UPDATE balance SET cash = ?" in sql for sql in traced_sql)
         if sqlite3.sqlite_version_info >= (3, 35, 0):
             assert any("RETURNING cash" in sql for sql in traced_sql)
-            assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+            assert not any("SELECT cash FROM balance WHERE owner_id = 'owner@example.test'" in sql for sql in traced_sql)
     finally:
         _cleanup_service(service)
 
@@ -353,22 +359,22 @@ def test_update_balance_uses_in_place_sql_arithmetic_update(monkeypatch):
 def test_buy_and_sell_stock_updates_portfolio_and_trade_log():
     service = _build_service()
     try:
-        buy_result = service.buy_stock("005930", "삼성전자", 1000, 10)
+        buy_result = service.buy_stock("005930", "삼성전자", 1000, 10, owner_id=TEST_OWNER)
         assert buy_result["status"] == "success"
 
-        portfolio_after_buy = service.get_portfolio()
+        portfolio_after_buy = service.get_portfolio(owner_id=TEST_OWNER)
         assert len(portfolio_after_buy["holdings"]) == 1
         assert portfolio_after_buy["holdings"][0]["ticker"] == "005930"
         assert portfolio_after_buy["holdings"][0]["quantity"] == 10
 
-        sell_result = service.sell_stock("005930", 1100, 4)
+        sell_result = service.sell_stock("005930", 1100, 4, owner_id=TEST_OWNER)
         assert sell_result["status"] == "success"
 
-        portfolio_after_sell = service.get_portfolio()
+        portfolio_after_sell = service.get_portfolio(owner_id=TEST_OWNER)
         assert len(portfolio_after_sell["holdings"]) == 1
         assert portfolio_after_sell["holdings"][0]["quantity"] == 6
 
-        trade_history = service.get_trade_history(limit=10)["trades"]
+        trade_history = service.get_trade_history(limit=10, owner_id=TEST_OWNER)["trades"]
         assert len(trade_history) == 2
         assert trade_history[0]["action"] == "SELL"
         assert trade_history[1]["action"] == "BUY"
@@ -385,7 +391,7 @@ def test_buy_stock_does_not_call_get_balance_for_cash_check(monkeypatch):
             lambda: (_ for _ in ()).throw(AssertionError("get_balance should not be called")),
         )
 
-        result = service.buy_stock("005930", "삼성전자", 1000, 1)
+        result = service.buy_stock("005930", "삼성전자", 1000, 1, owner_id=TEST_OWNER)
 
         assert result["status"] == "success"
     finally:
@@ -395,7 +401,7 @@ def test_buy_stock_does_not_call_get_balance_for_cash_check(monkeypatch):
 def test_buy_stock_preserves_input_ticker_for_portfolio_and_trade_log():
     service = _build_service()
     try:
-        result = service.buy_stock("5930", "삼성전자", 1_000, 1)
+        result = service.buy_stock("5930", "삼성전자", 1_000, 1, owner_id=TEST_OWNER)
         assert result["status"] == "success"
 
         with service.get_context() as conn:
@@ -417,16 +423,16 @@ def test_buy_stock_preserves_input_ticker_for_portfolio_and_trade_log():
         _cleanup_service(service)
 
 
-def test_buy_stock_insufficient_funds_updates_memory_cache_only():
+def test_buy_stock_insufficient_funds_does_not_write_shared_price_cache():
     service = _build_service()
     try:
-        result = service.buy_stock("005930", "삼성전자", 100_000_000, 2)
+        result = service.buy_stock("005930", "삼성전자", 100_000_000, 2, owner_id=TEST_OWNER)
         assert result["status"] == "error"
         assert "잔고 부족" in result["message"]
         assert "보유" in result["message"]
 
         with service.cache_lock:
-            assert service.price_cache.get("005930") == 100_000_000
+            assert service.price_cache.get("005930") is None
 
         with service.get_context() as conn:
             cursor = conn.cursor()
@@ -450,18 +456,13 @@ def test_buy_stock_insufficient_funds_uses_single_balance_snapshot_statement(mon
             return conn
 
         monkeypatch.setattr(service, "get_context", _traced_get_context)
-        result = service.buy_stock("005930", "삼성전자", 100_000_000, 2)
+        result = service.buy_stock("005930", "삼성전자", 100_000_000, 2, owner_id=TEST_OWNER)
 
         assert result["status"] == "error"
         assert "잔고 부족" in result["message"]
         assert "보유" in result["message"]
-        if sqlite3.sqlite_version_info >= (3, 35, 0):
-            assert any(
-                "UPDATE balance SET cash = cash - 200000000" in sql and "RETURNING cash" in sql
-                for sql in traced_sql
-            )
-            # 잔고 부족 메시지 생성을 위해 실패 경로에서는 현재 잔고 조회가 1회 필요하다.
-            assert any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+        assert any("UPDATE balance SET cash = cash - 200000000" in sql for sql in traced_sql)
+        assert any("owner_id = 'owner@example.test'" in sql for sql in traced_sql)
     finally:
         _cleanup_service(service)
 
@@ -479,9 +480,9 @@ def test_buy_stock_success_path_skips_balance_select(monkeypatch):
 
         monkeypatch.setattr(service, "get_context", _traced_get_context)
 
-        result = service.buy_stock("005930", "삼성전자", 1_000, 1)
+        result = service.buy_stock("005930", "삼성전자", 1_000, 1, owner_id=TEST_OWNER)
         assert result["status"] == "success"
-        assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+        assert not any("SELECT cash FROM balance WHERE owner_id = 'owner@example.test'" in sql for sql in traced_sql)
     finally:
         _cleanup_service(service)
 
@@ -489,11 +490,11 @@ def test_buy_stock_success_path_skips_balance_select(monkeypatch):
 def test_buy_stock_rejects_non_positive_or_non_numeric_price():
     service = _build_service()
     try:
-        zero_price_result = service.buy_stock("005930", "삼성전자", 0, 1)
+        zero_price_result = service.buy_stock("005930", "삼성전자", 0, 1, owner_id=TEST_OWNER)
         assert zero_price_result["status"] == "error"
         assert "Price must be a positive number" in zero_price_result["message"]
 
-        invalid_price_result = service.buy_stock("005930", "삼성전자", "bad-price", 1)
+        invalid_price_result = service.buy_stock("005930", "삼성전자", "bad-price", 1, owner_id=TEST_OWNER)
         assert invalid_price_result["status"] == "error"
         assert "Price must be a positive number" in invalid_price_result["message"]
     finally:
@@ -509,8 +510,8 @@ def test_buy_stock_uses_sqlite_upsert_without_portfolio_select(monkeypatch):
             lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("portfolio select should not run")),
         )
 
-        first = service.buy_stock("005930", "삼성전자", 1_000, 1)
-        second = service.buy_stock("005930", "삼성전자", 2_000, 2)
+        first = service.buy_stock("005930", "삼성전자", 1_000, 1, owner_id=TEST_OWNER)
+        second = service.buy_stock("005930", "삼성전자", 2_000, 2, owner_id=TEST_OWNER)
         assert first["status"] == "success"
         assert second["status"] == "success"
 
@@ -534,7 +535,8 @@ def test_buy_stocks_bulk_updates_portfolio_and_trade_log_with_single_request():
             [
                 {"ticker": "005930", "name": "삼성전자", "price": 1_000, "quantity": 10},
                 {"ticker": "000660", "name": "SK하이닉스", "price": 2_000, "quantity": 5},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
 
         assert result["status"] == "success"
@@ -543,7 +545,7 @@ def test_buy_stocks_bulk_updates_portfolio_and_trade_log_with_single_request():
         assert result["summary"]["failed"] == 0
         assert len(result["results"]) == 2
 
-        portfolio = service.get_portfolio()
+        portfolio = service.get_portfolio(owner_id=TEST_OWNER)
         tickers = {holding["ticker"] for holding in portfolio["holdings"]}
         assert tickers == {"005930", "000660"}
 
@@ -551,7 +553,7 @@ def test_buy_stocks_bulk_updates_portfolio_and_trade_log_with_single_request():
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM trade_log WHERE action = 'BUY'")
             buy_count = int(cursor.fetchone()[0])
-            cursor.execute("SELECT cash FROM balance WHERE id = 1")
+            cursor.execute("SELECT cash FROM balance WHERE owner_id = 'owner@example.test'")
             cash = int(cursor.fetchone()[0])
 
         assert buy_count == 2
@@ -568,7 +570,8 @@ def test_buy_stocks_bulk_reports_invalid_orders_and_insufficient_funds():
                 {"ticker": "005930", "name": "삼성전자", "price": "bad", "quantity": 10},
                 {"ticker": "000660", "name": "SK하이닉스", "price": 1_000, "quantity": 10},
                 {"ticker": "035420", "name": "NAVER", "price": 100_000_000, "quantity": 2},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
 
         assert result["status"] == "success"
@@ -597,7 +600,8 @@ def test_buy_stocks_bulk_preserves_input_ticker_for_trade_log():
         result = service.buy_stocks_bulk(
             [
                 {"ticker": "5930", "name": "삼성전자", "price": 1_000, "quantity": 1},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
         assert result["status"] == "success"
 
@@ -627,12 +631,13 @@ def test_buy_stocks_bulk_accumulates_duplicate_ticker_orders():
             [
                 {"ticker": "005930", "name": "삼성전자", "price": 1_000, "quantity": 2},
                 {"ticker": "005930", "name": "삼성전자", "price": 2_000, "quantity": 3},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
         assert result["status"] == "success"
         assert result["summary"]["success"] == 2
 
-        portfolio = service.get_portfolio()
+        portfolio = service.get_portfolio(owner_id=TEST_OWNER)
         assert len(portfolio["holdings"]) == 1
         assert int(portfolio["holdings"][0]["quantity"]) == 5
         assert float(portfolio["holdings"][0]["avg_price"]) == 1_600.0
@@ -646,7 +651,7 @@ def test_buy_stocks_bulk_accumulates_duplicate_ticker_orders():
         _cleanup_service(service)
 
 
-def test_buy_stocks_bulk_error_summary_includes_valid_orders_when_db_operation_fails(monkeypatch):
+def test_buy_stocks_bulk_propagates_preflight_database_failure(monkeypatch):
     service = _build_service()
     try:
         monkeypatch.setattr(
@@ -655,18 +660,11 @@ def test_buy_stocks_bulk_error_summary_includes_valid_orders_when_db_operation_f
             lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("forced-db-error")),
         )
 
-        result = service.buy_stocks_bulk(
-            [
-                {"ticker": "005930", "name": "삼성전자", "price": "bad", "quantity": 1},
-                {"ticker": "000660", "name": "SK하이닉스", "price": 1_000, "quantity": 1},
-            ]
-        )
-
-        assert result["status"] == "error"
-        assert result["summary"]["total"] == 2
-        assert result["summary"]["success"] == 0
-        assert result["summary"]["failed"] == 2
-        assert len(result["results"]) == 2
+        with pytest.raises(RuntimeError, match="forced-db-error"):
+            service.buy_stocks_bulk(
+                [{"ticker": "000660", "name": "SK하이닉스", "price": 1_000, "quantity": 1}],
+                owner_id=TEST_OWNER,
+            )
     finally:
         _cleanup_service(service)
 
@@ -684,7 +682,8 @@ def test_buy_stocks_bulk_skips_portfolio_lookup_when_no_order_is_affordable(monk
             [
                 {"ticker": "005930", "name": "삼성전자", "price": 100_000_000, "quantity": 2},
                 {"ticker": "000660", "name": "SK하이닉스", "price": 100_000_000, "quantity": 2},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
 
         assert result["status"] == "error"
@@ -697,22 +696,27 @@ def test_buy_stocks_bulk_skips_portfolio_lookup_when_no_order_is_affordable(monk
 def test_buy_stocks_bulk_skips_write_context_when_no_order_is_affordable(monkeypatch):
     service = _build_service()
     try:
-        monkeypatch.setattr(
-            service,
-            "get_context",
-            lambda: (_ for _ in ()).throw(AssertionError("write context should be skipped")),
-        )
+        original_get_context = service.get_context
+        write_context_calls = {"count": 0}
+
+        def tracked_get_context():
+            write_context_calls["count"] += 1
+            return original_get_context()
+
+        monkeypatch.setattr(service, "get_context", tracked_get_context)
 
         result = service.buy_stocks_bulk(
             [
                 {"ticker": "005930", "name": "삼성전자", "price": 100_000_000, "quantity": 2},
                 {"ticker": "000660", "name": "SK하이닉스", "price": 100_000_000, "quantity": 2},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
 
         assert result["status"] == "error"
         assert result["summary"]["success"] == 0
         assert result["summary"]["failed"] == 2
+        assert write_context_calls["count"] == 0
     finally:
         _cleanup_service(service)
 
@@ -730,7 +734,8 @@ def test_buy_stocks_bulk_uses_sqlite_upsert_without_portfolio_preload(monkeypatc
         result = service.buy_stocks_bulk(
             [
                 {"ticker": "005930", "name": "삼성전자", "price": 2_000, "quantity": 2},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
 
         assert result["status"] == "success"
@@ -752,18 +757,14 @@ def test_buy_stocks_bulk_uses_sqlite_upsert_without_portfolio_preload(monkeypatc
         _cleanup_service(service)
 
 
-def test_buy_stocks_bulk_single_order_uses_buy_stock_fast_path_without_read_context(monkeypatch):
+def test_buy_stocks_bulk_single_order_preflights_with_read_context(monkeypatch):
     service = _build_service()
     try:
-        monkeypatch.setattr(
-            service,
-            "get_read_context",
-            lambda: (_ for _ in ()).throw(AssertionError("single-order bulk should not use read context")),
-        )
         result = service.buy_stocks_bulk(
             [
                 {"ticker": "005930", "name": "삼성전자", "price": 1_000, "quantity": 1},
-            ]
+            ],
+            owner_id=TEST_OWNER,
         )
 
         assert result["status"] == "success"
@@ -783,6 +784,7 @@ def test_load_portfolio_positions_map_for_tickers_handles_large_lookup_set():
             positions = service._load_portfolio_positions_map_for_tickers(
                 cursor=cursor,
                 tickers=large_tickers,
+                owner_id=TEST_OWNER,
             )
         assert positions == {}
     finally:
@@ -796,14 +798,14 @@ def test_sell_stock_requires_exact_ticker_match():
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
                 """,
                 ("5930", "삼성전자", 1_000, 1, 1_000, "2026-01-01T00:00:00"),
             )
             conn.commit()
 
-        result = service.sell_stock("005930", 1_100, 1)
+        result = service.sell_stock("005930", 1_100, 1, owner_id=TEST_OWNER)
         assert result["status"] == "error"
 
         with service.get_context() as conn:
@@ -824,12 +826,12 @@ def test_sell_stock_requires_exact_ticker_match():
 def test_reset_account_clears_positions_and_restores_cash():
     service = _build_service()
     try:
-        service.buy_stock("005930", "삼성전자", 1000, 2)
-        assert len(service.get_portfolio()["holdings"]) == 1
+        service.buy_stock("005930", "삼성전자", 1000, 2, owner_id=TEST_OWNER)
+        assert len(service.get_portfolio(owner_id=TEST_OWNER)["holdings"]) == 1
 
-        assert service.reset_account() is True
+        assert service.reset_account(owner_id=TEST_OWNER) is True
 
-        portfolio = service.get_portfolio()
+        portfolio = service.get_portfolio(owner_id=TEST_OWNER)
         assert portfolio["holdings"] == []
         assert int(portfolio["cash"]) == 100_000_000
     finally:
@@ -843,14 +845,14 @@ def test_get_portfolio_preserves_legacy_ticker_format():
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
                 """,
                 ("5930", "삼성전자", 1_000, 2, 2_000, "2026-01-01T00:00:00"),
             )
             conn.commit()
 
-        portfolio = service.get_portfolio()
+        portfolio = service.get_portfolio(owner_id=TEST_OWNER)
         assert len(portfolio["holdings"]) == 1
         assert portfolio["holdings"][0]["ticker"] == "5930"
     finally:
@@ -860,25 +862,24 @@ def test_get_portfolio_preserves_legacy_ticker_format():
 def test_sell_stock_insufficient_quantity_does_not_overwrite_price_cache():
     service = _build_service()
     try:
-        buy_result = service.buy_stock("005930", "삼성전자", 1_000, 1)
+        buy_result = service.buy_stock("005930", "삼성전자", 1_000, 1, owner_id=TEST_OWNER)
         assert buy_result["status"] == "success"
 
         with service.cache_lock:
-            assert service.price_cache.get("005930") == 1_000
+            assert service.price_cache.get("005930") is None
 
-        sell_result = service.sell_stock("005930", 1_200, 2)
+        sell_result = service.sell_stock("005930", 1_200, 2, owner_id=TEST_OWNER)
         assert sell_result["status"] == "error"
 
         with service.cache_lock:
-            assert service.price_cache.get("005930") == 1_000
+            assert service.price_cache.get("005930") is None
 
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT price FROM price_cache WHERE ticker = ?", ("005930",))
             row = cursor.fetchone()
 
-        assert row is not None
-        assert int(row[0]) == 1_000
+        assert row is None
     finally:
         _cleanup_service(service)
 
@@ -888,11 +889,11 @@ def test_sell_stock_rejects_non_positive_or_non_numeric_price():
     try:
         _insert_portfolio_row(service, "005930", "삼성전자")
 
-        zero_price_result = service.sell_stock("005930", 0, 1)
+        zero_price_result = service.sell_stock("005930", 0, 1, owner_id=TEST_OWNER)
         assert zero_price_result["status"] == "error"
         assert "Price must be a positive number" in zero_price_result["message"]
 
-        invalid_price_result = service.sell_stock("005930", "bad-price", 1)
+        invalid_price_result = service.sell_stock("005930", "bad-price", 1, owner_id=TEST_OWNER)
         assert invalid_price_result["status"] == "error"
         assert "Price must be a positive number" in invalid_price_result["message"]
     finally:
@@ -906,8 +907,8 @@ def test_get_portfolio_valuation_ignores_normalized_cache_for_legacy_ticker():
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
                 """,
                 ("5930", "삼성전자", 1_000, 3, 3_000, "2026-01-01T00:00:00"),
             )
@@ -916,7 +917,7 @@ def test_get_portfolio_valuation_ignores_normalized_cache_for_legacy_ticker():
         with service.cache_lock:
             service.price_cache["005930"] = 7_000
 
-        valuation = service.get_portfolio_valuation()
+        valuation = service.get_portfolio_valuation(owner_id=TEST_OWNER)
         assert len(valuation["holdings"]) == 1
         assert valuation["holdings"][0]["ticker"] == "5930"
         assert valuation["holdings"][0]["current_price"] == 1_000
@@ -946,17 +947,17 @@ def test_get_trade_history_normalizes_invalid_limit_and_caps_upper_bound():
             ]
             cursor.executemany(
                 """
-                INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO trade_log (owner_id, action, ticker, name, price, quantity, timestamp, profit, profit_rate)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
             conn.commit()
 
-        invalid_limit_payload = service.get_trade_history(limit="bad-limit")
+        invalid_limit_payload = service.get_trade_history(limit="bad-limit", owner_id=TEST_OWNER)
         assert len(invalid_limit_payload["trades"]) == 50
 
-        capped_limit_payload = service.get_trade_history(limit=999999)
+        capped_limit_payload = service.get_trade_history(limit=999999, owner_id=TEST_OWNER)
         assert len(capped_limit_payload["trades"]) == 500
     finally:
         _cleanup_service(service)
@@ -984,18 +985,18 @@ def test_get_asset_history_normalizes_invalid_limit_and_caps_upper_bound():
                 )
             cursor.executemany(
                 """
-                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO asset_history (owner_id, date, total_asset, cash, stock_value, timestamp)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
             conn.commit()
 
-        invalid_limit_history = service.get_asset_history(limit="bad-limit")
+        invalid_limit_history = service.get_asset_history(limit="bad-limit", owner_id=TEST_OWNER)
         assert len(invalid_limit_history) == 30
 
         # 자산 히스토리 캡은 MAX_ASSET_HISTORY_LIMIT(=4000)
-        capped_limit_history = service.get_asset_history(limit=999999)
+        capped_limit_history = service.get_asset_history(limit=999999, owner_id=TEST_OWNER)
         assert len(capped_limit_history) == 4000
     finally:
         _cleanup_service(service)
@@ -1023,13 +1024,13 @@ def test_record_asset_history_skips_duplicate_daily_snapshot_writes(monkeypatch)
 
         monkeypatch.setattr(paper_trading_history_mixin, "datetime", _FakeDateTime)
 
-        service.record_asset_history(current_stock_value=0)
+        service.record_asset_history(current_stock_value=0, owner_id=TEST_OWNER)
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT timestamp, stock_value FROM asset_history WHERE date = ?", ("2026-02-22",))
             first_timestamp, first_stock_value = cursor.fetchone()
 
-        service.record_asset_history(current_stock_value=0)
+        service.record_asset_history(current_stock_value=0, owner_id=TEST_OWNER)
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT timestamp, stock_value FROM asset_history WHERE date = ?", ("2026-02-22",))
@@ -1038,7 +1039,7 @@ def test_record_asset_history_skips_duplicate_daily_snapshot_writes(monkeypatch)
         assert first_stock_value == second_stock_value == 0
         assert first_timestamp == second_timestamp
 
-        service.record_asset_history(current_stock_value=10_000)
+        service.record_asset_history(current_stock_value=10_000, owner_id=TEST_OWNER)
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT timestamp, stock_value FROM asset_history WHERE date = ?", ("2026-02-22",))
@@ -1066,6 +1067,7 @@ def test_record_asset_history_with_cash_skips_write_context_for_duplicate_snapsh
             total_asset=100_000_000,
             cash=100_000_000,
             stock_value=0,
+            owner_id=TEST_OWNER,
         )
 
         original_get_context = service.get_context
@@ -1080,6 +1082,7 @@ def test_record_asset_history_with_cash_skips_write_context_for_duplicate_snapsh
         service.record_asset_history_with_cash(
             cash=100_000_000,
             current_stock_value=0,
+            owner_id=TEST_OWNER,
         )
 
         assert write_context_calls["count"] == 0
@@ -1109,6 +1112,7 @@ def test_record_asset_history_skips_write_context_for_duplicate_snapshot(monkeyp
             total_asset=100_000_000,
             cash=100_000_000,
             stock_value=0,
+            owner_id=TEST_OWNER,
         )
 
         monkeypatch.setattr(
@@ -1117,7 +1121,7 @@ def test_record_asset_history_skips_write_context_for_duplicate_snapshot(monkeyp
             lambda: (_ for _ in ()).throw(AssertionError("get_context should be skipped on duplicate snapshot")),
         )
 
-        service.record_asset_history(current_stock_value=0)
+        service.record_asset_history(current_stock_value=0, owner_id=TEST_OWNER)
 
         with original_get_context() as conn:
             cursor = conn.cursor()
@@ -1144,9 +1148,9 @@ def test_record_asset_history_skips_noop_upsert_when_snapshot_cache_is_empty(mon
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(date) DO UPDATE SET
+                INSERT INTO asset_history (owner_id, date, total_asset, cash, stock_value, timestamp)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_id, date) DO UPDATE SET
                     total_asset = excluded.total_asset,
                     cash = excluded.cash,
                     stock_value = excluded.stock_value,
@@ -1159,7 +1163,7 @@ def test_record_asset_history_skips_noop_upsert_when_snapshot_cache_is_empty(mon
         if hasattr(service, "_last_asset_history_snapshot"):
             service._last_asset_history_snapshot = None
 
-        service.record_asset_history(current_stock_value=0)
+        service.record_asset_history(current_stock_value=0, owner_id=TEST_OWNER)
 
         with original_get_context() as conn:
             cursor = conn.cursor()
@@ -1264,8 +1268,8 @@ def test_get_portfolio_tickers_uses_normalized_ticker_expression_index():
             )
             cursor.executemany(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
@@ -1303,14 +1307,14 @@ def test_get_trade_history_orders_by_id_when_timestamp_is_identical():
             ]
             cursor.executemany(
                 """
-                INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO trade_log (owner_id, action, ticker, name, price, quantity, timestamp, profit, profit_rate)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
             conn.commit()
 
-        history = service.get_trade_history(limit=2)["trades"]
+        history = service.get_trade_history(limit=2, owner_id=TEST_OWNER)["trades"]
         assert len(history) == 2
         assert history[0]["ticker"] == "000660"
         assert history[1]["ticker"] == "005930"
@@ -1376,6 +1380,7 @@ def test_get_read_context_applies_busy_timeout_and_read_only(monkeypatch):
 def test_read_methods_use_read_context_without_get_context(monkeypatch):
     service = _build_service()
     try:
+        service.get_balance(owner_id=TEST_OWNER)
         monkeypatch.setattr(
             service,
             "get_context",
@@ -1385,21 +1390,21 @@ def test_read_methods_use_read_context_without_get_context(monkeypatch):
         monkeypatch.setattr(service, "record_asset_history", lambda *_args, **_kwargs: None)
 
         assert service._get_portfolio_tickers() == []
-        assert isinstance(service.get_balance(), (int, float))
+        assert isinstance(service.get_balance(owner_id=TEST_OWNER), (int, float))
 
-        portfolio = service.get_portfolio()
+        portfolio = service.get_portfolio(owner_id=TEST_OWNER)
         assert isinstance(portfolio, dict)
         assert "holdings" in portfolio
 
-        history_payload = service.get_trade_history(limit=5)
+        history_payload = service.get_trade_history(limit=5, owner_id=TEST_OWNER)
         assert isinstance(history_payload, dict)
         assert "trades" in history_payload
 
-        asset_history = service.get_asset_history(limit=5)
+        asset_history = service.get_asset_history(limit=5, owner_id=TEST_OWNER)
         assert isinstance(asset_history, list)
         assert len(asset_history) >= 2
 
-        valuation = service.get_portfolio_valuation()
+        valuation = service.get_portfolio_valuation(owner_id=TEST_OWNER)
         assert isinstance(valuation, dict)
         assert "holdings" in valuation
     finally:
@@ -1441,11 +1446,9 @@ def test_constructor_ensures_price_cache_when_db_init_fails(monkeypatch):
 
     monkeypatch.setattr(PaperTradingService, "_ensure_price_cache_table", _fake_ensure)
 
-    service = PaperTradingService(db_name=db_name, auto_start_sync=False)
-    try:
-        assert ensure_calls == [True]
-    finally:
-        _cleanup_service(service)
+    with pytest.raises(RuntimeError, match="owner migration failed"):
+        PaperTradingService(db_name=db_name, auto_start_sync=False)
+    assert ensure_calls == []
 
 
 def test_ensure_price_cache_table_deduplicates_concurrent_initialization(monkeypatch):
@@ -1556,7 +1559,7 @@ def test_get_asset_history_dummy_path_does_not_call_get_balance(monkeypatch):
             lambda: (_ for _ in ()).throw(AssertionError("get_balance should not be called")),
         )
 
-        history = service.get_asset_history(limit=30)
+        history = service.get_asset_history(limit=30, owner_id=TEST_OWNER)
 
         assert len(history) >= 2
         assert "total_asset" in history[0]
@@ -1577,9 +1580,9 @@ def test_get_asset_history_uses_today_single_snapshot_without_extra_queries(monk
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(date) DO UPDATE SET
+                INSERT INTO asset_history (owner_id, date, total_asset, cash, stock_value, timestamp)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_id, date) DO UPDATE SET
                     total_asset = excluded.total_asset,
                     cash = excluded.cash,
                     stock_value = excluded.stock_value,
@@ -1606,39 +1609,48 @@ def test_get_asset_history_uses_today_single_snapshot_without_extra_queries(monk
             return conn
 
         monkeypatch.setattr(service, "get_read_context", _traced_read_context)
-        history = service.get_asset_history(limit=30)
+        history = service.get_asset_history(limit=30, owner_id=TEST_OWNER)
 
         assert len(history) >= 2
         assert any("FROM asset_history" in sql for sql in traced_sql)
-        assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
+        assert not any("SELECT cash FROM balance WHERE owner_id = 'owner@example.test'" in sql for sql in traced_sql)
         assert not any("FROM portfolio" in sql for sql in traced_sql)
     finally:
         _cleanup_service(service)
 
 
-def test_get_asset_history_low_history_fallback_uses_single_join_query(monkeypatch):
+def test_get_asset_history_rebuilds_past_snapshot_from_current_owner_state(monkeypatch):
     service = _build_service()
     try:
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        other_owner = "other@example.test"
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
+                "INSERT INTO balance(owner_id, cash, total_deposit) VALUES (?, ?, 0)",
+                (TEST_OWNER, 50_000),
+            )
+            cursor.execute(
+                "INSERT INTO balance(owner_id, cash, total_deposit) VALUES (?, ?, 0)",
+                (other_owner, 900_000),
+            )
+            cursor.execute(
                 """
-                INSERT INTO asset_history (date, total_asset, cash, stock_value, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(date) DO UPDATE SET
+                INSERT INTO asset_history (owner_id, date, total_asset, cash, stock_value, timestamp)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_id, date) DO UPDATE SET
                     total_asset = excluded.total_asset,
                     cash = excluded.cash,
                     stock_value = excluded.stock_value,
                     timestamp = excluded.timestamp
                 """,
-                (yesterday, 100_000_000, 100_000_000, 0, f"{yesterday}T09:00:00"),
+                (yesterday, 1, 1, 0, f"{yesterday}T09:00:00"),
             )
             cursor.execute(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(ticker) DO UPDATE SET
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_id, ticker) DO UPDATE SET
                     name = excluded.name,
                     avg_price = excluded.avg_price,
                     quantity = excluded.quantity,
@@ -1647,25 +1659,19 @@ def test_get_asset_history_low_history_fallback_uses_single_join_query(monkeypat
                 """,
                 ("005930", "삼성전자", 70_000, 1, 70_000, f"{yesterday}T09:00:00"),
             )
+            cursor.execute(
+                "INSERT INTO portfolio(owner_id, ticker, name, avg_price, quantity, total_cost, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (other_owner, "005930", "다른사용자", 1, 99, 99, f"{yesterday}T09:00:00"),
+            )
             conn.commit()
-
-        traced_sql: list[str] = []
-        original_get_read_context = service.get_read_context
-
-        def _traced_read_context():
-            conn = original_get_read_context()
-            conn.set_trace_callback(lambda sql: traced_sql.append(str(sql)))
-            return conn
-
-        monkeypatch.setattr(service, "get_read_context", _traced_read_context)
-        history = service.get_asset_history(limit=30)
+        with service.cache_lock:
+            service.price_cache["005930"] = 3_000
+        history = service.get_asset_history(limit=30, owner_id=TEST_OWNER)
 
         assert len(history) >= 2
-        assert any("FROM balance b" in sql for sql in traced_sql)
-        assert any("SELECT COALESCE(SUM(p.quantity * p.avg_price), 0)" in sql for sql in traced_sql)
-        assert not any("LEFT JOIN portfolio p ON 1 = 1" in sql for sql in traced_sql)
-        assert not any("SELECT cash FROM balance WHERE id = 1" in sql for sql in traced_sql)
-        assert not any("SELECT quantity, avg_price, ticker FROM portfolio" in sql for sql in traced_sql)
+        assert history[-1]["cash"] == 50_000
+        assert history[-1]["stock_value"] == 3_000
+        assert history[-1]["total_asset"] == 53_000
     finally:
         _cleanup_service(service)
 
@@ -1966,8 +1972,8 @@ def test_service_warmup_uses_limited_subquery_path_for_large_portfolio(monkeypat
             ]
             cursor.executemany(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
                 """,
                 portfolio_rows,
             )
@@ -2046,9 +2052,9 @@ def test_get_portfolio_tickers_returns_normalized_unique_values():
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(ticker) DO UPDATE SET
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_id, ticker) DO UPDATE SET
                     name = excluded.name,
                     avg_price = excluded.avg_price,
                     quantity = excluded.quantity,
@@ -2072,8 +2078,8 @@ def test_get_portfolio_tickers_deduplicates_raw_and_normalized_rows_in_sql():
             cursor = conn.cursor()
             cursor.executemany(
                 """
-                INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio (owner_id, ticker, name, avg_price, quantity, total_cost, last_updated)
+                VALUES ('owner@example.test', ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     ("5930", "삼성전자", 70_000, 1, 70_000, "2026-02-22T09:00:00"),
@@ -2118,7 +2124,7 @@ def test_buy_stock_recovers_when_trade_log_table_missing():
             cursor.execute("DROP TABLE IF EXISTS trade_log")
             conn.commit()
 
-        result = service.buy_stock("005930", "삼성전자", 1000, 1)
+        result = service.buy_stock("005930", "삼성전자", 1000, 1, owner_id=TEST_OWNER)
         assert result["status"] == "success"
 
         with service.get_context() as conn:
@@ -2142,14 +2148,14 @@ def test_get_portfolio_recovers_when_balance_table_missing():
             cursor.execute("DROP TABLE IF EXISTS balance")
             conn.commit()
 
-        portfolio = service.get_portfolio()
+        portfolio = service.get_portfolio(owner_id=TEST_OWNER)
         assert isinstance(portfolio, dict)
         assert "cash" in portfolio
         assert int(portfolio["cash"]) == 100_000_000
 
         with service.get_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM balance WHERE id = 1")
+            cursor.execute("SELECT COUNT(*) FROM balance WHERE owner_id = 'owner@example.test'")
             balance_rows = int(cursor.fetchone()[0])
 
         assert balance_rows == 1
@@ -2165,7 +2171,7 @@ def test_get_asset_history_recovers_when_asset_history_table_missing():
             cursor.execute("DROP TABLE IF EXISTS asset_history")
             conn.commit()
 
-        history = service.get_asset_history(limit=10)
+        history = service.get_asset_history(limit=10, owner_id=TEST_OWNER)
         assert isinstance(history, list)
         assert len(history) >= 2
 
@@ -2197,7 +2203,7 @@ def test_record_asset_history_uses_single_context_without_get_balance(monkeypatc
             ),
         )
 
-        service.record_asset_history(current_stock_value=0)
+        service.record_asset_history(current_stock_value=0, owner_id=TEST_OWNER)
 
         with service.get_context() as conn:
             cursor = conn.cursor()
@@ -2222,12 +2228,12 @@ def test_get_portfolio_valuation_prefers_record_asset_history_with_cash(monkeypa
             ),
         )
 
-        def _record_with_cash(*, cash: int, current_stock_value: int):
+        def _record_with_cash(*, cash: int, current_stock_value: int, owner_id: str):
             captured["cash"] = int(cash)
             captured["stock_value"] = int(current_stock_value)
 
         monkeypatch.setattr(service, "record_asset_history_with_cash", _record_with_cash)
-        valuation = service.get_portfolio_valuation()
+        valuation = service.get_portfolio_valuation(owner_id=TEST_OWNER)
 
         assert captured["cash"] == int(valuation["cash"])
         assert captured["stock_value"] == int(valuation["total_stock_value"])
@@ -2251,7 +2257,7 @@ def test_get_portfolio_valuation_loads_holdings_and_balance_with_single_query(mo
         monkeypatch.setattr(service, "record_asset_history_with_cash", lambda **_kwargs: None)
         monkeypatch.setattr(service, "record_asset_history", lambda *_args, **_kwargs: None)
 
-        valuation = service.get_portfolio_valuation()
+        valuation = service.get_portfolio_valuation(owner_id=TEST_OWNER)
 
         assert valuation["holdings"]
         combined_queries = [
@@ -2261,7 +2267,7 @@ def test_get_portfolio_valuation_loads_holdings_and_balance_with_single_query(mo
         ]
         assert combined_queries
         assert not any(
-            "SELECT cash, total_deposit FROM balance WHERE id = 1" in sql
+            "SELECT cash, total_deposit FROM balance WHERE owner_id = 'owner@example.test'" in sql
             for sql in traced_sql
         )
     finally:
@@ -2281,7 +2287,7 @@ def test_get_portfolio_loads_holdings_and_balance_with_single_query(monkeypatch)
             return conn
 
         monkeypatch.setattr(service, "get_read_context", _traced_read_context)
-        portfolio = service.get_portfolio()
+        portfolio = service.get_portfolio(owner_id=TEST_OWNER)
 
         assert portfolio["holdings"]
         combined_queries = [
@@ -2291,19 +2297,19 @@ def test_get_portfolio_loads_holdings_and_balance_with_single_query(monkeypatch)
         ]
         assert combined_queries
         assert not any(
-            "SELECT cash, total_deposit FROM balance WHERE id = 1" in sql
+            "SELECT cash, total_deposit FROM balance WHERE owner_id = 'owner@example.test'" in sql
             for sql in traced_sql
         )
     finally:
         _cleanup_service(service)
 
 
-def test_reset_account_clears_price_cache_table_and_memory():
+def test_reset_account_keeps_shared_price_cache_table_and_memory():
     service = _build_service()
     try:
-        buy_result = service.buy_stock("005930", "삼성전자", 1000, 1)
-        assert buy_result["status"] == "success"
-        assert service.price_cache.get("005930") == 1000
+        service._persist_price_cache({"005930": 1_000})
+        with service.cache_lock:
+            service.price_cache["005930"] = 1_000
 
         with service.get_context() as conn:
             cursor = conn.cursor()
@@ -2311,20 +2317,20 @@ def test_reset_account_clears_price_cache_table_and_memory():
             before_reset = int(cursor.fetchone()[0])
 
         assert before_reset >= 1
-        assert service.reset_account() is True
-        assert service.price_cache == {}
+        assert service.reset_account(owner_id=TEST_OWNER) is True
+        assert service.price_cache == {"005930": 1_000}
 
         with service.get_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM price_cache")
             after_reset = int(cursor.fetchone()[0])
 
-        assert after_reset == 0
+        assert after_reset == before_reset
     finally:
         _cleanup_service(service)
 
 
-def test_reset_account_resets_price_cache_prune_tracker_state():
+def test_reset_account_keeps_shared_price_cache_prune_tracker_state():
     service = _build_service()
     try:
         service._persist_price_cache({"005930": 70_500})
@@ -2334,10 +2340,10 @@ def test_reset_account_resets_price_cache_prune_tracker_state():
             assert len(service._price_cache_known_tickers) >= 2
             assert service._price_cache_save_counter >= 2
 
-        assert service.reset_account() is True
+        assert service.reset_account(owner_id=TEST_OWNER) is True
 
         with service._price_cache_prune_lock:
-            assert len(service._price_cache_known_tickers) == 0
-            assert service._price_cache_save_counter == 0
+            assert len(service._price_cache_known_tickers) >= 2
+            assert service._price_cache_save_counter >= 2
     finally:
         _cleanup_service(service)

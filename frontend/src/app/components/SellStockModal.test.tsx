@@ -5,8 +5,19 @@ import SellStockModal from './SellStockModal';
 // [FE-003] 회귀 검사. 화면이 안내하는 정산 금액은 백엔드가 실제로 입금하는 금액
 // (가격 × 수량)과 같아야 한다. 수수료와 세금을 화면에서만 빼면 어긋난다.
 
+const sessionState = vi.hoisted(() => ({
+  data: { user: { email: 'seller@example.test' } } as { user: { email: string } } | null,
+  status: 'authenticated',
+}));
+
+vi.mock('next-auth/react', () => ({
+  useSession: () => sessionState,
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionState.data = { user: { email: 'seller@example.test' } };
+  sessionState.status = 'authenticated';
   window.alert = vi.fn();
 });
 
@@ -23,6 +34,19 @@ function renderModal(onSell = vi.fn(async () => true)) {
     <SellStockModal isOpen onClose={vi.fn()} stock={holding} onSell={onSell} />,
   );
 }
+
+describe('[INFRA-060] 로그인 경계', () => {
+  it('익명 사용자는 매도 주문을 실행하지 않고 로그인 안내를 본다', () => {
+    sessionState.data = null;
+    sessionState.status = 'unauthenticated';
+    const onSell = vi.fn(async () => true);
+
+    renderModal(onSell);
+
+    expect(screen.getByText('모의투자는 로그인 후 사용할 수 있습니다.')).not.toBeNull();
+    expect(onSell).not.toHaveBeenCalled();
+  });
+});
 
 describe('정산 금액', () => {
   it('가격 × 수량과 정확히 같다', async () => {

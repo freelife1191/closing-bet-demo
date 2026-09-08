@@ -6,6 +6,15 @@ interface FetchOptions extends RequestInit {
   timeout?: number;
 }
 
+interface APIError extends Error {
+  status?: number;
+  data?: unknown;
+}
+
+export function isAuthenticationError(error: unknown): error is APIError & { status: 401 } {
+  return typeof error === 'object' && error !== null && (error as APIError).status === 401;
+}
+
 export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timeoutMs = options.timeout ?? 10000; // 기본 10초, 옵션으로 변경 가능
@@ -375,6 +384,10 @@ export interface TradeResponse {
   message: string;
 }
 
+export interface BulkTradeResponse extends TradeResponse {
+  results?: Array<TradeResponse & { ticker?: string; name?: string }>;
+}
+
 // 모의투자 API
 export const paperTradingAPI = {
   getPortfolio: () => fetchAPI<PaperTradingPortfolio>('/api/portfolio'),
@@ -387,6 +400,13 @@ export const paperTradingAPI = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+    }),
+
+  bulkBuy: (orders: BuyRequest[]): Promise<BulkTradeResponse> =>
+    fetchAPI<BulkTradeResponse>('/api/portfolio/buy/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orders }),
     }),
 
   sell: (data: SellRequest): Promise<TradeResponse> =>

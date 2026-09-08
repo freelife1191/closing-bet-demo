@@ -1,0 +1,24 @@
+{
+  "baseline": {
+    "failures": [
+      "tests/app/test_kr_market_route_integration.py::test_chatbot_free_tier_success_stream_increments_quota",
+      "tests/app/test_kr_market_route_integration.py::test_chatbot_warning_response_skips_quota_increment",
+      "tests/app/test_kr_market_route_integration.py::test_chatbot_quota_guard_blocks_when_limit_exceeded",
+      "tests/services/test_kr_market_stock_detail_service_refactor.py::test_load_naver_stock_detail_payload_clears_event_loop_after_run",
+      "tests/test_chatbot_feature.py::TestChatbotFeature::test_slash_commands"
+    ],
+    "summary": "5 failed, 1854 passed, 3 skipped in 28.00s"
+  },
+  "current": {
+    "failures": [
+      "tests/app/test_kr_market_route_integration.py::test_chatbot_free_tier_success_stream_increments_quota",
+      "tests/app/test_kr_market_route_integration.py::test_chatbot_warning_response_skips_quota_increment",
+      "tests/app/test_kr_market_route_integration.py::test_chatbot_quota_guard_blocks_when_limit_exceeded",
+      "tests/services/test_kr_market_stock_detail_service_refactor.py::test_load_naver_stock_detail_payload_clears_event_loop_after_run",
+      "tests/test_chatbot_feature.py::TestChatbotFeature::test_slash_commands"
+    ],
+    "summary": "5 failed, 1901 passed, 3 skipped in 27.39s"
+  },
+  "new_failures": [],
+  "claim": "Full suites have five unchanged pre-existing failures under the same offline/no-secrets environment; no full-green claim."
+}

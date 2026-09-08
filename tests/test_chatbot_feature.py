@@ -135,7 +135,9 @@ class TestChatbotFeature(unittest.TestCase):
             # Verify verify model name was passed to chat method
             mock_bot_instance.chat.assert_called_with('Test Message', model_name='test-model')
 
-    def test_slash_commands(self):
+    @patch("chatbot.core._create_genai_client_impl")
+    @patch("chatbot.core.genai.GenerativeModel")
+    def test_slash_commands(self, _mock_model, _mock_client):
         """Test slash commands logic"""
         bot = KRStockChatbot(self.user_id)
         

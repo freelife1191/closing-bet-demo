@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchAPI, krAPI } from './api';
+import { fetchAPI, krAPI, paperTradingAPI } from './api';
 
 // body 에 문자열 'not-json' 을 넘기면 본문 파싱이 실패하는 응답이 된다.
 function mockResponse(status: number, body: unknown) {
@@ -77,6 +77,26 @@ describe('fetchAPI', () => {
     );
 
     await expect(fetchAPI('/api/kr/signals', { timeout: 10 })).rejects.toThrow('Request timed out');
+  });
+});
+
+describe('paperTradingAPI.bulkBuy', () => {
+  it('일괄 주문을 공통 오류 처리 경계로 보내 401 사유를 호출부에 전달한다', async () => {
+    mockResponse(401, { status: 'error', message: '모의투자는 로그인 후 사용할 수 있습니다.' });
+
+    await expect(paperTradingAPI.bulkBuy([
+      { ticker: '005930', name: '삼성전자', price: 70_000, quantity: 10 },
+    ])).rejects.toMatchObject({
+      status: 401,
+      message: '모의투자는 로그인 후 사용할 수 있습니다.',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/portfolio/buy/bulk', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        orders: [{ ticker: '005930', name: '삼성전자', price: 70_000, quantity: 10 }],
+      }),
+    }));
   });
 });
 

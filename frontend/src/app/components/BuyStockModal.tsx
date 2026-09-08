@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useId } from 'react';
-import { paperTradingAPI } from '@/lib/api';
+import { useSession } from 'next-auth/react';
+import { isAuthenticationError, paperTradingAPI } from '@/lib/api';
+import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import { ModalShell } from './Modal';
 
 interface BuyStockModalProps {
@@ -18,6 +20,32 @@ interface BuyStockModalProps {
 }
 
 export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStockModalProps) {
+  const { data: session, status } = useSession();
+  const accountEmail = status === 'authenticated' ? session?.user?.email ?? null : null;
+  return (
+    <BuyStockModalAccount
+      key={accountEmail ?? 'unauthenticated'}
+      isOpen={isOpen}
+      onClose={onClose}
+      stock={stock}
+      onBuy={onBuy}
+      isAuthenticated={Boolean(accountEmail)}
+    />
+  );
+}
+
+interface BuyStockModalAccountProps extends BuyStockModalProps {
+  isAuthenticated: boolean;
+}
+
+function BuyStockModalAccount({
+  isOpen,
+  onClose,
+  stock,
+  onBuy,
+  isAuthenticated,
+}: BuyStockModalAccountProps) {
+  const captureAccountAction = useAccountActionGuard(null);
   const titleId = useId();
   const [mode, setMode] = useState<'quantity' | 'amount'>('quantity');
   const [quantity, setQuantity] = useState<string>('0');
@@ -26,13 +54,29 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
   const [portfolio, setPortfolio] = useState<any>(null);
   const [fetchedPrice, setFetchedPrice] = useState<number | null>(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   // 포트폴리오(예수금) 조회 및 실시간 가격 조회
   useEffect(() => {
-    if (isOpen && stock) {
-      paperTradingAPI.getPortfolio().then(setPortfolio).catch(console.error);
+    let cancelled = false;
+    if (isOpen && stock && isAuthenticated) {
+      setAccessDenied(false);
+      setPortfolio(null);
+      setFetchedPrice(null);
       setQuantity('0');
       setAmount('0');
+
+      paperTradingAPI.getPortfolio()
+        .then((nextPortfolio) => {
+          if (!cancelled) setPortfolio(nextPortfolio);
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            const denied = isAuthenticationError(error);
+            setAccessDenied(denied);
+            if (!denied) console.error(error);
+          }
+        });
 
       // 실시간 가격 조회
       setLoadingPrice(true);
@@ -43,6 +87,7 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
       })
         .then(res => res.json())
         .then(data => {
+          if (cancelled) return;
           if (data.prices && data.prices[stock.ticker]) {
             setFetchedPrice(data.prices[stock.ticker]);
           } else if (data[stock.ticker]) {
@@ -50,12 +95,22 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
             setFetchedPrice(data[stock.ticker]);
           }
         })
-        .catch(console.error)
-        .finally(() => setLoadingPrice(false));
+        .catch((error: unknown) => {
+          if (!cancelled) console.error(error);
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingPrice(false);
+        });
     } else {
+      setAccessDenied(false);
+      setPortfolio(null);
       setFetchedPrice(null);
+      setLoadingPrice(false);
     }
-  }, [isOpen, stock]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, stock, isAuthenticated]);
 
   if (!stock) return null;
 
@@ -79,14 +134,17 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
     if (isInsufficient) return;
 
     setIsSubmitting(true);
+    const isCurrent = captureAccountAction();
     try {
       const success = await onBuy(stock.ticker, stock.name, price, estimatedQty);
+      if (!isCurrent()) return;
       if (success) onClose();
     } catch (e) {
+      if (!isCurrent()) return;
       console.error('[BuyStockModal] Error:', e);
       alert('매수 실패: ' + e);
     } finally {
-      setIsSubmitting(false);
+      if (isCurrent()) setIsSubmitting(false);
     }
   };
 
@@ -114,6 +172,20 @@ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStoc
   };
 
   if (!isOpen) return null;
+
+  if (!isAuthenticated || accessDenied) {
+    return (
+      <ModalShell
+        onClose={onClose}
+        labelledBy={titleId}
+        overlayClassName="z-[110] p-4"
+        className="relative bg-[#1c1c1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6"
+      >
+        <h2 id={titleId} className="text-xl font-bold text-white mb-3">모의 투자 매수</h2>
+        <p className="text-gray-300">모의투자는 로그인 후 사용할 수 있습니다.</p>
+      </ModalShell>
+    );
+  }
 
   return (
     <ModalShell

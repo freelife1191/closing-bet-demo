@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict
 from services.paper_trading_constants import INITIAL_CASH_KRW
 
 
-def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[list[dict], float, float]:
+def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any], owner_id: str) -> tuple[list[dict], float, float]:
     """DB에서 보유 종목과 현금/입금 총액을 로드한다."""
     with get_read_context_fn() as conn:
         cursor = conn.cursor()
@@ -32,9 +32,10 @@ def _load_holdings_and_balance(get_read_context_fn: Callable[[], Any]) -> tuple[
                 b.cash AS cash,
                 b.total_deposit AS total_deposit
             FROM balance b
-            LEFT JOIN portfolio p ON 1 = 1
-            WHERE b.id = 1
-            """
+            LEFT JOIN portfolio p ON p.owner_id = b.owner_id
+            WHERE b.owner_id = ?
+            """,
+            (owner_id,),
         )
         rows = cursor.fetchall()
 
@@ -73,9 +74,10 @@ def get_portfolio_valuation(
     logger: logging.Logger,
     record_asset_history_with_cash_fn: Callable[..., None] | None = None,
     run_db_operation_with_schema_retry_fn: Callable[[Callable[[], Any]], Any] | None = None,
+    owner_id: str,
 ) -> dict[str, Any]:
     """캐시 가격을 기준으로 포트폴리오 평가 결과를 계산한다."""
-    load_holdings_fn = lambda: _load_holdings_and_balance(get_read_context_fn)
+    load_holdings_fn = lambda: _load_holdings_and_balance(get_read_context_fn, owner_id)
     if callable(run_db_operation_with_schema_retry_fn):
         holdings, cash, total_deposit = run_db_operation_with_schema_retry_fn(load_holdings_fn)
     else:

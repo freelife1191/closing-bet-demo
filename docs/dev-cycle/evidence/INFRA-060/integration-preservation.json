@@ -1,0 +1,6 @@
+{
+  "original_head": "cabc0be80ed11d4752890a5f84827bf34ced9871",
+  "original_status": "?? package.json",
+  "preintegration_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "runtime_policy": "No operational HTTP request, data/env reads or migration/restart/deploy; no bytes-of-data invariant claimed without inspecting files."
+}

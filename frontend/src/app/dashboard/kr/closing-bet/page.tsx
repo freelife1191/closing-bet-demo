@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchAPI } from '@/lib/api';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { fetchAPI, isAuthenticationError, paperTradingAPI } from '@/lib/api';
+import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import { parseAIConfidence } from '@/lib/aiConfidence';
 import Modal from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
@@ -815,6 +817,10 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
 
 export default function JonggaV2Page() {
   const { isAdmin } = useAdmin();
+  const { data: session, status } = useSession();
+  const paperTradingAccountKey = status === 'authenticated' ? session?.user?.email ?? null : null;
+  const isPaperTradingAuthenticated = Boolean(paperTradingAccountKey);
+  const capturePaperTradingAction = useAccountActionGuard(paperTradingAccountKey);
   const [analyzingGemini, setAnalyzingGemini] = useState(false);
   const [retryingTicker, setRetryingTicker] = useState<string | null>(null);
   const [retryConfirmCode, setRetryConfirmCode] = useState<string | null>(null);
@@ -846,6 +852,24 @@ export default function JonggaV2Page() {
     title: string;
     content: string;
   }>({ isOpen: false, type: 'default', title: '', content: '' });
+
+  const showPaperTradingLoginRequired = () => {
+    setAlertModal({
+      isOpen: true,
+      type: 'default',
+      title: '로그인 필요',
+      content: '모의투자는 로그인 후 사용할 수 있습니다.',
+    });
+  };
+
+  useLayoutEffect(() => {
+    setIsBuyModalOpen(false);
+    setBuyingStock(null);
+    setIsBulkBuyingClosingBet(false);
+    setAlertModal((current) => current.title.includes('매수') || current.title === '로그인 필요'
+      ? { ...current, isOpen: false }
+      : current);
+  }, [paperTradingAccountKey]);
 
   // Tips Collapse State
 
@@ -988,7 +1012,12 @@ export default function JonggaV2Page() {
   const bulkBuyClosingBetTooltip = bulkBuyClosingBetDisabledReason || '오늘 종가베팅 종목 전체를 10주씩 매수합니다.';
 
   const handleBulkBuyClosingBet = async () => {
+    if (!isPaperTradingAuthenticated) {
+      showPaperTradingLoginRequired();
+      return;
+    }
     if (isBulkBuyingClosingBet) return;
+    const isCurrent = capturePaperTradingAction();
     if (buyDisabledReason) {
       setAlertModal({
         isOpen: true,
@@ -1046,16 +1075,12 @@ export default function JonggaV2Page() {
 
       if (buyOrders.length > 0) {
         try {
-          const res = await fetch('/api/portfolio/buy/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orders: buyOrders })
-          });
-          const result = await res.json();
+          const result = await paperTradingAPI.bulkBuy(buyOrders);
+          if (!isCurrent()) return;
           const resultRows = Array.isArray(result?.results) ? result.results : [];
 
           if (resultRows.length > 0) {
-            resultRows.forEach((row: any) => {
+            resultRows.forEach((row) => {
               const rowName = row?.name || row?.ticker || '종목';
               if (row?.status === 'success') {
                 successCount += 1;
@@ -1070,10 +1095,15 @@ export default function JonggaV2Page() {
             failCount += buyOrders.length;
             failedItems.push(`일괄 매수(${result?.message || '매수 실패'})`);
           }
-        } catch (error) {
-          console.error('[Closing Bet Bulk Buy] bulk buy failed:', error);
-          failCount += buyOrders.length;
-          failedItems.push(`일괄 매수(요청 오류)`);
+          } catch (error: unknown) {
+            if (!isCurrent()) return;
+            console.error('[Closing Bet Bulk Buy] bulk buy failed:', error);
+            if (isAuthenticationError(error)) {
+              showPaperTradingLoginRequired();
+              return;
+            }
+            failCount += buyOrders.length;
+            failedItems.push('일괄 매수(요청 오류)');
         }
       }
 
@@ -1092,7 +1122,7 @@ export default function JonggaV2Page() {
         content: `오늘 종가베팅 종목 10주씩 매수 완료\n${summary.join(' / ')}${failedPreview ? `\n실패/스킵: ${failedPreview}${failedSuffix}` : ''}`
       });
     } finally {
-      setIsBulkBuyingClosingBet(false);
+      if (isCurrent()) setIsBulkBuyingClosingBet(false);
     }
   };
 
@@ -1560,13 +1590,10 @@ export default function JonggaV2Page() {
         onClose={() => setIsBuyModalOpen(false)}
         stock={buyingStock}
         onBuy={async (ticker, name, price, quantity) => {
+          const isCurrent = capturePaperTradingAction();
           try {
-            const res = await fetch('/api/portfolio/buy', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ticker, name, price, quantity })
-            });
-            const data = await res.json();
+            const data = await paperTradingAPI.buy({ ticker, name, price, quantity });
+            if (!isCurrent()) return false;
             if (data.status === 'success') {
               setAlertModal({
                 isOpen: true,
@@ -1584,13 +1611,14 @@ export default function JonggaV2Page() {
               });
               return false;
             }
-          } catch (e) {
+          } catch (e: unknown) {
+            if (!isCurrent()) return false;
             console.error('Buy error:', e);
             setAlertModal({
               isOpen: true,
               type: 'danger',
-              title: '오류',
-              content: '매수 중 오류가 발생했습니다.'
+              title: isAuthenticationError(e) ? '로그인 필요' : '오류',
+              content: isAuthenticationError(e) ? '모의투자는 로그인 후 사용할 수 있습니다.' : '매수 중 오류가 발생했습니다.'
             });
             return false;
           }
@@ -2430,4 +2458,3 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
     </div>
   );
 }
-

@@ -1,55 +1,65 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""임시 DB와 bare Flask Blueprint로 포트폴리오 API를 안전하게 확인한다."""
 
-import sys
+import base64
+import hashlib
+import hmac
+import logging
 import os
-import json
+import tempfile
+import time
+from types import SimpleNamespace
+from pathlib import Path
+import sys
 
-# Add project root to path
-sys.path.append(os.getcwd())
+from flask import Blueprint, Flask
 
-try:
-    from app import create_app
-    from services.paper_trading import paper_trading
-except ImportError:
-    # Fallback setup if partial env
-    from flask import Flask
-    app = Flask(__name__)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# Try full app setup
-try:
-    # Mocking or simplified app setup if full create_app is complex
-    # But usually we want to import the real one
-    from flask_app import app # Assuming flask_app.py has the 'app' instance
-except ImportError:
-     print("Could not import app from flask_app.py, constructing minimal context")
-     # Manual setup logic if needed, but preferable to use existing app
-     pass
+from app.routes.common_portfolio_routes import register_common_portfolio_routes
+from services.paper_trading import PaperTradingService
 
-# To be safe, let's use the PaperTradingService directly for SETUP and then call the route function logic
-# Or rely on the fact that we can call get_portfolio_data() if we set up a request context
+KEY = "verify-portfolio-api-key"
+OWNER = "verify@example.test"
 
-def test_api():
-    print("Initializing App Context...")
-    # Setup dummy holdings if empty
-    paper_trading.reset_account()
-    paper_trading.buy_stock('005380', '현대차', 491500, 100)
-    paper_trading.buy_stock('45226K', '한화갤러리아우', 9970, 200)
-    paper_trading.buy_stock('452260', '한화갤러리아', 1907, 200)
 
-    with app.test_client() as client:
-        print("Calling /api/portfolio endpoint...")
-        response = client.get('/api/portfolio')
-        
-        if response.status_code == 200:
-            data = response.get_json()
-            print("\nResponse Status: 200 OK")
-            print("Debug Error:", data.get('debug_error'))
-            
-            holdings = data.get('holdings', [])
-            print(f"\nHoldings: {len(holdings)}")
-            for h in holdings:
-                print(f"[{h['ticker']}] {h['name']} | Avg: {h['avg_price']} | Cur: {h['current_price']} | Profit: {h['profit_rate']}%")
+def _identity(email: str) -> str:
+    encoded = base64.urlsafe_b64encode(email.encode()).decode().rstrip("=")
+    payload = f"{encoded}.{int(time.time()) + 60}"
+    return f"{payload}.{hmac.new(KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()}"
+
+
+def main() -> None:
+    previous_secret = os.environ.get("INTERNAL_IDENTITY_SECRET")
+    os.environ["INTERNAL_IDENTITY_SECRET"] = KEY
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            service = PaperTradingService(db_path=os.path.join(directory, "portfolio.sqlite3"), auto_start_sync=False)
+            service.start_background_sync = lambda: None
+            service._wait_for_initial_price_sync = lambda holdings, prices: prices
+            service.price_cache.update({"005380": 491_500, "45226K": 9_970, "452260": 1_907})
+            app = Flask(__name__)
+            blueprint = Blueprint("verify_portfolio", __name__)
+            register_common_portfolio_routes(blueprint, SimpleNamespace(paper_trading=service, logger=logging.getLogger(__name__)))
+            app.register_blueprint(blueprint, url_prefix="/api")
+            client = app.test_client()
+            assert client.get("/api/portfolio").status_code == 401
+            headers = {"X-Auth-Identity": _identity(OWNER)}
+            assert client.post("/api/portfolio/reset", headers=headers).status_code == 200
+            for ticker, name, price, quantity in [("005380", "현대차", 491_500, 2), ("45226K", "한화갤러리아우", 9_970, 2), ("452260", "한화갤러리아", 1_907, 2)]:
+                response = client.post("/api/portfolio/buy", headers=headers, json={"ticker": ticker, "name": name, "price": price, "quantity": quantity})
+                assert response.status_code == 200 and response.get_json()["status"] == "success"
+            response = client.get("/api/portfolio", headers=headers)
+            assert response.status_code == 200
+            assert {holding["ticker"] for holding in response.get_json()["holdings"]} == {"005380", "45226K", "452260"}
+            print("PASS: unsigned GET=401, signed reset/buy/portfolio owner flow verified")
+    finally:
+        if previous_secret is None:
+            os.environ.pop("INTERNAL_IDENTITY_SECRET", None)
         else:
-            print(f"Error {response.status_code}: {response.data.decode('utf-8')}")
+            os.environ["INTERNAL_IDENTITY_SECRET"] = previous_secret
+
 
 if __name__ == "__main__":
-    test_api()
+    main()

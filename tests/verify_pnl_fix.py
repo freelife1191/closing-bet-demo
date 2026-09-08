@@ -1,69 +1,34 @@
-import sys
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""임시 DB에서 예수금 반영과 stale P&L을 독립 검증한다."""
+
 import os
-import time
+import tempfile
+from pathlib import Path
+import sys
 
-# Add project root to path
-sys.path.append(os.getcwd())
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services.paper_trading import paper_trading
+from services.paper_trading import PaperTradingService
 
-def test_pnl_fix():
-    print(">>> Testing Portfolio P&L Fixes")
-    
-    # 1. Reset Account
-    paper_trading.reset_account()
-    print("[1] Account Reset. Balance: 100,000,000")
-    
-    # 2. Buy Stock (10 shares @ 10,000)
-    ticker = '005930'
-    paper_trading.buy_stock(ticker, 'Samsung', 10000, 10)
-    print(f"[2] Bought 10 shares of {ticker} @ 10,000")
-    
-    # 3. Simulate Deposit (50,000,000)
-    res = paper_trading.deposit_cash(50000000)
-    print(f"[3] Deposit 50,000,000: {res['message']}")
-    
-    # [Fix] Clear cache to ensure we test P&L Logic without market price fluctuations
-    # This forces current_price = buy_price (10,000), so profit should be 0
-    with paper_trading.cache_lock:
-        paper_trading.price_cache.clear()
-    print("[3.5] Cleared Price Cache for deterministic P&L check")
+OWNER = "pnl@example.test"
 
-    # 4. Check Portfolio
-    portfolio = paper_trading.get_portfolio_valuation()
-    holdings = portfolio['holdings']
-    total_asset = portfolio['total_asset_value']
-    total_profit = portfolio['total_profit']
-    total_principal = portfolio.get('total_principal', 0)
-    
-    print(f"\n[4] Portfolio State:")
-    print(f"    - Total Asset: {total_asset:,} (Expect ~150,000,000)")
-    print(f"    - Total Principal: {total_principal:,} (Expect 150,000,000)")
-    print(f"    - Total Profit: {total_profit:,} (Expect 0)")
-    
-    # Verification
-    if total_principal != 150000000:
-        print("!!! FAIL: Total Principal is incorrect")
-    elif total_profit != 0:
-        print("!!! FAIL: Total Profit should be 0 immediately after deposit (assuming no price change)")
-    else:
-        print(">>> SUCCESS: Deposit correctly handled in P&L")
 
-    # 5. Simulate Price Fallback (Stale Price)
-    # Clear cache to force fallback
-    with paper_trading.cache_lock:
-        paper_trading.price_cache.clear()
-        
-    print("\n[5] Cleared Price Cache to test Stale Flag")
-    portfolio_stale = paper_trading.get_portfolio_valuation()
-    holding = portfolio_stale['holdings'][0]
-    
-    print(f"    - Holding {holding['ticker']} Stale Status: {holding.get('is_stale')}")
-    
-    if holding.get('is_stale') is True:
-        print(">>> SUCCESS: Stale price flag detected")
-    else:
-        print("!!! FAIL: Stale flag missing")
+def main() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        service = PaperTradingService(db_path=os.path.join(directory, "pnl.sqlite3"), auto_start_sync=False)
+        assert service.reset_account(owner_id=OWNER)
+        assert service.buy_stock("005930", "Samsung", 10_000, 10, owner_id=OWNER)["status"] == "success"
+        assert service.deposit_cash(50_000_000, owner_id=OWNER)["status"] == "success"
+        with service.cache_lock:
+            service.price_cache.clear()
+        valuation = service.get_portfolio_valuation(owner_id=OWNER)
+        assert valuation["total_principal"] == 150_000_000
+        assert valuation["total_profit"] == 0
+        assert valuation["holdings"][0]["is_stale"] is True
+        assert service.get_balance(owner_id="other@example.test") == 100_000_000
+        print("PASS: owner P&L principal/profit/stale and second-owner isolation verified")
+
 
 if __name__ == "__main__":
-    test_pnl_fix()
+    main()

@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Paper Trading 거래/계좌 처리 믹스인.
-"""
+"""Paper Trading 거래/계좌 처리 믹스인."""
 
 from __future__ import annotations
 
 import logging
 import sqlite3
 from datetime import datetime
+from typing import Any
 
 from services.paper_trading_constants import (
     DEFAULT_TRADE_HISTORY_LIMIT,
     INITIAL_CASH_KRW,
+    LEGACY_UNASSIGNED_OWNER_ID,
     MAX_DEPOSIT_PER_REQUEST_KRW,
-    MAX_TOTAL_DEPOSIT_KRW,
     MAX_HISTORY_LIMIT,
+    MAX_TOTAL_DEPOSIT_KRW,
 )
-from services.sqlite_utils import prune_rows_by_updated_at_if_needed
 
 logger = logging.getLogger(__name__)
 
@@ -26,148 +25,11 @@ class PaperTradingTradeAccountMixin:
     _SQLITE_SUPPORTS_RETURNING = sqlite3.sqlite_version_info >= (3, 35, 0)
 
     @staticmethod
-    def _try_subtract_balance_with_snapshot(
-        *,
-        cursor: sqlite3.Cursor,
-        amount: int,
-    ) -> tuple[bool, int]:
-        """
-        잔고 차감 시도와 현재 잔고 스냅샷 조회를 최대 1개 SQL 문장으로 처리한다.
-
-        Returns:
-            (applied, cash_snapshot)
-            - applied=True: 차감 성공
-            - applied=False: 잔고 부족 (cash_snapshot=현재 보유 현금)
-        """
-        if PaperTradingTradeAccountMixin._SQLITE_SUPPORTS_RETURNING:
-            try:
-                cursor.execute(
-                    'UPDATE balance SET cash = cash - ? WHERE id = 1 AND cash >= ? RETURNING cash',
-                    (amount, amount),
-                )
-                row = cursor.fetchone()
-                if row:
-                    return True, int(row[0]) if row[0] is not None else 0
-                cursor.execute('SELECT cash FROM balance WHERE id = 1')
-                balance_row = cursor.fetchone()
-                current_cash = int(balance_row[0]) if balance_row else 0
-                return False, current_cash
-            except sqlite3.OperationalError as error:
-                # 일부 환경에서 RETURNING 지원이 비활성화된 경우 fallback
-                if "returning" not in str(error).lower():
-                    raise
-
-        cursor.execute(
-            'UPDATE balance SET cash = cash - ? WHERE id = 1 AND cash >= ?',
-            (amount, amount),
-        )
-        if cursor.rowcount > 0:
-            return True, 0
-
-        cursor.execute('SELECT cash FROM balance WHERE id = 1')
-        row = cursor.fetchone()
-        current_cash = int(row[0]) if row else 0
-        return False, current_cash
-
-    @staticmethod
-    def _update_balance_with_sqlite_returning(
-        *,
-        cursor: sqlite3.Cursor,
-        amount: float,
-        operation: str,
-    ) -> float:
-        """SQLite RETURNING을 우선 사용해 잔고 갱신 후 값을 즉시 반환한다."""
-        if operation == 'subtract':
-            returning_sql = 'UPDATE balance SET cash = cash - ? WHERE id = 1 RETURNING cash'
-            fallback_sql = 'UPDATE balance SET cash = cash - ? WHERE id = 1'
-        else:
-            returning_sql = 'UPDATE balance SET cash = cash + ? WHERE id = 1 RETURNING cash'
-            fallback_sql = 'UPDATE balance SET cash = cash + ? WHERE id = 1'
-
-        if PaperTradingTradeAccountMixin._SQLITE_SUPPORTS_RETURNING:
-            try:
-                cursor.execute(returning_sql, (amount,))
-                row = cursor.fetchone()
-                return row[0] if row else 0
-            except sqlite3.OperationalError as error:
-                # SQLite 3.35 미만/RETURNING 비지원 build fallback
-                if "returning" not in str(error).lower():
-                    raise
-
-        cursor.execute(fallback_sql, (amount,))
-        cursor.execute('SELECT cash FROM balance WHERE id = 1')
-        row = cursor.fetchone()
-        return row[0] if row else 0
-
-    def _persist_price_cache_with_cursor(
-        self,
-        *,
-        cursor: sqlite3.Cursor,
-        prices: dict[str, int],
-        updated_at: str | None = None,
-    ) -> None:
-        """
-        기존 거래 트랜잭션 안에서 price_cache를 함께 upsert한다.
-
-        buy/sell 후 별도 write 트랜잭션을 열지 않아도 되어 SQLite write 락 경합을 줄인다.
-        """
-        if not prices:
-            return
-
-        row_timestamp = str(updated_at) if updated_at is not None else datetime.now().isoformat()
-        upsert_rows: list[tuple[str, int, str]] = []
-        should_prune_for_new_ticker = False
-
-        for ticker, price in prices.items():
-            ticker_key = str(ticker).zfill(6)
-            try:
-                price_int = int(float(price))
-            except (TypeError, ValueError):
-                continue
-            if price_int <= 0:
-                continue
-
-            upsert_rows.append((ticker_key, price_int, row_timestamp))
-            should_prune_for_new_ticker = (
-                self._mark_price_cache_ticker_seen(ticker_key) or should_prune_for_new_ticker
-            )
-
-        if not upsert_rows:
-            return
-
-        max_rows = max(1, int(getattr(self, "PRICE_CACHE_MAX_ROWS", len(upsert_rows))))
-        should_prune_for_new_ticker = (
-            should_prune_for_new_ticker
-            and self._should_prune_price_cache_for_new_ticker(max_rows=max_rows)
-        )
-        should_force_prune = self._should_force_price_cache_prune()
-        should_prune_after_upsert = should_prune_for_new_ticker or should_force_prune
-
-        cursor.executemany(
-            """
-            INSERT INTO price_cache (ticker, price, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(ticker) DO UPDATE SET
-                price = excluded.price,
-                updated_at = excluded.updated_at
-            """,
-            upsert_rows,
-        )
-
-        if should_prune_after_upsert:
-            prune_rows_by_updated_at_if_needed(
-                cursor,
-                table_name="price_cache",
-                max_rows=max_rows,
-            )
-
-    @staticmethod
-    def _normalize_trade_history_limit(limit: object, *, default: int) -> int:
-        try:
-            parsed = int(float(limit))
-        except (TypeError, ValueError):
-            parsed = int(default)
-        return min(max(parsed, 1), int(MAX_HISTORY_LIMIT))
+    def _validate_owner_id(owner_id: str) -> str:
+        normalized = owner_id.strip() if isinstance(owner_id, str) else ""
+        if not normalized or normalized == LEGACY_UNASSIGNED_OWNER_ID:
+            raise ValueError("A non-legacy owner_id is required")
+        return normalized
 
     @staticmethod
     def _normalize_ticker(ticker: str) -> str:
@@ -175,54 +37,47 @@ class PaperTradingTradeAccountMixin:
 
     @classmethod
     def _ticker_lookup_candidates(cls, ticker: str) -> tuple[str, ...]:
-        raw_ticker = str(ticker).strip()
-        normalized_ticker = cls._normalize_ticker(raw_ticker)
-        if normalized_ticker == raw_ticker:
-            return (raw_ticker,)
-        return (raw_ticker, normalized_ticker)
+        raw = str(ticker).strip()
+        normalized = cls._normalize_ticker(raw)
+        return (raw,) if raw == normalized else (raw, normalized)
 
-    @classmethod
-    def _select_portfolio_position_by_ticker(
-        cls,
-        *,
-        cursor: sqlite3.Cursor,
-        ticker: str,
-    ):
-        lookup_candidates = cls._ticker_lookup_candidates(ticker)
-        if len(lookup_candidates) == 1:
-            candidate = lookup_candidates[0]
-            cursor.execute(
-                """
-                SELECT ticker, name, avg_price, quantity, total_cost
-                FROM portfolio
-                WHERE ticker = ?
-                LIMIT 1
-                """,
-                (candidate,),
-            )
-            return cursor.fetchone()
+    @staticmethod
+    def _normalize_buy_price(value: object) -> float | None:
+        try:
+            price = float(value)
+        except (TypeError, ValueError):
+            return None
+        return price if price > 0 else None
 
-        first_candidate, second_candidate = lookup_candidates[0], lookup_candidates[1]
+    @staticmethod
+    def _normalize_buy_quantity(value: object) -> int | None:
+        try:
+            quantity = int(float(value))
+        except (TypeError, ValueError):
+            return None
+        return quantity if quantity > 0 else None
+
+    @staticmethod
+    def _normalize_trade_history_limit(limit: object, *, default: int) -> int:
+        try:
+            parsed = int(float(limit))
+        except (TypeError, ValueError):
+            parsed = default
+        return min(max(parsed, 1), MAX_HISTORY_LIMIT)
+
+    @staticmethod
+    def _ensure_owner_balance(cursor: sqlite3.Cursor, owner_id: str) -> None:
         cursor.execute(
-            """
-            SELECT ticker, name, avg_price, quantity, total_cost
-            FROM portfolio
-            WHERE ticker IN (?, ?)
-            ORDER BY CASE ticker
-                WHEN ? THEN 0
-                WHEN ? THEN 1
-                ELSE 2
-            END
-            LIMIT 1
-            """,
-            (
-                first_candidate,
-                second_candidate,
-                first_candidate,
-                second_candidate,
-            ),
+            "INSERT OR IGNORE INTO balance(owner_id, cash, total_deposit) VALUES (?, ?, 0)",
+            (owner_id, INITIAL_CASH_KRW),
         )
-        return cursor.fetchone()
+
+    def _ensure_owner(self, owner_id: str) -> None:
+        def operation() -> None:
+            with self.get_context() as conn:
+                self._ensure_owner_balance(conn.cursor(), owner_id)
+                conn.commit()
+        self._execute_db_operation_with_schema_retry(operation)
 
     @classmethod
     def _load_portfolio_positions_map_for_tickers(
@@ -230,791 +85,268 @@ class PaperTradingTradeAccountMixin:
         *,
         cursor: sqlite3.Cursor,
         tickers: list[str],
+        owner_id: str,
     ) -> dict[str, tuple]:
-        lookup_candidates: set[str] = set()
-        for ticker in tickers:
-            for candidate in cls._ticker_lookup_candidates(ticker):
-                lookup_candidates.add(candidate)
-
-        if not lookup_candidates:
+        """대량 주문용 기존 보유 종목 조회 헬퍼를 owner 범위로 유지한다."""
+        candidates = sorted({candidate for ticker in tickers for candidate in cls._ticker_lookup_candidates(ticker)})
+        if not candidates:
             return {}
-
-        ordered_candidates = sorted(lookup_candidates)
-        # SQLite 바인딩 변수 한도(기본 999)를 넘지 않도록 청크 조회한다.
-        chunk_size = 900
-        positions_map: dict[str, tuple] = {}
-
-        for start in range(0, len(ordered_candidates), chunk_size):
-            chunk = ordered_candidates[start:start + chunk_size]
+        positions: dict[str, tuple] = {}
+        for start in range(0, len(candidates), 900):
+            chunk = candidates[start:start + 900]
             placeholders = ", ".join("?" for _ in chunk)
-            cursor.execute(
-                f"""
-                SELECT ticker, name, avg_price, quantity, total_cost
-                FROM portfolio
-                WHERE ticker IN ({placeholders})
-                """,
-                tuple(chunk),
-            )
-            rows = cursor.fetchall()
-            for row in rows:
-                positions_map[str(row[0])] = row
-
-        return positions_map
+            query = f"SELECT ticker, name, avg_price, quantity, total_cost FROM portfolio WHERE owner_id = ? AND ticker IN ({placeholders})"
+            parameters: list[Any] = [cls._validate_owner_id(owner_id), *chunk]
+            for row in cursor.execute(query, parameters).fetchall():
+                positions[str(row[0])] = row
+        return positions
 
     @classmethod
-    def _select_portfolio_position_from_map(
-        cls,
-        *,
-        portfolio_positions_map: dict[str, tuple],
-        ticker: str,
-    ):
-        for candidate in cls._ticker_lookup_candidates(ticker):
-            row = portfolio_positions_map.get(candidate)
-            if row:
-                return row
-        return None
-
-    @staticmethod
-    def _normalize_buy_price(raw_price: object) -> float | None:
-        try:
-            execution_price = float(raw_price)
-        except (TypeError, ValueError):
-            return None
-        if execution_price <= 0:
-            return None
-        return execution_price
-
-    @staticmethod
-    def _normalize_buy_quantity(raw_quantity: object) -> int | None:
-        try:
-            quantity = int(float(raw_quantity))
-        except (TypeError, ValueError):
-            return None
-        if quantity <= 0:
-            return None
-        return quantity
-
-    @staticmethod
-    def _build_buy_trade_log_row(
-        *,
-        ticker: str,
-        name: str,
-        execution_price: float,
-        quantity: int,
-        timestamp: str | None = None,
-    ) -> tuple[str, str, str, float, int, str, float, float]:
-        return (
-            "BUY",
-            str(ticker),
-            str(name),
-            float(execution_price),
-            int(quantity),
-            str(timestamp) if timestamp is not None else datetime.now().isoformat(),
-            0.0,
-            0.0,
-        )
-
-    @classmethod
-    def _apply_buy_order_to_db(
-        cls,
-        *,
-        cursor: sqlite3.Cursor,
-        ticker: str,
-        name: str,
-        execution_price: float,
-        quantity: int,
-        total_cost: int,
-    ) -> None:
-        ticker_key = str(ticker)
-        timestamp = datetime.now().isoformat()
+    def _select_portfolio_position_by_ticker(cls, *, cursor: sqlite3.Cursor, ticker: str, owner_id: str):
+        candidates = cls._ticker_lookup_candidates(ticker)
+        placeholders = ", ".join("?" for _ in candidates)
         cursor.execute(
-            """
-            INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ticker) DO UPDATE SET
-                name = excluded.name,
-                quantity = portfolio.quantity + excluded.quantity,
-                total_cost = portfolio.total_cost + excluded.total_cost,
-                avg_price = (portfolio.total_cost + excluded.total_cost) / (portfolio.quantity + excluded.quantity),
-                last_updated = excluded.last_updated
-            """,
-            (ticker_key, name, execution_price, quantity, total_cost, timestamp),
+            f"SELECT ticker, name, avg_price, quantity, total_cost FROM portfolio "
+            f"WHERE owner_id = ? AND ticker IN ({placeholders}) "
+            "ORDER BY CASE ticker WHEN ? THEN 0 ELSE 1 END LIMIT 1",
+            (owner_id, *candidates, candidates[0]),
         )
+        return cursor.fetchone()
 
-        trade_log_row = cls._build_buy_trade_log_row(
-            ticker=ticker_key,
-            name=name,
-            execution_price=execution_price,
-            quantity=quantity,
-            timestamp=timestamp,
-        )
-        cursor.execute(
-            """
-            INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            trade_log_row,
-        )
-
-    @classmethod
-    def _apply_aggregated_buy_orders_to_portfolio(
-        cls,
-        *,
-        cursor: sqlite3.Cursor,
-        aggregated_orders_by_ticker: dict[str, dict[str, int | str]],
-        timestamp: str | None = None,
-    ) -> None:
-        if not aggregated_orders_by_ticker:
-            return
-
-        batch_timestamp = str(timestamp) if timestamp is not None else datetime.now().isoformat()
-        upsert_rows: list[tuple[str, str, float, int, int, str]] = []
-
-        for ticker_key, aggregate in aggregated_orders_by_ticker.items():
-            name = str(aggregate["name"])
-            quantity = int(aggregate["quantity"])
-            total_cost = int(aggregate["total_cost"])
-            if quantity <= 0 or total_cost <= 0:
-                continue
-
-            avg_price = float(total_cost) / float(quantity)
-            upsert_rows.append((ticker_key, name, avg_price, quantity, total_cost, batch_timestamp))
-
-        if not upsert_rows:
-            return
-
-        cursor.executemany(
-            """
-            INSERT INTO portfolio (ticker, name, avg_price, quantity, total_cost, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ticker) DO UPDATE SET
-                name = excluded.name,
-                quantity = portfolio.quantity + excluded.quantity,
-                total_cost = portfolio.total_cost + excluded.total_cost,
-                avg_price = (portfolio.total_cost + excluded.total_cost) / (portfolio.quantity + excluded.quantity),
-                last_updated = excluded.last_updated
-            """,
-            upsert_rows,
-        )
-
-    def get_balance(self):
-        """Get current cash balance"""
-        def _operation():
+    def get_balance(self, *, owner_id: str) -> float:
+        owner_id = self._validate_owner_id(owner_id)
+        def operation() -> float:
             with self.get_read_context() as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT cash FROM balance WHERE id = 1')
-                row = cursor.fetchone()
+                row = conn.execute("SELECT cash FROM balance WHERE owner_id = ?", (owner_id,)).fetchone()
                 return row[0] if row else 0
+        balance = self._execute_db_operation_with_schema_retry(operation)
+        if balance:
+            return balance
+        self._ensure_owner(owner_id)
+        return self._execute_db_operation_with_schema_retry(operation)
 
-        return self._execute_db_operation_with_schema_retry(_operation)
-
-    def deposit_cash(self, amount):
-        """Deposit cash (Charging)"""
+    def deposit_cash(self, amount: object, *, owner_id: str) -> dict[str, str]:
+        owner_id = self._validate_owner_id(owner_id)
         try:
             normalized_amount = int(float(amount))
         except (TypeError, ValueError):
-            return {'status': 'error', 'message': 'Amount must be a positive number'}
-
+            return {"status": "error", "message": "Amount must be a positive number"}
         if normalized_amount <= 0:
-            return {'status': 'error', 'message': 'Amount must be a positive number'}
-
+            return {"status": "error", "message": "Amount must be a positive number"}
         if normalized_amount > MAX_DEPOSIT_PER_REQUEST_KRW:
-            return {
-                'status': 'error',
-                'message': f'Deposit per request limit exceeded (max: {MAX_DEPOSIT_PER_REQUEST_KRW:,} KRW)',
-            }
+            return {"status": "error", "message": f"Deposit per request limit exceeded (max: {MAX_DEPOSIT_PER_REQUEST_KRW:,} KRW)"}
 
-        try:
-            def _operation():
-                with self.get_context() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        '''
-                        UPDATE balance
-                        SET cash = cash + ?, total_deposit = total_deposit + ?
-                        WHERE id = 1 AND total_deposit + ? <= ?
-                        ''',
-                        (
-                            normalized_amount,
-                            normalized_amount,
-                            normalized_amount,
-                            MAX_TOTAL_DEPOSIT_KRW,
-                        ),
-                    )
-                    if cursor.rowcount == 0:
-                        cursor.execute('SELECT total_deposit FROM balance WHERE id = 1')
-                        row = cursor.fetchone()
-                        current_total_deposit = int(float(row[0])) if row and row[0] is not None else 0
-                        return {
-                            'status': 'error',
-                            'message': (
-                                f'Total deposit limit exceeded '
-                                f'(current: {current_total_deposit:,} KRW, max: {MAX_TOTAL_DEPOSIT_KRW:,} KRW)'
-                            ),
-                        }
-                    conn.commit()
-                return {'status': 'success', 'message': f'Deposited {normalized_amount:,} KRW'}
-
-            return self._execute_db_operation_with_schema_retry(_operation)
-        except Exception as e:
-            return {'status': 'error', 'message': str(e)}
-
-    def update_balance(self, amount, operation='add'):
-        """Update cash balance"""
-        def _operation():
+        def operation() -> dict[str, str]:
             with self.get_context() as conn:
                 cursor = conn.cursor()
-                new_cash = self._update_balance_with_sqlite_returning(
-                    cursor=cursor,
-                    amount=amount,
-                    operation=operation,
+                self._ensure_owner_balance(cursor, owner_id)
+                cursor.execute(
+                    "UPDATE balance SET cash = cash + ?, total_deposit = total_deposit + ? "
+                    "WHERE owner_id = ? AND total_deposit + ? <= ?",
+                    (normalized_amount, normalized_amount, owner_id, normalized_amount, MAX_TOTAL_DEPOSIT_KRW),
                 )
+                if cursor.rowcount == 0:
+                    row = cursor.execute("SELECT total_deposit FROM balance WHERE owner_id = ?", (owner_id,)).fetchone()
+                    current = int(float(row[0])) if row else 0
+                    return {"status": "error", "message": f"Total deposit limit exceeded (current: {current:,} KRW, max: {MAX_TOTAL_DEPOSIT_KRW:,} KRW)"}
                 conn.commit()
-                return new_cash
+            return {"status": "success", "message": f"Deposited {normalized_amount:,} KRW"}
+        return self._execute_db_operation_with_schema_retry(operation)
 
-        return self._execute_db_operation_with_schema_retry(_operation)
+    def update_balance(self, amount: float, operation: str = "add", *, owner_id: str) -> float:
+        owner_id = self._validate_owner_id(owner_id)
+        def db_operation() -> float:
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                self._ensure_owner_balance(cursor, owner_id)
+                sign = "-" if operation == "subtract" else "+"
+                if self._SQLITE_SUPPORTS_RETURNING:
+                    try:
+                        cursor.execute(f"UPDATE balance SET cash = cash {sign} ? WHERE owner_id = ? RETURNING cash", (amount, owner_id))
+                        row = cursor.fetchone()
+                    except sqlite3.OperationalError as error:
+                        if "returning" not in str(error).lower():
+                            raise
+                        cursor.execute(f"UPDATE balance SET cash = cash {sign} ? WHERE owner_id = ?", (amount, owner_id))
+                        row = cursor.execute("SELECT cash FROM balance WHERE owner_id = ?", (owner_id,)).fetchone()
+                else:
+                    cursor.execute(f"UPDATE balance SET cash = cash {sign} ? WHERE owner_id = ?", (amount, owner_id))
+                    row = cursor.execute("SELECT cash FROM balance WHERE owner_id = ?", (owner_id,)).fetchone()
+                conn.commit()
+                return row[0] if row else 0
+        return self._execute_db_operation_with_schema_retry(db_operation)
 
-    def buy_stock(self, ticker, name, price, quantity):
-        """Execute Buy Order"""
+    def _buy_one(self, *, cursor: sqlite3.Cursor, ticker: str, name: str, price: float, quantity: int, owner_id: str, ensure_owner: bool = True) -> dict[str, str]:
+        total_cost = int(price * quantity)
+        if ensure_owner:
+            self._ensure_owner_balance(cursor, owner_id)
+        cursor.execute(
+            "UPDATE balance SET cash = cash - ? WHERE owner_id = ? AND cash >= ?",
+            (total_cost, owner_id, total_cost),
+        )
+        if cursor.rowcount != 1:
+            row = cursor.execute("SELECT cash FROM balance WHERE owner_id = ?", (owner_id,)).fetchone()
+            cash = int(row[0]) if row else 0
+            return {"status": "error", "message": f"잔고 부족 (필요: {total_cost:,}원, 보유: {cash:,}원)"}
+        timestamp = datetime.now().isoformat()
+        cursor.execute(
+            "INSERT INTO portfolio(owner_id, ticker, name, avg_price, quantity, total_cost, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(owner_id, ticker) DO UPDATE SET name=excluded.name, quantity=portfolio.quantity + excluded.quantity, "
+            "total_cost=portfolio.total_cost + excluded.total_cost, avg_price=(portfolio.total_cost + excluded.total_cost) / (portfolio.quantity + excluded.quantity), last_updated=excluded.last_updated",
+            (owner_id, ticker, name, price, quantity, total_cost, timestamp),
+        )
+        cursor.execute(
+            "INSERT INTO trade_log(owner_id, action, ticker, name, price, quantity, timestamp, profit, profit_rate) VALUES (?, 'BUY', ?, ?, ?, ?, ?, 0, 0)",
+            (owner_id, ticker, name, price, quantity, timestamp),
+        )
+        return {"status": "success", "message": f"{name} {quantity}주 매수 완료"}
+
+    def buy_stock(self, ticker: str, name: str, price: object, quantity: object, *, owner_id: str) -> dict[str, str]:
+        owner_id = self._validate_owner_id(owner_id)
+        normalized_price = self._normalize_buy_price(price)
         normalized_quantity = self._normalize_buy_quantity(quantity)
+        if normalized_price is None:
+            return {"status": "error", "message": "Price must be a positive number"}
         if normalized_quantity is None:
-            return {'status': 'error', 'message': 'Quantity must be positive'}
-
-        execution_price = self._normalize_buy_price(price)
-        if execution_price is None:
-            return {'status': 'error', 'message': 'Price must be a positive number'}
-
-        # [User Request] Trust Client Price
-        # 사용자가 보고 매수한 가격(프론트엔드 가격)을 그대로 체결 가격으로 사용합니다.
-        # 서버에서 다시 조회하면 소스/시간 차이로 가격이 달라져 혼란을 줄 수 있음.
-        ticker_key = str(ticker)
-        # main 동작과 동일하게 체결 시도 시점에 즉시 캐시를 반영한다.
-        with self.cache_lock:
-            self.price_cache[ticker_key] = int(execution_price)
-            self.last_update = datetime.now()
-
-        total_cost = int(execution_price * normalized_quantity)  # 정수로 처리
-
-        try:
-            def _operation():
-                with self.get_context() as conn:
-                    cursor = conn.cursor()
-                    if total_cost <= 0:
-                        return {
-                            'status': 'error',
-                            'message': 'Price must be a positive number',
-                        }
-
-                    balance_updated, current_cash = self._try_subtract_balance_with_snapshot(
-                        cursor=cursor,
-                        amount=total_cost,
-                    )
-                    if not balance_updated:
-                        return {
-                            'status': 'error',
-                            'message': f'잔고 부족 (필요: {total_cost:,}원, 보유: {int(current_cash):,}원)',
-                        }
-
-                    self._apply_buy_order_to_db(
-                        cursor=cursor,
-                        ticker=ticker_key,
-                        name=name,
-                        execution_price=execution_price,
-                        quantity=normalized_quantity,
-                        total_cost=total_cost,
-                    )
-                    self._persist_price_cache_with_cursor(
-                        cursor=cursor,
-                        prices={ticker_key: int(execution_price)},
-                    )
+            return {"status": "error", "message": "Quantity must be positive"}
+        def operation() -> dict[str, str]:
+            with self.get_context() as conn:
+                result = self._buy_one(cursor=conn.cursor(), ticker=str(ticker), name=str(name), price=normalized_price, quantity=normalized_quantity, owner_id=owner_id)
+                if result["status"] == "success":
                     conn.commit()
-                return {'status': 'success', 'message': f'{name} {normalized_quantity}주 매수 완료'}
+                return result
+        return self._execute_db_operation_with_schema_retry(operation)
 
-            result = self._execute_db_operation_with_schema_retry(_operation)
-            return result
-
-        except Exception as e:
-            logger.error(f"Buy failed: {e}")
-            return {'status': 'error', 'message': str(e)}
-
-    def buy_stocks_bulk(self, orders):
-        """여러 종목 매수를 단일 SQLite 트랜잭션으로 처리한다."""
+    def buy_stocks_bulk(self, orders: object, *, owner_id: str) -> dict[str, Any]:
+        owner_id = self._validate_owner_id(owner_id)
         if not isinstance(orders, list) or not orders:
-            return {
-                "status": "error",
-                "message": "No orders provided",
-                "summary": {"total": 0, "success": 0, "failed": 0},
-                "results": [],
-            }
-
-        normalized_orders: list[dict[str, object]] = []
-        pre_validation_results: list[dict[str, str]] = []
-        pending_cache_updates: dict[str, int] = {}
-
+            return {"status": "error", "message": "No orders provided", "summary": {"total": 0, "success": 0, "failed": 0}, "results": []}
+        normalized: list[tuple[str, str, float, int]] = []
+        results: list[dict[str, str]] = []
         for item in orders:
             if not isinstance(item, dict):
-                pre_validation_results.append(
-                    {
-                        "ticker": "",
-                        "name": "",
-                        "status": "error",
-                        "message": "Invalid order payload",
-                    }
-                )
+                results.append({"ticker": "", "name": "", "status": "error", "message": "Invalid order payload"})
                 continue
-
-            ticker = str(item.get("ticker", "")).strip()
-            name = str(item.get("name", "")).strip()
-            execution_price = self._normalize_buy_price(item.get("price"))
-            quantity = self._normalize_buy_quantity(item.get("quantity"))
-
-            if not ticker or not name or execution_price is None or quantity is None:
-                pre_validation_results.append(
-                    {
-                        "ticker": ticker,
-                        "name": name,
-                        "status": "error",
-                        "message": "Missing or invalid order fields",
-                    }
-                )
-                continue
-
-            ticker_key = str(ticker)
-            pending_cache_updates[ticker_key] = int(execution_price)
-
-            total_cost = int(execution_price * quantity)
-            if total_cost <= 0:
-                pre_validation_results.append(
-                    {
-                        "ticker": ticker_key,
-                        "name": name,
-                        "status": "error",
-                        "message": "Price must be a positive number",
-                    }
-                )
-                continue
-
-            normalized_orders.append(
-                {
-                    "ticker": ticker_key,
-                    "name": name,
-                    "price": execution_price,
-                    "quantity": quantity,
-                    "total_cost": total_cost,
-                }
-            )
-
-        # 주문 1건 단일 케이스는 buy_stock 경로를 재사용해
-        # read/write 컨텍스트 왕복을 줄이고 SQLite 트랜잭션 수를 최소화한다.
-        if len(normalized_orders) == 1 and not pre_validation_results:
-            only_order = normalized_orders[0]
-            single_result = self.buy_stock(
-                only_order["ticker"],
-                only_order["name"],
-                only_order["price"],
-                only_order["quantity"],
-            )
-            result_status = str(single_result.get("status", "error"))
-            result_message = str(single_result.get("message", "Unknown error"))
-            result_row = {
-                "ticker": str(only_order["ticker"]),
-                "name": str(only_order["name"]),
-                "status": result_status,
-                "message": result_message,
-            }
-            success_count = 1 if result_status == "success" else 0
-            failed_count = 1 - success_count
-            summary_message = "일괄 매수 완료 (성공 1건, 실패 0건)"
-            if success_count == 0:
-                summary_message = "일괄 매수 실패 (성공 0건, 실패 1건)"
-            return {
-                "status": "success" if success_count > 0 else "error",
-                "message": summary_message,
-                "summary": {
-                    "total": 1,
-                    "success": success_count,
-                    "failed": failed_count,
-                },
-                "results": [result_row],
-            }
-
-        if pending_cache_updates:
-            with self.cache_lock:
-                self.price_cache.update(pending_cache_updates)
-                self.last_update = datetime.now()
-
-        db_results: list[dict[str, str]] = []
-
-        if normalized_orders:
-            try:
-                def _operation():
-                    local_results: list[dict[str, str]] = []
-                    aggregated_orders_by_ticker: dict[str, dict[str, int | str]] = {}
-                    pending_trade_log_rows: list[tuple[str, str, str, float, int, str, float, float]] = []
-                    successful_prices: dict[str, int] = {}
-                    with self.get_read_context() as read_conn:
-                        read_cursor = read_conn.cursor()
-                        read_cursor.execute("SELECT cash FROM balance WHERE id = 1")
-                        balance_row = read_cursor.fetchone()
-                        current_cash = int(balance_row[0]) if balance_row else 0
-
-                    initial_cash = current_cash
-                    batch_timestamp = datetime.now().isoformat()
-
-                    for order in normalized_orders:
-                        ticker_key = str(order["ticker"])
-                        name = str(order["name"])
-                        execution_price = float(order["price"])
-                        quantity = int(order["quantity"])
-                        total_cost = int(order["total_cost"])
-
-                        if current_cash < total_cost:
-                            local_results.append(
-                                {
-                                    "ticker": ticker_key,
-                                    "name": name,
-                                    "status": "error",
-                                    "message": f"잔고 부족 (필요: {total_cost:,}원, 보유: {int(current_cash):,}원)",
-                                }
-                            )
-                            continue
-
-                        current_cash -= total_cost
-                        successful_prices[ticker_key] = int(execution_price)
-                        local_results.append(
-                            {
-                                "ticker": ticker_key,
-                                "name": name,
-                                "status": "success",
-                                "message": f"{name} {quantity}주 매수 완료",
-                            }
-                        )
-
-                        aggregate_row = aggregated_orders_by_ticker.setdefault(
-                            ticker_key,
-                            {"name": name, "quantity": 0, "total_cost": 0},
-                        )
-                        aggregate_row["name"] = name
-                        aggregate_row["quantity"] = int(aggregate_row["quantity"]) + quantity
-                        aggregate_row["total_cost"] = int(aggregate_row["total_cost"]) + total_cost
-
-                        pending_trade_log_rows.append(
-                            self._build_buy_trade_log_row(
-                                ticker=ticker_key,
-                                name=name,
-                                execution_price=execution_price,
-                                quantity=quantity,
-                                timestamp=batch_timestamp,
-                            )
-                        )
-
-                    if not aggregated_orders_by_ticker:
-                        return local_results
-
-                    with self.get_context() as conn:
-                        cursor = conn.cursor()
-                        spent_cash = initial_cash - current_cash
-                        if spent_cash > 0:
-                            cursor.execute(
-                                "UPDATE balance SET cash = cash - ? WHERE id = 1 AND cash >= ?",
-                                (spent_cash, spent_cash),
-                            )
-                            if cursor.rowcount == 0:
-                                raise RuntimeError("잔고 동기화 충돌이 발생했습니다. 잠시 후 다시 시도해 주세요.")
-
-                        self._apply_aggregated_buy_orders_to_portfolio(
-                            cursor=cursor,
-                            aggregated_orders_by_ticker=aggregated_orders_by_ticker,
-                            timestamp=batch_timestamp,
-                        )
-
-                        if pending_trade_log_rows:
-                            cursor.executemany(
-                                """
-                                INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                pending_trade_log_rows,
-                            )
-                        if successful_prices:
-                            self._persist_price_cache_with_cursor(
-                                cursor=cursor,
-                                prices=successful_prices,
-                                updated_at=batch_timestamp,
-                            )
-                        conn.commit()
-                    return local_results
-
-                operation_result = self._execute_db_operation_with_schema_retry(_operation)
-                db_results = operation_result
-            except Exception as error:
-                logger.error(f"Bulk buy failed: {error}")
-                failed_orders = [
-                    {
-                        "ticker": str(item.get("ticker", "")),
-                        "name": str(item.get("name", "")),
-                        "status": "error",
-                        "message": str(error),
-                    }
-                    for item in normalized_orders
-                ]
-                merged_results = [*pre_validation_results, *failed_orders]
-                return {
-                    "status": "error",
-                    "message": str(error),
-                    "summary": {
-                        "total": len(merged_results),
-                        "success": 0,
-                        "failed": len(merged_results),
-                    },
-                    "results": merged_results,
-                }
-
-        merged_results = [*pre_validation_results, *db_results]
-        success_count = sum(1 for item in merged_results if item.get("status") == "success")
-        failed_count = sum(1 for item in merged_results if item.get("status") != "success")
-        total_count = len(merged_results)
-
-        status = "success" if success_count > 0 else "error"
-        summary_message = f"일괄 매수 완료 (성공 {success_count}건, 실패 {failed_count}건)"
-        if success_count == 0 and total_count > 0:
-            summary_message = f"일괄 매수 실패 (성공 0건, 실패 {failed_count}건)"
-
-        return {
-            "status": status,
-            "message": summary_message,
-            "summary": {
-                "total": total_count,
-                "success": success_count,
-                "failed": failed_count,
-            },
-            "results": merged_results,
-        }
-
-    def sell_stock(self, ticker, price, quantity):
-        """Execute Sell Order"""
-        if quantity <= 0:
-            return {'status': 'error', 'message': 'Quantity must be positive'}
-
-        try:
-            try:
-                execution_price = float(price)
-            except (TypeError, ValueError):
-                return {'status': 'error', 'message': 'Price must be a positive number'}
-            if execution_price <= 0:
-                return {'status': 'error', 'message': 'Price must be a positive number'}
-            # [User Request] Trust Client Price
-            ticker_key = str(ticker)
-
-            def _operation():
-                with self.get_context() as conn:
-                    cursor = conn.cursor()
-
-                    # 1. Check Portfolio
-                    row = self._select_portfolio_position_by_ticker(
-                        cursor=cursor,
-                        ticker=ticker,
-                    )
-
-                    if not row or row[3] < quantity:
-                        return {'status': 'error', 'message': 'Not enough shares to sell'}
-
-                    db_ticker, name, avg_price, current_qty, _current_total_cost = row
-                    # main 동작과 동일하게 실제 매도 처리 직전에 캐시를 즉시 반영한다.
-                    with self.cache_lock:
-                        self.price_cache[ticker_key] = int(execution_price)
-                        self.last_update = datetime.now()
-
-                    # 2. Update/Remove Portfolio
-                    remaining_qty = current_qty - quantity
-
-                    if remaining_qty == 0:
-                        cursor.execute('DELETE FROM portfolio WHERE ticker = ?', (db_ticker,))
-                    else:
-                        new_total_cost = avg_price * remaining_qty
-                        cursor.execute(
-                            '''
-                            UPDATE portfolio
-                            SET quantity = ?, total_cost = ?, last_updated = ?
-                            WHERE ticker = ?
-                        ''',
-                            (remaining_qty, new_total_cost, datetime.now().isoformat(), db_ticker),
-                        )
-
-                    # 3. Calculate Profit & Log Trade
-                    total_proceeds = int(execution_price * quantity)
-                    cost_basis = int(avg_price * quantity)
-                    profit = total_proceeds - cost_basis
-                    profit_rate = (profit / cost_basis * 100) if cost_basis > 0 else 0
-
-                    cursor.execute(
-                        '''
-                        INSERT INTO trade_log (action, ticker, name, price, quantity, timestamp, profit, profit_rate)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''',
-                        (
-                            'SELL',
-                            ticker_key,
-                            name,
-                            execution_price,
-                            quantity,
-                            datetime.now().isoformat(),
-                            profit,
-                            profit_rate,
-                        ),
-                    )
-
-                    # 4. Add Cash
-                    cursor.execute('UPDATE balance SET cash = cash + ? WHERE id = 1', (total_proceeds,))
-                    self._persist_price_cache_with_cursor(
-                        cursor=cursor,
-                        prices={ticker_key: int(execution_price)},
-                    )
-
-                    conn.commit()
-                return {'status': 'success', 'message': f'{name} {quantity}주 매도 완료'}
-
-            result = self._execute_db_operation_with_schema_retry(_operation)
-            return result
-
-        except Exception as e:
-            logger.error(f"Sell failed: {e}")
-            return {'status': 'error', 'message': str(e)}
-
-    def get_portfolio(self):
-        """Get all holdings"""
-        def _operation():
-            with self.get_read_context() as conn:
-                cursor = conn.cursor()
-
-                cursor.execute(
-                    '''
-                    SELECT
-                        p.ticker,
-                        p.name,
-                        p.avg_price,
-                        p.quantity,
-                        p.total_cost,
-                        p.last_updated,
-                        b.cash AS cash,
-                        b.total_deposit AS total_deposit
-                    FROM balance b
-                    LEFT JOIN portfolio p ON 1 = 1
-                    WHERE b.id = 1
-                    '''
-                )
-                rows = cursor.fetchall()
-                if rows:
-                    first_row = rows[0]
-                    cash = first_row[6] if first_row[6] is not None else 0
-                    total_deposit = first_row[7] if first_row[7] is not None else 0
+            ticker, name = str(item.get("ticker", "")).strip(), str(item.get("name", "")).strip()
+            price, quantity = self._normalize_buy_price(item.get("price")), self._normalize_buy_quantity(item.get("quantity"))
+            if not ticker or not name or price is None or quantity is None:
+                results.append({"ticker": ticker, "name": name, "status": "error", "message": "Missing or invalid order fields"})
+            else:
+                normalized.append((ticker, name, price, quantity))
+        if normalized:
+            def read_cash() -> float | None:
+                with self.get_read_context() as conn:
+                    row = conn.execute("SELECT cash FROM balance WHERE owner_id=?", (owner_id,)).fetchone()
+                    return float(row[0]) if row else None
+            available_cash = self._execute_db_operation_with_schema_retry(read_cash)
+            projected_cash = INITIAL_CASH_KRW if available_cash is None else available_cash
+            preflight_results: list[dict[str, str]] = []
+            for ticker, name, price, quantity in normalized:
+                cost = int(price * quantity)
+                if projected_cash < cost:
+                    preflight_results.append({"ticker": ticker, "name": name, "status": "error", "message": f"잔고 부족 (필요: {cost:,}원, 보유: {int(projected_cash):,}원)"})
                 else:
-                    cash = 0
-                    total_deposit = 0
-
-                holdings = [
-                    {
-                        'ticker': row[0],
-                        'name': row[1],
-                        'avg_price': row[2],
-                        'quantity': row[3],
-                        'total_cost': row[4],
-                        'last_updated': row[5],
-                    }
-                    for row in rows
-                    if row[0] is not None
-                ]
-
-                # Initial Principal is 100,000,000. Total Principal = 100M + Deposits
-                total_principal = INITIAL_CASH_KRW + total_deposit
-
-                return {
-                    'holdings': holdings,
-                    'cash': cash,
-                    'total_asset_value': cash,  # Will need to add holdings value in API layer
-                    'total_principal': total_principal,
-                }
-
-        return self._execute_db_operation_with_schema_retry(_operation)
-
-    def reset_account(self):
-        """Reset everything to default"""
-        try:
-            def _operation():
-                with self.get_context() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('DELETE FROM portfolio')
-                    cursor.execute('DELETE FROM trade_log')
-                    cursor.execute('DELETE FROM asset_history')  # 히스토리도 초기화
-                    cursor.execute('DELETE FROM price_cache')
-                    cursor.execute(
-                        'UPDATE balance SET cash = ?, total_deposit = 0 WHERE id = 1',
-                        (INITIAL_CASH_KRW,),
-                    )
+                    projected_cash -= cost
+            if len(preflight_results) == len(normalized):
+                rows = [*results, *preflight_results]
+                return {"status": "error", "message": f"일괄 매수 실패 (성공 0건, 실패 {len(rows)}건)", "summary": {"total": len(rows), "success": 0, "failed": len(rows)}, "results": rows}
+        def operation() -> list[dict[str, str]]:
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                self._ensure_owner_balance(cursor, owner_id)
+                local = list(results)
+                for ticker, name, price, quantity in normalized:
+                    result = self._buy_one(cursor=cursor, ticker=ticker, name=name, price=price, quantity=quantity, owner_id=owner_id, ensure_owner=False)
+                    local.append({"ticker": ticker, "name": name, **result})
+                if any(row["status"] == "success" for row in local):
                     conn.commit()
-                return True
-
-            self._execute_db_operation_with_schema_retry(_operation)
-            with self.cache_lock:
-                self.price_cache.clear()
-                self.last_update = None
-            if hasattr(self, "_reset_price_cache_prune_state"):
-                self._reset_price_cache_prune_state()
-            if hasattr(self, "_last_asset_history_snapshot"):
-                self._last_asset_history_snapshot = None
-            return True
+                return local
+        try:
+            rows = self._execute_db_operation_with_schema_retry(operation)
         except Exception as error:
-            logger.error(f"Failed to reset paper trading account: {error}")
-            return False
+            logger.error(f"Bulk buy failed: {error}")
+            rows = [*results, *[
+                {"ticker": ticker, "name": name, "status": "error", "message": str(error)}
+                for ticker, name, _price, _quantity in normalized
+            ]]
+        success = sum(row["status"] == "success" for row in rows)
+        message = f"일괄 매수 완료 (성공 {success}건, 실패 {len(rows) - success}건)" if success else f"일괄 매수 실패 (성공 0건, 실패 {len(rows)}건)"
+        return {"status": "success" if success else "error", "message": message, "summary": {"total": len(rows), "success": success, "failed": len(rows) - success}, "results": rows}
 
-    def get_trade_history(self, limit=DEFAULT_TRADE_HISTORY_LIMIT, ticker: str | None = None):
-        """Get trade history. Optionally filter by ticker."""
-        normalized_limit = self._normalize_trade_history_limit(
-            limit,
-            default=DEFAULT_TRADE_HISTORY_LIMIT,
-        )
-
-        ticker_candidates: tuple[str, ...] = ()
-        if ticker is not None and str(ticker).strip():
-            ticker_candidates = self._ticker_lookup_candidates(ticker)
-
-        def _operation():
-            with self.get_read_context() as conn:
+    def sell_stock(self, ticker: str, price: object, quantity: object, *, owner_id: str) -> dict[str, str]:
+        owner_id = self._validate_owner_id(owner_id)
+        execution_price, normalized_quantity = self._normalize_buy_price(price), self._normalize_buy_quantity(quantity)
+        if execution_price is None:
+            return {"status": "error", "message": "Price must be a positive number"}
+        if normalized_quantity is None:
+            return {"status": "error", "message": "Quantity must be positive"}
+        def operation() -> dict[str, str]:
+            with self.get_context() as conn:
                 cursor = conn.cursor()
-                if ticker_candidates:
-                    placeholders = ",".join("?" for _ in ticker_candidates)
-                    query = f'''
-                        SELECT id, action, ticker, name, price, quantity, timestamp, profit, profit_rate
-                        FROM trade_log
-                        WHERE ticker IN ({placeholders})
-                        ORDER BY timestamp DESC, id DESC
-                        LIMIT ?
-                    '''
-                    cursor.execute(query, (*ticker_candidates, normalized_limit))
+                self._ensure_owner_balance(cursor, owner_id)
+                row = self._select_portfolio_position_by_ticker(cursor=cursor, ticker=ticker, owner_id=owner_id)
+                if not row or row[3] < normalized_quantity:
+                    return {"status": "error", "message": "Not enough shares to sell"}
+                db_ticker, name, avg_price, current_quantity, _ = row
+                remaining = current_quantity - normalized_quantity
+                if remaining:
+                    cursor.execute("UPDATE portfolio SET quantity=?, total_cost=?, last_updated=? WHERE owner_id=? AND ticker=?", (remaining, avg_price * remaining, datetime.now().isoformat(), owner_id, db_ticker))
                 else:
-                    cursor.execute(
-                        '''
-                        SELECT id, action, ticker, name, price, quantity, timestamp, profit, profit_rate
-                        FROM trade_log
-                        ORDER BY timestamp DESC, id DESC
-                        LIMIT ?
-                    ''',
-                        (normalized_limit,),
-                    )
-                trades = [
-                    {
-                        'id': row[0],
-                        'action': row[1],
-                        'ticker': row[2],
-                        'name': row[3],
-                        'price': row[4],
-                        'quantity': row[5],
-                        'timestamp': row[6],
-                        'profit': row[7],
-                        'profit_rate': row[8],
-                    }
-                    for row in cursor.fetchall()
-                ]
-                return {'trades': trades}
+                    cursor.execute("DELETE FROM portfolio WHERE owner_id=? AND ticker=?", (owner_id, db_ticker))
+                proceeds, cost = int(execution_price * normalized_quantity), int(avg_price * normalized_quantity)
+                profit = proceeds - cost
+                cursor.execute("INSERT INTO trade_log(owner_id, action, ticker, name, price, quantity, timestamp, profit, profit_rate) VALUES (?, 'SELL', ?, ?, ?, ?, ?, ?, ?)", (owner_id, db_ticker, name, execution_price, normalized_quantity, datetime.now().isoformat(), profit, profit / cost * 100 if cost else 0))
+                cursor.execute("UPDATE balance SET cash = cash + ? WHERE owner_id = ?", (proceeds, owner_id))
+                conn.commit()
+                return {"status": "success", "message": f"{name} {normalized_quantity}주 매도 완료"}
+        return self._execute_db_operation_with_schema_retry(operation)
 
-        return self._execute_db_operation_with_schema_retry(_operation)
+    def get_portfolio(self, *, owner_id: str) -> dict[str, Any]:
+        owner_id = self._validate_owner_id(owner_id)
+        def operation() -> dict[str, Any]:
+            with self.get_read_context() as conn:
+                rows = conn.execute(
+                    "SELECT p.ticker, p.name, p.avg_price, p.quantity, p.total_cost, p.last_updated, b.cash, b.total_deposit "
+                    "FROM balance b LEFT JOIN portfolio p ON p.owner_id = b.owner_id WHERE b.owner_id=?",
+                    (owner_id,),
+                ).fetchall()
+                cash, deposits = (rows[0][6], rows[0][7]) if rows else (0, 0)
+                return {"holdings": [{"ticker": row[0], "name": row[1], "avg_price": row[2], "quantity": row[3], "total_cost": row[4], "last_updated": row[5]} for row in rows if row[0] is not None], "cash": cash, "total_asset_value": cash, "total_principal": INITIAL_CASH_KRW + deposits}
+        portfolio = self._execute_db_operation_with_schema_retry(operation)
+        if portfolio["cash"]:
+            return portfolio
+        self._ensure_owner(owner_id)
+        return self._execute_db_operation_with_schema_retry(operation)
+
+    def reset_account(self, *, owner_id: str) -> bool:
+        owner_id = self._validate_owner_id(owner_id)
+        def operation() -> None:
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                self._ensure_owner_balance(cursor, owner_id)
+                for table in ("portfolio", "trade_log", "asset_history"):
+                    cursor.execute(f"DELETE FROM {table} WHERE owner_id = ?", (owner_id,))
+                cursor.execute("UPDATE balance SET cash=?, total_deposit=0 WHERE owner_id=?", (INITIAL_CASH_KRW, owner_id))
+                conn.commit()
+        self._execute_db_operation_with_schema_retry(operation)
+        snapshot = getattr(self, "_last_asset_history_snapshot", None)
+        if isinstance(snapshot, dict) and snapshot.get("owner_id") == owner_id:
+            self._last_asset_history_snapshot = None
+        return True
+
+    def get_trade_history(self, limit: object = DEFAULT_TRADE_HISTORY_LIMIT, ticker: str | None = None, *, owner_id: str) -> dict[str, list[dict[str, Any]]]:
+        owner_id = self._validate_owner_id(owner_id)
+        limit = self._normalize_trade_history_limit(limit, default=DEFAULT_TRADE_HISTORY_LIMIT)
+        candidates = self._ticker_lookup_candidates(ticker) if ticker and str(ticker).strip() else ()
+        def operation() -> dict[str, list[dict[str, Any]]]:
+            with self.get_read_context() as conn:
+                query = "SELECT id, action, ticker, name, price, quantity, timestamp, profit, profit_rate FROM trade_log WHERE owner_id=?"
+                params: list[Any] = [owner_id]
+                if candidates:
+                    query += f" AND ticker IN ({', '.join('?' for _ in candidates)})"
+                    params.extend(candidates)
+                query += " ORDER BY timestamp DESC, id DESC LIMIT ?"
+                params.append(limit)
+                rows = conn.execute(query, params).fetchall()
+                return {"trades": [{"id": row[0], "action": row[1], "ticker": row[2], "name": row[3], "price": row[4], "quantity": row[5], "timestamp": row[6], "profit": row[7], "profit_rate": row[8]} for row in rows]}
+        return self._execute_db_operation_with_schema_retry(operation)

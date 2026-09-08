@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { krAPI, KRSignal, KRAIAnalysis, KRMarketGate, AIRecommendation } from '@/lib/api';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { AIRecommendation, isAuthenticationError, krAPI, KRSignal, KRAIAnalysis, KRMarketGate, paperTradingAPI } from '@/lib/api';
+import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import StockChart from './StockChart';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
@@ -201,6 +203,10 @@ const AI_ACTION_BADGES = {
 } as const;
 
 export default function VCPSignalsPage() {
+  const { data: session, status } = useSession();
+  const paperTradingAccountKey = status === 'authenticated' ? session?.user?.email ?? null : null;
+  const isPaperTradingAuthenticated = Boolean(paperTradingAccountKey);
+  const capturePaperTradingAction = useAccountActionGuard(paperTradingAccountKey);
   const [signals, setSignals] = useState<KRSignal[]>([]);
   const [staleWarning, setStaleWarning] = useState<string | null>(null);
   const [aiData, setAiData] = useState<KRAIAnalysis | null>(null);
@@ -257,6 +263,24 @@ export default function VCPSignalsPage() {
     title: string;
     content: string;
   }>({ isOpen: false, type: 'default', title: '', content: '' });
+
+  const showPaperTradingLoginRequired = () => {
+    setAlertModal({
+      isOpen: true,
+      type: 'default',
+      title: '로그인 필요',
+      content: '모의투자는 로그인 후 사용할 수 있습니다.',
+    });
+  };
+
+  useLayoutEffect(() => {
+    setIsBuyModalOpen(false);
+    setBuyingStock(null);
+    setIsBulkBuyingVCP(false);
+    setAlertModal((current) => current.title.includes('매수') || current.title === '로그인 필요'
+      ? { ...current, isOpen: false }
+      : current);
+  }, [paperTradingAccountKey]);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
     isOpen: boolean;
     mode: 'clear_all' | 'single_message' | null;
@@ -761,7 +785,12 @@ export default function VCPSignalsPage() {
   };
 
   const handleBulkBuyVCP = async () => {
+    if (!isPaperTradingAuthenticated) {
+      showPaperTradingLoginRequired();
+      return;
+    }
     if (isBulkBuyingVCP) return;
+    const isCurrent = capturePaperTradingAction();
 
     if (buyDisabledReason) {
       setAlertModal({
@@ -833,16 +862,12 @@ export default function VCPSignalsPage() {
 
       if (buyOrders.length > 0) {
         try {
-          const res = await fetch('/api/portfolio/buy/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orders: buyOrders })
-          });
-          const result = await res.json();
+          const result = await paperTradingAPI.bulkBuy(buyOrders);
+          if (!isCurrent()) return;
           const resultRows = Array.isArray(result?.results) ? result.results : [];
 
           if (resultRows.length > 0) {
-            resultRows.forEach((row: any) => {
+            resultRows.forEach((row) => {
               const rowName = row?.name || row?.ticker || '종목';
               if (row?.status === 'success') {
                 successCount += 1;
@@ -857,10 +882,15 @@ export default function VCPSignalsPage() {
             failCount += buyOrders.length;
             failedItems.push(`일괄 매수(${result?.message || '매수 실패'})`);
           }
-        } catch (error) {
+        } catch (error: unknown) {
+          if (!isCurrent()) return;
           console.error('[VCP Bulk Buy] bulk buy failed:', error);
+          if (isAuthenticationError(error)) {
+            showPaperTradingLoginRequired();
+            return;
+          }
           failCount += buyOrders.length;
-          failedItems.push(`일괄 매수(요청 오류)`);
+          failedItems.push('일괄 매수(요청 오류)');
         }
       }
 
@@ -879,7 +909,7 @@ export default function VCPSignalsPage() {
         content: `오늘 VCP 시그널 종목 10주씩 매수 완료\n${summary.join(' / ')}${failedPreview ? `\n실패/스킵: ${failedPreview}${failedSuffix}` : ''}`
       });
     } finally {
-      setIsBulkBuyingVCP(false);
+      if (isCurrent()) setIsBulkBuyingVCP(false);
     }
   };
 
@@ -2075,13 +2105,10 @@ export default function VCPSignalsPage() {
         onClose={() => setIsBuyModalOpen(false)}
         stock={buyingStock}
         onBuy={async (ticker, name, price, quantity) => {
+          const isCurrent = capturePaperTradingAction();
           try {
-            const res = await fetch('/api/portfolio/buy', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ticker, name, price, quantity })
-            });
-            const data = await res.json();
+            const data = await paperTradingAPI.buy({ ticker, name, price, quantity });
+            if (!isCurrent()) return false;
             if (data.status === 'success') {
               setAlertModal({
                 isOpen: true,
@@ -2099,12 +2126,13 @@ export default function VCPSignalsPage() {
               });
               return false;
             }
-          } catch (e) {
+          } catch (e: unknown) {
+            if (!isCurrent()) return false;
             setAlertModal({
               isOpen: true,
               type: 'danger',
-              title: '오류 발생',
-              content: '매수 요청 중 오류 발생'
+              title: isAuthenticationError(e) ? '로그인 필요' : '오류 발생',
+              content: isAuthenticationError(e) ? '모의투자는 로그인 후 사용할 수 있습니다.' : '매수 요청 중 오류 발생'
             });
             return false;
           }

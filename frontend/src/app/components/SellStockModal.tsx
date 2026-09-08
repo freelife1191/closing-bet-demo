@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useId } from 'react';
+import { useSession } from 'next-auth/react';
+import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import { ModalShell } from './Modal';
 
 interface SellStockModalProps {
@@ -17,6 +19,32 @@ interface SellStockModalProps {
 }
 
 export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellStockModalProps) {
+  const { data: session, status } = useSession();
+  const accountEmail = status === 'authenticated' ? session?.user?.email ?? null : null;
+  return (
+    <SellStockModalAccount
+      key={accountEmail ?? 'unauthenticated'}
+      isOpen={isOpen}
+      onClose={onClose}
+      stock={stock}
+      onSell={onSell}
+      isAuthenticated={Boolean(accountEmail)}
+    />
+  );
+}
+
+interface SellStockModalAccountProps extends SellStockModalProps {
+  isAuthenticated: boolean;
+}
+
+function SellStockModalAccount({
+  isOpen,
+  onClose,
+  stock,
+  onSell,
+  isAuthenticated,
+}: SellStockModalAccountProps) {
+  const captureAccountAction = useAccountActionGuard(null);
   const titleId = useId();
   const [quantity, setQuantity] = useState<string>('0');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,14 +71,17 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
     if (isSubmitting || isInvalid) return;
 
     setIsSubmitting(true);
+    const isCurrent = captureAccountAction();
     try {
       const success = await onSell(stock.ticker, stock.name, price, numericQty);
+      if (!isCurrent()) return;
       if (success) onClose();
     } catch (e: any) {
+      if (!isCurrent()) return;
       console.error('[SellStockModal] Error:', e);
       alert('매도 실패: ' + e.message);
     } finally {
-      setIsSubmitting(false);
+      if (isCurrent()) setIsSubmitting(false);
     }
   };
 
@@ -64,6 +95,20 @@ export default function SellStockModal({ isOpen, onClose, stock, onSell }: SellS
   };
 
   if (!isOpen) return null;
+
+  if (!isAuthenticated) {
+    return (
+      <ModalShell
+        onClose={onClose}
+        labelledBy={titleId}
+        overlayClassName="z-[110] p-4"
+        className="relative bg-[#1c1c1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6"
+      >
+        <h2 id={titleId} className="text-xl font-bold text-white mb-3">모의 투자 매도</h2>
+        <p className="text-gray-300">모의투자는 로그인 후 사용할 수 있습니다.</p>
+      </ModalShell>
+    );
+  }
 
   return (
     <ModalShell

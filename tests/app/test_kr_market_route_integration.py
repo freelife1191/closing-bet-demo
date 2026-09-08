@@ -95,6 +95,9 @@ def _create_client_with_user(user_api_key=None, user_email=None):
 
 
 def _install_chatbot_module(monkeypatch, bot):
+    # 실제 Vertex 호출 없이, 주입한 fake bot의 구성 완료 전제만 설정한다.
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "isolated-test-project")
     module = types.ModuleType("chatbot")
     module.get_chatbot = lambda: bot
     monkeypatch.setitem(sys.modules, "chatbot", module)

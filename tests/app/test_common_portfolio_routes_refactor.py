@@ -7,6 +7,12 @@ Common Portfolio Routes 리팩토링 회귀 테스트
 from __future__ import annotations
 
 import os
+import base64
+import hashlib
+import hmac
+import time
+
+import pytest
 import sys
 import types
 
@@ -20,6 +26,11 @@ from app.routes.common_portfolio_routes import register_common_portfolio_routes
 from app.routes.common_route_context import CommonRouteContext
 
 
+@pytest.fixture(autouse=True)
+def _identity_secret(monkeypatch):
+    monkeypatch.setenv("INTERNAL_IDENTITY_SECRET", "portfolio-route-test-key")
+
+
 class _DummyPaperTrading:
     def __init__(self):
         self.started = 0
@@ -27,10 +38,10 @@ class _DummyPaperTrading:
     def start_background_sync(self):
         self.started += 1
 
-    def get_portfolio_valuation(self):
+    def get_portfolio_valuation(self, *, owner_id):
         return {"status": "ok", "cash": 100}
 
-    def buy_stock(self, ticker, name, price, quantity):
+    def buy_stock(self, ticker, name, price, quantity, *, owner_id):
         return {
             "status": "success",
             "ticker": ticker,
@@ -39,10 +50,10 @@ class _DummyPaperTrading:
             "quantity": quantity,
         }
 
-    def sell_stock(self, ticker, price, quantity):
+    def sell_stock(self, ticker, price, quantity, *, owner_id):
         return {"status": "success", "ticker": ticker, "price": price, "quantity": quantity}
 
-    def buy_stocks_bulk(self, orders):
+    def buy_stocks_bulk(self, orders, *, owner_id):
         return {
             "status": "success",
             "summary": {
@@ -61,16 +72,16 @@ class _DummyPaperTrading:
             ],
         }
 
-    def reset_account(self):
+    def reset_account(self, *, owner_id):
         return True
 
-    def deposit_cash(self, amount):
+    def deposit_cash(self, amount, *, owner_id):
         return {"status": "success", "amount": amount}
 
-    def get_trade_history(self, limit, ticker=None):
+    def get_trade_history(self, limit, ticker=None, *, owner_id):
         return {"trades": [], "limit": limit, "ticker": ticker}
 
-    def get_asset_history(self, limit, days=None):
+    def get_asset_history(self, limit, days=None, *, owner_id):
         return [{"value": 1, "limit": limit, "days": days}]
 
 
@@ -110,7 +121,12 @@ def _create_client(ctx: CommonRouteContext):
     bp = Blueprint("common_test", __name__)
     register_common_portfolio_routes(bp, ctx)
     app.register_blueprint(bp, url_prefix="/api")
-    return app.test_client()
+    client = app.test_client()
+    email = base64.urlsafe_b64encode(b"alice@example.test").decode().rstrip("=")
+    payload = f"{email}.{int(time.time()) + 120}"
+    mac = hmac.new(b"portfolio-route-test-key", payload.encode(), hashlib.sha256).hexdigest()
+    client.environ_base["HTTP_X_AUTH_IDENTITY"] = f"{payload}.{mac}"
+    return client
 
 
 def test_get_portfolio_data_starts_sync_and_returns_payload():

@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-PaperTrading SQLite 스키마/마이그레이션 초기화 유틸.
-"""
+"""Paper Trading SQLite 스키마와 소유자 분리 마이그레이션."""
 
 from __future__ import annotations
 
 import sqlite3
 import threading
 
+from services.paper_trading_constants import LEGACY_UNASSIGNED_OWNER_ID
 from services.sqlite_utils import (
     add_bounded_ready_key,
     build_sqlite_pragmas,
@@ -17,12 +16,9 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
-from services.paper_trading_constants import INITIAL_CASH_KRW
 
 SQLITE_BUSY_TIMEOUT_MS = 30_000
-SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(
-    busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS,
-)
+SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS)
 SQLITE_RETRY_ATTEMPTS = 2
 SQLITE_RETRY_DELAY_SECONDS = 0.03
 DB_INIT_READY_LOCK = threading.Lock()
@@ -31,208 +27,163 @@ DB_INIT_READY_PATHS: set[str] = set()
 DB_INIT_READY_MAX_ENTRIES = 2_048
 DB_INIT_IN_PROGRESS_PATHS: set[str] = set()
 
+_ACCOUNT_TABLES = ("portfolio", "trade_log", "asset_history", "balance")
 
-def is_duplicate_column_error(error: Exception) -> bool:
-    """ALTER TABLE ADD COLUMN 중복 컬럼 예외인지 판별한다."""
-    if not isinstance(error, sqlite3.OperationalError):
+
+def _table_exists(cursor: sqlite3.Cursor, table_name: str) -> bool:
+    return cursor.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,)
+    ).fetchone() is not None
+
+
+def _columns(cursor: sqlite3.Cursor, table_name: str) -> set[str]:
+    return {str(row[1]) for row in cursor.execute(f"PRAGMA table_info({table_name})")}
+
+
+def _owner_schema_ready(cursor: sqlite3.Cursor) -> bool:
+    if not all(_table_exists(cursor, table) and "owner_id" in _columns(cursor, table) for table in _ACCOUNT_TABLES):
         return False
-    return "duplicate column name" in str(error).lower()
+    primary_keys = {
+        table: [str(row[1]) for row in cursor.execute(f"PRAGMA table_info({table})") if int(row[5]) > 0]
+        for table in _ACCOUNT_TABLES
+    }
+    return (
+        primary_keys["balance"] == ["owner_id"]
+        and primary_keys["portfolio"] == ["owner_id", "ticker"]
+        and primary_keys["asset_history"] == ["owner_id", "date"]
+    )
+
+
+def _create_account_tables(cursor: sqlite3.Cursor) -> None:
+    cursor.execute("""CREATE TABLE IF NOT EXISTS balance (
+        owner_id TEXT PRIMARY KEY, cash REAL NOT NULL, total_deposit REAL NOT NULL DEFAULT 0)""")
+    cursor.execute("""CREATE TABLE IF NOT EXISTS portfolio (
+        owner_id TEXT NOT NULL, ticker TEXT NOT NULL, name TEXT, avg_price REAL,
+        quantity INTEGER, total_cost REAL, last_updated TEXT,
+        PRIMARY KEY (owner_id, ticker))""")
+    cursor.execute("""CREATE TABLE IF NOT EXISTS trade_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id TEXT NOT NULL, action TEXT,
+        ticker TEXT, name TEXT, price REAL, quantity INTEGER, timestamp TEXT,
+        profit REAL DEFAULT 0, profit_rate REAL DEFAULT 0)""")
+    cursor.execute("""CREATE TABLE IF NOT EXISTS asset_history (
+        owner_id TEXT NOT NULL, date TEXT NOT NULL, total_asset REAL, cash REAL,
+        stock_value REAL, timestamp TEXT, PRIMARY KEY (owner_id, date))""")
 
 
 def _create_indexes(cursor: sqlite3.Cursor) -> None:
-    # 구형 단일 timestamp 인덱스는 (timestamp, id) 복합 인덱스로 대체 가능하므로 정리한다.
-    # 불필요한 중복 인덱스를 제거해 trade_log write 비용을 줄인다.
-    cursor.execute("DROP INDEX IF EXISTS idx_trade_log_timestamp")
-    # ticker 조건 trade_log 조회가 현재 서비스 경로에 없어 ticker 기반 인덱스도 정리한다.
-    cursor.execute("DROP INDEX IF EXISTS idx_trade_log_ticker_timestamp")
-    # asset_history는 date PRIMARY KEY(auto index) 기준으로 조회하므로 timestamp 인덱스는 불필요하다.
-    cursor.execute("DROP INDEX IF EXISTS idx_asset_history_timestamp")
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_trade_log_timestamp_id
-        ON trade_log(timestamp DESC, id DESC)
-        """
-    )
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_price_cache_updated_at
-        ON price_cache(updated_at DESC)
-        """
-    )
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_portfolio_normalized_ticker
-        ON portfolio(
-            CASE
-                WHEN length(ticker) >= 6 THEN ticker
-                ELSE substr('000000' || ticker, -6)
-            END
-        )
-        """
-    )
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_portfolio_last_updated
-        ON portfolio(last_updated DESC, ticker ASC)
-        """
-    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_trade_log_timestamp_id ON trade_log(timestamp DESC, id DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_owner_updated ON portfolio(owner_id, last_updated DESC, ticker ASC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_normalized_ticker ON portfolio(CASE WHEN length(ticker) >= 6 THEN ticker ELSE substr('000000' || ticker, -6) END)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_last_updated ON portfolio(last_updated DESC, ticker ASC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_trade_log_owner_timestamp ON trade_log(owner_id, timestamp DESC, id DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_asset_history_owner_date ON asset_history(owner_id, date DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_cache_updated_at ON price_cache(updated_at DESC)")
 
 
-def _normalize_db_key(path: str) -> str:
-    return normalize_sqlite_db_key(path)
-
-
-def _load_table_columns(cursor: sqlite3.Cursor, table_name: str) -> set[str]:
-    rows = cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
-    columns: set[str] = set()
-    for row in rows:
-        if len(row) < 2:
-            continue
-        columns.add(str(row[1]))
-    return columns
-
-
-def _ensure_trade_log_columns(cursor: sqlite3.Cursor, logger) -> None:
-    columns = _load_table_columns(cursor, "trade_log")
-
-    if "profit" not in columns:
-        try:
-            cursor.execute("ALTER TABLE trade_log ADD COLUMN profit REAL DEFAULT 0")
-        except sqlite3.OperationalError as error:
-            if not is_duplicate_column_error(error):
-                logger.error(f"Failed to migrate trade_log.profit: {error}")
-
-    if "profit_rate" not in columns:
-        try:
-            cursor.execute("ALTER TABLE trade_log ADD COLUMN profit_rate REAL DEFAULT 0")
-        except sqlite3.OperationalError as error:
-            if not is_duplicate_column_error(error):
-                logger.error(f"Failed to migrate trade_log.profit_rate: {error}")
-
-
-def _ensure_balance_columns(cursor: sqlite3.Cursor, logger) -> None:
-    columns = _load_table_columns(cursor, "balance")
-    if "total_deposit" in columns:
+def _migrate_account_tables(cursor: sqlite3.Cursor) -> None:
+    if _owner_schema_ready(cursor):
         return
+    existing = [table for table in _ACCOUNT_TABLES if _table_exists(cursor, table)]
+    scoped = [table for table in existing if "owner_id" in _columns(cursor, table)]
+    if scoped:
+        if len(scoped) != len(existing):
+            raise RuntimeError("Refusing to mix scoped and legacy paper-trading tables")
+        for table in scoped:
+            if table == "balance":
+                expected_key = ["owner_id"]
+            elif table == "portfolio":
+                expected_key = ["owner_id", "ticker"]
+            elif table == "asset_history":
+                expected_key = ["owner_id", "date"]
+            else:
+                continue
+            actual_key = [str(row[1]) for row in cursor.execute(f"PRAGMA table_info({table})") if int(row[5]) > 0]
+            if actual_key != expected_key:
+                raise RuntimeError(f"Refusing to migrate malformed scoped table: {table}")
+        _create_account_tables(cursor)
+        return
+    legacy_tables: list[tuple[str, str]] = []
+    for table in _ACCOUNT_TABLES:
+        if _table_exists(cursor, table):
+            legacy_name = f"__infra060_old_{table}"
+            cursor.execute(f"DROP TABLE IF EXISTS {legacy_name}")
+            cursor.execute(f"ALTER TABLE {table} RENAME TO {legacy_name}")
+            legacy_tables.append((table, legacy_name))
+    _create_account_tables(cursor)
+    for table, legacy_name in legacy_tables:
+        columns = _columns(cursor, legacy_name)
+        if table == "balance":
+            total_deposit = "COALESCE(total_deposit, 0)" if "total_deposit" in columns else "0"
+            cursor.execute(
+                f"INSERT INTO balance(owner_id, cash, total_deposit) SELECT ?, COALESCE(cash, 0), {total_deposit} FROM {legacy_name} LIMIT 1",
+                (LEGACY_UNASSIGNED_OWNER_ID,),
+            )
+        elif table == "portfolio":
+            cursor.execute(
+                f"INSERT INTO portfolio(owner_id, ticker, name, avg_price, quantity, total_cost, last_updated) SELECT ?, ticker, name, avg_price, quantity, COALESCE(total_cost, avg_price * quantity), last_updated FROM {legacy_name}",
+                (LEGACY_UNASSIGNED_OWNER_ID,),
+            )
+        elif table == "trade_log":
+            profit = "profit" if "profit" in columns else "0"
+            profit_rate = "profit_rate" if "profit_rate" in columns else "0"
+            cursor.execute(
+                f"INSERT INTO trade_log(id, owner_id, action, ticker, name, price, quantity, timestamp, profit, profit_rate) SELECT id, ?, action, ticker, name, price, quantity, timestamp, {profit}, {profit_rate} FROM {legacy_name}",
+                (LEGACY_UNASSIGNED_OWNER_ID,),
+            )
+        else:
+            cursor.execute(
+                f"INSERT INTO asset_history(owner_id, date, total_asset, cash, stock_value, timestamp) SELECT ?, date, total_asset, cash, stock_value, timestamp FROM {legacy_name}",
+                (LEGACY_UNASSIGNED_OWNER_ID,),
+            )
+        cursor.execute(f"DROP TABLE {legacy_name}")
 
-    try:
-        cursor.execute("ALTER TABLE balance ADD COLUMN total_deposit REAL DEFAULT 0")
-    except sqlite3.OperationalError as error:
-        if not is_duplicate_column_error(error):
-            logger.error(f"Failed to migrate balance.total_deposit: {error}")
+
+def _migrate_price_cache(cursor: sqlite3.Cursor) -> None:
+    cursor.execute("CREATE TABLE IF NOT EXISTS paper_trading_schema_migrations (name TEXT PRIMARY KEY)")
+    migrated = cursor.execute(
+        "SELECT 1 FROM paper_trading_schema_migrations WHERE name = 'infra060_owner_isolation'"
+    ).fetchone()
+    if migrated:
+        cursor.execute("CREATE TABLE IF NOT EXISTS price_cache (ticker TEXT PRIMARY KEY, price INTEGER NOT NULL, updated_at TEXT NOT NULL)")
+        return
+    if _table_exists(cursor, "price_cache"):
+        cursor.execute("ALTER TABLE price_cache RENAME TO legacy_price_cache")
+        cursor.execute("DROP INDEX IF EXISTS idx_price_cache_updated_at")
+    cursor.execute("CREATE TABLE IF NOT EXISTS price_cache (ticker TEXT PRIMARY KEY, price INTEGER NOT NULL, updated_at TEXT NOT NULL)")
+    cursor.execute("INSERT INTO paper_trading_schema_migrations(name) VALUES ('infra060_owner_isolation')")
 
 
 def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
-    """Paper trading DB 초기화."""
-    db_key = _normalize_db_key(db_path)
+    """단일 IMMEDIATE 트랜잭션으로 owner 스키마와 빈 활성 가격 캐시를 준비한다."""
+    db_key = normalize_sqlite_db_key(db_path)
     with DB_INIT_READY_CONDITION:
         if force_recheck:
             DB_INIT_READY_PATHS.discard(db_key)
-        elif db_key in DB_INIT_READY_PATHS:
-            if sqlite_db_path_exists(db_path):
-                return True
-            DB_INIT_READY_PATHS.discard(db_key)
-
+        elif db_key in DB_INIT_READY_PATHS and sqlite_db_path_exists(db_path):
+            return True
         while db_key in DB_INIT_IN_PROGRESS_PATHS:
             DB_INIT_READY_CONDITION.wait()
-            if force_recheck:
-                DB_INIT_READY_PATHS.discard(db_key)
-                continue
-            if db_key in DB_INIT_READY_PATHS:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                DB_INIT_READY_PATHS.discard(db_key)
-
+            if db_key in DB_INIT_READY_PATHS and sqlite_db_path_exists(db_path):
+                return True
         DB_INIT_IN_PROGRESS_PATHS.add(db_key)
 
-    def _initialize_schema() -> None:
-        with connect_sqlite(
-            db_path,
-            timeout_seconds=30,
-            pragmas=SQLITE_INIT_PRAGMAS,
-        ) as conn:
+    succeeded = False
+    def _initialize() -> None:
+        with connect_sqlite(db_path, timeout_seconds=30, pragmas=SQLITE_INIT_PRAGMAS) as conn:
             cursor = conn.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
+            try:
+                _migrate_account_tables(cursor)
+                _migrate_price_cache(cursor)
+                _create_indexes(cursor)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS portfolio (
-                    ticker TEXT PRIMARY KEY,
-                    name TEXT,
-                    avg_price REAL,
-                    quantity INTEGER,
-                    total_cost REAL,
-                    last_updated TEXT
-                )
-                """
-            )
-
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS trade_log (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    action TEXT,
-                    ticker TEXT,
-                    name TEXT,
-                    price REAL,
-                    quantity INTEGER,
-                    timestamp TEXT,
-                    profit REAL DEFAULT 0,
-                    profit_rate REAL DEFAULT 0
-                )
-                """
-            )
-
-            _ensure_trade_log_columns(cursor, logger)
-
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS asset_history (
-                    date TEXT PRIMARY KEY,
-                    total_asset REAL,
-                    cash REAL,
-                    stock_value REAL,
-                    timestamp TEXT
-                )
-                """
-            )
-
-            cursor.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS balance (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    cash REAL DEFAULT {INITIAL_CASH_KRW},
-                    total_deposit REAL DEFAULT 0
-                )
-                """
-            )
-
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS price_cache (
-                    ticker TEXT PRIMARY KEY,
-                    price INTEGER NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-
-            _ensure_balance_columns(cursor, logger)
-
-            cursor.execute(
-                "INSERT OR IGNORE INTO balance (id, cash, total_deposit) VALUES (1, ?, 0)",
-                (INITIAL_CASH_KRW,),
-            )
-            _create_indexes(cursor)
-            conn.commit()
-
-    initialization_succeeded = False
     try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
+        run_sqlite_with_retry(_initialize, max_retries=SQLITE_RETRY_ATTEMPTS, retry_delay_seconds=SQLITE_RETRY_DELAY_SECONDS)
+        succeeded = True
         return True
     except Exception as error:
         logger.error(f"Failed to initialize paper trading db: {error}")
@@ -240,12 +191,8 @@ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
     finally:
         with DB_INIT_READY_CONDITION:
             DB_INIT_IN_PROGRESS_PATHS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    DB_INIT_READY_PATHS,
-                    db_key,
-                    max_entries=DB_INIT_READY_MAX_ENTRIES,
-                )
+            if succeeded:
+                add_bounded_ready_key(DB_INIT_READY_PATHS, db_key, max_entries=DB_INIT_READY_MAX_ENTRIES)
             else:
                 DB_INIT_READY_PATHS.discard(db_key)
             DB_INIT_READY_CONDITION.notify_all()

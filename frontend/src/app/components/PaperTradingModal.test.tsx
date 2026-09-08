@@ -2,6 +2,10 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import PaperTradingModal from './PaperTradingModal';
 
+vi.mock('next-auth/react', () => ({
+  useSession: () => ({ data: { user: { email: 'modal@example.test' } }, status: 'authenticated' }),
+}));
+
 // Mock lightweight-charts to avoid canvas/DOM issues in jsdom
 vi.mock('lightweight-charts', () => ({
   createChart: () => ({
@@ -23,6 +27,21 @@ vi.mock('lightweight-charts', () => ({
 vi.mock('./BuyStockModal', () => ({ default: () => null }));
 vi.mock('./SellStockModal', () => ({ default: () => null }));
 vi.mock('./ConfirmationModal', () => ({ default: () => null }));
+vi.mock('./PaperTradingAssetChart', async () => {
+  const { useState } = await import('react');
+  function MockPaperTradingAssetChart({ refreshKey }: { refreshKey: number }) {
+    const [timeRange, setTimeRange] = useState('1Y');
+    return (
+      <button onClick={() => setTimeRange('3M')}>
+        차트 기간 {timeRange} / 갱신 {refreshKey}
+      </button>
+    );
+  }
+
+  return {
+    default: MockPaperTradingAssetChart,
+  };
+});
 
 const mockPortfolio = {
   holdings: [],
@@ -35,6 +54,7 @@ const mockPortfolio = {
 };
 
 vi.mock('@/lib/api', () => ({
+  isAuthenticationError: () => false,
   paperTradingAPI: {
     getPortfolio: vi.fn(async () => mockPortfolio),
     getChartData: vi.fn(async () => ({ data: [] })),
@@ -179,5 +199,31 @@ describe('handleDeposit limit validation', () => {
     expect(window.alert).toHaveBeenCalledWith(
       expect.stringContaining('충전되었습니다'),
     );
+  });
+});
+
+describe('[INFRA-060] 동일 계정 갱신', () => {
+  it('입금으로 다시 조회해도 선택한 차트 기간을 유지한다', async () => {
+    renderOpen();
+    await waitFor(() => expect(screen.queryByText('예수금')).not.toBeNull());
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('수익 차트'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText('차트 기간 1Y / 갱신 0'));
+    });
+    expect(screen.getByText('차트 기간 3M / 갱신 0')).not.toBeNull();
+
+    const plusButton = document.querySelector('button.w-4.h-4') as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(plusButton);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText('충전하기'));
+    });
+
+    await waitFor(() => expect(paperTradingAPI.deposit).toHaveBeenCalledWith(10_000_000));
+    expect(screen.getByText('차트 기간 3M / 갱신 1')).not.toBeNull();
   });
 });

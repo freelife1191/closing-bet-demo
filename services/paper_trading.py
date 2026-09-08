@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover - non-POSIX 환경 방어
     fcntl = None
 
 from services.paper_trading_db_setup import init_db as init_db_impl
+from services.paper_trading_constants import LEGACY_UNASSIGNED_OWNER_ID
 from services.paper_trading_history_mixin import PaperTradingHistoryMixin
 from services.paper_trading_price_fetchers import (
     fetch_prices_naver as fetch_prices_naver_impl,
@@ -87,10 +88,10 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         base_pragmas=("PRAGMA temp_store=MEMORY", "PRAGMA cache_size=-8000"),
     )
 
-    def __init__(self, db_name='paper_trading.db', auto_start_sync=True):
+    def __init__(self, db_name='paper_trading.db', auto_start_sync=True, *, db_path: str | None = None):
         # Root path logic
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.db_path = os.path.join(base_dir, 'data', db_name)
+        self.db_path = db_path if db_path is not None else os.path.join(base_dir, 'data', db_name)
 
         # Cache for real-time prices
         self.price_cache = {}
@@ -111,7 +112,7 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
 
         self._price_cache_schema_ready = self._init_db()
         if not self._price_cache_schema_ready:
-            self._ensure_price_cache_table(force_recheck=True)
+            raise RuntimeError("Paper trading owner migration failed")
         self._load_price_cache_from_db()
 
         # [Optimization] Auto-start background sync on initialization
@@ -223,8 +224,6 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             self._price_cache_schema_ready = False
         self._reset_price_cache_prune_state()
         recovered = self._init_db(force_recheck=True)
-        if not recovered:
-            recovered = self._ensure_price_cache_table(force_recheck=True)
         if recovered:
             with self._price_cache_schema_condition:
                 self._price_cache_schema_ready = True
@@ -587,8 +586,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
                             ELSE substr('000000' || ticker, -6)
                         END AS normalized_ticker
                     FROM portfolio
-                    WHERE ticker IS NOT NULL
-                    """
+                    WHERE ticker IS NOT NULL AND owner_id != ?
+                    """,
+                    (LEGACY_UNASSIGNED_OWNER_ID,),
                 )
                 return [str(row[0]) for row in cursor.fetchall() if row and row[0] is not None]
 
@@ -751,19 +751,31 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
             current_stock_val=current_stock_val,
         )
 
-    def get_portfolio_valuation(self):
+    def get_portfolio_valuation(self, *, owner_id: str):
         """Get portfolio with cached prices (Fast)"""
+        owner_id = self._validate_owner_id(owner_id)
+        def owner_exists_operation():
+            with self.get_read_context() as conn:
+                return conn.execute("SELECT 1 FROM balance WHERE owner_id=?", (owner_id,)).fetchone()
+        owner_exists = self._execute_db_operation_with_schema_retry(owner_exists_operation)
+        if owner_exists is None:
+            self._ensure_owner(owner_id)
         return get_portfolio_valuation_impl(
             get_read_context_fn=self.get_read_context,
             cache_lock=self.cache_lock,
             price_cache=self.price_cache,
             wait_for_initial_price_sync_fn=self._wait_for_initial_price_sync,
             build_valuated_holding_fn=self._build_valuated_holding,
-            record_asset_history_fn=self.record_asset_history,
-            record_asset_history_with_cash_fn=getattr(self, "record_asset_history_with_cash", None),
+            record_asset_history_fn=lambda current_stock_value: self.record_asset_history(
+                current_stock_value, owner_id=owner_id
+            ),
+            record_asset_history_with_cash_fn=lambda **kwargs: self.record_asset_history_with_cash(
+                owner_id=owner_id, **kwargs
+            ),
             run_db_operation_with_schema_retry_fn=self._execute_db_operation_with_schema_retry,
             last_update=self.last_update,
             logger=logger,
+            owner_id=owner_id,
         )
 
 

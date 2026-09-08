@@ -276,6 +276,10 @@ def test_load_naver_stock_detail_payload_clears_event_loop_after_run(monkeypatch
 
     fake_collectors.NaverFinanceCollector = _FakeCollector
     monkeypatch.setitem(sys.modules, "engine.collectors", fake_collectors)
+    # 실제 구현이 우선 import하는 모듈 경로도 격리해 네트워크 호출을 막는다.
+    fake_naver = types.ModuleType("engine.collectors.naver")
+    fake_naver.NaverFinanceCollector = _FakeCollector
+    monkeypatch.setitem(sys.modules, "engine.collectors.naver", fake_naver)
 
     calls: list[object] = []
 

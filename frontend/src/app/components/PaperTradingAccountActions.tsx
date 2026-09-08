@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { paperTradingAPI } from '@/lib/api';
+import { CaptureAccountAction } from '@/lib/accountActionGuard';
 import ConfirmationModal from './ConfirmationModal';
 
 const MAX_DEPOSIT_PER_TX = 1_000_000_000_000; // 1조원
@@ -15,16 +16,18 @@ const DEPOSIT_STEPS: ReadonlyArray<readonly [number, string]> = [
 
 interface DepositPanelProps {
   cash: number;
+  captureAccountAction: CaptureAccountAction;
   /** 충전이 끝났음을 모달 본체에 알린다. 본체가 포트폴리오를 다시 받는다. */
   onDeposited: () => void;
 }
 
 /** 모의투자 모달 머리의 예수금 표시와 충전 팝오버다. */
-export function DepositPanel({ cash, onDeposited }: DepositPanelProps) {
+export function DepositPanel({ cash, captureAccountAction, onDeposited }: DepositPanelProps) {
   const [showDeposit, setShowDeposit] = useState(false);
   const [depositAmount, setDepositAmount] = useState('10000000'); // 기본 1000만원
 
   const handleDeposit = async () => {
+    const isCurrent = captureAccountAction();
     const amt = parseInt(depositAmount.replace(/,/g, ''), 10);
     if (!amt || amt <= 0) return;
     if (amt > MAX_DEPOSIT_PER_TX) {
@@ -33,10 +36,12 @@ export function DepositPanel({ cash, onDeposited }: DepositPanelProps) {
     }
     try {
       await paperTradingAPI.deposit(amt);
+      if (!isCurrent()) return;
       alert(`${amt.toLocaleString()}원이 충전되었습니다.`);
       setShowDeposit(false);
       onDeposited();
     } catch (e: any) {
+      if (!isCurrent()) return;
       alert(e.message);
     }
   };
@@ -90,20 +95,24 @@ export function DepositPanel({ cash, onDeposited }: DepositPanelProps) {
 }
 
 interface ResetAccountButtonProps {
+  captureAccountAction: CaptureAccountAction;
   /** 초기화가 끝났음을 모달 본체에 알린다. */
   onReset: () => void;
 }
 
 /** 계정 초기화 버튼과 그 확인 대화상자다. 되돌릴 수 없는 조작이라 확인을 한 번 받는다. */
-export function ResetAccountButton({ onReset }: ResetAccountButtonProps) {
+export function ResetAccountButton({ captureAccountAction, onReset }: ResetAccountButtonProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleConfirm = async () => {
+    const isCurrent = captureAccountAction();
     try {
       await paperTradingAPI.reset();
+      if (!isCurrent()) return;
       setConfirmOpen(false);
       onReset();
     } catch (e) {
+      if (!isCurrent()) return;
       alert('초기화 실패');
     }
   };
