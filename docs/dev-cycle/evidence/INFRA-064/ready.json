@@ -1,0 +1,17 @@
+{
+  "url": "http://localhost:64981/dashboard/kr",
+  "vcp_url": "http://localhost:64981/dashboard/kr/vcp",
+  "flask_port": 64980,
+  "next_port": 64981,
+  "next_pid": 11477,
+  "next_pgid": 11477,
+  "cookie_file": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/admin.cookies.json",
+  "admin_cookie": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/admin.cookies.json",
+  "viewer_cookie": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/viewer.cookies.json",
+  "cookie_files": {
+    "admin": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/admin.cookies.json",
+    "viewer": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/viewer.cookies.json"
+  },
+  "control_url": "http://127.0.0.1:64980/fixture/control",
+  "metrics": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra064-9f4s45_s/metrics.json"
+}

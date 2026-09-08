@@ -1,0 +1,7 @@
+{
+  "next_stopped": true,
+  "flask_stopped": true,
+  "flask_thread_stopped": true,
+  "analysis_stopped": true,
+  "errors": []
+}

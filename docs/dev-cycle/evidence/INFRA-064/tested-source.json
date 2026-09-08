@@ -1,0 +1,13 @@
+{
+  "commit": "5cc21835fd38ddad1ea60e7e09c7d7257b00cc94",
+  "files": {
+    "app/routes/kr_market.py": "f47a7c806cf6166b6213a1ca703cdcb9ebff37b13b38e0e9050cafbedf23176a",
+    "app/routes/kr_market_system_http_routes.py": "4b6c9c30dbdca4f2723672760fe4207f2c1faef99a2413108816b1bcd1784a88",
+    "services/kr_market_market_gate_validity.py": "d307822f7c62c4b24f5fb6950ed375536fae73aa17c73ceee281e92cff169f00",
+    "frontend/src/app/dashboard/kr/page.tsx": "db6d63b3adb4030517903a5a561654cebd24db340520f6b8baecd26fa04a464d",
+    "frontend/src/app/dashboard/kr/vcp/page.tsx": "2aaff2f64f5cd0a81ded3e60647f6a1140d3bd44c13f1fe3b79dc297bdb735eb",
+    "frontend/src/lib/api.ts": "d25b60b91916d7b400c66dd9c631fca3bc09d5e7f45935c45f713f0b2861c5c7",
+    "frontend/src/proxy.ts": "07430cf5989f9954480e0e4914c0e069991d9daf146e80dcc98b3204ef8f7909"
+  },
+  "match": true
+}

@@ -1,0 +1,178 @@
+{
+  "passed": true,
+  "cookies": "none",
+  "rows": [
+    {
+      "query": "date=19990101",
+      "http_status": 200,
+      "response": {
+        "commodities": {},
+        "dataset_date": "1999-01-01",
+        "indices": {
+          "kosdaq": {
+            "change_pct": 0.2,
+            "value": 850
+          },
+          "kospi": {
+            "change_pct": 0.1,
+            "value": 2700
+          }
+        },
+        "kosdaq_change_pct": 0.2,
+        "kosdaq_close": 850,
+        "kospi_change_pct": 0.1,
+        "kospi_close": 2700,
+        "label": "Bearish",
+        "score": 31,
+        "sectors": [
+          {
+            "change_pct": 1.2,
+            "name": "격리 QA",
+            "signal": "bullish"
+          }
+        ],
+        "status": "RED",
+        "timestamp": "1999-01-01T15:40:00",
+        "total_score": 31
+      }
+    },
+    {
+      "query": "date=1999-01-02",
+      "http_status": 200,
+      "response": {
+        "commodities": {},
+        "is_gate_open": true,
+        "kosdaq_change_pct": 0,
+        "kosdaq_close": 0,
+        "kospi_change_pct": 0,
+        "kospi_close": 0,
+        "label": "Neutral",
+        "message": "데이터 없음",
+        "score": 50,
+        "status": "YELLOW",
+        "updated_at": "2026-09-08T21:07:30.424838"
+      }
+    },
+    {
+      "query": "date=1999-01-03",
+      "http_status": 200,
+      "response": {
+        "commodities": {},
+        "is_gate_open": true,
+        "kosdaq_change_pct": 0,
+        "kosdaq_close": 0,
+        "kospi_change_pct": 0,
+        "kospi_close": 0,
+        "label": "Neutral",
+        "message": "데이터 없음",
+        "score": 50,
+        "status": "YELLOW",
+        "updated_at": "2026-09-08T21:07:30.431059"
+      }
+    },
+    {
+      "query": "date=",
+      "http_status": 200,
+      "response": {
+        "commodities": {},
+        "dataset_date": "2026-09-08",
+        "indices": {
+          "kosdaq": {
+            "change_pct": 0.2,
+            "value": 850
+          },
+          "kospi": {
+            "change_pct": 0.1,
+            "value": 2700
+          }
+        },
+        "kosdaq_change_pct": 0.2,
+        "kosdaq_close": 850,
+        "kospi_change_pct": 0.1,
+        "kospi_close": 2700,
+        "label": "Bullish",
+        "score": 72,
+        "sectors": [
+          {
+            "change_pct": 1.2,
+            "name": "격리 QA",
+            "signal": "bullish"
+          }
+        ],
+        "status": "GREEN",
+        "timestamp": "2026-09-08T21:06:24.729891",
+        "total_score": 72
+      }
+    },
+    {
+      "query": "date=%20",
+      "http_status": 200,
+      "response": {
+        "commodities": {},
+        "dataset_date": "2026-09-08",
+        "indices": {
+          "kosdaq": {
+            "change_pct": 0.2,
+            "value": 850
+          },
+          "kospi": {
+            "change_pct": 0.1,
+            "value": 2700
+          }
+        },
+        "kosdaq_change_pct": 0.2,
+        "kosdaq_close": 850,
+        "kospi_change_pct": 0.1,
+        "kospi_close": 2700,
+        "label": "Bullish",
+        "score": 72,
+        "sectors": [
+          {
+            "change_pct": 1.2,
+            "name": "격리 QA",
+            "signal": "bullish"
+          }
+        ],
+        "status": "GREEN",
+        "timestamp": "2026-09-08T21:06:24.729891",
+        "total_score": 72
+      }
+    },
+    {
+      "query": "date=%ED%95%9C%EA%B8%80",
+      "http_status": 200,
+      "response": {
+        "commodities": {},
+        "is_gate_open": true,
+        "kosdaq_change_pct": 0,
+        "kosdaq_close": 0,
+        "kospi_change_pct": 0,
+        "kospi_close": 0,
+        "label": "Neutral",
+        "message": "데이터 없음",
+        "score": 50,
+        "status": "YELLOW",
+        "updated_at": "2026-09-08T21:07:30.450953"
+      }
+    },
+    {
+      "query": "date=../../missing",
+      "http_status": 200,
+      "response": {
+        "commodities": {},
+        "is_gate_open": true,
+        "kosdaq_change_pct": 0,
+        "kosdaq_close": 0,
+        "kospi_change_pct": 0,
+        "kospi_close": 0,
+        "label": "Neutral",
+        "message": "데이터 없음",
+        "score": 50,
+        "status": "YELLOW",
+        "updated_at": "2026-09-08T21:07:30.457872"
+      }
+    }
+  ],
+  "final_analysis": 3,
+  "final_save": 1
+}

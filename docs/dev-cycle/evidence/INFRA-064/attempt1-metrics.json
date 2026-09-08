@@ -1,0 +1,11 @@
+{
+  "mode": "success",
+  "hold": false,
+  "clock_offset_seconds": 0.0,
+  "analysis_count": 0,
+  "save_count": 0,
+  "api_requests": [],
+  "control_events": [],
+  "hold_started": false,
+  "release_hold": false
+}

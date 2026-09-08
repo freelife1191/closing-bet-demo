@@ -1,0 +1,9 @@
+{
+  "status": "passed",
+  "failure_analysis": 1,
+  "repoll_after_empty": 0,
+  "at299_analysis": 1,
+  "at300_analysis": 2,
+  "recovery_analysis": 3,
+  "recovery_save": 1
+}

@@ -1,0 +1,263 @@
+{
+  "mode": "success",
+  "hold": true,
+  "clock_offset_seconds": 0.0,
+  "analysis_count": 1,
+  "save_count": 0,
+  "api_requests": [
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869034517",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869034517",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869039746",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869039747",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869044815",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869044815",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869049881",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869049881",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869054946",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869054946",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869060015",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869060015",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869065081",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869065081",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    }
+  ],
+  "control_events": [
+    {
+      "event": "snapshot",
+      "at": "2026-09-08T21:03:29.311672"
+    },
+    {
+      "event": "reset",
+      "at": "2026-09-08T21:03:46.019752"
+    },
+    {
+      "event": "hold",
+      "at": "2026-09-08T21:03:46.068611"
+    }
+  ],
+  "hold_started": true,
+  "release_hold": false
+}

@@ -1,0 +1,5 @@
+{
+  "flask": 64980,
+  "next": 64981,
+  "policy": "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))"
+}

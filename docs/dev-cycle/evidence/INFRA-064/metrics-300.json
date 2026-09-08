@@ -1,0 +1,419 @@
+{
+  "mode": "fail",
+  "hold": false,
+  "clock_offset_seconds": 300.0,
+  "analysis_count": 2,
+  "save_count": 0,
+  "api_requests": [
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/config/interval",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869163171",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869163172",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869168239",
+      "response_status": 200,
+      "response": {
+        "status": "YELLOW",
+        "score": 50,
+        "message": "데이터 없음"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869168240",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/config/interval",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869176528",
+      "response_status": 200,
+      "response": {
+        "status": "YELLOW",
+        "score": 50,
+        "message": "데이터 없음"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869176529",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869176531",
+      "response_status": 200,
+      "response": {
+        "status": "YELLOW",
+        "score": 50,
+        "message": "데이터 없음"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869176531",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/config/interval",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/config/interval",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869178200",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869178200",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869183243",
+      "response_status": 200,
+      "response": {
+        "status": "YELLOW",
+        "score": 50,
+        "message": "데이터 없음"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869183243",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    }
+  ],
+  "control_events": [
+    {
+      "event": "snapshot",
+      "at": "2026-09-08T21:03:29.311672"
+    },
+    {
+      "event": "reset",
+      "at": "2026-09-08T21:03:46.019752"
+    },
+    {
+      "event": "hold",
+      "at": "2026-09-08T21:03:46.068611"
+    },
+    {
+      "event": "release",
+      "at": "2026-09-08T21:04:28.410398"
+    },
+    {
+      "event": "reset",
+      "at": "2026-09-08T21:05:03.111864"
+    },
+    {
+      "event": "mode",
+      "at": "2026-09-08T21:05:03.167519"
+    },
+    {
+      "event": "hold",
+      "at": "2026-09-08T21:05:03.221576"
+    },
+    {
+      "event": "release",
+      "at": "2026-09-08T21:05:10.769352"
+    },
+    {
+      "event": "reset",
+      "at": "2026-09-08T21:06:02.749442"
+    },
+    {
+      "event": "mode",
+      "at": "2026-09-08T21:06:02.800065"
+    },
+    {
+      "event": "advance",
+      "at": "2026-09-08T21:06:16.257675"
+    },
+    {
+      "event": "advance",
+      "at": "2026-09-08T21:06:17.835159"
+    }
+  ],
+  "hold_started": true,
+  "release_hold": true
+}

@@ -1,0 +1,101 @@
+[
+  {
+    "file": "current.png",
+    "sha256": "082efcb883fb2bca12d181e3e0fc39b6fed32f637e20f9da14f64c5c7a42fa90",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "실시간72/Bullish"
+  },
+  {
+    "file": "historical.png",
+    "sha256": "991f24922981c2c65b4edff7be8bd371f9a2d3f76ebbe80fc9638f3aadef108d",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "1999-01-01 날짜 입력31/Bearish"
+  },
+  {
+    "file": "historical-missing.png",
+    "sha256": "f737e66c703d70d1a7c674d84b89211d2ff8399defabc27d5d305ec218eae381",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "1999-01-02 입력50/Neutral"
+  },
+  {
+    "file": "running.png",
+    "sha256": "cf67b47ae814c400586a16c10e08aac6fa0999e53151f58b7601067bcc940642",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "실행중 API initializing, 기존UI50/Neutral"
+  },
+  {
+    "file": "success.png",
+    "sha256": "43d2868cd59fba7500f4388c105f868e71994e5f94bd56602b3ede3a3cdcce07",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "성공72/Bullish"
+  },
+  {
+    "file": "failure.png",
+    "sha256": "90376a9090fa8bd5b0840e21b21d38536ae4eb0d9bdbc8bfabec4a7b6ec212ba",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "분석실패후50/Neutral"
+  },
+  {
+    "file": "cooldown-299.png",
+    "sha256": "f9c190235339d538246cd20e088a89625141af563e3ca7af189100772f89b3d3",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "299초차단50/Neutral"
+  },
+  {
+    "file": "recovery.png",
+    "sha256": "c5985350055dd75734ddf9d8b4c697f87452c97d388a6b287f2dc10ccd9d7f1d",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "재시도복구72/Bullish"
+  },
+  {
+    "file": "vcp.png",
+    "sha256": "58cbc68cc152e1096dc9172cd53a3f400e3c00cb6c3a76f954b51ca74c516f83",
+    "dimensions": [
+      1280,
+      577
+    ],
+    "opened_with": "view_image",
+    "opened": true,
+    "observation": "VCP빈표 정상 렌더; GET72 수신"
+  }
+]

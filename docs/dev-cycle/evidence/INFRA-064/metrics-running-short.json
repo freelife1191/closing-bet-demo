@@ -1,0 +1,199 @@
+{
+  "mode": "success",
+  "hold": true,
+  "clock_offset_seconds": 0.0,
+  "analysis_count": 1,
+  "save_count": 0,
+  "api_requests": [
+    {
+      "method": "GET",
+      "path": "/api/kr/config/interval",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869103594",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869103594",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869103596",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869103597",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/config/interval",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/market-gate",
+      "query": "_t=1788869108696",
+      "response_status": 200,
+      "response": {
+        "status": "initializing",
+        "score": 50,
+        "message": "데이터 분석 중... 잠시만 기다려주세요."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/signals",
+      "query": "_t=1788869108696",
+      "response_status": 200,
+      "response": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/status",
+      "query": "",
+      "response_status": 200,
+      "response": {
+        "status": "success"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/backtest-summary",
+      "query": "",
+      "response_status": 200,
+      "response": {}
+    }
+  ],
+  "control_events": [
+    {
+      "event": "snapshot",
+      "at": "2026-09-08T21:03:29.311672"
+    },
+    {
+      "event": "reset",
+      "at": "2026-09-08T21:03:46.019752"
+    },
+    {
+      "event": "hold",
+      "at": "2026-09-08T21:03:46.068611"
+    },
+    {
+      "event": "release",
+      "at": "2026-09-08T21:04:28.410398"
+    },
+    {
+      "event": "reset",
+      "at": "2026-09-08T21:05:03.111864"
+    },
+    {
+      "event": "mode",
+      "at": "2026-09-08T21:05:03.167519"
+    },
+    {
+      "event": "hold",
+      "at": "2026-09-08T21:05:03.221576"
+    }
+  ],
+  "hold_started": true,
+  "release_hold": false
+}

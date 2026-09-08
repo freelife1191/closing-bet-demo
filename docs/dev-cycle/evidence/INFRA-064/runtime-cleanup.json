@@ -1,0 +1,20 @@
+{
+  "fixture_exit": 0,
+  "proxy_exit": 0,
+  "browser_close_exit": 0,
+  "ports_closed": [
+    64538,
+    64539,
+    64555,
+    64980,
+    64981,
+    64986
+  ],
+  "namespaces_removed": [
+    "devcycle-infra064-9f4s45",
+    "devcycle-infra064-9f4s45-r2"
+  ],
+  "owned_chrome_processes": 0,
+  "original_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "clone_cleanup": "after integration"
+}
