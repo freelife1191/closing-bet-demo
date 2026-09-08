@@ -1,0 +1,17 @@
+{
+  "mode": "build",
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra055-x_hko9la/checkout",
+  "head": "d2c7291bc8f3f3e47b91f27dc76f854d244cdc36",
+  "backend": {
+    "port": 49878,
+    "pid": 4105,
+    "pgid": 4105,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra055-x_hko9la/checkout"
+  },
+  "next": {
+    "port": 49879,
+    "pid": 4789,
+    "pgid": 4789,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra055-x_hko9la/checkout/frontend"
+  }
+}

@@ -1,0 +1,149 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/kr/config/interval",
+    "status": 200,
+    "identity": "anonymous",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/market-gate",
+    "status": 200,
+    "identity": "anonymous",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/signals",
+    "status": 200,
+    "identity": "anonymous",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/status",
+    "status": 200,
+    "identity": "anonymous",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/backtest-summary",
+    "status": 200,
+    "identity": "anonymous",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/user/quota",
+    "status": 200,
+    "identity": "anonymous",
+    "count": 2
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/check",
+    "status": 200,
+    "identity": "admin",
+    "count": 23
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/user/quota",
+    "status": 200,
+    "identity": "admin",
+    "count": 8
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/config/interval",
+    "status": 200,
+    "identity": "admin",
+    "count": 5
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/market-gate",
+    "status": 200,
+    "identity": "admin",
+    "count": 5
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/signals",
+    "status": 200,
+    "identity": "admin",
+    "count": 5
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/status",
+    "status": 200,
+    "identity": "admin",
+    "count": 5
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/backtest-summary",
+    "status": 200,
+    "identity": "admin",
+    "count": 5
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/env",
+    "status": 200,
+    "identity": "anonymous",
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/config/interval",
+    "status": 200,
+    "identity": "viewer",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/market-gate",
+    "status": 200,
+    "identity": "viewer",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/signals",
+    "status": 200,
+    "identity": "viewer",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/status",
+    "status": 200,
+    "identity": "viewer",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/backtest-summary",
+    "status": 200,
+    "identity": "viewer",
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/check",
+    "status": 200,
+    "identity": "viewer",
+    "count": 17
+  },
+  {
+    "method": "GET",
+    "path": "/api/kr/user/quota",
+    "status": 200,
+    "identity": "viewer",
+    "count": 7
+  }
+]

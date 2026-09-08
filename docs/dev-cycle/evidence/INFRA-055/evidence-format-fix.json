@@ -1,0 +1,6 @@
+{
+  "initial_staged_diff_check_exit": 2,
+  "cause": "raw SSE ends with blank event separator; git reports new blank line at EOF",
+  "fix": "preserve exact raw bytes in gzip instead of editing SSE source",
+  "product_changes": false
+}

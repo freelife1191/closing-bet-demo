@@ -1,0 +1,13 @@
+{
+  "49878": "no listener",
+  "49879": "no listener",
+  "51760": "no listener",
+  "5990": "not alive",
+  "6084": "not alive",
+  "namespace": "removed exact owned namespace",
+  "source_hashes": "7/7 match",
+  "user_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "fake_env_unchanged": true,
+  "legacy_link_removed": true,
+  "temp_clone_cleanup": "pending after integration"
+}
