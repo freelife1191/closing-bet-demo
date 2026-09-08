@@ -899,7 +899,11 @@ export default function KRMarketOverview() {
       </section>
 
       {/* KPI Cards (Performance Overview) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* [INFRA-059] 네 번째 칸(Refresh Data)이 관리자 전용이 되어 비관리자에게는 셋만
+          남는다. lg:grid-cols-4 를 그대로 두면 오른쪽 1/4 이 빈 채로 보인다. 두 클래스명이
+          소스에 문자열로 있으므로 Tailwind 의 정적 추출에 걸린다. 문자열을 조립해 만들면
+          그때는 빠진다. */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${canOperate ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
         {/* 1. Today's Signals */}
         {(() => {
           const signalCount = signalsData?.signals?.length ?? 0;

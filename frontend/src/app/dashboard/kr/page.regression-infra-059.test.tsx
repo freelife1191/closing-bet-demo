@@ -63,6 +63,9 @@ describe('[INFRA-059] 관리자 전용 조작의 노출', () => {
     // 값 자체는 계속 보인다. GET /api/kr/config/interval 은 열려 있고, 이 값으로
     // 화면 자동 갱신도 그대로 돈다.
     expect(screen.queryByText('30분')).not.toBeNull();
+    // Refresh Data 가 빠지면 그 그리드는 세 칸이다. lg:grid-cols-4 를 그대로 두면
+    // 오른쪽 1/4 이 빈 채로 보인다(agent-browser 로 실측해 확인한 자리다).
+    expect(container.querySelector('.lg\\:grid-cols-3')).not.toBeNull();
   });
 
   it('관리자에게는 세 자리가 모두 보인다', async () => {
@@ -75,6 +78,8 @@ describe('[INFRA-059] 관리자 전용 조작의 노출', () => {
     expect(screen.queryByText('Refresh Data')).not.toBeNull();
     expect(screen.queryByTitle('Refresh Market Gate Only')).not.toBeNull();
     expect(container.querySelector('select')).not.toBeNull();
+    // 네 칸이 다 차므로 그리드도 넷이다.
+    expect(container.querySelector('.lg\\:grid-cols-4')).not.toBeNull();
   });
 
   it('주기 변경이 실패하면 화면 값을 되돌린다', async () => {
