@@ -47,7 +47,7 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 | 과잉설계 리뷰 | `/ponytail-review` | `code-reviewer`에 `CLAUDE.md`의 ponytail 기준 전달 |
 | 코드 리뷰 | `feature-dev:code-reviewer` | `$code-review` |
 | 심층 리뷰(T3) | `/review` | `$review` |
-| 보안 리뷰 보강 (인증·시크릿) | `oh-my-claudecode:security-reviewer` | `$security-review` |
+| 보안 리뷰 보강 (인증·시크릿) | `oh-my-claudecode:security-reviewer` | `$security-review` → 보안 범위의 `code-reviewer` |
 | 카테고리 감사 | `dev-workflow` | `agent_type: "dev-workflow"` |
 
 이후 본문의 「QA 계획」「QA 실행」「계획 검토」「보안 리뷰 보강」은 이 표의 해당 환경 단계를

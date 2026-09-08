@@ -98,7 +98,9 @@ architect 두 레인을 병렬 실행하고 두 결과를 받은 뒤, T3는 `$re
 세 가지를 직접 확인한 뒤 `oh-my-claudecode:security-reviewer` 를 `Agent` 도구에 `name` 을 주어
 읽기 전용으로 띄우고, 변경 파일 목록과 기준 SHA 를 전달해 OWASP 관점의 지적을 받는다. 이
 에이전트는 하드코딩된 키와 로그·오류 노출을 보며 위 세 가지를 대체하지 않는다. codex 에서는
-`$security-review` 로, 플러그인이 없는 Claude Code 에서는 `security-review` 스킬로 대신하고
+`$security-review`로 보안 범위의 독립 `code-reviewer`를 호출한다. 설치된 OMX가 deprecated로
+분류한 `security-reviewer` 역할은 재설치하지 않는다. 플러그인이 없는 Claude Code에서는
+`security-review` 스킬로 대신하고
 그 사실을 기록한다. 지적의 반영과 미반영 사유는 다른 리뷰와 같이 TODO 체크에 적는다.
 
 줄 수는 `git diff --stat` 의 추가와 삭제 합계를 쓴다. 구현 파일이 함께 바뀌는 경우에

@@ -1,0 +1,12 @@
+from flask import Flask, jsonify, request
+
+app = Flask(__name__)
+ACCOUNTS = {"alice": {"balance": 100}, "bob": {"balance": 200}}
+
+@app.get("/account/<owner>")
+def account(owner):
+    return jsonify(ACCOUNTS[owner])
+
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok"})

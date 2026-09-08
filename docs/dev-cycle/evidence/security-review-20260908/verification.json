@@ -1,0 +1,52 @@
+{
+  "scope": "security-review installed-skill routing repair",
+  "authorization": "2026-09-08 사용자: 확인된 사항들 검토해서 조치해줘",
+  "catalog": "/usr/local/lib/node_modules/oh-my-codex/templates/catalog-manifest.json",
+  "root_cause": {
+    "security-reviewer": "deprecated",
+    "code-reviewer": "active",
+    "installed_skill": "stale delegation to deprecated role"
+  },
+  "installed_skill": "/Users/freelife/.agents/skills/security-review/SKILL.md",
+  "backup": "/Users/freelife/.codex/backups/security-review-20260908/SKILL.md.before",
+  "before_sha256": "163e27edf0a42bfceb469701f9101d910f13d7236c58a6b5f459dded72838fa4",
+  "after_sha256": "6eac5148fb0a3d6f3252e0e01773dd4141eb90c8022dc1b1d6e8c71bccc565a9",
+  "validation": {
+    "quick_validate_exit": 0,
+    "routing": "PASS",
+    "role": "code-reviewer",
+    "native_child": "/root/security_review_verified",
+    "report": "reviewer.md",
+    "expected_signal": "OWASP A01 owner authorization gap found; fixed health response not flagged",
+    "actual_signal": "HIGH A01 fixture.py:6-8; LOW absent-owner error; health no issue",
+    "product_verdict": "REQUEST CHANGES on deliberately insecure test fixture; not application finding",
+    "unrun": [
+      "fixture execution",
+      "HTTP E2E",
+      "dependency audit",
+      "native OMX lifecycle"
+    ],
+    "patch_replay_exit": 0,
+    "patch_replay_exact_match": true
+  },
+  "initial_probe": {
+    "child": "/root/security_skill_routing_probe",
+    "result": "independent security review unavailable",
+    "cause": "executor leaf guard blocks recursive delegation",
+    "recovery": "root leader delegated directly to code-reviewer; assigned reviewer does not delegate again"
+  },
+  "preservation": {
+    "root": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/security-review-routing-kchu35vl",
+    "fixture_sha256": "95a4bd5d91d30b6d73f91e18cf88018f81f9f10b44557780c437f3e50e510e40",
+    "package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+    "git_head": "82eaf29445c31b5bb7822c7698a13a515dfbbb31"
+  },
+  "existing_configs_reinstalled": false,
+  "new_role_created": false,
+  "cleanup": {
+    "temporary_fixture_removed": true,
+    "servers_started": 0,
+    "background_processes_started": 0,
+    "patch_fixture_removed": true
+  }
+}

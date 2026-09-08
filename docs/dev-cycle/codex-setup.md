@@ -133,7 +133,7 @@ developer_instructions = """
 | 과잉설계 리뷰 | `/ponytail-review` | omx `code-reviewer` 에이전트를 `spawn_agent` 로 띄운다. 프롬프트는 아래 「과잉설계 리뷰 프롬프트」 | `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 |
 | 계획 문서 (T3) | `superpowers:writing-plans` | `$superpowers:writing-plans` | 현재 스킬 목록에 `superpowers:writing-plans` | 아래 superpowers 설치. 그래도 없으면 omx `$plan` 으로 대신하고 그 사실을 문서에 적는다 |
 | 계획 검토 (architectural·T3) | `oh-my-claudecode:critic` 에이전트 | omx `critic` 역할을 `spawn_agent` 의 `agent_type: "critic"` 으로 띄운다 | `$CODEX_HOME/agents/critic.toml` | omx 설치 (0번) |
-| 보안 리뷰 보강 (인증·시크릿) | `oh-my-claudecode:security-reviewer` 에이전트 | `$security-review` | 현재 스킬 목록에 `security-review` | `~/.agents/skills/security-review` 확인. 없으면 `tier-rules.md` §1 의 세 가지 확인만 수행하고 그 사실을 기록한다 |
+| 보안 리뷰 보강 (인증·시크릿) | `oh-my-claudecode:security-reviewer` 에이전트 | `$security-review` → 보안 범위의 `code-reviewer` | 스킬 목록과 실제 위임 대상 확인 | 스킬이 없으면 설치를 확인한다. 독립 역할을 사용할 수 없으면 미완료로 기록하며 시크릿 검사 세 가지로 대체하지 않는다 |
 | 프론트엔드 스킬 | `vercel-react-best-practices`, `vercel-composition-patterns` | 같다 | 현재 스킬 목록에 두 이름 | `npx skills add vercel-labs/agent-skills` 뒤 `~/.agents/skills` 에 두 디렉터리가 생겼는지 본다. 이름이 다르면 `npx skills find react --owner vercel-labs` 로 찾는다 |
 | 프론트엔드 실행 검증 | `next-dev-loop` | `$next-dev-loop` | 현재 스킬 목록 | `skill-installer` 로 `vercel/next.js`의 `canary`, `skills/next-dev-loop` 설치 |
 | Cache Components 도입·최적화 | `next-cache-components-adoption`, `next-cache-components-optimizer` | 같은 이름의 `$` 호출 | 현재 스킬 목록에 두 이름 | 같은 저장소·브랜치의 `skills/<스킬 이름>` 설치 |
@@ -424,3 +424,35 @@ Codex QA는 시나리오 계획부터 실행·진단·수정·정리까지 `$ult
 성공 문구만으로 업무 처리 성공을 주장하지 않고, 격리 fixture의 명령 종료 코드·파일 변경·
 TODO·아카이브·런타임 역할 메타데이터를 검사한다. 새 플러그인 패키지를 만들지 않았으므로
 검증 대상은 실제 등록된 프로젝트 스킬과 전용 네이티브 역할이다.
+
+## 11. 2026-09-08 보안 리뷰 내부 호출 수리
+
+사용자의 설치 점검·조치 요청으로 기본·조건부 스킬과 실제 역할을 대조했다. 스킬 파일과
+현재 목록은 갖춰졌지만, 별도로 남아 있던 `~/.agents/skills/security-review/SKILL.md`가
+호출하는 `security-reviewer` 역할은 없었다. 설치된 OMX의
+`templates/catalog-manifest.json`은 이 역할을 `deprecated`, `code-reviewer`를 `active`로
+분류하며, native 설치기는 active/internal 역할만 설치한다. 단순 설치 누락으로 보았던
+초기 설명을 정정한다. 홈에 예전 역할 프롬프트가 남아 있는 것은 native 역할 등록이 아니다.
+
+로컬 보안 스킬을 백업하고 위임 대상을 `code-reviewer`로 수정했다. OWASP·시크릿·입력·인증·
+의존성·심각도 판정 기준은 유지한다. 리더가 보안 범위의 독립 reviewer를 호출하고,
+이미 지정된 reviewer는 재위임하지 않는다. 사용할 수 없는 역할을 통과로 대체하지 않으며,
+폐지된 Swarm·Ralph 실행 안내와 존재를 가정한 외부 도구 호출도 제거했다. 이 변경은
+사용자 승인으로 보완한 로컬 스킬이며 OMX 상류 패키지를 수정한 것은 아니다.
+
+- 백업: `~/.codex/backups/security-review-20260908/SKILL.md.before`
+- 수정 위치: `~/.agents/skills/security-review/SKILL.md`
+- 재현용 차이와 해시: [검증 기록](evidence/security-review-20260908/verification.json),
+  [스킬 변경](evidence/security-review-20260908/skill.patch.gz)
+- 스킬 형식 검사 통과. 실제 `agent_type: "code-reviewer"` 호출
+  `/root/security_review_verified`의 완료 결과에서 의도적으로 넣은 계정 소유권 검증 누락을
+  발견하고 검사하지 않은 영역을 구분했다. [결과](evidence/security-review-20260908/reviewer.md)
+- 첫 검증용 executor는 leaf 제한 때문에 하위 위임을 거부했다. 이를 호출 성공으로 세지 않고,
+  리더가 직접 독립 reviewer를 호출해 검증했다. 폐지된 역할을 새로 설치하거나 호출한 것이 아니다.
+- 검증용 코드는 실행하지 않았고 운영 HTTP·외부 네트워크·실제 자격 증명을 사용하지 않았다.
+  임시 fixture는 제거했으며, 기존 루트 `package.json`은 해시가 동일하다.
+
+이번 검증은 스킬의 실제 역할 위임과 보안 결과 반환을 확인한 것이다. 애플리케이션 전체 QA나
+UltraQA 실행을 대신하지 않는다. 티어 판정·설계 승인·UltraQA 완료 조건은 바뀌지 않았고,
+TODO의 81개 항목(P1 29, P2 52)은 그대로 유지한다. INFRA-063은 아직 설계 승인 대기다.
+이 기기 외의 설치 또는 이후 스킬 업데이트 때에는 위임 대상과 현재 역할 목록을 다시 대조한다.
