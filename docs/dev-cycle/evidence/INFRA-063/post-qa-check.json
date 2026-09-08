@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "implementation_commit": "6b2069b93b5e6195da4a87b26155f5179bb756ac",
+  "http_scenarios": 28,
+  "http_counts": {
+    "200": 6,
+    "403": 10,
+    "415": 5,
+    "400": 7
+  },
+  "final_counters": {
+    "arrivals": 23,
+    "load": 5,
+    "construct": 4,
+    "send": 4
+  },
+  "cleanup": {
+    "next_process_group": "terminated",
+    "flask_thread": "joined",
+    "temporary_fixture": "removed"
+  },
+  "listeners": {
+    "flask": [],
+    "next": []
+  },
+  "telemetry": "no detached process/event file before or after",
+  "reviewed_inputs_unchanged": 16,
+  "original_package_preserved": true,
+  "original_head_preserved": true
+}

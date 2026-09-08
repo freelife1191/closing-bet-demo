@@ -1,0 +1,37 @@
+{
+  "iteration": 2,
+  "commit": "6b2069b93b5e6195da4a87b26155f5179bb756ac",
+  "profile": "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:49534\") (remote ip \"localhost:49535\"))",
+  "env_keys": [
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LOGNAME",
+    "NEXT_TELEMETRY_DISABLED",
+    "NEXT_TRACE_UPLOAD_DISABLED",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "SCHEDULER_ENABLED",
+    "SHELL",
+    "TMPDIR",
+    "USER"
+  ],
+  "ports": {
+    "flask": 49534,
+    "next": 49535
+  },
+  "command": [
+    "sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:49534\") (remote ip \"localhost:49535\"))",
+    "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra063-0mt30h7d/message_transport.py",
+    "--commit",
+    "6b2069b93b5e6195da4a87b26155f5179bb756ac",
+    "--flask-port",
+    "49534",
+    "--next-port",
+    "49535"
+  ],
+  "timeout_seconds": 660
+}

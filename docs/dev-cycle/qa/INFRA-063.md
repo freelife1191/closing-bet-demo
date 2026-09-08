@@ -2,7 +2,7 @@
 
 ## Goal and success criteria
 
-- 항목: INFRA-063 | engine: ultraqa | lifecycle: app-adapted | phase: qa | active: true | iteration: 1 | same_failure_count: 0
+- 항목: INFRA-063 | engine: ultraqa | lifecycle: app-adapted | phase: cleanup | active: true | iteration: 2 | same_failure_count: 0
 - 목표: 관리자 JSON 객체만 발송 로직에 진입; 잘못된 입력·교차 사이트 요청은 조회/발송/guard 상태를 바꾸지 않는다.
 - 승인: 현재 대화의 bounded 설계 및 설치 보완 후 사용자 「다음 진행해」/「계속 진행해」.
 - 기준: 5aab1dc에서 독립 clone. 구현 commit 확정 후 HTTP실행.
@@ -13,13 +13,13 @@
 
 | ID | 의도/사용자·공격자 | Setup/command | 기대 신호 | 실제 결과 | 수정 | 증거 | cleanup | 필수 |
 |---|---|---|---|---|---|---|---|---|
-| Q1 | 정상 관리자 | actual Next→Flask JSON {}, target_date, null날짜, vendor JSON | 200·정상 대역 발송 | 미실행 | JSON 객체 경계 | transport | own tmp | 예 |
-| Q2 | 단순 요청 공격 | admin form/urlencoded·multipart·text/plain·MIME없음·빈POST | 415·load/construct/send/guard변화0 | 미실행 | MIME검사 | boundary/transport | own tmp | 예 |
-| Q3 | 잘못된 JSON | 문법오류·빈JSON본문·null·배열·scalar·Unicode/큰오류본문 | 400·부수효과0·입력비반사 | 미실행 | 문법/객체검사 | boundary/transport/logs | own tmp | 예 |
-| Q4 | 교차사이트/권한우회 | Next 세션 admin cross-site/same-site/없음, 익명/일반계정 각각 폼 및 malformed JSON·위조헤더 | 403·send0, proxy거부는Flask도달0 | 미실행 | 기존게이트유지 | transport | servers off | 예 |
-| Q5 | 중복/force/재시도 | 같은 날짜 두 번·force true·발송 예외 후 재시도·OPTIONS | 정상1회·중복skipped·force추가1회·claim회복·OPTIONS무발송 | 미실행 | 기존동작유지 | boundary/transport | guard tmp삭제 | 예 |
-| Q6 | 시크릿/오류노출 | tracked env·client bundle sentinel·HTTP응답/Next/Flask로그 | 시크릿/서명/MAC 노출0 | 미실행 | 일반오류본문 | security evidence | fake자격제거 | 예 |
-| Q7 | 회귀/dirty/정체 | 전체pytest/vitest/typecheck/lint·hash·timeout/프로세스정리 | exit0·skip공개·원본(복제본 밖) untracked package.json 보존·소유서버종료 | 미실행 | 필요한하네스수리 | full logs/preservation | clone제거 | 예 |
+| Q1 | 정상 관리자 | actual Next→Flask JSON {}, target_date, null날짜, vendor JSON | 200·정상 대역 발송 | 통과: 정상/날짜/null·vendor200, resolver전달일치 | JSON 객체 경계 | transport | own tmp | 예 |
+| Q2 | 단순 요청 공격 | admin form/urlencoded·multipart·text/plain·MIME없음·빈POST | 415·load/construct/send/guard변화0 | 통과: MIME거부5개415, load/construct/send/guard변화0 | MIME검사 | boundary/transport | own tmp | 예 |
+| Q3 | 잘못된 JSON | 문법오류·빈JSON본문·null·배열·scalar·Unicode/큰오류본문 | 400·부수효과0·입력비반사 | 통과: JSON거부7개400, 부수효과0·escaped/plain입력비반사 | 문법/객체검사 | boundary/transport/logs | own tmp | 예 |
+| Q4 | 교차사이트/권한우회 | Next 세션 admin cross-site/same-site/없음, 익명/일반계정 각각 폼 및 malformed JSON·위조헤더 | 403·send0, proxy거부는Flask도달0 | 통과: 권한/CSRF10개403, proxy차단5개Flask도달0 | 기존게이트유지 | transport | servers off | 예 |
+| Q5 | 중복/force/재시도 | 같은 날짜 두 번·force true·발송 예외 후 재시도·OPTIONS | 정상1회·중복skipped·force추가1회·claim회복·OPTIONS무발송 | 통과: 중복skipped·force추가발송·OPTIONS200무발송; claimretry는회귀검사통과 | 기존동작유지 | boundary/transport | guard tmp삭제 | 예 |
+| Q6 | 시크릿/오류노출 | tracked env·client bundle sentinel·HTTP응답/Next/Flask로그 | 시크릿/서명/MAC 노출0 | 통과: 응답·Next/Flask로그·build31JS노출0 | 일반오류본문 | security evidence | fake자격제거 | 예 |
+| Q7 | 회귀/dirty/정체 | 전체pytest/vitest/typecheck/lint·hash·timeout/프로세스정리 | exit0·skip공개·원본(복제본 밖) untracked package.json 보존·소유서버종료 | 정적검사·서버정리·원본hash통과; 원본반영/clone정리대기 | 필요한하네스수리 | full logs/preservation | clone제거 | 예 |
 
 ## Commands run
 - baseline pytest: 외부 네트워크 차단 sandbox, SCHEDULER_ENABLED=false, exit0; 1936 passed/3 skipped, 28.37s.
@@ -60,3 +60,24 @@
 - actualHTTP는root가동적선택한own2port를CLI로전달하고Seatbelt에서그포트만허용할예정이다.
 
 - 심층 재검토 APPROVE. actual commit을첫구현commit후전달한다. 강화환경의type-check/lint도각exit0(180초상한)이며 isolated-frontend-checks.json에기록.
+
+## 실제 실행 1회와 하네스 수리
+
+- 기준 구현commit6b2069b. 1회차는HTTP0회·Next/Flask시작전에PermissionError로실패했다. macOS /bin/ps가setuid라Seatbelt에서exec자체가거부됨을확인했다.
+- 네트워크정책을유지하고group/telemetry 관측만non-setuid /usr/bin/pgrep으로바꿨다. 동일sandbox에서alive/dead leader forcekill정리, 실제dummy telemetry process탐지·무관process제외·종료후부재검사가통과했다. pgrep-sandbox-selftest.json과attempt-1.json에보존한다.
+- 제품소스·테스트변경없음. 실제실행2회차를준비한다.
+
+## 확정 커밋 실제 QA 결과
+
+- 구현 기준 **6b2069b**. 2회차 actual Next → 기존 proxy/rewrite → bare Flask 실제 request-context/admin/message route: **28/28 통과**, exit0, 4.6초.
+- 응답 분포: 200 6개·403 10개·415 5개·400 7개. Flask도달23, 조회5, Messenger생성4, 가짜발송4. 정상1회·중복0회·force/날짜/null각추가1회가 기대와 일치했다.
+- Next49535/Flask49534만 Seatbelt outbound허용. 원본3500/5501·live·외부서비스 호출없음. 프로세스환경은allowlist와가짜값만 사용했다.
+- 소유Next그룹종료·Flaskthread/socket종료·임시fixture삭제완료. root가두listener부재를별도로확인했다. detached-flush process·_events파일은시작전/종료후/최종정리모두0.
+- 실제응답/Next·Flask로그에서fake identity/JWT secret·전체서명·MAC미노출. 새입력오류marker비반사. build31JS는강화격리baseline의unique sentinel로별도검증했다.
+- 같은commit의새경계29개도exit0. 검토입력16hash는리뷰/정적검증/실제QA뒤모두동일하다.
+- 증거: evidence/INFRA-063/transport/transport.json, run-input.json, run-exit.json, next.log.gz, flask.log.gz, run-2.log.gz; post-qa-check.json.
+- 개발 정적 검증의 격리 환경 수리와 실제 QA 실행 횟수는 구분한다. 첫 구현 커밋 뒤 실제QA는 서버전PermissionError 1회와 통과 1회, 총2회다.
+
+## 남은 마감
+
+필수동작은7/7통과했으며 원본반영·독립clone정리·최종아카이브를이어간다. 완료상태는그정리까지끝난뒤표시한다.

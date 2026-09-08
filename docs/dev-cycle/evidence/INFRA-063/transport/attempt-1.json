@@ -1,0 +1,18 @@
+{
+  "status": "failed",
+  "requested_commit": "6b2069b93b5e6195da4a87b26155f5179bb756ac",
+  "scenarios": [],
+  "cleanup": {
+    "next_process_group": "not-started",
+    "flask_thread": "not-started",
+    "temporary_fixture": "not-started"
+  },
+  "ports": {
+    "flask": 63678,
+    "next": 63679
+  },
+  "failure": {
+    "type": "PermissionError",
+    "message": "PermissionError"
+  }
+}

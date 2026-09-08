@@ -1,0 +1,6 @@
+{
+  "commit": "6b2069b",
+  "passed": 29,
+  "exit": 0,
+  "network": "deny network-outbound"
+}

@@ -1,0 +1,13 @@
+{
+  "sandbox": "deny network-outbound",
+  "force_kill_group_selftest": "dead/live leader PASS",
+  "matching_dummy_detected": true,
+  "unrelated_dummy_excluded": true,
+  "after": {
+    "NEXT_TELEMETRY_DISABLED": "1",
+    "NEXT_TRACE_UPLOAD_DISABLED": "1",
+    "detached_flush_pids": [],
+    "event_files": []
+  },
+  "owned_dummies_reaped": true
+}

@@ -35,3 +35,5 @@ TDD → ponytail → code-reviewer/architect 및 security → deep review → �
 - 이전frontendbaseline은telemetry강제비활성화가없었으므로외부통신금지보장근거로쓰지않는다. 실제전송이발생했다는근거도없다. 최종근거는fresh-loopback-vitest-exit.json/로그이며API대역호출0이다.
 
 - 심층 재검토: **APPROVE**, HIGH/P1 해결·제품차단없음. deep-review-final.md에최종응답보존. gstack review는로컬기준5aab1dc diff에적용했고홈telemetry/PR/원격조회는프로젝트대응으로생략했다.
+
+- 실제실행1회차의setuid ps금지를non-setuid pgrep으로수리. 동일sandbox동적processnegativecontrol과그룹정리검사통과후 deep-review-pgrep.md 재검토APPROVE. 실제2회차28/28통과, 제품/test16hash불변.
