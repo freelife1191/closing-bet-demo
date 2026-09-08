@@ -1,0 +1,10 @@
+{
+  "source": "5716194",
+  "dangerous_values": 40,
+  "existing_and_new_keys_per_request": 2,
+  "all_status": 200,
+  "status_note": "INFRA051 \ud6c4\uc18d \uc804; \ud604\uc7ac\ub294 \ube44\uc800\uc7a5 \uacc4\uc57d\ub9cc",
+  "file_unchanged": true,
+  "worker_existing_value_unchanged": true,
+  "request_count": 40
+}
