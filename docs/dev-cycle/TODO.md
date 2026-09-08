@@ -16,6 +16,9 @@
 ## P1 — 이번 주기
 
 ### [INFRA-062] 신원 서명이 경로·메서드에 묶이지 않아 다른 경로로 재생할 수 있다
+- 상태: RESUME — 설계 승인, 계획 critic 검토 중
+- 설계 승인: 2026-09-08 현재 대화 사용자 「진행해」. method/path v2결합·구형거부·Next/Flask동시수정·T3/UltraQA.
+- 설계/계획: docs/superpowers/specs/2026-09-08-infra-062-request-bound-identity-design.md, docs/superpowers/plans/2026-09-08-infra-062-request-bound-identity.md
 - 카테고리: 인프라 | 티어: T3(인증) | 근거: 2026-09-08 `[INFRA-042]` 사이클의
   `feature-dev:code-reviewer` 가 확신도 낮음으로 짚었습니다. 이번 변경이 만든 결함이 아니라
   물려받은 성질입니다.
