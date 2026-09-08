@@ -41,6 +41,10 @@ class TelegramSender(MessageSender):
         self.formatter = TelegramFormatter()
 
     def send(self, data: MessageData) -> bool:
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
+
         if not self.config.telegram_token or not self.config.telegram_chat_id:
             logger.warning("Telegram 설정이 누락되어 발송을 건너뜁니다.")
             return False
@@ -57,13 +61,13 @@ class TelegramSender(MessageSender):
 
             resp = requests.post(url, json=payload)
             if not resp.ok:
-                logger.error(f"Telegram 발송 실패 결과: {resp.text}")
+                logger.error("Telegram 발송 실패: HTTP %s", resp.status_code)
                 return False
 
             logger.info("Telegram 알림 발송 성공")
             return True
         except Exception as e:
-            logger.error(f"Telegram 발송 중 오류: {e}")
+            logger.error(f"Telegram 발송 중 오류: {type(e).__name__}")
             return False
 
 
@@ -75,6 +79,10 @@ class DiscordSender(MessageSender):
         self.formatter = DiscordFormatter()
 
     def send(self, data: MessageData) -> bool:
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
+
         if not self.config.discord_url:
             logger.warning("Discord 설정이 누락되어 발송을 건너뜁니다.")
             return False
@@ -83,13 +91,13 @@ class DiscordSender(MessageSender):
             payload = self.formatter.format(data)
             resp = requests.post(self.config.discord_url, json=payload)
             if not resp.ok:
-                logger.error(f"Discord 발송 실패 결과: {resp.text}")
+                logger.error("Discord 발송 실패: HTTP %s", resp.status_code)
                 return False
 
             logger.info("Discord 알림 발송 성공")
             return True
         except Exception as e:
-            logger.error(f"Discord 발송 중 오류: {e}")
+            logger.error(f"Discord 발송 중 오류: {type(e).__name__}")
             return False
 
 
@@ -101,6 +109,10 @@ class EmailSender(MessageSender):
         self.formatter = EmailFormatter()
 
     def send(self, data: MessageData) -> bool:
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
+
         if not self.config.smtp_user or not self.config.smtp_password:
             logger.warning("SMTP 설정이 누락되어 발송을 건너뜁니다.")
             return False
@@ -126,7 +138,7 @@ class EmailSender(MessageSender):
             logger.info(f"이메일 발송 성공: {', '.join(self.config.email_recipients)}")
             return True
         except Exception as e:
-            logger.error(f"이메일 발송 중 오류: {e}")
+            logger.error(f"이메일 발송 중 오류: {type(e).__name__}")
             return False
 
 

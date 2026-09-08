@@ -43,7 +43,7 @@ def send_discord_message(webhook_url: str, message: str, logger: logging.Logger)
         logger.info("[Notifier] Discord 발송 성공")
         return True
     except Exception as e:
-        logger.error(f"[Notifier] Discord 발송 실패: {e}")
+        logger.error(f"[Notifier] Discord 발송 실패: {type(e).__name__}")
         return False
 
 
@@ -70,7 +70,7 @@ def send_telegram_message(
         logger.info("[Notifier] Telegram 발송 성공")
         return True
     except Exception as e:
-        logger.error(f"[Notifier] Telegram 발송 실패: {e}")
+        logger.error(f"[Notifier] Telegram 발송 실패: {type(e).__name__}")
         return False
 
 
@@ -90,7 +90,7 @@ def send_slack_message(webhook_url: str, message: str, logger: logging.Logger) -
         logger.info("[Notifier] Slack 발송 성공")
         return True
     except Exception as e:
-        logger.error(f"[Notifier] Slack 발송 실패: {e}")
+        logger.error(f"[Notifier] Slack 발송 실패: {type(e).__name__}")
         return False
 
 
@@ -129,5 +129,5 @@ def send_email_message(
         logger.info("[Notifier] 이메일 발송 성공")
         return True
     except Exception as e:
-        logger.error(f"[Notifier] 이메일 발송 실패: {e}")
+        logger.error(f"[Notifier] 이메일 발송 실패: {type(e).__name__}")
         return False

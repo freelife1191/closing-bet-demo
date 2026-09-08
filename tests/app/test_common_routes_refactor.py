@@ -7,6 +7,8 @@ Common 라우트 분해 회귀 테스트
 import os
 import sys
 
+from types import SimpleNamespace
+
 from flask import Flask, g
 
 
@@ -157,6 +159,7 @@ def test_send_test_notification_uses_messenger_compat_interface(monkeypatch):
     created = []
 
     class _DummyMessenger:
+        config = SimpleNamespace(disabled=False)
         def __init__(self):
             self.discord_url = "https://example.com/webhook"
             self.telegram_token = "token"
@@ -167,12 +170,15 @@ def test_send_test_notification_uses_messenger_compat_interface(monkeypatch):
 
         def _send_discord(self, payload):
             self.calls.append(("discord", payload))
+            return True
 
         def _send_telegram(self, payload):
             self.calls.append(("telegram", payload))
+            return True
 
         def _send_email(self, payload):
             self.calls.append(("email", payload))
+            return True
 
     import engine.messenger as messenger_module
 
@@ -211,6 +217,7 @@ def test_send_test_notification_requires_platform(monkeypatch):
 
 def test_send_test_notification_returns_config_error_for_unconfigured_platform(monkeypatch):
     class _DummyMessenger:
+        config = SimpleNamespace(disabled=False)
         def __init__(self):
             self.discord_url = ""
             self.telegram_token = "token"
@@ -242,6 +249,7 @@ def test_send_test_notification_returns_config_error_for_unconfigured_platform(m
 
 def test_send_test_notification_handles_send_exception(monkeypatch):
     class _DummyMessenger:
+        config = SimpleNamespace(disabled=False)
         def __init__(self):
             self.discord_url = "https://example.com/webhook"
             self.telegram_token = "token"
@@ -267,7 +275,7 @@ def test_send_test_notification_handles_send_exception(monkeypatch):
     assert response.status_code == 500
     assert response.get_json() == {
         "status": "error",
-        "message": "send failed",
+        "message": "Notification request failed",
     }
 
 

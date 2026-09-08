@@ -1,0 +1,21 @@
+{
+  "name": "pytest-043-green",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/pytest-temp",
+    "tests/engine/test_notification_failure_contract.py",
+    "tests/engine/test_messenger_compatibility.py",
+    "tests/app/test_notification_admin_gate.py",
+    "tests/app/test_common_routes_refactor.py",
+    "tests/services/test_notifier_refactor.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout",
+  "exit": 0,
+  "seconds": 1.81,
+  "policy": "no-network.sb"
+}

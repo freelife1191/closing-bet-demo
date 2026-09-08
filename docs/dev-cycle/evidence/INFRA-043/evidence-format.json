@@ -1,0 +1,6 @@
+{
+  "initial_staged_diff_check": 2,
+  "reason": "independent architecture report Markdown hard-break trailing spaces",
+  "repair": "exact raw bytes preserved gzip; display Markdown trimmed",
+  "source_unchanged": true
+}

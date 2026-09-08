@@ -15,6 +15,8 @@ import os
 import sys
 
 import pytest
+from types import SimpleNamespace
+
 from flask import Flask
 
 sys.path.insert(
@@ -68,10 +70,12 @@ def sent(monkeypatch):
     calls: list[tuple[str, dict]] = []
 
     class _FakeMessenger:
+        config = SimpleNamespace(disabled=False)
         discord_url = "https://discord.example/webhook"
 
         def _send_discord(self, data):
             calls.append(("discord", data))
+            return True
 
     import engine.messenger
 

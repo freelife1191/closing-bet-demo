@@ -92,7 +92,7 @@ class NotificationService:
                 else:
                     logger.warning(f"[Notifier] 알 수 없는 채널: {channel}")
             except Exception as e:
-                logger.error(f"[Notifier] {channel} 발송 실패: {e}")
+                logger.error(f"[Notifier] {channel} 발송 실패: {type(e).__name__}")
                 results[channel] = False
 
         return results

@@ -1,0 +1,8 @@
+{
+  "files": 9,
+  "syntax": "pass",
+  "unsafe_log_patterns": [],
+  "mcp_lsp": "unavailable: Transport closed",
+  "mcp_ast": "unavailable: Transport closed",
+  "alternative": "stdlib AST syntax and semantic logger argument scan; not LSP"
+}

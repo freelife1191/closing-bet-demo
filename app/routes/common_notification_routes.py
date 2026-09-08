@@ -98,8 +98,8 @@ def _execute_notification_route(
     try:
         return handler()
     except Exception as error:
-        ctx.logger.error(f"{error_label}: {error}")
-        return _build_error_response(str(error), 500)
+        ctx.logger.error("%s: %s", error_label, type(error).__name__)
+        return _build_error_response("Notification request failed", 500)
 
 
 def _send_platform_test_notification(
@@ -111,7 +111,8 @@ def _send_platform_test_notification(
         return _build_error_response(spec.missing_config_message, 400)
 
     sender = getattr(messenger, spec.sender_attr)
-    sender(test_data)
+    if not sender(test_data):
+        return _build_error_response("Notification delivery failed", 502)
     return None
 
 
@@ -159,6 +160,8 @@ def register_common_notification_routes(common_bp, ctx: CommonRouteContext) -> N
             from engine.messenger import Messenger
 
             messenger = Messenger()
+            if messenger.config.disabled:
+                return _build_error_response("Notifications are disabled", 503)
             test_data = _build_test_notification_data(platform)
             error_response = _send_platform_test_notification(spec, messenger, test_data)
             if error_response is not None:

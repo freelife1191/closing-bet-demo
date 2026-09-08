@@ -1,0 +1,11 @@
+{
+  "engine/messenger_senders.py": "f6c485fb3817122e735435ff737069d8f91e1bdc2b63a378fefa44e7cb273ab8",
+  "engine/messenger.py": "65a7e19915d42e441b4104e0c2846a9d4e2f0e5441c1f556a958cc9f829fa5dd",
+  "services/notifier_channels.py": "2943131ba8d647445ce61891867987d6db772ff569798b938599e35730b46062",
+  "services/notifier.py": "2f4550eab1f5f184a47f7b332a0658af6699105b9e490888fb26bc4bcfce693d",
+  "app/routes/common_notification_routes.py": "28dbaf7428289767bbd8e49c0eaa1aadb22f0c1289acc32f655f5392c8ea930f",
+  "tests/engine/test_notification_failure_contract.py": "a22beb22c294ee729d110669bde85d2e8eb879a37afe8fb2efa241f0bdc2f1c0",
+  "tests/app/test_common_routes_refactor.py": "6f14abd5b5d54930f6195b1caf28e81d67bd00df268038227d2096cbfc210d20",
+  "tests/app/test_notification_admin_gate.py": "f273c4580cd74e6ddae2761f33d310d1e71fb69ab4e4bc03e2a8b4aa6c49dd95",
+  "docs/superpowers/plans/2026-09-09-notification-settings.md": "e724a0f82ed56cf9ea9f5957a06f7b930f6ad3d21f8e81e615762f239b87c011"
+}

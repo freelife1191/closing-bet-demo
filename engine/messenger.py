@@ -84,26 +84,41 @@ class Messenger:
         """기존 dict 기반 payload를 MessageData로 변환한다."""
         return build_message_data_from_payload(payload)
 
-    def _send_telegram(self, payload: dict) -> None:
+    def _send_telegram(self, payload: dict) -> bool:
         """기존 코드 호환용 텔레그램 발송 메서드."""
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
         data = self._build_message_data_from_payload(payload)
         sender = self.senders.get("telegram")
         if sender:
-            sender.send(data)
+            return sender.send(data)
+        logger.warning("알림 발송기가 없어 발송을 건너뜁니다.")
+        return False
 
-    def _send_discord(self, payload: dict) -> None:
+    def _send_discord(self, payload: dict) -> bool:
         """기존 코드 호환용 디스코드 발송 메서드."""
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
         data = self._build_message_data_from_payload(payload)
         sender = self.senders.get("discord")
         if sender:
-            sender.send(data)
+            return sender.send(data)
+        logger.warning("알림 발송기가 없어 발송을 건너뜁니다.")
+        return False
 
-    def _send_email(self, payload: dict) -> None:
+    def _send_email(self, payload: dict) -> bool:
         """기존 코드 호환용 이메일 발송 메서드."""
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
         data = self._build_message_data_from_payload(payload)
         sender = self.senders.get("email")
         if sender:
-            sender.send(data)
+            return sender.send(data)
+        logger.warning("알림 발송기가 없어 발송을 건너뜁니다.")
+        return False
 
     def send_screener_result(self, result) -> None:
         """
@@ -133,7 +148,7 @@ class Messenger:
                 logger.warning("메신저 알림을 발송할 채널이 없습니다.")
 
         except Exception as e:
-            logger.error(f"메신저 알림 발송 중 전체 오류: {e}")
+            logger.error(f"메신저 알림 발송 중 전체 오류: {type(e).__name__}")
 
     def send_custom_message(
         self,
@@ -161,10 +176,13 @@ class Messenger:
             elif channel == "discord":
                 self._send_discord_custom(title, message)
 
-    def _send_telegram_custom(self, title: str, message: str) -> None:
+    def _send_telegram_custom(self, title: str, message: str) -> bool:
         """텔레그램 커스텀 메시지 발송"""
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
         if not self.config.telegram_token or not self.config.telegram_chat_id:
-            return
+            return False
 
         try:
             url = f"https://api.telegram.org/bot{self.config.telegram_token}/sendMessage"
@@ -174,15 +192,23 @@ class Messenger:
                 "parse_mode": "HTML",
                 "disable_web_page_preview": True,
             }
-            requests.post(url, json=payload)
+            response = requests.post(url, json=payload)
+            if not response.ok:
+                logger.error("telegram 커스텀 발송 실패: HTTP %s", response.status_code)
+                return False
             logger.info("Telegram 커스텀 알림 발송 성공")
+            return True
         except Exception as e:
-            logger.error(f"Telegram 커스텀 발송 중 오류: {e}")
+            logger.error(f"Telegram 커스텀 발송 중 오류: {type(e).__name__}")
+            return False
 
-    def _send_discord_custom(self, title: str, message: str) -> None:
+    def _send_discord_custom(self, title: str, message: str) -> bool:
         """디스코드 커스텀 메시지 발송"""
+        if self.config.disabled:
+            logger.info("메신저 알림이 비활성화되어 있습니다.")
+            return False
         if not self.config.discord_url:
-            return
+            return False
 
         try:
             payload = {
@@ -195,10 +221,15 @@ class Messenger:
                     }
                 ],
             }
-            requests.post(self.config.discord_url, json=payload)
+            response = requests.post(self.config.discord_url, json=payload)
+            if not response.ok:
+                logger.error("discord 커스텀 발송 실패: HTTP %s", response.status_code)
+                return False
             logger.info("Discord 커스텀 알림 발송 성공")
+            return True
         except Exception as e:
-            logger.error(f"Discord 커스텀 발송 중 오류: {e}")
+            logger.error(f"Discord 커스텀 발송 중 오류: {type(e).__name__}")
+            return False
 
 
 def create_messenger(config: Optional[MessengerConfig] = None) -> Messenger:
