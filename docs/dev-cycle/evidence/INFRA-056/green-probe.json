@@ -1,0 +1,12 @@
+{
+  "name": "green-probe",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/checkout/venv/bin/python",
+    "-B",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/green_probe.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/checkout",
+  "exit": 0,
+  "seconds": 1.45,
+  "policy": "no-network.sb"
+}

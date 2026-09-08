@@ -1,0 +1,22 @@
+[
+  {
+    "mode": "two-writers",
+    "a_exit": 0,
+    "b_exit": 0,
+    "values": {
+      "SMTP_HOST": "new-host",
+      "MARKET_GATE_UPDATE_INTERVAL_MINUTES": "15"
+    },
+    "blocked_while_held": true
+  },
+  {
+    "mode": "kill-lock-owner",
+    "a_exit": -15,
+    "b_exit": 0,
+    "values": {
+      "SMTP_HOST": "new-host",
+      "MARKET_GATE_UPDATE_INTERVAL_MINUTES": "15"
+    },
+    "blocked_while_held": true
+  }
+]

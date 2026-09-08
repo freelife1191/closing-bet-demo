@@ -1,0 +1,10 @@
+{
+  "scope_input": "review-input-before-error-fix.json",
+  "code": "COMMENT",
+  "security": "APPROVE with LOW1",
+  "architecture": "CLEAR",
+  "low": "app/routes/kr_market.py raw error response/log reflects exception details",
+  "action": "generic error response and exception type only logging; two sentinel RED tests reproduced exposure; 51 tests pass after fix",
+  "lsp": "7 Python calls returned tsc skipped; NOT Python diagnostics",
+  "architecture_process_diagnosis": "parent SemLock/sem_wait from final release.set after killed child, not fcntl; revised process probe PASS"
+}

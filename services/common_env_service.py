@@ -106,7 +106,7 @@ def _read_env_lines(env_path: str) -> list[str]:
         read_fd = os.open(env_path, os.O_RDONLY | os.O_NOFOLLOW)
     except FileNotFoundError:
         return []
-    with os.fdopen(read_fd, "r", encoding="utf-8") as file:
+    with os.fdopen(read_fd, "r", encoding="utf-8", newline="") as file:
         return file.readlines()
 
 

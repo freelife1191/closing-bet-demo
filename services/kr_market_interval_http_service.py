@@ -14,8 +14,7 @@ def handle_interval_config_request(
     method: str,
     req_data: dict[str, Any],
     current_interval: int,
-    apply_interval_fn: Callable[[int], None],
-    persist_interval_fn: Callable[[int], None],
+    set_interval_fn: Callable[[int], None],
 ) -> tuple[int, dict[str, Any]]:
     """config/interval 요청을 검증/처리하여 (status, payload)를 반환한다."""
     if method == "GET":
@@ -23,14 +22,13 @@ def handle_interval_config_request(
 
     try:
         new_interval = int(req_data.get("interval"))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 400, {"error": "Invalid interval"}
 
     if new_interval < 1 or new_interval > 1440:
         return 400, {"error": "Invalid interval"}
 
-    apply_interval_fn(new_interval)
-    persist_interval_fn(new_interval)
+    set_interval_fn(new_interval)
     return 200, {
         "status": "success",
         "message": f"Updated interval to {new_interval} minutes",

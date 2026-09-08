@@ -1,0 +1,12 @@
+{
+  "services/kr_market_interval_service.py": "d1158ac91188da03ce54694b72c58682ecb4d848fd21d37ed9d882fb6f5f525d",
+  "services/kr_market_interval_http_service.py": "0afde11ebf0803f387f077f0352e99250b0293ed58b73a25794d6557156a2837",
+  "services/common_env_service.py": "196f9b26f39cd2b1ce0d39882a6bcebd4281526155abbe8b60de8d72de144eb9",
+  "app/routes/kr_market.py": "dcfe66d11088970031f5d7b522ffe823ab567920c8bd5c3b309952ca6267d626",
+  "tests/services/test_kr_market_interval_persistence.py": "f2ddf7fefab8e4f9cfebb23ae442243e083f77d21d4bf192bc85a9d645b8c002",
+  "tests/services/test_kr_market_interval_http_service.py": "996700e8c83fd0177c732fca093a9408b76a2cbdeaa2f5a3a76ed1beb97d3db8",
+  "tests/app/test_kr_market_route_integration.py": "e96cb9bc820facc6c99f514a59ff329222445cc198ac42f2fe1c7f39744e5604",
+  "CLAUDE.md": "2590af03753472d646ad8dd1f80ace079b78e23be554e297e6d8bde10b209861",
+  "docs/superpowers/plans/2026-09-08-infra056-interval-persistence.md": "fd806d2bf4a8d03f9b107bbc3d1535c95a336e57bbca18c5c3d3104ae36b7b8e",
+  "docs/dev-cycle/qa/INFRA-056.md": "9ab9bc0232373e7ec922f1b37e6ebc7a95586d556a3572669b806443f0acbb16"
+}

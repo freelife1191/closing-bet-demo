@@ -16,6 +16,7 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from flask import Flask
 
 
@@ -478,17 +479,22 @@ def test_increment_user_usage_is_thread_safe(monkeypatch, tmp_path: Path):
     assert kr_market.get_user_usage(usage_key) == increment_count
 
 
-def test_config_interval_post_parses_string_and_applies_update(monkeypatch):
+def test_config_interval_post_persists_and_applies_update(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
     client = _create_client_with_user(user_email="admin@example.com")
-    applied = {}
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "MARKET_GATE_UPDATE_INTERVAL_MINUTES=30\nSMTP_HOST=old\n",
+        encoding="utf-8",
+    )
+    applied: list[int] = []
 
     monkeypatch.setattr(
         kr_market,
         "_apply_market_gate_interval",
-        lambda interval: applied.setdefault("interval", interval),
+        applied.append,
     )
-    monkeypatch.setattr(kr_market, "_persist_market_gate_interval_to_env", lambda _: None)
+    monkeypatch.setattr(kr_market, "_project_env_path", lambda: str(env_path))
 
     response = client.post("/api/kr/config/interval", json={"interval": "15"})
 
@@ -496,7 +502,10 @@ def test_config_interval_post_parses_string_and_applies_update(monkeypatch):
     payload = response.get_json()
     assert payload["status"] == "success"
     assert payload["interval"] == 15
-    assert applied["interval"] == 15
+    assert applied == [15]
+    assert env_path.read_text(encoding="utf-8") == (
+        "MARKET_GATE_UPDATE_INTERVAL_MINUTES=15\nSMTP_HOST=old\n"
+    )
 
 
 def test_config_interval_post_rejects_invalid_value(monkeypatch):
@@ -592,3 +601,23 @@ def test_reanalyze_gemini_returns_500_when_batch_fails(monkeypatch):
     payload = response.get_json()
     assert payload["status"] == "error"
     assert payload["error"] == "batch failed"
+
+
+@pytest.mark.parametrize("error", [
+    OSError(28, "QA_SECRET_SENTINEL", "/private/fake-credentials.env"),
+    RuntimeError("QA_SECRET_SENTINEL"),
+])
+def test_config_interval_errors_do_not_expose_details(monkeypatch, caplog, error):
+    monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
+    client = _create_client_with_user(user_email="admin@example.com")
+
+    def fail_persistence(_interval):
+        raise error
+
+    monkeypatch.setattr(kr_market, "_persist_market_gate_interval_to_env", fail_persistence)
+    response = client.post("/api/kr/config/interval", json={"interval": 15})
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "Failed to process interval configuration"}
+    assert "QA_SECRET_SENTINEL" not in response.get_data(as_text=True) + caplog.text
+    assert "/private/fake-credentials.env" not in response.get_data(as_text=True) + caplog.text
+    assert type(error).__name__ in caplog.text

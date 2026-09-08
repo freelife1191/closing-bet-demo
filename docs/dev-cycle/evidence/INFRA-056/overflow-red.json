@@ -1,0 +1,12 @@
+{
+  "name": "overflow-red",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/checkout/venv/bin/python",
+    "-B",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/overflow_probe.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra056-65n43kff/checkout",
+  "exit": 1,
+  "seconds": 0.08,
+  "policy": "no-network.sb"
+}

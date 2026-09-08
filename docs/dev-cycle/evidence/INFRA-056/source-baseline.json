@@ -1,0 +1,11 @@
+{
+  "HEAD": "49f5264",
+  "original_package": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "frontend_files": {
+    "frontend/src/app/dashboard/kr/page.tsx": "db6d63b3adb4030517903a5a561654cebd24db340520f6b8baecd26fa04a464d",
+    "frontend/src/proxy.ts": "07430cf5989f9954480e0e4914c0e069991d9daf146e80dcc98b3204ef8f7909",
+    "frontend/src/lib/identity.ts": "0d1f982f64f5b5dd6b24fc41da8823bd5122c0c1a27df1ab6d2309602d18dab8",
+    "frontend/package.json": "3fe92d2d9f0673e9a837a60e9109f6677de306dc1fc7af8c6b6e42d22eafdeff",
+    "frontend/next.config.js": "42a3ed82e8469ed8b5557b7908409036fcb1d4ba29f294c3b09542b981c23146"
+  }
+}

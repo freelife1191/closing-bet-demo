@@ -1,0 +1,9 @@
+{
+  "docs/superpowers/plans/2026-09-08-infra056-interval-persistence.md": "fd806d2bf4a8d03f9b107bbc3d1535c95a336e57bbca18c5c3d3104ae36b7b8e",
+  "services/kr_market_interval_service.py": "b22e8d1d68a973dfa8810fcc279899120c58422ea3ee47f2b101ae42d5725081",
+  "services/kr_market_interval_http_service.py": "8457bd99981dbb0822634e899ff2fbe9a13a8c123fe601520c9ba7295c8c8cf2",
+  "services/common_env_service.py": "6af63fa01cd88068d8490dc08f4fc810db8e0e89ec0d515b55fd32e110d1385a",
+  "app/routes/kr_market.py": "f47a7c806cf6166b6213a1ca703cdcb9ebff37b13b38e0e9050cafbedf23176a",
+  "tests/services/test_kr_market_interval_http_service.py": "b0b294cb2a9e08c58117582a2d83a88366b006ee56e548a5d221400324b633ab",
+  "tests/app/test_kr_market_route_integration.py": "31bb2f7e56ca630bef705f36bf2cb8358294704c782f8508ceb535a21ba0c9d1"
+}

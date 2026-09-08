@@ -1,0 +1,8 @@
+{
+  "tracked_env_files": [
+    ".env.example"
+  ],
+  "frontend_identity_config_hashes_unchanged": true,
+  "new_public_secret_variables": 0,
+  "API_review": "interval response only status/message/interval; new parser error is generic. No env content returned. Real browser sentinel check pending."
+}

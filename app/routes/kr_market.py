@@ -25,8 +25,8 @@ from services.kr_market_quota_service import (
 from services.kr_market_interval_service import (
     apply_market_gate_interval as apply_market_gate_interval_service,
     persist_market_gate_interval_to_env as persist_market_gate_interval_to_env_service,
-    project_env_path as project_env_path_service,
 )
+from services.common_env_service import resolve_env_path
 from services.kr_market_interval_http_service import (
     handle_interval_config_request as handle_interval_config_request_service,
 )
@@ -102,7 +102,7 @@ _MIN_JONGGA_RUN_INTERVAL = timedelta(minutes=5)  # Minimum 5 minutes between run
 DATA_DIR = 'data'
 
 _invalidate_file_cache = invalidate_file_cache_service
-_project_env_path = lambda: project_env_path_service(__file__)
+_project_env_path = resolve_env_path
 _atomic_write_text = lambda file_path, content: atomic_write_text_service(
     file_path,
     content,
@@ -112,6 +112,7 @@ _persist_market_gate_interval_to_env = lambda interval: persist_market_gate_inte
     interval=interval,
     env_path=_project_env_path(),
     atomic_write_text=_atomic_write_text,
+    apply_interval_fn=_apply_market_gate_interval,
 )
 _apply_market_gate_interval = lambda interval: apply_market_gate_interval_service(
     interval=interval,
@@ -159,8 +160,7 @@ def _update_vcp_ai_cache_files(
 def _interval_config_response(method: str, req_data: dict):
     """config/interval 의 두 라우트가 공유하는 몸통.
 
-    GET 에 apply/persist 를 그대로 넘겨도 무해하다. handle_interval_config_request 가
-    GET 에서는 두 함수를 부르지 않고 바로 반환한다.
+    GET 에 설정 콜백을 넘겨도 handle_interval_config_request 가 호출하지 않고 반환한다.
     """
     try:
         from engine.config import app_config
@@ -168,14 +168,13 @@ def _interval_config_response(method: str, req_data: dict):
             method=method,
             req_data=req_data,
             current_interval=app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES,
-            apply_interval_fn=_apply_market_gate_interval,
-            persist_interval_fn=_persist_market_gate_interval_to_env,
+            set_interval_fn=_persist_market_gate_interval_to_env,
         )
         return jsonify(payload), int(status_code)
 
     except Exception as e:
-        logger.error(f"Interval Config Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error("Interval Config Error: %s", type(e).__name__)
+        return jsonify({'error': 'Failed to process interval configuration'}), 500
 
 
 @kr_bp.route('/config/interval', methods=['GET'])
@@ -191,14 +190,7 @@ def get_interval_config():
 @kr_bp.route('/config/interval', methods=['POST'])
 @require_admin
 def set_interval_config():
-    """Market Gate 업데이트 주기 설정. 서버 전역 스케줄러 값이라 관리자만 바꾼다.
-
-    지금 이 라우트는 `.env` 를 쓰지 않는다. `_project_env_path()` 가 존재하지 않는
-    `app/.env` 를 가리켜 `persist_market_gate_interval_to_env` 가 첫 줄에서 반환하기
-    때문이다(`[INFRA-056]` 이 그 경로를 고친다). 실제로 바뀌는 것은 이 요청을 처리한
-    워커의 `app_config` 값과, 그 워커가 스케줄러 잠금을 쥐고 있을 때의 `schedule` 등록뿐이다.
-    경로를 고치는 순간 이 자리가 파일 쓰기 경로가 되므로 그때 이 주석을 함께 지운다.
-    """
+    """관리자 주기를 루트 .env에 저장한 뒤 요청 워커의 런타임에 적용한다."""
     return _interval_config_response("POST", request.get_json(silent=True) or {})
 
 # VCP Screener Status State (file-backed for multi-worker gunicorn)

@@ -6,17 +6,12 @@ KR Market Interval Service
 
 from __future__ import annotations
 
-import os
-import re
+from io import StringIO
 from typing import Callable
 
+from dotenv.parser import parse_stream
 
-def project_env_path(base_file: str) -> str:
-    """프로젝트 루트 .env 파일 경로를 반환한다."""
-    return os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(base_file))),
-        ".env",
-    )
+from services.common_env_service import _env_file_lock, _read_env_lines
 
 
 def persist_market_gate_interval_to_env(
@@ -24,22 +19,32 @@ def persist_market_gate_interval_to_env(
     interval: int,
     env_path: str,
     atomic_write_text: Callable[[str, str], None],
+    apply_interval_fn: Callable[[int], None],
 ) -> None:
-    """MARKET_GATE_UPDATE_INTERVAL_MINUTES 값을 .env에 반영한다."""
-    if not os.path.exists(env_path):
-        return
+    """주기를 저장한 뒤 같은 잠금 안에서 런타임에 적용한다.
 
-    with open(env_path, "r", encoding="utf-8") as file:
-        content = file.read()
-
-    pattern = r"^MARKET_GATE_UPDATE_INTERVAL_MINUTES=\d+"
-    new_line = f"MARKET_GATE_UPDATE_INTERVAL_MINUTES={interval}"
-    if re.search(pattern, content, re.MULTILINE):
-        updated_content = re.sub(pattern, new_line, content, flags=re.MULTILINE)
-    else:
-        updated_content = f"{content.rstrip()}\n{new_line}\n"
-
-    atomic_write_text(env_path, updated_content)
+    읽기·파싱·교체 실패는 런타임을 바꾸지 않는다. 교체 후 적용 실패는
+    이미 저장한 파일을 되돌리지 않고 호출자에게 전파한다.
+    """
+    with _env_file_lock(env_path):
+        lines = _read_env_lines(env_path)
+        parts: list[str] = []
+        found = False
+        for binding in parse_stream(StringIO("".join(lines))):
+            if binding.error:
+                raise ValueError("Invalid environment file syntax")
+            if binding.key == "MARKET_GATE_UPDATE_INTERVAL_MINUTES":
+                if not found:
+                    parts.append(f"MARKET_GATE_UPDATE_INTERVAL_MINUTES={interval}\n")
+                    found = True
+            else:
+                parts.append(binding.original.string)
+        if not found:
+            if parts and not parts[-1].endswith(("\n", "\r")):
+                parts.append("\n")
+            parts.append(f"MARKET_GATE_UPDATE_INTERVAL_MINUTES={interval}\n")
+        atomic_write_text(env_path, "".join(parts))
+        apply_interval_fn(interval)
 
 
 def apply_market_gate_interval(
