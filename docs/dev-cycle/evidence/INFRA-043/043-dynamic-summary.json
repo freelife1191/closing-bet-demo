@@ -1,0 +1,38 @@
+{
+  "source": "a902a58",
+  "states": [
+    [
+      200,
+      1,
+      "admin"
+    ],
+    [
+      503,
+      1,
+      "admin"
+    ],
+    [
+      502,
+      2,
+      "admin"
+    ],
+    [
+      502,
+      3,
+      "admin"
+    ],
+    [
+      403,
+      3,
+      "anonymous"
+    ],
+    [
+      403,
+      3,
+      "viewer"
+    ]
+  ],
+  "scanned_files": 62,
+  "secret_matches": [],
+  "browser_page_errors": 0
+}
