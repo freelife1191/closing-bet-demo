@@ -1,0 +1,7 @@
+{
+  "sentinel_present": false,
+  "client_js_files": 31,
+  "build_log_sentinel_present": false,
+  "scope": "fresh production build in localhost-only sandbox; telemetry/trace disabled",
+  "log": "fresh-loopback-vitest.log.gz"
+}

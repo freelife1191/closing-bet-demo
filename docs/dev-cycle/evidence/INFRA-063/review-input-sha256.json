@@ -1,0 +1,18 @@
+{
+  "app/routes/kr_market_jongga_execution_routes.py": "5606a745c45823d0cb4f297b686761859cc8e33816053ca0b0ed7d27d67978da",
+  "tests/app/test_jongga_message_request_boundary.py": "4798301ad7779cbbd2c61023509ba7d67b511e6f38e8254301e4440a7f0ba5ad",
+  "tests/app/test_kr_market_jongga_execution_routes_refactor.py": "3a8ce77c7fbd155b44f5c38cdfe258f911ac2b26b24ddc403ae1445b5c1229db",
+  "tests/app/test_admin_gated_routes.py": "95f4a57f9d47c128008ad80bf1e1e81c4d6c7b6a1dd936477aeb6f0132532e5f",
+  "app/routes/route_execution.py": "8bff5d1f82e154fb21bee1806f3c2ff5b195adff79c6d3d2ff02ef0953f9a5c8",
+  "app/routes/route_guards.py": "b9e79b1a078572a38fc6c0dba0f2988a9d4657956a9ce24e7bf5d52348ed3bd1",
+  "app/__init__.py": "5b26cacfd78d852f61e04981cd13e5d2cad5557bb02a335641f8df51fee2667e",
+  "services/identity_helpers.py": "f27944a7d4c6a2f3e732ce6a1b1ace39f009f042cac883567b14f406941ad8ec",
+  "services/admin_helpers.py": "2f13ceae2718c7e415b24209d6d4d166c3f34fb2b1132dba293871bd52f8654c",
+  "services/jongga_notification_guard_service.py": "6b753e2d1dbeaad6b7536ec8116a1128733393a2828467cbf968273a8c61ec8b",
+  "frontend/src/proxy.ts": "07430cf5989f9954480e0e4914c0e069991d9daf146e80dcc98b3204ef8f7909",
+  "frontend/src/lib/identity.ts": "0d1f982f64f5b5dd6b24fc41da8823bd5122c0c1a27df1ab6d2309602d18dab8",
+  "frontend/src/lib/api.ts": "d25b60b91916d7b400c66dd9c631fca3bc09d5e7f45935c45f713f0b2861c5c7",
+  "frontend/src/app/dashboard/data-status/page.tsx": "dffa7ae43c6943db0292a7520667b1498553d5fadc184fc7cf748f7b81c556a0",
+  "frontend/next.config.js": "42a3ed82e8469ed8b5557b7908409036fcb1d4ba29f294c3b09542b981c23146",
+  "docs/superpowers/plans/2026-09-08-infra-063-json-boundary.md": "7edfb12f83a2ca9b294aae2842c0794ec6fe7e1266becef2a9842ffea653309a"
+}

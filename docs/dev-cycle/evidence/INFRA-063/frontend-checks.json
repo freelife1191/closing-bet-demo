@@ -1,0 +1,21 @@
+{
+  "vitest": {
+    "exit": 0,
+    "files": 57,
+    "passed": 373,
+    "seconds": 12.52
+  },
+  "typecheck": {
+    "exit": 0
+  },
+  "lint": {
+    "exit": 0,
+    "errors": 0,
+    "warnings": 199
+  },
+  "timeout_seconds": {
+    "vitest": 300,
+    "typecheck": 180,
+    "lint": 180
+  }
+}

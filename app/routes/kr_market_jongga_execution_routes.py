@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from flask import jsonify, request
+from werkzeug.exceptions import BadRequest
 
 from app.routes.route_execution import execute_json_route
 from app.routes.route_guards import require_admin
@@ -204,8 +205,22 @@ def _register_jongga_message_route(
     @require_admin
     def send_jongga_v2_message_route():
         """종가베팅 결과 메시지 수동 발송"""
+        # 관리자 신원이 첫 방어이고, JSON 전용은 form 같은 단순 요청 CSRF를 막는 두 번째
+        # 방어다. execute_json_route 안에서 BadRequest를 잡으면 기존 415/400 대신 500으로
+        # 바뀌므로, 발송 처리에 들어가기 전에 여기서 요청 경계를 확정한다.
+        if not request.is_json:
+            return jsonify({"status": "error", "error": "JSON 요청 본문이 필요합니다."}), 415
+
+        try:
+            data = request.get_json()
+        except BadRequest:
+            logger.error("Invalid JSON body for jongga message request")
+            return jsonify({"status": "error", "error": "올바른 JSON 객체가 필요합니다."}), 400
+
+        if not isinstance(data, dict):
+            return jsonify({"status": "error", "error": "JSON 객체가 필요합니다."}), 400
+
         def _handler():
-            data = request.get_json(silent=True) or {}
             target_date = data.get("target_date")
 
             filename = resolve_jongga_message_filename(target_date)

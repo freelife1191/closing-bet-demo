@@ -1,0 +1,9 @@
+{
+  "exit": 1,
+  "seconds": 6.53,
+  "timeout_seconds": 300,
+  "network": "deny outbound except localhost IPC",
+  "environment": "allowlist; telemetry and trace upload disabled; API_URL owned503stub",
+  "stub_requests": 0,
+  "stub_shutdown": true
+}

@@ -1,0 +1,26 @@
+{
+  "base": "5aab1dcd82c71c3b7ffaec7ecedbcb05089d9de5",
+  "pytest": {
+    "exit": 0,
+    "passed": 1936,
+    "skipped": 3,
+    "seconds": 28.37,
+    "skip_reasons": [
+      "manual Gemini integration x2",
+      "isolated clone has no .env x1"
+    ]
+  },
+  "vitest": {
+    "exit": 0,
+    "files": 57,
+    "passed": 373,
+    "seconds": 23.5
+  },
+  "tracked_dotenv": [
+    ".env.example"
+  ],
+  "public_variable_names": [
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_GOOGLE_CLIENT_ID"
+  ]
+}

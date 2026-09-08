@@ -38,8 +38,10 @@
 - 설계 승인: 승인 일자 2026-09-08 | 범위: 발송 JSON 객체 경계·T3 리뷰·UltraQA | 실제 대화: 설치 조치 후 사용자 「다음 진행해」, 중단 후 「계속 진행해」
 - 계획: docs/superpowers/plans/2026-09-08-infra-063-json-boundary.md
 - [x] `silent=True` 제거와 발송 전 MIME/문법/객체 검사로 결정
-- [ ] 정한 근거를 발송 라우트 옆에 적음
-- [ ] 폼 인코딩 요청이 막히는지 재는 검사 추가
+- [x] JSON-only의2차CSRF방어·wrapper밖415/400보존근거를발송라우트옆에적음
+- [x] 실제HMAC경계29개 추가, 대상62·전체pytest1965·vitest373PASS
+- [x] critic OKAY·ponytail Lean already·code/security APPROVE·architect CLEAR·deep수리후APPROVE
+- [ ] 확정commit UltraQA 실제HTTP28개·정리·통합·최종아카이브
 
 ### [INFRA-064] 익명 GET 하나가 Market Gate 분석을 원하는 만큼 돌릴 수 있다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-08 `[INFRA-059]` 사이클의 보안 리뷰(지적 2)와

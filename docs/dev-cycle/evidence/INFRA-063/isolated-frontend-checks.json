@@ -1,0 +1,13 @@
+{
+  "profile": "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))",
+  "checks": {
+    "type-check": {
+      "exit": 0,
+      "timeout": 180
+    },
+    "lint": {
+      "exit": 0,
+      "timeout": 180
+    }
+  }
+}

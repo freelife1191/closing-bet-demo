@@ -1,0 +1,22 @@
+{
+  "force_kill_cleanup": "dead-leader-child and live-leader-child PASS",
+  "jwt_environment_keys": [
+    [
+      "AUTH_SECRET",
+      "HOME",
+      "INFRA063_EMAIL",
+      "INFRA063_TOKEN_FILE",
+      "LANG",
+      "LC_ALL",
+      "LOGNAME",
+      "NEXTAUTH_SECRET",
+      "PATH",
+      "SHELL",
+      "TMPDIR",
+      "USER"
+    ]
+  ],
+  "fake_parent_credential_forwarded": false,
+  "debug_forwarded": false,
+  "temporary_jwt_removed": true
+}

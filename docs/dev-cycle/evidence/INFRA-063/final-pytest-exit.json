@@ -1,0 +1,8 @@
+{
+  "exit": 0,
+  "passed": 1965,
+  "skipped": 3,
+  "seconds": 25.58,
+  "timeout_seconds": 180,
+  "command": "gtimeout -k 10s 180s env -u OMX_ROOT -u OMX_STATE_ROOT SCHEDULER_ENABLED=false PYTHONDONTWRITEBYTECODE=1 sandbox-exec [deny network-outbound] original/venv/bin/python -m pytest -q -rs"
+}

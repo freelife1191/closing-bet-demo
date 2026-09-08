@@ -1,0 +1,38 @@
+{
+  "status": "recovered",
+  "product_source_changed": false,
+  "build_failures": 2,
+  "symptom": "Turbopack CSS node worker exited before IPC connection, exit0",
+  "runs": [
+    "isolated-vitest-exit.json",
+    "loopback-vitest-exit.json"
+  ],
+  "telemetry": "previous baseline did not force disable; external transmission not proven",
+  "network_filter_experiment": "specific-deny and require-not exclusion probes did not reject own simulated protected port; neither policy used for app QA",
+  "panic_cleanup": [
+    {
+      "source": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/next-panic-242e094dd3f60e05ba9dae762ed8f444.log",
+      "sha256": "b06faade64fc5aed2f62612a546ae077219f044017867bd0754b86f8b0ad0414",
+      "removed": true
+    },
+    {
+      "source": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/next-panic-5edbf73790ad5cbf3b3ed0792c7281ab.log",
+      "sha256": "b06faade64fc5aed2f62612a546ae077219f044017867bd0754b86f8b0ad0414",
+      "removed": true
+    },
+    {
+      "source": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra063-0mt30h7d/build-tmp/next-panic-a04468a88b52d8d840fb60a62ffcda05.log",
+      "sha256": "b06faade64fc5aed2f62612a546ae077219f044017867bd0754b86f8b0ad0414",
+      "removed": true
+    },
+    {
+      "source": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-infra063-0mt30h7d/build-tmp/next-panic-f168b1e1b7ba6b1231375286b2a0b351.log",
+      "sha256": "b06faade64fc5aed2f62612a546ae077219f044017867bd0754b86f8b0ad0414",
+      "removed": true
+    }
+  ],
+  "node_probe": "transport/node-bidirectional-probe.json",
+  "recovery": "Move only failed .next output aside, rerun same localhost-only sandbox/allowlist. Full vitest373 passed; API stub requests0. Specific corrupt cache entry not isolated.",
+  "passing_run": "fresh-loopback-vitest-exit.json",
+  "consecutive_failure_count": 0
+}

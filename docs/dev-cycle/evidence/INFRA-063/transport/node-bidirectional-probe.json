@@ -1,0 +1,6 @@
+{
+  "exit": 0,
+  "stdout": "connected\nserver-received:ping\nclient-received:pong\n",
+  "stderr": "",
+  "profile": "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))"
+}

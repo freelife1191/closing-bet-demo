@@ -1,0 +1,32 @@
+{
+  "exit": 0,
+  "checks": [
+    {
+      "target": "owned-loopback",
+      "allowed": true,
+      "connected": true,
+      "errno": null
+    },
+    {
+      "target": "owned-loopback",
+      "allowed": true,
+      "connected": true,
+      "errno": null
+    },
+    {
+      "target": "owned-loopback",
+      "allowed": false,
+      "connected": false,
+      "errno": 1
+    },
+    {
+      "target": "reserved-documentation-ip",
+      "allowed": false,
+      "connected": false,
+      "errno": 1
+    }
+  ],
+  "policy": "deny network-outbound except two exact localhost ports",
+  "initial_syntax_correction": "Seatbelt requires host localhost, not literal 127.0.0.1; initial syntax rejected before process launch",
+  "cleanup": "three owned probe sockets closed"
+}

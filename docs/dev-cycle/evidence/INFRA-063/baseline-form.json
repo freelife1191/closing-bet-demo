@@ -1,0 +1,8 @@
+{
+  "base": "5aab1dc",
+  "status": 404,
+  "load": 1,
+  "desired_status": 415,
+  "desired_load": 0,
+  "external_send": false
+}

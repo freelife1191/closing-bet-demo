@@ -1,0 +1,1 @@
+{"detected": false, "expected": true, "cause": "raw UTF-8 scan misses JSON unicode escapes", "fixture": "synthetic response only; no HTTP"}

@@ -1,0 +1,1 @@
+{"content":[{"type":"text","text":"tool call error: tool call failed for `omx_code_intel/lsp_servers`\n\nCaused by:\n    Transport closed"}],"isError":true}

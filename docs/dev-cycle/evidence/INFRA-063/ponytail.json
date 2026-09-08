@@ -1,0 +1,10 @@
+{
+  "task": "/root/infra063_ponytail",
+  "role": "code-reviewer",
+  "raw_final": "Lean already. Ship.",
+  "scope": [
+    "app/routes/kr_market_jongga_execution_routes.py",
+    "tests/app/test_jongga_message_request_boundary.py"
+  ],
+  "input_hashes": "review-input-sha256.json"
+}

@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "case": "HEAD^",
+      "rejected": true,
+      "reason": "HEAD is not the requested implementation commit"
+    },
+    {
+      "case": "HEAD",
+      "rejected": true,
+      "reason": "message source/test is not tracked at requested commit"
+    }
+  ],
+  "syntax": "AST parse pass",
+  "cleanup_selftest": "root exit0, log transport-cleanup-selftest.log.gz"
+}

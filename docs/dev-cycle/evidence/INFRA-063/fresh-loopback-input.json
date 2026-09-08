@@ -1,0 +1,21 @@
+{
+  "profile": "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))",
+  "env_keys": [
+    "API_URL",
+    "HOME",
+    "INTERNAL_IDENTITY_SECRET",
+    "LANG",
+    "LC_ALL",
+    "LOGNAME",
+    "NEXT_TELEMETRY_DISABLED",
+    "NEXT_TRACE_UPLOAD_DISABLED",
+    "PATH",
+    "SCHEDULER_ENABLED",
+    "SHELL",
+    "TMPDIR",
+    "USER"
+  ],
+  "test_command": "npx vitest run",
+  "generated_output": "prior .next moved to owned parent/failed-next-build; fresh output",
+  "source_changed": false
+}
