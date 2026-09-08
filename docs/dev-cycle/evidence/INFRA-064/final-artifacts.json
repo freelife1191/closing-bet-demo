@@ -1,0 +1,17 @@
+{
+  "completed_at": "2026-09-08 21:21",
+  "artifact_hashes": {
+    "docs/dev-cycle/qa/INFRA-064.md": "edc7050d61ce79b5d7b89cd333f54a16b57e519fb305fcab8e2f2ad054b1b986",
+    "docs/dev-cycle/reviews/INFRA-064.md": "25aae890fc387f226ced51874abc0bc8736b818ce03d3d1e0511c017fc3f91c5",
+    "docs/dev-cycle/TODO.md": "3a78fe7501b998a570e7248b320fde45742554f1737191b1fc47de125a32353b",
+    "docs/dev-cycle/archive/daily/2026-09-08.md": "6e7b170b45c8add75c00f4a08409cc33ce017c8a4b19e2adc3f4a4e24fc88a4b",
+    "docs/dev-cycle/archive/2026-09.md": "eec747497429e8896eff7db68acbfac8b17b788f608c68b665f37f365f861d21",
+    "docs/dev-cycle/evidence/INFRA-064/review-input.json": "47484e1e2f5d8c7b6f5f6e5af18c7c452974657ed208ece3783308b7c9dc7de3",
+    "docs/dev-cycle/evidence/INFRA-064/integration-preservation.json": "ac01119fbd9516f7f6be7562e9e293d92bf7a4203f5aabaa461700be49fe3c18"
+  },
+  "note": "코드 리뷰 입력과 최종 QA/아카이브 결과문서 해시를 구분한다. 과거 월별 통계는 재해석하지 않고 이번 완료1건/코드+401/Markdown증감만 적용했다.",
+  "round_markdown_diff": {
+    "added": 225,
+    "deleted": 46
+  }
+}

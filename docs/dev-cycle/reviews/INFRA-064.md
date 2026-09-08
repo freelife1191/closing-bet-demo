@@ -78,3 +78,21 @@ Recommendation: APPROVE
 
 리더 판정: APPROVE / Architectural Status CLEAR. LOW는 공개 상태 스냅샷의 짧은 전이 창으로 수용한다. 빈도 제한·중복 방지의 우회가 없고 다음 폴링에서 정정되므로 별도 상태 계층을 추가하지 않는다. 요구사항을 순간별 선형화 보장으로 확대하지 않는다.
 Python LSP 응답은 0 diagnostics이나 실제 backend가 tsc skipped이므로 Python 타입 검증 성공으로 세지 않는다. AST+실행 검사 증거를 사용했다.
+
+## 독립 최종 증거 검수 원문
+
+PASS — INFRA-064의 코드, 테스트, API 지표, 실제 UI 증거가 검증 주장과 일치합니다. 숨겨진 필수 실패는 발견하지 못했습니다.
+
+- review-input.json의 코드·테스트 5개 해시와 현재 파일이 모두 일치했습니다. tested-source.json의 백엔드·프론트 7개 파일도 모두 일치했습니다.
+- pytest 1996 passed/3 skipped, 관련65 passed, vitest57 files/373 passed, typecheck exit0, lint0 errors/199 warnings를 확인했습니다.
+- 날짜 조회 분석0, 실행 중 분석1/저장0·API initializing·UI50/Neutral, 성공 후 분석1/저장1·UI72/Bullish가 일치합니다.
+- 실패후 YELLOW/데이터 없음과 추가6.5초 재폴링0, fake clock299/300 경계를 확인했습니다.
+- quota만 브라우저 대역이고 Market Gate API는 대역하지 않았습니다.
+- 보존된9개 이미지를 직접 열어 현재72,과거31,누락/실행중/실패/299초50,복구72,VCP빈표를 확인했습니다.
+- 첫환경500/Turbopack오류,두번째준비quota404/date fill실패/잘못된 Initializing대기timeout이 원문에 남아있고 성공으로 계산되지 않았습니다.
+- 최종console error0/page error0,code-reviewerAPPROVE/architectCLEAR를 확인했습니다.
+- runtime cleanup은 fixture/proxy/browser exit0,listener0,Chrome0,namespace2개삭제로 기록됐습니다.
+
+검수 당시 마감 조건: 통합 → clone 삭제 → QA active:false/complete → 최종 QA SHA를 review-input.json에 추가 → 최종 산출물 문서 해시 기록.
+
+리더 후속 확인: 위 조건을 모두 이행했다. 원본package는 verifier가 clone에서 직접 재측정하지 않았으므로 root가 원본에서 직접 SHA256을 재측정했고 integration-preservation.json에 보존했다. verifier가 HEAD라고 표현한5cc2183은 실제 검증 기준 구현 커밋이며, 통합한 Git HEAD는 문서·QA 증거까지 포함한784a9dc다. tested-source 일치 확인으로 코드 차이가 없음을 증명했다.

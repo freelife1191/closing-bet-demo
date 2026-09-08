@@ -15,45 +15,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-064] 익명 GET 하나가 Market Gate 분석을 원하는 만큼 돌릴 수 있다
-- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-08 `[INFRA-059]` 사이클의 보안 리뷰(지적 2)와
-  적대적 리뷰(F3). 그 라운드가 `POST /market-gate/update` 를 관리자 전용으로 닫으면서,
-  같은 분석에 닿는 `GET /api/kr/market-gate` 는 열어 두기로 사용자가 결정한 자리입니다.
-- **승인 당시 전달된 근거가 불완전했습니다.** 그때 「프로세스 잠금이 동시 실행을 막는다」고
-  설명했는데, 잠금은 **겹침만 막고 빈도를 막지 않습니다.** 적대적 리뷰가 그 위에서 결정적
-  재현 경로를 찾았습니다.
-- **`?date=` 가 조종 가능한 손잡이입니다.**
-  `services/kr_market_market_gate_validity.py:67` 은 `target_date` 가 있으면 `needs_update`
-  판정 없이 조기 반환하고, 존재하지 않는 날짜 파일이면 `is_valid=False` 로 트리거 조건이
-  섭니다. 그런데 트리거되는 `_trigger_market_gate_background_refresh`
-  (`app/routes/kr_market.py:234`)는 **인자를 받지 않아** `analyze()` 와 `save_analysis()` 를
-  날짜 없이 부릅니다. 요청한 날짜 파일은 영원히 생기지 않으므로
-  **`GET /api/kr/market-gate?date=19990101` 은 매 요청마다 다시 무장됩니다.**
-  「낡았을 때만」이 사실은 조건이 아닙니다.
-- **더 실질적인 것은 공유 파일 덮어쓰기입니다.** `save_analysis` 가 오늘자
-  `market_gate.json` 을 매번 갈아쓰므로 익명 요청자가 **언제 다시 계산할지를 고릅니다.**
-  외부 데이터 소스가 실패하는 순간을 골라 두드리면 정상 스냅샷이 열화된 결과로 대체되고
-  모든 사용자가 그것을 봅니다.
-- **실패 경로에 억제가 없습니다.** `analyze()` 가 예외로 끝나면 `save_analysis` 에 닿지
-  못해 파일이 낡은 채로 남고 다음 GET 이 곧바로 재시도합니다. 데이터 소스 장애를 방문
-  트래픽이 무한 직렬 재시도로 증폭합니다.
-- **흔적이 남지 않습니다.** `_should_skip_activity_logging` 첫 줄이 GET 을 전부 거르므로
-  `[INFRA-059]` 의 `NOISY_ACTIVITY_PATHS` 정리로도 이 경로는 활동 로그에 남지 않습니다.
-- **비용은 LLM 이 아닙니다.** `engine/market_gate.py` 의 `analyze()` 는 pykrx·FDR·yfinance
-  수집이고 LLM 호출 경로가 없습니다. 쓰이는 것은 CPU·스레드와 외부 데이터 소스 호출량입니다.
-- 같은 파일 `:95-96` 의 `_jongga_last_run` 과 `_MIN_JONGGA_RUN_INTERVAL` 이 이미 쿨다운
-  패턴을 쓰고 있으므로 새 구조 없이 그것을 가져다 쓰면 됩니다.
-- 설계 승인: 승인 일자 2026-09-08 | 승인 확인 시각 2026-09-08 20:33
-  | 범위: 날짜 지정 GET 자동 분석 금지, 워커 공통 5분 쿨다운과 실제 실행 상태 응답, 회귀·전체 검사·UltraQA 실측
-  | 실제 대화 근거: INFRA-064 bounded·T2 설계 제안에 사용자가 「진행해」로 승인
-- QA 시나리오: `?date=` 를 바꿔 가며 GET 을 연속으로 쳤을 때 두 번째부터 분석이 시작되지
-  않는지 확인. 분석이 실패한 뒤에도 곧바로 재시도되지 않는지 함께 확인
-- [x] 종료 후 워커 공통 300초 쿨다운과 중단/부분 기록 복구 구현
-- [x] 분석·저장·스레드 기동·완료 기록 실패 회귀 확인
-- [x] 날짜 지정 GET 조회전용, 실제 running 표식의 초기화 응답
-- [x] 관련65PASS·전체pytest1996/3skip·vitest373·tsc/lint 통과; ponytail Lean already, code-review APPROVE, architect CLEAR
-- [ ] UltraQA agent-browser 실측·증거·정리·최종 아카이브
-
 ### [INFRA-065] 인가 불변식 검사가 `create_app()` 부작용을 일으킨다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-08 `[INFRA-059]` 사이클의 보안 리뷰(지적 6).
   `[INFRA-042]` 가 만든 검사의 성질이며 이번 라운드가 그 목록에 세 줄을 더해 비중을

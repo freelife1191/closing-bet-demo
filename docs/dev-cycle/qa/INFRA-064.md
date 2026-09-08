@@ -7,10 +7,10 @@
 
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: cleanup
+- phase: complete
 - iteration: 2
 - same_failure_count: 0
-- active: true
+- active: false
 - 기준: 5cc21835fd38ddad1ea60e7e09c7d7257b00cc94 (첫 구현 커밋)
 - browser_applicability: required
 - 근거: /dashboard/kr의 오늘/과거 날짜 화면과 /dashboard/kr/vcp가 변경 GET을 소비한다.
@@ -19,19 +19,19 @@
 - browser_session: viewer
 - baseline: pytest 1965 passed/3 skipped(exit0), vitest 373 passed/57 files(exit0)
 - timeout: 검사별 480초, 리뷰별 900초, 브라우저 실행별 900초. 최대 5회·동일 실패 3회.
-- cleanup: 서버·브라우저·namespace 종료/제거 완료, 사본 통합 후 삭제 예정
+- cleanup: 완료 — 서버·브라우저·namespace 종료/제거, develop 통합·독립 사본 삭제 확인
 
 ## 시나리오 행렬
 
 | ID | 의도·행위자 | setup·명령/하네스 | 기대 신호 | 실제 결과·수정·증거 | 정리 | 필수 |
 |---|---|---|---|---|---|---|
-| Q1 | 정상 최신 조회 | 임시 저장 자료와 실제 GET/분석 대역, pytest·브라우저 | 최신 자료 조회는 분석0; 낡은 자료 첫 요청1; 완료 후 값 표시 | 통과: 관련65PASS 및 아래 실제 UI/HTTP·metrics 증거 | 임시 자료 최종 제거 예정 | 예 |
-| Q2 | 과거 날짜 남용 | 서로 다른 없는 날짜·빈/Unicode/특이 date를 실제 GET | date 지정 분석0, 저장된 과거 자료는 보존 | 통과: 관련65PASS 및 아래 실제 UI/HTTP·metrics 증거 | 임시 자료 최종 제거 예정 | 예 |
+| Q1 | 정상 최신 조회 | 임시 저장 자료와 실제 GET/분석 대역, pytest·브라우저 | 최신 자료 조회는 분석0; 낡은 자료 첫 요청1; 완료 후 값 표시 | 통과: 관련65PASS 및 아래 실제 UI/HTTP·metrics 증거 | 소유 fixture 제거 완료 | 예 |
+| Q2 | 과거 날짜 남용 | 서로 다른 없는 날짜·빈/Unicode/특이 date를 실제 GET | date 지정 분석0, 저장된 과거 자료는 보존 | 통과: 관련65PASS 및 아래 실제 UI/HTTP·metrics 증거 | 소유 fixture 제거 완료 | 예 |
 | Q3 | 반복·실패 재시도 | 실제 파일 잠금·시계 제어·분석/스레드 start 실패 | 종료 후 299초 억제, 300초 재실행; 실패도 동일 | 통과: 실패3종·299/300·실제 UI 재시도/중단 | 소유 실행 종료 | 예 |
 | Q4 | 여러 워커·중단·잘못된 상태 | 실제 별도 프로세스/flock·잘못된 timestamp·잠금/I/O 불가 | 실행중 중복0; 다음 워커 쿨다운 공유; 불명확 상태 fail closed | 통과: 실제 별도 프로세스 회귀 및 write/partial-flush RED→GREEN | 소유 실행 종료 | 예 |
 | Q5 | 사용자 UI 회귀 | agent-browser로 /dashboard/kr 오늘/과거 전환·재조회, VCP 진입 | 실제 GET과 화면값 일치; 쿨다운을 분석중으로 표시하지 않음 | 통과: 실제 UI/응답/폴링/이미지 대조; 아래 참조 | 전용 세션 종료 | 예 |
 | Q6 | 실패 UI | 격리 수집 실패 뒤 실제 UI 재조회 | 즉시 재실행0; 분석중 허위 표시0; console/page 오류 평가 | 통과: 실제 UI/응답/폴링/이미지 대조; 아래 참조 | 전용 세션 종료 | 예 |
-| Q7 | 검사·증거·정리 보장 | 전체 pytest/vitest, diff 검사, PID/port·원본 hash 대조 | 종료코드와 결과 일치; 필수 전부 통과; 소유 임시물 제거 | 실행 증거 통과, 최종 사본 정리 대기 | runtime-cleanup.json | 예 |
+| Q7 | 검사·증거·정리 보장 | 전체 pytest/vitest, diff 검사, PID/port·원본 hash 대조 | 종료코드와 결과 일치; 필수 전부 통과; 소유 임시물 제거 | 통과: 실행 증거·통합·사본 삭제·원본 보존 확인 | runtime-cleanup.json | 예 |
 
 외부 자료 속 지시 실행은 이 GET의 기능이 아니므로 prompt injection 동적 행은 해당 없음. 특이 query는 코드/명령으로 평가하지 않는다. 인증 정책·관리자 강제 POST·스케줄러 변경은 범위 밖이며 실운영으로 실행하지 않는다. 하네스 setup 실패와 제품 실패를 구분해 재시도 횟수와 원인을 보존한다.
 
@@ -88,4 +88,14 @@
 
 ## 종료 확인
 
-fixture/proxy/브라우저 종료 모두 exit0. 첫/두 번째 소유 포트 모두 listener0, Chrome0, 두 namespace 삭제. 사진·명령·HTTP·부수효과·실패와 수정·정리 증거는 evidence/INFRA-064에 보존했다. 남은 단계는 이 사본의 커밋 통합과 사본 삭제다.
+fixture/proxy/브라우저 종료 모두 exit0. 첫/두 번째 소유 포트 모두 listener0, Chrome0, 두 namespace 삭제. 사진·명령·HTTP·부수효과·실패와 수정·정리 증거는 evidence/INFRA-064에 보존했다. 784a9dc까지 원본 develop에 fast-forward 통합하고 소유 임시 사본을 삭제했다.
+
+
+## 최종 판정
+
+- 필수 **7/7 통과**, 독립 verifier PASS. 통합 후 테스트 소스 해시 일치와 원본 package.json 보존을 다시 확인했다.
+- 원본 develop에 5cc2183·784a9dc 반영. 독립 clone·복제 의존성·실패 .next·가짜 쿠키/브라우저 프로필·하네스·fixture 삭제 완료(integration-preservation.json).
+- 최종 문서 해시는 review-input.json 및 final-artifacts.json에 별도로 기록한다. 결과 문서의 최종 해시를 과거 코드 reviewer가 읽은 입력으로 소급 주장하지 않는다.
+- 운영 재시작·배포·실제 시장 수집·발송은 수행하지 않았다.
+
+ULTRAQA COMPLETE: Goal met after 2 cycles
