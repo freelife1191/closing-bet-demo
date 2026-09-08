@@ -1,0 +1,11 @@
+{
+  "source": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo",
+  "head": "a464a30398a78dc8422fdbb43c2b7879178a5b9c",
+  "package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "integrated_commit": "d570a390e0b0ba731eb9e5dba1f1d87044e1295c",
+  "postintegration_review_inputs_matched": 24,
+  "postintegration_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "owned_clone_and_harness_removed": true,
+  "original_env_data_accessed": false,
+  "operational_restart_or_deploy": false
+}
