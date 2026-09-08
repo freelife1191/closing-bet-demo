@@ -3,7 +3,7 @@
 ## Goal and success criteria
 
 - 목표: 로그인한 A/B가 자기 모의계정만 조회·변경하고 legacy 자료와 공용 시세의 신뢰 경계를 보존한다.
-- engine: ultraqa | lifecycle: app-adapted | phase: cleanup | iteration: 1 | same_failure_count: 0
+- engine: ultraqa | lifecycle: app-adapted | phase: complete | iteration: 1 | same_failure_count: 0
 - 승인: 사용자 「진행해」. 로그인 전용·legacy 보존·개인 계정 초기 모의자금 100_000_000.
 - 기준: cabc0be, 설계/계획 9f32e9a. critic 최초 REJECT(기존 가격캐시 전환 누락) 후 보완하여 OKAY.
 - baseline: 기존 모의투자 관련 pytest 96개 통과(1.53초). HTTP 신규 회귀는 익명 응답 200으로 RED, 인증 경계 후 33개 GREEN.
@@ -20,7 +20,7 @@
 | Q4 | 동시 사용자/중단 | 여러 연결·동시 초기화/매수·실패 주입 | concurrency/rollback pytest | 자금 중복 지급·음수잔고·다른owner변경·부분 migration 없음 | 통과: 두 spawn 초기화·동시 owner valuation·late 실패 rollback | transaction/조건부 SQL | test_paper_trading_migration_safety.py, exactcommit PASS | 프로세스 join·연결 종료 | 예 |
 | Q5 | 가격 오염 시도 | 같은 ticker, A의 입력가격, mock provider | cache/valuation pytest | B는 공급자 시세/자기 원가만 사용, reset은 공유cache 보존 | 통과: 체결 입력은 공용cache 미기록·B provider/원가만 평가 | 거래의 공유캐시 쓰기 제거 | test_paper_trading_owner_isolation.py, exactcommit PASS | 외부호출 없음 | 예 |
 | Q6 | 로그인 전환/늦은응답 | 익명→A→B, 지연응답·401 | vitest·격리 UI | 로그인 안내, A 자료/응답이 B 화면에 재등장하지 않음 | 통과: Alice120,999,000/Bob99,996,000, 401안내, 늦은 응답 미반영 | UX/session 경계 | final-ui/final-summary.md, deferred 9 PASS | 소유서버·임시route·브라우저 정리 완료 | 예 |
-| Q7 | 회귀·불변성 | 독립 clone, 원본 파일 hash | 전체 pytest/vitest/typecheck·diff | 기존 계약 및 원본 data/env/package 보존 | 정적/동적 통과, 원본 HEAD/package 불변 확인 | 필요한 contract 갱신 | full logs·34 source hashes | 실행 fixture 정리 완료, clone 반영·정리 대기 | 예 |
+| Q7 | 회귀·불변성 | 독립 clone, 원본 파일 hash | 전체 pytest/vitest/typecheck·diff | 기존 계약 및 원본 data/env/package 보존 | 통과: 정적/동적·source34·원본 package 보존 | 필요한 contract 갱신 | full logs·34 source hashes | 실행 fixture·clone·baseline 정리 완료 | 예 |
 
 ## Commands run
 
@@ -36,11 +36,11 @@
 
 ## Cleanup and rollback
 
-실행용 QA 서버·임시 route·브라우저·임시 SQLite·하네스는 정리했다. 원본 DB migration/서비스 재기동/배포는 수행하지 않았다. 검증 커밋을 원본에 반영한 뒤 독립 clone·baseline도 제거한다.
+실행용 QA 서버·임시 route·브라우저·임시 SQLite·하네스는 정리했다. 원본 DB migration/서비스 재기동/배포는 수행하지 않았다. 검증 커밋 374d4f6까지 원본 develop에 fast-forward한 뒤 독립 clone·baseline을 제거했다.
 
 ## Residual risks
 
-모든 필수 동작은 통과했다. 검증 커밋의 원본 반영과 작업 clone 정리 후 완료 판정한다. 신원 서명의 경로/메서드 재생 방어는 기존 INFRA-062 범위이며 이번 변경에서 서명 형식을 바꾸지 않는다.
+모든 필수 동작과 정리가 통과했고 검증 커밋은 원본 develop에 반영했다. 운영 DB 적용·재기동·배포는 실행하지 않았다. 신원 서명의 경로/메서드 재생 방어는 기존 INFRA-062 범위이며 이번 변경에서 서명 형식을 바꾸지 않는다.
 
 ## Evidence
 
@@ -90,3 +90,18 @@
 - 최종 Q6: [브라우저/실컴포넌트 QA](../evidence/INFRA-060/final-ui/final-summary.md). 늦은 mutation은 브라우저에서 요청을 중단한 시험으로 꾸미지 않고, 같은 커밋의 실제 BuyStockModal deferred 응답 테스트 9개로 검증했다.
 
 - 최종 동적 QA와 실행 fixture cleanup PASS. root에서 source/test SHA34 일치, source diff 0, 원본 HEAD 및 package 해시 불변을 확인했다. 작업 clone 정리 전이므로 이 QA 증거 커밋에서도 TODO는 유지한다.
+
+## 최종 판정
+
+- 필수 시나리오 **7/7 통과**, 미통과 필수 없음. Q6의 브라우저/컴포넌트 세부 시나리오도 7/7 통과했다.
+- 최종 코드 기준: `5f60865`; 확정 커밋 QA 증거: `374d4f6`; 설계/계획: `9f32e9a`.
+- root가 원본 반영 후 source/test 34개 SHA-256 일치와 기존 package.json 해시 불변을 확인했다.
+- 58235/58786 QA listener가 없음을 다시 확인했고, 이번 작업의 독립 clone·baseline·임시 실행 파일을 제거했다. 증거는 저장소에 보존했다.
+- 원본 .env/data는 읽거나 바꾸는 작업을 수행하지 않았다. 내용 hash를 확인했다는 의미는 아니다.
+- App 대응 실행이며 네이티브 OMX hook 상태를 생성·수정·종료했다고 주장하지 않는다.
+- [최종 UI 증거](../evidence/INFRA-060/final-ui/final-summary.md), [보존/정리 결과](../evidence/INFRA-060/integration-preservation.json), [리뷰 판정](../reviews/INFRA-060.md).
+- 재개 판정: 완료 가능. 이번 항목만 완료하며 다음 TODO는 시작하지 않는다.
+
+`ULTRAQA COMPLETE: Goal met after 1 cycles`
+
+완료 확인: 2026-09-08 15:39 KST.
