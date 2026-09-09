@@ -66,8 +66,8 @@ class PositionSizer:
             logger.error(f"포지션 계산 실패: {e}")
             return PositionInfo(
                 entry_price=current_price,
-                stop_price=current_price * 0.97,
-                target_price=current_price * 1.05,
+                stop_price=current_price * (1 - self.config.stop_loss_pct),
+                target_price=current_price * (1 + self.config.take_profit_pct),
                 r_value=0,
                 r_multiplier=1,
                 position_size=0,

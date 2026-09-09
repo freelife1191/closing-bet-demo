@@ -1,0 +1,12 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-c",
+    "\nimport hashlib, json\nfrom pathlib import Path\nroot=Path.cwd()\nmanifest=json.loads((root.parent/\"evidence/review-input-v4.json\").read_text())\nbad=[]\nfor rel, expected in manifest[\"files\"].items():\n    actual=hashlib.sha256((root/rel).read_bytes()).hexdigest()\n    if actual != expected:\n        bad.append({\"file\":rel,\"expected\":expected,\"actual\":actual})\nassert manifest[\"base\"]==\"8febe19ad7d2a41301104b8efe5ff6bed7b3ccab\"\nassert not bad,bad\nprint({\"manifest\":\"review-input-v4.json\",\"files\":len(manifest[\"files\"]),\"hashes\":\"match\",\"base\":manifest[\"base\"]})\n"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 0,
+  "seconds": 0.076,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-arch-v4-hash.log"
+}

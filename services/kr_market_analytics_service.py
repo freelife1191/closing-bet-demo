@@ -23,7 +23,10 @@ from services.kr_market_csv_utils import (
     load_csv_readonly as _load_csv_readonly,
 )
 from services.file_row_count_cache import get_cached_file_row_count
-from services.kr_market_backtest_cumulative import build_ticker_price_index
+from services.kr_market_backtest_cumulative import (
+    build_ticker_price_index,
+    extract_stats_date_from_results_filename,
+)
 from services.kr_market_backtest_summary_cache import (
     build_backtest_summary_cache_signature,
     get_cached_backtest_summary,
@@ -358,7 +361,11 @@ def build_backtest_summary_payload(
         "candidates": candidates,
     }
     try:
-        history_payloads = [payload for _, payload in load_jongga_result_payloads(30)]
+        history_payloads = [
+            {**payload, "date": extract_stats_date_from_results_filename(path, payload.get("date", ""))}
+            for path, payload in load_jongga_result_payloads(30)
+            if isinstance(payload, dict)
+        ]
         try:
             jb_stats = calculate_jongga_backtest_stats(
                 candidates,

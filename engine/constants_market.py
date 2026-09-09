@@ -50,6 +50,10 @@ SCREENING: Final[ScreeningConfig] = ScreeningConfig()
 FILE_PATHS: Final[FilePaths] = FilePaths()
 TICKERS: Final[TickerSymbols] = TickerSymbols()
 
+# 종가베팅 생성·누락 보정·성과 계산이 함께 쓰는 기본 익절/손절 폭이다.
+JONGGA_TARGET_PCT: Final[float] = 0.05
+JONGGA_STOP_PCT: Final[float] = 0.03
+
 
 __all__ = [
     "BOLLINGER",
@@ -57,6 +61,8 @@ __all__ = [
     "FILE_PATHS",
     "FX",
     "LLM",
+    "JONGGA_STOP_PCT",
+    "JONGGA_TARGET_PCT",
     "MARKET_GATE",
     "NEWS",
     "PRICE_CHANGE",
@@ -86,4 +92,3 @@ __all__ = [
     "VCPThresholds",
     "VolumeThresholds",
 ]
-

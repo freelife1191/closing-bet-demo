@@ -1,0 +1,6 @@
+{
+  "file": "checkout/tests/services/test_kr_market_cumulative_cache.py",
+  "old_sha256": "290e0d46e9053c99e3948d177a98cd8931b9b84b8127d0bbe5689c41f04409ae",
+  "new_sha256": "a6a8fb7d815fd83d079f235894ccb602ac781c53a6e3424cba0eddac404e7c18",
+  "change": "remove blank lines at EOF from removal of duplicate newly added test; no code changes"
+}

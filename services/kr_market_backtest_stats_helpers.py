@@ -11,13 +11,13 @@ from typing import Any
 import pandas as pd
 
 from services.kr_market_backtest_common import (
-    JONGGA_STOP_PCT,
-    JONGGA_TARGET_PCT,
     determine_backtest_status,
-    pct_to_percent,
     safe_float,
 )
-from services.kr_market_backtest_cumulative import build_ticker_price_index
+from services.kr_market_backtest_cumulative import (
+    build_cumulative_trade_record,
+    build_ticker_price_index,
+)
 from services.kr_market_backtest_scenario_helpers import (
     calculate_scenario_return,
     inject_latest_prices_to_candidates,
@@ -46,6 +46,8 @@ def calculate_jongga_backtest_stats(
     losses = 0
     total_return = 0.0
 
+    # 일봉 group의 date/RangeIndex 정규화는 공통 metrics 진입점이 수행한다. 여기서
+    # 전체 frame을 미리 복사하지 않아도 raw group과 DatetimeIndex group을 모두 처리한다.
     resolved_price_index = price_index or build_ticker_price_index(price_df)
 
     for payload in history_payloads:
@@ -59,41 +61,20 @@ def calculate_jongga_backtest_stats(
         for signal in signals:
             if not isinstance(signal, dict):
                 continue
-            code = str(
-                signal.get("stock_code")
-                or signal.get("code")
-                or signal.get("ticker")
-                or ""
-            ).zfill(6)
-            if not code or code == "000000":
-                continue
-
-            entry = safe_float(
-                signal.get("entry_price") or signal.get("close") or signal.get("current_price"),
-                default=0.0,
-            )
-            if entry <= 0:
-                continue
-
-            current_price = safe_float(price_map.get(code), default=0.0)
-            if current_price <= 0:
-                continue
-
-            ret = calculate_scenario_return(
-                code,
-                entry,
-                signal_date,
-                current_price,
+            trade = build_cumulative_trade_record(
+                signal,
+                str(signal_date),
                 price_df,
-                target_pct=JONGGA_TARGET_PCT,
-                stop_pct=JONGGA_STOP_PCT,
-                stock_prices=resolved_price_index.get(code),
+                price_index=resolved_price_index,
             )
+            if trade is None:
+                continue
+
             total_signals += 1
-            total_return += ret
-            if ret >= pct_to_percent(JONGGA_TARGET_PCT):
+            total_return += float(trade["roi"])
+            if trade["outcome"] == "WIN":
                 wins += 1
-            elif ret <= -pct_to_percent(JONGGA_STOP_PCT):
+            elif trade["outcome"] == "LOSS":
                 losses += 1
 
     if total_signals > 0:

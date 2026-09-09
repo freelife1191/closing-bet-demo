@@ -57,3 +57,14 @@ describe('[FLOW-004] 백테스트 확인 아이콘', () => {
     expect(container.querySelectorAll('i.fa-check-circle')).toHaveLength(expected);
   });
 });
+
+it('종가 성과는 저장 가격 우선 기준을 설명하고 VCP 설명 분기와 섞이지 않는다', async () => {
+  fetchAPIMock.mockResolvedValue({
+    vcp: { status: 'GOOD', count: 12, win_rate: 55, avg_return: 3.1 },
+    closing_bet: { status: 'GOOD', count: 8, win_rate: 62, avg_return: 2.4, candidates: [] },
+  });
+  render(<KRDashboardPage />);
+  await waitFor(() => expect(screen.getAllByText('12 trades').length).toBeGreaterThan(0));
+  expect(screen.getByText(/종가베팅은 저장된 목표가·손절가 기준/)).toBeTruthy();
+  expect(screen.getByText('익절 +9%, 손절 -5% 기준 백테스팅 결과입니다.')).toBeTruthy();
+});

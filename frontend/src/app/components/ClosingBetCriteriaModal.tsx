@@ -83,13 +83,13 @@ export default function ClosingBetCriteriaModal({ isOpen, onClose }: ClosingBetC
         <div className="border border-white/10 rounded-xl overflow-hidden">
           <div className="bg-white/5 px-4 py-2 border-b border-white/10 flex justify-between items-center">
             <h4 className="font-bold text-white">매매 원칙 (Exit Strategy)</h4>
-            <span className="text-xs font-bold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">고정값</span>
+            <span className="text-xs font-bold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">기본값</span>
           </div>
           <div className="p-4 space-y-1 text-sm text-gray-300">
-            <div className="flex justify-between"><span><span className="text-emerald-400 font-bold">익절</span> 목표</span><span className="font-mono text-emerald-400">+9%</span></div>
-            <div className="flex justify-between"><span><span className="text-rose-400 font-bold">손절</span> 기준</span><span className="font-mono text-rose-400">-5%</span></div>
+            <div className="flex justify-between"><span><span className="text-emerald-400 font-bold">익절</span> 목표</span><span className="font-mono text-emerald-400">+5%</span></div>
+            <div className="flex justify-between"><span><span className="text-rose-400 font-bold">손절</span> 기준</span><span className="font-mono text-rose-400">-3%</span></div>
             <p className="text-[11px] text-gray-500 mt-2">
-              * 누적 성과 백테스트(<code className="text-gray-400">backtest_trade_helpers</code>)는 익절(+9%)·손절(-5%) 도달 시 청산하며, 미도달 시 OPEN 상태로 추적합니다.
+              * 시그널에 저장된 목표가·손절가를 우선 사용합니다. 누락된 가격은 진입가 대비 +5%/-3%로 계산합니다. 백테스트도 같은 가격으로 판정하며, 같은 일봉에서 양쪽에 도달하면 손절을 우선합니다. 미도달 거래는 OPEN으로 추적합니다.
             </p>
           </div>
         </div>

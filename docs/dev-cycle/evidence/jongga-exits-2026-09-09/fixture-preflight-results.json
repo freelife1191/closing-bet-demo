@@ -1,0 +1,162 @@
+[
+  {
+    "variant": "stored",
+    "daily": "targethit",
+    "outcome": "WIN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "stored",
+    "daily": "stophit",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "stored",
+    "daily": "sameday",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "stored",
+    "daily": "open",
+    "outcome": "OPEN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "missing",
+    "daily": "targethit",
+    "outcome": "WIN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "missing",
+    "daily": "stophit",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "missing",
+    "daily": "sameday",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "missing",
+    "daily": "open",
+    "outcome": "OPEN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "custom",
+    "daily": "targethit",
+    "outcome": "WIN",
+    "roi": 8,
+    "target": 108000.0,
+    "stop": 96000.0
+  },
+  {
+    "variant": "custom",
+    "daily": "stophit",
+    "outcome": "LOSS",
+    "roi": -4,
+    "target": 108000.0,
+    "stop": 96000.0
+  },
+  {
+    "variant": "custom",
+    "daily": "sameday",
+    "outcome": "LOSS",
+    "roi": -4,
+    "target": 108000.0,
+    "stop": 96000.0
+  },
+  {
+    "variant": "custom",
+    "daily": "open",
+    "outcome": "OPEN",
+    "roi": 5,
+    "target": 108000.0,
+    "stop": 96000.0
+  },
+  {
+    "variant": "malicious",
+    "daily": "targethit",
+    "outcome": "WIN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "malicious",
+    "daily": "stophit",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "malicious",
+    "daily": "sameday",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "malicious",
+    "daily": "open",
+    "outcome": "OPEN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "empty-reason",
+    "daily": "targethit",
+    "outcome": "WIN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "empty-reason",
+    "daily": "stophit",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "empty-reason",
+    "daily": "sameday",
+    "outcome": "LOSS",
+    "roi": -3,
+    "target": 105000.0,
+    "stop": 97000.0
+  },
+  {
+    "variant": "empty-reason",
+    "daily": "open",
+    "outcome": "OPEN",
+    "roi": 5,
+    "target": 105000.0,
+    "stop": 97000.0
+  }
+]

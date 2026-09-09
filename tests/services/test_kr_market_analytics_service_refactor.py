@@ -761,3 +761,24 @@ def test_build_stock_chart_payload_cuts_on_normalized_dates():
     )
 
     assert [row["date"] for row in payload["data"]] == ["2026-04-20", "2026-05-04"]
+
+
+def test_backtest_summary_uses_history_filename_date_without_mutating_payload(monkeypatch):
+    """파일명이 기준일인 과거 자료도 누적성과와 같은 청산 판정을 해야 한다."""
+    from services.kr_market_backtest_stats_helpers import calculate_jongga_backtest_stats
+    monkeypatch.setattr(analytics_service, "get_cached_backtest_summary", lambda **_: None)
+    monkeypatch.setattr(analytics_service, "save_cached_backtest_summary", lambda **_: None)
+    history = {"signals": [{"stock_code": "005930", "entry_price": 100}]}
+    prices = pd.DataFrame([{"date": "2026-02-21", "ticker": "005930", "high": 106, "low": 99, "close": 105}])
+    result = build_backtest_summary_payload(
+        load_json_file=lambda *_args, **_kwargs: {},
+        load_backtest_price_snapshot=lambda: (prices, {}),
+        load_jongga_result_payloads=lambda _: [("jongga_v2_results_20260220.json", history)],
+        calculate_jongga_backtest_stats=calculate_jongga_backtest_stats,
+        load_csv_file=lambda *_args, **_kwargs: pd.DataFrame(),
+        calculate_vcp_backtest_stats=lambda *_args, **_kwargs: {},
+        logger=logging.getLogger("summary-filename-date"),
+    )
+    assert result["closing_bet"]["win_rate"] == 100.0
+    assert result["closing_bet"]["avg_return"] == 5.0
+    assert "date" not in history

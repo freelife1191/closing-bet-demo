@@ -1,0 +1,12 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-c",
+    "import pandas as pd; from services.kr_market_backtest_trade_helpers import calculate_cumulative_trade_metrics, prepare_cumulative_price_dataframe; raw=pd.DataFrame([{\"date\":\"2026-02-21\",\"ticker\":\"005930\",\"high\":107,\"low\":96,\"close\":100}]); prices=prepare_cumulative_price_dataframe(raw); print(calculate_cumulative_trade_metrics(100,\"2026-02-20\",prices,target_pct=.20,stop_pct=.10,target_price=108,stop_price=None))"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 0,
+  "seconds": 1.164,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-code-mixed-pct.log"
+}

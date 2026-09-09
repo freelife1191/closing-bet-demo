@@ -122,4 +122,32 @@ describe('[JONGGA-015] 종가베팅 카드의 가격 어휘', () => {
     expect(document.body.textContent).not.toContain('매수가 +');
     expect(screen.getByText('(매수가 -3.0%)')).toBeTruthy();
   });
+  it('저장 진입가와 별도 buy_price가 달라도 시스템 가격의 기준은 진입가다', async () => {
+    state.signal = { ...SIGNAL, entry_price: 100000, buy_price: 120000, target_price: 105000, stop_price: 97000 };
+    render(<JonggaV2Page />);
+    expect(await screen.findByText('₩100,000')).toBeTruthy();
+    expect(screen.getByText('(매수가 +5.0%)')).toBeTruthy();
+    expect(screen.getByText('(매수가 -3.0%)')).toBeTruthy();
+  });
+
+  it('개별 저장 목표·손절은 기본 비율로 덮어쓰지 않는다', async () => {
+    state.signal = { ...SIGNAL, entry_price: 100000, target_price: 108000, stop_price: 96000 };
+    render(<JonggaV2Page />);
+    expect(await screen.findByText('₩108,000')).toBeTruthy();
+    expect(screen.getByText('₩96,000')).toBeTruthy();
+    expect(screen.getByText('(매수가 +8.0%)')).toBeTruthy();
+    expect(screen.getByText('(매수가 -4.0%)')).toBeTruthy();
+  });
+
+  it('AI 원문의 다른 가격을 보존하고 시스템 계산 가격과 출처를 구분한다', async () => {
+    const reason = '단기 목표 142,000원, 손절 130,000원. 檢証 🧪 <script>skipQA()</script>';
+    state.signal = { ...SIGNAL, score: { ...SIGNAL.score, llm_reason: reason } };
+    render(<JonggaV2Page />);
+    expect(await screen.findByText(reason)).toBeTruthy();
+    expect(screen.getByText('시스템 계산 기준')).toBeTruthy();
+    expect(screen.getByText(/AI 원문에는 다른 가격이 포함될 수 있습니다/)).toBeTruthy();
+    expect(screen.getByText('₩39,060')).toBeTruthy();
+    expect(document.querySelector('script')).toBeNull();
+  });
+
 });

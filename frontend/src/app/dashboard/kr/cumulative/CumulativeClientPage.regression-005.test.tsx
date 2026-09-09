@@ -3,7 +3,7 @@
 // Found by /qa on 2026-09-01
 // Report: .gstack/qa-reports/qa-report-localhost-3500-2026-09-01.md
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CumulativeClientPage from './CumulativeClientPage';
@@ -85,4 +85,11 @@ describe('CumulativeClientPage', () => {
     // 5건 중 3승이므로 60%. 대소문자가 어긋나면 closedTrades 가 비어 '-' 가 된다.
     expect(screen.queryByText('60%')).not.toBeNull();
   });
+});
+
+it('누적성과 안내는 저장 가격 우선과 기본 +5/-3을 설명한다', async () => {
+  render(<CumulativeClientPage />);
+  await waitFor(() => expect(chipLabels()).toContain('전체 (5)'));
+  fireEvent.click(screen.getByRole('button', { name: '성과 가이드' }));
+  expect(within(screen.getByRole('dialog')).getByText(/저장된 목표가·손절가를 우선/)).toBeTruthy();
 });

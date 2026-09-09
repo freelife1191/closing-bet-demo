@@ -621,3 +621,22 @@ def test_config_interval_errors_do_not_expose_details(monkeypatch, caplog, error
     assert "QA_SECRET_SENTINEL" not in response.get_data(as_text=True) + caplog.text
     assert "/private/fake-credentials.env" not in response.get_data(as_text=True) + caplog.text
     assert type(error).__name__ in caplog.text
+
+
+@pytest.mark.parametrize("stored", [False, True])
+def test_jongga_history_repairs_missing_exit_prices_without_rewriting_file(monkeypatch, tmp_path, stored):
+    """과거 날짜 조회도 최신과 같은 가격 보정을 거치며 저장 원문을 바꾸지 않는다."""
+    monkeypatch.setattr(kr_market, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(kr_market, "load_json_file", lambda _: {})
+    signal = {"stock_code": "005930", "entry_price": 100000, "grade": "B", "score": {"total": 6, "llm_reason": "목표 142000원 원문"}}
+    if stored:
+        signal.update(target_price=108000, stop_price=96000)
+    path = tmp_path / "jongga_v2_results_20260220.json"
+    original = json.dumps({"date": "2026-02-20", "signals": [signal]}).encode()
+    path.write_bytes(original)
+    response = _create_client().get("/api/kr/jongga-v2/history/2026-02-20")
+    assert response.status_code == 200
+    row = response.get_json()["signals"][0]
+    assert (row["target_price"], row["stop_price"]) == ((108000, 96000) if stored else (105000, 97000))
+    assert row["score"]["llm_reason"] == "목표 142000원 원문"
+    assert path.read_bytes() == original

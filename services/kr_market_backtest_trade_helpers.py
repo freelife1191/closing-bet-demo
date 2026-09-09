@@ -6,6 +6,8 @@ KR Market Backtest - Trade/Cumulative Helpers
 
 from __future__ import annotations
 
+import logging
+import math
 from datetime import datetime
 from typing import Any
 
@@ -16,10 +18,13 @@ from services.kr_market_backtest_common import (
     JONGGA_TARGET_PCT,
     format_signal_date,
     pct_to_percent,
+    resolve_jongga_exit_prices,
     resolve_hit_outcome,
     safe_float,
 )
 
+
+logger = logging.getLogger(__name__)
 
 def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
     if "_ticker_padded" in df.columns:
@@ -99,11 +104,15 @@ def calculate_cumulative_trade_metrics(
     stock_prices: Any,
     target_pct: float = JONGGA_TARGET_PCT,
     stop_pct: float = JONGGA_STOP_PCT,
+    *,
+    target_price: float | None = None,
+    stop_price: float | None = None,
 ) -> dict[str, Any]:
     """종가베팅 1건의 Outcome/ROI/Trail/기간/최대상승률을 계산한다.
 
-    폭의 기본값은 종가베팅 통계가 `calculate_scenario_return` 에 넘기는 값과 같은
-    상수에서 온다.
+    종가 요약과 누적성과가 같은 결과를 사용한다. 명시 가격을 우선하며 없는
+    한쪽은 해당 pct로 계산한다. date 컬럼 입력은 ticker와 ISO 날짜 문자열을
+    포함한 생산 일봉 형식이고, 정규화된 DatetimeIndex 입력도 받는다.
     """
     outcome = "OPEN"
     roi = 0.0
@@ -119,6 +128,9 @@ def calculate_cumulative_trade_metrics(
             "days": days,
             "price_trail": price_trail,
         }
+
+    if "date" in stock_prices.columns:
+        stock_prices = prepare_cumulative_price_dataframe(stock_prices)
 
     try:
         signal_ts = pd.Timestamp(stats_date)
@@ -144,13 +156,20 @@ def calculate_cumulative_trade_metrics(
             & (period_prices["close"] > 0)
         ]
 
-    target_price = entry_price * (1 + target_pct)
-    stop_price = entry_price * (1 - stop_pct)
+    if target_price is None:
+        logger.info("Missing jongga target price; using target_pct")
+    if stop_price is None:
+        logger.info("Missing jongga stop price; using stop_pct")
+    resolved_target, resolved_stop = resolve_jongga_exit_prices(
+        entry_price,
+        entry_price * (1 + target_pct) if target_price is None else target_price,
+        entry_price * (1 - stop_pct) if stop_price is None else stop_price,
+    )
 
     exit_date = None
     if has_required_cols:
-        hit_target = period_prices[period_prices["high"] >= target_price]
-        hit_stop = period_prices[period_prices["low"] <= stop_price]
+        hit_target = period_prices[period_prices["high"] >= resolved_target]
+        hit_stop = period_prices[period_prices["low"] <= resolved_stop]
         first_win_date = hit_target.index[0] if not hit_target.empty else None
         first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
 
@@ -159,9 +178,9 @@ def calculate_cumulative_trade_metrics(
             first_stop=first_loss_date,
         )
         if outcome == "WIN":
-            roi = pct_to_percent(target_pct)
+            roi = round(((resolved_target - entry_price) / entry_price) * 100, 1)
         elif outcome == "LOSS":
-            roi = -pct_to_percent(stop_pct)
+            roi = round(((resolved_stop - entry_price) / entry_price) * 100, 1)
 
     trade_period = period_prices[period_prices.index <= exit_date] if exit_date is not None else period_prices
 
@@ -171,9 +190,9 @@ def calculate_cumulative_trade_metrics(
         price_trail.extend(closes)
         if len(price_trail) > 1:
             if outcome == "WIN":
-                price_trail[-1] = target_price
+                price_trail[-1] = resolved_target
             elif outcome == "LOSS":
-                price_trail[-1] = stop_price
+                price_trail[-1] = resolved_stop
 
     days = len(trade_period)
 
@@ -205,12 +224,13 @@ def build_cumulative_trade_record(
     if not isinstance(signal, dict):
         return None
 
-    ticker = str(signal.get("ticker", signal.get("stock_code", ""))).zfill(6)
+    ticker = str(signal.get("ticker") or signal.get("stock_code") or signal.get("code") or "").zfill(6)
     if not ticker or ticker == "000000":
         return None
 
     entry_price = safe_float(signal.get("entry_price", 0), default=0.0)
-    if entry_price <= 0:
+    if not math.isfinite(entry_price) or entry_price <= 0:
+        logger.warning("Invalid jongga entry price; skipping trade")
         return None
 
     metrics: dict[str, Any] = {
@@ -224,10 +244,22 @@ def build_cumulative_trade_record(
     if isinstance(price_index, dict):
         stock_prices = price_index.get(ticker)
         if isinstance(stock_prices, pd.DataFrame) and not stock_prices.empty:
-            metrics = calculate_cumulative_trade_metrics(entry_price, stats_date, stock_prices)
+            metrics = calculate_cumulative_trade_metrics(
+                entry_price,
+                stats_date,
+                stock_prices,
+                target_price=signal.get("target_price"),
+                stop_price=signal.get("stop_price"),
+            )
     elif isinstance(price_df, pd.DataFrame) and not price_df.empty and "ticker" in price_df.columns:
         stock_prices = price_df[price_df["ticker"] == ticker]
-        metrics = calculate_cumulative_trade_metrics(entry_price, stats_date, stock_prices)
+        metrics = calculate_cumulative_trade_metrics(
+            entry_price,
+            stats_date,
+            stock_prices,
+            target_price=signal.get("target_price"),
+            stop_price=signal.get("stop_price"),
+        )
 
     score = signal.get("score", {})
     score_value = score.get("total", 0) if isinstance(score, dict) else 0

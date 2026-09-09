@@ -6,8 +6,15 @@ KR Market Backtest - Common Helpers
 
 from __future__ import annotations
 
+import logging
+import math
 from datetime import datetime
 from typing import Any
+
+from engine.constants_market import JONGGA_STOP_PCT, JONGGA_TARGET_PCT
+
+
+logger = logging.getLogger(__name__)
 
 
 def safe_float(value: Any, default: float = 0.0) -> float:
@@ -64,9 +71,37 @@ def determine_backtest_status(win_rate: float, closed_trades: int) -> str:
     return "BAD"
 
 
-# 종가베팅 전략의 익절·손절 폭. 승패를 세는 두 경로가 이 값을 함께 쓴다.
-JONGGA_TARGET_PCT = 0.09
-JONGGA_STOP_PCT = 0.05
+def resolve_jongga_exit_prices(
+    entry_price: Any,
+    target_price: Any = None,
+    stop_price: Any = None,
+) -> tuple[float, float]:
+    """저장 가격을 우선하고 유효하지 않은 한쪽만 종가 기본값으로 보충한다."""
+    entry = safe_float(entry_price, default=0.0)
+    if not math.isfinite(entry) or entry <= 0:
+        logger.warning("Invalid jongga entry price while resolving exits: %r", entry_price)
+        return 0.0, 0.0
+
+    default_target = entry * (1 + JONGGA_TARGET_PCT)
+    default_stop = entry * (1 - JONGGA_STOP_PCT)
+    candidate_target = safe_float(target_price, default=0.0)
+    candidate_stop = safe_float(stop_price, default=0.0)
+    valid_target = math.isfinite(candidate_target) and candidate_target > entry
+    valid_stop = math.isfinite(candidate_stop) and 0 < candidate_stop < entry
+
+    if target_price is None:
+        logger.info("Missing jongga target price; using default")
+    if stop_price is None:
+        logger.info("Missing jongga stop price; using default")
+    if target_price is not None and not valid_target:
+        logger.warning("Invalid jongga target price; using default: %r", target_price)
+    if stop_price is not None and not valid_stop:
+        logger.warning("Invalid jongga stop price; using default: %r", stop_price)
+
+    return (
+        candidate_target if valid_target else default_target,
+        candidate_stop if valid_stop else default_stop,
+    )
 
 
 def pct_to_percent(pct: float) -> float:

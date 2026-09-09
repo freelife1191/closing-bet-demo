@@ -1,0 +1,9 @@
+{
+  "source_unchanged_sha256": "2420477919a9e57225d9ebc8e24de9a731d6d8080ea9c7dc2aa7fcad02685414",
+  "test": "frontend/src/app/chatbot/page.regression-chat-004.test.tsx",
+  "failure": "markdownRenderCounts.has(가나) false; final message rendered",
+  "observation": "read() yields setTimeout(0), but intermediate React commits are not synchronized by this fixture; exact intermediate state assumes scheduler timing",
+  "bounded_probe": "same file two tests passed",
+  "full_recheck": "frontend-full-confirm.json",
+  "scope": "no chatbot product or test edits"
+}

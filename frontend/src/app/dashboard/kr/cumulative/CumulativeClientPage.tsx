@@ -63,26 +63,26 @@ const TOOLTIP_CONTENT = {
   },
   winRate: {
     title: "승률 (Win Rate)",
-    desc: "전체 청산된 매매 중 익절 목표(+9%)에 도달한 비율입니다.",
-    criteria: "익절 +9% 성공 / (익절 + 손절) * 100",
-    interpretation: "승률 40% 이상이면 손익비 1.5:1 구조에서 꾸준한 우상향 수익이 가능합니다."
+    desc: "전체 청산된 매매 중 시그널 목표가에 먼저 도달한 비율입니다.",
+    criteria: "목표가 도달 성공 / (익절 + 손절) × 100; 미청산 거래 제외",
+    interpretation: "목표가·손절가는 저장된 개별 가격을 사용하며, 누락 시 기본 +5%/-3%로 계산합니다."
   },
   wins: {
     title: "성공 횟수 (Wins)",
-    desc: "매수 후 목표 수익률(+9%)에 도달하여 이익 실현한 횟수입니다.",
-    criteria: "고가가 진입가 대비 +9% 이상 도달 시 성공 처리",
+    desc: "진입 후 시그널 목표가에 먼저 도달한 횟수입니다.",
+    criteria: "고가가 목표가 이상이면 성공; 같은 일봉에서 손절가에도 도달하면 손절 우선",
     interpretation: "성공 횟수가 많을수록 계좌 수익금이 누적됩니다."
   },
   losses: {
     title: "실패 횟수 (Losses)",
-    desc: "매수 후 손절 기준(-5%)을 이탈하여 손실 확정한 횟수입니다.",
-    criteria: "저가가 진입가 대비 -5% 이하 하락 시 실패 처리",
-    interpretation: "실패는 피할 수 없으며, 손실을 -5%로 제한하는 것이 핵심입니다."
+    desc: "진입 후 시그널 손절가에 먼저 도달한 횟수입니다.",
+    criteria: "저가가 손절가 이하이면 실패; 가격 누락 시 기본 -3%",
+    interpretation: "저장된 손절가를 기준으로 계산한 백테스트이며 실제 체결을 보장하지 않습니다."
   },
   open: {
     title: "보유중 (Open Positions)",
     desc: "현재 매수 후 아직 익절이나 손절 기준에 도달하지 않은 종목입니다.",
-    criteria: "최대 15일 보유 기간 내 진행 중인 종목",
+    criteria: "관측된 일봉에서 목표가와 손절가 모두 미도달한 종목",
     interpretation: "보유 종목이 많을 때는 시장 리스크 관리에 유의해야 합니다."
   },
   avgRoi: {
@@ -154,7 +154,7 @@ const TOOLTIP_CONTENT = {
     title: "진입가 (Entry Price)",
     desc: "추천일의 종가(Close Price)를 기준으로 한 매수 가격입니다.",
     criteria: "실제 체결가는 ±1~2호가 차이가 있을 수 있음",
-    interpretation: "이 가격을 기준으로 +9% 익절, -5% 손절 라인이 설정됩니다."
+    interpretation: "저장된 목표가·손절가를 우선 사용하며 누락된 가격은 진입가 대비 기본 +5%/-3%입니다."
   },
   table_result: {
     title: "결과 (Outcome)",
@@ -166,13 +166,13 @@ const TOOLTIP_CONTENT = {
     title: "수익률 (ROI)",
     desc: "진입가 대비 현재가(또는 청산가)의 등락률입니다.",
     criteria: "수수료 및 세금은 미포함된 수치",
-    interpretation: "목표 +9% 달성 시 성공, -5% 이탈 시 실패로 기록됩니다."
+    interpretation: "시그널 목표가 도달 시 성공, 손절가 도달 시 실패입니다. 같은 일봉에서는 손절을 우선합니다."
   },
   table_maxHigh: {
     title: "최고가 (Max High)",
     desc: "보유 기간 동안 도달한 최고 수익률입니다.",
     criteria: "(기간내 최고가 - 진입가) / 진입가 * 100",
-    interpretation: "최고가가 +9%를 넘었다면 성공으로 간주합니다."
+    interpretation: "최고 상승률만으로 승패를 정하지 않습니다. 목표가와 손절가 중 먼저 도달한 기준으로 판정합니다."
   },
   table_priceTrail: {
     title: "가격 흐름 (Price Trail)",
@@ -416,7 +416,7 @@ function CumulativeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: (
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
               <h4 className="font-bold text-white text-sm mb-2 text-emerald-400">승률 (Win Rate)</h4>
               <p className="text-xs text-gray-400 leading-relaxed">
-                전체 매매 중 익절(+9% 목표 도달)에 성공한 비율입니다.<br />
+                청산된 매매 중 시그널 목표가에 먼저 도달한 비율입니다.<br />
                 <span className="text-gray-500 mt-1 block">계산식: (익절 횟수 / (익절 + 손절 횟수)) * 100</span>
               </p>
             </div>
@@ -456,9 +456,9 @@ function CumulativeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: (
             <div>
               <h4 className="font-bold text-white text-sm mb-1">매매 원칙 (Exit Strategy)</h4>
               <ul className="list-disc list-inside text-xs text-gray-400 space-y-1 ml-1">
-                <li><span className="text-emerald-400 font-bold">익절 목표:</span> +9.0% 도달 시 전량 매도</li>
-                <li><span className="text-rose-400 font-bold">손절 기준:</span> -5.0% 이탈 시 전량 매도</li>
-                <li><span className="text-yellow-400 font-bold">최대 보유:</span> 15일 (기간 내 승부 안나면 매도 고려)</li>
+                <li><span className="text-emerald-400 font-bold">익절 목표:</span> 저장된 목표가 도달 (누락 시 기본 +5%)</li>
+                <li><span className="text-rose-400 font-bold">손절 기준:</span> 저장된 손절가 도달 (누락 시 기본 -3%)</li>
+                <li>저장된 목표가·손절가를 우선 사용합니다. 같은 일봉에서 양쪽에 도달하면 손절 우선, 미도달이면 OPEN으로 추적합니다.</li>
               </ul>
             </div>
             <div className="border-t border-white/10 pt-4">
@@ -652,15 +652,15 @@ function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
         <div className="grid grid-cols-1 gap-1.5 text-xs">
           <div className="flex justify-between items-start gap-2">
             <span className="text-emerald-400 font-bold w-12 shrink-0">목표달성</span>
-            <span className="text-gray-300">진입가 대비 <span className="text-emerald-400">+9% 이상</span> 상승하여 이익 실현 (익절)</span>
+            <span className="text-gray-300">시그널 <span className="text-emerald-400">목표가</span>에 먼저 도달 (누락 시 기본 +5%)</span>
           </div>
           <div className="flex justify-between items-start gap-2">
             <span className="text-gray-400 font-bold w-12 shrink-0">보유중</span>
-            <span className="text-gray-300">아직 청산되지 않고 진행 중 (최대 <span className="text-gray-200">15일</span> 보유)</span>
+            <span className="text-gray-300">목표가·손절가에 도달하지 않아 <span className="text-gray-200">미청산</span> 상태</span>
           </div>
           <div className="flex justify-between items-start gap-2">
             <span className="text-rose-400 font-bold w-12 shrink-0">손절도달</span>
-            <span className="text-gray-300">진입가 대비 <span className="text-rose-400">-5% 이하</span> 하락하여 손실 확정 (손절)</span>
+            <span className="text-gray-300">시그널 <span className="text-rose-400">손절가</span>에 도달 (누락 시 기본 -3%; 같은 일봉에서 양쪽 도달 시 손절 우선)</span>
           </div>
         </div>
       </div>
@@ -1018,8 +1018,8 @@ export default function CumulativeClientPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm text-gray-400">
               <span>{kpi.priceDate} 기준 누적 성과</span>
               <div className="flex gap-2">
-                <span className="whitespace-nowrap px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-bold">목표 (+9%)</span>
-                <span className="whitespace-nowrap px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-[10px] font-bold">손절 (-5%)</span>
+                <span className="whitespace-nowrap px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-bold">기본 목표 (+5%)</span>
+                <span className="whitespace-nowrap px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-[10px] font-bold">기본 손절 (-3%)</span>
               </div>
             </div>
           </div>

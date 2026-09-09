@@ -6,6 +6,7 @@ KR Market Data Routes - Jongga V2
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from flask import jsonify
@@ -93,6 +94,7 @@ def _register_jongga_history_route(
     build_jongga_history_payload,
     recalculate_jongga_grades,
     sort_jongga_signals,
+    normalize_jongga_signals_for_frontend,
 ) -> None:
     @kr_bp.route("/jongga-v2/history/<target_date>", methods=["GET"])
     def get_jongga_v2_history(target_date: str):
@@ -105,6 +107,9 @@ def _register_jongga_history_route(
                 recalculate_jongga_grades=recalculate_jongga_grades,
                 sort_jongga_signals=sort_jongga_signals,
             )
+            if status_code == 200 and isinstance(payload, dict):
+                payload = copy.deepcopy(payload)
+                normalize_jongga_signals_for_frontend(payload.get("signals", []))
             return jsonify(payload), int(status_code)
 
         return _execute_json_route(
@@ -150,5 +155,6 @@ def register_market_data_jongga_routes(
         build_jongga_history_payload=deps["build_jongga_history_payload"],
         recalculate_jongga_grades=deps["recalculate_jongga_grades"],
         sort_jongga_signals=deps["sort_jongga_signals"],
+        normalize_jongga_signals_for_frontend=deps["normalize_jongga_signals_for_frontend"],
     )
 

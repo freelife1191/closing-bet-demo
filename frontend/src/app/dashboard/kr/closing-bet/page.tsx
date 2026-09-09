@@ -1474,8 +1474,8 @@ export default function JonggaV2Page() {
                   <strong className="text-white block mb-1">Execution Timing</strong>
                   <ul className="list-disc list-inside space-y-1">
                     <li><span className="text-emerald-400">Entry</span>: 15:10 ~ 15:30 (종가 부근), 눌림목 지지 확인 필수</li>
-                    <li><span className="text-rose-400">Profit</span>: 익일 시초 30분 내 +3% 발생 시 50% 분할 익절</li>
-                    <li><span className="text-gray-400">Stop</span>: 전일 종가 또는 5일선 이탈 시 나머지 전량 매도</li>
+                    <li><span className="text-rose-400">Profit</span>: 시그널 목표가 도달 여부로 판정 (누락 시 진입가 대비 기본 +5%)</li>
+                    <li><span className="text-gray-400">Stop</span>: 시그널 손절가 도달 여부로 판정 (누락 시 진입가 대비 기본 -3%)</li>
                   </ul>
                 </div>
               </div>
@@ -1953,7 +1953,9 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
   // [JONGGA-015] 목표가와 손절가는 매수가에서 파생되고, 같은 카드에 놓인 「종가」와는
   // 무관하다. 두 값이 나란히 보이므로 어느 쪽이 기준인지 화면에 적어 둔다.
-  const basePrice = Math.round(signal.buy_price || signal.entry_price || 0);
+  const entryPrice = Number.isFinite(signal.entry_price) && signal.entry_price > 0
+    ? signal.entry_price : signal.buy_price || 0;
+  const basePrice = Math.round(entryPrice);
   const pctFromBase = (price?: number) => {
     if (!(basePrice > 0) || !price) return null;
     // 옆에 찍히는 금액이 반올림된 값이므로 비율도 같은 값에서 뽑는다.
@@ -2204,13 +2206,18 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <p className="text-sm text-gray-300 leading-relaxed">
               {signal.score.llm_reason || "AI 분석 대기 중입니다..."}
             </p>
+            {signal.score.llm_reason && (
+              <p className="mt-2 text-xs text-gray-500 leading-relaxed">
+                AI 원문에는 다른 가격이 포함될 수 있습니다. 이 화면의 시스템 계산 기준은 아래 목표가·손절가입니다.
+              </p>
+            )}
           </div>
 
           <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
             <div>
               <h5 className="text-[10px] text-gray-500 mb-2 font-bold flex items-center gap-1">
-                전략 포인트
-                <Tooltip content="AI가 분석한 최적의 매매 가격대입니다. 시장 상황에 따라 유동적으로 대응하세요.">
+                시스템 계산 기준
+                <Tooltip content="시그널에 저장된 목표가·손절가를 우선 사용합니다. 가격이 없으면 진입가 대비 기본 +5%/-3%로 계산합니다.">
                   <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </h5>
@@ -2238,17 +2245,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                 <li className="flex items-start gap-1.5">
                   <span className="text-amber-500 mt-0.5">●</span>
                   <span>
-                    <Tooltip content={
-                      <div className="text-[10px] leading-snug text-left w-48">
-                        <span className="text-amber-400 font-bold block mb-1 text-center">🟠 매도 전략</span>
-                        <ul className="list-disc pl-4 space-y-0.5 text-gray-300">
-                          <li><strong>+2.5%</strong>: 시초가 1/3 분할 매도</li>
-                          <li><strong>+5% (수급↑)</strong>: 5분 내 전량 매도</li>
-                          <li><strong>15:50</strong>: 매수 잔량↑ → 홀딩/시간외</li>
-                          <li><strong>15:59</strong>: 매도 잔량↑ → 리스크 관리</li>
-                        </ul>
-                      </div>
-                    }>
+                    <Tooltip content="저장된 목표가를 기준으로 익절 여부를 계산합니다. 목표가가 없으면 진입가 대비 기본 +5%를 사용합니다.">
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-amber-500 hover:text-amber-400 transition-colors">목표가</span>
                     </Tooltip>
                     : <span className="text-amber-400 font-mono">₩{Math.round(signal.target_price || 0).toLocaleString()}</span>
@@ -2258,15 +2255,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                 <li className="flex items-start gap-1.5">
                   <span className="text-rose-500 mt-0.5">●</span>
                   <span>
-                    <Tooltip content={
-                      <div className="text-[10px] leading-snug text-left w-48">
-                        <span className="text-rose-400 font-bold block mb-1 text-center">🔴 손절 전략</span>
-                        <ul className="list-disc pl-4 space-y-0.5 text-gray-300">
-                          <li><strong>-1% ~ -3%</strong> (2~3만원):<br />무조건 손절</li>
-                          <li><strong>큰 금액 투자시</strong> (10만원↑):<br />-0.5% ~ -1% 즉시 손절</li>
-                        </ul>
-                      </div>
-                    }>
+                    <Tooltip content="저장된 손절가를 기준으로 손절 여부를 계산합니다. 손절가가 없으면 진입가 대비 기본 -3%를 사용합니다. 같은 일봉에서 양쪽에 도달하면 손절을 우선합니다.">
                       <span className="cursor-help border-b border-dashed border-gray-600 hover:border-rose-500 hover:text-rose-400 transition-colors">손절가</span>
                     </Tooltip>
                     : <span className="text-rose-400 font-mono">₩{Math.round(signal.stop_price || 0).toLocaleString()}</span>

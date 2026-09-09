@@ -1,0 +1,13 @@
+{
+  "command": [
+    "node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-005.test.tsx"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout/frontend",
+  "exit_code": 1,
+  "seconds": 1.276,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/frontend-red-cumulative.log"
+}

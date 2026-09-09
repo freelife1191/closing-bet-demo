@@ -1,0 +1,12 @@
+{
+  "command": [
+    "npm",
+    "run",
+    "lint"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout/frontend",
+  "exit_code": 0,
+  "seconds": 8.474,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/frontend-lint.log"
+}

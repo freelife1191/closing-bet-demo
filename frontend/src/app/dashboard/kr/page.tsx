@@ -69,7 +69,7 @@ function StrategyGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: () 
               <p className="text-xs text-gray-400 leading-relaxed">
                 모든 매매(익절+손절)의 손익률 평균입니다.
                 <br />
-                <span className="text-gray-500 mt-1 block">손절(-5%)이 포함되므로 낮게 보일 수 있습니다.</span>
+                <span className="text-gray-500 mt-1 block">각 전략의 손절 거래도 평균에 포함됩니다.</span>
               </p>
             </div>
 
@@ -512,9 +512,6 @@ export default function KRMarketOverview() {
 
   const getStrategyTooltip = (rate: number, avgReturn: number, count: number, strategyName: string) => {
     const isVCP = strategyName.includes("VCP");
-    const criteriaText = isVCP
-      ? "돌파 매매 진입 후 익절(+9%) 성공 비율"
-      : "종가 매수 후 보유 시 익절(+9%) 성공 비율";
 
     return (
       <div className="space-y-3">
@@ -541,7 +538,9 @@ export default function KRMarketOverview() {
         <div className="space-y-2 text-[11px] text-gray-300">
           <div className="flex gap-2">
             <span className="text-gray-500 min-w-[30px]">기준:</span>
-            <span>익절 +9%, 손절 -5% 기준 백테스팅 결과입니다.</span>
+            <span>{isVCP
+              ? '익절 +9%, 손절 -5% 기준 백테스팅 결과입니다.'
+              : '종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다.'}</span>
           </div>
           <div className="flex gap-2">
             <span className="text-gray-500 min-w-[30px]">해석:</span>

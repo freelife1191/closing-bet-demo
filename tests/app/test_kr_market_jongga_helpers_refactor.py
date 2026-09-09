@@ -175,6 +175,36 @@ def test_normalize_signal_synthesizes_target_and_stop_from_shared_constants():
     assert signal["stop_price"] == round(10000 * (1 - JONGGA_STOP_PCT))
 
 
+def test_normalize_signal_keeps_valid_stored_exit_prices():
+    """저장 목표/손절을 기본 비율로 다시 덮으면 과거 신호의 의도가 바뀐다."""
+    signal = {
+        "stock_code": "5930",
+        "entry_price": 100_000,
+        "target_price": 108_000,
+        "stop_price": 96_000,
+    }
+
+    _normalize_jongga_signal_for_frontend(signal)
+
+    assert signal["target_price"] == 108_000
+    assert signal["stop_price"] == 96_000
+
+
+def test_normalize_signal_replaces_invalid_exit_prices_with_five_and_three_percent_defaults():
+    """0·NaN·진입가 반대편 값은 매매 경계가 아니므로 공용 기본값으로 보충해야 한다."""
+    signal = {
+        "stock_code": "5930",
+        "entry_price": 100_000,
+        "target_price": "nan",
+        "stop_price": 120_000,
+    }
+
+    _normalize_jongga_signal_for_frontend(signal)
+
+    assert signal["target_price"] == 105_000
+    assert signal["stop_price"] == 97_000
+
+
 def test_normalize_signal_collapses_placeholder_codes_to_empty_string():
     """자리채움 코드는 원본 모양을 남기지 않고 빈 문자열 하나로 모은다."""
     signal = {"stock_code": "0", "entry_price": 1000}

@@ -1,0 +1,16 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/services/test_kr_market_analytics_service_refactor.py",
+    "-k",
+    "history_filename_date"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 1,
+  "seconds": 1.55,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-history-date-red.log"
+}

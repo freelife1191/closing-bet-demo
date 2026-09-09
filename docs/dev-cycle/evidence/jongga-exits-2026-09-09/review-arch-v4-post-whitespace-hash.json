@@ -1,0 +1,12 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-c",
+    "\nimport hashlib, json\nfrom pathlib import Path\nroot=Path.cwd()\nmanifest=json.loads((root.parent/\"evidence/review-input-v4.json\").read_text())\nbad={}\nfor rel, expected in manifest[\"files\"].items():\n    actual=hashlib.sha256((root/rel).read_bytes()).hexdigest()\n    if actual != expected:\n        bad[rel]={\"expected\":expected,\"actual\":actual}\nexpected={\"tests/services/test_kr_market_cumulative_cache.py\":{\"expected\":\"290e0d46e9053c99e3948d177a98cd8931b9b84b8127d0bbe5689c41f04409ae\",\"actual\":\"a6a8fb7d815fd83d079f235894ccb602ac781c53a6e3424cba0eddac404e7c18\"}}\nassert bad==expected,bad\nprint({\"manifest\":\"review-input-v4.json\",\"unchanged_files\":len(manifest[\"files\"])-1,\"known_whitespace_delta\":bad})\n"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 0,
+  "seconds": 0.129,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-arch-v4-post-whitespace-hash.log"
+}

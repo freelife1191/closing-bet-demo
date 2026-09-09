@@ -9,6 +9,8 @@ from enum import Enum
 import os
 from dotenv import load_dotenv
 
+from engine.constants_market import JONGGA_STOP_PCT, JONGGA_TARGET_PCT
+
 load_dotenv()
 
 
@@ -48,8 +50,8 @@ class SignalConfig:
     max_positions: int = 10
 
     # 손절/익절 (User Request: +5%, -3%)
-    stop_loss_pct: float = 0.03  # -3%
-    take_profit_pct: float = 0.05  # +5%
+    stop_loss_pct: float = JONGGA_STOP_PCT  # -3%
+    take_profit_pct: float = JONGGA_TARGET_PCT  # +5%
     r_multiplier: int = 3  # R:Reward = 3:5 approx (Not strictly 1:3 anymore, but keeping field)
 
     def __post_init__(self) -> None:

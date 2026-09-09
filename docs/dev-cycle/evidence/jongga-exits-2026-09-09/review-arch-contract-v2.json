@@ -1,0 +1,12 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-c",
+    "\nimport hashlib, json\nfrom pathlib import Path\nimport pandas as pd\nfrom services.kr_market_backtest_trade_helpers import calculate_cumulative_trade_metrics, build_cumulative_trade_record, build_ticker_price_index\nfrom services.kr_market_backtest_stats_helpers import calculate_jongga_backtest_stats\nroot=Path.cwd()\nmanifest=json.loads((root.parent/\"evidence/review-input-v2.json\").read_text())\nmismatches=[]\nfor rel, expected in manifest[\"files\"].items():\n    actual=hashlib.sha256((root/rel).read_bytes()).hexdigest()\n    if actual != expected:\n        mismatches.append((rel, expected, actual))\nassert not mismatches, mismatches\nraw=pd.DataFrame([{\"date\":\"2026-02-21\",\"ticker\":\"005930\",\"high\":109.0,\"low\":99.0,\"close\":108.0}])\nbefore=raw.copy(deep=True)\nidx=build_ticker_price_index(raw)\nm=calculate_cumulative_trade_metrics(100.0,\"2026-02-20\",idx[\"005930\"],target_price=109.0,stop_price=97.0)\nassert (m[\"outcome\"],m[\"roi\"]) == (\"WIN\",9.0), m\npd.testing.assert_frame_equal(raw,before)\nsummary=calculate_jongga_backtest_stats([], [{\"date\":\"2026-02-20\",\"signals\":[{\"stock_code\":\"005930\",\"entry_price\":100.0,\"target_price\":109.0,\"stop_price\":97.0}]}], {}, raw, price_index=idx)\ntrade=build_cumulative_trade_record({\"stock_code\":\"005930\",\"entry_price\":100.0,\"target_price\":109.0,\"stop_price\":97.0},\"2026-02-20\",raw,price_index=idx)\nassert summary[\"win_rate\"] == 100.0 and trade[\"outcome\"] == \"WIN\", (summary,trade)\ncode_only=calculate_jongga_backtest_stats([], [{\"date\":\"2026-02-20\",\"signals\":[{\"code\":\"005930\",\"entry_price\":100.0}]}], {}, raw, price_index=idx)\nempty_ticker=build_cumulative_trade_record({\"ticker\":\"\",\"stock_code\":\"005930\",\"entry_price\":100.0},\"2026-02-20\",raw,price_index=idx)\nprint({\"hashes\":\"match\",\"exact\":m,\"summary\":summary,\"code_only_count\":code_only[\"count\"],\"empty_ticker_trade\":empty_ticker})\n"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 0,
+  "seconds": 1.068,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-arch-contract-v2.log"
+}

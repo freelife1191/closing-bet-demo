@@ -113,6 +113,12 @@
 - [ ] 점수표 모달과 Trading Tips 아코디언의 문구를 정한 기준에 맞춤
 - [ ] 폭이 한 곳에서만 결정되는지, 두 필드가 빠진 자료에서도 같은 비율이 붙는지 검사로 고정
 
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 12:59 | 범위: JONGGA-012·013 기본 +5/-3 통일, 저장 명시가격/AI 원문 보존, 보정·백테스트·캐시·화면 연결 | 실제 대화 근거: 위 두 라운드 설계에 대한 사용자 「진행해」 응답.
+- 진행: 독립 develop clone, 계획 `docs/superpowers/plans/2026-09-09-jongga-exit-prices.md`, 기준 `8febe19`.
+- [x] critic OKAY(기존 native agent 대체) · TDD 구현 · 전용 ponytail · 전용 code-review APPROVE/architect WATCH(차단0) · T3 체크리스트 App 대응 완료
+- [x] 전체 pytest 2249/기존skip3 · Vitest424/59 · type-check/lint0오류 · 빌드 통과
+- [ ] UltraQA agent-browser 필수10행 · 정리 · 아카이브
+
 ### [INFRA-019] README·.env.example·랜딩 페이지의 스케줄러와 AI 프로바이더 서술이 실제 동작과 어긋난다
 - 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-02 INFRA-012 진행 중 실측, `[VCP-015]` 사이클의 유지보수성 리뷰
 - 2026-09-07 백로그 정리에서 `[FE-020]` 을 흡수했습니다. 둘 다 「설명 문서가 실제 동작과 다르다」는
@@ -1229,6 +1235,12 @@
 - [ ] 두 값을 나란히 보여줄지, 본문의 숫자를 계산값으로 맞출지 방향을 정함
 - [ ] 정한 방향대로 화면 또는 프롬프트를 조정
 
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 12:59 | 범위: JONGGA-012·013 기본 +5/-3 통일, 저장 명시가격/AI 원문 보존, 보정·백테스트·캐시·화면 연결 | 실제 대화 근거: 위 두 라운드 설계에 대한 사용자 「진행해」 응답.
+- 진행: 독립 develop clone, 계획 `docs/superpowers/plans/2026-09-09-jongga-exit-prices.md`, 기준 `8febe19`.
+- [x] critic OKAY(기존 native agent 대체) · TDD 구현 · 전용 ponytail · 전용 code-review APPROVE/architect WATCH(차단0) · T3 체크리스트 App 대응 완료
+- [x] 전체 pytest 2249/기존skip3 · Vitest424/59 · type-check/lint0오류 · 빌드 통과
+- [ ] UltraQA agent-browser 필수10행 · 정리 · 아카이브
+
 ### [CHAT-009] 상태 변경 슬래시 명령으로 시작한 대화의 제목이 명령어로 붙는다
 - 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-02 CHAT-002 마감 qa-only ISSUE-002
 - 세션 제목은 첫 사용자 메시지에서 만들어집니다. `[CHAT-002]` 가 `/clear` 를 기록에 남기도록
@@ -1547,3 +1559,23 @@
 - 최초 전체 2231 통과/1 실패, 원인 확인 후 해당 파일14 통과 및 전체2232 통과/3skip. 성공만 남기지 않고 `evidence/vcp-chart-2026-09-09/baseline-pytest*`에 원본을 보존한다.
 - [ ] 고정 sleep 대신 Event 등으로 시작/중지 시점을 동기화해 실제 중지 계약을 검증
 - [ ] 자식 스레드 정리와 반복 검사로 비결정적 실패가 해소됐는지 확인
+
+### [VCP-025] 홈의 VCP 성과 안내 비율이 실제 백테스트와 다르다
+- 카테고리: VCP 시그널 | 티어: T2 예상 | 근거: 2026-09-09 JONGGA-012 계획 critic의 실제 소스 대조.
+- `frontend/src/app/dashboard/kr/page.tsx`의 VCP 성과 tooltip은 +9/-5로 설명하지만, `services/kr_market_backtest_stats_helpers.py`의 VCP 백테스트는 +15/-5를 사용한다. VCP 전용 화면과 시그널 가격 기본 +5/-3은 또 다른 기준이다.
+- JONGGA-012·013 승인 범위에서 VCP 정책을 변경하지 않고 이월한다. 표시 기준을 분리할지 계산을 통일할지 설계가 필요하다.
+- [ ] VCP 생성·저장·백테스트 기준을 추적해 안내/계산 정책 결정
+- [ ] 홈/전용 화면 안내 및 필요한 계산 경로를 결정에 맞춤
+- [ ] VCP 정상·과거 자료와 브라우저 실측으로 확인
+
+### [INFRA-068] 스트리밍 회귀 검사가 타이머 사이의 특정 React 중간 렌더를 가정한다
+- 카테고리: 인프라 | 티어: T1 예상 | 근거: 2026-09-09 JONGGA-012·013 전체 Vitest에서 1건 실패, 같은 파일 단독 2건 통과. 제품/해당 테스트 소스 SHA 불변.
+- `frontend/src/app/chatbot/page.regression-chat-004.test.tsx`의 SSE 대역은 setTimeout(0)으로 청크를 넘기며, 마지막 답변을 기다린 후 `가나` 중간 렌더가 반드시 있었다고 단언한다. 중간 화면 커밋을 기다리는 명시적 동기화가 없어 실행 스케줄에 의존한다.
+- [ ] 청크 전달과 중간 화면 관측을 명시적으로 동기화하고 최종 답변·기존 메시지 재렌더 계약 유지
+- [ ] 대상 및 전체 Vitest에서 검증하고 테스트 기대를 단순 삭제/완화하지 않음
+
+### [FLOW-015] 누적성과 공개 helper의 생산 계약 밖 DataFrame 입력을 명시적으로 거부한다
+- 카테고리: 수급·백테스트 | 티어: T2 예상 | 근거: 2026-09-09 JONGGA-012·013 독립 아키텍처 WATCH의 제한 재현.
+- calculate_cumulative_trade_metrics는 현재 ticker+ISO date의 생산 frame 또는 숫자 OHLC의 DatetimeIndex를 받는다. ticker 없는 date frame, 숫자 YYYYMMDD, 문자열 OHLC의 직접 호출은 TypeError 또는 OPEN 오판정이 가능하다. 실제 생산 호출부는 이 계약을 충족한다.
+- [ ] 직접 호출부와 허용 입력 계약을 확인해 비표준 입력을 명시적으로 거부하거나 안전하게 정규화
+- [ ] 세 재현과 정상 생산 frame의 회귀 검사 추가

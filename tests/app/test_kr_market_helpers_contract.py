@@ -22,6 +22,7 @@ sys.path.insert(
 )
 
 from app.routes import kr_market_jongga_normalize_helpers as jongga_normalize
+from services import kr_market_backtest_common
 from app.routes.kr_market import (
     _apply_gemini_reanalysis_results,
     _apply_vcp_reanalysis_updates,
@@ -287,8 +288,8 @@ def test_normalize_jongga_signals_for_frontend_fills_required_fields():
     assert normalized["stock_name"] == "테스트"
     assert normalized["score"]["total"] == 7
     assert normalized["change_pct"] == 3.0
-    assert normalized["target_price"] == 10_900
-    assert normalized["stop_price"] == 9_500
+    assert normalized["target_price"] == 10_500
+    assert normalized["stop_price"] == 9_700
     assert normalized["ai_evaluation"]["action"] == "BUY"
 
 
@@ -329,8 +330,8 @@ def test_normalize_jongga_target_and_stop_follow_backtest_constants(monkeypatch)
     """[JONGGA-007] 회귀 검사. 화면에 채워 넣는 목표가와 손절가는 백테스트가 승패를
     재는 폭과 같은 상수에서 나와야 한다. 폭을 바꿨는데 표시값이 따라오지 않으면
     화면이 말하는 목표가와 백테스트가 재는 목표가가 갈라진다."""
-    monkeypatch.setattr(jongga_normalize, "JONGGA_TARGET_PCT", 0.20)
-    monkeypatch.setattr(jongga_normalize, "JONGGA_STOP_PCT", 0.10)
+    monkeypatch.setattr(kr_market_backtest_common, "JONGGA_TARGET_PCT", 0.20)
+    monkeypatch.setattr(kr_market_backtest_common, "JONGGA_STOP_PCT", 0.10)
 
     signals = [{"ticker": "1", "name": "폭변경", "entry_price": 10_000}]
     _normalize_jongga_signals_for_frontend(signals)
@@ -791,9 +792,9 @@ def test_cumulative_trade_record_and_kpi_follow_target_stop_rules():
     loss_trade = _build_cumulative_trade_record(loss_signal, "2026-02-20", price_df)
 
     assert win_trade["outcome"] == "WIN"
-    assert win_trade["roi"] == 9.0
+    assert win_trade["roi"] == 5.0
     assert loss_trade["outcome"] == "LOSS"
-    assert loss_trade["roi"] == -5.0
+    assert loss_trade["roi"] == -3.0
 
     kpi = _aggregate_cumulative_kpis([win_trade, loss_trade], price_df, datetime(2026, 2, 21))
     assert kpi["totalSignals"] == 2

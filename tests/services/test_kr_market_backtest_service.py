@@ -4,6 +4,7 @@
 KR Market Backtest Service 단위 테스트
 """
 
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -77,7 +78,93 @@ def test_build_cumulative_trade_record_uses_prebuilt_price_index():
 
     assert trade is not None
     assert trade["outcome"] == "WIN"
-    assert trade["roi"] == 9.0
+    assert trade["roi"] == 5.0
+
+
+def test_cumulative_metrics_use_exact_stored_exit_prices_without_pct_round_trip():
+    """101원 목표를 비율로 되돌리면 이진 꼬리나 반올림으로 경계를 놓칠 수 있다."""
+    prices = _one_day_prices(high=101, low=99, close=100)
+
+    metrics = calculate_cumulative_trade_metrics(
+        entry_price=100,
+        stats_date="2026-02-20",
+        stock_prices=prices,
+        target_price=101,
+        stop_price=97,
+    )
+
+    assert metrics["outcome"] == "WIN"
+    assert metrics["roi"] == 1.0
+
+
+def test_cumulative_metrics_distinguish_exact_target_109_boundary_from_one_tick_below():
+    """109.00000000000001로 pct를 재구성하면 109 정확 도달을 놓치는 회귀를 잡는다."""
+    at_target = calculate_cumulative_trade_metrics(
+        entry_price=100,
+        stats_date="2026-02-20",
+        stock_prices=_one_day_prices(high=109, low=99, close=108),
+        target_price=109,
+        stop_price=97,
+    )
+    below_target = calculate_cumulative_trade_metrics(
+        entry_price=100,
+        stats_date="2026-02-20",
+        stock_prices=_one_day_prices(high=108.999999999, low=99, close=108),
+        target_price=109,
+        stop_price=97,
+    )
+
+    assert (at_target["outcome"], at_target["roi"]) == ("WIN", 9.0)
+    assert (below_target["outcome"], below_target["roi"]) == ("OPEN", 8.0)
+
+
+def test_jongga_summary_counts_raw_daily_prices_without_a_price_map():
+    """표시용 price_map이 비어도 저장 일봉의 거래 결과는 집계돼야 한다."""
+    raw_prices = pd.DataFrame(
+        [{"date": "2026-02-21", "ticker": "005930", "high": 105, "low": 99, "close": 104}]
+    )
+
+    stats = calculate_jongga_backtest_stats(
+        candidates=[],
+        history_payloads=[{"date": "2026-02-20", "signals": [{"ticker": "005930", "entry_price": 100}]}],
+        price_map={},
+        price_df=raw_prices,
+    )
+
+    assert stats["count"] == 1
+    assert stats["win_rate"] == 100.0
+    assert stats["avg_return"] == 5.0
+
+
+def test_jongga_summary_counts_open_trade_without_daily_prices_when_price_map_exists():
+    """price_map은 후보 표시용이며 일봉이 없더라도 거래를 버리는 집계 게이트가 아니다."""
+    stats = calculate_jongga_backtest_stats(
+        candidates=[],
+        history_payloads=[{"date": "2026-02-20", "signals": [{"ticker": "005930", "entry_price": 100}]}],
+        price_map={"005930": 105},
+        price_df=pd.DataFrame(),
+    )
+
+    assert (stats["count"], stats["win_rate"], stats["avg_return"], stats["status"]) == (1, 0.0, 0.0, "PENDING")
+
+
+def test_jongga_summary_and_cumulative_keep_stop_first_for_custom_same_day_hits():
+    """같은 일봉에서 custom 목표와 손절이 함께 닿으면 요약과 누적성과가 LOSS여야 한다."""
+    raw_prices = pd.DataFrame(
+        [{"date": "2026-02-21", "ticker": "005930", "high": 108, "low": 96, "close": 100}]
+    )
+    price_df = prepare_cumulative_price_dataframe(raw_prices)
+    signal = {"ticker": "005930", "entry_price": 100, "target_price": 108, "stop_price": 96, "grade": "S"}
+
+    summary = calculate_jongga_backtest_stats(
+        candidates=[], history_payloads=[{"date": "2026-02-20", "signals": [signal]}],
+        price_map={}, price_df=raw_prices,
+    )
+    trade = build_cumulative_trade_record(signal, "2026-02-20", price_df)
+
+    assert summary["win_rate"] == 0.0
+    assert summary["avg_return"] == -4.0
+    assert trade is not None and (trade["outcome"], trade["roi"]) == ("LOSS", -4.0)
 
 
 def test_calculate_scenario_return_prefers_stop_when_same_day_hits_both():
@@ -217,8 +304,8 @@ def _one_day_prices(high: float, low: float, close: float):
     )
 
 
-def test_cumulative_and_scenario_agree_when_same_day_hits_both():
-    """같은 날 익절과 손절을 함께 충족하면 두 판정 경로가 같은 결론을 내야 한다."""
+def test_cumulative_uses_jongga_defaults_while_vcp_scenario_widths_stay_unchanged():
+    """종가 누적성과 기본값만 +5/-3으로 바꾸고 VCP float 시나리오는 건드리지 않는다."""
     stock_prices = _one_day_prices(high=120, low=94, close=110)
 
     metrics = calculate_cumulative_trade_metrics(
@@ -238,7 +325,7 @@ def test_cumulative_and_scenario_agree_when_same_day_hits_both():
     )
 
     assert metrics["outcome"] == "LOSS"
-    assert metrics["roi"] == -5.0
+    assert metrics["roi"] == -3.0
     assert scenario_return == -5.0
 
 
@@ -259,12 +346,12 @@ def test_cumulative_metrics_win_path_reports_roi_days_and_max_high():
     )
 
     assert metrics["outcome"] == "WIN"
-    assert metrics["roi"] == 9.0
+    assert metrics["roi"] == 5.0
     # 익절일에서 거래가 끝나므로 셋째 날의 고가 130 은 어느 값에도 반영되지 않는다.
     assert metrics["days"] == 2
     assert metrics["max_high"] == 12.0
     assert metrics["price_trail"][:2] == [100, 103]
-    assert round(metrics["price_trail"][-1], 2) == 109.0
+    assert round(metrics["price_trail"][-1], 2) == 105.0
 
 
 def test_cumulative_metrics_loss_path_trims_trail_at_stop_price():
@@ -284,18 +371,18 @@ def test_cumulative_metrics_loss_path_trims_trail_at_stop_price():
     )
 
     assert metrics["outcome"] == "LOSS"
-    assert metrics["roi"] == -5.0
+    assert metrics["roi"] == -3.0
     assert metrics["days"] == 2
     assert metrics["max_high"] == 4.0
     assert metrics["price_trail"][:2] == [100, 103]
-    assert round(metrics["price_trail"][-1], 2) == 95.0
+    assert round(metrics["price_trail"][-1], 2) == 97.0
 
 
 def test_cumulative_metrics_open_path_uses_last_close_for_roi():
     stock_prices = pd.DataFrame(
         [
             {"high": 104, "low": 99, "close": 103},
-            {"high": 106, "low": 101, "close": 105},
+            {"high": 104, "low": 101, "close": 105},
         ],
         index=pd.to_datetime(["2026-02-21", "2026-02-22"]),
     )
@@ -309,7 +396,7 @@ def test_cumulative_metrics_open_path_uses_last_close_for_roi():
     assert metrics["outcome"] == "OPEN"
     assert metrics["roi"] == 5.0
     assert metrics["days"] == 2
-    assert metrics["max_high"] == 6.0
+    assert metrics["max_high"] == 4.0
     assert metrics["price_trail"] == [100, 103, 105]
 
 
@@ -346,7 +433,7 @@ def test_cumulative_metrics_follows_the_given_target_and_stop_widths():
         stop_pct=0.02,
     )
 
-    assert default_metrics["outcome"] == "OPEN"
+    assert default_metrics["outcome"] == "WIN"
     assert default_metrics["roi"] == 5.0
     assert narrow_target["outcome"] == "WIN"
     assert narrow_target["roi"] == 3.0
@@ -450,13 +537,8 @@ def test_dashboard_and_cumulative_report_the_same_win_rate():
     assert dashboard["win_rate"] == cumulative["winRate"] == 33.3
 
 
-def test_jongga_stats_counts_a_win_when_the_width_carries_a_float_tail(monkeypatch):
-    """익절 수익률을 만드는 쪽과 그 값을 재는 쪽이 같은 변환을 써야 승이 사라지지 않는다.
-
-    폭 0.07 은 곱하기만 하면 7.000000000000001 이 되므로, 반환값 7.0 이 기준에
-    미치지 못해 익절한 거래가 승으로도 패로도 세어지지 않는다.
-    """
-    monkeypatch.setattr(stats_helpers, "JONGGA_TARGET_PCT", 0.07)
+def test_jongga_stats_counts_a_win_for_an_exact_custom_exit_price():
+    """요약은 가격을 pct로 왕복하지 않고 저장된 107원 목표 경계로 승패를 센다."""
 
     raw_prices = pd.DataFrame(
         [{"date": "2026-02-21", "ticker": "005930", "high": 112, "low": 102, "close": 110}]
@@ -468,7 +550,7 @@ def test_jongga_stats_counts_a_win_when_the_width_carries_a_float_tail(monkeypat
         history_payloads=[
             {
                 "date": "2026-02-20",
-                "signals": [{"ticker": "005930", "stock_code": "005930", "entry_price": 100}],
+                "signals": [{"ticker": "005930", "stock_code": "005930", "entry_price": 100, "target_price": 107, "stop_price": 98}],
             }
         ],
         price_map={"005930": 100.0},
@@ -576,6 +658,20 @@ def test_vcp_stats_uses_the_same_word_as_jongga_for_an_uncounted_window():
     assert stats["status"] == "OK (New)"
 
 
+def test_vcp_backtest_keeps_its_existing_fifteen_and_minus_five_percent_contract():
+    """종가 기본값 변경이 VCP의 독립 +15/-5 전략으로 번지면 안 된다."""
+    raw_prices = pd.DataFrame(
+        [{"date": "2026-02-21", "ticker": "005930", "high": 115, "low": 99, "close": 112}]
+    )
+    stats = stats_helpers.calculate_vcp_backtest_stats(
+        pd.DataFrame([{"ticker": "005930", "signal_date": "2026-02-20", "entry_price": 100}]),
+        price_map={"005930": 112},
+        price_df=raw_prices,
+    )
+
+    assert (stats["count"], stats["win_rate"], stats["avg_return"]) == (1, 100.0, 15.0)
+
+
 def test_aggregate_cumulative_kpis_computes_every_reported_metric():
     """승률·평균 ROI·평균 보유일·손익비·등급별 ROI 를 한 번에 고정한다."""
     trades = [
@@ -643,3 +739,39 @@ def test_aggregate_cumulative_kpis_reports_no_profit_factor_without_a_loss():
     assert kpi["totalRoi"] == 45.0
     assert kpi["profitFactor"] is None
 
+
+def test_nonfinite_entry_does_not_create_a_trade_or_summary_win():
+    """진입가가 비정상일 때 보정된 0원 경계를 WIN으로 집계하면 안 된다."""
+    prices = prepare_cumulative_price_dataframe(pd.DataFrame([
+        {"date": "2026-02-21", "ticker": "005930", "high": 110, "low": 99, "close": 105},
+    ]))
+    for entry in (float("nan"), float("inf"), float("-inf")):
+        signal = {"stock_code": "005930", "entry_price": entry}
+        assert build_cumulative_trade_record(signal, "2026-02-20", prices) is None
+        stats = calculate_jongga_backtest_stats([], [{"date": "2026-02-20", "signals": [signal]}], {}, prices)
+        assert stats["count"] == 0
+
+
+def test_summary_and_cumulative_keep_legacy_ticker_aliases():
+    """공통 계산으로 옮겨도 code-only·빈 ticker의 기존 시그널을 누락하지 않는다."""
+    prices = prepare_cumulative_price_dataframe(pd.DataFrame([
+        {"date": "2026-02-21", "ticker": "005930", "high": 106, "low": 99, "close": 105},
+    ]))
+    for identity in ({"code": "005930"}, {"ticker": "", "stock_code": "005930"}, {"ticker": None, "stock_code": "005930"}):
+        signal = {**identity, "entry_price": 100}
+        trade = build_cumulative_trade_record(signal, "2026-02-20", prices)
+        assert trade is not None
+        assert trade["code"] == "005930" and trade["outcome"] == "WIN"
+        stats = calculate_jongga_backtest_stats([], [{"date": "2026-02-20", "signals": [signal]}], {}, prices)
+        assert stats["count"] == 1 and stats["win_rate"] == 100
+
+
+def test_exact_price_overrides_only_its_side_of_legacy_pct_arguments(caplog):
+    """한쪽 명시 가격이 다른 쪽의 사용자 지정 비율까지 기본값으로 바꾸면 안 된다."""
+    caplog.set_level(logging.INFO)
+    prices = _one_day_prices(high=107, low=96, close=100)
+    target_only = calculate_cumulative_trade_metrics(100, "2026-02-20", prices, 0.20, 0.10, target_price=108)
+    stop_only = calculate_cumulative_trade_metrics(100, "2026-02-20", prices, 0.20, 0.10, stop_price=94)
+    assert target_only["outcome"] == stop_only["outcome"] == "OPEN"
+    assert "Missing jongga target price" in caplog.text
+    assert "Missing jongga stop price" in caplog.text

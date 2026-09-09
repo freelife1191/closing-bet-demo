@@ -1,0 +1,17 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/services/test_kr_market_backtest_service.py",
+    "tests/app/test_kr_market_route_integration.py",
+    "-k",
+    "exact_price_overrides_only or history_repairs"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 1,
+  "seconds": 2.121,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-history-mixed-red.log"
+}

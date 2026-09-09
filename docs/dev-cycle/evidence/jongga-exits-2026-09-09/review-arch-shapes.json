@@ -1,0 +1,12 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-c",
+    "\nimport pandas as pd\nfrom services.kr_market_backtest_trade_helpers import calculate_cumulative_trade_metrics, prepare_cumulative_price_dataframe\ncases={}\nfor label, frame in {\n  \"date_without_ticker\": pd.DataFrame([{\"date\":\"2026-02-21\",\"high\":105,\"low\":99,\"close\":104}]),\n  \"numeric_date_with_ticker\": pd.DataFrame([{\"date\":20260221,\"ticker\":\"005930\",\"high\":105,\"low\":99,\"close\":104}]),\n  \"string_ohlc_datetime_index\": pd.DataFrame([{\"high\":\"105\",\"low\":\"99\",\"close\":\"104\"}],index=pd.to_datetime([\"2026-02-21\"]))\n}.items():\n  try:\n    cases[label]=calculate_cumulative_trade_metrics(100,\"2026-02-20\",frame)\n  except Exception as exc:\n    cases[label]={\"error\":type(exc).__name__,\"message\":str(exc)}\nprint(cases)\n"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 0,
+  "seconds": 1.103,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-arch-shapes.log"
+}

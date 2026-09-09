@@ -1,0 +1,12 @@
+{
+  "command": [
+    "./venv/bin/python",
+    "-c",
+    "import pandas as pd; from services.kr_market_backtest_stats_helpers import calculate_jongga_backtest_stats; from services.kr_market_backtest_trade_helpers import calculate_cumulative_trade_metrics, prepare_cumulative_price_dataframe, build_cumulative_trade_record; raw=pd.DataFrame([{\"date\":\"2026-02-21\",\"ticker\":\"005930\",\"high\":106,\"low\":99,\"close\":104}]); idx=prepare_cumulative_price_dataframe(raw); signal={\"ticker\":\"005930\",\"entry_price\":100}; summary=calculate_jongga_backtest_stats([], [{\"signals\":[signal]}], {}, raw); cumulative=build_cumulative_trade_record(signal,\"2026-02-20\",idx); mixed=calculate_cumulative_trade_metrics(100,\"2026-02-20\",idx,target_pct=.20,stop_pct=.10,target_price=108,stop_price=None); print({\"summary_without_payload_date\":summary,\"cumulative_from_filename_date\":cumulative,\"mixed_exact_and_custom_pct\":mixed})"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/checkout",
+  "exit_code": 0,
+  "seconds": 1.098,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c/evidence/review-code-boundaries.log"
+}

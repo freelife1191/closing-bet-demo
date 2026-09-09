@@ -1,0 +1,21 @@
+{
+  "python_ast": "PASS",
+  "files": [
+    "app/routes/kr_market_jongga_normalize_helpers.py",
+    "engine/config.py",
+    "engine/constants_market.py",
+    "engine/position_sizer.py",
+    "services/kr_market_backtest_common.py",
+    "services/kr_market_backtest_stats_helpers.py",
+    "services/kr_market_backtest_summary_cache.py",
+    "services/kr_market_backtest_trade_helpers.py",
+    "services/kr_market_cumulative_cache.py",
+    "tests/app/test_kr_market_helpers_contract.py",
+    "tests/app/test_kr_market_jongga_helpers_refactor.py",
+    "tests/services/test_kr_market_backtest_service.py",
+    "tests/services/test_kr_market_backtest_summary_cache.py",
+    "tests/services/test_kr_market_cumulative_cache.py",
+    "tests/engine/test_position_sizer_exit_prices.py"
+  ],
+  "lsp": "typescript-language-server not available in PATH; using real tsc, eslint, build and independent review"
+}

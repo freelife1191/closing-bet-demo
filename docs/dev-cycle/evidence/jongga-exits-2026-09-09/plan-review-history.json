@@ -1,0 +1,35 @@
+{
+  "tool": "collaboration.followup_task/send_message",
+  "lane": "existing native agent notification_batch_plan applying installed critic prompt; dedicated invocation not claimed",
+  "records": [
+    {
+      "verdict": "REJECT",
+      "findings": [
+        "명시 가격을 pct로 왕복하면 exact hit 누락",
+        "요약 float 재추론 제거 계약 미정",
+        "buy/entry 우선순위와 실제 cumulative client 경로 누락"
+      ]
+    },
+    {
+      "verdict": "REJECT",
+      "findings": [
+        "생산 요약 date-column/RangeIndex group과 cumulative DatetimeIndex 전제 충돌"
+      ]
+    },
+    {
+      "verdict": "REJECT",
+      "findings": [
+        "price_map gate와 OPEN자료 경계 미정",
+        "frontend 테스트 경로 불명확"
+      ]
+    },
+    {
+      "verdict": "REJECT",
+      "findings": [
+        "계획 VCP 안내 수치가 실제 전용화면/백테스트와 다름"
+      ]
+    }
+  ],
+  "repairs": "계획 Critic 보완 이력 및 최신 Task1-4 참조",
+  "input_sha256": "e55e6f88f1612f4b4ff778a3d21de765f61d4fa4dd8d7dad2284efdedc8741be"
+}

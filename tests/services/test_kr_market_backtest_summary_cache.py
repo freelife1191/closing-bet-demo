@@ -271,6 +271,8 @@ def test_backtest_summary_cache_skips_delete_when_rows_within_limit(tmp_path, mo
     assert not any("SELECT COUNT(*) FROM backtest_summary_cache" in sql for sql in traced_sql)
 
 
+
+
 def test_backtest_summary_cache_repeated_signature_prunes_once(tmp_path, monkeypatch):
     _reset_cache_state()
     db_path = tmp_path / "runtime_cache.db"
@@ -471,4 +473,3 @@ def test_schema_version_participates_in_the_signature(monkeypatch, tmp_path):
 
     assert before is not None and after is not None
     assert before != after
-
