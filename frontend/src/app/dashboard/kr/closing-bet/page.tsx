@@ -1675,6 +1675,11 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
   const [updating, setUpdating] = useState(false);
   const [runningMessage, setRunningMessage] = useState('');
   const [currentUpdatedAt, setCurrentUpdatedAt] = useState(updatedAt);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollingGenerationRef = useRef(0);
+  const pollingRequestActiveRef = useRef(false);
+  const isMountedRef = useRef(false);
 
   // ADMIN 권한 체크
   const { isAdmin } = useAdmin();
@@ -1692,46 +1697,81 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
     setCurrentUpdatedAt(updatedAt);
   }, [updatedAt]);
 
+  const stopPolling = useCallback(() => {
+    pollingGenerationRef.current += 1;
+    pollingRequestActiveRef.current = false;
+    if (pollingIntervalRef.current !== null) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    if (pollingTimeoutRef.current !== null) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopPolling();
+    };
+  }, [stopPolling]);
+
   const pollStatus = useCallback(() => {
-    const interval = setInterval(async () => {
+    if (!isMountedRef.current) return;
+
+    stopPolling();
+    const generation = pollingGenerationRef.current;
+    const isCurrentPolling = () => (
+      isMountedRef.current && pollingGenerationRef.current === generation
+    );
+    const checkStatus = async () => {
+      if (!isCurrentPolling() || pollingRequestActiveRef.current) return;
+      pollingRequestActiveRef.current = true;
       try {
         // 변경: 상태 전용 엔드포인트 폴링
         const res: any = await fetchAPI('/api/kr/jongga-v2/status');
         const data = res; // fetchAPI returns JSON directly
+        if (!isCurrentPolling()) return;
         const isRunning = Boolean(data?.isRunning ?? data?.is_running);
 
         if (data) {
           // 실행 중이면 계속 폴링
           if (isRunning) {
-            if (!updating) setUpdating(true); // 강제 상태 동기화
+            setUpdating(true);
             if (data.message) {
               setRunningMessage(String(data.message));
             } else {
               setRunningMessage('종가베팅 스케쥴링 진행 중인 상태');
             }
           } else {
-            // 실행 끝남 (is_running: false)
-            // 만약 내가 '업데이트 중'이라고 알고 있었다면 -> 완료 처리
-            if (updating) {
-              clearInterval(interval);
-              setUpdating(false);
-              setRunningMessage('');
-              onRefresh();
-            }
+            // 완료는 runUpdate 렌더 당시의 updating 값이 아니라 현재 polling 세대가 판정한다.
+            stopPolling();
+            setUpdating(false);
+            setRunningMessage('');
+            onRefresh();
           }
         }
       } catch (error) {
-        console.error('Polling error:', error);
+        if (isCurrentPolling()) console.error('Polling error:', error);
+      } finally {
+        if (isCurrentPolling()) pollingRequestActiveRef.current = false;
       }
+    };
+
+    pollingIntervalRef.current = setInterval(() => {
+      void checkStatus();
     }, 2000); // 2초마다 체크 (반응성 향상)
 
     // 5분 후에는 폴링 중단 (안전장치)
-    setTimeout(() => {
-      clearInterval(interval);
-      if (updating) setUpdating(false);
+    pollingTimeoutRef.current = setTimeout(() => {
+      if (!isCurrentPolling()) return;
+      stopPolling();
+      setUpdating(false);
       setRunningMessage('');
     }, 350000);
-  }, [updating]);
+  }, [onRefresh, stopPolling]);
 
   // 조회가 끝났는데도 updatedAt이 없으면 데이터가 없는 것이므로 LOADING에 머물지 않는다.
   if (!updatedAt && !updating && !analyzingGemini) {

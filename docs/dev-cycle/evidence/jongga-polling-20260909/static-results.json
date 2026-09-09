@@ -1,0 +1,28 @@
+{
+  "pytest": {
+    "exit": 0,
+    "passed": 2281,
+    "skipped": 2,
+    "initial_failed": 1,
+    "fix": "INFRA-069"
+  },
+  "vitest": {
+    "exit": 0,
+    "files": 60,
+    "passed": 429
+  },
+  "targeted_vitest": {
+    "exit": 0,
+    "files": 3,
+    "passed": 15
+  },
+  "typecheck": {
+    "exit": 0
+  },
+  "lint": {
+    "exit": 0,
+    "errors": 0,
+    "warnings": 200
+  },
+  "note": "Product RED4 assertion failures after correcting fake timer harness; final regression5 includes active poll unmount."
+}

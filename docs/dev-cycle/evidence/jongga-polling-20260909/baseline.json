@@ -1,0 +1,9 @@
+{
+  "base": "b503549",
+  "files": {
+    "frontend/src/app/dashboard/kr/closing-bet/page.tsx": "4380dfe036db59af4deb74eea57a8cf4e52656d9c9bd60d9b57647eab8cceb9b",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx": "4b2cef57d11c4cd2c49b146e0e9c0a93c767f70e7ba4f9ac09a467d7a7e39f67",
+    "package.json": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8"
+  },
+  "note": "root package.json user-owned; do not stage"
+}

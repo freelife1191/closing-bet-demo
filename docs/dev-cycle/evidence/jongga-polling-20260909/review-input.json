@@ -1,0 +1,14 @@
+{
+  "base": "b503549",
+  "scope": {
+    "frontend/src/app/dashboard/kr/closing-bet/page.tsx": "4cb5256c46fab18f2a519e1a57cee326c18ce4e57582a1f4fe63c5ab56c609d3",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-037.test.tsx": "891a2ee863f70b7d1910bf9bc7300b59d1d0c78aa0c056f501d1c05766c0d7f9",
+    "tests/engine/test_news_collector_refactor.py": "c5d0d74127545ce6188cc8ac9e7c0b0321d996664e6405e4f6f923038c30645c"
+  },
+  "requirements": [
+    "JONGGA-037 완료 응답 버튼/재조회",
+    "JONGGA-032 완료/timeout/unmount 폴링정리 및 늦은응답무효",
+    "INFRA-069 캐시격리 테스트 기대불변"
+  ],
+  "validation": "pytest2281/2skip; targeted15passed; typecheck0; lint0errors200warnings"
+}

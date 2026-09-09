@@ -28,6 +28,9 @@ def _build_news(title: str, source: str, weight: float) -> NewsItem:
 
 def test_get_stock_news_merges_and_sorts_by_weight(monkeypatch):
     collector = EnhancedNewsCollector()
+    # 수집·정렬 계약을 검사하며, 실제 메모리/SQLite 캐시를 읽거나 쓰지 않는다.
+    monkeypatch.setattr(collector, "_load_cached_news_items", lambda **_kwargs: None)
+    monkeypatch.setattr(collector, "_save_cached_news_items", lambda **_kwargs: None)
 
     monkeypatch.setattr(
         collector,
@@ -58,6 +61,8 @@ def test_get_stock_news_merges_and_sorts_by_weight(monkeypatch):
 
 def test_get_stock_news_continues_when_one_source_fails(monkeypatch):
     collector = EnhancedNewsCollector()
+    monkeypatch.setattr(collector, "_load_cached_news_items", lambda **_kwargs: None)
+    monkeypatch.setattr(collector, "_save_cached_news_items", lambda **_kwargs: None)
 
     def _raise(*_a, **_k):
         raise RuntimeError("failed")

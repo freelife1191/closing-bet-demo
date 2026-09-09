@@ -800,6 +800,7 @@
 - [ ] 모달이 열린 동안 상단 32px 의 요소가 클릭되지 않는 것을 확인
 
 ### [JONGGA-032] 종가베팅 상태 폴링이 화면을 떠난 뒤에도 계속 돈다
+- 진행: JONGGA-037과 같은 폴링 생명주기 보완으로 묶음 진행. 확인 일자 2026-09-09, 사용자 연관 항목 묶음 실행 요청. 완료·이탈·350초 제한에서 타이머 정리와 늦은 응답 무효화를 회귀 검증한다. 티어는 공유 변경 규모로 재판정한다.
 - 카테고리: 종가베팅 | 티어: T1 | 근거: 2026-09-04 FE-024 사이클의 code-reviewer 지적 10번
 - `frontend/src/app/dashboard/kr/closing-bet/page.tsx` 의 `pollStatus` 가 2초 간격
   `setInterval` 과 350초 `setTimeout` 을 걸지만 언마운트 정리가 없습니다.
@@ -810,6 +811,9 @@
 - [ ] 인터벌 id 를 `useRef` 에 담고 언마운트 시 정리
 - [ ] 350초 안전장치 타이머도 함께 정리
 - [ ] 회귀 검사가 타이머를 남기지 않는지 확인
+
+- 검토 체크: ponytail APPROVE; 공유 코드리뷰 APPROVE·architect CLEAR. evidence/jongga-polling-20260909/review-input.json의 SHA와 원문 보존. 기존 비작성 agent의 설치 prompt 독립레인, 전용 역할 spawn 성공으로 보고하지 않음.
+- 정적 검증: pytest2281/2skip, Vitest429/60파일, 대상15통과, typecheck0, lint0오류/200경고. 필수 웹 QA는 첫 커밋 뒤 실행. INFRA-069만 테스트 전용 제외.
 
 ### [FE-028] 헤더의 모바일 검색 버튼이 아무 동작도 하지 않는다
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-024 사이클의 실측
@@ -1382,10 +1386,25 @@
 - [ ] 데스크톱·모바일 랜딩 실측으로 표시와 현재 종가베팅 안내 대조
 
 ### [JONGGA-037] 종가 업데이트 완료 뒤 버튼이 계속 잠긴다
-- 카테고리: 종가베팅 | 티어: T2 예상 | 근거: 2026-09-09 JONGGA-014 격리 웹 QA.
+- 카테고리: 종가베팅 | 티어: T2 | 근거: 2026-09-09 JONGGA-014 격리 웹 QA. 공유 구현 변경70줄.
 - `closing-bet/page.tsx`의 runUpdate가 setUpdating(true) 직후 이전 렌더의 pollStatus를 호출한다. pollStatus의 updating=false 캡처 때문에 상태 응답 isRunning=false에서도 완료 처리가 생략된다.
 - 1ce5cde에도 동일한 소스다. JONGGA-014 변경이 유발한 회귀로 분류하지 않는다. JONGGA-032의 언마운트 타이머 누수와 같은 영역이지만 완료 상태 전이 결함은 별도다.
-- 진행: 추가 범위 설계 제시 및 사용자 선택 대기. 기존 8건의 승인을 이 항목의 승인으로 간주하지 않는다.
+- 진행: 2026-09-09 후속 사용자 「다음 라운드 … 연관된 라운드들 쭉 이어서 진행」 요청으로 직전 제시한 완료 처리 보완을 재개한다.
+- 설계 승인: 확인 일자 2026-09-09 | 범위: 완료 처리·200/409 회귀 및 같은 폴링의 JONGGA-032 타이머 정리 | 실제 대화 근거: 추가 보완 제시 뒤 사용자 연관 항목 묶음 실행 요청. 이전 8건 승인과 구분한다.
 - 설계: 완료 판정에서 오래된 updating 캡처 의존을 없애고 interval 종료·버튼 재활성화·리포트 갱신을 실행한다. 200/409→상태완료 회귀 검사를 추가한다.
 - [ ] 완료 상태 응답 뒤 버튼 재활성화·재조회·추가 polling 중단 검증
 - [ ] 기존 정상/실패·409·화면 이탈 흐름 보존 및 agent-browser 실측
+
+- 검토 체크: ponytail APPROVE; 공유 코드리뷰 APPROVE·architect CLEAR. evidence/jongga-polling-20260909/review-input.json의 SHA와 원문 보존. 기존 비작성 agent의 설치 prompt 독립레인, 전용 역할 spawn 성공으로 보고하지 않음.
+- 정적 검증: pytest2281/2skip, Vitest429/60파일, 대상15통과, typecheck0, lint0오류/200경고. 필수 웹 QA는 첫 커밋 뒤 실행. INFRA-069만 테스트 전용 제외.
+
+### [INFRA-069] 뉴스 병합 회귀 테스트가 실제 캐시를 읽어 입력이 바뀐다
+- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-09 폴링 묶음 baseline pytest 1실패.
+- 진행: 사용자 연속 작업의 필수 검증을 막는 테스트 격리 보완. 원본 캐시를 지우지 않고 병합·소스 실패 테스트의 cache load/save만 대역 처리한다.
+- 범위: tests/engine/test_news_collector_refactor.py의 첫 두 테스트. 제품 캐시 및 별도 캐시 회귀 계약은 유지한다.
+- [ ] 실패 원인·원문 보존과 독립 진단
+- [ ] cache read/write를 격리하고 기존 기대값으로 대상·전체 검증
+- [ ] ponytail 검토 및 테스트 전용 QA 제외 근거 기록
+
+- 검토 체크: ponytail APPROVE; 공유 코드리뷰 APPROVE·architect CLEAR. evidence/jongga-polling-20260909/review-input.json의 SHA와 원문 보존. 기존 비작성 agent의 설치 prompt 독립레인, 전용 역할 spawn 성공으로 보고하지 않음.
+- 정적 검증: pytest2281/2skip, Vitest429/60파일, 대상15통과, typecheck0, lint0오류/200경고. 필수 웹 QA는 첫 커밋 뒤 실행. INFRA-069만 테스트 전용 제외.
