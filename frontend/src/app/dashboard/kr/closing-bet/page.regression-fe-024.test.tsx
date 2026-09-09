@@ -196,3 +196,18 @@ describe('[FE-024] 비용을 일으키는 조작의 확인 절차', () => {
     expect(api.fetchAPI.mock.calls.at(-1)?.[1]?.body).toContain('044490');
   });
 });
+
+
+describe('[FE-034] 제목 계층', () => {
+  it('페이지 제목과 펼친 전략 및 종목을 연속된 제목 계층으로 제공한다', async () => {
+    await renderPage();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 }).textContent?.replace(/\s/g, '')).toBe('종가베팅');
+    expect(screen.getByRole('heading', { level: 2, name: '태웅' })).toBeTruthy();
+    const tips = screen.getByRole('button', { name: /Trading Tips & Strategy/ });
+    fireEvent.click(tips);
+    expect(screen.getByRole('heading', { level: 2, name: 'Trading Tips & Strategy' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: 'Market Adaptation Strategy' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 4, name: '1) 신고가 조정 후 반등' })).toBeTruthy();
+  });
+});

@@ -510,16 +510,14 @@ function PaperTradingModalAccount({
                             </tr>
                             );
                           })}
-                          {portfolio.holdings.length === 0 && (
-                            <tr>
-                              <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                                보유 중인 종목이 없습니다.
-                              </td>
-                            </tr>
-                          )}
                         </tbody>
                       </table>
                     </div>
+                    {portfolio.holdings.length === 0 && (
+                      <div className="px-6 py-12 text-center text-gray-500">
+                        보유 중인 종목이 없습니다.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -592,15 +590,13 @@ function PaperTradingModalAccount({
                             </td>
                           </tr>
                         ))}
-                        {tradeHistory.length === 0 && (
-                          <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                              거래 내역이 없습니다.
-                            </td>
-                          </tr>
-                        )}
                       </tbody>
                     </table></div>
+                    {tradeHistory.length === 0 && (
+                      <div className="px-6 py-12 text-center text-gray-500">
+                        거래 내역이 없습니다.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

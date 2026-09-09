@@ -1222,9 +1222,9 @@ export default function JonggaV2Page() {
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping"></span>
             AI 기반 전략
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tighter text-white leading-tight mb-2">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-white leading-tight mb-2">
             종가 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">베팅</span>
-          </h2>
+          </h1>
           <p className="text-gray-400 text-lg">
             Gemini 분석 + 기관 수급 추세
           </p>
@@ -1441,9 +1441,9 @@ export default function JonggaV2Page() {
               <i className="fas fa-lightbulb"></i>
             </div>
             <div className="text-left">
-              <h3 className={`text-sm font-bold ${isTipsOpen ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'}`}>
+              <h2 className={`text-sm font-bold ${isTipsOpen ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'}`}>
                 Trading Tips & Strategy
-              </h3>
+              </h2>
               {!isTipsOpen && (
                 <p className="text-[10px] text-gray-500 mt-0.5">
                   시장 대응 전략 및 종가베팅 매수 패턴 가이드 보기
@@ -1458,9 +1458,9 @@ export default function JonggaV2Page() {
           <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
             {/* Market Adaptation Tips */}
             <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl p-4">
-              <h4 className="text-sm font-bold text-indigo-300 mb-2 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-indigo-300 mb-2 flex items-center gap-2">
                 <i className="fas fa-compass"></i> Market Adaptation Strategy
-              </h4>
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-400">
                 <div>
                   <strong className="text-white block mb-1">Target Selection</strong>
@@ -1483,27 +1483,27 @@ export default function JonggaV2Page() {
 
             {/* Closing Bet Buy Daily Patterns */}
             <div className="bg-[#1c1c1e] border border-white/5 rounded-2xl p-5">
-              <h4 className="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2">
                 <span className="w-1 h-4 bg-emerald-500 rounded-full"></span>
                 종가베팅 매수 일봉 패턴
-              </h4>
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                 <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                  <h5 className="text-xs font-bold text-emerald-400 mb-2">1) 신고가 조정 후 반등</h5>
+                  <h4 className="text-xs font-bold text-emerald-400 mb-2">1) 신고가 조정 후 반등</h4>
                   <div className="text-[10px] text-gray-400 space-y-1">
                     <p>• <strong>패턴</strong>: 신고가 돌파 → 10~40일 20일선 지지 조정 → 매물 소화 → 거래량 터진 양봉(윗꼬리 짧음)</p>
                     <p>• <strong>타이밍</strong>: 전고점 근처 깔끔한 양봉 종가</p>
                   </div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                  <h5 className="text-xs font-bold text-emerald-400 mb-2">2) 장대양봉 후 5일선 지지</h5>
+                  <h4 className="text-xs font-bold text-emerald-400 mb-2">2) 장대양봉 후 5일선 지지</h4>
                   <div className="text-[10px] text-gray-400 space-y-1">
                     <p>• <strong>패턴</strong>: 장대양봉 → 다음날 음봉에도 5일선 위 버팀 → 관찰 → 5일선 지지 양봉</p>
                     <p>• <strong>특징</strong>: 재료 좋은 종목, 장대양봉 다음날 대량 음봉 OK</p>
                   </div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                  <h5 className="text-xs font-bold text-emerald-400 mb-2">3) 엔벨로프 돌파 후 7일선 지지</h5>
+                  <h4 className="text-xs font-bold text-emerald-400 mb-2">3) 엔벨로프 돌파 후 7일선 지지</h4>
                   <div className="text-[10px] text-gray-400 space-y-1">
                     <p>• <strong>패턴</strong>: 엔벨로프 20/40선 돌파 → 연속 시세 → 7일선(or 15일선) 지지</p>
                     <p>• <strong>의미</strong>: 단발성 아닌 연속성 재료 확정</p>
@@ -1512,9 +1512,9 @@ export default function JonggaV2Page() {
               </div>
 
               <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3">
-                <h5 className="text-xs font-bold text-indigo-300 mb-2 flex items-center gap-1">
+                <h4 className="text-xs font-bold text-indigo-300 mb-2 flex items-center gap-1">
                   <i className="fas fa-check-circle"></i> 공통 조건
-                </h5>
+                </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-gray-300">
                   <div className="flex items-center gap-1.5"><span className="text-indigo-500">•</span> <span>거래대금 1,000억↑ + 외인/기관 양매수</span></div>
                   <div className="flex items-center gap-1.5"><span className="text-indigo-500">•</span> <span>고점비율 90%↑ 종가 (상한가 제외)</span></div>
@@ -1533,7 +1533,7 @@ export default function JonggaV2Page() {
             <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
               <span className="text-3xl opacity-30">💤</span>
             </div>
-            <h3 className="text-xl font-bold text-gray-300">No Signals Found</h3>
+            <h2 className="text-xl font-bold text-gray-300">No Signals Found</h2>
             <p className="text-gray-500 mt-2 max-w-md">
               Try adjusting filters or wait for market conditions to improve.
             </p>
@@ -2025,7 +2025,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
           </div>
 
           {/* Stock Name */}
-          <h3 className="text-xl font-bold text-white mb-1 truncate">{signal.stock_name}</h3>
+          <h2 className="text-xl font-bold text-white mb-1 truncate">{signal.stock_name}</h2>
           <div className="text-sm font-mono text-gray-400 mb-2">{signal.stock_code}</div>
 
           {/* Theme Tags */}
@@ -2218,7 +2218,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
         {/* Column 2: Analysis Details */}
         <div className="p-5 xl:w-[45%] border-b xl:border-b-0 xl:border-r border-white/10 flex flex-col justify-between">
           <div>
-            <h4 className="text-xs font-bold text-gray-400 mb-3 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-gray-400 mb-3 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <i className="fas fa-microscope text-indigo-400"></i> AI 분석 리포트
                 {aiEval?.model && (
@@ -2242,7 +2242,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                   <i className={`fas fa-redo-alt text-[10px] ${isRetrying ? 'animate-spin' : ''}`}></i>
                 </button>
               )}
-            </h4>
+            </h3>
             <p className="text-sm text-gray-300 leading-relaxed">
               {signal.score.llm_reason || "AI 분석 대기 중입니다..."}
             </p>
@@ -2255,12 +2255,12 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
           <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <h5 className="text-[10px] text-gray-500 mb-2 font-bold flex items-center gap-1">
+              <h4 className="text-[10px] text-gray-500 mb-2 font-bold flex items-center gap-1">
                 시스템 계산 기준
                 <Tooltip content="시그널에 저장된 목표가·손절가를 우선 사용합니다. 가격이 없으면 진입가 대비 기본 +5%/-3%로 계산합니다.">
                   <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
-              </h5>
+              </h4>
               <ul className="text-xs text-gray-400 space-y-1">
                 <li className="flex items-start gap-1.5">
                   <span className="text-emerald-500 mt-0.5">●</span>
@@ -2305,7 +2305,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               </ul>
             </div>
             <div>
-              <h5 className="text-[10px] text-gray-500 mb-2 font-bold">체크리스트</h5>
+              <h4 className="text-[10px] text-gray-500 mb-2 font-bold">체크리스트</h4>
               <div className="space-y-1">
                 <div className={`text-[10px] px-2 py-1 rounded w-fit ${signal.checklist?.has_news ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-500'}`}>
                   {signal.checklist?.has_news ? '뉴스/호재 있음' : '특별한 호재 없음'}

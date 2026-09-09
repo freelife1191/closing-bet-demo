@@ -19,24 +19,27 @@ export default function Header() {
     };
 
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href="/" className="hover:text-white transition-colors">
-          <i className="fas fa-home"></i>
-        </Link>
-        <span>/</span>
-        {paths.map((path, index) => {
-          const isLast = index === paths.length - 1;
-          const rawLabel = path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, ' ');
-          const label = labelMap[rawLabel] || rawLabel;
+      <nav aria-label="현재 위치">
+        <ol className="flex items-center gap-2 text-sm text-gray-400">
+          <li aria-current={paths.length === 0 ? 'page' : undefined}>
+            <Link href="/" aria-label="홈" className="hover:text-white transition-colors">
+              <i className="fas fa-home" aria-hidden="true"></i>
+            </Link>
+          </li>
+          {paths.map((path, index) => {
+            const isLast = index === paths.length - 1;
+            const rawLabel = path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, ' ');
+            const label = labelMap[rawLabel] || rawLabel;
 
-          return (
-            <div key={path} className="flex items-center gap-2">
-              <span className={isLast ? 'text-white font-medium' : ''}>{label}</span>
-              {!isLast && <span>/</span>}
-            </div>
-          );
-        })}
-      </div>
+            return (
+              <li key={path} aria-current={isLast ? 'page' : undefined} className="flex items-center gap-2">
+                <span aria-hidden="true">/</span>
+                <span className={isLast ? 'text-white font-medium' : ''}>{label}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
     );
   };
 

@@ -1,0 +1,20 @@
+{
+  "pytest": {
+    "exit": 0,
+    "passed": 2281,
+    "skipped": 2
+  },
+  "vitest": {
+    "exit": 0,
+    "passed": 446,
+    "files": 64
+  },
+  "typecheck": {
+    "exit": 0
+  },
+  "lint": {
+    "exit": 0,
+    "errors": 0,
+    "warnings": 199
+  }
+}

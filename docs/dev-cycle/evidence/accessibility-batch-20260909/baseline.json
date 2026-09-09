@@ -1,0 +1,15 @@
+{
+  "commit": "f7801ff88a86ffea30048ddf79e164f6e01c3a46",
+  "branch": "develop",
+  "user_file": "package.json",
+  "user_file_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "todo_count": 57,
+  "started_at": "2026-09-09T18:23:04.733621+09:00",
+  "lifecycle": "app-adapted",
+  "limits": {
+    "review_minutes": 15,
+    "qa_minutes": 60,
+    "same_failure": 3,
+    "iterations": 5
+  }
+}

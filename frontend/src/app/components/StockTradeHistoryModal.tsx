@@ -346,16 +346,14 @@ export default function StockTradeHistoryModal({
                         </tr>
                       );
                     })}
-                    {trades.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
-                          해당 종목의 거래 내역이 없습니다.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
+              {trades.length === 0 && (
+                <div className="px-4 py-12 text-center text-gray-500">
+                  해당 종목의 거래 내역이 없습니다.
+                </div>
+              )}
             </div>
           </>
         )}

@@ -885,16 +885,14 @@ function TradeTable({ trades }: { trades: Trade[] }) {
                 </td>
               </tr>
             ))}
-            {trades.length === 0 && (
-              <tr>
-                <td colSpan={12} className="py-8 text-center text-gray-500">
-                  해당 기간에 대한 거래 내역이 없습니다.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
+      {trades.length === 0 && (
+        <div className="py-8 text-center text-gray-500">
+          해당 기간에 대한 거래 내역이 없습니다.
+        </div>
+      )}
     </div>
   );
 }
