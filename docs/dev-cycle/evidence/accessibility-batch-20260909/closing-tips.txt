@@ -1,0 +1,233 @@
+- complementary
+  - link "M 스마트 머니 봇" [ref=e1]
+    - StaticText "M"
+    - StaticText "스마트 머니 봇"
+  - navigation
+    - StaticText "DASHBOARD"
+    - button " KR Market " [ref=e25]
+      - StaticText ""
+      - StaticText "KR Market"
+      - StaticText ""
+    - link "● Overview" [ref=e26]
+    - link "● VCP 시그널" [ref=e27]
+    - link "● 종가베팅" [ref=e28]
+    - link "● 누적 성과" [ref=e29]
+    - link "● AI 상담" [ref=e30]
+    - button " 모의투자" [ref=e31]
+      - StaticText ""
+      - StaticText "모의투자"
+    - link " 데이터 상태" [ref=e32]
+      - StaticText ""
+      - StaticText "데이터 상태"
+  - generic
+    - StaticText "무료 사용량"
+    - StaticText "10"
+    - StaticText "회 남음"
+    - button "+" [ref=e33]
+    - button "U User Free Tier Plan " [ref=e34]
+      - StaticText "U"
+      - StaticText "User"
+      - StaticText "Free Tier Plan"
+      - StaticText ""
+- banner
+  - navigation "현재 위치" [ref=e2]
+    - list
+      - listitem [level=1]
+        - link "홈" [ref=e60]
+      - listitem [level=1]
+        - StaticText "대시보드"
+      - listitem [level=1]
+        - StaticText "국내 시장"
+      - listitem [level=1]
+        - StaticText "종가베팅"
+  - generic
+    - StaticText ""
+    - textbox "Search markets, tickers..." [ref=e35]
+    - StaticText "⌘K"
+  - button "설정 열기" [ref=e3]
+    - StaticText ""
+- main
+  - generic
+    - StaticText ""
+    - StaticText "스마트 머니 봇"
+  - generic
+    - StaticText "AI 기반 전략"
+  - heading "종가 베팅" [level=1, ref=e4]
+    - StaticText "종가 베팅"
+  - paragraph
+    - StaticText "Gemini 분석 + 기관 수급 추세"
+  - StaticText "TRENDING THEMES"
+  - StaticText "데이터 갱신 후 표시됩니다"
+  - StaticText "CANDIDATES"
+  - StaticText ""
+  - generic
+    - StaticText "시장에서 1차 필터링된 후보 종목 수입니다."
+  - StaticText "0"
+  - StaticText "FILTERED"
+  - StaticText ""
+  - generic
+    - StaticText "AI 조건에 의해 최종 선별된 종목 수입니다."
+  - StaticText "0"
+  - StaticText "DATA STATUS"
+  - button "스크리너 전체 업데이트" [ref=e5]
+    - StaticText ""
+  - generic
+    - StaticText "스크리너 엔진을 실행하여 모든 종목에 대해 전체 업데이트(뉴스, 수급, 점수 등)를 수행합니다."
+  - button "GEMINI AI 재분석" [ref=e6]
+    - StaticText ""
+  - generic
+    - StaticText "기존 데이터를 기반으로 GEMINI AI를 재호출합니다. 전체 실행 시 미분석/실패 항목만 재분석됩니다."
+  - StaticText "UPDATED"
+  - StaticText "오후 05:00"
+  - StaticText "거래대금"
+  - StaticText ""
+  - generic
+    - StaticText "하루 동안 거래된 총 금액입니다. 거래대금이 클수록 유동성이 좋고 기관의 관심을 받는 종목입니다."
+  - combobox [expanded=false, ref=e7]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e37]
+      - option "1000억 이상" [ref=e38]
+      - option "5000억 이상" [ref=e39]
+      - option "1조 이상" [ref=e40]
+  - StaticText "상승률"
+  - StaticText ""
+  - generic
+    - StaticText "전일 종가 대비 상승률입니다. 5% 이상이면 강세, 10% 이상이면 급등 신호입니다."
+  - combobox [expanded=false, ref=e8]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e41]
+      - option "2% 이상" [ref=e42]
+      - option "3% 이상" [ref=e43]
+      - option "5% 이상 (Standard)" [ref=e44]
+      - option "7% 이상" [ref=e45]
+      - option "10% 이상 (Strong)" [ref=e46]
+      - option "15% 이상 (Very Strong)" [ref=e47]
+      - option "20% 이상 (Super)" [ref=e48]
+      - option "25% 이상 (Limit)" [ref=e49]
+  - StaticText "등급"
+  - StaticText ""
+  - generic
+    - StaticText "AI가 평가한 종합 등급입니다. S(최고), A(우수), B(양호) 순서입니다."
+  - button "기준표" [ref=e9]
+  - combobox [expanded=false, ref=e10]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e50]
+      - option "S급 이상" [ref=e51]
+      - option "A급 이상" [ref=e52]
+      - option "B급 이상" [ref=e53]
+  - StaticText "총점"
+  - StaticText ""
+  - generic
+    - StaticText "기본 6개 항목 12점과 가산점 7점을 더한 총점입니다. 최대 19점, 8점 이상이면 강한 신호입니다."
+  - combobox [expanded=false, ref=e11]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e54]
+      - option "4점 이상" [ref=e55]
+      - option "8점 이상" [ref=e56]
+      - option "10점 이상" [ref=e57]
+  - button " 종가베팅 전체 10주 매수" [disabled, ref=e12]
+    - StaticText ""
+    - StaticText "종가베팅 전체 10주 매수"
+  - generic
+    - StaticText "오늘 종가베팅 매수 대상 종목이 없습니다."
+  - button " 종가베팅 점수표" [ref=e13]
+    - StaticText ""
+    - StaticText "종가베팅 점수표"
+  - combobox [expanded=false, ref=e14]: Latest Report
+    - MenuListPopup
+      - option "Latest Report" [selected, ref=e58]
+      - option "2026-09-09" [ref=e59]
+  - generic
+    - StaticText "이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다."
+  - button "선택한 날짜의 리포트 다시 불러오기" [ref=e15]
+    - StaticText ""
+  - generic
+    - StaticText "현재 선택된 날짜의 데이터를 다시 불러옵니다."
+  - button " Trading Tips & Strategy " [ref=e16]
+    - StaticText ""
+    - heading "Trading Tips & Strategy" [level=2, ref=e36]
+    - StaticText ""
+  - heading " Market Adaptation Strategy" [level=3, ref=e17]
+    - StaticText ""
+    - StaticText "Market Adaptation Strategy"
+  - strong
+    - StaticText "Target Selection"
+  - list
+    - listitem [level=1]
+      - ListMarker "• "
+      - StaticText "KOSPI: 시총 대형주 + 거래대금 1000억 이상 (추세 지속)"
+    - listitem [level=1]
+      - ListMarker "• "
+      - StaticText "KOSDAQ: 알짜 중소형주 (200~500억) 변동성 활용"
+    - listitem [level=1]
+      - ListMarker "• "
+      - StaticText "Bull Market: 코스피 5000 등 대상승장엔 S등급 주도주만 집중"
+  - strong
+    - StaticText "Execution Timing"
+  - list
+    - listitem [level=1]
+      - ListMarker "• "
+      - StaticText "Entry: 15:10 ~ 15:30 (종가 부근), 눌림목 지지 확인 필수"
+    - listitem [level=1]
+      - ListMarker "• "
+      - StaticText "Profit: 시그널 목표가 도달 여부로 판정 (누락 시 진입가 대비 기본 +5%)"
+    - listitem [level=1]
+      - ListMarker "• "
+      - StaticText "Stop: 시그널 손절가 도달 여부로 판정 (누락 시 진입가 대비 기본 -3%)"
+  - heading "종가베팅 매수 일봉 패턴" [level=3, ref=e18]
+    - StaticText "종가베팅 매수 일봉 패턴"
+  - heading "1) 신고가 조정 후 반등" [level=4, ref=e19]
+  - paragraph
+    - StaticText "• "
+    - strong
+      - StaticText "패턴"
+    - StaticText ": 신고가 돌파 → 10~40일 20일선 지지 조정 → 매물 소화 → 거래량 터진 양봉(윗꼬리 짧음)"
+  - paragraph
+    - StaticText "• "
+    - strong
+      - StaticText "타이밍"
+    - StaticText ": 전고점 근처 깔끔한 양봉 종가"
+  - heading "2) 장대양봉 후 5일선 지지" [level=4, ref=e20]
+  - paragraph
+    - StaticText "• "
+    - strong
+      - StaticText "패턴"
+    - StaticText ": 장대양봉 → 다음날 음봉에도 5일선 위 버팀 → 관찰 → 5일선 지지 양봉"
+  - paragraph
+    - StaticText "• "
+    - strong
+      - StaticText "특징"
+    - StaticText ": 재료 좋은 종목, 장대양봉 다음날 대량 음봉 OK"
+  - heading "3) 엔벨로프 돌파 후 7일선 지지" [level=4, ref=e21]
+  - paragraph
+    - StaticText "• "
+    - strong
+      - StaticText "패턴"
+    - StaticText ": 엔벨로프 20/40선 돌파 → 연속 시세 → 7일선(or 15일선) 지지"
+  - paragraph
+    - StaticText "• "
+    - strong
+      - StaticText "의미"
+    - StaticText ": 단발성 아닌 연속성 재료 확정"
+  - heading " 공통 조건" [level=4, ref=e22]
+    - StaticText ""
+    - StaticText "공통 조건"
+  - StaticText "•"
+  - StaticText "거래대금 1,000억↑ + 외인/기관 양매수"
+  - StaticText "•"
+  - StaticText "고점비율 90%↑ 종가 (상한가 제외)"
+  - StaticText "•"
+  - StaticText "외인/기관 양매수 (수급 확인 필수)"
+  - StaticText "•"
+  - StaticText "(20일선 OR 5일선 OR 7일선 지지) 패턴 부합"
+  - StaticText "💤"
+  - heading "No Signals Found" [level=2, ref=e23]
+  - paragraph
+    - StaticText "Try adjusting filters or wait for market conditions to improve."
+  - generic
+    - StaticText "Engine: v2.0.1 (Gemini Flash) • Updated: 2026-09-09T17:00:00+09:00"
+- button "AI 상담" [expanded=false, ref=e24]
+  - generic
+    - StaticText ""
+    - StaticText ""
+- alert

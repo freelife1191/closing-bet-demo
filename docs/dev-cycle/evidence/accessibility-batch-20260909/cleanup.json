@@ -1,0 +1,17 @@
+{
+  "completed_at": "2026-09-09T18:38:21.596281+09:00",
+  "browser_closed": true,
+  "owned_groups": [
+    93109,
+    93110
+  ],
+  "remaining_members": [],
+  "ports_free": [
+    57381,
+    57382
+  ],
+  "scratch_removed": "/tmp/fe-empty-ui-qa-pYLqHs",
+  "original_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "original_services": "not operated",
+  "original_env_data": "not copied or modified"
+}

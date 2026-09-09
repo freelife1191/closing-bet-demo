@@ -1,0 +1,113 @@
+{
+  "source": "d5d2a90",
+  "driver": "agent-browser",
+  "lifecycle": "app-adapted",
+  "required": 8,
+  "observed_scenarios": {
+    "S-1": "heading/nav DOM plus Tips and populated signal snapshots",
+    "S-2": "cumulative desktop navigation+aria-current HTML",
+    "S-3": "cumulative mobile and filter empty",
+    "S-4": "holdings-empty",
+    "S-5": "trades-empty",
+    "S-6": "stock keyboard+desktop mouse entry, specific modal scroll, stock-empty-scrolled",
+    "S-7": "cumulative longUnicode1row→LOSS empty→All1row; holdings andstockreopen",
+    "S-8": "static-results/runtime-errors/cleanup"
+  },
+  "rects": {
+    "cumulative-rect": [
+      {
+        "text": "해당 기간에 대한 거래 내역이 없습니다.",
+        "rect": {
+          "x": 33,
+          "y": 693,
+          "width": 309,
+          "height": 86.390625,
+          "top": 693,
+          "right": 342,
+          "bottom": 779.390625,
+          "left": 33
+        },
+        "overflow": false,
+        "vw": 375
+      }
+    ],
+    "holdings-rect": [
+      {
+        "rect": {
+          "x": 34,
+          "y": 428.296875,
+          "width": 307,
+          "height": 118.390625,
+          "top": 428.296875,
+          "right": 341,
+          "bottom": 546.6875,
+          "left": 34
+        },
+        "overflow": false,
+        "vw": 375
+      }
+    ],
+    "trades-rect": [
+      {
+        "rect": {
+          "x": 34,
+          "y": 428.296875,
+          "width": 307,
+          "height": 118.390625,
+          "top": 428.296875,
+          "right": 341,
+          "bottom": 546.6875,
+          "left": 34
+        },
+        "overflow": false,
+        "vw": 375
+      }
+    ],
+    "stock-rect-scrolled": [
+      {
+        "rect": {
+          "x": 34,
+          "y": 629.5,
+          "width": 307,
+          "height": 118.390625,
+          "top": 629.5,
+          "right": 341,
+          "bottom": 747.890625,
+          "left": 34
+        },
+        "overflow": false,
+        "vw": 375
+      }
+    ]
+  },
+  "requests": {
+    "/api/kr/jongga-v2/dates": 4,
+    "/api/kr/jongga-v2/latest": 4,
+    "/api/kr/user/quota": 5,
+    "/api/kr/closing-bet/cumulative": 8,
+    "/api/admin/check": 20,
+    "/api/portfolio": 4,
+    "/api/portfolio/history": 5,
+    "/api/kr/stock-chart/005930": 3
+  },
+  "all_requests_get200": true,
+  "page_errors": [],
+  "console_errors": [],
+  "viewed_images": [
+    "closing-tips.png",
+    "cumulative-mobile.png",
+    "holdings-empty.png",
+    "trades-empty.png",
+    "stock-empty.png",
+    "stock-empty-visible.png",
+    "stock-empty-scrolled.png",
+    "cumulative-filter-empty.png",
+    "closing-populated.png",
+    "cumulative-desktop.png"
+  ],
+  "limitations": [
+    "HTTPbackend synthetic; no real trading or IdP validation",
+    "get_compilation_issues unavailable webpack -32602; runtime MCP clear and compiled logs+buildsmoke used",
+    "mobile row coordinate click inconclusive; actual keyboard and desktop mouse entry verified"
+  ]
+}

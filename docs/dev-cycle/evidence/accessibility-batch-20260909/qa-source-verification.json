@@ -1,0 +1,32 @@
+{
+  "commit": "d5d2a90d90a6c0dc6e7c0989189713dd56b94833",
+  "matches": {
+    "frontend/src/app/components/Header.tsx": true,
+    "frontend/src/app/components/PaperTradingModal.tsx": true,
+    "frontend/src/app/components/StockTradeHistoryModal.tsx": true,
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx": true,
+    "frontend/src/app/dashboard/kr/closing-bet/page.tsx": true,
+    "frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx": true,
+    "frontend/src/app/components/Header.regression-fe-034.test.tsx": true,
+    "frontend/src/app/components/emptyState.regression-fe-040.test.tsx": true
+  },
+  "runtime": {
+    "root": "/private/tmp/fe-empty-ui-qa-pYLqHs",
+    "ports": [
+      57381,
+      57382
+    ],
+    "items": [
+      {
+        "pid": 93109,
+        "pgid": 93109,
+        "cwd": "/private/tmp/fe-empty-ui-qa-pYLqHs"
+      },
+      {
+        "pid": 93110,
+        "pgid": 93110,
+        "cwd": "/private/tmp/fe-empty-ui-qa-pYLqHs/checkout/frontend"
+      }
+    ]
+  }
+}
