@@ -2213,7 +2213,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             )}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
+          <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <h5 className="text-[10px] text-gray-500 mb-2 font-bold flex items-center gap-1">
                 시스템 계산 기준
