@@ -1,0 +1,40 @@
+{
+  "viewer": "view_image actually opened each of seven PNGs",
+  "images": [
+    {
+      "name": "desktop-ai.png",
+      "sha256": "443a6e08bc6b2fd0c1065b4dac616f71a0a58a7e03480a9ee9805edff7c40366",
+      "verdict": "PASS scoped text/layout/tab state"
+    },
+    {
+      "name": "mobile-closing-tab.png",
+      "sha256": "e03b297c72c59debe47db89a14dcbe5823f4d0588ef4a5ec0f702e24a69499b8",
+      "verdict": "PASS scoped text/layout/tab state"
+    },
+    {
+      "name": "mobile-gpt-corrected.png",
+      "sha256": "91c695d428654facb7a8066e81d7ab42c0d48a58b98f8a20b966ff97da65d50b",
+      "verdict": "PASS scoped text/layout/tab state"
+    },
+    {
+      "name": "mobile-gpt.png",
+      "sha256": "a9a6b9ded6997ed600095714efa3e088c34452a60783caaae5f6a96853defd7d",
+      "verdict": "harness wrong scroll, excluded from required proof"
+    },
+    {
+      "name": "mobile-perplexity.png",
+      "sha256": "1ff9b71e462a9aad9b12cb6ba79346bcd39709a33c0d45fa0884932a68dda209",
+      "verdict": "PASS scoped text/layout/tab state"
+    },
+    {
+      "name": "mobile-supply-tab.png",
+      "sha256": "13ba141fb3f1234d8a046a803c9c6f6fffc833033454defad6502965e783cc13",
+      "verdict": "PASS scoped text/layout/tab state"
+    },
+    {
+      "name": "mobile-vcp-tab.png",
+      "sha256": "44f8272095bd023f34953d5b22977ec1bcf235dabaf48b9a69abc6eb83ff54c3",
+      "verdict": "PASS scoped text/layout/tab state"
+    }
+  ]
+}

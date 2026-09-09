@@ -1,0 +1,72 @@
+- heading "Multi AI Analysis System" [level=2, ref=e8]
+- paragraph
+  - StaticText "Gemini 주분석 + GPT/Perplexity 보조 검증으로 신뢰도를 높이는 멀티 AI 구조"
+- StaticText "MULTI ENGINE"
+- heading "Gemini (Main · Vertex AI)" [level=3, ref=e9]
+  - StaticText "Gemini (Main · Vertex AI)"
+- paragraph
+  - StaticText "종가베팅 Phase3 뉴스 종합 분석 + 호재 점수(0~3) + VCP 1차 추론. 심층 추론과 긴 컨텍스트가 강점이며 서비스 계정 기반 Vertex AI로 운영됩니다."
+- heading "GPT (Sub · Z.ai fallback)" [level=3, ref=e10]
+  - StaticText "GPT (Sub · Z.ai fallback)"
+- paragraph
+  - StaticText "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증합니다. 할당량 소진 등 전환 조건에 해당하면 사용 가능한 Z.ai로 대체 분석을 시도합니다."
+- heading "Perplexity (Sub)" [level=3, ref=e11]
+  - StaticText "Perplexity (Sub)"
+- paragraph
+  - StaticText "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증하며, 웹 검색으로 최신 뉴스와 공시를 참고합니다. 호출 제한·인증 오류 등 전환 조건에 해당하면 설정된 Z.ai·GPT 중 사용 가능한 모델로 대체 분석을 시도합니다."
+- heading "Market Gate" [level=3, ref=e12]
+- paragraph
+  - StaticText "시장 전체의 상태와 주도 섹터를 분석합니다."
+- list
+  - listitem [level=1]
+    - StaticText "EMA 추세 정배열 (25점)"
+  - listitem [level=1]
+    - StaticText "RSI & MACD (45점)"
+  - listitem [level=1]
+    - StaticText "거래량 & 상대강도 (30점)"
+  - listitem [level=1]
+    - StaticText "Gate Open: 기술점수 40점 이상"
+- paragraph
+  - StaticText "모니터링 대상"
+- StaticText "반도체"
+- StaticText "2차전지"
+- StaticText "헬스케어"
+- StaticText "+4"
+- heading "Multi AI Analysis System" [level=2, ref=e8]
+- paragraph
+  - StaticText "Gemini 주분석 + GPT/Perplexity 보조 검증으로 신뢰도를 높이는 멀티 AI 구조"
+- StaticText "MULTI ENGINE"
+- heading "Gemini (Main · Vertex AI)" [level=3, ref=e9]
+  - StaticText "Gemini (Main · Vertex AI)"
+- paragraph
+  - StaticText "종가베팅 Phase3 뉴스 종합 분석 + 호재 점수(0~3) + VCP 1차 추론. 심층 추론과 긴 컨텍스트가 강점이며 서비스 계정 기반 Vertex AI로 운영됩니다."
+- heading "GPT (Sub · Z.ai fallback)" [level=3, ref=e10]
+  - StaticText "GPT (Sub · Z.ai fallback)"
+- paragraph
+  - StaticText "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증합니다. 할당량 소진 등 전환 조건에 해당하면 사용 가능한 Z.ai로 대체 분석을 시도합니다."
+- heading "Perplexity (Sub)" [level=3, ref=e11]
+  - StaticText "Perplexity (Sub)"
+- paragraph
+  - StaticText "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증하며, 웹 검색으로 최신 뉴스와 공시를 참고합니다. 호출 제한·인증 오류 등 전환 조건에 해당하면 설정된 Z.ai·GPT 중 사용 가능한 모델로 대체 분석을 시도합니다."
+- heading "Market Gate" [level=3, ref=e12]
+- paragraph
+  - StaticText "시장 전체의 상태와 주도 섹터를 분석합니다."
+- list
+  - listitem [level=1]
+    - StaticText "EMA 추세 정배열 (25점)"
+  - listitem [level=1]
+    - StaticText "RSI & MACD (45점)"
+  - listitem [level=1]
+    - StaticText "거래량 & 상대강도 (30점)"
+  - listitem [level=1]
+    - StaticText "Gate Open: 기술점수 40점 이상"
+- paragraph
+  - StaticText "모니터링 대상"
+- StaticText "반도체"
+- StaticText "2차전지"
+- StaticText "헬스케어"
+- StaticText "+4"
+- StaticText "EMA 추세 정배열 (25점)"
+- StaticText "RSI & MACD (45점)"
+- StaticText "거래량 & 상대강도 (30점)"
+- StaticText "Gate Open: 기술점수 40점 이상"

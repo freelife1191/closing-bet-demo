@@ -1,0 +1,33 @@
+{"label": "open", "args": ["open", "http://127.0.0.1:57272/"], "exit_code": 0, "seconds": 5.127}
+{"label": "desktop-size", "args": ["set", "viewport", "1280", "900"], "exit_code": 0, "seconds": 0.059}
+{"label": "desktop-before", "args": ["snapshot"], "exit_code": 0, "seconds": 0.068}
+{"label": "desktop-ai-click", "args": ["click", "@e3"], "exit_code": 0, "seconds": 0.077}
+{"label": "desktop-ai", "args": ["snapshot", "-s", "#ai-analysis"], "exit_code": 0, "seconds": 0.065}
+{"label": "desktop-ai-shot", "args": ["screenshot", "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/desktop-ai.png"], "exit_code": 0, "seconds": 0.108}
+{"label": "desktop-errors", "args": ["errors", "--json"], "exit_code": 0, "seconds": 0.051}
+{"label": "desktop-console", "args": ["console", "--json"], "exit_code": 0, "seconds": 0.049}
+{"label": "mobile-size", "args": ["set", "viewport", "375", "812"], "exit_code": 0, "seconds": 0.065}
+{"label": "mobile-before", "args": ["snapshot", "-s", "#ai-analysis"], "exit_code": 0, "seconds": 0.074}
+{"label": "mobile-gpt-scroll", "args": ["scrollintoview", "@e13"], "exit_code": 0, "seconds": 0.053}
+{"label": "mobile-gpt-shot", "args": ["screenshot", "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/mobile-gpt.png"], "exit_code": 0, "seconds": 0.066}
+{"label": "mobile-gpt-scroll-corrected", "args": ["scrollintoview", "@e10"], "exit_code": 0, "seconds": 0.051}
+{"label": "mobile-gpt-corrected-shot", "args": ["screenshot", "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/mobile-gpt-corrected.png"], "exit_code": 0, "seconds": 0.078}
+{"label": "mobile-perplexity-scroll", "args": ["scrollintoview", "@e11"], "exit_code": 0, "seconds": 0.057}
+{"label": "mobile-perplexity-shot", "args": ["screenshot", "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/mobile-perplexity.png"], "exit_code": 0, "seconds": 0.073}
+{"label": "mobile-dom", "args": ["eval", "--stdin"], "exit_code": 0, "seconds": 0.053}
+{"label": "tabs-before", "args": ["snapshot", "-i"], "exit_code": 0, "seconds": 0.062}
+{"label": "vcp-click", "args": ["click", "@e17"], "exit_code": 0, "seconds": 0.063}
+{"label": "vcp-after", "args": ["snapshot"], "exit_code": 0, "seconds": 0.062}
+{"label": "vcp-shot", "args": ["screenshot", "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/mobile-vcp-tab.png"], "exit_code": 0, "seconds": 0.076}
+{"label": "supply-click", "args": ["click", "@e18"], "exit_code": 0, "seconds": 0.068}
+{"label": "supply-after", "args": ["snapshot", "-i"], "exit_code": 0, "seconds": 0.06}
+{"label": "supply-shot", "args": ["screenshot", "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/mobile-supply-tab.png"], "exit_code": 0, "seconds": 0.07}
+{"label": "closing-click", "args": ["click", "@e19"], "exit_code": 0, "seconds": 0.059}
+{"label": "closing-after", "args": ["snapshot", "-i"], "exit_code": 0, "seconds": 0.065}
+{"label": "closing-shot", "args": ["screenshot", "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/mobile-closing-tab.png"], "exit_code": 0, "seconds": 0.077}
+{"label": "final-dom", "args": ["eval", "--stdin"], "exit_code": 0, "seconds": 0.052}
+{"label": "final-errors", "args": ["errors", "--json"], "exit_code": 0, "seconds": 0.051}
+{"label": "final-console", "args": ["console", "--json"], "exit_code": 0, "seconds": 0.05}
+{"label": "final-network", "args": ["network", "requests", "--json"], "exit_code": 0, "seconds": 0.052}
+{"label": "final-dom-corrected", "args": ["eval", "--stdin"], "exit_code": 0, "seconds": 0.05}
+{"label": "close", "args": ["close"], "exit_code": 0, "seconds": 0.159}

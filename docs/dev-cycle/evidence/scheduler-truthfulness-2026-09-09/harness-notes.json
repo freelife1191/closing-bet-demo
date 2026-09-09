@@ -1,0 +1,28 @@
+{
+  "iteration": 1,
+  "product_failures": 0,
+  "harness_corrections": [
+    {
+      "issue": "viewport resize changed refs; stale e13 scrolled to Scoring section",
+      "evidence": "mobile-gpt.png actually viewed; not accepted as GPT visual proof",
+      "fix": "read refreshed mobile snapshot e10 and e11, recapture corrected screenshots"
+    },
+    {
+      "issue": "heading textContent has leading icon whitespace, exact equality returnedfalse",
+      "fix": "trim comparison; final-dom-corrected true plus real snapshot/screenshots"
+    }
+  ],
+  "asset_limits": [
+    "external icon font denied intentionally by allowed domains/proxy; icons not visually verified",
+    "favicon.ico GET404 existing unmodified route; no console/pageerror observed"
+  ],
+  "network": {
+    "total": 24,
+    "methods": [
+      "GET"
+    ],
+    "API_sink_requests": 0
+  },
+  "raw_network_headers": "removed before export; no real user session imported",
+  "archive_format_correction": "git diff --cached --check rejected two MCP SSE text files for terminal blank lines; gzip raw preserved, display text EOF normalized, stage check rerun before commit"
+}

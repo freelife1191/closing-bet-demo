@@ -1,0 +1,21 @@
+{
+  "source_commit": "3853de87b3f62018fbbb7d6466379d0a40158bea",
+  "iteration": 1,
+  "required_pass": 10,
+  "required_total": 10,
+  "schedule_configs": 2,
+  "chain_cases": 13,
+  "screenshots_viewed": 7,
+  "screenshots_accepted": 6,
+  "browser_requests": 24,
+  "browser_methods": [
+    "GET"
+  ],
+  "console_errors_warnings": 0,
+  "page_errors": 0,
+  "next_compilation_issues": 0,
+  "next_runtime_issues": 0,
+  "cleanup": "runtime complete; clone integration pending",
+  "out_of_scope": "JONGGA-036",
+  "note": "No product failures. Stale viewport ref and trim comparison corrected as harness issues; initial outputs retained. External font intentionally denied, favicon404 outside changed scope."
+}

@@ -6,9 +6,11 @@
     "TDD": "superpowers:test-driven-development + writing-good-tests",
     "frontend": "Next bundled 03-layouts-and-pages.md; copy only no hook/performance changes",
     "ponytail": "dedicated code-reviewer scheduler_ponytail Lean already. Ship.",
-    "code-review": "dedicated scheduler_code_review and scheduler_arch_review currently running",
-    "qa": "ultraqa App adaptation; agent-browser core read; scenarios committed beforeexecution",
-    "workspace": "using-git-worktrees isolation adapted independentclone develop because repository requiresdevelop and originaldirtypackage preserved"
+    "code-review": "scheduler_code_review v4 APPROVE + scheduler_arch_review CLEAR",
+    "qa": "ultraqa app-adapted iteration1 10/10 behavior pass; runtime cleanup complete, clone integration pending",
+    "workspace": "using-git-worktrees isolation adapted independentclone develop because repository requiresdevelop and originaldirtypackage preserved",
+    "security": "scheduler_security_review APPROVE, exactv4",
+    "completion": "verification-before-completion source hashes and finishing-a-development-branch existing approved develop FF integration"
   },
   "native_state": "not used; no proven writable OMXscope",
   "baseline_and_final_source": "review-input.json SHA256",

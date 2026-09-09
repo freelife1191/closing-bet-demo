@@ -113,7 +113,7 @@
 - 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 14:31 KST | 실제 대화 근거: 두 라운드 설계 제안에 사용자 「승인」
 - 승인 범위: INFRA-019 설명 정합성 → INFRA-029 성공/부분 실패 로그 구분. 실행 순서·알림 발송 조건 유지.
 - 계획: `docs/superpowers/plans/2026-09-09-scheduler-truthfulness.md`
-- 진행 상태: QA_RUN 준비 — 구현·critic OKAY·ponytail Lean·code APPROVE/architect CLEAR·T3 review·security APPROVE·전체 정적 검증 통과. 입력 v4 해시 대조 완료.
+- 진행 상태: QA 동작 검수 완료, clone 통합·최종 정리 대기 — 구현·critic OKAY·ponytail Lean·code APPROVE/architect CLEAR·T3 review·security APPROVE·전체 정적 검증 통과. 입력 v4 해시 대조 완료.
 
 - [ ] UltraQA 필수 행렬 실행 및 소유 런타임/fixture 정리
 - [ ] 최종 아카이브와 TODO 제거
@@ -790,7 +790,7 @@
 - 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 14:31 KST | 실제 대화 근거: 두 라운드 설계 제안에 사용자 「승인」
 - 승인 범위: INFRA-019 설명 정합성 → INFRA-029 성공/부분 실패 로그 구분. 실행 순서·알림 발송 조건 유지.
 - 계획: `docs/superpowers/plans/2026-09-09-scheduler-truthfulness.md`
-- 진행 상태: QA_RUN 준비 — 구현·critic OKAY·ponytail Lean·code APPROVE/architect CLEAR·T3 review·security APPROVE·전체 정적 검증 통과. 입력 v4 해시 대조 완료.
+- 진행 상태: QA 동작 검수 완료, clone 통합·최종 정리 대기 — 구현·critic OKAY·ponytail Lean·code APPROVE/architect CLEAR·T3 review·security APPROVE·전체 정적 검증 통과. 입력 v4 해시 대조 완료.
 
 - [ ] UltraQA 필수 행렬 실행 및 소유 런타임/fixture 정리
 - [ ] 최종 아카이브와 TODO 제거
@@ -1542,3 +1542,10 @@
 - calculate_cumulative_trade_metrics는 현재 ticker+ISO date의 생산 frame 또는 숫자 OHLC의 DatetimeIndex를 받는다. ticker 없는 date frame, 숫자 YYYYMMDD, 문자열 OHLC의 직접 호출은 TypeError 또는 OPEN 오판정이 가능하다. 실제 생산 호출부는 이 계약을 충족한다.
 - [ ] 직접 호출부와 허용 입력 계약을 확인해 비표준 입력을 명시적으로 거부하거나 안전하게 정규화
 - [ ] 세 재현과 정상 생산 frame의 회귀 검사 추가
+
+### [JONGGA-036] 랜딩의 종가베팅 수익률·보유기간 설명이 현재 시스템 기준과 다르다
+- 카테고리: 종가베팅 | 티어: T1 예상 | 근거: 2026-09-09 INFRA-019·029 agent-browser 인접 탭 실측.
+- `frontend/src/app/page.tsx`의 Core Analysis Features에는 「익절 +9% / 손절 -5% / 최대 보유 15일」이 남아 있다. Scoring Logic Detail의 기대값 예시는 +9/-5와 +3.4%를 표시한다. JONGGA-012가 정리한 시스템 기본 +5/-3 및 OPEN 추적과 의미를 구분해야 한다.
+- 이번 승인 범위는 스케줄러/AI 프로바이더 설명·성공 로그이며 해당 수치 코드는 이전 base4e57aa3와 같다. 현재 QA의 인접 탭 전환은 통과했지만 이 수치 정합성은 별도 설계 대상이다.
+- [ ] 전략 일반 예시와 시스템 실제 기준을 구분해 문구·가정·계산을 정리
+- [ ] 데스크톱·모바일 랜딩 실측으로 표시와 현재 종가베팅 안내 대조

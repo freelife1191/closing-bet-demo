@@ -1,0 +1,16 @@
+{
+  "supervisor_finalized": true,
+  "child_exit": -15,
+  "record": {
+    "supervisor_pid": 86762,
+    "pid": 86776,
+    "pgid": 86776,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/checkout/frontend",
+    "url": "http://127.0.0.1:57272",
+    "port": 57272,
+    "api_port": 49559,
+    "proxy_port": 49560,
+    "namespace": "devcycle-scheduler-ta7kuvwh",
+    "profile": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/qa/browser-profile"
+  }
+}

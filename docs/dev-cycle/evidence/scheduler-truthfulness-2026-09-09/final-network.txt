@@ -1,0 +1,150 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/",
+      "status": 200,
+      "resourceType": "Document"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/src_app_globals_162hn9o.css",
+      "status": 200,
+      "resourceType": "Stylesheet"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1di75ot._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_%40swc_helpers_cjs_1r9vbqw._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_1anvha4._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/turbopack-_08bm286._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_219uq1s._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/src_1uwh4b6._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_micromark-core-commonmark_dev_lib_2079wuz._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_1fxfqrc._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_17bdxmi._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_0jcs43t._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
+      "status": null,
+      "resourceType": "Stylesheet"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1mojsay._.js",
+      "status": 200,
+      "resourceType": "Script"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/api/auth/session",
+      "status": 200,
+      "resourceType": "Fetch"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/api/auth/session",
+      "status": 200,
+      "resourceType": "Fetch"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/favicon.ico",
+      "status": 404,
+      "resourceType": "Other"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:57272/__nextjs_font/geist-latin.woff2",
+      "status": 200,
+      "resourceType": "Font"
+    }
+  ],
+  "redaction": "request/response headers removed before persistence",
+  "raw_sha256": "4eae6d987c650f7e0300800a6d343f4bd96ea2455451c7d26160eeb70781e052"
+}

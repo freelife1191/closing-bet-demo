@@ -1,6 +1,6 @@
 # INFRA-019·INFRA-029 검토 및 실행 기록
 
-상태: 구현·정적 검증·독립 리뷰 완료, 첫 커밋 고정 후 UltraQA 실행.
+상태: 첫 커밋3853de8에서 UltraQA 필수10/10 동작 통과. 런타임 정리 완료, clone통합·최종아카이브 대기.
 
 ## 승인과 범위
 
@@ -33,3 +33,12 @@ UltraQA App 대응으로 시나리오를 기록하며 OMX native state 명령은
 `docs/dev-cycle/evidence/scheduler-truthfulness-2026-09-09/`에 입력 해시·리뷰 원문·RED/GREEN·전체 검사·브라우저·동적 하네스·정리를 모은다. 원본 로그는 gzip으로 보존한다. 최종 QA/정리와 통합 뒤 완료 상태를 갱신한다.
 
 독립 판정: ponytail v4 Lean already. Ship.; code-review v4 APPROVE; architect CLEAR; security-review APPROVE; T3 review core App 대응 추가 지적 없음. 보안 검토는 정적 세 확인 완료 후 문서 delta 검토와 병행했다. 아키텍처가 찾은 README 폴백 조건·zai 허용 목록·슬롯 귀속은 v4에서 보완했다.
+
+
+## UltraQA 실행 결과
+
+App 대응 iteration1. 실제 등록2구성(기본30분/17:00, 사용자7분/18:10; 폐지설정은잡추가없음) 및 실제체인13경우 통과. 외부 적재·발송만 대역으로 치환했다. 실제 Next 랜딩에서 데스크톱/모바일 공급자문구와3개탭 전환확인. browser GET24건 중22건200, favicon기존404, 외부font1건차단. API sink호출0, consolewarning/error0, pageerror0, Next compilation/runtime0. 7개PNG전부실제열람; stale ref로다른곳을찍은1개는제외하고6개로검증했다. whitespace trim 비교도하네스에서정정하고원본과재관측을모두보존했다. 제품실패나QA제품수정은없다.
+
+범위밖 JONGGA-036: 랜딩의 +9/-5·15일 안내와 수익 예시. 현재스케줄/프로바이더설명및로그범위와분리해TODO등록했다. 외부아이콘폰트차단/기존favicon404로 아이콘자산전체검수통과는주장하지않는다. 필수문구와탭동작의검증에는영향없다.
+
+보안·코드리뷰는 실제 source hash 및 입력 원문을 남겼으며, 의미가변하지않는문서진행/QA결과기록은구현범위변경과구분한다. 원본3500/5501재시작/라이브조회/배포/푸시는하지않았다.

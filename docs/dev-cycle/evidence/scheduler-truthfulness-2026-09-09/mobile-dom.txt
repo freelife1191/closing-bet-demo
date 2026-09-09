@@ -1,0 +1,37 @@
+{
+  "height": 812,
+  "pageURL": "http://127.0.0.1:57272/#ai-analysis",
+  "paragraphs": [
+    {
+      "card": {
+        "left": 60,
+        "right": 315
+      },
+      "fitsHorizontal": true,
+      "heading": " GPT (Sub · Z.ai fallback)",
+      "rect": {
+        "bottom": 317.984375,
+        "left": 85,
+        "right": 290,
+        "top": 226.984375
+      },
+      "text": "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증합니다. 할당량 소진 등 전환 조건에 해당하면 사용 가능한 Z.ai로 대체 분석을 시도합니다."
+    },
+    {
+      "card": {
+        "left": 60,
+        "right": 315
+      },
+      "fitsHorizontal": true,
+      "heading": " Perplexity (Sub)",
+      "rect": {
+        "bottom": 564.484375,
+        "left": 85,
+        "right": 290,
+        "top": 427.984375
+      },
+      "text": "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증하며, 웹 검색으로 최신 뉴스와 공시를 참고합니다. 호출 제한·인증 오류 등 전환 조건에 해당하면 설정된 Z.ai·GPT 중 사용 가능한 모델로 대체 분석을 시도합니다."
+    }
+  ],
+  "width": 375
+}

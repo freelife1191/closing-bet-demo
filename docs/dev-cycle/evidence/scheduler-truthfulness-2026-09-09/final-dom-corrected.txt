@@ -1,0 +1,5 @@
+{
+  "closingVisible": true,
+  "providerCopyRetained": true,
+  "strategyTime": true
+}

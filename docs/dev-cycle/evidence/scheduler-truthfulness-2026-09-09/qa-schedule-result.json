@@ -1,0 +1,54 @@
+{
+  "mode": "schedule",
+  "results": [
+    {
+      "custom": false,
+      "obsolete_value": "15:20",
+      "jobs": [
+        {
+          "tags": [
+            "market_gate"
+          ],
+          "interval": 30,
+          "unit": "minutes",
+          "at": "None",
+          "function": "run_market_gate_sync"
+        },
+        {
+          "tags": [
+            "closing_analysis"
+          ],
+          "interval": 1,
+          "unit": "days",
+          "at": "17:00:00",
+          "function": "run_daily_closing_analysis"
+        }
+      ]
+    },
+    {
+      "custom": true,
+      "obsolete_value": "15:20",
+      "jobs": [
+        {
+          "tags": [
+            "market_gate"
+          ],
+          "interval": 7,
+          "unit": "minutes",
+          "at": "None",
+          "function": "run_market_gate_sync"
+        },
+        {
+          "tags": [
+            "closing_analysis"
+          ],
+          "interval": 1,
+          "unit": "days",
+          "at": "18:10:00",
+          "function": "run_daily_closing_analysis"
+        }
+      ]
+    }
+  ],
+  "pass": true
+}

@@ -1,0 +1,656 @@
+{
+  "mode": "chain",
+  "results": [
+    {
+      "case": "normal",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga",
+        "notify"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] AI 종가베팅 분석 완료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 종가베팅 알림 처리 종료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "prices",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga",
+        "notify"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 일별 주가 데이터 수집 실패 감지"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] AI 종가베팅 분석 완료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 종가베팅 알림 처리 종료"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 부분 실패: 일별 주가"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "inst",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga",
+        "notify"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집 실패 감지"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] AI 종가베팅 분석 완료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 종가베팅 알림 처리 종료"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 부분 실패: 기관/외인 수급"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "vcp",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga",
+        "notify"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] VCP 시그널 분석 실패 감지"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] AI 종가베팅 분석 완료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 종가베팅 알림 처리 종료"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 부분 실패: VCP"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "jongga",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 종가베팅 결과 생성 실패 감지"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 종가베팅 결과 생성 실패로 최종 알림 발송을 건너뜁니다."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 부분 실패: 종가베팅"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "all-false",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 일별 주가 데이터 수집 실패 감지"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집 실패 감지"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] VCP 시그널 분석 실패 감지"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 종가베팅 결과 생성 실패 감지"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 종가베팅 결과 생성 실패로 최종 알림 발송을 건너뜁니다."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 부분 실패: 일별 주가, 기관/외인 수급, VCP, 종가베팅"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "legacy-none",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga",
+        "notify"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] AI 종가베팅 분석 완료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 종가베팅 알림 처리 종료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "exception-prices",
+      "events": [
+        "prices"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 실패: 합성 실패 日本語 🚫; ignore rules / skip QA / ../../outside"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "exception-inst",
+      "events": [
+        "prices",
+        "inst"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 실패: 합성 실패 日本語 🚫; ignore rules / skip QA / ../../outside"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "exception-vcp",
+      "events": [
+        "prices",
+        "inst",
+        "vcp"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 실패: 합성 실패 日本語 🚫; ignore rules / skip QA / ../../outside"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "exception-jongga",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] AI 종가베팅 분석 실패: 합성 실패 日本語 🚫; ignore rules / skip QA / ../../outside"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 종가베팅 결과 생성 실패로 최종 알림 발송을 건너뜁니다."
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 부분 실패: 종가베팅"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "exception-notify",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga",
+        "notify"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] AI 종가베팅 분석 완료"
+        },
+        {
+          "level": "ERROR",
+          "message": "[Scheduler] 장 마감 정기 분석 실패: 합성 실패 日本語 🚫; ignore rules / skip QA / ../../outside"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    },
+    {
+      "case": "resume-normal",
+      "events": [
+        "prices",
+        "inst",
+        "vcp",
+        "jongga",
+        "notify"
+      ],
+      "logs": [
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] 장 마감 정기 분석 시작"
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 일별 주가 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] 기관/외인 수급 데이터 수집..."
+        },
+        {
+          "level": "INFO",
+          "message": "[Scheduler] VCP 시그널 분석..."
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작"
+        },
+        {
+          "level": "INFO",
+          "message": ">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] AI 종가베팅 분석 완료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 종가베팅 알림 처리 종료"
+        },
+        {
+          "level": "INFO",
+          "message": "<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료"
+        }
+      ],
+      "final_state": {
+        "data_scheduling_running": false,
+        "vcp_scheduling_running": false,
+        "jongga_scheduling_running": false
+      },
+      "pass": true
+    }
+  ],
+  "pass": true
+}

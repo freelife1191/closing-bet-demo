@@ -1,0 +1,129 @@
+{
+  "closingVisible": false,
+  "navigation": [
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:57272/"
+    }
+  ],
+  "providerCopyRetained": true,
+  "resources": [
+    {
+      "status": 200,
+      "type": "link",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/src_app_globals_162hn9o.css"
+    },
+    {
+      "status": 200,
+      "type": "link",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1di75ot._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_1anvha4._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_%40swc_helpers_cjs_1r9vbqw._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_219uq1s._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/src_1uwh4b6._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/turbopack-_08bm286._.js"
+    },
+    {
+      "status": 0,
+      "type": "link",
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_17bdxmi._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_micromark-core-commonmark_dev_lib_2079wuz._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/_0jcs43t._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/node_modules_1fxfqrc._.js"
+    },
+    {
+      "status": 200,
+      "type": "script",
+      "url": "http://127.0.0.1:57272/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1mojsay._.js"
+    },
+    {
+      "status": 200,
+      "type": "fetch",
+      "url": "http://127.0.0.1:57272/api/auth/session"
+    },
+    {
+      "status": 200,
+      "type": "fetch",
+      "url": "http://127.0.0.1:57272/api/auth/session"
+    },
+    {
+      "status": 404,
+      "type": "other",
+      "url": "http://127.0.0.1:57272/favicon.ico"
+    },
+    {
+      "status": 200,
+      "type": "css",
+      "url": "http://127.0.0.1:57272/__nextjs_font/geist-latin.woff2"
+    }
+  ],
+  "strategyTime": true,
+  "url": "http://127.0.0.1:57272/#ai-analysis"
+}

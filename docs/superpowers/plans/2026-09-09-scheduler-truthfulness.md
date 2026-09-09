@@ -52,6 +52,6 @@ else:
 ## Task 3: 검증 및 완료
 - [x] pytest 전체, Vitest 전체(실제 build 포함), type-check, lint, diff check. .env 추적/NEXT_PUBLIC/로그·응답·번들 비밀 노출 확인.
 - [x] QA 행렬 확정: 019 데스크톱/모바일 랜딩 문구와 인접 탭, 실제 scheduler 등록 기본/사용자설정/폐지값 무효. 029 정상/각단계실패/복합실패/예외/재실행/상태정리. 별도 subprocess 하네스와 실제 agent-browser 사용.
-- [ ] 검증 통과 구현·행렬 첫 커밋, TODO 유지. 기준 SHA에 대해 UltraQA 실행.
-- [ ] 브라우저 DOM/PNG 실제 열람/console/errors/Next MCP 및 하네스 로그 증거. 예상 실패 입력과 전체 프로세스 exit를 구별.
+- [x] 검증 통과 구현·행렬 첫 커밋, TODO 유지. 기준 SHA에 대해 UltraQA 실행.
+- [x] 브라우저 DOM/PNG 실제 열람/console/errors/Next MCP 및 하네스 로그 증거. 예상 실패 입력과 전체 프로세스 exit를 구별.
 - [ ] 소유 서버/브라우저/fixture/clone 정리 및 원본 package 해시 확인. FF 통합 후 각 ID QA/일별/월별 기록, 최종 아카이브 커밋에서만 TODO 제거.
