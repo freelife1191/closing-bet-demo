@@ -341,6 +341,7 @@
 - [ ] 이름을 아직 모를 때의 표시 문구를 두 자리에서 동일하게 정함
 
 ### [VCP-020] 과거 날짜를 조회해도 legacy 파일의 최신 AI 판정이 붙는다
+- 진행: T3 계획 독립 OKAY, 구현·회귀·전체검증 통과. ponytail APPROVE, code-review legacy-shape 지적 보완 후 APPROVE, architect CLEAR, 심층검토 추가지적없음. QA행렬 `qa/VCP-020.md`, 최종소스 `evidence/vcp-integrity-20260909/review-input-final.json`.
 - 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 15:59 | 실제 대화 근거: 8건 3묶음 제안에 사용자 「승인」. 해당 제안의 범위로 연속 구현·리뷰·QA·커밋 진행.
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-018]` 사이클의 code-review
 - 관찰: `services/kr_market_vcp_payload_service.py:275-302` 는 시그널의 `signal_date` 로
@@ -1336,6 +1337,7 @@
 - [ ] vitest 로 목록 밖 값의 표시를 고정
 
 ### [VCP-021] 같은 AI 프로바이더 필드 목록이 저장소 다섯 곳에 흩어져 있다
+- 진행: T3 계획 독립 OKAY, 구현·회귀·전체검증 통과. ponytail APPROVE, code-review legacy-shape 지적 보완 후 APPROVE, architect CLEAR, 심층검토 추가지적없음. QA행렬 `qa/VCP-021.md`, 최종소스 `evidence/vcp-integrity-20260909/review-input-final.json`.
 - 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 15:59 | 실제 대화 근거: 8건 3묶음 제안에 사용자 「승인」. 해당 제안의 범위로 연속 구현·리뷰·QA·커밋 진행.
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-018]` 사이클의 code-review
 - 관찰: `gemini_recommendation`·`gpt_recommendation`·`perplexity_recommendation` 세 필드를
@@ -1401,6 +1403,7 @@
 - [ ] 이미 쌓인 11,647 쌍과 `cmp_dev_*` 셋을 어떻게 할지 사용자와 정함
 
 ### [VCP-023] LLM 응답 복구 실패 시의 폴백이 없는 1일 수급을 0 으로 지어낸다
+- 진행: T3 계획 독립 OKAY, 구현·회귀·전체검증 통과. ponytail APPROVE, code-review legacy-shape 지적 보완 후 APPROVE, architect CLEAR, 심층검토 추가지적없음. QA행렬 `qa/VCP-023.md`, 최종소스 `evidence/vcp-integrity-20260909/review-input-final.json`.
 - 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 15:59 | 실제 대화 근거: 8건 3묶음 제안에 사용자 「승인」. 해당 제안의 범위로 연속 구현·리뷰·QA·커밋 진행.
 - 카테고리: VCP 시그널 | 티어: T3 | 근거: 2026-09-07 `[VCP-011]` 의 code-review (확신도 상)
 - QA 시나리오: 1일 수급 열이 없는 행으로 폴백을 태워 사유 문장에 「1일 수급은 중립입니다」가
@@ -1431,6 +1434,7 @@
 - [ ] 분기 조건이 「값 없음」을 어떻게 다뤄야 하는지 정한다
 
 ### [VCP-024] 스크리너가 구한 1일 수급이 프롬프트까지 오지 못한다
+- 진행: T3 계획 독립 OKAY, 구현·회귀·전체검증 통과. ponytail APPROVE, code-review legacy-shape 지적 보완 후 APPROVE, architect CLEAR, 심층검토 추가지적없음. QA행렬 `qa/VCP-024.md`, 최종소스 `evidence/vcp-integrity-20260909/review-input-final.json`.
 - 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 15:59 | 실제 대화 근거: 8건 3묶음 제안에 사용자 「승인」. 해당 제안의 범위로 연속 구현·리뷰·QA·커밋 진행.
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: 2026-09-07 `[VCP-011]` 진행 중 경로 추적
 - QA 시나리오: 새로 만든 `signals_log.csv` 에 1일 수급 열이 생기고 프롬프트가 `N/A` 대신
@@ -1479,3 +1483,12 @@
 - 이번 승인 범위는 스케줄러/AI 프로바이더 설명·성공 로그이며 해당 수치 코드는 이전 base4e57aa3와 같다. 현재 QA의 인접 탭 전환은 통과했지만 이 수치 정합성은 별도 설계 대상이다.
 - [ ] 전략 일반 예시와 시스템 실제 기준을 구분해 문구·가정·계산을 정리
 - [ ] 데스크톱·모바일 랜딩 실측으로 표시와 현재 종가베팅 안내 대조
+
+### [JONGGA-037] 종가 업데이트 완료 뒤 버튼이 계속 잠긴다
+- 카테고리: 종가베팅 | 티어: T2 예상 | 근거: 2026-09-09 JONGGA-014 격리 웹 QA.
+- `closing-bet/page.tsx`의 runUpdate가 setUpdating(true) 직후 이전 렌더의 pollStatus를 호출한다. pollStatus의 updating=false 캡처 때문에 상태 응답 isRunning=false에서도 완료 처리가 생략된다.
+- 1ce5cde에도 동일한 소스다. JONGGA-014 변경이 유발한 회귀로 분류하지 않는다. JONGGA-032의 언마운트 타이머 누수와 같은 영역이지만 완료 상태 전이 결함은 별도다.
+- 진행: 추가 범위 설계 제시 및 사용자 선택 대기. 기존 8건의 승인을 이 항목의 승인으로 간주하지 않는다.
+- 설계: 완료 판정에서 오래된 updating 캡처 의존을 없애고 interval 종료·버튼 재활성화·리포트 갱신을 실행한다. 200/409→상태완료 회귀 검사를 추가한다.
+- [ ] 완료 상태 응답 뒤 버튼 재활성화·재조회·추가 polling 중단 검증
+- [ ] 기존 정상/실패·409·화면 이탈 흐름 보존 및 agent-browser 실측

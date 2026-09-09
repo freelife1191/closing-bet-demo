@@ -1,0 +1,7 @@
+{
+  "command": "source venv/bin/activate && pytest -q tests/engine/test_vcp_ai_analyzer_helpers_refactor.py tests/engine/test_vcp_ai_analyzer_refactor.py",
+  "exit_code": 1,
+  "result": "RED",
+  "summary": "56 tests 중 8개 실패. None·빈 문자열·NaN·inf·비숫자 1일 수급이 BUY로, 빈 입력이 가짜 SELL로 판정됐다.",
+  "log_gzip": "fallback-red.log.gz"
+}

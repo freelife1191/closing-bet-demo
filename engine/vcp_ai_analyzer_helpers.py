@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import ast
 import json
-import math
 import re
 from typing import Any, Optional
+
+from engine.pandas_utils_safe import safe_optional_float
 
 
 _PERPLEXITY_QUOTA_KEYWORDS = (
@@ -515,16 +516,6 @@ def _parse_recommendation_from_narrative(text: str) -> Optional[dict[str, Any]]:
     }
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return float(default)
-    if not math.isfinite(numeric):
-        return float(default)
-    return numeric
-
-
 def _describe_vcp_state(score: float, contraction_ratio: float) -> str:
     if score >= 80 and contraction_ratio <= 0.80:
         return "변동성 수축 신호가 강한 편입니다"
@@ -562,14 +553,58 @@ def build_vcp_rule_based_recommendation(
     """
     LLM JSON 응답 복구 실패 시 사용하는 규칙 기반 보정 추천.
     """
-    score = _safe_float(stock_data.get("score"), 0.0)
-    contraction_ratio = _safe_float(stock_data.get("contraction_ratio"), 1.0)
-    foreign_5d = _safe_float(stock_data.get("foreign_5d"), 0.0)
-    inst_5d = _safe_float(stock_data.get("inst_5d"), 0.0)
-    foreign_1d = _safe_float(stock_data.get("foreign_1d"), 0.0)
-    inst_1d = _safe_float(stock_data.get("inst_1d"), 0.0)
-    flow_5d = foreign_5d + inst_5d
-    flow_1d = foreign_1d + inst_1d
+    score = safe_optional_float(stock_data.get("score"))
+    contraction_ratio = safe_optional_float(stock_data.get("contraction_ratio"))
+    foreign_5d = safe_optional_float(stock_data.get("foreign_5d"))
+    inst_5d = safe_optional_float(stock_data.get("inst_5d"))
+    foreign_1d = safe_optional_float(stock_data.get("foreign_1d"))
+    inst_1d = safe_optional_float(stock_data.get("inst_1d"))
+    flow_5d = foreign_5d + inst_5d if foreign_5d is not None and inst_5d is not None else None
+    flow_1d = foreign_1d + inst_1d if foreign_1d is not None and inst_1d is not None else None
+    is_complete = all(
+        value is not None
+        for value in (score, contraction_ratio, foreign_5d, inst_5d, foreign_1d, inst_1d)
+    )
+    topic_particle = _topic_particle(stock_name)
+
+    if not is_complete:
+        has_negative_flows = (
+            flow_5d is not None
+            and flow_1d is not None
+            and flow_5d < 0
+            and flow_1d < 0
+        )
+        if (score is not None and score <= 62) or has_negative_flows:
+            action = "SELL"
+        else:
+            action = "HOLD"
+
+        evidence: list[str] = []
+        if score is not None and contraction_ratio is not None:
+            evidence.append(
+                f"VCP 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}로 "
+                f"{_describe_vcp_state(score, contraction_ratio)}."
+            )
+        elif score is not None:
+            evidence.append(f"VCP 점수 {score:.1f}점이 확인됩니다.")
+        elif contraction_ratio is not None:
+            evidence.append(f"수축비율 {contraction_ratio:.2f}가 확인됩니다.")
+        if flow_5d is not None:
+            evidence.append(f"{_describe_flow_state(flow_5d, '5일')}.")
+        if flow_1d is not None:
+            evidence.append(f"{_describe_flow_state(flow_1d, '1일')}.")
+
+        detail = " ".join(evidence)
+        reason = (
+            f"{stock_name}{topic_particle} {detail + ' ' if detail else ''}"
+            f"정보가 부족하여 보수적으로 {action} 판단을 유지합니다."
+        )
+        return {
+            "action": action,
+            # 결측을 점수·비율 기본값으로 바꿔 신뢰도를 계산하지 않는다.
+            "confidence": 55,
+            "reason": reason[:600],
+        }
 
     if score >= 78 and contraction_ratio <= 0.80 and flow_5d > 0 and flow_1d >= 0:
         action = "BUY"
@@ -584,7 +619,6 @@ def build_vcp_rule_based_recommendation(
     vcp_state = _describe_vcp_state(score, contraction_ratio)
     flow_5d_state = _describe_flow_state(flow_5d, "5일")
     flow_1d_state = _describe_flow_state(flow_1d, "1일")
-    topic_particle = _topic_particle(stock_name)
     reason = (
         f"{stock_name}{topic_particle} VCP 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}로 {vcp_state}. "
         f"{flow_5d_state}. {flow_1d_state}. "

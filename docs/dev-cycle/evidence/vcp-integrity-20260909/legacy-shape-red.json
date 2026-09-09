@@ -1,0 +1,9 @@
+{
+  "stage": "RED",
+  "scope": ["VCP-020"],
+  "command": "source venv/bin/activate && pytest tests/services/test_kr_market_vcp_payload_service_refactor.py::test_merge_ai_keeps_verified_date_payload_when_legacy_shape_is_invalid -q",
+  "exit_code": 1,
+  "expected_failure": "legacy merge callback TypeError must be isolated from verified date-payload merge",
+  "observed_failure": "TypeError: NoneType object is not iterable",
+  "external_side_effects": false
+}

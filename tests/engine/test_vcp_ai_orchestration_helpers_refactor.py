@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import asyncio
 
-from engine.vcp_ai_orchestration_helpers import analyze_batch_with_limit, orchestrate_stock_analysis
+from engine.vcp_ai_orchestration_helpers import (
+    VCP_AI_RECOMMENDATION_FIELDS,
+    analyze_batch_with_limit,
+    orchestrate_stock_analysis,
+)
 
 
 class _Logger:
@@ -61,6 +65,12 @@ def test_orchestrate_stock_analysis_merges_provider_results():
     )
 
     assert calls["prompt"] == 1
+    assert VCP_AI_RECOMMENDATION_FIELDS == (
+        "gemini_recommendation",
+        "gpt_recommendation",
+        "perplexity_recommendation",
+    )
+    assert set(VCP_AI_RECOMMENDATION_FIELDS).issubset(result)
     assert result["gemini_recommendation"]["action"] == "BUY"
     assert result["gpt_recommendation"]["action"] == "HOLD"
 

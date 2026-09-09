@@ -1,0 +1,14 @@
+[
+  {
+    "name": "final-pytest",
+    "exit": 0
+  },
+  {
+    "name": "final-vitest",
+    "exit": 0
+  },
+  {
+    "name": "final-typecheck",
+    "exit": 0
+  }
+]

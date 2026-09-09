@@ -1,0 +1,10 @@
+{
+  "stage": "GREEN",
+  "scope": ["VCP-020"],
+  "command": "source venv/bin/activate && pytest tests/services/test_kr_market_vcp_payload_service_refactor.py -q",
+  "exit_code": 0,
+  "passed": 32,
+  "duration_seconds": 1.22,
+  "verified_contract": "invalid same-date legacy shape cannot discard already validated date-specific recommendations",
+  "external_side_effects": false
+}

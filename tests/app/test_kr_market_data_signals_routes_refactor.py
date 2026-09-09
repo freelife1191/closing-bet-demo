@@ -574,6 +574,46 @@ def test_reanalyze_failed_ai_route_loads_min_columns_and_forwards_persist_loader
     assert callable(captured_execute.get("load_csv_file_for_persist"))
 
 
+def test_reanalyze_failed_ai_route_accepts_old_csv_without_one_day_supply_columns():
+    deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
+    loader_calls: list[dict[str, Any]] = []
+    captured_execute: dict[str, Any] = {}
+
+    def _load_csv_file(_name: str, **kwargs):
+        loader_calls.append(dict(kwargs))
+        if "usecols" in kwargs:
+            raise ValueError("old CSV does not have one-day supply columns")
+        return pd.DataFrame([{"ticker": "005930", "signal_date": "2026-02-21"}])
+
+    def _execute(**kwargs):
+        captured_execute.update(kwargs)
+        return 200, {"status": "success", "message": "ok"}
+
+    deps["load_csv_file"] = _load_csv_file
+    deps["execute_vcp_failed_ai_reanalysis"] = _execute
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr_signal_reanalyze_old_csv_test", __name__)
+    register_market_data_signal_routes(
+        bp,
+        logger=logging.getLogger("test.kr_market_data_signals_routes"),
+        deps=deps,
+    )
+    _seed_admin_identity(app)
+    app.register_blueprint(bp, url_prefix="/api/kr")
+
+    response = app.test_client().post(
+        "/api/kr/signals/reanalyze-failed-ai",
+        json={"background": False, "target_date": "2026-02-21"},
+    )
+
+    assert response.status_code == 200
+    assert any("usecols" in kwargs for kwargs in loader_calls)
+    assert "foreign_1d" not in captured_execute["signals_df"].columns
+    assert "inst_1d" not in captured_execute["signals_df"].columns
+
+
 def test_reanalyze_failed_ai_route_rejects_invalid_force_provider():
     deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
 

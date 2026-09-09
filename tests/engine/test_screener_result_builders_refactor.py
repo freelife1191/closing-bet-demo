@@ -28,6 +28,8 @@ def test_build_screening_result_calculates_change_pct_and_maps_fields():
     assert result["current_price"] == 110.0
     assert result["vcp_score"] == 8
     assert result["is_vcp"] is True
+    assert result["foreign_net_1d"] == 3
+    assert result["inst_net_1d"] == 4
 
 
 def test_build_signal_item_uses_target_date_and_defaults():
@@ -41,6 +43,8 @@ def test_build_signal_item_uses_target_date_and_defaults():
             "score": 80,
             "foreign_net_5d": 11,
             "inst_net_5d": 12,
+            "foreign_net_1d": 0,
+            "inst_net_1d": -7,
             "market": "KOSPI",
             "change_pct": 1.5,
             "contraction_ratio": 0.7,
@@ -52,3 +56,14 @@ def test_build_signal_item_uses_target_date_and_defaults():
     assert signal["signal_date"] == "2026-02-21"
     assert signal["foreign_5d"] == 11
     assert signal["inst_5d"] == 12
+    assert signal["foreign_1d"] == 0
+    assert signal["inst_1d"] == -7
+
+
+def test_build_signal_item_keeps_absent_one_day_supply_distinct_from_zero():
+    row = type("Row", (), {"ticker": "5930"})()
+
+    signal = build_signal_item(row, "2026-02-21")
+
+    assert signal["foreign_1d"] is None
+    assert signal["inst_1d"] is None

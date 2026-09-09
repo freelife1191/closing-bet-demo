@@ -11,6 +11,7 @@ import os
 from datetime import datetime
 from typing import Any, Callable
 
+from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 from services.kr_market_data_cache_service import atomic_write_text
 
 
@@ -23,11 +24,7 @@ def _normalize_ai_payload(ai_payload: Any) -> dict[str, dict[str, Any]]:
         return {}
 
     normalized: dict[str, dict[str, Any]] = {}
-    for key in (
-        "gemini_recommendation",
-        "gpt_recommendation",
-        "perplexity_recommendation",
-    ):
+    for key in VCP_AI_RECOMMENDATION_FIELDS:
         value = ai_payload.get(key)
         if isinstance(value, dict) and value:
             normalized[key] = value

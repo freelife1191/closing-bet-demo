@@ -1,0 +1,15 @@
+{
+  "stage": "RED",
+  "scope": ["VCP-020", "VCP-024"],
+  "exit_code": 1,
+  "tests": 29,
+  "passed": 23,
+  "failed": 6,
+  "expected_failures": [
+    "historical query must not read generic legacy",
+    "date-named payload must internally match the signal date",
+    "mixed, missing, and non-ISO dates must not select AI payloads",
+    "one-day supply must reach signal item and isolated CSV"
+  ],
+  "external_side_effects": false
+}

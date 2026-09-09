@@ -68,7 +68,8 @@ from engine.constants import SCREENING
 from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
 from engine.market_gate import MarketGate
-from engine.pandas_utils_safe import safe_bool
+from engine.pandas_utils_safe import safe_bool, safe_optional_float
+from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
 # =====================================================
 # 주말/휴일 처리를 위한 유틸리티 함수
@@ -1632,6 +1633,8 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     'entry_price': int(float(getattr(row, 'entry_price', 0) or 0)),
                     'foreign_5d': int(float(getattr(row, 'foreign_net_5d', 0) or 0)),
                     'inst_5d': int(float(getattr(row, 'inst_net_5d', 0) or 0)),
+                    'foreign_1d': safe_optional_float(getattr(row, 'foreign_net_1d', None)),
+                    'inst_1d': safe_optional_float(getattr(row, 'inst_net_1d', None)),
                     'vcp_score': int(row_vcp_score),
                     'is_vcp': row_is_vcp,
                     'current_price': int(float(getattr(row, 'entry_price', 0) or 0)) # Approximation or need fetch
@@ -1726,17 +1729,20 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                             'contraction_ratio': signal.get('contraction_ratio', 0),
                             'foreign_5d': signal.get('foreign_5d', 0),
                             'inst_5d': signal.get('inst_5d', 0),
+                            'foreign_1d': signal.get('foreign_1d'),
+                            'inst_1d': signal.get('inst_1d'),
                             'entry_price': entry_p,
                             'current_price': curr_p,
                             'return_pct': ret_p,
                             'vcp_score': signal.get('vcp_score', 0),
                             # AI 분석 결과 통합
-                            'gemini_recommendation': ai_data.get('gemini_recommendation'),
-                            'gpt_recommendation': ai_data.get('gpt_recommendation'),
-                            'perplexity_recommendation': ai_data.get('perplexity_recommendation'),
                             # 뉴스 데이터 추가
                             'news': news_items,
                         }
+                        kr_signal.update({
+                            field: ai_data.get(field)
+                            for field in VCP_AI_RECOMMENDATION_FIELDS
+                        })
                         kr_ai_signals.append(kr_signal)
                     
                     # 시장 지수 데이터 수집
@@ -1871,6 +1877,8 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 'entry_price',
                 'foreign_5d',
                 'inst_5d',
+                'foreign_1d',
+                'inst_1d',
                 'vcp_score',
                 'is_vcp',
                 'current_price',
@@ -1916,6 +1924,8 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 'entry_price',
                 'foreign_5d',
                 'inst_5d',
+                'foreign_1d',
+                'inst_1d',
             ]
         )
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')

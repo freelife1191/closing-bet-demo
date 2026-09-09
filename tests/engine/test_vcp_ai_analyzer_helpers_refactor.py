@@ -7,6 +7,7 @@ VCP AI analyzer helper 분리 회귀 테스트
 import os
 import sys
 
+import pytest
 
 sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -307,3 +308,119 @@ def test_build_vcp_rule_based_recommendation_handles_nan_without_literal_nan_tex
     assert "nan" not in result["reason"].lower()
     assert "올릭스는" in result["reason"]
     assert "수급은" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    "missing_value",
+    [None, "", float("nan"), float("inf"), "not-a-number"],
+)
+def test_rule_based_fallback_keeps_missing_one_day_flow_out_of_reason(missing_value):
+    result = build_vcp_rule_based_recommendation(
+        stock_name="A",
+        stock_data={
+            "score": 83,
+            "contraction_ratio": 0.72,
+            "foreign_5d": 100,
+            "inst_5d": 20,
+            "foreign_1d": missing_value,
+            "inst_1d": 10,
+        },
+    )
+
+    assert result["action"] == "HOLD"
+    assert result["confidence"] == 55
+    assert "정보가 부족" in result["reason"]
+    assert "1일 수급" not in result["reason"]
+    assert all(token not in result["reason"].lower() for token in ("nan", "inf", "점수 0.0", "수축비율 1.00"))
+
+
+def test_rule_based_fallback_keeps_absent_core_data_as_conservative_hold():
+    result = build_vcp_rule_based_recommendation(stock_name="B", stock_data={})
+
+    assert result == {
+        "action": "HOLD",
+        "confidence": 55,
+        "reason": "B는 정보가 부족하여 보수적으로 HOLD 판단을 유지합니다.",
+    }
+
+
+def test_rule_based_fallback_keeps_absent_one_day_fields_out_of_verdict():
+    result = build_vcp_rule_based_recommendation(
+        stock_name="B",
+        stock_data={
+            "score": 83,
+            "contraction_ratio": 0.72,
+            "foreign_5d": 100,
+            "inst_5d": 20,
+        },
+    )
+
+    assert result["action"] == "HOLD"
+    assert result["confidence"] == 55
+    assert "1일 수급" not in result["reason"]
+
+
+def test_rule_based_fallback_partial_sell_uses_only_real_negative_evidence():
+    low_score = build_vcp_rule_based_recommendation(stock_name="D", stock_data={"score": 58})
+    negative_flows = build_vcp_rule_based_recommendation(
+        stock_name="E",
+        stock_data={"foreign_5d": -10, "inst_5d": -5, "foreign_1d": -3, "inst_1d": -2},
+    )
+
+    assert low_score["action"] == "SELL"
+    assert low_score["confidence"] == 55
+    assert "VCP 점수 58.0점" in low_score["reason"]
+    assert negative_flows["action"] == "SELL"
+    assert negative_flows["confidence"] == 55
+    assert "점수" not in negative_flows["reason"]
+    assert "5일 수급은 순매도 우위입니다" in negative_flows["reason"]
+    assert "1일 수급은 순매도 우위입니다" in negative_flows["reason"]
+
+
+def test_rule_based_fallback_preserves_real_zero_and_complete_verdicts():
+    zero_case = build_vcp_rule_based_recommendation(
+        stock_name="C",
+        stock_data={
+            "score": 69,
+            "contraction_ratio": 0.90,
+            "foreign_5d": 10,
+            "inst_5d": -5,
+            "foreign_1d": 0,
+            "inst_1d": 0,
+        },
+    )
+    buy_case = build_vcp_rule_based_recommendation(
+        stock_name="D",
+        stock_data={
+            "score": 83,
+            "contraction_ratio": 0.72,
+            "foreign_5d": 1000,
+            "inst_5d": 400,
+            "foreign_1d": 100,
+            "inst_1d": 50,
+        },
+    )
+    sell_case = build_vcp_rule_based_recommendation(
+        stock_name="E",
+        stock_data={
+            "score": 58,
+            "contraction_ratio": 1.03,
+            "foreign_5d": -500,
+            "inst_5d": -300,
+            "foreign_1d": -80,
+            "inst_1d": -40,
+        },
+    )
+
+    assert zero_case["action"] == "HOLD"
+    assert zero_case["confidence"] == 61
+    assert "1일 수급은 중립입니다" in zero_case["reason"]
+    assert buy_case["action"] == "BUY"
+    assert buy_case["confidence"] == 78
+    assert buy_case["reason"] == (
+        "D는 VCP 점수 83.0점, 수축비율 0.72로 변동성 수축 신호가 강한 편입니다. "
+        "5일 수급은 순매수 우위입니다. 1일 수급은 순매수 우위입니다. "
+        "이 신호를 종합해 현재 판단은 BUY입니다."
+    )
+    assert sell_case["action"] == "SELL"
+    assert sell_case["confidence"] == 69

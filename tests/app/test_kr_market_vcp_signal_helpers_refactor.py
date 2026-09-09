@@ -7,6 +7,7 @@ KR Market VCP 시그널 헬퍼 리팩토링 회귀 테스트
 from __future__ import annotations
 
 import app.routes.kr_market_vcp_signal_helpers as vcp_helpers
+from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
 
 def test_sort_and_limit_vcp_signals_uses_runtime_limit_when_not_provided(monkeypatch):
@@ -161,6 +162,18 @@ def test_ai_data_map_pads_ticker_to_six_digits():
     assert list(ai_data_map) == ["005930"]
 
 
+def test_reanalysis_prompt_payload_preserves_zero_and_omits_missing_one_day_supply():
+    with_zero = vcp_helpers._build_vcp_stock_payload(
+        {"ticker": "5930", "foreign_1d": 0, "inst_1d": -7}
+    )
+    without_one_day_supply = vcp_helpers._build_vcp_stock_payload({"ticker": "5930"})
+
+    assert with_zero["foreign_1d"] == 0.0
+    assert with_zero["inst_1d"] == -7.0
+    assert "foreign_1d" not in without_one_day_supply
+    assert "inst_1d" not in without_one_day_supply
+
+
 def test_ai_data_map_drops_entries_without_a_ticker():
     """종목 코드가 없는 항목은 맵에 넣지 않는다.
 
@@ -253,7 +266,7 @@ def test_legacy_merge_fills_the_same_three_provider_fields():
     )
 
     merged = ai_data_map["005930"]
-    assert [merged.get(field) for field in vcp_helpers._AI_RECOMMENDATION_FIELDS] == [
+    assert [merged.get(field) for field in VCP_AI_RECOMMENDATION_FIELDS] == [
         legacy,
         legacy,
         legacy,

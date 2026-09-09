@@ -172,6 +172,8 @@ def test_create_signals_log_persists_detected_signal(monkeypatch, tmp_path):
     assert len(df) == 1
     assert df.iloc[0]["ticker"] == "005930"
     assert df.iloc[0]["grade"] == "B"
+    assert df.iloc[0]["foreign_1d"] == 11_111_111
+    assert df.iloc[0]["inst_1d"] == 22_222_222
 
 
 def test_create_signals_log_passes_max_stocks(monkeypatch, tmp_path):

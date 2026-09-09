@@ -269,24 +269,18 @@ def _merge_ai_into_vcp_signals(
     if not signals:
         return
 
-    sig_date = signals[0].get("signal_date", "")
-    date_str = sig_date.replace("-", "") if sig_date else current_time.strftime("%Y%m%d")
+    signal_date = _resolve_single_signal_date(signals)
+    if signal_date is None:
+        logger.warning("Skipped VCP AI merge because signal dates are missing, mixed, or invalid")
+        return
+
+    date_str = signal_date.replace("-", "")
     try:
         ai_json = load_json_file(f"ai_analysis_results_{date_str}.json", deep_copy=False)
     except TypeError:
         ai_json = load_json_file(f"ai_analysis_results_{date_str}.json")
-    if not ai_json or "signals" not in ai_json:
-        logger.info("Falling back to kr_ai_analysis.json")
-        try:
-            ai_json = load_json_file("kr_ai_analysis.json", deep_copy=False)
-        except TypeError:
-            ai_json = load_json_file("kr_ai_analysis.json")
-
-    logger.debug(
-        "AI JSON Loaded: %s, Signals in JSON: %d",
-        bool(ai_json),
-        len(ai_json.get("signals", [])) if isinstance(ai_json, dict) else 0,
-    )
+    if not _is_date_specific_payload_compatible(ai_json, signal_date):
+        ai_json = {}
 
     # ai map 병합 단계에서 필드를 덮어쓰기 때문에 캐시 원본과 분리된 얕은 복사 맵을 사용한다.
     ai_data_map = {
@@ -294,17 +288,83 @@ def _merge_ai_into_vcp_signals(
         for ticker, item in build_ai_data_map(ai_json).items()
         if isinstance(item, dict)
     }
-    try:
+
+    is_current_signal_date = signal_date == current_time.strftime("%Y-%m-%d")
+    if is_current_signal_date:
         try:
-            legacy_json = load_json_file("kr_ai_analysis.json", deep_copy=False)
-        except TypeError:
-            legacy_json = load_json_file("kr_ai_analysis.json")
-        merge_legacy_ai_fields_into_map(ai_data_map, legacy_json)
-    except Exception as legacy_error:
-        logger.warning(f"Legacy merge failed: {legacy_error}")
+            try:
+                legacy_json = load_json_file("kr_ai_analysis.json", deep_copy=False)
+            except TypeError:
+                legacy_json = load_json_file("kr_ai_analysis.json")
+        except Exception as legacy_error:
+            logger.warning(f"Legacy merge failed: {legacy_error}")
+            legacy_json = {}
+
+        if _payload_matches_signal_date(legacy_json, signal_date):
+            try:
+                if not ai_data_map:
+                    ai_data_map = {
+                        ticker: dict(item)
+                        for ticker, item in build_ai_data_map(legacy_json).items()
+                        if isinstance(item, dict)
+                    }
+                else:
+                    merge_legacy_ai_fields_into_map(ai_data_map, legacy_json)
+            except Exception as legacy_error:
+                logger.warning(f"Legacy merge failed: {legacy_error}")
+
+    logger.debug(
+        "AI JSON Loaded for %s: %s signals",
+        signal_date,
+        len(ai_json.get("signals", [])) if isinstance(ai_json, dict) else 0,
+    )
 
     merged_count = merge_ai_data_into_vcp_signals(signals, ai_data_map)
     logger.debug(f"Merged AI data for {merged_count} signals")
+
+
+def _resolve_single_signal_date(signals: list[dict[str, Any]]) -> str | None:
+    """시그널 전체가 동일한 ISO 날짜를 가질 때만 그 날짜를 반환한다."""
+    dates: set[str] = set()
+    for signal in signals:
+        if not isinstance(signal, dict):
+            return None
+        value = signal.get("signal_date")
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            return None
+        if parsed.strftime("%Y-%m-%d") != value:
+            return None
+        dates.add(value)
+
+    return dates.pop() if len(dates) == 1 else None
+
+
+def _payload_matches_signal_date(payload: Any, signal_date: str) -> bool:
+    """AI payload가 요청 시그널 날짜를 명시적으로 선언했는지 확인한다."""
+    return isinstance(payload, dict) and payload.get("signal_date") == signal_date
+
+
+def _is_date_specific_payload_compatible(payload: Any, signal_date: str) -> bool:
+    """날짜 파일의 선택적 내부 날짜가 요청 날짜와 충돌하지 않는지 확인한다."""
+    if not isinstance(payload, dict):
+        return False
+
+    payload_date = payload.get("signal_date")
+    if payload_date is None:
+        # 날짜별 filename은 이미 요청 날짜에서 만들었다. 옛 payload가 내부 날짜를
+        # 저장하지 않았더라도 filename 근거까지 버리면 정상 과거 판정을 잃는다.
+        return True
+    if not isinstance(payload_date, str):
+        return False
+    try:
+        parsed = datetime.strptime(payload_date, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return parsed.strftime("%Y-%m-%d") == signal_date
 
 
 __all__ = [

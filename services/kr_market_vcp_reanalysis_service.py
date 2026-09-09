@@ -14,18 +14,25 @@ from typing import Any, Callable
 import pandas as pd
 
 from engine.config import app_config
+from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
 )
 
 
+(
+    _GEMINI_RECOMMENDATION_FIELD,
+    _GPT_RECOMMENDATION_FIELD,
+    _PERPLEXITY_RECOMMENDATION_FIELD,
+) = VCP_AI_RECOMMENDATION_FIELDS
+
 _VCP_SECOND_RECOMMENDATION_KEY_MAP = {
-    "gpt": "gpt_recommendation",
-    "openai": "gpt_recommendation",
-    "zai": "gpt_recommendation",
-    "z.ai": "gpt_recommendation",
-    "perplexity": "perplexity_recommendation",
+    "gpt": _GPT_RECOMMENDATION_FIELD,
+    "openai": _GPT_RECOMMENDATION_FIELD,
+    "zai": _GPT_RECOMMENDATION_FIELD,
+    "z.ai": _GPT_RECOMMENDATION_FIELD,
+    "perplexity": _PERPLEXITY_RECOMMENDATION_FIELD,
 }
 _VCP_FORCE_PROVIDER_LABELS = {
     "gemini": "Gemini",
@@ -84,7 +91,7 @@ def collect_scoped_vcp_rows(
 def resolve_vcp_second_recommendation_key(second_provider: str) -> str:
     """second_provider 문자열을 recommendation 필드명으로 변환한다."""
     provider = str(second_provider or "").strip().lower()
-    return _VCP_SECOND_RECOMMENDATION_KEY_MAP.get(provider, "gpt_recommendation")
+    return _VCP_SECOND_RECOMMENDATION_KEY_MAP.get(provider, _GPT_RECOMMENDATION_FIELD)
 
 
 def normalize_vcp_force_provider(force_provider: str | None) -> str | None:
@@ -138,11 +145,7 @@ def load_vcp_ai_cache_map(
             for ticker in ticker_filter
             if str(ticker).strip()
         }
-    recommendation_keys = (
-        "gemini_recommendation",
-        "gpt_recommendation",
-        "perplexity_recommendation",
-    )
+    recommendation_keys = VCP_AI_RECOMMENDATION_FIELDS
     normalized_required_keys: set[str] | None = None
     if required_recommendation_keys:
         allowed_keys = set(recommendation_keys)
@@ -530,7 +533,7 @@ def execute_vcp_failed_ai_reanalysis(
             if effective_second_provider
             else None
         )
-        required_recommendation_keys = {"gemini_recommendation"}
+        required_recommendation_keys = {_GEMINI_RECOMMENDATION_FIELD}
         if second_recommendation_key:
             required_recommendation_keys.add(second_recommendation_key)
 

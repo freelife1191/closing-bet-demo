@@ -1,0 +1,24 @@
+{
+  "base": "5252bec",
+  "files": {
+    "app/routes/kr_market_vcp_signal_helpers.py": "00846f9cf4dc840c7d04b32ef8a5f26dbb82344877eefd77129e451a55dd5b71",
+    "engine/screener_result_builders.py": "cbdc31bd81ff6111636e7227f8644e26baf3f6b078d190aa883fc2ed066b694e",
+    "engine/signal_tracker_ai_helpers.py": "ec5d371bda71c53eb755a1874411e562e62b5fbf0185043fa499387d172b6a2e",
+    "engine/vcp_ai_analyzer_helpers.py": "635fc222de6370c78397afb54fcfbc59e4525217e3b1ff5178e54a28089cb389",
+    "engine/vcp_ai_orchestration_helpers.py": "bc564d2aa7aea729e6e4f888f109ac5ca8679a8af7c83bbc091b34f4518ed19a",
+    "scripts/init_data.py": "c837e2c5940ec7c33c8af16f8e01288d17199b46ad210a36876f877381cd3f60",
+    "services/kr_market_vcp_cache_update_service.py": "c91829821a82f9f52b10e7ad8d10daa4b4c7af7094dd0f94f6fe25807c5fb989",
+    "services/kr_market_vcp_payload_service.py": "8febf71a20415d9dff03a8a4cab0e674cabbc3fc834108df93200160f2ee420f",
+    "services/kr_market_vcp_reanalysis_service.py": "da704bf0bf9a0d0c0179338764c70e4cf36e0f9a2e28c5a1d2d8ef202b90ccb9",
+    "tests/app/test_kr_market_data_signals_routes_refactor.py": "ca592fd2e9880b2462472e552d2ef09eff32f353108e992cba573122394f5bd4",
+    "tests/app/test_kr_market_vcp_signal_helpers_refactor.py": "351b5b4f27e2deb0edc4c83141fddbc41dc8a01b8f6eb60f535572376fe71e16",
+    "tests/engine/test_screener_result_builders_refactor.py": "10acfa698a2f5bf4229ee02e1d87ae406980c0814a1c73596996740297f9fd1f",
+    "tests/engine/test_signal_tracker_ai_helpers_refactor.py": "3a91c78f1a61e78f0d4afe355f8602f73de3cf21d7643394d9c8f0340898bdc3",
+    "tests/engine/test_vcp_ai_analyzer_helpers_refactor.py": "54409a03ae51fd123e25e7817fe56101dc76a272c8bf98d923c9419c3fe8b6c5",
+    "tests/engine/test_vcp_ai_analyzer_refactor.py": "4372ff67b0ae5789c6e9964fbd9519d140cbb533dfcbbfaaa60e09c5ea8e25c8",
+    "tests/engine/test_vcp_ai_orchestration_helpers_refactor.py": "ceef43429978b31e99096143daaf4b8d6e67bf83f63a7274079d024a2ff85c0e",
+    "tests/scripts/test_init_data_vcp_scheduler.py": "810ecb6a9fa26dd812b4cfa99a81bc4dfbffbc0c2a1c348acdd208977ad73d5a",
+    "tests/services/test_kr_market_vcp_cache_update_service.py": "85dafaeb2a47201579d3944249e7b9e9e245624871425faa2edb380ba5c8e8e0",
+    "tests/services/test_kr_market_vcp_payload_service_refactor.py": "b2dc11252d9eadb5a3bb6c2cb47a0e63706d5da39f8c46a581304e211f0404c6"
+  }
+}

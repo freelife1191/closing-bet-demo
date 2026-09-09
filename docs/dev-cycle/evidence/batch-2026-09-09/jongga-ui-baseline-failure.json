@@ -1,0 +1,8 @@
+{
+  "source": "1ce5cde and a8a781c same frontend source",
+  "observed": "run 200 and status isRunning=false leave update button disabled",
+  "cause": "pollStatus captures updating=false",
+  "backend_change_cause": false,
+  "new_scope_question": "pending user answer",
+  "scenario": "JONGGA-014 S-3 partial fail"
+}

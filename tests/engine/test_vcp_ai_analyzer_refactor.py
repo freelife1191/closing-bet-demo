@@ -871,6 +871,43 @@ def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkey
     assert calls["count"] == len(model_chain) * 2
 
 
+def test_analyze_with_zai_fallback_keeps_unknown_one_day_flow_conservative(monkeypatch):
+    def _create(**_kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="JSON 형식이 아닌 응답"))]
+        )
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=_create))
+    )
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+
+    result = asyncio.run(
+        analyzer._analyze_with_zai(
+            "고려아연",
+            {
+                "ticker": "010130",
+                "score": 82,
+                "contraction_ratio": 0.74,
+                "foreign_5d": 1200,
+                "inst_5d": 500,
+            },
+        )
+    )
+
+    assert result is not None
+    assert result["action"] == "HOLD"
+    assert result["confidence"] == 55
+    assert "정보가 부족" in result["reason"]
+    assert "1일 수급" not in result["reason"]
+
+
 def test_analyze_with_zai_uses_rule_based_fallback_when_exception_occurs(monkeypatch):
     def _create(**_kwargs):
         raise RuntimeError("z.ai temporary timeout")

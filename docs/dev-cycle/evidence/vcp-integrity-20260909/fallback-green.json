@@ -1,0 +1,7 @@
+{
+  "command": "source venv/bin/activate && pytest -q tests/engine/test_vcp_ai_analyzer_helpers_refactor.py tests/engine/test_vcp_ai_analyzer_refactor.py",
+  "exit_code": 0,
+  "result": "GREEN",
+  "summary": "58 passed in 1.21s. 결측·NaN·inf·비숫자는 HOLD/55와 정보 부족 문구로, 실제 0과 완전 BUY·SELL·HOLD 입력은 기존 계산으로 검증했다.",
+  "log_gzip": "fallback-green.log.gz"
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "full-pytest",
+    "exit": 0,
+    "seconds": 34.73,
+    "tail": "....................................... [ 56%]\n........................................................................ [ 59%]\n....ss.................................................................. [ 63%]\n........................................................................ [ 66%]\n........................................................................ [ 69%]\n........................................................................ [ 72%]\n........................................................................ [ 75%]\n........................................................................ [ 78%]\n........................................................................ [ 82%]\n........................................................................ [ 85%]\n........................................................................ [ 88%]\n........................................................................ [ 91%]\n........................................................................ [ 94%]\n........................................................................ [ 97%]\n..................................................                       [100%]\n2280 passed, 2 skipped in 33.77s\n"
+  },
+  {
+    "name": "full-vitest",
+    "exit": 0,
+    "seconds": 13.28,
+    "tail": "RL-impl.js:20:13)\n      at Object.exports.setup (/Users/freelife/vibe/lecture/hodu/closing-bet-demo/frontend/node_modules/whatwg-url/lib/URL.js:54:12)\n      at new URL (/Users/freelife/vibe/lecture/hodu/closing-bet-demo/frontend/node_modules/whatwg-url/lib/URL.js:115:22)\n      at new Request (node:internal/deps/undici/undici:12072:25)\n      at fetch (node:internal/deps/undici/undici:12997:25)\n      at fetch (node:internal/deps/undici/undici:17708:10)\n      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:83:12)\n      at updatePrices (/Users/freelife/vibe/lecture/hodu/closing-bet-demo/frontend/src/app/dashboard/kr/vcp/page.tsx:644:27)\n      at /Users/freelife/vibe/lecture/hodu/closing-bet-demo/frontend/src/app/dashboard/kr/vcp/page.tsx:672:5\n      at Object.react_stack_bottom_frame (/Users/freelife/vibe/lecture/hodu/closing-bet-demo/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:25989:20)\n}\n\nnpm notice run kr-market-dashboard@1.0.0 build\nnpm notice run node scripts/run-next.js build\nnpm notice run kr-market-dashboard@1.0.0 build\nnpm notice run node scripts/run-next.js build\nnpm notice run kr-market-dashboard@1.0.0 npx\nnpm notice run 'tsc' --noEmit\n"
+  },
+  {
+    "name": "typecheck",
+    "exit": 0,
+    "seconds": 1.01,
+    "tail": "npm notice run kr-market-dashboard@1.0.0 type-check\nnpm notice run tsc --noEmit\n"
+  }
+]

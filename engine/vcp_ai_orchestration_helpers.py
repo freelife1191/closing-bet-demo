@@ -10,6 +10,13 @@ import asyncio
 from typing import Any, Awaitable, Callable
 
 
+VCP_AI_RECOMMENDATION_FIELDS = (
+    "gemini_recommendation",
+    "gpt_recommendation",
+    "perplexity_recommendation",
+)
+
+
 async def orchestrate_stock_analysis(
     *,
     stock_name: str,
@@ -26,9 +33,7 @@ async def orchestrate_stock_analysis(
     results = {
         "ticker": stock_data.get("ticker", ""),
         "stock_name": stock_name,
-        "gemini_recommendation": None,
-        "gpt_recommendation": None,
-        "perplexity_recommendation": None,
+        **dict.fromkeys(VCP_AI_RECOMMENDATION_FIELDS),
     }
 
     tasks: list[Awaitable[dict[str, Any] | None]] = []

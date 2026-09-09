@@ -1,0 +1,9 @@
+{
+  "stage": "RED",
+  "scope": ["VCP-020", "VCP-021", "VCP-024"],
+  "command": "source venv/bin/activate && pytest tests/engine/test_vcp_ai_orchestration_helpers_refactor.py tests/services/test_kr_market_vcp_payload_service_refactor.py tests/engine/test_screener_result_builders_refactor.py tests/scripts/test_init_data_vcp_scheduler.py tests/engine/test_signal_tracker_ai_helpers_refactor.py -q",
+  "exit_code": 2,
+  "expected_failure": "VCP_AI_RECOMMENDATION_FIELDS import is absent before VCP-021 implementation",
+  "observed_failure": "ImportError: cannot import name 'VCP_AI_RECOMMENDATION_FIELDS'",
+  "external_side_effects": false
+}

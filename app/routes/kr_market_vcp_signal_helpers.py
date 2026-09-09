@@ -22,19 +22,13 @@ from engine.config import config as signal_config
 from engine.pandas_utils_safe import safe_bool, safe_confidence, safe_optional_float
 from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
 from engine.signal_tracker_ai_helpers import AI_PROMPT_NUMERIC_FIELDS
+from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
 # AI 추천을 담는 세 필드. legacy 보강과 시그널 병합이 같은 목록을 봐야 한다. 두 번째
 # 프로바이더는 VCP_SECOND_PROVIDER 와 PERPLEXITY_API_KEY 를 읽어 실행 시점에 정해지고
 # 저장된 자료도 그에 따라 갈린다. data/ 를 세어 보면 2026-02-11 은 gpt, 02-12~02-20 은
 # perplexity, 02-26 은 둘 다 없고, 05-05 는 다시 gpt 다. 그러므로 보강 목록이 부분집합이면
 # 그때 쓰인 필드가 legacy 에만 있을 때 응답에 닿지 못한다.
-_AI_RECOMMENDATION_FIELDS = (
-    "gemini_recommendation",
-    "gpt_recommendation",
-    "perplexity_recommendation",
-)
-
-
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
     if isinstance(row, dict):
         return row.get(key, default)
@@ -358,7 +352,7 @@ def _merge_legacy_ai_fields_into_map(ai_data_map: Dict[str, dict], legacy_payloa
             continue
 
         current = ai_data_map[ticker]
-        for field in _AI_RECOMMENDATION_FIELDS:
+        for field in VCP_AI_RECOMMENDATION_FIELDS:
             # 비어 있는 자리만 채운다. 값이 이미 있으면 그것이 실패 기록이어도 legacy 로
             # 바꾸지 않는다. 이 맵은 다음 단계에서 CSV 가 만든 시그널 판정을 덮어쓰므로,
             # 실패 기록을 legacy 의 정상 판정으로 대체하면 오늘 CSV 의 판정이 지난 달
@@ -382,7 +376,7 @@ def _merge_ai_data_into_vcp_signals(signals: List[dict], ai_data_map: Dict[str, 
             continue
         ai_item = ai_data_map[ticker]
         # 캐시에 없거나 실패 기록인 추천으로 기존 값을 덮어쓰지 않는다.
-        for field in _AI_RECOMMENDATION_FIELDS:
+        for field in VCP_AI_RECOMMENDATION_FIELDS:
             recommendation = ai_item.get(field)
             if _is_valid_ai_recommendation(recommendation):
                 signal[field] = recommendation

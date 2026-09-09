@@ -103,6 +103,207 @@ def _reset_vcp_signals_cache_state() -> None:
         vcp_signals_cache._VCP_SIGNALS_SQLITE_SAVE_COUNTER = 0
 
 
+def _merge_ai_for_test(
+    signals: list[dict[str, object]],
+    files: dict[str, object],
+    *,
+    now: datetime,
+) -> tuple[list[str], list[dict[str, object]]]:
+    loaded_names: list[str] = []
+
+    def _load_json_file(name: str, **_kwargs):
+        loaded_names.append(name)
+        return files.get(name, {})
+
+    vcp_payload_service._merge_ai_into_vcp_signals(
+        signals=signals,
+        load_json_file=_load_json_file,
+        build_ai_data_map=vcp_signal_helpers._build_ai_data_map,
+        merge_legacy_ai_fields_into_map=vcp_signal_helpers._merge_legacy_ai_fields_into_map,
+        merge_ai_data_into_vcp_signals=vcp_signal_helpers._merge_ai_data_into_vcp_signals,
+        logger=logging.getLogger("vcp-payload-date-proof-test"),
+        current_time=now,
+    )
+    return loaded_names, signals
+
+
+def test_merge_ai_does_not_use_current_legacy_for_historical_signal_date():
+    signals: list[dict[str, object]] = [{"ticker": "005930", "signal_date": "2026-02-13"}]
+    legacy = {
+        "signal_date": "2026-05-05",
+        "signals": [
+            {"ticker": "005930", "gpt_recommendation": {"action": "BUY", "reason": "최신"}}
+        ],
+    }
+
+    loaded_names, merged = _merge_ai_for_test(
+        signals,
+        {"kr_ai_analysis.json": legacy},
+        now=datetime(2026, 5, 5, 9, 0, 0),
+    )
+
+    assert loaded_names == ["ai_analysis_results_20260213.json"]
+    assert "gpt_recommendation" not in merged[0]
+
+
+def test_merge_ai_rejects_date_named_file_with_conflicting_internal_date():
+    signals: list[dict[str, object]] = [{"ticker": "005930", "signal_date": "2026-02-13"}]
+    conflicting = {
+        "signal_date": "2026-05-05",
+        "signals": [
+            {"ticker": "005930", "gemini_recommendation": {"action": "BUY", "reason": "다른 날"}}
+        ],
+    }
+
+    loaded_names, merged = _merge_ai_for_test(
+        signals,
+        {"ai_analysis_results_20260213.json": conflicting},
+        now=datetime(2026, 2, 13, 9, 0, 0),
+    )
+
+    assert loaded_names == ["ai_analysis_results_20260213.json", "kr_ai_analysis.json"]
+    assert "gemini_recommendation" not in merged[0]
+
+
+def test_merge_ai_accepts_date_named_file_without_internal_date():
+    signals: list[dict[str, object]] = [{"ticker": "005930", "signal_date": "2026-02-13"}]
+    date_payload = {
+        "signals": [
+            {"ticker": "005930", "gemini_recommendation": {"action": "BUY", "reason": "파일명 날짜"}}
+        ],
+    }
+
+    loaded_names, merged = _merge_ai_for_test(
+        signals,
+        {"ai_analysis_results_20260213.json": date_payload},
+        now=datetime(2026, 5, 5, 9, 0, 0),
+    )
+
+    assert loaded_names == ["ai_analysis_results_20260213.json"]
+    assert merged[0]["gemini_recommendation"]["reason"] == "파일명 날짜"
+
+
+def test_merge_ai_uses_generic_legacy_only_when_current_date_is_proven():
+    signals: list[dict[str, object]] = [{"ticker": "005930", "signal_date": "2026-02-13"}]
+    legacy = {
+        "signal_date": "2026-02-13",
+        "signals": [
+            {"ticker": "005930", "gpt_recommendation": {"action": "HOLD", "reason": "같은 날"}}
+        ],
+    }
+
+    loaded_names, merged = _merge_ai_for_test(
+        signals,
+        {"kr_ai_analysis.json": legacy},
+        now=datetime(2026, 2, 13, 9, 0, 0),
+    )
+
+    assert loaded_names == ["ai_analysis_results_20260213.json", "kr_ai_analysis.json"]
+    assert merged[0]["gpt_recommendation"]["reason"] == "같은 날"
+
+
+def test_merge_ai_fills_only_missing_fields_from_same_day_generic_legacy():
+    signals: list[dict[str, object]] = [{"ticker": "005930", "signal_date": "2026-02-13"}]
+    date_payload = {
+        "signal_date": "2026-02-13",
+        "signals": [
+            {"ticker": "005930", "gemini_recommendation": {"action": "BUY", "reason": "날짜 파일"}}
+        ],
+    }
+    legacy = {
+        "signal_date": "2026-02-13",
+        "signals": [
+            {
+                "ticker": "005930",
+                "gemini_recommendation": {"action": "SELL", "reason": "덮어쓰면 안 됨"},
+                "perplexity_recommendation": {"action": "HOLD", "reason": "legacy 보강"},
+            }
+        ],
+    }
+
+    _, merged = _merge_ai_for_test(
+        signals,
+        {
+            "ai_analysis_results_20260213.json": date_payload,
+            "kr_ai_analysis.json": legacy,
+        },
+        now=datetime(2026, 2, 13, 9, 0, 0),
+    )
+
+    assert merged[0]["gemini_recommendation"]["reason"] == "날짜 파일"
+    assert merged[0]["perplexity_recommendation"]["reason"] == "legacy 보강"
+
+
+def test_merge_ai_rejects_mixed_missing_or_non_iso_signal_dates():
+    for signals in (
+        [
+            {"ticker": "005930", "signal_date": "2026-02-13"},
+            {"ticker": "000660", "signal_date": "2026-02-14"},
+        ],
+        [{"ticker": "005930", "signal_date": ""}],
+        [{"ticker": "005930", "signal_date": "20260213"}],
+    ):
+        loaded_names, merged = _merge_ai_for_test(
+            signals,
+            {},
+            now=datetime(2026, 2, 13, 9, 0, 0),
+        )
+
+        assert loaded_names == []
+        assert all("gemini_recommendation" not in item for item in merged)
+
+
+def test_merge_ai_keeps_verified_date_payload_when_legacy_loader_fails_after_typeerror():
+    signals: list[dict[str, object]] = [{"ticker": "005930", "signal_date": "2026-02-13"}]
+    date_payload = {
+        "signal_date": "2026-02-13",
+        "signals": [
+            {"ticker": "005930", "gemini_recommendation": {"action": "BUY", "reason": "날짜 파일"}}
+        ],
+    }
+
+    def _load_json_file(name: str, **kwargs):
+        if name == "ai_analysis_results_20260213.json":
+            return date_payload
+        if kwargs:
+            raise TypeError("legacy loader does not accept deep_copy")
+        raise RuntimeError("legacy file unavailable")
+
+    vcp_payload_service._merge_ai_into_vcp_signals(
+        signals=signals,
+        load_json_file=_load_json_file,
+        build_ai_data_map=vcp_signal_helpers._build_ai_data_map,
+        merge_legacy_ai_fields_into_map=vcp_signal_helpers._merge_legacy_ai_fields_into_map,
+        merge_ai_data_into_vcp_signals=vcp_signal_helpers._merge_ai_data_into_vcp_signals,
+        logger=logging.getLogger("vcp-payload-legacy-loader-failure-test"),
+        current_time=datetime(2026, 2, 13, 9, 0, 0),
+    )
+
+    assert signals[0]["gemini_recommendation"]["reason"] == "날짜 파일"
+
+
+def test_merge_ai_keeps_verified_date_payload_when_legacy_shape_is_invalid():
+    signals: list[dict[str, object]] = [{"ticker": "005930", "signal_date": "2026-02-13"}]
+    date_payload = {
+        "signal_date": "2026-02-13",
+        "signals": [
+            {"ticker": "005930", "gemini_recommendation": {"action": "BUY", "reason": "날짜 파일"}}
+        ],
+    }
+    invalid_legacy = {"signal_date": "2026-02-13", "signals": None}
+
+    _, merged = _merge_ai_for_test(
+        signals,
+        {
+            "ai_analysis_results_20260213.json": date_payload,
+            "kr_ai_analysis.json": invalid_legacy,
+        },
+        now=datetime(2026, 2, 13, 9, 0, 0),
+    )
+
+    assert merged[0]["gemini_recommendation"]["reason"] == "날짜 파일"
+
+
 def test_vcp_signals_memory_cache_keeps_recently_used_entry_on_eviction(monkeypatch, tmp_path):
     _reset_vcp_signals_cache_state()
     monkeypatch.setattr(vcp_signals_cache, "_VCP_SIGNALS_MEMORY_MAX_ENTRIES", 2)

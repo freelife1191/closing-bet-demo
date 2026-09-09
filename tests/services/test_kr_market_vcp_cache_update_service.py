@@ -50,6 +50,7 @@ def test_update_vcp_ai_cache_files_updates_second_ai_recommendations(tmp_path: P
                     {
                         "ticker": "005930",
                         "gemini_recommendation": {"action": "HOLD"},
+                        "gpt_recommendation": None,
                         "perplexity_recommendation": None,
                     }
                 ]
@@ -66,6 +67,11 @@ def test_update_vcp_ai_cache_files_updates_second_ai_recommendations(tmp_path: P
         logger=type("L", (), {"warning": lambda *_a, **_k: None})(),
         ai_results={
             "005930": {
+                "gpt_recommendation": {
+                    "action": "SELL",
+                    "confidence": 65,
+                    "reason": "GPT 채움",
+                },
                 "perplexity_recommendation": {
                     "action": "BUY",
                     "confidence": 70,
@@ -77,6 +83,7 @@ def test_update_vcp_ai_cache_files_updates_second_ai_recommendations(tmp_path: P
 
     assert updated == 1
     payload = json.loads(target_file.read_text(encoding="utf-8"))
+    assert payload["signals"][0]["gpt_recommendation"]["action"] == "SELL"
     assert payload["signals"][0]["perplexity_recommendation"]["action"] == "BUY"
 
 

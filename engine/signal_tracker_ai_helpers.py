@@ -13,6 +13,7 @@ import pandas as pd
 
 from engine.pandas_utils_safe import safe_confidence, safe_optional_float
 from engine.screening_runtime import resolve_vcp_signals_to_show
+from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
 
 def _resolve_ai_target_limit(limit: int | None) -> int:
@@ -82,10 +83,8 @@ def build_ai_batch_payload(signals_df: pd.DataFrame) -> list[dict[str, Any]]:
     return payload
 
 
-_PROVIDER_PRIORITY: tuple[tuple[str, str], ...] = (
-    ("gemini", "gemini_recommendation"),
-    ("gpt", "gpt_recommendation"),
-    ("perplexity", "perplexity_recommendation"),
+_PROVIDER_PRIORITY: tuple[tuple[str, str], ...] = tuple(
+    zip(("gemini", "gpt", "perplexity"), VCP_AI_RECOMMENDATION_FIELDS)
 )
 
 

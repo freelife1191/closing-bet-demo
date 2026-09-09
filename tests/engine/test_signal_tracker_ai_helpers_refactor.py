@@ -48,6 +48,8 @@ def test_build_ai_batch_payload_maps_fields():
                 "contraction_ratio": 0.45,
                 "foreign_5d": 100,
                 "inst_5d": 200,
+                "foreign_1d": 0,
+                "inst_1d": -25,
             }
         ]
     )
@@ -57,6 +59,8 @@ def test_build_ai_batch_payload_maps_fields():
     assert payload[0]["ticker"] == "000001"
     assert payload[0]["current_price"] == 12345
     assert payload[0]["score"] == 77
+    assert payload[0]["foreign_1d"] == 0.0
+    assert payload[0]["inst_1d"] == -25.0
 
 
 def test_build_ai_batch_payload_omits_absent_and_unreadable_fields():

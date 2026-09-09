@@ -1,0 +1,14 @@
+{
+  "stage": "GREEN",
+  "scope": ["VCP-020", "VCP-021", "VCP-024"],
+  "exit_code": 0,
+  "passed": 130,
+  "duration_seconds": 3.64,
+  "date_file_internal_date": {
+    "absent": "accepted using date-specific filename",
+    "conflicting_or_invalid": "rejected"
+  },
+  "generic_legacy": "only current signal date and explicit matching payload signal_date",
+  "legacy_loader_failure": "verified date payload preserved",
+  "external_side_effects": false
+}
