@@ -241,7 +241,7 @@ class HistoryManager:
     ) -> dict[str, Any]:
         return {
             "id": session_id,
-            "title": "새로운 대화",
+            "title": "",  # 빈 값은 아직 첫 일반 질문이 없는 세션이다.
             "messages": [],
             "created_at": now_iso,
             "updated_at": now_iso,
@@ -263,11 +263,12 @@ class HistoryManager:
         return clean_msg[:30] + "..." if len(clean_msg) > 30 else clean_msg
 
     def _maybe_set_auto_title(self, session: dict[str, Any], role: str, message: str) -> None:
-        if role != "user":
+        # 표시 문구를 sentinel로 쓰면 같은 질문으로 만든 제목이 다시 덮어써진다.
+        if session.get("title") or role != "user":
             return
-        message_count = len(session.get("messages", []))
-        if message_count in (1, 2):
-            session["title"] = self._derive_auto_title(message)
+        if not message.strip() or message.strip().startswith("/"):
+            return
+        session["title"] = self._derive_auto_title(message)
 
     @staticmethod
     def _clone_sanitized_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -406,7 +407,7 @@ class HistoryManager:
                 continue
 
             if has_meaningful_user_message(msgs):
-                valid_sessions.append(session)
+                valid_sessions.append({**session, "title": session.get("title") or "새로운 대화"})
 
         # Sort by updated_at desc
         sorted_sessions = sorted(

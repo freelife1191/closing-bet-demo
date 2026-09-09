@@ -1,0 +1,36 @@
+{
+  "base": "3c95c30e84c8b51ea6048e9e74f4b6f1a64140c1",
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/slash-qa-1y1tihi9",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "started_at": "2026-09-09T22:10:15.676936+09:00",
+  "files": {
+    "app/routes/kr_market_chatbot_http_routes.py": "c41f87141f2e5d7876327197d882e8b8cb2e235b3b6ec62196ea317cb18ee3ee",
+    "chatbot/storage.py": "d55bc62d1e70d3e2011d3a6c746ffd33f68b2f41baa1bd9d4bef3e103411fafa",
+    "chatbot/storage_sqlite_history.py": "0c28c623b3c0a562e6297afc46ddb71ad737fb7edfeaa02a9da94aa03bfe0cf0",
+    "services/kr_market_chatbot_quota_helpers.py": "0b3e68e26ee9dfb6e344b10f9060c155dd19141ec02f7ff7c7b8991bcc1fb58e",
+    "tests/app/test_kr_market_chatbot_service.py": "11491292e9a52f77a80bb0b5cb95c86d9600723f8d9ba896ecd117a568abdca5",
+    "tests/app/test_kr_market_route_integration.py": "ff8d69aff583455407be41b6e434c3c6003d5501c5a57a07fd7e6be72fc2dbe6",
+    "tests/chatbot/test_storage_sqlite.py": "fe0291708d0089ad075146d7a101916cf7955d05c23c793a90d8e9b406ebe511"
+  },
+  "review_artifacts": {
+    "app/routes/kr_market_chatbot_http_routes.py": "c41f87141f2e5d7876327197d882e8b8cb2e235b3b6ec62196ea317cb18ee3ee",
+    "docs/dev-cycle/qa/CHAT-009.md": "477f43b77aa4a37a19c862f8cc26faf3d71b37ffebccf3a8d868f115c0792655",
+    "tests/app/test_kr_market_route_integration.py": "ff8d69aff583455407be41b6e434c3c6003d5501c5a57a07fd7e6be72fc2dbe6",
+    "docs/dev-cycle/qa/CHAT-008.md": "1666ef81d3711f3652b4b57fee4efe566491ae7872a6a989ac169f5faf1e1765",
+    "chatbot/storage_sqlite_history.py": "0c28c623b3c0a562e6297afc46ddb71ad737fb7edfeaa02a9da94aa03bfe0cf0",
+    "chatbot/storage.py": "d55bc62d1e70d3e2011d3a6c746ffd33f68b2f41baa1bd9d4bef3e103411fafa",
+    "docs/dev-cycle/evidence/slash-batch-20260909/fixture.py": "519068201191ef872d4a420805780562270ccb63dbde15d179e123b8ae977b57",
+    "docs/dev-cycle/evidence/slash-batch-20260909/history_probe.py": "c9c2227a821e987f4337c746c12a47f3618f305293d524944cf3ab0e4e3054a1",
+    "services/kr_market_chatbot_quota_helpers.py": "0b3e68e26ee9dfb6e344b10f9060c155dd19141ec02f7ff7c7b8991bcc1fb58e",
+    "tests/chatbot/test_storage_sqlite.py": "fe0291708d0089ad075146d7a101916cf7955d05c23c793a90d8e9b406ebe511",
+    "chatbot/storage_history_helpers.py": "54029bd673adf149e209694483a2b624213c6aea4520b87e6fe724e035b4d645",
+    "tests/app/test_kr_market_chatbot_service.py": "11491292e9a52f77a80bb0b5cb95c86d9600723f8d9ba896ecd117a568abdca5"
+  },
+  "latest_checks": {
+    "pytest": "pytest-approved.json",
+    "target": "target-review-final.json",
+    "vitest": "vitest.json",
+    "typecheck": "typecheck.json",
+    "lint": "lint.json"
+  }
+}

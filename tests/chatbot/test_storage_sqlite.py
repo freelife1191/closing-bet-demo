@@ -21,6 +21,7 @@ import chatbot.core as chatbot_core
 import chatbot.storage_sqlite_history as storage_sqlite_history
 import chatbot.storage_sqlite_memory as storage_sqlite_memory
 import chatbot.storage_sqlite_common as sqlite_common
+from chatbot.storage import HistoryManager
 from chatbot.storage_sqlite_helpers import (
     apply_history_session_deltas_in_sqlite,
     clear_history_sessions_in_sqlite,
@@ -66,6 +67,71 @@ def test_history_manager_persists_and_restores_from_sqlite(monkeypatch, tmp_path
     assert len(messages) == 2
     assert messages[0]["role"] == "user"
     assert messages[0]["parts"][0]["text"] == "첫 질문"
+
+
+def test_history_manager_auto_title_uses_first_non_command_user_question(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+
+    manager = chatbot_core.HistoryManager(user_id="u1")
+    session_id = manager.create_session(owner_id="owner-a")
+
+    manager.add_message(session_id, "user", "/clear")
+    manager.add_message(session_id, "model", "대화를 비웠습니다.")
+    manager.add_message(session_id, "user", "/refresh")
+    manager.add_message(session_id, "user", "첫 일반 질문\n두 번째 줄")
+
+    session = manager.get_session(session_id)
+    assert session is not None
+    assert session["title"] == "첫 일반 질문 두 번째 줄"
+
+    manager.add_message(session_id, "user", "이후 사용자 질문")
+
+    assert manager.get_session(session_id)["title"] == "첫 일반 질문 두 번째 줄"
+
+
+def test_history_manager_auto_title_keeps_existing_custom_title(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+
+    manager = chatbot_core.HistoryManager(user_id="u1")
+    session_id = manager.create_session(owner_id="owner-a")
+    manager.sessions[session_id]["title"] = "사용자 지정 제목"
+
+    manager.add_message(session_id, "user", "첫 일반 질문")
+
+    assert manager.get_session(session_id)["title"] == "사용자 지정 제목"
+
+
+def test_history_manager_auto_title_skips_slash_message_with_file_attachment(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+
+    manager = chatbot_core.HistoryManager(user_id="u1")
+    session_id = manager.create_session(owner_id="owner-a")
+
+    manager.add_message(session_id, "user", "/clear [파일 1개 첨부됨]")
+    assert manager.get_session(session_id)["title"] == ""
+    assert manager.get_all_sessions(owner_id="owner-a") == []
+
+    manager.add_message(session_id, "user", "첨부 파일을 분석해줘")
+
+    assert manager.get_session(session_id)["title"] == "첨부 파일을 분석해줘"
+
+
+def test_history_manager_auto_title_survives_command_history_truncation(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+
+    manager = chatbot_core.HistoryManager(user_id="u1")
+    session_id = manager.create_session(owner_id="owner-a")
+
+    for _ in range(25):
+        manager.add_message(session_id, "user", "/clear")
+        manager.add_message(session_id, "model", "대화를 비웠습니다.")
+
+    manager.add_message(session_id, "user", "50개 뒤 첫 일반 질문")
+
+    session = manager.get_session(session_id)
+    assert session is not None
+    assert len(session["messages"]) == 50
+    assert session["title"] == "50개 뒤 첫 일반 질문"
 
 
 def test_history_manager_migrates_legacy_json_into_sqlite(monkeypatch, tmp_path: Path):
@@ -1190,3 +1256,25 @@ def test_load_memories_recovers_when_memories_table_missing(tmp_path: Path):
             "SELECT name FROM sqlite_master WHERE type='table' AND name='chatbot_memories'"
         ).fetchone()
     assert table_row is not None
+
+
+def test_history_title_equal_to_placeholder_survives_truncation_and_reload(tmp_path: Path):
+    manager = HistoryManager("qa", data_dir=tmp_path)
+    sid = manager.create_session(owner_id="qa-owner")
+    manager.add_message(sid, "user", "새로운 대화")
+    for _ in range(51):
+        manager.add_message(sid, "user", "/model")
+    restored = HistoryManager("qa-restored", data_dir=tmp_path)
+    restored.add_message(sid, "user", "두 번째 일반 질문")
+    assert restored.get_session(sid)["title"] == "새로운 대화"
+
+
+def test_pending_title_survives_reload_and_is_displayed_with_placeholder(tmp_path: Path):
+    manager = HistoryManager("qa", data_dir=tmp_path)
+    sid = manager.create_session(owner_id="qa-owner")
+    manager.add_message(sid, "user", "/model")
+    restored = HistoryManager("qa-restored", data_dir=tmp_path)
+    assert restored.get_session(sid)["title"] == ""
+    assert restored.get_all_sessions(owner_id="qa-owner")[0]["title"] == "새로운 대화"
+    restored.add_message(sid, "user", "첫 질문")
+    assert restored.get_session(sid)["title"] == "첫 질문"

@@ -423,7 +423,7 @@ def _upsert_history_session_with_messages_delta_cursor(
     raw_session: Dict[str, Any],
 ) -> None:
     session_id = str(raw_session.get("id") or raw_session_id)
-    title = str(raw_session.get("title") or "새로운 대화")
+    title = str(raw_session.get("title") if raw_session.get("title") is not None else "새로운 대화")
     created_at = str(raw_session.get("created_at") or datetime.now().isoformat())
     updated_at = str(raw_session.get("updated_at") or created_at)
     model_name = str(raw_session.get("model") or "gemini-3.7-flash")

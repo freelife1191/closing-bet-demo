@@ -1,0 +1,5 @@
+{
+  "raw_sha256": "a2d009513d0aa7a2a5ad76d83ac326f01fc06c0331dab6812696b1cd820208a3",
+  "display_sha256": "8687808e402e2bb78048e999d4f9e32d2c86dd5d7461f616cfdb5ad38c93775d",
+  "reason": "git diff --cached --check trailing whitespace; content unchanged; original gzip preserved"
+}

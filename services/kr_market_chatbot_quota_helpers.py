@@ -14,12 +14,18 @@ from typing import Any, Callable
 from services.admin_helpers import is_admin_email
 
 
+def requires_chatbot_model_response(message: Any, has_files: bool) -> bool:
+    """현재 챗봇이 모델 응답 경로로 보내는 요청인지 판별한다."""
+    return has_files or not isinstance(message, str) or not message.startswith("/")
+
+
 def check_chatbot_quota_guard(
     user_api_key: str | None,
     usage_key: str | None,
     max_free_usage: int,
     get_user_usage_fn: Callable[[str | None], int],
     server_key_available: bool,
+    requires_model_response: bool = True,
 ) -> tuple[bool, tuple[int, dict[str, Any]] | None]:
     """
     무료 티어 사용 가능 여부를 확인한다.
@@ -48,6 +54,9 @@ def check_chatbot_quota_guard(
 
     if is_admin_email(usage_key):
         # 관리자: 서버 키 사용하되 무료 쿼터 차감/제한을 우회한다.
+        return False, None
+
+    if not requires_model_response:
         return False, None
 
     used = get_user_usage_fn(usage_key)
@@ -100,4 +109,3 @@ def maybe_increment_chatbot_usage(
 
     new_usage = increment_user_usage_fn(usage_key)
     logger.info(f"[QUOTA] 사용량 차감 완료: {usage_key} -> {new_usage}회")
-

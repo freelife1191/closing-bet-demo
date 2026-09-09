@@ -7,6 +7,7 @@ KR Market 라우트 통합 테스트
 """
 
 import copy
+import io
 import json
 import os
 import sys
@@ -460,6 +461,106 @@ def test_chatbot_quota_guard_blocks_when_limit_exceeded(monkeypatch, tmp_path: P
     assert bot.calls == []
 
 
+@pytest.mark.parametrize(
+    "command",
+    ["/status", "/help", "/clear", "/refresh", "/model", "/memory", "/unknown"],
+)
+def test_chatbot_slash_command_bypasses_exhausted_quota_without_increment(
+    monkeypatch,
+    tmp_path: Path,
+    command: str,
+):
+    """파일 없는 정확한 슬래시 명령은 한도를 소진해도 실행하고 차감하지 않는다."""
+    _prepare_quota_store(monkeypatch, tmp_path)
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-server-key")
+
+    quota_file = tmp_path / "user_quota.json"
+    quota_file.write_text(
+        json.dumps({"anon_session-command": kr_market.MAX_FREE_USAGE}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    bot = _DummyChatbot([{"chunk": "명령 응답"}])
+    _install_chatbot_module(monkeypatch, bot)
+
+    client = _create_client()
+    response = client.post(
+        "/api/kr/chatbot",
+        json={"message": command},
+        headers={"X-Session-Id": "anon_session-command"},
+    )
+
+    assert response.status_code == 200
+    assert response.content_type.startswith("text/event-stream")
+    assert kr_market.get_user_usage("anon_session-command") == kr_market.MAX_FREE_USAGE
+
+
+def test_chatbot_slash_command_preserves_session_required_guard(monkeypatch, tmp_path: Path):
+    """슬래시 명령도 검증된 세션 식별자 없이는 실행하지 않는다."""
+    _prepare_quota_store(monkeypatch, tmp_path)
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-server-key")
+    _install_chatbot_module(monkeypatch, _DummyChatbot([{"chunk": "명령 응답"}]))
+
+    client = _create_client()
+    response = client.post(
+        "/api/kr/chatbot",
+        json={"message": "/status"},
+        headers={"Accept": "text/event-stream"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "SESSION_REQUIRED"
+
+
+def test_chatbot_leading_space_slash_request_remains_quota_limited(monkeypatch, tmp_path: Path):
+    """앞 공백이 있는 슬래시 문자열은 명령이 아니므로 쿼터 가드를 통과해야 한다."""
+    _prepare_quota_store(monkeypatch, tmp_path)
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-server-key")
+
+    quota_file = tmp_path / "user_quota.json"
+    quota_file.write_text(
+        json.dumps({"anon_session-leading-space": kr_market.MAX_FREE_USAGE}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    bot = _DummyChatbot([{"chunk": "should-not-run"}])
+    _install_chatbot_module(monkeypatch, bot)
+
+    client = _create_client()
+    response = client.post(
+        "/api/kr/chatbot",
+        json={"message": " /status"},
+        headers={"X-Session-Id": "anon_session-leading-space"},
+    )
+
+    assert response.status_code == 402
+    assert response.get_json()["code"] == "QUOTA_EXCEEDED"
+    assert bot.calls == []
+
+
+def test_chatbot_file_attached_slash_request_remains_quota_limited(monkeypatch, tmp_path: Path):
+    """첨부가 있는 슬래시 문자열은 명령이 아니므로 쿼터 가드를 통과해야 한다."""
+    _prepare_quota_store(monkeypatch, tmp_path)
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-server-key")
+
+    quota_file = tmp_path / "user_quota.json"
+    quota_file.write_text(
+        json.dumps({"anon_session-file": kr_market.MAX_FREE_USAGE}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    bot = _DummyChatbot([{"chunk": "should-not-run"}])
+    _install_chatbot_module(monkeypatch, bot)
+
+    client = _create_client()
+    response = client.post(
+        "/api/kr/chatbot",
+        data={"message": "/status", "file": (io.BytesIO(b"upload"), "note.txt")},
+        headers={"X-Session-Id": "anon_session-file"},
+    )
+
+    assert response.status_code == 402
+    assert response.get_json()["code"] == "QUOTA_EXCEEDED"
+    assert bot.calls == []
+
+
 def test_routes_do_not_overlap_for_interval_and_chatbot_history():
     client = _create_client()
 
@@ -640,3 +741,20 @@ def test_jongga_history_repairs_missing_exit_prices_without_rewriting_file(monke
     assert (row["target_price"], row["stop_price"]) == ((108000, 96000) if stored else (105000, 97000))
     assert row["score"]["llm_reason"] == "목표 142000원 원문"
     assert path.read_bytes() == original
+
+
+def test_chatbot_multipart_command_classification_matches_parser_case(monkeypatch, tmp_path: Path):
+    _prepare_quota_store(monkeypatch, tmp_path)
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-server-key")
+    bot = _DummyChatbot([{"chunk": "명령 응답"}])
+    _install_chatbot_module(monkeypatch, bot)
+    body = '--qa\r\nContent-Disposition: form-data; name="message"\r\n\r\n/status\r\n--qa--\r\n'
+    response = _create_client().post(
+        "/api/kr/chatbot", data=body,
+        content_type="Multipart/Form-Data; boundary=qa",
+        headers={"X-Session-Id": "anon_session-command"},
+    )
+    assert response.status_code == 200
+    response.get_data()
+    assert bot.calls[0]["message"] == "/status"
+    assert kr_market.get_user_usage("anon_session-command") == 0

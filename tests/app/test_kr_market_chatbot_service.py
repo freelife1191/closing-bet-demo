@@ -431,6 +431,17 @@ def test_check_chatbot_quota_guard_cases():
 
     use_free_tier, error = check_chatbot_quota_guard(
         user_api_key=None,
+        usage_key="session-command",
+        max_free_usage=10,
+        get_user_usage_fn=lambda _k: 10,
+        server_key_available=True,
+        requires_model_response=False,
+    )
+    assert use_free_tier is False
+    assert error is None
+
+    use_free_tier, error = check_chatbot_quota_guard(
+        user_api_key=None,
         usage_key="session-3",
         max_free_usage=10,
         get_user_usage_fn=lambda _k: 3,

@@ -1,0 +1,13 @@
+{
+  "python_ast": "pass",
+  "files": [
+    "app/routes/kr_market_chatbot_http_routes.py",
+    "chatbot/storage.py",
+    "chatbot/storage_sqlite_history.py",
+    "services/kr_market_chatbot_quota_helpers.py",
+    "tests/app/test_kr_market_chatbot_service.py",
+    "tests/app/test_kr_market_route_integration.py",
+    "tests/chatbot/test_storage_sqlite.py"
+  ],
+  "python_lsp": "not available; not claimed"
+}

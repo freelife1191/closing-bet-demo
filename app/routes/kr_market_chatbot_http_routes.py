@@ -13,6 +13,7 @@ from typing import Any, Callable
 from flask import Response, g, jsonify, request, stream_with_context
 
 from app.routes.route_execution import execute_json_route as _execute_json_route
+from services.kr_market_chatbot_quota_helpers import requires_chatbot_model_response
 from services.kr_market_chatbot_service import (
     check_chatbot_quota_guard,
     detect_chatbot_device_type,
@@ -142,6 +143,14 @@ def _register_chatbot_stream_route(
                 and not user_api_key
                 and not usage_key
             )
+            if "multipart/form-data" in content_type:
+                request_json = None
+                command_message = request.form.get("message", "")
+                has_files = any(file.filename != "" for file in request.files.getlist("file"))
+            else:
+                request_json = request.get_json(silent=True)
+                command_message = request_json.get("message", "") if isinstance(request_json, dict) else ""
+                has_files = False
             if legacy_sync_mode:
                 use_free_tier, quota_error = False, None
             else:
@@ -154,16 +163,19 @@ def _register_chatbot_stream_route(
                         (app_config.GOOGLE_GENAI_USE_VERTEXAI and app_config.GOOGLE_CLOUD_PROJECT)
                         or app_config.ZAI_API_KEY
                     ),
+                    requires_model_response=requires_chatbot_model_response(
+                        command_message, has_files
+                    ),
                 )
                 if quota_error:
                     status_code, payload = quota_error
                     return jsonify(payload), int(status_code)
 
             payload = parse_chatbot_request_payload(
-                content_type=request.content_type,
+                content_type=content_type,
                 form_data=request.form,
                 request_files=request.files,
-                request_json=request.get_json(silent=True),
+                request_json=request_json,
                 default_session_id=context["header_session_id"],
                 logger=logger,
             )
