@@ -1,0 +1,66 @@
+{
+  "base": "e4c4fd6",
+  "integrated_head": "477bde07f0454ed5131c03e3cc2543dd1670b594",
+  "rounds": [
+    "INFRA-043",
+    "INFRA-057",
+    "INFRA-058",
+    "INFRA-051",
+    "FE-041"
+  ],
+  "required_scenarios": {
+    "INFRA-043": 4,
+    "INFRA-057": 3,
+    "INFRA-058": 3,
+    "INFRA-051": 3,
+    "FE-041": 5
+  },
+  "required_passed": 18,
+  "required_total": 18,
+  "pytest": {
+    "passed": 2220,
+    "skipped": 3
+  },
+  "vitest": {
+    "passed": 405,
+    "files": 58
+  },
+  "typecheck_exit": 0,
+  "lint_errors": 0,
+  "lint_existing_warnings": 204,
+  "remaining_todo": 71,
+  "reviewed_source_and_tests": {
+    "app/routes/common_notification_routes.py": "28dbaf7428289767bbd8e49c0eaa1aadb22f0c1289acc32f655f5392c8ea930f",
+    "app/routes/common_update_routes.py": "714b486ff640a1ea3fb1e604ec3ba66fb6d037e2686f2e90235cd95d72b918e9",
+    "engine/messenger.py": "65a7e19915d42e441b4104e0c2846a9d4e2f0e5441c1f556a958cc9f829fa5dd",
+    "engine/messenger_senders.py": "f6c485fb3817122e735435ff737069d8f91e1bdc2b63a378fefa44e7cb273ab8",
+    "frontend/src/app/api/system/env/route.test.ts": "84c81d5dc527d8a9b9c942adf056f062177fff735316b8740428408bb42020d3",
+    "frontend/src/app/api/system/env/route.ts": "6cc3b644e07b51554e7c192541ff3f5fe8e9ce8483fb07425ec3623c299147b6",
+    "frontend/src/app/components/SettingsModal.notification.test.tsx": "7d80ffdbd00b326abb71160f44a4f541e2ee26bd178ee5c3bdbf08469237bb7d",
+    "frontend/src/app/components/SettingsModal.save-isolation.test.tsx": "b964ee48f61222ca61e15ba8a2780ed3977c1d5fbce9213fab4cb95eb70bcf68",
+    "frontend/src/app/components/SettingsModal.tsx": "e6d071638fe77a3e3f209506a2157b4e0c2a3c4ba908bb12b6836a012f868bd1",
+    "services/common_env_service.py": "6217cf55f657cf3194aa5828a41aaf814e401636422ea44e610849eb8a408599",
+    "services/notifier.py": "2f4550eab1f5f184a47f7b332a0658af6699105b9e490888fb26bc4bcfce693d",
+    "services/notifier_channels.py": "2943131ba8d647445ce61891867987d6db772ff569798b938599e35730b46062",
+    "tests/app/test_common_routes_refactor.py": "6f14abd5b5d54930f6195b1caf28e81d67bd00df268038227d2096cbfc210d20",
+    "tests/app/test_env_absent_key_deletion.py": "19fb34514edc4a4109a86dd464d00fa1901081ee68080482416c017909cc01ba",
+    "tests/app/test_env_control_characters.py": "8eae907691b96f5915c2d090986c59aaecd4b3ba8021d08642196c38a1e204d1",
+    "tests/app/test_env_update_result.py": "8f3431e9302e7df9d6db232791251a131f8b4594a7475e8c0d85f036031de47e",
+    "tests/app/test_notification_admin_gate.py": "f273c4580cd74e6ddae2761f33d310d1e71fb69ab4e4bc03e2a8b4aa6c49dd95",
+    "tests/engine/test_notification_failure_contract.py": "eeaecc3a07bf2616bb938c55c8fad4bc0ac6a5c2c99be67781a7c036ac6fe7c5"
+  },
+  "plan_reviewed_sha": "433e97e8b8adfc24c8b34685300b1d5123ccceb6c01cda812182d1039b347f4f",
+  "original_user_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "runtime_cleanup_complete": true,
+  "workspace_cleanup": "complete",
+  "removed_workspace": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie",
+  "cleanup_at": "2026-09-09T10:47:42.176297+09:00",
+  "original_venv_exists": true,
+  "plan_completed_sha": "b612e0ee497fb8e4e4003dacc022404ce07583f287103252ad06851af091221c",
+  "plan_change_after_qa": "checkbox completion markers only; requirements unchanged",
+  "remaining_by_priority": {
+    "P0": 0,
+    "P1": 21,
+    "P2": 50
+  }
+}
