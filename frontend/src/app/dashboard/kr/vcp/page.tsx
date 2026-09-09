@@ -1669,8 +1669,8 @@ export default function VCPSignalsPage() {
                 <h3 className="min-w-0 break-words text-lg font-bold text-white">
                   {selectedStock.name} <span className="text-sm text-gray-500">({selectedStock.ticker})</span>
                 </h3>
-                <button onClick={closeChart} aria-label="차트 닫기" className="shrink-0 text-gray-400 hover:text-white transition-colors lg:hidden">
-                  <i className="fas fa-times text-xl"></i>
+                <button onClick={closeChart} aria-label="차트 닫기" className="shrink-0 p-2 text-gray-400 hover:text-white transition-colors lg:hidden">
+                  <span aria-hidden="true" className="text-xl leading-none">×</span>
                 </button>
               </div>
               <div role="group" aria-label="차트 조회 기간" className="flex flex-wrap gap-2 px-4 py-2 shrink-0">
@@ -1778,8 +1778,8 @@ export default function VCPSignalsPage() {
                   <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                   <span className="text-sm font-bold text-white">AI 상세 분석</span>
                 </div>
-                <button onClick={closeChart} aria-label="차트 닫기" className="shrink-0 text-gray-400 hover:text-white transition-colors hidden lg:block">
-                  <i className="fas fa-times"></i>
+                <button onClick={closeChart} aria-label="차트 닫기" className="shrink-0 p-2 text-gray-400 hover:text-white transition-colors hidden lg:block">
+                  <span aria-hidden="true" className="text-xl leading-none">×</span>
                 </button>
               </div>
 

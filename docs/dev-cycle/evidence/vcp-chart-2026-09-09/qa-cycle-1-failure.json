@@ -1,0 +1,15 @@
+{
+  "scenario": "FE-018 S-4 / VCP-012 cancellation setup",
+  "source": "dc4fb24",
+  "cause": "외부 Font Awesome stylesheet를 egress차단한 UI에서 닫기버튼의 i요소만있어가로세로0. pointerclick완료출력만으로실제닫힘을확인할수없었음. 키보드focus+Enter는닫힘",
+  "observed_desktop_close": {
+    "width": 0,
+    "height": 0,
+    "display": "block"
+  },
+  "fix": "aria-hidden × text+padding으로외부폰트독립; 실제버튼크기/닫힘검증",
+  "iterations": 1,
+  "same_failure_count": 1,
+  "evidence": "browser-commands.jsonl forensic BEFORE/FOCUS/AFTER, history-harness-overlay.png",
+  "outcome": "cycle2에서회귀재검증필요"
+}

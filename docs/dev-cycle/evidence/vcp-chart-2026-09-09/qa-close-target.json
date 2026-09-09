@@ -1,0 +1,12 @@
+{
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "src/app/dashboard/kr/vcp"
+  ],
+  "cwd": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-vcp-z89pj2p2/checkout/frontend",
+  "exit": 0,
+  "seconds": 3.32,
+  "timeout": 240
+}

@@ -10,9 +10,9 @@
     "frontend/src/app/dashboard/kr/vcp/StockChart.tsx": "f9abb54f93b1b4f1039f2d50c4e064fefc7527f3a85f0d99c8211641aa4ed8f9",
     "frontend/src/app/dashboard/kr/vcp/page.regression-vcp-010.test.tsx": "28b9927fd348c2d900f8e5cc4f48a62eca3488451f2975b0bca7e1f903295c21",
     "frontend/src/app/dashboard/kr/vcp/chartUtils.ts": "0ae97ad8d5c14dd1f5e0a50b20e09bc96a28071741bc49bd46c59fdab298d127",
-    "frontend/src/app/dashboard/kr/vcp/page.tsx": "3dc1a34c0d7cf75a7c76dc72e144e755f49f2255a8dbef430576a1fa6e311ea5"
+    "frontend/src/app/dashboard/kr/vcp/page.tsx": "6aa4910f106fb00c43977ef4de6cba5b871bacdedb64f0f30ab4d82c05cc7fe2"
   },
   "approval": "사용자가 세 라운드 bounded/T2 설계 제안 후 승인. 요청 세대/모바일 흐름/기간 버튼/달력7일초과 간격만 표시. 데이터수집/백엔드/신호판정 변경 제외.",
-  "tests": "fullvitest418/typecheck0/lint0/pytest2232pass3skip. QA1닫기버튼0x0관찰후page.tsx의기존닫기버튼2개만span×+p2로수정. 기능delta위험없음,수정후검증진행.",
+  "tests": "리뷰MEDIUM/LOW반영: error+retry현재세대만 적용/3page회귀추가. review-fix-red1fail11pass→green52pass/typecheck0, fullvitest+lint재실행중.",
   "limit": "각리뷰15분; read-only; 원본/live/API접근금지"
 }
