@@ -7,7 +7,7 @@
 // 삭제는 「<제목> 삭제」라는 이름의 형제 버튼이다. 입력 영역의 아이콘 전용 버튼도 이름을 갖는다.
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchAPI } from '@/lib/api';
 
@@ -58,6 +58,10 @@ describe('ChatbotPage - 사이드바 대화 항목의 키보드 접근성', () =
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('대화 항목은 제목을 이름으로 가진 버튼이고, 누르면 그 대화의 기록을 요청한다', async () => {
     render(<ChatbotPage />);
 
@@ -99,5 +103,41 @@ describe('ChatbotPage - 사이드바 대화 항목의 키보드 접근성', () =
 
     // 버튼 안에 버튼이 있으면 HTML 로도 무효하고 보조 기술도 둘을 구분하지 못한다.
     expect(document.querySelector('button button')).toBeNull();
+  });
+
+  it('첨부 제거 버튼은 파일 이름을 말하고 해당 첨부만 제거한다', async () => {
+    render(<ChatbotPage />);
+    await screen.findByRole('button', { name: SESSION_TITLE });
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(['ticker'], 'portfolio.csv', { type: 'text/csv' }),
+          new File(['memo'], 'notes.txt', { type: 'text/plain' }),
+        ],
+      },
+    });
+
+    const remove = await screen.findByRole('button', { name: 'portfolio.csv 첨부 제거' });
+    fireEvent.click(remove);
+    expect(screen.queryByRole('button', { name: 'portfolio.csv 첨부 제거' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'notes.txt 첨부 제거' })).toBeTruthy();
+  });
+
+  it('답변을 기다리는 동안 중단 버튼은 이름을 갖고 abort 동작을 유지한다', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('중단', 'AbortError')));
+    })));
+    render(<ChatbotPage />);
+    await screen.findByRole('button', { name: SESSION_TITLE });
+
+    fireEvent.change(screen.getByPlaceholderText('메시지 입력...'), { target: { value: '삼성전자' } });
+    fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+
+    const stop = await screen.findByRole('button', { name: '답변 중단' });
+    expect(stop.getAttribute('aria-label')).toBe('답변 중단');
+    fireEvent.click(stop);
+    expect(await screen.findByText('🛑 답변 생성이 중단되었습니다.')).toBeTruthy();
   });
 });

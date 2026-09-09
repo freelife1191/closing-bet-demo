@@ -1,0 +1,14 @@
+{
+  "target_vitest": {
+    "exit": 0,
+    "passed": 5
+  },
+  "typecheck": {
+    "exit": 0
+  },
+  "lint": {
+    "exit": 0,
+    "errors": 0,
+    "warnings": 199
+  }
+}

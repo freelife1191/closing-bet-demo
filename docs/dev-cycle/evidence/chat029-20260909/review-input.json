@@ -1,0 +1,8 @@
+{
+  "base": "e6ab4ca",
+  "tier": "T1",
+  "files": {
+    "frontend/src/app/chatbot/page.tsx": "6c912b2a48b7bcc7236e8eba9a3b0b565e99aa56f09acaec69f80f455f0c7f82",
+    "frontend/src/app/chatbot/page.regression-chat-007.test.tsx": "5350227856f8b8e17b98485dd8583132198fd2a42b15a3f4c8a8eb3de55ef556"
+  }
+}

@@ -933,6 +933,7 @@ export default function ChatbotPage() {
                         </div>
                         <button
                           onClick={() => removeFile(idx)}
+                          aria-label={`${file.name} 첨부 제거`}
                           className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center text-white text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <i className="fas fa-times"></i>
@@ -1031,6 +1032,7 @@ export default function ChatbotPage() {
                           onClick={handleStop}
                           className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-gray-700 hover:bg-gray-600 transition-all shadow-lg animate-fade-in"
                           title="답변 중단"
+                          aria-label="답변 중단"
                         >
                           <div className="w-3 h-3 bg-white rounded-sm"></div>
                         </button>
