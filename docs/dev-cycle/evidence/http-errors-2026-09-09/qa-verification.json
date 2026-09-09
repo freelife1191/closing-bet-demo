@@ -21,5 +21,7 @@
     "data-runtime.png",
     "data-normal.png"
   ],
-  "cleanup": "runtime and credentials complete; workspace removal after integration"
+  "cleanup": "complete",
+  "integrated_head": "3a8efc5",
+  "original_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8"
 }

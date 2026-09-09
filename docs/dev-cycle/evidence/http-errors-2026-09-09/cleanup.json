@@ -11,5 +11,8 @@
     55168
   ],
   "fake_credentials_removed": true,
-  "workspace": "pending final integration"
+  "workspace": "complete",
+  "removed_parent": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8",
+  "removed_at": "2026-09-09T11:26:35.162704",
+  "original_venv_preserved": true
 }

@@ -3,11 +3,11 @@
 - item: INFRA-038
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: cleanup
+- phase: complete
 - iteration: 1
 - same_failure_count: 0
-- active: true
-- cleanup: runtime/credentials complete; workspace removal pending integration
+- active: false
+- cleanup: complete
 - browser_applicability: required
 - browser_driver: agent-browser
 - namespace: devcycle-errors-k6-l42b8
@@ -51,6 +51,8 @@ ponytail APPROVE, 독립 code-reviewer APPROVE. architect v1 BLOCK은 공통 wra
 
 ## 정리와 잔여 작업
 
-자신의 브라우저2개·Next/Flask·deny proxy 종료, namespace·fake env/쿠키/프로필 삭제 완료. 원본 package.json은보존. 독립clone 삭제와 완료 아카이브만 남았다. `.omx` hook 상태 명령은 실행하지 않은 App 대응이다.
+자신의 브라우저2개·Next/Flask·deny proxy 종료, namespace·fake env/쿠키/프로필 삭제 완료. 원본 package.json은보존. 독립 clone도 삭제했고 원본 venv와 package.json은 보존했다. `.omx` hook 상태 명령은 실행하지 않은 App 대응이다.
 
-필수4/4 PASS. 작업공간 정리 전에는 COMPLETE로 표시하지 않는다.
+필수4/4 PASS. 소유 작업공간 정리까지 확인했다.
+
+ULTRAQA COMPLETE: Goal met after 1 cycles

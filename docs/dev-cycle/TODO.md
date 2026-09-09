@@ -53,6 +53,8 @@
 - [ ] 기존 테스트 두 건을 새 계약에 맞게 고침
 - [ ] 감사 로그의 IP 가 무엇을 뜻하는지 코드 주석에 적음
 
+- 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
+
 ### [INFRA-046] `Procfile` 이 지금 아키텍처에서 동작하지 않는 배포 방식을 남겨 둔다
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-039]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적(심각도 중, 확신도 높음). 파일을 열어 확인했습니다.
@@ -78,25 +80,7 @@
 - [ ] 그 답에 따라 파일을 지우거나 두 프로세스로 고침
 - [ ] `services/identity_helpers.py` 와 `.env.example` 의 `Procfile` 언급을 결과에 맞춤
 
-### [INFRA-038] 500 응답 본문이 서버 내부 경로를 그대로 흘린다
-- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-07 `[INFRA-025]` 사이클의 보안 리뷰
-  (확신도 높음, 우선순위 낮음으로 분류)
-- `app/routes/common_update_routes.py:67` 의 `_build_error_payload` 가 500 본문에
-  `str(error)` 를 그대로 담습니다. `.env` 읽기가 실패하면 그 절대 경로가 응답에
-  실려 나가 서버의 디렉터리 구조를 알려 줍니다.
-- `app/__init__.py:270` 의 전역 예외 처리기도 같은 형태로 `message` 에 `str(error)` 를
-  담습니다. `[INFRA-017]` 이 그 처리기를 손볼 예정이므로 함께 보는 편이 낫습니다.
-- 우선순위가 낮은 이유는 `[INFRA-025]` 가 `/api/system/env` 를 관리자 전용으로 닫아
-  이 본문에 닿는 사람이 이미 관리자로 좁혀졌기 때문입니다. 다른 경로에는 그 게이트가
-  없으므로 완전히 사라진 문제는 아닙니다.
-- [ ] 오류 본문에서 내부 경로를 걷어내고 로그에만 남기도록 바꿈
-- [ ] `[INFRA-017]` 과 겹치는 범위를 정리
-
-- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 11:15 KST
-  | 범위: 전역 HTTP 오류 상태 유지와 공통 오류 응답 비노출, 회귀 및 격리 브라우저 검증
-  | 실제 대화 근거: 인프라 4개 라운드 제안 후 사용자 「진행해」. 배포 정보가 필요한 INFRA-045·046은 결정 대기, 017·038부터 실행.
-- [x] 구현·ponytail APPROVE·code-review APPROVE/architect CLEAR·정적 검사 통과 (evidence/http-errors-2026-09-09)
-- [ ] UltraQA 필수8행 실측·정리·아카이브
+- 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
 
 ### [VCP-012] 차트 조회 응답의 도착 순서를 보장하지 않는다
 - 카테고리: VCP 시그널 | 티어: T1 | 근거: 2026-09-02 VCP-010 마감 code-review
@@ -177,40 +161,6 @@
 - [ ] Market Gate 간격의 기본값 표기를 `engine/config.py:280` 과 맞춤
 - [ ] 랜딩 페이지의 두 문단을 실제 동작에 맞게 고침
 - [ ] 시크릿 확인 세 가지 수행
-
-### [INFRA-017] 존재하지 않는 API 경로가 404 대신 500 을 돌려준다
-- 카테고리: 인프라 | 티어: T2 | 근거: [FE-004] 사이클의 실측, [FE-002] 마감 qa-only ISSUE-001
-- 관찰: `curl http://localhost:5501/api/health` 가 500 과 함께 본문에
-  `"error": "Internal Server Error", "message": "404 Not Found: ..."` 를 돌려줍니다.
-  존재하지 않는 경로이므로 404 가 나가야 하는데, 전역 예외 처리기가 `NotFound` 까지
-  삼켜 500 으로 바꾸고 `logs/backend.log` 에 `CRITICAL SERVER ERROR` 로 남깁니다.
-- 한 경로만의 문제가 아닙니다. 2026-09-02 실측에서 `/api/chat/sessions`,
-  `/api/chatbot/sessions`, `/api/chat/history`, `/api/chat/session`,
-  `/api/kr/chat/sessions` 다섯 개가 모두 같은 형태로 500 을 돌려주는 것을
-  확인했습니다. 응답의 `type` 필드에는 `NotFound` 가 그대로 실려 나옵니다.
-- 재현: `curl -i http://localhost:5501/api/chat/sessions` 를 실행하면 첫 줄이
-  `HTTP/1.1 500 INTERNAL SERVER ERROR` 이고 본문에 `"type": "NotFound"` 가 실립니다.
-- 호출하는 쪽이 「경로가 없음」과 「서버가 고장남」을 구분할 수 없습니다. 프론트엔드의
-  재시도 로직은 5xx 를 일시적 장애로 보고 무의미하게 반복하게 되고, 운영 환경의
-  모니터링에서는 경로 오타 하나가 서버 장애로 집계됩니다.
-- 2026-09-07 `[INFRA-025]` 사이클에서 같은 원인이 `NotFound` 뿐 아니라
-  `MethodNotAllowed` 에도 걸리는 것을 확인했습니다. 그 항목이 `/api/system/env` 의
-  `DELETE` 를 없앤 뒤 `curl -X DELETE http://127.0.0.1:5501/api/system/env` 를 실행하면
-  405 가 아니라 500 이 나오고, `logs/backend.log` 에 werkzeug 의 라우팅 예외가
-  `CRITICAL SERVER ERROR` 로 남습니다. 최소 앱으로 도는 `tests/app/` 의 테스트는
-  전역 처리기를 달지 않으므로 405 를 보고, 실제 앱만 500 을 봅니다. 그래서 회귀 검사는
-  블루프린트만 붙인 앱이 아니라 `create_app()` 이 만든 앱으로 확인해야 합니다.
-- 전역 오류 처리를 바꾸면 모든 API 응답의 상태 코드에 영향을 주므로 T2 로 봅니다.
-  계획 단계에서 실제 수정 파일로 다시 판정합니다.
-- [ ] 전역 예외 처리기가 `werkzeug.exceptions.HTTPException` 을 그대로 통과시키도록 수정
-- [ ] 오탐 로그가 사라지는지 `logs/backend.log` 로 확인
-- [ ] 없는 경로가 404 를, 실제 서버 오류가 500 을 돌려주는지 구분하는 회귀 검사 추가
-
-- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 11:15 KST
-  | 범위: 전역 HTTP 오류 상태 유지와 공통 오류 응답 비노출, 회귀 및 격리 브라우저 검증
-  | 실제 대화 근거: 인프라 4개 라운드 제안 후 사용자 「진행해」. 배포 정보가 필요한 INFRA-045·046은 결정 대기, 017·038부터 실행.
-- [x] 구현·ponytail APPROVE·code-review APPROVE/architect CLEAR·정적 검사 통과 (evidence/http-errors-2026-09-09)
-- [ ] UltraQA 필수8행 실측·정리·아카이브
 
 ### [JONGGA-014] 파이프라인 Phase 1 호출의 죽은 TypeError 폴백을 걷어낸다
 - 카테고리: 종가베팅 | 티어: T3 | 근거: `[JONGGA-001]` 사이클에서 관찰
