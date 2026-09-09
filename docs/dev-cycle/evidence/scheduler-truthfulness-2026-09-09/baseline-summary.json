@@ -1,0 +1,15 @@
+{
+  "base": "4e57aa3d74f8ca8592fe7757b398a25f13307c69",
+  "pytest": {
+    "passed": 2249,
+    "skipped": 3,
+    "exit": 0
+  },
+  "vitest": {
+    "passed": 424,
+    "files": 59,
+    "exit": 0
+  },
+  "isolation": "independent clone develop; original writes and external network denied",
+  "native_omx": "not used; app-adapted"
+}

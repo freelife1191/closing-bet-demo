@@ -1,0 +1,11 @@
+{
+  "command": [
+    "./node_modules/.bin/vitest",
+    "run"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/checkout/frontend",
+  "exit_code": 0,
+  "seconds": 22.85,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/final-vitest.log"
+}

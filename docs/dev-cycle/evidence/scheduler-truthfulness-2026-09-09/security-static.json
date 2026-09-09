@@ -1,0 +1,12 @@
+{
+  "env_tracked": [
+    ".env.example"
+  ],
+  "added_public_or_secret_assignments": false,
+  "package_preserved": true,
+  "package_sha": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "scope": "new diff only; real secrets not read; existing error raw log behavior not expanded",
+  "new_log_values": "static names only; no new response handlers",
+  "dependencies": "unchanged; no online CVE audit claimed",
+  "doc_delta_v3": "comments and README instructions only, VCP_AI_PROVIDERS values unchanged"
+}

@@ -249,7 +249,7 @@ export default function HomePage() {
                       <i className="fas fa-robot"></i> GPT (Sub · Z.ai fallback)
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      VCP 신호 보조 검증용 빠른 추론 엔진. OpenAI 장애 시 Z.ai로 자동 폴백되며, Gemini 추천을 교차 검증해 provider 우선순위(gemini→gpt→perplexity)에서 두 번째로 채택됩니다.
+                      설정에 따라 Gemini와 함께 VCP 신호를 보조 검증합니다. 할당량 소진 등 전환 조건에 해당하면 사용 가능한 Z.ai로 대체 분석을 시도합니다.
                     </p>
                   </div>
                   <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-green-500/20 hover:bg-[#252529] transition-colors">
@@ -257,7 +257,7 @@ export default function HomePage() {
                       <i className="fas fa-robot"></i> Perplexity (Sub)
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      실시간 웹 검색 기반 보조 검증. 최신 뉴스/공시 반영이 강점이며, Gemini·GPT 모두 응답하지 않을 때 최종 fallback으로 동작합니다.
+                      설정에 따라 Gemini와 함께 VCP 신호를 보조 검증하며, 웹 검색으로 최신 뉴스와 공시를 참고합니다. 호출 제한·인증 오류 등 전환 조건에 해당하면 설정된 Z.ai·GPT 중 사용 가능한 모델로 대체 분석을 시도합니다.
                     </p>
                   </div>
                 </div>

@@ -1,0 +1,14 @@
+{
+  "python_ast": "2 files parse",
+  "typecheck": "final-typecheck.json exit0",
+  "bundle_variable_name_matches": [
+    {
+      "asset": "frontend/.next/static/chunks/1l7enajkyc121.js",
+      "variable_name": "OPENAI_API_KEY",
+      "meaning": "existing localStorage.removeItem list; key NAME only, not value or process.env substitution"
+    }
+  ],
+  "actual_secret_values_read": false,
+  "new_env_assignments": "schedule interval and time only",
+  "runtime_key_value_paths_added": false
+}

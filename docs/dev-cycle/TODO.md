@@ -104,11 +104,19 @@
   `[VCP-015]` 가 같은 오기를 `VCPCriteriaModal.tsx` 에서 고쳤습니다.
 - `.env.example` 을 건드리므로 `tier-rules.md` §2 의 「시크릿과 인증」에 해당해 T3 이며,
   §1 의 시크릿 확인 세 가지를 검증에 더합니다.
-- [ ] README 다섯 자리에서 15:20 단독 실행 서술을 걷어냄
-- [ ] `.env.example:123` 의 `JONGGA_SCHEDULE_TIME` 줄 처리
-- [ ] Market Gate 간격의 기본값 표기를 `engine/config.py:280` 과 맞춤
-- [ ] 랜딩 페이지의 두 문단을 실제 동작에 맞게 고침
-- [ ] 시크릿 확인 세 가지 수행
+- [x] README 다섯 자리에서 15:20 단독 실행 서술을 걷어냄
+- [x] `.env.example:123` 의 `JONGGA_SCHEDULE_TIME` 줄 처리
+- [x] Market Gate 간격의 기본값 표기를 `engine/config.py:280` 과 맞춤
+- [x] 랜딩 페이지의 두 문단을 실제 동작에 맞게 고침
+- [x] 시크릿 확인 세 가지 수행
+
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 14:31 KST | 실제 대화 근거: 두 라운드 설계 제안에 사용자 「승인」
+- 승인 범위: INFRA-019 설명 정합성 → INFRA-029 성공/부분 실패 로그 구분. 실행 순서·알림 발송 조건 유지.
+- 계획: `docs/superpowers/plans/2026-09-09-scheduler-truthfulness.md`
+- 진행 상태: QA_RUN 준비 — 구현·critic OKAY·ponytail Lean·code APPROVE/architect CLEAR·T3 review·security APPROVE·전체 정적 검증 통과. 입력 v4 해시 대조 완료.
+
+- [ ] UltraQA 필수 행렬 실행 및 소유 런타임/fixture 정리
+- [ ] 최종 아카이브와 TODO 제거
 
 ### [JONGGA-014] 파이프라인 Phase 1 호출의 죽은 TypeError 폴백을 걷어낸다
 - 카테고리: 종가베팅 | 티어: T3 | 근거: `[JONGGA-001]` 사이클에서 관찰
@@ -767,17 +775,25 @@
 - [ ] pytest 전체 통과 확인
 
 ### [INFRA-029] 장 마감 정기 분석의 완료 로그가 실패한 단계를 덮는다
-- 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
+- 카테고리: 인프라 | 티어: T3 (scheduler_jobs.py 위험 경로) | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
   유지보수성 스페셜리스트 지적(확신도 45)
 - `services/scheduler_jobs.py:102-115` 의 일별 주가, 수급, VCP 세 단계는 실패해도 오류만
   기록하고 계속 진행하는데, 121 행의 완료 로그는 그 결과를 보지 않는다.
 - 게다가 이 로그는 122 행에서 `jongga_ok` 를 판정하기 전에 나오므로, 종가베팅이 실패해
   126 행의 오류가 뒤따르는 경우에도 「완료」가 먼저 찍힌다. 사람이 지켜보지 않는 야간
   작업이라 로그가 유일한 판단 근거인데, 완료로 grep 하면 실패한 밤을 성공으로 읽는다.
-- [ ] `prices_ok`, `inst_ok`, `vcp_ok`, `jongga_ok` 를 모아 완료와 부분 실패를 나눠 기록
-- [ ] 최소한 완료 로그를 `jongga_ok` 판정 이후로 옮긴다
-- [ ] 부분 실패 시 완료 로그가 나오지 않음을 고정하는 검사 추가
-- [ ] pytest 전체 통과 확인
+- [x] `prices_ok`, `inst_ok`, `vcp_ok`, `jongga_ok` 를 모아 완료와 부분 실패를 나눠 기록
+- [x] 최소한 완료 로그를 `jongga_ok` 판정 이후로 옮긴다
+- [x] 부분 실패 시 완료 로그가 나오지 않음을 고정하는 검사 추가
+- [x] pytest 전체 통과 확인
+
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 14:31 KST | 실제 대화 근거: 두 라운드 설계 제안에 사용자 「승인」
+- 승인 범위: INFRA-019 설명 정합성 → INFRA-029 성공/부분 실패 로그 구분. 실행 순서·알림 발송 조건 유지.
+- 계획: `docs/superpowers/plans/2026-09-09-scheduler-truthfulness.md`
+- 진행 상태: QA_RUN 준비 — 구현·critic OKAY·ponytail Lean·code APPROVE/architect CLEAR·T3 review·security APPROVE·전체 정적 검증 통과. 입력 v4 해시 대조 완료.
+
+- [ ] UltraQA 필수 행렬 실행 및 소유 런타임/fixture 정리
+- [ ] 최종 아카이브와 TODO 제거
 
 ### [FE-031] 국내 시장 화면이 갱신 실패를 콘솔에만 남긴다
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-005 사이클의 code-reviewer

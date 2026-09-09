@@ -1,0 +1,14 @@
+{
+  "command": [
+    "venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/services/test_scheduler_jobs_refactor.py",
+    "-q"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/checkout",
+  "exit_code": 1,
+  "seconds": 2.002,
+  "timeout_seconds": 900,
+  "log": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/evidence/red-scheduler.log"
+}

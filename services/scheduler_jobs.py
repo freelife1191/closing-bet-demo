@@ -115,15 +115,32 @@ def run_daily_closing_analysis(test_mode: bool = False) -> None:
             logger.error("[Scheduler] VCP 시그널 분석 실패 감지")
         set_scheduler_runtime_status(vcp_scheduling_running=False)
 
-        logger.info(">>> [Scheduler] Chaining: 데이터 수집 완료 후 AI 종가베팅 분석 즉시 시작")
+        logger.info(">>> [Scheduler] Chaining: 데이터 수집·VCP 단계 처리 후 AI 종가베팅 분석 즉시 시작")
         jongga_ok = run_jongga_v2_analysis(test_mode=test_mode, send_notification=False)
 
-        logger.info("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
         if jongga_ok:
             init_data_functions["send_jongga_notification"]()
-            logger.info("<<< [Scheduler] 최종 완료 후 종가베팅 알림 발송 완료")
+            logger.info("<<< [Scheduler] 종가베팅 알림 처리 종료")
         else:
             logger.error("[Scheduler] 종가베팅 결과 생성 실패로 최종 알림 발송을 건너뜁니다.")
+
+        failed_steps = [
+            name
+            for name, failed in (
+                ("일별 주가", prices_ok is False),
+                ("기관/외인 수급", inst_ok is False),
+                ("VCP", vcp_ok is False),
+                ("종가베팅", not jongga_ok),
+            )
+            if failed
+        ]
+        if failed_steps:
+            logger.error(
+                "[Scheduler] 장 마감 정기 분석 부분 실패: %s",
+                ", ".join(failed_steps),
+            )
+        else:
+            logger.info("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
     except Exception as e:
         logger.error(f"[Scheduler] 장 마감 정기 분석 실패: {e}")
     finally:

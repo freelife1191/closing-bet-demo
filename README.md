@@ -91,20 +91,19 @@ ANALYSIS_LLM_API_TIMEOUT=120
 ANALYSIS_LLM_REQUEST_DELAY=4         # API 호출 간 대기(초). 429 방지용 (None만 기본값으로 대체, 0 명시 가능)
 
 # === VCP 멀티 AI 설정 ===
-VCP_AI_PROVIDERS=gemini,perplexity   # 활성 provider (gemini/gpt/perplexity 조합)
+VCP_AI_PROVIDERS=gemini,perplexity   # 활성·폴백 허용 provider (gemini/gpt/perplexity/zai 조합)
 VCP_SECOND_PROVIDER=perplexity       # gemini 외 보조모델 1개 (gpt 또는 perplexity)
 VCP_GEMINI_MODEL=gemini-3.7-flash
 VCP_GPT_MODEL=gpt-5.6-luna           # GPT 분석용 모델
 VCP_GPT_FALLBACK_MODEL=gpt-5.4-nano  # 429/503 시 전환 모델
 VCP_PERPLEXITY_MODEL=sonar           # sonar | sonar-pro
 VCP_PERPLEXITY_API_TIMEOUT=120
-VCP_ZAI_FALLBACK_ENABLED=true        # Perplexity 차단 시 Z.ai 폴백
+VCP_ZAI_FALLBACK_ENABLED=true        # Z.ai 폴백 클라이언트 활성화 (호출 조건·허용 provider는 별도)
 VCP_ZAI_API_TIMEOUT=180
 
 # === 스케줄러 시간(KST) ===
-JONGGA_SCHEDULE_TIME=15:20           # AI 종가베팅 분석
 CLOSING_SCHEDULE_TIME=17:00          # 장 마감 후 일괄 체인
-MARKET_GATE_UPDATE_INTERVAL_MINUTES=5
+MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
 SCHEDULER_ENABLED=true
 
 # === 데이터 소스 ===
@@ -407,7 +406,7 @@ app/
 services/
 ├── scheduler.py / scheduler_*.py                   # 스케줄러 본체 + 잡 정의
 │   ├── run_daily_closing_analysis (CLOSING_SCHEDULE_TIME, 기본 17:00)
-│   ├── run_jongga_v2_analysis     (JONGGA_SCHEDULE_TIME, 기본 15:20)
+│   ├── run_jongga_v2_analysis     (장 마감 체인 내부에서 실행)
 │   └── run_market_gate_sync       (MARKET_GATE_UPDATE_INTERVAL_MINUTES)
 │
 ├── notifier.py + notifier_*.py                     # 멀티채널 알림 (Telegram/Discord/Slack/Email)
@@ -433,12 +432,12 @@ services/
 
 **스케줄러 서비스 (`scheduler.py`):**
 - **Lock File 기반 중복 방지**: `fcntl`을 활용한 파일 락(`scheduler.lock`)으로 프로세스 중복 실행 원천 차단
-- **17:00 KST(기본) - 장 마감 체인 분석 (Chain Execution)**: 모든 작업을 정해진 순서에 따라 원스톱으로 병렬/순차 실행
+- **17:00 KST(기본) - 장 마감 체인 분석 (Chain Execution)**: 일별 주가 → 수급 → VCP → 종가베팅 순서로 실행
   1. **데이터 수집**: 일별 종가 및 투자자별 수급 데이터 확정본 동기화
   2. **VCP 분석**: 전 종목 기술적 패턴 필터링 및 VCP 시그널 생성
   3. **AI 종가베팅**: VCP 시그널 기반 AI(Gemini) 심층 정성적 분석 수행
-  4. **알림 전송**: 모든 분석 완료 즉시 4개 채널(텔레그램 등)로 결과 발송
-- **주기적 동기화**: 설정된 인터벌(`MARKET_GATE_UPDATE_INTERVAL_MINUTES`, 기본 5분)에 따라 Market Gate 및 환율 실시간 최신화
+  4. **알림 전송**: 종가베팅 결과 생성 성공 시 알림 처리 호출. 활성화·채널 설정과 중복 방지 조건에 따라 발송
+- **주기적 동기화**: 설정된 인터벌(`MARKET_GATE_UPDATE_INTERVAL_MINUTES`, 기본 30분)에 따라 Market Gate 및 환율 실시간 최신화
 
 **알림 서비스 (`notifier.py`):**
 - **NotificationService 클래스**: 4채널 지원 알림 시스템
@@ -552,9 +551,9 @@ graph LR
 **검증 규칙 (VCP 기준):**
 1. Gemini는 기본 분석 모델로 실행됩니다.
 2. 보조 모델은 `VCP_SECOND_PROVIDER` 값(`gpt` 또는 `perplexity`)에 따라 1개만 실행됩니다.
-3. 결과는 자동 합의(평균/우선선택) 없이 모델별로 분리 저장되며, 프론트엔드에서 탭으로 비교합니다.
-4. **Provider 우선순위 체인**: `engine/signal_tracker_ai_helpers.py::apply_ai_results`가 `gemini → gpt → perplexity` 순으로 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 기록합니다. 모든 provider가 응답하지 않으면 `ai_provider="N/A"`로 표시됩니다.
-5. **Z.ai fallback**: Perplexity가 차단되거나 5xx 응답을 줄 경우 `VCP_ZAI_FALLBACK_ENABLED=true`이면 Z.ai(OpenAI 호환) 경로로 자동 폴백합니다.
+3. 분석 결과는 설정된 프로바이더 슬롯별로 저장되며, 프론트엔드에서 탭으로 비교합니다. Perplexity 내부의 Z.ai·GPT 폴백 결과는 `perplexity_recommendation`, GPT 내부의 Z.ai 폴백 결과는 `gpt_recommendation` 슬롯을 유지합니다.
+4. **Provider 우선순위 체인**: `engine/signal_tracker_ai_helpers.py::apply_ai_results`가 `gemini → gpt → perplexity` 순으로 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 기록합니다. `ai_provider`는 선택된 슬롯 이름이며 내부 폴백에서 실제 응답한 엔진까지 식별하는 값은 아닙니다. 유효한 추천 슬롯이 없으면 `ai_provider="N/A"`로 표시됩니다.
+5. **Perplexity 폴백**: 429·503 응답, 할당량·인증 오류 등 전환 조건에 해당하면 `VCP_AI_PROVIDERS`에 설정된 Z.ai → GPT 순서로 사용 가능한 클라이언트를 시도합니다. Z.ai는 `VCP_ZAI_FALLBACK_ENABLED=true`와 키 설정도 필요합니다. 일반 5xx·통신 예외·응답 파싱 실패에는 폴백을 보장하지 않습니다. Perplexity 키가 없으면 초기화 시 허용된 GPT를 보조 모델로 선택합니다. 위 예시의 `gemini,perplexity` 목록은 Z.ai·GPT 폴백을 허용하지 않습니다. 두 폴백을 사용하려면 `gemini,perplexity,zai,gpt`처럼 목록에 추가하고 각 키도 설정합니다.
 
 ### Concurrency Architecture
 Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)으로 동작하는 LLM 클라이언트 라이브러리들을 비동기 논블로킹(Non-blocking) 환경에서 병렬 실행합니다.
@@ -1328,7 +1327,7 @@ VCP 패턴과 수급 상황을 종합 분석하세요.
 
 #### 4.1 종가베팅 (Closing Bet) 알고리즘
 **전략 시나리오:**
-- **장 마감 직후 (기본 17:00 체인 / 사전 15:20 단독 실행)**: 후보군 스크리닝 → AI 필터링 → 최종 신호 생성
+- **장 마감 직후 (기본 17:00 체인)**: 후보군 스크리닝 → AI 필터링 → 최종 신호 생성
 - **익일 09:00~09:30**: 목표가/손절가에 따라 자동 매도 추천
 
 ![종가 매매 전략](assets/4.png)
@@ -1450,8 +1449,8 @@ OPEN으로 추적합니다. AI 답변 예시의 가격은 원문이며 시스템
 ### 5. Data Status & Integrity
 
 **A. 데이터 업데이트 자동화**
-- **장중 주기 동기화**: `MARKET_GATE_UPDATE_INTERVAL_MINUTES` (기본 5분) 간격으로 Market Gate 갱신
-- **매일 장 마감 체인 실행**: `CLOSING_SCHEDULE_TIME` (기본 17:00) 기준으로 일별 데이터 수집 → VCP → 종가베팅 순차 실행. 별도로 `JONGGA_SCHEDULE_TIME` (기본 15:20) 시점에 AI 종가베팅 단독 실행
+- **개장일 주기 동기화**: `MARKET_GATE_UPDATE_INTERVAL_MINUTES` (기본 30분) 간격으로 Market Gate 갱신
+- **매일 장 마감 체인 실행**: `CLOSING_SCHEDULE_TIME` (기본 17:00) 기준으로 일별 데이터 수집 → VCP → 종가베팅 순차 실행.
 - **수동 실행**: `python scripts/run_full_update.py`
 
 **B. 데이터 무결성(Integrity)**
@@ -1461,10 +1460,10 @@ OPEN으로 추적합니다. AI 답변 예시의 가격은 원문이며 시스템
 
 ### 6. Scheduler & Notification (자동화된 스케줄러)
 
-시스템은 `services/scheduler.py`에 의해 전자동으로 운영되며, **장중 주기 동기화 + 장 마감 체인 실행** 구조로 동작합니다.
+시스템은 `services/scheduler.py`에 의해 전자동으로 운영되며, **개장일 주기 동기화 + 장 마감 체인 실행** 구조로 동작합니다.
 
-### 1. 장중 주기 동기화 (Market Gate Sync)
-*   **목적**: 장중 시장 상태를 일정 주기로 최신화.
+### 1. 개장일 주기 동기화 (Market Gate Sync)
+*   **목적**: 개장일에 시장 상태를 일정 주기로 최신화. 장중 시간대만으로 제한하지 않습니다.
 *   **프로세스**:
     1.  `run_market_gate_sync()` 실행
     2.  Market Gate 점수/상태 갱신
@@ -1481,8 +1480,7 @@ OPEN으로 추적합니다. AI 답변 예시의 가격은 원문이며 시스템
 
 | 시간 (KST)     | 작업(Job)                      | 세부 내용                                                                     |
 | -------------- | ------------------------------ | ----------------------------------------------------------------------------- |
-| **장중 N분마다** | `run_market_gate_sync()`       | 1. Market Gate 동기화<br>2. 시장 상태 업데이트 (기본 5분)                  |
-| **매일 15:20(기본)** | `run_jongga_v2_analysis()` | AI 종가베팅 V2 단독 실행 (`JONGGA_SCHEDULE_TIME`)                          |
+| **개장일 N분마다** | `run_market_gate_sync()`       | 1. Market Gate 동기화<br>2. 시장 상태 업데이트 (기본 30분)                  |
 | **매일 17:00(기본)** | `run_daily_closing_analysis()` | 1. 장 마감 데이터 수집<br>2. VCP 신호 생성<br>3. 종가베팅 체인 실행<br>4. 알림 발송 (`CLOSING_SCHEDULE_TIME`) |
 
 #### 6.1 스케줄러 아키텍처
@@ -2065,8 +2063,8 @@ Response 200 OK:
 
 ### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
 - **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
-- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (`MARKET_GATE_UPDATE_INTERVAL_MINUTES` 기본 5분, **1분~60분 단위 설정 가능**)
-- **장 마감 순차 분석 (`CLOSING_SCHEDULE_TIME`, 기본 17:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution). `JONGGA_SCHEDULE_TIME`(기본 15:20)에는 AI 종가베팅 단독 실행
+- **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (`MARKET_GATE_UPDATE_INTERVAL_MINUTES` 기본 30분, **1분~60분 단위 설정 가능**)
+- **장 마감 순차 분석 (`CLOSING_SCHEDULE_TIME`, 기본 17:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution).
 - **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
 
 ![데이터 상태](assets/25.png)

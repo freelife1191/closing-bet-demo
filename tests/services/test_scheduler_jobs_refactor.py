@@ -9,6 +9,8 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 import services.scheduler_jobs as scheduler_jobs
 
 
@@ -143,6 +145,158 @@ def test_run_daily_closing_analysis_updates_scheduler_runtime_status(monkeypatch
     assert scheduler_updates[-1]["data_scheduling_running"] is False
     assert scheduler_updates[-1]["vcp_scheduling_running"] is False
     assert scheduler_updates[-1]["jongga_scheduling_running"] is False
+
+
+@pytest.mark.parametrize(
+    ("failed_step", "daily_result", "institutional_result", "vcp_result", "jongga_result"),
+    [
+        ("일별 주가", False, True, True, True),
+        ("기관/외인 수급", True, False, True, True),
+        ("VCP", True, True, False, True),
+        ("종가베팅", True, True, True, False),
+        ("종가베팅", True, True, True, None),
+    ],
+)
+def test_run_daily_closing_analysis_logs_each_failed_step_without_false_completion(
+    monkeypatch,
+    caplog,
+    failed_step,
+    daily_result,
+    institutional_result,
+    vcp_result,
+    jongga_result,
+):
+    """단계별 실패를 전체 완료로 기록하는 회귀를 막는다."""
+    caplog.set_level("INFO", logger=scheduler_jobs.__name__)
+    monkeypatch.setattr(scheduler_jobs, "set_scheduler_runtime_status", lambda **_kwargs: None)
+    events: list[str] = []
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "_load_init_data_functions",
+        lambda: {
+            "create_daily_prices": lambda: events.append("daily") or daily_result,
+            "create_institutional_trend": lambda: events.append("institutional") or institutional_result,
+            "create_signals_log": lambda run_ai: events.append("vcp") or vcp_result,
+            "send_jongga_notification": lambda: events.append("notify"),
+        },
+    )
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "run_jongga_v2_analysis",
+        lambda **_kwargs: events.append("jongga") or jongga_result,
+    )
+
+    scheduler_jobs.run_daily_closing_analysis(test_mode=True)
+
+    assert events == (["daily", "institutional", "vcp", "jongga", "notify"] if jongga_result else ["daily", "institutional", "vcp", "jongga"])
+    assert f"부분 실패: {failed_step}" in caplog.text
+    assert "장 마감 정기 분석 및 종가베팅 완료" not in caplog.text
+
+
+def test_run_daily_closing_analysis_notifies_after_compound_failure_before_partial_log(
+    monkeypatch,
+    caplog,
+):
+    """앞 단계가 복합 실패해도 종가 성공 알림 뒤에 부분 실패를 남긴다."""
+    caplog.set_level("INFO", logger=scheduler_jobs.__name__)
+    monkeypatch.setattr(scheduler_jobs, "set_scheduler_runtime_status", lambda **_kwargs: None)
+    events: list[str] = []
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "_load_init_data_functions",
+        lambda: {
+            "create_daily_prices": lambda: events.append("daily") or False,
+            "create_institutional_trend": lambda: events.append("institutional") or False,
+            "create_signals_log": lambda run_ai: events.append("vcp") or False,
+            "send_jongga_notification": lambda: events.append("notify"),
+        },
+    )
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "run_jongga_v2_analysis",
+        lambda **_kwargs: events.append("jongga") or True,
+    )
+
+    scheduler_jobs.run_daily_closing_analysis(test_mode=True)
+
+    messages = [record.getMessage() for record in caplog.records]
+    notification_index = messages.index("<<< [Scheduler] 종가베팅 알림 처리 종료")
+    partial_failure_index = next(
+        index for index, message in enumerate(messages) if "부분 실패: 일별 주가, 기관/외인 수급, VCP" in message
+    )
+    assert events == ["daily", "institutional", "vcp", "jongga", "notify"]
+    assert notification_index < partial_failure_index
+    assert "장 마감 정기 분석 및 종가베팅 완료" not in caplog.text
+
+
+def test_run_daily_closing_analysis_treats_none_from_first_three_steps_as_success(
+    monkeypatch,
+    caplog,
+):
+    """앞 세 단계의 None 호환을 False 판정으로 좁히는 회귀를 막는다."""
+    caplog.set_level("INFO", logger=scheduler_jobs.__name__)
+    monkeypatch.setattr(scheduler_jobs, "set_scheduler_runtime_status", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "_load_init_data_functions",
+        lambda: {
+            "create_daily_prices": lambda: None,
+            "create_institutional_trend": lambda: None,
+            "create_signals_log": lambda run_ai: None,
+            "send_jongga_notification": lambda: None,
+        },
+    )
+    monkeypatch.setattr(scheduler_jobs, "run_jongga_v2_analysis", lambda **_kwargs: True)
+
+    scheduler_jobs.run_daily_closing_analysis(test_mode=True)
+
+    messages = [record.getMessage() for record in caplog.records]
+    notification_index = messages.index("<<< [Scheduler] 종가베팅 알림 처리 종료")
+    completion_index = messages.index("<<< [Scheduler] 장 마감 정기 분석 및 종가베팅 완료")
+    assert notification_index < completion_index
+    assert "장 마감 정기 분석 및 종가베팅 완료" in caplog.text
+    assert "부분 실패" not in caplog.text
+
+
+@pytest.mark.parametrize("failure", ["daily", "notification"])
+def test_run_daily_closing_analysis_does_not_log_completion_after_exception_and_resets_status(
+    monkeypatch,
+    caplog,
+    failure,
+):
+    """수집 또는 알림 예외 뒤에 완료를 기록하거나 실행 상태를 남기는 회귀를 막는다."""
+    caplog.set_level("INFO", logger=scheduler_jobs.__name__)
+    scheduler_updates: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "set_scheduler_runtime_status",
+        lambda **kwargs: scheduler_updates.append(kwargs),
+    )
+
+    def raise_failure() -> None:
+        raise RuntimeError(f"{failure} failure")
+
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "_load_init_data_functions",
+        lambda: {
+            "create_daily_prices": raise_failure if failure == "daily" else lambda: True,
+            "create_institutional_trend": lambda: True,
+            "create_signals_log": lambda run_ai: True,
+            "send_jongga_notification": raise_failure if failure == "notification" else lambda: None,
+        },
+    )
+    monkeypatch.setattr(scheduler_jobs, "run_jongga_v2_analysis", lambda **_kwargs: True)
+
+    scheduler_jobs.run_daily_closing_analysis(test_mode=True)
+
+    assert "장 마감 정기 분석 및 종가베팅 완료" not in caplog.text
+    assert f"장 마감 정기 분석 실패: {failure} failure" in caplog.text
+    assert scheduler_updates[-1] == {
+        "data_scheduling_running": False,
+        "vcp_scheduling_running": False,
+        "jongga_scheduling_running": False,
+    }
 
 
 def test_run_market_gate_sync_skips_when_market_closed(monkeypatch):
