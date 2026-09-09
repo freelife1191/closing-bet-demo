@@ -1,13 +1,15 @@
 # UltraQA Report
 
+**ULTRAQA COMPLETE: Goal met after 2 cycles**
+
 - 항목: JONGGA-012
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: cleanup
+- phase: complete
 - iteration: 2
 - same_failure_count: 0
-- active: true
-- cleanup: pending
+- active: false
+- cleanup: complete
 - browser_applicability: required
 - browser_driver: agent-browser
 - namespace: devcycle-jongga-rl9kpa8c / session: viewer
@@ -24,12 +26,12 @@
 
 | ID | 의도/사용자·공격자 | Setup / command | 기대 신호 | 실제 결과 | 수정 | 증거 | Cleanup | 필수 |
 |---|---|---|---|---|---|---|---|---|
-| S-1 | 기본가격·누락값 | agent-browser 종가 카드와 점수표/전략안내 | entry100000 target105000 stop97000; +5/-3 | 통과: 105000/97000, +5/-3; 점수표와 Tips 일치 | — | cycle1-normal-prices, cycle1-criteria-exit, cycle1-tips, cycle1-missing-latest | 런타임 정리 완료 | 예 |
-| S-2 | 명시가격·과거자료 | agent-browser custom 모드 및 과거 날짜 선택 종가 카드 | target108000 stop96000; +8/-4; 원본fixture 불변 | 통과: 108000/96000, +8/-4 보존; 실제 history route 누락값105000/97000 | — | cycle1-custom-history, cycle2-custom-prices, cycle2-missing-history | 런타임 정리 완료 | 예 |
-| S-3 | 성과계산 연결 | agent-browser 홈 및 누적성과 정상target/stop | 실제 backend 계산과 화면의 WIN+5 / LOSS-3 일치 | 통과: 홈100%/Avg+5와누적성공/+5.0%; 손절은양쪽-3% | — | cycle2-overview-win, cycle2-cumulative-win-row, cycle2-cumulative-stored-stophit | 런타임 정리 완료 | 예 |
-| S-4 | 경계·OPEN | agent-browser 동시hit/OPEN 모드 홈·누적성과 | 같은 일봉 손절 우선, 미도달 OPEN; 승률에 미청산 불포함 | 통과: 같은봉LOSS/-3; 미도달은보유/+5.0반올림이나승률0% | — | cycle2-cumulative-stored-sameday, cycle2-cumulative-stored-open, cycle2-overview-stored-open | 런타임 정리 완료 | 예 |
-| S-5 | custom 성과 | agent-browser custom 가격 모드 홈·누적성과 | 기본5/-3이 아닌 저장8/-4 도달 판정 | 통과: custom WIN+8/LOSS-4, 홈·누적일치 | — | cycle2-cumulative-custom-targethit, cycle2-cumulative-custom-stophit, cycle2-performance-results.json | 런타임 정리 완료 | 예 |
-| S-6 | 모바일·복구 | agent-browser 375x812 종가카드/점수표,1280x900 복귀 | 가격·출처 읽기 가능, 새오류 없음 | 통과: 1회차겹침46.171875px²→2회차0;375px1열/1280px2열 | 모바일1열 보완 | cycle1-mobile-source-check, cycle2-mobile-fixed, cycle2-mobile-criteria, cycle2-resized-desktop, cycle2-mobile-geometry.json | 런타임 정리 완료 | 예 |
+| S-1 | 기본가격·누락값 | agent-browser 종가 카드와 점수표/전략안내 | entry100000 target105000 stop97000; +5/-3 | 통과: 105000/97000, +5/-3; 점수표와 Tips 일치 | — | cycle1-normal-prices, cycle1-criteria-exit, cycle1-tips, cycle1-missing-latest | 완료 | 예 |
+| S-2 | 명시가격·과거자료 | agent-browser custom 모드 및 과거 날짜 선택 종가 카드 | target108000 stop96000; +8/-4; 원본fixture 불변 | 통과: 108000/96000, +8/-4 보존; 실제 history route 누락값105000/97000 | — | cycle1-custom-history, cycle2-custom-prices, cycle2-missing-history | 완료 | 예 |
+| S-3 | 성과계산 연결 | agent-browser 홈 및 누적성과 정상target/stop | 실제 backend 계산과 화면의 WIN+5 / LOSS-3 일치 | 통과: 홈100%/Avg+5와누적성공/+5.0%; 손절은양쪽-3% | — | cycle2-overview-win, cycle2-cumulative-win-row, cycle2-cumulative-stored-stophit | 완료 | 예 |
+| S-4 | 경계·OPEN | agent-browser 동시hit/OPEN 모드 홈·누적성과 | 같은 일봉 손절 우선, 미도달 OPEN; 승률에 미청산 불포함 | 통과: 같은봉LOSS/-3; 미도달은보유/+5.0반올림이나승률0% | — | cycle2-cumulative-stored-sameday, cycle2-cumulative-stored-open, cycle2-overview-stored-open | 완료 | 예 |
+| S-5 | custom 성과 | agent-browser custom 가격 모드 홈·누적성과 | 기본5/-3이 아닌 저장8/-4 도달 판정 | 통과: custom WIN+8/LOSS-4, 홈·누적일치 | — | cycle2-cumulative-custom-targethit, cycle2-cumulative-custom-stophit, cycle2-performance-results.json | 완료 | 예 |
+| S-6 | 모바일·복구 | agent-browser 375x812 종가카드/점수표,1280x900 복귀 | 가격·출처 읽기 가능, 새오류 없음 | 통과: 1회차겹침46.171875px²→2회차0;375px1열/1280px2열 | 모바일1열 보완 | cycle1-mobile-source-check, cycle2-mobile-fixed, cycle2-mobile-criteria, cycle2-resized-desktop, cycle2-mobile-geometry.json | 완료 | 예 |
 
 ## 적대적 분류
 
@@ -39,7 +41,7 @@
 
 - 필수 통과: 6/6
 - 미통과 필수: 없음
-- 남은 단계: 검증된 커밋 통합·임시 clone 제거 후 최종 완료 기록.
+- 재개 판정: 완료 가능. 로컬 통합과 임시 clone 제거까지 확인했다.
 
 ## 1회차 실패와 보완
 
@@ -55,4 +57,6 @@
 - 준비실패: Netscape파일을cookies --curl에주어거부→가짜Cookie curl파일로수리; heading ref의추가속성정규식과매매원칙제목2개매칭을수리. 제품결함과구분하며harness-failures.json에남긴다.
 - 정적: pytest2249통과/기존skip3, Vitest424통과/59(실제build·TS포함), lint0오류/201기존경고. 기존chat004 타이머경합1회실패는원문보존후원인대조·단독2통과·전체424통과, INFRA068이월.
 - 독립리뷰: 전용code-reviewer APPROVE, architect WATCH(생산계약밖frame); 합성COMMENT를APPROVE로바꾸지않았다. QA CSS delta는전용ponytail/code-reviewer/architect CLEAR. T3심층체크리스트는develop/baseSHA에맞춘App대응으로수행했다.
-- 런타임 정리: 소유57261/57262/63173 종료, 전용브라우저·namespace·profile·가짜env/쿠키제거. clone 제거는 통합 후 최종 기록한다.
+- 런타임 정리: 소유57261/57262/63173 종료, 전용브라우저·namespace·profile·가짜env/쿠키제거. 독립 clone과 실행용 하네스도 통합 후 제거했다.
+
+- 최종 확인: 2026-09-09 14:20 KST. 완료 아카이브와 증거 해시를 함께 기록한다.

@@ -87,11 +87,11 @@ expect(screen.getByText(/142,000원/)).toBeTruthy();
 
 ## Task 4: 독립 검토·검증·실측·마감
 
-- [ ] 입력 파일 SHA256와 base 8febe19ad7d2a41301104b8efe5ff6bed7b3ccab diff를 고정해 ponytail, code-review 두 독립 레인, T3 review를 순서대로 진행하고 지적을 반영한다.
-- [ ] 전체 pytest/Vitest, type-check/lint, 빌드 smoke를 실행하고 exit/검사수를 기록한다. LSP가 없으면 부재와 대체 증거를 명시한다.
-- [ ] docs/dev-cycle/qa/JONGGA-012.md 및 JONGGA-013.md에 UltraQA 행렬을 만들고 첫 구현/행렬 커밋한다. TODO는 유지한다.
-- [ ] 실제 Next 화면과 변경한 백엔드 계산을 합성 데이터로 연결한 격리 앱에서 agent-browser로 카드/점수표/전략안내/홈성과/누적성과/모바일/AI원문·Unicode/누락·custom·동시hit·OPEN을 실측한다. Next MCP compilation/errors도 확인한다.
-- [ ] 필수 행·증거·소유 프로세스/fixture 정리가 통과한 뒤 develop에 검증된 커밋만 통합하고 두 항목을 월별/일별 아카이브로 이동한다. 원본 미추적파일 SHA를 다시 확인한다.
+- [x] 입력 파일 SHA256와 base 8febe19ad7d2a41301104b8efe5ff6bed7b3ccab diff를 고정해 ponytail, code-review 두 독립 레인, T3 review를 순서대로 진행하고 지적을 반영한다.
+- [x] 전체 pytest/Vitest, type-check/lint, 빌드 smoke를 실행하고 exit/검사수를 기록한다. LSP가 없으면 부재와 대체 증거를 명시한다.
+- [x] docs/dev-cycle/qa/JONGGA-012.md 및 JONGGA-013.md에 UltraQA 행렬을 만들고 첫 구현/행렬 커밋한다. TODO는 유지한다.
+- [x] 실제 Next 화면과 변경한 백엔드 계산을 합성 데이터로 연결한 격리 앱에서 agent-browser로 카드/점수표/전략안내/홈성과/누적성과/모바일/AI원문·Unicode/누락·custom·동시hit·OPEN을 실측한다. Next MCP compilation/errors도 확인한다.
+- [x] 필수 행·증거·소유 프로세스/fixture 정리가 통과한 뒤 develop에 검증된 커밋만 통합하고 두 항목을 월별/일별 아카이브로 이동한다. 원본 미추적파일 SHA를 다시 확인한다.
 
 ## Critic 보완 이력
 

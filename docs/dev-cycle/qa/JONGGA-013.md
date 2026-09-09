@@ -1,13 +1,15 @@
 # UltraQA Report
 
+**ULTRAQA COMPLETE: Goal met after 2 cycles**
+
 - 항목: JONGGA-013
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: cleanup
+- phase: complete
 - iteration: 2
 - same_failure_count: 0
-- active: true
-- cleanup: pending
+- active: false
+- cleanup: complete
 - browser_applicability: required
 - browser_driver: agent-browser
 - namespace: devcycle-jongga-rl9kpa8c / session: viewer
@@ -24,10 +26,10 @@
 
 | ID | 의도/사용자·공격자 | Setup / command | 기대 신호 | 실제 결과 | 수정 | 증거 | Cleanup | 필수 |
 |---|---|---|---|---|---|---|---|---|
-| S-1 | AI 원문 불일치 | agent-browser 가격142000/130000이 적힌 카드 | 원문보존; 시스템 계산 기준105000/97000 구분 | 통과: 142000/130000 AI원문보존, 시스템105000/97000·출처구분 | — | cycle1-desktop-ai-original, cycle1-mobile-ai-prices, cycle2-resized-desktop | 런타임 정리 완료 | 예 |
-| S-2 | Unicode·주입형본문 | agent-browser 긴한글/Unicode 및 검증생략/시크릿요구 문자열 | 본문이 텍스트로만 표시; 외부/변경요청0 | 통과: Unicode/지시문/script문자열은텍스트; 실행script없음, 변경요청0 | — | cycle1-mobile-ai-original, cycle2-mobile-fixed, requests.jsonl.gz | 런타임 정리 완료 | 예 |
-| S-3 | AI 없는 과거자료 | agent-browser empty-reason 모드 종가카드 | AI대기 유지; 목표손절 구조화 가격 표시 | 통과: AI분석대기 유지, 시스템가격105000/97000; 이조건은CSS수정영향없는desktop1회차통과 | — | cycle1-empty-ai | 런타임 정리 완료 | 예 |
-| S-4 | 모바일 | agent-browser 375x812 리포트와 전략가격 | 출처 안내와 가격이 가려지지 않음 | 통과: 출처문구·가격확인; 모바일기준일겹침수정후0 | 모바일1열 보완 | cycle2-mobile-fixed, cycle2-mobile-geometry.json | 런타임 정리 완료 | 예 |
+| S-1 | AI 원문 불일치 | agent-browser 가격142000/130000이 적힌 카드 | 원문보존; 시스템 계산 기준105000/97000 구분 | 통과: 142000/130000 AI원문보존, 시스템105000/97000·출처구분 | — | cycle1-desktop-ai-original, cycle1-mobile-ai-prices, cycle2-resized-desktop | 완료 | 예 |
+| S-2 | Unicode·주입형본문 | agent-browser 긴한글/Unicode 및 검증생략/시크릿요구 문자열 | 본문이 텍스트로만 표시; 외부/변경요청0 | 통과: Unicode/지시문/script문자열은텍스트; 실행script없음, 변경요청0 | — | cycle1-mobile-ai-original, cycle2-mobile-fixed, requests.jsonl.gz | 완료 | 예 |
+| S-3 | AI 없는 과거자료 | agent-browser empty-reason 모드 종가카드 | AI대기 유지; 목표손절 구조화 가격 표시 | 통과: AI분석대기 유지, 시스템가격105000/97000; 이조건은CSS수정영향없는desktop1회차통과 | — | cycle1-empty-ai | 완료 | 예 |
+| S-4 | 모바일 | agent-browser 375x812 리포트와 전략가격 | 출처 안내와 가격이 가려지지 않음 | 통과: 출처문구·가격확인; 모바일기준일겹침수정후0 | 모바일1열 보완 | cycle2-mobile-fixed, cycle2-mobile-geometry.json | 완료 | 예 |
 
 ## 적대적 분류
 
@@ -37,7 +39,7 @@
 
 - 필수 통과: 4/4
 - 미통과 필수: 없음
-- 남은 단계: 검증된 커밋 통합·임시 clone 제거 후 최종 완료 기록.
+- 재개 판정: 완료 가능. 로컬 통합과 임시 clone 제거까지 확인했다.
 
 ## 1회차 실패와 보완
 
@@ -53,4 +55,6 @@
 - 준비실패: Netscape파일을cookies --curl에주어거부→가짜Cookie curl파일로수리; heading ref의추가속성정규식과매매원칙제목2개매칭을수리. 제품결함과구분하며harness-failures.json에남긴다.
 - 정적: pytest2249통과/기존skip3, Vitest424통과/59(실제build·TS포함), lint0오류/201기존경고. 기존chat004 타이머경합1회실패는원문보존후원인대조·단독2통과·전체424통과, INFRA068이월.
 - 독립리뷰: 전용code-reviewer APPROVE, architect WATCH(생산계약밖frame); 합성COMMENT를APPROVE로바꾸지않았다. QA CSS delta는전용ponytail/code-reviewer/architect CLEAR. T3심층체크리스트는develop/baseSHA에맞춘App대응으로수행했다.
-- 런타임 정리: 소유57261/57262/63173 종료, 전용브라우저·namespace·profile·가짜env/쿠키제거. clone 제거는 통합 후 최종 기록한다.
+- 런타임 정리: 소유57261/57262/63173 종료, 전용브라우저·namespace·profile·가짜env/쿠키제거. 독립 clone과 실행용 하네스도 통합 후 제거했다.
+
+- 최종 확인: 2026-09-09 14:20 KST. 완료 아카이브와 증거 해시를 함께 기록한다.
