@@ -1,0 +1,16 @@
+{
+  "name": "pytest-baseline",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/pytest-temp"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout",
+  "exit": 0,
+  "seconds": 38.85,
+  "policy": "no-network.sb"
+}

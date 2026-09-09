@@ -6,9 +6,9 @@ Common 라우트 분해 회귀 테스트
 
 import os
 import sys
-
 from types import SimpleNamespace
 
+import pytest
 from flask import Flask, g
 
 
@@ -328,12 +328,14 @@ def test_system_log_event_returns_500_when_activity_logger_fails(monkeypatch):
     response = client.post("/api/system/log-event", json={"action": "LOGIN", "details": {}})
 
     assert response.status_code == 500
-    assert response.get_json() == {"error": "log failed"}
+    assert response.get_json() == {"error": "Internal Server Error"}
 
 
-def test_system_env_get_returns_500_on_read_error(monkeypatch):
+def test_system_env_get_returns_500_on_read_error(monkeypatch, caplog):
+    canary = "/private/qa-only/설정.env: synthetic read failure"
+
     def _raise_read_error(_env_path):
-        raise RuntimeError("env read fail")
+        raise OSError(canary)
 
     monkeypatch.setattr(common_update_routes, "read_masked_env_vars", _raise_read_error)
     # 이 경로는 [INFRA-025] 이후 관리자 토큰을 요구한다. 검사 대상은 게이트가 아니라
@@ -344,4 +346,19 @@ def test_system_env_get_returns_500_on_read_error(monkeypatch):
     response = client.get("/api/system/env", headers={"X-Admin-Token": "s3cret-token"})
 
     assert response.status_code == 500
-    assert response.get_json() == {"error": "env read fail"}
+    assert response.get_json() == {"error": "Internal Server Error"}
+    assert canary not in response.get_data(as_text=True)
+    assert canary in caplog.text
+
+
+@pytest.mark.parametrize("body, content_type, expected", [
+    ("{", "application/json", 400),
+    ("action=LOGIN", "application/x-www-form-urlencoded", 415),
+])
+def test_log_event_preserves_request_parse_error(body, content_type, expected, caplog):
+    response = _create_client().post(
+        "/api/system/log-event", data=body, content_type=content_type
+    )
+    assert response.status_code == expected
+    assert "Internal Server Error" not in response.get_data(as_text=True)
+    assert not any(record.levelname == "ERROR" for record in caplog.records)

@@ -1,0 +1,13 @@
+{
+  "base": "54078ca",
+  "scope": {
+    "app/__init__.py": "e1239a145a5f1d314c0944de82634da0c9d8575a141a9029ce54283745f482dd",
+    "app/routes/common_update_routes.py": "7602e67021dec8fb60842e6c68a99e4822b56951ced71812132f1cd64e12d876",
+    "tests/app/test_global_error_contract.py": "4a41b3e32ee959f6d3c340cd88660f267ef7c8d75a96aa050f50b4eb556b5048",
+    "tests/app/test_common_routes_refactor.py": "17894fe64cbe46d9d843fd16b9a4c97e2f1bf6269ceeeaf67d6a9bbe56cdfeaa",
+    "docs/dev-cycle/qa/INFRA-017.md": "fdda1c943d07874a42668ce824f1b3f21e5777af6259ef1d9a2deb34e633ef28",
+    "docs/dev-cycle/qa/INFRA-038.md": "725e058792f94d5fc1584dbe240d59e3078df821118e87bf6d7ee8f20224f618"
+  },
+  "requirements": "INFRA017 HTTPException unchanged response,status,Allow,Retry-After; INFRA038 fixed unexpected500 message without exception type, same error shape on common env/logevent. Other route wrappers not in scope. UI failure presentation unchanged.",
+  "timestamp": "2026-09-09T11:11:49.556517"
+}

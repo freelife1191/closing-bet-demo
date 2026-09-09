@@ -1,0 +1,17 @@
+{
+  "name": "pytest-017-red",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/pytest-temp",
+    "tests/app/test_global_error_contract.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout",
+  "exit": 1,
+  "seconds": 2.4,
+  "policy": "no-network.sb"
+}

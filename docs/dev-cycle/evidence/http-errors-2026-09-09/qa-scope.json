@@ -1,0 +1,28 @@
+{
+  "ids": [
+    "INFRA-017",
+    "INFRA-038"
+  ],
+  "browser_namespace": "devcycle-errors-k6-l42b8",
+  "sessions": [
+    "admin",
+    "viewer"
+  ],
+  "processes": [
+    "Next dev",
+    "isolated actual Flask factory",
+    "deny proxy"
+  ],
+  "owned_parent": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8",
+  "backend_fixture": "actual create_app; suppress startup jobs and return fixed non-target reads in before_request; env handler/request context/global error handler real",
+  "ui": "/dashboard/kr SettingsModal plus /dashboard/data-status",
+  "http_probes": [
+    "404 random/Unicode/long missing path",
+    "405 POST to GET-only API and DELETE encoded env route",
+    "400 malformed via QA BadRequest",
+    "429 with Retry-After17",
+    "500 injected general exception and env read OSError"
+  ],
+  "required_rows": 8,
+  "start_time": "2026-09-09T11:13:31.620117"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "pytest-wrapper-red",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/pytest-temp",
+    "tests/app/test_common_routes_refactor.py",
+    "-k",
+    "preserves_request_parse_error"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout",
+  "exit": 1,
+  "seconds": 1.85,
+  "policy": "no-network.sb"
+}

@@ -16,6 +16,7 @@ from flask import Flask, jsonify, request, g
 from flask.json.provider import DefaultJSONProvider
 from flask_cors import CORS
 from dotenv import load_dotenv
+from werkzeug.exceptions import HTTPException
 from engine.pandas_utils_safe import sanitize_for_json
 from services.kr_market_data_cache_service import (
     atomic_write_text,
@@ -264,6 +265,10 @@ def _register_core_routes(app: Flask) -> None:
 def _register_global_error_handler(app: Flask) -> None:
     @app.errorhandler(Exception)
     def handle_exception(error):
+        if isinstance(error, HTTPException):
+            # 라우팅·요청 오류의 상태와 Allow/Retry-After 헤더를 보존한다.
+            return error
+
         import traceback
 
         error_msg = f"Unhandled Exception: {str(error)}\n{traceback.format_exc()}"
@@ -279,8 +284,7 @@ def _register_global_error_handler(app: Flask) -> None:
 
         return jsonify({
             'error': 'Internal Server Error',
-            'message': str(error),
-            'type': type(error).__name__,
+            'message': 'Internal Server Error',
         }), 500
 
 

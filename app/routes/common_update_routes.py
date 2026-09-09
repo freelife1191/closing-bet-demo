@@ -69,7 +69,8 @@ DATA_FILES_TO_CHECK = [
 
 
 def _build_error_payload(error: Exception) -> dict[str, str]:
-    return {"error": str(error)}
+    # 원인은 호출부에서 기록하며 외부에는 경로·예외 내용을 보내지 않는다.
+    return {"error": "Internal Server Error"}
 
 
 def _execute_update_route(
@@ -81,6 +82,9 @@ def _execute_update_route(
 ) -> object:
     try:
         return handler()
+    except HTTPException as error:
+        ctx.logger.warning("%s: %s", error_label, type(error).__name__)
+        raise
     except Exception as error:
         ctx.logger.error(f"{error_label}: {error}")
         return jsonify(error_payload_builder(error)), 500

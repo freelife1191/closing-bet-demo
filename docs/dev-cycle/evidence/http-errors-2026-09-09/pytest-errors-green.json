@@ -1,0 +1,20 @@
+{
+  "name": "pytest-errors-green",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout/venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/pytest-temp",
+    "tests/app/test_global_error_contract.py",
+    "tests/app/test_common_routes_refactor.py",
+    "tests/app/test_env_update_result.py",
+    "tests/app/test_admin_gated_routes.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-errors-k6_l42b8/checkout",
+  "exit": 0,
+  "seconds": 2.36,
+  "policy": "no-network.sb"
+}
