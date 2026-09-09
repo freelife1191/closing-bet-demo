@@ -1,0 +1,23 @@
+{
+  "source": "8101bf3",
+  "current": {
+    "gemini": 78,
+    "gpt": 88,
+    "perplexity": 77,
+    "one_day_sum": 4
+  },
+  "history": {
+    "gemini": 55,
+    "gpt": null,
+    "perplexity": null,
+    "reason_has_fake_one_day": false
+  },
+  "fresh_page_errors": 0,
+  "fresh_console_errors": 0,
+  "screenshots_opened": 4,
+  "framework_errors": {
+    "configErrors": [],
+    "sessionErrors": []
+  },
+  "compilation_tool": "unavailable in webpack dev; successful compilation logs and real build used"
+}

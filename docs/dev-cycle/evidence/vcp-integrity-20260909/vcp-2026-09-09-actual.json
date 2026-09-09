@@ -1,0 +1,67 @@
+{
+  "input": {
+    "ticker": "005930",
+    "name": "삼성전자",
+    "signal_date": "2026-09-09",
+    "entry_price": 100000,
+    "status": "OPEN",
+    "score": 83,
+    "foreign_5d": 100,
+    "inst_5d": 20,
+    "foreign_1d": 11,
+    "inst_1d": -7,
+    "market": "KOSPI",
+    "change_pct": 0,
+    "contraction_ratio": 0.72,
+    "is_vcp": true,
+    "vcp_score": 83,
+    "current_price": 103000,
+    "return_pct": 3
+  },
+  "recommendation": {
+    "action": "BUY",
+    "confidence": 78,
+    "reason": "삼성전자는 VCP 점수 83.0점, 수축비율 0.72로 변동성 수축 신호가 강한 편입니다. 5일 수급은 순매수 우위입니다. 1일 수급은 순매수 우위입니다. 이 신호를 종합해 현재 판단은 BUY입니다."
+  },
+  "payload": {
+    "signals": [
+      {
+        "ticker": "005930",
+        "name": "삼성전자",
+        "signal_date": "2026-09-09",
+        "market": "KOSPI",
+        "status": "OPEN",
+        "score": 83.0,
+        "contraction_ratio": 0.72,
+        "entry_price": 100000,
+        "target_price": 105000,
+        "stop_price": 97000,
+        "foreign_5d": 100,
+        "inst_5d": 20,
+        "vcp_score": 83.0,
+        "is_vcp": true,
+        "current_price": 103000,
+        "return_pct": 3,
+        "gemini_recommendation": {
+          "action": "BUY",
+          "confidence": 78,
+          "reason": "삼성전자는 VCP 점수 83.0점, 수축비율 0.72로 변동성 수축 신호가 강한 편입니다. 5일 수급은 순매수 우위입니다. 1일 수급은 순매수 우위입니다. 이 신호를 종합해 현재 판단은 BUY입니다."
+        },
+        "gpt_recommendation": {
+          "action": "SELL",
+          "confidence": 88,
+          "reason": "최신 날짜 전용 GPT"
+        },
+        "perplexity_recommendation": {
+          "action": "HOLD",
+          "confidence": 77,
+          "reason": "최신 날짜 전용 Perplexity"
+        }
+      }
+    ],
+    "count": 1,
+    "total_scanned": 1,
+    "generated_at": "2026-09-09T17:00:00",
+    "source": "signals_log.csv"
+  }
+}

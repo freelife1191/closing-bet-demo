@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "preflight",
+    "cause": "scratch checkout import created local data/vcp_status.json; overly strict no-data gate rejected restart",
+    "fix": "permit owned scratch directory, forbid symlinks; no original data copied",
+    "product_bug": false
+  },
+  {
+    "cause": "concurrent requests shared evidence temp path",
+    "fix": "unique temp suffix before replace",
+    "product_bug": false
+  },
+  {
+    "cause": "synthetic chart used time instead of API date field",
+    "fix": "fixture aligns KRChartData.date",
+    "product_bug": false
+  }
+]

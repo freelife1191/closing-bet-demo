@@ -1,0 +1,264 @@
+- complementary
+  - link "M 스마트 머니 봇" [ref=e1]
+    - StaticText "M"
+    - StaticText "스마트 머니 봇"
+  - navigation
+    - StaticText "DASHBOARD"
+    - button " KR Market " [ref=e11]
+      - StaticText ""
+      - StaticText "KR Market"
+      - StaticText ""
+    - link "● Overview" [ref=e12]
+    - link "● VCP 시그널" [ref=e13]
+    - link "● 종가베팅" [ref=e14]
+    - link "● 누적 성과" [ref=e15]
+    - link "● AI 상담" [ref=e16]
+    - button " 모의투자" [ref=e17]
+      - StaticText ""
+      - StaticText "모의투자"
+    - link " 데이터 상태" [ref=e18]
+      - StaticText ""
+      - StaticText "데이터 상태"
+  - button "Q QA Admin ADMIN Admin · 무제한 사용 " [ref=e19]
+    - generic
+      - StaticText "Q"
+    - StaticText "QA Admin"
+    - StaticText "ADMIN"
+    - StaticText "Admin · 무제한 사용"
+    - StaticText ""
+- banner
+  - link "" [ref=e2]
+    - StaticText ""
+  - StaticText "/"
+  - StaticText "대시보드"
+  - StaticText "/"
+  - StaticText "국내 시장"
+  - StaticText "/"
+  - StaticText "VCP 시그널"
+  - generic
+    - StaticText ""
+    - textbox "Search markets, tickers..." [ref=e20]
+    - StaticText "⌘K"
+  - button "설정 열기" [ref=e3]
+    - StaticText ""
+- main
+  - generic
+    - StaticText "VCP 패턴 스캐너"
+  - heading "VCP 시그널" [level=2, ref=e4]
+    - StaticText "VCP 시그널"
+  - paragraph
+    - StaticText "Volatility Contraction Pattern + 기관/외국인 수급"
+  - combobox "재분석 실행 모드 선택" [expanded=false, ref=e5]: 실패/누락만
+    - MenuListPopup
+      - option "실패/누락만" [selected, ref=e24]
+      - option "Gemini 강제" [ref=e25]
+      - option "Second 강제" [ref=e26]
+  - button " 실패 AI 재분석" [ref=e6]
+    - StaticText ""
+    - StaticText "실패 AI 재분석"
+  - button " Refresh VCP" [ref=e7]
+    - StaticText ""
+    - StaticText "Refresh VCP"
+  - heading "실시간 VCP 시그널" [level=3, ref=e8]
+    - StaticText "실시간 VCP 시그널"
+  - StaticText "TOP "
+  - StaticText "1"
+  - StaticText "(Scanned: "
+  - StaticText "1"
+  - StaticText ")"
+  - generic
+    - button " VCP 전체 10주 매수" [ref=e27]
+      - StaticText ""
+      - StaticText "VCP 전체 10주 매수"
+    - button " VCP 기준표" [ref=e21]
+      - StaticText ""
+      - StaticText "VCP 기준표"
+    - button "최신" [ref=e22]
+    - button " 과거" [ref=e28]
+      - StaticText ""
+      - StaticText "과거"
+  - table
+    - rowgroup
+      - row
+        - columnheader "STOCK" [ref=e52]
+        - columnheader "DATE" [ref=e53]
+        - columnheader "외국인 5D" [ref=e54]
+          - StaticText "외국인 5D"
+        - columnheader "기관 5D" [ref=e55]
+          - StaticText "기관 5D"
+        - columnheader "BUY" [ref=e56]
+          - StaticText "BUY"
+        - columnheader "SCORE" [ref=e57]
+          - StaticText "SCORE"
+        - columnheader "CONT." [ref=e58]
+          - StaticText "CONT."
+        - columnheader "ENTRY" [ref=e59]
+          - StaticText "ENTRY"
+        - columnheader "STOP" [ref=e60]
+          - StaticText "STOP"
+        - columnheader "TARGET" [ref=e61]
+          - StaticText "TARGET"
+        - columnheader "CURRENT" [ref=e62]
+          - StaticText "CURRENT"
+        - columnheader "RETURN" [ref=e63]
+          - StaticText "RETURN"
+        - columnheader "PERPLEXITY" [ref=e64]
+          - StaticText "PERPLEXITY"
+        - columnheader "GEMINI" [ref=e65]
+          - StaticText "GEMINI"
+    - row [ref=e29] clickable [cursor:pointer, onclick]
+      - cell "삼성전자 005930" [ref=e32]
+        - StaticText "삼성전자"
+        - StaticText "005930"
+      - cell "2026-09-09" [ref=e33]
+      - cell " 100" [ref=e34]
+        - StaticText ""
+        - StaticText "100"
+      - cell " 20" [ref=e35]
+        - StaticText ""
+        - StaticText "20"
+      - cell "" [ref=e36] clickable [cursor:pointer, onclick]
+        - button "" [ref=e78]
+          - StaticText ""
+      - cell "83" [ref=e37]
+      - cell "0.72" [ref=e38]
+      - cell "₩100,000" [ref=e39]
+        - StaticText "₩100,000"
+      - cell "₩97,000" [ref=e40]
+      - cell "₩105,000" [ref=e41]
+      - cell "₩71,000" [ref=e42]
+        - StaticText "₩71,000"
+      - cell "-29.0%" [ref=e43]
+      - cell "■ 관망" [ref=e44]
+        - generic
+          - StaticText "■ 관망"
+      - cell "▲ 매수" [ref=e45]
+        - generic
+          - StaticText "▲ 매수"
+  - generic
+    - StaticText "Last updated: 오후 04:30"
+  - generic [ref=e9] clickable [onclick]
+    - generic [ref=e23] clickable [onclick]
+      - heading "삼성전자 (005930)" [level=3, ref=e30]
+        - StaticText "삼성전자 (005930)"
+      - group "차트 조회 기간"
+        - button "1개월" [ref=e46]
+        - button "3개월" [ref=e47]
+        - button "6개월" [ref=e48]
+        - button "1년" [ref=e49]
+      - generic
+        - LayoutTable
+          - LayoutTableRow
+            - LayoutTableCell
+            - LayoutTableCell "Charting by TradingView"
+              - generic
+                - Canvas
+                - Canvas
+              - link "Charting by TradingView" [ref=e83]
+                - image
+            - LayoutTableCell
+              - generic
+                - Canvas
+                - Canvas
+          - LayoutTableRow
+            - LayoutTableCell
+            - LayoutTableCell
+              - generic
+                - Canvas
+                - Canvas
+            - LayoutTableCell
+        - StaticText "VCP 표시"
+        - StaticText ""
+        - StaticText "이동평균선 토글"
+        - StaticText ""
+        - button "3일선" [ref=e66]
+          - StaticText "3일선"
+        - button "5일선" [ref=e67]
+          - StaticText "5일선"
+        - button "10일선" [ref=e68]
+          - StaticText "10일선"
+        - button "20일선" [ref=e69]
+          - StaticText "20일선"
+        - button "60일선" [ref=e70]
+          - StaticText "60일선"
+        - button "120일선" [ref=e71]
+          - StaticText "120일선"
+      - generic
+        - StaticText "VCP 패턴"
+        - LabelText [ref=e50] clickable [cursor:pointer]
+          - checkbox "범위 표시" [checked=true, ref=e72]
+          - StaticText "범위 표시"
+        - StaticText "수축비율:"
+        - StaticText "0.72"
+        - StaticText "전반부:"
+        - StaticText "₩"
+        - StaticText "104,900"
+        - StaticText "후반부:"
+        - StaticText "₩"
+        - StaticText "101,000"
+      - StaticText "AI 상세 분석"
+      - button "차트 닫기" [ref=e31]
+      - generic
+        - generic
+          - button " GPT" [ref=e73]
+            - StaticText ""
+            - StaticText " GPT"
+          - button " Perplexity" [ref=e74]
+            - StaticText ""
+            - StaticText " Perplexity"
+          - button " Gemini" [ref=e75]
+            - StaticText ""
+            - StaticText " Gemini"
+        - generic
+          - image
+          - StaticText "77%"
+        - generic
+          - StaticText "\"최신 날짜 전용 Perplexity\""
+        - StaticText "종합 시그널 점수"
+        - StaticText "83.0"
+        - StaticText "VCP 패턴 보조 점수"
+        - StaticText "83.0"
+        - generic
+          - StaticText "수축비율 0.72 · 외국인 5일 순매수 100주 · 기관 5일 순매수 20주"
+        - StaticText ""
+        - StaticText "주요 뉴스"
+        - StaticText "관련 뉴스 없음"
+        - StaticText ""
+        - StaticText "AI 상담 (VCP 전문가)"
+        - button "" [ref=e51]
+          - StaticText ""
+        - StaticText ""
+        - generic
+          - button "" [ref=e79]
+            - StaticText ""
+          - paragraph
+            - StaticText "👋 안녕하세요! VCP 전문가 챗봇 입니다."
+          - paragraph
+            - StaticText "삼성전자 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요."
+          - paragraph
+            - StaticText "명령어 예시:"
+          - list
+            - listitem [level=1]
+              - ListMarker "• "
+              - code
+                - StaticText "/status"
+              - StaticText " - 현재 상태 확인"
+            - listitem [level=1]
+              - ListMarker "• "
+              - code
+                - StaticText "/help"
+              - StaticText " - 도움말"
+          - StaticText ""
+          - StaticText "추천 질문"
+          - button "이 종목 VCP 패턴 분석해줘" [ref=e80]
+          - button "수급(기관/외국인) 상황 어때?" [ref=e81]
+          - button "진입가와 손절가 추천해줘" [ref=e82]
+      - generic
+        - textbox "AI에게 질문하기... (/ 명령어)" [ref=e76]
+        - button "" [disabled, ref=e77]
+          - StaticText ""
+- button "AI 상담" [expanded=false, ref=e10]
+  - generic
+    - StaticText ""
+    - StaticText ""
+- alert

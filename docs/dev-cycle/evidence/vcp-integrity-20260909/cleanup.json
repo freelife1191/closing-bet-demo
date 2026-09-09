@@ -1,0 +1,17 @@
+{
+  "owned_pids": {
+    "backend": 97195,
+    "next": 99610
+  },
+  "all_exited": true,
+  "ports_free": [
+    57361,
+    57362
+  ],
+  "browser_sessions_closed": [
+    "qa",
+    "diagnostic"
+  ],
+  "scratch_deleted": "/tmp/closing-batch-20260909-qa",
+  "package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8"
+}

@@ -1,0 +1,18 @@
+{
+  "commit": "8101bf3",
+  "exit": 0,
+  "files": [
+    "tests/services/test_kr_market_vcp_payload_service_refactor.py",
+    "tests/services/test_kr_market_vcp_cache_update_service.py",
+    "tests/services/test_kr_market_vcp_service.py",
+    "tests/app/test_kr_market_data_signals_routes_refactor.py",
+    "tests/app/test_kr_market_vcp_signal_helpers_refactor.py",
+    "tests/engine/test_vcp_ai_orchestration_helpers_refactor.py",
+    "tests/engine/test_vcp_ai_analyzer_helpers_refactor.py",
+    "tests/engine/test_vcp_ai_analyzer_refactor.py",
+    "tests/engine/test_screener_result_builders_refactor.py",
+    "tests/engine/test_signal_tracker_ai_helpers_refactor.py",
+    "tests/scripts/test_init_data_vcp_scheduler.py"
+  ],
+  "output": "........................................................................ [ 38%]\n........................................................................ [ 76%]\n.............................................                            [100%]\n189 passed in 3.68s\n"
+}

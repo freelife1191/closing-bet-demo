@@ -1,0 +1,57 @@
+{
+  "normal": {
+    "status": "success",
+    "mode": "normal",
+    "signals": [
+      {
+        "ticker": "005930",
+        "signal_date": "2026-09-08",
+        "grade": "S"
+      }
+    ],
+    "stats": {
+      "phase1": {
+        "stats": {
+          "processed": 1
+        },
+        "drops": {}
+      },
+      "phase2": {
+        "stats": {
+          "processed": 1
+        },
+        "no_news": 0
+      },
+      "phase3": {
+        "processed": 1
+      },
+      "phase4": {
+        "stats": {
+          "processed": 1
+        },
+        "grades": {
+          "S": 1
+        }
+      }
+    },
+    "calls": [
+      {
+        "phase": "phase1",
+        "date": "2026-09-08"
+      }
+    ]
+  },
+  "internal_typeerror": {
+    "status": "error",
+    "mode": "typeerror",
+    "error_type": "TypeError",
+    "message": "phase1 internal synthetic error",
+    "calls": [
+      {
+        "phase": "phase1",
+        "date": "2026-09-08"
+      }
+    ],
+    "same_exception": true
+  }
+}
