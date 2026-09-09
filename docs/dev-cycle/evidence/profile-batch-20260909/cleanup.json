@@ -1,0 +1,24 @@
+{
+  "status": "complete",
+  "owned_roots": {
+    "backend": {
+      "pid": 59756,
+      "pgid": 59756,
+      "cwd": "/private/tmp/profile-ui-qa-vIs8KE"
+    },
+    "frontend": {
+      "pid": 59757,
+      "pgid": 59757,
+      "cwd": "/private/tmp/profile-ui-qa-vIs8KE/checkout/frontend"
+    }
+  },
+  "group_members_after": [],
+  "ports_free": [
+    57371,
+    57372
+  ],
+  "browser_closed": true,
+  "scratch_removed": true,
+  "user_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "harness_cleanup_issue": "SIGTERM sent successfully; os.killpg(pgid,0) returned PermissionError during exit check. Parent separately verified ps group membership empty and no listening ports before removing owned scratch. No additional kill needed."
+}

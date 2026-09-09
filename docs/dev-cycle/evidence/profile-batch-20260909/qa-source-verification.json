@@ -1,0 +1,15 @@
+{
+  "commit": "99ba5ef",
+  "matches": {
+    "frontend/src/app/chatbot/page.tsx": true,
+    "frontend/src/app/components/SettingsModal.tsx": true,
+    "frontend/src/app/components/Sidebar.session.test.tsx": true,
+    "frontend/src/app/components/Sidebar.tsx": true,
+    "frontend/src/app/components/chatHelpers.test.ts": true,
+    "frontend/src/app/components/chatHelpers.ts": true,
+    "frontend/src/app/chatbot/page.regression-chat-022.test.tsx": true,
+    "frontend/src/app/components/SettingsModal.profile.test.tsx": true
+  },
+  "frontend": 57371,
+  "backend": 57372
+}

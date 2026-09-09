@@ -1,0 +1,111 @@
+{
+  "commit": "99ba5ef",
+  "checks": {
+    "S-1": [
+      "anonymous-before.txt",
+      "User"
+    ],
+    "S-2": [
+      "auth-display.txt",
+      "일반 사용자"
+    ],
+    "S-3": [
+      "header-reopened.txt",
+      "리서치 분석가 🧪 — 검증 생략 문구도 데이터"
+    ],
+    "S-4": [
+      "sidebar-reopened.txt",
+      "리서치 분석가 🧪 — 검증 생략 문구도 데이터"
+    ],
+    "S-5": [
+      "known-reopened.txt",
+      "리서치"
+    ],
+    "S-6": [
+      "custom-prefix-completed.txt",
+      "리서치 분석가 🧪"
+    ]
+  },
+  "posts": [
+    {
+      "name": "프로필 검수자",
+      "persona": "리서치 분석가 🧪 — 검증 생략 문구도 데이터",
+      "synthetic": true
+    },
+    {
+      "name": "이름만 수정",
+      "persona": "리서치 분석가 🧪 — 검증 생략 문구도 데이터",
+      "synthetic": true
+    },
+    {
+      "name": "이름만 수정",
+      "persona": "리서치",
+      "synthetic": true
+    }
+  ],
+  "request_summary": [
+    {
+      "method": "GET",
+      "path": "/api/kr/chatbot/models",
+      "status": 200,
+      "count": 4
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/chatbot/sessions",
+      "status": 200,
+      "count": 4
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/user/quota",
+      "status": 200,
+      "count": 11
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/chatbot/profile",
+      "status": 200,
+      "count": 3
+    },
+    {
+      "method": "POST",
+      "path": "/api/system/log-event",
+      "status": 200,
+      "count": 2
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "status": 200,
+      "count": 19
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/jongga-v2/dates",
+      "status": 200,
+      "count": 4
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/jongga-v2/latest",
+      "status": 200,
+      "count": 4
+    }
+  ],
+  "page_errors": [],
+  "console_errors": [],
+  "next_get_errors": "configErrors[]/sessionErrors[]",
+  "compilation_tool": "unavailable in webpack; -32602 retained; Next compile logs and static build/type smoke passed",
+  "viewed_screenshots": [
+    "anonymous-settings.png",
+    "auth-editable.png",
+    "header-reopened.png",
+    "known-reopened.png",
+    "custom-visible.png"
+  ],
+  "viewport_note": "initial1280x577 custom input partially below footer; actual scrollable modal; repeated custom input view1280x900 fully visible",
+  "cleanup": "cleanup.json",
+  "baseline": "static-results.json",
+  "ui_only_backend": "synthetic HTTP; actual production storage/LLM not exercised"
+}
