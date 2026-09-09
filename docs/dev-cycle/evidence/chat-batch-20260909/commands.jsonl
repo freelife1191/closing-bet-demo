@@ -1,0 +1,86 @@
+{"label": "normal-state", "args": ["eval", "JSON.stringify({text:document.body.innerText,session:localStorage.getItem(\"chatbot_last_session_id\"),stop:!!document.querySelector(\"button[aria-label=\\\"답변 중단\\\"]\")})"], "exit": 0, "elapsed": 0.04975605010986328}
+{"label": "select-a", "args": ["click", "@e3"], "exit": 0, "elapsed": 0.07420730590820312}
+{"label": "wait-a", "args": ["wait", "--text", "A 고유 기록"], "exit": 0, "elapsed": 0.047942161560058594}
+{"label": "a-snapshot", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.055058956146240234}
+{"label": "long-fill", "args": ["fill", "@e22", "long 중단 검수"], "exit": 0, "elapsed": 0.06880474090576172}
+{"label": "long-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.06956315040588379}
+{"label": "first-chunk", "args": ["wait", "--text", "시작 long 중단 검수"], "exit": 1, "elapsed": 25.123460054397583}
+{"label": "pending-inspect", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05676603317260742}
+{"label": "streaming-text", "args": ["eval", "document.body.innerText"], "exit": 0, "elapsed": 0.049822092056274414}
+{"label": "after-timeout", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05523109436035156}
+{"label": "runtime-errors", "args": ["errors"], "exit": 0, "elapsed": 0.04592585563659668}
+{"label": "stop-first", "args": ["click", "@e28"], "exit": 1, "elapsed": 0.05396676063537598}
+{"label": "current-body", "args": ["eval", "document.body.innerText"], "exit": 0, "elapsed": 0.05049395561218262}
+{"label": "current-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.057768821716308594}
+{"label": "iteration1-close", "args": ["close"], "exit": 0, "elapsed": 0.2332918643951416}
+{"label": "iteration2-open", "args": ["open", "http://127.0.0.1:57401/chatbot"], "exit": 0, "elapsed": 4.98197603225708}
+{"label": "reload2", "args": ["reload"], "exit": 0, "elapsed": 0.6801061630249023}
+{"label": "viewport2", "args": ["set", "viewport", "1280", "900"], "exit": 0, "elapsed": 0.06461977958679199}
+{"label": "initial2", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.06130504608154297}
+{"label": "long2-fill", "args": ["fill", "@e31", "long 신규 중단"], "exit": 0, "elapsed": 0.07322192192077637}
+{"label": "long2-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.08537793159484863}
+{"label": "long2-chunk", "args": ["wait", "--text", "시작 long 신규 중단"], "exit": 0, "elapsed": 0.05041384696960449}
+{"label": "long2-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05454897880554199}
+{"label": "duplicate-fill", "args": ["fill", "@e23", "차단되어야 할 두번째"], "exit": 0, "elapsed": 0.0676119327545166}
+{"label": "duplicate-enter", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.04951190948486328}
+{"label": "duplicate-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.054879188537597656}
+{"label": "stop2", "args": ["click", "@e26"], "exit": 0, "elapsed": 0.08452010154724121}
+{"label": "stopped2", "args": ["wait", "--text", "답변 생성이 중단되었습니다."], "exit": 0, "elapsed": 0.049941062927246094}
+{"label": "stopped2-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05706596374511719}
+{"label": "stopped2-state", "args": ["eval", "JSON.stringify({text:document.body.innerText,stop:!!document.querySelector(\"button[aria-label=\\\"답변 중단\\\"]\"),session:localStorage.getItem(\"chatbot_last_session_id\")})"], "exit": 0, "elapsed": 0.04879117012023926}
+{"label": "stopped2-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/stopped2.png"], "exit": 0, "elapsed": 0.08669185638427734}
+{"label": "a2-click", "args": ["click", "@e3"], "exit": 0, "elapsed": 0.07278704643249512}
+{"label": "a2-wait", "args": ["wait", "--text", "A 고유 기록"], "exit": 0, "elapsed": 0.0495760440826416}
+{"label": "a2-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.054251909255981445}
+{"label": "switch-fill", "args": ["fill", "@e22", "long 세션 A"], "exit": 0, "elapsed": 0.07348203659057617}
+{"label": "switch-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.0752558708190918}
+{"label": "switch-chunk", "args": ["wait", "--text", "시작 long 세션 A"], "exit": 0, "elapsed": 0.049849748611450195}
+{"label": "switch-before", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05455183982849121}
+{"label": "switch-b", "args": ["click", "@e5"], "exit": 0, "elapsed": 0.08464384078979492}
+{"label": "switch-b-ready", "args": ["wait", "--text", "B 고유 기록"], "exit": 0, "elapsed": 0.05146336555480957}
+{"label": "switch-after", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05276799201965332}
+{"label": "b-fill", "args": ["fill", "@e22", "normal B 재전송"], "exit": 0, "elapsed": 0.07018589973449707}
+{"label": "b-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.07079577445983887}
+{"label": "b-normal", "args": ["wait", "--text", "합성 JSON 답변 normal B 재전송"], "exit": 0, "elapsed": 0.04821014404296875}
+{"label": "b-state", "args": ["eval", "JSON.stringify({text:document.body.innerText,session:localStorage.getItem(\"chatbot_last_session_id\"),stop:!!document.querySelector(\"button[aria-label=\\\"답변 중단\\\"]\")})"], "exit": 0, "elapsed": 0.04912996292114258}
+{"label": "b-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/session-b.png"], "exit": 0, "elapsed": 0.0781252384185791}
+{"label": "b-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.056304931640625}
+{"label": "parser-fill", "args": ["fill", "@e26", "parser 제목 검수"], "exit": 0, "elapsed": 0.06746697425842285}
+{"label": "parser-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.07098913192749023}
+{"label": "parser-title", "args": ["wait", "--text", "1. 시장 환경 및 섹터 강도"], "exit": 0, "elapsed": 0.048246145248413086}
+{"label": "parser-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05565595626831055}
+{"label": "reasoning-open", "args": ["click", "@e29"], "exit": 0, "elapsed": 0.05797290802001953}
+{"label": "parser-state", "args": ["eval", "JSON.stringify({headings:[...document.querySelectorAll(\"h3\")].map(x=>x.textContent),suggestions:[...document.querySelectorAll(\"button\")].filter(x=>/^[123]🧪/.test(x.textContent||\"\")).map(x=>({length:Array.from(x.textContent||\"\").length,last:(x.textContent||\"\").slice(-2)})),text:document.body.innerText})"], "exit": 0, "elapsed": 0.05030512809753418}
+{"label": "parser-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/parser.png"], "exit": 0, "elapsed": 0.11360406875610352}
+{"label": "mobile-viewport", "args": ["set", "viewport", "375", "812"], "exit": 0, "elapsed": 0.06911706924438477}
+{"label": "mobile-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.06250405311584473}
+{"label": "mobile-fill", "args": ["fill", "@e31", "long 모바일"], "exit": 0, "elapsed": 0.07024407386779785}
+{"label": "mobile-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.07917022705078125}
+{"label": "mobile-chunk", "args": ["wait", "--text", "시작 long 모바일"], "exit": 0, "elapsed": 0.048577070236206055}
+{"label": "mobile-stop-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05500316619873047}
+{"label": "mobile-stop-rect", "args": ["eval", "JSON.stringify(document.querySelector(\"button[aria-label=\\\"답변 중단\\\"]\").getBoundingClientRect().toJSON())"], "exit": 0, "elapsed": 0.04970383644104004}
+{"label": "mobile-stop", "args": ["click", "@e37"], "exit": 0, "elapsed": 0.0905141830444336}
+{"label": "mobile-stopped", "args": ["wait", "--text", "답변 생성이 중단되었습니다."], "exit": 0, "elapsed": 0.048911094665527344}
+{"label": "mobile-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/mobile-stopped.png"], "exit": 0, "elapsed": 0.08575892448425293}
+{"label": "desktop-return", "args": ["set", "viewport", "1280", "900"], "exit": 0, "elapsed": 0.06271100044250488}
+{"label": "profile-before", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05793571472167969}
+{"label": "sidebar-user", "args": ["click", "@e16"], "exit": 0, "elapsed": 0.06412291526794434}
+{"label": "sidebar-menu", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.06010913848876953}
+{"label": "sidebar-settings", "args": ["click", "@e41"], "exit": 0, "elapsed": 0.06669998168945312}
+{"label": "settings-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.062216997146606445}
+{"label": "profile-name", "args": ["fill", "@e47", "헤더 합성 검수"], "exit": 0, "elapsed": 0.05674004554748535}
+{"label": "profile-save", "args": ["click", "@e21"], "exit": 0, "elapsed": 0.06634807586669922}
+{"label": "profile-saved", "args": ["wait", "--text", "설정이 성공적으로 저장되었습니다."], "exit": 0, "elapsed": 0.08651018142700195}
+{"label": "profile-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/profile-saved.png"], "exit": 0, "elapsed": 0.10459208488464355}
+{"label": "profile-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.06145000457763672}
+{"label": "widget-home", "args": ["open", "http://127.0.0.1:57401/"], "exit": 0, "elapsed": 1.908012866973877}
+{"label": "widget-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.06721091270446777}
+{"label": "widget-open", "args": ["click", "@e5"], "exit": 0, "elapsed": 0.06994509696960449}
+{"label": "widget-open-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.06333613395690918}
+{"label": "widget-fill", "args": ["fill", "@e24", "normal 위젯 검수"], "exit": 0, "elapsed": 0.053672075271606445}
+{"label": "widget-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.05512595176696777}
+{"label": "widget-answer", "args": ["wait", "--text", "합성 JSON 답변 normal 위젯 검수"], "exit": 0, "elapsed": 0.050885915756225586}
+{"label": "widget-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/widget.png"], "exit": 0, "elapsed": 0.1440448760986328}
+{"label": "errors2", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.048126935958862305}
+{"label": "console2", "args": ["--json", "console"], "exit": 0, "elapsed": 0.04929518699645996}
+{"label": "iteration2-close", "args": ["close"], "exit": 0, "elapsed": 0.1772139072418213}

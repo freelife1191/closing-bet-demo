@@ -1,0 +1,7 @@
+{
+  "base": "212c7194dc2d18cf6f4c315bf629c7ba0fd8a296",
+  "files": {
+    "frontend/src/app/components/ThinkingProcess.tsx": "49a25550e5e11149b5643c91f1f8b357ceddbdbb3bb14242709e72af917d008c",
+    "frontend/src/app/chatbot/ChatMessage.regression-chat-015.test.tsx": "2b1ee68e4fa2d35d1a24bbd2f2ed04c55153c6144e7d51aa30131280f5776106"
+  }
+}

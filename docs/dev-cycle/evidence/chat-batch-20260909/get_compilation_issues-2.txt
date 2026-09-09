@@ -1,0 +1,2 @@
+event: message
+data: {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"MCP error -32602: Tool get_compilation_issues not found"}}

@@ -6,16 +6,18 @@
   },
   "vitest": {
     "exit": 0,
-    "passed": 460,
+    "passed": 462,
     "files": 67
   },
   "typecheck": {
-    "exit": 0
+    "exit": 0,
+    "evidence": "chat015-reasoning-typecheck.txt.gz"
   },
   "lint": {
     "exit": 0,
     "errors": 0,
     "warnings": 198
   },
-  "source_hashes_match": true
+  "source_hashes_match": true,
+  "final_source_fix": "ThinkingProcess heading + dense order"
 }

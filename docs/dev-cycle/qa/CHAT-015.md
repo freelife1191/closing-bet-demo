@@ -4,10 +4,10 @@
 
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: planning
-- iteration: 1
+- phase: adversarial-e2e
+- iteration: 3
 - same_failure_count: 0
-- baseline: pytest 2281 통과·2 skip / vitest 460 통과 / typecheck exit0 / lint 0 errors·198 warnings
+- baseline: pytest 2281 통과·2 skip / vitest 462 통과 / typecheck exit0 / lint 0 errors·198 warnings
 - browser_applicability: required
 - browser_driver: agent-browser
 - namespace: chat-batch-20260909 / session: qa
@@ -48,3 +48,7 @@
 - 결과: 미실행
 - 증거: ../evidence/chat-batch-20260909/
 - cleanup: 미실행
+
+## 실행 이력
+- iteration1: fixture의 no-transform 누락으로 SSE 첫청크대기 실패. 제품변경 없이실제header계약 적용.
+- iteration2 S-1 실패: parser-state.txt의 headings=[빈문자열,본문제목]. ThinkingProcess의재변환을확인하고 실제컴포넌트회귀추가. 최종S-1재실행전완료불가.

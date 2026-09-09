@@ -1,0 +1,26 @@
+{
+  "same_header_digest": true,
+  "records": [
+    {
+      "method": "POST",
+      "path": "/api/kr/chatbot/profile",
+      "status": 200,
+      "x_session_id": "354f16a170aa390dd25c3af4c8e86dc334c2fa1a54592c2b63b6b5997d51b249"
+    },
+    {
+      "method": "POST",
+      "path": "/api/system/log-event",
+      "status": 200,
+      "x_session_id": "354f16a170aa390dd25c3af4c8e86dc334c2fa1a54592c2b63b6b5997d51b249"
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/chatbot",
+      "status": 200,
+      "message": "normal 위젯 검수",
+      "session_id": "batch-new",
+      "x_session_id": "354f16a170aa390dd25c3af4c8e86dc334c2fa1a54592c2b63b6b5997d51b249"
+    }
+  ],
+  "duplicate_send_absent": true
+}

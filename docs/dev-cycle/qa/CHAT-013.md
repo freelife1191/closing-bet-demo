@@ -4,10 +4,10 @@
 
 - engine: ultraqa
 - lifecycle: app-adapted
-- phase: planning
-- iteration: 1
+- phase: adversarial-e2e
+- iteration: 3
 - same_failure_count: 0
-- baseline: pytest 2281 통과·2 skip / vitest 460 통과 / typecheck exit0 / lint 0 errors·198 warnings
+- baseline: pytest 2281 통과·2 skip / vitest 462 통과 / typecheck exit0 / lint 0 errors·198 warnings
 - browser_applicability: required
 - browser_driver: agent-browser
 - namespace: chat-batch-20260909 / session: qa

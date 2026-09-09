@@ -13,15 +13,21 @@ interface ThinkingProcessProps {
 const normalizeOrderedListMarkdown = (text: string): string => {
   if (!text) return text;
 
-  let normalized = text.replace(/\r\n/g, '\n');
+  const normalized = text.replace(/\r\n/g, '\n');
+  const denseSeparated = normalized
+    .split('\n')
+    .map(line => {
+      // `### 2. 제목`의 공백은 dense numbering이 아니라 markdown heading 문법이다.
+      // 이 줄까지 전역 치환하면 빈 h3와 ordered list로 갈라진다.
+      if (/^\s*#{1,6}\s+/.test(line)) return line;
+      return line.replace(
+        /(?<=\S)\s+(?=(?:\*\*|__)?\d+[.)](?:\s|(?=\*\*|__|[가-힣A-Za-z(])))/g,
+        '\n'
+      );
+    })
+    .join('\n');
 
-  // Break dense inline numbering into line-based list items.
-  normalized = normalized.replace(
-    /(?<=\S)\s+(?=(?:\*\*|__)?\d+[.)](?:\s|(?=\*\*|__|[가-힣A-Za-z(])))/g,
-    '\n'
-  );
-
-  const lines = normalized.split('\n');
+  const lines = denseSeparated.split('\n');
   const output: string[] = [];
 
   for (const line of lines) {

@@ -13,3 +13,5 @@
 
 - 독립 리뷰: ponytail APPROVE → code-review lane APPROVE + architect lane CLEAR. 두 읽기전용 child에 설치된 역할 prompt를 적용한 대체 호출이며 전용역할 호출 성공으로 주장하지 않는다. 각 원문과 입력hash 보존.
 - 발견 및 보완: queued React setter가 finally 이후 sending=false를 보면 정상 JSON/종료 SSE도 버렸다. RED2건 확인 후 request token과 전송 lock을 분리, 최종 full vitest460 통과.
+
+- QA내 추가 범위: ThinkingProcess.tsx 및 실제 ChatMessage 통합회귀. CHAT015의 원래 필수 추론제목 보존을 완성하기 위한 기존호출부 보완. production추가18줄로T2유지. 중간ponytail판정은 이후dense목록회귀발견으로최종승인에재사용하지 않는다.
