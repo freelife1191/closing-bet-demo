@@ -49,7 +49,8 @@ npm run dev                     # Port 3500
 npm run build                   # Production build
 npm run lint                    # ESLint
 npm run type-check              # TypeScript check (tsc --noEmit)
-npm run test                    # Vitest tests
+npm run test                    # Vitest tests (run once and exit)
+npm run test:watch              # Vitest watch mode
 npm run test:coverage           # Coverage report
 ```
 

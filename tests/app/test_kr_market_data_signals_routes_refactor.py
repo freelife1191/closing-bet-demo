@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import time
+import threading
 from typing import Any
 
 import pandas as pd
@@ -369,17 +369,28 @@ def test_signals_route_count_callback_allows_legacy_noarg_callback():
 
 def test_reanalyze_failed_ai_background_supports_stop_request():
     deps = _build_deps(fetch_realtime_prices_fn=lambda **_kwargs: {})
-    status_state = deps["vcp_status"]
+    reanalysis_started = threading.Event()
+    allow_reanalysis_to_finish = threading.Event()
+    reanalysis_finished = threading.Event()
+
+    class _ReanalysisStatus(dict):
+        def update(self, *args, **kwargs):
+            super().update(*args, **kwargs)
+            if self.get("running") is False and self.get("task_type") is None:
+                reanalysis_finished.set()
+
+    status_state = _ReanalysisStatus(deps["vcp_status"])
+    deps["vcp_status"] = status_state
 
     def _execute(**kwargs):
         should_stop = kwargs.get("should_stop")
         on_progress = kwargs.get("on_progress")
-        for idx in range(5):
-            if callable(on_progress):
-                on_progress(idx + 1, 5, f"{idx + 1:06d}")
-            if callable(should_stop) and should_stop():
-                return 200, {"status": "cancelled", "message": "사용자 중지"}
-            time.sleep(0.01)
+        reanalysis_started.set()
+        # 중지 요청을 관찰하기 전까지 백그라운드 작업을 멈춘다. 시간 대기는 CI 부하에
+        # 따라 stop 요청보다 먼저 끝날 수 있어 중지 경로를 보장하지 못한다.
+        allow_reanalysis_to_finish.wait()
+        if callable(should_stop) and should_stop():
+            return 200, {"status": "cancelled", "message": "사용자 중지"}
         return 200, {"status": "success", "message": "완료"}
 
     deps["execute_vcp_failed_ai_reanalysis"] = _execute
@@ -396,26 +407,30 @@ def test_reanalyze_failed_ai_background_supports_stop_request():
     app.register_blueprint(bp, url_prefix="/api/kr")
     client = app.test_client()
 
-    start_response = client.post(
-        "/api/kr/signals/reanalyze-failed-ai",
-        json={"background": True, "target_date": "2026-02-21"},
-    )
-    assert start_response.status_code == 202
-    assert status_state["running"] is True
-    assert status_state["task_type"] == "reanalysis_failed_ai"
+    try:
+        start_response = client.post(
+            "/api/kr/signals/reanalyze-failed-ai",
+            json={"background": True, "target_date": "2026-02-21"},
+        )
+        assert start_response.status_code == 202
+        assert reanalysis_started.wait(timeout=1.0)
+        assert status_state["running"] is True
+        assert status_state["task_type"] == "reanalysis_failed_ai"
 
-    stop_response = client.post("/api/kr/signals/reanalyze-failed-ai/stop", json={})
-    assert stop_response.status_code == 202
-    assert status_state["cancel_requested"] is True
+        stop_response = client.post("/api/kr/signals/reanalyze-failed-ai/stop", json={})
+        assert stop_response.status_code == 202
+        assert status_state["cancel_requested"] is True
 
-    deadline = time.time() + 1.0
-    while status_state.get("running") and time.time() < deadline:
-        time.sleep(0.01)
-
-    assert status_state["running"] is False
-    assert status_state["task_type"] is None
-    assert status_state["cancel_requested"] is False
-    assert status_state["status"] in {"cancelled", "success"}
+        allow_reanalysis_to_finish.set()
+        assert reanalysis_finished.wait(timeout=1.0)
+        assert status_state["running"] is False
+        assert status_state["task_type"] is None
+        assert status_state["cancel_requested"] is False
+        assert status_state["status"] == "cancelled"
+    finally:
+        # 앞선 단언이 실패해도 daemon 스레드가 다음 테스트까지 남지 않게 한다.
+        allow_reanalysis_to_finish.set()
+        assert reanalysis_finished.wait(timeout=1.0)
 
 
 def test_reanalyze_failed_ai_stop_returns_conflict_when_not_running():

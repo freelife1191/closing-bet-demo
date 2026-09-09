@@ -72,7 +72,7 @@ Z.ai 계열 모델을 함께 쓴다.
 
 ```bash
 source venv/bin/activate && pytest       # 저장소 루트에서 실행한다
-(cd frontend && npx vitest run)          # npm run test 는 watch 모드라 끝나지 않는다
+(cd frontend && npx vitest run)          # npm test도 종료형 실행이며, 감시는 npm run test:watch
 (cd frontend && npm run type-check)      # tsc --noEmit
 ```
 

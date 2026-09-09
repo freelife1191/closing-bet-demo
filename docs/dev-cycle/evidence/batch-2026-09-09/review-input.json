@@ -1,0 +1,10 @@
+{
+  "base": "1ce5cded341e003e0d0570b174e37230cb513f5a",
+  "files": {
+    "engine/phases_pipeline.py": "fe0bffab33960efe57109d5a23861debbfdea4ec23501f0a0fae29a2d8a4d05c",
+    "tests/engine/test_phases_pipeline_refactor.py": "8177020fba5fc978432e1e92163e77795e8ac861d9712b89924a095e5cfcdf70",
+    "frontend/package.json": "020c78426e1632577db9a2b69a4d7b221780b415da6d9af34c261ba15dcdf4d7",
+    "tests/app/test_kr_market_data_signals_routes_refactor.py": "e0e6cce27744c0a965a8d8b8095b7dd2564cb3ebb663bd243556f1de8f574da6",
+    "frontend/src/app/chatbot/page.regression-chat-004.test.tsx": "9c43821e1b6083190416434cc2c6a6eb8de48f5c35a362343e256942683d20e3"
+  }
+}

@@ -48,10 +48,7 @@ class SignalGenerationPipeline:
 
         logger.info("=" * 60)
         logger.info("[Pipeline] Phase 1: Base Analysis & Pre-Screening")
-        try:
-            phase1_results = await self.phase1.execute(candidates, target_date=target_date)
-        except TypeError:
-            phase1_results = await self.phase1.execute(candidates)
+        phase1_results = await self.phase1.execute(candidates, target_date=target_date)
 
         if not phase1_results:
             raise NoCandidatesError("All", "No candidates passed Phase 1")

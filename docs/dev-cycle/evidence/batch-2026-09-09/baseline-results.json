@@ -1,0 +1,35 @@
+[
+  {
+    "name": "baseline-pytest",
+    "command": [
+      "venv/bin/python",
+      "-m",
+      "pytest",
+      "-q"
+    ],
+    "cwd": ".",
+    "exit": 0,
+    "seconds": 36.33
+  },
+  {
+    "name": "baseline-vitest",
+    "command": [
+      "npm",
+      "test"
+    ],
+    "cwd": "frontend",
+    "exit": 0,
+    "seconds": 19.2
+  },
+  {
+    "name": "typecheck",
+    "command": [
+      "npm",
+      "run",
+      "type-check"
+    ],
+    "cwd": "frontend",
+    "exit": 0,
+    "seconds": 1.09
+  }
+]

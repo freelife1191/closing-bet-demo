@@ -175,3 +175,21 @@ def test_pipeline_stats_keeps_the_key_paths_callers_read():
     assert stats["phase1"]["drops"] == {"low_trading_value": 1, "no_news": 0}
     assert stats["phase2"]["no_news"] == 1
     assert stats["phase4"]["grades"] == {"S": 0, "A": 1}
+
+
+async def test_phase1_internal_type_error_is_not_retried():
+    calls = []
+    error = TypeError("phase1 internal error")
+
+    class _Phase1InternalTypeErrorStub:
+        async def execute(self, candidates, target_date=None):
+            calls.append(("phase1", candidates, target_date))
+            raise error
+
+    pipeline = _build_pipeline(calls)
+    pipeline.phase1 = _Phase1InternalTypeErrorStub()
+    with pytest.raises(TypeError) as caught:
+        await pipeline.execute(CANDIDATES, target_date=TARGET_DATE)
+
+    assert caught.value is error
+    assert calls == [("phase1", CANDIDATES, TARGET_DATE)]

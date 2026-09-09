@@ -59,24 +59,38 @@ const STREAM_CHUNKS = [
   { session_id: SESSION_ID, done: true },
 ];
 
-function sseResponse(chunks: Record<string, unknown>[]) {
+function controlledSseResponse(chunks: Record<string, unknown>[]) {
   const encoder = new TextEncoder();
   let index = 0;
+  const pendingReads: Array<(result: { value: Uint8Array | undefined; done: boolean }) => void> = [];
+
   return {
-    headers: {
-      get: (name: string) => (name.toLowerCase() === 'content-type' ? 'text/event-stream' : null),
+    response: {
+      headers: {
+        get: (name: string) => (name.toLowerCase() === 'content-type' ? 'text/event-stream' : null),
+      },
+      body: {
+        getReader: () => ({
+          read: () => new Promise(resolve => pendingReads.push(resolve)),
+        }),
+      },
     },
-    body: {
-      getReader: () => ({
-        read: async () => {
-          // 실제 스트림처럼 청크 사이에서 태스크를 넘긴다. 그래야 React 가 청크마다
-          // 렌더를 커밋한다.
-          await new Promise(resolve => setTimeout(resolve, 0));
-          if (index >= chunks.length) return { value: undefined, done: true };
-          const payload = encoder.encode(`data: ${JSON.stringify(chunks[index++])}\n\n`);
-          return { value: payload, done: false };
-        },
-      }),
+    async deliverNextChunk() {
+      await waitFor(() => expect(pendingReads.length).toBeGreaterThan(0));
+      const resolve = pendingReads.shift();
+      if (!resolve) throw new Error('SSE 리더가 청크를 기다리고 있지 않습니다.');
+      const payload = encoder.encode(`data: ${JSON.stringify(chunks[index++])}\n\n`);
+      await act(async () => {
+        resolve({ value: payload, done: false });
+      });
+    },
+    async close() {
+      await waitFor(() => expect(pendingReads.length).toBeGreaterThan(0));
+      const resolve = pendingReads.shift();
+      if (!resolve) throw new Error('SSE 리더가 종료 신호를 기다리고 있지 않습니다.');
+      await act(async () => {
+        resolve({ value: undefined, done: true });
+      });
     },
   };
 }
@@ -88,10 +102,11 @@ describe('ChatbotPage - 스트리밍 중 앞선 메시지의 재렌더', () => {
     localStorage.clear();
     localStorage.setItem('chatbot_last_session_id', SESSION_ID);
     markdownRenderCounts.clear();
-    global.fetch = vi.fn(async () => sseResponse(STREAM_CHUNKS)) as unknown as typeof fetch;
   });
 
   it('청크가 도착해도 앞선 메시지를 다시 그리지 않는다', async () => {
+    const stream = controlledSseResponse(STREAM_CHUNKS);
+    global.fetch = vi.fn(async () => stream.response) as unknown as typeof fetch;
     render(<ChatbotPage />);
     await screen.findByText(HISTORY_TEXT);
 
@@ -102,10 +117,11 @@ describe('ChatbotPage - 스트리밍 중 앞선 메시지의 재렌더', () => {
     fireEvent.change(textarea, { target: { value: '안녕' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
+    for (let chunkIndex = 0; chunkIndex < STREAM_CHUNKS.length; chunkIndex += 1) {
+      await stream.deliverNextChunk();
+    }
+    await stream.close();
     await screen.findByText('가나다라마');
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 10));
-    });
 
     // 델타가 다섯 개 흐르는 동안 지난 답변이 다시 파싱되면 이 값이 그만큼 늘어난다.
     // 사용자 메시지가 붙을 때 한 번은 늘 수 있으므로 두 번까지만 허용한다.
@@ -114,6 +130,8 @@ describe('ChatbotPage - 스트리밍 중 앞선 메시지의 재렌더', () => {
   });
 
   it('스트리밍 중인 메시지 자체는 청크마다 갱신된다', async () => {
+    const stream = controlledSseResponse(STREAM_CHUNKS);
+    global.fetch = vi.fn(async () => stream.response) as unknown as typeof fetch;
     render(<ChatbotPage />);
     await screen.findByText(HISTORY_TEXT);
 
@@ -121,11 +139,20 @@ describe('ChatbotPage - 스트리밍 중 앞선 메시지의 재렌더', () => {
     fireEvent.change(textarea, { target: { value: '안녕' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
-    await waitFor(() => expect(screen.getByText('가나다라마')).toBeTruthy());
+    await stream.deliverNextChunk();
+    await screen.findByText('가');
+    await stream.deliverNextChunk();
+    await screen.findByText('가나');
 
     // 중간 상태가 실제로 화면에 그려졌는지 본다. memo 가 너무 세게 걸려 스트리밍
     // 메시지까지 멈추면 이 값들이 남지 않는다.
     expect(markdownRenderCounts.has('가나')).toBe(true);
+
+    for (let chunkIndex = 2; chunkIndex < STREAM_CHUNKS.length; chunkIndex += 1) {
+      await stream.deliverNextChunk();
+    }
+    await stream.close();
+    await screen.findByText('가나다라마');
     expect(markdownRenderCounts.has('가나다라마')).toBe(true);
   });
 });

@@ -23,7 +23,7 @@ dev-cycle 의 리뷰와 검증 강도를 정하는 규칙이다. 판정은 계�
 알아내면 그만큼 시간이 든다.
 
     source venv/bin/activate && pytest      # 파이썬. 저장소 루트에서 실행한다
-    cd frontend && npx vitest run           # `npm run test` 는 watch 모드라 끝나지 않는다
+    cd frontend && npx vitest run           # `npm test`도 종료형 실행이며 감시는 `npm run test:watch`
     cd frontend && npm run type-check       # tsc --noEmit
 
 `tsc` 는 표의 검증 열에 적혀 있지 않지만 `frontend/` 를 건드리는 항목에서는 함께 돌린다.
