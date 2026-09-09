@@ -28,25 +28,31 @@ def send(stage,text,expected):
   if usage==expected: break
   assert time.monotonic()<deadline,current
   time.sleep(.1)
- after=ab(stage+'-after','snapshot')
+ deadline=time.monotonic()+6
+ while True:
+  after=ab(stage+'-after','snapshot')
+  counter=re.search(r'무료 사용량"\s*\n\s*- StaticText "([0-9]+)"',after)
+  if counter and int(counter.group(1))==10-expected:break
+  assert time.monotonic()<deadline,('visible quota mismatch',expected,after)
+  time.sleep(.15)
  (p/(stage+'-state.json')).write_text(json.dumps(current,ensure_ascii=False,indent=2)+'\n')
  return after,current
 
 mode=sys.argv[1]
 if mode=='normal':
  for i,text in enumerate(['/status','/help','/status','/clear']):
-  after,current=send('v2-command'+str(i),text,0)
+  after,current=send('v3-command'+str(i),text,0)
   assert current['model_calls']==0
- after,current=send('v2-q1','첫 일반 질문 검수',1)
+ after,current=send('v3-q1','첫 일반 질문 검수',1)
  assert current['sessions'][0]['title']=='첫 일반 질문 검수'
- after,current=send('v2-q2','두 번째 일반 질문 검수',2)
+ after,current=send('v3-q2','두 번째 일반 질문 검수',2)
  assert current['sessions'][0]['title']=='첫 일반 질문 검수'
 elif mode=='exhaust':
  for count in range(3,11):
-  send('v2-q'+str(count),'한도 검수 질문 '+str(count),count)
- after,current=send('v2-exhaust-status','/status',10)
+  send('v3-q'+str(count),'한도 검수 질문 '+str(count),count)
+ after,current=send('v3-exhaust-status','/status',10)
  assert current['model_calls']==10
- after,current=send('v2-denied','한도 초과 질문',10)
+ after,current=send('v3-denied','한도 초과 질문',10)
  assert current['model_calls']==10
  assert '초과' in after,after
 else: raise RuntimeError(mode)

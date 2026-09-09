@@ -1,0 +1,12 @@
+{
+  "model_calls": 8,
+  "sessions": [
+    {
+      "id": "a72e3bfd-7a7d-410f-89fb-c52bb8076efb",
+      "title": "첫 일반 질문 검수"
+    }
+  ],
+  "usage": {
+    "anon_8ee05b28-6c56-46ab-94ff-bd91f8d981a4": 8
+  }
+}

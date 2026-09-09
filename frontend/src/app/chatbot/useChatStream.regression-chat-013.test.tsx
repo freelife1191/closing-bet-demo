@@ -157,3 +157,21 @@ describe('[CHAT-013] useChatStream ownership', () => {
     expect(result.current.isLoading).toBe(false);
   });
 });
+
+
+it('사용량 갱신은 done 이벤트가 아닌 SSE 종료 뒤 한 번 알린다', async () => {
+  const sse = controlledSse();
+  vi.stubGlobal('fetch', vi.fn(async () => sse.response));
+  const quotaUpdated = vi.fn();
+  window.addEventListener('quota-updated', quotaUpdated);
+  try {
+    const { result } = renderStream('session-a');
+    await act(async () => { void result.current.handleSend('질문'); });
+    await sse.deliver({ session_id: 'session-a', done: true });
+    expect(quotaUpdated).not.toHaveBeenCalled();
+    await sse.close();
+    expect(quotaUpdated).toHaveBeenCalledOnce();
+  } finally {
+    window.removeEventListener('quota-updated', quotaUpdated);
+  }
+});

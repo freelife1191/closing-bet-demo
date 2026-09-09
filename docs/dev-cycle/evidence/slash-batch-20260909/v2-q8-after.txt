@@ -1,0 +1,263 @@
+- complementary
+  - link "M 스마트 머니 봇" [ref=e2]
+    - StaticText "M"
+    - StaticText "스마트 머니 봇"
+  - navigation
+    - StaticText "DASHBOARD"
+    - button "KR Market" [ref=e5]
+      - StaticText "KR Market"
+    - link "● Overview" [ref=e6]
+    - link "● VCP 시그널" [ref=e7]
+    - link "● 종가베팅" [ref=e8]
+    - link "● 누적 성과" [ref=e9]
+    - link "● AI 상담" [ref=e10]
+    - button "모의투자" [ref=e11]
+      - StaticText "모의투자"
+    - link "데이터 상태" [ref=e12]
+      - StaticText "데이터 상태"
+  - generic
+    - StaticText "무료 사용량"
+    - StaticText "10"
+    - StaticText "회 남음"
+    - button "+" [ref=e13]
+    - button "U User Free Tier Plan" [ref=e14]
+      - StaticText "U"
+      - StaticText "User"
+      - StaticText "Free Tier Plan"
+- button "새 채팅" [ref=e1]
+  - StaticText "새 채팅"
+- StaticText "최근 대화"
+- generic
+  - button "첫 일반 질문 검수" [ref=e3]
+    - StaticText "첫 일반 질문 검수"
+  - button "첫 일반 질문 검수 삭제" [ref=e4]
+- generic
+  - generic
+    - button "스마트머니봇" [expanded=false, ref=e15]
+      - StaticText "스마트머니봇"
+    - button "프로필 설정 열기" [ref=e16]
+      - StaticText "US"
+  - main
+    - StaticText "2026. 09. 09. 오후 10:43:35"
+    - button "이 질문과 답변 함께 삭제" [ref=e17]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e18]
+    - paragraph
+      - StaticText "/status"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e19]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e20]
+    - paragraph
+      - StaticText "📊 "
+      - strong
+        - StaticText "현재 상태"
+    - list
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "사용자: qa_fixture"
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "모델: gemini-3.7-flash"
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "메모리 개수: 0"
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "세션 개수: 0"
+    - StaticText "2026. 09. 09. 오후 10:43:36"
+    - button "이 질문과 답변 함께 삭제" [ref=e21]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e22]
+    - paragraph
+      - StaticText "/help"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e23]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e24]
+    - paragraph
+      - StaticText "🤖 "
+      - strong
+        - StaticText "스마트머니봇 도움말"
+    - paragraph
+      - StaticText "주요 명령어:"
+    - list
+      - listitem [level=1]
+        - ListMarker "• "
+        - code
+          - StaticText "/status"
+        - StaticText " 현재 상태"
+      - listitem [level=1]
+        - ListMarker "• "
+        - code
+          - StaticText "/help"
+        - StaticText " 도움말"
+      - listitem [level=1]
+        - ListMarker "• "
+        - code
+          - StaticText "/clear"
+        - StaticText " 현재 세션 초기화"
+      - listitem [level=1]
+        - ListMarker "• "
+        - code
+          - StaticText "/clear all"
+        - StaticText " 전체 초기화"
+      - listitem [level=1]
+        - ListMarker "• "
+        - code
+          - StaticText "/refresh"
+        - StaticText " 캐시 새로고침"
+      - listitem [level=1]
+        - ListMarker "• "
+        - code
+          - StaticText "/model"
+        - StaticText " 모델 확인/변경"
+      - listitem [level=1]
+        - ListMarker "• "
+        - code
+          - StaticText "/memory ..."
+        - StaticText " 메모리 관리"
+    - StaticText "2026. 09. 09. 오후 10:43:37"
+    - button "이 질문과 답변 함께 삭제" [ref=e25]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e26]
+    - paragraph
+      - StaticText "/status"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e27]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e28]
+    - paragraph
+      - StaticText "📊 "
+      - strong
+        - StaticText "현재 상태"
+    - list
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "사용자: qa_fixture"
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "모델: gemini-3.7-flash"
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "메모리 개수: 0"
+      - listitem [level=1]
+        - ListMarker "• "
+        - StaticText "세션 개수: 0"
+    - StaticText "2026. 09. 09. 오후 10:43:38"
+    - button "이 질문과 답변 함께 삭제" [ref=e29]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e30]
+    - paragraph
+      - StaticText "/clear"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e31]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e32]
+    - paragraph
+      - StaticText "🧹 현재 대화 세션이 초기화되었습니다."
+    - StaticText "2026. 09. 09. 오후 10:43:39"
+    - button "이 질문과 답변 함께 삭제" [ref=e33]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e34]
+    - paragraph
+      - StaticText "첫 일반 질문 검수"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e35]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e36]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+    - StaticText "2026. 09. 09. 오후 10:43:40"
+    - button "이 질문과 답변 함께 삭제" [ref=e37]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e38]
+    - paragraph
+      - StaticText "두 번째 일반 질문 검수"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e39]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e40]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+    - StaticText "2026. 09. 09. 오후 10:43:50"
+    - button "이 질문과 답변 함께 삭제" [ref=e41]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e42]
+    - paragraph
+      - StaticText "한도 검수 질문 3"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e43]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e44]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+    - StaticText "2026. 09. 09. 오후 10:43:51"
+    - button "이 질문과 답변 함께 삭제" [ref=e45]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e46]
+    - paragraph
+      - StaticText "한도 검수 질문 4"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e47]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e48]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+    - StaticText "2026. 09. 09. 오후 10:43:51"
+    - button "이 질문과 답변 함께 삭제" [ref=e49]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e50]
+    - paragraph
+      - StaticText "한도 검수 질문 5"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e51]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e52]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+    - StaticText "2026. 09. 09. 오후 10:43:52"
+    - button "이 질문과 답변 함께 삭제" [ref=e53]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e54]
+    - paragraph
+      - StaticText "한도 검수 질문 6"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e55]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e56]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+    - StaticText "2026. 09. 09. 오후 10:43:52"
+    - button "이 질문과 답변 함께 삭제" [ref=e57]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e58]
+    - paragraph
+      - StaticText "한도 검수 질문 7"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e59]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e60]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+    - StaticText "2026. 09. 09. 오후 10:43:53"
+    - button "이 질문과 답변 함께 삭제" [ref=e61]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e62]
+    - paragraph
+      - StaticText "한도 검수 질문 8"
+    - StaticText "스마트머니봇"
+    - button "이 질문과 답변 함께 삭제" [ref=e63]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e64]
+    - paragraph
+      - StaticText "QA fixture 모델 응답입니다."
+  - contentinfo
+    - generic
+      - button "파일 첨부" [ref=e65]
+      - button "FLASH" [ref=e68]
+        - StaticText "FLASH"
+      - textbox "메시지 입력..." [ref=e66]
+      - button "음성 입력" [ref=e67]
+      - StaticText "AI는 100% 정확하지 않을 수 있습니다."
+- alert

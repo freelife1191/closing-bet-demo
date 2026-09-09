@@ -12,28 +12,35 @@
     "tests/app/test_kr_market_route_integration.py": "ff8d69aff583455407be41b6e434c3c6003d5501c5a57a07fd7e6be72fc2dbe6",
     "tests/chatbot/test_storage_sqlite.py": "fe0291708d0089ad075146d7a101916cf7955d05c23c793a90d8e9b406ebe511",
     "frontend/src/app/components/Sidebar.tsx": "fe186a01dc2f2a03276ce61a2db62f6c0cb0ff0065cba096bfa0a2c7ed127b30",
-    "frontend/src/app/components/Sidebar.session.test.tsx": "6945ec138e1290a6f69c1ef067e87d12ad46eae50aa7cd6238b29235ee0a1719"
+    "frontend/src/app/components/Sidebar.session.test.tsx": "6945ec138e1290a6f69c1ef067e87d12ad46eae50aa7cd6238b29235ee0a1719",
+    "frontend/src/app/chatbot/useChatStream.ts": "da5eb4f3b56cdc61d1bc9ab9ee9b3930ad0f2eeb06ba5ae6c7d18757c632cf13",
+    "frontend/src/app/chatbot/useChatStream.regression-chat-013.test.tsx": "aac5362d659d2c4244f4b6dafd1de973e0436e6b7b21e1a177f9cd810558d5c4"
   },
   "review_artifacts": {
-    "app/routes/kr_market_chatbot_http_routes.py": "c41f87141f2e5d7876327197d882e8b8cb2e235b3b6ec62196ea317cb18ee3ee",
-    "docs/dev-cycle/qa/CHAT-009.md": "477f43b77aa4a37a19c862f8cc26faf3d71b37ffebccf3a8d868f115c0792655",
-    "tests/app/test_kr_market_route_integration.py": "ff8d69aff583455407be41b6e434c3c6003d5501c5a57a07fd7e6be72fc2dbe6",
-    "docs/dev-cycle/qa/CHAT-008.md": "1666ef81d3711f3652b4b57fee4efe566491ae7872a6a989ac169f5faf1e1765",
     "chatbot/storage_sqlite_history.py": "0c28c623b3c0a562e6297afc46ddb71ad737fb7edfeaa02a9da94aa03bfe0cf0",
     "chatbot/storage.py": "d55bc62d1e70d3e2011d3a6c746ffd33f68b2f41baa1bd9d4bef3e103411fafa",
-    "docs/dev-cycle/evidence/slash-batch-20260909/fixture.py": "519068201191ef872d4a420805780562270ccb63dbde15d179e123b8ae977b57",
-    "docs/dev-cycle/evidence/slash-batch-20260909/history_probe.py": "c9c2227a821e987f4337c746c12a47f3618f305293d524944cf3ab0e4e3054a1",
+    "tests/app/test_kr_market_route_integration.py": "ff8d69aff583455407be41b6e434c3c6003d5501c5a57a07fd7e6be72fc2dbe6",
+    "docs/dev-cycle/qa/CHAT-009.md": "ef18f1c1fa376af1f48c1b67579a523265f9f27b63dd98842be934463f632d42",
+    "frontend/src/app/components/Sidebar.tsx": "fe186a01dc2f2a03276ce61a2db62f6c0cb0ff0065cba096bfa0a2c7ed127b30",
+    "frontend/src/app/components/Sidebar.session.test.tsx": "6945ec138e1290a6f69c1ef067e87d12ad46eae50aa7cd6238b29235ee0a1719",
+    "docs/dev-cycle/qa/CHAT-008.md": "5d633966b5c4d7d254210420f95f434aab6758220358190fe13f91725e1483a9",
+    "frontend/src/app/chatbot/useChatStream.regression-chat-013.test.tsx": "aac5362d659d2c4244f4b6dafd1de973e0436e6b7b21e1a177f9cd810558d5c4",
     "services/kr_market_chatbot_quota_helpers.py": "0b3e68e26ee9dfb6e344b10f9060c155dd19141ec02f7ff7c7b8991bcc1fb58e",
-    "tests/chatbot/test_storage_sqlite.py": "fe0291708d0089ad075146d7a101916cf7955d05c23c793a90d8e9b406ebe511",
     "chatbot/storage_history_helpers.py": "54029bd673adf149e209694483a2b624213c6aea4520b87e6fe724e035b4d645",
-    "tests/app/test_kr_market_chatbot_service.py": "11491292e9a52f77a80bb0b5cb95c86d9600723f8d9ba896ecd117a568abdca5"
+    "tests/app/test_kr_market_chatbot_service.py": "11491292e9a52f77a80bb0b5cb95c86d9600723f8d9ba896ecd117a568abdca5",
+    "docs/dev-cycle/evidence/slash-batch-20260909/fixture.py": "519068201191ef872d4a420805780562270ccb63dbde15d179e123b8ae977b57",
+    "tests/chatbot/test_storage_sqlite.py": "fe0291708d0089ad075146d7a101916cf7955d05c23c793a90d8e9b406ebe511",
+    "docs/dev-cycle/evidence/slash-batch-20260909/history_probe.py": "c9c2227a821e987f4337c746c12a47f3618f305293d524944cf3ab0e4e3054a1",
+    "frontend/src/app/chatbot/useChatStream.ts": "da5eb4f3b56cdc61d1bc9ab9ee9b3930ad0f2eeb06ba5ae6c7d18757c632cf13",
+    "app/routes/kr_market_chatbot_http_routes.py": "c41f87141f2e5d7876327197d882e8b8cb2e235b3b6ec62196ea317cb18ee3ee"
   },
   "latest_checks": {
     "pytest": "pytest-approved.json",
     "target": "target-review-final.json",
-    "vitest": "vitest-qa-fix.json",
-    "typecheck": "typecheck-qa-fix.json",
-    "lint": "lint-qa-fix.json"
+    "vitest": "vitest-qa-fix2.json",
+    "typecheck": "typecheck-qa-fix2.json",
+    "lint": "lint-qa-fix2.json"
   },
-  "qa_fix_base": "63ec882"
+  "qa_fix_base": "63ec882",
+  "qa_fix2_base": "338aae3"
 }

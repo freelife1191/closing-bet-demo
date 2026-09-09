@@ -337,6 +337,7 @@ export function useChatStream({
       ));
     } finally {
       if (isCurrentRequest()) {
+        window.dispatchEvent(new CustomEvent('quota-updated'));
         isSendingRef.current = false;
         setIsLoading(false);
         if (abortControllerRef.current === controller) abortControllerRef.current = null;

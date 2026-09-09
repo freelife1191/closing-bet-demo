@@ -1,7 +1,7 @@
 # UltraQA Report
 
 - 항목: CHAT-009, CHAT-008·009 공유 검증
-- engine: ultraqa | lifecycle: app-adapted | phase: adversarial-e2e | iteration: 1 | same_failure_count: 0
+- engine: ultraqa | lifecycle: app-adapted | phase: adversarial-e2e | iteration: 2 | same_failure_count: 0
 - browser_applicability: required | browser_driver: agent-browser
 - 근거: 실제 /chatbot 화면이 변경한 차감/세션 제목을 사용한다.
 - namespace/session: slash-20260909 / qa
@@ -38,3 +38,11 @@
 - 증거: state-after-q2.json, q2-reloaded.txt, title.png(직접열람), iteration1-requests.jsonl.
 - 기존/shared getAuthHeaders를사용량조회에도적용. frontend번들fetch/mutation문서,vercel-react-best-practices로기존callback/이벤트구독유지확인.
 - iteration1전용브라우저닫음/소유서버SIGTERM. 수정전실측결과보존,완료아님.
+
+- Iteration 2 기준: 338aae3c8b19e838ead9d977edac1b357cd7dda9
+
+## Iteration 2 결과
+- 실제명령4회 usage0/model0, 질문10회usage10/model10, 소진후/status200/일반질문402 확인. 제목유지통과.
+- Sidebar헤더수정으로reload후0회남음표시일치. 그러나전용챗봇에quota-updated발행이없어현재화면은즉시갱신안됨. S-2표시필수미통과로유지.
+- useChatStream finally의현재요청검사안에서 EOF후기존갱신이벤트1회발행하도록보완한다. done이벤트직후에는서버후처리전일수있어EOF를기준으로한다.
+- iteration2브라우저/서버종료,raw증거보존. 동일실패count: 2 (표시불일치), iteration3 재검증예정; 동일문제재실패면한도에따라중단.
