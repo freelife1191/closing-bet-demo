@@ -11,5 +11,9 @@
   "next_compilation_issues": 0,
   "next_config_errors": 0,
   "next_session_errors": 0,
-  "cleanup": "pending"
+  "cleanup": "complete",
+  "integrated_head": "dda6a88f06709ad55a4bd42fc56f74c3bc4ab34f",
+  "final_vitest_pass": 418,
+  "final_typecheck_exit": 0,
+  "final_lint_exit": 0
 }

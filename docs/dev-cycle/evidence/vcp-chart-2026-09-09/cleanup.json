@@ -7,6 +7,10 @@
   },
   "browser_namespace_removed": true,
   "fake_credentials_removed": true,
-  "workspace": "pending integration/archive",
-  "timestamp": 1788925315.938397
+  "workspace": "complete",
+  "timestamp": 1788925315.938397,
+  "removed_parent": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-vcp-z89pj2p2",
+  "completed_at": "2026-09-09 12:47",
+  "original_package_sha": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "original_venv_preserved": true
 }
