@@ -1,0 +1,8 @@
+{
+  "services/common_env_service.py": "6217cf55f657cf3194aa5828a41aaf814e401636422ea44e610849eb8a408599",
+  "app/routes/common_update_routes.py": "714b486ff640a1ea3fb1e604ec3ba66fb6d037e2686f2e90235cd95d72b918e9",
+  "frontend/src/app/components/SettingsModal.tsx": "8ed14c89265d2de22772e299ea70f9665c9812378b2167258bcb4d9e2772c88a",
+  "tests/app/test_env_update_result.py": "8f3431e9302e7df9d6db232791251a131f8b4594a7475e8c0d85f036031de47e",
+  "frontend/src/app/components/SettingsModal.save-isolation.test.tsx": "b964ee48f61222ca61e15ba8a2780ed3977c1d5fbce9213fab4cb95eb70bcf68",
+  "docs/superpowers/plans/2026-09-09-notification-settings.md": "433e97e8b8adfc24c8b34685300b1d5123ccceb6c01cda812182d1039b347f4f"
+}

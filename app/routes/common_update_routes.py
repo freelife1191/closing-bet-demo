@@ -11,6 +11,7 @@ from collections.abc import Callable
 from threading import Thread
 
 from flask import g, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from app.routes.common_route_context import CommonRouteContext
 from app.routes.route_guards import require_admin
@@ -245,11 +246,22 @@ def _register_manage_env_route(common_bp, ctx: CommonRouteContext) -> None:
             )
 
         def _handle_post():
-            data = request.get_json() or {}
-            if not data:
-                return jsonify({"status": "ok"})
-            update_env_file(resolve_env_path(), data, os.environ)
-            return jsonify({"status": "ok"})
+            try:
+                data = request.get_json()
+            except HTTPException as error:
+                ctx.logger.warning("Invalid env JSON request: %s", type(error).__name__)
+                return jsonify({"status": "error", "message": "Invalid JSON request"}), error.code
+            if not isinstance(data, dict):
+                return jsonify({"status": "error", "message": "Expected a JSON object"}), 400
+            try:
+                result = update_env_file(resolve_env_path(), data, os.environ)
+            except Exception as error:
+                ctx.logger.error("Error updating .env: %s", type(error).__name__)
+                return jsonify({"status": "error", "message": "Settings could not be saved"}), 500
+            if result["rejected"]:
+                return jsonify({"status": "error", **result,
+                                "message": "Some settings were rejected; accepted settings were saved."}), 400
+            return jsonify({"status": "ok", **result})
 
         return _execute_update_route(
             handler=_handle_post,

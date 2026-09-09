@@ -202,21 +202,28 @@ def update_env_file(
     env_path: str,
     data: dict[str, Any],
     environ: dict[str, str],
-) -> None:
+) -> dict[str, Any]:
+    result: dict[str, Any] = {"applied": [], "removed": [], "preserved": [], "rejected": {}}
     if not data:
-        return
+        return result
 
     # 게이트를 통과한 관리자라도 화면에서 ADMIN_EMAILS 나 ADMIN_API_TOKEN 을 덮어쓰면
     # 자기 자신을 잠글 수 있다. 읽기와 같은 목록으로 쓰기도 막는다. 키만 보면 부족해서
     # 값도 함께 본다. 막는 것과 이유는 UNSAFE_ENV_VALUE 에 적어 두었다. 아래 두 쓰기
     # 경로에 각각 두지 않고 여기 한 자리에서 함께 막는다.
-    data = {
-        key: value
-        for key, value in data.items()
-        if key in EDITABLE_ENV_KEYS and not UNSAFE_ENV_VALUE.search(str(value))
-    }
+    accepted: dict[str, str] = {}
+    for key, value in data.items():
+        if key not in EDITABLE_ENV_KEYS:
+            result["rejected"][key] = "unsupported_key"
+        elif not isinstance(value, str):
+            result["rejected"][key] = "invalid_type"
+        elif UNSAFE_ENV_VALUE.search(value):
+            result["rejected"][key] = "unsafe_value"
+        else:
+            accepted[key] = value
+    data = accepted
     if not data:
-        return
+        return result
 
     with _env_file_lock(env_path):
         lines = _read_env_lines(env_path)
@@ -228,6 +235,7 @@ def update_env_file(
         # os.environ 을 다시 읽는 경로가 워커마다 다르게 동작한다.
         applied: dict[str, str] = {}
         removed: list[str] = []
+        preserved: set[str] = set()
 
         for original_line in lines:
             line_stripped = original_line.strip()
@@ -249,6 +257,7 @@ def update_env_file(
 
             if "*" in new_value:
                 # 마스킹 값은 사용자 입력이 아닌 조회 결과일 수 있어 기존 값 유지
+                preserved.add(key)
                 new_lines.append(original_line)
                 continue
 
@@ -264,6 +273,7 @@ def update_env_file(
                 continue
             value = str(raw_value)
             if "*" in value:
+                preserved.add(key)
                 continue
             if not value:
                 removed.append(key)
@@ -305,3 +315,5 @@ def update_env_file(
         for key in removed:
             environ.pop(key, None)
         environ.update(applied)
+        result.update(applied=sorted(applied), removed=sorted(set(removed)), preserved=sorted(preserved))
+        return result

@@ -54,6 +54,19 @@ const envSaveCalls = () =>
   );
 
 describe('SettingsModal 저장 격리', () => {
+  it('거부된 환경 설정 이름을 알리고 값은 화면에 노출하지 않는다', async () => {
+    fetchMock.mockImplementation(async (_url: RequestInfo | URL, init?: RequestInit) => ({
+      ok: init?.method !== 'POST',
+      json: async () => init?.method === 'POST'
+        ? { status: 'error', rejected: { SMTP_HOST: 'unsafe_value' }, applied: ['SMTP_PORT'] }
+        : {},
+    }));
+    renderModal(async () => {});
+    await screen.findByText('일부 저장 실패');
+    expect(screen.getByText(/SMTP_HOST/)).toBeTruthy();
+    expect(screen.queryByText(/unsafe_value/)).toBeNull();
+  });
+
   it('프로필 저장이 실패해도 환경 변수와 관심종목은 저장한다', async () => {
     renderModal(async () => {
       throw new Error('Name is required');

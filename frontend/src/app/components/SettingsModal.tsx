@@ -170,7 +170,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
           body: JSON.stringify(envVars)
         });
 
-        if (!res.ok) throw new Error("Failed to save env vars");
+        if (!res.ok) {
+          const detail: unknown = await res.json().catch(() => null);
+          const rejected = detail && typeof detail === 'object' && 'rejected' in detail
+            && detail.rejected && typeof detail.rejected === 'object' && !Array.isArray(detail.rejected)
+            ? Object.keys(detail.rejected) : [];
+          failed.push(rejected.length ? `API 설정 (${rejected.join(', ')})` : 'API 설정');
+        }
       } catch (error) {
         console.error("Env save error:", error);
         failed.push('API 설정');
