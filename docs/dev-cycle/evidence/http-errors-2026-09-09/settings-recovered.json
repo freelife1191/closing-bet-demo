@@ -1,0 +1,20 @@
+{
+  "case": "settings-recovered",
+  "role": "admin",
+  "expected_env_status": 200,
+  "env_responses": [
+    {
+      "at": 1788920458.439287,
+      "method": "GET",
+      "path": "/api/system/env",
+      "status": 200,
+      "role": "anonymous",
+      "allow": null,
+      "retry_after": null
+    }
+  ],
+  "ui_canary_absent": true,
+  "screenshot": "settings-recovered.png",
+  "page_errors": "",
+  "console": "[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\n[log] [HMR] connected\n[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\n[log] [HMR] connected\n"
+}

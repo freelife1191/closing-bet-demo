@@ -1,0 +1,25 @@
+{
+  "source_head": "214e996ff2f68b83c6125b15df5f2d8a12ac4a96",
+  "reviewed_source_hashes_match": true,
+  "required_rows": 8,
+  "passed_rows": 8,
+  "http_probes": 10,
+  "private_value_scan_files": 64,
+  "private_value_matches": 0,
+  "response_canary_matches": 0,
+  "expected_console_errors": {
+    "data-missing": "API Error: 404 twice (React dev)",
+    "data-runtime": "Internal Server Error twice (React dev)"
+  },
+  "unexpected_page_errors": 0,
+  "screenshots": [
+    "settings-normal.png",
+    "settings-fault.png",
+    "settings-recovered.png",
+    "settings-viewer.png",
+    "data-missing.png",
+    "data-runtime.png",
+    "data-normal.png"
+  ],
+  "cleanup": "runtime and credentials complete; workspace removal after integration"
+}

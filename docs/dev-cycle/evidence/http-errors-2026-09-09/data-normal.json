@@ -1,0 +1,27 @@
+{
+  "case": "data-normal",
+  "responses": [
+    {
+      "at": 1788920544.150183,
+      "method": "GET",
+      "path": "/api/system/data-status",
+      "status": 200,
+      "role": "admin",
+      "allow": null,
+      "retry_after": null
+    },
+    {
+      "at": 1788920544.17586,
+      "method": "GET",
+      "path": "/api/system/data-status",
+      "status": 200,
+      "role": "admin",
+      "allow": null,
+      "retry_after": null
+    }
+  ],
+  "ui_canary_absent": true,
+  "screenshot": "data-normal.png",
+  "console": "[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\n[log] [HMR] connected\n",
+  "page_errors": ""
+}

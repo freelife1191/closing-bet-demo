@@ -1,0 +1,31 @@
+{
+  "case": "data-runtime",
+  "responses": [
+    {
+      "at": 1788920517.627857,
+      "method": "GET",
+      "path": "/api/system/data-status",
+      "status": 500,
+      "role": "admin",
+      "allow": null,
+      "retry_after": null,
+      "body": "{\"error\":\"Internal Server Error\",\"message\":\"Internal Server Error\"}\n",
+      "canary_present": false
+    },
+    {
+      "at": 1788920517.639751,
+      "method": "GET",
+      "path": "/api/system/data-status",
+      "status": 500,
+      "role": "admin",
+      "allow": null,
+      "retry_after": null,
+      "body": "{\"error\":\"Internal Server Error\",\"message\":\"Internal Server Error\"}\n",
+      "canary_present": false
+    }
+  ],
+  "ui_canary_absent": true,
+  "screenshot": "data-runtime.png",
+  "console": "[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\n[log] [HMR] connected\n[error] Failed to load data status: {status: 500, data: Object, stack: \"Error: Internal Server Error\n    at fetchAPI (http…/_next/static/chunks/src_app_1zzrg01._.js:142:30)\", message: \"Internal Server Error\", Symbol(next.console.error.digest): \"NEXT_CONSOLE_ERROR\"}\n[error] Failed to load data status: {status: 500, data: Object, stack: \"Error: Internal Server Error\n    at fetchAPI (http…/_next/static/chunks/src_app_1zzrg01._.js:142:30)\", message: \"Internal Server Error\", Symbol(next.console.error.digest): \"NEXT_CONSOLE_ERROR\"}\n",
+  "page_errors": ""
+}

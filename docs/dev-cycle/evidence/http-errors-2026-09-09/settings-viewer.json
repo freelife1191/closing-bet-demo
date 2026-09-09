@@ -1,0 +1,10 @@
+{
+  "case": "settings-viewer",
+  "role": "viewer",
+  "expected_env_status": 200,
+  "env_responses": [],
+  "ui_canary_absent": true,
+  "screenshot": "settings-viewer.png",
+  "page_errors": "",
+  "console": "[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\n[log] [HMR] connected\n[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\n[log] [HMR] connected\n"
+}

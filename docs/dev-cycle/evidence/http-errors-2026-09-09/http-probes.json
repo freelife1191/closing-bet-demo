@@ -1,0 +1,122 @@
+[
+  {
+    "allow": null,
+    "body": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 404,
+    "method": "GET",
+    "name": "missing",
+    "path": "/api/no-such-route",
+    "retryAfter": null,
+    "status": 404
+  },
+  {
+    "allow": null,
+    "body": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 404,
+    "method": "GET",
+    "name": "unicode",
+    "path": "/api/없는경로",
+    "retryAfter": null,
+    "status": 404
+  },
+  {
+    "allow": null,
+    "body": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 404,
+    "method": "GET",
+    "name": "long",
+    "path": "/api/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "retryAfter": null,
+    "status": 404
+  },
+  {
+    "allow": "HEAD, GET, OPTIONS",
+    "body": "<!doctype html>\n<html lang=en>\n<title>405 Method Not Allowed</title>\n<h1>Method Not Allowed</h1>\n<p>The method is not allowed for the requested URL.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 405,
+    "method": "POST",
+    "name": "method",
+    "path": "/api/admin/check",
+    "retryAfter": null,
+    "status": 405
+  },
+  {
+    "allow": "HEAD, POST, OPTIONS, GET",
+    "body": "<!doctype html>\n<html lang=en>\n<title>405 Method Not Allowed</title>\n<h1>Method Not Allowed</h1>\n<p>The method is not allowed for the requested URL.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 405,
+    "method": "DELETE",
+    "name": "env-method",
+    "path": "/api/system%2Fenv",
+    "retryAfter": null,
+    "status": 405
+  },
+  {
+    "allow": null,
+    "body": "<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n<h1>Bad Request</h1>\n<p>The browser (or proxy) sent a request that this server could not understand.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 400,
+    "method": "GET",
+    "name": "bad",
+    "path": "/api/qa-bad-request",
+    "retryAfter": null,
+    "status": 400
+  },
+  {
+    "allow": null,
+    "body": "<!doctype html>\n<html lang=en>\n<title>429 Too Many Requests</title>\n<h1>Too Many Requests</h1>\n<p>This user has exceeded an allotted request count. Try again later.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 429,
+    "method": "GET",
+    "name": "rate",
+    "path": "/api/qa-rate-limit",
+    "retryAfter": "17",
+    "status": 429
+  },
+  {
+    "allow": null,
+    "body": "<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n<h1>Bad Request</h1>\n<p>The browser (or proxy) sent a request that this server could not understand.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 400,
+    "method": "POST",
+    "name": "parse",
+    "path": "/api/system/log-event",
+    "retryAfter": null,
+    "status": 400
+  },
+  {
+    "allow": null,
+    "body": "<!doctype html>\n<html lang=en>\n<title>415 Unsupported Media Type</title>\n<h1>Unsupported Media Type</h1>\n<p>Did not attempt to load JSON data because the request Content-Type was not &#39;application/json&#39;.</p>\n",
+    "canaryPresent": false,
+    "custom": null,
+    "expected": 415,
+    "method": "POST",
+    "name": "form",
+    "path": "/api/system/log-event",
+    "retryAfter": null,
+    "status": 415
+  },
+  {
+    "allow": null,
+    "body": "custom-public-response",
+    "canaryPresent": false,
+    "custom": "preserved",
+    "expected": 418,
+    "method": "GET",
+    "name": "custom",
+    "path": "/api/qa-custom-http",
+    "retryAfter": null,
+    "status": 418
+  }
+]

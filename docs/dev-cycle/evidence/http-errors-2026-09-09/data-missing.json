@@ -1,0 +1,31 @@
+{
+  "case": "data-missing",
+  "responses": [
+    {
+      "at": 1788920493.78212,
+      "method": "GET",
+      "path": "/api/system/data-status",
+      "status": 404,
+      "role": "admin",
+      "allow": null,
+      "retry_after": null,
+      "body": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+      "canary_present": false
+    },
+    {
+      "at": 1788920493.794452,
+      "method": "GET",
+      "path": "/api/system/data-status",
+      "status": 404,
+      "role": "admin",
+      "allow": null,
+      "retry_after": null,
+      "body": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+      "canary_present": false
+    }
+  ],
+  "ui_canary_absent": true,
+  "screenshot": "data-missing.png",
+  "console": "[log] [Fast Refresh] rebuilding\n[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\n[log] [HMR] connected\n[error] Failed to load data status: {status: 404, data: undefined, stack: \"Error: API Error: 404\n    at fetchAPI (http://127.…/_next/static/chunks/src_app_1zzrg01._.js:142:30)\", message: \"API Error: 404\", Symbol(next.console.error.digest): \"NEXT_CONSOLE_ERROR\"}\n[error] Failed to load data status: {status: 404, data: undefined, stack: \"Error: API Error: 404\n    at fetchAPI (http://127.…/_next/static/chunks/src_app_1zzrg01._.js:142:30)\", message: \"API Error: 404\", Symbol(next.console.error.digest): \"NEXT_CONSOLE_ERROR\"}\n",
+  "page_errors": ""
+}

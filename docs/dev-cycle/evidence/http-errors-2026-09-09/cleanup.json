@@ -1,0 +1,15 @@
+{
+  "runtime": "complete",
+  "browser_sessions_closed": [
+    "admin",
+    "viewer"
+  ],
+  "namespace_removed": true,
+  "ports_stopped": [
+    57161,
+    57162,
+    55168
+  ],
+  "fake_credentials_removed": true,
+  "workspace": "pending final integration"
+}

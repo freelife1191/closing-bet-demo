@@ -1617,3 +1617,12 @@
 - [ ] `build_signal_item` 과 `init_data` 의 시그널 dict 에 두 열을 싣는다
 - [ ] 열이 없는 옛 CSV 를 읽는 경로가 견디는지 확인한다
 - [ ] 프롬프트가 실제 값을 싣는지 실측으로 대조한다
+
+### [INFRA-066] 개별 라우트 오류 래퍼가 예외 원문을 500 응답에 남긴다
+- 카테고리: 인프라 | 티어: T2 예상 | 근거: 2026-09-09 INFRA-017·038 범위 검토
+- `app/routes/route_execution.py`의 `build_route_error_response`는 `str(error)`를 500으로 보내며, `execute_json_route`는 HTTPException까지 잡는다. `common_portfolio_routes.py`의 별도 wrapper와 payload builder도 같은 형태다.
+- 전역 처리기 및 common update wrapper를 고친 INFRA-017·038이 닿지 않는 독립 경로다. 모의투자/다른 호출부의 기존 오류 계약을 따로 조사해야 하므로 현재 범위로 확대하지 않았다.
+- QA 시나리오: 지정 호출부에 합성 경로가 포함된 예외를 주입해 응답에 원문이 없고, HTTP 요청 오류의 상태가 유지되는지 격리 실제 앱으로 검증한다.
+- [ ] 호출부와 사용자용 오류 계약을 확정하고 실제 파일로 티어를 판정
+- [ ] 내부 로그와 외부 오류를 분리하고 HTTPException 처리 계약을 맞춤
+- [ ] 회귀 검사와 해당 사용자 흐름의 UltraQA·agent-browser 실측
