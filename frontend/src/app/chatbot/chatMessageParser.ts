@@ -34,6 +34,14 @@ export const getMessagePartText = (part: Message['parts'][number] | undefined): 
   return typeof part === 'string' ? part : part.text;
 };
 
+const splitDenseNumberedLists = (text: string): string => text
+  .split('\n')
+  .map((line) => {
+    if (/^\s*#{1,6}\s/.test(line)) return line;
+    return line.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+  })
+  .join('\n');
+
 // Helper to fix CJK markdown issues and malformed AI output
 export const preprocessMarkdown = (text: string) => {
   let processed = text;
@@ -113,7 +121,9 @@ export const extractSuggestions = (text: string, isStreaming: boolean = false, s
     suggestions = lines
       .map(l => l.replace(/^(?:\d+\.|\-|\*)\s*/, '').trim())
       .filter(l => l.length > 0 && !l.replace(/\*/g, '').includes('[추천 질문]'))
-      .map(l => l.replace(/\*\*/g, '')); // 별표 제거
+      .map(l => l.replace(/\*\*/g, ''))
+      .map(l => Array.from(l).slice(0, 120).join(''))
+      .slice(0, 3); // 별표 제거·유니코드 안전 길이·표시 상한
   }
 
   const reasonStartRegex = /(?:\*\*|__)?\**\[\s*추론\s*과정\s*\]\**(?:\*\*|__)?/i;
@@ -157,7 +167,7 @@ export const extractSuggestions = (text: string, isStreaming: boolean = false, s
 
   // FORCE newlines before numbered lists inside dense text
   // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
-  processed = processed.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+  processed = splitDenseNumberedLists(processed);
 
   const reasoningHeaderRegex = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\\?\[\s*추론\s*과정\s*\\?\](?:\*\*|__)?\s*\n?/i;
   let cleanReasoning = preprocessMarkdown(reasoning).replace(reasoningHeaderRegex, '').trim();
@@ -169,7 +179,7 @@ export const extractSuggestions = (text: string, isStreaming: boolean = false, s
 
   // FORCE newlines before numbered lists inside dense text (e.g., "내용 2. ")
   // Safely avoids breaking bold markdown tags (e.g., "**1. 제목**")
-  cleanReasoning = cleanReasoning.replace(/(?<=\S)\s+(?=(?:\*\*|__)?\d+\.\s)/g, '\n\n');
+  cleanReasoning = splitDenseNumberedLists(cleanReasoning);
 
   return { content: processed.trim(), suggestions, reasoning: cleanReasoning };
 };

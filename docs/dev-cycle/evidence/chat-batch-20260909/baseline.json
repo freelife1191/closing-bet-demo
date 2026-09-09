@@ -1,0 +1,21 @@
+{
+  "pytest": {
+    "exit": 0,
+    "passed": 2281,
+    "skipped": 2
+  },
+  "vitest": {
+    "exit": 0,
+    "passed": 460,
+    "files": 67
+  },
+  "typecheck": {
+    "exit": 0
+  },
+  "lint": {
+    "exit": 0,
+    "errors": 0,
+    "warnings": 198
+  },
+  "source_hashes_match": true
+}

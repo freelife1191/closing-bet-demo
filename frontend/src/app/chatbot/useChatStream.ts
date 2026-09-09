@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getAuthHeaders } from '../components/chatHelpers';
 import { getMessagePartText, type Message } from './chatMessageParser';
@@ -79,18 +79,63 @@ export function useChatStream({
 }: UseChatStreamOptions) {
   const [isLoading, setIsLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(false);
+  const isSendingRef = useRef(false);
+  const requestTokenRef = useRef(0);
+  const activeSessionRef = useRef(currentSessionId);
+  const streamSessionRef = useRef<string | null>(currentSessionId);
 
-  const handleStop = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsLoading(false);
-      setMessages(prev => [...prev, { role: 'model', parts: ['🛑 답변 생성이 중단되었습니다.'] }]);
+  const invalidateRequest = useCallback((showStoppedMessage: boolean) => {
+    requestTokenRef.current += 1;
+    isSendingRef.current = false;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLoading(false);
+    if (showStoppedMessage && isMountedRef.current) {
+      setMessages(prev => {
+        const next = [...prev];
+        const last = next.at(-1);
+        if (last?.role === 'model' && last.isStreaming) {
+          next[next.length - 1] = { ...last, isStreaming: false };
+        }
+        return [...next, { role: 'model', parts: ['🛑 답변 생성이 중단되었습니다.'] }];
+      });
     }
   }, [setMessages]);
 
-  const applyToLastMessage = useCallback((data: StreamEvent) => {
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      requestTokenRef.current += 1;
+      isSendingRef.current = false;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const previousSessionId = activeSessionRef.current;
+    activeSessionRef.current = currentSessionId;
+    if (
+      isMountedRef.current
+      && isSendingRef.current
+      && previousSessionId !== currentSessionId
+      && currentSessionId !== streamSessionRef.current
+    ) {
+      invalidateRequest(false);
+    }
+  }, [currentSessionId, invalidateRequest]);
+
+  const handleStop = useCallback(() => {
+    if (isSendingRef.current && abortControllerRef.current) {
+      invalidateRequest(true);
+    }
+  }, [invalidateRequest]);
+
+  const applyToLastMessage = useCallback((data: StreamEvent, shouldApply: () => boolean) => {
     setMessages(prev => {
+      if (!shouldApply()) return prev;
       if (prev.length === 0) return prev;
       const last = prev[prev.length - 1];
       const nextMsg = applyStreamEvent(last, data);
@@ -104,7 +149,7 @@ export function useChatStream({
   }, [setMessages]);
 
   const handleSend = useCallback(async (text: string) => {
-    if ((!text.trim() && attachedFiles.length === 0) || isLoading || isDisabled) return;
+    if ((!text.trim() && attachedFiles.length === 0) || isSendingRef.current || isDisabled) return;
 
     // Display User Message locally first
     const displayMsg = text + (attachedFiles.length > 0 ? `\n[파일 ${attachedFiles.length}개 첨부]` : '');
@@ -113,6 +158,22 @@ export function useChatStream({
       parts: [displayMsg],
       timestamp: new Date().toISOString(),
     };
+
+    const requestToken = requestTokenRef.current + 1;
+    requestTokenRef.current = requestToken;
+    isSendingRef.current = true;
+    streamSessionRef.current = currentSessionId;
+
+    // 전송 중 여부는 새 전송을 막는 동기 ref다. 이미 큐에 들어간 정상 응답 setter는
+    // finally가 이 ref를 false로 만든 뒤에도 token이 같으면 커밋되어야 한다.
+    const isCurrentRequest = () => (
+      isMountedRef.current
+      && requestTokenRef.current === requestToken
+    );
+    const streamOwnsVisibleSession = () => (
+      activeSessionRef.current === streamSessionRef.current
+      || (activeSessionRef.current === null && streamSessionRef.current !== null)
+    );
 
     // Optimistic update
     setMessages(prev => [...prev, userMsg]);
@@ -124,8 +185,6 @@ export function useChatStream({
 
     // 이 요청이 속한 세션. 화면에 표시 중인 세션(currentSessionId)과는 다른 값이다.
     // 응답이 흐르는 동안 사용자가 다른 세션을 열 수 있기 때문에 둘을 섞으면 안 된다.
-    let streamSessionId = currentSessionId;
-
     try {
       const savedWatchlist = localStorage.getItem('watchlist');
       const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
@@ -165,11 +224,16 @@ export function useChatStream({
         });
       }
 
+      if (!isCurrentRequest()) return;
+
       const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
       if (contentType.includes('text/event-stream') && res.body) {
-        setIsLoading(false);
-        setMessages(prev => [...prev, { role: 'model', parts: [''], reasoning: '', isStreaming: true }]);
+        setMessages(prev => (
+          isCurrentRequest()
+            ? [...prev, { role: 'model', parts: [''], reasoning: '', isStreaming: true }]
+            : prev
+        ));
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8');
@@ -177,7 +241,9 @@ export function useChatStream({
         let buffer = '';
 
         while (!done) {
+          if (!isCurrentRequest()) return;
           const { value, done: readerDone } = await reader.read();
+          if (!isCurrentRequest()) return;
           done = readerDone;
           if (!value) continue;
 
@@ -198,15 +264,19 @@ export function useChatStream({
               continue;
             }
 
-            applyToLastMessage(data);
-
             // 서버는 모든 청크에 session_id 를 싣는다. 새 대화에서 첫 청크가 세션을
             // 배정한 뒤에도 갱신으로 판정되지 않도록 이 스트림의 세션을 갱신해 둔다.
-            const sessionChanged = Boolean(data.session_id) && data.session_id !== streamSessionId;
+            const sessionChanged = Boolean(data.session_id) && data.session_id !== streamSessionRef.current;
             if (sessionChanged) {
-              streamSessionId = data.session_id!;
+              if (!streamOwnsVisibleSession()) {
+                invalidateRequest(false);
+                return;
+              }
+              streamSessionRef.current = data.session_id!;
               onSessionAssigned(data.session_id!);
             }
+            if (!isCurrentRequest() || !streamOwnsVisibleSession()) return;
+            applyToLastMessage(data, () => isCurrentRequest() && streamOwnsVisibleSession());
             if (sessionChanged || data.done) {
               onSessionsShouldRefresh();
             }
@@ -215,7 +285,9 @@ export function useChatStream({
 
         // Safety net: if stream closed without explicit done event,
         // ensure the last placeholder message does not remain in streaming state.
+        if (!isCurrentRequest()) return;
         setMessages(prev => {
+          if (!isCurrentRequest()) return prev;
           if (prev.length === 0) return prev;
           const next = [...prev];
           const last = next[next.length - 1];
@@ -226,41 +298,57 @@ export function useChatStream({
         });
       } else {
         const data = await res.json();
+        if (!isCurrentRequest()) return;
 
         if (data.response) {
-          if (data.session_id && data.session_id !== streamSessionId) {
-            streamSessionId = data.session_id;
+          if (data.session_id && data.session_id !== streamSessionRef.current) {
+            if (!streamOwnsVisibleSession()) return;
+            streamSessionRef.current = data.session_id;
             onSessionAssigned(data.session_id);
           }
+          if (!isCurrentRequest() || !streamOwnsVisibleSession()) return;
           onSessionsShouldRefresh();
-          setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
+          setMessages(prev => (
+            isCurrentRequest() && streamOwnsVisibleSession()
+              ? [...prev, { role: 'model', parts: [data.response] }]
+              : prev
+          ));
         } else if (data.error) {
-          setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ 오류: ${data.error}`] }]);
+          setMessages(prev => (
+            isCurrentRequest() ? [...prev, { role: 'model', parts: [`⚠️ 오류: ${data.error}`] }] : prev
+          ));
         } else {
-          setMessages(prev => [...prev, { role: 'model', parts: ['⚠️ 응답을 받아오지 못했습니다.'] }]);
+          setMessages(prev => (
+            isCurrentRequest() ? [...prev, { role: 'model', parts: ['⚠️ 응답을 받아오지 못했습니다.'] }] : prev
+          ));
         }
       }
-    } catch (error: any) {
-      if (error?.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (!isCurrentRequest()) return;
+      if (error instanceof Error && error.name === 'AbortError') {
         // Already handled in handleStop usually, but double check
         return;
       }
-      const errorMessage = (error && typeof error.message === 'string' && error.message.trim().length > 0)
+      const errorMessage = (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message.trim().length > 0)
         ? `⚠️ 오류가 발생했습니다: ${error.message}`
         : '⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-      setMessages(prev => [...prev, { role: 'model', parts: [errorMessage] }]);
+      setMessages(prev => (
+        isCurrentRequest() ? [...prev, { role: 'model', parts: [errorMessage] }] : prev
+      ));
     } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
-      // Reset viewport for mobile keyboard fix
-      if (window.innerWidth < 1024) {
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
+      if (isCurrentRequest()) {
+        isSendingRef.current = false;
+        setIsLoading(false);
+        if (abortControllerRef.current === controller) abortControllerRef.current = null;
+        // Reset viewport for mobile keyboard fix
+        if (window.innerWidth < 1024) {
+          window.scrollTo(0, 0);
+          document.body.scrollTop = 0;
+        }
       }
     }
   }, [
     attachedFiles,
-    isLoading,
     isDisabled,
     currentSessionId,
     currentModel,
@@ -268,6 +356,7 @@ export function useChatStream({
     setMessages,
     onSendStart,
     applyToLastMessage,
+    invalidateRequest,
     onSessionAssigned,
     onSessionsShouldRefresh,
   ]);

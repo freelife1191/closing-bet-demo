@@ -62,6 +62,32 @@ describe('extractSuggestions - 히스토리 메시지의 fallback 파싱', () =>
     expect(result.content).not.toContain('목표가는 얼마인가요');
     expect(result.suggestions).toEqual(['목표가는 얼마인가요?', '손절가는요?']);
   });
+
+  it('추천 질문은 순서대로 세 개만 남기고 각 줄을 120 code point로 자른다', () => {
+    const long = `${'😀'.repeat(121)} 끝`;
+    const raw = `본문\n[추천 질문]\n1. 첫 질문\n2. ${long}\n3. 셋째 질문\n4. 넷째 질문`;
+
+    const result = extractSuggestions(raw);
+
+    expect(result.suggestions).toHaveLength(3);
+    expect(result.suggestions).toEqual(['첫 질문', Array.from(long).slice(0, 120).join(''), '셋째 질문']);
+  });
+});
+
+describe('extractSuggestions - 번호 목록 줄바꿈', () => {
+  it('markdown 제목 줄은 보존하고 조밀한 본문 번호 목록만 나눈다', () => {
+    const result = extractSuggestions('### 1. 시장 환경\n본문 2. 다음 항목');
+
+    expect(result.content).toContain('### 1. 시장 환경');
+    expect(result.content).toContain('본문\n\n2. 다음 항목');
+  });
+
+  it('추론 영역에도 같은 제목 보존 규칙을 적용한다', () => {
+    const result = extractSuggestions('[추론 과정]\n### 1. 근거\n내용 2. 다음\n[답변]\n결론');
+
+    expect(result.reasoning).toContain('### 1. 근거');
+    expect(result.reasoning).toContain('내용\n\n2. 다음');
+  });
 });
 
 describe('preprocessMarkdown', () => {

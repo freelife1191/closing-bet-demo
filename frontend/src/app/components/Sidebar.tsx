@@ -7,8 +7,7 @@ import Modal from './Modal';
 import PaperTradingModal from './PaperTradingModal';
 import { useSession, signOut } from 'next-auth/react';
 import { useAdmin } from '@/hooks/useAdmin';
-import { getBrowserSessionId } from '@/lib/session';
-import { DEFAULT_USER_PROFILE, normalizeUserProfile, resolveUserProfile, saveUserProfile, type UserProfile } from './chatHelpers';
+import { getAuthHeaders, DEFAULT_USER_PROFILE, normalizeUserProfile, resolveUserProfile, saveUserProfile, type UserProfile } from './chatHelpers';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -113,13 +112,11 @@ export default function Sidebar() {
 
     // [Log] Update Profile Event
     try {
-      const sessionId = getBrowserSessionId();
       await fetch('/api/system/log-event', {
         method: 'POST',
         headers: {
-          // 신원은 proxy.ts 가 세션에서 확정해 서명한다. X-User-Email 을 보내도 지워진다.
-          'Content-Type': 'application/json',
-          'X-Session-Id': sessionId
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           action: 'PROFILE_UPDATE',

@@ -5,8 +5,7 @@ import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ThinkingProcess from './ThinkingProcess';
-import { getStoredModel, shouldSendOnEnter } from './chatHelpers';
-import { getBrowserSessionId } from '@/lib/session';
+import { getAuthHeaders, getStoredModel, shouldSendOnEnter } from './chatHelpers';
 
 interface Message {
   role: 'user' | 'model';
@@ -231,9 +230,6 @@ export default function ChatWidget() {
       const savedWatchlist = localStorage.getItem('watchlist');
       const watchlist = savedWatchlist ? JSON.parse(savedWatchlist) : [];
 
-      // Auth Info Retrieval
-      const sessionId = getBrowserSessionId();
-
       const storedModel = getStoredModel();
       const requestBody: Record<string, unknown> = { message: messageToSend, watchlist };
       if (storedModel) requestBody.model = storedModel;
@@ -241,9 +237,8 @@ export default function ChatWidget() {
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
         headers: {
-          // 신원은 proxy.ts 가 세션에서 확정해 서명한다. X-User-Email 을 보내도 지워진다.
-          'Content-Type': 'application/json',
-          'X-Session-Id': sessionId
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(requestBody),
       });

@@ -147,10 +147,12 @@ describe('ChatbotPage - 새 대화의 세션 전환', () => {
     await screen.findByText(historyTextOf(NEW_SESSION_ID));
 
     send('안녕');
-    await waitFor(() => expect(consumed).toBe(streamChunks(NEW_SESSION_ID).length));
+    await waitFor(() => expect(consumed).toBeGreaterThan(0));
     await settle();
 
-    // 남은 청크가 화면을 원래 세션으로 되돌리면 이 값이 다시 덮어써진다.
+    // 세션을 바꾸면 이전 스트림은 취소한다. 남은 청크를 억지로 소비하지 않고도
+    // 선택한 세션의 기록과 localStorage 값이 그대로여야 한다.
+    expect(await screen.findByText(historyTextOf(OTHER_SESSION_ID))).toBeTruthy();
     expect(localStorage.getItem('chatbot_last_session_id')).toBe(OTHER_SESSION_ID);
   });
 });

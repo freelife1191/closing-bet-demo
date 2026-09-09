@@ -1151,6 +1151,8 @@
 
 - 2026-09-09 CHAT-029 실측: 합성 SSE headers 직후 useChatStream:171 setIsLoading(false), page isBusy=false로 답변 중단 버튼이 사라짐을 재확인. CHAT-029는 이름 보강 및 headers 전 대기 취소만 검증했으며 이 항목의 스트리밍 상태 결함은 미해결. 증거: evidence/chat029-20260909/diagnosis.md 및 stream-initial.txt.
 
+- 진행 2026-09-09: 사용자 연속·묶음 실행 요청 및 AUTO-CONTINUE에 따라 bounded 설계 후 구현. 범위·근거: evidence/chat-batch-20260909/scope.md. 독립 ponytail APPROVE·code-review APPROVE·architect CLEAR 및 전체 정적 검사 통과. UltraQA 실측 완료 전 TODO 유지.
+
 ### [FE-038] 세션 헤더를 만드는 코드가 세 곳에 흩어져 있다
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-05 `[CHAT-004]` 사이클의 code-review
 - `[CHAT-004]` 이 챗봇 쪽 `getAuthHeaders` 를
@@ -1179,6 +1181,8 @@
       (`[INFRA-027]` 이 신원 헤더 자체를 없애 규칙이 필요 없어졌습니다)
 - [ ] 세 경로가 같은 헤더를 만드는지 vitest 로 고정
 
+- 진행 2026-09-09: 사용자 연속·묶음 실행 요청 및 AUTO-CONTINUE에 따라 bounded 설계 후 구현. 범위·근거: evidence/chat-batch-20260909/scope.md. 독립 ponytail APPROVE·code-review APPROVE·architect CLEAR 및 전체 정적 검사 통과. UltraQA 실측 완료 전 TODO 유지.
+
 ### [CHAT-015] 답변 파서가 소제목을 쪼개고 추천 질문에 상한을 두지 않는다
 - 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-05 `[CHAT-004]` 사이클의 `/qa-only` ISSUE-001 과 `/review`
 - 2026-09-07 백로그 정리에서 `[CHAT-014]` 를 흡수했습니다. 둘 다
@@ -1202,6 +1206,8 @@
 - [ ] 제목 줄(`#` 으로 시작하는 줄)을 치환 대상에서 제외하고 본문과 추론 두 곳에 같은 규칙을 적용
 - [ ] 추천 질문의 개수 상한과 한 줄 길이 상한을 정하고 적용
 - [ ] `### 1. 제목` 이 `h3` 하나로 렌더되는지, 빽빽한 문장 속 번호 목록은 여전히 갈라지는지, 상한을 넘는 입력에서 무엇이 잘리는지 vitest 로 고정
+
+- 진행 2026-09-09: 사용자 연속·묶음 실행 요청 및 AUTO-CONTINUE에 따라 bounded 설계 후 구현. 범위·근거: evidence/chat-batch-20260909/scope.md. 독립 ponytail APPROVE·code-review APPROVE·architect CLEAR 및 전체 정적 검사 통과. UltraQA 실측 완료 전 TODO 유지.
 
 ### [INFRA-035] 모의투자 테스트가 pytest 를 돌릴 때마다 `data/` 에 SQLite 임시 파일을 남긴다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[FE-015]` 사이클의 QA 준비 중 발견, 2026-09-07 백로그 정리에서 출처 확인
