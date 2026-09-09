@@ -1,0 +1,16 @@
+{
+  "stage": "baseline",
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "tests/smoke/upgrade-smoke.test.ts",
+    "-t",
+    "should successfully build the application"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/test-isolation-qa-hfwssz37/frontend",
+  "timeout_seconds": 240,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 6.06
+}

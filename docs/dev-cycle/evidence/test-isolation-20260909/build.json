@@ -1,0 +1,13 @@
+{
+  "stage": "build",
+  "command": [
+    "npm",
+    "run",
+    "test:build"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/test-isolation-qa-hfwssz37/frontend",
+  "timeout_seconds": 240,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 6.83
+}

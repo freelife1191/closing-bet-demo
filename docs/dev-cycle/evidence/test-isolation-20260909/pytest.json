@@ -1,0 +1,14 @@
+{
+  "stage": "pytest",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/test-isolation-qa-hfwssz37/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/test-isolation-qa-hfwssz37",
+  "timeout_seconds": 180,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 39.03
+}

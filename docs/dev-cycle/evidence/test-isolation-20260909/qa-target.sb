@@ -1,0 +1,10 @@
+(version 1)
+(allow default)
+(deny network*)
+(allow network-inbound (local ip "localhost:*"))
+(allow network-outbound (remote ip "localhost:*"))
+(deny network-outbound (remote ip "localhost:3500"))
+(deny network-outbound (remote ip "localhost:5501"))
+(deny file-write* (subpath "/Users/freelife/vibe/lecture/hodu/closing-bet-demo"))
+
+(deny file-write* (subpath "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/test-isolation-qa-hfwssz37/data"))

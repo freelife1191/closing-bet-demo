@@ -13,7 +13,8 @@
     "test:coverage": "vitest --coverage",
     "test:baseline": "vitest run tests/baseline/upgrade-nextjs16.test.ts",
     "type-check": "tsc --noEmit",
-    "upgrade:check": "npm run test:baseline && npm run type-check && npm run lint"
+    "upgrade:check": "npm run test:baseline && npm run type-check && npm run lint",
+    "test:build": "node --test tests/build-checks/verify-build.mjs"
   },
   "dependencies": {
     "lightweight-charts": "^5.1.0",

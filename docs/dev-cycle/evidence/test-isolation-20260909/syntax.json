@@ -1,0 +1,5 @@
+{
+  "python_ast": "passed",
+  "node_check": "exit 0",
+  "python_lsp": "not available; not claimed"
+}

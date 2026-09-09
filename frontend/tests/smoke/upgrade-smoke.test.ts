@@ -8,7 +8,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
-import { execSync } from 'child_process'
 
 const ROOT_DIR = process.cwd()
 
@@ -52,59 +51,6 @@ describe('Next.js 16 Smoke Tests', () => {
       expect(loadingContent).toContain('로딩 중...')
       expect(loadingContent).toContain('데이터를 불러오고 있습니다')
     })
-  })
-
-  describe('Build Verification', () => {
-    it('should successfully build the application', () => {
-      try {
-        const output = execSync('npm run build', {
-          encoding: 'utf-8',
-          cwd: ROOT_DIR,
-          timeout: 180000,
-        })
-
-        expect(output).toContain('Compiled successfully')
-        expect(output).toContain('Creating an optimized production build')
-      } catch (error: any) {
-        throw new Error(`Build failed: ${error.message}`)
-      }
-    }, 180000)
-
-    it('should have correct route structure', () => {
-      try {
-        const output = execSync('npm run build', {
-          encoding: 'utf-8',
-          cwd: ROOT_DIR,
-          timeout: 180000,
-        })
-
-        // Check for expected routes
-        expect(output).toContain('/')
-        expect(output).toContain('/dashboard/kr')
-        expect(output).toContain('/dashboard/kr/closing-bet')
-        expect(output).toContain('/dashboard/kr/vcp')
-        expect(output).toContain('/dashboard/kr/cumulative')
-      } catch (error: any) {
-        throw new Error(`Build output check failed: ${error.message}`)
-      }
-    }, 180000)
-  })
-
-  describe('TypeScript Compilation', () => {
-    it('should compile without errors', () => {
-      try {
-        const output = execSync('npx tsc --noEmit', {
-          encoding: 'utf-8',
-          cwd: ROOT_DIR,
-          timeout: 60000,
-        })
-
-        // No error means success
-        expect(true).toBe(true)
-      } catch (error: any) {
-        throw new Error(`TypeScript compilation failed: ${error.stderr || error.stdout}`)
-      }
-    }, 60000)
   })
 
   describe('Package Configuration', () => {
@@ -228,8 +174,7 @@ describe('Upgrade Summary', () => {
     console.log('   • 포괄적인 테스트 스위트')
     console.log('')
     console.log('🧪 테스트 상태:')
-    console.log('   • 빌드: ✅ 성공')
-    console.log('   • TypeScript: ✅ 통과')
+    console.log('   • 빌드·타입 검증: npm run test:build 별도 실행')
     console.log('   • 단위 테스트: ✅ 작성 완료')
     console.log('   • 스모크 테스트: ✅ 실행 완료')
     console.log('')

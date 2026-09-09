@@ -410,6 +410,10 @@
 ## P2 — 대기
 
 ### [FE-042] vitest 스모크 검사가 실제 `next build` 를 돌려 간헐적으로 실패한다
+- 현재 라운드: 2026-09-09 테스트 격리 묶음 T2. 설계/실행 근거는 사용자 「연관된 라운드들 쭉 이어서」「최대한 한번에 묶어서」 및 AUTO-CONTINUE. 별도 승인 응답을 만들지 않음.
+- [x] 제한된 설계와 변경 범위 확정 — `evidence/test-isolation-20260909/scope.md`
+- [x] 독립 리뷰 ponytail SHIP → code-reviewer APPROVE / architect BLOCK→수정→CLEAR, 정적 검증 통과
+- [ ] UltraQA 행렬 실행·정리
 - 카테고리: 프론트엔드 | 티어: T1 | 근거: 2026-09-08 `[INFRA-053]` 사이클의 정적 검증에서
   12회 실행 중 2회 관측했습니다.
 - `frontend/tests/smoke/upgrade-smoke.test.ts:57` 의 `Build Verification` 이
@@ -1103,6 +1107,10 @@
 - [ ] 뷰포트 1280px 과 그 앞뒤 폭을 실측으로 대조
 
 ### [INFRA-035] 모의투자 테스트가 pytest 를 돌릴 때마다 `data/` 에 SQLite 임시 파일을 남긴다
+- 현재 라운드: 2026-09-09 테스트 격리 묶음 T2. 설계/실행 근거는 사용자 「연관된 라운드들 쭉 이어서」「최대한 한번에 묶어서」 및 AUTO-CONTINUE. 별도 승인 응답을 만들지 않음.
+- [x] 제한된 설계와 변경 범위 확정 — `evidence/test-isolation-20260909/scope.md`
+- [x] 독립 리뷰 ponytail SHIP → code-reviewer APPROVE / architect BLOCK→수정→CLEAR, 정적 검증 통과
+- [ ] UltraQA 행렬 실행·정리
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[FE-015]` 사이클의 QA 준비 중 발견, 2026-09-07 백로그 정리에서 출처 확인
 - QA 시나리오: `pytest tests/services/test_paper_trading_service.py` 를 돌린 뒤 `data/` 의
   `.db-wal`·`.db-shm` 수가 늘지 않는다

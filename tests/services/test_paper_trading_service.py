@@ -58,8 +58,12 @@ def _build_service():
 def _cleanup_service(service: PaperTradingService):
     service.is_running = False
     db_file = Path(service.db_path)
-    if db_file.exists():
-        db_file.unlink()
+    for sqlite_file in (
+        db_file,
+        db_file.with_name(f"{db_file.name}-wal"),
+        db_file.with_name(f"{db_file.name}-shm"),
+    ):
+        sqlite_file.unlink(missing_ok=True)
 
 
 def _insert_portfolio_row(service: PaperTradingService, ticker: str, name: str):
@@ -1411,9 +1415,9 @@ def test_read_methods_use_read_context_without_get_context(monkeypatch):
         _cleanup_service(service)
 
 
-def test_constructor_skips_price_cache_ensure_when_db_init_succeeds(monkeypatch):
+def test_constructor_skips_price_cache_ensure_when_db_init_succeeds(monkeypatch, tmp_path):
     ensure_calls: list[bool] = []
-    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
+    db_path = str(tmp_path / "paper_trading_test.db")
 
     monkeypatch.setattr(PaperTradingService, "_init_db", lambda self: True)
     monkeypatch.setattr(PaperTradingService, "_load_price_cache_from_db", lambda self: None)
@@ -1424,7 +1428,7 @@ def test_constructor_skips_price_cache_ensure_when_db_init_succeeds(monkeypatch)
 
     monkeypatch.setattr(PaperTradingService, "_ensure_price_cache_table", _fake_ensure)
 
-    service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+    service = PaperTradingService(db_path=db_path, auto_start_sync=False)
     try:
         assert service._price_cache_schema_ready is True
         assert ensure_calls == []
@@ -1432,9 +1436,9 @@ def test_constructor_skips_price_cache_ensure_when_db_init_succeeds(monkeypatch)
         _cleanup_service(service)
 
 
-def test_constructor_ensures_price_cache_when_db_init_fails(monkeypatch):
+def test_constructor_ensures_price_cache_when_db_init_fails(monkeypatch, tmp_path):
     ensure_calls: list[bool] = []
-    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
+    db_path = str(tmp_path / "paper_trading_test.db")
 
     monkeypatch.setattr(PaperTradingService, "_init_db", lambda self: False)
     monkeypatch.setattr(PaperTradingService, "_load_price_cache_from_db", lambda self: None)
@@ -1447,7 +1451,7 @@ def test_constructor_ensures_price_cache_when_db_init_fails(monkeypatch):
     monkeypatch.setattr(PaperTradingService, "_ensure_price_cache_table", _fake_ensure)
 
     with pytest.raises(RuntimeError, match="owner migration failed"):
-        PaperTradingService(db_name=db_name, auto_start_sync=False)
+        PaperTradingService(db_path=db_path, auto_start_sync=False)
     assert ensure_calls == []
 
 
@@ -1853,14 +1857,14 @@ def test_refresh_price_cache_once_skips_sqlite_write_when_price_unchanged(monkey
         _cleanup_service(service)
 
 
-def test_service_warms_up_price_cache_from_sqlite_on_restart():
-    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
-    first_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+def test_service_warms_up_price_cache_from_sqlite_on_restart(tmp_path):
+    db_path = str(tmp_path / "paper_trading_test.db")
+    first_service = PaperTradingService(db_path=db_path, auto_start_sync=False)
     second_service = None
     try:
         first_service._persist_price_cache({"005930": 70900, "000660": 123400})
 
-        second_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+        second_service = PaperTradingService(db_path=db_path, auto_start_sync=False)
 
         assert second_service.price_cache.get("005930") == 70900
         assert second_service.price_cache.get("000660") == 123400
@@ -1870,15 +1874,15 @@ def test_service_warms_up_price_cache_from_sqlite_on_restart():
         _cleanup_service(first_service)
 
 
-def test_service_warms_up_price_cache_for_active_holdings_first():
-    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
-    first_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+def test_service_warms_up_price_cache_for_active_holdings_first(tmp_path):
+    db_path = str(tmp_path / "paper_trading_test.db")
+    first_service = PaperTradingService(db_path=db_path, auto_start_sync=False)
     second_service = None
     try:
         first_service._persist_price_cache({"005930": 70900, "000660": 123400})
         _insert_portfolio_row(first_service, "005930", "삼성전자")
 
-        second_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+        second_service = PaperTradingService(db_path=db_path, auto_start_sync=False)
 
         assert second_service.price_cache.get("005930") == 70900
         assert "000660" not in second_service.price_cache
@@ -1888,15 +1892,15 @@ def test_service_warms_up_price_cache_for_active_holdings_first():
         _cleanup_service(first_service)
 
 
-def test_service_warms_up_price_cache_for_legacy_ticker_using_normalized_lookup():
-    db_name = f"paper_trading_test_{uuid.uuid4().hex}.db"
-    first_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+def test_service_warms_up_price_cache_for_legacy_ticker_using_normalized_lookup(tmp_path):
+    db_path = str(tmp_path / "paper_trading_test.db")
+    first_service = PaperTradingService(db_path=db_path, auto_start_sync=False)
     second_service = None
     try:
         first_service._persist_price_cache({"005930": 70900})
         _insert_portfolio_row(first_service, "5930", "삼성전자")
 
-        second_service = PaperTradingService(db_name=db_name, auto_start_sync=False)
+        second_service = PaperTradingService(db_path=db_path, auto_start_sync=False)
 
         assert second_service.price_cache.get("005930") == 70900
     finally:
