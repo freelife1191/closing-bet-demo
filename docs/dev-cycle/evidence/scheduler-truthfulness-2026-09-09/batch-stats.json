@@ -1,0 +1,9 @@
+{
+  "code_added": 180,
+  "code_deleted": 10,
+  "docs_added": 3027,
+  "docs_deleted": 31,
+  "base": "4e57aa3d74f8ca8592fe7757b398a25f13307c69",
+  "end": "6c50ff4c4ff49c42c498e565d01111c1822f6123",
+  "note": "shared batch counted once; binary and archive commit itself excluded"
+}

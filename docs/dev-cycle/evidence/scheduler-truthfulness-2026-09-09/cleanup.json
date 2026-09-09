@@ -8,6 +8,8 @@
   ],
   "namespace_removed": "/Users/freelife/.agent-browser/namespaces/devcycle-scheduler-ta7kuvwh",
   "profile_removed": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh/qa/browser-profile",
-  "workspace": "pending integration and clone removal",
-  "original_live_requests": false
+  "workspace": "complete",
+  "original_live_requests": false,
+  "temporary_parent_removed": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-scheduler-ta7kuvwh",
+  "original_package_preserved": true
 }

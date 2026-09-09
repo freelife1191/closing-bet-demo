@@ -1,0 +1,10 @@
+{
+  "head": "6c50ff4c4ff49c42c498e565d01111c1822f6123",
+  "base": "4e57aa3d74f8ca8592fe7757b398a25f13307c69",
+  "integrated_files_equal": 125,
+  "source_commit": "3853de87b3f62018fbbb7d6466379d0a40158bea",
+  "source_hashes_equal": 5,
+  "package_sha": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "mode": "fast-forward develop from owned independent clone",
+  "original_venv_preserved": true
+}
