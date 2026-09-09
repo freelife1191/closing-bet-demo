@@ -1,0 +1,26 @@
+{
+  "commit": "1b803ca",
+  "matches": {
+    "frontend/src/app/chatbot/page.tsx": true,
+    "frontend/src/app/chatbot/page.regression-chat-007.test.tsx": true
+  },
+  "runtime": {
+    "root": "/private/tmp/chat029-ui-qa-rZfcTz",
+    "ports": [
+      57391,
+      57392
+    ],
+    "items": [
+      {
+        "pid": 37096,
+        "pgid": 37096,
+        "cwd": "/private/tmp/chat029-ui-qa-rZfcTz"
+      },
+      {
+        "pid": 37097,
+        "pgid": 37097,
+        "cwd": "/private/tmp/chat029-ui-qa-rZfcTz/checkout/frontend"
+      }
+    ]
+  }
+}

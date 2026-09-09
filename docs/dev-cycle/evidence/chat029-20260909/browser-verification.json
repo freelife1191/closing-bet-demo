@@ -1,0 +1,52 @@
+{
+  "source": "1b803ca",
+  "iteration": 3,
+  "required_pass": 3,
+  "driver": "agent-browser",
+  "S1": "attached-two.txt + one-remaining.txt, filespecific names and selected removal",
+  "S2": "pending-stop.txt + stop-aria.txt + stopped.txt/json/png, headers-before-response abort UI",
+  "S3": "typecheck/lint/targettests plus Next runtime/page/console errors empty; owned cleanup",
+  "posts": [
+    {
+      "method": "POST",
+      "path": "/api/kr/chatbot",
+      "status": 200,
+      "synthetic": true,
+      "message": "합성 중단 검수",
+      "model": "synthetic-chat",
+      "files": 0
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/chatbot",
+      "status": 200,
+      "synthetic": true,
+      "message": "합성 대기 중단 검수",
+      "model": "synthetic-chat",
+      "files": 0
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/chatbot",
+      "status": 200,
+      "synthetic": true,
+      "message": "합성 대기 중단 최종 검수",
+      "model": "synthetic-chat",
+      "files": 0
+    }
+  ],
+  "backend_stream_cancel": "not claimed; proxy/backend can continue after browser abort",
+  "streaming_chunk_stop": "not verified; existing CHAT-013",
+  "viewed_images": [
+    "attached-two.png",
+    "stopped.png"
+  ],
+  "failures": [
+    "zsh readonly dependent variable unbound fixed",
+    "placeholder wait25s failed, selector used",
+    "immediate headers expose existing CHAT013",
+    "initial synthetic SSE newline fixed",
+    "pending screenshot stalled, exactownedCLI/browser child terminated then normalclose/reopen",
+    "earlyrestart navigation refused, read readiness and reload"
+  ]
+}

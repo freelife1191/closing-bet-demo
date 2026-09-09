@@ -1,0 +1,68 @@
+- complementary
+  - link "M 스마트 머니 봇" [ref=e2]
+    - StaticText "M"
+    - StaticText "스마트 머니 봇"
+  - navigation
+    - StaticText "DASHBOARD"
+    - button " KR Market " [ref=e3]
+      - StaticText ""
+      - StaticText "KR Market"
+      - StaticText ""
+    - link "● Overview" [ref=e4]
+    - link "● VCP 시그널" [ref=e5]
+    - link "● 종가베팅" [ref=e6]
+    - link "● 누적 성과" [ref=e7]
+    - link "● AI 상담" [ref=e8]
+    - button " 모의투자" [ref=e9]
+      - StaticText ""
+      - StaticText "모의투자"
+    - link " 데이터 상태" [ref=e10]
+      - StaticText ""
+      - StaticText "데이터 상태"
+  - generic
+    - StaticText "무료 사용량"
+    - StaticText "10"
+    - StaticText "회 남음"
+    - button "+" [ref=e11]
+    - button "채 채팅 검수자 Free Tier Plan " [ref=e12]
+      - StaticText "채"
+      - StaticText "채팅 검수자"
+      - StaticText "Free Tier Plan"
+      - StaticText ""
+- button "+ 새 채팅" [ref=e1]
+  - StaticText "+"
+  - StaticText "새 채팅"
+- StaticText "최근 대화"
+- paragraph
+  - StaticText "저장된 대화가 없습니다."
+- generic
+  - generic
+    - button "스마트머니봇" [expanded=false, ref=e13]
+      - StaticText "스마트머니봇"
+    - button "프로필 설정 열기" [ref=e14]
+      - StaticText "채팅"
+  - main
+    - StaticText "2026. 09. 09. 오후 06:45:49"
+    - button "이 질문과 답변 함께 삭제" [ref=e15]
+      - StaticText "질문/답변"
+    - button "이 메시지 삭제" [ref=e16]
+      - StaticText ""
+    - paragraph
+      - StaticText "합성 중단 검수"
+    - StaticText "스마트머니봇"
+    - button "생각하는 과정 표시... " [ref=e17]
+      - StaticText "생각하는 과정 표시..."
+      - StaticText ""
+  - contentinfo
+    - generic
+      - button "파일 첨부" [ref=e18]
+        - StaticText ""
+      - generic
+        - button "CHAT " [ref=e21]
+          - StaticText "CHAT"
+          - StaticText ""
+      - textbox "메시지 입력..." [ref=e19]
+      - button "음성 입력" [ref=e20]
+        - StaticText ""
+      - StaticText "AI는 100% 정확하지 않을 수 있습니다."
+- alert

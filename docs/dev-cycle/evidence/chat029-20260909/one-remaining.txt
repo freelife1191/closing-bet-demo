@@ -1,0 +1,88 @@
+- complementary
+  - link "M 스마트 머니 봇" [ref=e2]
+    - StaticText "M"
+    - StaticText "스마트 머니 봇"
+  - navigation
+    - StaticText "DASHBOARD"
+    - button " KR Market " [ref=e3]
+      - StaticText ""
+      - StaticText "KR Market"
+      - StaticText ""
+    - link "● Overview" [ref=e4]
+    - link "● VCP 시그널" [ref=e5]
+    - link "● 종가베팅" [ref=e6]
+    - link "● 누적 성과" [ref=e7]
+    - link "● AI 상담" [ref=e8]
+    - button " 모의투자" [ref=e9]
+      - StaticText ""
+      - StaticText "모의투자"
+    - link " 데이터 상태" [ref=e10]
+      - StaticText ""
+      - StaticText "데이터 상태"
+  - generic
+    - StaticText "무료 사용량"
+    - StaticText "10"
+    - StaticText "회 남음"
+    - button "+" [ref=e11]
+    - button "채 채팅 검수자 Free Tier Plan " [ref=e12]
+      - StaticText "채"
+      - StaticText "채팅 검수자"
+      - StaticText "Free Tier Plan"
+      - StaticText ""
+- button "+ 새 채팅" [ref=e1]
+  - StaticText "+"
+  - StaticText "새 채팅"
+- StaticText "최근 대화"
+- paragraph
+  - StaticText "저장된 대화가 없습니다."
+- generic
+  - generic
+    - button "스마트머니봇" [expanded=false, ref=e13]
+      - StaticText "스마트머니봇"
+    - button "프로필 설정 열기" [ref=e14]
+      - StaticText "채팅"
+  - main
+    - heading "안녕하세요, 채팅 검수자님" [level=1, ref=e15]
+      - StaticText "안녕하세요, 채팅 검수자님"
+    - heading "무엇을 도와드릴까요?" [level=2, ref=e16]
+    - button " 마켓게이트 상태와 투자 전략 " [ref=e17]
+      - StaticText ""
+      - StaticText "마켓게이트 상태와 투자 전략"
+      - StaticText ""
+    - button " AI 분석 기반 매수 추천 종목 " [ref=e18]
+      - StaticText ""
+      - StaticText "AI 분석 기반 매수 추천 종목"
+      - StaticText ""
+    - button " 오늘의 S/A급 종가베팅 추천 " [ref=e19]
+      - StaticText ""
+      - StaticText "오늘의 S/A급 종가베팅 추천"
+      - StaticText ""
+    - button " 최근 주요 뉴스와 시장 영향 " [ref=e20]
+      - StaticText ""
+      - StaticText "최근 주요 뉴스와 시장 영향"
+      - StaticText ""
+  - contentinfo
+    - generic
+      - button "시장 현황" [ref=e21]
+      - button "VCP 추천" [ref=e22]
+      - button "종가 베팅" [ref=e23]
+      - button "뉴스 분석" [ref=e24]
+      - button "내 관심종목" [ref=e25]
+      - generic
+        - generic
+          - StaticText ""
+          - button "남길파일.csv 첨부 제거" [ref=e29]
+            - StaticText ""
+        - button "파일 첨부" [ref=e26]
+          - StaticText ""
+        - generic
+          - button "CHAT " [ref=e30]
+            - StaticText "CHAT"
+            - StaticText ""
+        - textbox "메시지 입력..." [ref=e27]
+        - button "음성 입력" [ref=e28]
+          - StaticText ""
+        - button "보내기" [ref=e31]
+          - StaticText ""
+      - StaticText "AI는 100% 정확하지 않을 수 있습니다."
+- alert

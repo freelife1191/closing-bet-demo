@@ -442,24 +442,6 @@
 - [ ] `pkill` 호출을 패턴마다 나눔
 - [ ] `stop_all.sh` 와 정리 대상 패턴이 같은지 대조
 
-### [CHAT-029] 챗봇 입력 영역에 이름 없는 버튼이 둘 남아 있다
-- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-07 `[CHAT-007]` 코드 리뷰(`feature-dev:code-reviewer`)의 범위 밖 발견
-- `[CHAT-007]` 이 아이콘 전용 버튼 다섯에 `aria-label` 을 붙였는데, 같은 파일에 둘이 더 남았습니다.
-  첨부 파일 제거 버튼(`fa-times`, `frontend/src/app/chatbot/page.tsx` 의 `attachedFiles` 목록)은
-  `aria-label` 도 `title` 도 없어 접근성 트리에서 이름이 비고, 답변 중단 버튼은 `title="답변 중단"`
-  만 있어 마지막 순위 폴백에 기대고 있습니다. 승인 범위가 다섯 버튼으로 명시되어 있어 그 사이클에
-  넣지 않고 이월했습니다. 첨부 파일 제거는 파일을 붙였을 때만 그려지므로 실측하려면 파일을
-  붙여야 하지만 보내지는 않습니다.
-- [x] 첨부 파일 제거 버튼에 파일 이름을 담은 `aria-label` (예: 「보고서.pdf 첨부 제거」) 을 붙임
-- [x] 답변 중단 버튼에 `aria-label="답변 중단"` 을 붙임
-- [x] `page.regression-chat-007.test.tsx` 의 이름 목록에 둘을 추가
-
-- 설계 경로: bounded | 티어 T1 (표시 이름2개와 회귀 검사, 동작 변경 없음)
-- 승인 근거: 2026-09-09 사용자 연관 라운드 최대 묶음·연속 실행 요청 및 명확한 가역 작업 AUTO-CONTINUE 지시. 현재 대화에 첨부제거 파일명·답변중단 이름 설계를 알리고 같은 접근성 묶음 후속으로 진행.
-- 범위: chatbot/page.tsx 및 page.regression-chat-007.test.tsx. 새 의존성·서버 변경 없음.
-- [x] ponytail 독립 검토·대상 Vitest·typecheck·lint
-- [ ] UltraQA App 대응 agent-browser 합성HTTP/SSE에서 첨부·중단 상태 실측 후 정리
-
 ### [CHAT-027] 프로필이 메모리 영역에 들어오면서 생긴 어긋남 둘
 - 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰
 - `[CHAT-021]` 이 `user_profile` 을 소유자 버킷으로 옮기면서 메모리와 같은 취급을 받게
@@ -1166,6 +1148,8 @@
 - [ ] 스트리밍 중 두 번째 전송을 막거나, 앞 스트림을 중단하고 이어받도록 정함
 - [ ] 세션이 바뀐 뒤 도착한 델타를 버리도록 스트림에 소속 세션 검사를 더함
 - [ ] 위 셋을 각각 붙잡는 vitest 검사 추가
+
+- 2026-09-09 CHAT-029 실측: 합성 SSE headers 직후 useChatStream:171 setIsLoading(false), page isBusy=false로 답변 중단 버튼이 사라짐을 재확인. CHAT-029는 이름 보강 및 headers 전 대기 취소만 검증했으며 이 항목의 스트리밍 상태 결함은 미해결. 증거: evidence/chat029-20260909/diagnosis.md 및 stream-initial.txt.
 
 ### [FE-038] 세션 헤더를 만드는 코드가 세 곳에 흩어져 있다
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-05 `[CHAT-004]` 사이클의 code-review

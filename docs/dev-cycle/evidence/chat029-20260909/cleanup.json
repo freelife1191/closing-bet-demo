@@ -1,0 +1,13 @@
+{
+  "browser_closed": true,
+  "launcher_cleanup_exit": 0,
+  "ownership_checks": "launcher root/PGID/CWD/descendants checked before SIGTERM; ps group empty and ports free before PID record removal",
+  "ports_free": [
+    57391,
+    57392
+  ],
+  "scratch_removed": "/tmp/chat029-ui-qa-rZfcTz",
+  "package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "completed_at": "2026-09-09T18:51:12.467197+09:00",
+  "earlier_browser_recovery": "namespace qa.pid37108 matched, chrome child37109 verified PPID37108 and dedicated profile; exact child terminated, native close succeeded"
+}
