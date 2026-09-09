@@ -1,0 +1,13 @@
+{
+  "required_rows": [
+    "JONGGA-012 S-6",
+    "JONGGA-013 S-4"
+  ],
+  "root": "always-two-column price/checklist grid at375px; nowrap date protrudes into adjacent badge",
+  "overlap_pixel_area": 46.171875,
+  "evidence": "cycle1-mobile-source-geometry.json and cycle1-mobile-source-check.png",
+  "diagnosis": "leader direct architect criteria; no data/security effects",
+  "fix": "grid-cols-1 sm:grid-cols-2; desktop layout preserved",
+  "iteration": 1,
+  "same_failure_count": 1
+}

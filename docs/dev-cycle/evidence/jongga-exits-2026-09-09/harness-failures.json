@@ -1,0 +1,11 @@
+{
+  "product_failure": "cycle1-mobile source overlap fixed in ba91b8e",
+  "setup_failures": [
+    "Netscape cookie input not supported by cookies --curl; corrected private curl Cookie input",
+    "heading ref regex assumed [ref=...] but heading uses [level=..., ref=...]; match ref= anywhere",
+    "cumulative guide has two headings beginning 매매 원칙; scoped exact Exit Strategy",
+    "attempt to view not-yet-created guide screenshot failed; screenshot created and viewed after corrected heading selection"
+  ],
+  "baseline_setup": "Turbopack localhost IPC sandbox and cached failure repaired; original traces kept",
+  "none_counted_as_pass_without_reexecution": true
+}

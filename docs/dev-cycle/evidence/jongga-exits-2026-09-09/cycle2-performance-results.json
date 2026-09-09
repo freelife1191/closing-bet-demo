@@ -1,0 +1,37 @@
+[
+  {
+    "variant": "stored",
+    "daily": "stophit",
+    "table_outcome": "실패",
+    "table_roi": "-3.0%",
+    "overview": "Avg. -3%"
+  },
+  {
+    "variant": "stored",
+    "daily": "sameday",
+    "table_outcome": "실패",
+    "table_roi": "-3.0%",
+    "overview": "Avg. -3%"
+  },
+  {
+    "variant": "stored",
+    "daily": "open",
+    "table_outcome": "보유",
+    "table_roi": "+5.0%",
+    "overview": "Avg. +5%"
+  },
+  {
+    "variant": "custom",
+    "daily": "targethit",
+    "table_outcome": "성공",
+    "table_roi": "+8.0%",
+    "overview": "Avg. +8%"
+  },
+  {
+    "variant": "custom",
+    "daily": "stophit",
+    "table_outcome": "실패",
+    "table_roi": "-4.0%",
+    "overview": "Avg. -4%"
+  }
+]

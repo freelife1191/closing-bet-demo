@@ -1,0 +1,7 @@
+{
+  "height": 900,
+  "overflow": 0,
+  "text": "M\n스마트 머니 봇\nDASHBOARD\nKR Market\n● Overview\n● VCP 시그널\n● 종가베팅\n● 누적 성과\n● AI 상담\n모의투자\n데이터 상태\n무료 사용량\n10회 남음\n+\nJ\nJongga QA Viewer\nFree Tier Plan\n/\n대시보드\n/\n국내 시장\n⌘K\nKR 마켓 알파\n스마트머니 추적\n\nVCP 패턴 & 기관/외국인 수급 추적\n\n실시간\n날짜 지정\n매크로 지표:\n600000분\n마다 자동 갱신\n시그널 분석: 매일 15:40 (KST)\n마지막 업데이트: 오후 02:04\nKR Market Gate\n시장 강도(Score)와 수급 상태를 종합 분석한 마켓 타이밍 지표입니다.\n72\nSCORE\nBullish\n상승장 (매수 우위)\nKOSPI 200 Sector Index\nKOSPI 200 주요 섹터별 등락 현황입니다.\nBULLISH\n상승세: 20/60일 이평 상회 및 수급 유입\nNEUTRAL\n혼조세: 방향성 탐색 중\nBEARISH\n하락세: 주요 이평 하회 및 수급 이탈\n오늘의 시그널\n오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다.\n0\nVCP + 외국인 순매수\nVCP 전략\nVCP 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n0%\n평균 수익률 (Avg)\n0%\n기준:\n익절 +9%, 손절 -5% 기준 백테스팅 결과입니다.\n해석:\n시장 변동성이 크거나 추세가 약해 보수적 대응이 필요합니다.\n표본:\n총 0번의 매매 신호를 분석한 결과입니다.\n기준표\n미흡\n0%\nAvg. 0%\nNo trades\n종가베팅 전략\n종가베팅 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n0%\n평균 수익률 (Avg)\n-3%\n기준:\n종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다.\n해석:\n시장 변동성이 크거나 추세가 약해 보수적 대응이 필요합니다.\n표본:\n총 1번의 매매 신호를 분석한 결과입니다.\n기준표\n미흡\n0%\nAvg. -3%\n1 trades\nMarket Indices\n주요 국내외 증시 지수 현황입니다.\nKOSPI\n2,800\n+0.4%\nKOSDAQ\n920\n-0.2%\nS&P 500\n--\nNASDAQ\n--\nCommodities\n금, 은 등 주요 원자재 가격 동향입니다.\nKRX GOLD\n--\nKRX SILVER\n--\nUS GOLD (F)\n$--\nUS SILVER (F)\n$--\nCrypto Assets\n주요 암호화폐 실시간 시세입니다.\nBITCOIN\n--\nETHEREUM\n--\nXRP\n--\n궁금한 건 채팅으로 문의하세요\n대화 시작하기",
+  "url": "http://127.0.0.1:57262/dashboard/kr",
+  "width": 1280
+}

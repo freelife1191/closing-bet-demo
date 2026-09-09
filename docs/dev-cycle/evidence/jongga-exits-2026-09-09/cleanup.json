@@ -1,0 +1,13 @@
+{
+  "runtime": "complete",
+  "ports_not_listening": [
+    57261,
+    57262,
+    63173
+  ],
+  "namespace_removed": "/Users/freelife/.agent-browser/namespaces/devcycle-jongga-rl9kpa8c",
+  "profile_fake_cookies_env_removed": true,
+  "workspace": "pending",
+  "original_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "original_venv_exists": true
+}

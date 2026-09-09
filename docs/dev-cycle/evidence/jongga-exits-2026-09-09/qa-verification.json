@@ -1,0 +1,17 @@
+{
+  "required": 10,
+  "passed": 10,
+  "cycles": 2,
+  "same_failure_count": 0,
+  "source_commit": "ba91b8eadf96f5586a3849733a1bb09a1411e5e2",
+  "pytest": 2249,
+  "pytest_skipped": 3,
+  "vitest": 424,
+  "browser_page_errors": {},
+  "browser_console_errors": {},
+  "requests": 166,
+  "request_mutations": 0,
+  "backend_raw_preserved": true,
+  "screenshots": 35,
+  "cleanup": "runtime complete, workspace pending"
+}

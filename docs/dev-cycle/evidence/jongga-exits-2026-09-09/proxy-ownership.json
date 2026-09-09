@@ -1,0 +1,7 @@
+{
+  "pid": 98031,
+  "port": 63173,
+  "actual_cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-jongga-rl9kpa8c",
+  "verified_command": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python qa/deny_proxy.py",
+  "terminated": "SIGTERM"
+}

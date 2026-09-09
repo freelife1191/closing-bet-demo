@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "path": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/next-panic-d7c107efbf41d5bc48853ab76c42ee14.log",
+      "removed": true
+    },
+    {
+      "path": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/next-panic-2478cb3cc847cb5288734d51ea2c7b15.log",
+      "removed": true
+    },
+    {
+      "path": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/next-panic-a73aad967e67ebe9235bd83cca126a50.log",
+      "removed": true
+    },
+    {
+      "path": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/next-panic-22f88d848df5dee014fe7bc63857f39e.log",
+      "removed": true
+    }
+  ],
+  "ownership": "exact paths from owned build stdout, temp parent, uid and command time windows"
+}
