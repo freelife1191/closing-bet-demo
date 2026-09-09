@@ -1,0 +1,16 @@
+{
+  "completed_at": "2026-09-09T11:50:11.616505+00:00",
+  "scratch_removed": true,
+  "owned_processes": 0,
+  "owned_cwd_processes": 0,
+  "user_package_unchanged": true,
+  "source_hashes_unchanged": true,
+  "original_data_sidecars": {
+    "count": 27396,
+    "names_sha256": "3d07ae06f38a219ddb547635d882261909c828eab07252365ec814e2a7961fb8"
+  },
+  "original_data_sidecar_names_unchanged": true,
+  "qa_iteration": 1,
+  "qa_required_passed": 5,
+  "qa_required_total": 5
+}

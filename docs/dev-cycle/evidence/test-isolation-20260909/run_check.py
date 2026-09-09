@@ -28,7 +28,7 @@ environment = {key: os.environ[key] for key in ("PATH", "HOME", "USER", "TMPDIR"
 environment.update(PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(scratch), CI="true", PYTHON_DOTENV_DISABLED="1", TMPDIR=str(scratch / "tmp"))
 started = time.monotonic()
 started_at = datetime.now(timezone.utc).isoformat()
-with (evidence / (stage + ".log")).open("w") as output:
+with (evidence / (stage.replace(":", "-") + ".log")).open("w") as output:
     process = subprocess.Popen(["sandbox-exec", "-f", str(scratch / ("qa-target.sb" if stage == "target" else "qa.sb")), *command], cwd=cwd, env=environment, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
     timed_out = False
     try:
@@ -39,6 +39,6 @@ with (evidence / (stage + ".log")).open("w") as output:
         process.wait()
         code = 124
 result = {"stage": stage, "started_at": started_at, "ended_at": datetime.now(timezone.utc).isoformat(), "pid": process.pid, "command": command, "cwd": str(cwd), "timeout_seconds": timeout, "timed_out": timed_out, "exit_code": code, "elapsed_seconds": round(time.monotonic() - started, 2)}
-(evidence / (stage + ".json")).write_text(json.dumps(result, indent=2) + "\n")
+(evidence / (stage.replace(":", "-") + ".json")).write_text(json.dumps(result, indent=2) + "\n")
 print(json.dumps(result))
 sys.exit(code)

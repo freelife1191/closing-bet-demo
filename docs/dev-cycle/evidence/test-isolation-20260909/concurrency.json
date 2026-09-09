@@ -1,0 +1,14 @@
+[
+  {
+    "repeat": 1,
+    "overlap_seconds": 7.336992,
+    "build_exit": 0,
+    "vitest_exit": 0
+  },
+  {
+    "repeat": 2,
+    "overlap_seconds": 6.407904,
+    "build_exit": 0,
+    "vitest_exit": 0
+  }
+]

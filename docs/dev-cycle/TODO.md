@@ -409,25 +409,6 @@
 
 ## P2 — 대기
 
-### [FE-042] vitest 스모크 검사가 실제 `next build` 를 돌려 간헐적으로 실패한다
-- 현재 라운드: 2026-09-09 테스트 격리 묶음 T2. 설계/실행 근거는 사용자 「연관된 라운드들 쭉 이어서」「최대한 한번에 묶어서」 및 AUTO-CONTINUE. 별도 승인 응답을 만들지 않음.
-- [x] 제한된 설계와 변경 범위 확정 — `evidence/test-isolation-20260909/scope.md`
-- [x] 독립 리뷰 ponytail SHIP → code-reviewer APPROVE / architect BLOCK→수정→CLEAR, 정적 검증 통과
-- [ ] UltraQA 행렬 실행·정리
-- 카테고리: 프론트엔드 | 티어: T1 | 근거: 2026-09-08 `[INFRA-053]` 사이클의 정적 검증에서
-  12회 실행 중 2회 관측했습니다.
-- `frontend/tests/smoke/upgrade-smoke.test.ts:57` 의 `Build Verification` 이
-  `should successfully build the application` 에서 실제 `next build` 를 돌립니다. 4.8초가
-  걸리며 `.next` 를 씁니다.
-- 다른 명령이 같은 시점에 파일 시스템을 건드리면 1건이 실패합니다. 단독으로 연달아 돌린
-  6회는 전부 통과했습니다. **실패한 검사의 이름은 확보하지 못했습니다.** 재현되는 순간의
-  전체 출력을 남기려 반복했으나 그동안 실패가 나오지 않았습니다.
-- 자동화에서 다른 작업과 겹치면 통과 여부가 갈리므로, 사이클마다 「이번 변경 때문인가」를
-  다시 판정하는 비용이 듭니다.
-- QA 시나리오: 다른 명령과 동시에 돌려도 vitest 가 안정적으로 통과한다
-- [ ] 실패 검사의 이름과 오류를 먼저 확보(반복 실행 로그 보존)
-- [ ] 실제 빌드를 돌리는 검사를 기본 실행에서 분리할지 결정
-
 ### [INFRA-054] `restart_all.sh` 의 프로세스 정리 한 줄이 통째로 무동작이다
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-08 `[INFRA-049]` 사이클에서 발견했습니다.
   같은 사이클의 `oh-my-claudecode:security-reviewer` 도 종료 코드로 확인했습니다.
@@ -1110,7 +1091,7 @@
 - 현재 라운드: 2026-09-09 테스트 격리 묶음 T2. 설계/실행 근거는 사용자 「연관된 라운드들 쭉 이어서」「최대한 한번에 묶어서」 및 AUTO-CONTINUE. 별도 승인 응답을 만들지 않음.
 - [x] 제한된 설계와 변경 범위 확정 — `evidence/test-isolation-20260909/scope.md`
 - [x] 독립 리뷰 ponytail SHIP → code-reviewer APPROVE / architect BLOCK→수정→CLEAR, 정적 검증 통과
-- [ ] UltraQA 행렬 실행·정리
+- [x] UltraQA App 대응 5/5 통과·정리 완료 — `qa/INFRA-035.md`, 구현 커밋 `38fab47`
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-07 `[FE-015]` 사이클의 QA 준비 중 발견, 2026-09-07 백로그 정리에서 출처 확인
 - QA 시나리오: `pytest tests/services/test_paper_trading_service.py` 를 돌린 뒤 `data/` 의
   `.db-wal`·`.db-shm` 수가 늘지 않는다
@@ -1126,9 +1107,11 @@
   명령이 인자 수 제한에 걸렸습니다. 앞으로도 `data/` 를 훑는 모든 작업이 같은 벽에 부딪힙니다.
 - `data/` 는 읽기 전용 규약이므로 이미 쌓인 파일을 지우는 조작은 사용자 결정이 필요합니다.
   픽스처를 `tmp_path` 로 옮기면 새로 쌓이지는 않습니다.
-- [ ] 픽스처가 `data/` 대신 `tmp_path` 에 DB 를 만들고 연결을 닫도록 고침
-- [ ] pytest 전체를 돌린 뒤 `data/` 의 `.db-wal` 수가 늘지 않는 것을 확인
+- [x] 아직 `db_name`을 쓰던5개 테스트를 `tmp_path`로 전환. 공통 helper는 이미 임시 경로, 연결은 기존 AutoClosingSQLiteConnection이 닫음. 자체 DB/WAL/SHM 정리 보완 (`38fab47`)
+- [x] 비밀 없는 격리 전체 pytest2279/3skip 통과 및 원본sidecar27396개 이름해시불변. 별도 data쓰기차단 target86개 통과로 새 data 쓰기방지 확인
 - [ ] 이미 쌓인 11,647 쌍과 `cmp_dev_*` 셋을 어떻게 할지 사용자와 정함
+
+- 현재 남은 일: 원본 누적 파일의 처리 결정만 대기. 기존 설명의 수량·공통 helper 경로는 과거 관측이며, 2026-09-09 원본 WAL/SHM 파일 합계는27396개. 기존 파일을 삭제하지 않았고 완료 아카이브도 만들지 않음.
 
 ### [INFRA-066] 개별 라우트 오류 래퍼가 예외 원문을 500 응답에 남긴다
 - 카테고리: 인프라 | 티어: T2 예상 | 근거: 2026-09-09 INFRA-017·038 범위 검토

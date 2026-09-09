@@ -1,0 +1,11 @@
+[
+  ".krx_collector_cache",
+  ".market_schedule_cache",
+  "paper_trading_sync.lock",
+  "runtime_cache.db",
+  "scheduler_runtime_status.json",
+  "usage.db",
+  "v2_screener_status.json",
+  "vcp_status.json",
+  "vcp_status.json.lock"
+]

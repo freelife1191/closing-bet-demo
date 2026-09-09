@@ -1,0 +1,11 @@
+{
+  "commit": "38fab479911e6ebde198841959e0d6c4e0c49fc3",
+  "scratch_matches_commit": true,
+  "files": {
+    "frontend/package.json": "58a83763b9cf865fd5a71f5c5a4b50ff64e7487715af6456c54e5c6cf7aa36c2",
+    "frontend/tests/smoke/upgrade-smoke.test.ts": "dc552a9c6e07538d9398bc9719c2a563033bd82cab577e0b6997e9b559e36f82",
+    "frontend/tests/build-checks/verify-build.mjs": "3ffaf8d55911ee147c4c1674b0c1705248c61f02d0413817b28717be2681769d",
+    "frontend/tests/build-checks/README.md": "762aaeca08c86abf949cb552d6f91ea057c4fb9ab56ff3a4170a84468199d21a",
+    "tests/services/test_paper_trading_service.py": "12aba5aba926304d65e45eeec9c2e9f5e2659c5121c552ca6a48a64e69d542b5"
+  }
+}
