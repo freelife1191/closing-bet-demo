@@ -263,7 +263,10 @@ def update_env_file(
             if key in updated_keys:
                 continue
             value = str(raw_value)
-            if "*" in value or not value:
+            if "*" in value:
+                continue
+            if not value:
+                removed.append(key)
                 continue
             if new_lines and not new_lines[-1].endswith("\n"):
                 new_lines[-1] += "\n"

@@ -1,0 +1,23 @@
+{
+  "command": [
+    "codex",
+    "exec",
+    "--ephemeral",
+    "--ignore-user-config",
+    "--sandbox",
+    "read-only",
+    "-c",
+    "approval_policy=\"never\"",
+    "--cd",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout",
+    "--color",
+    "never",
+    "--json",
+    "--output-last-message",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/058-arch.md",
+    "-"
+  ],
+  "exit": 0,
+  "seconds": 58.22,
+  "surface": "independent ephemeral read-only Codex CLI; native architect thread limit fallback"
+}
