@@ -1,0 +1,18 @@
+{
+  "source": "749a4de",
+  "scanned_files": 31,
+  "secret_matches": [],
+  "required_passed": 3,
+  "required_total": 3,
+  "iteration": 3,
+  "harness_failures": "initial loading/404 resolved with readiness+fresh owned cache; empty fill did not send empty state, actual Backspace did",
+  "product_source_unchanged_during_qa": true,
+  "browser_page_errors": 0,
+  "expected_console_errors": [
+    "Failed to save env vars (injected pre-write OSError/HTTP500)"
+  ],
+  "unexpected_console_errors": 0,
+  "next_compilation_issues": 0,
+  "next_config_errors": 0,
+  "next_expected_runtime_console": 1
+}

@@ -1,0 +1,8 @@
+{
+  "observed": "/api/system/env returned404 while source file and MCP routes included it",
+  "source_unchanged": true,
+  "next_step": "stop owned Next/Flask and start with fresh owned .next cache",
+  "classification": "runtime setup failure; cause pending cold comparison",
+  "cold_same_source_status": 200,
+  "conclusion": "same tracked source worked after fresh owned .next cache; persistent cache suspected, not a proven product-source cause"
+}

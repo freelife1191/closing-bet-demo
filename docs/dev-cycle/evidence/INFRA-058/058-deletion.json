@@ -1,0 +1,12 @@
+{
+  "source": "749a4de",
+  "deleted_from_file": true,
+  "deleted_from_worker": true,
+  "request_status": 200,
+  "input": "actual keyboard Backspace; file key removed after input clear before save",
+  "write_failure": {
+    "status": 500,
+    "file_unchanged": true,
+    "worker_value_unchanged": true
+  }
+}

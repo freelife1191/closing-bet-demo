@@ -1,0 +1,9 @@
+{
+  "classification": "harness setup failure, not product defect",
+  "root_cause": "snapshot obtained during initial React loading; dependent fill/click were incorrectly attempted after setup failure",
+  "attempts": 1,
+  "fix": "wait for dashboard and notification tab before refs; stop dependent operations on nonzero exit",
+  "product_source_unchanged": true,
+  "failed_screenshot": "058-harness-failure.png",
+  "not_pass": true
+}
