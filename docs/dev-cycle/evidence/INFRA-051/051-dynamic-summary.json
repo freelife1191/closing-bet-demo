@@ -1,0 +1,14 @@
+{
+  "source": "726aa39",
+  "required_passed": 3,
+  "required_total": 3,
+  "scanned_files": 31,
+  "secret_matches": [],
+  "page_errors": 0,
+  "mask_probe": {
+    "authKeysAbsent": true,
+    "hostRestored": true,
+    "passwordMasked": true,
+    "status": 200
+  }
+}

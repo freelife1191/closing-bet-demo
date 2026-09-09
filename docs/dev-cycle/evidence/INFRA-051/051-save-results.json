@@ -1,0 +1,44 @@
+{
+  "partial_response": {
+    "body": {
+      "applied": [
+        "SMTP_PORT"
+      ],
+      "message": "Some settings were rejected; accepted settings were saved.",
+      "preserved": [],
+      "rejected": {
+        "ADMIN_API_TOKEN": "unsupported_key",
+        "SMTP_HOST": "unsafe_value"
+      },
+      "removed": [],
+      "status": "error"
+    },
+    "status": 400
+  },
+  "normal_key_applied": true,
+  "rejected_values_not_persisted": true,
+  "normal_ui_saved": true,
+  "invalid_requests_through_next": [
+    {
+      "body": {
+        "message": "Expected a JSON object",
+        "status": "error"
+      },
+      "status": 400
+    },
+    {
+      "body": {
+        "message": "Invalid JSON request",
+        "status": "error"
+      },
+      "status": 400
+    },
+    {
+      "body": {
+        "message": "Invalid JSON request",
+        "status": "error"
+      },
+      "status": 400
+    }
+  ]
+}

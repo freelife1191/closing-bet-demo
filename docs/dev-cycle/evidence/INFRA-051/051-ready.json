@@ -1,0 +1,17 @@
+{
+  "mode": "dev",
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout",
+  "head": "726aa396e2280281661ad6307cdf88795ac2f173",
+  "backend": {
+    "port": 50982,
+    "pid": 9939,
+    "pgid": 9939,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout"
+  },
+  "next": {
+    "port": 50983,
+    "pid": 10013,
+    "pgid": 10013,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout/frontend"
+  }
+}
