@@ -17,7 +17,6 @@ from .payload_service import (
     compose_system_prompt as _compose_system_prompt_impl,
 )
 from .stock_query_service import (
-    fallback_response as _fallback_response_impl,
     format_stock_info as _format_stock_info_impl,
 )
 
@@ -99,11 +98,6 @@ class CorePayloadMixin:
         """jongga_v2_latest.json에서 최신 S/A급 종목 조회"""
         return _fetch_jongga_data_impl(DATA_DIR)
 
-    def _fallback_response(self, user_message: str, vcp_data: list) -> str:
-        """AI 사용 불가 시 폴백 응답"""
-        return _fallback_response_impl(user_message, vcp_data)
-
     def _format_stock_info(self, stock: Dict) -> str:
         """종목 정보 포맷팅"""
         return _format_stock_info_impl(stock)
-

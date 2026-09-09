@@ -395,62 +395,6 @@ def test_signal_tracker_stock_map_uses_sqlite_snapshot_after_memory_clear(tmp_pa
     assert tracker_reloaded._stock_name_map["000001"] == "테스트주"
 
 
-def test_get_performance_report_loads_minimum_columns(tmp_path, monkeypatch):
-    signals_path = tmp_path / "signals_log.csv"
-    signals_path.write_text("dummy\n", encoding="utf-8-sig")
-    captured: dict[str, object] = {}
-
-    def _fake_read_csv(path, *args, **kwargs):
-        captured["path"] = str(path)
-        captured["usecols"] = kwargs.get("usecols")
-        captured["low_memory"] = kwargs.get("low_memory")
-        return pd.DataFrame(
-            [
-                {
-                    "status": "OPEN",
-                    "return_pct": 0.0,
-                    "signal_date": "2026-02-20",
-                    "exit_date": "",
-                    "hold_days": 1,
-                }
-            ]
-        )
-
-    monkeypatch.setattr(signal_tracker_analysis_mixin.pd, "read_csv", _fake_read_csv)
-
-    tracker = object.__new__(SignalTracker)
-    tracker.signals_log_path = str(signals_path)
-    tracker.strategy_params = {"stop_loss_pct": 7.0}
-
-    report = tracker.get_performance_report()
-
-    assert report["message"] == "아직 청산된 시그널이 없습니다"
-    assert str(captured.get("path", "")).endswith("signals_log.csv")
-    usecols = captured.get("usecols")
-    assert callable(usecols) or usecols == ["exit_date", "hold_days", "return_pct", "signal_date", "status"]
-    assert captured.get("low_memory") is False
-
-
-def test_get_performance_report_handles_missing_columns_gracefully(tmp_path, monkeypatch):
-    signals_path = tmp_path / "signals_log.csv"
-    signals_path.write_text("dummy\n", encoding="utf-8-sig")
-
-    def _fake_read_csv(_path, *args, **kwargs):
-        del args, kwargs
-        return pd.DataFrame([{"status": "OPEN"}])
-
-    monkeypatch.setattr(signal_tracker_analysis_mixin.pd, "read_csv", _fake_read_csv)
-
-    tracker = object.__new__(SignalTracker)
-    tracker.signals_log_path = str(signals_path)
-    tracker.strategy_params = {"stop_loss_pct": 7.0}
-
-    report = tracker.get_performance_report()
-
-    assert report["message"] == "아직 청산된 시그널이 없습니다"
-    assert report["open_signals"] == 1
-
-
 def test_update_open_signals_loads_log_with_ticker_dtype(tmp_path, monkeypatch):
     signals_path = tmp_path / "signals_log.csv"
     signals_path.write_text("dummy\n", encoding="utf-8-sig")

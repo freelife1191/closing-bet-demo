@@ -19,7 +19,6 @@ from .data_service import (
     default_daily_suggestions as _default_daily_suggestions_impl,
     fetch_latest_news as _fetch_latest_news_impl,
     fetch_market_gate as _fetch_market_gate_impl,
-    fetch_mock_data as _fetch_mock_data_impl,
     fetch_vcp_ai_analysis as _fetch_vcp_ai_analysis_impl,
     get_cached_daily_suggestions as _get_cached_daily_suggestions_impl,
     get_cached_data as _get_cached_data_impl,
@@ -34,7 +33,6 @@ from .stock_context import (
 )
 from .stock_query_service import (
     detect_stock_query as _detect_stock_query_impl,
-    detect_stock_query_from_stock_map as _detect_stock_query_from_stock_map_impl,
     detect_stock_query_from_vcp_data as _detect_stock_query_from_vcp_data_impl,
 )
 
@@ -49,10 +47,6 @@ class CoreDataAccessMixin:
     def _get_cached_data(self) -> Dict[str, Any]:
         """Fetch market data with caching"""
         return _get_cached_data_impl(self)
-
-    def _fetch_mock_data(self):
-        """폴백용 Mock 데이터 (실제 데이터 로드 실패 시)"""
-        return _fetch_mock_data_impl()
 
     def _fetch_market_gate(self) -> Dict[str, Any]:
         """market_gate.json에서 최신 시장 상태 조회"""
@@ -144,16 +138,6 @@ class CoreDataAccessMixin:
         trend_txt = self._fetch_institutional_trend(ticker)
         signal_txt = self._fetch_signal_history(ticker)
         return format_stock_context(name, ticker, price_txt, trend_txt, signal_txt)
-
-    def _detect_stock_query_from_stock_map(self, message: str) -> Optional[str]:
-        """전체 종목 맵에서 종목 질문을 감지해 상세 컨텍스트를 반환한다."""
-        return _detect_stock_query_from_stock_map_impl(
-            message=message,
-            stock_map=self.stock_map,
-            ticker_map=self.ticker_map,
-            format_stock_context_fn=self._format_stock_context,
-            logger=logger,
-        )
 
     def _detect_stock_query_from_vcp_data(self, message: str) -> Optional[str]:
         """VCP 캐시 데이터에서 종목 질문을 감지해 요약 정보를 반환한다."""

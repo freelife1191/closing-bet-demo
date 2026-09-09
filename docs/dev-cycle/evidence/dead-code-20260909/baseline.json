@@ -1,0 +1,7 @@
+{
+  "base": "4757dc354d37598fe0f53dd182eb67c458a3f115",
+  "target_command": "venv/bin/pytest tests/engine/test_signal_tracker_refactor.py -q",
+  "exit_code": 0,
+  "result": "22 passed in 2.31s",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8"
+}

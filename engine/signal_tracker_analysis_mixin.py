@@ -53,13 +53,6 @@ PERFORMANCE_SOURCE_COLUMNS = [
     "hold_days",
 ]
 PERFORMANCE_SOURCE_COLUMN_SET = set(PERFORMANCE_SOURCE_COLUMNS)
-PERFORMANCE_DEFAULTS: dict[str, Any] = {
-    "status": "OPEN",
-    "return_pct": 0.0,
-    "signal_date": "",
-    "exit_date": "",
-    "hold_days": 0,
-}
 _SUPPLY_SCORE_FRAME_CACHE_LOCK = threading.Lock()
 _SUPPLY_SCORE_FRAME_CACHE: OrderedDict[
     tuple[str, tuple[int, int, int], float],
@@ -267,22 +260,6 @@ class SignalTrackerAnalysisMixin:
             usecols_filter=PERFORMANCE_SOURCE_COLUMN_SET,
         )
 
-    @staticmethod
-    def _normalize_performance_frame(df: pd.DataFrame) -> pd.DataFrame:
-        """리포트 계산 필수 컬럼을 보정한다."""
-        if not isinstance(df, pd.DataFrame):
-            return pd.DataFrame(columns=PERFORMANCE_SOURCE_COLUMNS)
-
-        normalized = df.copy()
-        for column, default_value in PERFORMANCE_DEFAULTS.items():
-            if column not in normalized.columns:
-                normalized[column] = default_value
-
-        normalized["return_pct"] = pd.to_numeric(normalized["return_pct"], errors="coerce").fillna(0.0)
-        normalized["hold_days"] = pd.to_numeric(normalized["hold_days"], errors="coerce").fillna(0).astype(int)
-        normalized["status"] = normalized["status"].fillna("OPEN").astype(str)
-        return normalized
-
     def scan_today_signals(self) -> pd.DataFrame:
         """오늘의 시그널 스캔."""
         logger.info("🔍 오늘의 시그널 스캔 시작...")
@@ -446,49 +423,6 @@ class SignalTrackerAnalysisMixin:
         updated_df.to_csv(self.signals_log_path, index=False, encoding="utf-8-sig")
         self._refresh_signals_log_source_cache(self.signals_log_path, updated_df)
         logger.info(f"✅ 시그널 업데이트 완료: {len(closed_logs)}개 청산")
-
-    def get_performance_report(self) -> Dict:
-        """전략 성과 리포트."""
-        if not os.path.exists(self.signals_log_path):
-            return {"error": "시그널 로그가 없습니다"}
-
-        df = self._normalize_performance_frame(
-            self._load_performance_source_frame(self.signals_log_path)
-        )
-
-        closed = df[df["status"] == "CLOSED"]
-        open_signals = df[df["status"] == "OPEN"]
-
-        if len(closed) == 0:
-            return {
-                "message": "아직 청산된 시그널이 없습니다",
-                "open_signals": len(open_signals),
-                "total_signals": len(df),
-            }
-
-        wins = len(closed[closed["return_pct"] > 0])
-        losses = len(closed[closed["return_pct"] <= 0])
-
-        total_profit = closed[closed["return_pct"] > 0]["return_pct"].sum()
-        total_loss = abs(closed[closed["return_pct"] <= 0]["return_pct"].sum())
-        profit_factor = total_profit / total_loss if total_loss > 0 else float("inf")
-
-        return {
-            "period": f"{closed['signal_date'].min()} ~ {closed['exit_date'].max()}",
-            "total_signals": len(df),
-            "closed_signals": len(closed),
-            "open_signals": len(open_signals),
-            "wins": wins,
-            "losses": losses,
-            "win_rate": round(wins / len(closed) * 100, 1) if len(closed) > 0 else 0,
-            "avg_return": round(closed["return_pct"].mean(), 2),
-            "total_return": round(closed["return_pct"].sum(), 2),
-            "best_trade": round(closed["return_pct"].max(), 2),
-            "worst_trade": round(closed["return_pct"].min(), 2),
-            "avg_hold_days": round(closed["hold_days"].mean(), 1),
-            "profit_factor": round(profit_factor, 2),
-            "strategy_params": self.strategy_params,
-        }
 
     def calculate_vcp_score(self, vcp_info: Dict) -> float:
         """VCP 신호 강도 점수 (0-20점) - BLUEPRINT 기준."""

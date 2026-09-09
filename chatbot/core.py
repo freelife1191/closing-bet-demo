@@ -156,17 +156,6 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         """Gemini 클라이언트 리소스 정리 (asyncio Task pending 오류 방지)"""
         _close_client_impl(self.client, logger)
         self.client = None
-            
-        # 데이터 캐시
-        self._data_cache = None
-        self._cache_timestamp = None
-        self._cache_ttl = 60 # 60 seconds TTL
-        
-        # 전체 종목 리스트 로드 (이름/코드 매핑용)
-        self.stock_map = {} # name -> ticker
-        self.ticker_map = {} # ticker -> name
-        self._load_stock_map()
-        self._default_session_id = None
 
     def _load_stock_map(self):
         """korean_stocks_list.csv 로드하여 매핑 생성"""

@@ -1,0 +1,13 @@
+{
+  "stage": "lint",
+  "command": [
+    "npm",
+    "run",
+    "lint"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dead-code-qa-_zaas_yk/frontend",
+  "timeout_seconds": 60,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 6.05
+}

@@ -924,6 +924,7 @@
 - [ ] 기존 27건의 Z.ai 테스트가 그대로 통과하는지 확인
 
 ### [CHAT-005] 죽은 프롬프트 상수와 레거시 경로 정리
+- 진행: 2026-09-09 bounded 묶음 구현. 사용자 현재 연속 진행 요청과 AUTO-CONTINUE 범위; 별도 승인 응답을 만들어 기록하지 않음. 상세: `evidence/dead-code-20260909/scope.md`. 공유 T2 ponytail SHIP·code-review APPROVE·architect CLEAR 및 전체 pytest/Vitest 통과. UltraQA 행렬 실행 대기.
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §3.1, §3.2
 - 티어 판정: 삭제 위주이며 위험 경로에 닿지 않습니다. 170줄에서 250줄 사이로 보지만,
   구현 후 `git diff --stat` 이 300줄을 넘으면 `tier-rules.md` §3-6 에 따라 `T3` 으로
@@ -1060,6 +1061,7 @@
 - [ ] 여섯 어휘가 각각 어떤 표시로 이어지는지 vitest 로 고정
 
 ### [INFRA-021] 테스트 밖에서 부르지 않는 `get_performance_report` 가 JSON 으로 옮길 수 없는 손익비를 낸다
+- 진행: 2026-09-09 bounded 묶음 구현. 사용자 현재 연속 진행 요청과 AUTO-CONTINUE 범위; 별도 승인 응답을 만들어 기록하지 않음. 상세: `evidence/dead-code-20260909/scope.md`. 공유 T2 ponytail SHIP·code-review APPROVE·architect CLEAR 및 전체 pytest/Vitest 통과. UltraQA 행렬 실행 대기.
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-03 FLOW-004 사이클의 code-review
 - `engine/signal_tracker_analysis_mixin.py:474` 가 손실이 0일 때 `float("inf")` 를 손익비로
   돌려주고 `:489` 에서 그대로 dict 에 담습니다. JSON 으로 내보내면 `Infinity` 가 되어
