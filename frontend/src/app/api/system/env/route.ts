@@ -41,23 +41,29 @@ async function proxy(method: 'GET' | 'POST', body?: string) {
     );
   }
 
-  const response = await fetch(`${FLASK_BASE}/api/system/env`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Admin-Token': token,
-    },
-    body,
-    cache: 'no-store',
-  });
+  try {
+    const response = await fetch(`${FLASK_BASE}/api/system/env`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Token': token,
+      },
+      body,
+      cache: 'no-store',
+    });
 
-  const text = await response.text();
-  // 200 본문에는 부분적으로 가려진 비밀이 담긴다. 앞단에 공유 캐시가 놓이면 관리자의
-  // 응답이 익명 요청자에게 재사용될 수 있으므로 캐시를 막는다.
-  return new NextResponse(text, {
-    status: response.status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-  });
+    const text = await response.text();
+    // 200 본문에는 부분적으로 가려진 비밀이 담기므로 공유 캐시를 막는다.
+    return new NextResponse(text, {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  } catch {
+    return NextResponse.json(
+      { status: 'error', message: 'Settings service unavailable' },
+      { status: 502, headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
 }
 
 export async function GET() {

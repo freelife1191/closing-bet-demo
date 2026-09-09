@@ -1,0 +1,7 @@
+{
+  "failure": "TS2339 toBeDisabled matcher lacks project type augmentation",
+  "affected": "new test only; runtime matcher existed",
+  "fix": "native Element.matches(:disabled) assertion of same observable state; no suppression/dependency/test removal",
+  "prior_full_vitest_exit": 1,
+  "prior_typecheck_exit": 1
+}

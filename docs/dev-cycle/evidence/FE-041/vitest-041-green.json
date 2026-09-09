@@ -1,0 +1,15 @@
+{
+  "name": "vitest-041-green",
+  "command": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "src/app/components/SettingsModal.notification.test.tsx",
+    "src/app/components/SettingsModal.save-isolation.test.tsx",
+    "src/app/components/SettingsModal.admin-gate.test.tsx",
+    "src/app/api/system/env/route.test.ts"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-notification-rounds-4s28gwie/checkout/frontend",
+  "exit": 0,
+  "seconds": 1.46,
+  "policy": "local-network.sb"
+}

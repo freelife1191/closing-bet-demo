@@ -282,11 +282,26 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
     try {
       // 먼저 알림 설정을 저장한다. 서버가 .env 에서 읽어야 발송할 수 있기 때문이다.
       // 저장 버튼을 누르지 않은 요청이므로 알림에 필요한 키만 보낸다.
-      await fetch('/api/system/env', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pickNotificationEnv(envVars))
-      });
+      try {
+        const savedResponse = await fetch('/api/system/env', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pickNotificationEnv(envVars))
+        });
+        if (!savedResponse.ok) throw new Error('Settings save failed');
+        const saved: unknown = await savedResponse.json();
+        if (!saved || typeof saved !== 'object' || !('status' in saved) || saved.status !== 'ok') {
+          throw new Error('Settings save was not confirmed');
+        }
+      } catch {
+        setTestModal({
+          isOpen: true,
+          type: 'danger',
+          title: '설정 저장 실패',
+          content: '설정 저장을 확인하지 못해 테스트 발송을 중단했습니다. 일부 설정은 반영되었을 수 있습니다.',
+        });
+        return;
+      }
 
       const res = await fetch('/api/notification/send', {
         method: 'POST',
@@ -294,9 +309,10 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
         body: JSON.stringify({ platform })
       });
 
-      const data = await res.json();
+      const data: unknown = await res.json();
+      const result = data && typeof data === 'object' ? data : null;
 
-      if (res.ok) {
+      if (res.ok && result && 'status' in result && result.status === 'success') {
         setTestModal({
           isOpen: true,
           type: 'success',
@@ -308,15 +324,15 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
           isOpen: true,
           type: 'danger',
           title: '발송 실패',
-          content: `발송 실패: ${data.message}`,
+          content: result && 'message' in result && typeof result.message === 'string'
+            ? `발송 실패: ${result.message}` : '알림을 발송하지 못했습니다.',
         });
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
       setTestModal({
         isOpen: true,
         type: 'danger',
-        title: '오류 발생',
+        title: '발송 실패',
         content: '테스트 발송 중 오류가 발생했습니다.',
       });
     } finally {

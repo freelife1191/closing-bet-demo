@@ -1,0 +1,7 @@
+{
+  "frontend/src/app/components/SettingsModal.tsx": "e6d071638fe77a3e3f209506a2157b4e0c2a3c4ba908bb12b6836a012f868bd1",
+  "frontend/src/app/api/system/env/route.ts": "6cc3b644e07b51554e7c192541ff3f5fe8e9ce8483fb07425ec3623c299147b6",
+  "frontend/src/app/components/SettingsModal.notification.test.tsx": "ea873327815c45aa2f5ebb45cbc958a91a713c18806618277a43fcd8737d9489",
+  "frontend/src/app/api/system/env/route.test.ts": "84c81d5dc527d8a9b9c942adf056f062177fff735316b8740428408bb42020d3",
+  "docs/superpowers/plans/2026-09-09-notification-settings.md": "433e97e8b8adfc24c8b34685300b1d5123ccceb6c01cda812182d1039b347f4f"
+}
