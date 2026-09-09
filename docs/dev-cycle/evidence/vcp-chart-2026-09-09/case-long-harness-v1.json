@@ -1,0 +1,8 @@
+{
+  "scenario": "long",
+  "exit": 1,
+  "seconds": 27.300575017929077,
+  "timeout": 120,
+  "source": "qa_cases.py via agent-browser",
+  "cycle": 2
+}

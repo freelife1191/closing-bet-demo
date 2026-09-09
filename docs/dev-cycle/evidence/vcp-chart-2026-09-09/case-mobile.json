@@ -1,0 +1,8 @@
+{
+  "scenario": "mobile",
+  "exit": 0,
+  "seconds": 2.2623281478881836,
+  "timeout": 120,
+  "source": "qa_cases.py via agent-browser",
+  "cycle": 2
+}

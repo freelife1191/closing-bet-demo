@@ -1,0 +1,45 @@
+{
+  "success": true,
+  "data": {
+    "errors": [
+      {
+        "column": 20,
+        "line": 2079,
+        "text": "Error: An unexpected Turbopack error occurred. Please see the output of `next dev` for more details.\n    at getServerError (http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_20ud_8w._.js:2019:62)\n    at http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2080:27",
+        "url": null
+      },
+      {
+        "column": 20,
+        "line": 2079,
+        "text": "Error: An unexpected Turbopack error occurred. Please see the output of `next dev` for more details.\n    at getServerError (http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_20ud_8w._.js:2019:62)\n    at http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2080:27",
+        "url": null
+      },
+      {
+        "column": 20,
+        "line": 2079,
+        "text": "Error: An unexpected Turbopack error occurred. Please see the output of `next dev` for more details.\n    at getServerError (http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_20ud_8w._.js:2019:62)\n    at http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2080:27",
+        "url": null
+      },
+      {
+        "column": 20,
+        "line": 2079,
+        "text": "Error: An unexpected Turbopack error occurred. Please see the output of `next dev` for more details.\n    at getServerError (http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_20ud_8w._.js:2019:62)\n    at http://127.0.0.1:57262/_next/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2080:27",
+        "url": null
+      }
+    ],
+    "lifecycle": {
+      "effectiveLaunch": {
+        "browserLaunched": true,
+        "engine": "chrome",
+        "launchHash": 12897871292426535482
+      },
+      "launched": false,
+      "relaunchedBrowser": false,
+      "restartedBackground": false,
+      "restoreStatus": "not_configured",
+      "reused": true,
+      "saveStatus": "not_configured"
+    }
+  },
+  "error": null
+}

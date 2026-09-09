@@ -1,0 +1,8 @@
+{
+  "scenario": "empty-single-fail",
+  "exit": 0,
+  "seconds": 4.586848974227905,
+  "timeout": 120,
+  "source": "qa_cases.py via agent-browser",
+  "cycle": 2
+}

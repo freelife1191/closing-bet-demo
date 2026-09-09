@@ -1,0 +1,8 @@
+{
+  "scenario": "resize",
+  "exit": 0,
+  "seconds": 1.807948112487793,
+  "timeout": 120,
+  "source": "qa_cases.py via agent-browser",
+  "cycle": 2
+}

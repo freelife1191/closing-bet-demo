@@ -1,0 +1,17 @@
+{
+  "backend": {
+    "pid": 89070,
+    "pgid": 89070,
+    "port": 57261,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-vcp-z89pj2p2/checkout",
+    "command_token": "qa_fixture.py"
+  },
+  "next": {
+    "pid": 89097,
+    "pgid": 89097,
+    "port": 57262,
+    "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-vcp-z89pj2p2/checkout/frontend",
+    "command_token": "npm"
+  },
+  "url": "http://127.0.0.1:57262/dashboard/kr/vcp"
+}

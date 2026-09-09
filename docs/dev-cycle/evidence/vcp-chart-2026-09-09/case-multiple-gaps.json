@@ -1,0 +1,8 @@
+{
+  "scenario": "multiple-gaps",
+  "exit": 0,
+  "seconds": 1.2950952053070068,
+  "timeout": 120,
+  "source": "qa_cases.py via agent-browser",
+  "cycle": 2
+}

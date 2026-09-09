@@ -1,0 +1,15 @@
+{
+  "review_input_hashes_match": true,
+  "case_commands_pass": 12,
+  "required_rows": 12,
+  "required_pass": 12,
+  "source_commit": "966651a6019e61b5dcf601b2c4137254722f0ae5",
+  "chart_requests": 26,
+  "request_total": 233,
+  "forbidden_mutation_requests": 0,
+  "browser_fresh_errors": 0,
+  "next_compilation_issues": 0,
+  "next_config_errors": 0,
+  "next_session_errors": 0,
+  "cleanup": "pending"
+}

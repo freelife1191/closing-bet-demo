@@ -1,0 +1,299 @@
+{
+  "before": {
+    "ai": {
+      "bottom": 870,
+      "height": 808,
+      "right": 1247,
+      "width": 500,
+      "x": 747,
+      "y": 62
+    },
+    "canvases": 7,
+    "chart": {
+      "bottom": 767,
+      "height": 588,
+      "right": 729,
+      "width": 680,
+      "x": 49,
+      "y": 179
+    },
+    "empty": false,
+    "error": false,
+    "high": "₩968,170",
+    "horizontalOverflow": 0,
+    "info": {
+      "bottom": 870,
+      "height": 41,
+      "right": 746,
+      "width": 713,
+      "x": 33,
+      "y": 829
+    },
+    "loading": false,
+    "low": "₩958,010",
+    "modal": {
+      "bottom": 871,
+      "height": 810,
+      "right": 1248,
+      "width": 1216,
+      "x": 32,
+      "y": 61
+    },
+    "open": true,
+    "period": [
+      "1개월"
+    ],
+    "sma": {
+      "bottom": 813,
+      "height": 38,
+      "right": 730,
+      "width": 681,
+      "x": 49,
+      "y": 775
+    },
+    "title": "한화에어로스페이스 (012450)"
+  },
+  "after": {
+    "ai": {
+      "bottom": 870,
+      "height": 808,
+      "right": 1247,
+      "width": 500,
+      "x": 747,
+      "y": 62
+    },
+    "canvases": 7,
+    "chart": {
+      "bottom": 767,
+      "height": 588,
+      "right": 729,
+      "width": 680,
+      "x": 49,
+      "y": 179
+    },
+    "empty": false,
+    "error": false,
+    "high": "₩968,170",
+    "horizontalOverflow": 0,
+    "info": {
+      "bottom": 870,
+      "height": 41,
+      "right": 746,
+      "width": 713,
+      "x": 33,
+      "y": 829
+    },
+    "loading": false,
+    "low": "₩958,010",
+    "modal": {
+      "bottom": 871,
+      "height": 810,
+      "right": 1248,
+      "width": 1216,
+      "x": 32,
+      "y": 61
+    },
+    "open": true,
+    "period": [
+      "1개월"
+    ],
+    "sma": {
+      "bottom": 813,
+      "height": 38,
+      "right": 730,
+      "width": 681,
+      "x": 49,
+      "y": 775
+    },
+    "title": "한화에어로스페이스 (012450)"
+  },
+  "records": [
+    {
+      "at": 1788924799,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "3m",
+        "end": "2026-05-05"
+      },
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_summary": {
+        "count": 9,
+        "first": "2026-03-01",
+        "last": "2026-05-05",
+        "last30_high": 430200,
+        "last10_low": 398002
+      },
+      "chart_mode": "gap"
+    },
+    {
+      "at": 1788924816,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "1y",
+        "end": "2026-05-05"
+      },
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_summary": {
+        "count": 176,
+        "first": "2025-08-27",
+        "last": "2026-05-05",
+        "last30_high": 513900,
+        "last10_low": 481249
+      },
+      "chart_mode": "gap"
+    },
+    {
+      "at": 1788924829,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "1m",
+        "end": "2026-05-05"
+      },
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_summary": {
+        "count": 0,
+        "first": null,
+        "last": null,
+        "last30_high": 0,
+        "last10_low": 0
+      },
+      "chart_mode": "empty"
+    },
+    {
+      "at": 1788924830,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "1m",
+        "end": "2026-05-05"
+      },
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_summary": {
+        "count": 1,
+        "first": "2026-05-05",
+        "last": "2026-05-05",
+        "last30_high": 410400,
+        "last10_low": 407647
+      },
+      "chart_mode": "single"
+    },
+    {
+      "at": 1788924831,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "1m",
+        "end": "2026-05-05"
+      },
+      "status": 503,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_mode": "fail"
+    },
+    {
+      "at": 1788924832,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "1m",
+        "end": "2026-05-05"
+      },
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_summary": {
+        "count": 22,
+        "first": "2026-04-14",
+        "last": "2026-05-05",
+        "last30_high": 410400,
+        "last10_low": 403570
+      },
+      "chart_mode": "normal"
+    },
+    {
+      "at": 1788924850,
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "query": {},
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present"
+    },
+    {
+      "at": 1788924855,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "1m",
+        "end": "2026-05-05"
+      },
+      "status": 102,
+      "event": "start",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_mode": "delayed"
+    },
+    {
+      "at": 1788924855,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/012450",
+      "query": {
+        "period": "1m",
+        "end": "2026-05-05"
+      },
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_summary": {
+        "count": 22,
+        "first": "2026-04-14",
+        "last": "2026-05-05",
+        "last30_high": 968170,
+        "last10_low": 958010
+      },
+      "chart_mode": "normal"
+    },
+    {
+      "at": 1788924856,
+      "method": "GET",
+      "path": "/api/kr/stock-chart/267260",
+      "query": {
+        "period": "1m",
+        "end": "2026-05-05"
+      },
+      "status": 200,
+      "event": "complete",
+      "synthetic_api": true,
+      "auth_identity": "present",
+      "chart_summary": {
+        "count": 22,
+        "first": "2026-04-14",
+        "last": "2026-05-05",
+        "last30_high": 410400,
+        "last10_low": 403570
+      },
+      "chart_mode": "delayed",
+      "chart_delay_released": true,
+      "result": "success"
+    }
+  ]
+}

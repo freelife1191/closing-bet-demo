@@ -1,0 +1,2 @@
+[error] Failed to load chart: {status: 503, data: Object, stack: "Error: synthetic chart failure
+    at fetchAPI (ht…262/_next/static/chunks/src_0eg5zj_._.js:2117:25)", message: "synthetic chart failure", Symbol(next.console.error.digest): "NEXT_CONSOLE_ERROR"}

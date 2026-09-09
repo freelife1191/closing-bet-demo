@@ -1,0 +1,2 @@
+[error] Failed to load chart: {status: 503, data: Object, stack: "Error: synthetic delayed chart failure
+    at fetc…262/_next/static/chunks/src_0eg5zj_._.js:2117:25)", message: "synthetic delayed chart failure", Symbol(next.console.error.digest): "NEXT_CONSOLE_ERROR"}

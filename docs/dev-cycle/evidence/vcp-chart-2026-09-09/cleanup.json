@@ -1,0 +1,12 @@
+{
+  "runtime": "complete",
+  "ports_stopped": {
+    "57261": true,
+    "57262": true,
+    "52898": true
+  },
+  "browser_namespace_removed": true,
+  "fake_credentials_removed": true,
+  "workspace": "pending integration/archive",
+  "timestamp": 1788925315.938397
+}

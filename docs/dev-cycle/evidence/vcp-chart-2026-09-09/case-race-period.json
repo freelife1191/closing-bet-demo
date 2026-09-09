@@ -1,0 +1,8 @@
+{
+  "scenario": "race-period",
+  "exit": 0,
+  "seconds": 2.950505018234253,
+  "timeout": 120,
+  "source": "qa_cases.py via agent-browser",
+  "cycle": 2
+}

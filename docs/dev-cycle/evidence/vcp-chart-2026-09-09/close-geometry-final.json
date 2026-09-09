@@ -1,0 +1,25 @@
+[
+  {
+    "viewport": [
+      1280,
+      900
+    ],
+    "glyph": "×",
+    "height": 39.390625,
+    "label": "차트 닫기",
+    "width": 28.03125
+  },
+  {
+    "viewport": [
+      375,
+      812
+    ],
+    "glyph": "×",
+    "height": 39.390625,
+    "label": "차트 닫기",
+    "width": 28.03125
+  },
+  {
+    "pointer_close": "closed"
+  }
+]

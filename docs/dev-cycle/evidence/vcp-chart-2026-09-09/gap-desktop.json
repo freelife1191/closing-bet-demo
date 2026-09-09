@@ -1,0 +1,55 @@
+{
+  "ai": {
+    "bottom": 870,
+    "height": 808,
+    "right": 1247,
+    "width": 500,
+    "x": 747,
+    "y": 62
+  },
+  "canvases": 7,
+  "chart": {
+    "bottom": 767,
+    "height": 516,
+    "right": 729,
+    "width": 680,
+    "x": 49,
+    "y": 251
+  },
+  "empty": false,
+  "error": false,
+  "gaps": "관측 자료의 날짜 간격 7일 초과: 1구간캔들은 관측일 순서로 표시됩니다. 휴장·거래정지·수집 누락 여부는 날짜 간격만으로 구분할 수 없습니다.2026-03-06 → 2026-04-30: 55일",
+  "high": "₩430,200",
+  "horizontalOverflow": 0,
+  "info": {
+    "bottom": 870,
+    "height": 41,
+    "right": 746,
+    "width": 713,
+    "x": 33,
+    "y": 829
+  },
+  "loading": false,
+  "low": "₩398,002",
+  "modal": {
+    "bottom": 871,
+    "height": 810,
+    "right": 1248,
+    "width": 1216,
+    "x": 32,
+    "y": 61
+  },
+  "open": true,
+  "period": [
+    "3개월"
+  ],
+  "sma": {
+    "bottom": 813,
+    "height": 38,
+    "right": 730,
+    "width": 681,
+    "x": 49,
+    "y": 775
+  },
+  "title": "HD현대일렉트릭 (267260)"
+}

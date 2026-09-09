@@ -1,0 +1,8 @@
+{
+  "scenario": "gap-open",
+  "exit": 0,
+  "seconds": 2.226755142211914,
+  "timeout": 120,
+  "source": "qa_cases.py via agent-browser",
+  "cycle": 2
+}

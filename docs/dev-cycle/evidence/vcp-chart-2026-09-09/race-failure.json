@@ -1,0 +1,54 @@
+{
+  "ai": {
+    "bottom": 870,
+    "height": 808,
+    "right": 1247,
+    "width": 500,
+    "x": 747,
+    "y": 62
+  },
+  "canvases": 7,
+  "chart": {
+    "bottom": 767,
+    "height": 588,
+    "right": 729,
+    "width": 680,
+    "x": 49,
+    "y": 179
+  },
+  "empty": false,
+  "error": false,
+  "high": "₩968,170",
+  "horizontalOverflow": 0,
+  "info": {
+    "bottom": 870,
+    "height": 41,
+    "right": 746,
+    "width": 713,
+    "x": 33,
+    "y": 829
+  },
+  "loading": false,
+  "low": "₩958,010",
+  "modal": {
+    "bottom": 871,
+    "height": 810,
+    "right": 1248,
+    "width": 1216,
+    "x": 32,
+    "y": 61
+  },
+  "open": true,
+  "period": [
+    "1개월"
+  ],
+  "sma": {
+    "bottom": 813,
+    "height": 38,
+    "right": 730,
+    "width": 681,
+    "x": 49,
+    "y": 775
+  },
+  "title": "한화에어로스페이스 (012450)"
+}
