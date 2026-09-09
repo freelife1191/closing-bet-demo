@@ -60,6 +60,19 @@ describe('사이드바의 계정 표기', () => {
 
     expect(screen.getAllByText('저장된이름').length).toBeGreaterThan(0);
   });
+
+  it('프로필 갱신 이벤트에서 캐시가 없으면 공통 기본 프로필로 되돌린다', async () => {
+    mockSession(null, 'unauthenticated');
+    await renderSidebar();
+    localStorage.removeItem('user_profile');
+
+    await act(async () => {
+      window.dispatchEvent(new Event('user-profile-updated'));
+    });
+
+    expect(screen.getAllByText('User').length).toBeGreaterThan(0);
+    expect(screen.queryByText('저장된이름')).toBeNull();
+  });
 });
 
 describe('사용량 조회', () => {

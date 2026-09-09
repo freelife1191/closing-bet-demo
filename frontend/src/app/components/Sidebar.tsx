@@ -8,14 +8,14 @@ import PaperTradingModal from './PaperTradingModal';
 import { useSession, signOut } from 'next-auth/react';
 import { useAdmin } from '@/hooks/useAdmin';
 import { getBrowserSessionId } from '@/lib/session';
-import { saveUserProfile } from './chatHelpers';
+import { DEFAULT_USER_PROFILE, normalizeUserProfile, resolveUserProfile, saveUserProfile, type UserProfile } from './chatHelpers';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isKrExpanded, setIsKrExpanded] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [profile, setProfile] = useState({ name: 'User', email: 'user@example.com', persona: '' });
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
 
   const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [isPaperTradingOpen, setIsPaperTradingOpen] = useState(false);
@@ -36,8 +36,12 @@ export default function Sidebar() {
   // 표시의 기준은 세션이다. 권한 판정(useAdmin)과 사용량 집계가 모두 세션 이메일을 쓰므로,
   // 사이드바만 localStorage 프로필을 보여 주면 어느 계정으로 로그인했는지 오해하게 된다.
   const { data: session, status } = useSession();
-  const displayName = (status === 'authenticated' && session?.user?.name) || profile.name;
-  const displayEmail = (status === 'authenticated' && session?.user?.email) || profile.email;
+  const displayProfile = resolveUserProfile(
+    profile,
+    status === 'authenticated' ? session?.user : null,
+  );
+  const displayName = displayProfile.name;
+  const displayEmail = displayProfile.email;
 
   // Close mobile sidebar on path change
   useEffect(() => {
@@ -48,12 +52,21 @@ export default function Sidebar() {
     const handleSidebarToggle = () => setIsMobileOpen(prev => !prev);
     window.addEventListener('sidebar-toggle', handleSidebarToggle);
 
-    const savedProfile = localStorage.getItem('user_profile');
-    if (savedProfile) {
+    const loadProfile = () => {
+      const savedProfile = localStorage.getItem('user_profile');
+      if (!savedProfile) {
+        setProfile(DEFAULT_USER_PROFILE);
+        return;
+      }
       try {
-        setProfile(JSON.parse(savedProfile));
-      } catch (e) { console.error("Profile parse error", e); }
-    }
+        setProfile(normalizeUserProfile(JSON.parse(savedProfile)));
+      } catch (e) {
+        console.error("Profile parse error", e);
+        setProfile(DEFAULT_USER_PROFILE);
+      }
+    };
+    loadProfile();
+    window.addEventListener('user-profile-updated', loadProfile);
 
     const handleOpenSettings = () => setIsSettingsOpen(true);
     window.addEventListener('open-settings', handleOpenSettings);
@@ -61,6 +74,7 @@ export default function Sidebar() {
     return () => {
       window.removeEventListener('sidebar-toggle', handleSidebarToggle);
       window.removeEventListener('open-settings', handleOpenSettings);
+      window.removeEventListener('user-profile-updated', loadProfile);
     };
   }, []);
 

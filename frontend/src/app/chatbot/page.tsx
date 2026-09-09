@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { fetchAPI } from '@/lib/api';
 
 import Link from 'next/link';
@@ -14,6 +15,8 @@ import {
   getAuthHeaders,
   getStoredModel,
   saveUserProfile,
+  resolveUserProfile,
+  normalizeUserProfile,
   setStoredModel,
   shouldSendOnEnter,
 } from '../components/chatHelpers';
@@ -40,6 +43,7 @@ const SUGGESTIONS: SuggestionCard[] = [
 ];
 
 export default function ChatbotPage() {
+  const { data: session, status } = useSession();
   const {
     messages,
     setMessages,
@@ -76,6 +80,10 @@ export default function ChatbotPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile Sidebar State
   const [isMenuExpanded, setIsMenuExpanded] = useState(true); // Menu Parsing State
+  const displayProfile = resolveUserProfile(
+    userProfile,
+    status === 'authenticated' ? session?.user : null,
+  );
 
   // Delete Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -215,8 +223,11 @@ export default function ChatbotPage() {
       const cachedProfile = localStorage.getItem('user_profile');
       if (cachedProfile) {
         try {
-          setUserProfile(JSON.parse(cachedProfile));
-        } catch (e) { console.error("Cache clean needed"); }
+          setUserProfile(normalizeUserProfile(JSON.parse(cachedProfile)));
+        } catch (e) {
+          console.error("Cache clean needed");
+          setUserProfile(DEFAULT_USER_PROFILE);
+        }
       } else {
         setUserProfile(DEFAULT_USER_PROFILE);
       }
@@ -599,11 +610,11 @@ export default function ChatbotPage() {
             <div className="p-4 border-t border-white/5 bg-[#131314]">
               <button onClick={() => { setIsSettingsOpen(true); setIsMobileSidebarOpen(false); }} className="flex items-center gap-3 w-full text-left">
                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg">
-                  {userProfile.name.slice(0, 2).toUpperCase()}
+                  {displayProfile.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-gray-200 truncate">{userProfile.name}</div>
-                  <div className="text-xs text-gray-500 truncate">{userProfile.email}</div>
+                  <div className="text-sm font-bold text-gray-200 truncate">{displayProfile.name}</div>
+                  <div className="text-xs text-gray-500 truncate">{displayProfile.email}</div>
                 </div>
                 <i className="fas fa-cog text-gray-500"></i>
               </button>
@@ -750,11 +761,11 @@ export default function ChatbotPage() {
               {/* User Avatar - Initials */}
               <button
                 className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg"
-                title={userProfile.name}
+                title={displayProfile.name}
                 aria-label="프로필 설정 열기"
                 onClick={() => setIsSettingsOpen(true)}
               >
-                {userProfile.name.slice(0, 2).toUpperCase()}
+                {displayProfile.name.slice(0, 2).toUpperCase()}
               </button>
             </div>
           </div>
@@ -768,7 +779,7 @@ export default function ChatbotPage() {
                 <div className="flex-1 flex flex-col justify-center items-center space-y-6 md:space-y-8 mt-4 md:mt-20 animate-fade-in">
                   <div className="space-y-2 text-center px-4">
                     <h1 className="text-2xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] animate-fade-in-up break-keep leading-tight">
-                      안녕하세요, {userProfile.name}님
+                      안녕하세요, {displayProfile.name}님
                     </h1>
                     <h2 className="text-lg md:text-4xl font-bold text-[#444746] opacity-50 animate-fade-in-up delay-100 break-keep leading-tight">
                       무엇을 도와드릴까요?

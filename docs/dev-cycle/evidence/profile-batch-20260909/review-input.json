@@ -1,0 +1,25 @@
+{
+  "base": "2a37cfc",
+  "files": {
+    "frontend/src/app/chatbot/page.tsx": "2263a4614e0eda1642d4f6c3a63be3fd5124a83301c3bf554b5651d572da5458",
+    "frontend/src/app/components/SettingsModal.tsx": "dbb1ce22d60ae9347350a771772cc95d7e4d02b7e44439931a8c36a3799cb67c",
+    "frontend/src/app/components/Sidebar.session.test.tsx": "fdd3a4cc24bef0972494d5e671056000262e5e5a94485e1a48c4125f7ca2a43e",
+    "frontend/src/app/components/Sidebar.tsx": "ef43b8f938f061cae43b363113fc7e304b9b0002f9cd36e410b715757e40a4ea",
+    "frontend/src/app/components/chatHelpers.test.ts": "713d2da325b558691bcc2de0fcd4f0dd545b7980be1a1c27c1df849bc49b53e7",
+    "frontend/src/app/components/chatHelpers.ts": "7dd840d2fab21daa0a90b9eb04e67a4d5e0759ea31b22b2eb9c00a8d7d4341e4",
+    "frontend/src/app/chatbot/page.regression-chat-022.test.tsx": "9a5c8a0cf289b747be1144c52ad075b2f63d4a9eee6faee337a8aeff017beff4",
+    "frontend/src/app/components/SettingsModal.profile.test.tsx": "a98553ee152fbbc09df6f0480633c5d3a223781e18a7497815a0945a665bd529"
+  },
+  "requirements": "scope.md",
+  "pytest": {
+    "exit": 0,
+    "passed": 2281,
+    "skipped": 2
+  },
+  "vitest": {
+    "passed": 439,
+    "files": 62
+  },
+  "typecheck": "green log",
+  "lint": "0 errors/199 warnings"
+}

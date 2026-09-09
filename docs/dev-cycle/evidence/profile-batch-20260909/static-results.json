@@ -1,0 +1,28 @@
+{
+  "pytest": {
+    "exit_code": 0,
+    "passed": 2281,
+    "skipped": 2,
+    "seconds": 33.64
+  },
+  "vitest": {
+    "exit_code": 0,
+    "passed": 439,
+    "files": 62,
+    "seconds": 13.62
+  },
+  "target": {
+    "exit_code": 0,
+    "passed": 27,
+    "files": 4
+  },
+  "typecheck": {
+    "exit_code": 0
+  },
+  "lint": {
+    "exit_code": 0,
+    "errors": 0,
+    "warnings": 199
+  },
+  "initial_failure": "new test matcher toHaveValue not in configured TypeScript matcher types; fixed typed input value assertion, full rerun success"
+}

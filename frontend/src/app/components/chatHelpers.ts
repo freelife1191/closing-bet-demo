@@ -48,11 +48,47 @@ export function getAuthHeaders(): Record<string, string> {
 
 // 저장된 프로필이 없을 때 화면이 그리는 폴백. 서버 렌더와 첫 클라이언트 렌더가 같은 값을
 // 그리도록 `useState` 의 초기값으로도 쓴다.
-export const DEFAULT_USER_PROFILE = {
-  name: '흑기사',
+export interface UserProfile {
+  name: string;
+  email: string;
+  persona: string;
+}
+
+export const DEFAULT_USER_PROFILE: UserProfile = {
+  name: 'User',
   email: 'user@example.com',
   persona: ''
 };
+
+export function normalizeUserProfile(profile: unknown): UserProfile {
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+    return DEFAULT_USER_PROFILE;
+  }
+
+  const value = profile as Partial<UserProfile>;
+  return {
+    name: typeof value.name === 'string' && value.name ? value.name : DEFAULT_USER_PROFILE.name,
+    email: typeof value.email === 'string' && value.email ? value.email : DEFAULT_USER_PROFILE.email,
+    persona: typeof value.persona === 'string' ? value.persona : DEFAULT_USER_PROFILE.persona,
+  };
+}
+
+export function resolveUserProfile(
+  profile: Partial<UserProfile> | null | undefined,
+  sessionUser?: { name?: string | null; email?: string | null } | null,
+): UserProfile {
+  const normalizedProfile = normalizeUserProfile(profile);
+  const profileName = normalizedProfile.name.trim();
+  const profileEmail = normalizedProfile.email.trim();
+  const sessionName = sessionUser?.name?.trim();
+  const sessionEmail = sessionUser?.email?.trim();
+
+  return {
+    name: sessionName || profileName || DEFAULT_USER_PROFILE.name,
+    email: sessionEmail || profileEmail || DEFAULT_USER_PROFILE.email,
+    persona: normalizedProfile.persona,
+  };
+}
 
 // 프로필을 서버에 저장하고, 성공했을 때만 로컬 캐시와 화면을 갱신한다. 거절되면 던진다.
 // `SettingsModal.handleSave` 가 그 예외를 받아 오류 모달을 띄운다.

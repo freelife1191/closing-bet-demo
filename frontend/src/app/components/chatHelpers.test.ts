@@ -3,6 +3,8 @@ import {
   STORED_MODEL_KEY,
   shouldSendOnEnter,
   getStoredModel,
+  normalizeUserProfile,
+  resolveUserProfile,
   setStoredModel,
   saveUserProfile,
 } from './chatHelpers';
@@ -28,6 +30,35 @@ describe('shouldSendOnEnter', () => {
 
   it('IME guard wins over Shift state', () => {
     expect(shouldSendOnEnter('Enter', true, true)).toBe(false);
+  });
+});
+
+describe('resolveUserProfile', () => {
+  it('세션 표기는 우선하되 저장 프로필의 페르소나는 유지한다', () => {
+    expect(resolveUserProfile(
+      { name: '저장된 이름', email: 'saved@example.com', persona: '사용자 페르소나' },
+      { name: '세션 이름', email: 'session@example.com' },
+    )).toEqual({
+      name: '세션 이름',
+      email: 'session@example.com',
+      persona: '사용자 페르소나',
+    });
+  });
+
+  it('저장값이 없거나 비어 있으면 공통 기본 프로필을 쓴다', () => {
+    expect(resolveUserProfile(null)).toEqual({
+      name: 'User',
+      email: 'user@example.com',
+      persona: '',
+    });
+  });
+
+  it('손상된 캐시는 공통 기본 프로필로 정규화한다', () => {
+    expect(normalizeUserProfile(null)).toEqual({
+      name: 'User',
+      email: 'user@example.com',
+      persona: '',
+    });
   });
 });
 

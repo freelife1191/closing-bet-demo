@@ -17,6 +17,8 @@ interface SettingsModalProps {
 
 type Tab = 'profile' | 'api' | 'system' | 'notification';
 
+const ROLE_OPTIONS = ['엔지니어링', '리서치', '디자인', '트레이딩', '학생'];
+
 export default function SettingsModal({ isOpen, onClose, profile, onSave }: SettingsModalProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -27,8 +29,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   const [isSaving, setIsSaving] = useState(false);
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
   const [isLoadingEnv, setIsLoadingEnv] = useState(false);
-  const [role, setRole] = useState('엔지니어링');
-  const [isCustomRole, setIsCustomRole] = useState(false);
+  const [isCustomRole, setIsCustomRole] = useState(!ROLE_OPTIONS.includes(profile.persona));
 
 
 
@@ -64,6 +65,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
       setName(profile.name);
       setEmail(profile.email || 'user@example.com');
       setPersona(profile.persona);
+      setIsCustomRole(!ROLE_OPTIONS.includes(profile.persona));
 
       // Load watchlist from localStorage
       const savedWatchlist = localStorage.getItem('watchlist');
@@ -511,13 +513,14 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                       <div className="space-y-2">
                         <div className="relative">
                           <select
-                            value={role === '직접 입력' || !['엔지니어링', '리서치', '디자인', '트레이딩', '학생'].includes(role) ? '직접 입력' : role}
+                            value={isCustomRole ? '직접 입력' : persona}
                             onChange={(e) => {
                               const val = e.target.value;
                               if (val === '직접 입력') {
-                                setRole('직접 입력'); // Placeholder for custom input
+                                setPersona('');
+                                setIsCustomRole(true);
                               } else {
-                                setRole(val);
+                                setPersona(val);
                                 setIsCustomRole(false);
                               }
                             }}
@@ -533,14 +536,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                           <i className="fas fa-chevron-down absolute right-4 top-3.5 text-xs text-gray-500 pointer-events-none"></i>
                         </div>
 
-                        {(role === '직접 입력' || isCustomRole) && (
+                        {isCustomRole && (
                           <input
                             type="text"
-                            value={role === '직접 입력' ? '' : role}
-                            onChange={(e) => {
-                              setRole(e.target.value);
-                              setIsCustomRole(true);
-                            }}
+                            value={persona}
+                            onChange={(e) => setPersona(e.target.value)}
                             className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#5c5cff]/50 transition-colors animate-fadeIn"
                             placeholder="직무를 직접 입력하세요"
                             autoFocus
@@ -1007,7 +1007,10 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                       <label className="block text-xs font-bold text-gray-500 mb-1.5">시스템 프롬프트 / 페르소나</label>
                       <textarea
                         value={persona}
-                        onChange={(e) => setPersona(e.target.value)}
+                        onChange={(e) => {
+                          setPersona(e.target.value);
+                          setIsCustomRole(!ROLE_OPTIONS.includes(e.target.value));
+                        }}
                         rows={6}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white resize-none focus:outline-none focus:border-[#5c5cff]/50 transition-colors"
                         placeholder="AI에게 부여할 전역 페르소나를 입력하세요..."
