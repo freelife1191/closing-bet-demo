@@ -164,8 +164,8 @@ export default function StockChart({ data, ticker, name, vcpRange }: ChartProps)
   };
 
   return (
-    <div className="w-full h-full relative group">
-      <div ref={chartContainerRef} className="w-full h-full pb-8" />
+    <div className="w-full h-full min-h-0 flex flex-col relative group">
+      <div ref={chartContainerRef} className="w-full flex-1 min-h-0" />
 
       {/* VCP Range Tooltip (상단) */}
       <div className="absolute top-2 left-2 z-10 flex gap-2">
@@ -183,8 +183,8 @@ export default function StockChart({ data, ticker, name, vcpRange }: ChartProps)
       </div>
 
       {/* SMA Toggles Tooltip (하단) */}
-      <div className="absolute bottom-1 left-0 right-0 z-10 flex justify-center mt-2 px-2 overflow-x-auto custom-scrollbar pb-1">
-        <div className="flex bg-black/80 rounded border border-white/10 p-1 gap-1 items-center backdrop-blur-sm shadow-lg">
+      <div className="relative shrink-0 z-10 flex justify-center mt-2 px-1 pb-1">
+        <div className="flex flex-wrap justify-center bg-black/80 rounded border border-white/10 p-1 gap-1 items-center backdrop-blur-sm shadow-lg">
           <div className="relative group/tooltip">
             <span className="text-[10px] text-gray-400 font-bold px-2 py-1 cursor-help flex items-center gap-1">
               이동평균선 토글 <i className="fas fa-info-circle"></i>

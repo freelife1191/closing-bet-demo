@@ -83,7 +83,14 @@
 - 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
 
 ### [VCP-012] 차트 조회 응답의 도착 순서를 보장하지 않는다
-- 카테고리: VCP 시그널 | 티어: T1 | 근거: 2026-09-02 VCP-010 마감 code-review
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: 2026-09-02 VCP-010 마감 code-review
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09T12:00:40.578773+09:00
+  | 범위: VCP-012 응답 경합 방지 → FE-018 모바일 배치 → VCP-014 기간 전환·긴 날짜 간격 표시의 연속 3개 라운드
+  | 실제 대화 근거: 현재 대화의 3개 라운드 설계 제안에 사용자 「승인」 응답
+- 실행: bounded/T2, 독립 clone의 develop; 코드 300줄 이하 예상. 리뷰별 15분, 전체 90분 상한; 초과는 미완료로 기록.
+- [x] TDD·React 지침·Next fetching-data 번들 문서 적용
+- [x] ponytail → code-reviewer/architect 독립 리뷰 (native 기존 agent 역할지침 대체; code APPROVE, arch delta CLEAR/기존 WATCH 한계 보존)
+- [ ] 전체 pytest·vitest·typecheck·lint 및 UltraQA 실측·정리
 - `frontend/src/app/dashboard/kr/vcp/page.tsx` 의 `openChart` 에 요청 순번 가드가 없어서,
   먼저 보낸 요청의 응답이 늦게 도착하면 나중에 연 종목의 차트를 덮어씁니다. 종목 A 의
   상세를 열고 응답을 기다리는 동안 닫고 종목 B 를 열면, A 의 응답이 B 의 화면에 실립니다.
@@ -94,6 +101,13 @@
 
 ### [FE-018] 모바일에서 VCP 상세 모달의 글자들이 서로 겹친다
 - 카테고리: 프론트엔드 | 티어: T2 | 근거: 2026-09-02 VCP-010 마감 qa-only ISSUE-002
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09T12:00:40.578773+09:00
+  | 범위: VCP-012 응답 경합 방지 → FE-018 모바일 배치 → VCP-014 기간 전환·긴 날짜 간격 표시의 연속 3개 라운드
+  | 실제 대화 근거: 현재 대화의 3개 라운드 설계 제안에 사용자 「승인」 응답
+- 실행: bounded/T2, 독립 clone의 develop; 코드 300줄 이하 예상. 리뷰별 15분, 전체 90분 상한; 초과는 미완료로 기록.
+- [x] TDD·React 지침·Next fetching-data 번들 문서 적용
+- [x] ponytail → code-reviewer/architect 독립 리뷰 (native 기존 agent 역할지침 대체; code APPROVE, arch delta CLEAR/기존 WATCH 한계 보존)
+- [ ] 전체 pytest·vitest·typecheck·lint 및 UltraQA 실측·정리
 - 375×812 에서 상세 모달을 열면 세 영역이 한 자리에 포개집니다. 이동평균선 토글 바가
   AI 요약 본문을 덮고, 하단 정보 막대(`수축비율`·`전반부`·`후반부`)가 그 위에 다시
   겹쳐 두 글자가 서로 관통합니다. 차트 아래쪽 캔들과 `GPT / Gemini` 탭도 같은 높이에서
@@ -1241,7 +1255,14 @@
 - [ ] 회귀 검사의 훑는 범위를 `button, select, a` 로 넓히고 다른 화면도 같은 상태인지 확인해 범위를 정함
 
 ### [VCP-014] VCP 상세 차트에 기간 전환 수단이 없고 자료 공백이 표시되지 않는다
-- 카테고리: VCP 시그널 | 티어: T1 | 근거: 2026-09-02 VCP-010 마감 qa-only ISSUE-001·ISSUE-005
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: 2026-09-02 VCP-010 마감 qa-only ISSUE-001·ISSUE-005
+- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09T12:00:40.578773+09:00
+  | 범위: VCP-012 응답 경합 방지 → FE-018 모바일 배치 → VCP-014 기간 전환·긴 날짜 간격 표시의 연속 3개 라운드
+  | 실제 대화 근거: 현재 대화의 3개 라운드 설계 제안에 사용자 「승인」 응답
+- 실행: bounded/T2, 독립 clone의 develop; 코드 300줄 이하 예상. 리뷰별 15분, 전체 90분 상한; 초과는 미완료로 기록.
+- [x] TDD·React 지침·Next fetching-data 번들 문서 적용
+- [x] ponytail → code-reviewer/architect 독립 리뷰 (native 기존 agent 역할지침 대체; code APPROVE, arch delta CLEAR/기존 WATCH 한계 보존)
+- [ ] 전체 pytest·vitest·typecheck·lint 및 UltraQA 실측·정리
 - 2026-09-07 백로그 정리에서 `[VCP-013]` 을 흡수했습니다. 같은 상세 차트입니다.
 - **기간 전환**: 모달 안의 버튼을 모두 훑으면 이동평균선 토글 여섯 개와 `GPT / Gemini` 탭뿐입니다.
   차트는 항상 3개월로 고정됩니다. 백엔드는 이미 `?period=` 를 받아 `period=1y&end=2026-05-05` 로
@@ -1576,3 +1597,10 @@
 - [ ] 호출부와 사용자용 오류 계약을 확정하고 실제 파일로 티어를 판정
 - [ ] 내부 로그와 외부 오류를 분리하고 HTTPException 처리 계약을 맞춤
 - [ ] 회귀 검사와 해당 사용자 흐름의 UltraQA·agent-browser 실측
+
+### [INFRA-067] 재분석 중지 테스트가 짧은 작업 완료와 상태 단언 사이에서 경합한다
+- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-09 VCP 상세 3개 라운드 baseline
+- `tests/app/test_kr_market_data_signals_routes_refactor.py::test_reanalyze_failed_ai_background_supports_stop_request`의 가짜 작업은 10ms씩 5회 후 끝나지만, 테스트는 HTTP 202를 받은 직후 `running is True`를 요구한다. 스레드가 먼저 끝나면 유효한 False 상태로 실패한다.
+- 최초 전체 2231 통과/1 실패, 원인 확인 후 해당 파일14 통과 및 전체2232 통과/3skip. 성공만 남기지 않고 `evidence/vcp-chart-2026-09-09/baseline-pytest*`에 원본을 보존한다.
+- [ ] 고정 sleep 대신 Event 등으로 시작/중지 시점을 동기화해 실제 중지 계약을 검증
+- [ ] 자식 스레드 정리와 반복 검사로 비결정적 실패가 해소됐는지 확인

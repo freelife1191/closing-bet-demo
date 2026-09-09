@@ -1,0 +1,47 @@
+{
+  "source": "data/daily_prices.csv",
+  "readonly": true,
+  "encoding": "utf-8-sig",
+  "tickers": 2883,
+  "tickers_with_calendar_gap_over_7_days": 1992,
+  "most_common_gaps": [
+    {
+      "from": "2026-03-06",
+      "to": "2026-04-30",
+      "days": 55,
+      "tickers": 1871
+    },
+    {
+      "from": "2026-03-06",
+      "to": "2026-05-04",
+      "days": 59,
+      "tickers": 101
+    },
+    {
+      "from": "2026-03-06",
+      "to": "2026-05-26",
+      "days": 81,
+      "tickers": 5
+    },
+    {
+      "from": "2026-03-06",
+      "to": "2026-05-06",
+      "days": 61,
+      "tickers": 4
+    },
+    {
+      "from": "2026-05-22",
+      "to": "2026-07-16",
+      "days": 55,
+      "tickers": 3
+    },
+    {
+      "from": "2026-03-06",
+      "to": "2026-05-12",
+      "days": 67,
+      "tickers": 3
+    }
+  ],
+  "interpretation": "관찰된 날짜 간격이며 휴장/거래정지/수집 누락 원인은 단정하지 않음",
+  "probe_correction": "첫 csv probe는 BOM 때문에 date 열을 못 읽음. utf-8-sig로 수정한 현재 집계만 유효."
+}

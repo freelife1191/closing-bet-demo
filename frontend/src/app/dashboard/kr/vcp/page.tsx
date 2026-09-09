@@ -2,9 +2,10 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { AIRecommendation, isAuthenticationError, krAPI, KRSignal, KRAIAnalysis, KRMarketGate, paperTradingAPI } from '@/lib/api';
+import { AIRecommendation, isAuthenticationError, krAPI, KRChartData, KRSignal, KRAIAnalysis, KRMarketGate, paperTradingAPI } from '@/lib/api';
 import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import StockChart from './StockChart';
+import { findChartDateGaps } from './chartUtils';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
 import Modal from '@/app/components/Modal';
@@ -226,11 +227,15 @@ export default function VCPSignalsPage() {
 
   // Chart Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<KRChartData[]>([]);
+  const chartRequest = useRef(0);
+  const [chartError, setChartError] = useState(false);
   const [selectedStock, setSelectedStock] = useState<{ name: string; ticker: string } | null>(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartPeriod, setChartPeriod] = useState<'1M' | '3M' | '6M' | '1Y'>('3M');
   const [showVcpRange, setShowVcpRange] = useState(true); // VCP 범위 표시 상태
+
+  useEffect(() => () => { chartRequest.current += 1; }, []);
 
   // ADMIN 권한 체크
   const { isAdmin, isLoading: isAdminLoading } = useAdmin();
@@ -914,8 +919,11 @@ export default function VCPSignalsPage() {
   };
 
   const openChart = async (ticker: string, name: string, period?: string) => {
+    const requestId = ++chartRequest.current;
     setSelectedStock({ name, ticker });
     setIsModalOpen(true);
+    setChartData([]);
+    setChartError(false);
     setChartLoading(true);
     try {
       // 히스토리 날짜를 보고 있으면 그 날짜까지의 구간을 받아야 한다. 그러지 않으면
@@ -925,13 +933,14 @@ export default function VCPSignalsPage() {
         period || chartPeriod.toLowerCase(),
         activeDateTab === 'history' ? (selectedHistoryDate ?? undefined) : undefined,
       );
-      if (res && res.data) {
+      if (requestId === chartRequest.current && res && res.data) {
         setChartData(res.data);
       }
     } catch (e) {
       console.error('Failed to load chart:', e);
+      if (requestId === chartRequest.current) setChartError(true);
     } finally {
-      setChartLoading(false);
+      if (requestId === chartRequest.current) setChartLoading(false);
     }
   };
 
@@ -943,10 +952,15 @@ export default function VCPSignalsPage() {
   };
 
   const closeChart = () => {
+    chartRequest.current += 1;
+    setChartError(false);
+    setChartLoading(false);
     setIsModalOpen(false);
     setChartData([]);
     setSelectedStock(null);
   };
+
+  const chartDateGaps = useMemo(() => findChartDateGaps(chartData), [chartData]);
 
   // 차트에 겹쳐 그리는 VCP 범위. 차트 자체와 하단 정보 막대가 같은 값을 써야 하므로
   // 두 곳에서 따로 계산하지 않고 여기서 한 번만 만든다. 60초마다 도는 현재가 갱신이
@@ -1648,22 +1662,44 @@ export default function VCPSignalsPage() {
       {/* Chart Modal with AI Analysis Panel */}
       {isModalOpen && selectedStock && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeChart}>
-          <div className="bg-[#1c1c1e] border border-white/10 rounded-2xl w-full max-w-[95vw] h-[90vh] overflow-hidden shadow-2xl flex flex-col lg:flex-row" onClick={e => e.stopPropagation()}>
+          <div className="bg-[#1c1c1e] border border-white/10 rounded-2xl w-full max-w-[95vw] h-[90vh] overflow-y-auto lg:overflow-hidden shadow-2xl flex flex-col lg:flex-row" onClick={e => e.stopPropagation()}>
             {/* Left: Chart Section */}
-            <div className="flex-none lg:flex-1 flex flex-col h-[45vh] lg:h-auto border-b lg:border-b-0 lg:border-r border-white/10">
+            <div className="flex-none lg:flex-1 min-w-0 flex flex-col border-b lg:border-b-0 lg:border-r border-white/10">
               <div className="flex justify-between items-center p-4 border-b border-white/5">
-                <h3 className="text-lg font-bold text-white">
+                <h3 className="min-w-0 break-words text-lg font-bold text-white">
                   {selectedStock.name} <span className="text-sm text-gray-500">({selectedStock.ticker})</span>
                 </h3>
-                <button onClick={closeChart} className="text-gray-400 hover:text-white transition-colors lg:hidden">
+                <button onClick={closeChart} aria-label="차트 닫기" className="shrink-0 text-gray-400 hover:text-white transition-colors lg:hidden">
                   <i className="fas fa-times text-xl"></i>
                 </button>
               </div>
-              <div className="flex-1 p-2 lg:p-4 lg:min-h-[400px]">
+              <div role="group" aria-label="차트 조회 기간" className="flex flex-wrap gap-2 px-4 py-2 shrink-0">
+                {(['1M', '3M', '6M', '1Y'] as const).map(period => (
+                  <button key={period} aria-pressed={chartPeriod === period} onClick={() => changeChartPeriod(period)}
+                    className={`rounded px-3 py-1 text-xs ${chartPeriod === period ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-300'}`}>
+                    {{ '1M': '1개월', '3M': '3개월', '6M': '6개월', '1Y': '1년' }[period]}
+                  </button>
+                ))}
+              </div>
+              {chartDateGaps.length > 0 && (
+                <details className="shrink-0 px-4 py-2 text-xs text-amber-300">
+                  <summary className="cursor-pointer">관측 자료의 날짜 간격 7일 초과: {chartDateGaps.length}구간</summary>
+                  <p className="mt-1">캔들은 관측일 순서로 표시됩니다. 휴장·거래정지·수집 누락 여부는 날짜 간격만으로 구분할 수 없습니다.</p>
+                  <ul className="max-h-24 overflow-y-auto mt-1">
+                    {chartDateGaps.map(gap => <li key={`${gap.from}/${gap.to}`}>{gap.from} → {gap.to}: {gap.days}일</li>)}
+                  </ul>
+                </details>
+              )}
+              <div className="h-[320px] sm:h-[400px] lg:h-auto lg:flex-1 min-h-0 shrink-0 p-2 lg:p-4">
                 {chartLoading ? (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400">
                     <i className="fas fa-spinner fa-spin text-3xl mb-3"></i>
                     <p>Loading chart data...</p>
+                  </div>
+                ) : chartError ? (
+                  <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-gray-400">
+                    <p>차트 데이터를 불러오지 못했습니다.</p>
+                    <button onClick={() => changeChartPeriod(chartPeriod)} className="rounded bg-white/10 px-3 py-2 text-white">다시 시도</button>
                   </div>
                 ) : chartData.length > 0 ? (
                   <StockChart
@@ -1695,7 +1731,7 @@ export default function VCPSignalsPage() {
                 const contractionRatio = signal.contraction_ratio ?? null;
 
                 return (
-                  <div className="relative auto-cols-min grid grid-cols-2 lg:flex lg:items-center lg:justify-start lg:gap-8 px-4 py-3 bg-black/30 border-t border-white/5 text-xs text-gray-300">
+                  <div className="relative shrink-0 auto-cols-min grid grid-cols-2 gap-2 lg:flex lg:items-center lg:justify-start lg:gap-8 px-4 py-3 bg-black/30 border-t border-white/5 text-xs text-gray-300">
 
                     {/* VCP Checkbox */}
                     <div className="flex items-center gap-2">
@@ -1736,13 +1772,13 @@ export default function VCPSignalsPage() {
             </div>
 
             {/* Right: AI Analysis Panel */}
-            <div className="flex-1 lg:flex-none w-full lg:w-[500px] flex flex-col bg-[#131722] min-h-0">
+            <div className="flex-none shrink-0 w-full lg:w-[500px] h-[520px] lg:h-auto flex flex-col bg-[#131722] min-h-0">
               <div className="flex items-center justify-between p-4 border-b border-white/5">
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                   <span className="text-sm font-bold text-white">AI 상세 분석</span>
                 </div>
-                <button onClick={closeChart} className="text-gray-400 hover:text-white transition-colors hidden lg:block">
+                <button onClick={closeChart} aria-label="차트 닫기" className="shrink-0 text-gray-400 hover:text-white transition-colors hidden lg:block">
                   <i className="fas fa-times"></i>
                 </button>
               </div>

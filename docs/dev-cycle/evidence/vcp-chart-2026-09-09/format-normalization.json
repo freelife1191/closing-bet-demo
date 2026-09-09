@@ -1,0 +1,26 @@
+[
+  {
+    "file": "code-review.md",
+    "raw_sha": "69e24b4f63f70d52c7dac3f4c7c6db7c9025aa15e69572fe4786215ae6c10a35",
+    "display_sha": "ba271e8cb835c0af4ada4b2ea16e76b4728aaa100d2c8c3a75421945d799dda6",
+    "reason": "git diff --cached --check whitespace correction;\u539f\u6587gzip preserved"
+  },
+  {
+    "file": "next-mcp-tools.txt",
+    "raw_sha": "2ac8dfbf018cdc9b66c9afa79202d8631ae5cecc3ae62fafd94562ec66787fd6",
+    "display_sha": "c801a816534c247ca4487640197d2b7d9cfdf2a2a18bbee9a4c3515743d5cfbd",
+    "reason": "git diff --cached --check whitespace correction;\u539f\u6587gzip preserved"
+  },
+  {
+    "file": "next-preflight-get_compilation_issues.txt",
+    "raw_sha": "165004b17c0f66d14386553909fb90d02836d6b334a65417e52c892634638bd1",
+    "display_sha": "55bf37e8822ffcb3f68d082596e3da54c51d36298a776c003b3e844618238b7e",
+    "reason": "git diff --cached --check whitespace correction;\u539f\u6587gzip preserved"
+  },
+  {
+    "file": "next-preflight-get_errors.txt",
+    "raw_sha": "4b4a2ef3efc1d266e78570d7d8269a3b2f9583110e4aab650c16bce74b9f7198",
+    "display_sha": "3f2de1eb9d2c454879123933e2589085230c8703a1c231da391fe1c6fa9bdcda",
+    "reason": "git diff --cached --check whitespace correction;\u539f\u6587gzip preserved"
+  }
+]

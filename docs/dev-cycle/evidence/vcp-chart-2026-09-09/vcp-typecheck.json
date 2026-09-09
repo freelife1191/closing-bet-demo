@@ -1,0 +1,11 @@
+{
+  "command": [
+    "npm",
+    "run",
+    "type-check"
+  ],
+  "cwd": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/closing-bet-vcp-z89pj2p2/checkout/frontend",
+  "exit": 2,
+  "seconds": 2.35,
+  "timeout": 240
+}
