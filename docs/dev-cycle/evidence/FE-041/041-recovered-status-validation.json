@@ -1,0 +1,14 @@
+{
+  "observed_next_statuses": [
+    200,
+    400,
+    403
+  ],
+  "validated_cases": {
+    "041-dev-save-rejected": 400,
+    "041-dev-save-forbidden": 403
+  },
+  "notification_requests": 0,
+  "expected_statuses_unchanged": true,
+  "method": "rerun failed status validation using exact captured Next access log; no product changes"
+}

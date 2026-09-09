@@ -1,0 +1,12 @@
+{
+  "at": "2026-09-09T10:38:53.904362+09:00",
+  "ports_stopped": [
+    59314,
+    59315,
+    59322
+  ],
+  "browser_namespace_removed": true,
+  "fixture_env_removed": true,
+  "original_user_package_unchanged": true,
+  "workspace_retained": "approved remaining rounds; runtime/credentials/profile removed"
+}

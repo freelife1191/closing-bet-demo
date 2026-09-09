@@ -1,0 +1,10 @@
+{
+  "failure": "ResourceTiming omitted error response entries in two cases; UI and server behavior were correct",
+  "actual_next_access_statuses": [
+    200,
+    400,
+    403
+  ],
+  "repair": "observe per-case Next access log status when no ResourceTiming entry; preserve original failed evidence",
+  "product_change": false
+}

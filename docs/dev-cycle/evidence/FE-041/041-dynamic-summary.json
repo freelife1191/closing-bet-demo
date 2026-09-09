@@ -1,0 +1,22 @@
+{
+  "source": "203739e",
+  "required_passed": 5,
+  "required_total": 5,
+  "dev": "041-dev-summary.json",
+  "build_normal_ui": true,
+  "build_failure_ui_no_send": true,
+  "build_companion_probe": {
+    "body": {
+      "message": "Settings service unavailable",
+      "status": "error"
+    },
+    "cache": "no-store",
+    "status": 502
+  },
+  "scanned_files": 35,
+  "private_matches": [],
+  "page_errors": 0,
+  "console_errors": 0,
+  "viewed_screenshots": 12,
+  "iteration": 2
+}

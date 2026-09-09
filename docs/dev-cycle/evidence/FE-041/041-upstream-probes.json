@@ -1,0 +1,18 @@
+{
+  "disconnect": {
+    "body": {
+      "message": "Settings service unavailable",
+      "status": "error"
+    },
+    "cache": "no-store",
+    "status": 502
+  },
+  "truncated": {
+    "body": {
+      "message": "Settings service unavailable",
+      "status": "error"
+    },
+    "cache": "no-store",
+    "status": 502
+  }
+}

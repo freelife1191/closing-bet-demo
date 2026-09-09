@@ -1,0 +1,11 @@
+{
+  "source": "203739e",
+  "required_passed": 5,
+  "required_total": 5,
+  "scanned_files": 31,
+  "secret_matches": [],
+  "console_errors": 0,
+  "page_errors": 0,
+  "case_count": 9,
+  "timing_status_recovery": "041-recovered-status-validation.json"
+}
