@@ -1,0 +1,21 @@
+{
+  "iteration": 4,
+  "parser_h3": [
+    "2. 판단 근거",
+    "1. 시장 환경 및 섹터 강도"
+  ],
+  "recommendation_lengths": [
+    120,
+    120,
+    120
+  ],
+  "unicode_preserved": true,
+  "session_b_isolated": true,
+  "stop_after_chunk": true,
+  "duplicate_send_absent": true,
+  "headers": "headers-verification.json",
+  "final_errors": [],
+  "iteration3_transient_error": "unclassified; clean4 did not reproduce after anonymous+authenticated parser/SSE/normal/screenshots",
+  "backend_llm_cancellation": "not verified; UI abort/ownership only",
+  "cleanup": "clean4-cleanup.json"
+}

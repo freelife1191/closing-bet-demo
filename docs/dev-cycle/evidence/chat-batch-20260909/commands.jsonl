@@ -84,3 +84,75 @@
 {"label": "errors2", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.048126935958862305}
 {"label": "console2", "args": ["--json", "console"], "exit": 0, "elapsed": 0.04929518699645996}
 {"label": "iteration2-close", "args": ["close"], "exit": 0, "elapsed": 0.1772139072418213}
+{"label": "final-open", "args": ["open", "http://127.0.0.1:57401/chatbot"], "exit": 0, "elapsed": 4.611023187637329}
+{"label": "final-reload", "args": ["reload"], "exit": 0, "elapsed": 0.5249638557434082}
+{"label": "final-viewport", "args": ["set", "viewport", "1280", "900"], "exit": 0, "elapsed": 0.06262612342834473}
+{"label": "final-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.0579829216003418}
+{"label": "final-ready", "args": ["wait", "--text", "합성 대화 A"], "exit": 0, "elapsed": 0.048619985580444336}
+{"label": "final-ready-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05705976486206055}
+{"label": "final-parser-fill", "args": ["fill", "@e31", "parser 최종 제목"], "exit": 0, "elapsed": 0.06862711906433105}
+{"label": "final-parser-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.08974981307983398}
+{"label": "final-parser-ready", "args": ["wait", "--text", "1. 시장 환경 및 섹터 강도"], "exit": 0, "elapsed": 0.051264047622680664}
+{"label": "final-parser-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05309724807739258}
+{"label": "final-reasoning-toggle", "args": ["click", "@e23"], "exit": 0, "elapsed": 0.05647897720336914}
+{"label": "final-parser-state", "args": ["eval", "JSON.stringify({headings:[...document.querySelectorAll(\"h3\")].map(x=>x.textContent),suggestions:[...document.querySelectorAll(\"button\")].filter(x=>/^[123]🧪/.test(x.textContent||\"\")).map(x=>({length:Array.from(x.textContent||\"\").length,last:(x.textContent||\"\").slice(-2)})),session:localStorage.getItem(\"chatbot_last_session_id\"),stop:!!document.querySelector(\"button[aria-label=\\\"답변 중단\\\"]\"),text:document.body.innerText})"], "exit": 0, "elapsed": 0.050183773040771484}
+{"label": "final-parser-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/final-parser.png"], "exit": 0, "elapsed": 0.10786724090576172}
+{"label": "final-after-parser-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.0538640022277832}
+{"label": "final-normal-fill", "args": ["fill", "@e30", "normal 최종 재전송"], "exit": 0, "elapsed": 0.06966400146484375}
+{"label": "final-normal-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.07810425758361816}
+{"label": "final-normal-answer", "args": ["wait", "--text", "합성 JSON 답변 normal 최종 재전송"], "exit": 0, "elapsed": 0.04895281791687012}
+{"label": "final-normal-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.056371212005615234}
+{"label": "final-long-fill", "args": ["fill", "@e34", "long 최종 중단"], "exit": 0, "elapsed": 0.06819391250610352}
+{"label": "final-long-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.0759286880493164}
+{"label": "final-long-ready", "args": ["wait", "--text", "시작 long 최종 중단"], "exit": 0, "elapsed": 0.05043292045593262}
+{"label": "final-long-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05553889274597168}
+{"label": "final-stop", "args": ["click", "@e40"], "exit": 0, "elapsed": 0.09259605407714844}
+{"label": "final-stopped", "args": ["wait", "--text", "답변 생성이 중단되었습니다."], "exit": 0, "elapsed": 0.04922890663146973}
+{"label": "final-stopped-state", "args": ["eval", "JSON.stringify({stop:!!document.querySelector(\"button[aria-label=\\\"답변 중단\\\"]\"),text:document.body.innerText})"], "exit": 0, "elapsed": 0.04798483848571777}
+{"label": "final-stopped-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/final-stopped.png"], "exit": 0, "elapsed": 0.07898426055908203}
+{"label": "errors-final", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.047129154205322266}
+{"label": "console-final", "args": ["--json", "console"], "exit": 0, "elapsed": 0.0467371940612793}
+{"label": "final-close", "args": ["close"], "exit": 0, "elapsed": 0.17716002464294434}
+{"label": "clean4-open", "args": ["open", "http://127.0.0.1:57401/chatbot"], "exit": 0, "elapsed": 6.302123069763184}
+{"label": "clean4-ready", "args": ["wait", "--text", "합성 대화 A"], "exit": 0, "elapsed": 0.2695479393005371}
+{"label": "clean4-initial-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.04908323287963867}
+{"label": "clean4-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.06268000602722168}
+{"label": "clean4-viewport", "args": ["set", "viewport", "1280", "900"], "exit": 0, "elapsed": 0.06184887886047363}
+{"label": "clean4-fill", "args": ["fill", "@e30", "parser clean4"], "exit": 0, "elapsed": 0.07133913040161133}
+{"label": "clean4-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.084136962890625}
+{"label": "clean4-answer", "args": ["wait", "--text", "1. 시장 환경 및 섹터 강도"], "exit": 0, "elapsed": 0.04733777046203613}
+{"label": "clean4-after-answer-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.04958009719848633}
+{"label": "clean4-parser-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05840325355529785}
+{"label": "clean4-toggle", "args": ["click", "@e23"], "exit": 0, "elapsed": 0.058950185775756836}
+{"label": "clean4-state", "args": ["eval", "JSON.stringify({headings:[...document.querySelectorAll(\"h3\")].map(x=>x.textContent),suggestions:[...document.querySelectorAll(\"button\")].filter(x=>/^[123]🧪/.test(x.textContent||\"\")).map(x=>Array.from(x.textContent||\"\").length)})"], "exit": 0, "elapsed": 0.04837512969970703}
+{"label": "clean4-after-eval-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.050729990005493164}
+{"label": "clean4-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/clean4-parser.png"], "exit": 0, "elapsed": 0.09884905815124512}
+{"label": "clean4-after-image-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.04869699478149414}
+{"label": "clean4-auth-reload", "args": ["reload"], "exit": 0, "elapsed": 0.7130203247070312}
+{"label": "clean4-auth-ready", "args": ["wait", "--text", "채팅 묶음 검수자"], "exit": 0, "elapsed": 0.0505218505859375}
+{"label": "clean4-auth-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.050393104553222656}
+{"label": "clean4-auth-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05544877052307129}
+{"label": "clean4-long-fill", "args": ["fill", "@e22", "long clean4 중단"], "exit": 0, "elapsed": 0.07100319862365723}
+{"label": "clean4-long-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.07171010971069336}
+{"label": "clean4-long-chunk", "args": ["wait", "--text", "시작 long clean4 중단"], "exit": 0, "elapsed": 0.04956793785095215}
+{"label": "clean4-long-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.04721879959106445}
+{"label": "clean4-long-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05387401580810547}
+{"label": "clean4-stop", "args": ["click", "@e28"], "exit": 0, "elapsed": 0.07868385314941406}
+{"label": "clean4-stopped", "args": ["wait", "--text", "답변 생성이 중단되었습니다."], "exit": 0, "elapsed": 0.049466848373413086}
+{"label": "clean4-stopped-state", "args": ["eval", "JSON.stringify({stop:!!document.querySelector(\"button[aria-label=\\\"답변 중단\\\"]\"),text:document.body.innerText})"], "exit": 0, "elapsed": 0.04800009727478027}
+{"label": "clean4-stopped-image", "args": ["screenshot", "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/chat-batch-20260909/clean4-stopped.png"], "exit": 0, "elapsed": 0.08565306663513184}
+{"label": "clean4-stopped-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.04602694511413574}
+{"label": "clean4-stopped-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05529594421386719}
+{"label": "clean4-auth-parser-fill", "args": ["fill", "@e28", "parser 로그인 반복"], "exit": 0, "elapsed": 0.0712900161743164}
+{"label": "clean4-auth-parser-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.0744929313659668}
+{"label": "clean4-auth-parser-ready", "args": ["wait", "--text", "1. 시장 환경 및 섹터 강도"], "exit": 0, "elapsed": 0.04994511604309082}
+{"label": "clean4-auth-parser-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.04758787155151367}
+{"label": "clean4-auth-parser-tree", "args": ["snapshot", "-i"], "exit": 0, "elapsed": 0.05419802665710449}
+{"label": "clean4-auth-toggle", "args": ["click", "@e31"], "exit": 0, "elapsed": 0.05639505386352539}
+{"label": "clean4-auth-headings", "args": ["eval", "JSON.stringify([...document.querySelectorAll(\"h3\")].map(x=>x.textContent))"], "exit": 0, "elapsed": 0.04896402359008789}
+{"label": "clean4-normal-fill", "args": ["fill", "@e37", "normal clean4"], "exit": 0, "elapsed": 0.06790399551391602}
+{"label": "clean4-normal-send", "args": ["press", "Enter"], "exit": 0, "elapsed": 0.07811570167541504}
+{"label": "clean4-normal", "args": ["wait", "--text", "합성 JSON 답변 normal clean4"], "exit": 0, "elapsed": 0.04795074462890625}
+{"label": "clean4-final-errors", "args": ["--json", "errors"], "exit": 0, "elapsed": 0.05419301986694336}
+{"label": "clean4-final-console", "args": ["--json", "console"], "exit": 0, "elapsed": 0.049343109130859375}
+{"label": "clean4-close", "args": ["close"], "exit": 0, "elapsed": 0.17904305458068848}

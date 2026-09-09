@@ -1,0 +1,12 @@
+{
+  "status": "QA_RETRY",
+  "error": "SyntaxError: Invalid or unexpected token",
+  "url": null,
+  "line": 1390,
+  "column": 28,
+  "next_errors": [],
+  "console_errors": [],
+  "root_cause": "unconfirmed",
+  "cleanup": "complete",
+  "next": "clean archive without .next; rerun UI with intermediate error checkpoints"
+}

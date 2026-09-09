@@ -1,0 +1,14 @@
+{
+  "time": "2026-09-09T19:48:43.031082",
+  "browser_closed": true,
+  "namespace": "chat-batch-20260909",
+  "session": "qa",
+  "owned_process_groups_terminated": true,
+  "ports_free": [
+    57401,
+    57402
+  ],
+  "scratch_removed": "/tmp/chat-batch-qa-WyingO",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "source_hashes_unchanged": true
+}

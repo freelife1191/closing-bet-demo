@@ -1,0 +1,18 @@
+{
+  "source_commit": "20869d016ddd5ae452cf765ebb95227a234cec55",
+  "files": {
+    "frontend/src/app/chatbot/chatMessageParser.test.ts": "2974a231dd7202cb17692a19c00ae7c917d671a6f0bd6a14bc3b5101012bbd9c",
+    "frontend/src/app/chatbot/chatMessageParser.ts": "76d8a3f379808f8c62fbb72fc2d9a228734ad8da1ad41bd32f2bc04034289b74",
+    "frontend/src/app/chatbot/page.regression-chat-001.test.tsx": "0f5e1877fac1815984c94e006e9344149933e7d8919b3750304594f2a86fc586",
+    "frontend/src/app/chatbot/useChatStream.ts": "18bef9c6cc62960c1bcb8f1d0d8195e181e233b7cfcc82d0c4c807b045a9f51b",
+    "frontend/src/app/components/ChatWidget.tsx": "30438033c19988f74f1bcacb56e803686a108974c8868ccfca05a9d3abddf92c",
+    "frontend/src/app/components/Sidebar.tsx": "1a920937315c5e97b6659faaa3ee643e7e7dc8a51537d58bb862802ac29401ec",
+    "frontend/src/app/chatbot/ChatMessage.regression-chat-015.test.tsx": "2b1ee68e4fa2d35d1a24bbd2f2ed04c55153c6144e7d51aa30131280f5776106",
+    "frontend/src/app/chatbot/useChatStream.regression-chat-013.test.tsx": "ca8ccddc747c5a12716f1c10e0e92b36be96b691ad3db369a96bc9149c20f2a8",
+    "frontend/src/app/components/sessionHeaders.regression-fe-038.test.tsx": "8295d9492f9c334d8c88879fe16f29eff6748d6661d3901e827c9127db1d6d7f",
+    "frontend/src/app/components/ThinkingProcess.tsx": "49a25550e5e11149b5643c91f1f8b357ceddbdbb3bb14242709e72af917d008c"
+  },
+  "scratch": "/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/chat-batch-clean4-xsnanufp",
+  "fresh_archive": true,
+  "hashes_match": true
+}
