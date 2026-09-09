@@ -87,25 +87,6 @@
 
 - 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
 
-### [JONGGA-014] 파이프라인 Phase 1 호출의 죽은 TypeError 폴백을 걷어낸다
-- 진행: 구현·대상 및 전체 정적검증 통과. 독립 ponytail/코드리뷰 승인·architect CLEAR. QA 행렬과 증거는 `qa/JONGGA-014.md`, `evidence/batch-2026-09-09/`. 최종 QA/아카이브 전까지 유지.
-- 설계 승인: 승인 일자 2026-09-09 | 승인 확인 시각 2026-09-09 15:59 | 실제 대화 근거: 8건 3묶음 제안에 사용자 「승인」. 해당 제안의 범위로 연속 구현·리뷰·QA·커밋 진행.
-- 카테고리: 종가베팅 | 티어: T3 | 근거: `[JONGGA-001]` 사이클에서 관찰
-- 관찰: `engine/phases_pipeline.py:51-54` 가 Phase 1 을 호출할 때 `target_date` 를 받지
-  못하는 구현을 대비해 `try` / `except TypeError` 폴백을 두고 있습니다. 예외를 잡으면
-  `target_date` 없이 `self.phase1.execute(candidates)` 를 한 번 더 호출합니다.
-- 걷어내야 하는 이유가 둘입니다. 첫째, `Phase1Analyzer.execute` 는 지금 `target_date` 를
-  정식 인자로 받으므로 첫 호출이 `TypeError` 로 끝날 일이 없습니다. 죽은 코드입니다.
-  둘째, `except TypeError` 는 시그니처 불일치뿐 아니라 페이즈 안쪽에서 발생한
-  `TypeError` 까지 함께 삼킵니다. 그러면 후보 수백 개의 수집과 점수 계산을 통째로 다시
-  실행하고, 두 번째 시도도 같은 오류로 실패합니다. 실행 시간이 두 배가 되고, 밖으로
-  나가는 예외가 두 번째 호출의 것으로 바뀌어 원인을 추적하기 어려워집니다.
-- `engine/phases_pipeline.py` 는 `tier-rules.md` §2 의 위험 경로이므로 T3 입니다.
-- [ ] `Phase1Analyzer.execute` 의 시그니처를 확인해 폴백이 정말 죽은 코드인지 확정
-- [ ] `try` / `except TypeError` 를 걷어내고 단일 호출로 정리
-- [ ] 페이즈 안쪽에서 난 `TypeError` 가 삼켜지지 않고 그대로 올라오는지 확인하는 검사를
-      `tests/engine/test_phases_pipeline_refactor.py` 에 추가
-
 ### [CHAT-008] 무료 사용량이 모델을 부르지 않는 슬래시 명령에도 차감된다
 - 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-02 CHAT-002 마감 qa-only ISSUE-001
 - `/status`, `/help`, `/clear` 는 모델을 호출하지 않습니다. 세 명령의 활동 로그 항목은 모두
@@ -799,22 +780,6 @@
 - [ ] 오버레이가 32px 밀리는 원인을 찾고 다른 화면의 모달도 같은 현상인지 확인해 범위를 정함
 - [ ] 모달이 열린 동안 상단 32px 의 요소가 클릭되지 않는 것을 확인
 
-### [JONGGA-032] 종가베팅 상태 폴링이 화면을 떠난 뒤에도 계속 돈다
-- 진행: JONGGA-037과 같은 폴링 생명주기 보완으로 묶음 진행. 확인 일자 2026-09-09, 사용자 연관 항목 묶음 실행 요청. 완료·이탈·350초 제한에서 타이머 정리와 늦은 응답 무효화를 회귀 검증한다. 티어는 공유 변경 규모로 재판정한다.
-- 카테고리: 종가베팅 | 티어: T1 | 근거: 2026-09-04 FE-024 사이클의 code-reviewer 지적 10번
-- `frontend/src/app/dashboard/kr/closing-bet/page.tsx` 의 `pollStatus` 가 2초 간격
-  `setInterval` 과 350초 `setTimeout` 을 걸지만 언마운트 정리가 없습니다.
-- 스크리너 전체 업데이트를 실행한 뒤 다른 화면으로 옮기면, 인터벌이 계속 돌면서 이미
-  사라진 컴포넌트에 `setState` 를 부릅니다.
-- 회귀 검사 `page.regression-fe-024.test.tsx` 의 「실행을 눌러야 스크리너 전체 업데이트가
-  나간다」가 이 경로를 실제로 밟습니다. 지금은 통과하지만 타이머가 검사 뒤에도 남습니다.
-- [ ] 인터벌 id 를 `useRef` 에 담고 언마운트 시 정리
-- [ ] 350초 안전장치 타이머도 함께 정리
-- [ ] 회귀 검사가 타이머를 남기지 않는지 확인
-
-- 검토 체크: ponytail APPROVE; 공유 코드리뷰 APPROVE·architect CLEAR. evidence/jongga-polling-20260909/review-input.json의 SHA와 원문 보존. 기존 비작성 agent의 설치 prompt 독립레인, 전용 역할 spawn 성공으로 보고하지 않음.
-- 정적 검증: pytest2281/2skip, Vitest429/60파일, 대상15통과, typecheck0, lint0오류/200경고. 필수 웹 QA는 첫 커밋 뒤 실행. INFRA-069만 테스트 전용 제외.
-
 ### [FE-028] 헤더의 모바일 검색 버튼이 아무 동작도 하지 않는다
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-024 사이클의 실측
 - QA 시나리오: 좁은 화면에서 헤더의 돋보기 버튼을 누르면 검색할 수단이 나타난다
@@ -1384,27 +1349,3 @@
 - 이번 승인 범위는 스케줄러/AI 프로바이더 설명·성공 로그이며 해당 수치 코드는 이전 base4e57aa3와 같다. 현재 QA의 인접 탭 전환은 통과했지만 이 수치 정합성은 별도 설계 대상이다.
 - [ ] 전략 일반 예시와 시스템 실제 기준을 구분해 문구·가정·계산을 정리
 - [ ] 데스크톱·모바일 랜딩 실측으로 표시와 현재 종가베팅 안내 대조
-
-### [JONGGA-037] 종가 업데이트 완료 뒤 버튼이 계속 잠긴다
-- 카테고리: 종가베팅 | 티어: T2 | 근거: 2026-09-09 JONGGA-014 격리 웹 QA. 공유 구현 변경70줄.
-- `closing-bet/page.tsx`의 runUpdate가 setUpdating(true) 직후 이전 렌더의 pollStatus를 호출한다. pollStatus의 updating=false 캡처 때문에 상태 응답 isRunning=false에서도 완료 처리가 생략된다.
-- 1ce5cde에도 동일한 소스다. JONGGA-014 변경이 유발한 회귀로 분류하지 않는다. JONGGA-032의 언마운트 타이머 누수와 같은 영역이지만 완료 상태 전이 결함은 별도다.
-- 진행: 2026-09-09 후속 사용자 「다음 라운드 … 연관된 라운드들 쭉 이어서 진행」 요청으로 직전 제시한 완료 처리 보완을 재개한다.
-- 설계 승인: 확인 일자 2026-09-09 | 범위: 완료 처리·200/409 회귀 및 같은 폴링의 JONGGA-032 타이머 정리 | 실제 대화 근거: 추가 보완 제시 뒤 사용자 연관 항목 묶음 실행 요청. 이전 8건 승인과 구분한다.
-- 설계: 완료 판정에서 오래된 updating 캡처 의존을 없애고 interval 종료·버튼 재활성화·리포트 갱신을 실행한다. 200/409→상태완료 회귀 검사를 추가한다.
-- [ ] 완료 상태 응답 뒤 버튼 재활성화·재조회·추가 polling 중단 검증
-- [ ] 기존 정상/실패·409·화면 이탈 흐름 보존 및 agent-browser 실측
-
-- 검토 체크: ponytail APPROVE; 공유 코드리뷰 APPROVE·architect CLEAR. evidence/jongga-polling-20260909/review-input.json의 SHA와 원문 보존. 기존 비작성 agent의 설치 prompt 독립레인, 전용 역할 spawn 성공으로 보고하지 않음.
-- 정적 검증: pytest2281/2skip, Vitest429/60파일, 대상15통과, typecheck0, lint0오류/200경고. 필수 웹 QA는 첫 커밋 뒤 실행. INFRA-069만 테스트 전용 제외.
-
-### [INFRA-069] 뉴스 병합 회귀 테스트가 실제 캐시를 읽어 입력이 바뀐다
-- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-09 폴링 묶음 baseline pytest 1실패.
-- 진행: 사용자 연속 작업의 필수 검증을 막는 테스트 격리 보완. 원본 캐시를 지우지 않고 병합·소스 실패 테스트의 cache load/save만 대역 처리한다.
-- 범위: tests/engine/test_news_collector_refactor.py의 첫 두 테스트. 제품 캐시 및 별도 캐시 회귀 계약은 유지한다.
-- [ ] 실패 원인·원문 보존과 독립 진단
-- [ ] cache read/write를 격리하고 기존 기대값으로 대상·전체 검증
-- [ ] ponytail 검토 및 테스트 전용 QA 제외 근거 기록
-
-- 검토 체크: ponytail APPROVE; 공유 코드리뷰 APPROVE·architect CLEAR. evidence/jongga-polling-20260909/review-input.json의 SHA와 원문 보존. 기존 비작성 agent의 설치 prompt 독립레인, 전용 역할 spawn 성공으로 보고하지 않음.
-- 정적 검증: pytest2281/2skip, Vitest429/60파일, 대상15통과, typecheck0, lint0오류/200경고. 필수 웹 QA는 첫 커밋 뒤 실행. INFRA-069만 테스트 전용 제외.

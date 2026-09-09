@@ -1,0 +1,16 @@
+{
+  "owned_pids": [
+    61208,
+    61209,
+    61236
+  ],
+  "all_exited": true,
+  "ports_free": [
+    57361,
+    57362
+  ],
+  "browser_closed": true,
+  "user_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "fixture_removed": true,
+  "cleanup_repair": "next-server changes process title; verified parent/group/cwd before signaling exact owned groups"
+}

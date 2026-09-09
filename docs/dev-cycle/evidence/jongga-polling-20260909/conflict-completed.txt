@@ -1,0 +1,351 @@
+- complementary
+  - link "M 스마트 머니 봇" [ref=e1]
+    - StaticText "M"
+    - StaticText "스마트 머니 봇"
+  - navigation
+    - StaticText "DASHBOARD"
+    - button " KR Market " [ref=e18]
+      - StaticText ""
+      - StaticText "KR Market"
+      - StaticText ""
+    - link "● Overview" [ref=e19]
+    - link "● VCP 시그널" [ref=e20]
+    - link "● 종가베팅" [ref=e21]
+    - link "● 누적 성과" [ref=e22]
+    - link "● AI 상담" [ref=e23]
+    - button " 모의투자" [ref=e24]
+      - StaticText ""
+      - StaticText "모의투자"
+    - link " 데이터 상태" [ref=e25]
+      - StaticText ""
+      - StaticText "데이터 상태"
+  - button "Q QA Admin ADMIN Admin · 무제한 사용 " [ref=e26]
+    - generic
+      - StaticText "Q"
+    - StaticText "QA Admin"
+    - StaticText "ADMIN"
+    - StaticText "Admin · 무제한 사용"
+    - StaticText ""
+- banner
+  - link "" [ref=e2]
+    - StaticText ""
+  - StaticText "/"
+  - StaticText "대시보드"
+  - StaticText "/"
+  - StaticText "국내 시장"
+  - StaticText "/"
+  - StaticText "종가베팅"
+  - generic
+    - StaticText ""
+    - textbox "Search markets, tickers..." [ref=e27]
+    - StaticText "⌘K"
+  - button "설정 열기" [ref=e3]
+    - StaticText ""
+- main
+  - generic
+    - StaticText ""
+    - StaticText "스마트 머니 봇"
+  - generic
+    - StaticText "AI 기반 전략"
+  - heading "종가 베팅" [level=2, ref=e4]
+    - StaticText "종가 베팅"
+  - paragraph
+    - StaticText "Gemini 분석 + 기관 수급 추세"
+  - StaticText "TRENDING THEMES"
+  - StaticText "합성 검증"
+  - StaticText "CANDIDATES"
+  - StaticText ""
+  - generic
+    - StaticText "시장에서 1차 필터링된 후보 종목 수입니다."
+  - StaticText "1"
+  - StaticText "FILTERED"
+  - StaticText ""
+  - generic
+    - StaticText "AI 조건에 의해 최종 선별된 종목 수입니다."
+  - StaticText "1"
+  - StaticText "DATA STATUS"
+  - button "스크리너 전체 업데이트" [ref=e5]
+    - StaticText ""
+  - generic
+    - StaticText "스크리너 엔진을 실행하여 모든 종목에 대해 전체 업데이트(뉴스, 수급, 점수 등)를 수행합니다."
+  - button "GEMINI AI 재분석" [ref=e6]
+    - StaticText ""
+  - generic
+    - StaticText "기존 데이터를 기반으로 GEMINI AI를 재호출합니다. 전체 실행 시 미분석/실패 항목만 재분석됩니다."
+  - StaticText "UPDATED"
+  - StaticText "오후 05:00"
+  - StaticText "거래대금"
+  - StaticText ""
+  - generic
+    - StaticText "하루 동안 거래된 총 금액입니다. 거래대금이 클수록 유동성이 좋고 기관의 관심을 받는 종목입니다."
+  - combobox [expanded=false, ref=e7]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e38]
+      - option "1000억 이상" [ref=e39]
+      - option "5000억 이상" [ref=e40]
+      - option "1조 이상" [ref=e41]
+  - StaticText "상승률"
+  - StaticText ""
+  - generic
+    - StaticText "전일 종가 대비 상승률입니다. 5% 이상이면 강세, 10% 이상이면 급등 신호입니다."
+  - combobox [expanded=false, ref=e8]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e42]
+      - option "2% 이상" [ref=e43]
+      - option "3% 이상" [ref=e44]
+      - option "5% 이상 (Standard)" [ref=e45]
+      - option "7% 이상" [ref=e46]
+      - option "10% 이상 (Strong)" [ref=e47]
+      - option "15% 이상 (Very Strong)" [ref=e48]
+      - option "20% 이상 (Super)" [ref=e49]
+      - option "25% 이상 (Limit)" [ref=e50]
+  - StaticText "등급"
+  - StaticText ""
+  - generic
+    - StaticText "AI가 평가한 종합 등급입니다. S(최고), A(우수), B(양호) 순서입니다."
+  - button "기준표" [ref=e9]
+  - combobox [expanded=false, ref=e10]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e51]
+      - option "S급 이상" [ref=e52]
+      - option "A급 이상" [ref=e53]
+      - option "B급 이상" [ref=e54]
+  - StaticText "총점"
+  - StaticText ""
+  - generic
+    - StaticText "기본 6개 항목 12점과 가산점 7점을 더한 총점입니다. 최대 19점, 8점 이상이면 강한 신호입니다."
+  - combobox [expanded=false, ref=e11]: 전체
+    - MenuListPopup
+      - option "전체" [selected, ref=e55]
+      - option "4점 이상" [ref=e56]
+      - option "8점 이상" [ref=e57]
+      - option "10점 이상" [ref=e58]
+  - button " 종가베팅 전체 10주 매수" [ref=e12]
+    - StaticText ""
+    - StaticText "종가베팅 전체 10주 매수"
+  - generic
+    - StaticText "오늘 종가베팅 종목 전체를 10주씩 매수합니다."
+  - button " 종가베팅 점수표" [ref=e13]
+    - StaticText ""
+    - StaticText "종가베팅 점수표"
+  - combobox [expanded=false, ref=e14]: Latest Report
+    - MenuListPopup
+      - option "Latest Report" [selected, ref=e59]
+      - option "2026-09-09" [ref=e60]
+  - generic
+    - StaticText "이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다."
+  - button "선택한 날짜의 리포트 다시 불러오기" [ref=e15]
+    - StaticText ""
+  - generic
+    - StaticText "현재 선택된 날짜의 데이터를 다시 불러옵니다."
+  - button " Trading Tips & Strategy 시장 대응 전략 및 종가베팅 매수 패턴 가이드 보기 " [ref=e16]
+    - StaticText ""
+    - heading "Trading Tips & Strategy" [level=3, ref=e28]
+    - paragraph
+      - StaticText "시장 대응 전략 및 종가베팅 매수 패턴 가이드 보기"
+    - StaticText ""
+  - StaticText "S"
+  - StaticText " GRADE"
+  - StaticText "#"
+  - StaticText "1"
+  - heading "삼성전자" [level=3, ref=e29]
+  - StaticText "005930"
+  - StaticText "합성 검증"
+  - StaticText "상승률"
+  - StaticText ""
+  - generic
+    - StaticText "신호가 나온 거래일의 상승률입니다. 그날의 전일 종가 대비 종가를 비교한 값이며, 실시간 등락률이 아닙니다."
+  - generic
+    - StaticText "+7.0%"
+  - StaticText "거래량 배수"
+  - StaticText ""
+  - generic
+    - StaticText "최근 20일 평균 거래량 대비 오늘 거래량의 배수입니다. 2x 이상이면 평소보다 2배 이상 거래되고 있습니다."
+  - generic
+    - StaticText "1x"
+  - StaticText "종가"
+  - StaticText ""
+  - generic
+    - StaticText "가장 최근 거래일의 종가입니다. 장중에는 갱신되지 않으므로 실시간 시세와 다를 수 있습니다. 실시간 시세는 「상세 분석 보기」에서 확인하세요."
+  - generic
+    - StaticText "₩101,000"
+  - StaticText "거래대금"
+  - StaticText ""
+  - generic
+    - StaticText "오늘 하루 동안 거래된 총 금액입니다. 대금이 클수록 유동성이 좋고 큰 손들의 관심을 받고 있습니다."
+  - StaticText "1,000억"
+  - StaticText "외인 (5일)"
+  - StaticText ""
+  - generic
+    - StaticText "신호가 나온 거래일까지 5일간 외국인이 순매수한 금액입니다. 양수는 순매수, 음수는 순매도를 의미합니다."
+  - StaticText "-"
+  - StaticText "기관 (5일)"
+  - StaticText ""
+  - generic
+    - StaticText "신호가 나온 거래일까지 5일간 기관이 순매수한 금액입니다. 양수는 순매수, 음수는 순매도를 의미합니다."
+  - StaticText "-"
+  - StaticText "BUY"
+  - generic
+    - StaticText "Gemini AI가 분석한 결과에서 읽은 매매 추천입니다. BUY(매수), HOLD(관망), SELL(매도) 중 하나입니다."
+  - StaticText "확신도"
+  - StaticText ""
+  - generic
+    - StaticText "Gemini AI가 산출한 추천 신뢰도입니다. 높을수록 강력한 시그널이며, 값이 없으면 미산출로 표시합니다."
+  - StaticText "80"
+  - StaticText "%"
+  - generic [ref=e30] clickable [cursor:pointer, onclick]
+    - image
+    - generic
+      - StaticText "↑ 7.0%"
+    - generic
+      - StaticText ""
+      - StaticText " 크게 보기"
+  - heading " AI 분석 리포트 synthetic 삼성전자 이 종목만 재분석" [level=4, ref=e31]
+    - StaticText ""
+    - StaticText "AI 분석 리포트"
+    - StaticText "synthetic"
+    - button "삼성전자 이 종목만 재분석" [ref=e61]
+      - StaticText ""
+  - paragraph
+    - StaticText "합성 점수"
+  - paragraph
+    - StaticText "AI 원문에는 다른 가격이 포함될 수 있습니다. 이 화면의 시스템 계산 기준은 아래 목표가·손절가입니다."
+  - heading "시스템 계산 기준  시그널에 저장된 목표가·손절가를 우선 사용합니다. 가격이 없으면 진입가 대비 기본 +5%/-3%로 계산합니다." [level=5, ref=e32]
+    - StaticText "시스템 계산 기준"
+    - StaticText ""
+    - generic
+      - StaticText "시그널에 저장된 목표가·손절가를 우선 사용합니다. 가격이 없으면 진입가 대비 기본 +5%/-3%로 계산합니다."
+  - list
+    - listitem [level=1]
+      - StaticText "●"
+      - generic
+        - StaticText "매수가"
+        - generic
+          - StaticText "🟢 매수 전략"
+          - list
+            - listitem [level=2]
+              - ListMarker "• "
+              - strong
+                - StaticText "15:10 ~ 15:29"
+            - listitem [level=2]
+              - ListMarker "• "
+              - StaticText "분할 3회 매수"
+      - StaticText ": "
+      - StaticText "₩"
+      - StaticText "100,000"
+      - StaticText "("
+      - StaticText "2026-09-09"
+      - StaticText " 종가)"
+    - listitem [level=1]
+      - StaticText "●"
+      - generic
+        - StaticText "목표가"
+        - generic
+          - StaticText "저장된 목표가를 기준으로 익절 여부를 계산합니다. 목표가가 없으면 진입가 대비 기본 +5%를 사용합니다."
+      - StaticText ": "
+      - StaticText "₩"
+      - StaticText "0"
+    - listitem [level=1]
+      - StaticText "●"
+      - generic
+        - StaticText "손절가"
+        - generic
+          - StaticText "저장된 손절가를 기준으로 손절 여부를 계산합니다. 손절가가 없으면 진입가 대비 기본 -3%를 사용합니다. 같은 일봉에서 양쪽에 도달하면 손절을 우선합니다."
+      - StaticText ": "
+      - StaticText "₩"
+      - StaticText "0"
+  - heading "체크리스트" [level=5, ref=e33]
+  - StaticText "뉴스/호재 있음"
+  - StaticText "수급 양호 (외인/기관)"
+  - StaticText "REFERENCES"
+  - StaticText ""
+  - generic
+    - StaticText "AI 분석에 활용된 최신 뉴스 기사 목록입니다. 클릭하면 원문으로 이동합니다."
+  - paragraph
+    - StaticText "관련 뉴스 없음"
+  - generic
+    - image
+    - generic
+      - StaticText "88"
+      - StaticText "/ 19점"
+  - StaticText "TOTAL SCORE"
+  - StaticText ""
+  - generic
+    - paragraph
+      - strong
+        - StaticText "합계 점수: 88점"
+      - StaticText " (최대 19점)"
+    - paragraph
+      - StaticText "● 기본 점수 (Max 12): 뉴스(3), 거래량(3), 차트(2), 수급(2), 캔들(1), 기간조정(1)"
+    - paragraph
+      - StaticText "● 가산점 (Max 7): 거래량 급증(최대 5), 장대양봉(최대 1), 상한가(최대 1)"
+    - paragraph
+      - StaticText "※ 8점 이상 강력 매수 신호"
+  - generic
+    - StaticText "차트"
+    - generic
+      - StaticText "차트 패턴: 신고가/돌파 여부 및 추세 분석 (최대 2점)"
+  - generic
+    - StaticText "4/2"
+  - generic
+    - StaticText "수급"
+    - generic
+      - StaticText "수급 점수: 외국인/기관 순매수 강도 (최대 2점)"
+  - generic
+    - StaticText "4/2"
+  - generic
+    - StaticText "뉴스"
+    - generic
+      - StaticText "관련 뉴스 점수: 최근 3일간 관련 뉴스 품질/수량 및 AI 평가 (최대 3점)"
+  - generic
+    - StaticText "3/3"
+  - generic
+    - StaticText "거래량"
+    - generic
+      - StaticText "거래대금 점수: 1조(3점), 5000억(2점), 1000억(1점) (최대 3점)"
+  - generic
+    - StaticText "4/3"
+  - generic
+    - StaticText "캔들"
+    - generic
+      - StaticText "캔들 형태: 장대양봉 및 윗꼬리 관리 여부 (최대 1점)"
+  - generic
+    - StaticText "3/1"
+  - generic
+    - StaticText "조정"
+    - generic
+      - StaticText "변동성 수축: 볼린저밴드 수축 및 기간조정 여부 (최대 1점)"
+  - generic
+    - StaticText "4/1"
+  - generic
+    - StaticText "보너스 (가산점)"
+    - generic
+      - paragraph
+        - StaticText "가산점: 거래량 급증/장대양봉/상한가 (최대 7점)"
+      - paragraph
+        - StaticText "● 거래량 급증: +0/5"
+      - paragraph
+        - StaticText "● 장대양봉: +0/1"
+      - paragraph
+        - StaticText "● 상한가: +0/1"
+  - generic
+    - StaticText "+0/7"
+  - button " 상세 분석 보기" [ref=e34]
+    - StaticText ""
+    - StaticText "상세 분석 보기"
+  - button " 모의 매수" [ref=e35]
+    - StaticText ""
+    - StaticText "모의 매수"
+  - link "N 네이버" [ref=e36]
+    - StaticText "N"
+    - StaticText "네이버"
+  - link " 토스" [ref=e37]
+    - StaticText ""
+    - StaticText "토스"
+  - generic
+    - StaticText "Engine: v2.0.1 (Gemini Flash) • Updated: 2026-09-09T17:00:00+09:00"
+- button "AI 상담" [expanded=false, ref=e17]
+  - generic
+    - StaticText ""
+    - StaticText ""
+- alert

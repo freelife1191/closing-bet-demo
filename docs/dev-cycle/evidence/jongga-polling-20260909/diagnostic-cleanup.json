@@ -1,0 +1,11 @@
+{
+  "owned_pids": [
+    88827,
+    88828,
+    88831
+  ],
+  "all_exited": true,
+  "ports_free": true,
+  "scratch_removed": true,
+  "browser_closed": true
+}

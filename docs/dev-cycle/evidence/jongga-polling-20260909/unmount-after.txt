@@ -1,0 +1,284 @@
+- navigation
+  - StaticText ""
+  - StaticText "Smart Money Bot"
+  - link "기능" [ref=e1]
+  - link "아키텍처" [ref=e2]
+  - link "AI 분석" [ref=e3]
+  - link "Get Started" [ref=e4]
+- main
+  - generic
+    - generic
+      - generic
+        - StaticText "System Operational: v2.0 Released"
+      - heading "한국 주식 시장을 위한 AI 기반 퀀트 분석 솔루션" [level=1, ref=e17]
+        - StaticText "한국 주식 시장을 위한"
+        - LineBreak "\n"
+        - StaticText "AI 기반 퀀트 분석 솔루션"
+      - paragraph
+        - StaticText "VCP 패턴 인식, 기관/외국인 수급 추적, 그리고 Gemini + GPT + Perplexity 멀티 AI 엔진이 결합된 올인원 주식 분석 패키지입니다."
+      - link " 설치 가이드" [ref=e18]
+        - StaticText ""
+        - StaticText "설치 가이드"
+      - link " 분석 엔진 살펴보기" [ref=e19]
+        - StaticText ""
+        - StaticText "분석 엔진 살펴보기"
+      - StaticText ""
+      - StaticText "Python"
+      - StaticText ""
+      - StaticText "Next.js"
+      - StaticText ""
+      - StaticText "Flask"
+      - StaticText ""
+      - StaticText "Gemini"
+      - StaticText ""
+      - StaticText "GPT"
+      - StaticText ""
+      - StaticText "Perplexity"
+  - heading "System Architecture" [level=2, ref=e6]
+  - paragraph
+    - StaticText "데이터 수집부터 AI 분석, 그리고 프론트엔드 시각화까지의 파이프라인"
+  - generic
+    - generic
+      - StaticText ""
+      - heading "Flask API Backend" [level=3, ref=e23]
+      - list
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "Signals (/api/kr/signals)"
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "AI Analysis (/api/kr/ai-analysis)"
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "Market Gate"
+    - generic
+      - StaticText "CORE ENGINE"
+      - StaticText ""
+      - heading "Analysis Engine" [level=3, ref=e24]
+      - paragraph
+        - StaticText "Python Core"
+      - StaticText "Data Sources"
+      - StaticText "Toss, Naver, pykrx, yfinance"
+      - StaticText "AI Models"
+      - StaticText "Gemini + GPT + Perplexity"
+    - generic
+      - StaticText ""
+      - heading "Next.js Frontend" [level=3, ref=e25]
+      - list
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "Dashboard UI"
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "Real-time Signals"
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "News Feed"
+  - heading "Core Analysis Features" [level=2, ref=e7]
+  - paragraph
+    - StaticText "데이터와 알고리즘이 찾아내는 최적의 투자 기회"
+  - StaticText ""
+  - heading "VCP 패턴 감지" [level=3, ref=e8]
+  - paragraph
+    - StaticText "변동성 축소 패턴(Volatility Contraction Pattern)을 자동으로 탐지합니다."
+  - list
+    - listitem [level=1]
+      - StaticText "수축 임계값: 0.7 (인정 조건)"
+    - listitem [level=1]
+      - StaticText "변동폭(고가-저가) 5일/15일 비율"
+    - listitem [level=1]
+      - StaticText "거래량 드라이업 + MA 정배열"
+    - listitem [level=1]
+      - StaticText "총 100점 만점 · 50점 이상 유효"
+  - StaticText ""
+  - heading "수급 추적 (Smart Money)" [level=3, ref=e9]
+  - paragraph
+    - StaticText "수급 70점 + 거래량 20점 + VCP 10점 구조로 종목 우선순위를 계산합니다."
+  - StaticText "외인 5일 순매수"
+  - StaticText "25점"
+  - StaticText "기관 5일 순매수"
+  - StaticText "20점"
+  - StaticText "연속 순매수(외인+기관)"
+  - StaticText "25점"
+  - StaticText ""
+  - heading "종가베팅" [level=3, ref=e10]
+  - paragraph
+    - StaticText "장 마감 직전 모멘텀 종목을 선별해 익일 초반 대응하는 단기 전략입니다."
+  - list
+    - listitem [level=1]
+      - StaticText "점수 체계: 기본 12점 + 가산 7점 (총 19점)"
+    - listitem [level=1]
+      - StaticText "등급 기준: S 10점+, A 8점+, B 6점+"
+    - listitem [level=1]
+      - StaticText "익절 +9% / 손절 -5% / 최대 보유 15일"
+  - StaticText "S급 10+"
+  - StaticText "A급 8+"
+  - StaticText "B급 6+"
+  - paragraph
+    - StaticText "거래대금(1조 / 5천억 / 1천억) + 외인·기관 동반 순매수 + 등락률 하한 동시 충족 시 등급 부여"
+  - StaticText ""
+  - heading "Multi AI Analysis System" [level=2, ref=e11]
+  - paragraph
+    - StaticText "Gemini 주분석 + GPT/Perplexity 보조 검증으로 신뢰도를 높이는 멀티 AI 구조"
+  - StaticText "MULTI ENGINE"
+  - heading " Gemini (Main · Vertex AI)" [level=3, ref=e12]
+    - StaticText ""
+    - StaticText "Gemini (Main · Vertex AI)"
+  - paragraph
+    - StaticText "종가베팅 Phase3 뉴스 종합 분석 + 호재 점수(0~3) + VCP 1차 추론. 심층 추론과 긴 컨텍스트가 강점이며 서비스 계정 기반 Vertex AI로 운영됩니다."
+  - heading " GPT (Sub · Z.ai fallback)" [level=3, ref=e13]
+    - StaticText ""
+    - StaticText "GPT (Sub · Z.ai fallback)"
+  - paragraph
+    - StaticText "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증합니다. 할당량 소진 등 전환 조건에 해당하면 사용 가능한 Z.ai로 대체 분석을 시도합니다."
+  - heading " Perplexity (Sub)" [level=3, ref=e14]
+    - StaticText ""
+    - StaticText "Perplexity (Sub)"
+  - paragraph
+    - StaticText "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증하며, 웹 검색으로 최신 뉴스와 공시를 참고합니다. 호출 제한·인증 오류 등 전환 조건에 해당하면 설정된 Z.ai·GPT 중 사용 가능한 모델로 대체 분석을 시도합니다."
+  - StaticText ""
+  - heading "Market Gate" [level=3, ref=e15]
+  - paragraph
+    - StaticText "시장 전체의 상태와 주도 섹터를 분석합니다."
+  - list
+    - listitem [level=1]
+      - StaticText ""
+      - StaticText "EMA 추세 정배열 (25점)"
+    - listitem [level=1]
+      - StaticText ""
+      - StaticText "RSI & MACD (45점)"
+    - listitem [level=1]
+      - StaticText ""
+      - StaticText "거래량 & 상대강도 (30점)"
+    - listitem [level=1]
+      - StaticText ""
+      - StaticText "Gate Open: 기술점수 40점 이상"
+  - paragraph
+    - StaticText "모니터링 대상"
+  - StaticText "반도체"
+  - StaticText "2차전지"
+  - StaticText "헬스케어"
+  - StaticText "+4"
+  - heading "Scoring Logic Detail" [level=2, ref=e16]
+  - generic
+    - button "VCP 분석" [ref=e20]
+    - button "수급 점수" [ref=e21]
+    - button "종가베팅" [ref=e22]
+  - generic
+    - generic
+      - heading " 종가베팅이란?" [level=3, ref=e26]
+        - StaticText ""
+        - StaticText "종가베팅이란?"
+      - paragraph
+        - StaticText "\"오늘 뜬 놈이 내일도 뜬다\"는 가설에 기반하여, 장 마감 직전 급등주를 매수하고 다음 날 오전 갭상승을 노리는 단타 전략입니다."
+      - StaticText "15:20 ~ 15:30"
+      - StaticText "장 마감 직전"
+      - generic
+        - StaticText ""
+        - StaticText " 선별 매수"
+      - StaticText "Overnight (보유)"
+      - StaticText "09:00 ~ 10:00"
+      - StaticText "익일 장 시작"
+      - generic
+        - StaticText ""
+        - StaticText " 전량 매도"
+      - heading " 승리 공식 (Why?)" [level=4, ref=e27]
+        - StaticText ""
+        - StaticText "승리 공식 (Why?)"
+      - list
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "모멘텀 지속성"
+          - StaticText "오늘 강한 종목은 내일 시초가에도 강할 확률이 높음"
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "FOMO 심리"
+          - StaticText "장 마감 후 뉴스를 접한 투자자들의 익일 아침 매수세 유입"
+        - listitem [level=1]
+          - StaticText ""
+          - StaticText "뉴스 확산"
+          - StaticText "장중 발생한 호재가 밤사이 커뮤니티로 확산되며 기대감 증폭"
+      - heading " 기대값 (Example)" [level=4, ref=e28]
+        - StaticText ""
+        - StaticText "기대값 (Example)"
+      - StaticText "승률 가정"
+      - StaticText "60%"
+      - StaticText "익절 / 손절"
+      - StaticText "+9% / -5%"
+      - StaticText "1회 매매 기대수익 (60% × 9% − 40% × 5%)"
+      - StaticText "+3.4%"
+      - heading " 진입 조건 (Dos)" [level=4, ref=e29]
+        - StaticText ""
+        - StaticText "진입 조건 (Dos)"
+      - list
+        - listitem [level=1]
+          - StaticText "거래대금 1000억 이상 (유동성)"
+        - listitem [level=1]
+          - StaticText "확실한 뉴스/재료 보유 (지속성)"
+        - listitem [level=1]
+          - StaticText "신고가/돌파 차트 패턴"
+        - listitem [level=1]
+          - StaticText "등락률 5~20% (상한가 제외)"
+      - heading " 회피 조건 (Don'ts)" [level=4, ref=e30]
+        - StaticText ""
+        - StaticText "회피 조건 (Don'ts)"
+      - list
+        - listitem [level=1]
+          - StaticText "뉴스 없이 단순 급등 (작전주)"
+        - listitem [level=1]
+          - StaticText "윗꼬리가 긴 캔들 (매도세)"
+        - listitem [level=1]
+          - StaticText "거래대금 급감"
+        - listitem [level=1]
+          - StaticText "이미 상한가 간 종목"
+      - heading "종가베팅 점수표 (19점 만점)" [level=3, ref=e31]
+      - heading "기본 배점 (Max 12점)" [level=4, ref=e32]
+        - StaticText "기본 배점 (Max 12점)"
+      - StaticText "뉴스/재료"
+      - StaticText "3"
+      - StaticText "점"
+      - paragraph
+        - StaticText "AI 호재 분석 및 강도 (3점)"
+      - StaticText "거래대금"
+      - StaticText "3"
+      - StaticText "점"
+      - paragraph
+        - StaticText "1조(3점), 5천억(2점), 1천억(1점)"
+      - StaticText "차트/수급"
+      - StaticText "4"
+      - StaticText "점"
+      - paragraph
+        - StaticText "신고가+1, MA20>MA60 정배열+1, 외인+기관 5일/거래대금≥10%면 +2"
+      - StaticText "캔들/기간"
+      - StaticText "2"
+      - StaticText "점"
+      - paragraph
+        - StaticText "장대양봉(+1), 기간조정(+1)"
+      - heading "가산점 (Max 7점)" [level=4, ref=e33]
+        - StaticText "가산점 (Max 7점)"
+      - StaticText "거래량 급증"
+      - StaticText "+5"
+      - StaticText "점"
+      - paragraph
+        - StaticText "2x~6x+ 구간별 차등 (최대 +5)"
+      - StaticText "장대양봉 보너스"
+      - StaticText "+1"
+      - StaticText "점"
+      - paragraph
+        - StaticText "차트 점수 충족 시 +1"
+      - StaticText "상한가 보너스"
+      - StaticText "+1"
+      - StaticText "점"
+      - paragraph
+        - StaticText "등락률 29.5% 이상 시 +1"
+- contentinfo
+  - StaticText ""
+  - StaticText "Engineered by Gemini Agent"
+  - paragraph
+    - StaticText "© 2026 KR Market Analysis System. All rights reserved."
+- button "AI 상담" [expanded=false, ref=e5]
+  - generic
+    - StaticText ""
+    - StaticText ""
+- alert
+  - StaticText "한국 주식 시장을 위한 AI 기반 퀀트 분석 솔루션"

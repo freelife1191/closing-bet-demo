@@ -1,0 +1,59 @@
+{
+  "commit": "b50854c",
+  "segments": [
+    {
+      "run_status": 200,
+      "status_gets": 2,
+      "latest_gets": 1
+    },
+    {
+      "run_status": 409,
+      "status_gets": 2,
+      "latest_gets": 1
+    },
+    {
+      "run_status": 500,
+      "status_gets": 0,
+      "latest_gets": 0
+    },
+    {
+      "run_status": 200,
+      "status_gets": 9,
+      "latest_gets": 0
+    }
+  ],
+  "screenshots_viewed": [
+    "normal-completed.png",
+    "conflict-completed.png",
+    "typeerror-recovered.png",
+    "unmount-after.png"
+  ],
+  "unexpected_page_errors": {
+    "success": true,
+    "data": {
+      "errors": [
+        {
+          "column": 28,
+          "line": 1390,
+          "text": "SyntaxError: Invalid or unexpected token",
+          "url": null
+        }
+      ],
+      "lifecycle": {
+        "effectiveLaunch": {
+          "browserLaunched": true,
+          "engine": "chrome",
+          "launchHash": 6847324482101409511
+        },
+        "launched": false,
+        "relaunchedBrowser": false,
+        "restartedBackground": false,
+        "restoreStatus": "not_configured",
+        "reused": true,
+        "saveStatus": "not_attempted"
+      }
+    },
+    "error": null
+  },
+  "note": "Normal and409 UPDATED and enabled buttons; TypeError preserved old UPDATED report with expected console error, no success toast/latest refresh; unmount count13 unchanged."
+}
