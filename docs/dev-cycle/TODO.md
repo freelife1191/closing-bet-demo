@@ -923,20 +923,6 @@
 - [ ] `max_parse_attempts = 1` 로 죽어 있는 재시도 구조 정리
 - [ ] 기존 27건의 Z.ai 테스트가 그대로 통과하는지 확인
 
-### [CHAT-005] 죽은 프롬프트 상수와 레거시 경로 정리
-- 진행: 2026-09-09 bounded 묶음 구현. 사용자 현재 연속 진행 요청과 AUTO-CONTINUE 범위; 별도 승인 응답을 만들어 기록하지 않음. 상세: `evidence/dead-code-20260909/scope.md`. 공유 T2 ponytail SHIP·code-review APPROVE·architect CLEAR 및 전체 pytest/Vitest 통과. UltraQA 행렬 실행 대기.
-- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT §3.1, §3.2
-- 티어 판정: 삭제 위주이며 위험 경로에 닿지 않습니다. 170줄에서 250줄 사이로 보지만,
-  구현 후 `git diff --stat` 이 300줄을 넘으면 `tier-rules.md` §3-6 에 따라 `T3` 으로
-  올립니다. 위임 믹스인 다섯 개를 평탄화하는 작업은 규모가 따로여서 이 항목에 넣지
-  않았습니다.
-- [ ] `INTENT_PROMPTS`, `VCP_EXPERT_PERSONA`, `VCP_EXPERT_SUGGESTIONS` 제거
-- [ ] 호출자 없는 래퍼 세 개(`_fetch_mock_data`, `_detect_stock_query_from_stock_map`,
-      `_fallback_response`) 처리 방향 결정 후 정리
-- [ ] `close()` 에 남은 초기화 잔재 제거 (종료 시 종목 맵 재로드 중단)
-- [ ] `_CompatGenerativeModel` 과 `_run_legacy_model_chat` 이 아직 필요한지 확인 후 정리
-- [ ] 삭제한 심볼을 참조하던 테스트 정리 및 pytest 전체 통과 확인
-
 ### [FLOW-006] 백테스트 재노출 전용 계층을 걷어낸다
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW §3.1
 - [ ] `..._service`, `..._calculators`, `..._cumulative`, `..._signal_stats` 네 파일의
@@ -1059,19 +1045,6 @@
 - [ ] `OK (New)` 와 `Accumulating` 을 두 카드에서 같은 방식으로 처리
 - [ ] mock 라우트를 지울지 어휘에 맞출지 결정하고 같은 파일의 다른 mock 라우트도 도달 가능한지 확인
 - [ ] 여섯 어휘가 각각 어떤 표시로 이어지는지 vitest 로 고정
-
-### [INFRA-021] 테스트 밖에서 부르지 않는 `get_performance_report` 가 JSON 으로 옮길 수 없는 손익비를 낸다
-- 진행: 2026-09-09 bounded 묶음 구현. 사용자 현재 연속 진행 요청과 AUTO-CONTINUE 범위; 별도 승인 응답을 만들어 기록하지 않음. 상세: `evidence/dead-code-20260909/scope.md`. 공유 T2 ponytail SHIP·code-review APPROVE·architect CLEAR 및 전체 pytest/Vitest 통과. UltraQA 행렬 실행 대기.
-- 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-03 FLOW-004 사이클의 code-review
-- `engine/signal_tracker_analysis_mixin.py:474` 가 손실이 0일 때 `float("inf")` 를 손익비로
-  돌려주고 `:489` 에서 그대로 dict 에 담습니다. JSON 으로 내보내면 `Infinity` 가 되어
-  `JSON.parse` 가 깨지는 형태입니다.
-- 2026-09-07 grep 으로 확인한 결과 이 함수를 부르는 곳은 `tests/engine/test_signal_tracker_refactor.py`
-  의 검사 두 건(`:398`, `:434`)뿐입니다. `[FLOW-004]` 가 같은 결함을 고친 `aggregate_cumulative_kpis`
-  와 계산이 같으므로, 살려 두면 다음에 쓰는 사람이 같은 함정을 밟습니다. 부르는 곳이 없으니
-  지우는 쪽이 맞습니다.
-- [ ] `get_performance_report` 와 그것만 검사하는 두 검사를 지움
-- [ ] pytest 전체 통과 확인
 
 ### [FE-021] 모의투자 수익 차트의 기간 버튼이 기간과 무관한 `/api/portfolio` 를 다시 부른다
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-005 사이클의 `/qa`

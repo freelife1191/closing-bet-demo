@@ -33,8 +33,16 @@ Ponytail 전용 code-reviewer: SHIP → code-review 전용 code-reviewer APPROVE
 
 ## 동적 행렬·정리
 
-계획: [CHAT-005](../qa/CHAT-005.md), [INFRA-021](../qa/INFRA-021.md). 엔진 ultraqa, lifecycle app-adapted. 첫 구현/행렬 커밋 뒤 고정된 동일 코드의 실제 Python 클래스를 격리 하네스에서 실행한다. phase=baseline-complete, iteration=0; 동적 결과 대기.
+계획: [CHAT-005](../qa/CHAT-005.md), [INFRA-021](../qa/INFRA-021.md). 엔진 ultraqa, lifecycle app-adapted. 첫 구현/행렬 커밋 뒤 고정된 동일 코드의 실제 Python 클래스를 격리 하네스에서 실행한다. 검증 기준 8487e7d, phase=complete, iteration=1. 필수 시나리오 CHAT-005 3/3 · INFRA-021 3/3, 총6/6 통과. 반복 종료/reload0/모델 호환 응답/삭제표면/score0·20/유효한 KPI JSON/사용자 파일 및 정리를 실제 assert로 확인했다. 명령은 run_check.py probe, exit0(1.42초, timeout30초).
 
 ## 증거
 
 [증거 디렉터리](../evidence/dead-code-20260909/)의 review-input.json에 기준 SHA와 파일별 SHA-256이 있다. 실행 명령·timeout·exit·소요시간은 각 단계 JSON, 원문은 각 단계 .log.gz에 원문을 손실 없이 보존한다. 초기 실패 로그와 최종 성공 로그를 구분한다.
+
+## 완료 및 잔여 범위
+
+소유 scratch·임시 로그·포인터를 제거했고 ps 명령행과 lsof cwd에서 소유 프로세스가 없음을 확인했다. 검토 소스7개와 사용자 root package.json의 SHA-256이 유지됐다. cleanup.json 참조. OMX hook 상태 조작 없음. 최종 코드/테스트 순감226줄. TODO51→49(P1 11/P2 38).
+
+INFRA-030은 현재 실제 실행되는 레거시 KRX의 기능/캐시/폴백 동등성 검증이 필요한 구조 통합으로 별도 유지했다. INFRA-045/046의 배포 정보 대기 역시 유지한다. 실제 호출되는 레거시 모델·서비스·공유 캐시를 미사용으로 간주해 지우지 않았다.
+
+ULTRAQA COMPLETE: Goal met after 1 cycles

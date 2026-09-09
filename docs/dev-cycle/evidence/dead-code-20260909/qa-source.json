@@ -1,0 +1,13 @@
+{
+  "commit": "8487e7d665ef08ad0ae7e46cebe7062d6aa1b8ed",
+  "source_files": {
+    "chatbot/core.py": "46327256441d612ff980435862868eb92102bfb5816e3e6c814805cc2ffda27d",
+    "chatbot/core_data_access_mixin.py": "ed9f7cb3019a3444b7834715e6def5c1058aa1b6b97fbef80e1e58a0806cc370",
+    "chatbot/core_payload_mixin.py": "91a78cf27e909900b256d30fd31ae823dabcef3a8497ce793ac4dc7c6c5d0a48",
+    "chatbot/prompts.py": "612ef77905a654442eaa0d8b016e31fbb4ded049b7759df3a0773e47b5a03dcf",
+    "engine/signal_tracker_analysis_mixin.py": "4fc7d1afc3c36c6ab26638fe28e12782879eb0ddd1d618da390c3dbef99eb8d1",
+    "tests/engine/test_signal_tracker_refactor.py": "9ac839c855932434b8680656f8e215970b2134f8e7e7d90cc7145e9cff5636bf",
+    "tests/chatbot/test_core_close_cleanup.py": "e83b980386d9b7a4add78914997c1b97eee54f31109faed038e4544b1d53d71e"
+  },
+  "scratch_matches_commit": true
+}
