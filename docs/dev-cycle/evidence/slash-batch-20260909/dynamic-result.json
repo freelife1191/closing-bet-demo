@@ -1,0 +1,32 @@
+{
+  "browser": "agent-browser",
+  "iteration": 3,
+  "ui_counter_sequence": [
+    10,
+    9,
+    8,
+    7,
+    6,
+    5,
+    4,
+    3,
+    2,
+    1,
+    0
+  ],
+  "posts": {
+    "200": 16,
+    "402": 3
+  },
+  "source_hashes_match": true,
+  "root_package_unchanged": true,
+  "data_names_unchanged": true,
+  "screenshots_viewed": [
+    "commands.png",
+    "title.png",
+    "v3-title.png",
+    "v3-exhaust.png"
+  ],
+  "next_compilation_issues": [],
+  "next_runtime_errors": []
+}

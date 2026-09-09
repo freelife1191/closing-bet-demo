@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "case": "leading-space",
+      "method": "POST",
+      "path": "/api/kr/chatbot",
+      "status": 402,
+      "expected": 402,
+      "response": "{\"code\":\"QUOTA_EXCEEDED\",\"error\":\"\\ubb34\\ub8cc \\uc0ac\\uc6a9\\ub7c9(10\\ud68c)\\uc744 \\ucd08\\uacfc\\ud588\\uc2b5\\ub2c8\\ub2e4. \\uc7a0\\uc2dc \\ud6c4 \\ub2e4\\uc2dc \\uc2dc\\ub3c4\\ud558\\uc2dc\\uac70\\ub098 \\uad00\\ub9ac\\uc790\\uc5d0\\uac8c \\ubb38\\uc758\\ud574 \\uc8fc\\uc138\\uc694.\"}\n"
+    },
+    {
+      "case": "unknown-command",
+      "method": "POST",
+      "path": "/api/kr/chatbot",
+      "status": 200,
+      "expected": 200,
+      "response": "data: {\"chunk\": \"⚠️ 알 수 없는 명령어입니다: `/unknown`\\n`/help`로 사용법을 확인하세요.\", \"answer_chunk\": \"⚠️ 알 수 없는 명령어입니다: `/unknown`\\n`/help`로 사용법을 확인하세요.\", \"session_id\": \"anon_95a5753a-a857-4869-a754-5a4470c20ab1\"}\n\ndata: {\"done\": true, \"session_id\": \"anon_95a5753a-a857-4869-a754-5a4470c20ab1\"}\n\n"
+    },
+    {
+      "case": "attachment",
+      "method": "POST",
+      "path": "/api/kr/chatbot",
+      "status": 402,
+      "expected": 402,
+      "response": "{\"code\":\"QUOTA_EXCEEDED\",\"error\":\"\\ubb34\\ub8cc \\uc0ac\\uc6a9\\ub7c9(10\\ud68c)\\uc744 \\ucd08\\uacfc\\ud588\\uc2b5\\ub2c8\\ub2e4. \\uc7a0\\uc2dc \\ud6c4 \\ub2e4\\uc2dc \\uc2dc\\ub3c4\\ud558\\uc2dc\\uac70\\ub098 \\uad00\\ub9ac\\uc790\\uc5d0\\uac8c \\ubb38\\uc758\\ud574 \\uc8fc\\uc138\\uc694.\"}\n"
+    }
+  ],
+  "final": {
+    "model_calls": 10,
+    "sessions": [
+      {
+        "id": "b7d55bd1-335c-4e80-90de-8b4675425448",
+        "title": "첫 일반 질문 검수"
+      },
+      {
+        "id": "anon_95a5753a-a857-4869-a754-5a4470c20ab1",
+        "title": ""
+      }
+    ],
+    "usage": {
+      "anon_95a5753a-a857-4869-a754-5a4470c20ab1": 10
+    }
+  }
+}
