@@ -14,6 +14,7 @@ scratch = Path(json.loads((evidence / "review-input.json").read_text())["scratch
 stage = sys.argv[1]
 commands = {
     "pytest": ([str(scratch / "venv/bin/python"), "-m", "pytest", "-q"], scratch, 180),
+    "sidebar": (["npx", "vitest", "run", "src/app/components/Sidebar.session.test.tsx"], scratch / "frontend", 90),
     "vitest": (["npx", "vitest", "run"], scratch / "frontend", 300),
     "lint": (["npm", "run", "lint"], scratch / "frontend", 60),
     "build": (["npm", "run", "test:build"], scratch / "frontend", 240),

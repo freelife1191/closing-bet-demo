@@ -1,7 +1,7 @@
 # UltraQA Report
 
 - 항목: CHAT-008, CHAT-008·009 공유 검증
-- engine: ultraqa | lifecycle: app-adapted | phase: ready-for-qa | iteration: 0 | same_failure_count: 0
+- engine: ultraqa | lifecycle: app-adapted | phase: adversarial-e2e | iteration: 1 | same_failure_count: 0
 - browser_applicability: required | browser_driver: agent-browser
 - 근거: 실제 /chatbot 화면이 변경한 차감/세션 제목을 사용한다.
 - namespace/session: slash-20260909 / qa
@@ -29,3 +29,12 @@
 - 혼합대소문자 multipart가 명령분류와 본문파서에서 다르게 해석됨: canonical content_type 및 filename제외조건을 일치. target-red-case → 후속전체검사.
 - 제목기본문구와 첫질문이 같고 50개절단+재시작이 결합되면 제목변경: raw빈title을 신규미설정상태로 사용. 외부목록표시는 새로운 대화. 기존제목은 그대로이며 과거자료일괄수정없음. target-red-sentinel → target-sentinel-fixed93passed.
 - title문자열스캔이불필요해져 ponytail 공용헬퍼변경을원복하고 작은상태구분으로대체.
+
+- QA 기준 커밋: 63ec8826a135744f5bfcd752227b938598eefee5
+
+## Iteration 1 실패와 보완
+- 브라우저 실제 명령 무차감, 첫 질문 제목/후속 질문후보존은 확인했다.
+- 일반질문2회 이후 실제 usage2/model_calls2인데 UI는 reload후에도10회남음. Sidebar.tsx의사용량GET에익명세션헤더가없어다른quota를읽음. 이번quota필수검증과직결되어CHAT-008내부수정한다.
+- 증거: state-after-q2.json, q2-reloaded.txt, title.png(직접열람), iteration1-requests.jsonl.
+- 기존/shared getAuthHeaders를사용량조회에도적용. frontend번들fetch/mutation문서,vercel-react-best-practices로기존callback/이벤트구독유지확인.
+- iteration1전용브라우저닫음/소유서버SIGTERM. 수정전실측결과보존,완료아님.

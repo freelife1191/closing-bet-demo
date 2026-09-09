@@ -84,7 +84,7 @@ export default function Sidebar() {
 
     // 신원은 서버가 정한다. 종전에는 쿼리 파라미터로 이메일을 넘겼는데, 그러면 URL 한
     // 줄로 남의 사용량을 조회할 수 있었다.
-    fetch('/api/kr/user/quota')
+    fetch('/api/kr/user/quota', { headers: getAuthHeaders() })
       .then(res => res.json())
       .then(data => {
         setQuota(data);

@@ -10,7 +10,9 @@
     "services/kr_market_chatbot_quota_helpers.py": "0b3e68e26ee9dfb6e344b10f9060c155dd19141ec02f7ff7c7b8991bcc1fb58e",
     "tests/app/test_kr_market_chatbot_service.py": "11491292e9a52f77a80bb0b5cb95c86d9600723f8d9ba896ecd117a568abdca5",
     "tests/app/test_kr_market_route_integration.py": "ff8d69aff583455407be41b6e434c3c6003d5501c5a57a07fd7e6be72fc2dbe6",
-    "tests/chatbot/test_storage_sqlite.py": "fe0291708d0089ad075146d7a101916cf7955d05c23c793a90d8e9b406ebe511"
+    "tests/chatbot/test_storage_sqlite.py": "fe0291708d0089ad075146d7a101916cf7955d05c23c793a90d8e9b406ebe511",
+    "frontend/src/app/components/Sidebar.tsx": "fe186a01dc2f2a03276ce61a2db62f6c0cb0ff0065cba096bfa0a2c7ed127b30",
+    "frontend/src/app/components/Sidebar.session.test.tsx": "6945ec138e1290a6f69c1ef067e87d12ad46eae50aa7cd6238b29235ee0a1719"
   },
   "review_artifacts": {
     "app/routes/kr_market_chatbot_http_routes.py": "c41f87141f2e5d7876327197d882e8b8cb2e235b3b6ec62196ea317cb18ee3ee",
@@ -29,8 +31,9 @@
   "latest_checks": {
     "pytest": "pytest-approved.json",
     "target": "target-review-final.json",
-    "vitest": "vitest.json",
-    "typecheck": "typecheck.json",
-    "lint": "lint.json"
-  }
+    "vitest": "vitest-qa-fix.json",
+    "typecheck": "typecheck-qa-fix.json",
+    "lint": "lint-qa-fix.json"
+  },
+  "qa_fix_base": "63ec882"
 }

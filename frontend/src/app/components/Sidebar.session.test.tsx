@@ -117,3 +117,19 @@ describe('로그아웃 버튼', () => {
     expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/' });
   });
 });
+
+
+it('익명 사용량 조회와 갱신은 챗봇과 같은 브라우저 세션을 보낸다', async () => {
+  mockSession(null, 'unauthenticated');
+  await renderSidebar();
+  const sessionId = localStorage.getItem('browser_session_id');
+  expect(sessionId).toMatch(/^anon_/);
+  expect(global.fetch).toHaveBeenCalledWith('/api/kr/user/quota', {
+    headers: { 'X-Session-Id': sessionId },
+  });
+  vi.mocked(global.fetch).mockClear();
+  await act(async () => { window.dispatchEvent(new Event('quota-updated')); });
+  expect(global.fetch).toHaveBeenCalledWith('/api/kr/user/quota', {
+    headers: { 'X-Session-Id': sessionId },
+  });
+});

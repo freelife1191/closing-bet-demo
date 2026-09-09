@@ -1,0 +1,26 @@
+{"method": "GET", "path": "/api/kr/chatbot/models", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/models", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/user/quota", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "POST", "path": "/api/kr/chatbot", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "POST", "path": "/api/kr/chatbot", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "POST", "path": "/api/kr/chatbot", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "POST", "path": "/api/kr/chatbot", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 1}, "model_calls": 1}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/chatbot", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 1}, "model_calls": 1}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
+{"method": "GET", "path": "/api/kr/chatbot/models", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
+{"method": "GET", "path": "/api/kr/chatbot/history", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
+{"method": "GET", "path": "/api/kr/chatbot/models", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
+{"method": "GET", "path": "/api/kr/user/quota", "status": 200, "usage": {"anon_fca97381-7f15-4300-aae9-6c3f8e91f017": 2}, "model_calls": 2}
