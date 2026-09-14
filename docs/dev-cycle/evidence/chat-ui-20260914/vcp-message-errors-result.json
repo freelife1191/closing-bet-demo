@@ -1,0 +1,33 @@
+{
+  "case": "message-errors",
+  "pass": true,
+  "evidence": {
+    "preserved500": true,
+    "valid404": [
+      200,
+      {
+        "history": [
+          {
+            "parts": [
+              {
+                "text": "QA fixture 모델 응답입니다."
+              }
+            ],
+            "role": "model",
+            "timestamp": "2026-09-14T12:35:51.087668"
+          },
+          {
+            "parts": [
+              {
+                "text": "[삼성전자(005930)] 메시지 오류 검수"
+              }
+            ],
+            "role": "user",
+            "timestamp": "2026-09-14T12:36:28.617683"
+          }
+        ]
+      }
+    ],
+    "missing404_reset": true
+  }
+}

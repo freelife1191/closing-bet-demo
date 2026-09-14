@@ -1,0 +1,12 @@
+{
+  "desktop": true,
+  "drawerInDOM": false,
+  "events": [
+    {
+      "matches": true,
+      "time": 28460.199999999255,
+      "width": 1280
+    }
+  ],
+  "width": 1280
+}

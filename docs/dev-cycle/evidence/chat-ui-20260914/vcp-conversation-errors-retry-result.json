@@ -1,0 +1,9 @@
+{
+  "case": "conversation-errors-retry",
+  "pass": true,
+  "evidence": {
+    "preserved500": true,
+    "reset404": true,
+    "success200": true
+  }
+}

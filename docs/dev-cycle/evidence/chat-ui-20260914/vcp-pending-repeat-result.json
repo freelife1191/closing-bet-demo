@@ -1,0 +1,12 @@
+{
+  "case": "pending-repeat",
+  "pass": true,
+  "evidence": {
+    "pending": {
+      "deleteDisabled": true,
+      "inputDisabled": true
+    },
+    "delete_count": 1,
+    "session_cleared": true
+  }
+}

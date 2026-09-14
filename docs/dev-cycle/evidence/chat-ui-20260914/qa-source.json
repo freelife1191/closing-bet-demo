@@ -1,0 +1,13 @@
+{
+  "commit": "b86358f00b56c536cad17dd4db9d149d1a408a60",
+  "files": {
+    "frontend/src/app/chatbot/page.tsx": "7a096eaacdbb7985d3471266321093763cb2ca57f85cae8bb06fb0f27ef34d3e",
+    "frontend/src/app/components/ChatWidget.tsx": "c048d80b0e5242698ba9e872ca7a57c4a02e6e77ec1456f43681d3c1d89b9388",
+    "frontend/src/app/dashboard/kr/vcp/page.tsx": "063289623284181e8fa593084c63ec99c12ecb9259edcc7b9650d63375898feb",
+    "frontend/vitest.setup.ts": "a5d1f515d029561657e0361077cfbce18146bd4d7bf7fa8f60f5068aca2c7d61",
+    "frontend/src/app/chatbot/page.regression-chat-019-010.test.tsx": "8015e7445c33322ae80b4eb76f807209057ac8a91fc5751ea58daf2a1f38685d",
+    "frontend/src/app/dashboard/kr/vcp/page.regression-chat-020.test.tsx": "4ab92fb9b465a3bc71d43d90990c3fe6e5fe6a0514f1d76213a2fdae150a1782"
+  },
+  "fixture_sha256": "487cf3d8d0e710f4eb4e5e016877603cfc458348859ef2248cb39effe8809506",
+  "scratch_matches": true
+}

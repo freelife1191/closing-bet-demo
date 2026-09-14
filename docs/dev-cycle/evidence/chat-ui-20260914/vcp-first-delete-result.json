@@ -1,0 +1,48 @@
+{
+  "case": "first-delete",
+  "pass": true,
+  "evidence": {
+    "before": [
+      200,
+      {
+        "history": [
+          {
+            "parts": [
+              {
+                "text": "[삼성전자(005930)] 첫 질문 삭제 검수"
+              }
+            ],
+            "role": "user",
+            "timestamp": "2026-09-14T12:35:51.086352"
+          },
+          {
+            "parts": [
+              {
+                "text": "QA fixture 모델 응답입니다."
+              }
+            ],
+            "role": "model",
+            "timestamp": "2026-09-14T12:35:51.087668"
+          }
+        ]
+      }
+    ],
+    "after": [
+      200,
+      {
+        "history": [
+          {
+            "parts": [
+              {
+                "text": "QA fixture 모델 응답입니다."
+              }
+            ],
+            "role": "model",
+            "timestamp": "2026-09-14T12:35:51.087668"
+          }
+        ]
+      }
+    ],
+    "session": "vcp_005930_4f0bc0bd-9fce-4f18-9fa1-0543584a2102"
+  }
+}

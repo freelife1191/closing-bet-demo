@@ -1,0 +1,5 @@
+{
+  "desktop": false,
+  "visibility": "visible",
+  "width": 375
+}

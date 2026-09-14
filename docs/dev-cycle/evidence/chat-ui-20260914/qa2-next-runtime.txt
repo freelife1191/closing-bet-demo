@@ -1,0 +1,2 @@
+event: message
+data: {"result":{"content":[{"type":"text","text":"{\"error\":\"No browser sessions connected. Please open your application in a browser to retrieve error state.\"}"}]},"jsonrpc":"2.0","id":1}

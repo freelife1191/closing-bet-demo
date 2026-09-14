@@ -1,0 +1,10 @@
+{
+  "case": "stream-switch",
+  "pass": true,
+  "evidence": {
+    "beta_unchanged": true,
+    "beta_session": "vcp_000660_9ff49d02-a059-4869-bea7-430443eb8869",
+    "alpha_completed": true,
+    "alpha_status": 200
+  }
+}

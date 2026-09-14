@@ -1,0 +1,16 @@
+{
+  "desktop": false,
+  "drawerInDOM": false,
+  "events": [
+    {
+      "matches": true,
+      "width": 1280
+    },
+    {
+      "matches": false,
+      "width": 375
+    }
+  ],
+  "frame": true,
+  "width": 375
+}

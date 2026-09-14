@@ -1,0 +1,17 @@
+{
+  "desktop": false,
+  "drawerInDOM": true,
+  "events": [
+    {
+      "matches": true,
+      "time": 28460.199999999255,
+      "width": 1280
+    },
+    {
+      "matches": false,
+      "time": 35544.300000000745,
+      "width": 375
+    }
+  ],
+  "width": 375
+}

@@ -1,0 +1,10 @@
+{
+  "case": "seed-50",
+  "pass": true,
+  "evidence": {
+    "before_count": 50,
+    "after_count": 49,
+    "last_role": "user",
+    "session": "vcp_005930_06ac9d8d-a936-4a7e-81fe-6261ef3e1171"
+  }
+}

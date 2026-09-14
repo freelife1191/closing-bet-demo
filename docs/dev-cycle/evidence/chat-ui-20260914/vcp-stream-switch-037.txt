@@ -1,0 +1,4 @@
+{
+  "deleteDisabled": true,
+  "inputDisabled": true
+}

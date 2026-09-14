@@ -1,0 +1,5 @@
+{
+  "desktop": false,
+  "frame": true,
+  "width": 375
+}

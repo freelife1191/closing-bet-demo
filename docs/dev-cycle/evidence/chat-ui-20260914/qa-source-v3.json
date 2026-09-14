@@ -1,0 +1,18 @@
+{
+  "commit": "174795bf37f9f6f60515687c5a3ba69f49467c5e",
+  "files": {
+    "frontend/src/app/chatbot/page.tsx": "f2983babcfabc85bb94d4f97ef140ad4920a553377ddd944a0cd05e280edd6f5",
+    "frontend/src/app/components/ChatWidget.tsx": "c048d80b0e5242698ba9e872ca7a57c4a02e6e77ec1456f43681d3c1d89b9388",
+    "frontend/src/app/dashboard/kr/vcp/page.tsx": "063289623284181e8fa593084c63ec99c12ecb9259edcc7b9650d63375898feb",
+    "frontend/vitest.setup.ts": "a5d1f515d029561657e0361077cfbce18146bd4d7bf7fa8f60f5068aca2c7d61",
+    "frontend/src/app/chatbot/page.regression-chat-019-010.test.tsx": "3c99b9c4e6bf92d9dac4b24a143e2ed9a10dc388f338e89dc65b369c6a2c4a10",
+    "frontend/src/app/dashboard/kr/vcp/page.regression-chat-020.test.tsx": "4ab92fb9b465a3bc71d43d90990c3fe6e5fe6a0514f1d76213a2fdae150a1782"
+  },
+  "browser": "agent-browser headed",
+  "harness_sha256": {
+    "browser.py": "1b5079be3e29a945ec34f4a1265291863f3ec9ef71ef5cf36b5df886578aad69",
+    "vcp_qa.py": "035bb3694ca90ddaf094b96dfdab0fb2d714c93ffff54046527a68a5f6248ae3",
+    "fixture.py": "487cf3d8d0e710f4eb4e5e016877603cfc458348859ef2248cb39effe8809506"
+  },
+  "scope": "same product source as QA2; headed S3 plus VCP pending-repeat; all earlier evidence retained"
+}
