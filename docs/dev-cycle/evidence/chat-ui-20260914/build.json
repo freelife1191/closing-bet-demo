@@ -1,0 +1,16 @@
+{
+  "stage": "build",
+  "started_at": "2026-09-14T02:06:46.656110+00:00",
+  "ended_at": "2026-09-14T02:06:58.254995+00:00",
+  "pid": 48568,
+  "command": [
+    "npm",
+    "run",
+    "test:build"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/chat-ui-qa-3pj4rtgb/frontend",
+  "timeout_seconds": 240,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 11.6
+}

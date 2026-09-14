@@ -1,0 +1,3 @@
+# 재검토 원문 메시지
+
+재검토: 이전 BLOCK 3건+Escape WATCH는 해소 확인. 다만 새 구현에 비차단 WATCH 2건 있음. (1) 일반 전송 EOF에서 refresh 호출 전만 isCurrent를 검사(page.tsx:1312-1313), refresh가 실패하면 종목/세션/operation 재검사 없이 alert를 연다(:1314-1320). GET 대기 중 종목전환/닫기 후 실패하면 새 화면에 옛 종목 동기화 오류 모달이 뜰 수 있음. 채팅/키 오염은 가드됨. (2) refresh가 retainAfterSync 합성 메시지를 모두 뽑아(mapped 이전) `[...retainedMessages, ...mappedHistory]`로 합치므로(:412-418), 기존 저장 대화 A→/help→저장 대화 B 순서가 다음 EOF sync 후 /help→A→B로 재배치됨. 현재 /help 회귀는 기존 저장 이력 없는 시작만 커버(test:224-266). 둘 다 삭제 정합성/승인 핵심을 깨지는 않아 최종 ARCH status는 WATCH가 타당. 아주 작은 보강: alert 전 isCurrent 재검사, merge 시 원래 순서 메타 또는 합성 명령을 sync 후 별도 고정 영역으로 정의.

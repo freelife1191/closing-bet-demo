@@ -107,6 +107,7 @@ export default function ChatbotPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const isComposing = useRef(false); // Track IME composition state
 
   // Loading Steps
@@ -181,6 +182,41 @@ export default function ChatbotPage() {
     onUnsupported: handleSpeechUnsupported,
   });
 
+  const hasOpenDialog = isSettingsOpen
+    || isDeleteModalOpen
+    || isMessageDeleteModalOpen
+    || isTurnDeleteModalOpen
+    || alertModal.isOpen
+    || isPaperTradingOpen;
+
+  const closeMobileSidebar = useCallback(() => {
+    setIsMobileSidebarOpen(false);
+    mobileMenuTriggerRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const desktopMediaQuery = window.matchMedia('(min-width: 1024px)');
+    const closeAtDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setIsMobileSidebarOpen(false);
+      }
+    };
+
+    desktopMediaQuery.addEventListener('change', closeAtDesktop);
+    return () => desktopMediaQuery.removeEventListener('change', closeAtDesktop);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileSidebarOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !hasOpenDialog) closeMobileSidebar();
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [closeMobileSidebar, hasOpenDialog, isMobileSidebarOpen]);
+
   /* 
   // [Optimization] 페이지 진입 시 알트(Alt) Gemini API 호출 중단 요청 반영
   // 사용자가 직접 요청하지 않았는데 불필요하게 Quota를 소모하는 문제 방지
@@ -208,8 +244,8 @@ export default function ChatbotPage() {
     { cmd: '/help', desc: '도움말 확인' },
     { cmd: '/status', desc: '현재 상태(모델, 메모리) 확인' },
     { cmd: '/memory view', desc: '저장된 메모리 보기' },
-    { cmd: '/clear', desc: '현재 대화 초기화' },
-    { cmd: '/clear all', desc: '내 대화 전체 초기화' },
+    { cmd: '/clear', desc: '현재 세션 메시지 삭제' },
+    { cmd: '/clear all', desc: '내 대화와 메모리 프로필 삭제' },
   ];
 
   const filteredCommands = input.startsWith('/')
@@ -506,45 +542,45 @@ export default function ChatbotPage() {
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setIsMobileSidebarOpen(false)}></div>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={closeMobileSidebar}></div>
           <div className="relative w-[280px] bg-[#1e1f20] h-full shadow-2xl flex flex-col animate-slide-in-left border-r border-white/10">
             <div className="p-4 flex justify-between items-center border-b border-white/5 bg-[#131314]">
-              <button className="flex items-center gap-2" aria-expanded={isMenuExpanded} onClick={() => setIsMenuExpanded(!isMenuExpanded)}>
+              <button className="flex items-center gap-2" aria-expanded={isMenuExpanded} onClick={() => setIsMenuExpanded(prev => !prev)}>
                 <span className="font-bold text-gray-200 text-lg">메뉴</span>
                 <i className={`fas fa-chevron-${isMenuExpanded ? 'up' : 'down'} text-xs text-gray-500 transition-transform duration-200`}></i>
               </button>
-              <button onClick={() => setIsMobileSidebarOpen(false)} aria-label="메뉴 닫기" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+              <button onClick={closeMobileSidebar} aria-label="메뉴 닫기" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
             {/* Navigation Section */}
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isMenuExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div inert={!isMenuExpanded} className={`overflow-hidden transition-all duration-300 ease-in-out ${isMenuExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
               <div className="p-2 space-y-1 border-b border-white/5 bg-[#18181b]">
-                <Link href="/dashboard/kr" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <Link href="/dashboard/kr" onClick={closeMobileSidebar} className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
                   <i className="fas fa-home w-5 text-center text-gray-400"></i>
                   <span>대시보드 홈</span>
                 </Link>
-                <Link href="/dashboard/kr/vcp" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <Link href="/dashboard/kr/vcp" onClick={closeMobileSidebar} className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
                   <i className="fas fa-chart-line w-5 text-center text-blue-400"></i>
                   <span>VCP 스크리너</span>
                 </Link>
-                <Link href="/dashboard/kr/closing-bet" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <Link href="/dashboard/kr/closing-bet" onClick={closeMobileSidebar} className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
                   <i className="fas fa-chess-knight w-5 text-center text-purple-400"></i>
                   <span>종가베팅</span>
                 </Link>
-                <Link href="/dashboard/kr/cumulative" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <Link href="/dashboard/kr/cumulative" onClick={closeMobileSidebar} className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
                   <i className="fas fa-chart-bar w-5 text-center text-yellow-500"></i>
                   <span>누적 성과</span>
                 </Link>
-                <Link href="/dashboard/data-status" className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <Link href="/dashboard/data-status" onClick={closeMobileSidebar} className="flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors">
                   <i className="fas fa-database w-5 text-center text-emerald-400"></i>
                   <span>데이터 관리</span>
                 </Link>
                 <button
                   onClick={() => {
                     setIsPaperTradingOpen(true);
-                    setIsMobileSidebarOpen(false);
+                    closeMobileSidebar();
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-white/5 rounded-lg text-sm transition-colors text-left"
                 >
@@ -558,7 +594,7 @@ export default function ChatbotPage() {
               <button
                 onClick={() => {
                   handleNewChat();
-                  setIsMobileSidebarOpen(false);
+                  closeMobileSidebar();
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-[#2a2b2d] hover:bg-[#333537] text-gray-200 rounded-xl transition-all shadow-sm text-sm font-medium border border-white/5 active:scale-95"
               >
@@ -581,7 +617,7 @@ export default function ChatbotPage() {
                     <button
                       onClick={() => {
                         setCurrentSessionId(session.id);
-                        setIsMobileSidebarOpen(false);
+                        closeMobileSidebar();
                       }}
                       aria-current={currentSessionId === session.id ? 'true' : undefined}
                       className="flex-1 min-w-0 flex items-center gap-3 text-left px-3 py-3"
@@ -608,7 +644,7 @@ export default function ChatbotPage() {
 
             {/* Mobile Sidebar Footer (Profile) */}
             <div className="p-4 border-t border-white/5 bg-[#131314]">
-              <button onClick={() => { setIsSettingsOpen(true); setIsMobileSidebarOpen(false); }} className="flex items-center gap-3 w-full text-left">
+              <button onClick={() => { setIsSettingsOpen(true); closeMobileSidebar(); }} className="flex items-center gap-3 w-full text-left">
                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-[#131314] shadow-lg">
                   {displayProfile.name.slice(0, 2).toUpperCase()}
                 </div>
@@ -745,6 +781,7 @@ export default function ChatbotPage() {
             <div className="flex items-center gap-3 text-gray-200">
               {/* Hamburger Button (Mobile) */}
               <button
+                ref={mobileMenuTriggerRef}
                 onClick={() => setIsMobileSidebarOpen(true)}
                 aria-label="메뉴 열기"
                 className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 active:bg-white/20 transition-colors -ml-2"
@@ -849,9 +886,9 @@ export default function ChatbotPage() {
 
           {/* Footer (Input Area) */}
           <footer className="flex-shrink-0 p-4 bg-[#131314] border-t border-white/5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-            <div className="max-w-3xl mx-auto relative">
+            <div className="max-w-3xl mx-auto">
               {showCommands && filteredCommands.length > 0 && (
-                <div className="absolute bottom-full left-0 mb-4 w-[300px] bg-[#1e1f20] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 animate-fade-in-up">
+                <div className="relative z-40 mb-4 w-full max-h-64 overflow-y-auto bg-[#1e1f20] border border-white/10 rounded-xl shadow-2xl animate-fade-in-up">
                   <div className="text-xs font-bold text-gray-400 px-4 py-2 border-b border-white/5 bg-black/20">사용 가능한 명령어</div>
                   {filteredCommands.map((c, i) => (
                     <button
@@ -876,7 +913,7 @@ export default function ChatbotPage() {
               )}
 
               {/* Floating Toolbar (Suggestions & Model Selector) */}
-              <div className="absolute bottom-full left-0 right-0 mb-4 px-4 pointer-events-none z-30 flex flex-col items-center gap-3">
+              <div className="mb-4 px-4 pointer-events-none flex flex-col items-center gap-3">
                 {/* 1. Suggestions (Wrapped) */}
                 {messages.length === 0 && (
                   <div className="flex flex-wrap justify-center gap-2 pointer-events-auto max-w-full">

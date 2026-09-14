@@ -1,0 +1,3 @@
+# 아키텍처 최종 원문 메시지
+
+최종 ARCHITECTURE 판정 `CLEAR`. 최신6파일 SHA 모두 review-input과 일치. 이전 BLOCK: serverIndex 오프셋, 공통 pending, ticker/session/operation 세대, 중첩 Escape 모두 해소. 이전 WATCH1은 refresh 실패 alert 직전 isCurrent 재검사(page.tsx:1380-1389), WATCH2는 displayAnchor merge와 GET serverMessageIndex 독립(page:227-258,445-457) 및 A-help-B/trim50/404 회귀(test:469-570)로 해소. 추가 HIGH도 sawError/sawDone 조건부 sync와 EOF placeholder 정리, reader reject 치환(page:1259-1260,1287-1293,1352-1391,1393-1407; tests:397-467)로 해소. final 증거 69/486,type/lint/build exit0,pytest2296/3skip. 단, QA 8행은 문서상 아직 미실행이라 CLEAR는 아키텍처/정적 리뷰 상태이며 완료 판정은 아님.

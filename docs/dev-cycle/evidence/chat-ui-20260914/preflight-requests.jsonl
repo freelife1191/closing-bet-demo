@@ -1,0 +1,29 @@
+{"method": "GET", "path": "/api/kr/chatbot/models", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/models", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/chatbot/sessions", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/user/quota", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/user/quota", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/signals", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/market-gate", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/signals/status", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/ai-analysis", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/api/kr/stock-chart/005930", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "POST", "path": "/api/kr/chatbot", "status": 200, "usage": {}, "model_calls": 0}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "GET", "path": "/api/kr/chatbot/history", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "DELETE", "path": "/api/kr/chatbot/history", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "GET", "path": "/__qa/state", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "GET", "path": "/api/kr/chatbot/history", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}
+{"method": "POST", "path": "/api/kr/realtime-prices", "status": 200, "usage": {"vcp_005930_be8ef261-7141-4ac4-bb54-79756b61e1a0": 1}, "model_calls": 1}

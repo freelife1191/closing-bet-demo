@@ -194,6 +194,70 @@ const parseAIResponse = (text: string, isStreaming: boolean = false, streamReaso
 
 const getVcpWelcomeMessage = (stockName?: string) => `👋 안녕하세요! **VCP 전문가 챗봇**입니다.\n\n**${stockName || '선택 종목'}** 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n\n명령어 예시:\n* \`/status\` - 현재 상태 확인\n* \`/help\` - 도움말`;
 
+interface VcpChatTarget {
+  stockTicker: string;
+  stockName?: string;
+  sessionKey: string;
+  sessionId: string;
+}
+
+interface VcpChatHistoryMessage {
+  role?: string;
+  content?: string;
+  parts?: Array<string | { text?: string }>;
+  timestamp?: string;
+}
+
+interface VcpDisplayAnchor {
+  timestamp: string;
+  serverIndex: number;
+}
+
+interface VcpChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  reasoning?: string;
+  isStreaming?: boolean;
+  serverMessageIndex?: number;
+  isSynthetic?: boolean;
+  retainAfterSync?: boolean;
+  displayAnchor?: VcpDisplayAnchor;
+}
+
+function mergeRetainedVcpMessages(
+  retainedMessages: VcpChatMessage[],
+  serverMessages: VcpChatMessage[],
+): VcpChatMessage[] {
+  return retainedMessages.reduceRight((merged, retainedMessage) => {
+    const anchor = retainedMessage.displayAnchor;
+    if (!anchor) return [retainedMessage, ...merged];
+
+    let anchorIndex = -1;
+    for (let index = merged.length - 1; index >= 0; index -= 1) {
+      const candidate = merged[index];
+      if (!candidate.isSynthetic
+        && candidate.displayAnchor?.timestamp === anchor.timestamp
+        && candidate.serverMessageIndex !== undefined
+        && candidate.serverMessageIndex <= anchor.serverIndex) {
+        anchorIndex = index;
+        break;
+      }
+    }
+    if (anchorIndex !== -1) {
+      merged.splice(anchorIndex + 1, 0, retainedMessage);
+      return merged;
+    }
+
+    // 레거시 자료는 같은 초에 여러 메시지를 남겨 원본 순서를 완전히 복원할 수 없다.
+    // 그 경우에는 앵커 뒤의 첫 서버 메시지 앞에 넣는 best-effort 배치를 택한다.
+    const laterServerIndex = merged.findIndex((candidate) =>
+      !candidate.isSynthetic && (candidate.displayAnchor?.timestamp ?? '') > anchor.timestamp);
+    merged.splice(laterServerIndex === -1 ? merged.length : laterServerIndex, 0, retainedMessage);
+    return merged;
+  }, [...serverMessages]);
+}
+
+
 // AI 매매 의견 배지의 표기. 표에 없는 action 은 배지를 그리지 않는다. 재분석이
 // 실패한 행은 action 에 'N/A' 가 채워져 오는데, 기본값을 관망으로 두면 사용자가
 // 실패한 분석을 정상적인 AI 의견으로 읽게 된다.
@@ -221,9 +285,11 @@ export default function VCPSignalsPage() {
   const [marketGate, setMarketGate] = useState<KRMarketGate | null>(null);
 
   // Chatbot State
-  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string; isStreaming?: boolean }>>([]);
+  const [chatHistory, setChatHistory] = useState<VcpChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatDeletePending, setChatDeletePending] = useState(false);
+  const vcpChatOperationRef = useRef(0);
 
   // Chart Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -231,6 +297,8 @@ export default function VCPSignalsPage() {
   const chartRequest = useRef(0);
   const [chartError, setChartError] = useState(false);
   const [selectedStock, setSelectedStock] = useState<{ name: string; ticker: string } | null>(null);
+  const activeVcpChatRef = useRef<{ ticker: string | null; isOpen: boolean }>({ ticker: null, isOpen: false });
+  activeVcpChatRef.current = { ticker: selectedStock?.ticker ?? null, isOpen: isModalOpen };
   const [chartLoading, setChartLoading] = useState(false);
   const [chartPeriod, setChartPeriod] = useState<'1M' | '3M' | '6M' | '1Y'>('3M');
   const [showVcpRange, setShowVcpRange] = useState(true); // VCP 범위 표시 상태
@@ -289,15 +357,17 @@ export default function VCPSignalsPage() {
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
     isOpen: boolean;
     mode: 'clear_all' | 'single_message' | null;
-    msgIndex: number | null;
-  }>({ isOpen: false, mode: null, msgIndex: null });
+    target: VcpChatTarget | null;
+    serverMessageIndex: number | null;
+  }>({ isOpen: false, mode: null, target: null, serverMessageIndex: null });
+  const vcpChatDeletePendingRef = useRef(false);
 
   const SLASH_COMMANDS = [
     { cmd: '/help', desc: '도움말 확인' },
     { cmd: '/status', desc: '현재 상태 확인' },
     { cmd: '/model', desc: '모델 변경/확인' },
     { cmd: '/memory view', desc: '메모리 보기' },
-    { cmd: '/clear', desc: '대화 내역 초기화' },
+    { cmd: '/clear', desc: '현재 대화 메시지 삭제' },
   ];
 
   const filteredCommands = chatInput.startsWith('/')
@@ -309,59 +379,154 @@ export default function VCPSignalsPage() {
     "진입가와 손절가 추천해줘",
   ];
 
-  const openDeleteConfirmModal = (mode: 'clear_all' | 'single_message', msgIndex: number | null = null) => {
-    setDeleteConfirmModal({ isOpen: true, mode, msgIndex });
+  const isVcpChatBusy = chatLoading || chatDeletePending || chatHistory.some((message) => message.isStreaming);
+
+  const openDeleteConfirmModal = (mode: 'clear_all' | 'single_message', messageIndex: number | null = null) => {
+    if (isVcpChatBusy) return;
+    const target = getVcpChatTarget();
+    const serverMessageIndex = messageIndex === null ? null : chatHistory[messageIndex]?.serverMessageIndex ?? null;
+    if (!target || (mode === 'single_message' && typeof serverMessageIndex !== 'number')) return;
+    setDeleteConfirmModal({ isOpen: true, mode, target, serverMessageIndex });
   };
 
   const closeDeleteConfirmModal = () => {
-    setDeleteConfirmModal({ isOpen: false, mode: null, msgIndex: null });
+    setDeleteConfirmModal({ isOpen: false, mode: null, target: null, serverMessageIndex: null });
+  };
+
+  const getVcpChatTarget = (): VcpChatTarget | null => {
+    const stockTicker = selectedStock?.ticker || 'default';
+    const sessionKey = `vcp_chat_session_id_${stockTicker}`;
+    const sessionId = localStorage.getItem(sessionKey);
+    if (!sessionId) return null;
+    return { stockTicker, stockName: selectedStock?.name, sessionKey, sessionId };
+  };
+
+  const isActiveVcpChatTarget = (target: VcpChatTarget): boolean =>
+    activeVcpChatRef.current.isOpen && activeVcpChatRef.current.ticker === target.stockTicker;
+
+  const hasActiveVcpChatSession = (target: VcpChatTarget): boolean =>
+    isActiveVcpChatTarget(target) && localStorage.getItem(target.sessionKey) === target.sessionId;
+
+  const showVcpChatDeleteError = (target: VcpChatTarget): void => {
+    if (!hasActiveVcpChatSession(target)) return;
+    setAlertModal({
+      isOpen: true,
+      type: 'danger',
+      title: '대화 삭제 실패',
+      content: '대화 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+    });
+  };
+
+  const showVcpChatWelcome = (target: VcpChatTarget): void => {
+    if (!isActiveVcpChatTarget(target)) return;
+    setChatHistory([{ role: 'assistant', content: getVcpWelcomeMessage(target.stockName), isSynthetic: true }]);
+  };
+
+  const refreshVcpChatHistory = async (target: VcpChatTarget, operationId = vcpChatOperationRef.current): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/kr/chatbot/history?session_id=${target.sessionId}&_t=${Date.now()}`, {
+        headers: {
+          ...getVcpChatHeaders(target.sessionId),
+          'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
+      });
+
+      if (res.status === 404) {
+        if (!hasActiveVcpChatSession(target) || operationId !== vcpChatOperationRef.current) return true;
+        localStorage.removeItem(target.sessionKey);
+        showVcpChatWelcome(target);
+        return true;
+      }
+      if (!res.ok) return false;
+
+      const data: { history?: VcpChatHistoryMessage[] } = await res.json();
+      if (!hasActiveVcpChatSession(target) || operationId !== vcpChatOperationRef.current) return true;
+      const mappedHistory: VcpChatMessage[] = (data.history ?? []).map((msg, serverMessageIndex) => {
+        const content = msg.content
+          ?? (Array.isArray(msg.parts)
+            ? msg.parts.map((part) => typeof part === 'string' ? part : part.text ?? '').join('')
+            : '');
+        const displayAnchor = typeof msg.timestamp === 'string'
+          ? { timestamp: msg.timestamp, serverIndex: serverMessageIndex }
+          : undefined;
+        return { role: msg.role === 'user' ? 'user' : 'assistant', content, serverMessageIndex, displayAnchor };
+      });
+      const retainedMessages = chatHistory.filter((message) => message.retainAfterSync);
+      if (mappedHistory.length > 0) {
+        setChatHistory(mergeRetainedVcpMessages(retainedMessages, mappedHistory));
+      } else {
+        setChatHistory(retainedMessages.length > 0
+          ? retainedMessages
+          : [{ role: 'assistant', content: getVcpWelcomeMessage(target.stockName), isSynthetic: true }]);
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to load VCP chat history from DB', error);
+      return false;
+    }
+  };
+
+  const deleteVcpChatHistory = async (target: VcpChatTarget, msgIndex?: number): Promise<void> => {
+    if (vcpChatDeletePendingRef.current) return;
+    vcpChatDeletePendingRef.current = true;
+    setChatDeletePending(true);
+    const operationId = ++vcpChatOperationRef.current;
+    try {
+      const indexQuery = typeof msgIndex === 'number' ? `&index=${msgIndex}` : '';
+      const res = await fetch(`/api/kr/chatbot/history?session_id=${target.sessionId}${indexQuery}`, {
+        method: 'DELETE',
+        headers: getVcpChatHeaders(target.sessionId),
+      });
+
+      if (res.status === 404) {
+        const refreshResult = await refreshVcpChatHistory(target, operationId);
+        if (!refreshResult) showVcpChatDeleteError(target);
+        return;
+      }
+      if (!res.ok) {
+        showVcpChatDeleteError(target);
+        return;
+      }
+      if (!hasActiveVcpChatSession(target) || operationId !== vcpChatOperationRef.current) return;
+
+      if (typeof msgIndex === 'number') {
+        setChatHistory((history) => history.flatMap((message) => {
+          if (message.serverMessageIndex === msgIndex) return [];
+          const displayAnchor = message.displayAnchor && message.displayAnchor.serverIndex > msgIndex
+            ? { ...message.displayAnchor, serverIndex: message.displayAnchor.serverIndex - 1 }
+            : message.displayAnchor;
+          if (typeof message.serverMessageIndex === 'number' && message.serverMessageIndex > msgIndex) {
+            return [{ ...message, serverMessageIndex: message.serverMessageIndex - 1, displayAnchor }];
+          }
+          return [{ ...message, displayAnchor }];
+        }));
+        return;
+      }
+
+      localStorage.removeItem(target.sessionKey);
+      showVcpChatWelcome(target);
+    } catch (error) {
+      console.error('Failed to delete VCP chat history', error);
+      showVcpChatDeleteError(target);
+    } finally {
+      vcpChatDeletePendingRef.current = false;
+      setChatDeletePending(false);
+    }
   };
 
   const handleConfirmDeleteChatHistory = async () => {
     try {
       if (deleteConfirmModal.mode === 'clear_all') {
-        const stockTicker = selectedStock?.ticker || 'default';
-        const sessionKey = `vcp_chat_session_id_${stockTicker}`;
-        const sessionId = localStorage.getItem(sessionKey);
-
-        if (sessionId) {
-          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, {
-            method: 'DELETE',
-            headers: getVcpChatHeaders(sessionId),
-          });
-        }
-
-        setChatHistory([{
-          role: 'assistant',
-          content: getVcpWelcomeMessage(selectedStock?.name)
-        }]);
+        const target = deleteConfirmModal.target;
+        if (target) await deleteVcpChatHistory(target);
+        else setChatHistory([{ role: 'assistant', content: getVcpWelcomeMessage(selectedStock?.name), isSynthetic: true }]);
         return;
       }
 
-      if (deleteConfirmModal.mode === 'single_message' && deleteConfirmModal.msgIndex !== null) {
-        const msgIndex = deleteConfirmModal.msgIndex;
-        const newHistory = [...chatHistory];
-        newHistory.splice(msgIndex, 1);
-
-        // UI 즉시 반영
-        setChatHistory(newHistory);
-
-        try {
-          const stockTicker = selectedStock?.ticker || 'default';
-          const sessionKey = `vcp_chat_session_id_${stockTicker}`;
-          const sessionId = localStorage.getItem(sessionKey);
-          if (sessionId) {
-            await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&index=${msgIndex}`, {
-              method: 'DELETE',
-              headers: getVcpChatHeaders(sessionId),
-            });
-          }
-        } catch (e) {
-          console.error("Failed to sync partial deletion with DB", e);
-        }
+      if (deleteConfirmModal.mode === 'single_message' && deleteConfirmModal.target && deleteConfirmModal.serverMessageIndex !== null) {
+        await deleteVcpChatHistory(deleteConfirmModal.target, deleteConfirmModal.serverMessageIndex);
       }
-    } catch (e) {
-      console.error("Failed to delete VCP chat history", e);
     } finally {
       closeDeleteConfirmModal();
     }
@@ -373,80 +538,22 @@ export default function VCPSignalsPage() {
 
   // On ticker change, load chat history from backend DB
   useEffect(() => {
-    let isMounted = true;
-
     const loadHistory = async () => {
       if (!selectedStock?.ticker || !isModalOpen) return;
-
+      const operationId = ++vcpChatOperationRef.current;
       setChatLoading(true);
-      try {
-        const stockTicker = selectedStock.ticker;
-        const sessionKey = `vcp_chat_session_id_${stockTicker}`;
-        let sessionId = localStorage.getItem(sessionKey);
-
-        if (!sessionId) {
-          // No session yet, just show welcome message
-          setChatHistory([{
-            role: 'assistant',
-            content: getVcpWelcomeMessage(selectedStock.name)
-          }]);
-          setChatLoading(false);
-          return;
-        }
-
-        // Fetch from backend
-        const headers: Record<string, string> = {
-          ...getVcpChatHeaders(sessionId),
-          'Cache-Control': 'no-cache',
-        };
-
-        const res = await fetch(`/api/kr/chatbot/history?session_id=${sessionId}&_t=${Date.now()}`, {
-          headers,
-          cache: 'no-store'
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.history && data.history.length > 0) {
-            const mappedHistory = data.history.map((msg: any) => {
-              let textContent = '';
-              if (msg.content) {
-                textContent = msg.content;
-              } else if (msg.parts && Array.isArray(msg.parts)) {
-                textContent = msg.parts.map((p: any) => typeof p === 'string' ? p : p.text).join('');
-              }
-              return {
-                role: msg.role === 'model' ? 'assistant' : msg.role,
-                content: textContent
-              };
-            });
-            if (isMounted) setChatHistory(mappedHistory);
-          } else {
-            if (isMounted) setChatHistory([{
-              role: 'assistant',
-              content: getVcpWelcomeMessage(selectedStock.name)
-            }]);
-          }
-        } else if (res.status === 404) {
-          // 404 는 「그 세션은 없거나 내 것이 아니다」라는 뜻이다. 소유자가 바뀌면
-          // (로그인, 로그아웃) 저장해 둔 세션 ID 가 그대로 남아 이 응답을 받는다.
-          // 죽은 ID 를 버리지 않으면 모달이 빈 채로 남고 다음에도 같은 404 를 받는다.
-          localStorage.removeItem(sessionKey);
-          if (isMounted) setChatHistory([{
-            role: 'assistant',
-            content: getVcpWelcomeMessage(selectedStock.name)
-          }]);
-        }
-      } catch (e) {
-        console.error('Failed to parse VCP chat history from DB', e);
-      } finally {
-        if (isMounted) setChatLoading(false);
+      const target = getVcpChatTarget();
+      if (!target) {
+        setChatHistory([{ role: 'assistant', content: getVcpWelcomeMessage(selectedStock.name), isSynthetic: true }]);
+      } else {
+        await refreshVcpChatHistory(target, operationId);
+      }
+      if (activeVcpChatRef.current.isOpen && activeVcpChatRef.current.ticker === selectedStock.ticker && operationId === vcpChatOperationRef.current) {
+        setChatLoading(false);
       }
     };
 
     loadHistory();
-
-    return () => { isMounted = false; };
   }, [selectedStock?.ticker, isModalOpen]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -920,6 +1027,10 @@ export default function VCPSignalsPage() {
 
   const openChart = async (ticker: string, name: string, period?: string) => {
     const requestId = ++chartRequest.current;
+    if (selectedStock?.ticker !== ticker || !isModalOpen) {
+      vcpChatOperationRef.current += 1;
+      setChatHistory([]);
+    }
     setSelectedStock({ name, ticker });
     setIsModalOpen(true);
     setChartData([]);
@@ -953,6 +1064,7 @@ export default function VCPSignalsPage() {
 
   const closeChart = () => {
     chartRequest.current += 1;
+    vcpChatOperationRef.current += 1;
     setChartError(false);
     setChartLoading(false);
     setIsModalOpen(false);
@@ -1048,23 +1160,12 @@ export default function VCPSignalsPage() {
     // 인자로 받은 메시지가 있으면 그것을 사용, 없으면 입력창 값 사용
     const message = msgFromCommand || chatInput;
 
-    if (!message.trim() || chatLoading) return;
+    if (!message.trim() || isVcpChatBusy) return;
 
     if (message.trim().toLowerCase() === '/clear') {
-      const stockTicker = selectedStock?.ticker || 'default';
-      const sessionKey = `vcp_chat_session_id_${stockTicker}`;
-      let sessionId = localStorage.getItem(sessionKey);
-      if (sessionId) {
-        try {
-          await fetch(`/api/kr/chatbot/history?session_id=${sessionId}`, {
-            method: 'DELETE',
-            headers: getVcpChatHeaders(sessionId),
-          });
-        } catch (e) {
-          console.error("Failed to clear VCP chat history on server", e);
-        }
-      }
-      setChatHistory([]); // The useEffect will handle injecting the welcome message
+      const target = getVcpChatTarget();
+      if (target) await deleteVcpChatHistory(target);
+      else setChatHistory([{ role: 'assistant', content: getVcpWelcomeMessage(selectedStock?.name), isSynthetic: true }]);
       setChatInput('');
       setSelectedCommandIndex(0);
       return;
@@ -1072,21 +1173,47 @@ export default function VCPSignalsPage() {
 
     // 슬래시 커맨드인 경우 종목 컨텍스트를 붙이지 않음
     const isCommand = message.startsWith('/');
+    const isEphemeralCommand = isCommand && ['/help', '/status'].includes(message.toLowerCase().split(/\s+/)[0]);
+    const displayAnchor = [...chatHistory].reverse().find((chatMessage) => chatMessage.displayAnchor)?.displayAnchor;
     const stockContext = (selectedStock && !isCommand) ? `[${selectedStock.name}(${selectedStock.ticker})] ` : '';
     const fullMessage = stockContext + message;
 
-    setChatHistory(prev => [...prev, { role: 'user', content: message }]);
+    setChatHistory((history) => [
+      ...history.filter((chatMessage) => !chatMessage.isSynthetic || chatMessage.retainAfterSync),
+      {
+        role: 'user',
+        content: message,
+        isSynthetic: isEphemeralCommand,
+        retainAfterSync: isEphemeralCommand,
+        displayAnchor: isEphemeralCommand ? displayAnchor : undefined,
+      },
+    ]);
     setChatInput(''); // 입력창 즉시 초기화
     setChatLoading(true);
+    let streamOperationId = 0;
+    let streamTicker = selectedStock?.ticker || 'default';
 
     try {
       const stockTicker = selectedStock?.ticker || 'default';
+      streamTicker = stockTicker;
       const sessionKey = `vcp_chat_session_id_${stockTicker}`;
       let sessionId = localStorage.getItem(sessionKey);
       if (!sessionId) {
         sessionId = `vcp_${stockTicker}_` + crypto.randomUUID();
         localStorage.setItem(sessionKey, sessionId);
       }
+      streamOperationId = ++vcpChatOperationRef.current;
+      const streamTarget: VcpChatTarget = {
+        stockTicker,
+        stockName: selectedStock?.name,
+        sessionKey,
+        sessionId,
+      };
+      const isCurrentVcpChatStream = () =>
+        streamOperationId === vcpChatOperationRef.current
+        && activeVcpChatRef.current.isOpen
+        && activeVcpChatRef.current.ticker === stockTicker
+        && localStorage.getItem(sessionKey) === streamTarget.sessionId;
 
       const res = await fetch('/api/kr/chatbot', {
         method: 'POST',
@@ -1100,27 +1227,39 @@ export default function VCPSignalsPage() {
         }),
       });
 
+      if (!isCurrentVcpChatStream()) return;
+
       if (!res.ok || res.status === 401 || res.status === 402 || res.status === 400) {
         let errStr = "서버 통신 오류가 발생했습니다.";
         try {
           const errData = await res.json();
           if (errData.error) errStr = errData.error;
         } catch (e) { }
-        setChatHistory(prev => [...prev, { role: 'assistant', content: `⚠️ ${errStr}` }]);
-        setChatLoading(false);
+        if (isCurrentVcpChatStream()) {
+          setChatHistory(prev => [...prev, { role: 'assistant', content: `⚠️ ${errStr}` }]);
+          setChatLoading(false);
+        }
         return;
       }
 
       if (res.body) {
-        setChatLoading(false);
-
         // Setup a new streaming message
-        setChatHistory(prev => [...prev, { role: 'assistant', content: "", reasoning: "", isStreaming: true }]);
+        setChatHistory(prev => [...prev, {
+          role: 'assistant',
+          content: "",
+          reasoning: "",
+          isStreaming: true,
+          isSynthetic: isEphemeralCommand,
+          retainAfterSync: isEphemeralCommand,
+          displayAnchor: isEphemeralCommand ? displayAnchor : undefined,
+        }]);
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let done = false;
         let buffer = "";
+        let sawError = false;
+        let sawDone = false;
 
         while (!done) {
           const { value, done: readerDone } = await reader.read();
@@ -1136,16 +1275,19 @@ export default function VCPSignalsPage() {
                 if (!dataStr.trim()) continue;
                 try {
                   const data = JSON.parse(dataStr);
+                  if (!isCurrentVcpChatStream()) continue;
 
                   // 저장해 둔 세션에 접근할 수 없으면(로그인, 로그아웃으로 소유자가 바뀐
                   // 경우) 서버가 새 세션을 배정한다. 받아 두어야 다음 전송이 이어진다.
                   const assignedSessionId = data.session_id;
                   if (typeof assignedSessionId === 'string' && assignedSessionId && assignedSessionId !== sessionId) {
                     sessionId = assignedSessionId;
+                    streamTarget.sessionId = assignedSessionId;
                     localStorage.setItem(sessionKey, assignedSessionId);
                   }
 
                   if (data.error) {
+                    sawError = true;
                     setChatHistory(prev => {
                       const newMsgs = [...prev];
                       newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], content: data.error, isStreaming: false };
@@ -1210,6 +1352,7 @@ export default function VCPSignalsPage() {
                     });
                   }
                   if (data.done) {
+                    sawDone = true;
                     setChatHistory(prev => {
                       const newMsgs = [...prev];
                       newMsgs[newMsgs.length - 1] = {
@@ -1226,10 +1369,44 @@ export default function VCPSignalsPage() {
             }
           }
         }
+        if (isCurrentVcpChatStream()) {
+          setChatHistory((history) => {
+            const messages = [...history];
+            const lastIndex = messages.length - 1;
+            if (lastIndex >= 0 && messages[lastIndex].isStreaming) {
+              messages[lastIndex] = { ...messages[lastIndex], isStreaming: false };
+            }
+            return messages;
+          });
+        }
+        if (isCurrentVcpChatStream() && !isEphemeralCommand && sawDone && !sawError) {
+          const refreshed = await refreshVcpChatHistory(streamTarget, streamOperationId);
+          if (!refreshed && isCurrentVcpChatStream()) {
+            setAlertModal({
+              isOpen: true,
+              type: 'danger',
+              title: '대화 동기화 실패',
+              content: '대화 내역을 동기화하지 못했습니다. 새로고침 후 다시 시도해 주세요.',
+            });
+          }
+        }
+        if (isCurrentVcpChatStream()) setChatLoading(false);
       }
     } catch (e) {
-      setChatHistory(prev => [...prev, { role: 'assistant', content: '⚠️ 서버와 통신이 원활하지 않습니다. 잠시 후 다시 시도해주세요.', isStreaming: false }]);
-      setChatLoading(false);
+      if (streamOperationId === vcpChatOperationRef.current && activeVcpChatRef.current.isOpen && activeVcpChatRef.current.ticker === streamTicker) {
+        setChatHistory((history) => {
+          const messages = [...history];
+          const lastIndex = messages.length - 1;
+          const errorMessage = '⚠️ 서버와 통신이 원활하지 않습니다. 잠시 후 다시 시도해주세요.';
+          if (lastIndex >= 0 && messages[lastIndex].isStreaming) {
+            messages[lastIndex] = { ...messages[lastIndex], content: errorMessage, isStreaming: false };
+          } else {
+            messages.push({ role: 'assistant', content: errorMessage, isStreaming: false });
+          }
+          return messages;
+        });
+        setChatLoading(false);
+      }
     }
   };
 
@@ -1924,10 +2101,11 @@ export default function VCPSignalsPage() {
                             <span className="text-xs font-bold text-gray-400">AI 상담 (VCP 전문가)</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            {chatHistory.length > 0 && (
+                            {chatHistory.some((message) => typeof message.serverMessageIndex === 'number') && (
                               <button
                                 onClick={() => openDeleteConfirmModal('clear_all')}
-                                className="text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                                disabled={isVcpChatBusy}
+                                className="text-gray-500 hover:text-red-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="대화 내역 비우기"
                               >
                                 <i className="fas fa-trash-alt text-xs"></i>
@@ -1979,13 +2157,16 @@ export default function VCPSignalsPage() {
                                   return (
                                     <div key={i} className="flex justify-start relative group">
                                       <div className="flex flex-col gap-2 relative z-10 w-full overflow-hidden inline-block px-3 py-2.5 rounded-2xl text-xs max-w-[90%] leading-relaxed bg-[#2c2c2e] text-gray-200 rounded-bl-none border border-white/5">
-                                        <button
-                                          onClick={() => handleDeleteMessage(i)}
-                                          className="absolute top-2 right-2 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-[#1c1c1e]/80 p-1.5 rounded-full z-20"
-                                          title="이 답변 지우기"
-                                        >
-                                          <i className="fas fa-trash-alt text-[10px]"></i>
-                                        </button>
+                                        {typeof msg.serverMessageIndex === 'number' && (
+                                          <button
+                                            onClick={() => handleDeleteMessage(i)}
+                                            disabled={isVcpChatBusy}
+                                            className="absolute top-2 right-2 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-[#1c1c1e]/80 p-1.5 rounded-full z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title="이 답변 지우기"
+                                          >
+                                            <i className="fas fa-trash-alt text-[10px]"></i>
+                                          </button>
+                                        )}
 
                                         {msg.role === 'assistant' && (
                                           <ThinkingProcess
@@ -2033,13 +2214,16 @@ export default function VCPSignalsPage() {
                                   return (
                                     <div key={i} className="flex justify-end relative group">
                                       <div className="relative inline-block max-w-[90%]">
-                                        <button
-                                          onClick={() => handleDeleteMessage(i)}
-                                          className="absolute top-1 left-[-24px] text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 z-20"
-                                          title="이 질문 지우기"
-                                        >
-                                          <i className="fas fa-trash-alt text-[10px]"></i>
-                                        </button>
+                                        {typeof msg.serverMessageIndex === 'number' && (
+                                          <button
+                                            onClick={() => handleDeleteMessage(i)}
+                                            disabled={isVcpChatBusy}
+                                            className="absolute top-1 left-[-24px] text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 z-20"
+                                            title="이 질문 지우기"
+                                          >
+                                            <i className="fas fa-trash-alt text-[10px]"></i>
+                                          </button>
+                                        )}
 
                                         <div className="inline-block px-3 py-2.5 rounded-2xl text-xs max-w-full leading-relaxed bg-blue-600 text-white rounded-br-none">
                                           <ReactMarkdown
@@ -2114,12 +2298,13 @@ export default function VCPSignalsPage() {
                               setShowCommands(e.target.value.startsWith('/'));
                             }}
                             onKeyDown={handleKeyDown}
+                            disabled={isVcpChatBusy}
                             placeholder="AI에게 질문하기... (/ 명령어)"
                             className="w-full pl-4 pr-10 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 transition-colors"
                           />
                           <button
                             onClick={() => handleVCPChatSend()}
-                            disabled={!chatInput.trim() || chatLoading}
+                            disabled={!chatInput.trim() || isVcpChatBusy}
                             className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-500 rounded-lg flex items-center justify-center text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500 transition-colors"
                           >
                             <i className="fas fa-paper-plane text-xs"></i>

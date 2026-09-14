@@ -1,0 +1,16 @@
+{
+  "stage": "typecheck:release",
+  "started_at": "2026-09-14T03:28:44.564178+00:00",
+  "ended_at": "2026-09-14T03:28:46.235783+00:00",
+  "pid": 25022,
+  "command": [
+    "npm",
+    "run",
+    "type-check"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/chat-ui-qa-3pj4rtgb/frontend",
+  "timeout_seconds": 90,
+  "timed_out": false,
+  "exit_code": 2,
+  "elapsed_seconds": 1.67
+}
