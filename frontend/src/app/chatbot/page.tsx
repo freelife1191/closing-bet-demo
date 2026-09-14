@@ -213,8 +213,8 @@ export default function ChatbotPage() {
       if (event.key === 'Escape' && !hasOpenDialog) closeMobileSidebar();
     };
 
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
   }, [closeMobileSidebar, hasOpenDialog, isMobileSidebarOpen]);
 
   /* 

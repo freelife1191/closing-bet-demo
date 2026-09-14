@@ -3,6 +3,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushSync } from 'react-dom';
 
 import ChatbotPage from './page';
 
@@ -96,7 +97,7 @@ describe('[CHAT-010] 모바일 drawer 접근성', () => {
     await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
-  it('확인 대화상자가 열리면 첫 Escape는 대화상자만 닫고 다음 Escape가 drawer를 닫는다', async () => {
+  it.each([false, true])('확인 대화상자의 Escape는 listener 사이 렌더링(%s)에도 drawer와 분리된다', async (flushBetweenListeners) => {
     render(<ChatbotPage />);
     await screen.findByRole('button', { name: SESSION_TITLE });
     const opener = openMobileMenu();
@@ -107,7 +108,13 @@ describe('[CHAT-010] 모바일 drawer 접근성', () => {
     const confirmation = await screen.findByRole('dialog', { name: '대화 삭제' });
     const cancel = within(confirmation).getByRole('button', { name: '취소' });
     cancel.focus();
-    fireEvent.keyDown(cancel, { key: 'Escape' });
+    const flushPendingModalClose = () => flushSync(() => {});
+    if (flushBetweenListeners) document.addEventListener('keydown', flushPendingModalClose);
+    try {
+      fireEvent.keyDown(cancel, { key: 'Escape' });
+    } finally {
+      document.removeEventListener('keydown', flushPendingModalClose);
+    }
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '대화 삭제' })).toBeNull();

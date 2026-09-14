@@ -4,19 +4,19 @@
   "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
   "started_at": "2026-09-14T10:56:51.925880+09:00",
   "files": {
-    "frontend/src/app/chatbot/page.tsx": "7a096eaacdbb7985d3471266321093763cb2ca57f85cae8bb06fb0f27ef34d3e",
+    "frontend/src/app/chatbot/page.tsx": "f2983babcfabc85bb94d4f97ef140ad4920a553377ddd944a0cd05e280edd6f5",
     "frontend/src/app/components/ChatWidget.tsx": "c048d80b0e5242698ba9e872ca7a57c4a02e6e77ec1456f43681d3c1d89b9388",
     "frontend/src/app/dashboard/kr/vcp/page.tsx": "063289623284181e8fa593084c63ec99c12ecb9259edcc7b9650d63375898feb",
     "frontend/vitest.setup.ts": "a5d1f515d029561657e0361077cfbce18146bd4d7bf7fa8f60f5068aca2c7d61",
-    "frontend/src/app/chatbot/page.regression-chat-019-010.test.tsx": "8015e7445c33322ae80b4eb76f807209057ac8a91fc5751ea58daf2a1f38685d",
+    "frontend/src/app/chatbot/page.regression-chat-019-010.test.tsx": "3c99b9c4e6bf92d9dac4b24a143e2ed9a10dc388f338e89dc65b369c6a2c4a10",
     "frontend/src/app/dashboard/kr/vcp/page.regression-chat-020.test.tsx": "4ab92fb9b465a3bc71d43d90990c3fe6e5fe6a0514f1d76213a2fdae150a1782"
   },
   "latest_checks": {
     "pytest": "pytest.json",
-    "vitest": "vitest-release.json",
-    "lint": "lint-release.json",
-    "typecheck": "typecheck-after-build.json",
-    "build": "build-release.json"
+    "vitest": "vitest-qa2.json",
+    "lint": "lint-qa2.json",
+    "typecheck": "typecheck-qa2.json",
+    "build": "build-qa2.json"
   },
   "artifacts": {
     "docs/dev-cycle/evidence/chat-ui-20260914/scope.md": "3d20898e078d396773bad0aa24668e01bfc765c01794e8c7a632f157c0c9a50b",

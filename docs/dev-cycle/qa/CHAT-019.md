@@ -1,7 +1,7 @@
 # UltraQA Report
 
 - 항목: CHAT-019 (CHAT-019·010·020 공유 행렬)
-- engine: ultraqa | lifecycle: app-adapted | phase: ready-for-qa | iteration: 0 | same_failure_count: 0
+- engine: ultraqa | lifecycle: app-adapted | phase: qa-retry | iteration: 2 | same_failure_count: 1
 - browser_applicability: required | browser_driver: agent-browser
 - 기준: 정적 검증과 첫 커밋 후 qa-source.json에 고정. 현재 설계 승인 후 구현 준비.
 - 대상: http://127.0.0.1:57601/chatbot 및 /dashboard/kr/vcp → 격리 Flask57602.
@@ -31,3 +31,15 @@
 - 위관찰은첫QA커밋전구현검증이며최종QA통과로세지않는다. preflight소유브라우저/서버종료.
 
 - 정적검증: pytest2296/3skip,Vitest487/69,typecheck-after-build0,lint0error190,build3/3. 독립검토전부통과(T3포함), 실제QA는다음단계.
+
+- QA 기준 커밋: b86358f00b56c536cad17dd4db9d149d1a408a60
+
+## UltraQA iteration 1 결과와 수정
+
+S1/S3 및 VCP S4~S7은실제UI/HTTP/저장이력대조통과. S2는native Escape로상위확인모달과서랍이함께닫혀실패했다(layout-qa/report.md). 원본unit dispatchEvent에서는안보였으나리스너사이에React상태를flush하는회귀variant에서동일하게실패했다(chat-red-browser-escape.log). window Escape검사를capture단계로옮겨상위dialog닫힘처리전에가드를판정한다. 수정후chat-capture-fixed8/8통과. 영향리뷰/전체정적검사후QA2에서S2와인접S3를재검증한다. 기존S1/S4~S7의소스기능은변경없으며증거를보존한다.
+
+하네스보완: VCP전체삭제버튼은외부FontAwesome CSS차단환경에서0×0으로확인되어실제키보드focus+Enter로활성화했다. 전송버튼의pointer가가려지는경우는별도기존FE-010의floatingwidget겹침이며지원되는Enter전송을썼다. 스크립트상태나DOM을강제로바꿔성공처리하지않았다.
+
+## UltraQA iteration 2 계획
+
+수정 범위는 window Escape capture와 재현 테스트 두 파일이다. 최신 정적 검사: Vitest 488/69, lint 0오류/190경고, build 3/3, build 후 typecheck exit 0. S-2 전체와 S-3 인접 흐름을 실제 브라우저에서 재실행한다. S-1 및 S-4~7은 iteration 1 증거를 유지하되 VCP 소스 불변과 레이아웃 변경 없음에 한해 재사용한다. S-8은 현재 소스·오류·정리 결과로 최종 판정한다. 아직 완료 아님.
