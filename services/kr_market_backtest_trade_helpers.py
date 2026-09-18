@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from datetime import datetime
 from typing import Any
 
@@ -111,8 +112,9 @@ def calculate_cumulative_trade_metrics(
     """종가베팅 1건의 Outcome/ROI/Trail/기간/최대상승률을 계산한다.
 
     종가 요약과 누적성과가 같은 결과를 사용한다. 명시 가격을 우선하며 없는
-    한쪽은 해당 pct로 계산한다. date 컬럼 입력은 ticker와 ISO 날짜 문자열을
-    포함한 생산 일봉 형식이고, 정규화된 DatetimeIndex 입력도 받는다.
+    한쪽은 해당 pct로 계산한다. date 컬럼 입력은 ticker와 ISO 날짜 문자열 또는
+    SQLite 캐시가 복원한 naive 자정 datetime64를 포함한 생산 일봉 형식이고,
+    정규화된 DatetimeIndex 입력도 받는다.
     """
     outcome = "OPEN"
     roi = 0.0
@@ -129,8 +131,48 @@ def calculate_cumulative_trade_metrics(
             "price_trail": price_trail,
         }
 
+    required_cols = {"high", "low", "close"}
+    if not required_cols.issubset(stock_prices.columns):
+        logger.warning("Invalid cumulative price frame: missing required OHLC columns")
+        raise ValueError("Cumulative price frame requires numeric high, low, and close columns")
+    if any(
+        not pd.api.types.is_numeric_dtype(stock_prices[col])
+        or pd.api.types.is_bool_dtype(stock_prices[col])
+        or pd.api.types.is_complex_dtype(stock_prices[col])
+        for col in required_cols
+    ):
+        logger.warning("Invalid cumulative price frame: non-real numeric OHLC columns")
+        raise ValueError("Cumulative price frame requires numeric high, low, and close columns")
+
     if "date" in stock_prices.columns:
+        if "ticker" not in stock_prices.columns:
+            logger.warning("Invalid cumulative price frame: date column requires ticker")
+            raise ValueError("Cumulative date price frame requires ticker")
+        date_values = stock_prices["date"]
+        has_iso_dates = date_values.map(
+            lambda value: isinstance(value, str)
+            and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is not None
+        ).all()
+        parsed_dates = pd.to_datetime(date_values, format="%Y-%m-%d", errors="coerce")
+        has_valid_iso_dates = has_iso_dates and not parsed_dates.isna().any()
+        has_naive_midnight_datetimes = (
+            pd.api.types.is_datetime64_any_dtype(date_values)
+            and not date_values.isna().any()
+            and date_values.dt.tz is None
+            and date_values.eq(date_values.dt.normalize()).all()
+        )
+        if not has_valid_iso_dates and not has_naive_midnight_datetimes:
+            logger.warning("Invalid cumulative price frame: date must be canonical ISO or naive datetime64")
+            raise ValueError("Cumulative date price frame requires canonical ISO or naive datetime64")
         stock_prices = prepare_cumulative_price_dataframe(stock_prices)
+    elif (
+        not isinstance(stock_prices.index, pd.DatetimeIndex)
+        or stock_prices.index.tz is not None
+        or stock_prices.index.hasnans
+        or not stock_prices.index.is_monotonic_increasing
+    ):
+        logger.warning("Invalid cumulative price frame: expected a naive ascending DatetimeIndex")
+        raise ValueError("Cumulative indexed price frame requires a valid DatetimeIndex")
 
     try:
         signal_ts = pd.Timestamp(stats_date)
@@ -147,14 +189,11 @@ def calculate_cumulative_trade_metrics(
         }
 
     period_prices = stock_prices[stock_prices.index > signal_ts]
-    required_cols = {"high", "low", "close"}
-    has_required_cols = required_cols.issubset(set(period_prices.columns))
-    if has_required_cols:
-        period_prices = period_prices[
-            (period_prices["high"] > 0)
-            & (period_prices["low"] > 0)
-            & (period_prices["close"] > 0)
-        ]
+    period_prices = period_prices[
+        (period_prices["high"] > 0)
+        & (period_prices["low"] > 0)
+        & (period_prices["close"] > 0)
+    ]
 
     if target_price is None:
         logger.info("Missing jongga target price; using target_pct")
@@ -167,20 +206,19 @@ def calculate_cumulative_trade_metrics(
     )
 
     exit_date = None
-    if has_required_cols:
-        hit_target = period_prices[period_prices["high"] >= resolved_target]
-        hit_stop = period_prices[period_prices["low"] <= resolved_stop]
-        first_win_date = hit_target.index[0] if not hit_target.empty else None
-        first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
+    hit_target = period_prices[period_prices["high"] >= resolved_target]
+    hit_stop = period_prices[period_prices["low"] <= resolved_stop]
+    first_win_date = hit_target.index[0] if not hit_target.empty else None
+    first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
 
-        outcome, exit_date = resolve_hit_outcome(
-            first_target=first_win_date,
-            first_stop=first_loss_date,
-        )
-        if outcome == "WIN":
-            roi = round(((resolved_target - entry_price) / entry_price) * 100, 1)
-        elif outcome == "LOSS":
-            roi = round(((resolved_stop - entry_price) / entry_price) * 100, 1)
+    outcome, exit_date = resolve_hit_outcome(
+        first_target=first_win_date,
+        first_stop=first_loss_date,
+    )
+    if outcome == "WIN":
+        roi = round(((resolved_target - entry_price) / entry_price) * 100, 1)
+    elif outcome == "LOSS":
+        roi = round(((resolved_stop - entry_price) / entry_price) * 100, 1)
 
     trade_period = period_prices[period_prices.index <= exit_date] if exit_date is not None else period_prices
 

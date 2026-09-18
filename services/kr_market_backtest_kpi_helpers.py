@@ -27,7 +27,7 @@ def aggregate_cumulative_kpis(
 
     grade_acc: dict[str, dict[str, float]] = {
         grade: {"count": 0, "total_roi": 0.0, "wins": 0, "losses": 0}
-        for grade in ("S", "A", "B")
+        for grade in ("S", "A", "B", "D")
     }
 
     gross_profit = 0.0
@@ -71,7 +71,7 @@ def aggregate_cumulative_kpis(
     # 다시 계산했는데, 그러면 페이지를 넘길 때마다 같은 등급의 건수와 승률과 부호가
     # 통째로 달라졌다. 승률의 분모는 전체 KPI 와 같이 종료된 거래만 센다.
     roi_by_grade: dict[str, dict[str, Any]] = {}
-    for grade in ["S", "A", "B"]:
+    for grade in ["S", "A", "B", "D"]:
         grade_count = int(grade_acc[grade]["count"])
         grade_total_roi = float(grade_acc[grade]["total_roi"])
         grade_avg_roi = round(grade_total_roi / grade_count, 2) if grade_count > 0 else 0.0
@@ -89,6 +89,29 @@ def aggregate_cumulative_kpis(
             "losses": grade_losses,
             "winRate": grade_win_rate,
         }
+
+    closed_trade_records = sorted(
+        (trade for trade in trades if trade.get("outcome") in {"WIN", "LOSS"}),
+        key=lambda trade: (
+            str(trade.get("date", "")),
+            str(trade.get("code", "")),
+            str(trade.get("id", "")),
+        ),
+        reverse=True,
+    )
+    recent_closed_trades = closed_trade_records[:10]
+    recent_closed_count = len(recent_closed_trades)
+    recent_wins = sum(trade.get("outcome") == "WIN" for trade in recent_closed_trades)
+    recent_win_rate = (
+        round((recent_wins / recent_closed_count) * 100, 1)
+        if recent_closed_count > 0
+        else None
+    )
+    consecutive_losses = 0
+    for trade in closed_trade_records:
+        if trade.get("outcome") == "WIN":
+            break
+        consecutive_losses += 1
 
     # 손실 거래가 한 건도 없으면 비율이 정의되지 않는다. 앞서 이 자리는 분자인
     # 총이익을 그대로 돌려주었는데, 그 값이 화면에서 2.0 이라는 비율 기준에 걸려
@@ -116,6 +139,9 @@ def aggregate_cumulative_kpis(
         "avgDays": avg_days,
         "priceDate": price_date_str,
         "profitFactor": profit_factor,
+        "recentWinRate": recent_win_rate,
+        "recentClosedCount": recent_closed_count,
+        "consecutiveLosses": consecutive_losses,
     }
 
 
@@ -141,4 +167,3 @@ def paginate_items(
             "totalPages": total_pages,
         },
     )
-

@@ -1,0 +1,29 @@
+{
+  "base": "b48c05717769ea11ee036f108764d175e052ce5d",
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/performance-qa-7ll1secr",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "started_at": "2026-09-18T15:28:17.401392+09:00",
+  "files": {
+    "app/routes/common_market_mock_routes.py": "ff63bf071b3dd6b3189177afc801866c53bdb1073d1053db4171c1d880f8a04f",
+    "frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-005.test.tsx": "67502367fa5fdba23ae08bac1eaabd8cd95de22986d62c874c63c835a2026ddb",
+    "frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-performance-batch.test.tsx": "5244f467d95878e54e62a501f6e2c291a7fe0472367c428d62fdb7bf0f713a01",
+    "frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx": "d0907f319725b1b39088edb931e0ed911252aa2838a764008876fcc3c59fda05",
+    "frontend/src/app/dashboard/kr/page.regression-flow-004.test.tsx": "616bccf5947a3466ce78eae4078bcfef338c0e21315dc08e1be1c2daa9341505",
+    "frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx": "0238028b441ee33d97eee0ac4ff29ec508f9f86e2ca10a7ce5fa6e338277c3c9",
+    "frontend/src/app/dashboard/kr/page.tsx": "5ece70106c2dfc9798509ba326dfc2b35db3ba9bb93e6c1930c1688f458872c6",
+    "frontend/src/app/dashboard/kr/vcp/page.tsx": "f6fc42b4b9d125cc2e11567a83cb50638f891af5f59fb233964e14e63231ebd1",
+    "frontend/src/app/page.tsx": "707a29dca7c5ba08630ec40f5cfdb714587bbe235582e905fe3dcd4afb4b4b0c",
+    "services/kr_market_backtest_kpi_helpers.py": "6cf08d4e21265933844d0067e5cc6f5fd3212d3e1c2838c29617d8381b0cbacb",
+    "services/kr_market_backtest_trade_helpers.py": "a50ec19b569f1669259478b5d336c307c999f05c7cf149376524d9fb549797a4",
+    "services/kr_market_cumulative_cache.py": "4efe0614f0bf250b10d5a8125050ffa9698ff1e9010fc2f8773e81771729c524",
+    "tests/app/test_performance_mock_20260918.py": "89b99a8571cc075d71fcd8ce46b4e24afa06139aed0be632fe6e8bd576432d4c",
+    "tests/services/test_performance_batch_20260918.py": "b14dc5676f1f2f87f84ef9de40bc0eb76deed8d4c5beb1f1a947e1c9f71e3eb8"
+  },
+  "latest_checks": {
+    "pytest": "pytest-final.json",
+    "vitest": "vitest-final3.json",
+    "lint": "lint-final3.json",
+    "build": "build-review2.json",
+    "typecheck": "typecheck-final3.json"
+  }
+}

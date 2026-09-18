@@ -43,11 +43,15 @@ interface KPIData {
     S: GradeRoiData;
     A: GradeRoiData;
     B: GradeRoiData;
+    D: GradeRoiData;
   };
   avgDays: number;
   priceDate: string;
   // 손실 거래가 한 건도 없으면 비율이 정의되지 않으므로 백엔드가 null 을 보낸다.
   profitFactor: number | null;
+  recentWinRate: number | null;
+  recentClosedCount: number;
+  consecutiveLosses: number;
 }
 
 // ----------------------------------------------------------------------
@@ -87,15 +91,15 @@ const TOOLTIP_CONTENT = {
   },
   avgRoi: {
     title: "평균 수익률 (Average ROI)",
-    desc: "S/A/B 등급별 평균 수익률을 동시에 보여줍니다.",
-    criteria: "각 등급별 (등급 총 수익률 합계) / (등급 매매 수)",
-    interpretation: "S/A/B의 평균 수익률을 비교해 어떤 등급이 실제 수익에 기여하는지 확인할 수 있습니다."
+    desc: "전체 추천의 평균 수익률이며, 미청산 종목은 현재 평가수익률을 포함합니다.",
+    criteria: "청산 수익률과 미청산 평가수익률의 단순 평균",
+    interpretation: "등급별 상세값과 함께 보되, 포트폴리오 복리 수익률로 해석하지 마세요."
   },
   totalRoi: {
     title: "누적 수익률 (Total ROI)",
-    desc: "S/A/B 등급별 누적 수익률을 동시에 보여줍니다.",
-    criteria: "각 등급의 개별 매매 수익률 단순 합산",
-    interpretation: "S/A/B별 누적 수익률을 비교하면 전체 성과에서 등급별 기여도를 명확하게 볼 수 있습니다."
+    desc: "전체 추천의 누적 수익률이며, 미청산 종목은 현재 평가수익률을 포함합니다.",
+    criteria: "청산 수익률과 미청산 평가수익률의 단순 합산",
+    interpretation: "포트폴리오 복리 수익률이 아니며, 등급별 기여도를 함께 확인하세요."
   },
   avgDays: {
     title: "평균 보유일 (Average Days)",
@@ -129,6 +133,12 @@ const TOOLTIP_CONTENT = {
     criteria: "테마의 2등주나 개별 호재주가 포함될 수 있음",
     interpretation: "변동성이 클 수 있어 선별적인 접근이 필요합니다."
   },
+  gradeD: {
+    title: "D등급 과거 기록",
+    desc: "현재 신규 매수 추천 대상이 아닌 과거 D등급 신호의 성과 기록입니다.",
+    criteria: "과거 등급 체계에서 수집된 기록",
+    interpretation: "성과 비교용으로만 확인하고 신규 진입 근거로 사용하지 마세요."
+  },
   // --- Distribution ---
   distribution: {
     title: "승패 분포 (Win/Loss Distribution)",
@@ -147,7 +157,7 @@ const TOOLTIP_CONTENT = {
   table_grade: {
     title: "등급 (Grade)",
     desc: "AI가 분석한 종목의 상승 잠재력 등급입니다.",
-    criteria: "S > A > B 순으로 강력함",
+    criteria: "S > A > B > D 순으로 강력함",
     interpretation: "등급이 높을수록 성공 확률과 기대 수익률이 높은 경향이 있습니다."
   },
   table_entry: {
@@ -494,7 +504,10 @@ function renderGradeTooltip(grade: string, stats: { count: number, winRate: numb
   let strategyAdvice = "";
   let adviceColor = "text-gray-300";
 
-  if (stats.count === 0) {
+  if (grade === 'D') {
+    strategyAdvice = "과거 기록의 성과입니다. 현재 신규 매수 추천으로 사용하지 마세요.";
+    adviceColor = "text-gray-400";
+  } else if (stats.count === 0) {
     strategyAdvice = "아직 매매 데이터가 충분하지 않습니다.";
   } else if (stats.winRate >= 60) {
     strategyAdvice = "현재 승률이 매우 좋습니다! 적극적인 비중 확대가 유효한 구간입니다.";
@@ -508,7 +521,7 @@ function renderGradeTooltip(grade: string, stats: { count: number, winRate: numb
   }
 
   // ROI Warning
-  if (stats.avgRoi < 0 && stats.count > 0) {
+  if (grade !== 'D' && stats.avgRoi < 0 && stats.count > 0) {
     strategyAdvice += " (평균 수익률이 마이너스입니다. 손절 원칙을 철저히 지키세요)";
     adviceColor = "text-rose-400 font-bold";
   }
@@ -561,6 +574,7 @@ function GradeCard({ data }: { data: any }) {
       <div className="flex justify-between items-start">
         <h3 className={`text-lg font-bold ${data.color} flex items-center gap-2`}>
           {data.grade} 등급
+          {data.grade === 'D' && <span className="text-[10px] font-medium text-gray-500">과거 기록</span>}
           <i className="fas fa-question-circle text-white/20 text-[10px] group-hover:text-white/50 transition-colors"></i>
         </h3>
         <span className="text-xs text-gray-400">{data.count}건</span>
@@ -594,43 +608,34 @@ function GradeCard({ data }: { data: any }) {
 // ----------------------------------------------------------------------
 // 6. DISTRIBUTION TOOLTIP HELPER
 // ----------------------------------------------------------------------
-function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
+function renderDistributionTooltip(kpi: KPIData) {
   const baseContent = TOOLTIP_CONTENT.distribution;
   if (!baseContent) return null;
 
-  // Analysis Logic
-  // 1. Filter closed trades (Win or Loss) and sort by date descending (assuming 'data' is already sorted or we sort here)
-  // We assume 'trades' passed here are the current page's trades. For better accuracy, we might need global history, 
-  // but using visible recent trades is a good proxy for "recent trend".
-  // API 는 outcome 을 대문자(WIN/LOSS)로 내려준다. 소문자 표기로 비교하면 항상 빈 배열이 된다.
-  const closedTrades = trades.filter(t => t.outcome === 'WIN' || t.outcome === 'LOSS');
-
-  // Calculate Consecutive Losses
-  let consecutiveLosses = 0;
-  for (let i = 0; i < closedTrades.length; i++) {
-    if (closedTrades[i].outcome === 'LOSS') {
-      consecutiveLosses++;
-    } else {
-      break;
-    }
-  }
-
-  // Calculate Recent Win Rate (Last 10)
-  const recentTrades = closedTrades.slice(0, 10);
-  const recentWins = recentTrades.filter(t => t.outcome === 'WIN').length;
-  const recentWinRate = recentTrades.length > 0 ? (recentWins / recentTrades.length) * 100 : 0;
+  // 최근 지표는 전체 청산 이력에서 계산한 서버 KPI다. 현재 페이지 행은 표 렌더링에만 쓴다.
+  const { consecutiveLosses, recentClosedCount, recentWinRate } = kpi;
+  const hasRecentStats = recentWinRate !== null;
+  const recentLabel = recentWinRate == null ? '집계 전' : `${recentWinRate.toFixed(0)}%`;
+  const recentColor = recentWinRate == null
+    ? 'text-gray-400'
+    : recentWinRate >= 50
+      ? 'text-emerald-400'
+      : 'text-rose-400';
 
   // Determine Advice
   let advice = "승/패가 고르게 분포되어 있습니다.";
   let adviceColor = "text-gray-300";
 
-  if (consecutiveLosses >= 3) {
+  if (!hasRecentStats) {
+    advice = "종료된 거래가 없어 추세를 집계하지 않았습니다.";
+    adviceColor = "text-gray-400";
+  } else if (consecutiveLosses >= 3) {
     advice = `현재 ${consecutiveLosses}연패 중입니다. 잠시 매매를 멈추고 시장을 관망하세요.`;
     adviceColor = "text-rose-400 font-bold";
-  } else if (recentTrades.length >= 5 && recentWinRate >= 80) {
+  } else if (recentClosedCount >= 5 && recentWinRate !== null && recentWinRate >= 80) {
     advice = "최근 흐름이 매우 좋습니다 (승률 80%↑). 추세를 이어가세요.";
     adviceColor = "text-emerald-400 font-bold";
-  } else if (recentTrades.length >= 5 && recentWinRate <= 20) {
+  } else if (recentClosedCount >= 5 && recentWinRate !== null && recentWinRate <= 20) {
     advice = "최근 흐름이 좋지 않습니다. 보수적인 접근이 필요합니다.";
     adviceColor = "text-rose-400 font-bold";
   }
@@ -669,9 +674,9 @@ function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
       <div className="bg-white/5 rounded-lg p-2 border border-white/10">
         <div className="text-[10px] text-gray-500 font-bold mb-1 border-b border-white/5 pb-1">현재 추세 분석</div>
         <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs mb-2">
-          <span className="text-gray-500">최근 10건 승률:</span>
-          <span className={`font-mono font-bold ${recentWinRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {recentTrades.length > 0 ? `${recentWinRate.toFixed(0)}%` : '-'}
+          <span className="text-gray-500">최근 청산 {recentClosedCount}건 승률 (추천일순)</span>
+          <span className={`font-mono font-bold ${recentColor}`}>
+            {recentLabel}
           </span>
           <span className="text-gray-500">연속 손실:</span>
           <span className={`font-mono font-bold ${consecutiveLosses > 0 ? 'text-rose-400' : 'text-gray-400'}`}>
@@ -688,7 +693,7 @@ function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
   );
 }
 
-function DistributionBar({ kpi, trades }: { kpi: KPIData, trades: Trade[] }) {
+function DistributionBar({ kpi }: { kpi: KPIData }) {
   const total = kpi.wins + kpi.open + kpi.losses;
   const wPct = total > 0 ? (kpi.wins / total) * 100 : 0;
   const oPct = total > 0 ? (kpi.open / total) * 100 : 0;
@@ -698,7 +703,7 @@ function DistributionBar({ kpi, trades }: { kpi: KPIData, trades: Trade[] }) {
     <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-white/5 mb-8">
       <div className="flex items-center gap-2 mb-4">
         <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">승패 분포 (WIN/LOSS)</h3>
-        <Tooltip size="lg" content={renderDistributionTooltip(kpi, trades)} position="top" align="left">
+        <Tooltip size="lg" content={renderDistributionTooltip(kpi)} position="top" align="left">
           <i className="fas fa-question-circle text-gray-700 text-[10px] hover:text-gray-500 transition-colors cursor-help"></i>
         </Tooltip>
       </div>
@@ -902,7 +907,7 @@ export default function CumulativeClientPage() {
   const roundToOne = (value: number) => Math.round(value * 10) / 10;
   const createEmptyRoiByGrade = () => {
     const empty = { count: 0, avgRoi: 0, totalRoi: 0, wins: 0, losses: 0, winRate: 0 };
-    return { S: { ...empty }, A: { ...empty }, B: { ...empty } };
+    return { S: { ...empty }, A: { ...empty }, B: { ...empty }, D: { ...empty } };
   };
 
   const [outcomeFilter, setOutcomeFilter] = useState('All');
@@ -921,7 +926,10 @@ export default function CumulativeClientPage() {
     roiByGrade: createEmptyRoiByGrade(),
     avgDays: 0,
     priceDate: '-',
-    profitFactor: null
+    profitFactor: null,
+    recentWinRate: null,
+    recentClosedCount: 0,
+    consecutiveLosses: 0,
   });
   const [trades, setTrades] = useState<Trade[]>([]);
   const [pagination, setPagination] = useState<any>(null); // Pagination Metadata
@@ -933,6 +941,8 @@ export default function CumulativeClientPage() {
 
   // Fetch Data
   React.useEffect(() => {
+    let isActive = true;
+
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -940,28 +950,40 @@ export default function CumulativeClientPage() {
         const res = await fetch(`/api/kr/closing-bet/cumulative?page=${currentPage}&limit=${itemsPerPage}`);
         if (!res.ok) throw new Error('Failed to fetch data');
         const data = await res.json();
+        if (!isActive) return;
+
+        const apiKpi = data.kpi || {};
         const emptyRoiByGrade = createEmptyRoiByGrade();
-        const apiRoiByGrade = data.kpi?.roiByGrade || {};
+        const apiRoiByGrade = apiKpi.roiByGrade || {};
         setKpi({
-          ...data.kpi,
+          ...apiKpi,
           roiByGrade: {
             S: { ...emptyRoiByGrade.S, ...(apiRoiByGrade.S || {}) },
             A: { ...emptyRoiByGrade.A, ...(apiRoiByGrade.A || {}) },
-            B: { ...emptyRoiByGrade.B, ...(apiRoiByGrade.B || {}) }
-          }
+            B: { ...emptyRoiByGrade.B, ...(apiRoiByGrade.B || {}) },
+            D: { ...emptyRoiByGrade.D, ...(apiRoiByGrade.D || {}) },
+          },
+          recentWinRate: typeof apiKpi.recentWinRate === 'number' ? apiKpi.recentWinRate : null,
+          recentClosedCount: typeof apiKpi.recentClosedCount === 'number' ? apiKpi.recentClosedCount : 0,
+          consecutiveLosses: typeof apiKpi.consecutiveLosses === 'number' ? apiKpi.consecutiveLosses : 0,
         });
         setPagination(data.pagination);
-        // D등급 제외 필터링 (Server should handle this ideally, but keeping frontend filter for safety/consistency)
-        const filtered = (data.trades || []).filter((t: Trade) => t.grade !== 'D');
-        setTrades(filtered);
+        setTrades(data.trades || []);
       } catch (error) {
-        console.error('Error fetching cumulative data:', error);
+        if (isActive) {
+          console.error('Error fetching cumulative data:', error);
+        }
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+        }
       }
     };
 
     fetchData();
+    return () => {
+      isActive = false;
+    };
   }, [currentPage, itemsPerPage]); // Re-fetch on page/limit change
 
   // Filter Logic
@@ -977,17 +999,13 @@ export default function CumulativeClientPage() {
     { grade: 'S' as const, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', tooltipKey: 'gradeS' as const },
     { grade: 'A' as const, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', tooltipKey: 'gradeA' as const },
     { grade: 'B' as const, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', tooltipKey: 'gradeB' as const },
+    { grade: 'D' as const, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', tooltipKey: 'gradeD' as const },
   ].map(card => ({
     ...card,
     ...kpi.roiByGrade[card.grade],
     // 화면 표기는 소수 첫째 자리다. 백엔드는 둘째 자리까지 보낸다.
     avgRoi: roundToOne(kpi.roiByGrade[card.grade].avgRoi),
   }));
-
-  const sabTotalCount = kpi.roiByGrade.S.count + kpi.roiByGrade.A.count + kpi.roiByGrade.B.count;
-  const sabTotalRoiRaw = kpi.roiByGrade.S.totalRoi + kpi.roiByGrade.A.totalRoi + kpi.roiByGrade.B.totalRoi;
-  const sabTotalRoi = roundToOne(sabTotalRoiRaw);
-  const sabAvgRoi = sabTotalCount > 0 ? roundToOne(sabTotalRoiRaw / sabTotalCount) : 0;
 
   if (loading) {
     return (
@@ -1051,11 +1069,11 @@ export default function CumulativeClientPage() {
         <StatCard title="실패" value={kpi.losses} colorClass="text-rose-400" tooltipKey="losses" kpi={kpi} />
         <StatCard title="보유중" value={kpi.open} colorClass="text-yellow-500" tooltipKey="open" kpi={kpi} />
         <StatCard
-          title="평균 수익률 (S+A+B 합산)"
+          title="평균 수익률"
           value={
             <div className="space-y-1">
-              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${sabAvgRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {formatSignedPercent(sabAvgRoi)}
+              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${kpi.avgRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formatSignedPercent(kpi.avgRoi)}
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs font-semibold leading-tight">
                 {/* 백엔드는 소수 둘째 자리로 보낸다. 화면 표기는 첫째 자리이므로 등급
@@ -1063,11 +1081,13 @@ export default function CumulativeClientPage() {
                 <span className="text-purple-300">S {formatSignedPercent(roundToOne(kpi.roiByGrade.S.avgRoi))}</span>
                 <span className="text-rose-300">A {formatSignedPercent(roundToOne(kpi.roiByGrade.A.avgRoi))}</span>
                 <span className="text-blue-300">B {formatSignedPercent(roundToOne(kpi.roiByGrade.B.avgRoi))}</span>
+                <span className="text-emerald-300">D {formatSignedPercent(roundToOne(kpi.roiByGrade.D.avgRoi))}</span>
               </div>
             </div>
           }
           valueClassName="text-base leading-tight"
           colorClass="text-white"
+          containerClassName="h-auto min-h-24"
           tooltipKey="avgRoi"
           kpi={kpi}
         />
@@ -1077,21 +1097,23 @@ export default function CumulativeClientPage() {
       {/* Metric Cards - Row 2 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
-          title="누적 수익률 (S+A+B 합산)"
+          title="누적 수익률"
           value={
             <div className="space-y-1">
-              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${sabTotalRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {formatSignedPercent(sabTotalRoi)}
+              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${kpi.totalRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formatSignedPercent(kpi.totalRoi)}
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs font-semibold leading-tight">
                 <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.totalRoi)}</span>
                 <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.totalRoi)}</span>
                 <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.totalRoi)}</span>
+                <span className="text-emerald-300">D {formatSignedPercent(kpi.roiByGrade.D.totalRoi)}</span>
               </div>
             </div>
           }
           valueClassName="text-base leading-tight"
           colorClass="text-white"
+          containerClassName="h-auto min-h-24"
           tooltipKey="totalRoi"
           kpi={kpi}
         />
@@ -1102,14 +1124,14 @@ export default function CumulativeClientPage() {
 
 
       {/* Grade Performance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {gradeCards.map((data) => (
           <GradeCard key={data.grade} data={data} />
         ))}
       </div>
 
       {/* DistributionBar */}
-      <DistributionBar kpi={kpi} trades={trades} />
+      <DistributionBar kpi={kpi} />
 
       {/* Trade List Section */}
       <div className="space-y-4">
@@ -1117,23 +1139,25 @@ export default function CumulativeClientPage() {
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">결과:</span>
+              <span className="text-[10px] text-gray-500">현재 페이지 내</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
                 {/* 필터는 현재 페이지의 trades 만 거르므로 건수도 같은 기준으로 센다.
                     전체 기간 집계는 위쪽 KPI 카드가 이미 보여준다. */}
-                <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => { setOutcomeFilter('All'); setCurrentPage(1); }} />
-                <FilterButton label="성공" count={trades.filter(t => t.outcome === 'WIN').length} active={outcomeFilter === 'WIN'} onClick={() => { setOutcomeFilter('WIN'); setCurrentPage(1); }} />
-                <FilterButton label="실패" count={trades.filter(t => t.outcome === 'LOSS').length} active={outcomeFilter === 'LOSS'} onClick={() => { setOutcomeFilter('LOSS'); setCurrentPage(1); }} />
-                <FilterButton label="보유" count={trades.filter(t => t.outcome === 'OPEN').length} active={outcomeFilter === 'OPEN'} onClick={() => { setOutcomeFilter('OPEN'); setCurrentPage(1); }} />
+                <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => setOutcomeFilter('All')} />
+                <FilterButton label="성공" count={trades.filter(t => t.outcome === 'WIN').length} active={outcomeFilter === 'WIN'} onClick={() => setOutcomeFilter('WIN')} />
+                <FilterButton label="실패" count={trades.filter(t => t.outcome === 'LOSS').length} active={outcomeFilter === 'LOSS'} onClick={() => setOutcomeFilter('LOSS')} />
+                <FilterButton label="보유" count={trades.filter(t => t.outcome === 'OPEN').length} active={outcomeFilter === 'OPEN'} onClick={() => setOutcomeFilter('OPEN')} />
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">등급:</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
-                <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => { setGradeFilter('All'); setCurrentPage(1); }} />
-                <FilterButton label="S" count={trades.filter(t => t.grade === 'S').length} active={gradeFilter === 'S'} onClick={() => { setGradeFilter('S'); setCurrentPage(1); }} />
-                <FilterButton label="A" count={trades.filter(t => t.grade === 'A').length} active={gradeFilter === 'A'} onClick={() => { setGradeFilter('A'); setCurrentPage(1); }} />
-                <FilterButton label="B" count={trades.filter(t => t.grade === 'B').length} active={gradeFilter === 'B'} onClick={() => { setGradeFilter('B'); setCurrentPage(1); }} />
+                <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => setGradeFilter('All')} />
+                <FilterButton label="S" count={trades.filter(t => t.grade === 'S').length} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
+                <FilterButton label="A" count={trades.filter(t => t.grade === 'A').length} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
+                <FilterButton label="B" count={trades.filter(t => t.grade === 'B').length} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
+                <FilterButton label="D" count={trades.filter(t => t.grade === 'D').length} active={gradeFilter === 'D'} onClick={() => setGradeFilter('D')} />
               </div>
             </div>
           </div>

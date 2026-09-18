@@ -1,0 +1,1556 @@
+diff --git a/app/routes/common_market_mock_routes.py b/app/routes/common_market_mock_routes.py
+index 88051c7..537cb86 100644
+--- a/app/routes/common_market_mock_routes.py
++++ b/app/routes/common_market_mock_routes.py
+@@ -98,13 +98,13 @@ def _register_backtest_summary_mock_route(common_bp, ctx: CommonRouteContext) ->
+         def _handler():
+             summary = {
+                 "vcp": {
+-                    "status": "OK",
++                    "status": "EXCELLENT",
+                     "win_rate": 62.5,
+                     "avg_return": 4.2,
+                     "count": 16,
+                 },
+                 "closing_bet": {
+-                    "status": "OK",
++                    "status": "GOOD",
+                     "win_rate": 58.3,
+                     "avg_return": 3.8,
+                     "count": 12,
+diff --git a/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-005.test.tsx b/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-005.test.tsx
+index 0284178..3244807 100644
+--- a/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-005.test.tsx
++++ b/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-005.test.tsx
+@@ -1,5 +1,5 @@
+ // Regression: ISSUE-005 — 결과 필터 칩이 현재 페이지와 전체 기간을 섞어 세던 문제
+-//             ISSUE-006 — outcome 을 'Win'/'Loss' 로 비교해 추세 분석이 항상 비어 있던 문제
++//             최근 지표는 현재 페이지 행이 아니라 서버 KPI를 읽는다.
+ // Found by /qa on 2026-09-01
+ // Report: .gstack/qa-reports/qa-report-localhost-3500-2026-09-01.md
+
+@@ -30,6 +30,9 @@ const KPI = {
+   profitFactor: 1.22,
+   priceDate: '2026-05-22',
+   roiByGrade: {},
++  recentWinRate: 60,
++  recentClosedCount: 5,
++  consecutiveLosses: 0,
+ };
+
+ vi.mock('@/hooks/useAdmin', () => ({
+@@ -75,14 +78,15 @@ describe('CumulativeClientPage', () => {
+     expect(labels).not.toContain('실패 (105)');
+   });
+
+-  it('추세 분석이 대문자 outcome 을 인식해 실제 최근 승률을 계산한다', async () => {
++  it('서버가 제공한 최근 승률을 표시한다', async () => {
+     render(<CumulativeClientPage />);
+
+     await waitFor(() => {
+       expect(chipLabels()).toContain('전체 (5)');
+     });
+
+-    // 5건 중 3승이므로 60%. 대소문자가 어긋나면 closedTrades 가 비어 '-' 가 된다.
++    // 5건 중 3승인 60%를 서버 KPI로 공급한다. WIN/LOSS 대문자 집계 계약은
++    // 백엔드 성과 묶음 회귀에서 검증하며, 이 화면은 현재 표 행으로 재계산하지 않는다.
+     expect(screen.queryByText('60%')).not.toBeNull();
+   });
+ });
+diff --git a/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx b/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx
+index a76222f..81dce89 100644
+--- a/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx
++++ b/frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx
+@@ -43,11 +43,15 @@ interface KPIData {
+     S: GradeRoiData;
+     A: GradeRoiData;
+     B: GradeRoiData;
++    D: GradeRoiData;
+   };
+   avgDays: number;
+   priceDate: string;
+   // 손실 거래가 한 건도 없으면 비율이 정의되지 않으므로 백엔드가 null 을 보낸다.
+   profitFactor: number | null;
++  recentWinRate: number | null;
++  recentClosedCount: number;
++  consecutiveLosses: number;
+ }
+
+ // ----------------------------------------------------------------------
+@@ -87,15 +91,15 @@ const TOOLTIP_CONTENT = {
+   },
+   avgRoi: {
+     title: "평균 수익률 (Average ROI)",
+-    desc: "S/A/B 등급별 평균 수익률을 동시에 보여줍니다.",
+-    criteria: "각 등급별 (등급 총 수익률 합계) / (등급 매매 수)",
+-    interpretation: "S/A/B의 평균 수익률을 비교해 어떤 등급이 실제 수익에 기여하는지 확인할 수 있습니다."
++    desc: "전체 추천의 평균 수익률이며, 미청산 종목은 현재 평가수익률을 포함합니다.",
++    criteria: "청산 수익률과 미청산 평가수익률의 단순 평균",
++    interpretation: "등급별 상세값과 함께 보되, 포트폴리오 복리 수익률로 해석하지 마세요."
+   },
+   totalRoi: {
+     title: "누적 수익률 (Total ROI)",
+-    desc: "S/A/B 등급별 누적 수익률을 동시에 보여줍니다.",
+-    criteria: "각 등급의 개별 매매 수익률 단순 합산",
+-    interpretation: "S/A/B별 누적 수익률을 비교하면 전체 성과에서 등급별 기여도를 명확하게 볼 수 있습니다."
++    desc: "전체 추천의 누적 수익률이며, 미청산 종목은 현재 평가수익률을 포함합니다.",
++    criteria: "청산 수익률과 미청산 평가수익률의 단순 합산",
++    interpretation: "포트폴리오 복리 수익률이 아니며, 등급별 기여도를 함께 확인하세요."
+   },
+   avgDays: {
+     title: "평균 보유일 (Average Days)",
+@@ -129,6 +133,12 @@ const TOOLTIP_CONTENT = {
+     criteria: "테마의 2등주나 개별 호재주가 포함될 수 있음",
+     interpretation: "변동성이 클 수 있어 선별적인 접근이 필요합니다."
+   },
++  gradeD: {
++    title: "D등급 과거 기록",
++    desc: "현재 신규 매수 추천 대상이 아닌 과거 D등급 신호의 성과 기록입니다.",
++    criteria: "과거 등급 체계에서 수집된 기록",
++    interpretation: "성과 비교용으로만 확인하고 신규 진입 근거로 사용하지 마세요."
++  },
+   // --- Distribution ---
+   distribution: {
+     title: "승패 분포 (Win/Loss Distribution)",
+@@ -147,7 +157,7 @@ const TOOLTIP_CONTENT = {
+   table_grade: {
+     title: "등급 (Grade)",
+     desc: "AI가 분석한 종목의 상승 잠재력 등급입니다.",
+-    criteria: "S > A > B 순으로 강력함",
++    criteria: "S > A > B > D 순으로 강력함",
+     interpretation: "등급이 높을수록 성공 확률과 기대 수익률이 높은 경향이 있습니다."
+   },
+   table_entry: {
+@@ -494,7 +504,10 @@ function renderGradeTooltip(grade: string, stats: { count: number, winRate: numb
+   let strategyAdvice = "";
+   let adviceColor = "text-gray-300";
+
+-  if (stats.count === 0) {
++  if (grade === 'D') {
++    strategyAdvice = "과거 기록의 성과입니다. 현재 신규 매수 추천으로 사용하지 마세요.";
++    adviceColor = "text-gray-400";
++  } else if (stats.count === 0) {
+     strategyAdvice = "아직 매매 데이터가 충분하지 않습니다.";
+   } else if (stats.winRate >= 60) {
+     strategyAdvice = "현재 승률이 매우 좋습니다! 적극적인 비중 확대가 유효한 구간입니다.";
+@@ -508,7 +521,7 @@ function renderGradeTooltip(grade: string, stats: { count: number, winRate: numb
+   }
+
+   // ROI Warning
+-  if (stats.avgRoi < 0 && stats.count > 0) {
++  if (grade !== 'D' && stats.avgRoi < 0 && stats.count > 0) {
+     strategyAdvice += " (평균 수익률이 마이너스입니다. 손절 원칙을 철저히 지키세요)";
+     adviceColor = "text-rose-400 font-bold";
+   }
+@@ -561,6 +574,7 @@ function GradeCard({ data }: { data: any }) {
+       <div className="flex justify-between items-start">
+         <h3 className={`text-lg font-bold ${data.color} flex items-center gap-2`}>
+           {data.grade} 등급
++          {data.grade === 'D' && <span className="text-[10px] font-medium text-gray-500">과거 기록</span>}
+           <i className="fas fa-question-circle text-white/20 text-[10px] group-hover:text-white/50 transition-colors"></i>
+         </h3>
+         <span className="text-xs text-gray-400">{data.count}건</span>
+@@ -594,43 +608,34 @@ function GradeCard({ data }: { data: any }) {
+ // ----------------------------------------------------------------------
+ // 6. DISTRIBUTION TOOLTIP HELPER
+ // ----------------------------------------------------------------------
+-function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
++function renderDistributionTooltip(kpi: KPIData) {
+   const baseContent = TOOLTIP_CONTENT.distribution;
+   if (!baseContent) return null;
+
+-  // Analysis Logic
+-  // 1. Filter closed trades (Win or Loss) and sort by date descending (assuming 'data' is already sorted or we sort here)
+-  // We assume 'trades' passed here are the current page's trades. For better accuracy, we might need global history,
+-  // but using visible recent trades is a good proxy for "recent trend".
+-  // API 는 outcome 을 대문자(WIN/LOSS)로 내려준다. 소문자 표기로 비교하면 항상 빈 배열이 된다.
+-  const closedTrades = trades.filter(t => t.outcome === 'WIN' || t.outcome === 'LOSS');
+-
+-  // Calculate Consecutive Losses
+-  let consecutiveLosses = 0;
+-  for (let i = 0; i < closedTrades.length; i++) {
+-    if (closedTrades[i].outcome === 'LOSS') {
+-      consecutiveLosses++;
+-    } else {
+-      break;
+-    }
+-  }
+-
+-  // Calculate Recent Win Rate (Last 10)
+-  const recentTrades = closedTrades.slice(0, 10);
+-  const recentWins = recentTrades.filter(t => t.outcome === 'WIN').length;
+-  const recentWinRate = recentTrades.length > 0 ? (recentWins / recentTrades.length) * 100 : 0;
++  // 최근 지표는 전체 청산 이력에서 계산한 서버 KPI다. 현재 페이지 행은 표 렌더링에만 쓴다.
++  const { consecutiveLosses, recentClosedCount, recentWinRate } = kpi;
++  const hasRecentStats = recentWinRate !== null;
++  const recentLabel = recentWinRate == null ? '집계 전' : `${recentWinRate.toFixed(0)}%`;
++  const recentColor = recentWinRate == null
++    ? 'text-gray-400'
++    : recentWinRate >= 50
++      ? 'text-emerald-400'
++      : 'text-rose-400';
+
+   // Determine Advice
+   let advice = "승/패가 고르게 분포되어 있습니다.";
+   let adviceColor = "text-gray-300";
+
+-  if (consecutiveLosses >= 3) {
++  if (!hasRecentStats) {
++    advice = "종료된 거래가 없어 추세를 집계하지 않았습니다.";
++    adviceColor = "text-gray-400";
++  } else if (consecutiveLosses >= 3) {
+     advice = `현재 ${consecutiveLosses}연패 중입니다. 잠시 매매를 멈추고 시장을 관망하세요.`;
+     adviceColor = "text-rose-400 font-bold";
+-  } else if (recentTrades.length >= 5 && recentWinRate >= 80) {
++  } else if (recentClosedCount >= 5 && recentWinRate !== null && recentWinRate >= 80) {
+     advice = "최근 흐름이 매우 좋습니다 (승률 80%↑). 추세를 이어가세요.";
+     adviceColor = "text-emerald-400 font-bold";
+-  } else if (recentTrades.length >= 5 && recentWinRate <= 20) {
++  } else if (recentClosedCount >= 5 && recentWinRate !== null && recentWinRate <= 20) {
+     advice = "최근 흐름이 좋지 않습니다. 보수적인 접근이 필요합니다.";
+     adviceColor = "text-rose-400 font-bold";
+   }
+@@ -669,9 +674,9 @@ function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
+       <div className="bg-white/5 rounded-lg p-2 border border-white/10">
+         <div className="text-[10px] text-gray-500 font-bold mb-1 border-b border-white/5 pb-1">현재 추세 분석</div>
+         <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs mb-2">
+-          <span className="text-gray-500">최근 10건 승률:</span>
+-          <span className={`font-mono font-bold ${recentWinRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+-            {recentTrades.length > 0 ? `${recentWinRate.toFixed(0)}%` : '-'}
++          <span className="text-gray-500">최근 10건 승률 (추천일순 청산):</span>
++          <span className={`font-mono font-bold ${recentColor}`}>
++            {recentLabel}
+           </span>
+           <span className="text-gray-500">연속 손실:</span>
+           <span className={`font-mono font-bold ${consecutiveLosses > 0 ? 'text-rose-400' : 'text-gray-400'}`}>
+@@ -688,7 +693,7 @@ function renderDistributionTooltip(kpi: KPIData, trades: Trade[]) {
+   );
+ }
+
+-function DistributionBar({ kpi, trades }: { kpi: KPIData, trades: Trade[] }) {
++function DistributionBar({ kpi }: { kpi: KPIData }) {
+   const total = kpi.wins + kpi.open + kpi.losses;
+   const wPct = total > 0 ? (kpi.wins / total) * 100 : 0;
+   const oPct = total > 0 ? (kpi.open / total) * 100 : 0;
+@@ -698,7 +703,7 @@ function DistributionBar({ kpi, trades }: { kpi: KPIData, trades: Trade[] }) {
+     <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-white/5 mb-8">
+       <div className="flex items-center gap-2 mb-4">
+         <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">승패 분포 (WIN/LOSS)</h3>
+-        <Tooltip size="lg" content={renderDistributionTooltip(kpi, trades)} position="top" align="left">
++        <Tooltip size="lg" content={renderDistributionTooltip(kpi)} position="top" align="left">
+           <i className="fas fa-question-circle text-gray-700 text-[10px] hover:text-gray-500 transition-colors cursor-help"></i>
+         </Tooltip>
+       </div>
+@@ -902,7 +907,7 @@ export default function CumulativeClientPage() {
+   const roundToOne = (value: number) => Math.round(value * 10) / 10;
+   const createEmptyRoiByGrade = () => {
+     const empty = { count: 0, avgRoi: 0, totalRoi: 0, wins: 0, losses: 0, winRate: 0 };
+-    return { S: { ...empty }, A: { ...empty }, B: { ...empty } };
++    return { S: { ...empty }, A: { ...empty }, B: { ...empty }, D: { ...empty } };
+   };
+
+   const [outcomeFilter, setOutcomeFilter] = useState('All');
+@@ -921,7 +926,10 @@ export default function CumulativeClientPage() {
+     roiByGrade: createEmptyRoiByGrade(),
+     avgDays: 0,
+     priceDate: '-',
+-    profitFactor: null
++    profitFactor: null,
++    recentWinRate: null,
++    recentClosedCount: 0,
++    consecutiveLosses: 0,
+   });
+   const [trades, setTrades] = useState<Trade[]>([]);
+   const [pagination, setPagination] = useState<any>(null); // Pagination Metadata
+@@ -940,20 +948,23 @@ export default function CumulativeClientPage() {
+         const res = await fetch(`/api/kr/closing-bet/cumulative?page=${currentPage}&limit=${itemsPerPage}`);
+         if (!res.ok) throw new Error('Failed to fetch data');
+         const data = await res.json();
++        const apiKpi = data.kpi || {};
+         const emptyRoiByGrade = createEmptyRoiByGrade();
+-        const apiRoiByGrade = data.kpi?.roiByGrade || {};
++        const apiRoiByGrade = apiKpi.roiByGrade || {};
+         setKpi({
+-          ...data.kpi,
++          ...apiKpi,
+           roiByGrade: {
+             S: { ...emptyRoiByGrade.S, ...(apiRoiByGrade.S || {}) },
+             A: { ...emptyRoiByGrade.A, ...(apiRoiByGrade.A || {}) },
+-            B: { ...emptyRoiByGrade.B, ...(apiRoiByGrade.B || {}) }
+-          }
++            B: { ...emptyRoiByGrade.B, ...(apiRoiByGrade.B || {}) },
++            D: { ...emptyRoiByGrade.D, ...(apiRoiByGrade.D || {}) },
++          },
++          recentWinRate: typeof apiKpi.recentWinRate === 'number' ? apiKpi.recentWinRate : null,
++          recentClosedCount: typeof apiKpi.recentClosedCount === 'number' ? apiKpi.recentClosedCount : 0,
++          consecutiveLosses: typeof apiKpi.consecutiveLosses === 'number' ? apiKpi.consecutiveLosses : 0,
+         });
+         setPagination(data.pagination);
+-        // D등급 제외 필터링 (Server should handle this ideally, but keeping frontend filter for safety/consistency)
+-        const filtered = (data.trades || []).filter((t: Trade) => t.grade !== 'D');
+-        setTrades(filtered);
++        setTrades(data.trades || []);
+       } catch (error) {
+         console.error('Error fetching cumulative data:', error);
+       } finally {
+@@ -977,6 +988,7 @@ export default function CumulativeClientPage() {
+     { grade: 'S' as const, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', tooltipKey: 'gradeS' as const },
+     { grade: 'A' as const, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', tooltipKey: 'gradeA' as const },
+     { grade: 'B' as const, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', tooltipKey: 'gradeB' as const },
++    { grade: 'D' as const, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', tooltipKey: 'gradeD' as const },
+   ].map(card => ({
+     ...card,
+     ...kpi.roiByGrade[card.grade],
+@@ -984,11 +996,6 @@ export default function CumulativeClientPage() {
+     avgRoi: roundToOne(kpi.roiByGrade[card.grade].avgRoi),
+   }));
+
+-  const sabTotalCount = kpi.roiByGrade.S.count + kpi.roiByGrade.A.count + kpi.roiByGrade.B.count;
+-  const sabTotalRoiRaw = kpi.roiByGrade.S.totalRoi + kpi.roiByGrade.A.totalRoi + kpi.roiByGrade.B.totalRoi;
+-  const sabTotalRoi = roundToOne(sabTotalRoiRaw);
+-  const sabAvgRoi = sabTotalCount > 0 ? roundToOne(sabTotalRoiRaw / sabTotalCount) : 0;
+-
+   if (loading) {
+     return (
+       <div className="flex h-screen items-center justify-center">
+@@ -1051,11 +1058,11 @@ export default function CumulativeClientPage() {
+         <StatCard title="실패" value={kpi.losses} colorClass="text-rose-400" tooltipKey="losses" kpi={kpi} />
+         <StatCard title="보유중" value={kpi.open} colorClass="text-yellow-500" tooltipKey="open" kpi={kpi} />
+         <StatCard
+-          title="평균 수익률 (S+A+B 합산)"
++          title="평균 수익률"
+           value={
+             <div className="space-y-1">
+-              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${sabAvgRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+-                {formatSignedPercent(sabAvgRoi)}
++              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${kpi.avgRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
++                {formatSignedPercent(kpi.avgRoi)}
+               </div>
+               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs font-semibold leading-tight">
+                 {/* 백엔드는 소수 둘째 자리로 보낸다. 화면 표기는 첫째 자리이므로 등급
+@@ -1063,6 +1070,7 @@ export default function CumulativeClientPage() {
+                 <span className="text-purple-300">S {formatSignedPercent(roundToOne(kpi.roiByGrade.S.avgRoi))}</span>
+                 <span className="text-rose-300">A {formatSignedPercent(roundToOne(kpi.roiByGrade.A.avgRoi))}</span>
+                 <span className="text-blue-300">B {formatSignedPercent(roundToOne(kpi.roiByGrade.B.avgRoi))}</span>
++                <span className="text-emerald-300">D {formatSignedPercent(roundToOne(kpi.roiByGrade.D.avgRoi))}</span>
+               </div>
+             </div>
+           }
+@@ -1077,16 +1085,17 @@ export default function CumulativeClientPage() {
+       {/* Metric Cards - Row 2 */}
+       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+         <StatCard
+-          title="누적 수익률 (S+A+B 합산)"
++          title="누적 수익률"
+           value={
+             <div className="space-y-1">
+-              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${sabTotalRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+-                {formatSignedPercent(sabTotalRoi)}
++              <div className={`text-2xl md:text-3xl leading-none font-extrabold ${kpi.totalRoi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
++                {formatSignedPercent(kpi.totalRoi)}
+               </div>
+               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs font-semibold leading-tight">
+                 <span className="text-purple-300">S {formatSignedPercent(kpi.roiByGrade.S.totalRoi)}</span>
+                 <span className="text-rose-300">A {formatSignedPercent(kpi.roiByGrade.A.totalRoi)}</span>
+                 <span className="text-blue-300">B {formatSignedPercent(kpi.roiByGrade.B.totalRoi)}</span>
++                <span className="text-emerald-300">D {formatSignedPercent(kpi.roiByGrade.D.totalRoi)}</span>
+               </div>
+             </div>
+           }
+@@ -1102,14 +1111,14 @@ export default function CumulativeClientPage() {
+
+
+       {/* Grade Performance Cards */}
+-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
++      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+         {gradeCards.map((data) => (
+           <GradeCard key={data.grade} data={data} />
+         ))}
+       </div>
+
+       {/* DistributionBar */}
+-      <DistributionBar kpi={kpi} trades={trades} />
++      <DistributionBar kpi={kpi} />
+
+       {/* Trade List Section */}
+       <div className="space-y-4">
+@@ -1134,6 +1143,7 @@ export default function CumulativeClientPage() {
+                 <FilterButton label="S" count={trades.filter(t => t.grade === 'S').length} active={gradeFilter === 'S'} onClick={() => { setGradeFilter('S'); setCurrentPage(1); }} />
+                 <FilterButton label="A" count={trades.filter(t => t.grade === 'A').length} active={gradeFilter === 'A'} onClick={() => { setGradeFilter('A'); setCurrentPage(1); }} />
+                 <FilterButton label="B" count={trades.filter(t => t.grade === 'B').length} active={gradeFilter === 'B'} onClick={() => { setGradeFilter('B'); setCurrentPage(1); }} />
++                <FilterButton label="D" count={trades.filter(t => t.grade === 'D').length} active={gradeFilter === 'D'} onClick={() => { setGradeFilter('D'); setCurrentPage(1); }} />
+               </div>
+             </div>
+           </div>
+diff --git a/frontend/src/app/dashboard/kr/page.regression-flow-004.test.tsx b/frontend/src/app/dashboard/kr/page.regression-flow-004.test.tsx
+index 7d4cedb..22e5563 100644
+--- a/frontend/src/app/dashboard/kr/page.regression-flow-004.test.tsx
++++ b/frontend/src/app/dashboard/kr/page.regression-flow-004.test.tsx
+@@ -58,7 +58,7 @@ describe('[FLOW-004] 백테스트 확인 아이콘', () => {
+   });
+ });
+
+-it('종가 성과는 저장 가격 우선 기준을 설명하고 VCP 설명 분기와 섞이지 않는다', async () => {
++it('종가 성과는 저장 가격 우선 기준을 설명하고 VCP의 백테스트·시그널 기준과 섞이지 않는다', async () => {
+   fetchAPIMock.mockResolvedValue({
+     vcp: { status: 'GOOD', count: 12, win_rate: 55, avg_return: 3.1 },
+     closing_bet: { status: 'GOOD', count: 8, win_rate: 62, avg_return: 2.4, candidates: [] },
+@@ -66,5 +66,6 @@ it('종가 성과는 저장 가격 우선 기준을 설명하고 VCP 설명 분
+   render(<KRDashboardPage />);
+   await waitFor(() => expect(screen.getAllByText('12 trades').length).toBeGreaterThan(0));
+   expect(screen.getByText(/종가베팅은 저장된 목표가·손절가 기준/)).toBeTruthy();
+-  expect(screen.getByText('익절 +9%, 손절 -5% 기준 백테스팅 결과입니다.')).toBeTruthy();
++  expect(screen.getByText('VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.')).toBeTruthy();
++  expect(screen.getByText('개별 시그널의 기본 목표·손절은 +5%/-3%입니다.')).toBeTruthy();
+ });
+diff --git a/frontend/src/app/dashboard/kr/page.tsx b/frontend/src/app/dashboard/kr/page.tsx
+index 0c6f4c4..51f3fcc 100644
+--- a/frontend/src/app/dashboard/kr/page.tsx
++++ b/frontend/src/app/dashboard/kr/page.tsx
+@@ -15,8 +15,79 @@ import Tooltip from '@/app/components/Tooltip';
+ const isBacktestJudged = (status?: string) =>
+   ['EXCELLENT', 'GOOD', 'BAD'].includes(status ?? '');
+
++interface StrategyPresentation {
++  label: string;
++  description: string;
++  className: string;
++  theme: {
++    border: string;
++    glow: string;
++    text: string;
++    icon: string;
++  };
++}
++
++interface StrategyState extends StrategyPresentation {
++  judged: boolean;
++}
++
++const STRATEGY_PRESENTATIONS: Record<string, StrategyPresentation> = {
++  Accumulating: {
++    label: '축적 중',
++    description: '데이터를 축적하고 있습니다.',
++    className: 'bg-white/5 text-gray-400 border-white/10',
++    theme: { border: 'hover:border-white/20', glow: 'bg-white/5', text: 'group-hover:text-gray-300', icon: 'text-gray-400' },
++  },
++  'OK (New)': {
++    label: '신규 · 판정 전',
++    description: '신규 자료를 모으고 있습니다.',
++    className: 'bg-white/5 text-gray-400 border-white/10',
++    theme: { border: 'hover:border-white/20', glow: 'bg-white/5', text: 'group-hover:text-gray-300', icon: 'text-gray-400' },
++  },
++  PENDING: {
++    label: '집계 전',
++    description: '종료된 거래가 없어 집계 전입니다.',
++    className: 'bg-white/5 text-gray-400 border-white/10',
++    theme: { border: 'hover:border-white/20', glow: 'bg-white/5', text: 'group-hover:text-gray-300', icon: 'text-gray-400' },
++  },
++  EXCELLENT: {
++    label: '우수',
++    description: '',
++    className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
++    theme: { border: 'hover:border-emerald-500/30', glow: 'bg-emerald-500/10', text: 'group-hover:text-emerald-400', icon: 'text-emerald-500' },
++  },
++  GOOD: {
++    label: '양호',
++    description: '',
++    className: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
++    theme: { border: 'hover:border-amber-500/30', glow: 'bg-amber-500/10', text: 'group-hover:text-amber-400', icon: 'text-amber-500' },
++  },
++  BAD: {
++    label: '미흡',
++    description: '',
++    className: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
++    theme: { border: 'hover:border-rose-500/30', glow: 'bg-rose-500/10', text: 'group-hover:text-rose-400', icon: 'text-rose-500' },
++  },
++};
++
++const UNKNOWN_STRATEGY_PRESENTATION: StrategyPresentation = {
++  label: '확인 전',
++  description: '상태를 확인하고 있습니다.',
++  className: 'bg-white/5 text-gray-400 border-white/10',
++  theme: { border: 'hover:border-white/20', glow: 'bg-white/5', text: 'group-hover:text-gray-300', icon: 'text-gray-400' },
++};
++
++const getStrategyPresentation = (status?: string): StrategyState => {
++  const presentation = typeof status === 'string'
++    && Object.prototype.hasOwnProperty.call(STRATEGY_PRESENTATIONS, status)
++    ? STRATEGY_PRESENTATIONS[status]
++    : UNKNOWN_STRATEGY_PRESENTATION;
++
++  return { ...presentation, judged: isBacktestJudged(status) };
++};
++
+ interface BacktestStats {
+-  status: string;
++  status?: string;
+   count: number;
+   win_rate: number;
+   avg_return: number;
+@@ -483,36 +554,24 @@ export default function KRMarketOverview() {
+     return val.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
+   };
+
+-  const getStrategyStatus = (rate: number) => {
+-    if (rate >= 60) return { label: '우수', className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
+-    if (rate >= 40) return { label: '양호', className: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
+-    return { label: '미흡', className: 'bg-rose-500/10 text-rose-500 border-rose-500/20' };
+-  };
+-
+-  const getStrategyTheme = (rate: number) => {
+-    if (rate >= 60) return {
+-      border: 'hover:border-emerald-500/30',
+-      glow: 'bg-emerald-500/10',
+-      text: 'group-hover:text-emerald-400',
+-      icon: 'text-emerald-500'
+-    };
+-    if (rate >= 40) return {
+-      border: 'hover:border-amber-500/30',
+-      glow: 'bg-amber-500/10',
+-      text: 'group-hover:text-amber-400',
+-      icon: 'text-amber-500'
+-    };
+-    return {
+-      border: 'hover:border-rose-500/30',
+-      glow: 'bg-rose-500/10',
+-      text: 'group-hover:text-rose-400',
+-      icon: 'text-rose-500'
+-    };
+-  };
+-
+-  const getStrategyTooltip = (rate: number, avgReturn: number, count: number, strategyName: string) => {
++  const getStrategyTooltip = (
++    rate: number,
++    avgReturn: number,
++    count: number,
++    strategyName: string,
++    presentation: StrategyState,
++  ) => {
+     const isVCP = strategyName.includes("VCP");
+
++    if (!presentation.judged) {
++      return (
++        <div className="space-y-2">
++          <div className="font-bold text-white text-sm">{strategyName} 성과 상태</div>
++          <div className="text-[11px] text-gray-300">{presentation.label} 상태입니다. 성과 수치는 판정 후 표시됩니다.</div>
++        </div>
++      );
++    }
++
+     return (
+       <div className="space-y-3">
+         <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-1">
+@@ -538,9 +597,14 @@ export default function KRMarketOverview() {
+         <div className="space-y-2 text-[11px] text-gray-300">
+           <div className="flex gap-2">
+             <span className="text-gray-500 min-w-[30px]">기준:</span>
+-            <span>{isVCP
+-              ? '익절 +9%, 손절 -5% 기준 백테스팅 결과입니다.'
+-              : '종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다.'}</span>
++            {isVCP ? (
++              <span>
++                <span className="block">VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.</span>
++                <span>개별 시그널의 기본 목표·손절은 +5%/-3%입니다.</span>
++              </span>
++            ) : (
++              <span>종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다.</span>
++            )}
+           </div>
+           <div className="flex gap-2">
+             <span className="text-gray-500 min-w-[30px]">해석:</span>
+@@ -930,14 +994,16 @@ export default function KRMarketOverview() {
+         {(() => {
+           const vcpRate = backtestData?.vcp?.win_rate ?? 0;
+           const avgReturn = backtestData?.vcp?.avg_return ?? 0;
+-          const vcpTheme = getStrategyTheme(vcpRate);
++          const presentation = getStrategyPresentation(backtestData?.vcp?.status);
++          const vcpTheme = presentation.theme;
++          const showPendingState = !loading && !presentation.judged;
+           return (
+             <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${vcpTheme.border}`}>
+               <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${vcpTheme.glow}`}></div>
+               <div className="flex justify-between items-start">
+                 <div className="flex items-center gap-2 mb-1">
+                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">VCP 전략</div>
+-                  <Tooltip size="lg" content={getStrategyTooltip(vcpRate, avgReturn, backtestData?.vcp?.count ?? 0, "VCP 전략")} position="bottom" align="left">
++                  <Tooltip size="lg" content={getStrategyTooltip(vcpRate, avgReturn, backtestData?.vcp?.count ?? 0, "VCP 전략", presentation)} position="bottom" align="left">
+                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
+                   </Tooltip>
+                   <button
+@@ -947,27 +1013,31 @@ export default function KRMarketOverview() {
+                     기준표
+                   </button>
+                 </div>
+-                {(() => {
+-                  const status = getStrategyStatus(vcpRate);
+-                  return (
+-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
+-                      {status.label}
+-                    </span>
+-                  );
+-                })()}
+-              </div>
+-              <div className="flex items-baseline gap-2">
+-                <span className={`text-3xl font-black text-white transition-colors ${vcpTheme.text}`}>
+-                  {loading ? '--' : vcpRate}<span className="text-base text-gray-600">%</span>
++                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${presentation.className}`}>
++                  {presentation.label}
+                 </span>
+-                <span className={`text-xs font-bold ${avgReturn > 0 ? 'text-red-400' : 'text-blue-400'}`}>
+-                  Avg. {avgReturn > 0 ? '+' : ''}{avgReturn}%
+-                </span>
+-              </div>
+-              <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
+-                <span>{renderTradeCount(backtestData?.vcp?.count ?? 0)}</span>
+-                {isBacktestJudged(backtestData?.vcp?.status) && <i className={`fas fa-check-circle ${vcpTheme.icon}`}></i>}
+               </div>
++              {showPendingState ? (
++                <>
++                  <div className="py-4 text-sm font-bold text-gray-400">{presentation.description}</div>
++                  <div className="mt-2 text-xs text-gray-500">{renderTradeCount(backtestData?.vcp?.count ?? 0)}</div>
++                </>
++              ) : (
++                <>
++                  <div className="flex items-baseline gap-2">
++                    <span className={`text-3xl font-black text-white transition-colors ${vcpTheme.text}`}>
++                      {loading ? '--' : vcpRate}<span className="text-base text-gray-600">%</span>
++                    </span>
++                    <span className={`text-xs font-bold ${avgReturn > 0 ? 'text-red-400' : 'text-blue-400'}`}>
++                      Avg. {avgReturn > 0 ? '+' : ''}{avgReturn}%
++                    </span>
++                  </div>
++                  <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
++                    <span>{renderTradeCount(backtestData?.vcp?.count ?? 0)}</span>
++                    {presentation.judged && <i className={`fas fa-check-circle ${vcpTheme.icon}`}></i>}
++                  </div>
++                </>
++              )}
+             </div>
+           );
+         })()}
+@@ -976,14 +1046,16 @@ export default function KRMarketOverview() {
+         {(() => {
+           const cbRate = backtestData?.closing_bet?.win_rate ?? 0;
+           const avgReturn = backtestData?.closing_bet?.avg_return ?? 0;
+-          const cbTheme = getStrategyTheme(cbRate);
++          const presentation = getStrategyPresentation(backtestData?.closing_bet?.status);
++          const cbTheme = presentation.theme;
++          const showPendingState = !loading && !presentation.judged;
+           return (
+             <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${cbTheme.border}`}>
+               <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${cbTheme.glow}`}></div>
+               <div className="flex justify-between items-start">
+                 <div className="flex items-center gap-2 mb-1">
+                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">종가베팅 전략</div>
+-                  <Tooltip size="lg" content={getStrategyTooltip(cbRate, avgReturn, backtestData?.closing_bet?.count ?? 0, "종가베팅 전략")} position="bottom" align="left">
++                  <Tooltip size="lg" content={getStrategyTooltip(cbRate, avgReturn, backtestData?.closing_bet?.count ?? 0, "종가베팅 전략", presentation)} position="bottom" align="left">
+                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
+                   </Tooltip>
+                   <button
+@@ -993,30 +1065,15 @@ export default function KRMarketOverview() {
+                     기준표
+                   </button>
+                 </div>
+-                {backtestData?.closing_bet?.status === 'Accumulating' ? (
+-                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20 animate-pulse">
+-                    <i className="fas fa-hourglass-half mr-1"></i>축적 중
+-                  </span>
+-                ) : (
+-                  (() => {
+-                    const status = getStrategyStatus(cbRate);
+-                    return (
+-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${status.className}`}>
+-                        {status.label}
+-                      </span>
+-                    );
+-                  })()
+-                )}
++                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${presentation.className}`}>
++                  {presentation.label}
++                </span>
+               </div>
+-              {backtestData?.closing_bet?.status === 'Accumulating' ? (
+-                <div className="py-4">
+-                  <div className="text-2xl font-black text-amber-400 mb-1">
+-                    <i className="fas fa-database mr-2"></i>데이터 축적 중
+-                  </div>
+-                  <div className="text-xs text-gray-500">
+-                    {backtestData?.closing_bet?.message || '최소 2일 데이터 필요'}
+-                  </div>
+-                </div>
++              {showPendingState ? (
++                <>
++                  <div className="py-4 text-sm font-bold text-gray-400">{presentation.description}</div>
++                  <div className="mt-2 text-xs text-gray-500">{renderTradeCount(backtestData?.closing_bet?.count ?? 0)}</div>
++                </>
+               ) : (
+                 <>
+                   <div className="flex items-baseline gap-2">
+@@ -1029,7 +1086,7 @@ export default function KRMarketOverview() {
+                   </div>
+                   <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
+                     <span>{renderTradeCount(backtestData?.closing_bet?.count ?? 0)}</span>
+-                    {isBacktestJudged(backtestData?.closing_bet?.status) && <i className={`fas fa-check-circle ${cbTheme.icon}`}></i>}
++                    {presentation.judged && <i className={`fas fa-check-circle ${cbTheme.icon}`}></i>}
+                   </div>
+                 </>
+               )}
+diff --git a/frontend/src/app/dashboard/kr/vcp/page.tsx b/frontend/src/app/dashboard/kr/vcp/page.tsx
+index 00409bc..c426197 100644
+--- a/frontend/src/app/dashboard/kr/vcp/page.tsx
++++ b/frontend/src/app/dashboard/kr/vcp/page.tsx
+@@ -1707,10 +1707,10 @@ export default function VCPSignalsPage() {
+                   <SimpleTooltip text="시그널 발생 당시 진입 추천가">Entry</SimpleTooltip>
+                 </th>
+                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+-                  <SimpleTooltip text="손절가 (진입가 -3%)">Stop</SimpleTooltip>
++                  <SimpleTooltip text="시그널에 저장된 손절가 (기본 진입가 -3%)">Stop</SimpleTooltip>
+                 </th>
+                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+-                  <SimpleTooltip text="목표가 (진입가 +5%)">Target</SimpleTooltip>
++                  <SimpleTooltip text="시그널에 저장된 목표가 (기본 진입가 +5%)">Target</SimpleTooltip>
+                 </th>
+                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+                   <SimpleTooltip text="현재 주가 (실시간 업데이트 아님)">Current</SimpleTooltip>
+diff --git a/frontend/src/app/page.tsx b/frontend/src/app/page.tsx
+index d6bee78..0dfa26d 100644
+--- a/frontend/src/app/page.tsx
++++ b/frontend/src/app/page.tsx
+@@ -202,7 +202,10 @@ export default function HomePage() {
+                 <ul className="space-y-2 text-sm text-gray-300 mb-5">
+                   <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>점수 체계: 기본 12점 + 가산 7점 (총 19점)</li>
+                   <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>등급 기준: S 10점+, A 8점+, B 6점+</li>
+-                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>익절 +9% / 손절 -5% / 최대 보유 15일</li>
++                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>저장된 목표가·손절가를 우선 적용합니다.</li>
++                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>누락 시 기본 익절 +5%, 손절 -3%를 사용합니다.</li>
++                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>미청산(OPEN)은 계속 추적하며 승률 계산에서 제외합니다.</li>
++                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>승률 60% 가정 기대값은 +1.8%이며 수수료·세금 등 비용은 제외합니다.</li>
+                 </ul>
+                 <div className="grid grid-cols-3 gap-2 mb-3">
+                   <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded text-center">S급 10+</span>
+@@ -386,11 +389,11 @@ export default function HomePage() {
+                         </div>
+                         <div className="flex justify-between text-sm py-2 border-b border-white/5">
+                           <span className="text-gray-400">익절 / 손절</span>
+-                          <span className="font-mono font-bold text-white">+9% / -5%</span>
++                          <span className="font-mono font-bold text-white">+5% / -3%</span>
+                         </div>
+                         <div className="bg-[#13151A] p-4 rounded-xl text-center border border-green-500/20">
+-                          <div className="text-xs text-gray-500 mb-1">1회 매매 기대수익 (60% × 9% − 40% × 5%)</div>
+-                          <div className="text-2xl font-black text-green-400">+3.4%</div>
++                          <div className="text-xs text-gray-500 mb-1">1회 매매 기대수익 (60% × 5% − 40% × 3%, 비용 제외)</div>
++                          <div className="text-2xl font-black text-green-400">+1.8%</div>
+                         </div>
+                       </div>
+                     </div>
+diff --git a/services/kr_market_backtest_kpi_helpers.py b/services/kr_market_backtest_kpi_helpers.py
+index f788ba6..080e750 100644
+--- a/services/kr_market_backtest_kpi_helpers.py
++++ b/services/kr_market_backtest_kpi_helpers.py
+@@ -27,7 +27,7 @@ def aggregate_cumulative_kpis(
+
+     grade_acc: dict[str, dict[str, float]] = {
+         grade: {"count": 0, "total_roi": 0.0, "wins": 0, "losses": 0}
+-        for grade in ("S", "A", "B")
++        for grade in ("S", "A", "B", "D")
+     }
+
+     gross_profit = 0.0
+@@ -71,7 +71,7 @@ def aggregate_cumulative_kpis(
+     # 다시 계산했는데, 그러면 페이지를 넘길 때마다 같은 등급의 건수와 승률과 부호가
+     # 통째로 달라졌다. 승률의 분모는 전체 KPI 와 같이 종료된 거래만 센다.
+     roi_by_grade: dict[str, dict[str, Any]] = {}
+-    for grade in ["S", "A", "B"]:
++    for grade in ["S", "A", "B", "D"]:
+         grade_count = int(grade_acc[grade]["count"])
+         grade_total_roi = float(grade_acc[grade]["total_roi"])
+         grade_avg_roi = round(grade_total_roi / grade_count, 2) if grade_count > 0 else 0.0
+@@ -90,6 +90,29 @@ def aggregate_cumulative_kpis(
+             "winRate": grade_win_rate,
+         }
+
++    closed_trade_records = sorted(
++        (trade for trade in trades if trade.get("outcome") in {"WIN", "LOSS"}),
++        key=lambda trade: (
++            str(trade.get("date", "")),
++            str(trade.get("code", "")),
++            str(trade.get("id", "")),
++        ),
++        reverse=True,
++    )
++    recent_closed_trades = closed_trade_records[:10]
++    recent_closed_count = len(recent_closed_trades)
++    recent_wins = sum(trade.get("outcome") == "WIN" for trade in recent_closed_trades)
++    recent_win_rate = (
++        round((recent_wins / recent_closed_count) * 100, 1)
++        if recent_closed_count > 0
++        else None
++    )
++    consecutive_losses = 0
++    for trade in closed_trade_records:
++        if trade.get("outcome") == "WIN":
++            break
++        consecutive_losses += 1
++
+     # 손실 거래가 한 건도 없으면 비율이 정의되지 않는다. 앞서 이 자리는 분자인
+     # 총이익을 그대로 돌려주었는데, 그 값이 화면에서 2.0 이라는 비율 기준에 걸려
+     # 언제나 최고 등급으로 평가되었다. 비율이 아닌 값을 비율 자리에 넣지 않는다.
+@@ -116,6 +139,9 @@ def aggregate_cumulative_kpis(
+         "avgDays": avg_days,
+         "priceDate": price_date_str,
+         "profitFactor": profit_factor,
++        "recentWinRate": recent_win_rate,
++        "recentClosedCount": recent_closed_count,
++        "consecutiveLosses": consecutive_losses,
+     }
+
+
+@@ -141,4 +167,3 @@ def paginate_items(
+             "totalPages": total_pages,
+         },
+     )
+-
+diff --git a/services/kr_market_backtest_trade_helpers.py b/services/kr_market_backtest_trade_helpers.py
+index 33591af..683a8a8 100644
+--- a/services/kr_market_backtest_trade_helpers.py
++++ b/services/kr_market_backtest_trade_helpers.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+
+ import logging
+ import math
++import re
+ from datetime import datetime
+ from typing import Any
+
+@@ -129,8 +130,41 @@ def calculate_cumulative_trade_metrics(
+             "price_trail": price_trail,
+         }
+
++    required_cols = {"high", "low", "close"}
++    if not required_cols.issubset(stock_prices.columns):
++        logger.warning("Invalid cumulative price frame: missing required OHLC columns")
++        raise ValueError("Cumulative price frame requires numeric high, low, and close columns")
++    if any(
++        not pd.api.types.is_numeric_dtype(stock_prices[col])
++        or pd.api.types.is_bool_dtype(stock_prices[col])
++        or pd.api.types.is_complex_dtype(stock_prices[col])
++        for col in required_cols
++    ):
++        logger.warning("Invalid cumulative price frame: non-real numeric OHLC columns")
++        raise ValueError("Cumulative price frame requires numeric high, low, and close columns")
++
+     if "date" in stock_prices.columns:
++        if "ticker" not in stock_prices.columns:
++            logger.warning("Invalid cumulative price frame: date column requires ticker")
++            raise ValueError("Cumulative date price frame requires ticker")
++        date_values = stock_prices["date"]
++        has_iso_dates = date_values.map(
++            lambda value: isinstance(value, str)
++            and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is not None
++        ).all()
++        parsed_dates = pd.to_datetime(date_values, format="%Y-%m-%d", errors="coerce")
++        if not has_iso_dates or parsed_dates.isna().any():
++            logger.warning("Invalid cumulative price frame: date must be ISO YYYY-MM-DD strings")
++            raise ValueError("Cumulative date price frame requires ISO YYYY-MM-DD strings")
+         stock_prices = prepare_cumulative_price_dataframe(stock_prices)
++    elif (
++        not isinstance(stock_prices.index, pd.DatetimeIndex)
++        or stock_prices.index.tz is not None
++        or stock_prices.index.hasnans
++        or not stock_prices.index.is_monotonic_increasing
++    ):
++        logger.warning("Invalid cumulative price frame: expected a naive ascending DatetimeIndex")
++        raise ValueError("Cumulative indexed price frame requires a valid DatetimeIndex")
+
+     try:
+         signal_ts = pd.Timestamp(stats_date)
+@@ -147,14 +181,11 @@ def calculate_cumulative_trade_metrics(
+         }
+
+     period_prices = stock_prices[stock_prices.index > signal_ts]
+-    required_cols = {"high", "low", "close"}
+-    has_required_cols = required_cols.issubset(set(period_prices.columns))
+-    if has_required_cols:
+-        period_prices = period_prices[
+-            (period_prices["high"] > 0)
+-            & (period_prices["low"] > 0)
+-            & (period_prices["close"] > 0)
+-        ]
++    period_prices = period_prices[
++        (period_prices["high"] > 0)
++        & (period_prices["low"] > 0)
++        & (period_prices["close"] > 0)
++    ]
+
+     if target_price is None:
+         logger.info("Missing jongga target price; using target_pct")
+@@ -167,20 +198,19 @@ def calculate_cumulative_trade_metrics(
+     )
+
+     exit_date = None
+-    if has_required_cols:
+-        hit_target = period_prices[period_prices["high"] >= resolved_target]
+-        hit_stop = period_prices[period_prices["low"] <= resolved_stop]
+-        first_win_date = hit_target.index[0] if not hit_target.empty else None
+-        first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
+-
+-        outcome, exit_date = resolve_hit_outcome(
+-            first_target=first_win_date,
+-            first_stop=first_loss_date,
+-        )
+-        if outcome == "WIN":
+-            roi = round(((resolved_target - entry_price) / entry_price) * 100, 1)
+-        elif outcome == "LOSS":
+-            roi = round(((resolved_stop - entry_price) / entry_price) * 100, 1)
++    hit_target = period_prices[period_prices["high"] >= resolved_target]
++    hit_stop = period_prices[period_prices["low"] <= resolved_stop]
++    first_win_date = hit_target.index[0] if not hit_target.empty else None
++    first_loss_date = hit_stop.index[0] if not hit_stop.empty else None
++
++    outcome, exit_date = resolve_hit_outcome(
++        first_target=first_win_date,
++        first_stop=first_loss_date,
++    )
++    if outcome == "WIN":
++        roi = round(((resolved_target - entry_price) / entry_price) * 100, 1)
++    elif outcome == "LOSS":
++        roi = round(((resolved_stop - entry_price) / entry_price) * 100, 1)
+
+     trade_period = period_prices[period_prices.index <= exit_date] if exit_date is not None else period_prices
+
+diff --git a/services/kr_market_cumulative_cache.py b/services/kr_market_cumulative_cache.py
+index 554fb08..5da3b21 100644
+--- a/services/kr_market_cumulative_cache.py
++++ b/services/kr_market_cumulative_cache.py
+@@ -50,7 +50,7 @@ _CUMULATIVE_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
+
+ # 저장한 값의 계산 규칙이 바뀌면 이 번호를 올린다. 시그니처에 섞여 들어가므로
+ # 옛 규칙으로 계산해 둔 항목은 데이터 파일이 그대로여도 더 이상 적중하지 않는다.
+-_CUMULATIVE_CACHE_SCHEMA_VERSION = 5
++_CUMULATIVE_CACHE_SCHEMA_VERSION = 6
+
+ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ _CUMULATIVE_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
+
+NEW FILE frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-performance-batch.test.tsx
+// Regression: [FLOW-013] 누적성과 화면은 전체 KPI와 현재 페이지 행을 섞지 않는다.
+//
+// 서버는 전체 기간 KPI를 내려주고 표는 페이지별 행만 내려준다. 등급 카드와 핵심
+// 수익률, 최근 10건 지표가 표 행에서 다시 계산되면 페이지 전환에 따라 값이 바뀐다.
+// D 등급도 다른 등급과 같은 계약으로 화면에 남아야 한다.
+
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import CumulativeClientPage from './CumulativeClientPage';
+
+vi.mock('@/hooks/useAdmin', () => ({
+  useAdmin: () => ({ isAdmin: false, isLoading: false }),
+}));
+
+type Outcome = 'WIN' | 'LOSS' | 'OPEN';
+type Grade = 'S' | 'A' | 'B' | 'D';
+
+function makeTrade(index: number, grade: Grade, outcome: Outcome, name: string) {
+  return {
+    id: `trade-${index}`,
+    date: `2026-09-${String(18 - index).padStart(2, '0')}`,
+    grade,
+    name,
+    code: `000${index}`,
+    market: 'KOSPI',
+    entry: 100_000,
+    outcome,
+    roi: outcome === 'WIN' ? 5 : outcome === 'LOSS' ? -3 : 0,
+    maxHigh: 5,
+    priceTrail: [],
+    days: 2,
+    score: 10,
+    themes: [],
+  };
+}
+
+const ROI_BY_GRADE = {
+  S: { count: 6, avgRoi: 3, totalRoi: 18, wins: 5, losses: 1, winRate: 83.3 },
+  A: { count: 6, avgRoi: 2, totalRoi: 12, wins: 4, losses: 2, winRate: 66.7 },
+  B: { count: 6, avgRoi: 1, totalRoi: 6, wins: 3, losses: 3, winRate: 50 },
+  D: { count: 6, avgRoi: 2.17, totalRoi: 13, wins: 2, losses: 4, winRate: 33.3 },
+};
+
+interface CumulativeKpiFixture {
+  totalSignals: number;
+  wins: number;
+  losses: number;
+  open: number;
+  winRate: number;
+  avgRoi: number;
+  totalRoi: number;
+  avgDays: number;
+  priceDate: string;
+  profitFactor: number | null;
+  roiByGrade: typeof ROI_BY_GRADE;
+  recentWinRate: number | null;
+  recentClosedCount: number;
+  consecutiveLosses: number;
+}
+
+const KPI: CumulativeKpiFixture = {
+  totalSignals: 24,
+  wins: 14,
+  losses: 7,
+  open: 3,
+  winRate: 66.7,
+  // 등급별 합계(49)와 별개로, 메인 값은 서버가 계산한 전체 KPI다.
+  avgRoi: 2.04,
+  totalRoi: 49,
+  avgDays: 2.5,
+  priceDate: '2026-09-18',
+  profitFactor: 2.38,
+  roiByGrade: ROI_BY_GRADE,
+  recentWinRate: 30,
+  recentClosedCount: 10,
+  consecutiveLosses: 7,
+};
+
+const PAGE_ONE_TRADES = [
+  makeTrade(1, 'S', 'WIN', '첫 번째 페이지 S'),
+  makeTrade(2, 'A', 'WIN', '첫 번째 페이지 A'),
+  makeTrade(3, 'B', 'WIN', '첫 번째 페이지 B'),
+  makeTrade(4, 'D', 'LOSS', '첫 번째 페이지 D-1'),
+  makeTrade(5, 'D', 'LOSS', '첫 번째 페이지 D-2'),
+  makeTrade(6, 'S', 'WIN', '첫 번째 페이지 S-2'),
+  makeTrade(7, 'A', 'WIN', '첫 번째 페이지 A-2'),
+  makeTrade(8, 'B', 'LOSS', '첫 번째 페이지 B-2'),
+  makeTrade(9, 'S', 'WIN', '첫 번째 페이지 S-3'),
+  makeTrade(10, 'A', 'LOSS', '첫 번째 페이지 A-3'),
+];
+
+const PAGE_TWO_TRADES = [
+  makeTrade(11, 'S', 'LOSS', '두 번째 페이지 S'),
+  makeTrade(12, 'A', 'LOSS', '두 번째 페이지 A'),
+  makeTrade(13, 'B', 'LOSS', '두 번째 페이지 B'),
+  makeTrade(14, 'D', 'LOSS', '두 번째 페이지 D-1'),
+  makeTrade(15, 'D', 'LOSS', '두 번째 페이지 D-2'),
+  makeTrade(16, 'S', 'LOSS', '두 번째 페이지 S-2'),
+  makeTrade(17, 'A', 'LOSS', '두 번째 페이지 A-2'),
+  makeTrade(18, 'B', 'LOSS', '두 번째 페이지 B-2'),
+  makeTrade(19, 'S', 'LOSS', '두 번째 페이지 S-3'),
+  makeTrade(20, 'A', 'LOSS', '두 번째 페이지 A-3'),
+];
+
+function responseFor(trades: ReturnType<typeof makeTrade>[], kpi: CumulativeKpiFixture = KPI) {
+  return {
+    trades,
+    kpi,
+    pagination: { total: 24, page: trades === PAGE_ONE_TRADES ? 1 : 2, limit: 10, totalPages: 3 },
+  };
+}
+
+function kpiCard(title: string): HTMLElement {
+  const titleElement = screen
+    .getAllByText(title)
+    .find((element) => element.classList.contains('uppercase'));
+
+  if (!titleElement?.parentElement?.parentElement) {
+    throw new Error(`${title} KPI 카드를 찾지 못했습니다.`);
+  }
+
+  return titleElement.parentElement.parentElement;
+}
+
+function gradeCard(grade: Grade): HTMLElement {
+  const titleElement = screen.getByText(`${grade} 등급`);
+
+  if (!titleElement.parentElement?.parentElement) {
+    throw new Error(`${grade} 등급 카드를 찾지 못했습니다.`);
+  }
+
+  return titleElement.parentElement.parentElement;
+}
+
+beforeEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('[FLOW-013] 누적성과 KPI 표시', () => {
+  it('D 등급을 포함하고 메인 평균·누적 수익률은 서버 KPI를 그대로 사용한다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => responseFor(PAGE_ONE_TRADES) })),
+    );
+
+    render(<CumulativeClientPage />);
+
+    await waitFor(() => expect(screen.getByText('2026-09-18')).toBeTruthy());
+
+    // 전체 기간 D 등급은 카드의 6건이며, 현재 페이지의 D 두 행과 혼동하면 안 된다.
+    expect(within(gradeCard('D')).getByText('6건')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'D (2)' })).toBeTruthy();
+
+    // 기존 S+A+B 재계산 값(평균 2.0%, 누적 36%)이 아니라 서버의 전체 KPI를 표시한다.
+    expect(within(kpiCard('평균 수익률')).getByText('+2.04%')).toBeTruthy();
+    expect(within(kpiCard('누적 수익률')).getByText('+49%')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'D (2)' }));
+    expect(screen.getByText('첫 번째 페이지 D-1')).toBeTruthy();
+    expect(screen.getByText('첫 번째 페이지 D-2')).toBeTruthy();
+    expect(screen.queryByText('첫 번째 페이지 S')).toBeNull();
+  });
+
+  it('페이지가 달라져도 최근 성과는 서버 KPI를 유지한다', async () => {
+    const fetchMock = vi.fn(async (input: string) => ({
+      ok: true,
+      json: async () => responseFor(input.includes('page=2') ? PAGE_TWO_TRADES : PAGE_ONE_TRADES),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CumulativeClientPage />);
+
+    await waitFor(() => expect(screen.getByText('첫 번째 페이지 S')).toBeTruthy());
+    expect(screen.getByText('30%')).toBeTruthy();
+    expect(screen.getByText('7회')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    await waitFor(() => expect(screen.getByText('두 번째 페이지 S')).toBeTruthy());
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/kr/closing-bet/cumulative?page=2&limit=50');
+    expect(screen.getByText('30%')).toBeTruthy();
+    expect(screen.getByText('7회')).toBeTruthy();
+  });
+
+  it('최근 청산이 없으면 집계 전으로 표시한다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => responseFor([], {
+          ...KPI,
+          recentWinRate: null,
+          recentClosedCount: 0,
+          consecutiveLosses: 0,
+        }),
+      })),
+    );
+
+    render(<CumulativeClientPage />);
+
+    await waitFor(() => expect(screen.getByText('집계 전')).toBeTruthy());
+    expect(screen.getByText('종료된 거래가 없어 추세를 집계하지 않았습니다.')).toBeTruthy();
+    expect(screen.getByText('집계 전').className).toContain('text-gray-400');
+  });
+});
+
+NEW FILE frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx
+// Regression: [FLOW-009][VCP-025][JONGGA-036] 성과 판정 전 상태를 저조 성과처럼 보이게 한 문제
+//
+// 백테스트가 아직 거래를 축적하거나 종료 거래를 기다리는 동안에도 화면은 0%·미흡 배지와
+// 보수적 대응 조언을 냈다. 수치가 없다는 사실을 나쁜 성과로 바꾸지 않도록, 두 전략 카드가
+// 같은 상태 정책을 쓰고 판정이 끝난 뒤에만 실제 성과를 보이는지 고정한다.
+
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import HomePage from '@/app/page';
+import KRDashboardPage from './page';
+
+const fetchAPIMock = vi.fn();
+
+vi.mock('@/hooks/useAdmin', () => ({
+  useAdmin: () => ({ isAdmin: false, isLoading: false }),
+}));
+
+vi.mock('@/lib/api', () => ({
+  fetchAPI: (...args: unknown[]) => fetchAPIMock(...args),
+  krAPI: {
+    getMarketGate: vi.fn(async () => ({ status: 'GREEN', score: 70, message: '' })),
+    getSignals: vi.fn(async () => ({ signals: [], count: 0 })),
+    getDataStatus: vi.fn(async () => ({ data: {} })),
+  },
+}));
+
+interface BacktestFixture {
+  status?: string;
+  count: number;
+  winRate: number;
+  avgReturn: number;
+}
+
+const getStrategyCard = (name: string): HTMLElement => {
+  const card = screen.getByText(name).closest('div.group');
+  if (!(card instanceof HTMLElement)) {
+    throw new Error(`${name} 성과 카드를 찾지 못했습니다.`);
+  }
+  return card;
+};
+
+const getPerformanceThemeClass = (card: HTMLElement): string | undefined =>
+  card.className.split(' ').find((className) => className.startsWith('hover:border-'));
+
+const renderDashboardWith = async (fixture: BacktestFixture): Promise<[HTMLElement, HTMLElement]> => {
+  fetchAPIMock.mockResolvedValue({
+    vcp: {
+      status: fixture.status,
+      count: fixture.count,
+      win_rate: fixture.winRate,
+      avg_return: fixture.avgReturn,
+    },
+    closing_bet: {
+      status: fixture.status,
+      count: fixture.count,
+      win_rate: fixture.winRate,
+      avg_return: fixture.avgReturn,
+      candidates: [],
+    },
+  });
+
+  render(<KRDashboardPage />);
+
+  await waitFor(() => expect(screen.getByText('VCP 전략')).toBeTruthy());
+
+  return [getStrategyCard('VCP 전략'), getStrategyCard('종가베팅 전략')];
+};
+
+beforeEach(() => {
+  fetchAPIMock.mockReset();
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+});
+
+describe('[FLOW-009][VCP-025][JONGGA-036] 두 전략 카드의 성과 상태', () => {
+  it.each([
+    ['Accumulating', '축적 중', '데이터를 축적하고 있습니다.', 4, 62.5, 4.2],
+    ['OK (New)', '신규 · 판정 전', '신규 자료를 모으고 있습니다.', 1, 62.5, 4.2],
+    ['PENDING', '집계 전', '종료된 거래가 없어 집계 전입니다.', 6, 62.5, 4.2],
+    [undefined, '확인 전', '상태를 확인하고 있습니다.', 0, 62.5, 4.2],
+    // 외부 응답의 임의 문자열이 Object.prototype 키여도 중립 unknown으로 떨어져야 한다.
+    ['toString', '확인 전', '상태를 확인하고 있습니다.', 0, 62.5, 4.2],
+  ])(
+    '%s 상태는 두 전략에 중립 라벨·건수만 보이고 성적 수치나 조언을 보이지 않는다',
+    async (status, label, description, count, winRate, avgReturn) => {
+      const [vcpCard, closingBetCard] = await renderDashboardWith({
+        status,
+        count,
+        winRate,
+        avgReturn,
+      });
+
+      expect(screen.getAllByText(label)).toHaveLength(2);
+      for (const card of [vcpCard, closingBetCard]) {
+        const cardText = card.textContent ?? '';
+        expect(within(card).getByText(description)).toBeTruthy();
+        // 기존 0건 표기는 No trades다. 상태 표시 변경은 이 공통 형식을 바꾸지 않는다.
+        expect(within(card).getByText(count === 0 ? 'No trades' : `${count} trades`)).toBeTruthy();
+        expect(cardText).not.toContain(`${winRate}%`);
+        expect(cardText).not.toContain(`Avg. +${avgReturn}%`);
+        expect(cardText).not.toContain('보수적 대응이 필요합니다.');
+        expect(card.querySelector('i.fa-check-circle')).toBeNull();
+      }
+      expect(getPerformanceThemeClass(vcpCard)).toBe(getPerformanceThemeClass(closingBetCard));
+    }
+  );
+
+  it.each([
+    ['EXCELLENT', '우수', 62.5, 4.2],
+    ['GOOD', '양호', 58.3, 3.8],
+    ['BAD', '미흡', 0, -3],
+  ])('%s 상태는 두 전략에 실제 성과와 같은 판정 아이콘을 보인다', async (status, label, winRate, avgReturn) => {
+    const [vcpCard, closingBetCard] = await renderDashboardWith({
+      status,
+      count: 16,
+      winRate,
+      avgReturn,
+    });
+
+    expect(screen.getAllByText(label)).toHaveLength(2);
+    for (const card of [vcpCard, closingBetCard]) {
+      const cardText = card.textContent ?? '';
+      expect(cardText).toContain(`${winRate}%`);
+      expect(cardText).toContain(`Avg. ${avgReturn > 0 ? '+' : ''}${avgReturn}%`);
+      expect(within(card).getByText('16 trades')).toBeTruthy();
+      expect(card.querySelector('i.fa-check-circle')).not.toBeNull();
+    }
+    expect(getPerformanceThemeClass(vcpCard)).toBe(getPerformanceThemeClass(closingBetCard));
+    expect(vcpCard.querySelector('i.fa-check-circle')?.className).toBe(
+      closingBetCard.querySelector('i.fa-check-circle')?.className
+    );
+  });
+
+  it('VCP의 백테스트 +15/-5와 시그널 기본 +5/-3을 서로 구분해 안내한다', async () => {
+    const [vcpCard] = await renderDashboardWith({
+      status: 'GOOD',
+      count: 16,
+      winRate: 58.3,
+      avgReturn: 3.8,
+    });
+
+    const vcpCardText = vcpCard.textContent ?? '';
+    expect(vcpCardText).toContain('VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.');
+    expect(vcpCardText).toContain('개별 시그널의 기본 목표·손절은 +5%/-3%입니다.');
+  });
+});
+
+describe('[JONGGA-036] 홈 랜딩의 종가베팅 설명', () => {
+  it('저장 가격 우선, 누락 기본값, OPEN 처리와 가정 기대값을 함께 밝힌다', () => {
+    render(<HomePage />);
+
+    expect(screen.getByText('저장된 목표가·손절가를 우선 적용합니다.')).toBeTruthy();
+    expect(screen.getByText('누락 시 기본 익절 +5%, 손절 -3%를 사용합니다.')).toBeTruthy();
+    // 정정: OPEN의 현재 평가는 누적 ROI에 남는다. 승률의 분모에만 넣지 않는다.
+    expect(screen.getByText('미청산(OPEN)은 계속 추적하며 승률 계산에서 제외합니다.')).toBeTruthy();
+    expect(
+      screen.getByText('승률 60% 가정 기대값은 +1.8%이며 수수료·세금 등 비용은 제외합니다.')
+    ).toBeTruthy();
+    expect(screen.getByText('+5% / -3%')).toBeTruthy();
+    expect(screen.getByText('+1.8%')).toBeTruthy();
+    expect(screen.queryByText(/익절 \+9% \/ 손절 -5% \/ 최대 보유 15일/)).toBeNull();
+  });
+});
+
+NEW FILE tests/app/test_performance_mock_20260918.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""2026-09-18 성과 카드용 공통 모의 백테스트 응답 회귀 검사."""
+
+from __future__ import annotations
+
+import logging
+import os
+import sys
+from unittest.mock import Mock
+
+from flask import Blueprint, Flask
+from flask.testing import FlaskClient
+
+
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+
+from app.routes.common_market_mock_routes import register_common_market_mock_routes
+from app.routes.common_route_context import CommonRouteContext
+
+
+def _create_mock_client() -> FlaskClient:
+    app = Flask(__name__)
+    app.testing = True
+    blueprint = Blueprint("performance_mock", __name__)
+    context = CommonRouteContext(
+        logger=logging.getLogger(__name__),
+        update_lock=Mock(),
+        update_status_file="",
+        load_update_status=Mock(),
+        start_update=Mock(),
+        update_item_status=Mock(),
+        stop_update=Mock(),
+        finish_update=Mock(),
+        run_background_update=Mock(),
+        paper_trading=Mock(),
+    )
+    register_common_market_mock_routes(blueprint, context)
+    app.register_blueprint(blueprint, url_prefix="/api")
+    return app.test_client()
+
+
+def test_backtest_summary_mock_uses_judged_statuses_for_its_existing_metrics():
+    """62.5% VCP와 58.3% 종가 성과는 각각 우수·양호 판정으로 도착한다.
+
+    화면은 OK를 미판정으로 취급한다. 모의 라우트가 이전 OK를 계속 내면, 실제 수치를
+    가진 카드가 성적을 숨기는 회귀가 생긴다.
+    """
+    response = _create_mock_client().get("/api/kr/backtest-summary")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "vcp": {
+            "status": "EXCELLENT",
+            "win_rate": 62.5,
+            "avg_return": 4.2,
+            "count": 16,
+        },
+        "closing_bet": {
+            "status": "GOOD",
+            "win_rate": 58.3,
+            "avg_return": 3.8,
+            "count": 12,
+        },
+    }
+
+NEW FILE tests/services/test_performance_batch_20260918.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""2026-09-18 성과 묶음 회귀 테스트."""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+
+import pandas as pd
+import pytest
+
+from services import kr_market_cumulative_cache as cumulative_cache
+from services.kr_market_backtest_kpi_helpers import aggregate_cumulative_kpis
+from services.kr_market_backtest_trade_helpers import calculate_cumulative_trade_metrics
+
+
+def test_aggregate_cumulative_kpis_includes_d_grade_and_recent_metrics():
+    kpi = aggregate_cumulative_kpis(
+        [
+            {
+                "grade": "D",
+                "outcome": "LOSS",
+                "roi": -3,
+                "days": 1,
+                "date": "2026-09-17",
+                "code": "000002",
+            },
+            {
+                "grade": "S",
+                "outcome": "WIN",
+                "roi": 5,
+                "days": 1,
+                "date": "2026-09-16",
+                "code": "000001",
+            },
+        ],
+        pd.DataFrame(),
+        datetime(2026, 9, 18),
+    )
+
+    assert (kpi["totalSignals"], kpi["totalRoi"]) == (2, 2.0)
+    assert kpi["roiByGrade"]["D"] == {
+        "count": 1,
+        "avgRoi": -3.0,
+        "totalRoi": -3.0,
+        "wins": 0,
+        "losses": 1,
+        "winRate": 0.0,
+    }
+    assert (kpi["recentWinRate"], kpi["recentClosedCount"], kpi["consecutiveLosses"]) == (50.0, 2, 1)
+
+
+def test_aggregate_cumulative_kpis_sorts_closed_trades_before_recent_calculation():
+    trades = [
+        {"id": "old-win", "date": "2026-09-11", "code": "000001", "outcome": "WIN"},
+        {"id": "a-tie-win", "date": "2026-09-20", "code": "000002", "outcome": "WIN"},
+        {"id": "mid-loss", "date": "2026-09-18", "code": "000001", "outcome": "LOSS"},
+        {"id": "code-loss", "date": "2026-09-20", "code": "000001", "outcome": "LOSS"},
+        {"id": "recent-win-1", "date": "2026-09-15", "code": "000001", "outcome": "WIN"},
+        {"id": "recent-loss", "date": "2026-09-13", "code": "000001", "outcome": "LOSS"},
+        {"id": "z-tie-loss", "date": "2026-09-20", "code": "000002", "outcome": "LOSS"},
+        {"id": "recent-win-2", "date": "2026-09-17", "code": "000001", "outcome": "WIN"},
+        {"id": "open-future", "date": "2026-09-30", "code": "000001", "outcome": "OPEN"},
+        {"id": "recent-win-3", "date": "2026-09-19", "code": "000001", "outcome": "WIN"},
+        {"id": "older-win", "date": "2026-09-12", "code": "000001", "outcome": "WIN"},
+        {"id": "recent-loss-2", "date": "2026-09-16", "code": "000001", "outcome": "LOSS"},
+        {"id": "recent-win-4", "date": "2026-09-14", "code": "000001", "outcome": "WIN"},
+    ]
+
+    kpi = aggregate_cumulative_kpis(trades, pd.DataFrame(), datetime(2026, 9, 21))
+
+    assert (kpi["recentWinRate"], kpi["recentClosedCount"]) == (50.0, 10)
+    assert kpi["consecutiveLosses"] == 1
+
+
+def test_aggregate_cumulative_kpis_uses_null_recent_win_rate_without_closed_trades():
+    kpi = aggregate_cumulative_kpis(
+        [{"id": "open", "date": "2026-09-18", "code": "000001", "outcome": "OPEN"}],
+        pd.DataFrame(),
+        datetime(2026, 9, 18),
+    )
+
+    assert (kpi["recentWinRate"], kpi["recentClosedCount"], kpi["consecutiveLosses"]) == (None, 0, 0)
+
+
+@pytest.mark.parametrize(
+    "stock_prices",
+    [
+        pd.DataFrame(
+            [{"date": "2026-09-21", "high": 106, "low": 99, "close": 104}]
+        ),
+        pd.DataFrame(
+            [{"date": 20260921, "ticker": "000001", "high": 106, "low": 99, "close": 104}]
+        ),
+        pd.DataFrame(
+            [{"high": "106", "low": "99", "close": "104"}],
+            index=pd.to_datetime(["2026-09-21"]),
+        ),
+        pd.DataFrame(
+            [{"date": "2026-09-21", "ticker": "000001", "low": 99, "close": 104}]
+        ),
+        pd.DataFrame(
+            [{"date": "2026-02-30", "ticker": "000001", "high": 106, "low": 99, "close": 104}]
+        ),
+        pd.DataFrame(
+            [{"high": 106, "low": 99, "close": 104}],
+            index=pd.to_datetime(["2026-09-21"], utc=True),
+        ),
+        pd.DataFrame(
+            [{"high": 106, "low": 99, "close": 104}, {"high": 104, "low": 99, "close": 103}],
+            index=pd.to_datetime(["2026-09-21", "2026-09-20"]),
+        ),
+        pd.DataFrame(
+            [{"high": 106 + 0j, "low": 99 + 0j, "close": 104 + 0j}],
+            index=pd.to_datetime(["2026-09-21"]),
+        ),
+    ],
+    ids=[
+        "date_frame_without_ticker",
+        "numeric_yyyymmdd_date",
+        "string_ohlc_datetime_index",
+        "missing_required_high",
+        "invalid_iso_date",
+        "timezone_aware_datetime_index",
+        "unordered_datetime_index",
+        "complex_ohlc",
+    ],
+)
+def test_calculate_cumulative_trade_metrics_rejects_invalid_nonempty_price_frames(stock_prices):
+    with pytest.raises(ValueError):
+        calculate_cumulative_trade_metrics(100, "2026-09-20", stock_prices)
+
+
+def test_calculate_cumulative_trade_metrics_preserves_normalized_and_production_price_inputs():
+    production_prices = pd.DataFrame(
+        [{"date": "2026-09-21", "ticker": "000001", "high": 106.0, "low": 99.0, "close": 104.0}]
+    )
+    normalized_prices = pd.DataFrame(
+        [{"high": 106.0, "low": 99.0, "close": 104.0}],
+        index=pd.to_datetime(["2026-09-21"]),
+    )
+
+    expected = {
+        "outcome": "WIN",
+        "roi": 5.0,
+        "max_high": 6.0,
+        "days": 1,
+        "price_trail": [100, 105.0],
+    }
+    assert calculate_cumulative_trade_metrics(100, "2026-09-20", production_prices) == expected
+    assert calculate_cumulative_trade_metrics(100, "2026-09-20", normalized_prices) == expected
+
+
+def test_cumulative_cache_schema_version_does_not_reuse_version_five_payload(tmp_path, monkeypatch):
+    monkeypatch.setattr(cumulative_cache, "_CUMULATIVE_CACHE_DB_PATH", str(tmp_path / "runtime_cache.db"))
+    (tmp_path / "daily_prices.csv").write_text("date,ticker,close\n", encoding="utf-8")
+    monkeypatch.setattr(cumulative_cache, "_CUMULATIVE_CACHE_SCHEMA_VERSION", 5)
+    version_five_signature = cumulative_cache.build_cumulative_cache_signature(
+        data_dir_getter=lambda: str(tmp_path),
+    )
+    assert version_five_signature is not None
+
+    cumulative_cache.save_cached_cumulative_payload(
+        signature=version_five_signature,
+        payload={"kpi": {"recentWinRate": 100.0}, "trades": []},
+        logger=logging.getLogger("test-cumulative-version-six"),
+    )
+    monkeypatch.setattr(cumulative_cache, "_CUMULATIVE_CACHE_SCHEMA_VERSION", 6)
+    version_six_signature = cumulative_cache.build_cumulative_cache_signature(
+        data_dir_getter=lambda: str(tmp_path),
+    )
+
+    assert version_six_signature != version_five_signature
+    assert cumulative_cache.get_cached_cumulative_payload(
+        signature=version_six_signature,
+        logger=logging.getLogger("test-cumulative-version-six"),
+    ) is None

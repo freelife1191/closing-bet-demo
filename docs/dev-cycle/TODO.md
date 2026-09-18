@@ -88,6 +88,7 @@
 - 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
 
 ### [FLOW-013] 누적 성과 화면의 집계값 셋이 표·카드와 어긋난다
+- 현재 라운드: 2026-09-18 사용자 「진행해」로 직전 5건 설계 승인. 공유 T3, 계획 critic OKAY. 범위·실행: evidence/performance-20260918/plan.md. 원본 실행 금지, 격리 baseline pytest2296/3skip·Vitest488/69 통과. 최종 QA 전까지 TODO 유지.
 - 카테고리: 수급·백테스트 | 티어: T3 | 근거: 2026-09-03 FLOW-010 사이클의 `/qa-only` ISSUE-001·ISSUE-003 과 `/review`,
   2026-09-03 FLOW-004 사이클의 `/qa-only` 실측
 - 2026-09-07 백로그 정리에서 `[FLOW-011]`(누적 수익률 두 값), `[FLOW-012]`(최근 10건 승률),
@@ -926,6 +927,7 @@
 - [ ] 회귀 검사의 훑는 범위를 `button, select, a` 로 넓히고 다른 화면도 같은 상태인지 확인해 범위를 정함
 
 ### [FLOW-009] 화면이 백테스트 상태 어휘 여섯 가지를 구분해 보여주지 않는다
+- 현재 라운드: 2026-09-18 사용자 「진행해」로 직전 5건 설계 승인. 공유 T3, 계획 critic OKAY. 범위·실행: evidence/performance-20260918/plan.md. 원본 실행 금지, 격리 baseline pytest2296/3skip·Vitest488/69 통과. 최종 QA 전까지 TODO 유지.
 - 카테고리: 수급·백테스트 | 티어: T1 | 근거: 2026-09-03 FLOW-004 사이클의 code-review 와 `/review`
 - 2026-09-07 백로그 정리에서 `[FLOW-008]`(mock 라우트의 어휘 밖 상태)을 흡수했습니다. 같은 어휘
   정리입니다.
@@ -1037,6 +1039,7 @@
 - [ ] 회귀 검사와 해당 사용자 흐름의 UltraQA·agent-browser 실측
 
 ### [VCP-025] 홈의 VCP 성과 안내 비율이 실제 백테스트와 다르다
+- 현재 라운드: 2026-09-18 사용자 「진행해」로 직전 5건 설계 승인. 공유 T3, 계획 critic OKAY. 범위·실행: evidence/performance-20260918/plan.md. 원본 실행 금지, 격리 baseline pytest2296/3skip·Vitest488/69 통과. 최종 QA 전까지 TODO 유지.
 - 카테고리: VCP 시그널 | 티어: T2 예상 | 근거: 2026-09-09 JONGGA-012 계획 critic의 실제 소스 대조.
 - `frontend/src/app/dashboard/kr/page.tsx`의 VCP 성과 tooltip은 +9/-5로 설명하지만, `services/kr_market_backtest_stats_helpers.py`의 VCP 백테스트는 +15/-5를 사용한다. VCP 전용 화면과 시그널 가격 기본 +5/-3은 또 다른 기준이다.
 - JONGGA-012·013 승인 범위에서 VCP 정책을 변경하지 않고 이월한다. 표시 기준을 분리할지 계산을 통일할지 설계가 필요하다.
@@ -1045,12 +1048,14 @@
 - [ ] VCP 정상·과거 자료와 브라우저 실측으로 확인
 
 ### [FLOW-015] 누적성과 공개 helper의 생산 계약 밖 DataFrame 입력을 명시적으로 거부한다
+- 현재 라운드: 2026-09-18 사용자 「진행해」로 직전 5건 설계 승인. 공유 T3, 계획 critic OKAY. 범위·실행: evidence/performance-20260918/plan.md. 원본 실행 금지, 격리 baseline pytest2296/3skip·Vitest488/69 통과. 최종 QA 전까지 TODO 유지.
 - 카테고리: 수급·백테스트 | 티어: T2 예상 | 근거: 2026-09-09 JONGGA-012·013 독립 아키텍처 WATCH의 제한 재현.
 - calculate_cumulative_trade_metrics는 현재 ticker+ISO date의 생산 frame 또는 숫자 OHLC의 DatetimeIndex를 받는다. ticker 없는 date frame, 숫자 YYYYMMDD, 문자열 OHLC의 직접 호출은 TypeError 또는 OPEN 오판정이 가능하다. 실제 생산 호출부는 이 계약을 충족한다.
 - [ ] 직접 호출부와 허용 입력 계약을 확인해 비표준 입력을 명시적으로 거부하거나 안전하게 정규화
 - [ ] 세 재현과 정상 생산 frame의 회귀 검사 추가
 
 ### [JONGGA-036] 랜딩의 종가베팅 수익률·보유기간 설명이 현재 시스템 기준과 다르다
+- 현재 라운드: 2026-09-18 사용자 「진행해」로 직전 5건 설계 승인. 공유 T3, 계획 critic OKAY. 범위·실행: evidence/performance-20260918/plan.md. 원본 실행 금지, 격리 baseline pytest2296/3skip·Vitest488/69 통과. 최종 QA 전까지 TODO 유지.
 - 카테고리: 종가베팅 | 티어: T1 예상 | 근거: 2026-09-09 INFRA-019·029 agent-browser 인접 탭 실측.
 - `frontend/src/app/page.tsx`의 Core Analysis Features에는 「익절 +9% / 손절 -5% / 최대 보유 15일」이 남아 있다. Scoring Logic Detail의 기대값 예시는 +9/-5와 +3.4%를 표시한다. JONGGA-012가 정리한 시스템 기본 +5/-3 및 OPEN 추적과 의미를 구분해야 한다.
 - 이번 승인 범위는 스케줄러/AI 프로바이더 설명·성공 로그이며 해당 수치 코드는 이전 base4e57aa3와 같다. 현재 QA의 인접 탭 전환은 통과했지만 이 수치 정합성은 별도 설계 대상이다.

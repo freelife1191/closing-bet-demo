@@ -202,7 +202,10 @@ export default function HomePage() {
                 <ul className="space-y-2 text-sm text-gray-300 mb-5">
                   <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>점수 체계: 기본 12점 + 가산 7점 (총 19점)</li>
                   <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>등급 기준: S 10점+, A 8점+, B 6점+</li>
-                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>익절 +9% / 손절 -5% / 최대 보유 15일</li>
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>저장된 목표가·손절가를 우선 적용합니다.</li>
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>누락 시 기본 익절 +5%, 손절 -3%를 사용합니다.</li>
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>미청산(OPEN)은 계속 추적하며 승률 계산에서 제외합니다.</li>
+                  <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>승률 60% 가정 기대값은 +1.8%이며 수수료·세금 등 비용은 제외합니다.</li>
                 </ul>
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded text-center">S급 10+</span>
@@ -386,11 +389,11 @@ export default function HomePage() {
                         </div>
                         <div className="flex justify-between text-sm py-2 border-b border-white/5">
                           <span className="text-gray-400">익절 / 손절</span>
-                          <span className="font-mono font-bold text-white">+9% / -5%</span>
+                          <span className="font-mono font-bold text-white">+5% / -3%</span>
                         </div>
                         <div className="bg-[#13151A] p-4 rounded-xl text-center border border-green-500/20">
-                          <div className="text-xs text-gray-500 mb-1">1회 매매 기대수익 (60% × 9% − 40% × 5%)</div>
-                          <div className="text-2xl font-black text-green-400">+3.4%</div>
+                          <div className="text-xs text-gray-500 mb-1">1회 매매 기대수익 (60% × 5% − 40% × 3%, 비용 제외)</div>
+                          <div className="text-2xl font-black text-green-400">+1.8%</div>
                         </div>
                       </div>
                     </div>

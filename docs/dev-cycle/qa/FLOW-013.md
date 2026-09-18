@@ -158,3 +158,7 @@ S-4 를 처음 돌렸을 때 아홉 종목 모두 「상세 분석 보기」 버
 
 증거: `.gstack/qa-reports/screenshots/flow013-qa-mobile-375.png`,
 `.gstack/qa-reports/qa-report-localhost-3500-2026-09-05-flow013-run.md`
+
+## 2026-09-18 현재 TODO의 누적성과 집계 작업
+
+이 파일의 기존 본문은 2026-09-05 완료한 수급 캐시 불변식 작업이다. 현재 TODO가 같은 ID로 누적성과 집계 작업을 가리키므로 과거 증거를 덮어쓰지 않고 [별도 날짜의 UltraQA Report](batch-performance-2026-09-18.md)에 현재 engine/lifecycle/행렬/기준 커밋/실행 결과를 기록한다. 이 연결 자체는 현재 항목의 QA 성공을 뜻하지 않는다.

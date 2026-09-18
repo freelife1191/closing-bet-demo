@@ -98,13 +98,13 @@ def _register_backtest_summary_mock_route(common_bp, ctx: CommonRouteContext) ->
         def _handler():
             summary = {
                 "vcp": {
-                    "status": "OK",
+                    "status": "EXCELLENT",
                     "win_rate": 62.5,
                     "avg_return": 4.2,
                     "count": 16,
                 },
                 "closing_bet": {
-                    "status": "OK",
+                    "status": "GOOD",
                     "win_rate": 58.3,
                     "avg_return": 3.8,
                     "count": 12,

@@ -1,5 +1,5 @@
 // Regression: ISSUE-005 — 결과 필터 칩이 현재 페이지와 전체 기간을 섞어 세던 문제
-//             ISSUE-006 — outcome 을 'Win'/'Loss' 로 비교해 추세 분석이 항상 비어 있던 문제
+//             최근 지표는 현재 페이지 행이 아니라 서버 KPI를 읽는다.
 // Found by /qa on 2026-09-01
 // Report: .gstack/qa-reports/qa-report-localhost-3500-2026-09-01.md
 
@@ -30,6 +30,9 @@ const KPI = {
   profitFactor: 1.22,
   priceDate: '2026-05-22',
   roiByGrade: {},
+  recentWinRate: 60,
+  recentClosedCount: 5,
+  consecutiveLosses: 0,
 };
 
 vi.mock('@/hooks/useAdmin', () => ({
@@ -75,14 +78,15 @@ describe('CumulativeClientPage', () => {
     expect(labels).not.toContain('실패 (105)');
   });
 
-  it('추세 분석이 대문자 outcome 을 인식해 실제 최근 승률을 계산한다', async () => {
+  it('서버가 제공한 최근 승률을 표시한다', async () => {
     render(<CumulativeClientPage />);
 
     await waitFor(() => {
       expect(chipLabels()).toContain('전체 (5)');
     });
 
-    // 5건 중 3승이므로 60%. 대소문자가 어긋나면 closedTrades 가 비어 '-' 가 된다.
+    // 5건 중 3승인 60%를 서버 KPI로 공급한다. WIN/LOSS 대문자 집계 계약은
+    // 백엔드 성과 묶음 회귀에서 검증하며, 이 화면은 현재 표 행으로 재계산하지 않는다.
     expect(screen.queryByText('60%')).not.toBeNull();
   });
 });

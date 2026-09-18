@@ -1,0 +1,18 @@
+{
+  "stage": "backend:red",
+  "started_at": "2026-09-18T06:35:26.937599+00:00",
+  "ended_at": "2026-09-18T06:35:28.676192+00:00",
+  "pid": 98394,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/performance-qa-7ll1secr/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/services/test_performance_batch_20260918.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/performance-qa-7ll1secr",
+  "timeout_seconds": 90,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 1.74
+}

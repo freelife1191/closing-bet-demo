@@ -1707,10 +1707,10 @@ export default function VCPSignalsPage() {
                   <SimpleTooltip text="시그널 발생 당시 진입 추천가">Entry</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="손절가 (진입가 -3%)">Stop</SimpleTooltip>
+                  <SimpleTooltip text="시그널에 저장된 손절가 (기본 진입가 -3%)">Stop</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="목표가 (진입가 +5%)">Target</SimpleTooltip>
+                  <SimpleTooltip text="시그널에 저장된 목표가 (기본 진입가 +5%)">Target</SimpleTooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
                   <SimpleTooltip text="현재 주가 (실시간 업데이트 아님)">Current</SimpleTooltip>
