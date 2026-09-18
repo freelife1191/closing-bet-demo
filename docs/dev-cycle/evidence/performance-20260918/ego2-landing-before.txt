@@ -1,0 +1,332 @@
+[p1 "KR Market Dashboard" | space "성과 묶음 격리 QA — FLOW/VCP/JONGGA"(3): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      container
+        text ""
+        text "Smart Money Bot"
+      container
+        anchor [ref=460, url=http://127.0.0.1:57611/#features]
+          text "기능"
+        anchor [ref=461, url=http://127.0.0.1:57611/#architecture]
+          text "아키텍처"
+        anchor [ref=462, url=http://127.0.0.1:57611/#ai-analysis]
+          text "AI 분석"
+      anchor [ref=463, url=http://127.0.0.1:57611/dashboard/kr]
+        text "Get Started"
+    container
+      container
+        text "System Operational: v2.0 Released"
+        heading
+          text "한국 주식 시장을 위한"
+          text "AI 기반 퀀트 분석 솔루션"
+        paragraph
+          text "VCP 패턴 인식, 기관/외국인 수급 추적, 그리고"
+          text "Gemini + GPT + Perplexity 멀티 AI 엔진"
+          text "이 결합된 올인원 주식 분석 패키지입니다."
+        container
+          anchor [ref=464, url=http://127.0.0.1:57611/dashboard/kr]
+            text ""
+            text "설치 가이드"
+          anchor [ref=465, url=http://127.0.0.1:57611/dashboard/kr]
+            text ""
+            text "분석 엔진 살펴보기"
+        container
+          container
+            text ""
+            text "Python"
+          container
+            text ""
+            text "Next.js"
+          container
+            text ""
+            text "Flask"
+          container
+            text ""
+            text "Gemini"
+          container
+            text ""
+            text "GPT"
+          container
+            text ""
+            text "Perplexity"
+      container
+        heading
+          text "System Architecture"
+        paragraph
+          text "데이터 수집부터 AI 분석, 그리고 프론트엔드 시각화까지의 파이프라인"
+        container
+          text ""
+          heading
+            text "Flask API Backend"
+          paragraph
+          unordered_list
+            list_item
+              text ""
+              text "Signals (/api/kr/signals)"
+            list_item
+              text ""
+              text "AI Analysis (/api/kr/ai-analysis)"
+            list_item
+              text ""
+              text "Market Gate"
+        text "CORE ENGINE"
+        text ""
+        heading
+          text "Analysis Engine"
+        paragraph
+          text "Python Core"
+        text "Data Sources"
+        text "Toss, Naver, pykrx, yfinance"
+        text "AI Models"
+        text "Gemini + GPT + Perplexity"
+        container
+          text ""
+          heading
+            text "Next.js Frontend"
+          paragraph
+          unordered_list
+            list_item
+              text ""
+              text "Dashboard UI"
+            list_item
+              text ""
+              text "Real-time Signals"
+            list_item
+              text ""
+              text "News Feed"
+      container
+        heading
+          text "Core Analysis Features"
+        paragraph
+          text "데이터와 알고리즘이 찾아내는 최적의 투자 기회"
+        container
+          text ""
+          heading
+            text "VCP 패턴 감지"
+          paragraph
+            text "변동성 축소 패턴(Volatility Contraction Pattern)을 자동으로 탐지합니다."
+          unordered_list
+            list_item
+              text "수축 임계값: 0.7 (인정 조건)"
+            list_item
+              text "변동폭(고가-저가) 5일/15일 비율"
+            list_item
+              text "거래량 드라이업 + MA 정배열"
+            list_item
+              text "총 100점 만점 · 50점 이상 유효"
+        container
+          text ""
+          heading
+            text "수급 추적 (Smart Money)"
+          paragraph
+            text "수급 70점 + 거래량 20점 + VCP 10점 구조로 종목 우선순위를 계산합니다."
+          text "외인 5일 순매수"
+          text "25점"
+          text "기관 5일 순매수"
+          text "20점"
+          text "연속 순매수(외인+기관)"
+          text "25점"
+        container
+          text ""
+          heading
+            text "종가베팅"
+          paragraph
+            text "장 마감 직전 모멘텀 종목을 선별해 익일 초반 대응하는 단기 전략입니다."
+          unordered_list
+            list_item
+              text "점수 체계: 기본 12점 + 가산 7점 (총 19점)"
+            list_item
+              text "등급 기준: S 10점+, A 8점+, B 6점+"
+            list_item
+              text "저장된 목표가·손절가를 우선 적용합니다."
+            list_item
+              text "누락 시 기본 익절 +5%, 손절 -3%를 사용합니다."
+            list_item
+              text "미청산(OPEN)은 계속 추적하며 승률 계산에서 제외합니다."
+            list_item
+              text "승률 60% 가정 기대값은 +1.8%이며 수수료·세금 등 비용은 제외합니다."
+          text "S급 10+"
+          text "A급 8+"
+          text "B급 6+"
+          paragraph
+            text "거래대금(1조 / 5천억 / 1천억) + 외인·기관 동반 순매수 + 등락률 하한 동시 충족 시 등급 부여"
+      container
+        text ""
+        heading
+          text "Multi AI Analysis System"
+        paragraph
+          text "Gemini 주분석 + GPT/Perplexity 보조 검증으로 신뢰도를 높이는 멀티 AI 구조"
+        text "MULTI ENGINE"
+        container
+          heading
+            text ""
+            text "Gemini (Main · Vertex AI)"
+          paragraph
+            text "종가베팅 Phase3 뉴스 종합 분석 + 호재 점수(0~3) + VCP 1차 추론. 심층 추론과 긴 컨텍스트가 강점이며 서비스 계정 기반 Vertex AI로 운영됩니다."
+        container
+          heading
+            text ""
+            text "GPT (Sub · Z.ai fallback)"
+          paragraph
+            text "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증합니다. 할당량 소진 등 전환 조건에 해당하면 사용 가능한 Z.ai로 대체 분석을 시도합니다."
+        container
+          heading
+            text ""
+            text "Perplexity (Sub)"
+          paragraph
+            text "설정에 따라 Gemini와 함께 VCP 신호를 보조 검증하며, 웹 검색으로 최신 뉴스와 공시를 참고합니다. 호출 제한·인증 오류 등 전환 조건에 해당하면 설정�..."
+        container
+          text ""
+          heading
+            text "Market Gate"
+          paragraph
+            text "시장 전체의 상태와 주도 섹터를 분석합니다."
+          unordered_list
+            list_item
+              text ""
+              text "EMA 추세 정배열 (25점)"
+            list_item
+              text ""
+              text "RSI & MACD (45점)"
+            list_item
+              text ""
+              text "거래량 & 상대강도 (30점)"
+            list_item
+              text ""
+              text "Gate Open: 기술점수 40점 이상"
+          paragraph
+            text "모니터링 대상"
+          text "반도체"
+          text "2차전지"
+          text "헬스케어"
+          text "+4"
+      container
+        heading
+          text "Scoring Logic Detail"
+        button [ref=466]
+          text "VCP 분석"
+        button [ref=467]
+          text "수급 점수"
+        button [ref=468]
+          text "종가베팅"
+        heading
+          text ""
+          text "종가베팅이란?"
+        paragraph
+          text ""오늘 뜬 놈이 내일도 뜬다""
+          text "는 가설에 기반하여, 장 마감 직전 급등주를 매수하고 다음 날 오전 갭상승을 노리는 단타 전략입니다."
+        text "15:20 ~ 15:30"
+        text "장 마감 직전"
+        text ""
+        text "선별 매수"
+        text "Overnight (보유)"
+        text "09:00 ~ 10:00"
+        text "익일 장 시작"
+        text ""
+        text "전량 매도"
+        heading
+          text ""
+          text "승리 공식 (Why?)"
+        unordered_list
+          list_item
+            text ""
+            text "모멘텀 지속성"
+            text "오늘 강한 종목은 내일 시초가에도 강할 확률이 높음"
+          list_item
+            text ""
+            text "FOMO 심리"
+            text "장 마감 후 뉴스를 접한 투자자들의 익일 아침 매수세 유입"
+          list_item
+            text ""
+            text "뉴스 확산"
+            text "장중 발생한 호재가 밤사이 커뮤니티로 확산되며 기대감 증폭"
+        heading
+          text ""
+          text "기대값 (Example)"
+        text "승률 가정"
+        text "60%"
+        text "익절 / 손절"
+        text "+5% / -3%"
+        text "1회 매매 기대수익 (60% × 5% − 40% × 3%, 비용 제외)"
+        text "+1.8%"
+        heading
+          text ""
+          text "진입 조건 (Dos)"
+        unordered_list
+          list_item
+            text "거래대금 1000억 이상 (유동성)"
+          list_item
+            text "확실한 뉴스/재료 보유 (지속성)"
+          list_item
+            text "신고가/돌파 차트 패턴"
+          list_item
+            text "등락률 5~20% (상한가 제외)"
+        heading
+          text ""
+          text "회피 조건 (Don'ts)"
+        unordered_list
+          list_item
+            text "뉴스 없이 단순 급등 (작전주)"
+          list_item
+            text "윗꼬리가 긴 캔들 (매도세)"
+          list_item
+            text "거래대금 급감"
+          list_item
+            text "이미 상한가 간 종목"
+        heading
+          text "종가베팅 점수표 (19점 만점)"
+        heading
+          text "기본 배점 (Max 12점)"
+        text "뉴스/재료"
+        text "3"
+        text "점"
+        paragraph
+          text "AI 호재 분석 및 강도 (3점)"
+        text "거래대금"
+        text "3"
+        text "점"
+        paragraph
+          text "1조(3점), 5천억(2점), 1천억(1점)"
+        text "차트/수급"
+        text "4"
+        text "점"
+        paragraph
+          text "신고가+1, MA20>MA60 정배열+1, 외인+기관 5일/거래대금≥10%면 +2"
+        text "캔들/기간"
+        text "2"
+        text "점"
+        paragraph
+          text "장대양봉(+1), 기간조정(+1)"
+        heading
+          text "가산점 (Max 7점)"
+        text "거래량 급증"
+        text "+5"
+        text "점"
+        paragraph
+          text "2x~6x+ 구간별 차등 (최대 +5)"
+        text "장대양봉 보너스"
+        text "+1"
+        text "점"
+        paragraph
+          text "차트 점수 충족 시 +1"
+        text "상한가 보너스"
+        text "+1"
+        text "점"
+        paragraph
+          text "등락률 29.5% 이상 시 +1"
+    container
+      text ""
+      text "Engineered by Gemini Agent"
+      paragraph
+        text "© 2026 KR Market Analysis System. All rights reserved."
+  container
+    button "AI 상담" [ref=469, loc=css:button[aria-label="AI 상담"]]
+      text ""
+      text ""
+    container
+      button "안내 문구 닫기" [ref=470, loc=css:button[aria-label="안내 문구 닫기"]]
+        text ""
+      text "궁금한 건 채팅으로 문의하세요"
+      text "대화 시작하기"
+  alert

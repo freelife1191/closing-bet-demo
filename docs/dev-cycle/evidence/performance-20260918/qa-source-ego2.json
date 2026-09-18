@@ -1,0 +1,22 @@
+{
+  "commit": "46dd0a65f3ce40317cb5f4b93c1fde7766daf889",
+  "files": {
+    "app/routes/common_market_mock_routes.py": "ff63bf071b3dd6b3189177afc801866c53bdb1073d1053db4171c1d880f8a04f",
+    "frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-005.test.tsx": "67502367fa5fdba23ae08bac1eaabd8cd95de22986d62c874c63c835a2026ddb",
+    "frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.regression-performance-batch.test.tsx": "5244f467d95878e54e62a501f6e2c291a7fe0472367c428d62fdb7bf0f713a01",
+    "frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx": "271e328687bbc293d1c13e9c11aacc294de12957dafe2bd39de70a571a8c2ed8",
+    "frontend/src/app/dashboard/kr/page.regression-flow-004.test.tsx": "616bccf5947a3466ce78eae4078bcfef338c0e21315dc08e1be1c2daa9341505",
+    "frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx": "b35045a8ad4d8b9136221dc5adeb7fc9f0e64b6d4c8330f9e2c0b78078ae2853",
+    "frontend/src/app/dashboard/kr/page.tsx": "8dd2ca262f1348ce09bd17e79e8cb2dca930b112b5ce2c23147237d4af99d28c",
+    "frontend/src/app/dashboard/kr/vcp/page.tsx": "f6fc42b4b9d125cc2e11567a83cb50638f891af5f59fb233964e14e63231ebd1",
+    "frontend/src/app/page.tsx": "707a29dca7c5ba08630ec40f5cfdb714587bbe235582e905fe3dcd4afb4b4b0c",
+    "services/kr_market_backtest_kpi_helpers.py": "6cf08d4e21265933844d0067e5cc6f5fd3212d3e1c2838c29617d8381b0cbacb",
+    "services/kr_market_backtest_trade_helpers.py": "a209962c67c4ec638001e497b87e691b0ced797a4e1ee08a19e7f816c9709bfb",
+    "services/kr_market_cumulative_cache.py": "4efe0614f0bf250b10d5a8125050ffa9698ff1e9010fc2f8773e81771729c524",
+    "tests/app/test_performance_mock_20260918.py": "89b99a8571cc075d71fcd8ce46b4e24afa06139aed0be632fe6e8bd576432d4c",
+    "tests/services/test_performance_batch_20260918.py": "a5106e6e9b7c056bb057c1ebdc879bf172210703903bfe4bcb8d40e20b3d28d0"
+  },
+  "fixture_sha256": "2a3c53aadbd6aad6d0fa4bd76ee2e9be7e61b682de1eb1f374194a2dc2314b01",
+  "browser": "ego-browser",
+  "taskSpaceId": 3
+}

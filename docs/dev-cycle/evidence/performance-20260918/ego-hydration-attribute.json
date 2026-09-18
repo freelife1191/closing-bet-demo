@@ -1,0 +1,11 @@
+{
+  "serverBodyTag": "<body>",
+  "serverContainsApStyle": false,
+  "browser": {
+    "url": "http://127.0.0.1:57611/dashboard/kr/cumulative",
+    "apStylePresent": false,
+    "apStyleValue": null,
+    "ready": "complete"
+  },
+  "note": "read-only observation; no attributes, browser profiles, extensions or cache were modified"
+}

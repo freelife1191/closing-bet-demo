@@ -1,0 +1,41 @@
+[p1 "KR Market Dashboard" | space "성과 묶음 격리 QA — FLOW/VCP/JONGGA"(3): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      container
+        text ""
+        text "Smart Money Bot"
+      anchor [ref=463, url=http://127.0.0.1:57611/dashboard/kr]
+        text "Get Started"
+    container
+      container
+        paragraph
+          text "모니터링 대상"
+        container
+          text "반도체"
+          text "2차전지"
+          text "헬스케어"
+          text "+4"
+      container
+        heading
+          text "Scoring Logic Detail"
+        container
+          button [ref=466]
+            text "VCP 분석"
+          button [ref=467]
+            text "수급 점수"
+          button [ref=468]
+            text "종가베팅"
+        container
+          heading
+            text ""
+            text "VCP 패턴이란?"
+          paragraph
+            text "마크 미너비니(Mark Minervini)의"
+            text "변동성 축소 패턴(Volatility Contraction Pattern)"
+            text "을 의미하며, 주가가 상승하기 전 변동폭이 점진적으로 줄어드는 현상을 포착합니다."
+          heading
+            text "감지 로직 상세 (100점 만점)"
+  button "AI 상담" [ref=469, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

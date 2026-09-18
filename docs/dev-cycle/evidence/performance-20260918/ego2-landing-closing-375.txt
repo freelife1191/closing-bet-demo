@@ -1,0 +1,53 @@
+[p1 "KR Market Dashboard" | space "성과 묶음 격리 QA — FLOW/VCP/JONGGA"(3): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      container
+        text ""
+        text "Smart Money Bot"
+      anchor [ref=463, url=http://127.0.0.1:57611/dashboard/kr]
+        text "Get Started"
+    container
+      container
+        unordered_list
+          list_item
+            text "장 마감 후 뉴스를 접한 투자자들의 익일 아침 매수세 유입"
+          list_item
+            text ""
+            container
+              text "뉴스 확산"
+              text "장중 발생한 호재가 밤사이 커뮤니티로 확산되며 기대감 증폭"
+        container
+          heading
+            text ""
+            text "기대값 (Example)"
+          container
+            container
+              text "승률 가정"
+              text "60%"
+            container
+              text "익절 / 손절"
+              text "+5% / -3%"
+            container
+              text "1회 매매 기대수익 (60% × 5% − 40% × 3%, 비용 제외)"
+              text "+1.8%"
+      container
+        container
+          heading
+            text ""
+            text "진입 조건 (Dos)"
+          unordered_list
+            list_item
+              text "거래대금 1000억 이상 (유동성)"
+            list_item
+              text "확실한 뉴스/재료 보유 (지속성)"
+            list_item
+              text "신고가/돌파 차트 패턴"
+            list_item
+              text "등락률 5~20% (상한가 제외)"
+        heading
+          text ""
+          text "회피 조건 (Don'ts)"
+  button "AI 상담" [ref=469, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

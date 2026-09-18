@@ -1,0 +1,41 @@
+[p1 "KR Market Dashboard" | space "성과 묶음 격리 QA — FLOW/VCP/JONGGA"(3): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      container
+        text ""
+        text "Smart Money Bot"
+      anchor [ref=463, url=http://127.0.0.1:57611/dashboard/kr]
+        text "Get Started"
+    container
+      container
+        paragraph
+          text "모니터링 대상"
+        container
+          text "반도체"
+          text "2차전지"
+          text "헬스케어"
+          text "+4"
+      container
+        heading
+          text "Scoring Logic Detail"
+        container
+          button [ref=466]
+            text "VCP 분석"
+          button [ref=467]
+            text "수급 점수"
+          button [ref=468]
+            text "종가베팅"
+        container
+          heading
+            text ""
+            text "수급 분석이란?"
+          paragraph
+            text "주가를 움직이는 주체인"
+            text "외국인과 기관(Smart Money)"
+            text "의 자금 흐름을 추적하여, 단순 개인 매수세가 아닌 메이저 주체의 매집 종목을 선별합니다."
+          heading
+            text "분석 가중치 (Total 100점)"
+  button "AI 상담" [ref=469, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

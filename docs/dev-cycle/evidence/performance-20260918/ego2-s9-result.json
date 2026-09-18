@@ -1,0 +1,12 @@
+{
+  "pass": true,
+  "failed": {
+    "header": "실전 종가베팅 누적 성과",
+    "rows": 0,
+    "noRecent": true
+  },
+  "recovered": {
+    "rows": 24,
+    "total": "누적 수익률\n+49%\nS +14%\nA +17%\nB +9%\nD +9%"
+  }
+}

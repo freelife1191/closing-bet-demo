@@ -1,0 +1,13 @@
+{
+  "pass": true,
+  "results": [
+    {
+      "word": "Stop",
+      "text": "STOP\n시그널에 저장된 손절가 (기본 진입가 -3%)"
+    },
+    {
+      "word": "Target",
+      "text": "TARGET\n시그널에 저장된 목표가 (기본 진입가 +5%)"
+    }
+  ]
+}

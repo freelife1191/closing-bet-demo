@@ -18,7 +18,7 @@
 ### Task 1: KPI와 입력 경계 (FLOW-013·015)
 Files: services/kr_market_backtest_kpi_helpers.py, services/kr_market_backtest_trade_helpers.py, services/kr_market_cumulative_cache.py, tests/services/test_performance_batch_20260918.py.
 Interfaces: existing signatures preserved. roiByGrade adds D; recentWinRate: float|null, recentClosedCount: int, consecutiveLosses: int. Recent uses WIN/LOSS only, descending (date,code,id), N=10. Consecutive losses uses the same full closed order until first WIN. No completed trades => null/0/0. Dates are recommendation dates, not exit dates.
-- [ ] Write regressions: D contribution and totalSignals/ROI, >10 mixed WIN/LOSS/OPEN with deliberately shuffled dates, tie order, empty closed; three invalid nonempty price frames (missing ticker in date frame, numeric YYYYMMDD date, string OHLC DatetimeIndex) raise ValueError. Normal numeric OHLC DatetimeIndex and ticker+ISO-date production input preserve results.
+- [x] Write regressions: D contribution and totalSignals/ROI, >10 mixed WIN/LOSS/OPEN with deliberately shuffled dates, tie order, empty closed; three invalid nonempty price frames (missing ticker in date frame, numeric YYYYMMDD date, string OHLC DatetimeIndex) raise ValueError. Normal numeric OHLC DatetimeIndex and ticker+ISO-date production input preserve results.
 ```python
 kpi = aggregate_cumulative_kpis([
  {"grade":"D", "outcome":"LOSS", "roi":-3, "days":1, "date":"2026-09-17", "code":"000002"},
@@ -28,36 +28,36 @@ assert kpi["totalSignals"] == 2 and kpi["totalRoi"] == 2
 assert kpi["roiByGrade"]["D"]["count"] == 1
 assert kpi["recentWinRate"] == 50 and kpi["consecutiveLosses"] == 1
 ```
-- [ ] Parent copies test only to scratch, pytest targeted RED; then authorize implementation.
-- [ ] Extend existing grade accumulator to D. Compute sorted closed list once, recent numerator/denominator and prefix losses. Public metrics boundary `calculate_cumulative_trade_metrics` validates nonempty DataFrame before date conversion; log and raise ValueError for unsupported shapes/types. Preserve empty/no-data behavior and production normalization, do not change exit-price or outcome policy.
-- [ ] Bump _CUMULATIVE_CACHE_SCHEMA_VERSION 5→6 once for new response. No SQL schema migration.
-- [ ] Parent targeted GREEN plus existing service/cache regressions.
+- [x] Parent copies test only to scratch, pytest targeted RED; then authorize implementation.
+- [x] Extend existing grade accumulator to D. Compute sorted closed list once, recent numerator/denominator and prefix losses. Public metrics boundary `calculate_cumulative_trade_metrics` validates nonempty DataFrame before date conversion; log and raise ValueError for unsupported shapes/types. Preserve empty/no-data behavior and production normalization, do not change exit-price or outcome policy.
+- [x] Bump _CUMULATIVE_CACHE_SCHEMA_VERSION 5→6 once for new response. No SQL schema migration.
+- [x] Parent targeted GREEN plus existing service/cache regressions.
 
 ### Task 2: 누적성과 UI (FLOW-013)
 Files: frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx and new sibling regression-performance-batch.test.tsx.
 Consumes: task1 KPI fields. No recent statistics from page-local trades. Four grades S/A/B/D. Main average/total ROI uses kpi.avgRoi/kpi.totalRoi and explains simple sum, not portfolio compound return. Default table includes D; add D filter and card; wrap grade details safely at 1280×720/mobile.
-- [ ] Write regression rendering D and total 2% from fixture above, pagination uses different rows but same recent KPI, null recent shows no completed data. Parent RED.
-- [ ] Update local interfaces/defaults, existing card list/filter, tooltip data binding and concise labels. Remove stale S+A+B recomputation, don't create a new component framework.
+- [x] Write regression rendering D and total 2% from fixture above, pagination uses different rows but same recent KPI, null recent shows no completed data. Parent RED.
+- [x] Update local interfaces/defaults, existing card list/filter, tooltip data binding and concise labels. Remove stale S+A+B recomputation, don't create a new component framework.
 ```typescript
 const recentWinRate = kpi.recentWinRate;
 const recentLabel = recentWinRate == null ? '집계 전' : `${recentWinRate.toFixed(0)}%`;
 ```
-- [ ] Parent GREEN, screenshots at 1280×720/375×812 and page/grade transitions during QA.
+- [x] Parent GREEN, screenshots at 1280×720/375×812 and page/grade transitions during QA.
 
 ### Task 3: 홈·랜딩 설명 (FLOW-009·VCP-025·JONGGA-036)
 Files: frontend/src/app/dashboard/kr/page.tsx, frontend/src/app/page.tsx, app/routes/common_market_mock_routes.py, frontend/src/app/dashboard/kr/vcp/page.tsx (Stop/Target tooltip copy only), new dashboard sibling regression-performance-batch.test.tsx; required mock route regression in tests/app/test_performance_mock_20260918.py.
-- [ ] Read actual status source and VCP policy. Both strategy cards map Accumulating, OK (New), PENDING distinctly from EXCELLENT/GOOD/BAD. Undefined data is unknown/loading, never a poor-performance assertion. No change to server judgment thresholds.
-- [ ] Write six status × two card regression and user-visible policy copy checks; parent RED. Preserve the mock routes; use EXCELLENT for VCP 62.5 and GOOD for closing58.3, verify the actual standalone mock route response with a Flask test client.
-- [ ] Add minimal page-local status presentation mapping. Display count plus neutral labels for not-yet-judged; no misleading 0%/미흡 badge. VCP summary says backtest +15/-5 and distinguishes per-signal targets/default +5/-3. Landing jongga says saved target/stop prices, missing defaults +5/-3, unclosed OPEN rather than forced15day. Hypothetical expectancy at60% uses 0.6*5 - 0.4*3 = 1.8%, clearly hypothetical and excluding costs.
-- [ ] Parent GREEN and native UI checks for all six statuses, both strategies, landing tabs/mobile.
+- [x] Read actual status source and VCP policy. Both strategy cards map Accumulating, OK (New), PENDING distinctly from EXCELLENT/GOOD/BAD. Undefined data is unknown/loading, never a poor-performance assertion. No change to server judgment thresholds.
+- [x] Write six status × two card regression and user-visible policy copy checks; parent RED. Preserve the mock routes; use EXCELLENT for VCP 62.5 and GOOD for closing58.3, verify the actual standalone mock route response with a Flask test client.
+- [x] Add minimal page-local status presentation mapping. Display count plus neutral labels for not-yet-judged; no misleading 0%/미흡 badge. VCP summary says backtest +15/-5 and distinguishes per-signal targets/default +5/-3. Landing jongga says saved target/stop prices, missing defaults +5/-3, unclosed OPEN rather than forced15day. Hypothetical expectancy at60% uses 0.6*5 - 0.4*3 = 1.8%, clearly hypothetical and excluding costs.
+- [x] Parent GREEN and native UI checks for all six statuses, both strategies, landing tabs/mobile.
 
 ### Task 4: 통합 검증·리뷰·마감
-- [ ] Plan critic OKAY. Read frontend/AGENTS and Next bundled docs 02/03/05/06; React best practices for effect/default bindings.
-- [ ] Parent executes isolated pytest, Vitest, lint, build checker then type-check sequentially after build. Preserve RED/failure logs; don't weaken unrelated tests.
-- [ ] ponytail → code-review + architect parallel → T3 review. Provide exact source/test hashes, approve only resolved findings. QA fixes repeat affected review/checks.
-- [ ] Commit owned source, plan and QA matrix; retain TODOs. UltraQA App-adapted: actual application + seeded history/prices/status fixtures, agent-browser headed + Next MCP. No native OMX state writes.
-- [ ] Matrix: D/table/KPI consistency; stable recent stats across pages and OPEN exclusion; no closed; contract rejects vs normal frames; six statuses in both cards; VCP distinct policy; landing real/hypothetical copy; viewport wrapping; error/empty paths; source/user-file preservation and owned process cleanup.
-- [ ] All required checks pass and scratch cleanup verified before final TODO removal. Archive five with implementation/QA fix commits, update counts once. Preserve older same-ID QA history and show dated current report.
+- [x] Plan critic OKAY. Read frontend/AGENTS and Next bundled docs 02/03/05/06; React best practices for effect/default bindings.
+- [x] Parent executes isolated pytest, Vitest, lint, build checker then type-check sequentially after build. Preserve RED/failure logs; don't weaken unrelated tests.
+- [x] ponytail → code-review + architect parallel → T3 review. Provide exact source/test hashes, approve only resolved findings. QA fixes repeat affected review/checks.
+- [x] Commit owned source, plan and QA matrix; retain TODOs. UltraQA App-adapted: actual application + seeded history/prices/status fixtures, ego-browser 단일 TaskSpace + Next MCP (실측 중 사용자 지정으로 변경). No native OMX state writes.
+- [x] Matrix: D/table/KPI consistency; stable recent stats across pages and OPEN exclusion; no closed; contract rejects vs normal frames; six statuses in both cards; VCP distinct policy; landing real/hypothetical copy; viewport wrapping; error/empty paths; source/user-file preservation and owned process cleanup.
+- [x] All required checks pass and scratch cleanup verified before final TODO removal. Archive five with implementation/QA fix commits, update counts once. Preserve older same-ID QA history and show dated current report.
 
 ## 실행 계약 보완 (계획 검토 지적 반영)
 
@@ -97,3 +97,8 @@ QA 페이지 크기 보정: 실제 selector는50/100/200/500뿐이므로 존재�
 
 ## T3 검토로 확인한 생산 계약 정정
 초기 '생산date열은ISO문자열뿐' 가정은 틀렸다. 실제SQLite CSV snapshot의 read_json이date열을datetime64로되살린다. 메모리캐시를비우고warmSQLite만남긴실제경로에서종가판정이ValueError로실패함을재현했다. 공통serializer를바꾸지않고 metrics 경계에기존생산형태인naive/no-NaT/자정datetime64를허용한다. 숫자YYYYMMDD/문자열OHLC/tz/NaT/시간있는date열은계속거부한다. 실제cold→memoryclear→warm→jongga의count1/win100/avg5 보존을회귀로확인한다. 기준표승률분모와평균OPEN평가포함설명도실제모달열기회귀로맞춘다.
+
+## 최종 실행 현황
+2026-09-18: 구현·영향 리뷰·정적 검사·ego-browser 필수10/10·정리 완료. 위 중간 시점의 미완료 서술은 경과 기록이다. 최종 보고서 batch-performance-2026-09-18.md 참조. 최종 문서 검수 후 TODO 제거와 아카이브를 완료한다. 계획 밖 인증 요청은 실행 금지 계약을 만족했다고 주장하지 않으며 별도 편차 기록에 주체·세션 영향 미확정으로 보존했다.
+
+최종 독립 검수 PASS—APPROVE 후 다섯 TODO를 아카이브로 이동했다. 잔여38건(P1 9/P2 29).
