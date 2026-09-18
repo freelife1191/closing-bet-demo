@@ -1,0 +1,61 @@
+{
+  "width": 375,
+  "height": 812,
+  "documentWidth": 367,
+  "cards": [
+    {
+      "name": "평균 수익률",
+      "text": "평균 수익률\n+2.04%\nS +2.3%\nA +2.8%\nB +1.5%\nD +1.5%",
+      "x": 191.5,
+      "right": 348.578125,
+      "height": 107,
+      "clientWidth": 155,
+      "scrollWidth": 155,
+      "clientHeight": 105,
+      "scrollHeight": 105
+    },
+    {
+      "name": "누적 수익률",
+      "text": "누적 수익률\n+49%\nS +14%\nA +17%\nB +9%\nD +9%",
+      "x": 18.421875,
+      "right": 175.5,
+      "height": 107,
+      "clientWidth": 155,
+      "scrollWidth": 155,
+      "clientHeight": 105,
+      "scrollHeight": 105
+    }
+  ],
+  "filters": [
+    {
+      "text": "전체 (24)",
+      "x": 103.0625,
+      "right": 162.40625
+    },
+    {
+      "text": "성공 (14)",
+      "x": 166.40625,
+      "right": 224.984375
+    },
+    {
+      "text": "실패 (7)",
+      "x": 228.984375,
+      "right": 284.09375
+    },
+    {
+      "text": "보유 (3)",
+      "x": 288.09375,
+      "right": 343.578125
+    },
+    {
+      "text": "전체",
+      "x": 56.75,
+      "right": 106.09375
+    },
+    {
+      "text": "D (6)",
+      "x": 287.796875,
+      "right": 343.578125
+    }
+  ]
+}

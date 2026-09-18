@@ -1,0 +1,29 @@
+{
+  "pass": true,
+  "first": {
+    "rows": 50,
+    "recent": "30%",
+    "loss": "7회",
+    "label": "최근 청산 10건 승률 (추천일순)"
+  },
+  "second": {
+    "rows": 10,
+    "recent": "30%",
+    "loss": "7회"
+  },
+  "filtered": {
+    "rows": [
+      {
+        "grade": "D",
+        "name": "합성종목52100052 KOSPI",
+        "outcome": "실패"
+      },
+      {
+        "grade": "D",
+        "name": "합성종목56100056 KOSPI",
+        "outcome": "실패"
+      }
+    ],
+    "page2": true
+  }
+}

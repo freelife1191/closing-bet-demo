@@ -1002,8 +1002,8 @@ export default function KRMarketOverview() {
               <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${vcpTheme.glow}`}></div>
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">VCP 전략</div>
-                  <Tooltip size="lg" content={getStrategyTooltip(vcpRate, avgReturn, backtestData?.vcp?.count ?? 0, "VCP 전략", presentation)} position="bottom" align="left">
+                  <Tooltip className="flex items-center gap-2" size="lg" content={getStrategyTooltip(vcpRate, avgReturn, backtestData?.vcp?.count ?? 0, "VCP 전략", presentation)} position="bottom" align="left">
+                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">VCP 전략</div>
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
                   <button
@@ -1054,8 +1054,8 @@ export default function KRMarketOverview() {
               <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${cbTheme.glow}`}></div>
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">종가베팅 전략</div>
-                  <Tooltip size="lg" content={getStrategyTooltip(cbRate, avgReturn, backtestData?.closing_bet?.count ?? 0, "종가베팅 전략", presentation)} position="bottom" align="left">
+                  <Tooltip className="flex items-center gap-2" size="lg" content={getStrategyTooltip(cbRate, avgReturn, backtestData?.closing_bet?.count ?? 0, "종가베팅 전략", presentation)} position="bottom" align="left">
+                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">종가베팅 전략</div>
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
                   <button

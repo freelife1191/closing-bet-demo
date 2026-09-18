@@ -1,0 +1,7 @@
+{
+  "spaceId": 3,
+  "page": "p1",
+  "skill": "/Applications/ego lite.app/Contents/Frameworks/ego Framework.framework/Versions/0.5.0.32/Resources/ego-skills/ego-browser/SKILL.md",
+  "reason": "현재 사용자가 브라우저 실측을 ego-browser로 지정",
+  "legacy_driver": "agent-browser preliminary navigation/viewport only; owned sessions closed; not counted as completed scenarios"
+}

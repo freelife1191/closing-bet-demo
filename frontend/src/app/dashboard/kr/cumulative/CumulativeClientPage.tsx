@@ -703,7 +703,7 @@ function DistributionBar({ kpi }: { kpi: KPIData }) {
     <div className="bg-[#1c1c1e] p-6 rounded-2xl border border-white/5 mb-8">
       <div className="flex items-center gap-2 mb-4">
         <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">승패 분포 (WIN/LOSS)</h3>
-        <Tooltip size="lg" content={renderDistributionTooltip(kpi)} position="top" align="left">
+        <Tooltip size="lg" content={renderDistributionTooltip(kpi)} position="top" align="center">
           <i className="fas fa-question-circle text-gray-700 text-[10px] hover:text-gray-500 transition-colors cursor-help"></i>
         </Tooltip>
       </div>

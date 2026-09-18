@@ -110,6 +110,7 @@ safe = {
     '/api/kr/ai-analysis':{'signals':[]},
     '/api/kr/status':{'status':'success','data':{}},
     '/api/kr/config/interval':{'interval':60},
+    '/api/kr/user/quota':{'remaining':10,'limit':10,'used':0},
     '/api/kr/chatbot/quota':{'remaining':10,'limit':10,'used':0},
     '/api/kr/chatbot/sessions':{'sessions':[]},
 }

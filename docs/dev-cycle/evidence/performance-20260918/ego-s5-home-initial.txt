@@ -1,0 +1,268 @@
+[p1 "KR Market Dashboard" | space "성과 묶음 격리 QA — FLOW/VCP/JONGGA"(3): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=205, url=http://127.0.0.1:57611/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        container
+          button [ref=206]
+            container
+              text ""
+              text "KR Market"
+            text ""
+          container
+            anchor [ref=207, loc=href:/dashboard/kr, url=http://127.0.0.1:57611/dashboard/kr]
+              text "● Overview"
+            anchor [ref=208, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57611/dashboard/kr/vcp]
+              text "● VCP 시그널"
+            anchor [ref=209, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57611/dashboard/kr/closing-bet]
+              text "● 종가베팅"
+            anchor [ref=210, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57611/dashboard/kr/cumulative]
+              text "● 누적 성과"
+            anchor [ref=211, loc=href:/chatbot, url=http://127.0.0.1:57611/chatbot]
+              text "● AI 상담"
+        button [ref=212]
+          text ""
+          text "모의투자"
+        anchor [ref=213, loc=href:/dashboard/data-status, url=http://127.0.0.1:57611/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      container
+        container
+          text "무료 사용량"
+          container
+            container
+              text "10"
+              text "회 남음"
+            button [ref=214]
+              text "+"
+        button [ref=215]
+          text "U"
+          container
+            text "User"
+            text "Free Tier Plan"
+          text ""
+    container
+      container "현재 위치"
+        ordered_list
+          list_item
+            anchor "홈" [ref=216, loc=css:a[aria-label="홈"], url=http://127.0.0.1:57611/]
+              text ""
+          list_item
+            text "/"
+            text "대시보드"
+          list_item
+            text "/"
+            text "국내 시장"
+      container
+        container
+          text ""
+          textbox [ref=217, loc=css:input[placeholder="Search markets, tickers..."]]
+            text "Search markets, tickers..."
+          text "⌘K"
+        button "설정 열기" [ref=218, loc=css:button[aria-label="설정 열기"]]
+          text ""
+    container
+      container
+        container
+          text "KR 마켓 알파"
+          heading
+            text "스마트머니"
+            text "추적"
+          paragraph
+            text "VCP 패턴 & 기관/외국인 수급 추적"
+        container
+          container
+            button [ref=219]
+              text ""
+              text "실시간"
+            button [ref=220]
+              text ""
+              text "날짜 지정"
+          container
+            container
+              text "매크로 지표:"
+              container
+                text "60"
+                text "분"
+              text "마다 자동 갱신"
+            text "시그널 분석: 매일 15:40 (KST)"
+            container
+              text "마지막 업데이트:"
+              text "오후 04:58"
+      container
+        container
+          text ""
+          heading
+            text "KR Market Gate"
+            container
+              text ""
+              text "시장 강도(Score)와 수급 상태를 종합 분석한 마켓 타이밍 지표입니다."
+          container
+            container
+              svg_root
+              container
+                text "70"
+                text "SCORE"
+            container
+              text "Bullish"
+              text "상승장 (매수 우위)"
+        container
+          heading
+            text "KOSPI 200 Sector Index"
+            container
+              text ""
+              text "KOSPI 200 주요 섹터별 등락 현황입니다."
+          container
+            container
+              text "BULLISH"
+              text "상승세: 20/60일 이평 상회 및 수급 유입"
+            container
+              text "NEUTRAL"
+              text "혼조세: 방향성 탐색 중"
+            container
+              text "BEARISH"
+              text "하락세: 주요 이평 하회 및 수급 이탈"
+      container
+        container
+          container
+            text "오늘의 시그널"
+            container
+              text ""
+              text "오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다."
+          text "1"
+          text "VCP + 외국인 순매수"
+        container
+          container
+            container
+              text "VCP 전략"
+              container
+                text ""
+                text "VCP 전략"
+                text "성과 분석"
+                text "최근 30일 기준"
+                text "승률 (Win Rate)"
+                text "50"
+                text "%"
+                text "평균 수익률 (Avg)"
+                text "+"
+                text "2"
+                text "%"
+                text "기준:"
+                text "VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다."
+                text "개별 시그널의 기본 목표·손절은 +5%/-3%입니다."
+                text "해석:"
+                text "선별적인 접근으로 수익을 낼 수 있는 구간입니다."
+                text "표본:"
+                text "총"
+                text "24"
+                text "번의 매매 신호를 분석한 결과입니다."
+              button [ref=221]
+                text "기준표"
+            text "양호"
+          container
+            container
+              text "50"
+              text "%"
+            container
+              text "Avg."
+              text "+"
+              text "2"
+              text "%"
+          container
+            text "24 trades"
+            text ""
+        container
+          container
+            container
+              text "종가베팅 전략"
+              container
+                text ""
+                text "종가베팅 전략"
+                text "성과 분석"
+                text "최근 30일 기준"
+                text "승률 (Win Rate)"
+                text "50"
+                text "%"
+                text "평균 수익률 (Avg)"
+                text "+"
+                text "2"
+                text "%"
+                text "기준:"
+                text "종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다."
+                text "해석:"
+                text "선별적인 접근으로 수익을 낼 수 있는 구간입니다."
+                text "표본:"
+                text "총"
+                text "24"
+                text "번의 매매 신호를 분석한 결과입니다."
+              button [ref=222]
+                text "기준표"
+            text "양호"
+          container
+            container
+              text "50"
+              text "%"
+            container
+              text "Avg."
+              text "+"
+              text "2"
+              text "%"
+          container
+            text "24 trades"
+            text ""
+      container
+        container
+          heading
+            text "Market Indices"
+            text ""
+            text "주요 국내외 증시 지수 현황입니다."
+          text "KOSPI"
+          text "--"
+          text ""
+          text "%"
+          text "KOSDAQ"
+          text "--"
+          text ""
+          text "%"
+          text "S&P 500"
+          text "--"
+          text "NASDAQ"
+          text "--"
+        heading
+          text "Commodities"
+          text ""
+          text "금, 은 등 주요 원자재 가격 동향입니다."
+        text "KRX GOLD"
+        text "--"
+        text "KRX SILVER"
+        text "--"
+        text "US GOLD (F)"
+        text "$"
+        text "--"
+        text "US SILVER (F)"
+        text "$"
+        text "--"
+        heading
+          text "Crypto Assets"
+          text ""
+          text "주요 암호화폐 실시간 시세입니다."
+        text "BITCOIN"
+        text "--"
+        text "ETHEREUM"
+        text "--"
+        text "XRP"
+        text "--"
+  container
+    button "AI 상담" [ref=223, loc=css:button[aria-label="AI 상담"]]
+      text ""
+      text ""
+    container
+      button "안내 문구 닫기" [ref=224, loc=css:button[aria-label="안내 문구 닫기"]]
+        text ""
+      text "궁금한 건 채팅으로 문의하세요"
+      text "대화 시작하기"
+  alert

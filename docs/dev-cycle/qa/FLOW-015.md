@@ -2,7 +2,7 @@
 
 - 항목: FLOW-015
 - engine: ultraqa | lifecycle: app-adapted | phase: review | iteration: 0 | same_failure_count: 0
-- browser_applicability: required | browser_driver: agent-browser
+- browser_applicability: required | browser_driver: ego-browser
 - 대상: 격리 127.0.0.1:57611 → 57612. 사용자 승인 다섯 항목 공유 T3.
 - UltraQA Report: [성과 묶음의 계획·행렬·결과](batch-performance-2026-09-18.md)
 - 필수 행렬: 공유 보고서 S-1~10. FLOW-015의 비표준 직접 helper 입력은 Python 하네스이며 정상 생산 frame은 실제 누적 UI→제품 API에서도 대조한다.

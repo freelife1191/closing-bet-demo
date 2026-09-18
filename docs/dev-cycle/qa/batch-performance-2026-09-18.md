@@ -1,9 +1,9 @@
 # UltraQA Report
 
 - 항목: FLOW-013·FLOW-015·FLOW-009·VCP-025·JONGGA-036 (공유 T3)
-- engine: ultraqa | lifecycle: app-adapted | phase: qa-ready | iteration: 0 | same_failure_count: 0
+- engine: ultraqa | lifecycle: app-adapted | phase: fix | iteration: 2 | same_failure_count: 1
 - 승인: 직전 다섯 항목 설계에 대한 사용자 「진행해」. 범위는 evidence/performance-20260918/plan.md.
-- browser_applicability: required | browser_driver: agent-browser
+- browser_applicability: required | browser_driver: ego-browser
 - 예정 대상: 격리 Next 127.0.0.1:57611 / Flask 127.0.0.1:57612. 첫 구현 커밋과 실제 source SHA를 실행 전에 고정한다.
 - 기준 검사: 격리 baseline pytest2296/3skip·Vitest488/69 통과. 새 변경의 최종 검사와 구분한다.
 - 안전: 원본3500/5501/live·실제LLM/수집/발송/거래/설정/삭제 금지. 실제 .env/data 복사 없음. 합성 파일·가격을 제품 누적 라우트/계산/cache에 공급한다. 상태 응답은 UI 검증용 합성이며 백엔드 상태정책 변경을 주장하지 않는다.
@@ -39,3 +39,13 @@ S-4는 UI에서 허용되지 않는 직접 Python 입력 계약 검증이다. �
 - 동적 필수0/10이며 아직 완료 불가.
 
 최종 독립 영향 리뷰: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 APPROVE. 기준 구현 커밋 후 iteration1 실측을 시작한다.
+
+QA 기준 커밋: ef7641cac29ea274f364f31e6865e3ea423c47b0
+
+## 사용자 지정 브라우저 전환
+사용자가 실측 도중 ego-browser를 명시했다. 저장소의 기본 agent-browser보다 최신 사용자 지시를 우선한다. 기존 두 전용 세션은 종료했으며 원래 자료는 탐색 사전 기록으로 보존한다. 필수 시나리오의 완료 근거는 ego-browser 단일 TaskSpace 3에서 수집한다. iteration1 및 기존 실패 수를 유지하며 도구 교체를 제품 실패나 카운터 초기화로 처리하지 않는다. 사용자 profile을 조회·선택하거나 쿠키/캐시를 지우지 않는다. 별도포트·합성API·원본서비스금지 경계는 동일하다.
+
+## ego-browser iteration1 결과
+S1(24/200보기/D6),S2(50/10페이지recent30%/7·P2D+실패유지),S3(소표본2/50·미청산·빈자료),S5(6상태+unknown 두카드) 실측통과. S4는실제함수·warmSQLite회귀통과. S6홈정책/기준표통과,전용화면확인미완료. S7/S9미실행. S8모바일horizontal popup클립실패: 누적left194/right514,홈left92/right399 (width375). 이미지직접열람. 두각각localTooltip정렬/anchor만수정하고영향검증후iteration2로이어간다. 공통Tooltip재설계·계산로직변경없음. S10은최종정리후판정.
+
+하네스정정: 실제Sidebar quota경로 /api/kr/user/quota를fixture에누락하여404 HTML JSONparse오류가났다. 원문MCP/요청기록보존후해당합성GET만추가하고소유backend만재기동했다. 제품버그로세지않는다. ego는CDPviewport가라운드사이에유지되지않아각viewport검사호출내에서설정+실제innerWidth/Height확인한다. CDP뒤stale ref와이름없는role locator오류도원문결과로관측했고,관측된CSSselect로수정했다.

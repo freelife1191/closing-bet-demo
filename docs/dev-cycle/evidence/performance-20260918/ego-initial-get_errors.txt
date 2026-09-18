@@ -1,0 +1,2 @@
+event: message
+data: {"result":{"content":[{"type":"text","text":"{\"configErrors\":[],\"sessionErrors\":[{\"url\":\"/dashboard/kr/cumulative\",\"buildError\":null,\"runtimeErrors\":[{\"type\":\"console\",\"errorName\":\"SyntaxError\",\"message\":\"Unexpected token '<', \\\"<!doctype \\\"... is not valid JSON\",\"stack\":[]}]}]}"}]},"jsonrpc":"2.0","id":1}

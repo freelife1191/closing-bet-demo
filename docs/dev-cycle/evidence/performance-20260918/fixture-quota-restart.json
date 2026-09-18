@@ -1,0 +1,6 @@
+{
+  "old_pid": 12893,
+  "new_pid": 29644,
+  "reason": "fixture lacked actual Sidebar GET /api/kr/user/quota; 404 HTML caused JSON parse console error",
+  "fixture_sha256": "2a3c53aadbd6aad6d0fa4bd76ee2e9be7e61b682de1eb1f374194a2dc2314b01"
+}

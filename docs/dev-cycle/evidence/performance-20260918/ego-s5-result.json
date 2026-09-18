@@ -1,0 +1,117 @@
+{
+  "pass": true,
+  "results": [
+    {
+      "status": "Accumulating",
+      "label": "축적 중",
+      "cards": [
+        {
+          "text": "VCP 전략\nVCP 전략 성과 상태\n축적 중 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n축적 중\n데이터를 축적하고 있습니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        },
+        {
+          "text": "종가베팅 전략\n종가베팅 전략 성과 상태\n축적 중 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n축적 중\n데이터를 축적하고 있습니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        }
+      ]
+    },
+    {
+      "status": "OK (New)",
+      "label": "신규 · 판정 전",
+      "cards": [
+        {
+          "text": "VCP 전략\nVCP 전략 성과 상태\n신규 · 판정 전 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n신규 · 판정 전\n신규 자료를 모으고 있습니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        },
+        {
+          "text": "종가베팅 전략\n종가베팅 전략 성과 상태\n신규 · 판정 전 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n신규 · 판정 전\n신규 자료를 모으고 있습니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        }
+      ]
+    },
+    {
+      "status": "PENDING",
+      "label": "집계 전",
+      "cards": [
+        {
+          "text": "VCP 전략\nVCP 전략 성과 상태\n집계 전 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n집계 전\n종료된 거래가 없어 집계 전입니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        },
+        {
+          "text": "종가베팅 전략\n종가베팅 전략 성과 상태\n집계 전 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n집계 전\n종료된 거래가 없어 집계 전입니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        }
+      ]
+    },
+    {
+      "status": "EXCELLENT",
+      "label": "우수",
+      "cards": [
+        {
+          "text": "VCP 전략\nVCP 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n70%\n평균 수익률 (Avg)\n+2%\n기준:\nVCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.\n개별 시그널의 기본 목표·손절은 +5%/-3%입니다.\n해석:\n현재 시장 주도주 매매에 매우 유리한 구간입니다.\n표본:\n총 24번의 매매 신호를 분석한 결과입니다.\n기준표\n우수\n70%\nAvg. +2%\n24 trades",
+          "checked": true,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-emerald-500/30"
+        },
+        {
+          "text": "종가베팅 전략\n종가베팅 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n70%\n평균 수익률 (Avg)\n+2%\n기준:\n종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다.\n해석:\n현재 시장 주도주 매매에 매우 유리한 구간입니다.\n표본:\n총 24번의 매매 신호를 분석한 결과입니다.\n기준표\n우수\n70%\nAvg. +2%\n24 trades",
+          "checked": true,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-emerald-500/30"
+        }
+      ]
+    },
+    {
+      "status": "GOOD",
+      "label": "양호",
+      "cards": [
+        {
+          "text": "VCP 전략\nVCP 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n50%\n평균 수익률 (Avg)\n+2%\n기준:\nVCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.\n개별 시그널의 기본 목표·손절은 +5%/-3%입니다.\n해석:\n선별적인 접근으로 수익을 낼 수 있는 구간입니다.\n표본:\n총 24번의 매매 신호를 분석한 결과입니다.\n기준표\n양호\n50%\nAvg. +2%\n24 trades",
+          "checked": true,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-amber-500/30"
+        },
+        {
+          "text": "종가베팅 전략\n종가베팅 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n50%\n평균 수익률 (Avg)\n+2%\n기준:\n종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다.\n해석:\n선별적인 접근으로 수익을 낼 수 있는 구간입니다.\n표본:\n총 24번의 매매 신호를 분석한 결과입니다.\n기준표\n양호\n50%\nAvg. +2%\n24 trades",
+          "checked": true,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-amber-500/30"
+        }
+      ]
+    },
+    {
+      "status": "BAD",
+      "label": "미흡",
+      "cards": [
+        {
+          "text": "VCP 전략\nVCP 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n0%\n평균 수익률 (Avg)\n0%\n기준:\nVCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.\n개별 시그널의 기본 목표·손절은 +5%/-3%입니다.\n해석:\n시장 변동성이 크거나 추세가 약해 보수적 대응이 필요합니다.\n표본:\n총 24번의 매매 신호를 분석한 결과입니다.\n기준표\n미흡\n0%\nAvg. 0%\n24 trades",
+          "checked": true,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-rose-500/30"
+        },
+        {
+          "text": "종가베팅 전략\n종가베팅 전략 성과 분석\n최근 30일 기준\n승률 (Win Rate)\n0%\n평균 수익률 (Avg)\n0%\n기준:\n종가베팅은 저장된 목표가·손절가 기준이며, 누락 시 진입가 대비 기본 +5%/-3%를 사용합니다.\n해석:\n시장 변동성이 크거나 추세가 약해 보수적 대응이 필요합니다.\n표본:\n총 24번의 매매 신호를 분석한 결과입니다.\n기준표\n미흡\n0%\nAvg. 0%\n24 trades",
+          "checked": true,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-rose-500/30"
+        }
+      ]
+    },
+    {
+      "status": "UNKNOWN",
+      "label": "확인 전",
+      "cards": [
+        {
+          "text": "VCP 전략\nVCP 전략 성과 상태\n확인 전 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n확인 전\n상태를 확인하고 있습니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        },
+        {
+          "text": "종가베팅 전략\n종가베팅 전략 성과 상태\n확인 전 상태입니다. 성과 수치는 판정 후 표시됩니다.\n기준표\n확인 전\n상태를 확인하고 있습니다.\n24 trades",
+          "checked": false,
+          "theme": "p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all hover:border-white/20"
+        }
+      ]
+    }
+  ]
+}
