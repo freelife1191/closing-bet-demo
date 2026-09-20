@@ -1,0 +1,207 @@
+{
+  "pytarget-stats-red.log": {
+    "sha256": "ff1701e015d6262525bb372e4c01e3f3fd20014efef6af5d0938ccb46c047de8",
+    "bytes": 1196,
+    "compressed": "pytarget-stats-red.log.gz"
+  },
+  "pytarget-ticker-second.log": {
+    "sha256": "248d6839cdcfaaae9fe7551e6ab1768a62c71a8350e21c57aca48e583ac73627",
+    "bytes": 180,
+    "compressed": "pytarget-ticker-second.log.gz"
+  },
+  "vitest-review-fixed.log": {
+    "sha256": "c747fe63b48bd969b1be4fc104a2d6f8f456f8ade79e92a1ee397d487705085e",
+    "bytes": 155490,
+    "compressed": "vitest-review-fixed.log.gz"
+  },
+  "target-quota-green.log": {
+    "sha256": "2578b0084a03dd8d3bff4c5741577847a5a0274a9ac9eb56f7985f1bf932b47a",
+    "bytes": 7702,
+    "compressed": "target-quota-green.log.gz"
+  },
+  "build-review-fixed.log": {
+    "sha256": "9986cd790d66fe6fc2bb0e2257b8fb756eb9fc53bdb938f2606d0db5f0cf5340",
+    "bytes": 5586,
+    "compressed": "build-review-fixed.log.gz"
+  },
+  "pytest-review-fixed.log": {
+    "sha256": "2f3a118f286e3ce167828d8d5a52a67b1e65daee87fdf67dcdaf698b76572a3a",
+    "bytes": 3022,
+    "compressed": "pytest-review-fixed.log.gz"
+  },
+  "pytarget-stats-green.log": {
+    "sha256": "7f1961ada8216f0e86313fc1aac1a31ef60d8c30b335efc0bd34e1d8cf4f34f8",
+    "bytes": 99,
+    "compressed": "pytarget-stats-green.log.gz"
+  },
+  "pytarget-facade-baseline.log": {
+    "sha256": "f8f0226724e4ce8c7ab07984fb3c7957430862c85398773d1e26f0f4cbf756e3",
+    "bytes": 99,
+    "compressed": "pytarget-facade-baseline.log.gz"
+  },
+  "build-review-typed.log": {
+    "sha256": "9f6d08a3a7c30f8bfa152e1d4b9a84130382bb22d120d26e86bd33935ee95b00",
+    "bytes": 1682,
+    "compressed": "build-review-typed.log.gz"
+  },
+  "typecheck-initial.log": {
+    "sha256": "f03999110e99c60561b70c3f66bc6a53b7ca6776785e2b169c3a71dcb1ede823",
+    "bytes": 330,
+    "compressed": "typecheck-initial.log.gz"
+  },
+  "pytarget-valuation-authority-green.log": {
+    "sha256": "bc87149e4bc6fe377c1377da4ce9cb0ff74d5943ff2489f3d7a723e3fe03c27d",
+    "bytes": 180,
+    "compressed": "pytarget-valuation-authority-green.log.gz"
+  },
+  "fixture-initial.log": {
+    "sha256": "10818bfa960a5b5071401081f3a5cba8a6a1dfe294b7f9f0445f560e1f45a181",
+    "bytes": 154,
+    "compressed": "fixture-initial.log.gz"
+  },
+  "pytarget-ticker-green.log": {
+    "sha256": "28991b10a612795df06a3888c6e696b02c2ce5c5befa9cb8f3bbdb17c03497a6",
+    "bytes": 180,
+    "compressed": "pytarget-ticker-green.log.gz"
+  },
+  "build-verified.log": {
+    "sha256": "8cacc613a0143fb0c2fdd69e2a5f100ecf30c6954377326617fd9954e7b1d533",
+    "bytes": 1487,
+    "compressed": "build-verified.log.gz"
+  },
+  "pytarget-ticker-red.log": {
+    "sha256": "996a0a10ae9af1c160b07a1536e37bcf36ba1890b91565a22c6749b6bcd5baf3",
+    "bytes": 1062,
+    "compressed": "pytarget-ticker-red.log.gz"
+  },
+  "pytarget-facade-green.log": {
+    "sha256": "f8f0226724e4ce8c7ab07984fb3c7957430862c85398773d1e26f0f4cbf756e3",
+    "bytes": 99,
+    "compressed": "pytarget-facade-green.log.gz"
+  },
+  "pytarget-valuation-authority-red.log": {
+    "sha256": "bebde062010c75d00180211b0a0eb9d1540950dd2fac81a57fdd6ac77421725c",
+    "bytes": 916,
+    "compressed": "pytarget-valuation-authority-red.log.gz"
+  },
+  "target-quota-third.log": {
+    "sha256": "2e71561ba74efb2a83356b4c0d6d0f7ad583e56c03019e5d9f4a398279a4b732",
+    "bytes": 375773,
+    "compressed": "target-quota-third.log.gz"
+  },
+  "fixture-expanded.log": {
+    "sha256": "10818bfa960a5b5071401081f3a5cba8a6a1dfe294b7f9f0445f560e1f45a181",
+    "bytes": 154,
+    "compressed": "fixture-expanded.log.gz"
+  },
+  "build-final.log": {
+    "sha256": "5c8c61b361c301b38c6e69a0499f45714645ef2cbb61524129558a651e810f15",
+    "bytes": 2132,
+    "compressed": "build-final.log.gz"
+  },
+  "vitest-final.log": {
+    "sha256": "984f7cc784ac68cca1692c78561373dafea9c8f1bee3f11dda597f3f4a6ef0a5",
+    "bytes": 171380,
+    "compressed": "vitest-final.log.gz"
+  },
+  "pytarget-ticker-behavior-red.log": {
+    "sha256": "5d27900456e6843a5762d5e4c65ac4691472119bea81623f9462e2afa215e337",
+    "bytes": 5441,
+    "compressed": "pytarget-ticker-behavior-red.log.gz"
+  },
+  "target-loading-red.log": {
+    "sha256": "7d4f698949a0101182dd7651b6b65dc5a5f9195c00e0012ce38547a747816ac2",
+    "bytes": 31926,
+    "compressed": "target-loading-red.log.gz"
+  },
+  "vitest-baseline.log": {
+    "sha256": "66c1dfa40428ea24575a3e447d2e5d253ef52816514183b059e6a010ae2adfa4",
+    "bytes": 154268,
+    "compressed": "vitest-baseline.log.gz"
+  },
+  "typecheck-second.log": {
+    "sha256": "54998ec47582b8ba92efd61adb6b8f9e35ec9e388e9a54acc161d546673ecb1f",
+    "bytes": 256,
+    "compressed": "typecheck-second.log.gz"
+  },
+  "vitest-verified.log": {
+    "sha256": "495dd0666fc26a4896791ba7680bda437f7a3c08bcc27a9a3242313c55f77a88",
+    "bytes": 154734,
+    "compressed": "vitest-verified.log.gz"
+  },
+  "target-review-typed.log": {
+    "sha256": "611dc7ac8d630e0473316bb545e725f92b4a8c339e3a88035bc53f4267eb90d6",
+    "bytes": 846,
+    "compressed": "target-review-typed.log.gz"
+  },
+  "target-quota-red.log": {
+    "sha256": "746dc227e7c271158d00a8f2f251189fa7f5d0ba01d4f03fc816c6853c8c8b6c",
+    "bytes": 417703,
+    "compressed": "target-quota-red.log.gz"
+  },
+  "pytarget-valuation-green.log": {
+    "sha256": "2addf7c4c7a572ab3b5691fc4ec1d1c037ba71c73f370c723ee56c04cf1239c6",
+    "bytes": 180,
+    "compressed": "pytarget-valuation-green.log.gz"
+  },
+  "pytest-final.log": {
+    "sha256": "dbfa4389b7b70deaa7ccc2af6c8630e4da3c888ea8d302badd274c59d851d633",
+    "bytes": 3022,
+    "compressed": "pytest-final.log.gz"
+  },
+  "lint-final.log": {
+    "sha256": "d08026b738b2a70fa0795ee7d997bb0128d896d70576e7ceb70c8a38cc8fe91e",
+    "bytes": 52374,
+    "compressed": "lint-final.log.gz"
+  },
+  "pytarget-canonical-red.log": {
+    "sha256": "a800b65495a58facf9a3c116f48d9adc94cefce4f2108a71238351fea31e7b6c",
+    "bytes": 1699,
+    "compressed": "pytarget-canonical-red.log.gz"
+  },
+  "target-quota-fourth.log": {
+    "sha256": "7033ca9df920bb84ef205454909d8a03c027812e601f23e391386dfe41f1928b",
+    "bytes": 1405,
+    "compressed": "target-quota-fourth.log.gz"
+  },
+  "pytest-baseline.log": {
+    "sha256": "114f135b9b172108bdc56966bb1ca2273c023ebc53901c6e25f8b1323a96f8b7",
+    "bytes": 3022,
+    "compressed": "pytest-baseline.log.gz"
+  },
+  "lint-verified.log": {
+    "sha256": "0dd7d73defb2146f539a14a1dc8a1391102f70ddcd47e01727cfd9e338d34cd6",
+    "bytes": 52678,
+    "compressed": "lint-verified.log.gz"
+  },
+  "pytarget-facade-before.log": {
+    "sha256": "c8eed00d5707785031352e447cae16345252530070735c68f8fbea8cad83d380",
+    "bytes": 111,
+    "compressed": "pytarget-facade-before.log.gz"
+  },
+  "typecheck-third.log": {
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c",
+    "bytes": 80,
+    "compressed": "typecheck-third.log.gz"
+  },
+  "target-quota-second.log": {
+    "sha256": "5974e827730233c3b01f5b3859b82298c063fc3c5230251ad9a580899d0e9593",
+    "bytes": 222126,
+    "compressed": "target-quota-second.log.gz"
+  },
+  "pytest-integration-first.log": {
+    "sha256": "bd2cab0de2b39a3f6c49d450ed55f8eebc1f2e975a8cd9c88682e7ff264e1288",
+    "bytes": 3022,
+    "compressed": "pytest-integration-first.log.gz"
+  },
+  "pytarget-valuation-red.log": {
+    "sha256": "d7b9fe4e00e3fd8331a2c203f0fbf1cd4aa6dcb042a7a5970d7ca5a8bf799189",
+    "bytes": 1896,
+    "compressed": "pytarget-valuation-red.log.gz"
+  },
+  "lint-review-fixed.log": {
+    "sha256": "d9756abeac0789e5ff3a8227bb6c1302d54517f6730e9391deafb40903e580f0",
+    "bytes": 52682,
+    "compressed": "lint-review-fixed.log.gz"
+  }
+}

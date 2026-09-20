@@ -1,0 +1,11 @@
+{
+  "kind": "gateway",
+  "pid": 95355,
+  "pgid": 95355,
+  "port": 57930,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/docs/dev-cycle/evidence/quota-ticker-20260921/gateway.py"
+  ]
+}

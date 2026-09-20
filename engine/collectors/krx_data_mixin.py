@@ -14,13 +14,13 @@ import pandas as pd
 
 from engine.collectors.krx_local_data_mixin import KRXCollectorLocalDataMixin
 from engine.models import StockData
+from engine.ticker_utils import normalize_ticker
 
 
 logger = logging.getLogger(__name__)
 
 
-def _normalize_ticker(ticker: object) -> str:
-    return str(ticker).zfill(6)
+_normalize_ticker = normalize_ticker
 
 
 def _safe_int(value: object) -> int:

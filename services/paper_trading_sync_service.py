@@ -10,15 +10,16 @@ import logging
 import time
 from typing import Any, Callable
 
+from engine.ticker_utils import normalize_ticker
 
-def _normalize_ticker(ticker: str) -> str:
-    return str(ticker).zfill(6)
+
+_normalize_ticker = normalize_ticker
 
 
 def _is_normalized_unique_ticker_list(tickers: list[str]) -> bool:
     seen: set[str] = set()
     for ticker in tickers:
-        if not isinstance(ticker, str) or len(ticker) != 6 or not ticker.isdigit():
+        if not isinstance(ticker, str) or not ticker or normalize_ticker(ticker) != ticker:
             return False
         if ticker in seen:
             return False
@@ -35,6 +36,8 @@ def _normalize_unique_tickers(tickers: list[str]) -> list[str]:
     normalized: list[str] = []
     for ticker in tickers:
         ticker_str = _normalize_ticker(ticker)
+        if not ticker_str:
+            continue
         if ticker_str in seen:
             continue
         seen.add(ticker_str)
@@ -50,6 +53,8 @@ def _normalize_resolved_prices(prices: dict[str, int] | None) -> dict[str, int]:
     normalized: dict[str, int] = {}
     for ticker, value in prices.items():
         ticker_key = _normalize_ticker(ticker)
+        if not ticker_key:
+            continue
         try:
             price_int = int(float(value))
         except (TypeError, ValueError):

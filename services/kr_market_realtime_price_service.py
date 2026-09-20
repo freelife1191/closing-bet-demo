@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from engine.ticker_utils import normalize_ticker
 from services.kr_market_csv_utils import (
     build_latest_close_map_from_prices_df,
     load_csv_readonly as _load_csv_readonly,
@@ -39,16 +40,12 @@ def clear_market_map_cache() -> None:
     _clear_market_map_cache_impl()
     _clear_latest_close_map_cache_impl()
 
-def normalize_ticker(ticker: Any) -> str:
-    return str(ticker).zfill(6)
-
-
 def _is_normalized_unique_ticker_list(tickers: list[Any]) -> bool:
     seen: set[str] = set()
     for ticker in tickers:
         if not isinstance(ticker, str):
             return False
-        if len(ticker) != 6 or not ticker.isdigit():
+        if not ticker or normalize_ticker(ticker) != ticker:
             return False
         if ticker in seen:
             return False
@@ -65,6 +62,8 @@ def normalize_unique_tickers(tickers: list[Any]) -> list[str]:
     normalized: list[str] = []
     for ticker in tickers:
         ticker_str = normalize_ticker(ticker)
+        if not ticker_str:
+            continue
         if ticker_str in seen:
             continue
         seen.add(ticker_str)
@@ -84,12 +83,20 @@ def _resolve_normalized_tickers(
 
 def _normalize_price_map(price_map: dict[Any, Any]) -> dict[str, float]:
     normalized: dict[str, float] = {}
-    for ticker, value in price_map.items():
+    exact_keys: set[str] = set()
+    for ticker, value in sorted(price_map.items(), key=lambda item: str(item[0])):
         ticker_key = normalize_ticker(ticker)
+        if not ticker_key:
+            continue
+        is_exact_key = str(ticker) == ticker_key
+        if ticker_key in exact_keys or (ticker_key in normalized and not is_exact_key):
+            continue
         try:
             normalized[ticker_key] = float(value or 0)
         except (TypeError, ValueError):
             normalized[ticker_key] = 0.0
+        if is_exact_key:
+            exact_keys.add(ticker_key)
     return normalized
 
 def fetch_small_batch_prices(

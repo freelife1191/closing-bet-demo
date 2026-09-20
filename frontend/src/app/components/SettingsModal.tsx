@@ -5,6 +5,7 @@ import Modal from './Modal';
 import { useRouter } from 'next/navigation';
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useAdmin } from '@/hooks/useAdmin';
+import { useQuota } from '@/hooks/useQuota';
 import { getBrowserSessionId } from '@/lib/session';
 import { pickNotificationEnv, storedEnvFieldProps } from './settingsEnv';
 
@@ -41,19 +42,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   const googleUserInfo = isGoogleLoggedIn && session?.user
     ? { name: session.user.name || "User", email: session.user.email || "" }
     : null;
-  const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-
-  useEffect(() => {
-    if (session?.user?.email && isOpen) {
-      // 신원은 서버가 세션에서 정한다. 쿼리로 이메일을 넘기면 URL 한 줄로 남의
-      // 사용량을 조회할 수 있었다.
-      fetch('/api/kr/user/quota')
-        .then(res => res.json())
-        .then(data => setQuota(data))
-        .catch(e => console.error(e));
-    }
-  }, [session, isOpen]);
+  const quotaIdentity = `authenticated:${session?.user?.email ?? ''}`;
+  const { quota, quotaStatus, setQuota } = useQuota({
+    enabled: isOpen && status === 'authenticated' && Boolean(session?.user?.email),
+    identity: quotaIdentity,
+  });
+  const quotaDisplayStatus = status === 'loading' ? 'pending' : quotaStatus;
 
   // Watchlist State
   const [watchlist, setWatchlist] = useState<string[]>([]);
@@ -500,6 +495,10 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                               ></div>
                             </div>
                           </div>
+                        ) : quotaDisplayStatus === 'pending' ? (
+                          <div className="text-xs text-gray-400">사용량 확인 중</div>
+                        ) : quotaDisplayStatus === 'unavailable' ? (
+                          <div className="text-xs text-red-400">사용량을 불러올 수 없습니다</div>
                         ) : (
                           <div className="text-xs text-blue-400">
                             ✨ 무료 10회 AI 사용 가능
@@ -594,7 +593,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                                 <i className="fas fa-infinity text-[10px]"></i>
                                 <span>Admin · 무제한</span>
                               </div>
-                            ) : quota && (
+                            ) : quota ? (
                               <div className="mt-1.5 w-full max-w-[200px]">
                                 <div className="text-[11px] text-blue-400 flex justify-between mb-1">
                                   <span>무료 사용량</span>
@@ -610,7 +609,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                                   {quota.remaining}회 남았습니다.
                                 </div>
                               </div>
-                            )}
+                            ) : quotaDisplayStatus === 'pending' ? (
+                              <div className="mt-1.5 text-[11px] text-gray-400">사용량 확인 중</div>
+                            ) : quotaDisplayStatus === 'unavailable' ? (
+                              <div className="mt-1.5 text-[11px] text-red-400">사용량을 불러올 수 없습니다</div>
+                            ) : null}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 self-end md:self-auto">

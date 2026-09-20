@@ -1,0 +1,18 @@
+{
+  "stage": "pytest:integration-first",
+  "started_at": "2026-09-20T18:08:20.892033+00:00",
+  "ended_at": "2026-09-20T18:09:00.727952+00:00",
+  "pid": 82285,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "-ra"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq",
+  "timeout_seconds": 180,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 39.84
+}

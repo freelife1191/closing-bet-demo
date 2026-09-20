@@ -1,0 +1,16 @@
+{
+  "stage": "vitest:verified",
+  "started_at": "2026-09-20T18:14:41.499749+00:00",
+  "ended_at": "2026-09-20T18:14:48.843144+00:00",
+  "pid": 98006,
+  "command": [
+    "npx",
+    "vitest",
+    "run"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/frontend",
+  "timeout_seconds": 300,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 7.34
+}

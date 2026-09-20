@@ -60,6 +60,41 @@ describe('fetchAPI', () => {
     await expect(fetchAPI('/api/kr/signals')).rejects.toThrow('API Error: 502');
   });
 
+  it('성공 상태의 HTML 본문도 상태와 본문을 숨긴 제어된 오류로 바꾼다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<!doctype html><title>Proxy error</title>', { status: 200 }))
+    );
+
+    const error = await fetchAPI('/api/kr/user/quota').catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      message: '서버 응답이 올바른 JSON이 아닙니다',
+      status: 200,
+    });
+    expect((error as { data?: unknown }).data).toBeUndefined();
+  });
+
+  it.each([404, 502])('HTML %s 응답은 JSON SyntaxError 대신 상태를 보존한 오류가 된다', async (status) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<!doctype html><title>Proxy error</title>', { status }))
+    );
+
+    const error = await fetchAPI('/api/kr/user/quota').catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({ message: `API Error: ${status}`, status, data: undefined });
+  });
+
+  it.each([401, 403, 500])('JSON %s 오류의 상태와 사유를 호출부로 전달한다', async (status) => {
+    mockResponse(status, { status: 'error', message: `quota ${status} failure` });
+
+    await expect(fetchAPI('/api/kr/user/quota')).rejects.toMatchObject({
+      message: `quota ${status} failure`,
+      status,
+    });
+  });
+
   it('응답이 제한 시간을 넘기면 스스로 끊는다', async () => {
     // 서버가 답하지 않는 상황. AbortController 가 끊고 그 이름을 사람이 읽을 문구로 바꾼다.
     vi.stubGlobal(

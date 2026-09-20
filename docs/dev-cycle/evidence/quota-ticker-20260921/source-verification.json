@@ -1,0 +1,134 @@
+{
+  "files": {
+    "app/routes/kr_market_signal_common.py": {
+      "source": true,
+      "scratch": true
+    },
+    "engine/collectors/krx_data_mixin.py": {
+      "source": true,
+      "scratch": true
+    },
+    "engine/ticker_utils.py": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/app/components/SettingsModal.quota.test.tsx": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/app/components/SettingsModal.tsx": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/app/components/Sidebar.session.test.tsx": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/app/components/Sidebar.tsx": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/hooks/useQuota.test.ts": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/hooks/useQuota.ts": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/lib/api.test.ts": {
+      "source": true,
+      "scratch": true
+    },
+    "frontend/src/lib/api.ts": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_analytics_service.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_backtest_calculators.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_backtest_cumulative.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_backtest_scenario_helpers.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_backtest_service.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_backtest_signal_stats.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_backtest_stats_helpers.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_backtest_trade_helpers.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_csv_utils.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_data_cache_prices.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_realtime_price_cache.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_realtime_price_service.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/kr_market_vcp_cache_update_service.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/paper_trading_price_fetchers.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/paper_trading_sync_service.py": {
+      "source": true,
+      "scratch": true
+    },
+    "services/paper_trading_valuation_helpers.py": {
+      "source": true,
+      "scratch": true
+    },
+    "tests/engine/test_ticker_utils.py": {
+      "source": true,
+      "scratch": true
+    },
+    "tests/services/test_backtest_ticker_lookup.py": {
+      "source": true,
+      "scratch": true
+    },
+    "tests/services/test_kr_market_ticker_normalization.py": {
+      "source": true,
+      "scratch": true
+    },
+    "tests/services/test_paper_trading_service.py": {
+      "source": true,
+      "scratch": true
+    },
+    "tests/services/test_paper_trading_ticker_valuation.py": {
+      "source": true,
+      "scratch": true
+    }
+  },
+  "package_preserved": true,
+  "all_match": true
+}

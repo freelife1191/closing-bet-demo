@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from engine.ticker_utils import normalize_ticker
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
@@ -36,11 +37,15 @@ def _latest_vcp_price_map_sqlite_cache_key(price_file: str) -> str:
     return f"{os.path.abspath(price_file)}{_LATEST_VCP_PRICE_MAP_SQLITE_CACHE_KEY_SUFFIX}"
 
 
-def _serialize_latest_vcp_price_map(price_map: dict[str, float]) -> dict[str, object]:
+def _normalize_latest_vcp_price_map(price_map: dict[str, object]) -> dict[str, float]:
     rows: dict[str, float] = {}
-    for ticker, value in price_map.items():
-        ticker_key = str(ticker).zfill(6)
+    exact_keys: set[str] = set()
+    for ticker, value in sorted(price_map.items(), key=lambda item: str(item[0])):
+        ticker_key = normalize_ticker(ticker)
         if not ticker_key:
+            continue
+        is_exact_key = str(ticker) == ticker_key
+        if ticker_key in exact_keys or (ticker_key in rows and not is_exact_key):
             continue
         try:
             normalized_value = float(value)
@@ -49,7 +54,13 @@ def _serialize_latest_vcp_price_map(price_map: dict[str, float]) -> dict[str, ob
         if pd.isna(normalized_value):
             continue
         rows[ticker_key] = normalized_value
-    return {"rows": rows}
+        if is_exact_key:
+            exact_keys.add(ticker_key)
+    return rows
+
+
+def _serialize_latest_vcp_price_map(price_map: dict[str, float]) -> dict[str, object]:
+    return {"rows": _normalize_latest_vcp_price_map(price_map)}
 
 
 def _deserialize_latest_vcp_price_map(payload: dict[str, object]) -> dict[str, float] | None:
@@ -57,19 +68,7 @@ def _deserialize_latest_vcp_price_map(payload: dict[str, object]) -> dict[str, f
     if not isinstance(rows_payload, dict):
         return None
 
-    latest_price_map: dict[str, float] = {}
-    for ticker, value in rows_payload.items():
-        ticker_key = str(ticker).zfill(6)
-        if not ticker_key:
-            continue
-        try:
-            normalized_value = float(value)
-        except (TypeError, ValueError):
-            continue
-        if pd.isna(normalized_value):
-            continue
-        latest_price_map[ticker_key] = normalized_value
-    return latest_price_map
+    return _normalize_latest_vcp_price_map(rows_payload)
 
 
 def _load_latest_vcp_price_map_from_sqlite(
@@ -214,7 +213,8 @@ def load_backtest_price_snapshot(
     )
     if df_prices_full.empty:
         return pd.DataFrame(), {}
-    df_prices_full["ticker"] = df_prices_full["ticker"].astype(str).str.zfill(6)
+    df_prices_full["ticker"] = df_prices_full["ticker"].map(normalize_ticker)
+    df_prices_full = df_prices_full[df_prices_full["ticker"] != ""]
     if latest_signature == signature and isinstance(latest_cache_map, dict):
         latest_price_map = dict(latest_cache_map)
     else:

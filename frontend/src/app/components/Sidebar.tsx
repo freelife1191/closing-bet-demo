@@ -7,6 +7,7 @@ import Modal from './Modal';
 import PaperTradingModal from './PaperTradingModal';
 import { useSession, signOut } from 'next-auth/react';
 import { useAdmin } from '@/hooks/useAdmin';
+import { useQuota } from '@/hooks/useQuota';
 import { getAuthHeaders, DEFAULT_USER_PROFILE, normalizeUserProfile, resolveUserProfile, saveUserProfile, type UserProfile } from './chatHelpers';
 
 export default function Sidebar() {
@@ -16,7 +17,6 @@ export default function Sidebar() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
 
-  const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
   const [isPaperTradingOpen, setIsPaperTradingOpen] = useState(false);
 
   const [alertModal, setAlertModal] = useState<{
@@ -41,6 +41,17 @@ export default function Sidebar() {
   );
   const displayName = displayProfile.name;
   const displayEmail = displayProfile.email;
+  const quotaIdentity = status === 'authenticated'
+    ? `authenticated:${session?.user?.email ?? ''}`
+    : 'anonymous';
+  const quotaRequestOptions = useCallback(() => ({ headers: getAuthHeaders() }), []);
+  const { quota, quotaStatus, refreshQuota, setQuota } = useQuota({
+    enabled: status !== 'loading',
+    identity: quotaIdentity,
+    getRequestOptions: quotaRequestOptions,
+    refreshKey: isSettingsOpen,
+  });
+  const quotaDisplayStatus = status === 'loading' ? 'pending' : quotaStatus;
 
   // Close mobile sidebar on path change
   useEffect(() => {
@@ -76,25 +87,6 @@ export default function Sidebar() {
       window.removeEventListener('user-profile-updated', loadProfile);
     };
   }, []);
-
-  const refreshQuota = useCallback(() => {
-    // 세션이 확정되기 전에는 어느 계정의 사용량인지 알 수 없다. 세션 쿠키가 붙기 전에
-    // 조회하면 로그인한 사용자에게 익명 응답이 잠깐 표시된다.
-    if (status === 'loading') return;
-
-    // 신원은 서버가 정한다. 종전에는 쿼리 파라미터로 이메일을 넘겼는데, 그러면 URL 한
-    // 줄로 남의 사용량을 조회할 수 있었다.
-    fetch('/api/kr/user/quota', { headers: getAuthHeaders() })
-      .then(res => res.json())
-      .then(data => {
-        setQuota(data);
-      })
-      .catch(e => console.error(e));
-  }, [status]);
-
-  useEffect(() => {
-    refreshQuota();
-  }, [refreshQuota, isSettingsOpen]); // Update when settings close or API key changes
 
   // [Fix] 챗봇 응답 후 quota 자동 갱신
   useEffect(() => {
@@ -253,11 +245,15 @@ export default function Sidebar() {
                     <div className="text-[10px] text-rose-400 mt-1 font-medium bg-rose-500/10 px-1.5 py-0.5 rounded inline-block">
                       Admin · 무제한
                     </div>
-                  ) : quota && (
+                  ) : quota ? (
                     <div className="text-[10px] text-blue-400 mt-1 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded inline-block">
                       {quota.remaining}회 남음 (총 {quota.limit}회)
                     </div>
-                  )}
+                  ) : quotaDisplayStatus === 'pending' ? (
+                    <div className="text-[10px] text-gray-400 mt-1">사용량 확인 중</div>
+                  ) : quotaDisplayStatus === 'unavailable' ? (
+                    <div className="text-[10px] text-red-400 mt-1">사용량을 불러올 수 없습니다</div>
+                  ) : null}
                 </div>
                 <div className="p-1 space-y-0.5">
                   <button
@@ -348,6 +344,12 @@ export default function Sidebar() {
               )}
             </div>
           )}
+          {!isAdmin && !quota && quotaDisplayStatus === 'pending' && (
+            <div className="mb-2 px-3 text-[10px] text-gray-400">사용량 확인 중</div>
+          )}
+          {!isAdmin && !quota && quotaDisplayStatus === 'unavailable' && (
+            <div className="mb-2 px-3 text-[10px] text-red-400">사용량을 불러올 수 없습니다</div>
+          )}
 
           <button
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -371,6 +373,10 @@ export default function Sidebar() {
               <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
                 {isAdmin ? (
                   <span className="text-rose-400 text-[11px] font-semibold">Admin · 무제한 사용</span>
+                ) : quotaDisplayStatus === 'unavailable' ? (
+                  <span className="text-red-400 text-[11px]">사용량을 불러올 수 없습니다</span>
+                ) : quotaDisplayStatus === 'pending' ? (
+                  <span className="text-gray-500 text-[11px]">사용량 확인 중</span>
                 ) : quota ? (
                   <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
                 ) : (

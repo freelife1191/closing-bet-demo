@@ -15,15 +15,16 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
+from engine.ticker_utils import normalize_ticker
 
-def _normalize_ticker(ticker: str) -> str:
-    return str(ticker).zfill(6)
+
+_normalize_ticker = normalize_ticker
 
 
 def _is_normalized_unique_ticker_list(tickers: list[str]) -> bool:
     seen: set[str] = set()
     for ticker in tickers:
-        if not isinstance(ticker, str) or len(ticker) != 6 or not ticker.isdigit():
+        if not isinstance(ticker, str) or not ticker or normalize_ticker(ticker) != ticker:
             return False
         if ticker in seen:
             return False
@@ -41,6 +42,8 @@ def _normalize_unique_tickers(tickers: list[str]) -> list[str]:
     normalized: list[str] = []
     for ticker in tickers:
         ticker_str = _normalize_ticker(ticker)
+        if not ticker_str:
+            continue
         if ticker_str in seen:
             continue
         seen.add(ticker_str)
@@ -66,6 +69,8 @@ def _extract_krx_close_map(df: pd.DataFrame) -> Dict[str, int]:
     close_map: Dict[str, int] = {}
     for index_value, close_price in df["종가"].items():
         ticker = _normalize_ticker(index_value)
+        if not ticker:
+            continue
         try:
             close_int = int(float(close_price))
         except (TypeError, ValueError):

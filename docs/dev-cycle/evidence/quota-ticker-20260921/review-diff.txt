@@ -1,0 +1,1354 @@
+diff --git a/app/routes/kr_market_signal_common.py b/app/routes/kr_market_signal_common.py
+index 14f2ce0..c9e0f43 100644
+--- a/app/routes/kr_market_signal_common.py
++++ b/app/routes/kr_market_signal_common.py
+@@ -4,13 +4,13 @@
+ KR Market 시그널 헬퍼 공통 유틸리티
+ """
+
+-import re
+ from datetime import datetime
+ from typing import Any, Optional
+
+ import pandas as pd
+
+ from engine.pandas_utils_safe import safe_optional_float
++from engine.ticker_utils import normalize_ticker
+
+ # 이 두 상수는 프론트엔드에도 같은 내용이 있다. 화면은 병합된 응답이 비면 원시
+ # 캐시를 다시 보므로, 그쪽에서도 같은 기준으로 실패 기록을 걸러야 한다.
+@@ -114,26 +114,8 @@ def _safe_optional_float(value: Any) -> Optional[float]:
+ # 앞뒤의 숫자를 배제하는 것은 `20260211` 같은 긴 숫자열에서 앞 여섯 자리를 잘라 내지
+ # 않기 위해서다. 자르면 `202602` 라는 실재할 수 있는 코드가 되어, 종목이 아닌 값이
+ # 종목의 자리를 차지한다. 영문자는 배제하지 않는다. 시장 표시가 영문자이기 때문이다.
+-_TICKER_PATTERN = re.compile(r"(?<![0-9])[0-9][0-9A-Z]{4}[0-9](?![0-9])")
+-
+-
+-def _normalize_ticker(value: Any) -> str:
+-    """티커를 여섯 자리 종목코드 문자열로 정규화한다. 유효하지 않으면 빈 문자열이다.
+-
+-    숫자가 하나도 없는 값과 전부 0 인 값을 모두 빈 문자열로 돌린다. 전부 0 인
+-    코드는 국내 시장에 존재하지 않으며, 결측을 채워 넣은 자리채움이다. 그것을
+-    `"000000"` 이라는 여섯 자리로 통과시키면 실제 종목코드와 형태가 같아져서,
+-    가격 맵처럼 티커를 키로 쓰는 자리에서 엉뚱한 값이 매칭된다. 받는 쪽마다
+-    그 값을 다시 거르는 방어 코드가 생기는 것도 같은 이유다.
+-    """
+-    text = str(value or "").upper()
+-    matched = _TICKER_PATTERN.search(text)
+-    # 여섯 자리에 못 미치는 순수 숫자는 앞을 0 으로 채운다. `5930` 이 `005930` 이다.
+-    code = matched.group() if matched else re.sub(r"\D", "", text).zfill(6)
+-    # 여섯 자리를 넘는 폴백 결과는 종목코드가 아니다. `zfill` 은 모자란 자리만 채우므로
+-    # `20260211` 같은 값이 그대로 통과한다. 그것을 앞 여섯 자리로 자르면 실재하는
+-    # 종목코드와 형태가 같아지므로, 자르지 않고 버려서 다음 후보 키로 넘어가게 한다.
+-    return code if code.strip("0") and len(code) == 6 else ""
++# 기존 라우트 호출자의 private 이름을 유지한다.
++_normalize_ticker = normalize_ticker
+
+
+ def _resolve_ticker(signal: dict, *keys: str) -> str:
+@@ -192,7 +174,7 @@ def _normalize_ai_payload_tickers(payload: Any) -> Any:
+
+     for signal in signals:
+         if isinstance(signal, dict) and "ticker" in signal:
+-            signal["ticker"] = str(signal.get("ticker", "")).zfill(6)
++            signal["ticker"] = _normalize_ticker(signal.get("ticker"))
+
+     return payload
+
+diff --git a/engine/collectors/krx_data_mixin.py b/engine/collectors/krx_data_mixin.py
+index 517c8cf..e4ec3fb 100644
+--- a/engine/collectors/krx_data_mixin.py
++++ b/engine/collectors/krx_data_mixin.py
+@@ -14,13 +14,13 @@ import pandas as pd
+
+ from engine.collectors.krx_local_data_mixin import KRXCollectorLocalDataMixin
+ from engine.models import StockData
++from engine.ticker_utils import normalize_ticker
+
+
+ logger = logging.getLogger(__name__)
+
+
+-def _normalize_ticker(ticker: object) -> str:
+-    return str(ticker).zfill(6)
++_normalize_ticker = normalize_ticker
+
+
+ def _safe_int(value: object) -> int:
+diff --git a/frontend/src/app/components/SettingsModal.tsx b/frontend/src/app/components/SettingsModal.tsx
+index c38eef3..509d6a6 100644
+--- a/frontend/src/app/components/SettingsModal.tsx
++++ b/frontend/src/app/components/SettingsModal.tsx
+@@ -5,6 +5,7 @@ import Modal from './Modal';
+ import { useRouter } from 'next/navigation';
+ import { useSession, signIn, signOut } from "next-auth/react";
+ import { useAdmin } from '@/hooks/useAdmin';
++import { useQuota } from '@/hooks/useQuota';
+ import { getBrowserSessionId } from '@/lib/session';
+ import { pickNotificationEnv, storedEnvFieldProps } from './settingsEnv';
+
+@@ -41,19 +42,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
+   const googleUserInfo = isGoogleLoggedIn && session?.user
+     ? { name: session.user.name || "User", email: session.user.email || "" }
+     : null;
+-  const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
+   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+-
+-  useEffect(() => {
+-    if (session?.user?.email && isOpen) {
+-      // 신원은 서버가 세션에서 정한다. 쿼리로 이메일을 넘기면 URL 한 줄로 남의
+-      // 사용량을 조회할 수 있었다.
+-      fetch('/api/kr/user/quota')
+-        .then(res => res.json())
+-        .then(data => setQuota(data))
+-        .catch(e => console.error(e));
+-    }
+-  }, [session, isOpen]);
++  const quotaIdentity = `authenticated:${session?.user?.email ?? ''}`;
++  const { quota, quotaStatus, setQuota } = useQuota({
++    enabled: isOpen && status === 'authenticated' && Boolean(session?.user?.email),
++    identity: quotaIdentity,
++  });
++  const quotaDisplayStatus = status === 'loading' ? 'pending' : quotaStatus;
+
+   // Watchlist State
+   const [watchlist, setWatchlist] = useState<string[]>([]);
+@@ -500,6 +495,10 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
+                               ></div>
+                             </div>
+                           </div>
++                        ) : quotaDisplayStatus === 'pending' ? (
++                          <div className="text-xs text-gray-400">사용량 확인 중</div>
++                        ) : quotaDisplayStatus === 'unavailable' ? (
++                          <div className="text-xs text-red-400">사용량을 불러올 수 없습니다</div>
+                         ) : (
+                           <div className="text-xs text-blue-400">
+                             ✨ 무료 10회 AI 사용 가능
+@@ -594,7 +593,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
+                                 <i className="fas fa-infinity text-[10px]"></i>
+                                 <span>Admin · 무제한</span>
+                               </div>
+-                            ) : quota && (
++                            ) : quota ? (
+                               <div className="mt-1.5 w-full max-w-[200px]">
+                                 <div className="text-[11px] text-blue-400 flex justify-between mb-1">
+                                   <span>무료 사용량</span>
+@@ -610,7 +609,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
+                                   {quota.remaining}회 남았습니다.
+                                 </div>
+                               </div>
+-                            )}
++                            ) : quotaDisplayStatus === 'pending' ? (
++                              <div className="mt-1.5 text-[11px] text-gray-400">사용량 확인 중</div>
++                            ) : quotaDisplayStatus === 'unavailable' ? (
++                              <div className="mt-1.5 text-[11px] text-red-400">사용량을 불러올 수 없습니다</div>
++                            ) : null}
+                           </div>
+                         </div>
+                         <div className="flex items-center gap-2 self-end md:self-auto">
+diff --git a/frontend/src/app/components/Sidebar.session.test.tsx b/frontend/src/app/components/Sidebar.session.test.tsx
+index c72c550..717679d 100644
+--- a/frontend/src/app/components/Sidebar.session.test.tsx
++++ b/frontend/src/app/components/Sidebar.session.test.tsx
+@@ -1,4 +1,4 @@
+-import { render, screen, fireEvent, act } from '@testing-library/react';
++import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+ import { describe, expect, it, vi, beforeEach } from 'vitest';
+ import { signOut, useSession } from 'next-auth/react';
+ import Sidebar from './Sidebar';
+@@ -30,9 +30,10 @@ beforeEach(() => {
+   vi.clearAllMocks();
+   localStorage.clear();
+   localStorage.setItem('user_profile', JSON.stringify(savedProfile));
+-  global.fetch = vi.fn(async () => ({
+-    json: async () => ({ usage: 0, limit: 10, remaining: 10 }),
+-  })) as any;
++  global.fetch = vi.fn(async () => new Response(
++    JSON.stringify({ usage: 0, limit: 10, remaining: 10 }),
++    { status: 200, headers: { 'Content-Type': 'application/json' } }
++  )) as unknown as typeof fetch;
+ });
+
+ function mockSession(session: any, status: string) {
+@@ -83,6 +84,14 @@ describe('사용량 조회', () => {
+     expect(global.fetch).not.toHaveBeenCalled();
+   });
+
++  it('세션이 로딩 중이면 기본 10회 대신 사용량 확인 중을 표시한다', async () => {
++    mockSession(null, 'loading');
++    await renderSidebar();
++
++    expect(screen.getAllByText('사용량 확인 중')).toHaveLength(2);
++    expect(screen.queryByText('Free Tier (무료 10회)')).toBeNull();
++  });
++
+   it('[INFRA-027] 조회 URL 에 신원을 싣지 않는다', async () => {
+     // 종전에는 화면이 이메일을 쿼리 파라미터로 넘겼고, 서버가 그 값을 그대로 믿었다.
+     // 그래서 URL 한 줄로 남의 사용량을 조회할 수 있었다. 이제 신원은 proxy.ts 가
+@@ -131,12 +140,146 @@ it('익명 사용량 조회와 갱신은 챗봇과 같은 브라우저 세션을
+   await renderSidebar();
+   const sessionId = localStorage.getItem('browser_session_id');
+   expect(sessionId).toMatch(/^anon_/);
+-  expect(global.fetch).toHaveBeenCalledWith('/api/kr/user/quota', {
++  expect(global.fetch).toHaveBeenCalledWith('/api/kr/user/quota', expect.objectContaining({
+     headers: { 'X-Session-Id': sessionId },
+-  });
++  }));
+   vi.mocked(global.fetch).mockClear();
+   await act(async () => { window.dispatchEvent(new Event('quota-updated')); });
+-  expect(global.fetch).toHaveBeenCalledWith('/api/kr/user/quota', {
++  expect(global.fetch).toHaveBeenCalledWith('/api/kr/user/quota', expect.objectContaining({
+     headers: { 'X-Session-Id': sessionId },
++  }));
++});
++
++function quotaResponse(usage: number, remaining: number): Response {
++  return new Response(
++    JSON.stringify({ usage, limit: 10, remaining }),
++    { status: 200, headers: { 'Content-Type': 'application/json' } }
++  );
++}
++
++function deferredResponse(): {
++  promise: Promise<Response>;
++  resolve: (response: Response) => void;
++} {
++  let resolve!: (response: Response) => void;
++  const promise = new Promise<Response>((resolvePromise) => {
++    resolve = resolvePromise;
++  });
++  return { promise, resolve };
++}
++
++describe('[FE-043] 사용량 오류와 신원 경계', () => {
++  it.each([
++    ['HTML 200', new Response('<!doctype html>', { status: 200 })],
++    ['HTML 404', new Response('<!doctype html>', { status: 404 })],
++    ['HTML 502', new Response('<!doctype html>', { status: 502 })],
++    ['JSON 401', new Response(JSON.stringify({ message: 'unauthorized' }), { status: 401 })],
++    ['JSON 403', new Response(JSON.stringify({ message: 'forbidden' }), { status: 403 })],
++    ['JSON 500', new Response(JSON.stringify({ message: 'server error' }), { status: 500 })],
++  ])('%s 실패에서 기본 10회 대신 불러오기 실패를 표시한다', async (_label, response) => {
++    mockSession(null, 'unauthenticated');
++    global.fetch = vi.fn(async () => response) as unknown as typeof fetch;
++
++    await renderSidebar();
++
++    expect(await screen.findAllByText('사용량을 불러올 수 없습니다')).toHaveLength(2);
++    expect(screen.queryByText('Free Tier (무료 10회)')).toBeNull();
++  });
++
++  it('잘못된 숫자 형태는 사용량으로 표시하지 않는다', async () => {
++    mockSession(null, 'unauthenticated');
++    global.fetch = vi.fn(async () => new Response(
++      JSON.stringify({ usage: '0', limit: 10, remaining: 10 }),
++      { status: 200, headers: { 'Content-Type': 'application/json' } }
++    )) as unknown as typeof fetch;
++
++    await renderSidebar();
++
++    expect(await screen.findAllByText('사용량을 불러올 수 없습니다')).toHaveLength(2);
++    expect(screen.queryByText('10회 남음')).toBeNull();
++  });
++
++  it('실패 뒤 최신 갱신이 성공하면 실제 남은 횟수로 복구한다', async () => {
++    mockSession(null, 'unauthenticated');
++    global.fetch = vi.fn()
++      .mockResolvedValueOnce(new Response('<!doctype html>', { status: 502 }))
++      .mockResolvedValueOnce(quotaResponse(3, 7)) as unknown as typeof fetch;
++
++    await renderSidebar();
++    expect(await screen.findAllByText('사용량을 불러올 수 없습니다')).toHaveLength(2);
++
++    await act(async () => {
++      window.dispatchEvent(new Event('quota-updated'));
++    });
++
++    expect(await screen.findByText('7회 남음')).toBeTruthy();
++    expect(screen.queryAllByText('사용량을 불러올 수 없습니다')).toHaveLength(0);
++  });
++
++  it('성공 뒤 최신 갱신이 실패하면 이전 사용량을 숨긴다', async () => {
++    mockSession(null, 'unauthenticated');
++    global.fetch = vi.fn()
++      .mockResolvedValueOnce(quotaResponse(3, 7))
++      .mockResolvedValueOnce(new Response('<!doctype html>', { status: 502 })) as unknown as typeof fetch;
++
++    await renderSidebar();
++    expect(await screen.findByText('7회 남음')).toBeTruthy();
++
++    await act(async () => {
++      window.dispatchEvent(new Event('quota-updated'));
++    });
++
++    expect(await screen.findAllByText('사용량을 불러올 수 없습니다')).toHaveLength(2);
++    expect(screen.queryByText('7회 남음')).toBeNull();
++  });
++
++  it.each([
++    ['다른 계정', { user: { name: 'B', email: 'b@example.com' } }, 'authenticated'],
++    ['로그아웃', null, 'unauthenticated'],
++  ])('늦은 A 응답은 %s 뒤의 최신 신원 사용량을 덮어쓰지 않는다', async (_label, nextSession, nextStatus) => {
++    const delayedA = deferredResponse();
++    global.fetch = vi.fn()
++      .mockImplementationOnce(() => delayedA.promise)
++      .mockResolvedValueOnce(quotaResponse(4, 6)) as unknown as typeof fetch;
++    mockSession({ user: { name: 'A', email: 'a@example.com' } }, 'authenticated');
++
++    const view = render(<Sidebar />);
++    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
++
++    mockSession(nextSession, nextStatus);
++    view.rerender(<Sidebar />);
++    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
++    expect(await screen.findByText('6회 남음')).toBeTruthy();
++
++    await act(async () => {
++      delayedA.resolve(quotaResponse(1, 9));
++    });
++
++    expect(screen.queryByText('9회 남음')).toBeNull();
++    expect(screen.getByText('6회 남음')).toBeTruthy();
++  });
++
++  it('같은 신원의 연속 갱신에서 늦은 첫 응답을 버린다', async () => {
++    const delayedFirst = deferredResponse();
++    global.fetch = vi.fn()
++      .mockImplementationOnce(() => delayedFirst.promise)
++      .mockResolvedValueOnce(quotaResponse(4, 6)) as unknown as typeof fetch;
++    mockSession(null, 'unauthenticated');
++
++    await renderSidebar();
++    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
++
++    await act(async () => {
++      window.dispatchEvent(new Event('quota-updated'));
++    });
++    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
++    expect(await screen.findByText('6회 남음')).toBeTruthy();
++
++    await act(async () => {
++      delayedFirst.resolve(quotaResponse(1, 9));
++    });
++
++    expect(screen.queryByText('9회 남음')).toBeNull();
++    expect(screen.getByText('6회 남음')).toBeTruthy();
+   });
+ });
+diff --git a/frontend/src/app/components/Sidebar.tsx b/frontend/src/app/components/Sidebar.tsx
+index fcf63e5..ac76bf7 100644
+--- a/frontend/src/app/components/Sidebar.tsx
++++ b/frontend/src/app/components/Sidebar.tsx
+@@ -7,6 +7,7 @@ import Modal from './Modal';
+ import PaperTradingModal from './PaperTradingModal';
+ import { useSession, signOut } from 'next-auth/react';
+ import { useAdmin } from '@/hooks/useAdmin';
++import { useQuota } from '@/hooks/useQuota';
+ import { getAuthHeaders, DEFAULT_USER_PROFILE, normalizeUserProfile, resolveUserProfile, saveUserProfile, type UserProfile } from './chatHelpers';
+
+ export default function Sidebar() {
+@@ -16,7 +17,6 @@ export default function Sidebar() {
+   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+   const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
+
+-  const [quota, setQuota] = useState<{ usage: number, limit: number, remaining: number } | null>(null);
+   const [isPaperTradingOpen, setIsPaperTradingOpen] = useState(false);
+
+   const [alertModal, setAlertModal] = useState<{
+@@ -41,6 +41,17 @@ export default function Sidebar() {
+   );
+   const displayName = displayProfile.name;
+   const displayEmail = displayProfile.email;
++  const quotaIdentity = status === 'authenticated'
++    ? `authenticated:${session?.user?.email ?? ''}`
++    : 'anonymous';
++  const quotaRequestOptions = useCallback(() => ({ headers: getAuthHeaders() }), []);
++  const { quota, quotaStatus, refreshQuota, setQuota } = useQuota({
++    enabled: status !== 'loading',
++    identity: quotaIdentity,
++    getRequestOptions: quotaRequestOptions,
++    refreshKey: isSettingsOpen,
++  });
++  const quotaDisplayStatus = status === 'loading' ? 'pending' : quotaStatus;
+
+   // Close mobile sidebar on path change
+   useEffect(() => {
+@@ -77,25 +88,6 @@ export default function Sidebar() {
+     };
+   }, []);
+
+-  const refreshQuota = useCallback(() => {
+-    // 세션이 확정되기 전에는 어느 계정의 사용량인지 알 수 없다. 세션 쿠키가 붙기 전에
+-    // 조회하면 로그인한 사용자에게 익명 응답이 잠깐 표시된다.
+-    if (status === 'loading') return;
+-
+-    // 신원은 서버가 정한다. 종전에는 쿼리 파라미터로 이메일을 넘겼는데, 그러면 URL 한
+-    // 줄로 남의 사용량을 조회할 수 있었다.
+-    fetch('/api/kr/user/quota', { headers: getAuthHeaders() })
+-      .then(res => res.json())
+-      .then(data => {
+-        setQuota(data);
+-      })
+-      .catch(e => console.error(e));
+-  }, [status]);
+-
+-  useEffect(() => {
+-    refreshQuota();
+-  }, [refreshQuota, isSettingsOpen]); // Update when settings close or API key changes
+-
+   // [Fix] 챗봇 응답 후 quota 자동 갱신
+   useEffect(() => {
+     const handleQuotaUpdate = () => refreshQuota();
+@@ -253,11 +245,15 @@ export default function Sidebar() {
+                     <div className="text-[10px] text-rose-400 mt-1 font-medium bg-rose-500/10 px-1.5 py-0.5 rounded inline-block">
+                       Admin · 무제한
+                     </div>
+-                  ) : quota && (
++                  ) : quota ? (
+                     <div className="text-[10px] text-blue-400 mt-1 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded inline-block">
+                       {quota.remaining}회 남음 (총 {quota.limit}회)
+                     </div>
+-                  )}
++                  ) : quotaDisplayStatus === 'pending' ? (
++                    <div className="text-[10px] text-gray-400 mt-1">사용량 확인 중</div>
++                  ) : quotaDisplayStatus === 'unavailable' ? (
++                    <div className="text-[10px] text-red-400 mt-1">사용량을 불러올 수 없습니다</div>
++                  ) : null}
+                 </div>
+                 <div className="p-1 space-y-0.5">
+                   <button
+@@ -348,6 +344,12 @@ export default function Sidebar() {
+               )}
+             </div>
+           )}
++          {!isAdmin && !quota && quotaDisplayStatus === 'pending' && (
++            <div className="mb-2 px-3 text-[10px] text-gray-400">사용량 확인 중</div>
++          )}
++          {!isAdmin && !quota && quotaDisplayStatus === 'unavailable' && (
++            <div className="mb-2 px-3 text-[10px] text-red-400">사용량을 불러올 수 없습니다</div>
++          )}
+
+           <button
+             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+@@ -371,6 +373,10 @@ export default function Sidebar() {
+               <div className="text-xs text-gray-500 truncate flex items-center gap-1.5">
+                 {isAdmin ? (
+                   <span className="text-rose-400 text-[11px] font-semibold">Admin · 무제한 사용</span>
++                ) : quotaDisplayStatus === 'unavailable' ? (
++                  <span className="text-red-400 text-[11px]">사용량을 불러올 수 없습니다</span>
++                ) : quotaDisplayStatus === 'pending' ? (
++                  <span className="text-gray-500 text-[11px]">사용량 확인 중</span>
+                 ) : quota ? (
+                   <span className="text-gray-500 text-[11px]">Free Tier Plan</span>
+                 ) : (
+diff --git a/frontend/src/lib/api.test.ts b/frontend/src/lib/api.test.ts
+index 882d433..cd0340c 100644
+--- a/frontend/src/lib/api.test.ts
++++ b/frontend/src/lib/api.test.ts
+@@ -60,6 +60,41 @@ describe('fetchAPI', () => {
+     await expect(fetchAPI('/api/kr/signals')).rejects.toThrow('API Error: 502');
+   });
+
++  it('성공 상태의 HTML 본문도 상태와 본문을 숨긴 제어된 오류로 바꾼다', async () => {
++    vi.stubGlobal(
++      'fetch',
++      vi.fn(async () => new Response('<!doctype html><title>Proxy error</title>', { status: 200 }))
++    );
++
++    const error = await fetchAPI('/api/kr/user/quota').catch((reason: unknown) => reason);
++
++    expect(error).toMatchObject({
++      message: '서버 응답이 올바른 JSON이 아닙니다',
++      status: 200,
++    });
++    expect((error as { data?: unknown }).data).toBeUndefined();
++  });
++
++  it.each([404, 502])('HTML %s 응답은 JSON SyntaxError 대신 상태를 보존한 오류가 된다', async (status) => {
++    vi.stubGlobal(
++      'fetch',
++      vi.fn(async () => new Response('<!doctype html><title>Proxy error</title>', { status }))
++    );
++
++    const error = await fetchAPI('/api/kr/user/quota').catch((reason: unknown) => reason);
++
++    expect(error).toMatchObject({ message: `API Error: ${status}`, status, data: undefined });
++  });
++
++  it.each([401, 403, 500])('JSON %s 오류의 상태와 사유를 호출부로 전달한다', async (status) => {
++    mockResponse(status, { status: 'error', message: `quota ${status} failure` });
++
++    await expect(fetchAPI('/api/kr/user/quota')).rejects.toMatchObject({
++      message: `quota ${status} failure`,
++      status,
++    });
++  });
++
+   it('응답이 제한 시간을 넘기면 스스로 끊는다', async () => {
+     // 서버가 답하지 않는 상황. AbortController 가 끊고 그 이름을 사람이 읽을 문구로 바꾼다.
+     vi.stubGlobal(
+diff --git a/frontend/src/lib/api.ts b/frontend/src/lib/api.ts
+index 3d7c44d..f286da3 100644
+--- a/frontend/src/lib/api.ts
++++ b/frontend/src/lib/api.ts
+@@ -11,6 +11,19 @@ interface APIError extends Error {
+   data?: unknown;
+ }
+
++function getErrorMessage(data: unknown, status: number): string {
++  if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
++    const response = data as { message?: unknown; error?: unknown };
++    if (typeof response.message === 'string' && response.message.trim()) return response.message;
++    if (typeof response.error === 'string' && response.error.trim()) return response.error;
++  }
++  return `API Error: ${status}`;
++}
++
++function isAbortError(error: unknown): boolean {
++  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
++}
++
+ export function isAuthenticationError(error: unknown): error is APIError & { status: 401 } {
+   return typeof error === 'object' && error !== null && (error as APIError).status === 401;
+ }
+@@ -33,21 +46,28 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
+       // 백엔드는 실패 사유를 `message` 나 `error` 중 한 자리에 적어 보낸다. 그 문구를
+       // Error.message 로 올려야 호출부가 `e.message` 를 그대로 화면에 띄울 수 있다.
+       // 여기서 올리지 않으면 사유를 꺼내는 코드를 호출부마다 따로 두게 된다.
+-      let data: any;
++      let data: unknown;
+       try {
+         data = await response.json();
+-      } catch (e) { /* 본문이 JSON 이 아니면 상태 코드만 가지고 간다 */ }
++      } catch {
++        // 실패 상태의 HTML은 상태 코드만 남긴 제어된 API 오류가 된다.
++      }
+
+-      const error: any = new Error(
+-        data?.message || data?.error || `API Error: ${response.status}`
+-      );
++      const error: APIError = new Error(getErrorMessage(data, response.status));
+       error.status = response.status;
+       error.data = data;
+       throw error;
+     }
+-    return await response.json();
+-  } catch (e: any) {
+-    if (e.name === 'AbortError') {
++    try {
++      return await response.json();
++    } catch (error: unknown) {
++      if (isAbortError(error)) throw error;
++      // 프록시가 200과 함께 HTML 오류 페이지를 돌려도 호출부가 SyntaxError나 본문을
++      // 그대로 화면에 노출하지 않게 한다.
++      throw Object.assign(new Error('서버 응답이 올바른 JSON이 아닙니다'), { status: response.status });
++    }
++  } catch (e: unknown) {
++    if (isAbortError(e)) {
+       throw new Error('Request timed out');
+     }
+     throw e;
+diff --git a/services/kr_market_analytics_service.py b/services/kr_market_analytics_service.py
+index c63c6f7..1232f8f 100644
+--- a/services/kr_market_analytics_service.py
++++ b/services/kr_market_analytics_service.py
+@@ -23,7 +23,7 @@ from services.kr_market_csv_utils import (
+     load_csv_readonly as _load_csv_readonly,
+ )
+ from services.file_row_count_cache import get_cached_file_row_count
+-from services.kr_market_backtest_cumulative import (
++from services.kr_market_backtest_trade_helpers import (
+     build_ticker_price_index,
+     extract_stats_date_from_results_filename,
+ )
+diff --git a/services/kr_market_backtest_calculators.py b/services/kr_market_backtest_calculators.py
+deleted file mode 100644
+index 89006cc..0000000
+--- a/services/kr_market_backtest_calculators.py
++++ /dev/null
+@@ -1,39 +0,0 @@
+-#!/usr/bin/env python3
+-# -*- coding: utf-8 -*-
+-"""
+-KR Market Backtest/Cumulative Service
+-
+-누적 성과/백테스트 계산 로직의 호환 레이어.
+-"""
+-
+-from services.kr_market_backtest_cumulative import (
+-    aggregate_cumulative_kpis,
+-    build_cumulative_trade_record,
+-    build_ticker_price_index,
+-    calculate_cumulative_trade_metrics,
+-    extract_stats_date_from_results_filename,
+-    paginate_items,
+-    prepare_cumulative_price_dataframe,
+-)
+-from services.kr_market_backtest_signal_stats import (
+-    build_latest_price_map,
+-    calculate_jongga_backtest_stats,
+-    calculate_scenario_return,
+-    calculate_vcp_backtest_stats,
+-    inject_latest_prices_to_candidates,
+-)
+-
+-__all__ = [
+-    "aggregate_cumulative_kpis",
+-    "build_cumulative_trade_record",
+-    "build_latest_price_map",
+-    "build_ticker_price_index",
+-    "calculate_cumulative_trade_metrics",
+-    "calculate_jongga_backtest_stats",
+-    "calculate_scenario_return",
+-    "calculate_vcp_backtest_stats",
+-    "extract_stats_date_from_results_filename",
+-    "inject_latest_prices_to_candidates",
+-    "paginate_items",
+-    "prepare_cumulative_price_dataframe",
+-]
+diff --git a/services/kr_market_backtest_cumulative.py b/services/kr_market_backtest_cumulative.py
+deleted file mode 100644
+index c61cbd8..0000000
+--- a/services/kr_market_backtest_cumulative.py
++++ /dev/null
+@@ -1,30 +0,0 @@
+-#!/usr/bin/env python3
+-# -*- coding: utf-8 -*-
+-"""
+-KR Market Backtest - Cumulative Calculators (Facade)
+-"""
+-
+-from __future__ import annotations
+-
+-from services.kr_market_backtest_kpi_helpers import (
+-    aggregate_cumulative_kpis,
+-    paginate_items,
+-)
+-from services.kr_market_backtest_trade_helpers import (
+-    build_cumulative_trade_record,
+-    build_ticker_price_index,
+-    calculate_cumulative_trade_metrics,
+-    extract_stats_date_from_results_filename,
+-    prepare_cumulative_price_dataframe,
+-)
+-
+-__all__ = [
+-    "aggregate_cumulative_kpis",
+-    "build_cumulative_trade_record",
+-    "build_ticker_price_index",
+-    "calculate_cumulative_trade_metrics",
+-    "extract_stats_date_from_results_filename",
+-    "paginate_items",
+-    "prepare_cumulative_price_dataframe",
+-]
+-
+diff --git a/services/kr_market_backtest_scenario_helpers.py b/services/kr_market_backtest_scenario_helpers.py
+index f2fd286..edfdea2 100644
+--- a/services/kr_market_backtest_scenario_helpers.py
++++ b/services/kr_market_backtest_scenario_helpers.py
+@@ -11,19 +11,9 @@ from typing import Any
+ import numpy as np
+ import pandas as pd
+
++from engine.ticker_utils import normalize_ticker
+ from services.kr_market_backtest_common import pct_to_percent, resolve_hit_outcome, safe_float
+-
+-
+-def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
+-    if "_ticker_padded" in df.columns:
+-        return df["_ticker_padded"]
+-
+-    padded = df["ticker"].astype(str).str.zfill(6)
+-    try:
+-        df["_ticker_padded"] = padded
+-        return df["_ticker_padded"]
+-    except Exception:
+-        return padded
++from services.kr_market_csv_utils import get_ticker_padded_series
+
+
+ def _filter_subset_after_signal_date(
+@@ -59,7 +49,8 @@ def build_latest_price_map(price_df: Any) -> dict[str, float]:
+         return {}
+
+     df = price_df.copy()
+-    df["ticker"] = _get_ticker_padded_series(df)
++    df["ticker"] = get_ticker_padded_series(df)
++    df = df[df["ticker"] != ""]
+     if "date" in df.columns and not df["date"].is_monotonic_increasing:
+         df = df.sort_values("date")
+
+@@ -80,12 +71,11 @@ def inject_latest_prices_to_candidates(
+     for candidate in candidates:
+         if not isinstance(candidate, dict):
+             continue
+-        code = str(
++        code = normalize_ticker(
+             candidate.get("stock_code")
+             or candidate.get("code")
+             or candidate.get("ticker")
+-            or ""
+-        ).zfill(6)
++        )
+         if code not in price_map:
+             continue
+
+diff --git a/services/kr_market_backtest_service.py b/services/kr_market_backtest_service.py
+index 99ba95c..df53c4e 100644
+--- a/services/kr_market_backtest_service.py
++++ b/services/kr_market_backtest_service.py
+@@ -1,26 +1,27 @@
+ #!/usr/bin/env python3
+ # -*- coding: utf-8 -*-
+-"""
+-KR Market Backtest/Cumulative Service (Compatibility Layer)
++"""백테스트와 누적 성과의 공개 진입점. 실제 계산은 각 헬퍼가 담당한다."""
+
+-실제 계산 로직은 `services.kr_market_backtest_calculators`로 분리되었다.
+-기존 import 경로 호환을 위해 동일 API를 재노출한다.
+-"""
+-
+-from services.kr_market_backtest_calculators import (
++from services.kr_market_backtest_kpi_helpers import (
+     aggregate_cumulative_kpis,
++    paginate_items,
++)
++from services.kr_market_backtest_trade_helpers import (
+     build_cumulative_trade_record,
+-    build_latest_price_map,
+     build_ticker_price_index,
+     calculate_cumulative_trade_metrics,
+-    calculate_jongga_backtest_stats,
+-    calculate_scenario_return,
+-    calculate_vcp_backtest_stats,
+     extract_stats_date_from_results_filename,
+-    inject_latest_prices_to_candidates,
+-    paginate_items,
+     prepare_cumulative_price_dataframe,
+ )
++from services.kr_market_backtest_scenario_helpers import (
++    build_latest_price_map,
++    calculate_scenario_return,
++    inject_latest_prices_to_candidates,
++)
++from services.kr_market_backtest_stats_helpers import (
++    calculate_jongga_backtest_stats,
++    calculate_vcp_backtest_stats,
++)
+
+ __all__ = [
+     "aggregate_cumulative_kpis",
+diff --git a/services/kr_market_backtest_signal_stats.py b/services/kr_market_backtest_signal_stats.py
+deleted file mode 100644
+index bc3f177..0000000
+--- a/services/kr_market_backtest_signal_stats.py
++++ /dev/null
+@@ -1,26 +0,0 @@
+-#!/usr/bin/env python3
+-# -*- coding: utf-8 -*-
+-"""
+-KR Market Backtest - Scenario/Stats Calculators (Facade)
+-"""
+-
+-from __future__ import annotations
+-
+-from services.kr_market_backtest_scenario_helpers import (
+-    build_latest_price_map,
+-    calculate_scenario_return,
+-    inject_latest_prices_to_candidates,
+-)
+-from services.kr_market_backtest_stats_helpers import (
+-    calculate_jongga_backtest_stats,
+-    calculate_vcp_backtest_stats,
+-)
+-
+-__all__ = [
+-    "build_latest_price_map",
+-    "inject_latest_prices_to_candidates",
+-    "calculate_scenario_return",
+-    "calculate_jongga_backtest_stats",
+-    "calculate_vcp_backtest_stats",
+-]
+-
+diff --git a/services/kr_market_backtest_stats_helpers.py b/services/kr_market_backtest_stats_helpers.py
+index 70f3fe3..07271a0 100644
+--- a/services/kr_market_backtest_stats_helpers.py
++++ b/services/kr_market_backtest_stats_helpers.py
+@@ -10,11 +10,13 @@ from typing import Any
+
+ import pandas as pd
+
++from engine.ticker_utils import normalize_ticker
++
+ from services.kr_market_backtest_common import (
+     determine_backtest_status,
+     safe_float,
+ )
+-from services.kr_market_backtest_cumulative import (
++from services.kr_market_backtest_trade_helpers import (
+     build_cumulative_trade_record,
+     build_ticker_price_index,
+ )
+@@ -121,10 +123,10 @@ def calculate_vcp_backtest_stats(
+     resolved_price_index = price_index or build_ticker_price_index(price_df)
+
+     for row in vcp_df.itertuples(index=False):
+-        ticker = str(getattr(row, "ticker", "")).zfill(6)
++        ticker = normalize_ticker(getattr(row, "ticker", ""))
+         entry_price = safe_float(getattr(row, "entry_price", 0), default=0.0)
+         signal_date = str(getattr(row, "signal_date", ""))
+-        if entry_price <= 0 or not signal_date:
++        if not ticker or entry_price <= 0 or not signal_date:
+             continue
+
+         current_price = safe_float(price_map.get(ticker), default=0.0)
+diff --git a/services/kr_market_backtest_trade_helpers.py b/services/kr_market_backtest_trade_helpers.py
+index 242fab6..7a29f69 100644
+--- a/services/kr_market_backtest_trade_helpers.py
++++ b/services/kr_market_backtest_trade_helpers.py
+@@ -14,6 +14,7 @@ from typing import Any
+
+ import pandas as pd
+
++from engine.ticker_utils import normalize_ticker
+ from services.kr_market_backtest_common import (
+     JONGGA_STOP_PCT,
+     JONGGA_TARGET_PCT,
+@@ -23,22 +24,11 @@ from services.kr_market_backtest_common import (
+     resolve_hit_outcome,
+     safe_float,
+ )
++from services.kr_market_csv_utils import get_ticker_padded_series
+
+
+ logger = logging.getLogger(__name__)
+
+-def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
+-    if "_ticker_padded" in df.columns:
+-        return df["_ticker_padded"]
+-
+-    padded = df["ticker"].astype(str).str.zfill(6)
+-    try:
+-        df["_ticker_padded"] = padded
+-        return df["_ticker_padded"]
+-    except Exception:
+-        return padded
+-
+-
+ def prepare_cumulative_price_dataframe(raw_price_df: Any) -> Any:
+     """누적성과 계산용 가격 DataFrame을 정규화한다."""
+     if not isinstance(raw_price_df, pd.DataFrame) or raw_price_df.empty:
+@@ -47,7 +37,8 @@ def prepare_cumulative_price_dataframe(raw_price_df: Any) -> Any:
+         return pd.DataFrame()
+
+     df = raw_price_df.copy()
+-    df["ticker"] = _get_ticker_padded_series(df)
++    df["ticker"] = get_ticker_padded_series(df)
++    df = df[df["ticker"] != ""]
+     df["date"] = pd.to_datetime(df["date"], errors="coerce")
+     df = df[df["date"].notna()]
+
+@@ -69,7 +60,8 @@ def build_ticker_price_index(price_df: Any) -> dict[str, pd.DataFrame]:
+         return {}
+
+     normalized_df = price_df.copy()
+-    normalized_df["ticker"] = _get_ticker_padded_series(normalized_df)
++    normalized_df["ticker"] = get_ticker_padded_series(normalized_df)
++    normalized_df = normalized_df[normalized_df["ticker"] != ""]
+
+     if "date" in normalized_df.columns:
+         sorted_df = normalized_df
+@@ -262,8 +254,8 @@ def build_cumulative_trade_record(
+     if not isinstance(signal, dict):
+         return None
+
+-    ticker = str(signal.get("ticker") or signal.get("stock_code") or signal.get("code") or "").zfill(6)
+-    if not ticker or ticker == "000000":
++    ticker = normalize_ticker(signal.get("ticker") or signal.get("stock_code") or signal.get("code"))
++    if not ticker:
+         return None
+
+     entry_price = safe_float(signal.get("entry_price", 0), default=0.0)
+diff --git a/services/kr_market_csv_utils.py b/services/kr_market_csv_utils.py
+index 6cb6b0f..a2d15ac 100644
+--- a/services/kr_market_csv_utils.py
++++ b/services/kr_market_csv_utils.py
+@@ -12,6 +12,8 @@ from collections.abc import Callable
+
+ import pandas as pd
+
++from engine.ticker_utils import normalize_ticker
++
+ _ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ _LOADER_STRATEGY_CACHE: weakref.WeakKeyDictionary[
+     Callable[..., pd.DataFrame],
+@@ -209,7 +211,7 @@ def get_ticker_padded_series(
+     if cache_column in df.columns:
+         return df[cache_column]
+
+-    padded = df[ticker_column].astype(str).str.zfill(6)
++    padded = df[ticker_column].map(normalize_ticker)
+     try:
+         df[cache_column] = padded
+         return df[cache_column]
+@@ -234,11 +236,11 @@ def build_latest_close_map_from_prices_df(df_prices: pd.DataFrame) -> dict[str,
+
+     working = pd.DataFrame(
+         {
+-            "ticker": df_prices["ticker"].astype(str).str.zfill(6),
++            "ticker": get_ticker_padded_series(df_prices),
+             "close": pd.to_numeric(df_prices["close"], errors="coerce"),
+         }
+     )
+-    working = working[working["close"].notna()]
++    working = working[(working["ticker"] != "") & working["close"].notna()]
+     if working.empty:
+         return {}
+
+diff --git a/services/kr_market_data_cache_prices.py b/services/kr_market_data_cache_prices.py
+index ca0ded4..d004439 100644
+--- a/services/kr_market_data_cache_prices.py
++++ b/services/kr_market_data_cache_prices.py
+@@ -11,6 +11,7 @@ from typing import Any, Callable
+
+ import pandas as pd
+
++from engine.ticker_utils import normalize_ticker
+ from services.kr_market_data_cache_sqlite_payload import (
+     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
+     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
+@@ -36,12 +37,16 @@ def _latest_vcp_price_map_sqlite_cache_key(price_file: str) -> str:
+     return f"{os.path.abspath(price_file)}{_LATEST_VCP_PRICE_MAP_SQLITE_CACHE_KEY_SUFFIX}"
+
+
+-def _serialize_latest_vcp_price_map(price_map: dict[str, float]) -> dict[str, object]:
++def _normalize_latest_vcp_price_map(price_map: dict[str, object]) -> dict[str, float]:
+     rows: dict[str, float] = {}
+-    for ticker, value in price_map.items():
+-        ticker_key = str(ticker).zfill(6)
++    exact_keys: set[str] = set()
++    for ticker, value in sorted(price_map.items(), key=lambda item: str(item[0])):
++        ticker_key = normalize_ticker(ticker)
+         if not ticker_key:
+             continue
++        is_exact_key = str(ticker) == ticker_key
++        if ticker_key in exact_keys or (ticker_key in rows and not is_exact_key):
++            continue
+         try:
+             normalized_value = float(value)
+         except (TypeError, ValueError):
+@@ -49,7 +54,13 @@ def _serialize_latest_vcp_price_map(price_map: dict[str, float]) -> dict[str, ob
+         if pd.isna(normalized_value):
+             continue
+         rows[ticker_key] = normalized_value
+-    return {"rows": rows}
++        if is_exact_key:
++            exact_keys.add(ticker_key)
++    return rows
++
++
++def _serialize_latest_vcp_price_map(price_map: dict[str, float]) -> dict[str, object]:
++    return {"rows": _normalize_latest_vcp_price_map(price_map)}
+
+
+ def _deserialize_latest_vcp_price_map(payload: dict[str, object]) -> dict[str, float] | None:
+@@ -57,19 +68,7 @@ def _deserialize_latest_vcp_price_map(payload: dict[str, object]) -> dict[str, f
+     if not isinstance(rows_payload, dict):
+         return None
+
+-    latest_price_map: dict[str, float] = {}
+-    for ticker, value in rows_payload.items():
+-        ticker_key = str(ticker).zfill(6)
+-        if not ticker_key:
+-            continue
+-        try:
+-            normalized_value = float(value)
+-        except (TypeError, ValueError):
+-            continue
+-        if pd.isna(normalized_value):
+-            continue
+-        latest_price_map[ticker_key] = normalized_value
+-    return latest_price_map
++    return _normalize_latest_vcp_price_map(rows_payload)
+
+
+ def _load_latest_vcp_price_map_from_sqlite(
+@@ -214,7 +213,8 @@ def load_backtest_price_snapshot(
+     )
+     if df_prices_full.empty:
+         return pd.DataFrame(), {}
+-    df_prices_full["ticker"] = df_prices_full["ticker"].astype(str).str.zfill(6)
++    df_prices_full["ticker"] = df_prices_full["ticker"].map(normalize_ticker)
++    df_prices_full = df_prices_full[df_prices_full["ticker"] != ""]
+     if latest_signature == signature and isinstance(latest_cache_map, dict):
+         latest_price_map = dict(latest_cache_map)
+     else:
+diff --git a/services/kr_market_realtime_price_cache.py b/services/kr_market_realtime_price_cache.py
+index 1483404..ff52249 100644
+--- a/services/kr_market_realtime_price_cache.py
++++ b/services/kr_market_realtime_price_cache.py
+@@ -14,6 +14,7 @@ from collections import OrderedDict
+ from datetime import datetime, timedelta
+ from typing import Any, Callable, Iterator
+
++from engine.ticker_utils import normalize_ticker
+ from services.sqlite_utils import (
+     build_sqlite_in_placeholders,
+     build_sqlite_pragmas,
+@@ -60,8 +61,7 @@ _REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS = 2
+ _REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS = 0.03
+
+
+-def _normalize_ticker(ticker: Any) -> str:
+-    return str(ticker).zfill(6)
++_normalize_ticker = normalize_ticker
+
+
+ def _normalize_unique_tickers(tickers: list[Any]) -> list[str]:
+@@ -69,6 +69,8 @@ def _normalize_unique_tickers(tickers: list[Any]) -> list[str]:
+     seen: set[str] = set()
+     for ticker in tickers:
+         ticker_key = _normalize_ticker(ticker)
++        if not ticker_key:
++            continue
+         if ticker_key in seen:
+             continue
+         seen.add(ticker_key)
+@@ -308,7 +310,7 @@ def load_cached_realtime_prices(
+         return {}
+
+     cutoff_iso = (datetime.now() - timedelta(seconds=max(0, int(max_age_seconds)))).isoformat()
+-    def _query_rows() -> list[tuple[Any, Any]]:
++    def _query_rows() -> list[tuple[Any, Any, Any]]:
+         with connect_sqlite(
+             db_path,
+             timeout_seconds=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS,
+@@ -316,12 +318,12 @@ def load_cached_realtime_prices(
+             read_only=True,
+         ) as conn:
+             cursor = conn.cursor()
+-            rows: list[tuple[Any, Any]] = []
++            rows: list[tuple[Any, Any, Any]] = []
+             for chunk in _iter_ticker_chunks(unique_tickers):
+                 placeholders = build_sqlite_in_placeholders(chunk)
+                 cursor.execute(
+                     f"""
+-                    SELECT ticker, price
++                    SELECT ticker, price, updated_at
+                     FROM realtime_price_cache
+                     WHERE ticker IN ({placeholders})
+                       AND updated_at >= ?
+@@ -329,6 +331,21 @@ def load_cached_realtime_prices(
+                     [*chunk, cutoff_iso],
+                 )
+                 rows.extend(cursor.fetchall())
++                cursor.execute(
++                    f"""
++                    SELECT ticker, price, updated_at
++                    FROM realtime_price_cache
++                    WHERE updated_at >= ?
++                      AND LENGTH(TRIM(ticker)) BETWEEN 1 AND 6
++                      AND CASE
++                          WHEN LENGTH(TRIM(ticker)) < 6
++                          THEN SUBSTR('000000' || UPPER(TRIM(ticker)), -6)
++                          ELSE UPPER(TRIM(ticker))
++                      END IN ({placeholders})
++                    """,
++                    [cutoff_iso, *chunk],
++                )
++                rows.extend(cursor.fetchall())
+             return rows
+
+     try:
+@@ -357,16 +374,28 @@ def load_cached_realtime_prices(
+                 logger.debug("Failed to load realtime price cache: %s", error)
+             return {}
+
+-    resolved: dict[str, float] = {}
+-    for ticker, price in rows:
++    candidates: dict[str, tuple[float, float, bool]] = {}
++    requested_tickers = set(unique_tickers)
++    for ticker, price, updated_at in rows:
+         ticker_key = _normalize_ticker(ticker)
++        if not ticker_key or ticker_key not in requested_tickers:
++            continue
+         try:
+             price_value = float(price or 0)
+         except (TypeError, ValueError):
+-            price_value = 0.0
+-        if price_value > 0:
+-            resolved[ticker_key] = price_value
+-    return resolved
++            continue
++        if price_value <= 0:
++            continue
++        updated_timestamp = _parse_iso_timestamp(updated_at)
++        candidate = (price_value, updated_timestamp or float("-inf"), str(ticker) == ticker_key)
++        existing = candidates.get(ticker_key)
++        if (
++            existing is None
++            or candidate[1] > existing[1]
++            or (candidate[1] == existing[1] and candidate[2] and not existing[2])
++        ):
++            candidates[ticker_key] = candidate
++    return {ticker: candidate[0] for ticker, candidate in candidates.items()}
+
+
+ def save_realtime_prices_to_cache(
+@@ -389,6 +418,8 @@ def save_realtime_prices_to_cache(
+     now_iso = now_dt.isoformat()
+     for ticker, price in prices.items():
+         ticker_key = _normalize_ticker(ticker)
++        if not ticker_key:
++            continue
+         try:
+             price_value = float(price or 0)
+         except (TypeError, ValueError):
+diff --git a/services/kr_market_realtime_price_service.py b/services/kr_market_realtime_price_service.py
+index ffae1f6..86e1b9c 100644
+--- a/services/kr_market_realtime_price_service.py
++++ b/services/kr_market_realtime_price_service.py
+@@ -15,6 +15,7 @@ from typing import Any, Callable
+
+ import pandas as pd
+
++from engine.ticker_utils import normalize_ticker
+ from services.kr_market_csv_utils import (
+     build_latest_close_map_from_prices_df,
+     load_csv_readonly as _load_csv_readonly,
+@@ -39,16 +40,12 @@ def clear_market_map_cache() -> None:
+     _clear_market_map_cache_impl()
+     _clear_latest_close_map_cache_impl()
+
+-def normalize_ticker(ticker: Any) -> str:
+-    return str(ticker).zfill(6)
+-
+-
+ def _is_normalized_unique_ticker_list(tickers: list[Any]) -> bool:
+     seen: set[str] = set()
+     for ticker in tickers:
+         if not isinstance(ticker, str):
+             return False
+-        if len(ticker) != 6 or not ticker.isdigit():
++        if not ticker or normalize_ticker(ticker) != ticker:
+             return False
+         if ticker in seen:
+             return False
+@@ -65,6 +62,8 @@ def normalize_unique_tickers(tickers: list[Any]) -> list[str]:
+     normalized: list[str] = []
+     for ticker in tickers:
+         ticker_str = normalize_ticker(ticker)
++        if not ticker_str:
++            continue
+         if ticker_str in seen:
+             continue
+         seen.add(ticker_str)
+@@ -84,12 +83,20 @@ def _resolve_normalized_tickers(
+
+ def _normalize_price_map(price_map: dict[Any, Any]) -> dict[str, float]:
+     normalized: dict[str, float] = {}
+-    for ticker, value in price_map.items():
++    exact_keys: set[str] = set()
++    for ticker, value in sorted(price_map.items(), key=lambda item: str(item[0])):
+         ticker_key = normalize_ticker(ticker)
++        if not ticker_key:
++            continue
++        is_exact_key = str(ticker) == ticker_key
++        if ticker_key in exact_keys or (ticker_key in normalized and not is_exact_key):
++            continue
+         try:
+             normalized[ticker_key] = float(value or 0)
+         except (TypeError, ValueError):
+             normalized[ticker_key] = 0.0
++        if is_exact_key:
++            exact_keys.add(ticker_key)
+     return normalized
+
+ def fetch_small_batch_prices(
+diff --git a/services/kr_market_vcp_cache_update_service.py b/services/kr_market_vcp_cache_update_service.py
+index cfc057a..0801fe0 100644
+--- a/services/kr_market_vcp_cache_update_service.py
++++ b/services/kr_market_vcp_cache_update_service.py
+@@ -11,12 +11,12 @@ import os
+ from datetime import datetime
+ from typing import Any, Callable
+
++from engine.ticker_utils import normalize_ticker
+ from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
+ from services.kr_market_data_cache_service import atomic_write_text
+
+
+-def _normalize_ticker(value: Any) -> str:
+-    return str(value or "").strip().zfill(6)
++_normalize_ticker = normalize_ticker
+
+
+ def _normalize_ai_payload(ai_payload: Any) -> dict[str, dict[str, Any]]:
+@@ -48,14 +48,18 @@ def update_vcp_ai_cache_files(
+         for ticker, recommendation in updated_recommendations.items():
+             if not isinstance(recommendation, dict) or not recommendation:
+                 continue
+-            normalized_gemini_updates[_normalize_ticker(ticker)] = recommendation
++            ticker_key = _normalize_ticker(ticker)
++            if ticker_key:
++                normalized_gemini_updates[ticker_key] = recommendation
+
+     normalized_ai_results: dict[str, dict[str, dict[str, Any]]] = {}
+     if isinstance(ai_results, dict):
+         for ticker, ai_payload in ai_results.items():
+             normalized_payload = _normalize_ai_payload(ai_payload)
+             if normalized_payload:
+-                normalized_ai_results[_normalize_ticker(ticker)] = normalized_payload
++                ticker_key = _normalize_ticker(ticker)
++                if ticker_key:
++                    normalized_ai_results[ticker_key] = normalized_payload
+
+     target_tickers = set(normalized_gemini_updates) | set(normalized_ai_results)
+     if not target_tickers:
+@@ -91,7 +95,7 @@ def update_vcp_ai_cache_files(
+                 if not isinstance(item, dict):
+                     continue
+                 ticker = _normalize_ticker(item.get("ticker") or item.get("stock_code"))
+-                if ticker == "000000" or ticker not in target_tickers:
++                if not ticker or ticker not in target_tickers:
+                     continue
+
+                 gemini_rec = normalized_gemini_updates.get(ticker)
+diff --git a/services/paper_trading_price_fetchers.py b/services/paper_trading_price_fetchers.py
+index 00b21a0..6279e27 100644
+--- a/services/paper_trading_price_fetchers.py
++++ b/services/paper_trading_price_fetchers.py
+@@ -15,15 +15,16 @@ from typing import Any, Dict, Optional
+
+ import pandas as pd
+
++from engine.ticker_utils import normalize_ticker
+
+-def _normalize_ticker(ticker: str) -> str:
+-    return str(ticker).zfill(6)
++
++_normalize_ticker = normalize_ticker
+
+
+ def _is_normalized_unique_ticker_list(tickers: list[str]) -> bool:
+     seen: set[str] = set()
+     for ticker in tickers:
+-        if not isinstance(ticker, str) or len(ticker) != 6 or not ticker.isdigit():
++        if not isinstance(ticker, str) or not ticker or normalize_ticker(ticker) != ticker:
+             return False
+         if ticker in seen:
+             return False
+@@ -41,6 +42,8 @@ def _normalize_unique_tickers(tickers: list[str]) -> list[str]:
+     normalized: list[str] = []
+     for ticker in tickers:
+         ticker_str = _normalize_ticker(ticker)
++        if not ticker_str:
++            continue
+         if ticker_str in seen:
+             continue
+         seen.add(ticker_str)
+@@ -66,6 +69,8 @@ def _extract_krx_close_map(df: pd.DataFrame) -> Dict[str, int]:
+     close_map: Dict[str, int] = {}
+     for index_value, close_price in df["종가"].items():
+         ticker = _normalize_ticker(index_value)
++        if not ticker:
++            continue
+         try:
+             close_int = int(float(close_price))
+         except (TypeError, ValueError):
+diff --git a/services/paper_trading_sync_service.py b/services/paper_trading_sync_service.py
+index 4ab5146..adb8480 100644
+--- a/services/paper_trading_sync_service.py
++++ b/services/paper_trading_sync_service.py
+@@ -10,15 +10,16 @@ import logging
+ import time
+ from typing import Any, Callable
+
++from engine.ticker_utils import normalize_ticker
+
+-def _normalize_ticker(ticker: str) -> str:
+-    return str(ticker).zfill(6)
++
++_normalize_ticker = normalize_ticker
+
+
+ def _is_normalized_unique_ticker_list(tickers: list[str]) -> bool:
+     seen: set[str] = set()
+     for ticker in tickers:
+-        if not isinstance(ticker, str) or len(ticker) != 6 or not ticker.isdigit():
++        if not isinstance(ticker, str) or not ticker or normalize_ticker(ticker) != ticker:
+             return False
+         if ticker in seen:
+             return False
+@@ -35,6 +36,8 @@ def _normalize_unique_tickers(tickers: list[str]) -> list[str]:
+     normalized: list[str] = []
+     for ticker in tickers:
+         ticker_str = _normalize_ticker(ticker)
++        if not ticker_str:
++            continue
+         if ticker_str in seen:
+             continue
+         seen.add(ticker_str)
+@@ -50,6 +53,8 @@ def _normalize_resolved_prices(prices: dict[str, int] | None) -> dict[str, int]:
+     normalized: dict[str, int] = {}
+     for ticker, value in prices.items():
+         ticker_key = _normalize_ticker(ticker)
++        if not ticker_key:
++            continue
+         try:
+             price_int = int(float(value))
+         except (TypeError, ValueError):
+diff --git a/services/paper_trading_valuation_helpers.py b/services/paper_trading_valuation_helpers.py
+index 5c82b06..acec822 100644
+--- a/services/paper_trading_valuation_helpers.py
++++ b/services/paper_trading_valuation_helpers.py
+@@ -9,9 +9,7 @@ from __future__ import annotations
+ from datetime import datetime, timedelta
+ from typing import Dict
+
+-
+-def _normalize_ticker(ticker: str) -> str:
+-    return str(ticker).zfill(6)
++from engine.ticker_utils import normalize_ticker as _normalize_ticker
+
+
+ def _resolve_price_for_ticker(
+@@ -20,9 +18,10 @@ def _resolve_price_for_ticker(
+     current_prices: Dict[str, int],
+ ) -> int | None:
+     raw_ticker = str(ticker)
+-    if raw_ticker in current_prices:
+-        return current_prices[raw_ticker]
+-    return None
++    normalized = _normalize_ticker(ticker)
++    if normalized and normalized in current_prices:
++        return current_prices[normalized]
++    return current_prices.get(raw_ticker)
+
+
+ def build_valuated_holding(
+diff --git a/tests/services/test_paper_trading_service.py b/tests/services/test_paper_trading_service.py
+index fa0af49..eea6921 100644
+--- a/tests/services/test_paper_trading_service.py
++++ b/tests/services/test_paper_trading_service.py
+@@ -904,7 +904,7 @@ def test_sell_stock_rejects_non_positive_or_non_numeric_price():
+         _cleanup_service(service)
+
+
+-def test_get_portfolio_valuation_ignores_normalized_cache_for_legacy_ticker():
++def test_get_portfolio_valuation_uses_normalized_cache_for_legacy_ticker():
+     service = _build_service()
+     try:
+         with service.get_context() as conn:
+@@ -924,9 +924,9 @@ def test_get_portfolio_valuation_ignores_normalized_cache_for_legacy_ticker():
+         valuation = service.get_portfolio_valuation(owner_id=TEST_OWNER)
+         assert len(valuation["holdings"]) == 1
+         assert valuation["holdings"][0]["ticker"] == "5930"
+-        assert valuation["holdings"][0]["current_price"] == 1_000
+-        assert valuation["holdings"][0]["is_stale"] is True
+-        assert valuation["total_stock_value"] == 3_000
++        assert valuation["holdings"][0]["current_price"] == 7_000
++        assert valuation["holdings"][0]["is_stale"] is False
++        assert valuation["total_stock_value"] == 21_000
+     finally:
+         _cleanup_service(service)

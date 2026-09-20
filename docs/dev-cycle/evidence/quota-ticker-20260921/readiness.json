@@ -1,0 +1,12 @@
+[
+  {
+    "url": "http://127.0.0.1:57932/api/portfolio",
+    "status": 200,
+    "bytes": 366
+  },
+  {
+    "url": "http://127.0.0.1:57931/dashboard/kr/vcp",
+    "status": 200,
+    "bytes": 49754
+  }
+]

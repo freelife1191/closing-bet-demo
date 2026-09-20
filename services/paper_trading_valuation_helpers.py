@@ -9,9 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Dict
 
-
-def _normalize_ticker(ticker: str) -> str:
-    return str(ticker).zfill(6)
+from engine.ticker_utils import normalize_ticker as _normalize_ticker
 
 
 def _resolve_price_for_ticker(
@@ -20,9 +18,10 @@ def _resolve_price_for_ticker(
     current_prices: Dict[str, int],
 ) -> int | None:
     raw_ticker = str(ticker)
-    if raw_ticker in current_prices:
-        return current_prices[raw_ticker]
-    return None
+    normalized = _normalize_ticker(ticker)
+    if normalized and normalized in current_prices:
+        return current_prices[normalized]
+    return current_prices.get(raw_ticker)
 
 
 def build_valuated_holding(

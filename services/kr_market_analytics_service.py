@@ -23,7 +23,7 @@ from services.kr_market_csv_utils import (
     load_csv_readonly as _load_csv_readonly,
 )
 from services.file_row_count_cache import get_cached_file_row_count
-from services.kr_market_backtest_cumulative import (
+from services.kr_market_backtest_trade_helpers import (
     build_ticker_price_index,
     extract_stats_date_from_results_filename,
 )

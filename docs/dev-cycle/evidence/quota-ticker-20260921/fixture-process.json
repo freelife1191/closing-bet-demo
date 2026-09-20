@@ -1,0 +1,15 @@
+{
+  "kind": "fixture",
+  "pid": 43171,
+  "pgid": 43171,
+  "port": 57932,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/docs/dev-cycle/evidence/quota-ticker-20260921/fixture.py",
+    "--repo",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq",
+    "--port",
+    "57932"
+  ]
+}

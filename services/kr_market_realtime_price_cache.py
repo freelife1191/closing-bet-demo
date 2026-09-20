@@ -14,6 +14,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any, Callable, Iterator
 
+from engine.ticker_utils import normalize_ticker
 from services.sqlite_utils import (
     build_sqlite_in_placeholders,
     build_sqlite_pragmas,
@@ -60,8 +61,7 @@ _REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS = 2
 _REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS = 0.03
 
 
-def _normalize_ticker(ticker: Any) -> str:
-    return str(ticker).zfill(6)
+_normalize_ticker = normalize_ticker
 
 
 def _normalize_unique_tickers(tickers: list[Any]) -> list[str]:
@@ -69,6 +69,8 @@ def _normalize_unique_tickers(tickers: list[Any]) -> list[str]:
     seen: set[str] = set()
     for ticker in tickers:
         ticker_key = _normalize_ticker(ticker)
+        if not ticker_key:
+            continue
         if ticker_key in seen:
             continue
         seen.add(ticker_key)
@@ -308,7 +310,7 @@ def load_cached_realtime_prices(
         return {}
 
     cutoff_iso = (datetime.now() - timedelta(seconds=max(0, int(max_age_seconds)))).isoformat()
-    def _query_rows() -> list[tuple[Any, Any]]:
+    def _query_rows() -> list[tuple[Any, Any, Any]]:
         with connect_sqlite(
             db_path,
             timeout_seconds=_REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS,
@@ -316,17 +318,32 @@ def load_cached_realtime_prices(
             read_only=True,
         ) as conn:
             cursor = conn.cursor()
-            rows: list[tuple[Any, Any]] = []
+            rows: list[tuple[Any, Any, Any]] = []
             for chunk in _iter_ticker_chunks(unique_tickers):
                 placeholders = build_sqlite_in_placeholders(chunk)
                 cursor.execute(
                     f"""
-                    SELECT ticker, price
+                    SELECT ticker, price, updated_at
                     FROM realtime_price_cache
                     WHERE ticker IN ({placeholders})
                       AND updated_at >= ?
                     """,
                     [*chunk, cutoff_iso],
+                )
+                rows.extend(cursor.fetchall())
+                cursor.execute(
+                    f"""
+                    SELECT ticker, price, updated_at
+                    FROM realtime_price_cache
+                    WHERE updated_at >= ?
+                      AND LENGTH(TRIM(ticker)) BETWEEN 1 AND 6
+                      AND CASE
+                          WHEN LENGTH(TRIM(ticker)) < 6
+                          THEN SUBSTR('000000' || UPPER(TRIM(ticker)), -6)
+                          ELSE UPPER(TRIM(ticker))
+                      END IN ({placeholders})
+                    """,
+                    [cutoff_iso, *chunk],
                 )
                 rows.extend(cursor.fetchall())
             return rows
@@ -357,16 +374,28 @@ def load_cached_realtime_prices(
                 logger.debug("Failed to load realtime price cache: %s", error)
             return {}
 
-    resolved: dict[str, float] = {}
-    for ticker, price in rows:
+    candidates: dict[str, tuple[float, float, bool]] = {}
+    requested_tickers = set(unique_tickers)
+    for ticker, price, updated_at in rows:
         ticker_key = _normalize_ticker(ticker)
+        if not ticker_key or ticker_key not in requested_tickers:
+            continue
         try:
             price_value = float(price or 0)
         except (TypeError, ValueError):
-            price_value = 0.0
-        if price_value > 0:
-            resolved[ticker_key] = price_value
-    return resolved
+            continue
+        if price_value <= 0:
+            continue
+        updated_timestamp = _parse_iso_timestamp(updated_at)
+        candidate = (price_value, updated_timestamp or float("-inf"), str(ticker) == ticker_key)
+        existing = candidates.get(ticker_key)
+        if (
+            existing is None
+            or candidate[1] > existing[1]
+            or (candidate[1] == existing[1] and candidate[2] and not existing[2])
+        ):
+            candidates[ticker_key] = candidate
+    return {ticker: candidate[0] for ticker, candidate in candidates.items()}
 
 
 def save_realtime_prices_to_cache(
@@ -389,6 +418,8 @@ def save_realtime_prices_to_cache(
     now_iso = now_dt.isoformat()
     for ticker, price in prices.items():
         ticker_key = _normalize_ticker(ticker)
+        if not ticker_key:
+            continue
         try:
             price_value = float(price or 0)
         except (TypeError, ValueError):

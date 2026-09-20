@@ -295,6 +295,8 @@
 ## P2 — 대기
 
 ### [JONGGA-030] 티커 정규화 구현이 여섯 벌로 흩어져 규칙이 서로 다르다
+- 설계 승인: 승인 일자 2026-09-21 | 승인 확인 시각 2026-09-21T02:50 | 실제 대화: 이번 3건 설계에 사용자 「승인」.
+- 진행: 구현·정적 검증 통과, 독립 code APPROVE / architect CLEAR. 심층 리뷰 후 UltraQA 실행 — `plans/2026-09-21-quota-ticker-backtest.md`, `qa/batch-quota-ticker-2026-09-21.md`.
 - 카테고리: 종가베팅 | 티어: T3 | 근거: 2026-09-04 JONGGA-017 사이클의 리뷰, `[JONGGA-005]` 사이클의 변이 검사, AUDIT-FLOW §2.2
 - 2026-09-07 백로그 정리에서 `[INFRA-023]`(`000000` 가짜 종목)과 `[FLOW-007]`(백테스트 패딩
   헬퍼)을 흡수했습니다. 셋 다 「`zfill(6)` 을 각자 구현해 규칙이 어긋난다」는 하나의 문제입니다.
@@ -361,6 +363,8 @@
 - [ ] 기존 27건의 Z.ai 테스트가 그대로 통과하는지 확인
 
 ### [FLOW-006] 백테스트 재노출 전용 계층을 걷어낸다
+- 설계 승인: 승인 일자 2026-09-21 | 승인 확인 시각 2026-09-21T02:50 | 실제 대화: 이번 3건 설계에 사용자 「승인」.
+- 진행: 구현·정적 검증 통과, 독립 code APPROVE / architect CLEAR. 심층 리뷰 후 UltraQA 실행 — `plans/2026-09-21-quota-ticker-backtest.md`, `qa/batch-quota-ticker-2026-09-21.md`.
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW §3.1
 - [ ] `..._service`, `..._calculators`, `..._cumulative`, `..._signal_stats` 네 파일의
       외부 호출자를 확인한 뒤 남길 진입점 하나를 결정
@@ -422,6 +426,8 @@
 - 현재 남은 일: 원본 누적 파일의 처리 결정만 대기. 기존 설명의 수량·공통 helper 경로는 과거 관측이며, 2026-09-09 원본 WAL/SHM 파일 합계는27396개. 기존 파일을 삭제하지 않았고 완료 아카이브도 만들지 않음.
 
 ### [FE-043] 사용량 조회가 HTML 오류 응답을 JSON으로 읽어 SyntaxError를 남긴다
+- 설계 승인: 승인 일자 2026-09-21 | 승인 확인 시각 2026-09-21T02:50 | 실제 대화: 이번 3건 설계에 사용자 「승인」.
+- 진행: 구현·정적 검증 통과, 독립 code APPROVE / architect CLEAR. 심층 리뷰 후 UltraQA 실행 — `plans/2026-09-21-quota-ticker-backtest.md`, `qa/batch-quota-ticker-2026-09-21.md`.
 - 카테고리: 프론트엔드 공통 | 티어: T2 예상 | 근거: 2026-09-21 저장소·메모리 QA의 격리 하네스 기동 실패 실측
 - 검증용 Flask가 중복 endpoint로 기동하지 못해 gateway가 HTML 502를 반환했을 때,
   `frontend/src/app/components/Sidebar.tsx:88-92`의 `fetch(...).then(res => res.json())`가

@@ -11,6 +11,19 @@ interface APIError extends Error {
   data?: unknown;
 }
 
+function getErrorMessage(data: unknown, status: number): string {
+  if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    const response = data as { message?: unknown; error?: unknown };
+    if (typeof response.message === 'string' && response.message.trim()) return response.message;
+    if (typeof response.error === 'string' && response.error.trim()) return response.error;
+  }
+  return `API Error: ${status}`;
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
+}
+
 export function isAuthenticationError(error: unknown): error is APIError & { status: 401 } {
   return typeof error === 'object' && error !== null && (error as APIError).status === 401;
 }
@@ -33,21 +46,28 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
       // 백엔드는 실패 사유를 `message` 나 `error` 중 한 자리에 적어 보낸다. 그 문구를
       // Error.message 로 올려야 호출부가 `e.message` 를 그대로 화면에 띄울 수 있다.
       // 여기서 올리지 않으면 사유를 꺼내는 코드를 호출부마다 따로 두게 된다.
-      let data: any;
+      let data: unknown;
       try {
         data = await response.json();
-      } catch (e) { /* 본문이 JSON 이 아니면 상태 코드만 가지고 간다 */ }
+      } catch {
+        // 실패 상태의 HTML은 상태 코드만 남긴 제어된 API 오류가 된다.
+      }
 
-      const error: any = new Error(
-        data?.message || data?.error || `API Error: ${response.status}`
-      );
+      const error: APIError = new Error(getErrorMessage(data, response.status));
       error.status = response.status;
       error.data = data;
       throw error;
     }
-    return await response.json();
-  } catch (e: any) {
-    if (e.name === 'AbortError') {
+    try {
+      return await response.json();
+    } catch (error: unknown) {
+      if (isAbortError(error)) throw error;
+      // 프록시가 200과 함께 HTML 오류 페이지를 돌려도 호출부가 SyntaxError나 본문을
+      // 그대로 화면에 노출하지 않게 한다.
+      throw Object.assign(new Error('서버 응답이 올바른 JSON이 아닙니다'), { status: response.status });
+    }
+  } catch (e: unknown) {
+    if (isAbortError(e)) {
       throw new Error('Request timed out');
     }
     throw e;

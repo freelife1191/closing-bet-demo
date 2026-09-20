@@ -904,7 +904,7 @@ def test_sell_stock_rejects_non_positive_or_non_numeric_price():
         _cleanup_service(service)
 
 
-def test_get_portfolio_valuation_ignores_normalized_cache_for_legacy_ticker():
+def test_get_portfolio_valuation_uses_normalized_cache_for_legacy_ticker():
     service = _build_service()
     try:
         with service.get_context() as conn:
@@ -924,9 +924,9 @@ def test_get_portfolio_valuation_ignores_normalized_cache_for_legacy_ticker():
         valuation = service.get_portfolio_valuation(owner_id=TEST_OWNER)
         assert len(valuation["holdings"]) == 1
         assert valuation["holdings"][0]["ticker"] == "5930"
-        assert valuation["holdings"][0]["current_price"] == 1_000
-        assert valuation["holdings"][0]["is_stale"] is True
-        assert valuation["total_stock_value"] == 3_000
+        assert valuation["holdings"][0]["current_price"] == 7_000
+        assert valuation["holdings"][0]["is_stale"] is False
+        assert valuation["total_stock_value"] == 21_000
     finally:
         _cleanup_service(service)
 

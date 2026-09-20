@@ -11,19 +11,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from engine.ticker_utils import normalize_ticker
 from services.kr_market_backtest_common import pct_to_percent, resolve_hit_outcome, safe_float
-
-
-def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
-    if "_ticker_padded" in df.columns:
-        return df["_ticker_padded"]
-
-    padded = df["ticker"].astype(str).str.zfill(6)
-    try:
-        df["_ticker_padded"] = padded
-        return df["_ticker_padded"]
-    except Exception:
-        return padded
+from services.kr_market_csv_utils import get_ticker_padded_series
 
 
 def _filter_subset_after_signal_date(
@@ -59,7 +49,8 @@ def build_latest_price_map(price_df: Any) -> dict[str, float]:
         return {}
 
     df = price_df.copy()
-    df["ticker"] = _get_ticker_padded_series(df)
+    df["ticker"] = get_ticker_padded_series(df)
+    df = df[df["ticker"] != ""]
     if "date" in df.columns and not df["date"].is_monotonic_increasing:
         df = df.sort_values("date")
 
@@ -80,12 +71,11 @@ def inject_latest_prices_to_candidates(
     for candidate in candidates:
         if not isinstance(candidate, dict):
             continue
-        code = str(
+        code = normalize_ticker(
             candidate.get("stock_code")
             or candidate.get("code")
             or candidate.get("ticker")
-            or ""
-        ).zfill(6)
+        )
         if code not in price_map:
             continue
 

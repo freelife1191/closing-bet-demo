@@ -10,11 +10,13 @@ from typing import Any
 
 import pandas as pd
 
+from engine.ticker_utils import normalize_ticker
+
 from services.kr_market_backtest_common import (
     determine_backtest_status,
     safe_float,
 )
-from services.kr_market_backtest_cumulative import (
+from services.kr_market_backtest_trade_helpers import (
     build_cumulative_trade_record,
     build_ticker_price_index,
 )
@@ -121,10 +123,10 @@ def calculate_vcp_backtest_stats(
     resolved_price_index = price_index or build_ticker_price_index(price_df)
 
     for row in vcp_df.itertuples(index=False):
-        ticker = str(getattr(row, "ticker", "")).zfill(6)
+        ticker = normalize_ticker(getattr(row, "ticker", ""))
         entry_price = safe_float(getattr(row, "entry_price", 0), default=0.0)
         signal_date = str(getattr(row, "signal_date", ""))
-        if entry_price <= 0 or not signal_date:
+        if not ticker or entry_price <= 0 or not signal_date:
             continue
 
         current_price = safe_float(price_map.get(ticker), default=0.0)

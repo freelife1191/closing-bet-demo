@@ -12,6 +12,8 @@ from collections.abc import Callable
 
 import pandas as pd
 
+from engine.ticker_utils import normalize_ticker
+
 _ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _LOADER_STRATEGY_CACHE: weakref.WeakKeyDictionary[
     Callable[..., pd.DataFrame],
@@ -209,7 +211,7 @@ def get_ticker_padded_series(
     if cache_column in df.columns:
         return df[cache_column]
 
-    padded = df[ticker_column].astype(str).str.zfill(6)
+    padded = df[ticker_column].map(normalize_ticker)
     try:
         df[cache_column] = padded
         return df[cache_column]
@@ -234,11 +236,11 @@ def build_latest_close_map_from_prices_df(df_prices: pd.DataFrame) -> dict[str, 
 
     working = pd.DataFrame(
         {
-            "ticker": df_prices["ticker"].astype(str).str.zfill(6),
+            "ticker": get_ticker_padded_series(df_prices),
             "close": pd.to_numeric(df_prices["close"], errors="coerce"),
         }
     )
-    working = working[working["close"].notna()]
+    working = working[(working["ticker"] != "") & working["close"].notna()]
     if working.empty:
         return {}
 

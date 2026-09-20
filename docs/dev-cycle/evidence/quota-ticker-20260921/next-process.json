@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 43249,
+  "pgid": 43249,
+  "port": 57931,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/quota-ticker-20260921-wn5hsgrq/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "57931"
+  ]
+}

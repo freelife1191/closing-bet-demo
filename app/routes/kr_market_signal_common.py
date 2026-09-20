@@ -4,13 +4,13 @@
 KR Market 시그널 헬퍼 공통 유틸리티
 """
 
-import re
 from datetime import datetime
 from typing import Any, Optional
 
 import pandas as pd
 
 from engine.pandas_utils_safe import safe_optional_float
+from engine.ticker_utils import normalize_ticker
 
 # 이 두 상수는 프론트엔드에도 같은 내용이 있다. 화면은 병합된 응답이 비면 원시
 # 캐시를 다시 보므로, 그쪽에서도 같은 기준으로 실패 기록을 걸러야 한다.
@@ -114,26 +114,8 @@ def _safe_optional_float(value: Any) -> Optional[float]:
 # 앞뒤의 숫자를 배제하는 것은 `20260211` 같은 긴 숫자열에서 앞 여섯 자리를 잘라 내지
 # 않기 위해서다. 자르면 `202602` 라는 실재할 수 있는 코드가 되어, 종목이 아닌 값이
 # 종목의 자리를 차지한다. 영문자는 배제하지 않는다. 시장 표시가 영문자이기 때문이다.
-_TICKER_PATTERN = re.compile(r"(?<![0-9])[0-9][0-9A-Z]{4}[0-9](?![0-9])")
-
-
-def _normalize_ticker(value: Any) -> str:
-    """티커를 여섯 자리 종목코드 문자열로 정규화한다. 유효하지 않으면 빈 문자열이다.
-
-    숫자가 하나도 없는 값과 전부 0 인 값을 모두 빈 문자열로 돌린다. 전부 0 인
-    코드는 국내 시장에 존재하지 않으며, 결측을 채워 넣은 자리채움이다. 그것을
-    `"000000"` 이라는 여섯 자리로 통과시키면 실제 종목코드와 형태가 같아져서,
-    가격 맵처럼 티커를 키로 쓰는 자리에서 엉뚱한 값이 매칭된다. 받는 쪽마다
-    그 값을 다시 거르는 방어 코드가 생기는 것도 같은 이유다.
-    """
-    text = str(value or "").upper()
-    matched = _TICKER_PATTERN.search(text)
-    # 여섯 자리에 못 미치는 순수 숫자는 앞을 0 으로 채운다. `5930` 이 `005930` 이다.
-    code = matched.group() if matched else re.sub(r"\D", "", text).zfill(6)
-    # 여섯 자리를 넘는 폴백 결과는 종목코드가 아니다. `zfill` 은 모자란 자리만 채우므로
-    # `20260211` 같은 값이 그대로 통과한다. 그것을 앞 여섯 자리로 자르면 실재하는
-    # 종목코드와 형태가 같아지므로, 자르지 않고 버려서 다음 후보 키로 넘어가게 한다.
-    return code if code.strip("0") and len(code) == 6 else ""
+# 기존 라우트 호출자의 private 이름을 유지한다.
+_normalize_ticker = normalize_ticker
 
 
 def _resolve_ticker(signal: dict, *keys: str) -> str:
@@ -192,7 +174,7 @@ def _normalize_ai_payload_tickers(payload: Any) -> Any:
 
     for signal in signals:
         if isinstance(signal, dict) and "ticker" in signal:
-            signal["ticker"] = str(signal.get("ticker", "")).zfill(6)
+            signal["ticker"] = _normalize_ticker(signal.get("ticker"))
 
     return payload
 

@@ -14,6 +14,7 @@ from typing import Any
 
 import pandas as pd
 
+from engine.ticker_utils import normalize_ticker
 from services.kr_market_backtest_common import (
     JONGGA_STOP_PCT,
     JONGGA_TARGET_PCT,
@@ -23,21 +24,10 @@ from services.kr_market_backtest_common import (
     resolve_hit_outcome,
     safe_float,
 )
+from services.kr_market_csv_utils import get_ticker_padded_series
 
 
 logger = logging.getLogger(__name__)
-
-def _get_ticker_padded_series(df: pd.DataFrame) -> pd.Series:
-    if "_ticker_padded" in df.columns:
-        return df["_ticker_padded"]
-
-    padded = df["ticker"].astype(str).str.zfill(6)
-    try:
-        df["_ticker_padded"] = padded
-        return df["_ticker_padded"]
-    except Exception:
-        return padded
-
 
 def prepare_cumulative_price_dataframe(raw_price_df: Any) -> Any:
     """누적성과 계산용 가격 DataFrame을 정규화한다."""
@@ -47,7 +37,8 @@ def prepare_cumulative_price_dataframe(raw_price_df: Any) -> Any:
         return pd.DataFrame()
 
     df = raw_price_df.copy()
-    df["ticker"] = _get_ticker_padded_series(df)
+    df["ticker"] = get_ticker_padded_series(df)
+    df = df[df["ticker"] != ""]
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df[df["date"].notna()]
 
@@ -69,7 +60,8 @@ def build_ticker_price_index(price_df: Any) -> dict[str, pd.DataFrame]:
         return {}
 
     normalized_df = price_df.copy()
-    normalized_df["ticker"] = _get_ticker_padded_series(normalized_df)
+    normalized_df["ticker"] = get_ticker_padded_series(normalized_df)
+    normalized_df = normalized_df[normalized_df["ticker"] != ""]
 
     if "date" in normalized_df.columns:
         sorted_df = normalized_df
@@ -262,8 +254,8 @@ def build_cumulative_trade_record(
     if not isinstance(signal, dict):
         return None
 
-    ticker = str(signal.get("ticker") or signal.get("stock_code") or signal.get("code") or "").zfill(6)
-    if not ticker or ticker == "000000":
+    ticker = normalize_ticker(signal.get("ticker") or signal.get("stock_code") or signal.get("code"))
+    if not ticker:
         return None
 
     entry_price = safe_float(signal.get("entry_price", 0), default=0.0)
