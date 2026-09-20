@@ -122,5 +122,29 @@
   "fixture-ready.log": {
     "gzip": "fixture-ready.log.gz",
     "sha256": "21cfef082a287092a2c1e8985b691e886600e6635afaeaab04d787075a1fdd46"
+  },
+  "snapshotprobe-qa.log": {
+    "gzip": "snapshotprobe-qa.log.gz",
+    "sha256": "ac7b14d861ec5aef8c42cfd90f390ea9e80609026ed3613d5251b05932d2f854"
+  },
+  "gateway-runtime.log": {
+    "gzip": "gateway-runtime.log.gz",
+    "sha256": "53d23c1561f81274671703fb1575034adb53d76b18c6af879283d83380c6317b"
+  },
+  "fixture-runtime.log": {
+    "gzip": "fixture-runtime.log.gz",
+    "sha256": "b5ac0ecbea58503b8ddae9131b3fcf34b627f88ff590c5e6acb40460ffd5d88e"
+  },
+  "fixture-qa.log": {
+    "gzip": "fixture-qa.log.gz",
+    "sha256": "21cfef082a287092a2c1e8985b691e886600e6635afaeaab04d787075a1fdd46"
+  },
+  "pytarget-qa.log": {
+    "gzip": "pytarget-qa.log.gz",
+    "sha256": "c65cb45adeb9bb1b38f08bf71a6ef1f9a0fdad88e00c94c843d3e7641205af47"
+  },
+  "frontend-runtime.log": {
+    "gzip": "frontend-runtime.log.gz",
+    "sha256": "1a6180382704762d8b874b31aa0e65fc40cdba9555401978db121f3fc3195552"
   }
 }

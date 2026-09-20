@@ -1,0 +1,72 @@
+{
+  "count": 110,
+  "probe_count": 19,
+  "probe_status_counts": {
+    "200": 17,
+    "405": 2
+  },
+  "runtime_checks_count": 91,
+  "runtime_fixture_status_counts": {
+    "200": 91
+  },
+  "runtime_scope": "browser flows plus two direct fixture-readiness GET checks",
+  "unsafe_runtime_mutations": [],
+  "unclassified_fixture_failures": [],
+  "gateway_upstream_failures": [
+    {
+      "path": "/api/auth/session",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/auth/session",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/auth/_log",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/auth/_log",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/signals",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/market-gate",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/signals",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/signals/status",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/market-gate",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/user/quota",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/ai-analysis",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/ai-analysis",
+      "error": "ConnectionRefusedError"
+    }
+  ],
+  "gateway_failure_classification": "duplicate endpoint in QA harness prevented startup; recovered before final UI passes; see fixture-startup-recovery.json/next-fixture-outage.txt",
+  "favicon_404_count": 1,
+  "final_after_cleanup": true
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "CHAT-027",
+    "title": "프로필이 메모리 영역에 들어오면서 생긴 어긋남 둘",
+    "category": "챗봇",
+    "priority": "P2"
+  },
+  {
+    "id": "CHAT-023",
+    "title": "공용 메모리의 추천 질문 캐시가 상한 없이 쌓인다",
+    "category": "챗봇",
+    "priority": "P2"
+  },
+  {
+    "id": "CHAT-012",
+    "title": "챗봇 저장소의 스키마 준비 골격을 공용 게이트로 흡수",
+    "category": "챗봇",
+    "priority": "P2"
+  },
+  {
+    "id": "INFRA-032",
+    "title": "나머지 열다섯 모듈의 SQLite 준비 골격을 공용 게이트로 흡수",
+    "category": "인프라",
+    "priority": "P2"
+  }
+]

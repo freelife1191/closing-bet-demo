@@ -31,9 +31,9 @@ if force_recheck:
 # 기다리는강제호출도현재in_progress완료결과를받는기존chatbot계약유지
 limit = self._max_ready_entries if max_ready_entries is None else max_ready_entries
 ```
-- [ ] 강제재검사/동시강제호출/실패후재시도/동적상한 회귀 RED→GREEN.
-- [ ] chatbot 초기화SQL callback그대로, 앞뒤condition/ready/in-progress를gate.ensure에위임.
-- [ ] 게이트는self.lock=threading.Lock(),self.condition=threading.Condition(self.lock)로같은잠금을공개한다. 기존test가쓰는lock/condition/ready/in-progress전역이름은gate의같은객체alias유지. 복구예외/로그bool동일.
+- [x] 강제재검사/동시강제호출/실패후재시도/동적상한 회귀 RED→GREEN.
+- [x] chatbot 초기화SQL callback그대로, 앞뒤condition/ready/in-progress를gate.ensure에위임.
+- [x] 게이트는self.lock=threading.Lock(),self.condition=threading.Condition(self.lock)로같은잠금을공개한다. 기존test가쓰는lock/condition/ready/in-progress전역이름은gate의같은객체alias유지. 복구예외/로그bool동일.
 
 ## Task 2 — INFRA032 readiness-only 15모듈
 SQL·SeenKey/counter·prune/time-state는모듈에남긴다. 이번통합은초기화상태골격만이며범용invalidate callback추가없음. 현재invalidate의추적키/시간/실패시세정리는유지한다.
@@ -54,9 +54,9 @@ return _GATE.ensure(db_path, initialize=_initialize_schema,
     retry_attempts=RETRY_ATTEMPTS, retry_delay_seconds=RETRY_DELAY,
     max_ready_entries=READY_MAX_ENTRIES, on_failure=_log_failure)
 ```
-- [ ] 기존pytest baseline로동작고정후 A→B→C→D 그룹검증. 독립파일편집은병렬가능,검증과판정은순서유지.
-- [ ] readonly SQL/force/prune/조건변수회귀그대로,결함과하네스오류분리. 필요시실제tempSQLite roundtrip·병렬ensure검사추가.
-- [ ] 테이블SQL AST/문자열변경없음대조,주석제외토큰줄수와diff순감계측.
+- [x] 기존pytest baseline로동작고정후 A→B→C→D 그룹검증. 독립파일편집은병렬가능,검증과판정은순서유지.
+- [x] readonly SQL/force/prune/조건변수회귀그대로,결함과하네스오류분리. 필요시실제tempSQLite roundtrip·병렬ensure검사추가.
+- [x] 테이블SQL AST/문자열변경없음대조,주석제외토큰줄수와diff순감계측.
 
 ## Task 3 — CHAT027/023 (memory lane)
 Files: chatbot/command_service.py, runtime_setup_service.py, core.py, daily_suggestions_service.py, data_service.py, storage_memory_manager.py, storage_sqlite_memory.py, storage_sqlite_helpers.py; 관련tests/chatbot.
@@ -68,17 +68,17 @@ assert before_other_owner == after_other_owner
 assert len(shared_suggestion_rows) <= 500
 assert all(row.updated_at > cutoff for row in shared_suggestion_rows)
 ```
-- [ ] reservedprofile명령보호/owner격리/캐시TTL500/동일prefixprivate보존/재로드·snapshot·실패검사 RED.
-- [ ] 최소기존경계구현,공용profile를사용자에게복제하지않음,캐시prune 실패는로그로구분.
-- [ ] 기존메모리·프로필·추천질문회귀,임시SQLite복수매니저로검증. 원본.env USER_PROFILE값조회금지.
+- [x] reservedprofile명령보호/owner격리/캐시TTL500/동일prefixprivate보존/재로드·snapshot·실패검사 RED.
+- [x] 최소기존경계구현,공용profile를사용자에게복제하지않음,캐시prune 실패는로그로구분.
+- [x] 기존메모리·프로필·추천질문회귀,임시SQLite복수매니저로검증. 원본.env USER_PROFILE값조회금지.
 
 ## Task 4 — 검증/QA/마감
-- [ ] baseline pytest/Vitest 및현재module분기회귀,격리검증명령timeout300초. 프론트소스변경없으면같은SHA정적결과재사용.
-- [ ] 공유리뷰위순서실행,전용역할불가시dev-cycle허용대체명시. 전체pytest/Vitest/typecheck/lint/build,원본packageSHA/sourceSHA확인.
-- [ ] 첫커밋에구현/QA행렬,TODO유지. UltraQA App대응필수행: 강제/동시/복구gate;16모듈SQL/roundtrip;profile일반명령격리;캐시TTL/500/owner/snapshot;실제chatUI메모리/프로필및대화목록/캐시화면영향;정리.
-- [ ] 브라우저ego사용자선택. 실제앱UI를합성auth/LLM/데이터외부경계대역과연결,제품MemoryManager/SQLite/route검증연결. 사용자금지조작을원본으로보내지않음. UI관측과HTTP/서비스하네스증거구분.
-- [ ] screenshots직접열람,Next진단·요청로그·하네스한계기록. 필수실패5회/동일3회한도.
-- [ ] 소유Spacefinish1회/3프로세스PID-cwd검증종료/port닫힘/scratch제거. 독립최종PASS후4건만TODO제거아카이브.
+- [x] baseline pytest/Vitest 및현재module분기회귀,격리검증명령timeout300초. 프론트소스변경없으면같은SHA정적결과재사용.
+- [x] 공유리뷰위순서실행,전용역할불가시dev-cycle허용대체명시. 전체pytest/Vitest/typecheck/lint/build,원본packageSHA/sourceSHA확인.
+- [x] 첫커밋에구현/QA행렬,TODO유지. UltraQA App대응필수행: 강제/동시/복구gate;16모듈SQL/roundtrip;profile일반명령격리;캐시TTL/500/owner/snapshot;실제chatUI메모리/프로필및대화목록/캐시화면영향;정리.
+- [x] 브라우저ego사용자선택. 실제앱UI를합성auth/LLM/데이터외부경계대역과연결,제품MemoryManager/SQLite/route검증연결. 사용자금지조작을원본으로보내지않음. UI관측과HTTP/서비스하네스증거구분.
+- [x] screenshots직접열람,Next진단·요청로그·하네스한계기록. 필수실패5회/동일3회한도.
+- [x] 소유Spacefinish1회/3프로세스PID-cwd검증종료/port닫힘/scratch제거. 독립최종PASS후4건만TODO제거아카이브.
 
 ## Critic 보완 계약
 
@@ -98,3 +98,5 @@ assert all(row.updated_at > cutoff for row in shared_suggestion_rows)
 ## 스냅샷 동시성 심층 리뷰 보완
 
 공용 _write_legacy_memory_snapshot(memories, *, allow_uncommitted=False)는sidecar flock아래권위SQLite재로드→self.memories갱신→atomic JSON replace를묶는다. 모든SQL성공snapshotwriter는이경로를쓴다. SQLreload실패는False/log/기존JSON보존,기존일반메모리SQLmutation실패경로에서만allow_uncommitted=True로기존legacy-fallback유지가능. cache/clear_general의성공commit뒤에는False기본값필수. DBcommit은snapshotlock전에종료하고lock파일은실행중삭제하지않는다. A직전B성공다른owner/profile보존회귀와가능하면3worker검증을추가한다. 새테이블/historysnapshot/legacy권위전체이관정책은변경하지않는다.
+
+마감: 승인4건완료,후속FE043추가로잔여15.

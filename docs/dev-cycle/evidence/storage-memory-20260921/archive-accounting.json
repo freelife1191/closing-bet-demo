@@ -1,0 +1,60 @@
+{
+  "CHAT-012": {
+    "files": [
+      "services/sqlite_ready_gate.py",
+      "chatbot/storage_sqlite_common.py",
+      "tests/services/test_sqlite_ready_gate_refactor.py"
+    ],
+    "additions": 98,
+    "deletions": 56
+  },
+  "CHAT-027": {
+    "files": [
+      "chatbot/command_service.py",
+      "chatbot/core.py",
+      "chatbot/runtime_setup_service.py",
+      "tests/chatbot/test_runtime_setup_service.py"
+    ],
+    "additions": 13,
+    "deletions": 25
+  },
+  "CHAT-023": {
+    "files": [
+      "chatbot/daily_suggestions_service.py",
+      "chatbot/data_service.py",
+      "chatbot/storage_memory_manager.py",
+      "chatbot/storage_sqlite_memory.py",
+      "chatbot/storage_sqlite_helpers.py",
+      "tests/chatbot/test_daily_suggestions_service.py",
+      "tests/chatbot/test_storage_memory_batch.py"
+    ],
+    "additions": 805,
+    "deletions": 15
+  },
+  "INFRA-032": {
+    "files": [
+      "engine/kr_ai_stock_info_cache.py",
+      "engine/signal_tracker_analysis_source_cache.py",
+      "engine/signal_tracker_source_cache.py",
+      "services/common_update_status_service.py",
+      "services/file_row_count_cache.py",
+      "services/kr_market_backtest_summary_cache.py",
+      "services/kr_market_cumulative_cache.py",
+      "services/kr_market_data_cache_jongga.py",
+      "services/kr_market_data_cache_sqlite_payload.py",
+      "services/kr_market_jongga_payload_helpers.py",
+      "services/kr_market_realtime_latest_close_cache.py",
+      "services/kr_market_realtime_market_map_cache.py",
+      "services/kr_market_realtime_price_cache.py",
+      "services/kr_market_vcp_signals_cache.py",
+      "services/paper_trading_db_setup.py"
+    ],
+    "additions": 294,
+    "deletions": 708
+  },
+  "total": {
+    "files": 29,
+    "additions": 1210,
+    "deletions": 804
+  }
+}

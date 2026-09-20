@@ -1,0 +1,6 @@
+{
+  "table": "STOCK\tDATE\t외국인 5D\t기관 5D\tBUY\tSCORE\tCONT.\tENTRY\tSTOP\tTARGET\tCURRENT\tRETURN\tGPT\tGEMINI\n\n삼성전자\n005930\n\t2026-09-21\t\n1조 2400억\n\t\n33억\n\t\n\t86\t0.52\t₩75,000\t₩72,000\t₩82,000\t₩76,200\t+1.6%\t■ 관망\t▲ 매수",
+  "headings": [
+    "VCP 시그널"
+  ]
+}

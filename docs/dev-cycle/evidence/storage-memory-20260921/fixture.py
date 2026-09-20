@@ -253,7 +253,7 @@ def _dashboard_seed_payloads(storage_dir: Path) -> dict[str, Any]:
             "totalSignals": 1, "wins": 1, "losses": 0, "open": 0, "winRate": 100.0,
             "avgRoi": 2.1, "totalRoi": 2.1, "avgDays": 2.0, "priceDate": "2026-09-21",
             "profitFactor": None, "recentWinRate": 100.0, "recentClosedCount": 1, "consecutiveLosses": 0,
-            "roiByGrade": {grade: dict(grade_kpi) for grade in ("S", "A", "B", "D")},
+            "roiByGrade": {grade: (dict(grade_kpi) if grade == "S" else {key: 0 for key in grade_kpi}) for grade in ("S", "A", "B", "D")},
         },
         "trades": [{
             "id": "fixture-cumulative-001", "date": "2026-09-18", "grade": "S", "name": "삼성전자",
@@ -321,7 +321,7 @@ def build_app(repo: Path, *, reset_log: bool = False) -> Flask:
         if request.method in BLOCKED_METHODS:
             return jsonify({"error": "fixture prohibits product mutation"}), 405
         if request.method == "POST" and request.path not in {
-            "/__qa/control", "/api/kr/chatbot", "/api/kr/chatbot/profile", "/api/kr/chatbot/sessions",
+            "/__qa/control", "/api/kr/chatbot", "/api/kr/chatbot/profile", "/api/kr/chatbot/sessions", "/api/kr/realtime-prices",
         }:
             return jsonify({"error": "fixture prohibits product mutation"}), 405
         return None
@@ -370,6 +370,20 @@ def build_app(repo: Path, *, reset_log: bool = False) -> Flask:
             "kospi_change_pct": 0.2, "kosdaq_close": 780, "kosdaq_change_pct": -0.1,
             "sectors": [], "source": "synthetic-no-market",
         })
+
+    @app.get("/api/kr/ai-analysis")
+    def ai_analysis() -> Any:
+        return jsonify({"signals": dashboard_payloads["vcp"], "generated_at": "2026-09-21T15:40:00+09:00"})
+
+    @app.post("/api/kr/realtime-prices")
+    def realtime_prices() -> Any:
+        data = request.get_json() or {}
+        tickers = data.get("tickers", [])
+        return jsonify({row["ticker"]: row["current_price"] for row in dashboard_payloads["vcp"] if row["ticker"] in tickers})
+
+    @app.get("/api/kr/config/interval")
+    def interval() -> Any:
+        return jsonify({"interval": 30})
 
     @app.get("/api/kr/signals")
     def vcp_signals() -> Any:

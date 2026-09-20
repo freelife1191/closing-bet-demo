@@ -1,0 +1,13 @@
+{
+  "viewed": [
+    "ego-history.png",
+    "ego-memory-protected.png",
+    "ego-profile-preserved.png",
+    "ego-vcp.png",
+    "ego-jongga.png",
+    "ego-cumulative.png",
+    "ego-memory-empty-stable.png"
+  ],
+  "scope": "1280x900 desktop, each image directly viewed",
+  "partial_frame_note": "ego-memory-protected proves rejection/clear but final empty response clipped; use ego-memory-empty-stable for empty message"
+}

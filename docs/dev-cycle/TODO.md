@@ -294,90 +294,6 @@
 
 ## P2 — 대기
 
-### [CHAT-027] 프로필이 메모리 영역에 들어오면서 생긴 어긋남 둘
-- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
-- 카테고리: 챗봇 | 티어: T3 | 근거: 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰
-- `[CHAT-021]` 이 `user_profile` 을 소유자 버킷으로 옮기면서 메모리와 같은 취급을 받게
-  되었고, 그 결과 두 자리가 어긋납니다. 둘 다 사소하고 같은 주변이라 한 항목으로 묶습니다.
-  종전에 셋이었던 것 가운데 화면의 `/clear all` 설명 문구는 2026-09-07 백로그 정리에서
-  같은 명령어 목록을 다루는 `[CHAT-019]` 로 옮겼습니다.
-- `chatbot/command_service.py:119` 의 `render_memory_view` 가 소유자 버킷을 그대로 보여
-  주므로 사용자가 `/memory` 로 넣은 적 없는 `user_profile` 이 `/memory view` 에 나타나고
-  `/memory remove user_profile` 로 지울 수도 있습니다.
-- `chatbot/runtime_setup_service.py:162` 의 `init_user_profile_from_env` 는 가드가
-  `not memory.memories` 인데 저장소가 2단이 된 뒤로는 어느 소유자에게든 행이 하나라도
-  있으면 거짓입니다. 공용에 캐시 두 행이 이미 있어 영영 발동하지 않으므로 `USER_PROFILE`
-  환경 변수는 어떤 화면에도 영향을 주지 못합니다.
-- [ ] `/memory view` 에서 프로필을 가리거나 별도 표기로 구분
-- [ ] `init_user_profile_from_env` 를 지우거나 발동하도록 고침
-
-### [CHAT-023] 공용 메모리의 추천 질문 캐시가 상한 없이 쌓인다
-- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
-- 카테고리: 챗봇 | 티어: T3 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
-- `chatbot/daily_suggestions_service.py:65` 가 `daily_suggestions_<persona>_<watchlist>` 키로
-  추천 질문을 공용 영역에 저장합니다. `chatbot/data_service.py:133` 의 조회는 1시간 신선도만
-  보고 낡은 행을 지우지는 않습니다.
-- `[CHAT-017]` 이 공용 영역을 사용자 명령에서 도달 불가능하게 만들었으므로 `/clear all` 도
-  `/memory clear` 도 이 행들에 닿지 않습니다. `save_memories_to_sqlite` 의 stale 정리는
-  스냅샷에 있는 행을 남기므로 정리 수단이 아닙니다.
-- 캐시 키가 (페르소나 × 관심종목) 조합이고 관심종목이 사용자 입력이라 조합에 상한이 없습니다.
-  조합마다 한 행씩 영구히 쌓입니다.
-- 티어 판정: 만료된 행을 지우는 자리 하나를 정하면 됩니다. 저장 직후에 같은 접두사의 낡은 행을
-  지우는 방법과, 다른 캐시들이 쓰는 `prune_rows_by_updated_at_if_needed`(`services/sqlite_utils.py`)를
-  쓰는 방법이 있습니다. 후자를 쓰면 기존 프루닝 규약에 맞습니다.
-- [ ] 만료된 공용 캐시 행을 지우는 자리를 정하고 구현
-- [ ] 상한이 실제로 걸리는지 pytest 로 고정
-
-### [CHAT-012] 챗봇 저장소의 스키마 준비 골격을 공용 게이트로 흡수
-- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
-- 카테고리: 챗봇 | 티어: T3 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 code-reviewer 지적
-- QA 시나리오: 챗봇 대화 목록과 메시지 이력이 통합 전과 같게 조회된다
-- `chatbot/storage_sqlite_common.py:95-194` 의 `ensure_chatbot_storage_schema` 가
-  `[CHAT-003]` 이 만든 `services/sqlite_ready_gate.py` 의 `SqliteReadyGate` 와 같은
-  골격입니다. 줄 단위로 대응이 맞습니다. 진입 `:103`↔`:66`, 대기 루프 `:111-116`↔`:72-77`,
-  in-progress 등록 `:118`↔`:79`, `finally` 재진입 `:180`↔`:94`, `add_bounded_ready_key`
-  `:183-187`↔`:97-101`, `notify_all` `:190`↔`:104` 입니다.
-- 차이는 `force_recheck: bool = False` 인자 하나뿐입니다. 그 인자를 게이트의 `ensure` 에
-  더하면 흡수됩니다.
-- `[CHAT-003]` 이 이 파일을 범위에서 뺀 것은 그 항목이 정한 대상이 캐시 두 모듈이었고,
-  이 파일은 캐시가 아니라 세션·메시지·메모리 저장소이기 때문입니다.
-- [ ] `SqliteReadyGate.ensure` 에 `force_recheck` 를 더함
-- [ ] `ensure_chatbot_storage_schema` 를 게이트 위임으로 교체
-- [ ] 기존 회귀 테스트가 그대로 통과하는지 확인
-
-### [INFRA-032] 나머지 열다섯 모듈의 SQLite 준비 골격을 공용 게이트로 흡수
-- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
-- 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 code-reviewer 지적
-- QA 시나리오: 종가베팅·VCP·실시간 시세·누적 성과 화면이 통합 전과 같은 값을 그린다
-- `services/sqlite_utils.py` 의 `add_bounded_ready_key` 를 쓰는 비테스트 모듈이 열여섯
-  개이고, 그 가운데 `[CHAT-003]` 이 두 개를, `[CHAT-012]` 가 한 개를 가져갑니다. 남는
-  것은 다음 열다섯 개입니다.
-
-      services/kr_market_data_cache_sqlite_payload.py
-      services/kr_market_vcp_signals_cache.py
-      services/kr_market_jongga_payload_helpers.py
-      services/kr_market_realtime_price_cache.py
-      services/kr_market_realtime_latest_close_cache.py
-      services/kr_market_realtime_market_map_cache.py
-      services/kr_market_backtest_summary_cache.py
-      services/kr_market_cumulative_cache.py
-      services/kr_market_data_cache_jongga.py
-      services/common_update_status_service.py
-      services/file_row_count_cache.py
-      services/paper_trading_db_setup.py
-      engine/kr_ai_stock_info_cache.py
-      engine/signal_tracker_source_cache.py
-      engine/signal_tracker_analysis_source_cache.py
-
-- `[CHAT-003]` 은 두 모듈을 옮기면서 코드 줄이 13줄 늘었습니다(주석 제외 820 → 833).
-  중복 로직 354줄이 사라진 자리를 위임 호출의 인자 전달이 채웠기 때문입니다. 나머지가
-  따라오면 순감으로 돌아섭니다.
-- 열다섯 개를 한 사이클에 다 옮기면 규모가 통제를 벗어나므로, 화면 단위로 서너 개씩 나누어
-  진행할지 이 항목을 시작할 때 정합니다.
-- [ ] 옮길 순서를 화면 단위로 묶어 확정
-- [ ] 각 묶음마다 기존 회귀 테스트가 그대로 통과하는지 확인
-- [ ] 옮긴 뒤 주석을 뺀 코드 줄 수가 실제로 줄었는지 측정
-
 ### [JONGGA-030] 티커 정규화 구현이 여섯 벌로 흩어져 규칙이 서로 다르다
 - 카테고리: 종가베팅 | 티어: T3 | 근거: 2026-09-04 JONGGA-017 사이클의 리뷰, `[JONGGA-005]` 사이클의 변이 검사, AUDIT-FLOW §2.2
 - 2026-09-07 백로그 정리에서 `[INFRA-023]`(`000000` 가짜 종목)과 `[FLOW-007]`(백테스트 패딩
@@ -504,3 +420,16 @@
 - [ ] 이미 쌓인 11,647 쌍과 `cmp_dev_*` 셋을 어떻게 할지 사용자와 정함
 
 - 현재 남은 일: 원본 누적 파일의 처리 결정만 대기. 기존 설명의 수량·공통 helper 경로는 과거 관측이며, 2026-09-09 원본 WAL/SHM 파일 합계는27396개. 기존 파일을 삭제하지 않았고 완료 아카이브도 만들지 않음.
+
+### [FE-043] 사용량 조회가 HTML 오류 응답을 JSON으로 읽어 SyntaxError를 남긴다
+- 카테고리: 프론트엔드 공통 | 티어: T2 예상 | 근거: 2026-09-21 저장소·메모리 QA의 격리 하네스 기동 실패 실측
+- 검증용 Flask가 중복 endpoint로 기동하지 못해 gateway가 HTML 502를 반환했을 때,
+  `frontend/src/app/components/Sidebar.tsx:88-92`의 `fetch(...).then(res => res.json())`가
+  `Unexpected token '<'`를 냈다. `evidence/storage-memory-20260921/next-fixture-outage.txt`와
+  `fixture-startup-recovery.json`에 요청·원인·복구 근거가 있다. 하네스 복구 뒤 오류는 사라졌다.
+- 사용자의 기존 운영 제보와 같은 증상이지만 그 요청 URL·시각이 없어 운영 원인까지 확정하지 않는다.
+- QA 시나리오: 격리 사용량 API의 HTML 502/404 및 JSON 401/403/500에서 JSON SyntaxError 없이
+  조회 실패가 처리되고, 정상 JSON으로 복구하면 사용량 표시가 회복된다.
+- [ ] Sidebar와 같은 사용량 API를 읽는 호출부를 확인하고 실패 표시·기존 값 유지 계약 확정
+- [ ] 기존 fetchAPI 등 공용 응답 처리를 재사용해 HTTP 실패·비JSON 응답 처리
+- [ ] 회귀 테스트와 ego-browser 실패→복구 실측, 원본 서비스·실제 충전은 실행하지 않음

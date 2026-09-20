@@ -1,0 +1,9 @@
+{
+  "old_pid": 87774,
+  "old_command": "/opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/storage-memory-20260921-j28901sw/docs/dev-cycle/evidence/storage-memory-20260921/fixture.py --repo /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/storage-memory-20260921-j28901sw --port 57922 --reset-log",
+  "old_cwd_verified": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/storage-memory-20260921-j28901sw",
+  "new_pid": 99744,
+  "reason": "read-only VCP AI/quote/status/config polling surfaces missing in harness; no product code change",
+  "browser_parked": "about:blank",
+  "request_log_reset": false
+}

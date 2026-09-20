@@ -1,0 +1,8 @@
+{
+  "old_pid": 3747,
+  "new_pid": 8134,
+  "cwd_verified": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/storage-memory-20260921-j28901sw",
+  "reason": "one synthetic S trade requires A/B/D grade counters0, not copied S counters",
+  "product_source_changed": false,
+  "log_reset": false
+}

@@ -1,0 +1,7 @@
+{
+  "failed_pid": 99744,
+  "new_pid": 3747,
+  "cause": "duplicate jongga_status endpoint from parent harness extension",
+  "recovery": "removed duplicate, preserved request log and synthetic data, checked HTTP200 before browser resume",
+  "product_source_changed": false
+}

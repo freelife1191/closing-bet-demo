@@ -1,0 +1,29 @@
+{
+  "viewBefore": "🧠 저장된 메모리\n\n브라우저메모리: 검증값\n",
+  "results": [
+    {
+      "command": "/memory add user_profile 변경금지",
+      "reply": "⚠️ user_profile은 설정 화면에서 관리해주세요."
+    },
+    {
+      "command": "/memory update user_profile 변경금지",
+      "reply": "⚠️ user_profile은 설정 화면에서 관리해주세요."
+    },
+    {
+      "command": "/memory remove user_profile",
+      "reply": "⚠️ user_profile은 설정 화면에서 관리해주세요."
+    },
+    {
+      "command": "/memory clear",
+      "reply": "🧹 메모리가 초기화되었습니다."
+    },
+    {
+      "command": "/memory view",
+      "reply": "📭 저장된 메모리가 없습니다."
+    }
+  ],
+  "profileAfter": {
+    "status": 200,
+    "body": "{\"profile\":{\"name\":\"\\ube0c\\ub77c\\uc6b0\\uc800 QA\",\"persona\":\"\\uc800\\uc7a5\\uc18c \\uac80\\uc99d\"}}\n"
+  }
+}
