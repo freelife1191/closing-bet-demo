@@ -1,0 +1,73 @@
+{
+  "FE-031": {
+    "files": [
+      "frontend/src/app/dashboard/kr/page.tsx",
+      "frontend/src/app/dashboard/kr/page.regression-fe-031.test.tsx",
+      "frontend/src/lib/api.ts",
+      "frontend/src/lib/api.body-timeout.test.ts",
+      "frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx"
+    ],
+    "additions": 199,
+    "deletions": 19
+  },
+  "FE-028": {
+    "files": [
+      "frontend/src/app/components/Header.tsx",
+      "frontend/src/app/components/Header.regression-fe-028-010.test.tsx"
+    ],
+    "additions": 40,
+    "deletions": 19
+  },
+  "FE-010": {
+    "files": [
+      "frontend/src/app/components/ChatWidget.tsx"
+    ],
+    "additions": 13,
+    "deletions": 31
+  },
+  "JONGGA-024": {
+    "files": [
+      "frontend/src/app/dashboard/kr/closing-bet/page.tsx",
+      "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-followup.test.tsx",
+      "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-021.test.tsx",
+      "frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx"
+    ],
+    "additions": 141,
+    "deletions": 77
+  },
+  "JONGGA-028": {
+    "files": [
+      "app/routes/kr_market_jongga_ai_payload_helpers.py",
+      "tests/app/test_jongga_followup_contract.py",
+      "frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts",
+      "frontend/src/app/dashboard/kr/closing-bet/displayHelpers.jongga-followup.test.ts"
+    ],
+    "additions": 351,
+    "deletions": 28
+  },
+  "JONGGA-031": {
+    "files": [
+      "frontend/src/app/components/BuyStockModal.tsx",
+      "frontend/src/app/components/BuyStockModal.test.tsx",
+      "frontend/src/app/components/BuyStockModal.jongga-followup.test.tsx",
+      "frontend/src/app/components/ModalShell.test.tsx",
+      "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-015.test.tsx",
+      "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-023.test.tsx",
+      "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-037.test.tsx"
+    ],
+    "additions": 236,
+    "deletions": 53
+  },
+  "FE-021": {
+    "files": [
+      "frontend/src/app/components/PaperTradingModal.regression-fe-021.test.tsx"
+    ],
+    "additions": 93,
+    "deletions": 0
+  },
+  "total": {
+    "files": 24,
+    "additions": 1073,
+    "deletions": 227
+  }
+}

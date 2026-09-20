@@ -1,0 +1,59 @@
+{
+  "result": "PASS",
+  "browser": {
+    "spaceId": 5,
+    "closedSpace": true,
+    "keptManagedLabels": [],
+    "closedManagedLabels": [
+      "p1"
+    ],
+    "preservedUnmanagedCount": 0
+  },
+  "terminated_processes": [
+    {
+      "name": "fixture",
+      "pid": 31278,
+      "pgid": 31278,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf",
+      "command": "/opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/docs/dev-cycle/evidence/ui-followup-20260920/fixture.py --repo /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf --port 57722"
+    },
+    {
+      "name": "frontend",
+      "pid": 46844,
+      "pgid": 46844,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/frontend",
+      "command": "node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 57721"
+    },
+    {
+      "name": "gateway",
+      "pid": 46845,
+      "pgid": 46845,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf",
+      "command": "/opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/docs/dev-cycle/evidence/ui-followup-20260920/gateway.py"
+    }
+  ],
+  "listeners_after": {
+    "57720": "",
+    "57721": "",
+    "57722": ""
+  },
+  "scratch_removed": true,
+  "original_venv_exists": true,
+  "source_sha_matches": 24,
+  "git_object_matches": 24,
+  "root_package_unchanged": true,
+  "runtime_logs": {
+    "gateway-runtime.log": {
+      "sha256": "6e9e4c9c0e259dcbd0b8b9cb28506d1078ccfbe3e354475ede033ca0bae5ac60",
+      "gzip": "gateway-runtime.log.gz"
+    },
+    "fixture-runtime.log": {
+      "sha256": "5dd21fdf89d1f5d06d43b9fb76090f4168926827bec27617fce959bb0d96c13c",
+      "gzip": "fixture-runtime.log.gz"
+    },
+    "frontend-runtime.log": {
+      "sha256": "d215d55fddb88d5ab514f450df19da01d530d88ebb2d60e5b1d9f1551cafcdc6",
+      "gzip": "frontend-runtime.log.gz"
+    }
+  }
+}

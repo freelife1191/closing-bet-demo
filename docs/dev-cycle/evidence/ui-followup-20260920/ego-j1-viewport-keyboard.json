@@ -1,0 +1,27 @@
+{
+  "before": {
+    "width": 375,
+    "height": 812,
+    "left": 0,
+    "client": 341,
+    "scroll": 732,
+    "active": "SK하이닉스 가로 스크롤 차트"
+  },
+  "focused": {
+    "width": 375,
+    "height": 812,
+    "left": 0,
+    "client": 341,
+    "scroll": 732,
+    "active": "SK하이닉스 가로 스크롤 차트"
+  },
+  "after": {
+    "width": 375,
+    "height": 812,
+    "left": 7,
+    "client": 341,
+    "scroll": 732,
+    "active": "SK하이닉스 가로 스크롤 차트"
+  },
+  "waitError": null
+}

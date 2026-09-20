@@ -1,0 +1,17 @@
+{
+  "before": {
+    "width": 375,
+    "naturalWidth": 700,
+    "renderedWidth": 700
+  },
+  "failed": {
+    "width": 375,
+    "text": "SK하이닉스000660일봉주봉월봉네이버 금융 제공SK하이닉스 (000660) 차트를 불러오지 못했습니다다른 종목의 차트를 대신 보여주지 않습니다. 아래 네이버 금융이나 토스 증권에서 확인하세요.좌우 화살표 키로 차트를 가로로 스크롤할 수 있습니다.네이버 금융토스 증권",
+    "links": [
+      "https://m.stock.naver.com/domestic/stock/000660/chart",
+      "https://tossinvest.com/stocks/000660"
+    ],
+    "images": 0
+  },
+  "recovered": true
+}

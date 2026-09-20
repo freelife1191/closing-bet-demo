@@ -1,0 +1,178 @@
+[p1 "KR Market Dashboard" | space "UI follow-up seven TODO QA"(5): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    button "메뉴 열고 닫기" [ref=181, loc=css:button[aria-label="메뉴 열고 닫기"]]
+      text ""
+    text "KR Market"
+    button "설정 열기" [ref=182, loc=css:button[aria-label="설정 열기"]]
+      text ""
+  container
+    text "VCP 패턴 스캐너"
+    heading
+      text "VCP"
+      text "시그널"
+    paragraph
+      text "Volatility Contraction Pattern + 기관/외국인 수급"
+    combobox "재분석 실행 모드" [ref=183, loc=css:select[aria-label="재분석 실행 모드"]]
+      text "실패/누락만"
+    button [ref=184]
+      text ""
+      text "실패 AI 재분석"
+    button [ref=185]
+      text ""
+      text "Refresh VCP"
+    heading
+      text "실시간 VCP 시그널"
+    text "TOP"
+    text "2"
+    text "(Scanned:"
+    text "42"
+    text ")"
+    button [ref=186]
+      text ""
+      text "VCP 전체 10주 매수"
+    button [ref=187]
+      text ""
+      text "VCP 기준표"
+    button [ref=188]
+      text "최신"
+    button [ref=189]
+      text ""
+      text "과거"
+    table
+      table_row
+        table_cell
+          text "STOCK"
+        table_cell
+          text "DATE"
+        table_cell
+          text "외국인 5D"
+        table_cell
+      table_row
+        table_cell
+          text "삼성전자"
+          text "005930"
+        table_cell
+          text "2026-09-20"
+        table_cell
+          text ""
+          text "1조 2400억"
+        table_cell
+      table_row
+        table_cell
+          text "SK하이닉스"
+          text "000660"
+        table_cell
+          text "2026-09-20"
+        table_cell
+          text ""
+          text "-1조 2600억"
+        table_cell
+    text "Last updated:"
+    text "오후 09:53"
+  button "AI 상담" [ref=205, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  dialog "SK하이닉스 (000660)" [ref=206, loc=role:dialog[name="SK하이닉스 (000660)"]]
+    container
+      container
+        heading
+          text "SK하이닉스"
+          container
+            text "("
+            text "000660"
+            text ")"
+        button "차트 닫기" [ref=207]
+          text "×"
+      group "차트 조회 기간"
+        button [ref=208]
+          text "1개월"
+        button [ref=209]
+          text "3개월"
+        button [ref=210]
+          text "6개월"
+        button [ref=211]
+          text "1년"
+      container
+        table
+          table_row
+            table_cell
+              container
+                canvas
+                canvas
+              anchor [ref=212, url=https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=127.0.0.1/dashboard/kr/vcp]
+                svg_root
+            table_cell
+              canvas
+              canvas
+          table_row
+            table_cell
+              canvas
+              canvas
+            table_cell
+              canvas
+        container
+          text "VCP 표시"
+          text ""
+        container
+          container
+            text "이동평균선 토글"
+            text ""
+          button [ref=213]
+            text "3"
+            text "일선"
+          button [ref=214]
+            text "5"
+            text "일선"
+          button [ref=215]
+            text "10"
+            text "일선"
+          button [ref=216]
+            text "20"
+            text "일선"
+          button [ref=217]
+            text "60"
+            text "일선"
+          button [ref=218]
+            text "120"
+            text "일선"
+      container
+        container
+          text "VCP 패턴"
+          container
+            checkbox [ref=219]
+            text "범위 표시"
+        container
+          text "수축비율:"
+          text "0.52"
+        container
+          text "전반부:"
+          container
+            text "₩"
+            text "185,220"
+        container
+          text "후반부:"
+          container
+            text "₩"
+            text "183,690"
+    container
+      text "AI 상세 분석"
+      container [ref=220]
+        container
+          button [ref=221]
+            text ""
+            text "GPT"
+          button [ref=222]
+            text ""
+            text "Gemini"
+        container
+          container
+            svg_root
+            text "0%"
+          container
+            text """
+            text "새 HOLD 판정: 진입을 보류합니다."
+            text """
+        container
+          text "종합 시그널 점수"
+          text "81.0"

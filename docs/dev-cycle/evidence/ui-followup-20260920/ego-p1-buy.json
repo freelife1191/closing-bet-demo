@@ -1,0 +1,32 @@
+[
+  {
+    "mode": "success",
+    "pending": false,
+    "elapsedMs": 850,
+    "state": {
+      "width": 375,
+      "text": "모의 투자 매수\nSK하이닉스000660\n주문 기준가\n가격 조회값 적용 (실시간 시세 보장 아님)\n184,500원\n수량 매수\n금액 매수\n구매 수량 (주)\n가능: 493주\nQTY\n최대\n+10주\n+100주\n주문 수량\n0 주\n결제 금액\n0 원\n취소\n매수 주문",
+      "oldRealtimeClaim": false
+    }
+  },
+  {
+    "mode": "error",
+    "pending": false,
+    "elapsedMs": 457,
+    "state": {
+      "width": 375,
+      "text": "모의 투자 매수\nSK하이닉스000660\n주문 기준가\n⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)\n184,500원\n수량 매수\n금액 매수\n구매 수량 (주)\n가능: 493주\nQTY\n최대\n+10주\n+100주\n주문 수량\n0 주\n결제 금액\n0 원\n취소\n매수 주문",
+      "oldRealtimeClaim": false
+    }
+  },
+  {
+    "mode": "timeout",
+    "pending": true,
+    "elapsedMs": 10129,
+    "state": {
+      "width": 375,
+      "text": "모의 투자 매수\nSK하이닉스000660\n주문 기준가\n⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)\n184,500원\n수량 매수\n금액 매수\n구매 수량 (주)\n가능: 493주\nQTY\n최대\n+10주\n+100주\n주문 수량\n0 주\n결제 금액\n0 원\n취소\n매수 주문",
+      "oldRealtimeClaim": false
+    }
+  }
+]

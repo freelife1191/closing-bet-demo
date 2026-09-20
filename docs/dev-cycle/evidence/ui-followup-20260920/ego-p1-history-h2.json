@@ -1,0 +1,117 @@
+{
+  "history": {
+    "date": "2026-09-18",
+    "tiles": [
+      "2026-09-18 종가\n₩75,200",
+      "2026-09-18 종가\n₩183,500",
+      "2026-09-18 종가\n₩217,000"
+    ],
+    "buyDisabled": true
+  },
+  "controls": {
+    "viewport": 900,
+    "launcher": {
+      "x": 840,
+      "y": 14,
+      "width": 36,
+      "height": 36,
+      "top": 14,
+      "right": 876,
+      "bottom": 50,
+      "left": 840
+    },
+    "items": [
+      {
+        "name": "거래대금",
+        "rect": {
+          "x": 32,
+          "y": 557.390625,
+          "width": 111,
+          "height": 35,
+          "top": 557.390625,
+          "right": 143,
+          "bottom": 592.390625,
+          "left": 32
+        },
+        "chatOverlap": false,
+        "hit": true
+      },
+      {
+        "name": "상승률",
+        "rect": {
+          "x": 155,
+          "y": 557.390625,
+          "width": 174,
+          "height": 35,
+          "top": 557.390625,
+          "right": 329,
+          "bottom": 592.390625,
+          "left": 155
+        },
+        "chatOverlap": false,
+        "hit": true
+      },
+      {
+        "name": "등급",
+        "rect": {
+          "x": 32,
+          "y": 627.1875,
+          "width": 89,
+          "height": 35,
+          "top": 627.1875,
+          "right": 121,
+          "bottom": 662.1875,
+          "left": 32
+        },
+        "chatOverlap": false,
+        "hit": true
+      },
+      {
+        "name": "총점",
+        "rect": {
+          "x": 133,
+          "y": 624.984375,
+          "width": 94,
+          "height": 35,
+          "top": 624.984375,
+          "right": 227,
+          "bottom": 659.984375,
+          "left": 133
+        },
+        "chatOverlap": false,
+        "hit": true
+      },
+      {
+        "name": "리포트 날짜",
+        "rect": {
+          "x": 656,
+          "y": 603.078125,
+          "width": 160,
+          "height": 37,
+          "top": 603.078125,
+          "right": 816,
+          "bottom": 640.078125,
+          "left": 656
+        },
+        "chatOverlap": false,
+        "hit": true
+      },
+      {
+        "name": "선택한 날짜의 리포트 다시 불러오기",
+        "rect": {
+          "x": 828,
+          "y": 601.390625,
+          "width": 32,
+          "height": 40.390625,
+          "top": 601.390625,
+          "right": 860,
+          "bottom": 641.78125,
+          "left": 828
+        },
+        "chatOverlap": false,
+        "hit": true
+      }
+    ]
+  },
+  "reloadClicked": true
+}

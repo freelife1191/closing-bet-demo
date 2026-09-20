@@ -1,0 +1,206 @@
+[p1 "KR Market Dashboard" | space "UI follow-up seven TODO QA"(5): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=171, url=http://127.0.0.1:57720/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        button [ref=172]
+          text ""
+          text "KR Market"
+          text ""
+        anchor [ref=173, loc=href:/dashboard/kr, url=http://127.0.0.1:57720/dashboard/kr]
+          text "● Overview"
+        anchor [ref=174, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57720/dashboard/kr/vcp]
+          text "● VCP 시그널"
+        anchor [ref=175, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57720/dashboard/kr/closing-bet]
+          text "● 종가베팅"
+        anchor [ref=176, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57720/dashboard/kr/cumulative]
+          text "● 누적 성과"
+        anchor [ref=177, loc=href:/chatbot, url=http://127.0.0.1:57720/chatbot]
+          text "● AI 상담"
+        button [ref=178]
+          text ""
+          text "모의투자"
+        anchor [ref=179, loc=href:/dashboard/data-status, url=http://127.0.0.1:57720/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      button [ref=180]
+        text "f"
+        text "fakeadmin"
+        text "ADMIN"
+        text "Admin · 무제한 사용"
+        text ""
+    container
+      container
+        button "메뉴 열고 닫기" [ref=181, loc=css:button[aria-label="메뉴 열고 닫기"]]
+          text ""
+        text "KR Market"
+      button "설정 열기" [ref=182, loc=css:button[aria-label="설정 열기"]]
+        text ""
+    container
+      container
+        container
+          text "VCP 패턴 스캐너"
+          heading
+            text "VCP"
+            text "시그널"
+          paragraph
+            text "Volatility Contraction Pattern + 기관/외국인 수급"
+        container
+          combobox "재분석 실행 모드" [ref=183]
+            text "실패/누락만"
+          button [ref=184]
+            text ""
+            text "실패 AI 재분석"
+          button [ref=185]
+            text ""
+            text "Refresh VCP"
+      container
+        container
+          heading
+            text "실시간 VCP 시그널"
+          container
+            text "TOP"
+            text "2"
+          container
+            text "(Scanned:"
+            text "42"
+            text ")"
+        container
+          button [ref=186]
+            text ""
+            text "VCP 전체 10주 매수"
+          button [ref=187]
+            text ""
+            text "VCP 기준표"
+          button [ref=188]
+            text "최신"
+          button [ref=189]
+            text ""
+            text "과거"
+      container [ref=190]
+        table
+          table_row
+            table_cell
+              text "STOCK"
+            table_cell
+              text "DATE"
+            table_cell
+              container [ref=191]
+                text "외국인 5D"
+            table_cell
+              container [ref=192]
+                text "기관 5D"
+            table_cell
+              container [ref=193]
+                text "BUY"
+            table_cell
+              container [ref=194]
+                text "SCORE"
+            table_cell
+              container [ref=195]
+                text "CONT."
+            table_cell
+              container [ref=196]
+                text "ENTRY"
+            table_cell
+              container [ref=197]
+                text "STOP"
+            table_cell
+              container [ref=198]
+                text "TARGET"
+            table_cell
+              container [ref=199]
+                text "CURRENT"
+            table_cell
+              container [ref=200]
+                text "RETURN"
+            table_cell
+              container [ref=201]
+                text "GPT"
+            table_cell
+              container [ref=202]
+                text "GEMINI"
+          table_row
+            table_cell
+              text "삼성전자"
+              text "005930"
+            table_cell
+              text "2026-09-20"
+            table_cell
+              text ""
+              text "1조 2400억"
+            table_cell
+              text ""
+              text "33억"
+            table_cell
+              button "삼성전자 모의 매수" [ref=203, loc=css:button[aria-label="삼성전자 모의 매수"]]
+                text ""
+            table_cell
+              text "86"
+            table_cell
+              text "0.52"
+            table_cell
+              text "₩"
+              text "75,000"
+            table_cell
+              text "₩72,200"
+            table_cell
+              text "₩83,200"
+            table_cell
+              text "₩"
+              text "76,200"
+            table_cell
+              text "+1.6%"
+            table_cell
+              text "■"
+              text "관망"
+            table_cell
+              text "▲"
+              text "매수"
+          table_row
+            table_cell
+              text "SK하이닉스"
+              text "000660"
+            table_cell
+              text "2026-09-20"
+            table_cell
+              text ""
+              text "-1조 2600억"
+            table_cell
+              text ""
+              text "-33억"
+            table_cell
+              button "SK하이닉스 모의 매수" [ref=204, loc=css:button[aria-label="SK하이닉스 모의 매수"]]
+                text ""
+            table_cell
+              text "81"
+            table_cell
+              text "0.52"
+            table_cell
+              text "₩"
+              text "183,300"
+            table_cell
+              text "₩180,500"
+            table_cell
+              text "₩191,500"
+            table_cell
+              text "₩"
+              text "184,500"
+            table_cell
+              text "+1.6%"
+            table_cell
+              text "■"
+              text "관망"
+            table_cell
+              text "-"
+      container
+        text "Last updated:"
+        text "오후 09:52"
+  button "AI 상담" [ref=205, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  alert

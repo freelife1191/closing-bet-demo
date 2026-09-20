@@ -1,0 +1,225 @@
+[p1 "KR Market Dashboard" | space "UI follow-up seven TODO QA"(5): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=301, url=http://127.0.0.1:57720/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        button [ref=302]
+          text ""
+          text "KR Market"
+          text ""
+        anchor [ref=303, loc=href:/dashboard/kr, url=http://127.0.0.1:57720/dashboard/kr]
+          text "● Overview"
+        anchor [ref=304, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57720/dashboard/kr/vcp]
+          text "● VCP 시그널"
+        anchor [ref=305, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57720/dashboard/kr/closing-bet]
+          text "● 종가베팅"
+        anchor [ref=306, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57720/dashboard/kr/cumulative]
+          text "● 누적 성과"
+        anchor [ref=307, loc=href:/chatbot, url=http://127.0.0.1:57720/chatbot]
+          text "● AI 상담"
+        button [ref=308]
+          text ""
+          text "모의투자"
+        anchor [ref=309, loc=href:/dashboard/data-status, url=http://127.0.0.1:57720/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      button [ref=310]
+        text "f"
+        text "fakeadmin"
+        text "ADMIN"
+        text "Admin · 무제한 사용"
+        text ""
+    container
+      container
+        button "메뉴 열고 닫기" [ref=311, loc=css:button[aria-label="메뉴 열고 닫기"]]
+          text ""
+        text "KR Market"
+      button "설정 열기" [ref=312, loc=css:button[aria-label="설정 열기"]]
+        text ""
+    container
+      container
+        container
+          text "시스템 상태"
+          heading
+            text "데이터"
+            text "상태"
+          paragraph
+            text "데이터 파일 상태 및 업데이트 현황"
+        container
+          container
+            button [ref=313]
+              text ""
+              text "실시간"
+            button [ref=314]
+              text ""
+              text "날짜 지정"
+          button [ref=315]
+            text ""
+            text "전체 데이터 업데이트"
+      container
+        container
+          container
+            container
+              text ""
+              container
+                heading
+                  text "Daily Prices"
+                paragraph
+                  text "synthetic/0.json"
+            text "생성됨"
+          container
+            container
+              text "크기"
+              text "1.0 KB"
+            container
+              text "행 수"
+              text "42 lines"
+            container
+              text "최근 수정"
+              container
+                text "6시간 24분 전"
+                text "2026-09-20T15:45:00+09:00"
+            container
+              text "데이터 기준일"
+              container
+                text "2026-09-20"
+                text "15:45"
+          button [ref=316]
+            text ""
+            text "업데이트"
+          container [ref=317]
+            text ""
+            text "데이터 설명 보기"
+        container
+          container
+            container
+              text ""
+              container
+                heading
+                  text "Institutional Trend"
+                paragraph
+                  text "synthetic/1.json"
+            text "생성됨"
+          container
+            container
+              text "크기"
+              text "2.0 KB"
+            container
+              text "행 수"
+              text "42 lines"
+            container
+              text "최근 수정"
+              container
+                text "6시간 24분 전"
+                text "2026-09-20T15:45:00+09:00"
+            text "데이터 기준일"
+            text "2026-09-20"
+            text "15:45"
+          button [ref=318]
+            text ""
+            text "업데이트"
+          container [ref=319]
+            text ""
+            text "데이터 설명 보기"
+        container
+          text ""
+          heading
+            text "VCP Signals"
+          paragraph
+            text "synthetic/2.json"
+          text "생성됨"
+          text "크기"
+          text "3.0 KB"
+          text "행 수"
+          text "42 lines"
+          text "최근 수정"
+          text "6시간 24분 전"
+          text "2026-09-20T15:45:00+09:00"
+          text "데이터 기준일"
+          text "2026-09-20"
+          text "15:45"
+          button [ref=320]
+            text ""
+            text "업데이트"
+          container [ref=321]
+            text ""
+            text "데이터 설명 보기"
+        container
+          text ""
+          heading
+            text "AI Analysis"
+          paragraph
+            text "synthetic/3.json"
+          text "생성됨"
+          text "크기"
+          text "4.0 KB"
+          text "행 수"
+          text "42 lines"
+          text "최근 수정"
+          text "6시간 24분 전"
+          text "2026-09-20T15:45:00+09:00"
+          text "데이터 기준일"
+          text "2026-09-20"
+          text "15:45"
+          button [ref=322]
+            text ""
+            text "업데이트"
+          container [ref=323]
+            text ""
+            text "데이터 설명 보기"
+        container
+          text ""
+          heading
+            text "AI Jongga V2"
+          paragraph
+            text "synthetic/4.json"
+          text "생성됨"
+          text "크기"
+          text "5.0 KB"
+          text "행 수"
+          text "42 lines"
+          text "최근 수정"
+          text "6시간 24분 전"
+          text "2026-09-20T15:45:00+09:00"
+          text "데이터 기준일"
+          text "2026-09-20"
+          text "15:45"
+          button [ref=324]
+            text ""
+            text "업데이트"
+          button "AI Jongga V2 메시지 발송" [ref=325, loc=css:button[aria-label="AI Jongga V2 메시지 발송"]]
+            text ""
+          container [ref=326]
+            text ""
+            text "데이터 설명 보기"
+        container
+          text ""
+          heading
+            text "Market Gate"
+          paragraph
+            text "synthetic/5.json"
+          text "생성됨"
+          text "크기"
+          text "6.0 KB"
+          text "행 수"
+          text "42 lines"
+          text "최근 수정"
+          text "6시간 24분 전"
+          text "2026-09-20T15:45:00+09:00"
+          text "데이터 기준일"
+          text "2026-09-20"
+          text "15:45"
+          button [ref=327]
+            text ""
+            text "업데이트"
+          container [ref=328]
+            text ""
+            text "데이터 설명 보기"
+  button "AI 상담" [ref=329, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  alert

@@ -1,0 +1,23 @@
+{
+  "before": 4,
+  "steps": [
+    {
+      "label": "3개월",
+      "days": 90,
+      "portfolioCount": 4
+    },
+    {
+      "label": "1개월",
+      "days": 30,
+      "portfolioCount": 4
+    }
+  ],
+  "urls": [
+    "http://127.0.0.1:57720/api/portfolio",
+    "http://127.0.0.1:57720/api/portfolio/history/asset?days=365",
+    "http://127.0.0.1:57720/api/portfolio/history/asset?days=365",
+    "http://127.0.0.1:57720/api/portfolio/history/asset?days=90",
+    "http://127.0.0.1:57720/api/portfolio/history/asset?days=30"
+  ],
+  "width": 1280
+}

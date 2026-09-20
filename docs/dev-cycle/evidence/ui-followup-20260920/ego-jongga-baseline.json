@@ -1,0 +1,38 @@
+{
+  "expected": [
+    {
+      "name": "삼성전자",
+      "current": 76200,
+      "entry": 75200,
+      "date": "2026-09-20",
+      "ai": {
+        "action": "BUY",
+        "confidence": 67,
+        "reason": "합성 QA 투자 의견입니다."
+      }
+    },
+    {
+      "name": "SK하이닉스",
+      "current": 184500,
+      "entry": 183500,
+      "date": "2026-09-20",
+      "ai": {
+        "action": "HOLD",
+        "confidence": 0,
+        "reason": "새 HOLD 판정: 진입을 보류합니다."
+      }
+    },
+    {
+      "name": "NAVER",
+      "current": 218000,
+      "entry": 217000,
+      "date": "2026-09-20",
+      "ai": {
+        "action": "BUY",
+        "confidence": 67,
+        "reason": "합성 QA 투자 의견입니다."
+      }
+    }
+  ],
+  "cards": []
+}

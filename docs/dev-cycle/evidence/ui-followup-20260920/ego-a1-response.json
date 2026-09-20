@@ -1,0 +1,25 @@
+{
+  "contraction_ratio": 0,
+  "current_price": 184500,
+  "entry_price": 183500,
+  "foreign_5d": 0,
+  "gemini_recommendation": {
+    "action": "HOLD",
+    "confidence": 0,
+    "reason": "새 HOLD 판정: 진입을 보류합니다."
+  },
+  "grade": "A",
+  "inst_5d": 0,
+  "name": "SK하이닉스",
+  "news": [
+    {
+      "published_at": "2026-09-20T08:30:00+09:00",
+      "source": "QA 뉴스",
+      "title": "SK하이닉스 합성 QA 뉴스",
+      "url": "https://example.invalid/qa-news"
+    }
+  ],
+  "score": 15,
+  "ticker": "000660",
+  "vcp_score": 0
+}

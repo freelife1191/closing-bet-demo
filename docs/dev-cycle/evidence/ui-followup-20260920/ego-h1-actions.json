@@ -1,0 +1,41 @@
+[
+  {
+    "case": "header",
+    "state": {
+      "searchAbsent": true,
+      "shortcutAbsent": true
+    }
+  },
+  {
+    "case": "settings-open",
+    "dialog": "_R_5mitmlb_"
+  },
+  {
+    "case": "settings-close",
+    "focus": null
+  },
+  {
+    "case": "dashboard-desktop-open",
+    "state": {
+      "expanded": "true",
+      "rect": {
+        "x": 1220,
+        "y": 14,
+        "width": 36,
+        "height": 36,
+        "top": 14,
+        "right": 1256,
+        "bottom": 50,
+        "left": 1220
+      },
+      "hit": true
+    }
+  },
+  {
+    "case": "mobile-close",
+    "state": {
+      "expanded": "false",
+      "focus": "AI 상담"
+    }
+  }
+]

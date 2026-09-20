@@ -1,0 +1,170 @@
+[
+  {
+    "name": "cumulative",
+    "width": 375,
+    "scrollY": 1366,
+    "launcher": {
+      "x": 315,
+      "y": 14,
+      "width": 36,
+      "height": 36,
+      "top": 14,
+      "right": 351,
+      "bottom": 50,
+      "left": 315
+    },
+    "target": {
+      "x": 268.65625,
+      "y": 698.5,
+      "width": 65.3046875,
+      "height": 72.5,
+      "top": 698.5,
+      "right": 333.9609375,
+      "bottom": 771,
+      "left": 268.65625
+    },
+    "text": "",
+    "overlap": false,
+    "visible": true
+  },
+  {
+    "name": "cumulative",
+    "width": 900,
+    "scrollY": 720,
+    "launcher": {
+      "x": 840,
+      "y": 14,
+      "width": 36,
+      "height": 36,
+      "top": 14,
+      "right": 876,
+      "bottom": 50,
+      "left": 840
+    },
+    "target": {
+      "x": 769.65625,
+      "y": 674.5,
+      "width": 65.3046875,
+      "height": 72.5,
+      "top": 674.5,
+      "right": 834.9609375,
+      "bottom": 747,
+      "left": 769.65625
+    },
+    "text": "",
+    "overlap": false,
+    "visible": true
+  },
+  {
+    "name": "cumulative",
+    "width": 1280,
+    "scrollY": 460,
+    "launcher": {
+      "x": 1220,
+      "y": 14,
+      "width": 36,
+      "height": 36,
+      "top": 14,
+      "right": 1256,
+      "bottom": 50,
+      "left": 1220
+    },
+    "target": {
+      "x": 1149.6875,
+      "y": 682.5,
+      "width": 65.3125,
+      "height": 72.5,
+      "top": 682.5,
+      "right": 1215,
+      "bottom": 755,
+      "left": 1149.6875
+    },
+    "text": "",
+    "overlap": false,
+    "visible": true
+  },
+  {
+    "name": "data-status",
+    "width": 375,
+    "scrollY": 1795.5,
+    "launcher": {
+      "x": 315,
+      "y": 14,
+      "width": 36,
+      "height": 36,
+      "top": 14,
+      "right": 351,
+      "bottom": 50,
+      "left": 315
+    },
+    "target": {
+      "x": 93,
+      "y": 447.9921875,
+      "width": 189.046875,
+      "height": 28,
+      "top": 447.9921875,
+      "right": 282.046875,
+      "bottom": 475.9921875,
+      "left": 93
+    },
+    "text": "Market Gate",
+    "overlap": false,
+    "visible": true
+  },
+  {
+    "name": "data-status",
+    "width": 900,
+    "scrollY": 616.5,
+    "launcher": {
+      "x": 840,
+      "y": 14,
+      "width": 36,
+      "height": 36,
+      "top": 14,
+      "right": 876,
+      "bottom": 50,
+      "left": 840
+    },
+    "target": {
+      "x": 531,
+      "y": 428.296875,
+      "width": 260.046875,
+      "height": 28,
+      "top": 428.296875,
+      "right": 791.046875,
+      "bottom": 456.296875,
+      "left": 531
+    },
+    "text": "Market Gate",
+    "overlap": false,
+    "visible": true
+  },
+  {
+    "name": "data-status",
+    "width": 1280,
+    "scrollY": 228,
+    "launcher": {
+      "x": 1220,
+      "y": 14,
+      "width": 36,
+      "height": 36,
+      "top": 14,
+      "right": 1256,
+      "bottom": 50,
+      "left": 1220
+    },
+    "target": {
+      "x": 1010.328125,
+      "y": 427.8984375,
+      "width": 160.7109375,
+      "height": 28,
+      "top": 427.8984375,
+      "right": 1171.0390625,
+      "bottom": 455.8984375,
+      "left": 1010.328125
+    },
+    "text": "Market Gate",
+    "overlap": false,
+    "visible": true
+  }
+]

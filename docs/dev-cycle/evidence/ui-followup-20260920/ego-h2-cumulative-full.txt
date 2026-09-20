@@ -1,0 +1,404 @@
+[p1 "KR Market Dashboard" | space "UI follow-up seven TODO QA"(5): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=251, url=http://127.0.0.1:57720/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        button [ref=252]
+          text ""
+          text "KR Market"
+          text ""
+        anchor [ref=253, loc=href:/dashboard/kr, url=http://127.0.0.1:57720/dashboard/kr]
+          text "● Overview"
+        anchor [ref=254, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57720/dashboard/kr/vcp]
+          text "● VCP 시그널"
+        anchor [ref=255, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57720/dashboard/kr/closing-bet]
+          text "● 종가베팅"
+        anchor [ref=256, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57720/dashboard/kr/cumulative]
+          text "● 누적 성과"
+        anchor [ref=257, loc=href:/chatbot, url=http://127.0.0.1:57720/chatbot]
+          text "● AI 상담"
+        button [ref=258]
+          text ""
+          text "모의투자"
+        anchor [ref=259, loc=href:/dashboard/data-status, url=http://127.0.0.1:57720/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      button [ref=260]
+        text "f"
+        text "fakeadmin"
+        text "ADMIN"
+        text "Admin · 무제한 사용"
+        text ""
+    container
+      container
+        button "메뉴 열고 닫기" [ref=261, loc=css:button[aria-label="메뉴 열고 닫기"]]
+          text ""
+        text "KR Market"
+      button "설정 열기" [ref=262, loc=css:button[aria-label="설정 열기"]]
+        text ""
+    container
+      container
+        text "성과 트래커"
+        container
+          container
+            heading
+              text "실전 종가베팅"
+              text "누적 성과"
+            container
+              container
+                text "2026-09-18"
+                text "기준 누적 성과"
+              container
+                text "기본 목표 (+5%)"
+                text "기본 손절 (-3%)"
+          container
+            button [ref=263]
+              text ""
+            button [ref=264]
+              text ""
+      container
+        container [ref=265]
+          container
+            text "누적 추천수"
+            text ""
+          text "3"
+        container [ref=266]
+          container
+            text "승률"
+            text ""
+          text "100%"
+        container [ref=267]
+          container
+            text "성공"
+            text ""
+          text "3"
+        container [ref=268]
+          container
+            text "실패"
+            text ""
+          text "0"
+        container [ref=269]
+          container
+            text "보유중"
+            text ""
+          text "0"
+        container [ref=270]
+          container
+            text "평균 수익률"
+            text ""
+          container
+            text "+5%"
+            container
+              container
+                text "S"
+                text "0%"
+              container
+                text "A"
+                text "0%"
+              container
+                text "B"
+                text "0%"
+              container
+                text "D"
+                text "0%"
+      container
+        container [ref=271]
+          container
+            text "누적 수익률"
+            text ""
+          container
+            text "+15%"
+            container
+              container
+                text "S"
+                text "0%"
+              container
+                text "A"
+                text "0%"
+              container
+                text "B"
+                text "0%"
+              container
+                text "D"
+                text "0%"
+        container [ref=272]
+          container
+            text "평균 보유일"
+            text ""
+          text "1"
+        container
+          text "데이터 기준일"
+          text "2026-09-18"
+        container [ref=273]
+          container
+            text "손익비 (PROFIT FACTOR)"
+            text ""
+          text "0"
+      container [ref=274]
+        heading
+          text "S"
+          text "등급"
+          text ""
+        text "0"
+        text "건"
+        text "승률"
+        text "0"
+        text "%"
+        text "평균 수익률"
+        text "0"
+        text "%"
+        text "성공/실패"
+        text "0"
+        text "/"
+        text "0"
+      container [ref=275]
+        heading
+          text "A"
+          text "등급"
+          text ""
+        text "0"
+        text "건"
+        text "승률"
+        text "0"
+        text "%"
+        text "평균 수익률"
+        text "0"
+        text "%"
+        text "성공/실패"
+        text "0"
+        text "/"
+        text "0"
+      container [ref=276]
+        heading
+          text "B"
+          text "등급"
+          text ""
+        text "0"
+        text "건"
+        text "승률"
+        text "0"
+        text "%"
+        text "평균 수익률"
+        text "0"
+        text "%"
+        text "성공/실패"
+        text "0"
+        text "/"
+        text "0"
+      container [ref=277]
+        heading
+          text "D"
+          text "등급"
+          text "과거 기록"
+          text ""
+        text "0"
+        text "건"
+        text "승률"
+        text "0"
+        text "%"
+        text "평균 수익률"
+        text "0"
+        text "%"
+        text "성공/실패"
+        text "0"
+        text "/"
+        text "0"
+      heading
+        text "승패 분포 (WIN/LOSS)"
+      container [ref=278]
+        text ""
+      text "3"
+      text "성공"
+      text "목표가 도달"
+      text "보유중"
+      text "손절가 도달"
+      text "결과:"
+      text "현재 페이지 내"
+      button [ref=279]
+        text "전체"
+        text "("
+        text "3"
+        text ")"
+      button [ref=280]
+        text "성공"
+        text "("
+        text "3"
+        text ")"
+      button [ref=281]
+        text "실패"
+        text "("
+        text "0"
+        text ")"
+      button [ref=282]
+        text "보유"
+        text "("
+        text "0"
+        text ")"
+      text "등급:"
+      button [ref=283]
+        text "전체"
+      button [ref=284]
+        text "S"
+        text "("
+        text "0"
+        text ")"
+      button [ref=285]
+        text "A"
+        text "("
+        text "3"
+        text ")"
+      button [ref=286]
+        text "B"
+        text "("
+        text "0"
+        text ")"
+      button [ref=287]
+        text "D"
+        text "("
+        text "0"
+        text ")"
+      text "페이지당:"
+      combobox [ref=288]
+        text "50개"
+      container [ref=289]
+        table
+          table_row
+            table_cell
+              text "#"
+            table_cell
+              text "추천일"
+              container [ref=290]
+                text ""
+            table_cell
+              text "등급"
+              container [ref=291]
+                text ""
+            table_cell
+              text "종목명"
+            table_cell
+              text "진입가"
+              container [ref=292]
+                text ""
+            table_cell
+              text "결과"
+              container [ref=293]
+                text ""
+            table_cell
+              text "수익률"
+              container [ref=294]
+                text ""
+            table_cell
+              text "최고가"
+              container [ref=295]
+                text ""
+            table_cell
+              text "가격흐름"
+              container [ref=296]
+                text ""
+            table_cell
+              text "보유일"
+              container [ref=297]
+                text ""
+            table_cell
+              text "점수"
+              container [ref=298]
+                text ""
+            table_cell
+              text "테마"
+              container [ref=299]
+                text ""
+          table_row
+            table_cell
+              text "3"
+            table_cell
+              text "2026-09-18"
+            table_cell
+              text "A"
+            table_cell
+              text "삼성전자"
+              text "005930"
+              text "KOSPI"
+            table_cell
+              text "76,200"
+            table_cell
+              text "성공"
+            table_cell
+              text "+"
+              text "5.0"
+              text "%"
+            table_cell
+              text "80010%"
+            table_cell
+              text "-"
+            table_cell
+              text "1"
+              text "일"
+            table_cell
+              text "15"
+            table_cell
+          table_row
+            table_cell
+              text "2"
+            table_cell
+              text "2026-09-18"
+            table_cell
+              text "A"
+            table_cell
+              text "SK하이닉스"
+              text "000660"
+              text "KOSPI"
+            table_cell
+              text "184,500"
+            table_cell
+              text "성공"
+            table_cell
+              text "+"
+              text "5.0"
+              text "%"
+            table_cell
+              text "193725%"
+            table_cell
+              text "-"
+            table_cell
+              text "1"
+              text "일"
+            table_cell
+              text "15"
+            table_cell
+          table_row
+            table_cell
+              text "1"
+            table_cell
+              text "2026-09-18"
+            table_cell
+              text "A"
+            table_cell
+              text "NAVER"
+              text "035420"
+              text "KOSPI"
+            table_cell
+              text "218,000"
+            table_cell
+              text "성공"
+            table_cell
+              text "+"
+              text "5.0"
+              text "%"
+            table_cell
+              text "228900%"
+            table_cell
+              text "-"
+            table_cell
+              text "1"
+              text "일"
+            table_cell
+              text "15"
+            table_cell
+  button "AI 상담" [ref=300, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  alert

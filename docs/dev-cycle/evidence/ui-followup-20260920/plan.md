@@ -1,6 +1,6 @@
 # UI follow-up Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 승인된 FE-031·FE-028·FE-010·JONGGA-024·JONGGA-028·JONGGA-031·FE-021 7건을 구현/회귀 검증하고 실제 UI QA까지 마감한다.
 **Architecture:** 기존 React 화면과 Flask 응답 추출 규칙을 고친다. 새 검색/차트 데이터 시스템이나 의존성을 추가하지 않는다. 제품 변경은 develop, 실행 검증은 git archive 기반 격리 사본에서만 한다.
@@ -27,56 +27,56 @@
 ### Task 1: FE-031 갱신 실패
 Files: frontend/src/app/dashboard/kr/page.tsx 및 page.regression-fe-031.test.tsx, frontend/src/lib/api.ts (필요한 기존 fetchAPI export/API wrapper만).
 Interfaces: 기존 krAPI.updateMarketGate와 fetchAPI 오류/timeout 계약 유지. permissionError와 일반 갱신 오류를 구분.
-- [ ] 실패 테스트 먼저: updateMarketGate가 Error('갱신 실패')면 화면 alert; raw refresh 500/HTML/네트워크 및 timeout에 사용자 메시지, 재시도 성공시 해제, 403은 권한회수.
+- [x] 실패 테스트 먼저: updateMarketGate가 Error('갱신 실패')면 화면 alert; raw refresh 500/HTML/네트워크 및 timeout에 사용자 메시지, 재시도 성공시 해제, 403은 권한회수.
 ```tsx
 expect(await screen.findByRole('alert')).toHaveTextContent('갱신 실패');
 ```
-- [ ] 부모 격리 target vitest로 실패 관측(기대: 메시지 없음), 최소 구현: 일반 오류 state + 기존 alert 스타일, refresh를 기존 fetchAPI로 전달, 중복클릭/스피너 종료와 접근 가능한 갱신 이름 유지.
-- [ ] 격리 target GREEN 후 전체공유 검증으로 전달. 기존 타입억제 확대 금지.
+- [x] 부모 격리 target vitest로 실패 관측(기대: 메시지 없음), 최소 구현: 일반 오류 state + 기존 alert 스타일, refresh를 기존 fetchAPI로 전달, 중복클릭/스피너 종료와 접근 가능한 갱신 이름 유지.
+- [x] 격리 target GREEN 후 전체공유 검증으로 전달. 기존 타입억제 확대 금지.
 
 ### Task 2: FE-028/FE-010 공용 헤더와 채팅
 Files: frontend/src/app/components/Header.tsx, ChatWidget.tsx 및 해당 tests, 필요한 경우 dashboard/layout.tsx.
 Interfaces: launcher 소유권과 isOpen 상태는 root-mounted ChatWidget에 그대로 둔다. dashboard 경로에서는 기존 단일 버튼을 fixed top-3.5 right-4 w-9 h-9로 놓고 Header를 pl-4 md:pl-6 pr-16으로 하여 오른쪽64px을 예약한다. event/context/portal 추가하지 않음. aria-expanded는 같은 isOpen에 유지. dashboard 밖에서는 기존 bottom-right 배치 유지, /chatbot에서는 현행 widget 숨김 유지. 열기/닫기버튼과 창내 닫기를 테스트하고 닫은 뒤 launcher 초점복귀를 확인한다. 말풍선과 전용timer/state를 제거한다. 채팅창 열림은 기존 의도적 overlay이며 이번 대상은 닫힌 launcher의 본문가림이다.
-- [ ] 검색 input/mobile버튼/⌘K 모두 없음, named menu/settings 남음, 채팅 열기/닫기 회귀 작성. 제거만인 검색에 불필요한 구현 mirror 테스트는 추가하지 않고 기존 Header 계약 갱신.
+- [x] 검색 input/mobile버튼/⌘K 모두 없음, named menu/settings 남음, 채팅 열기/닫기 회귀 작성. 제거만인 검색에 불필요한 구현 mirror 테스트는 추가하지 않고 기존 Header 계약 갱신.
 ```tsx
 expect(screen.queryByRole('button', { name: '검색' })).toBeNull();
 ```
-- [ ] 원본 baseline의 launcher 동작 검사 후 디자인 수정. 닫힌 launcher와 헤더 버튼의 좌표중첩은 브라우저로 검증한다. 말풍선 state/timer와 죽은 JSX도 함께 제거.
-- [ ] 부모 격리 target GREEN. 375/900/1280 네 화면 스크롤중/끝에서 본문 가림 없음 및 채팅 open/close를 QA에 전달.
+- [x] 원본 baseline의 launcher 동작 검사 후 디자인 수정. 닫힌 launcher와 헤더 버튼의 좌표중첩은 브라우저로 검증한다. 말풍선 state/timer와 죽은 JSX도 함께 제거.
+- [x] 부모 격리 target GREEN. 375/900/1280 네 화면 스크롤중/끝에서 본문 가림 없음 및 채팅 open/close를 QA에 전달.
 
 ### Task 3: JONGGA-024/028/031 종가 표시 정확성
 Files: frontend/src/app/dashboard/kr/closing-bet/page.tsx, displayHelpers.ts 및 displayHelpers.test.ts, page.regression-jongga-followup.test.tsx; app/routes/kr_market_jongga_ai_payload_helpers.py, kr_market_jongga_reanalysis_helpers.py, kr_market_jongga_normalize_helpers.py 및 tests/app/test_jongga_followup_contract.py; BuyStockModal.tsx/tests 필요시.
 Interfaces: AI 정본 top-level ai_evaluation → score.ai_evaluation → score_details.ai_evaluation → legacy score.llm_reason. 후보가 비공백 문자열이면 기존호환 {action:HOLD,reason:문자열,confidence:null}로 선택한다. 객체는 BUY/HOLD/SELL action(대소문자무시) 또는 비공백 문자열 reason 중 하나가 있을 때 유효하다. 빈객체/배열/숫자/null/공백문자열/invalid-action-only/confidence-only는 건너뛴다. reason이 있되 action이 invalid면 HOLD로 표현한다. reason 내용 자체에 placeholder 마법문자열 판정을 도입하지 않는다. action-only 객체는 선택하고 기존 llm_reason으로 사유를 보완할 수 있다. confidence0은 값없음과 구분한다. TS displayHelpers에 동일 후보 선택함수를 두고 score_details 타입의 ai_evaluation을 unknown으로 수용해 검사한다. 사유는 선택한 판정 reason 우선, legacy llm_reason 호환. confidence0 보존, 입력객체 수정 금지(추출기).
-- [ ] 상충된 새HOLD/옛BUY, reason-only legacy, 빈/malformed 평가, confidence0 회귀 작성.
+- [x] 상충된 새HOLD/옛BUY, reason-only legacy, 빈/malformed 평가, confidence0 회귀 작성.
 ```python
 assert _extract_jongga_ai_evaluation({'ai_evaluation': {'action':'HOLD','reason':'new'}, 'score': {'ai_evaluation': {'action':'BUY','reason':'old'}}})['reason'] == 'new'
 ```
-- [ ] 부모 target RED 확인 후 추출/카드/본문 동일순서 적용; 재분석 결과를 fixture로 주입하여 UI와 실제 Python 변환을 함께 대조한다. 실제 LLM 호출 안 함.
-- [ ] 고정 polyline 장식 제거, 등락률 숫자/실제 확대 차트 진입 보존. 확대 이미지는700px 원본폭으로 가로스크롤 가능, 키보드초점/설명과 실패 외부링크 유지. 불필요한 시계열 조회 추가 안 함.
-- [ ] 가격 출처 응답/정규화 추적. 카드 신호일 종가는 entry_price+signal_date로 일치시키며 latest current_price는 신호일 가격이라고 부르지 않음. 매수모달 성공/실패 문구는 실제 API 응답의 출처를 보수적으로 표현(조회 성공이 거래소 실시간성 보장은 아님). 자료파일 재계산 안 함.
-- [ ] 부모 Python/Vitest target GREEN, browser 최신/역사·시세성공/실패·AI충돌·차트스크롤/실패 행 준비.
+- [x] 부모 target RED 확인 후 추출/카드/본문 동일순서 적용; 재분석 결과를 fixture로 주입하여 UI와 실제 Python 변환을 함께 대조한다. 실제 LLM 호출 안 함.
+- [x] 고정 polyline 장식 제거, 등락률 숫자/실제 확대 차트 진입 보존. 확대 이미지는700px 원본폭으로 가로스크롤 가능, 키보드초점/설명과 실패 외부링크 유지. 불필요한 시계열 조회 추가 안 함.
+- [x] 가격 출처 응답/정규화 추적. 카드 신호일 종가는 entry_price+signal_date로 일치시키며 latest current_price는 신호일 가격이라고 부르지 않음. 매수모달 성공/실패 문구는 실제 API 응답의 출처를 보수적으로 표현(조회 성공이 거래소 실시간성 보장은 아님). 자료파일 재계산 안 함.
+- [x] 부모 Python/Vitest target GREEN, browser 최신/역사·시세성공/실패·AI충돌·차트스크롤/실패 행 준비.
 
 ### Task 4: FE-021 기간 조회 회귀
 Files: frontend/src/app/components/PaperTradingModal.regression-fe-021.test.tsx. 기존 PaperTradingModal.test.tsx는 차트 컴포넌트를 mock하므로 별도파일에서 실제 PaperTradingAssetChart를 렌더하고 네트워크와 canvas 라이브러리만 대역 처리한다.
 Interfaces: 현행 기간버튼은 자산이력만 갱신. 제품 코드 변경은 실제 결함 재현시에만.
-- [ ] 초기 portfolio 조회수 저장→3개월→asset days90 요청 추가/portfolio 수 그대로→1개월도 동일 테스트.
+- [x] 초기 portfolio 조회수 저장→3개월→asset days90 요청 추가/portfolio 수 그대로→1개월도 동일 테스트.
 ```tsx
 const before = vi.mocked(paperTradingAPI.getPortfolio).mock.calls.length;
 fireEvent.click(screen.getByRole('button', { name: '3개월' }));
 await waitFor(() => expect(paperTradingAPI.getAssetHistory).toHaveBeenCalledWith(90));
 expect(paperTradingAPI.getPortfolio).toHaveBeenCalledTimes(before);
 ```
-- [ ] baseline GREEN이면 이미 해소된 동작임을 기록; 회귀 테스트 실패가 있으면 원인확인 후 범위내 수정.
+- [x] baseline GREEN이면 이미 해소된 동작임을 기록; 회귀 테스트 실패가 있으면 원인확인 후 범위내 수정.
 
 ### Task 5: 공유 검증과 마감
-- [ ] 부모 격리 사본에 허용파일만 sync. 소스SHA와 base31a2d93, root package SHA 보존.
-- [ ] pytest/Vitest 전체, type-check/lint/test:build 실행 및 exit/log 보존. RED와 harness오류를 GREEN으로 덮어쓰지 않음.
-- [ ] ponytail→code-review+architect→deep review, 파일별SHA와 판정원문 보존. 변경후 영향 레인 재검토.
-- [ ] UltraQA 행렬을 qa/batch-ui-followup-2026-09-20.md와7개wrapper에 작성, allowed path staging→diff check exit0 확인후 첫커밋. TODO 유지.
-- [ ] 기존 ui-batch fixture/gateway를 새 evidence/scratch 경로로 복제·수정. 모든 API는 합성서비스. JONGGA028/031은 실제 Python 변환기와 합성 입력을 연결하여 UI대역만의 검증과 구분.
-- [ ] ego-browser 한 TaskSpace, 실제앱 화면으로 행렬실행. screenshot 직접열람·요청로그·Next오류확인.
-- [ ] 소유PID명령/cwd 대조후 종료, scratch제거, task.finish({keep:[]}) 정확히1회. 원본파일 보존대조.
-- [ ] 독립 최종검증 후 통과한7건만 archive/월별통계갱신 및 TODO제거 커밋. 미통과면 항목유지.
+- [x] 부모 격리 사본에 허용파일만 sync. 소스SHA와 base31a2d93, root package SHA 보존.
+- [x] pytest/Vitest 전체, type-check/lint/test:build 실행 및 exit/log 보존. RED와 harness오류를 GREEN으로 덮어쓰지 않음.
+- [x] ponytail→code-review+architect→deep review, 파일별SHA와 판정원문 보존. 변경후 영향 레인 재검토.
+- [x] UltraQA 행렬을 qa/batch-ui-followup-2026-09-20.md와7개wrapper에 작성, allowed path staging→diff check exit0 확인후 첫커밋. TODO 유지.
+- [x] 기존 ui-batch fixture/gateway를 새 evidence/scratch 경로로 복제·수정. 모든 API는 합성서비스. JONGGA028/031은 실제 Python 변환기와 합성 입력을 연결하여 UI대역만의 검증과 구분.
+- [x] ego-browser 한 TaskSpace, 실제앱 화면으로 행렬실행. screenshot 직접열람·요청로그·Next오류확인.
+- [x] 소유PID명령/cwd 대조후 종료, scratch제거, task.finish({keep:[]}) 정확히1회. 원본파일 보존대조.
+- [x] 독립 최종검증 후 통과한7건만 archive/월별통계갱신 및 TODO제거 커밋. 미통과면 항목유지.
 
 ## 검토 반영 / 정확한 검증 경로
 - critic initial REJECT: root/widget 경계·AI유효성·QA매핑·읽기목록 누락. 위 Task2/3 계약을 구체화함. 원문은 plan-critic-initial.md 보존.

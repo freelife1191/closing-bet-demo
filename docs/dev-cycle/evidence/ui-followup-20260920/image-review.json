@@ -1,0 +1,170 @@
+[
+  {
+    "file": "ego-a1-vcp-gemini.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-a2-literal-data.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h1-home-chat.png",
+    "width": 1280,
+    "height": 900,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h1-mobile-chat-stable.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h1-mobile-chat.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "transition context only; not PASS evidence"
+  },
+  {
+    "file": "ego-h1-mobile-header-stable.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h1-mobile-header.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "transition context only; not PASS evidence"
+  },
+  {
+    "file": "ego-h2-closing-375-bottom.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h2-closing-375-middle.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h2-closing-900.png",
+    "width": 900,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h2-cumulative-375.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h2-data-status-375.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h2-vcp-1280.png",
+    "width": 1280,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-h2-vcp-375.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-j1-chart-axis.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-j2-image-failure.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-jongga-sk-card.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-p1-buy-error.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-p1-buy-success.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-p1-buy-timeout.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-p1-history.png",
+    "width": 375,
+    "height": 812,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-p2-chart-period.png",
+    "width": 1280,
+    "height": 900,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-r1-timeout.png",
+    "width": 1280,
+    "height": 900,
+    "viewed": true,
+    "use": "visual QA evidence"
+  },
+  {
+    "file": "ego-r2-forbidden.png",
+    "width": 1280,
+    "height": 900,
+    "viewed": true,
+    "use": "visual QA evidence"
+  }
+]

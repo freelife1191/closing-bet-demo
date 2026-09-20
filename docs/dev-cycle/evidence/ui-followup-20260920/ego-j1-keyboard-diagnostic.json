@@ -1,0 +1,66 @@
+{
+  "diagnostics": {
+    "keys": [
+      {
+        "key": "ArrowRight",
+        "keyCode": 39,
+        "which": 39,
+        "trusted": true,
+        "prevented": false,
+        "target": "SK하이닉스 가로 스크롤 차트"
+      },
+      {
+        "key": "ArrowRight",
+        "keyCode": 39,
+        "which": 39,
+        "trusted": true,
+        "prevented": false,
+        "target": "SK하이닉스 가로 스크롤 차트"
+      }
+    ],
+    "left": 0,
+    "direction": "ltr",
+    "focus": true,
+    "heldError": "Error: page.waitForFunction timed out after 1500ms on page p1; last URL was \"http://127.0.0.1:57720/dashboard/kr/closing-bet\"; last title was \"KR Market Dashboard\"."
+  },
+  "heldChanged": false,
+  "after": {
+    "keys": [
+      {
+        "key": "ArrowRight",
+        "keyCode": 39,
+        "which": 39,
+        "trusted": true,
+        "prevented": false,
+        "target": "SK하이닉스 가로 스크롤 차트"
+      },
+      {
+        "key": "ArrowRight",
+        "keyCode": 39,
+        "which": 39,
+        "trusted": true,
+        "prevented": false,
+        "target": "SK하이닉스 가로 스크롤 차트"
+      },
+      {
+        "key": "ArrowRight",
+        "keyCode": 39,
+        "which": 39,
+        "trusted": true,
+        "prevented": false,
+        "target": "SK하이닉스 가로 스크롤 차트"
+      }
+    ],
+    "left": 0,
+    "rect": {
+      "x": 916.5,
+      "y": 857.5,
+      "width": 894,
+      "height": 321,
+      "top": 857.5,
+      "right": 1810.5,
+      "bottom": 1178.5,
+      "left": 916.5
+    }
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "rows": [
+    {
+      "width": 375,
+      "position": "middle",
+      "scrollY": 571,
+      "target": {
+        "x": 16,
+        "y": 225.59375,
+        "width": 335,
+        "height": 72,
+        "top": 225.59375,
+        "right": 351,
+        "bottom": 297.59375,
+        "left": 16
+      },
+      "launcher": {
+        "x": 315,
+        "y": 14,
+        "width": 36,
+        "height": 36,
+        "top": 14,
+        "right": 351,
+        "bottom": 50,
+        "left": 315
+      },
+      "overlap": false,
+      "hit": true
+    },
+    {
+      "width": 375,
+      "position": "bottom",
+      "scrollY": 4675,
+      "target": {
+        "x": 37,
+        "y": 541.234375,
+        "width": 293,
+        "height": 44,
+        "top": 541.234375,
+        "right": 330,
+        "bottom": 585.234375,
+        "left": 37
+      },
+      "launcher": {
+        "x": 315,
+        "y": 14,
+        "width": 36,
+        "height": 36,
+        "top": 14,
+        "right": 351,
+        "bottom": 50,
+        "left": 315
+      },
+      "overlap": false,
+      "hit": true
+    },
+    {
+      "width": 1280,
+      "position": "middle",
+      "scrollY": 405.5,
+      "target": {
+        "x": 288,
+        "y": 161.6953125,
+        "width": 952,
+        "height": 72,
+        "top": 161.6953125,
+        "right": 1240,
+        "bottom": 233.6953125,
+        "left": 288
+      },
+      "launcher": {
+        "x": 1220,
+        "y": 14,
+        "width": 36,
+        "height": 36,
+        "top": 14,
+        "right": 1256,
+        "bottom": 50,
+        "left": 1220
+      },
+      "overlap": false,
+      "hit": true
+    },
+    {
+      "width": 1280,
+      "position": "bottom",
+      "scrollY": 1731.5,
+      "target": {
+        "x": 974,
+        "y": 541.0859375,
+        "width": 245,
+        "height": 44,
+        "top": 541.0859375,
+        "right": 1219,
+        "bottom": 585.0859375,
+        "left": 974
+      },
+      "launcher": {
+        "x": 1220,
+        "y": 14,
+        "width": 36,
+        "height": 36,
+        "top": 14,
+        "right": 1256,
+        "bottom": 50,
+        "left": 1220
+      },
+      "overlap": false,
+      "hit": true
+    }
+  ],
+  "harnessNote": "Initial hover exposed only the top edge of the button; centered hit testing now follows an observed native scroll until the entire target is in view."
+}
