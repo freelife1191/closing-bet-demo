@@ -1,0 +1,39 @@
+{
+  "before": [
+    {
+      "text": "반도체",
+      "title": "반도체: 2개 종목"
+    },
+    {
+      "text": "AI",
+      "title": "AI: 2개 종목"
+    },
+    {
+      "text": "HBM",
+      "title": "HBM: 1개 종목"
+    },
+    {
+      "text": "플랫폼",
+      "title": "플랫폼: 1개 종목"
+    }
+  ],
+  "after": [
+    {
+      "text": "반도체",
+      "title": "반도체: 2개 종목"
+    },
+    {
+      "text": "AI",
+      "title": "AI: 2개 종목"
+    },
+    {
+      "text": "HBM",
+      "title": "HBM: 1개 종목"
+    },
+    {
+      "text": "플랫폼",
+      "title": "플랫폼: 1개 종목"
+    }
+  ],
+  "unchanged": true
+}

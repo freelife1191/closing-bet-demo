@@ -2,8 +2,15 @@
 
 ## 2026-09-20 승인 묶음
 
-- engine: ultraqa | lifecycle: app-adapted | phase: planning | iteration: 0 | same_failure_count: 0
+- engine: ultraqa | lifecycle: app-adapted | phase: complete | iteration: 2 | same_failure_count: 0
 - browser_applicability: required | browser_driver: ego-browser (사용자지정)
-- 필수 행: D2,U9; 결과: 미실행; cleanup: 아직미기동
+- 필수 행: D2,U9; 결과: 통과; cleanup: 소유 환경 정리 완료
 - UltraQA Report: [공유행렬](batch-ui-2026-09-20.md), 기대/실제/명령/증거/정리의 정본.
 - 각필수행과공통gate통과후에만완료. 과거기록과별도라운드.
+
+## 최종 판정 (2026-09-20)
+
+- engine: ultraqa | lifecycle: app-adapted | phase: complete | iteration: 2 | same_failure_count: 0
+- 결과: 연결된 필수 행 모두 통과. cleanup: 소유 browser/server/scratch 정리 완료.
+- 제품 기준: b1718c6, be36cb7. 증거 정정: 151b3fc.
+- [최종 보고서](batch-ui-2026-09-20.md)의 실제 결과·명령·한계·정리와 해당 ID 행 매핑을 따른다.

@@ -1,0 +1,9 @@
+{
+  "root_source_files_match": 43,
+  "package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "scratch_check": "matched before owned removal; cleanup.json",
+  "source_commits": [
+    "b1718c6",
+    "be36cb7"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "normal": {
+    "detailButtons": 3,
+    "headings": [
+      "Trading Tips & Strategy",
+      "삼성전자",
+      "SK하이닉스",
+      "NAVER"
+    ],
+    "engine": true,
+    "emptyCopy": []
+  },
+  "filtered": {
+    "detailButtons": 0,
+    "headings": [
+      "Trading Tips & Strategy",
+      "선택한 필터에 맞는 종목이 없습니다."
+    ],
+    "engine": true,
+    "counts": "표시 0 / 리포트 전체 3",
+    "emptyCopy": [
+      "필터를 초기화하거나 조건을 낮춰 다시 확인해 주세요."
+    ]
+  },
+  "restored": {
+    "detailButtons": 3,
+    "headings": [
+      "Trading Tips & Strategy",
+      "삼성전자",
+      "SK하이닉스",
+      "NAVER"
+    ],
+    "engine": true,
+    "emptyCopy": []
+  },
+  "empty": {
+    "detailButtons": 0,
+    "headings": [
+      "Trading Tips & Strategy",
+      "분석된 종목이 없습니다."
+    ],
+    "engine": true,
+    "emptyCopy": [
+      "데이터가 갱신된 뒤 종목이 표시됩니다."
+    ]
+  },
+  "dOnly": {
+    "detailButtons": 0,
+    "headings": [
+      "Trading Tips & Strategy",
+      "표시할 수 있는 종목이 없습니다."
+    ],
+    "engine": true,
+    "emptyCopy": [
+      "D등급 종목은 안전 기준에 따라 화면에서 제외됩니다. 다른 날짜의 리포트를 확인해 주세요."
+    ]
+  },
+  "dFiltered": {
+    "detailButtons": 0,
+    "headings": [
+      "Trading Tips & Strategy",
+      "표시할 수 있는 종목이 없습니다."
+    ],
+    "engine": true,
+    "counts": "표시 0 / 리포트 전체 1",
+    "emptyCopy": [
+      "D등급 종목은 안전 기준에 따라 화면에서 제외됩니다. 다른 날짜의 리포트를 확인해 주세요."
+    ]
+  }
+}

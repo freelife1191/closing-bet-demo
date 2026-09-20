@@ -1,0 +1,70 @@
+{
+  "viewport": [
+    375,
+    812
+  ],
+  "buttons": [
+    {
+      "text": "VCP 전체 10주 매수",
+      "rect": {
+        "x": 16,
+        "y": 347.5,
+        "width": 146.421875,
+        "height": 30,
+        "top": 347.5,
+        "right": 162.421875,
+        "bottom": 377.5,
+        "left": 16
+      },
+      "scrollWidth": 144,
+      "clientWidth": 144,
+      "reason": [
+        {
+          "text": "최신(오늘) VCP 시그널 탭에서만 매수를 실행할 수 있습니다.",
+          "rect": {
+            "x": 16,
+            "y": 381.5,
+            "width": 242.125,
+            "height": 16.25,
+            "top": 381.5,
+            "right": 258.125,
+            "bottom": 397.75,
+            "left": 16
+          }
+        }
+      ]
+    },
+    {
+      "text": "VCP 기준표",
+      "rect": {
+        "x": 16,
+        "y": 405.75,
+        "width": 102.890625,
+        "height": 30,
+        "top": 405.75,
+        "right": 118.890625,
+        "bottom": 435.75,
+        "left": 16
+      },
+      "scrollWidth": 101,
+      "clientWidth": 101,
+      "reason": []
+    },
+    {
+      "text": "2026-09-18",
+      "rect": {
+        "x": 181.65625,
+        "y": 405.75,
+        "width": 118.875,
+        "height": 30,
+        "top": 405.75,
+        "right": 300.53125,
+        "bottom": 435.75,
+        "left": 181.65625
+      },
+      "scrollWidth": 117,
+      "clientWidth": 117,
+      "reason": []
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+[p1 "KR Market Dashboard" | space "공용 UI와 종목 화면 9건 검증"(2): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=313, url=http://127.0.0.1:57620/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        container
+          button [ref=314]
+            container
+              text ""
+              text "KR Market"
+            text ""
+          container
+            anchor [ref=315, loc=href:/dashboard/kr, url=http://127.0.0.1:57620/dashboard/kr]
+              text "● Overview"
+            anchor [ref=316, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57620/dashboard/kr/vcp]
+              text "● VCP 시그널"
+            anchor [ref=317, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57620/dashboard/kr/closing-bet]
+              text "● 종가베팅"
+            anchor [ref=318, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57620/dashboard/kr/cumulative]
+              text "● 누적 성과"
+            anchor [ref=319, loc=href:/chatbot, url=http://127.0.0.1:57620/chatbot]
+              text "● AI 상담"
+        button [ref=320]
+          text ""
+          text "모의투자"
+        anchor [ref=321, loc=href:/dashboard/data-status, url=http://127.0.0.1:57620/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      button [ref=322]
+        text "f"
+        container
+          container
+            text "fakeadmin"
+            text "ADMIN"
+          text "Admin · 무제한 사용"
+        text ""
+    container
+      container "현재 위치"
+        ordered_list
+          list_item
+            anchor "홈" [ref=323, loc=css:a[aria-label="홈"], url=http://127.0.0.1:57620/]
+              text ""
+          list_item
+            text "/"
+            text "대시보드"
+          list_item
+            text "/"
+            text "국내 시장"
+          list_item
+            text "/"
+            text "종가베팅"
+      container
+        container
+          text ""
+          textbox [ref=324, loc=css:input[placeholder="Search markets, tickers..."]]
+            text "Search markets, tickers..."
+          text "⌘K"
+        button "설정 열기" [ref=325, loc=css:button[aria-label="설정 열기"]]
+          text ""
+    container
+      container
+        container
+          container
+            container
+              text "거래대금"
+              container [ref=326]
+                text ""
+            combobox "거래대금" [ref=327, loc=css:select[aria-label="거래대금"]]
+              text "전체"
+          container
+            container
+              text "상승률"
+              container [ref=328]
+                text ""
+            combobox "상승률" [ref=329, loc=css:select[aria-label="상승률"]]
+              text "20% 이상 (Super)"
+          container
+            container
+              text "등급"
+              container [ref=330]
+                text ""
+              button [ref=331]
+                text "기준표"
+            combobox "등급" [ref=332, loc=css:select[aria-label="등급"]]
+              text "전체"
+          container
+            container
+              text "총점"
+              container [ref=333]
+                text ""
+            combobox "총점" [ref=334, loc=css:select[aria-label="총점"]]
+              text "전체"
+        container
+          container
+            text "표시"
+            text "0"
+            text "/ 리포트 전체"
+            text "3"
+          text "상승률 20% 이상"
+          button [ref=335]
+            text "필터 초기화"
+        container
+          button [ref=336]
+            text ""
+            text "종가베팅 전체 10주 매수"
+          button [ref=337]
+            text ""
+            text "종가베팅 점수표"
+          combobox "리포트 날짜" [ref=338, loc=css:select[aria-label="리포트 날짜"]]
+            text "Latest Report"
+          button "선택한 날짜의 리포트 다시 불러오기" [ref=339, loc=css:button[aria-label="선택한 날짜의 리포트 다시 불러오기"]]
+            text ""
+      button [ref=340]
+        container
+          text ""
+          container
+            heading
+              text "Trading Tips & Strategy"
+            paragraph
+              text "시장 대응 전략 및 종가베팅 매수 패턴 가이드 보기"
+        text ""
+      container
+        text "💤"
+        heading
+          text "선택한 필터에 맞는 종목이 없습니다."
+        paragraph
+          text "필터를 초기화하거나 조건을 낮춰 다시 확인해 주세요."
+      container
+        text "Engine: v2.0.1 (Gemini Flash) • Updated:"
+        text "2026-09-20T15:40:00+09:00"
+  button "AI 상담" [ref=341, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

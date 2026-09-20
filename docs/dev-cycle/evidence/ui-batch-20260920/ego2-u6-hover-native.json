@@ -1,0 +1,55 @@
+{
+  "pos": {
+    "trigger": {
+      "x": 186.453125,
+      "y": 432.5,
+      "width": 29.78125,
+      "height": 16,
+      "top": 432.5,
+      "right": 216.234375,
+      "bottom": 448.5,
+      "left": 186.453125
+    },
+    "popup": {
+      "x": 97.34375,
+      "y": 456.5,
+      "width": 208,
+      "height": 34.25,
+      "top": 456.5,
+      "right": 305.34375,
+      "bottom": 490.75,
+      "left": 97.34375
+    },
+    "viewport": [
+      375,
+      812
+    ]
+  },
+  "during": true,
+  "result": {
+    "trace": [
+      {
+        "type": "pointerout",
+        "t": 202094.59999999963,
+        "target": "trigger"
+      },
+      {
+        "type": "pointerover",
+        "t": 202094.59999999963,
+        "target": "gap"
+      },
+      {
+        "type": "pointerout",
+        "t": 202345.09999999963,
+        "target": "gap"
+      },
+      {
+        "type": "pointerover",
+        "t": 202345.40000000037,
+        "target": "popup"
+      }
+    ],
+    "exists": true,
+    "hover": true
+  }
+}

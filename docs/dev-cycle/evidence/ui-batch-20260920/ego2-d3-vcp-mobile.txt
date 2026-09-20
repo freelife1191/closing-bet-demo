@@ -1,0 +1,91 @@
+[p1 "KR Market Dashboard" | space "공용 UI와 종목 화면 9건 검증"(2): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      container
+        button "메뉴 열고 닫기" [ref=295, loc=css:button[aria-label="메뉴 열고 닫기"]]
+          text ""
+        text "KR Market"
+      container
+        button "검색" [ref=296, loc=css:button[aria-label="검색"]]
+          text ""
+        button "설정 열기" [ref=297, loc=css:button[aria-label="설정 열기"]]
+          text ""
+    container
+      container
+        container
+          text "VCP 패턴 스캐너"
+          heading
+            text "VCP"
+            text "시그널"
+          paragraph
+            text "Volatility Contraction Pattern + 기관/외국인 수급"
+        container
+          combobox "재분석 실행 모드" [ref=298, loc=css:select[aria-label="재분석 실행 모드"]]
+            text "실패/누락만"
+          button [ref=299]
+            text ""
+            text "실패 AI 재분석"
+          button [ref=300]
+            text ""
+            text "Refresh VCP"
+      container
+        container
+          heading
+            text "실시간 VCP 시그널"
+          container
+            text "TOP"
+            text "2"
+          container
+            text "(Scanned:"
+            text "42"
+            text ")"
+        container
+          container
+            container [ref=301]
+              button [ref=302]
+                text ""
+                text "VCP 전체 10주 매수"
+            paragraph
+              text "최신(오늘) VCP 시그널 탭에서만 매수를 실행할 수 있습니다."
+          button [ref=303]
+            text ""
+            text "VCP 기준표"
+          button [ref=304]
+            text "최신"
+          button [ref=305]
+            text ""
+            text "2026-09-18"
+      container [ref=306]
+        table
+          table_row
+            table_cell
+              text "STOCK"
+            table_cell
+              text "DATE"
+            table_cell
+              container [ref=307]
+                text "외국인 5D"
+            table_cell
+          table_row
+            table_cell
+              text "삼성전자"
+              text "005930"
+            table_cell
+              text "2026-09-18"
+            table_cell
+              text ""
+              text "1조 2400억"
+            table_cell
+          table_row
+            table_cell
+              text "SK하이닉스"
+            table_cell
+              text "2026-09-18"
+            table_cell
+              text ""
+              text "-1조 2600억"
+            table_cell
+  button "AI 상담" [ref=308, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

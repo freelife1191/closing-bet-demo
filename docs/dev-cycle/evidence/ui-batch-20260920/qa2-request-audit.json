@@ -1,0 +1,72 @@
+{
+  "requests": 138,
+  "errors": [],
+  "mutations": [
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/__qa/control",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/__qa/control",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/__qa/control",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/__qa/control",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/__qa/control",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/kr/realtime-prices",
+      "status": 200
+    }
+  ],
+  "unsafe_mutations": []
+}

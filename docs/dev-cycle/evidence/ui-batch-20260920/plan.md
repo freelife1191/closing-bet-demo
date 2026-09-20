@@ -52,18 +52,18 @@ Files: dashboard/kr/closing-bet/page.tsx, dashboard/kr/vcp/page.tsx, dashboard/d
 - [x] 별도 상세/차트 오버레이를 Task2 ModalShell로 옮겨 기존 크기/내용/닫기 유지; 제목id·닫기이름·Escape 확보. page에 중복Escape핸들러 남기지 않는다.
 - [x] FE017 TODO 지정 버튼/선택상자/링크 이름, disabled 매수 사유를 터치·키보드에서도 읽히는 안내로 제공. 실제 매수 트리거 금지.
 - [x] 모달 여섯종·상세모달·중첩·tab/escape/복귀·배경scroll·32px여백 시나리오 unit/브라우저 확인.
-- [ ] 1차5건: ponytail→code-review+architect→T3review; pytest/Vitest/lint/build/typecheck, 첫구현commit, UltraQA행렬, ego-browser·NextMCP, 수정영향 재검수·정리·아카이브.
+- [x] 1차5건: ponytail→code-review+architect→T3review; pytest/Vitest/lint/build/typecheck, 첫구현commit, UltraQA행렬, ego-browser·NextMCP, 수정영향 재검수·정리·아카이브.
 
 ### Task 5: 종목 표시 (JONGGA-023·026·029·FE-016)
 Files: closing-bet/page.tsx, closing-bet/displayHelpers.ts, vcp/page.tsx, kr/formatMarketAmount.ts 및 인접 회귀.
-- [ ] 빈자료와 필터0구분, 엔진선정수와 표시수구분, themes는 전체signals기준, 신호기준시점 tooltip 일치 RED.
-- [ ] 1조2400억/1조2600억 구분, 음수/0/억반올림 경계 테스트. 두 기존함수를 공용 helper로 합침; 조단위 억 표시·그이하 기존반올림·음수절대값기준 대칭. noData 표기는 호출부 계약 보존.
+- [x] 빈자료와 필터0구분, 엔진선정수와 표시수구분, themes는 전체signals기준, 신호기준시점 tooltip 일치 RED.
+- [x] 1조2400억/1조2600억 구분, 음수/0/억반올림 경계 테스트. 두 기존함수를 공용 helper로 합침; 조단위 억 표시·그이하 기존반올림·음수절대값기준 대칭. noData 표기는 호출부 계약 보존.
 ```ts
 expect(formatMarketAmount(1_240_000_000_000)).toBe('1조 2400억');
 expect(formatMarketAmount(3_276_004_650)).toBe('33억');
 ```
-- [ ] HOLD확신도 라벨 nowrap와 배지행 wrap,375 VCP과거날짜 버튼/종가필터 줄 wrap 및날짜 최소폭. 지표/신호계산 불변.
-- [ ] 2차4건: 1차와 동일 리뷰/정적/QA/마감. 375,1250,1280,1285,1440폭 합성실측, 초기화/필터0/전체테마 보존. 원본과소유런타임 정리증거 확인후 TODO제거.
+- [x] HOLD확신도 라벨 nowrap와 배지행 wrap,375 VCP과거날짜 버튼/종가필터 줄 wrap 및날짜 최소폭. 지표/신호계산 불변.
+- [x] 2차4건: 1차와 동일 리뷰/정적/QA/마감. 375,1250,1280,1285,1440폭 합성실측, 초기화/필터0/전체테마 보존. 원본과소유런타임 정리증거 확인후 TODO제거.
 
 ## 판정과 순서
 계획 critic OKAY 전 구현 금지. Task1/2/3은 공유파일이 없어 병렬, Task4는 Task2 interface확정후 단독 page 소유. Task5는 1차 검증/완료 후 같은page를 넘겨 받는다. 원본 API 오류에 대한 별도 사용자 보고는 발생주소가 미확정이며 이 승인범위에 임의로 넣지 않는다.
@@ -76,3 +76,5 @@ expect(formatMarketAmount(3_276_004_650)).toBe('33억');
 5. Header/ChatWidget의이미있는이름은유지하고회귀대조만한다. disabled매수에는항상보이는구체적사유텍스트를aria-describedby로연결하여터치에서hover없이읽게한다. 애니메이션은TODO대상모달들과Task4별도상세/차트모달에남은죽은클래스만정리하고다른앱영역을임의확장하지않는다.
 
 브라우저정적자산경계: 제품/테스트서버외부네트워크차단유지. 실제화면이요청하는cdnjs FontAwesome와ssl.pstatic.net의종목차트이미지는읽기전용정적자산으로취급하며, 그이미지시장수치를합성API검증결과로주장하지않는다. 모든제품API/인증은57620gateway를통해합성서버만사용.
+
+최종: 필수12/12·정리·독립verifier PASS/APPROVE 후9개TODO를아카이브했다. 잔여29건(P1 8/P2 21).
