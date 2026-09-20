@@ -1,0 +1,12 @@
+{
+  "alerts": [
+    "데이터 갱신에 실패했습니다. 잠시 후 다시 시도해 주세요."
+  ],
+  "leak": false,
+  "refresh": [
+    {
+      "text": "Refresh Data\nLast: 오후 11:48",
+      "disabled": false
+    }
+  ]
+}

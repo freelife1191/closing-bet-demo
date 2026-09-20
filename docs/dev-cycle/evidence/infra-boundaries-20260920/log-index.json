@@ -86,5 +86,25 @@
   "pytest-final-delta.log": {
     "gzip": "pytest-final-delta.log.gz",
     "sha256": "50d830cc359a9fc220156ad6c3084afe399f4caa0519c7f710996ff0f5694bd5"
+  },
+  "gateway-runtime.log": {
+    "gzip": "gateway-runtime.log.gz",
+    "sha256": "6450b7aaf3d4d91b6179f3d6753bdcda0ca5f29cfce24b87e908f84c5bd06136"
+  },
+  "fixture-runtime.log": {
+    "gzip": "fixture-runtime.log.gz",
+    "sha256": "30de585569ada26e403c83ffe84c9d934891592651e521bdb47c06b04d9495a5"
+  },
+  "fixture-qa.log": {
+    "gzip": "fixture-qa.log.gz",
+    "sha256": "a271b21ffd5b701328b594d080e09bc63f19f0b0b95daa9ec959fdfc32d07dab"
+  },
+  "pytarget-qa.log": {
+    "gzip": "pytarget-qa.log.gz",
+    "sha256": "6e8213b3245bdf9ee4cf7dd3b945cf4060fe9db42411d6db66704ca3b1cc8fdb"
+  },
+  "frontend-runtime.log": {
+    "gzip": "frontend-runtime.log.gz",
+    "sha256": "0738fe6c05935198ccd1a8d5e3c582d22d8bd79fc9dbc2abc813de0d4c076678"
   }
 }

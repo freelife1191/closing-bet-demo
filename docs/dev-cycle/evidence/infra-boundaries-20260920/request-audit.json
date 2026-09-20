@@ -1,0 +1,42 @@
+{
+  "count": 98,
+  "api_probe_count": 44,
+  "api_probe_status_counts": {
+    "200": 33,
+    "405": 5,
+    "503": 1,
+    "500": 4,
+    "403": 1
+  },
+  "browser_count": 54,
+  "browser_status_counts": {
+    "200": 50,
+    "500": 4
+  },
+  "unsafe_browser_mutations": [],
+  "unexpected_browser_failures": [],
+  "browser_error_paths": [
+    {
+      "method": "POST",
+      "path": "/api/kr/refresh",
+      "status": 500
+    },
+    {
+      "method": "GET",
+      "path": "/api/portfolio",
+      "status": 500
+    },
+    {
+      "method": "GET",
+      "path": "/api/portfolio",
+      "status": 500
+    },
+    {
+      "method": "GET",
+      "path": "/api/portfolio",
+      "status": 500
+    }
+  ],
+  "probe_denied_mutations": "fixture-only test_client deny checks, not real endpoints",
+  "final_after_cleanup": true
+}

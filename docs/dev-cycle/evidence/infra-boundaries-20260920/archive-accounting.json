@@ -1,0 +1,51 @@
+{
+  "INFRA-028": {
+    "files": [
+      "services/kr_market_route_service.py",
+      "tests/app/test_infra_boundary_dates.py",
+      "tests/app/test_kr_market_helpers_contract.py"
+    ],
+    "additions": 146,
+    "deletions": 9
+  },
+  "INFRA-048": {
+    "files": [
+      ".env.example",
+      "app/__init__.py",
+      "tests/app/test_infra_boundary_startup.py"
+    ],
+    "additions": 47,
+    "deletions": 2
+  },
+  "INFRA-054": {
+    "files": [
+      "restart_all.sh",
+      "tests/test_restart_cleanup_contract.py"
+    ],
+    "additions": 27,
+    "deletions": 1
+  },
+  "INFRA-066": {
+    "files": [
+      "app/routes/common_market_mock_routes.py",
+      "app/routes/common_portfolio_routes.py",
+      "app/routes/kr_market_data_signals_routes.py",
+      "app/routes/kr_market_jongga_execution_routes.py",
+      "app/routes/kr_market_system_http_routes.py",
+      "app/routes/route_execution.py",
+      "tests/app/test_common_portfolio_routes_refactor.py",
+      "tests/app/test_infra_boundary_errors.py",
+      "tests/app/test_jongga_message_request_boundary.py",
+      "tests/app/test_kr_market_jongga_execution_routes_refactor.py",
+      "tests/app/test_kr_market_quota_http_routes_refactor.py",
+      "tests/app/test_kr_market_system_http_routes_refactor.py"
+    ],
+    "additions": 579,
+    "deletions": 42
+  },
+  "total": {
+    "files": 20,
+    "additions": 799,
+    "deletions": 54
+  }
+}

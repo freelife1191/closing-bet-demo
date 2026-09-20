@@ -1,0 +1,45 @@
+{
+  "result": "PASS",
+  "browser": {
+    "spaceId": 9,
+    "closedSpace": true,
+    "keptManagedLabels": [],
+    "closedManagedLabels": [
+      "p1"
+    ],
+    "preservedUnmanagedCount": 0
+  },
+  "terminated_processes": [
+    {
+      "name": "fixture",
+      "pid": 37993,
+      "pgid": 37993,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre",
+      "command": "/opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre/docs/dev-cycle/evidence/infra-boundaries-20260920/fixture.py --repo /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre --port 57822 --reset-log"
+    },
+    {
+      "name": "frontend",
+      "pid": 37994,
+      "pgid": 37994,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre/frontend",
+      "command": "node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 57821"
+    },
+    {
+      "name": "gateway",
+      "pid": 37995,
+      "pgid": 37995,
+      "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre",
+      "command": "/opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre/docs/dev-cycle/evidence/infra-boundaries-20260920/gateway.py"
+    }
+  ],
+  "listeners_after": {
+    "57820": "",
+    "57821": "",
+    "57822": ""
+  },
+  "scratch_removed": true,
+  "original_venv_exists": true,
+  "source_sha_matches": 20,
+  "git_object_matches": 20,
+  "root_package_unchanged": true
+}

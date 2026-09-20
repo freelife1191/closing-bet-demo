@@ -1,0 +1,2 @@
+event: message
+data: {"result":{"content":[{"type":"text","text":"{\"configErrors\":[],\"sessionErrors\":[{\"url\":\"/dashboard/kr\",\"buildError\":null,\"runtimeErrors\":[{\"type\":\"console\",\"errorName\":\"Error\",\"message\":\"Internal Server Error\",\"stack\":[{\"file\":\"src/lib/api.ts\",\"methodName\":\"fetchAPI\",\"line\":41,\"column\":26},{\"file\":\"src/app/components/PaperTradingModal.tsx\",\"methodName\":\"async fetchPortfolio\",\"line\":105,\"column\":20}]}]}]}"}]},"jsonrpc":"2.0","id":2}

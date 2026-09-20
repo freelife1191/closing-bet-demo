@@ -1,0 +1,230 @@
+[p1 "KR Market Dashboard" | space "인프라 경계 4건 검증"(9): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    anchor [ref=77, url=http://127.0.0.1:57820/]
+      text "M"
+      text "스마트 머니 봇"
+    container
+      text "DASHBOARD"
+      button [ref=78]
+        text ""
+        text "KR Market"
+        text ""
+      anchor [ref=79, loc=href:/dashboard/kr, url=http://127.0.0.1:57820/dashboard/kr]
+        text "● Overview"
+      anchor [ref=80, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57820/dashboard/kr/vcp]
+        text "● VCP 시그널"
+      anchor [ref=81, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57820/dashboard/kr/closing-bet]
+        text "● 종가베팅"
+      anchor [ref=82, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57820/dashboard/kr/cumulative]
+        text "● 누적 성과"
+      anchor [ref=83, loc=href:/chatbot, url=http://127.0.0.1:57820/chatbot]
+        text "● AI 상담"
+      button [ref=84]
+        text ""
+        text "모의투자"
+      anchor [ref=85, loc=href:/dashboard/data-status, url=http://127.0.0.1:57820/dashboard/data-status]
+        text ""
+        text "데이터 상태"
+    button [ref=86]
+      text "f"
+      text "fakeadmin"
+      text "ADMIN"
+      text "Admin · 무제한 사용"
+      text ""
+  container
+    container "현재 위치"
+      ordered_list
+        list_item
+          anchor "홈" [ref=87, loc=css:a[aria-label="홈"], url=http://127.0.0.1:57820/]
+            text ""
+        list_item
+          text "/"
+          text "대시보드"
+        list_item
+          text "/"
+          text "국내 시장"
+    button "설정 열기" [ref=88, loc=css:button[aria-label="설정 열기"]]
+      text ""
+  container
+    text "KR 마켓 알파"
+    heading
+      text "스마트머니"
+      text "추적"
+    paragraph
+      text "VCP 패턴 & 기관/외국인 수급 추적"
+    button [ref=89]
+      text ""
+      text "실시간"
+    button [ref=90]
+      text ""
+      text "날짜 지정"
+    text "매크로 지표:"
+    combobox [ref=91]
+      text "30분"
+    text "마다 자동 갱신"
+    text ""
+    text "시그널 분석: 매일 15:40 (KST)"
+    text "마지막 업데이트:"
+    text "오후 11:50"
+    container
+      text ""
+      heading
+        text "KR Market Gate"
+        text ""
+        button "Market Gate 새로고침" [ref=92, loc=css:button[aria-label="Market Gate 새로고침"]]
+          text ""
+      svg_root
+      text "78"
+      text "SCORE"
+      text "Bullish"
+      heading
+        text "KOSPI 200 Sector Index"
+        text ""
+      text "BULLISH"
+      text "NEUTRAL"
+      text "BEARISH"
+      text "반도체"
+      text "+"
+      text "1.20"
+      text "%"
+    text "오늘의 시그널"
+    text ""
+    text "2"
+    text "VCP + 외국인 순매수"
+    text "VCP 전략"
+    text ""
+    button [ref=93]
+      text "기준표"
+    text "양호"
+    text "55"
+    text "%"
+    text "Avg."
+    text "+"
+    text "3.1"
+    text "%"
+    text "12 trades"
+    text ""
+    text "종가베팅 전략"
+    text ""
+    button [ref=94]
+      text "기준표"
+    text "양호"
+    text "62"
+    text "%"
+    text "Avg."
+    text "+"
+    text "2.4"
+    text "%"
+    text "8 trades"
+    text ""
+    button [ref=95]
+      text ""
+      text "Refresh Data"
+      text "Last:"
+      text "오후 11:50"
+    container
+      heading
+        text "Market Indices"
+        text ""
+      text "KOSPI"
+      text "2,680"
+      text ""
+      text "+"
+      text "0.6"
+      text "%"
+      text "KOSDAQ"
+      text "780"
+      text ""
+      text "+"
+      text "0.3"
+      text "%"
+      text "S&P 500"
+      text "--"
+      text "NASDAQ"
+      text "--"
+      heading
+        text "Commodities"
+        text ""
+  button "AI 상담" [ref=96, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  dialog "모의투자 포트폴리오" [ref=97, loc=role:dialog[name="모의투자 포트폴리오"]]
+    container
+      container
+        text ""
+        container
+          heading
+            text "모의투자 포트폴리오"
+          text "Paper Trading Account"
+      container
+        container
+          container
+            text "총 평가 자산"
+            container
+              text "101,340,000"
+              text "원"
+          container
+            container
+              text "예수금"
+              button [ref=98]
+                text "+"
+            container
+              text "91,060,000"
+              text "원"
+        button "닫기" [ref=99]
+          text ""
+    container
+      button [ref=100]
+        text ""
+        text "자산 개요"
+      button [ref=101]
+        text ""
+        text "보유 종목"
+      button [ref=102]
+        text ""
+        text "수익 차트"
+      button [ref=103]
+        text ""
+        text "거래 내역"
+    container
+      container
+        container
+          text ""
+          container
+            text "총 평가 손익"
+            text ""
+          container
+            text "+"
+            text "1,340,000"
+            text "원"
+          container
+            text ""
+            text "+"
+            text "1.34"
+            text "%"
+        container
+          text ""
+          text "자산 구성"
+          container
+            container
+              container
+                text "주식"
+                container
+                  text "10.1"
+                  text "%"
+              container
+                text "10,280,000"
+                text "원"
+            container
+              container
+                text "현금"
+                container
+                  text "89.9"
+                  text "%"
+              container
+                text "91,060,000"
+                text "원"
+      button [ref=104]
+        text ""
+        text "계정 초기화"

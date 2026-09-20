@@ -1,0 +1,246 @@
+[p1 "KR Market Dashboard" | space "인프라 경계 4건 검증"(9): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=1, url=http://127.0.0.1:57820/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        container
+          button [ref=2]
+            container
+              text ""
+              text "KR Market"
+            text ""
+          container
+            anchor [ref=3, loc=href:/dashboard/kr, url=http://127.0.0.1:57820/dashboard/kr]
+              text "● Overview"
+            anchor [ref=4, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57820/dashboard/kr/vcp]
+              text "● VCP 시그널"
+            anchor [ref=5, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57820/dashboard/kr/closing-bet]
+              text "● 종가베팅"
+            anchor [ref=6, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57820/dashboard/kr/cumulative]
+              text "● 누적 성과"
+            anchor [ref=7, loc=href:/chatbot, url=http://127.0.0.1:57820/chatbot]
+              text "● AI 상담"
+        button [ref=8]
+          text ""
+          text "모의투자"
+        anchor [ref=9, loc=href:/dashboard/data-status, url=http://127.0.0.1:57820/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      button [ref=10]
+        text "f"
+        container
+          container
+            text "fakeadmin"
+            text "ADMIN"
+          text "Admin · 무제한 사용"
+        text ""
+    container
+      container "현재 위치"
+        ordered_list
+          list_item
+            anchor "홈" [ref=11, loc=css:a[aria-label="홈"], url=http://127.0.0.1:57820/]
+              text ""
+          list_item
+            text "/"
+            text "대시보드"
+          list_item
+            text "/"
+            text "국내 시장"
+      button "설정 열기" [ref=12, loc=css:button[aria-label="설정 열기"]]
+        text ""
+    container
+      container
+        container
+          text "KR 마켓 알파"
+          heading
+            text "스마트머니"
+            text "추적"
+          paragraph
+            text "VCP 패턴 & 기관/외국인 수급 추적"
+        container
+          container
+            button [ref=13]
+              text ""
+              text "실시간"
+            button [ref=14]
+              text ""
+              text "날짜 지정"
+          container
+            container
+              text "매크로 지표:"
+              combobox [ref=15]
+                text "30분"
+              text "마다 자동 갱신"
+              text ""
+            text "시그널 분석: 매일 15:40 (KST)"
+            container
+              text "마지막 업데이트:"
+              text "오후 11:48"
+      container
+        container
+          text ""
+          heading
+            text "KR Market Gate"
+            container [ref=16]
+              text ""
+            button "Market Gate 새로고침" [ref=17, loc=css:button[aria-label="Market Gate 새로고침"]]
+              text ""
+          container
+            container
+              svg_root
+              container
+                text "78"
+                text "SCORE"
+            container [ref=18]
+              text "Bullish"
+        container
+          container
+            heading
+              text "KOSPI 200 Sector Index"
+              container [ref=19]
+                text ""
+            container
+              container [ref=20]
+                text "BULLISH"
+              container [ref=21]
+                text "NEUTRAL"
+              container [ref=22]
+                text "BEARISH"
+          container
+            text "반도체"
+            container
+              text "+"
+              text "1.20"
+              text "%"
+      container
+        container
+          container
+            text "오늘의 시그널"
+            container [ref=23]
+              text ""
+          text "2"
+          text "VCP + 외국인 순매수"
+        container
+          container
+            container
+              container [ref=24]
+                text "VCP 전략"
+                text ""
+              button [ref=25]
+                text "기준표"
+            text "양호"
+          container
+            container
+              text "55"
+              text "%"
+            container
+              text "Avg."
+              text "+"
+              text "3.1"
+              text "%"
+          container
+            text "12 trades"
+            text ""
+        container
+          container
+            container
+              container [ref=26]
+                text "종가베팅 전략"
+                text ""
+              button [ref=27]
+                text "기준표"
+            text "양호"
+          container
+            container
+              text "62"
+              text "%"
+            container
+              text "Avg."
+              text "+"
+              text "2.4"
+              text "%"
+          container
+            text "8 trades"
+            text ""
+        button [ref=28]
+          text ""
+          container
+            text "Refresh Data"
+            container
+              text "Last:"
+              text "오후 11:48"
+      container
+        container
+          heading
+            text "Market Indices"
+            container [ref=29]
+              text ""
+          container
+            container
+              text "KOSPI"
+              container
+                text "2,680"
+                container
+                  text ""
+                  text "+"
+                  text "0.6"
+                  text "%"
+            container
+              text "KOSDAQ"
+              container
+                text "780"
+                container
+                  text ""
+                  text "+"
+                  text "0.3"
+                  text "%"
+            container
+              text "S&P 500"
+              text "--"
+            container
+              text "NASDAQ"
+              text "--"
+        container
+          heading
+            text "Commodities"
+            container [ref=30]
+              text ""
+          container
+            container
+              text "KRX GOLD"
+              text "--"
+            container
+              text "KRX SILVER"
+              text "--"
+            container
+              text "US GOLD (F)"
+              container
+                text "$"
+                text "--"
+            container
+              text "US SILVER (F)"
+              container
+                text "$"
+                text "--"
+        container
+          heading
+            text "Crypto Assets"
+            container [ref=31]
+              text ""
+          container
+            container
+              text "BITCOIN"
+              text "--"
+            container
+              text "ETHEREUM"
+              text "--"
+            container
+              text "XRP"
+              text "--"
+  button "AI 상담" [ref=32, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

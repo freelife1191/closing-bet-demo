@@ -1,0 +1,202 @@
+[p1 "KR Market Dashboard" | space "인프라 경계 4건 검증"(9): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    anchor [ref=1, url=http://127.0.0.1:57820/]
+      text "M"
+      text "스마트 머니 봇"
+    container
+      text "DASHBOARD"
+      button [ref=2]
+        text ""
+        text "KR Market"
+        text ""
+      anchor [ref=3, loc=href:/dashboard/kr, url=http://127.0.0.1:57820/dashboard/kr]
+        text "● Overview"
+      anchor [ref=4, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57820/dashboard/kr/vcp]
+        text "● VCP 시그널"
+      anchor [ref=5, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57820/dashboard/kr/closing-bet]
+        text "● 종가베팅"
+      anchor [ref=6, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57820/dashboard/kr/cumulative]
+        text "● 누적 성과"
+      anchor [ref=7, loc=href:/chatbot, url=http://127.0.0.1:57820/chatbot]
+        text "● AI 상담"
+      button [ref=8]
+        text ""
+        text "모의투자"
+      anchor [ref=9, loc=href:/dashboard/data-status, url=http://127.0.0.1:57820/dashboard/data-status]
+        text ""
+        text "데이터 상태"
+    button [ref=10]
+      text "f"
+      text "fakeadmin"
+      text "ADMIN"
+      text "Admin · 무제한 사용"
+      text ""
+  container
+    container "현재 위치"
+      ordered_list
+        list_item
+          anchor "홈" [ref=11, loc=css:a[aria-label="홈"], url=http://127.0.0.1:57820/]
+            text ""
+        list_item
+          text "/"
+          text "대시보드"
+        list_item
+          text "/"
+          text "국내 시장"
+    button "설정 열기" [ref=12, loc=css:button[aria-label="설정 열기"]]
+      text ""
+  container
+    text "KR 마켓 알파"
+    heading
+      text "스마트머니"
+      text "추적"
+    paragraph
+      text "VCP 패턴 & 기관/외국인 수급 추적"
+    button [ref=13]
+      text ""
+      text "실시간"
+    button [ref=14]
+      text ""
+      text "날짜 지정"
+    text "매크로 지표:"
+    combobox [ref=15]
+      text "30분"
+    text "마다 자동 갱신"
+    text ""
+    text "시그널 분석: 매일 15:40 (KST)"
+    text "마지막 업데이트:"
+    text "오후 11:49"
+    container
+      text ""
+      heading
+        text "KR Market Gate"
+        text ""
+        button "Market Gate 새로고침" [ref=17, loc=css:button[aria-label="Market Gate 새로고침"]]
+          text ""
+      svg_root
+      text "78"
+      text "SCORE"
+      text "Bullish"
+      heading
+        text "KOSPI 200 Sector Index"
+        text ""
+      text "BULLISH"
+      text "NEUTRAL"
+      text "BEARISH"
+      text "반도체"
+      text "+"
+      text "1.20"
+      text "%"
+    text "오늘의 시그널"
+    text ""
+    text "2"
+    text "VCP + 외국인 순매수"
+    text "VCP 전략"
+    text ""
+    button [ref=25]
+      text "기준표"
+    text "양호"
+    text "55"
+    text "%"
+    text "Avg."
+    text "+"
+    text "3.1"
+    text "%"
+    text "12 trades"
+    text ""
+    text "종가베팅 전략"
+    text ""
+    button [ref=27]
+      text "기준표"
+    text "양호"
+    text "62"
+    text "%"
+    text "Avg."
+    text "+"
+    text "2.4"
+    text "%"
+    text "8 trades"
+    text ""
+    button [ref=28]
+      text ""
+      text "Refresh Data"
+      text "Last:"
+      text "오후 11:49"
+    container
+      heading
+        text "Market Indices"
+        text ""
+      text "KOSPI"
+      text "2,680"
+      text ""
+      text "+"
+      text "0.6"
+      text "%"
+      text "KOSDAQ"
+      text "780"
+      text ""
+      text "+"
+      text "0.3"
+      text "%"
+      text "S&P 500"
+      text "--"
+      text "NASDAQ"
+      text "--"
+      heading
+        text "Commodities"
+        text ""
+      text "KRX GOLD"
+      text "--"
+      text "KRX SILVER"
+      text "--"
+      text "US GOLD (F)"
+      text "$"
+      text "--"
+      text "US SILVER (F)"
+      text "$"
+      text "--"
+      heading
+        text "Crypto Assets"
+        text ""
+      text "BITCOIN"
+      text "--"
+      text "ETHEREUM"
+      text "--"
+      text "XRP"
+      text "--"
+  button "AI 상담" [ref=32, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  button "Open issues overlay" [ref=33, loc=css:button[aria-label="Open issues overlay"]]
+    svg_root
+    text "1"
+    text "2"
+    text "Issue"
+    text "s"
+  button "Collapse issues badge" [ref=34, loc=css:button[aria-label="Collapse issues badge"]]
+    svg_root
+  dialog "모의투자 포트폴리오" [ref=35, loc=role:dialog[name="모의투자 포트폴리오"]]
+    container
+      container
+        text ""
+        container
+          heading
+            text "모의투자 포트폴리오"
+          text "Paper Trading Account"
+      button "닫기" [ref=36]
+        text ""
+    container
+      button [ref=37]
+        text ""
+        text "자산 개요"
+      button [ref=38]
+        text ""
+        text "보유 종목"
+      button [ref=39]
+        text ""
+        text "수익 차트"
+      button [ref=40]
+        text ""
+        text "거래 내역"
+    text "데이터를 불러올 수 없습니다."

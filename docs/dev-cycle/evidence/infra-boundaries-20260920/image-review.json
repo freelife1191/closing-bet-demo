@@ -1,0 +1,19 @@
+{
+  "viewed": [
+    "ego-refresh-error.png",
+    "ego-portfolio-error.png",
+    "ego-portfolio-recovered.png",
+    "ego-portfolio-error-stable.png",
+    "ego-portfolio-recovered-stable.png"
+  ],
+  "pass_evidence": [
+    "ego-refresh-error.png",
+    "ego-portfolio-error-stable.png",
+    "ego-portfolio-recovered-stable.png"
+  ],
+  "context_only": [
+    "ego-portfolio-error.png",
+    "ego-portfolio-recovered.png"
+  ],
+  "reason": "first modal captures were entry animation frames; stable captures waited opacity1/finished animations"
+}
