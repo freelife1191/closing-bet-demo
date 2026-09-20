@@ -17,8 +17,8 @@ from typing import Callable
 import pandas as pd
 
 from services.kr_market_csv_utils import load_csv_readonly as _load_csv_readonly
+from services.sqlite_ready_gate import SqliteReadyGate
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -34,11 +34,12 @@ from services.sqlite_utils import (
 _MARKET_MAP_CACHE_LOCK = threading.Lock()
 _MARKET_MAP_CACHE: OrderedDict[tuple[str, int, int], dict[str, str]] = OrderedDict()
 _MARKET_MAP_MEMORY_MAX_ENTRIES = 16
-_MARKET_MAP_SQLITE_READY: set[str] = set()
-_MARKET_MAP_SQLITE_LOCK = threading.Lock()
-_MARKET_MAP_SQLITE_CONDITION = threading.Condition(_MARKET_MAP_SQLITE_LOCK)
-_MARKET_MAP_SQLITE_INIT_IN_PROGRESS: set[str] = set()
 _MARKET_MAP_SQLITE_READY_MAX_ENTRIES = 2_048
+_MARKET_MAP_READY_GATE = SqliteReadyGate()
+_MARKET_MAP_SQLITE_LOCK = _MARKET_MAP_READY_GATE.lock
+_MARKET_MAP_SQLITE_CONDITION = _MARKET_MAP_READY_GATE.condition
+_MARKET_MAP_SQLITE_READY = _MARKET_MAP_READY_GATE.ready_keys
+_MARKET_MAP_SQLITE_INIT_IN_PROGRESS = _MARKET_MAP_READY_GATE.in_progress_keys
 _MARKET_MAP_SQLITE_KNOWN_PATHS: OrderedDict[tuple[str, str], None] = OrderedDict()
 _MARKET_MAP_SQLITE_KNOWN_PATHS_LOCK = threading.Lock()
 _MARKET_MAP_SQLITE_KNOWN_PATHS_MAX_ENTRIES = 4_096
@@ -111,9 +112,8 @@ def _market_map_source_lookup_keys(path: str) -> tuple[str, ...]:
 
 
 def _invalidate_market_map_sqlite_ready(db_path: str) -> None:
+    _MARKET_MAP_READY_GATE.invalidate(db_path)
     db_key = normalize_sqlite_db_key(db_path)
-    with _MARKET_MAP_SQLITE_CONDITION:
-        _MARKET_MAP_SQLITE_READY.discard(db_key)
     with _MARKET_MAP_SQLITE_KNOWN_PATHS_LOCK:
         stale_keys = [key for key in _MARKET_MAP_SQLITE_KNOWN_PATHS if key[0] == db_key]
         for tracker_key in stale_keys:
@@ -159,22 +159,6 @@ def _should_force_market_map_sqlite_prune() -> bool:
 
 
 def _ensure_market_map_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with _MARKET_MAP_SQLITE_CONDITION:
-        if db_key in _MARKET_MAP_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _MARKET_MAP_SQLITE_READY.discard(db_key)
-
-        while db_key in _MARKET_MAP_SQLITE_INIT_IN_PROGRESS:
-            _MARKET_MAP_SQLITE_CONDITION.wait()
-            if db_key in _MARKET_MAP_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _MARKET_MAP_SQLITE_READY.discard(db_key)
-
-        _MARKET_MAP_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -201,31 +185,20 @@ def _ensure_market_map_sqlite(db_path: str, logger: logging.Logger | None) -> bo
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_MARKET_MAP_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_MARKET_MAP_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         if logger is not None:
             logger.debug(f"Failed to initialize market map sqlite cache: {error}")
-        return False
-    finally:
-        with _MARKET_MAP_SQLITE_CONDITION:
-            _MARKET_MAP_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _MARKET_MAP_SQLITE_READY,
-                    db_key,
-                    max_entries=_MARKET_MAP_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _MARKET_MAP_SQLITE_READY.discard(db_key)
-            _MARKET_MAP_SQLITE_CONDITION.notify_all()
+
+    return _MARKET_MAP_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_MARKET_MAP_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_MARKET_MAP_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=_MARKET_MAP_SQLITE_READY_MAX_ENTRIES,
+    )
 
 
 def _load_market_map_from_sqlite(

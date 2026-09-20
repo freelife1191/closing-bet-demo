@@ -14,8 +14,8 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Callable
 
+from services.sqlite_ready_gate import SqliteReadyGate
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -31,11 +31,12 @@ from services.sqlite_utils import (
 _STOCK_INFO_CACHE_LOCK = threading.Lock()
 _STOCK_INFO_CACHE: OrderedDict[str, tuple[tuple[int, int], dict[str, object]]] = OrderedDict()
 _STOCK_INFO_MEMORY_MAX_ENTRIES = 4_096
-_STOCK_INFO_SQLITE_READY_LOCK = threading.Lock()
-_STOCK_INFO_SQLITE_READY_CONDITION = threading.Condition(_STOCK_INFO_SQLITE_READY_LOCK)
-_STOCK_INFO_SQLITE_INIT_IN_PROGRESS: set[str] = set()
-_STOCK_INFO_SQLITE_READY: set[str] = set()
 _STOCK_INFO_SQLITE_READY_MAX_ENTRIES = 2_048
+_STOCK_INFO_READY_GATE = SqliteReadyGate()
+_STOCK_INFO_SQLITE_READY_LOCK = _STOCK_INFO_READY_GATE.lock
+_STOCK_INFO_SQLITE_READY_CONDITION = _STOCK_INFO_READY_GATE.condition
+_STOCK_INFO_SQLITE_INIT_IN_PROGRESS = _STOCK_INFO_READY_GATE.in_progress_keys
+_STOCK_INFO_SQLITE_READY = _STOCK_INFO_READY_GATE.ready_keys
 _STOCK_INFO_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
 _STOCK_INFO_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
 _STOCK_INFO_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
@@ -104,9 +105,8 @@ def resolve_stock_info_cache_db_path(signals_file: str) -> str:
 
 
 def _invalidate_stock_info_sqlite_ready(db_path: str) -> None:
+    _STOCK_INFO_READY_GATE.invalidate(db_path)
     db_key = normalize_sqlite_db_key(db_path)
-    with _STOCK_INFO_SQLITE_READY_LOCK:
-        _STOCK_INFO_SQLITE_READY.discard(db_key)
     with _STOCK_INFO_SQLITE_KNOWN_KEYS_LOCK:
         stale_keys = [key for key in _STOCK_INFO_SQLITE_KNOWN_KEYS if key[0] == db_key]
         for tracker_key in stale_keys:
@@ -151,22 +151,6 @@ def _should_force_stock_info_sqlite_prune() -> bool:
 
 
 def _ensure_stock_info_sqlite(db_path: str, logger: Any) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with _STOCK_INFO_SQLITE_READY_CONDITION:
-        if db_key in _STOCK_INFO_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _STOCK_INFO_SQLITE_READY.discard(db_key)
-
-        while db_key in _STOCK_INFO_SQLITE_INIT_IN_PROGRESS:
-            _STOCK_INFO_SQLITE_READY_CONDITION.wait()
-            if db_key in _STOCK_INFO_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _STOCK_INFO_SQLITE_READY.discard(db_key)
-
-        _STOCK_INFO_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -195,30 +179,19 @@ def _ensure_stock_info_sqlite(db_path: str, logger: Any) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_STOCK_INFO_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_STOCK_INFO_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         logger.debug("Failed to initialize KR AI stock info sqlite cache: %s", error)
-        return False
-    finally:
-        with _STOCK_INFO_SQLITE_READY_CONDITION:
-            _STOCK_INFO_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _STOCK_INFO_SQLITE_READY,
-                    db_key,
-                    max_entries=_STOCK_INFO_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _STOCK_INFO_SQLITE_READY.discard(db_key)
-            _STOCK_INFO_SQLITE_READY_CONDITION.notify_all()
+
+    return _STOCK_INFO_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_STOCK_INFO_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_STOCK_INFO_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=_STOCK_INFO_SQLITE_READY_MAX_ENTRIES,
+    )
 
 
 def _load_stock_info_from_sqlite(

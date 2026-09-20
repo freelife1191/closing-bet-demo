@@ -19,7 +19,6 @@ from typing import Any
 import pandas as pd
 
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -30,6 +29,7 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,10 +41,11 @@ _PAYLOAD_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
 _PAYLOAD_SQLITE_RETRY_ATTEMPTS = 2
 _PAYLOAD_SQLITE_RETRY_DELAY_SECONDS = 0.03
 
-JSON_PAYLOAD_SQLITE_READY: set[str] = set()
-JSON_PAYLOAD_SQLITE_READY_LOCK = threading.Lock()
-JSON_PAYLOAD_SQLITE_READY_CONDITION = threading.Condition(JSON_PAYLOAD_SQLITE_READY_LOCK)
-JSON_PAYLOAD_SQLITE_IN_PROGRESS: set[str] = set()
+_JSON_PAYLOAD_SQLITE_READY_GATE = SqliteReadyGate()
+JSON_PAYLOAD_SQLITE_READY = _JSON_PAYLOAD_SQLITE_READY_GATE.ready_keys
+JSON_PAYLOAD_SQLITE_READY_LOCK = _JSON_PAYLOAD_SQLITE_READY_GATE.lock
+JSON_PAYLOAD_SQLITE_READY_CONDITION = _JSON_PAYLOAD_SQLITE_READY_GATE.condition
+JSON_PAYLOAD_SQLITE_IN_PROGRESS = _JSON_PAYLOAD_SQLITE_READY_GATE.in_progress_keys
 JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
 JSON_PAYLOAD_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
 JSON_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
@@ -53,10 +54,11 @@ JSON_PAYLOAD_SQLITE_PRUNE_FORCE_INTERVAL = 64
 JSON_PAYLOAD_SQLITE_SAVE_COUNTER = 0
 JSON_PAYLOAD_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
 DEFAULT_JSON_PAYLOAD_SQLITE_MAX_ROWS = 256
-CSV_PAYLOAD_SQLITE_READY: set[str] = set()
-CSV_PAYLOAD_SQLITE_READY_LOCK = threading.Lock()
-CSV_PAYLOAD_SQLITE_READY_CONDITION = threading.Condition(CSV_PAYLOAD_SQLITE_READY_LOCK)
-CSV_PAYLOAD_SQLITE_IN_PROGRESS: set[str] = set()
+_CSV_PAYLOAD_SQLITE_READY_GATE = SqliteReadyGate()
+CSV_PAYLOAD_SQLITE_READY = _CSV_PAYLOAD_SQLITE_READY_GATE.ready_keys
+CSV_PAYLOAD_SQLITE_READY_LOCK = _CSV_PAYLOAD_SQLITE_READY_GATE.lock
+CSV_PAYLOAD_SQLITE_READY_CONDITION = _CSV_PAYLOAD_SQLITE_READY_GATE.condition
+CSV_PAYLOAD_SQLITE_IN_PROGRESS = _CSV_PAYLOAD_SQLITE_READY_GATE.in_progress_keys
 CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
 CSV_PAYLOAD_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
 CSV_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
@@ -173,22 +175,6 @@ def _should_force_csv_payload_sqlite_prune() -> bool:
 
 
 def _ensure_json_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with JSON_PAYLOAD_SQLITE_READY_CONDITION:
-        if db_key in JSON_PAYLOAD_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            JSON_PAYLOAD_SQLITE_READY.discard(db_key)
-
-        while db_key in JSON_PAYLOAD_SQLITE_IN_PROGRESS:
-            JSON_PAYLOAD_SQLITE_READY_CONDITION.wait()
-            if db_key in JSON_PAYLOAD_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                JSON_PAYLOAD_SQLITE_READY.discard(db_key)
-
-        JSON_PAYLOAD_SQLITE_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -215,30 +201,19 @@ def _ensure_json_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> b
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         logger.debug(f"Failed to initialize JSON payload SQLite cache: {error}")
-        return False
-    finally:
-        with JSON_PAYLOAD_SQLITE_READY_CONDITION:
-            JSON_PAYLOAD_SQLITE_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    JSON_PAYLOAD_SQLITE_READY,
-                    db_key,
-                    max_entries=JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                JSON_PAYLOAD_SQLITE_READY.discard(db_key)
-            JSON_PAYLOAD_SQLITE_READY_CONDITION.notify_all()
+
+    return _JSON_PAYLOAD_SQLITE_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+    )
 
 
 def _recover_json_payload_sqlite_schema(db_path: str, logger: logging.Logger) -> bool:
@@ -505,22 +480,6 @@ def _project_existing_usecols_columns(
 
 
 def _ensure_csv_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with CSV_PAYLOAD_SQLITE_READY_CONDITION:
-        if db_key in CSV_PAYLOAD_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            CSV_PAYLOAD_SQLITE_READY.discard(db_key)
-
-        while db_key in CSV_PAYLOAD_SQLITE_IN_PROGRESS:
-            CSV_PAYLOAD_SQLITE_READY_CONDITION.wait()
-            if db_key in CSV_PAYLOAD_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                CSV_PAYLOAD_SQLITE_READY.discard(db_key)
-
-        CSV_PAYLOAD_SQLITE_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -549,30 +508,19 @@ def _ensure_csv_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bo
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         logger.debug(f"Failed to initialize CSV payload SQLite cache: {error}")
-        return False
-    finally:
-        with CSV_PAYLOAD_SQLITE_READY_CONDITION:
-            CSV_PAYLOAD_SQLITE_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    CSV_PAYLOAD_SQLITE_READY,
-                    db_key,
-                    max_entries=CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                CSV_PAYLOAD_SQLITE_READY.discard(db_key)
-            CSV_PAYLOAD_SQLITE_READY_CONDITION.notify_all()
+
+    return _CSV_PAYLOAD_SQLITE_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+    )
 
 
 def _recover_csv_payload_sqlite_schema(db_path: str, logger: logging.Logger) -> bool:

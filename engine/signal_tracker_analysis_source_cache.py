@@ -18,8 +18,8 @@ from typing import Any
 import pandas as pd
 
 from services.kr_market_data_cache_service import load_csv_file as _load_shared_csv_file
+from services.sqlite_ready_gate import SqliteReadyGate
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -38,11 +38,12 @@ SUPPLY_SOURCE_CACHE: OrderedDict[str, tuple[tuple[int, int, int], pd.DataFrame]]
 PERFORMANCE_SOURCE_CACHE: OrderedDict[str, tuple[tuple[int, int, int], pd.DataFrame]] = OrderedDict()
 SIGNALS_LOG_SOURCE_CACHE: OrderedDict[str, tuple[tuple[int, int, int], pd.DataFrame]] = OrderedDict()
 CSV_SOURCE_MEMORY_CACHE_MAX_ENTRIES = 64
-CSV_SOURCE_SQLITE_READY_LOCK = threading.Lock()
-CSV_SOURCE_SQLITE_READY_CONDITION = threading.Condition(CSV_SOURCE_SQLITE_READY_LOCK)
-CSV_SOURCE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
-CSV_SOURCE_SQLITE_READY: set[str] = set()
 CSV_SOURCE_SQLITE_READY_MAX_ENTRIES = 2_048
+CSV_SOURCE_READY_GATE = SqliteReadyGate()
+CSV_SOURCE_SQLITE_READY_LOCK = CSV_SOURCE_READY_GATE.lock
+CSV_SOURCE_SQLITE_READY_CONDITION = CSV_SOURCE_READY_GATE.condition
+CSV_SOURCE_SQLITE_INIT_IN_PROGRESS = CSV_SOURCE_READY_GATE.in_progress_keys
+CSV_SOURCE_SQLITE_READY = CSV_SOURCE_READY_GATE.ready_keys
 CSV_SOURCE_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
 CSV_SOURCE_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
 CSV_SOURCE_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
@@ -119,9 +120,8 @@ def _csv_source_lookup_keys(path: str) -> tuple[str, ...]:
 
 
 def _invalidate_csv_source_sqlite_ready(db_path: str) -> None:
+    CSV_SOURCE_READY_GATE.invalidate(db_path)
     db_key = normalize_sqlite_db_key(db_path)
-    with CSV_SOURCE_SQLITE_READY_LOCK:
-        CSV_SOURCE_SQLITE_READY.discard(db_key)
     with CSV_SOURCE_SQLITE_KNOWN_KEYS_LOCK:
         stale_keys = [key for key in CSV_SOURCE_SQLITE_KNOWN_KEYS if key[0] == db_key]
         for tracker_key in stale_keys:
@@ -242,22 +242,6 @@ def _load_csv_source_via_shared_cache(
 
 
 def _ensure_csv_source_sqlite_cache(db_path: str) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with CSV_SOURCE_SQLITE_READY_CONDITION:
-        if db_key in CSV_SOURCE_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            CSV_SOURCE_SQLITE_READY.discard(db_key)
-
-        while db_key in CSV_SOURCE_SQLITE_INIT_IN_PROGRESS:
-            CSV_SOURCE_SQLITE_READY_CONDITION.wait()
-            if db_key in CSV_SOURCE_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                CSV_SOURCE_SQLITE_READY.discard(db_key)
-
-        CSV_SOURCE_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -288,30 +272,19 @@ def _ensure_csv_source_sqlite_cache(db_path: str) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=CSV_SOURCE_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=CSV_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         logger.debug("Failed to initialize signal tracker sqlite cache: %s", error)
-        return False
-    finally:
-        with CSV_SOURCE_SQLITE_READY_CONDITION:
-            CSV_SOURCE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    CSV_SOURCE_SQLITE_READY,
-                    db_key,
-                    max_entries=CSV_SOURCE_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                CSV_SOURCE_SQLITE_READY.discard(db_key)
-            CSV_SOURCE_SQLITE_READY_CONDITION.notify_all()
+
+    return CSV_SOURCE_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=CSV_SOURCE_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=CSV_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=CSV_SOURCE_SQLITE_READY_MAX_ENTRIES,
+    )
 
 
 def _load_csv_source_from_sqlite(

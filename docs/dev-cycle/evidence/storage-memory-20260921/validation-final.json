@@ -1,0 +1,18 @@
+{
+  "pytest": "pytest-snapshot-final.json",
+  "pytest_passed": 2389,
+  "pytest_skipped": 3,
+  "vitest": "vitest-baseline.json",
+  "vitest_passed": 595,
+  "vitest_files": 81,
+  "frontend_source_unchanged": true,
+  "build": "build-security.json",
+  "build_checks": 3,
+  "typecheck": "typecheck-baseline.json",
+  "lint": "lint-baseline.json",
+  "lint_errors": 0,
+  "lint_warnings": 188,
+  "fixture": "fixture-ready.json",
+  "sql": "sql-invariance.json",
+  "snapshot_process": "snapshotprobe-first.json"
+}

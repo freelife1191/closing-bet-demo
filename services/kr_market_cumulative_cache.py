@@ -23,7 +23,6 @@ from typing import Any, Callable
 from numpy_json_encoder import NumpyEncoder
 from services.file_row_count_cache import file_signature
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
@@ -32,15 +31,17 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 
 _CUMULATIVE_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
 _CUMULATIVE_CACHE_LOCK = threading.Lock()
-_CUMULATIVE_SQLITE_LOCK = threading.Lock()
-_CUMULATIVE_SQLITE_CONDITION = threading.Condition(_CUMULATIVE_SQLITE_LOCK)
-_CUMULATIVE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
-_CUMULATIVE_SQLITE_READY: set[str] = set()
 _CUMULATIVE_SQLITE_READY_MAX_ENTRIES = 2_048
+_CUMULATIVE_SQLITE_GATE = SqliteReadyGate()
+_CUMULATIVE_SQLITE_LOCK = _CUMULATIVE_SQLITE_GATE.lock
+_CUMULATIVE_SQLITE_CONDITION = _CUMULATIVE_SQLITE_GATE.condition
+_CUMULATIVE_SQLITE_INIT_IN_PROGRESS = _CUMULATIVE_SQLITE_GATE.in_progress_keys
+_CUMULATIVE_SQLITE_READY = _CUMULATIVE_SQLITE_GATE.ready_keys
 _CUMULATIVE_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
 _CUMULATIVE_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
 _CUMULATIVE_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
@@ -204,23 +205,6 @@ def _signature_hash(signature: tuple[Any, ...]) -> str:
 
 def _ensure_cumulative_sqlite(logger: Any) -> bool:
     db_path = _CUMULATIVE_CACHE_DB_PATH
-    db_key = normalize_sqlite_db_key(db_path)
-
-    with _CUMULATIVE_SQLITE_CONDITION:
-        if db_key in _CUMULATIVE_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _CUMULATIVE_SQLITE_READY.discard(db_key)
-
-        while db_key in _CUMULATIVE_SQLITE_INIT_IN_PROGRESS:
-            _CUMULATIVE_SQLITE_CONDITION.wait()
-            if db_key in _CUMULATIVE_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _CUMULATIVE_SQLITE_READY.discard(db_key)
-
-        _CUMULATIVE_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -245,30 +229,19 @@ def _ensure_cumulative_sqlite(logger: Any) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_CUMULATIVE_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_CUMULATIVE_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _log_failure(error: Exception) -> None:
         logger.debug("Failed to initialize cumulative sqlite cache: %s", error)
-        return False
-    finally:
-        with _CUMULATIVE_SQLITE_CONDITION:
-            _CUMULATIVE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _CUMULATIVE_SQLITE_READY,
-                    db_key,
-                    max_entries=_CUMULATIVE_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _CUMULATIVE_SQLITE_READY.discard(db_key)
-            _CUMULATIVE_SQLITE_CONDITION.notify_all()
+
+    return _CUMULATIVE_SQLITE_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_CUMULATIVE_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_CUMULATIVE_SQLITE_RETRY_DELAY_SECONDS,
+        max_ready_entries=_CUMULATIVE_SQLITE_READY_MAX_ENTRIES,
+        on_failure=_log_failure,
+    )
 
 
 def _load_from_sqlite(signature: tuple[Any, ...], logger: Any) -> dict[str, Any] | None:

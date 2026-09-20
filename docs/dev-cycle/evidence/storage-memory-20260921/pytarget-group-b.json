@@ -1,0 +1,23 @@
+{
+  "stage": "pytarget:group-b",
+  "started_at": "2026-09-20T16:19:41.443424+00:00",
+  "ended_at": "2026-09-20T16:19:44.677616+00:00",
+  "pid": 84549,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/storage-memory-20260921-j28901sw/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/services/test_sqlite_ready_gate_refactor.py",
+    "tests/services/test_kr_market_realtime_price_service_refactor.py",
+    "tests/services/test_file_row_count_cache.py",
+    "tests/engine/test_signal_tracker_source_cache_refactor.py",
+    "tests/engine/test_signal_tracker_analysis_source_cache_refactor.py",
+    "tests/engine/test_kr_ai_stock_info_cache_refactor.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/storage-memory-20260921-j28901sw",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 3.23
+}

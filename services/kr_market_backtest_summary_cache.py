@@ -24,7 +24,6 @@ from typing import Any, Callable
 from numpy_json_encoder import NumpyEncoder
 from services.file_row_count_cache import file_signature
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
@@ -33,6 +32,7 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 
 # 저장한 값의 계산 규칙이 바뀌면 이 번호를 올린다. 시그니처에 섞여 들어가므로
@@ -41,11 +41,12 @@ _BACKTEST_SUMMARY_CACHE_SCHEMA_VERSION = 2
 
 _BACKTEST_SUMMARY_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
 _BACKTEST_SUMMARY_CACHE_LOCK = threading.Lock()
-_BACKTEST_SUMMARY_SQLITE_LOCK = threading.Lock()
-_BACKTEST_SUMMARY_SQLITE_CONDITION = threading.Condition(_BACKTEST_SUMMARY_SQLITE_LOCK)
-_BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS: set[str] = set()
-_BACKTEST_SUMMARY_SQLITE_READY: set[str] = set()
 _BACKTEST_SUMMARY_SQLITE_READY_MAX_ENTRIES = 2_048
+_BACKTEST_SUMMARY_SQLITE_GATE = SqliteReadyGate()
+_BACKTEST_SUMMARY_SQLITE_LOCK = _BACKTEST_SUMMARY_SQLITE_GATE.lock
+_BACKTEST_SUMMARY_SQLITE_CONDITION = _BACKTEST_SUMMARY_SQLITE_GATE.condition
+_BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS = _BACKTEST_SUMMARY_SQLITE_GATE.in_progress_keys
+_BACKTEST_SUMMARY_SQLITE_READY = _BACKTEST_SUMMARY_SQLITE_GATE.ready_keys
 _BACKTEST_SUMMARY_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
 _BACKTEST_SUMMARY_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
 _BACKTEST_SUMMARY_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
@@ -262,23 +263,6 @@ def build_backtest_summary_cache_signature(
 
 def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
     db_path = _BACKTEST_SUMMARY_CACHE_DB_PATH
-    db_key = normalize_sqlite_db_key(db_path)
-
-    with _BACKTEST_SUMMARY_SQLITE_CONDITION:
-        if db_key in _BACKTEST_SUMMARY_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
-
-        while db_key in _BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS:
-            _BACKTEST_SUMMARY_SQLITE_CONDITION.wait()
-            if db_key in _BACKTEST_SUMMARY_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
-
-        _BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -304,30 +288,19 @@ def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _log_failure(error: Exception) -> None:
         logger.debug("Failed to initialize backtest summary sqlite cache: %s", error)
-        return False
-    finally:
-        with _BACKTEST_SUMMARY_SQLITE_CONDITION:
-            _BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _BACKTEST_SUMMARY_SQLITE_READY,
-                    db_key,
-                    max_entries=_BACKTEST_SUMMARY_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
-            _BACKTEST_SUMMARY_SQLITE_CONDITION.notify_all()
+
+    return _BACKTEST_SUMMARY_SQLITE_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
+        max_ready_entries=_BACKTEST_SUMMARY_SQLITE_READY_MAX_ENTRIES,
+        on_failure=_log_failure,
+    )
 
 
 def _load_backtest_summary_from_sqlite(

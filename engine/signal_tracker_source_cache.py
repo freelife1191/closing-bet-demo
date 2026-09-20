@@ -18,8 +18,8 @@ from typing import Any
 
 import pandas as pd
 
+from services.sqlite_ready_gate import SqliteReadyGate
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -38,11 +38,12 @@ _SOURCE_CACHE: OrderedDict[
 ] = OrderedDict()
 _SOURCE_CACHE_LOCK = threading.Lock()
 _SOURCE_MEMORY_CACHE_MAX_ENTRIES = 64
-_SOURCE_SQLITE_READY: set[str] = set()
-_SOURCE_SQLITE_READY_LOCK = threading.Lock()
-_SOURCE_SQLITE_READY_CONDITION = threading.Condition(_SOURCE_SQLITE_READY_LOCK)
-_SOURCE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
 _SOURCE_SQLITE_READY_MAX_ENTRIES = 2_048
+_SOURCE_READY_GATE = SqliteReadyGate()
+_SOURCE_SQLITE_READY_LOCK = _SOURCE_READY_GATE.lock
+_SOURCE_SQLITE_READY_CONDITION = _SOURCE_READY_GATE.condition
+_SOURCE_SQLITE_READY = _SOURCE_READY_GATE.ready_keys
+_SOURCE_SQLITE_INIT_IN_PROGRESS = _SOURCE_READY_GATE.in_progress_keys
 _SOURCE_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
 _SOURCE_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
 _SOURCE_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
@@ -113,9 +114,8 @@ def _resolve_db_path(path: str) -> str:
 
 
 def _invalidate_source_cache_sqlite_ready(db_path: str) -> None:
+    _SOURCE_READY_GATE.invalidate(db_path)
     db_key = normalize_sqlite_db_key(db_path)
-    with _SOURCE_SQLITE_READY_LOCK:
-        _SOURCE_SQLITE_READY.discard(db_key)
     with _SOURCE_SQLITE_KNOWN_KEYS_LOCK:
         stale_keys = [key for key in _SOURCE_SQLITE_KNOWN_KEYS if key[0] == db_key]
         for tracker_key in stale_keys:
@@ -188,22 +188,6 @@ def clear_signal_tracker_source_cache(*, reset_sqlite_state: bool = False) -> No
 
 
 def _ensure_source_cache_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with _SOURCE_SQLITE_READY_CONDITION:
-        if db_key in _SOURCE_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _SOURCE_SQLITE_READY.discard(db_key)
-
-        while db_key in _SOURCE_SQLITE_INIT_IN_PROGRESS:
-            _SOURCE_SQLITE_READY_CONDITION.wait()
-            if db_key in _SOURCE_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _SOURCE_SQLITE_READY.discard(db_key)
-
-        _SOURCE_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -234,31 +218,20 @@ def _ensure_source_cache_sqlite(db_path: str, logger: logging.Logger | None) -> 
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_SOURCE_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         if logger is not None:
             logger.debug("Failed to initialize signal tracker source sqlite cache: %s", error)
-        return False
-    finally:
-        with _SOURCE_SQLITE_READY_CONDITION:
-            _SOURCE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _SOURCE_SQLITE_READY,
-                    db_key,
-                    max_entries=_SOURCE_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _SOURCE_SQLITE_READY.discard(db_key)
-            _SOURCE_SQLITE_READY_CONDITION.notify_all()
+
+    return _SOURCE_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_SOURCE_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=_SOURCE_SQLITE_READY_MAX_ENTRIES,
+    )
 
 
 def _load_from_sqlite(

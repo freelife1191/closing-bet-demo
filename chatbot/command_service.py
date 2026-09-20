@@ -10,6 +10,9 @@ from datetime import datetime
 from typing import Any, Optional
 
 
+_RESERVED_MEMORY_KEYS = {"user_profile"}
+
+
 def clear_current_session_messages(bot: Any, session_id: Optional[str]) -> bool:
     """현재 세션 메시지를 비운다."""
     if not session_id:
@@ -123,9 +126,11 @@ def render_memory_view(bot: Any, owner_id: Optional[str]) -> str:
 
     lines = ["🧠 **저장된 메모리**"]
     for key in sorted(memories.keys()):
+        if key in _RESERVED_MEMORY_KEYS:
+            continue
         value = _normalize_memory_value(memories[key])
         lines.append(f"- `{key}`: {value}")
-    return "\n".join(lines)
+    return "\n".join(lines) if len(lines) > 1 else "📭 저장된 메모리가 없습니다."
 
 
 def render_memory_help() -> str:
@@ -151,12 +156,14 @@ def handle_memory_write_action(
     action = action.lower()
 
     if action == "clear":
-        return bot.memory.clear(owner_id)
+        return bot.memory.clear_general(owner_id)
 
     if action in {"add", "update"}:
         if len(args) < 2:
             return "⚠️ key/value를 함께 입력해주세요."
         key = args[0]
+        if key in _RESERVED_MEMORY_KEYS:
+            return "⚠️ `user_profile`은 설정 화면에서 관리해주세요."
         value = " ".join(args[1:])
         if action == "add":
             return bot.memory.add(key, value, owner_id=owner_id)
@@ -165,6 +172,8 @@ def handle_memory_write_action(
     if action == "remove":
         if not args:
             return "⚠️ 삭제할 key를 입력해주세요."
+        if args[0] in _RESERVED_MEMORY_KEYS:
+            return "⚠️ `user_profile`은 설정 화면에서 관리해주세요."
         return bot.memory.remove(args[0], owner_id=owner_id)
 
     return None
@@ -272,4 +281,3 @@ __all__ = [
     "render_memory_view",
     "render_model_command_help",
 ]
-

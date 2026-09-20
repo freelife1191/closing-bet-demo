@@ -1,0 +1,93 @@
+{
+  "method": "nonblank physical lines excluding comment-only and AST docstring ranges; SQL literals retained",
+  "files": {
+    "chatbot/storage_sqlite_common.py": {
+      "before": 217,
+      "after": 185,
+      "delta": -32
+    },
+    "services/kr_market_vcp_signals_cache.py": {
+      "before": 344,
+      "after": 320,
+      "delta": -24
+    },
+    "services/kr_market_jongga_payload_helpers.py": {
+      "before": 445,
+      "after": 421,
+      "delta": -24
+    },
+    "services/kr_market_data_cache_jongga.py": {
+      "before": 368,
+      "after": 344,
+      "delta": -24
+    },
+    "services/kr_market_backtest_summary_cache.py": {
+      "before": 437,
+      "after": 413,
+      "delta": -24
+    },
+    "services/kr_market_cumulative_cache.py": {
+      "before": 365,
+      "after": 341,
+      "delta": -24
+    },
+    "services/kr_market_realtime_latest_close_cache.py": {
+      "before": 408,
+      "after": 383,
+      "delta": -25
+    },
+    "services/kr_market_realtime_market_map_cache.py": {
+      "before": 405,
+      "after": 380,
+      "delta": -25
+    },
+    "services/file_row_count_cache.py": {
+      "before": 394,
+      "after": 369,
+      "delta": -25
+    },
+    "engine/signal_tracker_source_cache.py": {
+      "before": 466,
+      "after": 441,
+      "delta": -25
+    },
+    "engine/signal_tracker_analysis_source_cache.py": {
+      "before": 549,
+      "after": 524,
+      "delta": -25
+    },
+    "engine/kr_ai_stock_info_cache.py": {
+      "before": 397,
+      "after": 372,
+      "delta": -25
+    },
+    "services/kr_market_data_cache_sqlite_payload.py": {
+      "before": 741,
+      "after": 693,
+      "delta": -48
+    },
+    "services/common_update_status_service.py": {
+      "before": 522,
+      "after": 498,
+      "delta": -24
+    },
+    "services/kr_market_realtime_price_cache.py": {
+      "before": 626,
+      "after": 602,
+      "delta": -24
+    },
+    "services/paper_trading_db_setup.py": {
+      "before": 171,
+      "after": 156,
+      "delta": -15
+    },
+    "services/sqlite_ready_gate.py": {
+      "before": 137,
+      "after": 142,
+      "delta": 5
+    }
+  },
+  "before": 6992,
+  "after": 6584,
+  "delta": -408
+}

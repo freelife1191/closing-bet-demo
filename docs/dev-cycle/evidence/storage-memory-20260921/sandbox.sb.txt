@@ -1,0 +1,15 @@
+(version 1)
+(allow default)
+(deny file-write* (subpath "/Users/freelife/vibe/lecture/hodu/closing-bet-demo"))
+(deny file-read* (subpath "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/data"))
+(deny file-read* (regex #"/Users/freelife/vibe/lecture/hodu/closing-bet-demo/\.env($|\.)"))
+(deny network*)
+(allow network* (local ip "localhost:57920") (remote ip "localhost:57920") (local ip "localhost:57921") (remote ip "localhost:57921") (local ip "localhost:57922") (remote ip "localhost:57922"))
+(allow network* (local unix-socket) (remote unix-socket))
+
+; Turbopack/PostCSS workers allocate ephemeral loopback IPC ports.
+(allow network* (local ip "localhost:*") (remote ip "localhost:*"))
+(deny network* (local ip "localhost:3500") (remote ip "localhost:3500") (local ip "localhost:5501") (remote ip "localhost:5501"))
+
+; Binding itself has no destination; outbound remains loopback-only.
+(allow network-bind)

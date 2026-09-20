@@ -1,0 +1,3038 @@
+diff --git a/chatbot/command_service.py b/chatbot/command_service.py
+index 1e301fa..704b5cd 100644
+--- a/chatbot/command_service.py
++++ b/chatbot/command_service.py
+@@ -10,6 +10,9 @@ from datetime import datetime
+ from typing import Any, Optional
+
+
++_RESERVED_MEMORY_KEYS = {"user_profile"}
++
++
+ def clear_current_session_messages(bot: Any, session_id: Optional[str]) -> bool:
+     """현재 세션 메시지를 비운다."""
+     if not session_id:
+@@ -123,9 +126,11 @@ def render_memory_view(bot: Any, owner_id: Optional[str]) -> str:
+
+     lines = ["🧠 **저장된 메모리**"]
+     for key in sorted(memories.keys()):
++        if key in _RESERVED_MEMORY_KEYS:
++            continue
+         value = _normalize_memory_value(memories[key])
+         lines.append(f"- `{key}`: {value}")
+-    return "\n".join(lines)
++    return "\n".join(lines) if len(lines) > 1 else "📭 저장된 메모리가 없습니다."
+
+
+ def render_memory_help() -> str:
+@@ -151,12 +156,14 @@ def handle_memory_write_action(
+     action = action.lower()
+
+     if action == "clear":
+-        return bot.memory.clear(owner_id)
++        return bot.memory.clear_general(owner_id)
+
+     if action in {"add", "update"}:
+         if len(args) < 2:
+             return "⚠️ key/value를 함께 입력해주세요."
+         key = args[0]
++        if key in _RESERVED_MEMORY_KEYS:
++            return "⚠️ `user_profile`은 설정 화면에서 관리해주세요."
+         value = " ".join(args[1:])
+         if action == "add":
+             return bot.memory.add(key, value, owner_id=owner_id)
+@@ -165,6 +172,8 @@ def handle_memory_write_action(
+     if action == "remove":
+         if not args:
+             return "⚠️ 삭제할 key를 입력해주세요."
++        if args[0] in _RESERVED_MEMORY_KEYS:
++            return "⚠️ `user_profile`은 설정 화면에서 관리해주세요."
+         return bot.memory.remove(args[0], owner_id=owner_id)
+
+     return None
+@@ -272,4 +281,3 @@ __all__ = [
+     "render_memory_view",
+     "render_model_command_help",
+ ]
+-
+
+diff --git a/chatbot/core.py b/chatbot/core.py
+index ecf3506..2cde940 100644
+--- a/chatbot/core.py
++++ b/chatbot/core.py
+@@ -52,7 +52,6 @@ from .runtime_setup_service import (
+     create_genai_client as _create_genai_client_impl,
+     close_client as _close_client_impl,
+     load_stock_map as _load_stock_map_impl,
+-    init_user_profile_from_env as _init_user_profile_from_env_impl,
+     get_user_profile as _get_user_profile_impl,
+     update_user_profile as _update_user_profile_impl,
+ )
+@@ -135,9 +134,6 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
+         self.ticker_map = {}
+         self._load_stock_map()
+
+-        # .env에서 사용자 프로필 초기화 (기본값이 없을 때만 설정)
+-        self._init_user_profile_from_env()
+-
+         # Gemini 초기화 - Vertex AI 모드. 사용자별 API 키 인자는 무시된다.
+         self.api_key = ""  # legacy attribute; Vertex 전환 후 사용 안 됨
+         del api_key  # 외부 인자는 명시적으로 폐기
+@@ -161,10 +157,6 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
+         """korean_stocks_list.csv 로드하여 매핑 생성"""
+         self.stock_map, self.ticker_map = _load_stock_map_impl(DATA_DIR, logger)
+
+-    def _init_user_profile_from_env(self):
+-        """환경변수에서 초기 사용자 프로필 설정"""
+-        _init_user_profile_from_env_impl(self.memory, logger)
+-
+     def get_user_profile(self, owner_id: Optional[str] = None) -> Dict[str, Any]:
+         """사용자 프로필 조회"""
+         return _get_user_profile_impl(self.memory, owner_id)
+
+diff --git a/chatbot/daily_suggestions_service.py b/chatbot/daily_suggestions_service.py
+index d9488c3..af08559 100644
+--- a/chatbot/daily_suggestions_service.py
++++ b/chatbot/daily_suggestions_service.py
+@@ -62,7 +62,8 @@ def generate_daily_suggestions(
+         )
+
+         suggestions = json.loads(response.text)
+-        bot.memory.add(cache_key, suggestions)
++        if not bot.memory.save_daily_suggestions(cache_key, suggestions):
++            logger.warning("Failed to persist daily suggestions cache")
+         return suggestions
+
+     except Exception as e:
+
+diff --git a/chatbot/data_service.py b/chatbot/data_service.py
+index 5bfee8d..1549955 100644
+--- a/chatbot/data_service.py
++++ b/chatbot/data_service.py
+@@ -130,14 +130,25 @@ def get_cached_daily_suggestions(
+     now: datetime,
+ ) -> Optional[List[Dict[str, str]]]:
+     """유효한(1시간 이내) 일일 추천 캐시 조회."""
++    # 호출자는 기존 호환을 위해 now를 넘길 수 있지만, get()이 SQLite를 재적재한 뒤의
++    # 실제 관측 시각으로 판정해야 새 캐시를 future로 오인하지 않는다.
++    del now
+     cached = memory.get(cache_key)
+-    if not cached:
++    if not isinstance(cached, dict):
+         return None
+
+-    updated_at = datetime.fromisoformat(cached["updated_at"])
+-    if (now - updated_at).total_seconds() >= 3600:
++    try:
++        updated_at = datetime.fromisoformat(str(cached["updated_at"]))
++    except (KeyError, TypeError, ValueError):
++        logger.debug("Invalid daily suggestion cache timestamp")
++        return None
++    evaluated_at = datetime.now()
++    if updated_at.tzinfo is not None or updated_at > evaluated_at:
++        return None
++    if (evaluated_at - updated_at).total_seconds() >= 3600:
+         return None
+-    return cached["value"]
++    value = cached.get("value")
++    return value if isinstance(value, list) else None
+
+
+ def build_watchlist_suggestions_text(
+
+diff --git a/chatbot/runtime_setup_service.py b/chatbot/runtime_setup_service.py
+index 875ec6a..62454ce 100644
+--- a/chatbot/runtime_setup_service.py
++++ b/chatbot/runtime_setup_service.py
+@@ -159,14 +159,6 @@ def load_stock_map(data_dir: Path, logger: Any) -> Tuple[Dict[str, str], Dict[st
+     return stock_map, ticker_map
+
+
+-def init_user_profile_from_env(memory: Any, logger: Any) -> None:
+-    """환경변수 USER_PROFILE 기준으로 초기 사용자 프로필을 저장한다 (공용 영역)."""
+-    profile = os.getenv("USER_PROFILE")
+-    if profile and not memory.memories:
+-        memory.add("user_profile", {"name": "흑기사", "persona": profile})
+-        logger.info("Initialized user profile from env")
+-
+-
+ def get_user_profile(memory: Any, owner_id: Optional[str] = None) -> Dict[str, Any]:
+     """사용자 프로필 조회 (레거시 value wrapper 호환)."""
+     profile = memory.get("user_profile", owner_id)
+
+diff --git a/chatbot/storage_memory_manager.py b/chatbot/storage_memory_manager.py
+index 9dd1cfb..d956cbd 100644
+--- a/chatbot/storage_memory_manager.py
++++ b/chatbot/storage_memory_manager.py
+@@ -6,6 +6,7 @@
+
+ from __future__ import annotations
+
++import fcntl
+ import json
+ import logging
+ import os
+@@ -16,10 +17,13 @@ from typing import Any, Dict, Optional
+
+ from .storage_history_helpers import atomic_write_json
+ from .storage_sqlite_helpers import (
++    clear_general_memories_in_sqlite,
+     clear_memories_in_sqlite,
+     delete_memory_entry_in_sqlite,
+     load_memories_from_sqlite,
++    normalize_daily_suggestions_memories,
+     resolve_chatbot_storage_db_path,
++    save_daily_suggestions_in_sqlite,
+     save_memories_to_sqlite,
+     upsert_memory_entry_in_sqlite,
+ )
+@@ -90,7 +94,9 @@ class MemoryManager:
+             return {}
+
+         if isinstance(loaded, dict):
+-            return _promote_legacy_flat_memories(loaded)
++            return normalize_daily_suggestions_memories(
++                _promote_legacy_flat_memories(loaded),
++            )
+         logger.warning(f"Unexpected memory format type: {type(loaded).__name__}")
+         return {}
+
+@@ -99,34 +105,63 @@ class MemoryManager:
+             return
+         self._write_legacy_memory_snapshot(memories)
+
+-    def _write_legacy_memory_snapshot(self, memories: Dict[str, Any]) -> None:
++    def _write_legacy_memory_snapshot(
++        self,
++        memories: Dict[str, Any],
++        *,
++        allow_uncommitted: bool = False,
++    ) -> bool:
++        """SQLite 권위 데이터를 sidecar lock 아래에서 legacy JSON으로 교체한다."""
+         try:
+             if not self.data_dir.exists():
+                 self.data_dir.mkdir(parents=True, exist_ok=True)
+-            atomic_write_json(self.file_path, memories)
+-            self._last_legacy_snapshot_monotonic = time.monotonic()
++            lock_path = self.file_path.with_name(f"{self.file_path.name}.lock")
++            with open(lock_path, "a+", encoding="utf-8") as lock_file:
++                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
++                try:
++                    authoritative_memories = load_memories_from_sqlite(self.db_path, logger)
++                    if authoritative_memories is None:
++                        if not allow_uncommitted:
++                            logger.error("SQLite memory reload failed; legacy snapshot left unchanged")
++                            return False
++                        authoritative_memories = memories
++                    self.memories = authoritative_memories
++                    atomic_write_json(self.file_path, authoritative_memories)
++                    self._last_legacy_snapshot_monotonic = time.monotonic()
++                    return True
++                finally:
++                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+         except Exception as error:
+             logger.error(f"Failed to save legacy memory JSON snapshot: {error}")
++            return False
+
+     def _load(self) -> Dict[str, Any]:
+         sqlite_memories = load_memories_from_sqlite(self.db_path, logger)
+         if sqlite_memories:
+-            self._write_legacy_memory_snapshot(sqlite_memories)
++            if self._write_legacy_memory_snapshot(sqlite_memories):
++                return self.memories
+             return sqlite_memories
+
+         legacy_memories = self._load_legacy_memory()
+         if legacy_memories:
+-            save_memories_to_sqlite(self.db_path, legacy_memories, logger)
++            if save_memories_to_sqlite(self.db_path, legacy_memories, logger):
++                imported_memories = load_memories_from_sqlite(self.db_path, logger)
++                if imported_memories is not None:
++                    if self._write_legacy_memory_snapshot(imported_memories):
++                        return self.memories
++                    return imported_memories
+             return legacy_memories
+
+         return sqlite_memories or {}
+
+-    def _reload(self) -> None:
++    def _reload(self) -> bool:
+         """다른 워커가 저장한 행을 보도록 SQLite 를 다시 읽는다. 읽기 실패면 기존 스냅샷을 둔다."""
+         # ponytail: 호출마다 작은 표 전체를 읽는다. 비용이 보이면 HistoryManager 처럼 파일 서명 비교를 붙인다.
+         loaded = load_memories_from_sqlite(self.db_path, logger)
+         if loaded is not None:
+             self.memories = loaded
++            return True
++        return False
+
+     def _save_single_entry(self, owner_id: str, key: str) -> None:
+         sqlite_saved = upsert_memory_entry_in_sqlite(
+@@ -141,7 +176,10 @@ class MemoryManager:
+             # 그 변경을 되돌린다. 종전의 전체 동기화 재시도는 다른 워커의 행을 지웠으므로 두지
+             # 않는다. 유실이 실제로 보이면 여기서 예외로 올려 명령 응답을 실패로 바꾼다.
+             logger.warning("SQLite single memory upsert failed; legacy JSON snapshot only")
+-            self._write_legacy_memory_snapshot(self.memories)
++            self._write_legacy_memory_snapshot(
++                self.memories,
++                allow_uncommitted=True,
++            )
+             return
+         self._save_legacy_memory_snapshot(self.memories)
+
+@@ -170,6 +208,11 @@ class MemoryManager:
+             del owned[key]
+             if not delete_memory_entry_in_sqlite(self.db_path, owner_id=owner, key=key, logger=logger):
+                 logger.warning("SQLite memory delete failed; legacy JSON snapshot only")
++                self._write_legacy_memory_snapshot(
++                    self.memories,
++                    allow_uncommitted=True,
++                )
++                return f"🗑️ 메모리 삭제: {key}"
+             self._write_legacy_memory_snapshot(self.memories)
+             return f"🗑️ 메모리 삭제: {key}"
+         return "⚠️ 해당 키를 찾을 수 없습니다."
+@@ -191,9 +234,51 @@ class MemoryManager:
+         self.memories.pop(owner, None)
+         if not clear_memories_in_sqlite(self.db_path, logger=logger, owner_id=owner):
+             logger.warning("SQLite memory clear failed; legacy JSON snapshot only")
++            self._write_legacy_memory_snapshot(
++                self.memories,
++                allow_uncommitted=True,
++            )
++            return "🧹 메모리가 초기화되었습니다."
+         self._write_legacy_memory_snapshot(self.memories)
+         return "🧹 메모리가 초기화되었습니다."
+
++    def clear_general(self, owner_id: Optional[str] = None) -> str:
++        """설정 프로필을 남기고 요청자의 일반 메모리만 초기화한다."""
++        if not owner_id:
++            logger.error("Refused to clear general memories without an owner")
++            return "⚠️ 사용자를 식별할 수 없어 메모리를 초기화하지 않았습니다."
++        if not clear_general_memories_in_sqlite(
++            self.db_path,
++            logger=logger,
++            owner_id=owner_id,
++        ):
++            logger.error("SQLite general memory clear failed; memory and snapshot left unchanged")
++            return "⚠️ 메모리 초기화에 실패했습니다."
++        if not self._reload():
++            logger.error("SQLite general memory clear committed but reload failed")
++            return "⚠️ 메모리 초기화 후 동기화에 실패했습니다."
++        if not self._write_legacy_memory_snapshot(self.memories):
++            return "⚠️ 메모리 초기화 후 동기화에 실패했습니다."
++        return "🧹 메모리가 초기화되었습니다."
++
++    def save_daily_suggestions(self, key: str, value: Any) -> bool:
++        """공용 재생성 추천 캐시를 원자적으로 저장하고 JSON 스냅샷을 맞춘다."""
++        if not save_daily_suggestions_in_sqlite(
++            self.db_path,
++            key,
++            value,
++            logger=logger,
++        ):
++            logger.error("Daily suggestion cache save failed; memory and snapshot left unchanged")
++            return False
++        if not self._reload():
++            logger.error("Daily suggestion cache committed but reload failed")
++            return False
++        if not self._write_legacy_memory_snapshot(self.memories):
++            logger.error("Daily suggestion cache committed but snapshot write failed")
++            return False
++        return True
++
+     def format_for_prompt(self, owner_id: Optional[str] = None) -> str:
+         """요청자의 메모리만 프롬프트에 싣는다.
+
+
+diff --git a/chatbot/storage_sqlite_common.py b/chatbot/storage_sqlite_common.py
+index f67cf5d..e8a6d70 100644
+--- a/chatbot/storage_sqlite_common.py
++++ b/chatbot/storage_sqlite_common.py
+@@ -8,14 +8,12 @@ from __future__ import annotations
+
+ import logging
+ import sqlite3
+-import threading
+ from pathlib import Path
+
++from services.sqlite_ready_gate import SqliteReadyGate
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_pragmas,
+     connect_sqlite,
+-    normalize_sqlite_db_key,
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
+@@ -33,11 +31,12 @@ _SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
+ _SQLITE_TIMEOUT_SECONDS = 30
+ _SQLITE_RETRY_ATTEMPTS = 2
+ _SQLITE_RETRY_DELAY_SECONDS = 0.03
+-_SCHEMA_READY_LOCK = threading.Lock()
+-_SCHEMA_READY_CONDITION = threading.Condition(_SCHEMA_READY_LOCK)
+-_SCHEMA_READY_DB_PATHS: set[str] = set()
++_SCHEMA_GATE = SqliteReadyGate()
++_SCHEMA_READY_LOCK = _SCHEMA_GATE.lock
++_SCHEMA_READY_CONDITION = _SCHEMA_GATE.condition
++_SCHEMA_READY_DB_PATHS = _SCHEMA_GATE.ready_keys
+ _SCHEMA_READY_MAX_ENTRIES = 2_048
+-_SCHEMA_INIT_IN_PROGRESS: set[str] = set()
++_SCHEMA_INIT_IN_PROGRESS = _SCHEMA_GATE.in_progress_keys
+
+
+ def resolve_chatbot_storage_db_path(data_dir: Path) -> Path:
+@@ -156,24 +155,6 @@ def ensure_chatbot_storage_schema(
+     force_recheck: bool = False,
+ ) -> bool:
+     db_path_text = str(db_path)
+-    db_key = normalize_sqlite_db_key(db_path_text)
+-    with _SCHEMA_READY_CONDITION:
+-        if force_recheck:
+-            _SCHEMA_READY_DB_PATHS.discard(db_key)
+-        elif db_key in _SCHEMA_READY_DB_PATHS:
+-            if sqlite_db_path_exists(db_path_text):
+-                return True
+-            _SCHEMA_READY_DB_PATHS.discard(db_key)
+-
+-        while db_key in _SCHEMA_INIT_IN_PROGRESS:
+-            _SCHEMA_READY_CONDITION.wait()
+-            if db_key in _SCHEMA_READY_DB_PATHS:
+-                if sqlite_db_path_exists(db_path_text):
+-                    return True
+-                _SCHEMA_READY_DB_PATHS.discard(db_key)
+-
+-        _SCHEMA_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path_text,
+@@ -228,34 +209,17 @@ def ensure_chatbot_storage_schema(
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    init_error: Exception | None = None
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-    except Exception as error:
+-        init_error = error
+-    finally:
+-        with _SCHEMA_READY_CONDITION:
+-            _SCHEMA_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _SCHEMA_READY_DB_PATHS,
+-                    db_key,
+-                    max_entries=_SCHEMA_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _SCHEMA_READY_DB_PATHS.discard(db_key)
+-            _SCHEMA_READY_CONDITION.notify_all()
+-
+-    if initialization_succeeded:
+-        return True
+-    logger.error(f"Failed to initialize chatbot SQLite schema: {init_error}")
+-    return False
++    return _SCHEMA_GATE.ensure(
++        db_path_text,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=lambda error: logger.error(f"Failed to initialize chatbot SQLite schema: {error}"),
++        force_recheck=force_recheck,
++        max_ready_entries=_SCHEMA_READY_MAX_ENTRIES,
++    )
+
+
+ __all__ = [
+
+diff --git a/chatbot/storage_sqlite_helpers.py b/chatbot/storage_sqlite_helpers.py
+index a474663..18bc859 100644
+--- a/chatbot/storage_sqlite_helpers.py
++++ b/chatbot/storage_sqlite_helpers.py
+@@ -19,9 +19,12 @@ from .storage_sqlite_history import (
+     upsert_history_session_with_messages,
+ )
+ from .storage_sqlite_memory import (
++    clear_general_memories_in_sqlite,
+     clear_memories_in_sqlite,
+     delete_memory_entry_in_sqlite,
+     load_memories_from_sqlite,
++    normalize_daily_suggestions_memories,
++    save_daily_suggestions_in_sqlite,
+     save_memories_to_sqlite,
+     upsert_memory_entry_in_sqlite,
+ )
+@@ -29,6 +32,7 @@ from .storage_sqlite_memory import (
+
+ __all__ = [
+     "apply_history_session_deltas_in_sqlite",
++    "clear_general_memories_in_sqlite",
+     "clear_history_sessions_in_sqlite",
+     "clear_memories_in_sqlite",
+     "delete_history_session_from_sqlite",
+@@ -36,7 +40,9 @@ __all__ = [
+     "ensure_chatbot_storage_schema",
+     "load_history_sessions_from_sqlite",
+     "load_memories_from_sqlite",
++    "normalize_daily_suggestions_memories",
+     "resolve_chatbot_storage_db_path",
++    "save_daily_suggestions_in_sqlite",
+     "save_history_sessions_to_sqlite",
+     "save_memories_to_sqlite",
+     "upsert_history_session_with_messages",
+
+diff --git a/chatbot/storage_sqlite_memory.py b/chatbot/storage_sqlite_memory.py
+index 5a52641..3061eb8 100644
+--- a/chatbot/storage_sqlite_memory.py
++++ b/chatbot/storage_sqlite_memory.py
+@@ -9,7 +9,7 @@ from __future__ import annotations
+ import json
+ import logging
+ import sqlite3
+-from datetime import datetime
++from datetime import datetime, timedelta
+ from pathlib import Path
+ from typing import Any, Dict
+
+@@ -24,12 +24,228 @@ from .storage_sqlite_common import _SQLITE_SESSION_PRAGMAS, ensure_chatbot_stora
+ _SQLITE_TIMEOUT_SECONDS = 30
+ _SQLITE_RETRY_ATTEMPTS = 2
+ _SQLITE_RETRY_DELAY_SECONDS = 0.03
++_DAILY_SUGGESTIONS_PREFIX = "daily_suggestions_"
++_DAILY_SUGGESTIONS_CACHE_TTL = timedelta(hours=1)
++_DAILY_SUGGESTIONS_CACHE_MAX_ENTRIES = 500
+
+
+ def _is_missing_table_error(error: Exception, *, table_name: str) -> bool:
+     return is_sqlite_missing_table_error(error, table_names=table_name)
+
+
++def _parse_daily_suggestions_updated_at(value: object) -> datetime | None:
++    if not isinstance(value, str):
++        return None
++    try:
++        parsed = datetime.fromisoformat(value)
++    except (TypeError, ValueError):
++        logging.getLogger(__name__).debug("Invalid daily suggestion cache timestamp")
++        return None
++    return parsed if parsed.tzinfo is None else None
++
++
++def _daily_suggestions_keys_to_delete(
++    rows: list[tuple[str, object]],
++    now: datetime,
++) -> list[str]:
++    cutoff = now - _DAILY_SUGGESTIONS_CACHE_TTL
++    valid_rows: list[tuple[str, datetime]] = []
++    keys_to_delete: list[str] = []
++    for key, updated_at in rows:
++        parsed_updated_at = _parse_daily_suggestions_updated_at(updated_at)
++        if (
++            parsed_updated_at is None
++            or parsed_updated_at <= cutoff
++            or parsed_updated_at > now
++        ):
++            keys_to_delete.append(key)
++            continue
++        valid_rows.append((key, parsed_updated_at))
++
++    valid_rows.sort(key=lambda row: (row[1], row[0]), reverse=True)
++    keys_to_delete.extend(key for key, _ in valid_rows[_DAILY_SUGGESTIONS_CACHE_MAX_ENTRIES:])
++    return keys_to_delete
++
++
++def _prune_daily_suggestions_cursor(cursor: sqlite3.Cursor, now: datetime) -> None:
++    rows = cursor.execute(
++        """
++        SELECT memory_key, updated_at
++        FROM chatbot_memories
++        WHERE owner_id = ? AND substr(memory_key, 1, ?) = ?
++        """,
++        ("", len(_DAILY_SUGGESTIONS_PREFIX), _DAILY_SUGGESTIONS_PREFIX),
++    ).fetchall()
++    keys_to_delete = _daily_suggestions_keys_to_delete(
++        [(str(row[0]), row[1]) for row in rows],
++        now,
++    )
++    if keys_to_delete:
++        cursor.executemany(
++            """
++            DELETE FROM chatbot_memories
++            WHERE owner_id = ? AND memory_key = ?
++            """,
++            [("", key) for key in keys_to_delete],
++        )
++
++
++def _load_daily_suggestions_rows_read_only(db_path_text: str) -> list[tuple[str, object]]:
++    with connect_sqlite(
++        db_path_text,
++        timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
++        pragmas=_SQLITE_SESSION_PRAGMAS,
++        read_only=True,
++    ) as conn:
++        rows = conn.execute(
++            """
++            SELECT memory_key, updated_at
++            FROM chatbot_memories
++            WHERE owner_id = ? AND substr(memory_key, 1, ?) = ?
++            """,
++            ("", len(_DAILY_SUGGESTIONS_PREFIX), _DAILY_SUGGESTIONS_PREFIX),
++        ).fetchall()
++    return [(str(row[0]), row[1]) for row in rows]
++
++
++def normalize_daily_suggestions_memories(
++    memories: Dict[str, Any],
++) -> Dict[str, Any]:
++    """JSON 스냅샷의 공용 추천 캐시를 SQLite와 같은 기준으로 정리한다."""
++    public_memories = memories.get("")
++    if not isinstance(public_memories, dict):
++        return memories
++
++    normalized = dict(memories)
++    normalized_public_memories = dict(public_memories)
++    rows = [
++        (
++            key,
++            value.get("updated_at") if isinstance(value, dict) else None,
++        )
++        for key, value in normalized_public_memories.items()
++        if isinstance(key, str) and key.startswith(_DAILY_SUGGESTIONS_PREFIX)
++    ]
++    # JSON을 읽은 뒤 시각을 잡아, 읽는 사이 새로 쓰인 캐시를 future로 오인하지 않는다.
++    for key in _daily_suggestions_keys_to_delete(rows, datetime.now()):
++        normalized_public_memories.pop(key, None)
++    normalized[""] = normalized_public_memories
++    return normalized
++
++
++def _prune_daily_suggestions_in_sqlite(
++    db_path: Path,
++    logger: logging.Logger,
++    *,
++    _retried: bool = False,
++) -> bool:
++    """공용의 재생성 가능한 일일 추천 캐시만 정리한다."""
++    if not ensure_chatbot_storage_schema(db_path, logger):
++        return False
++    db_path_text = str(db_path)
++    try:
++        probe_rows = run_sqlite_with_retry(
++            lambda: _load_daily_suggestions_rows_read_only(db_path_text),
++            max_retries=_SQLITE_RETRY_ATTEMPTS,
++            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
++        )
++        # probe 결과를 받은 직후의 시각으로만 삭제 필요성을 판정한다.
++        if not _daily_suggestions_keys_to_delete(probe_rows, datetime.now()):
++            return True
++
++        def _prune_rows() -> None:
++            with connect_sqlite(
++                db_path_text,
++                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
++                pragmas=_SQLITE_SESSION_PRAGMAS,
++            ) as conn:
++                cursor = conn.cursor()
++                try:
++                    cursor.execute("BEGIN IMMEDIATE")
++                    _prune_daily_suggestions_cursor(cursor, datetime.now())
++                    conn.commit()
++                except Exception:
++                    conn.rollback()
++                    raise
++
++        run_sqlite_with_retry(
++            _prune_rows,
++            max_retries=_SQLITE_RETRY_ATTEMPTS,
++            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
++        )
++        return True
++    except Exception as error:
++        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
++            if ensure_chatbot_storage_schema(db_path, logger, force_recheck=True):
++                return _prune_daily_suggestions_in_sqlite(
++                    db_path,
++                    logger,
++                    _retried=True,
++                )
++        logger.error("Failed to prune daily suggestion cache in SQLite: %s", error)
++        return False
++
++
++def save_daily_suggestions_in_sqlite(
++    db_path: Path,
++    key: str,
++    value: Any,
++    logger: logging.Logger,
++    *,
++    _retried: bool = False,
++) -> bool:
++    """공용 일일 추천 캐시를 저장하고 같은 트랜잭션에서 범위를 정리한다."""
++    if not key.startswith(_DAILY_SUGGESTIONS_PREFIX):
++        logger.error("Refused non-daily-suggestions cache key: %s", key)
++        return False
++    if not ensure_chatbot_storage_schema(db_path, logger):
++        return False
++    db_path_text = str(db_path)
++    try:
++        def _save_and_prune() -> None:
++            with connect_sqlite(
++                db_path_text,
++                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
++                pragmas=_SQLITE_SESSION_PRAGMAS,
++            ) as conn:
++                cursor = conn.cursor()
++                try:
++                    cursor.execute("BEGIN IMMEDIATE")
++                    txn_now = datetime.now()
++                    _upsert_memory_rows_cursor(
++                        cursor=cursor,
++                        rows=[(
++                            "", key,
++                            json.dumps(value, ensure_ascii=False, separators=(",", ":")),
++                            txn_now.isoformat(),
++                        )],
++                    )
++                    _prune_daily_suggestions_cursor(cursor, txn_now)
++                    conn.commit()
++                except Exception:
++                    conn.rollback()
++                    raise
++
++        run_sqlite_with_retry(
++            _save_and_prune,
++            max_retries=_SQLITE_RETRY_ATTEMPTS,
++            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
++        )
++        return True
++    except Exception as error:
++        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
++            if ensure_chatbot_storage_schema(db_path, logger, force_recheck=True):
++                return save_daily_suggestions_in_sqlite(
++                    db_path,
++                    key,
++                    value,
++                    logger,
++                    _retried=True,
++                )
++        logger.error("Failed to save daily suggestion cache in SQLite: %s", error)
++        return False
++
++
+ def _upsert_memory_rows_cursor(
+     *,
+     cursor: sqlite3.Cursor,
+@@ -62,6 +278,8 @@ def load_memories_from_sqlite(
+         return None
+     if not ensure_chatbot_storage_schema(db_path, logger):
+         return None
++    if not _prune_daily_suggestions_in_sqlite(db_path, logger):
++        return None
+     db_path_text = str(db_path)
+
+     try:
+@@ -348,10 +566,62 @@ def clear_memories_in_sqlite(
+         return False
+
+
++def clear_general_memories_in_sqlite(
++    db_path: Path,
++    logger: logging.Logger,
++    *,
++    owner_id: str,
++    _retried: bool = False,
++) -> bool:
++    """요청자 일반 메모리만 지운다. 공용과 설정 프로필에는 사용하지 않는다."""
++    if not owner_id:
++        logger.error("Refused to clear general memories without an owner")
++        return False
++    if not ensure_chatbot_storage_schema(db_path, logger):
++        return False
++    db_path_text = str(db_path)
++    try:
++        def _clear_rows() -> None:
++            with connect_sqlite(
++                db_path_text,
++                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
++                pragmas=_SQLITE_SESSION_PRAGMAS,
++            ) as conn:
++                conn.execute(
++                    """
++                    DELETE FROM chatbot_memories
++                    WHERE owner_id = ? AND memory_key <> ?
++                    """,
++                    (owner_id, "user_profile"),
++                )
++                conn.commit()
++
++        run_sqlite_with_retry(
++            _clear_rows,
++            max_retries=_SQLITE_RETRY_ATTEMPTS,
++            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
++        )
++        return True
++    except Exception as error:
++        if (not _retried) and _is_missing_table_error(error, table_name="chatbot_memories"):
++            if ensure_chatbot_storage_schema(db_path, logger, force_recheck=True):
++                return clear_general_memories_in_sqlite(
++                    db_path,
++                    logger,
++                    owner_id=owner_id,
++                    _retried=True,
++                )
++        logger.error("Failed to clear general chatbot memories in SQLite: %s", error)
++        return False
++
++
+ __all__ = [
++    "clear_general_memories_in_sqlite",
+     "clear_memories_in_sqlite",
+     "delete_memory_entry_in_sqlite",
+     "load_memories_from_sqlite",
++    "normalize_daily_suggestions_memories",
+     "save_memories_to_sqlite",
++    "save_daily_suggestions_in_sqlite",
+     "upsert_memory_entry_in_sqlite",
+ ]
+
+diff --git a/engine/kr_ai_stock_info_cache.py b/engine/kr_ai_stock_info_cache.py
+index f062950..5ab406d 100644
+--- a/engine/kr_ai_stock_info_cache.py
++++ b/engine/kr_ai_stock_info_cache.py
+@@ -14,8 +14,8 @@ from collections import OrderedDict
+ from datetime import datetime
+ from typing import Any, Callable
+
++from services.sqlite_ready_gate import SqliteReadyGate
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -31,11 +31,12 @@ from services.sqlite_utils import (
+ _STOCK_INFO_CACHE_LOCK = threading.Lock()
+ _STOCK_INFO_CACHE: OrderedDict[str, tuple[tuple[int, int], dict[str, object]]] = OrderedDict()
+ _STOCK_INFO_MEMORY_MAX_ENTRIES = 4_096
+-_STOCK_INFO_SQLITE_READY_LOCK = threading.Lock()
+-_STOCK_INFO_SQLITE_READY_CONDITION = threading.Condition(_STOCK_INFO_SQLITE_READY_LOCK)
+-_STOCK_INFO_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+-_STOCK_INFO_SQLITE_READY: set[str] = set()
+ _STOCK_INFO_SQLITE_READY_MAX_ENTRIES = 2_048
++_STOCK_INFO_READY_GATE = SqliteReadyGate()
++_STOCK_INFO_SQLITE_READY_LOCK = _STOCK_INFO_READY_GATE.lock
++_STOCK_INFO_SQLITE_READY_CONDITION = _STOCK_INFO_READY_GATE.condition
++_STOCK_INFO_SQLITE_INIT_IN_PROGRESS = _STOCK_INFO_READY_GATE.in_progress_keys
++_STOCK_INFO_SQLITE_READY = _STOCK_INFO_READY_GATE.ready_keys
+ _STOCK_INFO_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _STOCK_INFO_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+ _STOCK_INFO_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
+@@ -104,9 +105,8 @@ def resolve_stock_info_cache_db_path(signals_file: str) -> str:
+
+
+ def _invalidate_stock_info_sqlite_ready(db_path: str) -> None:
++    _STOCK_INFO_READY_GATE.invalidate(db_path)
+     db_key = normalize_sqlite_db_key(db_path)
+-    with _STOCK_INFO_SQLITE_READY_LOCK:
+-        _STOCK_INFO_SQLITE_READY.discard(db_key)
+     with _STOCK_INFO_SQLITE_KNOWN_KEYS_LOCK:
+         stale_keys = [key for key in _STOCK_INFO_SQLITE_KNOWN_KEYS if key[0] == db_key]
+         for tracker_key in stale_keys:
+@@ -151,22 +151,6 @@ def _should_force_stock_info_sqlite_prune() -> bool:
+
+
+ def _ensure_stock_info_sqlite(db_path: str, logger: Any) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _STOCK_INFO_SQLITE_READY_CONDITION:
+-        if db_key in _STOCK_INFO_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _STOCK_INFO_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _STOCK_INFO_SQLITE_INIT_IN_PROGRESS:
+-            _STOCK_INFO_SQLITE_READY_CONDITION.wait()
+-            if db_key in _STOCK_INFO_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _STOCK_INFO_SQLITE_READY.discard(db_key)
+-
+-        _STOCK_INFO_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -195,30 +179,19 @@ def _ensure_stock_info_sqlite(db_path: str, logger: Any) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_STOCK_INFO_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_STOCK_INFO_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         logger.debug("Failed to initialize KR AI stock info sqlite cache: %s", error)
+-        return False
+-    finally:
+-        with _STOCK_INFO_SQLITE_READY_CONDITION:
+-            _STOCK_INFO_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _STOCK_INFO_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_STOCK_INFO_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _STOCK_INFO_SQLITE_READY.discard(db_key)
+-            _STOCK_INFO_SQLITE_READY_CONDITION.notify_all()
++
++    return _STOCK_INFO_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_STOCK_INFO_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_STOCK_INFO_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=_STOCK_INFO_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _load_stock_info_from_sqlite(
+
+diff --git a/engine/signal_tracker_analysis_source_cache.py b/engine/signal_tracker_analysis_source_cache.py
+index 82a7659..d41c4f6 100644
+--- a/engine/signal_tracker_analysis_source_cache.py
++++ b/engine/signal_tracker_analysis_source_cache.py
+@@ -18,8 +18,8 @@ from typing import Any
+ import pandas as pd
+
+ from services.kr_market_data_cache_service import load_csv_file as _load_shared_csv_file
++from services.sqlite_ready_gate import SqliteReadyGate
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -38,11 +38,12 @@ SUPPLY_SOURCE_CACHE: OrderedDict[str, tuple[tuple[int, int, int], pd.DataFrame]]
+ PERFORMANCE_SOURCE_CACHE: OrderedDict[str, tuple[tuple[int, int, int], pd.DataFrame]] = OrderedDict()
+ SIGNALS_LOG_SOURCE_CACHE: OrderedDict[str, tuple[tuple[int, int, int], pd.DataFrame]] = OrderedDict()
+ CSV_SOURCE_MEMORY_CACHE_MAX_ENTRIES = 64
+-CSV_SOURCE_SQLITE_READY_LOCK = threading.Lock()
+-CSV_SOURCE_SQLITE_READY_CONDITION = threading.Condition(CSV_SOURCE_SQLITE_READY_LOCK)
+-CSV_SOURCE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+-CSV_SOURCE_SQLITE_READY: set[str] = set()
+ CSV_SOURCE_SQLITE_READY_MAX_ENTRIES = 2_048
++CSV_SOURCE_READY_GATE = SqliteReadyGate()
++CSV_SOURCE_SQLITE_READY_LOCK = CSV_SOURCE_READY_GATE.lock
++CSV_SOURCE_SQLITE_READY_CONDITION = CSV_SOURCE_READY_GATE.condition
++CSV_SOURCE_SQLITE_INIT_IN_PROGRESS = CSV_SOURCE_READY_GATE.in_progress_keys
++CSV_SOURCE_SQLITE_READY = CSV_SOURCE_READY_GATE.ready_keys
+ CSV_SOURCE_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ CSV_SOURCE_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+ CSV_SOURCE_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
+@@ -119,9 +120,8 @@ def _csv_source_lookup_keys(path: str) -> tuple[str, ...]:
+
+
+ def _invalidate_csv_source_sqlite_ready(db_path: str) -> None:
++    CSV_SOURCE_READY_GATE.invalidate(db_path)
+     db_key = normalize_sqlite_db_key(db_path)
+-    with CSV_SOURCE_SQLITE_READY_LOCK:
+-        CSV_SOURCE_SQLITE_READY.discard(db_key)
+     with CSV_SOURCE_SQLITE_KNOWN_KEYS_LOCK:
+         stale_keys = [key for key in CSV_SOURCE_SQLITE_KNOWN_KEYS if key[0] == db_key]
+         for tracker_key in stale_keys:
+@@ -242,22 +242,6 @@ def _load_csv_source_via_shared_cache(
+
+
+ def _ensure_csv_source_sqlite_cache(db_path: str) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with CSV_SOURCE_SQLITE_READY_CONDITION:
+-        if db_key in CSV_SOURCE_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            CSV_SOURCE_SQLITE_READY.discard(db_key)
+-
+-        while db_key in CSV_SOURCE_SQLITE_INIT_IN_PROGRESS:
+-            CSV_SOURCE_SQLITE_READY_CONDITION.wait()
+-            if db_key in CSV_SOURCE_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                CSV_SOURCE_SQLITE_READY.discard(db_key)
+-
+-        CSV_SOURCE_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -288,30 +272,19 @@ def _ensure_csv_source_sqlite_cache(db_path: str) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=CSV_SOURCE_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=CSV_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         logger.debug("Failed to initialize signal tracker sqlite cache: %s", error)
+-        return False
+-    finally:
+-        with CSV_SOURCE_SQLITE_READY_CONDITION:
+-            CSV_SOURCE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    CSV_SOURCE_SQLITE_READY,
+-                    db_key,
+-                    max_entries=CSV_SOURCE_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                CSV_SOURCE_SQLITE_READY.discard(db_key)
+-            CSV_SOURCE_SQLITE_READY_CONDITION.notify_all()
++
++    return CSV_SOURCE_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=CSV_SOURCE_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=CSV_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=CSV_SOURCE_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _load_csv_source_from_sqlite(
+
+diff --git a/engine/signal_tracker_source_cache.py b/engine/signal_tracker_source_cache.py
+index 78f3e5c..4a3455f 100644
+--- a/engine/signal_tracker_source_cache.py
++++ b/engine/signal_tracker_source_cache.py
+@@ -18,8 +18,8 @@ from typing import Any
+
+ import pandas as pd
+
++from services.sqlite_ready_gate import SqliteReadyGate
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -38,11 +38,12 @@ _SOURCE_CACHE: OrderedDict[
+ ] = OrderedDict()
+ _SOURCE_CACHE_LOCK = threading.Lock()
+ _SOURCE_MEMORY_CACHE_MAX_ENTRIES = 64
+-_SOURCE_SQLITE_READY: set[str] = set()
+-_SOURCE_SQLITE_READY_LOCK = threading.Lock()
+-_SOURCE_SQLITE_READY_CONDITION = threading.Condition(_SOURCE_SQLITE_READY_LOCK)
+-_SOURCE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+ _SOURCE_SQLITE_READY_MAX_ENTRIES = 2_048
++_SOURCE_READY_GATE = SqliteReadyGate()
++_SOURCE_SQLITE_READY_LOCK = _SOURCE_READY_GATE.lock
++_SOURCE_SQLITE_READY_CONDITION = _SOURCE_READY_GATE.condition
++_SOURCE_SQLITE_READY = _SOURCE_READY_GATE.ready_keys
++_SOURCE_SQLITE_INIT_IN_PROGRESS = _SOURCE_READY_GATE.in_progress_keys
+ _SOURCE_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _SOURCE_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+ _SOURCE_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
+@@ -113,9 +114,8 @@ def _resolve_db_path(path: str) -> str:
+
+
+ def _invalidate_source_cache_sqlite_ready(db_path: str) -> None:
++    _SOURCE_READY_GATE.invalidate(db_path)
+     db_key = normalize_sqlite_db_key(db_path)
+-    with _SOURCE_SQLITE_READY_LOCK:
+-        _SOURCE_SQLITE_READY.discard(db_key)
+     with _SOURCE_SQLITE_KNOWN_KEYS_LOCK:
+         stale_keys = [key for key in _SOURCE_SQLITE_KNOWN_KEYS if key[0] == db_key]
+         for tracker_key in stale_keys:
+@@ -188,22 +188,6 @@ def clear_signal_tracker_source_cache(*, reset_sqlite_state: bool = False) -> No
+
+
+ def _ensure_source_cache_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _SOURCE_SQLITE_READY_CONDITION:
+-        if db_key in _SOURCE_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _SOURCE_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _SOURCE_SQLITE_INIT_IN_PROGRESS:
+-            _SOURCE_SQLITE_READY_CONDITION.wait()
+-            if db_key in _SOURCE_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _SOURCE_SQLITE_READY.discard(db_key)
+-
+-        _SOURCE_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -234,31 +218,20 @@ def _ensure_source_cache_sqlite(db_path: str, logger: logging.Logger | None) ->
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_SOURCE_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         if logger is not None:
+             logger.debug("Failed to initialize signal tracker source sqlite cache: %s", error)
+-        return False
+-    finally:
+-        with _SOURCE_SQLITE_READY_CONDITION:
+-            _SOURCE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _SOURCE_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_SOURCE_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _SOURCE_SQLITE_READY.discard(db_key)
+-            _SOURCE_SQLITE_READY_CONDITION.notify_all()
++
++    return _SOURCE_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_SOURCE_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_SOURCE_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=_SOURCE_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _load_from_sqlite(
+
+diff --git a/services/common_update_status_service.py b/services/common_update_status_service.py
+index c7affa9..2388542 100644
+--- a/services/common_update_status_service.py
++++ b/services/common_update_status_service.py
+@@ -17,7 +17,6 @@ from typing import Any, Dict
+
+ from numpy_json_encoder import NumpyEncoder
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -28,15 +27,17 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+
+ _UPDATE_STATUS_CACHE: OrderedDict[str, tuple[tuple[int, int], Dict[str, Any]]] = OrderedDict()
+ _UPDATE_STATUS_CACHE_LOCK = threading.Lock()
+ _UPDATE_STATUS_CACHE_MAX_ENTRIES = 2_048
+-_UPDATE_STATUS_DB_INIT_LOCK = threading.Lock()
+-_UPDATE_STATUS_DB_INIT_CONDITION = threading.Condition(_UPDATE_STATUS_DB_INIT_LOCK)
+-_UPDATE_STATUS_DB_INIT_IN_PROGRESS: set[str] = set()
+-_UPDATE_STATUS_DB_READY: set[str] = set()
++_UPDATE_STATUS_DB_READY_GATE = SqliteReadyGate()
++_UPDATE_STATUS_DB_INIT_LOCK = _UPDATE_STATUS_DB_READY_GATE.lock
++_UPDATE_STATUS_DB_INIT_CONDITION = _UPDATE_STATUS_DB_READY_GATE.condition
++_UPDATE_STATUS_DB_INIT_IN_PROGRESS = _UPDATE_STATUS_DB_READY_GATE.in_progress_keys
++_UPDATE_STATUS_DB_READY = _UPDATE_STATUS_DB_READY_GATE.ready_keys
+ _UPDATE_STATUS_DB_READY_MAX_ENTRIES = 2_048
+ _UPDATE_STATUS_SQLITE_KNOWN_SNAPSHOT_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _UPDATE_STATUS_SQLITE_KNOWN_SNAPSHOT_KEYS_LOCK = threading.Lock()
+@@ -168,22 +169,6 @@ def _should_force_update_status_snapshot_prune() -> bool:
+
+ def _ensure_update_status_sqlite(logger) -> bool:
+     db_path = _UPDATE_STATUS_CACHE_DB_PATH
+-    db_key = _normalize_db_key(db_path)
+-
+-    with _UPDATE_STATUS_DB_INIT_CONDITION:
+-        if db_key in _UPDATE_STATUS_DB_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _UPDATE_STATUS_DB_READY.discard(db_key)
+-
+-        while db_key in _UPDATE_STATUS_DB_INIT_IN_PROGRESS:
+-            _UPDATE_STATUS_DB_INIT_CONDITION.wait()
+-            if db_key in _UPDATE_STATUS_DB_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _UPDATE_STATUS_DB_READY.discard(db_key)
+-
+-        _UPDATE_STATUS_DB_INIT_IN_PROGRESS.add(db_key)
+
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+@@ -212,30 +197,19 @@ def _ensure_update_status_sqlite(logger) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         logger.error(f"Failed to initialize update status sqlite cache: {error}")
+-        return False
+-    finally:
+-        with _UPDATE_STATUS_DB_INIT_CONDITION:
+-            _UPDATE_STATUS_DB_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _UPDATE_STATUS_DB_READY,
+-                    db_key,
+-                    max_entries=_UPDATE_STATUS_DB_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _UPDATE_STATUS_DB_READY.discard(db_key)
+-            _UPDATE_STATUS_DB_INIT_CONDITION.notify_all()
++
++    return _UPDATE_STATUS_DB_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=_UPDATE_STATUS_DB_READY_MAX_ENTRIES,
++    )
+
+
+ def _load_update_status_from_sqlite(
+
+diff --git a/services/file_row_count_cache.py b/services/file_row_count_cache.py
+index e2fc699..4811752 100644
+--- a/services/file_row_count_cache.py
++++ b/services/file_row_count_cache.py
+@@ -17,8 +17,8 @@ from collections import OrderedDict
+ from datetime import datetime
+ from typing import Any, Callable
+
++from services.sqlite_ready_gate import SqliteReadyGate
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -32,11 +32,12 @@ from services.sqlite_utils import (
+
+ _ROW_COUNT_CACHE: OrderedDict[str, tuple[tuple[int, int], int | None]] = OrderedDict()
+ _ROW_COUNT_CACHE_LOCK = threading.Lock()
+-_ROW_COUNT_SQLITE_LOCK = threading.Lock()
+-_ROW_COUNT_SQLITE_CONDITION = threading.Condition(_ROW_COUNT_SQLITE_LOCK)
+-_ROW_COUNT_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+-_ROW_COUNT_SQLITE_READY: set[str] = set()
+ _ROW_COUNT_SQLITE_READY_MAX_ENTRIES = 2_048
++_ROW_COUNT_READY_GATE = SqliteReadyGate()
++_ROW_COUNT_SQLITE_LOCK = _ROW_COUNT_READY_GATE.lock
++_ROW_COUNT_SQLITE_CONDITION = _ROW_COUNT_READY_GATE.condition
++_ROW_COUNT_SQLITE_INIT_IN_PROGRESS = _ROW_COUNT_READY_GATE.in_progress_keys
++_ROW_COUNT_SQLITE_READY = _ROW_COUNT_READY_GATE.ready_keys
+ _ROW_COUNT_MEMORY_MAX_ENTRIES = 4_096
+ _ROW_COUNT_SQLITE_KNOWN_PATHS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _ROW_COUNT_SQLITE_KNOWN_PATHS_LOCK = threading.Lock()
+@@ -61,9 +62,8 @@ _ROW_COUNT_SESSION_PRAGMAS = build_sqlite_pragmas(
+
+
+ def _invalidate_row_count_sqlite_ready(db_path: str) -> None:
++    _ROW_COUNT_READY_GATE.invalidate(db_path)
+     db_key = normalize_sqlite_db_key(db_path)
+-    with _ROW_COUNT_SQLITE_CONDITION:
+-        _ROW_COUNT_SQLITE_READY.discard(db_key)
+     with _ROW_COUNT_SQLITE_KNOWN_PATHS_LOCK:
+         stale_keys = [key for key in _ROW_COUNT_SQLITE_KNOWN_PATHS if key[0] == db_key]
+         for tracker_key in stale_keys:
+@@ -192,22 +192,6 @@ def _should_force_row_count_sqlite_prune() -> bool:
+
+ def _ensure_row_count_sqlite_cache(logger: Any) -> bool:
+     db_path = _ROW_COUNT_CACHE_DB_PATH
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _ROW_COUNT_SQLITE_CONDITION:
+-        if db_key in _ROW_COUNT_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _ROW_COUNT_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _ROW_COUNT_SQLITE_INIT_IN_PROGRESS:
+-            _ROW_COUNT_SQLITE_CONDITION.wait()
+-            if db_key in _ROW_COUNT_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _ROW_COUNT_SQLITE_READY.discard(db_key)
+-
+-        _ROW_COUNT_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -234,30 +218,19 @@ def _ensure_row_count_sqlite_cache(logger: Any) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_ROW_COUNT_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         logger.debug("Failed to initialize row count sqlite cache: %s", error)
+-        return False
+-    finally:
+-        with _ROW_COUNT_SQLITE_CONDITION:
+-            _ROW_COUNT_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _ROW_COUNT_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_ROW_COUNT_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _ROW_COUNT_SQLITE_READY.discard(db_key)
+-            _ROW_COUNT_SQLITE_CONDITION.notify_all()
++
++    return _ROW_COUNT_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_ROW_COUNT_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_ROW_COUNT_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=_ROW_COUNT_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _load_row_count_from_sqlite(
+
+diff --git a/services/kr_market_backtest_summary_cache.py b/services/kr_market_backtest_summary_cache.py
+index c2ed825..31cc6fb 100644
+--- a/services/kr_market_backtest_summary_cache.py
++++ b/services/kr_market_backtest_summary_cache.py
+@@ -24,7 +24,6 @@ from typing import Any, Callable
+ from numpy_json_encoder import NumpyEncoder
+ from services.file_row_count_cache import file_signature
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_pragmas,
+     connect_sqlite,
+     is_sqlite_missing_table_error,
+@@ -33,6 +32,7 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+
+ # 저장한 값의 계산 규칙이 바뀌면 이 번호를 올린다. 시그니처에 섞여 들어가므로
+@@ -41,11 +41,12 @@ _BACKTEST_SUMMARY_CACHE_SCHEMA_VERSION = 2
+
+ _BACKTEST_SUMMARY_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+ _BACKTEST_SUMMARY_CACHE_LOCK = threading.Lock()
+-_BACKTEST_SUMMARY_SQLITE_LOCK = threading.Lock()
+-_BACKTEST_SUMMARY_SQLITE_CONDITION = threading.Condition(_BACKTEST_SUMMARY_SQLITE_LOCK)
+-_BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+-_BACKTEST_SUMMARY_SQLITE_READY: set[str] = set()
+ _BACKTEST_SUMMARY_SQLITE_READY_MAX_ENTRIES = 2_048
++_BACKTEST_SUMMARY_SQLITE_GATE = SqliteReadyGate()
++_BACKTEST_SUMMARY_SQLITE_LOCK = _BACKTEST_SUMMARY_SQLITE_GATE.lock
++_BACKTEST_SUMMARY_SQLITE_CONDITION = _BACKTEST_SUMMARY_SQLITE_GATE.condition
++_BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS = _BACKTEST_SUMMARY_SQLITE_GATE.in_progress_keys
++_BACKTEST_SUMMARY_SQLITE_READY = _BACKTEST_SUMMARY_SQLITE_GATE.ready_keys
+ _BACKTEST_SUMMARY_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _BACKTEST_SUMMARY_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
+ _BACKTEST_SUMMARY_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
+@@ -262,23 +263,6 @@ def build_backtest_summary_cache_signature(
+
+ def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
+     db_path = _BACKTEST_SUMMARY_CACHE_DB_PATH
+-    db_key = normalize_sqlite_db_key(db_path)
+-
+-    with _BACKTEST_SUMMARY_SQLITE_CONDITION:
+-        if db_key in _BACKTEST_SUMMARY_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS:
+-            _BACKTEST_SUMMARY_SQLITE_CONDITION.wait()
+-            if db_key in _BACKTEST_SUMMARY_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
+-
+-        _BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -304,30 +288,19 @@ def _ensure_backtest_summary_sqlite(logger: Any) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _log_failure(error: Exception) -> None:
+         logger.debug("Failed to initialize backtest summary sqlite cache: %s", error)
+-        return False
+-    finally:
+-        with _BACKTEST_SUMMARY_SQLITE_CONDITION:
+-            _BACKTEST_SUMMARY_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _BACKTEST_SUMMARY_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_BACKTEST_SUMMARY_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _BACKTEST_SUMMARY_SQLITE_READY.discard(db_key)
+-            _BACKTEST_SUMMARY_SQLITE_CONDITION.notify_all()
++
++    return _BACKTEST_SUMMARY_SQLITE_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_BACKTEST_SUMMARY_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_BACKTEST_SUMMARY_SQLITE_RETRY_DELAY_SECONDS,
++        max_ready_entries=_BACKTEST_SUMMARY_SQLITE_READY_MAX_ENTRIES,
++        on_failure=_log_failure,
++    )
+
+
+ def _load_backtest_summary_from_sqlite(
+
+diff --git a/services/kr_market_cumulative_cache.py b/services/kr_market_cumulative_cache.py
+index 5da3b21..b07ee5b 100644
+--- a/services/kr_market_cumulative_cache.py
++++ b/services/kr_market_cumulative_cache.py
+@@ -23,7 +23,6 @@ from typing import Any, Callable
+ from numpy_json_encoder import NumpyEncoder
+ from services.file_row_count_cache import file_signature
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_pragmas,
+     connect_sqlite,
+     is_sqlite_missing_table_error,
+@@ -32,15 +31,17 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+
+ _CUMULATIVE_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+ _CUMULATIVE_CACHE_LOCK = threading.Lock()
+-_CUMULATIVE_SQLITE_LOCK = threading.Lock()
+-_CUMULATIVE_SQLITE_CONDITION = threading.Condition(_CUMULATIVE_SQLITE_LOCK)
+-_CUMULATIVE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+-_CUMULATIVE_SQLITE_READY: set[str] = set()
+ _CUMULATIVE_SQLITE_READY_MAX_ENTRIES = 2_048
++_CUMULATIVE_SQLITE_GATE = SqliteReadyGate()
++_CUMULATIVE_SQLITE_LOCK = _CUMULATIVE_SQLITE_GATE.lock
++_CUMULATIVE_SQLITE_CONDITION = _CUMULATIVE_SQLITE_GATE.condition
++_CUMULATIVE_SQLITE_INIT_IN_PROGRESS = _CUMULATIVE_SQLITE_GATE.in_progress_keys
++_CUMULATIVE_SQLITE_READY = _CUMULATIVE_SQLITE_GATE.ready_keys
+ _CUMULATIVE_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _CUMULATIVE_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
+ _CUMULATIVE_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
+@@ -204,23 +205,6 @@ def _signature_hash(signature: tuple[Any, ...]) -> str:
+
+ def _ensure_cumulative_sqlite(logger: Any) -> bool:
+     db_path = _CUMULATIVE_CACHE_DB_PATH
+-    db_key = normalize_sqlite_db_key(db_path)
+-
+-    with _CUMULATIVE_SQLITE_CONDITION:
+-        if db_key in _CUMULATIVE_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _CUMULATIVE_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _CUMULATIVE_SQLITE_INIT_IN_PROGRESS:
+-            _CUMULATIVE_SQLITE_CONDITION.wait()
+-            if db_key in _CUMULATIVE_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _CUMULATIVE_SQLITE_READY.discard(db_key)
+-
+-        _CUMULATIVE_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -245,30 +229,19 @@ def _ensure_cumulative_sqlite(logger: Any) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_CUMULATIVE_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_CUMULATIVE_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _log_failure(error: Exception) -> None:
+         logger.debug("Failed to initialize cumulative sqlite cache: %s", error)
+-        return False
+-    finally:
+-        with _CUMULATIVE_SQLITE_CONDITION:
+-            _CUMULATIVE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _CUMULATIVE_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_CUMULATIVE_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _CUMULATIVE_SQLITE_READY.discard(db_key)
+-            _CUMULATIVE_SQLITE_CONDITION.notify_all()
++
++    return _CUMULATIVE_SQLITE_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_CUMULATIVE_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_CUMULATIVE_SQLITE_RETRY_DELAY_SECONDS,
++        max_ready_entries=_CUMULATIVE_SQLITE_READY_MAX_ENTRIES,
++        on_failure=_log_failure,
++    )
+
+
+ def _load_from_sqlite(signature: tuple[Any, ...], logger: Any) -> dict[str, Any] | None:
+
+diff --git a/services/kr_market_data_cache_jongga.py b/services/kr_market_data_cache_jongga.py
+index 8f48ce0..96d6830 100644
+--- a/services/kr_market_data_cache_jongga.py
++++ b/services/kr_market_data_cache_jongga.py
+@@ -24,7 +24,6 @@ from services.kr_market_data_cache_core import (
+     file_signature,
+ )
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_pragmas,
+     connect_sqlite,
+     is_sqlite_missing_table_error,
+@@ -33,13 +32,15 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+
+-_JONGGA_PAYLOAD_SQLITE_LOCK = threading.Lock()
+-_JONGGA_PAYLOAD_SQLITE_CONDITION = threading.Condition(_JONGGA_PAYLOAD_SQLITE_LOCK)
+-_JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+-_JONGGA_PAYLOAD_SQLITE_READY: set[str] = set()
+ _JONGGA_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
++_JONGGA_PAYLOAD_SQLITE_GATE = SqliteReadyGate()
++_JONGGA_PAYLOAD_SQLITE_LOCK = _JONGGA_PAYLOAD_SQLITE_GATE.lock
++_JONGGA_PAYLOAD_SQLITE_CONDITION = _JONGGA_PAYLOAD_SQLITE_GATE.condition
++_JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS = _JONGGA_PAYLOAD_SQLITE_GATE.in_progress_keys
++_JONGGA_PAYLOAD_SQLITE_READY = _JONGGA_PAYLOAD_SQLITE_GATE.ready_keys
+ _JONGGA_PAYLOAD_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _JONGGA_PAYLOAD_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
+ _JONGGA_PAYLOAD_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
+@@ -136,23 +137,6 @@ def _should_force_jongga_payload_sqlite_prune() -> bool:
+
+ def _ensure_jongga_payload_sqlite(logger: Any | None) -> bool:
+     db_path = _JONGGA_PAYLOAD_SQLITE_DB_PATH
+-    db_key = normalize_sqlite_db_key(db_path)
+-
+-    with _JONGGA_PAYLOAD_SQLITE_CONDITION:
+-        if db_key in _JONGGA_PAYLOAD_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS:
+-            _JONGGA_PAYLOAD_SQLITE_CONDITION.wait()
+-            if db_key in _JONGGA_PAYLOAD_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
+-
+-        _JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -178,31 +162,20 @@ def _ensure_jongga_payload_sqlite(logger: Any | None) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _log_failure(error: Exception) -> None:
+         if logger is not None:
+             logger.debug(f"Failed to initialize jongga payload sqlite cache: {error}")
+-        return False
+-    finally:
+-        with _JONGGA_PAYLOAD_SQLITE_CONDITION:
+-            _JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _JONGGA_PAYLOAD_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_JONGGA_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
+-            _JONGGA_PAYLOAD_SQLITE_CONDITION.notify_all()
++
++    return _JONGGA_PAYLOAD_SQLITE_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
++        max_ready_entries=_JONGGA_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
++        on_failure=_log_failure,
++    )
+
+
+ def _normalize_payload_rows(rows: Any) -> list[tuple[str, dict[str, Any]]]:
+
+diff --git a/services/kr_market_data_cache_sqlite_payload.py b/services/kr_market_data_cache_sqlite_payload.py
+index 9eb60c5..d314d5f 100644
+--- a/services/kr_market_data_cache_sqlite_payload.py
++++ b/services/kr_market_data_cache_sqlite_payload.py
+@@ -19,7 +19,6 @@ from typing import Any
+ import pandas as pd
+
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -30,6 +29,7 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+
+ _LOGGER = logging.getLogger(__name__)
+@@ -41,10 +41,11 @@ _PAYLOAD_SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
+ _PAYLOAD_SQLITE_RETRY_ATTEMPTS = 2
+ _PAYLOAD_SQLITE_RETRY_DELAY_SECONDS = 0.03
+
+-JSON_PAYLOAD_SQLITE_READY: set[str] = set()
+-JSON_PAYLOAD_SQLITE_READY_LOCK = threading.Lock()
+-JSON_PAYLOAD_SQLITE_READY_CONDITION = threading.Condition(JSON_PAYLOAD_SQLITE_READY_LOCK)
+-JSON_PAYLOAD_SQLITE_IN_PROGRESS: set[str] = set()
++_JSON_PAYLOAD_SQLITE_READY_GATE = SqliteReadyGate()
++JSON_PAYLOAD_SQLITE_READY = _JSON_PAYLOAD_SQLITE_READY_GATE.ready_keys
++JSON_PAYLOAD_SQLITE_READY_LOCK = _JSON_PAYLOAD_SQLITE_READY_GATE.lock
++JSON_PAYLOAD_SQLITE_READY_CONDITION = _JSON_PAYLOAD_SQLITE_READY_GATE.condition
++JSON_PAYLOAD_SQLITE_IN_PROGRESS = _JSON_PAYLOAD_SQLITE_READY_GATE.in_progress_keys
+ JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
+ JSON_PAYLOAD_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ JSON_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+@@ -53,10 +54,11 @@ JSON_PAYLOAD_SQLITE_PRUNE_FORCE_INTERVAL = 64
+ JSON_PAYLOAD_SQLITE_SAVE_COUNTER = 0
+ JSON_PAYLOAD_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
+ DEFAULT_JSON_PAYLOAD_SQLITE_MAX_ROWS = 256
+-CSV_PAYLOAD_SQLITE_READY: set[str] = set()
+-CSV_PAYLOAD_SQLITE_READY_LOCK = threading.Lock()
+-CSV_PAYLOAD_SQLITE_READY_CONDITION = threading.Condition(CSV_PAYLOAD_SQLITE_READY_LOCK)
+-CSV_PAYLOAD_SQLITE_IN_PROGRESS: set[str] = set()
++_CSV_PAYLOAD_SQLITE_READY_GATE = SqliteReadyGate()
++CSV_PAYLOAD_SQLITE_READY = _CSV_PAYLOAD_SQLITE_READY_GATE.ready_keys
++CSV_PAYLOAD_SQLITE_READY_LOCK = _CSV_PAYLOAD_SQLITE_READY_GATE.lock
++CSV_PAYLOAD_SQLITE_READY_CONDITION = _CSV_PAYLOAD_SQLITE_READY_GATE.condition
++CSV_PAYLOAD_SQLITE_IN_PROGRESS = _CSV_PAYLOAD_SQLITE_READY_GATE.in_progress_keys
+ CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
+ CSV_PAYLOAD_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ CSV_PAYLOAD_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+@@ -173,22 +175,6 @@ def _should_force_csv_payload_sqlite_prune() -> bool:
+
+
+ def _ensure_json_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with JSON_PAYLOAD_SQLITE_READY_CONDITION:
+-        if db_key in JSON_PAYLOAD_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            JSON_PAYLOAD_SQLITE_READY.discard(db_key)
+-
+-        while db_key in JSON_PAYLOAD_SQLITE_IN_PROGRESS:
+-            JSON_PAYLOAD_SQLITE_READY_CONDITION.wait()
+-            if db_key in JSON_PAYLOAD_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                JSON_PAYLOAD_SQLITE_READY.discard(db_key)
+-
+-        JSON_PAYLOAD_SQLITE_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -215,30 +201,19 @@ def _ensure_json_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> b
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         logger.debug(f"Failed to initialize JSON payload SQLite cache: {error}")
+-        return False
+-    finally:
+-        with JSON_PAYLOAD_SQLITE_READY_CONDITION:
+-            JSON_PAYLOAD_SQLITE_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    JSON_PAYLOAD_SQLITE_READY,
+-                    db_key,
+-                    max_entries=JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                JSON_PAYLOAD_SQLITE_READY.discard(db_key)
+-            JSON_PAYLOAD_SQLITE_READY_CONDITION.notify_all()
++
++    return _JSON_PAYLOAD_SQLITE_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=JSON_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _recover_json_payload_sqlite_schema(db_path: str, logger: logging.Logger) -> bool:
+@@ -505,22 +480,6 @@ def _project_existing_usecols_columns(
+
+
+ def _ensure_csv_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with CSV_PAYLOAD_SQLITE_READY_CONDITION:
+-        if db_key in CSV_PAYLOAD_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            CSV_PAYLOAD_SQLITE_READY.discard(db_key)
+-
+-        while db_key in CSV_PAYLOAD_SQLITE_IN_PROGRESS:
+-            CSV_PAYLOAD_SQLITE_READY_CONDITION.wait()
+-            if db_key in CSV_PAYLOAD_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                CSV_PAYLOAD_SQLITE_READY.discard(db_key)
+-
+-        CSV_PAYLOAD_SQLITE_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -549,30 +508,19 @@ def _ensure_csv_payload_sqlite_cache(db_path: str, logger: logging.Logger) -> bo
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         logger.debug(f"Failed to initialize CSV payload SQLite cache: {error}")
+-        return False
+-    finally:
+-        with CSV_PAYLOAD_SQLITE_READY_CONDITION:
+-            CSV_PAYLOAD_SQLITE_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    CSV_PAYLOAD_SQLITE_READY,
+-                    db_key,
+-                    max_entries=CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                CSV_PAYLOAD_SQLITE_READY.discard(db_key)
+-            CSV_PAYLOAD_SQLITE_READY_CONDITION.notify_all()
++
++    return _CSV_PAYLOAD_SQLITE_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=CSV_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _recover_csv_payload_sqlite_schema(db_path: str, logger: logging.Logger) -> bool:
+
+diff --git a/services/kr_market_jongga_payload_helpers.py b/services/kr_market_jongga_payload_helpers.py
+index 28a09bf..f9f694c 100644
+--- a/services/kr_market_jongga_payload_helpers.py
++++ b/services/kr_market_jongga_payload_helpers.py
+@@ -21,7 +21,6 @@ from services.kr_market_data_cache_service import (
+     load_json_payload_from_path,
+ )
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -32,16 +31,18 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+
+ _RECENT_JONGGA_PAYLOAD_CACHE: OrderedDict[str, dict[str, Any]] = OrderedDict()
+ _RECENT_JONGGA_PAYLOAD_CACHE_LOCK = threading.Lock()
+ _RECENT_JONGGA_PAYLOAD_CACHE_MAX_ENTRIES = 256
+-_RECENT_JONGGA_SQLITE_READY: set[str] = set()
+-_RECENT_JONGGA_SQLITE_READY_LOCK = threading.Lock()
+-_RECENT_JONGGA_SQLITE_READY_CONDITION = threading.Condition(_RECENT_JONGGA_SQLITE_READY_LOCK)
+-_RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+ _RECENT_JONGGA_SQLITE_READY_MAX_ENTRIES = 2_048
++_RECENT_JONGGA_SQLITE_GATE = SqliteReadyGate()
++_RECENT_JONGGA_SQLITE_READY = _RECENT_JONGGA_SQLITE_GATE.ready_keys
++_RECENT_JONGGA_SQLITE_READY_LOCK = _RECENT_JONGGA_SQLITE_GATE.lock
++_RECENT_JONGGA_SQLITE_READY_CONDITION = _RECENT_JONGGA_SQLITE_GATE.condition
++_RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS = _RECENT_JONGGA_SQLITE_GATE.in_progress_keys
+ _RECENT_JONGGA_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _RECENT_JONGGA_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
+ _RECENT_JONGGA_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
+@@ -203,22 +204,6 @@ def _should_force_recent_payload_sqlite_prune() -> bool:
+
+ def _ensure_recent_payload_sqlite(data_dir: str, logger: Any) -> bool:
+     db_path = _runtime_cache_db_path(data_dir)
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _RECENT_JONGGA_SQLITE_READY_CONDITION:
+-        if db_key in _RECENT_JONGGA_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _RECENT_JONGGA_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS:
+-            _RECENT_JONGGA_SQLITE_READY_CONDITION.wait()
+-            if db_key in _RECENT_JONGGA_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _RECENT_JONGGA_SQLITE_READY.discard(db_key)
+-
+-        _RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -245,30 +230,19 @@ def _ensure_recent_payload_sqlite(data_dir: str, logger: Any) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_RECENT_JONGGA_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_RECENT_JONGGA_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _log_failure(error: Exception) -> None:
+         _log_debug(logger, f"Failed to initialize recent jongga sqlite cache: {error}")
+-        return False
+-    finally:
+-        with _RECENT_JONGGA_SQLITE_READY_CONDITION:
+-            _RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _RECENT_JONGGA_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_RECENT_JONGGA_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _RECENT_JONGGA_SQLITE_READY.discard(db_key)
+-            _RECENT_JONGGA_SQLITE_READY_CONDITION.notify_all()
++
++    return _RECENT_JONGGA_SQLITE_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_RECENT_JONGGA_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_RECENT_JONGGA_SQLITE_RETRY_DELAY_SECONDS,
++        max_ready_entries=_RECENT_JONGGA_SQLITE_READY_MAX_ENTRIES,
++        on_failure=_log_failure,
++    )
+
+
+ def _load_recent_payload_from_sqlite(
+
+diff --git a/services/kr_market_realtime_latest_close_cache.py b/services/kr_market_realtime_latest_close_cache.py
+index aefbf4c..7527874 100644
+--- a/services/kr_market_realtime_latest_close_cache.py
++++ b/services/kr_market_realtime_latest_close_cache.py
+@@ -17,8 +17,8 @@ from typing import Any
+
+ import pandas as pd
+
++from services.sqlite_ready_gate import SqliteReadyGate
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -34,11 +34,12 @@ from services.sqlite_utils import (
+ _LATEST_CLOSE_MAP_CACHE_LOCK = threading.Lock()
+ _LATEST_CLOSE_MAP_CACHE: OrderedDict[tuple[str, int, int], dict[str, float]] = OrderedDict()
+ _LATEST_CLOSE_MAP_MEMORY_MAX_ENTRIES = 16
+-_LATEST_CLOSE_MAP_SQLITE_READY: set[str] = set()
+-_LATEST_CLOSE_MAP_SQLITE_LOCK = threading.Lock()
+-_LATEST_CLOSE_MAP_SQLITE_CONDITION = threading.Condition(_LATEST_CLOSE_MAP_SQLITE_LOCK)
+-_LATEST_CLOSE_MAP_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+ _LATEST_CLOSE_MAP_SQLITE_READY_MAX_ENTRIES = 2_048
++_LATEST_CLOSE_MAP_READY_GATE = SqliteReadyGate()
++_LATEST_CLOSE_MAP_SQLITE_LOCK = _LATEST_CLOSE_MAP_READY_GATE.lock
++_LATEST_CLOSE_MAP_SQLITE_CONDITION = _LATEST_CLOSE_MAP_READY_GATE.condition
++_LATEST_CLOSE_MAP_SQLITE_READY = _LATEST_CLOSE_MAP_READY_GATE.ready_keys
++_LATEST_CLOSE_MAP_SQLITE_INIT_IN_PROGRESS = _LATEST_CLOSE_MAP_READY_GATE.in_progress_keys
+ _LATEST_CLOSE_MAP_SQLITE_KNOWN_PATHS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _LATEST_CLOSE_MAP_SQLITE_KNOWN_PATHS_LOCK = threading.Lock()
+ _LATEST_CLOSE_MAP_SQLITE_KNOWN_PATHS_MAX_ENTRIES = 4_096
+@@ -111,9 +112,8 @@ def _latest_close_source_lookup_keys(path: str) -> tuple[str, ...]:
+
+
+ def _invalidate_latest_close_map_sqlite_ready(db_path: str) -> None:
++    _LATEST_CLOSE_MAP_READY_GATE.invalidate(db_path)
+     db_key = normalize_sqlite_db_key(db_path)
+-    with _LATEST_CLOSE_MAP_SQLITE_CONDITION:
+-        _LATEST_CLOSE_MAP_SQLITE_READY.discard(db_key)
+     with _LATEST_CLOSE_MAP_SQLITE_KNOWN_PATHS_LOCK:
+         stale_keys = [key for key in _LATEST_CLOSE_MAP_SQLITE_KNOWN_PATHS if key[0] == db_key]
+         for tracker_key in stale_keys:
+@@ -159,22 +159,6 @@ def _should_force_latest_close_map_sqlite_prune() -> bool:
+
+
+ def _ensure_latest_close_map_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _LATEST_CLOSE_MAP_SQLITE_CONDITION:
+-        if db_key in _LATEST_CLOSE_MAP_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _LATEST_CLOSE_MAP_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _LATEST_CLOSE_MAP_SQLITE_INIT_IN_PROGRESS:
+-            _LATEST_CLOSE_MAP_SQLITE_CONDITION.wait()
+-            if db_key in _LATEST_CLOSE_MAP_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _LATEST_CLOSE_MAP_SQLITE_READY.discard(db_key)
+-
+-        _LATEST_CLOSE_MAP_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -201,31 +185,20 @@ def _ensure_latest_close_map_sqlite(db_path: str, logger: logging.Logger | None)
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_LATEST_CLOSE_MAP_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_LATEST_CLOSE_MAP_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         if logger is not None:
+             logger.debug(f"Failed to initialize latest-close sqlite cache: {error}")
+-        return False
+-    finally:
+-        with _LATEST_CLOSE_MAP_SQLITE_CONDITION:
+-            _LATEST_CLOSE_MAP_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _LATEST_CLOSE_MAP_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_LATEST_CLOSE_MAP_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _LATEST_CLOSE_MAP_SQLITE_READY.discard(db_key)
+-            _LATEST_CLOSE_MAP_SQLITE_CONDITION.notify_all()
++
++    return _LATEST_CLOSE_MAP_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_LATEST_CLOSE_MAP_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_LATEST_CLOSE_MAP_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=_LATEST_CLOSE_MAP_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _load_latest_close_map_from_sqlite(
+
+diff --git a/services/kr_market_realtime_market_map_cache.py b/services/kr_market_realtime_market_map_cache.py
+index e0aee97..2a6556b 100644
+--- a/services/kr_market_realtime_market_map_cache.py
++++ b/services/kr_market_realtime_market_map_cache.py
+@@ -17,8 +17,8 @@ from typing import Callable
+ import pandas as pd
+
+ from services.kr_market_csv_utils import load_csv_readonly as _load_csv_readonly
++from services.sqlite_ready_gate import SqliteReadyGate
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_order_case_sql,
+     build_sqlite_pragmas,
+@@ -34,11 +34,12 @@ from services.sqlite_utils import (
+ _MARKET_MAP_CACHE_LOCK = threading.Lock()
+ _MARKET_MAP_CACHE: OrderedDict[tuple[str, int, int], dict[str, str]] = OrderedDict()
+ _MARKET_MAP_MEMORY_MAX_ENTRIES = 16
+-_MARKET_MAP_SQLITE_READY: set[str] = set()
+-_MARKET_MAP_SQLITE_LOCK = threading.Lock()
+-_MARKET_MAP_SQLITE_CONDITION = threading.Condition(_MARKET_MAP_SQLITE_LOCK)
+-_MARKET_MAP_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+ _MARKET_MAP_SQLITE_READY_MAX_ENTRIES = 2_048
++_MARKET_MAP_READY_GATE = SqliteReadyGate()
++_MARKET_MAP_SQLITE_LOCK = _MARKET_MAP_READY_GATE.lock
++_MARKET_MAP_SQLITE_CONDITION = _MARKET_MAP_READY_GATE.condition
++_MARKET_MAP_SQLITE_READY = _MARKET_MAP_READY_GATE.ready_keys
++_MARKET_MAP_SQLITE_INIT_IN_PROGRESS = _MARKET_MAP_READY_GATE.in_progress_keys
+ _MARKET_MAP_SQLITE_KNOWN_PATHS: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _MARKET_MAP_SQLITE_KNOWN_PATHS_LOCK = threading.Lock()
+ _MARKET_MAP_SQLITE_KNOWN_PATHS_MAX_ENTRIES = 4_096
+@@ -111,9 +112,8 @@ def _market_map_source_lookup_keys(path: str) -> tuple[str, ...]:
+
+
+ def _invalidate_market_map_sqlite_ready(db_path: str) -> None:
++    _MARKET_MAP_READY_GATE.invalidate(db_path)
+     db_key = normalize_sqlite_db_key(db_path)
+-    with _MARKET_MAP_SQLITE_CONDITION:
+-        _MARKET_MAP_SQLITE_READY.discard(db_key)
+     with _MARKET_MAP_SQLITE_KNOWN_PATHS_LOCK:
+         stale_keys = [key for key in _MARKET_MAP_SQLITE_KNOWN_PATHS if key[0] == db_key]
+         for tracker_key in stale_keys:
+@@ -159,22 +159,6 @@ def _should_force_market_map_sqlite_prune() -> bool:
+
+
+ def _ensure_market_map_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _MARKET_MAP_SQLITE_CONDITION:
+-        if db_key in _MARKET_MAP_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _MARKET_MAP_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _MARKET_MAP_SQLITE_INIT_IN_PROGRESS:
+-            _MARKET_MAP_SQLITE_CONDITION.wait()
+-            if db_key in _MARKET_MAP_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _MARKET_MAP_SQLITE_READY.discard(db_key)
+-
+-        _MARKET_MAP_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -201,31 +185,20 @@ def _ensure_market_map_sqlite(db_path: str, logger: logging.Logger | None) -> bo
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_MARKET_MAP_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_MARKET_MAP_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         if logger is not None:
+             logger.debug(f"Failed to initialize market map sqlite cache: {error}")
+-        return False
+-    finally:
+-        with _MARKET_MAP_SQLITE_CONDITION:
+-            _MARKET_MAP_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _MARKET_MAP_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_MARKET_MAP_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _MARKET_MAP_SQLITE_READY.discard(db_key)
+-            _MARKET_MAP_SQLITE_CONDITION.notify_all()
++
++    return _MARKET_MAP_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_MARKET_MAP_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_MARKET_MAP_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=_MARKET_MAP_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def _load_market_map_from_sqlite(
+
+diff --git a/services/kr_market_realtime_price_cache.py b/services/kr_market_realtime_price_cache.py
+index 003f038..1483404 100644
+--- a/services/kr_market_realtime_price_cache.py
++++ b/services/kr_market_realtime_price_cache.py
+@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
+ from typing import Any, Callable, Iterator
+
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_in_placeholders,
+     build_sqlite_pragmas,
+     connect_sqlite,
+@@ -24,11 +23,13 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+-_REALTIME_PRICE_SQLITE_READY: set[str] = set()
+-_REALTIME_PRICE_SQLITE_READY_LOCK = threading.Lock()
+-_REALTIME_PRICE_SQLITE_READY_CONDITION = threading.Condition(_REALTIME_PRICE_SQLITE_READY_LOCK)
+-_REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
++_REALTIME_PRICE_SQLITE_READY_GATE = SqliteReadyGate()
++_REALTIME_PRICE_SQLITE_READY = _REALTIME_PRICE_SQLITE_READY_GATE.ready_keys
++_REALTIME_PRICE_SQLITE_READY_LOCK = _REALTIME_PRICE_SQLITE_READY_GATE.lock
++_REALTIME_PRICE_SQLITE_READY_CONDITION = _REALTIME_PRICE_SQLITE_READY_GATE.condition
++_REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS = _REALTIME_PRICE_SQLITE_READY_GATE.in_progress_keys
+ _REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES = 2_048
+ _REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS = 5
+ _YFINANCE_FAILURE_CACHE_RETENTION_DAYS = 7
+@@ -233,22 +234,6 @@ def _recover_realtime_price_sqlite_schema(
+
+
+ def _ensure_realtime_price_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _REALTIME_PRICE_SQLITE_READY_CONDITION:
+-        if db_key in _REALTIME_PRICE_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _REALTIME_PRICE_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS:
+-            _REALTIME_PRICE_SQLITE_READY_CONDITION.wait()
+-            if db_key in _REALTIME_PRICE_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _REALTIME_PRICE_SQLITE_READY.discard(db_key)
+-
+-        _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -288,31 +273,20 @@ def _ensure_realtime_price_sqlite(db_path: str, logger: logging.Logger | None) -
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         if logger is not None:
+             logger.debug(f"Failed to initialize realtime price sqlite cache: {error}")
+-        return False
+-    finally:
+-        with _REALTIME_PRICE_SQLITE_READY_CONDITION:
+-            _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _REALTIME_PRICE_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _REALTIME_PRICE_SQLITE_READY.discard(db_key)
+-            _REALTIME_PRICE_SQLITE_READY_CONDITION.notify_all()
++
++    return _REALTIME_PRICE_SQLITE_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        max_ready_entries=_REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES,
++    )
+
+
+ def load_cached_realtime_prices(
+
+diff --git a/services/kr_market_vcp_signals_cache.py b/services/kr_market_vcp_signals_cache.py
+index 85089bb..ea4aa02 100644
+--- a/services/kr_market_vcp_signals_cache.py
++++ b/services/kr_market_vcp_signals_cache.py
+@@ -16,7 +16,6 @@ from datetime import datetime
+ from typing import Any
+
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_pragmas,
+     connect_sqlite,
+     is_sqlite_missing_table_error,
+@@ -25,6 +24,7 @@ from services.sqlite_utils import (
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+
+ _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
+@@ -37,11 +37,12 @@ _VCP_SIGNALS_MEMORY_CACHE: OrderedDict[
+ ] = OrderedDict()
+ _VCP_SIGNALS_MEMORY_MAX_ENTRIES = 16
+ _VCP_SIGNALS_SQLITE_MAX_ROWS = 64
+-_VCP_SIGNALS_SQLITE_READY: set[str] = set()
+ _VCP_SIGNALS_SQLITE_READY_MAX_ENTRIES = 2_048
+-_VCP_SIGNALS_SQLITE_READY_LOCK = threading.Lock()
+-_VCP_SIGNALS_SQLITE_READY_CONDITION = threading.Condition(_VCP_SIGNALS_SQLITE_READY_LOCK)
+-_VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS: set[str] = set()
++_VCP_SIGNALS_SQLITE_GATE = SqliteReadyGate()
++_VCP_SIGNALS_SQLITE_READY = _VCP_SIGNALS_SQLITE_GATE.ready_keys
++_VCP_SIGNALS_SQLITE_READY_LOCK = _VCP_SIGNALS_SQLITE_GATE.lock
++_VCP_SIGNALS_SQLITE_READY_CONDITION = _VCP_SIGNALS_SQLITE_GATE.condition
++_VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS = _VCP_SIGNALS_SQLITE_GATE.in_progress_keys
+ _VCP_SIGNALS_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
+ _VCP_SIGNALS_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
+ _VCP_SIGNALS_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
+@@ -150,22 +151,6 @@ def _should_force_vcp_signals_sqlite_prune() -> bool:
+
+
+ def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with _VCP_SIGNALS_SQLITE_READY_CONDITION:
+-        if db_key in _VCP_SIGNALS_SQLITE_READY:
+-            if sqlite_db_path_exists(db_path):
+-                return True
+-            _VCP_SIGNALS_SQLITE_READY.discard(db_key)
+-
+-        while db_key in _VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS:
+-            _VCP_SIGNALS_SQLITE_READY_CONDITION.wait()
+-            if db_key in _VCP_SIGNALS_SQLITE_READY:
+-                if sqlite_db_path_exists(db_path):
+-                    return True
+-                _VCP_SIGNALS_SQLITE_READY.discard(db_key)
+-
+-        _VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS.add(db_key)
+-
+     def _initialize_schema() -> None:
+         with connect_sqlite(
+             db_path,
+@@ -191,31 +176,20 @@ def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
+             )
+             conn.commit()
+
+-    initialization_succeeded = False
+-    try:
+-        run_sqlite_with_retry(
+-            _initialize_schema,
+-            max_retries=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
+-            retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
+-        )
+-        initialization_succeeded = True
+-        return True
+-    except Exception as error:
++    def _log_failure(error: Exception) -> None:
+         if logger:
+             logger.debug(f"Failed to initialize vcp signals sqlite cache: {error}")
+-        return False
+-    finally:
+-        with _VCP_SIGNALS_SQLITE_READY_CONDITION:
+-            _VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS.discard(db_key)
+-            if initialization_succeeded:
+-                add_bounded_ready_key(
+-                    _VCP_SIGNALS_SQLITE_READY,
+-                    db_key,
+-                    max_entries=_VCP_SIGNALS_SQLITE_READY_MAX_ENTRIES,
+-                )
+-            else:
+-                _VCP_SIGNALS_SQLITE_READY.discard(db_key)
+-            _VCP_SIGNALS_SQLITE_READY_CONDITION.notify_all()
++
++    return _VCP_SIGNALS_SQLITE_GATE.ensure(
++        db_path,
++        initialize=_initialize_schema,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
++        max_ready_entries=_VCP_SIGNALS_SQLITE_READY_MAX_ENTRIES,
++        on_failure=_log_failure,
++    )
+
+
+ def build_vcp_signals_cache_signature(
+
+diff --git a/services/paper_trading_db_setup.py b/services/paper_trading_db_setup.py
+index f706f95..81feac8 100644
+--- a/services/paper_trading_db_setup.py
++++ b/services/paper_trading_db_setup.py
+@@ -5,27 +5,26 @@
+ from __future__ import annotations
+
+ import sqlite3
+-import threading
+
+ from services.paper_trading_constants import LEGACY_UNASSIGNED_OWNER_ID
+ from services.sqlite_utils import (
+-    add_bounded_ready_key,
+     build_sqlite_pragmas,
+     connect_sqlite,
+-    normalize_sqlite_db_key,
+     run_sqlite_with_retry,
+     sqlite_db_path_exists,
+ )
++from services.sqlite_ready_gate import SqliteReadyGate
+
+ SQLITE_BUSY_TIMEOUT_MS = 30_000
+ SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS)
+ SQLITE_RETRY_ATTEMPTS = 2
+ SQLITE_RETRY_DELAY_SECONDS = 0.03
+-DB_INIT_READY_LOCK = threading.Lock()
+-DB_INIT_READY_CONDITION = threading.Condition(DB_INIT_READY_LOCK)
+-DB_INIT_READY_PATHS: set[str] = set()
++DB_INIT_READY_GATE = SqliteReadyGate()
++DB_INIT_READY_LOCK = DB_INIT_READY_GATE.lock
++DB_INIT_READY_CONDITION = DB_INIT_READY_GATE.condition
++DB_INIT_READY_PATHS = DB_INIT_READY_GATE.ready_keys
+ DB_INIT_READY_MAX_ENTRIES = 2_048
+-DB_INIT_IN_PROGRESS_PATHS: set[str] = set()
++DB_INIT_IN_PROGRESS_PATHS = DB_INIT_READY_GATE.in_progress_keys
+
+ _ACCOUNT_TABLES = ("portfolio", "trade_log", "asset_history", "balance")
+
+@@ -155,19 +154,6 @@ def _migrate_price_cache(cursor: sqlite3.Cursor) -> None:
+
+ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
+     """단일 IMMEDIATE 트랜잭션으로 owner 스키마와 빈 활성 가격 캐시를 준비한다."""
+-    db_key = normalize_sqlite_db_key(db_path)
+-    with DB_INIT_READY_CONDITION:
+-        if force_recheck:
+-            DB_INIT_READY_PATHS.discard(db_key)
+-        elif db_key in DB_INIT_READY_PATHS and sqlite_db_path_exists(db_path):
+-            return True
+-        while db_key in DB_INIT_IN_PROGRESS_PATHS:
+-            DB_INIT_READY_CONDITION.wait()
+-            if db_key in DB_INIT_READY_PATHS and sqlite_db_path_exists(db_path):
+-                return True
+-        DB_INIT_IN_PROGRESS_PATHS.add(db_key)
+-
+-    succeeded = False
+     def _initialize() -> None:
+         with connect_sqlite(db_path, timeout_seconds=30, pragmas=SQLITE_INIT_PRAGMAS) as conn:
+             cursor = conn.cursor()
+@@ -181,18 +167,17 @@ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
+                 conn.rollback()
+                 raise
+
+-    try:
+-        run_sqlite_with_retry(_initialize, max_retries=SQLITE_RETRY_ATTEMPTS, retry_delay_seconds=SQLITE_RETRY_DELAY_SECONDS)
+-        succeeded = True
+-        return True
+-    except Exception as error:
++    def _on_failure(error: Exception) -> None:
+         logger.error(f"Failed to initialize paper trading db: {error}")
+-        return False
+-    finally:
+-        with DB_INIT_READY_CONDITION:
+-            DB_INIT_IN_PROGRESS_PATHS.discard(db_key)
+-            if succeeded:
+-                add_bounded_ready_key(DB_INIT_READY_PATHS, db_key, max_entries=DB_INIT_READY_MAX_ENTRIES)
+-            else:
+-                DB_INIT_READY_PATHS.discard(db_key)
+-            DB_INIT_READY_CONDITION.notify_all()
++
++    return DB_INIT_READY_GATE.ensure(
++        db_path,
++        initialize=_initialize,
++        db_path_exists=sqlite_db_path_exists,
++        run_with_retry=run_sqlite_with_retry,
++        retry_attempts=SQLITE_RETRY_ATTEMPTS,
++        retry_delay_seconds=SQLITE_RETRY_DELAY_SECONDS,
++        on_failure=_on_failure,
++        force_recheck=force_recheck,
++        max_ready_entries=DB_INIT_READY_MAX_ENTRIES,
++    )
+
+diff --git a/services/sqlite_ready_gate.py b/services/sqlite_ready_gate.py
+index b7fbfb3..a67f082 100644
+--- a/services/sqlite_ready_gate.py
++++ b/services/sqlite_ready_gate.py
+@@ -49,7 +49,8 @@ class SqliteReadyGate:
+         # 재진입 불가한 Lock 을 쓴다. RLock 이면 락을 쥔 채로 ensure() 를 부르는
+         # 코드가 조용히 통과하면서 초기화 내내 다른 스레드를 막는다. Lock 이면
+         # 그 자리에서 교착으로 드러난다.
+-        self.condition = threading.Condition(threading.Lock())
++        self.lock = threading.Lock()
++        self.condition = threading.Condition(self.lock)
+         self.ready_keys: set[str] = set()
+         self.in_progress_keys: set[str] = set()
+         self._max_ready_entries = max_ready_entries
+@@ -69,10 +70,14 @@ class SqliteReadyGate:
+         retry_attempts: int,
+         retry_delay_seconds: float,
+         on_failure: Callable[[Exception], None],
++        force_recheck: bool = False,
++        max_ready_entries: int | None = None,
+     ) -> bool:
+         db_key = normalize_sqlite_db_key(db_path_text)
+         with self.condition:
+-            if db_key in self.ready_keys:
++            if force_recheck:
++                self.ready_keys.discard(db_key)
++            elif db_key in self.ready_keys:
+                 if db_path_exists(db_path_text):
+                     return True
+                 self.ready_keys.discard(db_key)
+@@ -105,7 +110,7 @@ class SqliteReadyGate:
+                     add_bounded_ready_key(
+                         self.ready_keys,
+                         db_key,
+-                        max_entries=self._max_ready_entries,
++                        max_entries=(self._max_ready_entries if max_ready_entries is None else max_ready_entries),
+                     )
+                 else:
+                     self.ready_keys.discard(db_key)
+
+diff --git a/tests/chatbot/test_daily_suggestions_service.py b/tests/chatbot/test_daily_suggestions_service.py
+index 1bb0b86..94875a0 100644
+--- a/tests/chatbot/test_daily_suggestions_service.py
++++ b/tests/chatbot/test_daily_suggestions_service.py
+@@ -20,8 +20,9 @@ class _FakeMemory:
+     def __init__(self):
+         self.saved = []
+
+-    def add(self, key, value):
++    def save_daily_suggestions(self, key, value):
+         self.saved.append((key, value))
++        return True
+
+
+ class _FakeBot:
+
+diff --git a/tests/chatbot/test_runtime_setup_service.py b/tests/chatbot/test_runtime_setup_service.py
+index d20ac70..818a441 100644
+--- a/tests/chatbot/test_runtime_setup_service.py
++++ b/tests/chatbot/test_runtime_setup_service.py
+@@ -22,7 +22,6 @@ from chatbot.runtime_setup_service import (
+     create_genai_client,
+     get_user_profile,
+     init_models,
+-    init_user_profile_from_env,
+     load_stock_map,
+     clear_stock_map_cache,
+     resolve_active_client,
+@@ -185,14 +184,11 @@ def test_load_stock_map_reuses_sqlite_cache_after_memory_clear(monkeypatch, tmp_
+     assert row and row[0] >= 1
+
+
+-def test_profile_init_get_update(monkeypatch):
+-    logger = _FakeLogger()
++def test_profile_get_update_uses_owner_settings_only():
+     memory = _FakeMemory()
+-    monkeypatch.setenv("USER_PROFILE", "공격적 투자자")
+
+-    init_user_profile_from_env(memory, logger)
+     profile = get_user_profile(memory)
+-    assert profile["persona"] == "공격적 투자자"
++    assert profile["name"] == "흑기사"
+
+     updated = update_user_profile(memory, "테스터", "중립", owner_id="")
+     assert updated == {"name": "테스터", "persona": "중립"}
+
+NEW FILE tests/chatbot/test_storage_memory_batch.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""CHAT-023/027 메모리 경계와 공용 추천 캐시 회귀 테스트."""
+
+import json
+import logging
+import os
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
+
+
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+
+import chatbot.storage_memory_manager as storage_memory_manager
+import chatbot.storage_sqlite_memory as storage_sqlite_memory
+
+from chatbot.command_service import handle_clear_command, handle_memory_command
+from chatbot.data_service import get_cached_daily_suggestions
+from chatbot.runtime_setup_service import DEFAULT_PROFILE, get_user_profile, update_user_profile
+from chatbot.storage_memory_manager import MemoryManager
+from chatbot.storage_sqlite_memory import load_memories_from_sqlite
+
+
+_LOGGER = logging.getLogger("test_storage_memory_batch")
+_CACHE_PREFIX = "daily_suggestions_"
+
+
+class _OwnerHistory:
+    def clear_for_owner(self, owner_id: str) -> int:
+        assert owner_id == "owner-a"
+        return 0
+
+
+def _new_manager(tmp_path: Path, monkeypatch) -> MemoryManager:
+    monkeypatch.setenv("CHATBOT_MEMORY_LEGACY_SNAPSHOT_INTERVAL_SECONDS", "0")
+    return MemoryManager(user_id="test-user", data_dir=tmp_path)
+
+
+def _cache_record(value: object, updated_at: datetime) -> dict[str, object]:
+    return {"value": value, "updated_at": updated_at.isoformat()}
+
+
+def test_memory_commands_keep_profile_in_settings_boundary(tmp_path: Path, monkeypatch) -> None:
+    """일반 메모리 명령은 설정 프로필을 노출하거나 변경·삭제하지 않는다."""
+    memory = _new_manager(tmp_path, monkeypatch)
+    bot = SimpleNamespace(memory=memory)
+    update_user_profile(memory, "갑", "공격적", owner_id="owner-a")
+    memory.add("watch", "삼성전자", owner_id="owner-a")
+
+    rendered = handle_memory_command(bot, ["view"], owner_id="owner-a")
+    assert "watch" in rendered
+    assert "user_profile" not in rendered
+    assert "공격적" not in rendered
+
+    for action in (
+        ["add", "user_profile", "변경"],
+        ["update", "user_profile", "변경"],
+        ["remove", "user_profile"],
+    ):
+        response = handle_memory_command(bot, action, owner_id="owner-a")
+        assert "설정" in response
+        assert get_user_profile(memory, "owner-a") == {"name": "갑", "persona": "공격적"}
+
+    assert "초기화" in handle_memory_command(bot, ["clear"], owner_id="owner-a")
+    assert memory.view("owner-a") == {
+        "user_profile": memory.get("user_profile", "owner-a")
+    }
+    assert get_user_profile(memory, "owner-a") == {"name": "갑", "persona": "공격적"}
+
+    clear_all_bot = SimpleNamespace(
+        history=_OwnerHistory(),
+        memory=memory,
+        _data_cache=None,
+        _cache_timestamp=None,
+    )
+    assert "초기화" in handle_clear_command(
+        clear_all_bot,
+        ["/clear", "all"],
+        session_id=None,
+        owner_id="owner-a",
+    )
+    assert get_user_profile(memory, "owner-a") == DEFAULT_PROFILE
+
+
+def test_legacy_public_cache_is_normalized_without_touching_other_namespaces(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """legacy JSON 이관 전 공용 literal 캐시만 TTL/500 정책으로 정규화한다."""
+    now = datetime.now()
+    valid_time = now - timedelta(minutes=30)
+    expired_time = now - timedelta(hours=2)
+    future_time = now + timedelta(minutes=1)
+    public_cache = {
+        f"{_CACHE_PREFIX}default_{index:03d}": _cache_record(index, valid_time)
+        for index in range(502)
+    }
+    public_cache[f"{_CACHE_PREFIX}expired"] = _cache_record("old", expired_time)
+    public_cache[f"{_CACHE_PREFIX}future"] = _cache_record("future", future_time)
+    public_cache["shared_note"] = _cache_record("keep", valid_time)
+    public_cache["user_profile"] = _cache_record(
+        {"name": "공용", "persona": "중립"}, valid_time
+    )
+    legacy = {
+        "": public_cache,
+        "owner-a": {
+            f"{_CACHE_PREFIX}private": _cache_record("private", expired_time),
+            "user_profile": _cache_record({"name": "갑", "persona": "공격적"}, valid_time),
+        },
+    }
+    (tmp_path / "chatbot_memory.json").write_text(
+        json.dumps(legacy, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    memory = _new_manager(tmp_path, monkeypatch)
+    shared = memory.view("")
+    shared_cache_keys = sorted(
+        key for key in shared if key.startswith(_CACHE_PREFIX)
+    )
+
+    assert len(shared_cache_keys) == 500
+    assert f"{_CACHE_PREFIX}expired" not in shared
+    assert f"{_CACHE_PREFIX}future" not in shared
+    assert f"{_CACHE_PREFIX}default_000" not in shared
+    assert f"{_CACHE_PREFIX}default_501" in shared
+    assert shared["shared_note"]["value"] == "keep"
+    assert shared["user_profile"]["value"]["name"] == "공용"
+    assert memory.view("owner-a")[f"{_CACHE_PREFIX}private"]["value"] == "private"
+
+    sqlite_memories = load_memories_from_sqlite(memory.db_path, _LOGGER)
+    assert sqlite_memories == memory.to_dict()
+    snapshot = json.loads((tmp_path / "chatbot_memory.json").read_text(encoding="utf-8"))
+    assert snapshot == memory.to_dict()
+
+
+def test_daily_suggestions_cache_is_bounded_across_memory_managers(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """여러 매니저의 공용 추천 캐시 저장도 500개와 JSON/SQLite 동기화를 지킨다."""
+    manager_a = _new_manager(tmp_path, monkeypatch)
+    manager_b = _new_manager(tmp_path, monkeypatch)
+    manager_a.add("shared_note", "keep")
+    manager_b.add(f"{_CACHE_PREFIX}private", "keep", owner_id="owner-b")
+    update_user_profile(manager_a, "갑", "공격적", owner_id="owner-a")
+
+    for index in range(502):
+        manager = manager_a if index % 2 == 0 else manager_b
+        assert manager.save_daily_suggestions(
+            f"{_CACHE_PREFIX}default_{index:03d}", [{"title": str(index)}]
+        )
+
+    restored = _new_manager(tmp_path, monkeypatch)
+    shared = restored.view("")
+    shared_cache_keys = [key for key in shared if key.startswith(_CACHE_PREFIX)]
+    assert len(shared_cache_keys) == 500
+    assert shared["shared_note"]["value"] == "keep"
+    assert restored.view("owner-b")[f"{_CACHE_PREFIX}private"]["value"] == "keep"
+    assert get_user_profile(restored, "owner-a") == {"name": "갑", "persona": "공격적"}
+
+    sqlite_memories = load_memories_from_sqlite(restored.db_path, _LOGGER)
+    assert sqlite_memories == restored.to_dict()
+    snapshot = json.loads((tmp_path / "chatbot_memory.json").read_text(encoding="utf-8"))
+    assert snapshot == restored.to_dict()
+
+
+def test_daily_suggestions_save_failure_does_not_apply_memory_or_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """원자적 캐시 저장 실패는 메모리·legacy JSON에 성공처럼 남지 않는다."""
+    memory = _new_manager(tmp_path, monkeypatch)
+    memory.add("shared_note", "before")
+    before_memory = memory.to_dict().copy()
+    before_snapshot = (tmp_path / "chatbot_memory.json").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(
+        "chatbot.storage_memory_manager.save_daily_suggestions_in_sqlite",
+        lambda *args, **kwargs: False,
+    )
+
+    assert not memory.save_daily_suggestions(
+        f"{_CACHE_PREFIX}default_failure", [{"title": "실패"}]
+    )
+    assert memory.to_dict() == before_memory
+    assert (tmp_path / "chatbot_memory.json").read_text(encoding="utf-8") == before_snapshot
+
+
+def test_snapshot_failure_keeps_committed_daily_suggestions_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """스냅샷 실패는 저장 실패로 알리되 이미 커밋한 SQLite 캐시는 되돌리지 않는다."""
+    memory = _new_manager(tmp_path, monkeypatch)
+    memory.add("shared_note", "before")
+    before_snapshot = (tmp_path / "chatbot_memory.json").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(
+        "chatbot.storage_memory_manager.atomic_write_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("snapshot failure")),
+    )
+
+    key = f"{_CACHE_PREFIX}default_snapshot_failure"
+    assert not memory.save_daily_suggestions(key, [{"title": "커밋"}])
+    sqlite_memories = load_memories_from_sqlite(memory.db_path, _LOGGER)
+    assert sqlite_memories is not None
+    assert sqlite_memories[""][key]["value"] == [{"title": "커밋"}]
+    assert (tmp_path / "chatbot_memory.json").read_text(encoding="utf-8") == before_snapshot
+
+
+def test_clear_general_failure_preserves_memory_and_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """일반 메모리 삭제가 실패하면 공용 또는 프로필로 흘러가지 않고 상태를 보존한다."""
+    memory = _new_manager(tmp_path, monkeypatch)
+    update_user_profile(memory, "갑", "공격적", owner_id="owner-a")
+    memory.add("watch", "삼성전자", owner_id="owner-a")
+    before_memory = json.loads(json.dumps(memory.to_dict(), ensure_ascii=False))
+    before_snapshot = (tmp_path / "chatbot_memory.json").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(
+        "chatbot.storage_memory_manager.clear_general_memories_in_sqlite",
+        lambda *args, **kwargs: False,
+    )
+
+    assert "실패" in memory.clear_general("owner-a")
+    assert "식별" in memory.clear_general("")
+    assert memory.to_dict() == before_memory
+    assert (tmp_path / "chatbot_memory.json").read_text(encoding="utf-8") == before_snapshot
+
+
+def test_profile_only_memory_load_does_not_open_a_write_connection(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """정리 대상이 없으면 프로필 조회가 cache prune 쓰기 락을 잡지 않는다."""
+    memory = _new_manager(tmp_path, monkeypatch)
+    update_user_profile(memory, "갑", "공격적", owner_id="owner-a")
+    observed_read_only: list[bool] = []
+    original_connect_sqlite = storage_sqlite_memory.connect_sqlite
+
+    def _observe_connect_sqlite(*args, **kwargs):
+        observed_read_only.append(bool(kwargs.get("read_only")))
+        return original_connect_sqlite(*args, **kwargs)
+
+    monkeypatch.setattr(storage_sqlite_memory, "connect_sqlite", _observe_connect_sqlite)
+
+    loaded = load_memories_from_sqlite(memory.db_path, _LOGGER)
+
+    assert loaded is not None
+    assert get_user_profile(memory, "owner-a") == {"name": "갑", "persona": "공격적"}
+    assert observed_read_only
+    assert all(observed_read_only)
+
+
+def test_delayed_daily_suggestions_writer_keeps_newer_writer_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """대기한 writer의 오래된 now가 먼저 끝난 writer 캐시를 future로 지우지 않는다."""
+    manager_a = _new_manager(tmp_path, monkeypatch)
+    manager_b = _new_manager(tmp_path, monkeypatch)
+    key_a = f"{_CACHE_PREFIX}default_delayed_a"
+    key_b = f"{_CACHE_PREFIX}default_newer_b"
+    original_save = storage_memory_manager.save_daily_suggestions_in_sqlite
+    entered = False
+
+    def _save_b_before_a(*args, **kwargs):
+        nonlocal entered
+        if not entered:
+            entered = True
+            assert manager_b.save_daily_suggestions(key_b, [{"title": "B"}])
+        return original_save(*args, **kwargs)
+
+    monkeypatch.setattr(
+        storage_memory_manager,
+        "save_daily_suggestions_in_sqlite",
+        _save_b_before_a,
+    )
+
+    assert manager_a.save_daily_suggestions(key_a, [{"title": "A"}])
+    loaded = load_memories_from_sqlite(manager_a.db_path, _LOGGER)
+    assert loaded is not None
+    assert loaded[""][key_a]["value"] == [{"title": "A"}]
+    assert loaded[""][key_b]["value"] == [{"title": "B"}]
+
+
+def test_delayed_daily_suggestions_reader_keeps_newer_writer_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """대기한 reader의 오래된 now가 앞서 저장된 캐시를 future로 지우지 않는다."""
+    reader = _new_manager(tmp_path, monkeypatch)
+    writer = _new_manager(tmp_path, monkeypatch)
+    reader.add("shared_note", "ready")
+    key_b = f"{_CACHE_PREFIX}default_newer_reader_b"
+    original_prune = storage_sqlite_memory._prune_daily_suggestions_in_sqlite
+    entered = False
+
+    def _save_b_before_reader_prune(*args, **kwargs):
+        nonlocal entered
+        if not entered:
+            entered = True
+            assert writer.save_daily_suggestions(key_b, [{"title": "B"}])
+        return original_prune(*args, **kwargs)
+
+    monkeypatch.setattr(
+        storage_sqlite_memory,
+        "_prune_daily_suggestions_in_sqlite",
+        _save_b_before_reader_prune,
+    )
+
+    loaded = load_memories_from_sqlite(reader.db_path, _LOGGER)
+    assert loaded is not None
+    assert loaded[""][key_b]["value"] == [{"title": "B"}]
+
+
+def test_legacy_snapshot_written_after_sql_miss_keeps_new_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """SQLite 미스 뒤 새로 읽은 legacy 캐시를 future로 오인해 지우지 않는다."""
+    key = f"{_CACHE_PREFIX}default_legacy_after_sql_miss"
+    memory_file = tmp_path / "chatbot_memory.json"
+    original_load_memories = storage_memory_manager.load_memories_from_sqlite
+    entered = False
+
+    def _write_legacy_after_sql_miss(*args, **kwargs):
+        nonlocal entered
+        result = original_load_memories(*args, **kwargs)
+        if not entered:
+            entered = True
+            assert result is None
+            storage_memory_manager.atomic_write_json(
+                memory_file,
+                {"": {key: _cache_record([{"title": "새 캐시"}], datetime.now())}},
+            )
+        return result
+
+    monkeypatch.setattr(
+        storage_memory_manager,
+        "load_memories_from_sqlite",
+        _write_legacy_after_sql_miss,
+    )
+
+    memory = _new_manager(tmp_path, monkeypatch)
+
+    assert memory.view("")[key]["value"] == [{"title": "새 캐시"}]
+
+
+def test_daily_suggestions_cache_hit_uses_time_after_memory_get(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """memory.get 도중 새로 저장된 캐시도 현재 요청에서 cache hit로 사용한다."""
+    memory = _new_manager(tmp_path, monkeypatch)
+    key = f"{_CACHE_PREFIX}default_get_race"
+    original_get = memory.get
+    entered = False
+
+    def _save_before_get(cache_key, owner_id=None):
+        nonlocal entered
+        if not entered:
+            entered = True
+            assert memory.save_daily_suggestions(key, [{"title": "새 캐시"}])
+        return original_get(cache_key, owner_id)
+
+    monkeypatch.setattr(memory, "get", _save_before_get)
+
+    assert get_cached_daily_suggestions(memory, key, datetime.now()) == [
+        {"title": "새 캐시"}
+    ]
+
+
+def test_snapshot_boundary_keeps_committed_other_writer(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """스냅샷 직전 다른 매니저가 커밋해도 JSON은 SQLite와 같은 행을 보존한다."""
+    manager_a = _new_manager(tmp_path, monkeypatch)
+    manager_b = _new_manager(tmp_path, monkeypatch)
+    key_a = f"{_CACHE_PREFIX}default_snapshot_boundary_a"
+    key_b = f"{_CACHE_PREFIX}default_snapshot_boundary_b"
+    original_snapshot = MemoryManager._write_legacy_memory_snapshot
+    entered = False
+
+    def _save_b_before_a_snapshot(self, memories):
+        nonlocal entered
+        if self is manager_a and not entered:
+            entered = True
+            update_user_profile(manager_b, "을", "중립", owner_id="owner-b")
+            assert manager_b.save_daily_suggestions(key_b, [{"title": "B"}])
+        return original_snapshot(self, memories)
+
+    monkeypatch.setattr(
+        MemoryManager,
+        "_write_legacy_memory_snapshot",
+        _save_b_before_a_snapshot,
+    )
+
+    assert manager_a.save_daily_suggestions(key_a, [{"title": "A"}])
+    snapshot = json.loads((tmp_path / "chatbot_memory.json").read_text(encoding="utf-8"))
+    sqlite_memories = load_memories_from_sqlite(manager_a.db_path, _LOGGER)
+    assert sqlite_memories is not None
+    assert snapshot == sqlite_memories
+    assert snapshot[""][key_a]["value"] == [{"title": "A"}]
+    assert snapshot[""][key_b]["value"] == [{"title": "B"}]
+
+    assert manager_a.to_dict() == snapshot
+    assert snapshot["owner-b"]["user_profile"]["value"]["name"] == "을"
+
+diff --git a/tests/services/test_sqlite_ready_gate_refactor.py b/tests/services/test_sqlite_ready_gate_refactor.py
+index a78abe8..be7fe22 100644
+--- a/tests/services/test_sqlite_ready_gate_refactor.py
++++ b/tests/services/test_sqlite_ready_gate_refactor.py
+@@ -577,3 +577,76 @@ def test_both_modules_prune_on_the_same_schedule(monkeypatch, tmp_path):
+
+     assert stock_map_prune_rounds == [1, 3]
+     assert result_text_prune_rounds == [1, 3]
++
++
++def test_ready_gate_force_recheck_and_dynamic_ready_limit(tmp_path):
++    gate = SqliteReadyGate(max_ready_entries=8)
++    calls = []
++    def ensure(path, **options):
++        return gate.ensure(str(path), initialize=lambda: calls.append(str(path)),
++                           db_path_exists=lambda _: True, run_with_retry=_run_immediately,
++                           retry_attempts=0, retry_delay_seconds=0,
++                           on_failure=lambda error: None, **options)
++    first = tmp_path / "one.db"
++    assert ensure(first)
++    assert ensure(first)
++    assert len(calls) == 1
++    assert ensure(first, force_recheck=True)
++    assert len(calls) == 2
++    assert ensure(tmp_path / "two.db", max_ready_entries=1)
++    assert len(gate.ready_keys) == 1
++
++
++def test_forced_waiter_shares_in_progress_initialization(tmp_path):
++    gate = SqliteReadyGate()
++    entered = threading.Event()
++    release = threading.Event()
++    waiting = threading.Event()
++    calls = []
++    results = []
++    errors = []
++    original_wait = gate.condition.wait
++    def observed_wait(*args, **kwargs):
++        waiting.set()
++        return original_wait(*args, **kwargs)
++    gate.condition.wait = observed_wait
++    def initialize():
++        calls.append(1)
++        entered.set()
++        assert release.wait(3)
++    def run(force):
++        try:
++            results.append(gate.ensure(str(tmp_path / "one.db"), initialize=initialize,
++                db_path_exists=lambda _: True, run_with_retry=_run_immediately,
++                retry_attempts=0, retry_delay_seconds=0, on_failure=lambda error: None,
++                force_recheck=force))
++        except Exception as error:
++            errors.append(error)
++            entered.set()
++            waiting.set()
++    first = threading.Thread(target=run, args=(False,), daemon=True)
++    second = threading.Thread(target=run, args=(True,), daemon=True)
++    try:
++        first.start()
++        assert entered.wait(3)
++        second.start()
++        assert waiting.wait(3)
++    finally:
++        release.set()
++        first.join(3)
++        if second.ident is not None:
++            second.join(3)
++    assert not first.is_alive() and not second.is_alive()
++    assert not errors
++    assert results == [True, True]
++    assert calls == [1]
++    assert not gate.in_progress_keys
++
++
++def test_ready_gate_exposes_same_non_reentrant_lock():
++    gate = SqliteReadyGate()
++    assert gate.lock.acquire(blocking=False)
++    try:
++        assert not gate.condition.acquire(blocking=False)
++    finally:
++        gate.lock.release()

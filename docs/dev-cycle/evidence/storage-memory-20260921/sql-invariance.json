@@ -1,0 +1,66 @@
+{
+  "chatbot/storage_sqlite_common.py": {
+    "sql_calls": 11,
+    "unchanged": true
+  },
+  "services/kr_market_vcp_signals_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/kr_market_jongga_payload_helpers.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/kr_market_data_cache_jongga.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/kr_market_backtest_summary_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/kr_market_cumulative_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/kr_market_realtime_latest_close_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/kr_market_realtime_market_map_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/file_row_count_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "engine/signal_tracker_source_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "engine/signal_tracker_analysis_source_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "engine/kr_ai_stock_info_cache.py": {
+    "sql_calls": 4,
+    "unchanged": true
+  },
+  "services/kr_market_data_cache_sqlite_payload.py": {
+    "sql_calls": 10,
+    "unchanged": true
+  },
+  "services/common_update_status_service.py": {
+    "sql_calls": 7,
+    "unchanged": true
+  },
+  "services/kr_market_realtime_price_cache.py": {
+    "sql_calls": 10,
+    "unchanged": true
+  },
+  "services/paper_trading_db_setup.py": {
+    "sql_calls": 30,
+    "unchanged": true
+  }
+}

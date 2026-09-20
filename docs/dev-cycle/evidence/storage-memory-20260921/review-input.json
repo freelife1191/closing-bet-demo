@@ -1,0 +1,13 @@
+{
+  "base": "8b5f6d579b189b1196826b40315314c81ec26386",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "scope": [
+    "CHAT-027",
+    "CHAT-023",
+    "CHAT-012",
+    "INFRA-032"
+  ],
+  "approval": "현재 4건 설계 제안에 사용자 승인",
+  "observed_at": "2026-09-21T01:01:52.279234+09:00",
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/storage-memory-20260921-j28901sw"
+}

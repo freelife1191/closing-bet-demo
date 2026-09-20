@@ -295,7 +295,8 @@
 ## P2 — 대기
 
 ### [CHAT-027] 프로필이 메모리 영역에 들어오면서 생긴 어긋남 둘
-- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰
+- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
+- 카테고리: 챗봇 | 티어: T3 | 근거: 2026-09-06 `[CHAT-021]` 사이클의 코드 리뷰
 - `[CHAT-021]` 이 `user_profile` 을 소유자 버킷으로 옮기면서 메모리와 같은 취급을 받게
   되었고, 그 결과 두 자리가 어긋납니다. 둘 다 사소하고 같은 주변이라 한 항목으로 묶습니다.
   종전에 셋이었던 것 가운데 화면의 `/clear all` 설명 문구는 2026-09-07 백로그 정리에서
@@ -311,7 +312,8 @@
 - [ ] `init_user_profile_from_env` 를 지우거나 발동하도록 고침
 
 ### [CHAT-023] 공용 메모리의 추천 질문 캐시가 상한 없이 쌓인다
-- 카테고리: 챗봇 | 티어: T1 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
+- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
+- 카테고리: 챗봇 | 티어: T3 | 근거: 2026-09-05 `[CHAT-017]` 사이클의 코드 리뷰
 - `chatbot/daily_suggestions_service.py:65` 가 `daily_suggestions_<persona>_<watchlist>` 키로
   추천 질문을 공용 영역에 저장합니다. `chatbot/data_service.py:133` 의 조회는 1시간 신선도만
   보고 낡은 행을 지우지는 않습니다.
@@ -327,7 +329,8 @@
 - [ ] 상한이 실제로 걸리는지 pytest 로 고정
 
 ### [CHAT-012] 챗봇 저장소의 스키마 준비 골격을 공용 게이트로 흡수
-- 카테고리: 챗봇 | 티어: T2 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 code-reviewer 지적
+- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
+- 카테고리: 챗봇 | 티어: T3 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 code-reviewer 지적
 - QA 시나리오: 챗봇 대화 목록과 메시지 이력이 통합 전과 같게 조회된다
 - `chatbot/storage_sqlite_common.py:95-194` 의 `ensure_chatbot_storage_schema` 가
   `[CHAT-003]` 이 만든 `services/sqlite_ready_gate.py` 의 `SqliteReadyGate` 와 같은
@@ -343,6 +346,7 @@
 - [ ] 기존 회귀 테스트가 그대로 통과하는지 확인
 
 ### [INFRA-032] 나머지 열다섯 모듈의 SQLite 준비 골격을 공용 게이트로 흡수
+- 설계 승인: 2026-09-21 현재 4건 설계에 사용자 「승인」. 범위/계획: `evidence/storage-memory-20260921/plan.md`. T3 공유 검토, UltraQA App 대응·ego-browser 실측.
 - 카테고리: 인프라 | 티어: T3 | 근거: 2026-09-05 `[CHAT-003]` 사이클의 code-reviewer 지적
 - QA 시나리오: 종가베팅·VCP·실시간 시세·누적 성과 화면이 통합 전과 같은 값을 그린다
 - `services/sqlite_utils.py` 의 `add_bounded_ready_key` 를 쓰는 비테스트 모듈이 열여섯

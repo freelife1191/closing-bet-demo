@@ -22,7 +22,6 @@ from chatbot.runtime_setup_service import (
     create_genai_client,
     get_user_profile,
     init_models,
-    init_user_profile_from_env,
     load_stock_map,
     clear_stock_map_cache,
     resolve_active_client,
@@ -185,14 +184,11 @@ def test_load_stock_map_reuses_sqlite_cache_after_memory_clear(monkeypatch, tmp_
     assert row and row[0] >= 1
 
 
-def test_profile_init_get_update(monkeypatch):
-    logger = _FakeLogger()
+def test_profile_get_update_uses_owner_settings_only():
     memory = _FakeMemory()
-    monkeypatch.setenv("USER_PROFILE", "공격적 투자자")
 
-    init_user_profile_from_env(memory, logger)
     profile = get_user_profile(memory)
-    assert profile["persona"] == "공격적 투자자"
+    assert profile["name"] == "흑기사"
 
     updated = update_user_profile(memory, "테스터", "중립", owner_id="")
     assert updated == {"name": "테스터", "persona": "중립"}

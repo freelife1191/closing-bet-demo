@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import threading
 from pathlib import Path
 
+from services.sqlite_ready_gate import SqliteReadyGate
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
-    normalize_sqlite_db_key,
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
@@ -33,11 +31,12 @@ _SQLITE_SESSION_PRAGMAS = build_sqlite_pragmas(
 _SQLITE_TIMEOUT_SECONDS = 30
 _SQLITE_RETRY_ATTEMPTS = 2
 _SQLITE_RETRY_DELAY_SECONDS = 0.03
-_SCHEMA_READY_LOCK = threading.Lock()
-_SCHEMA_READY_CONDITION = threading.Condition(_SCHEMA_READY_LOCK)
-_SCHEMA_READY_DB_PATHS: set[str] = set()
+_SCHEMA_GATE = SqliteReadyGate()
+_SCHEMA_READY_LOCK = _SCHEMA_GATE.lock
+_SCHEMA_READY_CONDITION = _SCHEMA_GATE.condition
+_SCHEMA_READY_DB_PATHS = _SCHEMA_GATE.ready_keys
 _SCHEMA_READY_MAX_ENTRIES = 2_048
-_SCHEMA_INIT_IN_PROGRESS: set[str] = set()
+_SCHEMA_INIT_IN_PROGRESS = _SCHEMA_GATE.in_progress_keys
 
 
 def resolve_chatbot_storage_db_path(data_dir: Path) -> Path:
@@ -156,24 +155,6 @@ def ensure_chatbot_storage_schema(
     force_recheck: bool = False,
 ) -> bool:
     db_path_text = str(db_path)
-    db_key = normalize_sqlite_db_key(db_path_text)
-    with _SCHEMA_READY_CONDITION:
-        if force_recheck:
-            _SCHEMA_READY_DB_PATHS.discard(db_key)
-        elif db_key in _SCHEMA_READY_DB_PATHS:
-            if sqlite_db_path_exists(db_path_text):
-                return True
-            _SCHEMA_READY_DB_PATHS.discard(db_key)
-
-        while db_key in _SCHEMA_INIT_IN_PROGRESS:
-            _SCHEMA_READY_CONDITION.wait()
-            if db_key in _SCHEMA_READY_DB_PATHS:
-                if sqlite_db_path_exists(db_path_text):
-                    return True
-                _SCHEMA_READY_DB_PATHS.discard(db_key)
-
-        _SCHEMA_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path_text,
@@ -228,34 +209,17 @@ def ensure_chatbot_storage_schema(
             )
             conn.commit()
 
-    initialization_succeeded = False
-    init_error: Exception | None = None
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-    except Exception as error:
-        init_error = error
-    finally:
-        with _SCHEMA_READY_CONDITION:
-            _SCHEMA_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _SCHEMA_READY_DB_PATHS,
-                    db_key,
-                    max_entries=_SCHEMA_READY_MAX_ENTRIES,
-                )
-            else:
-                _SCHEMA_READY_DB_PATHS.discard(db_key)
-            _SCHEMA_READY_CONDITION.notify_all()
-
-    if initialization_succeeded:
-        return True
-    logger.error(f"Failed to initialize chatbot SQLite schema: {init_error}")
-    return False
+    return _SCHEMA_GATE.ensure(
+        db_path_text,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=lambda error: logger.error(f"Failed to initialize chatbot SQLite schema: {error}"),
+        force_recheck=force_recheck,
+        max_ready_entries=_SCHEMA_READY_MAX_ENTRIES,
+    )
 
 
 __all__ = [

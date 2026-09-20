@@ -17,7 +17,6 @@ from typing import Any, Dict
 
 from numpy_json_encoder import NumpyEncoder
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -28,15 +27,17 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 
 _UPDATE_STATUS_CACHE: OrderedDict[str, tuple[tuple[int, int], Dict[str, Any]]] = OrderedDict()
 _UPDATE_STATUS_CACHE_LOCK = threading.Lock()
 _UPDATE_STATUS_CACHE_MAX_ENTRIES = 2_048
-_UPDATE_STATUS_DB_INIT_LOCK = threading.Lock()
-_UPDATE_STATUS_DB_INIT_CONDITION = threading.Condition(_UPDATE_STATUS_DB_INIT_LOCK)
-_UPDATE_STATUS_DB_INIT_IN_PROGRESS: set[str] = set()
-_UPDATE_STATUS_DB_READY: set[str] = set()
+_UPDATE_STATUS_DB_READY_GATE = SqliteReadyGate()
+_UPDATE_STATUS_DB_INIT_LOCK = _UPDATE_STATUS_DB_READY_GATE.lock
+_UPDATE_STATUS_DB_INIT_CONDITION = _UPDATE_STATUS_DB_READY_GATE.condition
+_UPDATE_STATUS_DB_INIT_IN_PROGRESS = _UPDATE_STATUS_DB_READY_GATE.in_progress_keys
+_UPDATE_STATUS_DB_READY = _UPDATE_STATUS_DB_READY_GATE.ready_keys
 _UPDATE_STATUS_DB_READY_MAX_ENTRIES = 2_048
 _UPDATE_STATUS_SQLITE_KNOWN_SNAPSHOT_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
 _UPDATE_STATUS_SQLITE_KNOWN_SNAPSHOT_KEYS_LOCK = threading.Lock()
@@ -168,22 +169,6 @@ def _should_force_update_status_snapshot_prune() -> bool:
 
 def _ensure_update_status_sqlite(logger) -> bool:
     db_path = _UPDATE_STATUS_CACHE_DB_PATH
-    db_key = _normalize_db_key(db_path)
-
-    with _UPDATE_STATUS_DB_INIT_CONDITION:
-        if db_key in _UPDATE_STATUS_DB_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _UPDATE_STATUS_DB_READY.discard(db_key)
-
-        while db_key in _UPDATE_STATUS_DB_INIT_IN_PROGRESS:
-            _UPDATE_STATUS_DB_INIT_CONDITION.wait()
-            if db_key in _UPDATE_STATUS_DB_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _UPDATE_STATUS_DB_READY.discard(db_key)
-
-        _UPDATE_STATUS_DB_INIT_IN_PROGRESS.add(db_key)
 
     def _initialize_schema() -> None:
         with connect_sqlite(
@@ -212,30 +197,19 @@ def _ensure_update_status_sqlite(logger) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         logger.error(f"Failed to initialize update status sqlite cache: {error}")
-        return False
-    finally:
-        with _UPDATE_STATUS_DB_INIT_CONDITION:
-            _UPDATE_STATUS_DB_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _UPDATE_STATUS_DB_READY,
-                    db_key,
-                    max_entries=_UPDATE_STATUS_DB_READY_MAX_ENTRIES,
-                )
-            else:
-                _UPDATE_STATUS_DB_READY.discard(db_key)
-            _UPDATE_STATUS_DB_INIT_CONDITION.notify_all()
+
+    return _UPDATE_STATUS_DB_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_UPDATE_STATUS_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_UPDATE_STATUS_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=_UPDATE_STATUS_DB_READY_MAX_ENTRIES,
+    )
 
 
 def _load_update_status_from_sqlite(

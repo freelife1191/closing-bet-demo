@@ -24,7 +24,6 @@ from services.kr_market_data_cache_core import (
     file_signature,
 )
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
@@ -33,13 +32,15 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 
-_JONGGA_PAYLOAD_SQLITE_LOCK = threading.Lock()
-_JONGGA_PAYLOAD_SQLITE_CONDITION = threading.Condition(_JONGGA_PAYLOAD_SQLITE_LOCK)
-_JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS: set[str] = set()
-_JONGGA_PAYLOAD_SQLITE_READY: set[str] = set()
 _JONGGA_PAYLOAD_SQLITE_READY_MAX_ENTRIES = 2_048
+_JONGGA_PAYLOAD_SQLITE_GATE = SqliteReadyGate()
+_JONGGA_PAYLOAD_SQLITE_LOCK = _JONGGA_PAYLOAD_SQLITE_GATE.lock
+_JONGGA_PAYLOAD_SQLITE_CONDITION = _JONGGA_PAYLOAD_SQLITE_GATE.condition
+_JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS = _JONGGA_PAYLOAD_SQLITE_GATE.in_progress_keys
+_JONGGA_PAYLOAD_SQLITE_READY = _JONGGA_PAYLOAD_SQLITE_GATE.ready_keys
 _JONGGA_PAYLOAD_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
 _JONGGA_PAYLOAD_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
 _JONGGA_PAYLOAD_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
@@ -136,23 +137,6 @@ def _should_force_jongga_payload_sqlite_prune() -> bool:
 
 def _ensure_jongga_payload_sqlite(logger: Any | None) -> bool:
     db_path = _JONGGA_PAYLOAD_SQLITE_DB_PATH
-    db_key = normalize_sqlite_db_key(db_path)
-
-    with _JONGGA_PAYLOAD_SQLITE_CONDITION:
-        if db_key in _JONGGA_PAYLOAD_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
-
-        while db_key in _JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS:
-            _JONGGA_PAYLOAD_SQLITE_CONDITION.wait()
-            if db_key in _JONGGA_PAYLOAD_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
-
-        _JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -178,31 +162,20 @@ def _ensure_jongga_payload_sqlite(logger: Any | None) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _log_failure(error: Exception) -> None:
         if logger is not None:
             logger.debug(f"Failed to initialize jongga payload sqlite cache: {error}")
-        return False
-    finally:
-        with _JONGGA_PAYLOAD_SQLITE_CONDITION:
-            _JONGGA_PAYLOAD_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _JONGGA_PAYLOAD_SQLITE_READY,
-                    db_key,
-                    max_entries=_JONGGA_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _JONGGA_PAYLOAD_SQLITE_READY.discard(db_key)
-            _JONGGA_PAYLOAD_SQLITE_CONDITION.notify_all()
+
+    return _JONGGA_PAYLOAD_SQLITE_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_JONGGA_PAYLOAD_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_JONGGA_PAYLOAD_SQLITE_RETRY_DELAY_SECONDS,
+        max_ready_entries=_JONGGA_PAYLOAD_SQLITE_READY_MAX_ENTRIES,
+        on_failure=_log_failure,
+    )
 
 
 def _normalize_payload_rows(rows: Any) -> list[tuple[str, dict[str, Any]]]:

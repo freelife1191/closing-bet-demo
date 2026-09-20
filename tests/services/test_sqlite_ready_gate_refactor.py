@@ -577,3 +577,76 @@ def test_both_modules_prune_on_the_same_schedule(monkeypatch, tmp_path):
 
     assert stock_map_prune_rounds == [1, 3]
     assert result_text_prune_rounds == [1, 3]
+
+
+def test_ready_gate_force_recheck_and_dynamic_ready_limit(tmp_path):
+    gate = SqliteReadyGate(max_ready_entries=8)
+    calls = []
+    def ensure(path, **options):
+        return gate.ensure(str(path), initialize=lambda: calls.append(str(path)),
+                           db_path_exists=lambda _: True, run_with_retry=_run_immediately,
+                           retry_attempts=0, retry_delay_seconds=0,
+                           on_failure=lambda error: None, **options)
+    first = tmp_path / "one.db"
+    assert ensure(first)
+    assert ensure(first)
+    assert len(calls) == 1
+    assert ensure(first, force_recheck=True)
+    assert len(calls) == 2
+    assert ensure(tmp_path / "two.db", max_ready_entries=1)
+    assert len(gate.ready_keys) == 1
+
+
+def test_forced_waiter_shares_in_progress_initialization(tmp_path):
+    gate = SqliteReadyGate()
+    entered = threading.Event()
+    release = threading.Event()
+    waiting = threading.Event()
+    calls = []
+    results = []
+    errors = []
+    original_wait = gate.condition.wait
+    def observed_wait(*args, **kwargs):
+        waiting.set()
+        return original_wait(*args, **kwargs)
+    gate.condition.wait = observed_wait
+    def initialize():
+        calls.append(1)
+        entered.set()
+        assert release.wait(3)
+    def run(force):
+        try:
+            results.append(gate.ensure(str(tmp_path / "one.db"), initialize=initialize,
+                db_path_exists=lambda _: True, run_with_retry=_run_immediately,
+                retry_attempts=0, retry_delay_seconds=0, on_failure=lambda error: None,
+                force_recheck=force))
+        except Exception as error:
+            errors.append(error)
+            entered.set()
+            waiting.set()
+    first = threading.Thread(target=run, args=(False,), daemon=True)
+    second = threading.Thread(target=run, args=(True,), daemon=True)
+    try:
+        first.start()
+        assert entered.wait(3)
+        second.start()
+        assert waiting.wait(3)
+    finally:
+        release.set()
+        first.join(3)
+        if second.ident is not None:
+            second.join(3)
+    assert not first.is_alive() and not second.is_alive()
+    assert not errors
+    assert results == [True, True]
+    assert calls == [1]
+    assert not gate.in_progress_keys
+
+
+def test_ready_gate_exposes_same_non_reentrant_lock():
+    gate = SqliteReadyGate()
+    assert gate.lock.acquire(blocking=False)
+    try:
+        assert not gate.condition.acquire(blocking=False)
+    finally:
+        gate.lock.release()

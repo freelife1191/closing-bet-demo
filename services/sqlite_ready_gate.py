@@ -49,7 +49,8 @@ class SqliteReadyGate:
         # 재진입 불가한 Lock 을 쓴다. RLock 이면 락을 쥔 채로 ensure() 를 부르는
         # 코드가 조용히 통과하면서 초기화 내내 다른 스레드를 막는다. Lock 이면
         # 그 자리에서 교착으로 드러난다.
-        self.condition = threading.Condition(threading.Lock())
+        self.lock = threading.Lock()
+        self.condition = threading.Condition(self.lock)
         self.ready_keys: set[str] = set()
         self.in_progress_keys: set[str] = set()
         self._max_ready_entries = max_ready_entries
@@ -69,10 +70,14 @@ class SqliteReadyGate:
         retry_attempts: int,
         retry_delay_seconds: float,
         on_failure: Callable[[Exception], None],
+        force_recheck: bool = False,
+        max_ready_entries: int | None = None,
     ) -> bool:
         db_key = normalize_sqlite_db_key(db_path_text)
         with self.condition:
-            if db_key in self.ready_keys:
+            if force_recheck:
+                self.ready_keys.discard(db_key)
+            elif db_key in self.ready_keys:
                 if db_path_exists(db_path_text):
                     return True
                 self.ready_keys.discard(db_key)
@@ -105,7 +110,7 @@ class SqliteReadyGate:
                     add_bounded_ready_key(
                         self.ready_keys,
                         db_key,
-                        max_entries=self._max_ready_entries,
+                        max_entries=(self._max_ready_entries if max_ready_entries is None else max_ready_entries),
                     )
                 else:
                     self.ready_keys.discard(db_key)

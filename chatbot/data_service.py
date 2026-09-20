@@ -130,14 +130,25 @@ def get_cached_daily_suggestions(
     now: datetime,
 ) -> Optional[List[Dict[str, str]]]:
     """유효한(1시간 이내) 일일 추천 캐시 조회."""
+    # 호출자는 기존 호환을 위해 now를 넘길 수 있지만, get()이 SQLite를 재적재한 뒤의
+    # 실제 관측 시각으로 판정해야 새 캐시를 future로 오인하지 않는다.
+    del now
     cached = memory.get(cache_key)
-    if not cached:
+    if not isinstance(cached, dict):
         return None
 
-    updated_at = datetime.fromisoformat(cached["updated_at"])
-    if (now - updated_at).total_seconds() >= 3600:
+    try:
+        updated_at = datetime.fromisoformat(str(cached["updated_at"]))
+    except (KeyError, TypeError, ValueError):
+        logger.debug("Invalid daily suggestion cache timestamp")
         return None
-    return cached["value"]
+    evaluated_at = datetime.now()
+    if updated_at.tzinfo is not None or updated_at > evaluated_at:
+        return None
+    if (evaluated_at - updated_at).total_seconds() >= 3600:
+        return None
+    value = cached.get("value")
+    return value if isinstance(value, list) else None
 
 
 def build_watchlist_suggestions_text(

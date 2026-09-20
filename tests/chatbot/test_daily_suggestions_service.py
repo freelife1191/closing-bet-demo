@@ -20,8 +20,9 @@ class _FakeMemory:
     def __init__(self):
         self.saved = []
 
-    def add(self, key, value):
+    def save_daily_suggestions(self, key, value):
         self.saved.append((key, value))
+        return True
 
 
 class _FakeBot:

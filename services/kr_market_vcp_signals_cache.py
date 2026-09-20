@@ -16,7 +16,6 @@ from datetime import datetime
 from typing import Any
 
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
     is_sqlite_missing_table_error,
@@ -25,6 +24,7 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 
 _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
@@ -37,11 +37,12 @@ _VCP_SIGNALS_MEMORY_CACHE: OrderedDict[
 ] = OrderedDict()
 _VCP_SIGNALS_MEMORY_MAX_ENTRIES = 16
 _VCP_SIGNALS_SQLITE_MAX_ROWS = 64
-_VCP_SIGNALS_SQLITE_READY: set[str] = set()
 _VCP_SIGNALS_SQLITE_READY_MAX_ENTRIES = 2_048
-_VCP_SIGNALS_SQLITE_READY_LOCK = threading.Lock()
-_VCP_SIGNALS_SQLITE_READY_CONDITION = threading.Condition(_VCP_SIGNALS_SQLITE_READY_LOCK)
-_VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+_VCP_SIGNALS_SQLITE_GATE = SqliteReadyGate()
+_VCP_SIGNALS_SQLITE_READY = _VCP_SIGNALS_SQLITE_GATE.ready_keys
+_VCP_SIGNALS_SQLITE_READY_LOCK = _VCP_SIGNALS_SQLITE_GATE.lock
+_VCP_SIGNALS_SQLITE_READY_CONDITION = _VCP_SIGNALS_SQLITE_GATE.condition
+_VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS = _VCP_SIGNALS_SQLITE_GATE.in_progress_keys
 _VCP_SIGNALS_SQLITE_KNOWN_HASHES: OrderedDict[tuple[str, str], None] = OrderedDict()
 _VCP_SIGNALS_SQLITE_KNOWN_HASHES_LOCK = threading.Lock()
 _VCP_SIGNALS_SQLITE_KNOWN_HASHES_MAX_ENTRIES = 8_192
@@ -150,22 +151,6 @@ def _should_force_vcp_signals_sqlite_prune() -> bool:
 
 
 def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with _VCP_SIGNALS_SQLITE_READY_CONDITION:
-        if db_key in _VCP_SIGNALS_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _VCP_SIGNALS_SQLITE_READY.discard(db_key)
-
-        while db_key in _VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS:
-            _VCP_SIGNALS_SQLITE_READY_CONDITION.wait()
-            if db_key in _VCP_SIGNALS_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _VCP_SIGNALS_SQLITE_READY.discard(db_key)
-
-        _VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -191,31 +176,20 @@ def _ensure_sqlite_cache(db_path: str, logger: Any) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _log_failure(error: Exception) -> None:
         if logger:
             logger.debug(f"Failed to initialize vcp signals sqlite cache: {error}")
-        return False
-    finally:
-        with _VCP_SIGNALS_SQLITE_READY_CONDITION:
-            _VCP_SIGNALS_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _VCP_SIGNALS_SQLITE_READY,
-                    db_key,
-                    max_entries=_VCP_SIGNALS_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _VCP_SIGNALS_SQLITE_READY.discard(db_key)
-            _VCP_SIGNALS_SQLITE_READY_CONDITION.notify_all()
+
+    return _VCP_SIGNALS_SQLITE_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_VCP_SIGNALS_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_VCP_SIGNALS_SQLITE_RETRY_DELAY_SECONDS,
+        max_ready_entries=_VCP_SIGNALS_SQLITE_READY_MAX_ENTRIES,
+        on_failure=_log_failure,
+    )
 
 
 def build_vcp_signals_cache_signature(

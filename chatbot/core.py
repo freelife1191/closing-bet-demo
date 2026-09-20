@@ -52,7 +52,6 @@ from .runtime_setup_service import (
     create_genai_client as _create_genai_client_impl,
     close_client as _close_client_impl,
     load_stock_map as _load_stock_map_impl,
-    init_user_profile_from_env as _init_user_profile_from_env_impl,
     get_user_profile as _get_user_profile_impl,
     update_user_profile as _update_user_profile_impl,
 )
@@ -135,9 +134,6 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         self.ticker_map = {}
         self._load_stock_map()
         
-        # .env에서 사용자 프로필 초기화 (기본값이 없을 때만 설정)
-        self._init_user_profile_from_env()
-
         # Gemini 초기화 - Vertex AI 모드. 사용자별 API 키 인자는 무시된다.
         self.api_key = ""  # legacy attribute; Vertex 전환 후 사용 안 됨
         del api_key  # 외부 인자는 명시적으로 폐기
@@ -160,10 +156,6 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
     def _load_stock_map(self):
         """korean_stocks_list.csv 로드하여 매핑 생성"""
         self.stock_map, self.ticker_map = _load_stock_map_impl(DATA_DIR, logger)
-
-    def _init_user_profile_from_env(self):
-        """환경변수에서 초기 사용자 프로필 설정"""
-        _init_user_profile_from_env_impl(self.memory, logger)
 
     def get_user_profile(self, owner_id: Optional[str] = None) -> Dict[str, Any]:
         """사용자 프로필 조회"""

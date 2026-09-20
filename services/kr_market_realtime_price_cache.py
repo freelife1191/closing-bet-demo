@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Iterator
 
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_pragmas,
     connect_sqlite,
@@ -24,11 +23,13 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
-_REALTIME_PRICE_SQLITE_READY: set[str] = set()
-_REALTIME_PRICE_SQLITE_READY_LOCK = threading.Lock()
-_REALTIME_PRICE_SQLITE_READY_CONDITION = threading.Condition(_REALTIME_PRICE_SQLITE_READY_LOCK)
-_REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS: set[str] = set()
+_REALTIME_PRICE_SQLITE_READY_GATE = SqliteReadyGate()
+_REALTIME_PRICE_SQLITE_READY = _REALTIME_PRICE_SQLITE_READY_GATE.ready_keys
+_REALTIME_PRICE_SQLITE_READY_LOCK = _REALTIME_PRICE_SQLITE_READY_GATE.lock
+_REALTIME_PRICE_SQLITE_READY_CONDITION = _REALTIME_PRICE_SQLITE_READY_GATE.condition
+_REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS = _REALTIME_PRICE_SQLITE_READY_GATE.in_progress_keys
 _REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES = 2_048
 _REALTIME_PRICE_SQLITE_TIMEOUT_SECONDS = 5
 _YFINANCE_FAILURE_CACHE_RETENTION_DAYS = 7
@@ -233,22 +234,6 @@ def _recover_realtime_price_sqlite_schema(
 
 
 def _ensure_realtime_price_sqlite(db_path: str, logger: logging.Logger | None) -> bool:
-    db_key = normalize_sqlite_db_key(db_path)
-    with _REALTIME_PRICE_SQLITE_READY_CONDITION:
-        if db_key in _REALTIME_PRICE_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _REALTIME_PRICE_SQLITE_READY.discard(db_key)
-
-        while db_key in _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS:
-            _REALTIME_PRICE_SQLITE_READY_CONDITION.wait()
-            if db_key in _REALTIME_PRICE_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _REALTIME_PRICE_SQLITE_READY.discard(db_key)
-
-        _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -288,31 +273,20 @@ def _ensure_realtime_price_sqlite(db_path: str, logger: logging.Logger | None) -
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         if logger is not None:
             logger.debug(f"Failed to initialize realtime price sqlite cache: {error}")
-        return False
-    finally:
-        with _REALTIME_PRICE_SQLITE_READY_CONDITION:
-            _REALTIME_PRICE_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _REALTIME_PRICE_SQLITE_READY,
-                    db_key,
-                    max_entries=_REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _REALTIME_PRICE_SQLITE_READY.discard(db_key)
-            _REALTIME_PRICE_SQLITE_READY_CONDITION.notify_all()
+
+    return _REALTIME_PRICE_SQLITE_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_REALTIME_PRICE_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_REALTIME_PRICE_SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        max_ready_entries=_REALTIME_PRICE_SQLITE_READY_MAX_ENTRIES,
+    )
 
 
 def load_cached_realtime_prices(

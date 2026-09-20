@@ -5,27 +5,26 @@
 from __future__ import annotations
 
 import sqlite3
-import threading
 
 from services.paper_trading_constants import LEGACY_UNASSIGNED_OWNER_ID
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_pragmas,
     connect_sqlite,
-    normalize_sqlite_db_key,
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 SQLITE_INIT_PRAGMAS = build_sqlite_pragmas(busy_timeout_ms=SQLITE_BUSY_TIMEOUT_MS)
 SQLITE_RETRY_ATTEMPTS = 2
 SQLITE_RETRY_DELAY_SECONDS = 0.03
-DB_INIT_READY_LOCK = threading.Lock()
-DB_INIT_READY_CONDITION = threading.Condition(DB_INIT_READY_LOCK)
-DB_INIT_READY_PATHS: set[str] = set()
+DB_INIT_READY_GATE = SqliteReadyGate()
+DB_INIT_READY_LOCK = DB_INIT_READY_GATE.lock
+DB_INIT_READY_CONDITION = DB_INIT_READY_GATE.condition
+DB_INIT_READY_PATHS = DB_INIT_READY_GATE.ready_keys
 DB_INIT_READY_MAX_ENTRIES = 2_048
-DB_INIT_IN_PROGRESS_PATHS: set[str] = set()
+DB_INIT_IN_PROGRESS_PATHS = DB_INIT_READY_GATE.in_progress_keys
 
 _ACCOUNT_TABLES = ("portfolio", "trade_log", "asset_history", "balance")
 
@@ -155,19 +154,6 @@ def _migrate_price_cache(cursor: sqlite3.Cursor) -> None:
 
 def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
     """단일 IMMEDIATE 트랜잭션으로 owner 스키마와 빈 활성 가격 캐시를 준비한다."""
-    db_key = normalize_sqlite_db_key(db_path)
-    with DB_INIT_READY_CONDITION:
-        if force_recheck:
-            DB_INIT_READY_PATHS.discard(db_key)
-        elif db_key in DB_INIT_READY_PATHS and sqlite_db_path_exists(db_path):
-            return True
-        while db_key in DB_INIT_IN_PROGRESS_PATHS:
-            DB_INIT_READY_CONDITION.wait()
-            if db_key in DB_INIT_READY_PATHS and sqlite_db_path_exists(db_path):
-                return True
-        DB_INIT_IN_PROGRESS_PATHS.add(db_key)
-
-    succeeded = False
     def _initialize() -> None:
         with connect_sqlite(db_path, timeout_seconds=30, pragmas=SQLITE_INIT_PRAGMAS) as conn:
             cursor = conn.cursor()
@@ -181,18 +167,17 @@ def init_db(*, db_path: str, logger, force_recheck: bool = False) -> bool:
                 conn.rollback()
                 raise
 
-    try:
-        run_sqlite_with_retry(_initialize, max_retries=SQLITE_RETRY_ATTEMPTS, retry_delay_seconds=SQLITE_RETRY_DELAY_SECONDS)
-        succeeded = True
-        return True
-    except Exception as error:
+    def _on_failure(error: Exception) -> None:
         logger.error(f"Failed to initialize paper trading db: {error}")
-        return False
-    finally:
-        with DB_INIT_READY_CONDITION:
-            DB_INIT_IN_PROGRESS_PATHS.discard(db_key)
-            if succeeded:
-                add_bounded_ready_key(DB_INIT_READY_PATHS, db_key, max_entries=DB_INIT_READY_MAX_ENTRIES)
-            else:
-                DB_INIT_READY_PATHS.discard(db_key)
-            DB_INIT_READY_CONDITION.notify_all()
+
+    return DB_INIT_READY_GATE.ensure(
+        db_path,
+        initialize=_initialize,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=SQLITE_RETRY_DELAY_SECONDS,
+        on_failure=_on_failure,
+        force_recheck=force_recheck,
+        max_ready_entries=DB_INIT_READY_MAX_ENTRIES,
+    )

@@ -159,14 +159,6 @@ def load_stock_map(data_dir: Path, logger: Any) -> Tuple[Dict[str, str], Dict[st
     return stock_map, ticker_map
 
 
-def init_user_profile_from_env(memory: Any, logger: Any) -> None:
-    """환경변수 USER_PROFILE 기준으로 초기 사용자 프로필을 저장한다 (공용 영역)."""
-    profile = os.getenv("USER_PROFILE")
-    if profile and not memory.memories:
-        memory.add("user_profile", {"name": "흑기사", "persona": profile})
-        logger.info("Initialized user profile from env")
-
-
 def get_user_profile(memory: Any, owner_id: Optional[str] = None) -> Dict[str, Any]:
     """사용자 프로필 조회 (레거시 value wrapper 호환)."""
     profile = memory.get("user_profile", owner_id)

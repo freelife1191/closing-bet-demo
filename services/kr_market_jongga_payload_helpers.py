@@ -21,7 +21,6 @@ from services.kr_market_data_cache_service import (
     load_json_payload_from_path,
 )
 from services.sqlite_utils import (
-    add_bounded_ready_key,
     build_sqlite_in_placeholders,
     build_sqlite_order_case_sql,
     build_sqlite_pragmas,
@@ -32,16 +31,18 @@ from services.sqlite_utils import (
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
+from services.sqlite_ready_gate import SqliteReadyGate
 
 
 _RECENT_JONGGA_PAYLOAD_CACHE: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _RECENT_JONGGA_PAYLOAD_CACHE_LOCK = threading.Lock()
 _RECENT_JONGGA_PAYLOAD_CACHE_MAX_ENTRIES = 256
-_RECENT_JONGGA_SQLITE_READY: set[str] = set()
-_RECENT_JONGGA_SQLITE_READY_LOCK = threading.Lock()
-_RECENT_JONGGA_SQLITE_READY_CONDITION = threading.Condition(_RECENT_JONGGA_SQLITE_READY_LOCK)
-_RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS: set[str] = set()
 _RECENT_JONGGA_SQLITE_READY_MAX_ENTRIES = 2_048
+_RECENT_JONGGA_SQLITE_GATE = SqliteReadyGate()
+_RECENT_JONGGA_SQLITE_READY = _RECENT_JONGGA_SQLITE_GATE.ready_keys
+_RECENT_JONGGA_SQLITE_READY_LOCK = _RECENT_JONGGA_SQLITE_GATE.lock
+_RECENT_JONGGA_SQLITE_READY_CONDITION = _RECENT_JONGGA_SQLITE_GATE.condition
+_RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS = _RECENT_JONGGA_SQLITE_GATE.in_progress_keys
 _RECENT_JONGGA_SQLITE_KNOWN_KEYS: OrderedDict[tuple[str, str], None] = OrderedDict()
 _RECENT_JONGGA_SQLITE_KNOWN_KEYS_LOCK = threading.Lock()
 _RECENT_JONGGA_SQLITE_KNOWN_KEYS_MAX_ENTRIES = 8_192
@@ -203,22 +204,6 @@ def _should_force_recent_payload_sqlite_prune() -> bool:
 
 def _ensure_recent_payload_sqlite(data_dir: str, logger: Any) -> bool:
     db_path = _runtime_cache_db_path(data_dir)
-    db_key = normalize_sqlite_db_key(db_path)
-    with _RECENT_JONGGA_SQLITE_READY_CONDITION:
-        if db_key in _RECENT_JONGGA_SQLITE_READY:
-            if sqlite_db_path_exists(db_path):
-                return True
-            _RECENT_JONGGA_SQLITE_READY.discard(db_key)
-
-        while db_key in _RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS:
-            _RECENT_JONGGA_SQLITE_READY_CONDITION.wait()
-            if db_key in _RECENT_JONGGA_SQLITE_READY:
-                if sqlite_db_path_exists(db_path):
-                    return True
-                _RECENT_JONGGA_SQLITE_READY.discard(db_key)
-
-        _RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS.add(db_key)
-
     def _initialize_schema() -> None:
         with connect_sqlite(
             db_path,
@@ -245,30 +230,19 @@ def _ensure_recent_payload_sqlite(data_dir: str, logger: Any) -> bool:
             )
             conn.commit()
 
-    initialization_succeeded = False
-    try:
-        run_sqlite_with_retry(
-            _initialize_schema,
-            max_retries=_RECENT_JONGGA_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_RECENT_JONGGA_SQLITE_RETRY_DELAY_SECONDS,
-        )
-        initialization_succeeded = True
-        return True
-    except Exception as error:
+    def _log_failure(error: Exception) -> None:
         _log_debug(logger, f"Failed to initialize recent jongga sqlite cache: {error}")
-        return False
-    finally:
-        with _RECENT_JONGGA_SQLITE_READY_CONDITION:
-            _RECENT_JONGGA_SQLITE_INIT_IN_PROGRESS.discard(db_key)
-            if initialization_succeeded:
-                add_bounded_ready_key(
-                    _RECENT_JONGGA_SQLITE_READY,
-                    db_key,
-                    max_entries=_RECENT_JONGGA_SQLITE_READY_MAX_ENTRIES,
-                )
-            else:
-                _RECENT_JONGGA_SQLITE_READY.discard(db_key)
-            _RECENT_JONGGA_SQLITE_READY_CONDITION.notify_all()
+
+    return _RECENT_JONGGA_SQLITE_GATE.ensure(
+        db_path,
+        initialize=_initialize_schema,
+        db_path_exists=sqlite_db_path_exists,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_RECENT_JONGGA_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_RECENT_JONGGA_SQLITE_RETRY_DELAY_SECONDS,
+        max_ready_entries=_RECENT_JONGGA_SQLITE_READY_MAX_ENTRIES,
+        on_failure=_log_failure,
+    )
 
 
 def _load_recent_payload_from_sqlite(

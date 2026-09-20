@@ -1,0 +1,7 @@
+{
+  "source_and_scratch_sha_match": 29,
+  "root_package_unchanged": true,
+  "original_data_env_full_immutability_claimed": false,
+  "execution_deviation": "execution-deviation.md",
+  "scratch_env_files_absent": true
+}

@@ -62,7 +62,8 @@ def generate_daily_suggestions(
         )
 
         suggestions = json.loads(response.text)
-        bot.memory.add(cache_key, suggestions)
+        if not bot.memory.save_daily_suggestions(cache_key, suggestions):
+            logger.warning("Failed to persist daily suggestions cache")
         return suggestions
 
     except Exception as e:
