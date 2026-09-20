@@ -7,7 +7,7 @@ from pathlib import Path
 import json, socket, select, time
 
 ROOT=Path(__file__).resolve().parents[4]
-assert not (ROOT/'.git').exists() and 'storage-memory-20260921-' in str(ROOT)
+assert not (ROOT/'.git').exists() and 'quota-ticker-20260921-' in str(ROOT)
 class Handler(BaseHTTPRequestHandler):
     def relay_upgrade(self):
         # Only Next's HMR websocket; auth/API always remain fixture-only.

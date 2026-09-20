@@ -1,0 +1,38 @@
+[
+  {
+    "mode": "html-502",
+    "sidebar": "unavailable",
+    "settings": "unavailable",
+    "errors": 0
+  },
+  {
+    "mode": "html-404",
+    "sidebar": "unavailable",
+    "settings": "unavailable",
+    "errors": 0
+  },
+  {
+    "mode": "html-200",
+    "sidebar": "unavailable",
+    "settings": "unavailable",
+    "errors": 0
+  },
+  {
+    "mode": "json-401",
+    "sidebar": "unavailable",
+    "settings": "unavailable",
+    "errors": 0
+  },
+  {
+    "mode": "json-403",
+    "sidebar": "unavailable",
+    "settings": "unavailable",
+    "errors": 0
+  },
+  {
+    "mode": "json-500",
+    "sidebar": "unavailable",
+    "settings": "unavailable",
+    "errors": 0
+  }
+]

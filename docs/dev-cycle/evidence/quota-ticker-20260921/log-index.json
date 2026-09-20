@@ -19,6 +19,11 @@
     "bytes": 7702,
     "compressed": "target-quota-green.log.gz"
   },
+  "gateway-runtime.log": {
+    "sha256": "e8205dc64e3123427c39113551f928b7eca90667144fa0df11e460df931c265a",
+    "bytes": 40050,
+    "compressed": "gateway-runtime.log.gz"
+  },
   "build-review-fixed.log": {
     "sha256": "9986cd790d66fe6fc2bb0e2257b8fb756eb9fc53bdb938f2606d0db5f0cf5340",
     "bytes": 5586,
@@ -48,6 +53,11 @@
     "sha256": "f03999110e99c60561b70c3f66bc6a53b7ca6776785e2b169c3a71dcb1ede823",
     "bytes": 330,
     "compressed": "typecheck-initial.log.gz"
+  },
+  "fixture-runtime.log": {
+    "sha256": "30644ea4fedb9de83e69a10aa925f9be89575eb83a4377df751fff6f43536130",
+    "bytes": 14784,
+    "compressed": "fixture-runtime.log.gz"
   },
   "pytarget-valuation-authority-green.log": {
     "sha256": "bc87149e4bc6fe377c1377da4ce9cb0ff74d5943ff2489f3d7a723e3fe03c27d",
@@ -193,6 +203,11 @@
     "sha256": "bd2cab0de2b39a3f6c49d450ed55f8eebc1f2e975a8cd9c88682e7ff264e1288",
     "bytes": 3022,
     "compressed": "pytest-integration-first.log.gz"
+  },
+  "next-runtime.log": {
+    "sha256": "fd3611b5554c42fc3cbaabaf866ae4a0851b8ab53ccd02121092e521bc752ea2",
+    "bytes": 1462,
+    "compressed": "next-runtime.log.gz"
   },
   "pytarget-valuation-red.log": {
     "sha256": "d7b9fe4e00e3fd8331a2c203f0fbf1cd4aa6dcb042a7a5970d7ca5a8bf799189",

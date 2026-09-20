@@ -294,41 +294,6 @@
 
 ## P2 — 대기
 
-### [JONGGA-030] 티커 정규화 구현이 여섯 벌로 흩어져 규칙이 서로 다르다
-- 설계 승인: 승인 일자 2026-09-21 | 승인 확인 시각 2026-09-21T02:50 | 실제 대화: 이번 3건 설계에 사용자 「승인」.
-- 진행: 구현·정적 검증 통과, 독립 code APPROVE / architect CLEAR. 심층 리뷰 후 UltraQA 실행 — `plans/2026-09-21-quota-ticker-backtest.md`, `qa/batch-quota-ticker-2026-09-21.md`.
-- 카테고리: 종가베팅 | 티어: T3 | 근거: 2026-09-04 JONGGA-017 사이클의 리뷰, `[JONGGA-005]` 사이클의 변이 검사, AUDIT-FLOW §2.2
-- 2026-09-07 백로그 정리에서 `[INFRA-023]`(`000000` 가짜 종목)과 `[FLOW-007]`(백테스트 패딩
-  헬퍼)을 흡수했습니다. 셋 다 「`zfill(6)` 을 각자 구현해 규칙이 어긋난다」는 하나의 문제입니다.
-- QA 시나리오: 영문자 코드를 가진 종목의 카드에 현재가와 수익률이 그려지고, 티커가 빈 행이 가격
-  맵에 `000000` 으로 들어가지 않는다
-- **영문자 코드**: `services/kr_market_realtime_price_service.py:42` 의 `normalize_ticker` 는
-  `str(ticker).zfill(6)` 한 줄이라 소문자 `0007c0` 이 들어오면 가격 맵의 키가 `0007c0` 이 됩니다.
-  조회하는 쪽의 `_normalize_ticker` 는 `[JONGGA-017]` 이후 `0007C0` 을 내므로 어긋나 가격이 붙지
-  않습니다. 같은 파일의 `_is_normalized_unique_ticker_list` 는 `ticker.isdigit()` 를 요구해 영문자
-  코드는 늘 「정규화 안 됨」으로 판정되어 최적화 경로를 타지 못합니다. 지금은 자료가 대문자로만
-  들어와 드러나지 않고, 어긋나도 남의 가격이 붙지는 않으므로 `[JONGGA-017]` 보다 덜 급합니다.
-- **`000000` 가짜 종목**: `services/kr_market_csv_utils.py:237` 이 `df_prices["ticker"].astype(str).str.zfill(6)`
-  로 티커를 만드므로 CSV 에 티커가 빈 행이 있고 종가가 유효하면 `"000000"` 키가 가격 맵에
-  들어갑니다. `services/kr_market_data_cache_prices.py:41` 과 `:63` 의 SQLite 직렬화·역직렬화도
-  같은 `zfill(6)` 을 하며 바로 다음 줄의 `if not ticker_key: continue` 는 zfill 뒤라 결코 참이
-  되지 않는 죽은 검사입니다. 종가베팅 경로는 `[JONGGA-005]` 가 전부 0 인 코드를 빈 문자열로
-  돌리도록 막았고, 남은 것은 맵을 만드는 쪽이며 VCP 경로가 이 키를 조회하는지는 확인하지 않았습니다.
-- **흩어진 구현**: `services/paper_trading_sync_service.py:14`,
-  `services/paper_trading_price_fetchers.py:19`, `services/kr_market_realtime_price_cache.py:62`,
-  `engine/collectors/krx_data_mixin.py:22`, `services/kr_market_vcp_cache_update_service.py:17` 이
-  각자 `_normalize_ticker` 를 정의합니다. 이름이 같아 한 함수처럼 보이지만 서로 다른 구현입니다.
-  백테스트 쪽도 `services/kr_market_backtest_scenario_helpers.py:17` 과
-  `services/kr_market_backtest_trade_helpers.py:24` 가 `_get_ticker_padded_series` 를 각자 두고
-  있는데 `services.kr_market_csv_utils.get_ticker_padded_series` 가 같은 일을 합니다.
-- 티어 근거: 가격 캐시 계열 파일이라 `tier-rules.md` §2 저장소 스키마에 닿습니다.
-- [ ] 정본으로 삼을 정규화 함수 하나를 정하고 위 구현들을 그것으로 교체
-- [ ] `_is_normalized_unique_ticker_list` 의 판정에 영문자 코드를 반영
-- [ ] 빈 티커 행을 맵에서 제외할지 `zfill` 앞에서 걸러 낼지 정하고 죽은 검사 두 곳을 정리
-- [ ] VCP 가격 반영 경로가 `000000` 을 조회하는지 확인하고 그렇다면 함께 막음
-- [ ] 백테스트 두 헬퍼를 공용 함수로 교체하고 `_ticker_padded` 캐시 컬럼 동작이 같은지 확인
-- [ ] 소문자 코드와 빈 티커가 섞인 DataFrame 에 대한 검사를 남김
-
 ### [JONGGA-018] 가산점이 화면이 밝힌 상한 7점을 넘는다
 - 카테고리: 종가베팅 | 티어: T3 | 근거: 2026-09-03 JONGGA-005 사이클의 `/qa` NEW-002
 - QA 시나리오: 카드 점수표의 「보너스 (가산점)」이 그 카드가 밝힌 상한을 넘지 않는다
@@ -361,16 +326,6 @@
 - [ ] `_extract_status_code` 세 사본을 하나로 통합
 - [ ] `max_parse_attempts = 1` 로 죽어 있는 재시도 구조 정리
 - [ ] 기존 27건의 Z.ai 테스트가 그대로 통과하는지 확인
-
-### [FLOW-006] 백테스트 재노출 전용 계층을 걷어낸다
-- 설계 승인: 승인 일자 2026-09-21 | 승인 확인 시각 2026-09-21T02:50 | 실제 대화: 이번 3건 설계에 사용자 「승인」.
-- 진행: 구현·정적 검증 통과, 독립 code APPROVE / architect CLEAR. 심층 리뷰 후 UltraQA 실행 — `plans/2026-09-21-quota-ticker-backtest.md`, `qa/batch-quota-ticker-2026-09-21.md`.
-- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW §3.1
-- [ ] `..._service`, `..._calculators`, `..._cumulative`, `..._signal_stats` 네 파일의
-      외부 호출자를 확인한 뒤 남길 진입점 하나를 결정
-- [ ] 나머지 재노출 계층 제거하고 `app/routes/kr_market_backtest_helpers.py` 의 import 정리
-- [ ] `tests/services/test_kr_market_backtest_service.py` 의 import 경로 갱신
-- [ ] pytest 전체 통과 확인
 
 ### [INFRA-008] init_data 의 죽은 진입점 정리
 - 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §3.1, §3.2
@@ -424,18 +379,3 @@
 - [ ] 이미 쌓인 11,647 쌍과 `cmp_dev_*` 셋을 어떻게 할지 사용자와 정함
 
 - 현재 남은 일: 원본 누적 파일의 처리 결정만 대기. 기존 설명의 수량·공통 helper 경로는 과거 관측이며, 2026-09-09 원본 WAL/SHM 파일 합계는27396개. 기존 파일을 삭제하지 않았고 완료 아카이브도 만들지 않음.
-
-### [FE-043] 사용량 조회가 HTML 오류 응답을 JSON으로 읽어 SyntaxError를 남긴다
-- 설계 승인: 승인 일자 2026-09-21 | 승인 확인 시각 2026-09-21T02:50 | 실제 대화: 이번 3건 설계에 사용자 「승인」.
-- 진행: 구현·정적 검증 통과, 독립 code APPROVE / architect CLEAR. 심층 리뷰 후 UltraQA 실행 — `plans/2026-09-21-quota-ticker-backtest.md`, `qa/batch-quota-ticker-2026-09-21.md`.
-- 카테고리: 프론트엔드 공통 | 티어: T2 예상 | 근거: 2026-09-21 저장소·메모리 QA의 격리 하네스 기동 실패 실측
-- 검증용 Flask가 중복 endpoint로 기동하지 못해 gateway가 HTML 502를 반환했을 때,
-  `frontend/src/app/components/Sidebar.tsx:88-92`의 `fetch(...).then(res => res.json())`가
-  `Unexpected token '<'`를 냈다. `evidence/storage-memory-20260921/next-fixture-outage.txt`와
-  `fixture-startup-recovery.json`에 요청·원인·복구 근거가 있다. 하네스 복구 뒤 오류는 사라졌다.
-- 사용자의 기존 운영 제보와 같은 증상이지만 그 요청 URL·시각이 없어 운영 원인까지 확정하지 않는다.
-- QA 시나리오: 격리 사용량 API의 HTML 502/404 및 JSON 401/403/500에서 JSON SyntaxError 없이
-  조회 실패가 처리되고, 정상 JSON으로 복구하면 사용량 표시가 회복된다.
-- [ ] Sidebar와 같은 사용량 API를 읽는 호출부를 확인하고 실패 표시·기존 값 유지 계약 확정
-- [ ] 기존 fetchAPI 등 공용 응답 처리를 재사용해 HTTP 실패·비JSON 응답 처리
-- [ ] 회귀 테스트와 ego-browser 실패→복구 실측, 원본 서비스·실제 충전은 실행하지 않음

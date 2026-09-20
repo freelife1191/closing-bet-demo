@@ -1,0 +1,23 @@
+{
+  "reviewer": "root direct view_image",
+  "files": [
+    "ego-cumulative.png",
+    "ego-portfolio.png",
+    "ego-cumulative-row.png",
+    "ego-quota-recovered.png",
+    "ego-initial-error.png",
+    "ego-jongga.png",
+    "ego-settings-error.png",
+    "ego-vcp.png",
+    "ego-portfolio-stable.png"
+  ],
+  "observed": {
+    "settings-error": "실패문구2곳, 기본10회 아님",
+    "settings-recovered": "2/10사용,8회남음",
+    "vcp": "0007C0 현재15200 +15.2%",
+    "jongga": "아크릴QA raw0007c0 신호일종가14000",
+    "cumulative": "1건 WIN +5.0%, entry14000, canonical0007C0",
+    "portfolio": "raw0007c0 3주 현재15200 평가45600 +8.57%, 총자산103600"
+  },
+  "limitations": "desktop viewport only; initial portfolio transition image superseded by portfolio-stable image; original services/data/auth not tested"
+}

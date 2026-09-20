@@ -1,0 +1,24 @@
+{
+  "fixture_total": 207,
+  "fixture_status_counts": {
+    "200": 172,
+    "502": 10,
+    "404": 8,
+    "401": 4,
+    "403": 4,
+    "500": 4,
+    "405": 5
+  },
+  "gateway_api_total": 157,
+  "gateway_api_status_counts": {
+    "200": 132,
+    "502": 9,
+    "404": 7,
+    "401": 3,
+    "403": 3,
+    "500": 3
+  },
+  "unsafe_browser_mutations": [],
+  "browser_nonquota_failures": [],
+  "note": "fixture includes synthetic controls and boundary probes; gateway initial AssertionError recorded separately; no originals accessed"
+}

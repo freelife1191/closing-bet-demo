@@ -1,0 +1,134 @@
+{
+  "commit": "fcf440a",
+  "files": {
+    "app/routes/kr_market_signal_common.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "engine/collectors/krx_data_mixin.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "engine/ticker_utils.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/app/components/SettingsModal.quota.test.tsx": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/app/components/SettingsModal.tsx": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/app/components/Sidebar.session.test.tsx": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/app/components/Sidebar.tsx": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/hooks/useQuota.test.ts": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/hooks/useQuota.ts": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/lib/api.test.ts": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "frontend/src/lib/api.ts": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_analytics_service.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_backtest_calculators.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_backtest_cumulative.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_backtest_scenario_helpers.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_backtest_service.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_backtest_signal_stats.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_backtest_stats_helpers.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_backtest_trade_helpers.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_csv_utils.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_data_cache_prices.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_realtime_price_cache.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_realtime_price_service.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/kr_market_vcp_cache_update_service.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/paper_trading_price_fetchers.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/paper_trading_sync_service.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "services/paper_trading_valuation_helpers.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "tests/engine/test_ticker_utils.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "tests/services/test_backtest_ticker_lookup.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "tests/services/test_kr_market_ticker_normalization.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "tests/services/test_paper_trading_service.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    },
+    "tests/services/test_paper_trading_ticker_valuation.py": {
+      "source_matches_review": true,
+      "commit_matches_review": true
+    }
+  },
+  "all_match": true
+}

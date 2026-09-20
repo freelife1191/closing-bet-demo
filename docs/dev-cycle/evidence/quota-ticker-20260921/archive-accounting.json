@@ -1,0 +1,219 @@
+{
+  "files": [
+    {
+      "file": "app/routes/kr_market_signal_common.py",
+      "added": 4,
+      "deleted": 22
+    },
+    {
+      "file": "engine/collectors/krx_data_mixin.py",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "file": "engine/ticker_utils.py",
+      "added": 49,
+      "deleted": 0
+    },
+    {
+      "file": "frontend/src/app/components/SettingsModal.quota.test.tsx",
+      "added": 108,
+      "deleted": 0
+    },
+    {
+      "file": "frontend/src/app/components/SettingsModal.tsx",
+      "added": 17,
+      "deleted": 14
+    },
+    {
+      "file": "frontend/src/app/components/Sidebar.session.test.tsx",
+      "added": 150,
+      "deleted": 7
+    },
+    {
+      "file": "frontend/src/app/components/Sidebar.tsx",
+      "added": 28,
+      "deleted": 22
+    },
+    {
+      "file": "frontend/src/hooks/useQuota.test.ts",
+      "added": 24,
+      "deleted": 0
+    },
+    {
+      "file": "frontend/src/hooks/useQuota.ts",
+      "added": 131,
+      "deleted": 0
+    },
+    {
+      "file": "frontend/src/lib/api.test.ts",
+      "added": 35,
+      "deleted": 0
+    },
+    {
+      "file": "frontend/src/lib/api.ts",
+      "added": 28,
+      "deleted": 8
+    },
+    {
+      "file": "services/kr_market_analytics_service.py",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "file": "services/kr_market_backtest_calculators.py",
+      "added": 0,
+      "deleted": 39
+    },
+    {
+      "file": "services/kr_market_backtest_cumulative.py",
+      "added": 0,
+      "deleted": 30
+    },
+    {
+      "file": "services/kr_market_backtest_scenario_helpers.py",
+      "added": 6,
+      "deleted": 16
+    },
+    {
+      "file": "services/kr_market_backtest_service.py",
+      "added": 14,
+      "deleted": 13
+    },
+    {
+      "file": "services/kr_market_backtest_signal_stats.py",
+      "added": 0,
+      "deleted": 26
+    },
+    {
+      "file": "services/kr_market_backtest_stats_helpers.py",
+      "added": 5,
+      "deleted": 3
+    },
+    {
+      "file": "services/kr_market_backtest_trade_helpers.py",
+      "added": 8,
+      "deleted": 16
+    },
+    {
+      "file": "services/kr_market_csv_utils.py",
+      "added": 5,
+      "deleted": 3
+    },
+    {
+      "file": "services/kr_market_data_cache_prices.py",
+      "added": 18,
+      "deleted": 18
+    },
+    {
+      "file": "services/kr_market_realtime_price_cache.py",
+      "added": 42,
+      "deleted": 11
+    },
+    {
+      "file": "services/kr_market_realtime_price_service.py",
+      "added": 13,
+      "deleted": 6
+    },
+    {
+      "file": "services/kr_market_vcp_cache_update_service.py",
+      "added": 9,
+      "deleted": 5
+    },
+    {
+      "file": "services/paper_trading_price_fetchers.py",
+      "added": 8,
+      "deleted": 3
+    },
+    {
+      "file": "services/paper_trading_sync_service.py",
+      "added": 8,
+      "deleted": 3
+    },
+    {
+      "file": "services/paper_trading_valuation_helpers.py",
+      "added": 5,
+      "deleted": 6
+    },
+    {
+      "file": "tests/engine/test_ticker_utils.py",
+      "added": 43,
+      "deleted": 0
+    },
+    {
+      "file": "tests/services/test_backtest_ticker_lookup.py",
+      "added": 18,
+      "deleted": 0
+    },
+    {
+      "file": "tests/services/test_kr_market_ticker_normalization.py",
+      "added": 195,
+      "deleted": 0
+    },
+    {
+      "file": "tests/services/test_paper_trading_service.py",
+      "added": 4,
+      "deleted": 4
+    },
+    {
+      "file": "tests/services/test_paper_trading_ticker_valuation.py",
+      "added": 30,
+      "deleted": 0
+    }
+  ],
+  "count": 32,
+  "added": 1008,
+  "deleted": 278,
+  "by_item": {
+    "JONGGA-030": {
+      "files": [
+        "app/routes/kr_market_signal_common.py",
+        "engine/collectors/krx_data_mixin.py",
+        "engine/ticker_utils.py",
+        "services/kr_market_backtest_scenario_helpers.py",
+        "services/kr_market_backtest_stats_helpers.py",
+        "services/kr_market_backtest_trade_helpers.py",
+        "services/kr_market_csv_utils.py",
+        "services/kr_market_data_cache_prices.py",
+        "services/kr_market_realtime_price_cache.py",
+        "services/kr_market_realtime_price_service.py",
+        "services/kr_market_vcp_cache_update_service.py",
+        "services/paper_trading_price_fetchers.py",
+        "services/paper_trading_sync_service.py",
+        "services/paper_trading_valuation_helpers.py",
+        "tests/engine/test_ticker_utils.py",
+        "tests/services/test_backtest_ticker_lookup.py",
+        "tests/services/test_kr_market_ticker_normalization.py",
+        "tests/services/test_paper_trading_service.py",
+        "tests/services/test_paper_trading_ticker_valuation.py"
+      ],
+      "added": 472,
+      "deleted": 118
+    },
+    "FE-043": {
+      "files": [
+        "frontend/src/app/components/SettingsModal.quota.test.tsx",
+        "frontend/src/app/components/SettingsModal.tsx",
+        "frontend/src/app/components/Sidebar.session.test.tsx",
+        "frontend/src/app/components/Sidebar.tsx",
+        "frontend/src/hooks/useQuota.test.ts",
+        "frontend/src/hooks/useQuota.ts",
+        "frontend/src/lib/api.test.ts",
+        "frontend/src/lib/api.ts"
+      ],
+      "added": 521,
+      "deleted": 51
+    },
+    "FLOW-006": {
+      "files": [
+        "services/kr_market_analytics_service.py",
+        "services/kr_market_backtest_calculators.py",
+        "services/kr_market_backtest_cumulative.py",
+        "services/kr_market_backtest_service.py",
+        "services/kr_market_backtest_signal_stats.py"
+      ],
+      "added": 15,
+      "deleted": 109
+    }
+  }
+}
