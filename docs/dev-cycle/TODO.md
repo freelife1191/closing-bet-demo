@@ -88,6 +88,7 @@
 - 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
 
 ### [FLOW-014] 자료가 얇은 기준일에서 수급 조회가 종목 수만큼 pykrx 왕복을 낸다
+- 설계 상태 (2026-09-21): INFRA-030과 연속 처리하는 구조 설계 방향을 현재 대화의 사용자 「승인」으로 확인. [상세 설계](../superpowers/specs/2026-09-21-collector-supply-design.md) 작성, 문서 승인 대기(DESIGN_PENDING). 구현·QA 미착수이며 완료 판정은 별도로 유지한다.
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: `[FLOW-011]` 사이클의 code-reviewer 지적과 실측
 - `[FLOW-011]` 이 호출자를 `verify_with_references=True` 한 번 호출로 바꾸면서, CSV 에
   5거래일이 모이지 않은 종목이 참조 조회 대상이 되었습니다. 예전에는 그 자리에서 값 없이
@@ -139,6 +140,7 @@
       한 종목으로 같은 불변식을 보고 있으므로, 겹치지 않는 형태를 찾아야 합니다
 
 ### [INFRA-030] 레거시 `engine/collectors.py` 와 모듈형 `engine/collectors/` 가 공존해 죽은 코드가 남는다
+- 설계 상태 (2026-09-21): FLOW-014와 연속 처리하는 구조 설계 방향을 현재 대화의 사용자 「승인」으로 확인. [상세 설계](../superpowers/specs/2026-09-21-collector-supply-design.md) 작성, 문서 승인 대기(DESIGN_PENDING). 구현·QA 미착수이며 완료 판정은 별도로 유지한다.
 - 카테고리: 인프라 | 티어: T3 | 근거: `[FLOW-011]` 사이클(수급 호출자 통합)의 실측
 - `engine/collectors.py` 가 `__path__` 를 스스로 지정해 모듈이면서 패키지처럼 동작합니다
   (`:31-34`). 파일 끝(`:2486-2501`)에서 `EnhancedNewsCollector` 와 `NaverFinanceCollector`
