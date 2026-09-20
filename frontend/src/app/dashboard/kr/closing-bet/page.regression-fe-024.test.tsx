@@ -128,6 +128,21 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
     expect(screen.getByRole('combobox', { name: '리포트 날짜' })).toBeTruthy();
   });
 
+  it('모바일 제어행이 줄바꿈되고 날짜 선택값과 버튼 이름을 온전히 유지한다', async () => {
+    await renderPage();
+
+    const criteria = screen.getByRole('button', { name: '종가베팅 점수표' });
+    const controls = criteria.parentElement as HTMLElement;
+    const bulkBuy = screen.getByRole('button', { name: '종가베팅 전체 10주 매수' });
+    const reportDate = screen.getByRole('combobox', { name: '리포트 날짜' });
+
+    expect(controls.classList.contains('flex-wrap')).toBe(true);
+    expect(controls.classList.contains('w-full')).toBe(true);
+    expect(bulkBuy.classList.contains('whitespace-nowrap')).toBe(true);
+    expect(criteria.classList.contains('whitespace-nowrap')).toBe(true);
+    expect(reportDate.className).toContain('min-w-');
+  });
+
   it('모달을 열어도 이름 없는 버튼이 생기지 않는다', async () => {
     await renderPage();
 

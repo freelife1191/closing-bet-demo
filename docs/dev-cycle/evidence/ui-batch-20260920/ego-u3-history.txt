@@ -1,0 +1,244 @@
+[p1 "KR Market Dashboard" | space "공용 UI와 종목 화면 9건 검증"(2): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    button "메뉴 열고 닫기" [ref=103, loc=css:button[aria-label="메뉴 열고 닫기"]]
+      text ""
+    text "KR Market"
+    button "검색" [ref=104, loc=css:button[aria-label="검색"]]
+      text ""
+    button "설정 열기" [ref=28, loc=css:button[aria-label="설정 열기"]]
+      text ""
+  container
+    text ""
+    text "스마트 머니 봇"
+    text "AI 기반 전략"
+    heading
+      text "종가"
+      text "베팅"
+    paragraph
+      text "Gemini 분석 + 기관 수급 추세"
+    text "TRENDING THEMES"
+    text "반도체"
+    text "AI"
+    text "HBM"
+    text "플랫폼"
+    text "CANDIDATES"
+    text ""
+    text "7"
+    text "FILTERED"
+    text ""
+    text "3"
+    text "DATA STATUS"
+    button "스크리너 전체 업데이트" [ref=31, loc=css:button[aria-label="스크리너 전체 업데이트"]]
+      text ""
+    button "GEMINI AI 재분석" [ref=32, loc=css:button[aria-label="GEMINI AI 재분석"]]
+      text ""
+    text "UPDATED"
+    text "오후 03:40"
+    text "거래대금"
+    text ""
+    combobox "거래대금" [ref=34, loc=css:select[aria-label="거래대금"]]
+      text "전체"
+    text "상승률"
+    text ""
+    combobox "상승률" [ref=36, loc=css:select[aria-label="상승률"]]
+      text "전체"
+    text "등급"
+    text ""
+    button [ref=38]
+      text "기준표"
+    combobox "등급" [ref=39, loc=css:select[aria-label="등급"]]
+      text "전체"
+    text "총점"
+    text ""
+    combobox "총점" [ref=41, loc=css:select[aria-label="총점"]]
+      text "전체"
+    button [ref=42]
+      text ""
+      text "종가베팅 전체 10주 매수"
+    button [ref=43]
+      text ""
+      text "종가베팅 점수표"
+    combobox "리포트 날짜" [ref=44, loc=css:select[aria-label="리포트 날짜"]]
+      text "Latest Report"
+    button "선택한 날짜의 리포트 다시 불러오기" [ref=45, loc=css:button[aria-label="선택한 날짜의 리포트 다시 불러오기"]]
+      text ""
+    button [ref=46]
+      text ""
+      heading
+        text "Trading Tips & Strategy"
+      paragraph
+        text "시장 대응 전략 및 종가베팅 매수 패턴 가이드 보기"
+      text ""
+  button "AI 상담" [ref=48, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  dialog "모의투자 포트폴리오"
+    text ""
+    heading
+      text "모의투자 포트폴리오"
+    text "Paper Trading Account"
+    button "닫기" [ref=105]
+      text ""
+    text "총 평가 자산"
+    text "101,340,000"
+    text "원"
+    text "예수금"
+    button [ref=80]
+      text "+"
+    text "91,060,000"
+    text "원"
+    container
+      button [ref=82]
+        text ""
+        text "자산 개요"
+      button [ref=83]
+        text ""
+        text "보유 종목"
+      button [ref=84]
+        text ""
+        text "수익 차트"
+    container
+      table
+        table_row
+          table_cell
+            text "종목명"
+          table_cell
+            text "보유수량"
+          table_cell
+        button
+          table_cell
+            text "00"
+            text "삼성전자"
+            text ""
+            text "005930"
+          table_cell
+            text "100"
+            text "주"
+          table_cell
+            text "70,000"
+        button
+          table_cell
+            text "00"
+            text "SK하이닉스"
+            text ""
+            text "000660"
+          table_cell
+            text "15"
+            text "주"
+          table_cell
+            text "176,000"
+      button [ref=86]
+        text ""
+        text "계정 초기화"
+  dialog "삼성전자 거래 내역" [ref=96, loc=role:dialog[name="삼성전자 거래 내역"]]
+    container
+      container
+        text ""
+        container
+          heading
+            text "삼성전자"
+            text "거래 내역"
+          text "005930"
+      button "닫기" [ref=97]
+        text ""
+    container [ref=98]
+      container
+        container
+          text "누적 매수"
+          container
+            text "100"
+            text "주"
+          container
+            text "7,000,000"
+            text "원"
+        container
+          text "누적 매도"
+          container
+            text "20"
+            text "주"
+          container
+            text "1,500,000"
+            text "원"
+        container
+          text "평균 매수단가"
+          container
+            text "70,000"
+            text "원"
+          container
+            text "잔여"
+            text "80"
+            text "주"
+        container
+          text "실현손익"
+          container
+            text "+"
+            text "100,000"
+            text "원"
+          container
+            text "매도"
+            text "20"
+            text "주 기준"
+      container
+        container
+          container
+            text ""
+            text "가격·거래량 추세"
+          container
+            button [ref=99]
+              text "1개월"
+            button [ref=100]
+              text "3개월"
+            button [ref=101]
+              text "6개월"
+            button [ref=102]
+              text "1년"
+        container
+          table
+            table_row
+              table_cell
+                container
+                  canvas
+                  canvas
+                anchor [ref=106, url=https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=127.0.0.1/dashboard/kr/closing-bet]
+                  svg_root
+              table_cell
+                canvas
+                canvas
+            table_row
+              table_cell
+                canvas
+                canvas
+              table_cell
+                canvas
+          container
+            container
+              text "이동평균선 토글"
+              text ""
+            button [ref=107]
+              text "3"
+              text "일선"
+            button [ref=108]
+              text "5"
+              text "일선"
+            button [ref=109]
+              text "10"
+              text "일선"
+            button [ref=110]
+              text "20"
+              text "일선"
+            button [ref=111]
+              text "60"
+              text "일선"
+            button [ref=112]
+              text "120"
+              text "일선"
+      container [ref=113]
+        table
+          table_row
+            table_cell
+              text "일시"
+            table_cell
+              text "유형"
+            table_cell
+              text "단가"

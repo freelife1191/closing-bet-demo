@@ -23,7 +23,7 @@ SOURCE_REPO = Path("/Users/freelife/vibe/lecture/hodu/closing-bet-demo").resolve
 FIXTURE_PATH = Path("docs/dev-cycle/evidence/ui-batch-20260920/fixture.py")
 HISTORICAL_DATE = "2026-09-18"
 LATEST_DATE = "2026-09-20"
-ALLOWED_CONTROL_MODES = {"admin", "normal", "empty", "historical"}
+ALLOWED_CONTROL_MODES = {"admin", "normal", "empty", "historical", "d-only", "zero"}
 BLOCKED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 STOCKS: dict[str, dict[str, Any]] = {
@@ -82,13 +82,13 @@ def _closing_signal(
         "sector": "반도체" if ticker != "035420" else "인터넷",
         "grade": grade,
         "score": {
-            "news": 12,
-            "volume": 13,
-            "chart": 12,
-            "candle": 10,
-            "consolidation": 11,
-            "timing": 10,
-            "supply": 12,
+            "news": 3,
+            "volume": 3,
+            "chart": 2,
+            "candle": 1,
+            "consolidation": 1,
+            "timing": 0,
+            "supply": 2,
             "llm_reason": "합성 QA 자료: 수급과 가격 수축을 함께 확인했습니다.",
             "total": score,
             "ai_evaluation": _recommendation(ai_action, 67, "합성 QA 투자 의견입니다."),
@@ -116,13 +116,13 @@ def _closing_signal(
             "volume_ratio": 2.4,
             "foreign_net_buy": trading_value,
             "inst_net_buy": -3_276_004_650 if ticker == "035420" else 3_276_004_650,
-            "base_score": score - 8,
-            "bonus_score": 8,
-            "bonus_breakdown": {"volume": 3, "candle": 3, "limit_up": 2},
+            "base_score": min(12, score),
+            "bonus_score": max(0, score - 12),
+            "bonus_breakdown": {"volume": min(5, max(0, score - 12)), "candle": max(0, score - 17), "limit_up": 0},
             "is_new_high": ticker == "005930",
             "is_limit_up": False,
-            "candle": 10,
-            "consolidation": 11,
+            "candle": 1,
+            "consolidation": 1,
         },
         "ai_evaluation": _recommendation(ai_action, 67, "합성 QA 투자 의견입니다."),
         "advice": {
@@ -145,13 +145,16 @@ def _closing_signal(
 def _closing_payload(mode: str, requested_date: str | None = None) -> dict[str, Any]:
     report_date = requested_date or (HISTORICAL_DATE if mode == "historical" else LATEST_DATE)
     signals = [] if mode == "empty" else [
-        _closing_signal("005930", grade="S", score=88, trading_value=1_240_000_000_000,
+        _closing_signal("005930", grade="S", score=18, trading_value=1_240_000_000_000,
                         themes=["반도체", "AI"], signal_date=report_date),
-        _closing_signal("000660", grade="A", score=81, trading_value=1_260_000_000_000,
+        _closing_signal("000660", grade="A", score=15, trading_value=1_260_000_000_000,
                         themes=["반도체", "HBM"], signal_date=report_date),
-        _closing_signal("035420", grade="B", score=73, trading_value=3_276_004_650,
+        _closing_signal("035420", grade="B", score=12, trading_value=3_276_004_650,
                         themes=["AI", "플랫폼"], signal_date=report_date),
     ]
+    if mode == "d-only":
+        signals = [_closing_signal("005930", grade="D", score=8, trading_value=1_240_000_000_000,
+                                   themes=["반도체", "AI"], signal_date=report_date)]
     return {
         "date": report_date,
         "total_candidates": 7 if signals else 0,
@@ -336,12 +339,12 @@ def build_app(repo: Path, *, reset_log: bool = False) -> Flask:
             return jsonify({"error": "admin must be boolean"}), 400
         requested_mode = payload.get("mode")
         if requested_mode is not None and requested_mode not in ALLOWED_CONTROL_MODES:
-            return jsonify({"error": "mode must be admin, normal, empty, or historical"}), 400
+            return jsonify({"error": "mode must be admin, normal, empty, historical, d-only, or zero"}), 400
         if requested_mode == "admin":
             state.update(admin=True, mode="normal")
         elif requested_mode == "normal":
             state.update(admin=False, mode="normal")
-        elif requested_mode in {"empty", "historical"}:
+        elif requested_mode in {"empty", "historical", "d-only", "zero"}:
             state.update(admin=True, mode=requested_mode)
         if "admin" in payload:
             state["admin"] = payload["admin"]
@@ -443,7 +446,11 @@ def build_app(repo: Path, *, reset_log: bool = False) -> Flask:
 
     @app.get("/api/kr/stock-detail/<ticker>")
     def stock_detail(ticker: str) -> Any:
-        return jsonify(_stock_detail_payload(ticker))
+        payload = _stock_detail_payload(ticker)
+        if state["mode"] == "zero":
+            payload.pop("investorTrend5Day", None)
+            payload["investorTrend"] = {"institution": 0, "individual": 0}
+        return jsonify(payload)
 
     @app.post("/api/kr/realtime-prices")
     def realtime_prices() -> Any:

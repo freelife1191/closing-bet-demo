@@ -11,7 +11,8 @@ import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
 import GradeGuideModal from '@/app/components/GradeGuideModal';
 import Tooltip from '@/app/components/Tooltip';
 import { useAdmin } from '@/hooks/useAdmin';
-import { CHART_PERIODS, formatBigNumber, stockChartUrl } from './displayHelpers';
+import { formatMarketAmount } from '../formatMarketAmount';
+import { CHART_PERIODS, stockChartUrl } from './displayHelpers';
 import { PriceRangeBar, StatBox } from './displayPrimitives';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
 
@@ -602,7 +603,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                       </Tooltip>
                     </span>
                     <span className="font-mono text-emerald-400">
-                      {formatBigNumber(detail.priceInfo.trading_value)}
+                      {formatMarketAmount(detail.priceInfo.trading_value, '-')}
                     </span>
                   </div>
                 </div>
@@ -624,7 +625,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className="text-sm font-bold text-white">{formatBigNumber(detail.indicators.marketCap)}</div>
+                    <div className="text-sm font-bold text-white">{formatMarketAmount(detail.indicators.marketCap, '-')}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -690,8 +691,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${foreign5Day >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                      {foreign5Day >= 0 ? '+' : ''}{formatBigNumber(foreign5Day)}
+                    <div className={`text-sm font-bold ${foreign5Day > 0 ? 'text-rose-400' : foreign5Day < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                      {foreign5Day > 0 ? '+' : ''}{formatMarketAmount(foreign5Day, '-')}
                     </div>
                   </div>
                   <div className="text-center">
@@ -701,8 +702,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${institution5Day >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                      {institution5Day >= 0 ? '+' : ''}{formatBigNumber(institution5Day)}
+                    <div className={`text-sm font-bold ${institution5Day > 0 ? 'text-rose-400' : institution5Day < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                      {institution5Day > 0 ? '+' : ''}{formatMarketAmount(institution5Day, '-')}
                     </div>
                   </div>
                   <div className="text-center">
@@ -712,8 +713,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${detail.investorTrend.individual >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                      {detail.investorTrend.individual >= 0 ? '+' : ''}{formatBigNumber(detail.investorTrend.individual)}
+                    <div className={`text-sm font-bold ${detail.investorTrend.individual > 0 ? 'text-rose-400' : detail.investorTrend.individual < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                      {detail.investorTrend.individual > 0 ? '+' : ''}{formatMarketAmount(detail.investorTrend.individual, '-')}
                     </div>
                   </div>
                 </div>
@@ -736,7 +737,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                           <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                         </Tooltip>
                       </div>
-                      <div className="text-sm font-bold text-white">{formatBigNumber(detail.financials.revenue)}</div>
+                      <div className="text-sm font-bold text-white">{formatMarketAmount(detail.financials.revenue, '-')}</div>
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -745,7 +746,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                           <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                         </Tooltip>
                       </div>
-                      <div className="text-sm font-bold text-white">{formatBigNumber(detail.financials.operatingProfit)}</div>
+                      <div className="text-sm font-bold text-white">{formatMarketAmount(detail.financials.operatingProfit, '-')}</div>
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -754,7 +755,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                           <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                         </Tooltip>
                       </div>
-                      <div className="text-sm font-bold text-white">{formatBigNumber(detail.financials.netIncome)}</div>
+                      <div className="text-sm font-bold text-white">{formatMarketAmount(detail.financials.netIncome, '-')}</div>
                     </div>
                   </div>
                 </div>
@@ -880,9 +881,11 @@ export default function JonggaV2Page() {
     setFilterScore(0);
   };
 
+  const reportSignals = data?.signals ?? [];
+  const eligibleSignals = reportSignals.filter((signal) => signal.grade !== 'D');
+
   const getFilteredSignals = () => {
-    if (!data?.signals) return [];
-    return data.signals.filter(s => {
+    return eligibleSignals.filter(s => {
       // 1. Trading Value Filter
       if (filterTradingValue > 0 && s.trading_value < filterTradingValue) return false;
 
@@ -908,9 +911,9 @@ export default function JonggaV2Page() {
     });
   };
 
-  const filteredSignals = getFilteredSignals();
-  const matchCount = filteredSignals.length;
-  const totalSignalCount = data?.signals?.length ?? 0;
+  const displaySignals = getFilteredSignals();
+  const matchCount = displaySignals.length;
+  const totalSignalCount = reportSignals.length;
   const activeFilterLabels = [
     filterTradingValue > 0 ? `거래대금 ${formatFilterTradingValue(filterTradingValue)}` : null,
     filterRise > 0 ? `상승률 ${filterRise}% 이상` : null,
@@ -1216,20 +1219,23 @@ export default function JonggaV2Page() {
         </div>
 
         {/* TRENDING THEMES Box */}
-        <TrendingThemesBox themes={getTrendingThemes(filteredSignals)} />
+        <TrendingThemesBox themes={getTrendingThemes(reportSignals)} />
       </div>
 
       <div className="flex flex-col gap-6 pb-6 border-b border-white/5">
-        <div className="flex gap-6">
-          <StatBox label="CANDIDATES" value={candidatesCount} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
-          <StatBox label="FILTERED" value={filteredCount} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
-          <DataStatusBox
-            updatedAt={data?.updated_at || null}
-            loading={loading}
-            analyzingGemini={analyzingGemini}
-            setAnalyzingGemini={setAnalyzingGemini}
-            onRefresh={() => setRefreshKey(prev => prev + 1)}
-          />
+        <div>
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">엔진 단계</div>
+          <div className="flex gap-6">
+            <StatBox label="CANDIDATES" value={candidatesCount} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
+            <StatBox label="FILTERED" value={filteredCount} highlight tooltip="AI 조건에 의해 최종 선별된 종목 수입니다." />
+            <DataStatusBox
+              updatedAt={data?.updated_at || null}
+              loading={loading}
+              analyzingGemini={analyzingGemini}
+              setAnalyzingGemini={setAnalyzingGemini}
+              onRefresh={() => setRefreshKey(prev => prev + 1)}
+            />
+          </div>
         </div>
 
         {selectedDate === 'latest' && (data?.is_stale || data?.status === 'stale' || data?.stale_warning) && (
@@ -1349,7 +1355,7 @@ export default function JonggaV2Page() {
           {hasActiveFilters && (
             <div className="w-full md:w-auto flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-gray-400">
               <span className="font-medium text-gray-300">
-                표시 {matchCount} / 전체 {totalSignalCount}
+                표시 {matchCount} / 리포트 전체 {totalSignalCount}
               </span>
               {activeFilterLabels.map((label) => (
                 <span key={label} className="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2 py-0.5 text-indigo-200">
@@ -1366,7 +1372,7 @@ export default function JonggaV2Page() {
             </div>
           )}
 
-          <div className="flex items-center gap-3 md:ml-auto">
+          <div className="flex w-full flex-wrap items-start justify-start gap-3 md:ml-auto md:w-auto md:items-center md:justify-end">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
 
             <div className="flex flex-col items-end gap-1">
@@ -1375,7 +1381,7 @@ export default function JonggaV2Page() {
                   onClick={handleBulkBuyClosingBet}
                   disabled={isBulkBuyClosingBetDisabled}
                   aria-describedby={isBulkBuyClosingBetDisabled ? bulkBuyReasonId : undefined}
-                  className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                   title={bulkBuyClosingBetTooltip}
                 >
                   <i className={`fas ${isBulkBuyingClosingBet ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
@@ -1392,7 +1398,7 @@ export default function JonggaV2Page() {
             {/* 종가베팅 점수표 버튼 */}
             <button
               onClick={() => setIsClosingBetCriteriaModalOpen(true)}
-              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10"
+              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10 whitespace-nowrap"
             >
               <i className="fas fa-table"></i> 종가베팅 점수표
             </button>
@@ -1402,7 +1408,7 @@ export default function JonggaV2Page() {
                 aria-label="리포트 날짜"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-[#1c1c1e] border border-white/10 text-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all hover:border-white/20 w-full md:w-auto"
+                className="bg-[#1c1c1e] border border-white/10 text-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all hover:border-white/20 min-w-[10rem] w-full md:w-auto"
               >
                 <option value="latest">Latest Report</option>
                 {dates.map((d) => (
@@ -1526,19 +1532,28 @@ export default function JonggaV2Page() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {!data || filteredSignals.length === 0 ? (
+        {!data || displaySignals.length === 0 ? (
           <div className="bg-[#1c1c1e] rounded-2xl p-16 text-center border border-white/5 flex flex-col items-center">
             <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
               <span className="text-3xl opacity-30">💤</span>
             </div>
-            <h2 className="text-xl font-bold text-gray-300">No Signals Found</h2>
+            <h2 className="text-xl font-bold text-gray-300">
+              {reportSignals.length === 0
+                ? '분석된 종목이 없습니다.'
+                : eligibleSignals.length === 0
+                  ? '표시할 수 있는 종목이 없습니다.'
+                  : '선택한 필터에 맞는 종목이 없습니다.'}
+            </h2>
             <p className="text-gray-500 mt-2 max-w-md">
-              Try adjusting filters or wait for market conditions to improve.
+              {reportSignals.length === 0
+                ? '데이터가 갱신된 뒤 종목이 표시됩니다.'
+                : eligibleSignals.length === 0
+                  ? 'D등급 종목은 안전 기준에 따라 화면에서 제외됩니다. 다른 날짜의 리포트를 확인해 주세요.'
+                  : '필터를 초기화하거나 조건을 낮춰 다시 확인해 주세요.'}
             </p>
           </div>
         ) : (
-          filteredSignals
-            .filter(s => s.grade !== 'D') // D등급 원천 필터링 (안전장치)
+          displaySignals
             .map((signal, idx) => (
               <SignalCard
                 key={`${signal.stock_code}-${idx}`}
@@ -2054,7 +2069,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                 거래량 배수
-                <Tooltip content="최근 20일 평균 거래량 대비 오늘 거래량의 배수입니다. 2x 이상이면 평소보다 2배 이상 거래되고 있습니다.">
+                <Tooltip content="신호가 나온 거래일까지 최근 20일 평균 거래량과 신호일 거래량을 비교한 값입니다. 2x 이상이면 평소보다 2배 이상 거래된 것입니다.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
@@ -2065,7 +2080,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                 종가
-                <Tooltip content="가장 최근 거래일의 종가입니다. 장중에는 갱신되지 않으므로 실시간 시세와 다를 수 있습니다. 실시간 시세는 「상세 분석 보기」에서 확인하세요.">
+                <Tooltip content="신호가 나온 거래일의 종가입니다. 실시간 시세와 다를 수 있으며 현재 시세는 「상세 분석 보기」에서 확인하세요.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
@@ -2076,27 +2091,12 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                 거래대금
-                <Tooltip content="오늘 하루 동안 거래된 총 금액입니다. 대금이 클수록 유동성이 좋고 큰 손들의 관심을 받고 있습니다.">
+                <Tooltip content="신호가 나온 거래일 하루 동안 거래된 총 금액입니다. 대금이 클수록 유동성이 좋고 큰 손들의 관심을 받은 종목입니다.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
               <div className="text-sm font-bold text-emerald-400">
-                {(() => {
-                  const value = signal.trading_value || 0;
-                  // 1조 이상: X.X조
-                  if (value >= 1_000_000_000_000) {
-                    return `${(value / 1_000_000_000_000).toFixed(1)}조`;
-                  }
-                  // 1억 이상: XXXX억 (정수 표기)
-                  if (value >= 100_000_000) {
-                    return `${Math.round(value / 100_000_000).toLocaleString()}억`;
-                  }
-                  // 1만 이상: XXXX만
-                  if (value >= 10_000) {
-                    return `${Math.round(value / 10_000).toLocaleString()}만`;
-                  }
-                  return value.toLocaleString();
-                })()}
+                {formatMarketAmount(signal.trading_value)}
               </div>
             </div>
             <div className="text-center">
@@ -2109,7 +2109,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               <div className={`text-sm font-bold ${(signal.score_details?.foreign_net_buy || 0) > 0 ? 'text-rose-400' :
                 (signal.score_details?.foreign_net_buy || 0) < 0 ? 'text-blue-400' : 'text-gray-400'
                 }`}>
-                {formatBigNumber(signal.score_details?.foreign_net_buy)}
+                {formatMarketAmount(signal.score_details?.foreign_net_buy, '-')}
               </div>
             </div>
             <div className="text-center">
@@ -2122,13 +2122,13 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               <div className={`text-sm font-bold ${(signal.score_details?.inst_net_buy || 0) > 0 ? 'text-rose-400' :
                 (signal.score_details?.inst_net_buy || 0) < 0 ? 'text-blue-400' : 'text-gray-400'
                 }`}>
-                {formatBigNumber(signal.score_details?.inst_net_buy)}
+                {formatMarketAmount(signal.score_details?.inst_net_buy, '-')}
               </div>
             </div>
           </div>
 
           {/* AI Analysis Result (Action / Confidence) */}
-          <div className="flex items-center justify-between bg-white/5 rounded-lg p-2 mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-white/5 rounded-lg p-2 mb-3">
             <Tooltip
               content={aiEval
                 ? 'Gemini AI가 분석한 결과에서 읽은 매매 추천입니다. BUY(매수), HOLD(관망), SELL(매도) 중 하나입니다.'
@@ -2143,7 +2143,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               </div>
             </Tooltip>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-gray-500 flex items-center gap-1">
+              <span className="text-[10px] text-gray-500 flex items-center gap-1 whitespace-nowrap">
                 확신도
                 <Tooltip content="Gemini AI가 산출한 추천 신뢰도입니다. 높을수록 강력한 시그널이며, 값이 없으면 미산출로 표시합니다.">
                   <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>

@@ -1,0 +1,88 @@
+{
+  "inputs": [
+    {
+      "id": "env-telegram-bot-token",
+      "value": "",
+      "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+      "labels": [
+        "TELEGRAM_BOT_TOKEN"
+      ]
+    },
+    {
+      "id": "env-telegram-chat-id",
+      "value": "",
+      "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+      "labels": [
+        "TELEGRAM_CHAT_ID"
+      ]
+    },
+    {
+      "id": "env-discord-webhook-url",
+      "value": "",
+      "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+      "labels": [
+        "DISCORD_WEBHOOK_URL"
+      ]
+    },
+    {
+      "id": "env-smtp-host",
+      "value": "smtp.example.test",
+      "placeholder": "smtp.gmail.com",
+      "labels": [
+        "SMTP Host"
+      ]
+    },
+    {
+      "id": "env-smtp-port",
+      "value": "587",
+      "placeholder": "587",
+      "labels": [
+        "SMTP Port"
+      ]
+    },
+    {
+      "id": "env-smtp-user",
+      "value": "",
+      "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+      "labels": [
+        "SMTP User (Email)"
+      ]
+    },
+    {
+      "id": "env-smtp-password",
+      "value": "",
+      "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+      "labels": [
+        "SMTP Password (App Password)"
+      ]
+    },
+    {
+      "id": "env-email-recipients",
+      "value": "",
+      "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+      "labels": [
+        "수신 이메일 (콤마로 구분)"
+      ]
+    }
+  ],
+  "active": "<button class=\"flex-none md:w-full text-left px-4 md:px-3 py-2 rounded-full md:rounded-[6px] text-sm md:text-[15px] font-medium transition-all whitespace-nowrap bg-[#3b3b40] text-white\">알림 센터</button>",
+  "overflow": "hidden",
+  "layers": [
+    {
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720,
+        "top": 0,
+        "right": 1280,
+        "bottom": 720,
+        "left": 0
+      },
+      "z": "1000",
+      "transform": "none",
+      "filter": "none"
+    }
+  ],
+  "background": true
+}

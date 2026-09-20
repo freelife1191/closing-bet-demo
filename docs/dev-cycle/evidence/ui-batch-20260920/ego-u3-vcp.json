@@ -1,0 +1,19 @@
+{
+  "focus": null,
+  "host": {
+    "x": 0,
+    "y": 0,
+    "width": 375,
+    "height": 812,
+    "top": 0,
+    "right": 375,
+    "bottom": 812,
+    "left": 0
+  },
+  "transform": "none",
+  "overflow": "hidden",
+  "buttonNames": [
+    "차트 닫기",
+    "차트 닫기"
+  ]
+}

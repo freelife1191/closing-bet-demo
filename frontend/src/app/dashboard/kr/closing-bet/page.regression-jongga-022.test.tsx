@@ -11,7 +11,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import JonggaV2Page from './page';
-import { formatBigNumber } from './displayHelpers';
+import { formatMarketAmount } from '../formatMarketAmount';
 
 const KST_DATE = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' });
 const TODAY = () => `${KST_DATE.format(new Date())}T12:00:00+09:00`;
@@ -166,6 +166,20 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
     expect(within(tooltip).getByText(/이 값만 실시간 시세 제공처가 집계하므로/)).toBeTruthy();
   });
 
+  it('5일 확정 집계가 없고 실시간 집계가 0 또는 누락이면 세 값을 중립적인 -로 표시한다', async () => {
+    state.detail = {
+      ...DETAIL,
+      investorTrend5Day: undefined,
+      investorTrend: { institution: 0, individual: 0 },
+    };
+    await openDetailModal();
+
+    const section = screen.getByText('투자자 동향 (오늘 기준 5영업일)').closest('div[class~="bg-white/5"]') as HTMLElement;
+    expect(within(section).getAllByText('-')).toHaveLength(3);
+    expect(section.textContent).not.toContain('+-');
+    expect(section.textContent).not.toContain('+0');
+  });
+
   it('모달의 시세 절이 실시간임을 제목에 밝힌다', async () => {
     await openDetailModal();
 
@@ -203,24 +217,24 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
   });
 });
 
-describe('[JONGGA-022] formatBigNumber', () => {
+describe('[JONGGA-022] formatMarketAmount', () => {
   it('카드와 모달이 같은 금액을 같은 문자열로 적는다', () => {
     // 고치기 전에는 카드가 내림해 32억, 모달이 반올림해 33억을 적었다.
-    expect(formatBigNumber(INSTITUTION_5DAY)).toBe('33억');
-    expect(formatBigNumber(FOREIGN_5DAY)).toBe('23억');
+    expect(formatMarketAmount(INSTITUTION_5DAY, '-')).toBe('33억');
+    expect(formatMarketAmount(FOREIGN_5DAY, '-')).toBe('23억');
   });
 
   it('값이 없거나 0이면 자리를 비운다', () => {
-    expect(formatBigNumber(undefined)).toBe('-');
-    expect(formatBigNumber(null)).toBe('-');
-    expect(formatBigNumber(0)).toBe('-');
+    expect(formatMarketAmount(undefined, '-')).toBe('-');
+    expect(formatMarketAmount(null, '-')).toBe('-');
+    expect(formatMarketAmount(0, '-')).toBe('-');
   });
 
   it('음수는 부호를 앞에 붙인다', () => {
-    expect(formatBigNumber(-INSTITUTION_5DAY)).toBe('-33억');
+    expect(formatMarketAmount(-INSTITUTION_5DAY, '-')).toBe('-33억');
   });
 
   it('조 단위는 소수 한 자리로 적는다', () => {
-    expect(formatBigNumber(1_250_000_000_000)).toBe('1.3조');
+    expect(formatMarketAmount(1_250_000_000_000, '-')).toBe('1조 2500억');
   });
 });

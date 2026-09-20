@@ -10,3 +10,13 @@ for path in ['/api/auth/signout','/api/auth/signin/google','/api/system/env','/a
 assert c.post('/__qa/control',json={'mode':'normal'}).status_code==200
 assert c.get('/api/admin/check').json['isAdmin'] is False
 print('fixture required GET and mutation boundaries PASS')
+
+assert c.post('/__qa/control',json={'mode':'d-only'}).status_code==200
+r=c.get('/api/kr/jongga-v2/latest').json
+assert len(r['signals'])==1 and r['signals'][0]['grade']=='D'
+assert c.post('/__qa/control',json={'mode':'zero'}).status_code==200
+r=c.get('/api/kr/stock-detail/005930').json
+assert 'investorTrend5Day' not in r and r['investorTrend']=={'institution':0,'individual':0}
+assert c.post('/__qa/control',json={'mode':'admin'}).status_code==200
+assert len(c.get('/api/system/env').json)==12
+print('D-only, zero/missing, editable env fixture contracts PASS')

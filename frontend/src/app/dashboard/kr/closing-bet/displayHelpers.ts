@@ -15,22 +15,6 @@ export const CHART_PERIODS = [
 
 export type ChartPeriod = (typeof CHART_PERIODS)[number]['key'];
 
-// 카드와 상세 모달이 같은 금액을 같은 문자열로 적도록 두 자리가 이 함수를 함께 쓴다.
-export function formatBigNumber(num: number | undefined | null) {
-  // 0 과 NaN 도 자리를 비운다. 값을 구하지 못했다는 뜻으로 읽히는 편이 「NaN」보다 낫다.
-  if (!num) return '-';
-
-  const abs = Math.abs(num);
-  const sign = num < 0 ? '-' : '';
-
-  if (abs >= 10000000000000000) return `${sign}${(abs / 10000000000000000).toFixed(1)}경`;
-  if (abs >= 1000000000000) return `${sign}${(abs / 1000000000000).toFixed(1)}조`;
-  if (abs >= 100000000) return `${sign}${(abs / 100000000).toFixed(0)}억`;
-  if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(0)}만`;
-
-  return num.toLocaleString();
-}
-
 // 종목코드는 백엔드 응답에서 오는 값이므로 경로에 끼우기 전에 인코딩한다. 형식을
 // 여섯 자리 숫자로 좁히지는 않는다. KRX 가 아크릴(0007C0)처럼 영문자가 든 코드를
 // 이미 쓰고 있어서, 좁히는 쪽이 오히려 멀쩡한 종목을 떨어뜨린다.

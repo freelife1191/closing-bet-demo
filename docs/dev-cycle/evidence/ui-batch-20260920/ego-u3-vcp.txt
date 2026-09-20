@@ -1,0 +1,180 @@
+[p1 "KR Market Dashboard" | space "공용 UI와 종목 화면 9건 검증"(2): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    button "메뉴 열고 닫기" [ref=250, loc=css:button[aria-label="메뉴 열고 닫기"]]
+      text ""
+    text "KR Market"
+    button "검색" [ref=251, loc=css:button[aria-label="검색"]]
+      text ""
+    button "설정 열기" [ref=228, loc=css:button[aria-label="설정 열기"]]
+      text ""
+  container
+    text "VCP 패턴 스캐너"
+    heading
+      text "VCP"
+      text "시그널"
+    paragraph
+      text "Volatility Contraction Pattern + 기관/외국인 수급"
+    combobox "재분석 실행 모드" [ref=229, loc=css:select[aria-label="재분석 실행 모드"]]
+      text "실패/누락만"
+    button [ref=230]
+      text ""
+      text "실패 AI 재분석"
+    button [ref=231]
+      text ""
+      text "Refresh VCP"
+    heading
+      text "실시간 VCP 시그널"
+    text "TOP"
+    text "2"
+    text "(Scanned:"
+    text "42"
+    text ")"
+    button [ref=232]
+      text ""
+      text "VCP 전체 10주 매수"
+    button [ref=233]
+      text ""
+      text "VCP 기준표"
+    button [ref=234]
+      text "최신"
+    button [ref=235]
+      text ""
+      text "과거"
+    table
+      table_row
+        table_cell
+          text "STOCK"
+        table_cell
+          text "DATE"
+        table_cell
+          text "외국인 5D"
+        table_cell
+      table_row
+        table_cell
+          text "삼성전자"
+          text "005930"
+        table_cell
+          text "2026-09-20"
+        table_cell
+          text ""
+          text "1조2400억"
+        table_cell
+      table_row
+        table_cell
+          text "SK하이닉스"
+          text "000660"
+        table_cell
+          text "2026-09-20"
+        table_cell
+          text ""
+          text "-1조2600억"
+        table_cell
+    text "Last updated:"
+    text "오후 05:50"
+  button "AI 상담" [ref=248, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  dialog "삼성전자 (005930)" [ref=252, loc=role:dialog[name="삼성전자 (005930)"]]
+    container
+      container
+        heading
+          text "삼성전자"
+          container
+            text "("
+            text "005930"
+            text ")"
+        button "차트 닫기" [ref=253]
+          text "×"
+      group "차트 조회 기간"
+        button [ref=254]
+          text "1개월"
+        button [ref=255]
+          text "3개월"
+        button [ref=256]
+          text "6개월"
+        button [ref=257]
+          text "1년"
+      container
+        table
+          table_row
+            table_cell
+              container
+                canvas
+                canvas
+              anchor [ref=258, url=https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=127.0.0.1/dashboard/kr/vcp]
+                svg_root
+            table_cell
+              canvas
+              canvas
+          table_row
+            table_cell
+              canvas
+              canvas
+            table_cell
+              canvas
+        container
+          text "VCP 표시"
+          text ""
+        container
+          container
+            text "이동평균선 토글"
+            text ""
+          button [ref=259]
+            text "3"
+            text "일선"
+          button [ref=260]
+            text "5"
+            text "일선"
+          button [ref=261]
+            text "10"
+            text "일선"
+          button [ref=262]
+            text "20"
+            text "일선"
+          button [ref=263]
+            text "60"
+            text "일선"
+          button [ref=264]
+            text "120"
+            text "일선"
+      container
+        container
+          text "VCP 패턴"
+          container
+            checkbox [ref=265]
+            text "범위 표시"
+        container
+          text "수축비율:"
+          text "0.52"
+        container
+          text "전반부:"
+          container
+            text "₩"
+            text "76,920"
+        container
+          text "후반부:"
+          container
+            text "₩"
+            text "75,390"
+    container
+      text "AI 상세 분석"
+      container [ref=266]
+        container
+          button [ref=267]
+            text ""
+            text "GPT"
+          button [ref=268]
+            text ""
+            text "Gemini"
+        container
+          container
+            svg_root
+            text "82%"
+          container
+            text """
+            text "합성 VCP 수축을 확인했습니다."
+            text """
+        container
+          text "종합 시그널 점수"
+          text "86.0"

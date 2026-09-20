@@ -1,0 +1,19 @@
+{
+  "text": "AI가 평가한 종합 등급입니다. S(최고), A(우수), B(양호) 순서입니다.",
+  "rect": {
+    "x": 8,
+    "y": 507.296875,
+    "width": 208,
+    "height": 50.5,
+    "top": 507.296875,
+    "right": 216,
+    "bottom": 557.796875,
+    "left": 8
+  },
+  "within": true,
+  "focus": "<span class=\"relative group/tooltip inline-flex items-center\" tabindex=\"0\" aria-describedby=\"_r_9_\"><i class=\"fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help\"></i></span>",
+  "viewport": [
+    375,
+    812
+  ]
+}

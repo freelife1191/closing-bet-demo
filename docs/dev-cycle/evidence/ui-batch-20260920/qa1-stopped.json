@@ -1,0 +1,20 @@
+[
+  {
+    "pid": 69336,
+    "name": "fixture",
+    "command": "/opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-qa-20260920-vxqi1vvg/docs/dev-cycle/evidence/ui-batch-20260920/fixture.py --repo /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-qa-20260920-vxqi1vvg --port 57622 --reset-log",
+    "cwd_matches": true
+  },
+  {
+    "pid": 69337,
+    "name": "frontend",
+    "command": "node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 57621",
+    "cwd_matches": true
+  },
+  {
+    "pid": 71148,
+    "name": "gateway",
+    "command": "/opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-qa-20260920-vxqi1vvg/docs/dev-cycle/evidence/ui-batch-20260920/gateway.py",
+    "cwd_matches": true
+  }
+]

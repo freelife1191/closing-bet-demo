@@ -1,0 +1,96 @@
+{
+  "user": {
+    "tabs": [
+      "",
+      "일반",
+      "+",
+      "로그아웃",
+      "계정 삭제",
+      "추가",
+      "다크",
+      "라이트",
+      "자동",
+      "취소",
+      "저장"
+    ],
+    "envInputs": 0
+  },
+  "envRequests": [],
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/__qa/control",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/jongga-v2/latest",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/jongga-v2/dates",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/jongga-v2/dates",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/jongga-v2/latest",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/user/quota",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/check",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/user/quota",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/user/quota",
+      "status": 200
+    }
+  ]
+}

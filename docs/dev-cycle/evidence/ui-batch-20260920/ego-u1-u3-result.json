@@ -1,0 +1,39 @@
+{
+  "api": {
+    "inputs": [
+      {
+        "id": "env-openai-api-key",
+        "value": "",
+        "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+        "labels": [
+          "OPENAI_API_KEY"
+        ]
+      },
+      {
+        "id": "env-perplexity-api-key",
+        "value": "",
+        "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요",
+        "labels": [
+          "PERPLEXITY_API_KEY"
+        ]
+      }
+    ],
+    "deleteNames": [
+      "닫기",
+      "OPENAI_API_KEY 삭제",
+      "PERPLEXITY_API_KEY 삭제"
+    ],
+    "gemini": []
+  },
+  "shift": "저장",
+  "tab": "닫기",
+  "after": {
+    "focus": null,
+    "overflow": "",
+    "inert": 0
+  },
+  "reopened": {
+    "value": "",
+    "placeholder": "저장되어 있습니다. 바꾸려면 새 값을 입력하세요"
+  }
+}

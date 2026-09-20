@@ -1,0 +1,50 @@
+{
+  "selects": [
+    {
+      "name": "거래대금",
+      "value": "0"
+    },
+    {
+      "name": "상승률",
+      "value": "0"
+    },
+    {
+      "name": "등급",
+      "value": "ALL"
+    },
+    {
+      "name": "총점",
+      "value": "0"
+    },
+    {
+      "name": "리포트 날짜",
+      "value": "2026-09-18"
+    }
+  ],
+  "disabled": [
+    {
+      "text": "종가베팅 전체 10주 매수",
+      "description": [
+        "Latest Report(최신 리포트)에서만 매수를 실행할 수 있습니다."
+      ]
+    },
+    {
+      "text": "삼성전자 모의 매수",
+      "description": [
+        "Latest Report(최신 리포트)에서만 매수를 실행할 수 있습니다."
+      ]
+    },
+    {
+      "text": "SK하이닉스 모의 매수",
+      "description": [
+        "Latest Report(최신 리포트)에서만 매수를 실행할 수 있습니다."
+      ]
+    },
+    {
+      "text": "NAVER 모의 매수",
+      "description": [
+        "Latest Report(최신 리포트)에서만 매수를 실행할 수 있습니다."
+      ]
+    }
+  ]
+}

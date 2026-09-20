@@ -23,3 +23,8 @@ Ponytail4지적모두반영후SHIP. UI전체review1 Vitest538/72,build3/3,lint0e
 독립 code REQUESTCHANGES(close icon labels/hovergrace),architectBLOCK(z-order/hosttransform/noninteractivefocus). 회귀review-red12fail69pass확인. z-orderinline공용소유·hostfade→card·닫기이름수정후targetreview-green64/65. 남은1건은testregex의fade-in부분매칭오류라exactclass token으로수정;동작기대유지. Tooltip키보드/grace보완중. 승인반복없이같은범위수정.
 
 Reviewfix: 전체Vitest546/72 build3/3PASS, 마지막Tooltip effectdeps/testjsxkey수정후targetTooltip16/16·lintreview3 0errors192warnings. 추가warning은DOMfocusable자손계산의layout effect1건(기존190+portalsetup1+focusable1). typecheckreview2실행.
+QA1 U1설정mask/labels/편집취소/재진입·U3키보드focus/Tab·모달들·U4중첩z1000/1001·U6edge/모달첫줄/resize실측확인. U8 모바일VCP과거선택에서bulk버튼및금지사유가왼쪽으로잘림. ego-u8-vcp-disabled-mobile.png 직접열람하여필수실패기록.
+Ruling: FE016(이미승인된후속4건)이U8을막으므로1차5건아카이브하지않고Task5를앞당겨9건통합최종QA로마감. 새범위없음/재승인불필요. 필수U8유지,완료0건. scratchb1718c6를계속검사하고root소스Task5는sync전까지영향없음. ui_pages에Task5testsfirst위임.
+하네스편차: gateway 초기WebSocket미전달로Next HMR404와hydration대기. /_next/hmr tunnel추가후정상화. 잘못된정확buttonname/aria-attribute/h3대h4/중간has-text선택자시도는DOM대조후수정. UI성공으로세지않음. 초기sell이미지는transition중이라안정이미지재확인필요.
+Task5 구현: parentdisplayRED8fail19pass+missinghelper suite→GREEN42/42. FullVitest558/74 build3/3 lint0. VCP수급금액의'주'표기오류는engine금액임계값으로단위확정해'원'수정; scratch구버전+새assert RED1fail2pass→GREEN3/3, typecheckpass. 현재43SHA원본/사본일치. ponytailSHIP,code/arch후속4건영향리뷰중. 기존모달/Tooltip/Settings소스불변.
+Task5 추가리뷰D-only/0접두사보완. parentRED3fail17pass→최초GREEN시testselector이스케이프오류1건→정확class token으로수정후fullVitest561/74PASS. builddisplay-final3/3,lint0/192,typed0. codeAPPROVE/architectCLEAR,후속T3review중. 승인9범위제품구현완료,QA2아직미실행.

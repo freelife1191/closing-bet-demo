@@ -1,0 +1,16 @@
+{
+  "stage": "vitest:display",
+  "started_at": "2026-09-20T09:02:18.649918+00:00",
+  "ended_at": "2026-09-20T09:02:25.384155+00:00",
+  "pid": 2487,
+  "command": [
+    "npx",
+    "vitest",
+    "run"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-qa-20260920-vxqi1vvg/frontend",
+  "timeout_seconds": 300,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 6.73
+}

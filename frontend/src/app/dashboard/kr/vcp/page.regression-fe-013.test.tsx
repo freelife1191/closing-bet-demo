@@ -94,6 +94,24 @@ describe('VCPPage - 과거 날짜 매수 가드', () => {
     });
   });
 
+  it('과거 날짜에서도 모바일 제어행과 금지 사유가 화면 폭 안에서 줄바꿈된다', async () => {
+    render(<VCPPage />);
+    await findRowBuyButton(LATEST_REASON);
+    await selectHistoryDate();
+
+    const criteria = screen.getByRole('button', { name: 'VCP 기준표' });
+    const controls = criteria.parentElement as HTMLElement;
+    const historyDate = screen.getByRole('button', { name: '2026-05-05' });
+
+    expect(controls.classList.contains('flex-wrap')).toBe(true);
+    expect(controls.classList.contains('self-stretch')).toBe(true);
+    expect(historyDate.className).toContain('min-w-');
+
+    const bulkButton = screen.getByRole('button', { name: /VCP 전체 10주 매수/ });
+    const reason = document.getElementById(bulkButton.getAttribute('aria-describedby') || '');
+    expect(reason?.className).toContain('break-words');
+  });
+
   it('종목 행을 열면 이름 있는 상세 대화상자가 나타나고 Escape로 닫힌다', async () => {
     render(<VCPPage />);
 

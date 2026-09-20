@@ -1,0 +1,44 @@
+{
+  "nested": {
+    "activeText": "취소",
+    "layers": [
+      {
+        "z": "1000",
+        "transform": "none",
+        "inert": true,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "top": 0,
+          "right": 1280,
+          "bottom": 720,
+          "left": 0
+        }
+      },
+      {
+        "z": "1001",
+        "transform": "none",
+        "inert": false,
+        "active": "true",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "top": 0,
+          "right": 1280,
+          "bottom": 720,
+          "left": 0
+        }
+      }
+    ],
+    "point": "alertdialog"
+  },
+  "parent": {
+    "count": 1,
+    "top": null,
+    "focus": "계정 초기화"
+  }
+}

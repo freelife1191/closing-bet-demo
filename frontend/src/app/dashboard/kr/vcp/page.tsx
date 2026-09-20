@@ -18,6 +18,7 @@ import ThinkingProcess from '@/app/components/ThinkingProcess';
 import { parseAIConfidence } from '@/lib/aiConfidence';
 import { decideSecondaryAI, isValidAIRecommendation } from './aiHelpers';
 import { getAuthHeaders } from '@/app/components/chatHelpers';
+import { formatMarketAmount } from '../formatMarketAmount';
 
 // VCP 채팅은 종목별 대화 세션 ID 를 그대로 X-Session-Id 로 실어 보낸다. 서버의
 // resolve_chatbot_owner_id 는 이메일이 있으면 이메일을, 없으면 이 헤더를 세션 소유자로
@@ -1075,25 +1076,6 @@ export default function VCPSignalsPage() {
   const bulkBuyVCPTooltip = bulkBuyVCPDisabledReason || '오늘 VCP 시그널 전체를 10주씩 매수합니다.';
   const rowBuyTooltip = buyDisabledReason || '모의 계좌로 매수 주문을 실행합니다.';
 
-  const formatFlow = (value: number | undefined) => {
-    if (value === undefined || value === null) return '-';
-    const absValue = Math.abs(value);
-    const sign = value < 0 ? '-' : '';
-
-    if (absValue >= 10000000000000000) { // 1경 (10^16)
-      return `${sign}${(absValue / 10000000000000000).toFixed(1)}경`;
-    } else if (absValue >= 1000000000000) { // 1조 (10^12)
-      const jo = Math.floor(absValue / 1000000000000);
-      const uk = Math.floor((absValue % 1000000000000) / 100000000);
-      return uk > 0 ? `${sign}${jo}조${uk}억` : `${sign}${jo}조`;
-    } else if (absValue >= 100000000) { // 1억 (10^8)
-      return `${sign}${Math.floor(absValue / 100000000)}억`;
-    } else if (absValue >= 10000) { // 1만 (10^4)
-      return `${sign}${Math.floor(absValue / 10000)}만`;
-    }
-    return `${sign}${Math.floor(absValue).toLocaleString()}`;
-  };
-
   const getAIBadge = (signal: KRSignal, model: 'gpt' | 'gemini' | 'perplexity') => {
     let rec;
     // 1. Try merged signal data first
@@ -1571,8 +1553,8 @@ export default function VCPSignalsPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2 relative self-end md:self-auto">
-          <div className="flex flex-col items-end gap-1">
+        <div className="relative flex flex-wrap items-start justify-start gap-2 self-stretch md:self-auto md:items-center md:justify-end">
+          <div className="flex max-w-full flex-col items-start gap-1 md:items-end">
             <Tooltip content={bulkBuyVCPTooltip} align="right" position="top" className="cursor-help">
               <span className="inline-flex">
                 <button
@@ -1588,7 +1570,7 @@ export default function VCPSignalsPage() {
               </span>
             </Tooltip>
             {isBulkBuyVCPDisabled && (
-              <p id={bulkBuyReasonId} className="max-w-64 text-right text-[10px] leading-relaxed text-amber-300">
+              <p id={bulkBuyReasonId} className="max-w-64 break-words text-left text-[10px] leading-relaxed text-amber-300 md:text-right">
                 {bulkBuyVCPDisabledReason}
               </p>
             )}
@@ -1597,7 +1579,7 @@ export default function VCPSignalsPage() {
           {/* VCP 기준표 버튼 */}
           <button
             onClick={() => setIsVCPCriteriaModalOpen(true)}
-            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10"
+            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-white/10 whitespace-nowrap"
           >
             <i className="fas fa-table"></i>
             <span>VCP 기준표</span>
@@ -1620,7 +1602,7 @@ export default function VCPSignalsPage() {
                 if (!isHistoryOpen) loadHistoryDates();
                 setIsHistoryOpen(!isHistoryOpen);
               }}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all border flex items-center gap-2 whitespace-nowrap ${activeDateTab === 'history'
+              className={`min-w-[7rem] px-3 py-1.5 text-xs font-bold rounded-lg transition-all border flex items-center justify-between gap-2 whitespace-nowrap ${activeDateTab === 'history'
                 ? 'bg-white/10 text-white border-white/20'
                 : 'bg-white/5 hover:bg-white/10 text-gray-400 border-white/10'
                 }`}
@@ -1726,13 +1708,13 @@ export default function VCPSignalsPage() {
                     <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${signal.foreign_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
                       <div className="flex items-center justify-end gap-1">
                         {signal.foreign_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.foreign_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
-                        {formatFlow(signal.foreign_5d)}
+                        {formatMarketAmount(signal.foreign_5d)}
                       </div>
                     </td>
                     <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${signal.inst_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
                       <div className="flex items-center justify-end gap-1">
                         {signal.inst_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.inst_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
-                        {formatFlow(signal.inst_5d)}
+                        {formatMarketAmount(signal.inst_5d)}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
@@ -2051,8 +2033,8 @@ export default function VCPSignalsPage() {
                           </div>
                           <div className="text-xs text-gray-400 leading-relaxed">
                             수축비율 {signal?.contraction_ratio?.toFixed(2) ?? '-'} · 외국인 5일 순매수{' '}
-                            {formatFlow(signal?.foreign_5d)}주 · 기관 5일 순매수{' '}
-                            {formatFlow(signal?.inst_5d)}주
+                            {formatMarketAmount(signal?.foreign_5d)}원 · 기관 5일 순매수{' '}
+                            {formatMarketAmount(signal?.inst_5d)}원
                           </div>
                         </div>
                       </div>

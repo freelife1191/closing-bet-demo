@@ -1,0 +1,244 @@
+[p1 "KR Market Dashboard" | space "공용 UI와 종목 화면 9건 검증"(2): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    anchor [ref=16, url=http://127.0.0.1:57620/]
+      text "M"
+      text "스마트 머니 봇"
+    container
+      text "DASHBOARD"
+      button [ref=17]
+        text ""
+        text "KR Market"
+        text ""
+      anchor [ref=18, loc=href:/dashboard/kr, url=http://127.0.0.1:57620/dashboard/kr]
+        text "● Overview"
+      anchor [ref=19, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:57620/dashboard/kr/vcp]
+        text "● VCP 시그널"
+      anchor [ref=20, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:57620/dashboard/kr/closing-bet]
+        text "● 종가베팅"
+      anchor [ref=21, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:57620/dashboard/kr/cumulative]
+        text "● 누적 성과"
+      anchor [ref=22, loc=href:/chatbot, url=http://127.0.0.1:57620/chatbot]
+        text "● AI 상담"
+      button [ref=23]
+        text ""
+        text "모의투자"
+      anchor [ref=24, loc=href:/dashboard/data-status, url=http://127.0.0.1:57620/dashboard/data-status]
+        text ""
+        text "데이터 상태"
+    button [ref=25]
+      text "f"
+      text "fakeadmin"
+      text "ADMIN"
+      text "Admin · 무제한 사용"
+      text ""
+  container
+    container "현재 위치"
+      ordered_list
+        list_item
+          anchor "홈" [ref=26, loc=css:a[aria-label="홈"], url=http://127.0.0.1:57620/]
+            text ""
+        list_item
+          text "/"
+          text "대시보드"
+        list_item
+          text "/"
+          text "국내 시장"
+        list_item
+          text "/"
+          text "종가베팅"
+    text ""
+    textbox [ref=27, loc=css:input[placeholder="Search markets, tickers..."]]
+      text "Search markets, tickers..."
+    text "⌘K"
+    button "설정 열기" [ref=28, loc=css:button[aria-label="설정 열기"]]
+      text ""
+  container
+    text "S"
+    text "GRADE"
+    text "#"
+    text "1"
+    heading
+      text "삼성전자"
+    text "005930"
+    text "반도체"
+    text "AI"
+    text "상승률"
+    text ""
+    text "+"
+    text "3.4"
+    text "%"
+    text "거래량 배수"
+    text ""
+    text "2"
+    text "x"
+    text "종가"
+    text ""
+    text "₩"
+    text "76,200"
+    text "거래대금"
+    text ""
+    text "1.2조"
+    text "외인 (5일)"
+    text ""
+    text "1.2조"
+    text "기관 (5일)"
+    text ""
+    text "33억"
+    text "BUY"
+    text "확신도"
+    text ""
+    text "67"
+    text "%"
+    svg_root
+    text "↑"
+    text "3.4"
+    text "%"
+    text ""
+    text "크게 보기"
+    heading
+      text ""
+      text "AI 분석 리포트"
+      button "삼성전자 이 종목만 재분석" [ref=47, loc=css:button[aria-label="삼성전자 이 종목만 재분석"]]
+        text ""
+    paragraph
+      text "합성 QA 자료: 수급과 가격 수축을 함께 확인했습니다."
+    paragraph
+      text "AI 원문에는 다른 가격이 포함될 수 있습니다. 이 화면의 시스템 계산 기준은 아래 목표가·손절가입니다."
+    heading
+      text "시스템 계산 기준"
+      text ""
+    unordered_list
+      list_item
+        text "●"
+        text "매수가"
+        text ":"
+        text "₩"
+        text "75,200"
+        text "("
+        text "2026-09-20"
+        text "종가)"
+      list_item
+        text "●"
+        text "목표가"
+        text ":"
+        text "₩"
+        text "84,200"
+        text "(매수가"
+        text "+"
+        text "12.0"
+        text "%)"
+      list_item
+        text "●"
+        text "손절가"
+        text ":"
+        text "₩"
+        text "72,200"
+        text "(매수가"
+        text "-4.0"
+        text "%)"
+    heading
+      text "체크리스트"
+    text "뉴스/호재 있음"
+    text "수급 양호 (외인/기관)"
+    text "REFERENCES"
+    text ""
+    anchor [ref=130, url=https://example.invalid/qa-news]
+      text ""
+      text "["
+      text "QA 뉴스"
+      text "]"
+      text "삼성전자 합성 QA 뉴스"
+    svg_root
+    text "88"
+    text "/ 19점"
+    text "TOTAL SCORE"
+    text ""
+    text "차트"
+    text "12"
+    text "/2"
+    text "수급"
+    text "12"
+    text "/2"
+    text "뉴스"
+    text "12"
+    text "/3"
+    text "거래량"
+    text "13"
+    text "/3"
+    text "캔들"
+    text "10"
+    text "/1"
+    text "조정"
+    text "10"
+    text "/1"
+    text "보너스 (가산점)"
+    text "+"
+    text "8"
+    text "/7"
+    text "거래량/"
+    text "3"
+    text "| 장대양봉/"
+    text "3"
+    text "/1 | 상한가/"
+    text "2"
+    text "/1"
+    button [ref=139]
+      text ""
+      text "상세 분석 보기"
+    button "삼성전자 모의 매수" [ref=140, loc=css:button[aria-label="삼성전자 모의 매수"]]
+      text ""
+      text "모의 매수"
+    anchor [ref=141, loc=href:https://m.stock.naver.com/domestic/stock/005930/main, url=https://m.stock.naver.com/domestic/stock/005930/main]
+      text "N"
+      text "네이버"
+    anchor [ref=142, url=https://tossinvest.com/stocks/005930]
+      text ""
+      text "토스"
+    text "A"
+    text "GRADE"
+    text "#"
+    text "2"
+    heading
+      text "SK하이닉스"
+    text "000660"
+    heading
+      text ""
+      text "AI 분석 리포트"
+      button "SK하이닉스 이 종목만 재분석" [ref=151, loc=css:button[aria-label="SK하이닉스 이 종목만 재분석"]]
+        text ""
+    paragraph
+      text "합성 QA 자료: 수급과 가격 수축을 함께 확인했습니다."
+    paragraph
+      text "AI 원문에는 다른 가격이 포함될 수 있습니다. 이 화면의 시스템 계산 기준은 아래 목표가·손절가입니다."
+    svg_root
+    text "81"
+    text "/ 19점"
+  button "AI 상담" [ref=48, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  dialog "삼성전자" [ref=209, loc=role:dialog[name="삼성전자"]]
+    container
+      container
+        heading
+          text "삼성전자"
+        text "005930"
+      button "닫기" [ref=210, loc=css:button[aria-label="닫기"]]
+        text ""
+    container
+      container
+        button [ref=211]
+          text "일봉"
+        button [ref=212]
+          text "주봉"
+        button [ref=213]
+          text "월봉"
+        text "네이버 금융 제공"
+      image
+      container
+        anchor [ref=214, loc=href:https://m.stock.naver.com/domestic/stock/005930/chart, url=https://m.stock.naver.com/domestic/stock/005930/chart]
+          text ""
+          text "네이버 금융"
+        anchor [ref=215, url=https://tossinvest.com/stocks/005930]
+          text ""
+          text "토스 증권"

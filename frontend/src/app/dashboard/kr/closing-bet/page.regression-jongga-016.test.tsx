@@ -122,6 +122,10 @@ describe('[JONGGA-016] 카드의 매매 추천 원천', () => {
     expect(within(card).queryByText('AI 분석 대기')).toBeNull();
     expect(within(card).queryByText('60%')).not.toBeNull();
     expect(within(card).queryByText('미산출')).toBeNull();
+
+    const confidenceLabel = within(card).getByText('확신도');
+    expect(confidenceLabel.classList.contains('whitespace-nowrap')).toBe(true);
+    expect(confidenceLabel.closest('.flex.items-center.justify-between')?.classList.contains('flex-wrap')).toBe(true);
   });
 
   it('매도 판정이 매수로 뒤집히지 않는다', async () => {

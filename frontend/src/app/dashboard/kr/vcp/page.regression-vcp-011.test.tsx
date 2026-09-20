@@ -71,6 +71,8 @@ describe('[VCP-011] VCP 상세의 점수 카드', () => {
     expect(within(card).getByText('100.0')).toBeTruthy();
     expect(within(card).getByText('VCP 패턴 보조 점수')).toBeTruthy();
     expect(within(card).getByText('17.0')).toBeTruthy();
+    expect(card.textContent).toContain('외국인 5일 순매수 1130억원');
+    expect(card.textContent).toContain('기관 5일 순매수 325억원');
   });
 
   it('보조 점수가 없으면 0.0 이 아니라 -를 그린다', async () => {
