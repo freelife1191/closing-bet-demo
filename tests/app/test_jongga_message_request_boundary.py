@@ -277,7 +277,7 @@ def test_delivery_failure_releases_claim_for_a_retry(message_app: dict[str, Any]
     retried = message_app["client"].post(PATH, json={}, headers=headers)
 
     assert failed.status_code == 500
-    assert failed.get_json() == {"status": "error", "error": "fixture delivery failed"}
+    assert failed.get_json() == {"status": "error", "error": "Internal Server Error"}
     assert retried.status_code == 200
     assert retried.get_json()["status"] == "success"
     assert message_app["counters"] == {"load": 2, "construct": 2, "send": 2}

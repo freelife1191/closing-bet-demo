@@ -12,6 +12,7 @@ from collections.abc import Callable
 from flask import jsonify, request
 
 from app.routes.common_route_context import CommonRouteContext
+from app.routes.route_execution import execute_json_route
 
 
 def _execute_market_mock_route(
@@ -20,11 +21,11 @@ def _execute_market_mock_route(
     ctx: CommonRouteContext,
     error_label: str,
 ) -> object:
-    try:
-        return handler()
-    except Exception as error:
-        ctx.logger.error(f"{error_label}: {error}")
-        return jsonify({"error": str(error)}), 500
+    return execute_json_route(
+        handler=handler,
+        logger=ctx.logger,
+        error_label=error_label,
+    )
 
 
 def _register_stock_detail_mock_route(common_bp, ctx: CommonRouteContext) -> None:

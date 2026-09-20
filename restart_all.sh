@@ -35,7 +35,9 @@ kill_port() {
 }
 
 kill_port $FRONTEND_PORT; kill_port $FLASK_PORT
-pkill -f "flask_app.py" "next dev" "npm.*dev" 2>/dev/null || true
+pkill -f "flask_app.py" 2>/dev/null || true
+pkill -f "next dev" 2>/dev/null || true
+pkill -f "npm.*dev" 2>/dev/null || true
 mkdir -p logs
 
 echo "🔧 Python deps setup (isolated venv)..."

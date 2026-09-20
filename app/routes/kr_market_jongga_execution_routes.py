@@ -165,7 +165,10 @@ def _register_jongga_analysis_routes(
             handler=_handler,
             logger=logger,
             error_label="Error re-analyzing stock",
-            error_response_builder=lambda error: (jsonify({"error": str(error)}), 500),
+            error_response_builder=lambda _error: (
+                jsonify({"error": "Internal Server Error"}),
+                500,
+            ),
         )
 
     @kr_bp.route("/jongga-v2/reanalyze-gemini", methods=["POST", "OPTIONS"])
@@ -283,8 +286,8 @@ def _register_jongga_message_route(
             handler=_handler,
             logger=logger,
             error_label="Message resend failed",
-            error_response_builder=lambda error: (
-                jsonify({"status": "error", "error": str(error)}),
+            error_response_builder=lambda _error: (
+                jsonify({"status": "error", "error": "Internal Server Error"}),
                 500,
             ),
         )

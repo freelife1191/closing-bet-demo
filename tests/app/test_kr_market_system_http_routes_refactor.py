@@ -106,7 +106,7 @@ def test_reanalyze_gemini_returns_status_error_payload_on_exception():
     response = client.post("/api/kr/reanalyze/gemini", json={})
 
     assert response.status_code == 500
-    assert response.get_json() == {"status": "error", "error": "boom"}
+    assert response.get_json() == {"status": "error", "error": "Internal Server Error"}
 
 
 def test_refresh_route_uses_common_update_handlers_and_adds_success_message(monkeypatch):
@@ -154,4 +154,4 @@ def test_status_route_returns_error_payload_when_builder_fails():
     response = client.get("/api/kr/status")
 
     assert response.status_code == 500
-    assert response.get_json() == {"status": "error", "message": "status failed"}
+    assert response.get_json() == {"status": "error", "message": "Internal Server Error"}

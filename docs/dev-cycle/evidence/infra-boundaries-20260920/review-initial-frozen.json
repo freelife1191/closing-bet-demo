@@ -1,0 +1,39 @@
+{
+  "base": "47aa73036b55c539a8f4ed76a0c59d9eeae9369f",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "scope": [
+    "INFRA-028",
+    "INFRA-066",
+    "INFRA-048",
+    "INFRA-054"
+  ],
+  "approval": "직전 4건 대화 설계에 대한 현재 사용자 승인",
+  "observed_at": "2026-09-20T23:16:37.190631+09:00",
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre",
+  "browser": {
+    "spaceId": 9,
+    "page": "p1",
+    "finished": false
+  },
+  "files": {
+    ".env.example": "62b623593eca01796342598630b3cfef4e16d7371a8a67a2d6a411c2034040b8",
+    "app/__init__.py": "dfb161cce4a96139bc432f7e8e6532290df11ed98d3337ed39621d5199029aeb",
+    "app/routes/common_portfolio_routes.py": "7331c2d3ff52b28d1d68be48a21dbaf6dd034d83b1064fb9cfb41a6e0c5100ab",
+    "app/routes/kr_market_data_signals_routes.py": "1623beea2d37c7d30a6baf61bff933a667c441d181f0cc474ef8928b04da0d52",
+    "app/routes/kr_market_jongga_execution_routes.py": "4ef048ba3d69f7398127ea165cfbb5aac57cea2ea0faaf6f4aca2d6d5defe82f",
+    "app/routes/kr_market_system_http_routes.py": "75ade868106ad22d49daf4a33c368c9ca5896ee61932b545c139e0ad4d3441c9",
+    "app/routes/route_execution.py": "520e32de03f41730e66f4753f80bd58311f68a9f6fedf14f571e8bf83a52d28f",
+    "restart_all.sh": "60cbef645ca46c6c921b8618c70478fbeff7c00ede7d13f2b621e4e88fc57d3d",
+    "services/kr_market_route_service.py": "0a13df95d869849a1fe9d8884f3fd456cb7d6f0ff5ff2bb5b3dbe272c22c6888",
+    "tests/app/test_common_portfolio_routes_refactor.py": "f1ffb40ed2e6c243d78adfdac9c8578d40cc89b3cb7443413751b954d400b0bd",
+    "tests/app/test_infra_boundary_dates.py": "f280633f8025b34d37678e02bf7cf0804b168f9be522e1ca212b206e0e65cfbb",
+    "tests/app/test_infra_boundary_errors.py": "cbc32d4f2a45f457a565348e697dcd7255f3f8c329b772ae984fa579e3c2fa03",
+    "tests/app/test_infra_boundary_startup.py": "d877017043612e8b8327833ffdc253ffa182e094f291bbfeb899cdc7609dd0e6",
+    "tests/app/test_jongga_message_request_boundary.py": "83d78f236e36b1a6650cb676a9c6f1e04dc4e22396bd63d2c9d89f9913fc0371",
+    "tests/app/test_kr_market_helpers_contract.py": "f07befa73026d3e2a9c705afad512ca9c5716a84e721277c2443fab3423ec3cc",
+    "tests/app/test_kr_market_jongga_execution_routes_refactor.py": "303dd9ff082865a2ffdc81f5b0c53c3039458b2c96f2c7502ea2aaf84f973612",
+    "tests/app/test_kr_market_quota_http_routes_refactor.py": "f9cd91b51b173e18e86d2b0dfda8e97bd7e99e7413b6e711ee634e5b31d55089",
+    "tests/app/test_kr_market_system_http_routes_refactor.py": "c4454d980a9c21d5b71cfc213c2588dbaa288e4ee806ea6d66a4cfc1b1e8fe77",
+    "tests/test_restart_cleanup_contract.py": "a92e94d5238ead2095354eec0f500b62df863b5f648e757ee51517adee9e1373"
+  }
+}

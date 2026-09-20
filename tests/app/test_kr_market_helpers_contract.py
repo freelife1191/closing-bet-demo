@@ -923,7 +923,8 @@ def test_route_service_jongga_latest_updates_prices_and_writes_latest_file(tmp_p
 def test_route_service_parse_target_dates_normalizes_scalar_and_list():
     assert route_service.parse_target_dates({}) == []
     assert route_service.parse_target_dates({"target_dates": " 2026-02-20 "}) == ["2026-02-20"]
-    assert route_service.parse_target_dates({"target_dates": ["2026-02-20", "", None]}) == ["2026-02-20"]
+    with pytest.raises(ValueError, match="INVALID_TARGET_DATES"):
+        route_service.parse_target_dates({"target_dates": ["2026-02-20", "", None]})
 
 
 def test_route_service_run_user_gemini_reanalysis_uses_scripts_package(monkeypatch):

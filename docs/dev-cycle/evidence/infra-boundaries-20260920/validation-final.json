@@ -1,0 +1,17 @@
+{
+  "pytest": "pytest-final-delta.json",
+  "vitest": "vitest-baseline.json",
+  "frontend_source_unchanged_since_baseline": true,
+  "build": "build-security.json",
+  "typecheck": "typecheck-final.json",
+  "lint": "lint-final.json",
+  "fixture": "fixture-corrected.json",
+  "security": "security-static.json",
+  "pytest_count": 2374,
+  "pytest_skip": 3,
+  "vitest_count": 595,
+  "vitest_files": 81,
+  "build_checks": 3,
+  "lint_errors": 0,
+  "lint_warnings": 188
+}

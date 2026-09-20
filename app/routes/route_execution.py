@@ -10,10 +10,11 @@ from collections.abc import Callable
 from typing import Any
 
 from flask import jsonify
+from werkzeug.exceptions import HTTPException
 
 
 def build_route_error_response(error: Exception) -> tuple[object, int]:
-    return jsonify({"error": str(error)}), 500
+    return jsonify({"error": "Internal Server Error"}), 500
 
 
 def execute_json_route(
@@ -25,7 +26,9 @@ def execute_json_route(
 ) -> object:
     try:
         return handler()
+    except HTTPException as error:
+        logger.warning("%s: %s", error_label, type(error).__name__)
+        raise
     except Exception as error:
         logger.error(f"{error_label}: {error}")
         return error_response_builder(error)
-

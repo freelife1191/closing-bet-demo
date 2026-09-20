@@ -1,0 +1,18 @@
+{
+  "stage": "pytarget:errors-red",
+  "started_at": "2026-09-20T14:26:57.073172+00:00",
+  "ended_at": "2026-09-20T14:26:58.933229+00:00",
+  "pid": 84907,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/app/test_infra_boundary_errors.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-boundaries-20260920-3_3wofre",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 1.86
+}

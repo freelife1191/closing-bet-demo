@@ -290,6 +290,11 @@ def _register_global_error_handler(app: Flask) -> None:
 
 def create_app():
     _configure_logging()
+    if not os.environ.get("INTERNAL_IDENTITY_SECRET", "").strip():
+        logging.getLogger(__name__).warning(
+            "INTERNAL_IDENTITY_SECRET이 비어 있어 요청 신원이 익명으로 처리되며 "
+            "관리자 화면이 표시되지 않습니다. Next와 Flask에 같은 값을 설정한 뒤 재기동하세요."
+        )
     app = Flask(__name__)
     _reset_startup_status_files()
     _start_scheduler()

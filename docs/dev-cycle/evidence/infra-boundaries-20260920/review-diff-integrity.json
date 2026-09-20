@@ -1,0 +1,6 @@
+{
+  "raw_gzip": "review-diff.txt.gz",
+  "raw_sha256": "4fcc11abcfe80424e0afffb6cc931c5b9cfecb5353401aa9849edc3827a919d2",
+  "display": "review-diff.txt",
+  "display_normalization": "trailing whitespace only"
+}

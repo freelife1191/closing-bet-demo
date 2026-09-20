@@ -167,7 +167,7 @@ def test_buy_stock_returns_error_shape_on_exception():
     assert response.status_code == 500
     payload = response.get_json()
     assert payload["status"] == "error"
-    assert "buy failed" in payload["message"]
+    assert payload["message"] == "Internal Server Error"
 
 
 def test_bulk_buy_returns_400_when_orders_are_missing():
@@ -214,7 +214,7 @@ def test_bulk_buy_returns_error_shape_on_exception():
     assert response.status_code == 500
     payload = response.get_json()
     assert payload["status"] == "error"
-    assert "bulk buy failed" in payload["message"]
+    assert payload["message"] == "Internal Server Error"
 
 
 def test_get_trade_history_returns_error_payload_on_exception():
@@ -224,7 +224,7 @@ def test_get_trade_history_returns_error_payload_on_exception():
 
     assert response.status_code == 500
     payload = response.get_json()
-    assert "history failed" in payload["error"]
+    assert payload["error"] == "Internal Server Error"
 
 
 def test_buy_stock_returns_400_when_quantity_is_not_numeric():

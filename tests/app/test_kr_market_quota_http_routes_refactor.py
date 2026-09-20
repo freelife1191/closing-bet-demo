@@ -89,7 +89,7 @@ def test_get_user_quota_info_returns_error_payload_on_exception(monkeypatch):
     response = client.get("/api/kr/user/quota")
 
     assert response.status_code == 500
-    assert response.get_json() == {"error": "quota boom"}
+    assert response.get_json() == {"error": "Internal Server Error"}
 
 
 def test_recharge_user_quota_requires_identity():
@@ -128,4 +128,4 @@ def test_recharge_user_quota_returns_error_payload_on_exception():
     response = client.post("/api/kr/user/quota/recharge", json={})
 
     assert response.status_code == 500
-    assert response.get_json() == {"error": "recharge boom"}
+    assert response.get_json() == {"error": "Internal Server Error"}

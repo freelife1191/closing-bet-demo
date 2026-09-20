@@ -10,6 +10,7 @@ from functools import wraps
 from typing import Any, Callable
 
 from flask import jsonify, make_response, request
+from werkzeug.exceptions import HTTPException
 
 from app.routes.common_route_context import CommonRouteContext
 from services.identity_helpers import verify_identity_header
@@ -54,6 +55,9 @@ def _execute_portfolio_route(
 ):
     try:
         return handler()
+    except HTTPException as error:
+        ctx.logger.warning("%s: %s", error_label, type(error).__name__)
+        raise
     except Exception as error:
         ctx.logger.error(f"{error_label}: {error}")
         return jsonify(error_payload_builder(error)), 500
@@ -94,7 +98,7 @@ def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> N
             handler=_handler,
             ctx=ctx,
             error_label="Error fetching portfolio",
-            error_payload_builder=lambda error: {"error": str(error)},
+            error_payload_builder=lambda _error: {"error": "Internal Server Error"},
         )
 
     @common_bp.route("/portfolio/reset", methods=["POST"])
@@ -134,7 +138,9 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             handler=_handler,
             ctx=ctx,
             error_label="Error buying stock",
-            error_payload_builder=lambda error: {"status": "error", "message": str(error)},
+            error_payload_builder=lambda _error: {
+                "status": "error", "message": "Internal Server Error"
+            },
         )
 
     @common_bp.route("/portfolio/buy/bulk", methods=["POST"])
@@ -154,7 +160,9 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             handler=_handler,
             ctx=ctx,
             error_label="Error bulk buying stocks",
-            error_payload_builder=lambda error: {"status": "error", "message": str(error)},
+            error_payload_builder=lambda _error: {
+                "status": "error", "message": "Internal Server Error"
+            },
         )
 
     @common_bp.route("/portfolio/sell", methods=["POST"])
@@ -177,7 +185,9 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             handler=_handler,
             ctx=ctx,
             error_label="Error selling stock",
-            error_payload_builder=lambda error: {"status": "error", "message": str(error)},
+            error_payload_builder=lambda _error: {
+                "status": "error", "message": "Internal Server Error"
+            },
         )
 
     @common_bp.route("/portfolio/deposit", methods=["POST"])
@@ -194,7 +204,9 @@ def _register_portfolio_trade_routes(common_bp, ctx: CommonRouteContext) -> None
             handler=_handler,
             ctx=ctx,
             error_label="Error depositing cash",
-            error_payload_builder=lambda error: {"status": "error", "message": str(error)},
+            error_payload_builder=lambda _error: {
+                "status": "error", "message": "Internal Server Error"
+            },
         )
 
 
@@ -217,7 +229,7 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
             handler=_handler,
             ctx=ctx,
             error_label="Error getting trade history",
-            error_payload_builder=lambda error: {"error": str(error)},
+            error_payload_builder=lambda _error: {"error": "Internal Server Error"},
         )
 
     @common_bp.route("/portfolio/history/asset")
@@ -252,7 +264,7 @@ def _register_portfolio_history_routes(common_bp, ctx: CommonRouteContext) -> No
             handler=_handler,
             ctx=ctx,
             error_label="Error getting asset history",
-            error_payload_builder=lambda error: {"error": str(error)},
+            error_payload_builder=lambda _error: {"error": "Internal Server Error"},
         )
 
 

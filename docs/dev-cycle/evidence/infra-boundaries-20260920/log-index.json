@@ -1,0 +1,90 @@
+{
+  "pytarget-startup-shell-green.log": {
+    "gzip": "pytarget-startup-shell-green.log.gz",
+    "sha256": "3fbe01ee9ec6ca8fb8843f62a701b7e48d60d6382f4d21a53cea71e2bc6718f6"
+  },
+  "pytarget-errors-red.log": {
+    "gzip": "pytarget-errors-red.log.gz",
+    "sha256": "f879f969244de5cdeb4744beec31564351d37b0f28edebaeaea27da99fe51b66"
+  },
+  "typecheck-final.log": {
+    "gzip": "typecheck-final.log.gz",
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c"
+  },
+  "pytarget-errors-green.log": {
+    "gzip": "pytarget-errors-green.log.gz",
+    "sha256": "dbc2f7da2a4f1c5557b820ed6095a74fd02ea533c2c35fb17eac3b5c3daaf835"
+  },
+  "fixture-initial.log": {
+    "gzip": "fixture-initial.log.gz",
+    "sha256": "ac442c3ed76124be5521516d8b9d5363f7a70f38624a33072d0ba17b53884753"
+  },
+  "pytarget-status-red.log": {
+    "gzip": "pytarget-status-red.log.gz",
+    "sha256": "a06610474f657847282d342a29cafba944ddbca2acfa8de9b4c17f9a9de30700"
+  },
+  "vitest-baseline.log": {
+    "gzip": "vitest-baseline.log.gz",
+    "sha256": "1599b54bf2d0637683d0aae72569e79b5a798e4786e1ceed4b4a72f8887dc3d3"
+  },
+  "pytest-integration.log": {
+    "gzip": "pytest-integration.log.gz",
+    "sha256": "6e5827bb130b15c4906e793b9759c1382194b1ba882b04fab46a48fe1d3549b0"
+  },
+  "pytarget-dates-red.log": {
+    "gzip": "pytarget-dates-red.log.gz",
+    "sha256": "246c81a0b187970f25a3904002b7181a3a23f2356dfc9dc5db15f067f8a97065"
+  },
+  "pytarget-startup-shell-red.log": {
+    "gzip": "pytarget-startup-shell-red.log.gz",
+    "sha256": "9927a3857ea9bb5f51f55fb827695f2f4b02f7c33c762c5165ebab6bd34ddfb9"
+  },
+  "fixture-corrected.log": {
+    "gzip": "fixture-corrected.log.gz",
+    "sha256": "a271b21ffd5b701328b594d080e09bc63f19f0b0b95daa9ec959fdfc32d07dab"
+  },
+  "pytest-final.log": {
+    "gzip": "pytest-final.log.gz",
+    "sha256": "32d21f4f3d3f0fe1cce90cb2b9e35bce3e91e97b56c20d30e8f70c01a0ce44e1"
+  },
+  "lint-final.log": {
+    "gzip": "lint-final.log.gz",
+    "sha256": "46b270599546e61b9ca076bc75c7b7bf5b2fe738a47bd4d2c35bc708ee5f6952"
+  },
+  "pytarget-dates-green.log": {
+    "gzip": "pytarget-dates-green.log.gz",
+    "sha256": "db1d8b84319f4358ad4a9eb0fc46641fef95f9418c2912abe96089dfd246cb28"
+  },
+  "fixture-final.log": {
+    "gzip": "fixture-final.log.gz",
+    "sha256": "de8eb14b1524a390f126132a3f273330dacdfcd3c2caac8f20655cb73fd9100b"
+  },
+  "pytest-baseline.log": {
+    "gzip": "pytest-baseline.log.gz",
+    "sha256": "90a52f98ad535da65edbaf5ea2336c2306fbb5356834bb6f2a184230aac6edee"
+  },
+  "build-security.log": {
+    "gzip": "build-security.log.gz",
+    "sha256": "b1be158d9a77730c54ed9ad23bccb5b73215ded8545d9b2fc61df8c6c54e9dc8"
+  },
+  "pytarget-errors-final.log": {
+    "gzip": "pytarget-errors-final.log.gz",
+    "sha256": "4b0472096376c57ca554d1f51ed1de9dd4878aba1b889940aa37982fdd290483"
+  },
+  "pytest-review-final.log": {
+    "gzip": "pytest-review-final.log.gz",
+    "sha256": "2afd6e26edef413ce07e9d07b285621f6906ee034f3c0db24187959711d01be0"
+  },
+  "pytarget-mock-red.log": {
+    "gzip": "pytarget-mock-red.log.gz",
+    "sha256": "5f8da7367a093d115a2b5decad795399fffb284e4d282bfe1b0180baa1f1b433"
+  },
+  "pytarget-whitespace-red.log": {
+    "gzip": "pytarget-whitespace-red.log.gz",
+    "sha256": "ac23f580f1212c1adc31ee0e6fd5c1f48259f335d8439d10c90956935bf43738"
+  },
+  "pytest-final-delta.log": {
+    "gzip": "pytest-final-delta.log.gz",
+    "sha256": "50d830cc359a9fc220156ad6c3084afe399f4caa0519c7f710996ff0f5694bd5"
+  }
+}

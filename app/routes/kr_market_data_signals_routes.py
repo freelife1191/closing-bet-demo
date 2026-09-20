@@ -227,8 +227,8 @@ def _register_vcp_run_route(
             handler=_handler,
             logger=logger,
             error_label="Error running VCP screener",
-            error_response_builder=lambda error: (
-                jsonify({"status": "error", "error": str(error)}),
+            error_response_builder=lambda _error: (
+                jsonify({"status": "error", "error": "Internal Server Error"}),
                 500,
             ),
         )
@@ -376,7 +376,7 @@ def _register_vcp_reanalyze_route(
                     logger.error(f"Failed AI reanalysis background error: {error}")
                     _update_status(
                         status='error',
-                        message=f'실패 AI 재분석 실패: {error}',
+                        message='실패 AI 재분석 실패',
                     )
                 finally:
                     _update_status(
@@ -398,8 +398,8 @@ def _register_vcp_reanalyze_route(
             handler=_handler,
             logger=logger,
             error_label="Error reanalyzing VCP failed AI",
-            error_response_builder=lambda error: (
-                jsonify({"status": "error", "message": str(error)}),
+            error_response_builder=lambda _error: (
+                jsonify({"status": "error", "message": "Internal Server Error"}),
                 500,
             ),
         )
@@ -435,8 +435,8 @@ def _register_vcp_reanalyze_route(
             handler=_handler,
             logger=logger,
             error_label="Error stopping VCP failed AI reanalysis",
-            error_response_builder=lambda error: (
-                jsonify({"status": "error", "message": str(error)}),
+            error_response_builder=lambda _error: (
+                jsonify({"status": "error", "message": "Internal Server Error"}),
                 500,
             ),
         )

@@ -1,0 +1,10 @@
+{
+  "tracked_env_files": [
+    ".env.example"
+  ],
+  "browser_bundle_synthetic_secret_hits": [],
+  "scanned_bundle": "frontend/.next/static",
+  "original_env_read": false,
+  "root_package_unchanged": true,
+  "scanned_file_count": 33
+}

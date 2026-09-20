@@ -139,7 +139,7 @@ def _register_reanalyze_gemini_route(
 
             user_api_key = g.get('user_api_key')
             user_email = g.get('user_email')
-            req_data = request.get_json(silent=True) or {}
+            req_data = request.get_json()
             status_code, payload = deps["execute_user_gemini_reanalysis_request"](
                 user_api_key=user_api_key,
                 user_email=user_email,
@@ -154,8 +154,8 @@ def _register_reanalyze_gemini_route(
             handler=_handler,
             logger=logger,
             error_label="Error reanalyzing gemini",
-            error_response_builder=lambda error: (
-                jsonify({"status": "error", "error": str(error)}),
+            error_response_builder=lambda _error: (
+                jsonify({"status": "error", "error": "Internal Server Error"}),
                 500,
             ),
         )
@@ -193,11 +193,11 @@ def _register_refresh_route(
             handler=_handler,
             logger=logger,
             error_label="Refresh start failed",
-            error_response_builder=lambda error: (
+            error_response_builder=lambda _error: (
                 jsonify(
                     {
                         "status": "error",
-                        "message": f"데이터 갱신 시작 실패: {str(error)}",
+                        "message": "Internal Server Error",
                     }
                 ),
                 500,
@@ -235,11 +235,11 @@ def _register_init_data_route(
             handler=_handler,
             logger=logger,
             error_label="Init data start failed",
-            error_response_builder=lambda error: (
+            error_response_builder=lambda _error: (
                 jsonify(
                     {
                         "status": "error",
-                        "message": f"데이터 초기화 시작 실패: {str(error)}",
+                        "message": "Internal Server Error",
                     }
                 ),
                 500,
@@ -268,8 +268,8 @@ def _register_status_route(
             handler=_handler,
             logger=logger,
             error_label="Status check failed",
-            error_response_builder=lambda error: (
-                jsonify({"status": "error", "message": str(error)}),
+            error_response_builder=lambda _error: (
+                jsonify({"status": "error", "message": "Internal Server Error"}),
                 500,
             ),
         )

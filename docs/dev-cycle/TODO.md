@@ -293,6 +293,7 @@
 - [ ] 갱신이 조회로 일어나지 않는 것을 고정하는 검사 추가
 
 ### [INFRA-048] `INTERNAL_IDENTITY_SECRET` 이 비면 관리자 화면이 말없이 사라진다
+- 설계 승인: 2026-09-20 현재 대화의 4건 설계에 사용자 「승인」. 범위·계획: `evidence/infra-boundaries-20260920/plan.md`. 공유 T3 검토·UltraQA App 대응·ego-browser 실측.
 - 카테고리: 인프라 | 티어: T3 (`.env.example` 을 건드리므로 `tier-rules.md` §2 「시크릿과
   인증」) | 근거: 2026-09-07 `[INFRA-041]` 사이클의
   `oh-my-claudecode:security-reviewer` 지적 2(확신도 높음)
@@ -319,6 +320,7 @@
 ## P2 — 대기
 
 ### [INFRA-054] `restart_all.sh` 의 프로세스 정리 한 줄이 통째로 무동작이다
+- 설계 승인: 2026-09-20 현재 대화의 4건 설계에 사용자 「승인」. 범위·계획: `evidence/infra-boundaries-20260920/plan.md`. 공유 T3 검토·UltraQA App 대응·ego-browser 실측.
 - 카테고리: 인프라 | 티어: T1 | 근거: 2026-09-08 `[INFRA-049]` 사이클에서 발견했습니다.
   같은 사이클의 `oh-my-claudecode:security-reviewer` 도 종료 코드로 확인했습니다.
 - `restart_all.sh:36` 의 `pkill -f "flask_app.py" "next dev" "npm.*dev"` 는 `pkill` 에
@@ -417,6 +419,7 @@
 - [ ] 옮긴 뒤 주석을 뺀 코드 줄 수가 실제로 줄었는지 측정
 
 ### [INFRA-028] Gemini 재분석 요청의 날짜 목록에 형식 검사도 개수 상한도 없다
+- 설계 승인: 2026-09-20 현재 대화의 4건 설계에 사용자 「승인」. 범위·계획: `evidence/infra-boundaries-20260920/plan.md`. 공유 T3 검토·UltraQA App 대응·ego-browser 실측.
 - 카테고리: 인프라 | 티어: T2 | 근거: 2026-09-04 `[INFRA-006]` 사이클의 /review
   보안 스페셜리스트 지적(확신도 70, 60, 40)
 - `services/kr_market_route_service.py:113` 의 `parse_target_dates` 는 신뢰 경계를 넘어온
@@ -563,6 +566,7 @@
 - 현재 남은 일: 원본 누적 파일의 처리 결정만 대기. 기존 설명의 수량·공통 helper 경로는 과거 관측이며, 2026-09-09 원본 WAL/SHM 파일 합계는27396개. 기존 파일을 삭제하지 않았고 완료 아카이브도 만들지 않음.
 
 ### [INFRA-066] 개별 라우트 오류 래퍼가 예외 원문을 500 응답에 남긴다
+- 설계 승인: 2026-09-20 현재 대화의 4건 설계에 사용자 「승인」. 범위·계획: `evidence/infra-boundaries-20260920/plan.md`. 공유 T3 검토·UltraQA App 대응·ego-browser 실측.
 - 카테고리: 인프라 | 티어: T2 예상 | 근거: 2026-09-09 INFRA-017·038 범위 검토
 - `app/routes/route_execution.py`의 `build_route_error_response`는 `str(error)`를 500으로 보내며, `execute_json_route`는 HTTPException까지 잡는다. `common_portfolio_routes.py`의 별도 wrapper와 payload builder도 같은 형태다.
 - 전역 처리기 및 common update wrapper를 고친 INFRA-017·038이 닿지 않는 독립 경로다. 모의투자/다른 호출부의 기존 오류 계약을 따로 조사해야 하므로 현재 범위로 확대하지 않았다.

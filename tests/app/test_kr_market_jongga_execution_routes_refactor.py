@@ -222,7 +222,7 @@ def test_analyze_single_stock_route_returns_500_on_exception(tmp_path: Path):
     response = client.post("/api/kr/jongga-v2/analyze", json={"code": "005930"})
 
     assert response.status_code == 500
-    assert response.get_json() == {"error": "boom"}
+    assert response.get_json() == {"error": "Internal Server Error"}
 
 
 def test_reanalyze_gemini_route_options_short_circuit(tmp_path: Path):

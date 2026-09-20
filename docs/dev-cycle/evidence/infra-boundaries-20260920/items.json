@@ -1,0 +1,26 @@
+[
+  {
+    "id": "INFRA-028",
+    "title": "Gemini 재분석 요청의 날짜 목록에 형식 검사도 개수 상한도 없다",
+    "priority": "P2",
+    "category": "인프라"
+  },
+  {
+    "id": "INFRA-066",
+    "title": "개별 라우트 오류 래퍼가 예외 원문을 500 응답에 남긴다",
+    "priority": "P2",
+    "category": "인프라"
+  },
+  {
+    "id": "INFRA-048",
+    "title": "`INTERNAL_IDENTITY_SECRET` 이 비면 관리자 화면이 말없이 사라진다",
+    "priority": "P1",
+    "category": "인프라"
+  },
+  {
+    "id": "INFRA-054",
+    "title": "`restart_all.sh` 의 프로세스 정리 한 줄이 통째로 무동작이다",
+    "priority": "P2",
+    "category": "인프라"
+  }
+]
