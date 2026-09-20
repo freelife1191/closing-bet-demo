@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { ModalShell } from './Modal';
 
 interface ConfirmationModalProps {
@@ -23,6 +23,7 @@ export default function ConfirmationModal({
   cancelText = '취소'
 }: ConfirmationModalProps) {
   const titleId = useId();
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   if (!isOpen) return null;
 
@@ -30,9 +31,11 @@ export default function ConfirmationModal({
     <ModalShell
       onClose={onCancel}
       labelledBy={titleId}
-      overlayClassName="z-[100] animate-fade-in"
+      role="alertdialog"
+      initialFocusRef={cancelButtonRef}
+      overlayClassName="z-[100]"
       backdropClassName="bg-black/50 backdrop-blur-sm"
-      className="relative bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 transform transition-all scale-100 animate-scale-in"
+      className="relative bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 animate-fade-in motion-reduce:animate-none"
     >
       <div className="flex flex-col items-center text-center space-y-4">
         <div className="w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center">
@@ -49,6 +52,7 @@ export default function ConfirmationModal({
 
         <div className="flex gap-3 w-full pt-4">
           <button
+            ref={cancelButtonRef}
             onClick={onCancel}
             className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors"
           >

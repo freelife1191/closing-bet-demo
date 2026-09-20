@@ -527,6 +527,7 @@ export default function DataStatusPage() {
             {!useTodayMode && (
               <input
                 type="date"
+                aria-label="수집 기준 날짜"
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
                 className="px-4 py-2 bg-[#1c1c1e] border border-purple-500/30 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-purple-500"
@@ -653,6 +654,7 @@ export default function DataStatusPage() {
                   <button
                     onClick={() => handleSendMessage(file.name)}
                     disabled={updating || !!updatingItem || !file.exists}
+                    aria-label={`${file.name} 메시지 발송`}
                     className="flex-none w-10 h-9 flex items-center justify-center bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors disabled:opacity-30"
                     title="메시지 발송"
                   >

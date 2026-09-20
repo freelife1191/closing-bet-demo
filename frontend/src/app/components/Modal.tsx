@@ -1,30 +1,233 @@
 'use client';
 
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-interface ModalShellProps {
+export interface ModalShellProps {
   onClose: () => void;
   labelledBy: string;
   children: React.ReactNode;
   /** 다이얼로그 카드에 붙일 클래스. 폭과 여백과 배경이 모달마다 다르다. */
   className: string;
-  /** 오버레이에 덧붙일 클래스. z-index 와 바깥 여백이 모달마다 다르다. */
+  /** 포털 host에 덧붙일 클래스. z-index와 바깥 여백이 모달마다 다르다. */
   overlayClassName: string;
   /** 배경 판에 붙일 클래스. 어둡기가 모달마다 다르다. */
   backdropClassName?: string;
+  role?: 'dialog' | 'alertdialog';
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
-/** 열려 있는 셸을 마운트 순서대로 담는다. Escape 를 맨 위의 셸에만 넘기는 데 쓴다. */
-const modalShellStack: object[] = [];
+interface ModalShellEntry {
+  layer: HTMLElement;
+  dialog: HTMLElement;
+  onCloseRef: React.RefObject<() => void>;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
+  previousFocus: HTMLElement | null;
+}
+
+interface BodyOverflowSnapshot {
+  value: string;
+  priority: string;
+}
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'area[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'iframe',
+  'object',
+  'embed',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+const modalShellStack: ModalShellEntry[] = [];
+const inertSnapshots = new Map<HTMLElement, boolean>();
+let bodyOverflowSnapshot: BodyOverflowSnapshot | null = null;
+let bodyObserver: MutationObserver | null = null;
+
+function isAvailableForFocus(element: HTMLElement): boolean {
+  if (!element.isConnected || element.closest('[hidden], [inert]')) return false;
+  let current: HTMLElement | null = element;
+  while (current) {
+    const style = window.getComputedStyle(current);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    current = current.parentElement;
+  }
+  return true;
+}
+
+function focusElement(element: HTMLElement): void {
+  element.focus({ preventScroll: true });
+}
+
+function focusableElements(dialog: HTMLElement): HTMLElement[] {
+  return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isAvailableForFocus);
+}
+
+function focusEntry(entry: ModalShellEntry, useInitialFocus = true): void {
+  const requested = useInitialFocus ? entry.initialFocusRef?.current : null;
+  if (requested && entry.dialog.contains(requested) && isAvailableForFocus(requested)) {
+    focusElement(requested);
+    return;
+  }
+
+  const first = focusableElements(entry.dialog)[0];
+  focusElement(first ?? entry.dialog);
+}
+
+function rememberAndSetInert(element: HTMLElement): void {
+  if (!inertSnapshots.has(element)) {
+    inertSnapshots.set(element, element.hasAttribute('inert'));
+  }
+  element.setAttribute('inert', '');
+}
+
+function restoreManagedInert(element: HTMLElement): void {
+  const hadInert = inertSnapshots.get(element);
+  if (hadInert === undefined) return;
+  if (!hadInert) element.removeAttribute('inert');
+  inertSnapshots.delete(element);
+}
+
+function restoreAllManagedInert(): void {
+  inertSnapshots.forEach((hadInert, element) => {
+    if (element.isConnected && !hadInert) element.removeAttribute('inert');
+  });
+  inertSnapshots.clear();
+}
+
+function syncModalEnvironment(): void {
+  const top = modalShellStack[modalShellStack.length - 1];
+
+  modalShellStack.forEach((entry, index) => {
+    entry.layer.style.zIndex = String(1_000 + index);
+  });
+
+  document.querySelectorAll<HTMLElement>('[data-modal-layer]').forEach((layer) => {
+    if (layer === top?.layer) {
+      layer.setAttribute('data-modal-active', 'true');
+      restoreManagedInert(layer);
+    } else {
+      layer.removeAttribute('data-modal-active');
+      if (top) rememberAndSetInert(layer);
+    }
+  });
+
+  if (!top) {
+    restoreAllManagedInert();
+    return;
+  }
+
+  Array.from(document.body.children).forEach((child) => {
+    if (!(child instanceof HTMLElement) || child === top.layer) return;
+    rememberAndSetInert(child);
+  });
+
+  inertSnapshots.forEach((_hadInert, element) => {
+    if (!element.isConnected) inertSnapshots.delete(element);
+  });
+}
+
+function handleDocumentKeyDown(event: KeyboardEvent): void {
+  const top = modalShellStack[modalShellStack.length - 1];
+  if (!top) return;
+
+  if (event.key === 'Escape') {
+    if (top.layer.querySelector('[role="tooltip"]')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    top.onCloseRef.current();
+    return;
+  }
+
+  if (event.key !== 'Tab') return;
+  const focusable = focusableElements(top.dialog);
+  if (focusable.length === 0) {
+    event.preventDefault();
+    focusElement(top.dialog);
+    return;
+  }
+
+  const active = document.activeElement;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && (active === first || !top.dialog.contains(active))) {
+    event.preventDefault();
+    focusElement(last);
+  } else if (!event.shiftKey && (active === last || !top.dialog.contains(active))) {
+    event.preventDefault();
+    focusElement(first);
+  }
+}
+
+function lockBody(): void {
+  if (bodyOverflowSnapshot) return;
+  bodyOverflowSnapshot = {
+    value: document.body.style.getPropertyValue('overflow'),
+    priority: document.body.style.getPropertyPriority('overflow'),
+  };
+  document.body.style.setProperty('overflow', 'hidden');
+  document.addEventListener('keydown', handleDocumentKeyDown);
+  bodyObserver = new MutationObserver(() => syncModalEnvironment());
+  bodyObserver.observe(document.body, { childList: true });
+}
+
+function unlockBody(): void {
+  document.removeEventListener('keydown', handleDocumentKeyDown);
+  bodyObserver?.disconnect();
+  bodyObserver = null;
+  if (bodyOverflowSnapshot) {
+    if (bodyOverflowSnapshot.value) {
+      document.body.style.setProperty(
+        'overflow',
+        bodyOverflowSnapshot.value,
+        bodyOverflowSnapshot.priority,
+      );
+    } else {
+      document.body.style.removeProperty('overflow');
+    }
+    bodyOverflowSnapshot = null;
+  }
+}
+
+function registerModal(entry: ModalShellEntry): () => void {
+  if (modalShellStack.length === 0) lockBody();
+  modalShellStack.push(entry);
+  syncModalEnvironment();
+  focusEntry(entry);
+
+  return () => {
+    const index = modalShellStack.indexOf(entry);
+    if (index === -1) return;
+    const wasTop = index === modalShellStack.length - 1;
+    modalShellStack.splice(index, 1);
+    syncModalEnvironment();
+
+    if (modalShellStack.length === 0) unlockBody();
+    if (!wasTop) return;
+
+    if (entry.previousFocus && isAvailableForFocus(entry.previousFocus)) {
+      focusElement(entry.previousFocus);
+      return;
+    }
+
+    const nextTop = modalShellStack[modalShellStack.length - 1];
+    if (nextTop) {
+      focusEntry(nextTop, false);
+    } else {
+      focusElement(document.body);
+    }
+  };
+}
 
 /**
- * 모달 여섯 벌이 함께 쓰는 셸이다. 오버레이와 배경 클릭으로 닫기, Escape 키,
- * 그리고 화면 낭독기가 대화상자로 인식하는 데 필요한 세 속성을 이 자리에서
- * 한 번만 보장한다. 종전에는 같은 코드가 다섯 벌 있었고 갖춘 기능이 서로 달라서,
- * 매수와 매도 모달에서는 Escape 키가 듣지 않았다.
- *
- * 마운트 여부는 호출자가 정한다. 아래의 `Modal` 처럼 닫히는 애니메이션이 끝날
- * 때까지 남아 있어야 하는 모달과, 곧바로 사라지는 모달이 섞여 있기 때문이다.
+ * 공용 모달 셸이다. 카드가 아니라 전체 화면 host를 body의 직접 자식으로 portal한다.
+ * 열려 있는 맨 위 셸만 입력과 초점을 받고, 마지막 셸이 실제로 언마운트될 때 배경과
+ * body 스크롤 및 이전 초점을 원래 상태로 돌린다.
  */
 export function ModalShell({
   onClose,
@@ -33,41 +236,66 @@ export function ModalShell({
   className,
   overlayClassName,
   backdropClassName = 'bg-black/80 backdrop-blur-sm',
+  role = 'dialog',
+  initialFocusRef,
 }: ModalShellProps) {
-  const idRef = useRef({});
-
-  // 마운트 순서를 쌓아 둔다. 등록만 하는 훅을 따로 두는 이유는 아래 훅의 의존성이
-  // `onClose` 이기 때문이다. 호출자가 인라인 화살표 함수를 넘기면 렌더마다 새 함수가
-  // 되어 그 훅이 다시 돌아가는데, 그때마다 스택에서 빠졌다 맨 뒤로 다시 들어가면
-  // 쌓인 순서가 실제 마운트 순서와 어긋난다.
-  useEffect(() => {
-    const id = idRef.current;
-    modalShellStack.push(id);
-    return () => {
-      const at = modalShellStack.indexOf(id);
-      if (at !== -1) modalShellStack.splice(at, 1);
-    };
-  }, []);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // 맨 위의 셸만 반응한다. 리스너가 셸마다 document 에 붙으므로 이 판정이 없으면
-      // 모의투자 모달 위에 매수 모달이 열린 상태에서 Escape 한 번에 둘 다 닫힌다.
-      if (e.key !== 'Escape') return;
-      if (modalShellStack[modalShellStack.length - 1] !== idRef.current) return;
-      onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    onCloseRef.current = onClose;
   }, [onClose]);
 
-  return (
-    <div className={`fixed inset-0 flex items-center justify-center ${overlayClassName}`}>
-      <div className={`absolute inset-0 ${backdropClassName}`} onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby={labelledBy} className={className}>
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
+
+  useLayoutEffect(() => {
+    const layer = layerRef.current;
+    const dialog = dialogRef.current;
+    if (!portalTarget || !layer || !dialog) return;
+
+    return registerModal({
+      layer,
+      dialog,
+      onCloseRef,
+      initialFocusRef,
+      previousFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    });
+  }, [portalTarget]);
+
+  if (!portalTarget) return null;
+
+  return createPortal(
+    <div
+      ref={layerRef}
+      data-modal-layer=""
+      className={`fixed inset-0 overflow-visible flex items-center justify-center ${overlayClassName}`}
+      style={{ transform: 'none', filter: 'none' }}
+    >
+      <div
+        aria-hidden="true"
+        className={`absolute inset-0 ${backdropClassName}`}
+        onClick={() => {
+          if (modalShellStack[modalShellStack.length - 1]?.layer === layerRef.current) {
+            onCloseRef.current();
+          }
+        }}
+      />
+      <div
+        ref={dialogRef}
+        role={role}
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        tabIndex={-1}
+        className={className}
+      >
         {children}
       </div>
-    </div>
+    </div>,
+    portalTarget,
   );
 }
 
@@ -89,8 +317,9 @@ export default function Modal({ isOpen, onClose, title, children, footer, type =
     if (isOpen) {
       setShow(true);
     } else {
-      const timer = setTimeout(() => setShow(false), 200); // Wait for animation
-      return () => clearTimeout(timer);
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const timer = window.setTimeout(() => setShow(false), reduceMotion ? 0 : 200);
+      return () => window.clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -100,11 +329,10 @@ export default function Modal({ isOpen, onClose, title, children, footer, type =
     <ModalShell
       onClose={onClose}
       labelledBy={titleId}
-      overlayClassName={`z-[100] transition-opacity duration-200 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+      overlayClassName={`z-[100] transition-opacity duration-200 motion-reduce:transition-none ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       backdropClassName="bg-black/60 backdrop-blur-sm"
-      className={`relative bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl w-full ${maxWidth ? maxWidth : (wide ? 'max-w-4xl' : 'max-w-md')} overflow-hidden flex flex-col max-h-[90vh] transform transition-all duration-200 ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
+      className={`relative bg-[#1c1c1e] border border-white/10 rounded-2xl shadow-2xl w-full ${maxWidth ? maxWidth : (wide ? 'max-w-4xl' : 'max-w-md')} overflow-hidden flex flex-col max-h-[90vh] transform transition-all duration-200 motion-reduce:transition-none ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
     >
-      {/* Header */}
       <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/5">
         <h3 id={titleId} className="text-lg font-bold text-white flex items-center gap-2">
           {type === 'success' && <i className="fas fa-check-circle text-emerald-500"></i>}
@@ -116,12 +344,10 @@ export default function Modal({ isOpen, onClose, title, children, footer, type =
         </button>
       </div>
 
-      {/* Body */}
       <div className="p-6 text-gray-300 leading-relaxed text-sm overflow-y-auto">
         {children}
       </div>
 
-      {/* Footer */}
       {footer && (
         <div className="px-6 py-4 bg-[#151517] border-t border-white/5 flex justify-end gap-3">
           {footer}

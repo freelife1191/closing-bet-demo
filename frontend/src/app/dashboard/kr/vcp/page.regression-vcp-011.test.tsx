@@ -48,7 +48,10 @@ vi.mock('@/hooks/useAdmin', () => ({
 vi.mock('./StockChart', () => ({ default: () => null }));
 vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
 vi.mock('@/app/components/ConfirmationModal', () => ({ default: () => null }));
-vi.mock('@/app/components/Modal', () => ({ default: () => null }));
+vi.mock('@/app/components/Modal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/app/components/Modal')>();
+  return { ...actual, default: () => null };
+});
 vi.mock('@/app/components/VCPCriteriaModal', () => ({ default: () => null }));
 vi.mock('@/app/components/ThinkingProcess', () => ({ default: () => null }));
 vi.mock('react-markdown', () => ({ default: () => null }));

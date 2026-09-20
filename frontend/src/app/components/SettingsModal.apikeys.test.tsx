@@ -1,7 +1,8 @@
+import '@testing-library/jest-dom/vitest';
+
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import SettingsModal from './SettingsModal';
-import { apiKeyFieldProps } from './settingsEnv';
 
 // [FE-006] 회귀 검사. AUDIT-FE §1.4 의 결함은 함수가 아니라 배선에 있었다. 두 API 키
 // 입력이 각자 다른 경로로 값을 얻고 있어서 한쪽만 복원되었다. 검사할 것은 두 필드가
@@ -43,9 +44,7 @@ beforeEach(() => {
   })) as unknown as typeof fetch;
 });
 
-// 저장된 키가 있을 때 두 필드에 함께 걸려야 하는 문구. 문구가 바뀌어도 따라가도록
-// 검사 대상 함수에서 직접 얻는다.
-const STORED_HINT = apiKeyFieldProps('****', '').placeholder;
+const STORED_HINT = '저장되어 있습니다. 바꾸려면 새 값을 입력하세요';
 
 /**
  * API 탭을 열고 서버 응답이 상태에 반영될 때까지 기다린다.
@@ -55,7 +54,7 @@ const STORED_HINT = apiKeyFieldProps('****', '').placeholder;
  * 증거다. 한쪽이 envVars 를 직접 참조하면 그쪽 문구가 `pplx-...` 로 남아 여기서 멈춘다.
  */
 async function openApiTabWithStoredKeys() {
-  const { container } = render(
+  const { baseElement } = render(
     <SettingsModal
       isOpen
       onClose={() => {}}
@@ -67,14 +66,14 @@ async function openApiTabWithStoredKeys() {
   await waitFor(() => {
     expect(screen.getAllByPlaceholderText(STORED_HINT)).toHaveLength(2);
   });
-  return container;
+  return baseElement;
 }
 
 describe('SettingsModal API 키 필드', () => {
   it('마스킹된 서버 값을 두 입력 어느 쪽에도 값으로 넣지 않는다', async () => {
-    const container = await openApiTabWithStoredKeys();
+    const baseElement = await openApiTabWithStoredKeys();
 
-    const inputs = container.querySelectorAll<HTMLInputElement>('input[type="password"]');
+    const inputs = baseElement.querySelectorAll<HTMLInputElement>('input[type="password"]');
     expect(inputs).toHaveLength(2);
     for (const input of inputs) {
       expect(input.value).toBe('');
@@ -82,13 +81,22 @@ describe('SettingsModal API 키 필드', () => {
   });
 
   it('마스킹 문자열을 화면 문구로도 내보내지 않는다', async () => {
-    const container = await openApiTabWithStoredKeys();
+    const baseElement = await openApiTabWithStoredKeys();
 
-    expect(container.textContent).not.toContain('abcd');
-    expect(container.textContent).not.toContain('wxyz');
-    for (const input of container.querySelectorAll<HTMLInputElement>('input[type="password"]')) {
+    expect(baseElement.textContent).not.toContain('abcd');
+    expect(baseElement.textContent).not.toContain('wxyz');
+    for (const input of baseElement.querySelectorAll<HTMLInputElement>('input[type="password"]')) {
       expect(input.placeholder).not.toContain('*');
     }
+  });
+
+  it('라벨과 입력을 연결하고 삭제 버튼에 키 이름을 붙인다', async () => {
+    await openApiTabWithStoredKeys();
+
+    expect(screen.getByLabelText('OPENAI_API_KEY')).toHaveValue('');
+    expect(screen.getByLabelText('PERPLEXITY_API_KEY')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'OPENAI_API_KEY 삭제' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'PERPLEXITY_API_KEY 삭제' })).toBeTruthy();
   });
 
   it('API 키를 localStorage 에 남기지 않는다', async () => {

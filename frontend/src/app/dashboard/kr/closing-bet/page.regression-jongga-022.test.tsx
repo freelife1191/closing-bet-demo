@@ -7,7 +7,7 @@
 // 다른 값으로 보였다. 여기에 더해 두 자리의 반올림 규칙까지 갈려 있어서, 값이 같아도
 // 카드는 내림한 32억을, 모달은 반올림한 33억을 적었다.
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import JonggaV2Page from './page';
@@ -95,7 +95,10 @@ vi.mock('@/hooks/useAdmin', () => ({
   useAdmin: () => ({ isAdmin: false, isLoading: false }),
 }));
 
-vi.mock('@/app/components/Modal', () => ({ default: () => null }));
+vi.mock('@/app/components/Modal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/app/components/Modal')>();
+  return { ...actual, default: () => null };
+});
 vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
 vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null }));
 
@@ -104,6 +107,15 @@ const openDetailModal = async () => {
   render(<JonggaV2Page />);
   fireEvent.click(await screen.findByText('상세 분석 보기'));
   await waitFor(() => expect(screen.getByText('투자자 동향 (오늘 기준 5영업일)')).toBeTruthy());
+};
+
+const openTooltipForLabel = async (label: string) => {
+  const dialog = screen.getByRole('dialog', { name: '태웅' });
+  const labelElement = within(dialog).getByText(label);
+  const trigger = labelElement.querySelector<HTMLElement>('[class*="group/tooltip"]');
+  expect(trigger).not.toBeNull();
+  fireEvent.mouseEnter(trigger as HTMLElement);
+  return screen.findByRole('tooltip');
 };
 
 describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
@@ -150,7 +162,8 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
 
     // 확정 집계에 개인 열이 없어 이 값만 출처가 다르다. 툴팁이 그 사실을 밝힌다.
     expect(screen.getByText('-93억')).toBeTruthy();
-    expect(document.body.textContent).toContain('이 값만 실시간 시세 제공처가 집계하므로');
+    const tooltip = await openTooltipForLabel('개인');
+    expect(within(tooltip).getByText(/이 값만 실시간 시세 제공처가 집계하므로/)).toBeTruthy();
   });
 
   it('모달의 시세 절이 실시간임을 제목에 밝힌다', async () => {
@@ -164,7 +177,8 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
 
     // 장중 누적 324억과 카드의 확정 1,085억이 함께 있어도 사용자가 이유를 알 수 있다.
     expect(screen.getByText('324억')).toBeTruthy();
-    expect(document.body.textContent).toContain('신호가 나온 거래일에 확정된 하루치');
+    const tooltip = await openTooltipForLabel('거래대금 (Val)');
+    expect(within(tooltip).getByText(/신호가 나온 거래일에 확정된 하루치/)).toBeTruthy();
   });
 
   // Regression: ISSUE-001 — 모달 수급이 어느 날짜에서든 「카드와 같은 값」이라고 단언했다
@@ -179,12 +193,13 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
   // 올려야 보이지만 제목은 늘 보이므로, 시점을 밝히는 자리를 제목에도 두었다.
   it('카드와 같은 값이라고 단언하지 않는다', async () => {
     await openDetailModal();
+    const tooltip = await openTooltipForLabel('외국인');
 
     // 지난 날짜에서 거짓이 되는 단언이라 지웠다.
-    expect(document.body.textContent).not.toContain('카드의 「외인 (5일)」과 같은 값입니다');
-    expect(document.body.textContent).not.toContain('카드의 「기관 (5일)」과 같은 값입니다');
+    expect(tooltip.textContent).not.toContain('카드의 「외인 (5일)」과 같은 값입니다');
+    expect(tooltip.textContent).not.toContain('카드의 「기관 (5일)」과 같은 값입니다');
     // 대신 두 값이 갈리는 조건을 밝힌다.
-    expect(document.body.textContent).toContain('지난 날짜를 골랐다면 두 값이 다릅니다');
+    expect(within(tooltip).getByText(/지난 날짜를 골랐다면 두 값이 다릅니다/)).toBeTruthy();
   });
 });
 

@@ -1,0 +1,19 @@
+{
+  "stage": "target:review-green2",
+  "started_at": "2026-09-20T08:27:54.836170+00:00",
+  "ended_at": "2026-09-20T08:27:56.966557+00:00",
+  "pid": 51429,
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "src/app/components/Tooltip.test.tsx",
+    "src/app/components/ModalShell.test.tsx",
+    "src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-qa-20260920-vxqi1vvg/frontend",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 2.13
+}

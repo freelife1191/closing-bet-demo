@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useAdmin } from '@/hooks/useAdmin';
 import { getBrowserSessionId } from '@/lib/session';
-import { apiKeyFieldProps, pickNotificationEnv } from './settingsEnv';
+import { pickNotificationEnv, storedEnvFieldProps } from './settingsEnv';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -109,7 +109,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
       if (res.ok) {
         const data = await res.json();
 
-        // 마스킹 값은 그대로 둔다. apiKeyFieldProps 가 입력 필드의 값이 아니라
+        // 마스킹 값은 그대로 둔다. storedEnvFieldProps 가 입력 필드의 값이 아니라
         // 자리 표시자로 돌리고, 서버의 update_env_file 도 `*` 가 섞인 값을 받으면
         // 기존 키를 유지하므로 되돌려 보내도 덮어쓰지 않는다.
         setEnvVars(data);
@@ -744,11 +744,12 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   </h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
                     <div className="mb-4">
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">OPENAI_API_KEY</label>
+                      <label htmlFor="env-openai-api-key" className="block text-xs font-bold text-gray-500 mb-1.5">OPENAI_API_KEY</label>
                       <div className="relative">
                         <input
+                          id="env-openai-api-key"
                           type="password"
-                          {...apiKeyFieldProps(envVars['OPENAI_API_KEY'], 'sk-...')}
+                          {...storedEnvFieldProps(envVars['OPENAI_API_KEY'], 'sk-...')}
                           onChange={(e) => handleEnvChange('OPENAI_API_KEY', e.target.value)}
                           className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-green-500 transition-colors"
                           autoComplete="new-password"
@@ -759,6 +760,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                             onClick={() => handleEnvChange('OPENAI_API_KEY', '')}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-500 transition-colors"
                             title="API Key 삭제"
+                            aria-label="OPENAI_API_KEY 삭제"
                           >
                             <i className="fas fa-trash-alt"></i>
                           </button>
@@ -775,11 +777,12 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   </h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
                     <div className="mb-4">
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">PERPLEXITY_API_KEY</label>
+                      <label htmlFor="env-perplexity-api-key" className="block text-xs font-bold text-gray-500 mb-1.5">PERPLEXITY_API_KEY</label>
                       <div className="relative">
                         <input
+                          id="env-perplexity-api-key"
                           type="password"
-                          {...apiKeyFieldProps(envVars['PERPLEXITY_API_KEY'], 'pplx-...')}
+                          {...storedEnvFieldProps(envVars['PERPLEXITY_API_KEY'], 'pplx-...')}
                           onChange={(e) => handleEnvChange('PERPLEXITY_API_KEY', e.target.value)}
                           className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition-colors"
                           autoComplete="new-password"
@@ -790,6 +793,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                             onClick={() => handleEnvChange('PERPLEXITY_API_KEY', '')}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-500 transition-colors"
                             title="API Key 삭제"
+                            aria-label="PERPLEXITY_API_KEY 삭제"
                           >
                             <i className="fas fa-trash-alt"></i>
                           </button>
@@ -810,26 +814,26 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   </h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5 space-y-5">
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">TELEGRAM_BOT_TOKEN</label>
+                      <label htmlFor="env-telegram-bot-token" className="block text-xs font-bold text-gray-500 mb-1.5">TELEGRAM_BOT_TOKEN</label>
                       <input
+                        id="env-telegram-bot-token"
                         type="password"
-                        value={envVars['TELEGRAM_BOT_TOKEN'] || ''}
+                        {...storedEnvFieldProps(envVars['TELEGRAM_BOT_TOKEN'], 'bot123456:ABC-DEF...')}
                         onChange={(e) => handleEnvChange('TELEGRAM_BOT_TOKEN', e.target.value)}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-400 transition-colors"
-                        placeholder="bot123456:ABC-DEF..."
                       />
                       <div className="mt-2 text-[11px] text-gray-500">
                         @BotFather를 통해 생성한 봇 토큰을 입력하세요.
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">TELEGRAM_CHAT_ID</label>
+                      <label htmlFor="env-telegram-chat-id" className="block text-xs font-bold text-gray-500 mb-1.5">TELEGRAM_CHAT_ID</label>
                       <input
+                        id="env-telegram-chat-id"
                         type="text"
-                        value={envVars['TELEGRAM_CHAT_ID'] || ''}
+                        {...storedEnvFieldProps(envVars['TELEGRAM_CHAT_ID'], '-1001234567890')}
                         onChange={(e) => handleEnvChange('TELEGRAM_CHAT_ID', e.target.value)}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-400 transition-colors"
-                        placeholder="-1001234567890"
                       />
                       <div className="mt-2 text-[11px] text-gray-500">
                         알림을 받을 채널 또는 개인 채팅 ID입니다. ( https://api.telegram.org/bot[TOKEN]/getUpdates 로 확인)
@@ -855,13 +859,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   </h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
                     <div className="mb-4">
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">DISCORD_WEBHOOK_URL</label>
+                      <label htmlFor="env-discord-webhook-url" className="block text-xs font-bold text-gray-500 mb-1.5">DISCORD_WEBHOOK_URL</label>
                       <input
+                        id="env-discord-webhook-url"
                         type="password"
-                        value={envVars['DISCORD_WEBHOOK_URL'] || ''}
+                        {...storedEnvFieldProps(envVars['DISCORD_WEBHOOK_URL'], 'https://discord.com/api/webhooks/...')}
                         onChange={(e) => handleEnvChange('DISCORD_WEBHOOK_URL', e.target.value)}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition-colors"
-                        placeholder="https://discord.com/api/webhooks/..."
                       />
                       <div className="mt-2 text-[11px] text-gray-500">
                         디스코드 채널 설정 &gt; 연동 &gt; 웹후크에서 생성한 URL을 입력하세요.
@@ -888,46 +892,46 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5 space-y-5">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Host</label>
+                        <label htmlFor="env-smtp-host" className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Host</label>
                         <input
+                          id="env-smtp-host"
                           type="text"
-                          value={envVars['SMTP_HOST'] || ''}
+                          {...storedEnvFieldProps(envVars['SMTP_HOST'], 'smtp.gmail.com')}
                           onChange={(e) => handleEnvChange('SMTP_HOST', e.target.value)}
                           className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
-                          placeholder="smtp.gmail.com"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Port</label>
+                        <label htmlFor="env-smtp-port" className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Port</label>
                         <input
+                          id="env-smtp-port"
                           type="text"
-                          value={envVars['SMTP_PORT'] || ''}
+                          {...storedEnvFieldProps(envVars['SMTP_PORT'], '587')}
                           onChange={(e) => handleEnvChange('SMTP_PORT', e.target.value)}
                           className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
-                          placeholder="587"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP User (Email)</label>
+                      <label htmlFor="env-smtp-user" className="block text-xs font-bold text-gray-500 mb-1.5">SMTP User (Email)</label>
                       <input
+                        id="env-smtp-user"
                         type="email"
-                        value={envVars['SMTP_USER'] || ''}
+                        {...storedEnvFieldProps(envVars['SMTP_USER'], 'your-email@gmail.com')}
                         onChange={(e) => handleEnvChange('SMTP_USER', e.target.value)}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
-                        placeholder="your-email@gmail.com"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Password (App Password)</label>
+                      <label htmlFor="env-smtp-password" className="block text-xs font-bold text-gray-500 mb-1.5">SMTP Password (App Password)</label>
                       <input
+                        id="env-smtp-password"
                         type="password"
-                        value={envVars['SMTP_PASSWORD'] || ''}
+                        {...storedEnvFieldProps(envVars['SMTP_PASSWORD'], 'abcd efgh ijkl mnop')}
                         onChange={(e) => handleEnvChange('SMTP_PASSWORD', e.target.value)}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
-                        placeholder="abcd efgh ijkl mnop"
                       />
                       <div className="mt-2 text-[11px] text-gray-500">
                         Gmail의 경우, 2단계 인증 설정 후 '앱 비밀번호'를 생성하여 입력해야 합니다. (공용 비밀번호 절대 불가)
@@ -935,13 +939,13 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">수신 이메일 (콤마로 구분)</label>
+                      <label htmlFor="env-email-recipients" className="block text-xs font-bold text-gray-500 mb-1.5">수신 이메일 (콤마로 구분)</label>
                       <input
+                        id="env-email-recipients"
                         type="text"
-                        value={envVars['EMAIL_RECIPIENTS'] || ''}
+                        {...storedEnvFieldProps(envVars['EMAIL_RECIPIENTS'], 'me@example.com, boss@example.com')}
                         onChange={(e) => handleEnvChange('EMAIL_RECIPIENTS', e.target.value)}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-orange-500 transition-colors"
-                        placeholder="me@example.com, boss@example.com"
                       />
                     </div>
 
@@ -1027,10 +1031,11 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   <h3 className="text-lg font-bold text-white mb-4">검색 엔진</h3>
                   <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1.5">Google Custom Search Engine ID</label>
+                      <label htmlFor="env-google-search-engine-id" className="block text-xs font-bold text-gray-500 mb-1.5">Google Custom Search Engine ID</label>
                       <input
+                        id="env-google-search-engine-id"
                         type="text"
-                        value={envVars['GOOGLE_SEARCH_ENGINE_ID'] || ''}
+                        {...storedEnvFieldProps(envVars['GOOGLE_SEARCH_ENGINE_ID'], '')}
                         onChange={(e) => handleEnvChange('GOOGLE_SEARCH_ENGINE_ID', e.target.value)}
                         className="w-full bg-[#18181b] border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500 transition-colors"
                       />

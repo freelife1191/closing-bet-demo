@@ -332,6 +332,7 @@ export default function Sidebar() {
                         }}
                         className="w-4 h-4 flex items-center justify-center bg-blue-500 hover:bg-blue-400 rounded text-white text-[9px] font-bold transition-colors"
                         title="5회 충전 (하루 1회)"
+                        aria-label="무료 사용량 5회 충전 (하루 1회)"
                       >
                         +
                       </button>

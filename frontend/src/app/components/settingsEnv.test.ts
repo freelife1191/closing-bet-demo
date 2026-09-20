@@ -1,41 +1,41 @@
 import { describe, it, expect } from 'vitest';
-import { apiKeyFieldProps, pickNotificationEnv } from './settingsEnv';
+import { pickNotificationEnv, storedEnvFieldProps } from './settingsEnv';
 
-describe('apiKeyFieldProps', () => {
+describe('storedEnvFieldProps', () => {
   it('turns a masked server value into a placeholder, never a value', () => {
-    expect(apiKeyFieldProps('sk-1***************abcd', 'sk-...')).toEqual({
+    expect(storedEnvFieldProps('sk-1***************abcd', 'sk-...')).toEqual({
       value: '',
       placeholder: '저장되어 있습니다. 바꾸려면 새 값을 입력하세요',
     });
   });
 
   it('never puts the masked string on screen — a password placeholder is plain text', () => {
-    const { placeholder } = apiKeyFieldProps('sk-1***************abcd', 'sk-...');
+    const { placeholder } = storedEnvFieldProps('sk-1***************abcd', 'sk-...');
     expect(placeholder).not.toContain('sk-1');
     expect(placeholder).not.toContain('abcd');
   });
 
   it('treats a fully masked short value as masked too', () => {
     // _mask_env_value returns all asterisks when the secret is 8 chars or fewer
-    expect(apiKeyFieldProps('******', 'sk-...').value).toBe('');
+    expect(storedEnvFieldProps('******', 'sk-...').value).toBe('');
   });
 
   it('edits what the user typed rather than replacing it with a hint', () => {
-    expect(apiKeyFieldProps('sk-typed-by-user', 'sk-...')).toEqual({
+    expect(storedEnvFieldProps('sk-typed-by-user', 'sk-...')).toEqual({
       value: 'sk-typed-by-user',
       placeholder: 'sk-...',
     });
   });
 
   it('falls back to the hint when no key is stored', () => {
-    expect(apiKeyFieldProps(undefined, 'pplx-...')).toEqual({
+    expect(storedEnvFieldProps(undefined, 'pplx-...')).toEqual({
       value: '',
       placeholder: 'pplx-...',
     });
   });
 
   it('treats a cleared field as empty, not as a stored key', () => {
-    expect(apiKeyFieldProps('', 'pplx-...')).toEqual({
+    expect(storedEnvFieldProps('', 'pplx-...')).toEqual({
       value: '',
       placeholder: 'pplx-...',
     });

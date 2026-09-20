@@ -1,0 +1,17 @@
+{
+  "stage": "target:modal-green",
+  "started_at": "2026-09-20T08:07:54.572140+00:00",
+  "ended_at": "2026-09-20T08:07:56.975418+00:00",
+  "pid": 3907,
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "src/app/components/ModalShell.test.tsx"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-qa-20260920-vxqi1vvg/frontend",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 2.4
+}

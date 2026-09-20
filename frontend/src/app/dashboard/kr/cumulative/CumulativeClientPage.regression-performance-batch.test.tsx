@@ -163,6 +163,16 @@ function gradeCard(grade: Grade): HTMLElement {
   return titleElement.parentElement.parentElement;
 }
 
+function openDistributionTooltip(): HTMLElement {
+  const heading = screen.getByText('승패 분포 (WIN/LOSS)');
+  const trigger = heading.parentElement?.querySelector('i.fa-question-circle');
+  if (!(trigger instanceof HTMLElement)) {
+    throw new Error('승패 분포 툴팁 trigger를 찾지 못했습니다.');
+  }
+  fireEvent.mouseEnter(trigger);
+  return screen.getByRole('tooltip');
+}
+
 beforeEach(() => {
   vi.unstubAllGlobals();
 });
@@ -202,15 +212,16 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
     render(<CumulativeClientPage />);
 
     await waitFor(() => expect(screen.getByText('첫 번째 페이지 S')).toBeTruthy());
-    expect(screen.getByText('30%')).toBeTruthy();
-    expect(screen.getByText('7회')).toBeTruthy();
+    const tooltip = openDistributionTooltip();
+    expect(within(tooltip).getByText('30%')).toBeTruthy();
+    expect(within(tooltip).getByText('7회')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     await waitFor(() => expect(screen.getByText('두 번째 페이지 S')).toBeTruthy());
     expect(fetchMock).toHaveBeenLastCalledWith('/api/kr/closing-bet/cumulative?page=2&limit=50');
-    expect(screen.getByText('30%')).toBeTruthy();
-    expect(screen.getByText('7회')).toBeTruthy();
+    expect(within(tooltip).getByText('30%')).toBeTruthy();
+    expect(within(tooltip).getByText('7회')).toBeTruthy();
   });
 
   it('최근 승률은 실제 청산 표본 수를 라벨에 표시한다', async () => {
@@ -229,8 +240,10 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
 
     render(<CumulativeClientPage />);
 
-    await waitFor(() => expect(screen.getByText('최근 청산 2건 승률 (추천일순)')).toBeTruthy());
-    expect(screen.getByText('최근 청산 2건 승률 (추천일순)').nextElementSibling?.textContent).toBe('50%');
+    await waitFor(() => expect(screen.getByText('승패 분포 (WIN/LOSS)')).toBeTruthy());
+    const tooltip = within(openDistributionTooltip());
+    expect(tooltip.getByText('최근 청산 2건 승률 (추천일순)')).toBeTruthy();
+    expect(tooltip.getByText('최근 청산 2건 승률 (추천일순)').nextElementSibling?.textContent).toBe('50%');
   });
 
   it('필터 범위가 현재 페이지 행임을 표시한다', async () => {
@@ -292,6 +305,7 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
       await Promise.resolve();
     });
     await waitFor(() => expect(screen.getByText('첫 번째 페이지 S')).toBeTruthy());
+    const tooltip = openDistributionTooltip();
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() => expect(requests).toHaveLength(3));
@@ -300,7 +314,7 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
       await Promise.resolve();
     });
     await waitFor(() => expect(screen.getByText('두 번째 페이지 S')).toBeTruthy());
-    expect(screen.getByText('30%')).toBeTruthy();
+    expect(within(tooltip).getByText('30%')).toBeTruthy();
 
     await act(async () => {
       requests[0].resolve(mockResponse(responseFor(PAGE_ONE_TRADES, {
@@ -313,8 +327,8 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
 
     expect(screen.getByText('두 번째 페이지 S')).toBeTruthy();
     expect(screen.queryByText('첫 번째 페이지 S')).toBeNull();
-    expect(screen.getByText('30%')).toBeTruthy();
-    expect(screen.queryByText('10%')).toBeNull();
+    expect(within(tooltip).getByText('30%')).toBeTruthy();
+    expect(within(tooltip).queryByText('10%')).toBeNull();
   });
 
   it('최근 청산이 없으면 집계 전으로 표시한다', async () => {
@@ -333,9 +347,11 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
 
     render(<CumulativeClientPage />);
 
-    await waitFor(() => expect(screen.getByText('집계 전')).toBeTruthy());
-    expect(screen.getByText('최근 청산 0건 승률 (추천일순)')).toBeTruthy();
-    expect(screen.getByText('종료된 거래가 없어 추세를 집계하지 않았습니다.')).toBeTruthy();
-    expect(screen.getByText('집계 전').className).toContain('text-gray-400');
+    await waitFor(() => expect(screen.getByText('승패 분포 (WIN/LOSS)')).toBeTruthy());
+    const tooltip = within(openDistributionTooltip());
+    expect(tooltip.getByText('집계 전')).toBeTruthy();
+    expect(tooltip.getByText('최근 청산 0건 승률 (추천일순)')).toBeTruthy();
+    expect(tooltip.getByText('종료된 거래가 없어 추세를 집계하지 않았습니다.')).toBeTruthy();
+    expect(tooltip.getByText('집계 전').className).toContain('text-gray-400');
   });
 });

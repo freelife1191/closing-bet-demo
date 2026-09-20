@@ -99,6 +99,13 @@ describe('사용량 조회', () => {
     // 이전 사용자의 값이 새어 나가지 않는다는 원래 보장은 그대로 유지된다.
     expect(requested.some((url) => url.includes('saved@example.com'))).toBe(false);
   });
+
+  it('충전 버튼의 목적과 제한을 이름으로 알린다', async () => {
+    mockSession(null, 'unauthenticated');
+    await renderSidebar();
+
+    expect(screen.getByRole('button', { name: '무료 사용량 5회 충전 (하루 1회)' })).toBeTruthy();
+  });
 });
 
 describe('로그아웃 버튼', () => {

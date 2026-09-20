@@ -1,0 +1,20 @@
+{
+  "tracked_env_files": [
+    ".env.example"
+  ],
+  "real_env_values_read": false,
+  "root_data_read": false,
+  "auth_gateway": "all /api incl auth are fixture-only; request cookies/auth stripped; response Set-Cookie stripped",
+  "public_bundle_check": {
+    "files": 32,
+    "synthetic_server_sentinel_matches": [],
+    "scope": "build had no real or synthetic server secret; absence is inventory only, not a seeded non-exposure test"
+  },
+  "seeded_build_check": {
+    "build": "build-security.json",
+    "sentinels": 3,
+    "client_js_files": 32,
+    "matches": [],
+    "real_secrets_supplied": false
+  }
+}

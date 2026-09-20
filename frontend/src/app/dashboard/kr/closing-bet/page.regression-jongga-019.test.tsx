@@ -90,7 +90,10 @@ vi.mock('@/lib/api', () => ({
 }));
 
 vi.mock('@/hooks/useAdmin', () => ({ useAdmin: () => ({ isAdmin: false, isLoading: false }) }));
-vi.mock('@/app/components/Modal', () => ({ default: () => null }));
+vi.mock('@/app/components/Modal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/app/components/Modal')>();
+  return { ...actual, default: () => null };
+});
 vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
 vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null }));
 

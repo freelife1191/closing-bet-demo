@@ -63,11 +63,24 @@ function costlyCalls() {
   return api.fetchAPI.mock.calls.filter(([path]) => COSTLY_PATHS.includes(path as string));
 }
 
-// 접근 가능한 이름이 없는 버튼. `title` 은 이름으로 치지 않는다.
-function unnamedButtons() {
-  return Array.from(document.querySelectorAll('button')).filter(
-    (b) => !((b.textContent || '').trim() || b.getAttribute('aria-label'))
-  );
+// 접근 가능한 이름이 없는 컨트롤. `title` 은 이름으로 치지 않고, select 의 option
+// 텍스트도 select 자체의 이름으로 오인하지 않는다.
+function unnamedControls() {
+  return Array.from(document.querySelectorAll('button, select, a')).filter((control) => {
+    if (control instanceof HTMLSelectElement) {
+      return !(
+        control.getAttribute('aria-label')
+        || control.getAttribute('aria-labelledby')
+        || control.labels?.length
+      );
+    }
+
+    return !(
+      (control.textContent || '').trim()
+      || control.getAttribute('aria-label')
+      || control.getAttribute('aria-labelledby')
+    );
+  });
 }
 
 async function renderPage() {
@@ -76,7 +89,7 @@ async function renderPage() {
 }
 
 function dialog() {
-  return document.querySelector('[role="dialog"]') as HTMLElement | null;
+  return document.querySelector('[role="dialog"], [role="alertdialog"]') as HTMLElement | null;
 }
 
 beforeEach(() => {
@@ -102,7 +115,17 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
   it('종가베팅 화면의 모든 버튼이 이름을 가진다', async () => {
     await renderPage();
 
-    expect(unnamedButtons().map((b) => b.outerHTML.slice(0, 120))).toEqual([]);
+    expect(unnamedControls().map((control) => control.outerHTML.slice(0, 120))).toEqual([]);
+  });
+
+  it('종가베팅 선택 상자 다섯 개가 화면 문구와 같은 정확한 이름을 가진다', async () => {
+    await renderPage();
+
+    expect(screen.getByRole('combobox', { name: '거래대금' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: '상승률' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: '등급' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: '총점' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: '리포트 날짜' })).toBeTruthy();
   });
 
   it('모달을 열어도 이름 없는 버튼이 생기지 않는다', async () => {
@@ -112,7 +135,38 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '상세 분석 보기' })[0]);
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: '닫기' }).length).toBeGreaterThan(0));
-    expect(unnamedButtons().map((b) => b.outerHTML.slice(0, 120))).toEqual([]);
+    expect(unnamedControls().map((control) => control.outerHTML.slice(0, 120))).toEqual([]);
+  });
+
+  it('종목 상세를 이름 있는 대화상자로 열고 Escape 한 번으로 닫는다', async () => {
+    await renderPage();
+
+    fireEvent.click(screen.getAllByRole('button', { name: '상세 분석 보기' })[0]);
+
+    const detail = await screen.findByRole('dialog', { name: '태웅' });
+    const layer = detail.closest('[data-modal-layer]') as HTMLElement;
+    expect(layer).not.toBeNull();
+    expect(layer.className).not.toContain('animate-fade-in');
+    expect(detail.className).toContain('animate-fade-in');
+    expect(within(detail).getByRole('button', { name: '닫기' })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '태웅' })).toBeNull());
+  });
+
+  it('차트를 이름 있는 대화상자로 열고 애니메이션을 고정 host가 아닌 카드에 둔다', async () => {
+    await renderPage();
+
+    fireEvent.click(screen.getByTestId('mini-chart'));
+
+    const chart = await screen.findByRole('dialog', { name: '태웅' });
+    const layer = chart.closest('[data-modal-layer]') as HTMLElement;
+    expect(layer).not.toBeNull();
+    expect(layer.className).not.toContain('animate-fade-in');
+    expect(chart.className).toContain('animate-fade-in');
+    for (const deadClass of ['animate-in', 'fade-in', 'zoom-in-95']) {
+      expect(chart.classList.contains(deadClass)).toBe(false);
+    }
   });
 
   it('헤더의 아이콘 버튼 셋이 이름을 가진다', () => {
@@ -133,7 +187,7 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
     fireEvent.click(toggle);
 
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(unnamedButtons().map((b) => b.outerHTML.slice(0, 120))).toEqual([]);
+    expect(unnamedControls().map((control) => control.outerHTML.slice(0, 120))).toEqual([]);
   });
 });
 
@@ -193,7 +247,7 @@ describe('[FE-024] 비용을 일으키는 조작의 확인 절차', () => {
     await waitFor(() =>
       expect(costlyCalls().map(([path]) => path)).toEqual(['/api/kr/jongga-v2/reanalyze-gemini'])
     );
-    expect(api.fetchAPI.mock.calls.at(-1)?.[1]?.body).toContain('044490');
+    expect(costlyCalls().at(-1)?.[1]?.body).toContain('044490');
   });
 });
 

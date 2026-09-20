@@ -105,7 +105,7 @@ describe('[CHAT-010] 모바일 drawer 접근성', () => {
 
     fireEvent.click(deleteButtons[0]);
 
-    const confirmation = await screen.findByRole('dialog', { name: '대화 삭제' });
+    const confirmation = await screen.findByRole('alertdialog', { name: '대화 삭제' });
     const cancel = within(confirmation).getByRole('button', { name: '취소' });
     cancel.focus();
     const flushPendingModalClose = () => flushSync(() => {});
@@ -117,7 +117,7 @@ describe('[CHAT-010] 모바일 drawer 접근성', () => {
     }
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: '대화 삭제' })).toBeNull();
+      expect(screen.queryByRole('alertdialog', { name: '대화 삭제' })).toBeNull();
       expect(screen.queryByRole('button', { name: '메뉴 닫기' })).not.toBeNull();
     });
 

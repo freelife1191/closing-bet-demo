@@ -1,6 +1,8 @@
 // Regression: [FE-013] — 과거 날짜에서 일괄 매수만 막히고 행별 매수 버튼은 살아 있던 문제
 // 근거: docs/dev-cycle/TODO.md [FE-013] (2026-09-02 VCP-007 마감 qa-only)
 
+import '@testing-library/jest-dom/vitest';
+
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -34,7 +36,6 @@ vi.mock('@/hooks/useAdmin', () => ({
 vi.mock('./StockChart', () => ({ default: () => null }));
 vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
 vi.mock('@/app/components/ConfirmationModal', () => ({ default: () => null }));
-vi.mock('@/app/components/Modal', () => ({ default: () => null }));
 vi.mock('@/app/components/VCPCriteriaModal', () => ({ default: () => null }));
 vi.mock('@/app/components/ThinkingProcess', () => ({ default: () => null }));
 vi.mock('react-markdown', () => ({ default: () => null }));
@@ -67,7 +68,13 @@ describe('VCPPage - 과거 날짜 매수 가드', () => {
     await selectHistoryDate();
 
     await waitFor(async () => {
-      expect((await findRowBuyButton(HISTORY_REASON)).disabled).toBe(true);
+      const button = await findRowBuyButton(HISTORY_REASON);
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-label')).toBe('알파테크 모의 매수');
+
+      const reason = document.getElementById(button.getAttribute('aria-describedby') || '');
+      expect(reason?.textContent).toBe(HISTORY_REASON);
+      expect(reason).not.toHaveClass('sr-only');
     });
   });
 
@@ -81,6 +88,25 @@ describe('VCPPage - 과거 날짜 매수 가드', () => {
       const bulkButton = screen.getByRole('button', { name: /VCP 전체 10주 매수/ }) as HTMLButtonElement;
       expect(bulkButton.disabled).toBe(true);
       expect(bulkButton.getAttribute('title')).toBe(HISTORY_REASON);
+      const reason = document.getElementById(bulkButton.getAttribute('aria-describedby') || '');
+      expect(reason?.textContent).toBe(HISTORY_REASON);
+      expect(reason).not.toHaveClass('sr-only');
     });
+  });
+
+  it('종목 행을 열면 이름 있는 상세 대화상자가 나타나고 Escape로 닫힌다', async () => {
+    render(<VCPPage />);
+
+    fireEvent.click(await screen.findByText('알파테크'));
+
+    const detail = await screen.findByRole('dialog', { name: /알파테크.*034730/ });
+    const layer = detail.closest('[data-modal-layer]') as HTMLElement;
+    expect(layer).not.toBeNull();
+    expect(layer.className).not.toContain('animate-fade-in');
+    expect(detail.className).toContain('animate-fade-in');
+    expect(within(detail).getAllByRole('button', { name: '차트 닫기' }).length).toBeGreaterThan(0);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /알파테크.*034730/ })).toBeNull());
   });
 });

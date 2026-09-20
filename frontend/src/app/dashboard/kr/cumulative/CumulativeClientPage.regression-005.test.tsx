@@ -61,6 +61,16 @@ function chipLabels(): string[] {
     .filter((text) => /^(전체|성공|실패|보유) \(\d+\)$/.test(text));
 }
 
+function openDistributionTooltip(): HTMLElement {
+  const heading = screen.getByText('승패 분포 (WIN/LOSS)');
+  const trigger = heading.parentElement?.querySelector('i.fa-question-circle');
+  if (!(trigger instanceof HTMLElement)) {
+    throw new Error('승패 분포 툴팁 trigger를 찾지 못했습니다.');
+  }
+  fireEvent.mouseEnter(trigger);
+  return screen.getByRole('tooltip');
+}
+
 describe('CumulativeClientPage', () => {
   it('결과 칩은 현재 페이지 기준으로 세어 전체 = 성공 + 실패 + 보유가 맞는다', async () => {
     render(<CumulativeClientPage />);
@@ -87,7 +97,7 @@ describe('CumulativeClientPage', () => {
 
     // 5건 중 3승인 60%를 서버 KPI로 공급한다. WIN/LOSS 대문자 집계 계약은
     // 백엔드 성과 묶음 회귀에서 검증하며, 이 화면은 현재 표 행으로 재계산하지 않는다.
-    expect(screen.queryByText('60%')).not.toBeNull();
+    expect(within(openDistributionTooltip()).getByText('60%')).toBeTruthy();
   });
 });
 

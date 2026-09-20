@@ -5,7 +5,7 @@
 // 그래서 성적을 판정받은 전략에는 확인 표시가 붙지 않고, 집계할 것이 없는 구간에만
 // 붙었다. 이제는 판정이 끝난 세 값에서만 켜진다.
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import KRDashboardPage from './page';
@@ -65,7 +65,15 @@ it('종가 성과는 저장 가격 우선 기준을 설명하고 VCP의 백테�
   });
   render(<KRDashboardPage />);
   await waitFor(() => expect(screen.getAllByText('12 trades').length).toBeGreaterThan(0));
-  expect(screen.getByText(/종가베팅은 저장된 목표가·손절가 기준/)).toBeTruthy();
-  expect(screen.getByText('VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.')).toBeTruthy();
-  expect(screen.getByText('개별 시그널의 기본 목표·손절은 +5%/-3%입니다.')).toBeTruthy();
+
+  const closingTrigger = screen.getByText('종가베팅 전략');
+  fireEvent.mouseEnter(closingTrigger);
+  expect(within(screen.getByRole('tooltip')).getByText(/종가베팅은 저장된 목표가·손절가 기준/)).toBeTruthy();
+  fireEvent.mouseLeave(closingTrigger);
+  await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+
+  fireEvent.mouseEnter(screen.getByText('VCP 전략'));
+  const vcpTooltip = within(screen.getByRole('tooltip'));
+  expect(vcpTooltip.getByText('VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.')).toBeTruthy();
+  expect(vcpTooltip.getByText('개별 시그널의 기본 목표·손절은 +5%/-3%입니다.')).toBeTruthy();
 });

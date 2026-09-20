@@ -6,6 +6,8 @@
 // 싣는다. 그 화면에서 카드별 매수 버튼이 열려 있으면, 일괄 매수가 막으려던 결과에
 // 종목 수만큼 반복해서 도달한다.
 
+import '@testing-library/jest-dom/vitest';
+
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -101,7 +103,12 @@ describe('[JONGGA-010] 종가베팅 카드의 매수 가드', () => {
     await waitFor(() => {
       expect(button.disabled).toBe(true);
     });
+    expect(button.getAttribute('aria-label')).toBe('알파에너지 모의 매수');
     expect(button.getAttribute('title')).toBe(STALE_REASON);
+
+    const reason = document.getElementById(button.getAttribute('aria-describedby') || '');
+    expect(reason?.textContent).toBe(STALE_REASON);
+    expect(reason).not.toHaveClass('sr-only');
   });
 
   it('카드 버튼과 일괄 매수 버튼이 같은 사유 문구를 쓴다', async () => {
@@ -117,5 +124,9 @@ describe('[JONGGA-010] 종가베팅 카드의 매수 가드', () => {
     expect(bulkButton.disabled).toBe(true);
     expect(bulkButton.getAttribute('title')).toBe(STALE_REASON);
     expect(cardButton.getAttribute('title')).toBe(bulkButton.getAttribute('title'));
+
+    const bulkReason = document.getElementById(bulkButton.getAttribute('aria-describedby') || '');
+    expect(bulkReason?.textContent).toBe(STALE_REASON);
+    expect(bulkReason).not.toHaveClass('sr-only');
   });
 });

@@ -170,3 +170,11 @@ describe('결제 금액', () => {
     expect(document.body.textContent).toContain('부족: 500,000원');
   });
 });
+
+describe('대화상자 닫기', () => {
+  it('아이콘 닫기 버튼에 접근 가능한 이름을 제공한다', async () => {
+    renderModal(stockAt10000);
+
+    expect(await screen.findByRole('button', { name: '닫기' })).not.toBeNull();
+  });
+});

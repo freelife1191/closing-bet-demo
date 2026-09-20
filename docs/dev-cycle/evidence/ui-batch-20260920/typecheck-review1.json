@@ -1,0 +1,16 @@
+{
+  "stage": "typecheck:review1",
+  "started_at": "2026-09-20T08:17:20.014507+00:00",
+  "ended_at": "2026-09-20T08:17:21.167575+00:00",
+  "pid": 31298,
+  "command": [
+    "npm",
+    "run",
+    "type-check"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-qa-20260920-vxqi1vvg/frontend",
+  "timeout_seconds": 90,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 1.15
+}

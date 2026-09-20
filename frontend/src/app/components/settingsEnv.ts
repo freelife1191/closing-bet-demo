@@ -4,11 +4,12 @@
  * placeholder in plain text, so we show a fixed sentence instead: the field
  * only needs to say that a key is stored, not which one.
  *
- * Both key fields go through this one function so they cannot drift apart.
+ * Every persisted environment field goes through this function so masked
+ * server values cannot drift into visible input values.
  */
 const STORED_KEY_HINT = '저장되어 있습니다. 바꾸려면 새 값을 입력하세요';
 
-export function apiKeyFieldProps(
+export function storedEnvFieldProps(
   stored: string | undefined,
   hint: string
 ): { value: string; placeholder: string } {

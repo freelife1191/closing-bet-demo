@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useId, useLayoutEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { fetchAPI, isAuthenticationError, paperTradingAPI } from '@/lib/api';
 import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import { parseAIConfidence } from '@/lib/aiConfidence';
-import Modal from '@/app/components/Modal';
+import Modal, { ModalShell } from '@/app/components/Modal';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
 import GradeGuideModal from '@/app/components/GradeGuideModal';
@@ -269,23 +269,18 @@ function StockChart({ symbol, name }: { symbol: string, name: string }) {
 }
 
 function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, onClose: () => void }) {
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
+  const titleId = useId();
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in duration-200" onClick={onClose}>
-      <div
-        className="bg-[#1c1c1e] w-full max-w-4xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalShell
+      onClose={onClose}
+      labelledBy={titleId}
+      overlayClassName="z-[100] p-4"
+      className="bg-[#1c1c1e] w-full max-w-4xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative animate-fade-in motion-reduce:animate-none"
+    >
         <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#1c1c1e]">
           <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-white">{name}</h3>
+            <h3 id={titleId} className="text-xl font-bold text-white">{name}</h3>
             <span className="text-sm font-mono text-gray-400">{symbol}</span>
           </div>
           <button
@@ -300,8 +295,7 @@ function ChartModal({ symbol, name, onClose }: { symbol: string, name: string, o
         <div className="flex-1 relative overflow-y-auto">
           <StockChart symbol={symbol} name={name} />
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -406,17 +400,10 @@ function TrendingThemesBox({ themes }: { themes: { theme: string; count: number 
 
 // Stock Detail Modal Component
 function StockDetailModal({ code, name, onClose }: { code: string; name: string; onClose: () => void }) {
+  const titleId = useId();
   const [detail, setDetail] = useState<StockDetailInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
 
   // TossCollector 응답을 StockDetailInfo 형식으로 변환
   const mapTossDataToDetail = (data: Record<string, unknown>): StockDetailInfo => {
@@ -509,18 +496,16 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
   const institution5Day = detail?.investorTrend5Day?.institution ?? detail?.investorTrend?.institution ?? 0;
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 md:p-4"
-      onClick={onClose}
+    <ModalShell
+      onClose={onClose}
+      labelledBy={titleId}
+      overlayClassName="z-[100] p-2 md:p-4"
+      className="bg-[#1c1c1e] w-[95%] md:w-full max-w-3xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl overflow-hidden animate-fade-in motion-reduce:animate-none"
     >
-      <div
-        className="bg-[#1c1c1e] w-[95%] md:w-full max-w-3xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-white">{name}</h3>
+            <h3 id={titleId} className="text-xl font-bold text-white">{name}</h3>
             <span className="text-sm font-mono text-gray-400">{code}</span>
             {detail?.market && (
               <span
@@ -810,12 +795,12 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
             </div>
           ) : null}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
 export default function JonggaV2Page() {
+  const bulkBuyReasonId = useId();
   const { isAdmin } = useAdmin();
   const { data: session, status } = useSession();
   const paperTradingAccountKey = status === 'authenticated' ? session?.user?.email ?? null : null;
@@ -1274,6 +1259,7 @@ export default function JonggaV2Page() {
                 </Tooltip>
               </div>
               <select
+                aria-label="거래대금"
                 value={filterTradingValue}
                 onChange={(e) => setFilterTradingValue(Number(e.target.value))}
                 className={`bg-[#1c1c1e] border text-xs rounded-xl px-3 py-2 outline-none transition-colors ${filterTradingValue > 0 ? 'border-indigo-500 text-indigo-400' : 'border-white/10 text-gray-400'}`}
@@ -1294,6 +1280,7 @@ export default function JonggaV2Page() {
                 </Tooltip>
               </div>
               <select
+                aria-label="상승률"
                 value={filterRise}
                 onChange={(e) => setFilterRise(Number(e.target.value))}
                 className={`bg-[#1c1c1e] border text-xs rounded-xl px-3 py-2 outline-none transition-colors ${filterRise > 0 ? 'border-rose-500 text-rose-400' : 'border-white/10 text-gray-400'}`}
@@ -1325,6 +1312,7 @@ export default function JonggaV2Page() {
                 </button>
               </div>
               <select
+                aria-label="등급"
                 value={filterGrade}
                 onChange={(e) => setFilterGrade(e.target.value)}
                 className={`bg-[#1c1c1e] border text-xs rounded-xl px-3 py-2 outline-none transition-colors ${filterGrade !== 'ALL' ? 'border-purple-500 text-purple-400' : 'border-white/10 text-gray-400'}`}
@@ -1345,6 +1333,7 @@ export default function JonggaV2Page() {
                 </Tooltip>
               </div>
               <select
+                aria-label="총점"
                 value={filterScore}
                 onChange={(e) => setFilterScore(Number(e.target.value))}
                 className={`bg-[#1c1c1e] border text-xs rounded-xl px-3 py-2 outline-none transition-colors ${filterScore > 0 ? 'border-emerald-500 text-emerald-400' : 'border-white/10 text-gray-400'}`}
@@ -1380,17 +1369,25 @@ export default function JonggaV2Page() {
           <div className="flex items-center gap-3 md:ml-auto">
             <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
 
-            <Tooltip content={bulkBuyClosingBetTooltip} position="top" align="right" size="md">
-              <button
-                onClick={handleBulkBuyClosingBet}
-                disabled={isBulkBuyClosingBetDisabled}
-                className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                title={bulkBuyClosingBetTooltip}
-              >
-                <i className={`fas ${isBulkBuyingClosingBet ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
-                <span>{isBulkBuyingClosingBet ? '일괄 매수 중...' : '종가베팅 전체 10주 매수'}</span>
-              </button>
-            </Tooltip>
+            <div className="flex flex-col items-end gap-1">
+              <Tooltip content={bulkBuyClosingBetTooltip} position="top" align="right" size="md">
+                <button
+                  onClick={handleBulkBuyClosingBet}
+                  disabled={isBulkBuyClosingBetDisabled}
+                  aria-describedby={isBulkBuyClosingBetDisabled ? bulkBuyReasonId : undefined}
+                  className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={bulkBuyClosingBetTooltip}
+                >
+                  <i className={`fas ${isBulkBuyingClosingBet ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
+                  <span>{isBulkBuyingClosingBet ? '일괄 매수 중...' : '종가베팅 전체 10주 매수'}</span>
+                </button>
+              </Tooltip>
+              {isBulkBuyClosingBetDisabled && (
+                <p id={bulkBuyReasonId} className="max-w-64 text-right text-[10px] leading-relaxed text-amber-300">
+                  {bulkBuyClosingBetDisabledReason}
+                </p>
+              )}
+            </div>
 
             {/* 종가베팅 점수표 버튼 */}
             <button
@@ -1402,6 +1399,7 @@ export default function JonggaV2Page() {
 
             <Tooltip content="이전 리포트 기록을 조회할 수 있습니다. Latest Report는 가장 최신 데이터를 보여줍니다." position="bottom" align="right" size="md">
               <select
+                aria-label="리포트 날짜"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="bg-[#1c1c1e] border border-white/10 text-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all hover:border-white/20 w-full md:w-auto"
@@ -1956,6 +1954,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
   isAdmin: boolean,
   buyDisabledReason: string
 }) {
+  const buyReasonId = useId();
   const buyTooltip = buyDisabledReason || '모의 계좌로 매수 주문을 실행합니다.';
   const gradeStyles: Record<string, { bg: string, text: string, border: string }> = {
     S: { bg: 'bg-indigo-500/20', text: 'text-indigo-400', border: 'border-indigo-500/30' },
@@ -2452,15 +2451,24 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               <i className="fas fa-search-plus transition-transform group-hover/btn:scale-110"></i>
               상세 분석 보기
             </button>
-            <button
-              onClick={onBuy}
-              disabled={Boolean(buyDisabledReason)}
-              title={buyTooltip}
-              className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] flex items-center justify-center gap-2 group/buy disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-amber-600 disabled:hover:to-orange-600 disabled:active:scale-100"
-            >
-              <i className="fas fa-shopping-cart transition-transform group-hover/buy:scale-110"></i>
-              모의 매수
-            </button>
+            <div className="space-y-1">
+              <button
+                onClick={onBuy}
+                disabled={Boolean(buyDisabledReason)}
+                aria-label={`${signal.stock_name} 모의 매수`}
+                aria-describedby={buyDisabledReason ? buyReasonId : undefined}
+                title={buyTooltip}
+                className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] flex items-center justify-center gap-2 group/buy disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-amber-600 disabled:hover:to-orange-600 disabled:active:scale-100"
+              >
+                <i className="fas fa-shopping-cart transition-transform group-hover/buy:scale-110"></i>
+                모의 매수
+              </button>
+              {buyDisabledReason && (
+                <p id={buyReasonId} className="text-xs leading-relaxed text-amber-200">
+                  {buyDisabledReason}
+                </p>
+              )}
+            </div>
 
             {/* Secondary Actions: 2-Column Grid for Links */}
             <div className="grid grid-cols-2 gap-2 md:col-span-2 xl:col-span-1">

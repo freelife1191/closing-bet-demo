@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { AIRecommendation, isAuthenticationError, krAPI, KRChartData, KRSignal, KRAIAnalysis, KRMarketGate, paperTradingAPI } from '@/lib/api';
 import { useAccountActionGuard } from '@/lib/accountActionGuard';
@@ -8,7 +8,8 @@ import StockChart from './StockChart';
 import { findChartDateGaps } from './chartUtils';
 import BuyStockModal from '@/app/components/BuyStockModal';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
-import Modal from '@/app/components/Modal';
+import Modal, { ModalShell } from '@/app/components/Modal';
+import Tooltip from '@/app/components/Tooltip';
 import VCPCriteriaModal from '@/app/components/VCPCriteriaModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -25,40 +26,6 @@ import { getAuthHeaders } from '@/app/components/chatHelpers';
 function getVcpChatHeaders(sessionId: string): Record<string, string> {
   return { ...getAuthHeaders(), 'X-Session-Id': sessionId };
 }
-
-// Simple Tooltip Component
-const SimpleTooltip = ({
-  text,
-  children,
-  align = 'center',
-  position = 'bottom'
-}: {
-  text: string;
-  children: React.ReactNode;
-  align?: 'left' | 'center' | 'right';
-  position?: 'top' | 'bottom';
-}) => {
-  let positionClass = 'left-1/2 -translate-x-1/2';
-  let arrowClass = 'left-1/2 -translate-x-1/2';
-
-  if (align === 'right') {
-    positionClass = 'right-0 translate-x-0';
-    arrowClass = 'right-4 translate-x-0';
-  } else if (align === 'left') {
-    positionClass = 'left-0 translate-x-0';
-    arrowClass = 'left-4 translate-x-0';
-  }
-
-  return (
-    <div className="group relative flex items-center justify-center gap-1 cursor-help">
-      {children}
-      <div className={`absolute ${position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'} hidden group-hover:block min-w-[120px] w-max max-w-[180px] p-2 bg-gray-900 text-white text-[10px] rounded shadow-lg z-[100] text-center border border-white/10 pointer-events-none whitespace-normal break-keep ${positionClass}`}>
-        {text}
-        <div className={`absolute border-4 border-transparent ${position === 'top' ? 'top-full border-t-gray-900' : 'bottom-full border-b-gray-900'} ${arrowClass}`}></div>
-      </div>
-    </div>
-  );
-};
 
 // Helper to fix CJK markdown issues and malformed AI output
 const preprocessMarkdown = (text: string) => {
@@ -268,6 +235,9 @@ const AI_ACTION_BADGES = {
 } as const;
 
 export default function VCPSignalsPage() {
+  const chartTitleId = useId();
+  const bulkBuyReasonId = useId();
+  const rowBuyReasonId = useId();
   const { data: session, status } = useSession();
   const paperTradingAccountKey = status === 'authenticated' ? session?.user?.email ?? null : null;
   const isPaperTradingAuthenticated = Boolean(paperTradingAccountKey);
@@ -1437,6 +1407,7 @@ export default function VCPSignalsPage() {
           )}
           {/* [MOVED] VCP 기준표 버튼 removed from here */}
           <select
+            aria-label="재분석 실행 모드"
             value={reanalysisMode}
             onChange={(e) => setReanalysisMode(e.target.value as 'failed' | 'gemini' | 'second')}
             disabled={screenerRunning || reanalyzingFailedAI}
@@ -1601,19 +1572,27 @@ export default function VCPSignalsPage() {
         </div>
 
         <div className="flex items-center gap-2 relative self-end md:self-auto">
-          <SimpleTooltip text={bulkBuyVCPTooltip} align="right" position="top">
-            <span className="inline-flex">
-              <button
-                onClick={handleBulkBuyVCP}
-                disabled={isBulkBuyVCPDisabled}
-                className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                title={bulkBuyVCPTooltip}
-              >
-                <i className={`fas ${isBulkBuyingVCP ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
-                <span>{isBulkBuyingVCP ? '일괄 매수 중...' : 'VCP 전체 10주 매수'}</span>
-              </button>
-            </span>
-          </SimpleTooltip>
+          <div className="flex flex-col items-end gap-1">
+            <Tooltip content={bulkBuyVCPTooltip} align="right" position="top" className="cursor-help">
+              <span className="inline-flex">
+                <button
+                  onClick={handleBulkBuyVCP}
+                  disabled={isBulkBuyVCPDisabled}
+                  aria-describedby={isBulkBuyVCPDisabled ? bulkBuyReasonId : undefined}
+                  className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-amber-400/30 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                  title={bulkBuyVCPTooltip}
+                >
+                  <i className={`fas ${isBulkBuyingVCP ? 'fa-circle-notch fa-spin' : 'fa-cart-shopping'}`}></i>
+                  <span>{isBulkBuyingVCP ? '일괄 매수 중...' : 'VCP 전체 10주 매수'}</span>
+                </button>
+              </span>
+            </Tooltip>
+            {isBulkBuyVCPDisabled && (
+              <p id={bulkBuyReasonId} className="max-w-64 text-right text-[10px] leading-relaxed text-amber-300">
+                {bulkBuyVCPDisabledReason}
+              </p>
+            )}
+          </div>
 
           {/* VCP 기준표 버튼 */}
           <button
@@ -1680,7 +1659,6 @@ export default function VCPSignalsPage() {
           </div>
         </div>
       </div>
-
       <div className="rounded-2xl bg-[#1c1c1e] border border-white/10 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
@@ -1689,42 +1667,42 @@ export default function VCPSignalsPage() {
                 <th className="px-4 py-3 font-semibold min-w-[120px]">Stock</th>
                 <th className="px-4 py-3 font-semibold whitespace-nowrap">Date</th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap min-w-[100px] w-[100px]">
-                  <SimpleTooltip text="외국인 5일 연속 순매수 금액">외국인 5D</SimpleTooltip>
+                  <Tooltip content="외국인 5일 연속 순매수 금액" position="bottom" className="cursor-help">외국인 5D</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap min-w-[100px] w-[100px]">
-                  <SimpleTooltip text="기관 5일 연속 순매수 금액">기관 5D</SimpleTooltip>
+                  <Tooltip content="기관 5일 연속 순매수 금액" position="bottom" className="cursor-help">기관 5D</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
-                  <SimpleTooltip text="클릭하여 모의 투자 계좌로 매수 주문을 실행할 수 있습니다.">Buy</SimpleTooltip>
+                  <Tooltip content="클릭하여 모의 투자 계좌로 매수 주문을 실행할 수 있습니다." position="bottom" className="cursor-help">Buy</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
-                  <SimpleTooltip text="VCP(60%) + 수급(40%) 합산 점수 (높을수록 좋음)">Score</SimpleTooltip>
+                  <Tooltip content="VCP(60%) + 수급(40%) 합산 점수 (높을수록 좋음)" position="bottom" className="cursor-help">Score</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
-                  <SimpleTooltip text="변동성 수축 비율 (0.9 미만 권장, 낮을수록 에너지 응축)">Cont.</SimpleTooltip>
+                  <Tooltip content="변동성 수축 비율 (0.9 미만 권장, 낮을수록 에너지 응축)" position="bottom" className="cursor-help">Cont.</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="시그널 발생 당시 진입 추천가">Entry</SimpleTooltip>
+                  <Tooltip content="시그널 발생 당시 진입 추천가" position="bottom" className="cursor-help">Entry</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="시그널에 저장된 손절가 (기본 진입가 -3%)">Stop</SimpleTooltip>
+                  <Tooltip content="시그널에 저장된 손절가 (기본 진입가 -3%)" position="bottom" className="cursor-help">Stop</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="시그널에 저장된 목표가 (기본 진입가 +5%)">Target</SimpleTooltip>
+                  <Tooltip content="시그널에 저장된 목표가 (기본 진입가 +5%)" position="bottom" className="cursor-help">Target</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="현재 주가 (실시간 업데이트 아님)">Current</SimpleTooltip>
+                  <Tooltip content="현재 주가 (실시간 업데이트 아님)" position="bottom" className="cursor-help">Current</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">
-                  <SimpleTooltip text="진입가 대비 현재 수익률 (%)">Return</SimpleTooltip>
+                  <Tooltip content="진입가 대비 현재 수익률 (%)" position="bottom" className="cursor-help">Return</Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
-                  <SimpleTooltip text="Second AI 기반 매매 의견">
+                  <Tooltip content="Second AI 기반 매매 의견" position="bottom" className="cursor-help">
                     {secondaryAI === 'perplexity' ? 'Perplexity' : 'GPT'}
-                  </SimpleTooltip>
+                  </Tooltip>
                 </th>
                 <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">
-                  <SimpleTooltip text="Gemini Pro 기반 매매 의견" align="right">Gemini</SimpleTooltip>
+                  <Tooltip content="Gemini Pro 기반 매매 의견" position="bottom" align="right" className="cursor-help">Gemini</Tooltip>
                 </th>
               </tr>
             </thead>
@@ -1758,19 +1736,26 @@ export default function VCPSignalsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <SimpleTooltip text={rowBuyTooltip}>
+                      <Tooltip content={rowBuyTooltip} position="bottom" className="cursor-help">
                         <button
                           onClick={() => {
                             setBuyingStock({ ticker: signal.ticker, name: signal.name, price: signal.current_price || signal.entry_price || 0 });
                             setIsBuyModalOpen(true);
                           }}
                           disabled={Boolean(buyDisabledReason)}
+                          aria-label={`${signal.name} 모의 매수`}
+                          aria-describedby={buyDisabledReason ? `${rowBuyReasonId}-${signal.ticker}` : undefined}
                           title={rowBuyTooltip}
                           className="w-8 h-8 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-500/10 disabled:hover:text-rose-500"
                         >
                           <i className="fas fa-shopping-cart text-xs"></i>
                         </button>
-                      </SimpleTooltip>
+                      </Tooltip>
+                      {buyDisabledReason && (
+                        <p id={`${rowBuyReasonId}-${signal.ticker}`} className="mx-auto mt-1 max-w-40 text-[10px] leading-relaxed text-amber-200">
+                          {buyDisabledReason}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
@@ -1838,12 +1823,16 @@ export default function VCPSignalsPage() {
 
       {/* Chart Modal with AI Analysis Panel */}
       {isModalOpen && selectedStock && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeChart}>
-          <div className="bg-[#1c1c1e] border border-white/10 rounded-2xl w-full max-w-[95vw] h-[90vh] overflow-y-auto lg:overflow-hidden shadow-2xl flex flex-col lg:flex-row" onClick={e => e.stopPropagation()}>
+        <ModalShell
+          onClose={closeChart}
+          labelledBy={chartTitleId}
+          overlayClassName="z-[100] p-4"
+          className="bg-[#1c1c1e] border border-white/10 rounded-2xl w-full max-w-[95vw] h-[90vh] overflow-y-auto lg:overflow-hidden shadow-2xl flex flex-col lg:flex-row animate-fade-in motion-reduce:animate-none"
+        >
             {/* Left: Chart Section */}
             <div className="flex-none lg:flex-1 min-w-0 flex flex-col border-b lg:border-b-0 lg:border-r border-white/10">
               <div className="flex justify-between items-center p-4 border-b border-white/5">
-                <h3 className="min-w-0 break-words text-lg font-bold text-white">
+                <h3 id={chartTitleId} className="min-w-0 break-words text-lg font-bold text-white">
                   {selectedStock.name} <span className="text-sm text-gray-500">({selectedStock.ticker})</span>
                 </h3>
                 <button onClick={closeChart} aria-label="차트 닫기" className="shrink-0 p-2 text-gray-400 hover:text-white transition-colors lg:hidden">
@@ -2317,8 +2306,7 @@ export default function VCPSignalsPage() {
 
               })()}
             </div>
-          </div>
-        </div>
+        </ModalShell>
       )}
       {/* Buy Stock Modal */}
       <BuyStockModal

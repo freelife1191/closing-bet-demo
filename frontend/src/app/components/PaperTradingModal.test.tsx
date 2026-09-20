@@ -129,6 +129,12 @@ describe('ARIA attributes', () => {
     const titleEl = document.getElementById('paper-trading-modal-title');
     expect(titleEl).not.toBeNull();
   });
+
+  it('모바일과 데스크톱 아이콘 닫기 버튼 모두 접근 가능한 이름을 제공한다', async () => {
+    renderOpen();
+
+    expect(await screen.findAllByRole('button', { name: '닫기' })).toHaveLength(2);
+  });
 });
 
 // ---------------------------------------------------------------------------

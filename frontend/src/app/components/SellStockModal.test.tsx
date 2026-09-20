@@ -86,3 +86,11 @@ describe('정산 금액', () => {
     expect(input.value).toBe('10');
   });
 });
+
+describe('대화상자 닫기', () => {
+  it('아이콘 닫기 버튼에 접근 가능한 이름을 제공한다', async () => {
+    renderModal();
+
+    expect(await screen.findByRole('button', { name: '닫기' })).not.toBeNull();
+  });
+});

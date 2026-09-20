@@ -139,9 +139,10 @@ describe('[FLOW-009][VCP-025][JONGGA-036] 두 전략 카드의 성과 상태', (
       avgReturn: 3.8,
     });
 
-    const vcpCardText = vcpCard.textContent ?? '';
-    expect(vcpCardText).toContain('VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.');
-    expect(vcpCardText).toContain('개별 시그널의 기본 목표·손절은 +5%/-3%입니다.');
+    fireEvent.mouseEnter(within(vcpCard).getByText('VCP 전략'));
+    const tooltipText = screen.getByRole('tooltip').textContent ?? '';
+    expect(tooltipText).toContain('VCP 백테스트는 익절 +15%, 손절 -5% 기준입니다.');
+    expect(tooltipText).toContain('개별 시그널의 기본 목표·손절은 +5%/-3%입니다.');
   });
 
   it('기준표는 OPEN을 승률에서 빼고 평균 손익에는 현재 평가를 넣는다고 안내한다', async () => {

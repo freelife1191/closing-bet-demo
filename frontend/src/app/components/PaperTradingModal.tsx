@@ -238,7 +238,7 @@ function PaperTradingModalAccount({
         onClose={onClose}
         labelledBy="paper-trading-modal-title"
         overlayClassName="z-[110] p-4"
-        className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="relative bg-[#1c1c1e] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-fade-in motion-reduce:animate-none"
       >
 
         {/* Header */}
@@ -251,7 +251,11 @@ function PaperTradingModalAccount({
               <h2 id="paper-trading-modal-title" className="text-lg md:text-xl font-bold text-white whitespace-nowrap">모의투자 포트폴리오</h2>
               <div className="text-xs text-slate-400 font-medium">Paper Trading Account</div>
             </div>
-            <button onClick={onClose} className="ml-auto md:hidden w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white">
+            <button
+              onClick={onClose}
+              aria-label="닫기"
+              className="ml-auto md:hidden w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white"
+            >
               <i className="fas fa-times"></i>
             </button>
           </div>
@@ -271,7 +275,11 @@ function PaperTradingModalAccount({
                   />
               </div>
             )}
-            <button onClick={onClose} className="hidden md:flex w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 items-center justify-center text-gray-400 hover:text-white transition-colors">
+            <button
+              onClick={onClose}
+              aria-label="닫기"
+              className="hidden md:flex w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 items-center justify-center text-gray-400 hover:text-white transition-colors"
+            >
               <i className="fas fa-times"></i>
             </button>
           </div>
@@ -331,7 +339,7 @@ function PaperTradingModalAccount({
                 const cashBarWidth = cashValue > 0 ? Math.max(cashPct, 0.8) : 0;
 
                 return (
-                <div className="max-w-4xl mx-auto space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="max-w-4xl mx-auto space-y-4 md:space-y-6 animate-fade-in motion-reduce:animate-none">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-[#252529] p-5 md:p-6 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-colors">
                       <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -392,7 +400,7 @@ function PaperTradingModalAccount({
 
               {/* Holdings Tab */}
               {activeTab === 'holdings' && (
-                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="space-y-4 animate-fade-in motion-reduce:animate-none">
                   <div className="bg-[#252529] rounded-xl border border-white/5 overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse min-w-[800px]">
@@ -536,7 +544,7 @@ function PaperTradingModalAccount({
 
               {/* History Tab (New) */}
               {activeTab === 'history' && (
-                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="space-y-4 animate-fade-in motion-reduce:animate-none">
                   <div className="bg-[#252529] rounded-xl border border-white/5 overflow-hidden">
                     <div className="overflow-x-auto"><table className="w-full text-left border-collapse min-w-[700px]">
                       <thead>

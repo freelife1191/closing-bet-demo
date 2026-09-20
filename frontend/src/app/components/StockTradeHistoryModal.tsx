@@ -138,7 +138,7 @@ export default function StockTradeHistoryModal({
       onClose={onClose}
       labelledBy="stock-trade-history-title"
       overlayClassName="z-[120] p-4"
-      className="relative bg-[#1c1c1e] w-full max-w-4xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+      className="relative bg-[#1c1c1e] w-full max-w-4xl max-h-[85vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-fade-in motion-reduce:animate-none"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 md:p-5 border-b border-white/10 bg-[#252529] flex-shrink-0">

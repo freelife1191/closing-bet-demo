@@ -35,7 +35,7 @@ async function renderAndStartUpdate() {
 
   vi.useFakeTimers();
   fireEvent.click(screen.getByRole('button', { name: '스크리너 전체 업데이트' }));
-  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '실행' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '실행' }));
   await act(async () => {
     await Promise.resolve();
   });

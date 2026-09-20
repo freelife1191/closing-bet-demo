@@ -115,7 +115,7 @@ function SellStockModalAccount({
       onClose={onClose}
       labelledBy={titleId}
       overlayClassName="z-[110] p-4"
-      className="relative bg-[#1c1c1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200"
+      className="relative bg-[#1c1c1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 animate-fade-in motion-reduce:animate-none"
     >
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
@@ -126,7 +126,11 @@ function SellStockModalAccount({
             <span>{stock.ticker}</span>
           </div>
         </div>
-        <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+        <button
+          onClick={onClose}
+          aria-label="닫기"
+          className="text-gray-500 hover:text-white transition-colors"
+        >
           <i className="fas fa-times text-xl"></i>
         </button>
       </div>
