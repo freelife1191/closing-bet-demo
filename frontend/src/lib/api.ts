@@ -28,7 +28,6 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
     };
 
     const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
-    clearTimeout(id);
 
     if (!response.ok) {
       // 백엔드는 실패 사유를 `message` 나 `error` 중 한 자리에 적어 보낸다. 그 문구를
@@ -46,15 +45,15 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
       error.data = data;
       throw error;
     }
-    return response.json();
+    return await response.json();
   } catch (e: any) {
     if (e.name === 'AbortError') {
       throw new Error('Request timed out');
     }
     throw e;
   } finally {
-    // fetch 자체가 거부하면(백엔드 다운, DNS 실패) 위의 clearTimeout 에 닿지 못한다.
-    // 그대로 두면 타이머가 만료 시각까지 남는다. 폴링이 도는 화면에서는 계속 쌓인다.
+    // 헤더뿐 아니라 JSON 본문 수신·파싱이 끝나거나 실패할 때까지 제한 시간을 유지한다.
+    // 성공·오류 모두에서 타이머를 해제해 이후 폴링에 남기지 않는다.
     clearTimeout(id);
   }
 }

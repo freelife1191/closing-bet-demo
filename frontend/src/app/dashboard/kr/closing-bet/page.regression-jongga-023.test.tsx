@@ -69,7 +69,7 @@ async function renderReport() {
 
 async function openCardTooltip(label: string) {
   const card = screen.getByRole('heading', { name: '테마종목' }).closest('div.rounded-2xl.border') as HTMLElement;
-  const labelNode = within(card).getByText(label);
+  const labelNode = within(card).getByText(label === '종가' ? /종가$/ : label);
   const trigger = labelNode.querySelector<HTMLElement>('[class*="group/tooltip"]');
   expect(trigger).not.toBeNull();
   fireEvent.mouseEnter(trigger as HTMLElement);

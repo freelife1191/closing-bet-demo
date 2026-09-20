@@ -67,11 +67,9 @@ vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null
 // 카드의 미니차트를 눌러 「크게 보기」 모달을 연다. 모달 안의 차트 이미지를 돌려준다.
 async function openChart() {
   render(<JonggaV2Page />);
-  await screen.findByText('₩37,250');
+  await screen.findByRole('heading', { name: '태웅' });
 
-  const miniCharts = document.querySelectorAll('[data-testid="mini-chart"]');
-  expect(miniCharts.length).toBe(1);
-  fireEvent.click(miniCharts[0]);
+  fireEvent.click(screen.getByRole('button', { name: '태웅 차트 크게 보기' }));
 
   return document.querySelector('img[alt*="태웅"]') as HTMLImageElement | null;
 }

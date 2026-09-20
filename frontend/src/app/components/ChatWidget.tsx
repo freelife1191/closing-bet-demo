@@ -160,14 +160,7 @@ const parseAIResponse = (text: string, isStreaming: boolean = false, streamReaso
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
-  const [showTooltip, setShowTooltip] = useState(true);
-
-  // Auto-hide tooltip
-  useEffect(() => {
-    const timer = setTimeout(() => setShowTooltip(false), 8000);
-    return () => clearTimeout(timer);
-  }, []);
-
+  const launcherRef = useRef<HTMLButtonElement>(null);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -201,7 +194,11 @@ export default function ChatWidget() {
     "최근 주요 뉴스 정리해줘"
   ];
 
-  const toggleChat = () => setIsOpen(!isOpen);
+  const closeChat = () => {
+    setIsOpen(false);
+    launcherRef.current?.focus();
+  };
+  const toggleChat = () => setIsOpen(open => !open);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -480,7 +477,7 @@ export default function ChatWidget() {
                 <i className="fas fa-redo-alt"></i>
               </button>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={closeChat}
                 aria-label="AI 상담 닫기"
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors md:hidden"
               >
@@ -682,39 +679,24 @@ export default function ChatWidget() {
       )}
 
       {/* Toggle Button (Always Visible) */}
-      <div className="fixed bottom-3 right-3 md:bottom-6 md:right-6 z-[120] flex flex-col items-end">
+      <div className={`fixed flex flex-col items-end ${pathname.startsWith('/dashboard') ? 'top-3.5 right-4 z-[100]' : 'bottom-3 right-3 md:bottom-6 md:right-6 z-[120]'}`}>
         {/* 이름은 고정하고 상태는 aria-expanded 로만 알린다. 둘 다 상태를 말하면 스크린
             리더가 「AI 상담 닫기, 확장됨」처럼 같은 사실을 두 번 읽고, 활성화할 때마다
             이름이 바뀌어 초점 문맥을 다시 읽는다. WAI-ARIA APG 의 disclosure 표기다. */}
         <button
+          ref={launcherRef}
           onClick={toggleChat}
           aria-label="AI 상담"
           aria-expanded={isOpen}
-          className={`w-11 h-11 md:w-14 md:h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+          className={`${pathname.startsWith('/dashboard') ? 'w-9 h-9' : 'w-11 h-11 md:w-14 md:h-14'} rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
         >
           <div className="relative w-full h-full flex items-center justify-center">
-            <i className={`fas fa-comment-dots text-lg md:text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`}></i>
-            <i className={`fas fa-times text-lg md:text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`}></i>
+            <i className={`fas fa-comment-dots text-lg transition-all duration-300 absolute ${isOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`}></i>
+            <i className={`fas fa-times text-lg transition-all duration-300 absolute ${isOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`}></i>
           </div>
         </button>
 
-        {!isOpen && messages.length === 0 && showTooltip && (
-          <div className="hidden md:block absolute right-16 top-1/2 -translate-y-1/2 bg-white text-black px-4 py-2 rounded-xl shadow-lg whitespace-nowrap animate-fade-in origin-right z-50">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowTooltip(false);
-              }}
-              aria-label="안내 문구 닫기"
-              className="absolute -top-2 -left-2 w-5 h-5 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600 shadow-sm transition-colors z-10"
-            >
-              <i className="fas fa-times text-[10px]"></i>
-            </button>
-            <div className="text-sm font-bold">궁금한 건 채팅으로 문의하세요</div>
-            <div className="text-xs text-gray-500">대화 시작하기</div>
-            <div className="absolute top-1/2 -right-1.5 w-3 h-3 bg-white transform -translate-y-1/2 rotate-45"></div>
-          </div>
-        )}
+
       </div>
     </>
   );

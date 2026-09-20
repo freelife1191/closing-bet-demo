@@ -4,7 +4,7 @@
 // 보수적 대응 조언을 냈다. 수치가 없다는 사실을 나쁜 성과로 바꾸지 않도록, 두 전략 카드가
 // 같은 상태 정책을 쓰고 판정이 끝난 뒤에만 실제 성과를 보이는지 고정한다.
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HomePage from '@/app/page';
@@ -60,7 +60,9 @@ const renderDashboardWith = async (fixture: BacktestFixture): Promise<[HTMLEleme
     },
   });
 
-  render(<KRDashboardPage />);
+  // The heading exists before async summary data arrives. Flush the supplied responses
+  // before retaining card elements; otherwise assertions can read the loading render.
+  await act(async () => { render(<KRDashboardPage />); });
 
   await waitFor(() => expect(screen.getByText('VCP 전략')).toBeTruthy());
 

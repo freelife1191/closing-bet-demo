@@ -85,7 +85,7 @@ function unnamedControls() {
 
 async function renderPage() {
   render(<JonggaV2Page />);
-  await screen.findByText('₩37,250');
+  await screen.findByRole('heading', { name: '태웅' });
 }
 
 function dialog() {
@@ -172,7 +172,7 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
   it('차트를 이름 있는 대화상자로 열고 애니메이션을 고정 host가 아닌 카드에 둔다', async () => {
     await renderPage();
 
-    fireEvent.click(screen.getByTestId('mini-chart'));
+    fireEvent.click(screen.getByRole('button', { name: '태웅 차트 크게 보기' }));
 
     const chart = await screen.findByRole('dialog', { name: '태웅' });
     const layer = chart.closest('[data-modal-layer]') as HTMLElement;
@@ -184,12 +184,12 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
     }
   });
 
-  it('헤더의 아이콘 버튼 셋이 이름을 가진다', () => {
+  it('헤더에 남은 메뉴와 설정 버튼이 이름을 가진다', () => {
     render(<Header />);
 
     // 사이드바를 여닫는 토글이므로 「열기」로 고정하지 않는다.
     expect(screen.getByRole('button', { name: '메뉴 열고 닫기' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '검색' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '검색' })).toBeNull(); // FE-028: 미동작 검색 제거
     expect(screen.getByRole('button', { name: '설정 열기' })).toBeTruthy();
   });
 

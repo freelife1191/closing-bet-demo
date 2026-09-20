@@ -1,0 +1,54 @@
+{
+  "base": "31a2d93d85ba8a5f9d6daec4addf92d00a72414f",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "approved_scope": [
+    "FE-031",
+    "FE-028",
+    "FE-010",
+    "JONGGA-024",
+    "JONGGA-028",
+    "JONGGA-031",
+    "FE-021"
+  ],
+  "approval_evidence": "현재 대화의 7건 bounded 설계 제안에 대한 사용자 승인",
+  "observed_at": "2026-09-20T19:49:58.294260+09:00",
+  "files": {
+    "app/routes/kr_market_jongga_ai_payload_helpers.py": "cacb574cfe281bfce0b53ac60d07071562ae2b95d8b9b820e930b708d9d5a167",
+    "frontend/src/app/components/BuyStockModal.jongga-followup.test.tsx": "08a901aa96047ae3bfca68e23bdd41511b979a42f71f400100531dae76cf1b20",
+    "frontend/src/app/components/BuyStockModal.test.tsx": "046416578e94fc894e01cf52ab5fc000c8701874dc44a88450953513f268bd4d",
+    "frontend/src/app/components/BuyStockModal.tsx": "04ef4c72c560c1eb928a04a938ac1883d2fde865f014cb8681effa91dcf24312",
+    "frontend/src/app/components/ChatWidget.tsx": "171b7a042a42a6d56cb1e80177a3472cd8fc0278c4dfab7ce0b2aeaa79243e23",
+    "frontend/src/app/components/Header.regression-fe-028-010.test.tsx": "930257b5adb4a4516ce3198576210659b6efb50402b1fe9e6d3a7e984b4618ba",
+    "frontend/src/app/components/Header.tsx": "9724a3ff0d6c29aefb1f5b160763737f2a9a6c884583ad65afa6f767ff83fb1a",
+    "frontend/src/app/components/ModalShell.test.tsx": "21b5ca58f521eb3231313f5cab81e712f5389a9a5d4d26bf7a4142910ddccc5d",
+    "frontend/src/app/components/PaperTradingModal.regression-fe-021.test.tsx": "4bbf65e7f4ad99957f34cc9f25af82585a5a58f0885bcfc3500476641d6e768c",
+    "frontend/src/app/dashboard/kr/closing-bet/displayHelpers.jongga-followup.test.ts": "b8b2e15dd32ccd6b15270ce383949a00870368cc80abc2b16e5d131165d05f07",
+    "frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts": "7309f42c7088a2e12cf6f49692f73f75436fe18a6f88f22c56b12ddc824f69d1",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx": "ff9da12872fedf55e741b7b1c0bb372764af9aa46ace468ac4904a2e48b6b7cd",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-015.test.tsx": "7b116817b072d20bdf6eea31cdffc61dd68ea2c65738824e50b75339b1ad30db",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-021.test.tsx": "1575b213bf4ce9645f606d77b52d2d3d872b9680f448564ddf01049b1fdff394",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-023.test.tsx": "1128d9be9257abcd464857fba888048a835cecd699ad1979ae4fa63ab1349d88",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-037.test.tsx": "8d1c3fac71795b636881f7ccd5cf51a1df681a057c16ef688572aba09b315d47",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-followup.test.tsx": "f11e0d7848739bedcbc440a077b47730b76688ee866b8d26f0f4f9e813c0eb08",
+    "frontend/src/app/dashboard/kr/closing-bet/page.tsx": "6a6a423835f2d6459c158cf820bf4e8f80febca0d5487bad3ad86b5f9c50acb9",
+    "frontend/src/app/dashboard/kr/page.regression-fe-031.test.tsx": "25674dd75baeb425e087a22adda2dcc6ce9f969eebe953f988c1bb375c0e563e",
+    "frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx": "16ebf82d4cc8e9d88bc2a5e97785a3e65f4e04c7b96ddc544d5ce885690cc6cb",
+    "frontend/src/app/dashboard/kr/page.tsx": "0c5d2e68558f0a84780a99fa83cf88f607a84b131206a9c26cb6e6412391bd1e",
+    "tests/app/test_jongga_followup_contract.py": "d8d8141e0b91e4bb98f1ee2672535c899b12e91c9b0dfda9c21a0fc91ea2a9a6"
+  },
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf",
+  "browser": {
+    "spaceId": 5,
+    "page": "p1",
+    "finished": false
+  },
+  "requirements_sha256": "b8427e5b965fadacbaa3c3553cf717ccbe370efe58af83ee119a14b2c269c882",
+  "validation": {
+    "pytest": "pytest-integration.json",
+    "vitest": "vitest-integration2.json",
+    "build": "build-clean-cache.json",
+    "typecheck": "typecheck-integration.json",
+    "lint": "lint-integration.json",
+    "lsp": "lsp-unavailable.md"
+  }
+}

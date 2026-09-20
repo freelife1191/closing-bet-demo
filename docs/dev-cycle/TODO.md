@@ -436,6 +436,10 @@
 - [ ] pytest 전체 통과 확인
 
 ### [FE-031] 국내 시장 화면이 갱신 실패를 콘솔에만 남긴다
+- 설계 승인: 2026-09-20 사용자 「승인」(직전 7건 bounded 설계). 확인 2026-09-20T19:49:58.294260+09:00. 범위·계획: `evidence/ui-followup-20260920/plan.md`. T3 공유검토.
+- [x] 1차 구현·회귀 및 격리 정적검증: pytest2320/3skip, Vitest582, build3/3, typecheck0, lint0오류191경고. 증거 `evidence/ui-followup-20260920/`
+- [x] 독립 리뷰 완료: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 deep-review APPROVE. 최종 정적검사 pytest2324/3skip·Vitest595·build3/3·typecheck0·lint0errors188warnings
+- [ ] UltraQA 실측·정리·마감
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-005 사이클의 code-reviewer
   지적(확신도 55, 25)
 - QA 시나리오: Flask 를 내린 상태로 「Market Gate 새로고침」을 누르면 화면에 실패 사유가
@@ -457,6 +461,10 @@
       대상으로 삼아 남았음
 
 ### [FE-028] 헤더의 모바일 검색 버튼이 아무 동작도 하지 않는다
+- 설계 승인: 2026-09-20 사용자 「승인」(직전 7건 bounded 설계). 확인 2026-09-20T19:49:58.294260+09:00. 범위·계획: `evidence/ui-followup-20260920/plan.md`. T3 공유검토.
+- [x] 1차 구현·회귀 및 격리 정적검증: pytest2320/3skip, Vitest582, build3/3, typecheck0, lint0오류191경고. 증거 `evidence/ui-followup-20260920/`
+- [x] 독립 리뷰 완료: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 deep-review APPROVE. 최종 정적검사 pytest2324/3skip·Vitest595·build3/3·typecheck0·lint0errors188warnings
+- [ ] UltraQA 실측·정리·마감
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-024 사이클의 실측
 - QA 시나리오: 좁은 화면에서 헤더의 돋보기 버튼을 누르면 검색할 수단이 나타난다
 - `frontend/src/app/components/Header.tsx:76` 의 버튼에는 `onClick` 이 없습니다. 눌러도
@@ -507,6 +515,11 @@
 - [ ] 소문자 코드와 빈 티커가 섞인 DataFrame 에 대한 검사를 남김
 
 ### [JONGGA-031] 카드의 「종가」와 매수 모달의 「실시간 시세」가 어느 시점의 값인지 밝히지 않는다
+- [x] 통합 검토 보완: 종가 타일을 entry_price·signal_date 계약에 맞추고 실제 가격이 다른 회귀 검증을 통과함.
+- 설계 승인: 2026-09-20 사용자 「승인」(직전 7건 bounded 설계). 확인 2026-09-20T19:49:58.294260+09:00. 범위·계획: `evidence/ui-followup-20260920/plan.md`. T3 공유검토.
+- [x] 1차 구현·회귀 및 격리 정적검증: pytest2320/3skip, Vitest582, build3/3, typecheck0, lint0오류191경고. 증거 `evidence/ui-followup-20260920/`
+- [x] 독립 리뷰 완료: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 deep-review APPROVE. 최종 정적검사 pytest2324/3skip·Vitest595·build3/3·typecheck0·lint0errors188warnings
+- [ ] UltraQA 실측·정리·마감
 - 카테고리: 종가베팅 | 티어: T1 | 근거: 2026-09-04 JONGGA-017 사이클의 `/qa-only` ISSUE-001,
   2026-09-02 JONGGA-009 마감 qa-only ISSUE-002
 - 2026-09-07 백로그 정리에서 `[JONGGA-011]` 을 흡수했습니다. 둘 다 「이 가격이 언제 값인가」를
@@ -531,6 +544,10 @@
 - [ ] 매수 모달이 표시하는 값의 출처를 확인하고 출처에 맞게 문구 또는 조회 경로를 바로잡음
 
 ### [JONGGA-024] 카드 차트가 정보를 주지 않는다 — 미니차트는 두 모양뿐이고 모바일 확대 차트는 숫자를 읽을 수 없다
+- 설계 승인: 2026-09-20 사용자 「승인」(직전 7건 bounded 설계). 확인 2026-09-20T19:49:58.294260+09:00. 범위·계획: `evidence/ui-followup-20260920/plan.md`. T3 공유검토.
+- [x] 1차 구현·회귀 및 격리 정적검증: pytest2320/3skip, Vitest582, build3/3, typecheck0, lint0오류191경고. 증거 `evidence/ui-followup-20260920/`
+- [x] 독립 리뷰 완료: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 deep-review APPROVE. 최종 정적검사 pytest2324/3skip·Vitest595·build3/3·typecheck0·lint0errors188warnings
+- [ ] UltraQA 실측·정리·마감
 - 카테고리: 종가베팅 | 티어: T2 | 근거: 2026-09-03 JONGGA-021 사이클의 `/qa-only` ISSUE-001·ISSUE-002
 - 2026-09-07 백로그 정리에서 `[JONGGA-025]` 를 흡수했습니다. 같은 카드의 차트 둘입니다.
 - QA 시나리오: 같은 화면의 카드 여러 장에서 미니차트의 모양이 종목마다 다르거나 차트 모양이
@@ -604,6 +621,10 @@
 - [ ] pytest 전체 통과 확인
 
 ### [FE-010] 떠 있는 채팅 위젯과 말풍선이 네 화면의 본문을 가린다
+- 설계 승인: 2026-09-20 사용자 「승인」(직전 7건 bounded 설계). 확인 2026-09-20T19:49:58.294260+09:00. 범위·계획: `evidence/ui-followup-20260920/plan.md`. T3 공유검토.
+- [x] 1차 구현·회귀 및 격리 정적검증: pytest2320/3skip, Vitest582, build3/3, typecheck0, lint0오류191경고. 증거 `evidence/ui-followup-20260920/`
+- [x] 독립 리뷰 완료: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 deep-review APPROVE. 최종 정적검사 pytest2324/3skip·Vitest595·build3/3·typecheck0·lint0errors188warnings
+- [ ] UltraQA 실측·정리·마감
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: [JONGGA-002]·[INFRA-001] 사이클의 qa-only 실측,
   2026-09-02 VCP-007·VCP-009 마감 qa-only
 - 2026-09-07 백로그 정리에서 `[FE-014]` 를 흡수했습니다. 둘 다 `ChatWidget.tsx` 의 같은 위젯과
@@ -640,6 +661,10 @@
 - [ ] numpy 2.x 를 설치한 격리 환경에서 pytest 전체 통과 확인
 
 ### [FE-021] 모의투자 수익 차트의 기간 버튼이 기간과 무관한 `/api/portfolio` 를 다시 부른다
+- 설계 승인: 2026-09-20 사용자 「승인」(직전 7건 bounded 설계). 확인 2026-09-20T19:49:58.294260+09:00. 범위·계획: `evidence/ui-followup-20260920/plan.md`. T3 공유검토.
+- [x] 1차 구현·회귀 및 격리 정적검증: pytest2320/3skip, Vitest582, build3/3, typecheck0, lint0오류191경고. 증거 `evidence/ui-followup-20260920/`
+- [x] 독립 리뷰 완료: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 deep-review APPROVE. 최종 정적검사 pytest2324/3skip·Vitest595·build3/3·typecheck0·lint0errors188warnings
+- [ ] UltraQA 실측·정리·마감
 - 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: 2026-09-04 FE-005 사이클의 `/qa`
 - 처음에는 여러 화면의 이중 요청을 함께 적었으나 2026-09-07 백로그 정리에서 범위를 좁혔습니다.
   누적 성과 화면의 `cumulative`, 네 화면의 `user/quota`, 챗봇의 `models`·`sessions` 가 두 번
@@ -653,6 +678,10 @@
 - [ ] 기간 버튼을 눌렀을 때 `/api/portfolio` 가 나가지 않는 것을 vitest 로 고정
 
 ### [JONGGA-028] AI 판정을 담는 세 자리가 화면마다 다르게 읽혀 서로 다른 값을 말한다
+- 설계 승인: 2026-09-20 사용자 「승인」(직전 7건 bounded 설계). 확인 2026-09-20T19:49:58.294260+09:00. 범위·계획: `evidence/ui-followup-20260920/plan.md`. T3 공유검토.
+- [x] 1차 구현·회귀 및 격리 정적검증: pytest2320/3skip, Vitest582, build3/3, typecheck0, lint0오류191경고. 증거 `evidence/ui-followup-20260920/`
+- [x] 독립 리뷰 완료: ponytail SHIP, code-review APPROVE, architect CLEAR, T3 deep-review APPROVE. 최종 정적검사 pytest2324/3skip·Vitest595·build3/3·typecheck0·lint0errors188warnings
+- [ ] UltraQA 실측·정리·마감
 - 카테고리: 종가베팅 | 티어: T2 | 근거: 2026-09-03 JONGGA-016 사이클의 code-review 관찰
 - QA 시나리오: 한 종목을 재분석한 직후 종가베팅 카드의 추천 배지와 AI 분석 화면의 추천이
   같다. 사유 본문도 같은 판정의 사유를 적는다

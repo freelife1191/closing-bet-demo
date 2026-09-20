@@ -1,5 +1,6 @@
+import { type ComponentProps } from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import BuyStockModal from './BuyStockModal';
 
 // [FE-003] 회귀 검사. 화면이 안내하는 결제 금액과 매수 가능 수량은 백엔드가 실제로
@@ -18,13 +19,18 @@ const apiMocks = vi.hoisted(() => ({
   getPortfolio: vi.fn(async () => ({ cash: 1_000_000 })),
 }));
 
-vi.mock('@/lib/api', () => ({
-  isAuthenticationError: (error: unknown) =>
-    typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 401,
-  paperTradingAPI: {
-    getPortfolio: apiMocks.getPortfolio,
-  },
-}));
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>();
+  return {
+    ...actual,
+    isAuthenticationError: (error: unknown) =>
+      typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 401,
+    paperTradingAPI: {
+      ...actual.paperTradingAPI,
+      getPortfolio: apiMocks.getPortfolio,
+    },
+  };
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -32,10 +38,16 @@ beforeEach(() => {
   sessionState.status = 'authenticated';
   window.alert = vi.fn();
   // 마운트 시 실시간 가격을 조회한다. 빈 응답을 주면 stock 이 들고 온 가격으로 떨어진다.
-  global.fetch = vi.fn(async () => ({ json: async () => ({ prices: {} }) })) as any;
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ prices: {} })));
 });
 
-function renderModal(stock: any, onBuy = vi.fn(async () => true)) {
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+type BuyStock = NonNullable<ComponentProps<typeof BuyStockModal>['stock']>;
+
+function renderModal(stock: BuyStock, onBuy = vi.fn(async () => true)) {
   return render(
     <BuyStockModal isOpen onClose={vi.fn()} stock={stock} onBuy={onBuy} />,
   );

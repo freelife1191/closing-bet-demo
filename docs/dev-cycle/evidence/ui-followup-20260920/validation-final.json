@@ -1,0 +1,10 @@
+{
+  "source_manifest": "review-input-qa.json",
+  "pytest": "pytest-review-final.json",
+  "vitest": "vitest-qa-ready.json",
+  "build": "build-qa-ready.json",
+  "typecheck": "typecheck-qa-ready.json",
+  "lint": "lint-qa-ready.json",
+  "fixture": "fixture-validated.json",
+  "lsp": "lsp-unavailable.md"
+}

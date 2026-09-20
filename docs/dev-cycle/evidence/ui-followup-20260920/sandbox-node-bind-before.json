@@ -1,0 +1,5 @@
+{
+  "exit_code": 0,
+  "stdout": "{ address: '::', family: 'IPv6', port: 64451 }\n",
+  "stderr": ""
+}

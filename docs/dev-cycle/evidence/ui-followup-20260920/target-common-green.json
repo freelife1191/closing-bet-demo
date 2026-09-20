@@ -1,0 +1,19 @@
+{
+  "stage": "target:common-green",
+  "started_at": "2026-09-20T10:58:13.518035+00:00",
+  "ended_at": "2026-09-20T10:58:15.546413+00:00",
+  "pid": 50288,
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "src/app/components/Header.regression-fe-028-010.test.tsx",
+    "src/app/components/PaperTradingModal.regression-fe-021.test.tsx",
+    "src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/frontend",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 2.03
+}

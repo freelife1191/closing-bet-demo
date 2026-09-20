@@ -16,16 +16,21 @@ import Modal, { ModalShell } from './Modal';
 //
 // 근거: AUDIT-FE §2.2
 
-vi.mock('@/lib/api', () => ({
-  paperTradingAPI: {
-    getPortfolio: vi.fn(async () => ({ cash: 1_000_000 })),
-  },
-}));
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>();
+  return {
+    ...actual,
+    paperTradingAPI: {
+      ...actual.paperTradingAPI,
+      getPortfolio: vi.fn(async () => ({ cash: 1_000_000 })),
+    },
+  };
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   window.alert = vi.fn();
-  global.fetch = vi.fn(async () => ({ json: async () => ({ prices: {} }) })) as any;
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ prices: {} })));
 });
 
 afterEach(() => {

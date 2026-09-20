@@ -15,6 +15,53 @@ export const CHART_PERIODS = [
 
 export type ChartPeriod = (typeof CHART_PERIODS)[number]['key'];
 
+export interface JonggaAiEvaluation {
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence?: number | string | null;
+  model?: string;
+  reason?: string;
+}
+
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeConfidence(value: unknown): number | string | null | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  return typeof value === 'string' || value === null ? value : undefined;
+}
+
+function normalizeAiEvaluation(value: unknown): JonggaAiEvaluation | null {
+  if (typeof value === 'string') {
+    const reason = normalizeText(value);
+    return reason ? { action: 'HOLD', confidence: null, reason } : null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const candidate = value as Record<string, unknown>;
+  const action = normalizeText(candidate.action).toUpperCase();
+  const reason = normalizeText(candidate.reason);
+  if (action === 'BUY' || action === 'SELL' || action === 'HOLD') {
+    return {
+      action,
+      confidence: normalizeConfidence(candidate.confidence),
+      model: typeof candidate.model === 'string' ? candidate.model : undefined,
+      reason: reason || undefined,
+    };
+  }
+  return reason ? { action: 'HOLD', confidence: normalizeConfidence(candidate.confidence), reason } : null;
+}
+
+export function resolveJonggaAiEvaluation(candidates: unknown[], legacyReason: unknown): JonggaAiEvaluation | null {
+  const legacy = normalizeText(legacyReason);
+  for (const candidate of candidates) {
+    const evaluation = normalizeAiEvaluation(candidate);
+    if (!evaluation) continue;
+    return evaluation.reason || !legacy ? evaluation : { ...evaluation, reason: legacy };
+  }
+  return null;
+}
+
 // 종목코드는 백엔드 응답에서 오는 값이므로 경로에 끼우기 전에 인코딩한다. 형식을
 // 여섯 자리 숫자로 좁히지는 않는다. KRX 가 아크릴(0007C0)처럼 영문자가 든 코드를
 // 이미 쓰고 있어서, 좁히는 쪽이 오히려 멀쩡한 종목을 떨어뜨린다.

@@ -1,0 +1,18 @@
+{
+  "stage": "target:jongga-red",
+  "started_at": "2026-09-20T11:09:29.793141+00:00",
+  "ended_at": "2026-09-20T11:09:33.384711+00:00",
+  "pid": 73936,
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "src/app/dashboard/kr/closing-bet/page.regression-jongga-followup.test.tsx",
+    "src/app/components/BuyStockModal.jongga-followup.test.tsx"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/frontend",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 3.59
+}

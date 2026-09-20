@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useId } from 'react';
 import { useSession } from 'next-auth/react';
-import { isAuthenticationError, paperTradingAPI } from '@/lib/api';
+import { fetchAPI, isAuthenticationError, paperTradingAPI } from '@/lib/api';
 import { useAccountActionGuard } from '@/lib/accountActionGuard';
 import { ModalShell } from './Modal';
 
@@ -17,6 +17,21 @@ interface BuyStockModalProps {
     entry_price?: number;
   } | null;
   onBuy: (ticker: string, name: string, price: number, quantity: number) => Promise<boolean>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toPositiveFinitePrice(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function extractFetchedPrice(response: unknown, ticker: string): number | null {
+  if (!isRecord(response)) return null;
+
+  const prices = isRecord(response.prices) ? response.prices : null;
+  return toPositiveFinitePrice(prices?.[ticker]) ?? toPositiveFinitePrice(response[ticker]);
 }
 
 export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStockModalProps) {
@@ -53,7 +68,7 @@ function BuyStockModalAccount({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [portfolio, setPortfolio] = useState<any>(null);
   const [fetchedPrice, setFetchedPrice] = useState<number | null>(null);
-  const [loadingPrice, setLoadingPrice] = useState(false);
+  const [priceLookupFinished, setPriceLookupFinished] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
 
   // 포트폴리오(예수금) 조회 및 실시간 가격 조회
@@ -63,6 +78,7 @@ function BuyStockModalAccount({
       setAccessDenied(false);
       setPortfolio(null);
       setFetchedPrice(null);
+      setPriceLookupFinished(false);
       setQuantity('0');
       setAmount('0');
 
@@ -79,33 +95,29 @@ function BuyStockModalAccount({
         });
 
       // 실시간 가격 조회
-      setLoadingPrice(true);
-      fetch('/api/kr/realtime-prices', {
+      fetchAPI<unknown>('/api/kr/realtime-prices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tickers: [stock.ticker] })
       })
-        .then(res => res.json())
-        .then(data => {
+        .then(response => {
           if (cancelled) return;
-          if (data.prices && data.prices[stock.ticker]) {
-            setFetchedPrice(data.prices[stock.ticker]);
-          } else if (data[stock.ticker]) {
-            // Fallback for any legacy format (though backend is updated)
-            setFetchedPrice(data[stock.ticker]);
-          }
+          const nextPrice = extractFetchedPrice(response, stock.ticker);
+          if (nextPrice !== null) setFetchedPrice(nextPrice);
         })
         .catch((error: unknown) => {
           if (!cancelled) console.error(error);
         })
         .finally(() => {
-          if (!cancelled) setLoadingPrice(false);
+          if (!cancelled) {
+            setPriceLookupFinished(true);
+          }
         });
     } else {
       setAccessDenied(false);
       setPortfolio(null);
       setFetchedPrice(null);
-      setLoadingPrice(false);
+      setPriceLookupFinished(false);
     }
     return () => {
       cancelled = true;
@@ -114,7 +126,8 @@ function BuyStockModalAccount({
 
   if (!stock) return null;
 
-  const price = fetchedPrice || stock.current_price || stock.entry_price || stock.price || 0;
+  const price = fetchedPrice ?? (stock.current_price || stock.entry_price || stock.price || 0);
+  const loadingPrice = !priceLookupFinished && fetchedPrice === null;
   const numericQty = parseInt(quantity.replace(/,/g, ''), 10) || 0;
   const numericAmount = parseInt(amount.replace(/,/g, ''), 10) || 0;
 
@@ -216,19 +229,23 @@ function BuyStockModalAccount({
       <div className="flex justify-between items-center bg-white/5 rounded-xl p-4 mb-6 border border-white/5">
         <div className="flex flex-col">
           <span className="text-gray-400 text-sm flex items-center gap-2">
-            현재가 (매수가)
+            주문 기준가
             {loadingPrice && <i className="fas fa-circle-notch fa-spin text-xs text-blue-500"></i>}
           </span>
-          {fetchedPrice ? (
+          {loadingPrice ? (
+            <span className="text-[10px] text-gray-400 font-bold mt-0.5">
+              시세 조회 중 · 저장된 가격으로 표시
+            </span>
+          ) : fetchedPrice ? (
             <span className="text-[10px] text-green-400 font-bold flex items-center gap-1 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-              실시간 시세 적용
+              가격 조회값 적용 (실시간 시세 보장 아님)
             </span>
-          ) : (
+          ) : priceLookupFinished ? (
             <span className="text-[10px] text-yellow-500 font-bold mt-0.5">
-              ⚠ 진입가/기본가 적용
+              ⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)
             </span>
-          )}
+          ) : null}
         </div>
         <span className={`text-2xl font-bold ${loadingPrice ? 'opacity-50' : 'text-rose-400'} transition-opacity`}>
           {price.toLocaleString()}원

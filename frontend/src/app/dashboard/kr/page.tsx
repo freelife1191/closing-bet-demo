@@ -268,12 +268,21 @@ export default function KRMarketOverview() {
   // 「이 탭의 판정이 낡았다」 하나이고 상태 하나로 끝난다.
   const [permissionRevoked, setPermissionRevoked] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const canOperate = !isAdminLoading && isAdmin && !permissionRevoked;
 
   const reportPermissionDenied = (message: string) => {
     setPermissionRevoked(true);
     setPermissionError(message);
   };
+
+  const isStatusError = (error: unknown, status: number): boolean =>
+    typeof error === 'object' && error !== null && 'status' in error && error.status === status;
+
+  const getRefreshErrorMessage = (error: unknown, fallback: string): string =>
+    error instanceof Error && error.message === 'Request timed out'
+      ? '데이터 갱신 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.'
+      : fallback;
   // 서버가 실제로 받아들인 마지막 주기다. updateInterval 은 낙관적 갱신이라 아직 확정되지
   // 않은 값을 담을 수 있고, 요청이 겹칠 때 그것으로 되돌리면 서버에 반영된 적 없는 값이
   // 화면에 남는다.
@@ -466,6 +475,7 @@ export default function KRMarketOverview() {
     if (mgLoading) return;
     // Reset retry state so a user-initiated refresh starts fresh
     resetAutoRetry();
+    setRefreshError(null);
     setMgLoading(true);
     try {
       const dateParam = useTodayMode ? undefined : (targetDate || getLastBusinessDay());
@@ -473,10 +483,16 @@ export default function KRMarketOverview() {
       // 업데이트 후 데이터 다시 로드
       const gate = await krAPI.getMarketGate(dateParam);
       setGateData(gate);
-    } catch (e: any) {
-      console.error('Market Gate update failed', e);
-      if (e?.status === 403) {
+    } catch (error: unknown) {
+      console.error('Market Gate update failed', error);
+      if (isStatusError(error, 403)) {
         reportPermissionDenied('관리자만 Market Gate 를 강제로 갱신할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
+      } else {
+        setRefreshError(
+          error instanceof Error && error.message
+            ? error.message
+            : 'Market Gate 갱신에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+        );
       }
     } finally {
       setMgLoading(false);
@@ -486,25 +502,23 @@ export default function KRMarketOverview() {
   const refreshData = async () => {
     // Reset retry state so a user-initiated refresh starts fresh
     resetAutoRetry();
+    setRefreshError(null);
     setLoading(true);
     try {
       const dateParam = useTodayMode ? undefined : (targetDate || getLastBusinessDay());
-      const refreshRes = await fetch('/api/kr/refresh', {
+      await fetchAPI('/api/kr/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_date: dateParam })
       });
-      if (!refreshRes.ok) {
-        console.error('Refresh API failed');
-        // 403 을 조용히 지나면 아래 loadData 가 옛 데이터를 다시 그리고 스피너가 멎어
-        // 성공한 갱신과 구분되지 않는다. 권한이 바뀐 뒤에도 열려 있는 탭에서 일어난다.
-        if (refreshRes.status === 403) {
-          reportPermissionDenied('관리자만 데이터 갱신을 시작할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
-        }
-      }
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to refresh data:', error);
+      if (isStatusError(error, 403)) {
+        reportPermissionDenied('관리자만 데이터 갱신을 시작할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
+      } else {
+        setRefreshError(getRefreshErrorMessage(error, '데이터 갱신에 실패했습니다. 잠시 후 다시 시도해 주세요.'));
+      }
       setLoading(false);
     }
   };
@@ -726,6 +740,11 @@ export default function KRMarketOverview() {
           </button>
         </div>
       )}
+      {refreshError && (
+        <div role="alert" aria-live="assertive" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+          {refreshError}
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-rose-500/20 bg-rose-500/5 text-xs text-rose-400 font-medium mb-4">
@@ -873,6 +892,7 @@ export default function KRMarketOverview() {
               <button
                 onClick={refreshMarketGate}
                 disabled={mgLoading}
+                aria-label="Market Gate 새로고침"
                 className={`ml-1 p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-[10px] text-gray-400 hover:text-white transition-all ${mgLoading ? 'animate-spin opacity-50' : ''}`}
                 title="Refresh Market Gate Only"
               >

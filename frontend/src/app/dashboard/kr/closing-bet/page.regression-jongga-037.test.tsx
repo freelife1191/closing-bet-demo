@@ -31,7 +31,7 @@ function statusCallCount() {
 
 async function renderAndStartUpdate() {
   const view = render(<JonggaV2Page />);
-  await screen.findByText('₩37,250');
+  await screen.findByRole('heading', { name: '태웅' });
 
   vi.useFakeTimers();
   fireEvent.click(screen.getByRole('button', { name: '스크리너 전체 업데이트' }));

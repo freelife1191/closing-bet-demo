@@ -1,0 +1,16 @@
+{
+  "stage": "vitest:qa-ready",
+  "started_at": "2026-09-20T12:07:40.705361+00:00",
+  "ended_at": "2026-09-20T12:07:49.380194+00:00",
+  "pid": 21229,
+  "command": [
+    "npx",
+    "vitest",
+    "run"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/frontend",
+  "timeout_seconds": 300,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 8.67
+}

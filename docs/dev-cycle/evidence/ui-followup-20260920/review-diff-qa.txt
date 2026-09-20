@@ -1,0 +1,2044 @@
+diff --git a/app/routes/kr_market_jongga_ai_payload_helpers.py b/app/routes/kr_market_jongga_ai_payload_helpers.py
+index 951b63b..83c8081 100644
+--- a/app/routes/kr_market_jongga_ai_payload_helpers.py
++++ b/app/routes/kr_market_jongga_ai_payload_helpers.py
+@@ -2,53 +2,95 @@
+ # -*- coding: utf-8 -*-
+ """
+ KR Market 종가베팅 AI 페이로드 변환 헬퍼
+ """
+
++import math
++import sys
+ from typing import Any, List, Optional
+
+ from app.routes.kr_market_jongga_grade_helpers import _sort_jongga_signals
+-from app.routes.kr_market_signal_common import _parse_datetime_safe, _safe_float
++from app.routes.kr_market_signal_common import (
++    _VALID_AI_ACTIONS,
++    _normalize_text,
++    _parse_datetime_safe,
++    _safe_float,
++)
+
+
+ def _extract_jongga_ai_evaluation(signal: dict) -> Optional[dict]:
+     """
+     종가베팅 시그널에서 AI 평가 객체를 추출한다.
+-    우선순위: score_details.ai_evaluation -> score.ai_evaluation -> ai_evaluation -> score.llm_reason
++    우선순위: ai_evaluation -> score.ai_evaluation -> score_details.ai_evaluation -> score.llm_reason
+     """
+     if not isinstance(signal, dict):
+         return None
+
+-    ai_eval: Any = None
+-    score_details = signal.get("score_details")
+-    if isinstance(score_details, dict):
+-        ai_eval = score_details.get("ai_evaluation")
+-
+     score = signal.get("score")
+-    if not ai_eval and isinstance(score, dict):
+-        ai_eval = score.get("ai_evaluation")
+-
+-    if not ai_eval:
+-        ai_eval = signal.get("ai_evaluation")
+-
+-    if not ai_eval and isinstance(score, dict):
+-        ai_eval = score.get("llm_reason")
+-
+-    if isinstance(ai_eval, str):
+-        # 사유 문자열만 남은 기록이라 확신도가 존재하지 않는다.
+-        return {"reason": ai_eval, "action": "HOLD", "confidence": None}
+-
+-    if not isinstance(ai_eval, dict):
+-        return None
++    score_details = signal.get("score_details")
++    candidates = [
++        signal.get("ai_evaluation"),
++        score.get("ai_evaluation") if isinstance(score, dict) else None,
++        score_details.get("ai_evaluation") if isinstance(score_details, dict) else None,
++    ]
++    for candidate in candidates:
++        if isinstance(candidate, str):
++            reason = _normalize_text(candidate)
++            if reason:
++                return {"reason": reason, "action": "HOLD", "confidence": None}
++            continue
++        if not isinstance(candidate, dict):
++            continue
++        action = candidate.get("action").strip().upper() if isinstance(candidate.get("action"), str) else ""
++        reason = candidate.get("reason").strip() if isinstance(candidate.get("reason"), str) else ""
++        if action in _VALID_AI_ACTIONS:
++            evaluation = _build_jongga_ai_evaluation(candidate, action, reason)
++        elif reason:
++            evaluation = _build_jongga_ai_evaluation(candidate, "HOLD", reason)
++        else:
++            continue
++
++        if reason:
++            return {**evaluation, "reason": reason}
++
++        llm_reason = score.get("llm_reason") if isinstance(score, dict) else None
++        legacy_reason = llm_reason.strip() if isinstance(llm_reason, str) else ""
++        return {**evaluation, "reason": legacy_reason} if legacy_reason else evaluation
+
+-    # 사유를 ai_evaluation 이 아닌 자리에 저장하는 생산자가 있으므로, 앞에서 고른 객체의
+-    # 사유가 비어 있으면 score.llm_reason 으로 한 번 더 내려간다. 원본은 건드리지 않는다.
+     llm_reason = score.get("llm_reason") if isinstance(score, dict) else None
+-    if not ai_eval.get("reason") and isinstance(llm_reason, str) and llm_reason:
+-        return {**ai_eval, "reason": llm_reason}
+-
+-    return ai_eval
++    reason = llm_reason.strip() if isinstance(llm_reason, str) else ""
++    if reason:
++        # 사유 문자열만 남은 기록은 매매 판단을 지어내지 않고 관망으로 표시한다.
++        return {"reason": reason, "action": "HOLD", "confidence": None}
++
++    return None
++
++
++def _build_jongga_ai_evaluation(candidate: dict, action: str, reason: str) -> dict:
++    """AI 응답에서 화면과 VCP가 소비하는 네 필드만 안전하게 전달한다."""
++    evaluation = {"action": action}
++    if reason:
++        evaluation["reason"] = reason
++
++    confidence = candidate.get("confidence")
++    if confidence is None:
++        if "confidence" in candidate:
++            evaluation["confidence"] = None
++    elif isinstance(confidence, str):
++        evaluation["confidence"] = confidence
++    elif (
++        not isinstance(confidence, bool)
++        and isinstance(confidence, (int, float))
++        and -sys.float_info.max <= confidence <= sys.float_info.max
++        and math.isfinite(confidence)
++    ):
++        evaluation["confidence"] = confidence
++
++    model = candidate.get("model")
++    if isinstance(model, str):
++        evaluation["model"] = model
++    return evaluation
+
+
+ def _extract_jongga_score_value(signal: dict, allow_numeric_fallback: bool) -> float:
+     """종가 시그널에서 정렬/표시용 점수 값을 추출한다."""
+     raw_score = signal.get("score")
+diff --git a/frontend/src/app/components/BuyStockModal.test.tsx b/frontend/src/app/components/BuyStockModal.test.tsx
+index db4de73..540620d 100644
+--- a/frontend/src/app/components/BuyStockModal.test.tsx
++++ b/frontend/src/app/components/BuyStockModal.test.tsx
+@@ -1,7 +1,8 @@
++import { type ComponentProps } from 'react';
+ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+-import { describe, expect, it, vi, beforeEach } from 'vitest';
++import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
+ import BuyStockModal from './BuyStockModal';
+
+ // [FE-003] 회귀 검사. 화면이 안내하는 결제 금액과 매수 가능 수량은 백엔드가 실제로
+ // 차감하는 금액(가격 × 수량)과 같아야 한다. 수수료를 화면에서만 얹으면 어긋난다.
+
+@@ -16,28 +17,39 @@ vi.mock('next-auth/react', () => ({
+
+ const apiMocks = vi.hoisted(() => ({
+   getPortfolio: vi.fn(async () => ({ cash: 1_000_000 })),
+ }));
+
+-vi.mock('@/lib/api', () => ({
+-  isAuthenticationError: (error: unknown) =>
+-    typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 401,
+-  paperTradingAPI: {
+-    getPortfolio: apiMocks.getPortfolio,
+-  },
+-}));
++vi.mock('@/lib/api', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('@/lib/api')>();
++  return {
++    ...actual,
++    isAuthenticationError: (error: unknown) =>
++      typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 401,
++    paperTradingAPI: {
++      ...actual.paperTradingAPI,
++      getPortfolio: apiMocks.getPortfolio,
++    },
++  };
++});
+
+ beforeEach(() => {
+   vi.clearAllMocks();
+   sessionState.data = { user: { email: 'buyer@example.test' } };
+   sessionState.status = 'authenticated';
+   window.alert = vi.fn();
+   // 마운트 시 실시간 가격을 조회한다. 빈 응답을 주면 stock 이 들고 온 가격으로 떨어진다.
+-  global.fetch = vi.fn(async () => ({ json: async () => ({ prices: {} }) })) as any;
++  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ prices: {} })));
+ });
+
+-function renderModal(stock: any, onBuy = vi.fn(async () => true)) {
++afterEach(() => {
++  vi.unstubAllGlobals();
++});
++
++type BuyStock = NonNullable<ComponentProps<typeof BuyStockModal>['stock']>;
++
++function renderModal(stock: BuyStock, onBuy = vi.fn(async () => true)) {
+   return render(
+     <BuyStockModal isOpen onClose={vi.fn()} stock={stock} onBuy={onBuy} />,
+   );
+ }
+
+diff --git a/frontend/src/app/components/BuyStockModal.tsx b/frontend/src/app/components/BuyStockModal.tsx
+index 51312d5..5fc4279 100644
+--- a/frontend/src/app/components/BuyStockModal.tsx
++++ b/frontend/src/app/components/BuyStockModal.tsx
+@@ -1,10 +1,10 @@
+ 'use client';
+
+ import { useState, useEffect, useId } from 'react';
+ import { useSession } from 'next-auth/react';
+-import { isAuthenticationError, paperTradingAPI } from '@/lib/api';
++import { fetchAPI, isAuthenticationError, paperTradingAPI } from '@/lib/api';
+ import { useAccountActionGuard } from '@/lib/accountActionGuard';
+ import { ModalShell } from './Modal';
+
+ interface BuyStockModalProps {
+   isOpen: boolean;
+@@ -17,10 +17,25 @@ interface BuyStockModalProps {
+     entry_price?: number;
+   } | null;
+   onBuy: (ticker: string, name: string, price: number, quantity: number) => Promise<boolean>;
+ }
+
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return typeof value === 'object' && value !== null && !Array.isArray(value);
++}
++
++function toPositiveFinitePrice(value: unknown): number | null {
++  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
++}
++
++function extractFetchedPrice(response: unknown, ticker: string): number | null {
++  if (!isRecord(response)) return null;
++
++  const prices = isRecord(response.prices) ? response.prices : null;
++  return toPositiveFinitePrice(prices?.[ticker]) ?? toPositiveFinitePrice(response[ticker]);
++}
++
+ export default function BuyStockModal({ isOpen, onClose, stock, onBuy }: BuyStockModalProps) {
+   const { data: session, status } = useSession();
+   const accountEmail = status === 'authenticated' ? session?.user?.email ?? null : null;
+   return (
+     <BuyStockModalAccount
+@@ -51,20 +66,21 @@ function BuyStockModalAccount({
+   const [quantity, setQuantity] = useState<string>('0');
+   const [amount, setAmount] = useState<string>('0');
+   const [isSubmitting, setIsSubmitting] = useState(false);
+   const [portfolio, setPortfolio] = useState<any>(null);
+   const [fetchedPrice, setFetchedPrice] = useState<number | null>(null);
+-  const [loadingPrice, setLoadingPrice] = useState(false);
++  const [priceLookupFinished, setPriceLookupFinished] = useState(false);
+   const [accessDenied, setAccessDenied] = useState(false);
+
+   // 포트폴리오(예수금) 조회 및 실시간 가격 조회
+   useEffect(() => {
+     let cancelled = false;
+     if (isOpen && stock && isAuthenticated) {
+       setAccessDenied(false);
+       setPortfolio(null);
+       setFetchedPrice(null);
++      setPriceLookupFinished(false);
+       setQuantity('0');
+       setAmount('0');
+
+       paperTradingAPI.getPortfolio()
+         .then((nextPortfolio) => {
+@@ -77,46 +93,43 @@ function BuyStockModalAccount({
+             if (!denied) console.error(error);
+           }
+         });
+
+       // 실시간 가격 조회
+-      setLoadingPrice(true);
+-      fetch('/api/kr/realtime-prices', {
++      fetchAPI<unknown>('/api/kr/realtime-prices', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ tickers: [stock.ticker] })
+       })
+-        .then(res => res.json())
+-        .then(data => {
++        .then(response => {
+           if (cancelled) return;
+-          if (data.prices && data.prices[stock.ticker]) {
+-            setFetchedPrice(data.prices[stock.ticker]);
+-          } else if (data[stock.ticker]) {
+-            // Fallback for any legacy format (though backend is updated)
+-            setFetchedPrice(data[stock.ticker]);
+-          }
++          const nextPrice = extractFetchedPrice(response, stock.ticker);
++          if (nextPrice !== null) setFetchedPrice(nextPrice);
+         })
+         .catch((error: unknown) => {
+           if (!cancelled) console.error(error);
+         })
+         .finally(() => {
+-          if (!cancelled) setLoadingPrice(false);
++          if (!cancelled) {
++            setPriceLookupFinished(true);
++          }
+         });
+     } else {
+       setAccessDenied(false);
+       setPortfolio(null);
+       setFetchedPrice(null);
+-      setLoadingPrice(false);
++      setPriceLookupFinished(false);
+     }
+     return () => {
+       cancelled = true;
+     };
+   }, [isOpen, stock, isAuthenticated]);
+
+   if (!stock) return null;
+
+-  const price = fetchedPrice || stock.current_price || stock.entry_price || stock.price || 0;
++  const price = fetchedPrice ?? (stock.current_price || stock.entry_price || stock.price || 0);
++  const loadingPrice = !priceLookupFinished && fetchedPrice === null;
+   const numericQty = parseInt(quantity.replace(/,/g, ''), 10) || 0;
+   const numericAmount = parseInt(amount.replace(/,/g, ''), 10) || 0;
+
+   // 계산
+   const estimatedQty = mode === 'quantity' ? numericQty : (price > 0 ? Math.floor(numericAmount / price) : 0);
+@@ -214,23 +227,27 @@ function BuyStockModalAccount({
+
+       {/* Price Info */}
+       <div className="flex justify-between items-center bg-white/5 rounded-xl p-4 mb-6 border border-white/5">
+         <div className="flex flex-col">
+           <span className="text-gray-400 text-sm flex items-center gap-2">
+-            현재가 (매수가)
++            주문 기준가
+             {loadingPrice && <i className="fas fa-circle-notch fa-spin text-xs text-blue-500"></i>}
+           </span>
+-          {fetchedPrice ? (
++          {loadingPrice ? (
++            <span className="text-[10px] text-gray-400 font-bold mt-0.5">
++              시세 조회 중 · 저장된 가격으로 표시
++            </span>
++          ) : fetchedPrice ? (
+             <span className="text-[10px] text-green-400 font-bold flex items-center gap-1 mt-0.5">
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+-              실시간 시세 적용
++              가격 조회값 적용 (실시간 시세 보장 아님)
+             </span>
+-          ) : (
++          ) : priceLookupFinished ? (
+             <span className="text-[10px] text-yellow-500 font-bold mt-0.5">
+-              ⚠ 진입가/기본가 적용
++              ⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)
+             </span>
+-          )}
++          ) : null}
+         </div>
+         <span className={`text-2xl font-bold ${loadingPrice ? 'opacity-50' : 'text-rose-400'} transition-opacity`}>
+           {price.toLocaleString()}원
+         </span>
+       </div>
+diff --git a/frontend/src/app/components/ChatWidget.tsx b/frontend/src/app/components/ChatWidget.tsx
+index d331dbc..7940f07 100644
+--- a/frontend/src/app/components/ChatWidget.tsx
++++ b/frontend/src/app/components/ChatWidget.tsx
+@@ -158,18 +158,11 @@ const parseAIResponse = (text: string, isStreaming: boolean = false, streamReaso
+   return { cleanText: processed.trim(), suggestions, reasoning: cleanReasoning };
+ };
+
+ export default function ChatWidget() {
+   const [isOpen, setIsOpen] = useState(false);
+-  const [showTooltip, setShowTooltip] = useState(true);
+-
+-  // Auto-hide tooltip
+-  useEffect(() => {
+-    const timer = setTimeout(() => setShowTooltip(false), 8000);
+-    return () => clearTimeout(timer);
+-  }, []);
+-
++  const launcherRef = useRef<HTMLButtonElement>(null);
+   const [input, setInput] = useState('');
+   const [messages, setMessages] = useState<Message[]>([]);
+   const [isLoading, setIsLoading] = useState(false);
+   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+   const [thinkingIndex, setThinkingIndex] = useState(0);
+@@ -199,11 +192,15 @@ export default function ChatWidget() {
+     "VCP 매수 추천 종목 분석해줘",
+     "오늘의 종가베팅 추천해줘",
+     "최근 주요 뉴스 정리해줘"
+   ];
+
+-  const toggleChat = () => setIsOpen(!isOpen);
++  const closeChat = () => {
++    setIsOpen(false);
++    launcherRef.current?.focus();
++  };
++  const toggleChat = () => setIsOpen(open => !open);
+
+   const scrollToBottom = () => {
+     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+   };
+
+@@ -478,11 +475,11 @@ export default function ChatWidget() {
+                 title="New Chat"
+               >
+                 <i className="fas fa-redo-alt"></i>
+               </button>
+               <button
+-                onClick={() => setIsOpen(false)}
++                onClick={closeChat}
+                 aria-label="AI 상담 닫기"
+                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors md:hidden"
+               >
+                 <i className="fas fa-times"></i>
+               </button>
+@@ -680,42 +677,27 @@ export default function ChatWidget() {
+           </div>
+         </div>
+       )}
+
+       {/* Toggle Button (Always Visible) */}
+-      <div className="fixed bottom-3 right-3 md:bottom-6 md:right-6 z-[120] flex flex-col items-end">
++      <div className={`fixed flex flex-col items-end ${pathname.startsWith('/dashboard') ? 'top-3.5 right-4 z-[100]' : 'bottom-3 right-3 md:bottom-6 md:right-6 z-[120]'}`}>
+         {/* 이름은 고정하고 상태는 aria-expanded 로만 알린다. 둘 다 상태를 말하면 스크린
+             리더가 「AI 상담 닫기, 확장됨」처럼 같은 사실을 두 번 읽고, 활성화할 때마다
+             이름이 바뀌어 초점 문맥을 다시 읽는다. WAI-ARIA APG 의 disclosure 표기다. */}
+         <button
++          ref={launcherRef}
+           onClick={toggleChat}
+           aria-label="AI 상담"
+           aria-expanded={isOpen}
+-          className={`w-11 h-11 md:w-14 md:h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
++          className={`${pathname.startsWith('/dashboard') ? 'w-9 h-9' : 'w-11 h-11 md:w-14 md:h-14'} rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group ${isOpen ? 'bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+         >
+           <div className="relative w-full h-full flex items-center justify-center">
+-            <i className={`fas fa-comment-dots text-lg md:text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`}></i>
+-            <i className={`fas fa-times text-lg md:text-2xl transition-all duration-300 absolute ${isOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`}></i>
++            <i className={`fas fa-comment-dots text-lg transition-all duration-300 absolute ${isOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`}></i>
++            <i className={`fas fa-times text-lg transition-all duration-300 absolute ${isOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`}></i>
+           </div>
+         </button>
+
+-        {!isOpen && messages.length === 0 && showTooltip && (
+-          <div className="hidden md:block absolute right-16 top-1/2 -translate-y-1/2 bg-white text-black px-4 py-2 rounded-xl shadow-lg whitespace-nowrap animate-fade-in origin-right z-50">
+-            <button
+-              onClick={(e) => {
+-                e.stopPropagation();
+-                setShowTooltip(false);
+-              }}
+-              aria-label="안내 문구 닫기"
+-              className="absolute -top-2 -left-2 w-5 h-5 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600 shadow-sm transition-colors z-10"
+-            >
+-              <i className="fas fa-times text-[10px]"></i>
+-            </button>
+-            <div className="text-sm font-bold">궁금한 건 채팅으로 문의하세요</div>
+-            <div className="text-xs text-gray-500">대화 시작하기</div>
+-            <div className="absolute top-1/2 -right-1.5 w-3 h-3 bg-white transform -translate-y-1/2 rotate-45"></div>
+-          </div>
+-        )}
++
+       </div>
+     </>
+   );
+ }
+diff --git a/frontend/src/app/components/Header.tsx b/frontend/src/app/components/Header.tsx
+index 576ac0f..be24237 100644
+--- a/frontend/src/app/components/Header.tsx
++++ b/frontend/src/app/components/Header.tsx
+@@ -42,11 +42,11 @@ export default function Header() {
+       </nav>
+     );
+   };
+
+   return (
+-    <header className="h-16 border-b border-white/10 bg-[#000000]/95 backdrop-blur supports-[backdrop-filter]:bg-[#000000]/60 flex items-center justify-between px-4 md:px-6 fixed top-0 lg:left-64 left-0 right-0 z-40 transition-all duration-300">
++    <header className="h-16 border-b border-white/10 bg-[#000000]/95 backdrop-blur supports-[backdrop-filter]:bg-[#000000]/60 flex items-center justify-between pl-4 md:pl-6 pr-16 fixed top-0 lg:left-64 left-0 right-0 z-40 transition-all duration-300">
+       {/* Left: Breadcrumb & Mobile Menu */}
+       <div className="flex items-center gap-3">
+         {/* Mobile Menu Button */}
+         <button
+           onClick={() => window.dispatchEvent(new Event('sidebar-toggle'))}
+@@ -59,29 +59,12 @@ export default function Header() {
+         {/* Breadcrumbs (Mobile: Hidden on very small screens if needed, usually fine) */}
+         <div className="hidden sm:block">{getBreadcrumbs()}</div>
+         <div className="sm:hidden text-sm font-bold text-white">KR Market</div>
+       </div>
+
+-      {/* Right: Search & Actions */}
++      {/* Right: Actions (right padding reserves the chat launcher) */}
+       <div className="flex items-center gap-2 md:gap-4">
+-        {/* Search Bar */}
+-        <div className="relative hidden lg:block">
+-          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm"></i>
+-          <input
+-            type="text"
+-            placeholder="Search markets, tickers..."
+-            className="w-full md:w-80 bg-[#1c1c1e] border border-white/10 rounded-lg py-2 pl-10 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+-          />
+-          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 border border-white/10 rounded px-1.5 py-0.5">
+-            ⌘K
+-          </div>
+-        </div>
+-        {/* Mobile Search Icon */}
+-        <button aria-label="검색" className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400">
+-          <i className="fas fa-search"></i>
+-        </button>
+-
+         {/* Notifications: 종 아이콘이지만 여는 것은 사이드바의 설정 창이다 */}
+         <button
+           onClick={() => window.dispatchEvent(new Event('open-settings'))}
+           aria-label="설정 열기"
+           className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors relative"
+diff --git a/frontend/src/app/components/ModalShell.test.tsx b/frontend/src/app/components/ModalShell.test.tsx
+index 2658dcb..40bc762 100644
+--- a/frontend/src/app/components/ModalShell.test.tsx
++++ b/frontend/src/app/components/ModalShell.test.tsx
+@@ -14,20 +14,25 @@ import Modal, { ModalShell } from './Modal';
+ // role 은 있으나 Escape 가 없었다. 셸을 하나로 모은 뒤로는 세 가지가 어느 모달에서든
+ // 함께 따라온다. 그 사실을 여기서 고정한다.
+ //
+ // 근거: AUDIT-FE §2.2
+
+-vi.mock('@/lib/api', () => ({
+-  paperTradingAPI: {
+-    getPortfolio: vi.fn(async () => ({ cash: 1_000_000 })),
+-  },
+-}));
++vi.mock('@/lib/api', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('@/lib/api')>();
++  return {
++    ...actual,
++    paperTradingAPI: {
++      ...actual.paperTradingAPI,
++      getPortfolio: vi.fn(async () => ({ cash: 1_000_000 })),
++    },
++  };
++});
+
+ beforeEach(() => {
+   vi.clearAllMocks();
+   window.alert = vi.fn();
+-  global.fetch = vi.fn(async () => ({ json: async () => ({ prices: {} }) })) as any;
++  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ prices: {} })));
+ });
+
+ afterEach(() => {
+   vi.useRealTimers();
+ });
+diff --git a/frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts b/frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts
+index 6b94355..64d8ab1 100644
+--- a/frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts
++++ b/frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts
+@@ -13,10 +13,57 @@ export const CHART_PERIODS = [
+   { key: 'month', label: '월봉' },
+ ] as const;
+
+ export type ChartPeriod = (typeof CHART_PERIODS)[number]['key'];
+
++export interface JonggaAiEvaluation {
++  action: 'BUY' | 'SELL' | 'HOLD';
++  confidence?: number | string | null;
++  model?: string;
++  reason?: string;
++}
++
++function normalizeText(value: unknown): string {
++  return typeof value === 'string' ? value.trim() : '';
++}
++
++function normalizeConfidence(value: unknown): number | string | null | undefined {
++  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
++  return typeof value === 'string' || value === null ? value : undefined;
++}
++
++function normalizeAiEvaluation(value: unknown): JonggaAiEvaluation | null {
++  if (typeof value === 'string') {
++    const reason = normalizeText(value);
++    return reason ? { action: 'HOLD', confidence: null, reason } : null;
++  }
++  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
++
++  const candidate = value as Record<string, unknown>;
++  const action = normalizeText(candidate.action).toUpperCase();
++  const reason = normalizeText(candidate.reason);
++  if (action === 'BUY' || action === 'SELL' || action === 'HOLD') {
++    return {
++      action,
++      confidence: normalizeConfidence(candidate.confidence),
++      model: typeof candidate.model === 'string' ? candidate.model : undefined,
++      reason: reason || undefined,
++    };
++  }
++  return reason ? { action: 'HOLD', confidence: normalizeConfidence(candidate.confidence), reason } : null;
++}
++
++export function resolveJonggaAiEvaluation(candidates: unknown[], legacyReason: unknown): JonggaAiEvaluation | null {
++  const legacy = normalizeText(legacyReason);
++  for (const candidate of candidates) {
++    const evaluation = normalizeAiEvaluation(candidate);
++    if (!evaluation) continue;
++    return evaluation.reason || !legacy ? evaluation : { ...evaluation, reason: legacy };
++  }
++  return null;
++}
++
+ // 종목코드는 백엔드 응답에서 오는 값이므로 경로에 끼우기 전에 인코딩한다. 형식을
+ // 여섯 자리 숫자로 좁히지는 않는다. KRX 가 아크릴(0007C0)처럼 영문자가 든 코드를
+ // 이미 쓰고 있어서, 좁히는 쪽이 오히려 멀쩡한 종목을 떨어뜨린다.
+ export function stockChartUrl(symbol: string, period: ChartPeriod) {
+   return `https://ssl.pstatic.net/imgfinance/chart/item/candle/${period}/${encodeURIComponent(symbol)}.png`;
+diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx
+index 1eba624..2431cc5 100644
+--- a/frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx
++++ b/frontend/src/app/dashboard/kr/closing-bet/page.regression-fe-024.test.tsx
+@@ -83,11 +83,11 @@ function unnamedControls() {
+   });
+ }
+
+ async function renderPage() {
+   render(<JonggaV2Page />);
+-  await screen.findByText('₩37,250');
++  await screen.findByRole('heading', { name: '태웅' });
+ }
+
+ function dialog() {
+   return document.querySelector('[role="dialog"], [role="alertdialog"]') as HTMLElement | null;
+ }
+@@ -170,11 +170,11 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
+   });
+
+   it('차트를 이름 있는 대화상자로 열고 애니메이션을 고정 host가 아닌 카드에 둔다', async () => {
+     await renderPage();
+
+-    fireEvent.click(screen.getByTestId('mini-chart'));
++    fireEvent.click(screen.getByRole('button', { name: '태웅 차트 크게 보기' }));
+
+     const chart = await screen.findByRole('dialog', { name: '태웅' });
+     const layer = chart.closest('[data-modal-layer]') as HTMLElement;
+     expect(layer).not.toBeNull();
+     expect(layer.className).not.toContain('animate-fade-in');
+@@ -182,16 +182,16 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
+     for (const deadClass of ['animate-in', 'fade-in', 'zoom-in-95']) {
+       expect(chart.classList.contains(deadClass)).toBe(false);
+     }
+   });
+
+-  it('헤더의 아이콘 버튼 셋이 이름을 가진다', () => {
++  it('헤더에 남은 메뉴와 설정 버튼이 이름을 가진다', () => {
+     render(<Header />);
+
+     // 사이드바를 여닫는 토글이므로 「열기」로 고정하지 않는다.
+     expect(screen.getByRole('button', { name: '메뉴 열고 닫기' })).toBeTruthy();
+-    expect(screen.getByRole('button', { name: '검색' })).toBeTruthy();
++    expect(screen.queryByRole('button', { name: '검색' })).toBeNull(); // FE-028: 미동작 검색 제거
+     expect(screen.getByRole('button', { name: '설정 열기' })).toBeTruthy();
+   });
+
+   it('챗봇 토글의 이름은 고정이고 상태는 aria-expanded 가 말한다', () => {
+     render(<ChatWidget />);
+diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-015.test.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-015.test.tsx
+index f97f878..33ea9b5 100644
+--- a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-015.test.tsx
++++ b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-015.test.tsx
+@@ -1,14 +1,14 @@
+ // Regression: [JONGGA-015] — 카드가 「현재가」라는 이름으로 최근 거래일의 종가를 보여주고,
+ // 매수·목표·손절가가 어느 값에서 파생되는지 밝히지 않던 문제
+ // 근거: docs/dev-cycle/TODO.md [JONGGA-015] (2026-09-03 JONGGA-005 사이클의 qa-only ISSUE-001)
+ //
+-// 카드의 `current_price` 는 daily_prices.csv 의 최신 종가이고, 상세 모달의 「현재」는
+-// 실시간 시세다. 두 값은 원래 다른 것을 가리키는데 이름이 같은 것처럼 붙어 있었다.
+-// 목표가와 손절가는 그 「현재가」가 아니라 매수가에서 파생된다.
++// [JONGGA-031] 카드 종가는 entry_price와 signal_date를 함께 표시한다.
++// current_price는 최신 조회 가격이므로 이 타일의 기준으로 사용하지 않는다.
++// 목표가와 손절가도 저장된 진입가를 기준으로 한다.
+
+-import { render, screen } from '@testing-library/react';
++import { render, screen, within } from '@testing-library/react';
+ import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+ import JonggaV2Page from './page';
+
+ const KST_DATE = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' });
+@@ -59,37 +59,46 @@ vi.mock('@/hooks/useAdmin', () => ({
+
+ vi.mock('@/app/components/Modal', () => ({ default: () => null }));
+ vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
+ vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null }));
+
++async function signalCloseTile(): Promise<HTMLElement> {
++  const label = await screen.findByText('2026-09-02 종가');
++  const tile = label.closest('.text-center');
++  if (!tile) throw new Error('신호일 종가 타일을 찾지 못했습니다.');
++  return tile as HTMLElement;
++}
++
+ describe('[JONGGA-015] 종가베팅 카드의 가격 어휘', () => {
+   beforeEach(() => {
+     state.signal = { ...SIGNAL };
+   });
+
+   it('가격 자리를 「현재가」가 아니라 「종가」라고 부른다', async () => {
+     render(<JonggaV2Page />);
+
+     // 지표 라벨은 값과 같은 블록에 놓인다. 값에서 거슬러 올라가 라벨을 짚는다.
+-    const priceValue = await screen.findByText('₩37,250');
+-    const metricBlock = priceValue.closest('.text-center');
+-    expect(metricBlock?.textContent).toContain('종가');
+-    expect(metricBlock?.textContent).not.toContain('현재가');
++    const metricBlock = await signalCloseTile();
++    expect(within(metricBlock).getByText('₩37,200')).toBeTruthy();
++    expect(metricBlock.textContent).toContain('종가');
++    expect(metricBlock.textContent).not.toContain('현재가');
+   });
+
+   it('화면 어디에도 「현재가」라는 말이 남아 있지 않다', async () => {
+     render(<JonggaV2Page />);
+
+     // 툴팁 문구까지 포함해 확인한다. 「상승률」 툴팁도 같은 말을 쓰고 있었다.
+-    await screen.findByText('₩37,250');
++    await signalCloseTile();
+     expect(document.body.textContent).not.toContain('현재가');
+   });
+
+-  it('종가 값 자체는 달라지지 않는다', async () => {
++  it('신호일 종가는 entry_price 값을 표시한다', async () => {
+     render(<JonggaV2Page />);
+
+-    expect(await screen.findByText('₩37,250')).toBeTruthy();
++    const tile = await signalCloseTile();
++    expect(within(tile).getByText('₩37,200')).toBeTruthy();
++    expect(within(tile).queryByText('₩37,250')).toBeNull();
+   });
+
+   it('매수가 옆에 어느 날 종가인지 적는다', async () => {
+     render(<JonggaV2Page />);
+
+@@ -105,29 +114,29 @@ describe('[JONGGA-015] 종가베팅 카드의 가격 어휘', () => {
+
+   it('매수가가 없으면 비율 자리를 비운다', async () => {
+     state.signal = { ...SIGNAL, buy_price: 0, entry_price: 0 };
+     render(<JonggaV2Page />);
+
+-    await screen.findByText('₩37,250');
++    await screen.findByRole('heading', { name: '태웅' });
+     expect(document.body.textContent).not.toContain('매수가 +');
+     expect(document.body.textContent).not.toContain('매수가 -');
+     expect(document.body.textContent).not.toContain('NaN');
+     expect(document.body.textContent).not.toContain('Infinity');
+   });
+
+   it('목표가가 없으면 그 자리에만 비율을 그리지 않는다', async () => {
+     state.signal = { ...SIGNAL, target_price: 0 };
+     render(<JonggaV2Page />);
+
+-    await screen.findByText('₩37,250');
++    await signalCloseTile();
+     expect(document.body.textContent).not.toContain('매수가 +');
+     expect(screen.getByText('(매수가 -3.0%)')).toBeTruthy();
+   });
+   it('저장 진입가와 별도 buy_price가 달라도 시스템 가격의 기준은 진입가다', async () => {
+     state.signal = { ...SIGNAL, entry_price: 100000, buy_price: 120000, target_price: 105000, stop_price: 97000 };
+     render(<JonggaV2Page />);
+-    expect(await screen.findByText('₩100,000')).toBeTruthy();
++    expect(within(await signalCloseTile()).getByText('₩100,000')).toBeTruthy();
+     expect(screen.getByText('(매수가 +5.0%)')).toBeTruthy();
+     expect(screen.getByText('(매수가 -3.0%)')).toBeTruthy();
+   });
+
+   it('개별 저장 목표·손절은 기본 비율로 덮어쓰지 않는다', async () => {
+diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-021.test.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-021.test.tsx
+index a07371a..d709439 100644
+--- a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-021.test.tsx
++++ b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-021.test.tsx
+@@ -65,15 +65,13 @@ vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
+ vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null }));
+
+ // 카드의 미니차트를 눌러 「크게 보기」 모달을 연다. 모달 안의 차트 이미지를 돌려준다.
+ async function openChart() {
+   render(<JonggaV2Page />);
+-  await screen.findByText('₩37,250');
++  await screen.findByRole('heading', { name: '태웅' });
+
+-  const miniCharts = document.querySelectorAll('[data-testid="mini-chart"]');
+-  expect(miniCharts.length).toBe(1);
+-  fireEvent.click(miniCharts[0]);
++  fireEvent.click(screen.getByRole('button', { name: '태웅 차트 크게 보기' }));
+
+   return document.querySelector('img[alt*="태웅"]') as HTMLImageElement | null;
+ }
+
+ describe('[JONGGA-021] 「크게 보기」 차트의 종목', () => {
+diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-023.test.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-023.test.tsx
+index 8cef604..fbfab03 100644
+--- a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-023.test.tsx
++++ b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-023.test.tsx
+@@ -67,11 +67,11 @@ async function renderReport() {
+   await screen.findByText('테마종목');
+ }
+
+ async function openCardTooltip(label: string) {
+   const card = screen.getByRole('heading', { name: '테마종목' }).closest('div.rounded-2xl.border') as HTMLElement;
+-  const labelNode = within(card).getByText(label);
++  const labelNode = within(card).getByText(label === '종가' ? /종가$/ : label);
+   const trigger = labelNode.querySelector<HTMLElement>('[class*="group/tooltip"]');
+   expect(trigger).not.toBeNull();
+   fireEvent.mouseEnter(trigger as HTMLElement);
+   return screen.findByRole('tooltip');
+ }
+diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-037.test.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-037.test.tsx
+index ee5da87..f5f321a 100644
+--- a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-037.test.tsx
++++ b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-037.test.tsx
+@@ -29,11 +29,11 @@ function statusCallCount() {
+   return api.fetchAPI.mock.calls.filter(([path]) => path === '/api/kr/jongga-v2/status').length;
+ }
+
+ async function renderAndStartUpdate() {
+   const view = render(<JonggaV2Page />);
+-  await screen.findByText('₩37,250');
++  await screen.findByRole('heading', { name: '태웅' });
+
+   vi.useFakeTimers();
+   fireEvent.click(screen.getByRole('button', { name: '스크리너 전체 업데이트' }));
+   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '실행' }));
+   await act(async () => {
+diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.tsx
+index 5325676..2579f41 100644
+--- a/frontend/src/app/dashboard/kr/closing-bet/page.tsx
++++ b/frontend/src/app/dashboard/kr/closing-bet/page.tsx
+@@ -10,11 +10,11 @@ import BuyStockModal from '@/app/components/BuyStockModal';
+ import ClosingBetCriteriaModal from '@/app/components/ClosingBetCriteriaModal';
+ import GradeGuideModal from '@/app/components/GradeGuideModal';
+ import Tooltip from '@/app/components/Tooltip';
+ import { useAdmin } from '@/hooks/useAdmin';
+ import { formatMarketAmount } from '../formatMarketAmount';
+-import { CHART_PERIODS, stockChartUrl } from './displayHelpers';
++import { CHART_PERIODS, resolveJonggaAiEvaluation, stockChartUrl } from './displayHelpers';
+ import { PriceRangeBar, StatBox } from './displayPrimitives';
+ import ConfirmationModal from '@/app/components/ConfirmationModal';
+
+ // 이 화면에서 되돌릴 수 없는 지출을 일으키는 조작은 셋이다. 앞의 둘은 DATA STATUS 의
+ // 아이콘 버튼이고, 셋째는 카드마다 있는 「이 종목만 재분석」이다. 셋 모두 아이콘만 두지
+@@ -36,31 +36,21 @@ type CostlyAction = keyof typeof COSTLY_ACTIONS;
+ const COSTLY_WARNING = '외부 API 를 호출하므로 실제 요금이 발생하며, 실행한 뒤에는 되돌릴 수 없습니다.';
+
+ const costlyMessage = (body: string) => `${body}\n\n${COSTLY_WARNING}`;
+
+
+-// 응답은 이 판정을 최상위와 score 두 자리에 담는다. 지난 자료는 score 안에만 넣고
+-// 최상위를 null 로 두므로 두 자리 모두 null 을 허용해야 한다.
+-interface AiEvaluation {
+-  action: 'BUY' | 'HOLD' | 'SELL';
+-  // [JONGGA-008] 백엔드는 확신도가 없는 상태를 0 이 아니라 null 로 보낸다.
+-  confidence?: number | null;
+-  model?: string;
+-  reason?: string;
+-}
+-
+ interface ScoreDetail {
+   news: number;
+   volume: number;
+   chart: number;
+   candle: number;
+   consolidation: number;
+   timing: number;
+   supply: number;
+   llm_reason: string;
+   total: number;
+-  ai_evaluation?: AiEvaluation | null;
++  ai_evaluation?: unknown;
+ }
+
+ interface BonusBreakdown {
+   volume?: number;
+   candle?: number;
+@@ -103,10 +93,11 @@ interface Signal {
+   target_price_2?: number;
+   news_items?: NewsItem[];
+   advice?: ExpertAdvice;
+   mini_chart?: CandleData[];
+   score_details?: {
++    ai_evaluation?: unknown;
+     rise_pct?: number;
+     volume_ratio?: number;
+     foreign_net_buy?: number;
+     inst_net_buy?: number;
+     base_score?: number;
+@@ -115,11 +106,11 @@ interface Signal {
+     is_new_high?: boolean;
+     is_limit_up?: boolean;
+     candle?: number;
+     consolidation?: number;
+   };
+-  ai_evaluation?: AiEvaluation | null;
++  ai_evaluation?: unknown;
+   themes?: string[]; // 관련 테마 태그 (예: 원전, SMR, 전력인프라)
+   signal_date?: string; // 신호가 나온 거래일. 매수가가 어느 날 종가인지 밝히는 데 쓴다
+ }
+
+ interface ExpertAdvice {
+@@ -201,10 +192,11 @@ interface StockDetailInfo {
+ }
+
+ function StockChart({ symbol, name }: { symbol: string, name: string }) {
+   const [period, setPeriod] = useState<(typeof CHART_PERIODS)[number]>(CHART_PERIODS[0]);
+   const [failed, setFailed] = useState(false);
++  const scrollHintId = useId();
+
+   return (
+     <div className="flex flex-col h-full bg-[#131722]">
+       <div className="flex items-center gap-2 px-4 pt-4">
+         {CHART_PERIODS.map((p) => (
+@@ -221,11 +213,17 @@ function StockChart({ symbol, name }: { symbol: string, name: string }) {
+           </button>
+         ))}
+         <span className="ml-auto text-[11px] text-gray-500">네이버 금융 제공</span>
+       </div>
+
+-      <div className="flex items-center justify-center p-4">
++      <div
++        aria-describedby={scrollHintId}
++        aria-label={`${name} 가로 스크롤 차트`}
++        className="overflow-x-auto p-4"
++        role="region"
++        tabIndex={0}
++      >
+         {failed ? (
+           <div className="text-center px-6">
+             <i className="fas fa-chart-line text-4xl text-gray-600 mb-3"></i>
+             <p className="text-gray-200 font-bold">{name} ({symbol}) 차트를 불러오지 못했습니다</p>
+             <p className="text-sm text-gray-500 mt-2">
+@@ -238,14 +236,15 @@ function StockChart({ symbol, name }: { symbol: string, name: string }) {
+             src={stockChartUrl(symbol, period.key)}
+             alt={`${name} ${symbol} ${period.label} 차트`}
+             onError={() => setFailed(true)}
+             width={700}
+             height={289}
+-            className="max-w-full h-auto object-contain"
++            className="min-w-[700px] max-w-none h-auto object-contain"
+           />
+         )}
+       </div>
++      <p id={scrollHintId} className="sr-only">좌우 화살표 키로 차트를 가로로 스크롤할 수 있습니다.</p>
+
+       <div className="flex gap-3 p-4 bg-[#1c1c1e] border-t border-white/5">
+         <a
+           href={`https://m.stock.naver.com/domestic/stock/${symbol}/chart`}
+           target="_blank"
+@@ -1993,24 +1992,27 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry,
+       .replace(/\bgpt\b/gi, 'GPT');
+   };
+
+   const style = gradeStyles[signal.grade] || gradeStyles.D;
+
+-  // [JONGGA-016] 판정은 응답의 두 자리에 담긴다. 지난 자료는 score 안에만 넣고 최상위를
+-  // null 로 두므로, 최상위만 읽으면 판정과 확신도가 함께 사라진다. 그 빈자리를 llm_reason
+-  // 텍스트로 추정하던 폴백은 걷어냈다. 부정 맥락의 「상승」과 「매수」까지 BUY 로 읽어
+-  // 아홉 건 가운데 일곱 건을 틀렸다. 경위는 page.regression-jongga-016.test.tsx 에 있다.
+-  const aiEval = signal.ai_evaluation ?? signal.score.ai_evaluation;
++  // [JONGGA-028] 새 판정은 최상위, 과거 판정은 score·score_details에 남는다. Flask의
++  // 추출기와 같은 순서를 써야 카드 배지와 AI 분석 응답이 갈라지지 않는다.
++  const aiEval = resolveJonggaAiEvaluation(
++    [signal.ai_evaluation, signal.score.ai_evaluation, signal.score_details?.ai_evaluation],
++    signal.score.llm_reason,
++  );
+
+   // [JONGGA-004] 여기서 등급으로 확신도를 지어내지 않는다. AI 결과가 없는 상태는
+   // aiEval 이 없는 것으로 두고, 렌더 쪽에서 대기 상태로 표시한다.
+   const confidencePct = parseAIConfidence(aiEval?.confidence);
+
+   // [JONGGA-015] 목표가와 손절가는 매수가에서 파생되고, 같은 카드에 놓인 「종가」와는
+   // 무관하다. 두 값이 나란히 보이므로 어느 쪽이 기준인지 화면에 적어 둔다.
+   const entryPrice = Number.isFinite(signal.entry_price) && signal.entry_price > 0
+     ? signal.entry_price : signal.buy_price || 0;
++  const signalClosePrice = Number.isFinite(signal.entry_price) && signal.entry_price > 0
++    ? signal.entry_price : null;
+   const basePrice = Math.round(entryPrice);
+   const pctFromBase = (price?: number) => {
+     if (!(basePrice > 0) || !price) return null;
+     // 옆에 찍히는 금액이 반올림된 값이므로 비율도 같은 값에서 뽑는다.
+     const pct = ((Math.round(price) - basePrice) / basePrice) * 100;
+@@ -2077,17 +2079,17 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry,
+                 {(signal.volume_ratio ?? signal.score_details?.volume_ratio ?? 1).toFixed(0)}x
+               </div>
+             </div>
+             <div className="text-center">
+               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
+-                종가
++                {signal.signal_date ? `${signal.signal_date} 종가` : '신호일 종가'}
+                 <Tooltip content="신호가 나온 거래일의 종가입니다. 실시간 시세와 다를 수 있으며 현재 시세는 「상세 분석 보기」에서 확인하세요.">
+                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
+                 </Tooltip>
+               </div>
+               <div className="text-sm font-bold text-white">
+-                ₩{signal.current_price?.toLocaleString() || '-'}
++                {signalClosePrice ? `₩${signalClosePrice.toLocaleString()}` : '-'}
+               </div>
+             </div>
+             <div className="text-center">
+               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
+                 거래대금
+@@ -2163,56 +2165,20 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry,
+                 <span className="text-[10px] font-mono text-gray-500">미산출</span>
+               )}
+             </div>
+           </div>
+
+-          {/* Chart Area */}
+-          {/* Chart Area */}
+-          <div data-testid="mini-chart" className="relative h-24 bg-[#131722] rounded-xl overflow-hidden mb-2 cursor-pointer group/chart" onClick={onOpenChart}>
+-            {/* Gradient Overlay */}
+-            <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/10 to-transparent" />
+-
+-            {/* SVG 심플 라인 차트 */}
+-            <svg viewBox="0 0 100 40" className="w-full h-16 relative z-10">
+-              <defs>
+-                <linearGradient id={`gradient-${signal.stock_code}`} x1="0%" y1="0%" x2="100%" y2="0%">
+-                  <stop offset="0%" stopColor={signal.change_pct >= 0 ? "#10b981" : "#ef4444"} stopOpacity="0.5" />
+-                  <stop offset="100%" stopColor={signal.change_pct >= 0 ? "#10b981" : "#ef4444"} stopOpacity="1" />
+-                </linearGradient>
+-              </defs>
+-              {/* 상승 패턴 라인 */}
+-              <polyline
+-                fill="none"
+-                stroke={`url(#gradient-${signal.stock_code})`}
+-                strokeWidth="2"
+-                strokeLinecap="round"
+-                strokeLinejoin="round"
+-                points={signal.change_pct >= 0
+-                  ? "5,35 15,30 25,28 35,25 45,22 55,18 65,15 75,12 85,8 95,5"
+-                  : "5,5 15,8 25,12 35,15 45,18 55,22 65,25 75,28 85,30 95,35"
+-                }
+-              />
+-              {/* 마지막 점 강조 */}
+-              <circle
+-                cx={signal.change_pct >= 0 ? "95" : "95"}
+-                cy={signal.change_pct >= 0 ? "5" : "35"}
+-                r="3"
+-                fill={signal.change_pct >= 0 ? "#10b981" : "#ef4444"}
+-              />
+-            </svg>
+-
+-            {/* 상승률 오버레이 */}
+-            <div className={`absolute bottom-2 right-2 text-lg font-bold ${signal.change_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+-              {signal.change_pct >= 0 ? '↑' : '↓'} {Math.abs(signal.change_pct)?.toFixed(1)}%
+-            </div>
+-
+-            <div className="absolute top-2 right-2 z-20 opacity-0 group-hover/chart:opacity-100 transition-opacity">
+-              <span className="px-2 py-1 bg-gray-800/80 rounded text-[10px] text-white backdrop-blur">
+-                <i className="fas fa-expand-arrows-alt mr-1"></i> 크게 보기
+-              </span>
+-            </div>
+-          </div>
++          <button
++            type="button"
++            data-testid="mini-chart"
++            aria-label={`${signal.stock_name} 차트 크게 보기`}
++            onClick={onOpenChart}
++            className="flex h-24 w-full items-center justify-center gap-2 rounded-xl bg-[#131722] text-xs font-semibold text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
++          >
++            <i className="fas fa-chart-line text-indigo-400"></i>
++            실제 차트 크게 보기
++          </button>
+
+         </div>
+
+         {/* Column 2: Analysis Details */}
+         <div className="p-5 xl:w-[45%] border-b xl:border-b-0 xl:border-r border-white/10 flex flex-col justify-between">
+@@ -2241,11 +2207,11 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry,
+                   <i className={`fas fa-redo-alt text-[10px] ${isRetrying ? 'animate-spin' : ''}`}></i>
+                 </button>
+               )}
+             </h3>
+             <p className="text-sm text-gray-300 leading-relaxed">
+-              {signal.score.llm_reason || "AI 분석 대기 중입니다..."}
++              {aiEval?.reason || signal.score.llm_reason || "AI 분석 대기 중입니다..."}
+             </p>
+             {signal.score.llm_reason && (
+               <p className="mt-2 text-xs text-gray-500 leading-relaxed">
+                 AI 원문에는 다른 가격이 포함될 수 있습니다. 이 화면의 시스템 계산 기준은 아래 목표가·손절가입니다.
+               </p>
+diff --git a/frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx b/frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx
+index f65b8f7..73b1877 100644
+--- a/frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx
++++ b/frontend/src/app/dashboard/kr/page.regression-performance-batch.test.tsx
+@@ -2,11 +2,11 @@
+ //
+ // 백테스트가 아직 거래를 축적하거나 종료 거래를 기다리는 동안에도 화면은 0%·미흡 배지와
+ // 보수적 대응 조언을 냈다. 수치가 없다는 사실을 나쁜 성과로 바꾸지 않도록, 두 전략 카드가
+ // 같은 상태 정책을 쓰고 판정이 끝난 뒤에만 실제 성과를 보이는지 고정한다.
+
+-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
++import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+ import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+ import HomePage from '@/app/page';
+ import KRDashboardPage from './page';
+
+@@ -58,11 +58,13 @@ const renderDashboardWith = async (fixture: BacktestFixture): Promise<[HTMLEleme
+       avg_return: fixture.avgReturn,
+       candidates: [],
+     },
+   });
+
+-  render(<KRDashboardPage />);
++  // The heading exists before async summary data arrives. Flush the supplied responses
++  // before retaining card elements; otherwise assertions can read the loading render.
++  await act(async () => { render(<KRDashboardPage />); });
+
+   await waitFor(() => expect(screen.getByText('VCP 전략')).toBeTruthy());
+
+   return [getStrategyCard('VCP 전략'), getStrategyCard('종가베팅 전략')];
+ };
+diff --git a/frontend/src/app/dashboard/kr/page.tsx b/frontend/src/app/dashboard/kr/page.tsx
+index 6e0a887..01376cf 100644
+--- a/frontend/src/app/dashboard/kr/page.tsx
++++ b/frontend/src/app/dashboard/kr/page.tsx
+@@ -266,16 +266,25 @@ export default function KRMarketOverview() {
+   // 그래서 403 을 받으면 알리는 데서 그치지 않고 세 자리를 함께 거둔다. useAdmin 을
+   // 고치지 않는 이유는 그 훅이 다른 화면 여섯에서도 쓰이기 때문이다. 여기서 필요한 것은
+   // 「이 탭의 판정이 낡았다」 하나이고 상태 하나로 끝난다.
+   const [permissionRevoked, setPermissionRevoked] = useState(false);
+   const [permissionError, setPermissionError] = useState<string | null>(null);
++  const [refreshError, setRefreshError] = useState<string | null>(null);
+   const canOperate = !isAdminLoading && isAdmin && !permissionRevoked;
+
+   const reportPermissionDenied = (message: string) => {
+     setPermissionRevoked(true);
+     setPermissionError(message);
+   };
++
++  const isStatusError = (error: unknown, status: number): boolean =>
++    typeof error === 'object' && error !== null && 'status' in error && error.status === status;
++
++  const getRefreshErrorMessage = (error: unknown, fallback: string): string =>
++    error instanceof Error && error.message === 'Request timed out'
++      ? '데이터 갱신 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.'
++      : fallback;
+   // 서버가 실제로 받아들인 마지막 주기다. updateInterval 은 낙관적 갱신이라 아직 확정되지
+   // 않은 값을 담을 수 있고, 요청이 겹칠 때 그것으로 되돌리면 서버에 반영된 적 없는 값이
+   // 화면에 남는다.
+   const confirmedIntervalRef = useRef(30);
+   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+@@ -464,49 +473,54 @@ export default function KRMarketOverview() {
+
+   const refreshMarketGate = async () => {
+     if (mgLoading) return;
+     // Reset retry state so a user-initiated refresh starts fresh
+     resetAutoRetry();
++    setRefreshError(null);
+     setMgLoading(true);
+     try {
+       const dateParam = useTodayMode ? undefined : (targetDate || getLastBusinessDay());
+       await krAPI.updateMarketGate(dateParam);
+       // 업데이트 후 데이터 다시 로드
+       const gate = await krAPI.getMarketGate(dateParam);
+       setGateData(gate);
+-    } catch (e: any) {
+-      console.error('Market Gate update failed', e);
+-      if (e?.status === 403) {
++    } catch (error: unknown) {
++      console.error('Market Gate update failed', error);
++      if (isStatusError(error, 403)) {
+         reportPermissionDenied('관리자만 Market Gate 를 강제로 갱신할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
++      } else {
++        setRefreshError(
++          error instanceof Error && error.message
++            ? error.message
++            : 'Market Gate 갱신에 실패했습니다. 잠시 후 다시 시도해 주세요.'
++        );
+       }
+     } finally {
+       setMgLoading(false);
+     }
+   };
+
+   const refreshData = async () => {
+     // Reset retry state so a user-initiated refresh starts fresh
+     resetAutoRetry();
++    setRefreshError(null);
+     setLoading(true);
+     try {
+       const dateParam = useTodayMode ? undefined : (targetDate || getLastBusinessDay());
+-      const refreshRes = await fetch('/api/kr/refresh', {
++      await fetchAPI('/api/kr/refresh', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ target_date: dateParam })
+       });
+-      if (!refreshRes.ok) {
+-        console.error('Refresh API failed');
+-        // 403 을 조용히 지나면 아래 loadData 가 옛 데이터를 다시 그리고 스피너가 멎어
+-        // 성공한 갱신과 구분되지 않는다. 권한이 바뀐 뒤에도 열려 있는 탭에서 일어난다.
+-        if (refreshRes.status === 403) {
+-          reportPermissionDenied('관리자만 데이터 갱신을 시작할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
+-        }
+-      }
+       await loadData();
+-    } catch (error) {
++    } catch (error: unknown) {
+       console.error('Failed to refresh data:', error);
++      if (isStatusError(error, 403)) {
++        reportPermissionDenied('관리자만 데이터 갱신을 시작할 수 있습니다.\n\n권한이 바뀌었을 수 있으니 새로고침 후 다시 확인해 주세요.');
++      } else {
++        setRefreshError(getRefreshErrorMessage(error, '데이터 갱신에 실패했습니다. 잠시 후 다시 시도해 주세요.'));
++      }
+       setLoading(false);
+     }
+   };
+
+   const getGateColor = (score: number) => {
+@@ -724,10 +738,15 @@ export default function KRMarketOverview() {
+           >
+             다시 시도
+           </button>
+         </div>
+       )}
++      {refreshError && (
++        <div role="alert" aria-live="assertive" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
++          {refreshError}
++        </div>
++      )}
+       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+         <div>
+           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-rose-500/20 bg-rose-500/5 text-xs text-rose-400 font-medium mb-4">
+             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+             KR 마켓 알파
+@@ -871,10 +890,11 @@ export default function KRMarketOverview() {
+                 GET /api/kr/market-gate 가 백그라운드 분석을 알아서 트리거한다. */}
+             {canOperate && (
+               <button
+                 onClick={refreshMarketGate}
+                 disabled={mgLoading}
++                aria-label="Market Gate 새로고침"
+                 className={`ml-1 p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-[10px] text-gray-400 hover:text-white transition-all ${mgLoading ? 'animate-spin opacity-50' : ''}`}
+                 title="Refresh Market Gate Only"
+               >
+                 <i className="fas fa-sync-alt"></i>
+               </button>
+diff --git a/frontend/src/lib/api.ts b/frontend/src/lib/api.ts
+index 0e6faec..3d7c44d 100644
+--- a/frontend/src/lib/api.ts
++++ b/frontend/src/lib/api.ts
+@@ -26,11 +26,10 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
+       ...options,
+       signal: controller.signal
+     };
+
+     const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
+-    clearTimeout(id);
+
+     if (!response.ok) {
+       // 백엔드는 실패 사유를 `message` 나 `error` 중 한 자리에 적어 보낸다. 그 문구를
+       // Error.message 로 올려야 호출부가 `e.message` 를 그대로 화면에 띄울 수 있다.
+       // 여기서 올리지 않으면 사유를 꺼내는 코드를 호출부마다 따로 두게 된다.
+@@ -44,19 +43,19 @@ export async function fetchAPI<T>(endpoint: string, options: FetchOptions = {}):
+       );
+       error.status = response.status;
+       error.data = data;
+       throw error;
+     }
+-    return response.json();
++    return await response.json();
+   } catch (e: any) {
+     if (e.name === 'AbortError') {
+       throw new Error('Request timed out');
+     }
+     throw e;
+   } finally {
+-    // fetch 자체가 거부하면(백엔드 다운, DNS 실패) 위의 clearTimeout 에 닿지 못한다.
+-    // 그대로 두면 타이머가 만료 시각까지 남는다. 폴링이 도는 화면에서는 계속 쌓인다.
++    // 헤더뿐 아니라 JSON 본문 수신·파싱이 끝나거나 실패할 때까지 제한 시간을 유지한다.
++    // 성공·오류 모두에서 타이머를 해제해 이후 폴링에 남기지 않는다.
+     clearTimeout(id);
+   }
+ }
+
+ // KR Market API Types
+
+NEW FILE frontend/src/app/components/BuyStockModal.jongga-followup.test.tsx
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import BuyStockModal from './BuyStockModal';
+
+const sessionState = vi.hoisted(() => ({
+  data: { user: { email: 'buyer@example.test' } },
+  status: 'authenticated',
+}));
+const api = vi.hoisted(() => ({ getPortfolio: vi.fn() }));
+
+vi.mock('next-auth/react', () => ({ useSession: () => sessionState }));
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>();
+  return {
+    ...actual,
+    isAuthenticationError: () => false,
+    paperTradingAPI: { ...actual.paperTradingAPI, getPortfolio: api.getPortfolio },
+  };
+});
+
+function renderModal(): void {
+  render(
+    <BuyStockModal
+      isOpen
+      onClose={vi.fn()}
+      stock={{ ticker: '005930', name: '삼성전자', price: 70_000, entry_price: 70_000 }}
+      onBuy={vi.fn(async () => true)}
+    />,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  api.getPortfolio.mockResolvedValue({ cash: 1_000_000 });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+describe('[JONGGA-031] 매수 모달 가격 출처', () => {
+  it('조회 성공을 거래소 실시간 시세로 단정하지 않는다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ prices: { '005930': 76_200 } })));
+
+    renderModal();
+
+    expect(await screen.findByText('가격 조회값 적용 (실시간 시세 보장 아님)')).toBeTruthy();
+    expect(screen.queryByText('실시간 시세 적용')).toBeNull();
+  });
+
+  it('가격 조회가 실패하면 신호일 종가 또는 기본가를 쓴다고 밝힌다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: '가격 조회 실패' })));
+
+    renderModal();
+
+    await waitFor(() => {
+      expect(screen.getByText('⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)')).toBeTruthy();
+    });
+  });
+
+  it('조회가 끝나기 전에는 저장된 가격을 쓰는 진행 상태를 보인다', async () => {
+    let resolveResponse: (value: Response) => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { resolveResponse = resolve; })));
+
+    renderModal();
+
+    expect(await screen.findByText('시세 조회 중 · 저장된 가격으로 표시')).toBeTruthy();
+    await act(async () => {
+      resolveResponse(Response.json({ prices: { '005930': 76_200 } }));
+    });
+    expect(await screen.findByText('가격 조회값 적용 (실시간 시세 보장 아님)')).toBeTruthy();
+  });
+
+  it('조회 거부도 값 없음과 같은 저장된 가격 안내로 끝낸다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('network error'))));
+
+    renderModal();
+
+    await waitFor(() => {
+      expect(screen.getByText('⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)')).toBeTruthy();
+    });
+  });
+
+  it('HTTP 실패를 공용 fetchAPI 오류 계약으로 끝내고 저장 가격으로 돌아간다', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ error: '가격 조회 실패' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderModal();
+
+    expect(await screen.findByText('⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)')).toBeTruthy();
+    expect(screen.getByText('70,000원')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/kr/realtime-prices',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
+
+  it('10초 timeout 뒤 스피너를 끝내고 저장 가격으로 돌아간다', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const abortError = new Error('The operation was aborted.');
+          abortError.name = 'AbortError';
+          reject(abortError);
+        });
+      }))
+    );
+
+    await act(async () => { renderModal(); });
+    expect(screen.getByText('시세 조회 중 · 저장된 가격으로 표시')).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(screen.getByText('⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)')).toBeTruthy();
+  });
+
+  it('중첩 prices 응답이 아닌 legacy 평면 가격도 정상 가격으로 쓴다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ '005930': 76_200 })));
+
+    renderModal();
+
+    expect(await screen.findByText('가격 조회값 적용 (실시간 시세 보장 아님)')).toBeTruthy();
+    expect(screen.getByText('76,200원')).toBeTruthy();
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, '76200'])('유효하지 않은 prices 값 %s은 저장 가격으로 되돌린다', async (price) => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ prices: { '005930': price } })));
+
+    renderModal();
+
+    expect(await screen.findByText('⚠ 저장된 가격 적용 (시세 조회 실패 또는 값 없음)')).toBeTruthy();
+    expect(screen.getByText('70,000원')).toBeTruthy();
+  });
+});
+
+NEW FILE frontend/src/app/components/Header.regression-fe-028-010.test.tsx
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import Header from './Header';
+import ChatWidget from './ChatWidget';
+const route = vi.hoisted(() => ({ path: '/dashboard/kr' }));
+vi.mock('next/navigation', () => ({ usePathname: () => route.path }));
+beforeEach(() => { route.path = '/dashboard/kr'; Element.prototype.scrollIntoView = vi.fn(); });
+
+describe('header actions and chat access', () => {
+  it('removes nonfunctional search while preserving menu and settings events', () => {
+    const menu = vi.fn(); const settings = vi.fn();
+    window.addEventListener('sidebar-toggle', menu); window.addEventListener('open-settings', settings);
+    render(<Header />);
+    expect(screen.queryByRole('button', { name: '검색' })).toBeNull();
+    expect(screen.queryByPlaceholderText('Search markets, tickers...')).toBeNull();
+    expect(screen.queryByText('⌘K')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '메뉴 열고 닫기' }));
+    fireEvent.click(screen.getByRole('button', { name: '설정 열기' }));
+    expect(menu).toHaveBeenCalledTimes(1); expect(settings).toHaveBeenCalledTimes(1);
+    window.removeEventListener('sidebar-toggle', menu); window.removeEventListener('open-settings', settings);
+  });
+  it.each(['/dashboard/kr', '/'])('has one chat launcher and restores focus on close at %s', (path) => {
+    route.path = path;
+    render(<><Header /><ChatWidget /></>);
+    const launcher = screen.getByRole('button', { name: 'AI 상담' });
+    expect(screen.queryByText('궁금한 건 채팅으로 문의하세요')).toBeNull();
+    launcher.focus(); fireEvent.click(launcher);
+    expect(launcher.getAttribute('aria-expanded')).toBe('true');
+    const close = screen.getByRole('button', { name: 'AI 상담 닫기' });
+    close.focus(); fireEvent.click(close);
+    expect(launcher.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(launcher);
+  });
+  it('keeps the dedicated chatbot page free of a second widget', () => {
+    route.path = '/chatbot'; render(<ChatWidget />);
+    expect(screen.queryByRole('button', { name: 'AI 상담' })).toBeNull();
+  });
+});
+
+NEW FILE frontend/src/app/components/PaperTradingModal.regression-fe-021.test.tsx
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, beforeAll, afterEach } from 'vitest';
+import PaperTradingModal from './PaperTradingModal';
+
+vi.mock('next-auth/react', () => ({
+  useSession: () => ({ data: { user: { email: 'modal@example.test' } }, status: 'authenticated' }),
+}));
+
+// Mock child modals to keep tests simple
+vi.mock('./BuyStockModal', () => ({ default: () => null }));
+vi.mock('./SellStockModal', () => ({ default: () => null }));
+vi.mock('./ConfirmationModal', () => ({ default: () => null }));
+
+const mockPortfolio = {
+  holdings: [],
+  cash: 100_000_000,
+  total_asset_value: 100_000_000,
+  total_stock_value: 0,
+  total_profit: 0,
+  total_profit_rate: 0,
+  total_principal: 100_000_000,
+};
+
+vi.mock('@/lib/api', () => ({
+  isAuthenticationError: () => false,
+  paperTradingAPI: {
+    getPortfolio: vi.fn(async () => mockPortfolio),
+    getChartData: vi.fn(async () => ({ data: [] })),
+    getAssetHistory: vi.fn(async () => ({ history: [] })),
+    getTradeHistory: vi.fn(async () => ({ trades: [] })),
+    deposit: vi.fn(async () => ({})),
+    reset: vi.fn(async () => ({})),
+    buy: vi.fn(async () => ({ status: 'success', message: 'ok' })),
+    sell: vi.fn(async () => ({ status: 'success', message: 'ok' })),
+  },
+}));
+
+// Import after mock so we get the mock reference
+import { paperTradingAPI } from '@/lib/api';
+
+const mockOnClose = vi.fn();
+
+function renderOpen(props?: Partial<{ isOpen: boolean; onClose: () => void }>) {
+  return render(
+    <PaperTradingModal
+      isOpen={props?.isOpen ?? true}
+      onClose={props?.onClose ?? mockOnClose}
+    />,
+  );
+}
+
+beforeAll(async () => {
+  vi.stubGlobal('ResizeObserver', class {
+    observe() {} unobserve() {} disconnect() {}
+  });
+});
+beforeEach(() => {
+  vi.clearAllMocks();
+  window.alert = vi.fn();
+  // jsdom has no drawing surface. Keep the actual chart and its request effects;
+  // substitute only Canvas 2D methods (pixel rendering is covered in browser QA).
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) {
+    return new Proxy({}, {
+      get: (_target, key) => {
+        if (key === 'canvas') return this;
+        if (key === 'measureText') return (text: string) => ({ width: text.length * 7 });
+        if (key === 'createLinearGradient') return () => ({ addColorStop: () => {} });
+        return () => {};
+      },
+    }) as CanvasRenderingContext2D;
+  });
+});
+
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+describe('[FE-021] real chart period request boundary', () => {
+  it('changes asset history days without fetching portfolio again', async () => {
+    renderOpen();
+    await screen.findByText('예수금');
+    fireEvent.click(screen.getByText('수익 차트'));
+    await waitFor(() => expect(paperTradingAPI.getAssetHistory).toHaveBeenCalledWith(365));
+    await act(async () => { await vi.dynamicImportSettled(); });
+    const calls = vi.mocked(paperTradingAPI.getPortfolio).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: '3개월' }));
+    await waitFor(() => expect(paperTradingAPI.getAssetHistory).toHaveBeenLastCalledWith(90));
+    await act(async () => { await vi.dynamicImportSettled(); });
+    expect(paperTradingAPI.getPortfolio).toHaveBeenCalledTimes(calls);
+    fireEvent.click(screen.getByRole('button', { name: '1개월' }));
+    await waitFor(() => expect(paperTradingAPI.getAssetHistory).toHaveBeenLastCalledWith(30));
+    await act(async () => { await vi.dynamicImportSettled(); });
+    expect(paperTradingAPI.getPortfolio).toHaveBeenCalledTimes(calls);
+  });
+});
+
+NEW FILE frontend/src/app/dashboard/kr/closing-bet/displayHelpers.jongga-followup.test.ts
+import { describe, expect, it } from 'vitest';
+
+import { resolveJonggaAiEvaluation } from './displayHelpers';
+
+describe('[JONGGA-028] 화면 AI 판정 우선순위', () => {
+  it('첫 유효한 최상위 판정을 선택하고 사유가 비었을 때만 legacy 본문을 보충한다', () => {
+    expect(resolveJonggaAiEvaluation(
+      [
+        { action: 'HOLD', confidence: 0, reason: '' },
+        { action: 'BUY', confidence: 91, reason: '오래된 매수 판정' },
+      ],
+      '호환용 오래된 본문 사유',
+    )).toEqual({ action: 'HOLD', confidence: 0, reason: '호환용 오래된 본문 사유', model: undefined });
+  });
+
+  it('action이 잘못돼도 먼저 온 사유와 bare string을 HOLD로 읽는다', () => {
+    expect(resolveJonggaAiEvaluation(
+      [{ action: 'UNKNOWN', reason: '최신 사유' }, { action: 'BUY', reason: '오래된 사유' }],
+      '',
+    )).toEqual({ action: 'HOLD', confidence: undefined, reason: '최신 사유' });
+    expect(resolveJonggaAiEvaluation(['사유만 남은 최신 판정'], '')).toEqual({
+      action: 'HOLD', confidence: null, reason: '사유만 남은 최신 판정',
+    });
+  });
+
+  it('숫자·객체·배열 action 또는 사유는 비어 있는 값으로 보고 다음 후보를 쓴다', () => {
+    expect(resolveJonggaAiEvaluation(
+      [
+        { action: ['BUY'], reason: { text: '잘못된 사유' } },
+        { action: 'SELL', reason: '다음 유효한 판정' },
+        { action: 123, reason: ['잘못된 세부 사유'] },
+      ],
+      123,
+    )).toEqual({ action: 'SELL', confidence: undefined, model: undefined, reason: '다음 유효한 판정' });
+  });
+
+  it('legacy 본문만으로는 새 매매 추천을 만들지 않는다', () => {
+    expect(resolveJonggaAiEvaluation([], '사유만 남은 오래된 본문')).toBeNull();
+  });
+
+  it('NaN·Infinity confidence는 출력 경계에서 버리고 문자열·null만 보존한다', () => {
+    for (const confidence of [NaN, Infinity, -Infinity, true, {}]) {
+      expect(resolveJonggaAiEvaluation(
+        [{ action: 'BUY', reason: {}, confidence, model: {} }],
+        '',
+      )).toEqual({ action: 'BUY', confidence: undefined, model: undefined, reason: undefined });
+    }
+
+    expect(resolveJonggaAiEvaluation(
+      [{ action: 'BUY', reason: '근거', confidence: '80', model: 'gemini' }],
+      '',
+    )).toEqual({ action: 'BUY', confidence: '80', model: 'gemini', reason: '근거' });
+    expect(resolveJonggaAiEvaluation(
+      [{ action: 'BUY', reason: '근거', confidence: null, model: 'gemini' }],
+      '',
+    )).toEqual({ action: 'BUY', confidence: null, model: 'gemini', reason: '근거' });
+  });
+});
+
+NEW FILE frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-followup.test.tsx
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import JonggaV2Page from './page';
+
+const api = vi.hoisted(() => ({ fetchAPI: vi.fn() }));
+
+const SIGNAL = {
+  stock_code: '000660',
+  stock_name: 'SK하이닉스',
+  market: 'KOSPI',
+  sector: '반도체',
+  grade: 'A',
+  score: {
+    news: 3, volume: 3, chart: 2, candle: 1, consolidation: 1, timing: 0, supply: 2,
+    total: 15,
+    llm_reason: '오래된 BUY 본문은 카드 본문에 보이면 안 됩니다.',
+    ai_evaluation: { action: 'BUY', confidence: 91, reason: '오래된 BUY 판정입니다.' },
+  },
+  score_details: {
+    ai_evaluation: { action: 'SELL', confidence: 88, reason: '오래된 SELL 판정입니다.' },
+    rise_pct: 3.4,
+  },
+  ai_evaluation: { action: 'HOLD', confidence: 0, reason: '새 HOLD 판정 사유입니다.' },
+  checklist: { has_news: true, news_sources: [], is_new_high: false, is_breakout: true, supply_positive: true, volume_surge: true },
+  current_price: 184_500,
+  entry_price: 176_000,
+  stop_price: 170_720,
+  target_price: 184_800,
+  change_pct: 3.4,
+  trading_value: 1_260_000_000_000,
+  signal_date: '2026-09-18',
+};
+
+vi.mock('@/lib/api', () => ({ fetchAPI: api.fetchAPI }));
+vi.mock('@/hooks/useAdmin', () => ({ useAdmin: () => ({ isAdmin: false, isLoading: false }) }));
+vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
+vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null }));
+
+async function renderPage(): Promise<HTMLElement> {
+  render(<JonggaV2Page />);
+  const name = await screen.findByText('SK하이닉스');
+  const card = name.closest('div.rounded-2xl.border');
+  if (!card) throw new Error('종목 카드를 찾지 못했습니다.');
+  return card as HTMLElement;
+}
+
+beforeEach(() => {
+  api.fetchAPI.mockReset();
+  api.fetchAPI.mockImplementation(async (path: string) => {
+    if (path === '/api/kr/jongga-v2/dates') return [];
+    if (path === '/api/kr/jongga-v2/latest') {
+      return {
+        date: '2026-09-18', total_candidates: 1, filtered_count: 1,
+        signals: [SIGNAL], updated_at: '2026-09-18T15:40:00+09:00', status: 'ok',
+      };
+    }
+    if (path === '/api/kr/jongga-v2/status') return { is_running: false };
+    return {};
+  });
+});
+
+describe('[JONGGA-024/028] 카드의 실제 차트와 AI 원천', () => {
+  it('최신 HOLD 판정의 사유를 카드 배지와 본문에서 함께 쓴다', async () => {
+    const card = await renderPage();
+
+    expect(within(card).getByText('HOLD')).toBeTruthy();
+    expect(within(card).getByText('0%')).toBeTruthy();
+    expect(within(card).getByText('새 HOLD 판정 사유입니다.')).toBeTruthy();
+    expect(within(card).queryByText('오래된 BUY 본문은 카드 본문에 보이면 안 됩니다.')).toBeNull();
+  });
+
+  it('종가 타일은 최신 current_price가 아니라 신호일 entry_price와 날짜를 함께 표시한다', async () => {
+    const card = await renderPage();
+
+    const signalClose = within(card).getByText('2026-09-18 종가').closest('.text-center') as HTMLElement;
+    expect(within(signalClose).getByText('₩176,000')).toBeTruthy();
+    expect(within(signalClose).queryByText('₩184,500')).toBeNull();
+  });
+
+  it('고정 미니 선 대신 실제 700px 차트를 가로 스크롤로 열고 실패해도 외부 링크를 남긴다', async () => {
+    await renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'SK하이닉스 차트 크게 보기' }));
+    const dialog = await screen.findByRole('dialog', { name: 'SK하이닉스' });
+    const chart = within(dialog).getByRole('img', { name: 'SK하이닉스 000660 일봉 차트' });
+    const scrollArea = chart.parentElement as HTMLElement;
+
+    expect(chart.classList.contains('min-w-[700px]')).toBe(true);
+    expect(scrollArea.classList.contains('overflow-x-auto')).toBe(true);
+    expect(scrollArea.getAttribute('tabindex')).toBe('0');
+    expect(scrollArea.getAttribute('aria-describedby')).toBeTruthy();
+    expect(dialog.querySelector('polyline')).toBeNull();
+
+    fireEvent.error(chart);
+    expect(within(dialog).getByText(/차트를 불러오지 못했습니다/)).toBeTruthy();
+    expect(within(dialog).getByRole('link', { name: '네이버 금융' }).getAttribute('href')).toContain('000660');
+    expect(within(dialog).getByRole('link', { name: '토스 증권' }).getAttribute('href')).toContain('000660');
+  });
+});
+
+NEW FILE frontend/src/app/dashboard/kr/page.regression-fe-031.test.tsx
+// Regression: [FE-031] 관리자 갱신 실패가 콘솔에만 남던 문제
+//
+// Market Gate 갱신의 일반 오류와 Refresh Data의 HTTP/본문/네트워크/timeout 오류가
+// 사용자에게 보이지 않았다. Refresh Data도 공용 fetchAPI를 거쳐야 같은 10초 timeout과
+// 오류 계약을 쓰며, 403은 기존 권한 회수 모달을 계속 사용한다.
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import KRDashboardPage from './page';
+
+const { mockUseAdmin, mockUpdateMarketGate } = vi.hoisted(() => ({
+  mockUseAdmin: vi.fn(() => ({ isAdmin: true, isLoading: false })),
+  mockUpdateMarketGate: vi.fn(),
+}));
+
+const fetchAPIMock = vi.fn();
+
+vi.mock('@/hooks/useAdmin', () => ({
+  useAdmin: () => mockUseAdmin(),
+}));
+
+vi.mock('@/lib/api', () => ({
+  fetchAPI: (...args: unknown[]) => fetchAPIMock(...args),
+  krAPI: {
+    getMarketGate: vi.fn(async () => ({ status: 'GREEN', score: 70, message: '' })),
+    getSignals: vi.fn(async () => ({ signals: [], count: 0 })),
+    getDataStatus: vi.fn(async () => ({ data: {} })),
+    updateMarketGate: (...args: unknown[]) => mockUpdateMarketGate(...args),
+  },
+}));
+
+const BACKTEST_SUMMARY = {
+  vcp: { status: 'GOOD', count: 12, win_rate: 55, avg_return: 3.1 },
+  closing_bet: { status: 'GOOD', count: 8, win_rate: 62, avg_return: 2.4, candidates: [] },
+};
+
+const apiError = (message: string, status?: number) =>
+  status === undefined ? new Error(message) : Object.assign(new Error(message), { status });
+
+const refreshButton = (): HTMLButtonElement =>
+  screen.getByRole('button', { name: /Refresh Data/ });
+
+const renderReadyDashboard = async (): Promise<void> => {
+  render(<KRDashboardPage />);
+  await screen.findByRole('button', { name: /Refresh Data/ });
+  await waitFor(() => expect(screen.getAllByText('12 trades').length).toBeGreaterThan(0));
+};
+
+beforeEach(() => {
+  fetchAPIMock.mockReset();
+  fetchAPIMock.mockResolvedValue(BACKTEST_SUMMARY);
+  mockUpdateMarketGate.mockReset();
+  mockUpdateMarketGate.mockResolvedValue({});
+  mockUseAdmin.mockImplementation(() => ({ isAdmin: true, isLoading: false }));
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ interval: 30 }) })));
+});
+
+describe('[FE-031] 관리자 갱신 실패 안내', () => {
+  it('Market Gate 갱신의 일반 오류를 alert로 알리고 스피너를 푼다', async () => {
+    mockUpdateMarketGate.mockRejectedValueOnce(new Error('갱신 실패'));
+    await renderReadyDashboard();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Market Gate 새로고침' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('갱신 실패');
+    expect(screen.getByRole('button', { name: 'Market Gate 새로고침' })).not.toBeDisabled();
+  });
+
+  it.each([
+    ['HTTP 500', apiError('API Error: 500', 500)],
+    ['HTML 500', apiError('API Error: 500', 500)],
+    ['네트워크', new TypeError('Network failed')],
+    ['10초 timeout', new Error('Request timed out')],
+  ])('Refresh Data %s 오류를 alert로 알리고 공용 fetchAPI를 사용한다', async (_kind, error) => {
+    fetchAPIMock.mockImplementation(async (path: string) => {
+      if (path === '/api/kr/refresh') throw error;
+      return BACKTEST_SUMMARY;
+    });
+    await renderReadyDashboard();
+
+    fireEvent.click(refreshButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('데이터 갱신');
+    expect(fetchAPIMock).toHaveBeenCalledWith(
+      '/api/kr/refresh',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(refreshButton()).not.toBeDisabled();
+  });
+
+  it('실패 뒤 재시도가 성공하면 오류를 지운다', async () => {
+    fetchAPIMock.mockImplementationOnce(async (path: string) => {
+      if (path === '/api/kr/backtest-summary') return BACKTEST_SUMMARY;
+      return BACKTEST_SUMMARY;
+    }).mockRejectedValueOnce(new Error('Request timed out')).mockResolvedValue(BACKTEST_SUMMARY);
+    await renderReadyDashboard();
+
+    const button = refreshButton();
+    fireEvent.click(button);
+    await screen.findByRole('alert');
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(refreshButton()).not.toBeDisabled();
+  });
+
+  it('Refresh Data 403은 기존 권한 회수 동작을 보존한다', async () => {
+    fetchAPIMock.mockImplementation(async (path: string) => {
+      if (path === '/api/kr/refresh') throw apiError('Forbidden', 403);
+      return BACKTEST_SUMMARY;
+    });
+    await renderReadyDashboard();
+
+    fireEvent.click(refreshButton());
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent('권한 없음');
+    expect(screen.queryByRole('button', { name: /Refresh Data/ })).toBeNull();
+  });
+});
+
+NEW FILE frontend/src/lib/api.body-timeout.test.ts
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchAPI } from './api';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+describe('fetchAPI response body deadline', () => {
+  it.each([
+    [200, 'Request timed out'],
+    [500, 'API Error: 500'],
+  ])('keeps the deadline while a %s response body is stalled', async (status, message) => {
+    vi.useFakeTimers();
+    let bodyController!: ReadableStreamDefaultController<Uint8Array>;
+    let aborted = false;
+    const body = new ReadableStream<Uint8Array>({ start(controller) { bodyController = controller; } });
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => {
+      options.signal?.addEventListener('abort', () => {
+        aborted = true;
+        bodyController.error(new DOMException('Response aborted', 'AbortError'));
+      });
+      // Headers arrive immediately; the actual Response.json() waits for the body.
+      return new Response(body, { status, headers: { 'Content-Type': 'application/json' } });
+    }));
+    let failure: unknown;
+    const settled = fetchAPI('/api/kr/refresh', { timeout: 10 }).catch(error => { failure = error; });
+    try {
+      await vi.advanceTimersByTimeAsync(10);
+      expect(failure).toMatchObject({ message });
+      expect(aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      if (!aborted) bodyController.error(new Error('Test cleanup'));
+      await settled;
+    }
+  });
+});
+
+NEW FILE tests/app/test_jongga_followup_contract.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""[JONGGA-028] 종가 AI 판정 원천의 우선순위를 고정한다."""
+
+import math
+
+from app.routes.kr_market_jongga_ai_payload_helpers import (
+    _build_ai_signal_from_jongga_signal,
+    _extract_jongga_ai_evaluation,
+)
+
+
+def test_jongga_ai_evaluation_prefers_valid_top_level_verdict_and_reason():
+    signal = {
+        "stock_code": "000660",
+        "stock_name": "SK하이닉스",
+        "ai_evaluation": {"action": "HOLD", "confidence": 0, "reason": "새 판정 사유"},
+        "score": {
+            "total": 15,
+            "llm_reason": "오래된 본문 사유",
+            "ai_evaluation": {"action": "BUY", "confidence": 91, "reason": "오래된 score 사유"},
+        },
+        "score_details": {
+            "ai_evaluation": {"action": "SELL", "confidence": 88, "reason": "오래된 details 사유"},
+        },
+    }
+
+    evaluation = _extract_jongga_ai_evaluation(signal)
+    ai_signal = _build_ai_signal_from_jongga_signal(
+        signal,
+        include_without_ai=False,
+        allow_numeric_score_fallback=True,
+    )
+
+    assert evaluation == {"action": "HOLD", "confidence": 0, "reason": "새 판정 사유"}
+    assert ai_signal["gemini_recommendation"] == evaluation
+
+
+def test_jongga_ai_evaluation_keeps_the_first_reason_only_verdict_as_hold():
+    signal = {
+        "ai_evaluation": {"action": "UNKNOWN", "confidence": 0, "reason": "잘못된 최신 판정"},
+        "score": {"llm_reason": "호환용 오래된 본문 사유"},
+        "score_details": {"ai_evaluation": {"action": "BUY", "reason": "더 오래된 판정"}},
+    }
+
+    evaluation = _extract_jongga_ai_evaluation(signal)
+
+    assert evaluation == {
+        "action": "HOLD",
+        "confidence": 0,
+        "reason": "잘못된 최신 판정",
+    }
+
+
+def test_jongga_ai_evaluation_uses_legacy_reason_only_for_the_first_valid_action():
+    signal = {
+        "ai_evaluation": {"action": "HOLD", "confidence": 0, "reason": ""},
+        "score": {
+            "llm_reason": "호환용 오래된 본문 사유",
+            "ai_evaluation": {"action": "BUY", "confidence": 91, "reason": "더 오래된 판정"},
+        },
+    }
+
+    assert _extract_jongga_ai_evaluation(signal) == {
+        "action": "HOLD",
+        "confidence": 0,
+        "reason": "호환용 오래된 본문 사유",
+    }
+
+
+def test_jongga_ai_evaluation_accepts_a_bare_reason_at_its_original_priority():
+    signal = {
+        "ai_evaluation": "최상위 사유만 남은 판정",
+        "score": {"ai_evaluation": {"action": "BUY", "reason": "오래된 매수 판정"}},
+    }
+
+    assert _extract_jongga_ai_evaluation(signal) == {
+        "action": "HOLD",
+        "confidence": None,
+        "reason": "최상위 사유만 남은 판정",
+    }
+
+
+def test_jongga_ai_evaluation_ignores_non_string_actions_and_reasons():
+    signal = {
+        "ai_evaluation": {"action": ["BUY"], "reason": {"text": "잘못된 사유"}},
+        "score": {"ai_evaluation": {"action": "SELL", "reason": "다음 유효한 판정"}},
+        "score_details": {"ai_evaluation": {"action": 123, "reason": ["잘못된 세부 사유"]}},
+    }
+
+    assert _extract_jongga_ai_evaluation(signal) == {
+        "action": "SELL",
+        "reason": "다음 유효한 판정",
+    }
+
+
+def test_jongga_ai_evaluation_skips_an_invalid_action_without_a_string_reason():
+    signal = {
+        "ai_evaluation": {"action": "UNKNOWN", "reason": ""},
+        "score": {"ai_evaluation": {"action": "BUY", "reason": "다음 유효한 판정"}},
+    }
+
+    assert _extract_jongga_ai_evaluation(signal) == {
+        "action": "BUY",
+        "reason": "다음 유효한 판정",
+    }
+
+
+def test_jongga_ai_evaluation_keeps_only_normalized_transport_fields():
+    signal = {
+        "ai_evaluation": {
+            "action": "BUY",
+            "reason": "수급이 개선되었습니다.",
+            "confidence": 82.5,
+            "model": "gemini-3.7-flash",
+            "provider_payload": {"unsafe": "metadata"},
+        },
+    }
+
+    assert _extract_jongga_ai_evaluation(signal) == {
+        "action": "BUY",
+        "reason": "수급이 개선되었습니다.",
+        "confidence": 82.5,
+        "model": "gemini-3.7-flash",
+    }
+
+
+def test_jongga_ai_evaluation_discards_malformed_reason_confidence_and_model_values():
+    malformed_values = [True, {"value": 80}, math.nan, math.inf, -math.inf]
+
+    for confidence in malformed_values:
+        signal = {
+            "ai_evaluation": {
+                "action": "BUY",
+                "reason": {},
+                "confidence": confidence,
+                "model": {},
+            },
+        }
+
+        assert _extract_jongga_ai_evaluation(signal) == {"action": "BUY"}
+
+
+def test_jongga_ai_evaluation_preserves_string_or_null_confidence_only():
+    for confidence in ("80", None):
+        signal = {
+            "ai_evaluation": {
+                "action": "BUY",
+                "reason": "근거",
+                "confidence": confidence,
+                "model": "gemini",
+            },
+        }
+
+        assert _extract_jongga_ai_evaluation(signal) == {
+            "action": "BUY",
+            "reason": "근거",
+            "confidence": confidence,
+            "model": "gemini",
+        }
+
+
+def test_jongga_ai_evaluation_drops_integers_outside_the_javascript_number_range():
+    for confidence in (10**400, -(10**400)):
+        signal = {
+            "ai_evaluation": {
+                "action": "BUY",
+                "reason": "근거",
+                "confidence": confidence,
+            },
+        }
+
+        assert _extract_jongga_ai_evaluation(signal) == {
+            "action": "BUY",
+            "reason": "근거",
+        }

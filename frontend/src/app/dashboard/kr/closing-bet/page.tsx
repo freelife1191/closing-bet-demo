@@ -12,7 +12,7 @@ import GradeGuideModal from '@/app/components/GradeGuideModal';
 import Tooltip from '@/app/components/Tooltip';
 import { useAdmin } from '@/hooks/useAdmin';
 import { formatMarketAmount } from '../formatMarketAmount';
-import { CHART_PERIODS, stockChartUrl } from './displayHelpers';
+import { CHART_PERIODS, resolveJonggaAiEvaluation, stockChartUrl } from './displayHelpers';
 import { PriceRangeBar, StatBox } from './displayPrimitives';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
 
@@ -38,16 +38,6 @@ const COSTLY_WARNING = '외부 API 를 호출하므로 실제 요금이 발생�
 const costlyMessage = (body: string) => `${body}\n\n${COSTLY_WARNING}`;
 
 
-// 응답은 이 판정을 최상위와 score 두 자리에 담는다. 지난 자료는 score 안에만 넣고
-// 최상위를 null 로 두므로 두 자리 모두 null 을 허용해야 한다.
-interface AiEvaluation {
-  action: 'BUY' | 'HOLD' | 'SELL';
-  // [JONGGA-008] 백엔드는 확신도가 없는 상태를 0 이 아니라 null 로 보낸다.
-  confidence?: number | null;
-  model?: string;
-  reason?: string;
-}
-
 interface ScoreDetail {
   news: number;
   volume: number;
@@ -58,7 +48,7 @@ interface ScoreDetail {
   supply: number;
   llm_reason: string;
   total: number;
-  ai_evaluation?: AiEvaluation | null;
+  ai_evaluation?: unknown;
 }
 
 interface BonusBreakdown {
@@ -105,6 +95,7 @@ interface Signal {
   advice?: ExpertAdvice;
   mini_chart?: CandleData[];
   score_details?: {
+    ai_evaluation?: unknown;
     rise_pct?: number;
     volume_ratio?: number;
     foreign_net_buy?: number;
@@ -117,7 +108,7 @@ interface Signal {
     candle?: number;
     consolidation?: number;
   };
-  ai_evaluation?: AiEvaluation | null;
+  ai_evaluation?: unknown;
   themes?: string[]; // 관련 테마 태그 (예: 원전, SMR, 전력인프라)
   signal_date?: string; // 신호가 나온 거래일. 매수가가 어느 날 종가인지 밝히는 데 쓴다
 }
@@ -203,6 +194,7 @@ interface StockDetailInfo {
 function StockChart({ symbol, name }: { symbol: string, name: string }) {
   const [period, setPeriod] = useState<(typeof CHART_PERIODS)[number]>(CHART_PERIODS[0]);
   const [failed, setFailed] = useState(false);
+  const scrollHintId = useId();
 
   return (
     <div className="flex flex-col h-full bg-[#131722]">
@@ -223,7 +215,13 @@ function StockChart({ symbol, name }: { symbol: string, name: string }) {
         <span className="ml-auto text-[11px] text-gray-500">네이버 금융 제공</span>
       </div>
 
-      <div className="flex items-center justify-center p-4">
+      <div
+        aria-describedby={scrollHintId}
+        aria-label={`${name} 가로 스크롤 차트`}
+        className="overflow-x-auto p-4"
+        role="region"
+        tabIndex={0}
+      >
         {failed ? (
           <div className="text-center px-6">
             <i className="fas fa-chart-line text-4xl text-gray-600 mb-3"></i>
@@ -240,10 +238,11 @@ function StockChart({ symbol, name }: { symbol: string, name: string }) {
             onError={() => setFailed(true)}
             width={700}
             height={289}
-            className="max-w-full h-auto object-contain"
+            className="min-w-[700px] max-w-none h-auto object-contain"
           />
         )}
       </div>
+      <p id={scrollHintId} className="sr-only">좌우 화살표 키로 차트를 가로로 스크롤할 수 있습니다.</p>
 
       <div className="flex gap-3 p-4 bg-[#1c1c1e] border-t border-white/5">
         <a
@@ -1995,11 +1994,12 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
 
   const style = gradeStyles[signal.grade] || gradeStyles.D;
 
-  // [JONGGA-016] 판정은 응답의 두 자리에 담긴다. 지난 자료는 score 안에만 넣고 최상위를
-  // null 로 두므로, 최상위만 읽으면 판정과 확신도가 함께 사라진다. 그 빈자리를 llm_reason
-  // 텍스트로 추정하던 폴백은 걷어냈다. 부정 맥락의 「상승」과 「매수」까지 BUY 로 읽어
-  // 아홉 건 가운데 일곱 건을 틀렸다. 경위는 page.regression-jongga-016.test.tsx 에 있다.
-  const aiEval = signal.ai_evaluation ?? signal.score.ai_evaluation;
+  // [JONGGA-028] 새 판정은 최상위, 과거 판정은 score·score_details에 남는다. Flask의
+  // 추출기와 같은 순서를 써야 카드 배지와 AI 분석 응답이 갈라지지 않는다.
+  const aiEval = resolveJonggaAiEvaluation(
+    [signal.ai_evaluation, signal.score.ai_evaluation, signal.score_details?.ai_evaluation],
+    signal.score.llm_reason,
+  );
 
   // [JONGGA-004] 여기서 등급으로 확신도를 지어내지 않는다. AI 결과가 없는 상태는
   // aiEval 이 없는 것으로 두고, 렌더 쪽에서 대기 상태로 표시한다.
@@ -2009,6 +2009,8 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
   // 무관하다. 두 값이 나란히 보이므로 어느 쪽이 기준인지 화면에 적어 둔다.
   const entryPrice = Number.isFinite(signal.entry_price) && signal.entry_price > 0
     ? signal.entry_price : signal.buy_price || 0;
+  const signalClosePrice = Number.isFinite(signal.entry_price) && signal.entry_price > 0
+    ? signal.entry_price : null;
   const basePrice = Math.round(entryPrice);
   const pctFromBase = (price?: number) => {
     if (!(basePrice > 0) || !price) return null;
@@ -2079,13 +2081,13 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </div>
             <div className="text-center">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
-                종가
+                {signal.signal_date ? `${signal.signal_date} 종가` : '신호일 종가'}
                 <Tooltip content="신호가 나온 거래일의 종가입니다. 실시간 시세와 다를 수 있으며 현재 시세는 「상세 분석 보기」에서 확인하세요.">
                   <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                 </Tooltip>
               </div>
               <div className="text-sm font-bold text-white">
-                ₩{signal.current_price?.toLocaleString() || '-'}
+                {signalClosePrice ? `₩${signalClosePrice.toLocaleString()}` : '-'}
               </div>
             </div>
             <div className="text-center">
@@ -2165,52 +2167,16 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </div>
           </div>
 
-          {/* Chart Area */}
-          {/* Chart Area */}
-          <div data-testid="mini-chart" className="relative h-24 bg-[#131722] rounded-xl overflow-hidden mb-2 cursor-pointer group/chart" onClick={onOpenChart}>
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/10 to-transparent" />
-
-            {/* SVG 심플 라인 차트 */}
-            <svg viewBox="0 0 100 40" className="w-full h-16 relative z-10">
-              <defs>
-                <linearGradient id={`gradient-${signal.stock_code}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor={signal.change_pct >= 0 ? "#10b981" : "#ef4444"} stopOpacity="0.5" />
-                  <stop offset="100%" stopColor={signal.change_pct >= 0 ? "#10b981" : "#ef4444"} stopOpacity="1" />
-                </linearGradient>
-              </defs>
-              {/* 상승 패턴 라인 */}
-              <polyline
-                fill="none"
-                stroke={`url(#gradient-${signal.stock_code})`}
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                points={signal.change_pct >= 0
-                  ? "5,35 15,30 25,28 35,25 45,22 55,18 65,15 75,12 85,8 95,5"
-                  : "5,5 15,8 25,12 35,15 45,18 55,22 65,25 75,28 85,30 95,35"
-                }
-              />
-              {/* 마지막 점 강조 */}
-              <circle
-                cx={signal.change_pct >= 0 ? "95" : "95"}
-                cy={signal.change_pct >= 0 ? "5" : "35"}
-                r="3"
-                fill={signal.change_pct >= 0 ? "#10b981" : "#ef4444"}
-              />
-            </svg>
-
-            {/* 상승률 오버레이 */}
-            <div className={`absolute bottom-2 right-2 text-lg font-bold ${signal.change_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {signal.change_pct >= 0 ? '↑' : '↓'} {Math.abs(signal.change_pct)?.toFixed(1)}%
-            </div>
-
-            <div className="absolute top-2 right-2 z-20 opacity-0 group-hover/chart:opacity-100 transition-opacity">
-              <span className="px-2 py-1 bg-gray-800/80 rounded text-[10px] text-white backdrop-blur">
-                <i className="fas fa-expand-arrows-alt mr-1"></i> 크게 보기
-              </span>
-            </div>
-          </div>
+          <button
+            type="button"
+            data-testid="mini-chart"
+            aria-label={`${signal.stock_name} 차트 크게 보기`}
+            onClick={onOpenChart}
+            className="flex h-24 w-full items-center justify-center gap-2 rounded-xl bg-[#131722] text-xs font-semibold text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <i className="fas fa-chart-line text-indigo-400"></i>
+            실제 차트 크게 보기
+          </button>
 
         </div>
 
@@ -2243,7 +2209,7 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               )}
             </h3>
             <p className="text-sm text-gray-300 leading-relaxed">
-              {signal.score.llm_reason || "AI 분석 대기 중입니다..."}
+              {aiEval?.reason || signal.score.llm_reason || "AI 분석 대기 중입니다..."}
             </p>
             {signal.score.llm_reason && (
               <p className="mt-2 text-xs text-gray-500 leading-relaxed">

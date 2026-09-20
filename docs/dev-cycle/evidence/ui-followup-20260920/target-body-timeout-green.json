@@ -1,0 +1,20 @@
+{
+  "stage": "target:body-timeout-green",
+  "started_at": "2026-09-20T12:06:08.111946+00:00",
+  "ended_at": "2026-09-20T12:06:09.972593+00:00",
+  "pid": 18100,
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "src/lib/api.body-timeout.test.ts",
+    "src/lib/api.test.ts",
+    "src/app/components/BuyStockModal.jongga-followup.test.tsx",
+    "src/app/dashboard/kr/page.regression-fe-031.test.tsx"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/frontend",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 1.86
+}

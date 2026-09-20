@@ -1,0 +1,274 @@
+{
+  "lint-qa-ready.log": {
+    "compressed": "lint-qa-ready.log.gz",
+    "sha256": "e6399f06efdf8ee6d89794275211e264a8b1a89e23e61ceec184c02731848c9d"
+  },
+  "typecheck-common2.log": {
+    "compressed": "typecheck-common2.log.gz",
+    "sha256": "2e06179f2103beee032f98139d3fd4e362caf9b87c775eac2fcfdbac4f01cac0"
+  },
+  "target-common-green2.log": {
+    "compressed": "target-common-green2.log.gz",
+    "sha256": "4237df3b8a69c9b30ba4e020d820aff0e0a05f095719573372cc6d18133f83a5"
+  },
+  "build-integration.log": {
+    "compressed": "build-integration.log.gz",
+    "sha256": "59afe6aafbfdb7da38a61abeeaf1d79dc776d3510c91b91c178b9fe0f950468e"
+  },
+  "pytest-baseline2.log": {
+    "compressed": "pytest-baseline2.log.gz",
+    "sha256": "0c4bef6f341b50fc2935bbddf625ac4112a5cd94d053c85c25c35ac35a711d26"
+  },
+  "typecheck-pre-integration.log": {
+    "compressed": "typecheck-pre-integration.log.gz",
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c"
+  },
+  "typecheck-final.log": {
+    "compressed": "typecheck-final.log.gz",
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c"
+  },
+  "vitest-validated.log": {
+    "compressed": "vitest-validated.log.gz",
+    "sha256": "c42bf1a3e8169d999e95ababab195d09493b678c177c0e839dfec0f50f951fcd"
+  },
+  "pytarget-ai-overflow-red.log": {
+    "compressed": "pytarget-ai-overflow-red.log.gz",
+    "sha256": "3e1f393fc1b555070cd79b519c39423febc1cf13f224b84719ad0a4f6bb5a586"
+  },
+  "pytarget-jongga-green.log": {
+    "compressed": "pytarget-jongga-green.log.gz",
+    "sha256": "95499a5a1d533b234f89d82e4e11cfb95bd47973f2649abc58c9bdc25aee9b50"
+  },
+  "target-body-timeout-green.log": {
+    "compressed": "target-body-timeout-green.log.gz",
+    "sha256": "05caed246c027534bb627bd8c7e41e274c18dcf7d045e77eb053fa8a51d67a7d"
+  },
+  "vitest-qa-ready.log": {
+    "compressed": "vitest-qa-ready.log.gz",
+    "sha256": "905d24229400aa0a54cbdec3bb0a9fd9ea9dec270a9fff51c0e7c5c4849923e0"
+  },
+  "build-integration2.log": {
+    "compressed": "build-integration2.log.gz",
+    "sha256": "36037364ae21a9a4fad1db56a18fe8d6b868ec212f30d9df376b15b834fb8850"
+  },
+  "vitest-integration2.log": {
+    "compressed": "vitest-integration2.log.gz",
+    "sha256": "1401163bbe35ccff3d6ef3bd8fbc82b2cffc6f4c61ae6021e6cc86163debc7f7"
+  },
+  "build-integration3.log": {
+    "compressed": "build-integration3.log.gz",
+    "sha256": "aabe5fb142216f5d1f12a0505f8bf013b0ccb0ba0d09090f40e2e723bb6a6000"
+  },
+  "pytarget-jongga-red.log": {
+    "compressed": "pytarget-jongga-red.log.gz",
+    "sha256": "27a58dbf2e80bfc1201dc360ba416a4ecf607c4fd151662d9eaafcb8c688e39c"
+  },
+  "target-common-red.log": {
+    "compressed": "target-common-red.log.gz",
+    "sha256": "c8192c733655433cc04bec1e65fd6a4bdcc1df641b64ded1aec1c2a6ad905b8b"
+  },
+  "target-refresh-valid-green.log": {
+    "compressed": "target-refresh-valid-green.log.gz",
+    "sha256": "21db27744fdc4cb11b3ce9d999e8c3a5e64130ae22b1fd7793c2923abd695176"
+  },
+  "build-validated.log": {
+    "compressed": "build-validated.log.gz",
+    "sha256": "ddaace82fe5bcb809a47c5e86d5e85f0e77fbe90df4d776270afc7a8b26cf203"
+  },
+  "target-common-green.log": {
+    "compressed": "target-common-green.log.gz",
+    "sha256": "bdf44370a238e1449bfcb4b6317796d655fe2ec236285be724d43a1e6c3f841a"
+  },
+  "fixture-integration.log": {
+    "compressed": "fixture-integration.log.gz",
+    "sha256": "e2e80e3e03f0b1e52f49d7e652ea51a60d37471385e0644b5d30a62ece69075d"
+  },
+  "lint-review2.log": {
+    "compressed": "lint-review2.log.gz",
+    "sha256": "8f1a27e54a1d048315e75f7017bc20fe136497792c760c498dd8d962ed0b8060"
+  },
+  "target-chart-export-fix.log": {
+    "compressed": "target-chart-export-fix.log.gz",
+    "sha256": "5c45822d956e7a0e19d64cd38f683b86946f1837fbc7c4cbc3ddb40a990df610"
+  },
+  "target-refresh-valid-red.log": {
+    "compressed": "target-refresh-valid-red.log.gz",
+    "sha256": "ae0532f9ab05218f1e7b20765e1d382e1f50d5885fbb79289641e45bac5d59a1"
+  },
+  "vitest-integration.log": {
+    "compressed": "vitest-integration.log.gz",
+    "sha256": "a31f58a15a58ccfa46845424c489ec67b120c89426833d2b8586cfc66c56d067"
+  },
+  "target-jongga-green.log": {
+    "compressed": "target-jongga-green.log.gz",
+    "sha256": "a6146a346a24df1807a4f3438a720f8b01976e22e7bc7b0030c3209925ca106b"
+  },
+  "target-jongga-red.log": {
+    "compressed": "target-jongga-red.log.gz",
+    "sha256": "da30f236879ba4a30d1a7a463675ddd6a7aad138b052ab8d622378cf5928dde3"
+  },
+  "vitest-final.log": {
+    "compressed": "vitest-final.log.gz",
+    "sha256": "0ad3df201ca0a4839fc148bed2cc34c99edc6626a7392baff35bd7fbd33baf63"
+  },
+  "lint-review4.log": {
+    "compressed": "lint-review4.log.gz",
+    "sha256": "8f1a27e54a1d048315e75f7017bc20fe136497792c760c498dd8d962ed0b8060"
+  },
+  "vitest-baseline.log": {
+    "compressed": "vitest-baseline.log.gz",
+    "sha256": "057f3c38ac3f90c0a7c9ecf5d2d6cdd9295326401ef5187d056f0ad2e0cc8adf"
+  },
+  "typecheck-review3.log": {
+    "compressed": "typecheck-review3.log.gz",
+    "sha256": "0aab773954f616b067663fa47cf5af16ba50e03e87ae92a4a597231443d7e592"
+  },
+  "typecheck-qa-ready.log": {
+    "compressed": "typecheck-qa-ready.log.gz",
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c"
+  },
+  "pytest-integration.log": {
+    "compressed": "pytest-integration.log.gz",
+    "sha256": "ae0cfd7c83c26d333a2f40f21a2e7c3d36513be62798342fc484d97d9e7bcb5c"
+  },
+  "lint-integration.log": {
+    "compressed": "lint-integration.log.gz",
+    "sha256": "9760507883b0bc9e8acc46e1ea85dcac38efae2c02d21269f49892d127ca6dfe"
+  },
+  "typecheck-validated.log": {
+    "compressed": "typecheck-validated.log.gz",
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c"
+  },
+  "target-refresh-green.log": {
+    "compressed": "target-refresh-green.log.gz",
+    "sha256": "f504d06bd701f52b95412498e61228662d7eadb94d1f9289ba82495e2d27ca4c"
+  },
+  "build-qa-ready.log": {
+    "compressed": "build-qa-ready.log.gz",
+    "sha256": "ba1509850463cb5f4d66a530007ddb660a33210c127eef0197b98f084b18fa71"
+  },
+  "typecheck-review4.log": {
+    "compressed": "typecheck-review4.log.gz",
+    "sha256": "0aab773954f616b067663fa47cf5af16ba50e03e87ae92a4a597231443d7e592"
+  },
+  "target-buy-timeout-valid-red.log": {
+    "compressed": "target-buy-timeout-valid-red.log.gz",
+    "sha256": "cd1870b08d72b59da4ea359b96634098321df12d20e0c1f0c31a1862b38bf0dd"
+  },
+  "pytarget-ai-output-green.log": {
+    "compressed": "pytarget-ai-output-green.log.gz",
+    "sha256": "7cddbbb971119bd7675eb705b4da66e1a163e9adf4f7bcaa61a5cd53261c1be3"
+  },
+  "pytarget-jongga-final.log": {
+    "compressed": "pytarget-jongga-final.log.gz",
+    "sha256": "ec9b829a182c66625f43288ae2889b1f2ed1ec934c6a302b10937345a2235f7c"
+  },
+  "target-chart-harness.log": {
+    "compressed": "target-chart-harness.log.gz",
+    "sha256": "f930cb4ef68d98e65c8aa19b63ec674a63cc744607293a80171948c6bf9ef6ac"
+  },
+  "target-buy-timeout-green.log": {
+    "compressed": "target-buy-timeout-green.log.gz",
+    "sha256": "9a3fa0ff3f4eccaaf811eecd10b56bdefbec8f48c7db963d095148a6d08ed34a"
+  },
+  "typecheck-integration.log": {
+    "compressed": "typecheck-integration.log.gz",
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c"
+  },
+  "target-body-timeout-red.log": {
+    "compressed": "target-body-timeout-red.log.gz",
+    "sha256": "682e1505325cffb2ef7c593eb697e379b63b6dc9a292b14086943be980f3af5d"
+  },
+  "target-performance-timing.log": {
+    "compressed": "target-performance-timing.log.gz",
+    "sha256": "bbe2eabd3bcff6edcd8e214a49adaf99afdb57a73410038864c8c6f2ef6b28f9"
+  },
+  "target-buy-timeout-green2.log": {
+    "compressed": "target-buy-timeout-green2.log.gz",
+    "sha256": "4ebc8eed45540b441478355d6d161cae1cac3b2696dd51a7738439eadc4a088d"
+  },
+  "pytarget-ai-output-red.log": {
+    "compressed": "pytarget-ai-output-red.log.gz",
+    "sha256": "e59d0804b38f917868fd0cd2d14ea1e8ea7fd49cea8e85cd3971f73be719082d"
+  },
+  "fixture-baseline.log": {
+    "compressed": "fixture-baseline.log.gz",
+    "sha256": "c0cb96f9e80dee32ab4920f31a8c940ab953cf921f931e36d050e0ac74ca56ec"
+  },
+  "pytest-baseline.log": {
+    "compressed": "pytest-baseline.log.gz",
+    "sha256": "057f3c38ac3f90c0a7c9ecf5d2d6cdd9295326401ef5187d056f0ad2e0cc8adf"
+  },
+  "target-refresh-red.log": {
+    "compressed": "target-refresh-red.log.gz",
+    "sha256": "08e5937459acba0decda63107342a1c1173b9aee9ee162b0ae9bbf76e349fe1a"
+  },
+  "vitest-review4.log": {
+    "compressed": "vitest-review4.log.gz",
+    "sha256": "efad87a71173809d0d1ed6d5f6489453058c6f6b4a0cfb3d02de21f9be44e4e2"
+  },
+  "build-review2.log": {
+    "compressed": "build-review2.log.gz",
+    "sha256": "052afc0b5962be708702b0d598bc59dc38267929bb9306283dc22a4c131a1e56"
+  },
+  "fixture-validated.log": {
+    "compressed": "fixture-validated.log.gz",
+    "sha256": "cffd788ad8319a83ac575f8293aa927415fd19d12224aa6fafcc610bbfbc6cc3"
+  },
+  "pytest-review-final.log": {
+    "compressed": "pytest-review-final.log.gz",
+    "sha256": "335c5a2629fcf073a6900b412d0568f3d3969b87a2b9dfbf4b0e6a5c9f011664"
+  },
+  "target-buy-timeout-red.log": {
+    "compressed": "target-buy-timeout-red.log.gz",
+    "sha256": "90506d8bbd9a6f0b138f658cc3d2edc0875b3fca7ef8a2bf6fc0dc758ec2c50c"
+  },
+  "target-price-date-red.log": {
+    "compressed": "target-price-date-red.log.gz",
+    "sha256": "1df059ba9853fb1bfd9b7089a7cd75da31b964770a206c4a96348b567eee2fd4"
+  },
+  "lint-validated.log": {
+    "compressed": "lint-validated.log.gz",
+    "sha256": "0ac9672714810f13d4eb1a8fd92385a348bc23e76b511980770d1aaea130e339"
+  },
+  "target-ai-output-green.log": {
+    "compressed": "target-ai-output-green.log.gz",
+    "sha256": "69564036914127cbb704e4b7a3ca26928061e028b697f738c27147d4f5927b25"
+  },
+  "target-jongga-final.log": {
+    "compressed": "target-jongga-final.log.gz",
+    "sha256": "13caeb2ee28f636c71e6f9e69bff479e691c0ce902d94f247a213c023ce5c318"
+  },
+  "build-clean-cache.log": {
+    "compressed": "build-clean-cache.log.gz",
+    "sha256": "5920ed6b5db7bc6a327e4838447f90b82d2a6867f1dd1570fdc5db456edd05b3"
+  },
+  "vitest-baseline2.log": {
+    "compressed": "vitest-baseline2.log.gz",
+    "sha256": "7c694c954d6dcc0744e99837bc86d7b349b58442dfb8d81858dc807f69ff53f7"
+  },
+  "pytarget-ai-overflow-green.log": {
+    "compressed": "pytarget-ai-overflow-green.log.gz",
+    "sha256": "080a6aa9c2cb20d1418801980b49581c773f7e67bfccccf769f4b0a82e3905d2"
+  },
+  "vitest-review2.log": {
+    "compressed": "vitest-review2.log.gz",
+    "sha256": "a45feb9b9cfe3f9fa94e617669e2b09a8ec5ace554e671e5576b78d43b139440"
+  },
+  "target-ai-output-red.log": {
+    "compressed": "target-ai-output-red.log.gz",
+    "sha256": "d6ce3cc2a3754c30bcc92ed14dac7cd459230bdea7630ad49d250ca0f422ca35"
+  },
+  "typecheck-common.log": {
+    "compressed": "typecheck-common.log.gz",
+    "sha256": "c6b2f4f630b1884cfe6f50bc450e9d3a45bac8777721160f8d4c326972691404"
+  },
+  "vitest-review3.log": {
+    "compressed": "vitest-review3.log.gz",
+    "sha256": "315141b7184c070914b9a016225752e01dcfe91fb13fe029c35ea4dd1b8ad532"
+  },
+  "target-chart-native-canvas.log": {
+    "compressed": "target-chart-native-canvas.log.gz",
+    "sha256": "7bd3992f798879cedc464d24019b64c1c16471cb73bb8d0533fa0b0134d7c494"
+  }
+}

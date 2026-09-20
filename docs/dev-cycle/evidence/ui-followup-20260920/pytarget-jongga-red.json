@@ -1,0 +1,18 @@
+{
+  "stage": "pytarget:jongga-red",
+  "started_at": "2026-09-20T11:09:29.774580+00:00",
+  "ended_at": "2026-09-20T11:09:31.632509+00:00",
+  "pid": 73935,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/app/test_jongga_followup_contract.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/ui-followup-20260920-24ugppyf",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 1.86
+}

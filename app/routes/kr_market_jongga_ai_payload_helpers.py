@@ -4,49 +4,91 @@
 KR Market 종가베팅 AI 페이로드 변환 헬퍼
 """
 
+import math
+import sys
 from typing import Any, List, Optional
 
 from app.routes.kr_market_jongga_grade_helpers import _sort_jongga_signals
-from app.routes.kr_market_signal_common import _parse_datetime_safe, _safe_float
+from app.routes.kr_market_signal_common import (
+    _VALID_AI_ACTIONS,
+    _normalize_text,
+    _parse_datetime_safe,
+    _safe_float,
+)
 
 
 def _extract_jongga_ai_evaluation(signal: dict) -> Optional[dict]:
     """
     종가베팅 시그널에서 AI 평가 객체를 추출한다.
-    우선순위: score_details.ai_evaluation -> score.ai_evaluation -> ai_evaluation -> score.llm_reason
+    우선순위: ai_evaluation -> score.ai_evaluation -> score_details.ai_evaluation -> score.llm_reason
     """
     if not isinstance(signal, dict):
         return None
 
-    ai_eval: Any = None
-    score_details = signal.get("score_details")
-    if isinstance(score_details, dict):
-        ai_eval = score_details.get("ai_evaluation")
-
     score = signal.get("score")
-    if not ai_eval and isinstance(score, dict):
-        ai_eval = score.get("ai_evaluation")
+    score_details = signal.get("score_details")
+    candidates = [
+        signal.get("ai_evaluation"),
+        score.get("ai_evaluation") if isinstance(score, dict) else None,
+        score_details.get("ai_evaluation") if isinstance(score_details, dict) else None,
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, str):
+            reason = _normalize_text(candidate)
+            if reason:
+                return {"reason": reason, "action": "HOLD", "confidence": None}
+            continue
+        if not isinstance(candidate, dict):
+            continue
+        action = candidate.get("action").strip().upper() if isinstance(candidate.get("action"), str) else ""
+        reason = candidate.get("reason").strip() if isinstance(candidate.get("reason"), str) else ""
+        if action in _VALID_AI_ACTIONS:
+            evaluation = _build_jongga_ai_evaluation(candidate, action, reason)
+        elif reason:
+            evaluation = _build_jongga_ai_evaluation(candidate, "HOLD", reason)
+        else:
+            continue
 
-    if not ai_eval:
-        ai_eval = signal.get("ai_evaluation")
+        if reason:
+            return {**evaluation, "reason": reason}
 
-    if not ai_eval and isinstance(score, dict):
-        ai_eval = score.get("llm_reason")
+        llm_reason = score.get("llm_reason") if isinstance(score, dict) else None
+        legacy_reason = llm_reason.strip() if isinstance(llm_reason, str) else ""
+        return {**evaluation, "reason": legacy_reason} if legacy_reason else evaluation
 
-    if isinstance(ai_eval, str):
-        # 사유 문자열만 남은 기록이라 확신도가 존재하지 않는다.
-        return {"reason": ai_eval, "action": "HOLD", "confidence": None}
-
-    if not isinstance(ai_eval, dict):
-        return None
-
-    # 사유를 ai_evaluation 이 아닌 자리에 저장하는 생산자가 있으므로, 앞에서 고른 객체의
-    # 사유가 비어 있으면 score.llm_reason 으로 한 번 더 내려간다. 원본은 건드리지 않는다.
     llm_reason = score.get("llm_reason") if isinstance(score, dict) else None
-    if not ai_eval.get("reason") and isinstance(llm_reason, str) and llm_reason:
-        return {**ai_eval, "reason": llm_reason}
+    reason = llm_reason.strip() if isinstance(llm_reason, str) else ""
+    if reason:
+        # 사유 문자열만 남은 기록은 매매 판단을 지어내지 않고 관망으로 표시한다.
+        return {"reason": reason, "action": "HOLD", "confidence": None}
 
-    return ai_eval
+    return None
+
+
+def _build_jongga_ai_evaluation(candidate: dict, action: str, reason: str) -> dict:
+    """AI 응답에서 화면과 VCP가 소비하는 네 필드만 안전하게 전달한다."""
+    evaluation = {"action": action}
+    if reason:
+        evaluation["reason"] = reason
+
+    confidence = candidate.get("confidence")
+    if confidence is None:
+        if "confidence" in candidate:
+            evaluation["confidence"] = None
+    elif isinstance(confidence, str):
+        evaluation["confidence"] = confidence
+    elif (
+        not isinstance(confidence, bool)
+        and isinstance(confidence, (int, float))
+        and -sys.float_info.max <= confidence <= sys.float_info.max
+        and math.isfinite(confidence)
+    ):
+        evaluation["confidence"] = confidence
+
+    model = candidate.get("model")
+    if isinstance(model, str):
+        evaluation["model"] = model
+    return evaluation
 
 
 def _extract_jongga_score_value(signal: dict, allow_numeric_fallback: bool) -> float:

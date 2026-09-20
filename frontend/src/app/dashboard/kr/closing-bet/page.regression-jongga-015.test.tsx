@@ -2,11 +2,11 @@
 // 매수·목표·손절가가 어느 값에서 파생되는지 밝히지 않던 문제
 // 근거: docs/dev-cycle/TODO.md [JONGGA-015] (2026-09-03 JONGGA-005 사이클의 qa-only ISSUE-001)
 //
-// 카드의 `current_price` 는 daily_prices.csv 의 최신 종가이고, 상세 모달의 「현재」는
-// 실시간 시세다. 두 값은 원래 다른 것을 가리키는데 이름이 같은 것처럼 붙어 있었다.
-// 목표가와 손절가는 그 「현재가」가 아니라 매수가에서 파생된다.
+// [JONGGA-031] 카드 종가는 entry_price와 signal_date를 함께 표시한다.
+// current_price는 최신 조회 가격이므로 이 타일의 기준으로 사용하지 않는다.
+// 목표가와 손절가도 저장된 진입가를 기준으로 한다.
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import JonggaV2Page from './page';
@@ -61,6 +61,13 @@ vi.mock('@/app/components/Modal', () => ({ default: () => null }));
 vi.mock('@/app/components/BuyStockModal', () => ({ default: () => null }));
 vi.mock('@/app/components/ClosingBetCriteriaModal', () => ({ default: () => null }));
 
+async function signalCloseTile(): Promise<HTMLElement> {
+  const label = await screen.findByText('2026-09-02 종가');
+  const tile = label.closest('.text-center');
+  if (!tile) throw new Error('신호일 종가 타일을 찾지 못했습니다.');
+  return tile as HTMLElement;
+}
+
 describe('[JONGGA-015] 종가베팅 카드의 가격 어휘', () => {
   beforeEach(() => {
     state.signal = { ...SIGNAL };
@@ -70,24 +77,26 @@ describe('[JONGGA-015] 종가베팅 카드의 가격 어휘', () => {
     render(<JonggaV2Page />);
 
     // 지표 라벨은 값과 같은 블록에 놓인다. 값에서 거슬러 올라가 라벨을 짚는다.
-    const priceValue = await screen.findByText('₩37,250');
-    const metricBlock = priceValue.closest('.text-center');
-    expect(metricBlock?.textContent).toContain('종가');
-    expect(metricBlock?.textContent).not.toContain('현재가');
+    const metricBlock = await signalCloseTile();
+    expect(within(metricBlock).getByText('₩37,200')).toBeTruthy();
+    expect(metricBlock.textContent).toContain('종가');
+    expect(metricBlock.textContent).not.toContain('현재가');
   });
 
   it('화면 어디에도 「현재가」라는 말이 남아 있지 않다', async () => {
     render(<JonggaV2Page />);
 
     // 툴팁 문구까지 포함해 확인한다. 「상승률」 툴팁도 같은 말을 쓰고 있었다.
-    await screen.findByText('₩37,250');
+    await signalCloseTile();
     expect(document.body.textContent).not.toContain('현재가');
   });
 
-  it('종가 값 자체는 달라지지 않는다', async () => {
+  it('신호일 종가는 entry_price 값을 표시한다', async () => {
     render(<JonggaV2Page />);
 
-    expect(await screen.findByText('₩37,250')).toBeTruthy();
+    const tile = await signalCloseTile();
+    expect(within(tile).getByText('₩37,200')).toBeTruthy();
+    expect(within(tile).queryByText('₩37,250')).toBeNull();
   });
 
   it('매수가 옆에 어느 날 종가인지 적는다', async () => {
@@ -107,7 +116,7 @@ describe('[JONGGA-015] 종가베팅 카드의 가격 어휘', () => {
     state.signal = { ...SIGNAL, buy_price: 0, entry_price: 0 };
     render(<JonggaV2Page />);
 
-    await screen.findByText('₩37,250');
+    await screen.findByRole('heading', { name: '태웅' });
     expect(document.body.textContent).not.toContain('매수가 +');
     expect(document.body.textContent).not.toContain('매수가 -');
     expect(document.body.textContent).not.toContain('NaN');
@@ -118,14 +127,14 @@ describe('[JONGGA-015] 종가베팅 카드의 가격 어휘', () => {
     state.signal = { ...SIGNAL, target_price: 0 };
     render(<JonggaV2Page />);
 
-    await screen.findByText('₩37,250');
+    await signalCloseTile();
     expect(document.body.textContent).not.toContain('매수가 +');
     expect(screen.getByText('(매수가 -3.0%)')).toBeTruthy();
   });
   it('저장 진입가와 별도 buy_price가 달라도 시스템 가격의 기준은 진입가다', async () => {
     state.signal = { ...SIGNAL, entry_price: 100000, buy_price: 120000, target_price: 105000, stop_price: 97000 };
     render(<JonggaV2Page />);
-    expect(await screen.findByText('₩100,000')).toBeTruthy();
+    expect(within(await signalCloseTile()).getByText('₩100,000')).toBeTruthy();
     expect(screen.getByText('(매수가 +5.0%)')).toBeTruthy();
     expect(screen.getByText('(매수가 -3.0%)')).toBeTruthy();
   });
