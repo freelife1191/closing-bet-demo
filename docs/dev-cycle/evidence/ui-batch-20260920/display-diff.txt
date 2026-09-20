@@ -3,9 +3,9 @@ index 8b505d0..6b94355 100644
 --- a/frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts
 +++ b/frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts
 @@ -15,22 +15,6 @@ export const CHART_PERIODS = [
- 
+
  export type ChartPeriod = (typeof CHART_PERIODS)[number]['key'];
- 
+
 -// 카드와 상세 모달이 같은 금액을 같은 문자열로 적도록 두 자리가 이 함수를 함께 쓴다.
 -export function formatBigNumber(num: number | undefined | null) {
 -  // 0 과 NaN 도 자리를 비운다. 값을 구하지 못했다는 뜻으로 읽히는 편이 「NaN」보다 낫다.
@@ -32,7 +32,7 @@ index 8691335..1eba624 100644
 @@ -128,6 +128,21 @@ describe('[FE-024] 버튼의 접근 가능한 이름', () => {
      expect(screen.getByRole('combobox', { name: '리포트 날짜' })).toBeTruthy();
    });
- 
+
 +  it('모바일 제어행이 줄바꿈되고 날짜 선택값과 버튼 이름을 온전히 유지한다', async () => {
 +    await renderPage();
 +
@@ -50,7 +50,7 @@ index 8691335..1eba624 100644
 +
    it('모달을 열어도 이름 없는 버튼이 생기지 않는다', async () => {
      await renderPage();
- 
+
 diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-016.test.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-016.test.tsx
 index 53e4234..892092f 100644
 --- a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-016.test.tsx
@@ -64,7 +64,7 @@ index 53e4234..892092f 100644
 +    expect(confidenceLabel.classList.contains('whitespace-nowrap')).toBe(true);
 +    expect(confidenceLabel.closest('.flex.items-center.justify-between')?.classList.contains('flex-wrap')).toBe(true);
    });
- 
+
    it('매도 판정이 매수로 뒤집히지 않는다', async () => {
 diff --git a/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-022.test.tsx b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-022.test.tsx
 index 0ad7434..46cf654 100644
@@ -72,17 +72,17 @@ index 0ad7434..46cf654 100644
 +++ b/frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-022.test.tsx
 @@ -11,7 +11,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
  import { beforeEach, describe, expect, it, vi } from 'vitest';
- 
+
  import JonggaV2Page from './page';
 -import { formatBigNumber } from './displayHelpers';
 +import { formatMarketAmount } from '../formatMarketAmount';
- 
+
  const KST_DATE = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' });
  const TODAY = () => `${KST_DATE.format(new Date())}T12:00:00+09:00`;
 @@ -203,24 +203,24 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
    });
  });
- 
+
 -describe('[JONGGA-022] formatBigNumber', () => {
 +describe('[JONGGA-022] formatMarketAmount', () => {
    it('카드와 모달이 같은 금액을 같은 문자열로 적는다', () => {
@@ -92,7 +92,7 @@ index 0ad7434..46cf654 100644
 +    expect(formatMarketAmount(INSTITUTION_5DAY, '-')).toBe('33억');
 +    expect(formatMarketAmount(FOREIGN_5DAY, '-')).toBe('23억');
    });
- 
+
    it('값이 없거나 0이면 자리를 비운다', () => {
 -    expect(formatBigNumber(undefined)).toBe('-');
 -    expect(formatBigNumber(null)).toBe('-');
@@ -101,12 +101,12 @@ index 0ad7434..46cf654 100644
 +    expect(formatMarketAmount(null, '-')).toBe('-');
 +    expect(formatMarketAmount(0, '-')).toBe('-');
    });
- 
+
    it('음수는 부호를 앞에 붙인다', () => {
 -    expect(formatBigNumber(-INSTITUTION_5DAY)).toBe('-33억');
 +    expect(formatMarketAmount(-INSTITUTION_5DAY, '-')).toBe('-33억');
    });
- 
+
    it('조 단위는 소수 한 자리로 적는다', () => {
 -    expect(formatBigNumber(1_250_000_000_000)).toBe('1.3조');
 +    expect(formatMarketAmount(1_250_000_000_000, '-')).toBe('1조 2500억');
@@ -125,7 +125,7 @@ index 703a2b1..589bad4 100644
 +import { CHART_PERIODS, stockChartUrl } from './displayHelpers';
  import { PriceRangeBar, StatBox } from './displayPrimitives';
  import ConfirmationModal from '@/app/components/ConfirmationModal';
- 
+
 @@ -602,7 +603,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                        </Tooltip>
                      </span>
@@ -200,7 +200,7 @@ index 703a2b1..589bad4 100644
                  </div>
 @@ -909,7 +910,8 @@ export default function JonggaV2Page() {
    };
- 
+
    const filteredSignals = getFilteredSignals();
 -  const matchCount = filteredSignals.length;
 +  const displaySignals = filteredSignals.filter((signal) => signal.grade !== 'D');
@@ -210,12 +210,12 @@ index 703a2b1..589bad4 100644
      filterTradingValue > 0 ? `거래대금 ${formatFilterTradingValue(filterTradingValue)}` : null,
 @@ -1216,20 +1218,23 @@ export default function JonggaV2Page() {
          </div>
- 
+
          {/* TRENDING THEMES Box */}
 -        <TrendingThemesBox themes={getTrendingThemes(filteredSignals)} />
 +        <TrendingThemesBox themes={getTrendingThemes(data?.signals ?? [])} />
        </div>
- 
+
        <div className="flex flex-col gap-6 pb-6 border-b border-white/5">
 -        <div className="flex gap-6">
 -          <StatBox label="CANDIDATES" value={candidatesCount} tooltip="시장에서 1차 필터링된 후보 종목 수입니다." />
@@ -241,7 +241,7 @@ index 703a2b1..589bad4 100644
 +            />
 +          </div>
          </div>
- 
+
          {selectedDate === 'latest' && (data?.is_stale || data?.status === 'stale' || data?.stale_warning) && (
 @@ -1349,7 +1354,7 @@ export default function JonggaV2Page() {
            {hasActiveFilters && (
@@ -255,11 +255,11 @@ index 703a2b1..589bad4 100644
 @@ -1366,7 +1371,7 @@ export default function JonggaV2Page() {
              </div>
            )}
- 
+
 -          <div className="flex items-center gap-3 md:ml-auto">
 +          <div className="flex w-full flex-wrap items-start justify-start gap-3 md:ml-auto md:w-auto md:items-center md:justify-end">
              <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
- 
+
              <div className="flex flex-col items-end gap-1">
 @@ -1375,7 +1380,7 @@ export default function JonggaV2Page() {
                    onClick={handleBulkBuyClosingBet}
@@ -290,7 +290,7 @@ index 703a2b1..589bad4 100644
                  {dates.map((d) => (
 @@ -1526,19 +1531,24 @@ export default function JonggaV2Page() {
        </div>
- 
+
        <div className="grid grid-cols-1 gap-6">
 -        {!data || filteredSignals.length === 0 ? (
 +        {!data || displaySignals.length === 0 ? (
@@ -384,7 +384,7 @@ index 703a2b1..589bad4 100644
                </div>
              </div>
            </div>
- 
+
            {/* AI Analysis Result (Action / Confidence) */}
 -          <div className="flex items-center justify-between bg-white/5 rounded-lg p-2 mb-3">
 +          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-white/5 rounded-lg p-2 mb-3">
@@ -407,7 +407,7 @@ index 53f1731..22de8b9 100644
 @@ -94,6 +94,24 @@ describe('VCPPage - 과거 날짜 매수 가드', () => {
      });
    });
- 
+
 +  it('과거 날짜에서도 모바일 제어행과 금지 사유가 화면 폭 안에서 줄바꿈된다', async () => {
 +    render(<VCPPage />);
 +    await findRowBuyButton(LATEST_REASON);
@@ -428,7 +428,7 @@ index 53f1731..22de8b9 100644
 +
    it('종목 행을 열면 이름 있는 상세 대화상자가 나타나고 Escape로 닫힌다', async () => {
      render(<VCPPage />);
- 
+
 diff --git a/frontend/src/app/dashboard/kr/vcp/page.regression-vcp-011.test.tsx b/frontend/src/app/dashboard/kr/vcp/page.regression-vcp-011.test.tsx
 index 0d51fc1..9cb55b8 100644
 --- a/frontend/src/app/dashboard/kr/vcp/page.regression-vcp-011.test.tsx
@@ -440,7 +440,7 @@ index 0d51fc1..9cb55b8 100644
 +    expect(card.textContent).toContain('외국인 5일 순매수 1130억원');
 +    expect(card.textContent).toContain('기관 5일 순매수 325억원');
    });
- 
+
    it('보조 점수가 없으면 0.0 이 아니라 -를 그린다', async () => {
 diff --git a/frontend/src/app/dashboard/kr/vcp/page.tsx b/frontend/src/app/dashboard/kr/vcp/page.tsx
 index 14eb4ff..fbd56a2 100644
@@ -451,13 +451,13 @@ index 14eb4ff..fbd56a2 100644
  import { decideSecondaryAI, isValidAIRecommendation } from './aiHelpers';
  import { getAuthHeaders } from '@/app/components/chatHelpers';
 +import { formatMarketAmount } from '../formatMarketAmount';
- 
+
  // VCP 채팅은 종목별 대화 세션 ID 를 그대로 X-Session-Id 로 실어 보낸다. 서버의
  // resolve_chatbot_owner_id 는 이메일이 있으면 이메일을, 없으면 이 헤더를 세션 소유자로
 @@ -1075,25 +1076,6 @@ export default function VCPSignalsPage() {
    const bulkBuyVCPTooltip = bulkBuyVCPDisabledReason || '오늘 VCP 시그널 전체를 10주씩 매수합니다.';
    const rowBuyTooltip = buyDisabledReason || '모의 계좌로 매수 주문을 실행합니다.';
- 
+
 -  const formatFlow = (value: number | undefined) => {
 -    if (value === undefined || value === null) return '-';
 -    const absValue = Math.abs(value);
@@ -483,7 +483,7 @@ index 14eb4ff..fbd56a2 100644
 @@ -1571,8 +1553,8 @@ export default function VCPSignalsPage() {
            </span>
          </div>
- 
+
 -        <div className="flex items-center gap-2 relative self-end md:self-auto">
 -          <div className="flex flex-col items-end gap-1">
 +        <div className="relative flex flex-wrap items-start justify-start gap-2 self-stretch md:self-auto md:items-center md:justify-end">
