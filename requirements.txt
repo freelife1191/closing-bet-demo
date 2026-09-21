@@ -8,8 +8,8 @@ flask-cors==6.0.2
 gunicorn==25.0.3
 
 pandas==2.3.3
-# ponytail: numpy 1.x 고정. pykrx 1.2.3 이 numpy<2.0 을 요구하고 numpy_json_encoder.py:38
-# 이 numpy 2.x 가 제거한 np.float_ 을 참조한다. 둘을 함께 푸는 작업은 [INFRA-018].
+# ponytail: pykrx 1.2.3의 numpy<2.0 제약으로 1.x 유지. 인코더의 np.float_ 참조는 제거했다.
+# NumPy 2 전환은 pykrx 인증 쿠키의 타 출처 전달 문제가 해결된 뒤 검증한다([INFRA-018]).
 numpy==1.26.4
 
 # 1.2.7 부터 numpy>=2.0 으로 뒤집히므로 numpy 핀과 같이 움직인다([INFRA-018]).

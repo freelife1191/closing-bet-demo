@@ -26,9 +26,10 @@
 
 ### [INFRA-018] numpy 2.x 승격 — 제거된 별칭 참조와 pykrx 상한을 함께 푼다
 - 현재 상태: **BLOCKED (2026-09-21)**. NumPy2.4.6/pykrx1.2.7 격리설치·pipcheck·pytest2447/Vitest640은통과했으나, pykrx의KRX쿠키가Naver HTTP로전달되는경계를합성쿠키/네트워크0으로재현했다. 최신1.2.9와master도같아버전만으로완화불가. 후보코드·검증은 `evidence/numpy-upgrade-20260921/`에보존하고원작업트리의핀/encoder는기존값으로복원. 원본venv미변경. 완료아카이브없음.
+- 재개 진행: 별칭 제거만 별도 검증·적용했습니다. 두 의존성 핀은 기존 값이며, 공식 지원 hook으로 쿠키 문제를 해결할 수 없어 업그레이드는 계속 보류합니다. [대안 검토](evidence/numpy-encoder-prep-20260921/alternatives.md), [부분 계획·증거](evidence/numpy-encoder-prep-20260921/plan.md).
 - 카테고리: 인프라 | 티어: T3 (주요 의존성 승격으로 상향) | 근거: [INFRA-001] 사이클의 실측
-- numpy 2.x 로 올리는 것을 막는 것이 두 가지입니다. 하나만 풀면 나아가지 못합니다.
-  - `numpy_json_encoder.py:38` 이 numpy 2.0 에서 제거된 `np.float_` 을 참조합니다.
+- 최초 차단 요인은 두 가지였으며, 인코더 참조만 먼저 해소했습니다. 의존성 보안 검수가 남아 있습니다.
+  - 인코더의 `np.float_` 참조는 2026-09-21 선행 수정으로 제거했습니다. `np.float64` 처리는 유지합니다.
   - `pykrx==1.2.3` 이 `numpy<2.0,>=1.24.0` 을 요구합니다. PyPI 메타데이터 실측 결과
     1.2.6 까지가 `numpy<2.0` 이고 1.2.7 부터 `numpy>=2.0` 으로 뒤집힙니다. 즉 pykrx 를
     1.2.7 이상으로 올리는 일과 numpy 승격은 한 묶음이며, 어느 한쪽만 올리면 pip 이
@@ -37,7 +38,7 @@
   `np.float64` 만 남기면 두 버전에서 모두 동작합니다.
 - pykrx 1.2.3 에서 1.2.7 로 네 단계를 건너뛰므로 시세 조회 API 의 반환 형태가 그대로인지
   확인해야 합니다. `engine/collectors.py` 등 19곳이 이 패키지를 씁니다.
-- [ ] `np.float_` 참조 제거
+- [x] `np.float_` 참조 제거 — 2026-09-21 선행 수정. 기존 NumPy1에서 별칭 부재 RED 2건 → GREEN, 전체 pytest 2461/3skip·Vitest640. 실제 NumPy2 전환 검수와는 구분한다.
 - [ ] `pykrx` 를 numpy 2.x 를 허용하는 버전으로 올리고 시세 조회 경로 회귀 확인
 - [ ] `requirements.txt` 의 numpy·pykrx 핀과 두 주석을 함께 갱신
 - [ ] numpy 2.x 를 설치한 격리 환경에서 pytest 전체 통과 확인

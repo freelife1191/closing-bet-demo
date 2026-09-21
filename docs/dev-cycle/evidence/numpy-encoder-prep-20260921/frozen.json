@@ -1,0 +1,5 @@
+{
+  "numpy_json_encoder.py": "cda5a2929beaf6b5dcd99ec6cb2c10adb5fddf663b91f58e6add0a59d42a4aab",
+  "requirements.txt": "a3319b991a00edcf58449d05452b9f2f68a322eeb3e0030694cb8ce9cd184779",
+  "tests/test_numpy_encoder_compat.py": "4995f6cd32ded62a470765f29f4767716306615c03ed0f93bbdfda0e6d1a66de"
+}

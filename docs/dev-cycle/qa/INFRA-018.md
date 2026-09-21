@@ -46,3 +46,20 @@ INFRA-018은TODO에유지하고완료아카이브를만들지않는다. 해제�
 ## 잔여
 
 필수N4실패/N5차단. 전체성공아님. 보안review 최종BLOCK, 후보의기존APPROVE/WATCH는상위성공판정으로재사용하지않음.
+
+## 2026-09-21 재개: 인코더 선행 수정
+
+사용자가 차단 보고 뒤 진행을 요청했다. 의존성 대안 검토 후 독립적 인코더 수정만 재개했다.
+기존 engine=ultraqa/lifecycle=app-adapted/phase=blocked, iteration=1, same_failure_count=1 유지.
+N4 재실행으로 같은 실패를 반복하지 않고 N2 부분 회귀를 보강한다. N4 실패와 N5 필수 브라우저 차단은 그대로이며 전체 완료가 아니다.
+
+- 검증 범위: np.float_ 참조 제거, 기존 numpy1.26.4에서 실제 직렬화와 별칭 부재 조건, 비지원 객체 TypeError.
+- 기존 N2 행의 실제 타입·값 검사를 재사용한다. 신규 tests/test_numpy_encoder_compat.py는 정상값과 별칭 부재 조건을 검사하며 실제 NumPy2 설치를 대체하지 않는다.
+- RED: 별칭 부재 직렬화/비지원 객체 처리 2건이 AttributeError로 실패, 정상 환경 1건 통과.
+- GREEN: 표적 7건 통과. 현재 핀 전체 baseline: pytest 2461 passed/3 skipped, Vitest 640 passed/83 files, typecheck exit0, lint exit0/기존 경고184. evidence/numpy-encoder-prep-20260921/ 참조.
+- browser_applicability: required; N5는 의존성 보안 조건 미통과로 차단 유지. HTTP/단위 테스트로 웹 검수를 대신하지 않는다.
+- 원본 package.json 보존, 원본 venv 수정 없음. 현재 핀은 그대로 유지한다.
+
+- 리뷰: Ponytail SHIP → code APPROVE/architect CLEAR → T3 deep ACCEPT (App native 독립 검토, 외부 CLI 리뷰 아님).
+- 정리: 소유 scratch 삭제·관련 프로세스 0, 원래 package.json SHA 불변. cleanup.json과 frozen.json/raw-index.json 해시 검증 완료.
+- 최종 상태: **ULTRAQA BLOCKED**. 이번 부분 수정은 현재 핀의 정적·단위 회귀만 통과했으며, 기존 N4/N5 미통과를 해제하지 않는다. 의존성 수정본을 별도 유지하는 방안은 유지 비용 때문에 채택하지 않았다. 완료 아카이브 없음.
