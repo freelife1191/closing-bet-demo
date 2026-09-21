@@ -253,7 +253,6 @@ def _system_client(monkeypatch: pytest.MonkeyPatch, deps: dict[str, Any]):
 @pytest.mark.parametrize(
     ("path", "payload", "dependency", "expected"),
     [
-        ("/api/kr/reanalyze/gemini", {}, "execute_user_gemini_reanalysis_request", {"status": "error", "error": "Internal Server Error"}),
         ("/api/kr/refresh", {}, "launch_background_update_job", {"status": "error", "message": "Internal Server Error"}),
         ("/api/kr/init-data", {}, "launch_init_data_update", {"status": "error", "message": "Internal Server Error"}),
         ("/api/kr/status", None, "build_data_status_payload", {"status": "error", "message": "Internal Server Error"}),
@@ -287,8 +286,8 @@ def test_reanalyze_route_preserves_non_object_json_for_service_validation(monkey
 
     response = client.post("/api/kr/reanalyze/gemini", data="[]", content_type="application/json")
 
-    assert response.status_code == 400
-    assert received == [[]]
+    assert response.status_code == 410
+    assert received == []
 
 
 @pytest.mark.parametrize(
@@ -305,7 +304,7 @@ def test_reanalyze_route_preserves_flask_json_request_errors(
 
     response = client.post("/api/kr/reanalyze/gemini", data=body, content_type=content_type)
 
-    assert response.status_code == status
+    assert response.status_code == 410
 
 
 def _jongga_client(tmp_path, **overrides: Any):

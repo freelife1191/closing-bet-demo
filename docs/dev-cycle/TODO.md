@@ -24,6 +24,8 @@
 
 ### [VCP-022] VCP 상세 모달의 세 탭 가운데 둘은 아직 0% 를 그릴 수 있다
 
+- 후속 라운드 2026-09-21: 실제 VCP 경로 통합·정확 템플릿 조회 제외·실패/과거 저장 보존·구형 개인키 API410 구현. 설계와 범위 결정은 `evidence/vcp-real-analysis-20260921/design.md`, critic ACCEPT. 사용자가 승인 판단을 위임했다. 특정20260211 요청 귀속은 자료 없이 미확정이며, 시작 전 설계에서 비상용 재발방지 완료 기준과 분리했다. 전체2449/3skip·Vitest640·타입/lint/build 통과, 독립 심층·브라우저 QA 진행 중. 완료 전 TODO 유지.
+
 - 진행 라운드: 2026-09-21 VCP 정리 T3. 사용자 「승인도 알아서 진행하고 완료」 위임에 따른 리더 설계·계획 검토. `evidence/vcp-cleanup-20260921/design.md`, `plan.md`. 독립 critic ACCEPT. 원본 비밀·자료·서비스 접근 없이 scratch 실행.
 - [x] confidence 수정 95cab19; pytest2465/Vitest640·독립리뷰·UltraQA8/8. 역사 자료와 모의 분석 요구가 남아 항목 유지.
 - 이번 묶음은 confidence 부분 보완. 과거 모의 산출물/역사 실행 이력 요구는 미완료이며 이후 계속 처리한다.

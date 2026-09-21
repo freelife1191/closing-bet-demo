@@ -95,14 +95,12 @@ def test_register_system_and_execution_route_groups_registers_both(monkeypatch):
         load_json_file_fn=lambda _filename: {},
         load_csv_file_fn=lambda _filename: [],
         get_data_path_fn=lambda filename: f"data/{filename}",
-        run_user_gemini_reanalysis_fn=run_user,
     )
 
     assert system_register_calls
     assert system_register_calls[0][0] is sentinel_bp
     assert system_register_calls[0][1] is sentinel_logger
     assert system_register_calls[0][2] == {"system": "ok"}
-    assert built_system_kwargs["kwargs"]["run_user_gemini_reanalysis"] is run_user
 
     assert execution_register_calls
     assert execution_register_calls[0][0] is sentinel_bp

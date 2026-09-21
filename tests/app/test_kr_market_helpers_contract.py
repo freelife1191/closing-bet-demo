@@ -920,30 +920,8 @@ def test_route_service_jongga_latest_updates_prices_and_writes_latest_file(tmp_p
     assert persisted["recalculated"] is True
 
 
-def test_route_service_parse_target_dates_normalizes_scalar_and_list():
-    assert route_service.parse_target_dates({}) == []
-    assert route_service.parse_target_dates({"target_dates": " 2026-02-20 "}) == ["2026-02-20"]
-    with pytest.raises(ValueError, match="INVALID_TARGET_DATES"):
-        route_service.parse_target_dates({"target_dates": ["2026-02-20", "", None]})
 
 
-def test_route_service_run_user_gemini_reanalysis_uses_scripts_package(monkeypatch):
-    fake_scripts = types.ModuleType("scripts")
-    fake_scripts.init_data = types.SimpleNamespace(
-        create_kr_ai_analysis_with_key=lambda target_dates=None, api_key=None: {
-            "count": len(target_dates or []),
-            "has_key": bool(api_key),
-        }
-    )
-    monkeypatch.setitem(sys.modules, "scripts", fake_scripts)
-
-    result = route_service.run_user_gemini_reanalysis(
-        target_dates=["2026-02-20", "2026-02-21"],
-        api_key="user-key",
-    )
-
-    assert result["count"] == 2
-    assert result["has_key"] is True
 
 
 def test_route_service_background_pipeline_resets_status_on_error(monkeypatch):

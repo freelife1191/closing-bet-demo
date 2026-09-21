@@ -783,3 +783,50 @@ def test_create_institutional_trend_uses_toss_backfill_when_pykrx_is_empty(monke
             "inst_buy": 5000,
         },
     ]
+
+
+def test_historical_vcp_analysis_keeps_latest_files(monkeypatch, tmp_path):
+    data_dir = tmp_path / 'data'
+    data_dir.mkdir()
+    for prefix in ['ai_analysis_results', 'kr_ai_analysis']:
+        (data_dir / f'{prefix}.json').write_text('latest sentinel')
+    monkeypatch.setattr(init_data, 'BASE_DIR', str(tmp_path))
+    monkeypatch.setattr('engine.screener.SmartMoneyScreener', _DummyScreener)
+    monkeypatch.setattr('engine.market_gate.MarketGate', _DummyMarketGate)
+    class Analyzer:
+        async def analyze_batch(self, signals):
+            return {'005930': {'ticker': '005930', 'gemini_recommendation': {'action': 'HOLD', 'confidence': 75, 'reason': '실제 분석 경계 합성 응답'}}}
+    class News:
+        def __init__(self, *args):
+            pass
+        async def get_stock_news(self, *args, **kwargs):
+            return []
+    monkeypatch.setattr('engine.vcp_ai_analyzer.get_vcp_analyzer', Analyzer)
+    monkeypatch.setattr('engine.collectors.EnhancedNewsCollector', News)
+    monkeypatch.setattr('pykrx.stock.get_index_ohlcv', lambda *args: pd.DataFrame())
+    assert init_data.create_signals_log('2026-02-19', run_ai=True) is True
+    for prefix in ['ai_analysis_results', 'kr_ai_analysis']:
+        assert (data_dir / f'{prefix}.json').read_text() == 'latest sentinel'
+        assert json.loads((data_dir / f'{prefix}_20260219.json').read_text())['signals'][0]['gemini_recommendation']['confidence'] == 75
+
+
+def test_vcp_no_provider_result_does_not_log_save_success(monkeypatch, tmp_path):
+    (tmp_path/'data').mkdir()
+    monkeypatch.setattr(init_data,'BASE_DIR',str(tmp_path))
+    monkeypatch.setattr('engine.screener.SmartMoneyScreener',_DummyScreener)
+    monkeypatch.setattr('engine.market_gate.MarketGate',_DummyMarketGate)
+    class Analyzer:
+        async def analyze_batch(self, stocks):
+            return {'005930': {'ticker':'005930','gemini_recommendation':None}}
+    class News:
+        def __init__(self,*args): pass
+        async def get_stock_news(self,*args,**kwargs): return []
+    monkeypatch.setattr('engine.vcp_ai_analyzer.get_vcp_analyzer',Analyzer)
+    monkeypatch.setattr('engine.collectors.EnhancedNewsCollector',News)
+    monkeypatch.setattr('pykrx.stock.get_index_ohlcv',lambda *args:pd.DataFrame())
+    logs=[]
+    monkeypatch.setattr(init_data,'log',lambda message,level='INFO': logs.append((message,level)))
+    assert init_data.create_signals_log('2026-02-19',run_ai=True) is True
+    assert not any('분석 완료 및 저장' in message for message,level in logs)
+    assert any('기존 캐시 유지' in message and level=='WARNING' for message,level in logs)
+    assert not (tmp_path/'data/ai_analysis_results_20260219.json').exists()

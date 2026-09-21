@@ -1399,6 +1399,7 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         
         # AI 분석 실행 (옵션)
         if run_ai and signals:
+            loop = None
             try:
                 log(f"[AI Analysis] 감지된 {len(signals)}개 시그널에 대해 AI 정밀 분석 수행...", "INFO")
                 from engine.vcp_ai_analyzer import get_vcp_analyzer
@@ -1415,23 +1416,7 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 if ai_results:
                     date_str = signals[0]['signal_date'].replace('-', '')
                     
-                    # 1. ai_analysis_results.json에 저장 (기존 로직 유지)
                     ai_filename = f'ai_analysis_results_{date_str}.json'
-                    ai_filepath = os.path.join(BASE_DIR, 'data', ai_filename)
-                    
-                    save_data = {
-                        'generated_at': datetime.now().isoformat(),
-                        'signal_date': signals[0]['signal_date'],
-                        'signals': list(ai_results.values())
-                    }
-                    
-                    with open(ai_filepath, 'w', encoding='utf-8') as f:
-                        json.dump(save_data, f, ensure_ascii=False, indent=2)
-                        
-                    latest_path = os.path.join(BASE_DIR, 'data', 'ai_analysis_results.json')
-                    with open(latest_path, 'w', encoding='utf-8') as f:
-                         json.dump(save_data, f, ensure_ascii=False, indent=2)
-                    
                     # 2. kr_ai_analysis.json에도 저장 (프론트엔드 호환 형식)
                     # VCP 시그널 정보 + AI 분석 결과 + 뉴스 통합
                     kr_ai_signals = []
@@ -1525,21 +1510,26 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                         'signal_date': signals[0]['signal_date']
                     }
                     
-                    kr_ai_path = os.path.join(BASE_DIR, 'data', 'kr_ai_analysis.json')
-                    with open(kr_ai_path, 'w', encoding='utf-8') as f:
-                        json.dump(kr_ai_data, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
-                    
-                    # 날짜별 히스토리도 저장
-                    kr_ai_history_path = os.path.join(BASE_DIR, 'data', f'kr_ai_analysis_{date_str}.json')
-                    with open(kr_ai_history_path, 'w', encoding='utf-8') as f:
-                        json.dump(kr_ai_data, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
-                         
-                    log(f"[AI Analysis] 분석 완료 및 저장: {ai_filename}, kr_ai_analysis.json", "SUCCESS")
+                    from services.common_update_ai_analysis_service import _write_ai_analysis_files
+                    written_count = _write_ai_analysis_files(
+                        data_dir=os.path.join(BASE_DIR, 'data'),
+                        analysis_date=signals[0]['signal_date'], results=kr_ai_data,
+                    )
+
+                    if written_count:
+                        log(f"[AI Analysis] 분석 완료 및 저장: {ai_filename} ({written_count}종목)", "SUCCESS")
+                    else:
+                        log("[AI Analysis] 유효 추천 없음: 기존 캐시 유지", "WARNING")
                 
             except Exception as e:
                 log(f"[AI Analysis] 실행 중 오류 발생: {e}", "ERROR")
                 import traceback
                 traceback.print_exc()
+            finally:
+                if loop is not None:
+                    loop.close()
+                    asyncio.set_event_loop(None)
+
         
 
 
@@ -1739,259 +1729,22 @@ def create_jongga_v2_latest():
 
 
 def create_kr_ai_analysis(target_date=None):
-    """AI 분석 결과 생성 (실제 데이터 기반)"""
-    log("AI 분석 시작 (Real Mode)...")
-    try:
-        from engine.kr_ai_analyzer import KrAiAnalyzer
-        import pandas as pd
-        import json
-        
-        # 날짜 설정
-        if not target_date:
-            target_date = datetime.now().strftime('%Y-%m-%d')
-            
-        data_dir = os.path.join(BASE_DIR, 'data')
-        signals_path = os.path.join(data_dir, 'signals_log.csv')
-        
-        if not os.path.exists(signals_path):
-            log("VCP 시그널 파일이 없어 AI 분석을 건너뜁니다.", "WARNING")
-            return
-            
-        # VCP 결과 로드
-        df = pd.read_csv(signals_path, dtype={'ticker': str, 'signal_date': str})
-        if df.empty:
-            log("VCP 시그널 데이터가 비어있습니다.", "WARNING")
-            return
+    """현행 VCP 엔진으로 저장 시그널을 분석한다."""
+    from services.common_update_ai_analysis_service import run_ai_analysis_step
 
-        # 해당 날짜 데이터 필터링
-        target_df = df[df['signal_date'] == str(target_date)].copy()
-        
-        if target_df.empty:
-            # 날짜 포맷 불일치 가능성 체크 (YYYY-MM-DD vs YYYYMMDD)
-            alt_date = target_date.replace('-', '')
-            target_df = df[df['signal_date'] == alt_date].copy()
-            
-        if target_df.empty:
-            log(f"해당 날짜({target_date})의 VCP 시그널이 없습니다.", "WARNING")
-            return
+    return run_ai_analysis_step(
+        target_date=target_date, selected_items=["AI Analysis"], vcp_df=None,
+        update_item_status=lambda item, status: log(f"{item}: {status}"),
+        shared_state=shared_state, logger=logging.getLogger(__name__),
+        data_dir=os.path.join(BASE_DIR, "data"),
+    )
 
-        # [필수] 기존 분석 파일 삭제 (초기화)
-        date_str_clean = str(target_date).replace('-', '')
-        filename = f'ai_analysis_results_{date_str_clean}.json'
-        filepath = os.path.join(data_dir, filename)
-        
-        if os.path.exists(filepath):
-            try:
-                os.remove(filepath)
-                log(f"기존 AI 분석 파일 삭제 완료: {filename}", "INFO")
-            except Exception as e:
-                log(f"파일 삭제 실패: {e}", "WARNING")
-
-        # 분석 대상 선정 (Score 상위 N개)
-        ai_target_limit = int(SCREENING.VCP_SIGNALS_TO_SHOW)
-        if ai_target_limit <= 0:
-            ai_target_limit = 20
-
-        if 'score' in target_df.columns:
-            target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
-            target_df = target_df.sort_values('score', ascending=False)
-            
-        target_df = target_df.head(ai_target_limit)
-        tickers = target_df['ticker'].tolist()
-        
-        log(f"AI 분석 대상: {len(tickers)} 종목")
-        
-        # 분석 실행
-        analyzer = KrAiAnalyzer()
-        results = analyzer.analyze_multiple_stocks(tickers)
-        
-        # [Fix] CSV의 supply 데이터를 AI 결과에 병합
-        try:
-            csv_data = {row['ticker']: row for _, row in target_df.iterrows()}
-            for signal in results.get('signals', []):
-                ticker = signal.get('ticker')
-                if ticker in csv_data:
-                    csv_row = csv_data[ticker]
-                    
-                    # 데이터 병합 (타입 안전 처리)
-                    try:
-                        signal['foreign_5d'] = int(float(csv_row.get('foreign_5d', 0)))
-                    except: signal['foreign_5d'] = 0
-                        
-                    try:
-                        signal['inst_5d'] = int(float(csv_row.get('inst_5d', 0)))
-                    except: signal['inst_5d'] = 0
-                        
-                    try:
-                        signal['score'] = float(csv_row.get('score', 0))
-                    except: signal['score'] = 0.0
-                        
-                    try:
-                        signal['contraction_ratio'] = float(csv_row.get('contraction_ratio', 0))
-                    except: signal['contraction_ratio'] = 0.0
-                        
-                    try:
-                        signal['entry_price'] = int(float(csv_row.get('entry_price', 0)))
-                    except: signal['entry_price'] = 0
-
-                    try:
-                        current_p = int(float(csv_row.get('current_price', 0)))
-                        if current_p == 0:
-                            current_p = signal['entry_price']
-                        signal['current_price'] = current_p
-                    except: signal['current_price'] = signal.get('entry_price', 0)
-                        
-                    try:
-                        signal['vcp_score'] = float(csv_row.get('vcp_score', 0))
-                    except: signal['vcp_score'] = 0.0
-                        
-                    signal['market'] = csv_row.get('market', signal.get('market', 'KOSPI'))
-            
-            log("AI 결과에 Supply 데이터 병합 완료", "INFO")
-        except Exception as merge_e:
-            log(f"데이터 병합 중 오류 (무시): {merge_e}", "WARNING")
-        
-        # 메타데이터
-        results['generated_at'] = datetime.now().isoformat()
-        results['signal_date'] = target_date
-        
-        # 시장 지수 데이터 수집 (frontend 호환용)
-        market_indices = {}
-        try:
-            from pykrx import stock
-            today_str = datetime.now().strftime('%Y%m%d')
-            kospi = stock.get_index_ohlcv(today_str, today_str, "1001")
-            kosdaq = stock.get_index_ohlcv(today_str, today_str, "2001")
-            
-            if not kospi.empty:
-                market_indices['kospi'] = {
-                    'value': float(kospi['종가'].iloc[-1]),
-                    'change_pct': float(kospi['등락률'].iloc[-1]) if '등락률' in kospi.columns else 0
-                }
-            if not kosdaq.empty:
-                market_indices['kosdaq'] = {
-                    'value': float(kosdaq['종가'].iloc[-1]),
-                    'change_pct': float(kosdaq['등락률'].iloc[-1]) if '등락률' in kosdaq.columns else 0
-                }
-        except: pass
-        
-        results['market_indices'] = market_indices
-
-        # 저장 (ai_analysis_results.json)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
-            
-        log(f"AI 분석 결과 저장 완료: {filepath}", "SUCCESS")
-        
-        # 최신 파일 (ai_analysis_results.json)
-        if target_date == datetime.now().strftime('%Y-%m-%d'):
-            main_path = os.path.join(data_dir, 'ai_analysis_results.json')
-            with open(main_path, 'w', encoding='utf-8') as f:
-                json.dump(results, f, ensure_ascii=False, indent=2)
-
-            # [Fix] kr_ai_analysis.json 생성 (Frontend용)
-            kr_ai_path = os.path.join(data_dir, 'kr_ai_analysis.json')
-            with open(kr_ai_path, 'w', encoding='utf-8') as f:
-                 json.dump(results, f, ensure_ascii=False, indent=2)
-            log(f"Frontend 데이터 동기화 완료: {kr_ai_path}", "SUCCESS")
-                
-        return True
-
-    except Exception as e:
-        log(f"AI 분석 실패: {e}", "ERROR")
-        import traceback
-        traceback.print_exc()
-        return False
 
 def create_kr_ai_analysis_with_key(target_dates=None, api_key=None):
-    """
-    [사용자 요청] API Key를 주입하여 AI 분석 실행 (create_kr_ai_analysis 변형)
-    - 공용 배치 작업이 아니라, 특정 사용자의 요청에 의해 트리거됨.
-    - target_dates: ['YYYY-MM-DD', ...] or None
-    - api_key: 사용자의 Google Gemini API Key (없으면 공용 키 사용 - 정책에 따름)
-    """
-    log(f"AI 재분석 요청 (Key Present: {bool(api_key)})", "INFO")
-    
-    try:
-        from engine.kr_ai_analyzer import KrAiAnalyzer
-        import pandas as pd
-        import json
-        
-        # Analyzer 초기화시 키 주입
-        analyzer = KrAiAnalyzer(api_key=api_key)
-        
-        data_dir = os.path.join(BASE_DIR, 'data')
-        signals_path = os.path.join(data_dir, 'signals_log.csv')
-        
-        if not os.path.exists(signals_path):
-            log("VCP 시그널 파일이 없습니다.", "WARNING")
-            return {'count': 0}
+    """종료된 개인 키 모의 분석 진입점. 키와 파일을 사용하지 않는다."""
+    log("구형 개인 키 분석은 종료되었습니다. VCP 재분석 기능을 사용하세요.", "WARNING")
+    return {"count": 0, "error": "LEGACY_ANALYSIS_RETIRED"}
 
-        df = pd.read_csv(signals_path, dtype={'ticker': str, 'signal_date': str})
-        if df.empty:
-            return {'count': 0}
-
-        # 날짜 필터링
-        if not target_dates:
-            # 날짜 없으면 최신 날짜 하나만
-            latest_date = df['signal_date'].max()
-            target_dates = [latest_date]
-            
-        all_results = {}
-        total_analyzed = 0
-        
-        for t_date in target_dates:
-            log(f"Deep Analysis for date: {t_date}")
-            
-            # 날짜 포맷 매칭
-            target_df = df[df['signal_date'] == str(t_date)].copy()
-            if target_df.empty:
-                 alt_date = str(t_date).replace('-', '')
-                 target_df = df[df['signal_date'] == alt_date].copy()
-            
-            if target_df.empty:
-                continue
-                
-            # Score 상위 종목 선정
-            if 'score' in target_df.columns:
-                target_df['score'] = pd.to_numeric(target_df['score'], errors='coerce').fillna(0)
-                target_df = target_df.sort_values('score', ascending=False)
-            
-            # 최대 N개 (Rate Limit 및 시간 고려)
-            ai_target_limit = int(SCREENING.VCP_SIGNALS_TO_SHOW)
-            if ai_target_limit <= 0:
-                ai_target_limit = 20
-            target_df = target_df.head(ai_target_limit)
-            tickers = target_df['ticker'].tolist()
-            
-            # 분석 실행
-            results = analyzer.analyze_multiple_stocks(tickers) # api_key 사용됨
-            
-            if results and 'signals' in results:
-                count = len(results['signals'])
-                total_analyzed += count
-                
-                # 저장 (덮어쓰기)
-                date_str_clean = str(t_date).replace('-', '')
-                filename = f'ai_analysis_results_{date_str_clean}.json'
-                filepath = os.path.join(data_dir, filename)
-                
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    json.dump(results, f, ensure_ascii=False, indent=2)
-                
-                # 오늘 날짜면 메인 파일도 업데이트
-                if t_date == datetime.now().strftime('%Y-%m-%d'):
-                    main_path = os.path.join(data_dir, 'ai_analysis_results.json')
-                    with open(main_path, 'w', encoding='utf-8') as f:
-                        json.dump(results, f, ensure_ascii=False, indent=2)
-                        
-        return {'count': total_analyzed}
-
-    except Exception as e:
-        log(f"AI 재분석 실패: {e}", "ERROR")
-        import traceback
-        traceback.print_exc()
-        return {'error': str(e)}
 
 def send_jongga_notification():
     """종가베팅 V2 결과 알림 발송"""
@@ -2178,7 +1931,6 @@ def main():
         create_signals_log,
         create_jongga_v2_latest,
 
-        create_kr_ai_analysis  # AI 분석 추가
     ]
 
     
@@ -2338,7 +2090,6 @@ if __name__ == '__main__':
             create_daily_prices()
             create_institutional_trend()
             create_signals_log() # VCP 분석
-            create_kr_ai_analysis() # AI 분석
             log("전체 데이터 초기화 완료!", "SUCCESS")
     else:
         main()

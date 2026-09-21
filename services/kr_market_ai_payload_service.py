@@ -9,6 +9,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable
 import logging
+import re
+
+from engine.kr_ai_templates import is_legacy_analysis_template
+from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
+
+
+def normalize_ai_analysis_date(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-?[0-9]{2}-?[0-9]{2}", value):
+        raise ValueError("유효한 YYYY-MM-DD 또는 YYYYMMDD 날짜가 필요합니다.")
+    return datetime.strptime(value, "%Y-%m-%d" if "-" in value else "%Y%m%d").strftime("%Y-%m-%d")
 
 
 def _has_non_empty_signals(payload: dict[str, Any] | None) -> bool:
@@ -42,6 +52,13 @@ def _clone_payload_for_signal_normalization(payload: dict[str, Any]) -> dict[str
             dict(signal) if isinstance(signal, dict) else signal
             for signal in raw_signals
         ]
+        for signal in cloned["signals"]:
+            if not isinstance(signal, dict):
+                continue
+            for field in VCP_AI_RECOMMENDATION_FIELDS:
+                rec = signal.get(field)
+                if isinstance(rec, dict) and is_legacy_analysis_template(rec.get("reason")):
+                    signal[field] = None
     return cloned
 
 
@@ -54,8 +71,9 @@ def build_ai_analysis_payload_for_target_date(
     now: datetime | None = None,
 ) -> dict[str, Any] | None:
     """요청 날짜 기준 AI 분석 payload를 구성한다."""
-    if not target_date:
+    if target_date is None:
         return None
+    target_date = normalize_ai_analysis_date(target_date)
 
     current_time = now or datetime.now()
 

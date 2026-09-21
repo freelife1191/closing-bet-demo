@@ -7,7 +7,6 @@ from flask import Blueprint, jsonify, request
 from services.kr_market_route_service import (
     parse_jongga_reanalyze_request_options,
     run_jongga_news_reanalysis_batch,
-    run_user_gemini_reanalysis,
     update_vcp_ai_cache_files,
 )
 from services.kr_market_quota_service import (
@@ -228,7 +227,6 @@ register_system_and_execution_route_groups(
     load_json_file_fn=lambda filename, **kwargs: load_json_file(filename, **kwargs),
     load_csv_file_fn=lambda filename, **kwargs: load_csv_file(filename, **kwargs),
     get_data_path_fn=lambda filename: get_data_path(filename),
-    run_user_gemini_reanalysis_fn=lambda **kwargs: run_user_gemini_reanalysis(**kwargs),
 )
 
 def calculate_scenario_return(ticker, entry_price, signal_date, current_price, price_df, target_pct=0.15, stop_pct=0.05):

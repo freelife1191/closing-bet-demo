@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from engine.kr_ai_templates import is_legacy_analysis_template
 from engine.pandas_utils_safe import safe_optional_float
 from engine.ticker_utils import normalize_ticker
 
@@ -51,7 +52,7 @@ def _is_meaningful_ai_reason(reason: Any) -> bool:
     reason_text = _normalize_text(_none_if_nan(reason))
     if not reason_text:
         return False
-    return reason_text.lower() not in _INVALID_AI_REASONS
+    return reason_text.lower() not in _INVALID_AI_REASONS and not is_legacy_analysis_template(reason_text)
 
 
 # 숫자 문자열에서 떼어 낼 기호. 종가·VCP·수급 경로가 모두 이 목록을 공유한다.

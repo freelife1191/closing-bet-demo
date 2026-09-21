@@ -92,7 +92,7 @@ def test_market_gate_stale_valid_get_preserves_saved_payload():
     assert response.get_json()["status"] == "GREEN"
 
 
-def test_reanalyze_gemini_returns_status_error_payload_on_exception():
+def test_retired_gemini_does_not_call_former_dependency():
     deps = _build_base_deps(
         execute_user_gemini_reanalysis_request=(
             lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom"))
@@ -102,8 +102,8 @@ def test_reanalyze_gemini_returns_status_error_payload_on_exception():
 
     response = client.post("/api/kr/reanalyze/gemini", json={})
 
-    assert response.status_code == 500
-    assert response.get_json() == {"status": "error", "error": "Internal Server Error"}
+    assert response.status_code == 410
+    assert response.get_json()["code"] == "LEGACY_ANALYSIS_RETIRED"
 
 
 def test_refresh_route_uses_common_update_handlers_and_adds_success_message(monkeypatch):

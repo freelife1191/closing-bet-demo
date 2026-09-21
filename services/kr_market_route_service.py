@@ -9,9 +9,7 @@ KR Market Route Service
 from __future__ import annotations
 
 import logging
-import re
 import sys
-from datetime import date
 from typing import Any, Callable
 
 from services.kr_market_analytics_service import (
@@ -109,100 +107,6 @@ def run_jongga_v2_background_pipeline(
     finally:
         save_status(False)
         logger.info("[Background] Jongga V2 Status reset to False")
-
-
-def parse_target_dates(req_data: dict[str, Any]) -> list[str]:
-    """Gemini 재분석 요청의 target_dates 필드를 검증·정규화한다."""
-    if not isinstance(req_data, dict):
-        raise ValueError("INVALID_TARGET_DATES")
-
-    raw_target_dates = req_data.get("target_dates", [])
-    if raw_target_dates is None:
-        return []
-    if not isinstance(raw_target_dates, list):
-        raw_target_dates = [raw_target_dates]
-    if len(raw_target_dates) > 30:
-        raise ValueError("INVALID_TARGET_DATES")
-
-    normalized: list[str] = []
-    for item in raw_target_dates:
-        if not isinstance(item, str):
-            raise ValueError("INVALID_TARGET_DATES")
-        value = item.strip()
-        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
-            raise ValueError("INVALID_TARGET_DATES")
-        try:
-            date.fromisoformat(value)
-        except ValueError as error:
-            raise ValueError("INVALID_TARGET_DATES") from error
-        normalized.append(value)
-    return normalized
-
-
-def run_user_gemini_reanalysis(
-    target_dates: list[str],
-    api_key: str | None,
-) -> dict[str, Any]:
-    """사용자 키 기반 Gemini 재분석을 실행한다."""
-    from scripts import init_data
-
-    result = init_data.create_kr_ai_analysis_with_key(target_dates or None, api_key=api_key)
-    if isinstance(result, dict):
-        return result
-    return {"count": 0}
-
-
-def execute_user_gemini_reanalysis_request(
-    user_api_key: str | None,
-    user_email: str | None,
-    req_data: dict[str, Any],
-    usage_tracker: Any,
-    logger: logging.Logger,
-    run_reanalysis_func: Callable[..., dict[str, Any]] | None = None,
-) -> tuple[int, dict[str, Any]]:
-    """사용자 요청 Gemini 재분석(권한/쿼터 포함)을 실행한다."""
-    try:
-        target_dates = parse_target_dates(req_data)
-    except ValueError:
-        logger.warning("Invalid Gemini target_dates request")
-        return 400, {
-            "status": "error",
-            "code": "INVALID_TARGET_DATES",
-            "message": "target_dates는 유효한 YYYY-MM-DD 날짜 목록이어야 하며 최대 30개까지 지정할 수 있습니다.",
-        }
-
-    if not user_api_key:
-        if not user_email:
-            return 401, {
-                "status": "error",
-                "code": "UNAUTHORIZED",
-                "message": "로그인이 필요합니다.",
-            }
-
-        allowed = usage_tracker.check_and_increment(user_email)
-        if not allowed:
-            return 402, {
-                "status": "error",
-                "code": "LIMIT_EXCEEDED",
-                "message": "무료 AI 분석 횟수(10회)를 모두 소진했습니다. 잠시 후 다시 시도하시거나 관리자에게 문의해 주세요.",
-            }
-
-    logger.info(f"Gemini Re-analysis triggered by user (Key provided: {bool(user_api_key)})")
-    reanalysis_runner = run_reanalysis_func or run_user_gemini_reanalysis
-    result = reanalysis_runner(
-        target_dates=target_dates,
-        api_key=user_api_key,
-    )
-
-    if result.get("error"):
-        logger.error(f"Gemini re-analysis failed: {result['error']}")
-        return 500, {"status": "error", "error": result["error"]}
-
-    updated_count = int(result.get("count", 0) or 0)
-    return 200, {
-        "status": "success",
-        "message": f"{updated_count}개 종목의 Gemini 배치 분석이 완료되었습니다.",
-    }
 
 
 def update_vcp_ai_cache_files(

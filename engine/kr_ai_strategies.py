@@ -7,8 +7,6 @@ KR AI Analyzer 전략 모듈
 import logging
 from typing import Any, Dict, List, Optional
 
-from engine.constants import AI_ANALYSIS
-from engine.kr_ai_templates import MockAnalysisTemplates
 from engine.models import NewsItem
 
 
@@ -21,13 +19,6 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return float(default)
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return int(default)
 
 
 def _normalize_action(value: Any, default: str = "HOLD") -> str:
@@ -59,88 +50,19 @@ class AIStrategy:
 
 
 class GeminiStrategy(AIStrategy):
-    """Gemini 기반 분석 전략"""
+    """종료된 구형 모의 분석의 호환 진입점."""
+
+    def __init__(self, api_key: str):
+        super().__init__(api_key)
+        self.is_available = False
 
     def analyze(self, stock_info: Dict, news_items: List[NewsItem]) -> Optional[Dict]:
-        """
-        Gemini 전략 분석.
-        현재는 안정성을 위해 Mock 기반 분석 결과를 반환한다.
-        """
-        _ = news_items
-        if not self.is_available:
-            return None
-
-        try:
-            import random
-
-            templates = MockAnalysisTemplates()
-            driver = random.choice(templates.INVESTMENT_DRIVERS)
-            risk = random.choice(templates.RISK_FACTORS)
-            hypothesis_template = random.choice(templates.HYPOTHESIS_TEMPLATES)
-
-            hypothesis = hypothesis_template.format(
-                name=stock_info.get("name", "동사"),
-                driver=driver,
-                risk=risk,
-            )
-
-            rich_reason = f"""
-[핵심 투자 포인트]
-• {driver}
-• {random.choice(templates.INVESTMENT_DRIVERS)}
-
-[리스크 요인]
-• {risk}
-
-[종합 의견]
-{hypothesis}
-"""
-
-            return {
-                "action": "BUY",
-                "confidence": _safe_int(random.randint(
-                    AI_ANALYSIS.CONFIDENCE_BUY_MIN,
-                    AI_ANALYSIS.CONFIDENCE_MAX,
-                )),
-                "reason": rich_reason.strip(),
-                "news_sentiment": random.choice(["positive", "positive", "neutral"]),
-            }
-
-        except Exception as e:
-            logger.error(f"Gemini 분석 실패: {e}")
-            return None
+        logger.warning("구형 모의 분석은 종료되었습니다. VCP 분석기를 사용하세요.")
+        return None
 
 
-class GPTStrategy(AIStrategy):
-    """GPT 기반 분석 전략"""
-
-    def analyze(self, stock_info: Dict, news_items: List[NewsItem]) -> Optional[Dict]:
-        """
-        GPT 전략 분석.
-        현재는 안정성을 위해 Mock 기반 분석 결과를 반환한다.
-        """
-        _ = news_items
-        if not self.is_available:
-            return None
-
-        try:
-            import random
-            price = _safe_float(stock_info.get("price"), 0.0)
-
-            return {
-                "action": "BUY",
-                "confidence": _safe_int(random.randint(
-                    AI_ANALYSIS.CONFIDENCE_MIN,
-                    AI_ANALYSIS.CONFIDENCE_MAX,
-                )),
-                "reason": "VCP 패턴 및 외인 매집 추이 확인",
-                "target_price": price * AI_ANALYSIS.TARGET_PRICE_RATIO,
-                "stop_loss": price * AI_ANALYSIS.STOP_LOSS_RATIO,
-            }
-
-        except Exception as e:
-            logger.error(f"GPT 분석 실패: {e}")
-            return None
+class GPTStrategy(GeminiStrategy):
+    """종료된 구형 GPT 모의 분석의 호환 진입점."""
 
 
 class RecommendationCombiner:

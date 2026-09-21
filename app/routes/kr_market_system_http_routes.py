@@ -125,38 +125,12 @@ def _register_reanalyze_gemini_route(
 ) -> None:
     @kr_bp.route('/reanalyze/gemini', methods=['POST'])
     def reanalyze_gemini():
-        """
-        [AI] 기존 시그널 대상 Gemini 심층 재분석 (사용자 요청 기반)
-        * 정책:
-          - 개인 키 있음: 무제한
-          - 개인 키 없음: 10회 제한 (usage_tracker)
-        """
-        def _handler():
-            from flask import g
-            from services.usage_tracker import usage_tracker
+        """구형 모의 분석은 키·쿼터·파일 접근 전에 종료한다."""
+        return jsonify({
+            "status": "error", "code": "LEGACY_ANALYSIS_RETIRED",
+            "message": "구형 분석이 종료되었습니다. VCP 화면의 재분석 기능을 사용하세요.",
+        }), 410
 
-            user_api_key = g.get('user_api_key')
-            user_email = g.get('user_email')
-            req_data = request.get_json()
-            status_code, payload = deps["execute_user_gemini_reanalysis_request"](
-                user_api_key=user_api_key,
-                user_email=user_email,
-                req_data=req_data,
-                usage_tracker=usage_tracker,
-                logger=logger,
-                run_reanalysis_func=deps["run_user_gemini_reanalysis"],
-            )
-            return jsonify(payload), int(status_code)
-
-        return _execute_json_route(
-            handler=_handler,
-            logger=logger,
-            error_label="Error reanalyzing gemini",
-            error_response_builder=lambda _error: (
-                jsonify({"status": "error", "error": "Internal Server Error"}),
-                500,
-            ),
-        )
 
 
 def _register_refresh_route(

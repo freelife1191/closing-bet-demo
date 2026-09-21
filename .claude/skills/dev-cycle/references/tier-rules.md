@@ -203,6 +203,7 @@ Claude Code의 기존 QA 도구 순서는 실행 환경 표를 따른다.
 - `engine/market_gate_logic_utils.py`
 
 ### VCP 판정
+- `engine/signal_tracker_ai_helpers.py` — AI 추천 열을 직접 생성하므로 VCP-022에서 포함
 - `engine/vcp_ai_analyzer.py`
 - `engine/vcp_ai_analyzer_helpers.py`
 - `engine/vcp_ai_orchestration_helpers.py`

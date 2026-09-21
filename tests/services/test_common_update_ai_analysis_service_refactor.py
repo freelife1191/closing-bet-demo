@@ -7,7 +7,6 @@ Common Update AI Analysis Service 리팩토링 테스트
 from __future__ import annotations
 
 import json
-import sys
 import types
 
 import pandas as pd
@@ -108,97 +107,39 @@ def test_resolve_ai_target_limit_delegates_to_runtime_parser(monkeypatch):
     assert _resolve_ai_target_limit() == 17
 
 
-def test_run_ai_analysis_step_writes_empty_placeholder_when_no_signals(monkeypatch, tmp_path):
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "signals_log.csv").write_text("signal_date,ticker,score\n", encoding="utf-8")
-
-    fake_module = types.ModuleType("engine.kr_ai_analyzer")
-    fake_module.KrAiAnalyzer = type("KrAiAnalyzer", (), {})
-    monkeypatch.setitem(sys.modules, "engine.kr_ai_analyzer", fake_module)
-    monkeypatch.setattr(
-        "services.common_update_ai_analysis_service.__file__",
-        str(tmp_path / "services" / "common_update_ai_analysis_service.py"),
-    )
-
-    statuses: list[tuple[str, str]] = []
-    logger = type(
-        "L",
-        (),
-        {
-            "info": lambda *_a, **_k: None,
-            "warning": lambda *_a, **_k: None,
-            "error": lambda *_a, **_k: None,
-        },
-    )()
-
-    run_ai_analysis_step(
-        target_date="2026-03-06",
-        selected_items=["AI Analysis"],
-        vcp_df=None,
-        update_item_status=lambda name, status: statuses.append((name, status)),
+def test_empty_signals_preserve_existing_payload(monkeypatch, tmp_path):
+    import logging
+    (tmp_path / "signals_log.csv").write_text("signal_date,ticker,score\n")
+    path = tmp_path / "kr_ai_analysis.json"
+    path.write_text("preserved")
+    statuses = []
+    result = run_ai_analysis_step(
+        target_date="2026-03-06", selected_items=["AI Analysis"], vcp_df=None,
+        update_item_status=lambda *args: statuses.append(args),
         shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
-        logger=logger,
+        logger=logging.getLogger("test"), data_dir=str(tmp_path),
     )
-
-    latest_payload = json.loads((data_dir / "kr_ai_analysis.json").read_text(encoding="utf-8"))
-    dated_payload = json.loads((data_dir / "kr_ai_analysis_20260306.json").read_text(encoding="utf-8"))
-
-    assert statuses == [("AI Analysis", "running"), ("AI Analysis", "done")]
-    assert latest_payload["signal_date"] == "2026-03-06"
-    assert latest_payload["signals"] == []
-    assert dated_payload["signal_date"] == "2026-03-06"
-    assert dated_payload["signals"] == []
+    assert result == {"count": 0}
+    assert path.read_text() == "preserved"
+    assert statuses[-1][1] == "done"
 
 
-def test_run_ai_analysis_step_writes_kr_ai_analysis_files_for_targets(monkeypatch, tmp_path):
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "signals_log.csv").write_text(
-        "signal_date,ticker,score\n2026-03-06,5930,88\n",
-        encoding="utf-8",
+def test_first_analysis_creates_both_dated_signal_payloads(monkeypatch, tmp_path):
+    import logging
+    from services import common_update_ai_analysis_service as service
+    (tmp_path / "signals_log.csv").write_text("signal_date,ticker,name,score\n2026-03-06,5930,삼성전자,88\n")
+    good = {"action": "HOLD", "confidence": 75, "reason": "변동성 축소 뒤 거래량 확인이 필요합니다."}
+    monkeypatch.setattr(service, "get_vcp_analyzer", lambda: object())
+    monkeypatch.setattr(service, "run_async_analyzer_batch", lambda *_args: {"005930": {"gemini_recommendation": good}})
+    result = run_ai_analysis_step(
+        target_date="20260306", selected_items=["AI Analysis"], vcp_df=None,
+        update_item_status=lambda *_args: None, shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
+        logger=logging.getLogger("test"), data_dir=str(tmp_path),
     )
-
-    class _DummyAnalyzer:
-        def analyze_multiple_stocks(self, tickers):
-            assert tickers == ["005930"]
-            return {
-                "signals": [{"ticker": "005930", "name": "삼성전자"}],
-                "market_indices": {"kospi": {"value": 1}},
-            }
-
-    fake_module = types.ModuleType("engine.kr_ai_analyzer")
-    fake_module.KrAiAnalyzer = _DummyAnalyzer
-    monkeypatch.setitem(sys.modules, "engine.kr_ai_analyzer", fake_module)
-    monkeypatch.setattr(
-        "services.common_update_ai_analysis_service.__file__",
-        str(tmp_path / "services" / "common_update_ai_analysis_service.py"),
-    )
-
-    statuses: list[tuple[str, str]] = []
-    logger = type(
-        "L",
-        (),
-        {
-            "info": lambda *_a, **_k: None,
-            "warning": lambda *_a, **_k: None,
-            "error": lambda *_a, **_k: None,
-        },
-    )()
-
-    run_ai_analysis_step(
-        target_date="2026-03-06",
-        selected_items=["AI Analysis"],
-        vcp_df=None,
-        update_item_status=lambda name, status: statuses.append((name, status)),
-        shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
-        logger=logger,
-    )
-
-    latest_payload = json.loads((data_dir / "kr_ai_analysis.json").read_text(encoding="utf-8"))
-    dated_payload = json.loads((data_dir / "kr_ai_analysis_20260306.json").read_text(encoding="utf-8"))
-
-    assert statuses == [("AI Analysis", "running"), ("AI Analysis", "done")]
-    assert latest_payload["signal_date"] == "2026-03-06"
-    assert latest_payload["signals"] == [{"ticker": "005930", "name": "삼성전자"}]
-    assert dated_payload["signals"] == [{"ticker": "005930", "name": "삼성전자"}]
+    assert result["count"] == 1
+    for prefix in ["ai_analysis_results", "kr_ai_analysis"]:
+        payload = json.loads((tmp_path / f"{prefix}_20260306.json").read_text())
+        assert payload["signal_date"] == "2026-03-06"
+        assert payload["signals"][0]["ticker"] == "005930"
+        assert payload["signals"][0]["gemini_recommendation"] == good
+        assert not (tmp_path / f"{prefix}.json").exists()

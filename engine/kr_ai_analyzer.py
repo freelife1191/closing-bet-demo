@@ -68,7 +68,7 @@ class KrAiAnalyzer:
         self.data_service = data_service or KrAiDataService()
 
         if not self.gemini_strategy.is_available and not self.gpt_strategy.is_available:
-            logger.warning("AI API 키가 설정되지 않았습니다.")
+            logger.warning("구형 모의 분석은 종료되었습니다. VCP 분석기를 사용하세요.")
 
     def analyze_stock(
         self,

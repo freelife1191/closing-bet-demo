@@ -66,7 +66,6 @@ from services.kr_market_route_service import (
     build_vcp_signals_payload,
     execute_jongga_gemini_reanalysis,
     execute_single_stock_analysis,
-    execute_user_gemini_reanalysis_request,
     execute_vcp_failed_ai_reanalysis,
     evaluate_market_gate_validity,
     fetch_realtime_prices,
@@ -163,7 +162,6 @@ def register_system_and_execution_route_groups(
     load_json_file_fn: Callable[[str], dict[str, Any]],
     load_csv_file_fn: Callable[[str], Any],
     get_data_path_fn: Callable[[str], str],
-    run_user_gemini_reanalysis_fn: Callable[..., dict[str, Any]],
 ) -> None:
     """시스템/실행 라우트 그룹을 등록한다."""
 
@@ -178,8 +176,6 @@ def register_system_and_execution_route_groups(
             build_market_gate_empty_payload=build_market_gate_empty_payload,
             normalize_market_gate_payload=normalize_market_gate_payload,
             execute_market_gate_update=execute_market_gate_update,
-            execute_user_gemini_reanalysis_request=execute_user_gemini_reanalysis_request,
-            run_user_gemini_reanalysis=run_user_gemini_reanalysis_fn,
             launch_background_update_job=launch_background_update_job,
             launch_init_data_update=launch_init_data_update,
             build_data_status_payload=build_data_status_payload,

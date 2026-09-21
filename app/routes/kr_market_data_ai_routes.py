@@ -82,13 +82,17 @@ def _register_ai_analysis_route(
         """KR AI 분석 전체 - kr_ai_analysis.json 직접 읽기 (V2 호환 최적화)"""
         def _handler():
             target_date = request.args.get("date")
-            dated_payload = deps["build_ai_analysis_payload_for_target_date"](
-                target_date=target_date,
-                load_json_file=deps["load_json_file"],
-                build_ai_signals_from_jongga_results=deps["build_ai_signals_from_jongga_results"],
-                normalize_ai_payload_tickers=deps["normalize_ai_payload_tickers"],
-                logger=logger,
-            )
+            try:
+                dated_payload = deps["build_ai_analysis_payload_for_target_date"](
+                    target_date=target_date,
+                    load_json_file=deps["load_json_file"],
+                    build_ai_signals_from_jongga_results=deps["build_ai_signals_from_jongga_results"],
+                    normalize_ai_payload_tickers=deps["normalize_ai_payload_tickers"],
+                    logger=logger,
+                )
+            except ValueError:
+                logger.warning("[AI Analysis] Invalid date rejected before file access")
+                return jsonify({"error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."}), 400
             if dated_payload is not None:
                 return jsonify(dated_payload)
 

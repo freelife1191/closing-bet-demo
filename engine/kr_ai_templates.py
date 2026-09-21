@@ -4,6 +4,7 @@
 KR AI Analyzer 템플릿 데이터
 """
 
+import re
 from dataclasses import dataclass
 
 
@@ -12,7 +13,7 @@ class MockAnalysisTemplates:
     """
     AI 분석 Mock 데이터 템플릿
 
-    실제 API 키가 없을 때 사용하는 풍부한 샘플 데이터.
+    과거 고정 산출물을 조회 경계에서 식별하기 위한 자료. 새 분석에는 사용하지 않는다.
     """
 
     INVESTMENT_DRIVERS: tuple = (
@@ -49,3 +50,27 @@ class MockAnalysisTemplates:
 
 
 __all__ = ["MockAnalysisTemplates"]
+
+
+def is_legacy_analysis_template(reason: object) -> bool:
+    """고정 템플릿 전체 일치만 판별한다. 실제 생산자 귀속을 추론하지 않는다."""
+    if not isinstance(reason, str) or len(reason) > 4096:
+        return False
+    text = reason.strip()
+    if text == "VCP 패턴 및 외인 매집 추이 확인":
+        return True
+    match = re.fullmatch(
+        r"\[핵심 투자 포인트\]\n• ([^\n]+)\n• ([^\n]+)\n\n"
+        r"\[리스크 요인\]\n• ([^\n]+)\n\n\[종합 의견\]\n(.+)", text
+    )
+    if match is None:
+        return False
+    driver, second, risk, hypothesis = match.groups()
+    templates = MockAnalysisTemplates
+    if driver not in templates.INVESTMENT_DRIVERS or second not in templates.INVESTMENT_DRIVERS or risk not in templates.RISK_FACTORS:
+        return False
+    for template in templates.HYPOTHESIS_TEMPLATES:
+        pattern = re.escape(template.format(name="{name}", driver=driver, risk=risk))
+        if re.fullmatch(pattern.replace(re.escape("{name}"), r"[^\n]*"), hypothesis):
+            return True
+    return False

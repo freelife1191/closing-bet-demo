@@ -646,62 +646,12 @@ def test_config_interval_get_stays_open_for_anonymous():
     assert "interval" in response.get_json()
 
 
-def test_reanalyze_gemini_requires_login_without_api_key():
-    client = _create_client()
-
-    response = client.post("/api/kr/reanalyze/gemini", json={})
-
-    assert response.status_code == 401
-    payload = response.get_json()
-    assert payload["code"] == "UNAUTHORIZED"
 
 
-def test_reanalyze_gemini_returns_402_when_quota_exceeded(monkeypatch):
-    import services.usage_tracker as usage_tracker_module
-
-    monkeypatch.setattr(usage_tracker_module.usage_tracker, "check_and_increment", lambda _email: False)
-    client = _create_client_with_user(user_api_key=None, user_email="tester@example.com")
-
-    response = client.post("/api/kr/reanalyze/gemini", json={})
-
-    assert response.status_code == 402
-    payload = response.get_json()
-    assert payload["code"] == "LIMIT_EXCEEDED"
 
 
-def test_reanalyze_gemini_runs_batch_with_user_key(monkeypatch):
-    monkeypatch.setattr(
-        kr_market,
-        "run_user_gemini_reanalysis",
-        lambda **_kwargs: {"count": 3},
-    )
-    client = _create_client_with_user(user_api_key="test-key", user_email="tester@example.com")
-
-    response = client.post(
-        "/api/kr/reanalyze/gemini",
-        json={"target_dates": "2026-02-20"},
-    )
-
-    assert response.status_code == 200
-    payload = response.get_json()
-    assert payload["status"] == "success"
-    assert "3개 종목" in payload["message"]
 
 
-def test_reanalyze_gemini_returns_500_when_batch_fails(monkeypatch):
-    monkeypatch.setattr(
-        kr_market,
-        "run_user_gemini_reanalysis",
-        lambda **_kwargs: {"error": "batch failed"},
-    )
-    client = _create_client_with_user(user_api_key="test-key", user_email="tester@example.com")
-
-    response = client.post("/api/kr/reanalyze/gemini", json={})
-
-    assert response.status_code == 500
-    payload = response.get_json()
-    assert payload["status"] == "error"
-    assert payload["error"] == "batch failed"
 
 
 @pytest.mark.parametrize("error", [
@@ -758,3 +708,15 @@ def test_chatbot_multipart_command_classification_matches_parser_case(monkeypatc
     response.get_data()
     assert bot.calls[0]["message"] == "/status"
     assert kr_market.get_user_usage("anon_session-command") == 0
+
+
+@pytest.mark.parametrize('body', [{}, {'target_dates': ['2026-02-30']}, []])
+def test_retired_gemini_returns_410_without_quota(monkeypatch, body):
+    import services.usage_tracker as usage_tracker_module
+    def forbidden(*args, **kwargs):
+        raise AssertionError('retired route must not consume quota')
+    monkeypatch.setattr(usage_tracker_module.usage_tracker, 'check_and_increment', forbidden)
+    client = _create_client_with_user(user_api_key='unused-test-key', user_email='tester@example.com')
+    response = client.post('/api/kr/reanalyze/gemini', json=body)
+    assert response.status_code == 410
+    assert response.get_json()['code'] == 'LEGACY_ANALYSIS_RETIRED'
