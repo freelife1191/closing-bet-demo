@@ -1,0 +1,92 @@
+[
+  {
+    "mode": "zero",
+    "expected": "0",
+    "amount": 0,
+    "observation": {
+      "personal": "개인0",
+      "errors": [],
+      "consoleErrors": [],
+      "foreignUnchanged": true,
+      "institutionUnchanged": true
+    },
+    "httpStatus": 200,
+    "actual": 0,
+    "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-zero-stable.png"
+  },
+  {
+    "mode": "positive",
+    "expected": "+1억",
+    "amount": 100000000,
+    "observation": {
+      "personal": "개인+1억",
+      "errors": [],
+      "consoleErrors": [],
+      "foreignUnchanged": true,
+      "institutionUnchanged": true
+    },
+    "httpStatus": 200,
+    "actual": 100000000,
+    "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-positive-stable.png"
+  },
+  {
+    "mode": "negative",
+    "expected": "-1억",
+    "amount": -100000000,
+    "observation": {
+      "personal": "개인-1억",
+      "errors": [],
+      "consoleErrors": [],
+      "foreignUnchanged": true,
+      "institutionUnchanged": true
+    },
+    "httpStatus": 200,
+    "actual": -100000000,
+    "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-negative-stable.png"
+  },
+  {
+    "mode": "missing",
+    "expected": "자료 없음",
+    "amount": null,
+    "observation": {
+      "personal": "개인자료없음",
+      "errors": [],
+      "consoleErrors": [],
+      "foreignUnchanged": true,
+      "institutionUnchanged": true
+    },
+    "httpStatus": 200,
+    "actual": null,
+    "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-missing-stable.png"
+  },
+  {
+    "mode": "invalid",
+    "expected": "자료 없음",
+    "amount": null,
+    "observation": {
+      "personal": "개인자료없음",
+      "errors": [],
+      "consoleErrors": [],
+      "foreignUnchanged": true,
+      "institutionUnchanged": true
+    },
+    "httpStatus": 200,
+    "actual": null,
+    "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-invalid-stable.png"
+  },
+  {
+    "mode": "legacy",
+    "expected": "자료 없음",
+    "amount": null,
+    "observation": {
+      "personal": "개인자료없음",
+      "errors": [],
+      "consoleErrors": [],
+      "foreignUnchanged": true,
+      "institutionUnchanged": true
+    },
+    "httpStatus": 200,
+    "actual": null,
+    "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-legacy-stable.png"
+  }
+]

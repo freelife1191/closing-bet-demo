@@ -1,0 +1,15 @@
+{
+  "mode": "legacy",
+  "expected": "자료 없음",
+  "amount": null,
+  "observation": {
+    "personal": "개인자료없음",
+    "errors": [],
+    "consoleErrors": [],
+    "foreignUnchanged": false,
+    "institutionUnchanged": false
+  },
+  "httpStatus": 200,
+  "actual": null,
+  "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-legacy-stable.png"
+}

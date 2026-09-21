@@ -1,0 +1,55 @@
+{
+  "reviewer": "parent",
+  "images": [
+    {
+      "path": "ego-zero-stable.png",
+      "sha256": "2e9113691dc5f05a8aa0c3ff6fafb40843f0867117ab0f0574219e1dc060eeee",
+      "viewed": true,
+      "verdict": "expected value visible"
+    },
+    {
+      "path": "ego-positive-stable.png",
+      "sha256": "0ba80f0fcf25364a107c822dc6999d09c5b46207b8a635213be6b5f43deb203f",
+      "viewed": true,
+      "verdict": "expected value visible"
+    },
+    {
+      "path": "ego-negative-stable.png",
+      "sha256": "59b3d62fa2516cb7601932780ec53c6529f95794ffad6065e614b6300968fa4d",
+      "viewed": true,
+      "verdict": "expected value visible"
+    },
+    {
+      "path": "ego-missing-stable.png",
+      "sha256": "32283b77a85e841815a050e5d57afb4db3112ef2d684d6185f94307960aef53f",
+      "viewed": true,
+      "verdict": "expected value visible"
+    },
+    {
+      "path": "ego-invalid-stable.png",
+      "sha256": "32283b77a85e841815a050e5d57afb4db3112ef2d684d6185f94307960aef53f",
+      "viewed": true,
+      "verdict": "expected value visible"
+    },
+    {
+      "path": "ego-legacy-stable.png",
+      "sha256": "32283b77a85e841815a050e5d57afb4db3112ef2d684d6185f94307960aef53f",
+      "viewed": true,
+      "verdict": "expected value visible"
+    },
+    {
+      "path": "ego-error.png",
+      "sha256": "75a4f2fdc59f5653a5b69c9889ee7a1a2a50ccf8aea33bb2fa2266b22a05c7c0",
+      "viewed": true,
+      "verdict": "expected value visible"
+    },
+    {
+      "path": "ego-recovered.png",
+      "sha256": "0ba80f0fcf25364a107c822dc6999d09c5b46207b8a635213be6b5f43deb203f",
+      "viewed": true,
+      "verdict": "expected value visible"
+    }
+  ],
+  "scope": "1280x1000 desktop personal-flow modal; not whole-app/mobile design audit",
+  "note": "Initial large viewport and cycle1 images excluded from final verdict. Recovered image confirms settled common layout."
+}

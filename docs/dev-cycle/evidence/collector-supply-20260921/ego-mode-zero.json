@@ -1,0 +1,15 @@
+{
+  "mode": "zero",
+  "expected": "0",
+  "amount": 0,
+  "observation": {
+    "personal": "개인0",
+    "errors": [],
+    "consoleErrors": [],
+    "foreignUnchanged": true,
+    "institutionUnchanged": true
+  },
+  "httpStatus": 200,
+  "actual": 0,
+  "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-zero-stable.png"
+}

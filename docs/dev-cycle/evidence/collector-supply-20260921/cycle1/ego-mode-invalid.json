@@ -1,0 +1,15 @@
+{
+  "mode": "invalid",
+  "expected": "자료 없음",
+  "amount": null,
+  "observation": {
+    "personal": "개인자료없음",
+    "errors": [],
+    "consoleErrors": [],
+    "foreignUnchanged": true,
+    "institutionUnchanged": true
+  },
+  "httpStatus": 200,
+  "actual": null,
+  "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-invalid-stable.png"
+}

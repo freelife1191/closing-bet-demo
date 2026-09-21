@@ -1,56 +1,88 @@
 # UltraQA Report
 
-대상: INFRA-030 / FLOW-014. engine=ultraqa, lifecycle=app-adapted.
-phase=ready, iteration=0, same_failure_count=0, cleanup=pending.
-브라우저: required, 사용자 지정 ego-browser. 기존 종목 상세 UI의 데이터 계약 변경이므로 필수.
-기준: base63b1db0에서 변경, 제품·계획 해시는 evidence/collector-supply-20260921/review-frozen.json.
-첫 구현 커밋은 리뷰 통과 후 기록하며 아직 브라우저 실측을 시작하지 않았다.
+대상: INFRA-030 / FLOW-014 · 구현 커밋 cb51702 · 티어 T3.
+engine=ultraqa, lifecycle=app-adapted, phase=complete, iteration=2, same_failure_count=0, cleanup=complete.
+브라우저 required, 사용자 지정 ego-browser Space16/p1, 1280×1000 데스크톱.
+검증된 제품·계획29경로 SHA 목록은 `review-frozen.json`(aee99f...f11a3)이며,
+원본 작업 트리·검증 scratch·구현 커밋의 일치를 정리 전에 확인했다.
 
-## 목표와 경계
+## 목표·완료 조건·경계
 
-공개 수집기 단일화와 과거 날짜 동작을 보존하고, 개인 값0/자료없음과 조회 경합·성능 개선을
-실제 수정 코드에서 확인한다. 필수9행·baseline·정리 모두 통과해야 완료한다.
-최대5cycle/같은실패3회에서 미완료로 중단한다. fixture/명령 timeout은 실행 JSON에 남긴다.
-원본3500/5501/live, 실제 .env/data, 실제 인증/LLM/수집/설정저장/계좌변경/삭제는 제외한다.
-scratch의 원시 합성 공급자 → 실제 parser/service/SQLite → 합성 HTTP → 실제 Next UI를 검사한다.
-시장 API 성능이나 운영 인증을 검증했다고 보고하지 않는다.
+공개 수집기 단일화와 과거 날짜 계약을 보존하고 개인 수급0/자료없음, 조회 경합 및 대량 대기
+개선을 실제 수정 코드로 검증한다. 필수9행·baseline·증거·정리가 모두 통과했다.
+한도는 최대5cycle/동일실패3회다. 개발 TDD 실패와 브라우저 QA cycle을 분리해 기록했다.
+원본3500/5501/live, 실제 .env/data, 실제 인증·LLM·시장 수집·설정저장·계좌변경·삭제는 사용하지 않았다.
+원시 합성 공급자 → 실제 parser/service/SQLite → 합성 Flask HTTP → 실제 Next UI를 검사했다.
+인증·외부 공급자·HTTP 라우트 껍질은 대체됐으며 운영 end-to-end나 시장 API 속도를 검증한 것은 아니다.
 
 ## 필수 행렬
 
-| ID | 의도·사용자/오류 모델 | 설정·실행 | 기대 | 실제·증거 | 수정·정리 |
-|---|---|---|---|---|---|
-| Q1 | 운영 호출자·import 순서 변경 | package/subprocess 및 KRX 날짜/캐시 회귀 | 동일 클래스·동일 날짜/결과·설정 경로 | preflight55 + 추가 import, 최종 확인 대기 | root lazy export, 소유 임시자료 정리 |
-| Q2 | 정상/불완전/비유한 개인 수급 | 실제 Toss/pykrx/CSV 정규화·fixture probe | 0,+1억,-1억,None 구분; 누락은 역산하지 않음 | fixture-preflight6모드 일치, 최종 대조 대기 | 개인 helper, synthetic data |
-| Q3 | 구형/신형 캐시 | 실제 reference/collector/상세 SQLite roundtrip | 구형0은None, 검증된 새0은0 | 회귀·fixture-preflight 통과, 최종 대조 대기 | marker decode, 원본 저장소 미변경 |
-| Q4 | 중복 요청·중단·stale 작업 | Event/Future/가상clock 경합 검사 | 같은key1회,60초재시도,clear 전 작업 publish0회 | batch-first 및 batch-extended 로그 | 세대/TTL, 대기자·소유작업 회수 |
-| Q5 | 대량 경계·중복 티커 | cutoff/가격부족/VCP false/순차-배치 대조 | 범위밖조회0회, 결과와 순서 동일 | batch-extended15검사, 최종 대조 대기 | pandas 준비는 호출스레드 |
-| Q6 | 느린 공급자 | 600건×50ms, 순차3회/배치3회, 실제 cache 포함 | 동일600결과·최대4·중앙값50%이하 | 35.673345→9.883845초, 비율0.277065, bench-final.log | 각 subprocess60초, 소유 임시경로 제거 |
-| Q7 | 실제 UI 정상·자료없음 | ego: 상세 모달 0/+1억/-1억/누락/invalid/legacy | API와 개인 행 표시 일치, 새콘솔예외 없음 | 미실행 | 새 Space 하나, 이미지 직접 열람 |
-| Q8 | 조회 실패 후 복구 | ego: 닫기→fixture503→재열기→정상→재열기 | 실패 문구 후 정상값, 페이지 reload 없음 | 미실행 | 같은 모달 인스턴스 자동갱신으로 주장하지 않음 |
-| Q9 | 오해 가능한 성공·잔재·dirty 파일 | Next진단/로그종료코드/SHA/포트/PID/Space검증 | 필수오류0·소유서비스종료·원본packageSHA유지 | 미실행 | hook/OMX 상태 미활성·미조작 |
+| ID | 의도·사용자/오류 모델 | 실행·기대 | 실제·증거 | 판정 |
+|---|---|---|---|---|
+| Q1 | 운영 호출자·import 순서 | 공개/하위 클래스·과거 날짜·설정 경로 계약 유지 | package/collector 회귀와 service-first subprocess; 최종 전체2449에 포함 | PASS |
+| Q2 | 정상·누락·잘못된 개인 값 | 0,+1억,-1억,None을 구분, 역산 없음 | 실제 parser+서비스의6모드와 개인 날짜/숫자 회귀 | PASS |
+| Q3 | 구형·신형·손상 캐시 | 구형0→None, 새0→0, 외국인기관보존 | reference/collector/detail cold SQLite 회귀 및 fixture6모드 reread | PASS |
+| Q4 | 중복·느린 작업·clear | 같은key1회,60초후재시도,구세대publish0회 | Event/Future/가상clock, 경로 분리, 대기자 해제, 실패LRU검사 | PASS |
+| Q5 | 대량 cutoff·중복 후보 | 범위밖조회0회,결과·순서동일 | 가격19행·max0/음수·VCPfalse·중복ticker·순차대조 | PASS |
+| Q6 | 느린 공급자 | 600×50ms,각방식3회,동일결과·최대4·중앙값50%이하 | 35.673345→9.883845초,비율0.277065,각600호출·digest동일 | PASS |
+| Q7 | 실제 사용자 화면 | 0/+1억/-1억/누락/invalid/legacy의API·표시일치 | ego-modes.json 6/6; 모든모드 외국인+10억/기관+5억보존; 화면8PNG직접열람 | PASS |
+| Q8 | 조회 실패·복구 | 모달닫기/재열기,페이지reload없이503→정상 | 합성조회실패 문구→+1억,같은performance.timeOrigin,ego-recovery.json | PASS |
+| Q9 | misleading success·dirty파일·잔재 | Next오류0·소유자원종료·기존package유지 | Next두진단빈배열,로그51개SHA,Spacefinish1회,3포트닫힘,scratch제거 | PASS |
 
-## 정적 검증과 개발 중 실패
+## 실행과 정적 검증
 
-baseline pytest2422/3skip, Vitest629. 현재 pytest2449/3skip, Vitest634/83파일,
-build3/3, typecheck0, lint0오류184경고. 각 명령 원문·시각·종료코드는 evidence 경로 JSON/log에 있다.
-skip3은 수동 Gemini2건과 실제 .env 없는 환경1건이다. 필수 행 통과로 세지 않는다.
+baseline: pytest2422/3skip, Vitest629. 최종: pytest2449/3skip, Vitest634/83파일,
+build3/3, typecheck exit0, lint0오류184경고. skip은 수동Gemini2건과 실제.env없는환경1건이며
+필수 시나리오 성공으로 세지 않는다. 명령·종료코드·시각·timeout은 동일이름 JSON에 보존했다.
 
-개발 RED: 공개/하위 KRX identity1실패 → 단일화; import 순환 collection오류 → root지연노출;
-개인 정규화/legacy0 5실패 → nullable/marker; TTL/clear/data_dir 3실패 → 공유 캐시;
-batch API/cutoff2실패 → 제한된 병렬화; UI null/zero2실패 → 구분표시.
-옛0표시 검사 정정 시 selector 이름을 잘못 골라 한 단언이 남았으며, 원문 오류를 확인해 수정했다.
-테스트 기대 변경은 승인한0/None계약에 한정하며 외국인/기관 값과 점수 단언은 유지했다.
-제거된 private 테스트24개는 retired-tests.md에 이유와 대체 계약을 남겼다.
+- pytest 최종: `pytest-import-repair.json`, 180초한도, exit0.
+- 프론트엔드: `vitest-final.json`, `build-integrated.json`, `typecheck-final.json`, `lint-final.json` 모두exit0.
+- 성능: `bench-final.json`, 6개자식각60초/전체240초한도, exit0. 요청수는 최초600개를 유지하며 대기를 줄였다.
+- fixture: `fixture-cycle2-preflight.json`, 실제Flask handler·parser·SQLite6모드와 금지mutation405, exit0.
+- 최종 증거 대조: `verify_evidence.py`, source/scratch/commit29경로 및로그51개SHA확인.
 
-## 알려진 한계
+원시 로그는 `<원래이름>.log.gz`에 보존했다. `log-index.json`의 원문SHA/바이트가 압축해제 결과와
+일치한다. 최종 diff도 `review-diff.txt.gz`와 무결성 기록으로 보존한다.
 
-최초 서로 다른 종목 N개의 공급자 요청은 N개일 수 있다. 단축 수치는 합성 지연 하네스이며
-실제 시장 응답 속도가 아니다. 개별 HTTP 조회에 전체 deadline을 새로 보장하지 않는다.
-review 도구는 native 독립 레인과 T3 체크리스트의 App 대응이며 외부 gstack/Claude CLI
-런타임·홈 기록·텔레메트리는 실행하지 않는다.
+## 발견과 보완
+
+개발 TDD에서 공개 KRX identity, import순환, 개인값삭제/구형0, TTL/clear/data_dir혼합,
+batch API/cutoff, UI0/None을 재현하고 수정했다. 기존 테스트 기대 변경은 승인한0/None계약에
+한정한다. 제거한 private테스트24개와 대체 실행 계약은 `retired-tests.md`에 남겼다.
+
+코드 리뷰가 날짜유실/개인날짜집합 불일치와 import그룹을 지적해 수정했다. 이후 상세 캐시의
+비정수와 KRX 캐시의 잘못된 개인값도 RED로 재현해 공용 decoder로 보완했다. 공통 helper를
+정리하다 logger가 import보다 앞에 놓여 수집오류55건과fixture실패가 생겼다. 실패 원문을
+보존하고 고친 뒤 전체2449/3skip과fixture를 다시 검증했으며 오래된GREEN으로 대체하지 않았다.
+
+구조 리뷰의056080 fallback회귀 주장은 비실사용 모듈형과 실사용legacy를 혼동한 것이었다.
+기준 소스와 실제 호출자로 재대조해 reviewer가 BLOCK을 철회했다. 이를 제품 수정으로 보고하지 않는다.
+
+QA cycle1에서는 여섯개 개인 값은 맞았지만 마지막 snapshot root에CSS를 준 호출형식 오류가 났다.
+또 구형fixture에는 확정5일필드가 빠져 외국인·기관 대조값이 달랐다. 제품은 변경하지 않고
+snapshot호출을 교정하며 실제서비스로 확정필드를 넣어구형cache를 만들었다. fixture별 고유
+cache epoch를 추가해 preflight잔재를 재사용하지 않게 했다. 같은Space16을 유지하고 cycle2에서
+6모드를 모두 다시통과했다. cycle1자료는 별도폴더와 relocation기록으로 보존한다.
+
+## 리뷰·정리·제한
+
+ponytail2개삭제제안 반영 → code-review APPROVE → architect CLEAR → T3 APPROVE.
+생성한독립코드/심층레인과 기존독립에이전트의architecture역할 검토를 사용했다. 신규구조레인생성은
+thread limit으로 거부되어 기존에이전트에 배정했으며 전용새호출성공으로 주장하지 않는다.
+T3는 App-safe 체크리스트+native 적대적검토, 테스트/fixture는summary mode였다.
+외부gstack/ClaudeCLI·LSP·홈기록·텔레메트리 및 OMX상태는 실행하지 않았다.
+
+Gateway77응답 중 API52건(200:49, 예상503:3), 금지브라우저mutation0, 예상외API실패0.
+합성fixture로그의405는 별도경계프로브이며 원본라우트에 보낸 것이 아니다.
+Next진단 configErrors/sessionErrors/issues 모두빈배열. DOM 오류·console.error 계측도빈배열이며
+예상HTTP503 자체를 성공응답이라고 표현하지 않는다.
+
+Space16을 finish({keep:[]})로정확히한번닫았다. 소유PID/cwd/PGID확인후서버종료,
+57940/57941/57942닫힘, scratch제거, 원본venv존속과 사용자packageSHA보존을확인했다.
+화면판정은 개인수급영역의 데스크톱 실측이며 전체앱/모바일미관감사는 아니다.
+개별HTTP요청의 전체deadline과 전역여러프로세스 동시성제한은 이번에추가하지 않았다.
 
 ## 최종 판정
 
-미완료. 코드 APPROVE / 구조 CLEAR / T3 APPROVE, 최종29경로동결 aee99f...와 실행scratch 일치. 필수 브라우저 행·정리 확인 후 완료 판정한다.
-
-추가 보완: 날짜 집합 불일치 RED2, 상세소수 RED2, KRX개인캐시 RED5를 실제 재현해 수정했다. 공통 decoder 정리 중 import logger 순서가 잘못되어 collection55오류/fixture실패가 났으며 원문 보존 후 수정, 마지막 전체2449/3skip과fixture를 다시 통과했다.
+ULTRAQA COMPLETE: Goal met after 2 cycles (App-adapted).
+필수9/9와정리통과. [증거 폴더](../evidence/collector-supply-20260921/verify_evidence.py).

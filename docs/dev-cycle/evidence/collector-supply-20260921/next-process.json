@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 99398,
+  "pgid": 99398,
+  "port": 57941,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "57941"
+  ]
+}

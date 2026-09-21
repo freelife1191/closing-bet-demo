@@ -1,0 +1,14 @@
+[
+  {
+    "original": "next-get_errors.txt",
+    "archive": "next-get_errors.txt.raw.gz",
+    "bytes": 138,
+    "sha256": "4b4a2ef3efc1d266e78570d7d8269a3b2f9583110e4aab650c16bce74b9f7198"
+  },
+  {
+    "original": "next-get_compilation_issues.txt",
+    "archive": "next-get_compilation_issues.txt.raw.gz",
+    "bytes": 111,
+    "sha256": "165004b17c0f66d14386553909fb90d02836d6b334a65417e52c892634638bd1"
+  }
+]

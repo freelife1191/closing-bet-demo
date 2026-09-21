@@ -1,0 +1,15 @@
+{
+  "kind": "fixture",
+  "pid": 23765,
+  "pgid": 23765,
+  "port": 57942,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf/venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf/docs/dev-cycle/evidence/collector-supply-20260921/fixture.py",
+    "--repo",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf",
+    "--port",
+    "57942"
+  ]
+}

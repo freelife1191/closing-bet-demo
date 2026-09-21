@@ -1,0 +1,200 @@
+{
+  "base": "b4a0ae5",
+  "implementation": "cb51702",
+  "files": [
+    {
+      "path": "engine/__init__.py",
+      "owner": "INFRA-030",
+      "add": 9,
+      "delete": 5
+    },
+    {
+      "path": "engine/collectors.py",
+      "owner": "INFRA-030",
+      "add": 0,
+      "delete": 2500
+    },
+    {
+      "path": "engine/collectors/__init__.py",
+      "owner": "INFRA-030",
+      "add": 8,
+      "delete": 0
+    },
+    {
+      "path": "engine/collectors/krx.py",
+      "owner": "INFRA-030",
+      "add": 166,
+      "delete": 128
+    },
+    {
+      "path": "engine/collectors/krx_data_mixin.py",
+      "owner": "INFRA-030",
+      "add": 78,
+      "delete": 37
+    },
+    {
+      "path": "engine/collectors/krx_local_cache_helpers.py",
+      "owner": "INFRA-030",
+      "add": 0,
+      "delete": 141
+    },
+    {
+      "path": "engine/collectors/krx_local_data_mixin.py",
+      "owner": "INFRA-030",
+      "add": 957,
+      "delete": 1046
+    },
+    {
+      "path": "engine/collectors/naver_pykrx_mixin.py",
+      "owner": "INFRA-030",
+      "add": 18,
+      "delete": 16
+    },
+    {
+      "path": "engine/investor_personal_flow.py",
+      "owner": "INFRA-030",
+      "add": 63,
+      "delete": 0
+    },
+    {
+      "path": "engine/models.py",
+      "owner": "INFRA-030",
+      "add": 5,
+      "delete": 6
+    },
+    {
+      "path": "engine/screener.py",
+      "owner": "FLOW-014",
+      "add": 81,
+      "delete": 75
+    },
+    {
+      "path": "engine/toss_collector_metric_parsers.py",
+      "owner": "INFRA-030",
+      "add": 7,
+      "delete": 0
+    },
+    {
+      "path": "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-022.test.tsx",
+      "owner": "INFRA-030",
+      "add": 27,
+      "delete": 2
+    },
+    {
+      "path": "frontend/src/app/dashboard/kr/closing-bet/page.tsx",
+      "owner": "INFRA-030",
+      "add": 13,
+      "delete": 9
+    },
+    {
+      "path": "services/investor_trend_5day_service.py",
+      "owner": "FLOW-014",
+      "add": 136,
+      "delete": 120
+    },
+    {
+      "path": "services/kr_market_stock_detail_service.py",
+      "owner": "INFRA-030",
+      "add": 8,
+      "delete": 3
+    },
+    {
+      "path": "tests/engine/test_collectors_package_contract.py",
+      "owner": "INFRA-030",
+      "add": 17,
+      "delete": 0
+    },
+    {
+      "path": "tests/engine/test_collectors_refactor.py",
+      "owner": "INFRA-030",
+      "add": 108,
+      "delete": 119
+    },
+    {
+      "path": "tests/engine/test_collectors_unified_supply_service_refactor.py",
+      "owner": "INFRA-030",
+      "add": 3,
+      "delete": 3
+    },
+    {
+      "path": "tests/engine/test_krx_data_mixin_refactor.py",
+      "owner": "INFRA-030",
+      "add": 4,
+      "delete": 3
+    },
+    {
+      "path": "tests/engine/test_krx_local_cache_helpers_refactor.py",
+      "owner": "INFRA-030",
+      "add": 24,
+      "delete": 994
+    },
+    {
+      "path": "tests/engine/test_naver_collector_refactor.py",
+      "owner": "INFRA-030",
+      "add": 2,
+      "delete": 2
+    },
+    {
+      "path": "tests/engine/test_screener_supply_batch.py",
+      "owner": "FLOW-014",
+      "add": 99,
+      "delete": 0
+    },
+    {
+      "path": "tests/services/test_investor_personal_flow.py",
+      "owner": "INFRA-030",
+      "add": 120,
+      "delete": 0
+    },
+    {
+      "path": "tests/services/test_investor_trend_5day_service.py",
+      "owner": "FLOW-014",
+      "add": 3,
+      "delete": 0
+    },
+    {
+      "path": "tests/services/test_investor_trend_reference_concurrency.py",
+      "owner": "FLOW-014",
+      "add": 149,
+      "delete": 0
+    },
+    {
+      "path": "tests/services/test_kr_market_stock_detail_service_refactor.py",
+      "owner": "INFRA-030",
+      "add": 1,
+      "delete": 1
+    }
+  ],
+  "totals": {
+    "INFRA-030": {
+      "add": 1638,
+      "delete": 5015,
+      "files": 22
+    },
+    "FLOW-014": {
+      "add": 468,
+      "delete": 195,
+      "files": 5
+    }
+  },
+  "shared_assignment": "investor_trend_5day_service.py is counted only under FLOW-014; personal validation helper/tests only under INFRA-030",
+  "product_vs_tests": {
+    "product": {
+      "files": 15,
+      "add": 1549,
+      "delete": 4086,
+      "net": -2537
+    },
+    "tests": {
+      "files": 12,
+      "add": 557,
+      "delete": 1124,
+      "net": -567
+    }
+  },
+  "documents": {
+    "add": 5457,
+    "delete": 78,
+    "binary_files": 69
+  }
+}

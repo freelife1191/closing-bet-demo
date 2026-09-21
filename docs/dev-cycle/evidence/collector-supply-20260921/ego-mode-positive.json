@@ -1,0 +1,15 @@
+{
+  "mode": "positive",
+  "expected": "+1억",
+  "amount": 100000000,
+  "observation": {
+    "personal": "개인+1억",
+    "errors": [],
+    "consoleErrors": [],
+    "foreignUnchanged": true,
+    "institutionUnchanged": true
+  },
+  "httpStatus": 200,
+  "actual": 100000000,
+  "screenshot": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/collector-supply-20260921/ego-positive-stable.png"
+}

@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 from datetime import datetime
 
@@ -22,12 +23,13 @@ from services.kr_market_data_cache_sqlite_payload import save_json_payload_to_sq
 app = Flask("collector-supply-fixture")
 logger = logging.getLogger(__name__)
 state = {"mode": "zero", "version": 0}
+cache_epoch = uuid.uuid4().hex
 data_dir = ROOT / ".qa-supply" / "data"
 data_dir.mkdir(parents=True, exist_ok=True)
 log = ROOT / ".qa-supply" / "requests.jsonl"
 dates = ["2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18"]
 pd.DataFrame([{"ticker": "005930", "date": day, "foreign_buy": 200_000_000, "inst_buy": 100_000_000} for day in dates]).to_csv(data_dir / "all_institutional_trend_data.csv", index=False)
-detail._current_stock_detail_cache_slot = lambda: f"qa-{state['version']}"
+detail._current_stock_detail_cache_slot = lambda: f"qa-{cache_epoch}-{state['version']}"
 
 
 def synthetic_detail(self, ticker):
@@ -78,6 +80,7 @@ def stock_detail(ticker):
         return jsonify({"error": "합성 조회 실패"}), 503
     if state["mode"] == "legacy":
         payload = detail.build_toss_detail_payload(ticker, synthetic_detail(None, ticker))
+        detail.append_investor_trend_5day(payload, ticker, lambda filename: pd.read_csv(data_dir / filename), logger, data_dir=str(data_dir))
         payload["investorTrend"].pop("individual_schema", None)
         key, signature, _ = detail._stock_detail_sqlite_context(ticker_padded=ticker, cache_slot=detail._current_stock_detail_cache_slot(), data_dir=str(data_dir))
         save_json_payload_to_sqlite(filepath=key, signature=signature, payload=payload, logger=logger, max_rows=100)

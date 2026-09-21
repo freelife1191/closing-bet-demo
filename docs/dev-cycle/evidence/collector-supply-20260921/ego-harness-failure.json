@@ -1,0 +1,22 @@
+{
+  "cycle": 1,
+  "exit_code": 1,
+  "error": "TypeError: page.snapshot root must be a snapshot ref such as @21.",
+  "observations": "Six personal values matched; legacy fixture omitted investorTrend5Day, so unrelated fields differed. No product failure.",
+  "repair": "Use default snapshot; append actual 5-day payload before seeding legacy cache; unique cache epoch per fixture process.",
+  "relocated_artifacts": {
+    "ego-modes.json": "cycle1/ego-modes.json",
+    "ego-mode-zero.json": "cycle1/ego-mode-zero.json",
+    "ego-mode-positive.json": "cycle1/ego-mode-positive.json",
+    "ego-mode-negative.json": "cycle1/ego-mode-negative.json",
+    "ego-mode-missing.json": "cycle1/ego-mode-missing.json",
+    "ego-mode-invalid.json": "cycle1/ego-mode-invalid.json",
+    "ego-mode-legacy.json": "cycle1/ego-mode-legacy.json",
+    "ego-zero-stable.png": "cycle1/ego-zero-stable.png",
+    "ego-positive-stable.png": "cycle1/ego-positive-stable.png",
+    "ego-negative-stable.png": "cycle1/ego-negative-stable.png",
+    "ego-missing-stable.png": "cycle1/ego-missing-stable.png",
+    "ego-invalid-stable.png": "cycle1/ego-invalid-stable.png",
+    "ego-legacy-stable.png": "cycle1/ego-legacy-stable.png"
+  }
+}

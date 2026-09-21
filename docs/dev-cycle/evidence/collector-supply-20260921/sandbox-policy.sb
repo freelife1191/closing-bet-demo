@@ -1,0 +1,8 @@
+(version 1)
+(allow default)
+(deny file-write* (subpath "/Users/freelife/vibe/lecture/hodu/closing-bet-demo"))
+(deny file-read* (subpath "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/data") (regex #"/Users/freelife/vibe/lecture/hodu/closing-bet-demo/\.env($|\.)"))
+(deny network*)
+(allow network* (local ip "localhost:*"))
+(allow network-outbound (remote ip "localhost:*"))
+(deny network-outbound (remote ip "localhost:3500") (remote ip "localhost:5501"))

@@ -1,0 +1,12 @@
+{
+  "gateway_responses": 77,
+  "api_requests": 52,
+  "api_statuses": {
+    "200": 49,
+    "503": 3
+  },
+  "forbidden_browser_mutations": 0,
+  "unexpected_api_errors": [],
+  "all_routes_on_owned_targets": true,
+  "fixture_log_includes_preflight_405_probes": true
+}
