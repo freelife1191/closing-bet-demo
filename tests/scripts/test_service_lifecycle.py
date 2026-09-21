@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -81,3 +82,77 @@ def test_process_command_trims_ps_padding_before_matching(tmp_path: Path) -> Non
         cwd=tmp_path, capture_output=True, text=True, timeout=5,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_restart_and_stop_propagate_supervisor_refusal_without_success_message(
+    tmp_path: Path,
+) -> None:
+    """실행 관리자가 쥔 포트에서 두 진입점 모두 성공 문구 없이 비영점으로 끝난다."""
+    project = _fixture(tmp_path)
+    _command(
+        project,
+        "lsof",
+        "import sys\nif '-t' in ''.join(sys.argv[1:]): print('4242')\nsys.exit(0)\n",
+    )
+    proc = project / "proc"
+    (proc / "self").mkdir(parents=True)
+    (proc / "self" / "cgroup").write_text(
+        "0::/user.slice/user-1000.slice/session-6873.scope\n", encoding="utf-8"
+    )
+    (proc / "4242").mkdir()
+    (proc / "4242" / "cgroup").write_text(
+        "0::/user.slice/user-1000.slice/user@1000.service/app.slice/closing-bet-frontend.service\n",
+        encoding="utf-8",
+    )
+    env = {
+        "PATH": f"{project / 'bin'}:{os.environ['PATH']}",
+        "HOME": str(tmp_path / "home"),
+        "LIFECYCLE_PROC_DIR": str(proc),
+    }
+
+    for entrypoint in ("restart_all.sh", "stop_all.sh"):
+        result = subprocess.run(
+            ["bash", entrypoint], cwd=project, env=env, capture_output=True, text=True, timeout=30
+        )
+
+        assert result.returncode != 0, entrypoint
+        assert "closing-bet-frontend.service" in result.stderr, entrypoint
+        assert "systemctl --user restart closing-bet-frontend.service" in result.stderr, entrypoint
+        assert "🎉 Ready!" not in result.stdout, entrypoint
+        assert "종료되었습니다" not in result.stdout, entrypoint
+
+
+def test_repository_systemd_units_drop_the_settings_that_caused_the_restart_loop() -> None:
+    """운영 유닛 파일이 포트 경쟁·잠금 삭제·로그 혼입·무한 재시작을 다시 만들지 않는다."""
+    units = sorted((ROOT / "deploy" / "systemd").glob("*.service"))
+
+    assert [unit.name for unit in units] == [
+        "closing-bet-backend.service",
+        "closing-bet-frontend.service",
+    ]
+    for unit in units:
+        text = unit.read_text(encoding="utf-8")
+        # 설명 주석이 아니라 실제로 systemd 가 읽는 설정 줄만 본다.
+        directives = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+        assert not [line for line in directives if line.startswith("ExecStartPre=")], unit.name
+        assert not [line for line in directives if re.search(r"rm\s+-f.*scheduler\.lock", line)], unit.name
+        assert not [line for line in directives if "ln -sf" in line], unit.name
+        assert not [line for line in directives if "append:" in line], unit.name
+        assert "StandardOutput=journal" in directives, unit.name
+        assert "StandardError=journal" in directives, unit.name
+        # 상한이 사실상 없는 두 표기를 모두 막는다.
+        assert not [
+            line
+            for line in directives
+            if re.fullmatch(r"StartLimitIntervalSec=(0|infinity)", line.strip())
+        ], unit.name
+        assert [line for line in directives if line.startswith("StartLimitBurst=")], unit.name
+    backend = [
+        line
+        for line in (ROOT / "deploy" / "systemd" / "closing-bet-backend.service")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    assert [line for line in backend if "--bind 127.0.0.1:" in line]
+    assert not [line for line in backend if "0.0.0.0" in line]
