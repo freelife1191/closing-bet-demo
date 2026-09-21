@@ -10,24 +10,17 @@ from datetime import datetime
 from typing import Any, Callable
 import logging
 import math
+import re
 
 
 def resolve_market_gate_filename(target_date: str | None) -> str:
     """요청 날짜를 market_gate 파일명으로 변환한다."""
-    if not target_date:
+    if target_date is None:
         return "market_gate.json"
-
-    target_date = str(target_date).strip()
-    if not target_date:
-        return "market_gate.json"
-
-    try:
-        if "-" in target_date:
-            return f"market_gate_{datetime.strptime(target_date, '%Y-%m-%d').strftime('%Y%m%d')}.json"
-    except ValueError:
-        pass
-
-    return f"market_gate_{target_date.replace('-', '')}.json"
+    if not isinstance(target_date, str) or not re.fullmatch(r"(?:[0-9]{8}|[0-9]{4}-[0-9]{2}-[0-9]{2})", target_date):
+        raise ValueError("INVALID_MARKET_GATE_DATE")
+    parsed = datetime.strptime(target_date, "%Y-%m-%d" if "-" in target_date else "%Y%m%d")
+    return f"market_gate_{parsed.strftime('%Y%m%d')}.json"
 
 
 def _is_market_gate_data_structurally_valid(gate_data: dict[str, Any]) -> bool:
@@ -113,21 +106,6 @@ def apply_market_gate_snapshot_fallback(
     return snap_status, True
 
 
-def build_market_gate_initializing_payload(now: datetime | None = None) -> dict[str, Any]:
-    """백그라운드 분석 중 응답 payload."""
-    timestamp = (now or datetime.now()).isoformat()
-    return {
-        "score": 50,
-        "label": "Initializing...",
-        "status": "initializing",
-        "is_gate_open": True,
-        "kospi_close": 0,
-        "kospi_change_pct": 0,
-        "kosdaq_close": 0,
-        "kosdaq_change_pct": 0,
-        "updated_at": timestamp,
-        "message": "데이터 분석 중... 잠시만 기다려주세요.",
-    }
 
 
 def build_market_gate_empty_payload(now: datetime | None = None) -> dict[str, Any]:

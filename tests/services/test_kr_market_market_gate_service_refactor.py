@@ -196,3 +196,8 @@ def test_normalize_market_gate_payload_maps_generic_gold_to_us_commodity():
     assert "krx_silver" not in normalized["commodities"]
     assert normalized["commodities"]["us_gold"]["value"] == 5190.0
     assert normalized["commodities"]["us_silver"]["value"] == 88.0
+
+
+def test_market_gate_filename_preserves_only_valid_calendar_dates():
+    assert resolve_market_gate_filename("2024-02-29") == "market_gate_20240229.json"
+    assert resolve_market_gate_filename("20240229") == "market_gate_20240229.json"

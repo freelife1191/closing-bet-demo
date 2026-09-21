@@ -491,7 +491,7 @@ def test_device_ip_and_quota_increment_helpers():
     assert detect_chatbot_device_type("iphone", "Mozilla") == "MOBILE"
     assert detect_chatbot_device_type("linux", "Desktop") == "WEB"
 
-    assert extract_chatbot_client_ip("1.2.3.4, 5.6.7.8", "9.9.9.9") == "1.2.3.4"
+    assert extract_chatbot_client_ip("1.2.3.4, 5.6.7.8", "9.9.9.9") == "9.9.9.9"
     assert extract_chatbot_client_ip(None, "9.9.9.9") == "9.9.9.9"
 
     assert should_increment_free_quota(True, False, "정상 응답") is True

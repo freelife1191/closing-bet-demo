@@ -46,8 +46,6 @@ def _build_base_deps(**overrides: Any) -> dict[str, Any]:
         "apply_market_gate_snapshot_fallback": (
             lambda gate_data, is_valid, target_date, load_json_file, logger: (gate_data, is_valid)
         ),
-        "trigger_market_gate_background_refresh": lambda: None,
-        "build_market_gate_initializing_payload": lambda: {"status": "INITIALIZING"},
         "build_market_gate_empty_payload": lambda: {"status": "EMPTY"},
         "normalize_market_gate_payload": lambda payload: payload,
         "execute_market_gate_update": lambda target_date, logger: (200, {"status": "success"}),
@@ -78,21 +76,20 @@ def _build_base_deps(**overrides: Any) -> dict[str, Any]:
     return base
 
 
-def test_market_gate_returns_initializing_payload_and_triggers_refresh_when_invalid():
-    trigger_calls = {"count": 0}
-    deps = _build_base_deps(
-        evaluate_market_gate_validity=lambda gate_data, target_date: (False, True),
-        trigger_market_gate_background_refresh=lambda: trigger_calls.__setitem__(
-            "count", trigger_calls["count"] + 1
-        ) or True,
-    )
+def test_market_gate_invalid_get_is_read_only_without_refresh_dependency():
+    deps = _build_base_deps(evaluate_market_gate_validity=lambda gate_data, target_date: (False, True))
     client = _create_client(deps)
+    for url in ["/api/kr/market-gate", "/api/kr/market-gate", "/api/kr/market-gate?date=2026-09-01"]:
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.get_json()["status"] == "EMPTY"
 
+
+def test_market_gate_stale_valid_get_preserves_saved_payload():
+    client = _create_client(_build_base_deps(evaluate_market_gate_validity=lambda gate_data, target_date: (True, True)))
     response = client.get("/api/kr/market-gate")
-
     assert response.status_code == 200
-    assert response.get_json()["status"] == "INITIALIZING"
-    assert trigger_calls["count"] == 1
+    assert response.get_json()["status"] == "GREEN"
 
 
 def test_reanalyze_gemini_returns_status_error_payload_on_exception():
@@ -155,3 +152,17 @@ def test_status_route_returns_error_payload_when_builder_fails():
 
     assert response.status_code == 500
     assert response.get_json() == {"status": "error", "message": "Internal Server Error"}
+
+
+def test_invalid_market_gate_date_is_rejected_before_any_file_load():
+    from services.kr_market_market_gate_validity import resolve_market_gate_filename
+    loaded = []
+    deps = _build_base_deps(
+        resolve_market_gate_filename=resolve_market_gate_filename,
+        load_json_file=lambda filename: loaded.append(filename) or {"status": "GREEN"},
+    )
+    client = _create_client(deps)
+    for date in ["../../../private", "2026/09/21", "2026-02-30", "20260230", "2026-9-21", "", "2026-09-21.json", "２０２６０９２１"]:
+        response = client.get("/api/kr/market-gate", query_string={"date": date})
+        assert response.status_code == 400
+    assert loaded == []

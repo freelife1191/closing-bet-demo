@@ -1,15 +1,7 @@
 import os
 import logging
-import math
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import TextIO
-from time import time as _market_gate_now
-
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - non-POSIX 환경 호환
-    fcntl = None
 
 from flask import Blueprint, jsonify, request
 from services.kr_market_route_service import (
@@ -83,19 +75,15 @@ kr_bp = Blueprint('kr', __name__)
 logger = logging.getLogger(__name__)
 
 # Global Flags for Background Tasks (with locks for thread safety)
-is_market_gate_updating = False
 is_signals_updating = False
 is_jongga_updating = False
 
 # Thread locks for preventing race conditions
 _jongga_lock = threading.Lock()
-_market_gate_lock = threading.Lock()
 _signals_lock = threading.Lock()
-_market_gate_process_lock_handle: TextIO | None = None
 
 # Timestamp tracking to prevent infinite loops
 _jongga_last_run = None
-_MIN_MARKET_GATE_REFRESH_INTERVAL = 300  # 완료(실패 포함) 후 워커 공통 5분
 _MIN_JONGGA_RUN_INTERVAL = timedelta(minutes=5)  # Minimum 5 minutes between runs
 
 # Constants
@@ -233,116 +221,6 @@ register_market_data_http_route_group(
 )
 
 
-def _write_market_gate_cooldown(handle: TextIO, *, running: bool = False) -> None:
-    """같은 inode에 기록한다. 쓰기 실패가 기존 예약을 빈 파일로 만들지 않는다."""
-    handle.seek(0)
-    record = "running" if running else f"cooldown:{_market_gate_now() + _MIN_MARKET_GATE_REFRESH_INTERVAL}:end"
-    handle.write(record)
-    handle.flush()
-    handle.truncate()
-
-
-def _finish_market_gate_refresh() -> None:
-    """성공·분석 실패·스레드 기동 실패가 모두 같은 정리를 거친다."""
-    global is_market_gate_updating, _market_gate_process_lock_handle
-    with _market_gate_lock:
-        handle = _market_gate_process_lock_handle
-        try:
-            if handle is not None:
-                _write_market_gate_cooldown(handle)
-        except OSError:
-            logger.exception("[Market Gate] 완료 쿨다운 기록 실패")
-        finally:
-            try:
-                if handle is not None:
-                    handle.close()  # close가 flock도 해제한다.
-            except OSError:
-                logger.exception("[Market Gate] 공유 잠금 파일 닫기 실패")
-            finally:
-                _market_gate_process_lock_handle = None
-                is_market_gate_updating = False
-
-
-def _trigger_market_gate_background_refresh() -> bool:
-    """True는 새 시작 또는 실행 중, False는 쿨다운/실행 불가다.
-
-    최신 GET 전용이다. 관리자 강제 갱신과 스케줄러의 정책은 바꾸지 않는다.
-    """
-    global is_market_gate_updating, _market_gate_process_lock_handle
-
-    with _market_gate_lock:
-        if is_market_gate_updating:
-            return True
-        if fcntl is None:
-            logger.error("[Market Gate] 공유 잠금 사용 불가: 자동 분석 억제")
-            return False
-
-        handle: TextIO | None = None
-        try:
-            os.makedirs(DATA_DIR, exist_ok=True)
-            lock_path = os.path.join(DATA_DIR, '.market_gate_refresh.lock')
-            handle = open(os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600), 'r+', encoding='utf-8')
-            try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                # 잠금 경합은 쿨다운 조회/복구 중에도 발생한다. 실행 표식만 인정한다.
-                handle.seek(0)
-                running = handle.read(129).strip() == "running"
-                handle.close()
-                return running
-            handle.seek(0)
-            try:
-                raw = handle.read(129).strip()
-                if not raw:
-                    next_allowed = 0.0  # 이전 버전의 빈 잠금 파일 허용
-                elif raw.startswith("cooldown:") and raw.endswith(":end"):
-                    next_allowed = float(raw[9:-4])
-                else:
-                    raise ValueError("incomplete cooldown")
-                now = _market_gate_now()
-                if (len(raw) > 128 or not math.isfinite(next_allowed) or next_allowed < 0
-                        or next_allowed > now + _MIN_MARKET_GATE_REFRESH_INTERVAL):
-                    raise ValueError("invalid cooldown")
-            except (ValueError, UnicodeError):
-                logger.warning("[Market Gate] 손상된 쿨다운: 5분 뒤 재시도")
-                _write_market_gate_cooldown(handle)
-                handle.close()
-                return False
-            if _market_gate_now() < next_allowed:
-                handle.close()
-                return False
-            _write_market_gate_cooldown(handle, running=True)  # 중단/완료 기록 실패 시 다음 워커가 5분 예약으로 복구한다.
-        except (OSError, UnicodeError):
-            logger.exception("[Market Gate] 공유 쿨다운 사용 실패: 자동 분석 억제")
-            if handle is not None:
-                handle.close()
-            return False
-
-        _market_gate_process_lock_handle = handle
-        is_market_gate_updating = True
-
-    def run_analysis() -> None:
-        try:
-            from engine.market_gate import MarketGate
-
-            market_gate = MarketGate()
-            result = market_gate.analyze()
-            market_gate.save_analysis(result)
-            logger.info("[Market Gate] 백그라운드 분석 및 저장 완료")
-        except Exception:
-            logger.exception("[Market Gate] 백그라운드 분석 실패")
-        finally:
-            _finish_market_gate_refresh()
-
-    try:
-        threading.Thread(target=run_analysis, daemon=True).start()
-    except Exception:
-        logger.exception("[Market Gate] 백그라운드 스레드 기동 실패")
-        _finish_market_gate_refresh()
-        return False
-    return True
-
-
 register_system_and_execution_route_groups(
     kr_bp,
     logger=logger,
@@ -350,7 +228,6 @@ register_system_and_execution_route_groups(
     load_json_file_fn=lambda filename, **kwargs: load_json_file(filename, **kwargs),
     load_csv_file_fn=lambda filename, **kwargs: load_csv_file(filename, **kwargs),
     get_data_path_fn=lambda filename: get_data_path(filename),
-    trigger_market_gate_background_refresh_fn=_trigger_market_gate_background_refresh,
     run_user_gemini_reanalysis_fn=lambda **kwargs: run_user_gemini_reanalysis(**kwargs),
 )
 

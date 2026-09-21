@@ -189,13 +189,26 @@ def _resolve_daily_schedule_time(env_name: str, default_time: str) -> str:
     return configured
 
 
+def _ensure_paper_trading_sync() -> None:
+    """리더가 기동 실패나 종료된 가격 루프를 분당 한 번 복구한다."""
+    try:
+        from services.paper_trading import paper_trading
+
+        paper_trading.start_background_sync()
+    except Exception:
+        logger.exception("[Scheduler] Paper trading price sync start failed; continuing scheduled jobs")
+
+
 def _bootstrap_scheduler_after_lock_acquired() -> None:
     global _scheduler_loop_started
     scheduler_timezone = _apply_scheduler_timezone()
 
+    _ensure_paper_trading_sync()
+
     interval = app_config.MARKET_GATE_UPDATE_INTERVAL_MINUTES
     schedule.clear("market_gate")
     schedule.clear("closing_analysis")
+    schedule.clear("paper_price_sync")
     market_gate_job = schedule.every(interval).minutes.do(run_market_gate_sync).tag("market_gate")
     logger.info(
         "Scheduled Market Gate sync every %s minutes (next_run=%s)",
@@ -216,6 +229,8 @@ def _bootstrap_scheduler_after_lock_acquired() -> None:
         scheduler_timezone,
         closing_job.next_run,
     )
+
+    schedule.every(1).minutes.do(_ensure_paper_trading_sync).tag("paper_price_sync")
 
     if _scheduler_loop_started:
         logger.info("[Scheduler] scheduler loop already running. skip new thread start.")

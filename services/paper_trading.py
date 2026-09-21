@@ -760,6 +760,9 @@ class PaperTradingService(PaperTradingTradeAccountMixin, PaperTradingHistoryMixi
         owner_exists = self._execute_db_operation_with_schema_retry(owner_exists_operation)
         if owner_exists is None:
             self._ensure_owner(owner_id)
+        if not self.is_running:
+            # 동기화 리더가 갱신한 공유 DB 가격만 읽는다. GET은 외부 조회를 시작하지 않는다.
+            self._load_price_cache_from_db()
         return get_portfolio_valuation_impl(
             get_read_context_fn=self.get_read_context,
             cache_lock=self.cache_lock,
@@ -791,7 +794,7 @@ def get_paper_trading_service() -> PaperTradingService:
 
     with _paper_trading_singleton_lock:
         if _paper_trading_instance is None:
-            _paper_trading_instance = PaperTradingService()
+            _paper_trading_instance = PaperTradingService(auto_start_sync=False)
     return _paper_trading_instance
 
 

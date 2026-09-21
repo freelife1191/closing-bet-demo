@@ -13,8 +13,9 @@ def test_get_paper_trading_service_creates_singleton_once(monkeypatch):
     created = {"count": 0}
 
     class _DummyService:
-        def __init__(self):
+        def __init__(self, *, auto_start_sync=True):
             created["count"] += 1
+            created["auto_start_sync"] = auto_start_sync
 
     monkeypatch.setattr(paper_trading_module, "PaperTradingService", _DummyService)
     monkeypatch.setattr(paper_trading_module, "_paper_trading_instance", None)
@@ -24,11 +25,12 @@ def test_get_paper_trading_service_creates_singleton_once(monkeypatch):
 
     assert first is second
     assert created["count"] == 1
+    assert created["auto_start_sync"] is False
 
 
 def test_paper_trading_proxy_delegates_to_lazy_singleton(monkeypatch):
     class _DummyService:
-        def __init__(self):
+        def __init__(self, *, auto_start_sync=True):
             self.called = 0
 
         def get_portfolio(self):

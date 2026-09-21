@@ -211,8 +211,6 @@ def _build_system_deps(**overrides: Any) -> dict[str, Any]:
         "load_json_file": lambda _filename: {},
         "evaluate_market_gate_validity": lambda **_kwargs: (True, False),
         "apply_market_gate_snapshot_fallback": lambda **kwargs: (kwargs["gate_data"], kwargs["is_valid"]),
-        "trigger_market_gate_background_refresh": lambda: False,
-        "build_market_gate_initializing_payload": lambda: {},
         "build_market_gate_empty_payload": lambda: {},
         "normalize_market_gate_payload": lambda payload: payload,
         "execute_market_gate_update": lambda **_kwargs: (200, {}),

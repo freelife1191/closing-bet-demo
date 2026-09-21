@@ -61,11 +61,15 @@ def _register_market_gate_routes(
         """KR Market Gate 상태 (프론트엔드 호환 형식)"""
         def _handler():
             target_date = request.args.get('date')
-            filename = deps["resolve_market_gate_filename"](target_date)
+            try:
+                filename = deps["resolve_market_gate_filename"](target_date)
+            except ValueError:
+                logger.warning("[Market Gate] Invalid date query rejected before file access")
+                return jsonify({"error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."}), 400
             raw_gate_data = deps["load_json_file"](filename)
             raw_gate_data = raw_gate_data if isinstance(raw_gate_data, dict) else {}
 
-            source_is_valid, needs_update = deps["evaluate_market_gate_validity"](
+            source_is_valid, _needs_update = deps["evaluate_market_gate_validity"](
                 gate_data=raw_gate_data,
                 target_date=target_date,
             )
@@ -78,14 +82,8 @@ def _register_market_gate_routes(
                 logger=logger,
             )
 
-            # 날짜가 명시된 조회는 해당 파일만 읽는다. 없는 과거 자료를 위해
-            # 날짜 인자 없는 오늘 분석을 실행해도 그 자료는 생성되지 않는다.
-            should_trigger_refresh = 'date' not in request.args and ((not source_is_valid) or needs_update)
-
-            if should_trigger_refresh and deps["trigger_market_gate_background_refresh"]():
-                logger.info("[Market Gate] 백그라운드 분석 실행 중 또는 시작됨.")
-                gate_data = deps["build_market_gate_initializing_payload"]()
-            elif not is_valid:
+            # 조회는 저장 자료만 반환한다. 갱신은 관리자 POST와 스케줄러가 담당한다.
+            if not is_valid:
                 gate_data = deps["build_market_gate_empty_payload"]()
 
             if not gate_data:

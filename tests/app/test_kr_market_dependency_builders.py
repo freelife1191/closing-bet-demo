@@ -85,8 +85,6 @@ def test_build_system_route_deps_preserves_required_contract_keys():
         load_json_file=lambda _f: {},
         evaluate_market_gate_validity=lambda *_a, **_k: (True, "ok", {}),
         apply_market_gate_snapshot_fallback=lambda *_a, **_k: {},
-        trigger_market_gate_background_refresh=lambda: None,
-        build_market_gate_initializing_payload=lambda **_k: {},
         build_market_gate_empty_payload=lambda **_k: {},
         normalize_market_gate_payload=lambda **_k: {},
         execute_market_gate_update=lambda **_k: (200, {}),

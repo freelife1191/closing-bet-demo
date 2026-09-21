@@ -1,0 +1,23 @@
+{
+  "stage": "pytarget:red",
+  "started_at": "2026-09-21T03:55:06.797727+00:00",
+  "ended_at": "2026-09-21T03:55:08.727670+00:00",
+  "pid": 29666,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-read-boundaries-20260921-epl2zj26/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/app/test_common_routes_refactor.py",
+    "tests/app/test_kr_market_chatbot_service.py",
+    "tests/app/test_common_portfolio_routes_refactor.py",
+    "tests/app/test_kr_market_system_http_routes_refactor.py",
+    "tests/services/test_paper_trading_lazy_refactor.py",
+    "tests/app/test_read_audit_boundaries.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-read-boundaries-20260921-epl2zj26",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 1.93
+}

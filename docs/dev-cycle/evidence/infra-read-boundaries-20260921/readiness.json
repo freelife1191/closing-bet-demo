@@ -1,0 +1,12 @@
+[
+  {
+    "port": 57972,
+    "path": "/__qa/evidence",
+    "status": 200
+  },
+  {
+    "port": 57970,
+    "path": "/api/auth/session",
+    "status": 200
+  }
+]

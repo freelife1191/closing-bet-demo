@@ -210,9 +210,6 @@ def detect_chatbot_device_type(platform: str | None, ua_string: str | None) -> s
 
 
 def extract_chatbot_client_ip(forwarded_for: str | None, remote_addr: str | None) -> str | None:
-    """X-Forwarded-For 또는 remote_addr에서 실사용자 IP를 추출한다."""
-    real_ip = forwarded_for or remote_addr
-    if real_ip and "," in real_ip:
-        return real_ip.split(",")[0].strip()
-    return real_ip
+    """감사 IP는 직접 연결 상대다. forwarded_for는 호출 호환용이며 신뢰하지 않는다."""
+    return remote_addr
 

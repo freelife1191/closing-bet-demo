@@ -1,0 +1,11 @@
+{
+  "tracked_env_files": [
+    ".env.example"
+  ],
+  "new_public_secret_definitions": 0,
+  "original_env_contents_read": false,
+  "dependency_audit": "not run: dependencies unchanged in this batch",
+  "proxyfix_runtime_source_matches": 0,
+  "source_scope": "app/services/frontend proxy searched read-only",
+  "public_bundle": "no new secret identifiers or values introduced; build tests passed; actual secret values not loaded"
+}

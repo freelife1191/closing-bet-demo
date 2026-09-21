@@ -90,7 +90,6 @@ def _register_portfolio_overview_routes(common_bp, ctx: CommonRouteContext) -> N
     def get_portfolio_data(owner_id: str):
         """포트폴리오 데이터 (Fast - Cached)."""
         def _handler():
-            ctx.paper_trading.start_background_sync()
             data = ctx.paper_trading.get_portfolio_valuation(owner_id=owner_id)
             return jsonify(data)
 

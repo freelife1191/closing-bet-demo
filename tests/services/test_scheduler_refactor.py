@@ -267,6 +267,7 @@ def _make_fake_schedule(registered: list, cleared: list):
 
 
 def _bootstrap_with_fake_schedule(monkeypatch):
+    monkeypatch.setattr("services.paper_trading.paper_trading", SimpleNamespace(start_background_sync=lambda: None))
     registered: list[dict] = []
     cleared: list[str] = []
     monkeypatch.setattr(scheduler_module, "schedule", _make_fake_schedule(registered, cleared))
@@ -283,8 +284,8 @@ def test_bootstrap_registers_each_job_once_with_the_configured_time(monkeypatch)
 
     registered, cleared = _bootstrap_with_fake_schedule(monkeypatch)
 
-    assert [entry["tag"] for entry in registered] == ["market_gate", "closing_analysis"]
-    assert cleared == ["market_gate", "closing_analysis"]
+    assert [entry["tag"] for entry in registered] == ["market_gate", "closing_analysis", "paper_price_sync"]
+    assert cleared == ["market_gate", "closing_analysis", "paper_price_sync"]
     closing = registered[1]
     assert closing["at"] == "16:05"
     assert closing["job"] is scheduler_module.run_daily_closing_analysis
@@ -296,7 +297,7 @@ def test_bootstrap_survives_a_schedule_time_the_library_rejects(monkeypatch):
 
     registered, _ = _bootstrap_with_fake_schedule(monkeypatch)
 
-    assert [entry["tag"] for entry in registered] == ["market_gate", "closing_analysis"]
+    assert [entry["tag"] for entry in registered] == ["market_gate", "closing_analysis", "paper_price_sync"]
     assert registered[1]["at"] == "17:00"
 
 
@@ -342,3 +343,88 @@ def test_resolve_daily_schedule_time_warns_which_variable_was_ignored(monkeypatc
 
     assert "CLOSING_SCHEDULE_TIME" in caplog.text
     assert "25:00" in caplog.text
+
+
+def test_scheduler_leader_bootstrap_owns_price_sync_and_is_repeatable(monkeypatch):
+    from services import paper_trading as paper_module
+    service = object.__new__(paper_module.PaperTradingService)
+    service.is_running = False
+    service.bg_thread = None
+    service._acquire_sync_loop_lock = lambda: True
+    service._release_sync_loop_lock = lambda: None
+    service._update_prices_loop = lambda: None
+    monkeypatch.setattr(paper_module, "paper_trading", service)
+    registered, cleared, targets = [], [], []
+    monkeypatch.setattr(scheduler_module, "schedule", _make_fake_schedule(registered, cleared))
+    monkeypatch.setattr(scheduler_module, "_apply_scheduler_timezone", lambda: "Asia/Seoul")
+    monkeypatch.setattr(scheduler_module, "_scheduler_loop_started", False)
+    monkeypatch.setattr(scheduler_module.threading, "Thread", lambda target, daemon: SimpleNamespace(start=lambda: targets.append(target)))
+    scheduler_module._bootstrap_scheduler_after_lock_acquired()
+    scheduler_module._bootstrap_scheduler_after_lock_acquired()
+    assert service.is_running
+    assert targets.count(service._update_prices_loop) == 1
+    assert targets.count(scheduler_module._scheduler_loop) == 1
+    assert [x["tag"] for x in registered] == ["market_gate", "closing_analysis", "paper_price_sync"] * 2
+
+
+def test_price_sync_start_failure_does_not_stop_other_scheduled_jobs(monkeypatch, caplog):
+    from services import paper_trading as paper_module
+    calls, registered, cleared, loops = [], [], [], []
+
+    def fail():
+        calls.append(True)
+        raise RuntimeError("synthetic sync failure")
+
+    monkeypatch.setattr(paper_module, "paper_trading", SimpleNamespace(start_background_sync=fail))
+    monkeypatch.setattr(scheduler_module, "schedule", _make_fake_schedule(registered, cleared))
+    monkeypatch.setattr(scheduler_module, "_apply_scheduler_timezone", lambda: "Asia/Seoul")
+    monkeypatch.setattr(scheduler_module, "_scheduler_loop_started", False)
+    monkeypatch.setattr(scheduler_module.threading, "Thread", lambda target, daemon: SimpleNamespace(start=lambda: loops.append(target)))
+    scheduler_module._bootstrap_scheduler_after_lock_acquired()
+    assert calls == [True]
+    assert [x["tag"] for x in registered] == ["market_gate", "closing_analysis", "paper_price_sync"]
+    assert loops == [scheduler_module._scheduler_loop]
+    assert "synthetic sync failure" in caplog.text
+
+
+def test_price_sync_starts_only_after_direct_or_retry_scheduler_lock(monkeypatch):
+    from services import paper_trading as paper_module
+    calls, registered, cleared = [], [], []
+    monkeypatch.setattr(paper_module, "paper_trading", SimpleNamespace(start_background_sync=lambda: calls.append("sync")))
+    monkeypatch.setattr(scheduler_module, "schedule", _make_fake_schedule(registered, cleared))
+    monkeypatch.setattr(scheduler_module, "_scheduler_loop_started", True)
+    monkeypatch.setattr(scheduler_module, "_apply_scheduler_timezone", lambda: "Asia/Seoul")
+    monkeypatch.setattr(scheduler_module, "_acquire_scheduler_lock", lambda: False)
+    monkeypatch.setattr(scheduler_module, "_is_lock_contention_error", lambda: False)
+    monkeypatch.setenv("SCHEDULER_ENABLED", "false")
+    scheduler_module.start_scheduler()
+    assert calls == []
+    monkeypatch.setenv("SCHEDULER_ENABLED", "true")
+    scheduler_module.start_scheduler()
+    assert calls == []
+    monkeypatch.setattr(scheduler_module, "_acquire_scheduler_lock", lambda: True)
+    scheduler_module.start_scheduler()
+    assert calls == ["sync"]
+    scheduler_module._retry_scheduler_start_loop()
+    assert calls == ["sync", "sync"]
+
+
+def test_price_sync_failure_is_retried_by_one_minute_leader_job(monkeypatch):
+    from services import paper_trading as paper_module
+    calls, registered, cleared = [], [], []
+
+    def transient_failure():
+        calls.append(True)
+        if len(calls) == 1:
+            raise RuntimeError("temporary sync start failure")
+
+    monkeypatch.setattr(paper_module, "paper_trading", SimpleNamespace(start_background_sync=transient_failure))
+    monkeypatch.setattr(scheduler_module, "schedule", _make_fake_schedule(registered, cleared))
+    monkeypatch.setattr(scheduler_module, "_apply_scheduler_timezone", lambda: "Asia/Seoul")
+    monkeypatch.setattr(scheduler_module, "_scheduler_loop_started", True)
+    scheduler_module._bootstrap_scheduler_after_lock_acquired()
+    retry_job = next(job for job in registered if job["tag"] == "paper_price_sync")
+    assert retry_job["interval"] == 1
+    assert calls == [True]
+    retry_job["job"]()
+    assert calls == [True, True]

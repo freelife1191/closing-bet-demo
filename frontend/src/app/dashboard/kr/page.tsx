@@ -886,8 +886,8 @@ export default function KRMarketOverview() {
               <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
             </Tooltip>
             {/* [INFRA-059] POST /api/kr/market-gate/update 는 관리자 전용이다. 이 버튼이
-                사라져도 데이터는 계속 채워진다. 스케줄러가 주기마다 돌고, 값이 낡으면
-                GET /api/kr/market-gate 가 백그라운드 분석을 알아서 트리거한다. */}
+                사라져도 스케줄러가 주기마다 자료를 갱신한다.
+                GET /api/kr/market-gate 는 저장 자료만 조회한다. */}
             {canOperate && (
               <button
                 onClick={refreshMarketGate}

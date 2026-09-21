@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 23336,
+  "pgid": 23336,
+  "port": 57971,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-read-boundaries-20260921-epl2zj26/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-read-boundaries-20260921-epl2zj26/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "57971"
+  ]
+}

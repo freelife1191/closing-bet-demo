@@ -209,10 +209,8 @@ def _resolve_device_type() -> str:
 
 
 def _resolve_real_ip() -> str | None:
-    real_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if real_ip and ',' in real_ip:
-        return real_ip.split(',')[0].strip()
-    return real_ip
+    """감사 IP는 Flask의 직접 연결 상대이며 실제 사용자 IP를 보장하지 않는다."""
+    return request.remote_addr
 
 
 def _register_activity_logging(app: Flask) -> None:

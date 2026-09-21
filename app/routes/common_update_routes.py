@@ -100,10 +100,8 @@ def _resolve_activity_logger():
 
 
 def _resolve_request_ip() -> str | None:
-    real_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-    if real_ip and "," in real_ip:
-        return real_ip.split(",")[0].strip()
-    return real_ip
+    """프록시 전달 헤더 대신 Flask가 직접 관측한 연결 상대를 감사한다."""
+    return request.remote_addr
 
 
 def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:

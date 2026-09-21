@@ -293,18 +293,17 @@ Next와 Flask는 같은 릴리스로 적용해야 합니다. 구형·신형 워�
 1. **Ports**: Flask 5501, Next.js 3500
 2. **Logs**: `logs/backend.log`, `logs/frontend.log`
 3. **Data sources**: two separate fallback chains. Period data goes through `DataSourceManager` (FDR → pykrx → yfinance); single-ticker realtime quotes go through `fetch_stock_price` (Toss → Naver → yfinance)
-4. **Market Gate GET 자동 분석에는 워커 공통 쿨다운이 있습니다.** `[INFRA-064]`부터
-   날짜가 명시된 `GET /api/kr/market-gate?date=...`는 저장 자료만 읽습니다. 날짜 없는
-   최신 조회만 유효하지 않거나 낡은 자료의 자동 분석을 요청하며, 기존
-   `data/.market_gate_refresh.lock`을 모든 워커가 공유해 동시 실행과 완료 후 5분간
-   재실행을 막습니다. 실패와 스레드 기동 실패도 쿨다운에 포함합니다. 실행 중에는
-   initializing, 쿨다운 중에는 저장된 자료/스냅샷 또는 데이터 없음 응답을 반환합니다.
-   잠금이나 쿨다운을 사용할 수 없으면 자동 분석을 억제합니다. 시각은 호스트 시간을
-   사용하며 손상·비정상 미래 기록은 5분 예약으로 복구합니다.
-   관리자 `POST /api/kr/market-gate/update`와 스케줄러는 별도 실행 경로입니다.
-   이 쿨다운이 그 경로까지 직렬화하거나, GET의 부수효과를 완전히 없애는 것은 아닙니다.
-   생존 확인용으로 실제 GET을 호출하면 여전히 외부 수집을 일으킬 수 있습니다.
-5. **Scheduler**: `services/scheduler.py` 가 잡 두 개를 등록합니다. Market Gate 동기화는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES`(코드 기본값 30분) 간격으로 돌고, 장 마감 분석은 `CLOSING_SCHEDULE_TIME`(기본 17:00 KST) 에 하루 한 번 돌며 종가베팅은 그 체인 안에서 이어집니다. 관련 모듈: `scheduler_jobs.py`, `scheduler_loop.py`, `scheduler_runtime_status_service.py`
+4. **Market Gate GET은 저장 자료만 조회합니다.** `[INFRA-047]`부터 최신·과거 조회 모두
+   외부 분석이나 백그라운드 갱신을 시작하지 않습니다. 날짜는 유효한 YYYY-MM-DD/
+   YYYYMMDD만 허용하며 잘못된 값은 파일 조회 전에400으로 거부합니다. 유효 저장값·스냅샷 또는 데이터 없음
+   응답을 반환합니다. 갱신은 관리자 `POST /api/kr/market-gate/update`와 스케줄러가 담당합니다.
+   이전 GET 전용 쿨다운 코드도 제거했습니다. 기존 원본 잠금 파일을 삭제하지는 않습니다.
+   포트폴리오 가격 동기화는 scheduler lock을 획득한 bootstrap에서 시작합니다.
+   리더는 매분 가격 루프 시작을 재확인해 기동 실패나 종료 후 복구합니다.
+   `SCHEDULER_ENABLED=false`이면 자동 가격 동기화도 시작하지 않습니다. 비리더 워커의
+   포트폴리오 조회는 공유 SQLite 가격을 읽으며 외부 조회를 시작하지 않습니다.
+   GET의 기존 계정 초기화·자산이력 기록은 유지하므로 완전한 DB 무쓰기 계약은 아닙니다.
+5. **Scheduler**: `services/scheduler.py`가 업무 잡 두 개와 분당 가격 동기화 복구 잡 하나를 등록합니다. Market Gate 동기화는 `MARKET_GATE_UPDATE_INTERVAL_MINUTES`(코드 기본값 30분) 간격으로 돌고, 장 마감 분석은 `CLOSING_SCHEDULE_TIME`(기본 17:00 KST) 에 하루 한 번 돌며 종가베팅은 그 체인 안에서 이어집니다. 관련 모듈: `scheduler_jobs.py`, `scheduler_loop.py`, `scheduler_runtime_status_service.py`
 6. **Tests**: pytest (Python), vitest (TypeScript)
 7. **루트 `AGENTS.md`**: codex 처럼 `AGENTS.md` 만 자동으로 읽는 도구의 진입점입니다.
    그 도구들은 이 파일을 읽지 않으므로 `AGENTS.md` 가 첫 절에서 이 파일을 먼저 읽도록
@@ -443,3 +442,11 @@ Next 자식으로 전달하지 않습니다. 임의의 `NEXT_PUBLIC_*`나 `NODE_
 필요한 Next 서버 인증키는 private compiler cache에 남을 수 있으므로 이 권한 보호는
 계속 필요합니다. 예전에 생성된 캐시의 삭제나 실행 중 운영 프로세스 재시작은 이 라운드가
 수행하지 않았습니다. 새 환경은 다음 명시적 실행부터 적용됩니다.
+
+## 감사 IP와 지원 배포 경계
+
+`[INFRA-045]`의 감사 IP는 Flask가 직접 관측한 연결 상대(`remote_addr`)입니다.
+활동 로그·화면 이벤트 로그·챗봇 로그 모두 `X-Forwarded-For`를 신뢰하지 않습니다.
+프록시 뒤에서는 프록시 주소일 수 있으며 실제 사용자 주소로 해석하지 않습니다.
+`[INFRA-046]`에서 Flask만 공개하던 Procfile을 제거했습니다. 지원 운영은 Next와
+loopback Flask 두 프로세스입니다. 별도 PaaS 구성을 만들거나 실제 배포를 변경하지 않습니다.

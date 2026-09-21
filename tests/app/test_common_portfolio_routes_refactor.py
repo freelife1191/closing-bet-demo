@@ -134,7 +134,7 @@ def _create_client(ctx: CommonRouteContext):
     return app.test_client()
 
 
-def test_get_portfolio_data_starts_sync_and_returns_payload():
+def test_get_portfolio_data_reads_without_starting_sync():
     service = _DummyPaperTrading()
     client = _create_client(_build_ctx(service))
 
@@ -142,7 +142,7 @@ def test_get_portfolio_data_starts_sync_and_returns_payload():
 
     assert response.status_code == 200
     assert response.get_json()["status"] == "ok"
-    assert service.started == 1
+    assert service.started == 0
 
 
 def test_buy_stock_returns_400_when_required_fields_missing():

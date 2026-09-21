@@ -367,8 +367,6 @@ def _market_gate_deps(**overrides):
         "apply_market_gate_snapshot_fallback": (
             lambda gate_data, is_valid, target_date, load_json_file, logger: (gate_data, is_valid)
         ),
-        "trigger_market_gate_background_refresh": lambda: False,
-        "build_market_gate_initializing_payload": lambda: {"status": "INITIALIZING"},
         "build_market_gate_empty_payload": lambda: {"status": "EMPTY"},
         "normalize_market_gate_payload": lambda payload: payload,
         "execute_market_gate_update": _must_not_run,
@@ -409,13 +407,7 @@ def test_market_gate_update_passes_for_admin(monkeypatch):
 
 
 def test_market_gate_get_stays_open_for_anonymous(monkeypatch):
-    """[INFRA-059] GET 은 그대로 둔다는 결정을 코드에 고정한다.
-
-    이 GET 은 데이터가 낡으면 백그라운드 분석을 트리거하므로 익명이 MarketGate().analyze()
-    를 돌리는 경로가 남는다. 대시보드 첫 로딩 경로라 막으면 화면이 비고, 프로세스 잠금이
-    동시 실행을 이미 막고 있어 이번 라운드는 손대지 않기로 했다. 여기서 재는 것은 그
-    결정이며, 200 이 아니게 되는 순간 결정이 바뀐 것이다.
-    """
+    """공개 GET은 저장된 자료만 읽으며 외부 분석을 시작하지 않는다."""
     from app.routes.kr_market_system_http_routes import _register_market_gate_routes
 
     def register(bp):

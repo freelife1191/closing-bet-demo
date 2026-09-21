@@ -40,7 +40,6 @@ from services.kr_market_market_gate_service import (
     build_ai_analysis_payload_for_target_date,
     build_latest_ai_analysis_payload,
     build_market_gate_empty_payload,
-    build_market_gate_initializing_payload,
     evaluate_market_gate_validity,
     normalize_market_gate_payload,
     resolve_market_gate_filename,

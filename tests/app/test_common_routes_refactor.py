@@ -310,7 +310,7 @@ def test_system_log_event_injects_session_id_and_extracts_forwarded_ip(monkeypat
     assert captured["user_id"] == "anon_session-123"
     assert captured["action"] == "LOGIN"
     assert captured["details"]["session_id"] == "anon_session-123"
-    assert captured["ip_address"] == "10.0.0.1"
+    assert captured["ip_address"] == "127.0.0.1"
 
 
 def test_system_log_event_returns_500_when_activity_logger_fails(monkeypatch):
