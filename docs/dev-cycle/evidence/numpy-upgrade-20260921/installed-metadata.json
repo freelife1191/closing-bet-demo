@@ -1,0 +1,21 @@
+{
+  "prefix": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-upgrade-20260921-1c6rka1_/venv",
+  "numpy_file": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-upgrade-20260921-1c6rka1_/venv/lib/python3.11/site-packages/numpy/__init__.py",
+  "numpy_version": "2.4.6",
+  "pykrx_version": "1.2.7",
+  "numpy_requires_python": ">=3.11",
+  "pykrx_requires_dist": [
+    "requests>=2.32.0",
+    "pandas<3.0,>=2.2.0",
+    "numpy>=2.0",
+    "deprecated>=1.2.14",
+    "multipledispatch>=1.0.0",
+    "matplotlib>=3.8.0",
+    "pytest>=7.4.0; extra == \"dev\"",
+    "pytest-cov>=4.0.0; extra == \"dev\"",
+    "ruff>=0.9.0; extra == \"dev\"",
+    "pre-commit>=3.5.0; extra == \"dev\"",
+    "vcrpy>=4.1.0; extra == \"dev\"",
+    "pytest-vcr>=1.0.0; extra == \"dev\""
+  ]
+}

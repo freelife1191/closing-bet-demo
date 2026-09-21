@@ -1,0 +1,35 @@
+[
+  {
+    "name": "numpy",
+    "version": "2.4.6",
+    "filename": "numpy-2.4.6-cp311-cp311-macosx_11_0_arm64.whl",
+    "url": "https://files.pythonhosted.org/packages/0e/0d/f5957185c0ee2f3e12f78715aa9e3b353fd83633316c8532b38faa37e3f6/numpy-2.4.6-cp311-cp311-macosx_11_0_arm64.whl",
+    "sha256": "110f8b71aacb688ec69062bb7f6938a0f8acb01b7c1c4beb453c65b6d234584d",
+    "requires_python": ">=3.11",
+    "requires_dist": null,
+    "bytes": 14964111
+  },
+  {
+    "name": "pykrx",
+    "version": "1.2.7",
+    "filename": "pykrx-1.2.7-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/da/dd/6cf0878dfc833d7a3ae72f35f69126d547341593fcb51ec5019ebfce3880/pykrx-1.2.7-py3-none-any.whl",
+    "sha256": "9382533ed27a575ca4af2ba03055b6f6f9168a5a96b51f6e4fcf398093f87c16",
+    "requires_python": ">=3.10",
+    "requires_dist": [
+      "requests>=2.32.0",
+      "pandas<3.0,>=2.2.0",
+      "numpy>=2.0",
+      "deprecated>=1.2.14",
+      "multipledispatch>=1.0.0",
+      "matplotlib>=3.8.0",
+      "pytest>=7.4.0; extra == \"dev\"",
+      "pytest-cov>=4.0.0; extra == \"dev\"",
+      "ruff>=0.9.0; extra == \"dev\"",
+      "pre-commit>=3.5.0; extra == \"dev\"",
+      "vcrpy>=4.1.0; extra == \"dev\"",
+      "pytest-vcr>=1.0.0; extra == \"dev\""
+    ],
+    "bytes": 2196528
+  }
+]

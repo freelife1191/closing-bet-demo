@@ -1,0 +1,66 @@
+{
+  "review-diff.txt": {
+    "archive": "review-diff.txt.gz",
+    "raw_sha256": "3beee9df3f76abd0db3406239ee35d3f1612d8b701333a1a1b377d08d5daa520"
+  },
+  "pytest.log": {
+    "archive": "pytest.log.gz",
+    "raw_sha256": "95e78588f207b719fdf014fbe4dd4f1248783ac3aeb28695e2d42b37a78ed420"
+  },
+  "lint.log": {
+    "archive": "lint.log.gz",
+    "raw_sha256": "831a6be3eece9e74cd7044eac68bd951d971d33b20f1aad306fdfb7de444d27d"
+  },
+  "typecheck.log": {
+    "archive": "typecheck.log.gz",
+    "raw_sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c"
+  },
+  "install-attempt1.log": {
+    "archive": "install-attempt1.log.gz",
+    "raw_sha256": "4e89fb261646e9332c1a5eea66099a2aa34b8e059bf02146f274fe609c9be1fa"
+  },
+  "pytarget-pykrx.log": {
+    "archive": "pytarget-pykrx.log.gz",
+    "raw_sha256": "207d75cc7cdb9d37eeda57d787b238701f7288959f0c55ac0839b7988e96d460"
+  },
+  "install-attempt2.log": {
+    "archive": "install-attempt2.log.gz",
+    "raw_sha256": "fd58ecb4ed821fc068acf505eed44d01927ffed43e9af44f96415c2abfd2d6bd"
+  },
+  "pytest-restored.log": {
+    "archive": "pytest-restored.log.gz",
+    "raw_sha256": "b614d00479adc8d2bcc0f4959ed443889440fa7ba9c246678228f57bf24ad09d"
+  },
+  "pipcheck.log": {
+    "archive": "pipcheck.log.gz",
+    "raw_sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+  },
+  "vitest.log": {
+    "archive": "vitest.log.gz",
+    "raw_sha256": "1c162738ff0a5edf3ff08a086fad92e61cb22725ccf1c60f7963577dcc1472e3"
+  },
+  "pip-check.log": {
+    "archive": "pip-check.log.gz",
+    "raw_sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+  },
+  "pytarget-red.log": {
+    "archive": "pytarget-red.log.gz",
+    "raw_sha256": "4e56f7d3a7e4e573512c458c1765bf20fb298747d48dfce89aaa51729c25c67d"
+  },
+  "versions.log": {
+    "archive": "versions.log.gz",
+    "raw_sha256": "5d7fe2c9d549e0bf431964ebf793e6870dfbf25deb98e678cbb89f62e159ce67"
+  },
+  "install.log": {
+    "archive": "install.log.gz",
+    "raw_sha256": "0c3d806f83a6a6ddfaab7b70add483d1eec85d261ac53c45fde0c09135571737"
+  },
+  "sessionprobe.log": {
+    "archive": "sessionprobe.log.gz",
+    "raw_sha256": "0e989e4e9dceef3229ea5d04df113fa80debbf4d55b3079c09859360d3d393e8"
+  },
+  "pytarget-green.log": {
+    "archive": "pytarget-green.log.gz",
+    "raw_sha256": "654c07104dc3377f5557f8a33649bc74ea8b4e46386ab248e147a74ece848440"
+  }
+}

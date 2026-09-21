@@ -1,0 +1,19 @@
+{
+  "stage": "install",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-upgrade-20260921-1c6rka1_/venv/bin/python",
+    "-m",
+    "pip",
+    "install",
+    "--only-binary=:all:",
+    "--no-cache-dir",
+    "--index-url",
+    "https://pypi.org/simple",
+    "-r",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-upgrade-20260921-1c6rka1_/requirements.txt"
+  ],
+  "exit_code": 65,
+  "timeout_seconds": 300,
+  "elapsed_seconds": 0.01,
+  "completed_at": "2026-09-21T04:43:32.978274+00:00"
+}

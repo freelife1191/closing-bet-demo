@@ -1,0 +1,7 @@
+{
+  "requirements.txt": "476e8d2a6ced3ea5443cbb201652a00d68048e64d09885f3f3050dec9d35bc08",
+  "numpy_json_encoder.py": "cda5a2929beaf6b5dcd99ec6cb2c10adb5fddf663b91f58e6add0a59d42a4aab",
+  "tests/test_numpy_encoder_compat.py": "1ddf3e48e93d18d35054d06d0d0111dfe3264f7892f1ea39498ffe203aa5a11b",
+  "tests/engine/test_pykrx_numpy2_contract.py": "ccf7e63903a186e3cd9e5a46b166d609cfb401d959c7e4f46bea92c18a12f95c",
+  "tests/fixtures/pykrx_contract_probe.py": "fd3a175e875881f82583c83d5a453292c846978058fe66ea18bfad968e1bbf61"
+}

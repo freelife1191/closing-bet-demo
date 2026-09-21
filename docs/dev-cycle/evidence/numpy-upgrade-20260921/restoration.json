@@ -1,0 +1,11 @@
+{
+  "restored_to": "73dfa4b490ae58020bc2b3218ce0e48d7cb1d61a",
+  "restored_product_files": [
+    "requirements.txt",
+    "numpy_json_encoder.py"
+  ],
+  "removed_owned_untracked_tests": 3,
+  "candidate_preserved": true,
+  "original_venv_modified": false,
+  "candidate_status": "blocked; no upgrade shipped"
+}
