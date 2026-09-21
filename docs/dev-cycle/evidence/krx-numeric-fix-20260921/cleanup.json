@@ -1,0 +1,10 @@
+{
+  "scratch_removed": true,
+  "temporary_scripts_removed": true,
+  "browser_space": 32,
+  "browser_finished": true,
+  "services_kept": [
+    3500,
+    5501
+  ]
+}

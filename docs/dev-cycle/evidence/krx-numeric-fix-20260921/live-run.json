@@ -1,0 +1,58 @@
+{
+  "phase": "completed",
+  "date": "2026-09-21",
+  "updated_at": "2026-09-21T22:18:44.399626",
+  "signals": 8,
+  "scanned": 338,
+  "checks": [
+    {
+      "code": "009150",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    },
+    {
+      "code": "003160",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    },
+    {
+      "code": "036540",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    },
+    {
+      "code": "232140",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    },
+    {
+      "code": "437730",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    },
+    {
+      "code": "067310",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    },
+    {
+      "code": "066570",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    },
+    {
+      "code": "240810",
+      "fact_block": true,
+      "raw_money_match": true,
+      "formatted_money_match": true
+    }
+  ],
+  "seconds": 147.5
+}
