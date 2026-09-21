@@ -1,0 +1,16 @@
+{
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w",
+  "removed": true,
+  "owned_processes_remaining": 0,
+  "ports_closed": {
+    "58010": true,
+    "58011": true,
+    "58012": true
+  },
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "original_venv_modified": false,
+  "original_node_modules_modified": false,
+  "original_services_touched": false,
+  "browser_space": 25,
+  "browser_finished_once": true
+}

@@ -1,0 +1,1 @@
+{"numpy": "2.4.6", "price": 71000, "price_type": "int64", "transport": [{"url": "http://fchart.stock.naver.com/sise.nhn?symbol=005930&timeframe=day&count=22&requestType=0", "cookie_present": false}], "global_auth_calls": 0, "external_requests": 0}

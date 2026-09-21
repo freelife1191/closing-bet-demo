@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 86963,
+  "pgid": 86963,
+  "port": 58011,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "58011"
+  ]
+}

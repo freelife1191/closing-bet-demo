@@ -1,0 +1,9 @@
+{
+  "kind": "next",
+  "pid": 86963,
+  "pgid": 86963,
+  "terminated": true,
+  "post_signal_poll": "EPERM after verified-cwd SIGTERM; independent ps group and port checks show complete exit",
+  "group_members_remaining": 0,
+  "port_closed": true
+}

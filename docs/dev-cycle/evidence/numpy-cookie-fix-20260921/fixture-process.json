@@ -1,0 +1,15 @@
+{
+  "kind": "fixture",
+  "pid": 92332,
+  "pgid": 92332,
+  "port": 58012,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/candidate-venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/docs/dev-cycle/evidence/numpy-cookie-fix-20260921/fixture.py",
+    "--repo",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w",
+    "--port",
+    "58012"
+  ]
+}

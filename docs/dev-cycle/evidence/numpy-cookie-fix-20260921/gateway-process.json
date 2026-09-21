@@ -1,0 +1,11 @@
+{
+  "kind": "gateway",
+  "pid": 87034,
+  "pgid": 87034,
+  "port": 58010,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/candidate-venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/docs/dev-cycle/evidence/numpy-cookie-fix-20260921/gateway.py"
+  ]
+}

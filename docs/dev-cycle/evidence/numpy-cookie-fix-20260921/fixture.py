@@ -36,7 +36,8 @@ def naver_transport(adapter, prepared, **kwargs):
  return response
 with patch.object(webio,'get_session',return_value=fake_auth) as global_auth, patch.object(requests.adapters.HTTPAdapter,'send',naver_transport):
  frame=stock.get_market_ohlcv_by_date('20260901','20260901','005930')
- numpy_price=frame.iloc[0]['종가']
+ numpy_price=frame['종가'].iloc[0]
+ assert isinstance(numpy_price,np.integer)
  assert int(numpy_price)==71000 and global_auth.call_count==0
 (ROOT/'qa-numpy-flow.json').write_text(json.dumps({'numpy':np.__version__,'price':int(numpy_price),'price_type':type(numpy_price).__name__,'transport':transport_calls,'global_auth_calls':0,'external_requests':0}))
 app=Flask('vcp-real-fixture'); state={'mode':'normal','chart_error':False}

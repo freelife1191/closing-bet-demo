@@ -16,5 +16,12 @@
   "pytarget-upstream-red.log.gz": "cc51aefc7395b513c287aae45f6713b7e6bb88a010c31be9213f701329d11568",
   "npm-install.log.gz": "fd107f5d40b2997fa38853fdd7014d8fa52786b4e20572486cbf54a36ad6e7f2",
   "build.log.gz": "c84135932f42b4ece204ff272357f4cbc2e28c57fe4a65c72b69469858d31802",
-  "install-report.json.gz": "bf99a4482bf4eefac5a265a7c7cc629a4c0e444f08e225d1f4e8c48dccd38197"
+  "install-report.json.gz": "bf99a4482bf4eefac5a265a7c7cc629a4c0e444f08e225d1f4e8c48dccd38197",
+  "gateway-runtime.log.gz": "a89a5f28de2bd0a08d0062d1e6eb07d8949c0b54358b076a544c6c1928731391",
+  "fixture-runtime.log.gz": "5d8f296ca9aaf32ec5bad5bbf8a2b27a5755f0da59b59c2669aad3816959cf78",
+  "rebuild-zero-context.log.gz": "06b692c1abbbec7696c19773d785afd6a7e3421b934f82110d50f225dbb5bbed",
+  "next-runtime.log.gz": "ecccda17d33b127c341eaa6e58f4eead92a48fb76b38905a35fcd7f1e245c87b",
+  "get_errors.txt.gz": "4b4a2ef3efc1d266e78570d7d8269a3b2f9583110e4aab650c16bce74b9f7198",
+  "get_compilation_issues.txt.gz": "165004b17c0f66d14386553909fb90d02836d6b334a65417e52c892634638bd1",
+  "next-tools-list.txt.gz": "2ac8dfbf018cdc9b66c9afa79202d8631ae5cecc3ae62fafd94562ec66787fd6"
 }

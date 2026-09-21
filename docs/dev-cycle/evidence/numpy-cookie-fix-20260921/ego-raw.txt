@@ -1,0 +1,310 @@
+[p1 "KR Market Dashboard" | space "NumPy 업그레이드 쿠키 경계 검수"(25): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    anchor [ref=373, url=http://127.0.0.1:58010/]
+      text "M"
+      text "스마트 머니 봇"
+    container
+      text "DASHBOARD"
+      button [ref=374]
+        text ""
+        text "KR Market"
+        text ""
+      anchor [ref=375, loc=href:/dashboard/kr, url=http://127.0.0.1:58010/dashboard/kr]
+        text "● Overview"
+      anchor [ref=376, loc=href:/dashboard/kr/vcp, url=http://127.0.0.1:58010/dashboard/kr/vcp]
+        text "● VCP 시그널"
+      anchor [ref=377, loc=href:/dashboard/kr/closing-bet, url=http://127.0.0.1:58010/dashboard/kr/closing-bet]
+        text "● 종가베팅"
+      anchor [ref=378, loc=href:/dashboard/kr/cumulative, url=http://127.0.0.1:58010/dashboard/kr/cumulative]
+        text "● 누적 성과"
+      anchor [ref=379, loc=href:/chatbot, url=http://127.0.0.1:58010/chatbot]
+        text "● AI 상담"
+      button [ref=380]
+        text ""
+        text "모의투자"
+      anchor [ref=381, loc=href:/dashboard/data-status, url=http://127.0.0.1:58010/dashboard/data-status]
+        text ""
+        text "데이터 상태"
+    text "무료 사용량"
+    text "8"
+    text "회 남음"
+    button "무료 사용량 5회 충전 (하루 1회)" [ref=382, loc=css:button[aria-label="무료 사용량 5회 충전 (하루 1회)"]]
+      text "+"
+    button [ref=383]
+      text "U"
+      text "User"
+      text "Free Tier Plan"
+      text ""
+  container
+    container "현재 위치"
+      ordered_list
+        list_item
+          anchor "홈" [ref=384, loc=css:a[aria-label="홈"], url=http://127.0.0.1:58010/]
+            text ""
+        list_item
+          text "/"
+          text "대시보드"
+        list_item
+          text "/"
+          text "국내 시장"
+        list_item
+          text "/"
+          text "VCP 시그널"
+    button "설정 열기" [ref=385, loc=css:button[aria-label="설정 열기"]]
+      text ""
+  container
+    text "VCP 패턴 스캐너"
+    heading
+      text "VCP"
+      text "시그널"
+    paragraph
+      text "Volatility Contraction Pattern + 기관/외국인 수급"
+    combobox "재분석 실행 모드" [ref=386, loc=css:select[aria-label="재분석 실행 모드"]]
+      text "실패/누락만"
+    button [ref=387]
+      text ""
+      text "실패 AI 재분석"
+    button [ref=388]
+      text ""
+      text "Refresh VCP"
+    heading
+      text "실시간 VCP 시그널"
+    text "TOP"
+    text "1"
+    text "(Scanned:"
+    text "1"
+    text ")"
+    button [ref=389]
+      text ""
+      text "VCP 전체 10주 매수"
+    button [ref=390]
+      text ""
+      text "VCP 기준표"
+    button [ref=391]
+      text "최신"
+    button [ref=392]
+      text ""
+      text "과거"
+    table
+      table_row
+        table_cell
+          text "STOCK"
+        table_cell
+          text "DATE"
+        table_cell
+          text "외국인 5D"
+        table_cell
+          text "기관 5D"
+        table_cell
+          text "BUY"
+        table_cell
+          text "SCORE"
+        table_cell
+          text "CONT."
+        table_cell
+          text "ENTRY"
+        table_cell
+          text "STOP"
+        table_cell
+          text "TARGET"
+        table_cell
+          text "CURRENT"
+        table_cell
+          text "RETURN"
+        table_cell
+          text "GPT"
+        table_cell
+          text "GEMINI"
+      table_row
+        table_cell
+          text "VCP 검증"
+          text "005930"
+        table_cell
+          text "2026-09-21"
+        table_cell
+          text ""
+          text "1,000"
+        table_cell
+          text ""
+          text "500"
+        table_cell
+          button "VCP 검증 모의 매수" [ref=406, loc=css:button[aria-label="VCP 검증 모의 매수"]]
+            text ""
+        table_cell
+          text "85"
+        table_cell
+          text "0.60"
+        table_cell
+          text "₩"
+          text "70,000"
+        table_cell
+          text "-"
+        table_cell
+          text "-"
+        table_cell
+          text "₩"
+          text "71,000"
+        table_cell
+          text "+1.4%"
+        table_cell
+          text "-"
+        table_cell
+          text "-"
+    text "Last updated:"
+    text "오후 08:33"
+  button "AI 상담" [ref=407, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
+  dialog "VCP 검증 (005930)" [ref=408, loc=role:dialog[name="VCP 검증 (005930)"]]
+    container
+      heading
+        text "VCP 검증"
+        container
+          text "("
+          text "005930"
+          text ")"
+      group "차트 조회 기간"
+        button [ref=409]
+          text "1개월"
+        button [ref=410]
+          text "3개월"
+        button [ref=411]
+          text "6개월"
+        button [ref=412]
+          text "1년"
+      container
+        table
+          table_row
+            table_cell
+              container
+                canvas
+                canvas
+              anchor [ref=413, url=https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=127.0.0.1/dashboard/kr/vcp]
+                svg_root
+            table_cell
+              canvas
+              canvas
+          table_row
+            table_cell
+              canvas
+              canvas
+            table_cell
+              canvas
+        container
+          text "VCP 표시"
+          text ""
+        container
+          container
+            text "이동평균선 토글"
+            text ""
+          button [ref=414]
+            text "3"
+            text "일선"
+          button [ref=415]
+            text "5"
+            text "일선"
+          button [ref=416]
+            text "10"
+            text "일선"
+          button [ref=417]
+            text "20"
+            text "일선"
+          button [ref=418]
+            text "60"
+            text "일선"
+          button [ref=419]
+            text "120"
+            text "일선"
+      container
+        container
+          text "VCP 패턴"
+          container
+            checkbox [ref=420]
+            text "범위 표시"
+        container
+          text "수축비율:"
+          text "0.60"
+        container
+          text "전반부:"
+          container
+            text "₩"
+            text "72,490"
+        container
+          text "후반부:"
+          container
+            text "₩"
+            text "69,400"
+    container
+      container
+        text "AI 상세 분석"
+        button "차트 닫기" [ref=421]
+          text "×"
+      container
+        container
+          button [ref=422]
+            text ""
+            text "Gemini"
+          container
+            container
+              svg_root
+              text "미산출"
+            text "AI 분석 데이터 없음"
+          container
+            container
+              text "종합 시그널 점수"
+              text "85.0"
+            container
+              text "VCP 패턴 보조 점수"
+              text "-"
+            container
+              text "수축비율"
+              text "0.60"
+              text "· 외국인 5일 순매수"
+              text "1,000"
+              text "원 · 기관 5일 순매수"
+              text "500"
+              text "원"
+          container
+            container
+              text ""
+              text "주요 뉴스"
+            text "관련 뉴스 없음"
+          container
+            container
+              container
+                text ""
+                text "AI 상담 (VCP 전문가)"
+              text ""
+            container
+              paragraph
+                text "👋 안녕하세요!"
+                text "VCP 전문가 챗봇"
+                text "입니다."
+              paragraph
+                text "VCP 검증"
+                text "종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요."
+              paragraph
+                text "명령어 예시:"
+              unordered_list
+                list_item
+                  text "/status"
+                  text "- 현재 상태 확인"
+                list_item
+                  text "/help"
+                  text "- 도움말"
+              container
+                container
+                  text ""
+                  text "추천 질문"
+                button [ref=423]
+                  text "이 종목 VCP 패턴 분석해줘"
+                button [ref=424]
+                  text "수급(기관/외국인) 상황 어때?"
+                button [ref=425]
+                  text "진입가와 손절가 추천해줘"
+        container
+          textbox [ref=426, loc=css:input[placeholder="AI에게 질문하기... (/ 명령어)"]]
+            text "AI에게 질문하기... (/ 명령어)"
+          button [ref=427]
+            text ""
