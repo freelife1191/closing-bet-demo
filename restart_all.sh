@@ -1,72 +1,109 @@
 #!/bin/bash
 
-############################################
-# restart_all.sh - 최종 버전 (venv 격리 + deps 충돌 해결)
-############################################
+# 이 저장소가 시작한 두 서비스만 안전하게 교체한다. 다른 supervisor나 프로젝트의 포트
+# 점유자는 종료하지 않고 원인을 출력한다.
 
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT" || exit 1
 
-# .env 에서 이 스크립트가 쓰는 값만 읽는다. 파일을 통째로 실행하지 않는 이유는
-# scripts/env_value.sh 의 주석에 있다. 이 스크립트에는 set -e 가 없으므로 읽기 실패를
-# 직접 잡는다. 그러지 않으면 함수가 없는 채로 진행해 조용히 코드 기본값으로 떨어진다.
 source "$PROJECT_ROOT/scripts/env_value.sh" || {
-  echo "❌ scripts/env_value.sh 를 읽을 수 없다"; exit 1;
+  echo "❌ scripts/env_value.sh 를 읽을 수 없습니다." >&2
+  exit 1
 }
-
-# Next launcher가 frontend와 루트 .env를 제한된 자식 환경으로 읽고, 낡은 정확한 링크만
-# preflight 뒤 제거한다. .next의 생성·권한 검증도 launcher만 소유한다.
+source "$PROJECT_ROOT/scripts/service_lifecycle.sh" || {
+  echo "❌ scripts/service_lifecycle.sh 를 읽을 수 없습니다." >&2
+  exit 1
+}
+lifecycle_init
 
 FRONTEND_PORT=$(env_port FRONTEND_PORT 3500) || exit 1
 FLASK_PORT=$(env_port FLASK_PORT 5501) || exit 1
 _env_flask_host=$(env_value FLASK_HOST)
-FLASK_HOST=${_env_flask_host:-$FLASK_HOST}
+FLASK_HOST=${_env_flask_host:-${FLASK_HOST:-127.0.0.1}}
+PROBE_HOST=$FLASK_HOST
+case "$PROBE_HOST" in 0.0.0.0|::) PROBE_HOST=127.0.0.1 ;; esac
 
-echo "🛑 Stopping $FRONTEND_PORT/$FLASK_PORT..."
+BACKEND_PID=""
+FRONTEND_PID=""
 
-kill_port() {
-  local port=$1
-  pids=$(lsof -ti :$port 2>/dev/null || true)
-  [ -n "$pids" ] && { echo "   🔪 $port ($pids)"; kill -9 $pids 2>/dev/null; }
-  command -v ss >/dev/null 2>&1 && {
-    pids=$(ss -tulpn 2>/dev/null | grep :$port | awk '{print $7}' | cut -d, -f2 | cut -d= -f2 | sort -u)
-    [ -n "$pids" ] && kill -9 $pids 2>/dev/null
-  }
+cleanup_started_services() {
+  local service pid port
+  for service in frontend backend; do
+    case "$service" in
+      frontend) pid=$FRONTEND_PID; port=$FRONTEND_PORT ;;
+      backend) pid=$BACKEND_PID; port=$FLASK_PORT ;;
+    esac
+    [ -n "$pid" ] || continue
+    # 준비 확인 전 실패한 자식도 PID 기록·소유자 검증을 거쳐 종료한다. 이 함수는 이번
+    # restart에서 생성한 PID가 있을 때만 호출된다.
+    if lifecycle_terminate_started_child "$service" "$pid"; then
+      if lifecycle_assert_port_free "$port"; then
+        lifecycle_clear_pid "$service"
+      else
+        echo "⚠️  $service 자식 종료 후에도 포트 $port 가 사용 중입니다. 분리된 자식 또는 실행 관리자를 확인하세요." >&2
+      fi
+    else
+      echo "⚠️  이번 실행의 $service PID $pid 정리를 확인하지 못했습니다. logs/$service.pid와 포트 $port 를 확인하세요." >&2
+    fi
+  done
 }
 
-kill_port $FRONTEND_PORT; kill_port $FLASK_PORT
-pkill -f "flask_app.py" 2>/dev/null || true
-pkill -f "next dev" 2>/dev/null || true
-pkill -f "npm.*dev" 2>/dev/null || true
-mkdir -p logs
+finish() {
+  local status=$?
+  if [ "$status" -ne 0 ]; then cleanup_started_services; fi
+  lifecycle_release_lock
+  exit "$status"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-# 잠금 파일/설치 상태가 바뀌면 갱신하고, 설치·검증 실패 시 기동하지 않는다.
+lifecycle_acquire_lock || exit 1
+mkdir -p logs || exit 1
+
+# 두 포트를 모두 먼저 검증한다. 하나라도 외부/권한/자동 재시작 프로세스면 기존 서비스를
+# 일부만 내리지 않는다.
+lifecycle_assert_port_is_managed frontend "$FRONTEND_PORT" >/dev/null || exit 1
+lifecycle_assert_port_is_managed backend "$FLASK_PORT" >/dev/null || exit 1
+
+echo "🛑 이 프로젝트가 관리하는 $FRONTEND_PORT/$FLASK_PORT 서비스를 종료합니다..."
+stop_managed_services "$FRONTEND_PORT" "$FLASK_PORT" || exit 1
+
+# 공유 venv/node_modules를 바꾸므로 기존 서비스를 내린 뒤 적용한다. 실패하면 성공처럼
+# 출력하지 않고 여기서 끝난다.
 bash "$PROJECT_ROOT/scripts/sync_dependencies.sh" || {
-  echo "❌ 의존성 준비 실패. 서비스를 시작하지 않습니다." >&2
+  echo "❌ 의존성 준비 실패. 서비스를 시작하지 않았습니다." >&2
   exit 1
 }
 
-# Backend (venv 실행)
+lifecycle_assert_port_free "$FLASK_PORT" || exit 1
+lifecycle_assert_port_free "$FRONTEND_PORT" || exit 1
 echo "🚀 Backend $FLASK_PORT (Gunicorn)..."
-# Cleanup stale lock file
-rm -f services/scheduler.lock
-
-# Use Gunicorn as in Procfile
-# 바인딩은 위에서 env_value 로 읽은 FLASK_HOST 를 따르며 기본은 loopback 이다.
-nohup "$PROJECT_ROOT/venv/bin/gunicorn" flask_app:app --bind "${FLASK_HOST:-127.0.0.1}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
+nohup "$PROJECT_ROOT/venv/bin/gunicorn" flask_app:app \
+  --bind "${FLASK_HOST}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 \
+  9>&- >> "$PROJECT_ROOT/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
+lifecycle_write_pid backend "$BACKEND_PID" || exit 1
+wait_for_http backend "$FLASK_PORT" "http://$PROBE_HOST:$FLASK_PORT/api/kr/market-gate" "$BACKEND_PID" || exit 1
 
-# Frontend
-cd frontend
+lifecycle_assert_port_free "$FRONTEND_PORT" || exit 1
 echo "🚀 Frontend $FRONTEND_PORT..."
-# Filter noisy logs (NextAuth polling, 404s, etc.) using line-buffered grep
-# Note: Using unbuffer or check if Next.js detects pipe. 
-# We use grep -vE to filter multiple patterns.
-PORT=$FRONTEND_PORT nohup npm run dev 2>&1 | grep --line-buffered -vE "GET /api/auth/session|com.chrome.devtools.json|_not-found|wait - compiling" > ../logs/frontend.log &
+(
+  cd "$PROJECT_ROOT/frontend" || exit 1
+  export PORT="$FRONTEND_PORT"
+  exec nohup node scripts/run-next.js dev
+) 9>&- >> "$PROJECT_ROOT/logs/frontend.log" 2>&1 &
 FRONTEND_PID=$!
-cd ..
+lifecycle_write_pid frontend "$FRONTEND_PID" || exit 1
+wait_for_http frontend "$FRONTEND_PORT" "http://127.0.0.1:$FRONTEND_PORT/" "$FRONTEND_PID" || exit 1
 
+# 프론트엔드를 기다리는 동안 먼저 준비된 백엔드가 죽었을 수도 있다.
+lifecycle_service_ready backend "$FLASK_PORT" "http://$PROBE_HOST:$FLASK_PORT/api/kr/market-gate" "$BACKEND_PID" &&
+  lifecycle_service_ready frontend "$FRONTEND_PORT" "http://127.0.0.1:$FRONTEND_PORT/" "$FRONTEND_PID" || {
+    echo "❌ 최종 서비스 준비 확인에 실패했습니다. 로그를 확인하세요." >&2
+    exit 1
+  }
 echo "🎉 Ready!"
-echo "   Backend:  http://localhost:$FLASK_PORT (PID $BACKEND_PID)"
+echo "   Backend:  http://$PROBE_HOST:$FLASK_PORT (PID $BACKEND_PID)"
 echo "   Frontend: http://localhost:$FRONTEND_PORT (PID $FRONTEND_PID)"
 echo "   Logs: tail -f logs/backend.log logs/frontend.log"

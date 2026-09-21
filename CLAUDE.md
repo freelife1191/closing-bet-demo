@@ -17,7 +17,7 @@ AI-powered Korean stock market analysis system combining institutional flow anal
 ### Quick Start (All-in-One)
 ```bash
 ./restart_all.sh    # Automated setup: venv, deps, port cleanup, start both services
-./stop_all.sh        # Stop all services on ports 3500 and 5501
+./stop_all.sh        # Verify and stop project-owned services on configured ports
 ```
 
 ### Python Backend

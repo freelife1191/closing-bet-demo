@@ -20,6 +20,7 @@ def project(tmp_path):
     (root/'frontend').mkdir()
     assert (ROOT/'scripts/sync_dependencies.sh').exists()
     shutil.copy2(ROOT/'scripts/sync_dependencies.sh',root/'scripts/sync_dependencies.sh')
+    shutil.copy2(ROOT/'scripts/service_lifecycle.sh',root/'scripts/service_lifecycle.sh')
     shutil.copy2(ROOT/'restart_all.sh',root/'restart_all.sh')
     shutil.copy2(ROOT/'scripts/env_value.sh',root/'scripts/env_value.sh')
     (root/'requirements.txt').write_text('example==1\n')
@@ -32,12 +33,14 @@ with (root/'calls.jsonl').open('a') as f:f.write(json.dumps([name,args])+"\\n")
 if name=='python3.11':
  p=root/'venv/bin';p.mkdir(parents=True);(p/'python').write_text(pathlib.Path(sys.argv[0]).read_text());(p/'python').chmod(0o700);(p/'activate').write_text('deactivate() { :; }\\n');sys.exit(0)
 if name=='python':
+ if 'install' in args and '--quiet' not in args:print('Requirement already satisfied: fixture')
  if 'install' in args and os.environ.get('FAIL_PIP_INSTALL'):sys.exit(11)
  if 'check' in args and os.environ.get('FAIL_PIP_CHECK'):sys.exit(12)
 if name=='npm':
  modules=root/'frontend/node_modules'
  if args[0]=='ci':
-  if os.environ.get('FAIL_NPM_CI'):sys.exit(13)
+  if os.environ.get('FAIL_NPM_CI'):print('fixture npm install failed',file=sys.stderr);sys.exit(13)
+  print('added 612 packages and funding notices')
   (modules/'.bin').mkdir(parents=True,exist_ok=True);(modules/'.bin/next').write_text('fixture');(modules/'.package-lock.json').write_text((root/'frontend/package-lock.json').read_text())
  if args[0]=='ls' and (not (modules/'.package-lock.json').exists() or os.environ.get('FAIL_NPM_LS')):sys.exit(14)
 if name=='lsof':sys.exit(1)
@@ -86,3 +89,22 @@ def test_failed_dependency_step_prevents_start(project,flag):
 def test_missing_lockfile_fails_before_install(project):
     (project/'frontend/package-lock.json').unlink()
     assert run(project).returncode!=0
+
+
+def test_healthy_dependencies_have_concise_output(project):
+    first = run(project)
+    assert first.returncode == 0
+    assert 'Requirement already satisfied' not in first.stdout
+    assert 'funding notices' not in first.stdout
+    assert '최초' in first.stdout
+    second = run(project)
+    assert second.returncode == 0
+    assert '의존성 변경 없음' in second.stdout
+    assert ci_count(project) == 1
+
+
+def test_install_failure_preserves_diagnostic(project):
+    result = run(project, FAIL_NPM_CI='1')
+    assert result.returncode != 0
+    assert 'fixture npm install failed' in result.stdout + result.stderr
+    assert '의존성 준비 완료' not in result.stdout

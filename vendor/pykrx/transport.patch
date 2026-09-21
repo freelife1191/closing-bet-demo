@@ -2,7 +2,7 @@
 +++ b/pykrx/website/comm/auth.py
 @@ -4,0 +5 @@
 +from urllib.parse import urlsplit
-@@ -14,0 +16,24 @@
+@@ -15,0 +17,24 @@
 +
 +def is_krx_origin(url: str) -> bool:
 +    """Only this exact HTTPS origin may use the KRX authentication session."""
@@ -27,25 +27,73 @@
 +        session.trust_env = False
 +        return session.request(method, url, headers=public_headers, **kwargs)
 +
-@@ -78,5 +102,0 @@
+@@ -34,0 +60 @@
++    last_error: str = ""
+@@ -46,2 +72 @@
+-        except Exception as e:
+-            print(f"Session close error: {e}")
++        except Exception:
+@@ -49,0 +75,4 @@
++        self.is_authenticated = False
++        self.cookies.clear()
++        self.last_error = ""
++        self.session.cookies.clear()
+@@ -51,2 +79,0 @@
+-        warmup_krx_session(self.session)
+-
+@@ -55,4 +82,4 @@
+-        if success:
+-            self.login_time = time.time()
+-            self.expiry_time = time.time() + 3600  # 1 시간 만료
+-            self.is_authenticated = True
++        if not success:
++            self.last_error = getattr(self.session, "_pykrx_login_error", "login_rejected")
++            self.session.cookies.clear()
++            return False
+@@ -60,9 +87,3 @@
+-            # 쿠키 추출 및 저장
+-            for cookie in self.session.cookies:
+-                self.cookies[cookie.name] = {
+-                    "value": cookie.value,
+-                    "domain": cookie.domain,
+-                    "path": cookie.path,
+-                    "secure": cookie.secure,
+-                    "expires": cookie.expires or 0,
+-                }
++        self.login_time = time.time()
++        self.expiry_time = time.time() + 3600  # 1 시간 만료
++        self.is_authenticated = True
+@@ -70 +91,9 @@
+-        return success
++        # 쿠키 추출 및 저장
++        for cookie in self.session.cookies:
++            self.cookies[cookie.name] = {
++                "value": cookie.value,
++                "domain": cookie.domain,
++                "path": cookie.path,
++                "secure": cookie.secure,
++                "expires": cookie.expires or 0,
++            }
+@@ -71,0 +101,2 @@
++        return True
++
+@@ -78,5 +108,0 @@
 -            "Cookie": "; ".join(
 -                [f"{name}={info['value']}" for name, info in self.cookies.items()]
 -            )
 -            if self.cookies
 -            else "",
-@@ -83,0 +104,11 @@
-+
+@@ -84,0 +111,9 @@
 +    def _request(self, method: str, url: str, headers: dict = None, **kwargs):
 +        request_headers = self.get_headers()
 +        if headers is not None:
 +            request_headers.update(headers)
 +        if not is_krx_origin(url):
 +            return public_request(method, url, request_headers, **kwargs)
-+        # CookieJar enforces domain/path/secure; never rebuild a raw Cookie header.
-+        # Do not let callers opt back into cross-origin authenticated redirects.
 +        kwargs["allow_redirects"] = False
 +        return self.session.request(method, url, headers=request_headers, **kwargs)
-@@ -87,9 +118 @@
++
+@@ -87,7 +122 @@
 -        if headers is None:
 -            headers = self.get_headers()
 -        else:
@@ -53,10 +101,11 @@
 -            default_headers = self.get_headers()
 -            default_headers.update(headers)
 -            headers = default_headers
--
--        return self.session.get(url, headers=headers, params=params, **kwargs)
 +        return self._request("GET", url, headers, params=params, **kwargs)
-@@ -99,9 +122 @@
+@@ -95,2 +123,0 @@
+-        return self.session.get(url, headers=headers, params=params, **kwargs)
+-
+@@ -99,7 +126 @@
 -        if headers is None:
 -            headers = self.get_headers()
 -        else:
@@ -64,9 +113,109 @@
 -            default_headers = self.get_headers()
 -            default_headers.update(headers)
 -            headers = default_headers
--
--        return self.session.post(url, headers=headers, data=data, **kwargs)
 +        return self._request("POST", url, headers, data=data, **kwargs)
+@@ -107 +127,0 @@
+-        return self.session.post(url, headers=headers, data=data, **kwargs)
+@@ -109 +128,0 @@
+-
+@@ -117,2 +136,8 @@
+-    session.get(LOGIN_PAGE, headers={"User-Agent": USER_AGENT}, timeout=15)
+-    session.get(
++    response = session.get(
++        LOGIN_PAGE,
++        headers={"User-Agent": USER_AGENT},
++        timeout=15,
++        allow_redirects=False,
++    )
++    _require_success_status(response)
++    response = session.get(
+@@ -121,0 +147 @@
++        allow_redirects=False,
+@@ -122,0 +149 @@
++    _require_success_status(response)
+@@ -124,0 +152,24 @@
++def _require_success_status(response: requests.Response) -> None:
++    status_code = response.status_code
++    if not isinstance(status_code, int) or not 200 <= status_code < 300:
++        raise requests.HTTPError("KRX login response status rejected")
++
++
++def _login_response_data(response: requests.Response) -> tuple[dict | None, str]:
++    """Return a valid login response without exposing server content."""
++    status_code = response.status_code
++    if not isinstance(status_code, int) or not 200 <= status_code < 300:
++        return None, "http_error"
++    try:
++        data = response.json()
++    except (ValueError, TypeError):
++        return None, "invalid_json"
++    if not isinstance(data, dict) or not isinstance(data.get("_error_code"), str):
++        return None, "invalid_schema"
++    return data, ""
++
++
++def _set_login_error(session: requests.Session, category: str) -> None:
++    session._pykrx_login_error = category
++
++
+@@ -140 +191,8 @@
+-    warmup_krx_session(session)
++    try:
++        warmup_krx_session(session)
++    except requests.HTTPError:
++        _set_login_error(session, "http_error")
++        return False
++    except requests.RequestException:
++        _set_login_error(session, "network_error")
++        return False
+@@ -152,2 +210,11 @@
+-    resp = session.post(LOGIN_URL, data=payload, headers=headers, timeout=15)
+-    data = resp.json()
++    try:
++        resp = session.post(
++            LOGIN_URL, data=payload, headers=headers, timeout=15, allow_redirects=False,
++        )
++    except requests.RequestException:
++        _set_login_error(session, "network_error")
++        return False
++    data, error = _login_response_data(resp)
++    if data is None:
++        _set_login_error(session, error)
++        return False
+@@ -155 +221,0 @@
+-    error_message = data.get("_error_message", "")
+@@ -159,3 +225 @@
+-        print("⚠️ KRX 비밀번호 변경이 필요합니다.")
+-        print(f"   오류 메시지: {error_message}")
+-        print("   https://www.krx.co.kr 에서 비밀번호를 변경한 후 다시 시도하세요.")
++        _set_login_error(session, "password_change_required")
+@@ -167,2 +231,11 @@
+-        resp = session.post(LOGIN_URL, data=payload, headers=headers, timeout=15)
+-        data = resp.json()
++        try:
++            resp = session.post(
++                LOGIN_URL, data=payload, headers=headers, timeout=15, allow_redirects=False,
++            )
++        except requests.RequestException:
++            _set_login_error(session, "network_error")
++            return False
++        data, error = _login_response_data(resp)
++        if data is None:
++            _set_login_error(session, error)
++            return False
+@@ -170 +242,0 @@
+-        error_message = data.get("_error_message", "")
+@@ -172 +244,4 @@
+-    return error_code == "CD001"  # CD001 = 정상
++    if error_code != "CD001":
++        _set_login_error(session, "login_rejected")
++        return False
++    return True
+@@ -189 +263,0 @@
+-    print(f"  로그인 ID: {login_id}")
+@@ -204 +278 @@
+-        print("KRX 로그인 실패: 자격 증명을 확인하세요.")
++        print(f"KRX 로그인 실패: {krxs.last_error or 'login_rejected'}")
 --- a/pykrx/website/comm/webio.py
 +++ b/pykrx/website/comm/webio.py
 @@ -7,0 +8,2 @@
@@ -77,7 +226,7 @@
 -
 +        url = self.url
 +        krxs = get_session() if is_krx_origin(url) else None
-@@ -40,13 +42,2 @@
+@@ -40,9 +42,2 @@
 -            # 세션이 없으면 새 요청 생성
 -            session = requests.Session()
 -            resp = session.get(self.url, headers=self.headers, params=params)
@@ -87,18 +236,19 @@
 -            # 커스텀 헤더 병합
 -            for key, value in self.headers.items():
 -                headers[key] = value
--
++            return public_request("GET", url, self.headers, params=params)
++        return krxs.get(url, headers=self.headers, params=params)
+@@ -50,4 +44,0 @@
 -            resp = krxs.session.get(self.url, headers=headers, params=params)
 -
 -        return resp
-+            return public_request("GET", url, self.headers, params=params)
-+        return krxs.get(url, headers=self.headers, params=params)
+-
 @@ -71,2 +62,2 @@
 -        krxs = get_session()
 -
 +        url = self.url
 +        krxs = get_session() if is_krx_origin(url) else None
-@@ -74,13 +65,2 @@
+@@ -74,9 +65,2 @@
 -            # 세션이 없으면 새 요청 생성
 -            session = requests.Session()
 -            resp = session.post(self.url, headers=self.headers, data=params)
@@ -108,9 +258,10 @@
 -            # 커스텀 헤더 병합
 -            for key, value in self.headers.items():
 -                headers[key] = value
--
++            return public_request("POST", url, self.headers, data=params)
++        return krxs.post(url, headers=self.headers, data=params)
+@@ -84,4 +67,0 @@
 -            resp = krxs.session.post(self.url, headers=headers, data=params)
 -
 -        return resp
-+            return public_request("POST", url, self.headers, data=params)
-+        return krxs.post(url, headers=self.headers, data=params)
+-

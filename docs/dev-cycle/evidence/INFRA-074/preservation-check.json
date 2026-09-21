@@ -1,0 +1,20 @@
+{
+  "changed": [
+    "data/v2_screener_status.json",
+    "data/runtime_cache.db",
+    "data/market_gate_20260921.json",
+    "data/market_gate.json",
+    "data/scheduler_runtime_status.json",
+    "data/.market_schedule_cache/runtime_cache.db",
+    "data/.krx_collector_cache/top_gainers/runtime_cache.db",
+    "data/.krx_collector_cache/stock_lookup/runtime_cache.db"
+  ],
+  "missing": [
+    "data/.krx_collector_cache/stock_lookup/runtime_cache.db-wal",
+    "data/.krx_collector_cache/stock_lookup/runtime_cache.db-shm"
+  ],
+  "new": [
+    "data/.krx_collector_cache/top_gainers/runtime_cache.db-wal",
+    "data/.krx_collector_cache/top_gainers/runtime_cache.db-shm"
+  ]
+}

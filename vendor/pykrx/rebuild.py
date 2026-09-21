@@ -20,7 +20,7 @@ UPSTREAM_URL = (
     "pykrx-1.2.9-py3-none-any.whl"
 )
 UPSTREAM_SHA256 = "e768a64830d21dee46b1a5dd3e9e33112c390d65dbdf931a6bb89ac5a7bea8ea"
-VERSION = "1.2.9+cookie.1"
+VERSION = "1.2.9+cookie.2"
 WHEEL_NAME = f"pykrx-{VERSION}-py3-none-any.whl"
 
 
@@ -28,7 +28,7 @@ def rebuild(upstream: bytes, output: Path) -> str:
     if hashlib.sha256(upstream).hexdigest() != UPSTREAM_SHA256:
         raise ValueError("Upstream wheel SHA256 mismatch")
     with tempfile.TemporaryDirectory(prefix="pykrx-wheel-") as directory:
-        root = Path(directory)
+        root = Path(directory).resolve()
         with zipfile.ZipFile(io.BytesIO(upstream)) as source:
             names = source.namelist()
             if len(names) != len(set(names)):
@@ -55,7 +55,7 @@ def rebuild(upstream: bytes, output: Path) -> str:
         metadata.write_text(text.replace("\nVersion: 1.2.9\n", f"\nVersion: {VERSION}\n"), encoding="utf-8", newline="\n")
         wheel = info / "WHEEL"
         wheel.write_text(wheel.read_text(encoding="utf-8").replace(
-            "Generator: setuptools (84.0.0)", "Generator: repo-pykrx-cookie-fix"
+            "Generator: setuptools (84.0.0)", "Generator: repo-pykrx-auth-guard"
         ), encoding="utf-8", newline="\n")
         record = info / "RECORD"
         record.unlink()

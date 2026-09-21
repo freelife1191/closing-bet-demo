@@ -65,7 +65,7 @@ Z.ai 계열 모델을 함께 쓴다.
 
 ```bash
 ./restart_all.sh                 # venv·의존성·포트 정리까지 하고 두 서비스를 띄운다
-./stop_all.sh                    # 3500 과 5501 을 내린다
+./stop_all.sh                    # 설정된 포트의 이 프로젝트 소유 서비스를 확인해 종료한다
 ```
 
 검증은 세 가지를 쓴다. 세 명령의 실행 위치가 서로 다르므로 그대로 옮겨 쓴다.
@@ -179,7 +179,8 @@ from engine.constants import TRADING_VALUES, VCP_THRESHOLDS, SCORING, VOLUME, PR
 사용자에게 보고했는데, `logs/user_activity.log` 와 `logs/critical_errors.log` 를 읽어 보니
 그 요청은 405 였고 성공한 DELETE·POST 는 한 건도 없었다. **자료가 사라진 것을 발견하면
 먼저 활동 로그와 오류 로그에서 실제 요청 기록을 확인한다.** `logs/backend.log` 는
-`restart_all.sh:80` 이 `>` 로 덮어쓰므로 재기동 이전 기록이 남지 않는다는 것도 함께 안다.
+당시 `restart_all.sh`가 `>`로 덮어써 재기동 이전 기록이 남지 않았다는 것도 함께 안다.
+`[INFRA-074]`부터는 `>>`로 이어 쓰므로 새 재시작은 기존 로그를 보존한다.
 
 **대신 대조로 확정할 수 있는 것은 대조한다.** 위 건은 지워진 키 집합을 옛
 `FACTORY_RESET_SENSITIVE_KEYS` 와 맞춰 보아 `reset_sensitive_env_and_user_data` 가

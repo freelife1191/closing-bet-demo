@@ -18,10 +18,17 @@
 
 ## P0 — 즉시
 
+### [INFRA-074] 재시작 충돌·로그인 실패·반복 설치 로그 보완
+- 카테고리: 인프라 | 티어: T3 | 근거: 사용자 Linux 로그(2026-09-21 23:07), 시작·중지 실패 은폐, KRX 인증 경계
+- 설계 승인: 사용자의 「확인 된 부분들 모두 보완하고 … 의존성 … 로그 … 보완해줘」 및 기존 자율 진행 위임. 기존 시작/중지·의존성·KRX 실패 경계의 bounded 수정.
+- 범위: restart_all.sh, stop_all.sh, scripts의 관련 helper, pykrx vendor wheel/핀, 회귀 및 문서. 원격 운영 서버의 실행 관리자/계정 설정은 변경하지 않음.
+- QA 시나리오: 포트 충돌/재점유/기동 실패에서 성공 문구 없이 종료, 정상 시작/중지, 의존성 정상 재실행 로그 축약과 실패 표시, KRX HTML/HTTP/schema 오류와 정상 로그인.
+- [x] 구현과 RED→GREEN 회귀
+- [x] 과잉설계 2건 반영 → code APPROVE / architect CLEAR / deep ACCEPT / security APPROVE
+- [ ] 검증 진행: 격리 pytest2526 통과2skip(수명주기17개 별도), 관련81 통과, Vitest641 통과. 실제 기동/화면200 확인, 최종 중지·재시작 진행.
+- [ ] C1 원본 전체불변 검수 계약 미통과: 하위 agent의 원본 전체pytest 실행 경계 위반. 민감 설정·종가/VCP 결과 보존 확인, runtime cache/status 변경 기록. 전체 COMPLETE/완료 아카이브 금지; QA 문서 참조.
+
+
 ## P1 — 이번 주기
 
 ## P2 — 대기
-
-
-
-등록된 미완료 항목이 없습니다. 완료 기록은 `archive/2026-09.md`를 참고합니다.

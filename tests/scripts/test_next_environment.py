@@ -136,6 +136,7 @@ def test_restart_bootstrap_preserves_next_symlink_target_permissions(tmp_path: P
     (project / "frontend").mkdir(parents=True)
     (project / "scripts").mkdir()
     shutil.copy2(_ENV_VALUE, project / "scripts" / "env_value.sh")
+    shutil.copy2(_REPO_ROOT / "scripts" / "service_lifecycle.sh", project / "scripts" / "service_lifecycle.sh")
     target = project / "outside-next"
     target.mkdir(mode=0o755)
     target.chmod(0o755)
