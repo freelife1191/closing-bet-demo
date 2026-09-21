@@ -1,0 +1,18 @@
+{
+  "stage": "pytest",
+  "started_at": "2026-09-21T11:19:28.497857+00:00",
+  "ended_at": "2026-09-21T11:21:24.663769+00:00",
+  "pid": 26076,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/candidate-venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "-ra"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w",
+  "timeout_seconds": 300,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 116.16
+}

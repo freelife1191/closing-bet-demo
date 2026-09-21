@@ -1,0 +1,12 @@
+{
+  "base": "369f845d8df13d8fb14d4b581355f62c8c09bed8",
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w",
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "venv_probe": {
+    "prefix": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/venv",
+    "numpy_file": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/venv/lib/python3.11/site-packages/numpy/__init__.py",
+    "pip_file": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/venv/lib/python3.11/site-packages/pip/__init__.py",
+    "numpy_version": "1.26.4"
+  },
+  "execution_venv": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/numpy-cookie-fix-20260921-jtjb915w/candidate-venv"
+}

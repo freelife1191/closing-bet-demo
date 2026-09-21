@@ -1,6 +1,10 @@
 # UltraQA Report
 
-## 상태
+## 최신 재개
+
+사용자의 재요청으로 로컬 보안 수정 wheel과 NumPy2를 설치해 전체검수 중이다. 현재 기준과 결과는 [쿠키 수정·업그레이드 보고서](batch-numpy-cookie-fix-2026-09-21.md)를 따른다. 아래 BLOCKED 기록은 수정 전 공식판과 인코더 선행 작업의 이력이다.
+
+## 최초 시도 상태 (이력)
 
 engine: ultraqa; lifecycle: app-adapted; phase: blocked; iteration: 1; same_failure_count: 1.
 **ULTRAQA BLOCKED: pykrx 1.2.7+가 KRX 세션 쿠키를 다른 출처의 HTTP 요청에 전달한다.**

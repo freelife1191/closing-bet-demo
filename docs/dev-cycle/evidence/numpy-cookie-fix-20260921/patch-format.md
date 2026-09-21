@@ -1,0 +1,1 @@
+일반unified diff의빈context줄(한칸공백)이git diff--check에서거부되어zero-context unified patch로표현만변경했다. 고정상류SHA에적용하고재빌드wheel전체바이트가동일함을검증했다. 런타임코드는변하지않았고필수검사를비활성화하지않았다.

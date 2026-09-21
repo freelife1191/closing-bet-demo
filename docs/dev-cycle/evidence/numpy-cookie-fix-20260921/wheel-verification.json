@@ -1,0 +1,17 @@
+{
+  "upstream_sha256": "e768a64830d21dee46b1a5dd3e9e33112c390d65dbdf931a6bb89ac5a7bea8ea",
+  "patched_sha256": "67d2fc7c7d11d586472b181975a8daeb81eaf6bff64551aa87f5f2bcb800f8d6",
+  "rebuilds_identical": true,
+  "record_verified": true,
+  "metadata_license_preserved": "MIT",
+  "changed_upstream_entries": [
+    "pykrx-1.2.9.dist-info/METADATA",
+    "pykrx-1.2.9.dist-info/RECORD",
+    "pykrx-1.2.9.dist-info/WHEEL",
+    "pykrx/website/comm/auth.py",
+    "pykrx/website/comm/webio.py"
+  ],
+  "tampered_upstream_rejected": true,
+  "portable_metadata_rebuild_identical": true,
+  "zero_context_patch_rebuild_identical": true
+}

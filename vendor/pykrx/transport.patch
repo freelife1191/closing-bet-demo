@@ -1,0 +1,116 @@
+--- a/pykrx/website/comm/auth.py
++++ b/pykrx/website/comm/auth.py
+@@ -4,0 +5 @@
++from urllib.parse import urlsplit
+@@ -14,0 +16,24 @@
++
++def is_krx_origin(url: str) -> bool:
++    """Only this exact HTTPS origin may use the KRX authentication session."""
++    parsed = urlsplit(url)
++    return parsed.scheme == "https" and parsed.netloc.lower() in (
++        "data.krx.co.kr", "data.krx.co.kr:443"
++    )
++
++
++def public_request(method: str, url: str, headers: dict, **kwargs):
++    """Send public data requests without ambient or KRX credentials."""
++    parsed = urlsplit(url)
++    if parsed.username is not None or parsed.password is not None:
++        raise ValueError("Credentials in public request URLs are not supported")
++    if kwargs.get("cookies") is not None or kwargs.get("auth") is not None:
++        raise ValueError("Credentials in public requests are not supported")
++    public_headers = {
++        key: value for key, value in headers.items()
++        if key.lower() not in {"cookie", "authorization", "proxy-authorization"}
++    }
++    with requests.Session() as session:
++        session.trust_env = False
++        return session.request(method, url, headers=public_headers, **kwargs)
++
+@@ -78,5 +102,0 @@
+-            "Cookie": "; ".join(
+-                [f"{name}={info['value']}" for name, info in self.cookies.items()]
+-            )
+-            if self.cookies
+-            else "",
+@@ -83,0 +104,11 @@
++
++    def _request(self, method: str, url: str, headers: dict = None, **kwargs):
++        request_headers = self.get_headers()
++        if headers is not None:
++            request_headers.update(headers)
++        if not is_krx_origin(url):
++            return public_request(method, url, request_headers, **kwargs)
++        # CookieJar enforces domain/path/secure; never rebuild a raw Cookie header.
++        # Do not let callers opt back into cross-origin authenticated redirects.
++        kwargs["allow_redirects"] = False
++        return self.session.request(method, url, headers=request_headers, **kwargs)
+@@ -87,9 +118 @@
+-        if headers is None:
+-            headers = self.get_headers()
+-        else:
+-            # 기본 헤더와 병합
+-            default_headers = self.get_headers()
+-            default_headers.update(headers)
+-            headers = default_headers
+-
+-        return self.session.get(url, headers=headers, params=params, **kwargs)
++        return self._request("GET", url, headers, params=params, **kwargs)
+@@ -99,9 +122 @@
+-        if headers is None:
+-            headers = self.get_headers()
+-        else:
+-            # 기본 헤더와 병합
+-            default_headers = self.get_headers()
+-            default_headers.update(headers)
+-            headers = default_headers
+-
+-        return self.session.post(url, headers=headers, data=data, **kwargs)
++        return self._request("POST", url, headers, data=data, **kwargs)
+--- a/pykrx/website/comm/webio.py
++++ b/pykrx/website/comm/webio.py
+@@ -7,0 +8,2 @@
++    is_krx_origin,
++    public_request,
+@@ -37,2 +39,2 @@
+-        krxs = get_session()
+-
++        url = self.url
++        krxs = get_session() if is_krx_origin(url) else None
+@@ -40,13 +42,2 @@
+-            # 세션이 없으면 새 요청 생성
+-            session = requests.Session()
+-            resp = session.get(self.url, headers=self.headers, params=params)
+-        else:
+-            # KRXSession 의 헤더 사용 (쿠키 포함)
+-            headers = krxs.get_headers()
+-            # 커스텀 헤더 병합
+-            for key, value in self.headers.items():
+-                headers[key] = value
+-
+-            resp = krxs.session.get(self.url, headers=headers, params=params)
+-
+-        return resp
++            return public_request("GET", url, self.headers, params=params)
++        return krxs.get(url, headers=self.headers, params=params)
+@@ -71,2 +62,2 @@
+-        krxs = get_session()
+-
++        url = self.url
++        krxs = get_session() if is_krx_origin(url) else None
+@@ -74,13 +65,2 @@
+-            # 세션이 없으면 새 요청 생성
+-            session = requests.Session()
+-            resp = session.post(self.url, headers=self.headers, data=params)
+-        else:
+-            # KRXSession 의 헤더 사용 (쿠키 포함)
+-            headers = krxs.get_headers()
+-            # 커스텀 헤더 병합
+-            for key, value in self.headers.items():
+-                headers[key] = value
+-
+-            resp = krxs.session.post(self.url, headers=headers, data=params)
+-
+-        return resp
++            return public_request("POST", url, self.headers, data=params)
++        return krxs.post(url, headers=self.headers, data=params)

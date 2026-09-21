@@ -1,0 +1,11 @@
+{
+  "requirements.txt": "f679b31e739a97d51e14d6b47d601527ab9453a4e96e3d45494caa2a75c331e8",
+  "vendor/pykrx/rebuild.py": "639c49553c6c7d066bce24fcae6f3cdd190ec65608f9daeb7dab878e0829182f",
+  "vendor/pykrx/transport.patch": "f08137ac7df4843d0e7e2aca5812e19549a1147c0431cb26324a8df541e67b70",
+  "vendor/pykrx/README.md": "36d2800f5ef9248a9f1f2c6648d26c72f1989ad5c8df9e99f2cc2aecae6bea56",
+  "vendor/pykrx/pykrx-1.2.9+cookie.1-py3-none-any.whl": "67d2fc7c7d11d586472b181975a8daeb81eaf6bff64551aa87f5f2bcb800f8d6",
+  "tests/test_pykrx_transport_security.py": "c3fa6d75c6855ebb98251f9a389a3a4e41486cb6d1f128cebb5660a822767d11",
+  "tests/fixtures/pykrx_transport_probe.py": "b0df91a44a8a63e4ab15c55799b109c130cd2c98e4942e4ac5a4807dd6c0c867",
+  "tests/engine/test_pykrx_numpy2_contract.py": "ccf7e63903a186e3cd9e5a46b166d609cfb401d959c7e4f46bea92c18a12f95c",
+  "tests/fixtures/pykrx_contract_probe.py": "fd3a175e875881f82583c83d5a453292c846978058fe66ea18bfad968e1bbf61"
+}

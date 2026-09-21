@@ -26,8 +26,9 @@
 
 
 ### [INFRA-018] numpy 2.x 승격 — 제거된 별칭 참조와 pykrx 상한을 함께 푼다
-- 현재 상태: **BLOCKED (2026-09-21)**. NumPy2.4.6/pykrx1.2.7 격리설치·pipcheck·pytest2447/Vitest640은통과했으나, pykrx의KRX쿠키가Naver HTTP로전달되는경계를합성쿠키/네트워크0으로재현했다. 최신1.2.9와master도같아버전만으로완화불가. 후보코드·검증은 `evidence/numpy-upgrade-20260921/`에보존하고원작업트리의핀/encoder는기존값으로복원. 원본venv미변경. 완료아카이브없음.
-- 재개 진행: 별칭 제거만 별도 검증·적용했습니다. 두 의존성 핀은 기존 값이며, 공식 지원 hook으로 쿠키 문제를 해결할 수 없어 업그레이드는 계속 보류합니다. [대안 검토](evidence/numpy-encoder-prep-20260921/alternatives.md), [부분 계획·증거](evidence/numpy-encoder-prep-20260921/plan.md).
+- 현재 상태: **QA_RETRY (2026-09-21)**. 사용자 재요청에 따라 NumPy2.4.6과 pykrx1.2.9 기반 로컬 보안 수정 wheel을 준비했다. 공식판의 실제 Naver Cookie 누출 RED를 다시 확인했고, 수정판의 공개/인증/redirect·고수준 시세 계약 표적6건이 통과했다. 전체 검수와 브라우저 단계 진행 중.
+- 설계 승인: 승인 일자 2026-09-21 | 범위: NumPy2·pykrx 쿠키 경계 최소 패치 wheel, 전체 검수 | 실제 대화 근거: «쿠키 무슨 문제? 업그레이드하고 검증해»와 기존 승인 판단 위임.
+- 설계/계획: [수정 설계](evidence/numpy-cookie-fix-20260921/design.md), [실행 계획](evidence/numpy-cookie-fix-20260921/plan.md). 첫 보류와 인코더 선행 수정 이력은 qa/INFRA-018.md에 보존한다.
 - 카테고리: 인프라 | 티어: T3 (주요 의존성 승격으로 상향) | 근거: [INFRA-001] 사이클의 실측
 - 최초 차단 요인은 두 가지였으며, 인코더 참조만 먼저 해소했습니다. 의존성 보안 검수가 남아 있습니다.
   - 인코더의 `np.float_` 참조는 2026-09-21 선행 수정으로 제거했습니다. `np.float64` 처리는 유지합니다.
@@ -40,8 +41,9 @@
 - pykrx 1.2.3 에서 1.2.7 로 네 단계를 건너뛰므로 시세 조회 API 의 반환 형태가 그대로인지
   확인해야 합니다. `engine/collectors.py` 등 19곳이 이 패키지를 씁니다.
 - [x] `np.float_` 참조 제거 — 2026-09-21 선행 수정. 기존 NumPy1에서 별칭 부재 RED 2건 → GREEN, 전체 pytest 2461/3skip·Vitest640. 실제 NumPy2 전환 검수와는 구분한다.
-- [ ] `pykrx` 를 numpy 2.x 를 허용하는 버전으로 올리고 시세 조회 경로 회귀 확인
-- [ ] `requirements.txt` 의 numpy·pykrx 핀과 두 주석을 함께 갱신
-- [ ] numpy 2.x 를 설치한 격리 환경에서 pytest 전체 통과 확인
+- [x] `pykrx` 1.2.9+cookie.1 로컬 수정판과 실제 고수준 시세/인증 경계 회귀 확인
+- [x] NumPy2.4.6·pykrx localpin/find-links 및 출처/재빌드 문서 갱신
+- [x] 실제 NumPy2 fresh환경 pytest2464/3skip·V641·type/lint0·build3/3·감사0 통과
+- [ ] 필수 브라우저(N5)·정리·완료 아카이브
 
 - 재개 조건: 업스트림의도메인별세션분리가수정된릴리스 또는별도검토된통신경계대안. 같은1.2.7/1.2.9핀을안전하다고반복승인하지않음. 실제자격증명·쿠키·외부KRX/Naver요청은사용하지않았다.
