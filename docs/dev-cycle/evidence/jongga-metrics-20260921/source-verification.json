@@ -1,0 +1,12 @@
+{
+  "files": {
+    "engine/toss_collector_metric_parsers.py": "eaf542be3035060dd56507f1a8f04d4ad14ccfa280ea81a73e87dfa5906dacb9",
+    "frontend/src/app/dashboard/kr/closing-bet/displayHelpers.ts": "27b3dfd01c4255fffd566e562953895a8e8ace1dbf3f777764fdc1f6eb35e6a8",
+    "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-022.test.tsx": "50d4b88118e629f261eff379434d4406159fe570f1363c5dedc0517ee21dba68",
+    "frontend/src/app/dashboard/kr/closing-bet/page.tsx": "cf792ecbe184364e995ebea5936b865746d017d050c5f843a00f8455c133b30b",
+    "services/kr_market_stock_detail_service.py": "e199c6ac809662b0199886c959424a864440a59274badf96a8b8842e47f724f7",
+    "tests/engine/test_toss_collector_parsers_refactor.py": "b5c943b47da0d3f6c5d2150d1d6de3a1cf2a20e042c16c2df081e30ea795e681"
+  },
+  "scratch_matches": true,
+  "root_package_unchanged": true
+}

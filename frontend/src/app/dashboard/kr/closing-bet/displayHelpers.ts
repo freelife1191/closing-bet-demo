@@ -75,3 +75,9 @@ export function stockChartUrl(symbol: string, period: ChartPeriod) {
 export function isPositivePrice(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
+
+// 기간 없는 구형 캐시를 연간/TTM으로 추정하지 않는다.
+export function financialPeriodLabel(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 64
+    ? `기준: ${value.trim()}` : '기준 기간 미확인';
+}

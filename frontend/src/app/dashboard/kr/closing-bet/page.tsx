@@ -12,7 +12,7 @@ import GradeGuideModal from '@/app/components/GradeGuideModal';
 import Tooltip from '@/app/components/Tooltip';
 import { useAdmin } from '@/hooks/useAdmin';
 import { formatMarketAmount } from '../formatMarketAmount';
-import { CHART_PERIODS, resolveJonggaAiEvaluation, stockChartUrl } from './displayHelpers';
+import { CHART_PERIODS, financialPeriodLabel, resolveJonggaAiEvaluation, stockChartUrl } from './displayHelpers';
 import { PriceRangeBar, StatBox } from './displayPrimitives';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
 
@@ -184,6 +184,9 @@ interface StockDetailInfo {
     revenue: number;
     operatingProfit: number;
     netIncome: number;
+    revenuePeriod?: string | null;
+    operatingProfitPeriod?: string | null;
+    netIncomePeriod?: string | null;
   };
   safety: {
     debtRatio: number;
@@ -420,6 +423,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
     const investorTrend = (data.investor_trend || {}) as Record<string, number>;
     const investorTrend5Day = (data.investorTrend5Day || {}) as Record<string, number>;
     const financials = (data.financials || {}) as Record<string, number>;
+    const financialPeriods = (data.financials || {}) as Record<string, unknown>;
     const stability = (data.stability || {}) as Record<string, number>;
 
     return {
@@ -464,6 +468,9 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
         revenue: financials.revenue || 0,
         operatingProfit: financials.operating_profit || 0,
         netIncome: financials.net_income || 0,
+        revenuePeriod: typeof financialPeriods.revenue_period === 'string' ? financialPeriods.revenue_period : null,
+        operatingProfitPeriod: typeof financialPeriods.operating_profit_period === 'string' ? financialPeriods.operating_profit_period : null,
+        netIncomePeriod: typeof financialPeriods.net_income_period === 'string' ? financialPeriods.net_income_period : null,
       },
       safety: {
         debtRatio: stability.debt_ratio || 0,
@@ -633,7 +640,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       PER
-                      <Tooltip content="주가수익비율. 주가 ÷ 주당순이익. 낮을수록 저평가, 업종 평균과 비교 필요.">
+                      <Tooltip content="주가수익비율. 주가 ÷ 주당순이익. 양수일 때 업종 평균과 비교합니다. 음수 PER은 해당 이익 기준 적자를 뜻하며, 낮다고 저평가로 해석하지 않습니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
@@ -651,11 +658,12 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
                       EPS
-                      <Tooltip content="주당순이익. 순이익 ÷ 발행주식수. 높을수록 수익성 좋음.">
+                      <Tooltip content="주당순이익. 이익을 주식 수로 나눈 지표입니다. 제공된 EPS의 기준 기간은 확인되지 않아 아래 순이익과 직접 대조할 수 없습니다.">
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
                     <div className="text-sm font-bold text-white">{detail.indicators.eps?.toLocaleString() || '-'}</div>
+                    <div className="text-[10px] text-gray-400 mt-1">EPS 기준 기간 미확인</div>
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -728,7 +736,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                 <div className="bg-white/5 rounded-xl p-4">
                   <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                     <i className="fas fa-file-invoice-dollar text-emerald-400"></i> 재무 정보
-                    <Tooltip content="최근 연간 실적 기준 매출, 영업이익, 순이익입니다. 성장 추세를 확인하세요.">
+                    <Tooltip content="제공처의 각 실적 값과 기준 기간입니다. 기간 미확인 값은 연간 실적으로 단정하지 않으며, EPS와 산정 기간·이익 범위가 다를 수 있습니다.">
                       <i className="fas fa-info-circle text-gray-600 hover:text-gray-400 text-[10px] cursor-help"></i>
                     </Tooltip>
                   </h4>
@@ -741,6 +749,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         </Tooltip>
                       </div>
                       <div className="text-sm font-bold text-white">{formatMarketAmount(detail.financials.revenue, '-')}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">{financialPeriodLabel(detail.financials.revenuePeriod)}</div>
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -750,6 +759,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         </Tooltip>
                       </div>
                       <div className="text-sm font-bold text-white">{formatMarketAmount(detail.financials.operatingProfit, '-')}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">{financialPeriodLabel(detail.financials.operatingProfitPeriod)}</div>
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -759,6 +769,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         </Tooltip>
                       </div>
                       <div className="text-sm font-bold text-white">{formatMarketAmount(detail.financials.netIncome, '-')}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">{financialPeriodLabel(detail.financials.netIncomePeriod)}</div>
                     </div>
                   </div>
                 </div>
@@ -2337,16 +2348,16 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-3xl font-bold text-white">{signal.score.total}</span>
-                <span className="text-[10px] text-gray-500">/ 19점</span>
+                <span className="text-[10px] text-gray-500">{(signal.score_details?.bonus_score || 0) > 7 ? '저장 당시 총점' : '/ 19점'}</span>
               </div>
             </div>
             <div className="text-xs text-gray-400 mt-2 font-medium flex items-center justify-center gap-1">
               TOTAL SCORE
               <Tooltip content={
                 <div className="text-left space-y-2">
-                  <p><strong>합계 점수: {signal.score.total}점</strong> (최대 19점)</p>
+                  <p><strong>합계 점수: {signal.score.total}점</strong> (현재 기준 최대 19점)</p>
                   <p className="text-[9px] text-gray-400">● 기본 점수 (Max 12): 뉴스(3), 거래량(3), 차트(2), 수급(2), 캔들(1), 기간조정(1)</p>
-                  <p className="text-[9px] text-gray-400">● 가산점 (Max 7): 거래량 급증(최대 5), 장대양봉(최대 1), 상한가(최대 1)</p>
+                  <p className="text-[9px] text-gray-400">● 현재 가산점 (Max 7): 거래량 급증(최대 5), 장대양봉(최대 1), 상한가(최대 1)</p>
                   <p className="text-indigo-400 font-bold mt-1">※ 8점 이상 강력 매수 신호</p>
                 </div>
               } position="bottom" size="md">
@@ -2397,17 +2408,19 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
                   <Tooltip
                     content={
                       <div className="text-left space-y-1">
-                    <p>가산점: 거래량 급증/장대양봉/상한가 (최대 7점)</p>
-                    <p className="text-emerald-300">● 거래량 급증: +{signal.score_details?.bonus_breakdown?.volume || 0}/5</p>
-                    <p className="text-emerald-300">● 장대양봉: +{signal.score_details?.bonus_breakdown?.candle || 0}/1</p>
-                    <p className="text-emerald-300">● 상한가: +{signal.score_details?.bonus_breakdown?.limit_up || 0}/1</p>
+                    <p>현재 가산점: 거래량 급증/장대양봉/상한가 (최대 7점)</p>
+                    {(signal.score_details?.bonus_score || 0) > 7 && <p>세부 점수는 저장 당시 값입니다. 현재 항목별 상한을 적용하지 않습니다.</p>}
+                    <p className="text-emerald-300">● 거래량 급증: +{signal.score_details?.bonus_breakdown?.volume || 0}{(signal.score_details?.bonus_score || 0) > 7 ? '점' : '/5'}</p>
+                    <p className="text-emerald-300">● 장대양봉: +{signal.score_details?.bonus_breakdown?.candle || 0}{(signal.score_details?.bonus_score || 0) > 7 ? '점' : '/1'}</p>
+                    <p className="text-emerald-300">● 상한가: +{signal.score_details?.bonus_breakdown?.limit_up || 0}{(signal.score_details?.bonus_score || 0) > 7 ? '점' : '/1'}</p>
                   </div>
                 }>
                   <div className="cursor-help text-indigo-300 font-bold">보너스 (가산점)</div>
                 </Tooltip>
-                <div className="text-indigo-400 font-bold">+{signal.score_details?.bonus_score || 0}/7</div>
+                <div className="text-indigo-400 font-bold">+{signal.score_details?.bonus_score || 0}{(signal.score_details?.bonus_score || 0) > 7 ? '점 (과거 저장값)' : '/7'}</div>
+                {(signal.score_details?.bonus_score || 0) > 7 && <p className="text-[10px] text-amber-300 mt-1">현재 가산점 상한은 7점입니다. 총점은 저장 당시 값을 유지합니다.</p>}
                 {signal.score_details?.bonus_breakdown && (
-                  <div className="text-[9px] text-gray-500 mt-1">거래량/{signal.score_details.bonus_breakdown.volume || 0} | 장대양봉/{signal.score_details.bonus_breakdown.candle || 0}/1 | 상한가/{signal.score_details.bonus_breakdown.limit_up || 0}/1</div>
+                  <div className="text-[9px] text-gray-500 mt-1">거래량/{signal.score_details.bonus_breakdown.volume || 0} | 장대양봉/{signal.score_details.bonus_breakdown.candle || 0}{(signal.score_details?.bonus_score || 0) > 7 ? '' : '/1'} | 상한가/{signal.score_details.bonus_breakdown.limit_up || 0}{(signal.score_details?.bonus_score || 0) > 7 ? '' : '/1'}</div>
                 )}
               </div>
             </div>

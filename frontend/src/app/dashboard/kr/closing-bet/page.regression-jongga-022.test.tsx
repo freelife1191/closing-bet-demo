@@ -71,7 +71,7 @@ const DETAIL = {
   safety: { debtRatio: 0, currentRatio: 0 },
 };
 
-const state = vi.hoisted(() => ({ detail: {} as Record<string, unknown> }));
+const state = vi.hoisted(() => ({ detail: {} as Record<string, unknown>, bonus: 0 }));
 
 vi.mock('@/lib/api', () => ({
   fetchAPI: vi.fn(async (path: string) => {
@@ -81,7 +81,7 @@ vi.mock('@/lib/api', () => ({
         date: KST_DATE.format(new Date()),
         total_candidates: 1,
         filtered_count: 1,
-        signals: [SIGNAL],
+        signals: [{ ...SIGNAL, score_details: { ...SIGNAL.score_details, bonus_score: state.bonus } }],
         updated_at: TODAY(),
         status: 'ok',
       };
@@ -121,10 +121,58 @@ const openTooltipForLabel = async (label: string) => {
 describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
   beforeEach(() => {
     state.detail = { ...DETAIL };
+    state.bonus = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ json: async () => state.detail })),
     );
+  });
+
+  it('재무 값의 부호를 보존하고 각 기간과 EPS 미확인을 표시한다', async () => {
+    state.detail = { ...DETAIL, indicators: { ...DETAIL.indicators, per: -1147.6, eps: -266 },
+      financials: { revenue: 100, operatingProfit: 80, netIncome: 2_600_000_000,
+        revenuePeriod: '2026Q1', operatingProfitPeriod: '2025', netIncomePeriod: '2026Q1' } };
+    await openDetailModal();
+    const dialog = screen.getByRole('dialog', { name: '태웅' });
+    expect(within(dialog).getByText('-266')).toBeTruthy();
+    expect(within(dialog).getByText('26억')).toBeTruthy();
+    expect(within(dialog).getAllByText('기준: 2026Q1')).toHaveLength(2);
+    expect(within(dialog).getByText('기준: 2025')).toBeTruthy();
+    expect(within(dialog).getByText('EPS 기준 기간 미확인')).toBeTruthy();
+    expect((await openTooltipForLabel('PER')).textContent).toContain('음수 PER');
+  });
+
+  it('원시 Toss 응답도 기간을 보존하며 객체와 긴 기간 값은 미확인으로 표시한다', async () => {
+    state.detail = { code: '044490', name: '태웅', market: 'KOSDAQ',
+      price: { current: 100 }, indicators: { eps: -10 },
+      financials: { revenue: 100, operating_profit: 80, net_income: -20,
+        revenue_period: '2026Q2', operating_profit_period: {}, net_income_period: 'x'.repeat(1000) } };
+    await openDetailModal();
+    const dialog = screen.getByRole('dialog', { name: '태웅' });
+    expect(within(dialog).getByText('기준: 2026Q2')).toBeTruthy();
+    expect(within(dialog).getAllByText('기준 기간 미확인')).toHaveLength(2);
+    expect(within(dialog).getByText('-20')).toBeTruthy();
+  });
+
+  it('구형 응답의 재무 기간을 연간으로 추정하지 않는다', async () => {
+    await openDetailModal();
+    expect(screen.getAllByText('기준 기간 미확인')).toHaveLength(3);
+    expect((await openTooltipForLabel('재무 정보')).textContent).not.toContain('최근 연간');
+  });
+
+  it.each([8, 9])('과거 가산점 %s를 잘라내지 않고 현재 상한과 구분한다', async (bonus) => {
+    state.bonus = bonus;
+    render(<JonggaV2Page />);
+    expect(await screen.findByText(`+${bonus}점 (과거 저장값)`)).toBeTruthy();
+    expect(screen.queryByText(`+${bonus}/7`)).toBeNull();
+    expect(screen.getByText('현재 가산점 상한은 7점입니다. 총점은 저장 당시 값을 유지합니다.')).toBeTruthy();
+  });
+
+  it('현행 가산점 7은 기존 상한으로 표시한다', async () => {
+    state.bonus = 7;
+    render(<JonggaV2Page />);
+    expect(await screen.findByText('+7/7')).toBeTruthy();
+    expect(screen.queryByText(/과거 저장값/)).toBeNull();
   });
 
   it.each([

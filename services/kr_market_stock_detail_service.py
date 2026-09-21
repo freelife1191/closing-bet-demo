@@ -519,6 +519,9 @@ def build_toss_detail_payload(ticker_padded: str, toss_data: dict[str, Any]) -> 
             "revenue": financials.get("revenue", 0),
             "operatingProfit": financials.get("operating_profit", 0),
             "netIncome": financials.get("net_income", 0),
+            "revenuePeriod": financials.get("revenue_period"),
+            "operatingProfitPeriod": financials.get("operating_profit_period"),
+            "netIncomePeriod": financials.get("net_income_period"),
         },
         "safety": {
             "debtRatio": stability.get("debt_ratio", 0),

@@ -1,0 +1,92 @@
+[
+  {
+    "original": "pytest.log",
+    "archive": "pytest.log.gz",
+    "sha256": "c16cac28c2fbd939d7700e8324149c8419c884a7d62ac6bbb3b6f657ddf6e86b",
+    "bytes": 3102
+  },
+  {
+    "original": "pytarget-missing-green.log",
+    "archive": "pytarget-missing-green.log.gz",
+    "sha256": "20eea1b2d85a48d7384a35f6b5ff59c5f34e88daf432a3d53bfc30fdd6a22c1d",
+    "bytes": 99
+  },
+  {
+    "original": "pytarget-missing-red.log",
+    "archive": "pytarget-missing-red.log.gz",
+    "sha256": "24ac6e69a68408cf18884145873a83c3926fba8957228a33a947041f511445a2",
+    "bytes": 932
+  },
+  {
+    "original": "lint.log",
+    "archive": "lint.log.gz",
+    "sha256": "4bed70d0c9767a585c48a975143b89273d00984e2b432dcdfc2064b4910d8311",
+    "bytes": 52784
+  },
+  {
+    "original": "typecheck.log",
+    "archive": "typecheck.log.gz",
+    "sha256": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c",
+    "bytes": 80
+  },
+  {
+    "original": "target-red.log",
+    "archive": "target-red.log.gz",
+    "sha256": "b5c719ccc5efb7692697dee379f54c25ffc62bcaa5001fa217825fb8b55799e6",
+    "bytes": 95501
+  },
+  {
+    "original": "vitest.log",
+    "archive": "vitest.log.gz",
+    "sha256": "db2fd92eb5b68df492ed400721dd81824c9bfa311f621a885dbaef67a7ccba4b",
+    "bytes": 156159
+  },
+  {
+    "original": "pytest-final.log",
+    "archive": "pytest-final.log.gz",
+    "sha256": "0bba0e3757ac68a867f6fbf3511c3a810de17e22631a204d6b798346dfce6f9f",
+    "bytes": 3102
+  },
+  {
+    "original": "pytarget-red.log",
+    "archive": "pytarget-red.log.gz",
+    "sha256": "8238de33b1a66d4ffddbd5f8608235bda36795258e26ac6559df6676f2b4d8ff",
+    "bytes": 2172
+  },
+  {
+    "original": "target-green.log",
+    "archive": "target-green.log.gz",
+    "sha256": "d59ec503aefb69aa4741a9c4ab2bb4d8854012427f1175cf23d1b20f65816c2b",
+    "bytes": 896
+  },
+  {
+    "original": "pytarget-green.log",
+    "archive": "pytarget-green.log.gz",
+    "sha256": "0b2adb85cf2b6767e5a03278e138b56482583e93e2ab59410946dfb1538ed890",
+    "bytes": 99
+  },
+  {
+    "original": "build.log",
+    "archive": "build.log.gz",
+    "sha256": "35fa48d8bd2ead5fa1ebf1d7a262a731059cd84c040411829736c117c4ce2e34",
+    "bytes": 2131
+  },
+  {
+    "original": "review-diff-initial.txt",
+    "archive": "review-diff-initial.txt.gz",
+    "sha256": "90fd80826847618a16ae9cea9752fcfd732cc29e181a69d21eb6dc0a457939ea",
+    "bytes": 22855
+  },
+  {
+    "original": "review-diff.txt",
+    "archive": "review-diff.txt.gz",
+    "sha256": "612e7688d2851a73f397b348c9a8ddd53c71ed94ce4c3385694a4a0b49d24a12",
+    "bytes": 23336
+  },
+  {
+    "original": "code-review-final.md",
+    "archive": "code-review-final.md.raw.gz",
+    "sha256": "38e76a4f3d58ccb007a607728d7339f6c715a020a1d3bd3cbe301b5dbcf52296",
+    "bytes": 1557
+  }
+]

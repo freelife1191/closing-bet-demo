@@ -104,12 +104,15 @@ def _extract_latest_and_quarterly(
     table: list[dict[str, Any]],
     *,
     value_key: str,
-) -> tuple[Any, list[dict[str, Any]]]:
+) -> tuple[Any, list[dict[str, Any]], str | None]:
     if not table:
-        return 0, []
+        return 0, [], None
 
     latest = table[-1]
     latest_value = latest.get(value_key, 0) if isinstance(latest, dict) else 0
+    period = latest.get("period") if isinstance(latest, dict) and latest.get(value_key) is not None else None
+    period = period.strip() if isinstance(period, str) else None
+    period = period if period and len(period) <= 64 else None
     quarterly = []
     for item in table[-4:]:
         if not isinstance(item, dict):
@@ -120,7 +123,7 @@ def _extract_latest_and_quarterly(
                 "value": item.get(value_key, 0),
             }
         )
-    return latest_value, quarterly
+    return latest_value, quarterly, period
 
 
 def parse_financials(
@@ -131,6 +134,9 @@ def parse_financials(
         "revenue": 0,
         "operating_profit": 0,
         "net_income": 0,
+        "revenue_period": None,
+        "operating_profit_period": None,
+        "net_income_period": None,
         "revenue_quarterly": [],
         "operating_quarterly": [],
         "net_income_quarterly": [],
@@ -141,14 +147,16 @@ def parse_financials(
         if isinstance(revenue_result, dict):
             revenue_table = revenue_result.get("table", [])
             if isinstance(revenue_table, list):
-                revenue_latest, revenue_quarterly = _extract_latest_and_quarterly(
+                revenue_latest, revenue_quarterly, revenue_period = _extract_latest_and_quarterly(
                     revenue_table,
                     value_key="revenueKrw",
                 )
-                net_income_latest, net_income_quarterly = _extract_latest_and_quarterly(
+                net_income_latest, net_income_quarterly, net_income_period = _extract_latest_and_quarterly(
                     revenue_table,
                     value_key="netProfitKrw",
                 )
+                result["revenue_period"] = revenue_period
+                result["net_income_period"] = net_income_period
                 result["revenue"] = revenue_latest
                 result["net_income"] = net_income_latest
                 result["revenue_quarterly"] = revenue_quarterly
@@ -159,10 +167,11 @@ def parse_financials(
         if isinstance(operating_result, dict):
             operating_table = operating_result.get("table", [])
             if isinstance(operating_table, list):
-                op_latest, op_quarterly = _extract_latest_and_quarterly(
+                op_latest, op_quarterly, operating_period = _extract_latest_and_quarterly(
                     operating_table,
                     value_key="operatingIncomeKrw",
                 )
+                result["operating_profit_period"] = operating_period
                 result["operating_profit"] = op_latest
                 result["operating_quarterly"] = op_quarterly
 

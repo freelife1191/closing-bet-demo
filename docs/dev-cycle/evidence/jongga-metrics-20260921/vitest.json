@@ -1,0 +1,16 @@
+{
+  "stage": "vitest",
+  "started_at": "2026-09-21T02:26:45.250879+00:00",
+  "ended_at": "2026-09-21T02:26:52.903309+00:00",
+  "pid": 10642,
+  "command": [
+    "npx",
+    "vitest",
+    "run"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/jongga-metrics-20260921-wv68gv6l/frontend",
+  "timeout_seconds": 300,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 7.65
+}

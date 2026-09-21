@@ -222,3 +222,34 @@ def test_toss_collector_get_prices_batch_merges_chunk_results(monkeypatch):
 
     assert parsed["005930"]["change"] == 10
     assert parsed["000660"]["change_pct"] == 25.0
+
+
+def test_financial_periods_follow_the_exact_value_row():
+    parsed = parse_financials(
+        {"result": {"table": [{"period": "2025Q4", "netProfitKrw": -12}, {"period": "2026Q1", "netProfitKrw": 26, "revenueKrw": 100}]}},
+        {"result": {"table": [{"period": "2025", "operatingIncomeKrw": 80}]}},
+    )
+    from services.kr_market_stock_detail_service import build_toss_detail_payload
+    detail = build_toss_detail_payload("005930", {"financials": parsed, "indicators": {"eps": -266}})
+    assert detail["financials"]["netIncomePeriod"] == "2026Q1"
+    assert detail["financials"]["revenuePeriod"] == "2026Q1"
+    assert detail["financials"]["operatingProfitPeriod"] == "2025"
+    assert detail["financials"]["netIncome"] == 26
+    assert detail["indicators"]["eps"] == -266
+
+
+def test_financial_period_missing_or_invalid_does_not_reuse_previous_row():
+    from services.kr_market_stock_detail_service import build_toss_detail_payload
+    for latest in [None, {}, {"period": None}, {"period": {}}, {"period": " "}, {"period": "x" * 1000}]:
+        parsed = parse_financials({"result": {"table": [{"period": "2025Q4"}, latest]}}, None)
+        detail = build_toss_detail_payload("005930", {"financials": parsed})
+        assert detail["financials"]["netIncomePeriod"] is None
+        assert detail["financials"]["operatingProfitPeriod"] is None
+
+
+def test_financial_period_requires_the_corresponding_metric():
+    parsed = parse_financials({"result": {"table": [{"period": "2026Q1", "revenueKrw": 100, "netProfitKrw": None}]}}, None)
+    assert parsed["revenue_period"] == "2026Q1"
+    assert parsed["net_income_period"] is None
+    missing = parse_financials({"result": {"table": [{"period": "2026Q1", "revenueKrw": 100}]}}, None)
+    assert missing["net_income_period"] is None
