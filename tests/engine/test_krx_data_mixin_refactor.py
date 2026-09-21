@@ -16,8 +16,9 @@ from engine.collectors.krx import KRXCollector
 from engine.collectors.krx_data_mixin import KRXCollectorDataMixin
 
 
-class _DummyCollector(KRXCollectorDataMixin):
+class _DummyCollector(KRXCollector):
     def __init__(self):
+        super().__init__()
         self.name_calls: list[str] = []
 
     def _get_stock_name(self, ticker: str) -> str:
@@ -84,8 +85,8 @@ def test_get_top_gainers_explicit_target_does_not_probe_previous_dates(monkeypat
         get_market_ohlcv_by_ticker=_fake_get_market_ohlcv_by_ticker
     )
     monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
-    monkeypatch.setattr(KRXCollector, "_load_pykrx_top_gainers_snapshot", lambda *args, **kwargs: None)
-    monkeypatch.setattr(KRXCollector, "_save_pykrx_top_gainers_snapshot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(KRXCollector, "_load_cached_top_gainers", lambda *args, **kwargs: None)
+    monkeypatch.setattr(KRXCollector, "_save_cached_top_gainers", lambda *args, **kwargs: None)
     monkeypatch.setattr(collector, "_load_from_local_csv", lambda *_args, **_kwargs: [])
 
     result = asyncio.run(collector.get_top_gainers("KOSPI", top_n=5, target_date="20260522"))

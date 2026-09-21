@@ -1,0 +1,20 @@
+{
+  "stage": "pytarget:collector-cache-red",
+  "started_at": "2026-09-21T00:07:28.712383+00:00",
+  "ended_at": "2026-09-21T00:07:30.309656+00:00",
+  "pid": 71704,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/services/test_investor_personal_flow.py",
+    "-k",
+    "collector_cache_bad"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 1.6
+}

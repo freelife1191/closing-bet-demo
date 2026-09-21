@@ -127,6 +127,30 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
     );
   });
 
+  it.each([
+    [null, '자료 없음'], [0, '0'], [100_000_000, '+1억'], [-100_000_000, '-1억'],
+  ])('개인 수급 %s의 실제 값과 자료 없음을 구분한다', async (individual, expected) => {
+    state.detail = { ...DETAIL, investorTrend: { ...DETAIL.investorTrend, individual } };
+    await openDetailModal();
+    const row = within(screen.getByRole('dialog', { name: '태웅' })).getByText('개인').parentElement;
+    expect(row).not.toBeNull();
+    expect(row?.textContent).toContain(expected);
+  });
+
+  it('같은 페이지에서 닫고 다시 열면 자료 없음과 복구 응답을 그린다', async () => {
+    await openDetailModal();
+    for (const [individual, expected] of [[undefined, '자료 없음'], [-100_000_000, '-1억']] as const) {
+      fireEvent.click(within(screen.getByRole('dialog', { name: '태웅' })).getByRole('button', { name: '닫기' }));
+      state.detail = { ...DETAIL, investorTrend: { ...DETAIL.investorTrend, individual } };
+      fireEvent.click(screen.getByText('상세 분석 보기'));
+      await waitFor(() => {
+        const dialog = screen.getByRole('dialog', { name: '태웅' });
+        expect(within(dialog).getByText('개인').parentElement?.textContent).toContain(expected);
+        expect(within(dialog).getByText('+33억')).toBeTruthy();
+      });
+    }
+  });
+
   it('모달의 외국인 5일 순매수가 카드와 같은 값을 그린다', async () => {
     await openDetailModal();
 
@@ -166,7 +190,7 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
     expect(within(tooltip).getByText(/이 값만 실시간 시세 제공처가 집계하므로/)).toBeTruthy();
   });
 
-  it('5일 확정 집계가 없고 실시간 집계가 0 또는 누락이면 세 값을 중립적인 -로 표시한다', async () => {
+  it('5일 확정 집계가 없으면 외국인·기관은 -를 유지하고 개인 실제0은 0을 표시한다', async () => {
     state.detail = {
       ...DETAIL,
       investorTrend5Day: undefined,
@@ -175,7 +199,8 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
     await openDetailModal();
 
     const section = screen.getByText('투자자 동향 (오늘 기준 5영업일)').closest('div[class~="bg-white/5"]') as HTMLElement;
-    expect(within(section).getAllByText('-')).toHaveLength(3);
+    expect(within(section).getAllByText('-')).toHaveLength(2);
+    expect(within(section).getByText('개인').parentElement?.textContent).toContain('0');
     expect(section.textContent).not.toContain('+-');
     expect(section.textContent).not.toContain('+0');
   });

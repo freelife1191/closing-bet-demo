@@ -1,0 +1,24 @@
+{
+  "stage": "pytarget:task1-final",
+  "started_at": "2026-09-20T23:30:10.993910+00:00",
+  "ended_at": "2026-09-20T23:30:13.081059+00:00",
+  "pid": 23501,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/engine/test_collectors_package_contract.py",
+    "tests/engine/test_collectors_refactor.py",
+    "tests/engine/test_collectors_unified_supply_service_refactor.py",
+    "tests/engine/test_krx_data_mixin_refactor.py",
+    "tests/engine/test_krx_local_cache_helpers_refactor.py",
+    "tests/engine/test_naver_collector_refactor.py",
+    "tests/engine/test_news_collector_refactor.py"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/collector-supply-20260921-s4q2rzaf",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 0,
+  "elapsed_seconds": 2.09
+}

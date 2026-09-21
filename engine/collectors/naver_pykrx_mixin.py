@@ -4,14 +4,15 @@
 Naver collector pykrx enrichment mixin
 """
 
-import math
-import logging
-import os
-import threading
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict
+import logging
+import math
+import os
+import threading
 
+from engine.investor_personal_flow import personal_flow_total
 from services.investor_trend_5day_service import (
     get_investor_trend_5day_for_ticker,
     has_csv_anomaly_flags,
@@ -21,10 +22,8 @@ from services.kr_market_data_cache_sqlite_payload import (
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
 )
 
-
 logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 class NaverPykrxMixin:
     """pykrx 기반 투자자/펀더멘탈 보강 로직."""
@@ -440,6 +439,8 @@ class NaverPykrxMixin:
         """통합 5일 합산 서비스 우선 + pykrx 요약 캐시 fallback."""
         normalized_code = str(code).zfill(6)
         investor_trend = result.setdefault("investorTrend", {})
+        investor_trend["individual"] = None
+        investor_trend["individual_schema"] = 1
 
         try:
             trend_data = get_investor_trend_5day_for_ticker(
@@ -450,7 +451,7 @@ class NaverPykrxMixin:
             if isinstance(trend_data, dict) and not has_csv_anomaly_flags(trend_data):
                 investor_trend["foreign"] = int(trend_data.get("foreign", 0))
                 investor_trend["institution"] = int(trend_data.get("institution", 0))
-                investor_trend.setdefault("individual", 0)
+                investor_trend["individual"] = trend_data.get("individual")
                 return
             if isinstance(trend_data, dict):
                 logger.debug("투자자 동향 통합 서비스 이상징후 감지 (%s): pykrx fallback 사용", normalized_code)
@@ -467,14 +468,14 @@ class NaverPykrxMixin:
                 end_date = str(latest_market_date_resolver())
             else:
                 end_date = datetime.now().strftime("%Y%m%d")
-            cached_supply = cache_collector._load_pykrx_supply_summary_snapshot(
+            cached_supply = cache_collector._load_cached_pykrx_supply_summary(
                 ticker=normalized_code,
                 end_date=end_date,
             )
             if isinstance(cached_supply, dict):
                 investor_trend["foreign"] = int(cached_supply.get("foreign_buy_5d", 0))
                 investor_trend["institution"] = int(cached_supply.get("inst_buy_5d", 0))
-                investor_trend["individual"] = int(cached_supply.get("retail_buy_5d", 0))
+                investor_trend["individual"] = cached_supply.get("retail_buy_5d")
                 return
 
             try:
@@ -489,16 +490,17 @@ class NaverPykrxMixin:
                 empty_payload = {
                     "foreign_buy_5d": 0,
                     "inst_buy_5d": 0,
-                    "retail_buy_5d": 0,
+                    "retail_buy_5d": None,
+                    "individual_schema": 0,
                 }
-                cache_collector._save_pykrx_supply_summary_snapshot(
+                cache_collector._save_cached_pykrx_supply_summary(
                     ticker=normalized_code,
                     end_date=end_date,
                     payload=empty_payload,
                 )
                 investor_trend["foreign"] = 0
                 investor_trend["institution"] = 0
-                investor_trend["individual"] = 0
+                investor_trend["individual"] = None
                 return
 
             df = df.tail(5)
@@ -515,16 +517,17 @@ class NaverPykrxMixin:
             resolved_payload = {
                 "foreign_buy_5d": int(df[foreign_col].sum()) if foreign_col in df.columns else 0,
                 "inst_buy_5d": int(df[inst_col].sum()) if inst_col in df.columns else 0,
-                "retail_buy_5d": int(df[retail_col].sum()) if retail_col and retail_col in df.columns else 0,
+                "retail_buy_5d": personal_flow_total([{ "date": str(day)[:10], "netIndividualsBuyVolume": row[retail_col]} for day, row in df.iterrows()]) if retail_col and retail_col in df.columns else None,
             }
-            cache_collector._save_pykrx_supply_summary_snapshot(
+            resolved_payload["individual_schema"] = 1 if resolved_payload["retail_buy_5d"] is not None else 0
+            cache_collector._save_cached_pykrx_supply_summary(
                 ticker=normalized_code,
                 end_date=end_date,
                 payload=resolved_payload,
             )
             investor_trend["foreign"] = int(resolved_payload.get("foreign_buy_5d", 0))
             investor_trend["institution"] = int(resolved_payload.get("inst_buy_5d", 0))
-            investor_trend["individual"] = int(resolved_payload.get("retail_buy_5d", 0))
+            investor_trend["individual"] = resolved_payload.get("retail_buy_5d")
 
         except Exception as e:
             logger.debug("투자자 동향 pykrx 조회 실패 (%s): %s", normalized_code, e)
@@ -571,6 +574,5 @@ class NaverPykrxMixin:
                     continue
         except Exception as e:
             logger.debug(f"펀더멘탈 pykrx 조회 실패 ({normalized_code}): {e}")
-
 
 __all__ = ["NaverPykrxMixin"]

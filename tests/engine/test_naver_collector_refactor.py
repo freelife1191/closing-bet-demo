@@ -118,7 +118,7 @@ def test_naver_pykrx_investor_trend_prefers_unified_service(monkeypatch):
     assert captured["verify_with_references"] is False
     assert result["investorTrend"]["foreign"] == 510_000_000
     assert result["investorTrend"]["institution"] == -210_000_000
-    assert result["investorTrend"]["individual"] == 0
+    assert result["investorTrend"]["individual"] is None
 
 
 def test_naver_pykrx_investor_trend_uses_sqlite_summary_cache(monkeypatch):
@@ -135,7 +135,7 @@ def test_naver_pykrx_investor_trend_uses_sqlite_summary_cache(monkeypatch):
     )
     monkeypatch.setattr(
         krx_module.KRXCollector,
-        "_load_pykrx_supply_summary_snapshot",
+        "_load_cached_pykrx_supply_summary",
         lambda self, *, ticker, end_date: {
             "foreign_buy_5d": 700_000_000,
             "inst_buy_5d": -200_000_000,

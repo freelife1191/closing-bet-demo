@@ -361,7 +361,7 @@ def test_fetch_stock_detail_payload_reuses_sqlite_snapshot_after_memory_clear(mo
             "priceInfo": {"current": 70000},
             "yearRange": {"high_52w": 0, "low_52w": 0},
             "indicators": {"marketCap": 0, "per": 0, "pbr": 0},
-            "investorTrend": {"foreign": 0, "institution": 0, "individual": 0},
+            "investorTrend": {"foreign": 0, "institution": 0, "individual": 0, "individual_schema": 1},
             "financials": {"revenue": 0, "operatingProfit": 0, "netIncome": 0},
             "safety": {"debtRatio": 0, "currentRatio": 0},
         },

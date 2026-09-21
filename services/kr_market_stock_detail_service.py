@@ -20,6 +20,7 @@ from typing import Any, Callable
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 
+from engine.investor_personal_flow import cached_personal_value
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
@@ -107,6 +108,9 @@ def _normalize_stock_detail_payload(payload: Any) -> dict[str, Any] | None:
     normalized = copy.deepcopy(payload)
     if not isinstance(normalized.get("code"), str):
         return None
+    trend = normalized.get("investorTrend")
+    if isinstance(trend, dict):
+        trend["individual"] = cached_personal_value(trend, "individual")
     return normalized
 
 
@@ -128,7 +132,7 @@ def _load_cached_stock_detail_payload(
         cached_payload = _STOCK_DETAIL_CACHE.get(memory_key)
         if isinstance(cached_payload, dict):
             _STOCK_DETAIL_CACHE.move_to_end(memory_key)
-            return copy.deepcopy(cached_payload)
+            return _normalize_stock_detail_payload(cached_payload)
 
     try:
         loaded, payload = _load_json_payload_from_sqlite(
@@ -209,7 +213,7 @@ def build_default_stock_detail_payload(ticker_padded: str) -> dict[str, Any]:
         "priceInfo": {"current": 0, "prevClose": 0, "high": 0, "low": 0},
         "yearRange": {"high_52w": 0, "low_52w": 0},
         "indicators": {"marketCap": 0, "per": 0, "pbr": 0},
-        "investorTrend": {"foreign": 0, "institution": 0, "individual": 0},
+        "investorTrend": {"foreign": 0, "institution": 0, "individual": None, "individual_schema": 1},
         "financials": {"revenue": 0, "operatingProfit": 0, "netIncome": 0},
         "safety": {"debtRatio": 0, "currentRatio": 0},
         "message": "NaverFinanceCollector를 사용할 수 없어 기본 데이터를 반환합니다.",
@@ -508,7 +512,8 @@ def build_toss_detail_payload(ticker_padded: str, toss_data: dict[str, Any]) -> 
         "investorTrend": {
             "foreign": investor_trend.get("foreign", 0),
             "institution": investor_trend.get("institution", 0),
-            "individual": investor_trend.get("individual", 0),
+            "individual": investor_trend.get("individual"),
+            "individual_schema": 1,
         },
         "financials": {
             "revenue": financials.get("revenue", 0),

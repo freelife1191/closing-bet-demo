@@ -12,14 +12,16 @@ import types
 
 import pandas as pd
 
-import engine.collectors as collectors_module
+import engine.collectors.krx_local_data_mixin as collectors_module
+from engine.collectors.krx import KRXCollector
+from engine.collectors.naver import NaverFinanceCollector
 
 
 def test_load_from_local_csv_uses_shared_sqlite_backed_loader(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
-    collectors_module.KRXCollector.clear_stock_lookup_cache()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
+    KRXCollector.clear_stock_lookup_cache()
     calls: list[tuple[str, tuple[str, ...] | None]] = []
 
     daily_df = pd.DataFrame(
@@ -65,12 +67,12 @@ def test_load_from_local_csv_uses_shared_sqlite_backed_loader(monkeypatch, tmp_p
     monkeypatch.setattr(collectors_module, "_shared_file_signature", _fake_signature)
     monkeypatch.setattr(collectors_module, "_load_shared_csv_file", _fake_load_shared_csv_file)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_top_gainers_sqlite_context",
         classmethod(lambda cls, **_kwargs: (str(tmp_path / ".krx_collector_cache" / "case1.snapshot"), (11, 11))),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_stock_lookup_sqlite_context",
         classmethod(
             lambda cls, **_kwargs: (
@@ -97,10 +99,10 @@ def test_load_from_local_csv_uses_shared_sqlite_backed_loader(monkeypatch, tmp_p
 
 
 def test_load_from_local_csv_falls_back_when_usecols_mismatch(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
-    collectors_module.KRXCollector.clear_stock_lookup_cache()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
+    KRXCollector.clear_stock_lookup_cache()
     calls: list[tuple[str, tuple[str, ...] | None]] = []
 
     daily_df = pd.DataFrame(
@@ -148,12 +150,12 @@ def test_load_from_local_csv_falls_back_when_usecols_mismatch(monkeypatch, tmp_p
     monkeypatch.setattr(collectors_module, "_shared_file_signature", _fake_signature)
     monkeypatch.setattr(collectors_module, "_load_shared_csv_file", _fake_load_shared_csv_file)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_top_gainers_sqlite_context",
         classmethod(lambda cls, **_kwargs: (str(tmp_path / ".krx_collector_cache" / "case2.snapshot"), (22, 22))),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_stock_lookup_sqlite_context",
         classmethod(
             lambda cls, **_kwargs: (
@@ -175,10 +177,10 @@ def test_load_from_local_csv_falls_back_when_usecols_mismatch(monkeypatch, tmp_p
 
 
 def test_load_from_local_csv_does_not_backfill_explicit_missing_date(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
-    collectors_module.KRXCollector.clear_stock_lookup_cache()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
+    KRXCollector.clear_stock_lookup_cache()
 
     daily_df = pd.DataFrame(
         [
@@ -220,12 +222,12 @@ def test_load_from_local_csv_does_not_backfill_explicit_missing_date(monkeypatch
     monkeypatch.setattr(collectors_module, "_shared_file_signature", _fake_signature)
     monkeypatch.setattr(collectors_module, "_load_shared_csv_file", _fake_load_shared_csv_file)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_top_gainers_sqlite_context",
         classmethod(lambda cls, **_kwargs: (str(tmp_path / "missing_date.snapshot"), (53, 53))),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_stock_lookup_sqlite_context",
         classmethod(lambda cls, **_kwargs: (str(tmp_path / "lookup.snapshot"), (54, 54))),
     )
@@ -236,9 +238,9 @@ def test_load_from_local_csv_does_not_backfill_explicit_missing_date(monkeypatch
 
 
 def test_get_top_gainers_explicit_target_does_not_probe_previous_dates(monkeypatch):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
 
     calls: list[str] = []
 
@@ -252,12 +254,12 @@ def test_get_top_gainers_explicit_target_does_not_probe_previous_dates(monkeypat
     )
     monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_load_cached_top_gainers",
         classmethod(lambda cls, **_kwargs: None),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_save_cached_top_gainers",
         classmethod(lambda cls, **_kwargs: None),
     )
@@ -270,9 +272,9 @@ def test_get_top_gainers_explicit_target_does_not_probe_previous_dates(monkeypat
 
 
 def test_get_top_gainers_uses_toss_fallback_for_current_date(monkeypatch):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
 
     def _fake_get_market_ohlcv_by_ticker(_check_date: str, _market: str):
         return pd.DataFrame()
@@ -283,7 +285,7 @@ def test_get_top_gainers_uses_toss_fallback_for_current_date(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_load_cached_top_gainers",
         classmethod(lambda cls, **_kwargs: None),
     )
@@ -366,9 +368,9 @@ def test_get_top_gainers_uses_toss_fallback_for_current_date(monkeypatch):
 
 
 def test_get_top_gainers_skips_toss_fallback_for_historical_missing_date(monkeypatch):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
 
     def _fake_get_market_ohlcv_by_ticker(_check_date: str, _market: str):
         return pd.DataFrame()
@@ -379,7 +381,7 @@ def test_get_top_gainers_skips_toss_fallback_for_historical_missing_date(monkeyp
     )
     monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_load_cached_top_gainers",
         classmethod(lambda cls, **_kwargs: None),
     )
@@ -398,16 +400,16 @@ def test_get_top_gainers_skips_toss_fallback_for_historical_missing_date(monkeyp
 
 
 def test_get_latest_market_date_uses_memory_cache_before_pykrx(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    collectors_module.KRXCollector.clear_latest_market_date_cache()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    KRXCollector.clear_latest_market_date_cache()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_latest_market_date_cache_token",
         classmethod(lambda cls, _now: "20260224:postclose"),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_latest_market_date_sqlite_context",
         classmethod(
             lambda cls, cache_token: (
@@ -437,16 +439,16 @@ def test_get_latest_market_date_uses_memory_cache_before_pykrx(monkeypatch, tmp_
 
 
 def test_get_latest_market_date_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    collectors_module.KRXCollector.clear_latest_market_date_cache()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    KRXCollector.clear_latest_market_date_cache()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_latest_market_date_cache_token",
         classmethod(lambda cls, _now: "20260224:postclose"),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_latest_market_date_sqlite_context",
         classmethod(
             lambda cls, cache_token: (
@@ -471,7 +473,7 @@ def test_get_latest_market_date_reuses_sqlite_snapshot_after_memory_clear(monkey
     assert first == "20260224"
     assert calls["count"] == 1
 
-    collectors_module.KRXCollector.clear_latest_market_date_cache()
+    KRXCollector.clear_latest_market_date_cache()
     fake_pykrx.stock = types.SimpleNamespace(
         get_index_ohlcv_by_date=lambda *_a, **_k: (_ for _ in ()).throw(
             AssertionError("pykrx call should be skipped by sqlite snapshot")
@@ -484,11 +486,11 @@ def test_get_latest_market_date_reuses_sqlite_snapshot_after_memory_clear(monkey
 
 
 def test_get_stock_name_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
     collector._stock_name_cache.clear()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_stock_name_sqlite_context",
         classmethod(
             lambda cls, ticker: (
@@ -524,7 +526,7 @@ def test_get_stock_name_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, t
 
 
 def test_latest_market_date_sqlite_context_uses_project_data_dir():
-    cache_key, signature = collectors_module.KRXCollector._latest_market_date_sqlite_context(
+    cache_key, signature = KRXCollector._latest_market_date_sqlite_context(
         "20260225:postclose"
     )
     assert "data/.krx_collector_cache/latest_market_date__20260225:postclose.snapshot" in cache_key
@@ -533,10 +535,10 @@ def test_latest_market_date_sqlite_context_uses_project_data_dir():
 
 
 def test_load_from_local_csv_reuses_top_gainers_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
-    collectors_module.KRXCollector.clear_stock_lookup_cache()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
+    KRXCollector.clear_stock_lookup_cache()
 
     daily_df = pd.DataFrame(
         [
@@ -594,12 +596,12 @@ def test_load_from_local_csv_reuses_top_gainers_sqlite_snapshot_after_memory_cle
 
     monkeypatch.setattr(collectors_module, "_shared_file_signature", _fake_signature)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_top_gainers_sqlite_context",
         classmethod(_fake_top_sqlite_context),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_stock_lookup_sqlite_context",
         classmethod(
             lambda cls, **_kwargs: (
@@ -615,8 +617,8 @@ def test_load_from_local_csv_reuses_top_gainers_sqlite_snapshot_after_memory_cle
     assert first[0].code == "000001"
     assert calls["count"] >= 2
 
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
 
     monkeypatch.setattr(
         collectors_module,
@@ -632,10 +634,10 @@ def test_load_from_local_csv_reuses_top_gainers_sqlite_snapshot_after_memory_cle
 
 
 def test_load_from_local_csv_reuses_stock_lookup_sqlite_snapshot(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
-    collectors_module.KRXCollector.clear_stock_lookup_cache()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
+    KRXCollector.clear_stock_lookup_cache()
 
     daily_df = pd.DataFrame(
         [
@@ -697,12 +699,12 @@ def test_load_from_local_csv_reuses_stock_lookup_sqlite_snapshot(monkeypatch, tm
 
     monkeypatch.setattr(collectors_module, "_shared_file_signature", _fake_signature)
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_top_gainers_sqlite_context",
         classmethod(_fake_top_sqlite_context),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_stock_lookup_sqlite_context",
         classmethod(
             lambda cls, **_kwargs: (
@@ -718,9 +720,9 @@ def test_load_from_local_csv_reuses_stock_lookup_sqlite_snapshot(monkeypatch, tm
     assert call_counter["daily_prices.csv"] == 1
     assert call_counter["korean_stocks_list.csv"] == 1
 
-    collectors_module.KRXCollector.clear_stock_lookup_cache()
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
+    KRXCollector.clear_stock_lookup_cache()
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
 
     def _second_loader(
         data_dir: str,
@@ -749,13 +751,13 @@ def test_load_from_local_csv_reuses_stock_lookup_sqlite_snapshot(monkeypatch, tm
 
 
 def test_get_top_gainers_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
     collector._stock_name_cache.clear()
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_top_gainers_sqlite_context",
         classmethod(
             lambda cls, **_kwargs: (
@@ -765,7 +767,7 @@ def test_get_top_gainers_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeyp
         ),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_stock_name_sqlite_context",
         classmethod(
             lambda cls, ticker: (
@@ -807,8 +809,8 @@ def test_get_top_gainers_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeyp
     assert calls["ohlcv"] == 1
     assert calls["name"] == 1
 
-    with collectors_module.KRXCollector._top_gainers_cache_lock:
-        collectors_module.KRXCollector._top_gainers_cache.clear()
+    with KRXCollector._top_gainers_cache_lock:
+        KRXCollector._top_gainers_cache.clear()
 
     fake_stock_ns.get_market_ohlcv_by_ticker = lambda *_a, **_k: (_ for _ in ()).throw(
         AssertionError("pykrx ohlcv should be skipped by sqlite snapshot")
@@ -825,12 +827,12 @@ def test_get_top_gainers_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeyp
 
 
 def test_get_supply_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._pykrx_supply_cache_lock:
-        collectors_module.KRXCollector._pykrx_supply_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._pykrx_supply_cache_lock:
+        KRXCollector._pykrx_supply_cache.clear()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_pykrx_supply_sqlite_context",
         classmethod(
             lambda cls, **_kwargs: (
@@ -840,7 +842,7 @@ def test_get_supply_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeyp
         ),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_get_latest_market_date",
         lambda self: "20260221",
     )
@@ -859,7 +861,8 @@ def test_get_supply_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeyp
                 "외국인합계": [1_000_000_000, 500_000_000, -200_000_000, 100_000_000, 300_000_000],
                 "기관합계": [300_000_000, -100_000_000, 200_000_000, 100_000_000, 50_000_000],
                 "개인": [-1_300_000_000, -400_000_000, 0, -200_000_000, -350_000_000],
-            }
+            },
+            index=pd.bdate_range("2026-02-16", periods=5)
         )
 
     fake_stock_ns = types.SimpleNamespace(
@@ -876,8 +879,8 @@ def test_get_supply_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeyp
     assert first.retail_buy_5d == -2_250_000_000
     assert calls["count"] == 1
 
-    with collectors_module.KRXCollector._pykrx_supply_cache_lock:
-        collectors_module.KRXCollector._pykrx_supply_cache.clear()
+    with KRXCollector._pykrx_supply_cache_lock:
+        KRXCollector._pykrx_supply_cache.clear()
 
     fake_stock_ns.get_market_trading_value_by_date = lambda *_a, **_k: (_ for _ in ()).throw(
         AssertionError("pykrx supply query should be skipped by sqlite snapshot")
@@ -892,12 +895,12 @@ def test_get_supply_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeyp
 
 
 def test_get_chart_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._pykrx_chart_cache_lock:
-        collectors_module.KRXCollector._pykrx_chart_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._pykrx_chart_cache_lock:
+        KRXCollector._pykrx_chart_cache.clear()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_pykrx_chart_sqlite_context",
         classmethod(
             lambda cls, **_kwargs: (
@@ -907,7 +910,7 @@ def test_get_chart_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeypa
         ),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_get_latest_market_date",
         lambda self: "20260221",
     )
@@ -942,8 +945,8 @@ def test_get_chart_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeypa
     assert len(first.closes) == 3
     assert calls["count"] == 1
 
-    with collectors_module.KRXCollector._pykrx_chart_cache_lock:
-        collectors_module.KRXCollector._pykrx_chart_cache.clear()
+    with KRXCollector._pykrx_chart_cache_lock:
+        KRXCollector._pykrx_chart_cache.clear()
 
     fake_stock_ns.get_market_ohlcv_by_date = lambda *_a, **_k: (_ for _ in ()).throw(
         AssertionError("pykrx chart query should be skipped by sqlite snapshot")
@@ -956,12 +959,12 @@ def test_get_chart_data_reuses_pykrx_sqlite_snapshot_after_memory_clear(monkeypa
 
 
 def test_get_chart_data_uses_explicit_target_date_for_end_date(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
-    with collectors_module.KRXCollector._pykrx_chart_cache_lock:
-        collectors_module.KRXCollector._pykrx_chart_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(min_change_pct=0.0))
+    with KRXCollector._pykrx_chart_cache_lock:
+        KRXCollector._pykrx_chart_cache.clear()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_pykrx_chart_sqlite_context",
         classmethod(
             lambda cls, **kwargs: (
@@ -971,7 +974,7 @@ def test_get_chart_data_uses_explicit_target_date_for_end_date(monkeypatch, tmp_
         ),
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_get_latest_market_date",
         lambda self: (_ for _ in ()).throw(AssertionError("latest market date should not be used")),
     )
@@ -1007,12 +1010,12 @@ def test_get_chart_data_uses_explicit_target_date_for_end_date(monkeypatch, tmp_
 
 
 def test_get_supply_data_uses_explicit_target_date_for_pykrx_window(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(DATA_DIR=str(tmp_path)))
-    with collectors_module.KRXCollector._pykrx_supply_cache_lock:
-        collectors_module.KRXCollector._pykrx_supply_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(DATA_DIR=str(tmp_path)))
+    with KRXCollector._pykrx_supply_cache_lock:
+        KRXCollector._pykrx_supply_cache.clear()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_pykrx_supply_sqlite_context",
         classmethod(
             lambda cls, **kwargs: (
@@ -1027,7 +1030,7 @@ def test_get_supply_data_uses_explicit_target_date_for_pykrx_window(monkeypatch,
         lambda **_kwargs: None,
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_get_latest_market_date",
         lambda self: (_ for _ in ()).throw(AssertionError("latest market date should not be used")),
     )
@@ -1061,12 +1064,12 @@ def test_get_supply_data_uses_explicit_target_date_for_pykrx_window(monkeypatch,
 
 
 def test_get_supply_data_prefers_pykrx_for_explicit_historical_target(monkeypatch, tmp_path):
-    collector = collectors_module.KRXCollector(config=types.SimpleNamespace(DATA_DIR=str(tmp_path)))
-    with collectors_module.KRXCollector._pykrx_supply_cache_lock:
-        collectors_module.KRXCollector._pykrx_supply_cache.clear()
+    collector = KRXCollector(config=types.SimpleNamespace(DATA_DIR=str(tmp_path)))
+    with KRXCollector._pykrx_supply_cache_lock:
+        KRXCollector._pykrx_supply_cache.clear()
 
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_pykrx_supply_sqlite_context",
         classmethod(
             lambda cls, **kwargs: (
@@ -1113,7 +1116,7 @@ def test_get_supply_data_prefers_pykrx_for_explicit_historical_target(monkeypatc
 
 
 def test_naver_finance_investor_trend_prefers_unified_service(monkeypatch):
-    collector = collectors_module.NaverFinanceCollector(
+    collector = NaverFinanceCollector(
         config=types.SimpleNamespace(DATA_DIR="data")
     )
     captured: dict[str, object] = {}
@@ -1145,11 +1148,11 @@ def test_naver_finance_investor_trend_prefers_unified_service(monkeypatch):
     assert captured["verify_with_references"] is False
     assert result["investorTrend"]["foreign"] == 321_000_000
     assert result["investorTrend"]["institution"] == -123_000_000
-    assert result["investorTrend"]["individual"] == 0
+    assert result["investorTrend"]["individual"] is None
 
 
 def test_naver_finance_investor_trend_uses_pykrx_sqlite_summary_cache(monkeypatch):
-    collector = collectors_module.NaverFinanceCollector(
+    collector = NaverFinanceCollector(
         config=types.SimpleNamespace(DATA_DIR="data")
     )
     import engine.collectors.krx as krx_module
@@ -1174,7 +1177,7 @@ def test_naver_finance_investor_trend_uses_pykrx_sqlite_summary_cache(monkeypatc
         },
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_get_latest_market_date",
         lambda self: "20260221",
     )
@@ -1184,7 +1187,7 @@ def test_naver_finance_investor_trend_uses_pykrx_sqlite_summary_cache(monkeypatc
         lambda self: "20260221",
     )
     monkeypatch.setattr(
-        collectors_module.KRXCollector,
+        KRXCollector,
         "_load_cached_pykrx_supply_summary",
         classmethod(
             lambda cls, *, ticker, end_date: {
@@ -1196,7 +1199,7 @@ def test_naver_finance_investor_trend_uses_pykrx_sqlite_summary_cache(monkeypatc
     )
     monkeypatch.setattr(
         krx_module.KRXCollector,
-        "_load_pykrx_supply_summary_snapshot",
+        "_load_cached_pykrx_supply_summary",
         lambda self, *, ticker, end_date: {
             "foreign_buy_5d": 700_000_000,
             "inst_buy_5d": -200_000_000,
@@ -1220,27 +1223,15 @@ def test_naver_finance_investor_trend_uses_pykrx_sqlite_summary_cache(monkeypatc
 
 
 def test_naver_finance_fundamental_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    collector = collectors_module.NaverFinanceCollector(
+    collector = NaverFinanceCollector(
         config=types.SimpleNamespace(DATA_DIR="data")
     )
     import engine.collectors.naver_pykrx_mixin as naver_pykrx_mixin_module
-    with collectors_module.KRXCollector._pykrx_fundamental_cache_lock:
-        collectors_module.KRXCollector._pykrx_fundamental_cache.clear()
     with naver_pykrx_mixin_module.NaverPykrxMixin._pykrx_fundamental_cache_lock:
         naver_pykrx_mixin_module.NaverPykrxMixin._pykrx_fundamental_cache.clear()
     with naver_pykrx_mixin_module.NaverPykrxMixin._pykrx_market_fundamental_cache_lock:
         naver_pykrx_mixin_module.NaverPykrxMixin._pykrx_market_fundamental_cache.clear()
 
-    monkeypatch.setattr(
-        collectors_module.KRXCollector,
-        "_pykrx_fundamental_sqlite_context",
-        classmethod(
-            lambda cls, *, ticker, target_date: (
-                str(tmp_path / f"{ticker}__{target_date}.snapshot"),
-                (41, 41),
-            )
-        ),
-    )
     monkeypatch.setattr(
         naver_pykrx_mixin_module.NaverPykrxMixin,
         "_pykrx_fundamental_sqlite_context",
@@ -1300,8 +1291,6 @@ def test_naver_finance_fundamental_reuses_sqlite_snapshot_after_memory_clear(mon
     assert first_result["indicators"]["pbr"] == 1.4
     assert first_result["indicators"]["eps"] == 4500.0
 
-    with collectors_module.KRXCollector._pykrx_fundamental_cache_lock:
-        collectors_module.KRXCollector._pykrx_fundamental_cache.clear()
     with naver_pykrx_mixin_module.NaverPykrxMixin._pykrx_fundamental_cache_lock:
         naver_pykrx_mixin_module.NaverPykrxMixin._pykrx_fundamental_cache.clear()
     with naver_pykrx_mixin_module.NaverPykrxMixin._pykrx_market_fundamental_cache_lock:
@@ -1329,7 +1318,7 @@ def test_naver_finance_fundamental_reuses_sqlite_snapshot_after_memory_clear(mon
 
 
 def test_naver_finance_fundamental_reuses_market_snapshot_sqlite_for_second_ticker(monkeypatch, tmp_path):
-    collector = collectors_module.NaverFinanceCollector(
+    collector = NaverFinanceCollector(
         config=types.SimpleNamespace(DATA_DIR="data")
     )
     import engine.collectors.naver_pykrx_mixin as naver_pykrx_mixin_module

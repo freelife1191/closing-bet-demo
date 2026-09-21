@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.investor_personal_flow import personal_flow_details
+
 from engine.toss_collector_numeric_helpers import normalize_result_payload, to_float, to_int
 
 
@@ -84,7 +86,12 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
         institution_sum += to_float(item.get("netInstitutionBuyVolume", 0)) * close
         individual_sum += to_float(item.get("netIndividualsBuyVolume", 0)) * close
 
+    personal = personal_flow_details(trends, price_key="close") if days == 5 else []
+    if days == 5:
+        individual_sum = sum(item["netIndividualsBuyVolume"] for item in personal) if personal else None
     return {
+        "individual_schema": 1 if personal else 0,
+        "individual_details": personal,
         "foreign": foreign_sum,
         "institution": institution_sum,
         "individual": individual_sum,

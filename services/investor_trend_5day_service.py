@@ -8,24 +8,28 @@ KR Market Investor Trend 5-Day Service
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timedelta
+from typing import Any
+import copy
 import logging
 import os
 import threading
-from collections import OrderedDict
-from datetime import datetime, timedelta
-from typing import Any
+import time
 
+from pandas.api.types import is_datetime64_any_dtype
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_datetime64_any_dtype
 
+from engine.investor_personal_flow import personal_flow_details
+from engine.ticker_utils import normalize_ticker
+from services.kr_market_csv_utils import get_ticker_padded_series
 from services.kr_market_data_cache_service import load_csv_file
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite,
     save_json_payload_to_sqlite,
 )
-from services.kr_market_csv_utils import get_ticker_padded_series
-
 
 logger = logging.getLogger(__name__)
 
@@ -49,21 +53,23 @@ _TREND_CACHE: OrderedDict[
 ] = OrderedDict()
 _REFERENCE_CACHE_LOCK = threading.Lock()
 _REFERENCE_CACHE: OrderedDict[
-    tuple[str, str, str],
+    tuple[str, str, str, str],
     dict[str, Any] | None,
 ] = OrderedDict()
+_REFERENCE_FAILURE_TTL = 60.0
+_REFERENCE_FAILURES: OrderedDict[tuple[str, str, str, str], float] = OrderedDict()
+_REFERENCE_INFLIGHT: dict[tuple[int, tuple[str, str, str, str]], Future[dict[str, Any] | None]] = {}
+_REFERENCE_GENERATION = 0
 _TOSS_COLLECTOR_LOCK = threading.Lock()
 _TOSS_COLLECTOR: Any | None = None
 _PYKRX_MARKET_DATE_LOCK = threading.Lock()
 _PYKRX_MARKET_DATE_CACHE: dict[str, datetime] = {}
-
 
 def _normalize_data_dir(data_dir: str) -> str:
     normalized = (data_dir or "").strip()
     if not normalized:
         normalized = "data"
     return os.path.abspath(normalized)
-
 
 def _normalize_target_datetime(target_datetime: datetime | pd.Timestamp | str | None) -> datetime | None:
     if target_datetime is None:
@@ -76,13 +82,11 @@ def _normalize_target_datetime(target_datetime: datetime | pd.Timestamp | str | 
         return None
     return parsed.to_pydatetime()
 
-
 def _target_token(target_datetime: datetime | pd.Timestamp | str | None) -> str:
     normalized = _normalize_target_datetime(target_datetime)
     if normalized is None:
         return "latest"
     return normalized.strftime("%Y%m%d")
-
 
 def _safe_int(value: Any) -> int:
     """수치로 바꿀 수 없는 값을 0 으로 눌러 준다.
@@ -97,14 +101,12 @@ def _safe_int(value: Any) -> int:
     except (TypeError, ValueError, OverflowError):
         return 0
 
-
 def _extract_abs_total(payload: dict[str, Any] | None) -> int:
     if not isinstance(payload, dict):
         return 0
     foreign_value = _safe_int(payload.get("foreign", 0))
     inst_value = _safe_int(payload.get("institution", 0))
     return abs(foreign_value) + abs(inst_value)
-
 
 def _parse_date_string(value: Any) -> datetime | None:
     if value is None:
@@ -116,7 +118,6 @@ def _parse_date_string(value: Any) -> datetime | None:
     if parsed is None or pd.isna(parsed):
         return None
     return parsed.to_pydatetime()
-
 
 def _normalize_latest_date_from_details(details: list[dict[str, Any]]) -> str | None:
     if not details:
@@ -130,7 +131,6 @@ def _normalize_latest_date_from_details(details: list[dict[str, Any]]) -> str | 
             return parsed.strftime("%Y-%m-%d")
     return None
 
-
 def _stable_token_to_int(token: str) -> int:
     normalized = str(token or "")
     if normalized.isdigit():
@@ -143,13 +143,11 @@ def _stable_token_to_int(token: str) -> int:
         acc = (acc * 31 + ord(ch)) % 2_000_000_000
     return int(acc)
 
-
 def _reference_time_token(target_datetime: datetime | pd.Timestamp | str | None) -> str:
     normalized_target = _normalize_target_datetime(target_datetime)
     if normalized_target is not None:
         return normalized_target.strftime("%Y%m%d")
     return datetime.now().strftime("%Y%m%d")
-
 
 def _reference_cache_token(
     *,
@@ -170,7 +168,6 @@ def _reference_cache_token(
             pass
     return _reference_time_token(target_datetime)
 
-
 def _pykrx_market_date_sqlite_context(
     *,
     data_dir: str,
@@ -181,7 +178,6 @@ def _pykrx_market_date_sqlite_context(
     cache_key = os.path.join(namespace_dir, f"latest_market_date__{cache_token}.snapshot")
     signature = (_stable_token_to_int(cache_token), _stable_token_to_int("pykrx_market_date"))
     return cache_key, signature
-
 
 def _reference_sqlite_context(
     *,
@@ -208,7 +204,6 @@ def _reference_sqlite_context(
     signature = (_stable_token_to_int(token), _stable_token_to_int(source))
     return cache_key, signature
 
-
 def _resolve_trend_file_context(
     *,
     data_dir: str,
@@ -221,10 +216,8 @@ def _resolve_trend_file_context(
         return None
     return filepath, (int(stat.st_mtime_ns), int(stat.st_size))
 
-
 def _sqlite_cache_key(filepath: str, target_token: str) -> str:
     return f"{filepath}{_SQLITE_KEY_SUFFIX}::{target_token}"
-
 
 def _serialize_trend_map(trend_map: dict[str, dict[str, Any]]) -> dict[str, object]:
     rows: dict[str, object] = {}
@@ -254,7 +247,6 @@ def _serialize_trend_map(trend_map: dict[str, dict[str, Any]]) -> dict[str, obje
         latest_date_value = str(latest_date) if latest_date else ""
         rows[str(ticker).zfill(6)] = [foreign_5d, inst_5d, serialized_details, latest_date_value]
     return {"rows": rows}
-
 
 def _deserialize_trend_map(payload: dict[str, object]) -> dict[str, dict[str, Any]] | None:
     """SQLite 스냅숏을 되살린다. 5거래일치 불변식을 지키지 못하면 ``None`` 을 돌려준다.
@@ -335,7 +327,6 @@ def _deserialize_trend_map(payload: dict[str, object]) -> dict[str, dict[str, An
         }
     return trend_map
 
-
 def _load_trend_df(
     *,
     data_dir: str,
@@ -363,7 +354,6 @@ def _load_trend_df(
         if existing_columns:
             return loaded.loc[:, existing_columns]
         return loaded
-
 
 def _build_trend_map(
     trend_df: pd.DataFrame,
@@ -451,11 +441,11 @@ def _build_trend_map(
 
     return trend_map
 
-
 def _normalize_external_trend_payload(
     payload: dict[str, Any] | None,
     *,
     source: str,
+    from_cache: bool = False,
 ) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
@@ -464,19 +454,18 @@ def _normalize_external_trend_payload(
     inst_value = _safe_int(payload.get("institution", 0))
 
     details_payload = payload.get("details")
-    details: list[dict[str, int]] = []
+    details: list[dict[str, Any]] = []
     if isinstance(details_payload, list):
         for item in details_payload[:5]:
             if not isinstance(item, dict):
                 continue
             foreign_1d = _safe_int(item.get("netForeignerBuyVolume", 0))
             inst_1d = _safe_int(item.get("netInstitutionBuyVolume", 0))
-            details.append(
-                {
-                    "netForeignerBuyVolume": foreign_1d,
-                    "netInstitutionBuyVolume": inst_1d,
-                }
-            )
+            day = next((_parse_date_string(item.get(key)) for key in ("date", "localDate", "baseDate", "tradeDate") if item.get(key)), None)
+            detail: dict[str, Any] = {"netForeignerBuyVolume": foreign_1d, "netInstitutionBuyVolume": inst_1d}
+            if day is not None:
+                detail["date"] = day.strftime("%Y-%m-%d")
+            details.append(detail)
 
     if not details and (foreign_value != 0 or inst_value != 0):
         # details가 없더라도 5일합 자체는 유지한다.
@@ -486,7 +475,21 @@ def _normalize_external_trend_payload(
     if not latest_date:
         latest_date = _normalize_latest_date_from_details(payload.get("details", []))
 
+    personal_rows = payload.get("individual_details", details_payload)
+    personal = personal_flow_details(personal_rows) if isinstance(personal_rows, list) else []
+    if from_cache and payload.get("individual_schema") != 1:
+        personal = []
+    if source == "csv":
+        personal = []
+    selected_dates = {item.get("date") for item in details}
+    if personal and (len(selected_dates) != 5 or None in selected_dates or selected_dates != {item["date"] for item in personal}):
+        personal = []
+    if personal and latest_date and max(item["date"] for item in personal) != str(latest_date)[:10]:
+        personal = []
     return {
+        "individual": sum(item["netIndividualsBuyVolume"] for item in personal) if personal else None,
+        "individual_schema": 1 if personal else 0,
+        "individual_details": personal,
         "foreign": foreign_value,
         "institution": inst_value,
         "details": details,
@@ -494,7 +497,6 @@ def _normalize_external_trend_payload(
         "latest_date": str(latest_date) if latest_date else "",
         "source": source,
     }
-
 
 def _reference_reject_reason(payload: dict[str, Any] | None) -> str | None:
     """참조 페이로드를 쓸 수 없는 사유를 돌려준다. 쓸 만하면 None 이다.
@@ -523,7 +525,6 @@ def _reference_reject_reason(payload: dict[str, Any] | None) -> str | None:
         return "extreme_abs_total"
 
     return None
-
 
 def _detect_csv_anomaly_flags(
     csv_payload: dict[str, Any] | None,
@@ -579,7 +580,6 @@ def _detect_csv_anomaly_flags(
                 flags.append("stale_csv")
 
     return flags
-
 
 def _resolve_pykrx_latest_market_date(
     *,
@@ -649,7 +649,6 @@ def _resolve_pykrx_latest_market_date(
         logger.debug("Failed to save pykrx latest market date sqlite cache: %s", error)
     return latest_market_dt
 
-
 def _fetch_pykrx_reference_trend(
     *,
     ticker: str,
@@ -691,13 +690,14 @@ def _fetch_pykrx_reference_trend(
     details: list[dict[str, int]] = []
     foreign_sum = 0
     inst_sum = 0
-    for foreign_value, inst_value in ordered[[foreign_col, inst_col]].itertuples(index=False, name=None):
+    for day, (foreign_value, inst_value) in zip(ordered.index, ordered[[foreign_col, inst_col]].itertuples(index=False, name=None)):
         foreign_int = _safe_int(foreign_value)
         inst_int = _safe_int(inst_value)
         foreign_sum += foreign_int
         inst_sum += inst_int
         details.append(
             {
+                "date": str(day)[:10],
                 "netForeignerBuyVolume": foreign_int,
                 "netInstitutionBuyVolume": inst_int,
             }
@@ -709,7 +709,11 @@ def _fetch_pykrx_reference_trend(
     except Exception:
         latest_date = ""
 
+    personal_col = next((col for col in ordered.columns if col in ("개인", "개인합계")), None)
+    personal_rows = [{"date": str(day)[:10], "netIndividualsBuyVolume": row[personal_col]}
+                     for day, row in ordered.iterrows()] if personal_col else []
     return {
+        "individual_details": personal_rows,
         "foreign": int(foreign_sum),
         "institution": int(inst_sum),
         "details": details,
@@ -717,7 +721,6 @@ def _fetch_pykrx_reference_trend(
         "latest_date": latest_date,
         "source": "pykrx",
     }
-
 
 def _get_toss_collector() -> Any | None:
     global _TOSS_COLLECTOR
@@ -735,7 +738,6 @@ def _get_toss_collector() -> Any | None:
             logger.debug("Failed to initialize TossCollector for reference check: %s", error)
             _TOSS_COLLECTOR = None
     return _TOSS_COLLECTOR
-
 
 def _fetch_toss_reference_trend(
     *,
@@ -757,94 +759,91 @@ def _fetch_toss_reference_trend(
         return None
     return _normalize_external_trend_payload(trend_payload, source="toss")
 
-
 def _get_reference_trend_cached(
-    *,
-    data_dir: str,
-    source: str,
-    ticker: str,
+    *, data_dir: str, source: str, ticker: str,
     target_datetime: datetime | pd.Timestamp | str | None,
 ) -> dict[str, Any] | None:
-    # Toss는 과거 기준일(reference target_datetime 지정) 조회가 불가능하므로 즉시 종료한다.
-    if str(source or "").strip().lower() == "toss" and _normalize_target_datetime(target_datetime) is not None:
+    source = str(source).strip().lower()
+    ticker_key = normalize_ticker(ticker)
+    if not ticker_key or source not in {"pykrx", "toss"}:
         return None
-
-    normalized_data_dir = _normalize_data_dir(data_dir)
-    ticker_key = str(ticker).zfill(6)
-    target_key = _reference_cache_token(
-        source=source,
-        target_datetime=target_datetime,
-        data_dir=normalized_data_dir,
-    )
-    cache_key = (source, ticker_key, target_key)
-
+    if source == "toss" and _normalize_target_datetime(target_datetime) is not None:
+        return None
+    directory = _normalize_data_dir(data_dir)
+    target_key = _reference_cache_token(source=source, target_datetime=target_datetime, data_dir=directory)
+    cache_key = (directory, source, ticker_key, target_key)
     with _REFERENCE_CACHE_LOCK:
         if cache_key in _REFERENCE_CACHE:
             _REFERENCE_CACHE.move_to_end(cache_key)
-            cached = _REFERENCE_CACHE.get(cache_key)
-            return dict(cached) if isinstance(cached, dict) else None
+            return copy.deepcopy(_REFERENCE_CACHE[cache_key])
+        if _REFERENCE_FAILURES.get(cache_key, 0) > time.monotonic():
+            _REFERENCE_FAILURES.move_to_end(cache_key)
+            return None
+        _REFERENCE_FAILURES.pop(cache_key, None)
+        generation = _REFERENCE_GENERATION
+        flight_key = (generation, cache_key)
+        future = _REFERENCE_INFLIGHT.get(flight_key)
+        owner = future is None
+        if owner:
+            future = Future()
+            _REFERENCE_INFLIGHT[flight_key] = future
+    if not owner:
+        return copy.deepcopy(future.result())
 
-    sqlite_key, sqlite_signature = _reference_sqlite_context(
-        data_dir=normalized_data_dir,
-        source=source,
-        ticker=ticker_key,
-        target_datetime=target_datetime,
-    )
+    result = None
+    fatal = None
+    fetched = False
     try:
-        loaded, payload = load_json_payload_from_sqlite(
-            filepath=sqlite_key,
-            signature=sqlite_signature,
-            logger=logger,
+        sqlite_key, signature = _reference_sqlite_context(
+            data_dir=directory, source=source, ticker=ticker_key, target_datetime=target_datetime,
         )
-    except Exception as error:
-        logger.debug("Failed to load investor trend reference sqlite cache: %s", error)
-    else:
+        try:
+            loaded, payload = load_json_payload_from_sqlite(filepath=sqlite_key, signature=signature, logger=logger)
+        except Exception as error:
+            logger.debug("Failed to load reference cache: %s", error)
+            loaded, payload = False, None
         if loaded and isinstance(payload, dict):
-            normalized_sqlite_payload = _normalize_external_trend_payload(payload, source=source)
-            if isinstance(normalized_sqlite_payload, dict):
-                with _REFERENCE_CACHE_LOCK:
-                    _REFERENCE_CACHE[cache_key] = normalized_sqlite_payload
+            result = _normalize_external_trend_payload(payload, source=source, from_cache=True)
+        if result is None:
+            fetched = True
+            if source == "pykrx":
+                payload = _fetch_pykrx_reference_trend(ticker=ticker_key, target_datetime=target_datetime, data_dir=directory)
+            else:
+                payload = _fetch_toss_reference_trend(ticker=ticker_key, target_datetime=target_datetime)
+            result = _normalize_external_trend_payload(payload, source=source) if payload else None
+    except BaseException as error:
+        logger.debug("Reference lookup failed (%s/%s): %s", source, ticker_key, error)
+        if not isinstance(error, Exception):
+            fatal = error
+    finally:
+        # A clear separates generations. Publish and clear are serialized, including SQLite.
+        with _REFERENCE_CACHE_LOCK:
+            if generation == _REFERENCE_GENERATION:
+                if result is not None:
+                    _REFERENCE_CACHE[cache_key] = copy.deepcopy(result)
                     _REFERENCE_CACHE.move_to_end(cache_key)
                     while len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX_ENTRIES:
                         _REFERENCE_CACHE.popitem(last=False)
-                return dict(normalized_sqlite_payload)
-
-    if source == "pykrx":
-        payload = _fetch_pykrx_reference_trend(
-            ticker=ticker_key,
-            target_datetime=target_datetime,
-            data_dir=normalized_data_dir,
-        )
-    elif source == "toss":
-        payload = _fetch_toss_reference_trend(ticker=ticker_key, target_datetime=target_datetime)
-    else:
-        payload = None
-
-    normalized_payload = _normalize_external_trend_payload(payload, source=source) if payload else None
-    if isinstance(normalized_payload, dict):
-        with _REFERENCE_CACHE_LOCK:
-            _REFERENCE_CACHE[cache_key] = normalized_payload
-            _REFERENCE_CACHE.move_to_end(cache_key)
-            while len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX_ENTRIES:
-                _REFERENCE_CACHE.popitem(last=False)
-    else:
-        # miss(None)를 장시간 캐시하지 않아 일시 장애 후 재시도를 허용한다.
-        with _REFERENCE_CACHE_LOCK:
-            _REFERENCE_CACHE.pop(cache_key, None)
-
-    if isinstance(normalized_payload, dict):
-        try:
-            save_json_payload_to_sqlite(
-                filepath=sqlite_key,
-                signature=sqlite_signature,
-                payload=normalized_payload,
-                max_rows=_REFERENCE_SQLITE_MAX_ROWS,
-                logger=logger,
-            )
-        except Exception as error:
-            logger.debug("Failed to save investor trend reference sqlite cache: %s", error)
-    return dict(normalized_payload) if isinstance(normalized_payload, dict) else None
-
+                    if fetched:
+                        try:
+                            save_json_payload_to_sqlite(filepath=sqlite_key, signature=signature, payload=result,
+                                                       max_rows=_REFERENCE_SQLITE_MAX_ROWS, logger=logger)
+                        except Exception as error:
+                            logger.debug("Failed to save reference cache: %s", error)
+                elif fatal is None:
+                    _REFERENCE_FAILURES[cache_key] = time.monotonic() + _REFERENCE_FAILURE_TTL
+                    _REFERENCE_FAILURES.move_to_end(cache_key)
+                    while len(_REFERENCE_FAILURES) > _REFERENCE_CACHE_MAX_ENTRIES:
+                        _REFERENCE_FAILURES.popitem(last=False)
+            _REFERENCE_INFLIGHT.pop(flight_key, None)
+        # Callbacks/waiters may re-enter; settle outside the lock.
+        if fatal is not None:
+            future.set_exception(fatal)
+        else:
+            future.set_result(result)
+    if fatal is not None:
+        raise fatal
+    return copy.deepcopy(result)
 
 def _attach_selection_metadata(
     payload: dict[str, Any],
@@ -864,7 +863,6 @@ def _attach_selection_metadata(
         "reference_only": bool(reference_only),
     }
     return enriched
-
 
 def _resolve_best_payload(
     *,
@@ -956,7 +954,6 @@ def _resolve_best_payload(
         discarded_references=discarded_references,
     )
 
-
 def _get_or_build_trend_map(
     *,
     data_dir: str,
@@ -1022,7 +1019,6 @@ def _get_or_build_trend_map(
 
     return trend_map
 
-
 def has_csv_anomaly_flags(trend_data: dict[str, Any] | None) -> bool:
     """반환된 페이로드에 CSV 이상징후 플래그가 붙어 있는지 판정한다.
 
@@ -1036,7 +1032,6 @@ def has_csv_anomaly_flags(trend_data: dict[str, Any] | None) -> bool:
         return False
     csv_flags = quality.get("csv_anomaly_flags")
     return isinstance(csv_flags, list) and len(csv_flags) > 0
-
 
 def get_investor_trend_5day_for_ticker(
     *,
@@ -1086,19 +1081,40 @@ def get_investor_trend_5day_for_ticker(
         verify_with_references=verify_with_references,
     )
 
+def get_investor_trends_5day_for_tickers(
+    *, tickers: list[str], data_dir: str,
+    target_datetime: datetime | pd.Timestamp | str | None,
+) -> dict[str, dict[str, Any] | None]:
+    """최대 네 후보의 참조만 병렬 조회한다. CSV 준비는 호출 스레드에서 한다."""
+    if len(tickers) > 4:
+        raise ValueError("At most four candidates are allowed")
+    keys = list(dict.fromkeys(filter(None, (normalize_ticker(ticker) for ticker in tickers))))
+    if not keys:
+        return {}
+    directory = _normalize_data_dir(data_dir)
+    trend_map = _get_or_build_trend_map(data_dir=directory, filename=_TREND_FILENAME, target_datetime=target_datetime)
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="supply-reference") as pool:
+        futures = {key: pool.submit(_resolve_best_payload, data_dir=directory, csv_payload=trend_map.get(key),
+                                   ticker=key, target_datetime=target_datetime, verify_with_references=True)
+                   for key in keys}
+        return {key: future.result() for key, future in futures.items()}
 
 def clear_investor_trend_5day_memory_cache() -> None:
     """테스트/디버깅용: in-memory 캐시를 비운다."""
     with _TREND_CACHE_LOCK:
         _TREND_CACHE.clear()
+    global _REFERENCE_GENERATION
     with _REFERENCE_CACHE_LOCK:
+        _REFERENCE_GENERATION += 1
         _REFERENCE_CACHE.clear()
+        _REFERENCE_FAILURES.clear()
+        _REFERENCE_INFLIGHT.clear()
     with _PYKRX_MARKET_DATE_LOCK:
         _PYKRX_MARKET_DATE_CACHE.clear()
 
-
 __all__ = [
     "get_investor_trend_5day_for_ticker",
+    "get_investor_trends_5day_for_tickers",
     "has_csv_anomaly_flags",
     "clear_investor_trend_5day_memory_cache",
 ]

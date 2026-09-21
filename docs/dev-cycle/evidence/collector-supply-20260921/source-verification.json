@@ -1,0 +1,150 @@
+{
+  "paths": [
+    {
+      "path": "engine/__init__.py",
+      "sha256": "e1152a05f8f6640769174fcb726464214fa8805a7b6d5f61358a39024a7229f5",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/collectors.py",
+      "sha256": null,
+      "scratch_match": true
+    },
+    {
+      "path": "engine/collectors/__init__.py",
+      "sha256": "1ef1d7a5b8db3a0dda1d749ad26626043eaadb0b53cca5230df1f54167f976a3",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/collectors/krx.py",
+      "sha256": "175989a86d1cd03b93e2ae14388974d5240bc7627783dfb7facba89f6009c18f",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/collectors/krx_data_mixin.py",
+      "sha256": "bfeeb36b34d8c264026d2b46a7f42d520bba299b00cef217a87ec25d46782056",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/collectors/krx_local_cache_helpers.py",
+      "sha256": null,
+      "scratch_match": true
+    },
+    {
+      "path": "engine/collectors/krx_local_data_mixin.py",
+      "sha256": "e4492a8148089c214f1f8c15c01c369b492de0e49de30864f9974e74a3b597b8",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/collectors/naver_pykrx_mixin.py",
+      "sha256": "67ff75ac14979fd56428b344b250900cbfcb7486c89980908c034d2590a0763c",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/investor_personal_flow.py",
+      "sha256": "5f39ca7425c8aa3e63cf6f51b2b634bf0fb16b20886cdaceeb0de94208aa7d2d",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/models.py",
+      "sha256": "9b97eb2794705e22bac14231ebaa33314a28c4379a68496608840948230090db",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/screener.py",
+      "sha256": "635142286d7109c973bec4ff8d4185c590db57996b444f43e669c01e7dd7ce04",
+      "scratch_match": true
+    },
+    {
+      "path": "engine/toss_collector_metric_parsers.py",
+      "sha256": "ec475be68ac552d218631cf056aae16e251e69c113f8134b25bfbe32408d09c9",
+      "scratch_match": true
+    },
+    {
+      "path": "frontend/src/app/dashboard/kr/closing-bet/page.regression-jongga-022.test.tsx",
+      "sha256": "6db1e6a72c1e249f527cbb69f4e6873b03a9e591d64e861c707cd42ee4014c85",
+      "scratch_match": true
+    },
+    {
+      "path": "frontend/src/app/dashboard/kr/closing-bet/page.tsx",
+      "sha256": "569c0b2548a11681eb751a7c421277520581c0f62b30d2e5da879ee8e6bff58f",
+      "scratch_match": true
+    },
+    {
+      "path": "services/investor_trend_5day_service.py",
+      "sha256": "e43e833de235c86caa2377b3270196bfe3d4d069ce9e7a72abff4ce43ba15053",
+      "scratch_match": true
+    },
+    {
+      "path": "services/kr_market_stock_detail_service.py",
+      "sha256": "4759343e664c24394f8466fb1f14190633d7c5e12ce70e8948734536dd4bcf30",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/engine/test_collectors_package_contract.py",
+      "sha256": "f0a281f9b7697e3ad5c175d657a488312236c96864cfa11b8be83fe0651675fd",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/engine/test_collectors_refactor.py",
+      "sha256": "e12b902e0d6091ca60bdf30b8b88aa01e23f0c89b80340dc8c025c5d92113c39",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/engine/test_collectors_unified_supply_service_refactor.py",
+      "sha256": "06d64d9dc01edf42ad5a1600996758cd7b35bf49cdadb5c70a7d1b8b688e58dd",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/engine/test_krx_data_mixin_refactor.py",
+      "sha256": "cb8adac6f124b52bee70bc6c9b86f33795dd95abb64b2c038c44f50283645001",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/engine/test_krx_local_cache_helpers_refactor.py",
+      "sha256": "5c69c0c3697f258b8758ae76a4a98119297de8ffa2ddcb0d0de3d8957c31dc78",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/engine/test_naver_collector_refactor.py",
+      "sha256": "c683762bc951977fa9044f682507244427b7d786f6c2aa36306a3f7746b5ca85",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/engine/test_screener_supply_batch.py",
+      "sha256": "7d4d0d8c02c28458c46d5063c8abad97fecf550943de48f83c27d51611b5b6db",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/services/test_investor_personal_flow.py",
+      "sha256": "6ed43c18de6069e480131fef1411c1026dd33c9fd70e55821acf157f26dcb80a",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/services/test_investor_trend_5day_service.py",
+      "sha256": "1a19251672c4cb4d17f83ac57c8a6b6fb2105af234817bc358a76a6393739a4b",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/services/test_investor_trend_reference_concurrency.py",
+      "sha256": "0e52ef1758d31451215d748ceb49076246d27bef82bea3c0120a876b63c69aea",
+      "scratch_match": true
+    },
+    {
+      "path": "tests/services/test_kr_market_stock_detail_service_refactor.py",
+      "sha256": "d6be0723fb2ad567b0b6059e24410b59328455c89c6e2c058df67c9c650029a8",
+      "scratch_match": true
+    },
+    {
+      "path": "docs/superpowers/specs/2026-09-21-collector-supply-design.md",
+      "sha256": "aad7f14e6d9031d1d7f054b745701806d43a63e66f76b559c4e2495cd8c08c7e",
+      "scratch_match": true
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-21-collector-supply.md",
+      "sha256": "61b9177eb5d47512af89eebe8bd44afd644c89f47fbdf51f5ebe1f541910470d",
+      "scratch_match": true
+    }
+  ],
+  "pass": true
+}

@@ -174,7 +174,7 @@ interface StockDetailInfo {
   investorTrend: {
     foreign: number;
     institution: number;
-    individual: number;
+    individual: number | null;
   };
   investorTrend5Day?: {
     foreign: number;
@@ -407,9 +407,12 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
 
   // TossCollector 응답을 StockDetailInfo 형식으로 변환
   const mapTossDataToDetail = (data: Record<string, unknown>): StockDetailInfo => {
-    // 이미 백엔드에서 가공된 데이터인 경우 (kr_market.py 응답) 그대로 반환
+    const rawTrend = (data.priceInfo ? data.investorTrend : data.investor_trend) as Record<string, unknown> | undefined;
+    const rawPersonal = rawTrend?.individual;
+    const personal = typeof rawPersonal === 'number' && Number.isFinite(rawPersonal) ? rawPersonal : null;
     if (data.priceInfo) {
-      return data as unknown as StockDetailInfo;
+      const mapped = data as unknown as StockDetailInfo;
+      return { ...mapped, investorTrend: { ...mapped.investorTrend, individual: personal } };
     }
 
     const price = (data.price || {}) as Record<string, number>;
@@ -451,7 +454,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
       investorTrend: {
         foreign: investorTrend.foreign || 0,
         institution: investorTrend.institution || 0,
-        individual: investorTrend.individual || 0,
+        individual: personal,
       },
       investorTrend5Day: {
         foreign: investorTrend5Day.foreign || 0,
@@ -494,6 +497,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
   // 돌려주므로, 지난 날짜의 리포트를 보고 있으면 카드의 신호일 기준값과 어긋난다.
   const foreign5Day = detail?.investorTrend5Day?.foreign ?? detail?.investorTrend?.foreign ?? 0;
   const institution5Day = detail?.investorTrend5Day?.institution ?? detail?.investorTrend?.institution ?? 0;
+  const personal = detail?.investorTrend?.individual ?? null;
 
   return (
     <ModalShell
@@ -712,8 +716,8 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${detail.investorTrend.individual > 0 ? 'text-rose-400' : detail.investorTrend.individual < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
-                      {detail.investorTrend.individual > 0 ? '+' : ''}{formatMarketAmount(detail.investorTrend.individual, '-')}
+                    <div className={`text-sm font-bold ${personal !== null && personal > 0 ? 'text-rose-400' : personal !== null && personal < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                      {personal === null ? '자료 없음' : personal === 0 ? '0' : `${personal > 0 ? '+' : ''}${formatMarketAmount(personal, '-')}`}
                     </div>
                   </div>
                 </div>
@@ -1173,7 +1177,7 @@ export default function JonggaV2Page() {
           setRefreshKey(prev => prev + 1);
         }, 5000);
         // Keep loading true so user sees spinner, not empty state
-        // setLoading(false); 
+        // setLoading(false);
       })
       .finally(() => {
         clearTimeout(safetyTimer);
@@ -1819,10 +1823,10 @@ function DataStatusBox({ updatedAt, loading, analyzingGemini, setAnalyzingGemini
     try {
       // fetchAPI를 사용하여 타임아웃 적용 (엔진 실행은 오래 걸릴 수 있으므로 타임아웃 넉넉히 주거나, 비동기 확인만 하므로 기본값 사용)
       const res = await fetchAPI('/api/kr/jongga-v2/run', { method: 'POST' });
-      // fetchAPI throws on error, so we catch it below. 
+      // fetchAPI throws on error, so we catch it below.
       // Note: fetchAPI returns the parsed JSON if successful.
       // However, the original code checks res.ok or res.status which fetchAPI masks by throwing on error.
-      // We need to adjust usage or assumption. 
+      // We need to adjust usage or assumption.
       // fetchAPI signature: async function fetchAPI<T = any>(url: string, options: RequestInit = {}): Promise<T>
       // It returns data directly and throws error with status attached if possible.
 

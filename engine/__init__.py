@@ -12,11 +12,15 @@ try:
 except ImportError:
     LLMAnalyzer = None
     print("Warning: LLMAnalyzer could not be imported (missing dependencies?)")
-from .collectors import KRXCollector
-try:
-    from .collectors.news import EnhancedNewsCollector
-except Exception:
-    from .collectors import EnhancedNewsCollector
+def __getattr__(name: str):
+    # Leaf utilities can be imported while services are still initializing.
+    if name in {"KRXCollector", "EnhancedNewsCollector"}:
+        from . import collectors
+        value = getattr(collectors, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     'models', 'config', 'scorer', 'position_sizer', 'llm_analyzer', 'collectors',

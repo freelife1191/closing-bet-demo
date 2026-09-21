@@ -582,6 +582,8 @@ def test_reference_cache_rotates_by_reference_token_for_latest(monkeypatch, tmp_
 def test_reference_cache_does_not_pin_miss_result(monkeypatch, tmp_path):
     trend_service.clear_investor_trend_5day_memory_cache()
 
+    clock = [100.0]
+    monkeypatch.setattr(trend_service.time, "monotonic", lambda: clock[0])
     call_count = {"value": 0}
 
     def _fake_fetch_pykrx_reference_trend(**_kwargs):
@@ -610,6 +612,7 @@ def test_reference_cache_does_not_pin_miss_result(monkeypatch, tmp_path):
         ticker="005930",
         target_datetime=None,
     )
+    clock[0] += 60.0  # Short failure TTL expires; misses are never pinned indefinitely.
     second = trend_service._get_reference_trend_cached(
         data_dir=str(tmp_path),
         source="pykrx",

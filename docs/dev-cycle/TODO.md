@@ -88,7 +88,7 @@
 - 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
 
 ### [FLOW-014] 자료가 얇은 기준일에서 수급 조회가 종목 수만큼 pykrx 왕복을 낸다
-- 설계 상태 (2026-09-21): INFRA-030과 연속 처리. 구조 방향 「승인」 이후 상세 설계 제시에 대한 사용자 「연관된 라운드들 쭉 이어서 진행」 요청으로 문서 승인 확인. [상세 설계](../superpowers/specs/2026-09-21-collector-supply-design.md) · [구현 계획](../superpowers/plans/2026-09-21-collector-supply.md). 현재 계획 검토 대기(DESIGN_PENDING), 구현·QA 미착수.
+- 설계 상태 (2026-09-21): INFRA-030과 연속 처리. 구조 방향 「승인」 이후 상세 설계 제시에 대한 사용자 「연관된 라운드들 쭉 이어서 진행」 요청으로 문서 승인 확인. [상세 설계](../superpowers/specs/2026-09-21-collector-supply-design.md) · [구현 계획](../superpowers/plans/2026-09-21-collector-supply.md). 현재 사용자 「승인」으로 Native 실행 진행. 구현·TDD·정적 검증 및 코드/구조/T3 리뷰 통과, UltraQA 브라우저 실측 준비 중. 계획 커밋63b1db0, 증거는 evidence/collector-supply-20260921/.
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: `[FLOW-011]` 사이클의 code-reviewer 지적과 실측
 - `[FLOW-011]` 이 호출자를 `verify_with_references=True` 한 번 호출로 바꾸면서, CSV 에
   5거래일이 모이지 않은 종목이 참조 조회 대상이 되었습니다. 예전에는 그 자리에서 값 없이
@@ -140,7 +140,7 @@
       한 종목으로 같은 불변식을 보고 있으므로, 겹치지 않는 형태를 찾아야 합니다
 
 ### [INFRA-030] 레거시 `engine/collectors.py` 와 모듈형 `engine/collectors/` 가 공존해 죽은 코드가 남는다
-- 설계 상태 (2026-09-21): FLOW-014와 연속 처리. 구조 방향 「승인」 이후 상세 설계 제시에 대한 사용자 「연관된 라운드들 쭉 이어서 진행」 요청으로 문서 승인 확인. [상세 설계](../superpowers/specs/2026-09-21-collector-supply-design.md) · [구현 계획](../superpowers/plans/2026-09-21-collector-supply.md). 현재 계획 검토 대기(DESIGN_PENDING), 구현·QA 미착수.
+- 설계 상태 (2026-09-21): FLOW-014와 연속 처리. 구조 방향 「승인」 이후 상세 설계 제시에 대한 사용자 「연관된 라운드들 쭉 이어서 진행」 요청으로 문서 승인 확인. [상세 설계](../superpowers/specs/2026-09-21-collector-supply-design.md) · [구현 계획](../superpowers/plans/2026-09-21-collector-supply.md). 현재 사용자 「승인」으로 Native 실행 진행. 구현·TDD·정적 검증 및 코드/구조/T3 리뷰 통과, UltraQA 브라우저 실측 준비 중. 계획 커밋63b1db0, 증거는 evidence/collector-supply-20260921/.
 - 카테고리: 인프라 | 티어: T3 | 근거: `[FLOW-011]` 사이클(수급 호출자 통합)의 실측
 - `engine/collectors.py` 가 `__path__` 를 스스로 지정해 모듈이면서 패키지처럼 동작합니다
   (`:31-34`). 파일 끝(`:2486-2501`)에서 `EnhancedNewsCollector` 와 `NaverFinanceCollector`

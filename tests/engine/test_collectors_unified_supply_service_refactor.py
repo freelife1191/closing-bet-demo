@@ -23,7 +23,7 @@ def test_legacy_collector_get_supply_data_prefers_unified_service(monkeypatch, t
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
-        "engine.collectors.get_investor_trend_5day_for_ticker",
+        "engine.collectors.krx_local_data_mixin.get_investor_trend_5day_for_ticker",
         lambda **kwargs: captured.update(kwargs) or {"foreign": 123, "institution": 456},
     )
 
@@ -34,7 +34,7 @@ def test_legacy_collector_get_supply_data_prefers_unified_service(monkeypatch, t
     assert captured["verify_with_references"] is False
     assert supply.foreign_buy_5d == 123
     assert supply.inst_buy_5d == 456
-    assert supply.retail_buy_5d == 0
+    assert supply.retail_buy_5d is None
 
 
 def test_legacy_collector_get_supply_data_falls_back_when_unified_has_anomaly_flags(monkeypatch, tmp_path):
@@ -42,7 +42,7 @@ def test_legacy_collector_get_supply_data_falls_back_when_unified_has_anomaly_fl
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
-        "engine.collectors.get_investor_trend_5day_for_ticker",
+        "engine.collectors.krx_local_data_mixin.get_investor_trend_5day_for_ticker",
         lambda **kwargs: captured.update(kwargs)
         or {
             "foreign": 111,

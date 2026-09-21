@@ -4,7 +4,7 @@
 스크리너 - VCP 패턴 및 수급 분석
 """
 import pandas as pd
-from typing import List, Dict, Optional
+from typing import Iterator, List, Dict, Optional
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -38,6 +38,7 @@ from engine.screener_supply_helpers import (
 )
 from services.investor_trend_5day_service import (
     get_investor_trend_5day_for_ticker,
+    get_investor_trends_5day_for_tickers,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ class SmartMoneyScreener:
             self._target_datetime = pd.to_datetime(target_date) if target_date else None
         except Exception:
             self._target_datetime = None
-        
+
         # Data Cache
         self.stocks_df = None
         self.prices_df = None
@@ -192,7 +193,7 @@ class SmartMoneyScreener:
                 self._prices_by_ticker_target = self._prices_by_ticker
             self._inst_by_ticker = self._build_ticker_index(self.inst_df)
             self._data_mtimes = new_mtimes
-                
+
         except Exception as e:
             logger.error(f"데이터 로드 실패: {e}")
 
@@ -222,33 +223,14 @@ class SmartMoneyScreener:
             # 결과 저장 리스트
             results = []
             min_score = resolve_vcp_min_score(default=60.0)
-            
-            count = 0
-            for stock_row in prioritized_stocks.itertuples(index=False):
-                if count >= max_stocks: 
-                    break
-                    
-                stock_dict = build_stock_candidate(stock_row)
-                # 분석에 실패한 종목도 max_stocks 예산에서 차감한다.
-                count += 1
 
-                try:
-                    result = self._analyze_stock(stock_dict)
-                    if not result or not safe_bool(result.get("is_vcp", False)):
-                        continue
-
-                    if float(result.get("score", 0) or 0) >= min_score:
-                        result['market_status'] = gate_status['status']
-                        results.append(result)
-
-                except Exception as e:
-                    logger.debug(
-                        "종목 분석 스킵 ticker=%s: %s",
-                        stock_dict.get("ticker"),
-                        e,
-                        exc_info=True,
-                    )
+            candidates = [build_stock_candidate(row) for row in prioritized_stocks.head(max(0, max_stocks)).itertuples(index=False)]
+            for result in self._analyze_candidates(candidates):
+                if not result or not safe_bool(result.get("is_vcp", False)):
                     continue
+                if float(result.get("score", 0) or 0) >= min_score:
+                    result['market_status'] = gate_status['status']
+                    results.append(result)
 
             # DataFrame으로 변환
             df = pd.DataFrame(results)
@@ -261,58 +243,82 @@ class SmartMoneyScreener:
             logger.error(f"스크리닝 실패: {e}")
             return pd.DataFrame()
 
-    def _analyze_stock(self, stock: Dict) -> Optional[Dict]:
-        """개별 종목 분석"""
-        try:
-            ticker = stock['ticker']
+    def _analyze_candidates(self, candidates: List[Dict]) -> Iterator[Optional[Dict]]:
+        if not getattr(self, "_target_datetime", None) or not self._should_use_csv_supply_for_target_date():
+            for stock in candidates:
+                try:
+                    yield self._analyze_stock(stock)
+                except Exception as error:
+                    logger.debug("종목 분석 스킵 %s: %s", stock.get("ticker"), error, exc_info=True)
+            return
+        from engine.ticker_utils import normalize_ticker
+        for offset in range(0, len(candidates), 4):
+            prepared = [self._prepare_stock_analysis(stock) for stock in candidates[offset:offset + 4]]
+            prepared = [item for item in prepared if item is not None]
+            if not prepared:
+                continue
+            trends = get_investor_trends_5day_for_tickers(
+                tickers=[item[0]["ticker"] for item in prepared], data_dir=os.path.join(BASE_DIR, "data"),
+                target_datetime=self._target_datetime,
+            )
+            for item in prepared:
+                try:
+                    trend = trends.get(normalize_ticker(item[0]["ticker"]))
+                    supply = score_supply_from_toss_trend(trend) if trend else {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+                    yield self._finish_stock_analysis(item, supply)
+                except Exception as error:
+                    logger.debug("종목 분석 스킵 %s: %s", item[0].get("ticker"), error, exc_info=True)
 
-            # 가격 데이터 필터링 (메모리상)
+    def _prepare_stock_analysis(self, stock: Dict) -> tuple[Dict, pd.DataFrame, VCPResult] | None:
+        try:
             price_index = self._prices_by_ticker_target if self._target_datetime is not None else self._prices_by_ticker
-            stock_prices = price_index.get(ticker)
+            stock_prices = price_index.get(stock['ticker'])
             if stock_prices is None or len(stock_prices) < 20:
                 return None
-
-            # VCP 패턴 감지
-            vcp_result = self._detect_vcp_pattern(stock_prices, stock)
-
-            # 수급 점수 계산 (Foreign + Inst)
-            supply_result = self._calculate_supply_score(ticker)
-            supply_score_raw = supply_result['score'] # Max 70 (Foreign 40 + Inst 30)
-            
-            # 거래량 비율 점수 (Max 20)
-            volume = stock_prices['volume']
-            vol_score, _vol_ratio = calculate_volume_score(volume)
-            
-            # VCP 점수 (Max 10)
-            # vcp_result.vcp_score is 0-100. Scale to 0-10.
-            # If is_vcp is true, it means score >= 50.
-            vcp_score_final = scale_vcp_score(vcp_result.vcp_score)
-            
-            # Total Score = Supply(Max 70) + Vol(Max 20) + VCP(Max 10) = 100
-            total_score = supply_score_raw + vol_score + vcp_score_final
-
-            first_close = float(stock_prices.iloc[0]["close"]) if len(stock_prices) > 0 else 0.0
-            last_close = float(stock_prices.iloc[-1]["close"]) if len(stock_prices) > 0 else 0.0
-            return build_screening_result(
-                stock=stock,
-                total_score=total_score,
-                supply_result=supply_result,
-                entry_price=vcp_result.entry_price,
-                contraction_ratio=vcp_result.contraction_ratio,
-                vcp_score=vcp_score_final,
-                is_vcp=vcp_result.is_vcp,
-                first_close=first_close,
-                last_close=last_close,
-            )
-
-        except Exception as e:
-            logger.debug(
-                "%s 분석 중 에러: %s",
-                stock.get("ticker", "unknown"),
-                e,
-                exc_info=True,
-            )
+            return stock, stock_prices, self._detect_vcp_pattern(stock_prices, stock)
+        except Exception as error:
+            logger.debug("종목 준비 실패 %s: %s", stock.get("ticker"), error, exc_info=True)
             return None
+
+    def _analyze_stock(self, stock: Dict) -> Optional[Dict]:
+        try:
+            prepared = self._prepare_stock_analysis(stock)
+            if prepared is None:
+                return None
+            return self._finish_stock_analysis(prepared, self._calculate_supply_score(stock['ticker']))
+        except Exception as error:
+            logger.debug("종목 분석 실패 %s: %s", stock.get("ticker"), error, exc_info=True)
+            return None
+
+    def _finish_stock_analysis(self, prepared: tuple[Dict, pd.DataFrame, VCPResult], supply_result: Dict) -> Dict:
+        stock, stock_prices, vcp_result = prepared
+        supply_score_raw = supply_result['score'] # Max 70 (Foreign 40 + Inst 30)
+
+        # 거래량 비율 점수 (Max 20)
+        volume = stock_prices['volume']
+        vol_score, _vol_ratio = calculate_volume_score(volume)
+
+        # VCP 점수 (Max 10)
+        # vcp_result.vcp_score is 0-100. Scale to 0-10.
+        # If is_vcp is true, it means score >= 50.
+        vcp_score_final = scale_vcp_score(vcp_result.vcp_score)
+
+        # Total Score = Supply(Max 70) + Vol(Max 20) + VCP(Max 10) = 100
+        total_score = supply_score_raw + vol_score + vcp_score_final
+
+        first_close = float(stock_prices.iloc[0]["close"]) if len(stock_prices) > 0 else 0.0
+        last_close = float(stock_prices.iloc[-1]["close"]) if len(stock_prices) > 0 else 0.0
+        return build_screening_result(
+            stock=stock,
+            total_score=total_score,
+            supply_result=supply_result,
+            entry_price=vcp_result.entry_price,
+            contraction_ratio=vcp_result.contraction_ratio,
+            vcp_score=vcp_score_final,
+            is_vcp=vcp_result.is_vcp,
+            first_close=first_close,
+            last_close=last_close,
+        )
 
     def _detect_vcp_pattern(self, df: pd.DataFrame, stock: Dict) -> VCPResult:
         """VCP 패턴 감지 (Shared Logic)"""
@@ -375,7 +381,7 @@ class SmartMoneyScreener:
                 "details": trend_data.get("details", []),
             }
         )
-    
+
     def generate_signals(self, results: pd.DataFrame) -> List[Dict]:
         """시그널 생성"""
         try:

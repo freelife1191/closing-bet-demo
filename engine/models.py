@@ -43,7 +43,7 @@ class ChartData:
 class SupplyData:
     foreign_buy_5d: int = 0
     inst_buy_5d: int = 0
-    retail_buy_5d: int = 0
+    retail_buy_5d: Optional[int] = None
     # Additional fields if needed by other components, but scorer only uses these
 
 @dataclass
@@ -87,7 +87,7 @@ class Signal:
     grade: Grade
     score: ScoreDetail
     checklist: ChecklistDetail
-    news_items: List[Dict] 
+    news_items: List[Dict]
     current_price: float
     change_pct: float
     entry_price: float
@@ -111,12 +111,12 @@ class Signal:
             d['grade'] = self.grade.value
         if isinstance(self.status, Enum):
             d['status'] = self.status.value
-            
+
         # Serialize Date/Time objects
         for key, value in d.items():
             if isinstance(value, (date, datetime)):
                 d[key] = value.isoformat()
-                
+
         # Handle nested lists/dicts if necessary (e.g. news_items)
         if 'news_items' in d and isinstance(d['news_items'], list):
             new_news = []
@@ -127,7 +127,7 @@ class Signal:
                         new_item['published_at'] = new_item['published_at'].isoformat()
                     new_news.append(new_item)
             d['news_items'] = new_news
-            
+
         return d
 
 @dataclass
@@ -143,4 +143,3 @@ class ScreenerResult:
     market_status: Dict[str, Any]
     market_summary: str
     trending_themes: List[str]
-
