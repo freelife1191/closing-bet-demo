@@ -1,0 +1,37 @@
+{
+  "mode": "manual invocation of real scheduled chain",
+  "notification_sent": false,
+  "steps": [
+    {
+      "step": "create_daily_prices",
+      "status": "returned",
+      "return_type": "bool",
+      "result": true,
+      "seconds": 13.4
+    },
+    {
+      "step": "create_institutional_trend",
+      "status": "returned",
+      "return_type": "bool",
+      "result": true,
+      "seconds": 9.5
+    },
+    {
+      "step": "create_signals_log",
+      "status": "returned",
+      "return_type": "bool",
+      "result": true,
+      "seconds": 52.4
+    },
+    {
+      "step": "create_jongga_v2_latest",
+      "status": "returned",
+      "return_type": "bool",
+      "result": true,
+      "seconds": 78.3
+    }
+  ],
+  "notification_callback_reached": true,
+  "status": "finished",
+  "seconds": 154.4
+}

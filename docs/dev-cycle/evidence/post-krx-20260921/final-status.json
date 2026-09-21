@@ -1,0 +1,14 @@
+{
+  "jongga-v2/status": {
+    "isRunning": false,
+    "running": null,
+    "schedulerRunning": false,
+    "status": "IDLE"
+  },
+  "signals/status": {
+    "isRunning": null,
+    "running": false,
+    "schedulerRunning": false,
+    "status": "success"
+  }
+}

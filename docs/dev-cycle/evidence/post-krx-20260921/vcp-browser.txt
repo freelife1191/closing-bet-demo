@@ -1,0 +1,164 @@
+[p1 "KR Market Dashboard" | space "KRX 적용 후 VCP와 전체 분석 검증"(30): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=35, url=http://localhost:3500/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        container
+          button [ref=36]
+            container
+              text ""
+              text "KR Market"
+            text ""
+          container
+            anchor [ref=37, loc=href:/dashboard/kr, url=http://localhost:3500/dashboard/kr]
+              text "● Overview"
+            anchor [ref=38, loc=href:/dashboard/kr/vcp, url=http://localhost:3500/dashboard/kr/vcp]
+              text "● VCP 시그널"
+            anchor [ref=39, loc=href:/dashboard/kr/closing-bet, url=http://localhost:3500/dashboard/kr/closing-bet]
+              text "● 종가베팅"
+            anchor [ref=40, loc=href:/dashboard/kr/cumulative, url=http://localhost:3500/dashboard/kr/cumulative]
+              text "● 누적 성과"
+            anchor [ref=41, loc=href:/chatbot, url=http://localhost:3500/chatbot]
+              text "● AI 상담"
+        button [ref=42]
+          text ""
+          text "모의투자"
+        anchor [ref=43, loc=href:/dashboard/data-status, url=http://localhost:3500/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      container
+        container
+          text "무료 사용량"
+          container
+            container
+              text "10"
+              text "회 남음"
+            button "무료 사용량 5회 충전 (하루 1회)" [ref=44, loc=css:button[aria-label="무료 사용량 5회 충전 (하루 1회)"]]
+              text "+"
+        button [ref=45]
+          text "U"
+          container
+            text "User"
+            text "Free Tier Plan"
+          text ""
+    container
+      container "현재 위치"
+        ordered_list
+          list_item
+            anchor "홈" [ref=46, loc=css:a[aria-label="홈"], url=http://localhost:3500/]
+              text ""
+          list_item
+            text "/"
+            text "대시보드"
+          list_item
+            text "/"
+            text "국내 시장"
+          list_item
+            text "/"
+            text "VCP 시그널"
+      button "설정 열기" [ref=47, loc=css:button[aria-label="설정 열기"]]
+        text ""
+    container
+      container
+        container
+          text "VCP 패턴 스캐너"
+          heading
+            text "VCP"
+            text "시그널"
+          paragraph
+            text "Volatility Contraction Pattern + 기관/외국인 수급"
+        container
+          combobox "재분석 실행 모드" [ref=48, loc=css:select[aria-label="재분석 실행 모드"]]
+            text "실패/누락만"
+          button [ref=49]
+            text ""
+            text "실패 AI 재분석"
+          button [ref=50]
+            text ""
+            text "Refresh VCP"
+      container
+        text ""
+        paragraph
+          text "오늘(2026-09-21) 기준 VCP 시그널이 없습니다. 최신 저장 데이터는 2026-05-05입니다."
+      container
+        container
+          heading
+            text "실시간 VCP 시그널"
+          container
+            text "TOP"
+            text "0"
+          container
+            text "(Scanned:"
+            text "1997"
+            text ")"
+        container
+          container
+            container [ref=51]
+              button [ref=52]
+                text ""
+                text "VCP 전체 10주 매수"
+            paragraph
+              text "오늘 VCP 시그널 매수 대상 종목이 없습니다."
+          button [ref=53]
+            text ""
+            text "VCP 기준표"
+          button [ref=54]
+            text "최신"
+          button [ref=55]
+            text ""
+            text "과거"
+      container
+        table
+          table_row
+            table_cell
+              text "STOCK"
+            table_cell
+              text "DATE"
+            table_cell
+              container [ref=56]
+                text "외국인 5D"
+            table_cell
+              container [ref=57]
+                text "기관 5D"
+            table_cell
+              container [ref=58]
+                text "BUY"
+            table_cell
+              container [ref=59]
+                text "SCORE"
+            table_cell
+              container [ref=60]
+                text "CONT."
+            table_cell
+              container [ref=61]
+                text "ENTRY"
+            table_cell
+              container [ref=62]
+                text "STOP"
+            table_cell
+              container [ref=63]
+                text "TARGET"
+            table_cell
+              container [ref=64]
+                text "CURRENT"
+            table_cell
+              container [ref=65]
+                text "RETURN"
+            table_cell
+              container [ref=66]
+                text "GPT"
+            table_cell
+              container [ref=67]
+                text "GEMINI"
+        paragraph
+          text "No signals found."
+      container
+        text "Last updated:"
+        text "오후 09:45"
+  button "AI 상담" [ref=68, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

@@ -1,0 +1,10 @@
+2026-09-21 20:52:37,414 - services.scheduler - INFO - Scheduled Daily Closing Analysis at 17:00 (timezone=Asia/Seoul, next_run=2026-09-22 17:00:00)
+2026-09-21 20:52:37,415 - services.scheduler - INFO - Scheduler started successfully
+2026-09-21 21:20:21,063 - services.scheduler - INFO - Scheduler lock acquired. Starting scheduler service... (pid=69350)
+2026-09-21 21:20:21,069 - services.scheduler - INFO - Scheduled Market Gate sync every 1 minutes (next_run=2026-09-21 21:21:21.069194)
+2026-09-21 21:20:21,069 - services.scheduler - INFO - Scheduled Daily Closing Analysis at 17:00 (timezone=Asia/Seoul, next_run=2026-09-22 17:00:00)
+2026-09-21 21:20:21,070 - services.scheduler - INFO - Scheduler started successfully
+2026-09-21 21:34:57,751 - services.scheduler - INFO - Scheduler lock acquired. Starting scheduler service... (pid=56892)
+2026-09-21 21:34:57,757 - services.scheduler - INFO - Scheduled Market Gate sync every 1 minutes (next_run=2026-09-21 21:35:57.757631)
+2026-09-21 21:34:57,758 - services.scheduler - INFO - Scheduled Daily Closing Analysis at 17:00 (timezone=Asia/Seoul, next_run=2026-09-22 17:00:00)
+2026-09-21 21:34:57,758 - services.scheduler - INFO - Scheduler started successfully

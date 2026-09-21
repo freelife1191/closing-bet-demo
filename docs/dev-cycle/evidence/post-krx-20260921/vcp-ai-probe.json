@@ -1,0 +1,18 @@
+{
+  "input_date": "2026-05-05",
+  "ticker": "064350",
+  "kind": "historical input, live AI diagnostic",
+  "saved_to_current": false,
+  "providers": {
+    "gemini_recommendation": {
+      "present": true,
+      "reason_present": true,
+      "model": null
+    },
+    "gpt_recommendation": {
+      "present": true,
+      "reason_present": true,
+      "model": "gpt-5.6-luna"
+    }
+  }
+}
