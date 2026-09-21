@@ -1,0 +1,100 @@
+[
+  {
+    "port": 5501,
+    "path": "/api/kr/market-gate",
+    "status": 200,
+    "content_type": "application/json",
+    "size": 2990,
+    "valid_json": true,
+    "keys": [
+      "color",
+      "commodities",
+      "crypto",
+      "dataset_date",
+      "details",
+      "gate_reason",
+      "indices",
+      "is_gate_open",
+      "kosdaq_change_pct",
+      "kosdaq_close",
+      "kospi_change",
+      "kospi_change_pct",
+      "kospi_close",
+      "label",
+      "score",
+      "sectors",
+      "status",
+      "timestamp",
+      "total_score",
+      "usd_krw"
+    ]
+  },
+  {
+    "port": 3500,
+    "path": "/api/kr/market-gate",
+    "status": 200,
+    "content_type": "application/json",
+    "size": 2990,
+    "valid_json": true,
+    "keys": [
+      "color",
+      "commodities",
+      "crypto",
+      "dataset_date",
+      "details",
+      "gate_reason",
+      "indices",
+      "is_gate_open",
+      "kosdaq_change_pct",
+      "kosdaq_close",
+      "kospi_change",
+      "kospi_change_pct",
+      "kospi_close",
+      "label",
+      "score",
+      "sectors",
+      "status",
+      "timestamp",
+      "total_score",
+      "usd_krw"
+    ]
+  },
+  {
+    "port": 3500,
+    "path": "/api/kr/market-gate?date=invalid",
+    "status": 400,
+    "content_type": "application/json",
+    "size": 139,
+    "valid_json": true,
+    "keys": [
+      "error"
+    ]
+  },
+  {
+    "port": 3500,
+    "path": "/api/system/env",
+    "status": 403,
+    "content_type": "application/json",
+    "size": 21,
+    "valid_json": true,
+    "keys": [
+      "error"
+    ]
+  },
+  {
+    "port": 3500,
+    "path": "/api/auth/session",
+    "status": 200,
+    "content_type": "application/json",
+    "size": 2,
+    "valid_json": true,
+    "keys": []
+  },
+  {
+    "port": 3500,
+    "path": "/dashboard/kr",
+    "status": 200,
+    "content_type": "text/html; charset=utf-8",
+    "size": 54587
+  }
+]

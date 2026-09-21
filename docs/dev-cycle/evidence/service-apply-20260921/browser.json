@@ -1,0 +1,106 @@
+{
+  "url": "/dashboard/kr/closing-bet",
+  "errors": [],
+  "requests": [
+    {
+      "url": "/api/auth/session",
+      "status": 200
+    },
+    {
+      "url": "/api/auth/session",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/config/interval",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/market-gate",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/status",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/signals",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/backtest-summary",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/market-gate",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/config/interval",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/signals",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/status",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/backtest-summary",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/user/quota",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/signals",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/market-gate",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/signals/status",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/market-gate",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/signals",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/signals/status",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/ai-analysis",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/ai-analysis",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/jongga-v2/dates",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/jongga-v2/latest",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/jongga-v2/latest",
+      "status": 200
+    },
+    {
+      "url": "/api/kr/jongga-v2/dates",
+      "status": 200
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "package.json": true,
+  ".env.production": true,
+  ".env.bak.20260907_164102": true,
+  ".env.bak.20260505_042017": true,
+  ".env.bak.20260901_082418": true,
+  ".env": true,
+  ".env.bak.20260901_084454": true,
+  ".env.example": true,
+  ".env.production.bak.20260907_164335": true
+}

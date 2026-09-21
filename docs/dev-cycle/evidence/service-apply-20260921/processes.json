@@ -1,0 +1,12 @@
+[
+  {
+    "service": "backend",
+    "pid": 77981,
+    "cwd": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo"
+  },
+  {
+    "service": "frontend",
+    "pid": 77982,
+    "cwd": "/Users/freelife/vibe/lecture/hodu/closing-bet-demo/frontend"
+  }
+]

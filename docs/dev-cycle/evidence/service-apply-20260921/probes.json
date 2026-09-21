@@ -1,0 +1,14 @@
+[
+  {
+    "probe": "pykrx_transport_probe",
+    "exit": 0
+  },
+  {
+    "probe": "pykrx_contract_probe",
+    "exit": 0
+  },
+  {
+    "probe": "dependency_contract_probe",
+    "exit": 0
+  }
+]

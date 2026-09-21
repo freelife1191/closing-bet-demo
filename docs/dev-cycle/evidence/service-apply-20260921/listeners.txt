@@ -1,0 +1,5 @@
+COMMAND   PID     USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+Python  77981 freelife    3u  IPv4 0x2af13309d0e9b9e3      0t0  TCP 127.0.0.1:5501 (LISTEN)
+Python  78011 freelife    3u  IPv4 0x2af13309d0e9b9e3      0t0  TCP 127.0.0.1:5501 (LISTEN)
+Python  78030 freelife    3u  IPv4 0x2af13309d0e9b9e3      0t0  TCP 127.0.0.1:5501 (LISTEN)
+node    78031 freelife   13u  IPv6 0xc6541598a3f50224      0t0  TCP *:3500 (LISTEN)

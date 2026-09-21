@@ -1,0 +1,354 @@
+[p1 "KR Market Dashboard" | space "기존 서비스 업그레이드 검증"(26): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=31, url=http://localhost:3500/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        container
+          button [ref=32]
+            container
+              text ""
+              text "KR Market"
+            text ""
+          container
+            anchor [ref=33, loc=href:/dashboard/kr, url=http://localhost:3500/dashboard/kr]
+              text "● Overview"
+            anchor [ref=34, loc=href:/dashboard/kr/vcp, url=http://localhost:3500/dashboard/kr/vcp]
+              text "● VCP 시그널"
+            anchor [ref=35, loc=href:/dashboard/kr/closing-bet, url=http://localhost:3500/dashboard/kr/closing-bet]
+              text "● 종가베팅"
+            anchor [ref=36, loc=href:/dashboard/kr/cumulative, url=http://localhost:3500/dashboard/kr/cumulative]
+              text "● 누적 성과"
+            anchor [ref=37, loc=href:/chatbot, url=http://localhost:3500/chatbot]
+              text "● AI 상담"
+        button [ref=38]
+          text ""
+          text "모의투자"
+        anchor [ref=39, loc=href:/dashboard/data-status, url=http://localhost:3500/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      container
+        container
+          text "무료 사용량"
+          container
+            container
+              text "10"
+              text "회 남음"
+            button "무료 사용량 5회 충전 (하루 1회)" [ref=40, loc=css:button[aria-label="무료 사용량 5회 충전 (하루 1회)"]]
+              text "+"
+        button [ref=41]
+          text "U"
+          container
+            text "User"
+            text "Free Tier Plan"
+          text ""
+    container
+      container "현재 위치"
+        ordered_list
+          list_item
+            anchor "홈" [ref=42, loc=css:a[aria-label="홈"], url=http://localhost:3500/]
+              text ""
+          list_item
+            text "/"
+            text "대시보드"
+          list_item
+            text "/"
+            text "국내 시장"
+      button "설정 열기" [ref=43, loc=css:button[aria-label="설정 열기"]]
+        text ""
+    container
+      container
+        container
+          text "KR 마켓 알파"
+          heading
+            text "스마트머니"
+            text "추적"
+          paragraph
+            text "VCP 패턴 & 기관/외국인 수급 추적"
+        container
+          container
+            button [ref=44]
+              text ""
+              text "실시간"
+            button [ref=45]
+              text ""
+              text "날짜 지정"
+          container
+            container
+              text "매크로 지표:"
+              container
+                text "1"
+                text "분"
+              text "마다 자동 갱신"
+            text "시그널 분석: 매일 15:40 (KST)"
+            container
+              text "마지막 업데이트:"
+              text "오후 08:53"
+      container
+        container
+          text ""
+          heading
+            text "KR Market Gate"
+            container [ref=46]
+              text ""
+          container
+            container
+              svg_root
+              container
+                text "70"
+                text "SCORE"
+            container [ref=47]
+              text "Bullish"
+        container
+          container
+            heading
+              text "KOSPI 200 Sector Index"
+              container [ref=48]
+                text ""
+            container
+              container [ref=49]
+                text "BULLISH"
+              container [ref=50]
+                text "NEUTRAL"
+              container [ref=51]
+                text "BEARISH"
+          container
+            container
+              text "반도체"
+              container
+                text "+"
+                text "3.09"
+                text "%"
+            container
+              text "2차전지"
+              container
+                text "+"
+                text "6.91"
+                text "%"
+            container
+              text "자동차"
+              container
+                text "-1.44"
+                text "%"
+            container
+              text "헬스케어"
+              container
+                text "+"
+                text "1.24"
+                text "%"
+            container
+              text "IT"
+              container
+                text "+"
+                text "0.33"
+                text "%"
+            container
+              text "은행"
+              container
+                text "+"
+                text "4.86"
+                text "%"
+            container
+              text "철강"
+              container
+                text "+"
+                text "2.03"
+                text "%"
+            container
+              text "증권"
+              container
+                text "+"
+                text "0.14"
+                text "%"
+            container
+              text "조선"
+              container
+                text "+"
+                text "2.68"
+                text "%"
+            container
+              text "에너지"
+              container
+                text "-0.32"
+                text "%"
+            container
+              text "KOSPI 200"
+              container
+                text "+"
+                text "1.40"
+                text "%"
+      container
+        container
+          container
+            text "오늘의 시그널"
+            container [ref=52]
+              text ""
+          text "0"
+          text "VCP + 외국인 순매수"
+        container
+          container
+            container
+              container [ref=53]
+                text "VCP 전략"
+                text ""
+              button [ref=54]
+                text "기준표"
+            text "미흡"
+          container
+            container
+              text "33.3"
+              text "%"
+            container
+              text "Avg."
+              text "+"
+              text "1.7"
+              text "%"
+          container
+            text "15 trades"
+            text ""
+        container
+          container
+            container
+              container [ref=55]
+                text "종가베팅 전략"
+                text ""
+              button [ref=56]
+                text "기준표"
+            text "양호"
+          container
+            container
+              text "40.4"
+              text "%"
+            container
+              text "Avg."
+              text "+"
+              text "0.2"
+              text "%"
+          container
+            text "226 trades"
+            text ""
+      container
+        container
+          heading
+            text "Market Indices"
+            container [ref=57]
+              text ""
+          container
+            container
+              text "KOSPI"
+              container
+                text "7,052"
+                container
+                  text ""
+                  text "+"
+                  text "1.4"
+                  text "%"
+            container
+              text "KOSDAQ"
+              container
+                text "830"
+                container
+                  text ""
+                  text "+"
+                  text "2.3"
+                  text "%"
+            container
+              text "S&P 500"
+              container
+                text "7,650"
+                container
+                  text ""
+                  text "-0.3"
+                  text "%"
+            container
+              text "NASDAQ"
+              container
+                text "26,314"
+                container
+                  text ""
+                  text "-0.4"
+                  text "%"
+        container
+          heading
+            text "Commodities"
+            container [ref=58]
+              text ""
+          container
+            container
+              text "KRX GOLD"
+              container
+                text "24,640"
+                container
+                  text ""
+                  text "-0.1"
+                  text "%"
+            container
+              text "KRX SILVER"
+              container
+                text "10,815"
+                container
+                  text ""
+                  text "+"
+                  text "0.8"
+                  text "%"
+            container
+              text "US GOLD (F)"
+              container
+                container
+                  text "$"
+                  text "4,463"
+                container
+                  text ""
+                  text "+"
+                  text "1.6"
+                  text "%"
+            container
+              text "US SILVER (F)"
+              container
+                container
+                  text "$"
+                  text "69"
+                container
+                  text ""
+                  text "+"
+                  text "3.4"
+                  text "%"
+        container
+          heading
+            text "Crypto Assets"
+            container [ref=59]
+              text ""
+          container
+            container
+              text "BITCOIN"
+              container
+                text "79,310"
+                container
+                  text ""
+                  text "+"
+                  text "1.1"
+                  text "%"
+            container
+              text "ETHEREUM"
+              container
+                text "2,510"
+                container
+                  text ""
+                  text "+"
+                  text "1.0"
+                  text "%"
+            container
+              text "XRP"
+              container
+                text "1.43"
+                container
+                  text ""
+                  text "+"
+                  text "0.9"
+                  text "%"
+  button "AI 상담" [ref=60, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""
