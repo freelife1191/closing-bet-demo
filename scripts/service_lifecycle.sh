@@ -453,3 +453,16 @@ wait_for_http() {
   echo "❌ $service 준비 확인 실패: $url" >&2
   return 1
 }
+
+# 새 세션으로 분리해 실행한다. nohup 만으로는 부족하다. gunicorn 은 자체 SIGHUP
+# 핸들러를 등록해 nohup 이 설정한 무시 상태를 덮어쓰고, HUP 을 종료가 아니라 워커
+# reload 로 처리하므로 master 가 고아로 살아남아 포트를 계속 점유한다.
+# execvp 는 PID 를 유지하므로 호출한 셸이 잡은 $! 는 그대로 대상 프로세스다.
+lifecycle_exec_detached() {
+  exec python3 -c 'import os, sys
+try:
+    os.setsid()
+except OSError:
+    pass
+os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+}

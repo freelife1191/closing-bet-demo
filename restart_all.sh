@@ -76,10 +76,18 @@ bash "$PROJECT_ROOT/scripts/sync_dependencies.sh" || {
   exit 1
 }
 
+# 의존성 준비 동안 이 프로젝트 프로세스가 되살아났을 수 있다. 관리 대상으로 확인되면
+# 한 번 더 내리고, 외부 점유자면 stop_managed_services 가 그대로 거부한다.
+if ! lifecycle_assert_port_free "$FLASK_PORT" 2>/dev/null ||
+   ! lifecycle_assert_port_free "$FRONTEND_PORT" 2>/dev/null; then
+  echo "⚠️  의존성 준비 중 포트가 다시 점유되어 한 번 더 종료를 시도합니다..." >&2
+  stop_managed_services "$FRONTEND_PORT" "$FLASK_PORT" || exit 1
+fi
+
 lifecycle_assert_port_free "$FLASK_PORT" || exit 1
 lifecycle_assert_port_free "$FRONTEND_PORT" || exit 1
 echo "🚀 Backend $FLASK_PORT (Gunicorn)..."
-nohup "$PROJECT_ROOT/venv/bin/gunicorn" flask_app:app \
+lifecycle_exec_detached "$PROJECT_ROOT/venv/bin/gunicorn" flask_app:app \
   --bind "${FLASK_HOST}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 \
   9>&- >> "$PROJECT_ROOT/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
@@ -91,7 +99,7 @@ echo "🚀 Frontend $FRONTEND_PORT..."
 (
   cd "$PROJECT_ROOT/frontend" || exit 1
   export PORT="$FRONTEND_PORT"
-  exec nohup node scripts/run-next.js dev
+  lifecycle_exec_detached node scripts/run-next.js dev
 ) 9>&- >> "$PROJECT_ROOT/logs/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 lifecycle_write_pid frontend "$FRONTEND_PID" || exit 1
