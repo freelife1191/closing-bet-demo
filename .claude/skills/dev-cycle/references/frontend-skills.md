@@ -10,8 +10,8 @@
 
 | 항목 | 값 | 다시 확인하는 방법 |
 |---|---|---|
-| Next.js | 16.3.4 | `node -e "console.log(require('next/package.json').version)"` |
-| React | 19.2.4 | `node -e "console.log(require('react/package.json').version)"` |
+| Next.js | 16.3.5 | `node -e "console.log(require('next/package.json').version)"` |
+| React | 19.2.8 | `node -e "console.log(require('react/package.json').version)"` |
 | 라우터 | App Router, 루트는 `frontend/src/app` | — |
 | Cache Components | 미적용 | `grep cacheComponents frontend/next.config.js` |
 

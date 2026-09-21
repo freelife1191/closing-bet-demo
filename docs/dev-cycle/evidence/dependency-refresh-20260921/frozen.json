@@ -1,0 +1,9 @@
+{
+  "requirements.txt": "3b68a5921965751b09e8b4a33c477c84238adfab9b40991a932f51ccfe3db10c",
+  "requirements-security.txt": "e74950f29052940f527d97a49e7719211e940d102d194607d62913bf32d261f5",
+  "frontend/package.json": "2bbb54de3f286983b179b86b95c665883fc72093da02cd586c7baacd5539b5ca",
+  "frontend/package-lock.json": "a2d292da84379f820a696c7fa0839d0a9c95688d5b705e3a3f0897d5d153473d",
+  "frontend/tests/nextauth-security.test.ts": "2411065ba37b5ad485c4c719e7300235fdb30b5da50bbdc76b89f326ef995cf8",
+  "tests/test_dependency_contracts.py": "595eb7092eb10bde239fb04bed4884ed0ca4e254922dd057a1740513439c1b8d",
+  "tests/fixtures/dependency_contract_probe.py": "67c60da4394171c58bd0bc90a16b8676b9d5fe7b0d849a4efe05ac347e846674"
+}

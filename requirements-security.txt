@@ -1,0 +1,16 @@
+# INFRA-070: 현재 사용 중인 전이 의존성과 설치 도구의 보안 수정 하한.
+# -c가 아니라 requirements.txt의 -r로 포함해 기존 환경에서도 실제 갱신한다.
+# 근거와 감사 결과: docs/dev-cycle/evidence/dependency-refresh-20260921/
+anyio>=4.14.2,<5
+click>=8.3.3,<9
+cryptography>=50.0.0,<51
+curl-cffi>=0.15.0,<0.16
+idna>=3.15,<4
+lxml>=6.1.0,<7
+pillow>=12.3.0,<13
+pyasn1>=0.6.4,<0.7
+Pygments>=2.20.0,<3
+setuptools>=83.0.0,<84
+soupsieve>=2.9.0,<3
+urllib3>=2.7.0,<3
+Werkzeug>=3.1.6,<4

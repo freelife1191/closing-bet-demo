@@ -1,0 +1,490 @@
+[
+  {
+    "package": {
+      "name": "anyio",
+      "version": "4.12.1"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-5p39-cfhj-2xmp",
+        "modified": "2026-09-18T17:30:07.278440Z"
+      },
+      {
+        "id": "GHSA-82r6-8w77-94w6",
+        "modified": "2026-09-18T17:30:07.278457Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "click",
+      "version": "8.3.1"
+    },
+    "vulns": [
+      {
+        "id": "PYSEC-2026-2132",
+        "modified": "2026-07-13T07:15:21.899333Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "cryptography",
+      "version": "46.0.5"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-537c-gmf6-5ccf",
+        "modified": "2026-09-10T03:50:48.298936Z"
+      },
+      {
+        "id": "GHSA-g6cj-pr64-35w5",
+        "modified": "2026-09-10T03:50:53.610446Z"
+      },
+      {
+        "id": "GHSA-jwv3-5hgf-82ww",
+        "modified": "2026-09-10T03:51:14.262061Z"
+      },
+      {
+        "id": "GHSA-m2h6-j472-rp4c",
+        "modified": "2026-09-10T03:51:14.299325Z"
+      },
+      {
+        "id": "GHSA-m959-cc7f-wv43",
+        "modified": "2026-09-10T03:51:00.592317Z"
+      },
+      {
+        "id": "GHSA-p423-j2cm-9vmq",
+        "modified": "2026-09-10T03:50:44.766981Z"
+      },
+      {
+        "id": "PYSEC-2026-35",
+        "modified": "2026-05-20T09:18:55.884138Z"
+      },
+      {
+        "id": "PYSEC-2026-3552",
+        "modified": "2026-08-04T14:30:15.036332Z"
+      },
+      {
+        "id": "PYSEC-2026-3553",
+        "modified": "2026-08-04T14:30:26.222821Z"
+      },
+      {
+        "id": "PYSEC-2026-3554",
+        "modified": "2026-08-04T14:30:26.230323Z"
+      },
+      {
+        "id": "PYSEC-2026-36",
+        "modified": "2026-05-20T09:18:55.965312Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "curl_cffi",
+      "version": "0.13.0"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-qw2m-4pqf-rmpp",
+        "modified": "2026-07-13T16:42:36.740782Z"
+      },
+      {
+        "id": "PYSEC-2026-2431",
+        "modified": "2026-07-13T16:32:36.499899Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "Flask",
+      "version": "3.1.2"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-68rp-wp8r-4726",
+        "modified": "2026-09-10T03:49:54.354981Z"
+      },
+      {
+        "id": "PYSEC-2026-2151",
+        "modified": "2026-07-13T07:15:25.033843Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "idna",
+      "version": "3.11"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-65pc-fj4g-8rjx",
+        "modified": "2026-09-10T03:50:45.700124Z"
+      },
+      {
+        "id": "PYSEC-2026-215",
+        "modified": "2026-06-16T16:15:04.639265Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "lxml",
+      "version": "6.0.2"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-vfmq-68hx-4jfw",
+        "modified": "2026-09-10T03:51:03.302383Z"
+      },
+      {
+        "id": "PYSEC-2026-87",
+        "modified": "2026-05-20T09:19:06.179641Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "pillow",
+      "version": "12.1.1"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-45hq-cxwh-f6vc",
+        "modified": "2026-09-10T03:50:51.372929Z"
+      },
+      {
+        "id": "GHSA-4x4j-2g7c-83w6",
+        "modified": "2026-09-10T03:51:10.324377Z"
+      },
+      {
+        "id": "GHSA-5x94-69rx-g8h2",
+        "modified": "2026-09-10T03:51:10.514604Z"
+      },
+      {
+        "id": "GHSA-5xmw-vc9v-4wf2",
+        "modified": "2026-09-10T03:51:04.701007Z"
+      },
+      {
+        "id": "GHSA-62p4-gmf7-7g93",
+        "modified": "2026-09-10T03:51:10.632149Z"
+      },
+      {
+        "id": "GHSA-6r8x-57c9-28j4",
+        "modified": "2026-09-10T03:51:10.822199Z"
+      },
+      {
+        "id": "GHSA-8v84-f9pq-wr9x",
+        "modified": "2026-09-10T03:51:11.229114Z"
+      },
+      {
+        "id": "GHSA-9hw9-ch79-4vh6",
+        "modified": "2026-09-10T03:51:11.334365Z"
+      },
+      {
+        "id": "GHSA-fj7v-r99m-22gq",
+        "modified": "2026-09-10T03:50:51.891240Z"
+      },
+      {
+        "id": "GHSA-jjj6-mw9f-p565",
+        "modified": "2026-09-10T03:50:12.341825Z"
+      },
+      {
+        "id": "GHSA-pg7v-jwj7-p798",
+        "modified": "2026-09-10T03:50:52.876709Z"
+      },
+      {
+        "id": "GHSA-phj9-mv4w-65pm",
+        "modified": "2026-09-10T03:51:11.734605Z"
+      },
+      {
+        "id": "GHSA-pwv6-vv43-88gr",
+        "modified": "2026-09-10T03:50:47.242104Z"
+      },
+      {
+        "id": "GHSA-r73j-pqj5-w3x7",
+        "modified": "2026-09-10T03:50:55.309086Z"
+      },
+      {
+        "id": "GHSA-vjc4-5qp5-m44j",
+        "modified": "2026-09-10T03:50:53.107920Z"
+      },
+      {
+        "id": "GHSA-whj4-6x5x-4v2j",
+        "modified": "2026-09-10T03:51:03.847830Z"
+      },
+      {
+        "id": "GHSA-wjx4-4jcj-g98j",
+        "modified": "2026-09-10T03:50:47.950262Z"
+      },
+      {
+        "id": "GHSA-xj96-63gp-2gmr",
+        "modified": "2026-09-10T03:50:53.192759Z"
+      },
+      {
+        "id": "PYSEC-2026-165",
+        "modified": "2026-05-27T13:56:18.230226Z"
+      },
+      {
+        "id": "PYSEC-2026-2250",
+        "modified": "2026-07-13T07:26:24.246094Z"
+      },
+      {
+        "id": "PYSEC-2026-2251",
+        "modified": "2026-07-13T07:26:28.768890Z"
+      },
+      {
+        "id": "PYSEC-2026-2252",
+        "modified": "2026-07-13T07:26:52.198871Z"
+      },
+      {
+        "id": "PYSEC-2026-2253",
+        "modified": "2026-07-13T07:26:49.281845Z"
+      },
+      {
+        "id": "PYSEC-2026-2254",
+        "modified": "2026-07-13T07:26:56.196935Z"
+      },
+      {
+        "id": "PYSEC-2026-2255",
+        "modified": "2026-07-13T07:26:26.726353Z"
+      },
+      {
+        "id": "PYSEC-2026-2256",
+        "modified": "2026-07-13T07:26:17.085341Z"
+      },
+      {
+        "id": "PYSEC-2026-2257",
+        "modified": "2026-07-13T07:26:48.229039Z"
+      },
+      {
+        "id": "PYSEC-2026-2874",
+        "modified": "2026-07-13T16:42:37.358429Z"
+      },
+      {
+        "id": "PYSEC-2026-3451",
+        "modified": "2026-07-15T20:11:36.266805Z"
+      },
+      {
+        "id": "PYSEC-2026-3452",
+        "modified": "2026-07-15T20:11:27.953713Z"
+      },
+      {
+        "id": "PYSEC-2026-3453",
+        "modified": "2026-07-15T20:11:15.582336Z"
+      },
+      {
+        "id": "PYSEC-2026-3454",
+        "modified": "2026-07-22T11:11:36.231472Z"
+      },
+      {
+        "id": "PYSEC-2026-3493",
+        "modified": "2026-07-23T15:11:42.568996Z"
+      },
+      {
+        "id": "PYSEC-2026-3494",
+        "modified": "2026-07-23T15:11:28.382441Z"
+      },
+      {
+        "id": "PYSEC-2026-3495",
+        "modified": "2026-07-23T15:11:28.034031Z"
+      },
+      {
+        "id": "PYSEC-2026-3496",
+        "modified": "2026-07-23T15:11:20.720915Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "pyasn1",
+      "version": "0.6.2"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-8ppf-4f7h-5ppj",
+        "modified": "2026-09-10T03:51:11.103855Z"
+      },
+      {
+        "id": "GHSA-hm4w-wwcw-mr6r",
+        "modified": "2026-09-10T03:50:12.333773Z"
+      },
+      {
+        "id": "GHSA-jr27-m4p2-rc6r",
+        "modified": "2026-09-09T15:45:11.173742Z"
+      },
+      {
+        "id": "GHSA-m4p7-r5rc-7g4j",
+        "modified": "2026-09-10T03:50:52.562707Z"
+      },
+      {
+        "id": "PYSEC-2026-2263",
+        "modified": "2026-07-13T07:15:40.277367Z"
+      },
+      {
+        "id": "PYSEC-2026-3455",
+        "modified": "2026-07-22T11:00:08.839373Z"
+      },
+      {
+        "id": "PYSEC-2026-3456",
+        "modified": "2026-07-22T11:00:08.814095Z"
+      },
+      {
+        "id": "PYSEC-2026-3457",
+        "modified": "2026-07-22T11:00:08.839691Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "Pygments",
+      "version": "2.19.2"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-5239-wwwm-4pmq",
+        "modified": "2026-09-10T03:50:59.780634Z"
+      },
+      {
+        "id": "PYSEC-2026-2987",
+        "modified": "2026-07-13T16:32:42.870544Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "pytest",
+      "version": "9.0.2"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-6w46-j5rx-g56g",
+        "modified": "2026-09-10T03:50:32.768043Z"
+      },
+      {
+        "id": "PYSEC-2026-1845",
+        "modified": "2026-07-07T17:47:51.848748Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "python-dotenv",
+      "version": "1.2.1"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-mf9w-mj56-hr94",
+        "modified": "2026-09-10T03:51:02.363430Z"
+      },
+      {
+        "id": "PYSEC-2026-2270",
+        "modified": "2026-07-13T07:15:44.015809Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "requests",
+      "version": "2.32.5"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-gc5v-m9x4-r6x2",
+        "modified": "2026-09-10T03:50:39.207922Z"
+      },
+      {
+        "id": "PYSEC-2026-2275",
+        "modified": "2026-07-13T07:15:43.964902Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "setuptools",
+      "version": "80.10.1"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-h35f-9h28-mq5c",
+        "modified": "2026-09-10T03:50:52.323347Z"
+      },
+      {
+        "id": "PYSEC-2026-3447",
+        "modified": "2026-07-14T10:56:37.948360Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "soupsieve",
+      "version": "2.8.3"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-2wc2-fm75-p42x",
+        "modified": "2026-09-10T03:50:51.299551Z"
+      },
+      {
+        "id": "GHSA-836r-79rf-4m37",
+        "modified": "2026-09-10T03:51:10.949295Z"
+      },
+      {
+        "id": "GHSA-gjv8-xp57-g29c",
+        "modified": "2026-09-17T20:45:06.589610Z"
+      },
+      {
+        "id": "GHSA-j934-xhv5-fg8f",
+        "modified": "2026-09-17T20:45:05.791958Z"
+      },
+      {
+        "id": "PYSEC-2026-3071",
+        "modified": "2026-07-13T16:31:33.701425Z"
+      },
+      {
+        "id": "PYSEC-2026-3072",
+        "modified": "2026-07-13T16:31:33.705856Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "urllib3",
+      "version": "2.6.3"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-mf9v-mfxr-j63j",
+        "modified": "2026-09-10T03:51:06.409994Z"
+      },
+      {
+        "id": "GHSA-qccp-gfcp-xxvc",
+        "modified": "2026-09-10T03:50:47.272765Z"
+      },
+      {
+        "id": "PYSEC-2026-141",
+        "modified": "2026-05-20T09:19:20.983812Z"
+      },
+      {
+        "id": "PYSEC-2026-142",
+        "modified": "2026-05-20T09:19:21.038869Z"
+      }
+    ]
+  },
+  {
+    "package": {
+      "name": "Werkzeug",
+      "version": "3.1.5"
+    },
+    "vulns": [
+      {
+        "id": "GHSA-29vq-49wr-vm6x",
+        "modified": "2026-09-10T03:50:33.709103Z"
+      },
+      {
+        "id": "PYSEC-2026-2320",
+        "modified": "2026-07-13T07:15:48.093424Z"
+      }
+    ]
+  }
+]

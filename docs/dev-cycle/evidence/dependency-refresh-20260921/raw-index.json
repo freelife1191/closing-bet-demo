@@ -1,0 +1,20 @@
+{
+  "pytest.log.gz": "d9f585b181d050270b14906a4786d3887d6e0bccf605616f210726ea027cba26",
+  "typecheck-final.log.gz": "7be92254762179757901fe4da6e168842e921aa513f008e24084e3a0ff843c0c",
+  "lint.log.gz": "2d1ec3b2dc84c88ab9a2b8316cc4f58c58409577c1a2643f711b905b3abf629b",
+  "pytarget-yfinance.log.gz": "1ab9905d8b0f34f6d791ff7da4efa2de0f7f3e282a078758cc0496cc0230c0f0",
+  "target-red-node.log.gz": "bfde7e984c5116fcab2e1a600616175c378d1748a0f74be50bece8e6470bb7ff",
+  "typecheck.log.gz": "6374ef67df610405b126c9b4c3648af604db76e73040f25123fd947a6dc71b82",
+  "target-red.log.gz": "9d79e7e420038b51da8986ad25d081e265864d697dcbb18f25d804ad09212692",
+  "build-final.log.gz": "7dc9001b93c2d5ee7e75e5cecc197d3d71665ae309a3bf1a38327b91826a6e0e",
+  "vitest-final.log.gz": "96831b418243dc85291b9727db47f2095c8bfbbb28ba4c09dfcb5e33bd73f47c",
+  "pipcheck.log.gz": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09",
+  "vitest.log.gz": "e8724b0d7aa354eb45c4f46e903c7abd268c611fabd74aff52670725bdc465d5",
+  "pytest-final.log.gz": "ae00923f48b346fd1aa892b1eb5cbbe9510dfc0506670e749da0022b6698124e",
+  "target-red-contract.log.gz": "29c547f31e39354e579112a2cb8f2b3581d27ea5051b2604f045e7cd37f30f0f",
+  "lint-final.log.gz": "7554c56d7ce7958dece95f25accde627d17ee2b02886d0ae72f2e5c1328996ac",
+  "sdk.log.gz": "47f83f16fc809d1caf8ddb911adf0e642968e1358c17e16fa9eac4562bdce44b",
+  "python-install.log.gz": "be036a8c42d58242a9ffbba6641a9eef421bcae552f86f9254441ce8bf620f42",
+  "target-green.log.gz": "8295671b4a73e05f91b553a46ecf34146ba4f5acb393532d1f4ec1a30c54eaa4",
+  "npm-install.log.gz": "8c497ac8067e1724cccec8dab491af614c94afe7ef160dbbc14f9479387b4b7a"
+}

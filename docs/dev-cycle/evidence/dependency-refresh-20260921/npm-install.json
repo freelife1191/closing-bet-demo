@@ -1,0 +1,12 @@
+{
+  "command": [
+    "npm",
+    "update",
+    "--ignore-scripts",
+    "--no-audit",
+    "--no-fund"
+  ],
+  "exit_code": 0,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn/frontend",
+  "seconds": 4.57
+}

@@ -1,0 +1,1 @@
+첫 두 실행은 Node 환경 setup의 window 접근 및 jsdom/Node Headers·Uint8Array realm 차이로 하네스 검증에 실패했다. 이를 제품 결함으로 세지 않는다. 실제 Node 자식 프로세스에서 NextRequest/getToken/encode를 함께 실행해 거짓 익명 통과와 암호화 realm 오류를 제거한 뒤 보안 RED를 재검증했다.
