@@ -104,6 +104,9 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
                 )
                 return results
 
+        except ValueError:
+            logger.error("KRX 종목 데이터 변환 실패: 정상 빈 결과로 처리하지 않습니다.")
+            raise
         except Exception as e:
             logger.warning(f"pykrx 실시간 데이터 수집 실패: {e}")
 
@@ -161,13 +164,16 @@ class KRXCollectorDataMixin(KRXCollectorLocalDataMixin):
         top_df = (
             working[mask_price & mask_vol & mask_rise]
             .nlargest(top_n, "등락률")
+            .rename_axis("ticker")
             .reset_index()
-            .rename(columns={"index": "ticker"})
         )
 
         results = []
         for row in top_df.itertuples(index=False):
             code = _normalize_ticker(getattr(row, "ticker", ""))
+            if not code:
+                logger.error("KRX 응답에 유효하지 않은 종목코드가 있습니다.")
+                raise ValueError(f"유효하지 않은 티커: {getattr(row, 'ticker', '')!r}")
             try:
                 name = self._get_stock_name(code)
                 results.append(

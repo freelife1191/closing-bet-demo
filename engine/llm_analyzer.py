@@ -19,8 +19,10 @@ except ImportError:
     genai = None
 
 from engine.config import app_config
+from engine.exceptions import LLMResponseParseError
 from engine.llm_analyzer_parsers import (
     build_result_map as build_result_map_impl,
+    validate_jongga_results,
     parse_batch_response as parse_batch_response_impl,
     parse_json_response as parse_json_response_impl,
 )
@@ -232,8 +234,11 @@ class LLMAnalyzer:
         - 응답 스키마는 기존 batch와 동일.
         - 사용처: 종가베팅 재분석 파이프라인.
         """
-        if not self.client or not items:
+        if not items:
             return {}
+        if not self.client:
+            logger.error("종가 AI 클라이언트 없음: 저장 차단")
+            raise LLMResponseParseError("", "종가 AI 클라이언트 없음")
 
         start_time = time.time()
         try:
@@ -241,21 +246,33 @@ class LLMAnalyzer:
                 items=items,
                 market_status=market_status,
             )
-            response_content = await self._execute_llm_call(
-                prompt=prompt,
-                timeout=app_config.ANALYSIS_LLM_API_TIMEOUT,
-            )
-            results_list = parse_batch_response_impl(
-                response_text=response_content,
-                logger=logger,
-            )
-            model_name = self._retry_strategy.get_model_name() if self._retry_strategy else "unknown"
-            results = build_result_map_impl(results_list=results_list, model_name=model_name)
-            self._log_jongga_action_distribution(results)
-            return results
+            for attempt in range(2):
+                response_content = await self._execute_llm_call(
+                    prompt=prompt,
+                    timeout=app_config.ANALYSIS_LLM_API_TIMEOUT,
+                )
+                try:
+                    results_list = parse_batch_response_impl(response_text=response_content, logger=logger)
+                    if (not isinstance(results_list, list) or len(results_list) != len(items)
+                            or any(not isinstance(row, dict) or not isinstance(row.get("name"), str) for row in results_list)):
+                        raise LLMResponseParseError("", "종가 응답 배열이 불완전함")
+                    model_name = self._retry_strategy.get_model_name() if self._retry_strategy else "unknown"
+                    results = validate_jongga_results(
+                        results=build_result_map_impl(results_list=results_list, model_name=model_name), items=items,
+                    )
+                    self._log_jongga_action_distribution(results)
+                    return results
+                except LLMResponseParseError:
+                    logger.warning("종가 응답 검증 실패 (시도 %s/2)", attempt + 1)
+                    if attempt:
+                        raise
+                    prompt += "\n재작성: 모든 종목을 빠짐없이 반환하고 reason에는 ①~⑤ 외 숫자·금액·가격·배수·퍼센트 표현을 쓰지 마세요. 제품명 숫자도 생략하세요."
+        except LLMResponseParseError:
+            logger.error("종가 응답 검증 재시도 실패: 결과 저장 차단")
+            raise
         except Exception as e:
-            logger.error(f"{self.provider} jongga 배치 분석 실패: {e}")
-            return {}
+            logger.error("종가 배치 분석 처리 실패: %s", type(e).__name__)
+            raise LLMResponseParseError("", "종가 AI 호출/응답 처리 실패") from e
         finally:
             elapsed = time.time() - start_time
             logger.info(

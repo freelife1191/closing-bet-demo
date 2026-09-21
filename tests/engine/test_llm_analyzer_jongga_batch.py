@@ -5,11 +5,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import patch
 
 import pytest
 
 from engine.llm_analyzer import LLMAnalyzer
+
+
+def _valid_reason():
+    body = '원자재 가격과 정부 지원을 확인하며 기업 실적과 시장 환경을 함께 검토합니다. 단기 변동성과 추세 지속 여부를 살피고 확인되지 않은 정보로 성급하게 판단하지 않습니다.'
+    return ' '.join(f'{m} {label}: {body}' for m,label in zip('①②③④⑤',['뉴스/재료 분석','거래대금/거래량 평가','수급 동향','리스크 요인','매매 전략']))
 
 
 def _sample_item() -> dict:
@@ -51,7 +57,7 @@ class TestAnalyzeNewsBatchJongga:
 
         async def fake_execute(prompt, timeout):
             captured["prompt"] = prompt
-            return '[{"name": "삼성전자", "score": 2, "action": "BUY", "confidence": 80, "reason": "테스트 reason"}]'
+            return json.dumps([{"name":"삼성전자","score":2,"action":"BUY","confidence":80,"reason":_valid_reason()}])
 
         with patch.object(analyzer, "_execute_llm_call", side_effect=fake_execute):
             result = asyncio.run(analyzer.analyze_news_batch_jongga([_sample_item()], market_status=None))
@@ -78,7 +84,7 @@ class TestAnalyzeNewsBatchJongga:
 
     def test_results_attach_model_name(self, analyzer):
         async def fake_execute(prompt, timeout):
-            return '[{"name": "삼성전자", "score": 2, "action": "BUY", "confidence": 80, "reason": "r"}]'
+            return json.dumps([{"name":"삼성전자","score":2,"action":"BUY","confidence":80,"reason":_valid_reason()}])
 
         with patch.object(analyzer, "_execute_llm_call", side_effect=fake_execute):
             result = asyncio.run(analyzer.analyze_news_batch_jongga([_sample_item()], market_status=None))

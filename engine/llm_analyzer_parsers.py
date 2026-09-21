@@ -11,6 +11,7 @@ import re
 from typing import Dict, List, Optional
 
 from engine.pandas_utils_safe import safe_confidence
+from engine.exceptions import LLMResponseParseError
 
 
 _JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
@@ -115,3 +116,44 @@ __all__ = [
     "parse_batch_response",
     "build_result_map",
 ]
+
+
+_KOREAN_QUANTITY = re.compile(
+    r"(?:[영공일이삼사오육칠팔구십백천만억조수]+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|몇)"
+    r"\s*[십백천만억조]*\s*(?:원|달러|유로|엔|위안|퍼센트|배|점)"
+)
+
+
+def validate_jongga_results(*, results: Dict[str, Dict], items: List[Dict]) -> Dict[str, Dict]:
+    """모델 정성 설명을 검사한 뒤 코드가 계산한 원자료 수치만 붙인다."""
+    from engine.llm_analyzer_formatters import (
+        extract_stock_info, _format_trading_value_eok, _resolve_jongga_supply_text,
+    )
+    expected = {extract_stock_info(item["stock"])[0]: item for item in items}
+    if set(results) != set(expected) or len(expected) != len(items):
+        raise LLMResponseParseError("", "종가 응답의 종목 누락/중복/불일치")
+    checked = {}
+    for name, result in results.items():
+        reason = result.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise LLMResponseParseError("", "종가 분석 근거 없음")
+        sections = re.findall(r"([①②③④⑤])\s*([^:：\n]{1,24})[:：]([^①②③④⑤]+)", reason)
+        if ([part[0] for part in sections] != list("①②③④⑤")
+                or len(reason) < 350 or any(len(part[2].strip()) < 60 for part in sections)):
+            raise LLMResponseParseError("", "종가 설명의 필수 섹션/내용이 불완전함")
+        prose = re.sub(
+            r"[①②③④⑤](?=\s*(?:뉴스|거래|수급|리스크|위험|매매|전략)[^:：\n]{0,24}[:：])", "", reason,
+        )
+        if (any(char.isnumeric() for char in prose) or any(char in prose for char in "%％₩￦")
+                or _KOREAN_QUANTITY.search(prose)):
+            raise LLMResponseParseError("", "정성 설명에 검증되지 않은 수치가 포함됨")
+        item = expected[name]
+        _, _, price, _, trading = extract_stock_info(item["stock"])
+        facts = (
+            f"\n[원자료 수치] 현재가: {int(price):,}원; "
+            f"거래대금: {_format_trading_value_eok(trading)} ({int(trading):,}원); "
+            f"{_resolve_jongga_supply_text(item)}. "
+            "손절·목표가는 화면의 시스템 계산값을 따릅니다."
+        )
+        checked[name] = {**result, "reason": reason.strip() + facts}
+    return checked

@@ -12,6 +12,7 @@ import os
 
 from engine.investor_personal_flow import cached_personal_value, personal_flow_total
 from engine.models import StockData, ChartData, SupplyData
+from engine.ticker_utils import normalize_ticker
 from engine.toss_collector import TossCollector
 from services.investor_trend_5day_service import get_investor_trend_5day_for_ticker, has_csv_anomaly_flags
 from services.kr_market_data_cache_service import file_signature as _shared_file_signature, load_csv_file as _load_shared_csv_file
@@ -299,11 +300,11 @@ class KRXCollectorLocalDataMixin:
         results: list[StockData] = []
         for row in rows_payload:
             if not isinstance(row, (list, tuple)) or len(row) < 11:
-                continue
+                return None
 
-            code = str(row[0] or "").zfill(6)
+            code = normalize_ticker(row[0])
             if not code:
-                continue
+                return None
 
             try:
                 item = StockData(
@@ -320,7 +321,7 @@ class KRXCollectorLocalDataMixin:
                     low_52w=float(row[10] or 0.0),
                 )
             except (TypeError, ValueError):
-                continue
+                return None
             results.append(item)
         return results
 

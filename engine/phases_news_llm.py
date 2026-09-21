@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 
 from engine.constants import LLM as LLM_THRESHOLD
 from engine.llm_analyzer import LLMAnalyzer
+from engine.exceptions import LLMResponseParseError
 from engine.phases_base import BasePhase
 
 logger = logging.getLogger(__name__)
@@ -177,9 +178,11 @@ class Phase3LLMAnalyzer(BasePhase):
         """LLM 배치 분석 실행."""
         self.stats["processed"] += len(items)
 
-        if not self.llm_analyzer.client or not items:
-            logger.info("[Phase 3] Skipped: No LLM client or items")
+        if not items:
             return {}
+        if not self.llm_analyzer.client:
+            logger.error("종가 AI 클라이언트 없음: 파이프라인 중단")
+            raise LLMResponseParseError("", "종가 AI 클라이언트 없음")
 
         chunks = self._create_chunks(items, self.chunk_size)
         total_chunks = len(chunks)
@@ -204,15 +207,21 @@ class Phase3LLMAnalyzer(BasePhase):
                         adapted_chunk, market_status
                     )
 
+                    expected = {item["stock"]["stock_name"] for item in adapted_chunk}
+                    if not isinstance(chunk_result, dict) or set(chunk_result) != expected:
+                        raise LLMResponseParseError("", "종가 청크 응답이 불완전함")
                     elapsed = time.time() - start
                     logger.info(f"[LLM Batch] Chunk {chunk_idx} done in {elapsed:.2f}s")
                     self.stats["passed"] += len(chunk_result)
                     return chunk_result
 
+                except LLMResponseParseError:
+                    logger.error("종가 AI 수치/완전성 검증 실패: 파이프라인 중단")
+                    raise
                 except Exception as e:
                     logger.warning(f"[LLM Batch] Chunk {chunk_idx} error: {e}")
                     self.stats["failed"] += len(chunk_data)
-                    return {}
+                    raise LLMResponseParseError("", "종가 청크 실행 실패") from e
                 finally:
                     if self.request_delay > 0:
                         await asyncio.sleep(self.request_delay)

@@ -94,6 +94,10 @@ def _format_trading_value_eok(value: Any) -> str:
         eok = int(round(float(value) / 1e8))
     except (TypeError, ValueError):
         eok = 0
+    if abs(eok) >= 10_000:
+        jo, rest = divmod(abs(eok), 10_000)
+        sign = "-" if eok < 0 else ""
+        return f"{sign}{jo:,}조 {rest:,}억원 ({eok:,}억원)"
     return f"{eok:,}억원"
 
 

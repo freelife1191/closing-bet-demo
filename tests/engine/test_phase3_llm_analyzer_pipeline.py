@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 import asyncio
+import pytest
+from engine.exceptions import LLMResponseParseError
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
@@ -178,30 +180,30 @@ class TestPhase3DegradedInputs:
         assert result == {}
         assert analyzer.calls_jongga == []
 
-    def test_no_client_returns_empty(self):
+    def test_no_client_blocks_pipeline(self):
         analyzer = _FakeLLMAnalyzer()
         analyzer.client = None
         phase3 = Phase3LLMAnalyzer(analyzer, chunk_size=5, concurrency=1, request_delay=0)
         items = [_phase2_item("000001", "종목1")]
-        result = asyncio.run(phase3.execute(items, market_status=None))
-        assert result == {}
+        with pytest.raises(LLMResponseParseError):
+            asyncio.run(phase3.execute(items, market_status=None))
         assert analyzer.calls_jongga == []
 
 
 # ---------------------------------------------------------------------------
-# 일부 청크 실패 시에도 나머지는 진행
+# 일부 청크 실패 시 부분 결과 발행 차단
 # ---------------------------------------------------------------------------
 
 class TestPhase3ChunkResilience:
-    def test_one_chunk_failure_does_not_break_others(self):
+    def test_one_chunk_failure_blocks_partial_publication(self):
         # 두 번째 청크에서만 실패
         analyzer = _FakeLLMAnalyzer(fail_on_chunk=2)
         phase3 = Phase3LLMAnalyzer(analyzer, chunk_size=2, concurrency=1, request_delay=0)
         items = [_phase2_item(f"00000{i}", f"종목{i}") for i in range(4)]
-        result = asyncio.run(phase3.execute(items, market_status=None))
+        with pytest.raises(LLMResponseParseError):
+            asyncio.run(phase3.execute(items, market_status=None))
 
-        # 4개 중 2개만 살아남음 (실패한 청크의 2개는 누락)
-        assert len(result) == 2
+        # 성공한 청크가 있어도 부분 결과를 발행하지 않는다.
         # stats에 failed 2 누적
         assert phase3.stats["failed"] == 2
         assert phase3.stats["passed"] == 2
