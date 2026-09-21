@@ -129,7 +129,7 @@ def test_get_stock_news_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, t
     assert calls["count"] == 1
 
 
-def test_get_stock_news_caches_empty_result_and_reuses_sqlite_snapshot(monkeypatch, tmp_path):
+def test_get_stock_news_retries_empty_result_after_memory_clear(monkeypatch, tmp_path):
     collector = EnhancedNewsCollector()
     with collector._news_cache_lock:
         collector._news_cache.clear()
@@ -165,16 +165,9 @@ def test_get_stock_news_caches_empty_result_and_reuses_sqlite_snapshot(monkeypat
     with collector._news_cache_lock:
         collector._news_cache.clear()
 
-    monkeypatch.setattr(
-        "engine.collectors.news.collect_stock_news_impl",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            AssertionError("empty result should be served from sqlite snapshot")
-        ),
-    )
-
     second = asyncio.run(collector.get_stock_news("005930", limit=3, name="삼성전자"))
     assert second == []
-    assert calls["count"] == 1
+    assert calls["count"] == 2
 
 
 def test_get_weight_uses_cache_for_repeated_source_platform():

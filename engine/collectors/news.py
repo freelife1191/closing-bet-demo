@@ -203,7 +203,7 @@ class EnhancedNewsCollector(BaseCollector):
             if isinstance(payload, dict):
                 self._news_cache.move_to_end(memory_key)
                 cached_news = self._deserialize_news_items(payload)
-                if cached_news is not None:
+                if cached_news:
                     return cached_news
                 self._news_cache.pop(memory_key, None)
 
@@ -226,7 +226,7 @@ class EnhancedNewsCollector(BaseCollector):
         if not loaded or not isinstance(payload, dict):
             return None
         cached_news = self._deserialize_news_items(payload)
-        if cached_news is None:
+        if not cached_news:
             return None
 
         with self._news_cache_lock:
@@ -391,7 +391,7 @@ class EnhancedNewsCollector(BaseCollector):
                 stock_name=stock_name,
                 cache_slot=cache_slot,
             )
-            if cached_news is not None:
+            if cached_news:
                 return cached_news
 
             result = collect_stock_news_impl(
@@ -403,7 +403,7 @@ class EnhancedNewsCollector(BaseCollector):
                 fetch_daum_search_news_fn=self._fetch_daum_search_news,
                 logger=logger,
             )
-            if isinstance(result, list):
+            if isinstance(result, list) and result:
                 self._save_cached_news_items(
                     code=normalized_code,
                     limit=normalized_limit,

@@ -1,0 +1,9 @@
+{
+  "engine/collectors/base.py": "739b5372efe0c98770823f71aacbf9951ea7d2f4863ec8f0dfec5b6864d98157",
+  "engine/collectors/news.py": "13752d4327c250490e089b3008dac97453645bb541c75ac7cb490b54752a242f",
+  "engine/collectors/news_scrape_helpers.py": "10d5fa49a8c2bb30220a132e81d74c8393508243a002bb410c026661a3c93959",
+  "engine/generator_runtime_mixin.py": "765626c34947288036bd8ed255fdd642280b4625aecce77bf6cffce2d0c12798",
+  "tests/engine/test_news_current_markup.py": "1d04e1ef1b8e941e0addaa2da81d39efa646579b52b6d6d2991bb109388b2aec",
+  "tests/engine/test_news_collector_refactor.py": "5f584a3805d1d24cefa1ea2c61f3211242f445bd7eac22089c457c7cf49f5aae",
+  "tests/engine/test_generator_runtime_failure.py": "65e4c13cabc93d42f75f58cd394a4d1bef4e74d9557d0d74d9503fb0a60c4cf8"
+}

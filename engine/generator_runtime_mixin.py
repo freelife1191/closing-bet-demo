@@ -203,7 +203,9 @@ class SignalGeneratorRuntimeMixin:
             except Exception as e:
                 logger.error(f"[{market}] Pipeline execution failed: {e}")
                 print(f"  ✗ {market} 실패: {e}")
-                continue
+                # 일부 시장의 실제 파이프라인 실패를 빈 정상 결과로 저장하면 직전
+                # 시그널을 덮어쓴다. 후보 없음만 정상 빈 결과로 취급한다.
+                raise
             finally:
                 if self._pipeline and hasattr(self._pipeline, 'phase1'):
                     phase1_pass_after = self._pipeline.phase1.get_stats().get('passed', 0)

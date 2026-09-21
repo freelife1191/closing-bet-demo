@@ -89,25 +89,24 @@ def fetch_naver_search_news(
         return []
 
     soup = BeautifulSoup(response.text, "html.parser")
-    items = soup.select("div.news_wrap") or soup.select("li.bx") or soup.select("div.news_area")
+    title_links = soup.select('a.news_tit, a[data-heatmap-target=".tit"]')
 
     published_at = datetime.now()
     results: list[NewsItem] = []
-    for item in items:
-        title_el = item.select_one("a.news_tit")
-        if not title_el:
-            continue
-
-        title = title_el.get("title") or title_el.text.strip()
+    for title_el in title_links:
+        headline = title_el.select_one(".sds-comps-text-type-headline1")
+        title = title_el.get("title") or (headline or title_el).get_text().strip()
         if not title or title in seen_titles:
             continue
 
-        source_el = (
-            item.select_one("a.info.press")
-            or item.select_one("span.info.press")
-            or item.select_one("a.press")
-        )
-        source = source_el.text.strip().replace("언론사 선정", "") if source_el else "네이버검색"
+        # 현재 SDS 카드의 Profile은 기사 본문과 형제다. 난수 class나 고정 깊이에 의존하지 않는다.
+        card = title_el.find_parent(
+            lambda tag: tag.select_one(":scope > [data-sds-comp='Profile']") is not None
+        ) if headline else title_el.find_parent(class_=["news_wrap", "bx", "news_area"])
+        source_el = card.select_one(
+            ".sds-comps-profile-info-title-text .sds-comps-text, a.info.press, span.info.press, a.press"
+        ) if card else None
+        source = source_el.get_text().strip().replace("언론사 선정", "") if source_el else "네이버검색"
 
         seen_titles.add(title)
         results.append(

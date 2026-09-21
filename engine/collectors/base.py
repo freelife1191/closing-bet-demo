@@ -35,7 +35,8 @@ class BaseCollector:
                 "image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
             ),
             "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br",
+            # requests 기본 설치는 Brotli 해제가 보장되지 않는다.
+            "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
         }
