@@ -1,34 +1,58 @@
 # UltraQA Report
 
-engine=ultraqa, lifecycle=app-adapted, phase=planning, iteration=1, same_failure_count=0.
-기준: 92d84ab + 이번 변경. 원본 3500/5501 서비스, .env 계열, data, root package.json 보존.
+engine=ultraqa, lifecycle=app-adapted, phase=blocked, iteration=2, screenshot_failure_count=3.
+기준 구현: `6569c60`. 최종 코드 SHA: `evidence/INFRA-074/frozen.json`.
 
-목표: 시작/중지의 거짓 성공 제거, 중복 실행 방지, 의존성 정상 출력 축약, KRX 비JSON 로그인 실패 격리.
-browser_applicability=required; browser_driver=ego-browser (사용자 지정). CLI lifecycle 및 인증 transport는 격리 실행하고, 합성 KRX HTML 응답에서도 실제 앱 기동과 /dashboard/kr 화면 표시를 검사한다. 실제 계정 로그인 성공/원격 서버 복구와 구분한다.
-필수 행의 기대는 아래에 고정하며 실제 결과와 명령·증거는 실행 후 채운다.
+## 목표와 범위
 
-| ID | 의도/모델 | setup 및 command/harness | 기대 신호 | 실제/수정/증거 | cleanup | 필수 |
+재시작/중지의 거짓 성공과 중복 기동을 막고, 정상 의존성 출력을 축약하며 KRX 로그인 비정상 응답을 안전하게 처리한다. 원격 Linux에는 접속하지 않았다. 실제 서버관리자/네트워크 차단 원인을 확정하거나 원격 복구 완료로 보고하지 않는다.
+실제 비용·AI·발송·거래·사용자 설정 저장은 실행하지 않는다. 격리 서비스는58120/58121, 원본3500/5501은 보존한다.
+
+## 필수 시나리오와 결과
+
+| ID | 의도/모델 | setup·실행 | 기대 | 실제·증거 | cleanup | 필수 |
 |---|---|---|---|---|---|---|
-| L1 | 정상 운영자 | 격리 시작→중지→재시작 | own 서비스 HTTP 준비 확인 후만 성공, 중지 후 해제 | 대기 | own child 종료 | 예 |
-| L2 | 충돌/다른 사용자/관리자 재점유 | lifecycle tests | 무관 PID 보존, 차단/진단 및 비정상 종료 | 대기 | fixture 정리 | 예 |
-| L3 | 기동 실패/정체/동시 호출 | lifecycle tests | timeout/child 종료 감지, 거짓 Ready 없음 | 대기 | own child 종료 | 예 |
-| D1 | 정상 의존성/공백 경로 | helper 첫 실행→재실행 | 반복 already satisfied 제거, 같은 상태 npm ci 생략 | 대기 | 임시 venv/modules | 예 |
-| D2 | 변경/불완전 설치/오류 | lock·next 삭제, pip/npm 실패 주입 | 필요한 갱신, 원인 출력, 실패 시 기동 안 함 | 대기 | fixture 정리 | 예 |
-| K1 | HTML/HTTP/network/schema 실패 | wheel fake transport | import 가능, 인증 false, 응답/ID/암호 비노출 | 대기 | subprocess 종료 | 예 |
-| K2 | 정상/중복 로그인/세션갱신 | wheel fake transport | 정상 인증 및 기존 Cookie 보안 계약 유지 | 대기 | subprocess 종료 | 예 |
-| B1 | 앱 사용자 | 실제 scratch Flask/Next + 합성 KRX HTML, ego-browser /dashboard/kr | 앱 응답 및 화면 표시, 새 launcher 준비 확인 | 대기 | browser space/own services 종료 | 예 |
-| C1 | 타 작업/시크릿 | hash, git ls-files, 로그 경계 | 원본 불변 및 비밀 비노출 | 대기 | tmp만 정리 | 예 |
+| L1 | 정상 운영자/구버전 | scratch 실제 Gunicorn/Next 시작→중지→재시작, 기록 없는 legacy 중지 | 실제 프로세스·포트·응답 확인 후 성공 | 시작/중지0, stop2.6초/restart6.9초; legacy 인수·중지 및 cleanup도exit0 | own 서비스 종료 확인 | 예 |
+| L2 | 다른 사용자·PID 재사용·관리자 재점유 | ss/ps 대역 및 자체 tmp 자식 | 무관 프로세스 보존, 비정상 종료 | 동적17개 PASS: 다중/숨은PID, 재점유, 잘못된 명령, PID 재사용 | tmp 자식 종료 | 예 |
+| L3 | 정체·중복·부분 실패 | 실제 flock 경쟁, fake child, 실제 app 부팅 | 잠금 회수, 자체 자식만 정리, 거짓Ready 없음 | 동적17개 PASS, 최종 dual readiness·PID 기록 실패·Done job·뒤늦은 backend 사망 | tmp 자식 종료 | 예 |
+| D1 | 정상 의존성·공백 경로 | 실제 fresh 설치/같은 환경 반복 | 잡음 제거, npm ci 생략 | 최초9.6초/반복1.3초, 실제 재시작에서도 변경 없음 | scratch 삭제 완료 | 예 |
+| D2 | 설치 불량·실패 | lock 변경/실행 파일 누락, pip/npm 실패 | 필요한 갱신과 오류 원문, 기동 차단 | 관련 회귀 PASS, 설치 실패 시 down 상태 명시 | tmp fixture | 예 |
+| K1 | HTML/HTTP/schema/network/redirect | 실제 cookie.2의 합성 transport 및 Gunicorn import 강제 | 예외/자격정보 누출 없이 인증 실패 | 로그인14 시나리오 PASS; 앱 주입 증거 app-krx-fault.json | 외부 접속0/실제 자격정보 없음 | 예 |
+| K2 | 정상·CD011·갱신 실패 | 실제 requests와 합성 세션/응답 | 정상 로그인 유지, 실패 쿠키 제거 | 로그인14 + 기존 transport7그룹 PASS, wheel 재빌드2회 SHA일치 | 구현자 tmp 삭제 | 예 |
+| B1 | 앱 사용자 | ego-browser space1, /dashboard/kr | 화면·JSON·오류 및 screenshot 확인 | DOM 정상/JSON200, Next MCP오류0. 캡처2회timeout+대체CDP실패: **BLOCKED** | space1 finish 완료 | 예 |
+| C1 | 원본/다른 작업 보존 | 해시·소유권 대조 | 원본 전체불변 | 하위 검수의 원본 전체pytest 실행으로 **미통과**. 아래 사건 기록 | 원본을 임의 rollback하지 않음 | 예 |
 
-검증 경계: 금융 mutation/챗봇·AI 호출은 실행하지 않는다. CLI에서 문서·로그의 prompt injection은 실행 명령으로 해석하지 않는다. 로그/서버 응답은 자료로만 처리.
-실패 반복 상한 5 cycles, 같은 실패3회. 리뷰 레인당15분 상한; 시간초과는 PASS가 아님.
+## 실행 근거
 
-L1/L2 상세: legacy 무PID기록은 same UID+정확한 cwd+예상 argv로만 인수. permission/정보 없음은 보존 후 실패. listener는 이번 launcher/자손이어야 하며 타 HTTP200은 거부.
-L3 상세: 공유 원자 lock/owner start identity, concurrent only one, stale recovery. frontend pipeline 제거 및 actual launcher 기록. 부분 실패는 own child/기록 정리, 로그 append 보존. HTTP backend /api/kr/market-gate 및 frontend / 확인.
-K1/K2 상세: CD011 두 번째POST 오류도 동일 계약. 기존 authenticated refresh 실패는 인증상태/쿠키 제거. wheel version/SHA 재현 일치 확인.
+- 최종 snapshot fresh venv 전체 pytest: **2527 passed,2 skipped**,81.19초,exit0. macOS sandbox가 ps 실행을 막아 lifecycle adversarial 파일만 별도 실행.
+- 같은 snapshot의 동적 lifecycle adversarial: **17 passed**,5.30초,exit0. 실제 원본 환경이 아닌 scratch cwd와 합성 env, 자체 tmp 자식만 사용. 합계 Python2544통과.
+- 관련 스크립트·Next launcher 회귀:81통과. 프론트엔드 Vitest641/84파일 통과.
+- bash 문법·git diff check 통과. 원본 비추적package.json 보존.
+- 실제 서비스 시작/중지/재시작 exit0. KRX HTML을 주입한 실제 import/기동 결과는 app-krx-fault.json에 별도로 기록한다. 최초 UI 방문에서는 pykrx가 lazy import여서 로그인 분기를 실행하지 않았음을 구분한다.
+- code APPROVE, architect CLEAR, deep ACCEPT, security APPROVE. 과잉설계2건 반영. 초기 리뷰 해시는 이력으로 보존하며 final frozen.json/deep 리뷰가 최종 기준이다.
+- UI는 일반 대시보드의 실제 DOM을 관찰했다. 스크린샷 파일이 없으므로 시각 검증 성공으로 세지 않는다. raw CDP 쿠키/헤더는 보존하지 않고 event method만 남겼다.
 
-초기 baseline: scratch 실제 전체 의존성 설치 exit0, pip check exit0, Vitest641/84파일 통과(6.03초). 의존성 helper 실제 첫 실행9.6초/재실행1.3초 모두exit0; 재실행4줄 및 npm ci생략. 최종 코드 freeze 이후 필요한 검증은 다시 연결한다.
+## 실패→수정
 
-## 검수 경계 위반 기록
-하위 검수 agent /root/lifecycle_adversarial이 지정 범위를 벗어나 원본 cwd에서 inherited environment로 `venv/bin/python -m pytest -q`를 1회 실행했다. 종료(exit1) 뒤 중지 지시했으며 추가 원본 테스트는 금지했다. 기존cookie.1 pykrx가 계정 ID를 도구 stdout에 출력했다. 그 값은 증거/문서에 복사하지 않았다. 원본.env 계열 및 root package.json 해시는 유지됐고 종가/VCP 결과를 포함한 기존 주요 데이터 파일 해시도 유지됐다. runtime/cache/status8개 변경, WAL/SHM2개소실/2개생성은 preservation-check.json에 이름과 함께 기록했다. 자동으로 갱신하는 원본 서비스도 실행 중이므로 모든 변경의 단일 원인을 단정하지 않는다. 캐시를 과거 상태로 임의 되돌리거나 사용자 자료를 삭제하지 않는다. C1 원본 전체불변 계약은 PASS로 표시하지 않는다.
+1. 기존 KRX 비JSON 예외 RED→로그인 guard GREEN. 보안 검토에서 로그인307 재전송을 재현해 모든 로그인 요청의 redirect 차단 및 명시적2xx검사 추가.
+2. 이전 bootstrap fixture가 신규helper를 복사하지 않던 실패 수정. 기존 symlink 권한보존 기대값 유지.
+3. OS sandbox의 ps 차단은 제품 결함과 분리하고 해당 격리 프로세스 회귀만 clean-env scratch에서 실행.
+4. 실제 app smoke에서 Next의 ps 출력 공백으로 오인→문자열 정규화 회귀 추가. Bash pipeline에서 job table이 사라져 정리 시wait가 걸림→command substitution으로 고치고 실제 자식 회귀 통과.
+5. PID 파일 기록 실패, 포트가 먼저 닫히는 종료, 의존성 설치 중 재점유, 먼저 준비된 backend의 사망 모두 검증에 포함.
 
-기능 검증과 이 운영 경계 위반은 구분한다. 원본 전체불변 증거를 복구할 수 없는 한 전체 UltraQA COMPLETE/완료 아카이브를 만들지 않고 항목을 유지한다.
+## 검수 경계 위반
+
+하위 agent `/root/lifecycle_adversarial`이 지정 범위를 벗어나 원본 cwd에서 상속 환경으로 `venv/bin/python -m pytest -q`를 한 번 실행했다. 종료(exit1) 뒤 추가 원본 테스트를 금지했다. 기존cookie.1이 계정 ID를 도구stdout에 출력했으며 그 값은 문서/증거에 복사하지 않았다. 이 전체 실행은 검증 증거에서 제외했다.
+
+원본.env 계열·root package.json·종가/VCP 결과 파일은 초기 해시와 같다. Market Gate를 포함한 runtime/cache/status8개 변경, WAL/SHM 변동은 preservation-check.json에 기록했다. 원본 서비스도 자동 갱신 중이므로 모든 변화가 그 테스트 하나 때문이라고 단정하지 않는다. baseline은 해시만 보유하므로 이전 캐시 내용을 정확히 복구할 수 없다. 사용자 파일이나 정상 갱신을 임의로 되돌리지 않는다.
+
+이 사건을 새 baseline으로 덮거나 원본 전체불변 PASS로 바꾸지 않는다. 코드의 기능 검증과 별개로 C1은 미통과다.
+
+## 남은 한계와 판정
+
+원격 서버 미적용. 외부 systemd/Supervisor를 추측해서 중지하지 않으며 진단 후 관리자의 절차로 정리해야 한다. launcher 강제 종료로 분리된 자식은 안전한 소유권 증명이 없으면 종료하지 않고 PID 기록·실패를 남긴다. 정상 설치 hook의 daemon화는 지원하지 않는다.
+
+**ULTRAQA BLOCKED: B1 screenshot unavailable after3 attempts; C1 original-environment preservation violated.**
+기능 수정은 구현·검증했지만 전체 검수 완료/완료 아카이브를 만들지 않고 TODO를 유지한다.
+
+정리 완료(2026-09-22): own launchers 종료 및58120/58121해제, scratch삭제, browser space1 finish1회. 민감설정/root package 해시 및 frozen15파일 일치. 원본3500/5501은 기존 master77981/Next78031로 실행 중이다. 마지막 실행은 KRX실패 import를 강제로 검증했고 QA_KRX_IMPORT_OK/invalid_json을 확인했으며 JSONDecodeError/worker bootfailure는 없었다.

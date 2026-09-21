@@ -1,0 +1,16 @@
+{
+  "owned_launchers_gone": [
+    1162,
+    1389,
+    21638,
+    21771,
+    30511,
+    30606
+  ],
+  "ports_58120_58121_free": true,
+  "scratch_removed": true,
+  "browser_space_1_finished_once": true,
+  "protected_env_and_user_package_unchanged": true,
+  "runtime_data_preservation": "FAILED; see preservation-check.json and QA incident",
+  "frozen_source_hashes_match": true
+}
