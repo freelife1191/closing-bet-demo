@@ -1,0 +1,6 @@
+{
+  "restart_all.sh": "7e82f9a85eb42566d8abbd245be8e79cb49001cafb1a24d75418d795082b4406",
+  "scripts/sync_dependencies.sh": "1d9a1279d7a7474319919e8d75eaf56585927a52b3577db207585dd63ba701e6",
+  "tests/scripts/test_sync_dependencies.py": "8397663eb2257f7399f985f71e5a8e9f3fe8bb1e4a4da541abe07985ea1c6c49",
+  "README.md": "50ca4e9f2e46f527d3e556b42d1ba3c5cb6c08b33b019476a6904ac6349fdf1d"
+}

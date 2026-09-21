@@ -43,11 +43,22 @@
 ```
 
 이 스크립트는 다음 작업을 자동으로 수행합니다:
-- ✅ 가상환경(venv) 자동 생성 및 패키지 설치
-- ✅ 프론트엔드 의존성 설치 (npm install)
+- ✅ 가상환경(venv) 자동 생성, requirements 적용 및 의존성 충돌 검사
+- ✅ package.json·lock 파일·Node 환경·설치 상태 변경 시 `npm ci`, 변경 없으면 재설치 생략
 - ✅ 기존 프로세스 자동 종료
 - ✅ 백엔드(Gunicorn)과 프론트엔드(Next.js) 동시 시작
 - ✅ .env 설정 자동 로드 및 포트 적용
+
+다른 환경에서 코드를 갱신할 때도 아래 두 명령이면 패키지 변경까지 적용됩니다.
+
+```bash
+git pull --ff-only origin develop
+./restart_all.sh
+```
+
+의존성 적용은 `scripts/sync_dependencies.sh`가 담당합니다. Python·npm 설치나 검증이 실패하면
+서버를 시작하지 않습니다. 인터넷의 임의 최신 버전으로 올리지 않고 저장소의 requirements와
+lock 파일을 따릅니다. Git pull과 계정 정보 입력은 자동 실행하지 않으며 `.env`는 각 환경에 준비해야 합니다.
 
 **서버 접속:**
 - 백엔드: http://localhost:5501

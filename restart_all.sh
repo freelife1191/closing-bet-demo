@@ -40,50 +40,20 @@ pkill -f "next dev" 2>/dev/null || true
 pkill -f "npm.*dev" 2>/dev/null || true
 mkdir -p logs
 
-echo "🔧 Python deps setup (isolated venv)..."
-
-# 1. 시스템 기본 deps (충돌 최소)
-SYS_DEPS=("flask" "flask-cors" "python-dotenv")
-for dep in "${SYS_DEPS[@]}"; do
-  # 패키지명에서 하이픈을 언더스코어로 변환 (flask-cors → flask_cors, python-dotenv → dotenv)
-  import_name=$(echo "$dep" | sed 's/-/_/g' | sed 's/python_dotenv/dotenv/')
-  ! python3.11 -c "import $import_name" 2>/dev/null && {
-    echo "   📦 System $dep"
-    python3.11 -m pip install --break-system-packages --no-deps --quiet "$dep"
-  }
-done
-
-# 2. venv 격리 환경 (전체 deps)
-[ ! -d venv ] && {
-  echo "📦 Creating venv..."
-  python3.11 -m venv venv
+# 잠금 파일/설치 상태가 바뀌면 갱신하고, 설치·검증 실패 시 기동하지 않는다.
+bash "$PROJECT_ROOT/scripts/sync_dependencies.sh" || {
+  echo "❌ 의존성 준비 실패. 서비스를 시작하지 않습니다." >&2
+  exit 1
 }
-
-source venv/bin/activate
-pip install --upgrade pip --quiet >/dev/null
-
-echo "📦 Installing dependencies from requirements.txt..."
-pip install -r requirements.txt --quiet
-deactivate
-
-echo "✅ Python ready!"
-
-# Frontend
-[ -d frontend ] || { echo "❌ frontend/ missing!"; exit 1; }
-cd frontend
-[ ! -d node_modules ] && { echo "📦 npm install..."; npm ci --quiet; }
-cd ..
 
 # Backend (venv 실행)
 echo "🚀 Backend $FLASK_PORT (Gunicorn)..."
 # Cleanup stale lock file
 rm -f services/scheduler.lock
 
-source venv/bin/activate
 # Use Gunicorn as in Procfile
 # 바인딩은 위에서 env_value 로 읽은 FLASK_HOST 를 따르며 기본은 loopback 이다.
-nohup gunicorn flask_app:app --bind "${FLASK_HOST:-127.0.0.1}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
-deactivate
+nohup "$PROJECT_ROOT/venv/bin/gunicorn" flask_app:app --bind "${FLASK_HOST:-127.0.0.1}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 > logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
 # Frontend
