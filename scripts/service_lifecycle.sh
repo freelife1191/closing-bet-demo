@@ -43,13 +43,23 @@ lifecycle_port_pids() {
 }
 
 lifecycle_assert_port_free() {
-  local port=$1 pids
+  local port=$1 pids pid parent
   pids=$(lifecycle_port_pids "$port") || {
     echo "❌ 포트 $port 상태를 확인할 수 없어 기동하지 않습니다." >&2
     return 1
   }
   if [ -n "$pids" ]; then
-    echo "❌ 포트 $port 를 PID $pids 가 다시 사용 중입니다. systemd/supervisor 등 실행 관리자를 확인하세요. 중복 기동하지 않습니다." >&2
+    echo "❌ 포트 $port 를 PID $pids 가 다시 사용 중입니다. 중복 기동하지 않습니다." >&2
+    # 실행 관리자를 추측해 안내하지 않는다. 누가 되살렸는지는 점유자와 그 부모의
+    # 실제 계보에 드러나므로 그대로 출력한다.
+    for pid in $pids; do
+      ps -o pid,ppid,pgid,lstart,command -p "$pid" 2>/dev/null | sed 1d >&2
+      parent=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d '[:space:]')
+      case "$parent" in
+        ''|*[!0-9]*) ;;
+        *) ps -o pid,ppid,command -p "$parent" 2>/dev/null | sed '1d;s/^/  └─ 부모 /' >&2 ;;
+      esac
+    done
     return 1
   fi
 }
@@ -169,6 +179,21 @@ lifecycle_release_lock() {
   [ "${LIFECYCLE_LOCK_ACQUIRED:-0}" = 1 ] || return 0
   exec 9>&-
   LIFECYCLE_LOCK_ACQUIRED=0
+}
+
+# SIGKILL 은 핸들러가 돌지 않아 자식에게 전달되지 않는다. master 만 죽이면 중간
+# 노드(next dev)가 고아로 남고 그 손자가 포트를 계속 쥔다. lifecycle_exec_detached
+# 로 띄운 서비스는 기록 PID 가 자기 프로세스 그룹의 리더이므로, 그때만 그룹 전체에
+# 보내 체인을 한 번에 정리한다. 입양한 프로세스처럼 그룹 리더가 아니거나 이 셸과
+# 같은 그룹이면 종전대로 해당 PID 에만 보낸다.
+lifecycle_signal_process() {
+  local signal=$1 pid=$2 pgid self_pgid
+  pgid=$(ps -p "$pid" -o pgid= 2>/dev/null | tr -d '[:space:]')
+  self_pgid=$(ps -p $$ -o pgid= 2>/dev/null | tr -d '[:space:]')
+  if [ "$pgid" = "$pid" ] && [ "$pgid" != "$self_pgid" ]; then
+    kill -"$signal" -- "-$pid" 2>/dev/null && return 0
+  fi
+  kill -"$signal" "$pid" 2>/dev/null
 }
 
 lifecycle_pid_in_list() {
@@ -306,14 +331,14 @@ lifecycle_terminate_started_child() {
   token=$(lifecycle_pid_start_token "$pid")
   [ -n "$token" ] || return 1
   lifecycle_active_job "$pid" || return 0
-  kill -TERM "$pid" 2>/dev/null || return 1
+  lifecycle_signal_process TERM "$pid" || return 1
   deadline=$((SECONDS + LIFECYCLE_TERM_WAIT_SECONDS))
   while lifecycle_pid_alive "$pid" && [ "$SECONDS" -lt "$deadline" ]; do sleep 0.1; done
   if lifecycle_pid_alive "$pid"; then
     lifecycle_active_job "$pid" || return 1
     [ "$(lifecycle_pid_start_token "$pid")" = "$token" ] || return 1
     lifecycle_pid_matches_service "$service" "$pid" || return 1
-    kill -KILL "$pid" 2>/dev/null || return 1
+    lifecycle_signal_process KILL "$pid" || return 1
     deadline=$((SECONDS + LIFECYCLE_KILL_WAIT_SECONDS))
     while lifecycle_pid_alive "$pid" && [ "$SECONDS" -lt "$deadline" ]; do sleep 0.1; done
   fi
@@ -328,12 +353,12 @@ lifecycle_terminate_recorded_process() {
   lifecycle_pid_alive "$master" || return 0
   lifecycle_pid_matches_service "$service" "$master" || return 1
   lifecycle_record_matches_process "$service" "$master" || return 1
-  kill -TERM "$master" 2>/dev/null || return 1
+  lifecycle_signal_process TERM "$master" || return 1
   lifecycle_wait_for_exit "$service" "$master" "$LIFECYCLE_TERM_WAIT_SECONDS" && return 0
   lifecycle_pid_alive "$master" || return 0
   lifecycle_pid_matches_service "$service" "$master" || return 1
   lifecycle_record_matches_process "$service" "$master" || return 1
-  kill -KILL "$master" 2>/dev/null || return 1
+  lifecycle_signal_process KILL "$master" || return 1
   lifecycle_wait_for_exit "$service" "$master" "$LIFECYCLE_KILL_WAIT_SECONDS"
 }
 
