@@ -42,24 +42,34 @@ lifecycle_port_pids() {
   done
 }
 
+# 실행 관리자를 추측해 안내하지 않는다. 누가 포트를 쥐고 있는지는 점유자의 실제 계보에
+# 드러나므로 그대로 출력한다. 부모 한 단계만 보면 점유자가 고아가 된 뒤에는 PID 1 밖에
+# 보이지 않으므로 조상을 PID 1 까지 따라간다. Linux 에서는 cgroup 줄에 systemd 유닛명이나
+# 로그인 세션이 그대로 적히므로, 그 한 줄이 실행 관리자를 직접 지목한다.
+lifecycle_print_pid_genealogy() {
+  local pid=$1 indent="" prefix="" depth=0
+  case "$pid" in ''|*[!0-9]*) return 0 ;; esac
+  while [ "$depth" -lt 8 ]; do
+    ps -o pid,ppid,pgid,lstart,command -p "$pid" 2>/dev/null | sed "1d;s|^|$prefix|" >&2
+    [ -r "/proc/$pid/cgroup" ] && sed "s|^|$indent  cgroup |" "/proc/$pid/cgroup" >&2
+    [ "$pid" = 1 ] && return 0
+    pid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d '[:space:]')
+    case "$pid" in ''|0|*[!0-9]*) return 0 ;; esac
+    indent="$indent  "
+    prefix="$indent└─ "
+    depth=$((depth + 1))
+  done
+}
+
 lifecycle_assert_port_free() {
-  local port=$1 pids pid parent
+  local port=$1 pids pid
   pids=$(lifecycle_port_pids "$port") || {
     echo "❌ 포트 $port 상태를 확인할 수 없어 기동하지 않습니다." >&2
     return 1
   }
   if [ -n "$pids" ]; then
     echo "❌ 포트 $port 를 PID $pids 가 다시 사용 중입니다. 중복 기동하지 않습니다." >&2
-    # 실행 관리자를 추측해 안내하지 않는다. 누가 되살렸는지는 점유자와 그 부모의
-    # 실제 계보에 드러나므로 그대로 출력한다.
-    for pid in $pids; do
-      ps -o pid,ppid,pgid,lstart,command -p "$pid" 2>/dev/null | sed 1d >&2
-      parent=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d '[:space:]')
-      case "$parent" in
-        ''|*[!0-9]*) ;;
-        *) ps -o pid,ppid,command -p "$parent" 2>/dev/null | sed '1d;s/^/  └─ 부모 /' >&2 ;;
-      esac
-    done
+    for pid in $pids; do lifecycle_print_pid_genealogy "$pid"; done
     return 1
   fi
 }
@@ -258,12 +268,14 @@ lifecycle_assert_port_is_managed() {
   recorded=$(lifecycle_read_pid "$service") || {
     lifecycle_legacy_master_pid "$service" $pids >/dev/null || {
       echo "❌ 포트 $port 는 PID $pids 가 사용 중이지만 이 스크립트의 관리 대상이 아닙니다. 자동 종료하지 않았습니다." >&2
+      for pid in $pids; do lifecycle_print_pid_genealogy "$pid"; done
       return 1
     }
     recorded=$(lifecycle_read_pid "$service") || return 1
   }
   if ! kill -0 "$recorded" 2>/dev/null; then
-    echo "❌ $service 기록 PID $recorded 는 사라졌지만 포트 $port 는 계속 사용 중입니다. 자동 재시작 관리자(systemd/supervisor)를 중지한 뒤 다시 실행하세요." >&2
+    echo "❌ $service 기록 PID $recorded 는 사라졌지만 포트 $port 는 계속 사용 중입니다. 아래 점유자를 중지한 뒤 다시 실행하세요." >&2
+    for pid in $pids; do lifecycle_print_pid_genealogy "$pid"; done
     return 1
   fi
   lifecycle_pid_matches_service "$service" "$recorded" || return 1
@@ -396,7 +408,8 @@ stop_managed_service() {
   fi
   for pid in $remaining; do
     if ! lifecycle_pid_in_list "$pid" $pids; then
-      echo "❌ $service 종료 뒤 새 PID $pid 가 포트 $port 를 다시 점유했습니다. 자동 재시작 관리자(systemd/supervisor)를 중지한 뒤 다시 실행하세요." >&2
+      echo "❌ $service 종료 뒤 새 PID $pid 가 포트 $port 를 다시 점유했습니다. 아래 점유자를 중지한 뒤 다시 실행하세요." >&2
+      lifecycle_print_pid_genealogy "$pid"
       return 1
     fi
     lifecycle_pid_matches_service "$service" "$pid" || return 1
@@ -462,12 +475,22 @@ lifecycle_service_ready() {
     lifecycle_http_ok "$service" "$url"
 }
 
+# 기동 실패의 사유(포트 충돌, import 오류 등)는 서비스 로그에만 남는다. 화면에는
+# "준비 전에 종료되었습니다" 만 보여 사용자가 원인을 따로 찾아야 했으므로 함께 낸다.
+lifecycle_tail_service_log() {
+  local log="$LIFECYCLE_LOG_DIR/$1.log"
+  [ -r "$log" ] || return 0
+  echo "── logs/$1.log 마지막 15줄 ──" >&2
+  tail -n 15 "$log" >&2
+}
+
 wait_for_http() {
   local service=$1 port=$2 url=$3 child_pid=$4 deadline
   deadline=$(( $(date +%s) + LIFECYCLE_READY_WAIT_SECONDS ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
     if ! kill -0 "$child_pid" 2>/dev/null; then
       echo "❌ $service 프로세스(PID $child_pid)가 준비 전에 종료되었습니다." >&2
+      lifecycle_tail_service_log "$service"
       return 1
     fi
     if lifecycle_service_ready "$service" "$port" "$url" "$child_pid"; then
@@ -476,6 +499,7 @@ wait_for_http() {
     sleep 1
   done
   echo "❌ $service 준비 확인 실패: $url" >&2
+  lifecycle_tail_service_log "$service"
   return 1
 }
 
