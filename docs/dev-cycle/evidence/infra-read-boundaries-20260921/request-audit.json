@@ -1,0 +1,21 @@
+{
+  "live_requests": 88,
+  "live_status_counts": {
+    "200": 76,
+    "400": 8,
+    "403": 1,
+    "503": 1,
+    "401": 2
+  },
+  "all_fixture_requests": 101,
+  "all_status_counts": {
+    "200": 88,
+    "404": 1,
+    "400": 8,
+    "403": 1,
+    "503": 1,
+    "401": 2
+  },
+  "successful_external_calls": 0,
+  "note": "POST market-gate/update uses synthetic execution boundary; auth guard is real. __qa control changes only owned fixtures. Setup404/backtest is retained in all records; final UI matrix uses corrected live fixture."
+}

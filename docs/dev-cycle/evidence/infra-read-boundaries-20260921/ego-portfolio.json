@@ -1,0 +1,50 @@
+[
+  {
+    "price": 71000,
+    "total": 100001000,
+    "api": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57970/api/portfolio",
+      "headers": {
+        "cache-control": "private, no-store",
+        "content-length": "437",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 04:28:50 GMT, Mon, 21 Sep 2026 04:28:50 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16",
+        "vary": "Cookie, X-Auth-Identity"
+      },
+      "body": "{\"cash\":99930000.0,\"holdings\":[{\"avg_price\":70000.0,\"current_price\":71000,\"is_stale\":false,\"last_updated\":\"2026-09-21T13:25:09.219009\",\"market_value\":71000,\"name\":\"\\uac80\\uc99d \\uc885\\ubaa9\",\"profit_loss\":1000,\"profit_rate\":1.43,\"quantity\":1,\"ticker\":\"005930\",\"total_cost\":70000.0}],\"last_update\":null,\"total_asset_value\":100001000.0,\"total_principal\":100000000.0,\"total_profit\":1000,\"total_profit_rate\":0.001,\"total_stock_value\":71000}\n"
+    },
+    "actual": {
+      "text": "모의투자 포트폴리오Paper Trading Account총 평가 자산100,001,000원예수금+99,930,000원자산 개요보유 종목수익 차트거래 내역종목명보유수량평균단가현재가평가금액손익(률)주문00검증 종목0059301주70,000원71,000원71,000원+1.43%+1,000원매수매도기간1개월3개월6개월1년전체이동평균선3일5일10일20일60일120일수익 차트 로딩 중계정 초기화",
+      "errors": [],
+      "consoleErrors": []
+    }
+  },
+  {
+    "price": 72000,
+    "total": 100002000,
+    "api": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57970/api/portfolio",
+      "headers": {
+        "cache-control": "private, no-store",
+        "content-length": "437",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 04:28:50 GMT, Mon, 21 Sep 2026 04:28:50 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16",
+        "vary": "Cookie, X-Auth-Identity"
+      },
+      "body": "{\"cash\":99930000.0,\"holdings\":[{\"avg_price\":70000.0,\"current_price\":72000,\"is_stale\":false,\"last_updated\":\"2026-09-21T13:25:09.219009\",\"market_value\":72000,\"name\":\"\\uac80\\uc99d \\uc885\\ubaa9\",\"profit_loss\":2000,\"profit_rate\":2.86,\"quantity\":1,\"ticker\":\"005930\",\"total_cost\":70000.0}],\"last_update\":null,\"total_asset_value\":100002000.0,\"total_principal\":100000000.0,\"total_profit\":2000,\"total_profit_rate\":0.002,\"total_stock_value\":72000}\n"
+    },
+    "actual": {
+      "text": "모의투자 포트폴리오Paper Trading Account총 평가 자산100,002,000원예수금+99,930,000원자산 개요보유 종목수익 차트거래 내역종목명보유수량평균단가현재가평가금액손익(률)주문00검증 종목0059301주70,000원72,000원72,000원+2.86%+2,000원매수매도기간1개월3개월6개월1년전체이동평균선3일5일10일20일60일120일수익 차트 로딩 중계정 초기화",
+      "errors": [],
+      "consoleErrors": []
+    }
+  }
+]

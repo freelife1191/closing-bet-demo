@@ -1,0 +1,18 @@
+{
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/infra-read-boundaries-20260921-epl2zj26",
+  "scratch_removed": true,
+  "closed_ports": [
+    57970,
+    57971,
+    57972
+  ],
+  "original_package_preserved": true,
+  "browser": {
+    "spaceId": 20,
+    "url": "about:blank",
+    "retained": true,
+    "reason": "same user consecutive goal; next NumPy round",
+    "finish_calls": 0
+  },
+  "batch_owned_resources_clean": true
+}

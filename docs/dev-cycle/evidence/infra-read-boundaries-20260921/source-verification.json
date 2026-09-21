@@ -1,0 +1,7 @@
+{
+  "commit": "3f5d07f",
+  "root_scratch_frozen_match": true,
+  "paths": 30,
+  "original_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "scope": "actual product/test/doc source; fixture supplies only synthetic auth/storage/provider edges"
+}

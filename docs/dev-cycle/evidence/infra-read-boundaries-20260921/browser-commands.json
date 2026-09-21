@@ -1,0 +1,11 @@
+{
+  "spaceId": 20,
+  "driver": "ego-browser",
+  "cycle": 2,
+  "matrix_command": "ego-browser nodejs < browser-matrix.mjs",
+  "matrix_exit": 0,
+  "recovery_command": "ego-browser nodejs < browser-recovery.mjs",
+  "recovery_exit": 0,
+  "initial_failure": "ambiguous visible/hidden h3 and omitted fixture backtest endpoint404; corrected. Later open call returned exit0 without stdout; independent snapshot verified actual modal and explicit matrix artifacts support verdict.",
+  "finish_calls": 0
+}

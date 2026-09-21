@@ -60,7 +60,7 @@ ctx=SimpleNamespace(logger=logger,paper_trading=paper_module.paper_trading)
 bp=Blueprint('portfolio',__name__);register_common_portfolio_routes(bp,ctx=ctx);_register_event_log_route(bp,ctx);app.register_blueprint(bp,url_prefix='/api')
 def load_json(filename,**kwargs):
  if filename.startswith('jongga') or state['gate']=='empty':return {}
- return {'total_score':73,'status':'GREEN','dataset_date':'2020-01-01' if state['gate']=='stale' else datetime.now().strftime('%Y-%m-%d'),'timestamp':'2020-01-01T09:00:00' if state['gate']=='stale' else datetime.now().isoformat(),'sectors':[]}
+ return {'total_score':73,'status':'GREEN','dataset_date':'2020-01-01' if state['gate']=='stale' else datetime.now().strftime('%Y-%m-%d'),'timestamp':'2020-01-01T09:00:00' if state['gate']=='stale' else datetime.now().isoformat(),'sectors':[],'indices':{'kospi':{'value':2600,'change_pct':0.5},'kosdaq':{'value':800,'change_pct':0.2}}}
 def update(target_date,logger):
  counters['updates']+=1;return 200,{'status':'success','synthetic':True}
 mg=Blueprint('market_gate',__name__);_register_market_gate_routes(mg,logger=logger,deps={'resolve_market_gate_filename':resolve_market_gate_filename,'load_json_file':load_json,'evaluate_market_gate_validity':evaluate_market_gate_validity,'apply_market_gate_snapshot_fallback':apply_market_gate_snapshot_fallback,'build_market_gate_empty_payload':build_market_gate_empty_payload,'normalize_market_gate_payload':normalize_market_gate_payload,'execute_market_gate_update':update});app.register_blueprint(mg,url_prefix='/api/kr')
@@ -88,7 +88,9 @@ def interval():return jsonify(interval=30)
 @app.get('/api/kr/signals')
 def signals():return jsonify(signals=[],total_scanned=0)
 @app.get('/api/kr/status')
-def status():return jsonify(status='ok',data={})
+def status():return jsonify(status='ok',data={'last_update':None,'collected_stocks':0,'signals_count':0,'market_status':'closed','files':{}})
+@app.get('/api/kr/backtest-summary')
+def backtest():return jsonify(vcp={'win_rate':0,'avg_return':0,'count':0,'status':'UNKNOWN'},closing_bet={'win_rate':0,'avg_return':0,'count':0,'status':'UNKNOWN'})
 @app.get('/api/kr/ai-analysis')
 def ai():return jsonify(signals=[])
 @app.get('/api/kr/signals/dates')

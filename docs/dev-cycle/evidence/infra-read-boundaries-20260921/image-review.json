@@ -1,0 +1,16 @@
+{
+  "reviewer": "parent",
+  "viewed": true,
+  "files": [
+    "ego-portfolio-71000.png",
+    "ego-portfolio-72000.png",
+    "ego-gate-normal.png",
+    "ego-gate-stale.png",
+    "ego-gate-empty.png",
+    "ego-portfolio-error.png",
+    "ego-portfolio-recovered.png",
+    "ego-portfolio-denied.png",
+    "ego-portfolio-reauthenticated.png"
+  ],
+  "result": "PASS: 71000/72000 and totalassets match, 73/73/50, error/login messages/recovery legible. Cached header on denied same-identity state is not claimed cleared."
+}

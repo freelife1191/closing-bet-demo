@@ -1,0 +1,724 @@
+[
+  {
+    "mode": "normal",
+    "score": 73,
+    "api": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57970/api/kr/market-gate",
+      "headers": {
+        "content-length": "341",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 04:28:51 GMT, Mon, 21 Sep 2026 04:28:51 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"commodities\":{},\"dataset_date\":\"2026-09-21\",\"indices\":{\"kosdaq\":{\"change_pct\":0.2,\"value\":800},\"kospi\":{\"change_pct\":0.5,\"value\":2600}},\"kosdaq_change_pct\":0.2,\"kosdaq_close\":800,\"kospi_change_pct\":0.5,\"kospi_close\":2600,\"label\":\"Bullish\",\"score\":73,\"sectors\":[],\"status\":\"GREEN\",\"timestamp\":\"2026-09-21T13:28:51.204773\",\"total_score\":73}\n"
+    },
+    "actual": {
+      "text": "KR Market Gate\n73\nSCORE\nBullish",
+      "requests": [
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 71000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 71000,
+                "name": "검증 종목",
+                "profit_loss": 1000,
+                "profit_rate": 1.43,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100001000,
+            "total_principal": 100000000,
+            "total_profit": 1000,
+            "total_profit_rate": 0.001,
+            "total_stock_value": 71000
+          }
+        },
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 72000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 72000,
+                "name": "검증 종목",
+                "profit_loss": 2000,
+                "profit_rate": 2.86,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100002000,
+            "total_principal": 100000000,
+            "total_profit": 2000,
+            "total_profit_rate": 0.002,
+            "total_stock_value": 72000
+          }
+        },
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 72000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 72000,
+                "name": "검증 종목",
+                "profit_loss": 2000,
+                "profit_rate": 2.86,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100002000,
+            "total_principal": 100000000,
+            "total_profit": 2000,
+            "total_profit_rate": 0.002,
+            "total_stock_value": 72000
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964930993&date=2026-09-21",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:50.996069",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931139",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:51.142576",
+            "total_score": 73
+          }
+        }
+      ],
+      "errors": [],
+      "consoleErrors": []
+    }
+  },
+  {
+    "mode": "stale",
+    "score": 73,
+    "api": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57970/api/kr/market-gate",
+      "headers": {
+        "content-length": "334",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 04:28:51 GMT, Mon, 21 Sep 2026 04:28:51 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"commodities\":{},\"dataset_date\":\"2020-01-01\",\"indices\":{\"kosdaq\":{\"change_pct\":0.2,\"value\":800},\"kospi\":{\"change_pct\":0.5,\"value\":2600}},\"kosdaq_change_pct\":0.2,\"kosdaq_close\":800,\"kospi_change_pct\":0.5,\"kospi_close\":2600,\"label\":\"Bullish\",\"score\":73,\"sectors\":[],\"status\":\"GREEN\",\"timestamp\":\"2020-01-01T09:00:00\",\"total_score\":73}\n"
+    },
+    "actual": {
+      "text": "KR Market Gate\n73\nSCORE\nBullish",
+      "requests": [
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 71000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 71000,
+                "name": "검증 종목",
+                "profit_loss": 1000,
+                "profit_rate": 1.43,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100001000,
+            "total_principal": 100000000,
+            "total_profit": 1000,
+            "total_profit_rate": 0.001,
+            "total_stock_value": 71000
+          }
+        },
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 72000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 72000,
+                "name": "검증 종목",
+                "profit_loss": 2000,
+                "profit_rate": 2.86,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100002000,
+            "total_principal": 100000000,
+            "total_profit": 2000,
+            "total_profit_rate": 0.002,
+            "total_stock_value": 72000
+          }
+        },
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 72000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 72000,
+                "name": "검증 종목",
+                "profit_loss": 2000,
+                "profit_rate": 2.86,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100002000,
+            "total_principal": 100000000,
+            "total_profit": 2000,
+            "total_profit_rate": 0.002,
+            "total_stock_value": 72000
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964930993&date=2026-09-21",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:50.996069",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931139",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:51.142576",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:51.204773",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931373&date=2026-09-21",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2020-01-01",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2020-01-01T09:00:00",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931507",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2020-01-01",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2020-01-01T09:00:00",
+            "total_score": 73
+          }
+        }
+      ],
+      "errors": [],
+      "consoleErrors": []
+    }
+  },
+  {
+    "mode": "empty",
+    "score": 50,
+    "api": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57970/api/kr/market-gate",
+      "headers": {
+        "content-length": "248",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 04:28:51 GMT, Mon, 21 Sep 2026 04:28:51 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"commodities\":{},\"is_gate_open\":true,\"kosdaq_change_pct\":0,\"kosdaq_close\":0,\"kospi_change_pct\":0,\"kospi_close\":0,\"label\":\"Neutral\",\"message\":\"\\ub370\\uc774\\ud130 \\uc5c6\\uc74c\",\"score\":50,\"status\":\"YELLOW\",\"updated_at\":\"2026-09-21T13:28:51.939295\"}\n"
+    },
+    "actual": {
+      "text": "KR Market Gate\n50\nSCORE\nNeutral",
+      "requests": [
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 71000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 71000,
+                "name": "검증 종목",
+                "profit_loss": 1000,
+                "profit_rate": 1.43,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100001000,
+            "total_principal": 100000000,
+            "total_profit": 1000,
+            "total_profit_rate": 0.001,
+            "total_stock_value": 71000
+          }
+        },
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 72000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 72000,
+                "name": "검증 종목",
+                "profit_loss": 2000,
+                "profit_rate": 2.86,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100002000,
+            "total_principal": 100000000,
+            "total_profit": 2000,
+            "total_profit_rate": 0.002,
+            "total_stock_value": 72000
+          }
+        },
+        {
+          "url": "/api/portfolio",
+          "status": 200,
+          "body": {
+            "cash": 99930000,
+            "holdings": [
+              {
+                "avg_price": 70000,
+                "current_price": 72000,
+                "is_stale": false,
+                "last_updated": "2026-09-21T13:25:09.219009",
+                "market_value": 72000,
+                "name": "검증 종목",
+                "profit_loss": 2000,
+                "profit_rate": 2.86,
+                "quantity": 1,
+                "ticker": "005930",
+                "total_cost": 70000
+              }
+            ],
+            "last_update": null,
+            "total_asset_value": 100002000,
+            "total_principal": 100000000,
+            "total_profit": 2000,
+            "total_profit_rate": 0.002,
+            "total_stock_value": 72000
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964930993&date=2026-09-21",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:50.996069",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931139",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:51.142576",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2026-09-21",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2026-09-21T13:28:51.204773",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931373&date=2026-09-21",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2020-01-01",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2020-01-01T09:00:00",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931507",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2020-01-01",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2020-01-01T09:00:00",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "dataset_date": "2020-01-01",
+            "indices": {
+              "kosdaq": {
+                "change_pct": 0.2,
+                "value": 800
+              },
+              "kospi": {
+                "change_pct": 0.5,
+                "value": 2600
+              }
+            },
+            "kosdaq_change_pct": 0.2,
+            "kosdaq_close": 800,
+            "kospi_change_pct": 0.5,
+            "kospi_close": 2600,
+            "label": "Bullish",
+            "score": 73,
+            "sectors": [],
+            "status": "GREEN",
+            "timestamp": "2020-01-01T09:00:00",
+            "total_score": 73
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931741&date=2026-09-21",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "is_gate_open": true,
+            "kosdaq_change_pct": 0,
+            "kosdaq_close": 0,
+            "kospi_change_pct": 0,
+            "kospi_close": 0,
+            "label": "Neutral",
+            "message": "데이터 없음",
+            "score": 50,
+            "status": "YELLOW",
+            "updated_at": "2026-09-21T13:28:51.743357"
+          }
+        },
+        {
+          "url": "/api/kr/market-gate?_t=1789964931873",
+          "status": 200,
+          "body": {
+            "commodities": {},
+            "is_gate_open": true,
+            "kosdaq_change_pct": 0,
+            "kosdaq_close": 0,
+            "kospi_change_pct": 0,
+            "kospi_close": 0,
+            "label": "Neutral",
+            "message": "데이터 없음",
+            "score": 50,
+            "status": "YELLOW",
+            "updated_at": "2026-09-21T13:28:51.875574"
+          }
+        }
+      ],
+      "errors": [],
+      "consoleErrors": []
+    }
+  }
+]

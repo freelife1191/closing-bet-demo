@@ -62,5 +62,53 @@
   "pytarget-review-fixes.log": {
     "raw_sha256": "78c51e961b7fb0e40cba57c19f333a74913272a9728773486f0347b45582177a",
     "archive": "pytarget-review-fixes.log.gz"
+  },
+  "gateway-runtime.log": {
+    "archive": "gateway-runtime.log.gz",
+    "raw_sha256": "1898eae0702a114ef35db53dc0244480876907336f2e154bf967d36314de3ef3"
+  },
+  "fixture-runtime.log": {
+    "archive": "fixture-runtime.log.gz",
+    "raw_sha256": "46140a922faef40cb335a18fe60c55ce7e71b7dcf294980606a026fce7a1401a"
+  },
+  "next-runtime.log": {
+    "archive": "next-runtime.log.gz",
+    "raw_sha256": "efd229efd263eaebe7c8e02a704c280801819887b4bef14fdf67abb71755dfbb"
+  },
+  "ego-portfolio-recovered.txt": {
+    "archive": "ego-portfolio-recovered.txt.gz",
+    "raw_sha256": "37e19f79699515a3918ed7691680fa8011ee22819e672a38c7473532d074f80d"
+  },
+  "ego-portfolio-reauthenticated.txt": {
+    "archive": "ego-portfolio-reauthenticated.txt.gz",
+    "raw_sha256": "66c8db7a0dfff8c4bf935ba9748251604a632bc7a25065d31e103fa7c50542ea"
+  },
+  "ego-portfolio-72000.txt": {
+    "archive": "ego-portfolio-72000.txt.gz",
+    "raw_sha256": "e3d7e80ee7bc7d51747bb48a535b3ead12309f48ab07579ba46efc2e868afc0e"
+  },
+  "ego-gate-stale.txt": {
+    "archive": "ego-gate-stale.txt.gz",
+    "raw_sha256": "004b2bf51afe8d8dc2ef85464478a92123fe1ebc93e46b435eac6284f8309f14"
+  },
+  "ego-portfolio-denied.txt": {
+    "archive": "ego-portfolio-denied.txt.gz",
+    "raw_sha256": "15d37f255e0d6f78a25ee7246524cbdffd566222fe16b10b1171d2ccba2ae6ae"
+  },
+  "ego-portfolio-71000.txt": {
+    "archive": "ego-portfolio-71000.txt.gz",
+    "raw_sha256": "5f44d65eb04cc779cb9d18a9ad5d79a5250c5f3d8ae6b03a9c6078b9719ca338"
+  },
+  "ego-portfolio-error.txt": {
+    "archive": "ego-portfolio-error.txt.gz",
+    "raw_sha256": "e22ae7bf90cbd199a0b2af45cc9ad2c16b00c62eec7614542ecb14d59de02b5d"
+  },
+  "ego-gate-empty.txt": {
+    "archive": "ego-gate-empty.txt.gz",
+    "raw_sha256": "4bd209f0e8da3c65fdeeeda885e49f8b3a339ef8f922dca6a77fb3b237f6846b"
+  },
+  "ego-gate-normal.txt": {
+    "archive": "ego-gate-normal.txt.gz",
+    "raw_sha256": "004b2bf51afe8d8dc2ef85464478a92123fe1ebc93e46b435eac6284f8309f14"
   }
 }

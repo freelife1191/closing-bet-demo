@@ -1,0 +1,17 @@
+{
+  "base": "2a3a25c",
+  "completed": 3,
+  "remaining_todo": 3,
+  "code_add": 216,
+  "code_delete": 583,
+  "code_net": -367,
+  "code_paths": 28,
+  "documentation_extra_paths": [
+    "CLAUDE.md",
+    ".env.example"
+  ],
+  "monthly_code_net": 21363,
+  "docs_add": 3016,
+  "docs_delete": 105,
+  "binary_files": 37
+}

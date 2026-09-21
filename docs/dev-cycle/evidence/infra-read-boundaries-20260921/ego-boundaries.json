@@ -1,0 +1,164 @@
+{
+  "before": {
+    "audit": [
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      }
+    ],
+    "counters": {
+      "constructors": [
+        false
+      ],
+      "external": 0,
+      "sync": 0,
+      "updates": 0
+    },
+    "state": {
+      "admin": false,
+      "authenticated": true,
+      "gate": "empty",
+      "portfolio_error": false
+    }
+  },
+  "bad": [
+    {
+      "date": "../../../private",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    },
+    {
+      "date": "2026/09/21",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    },
+    {
+      "date": "2026-02-30",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    },
+    {
+      "date": "20260230",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    },
+    {
+      "date": "2026-9-21",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    },
+    {
+      "date": "",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    },
+    {
+      "date": "2026-09-21.json",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    },
+    {
+      "date": "２０２６０９２１",
+      "status": 400,
+      "body": {
+        "error": "날짜는 유효한 YYYY-MM-DD 또는 YYYYMMDD 형식이어야 합니다."
+      }
+    }
+  ],
+  "eventStatus": 200,
+  "chatStatus": 200,
+  "deniedStatus": 403,
+  "allowedStatus": 200,
+  "after": {
+    "audit": [
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "QA_EVENT",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "CHAT_MESSAGE",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      },
+      {
+        "action": "API_ACCESS",
+        "ip": "127.0.0.1"
+      }
+    ],
+    "counters": {
+      "constructors": [
+        false
+      ],
+      "external": 0,
+      "sync": 0,
+      "updates": 1
+    },
+    "state": {
+      "admin": false,
+      "authenticated": true,
+      "gate": "empty",
+      "portfolio_error": false
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"configErrors\":[],\"sessionErrors\":[{\"url\":\"/dashboard/kr\",\"buildError\":null,\"runtimeErrors\":[{\"type\":\"console\",\"errorName\":\"Error\",\"message\":\"합성 포트폴리오 조회 실패\",\"stack\":[{\"file\":\"src/lib/api.ts\",\"methodName\":\"fetchAPI\",\"line\":56,\"column\":31},{\"file\":\"src/app/components/PaperTradingModal.tsx\",\"methodName\":\"async fetchPortfolio\",\"line\":105,\"column\":20}]}]}]}"
+      }
+    ]
+  },
+  "jsonrpc": "2.0",
+  "id": 2
+}

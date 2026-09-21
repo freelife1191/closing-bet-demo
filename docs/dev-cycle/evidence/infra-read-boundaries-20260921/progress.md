@@ -9,3 +9,5 @@ Ponytail 수정필요: GET전용 initializing payload의 죽은배선. helper정
 Code review HIGH: existing date traversal possible in public GET. RED invaliddate200→strictASCIIcalendar/400beforeload, target54PASS. Genericinternalcacheloader unchanged since generateddatefilename now has no separator. Architect WATCH: startupfailure recovery missing→leader1minjob retries existing idempotent start; failure/recovery RED→GREEN. Additionalinprocessmutex suggestion not adopted: ordinarybootstrap+single schedulertick do not introduce concurrentcallers; existingservicelock remains. Sourcefrozenupdated.
 
 Final independent code APPROVE, architect CLEAR, security APPROVE. Architect docnote applied: scheduler 업무2+복구1 job wording. Only CLAUDE.md hash changed; product/test hashes unchanged. T3 deeperview next.
+
+QA cycle1: overview has visible+hidden MarketGate headings, ambiguous text locator; use snapshot/visibleDOM condition. Fixture omitted adjacent backtest-summary endpoint causing404; added complete synthetic empty summary/status/indices. No product change. Same Space20, owned fixture restart, cycle2.
