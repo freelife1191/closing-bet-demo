@@ -1,0 +1,13 @@
+{
+  "reviewer": "parent",
+  "images": [
+    "ego-normal.png",
+    "ego-invalid.png",
+    "ego-zero.png",
+    "ego-raw.png",
+    "ego-error.png",
+    "ego-recovered.png"
+  ],
+  "viewed": true,
+  "finding": "75%/미산출/0% 읽기 가능; 차트503 안내와 재시도 복구. error 캡처는 모달 진입 전환중이라 어둡지만 문구 식별 가능."
+}

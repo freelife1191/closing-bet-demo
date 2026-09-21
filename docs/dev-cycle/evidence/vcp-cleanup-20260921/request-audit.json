@@ -1,0 +1,14 @@
+{
+  "requests": 61,
+  "status_counts": {
+    "200": 59,
+    "405": 1,
+    "503": 1
+  },
+  "note": "system/env POST was fixture_probe guard test, refused405; no actual settings route registered. Realtime prices is synthetic read. Chart503 is expected recovery case.",
+  "synthetic_post_paths": {
+    "/api/system/env": 1,
+    "/api/kr/realtime-prices": 13
+  },
+  "successful_settings_trade_llm_delete_requests": 0
+}

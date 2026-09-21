@@ -56,7 +56,7 @@ def quota():return jsonify(usage=2,limit=10,remaining=8)
 @app.get('/api/kr/config/interval')
 def interval():return jsonify(interval=30)
 @app.post('/api/kr/realtime-prices')
-def prices():return jsonify({'005930':{'price':71000,'change_pct':1.43}})
+def prices():return jsonify({'005930':71000})
 if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--repo',required=True);parser.add_argument('--port',type=int,required=True);args=parser.parse_args()
  assert Path(args.repo).resolve()==ROOT and args.port==57962

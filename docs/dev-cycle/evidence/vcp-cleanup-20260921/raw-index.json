@@ -82,5 +82,41 @@
   "next-tools-list.txt": {
     "raw_sha256": "2ac8dfbf018cdc9b66c9afa79202d8631ae5cecc3ae62fafd94562ec66787fd6",
     "archive": "next-tools-list.txt.gz"
+  },
+  "gateway-runtime.log": {
+    "raw_sha256": "bc4a6af3590bcce58998125e38a0fb8eb50f851b31ce71ae07e14693cd3e305d",
+    "archive": "gateway-runtime.log.gz"
+  },
+  "fixture-runtime.log": {
+    "raw_sha256": "21d4a86efe36f0dc4bdab7cd304f01b7cee9f087a2abff073dfbf580057388de",
+    "archive": "fixture-runtime.log.gz"
+  },
+  "next-runtime.log": {
+    "raw_sha256": "46970ad4a2c5650e62af67e3926570380ea21805d0f8039f7bb526a5088fc4bf",
+    "archive": "next-runtime.log.gz"
+  },
+  "ego-invalid.txt": {
+    "raw_sha256": "d1a50315b61d98a39a9a8959e6531a820e35062188f389418b74a377b44e41fd",
+    "archive": "ego-invalid.txt.gz"
+  },
+  "ego-normal.txt": {
+    "raw_sha256": "b8d6e98674d6b1b20d5486370ec8c15e1771a53e8869cb610ff0b979d54408f3",
+    "archive": "ego-normal.txt.gz"
+  },
+  "ego-raw.txt": {
+    "raw_sha256": "1195d9582b3fbbbada6e9c2b026b037245ad587b6021b8d2cda250c1b1d4adc7",
+    "archive": "ego-raw.txt.gz"
+  },
+  "ego-error.txt": {
+    "raw_sha256": "e51f68ba1eda24f662f1ad173fe8818af5a770309c9198ef5c07dc9c89ba6c88",
+    "archive": "ego-error.txt.gz"
+  },
+  "ego-zero.txt": {
+    "raw_sha256": "db0a780036bd69f099913bd58750933928eaa55e74931c89bd982334b72f859e",
+    "archive": "ego-zero.txt.gz"
+  },
+  "ego-recovered.txt": {
+    "raw_sha256": "9fbf3f1d9d234a78c8f03d1697b1ca7425c17ba06c7db4c56f5e5b793b4cb989",
+    "archive": "ego-recovered.txt.gz"
   }
 }

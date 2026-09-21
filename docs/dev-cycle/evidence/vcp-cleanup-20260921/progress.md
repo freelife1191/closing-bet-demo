@@ -15,3 +15,7 @@ Review adaptation: installed gstack-review core checklist read. Its referenced g
 T3 deep review REJECT: unused MarketGate import and prematurely generated gzip diff index lagged echo test. Removed unused import, regenerated current diff/gzip/index/frozen together. Full pytest rerun, same independent reviewers delta requested. No product behavior regression found.
 
 First commit check stopped on Next SSE extra EOF blank lines. Raw gzip preserved; display text EOF normalized; recheck required before commit.
+
+UltraQA cycle1 harness issue: reused closing-bet realtime-price object shape but VCP expects ticker:number; UI CURRENT object and NaN return. Fixture corrected to 71000 number; product unchanged. Owned fixture restart then same Space20 recovery, cycle2.
+
+VCP batch dynamic8/8pass, batch-ownedservers/scratchclean. Shared goalSpace20blanktransferred to next relatedround; finish0calls. TODO005/008 removal/archive prepared, VCP022 partial remains.

@@ -1,0 +1,21 @@
+{
+  "driver": "ego-browser",
+  "spaceId": 20,
+  "observed_commands": [
+    {
+      "command": "ego-browser nodejs < docs/dev-cycle/evidence/vcp-cleanup-20260921/browser-open.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "ego-browser nodejs < docs/dev-cycle/evidence/vcp-cleanup-20260921/browser-matrix.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "ego-browser nodejs < docs/dev-cycle/evidence/vcp-cleanup-20260921/browser-recovery.mjs",
+      "exit_code": 0
+    }
+  ],
+  "initial_harness_failure": "realtime-price object expected by previous fixture mismatched VCP number contract; corrected and matrix executed cycle2",
+  "finish_calls": 0,
+  "retained_for_next_round": true
+}

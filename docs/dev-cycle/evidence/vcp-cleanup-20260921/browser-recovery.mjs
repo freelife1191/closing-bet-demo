@@ -1,0 +1,11 @@
+const page=(await taskSpace(20)).page('p1'),fs=await import('node:fs/promises'),out='/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/vcp-cleanup-20260921';
+await page.click('loc=role:button[name="차트 닫기"]',{label:'상세 화면 닫기'});await page.waitForSelector('text=AI 상세 분석',{state:'hidden'});
+const set=async chart_error=>{const r=await fetch('http://127.0.0.1:57962/__qa/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'raw',chart_error})});if(!r.ok)throw Error('control');};
+await set(true);await page.snapshot();await page.click('text=VCP 검증',{label:'합성 차트 오류 재현'});await page.waitForSelector('text=차트 데이터를 불러오지 못했습니다.',{timeout:10000});
+const before=await page.evaluate(()=>({text:document.body.textContent,errors:window.__qaErrors,consoleErrors:window.__qaConsoleErrors,timeOrigin:performance.timeOrigin}));
+await fs.writeFile(out+'/ego-error.txt',await page.snapshot());await page.screenshot({path:out+'/ego-error.png'});
+await set(false);await page.click('loc=role:button[name="다시 시도"]',{label:'같은 화면에서 조회 복구'});await page.waitForSelector('text=차트 데이터를 불러오지 못했습니다.',{state:'hidden'});await page.waitForSelector('canvas',{timeout:10000});
+const after=await page.evaluate(()=>({text:document.body.textContent,errors:window.__qaErrors,consoleErrors:window.__qaConsoleErrors,timeOrigin:performance.timeOrigin,canvases:document.querySelectorAll('canvas').length}));
+if(before.timeOrigin!==after.timeOrigin||after.errors.length||!after.canvases||after.consoleErrors.length!==before.consoleErrors.length)throw Error(JSON.stringify({before,after}));
+if(before.consoleErrors.length!==1||!before.consoleErrors[0].includes('Failed to load chart'))throw Error(JSON.stringify(before.consoleErrors));
+await fs.writeFile(out+'/ego-recovered.txt',await page.snapshot());await page.screenshot({path:out+'/ego-recovered.png'});await fs.writeFile(out+'/ego-recovery.json',JSON.stringify({before,after},null,2));console.log({expectedHandledErrors:before.consoleErrors.length,newErrors:after.consoleErrors.length-before.consoleErrors.length,canvases:after.canvases,samePage:true});console.log(await page.snapshot());
