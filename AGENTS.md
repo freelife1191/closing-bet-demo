@@ -188,8 +188,9 @@ from engine.constants import TRADING_VALUES, VCP_THRESHOLDS, SCORING, VOLUME, PR
 요청이 그것을 불렀는지는 접근 기록이 없어 재구성할 수 없지만, 무엇이 실행되었는지는
 자료의 모양만으로 좁혀진다. 「기록에 없음」과 「일어나지 않음」을 구분한다.
 
-- **`.env` 계열 파일**: `.env`, `.env.production`, `.env.vertex` 가 실제 시크릿을 담고
-  있다. `.gitignore` 가 `.env.*` 를 덮고 `.env.example` 만 예외다. 조사할 일이 생기면
+- **`.env` 계열 파일**: `.env` 가 실제 시크릿을 담는다. `.env.production` 과 `.env.vertex` 는
+  그 파일을 두는 배포에만 있으며 있으면 그것도 비밀이다. 운영 서버에는 `.env` 하나뿐이다.
+  `.gitignore` 가 `.env.*` 를 덮고 `.env.example` 만 예외다. 조사할 일이 생기면
   변수 이름과 값의 유무만 확인하고 값 자체는 어디에도 옮겨 적지 않는다. 변수의 정본
   목록은 `.env.example` 이며 변수를 추가하면 그 파일도 함께 갱신한다
 - **설정 모달의 「저장」**: 프로필과 환경 변수와 관심종목을 한꺼번에 저장하며, 환경 변수

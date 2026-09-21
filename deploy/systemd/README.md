@@ -76,6 +76,15 @@ curl -s -o /dev/null -w '%{http_code}\n' https://close.highvalue.kr/dashboard/kr
 `.env` 는 git 이 추적하지 않으므로 코드로 강제하지 않습니다. 대신 backend 유닛의
 `--bind` 가 `.env` 의 `FLASK_HOST` 를 읽지 않고 `127.0.0.1` 로 고정합니다. 서버의 `.env`
 값도 `127.0.0.1` 로 맞추어 두면 `python flask_app.py` 로 직접 띄울 때에도 같아집니다.
+`0.0.0.0` 이 실제로 무엇을 여는지는 `.env.example` 의 `FLASK_HOST` 주석에 있습니다.
+
+운영 `.env` 에는 `CLOSING_SCHEDULE_TIME`, `SLACK_WEBHOOK_URL`, `VCP_GPT_FALLBACK_MODEL`,
+`VCP_PERPLEXITY_API_TIMEOUT`, `VCP_ZAI_API_TIMEOUT` 이 없지만 조치할 것이 없습니다. 다섯 키
+모두 코드에 기본값이 있습니다. `services/scheduler.py` 의 `_resolve_daily_schedule_time` 호출이
+17:00 을, `services/notifier.py` 의 `__init__` 이 빈 웹훅 주소를, `engine/config.py` 의 같은
+이름 프로퍼티 셋이 나머지를 채웁니다. 두 타임아웃은 `ANALYSIS_LLM_API_TIMEOUT` 을 먼저 보고
+그것도 없으면 각각 120초·180초입니다(2026-09-22 서버 감사, 실제 로그로 확인). 다음 사람이
+다시 조사하지 않도록 적어 둡니다.
 
 ## 남아 있는 판단 사항
 

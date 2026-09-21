@@ -34,15 +34,19 @@
 - 카테고리: 인프라 | 티어: T3 | 근거: 운영 서버(close.highvalue.kr) EADDRINUSE 무한 반복, 누적 재시작 backend 433회·frontend 823회, `/proc/<pid>/cgroup` 소유권 증거
 - 설계 승인: 사용자 작업 의뢰서(2026-09-22). `superpowers:brainstorming` 설계 후 승인을 받고 구현한다.
 - 범위: `scripts/service_lifecycle.sh` 의 `lifecycle_legacy_master_pid` 입양 경로에 감독자 감지 guard 추가, 운영 systemd 유닛 파일을 저장소에 편입(U1~U5), `.env.example` 주석과 운영 적용 절차 문서화, 회귀 테스트. 원격 운영 서버에 직접 접속해 실험하지 않는다.
+- 범위에 추가(부록 B, 2026-09-22 서버 감사): `deploy/caddy/Caddyfile` 편입(B1), `.gitignore` AppleDouble 규칙(B2), `CLAUDE.md` 의 `.env.production` 서술 정정(B3), `.env.example` FLASK_HOST 주석 보강(B4). B5(누락 env 키 다섯 개)는 전부 코드 기본값이 있어 조치 불필요이며 기록만 남긴다. 운영 서버에서 이미 처리한 Caddy reload·`ADMIN_API_TOKEN` 추가·`.env` 권한 변경은 다시 하지 않는다.
 - 문제: `lifecycle_legacy_master_pid` 가 소유자·작업 경로·실행 명령 세 가지만 확인하고 「누가 이 프로세스의 수명주기를 관리하는가」를 보지 않아, systemd --user 유닛이 소유한 프로세스를 관리 대상으로 입양해 종료한다. systemd 가 5초 뒤 되살리므로 경쟁 상태가 된다.
 - 종료 로직(종료 순서, flock, PID 토큰 검증, `lifecycle_exec_detached` 의 setsid)은 결함이 아니므로 수정 대상이 아니다. `[INFRA-074]` 가 세운 계약을 유지한다.
 - U6(운영이 Next dev 서버로 서빙 중인 문제)은 판단만 보고하고 이 항목에서 변경하지 않는다.
-- QA 시나리오: cgroup 이 `.service` 로 끝나는 점유자를 입양하지 않고 유닛 이름을 포함해 거부·비영점 종료, `session-*.scope` 점유자의 기존 입양 경로 회귀 없음, cgroup 을 읽을 수 없을 때 조용히 통과하지 않음, `restart_all.sh`·`stop_all.sh` 두 진입점이 성공 문구 없이 거부를 전파, 유닛 파일 계약 검사.
+- QA 시나리오: cgroup 이 `.service` 로 끝나는 점유자를 입양하지 않고 유닛 이름을 포함해 거부·비영점 종료, `session-*.scope` 점유자의 기존 입양 경로 회귀 없음, cgroup 을 읽을 수 없을 때 조용히 통과하지 않음, `restart_all.sh`·`stop_all.sh` 두 진입점이 성공 문구 없이 거부를 전파, 유닛 파일 계약 검사. 부록 B 추가분: Caddy 설정 계약 테스트(압축·보안 헤더·`:80` 비노출·`reverse_proxy` 대상), `git status` 에 `._*` 가 뜨지 않음.
 - [x] 설계와 승인: bounded 설계를 대화에서 제시하고 사용자 승인 확보. cgroup 미존재 플랫폼의 판정을 「감독자 없음」으로 확정.
 - [x] 구현과 RED→GREEN 회귀: guard 도입 전 신규 4건 실패·회귀 방지 2건 통과를 확인한 뒤 구현. `scripts/service_lifecycle.sh` 에 `lifecycle_cgroup_path`·`lifecycle_cgroup_unit`·`lifecycle_pid_supervisor`·`lifecycle_assert_pid_is_unsupervised` 추가, `deploy/systemd/` 유닛 2개와 README 편입, `.env.example` 주석 보강.
 - [x] 리뷰와 보안 검토: code-reviewer 3라운드 → CHANGES REQUESTED(M1/M2) 후 APPROVE. M1(데스크톱 터미널 거짓 양성과 위험한 안내 명령), L1(Delegate 하위 cgroup 우회), L2(권위 없는 cgroup 줄·빈 파일), L3(제어 문자 출력), L4(사용자 세션 관리자 재기동 안내), L5(계약 테스트 단언 기준), L6(lingering 누락) 반영. M2 는 근거를 갖춰 이월. 무력화 실험으로 판정 3갈래가 각각 테스트에 고정됨을 확인.
 - [ ] 기능 검증과 운영 적용 절차 문서화: 정적 검증 완료(tests/scripts 126 통과, 전체 pytest 2555 통과 2skip, Vitest 641 통과, type-check 통과, 실제 기동·종료 사이클과 적대적 시나리오 통과). 운영 서버 적용과 확인은 미실시.
 - [ ] 미규명 1건: 전체 회귀 첫 실행에서 `test_supervisor_detection_ignores_a_unit_the_caller_itself_runs_inside` 가 1회 실패(종료 코드 0, stderr 비어 있음, stdout 에 유닛 경로). 이후 단독 전체 회귀 3회, 동일 동시 부하 전체 회귀 1회, 단독 반복 30회에서 재현되지 않음. 리뷰어의 fork EAGAIN 가설은 종료 코드 2 와 stderr 의 fork 오류를 예측하므로 관측과 맞지 않아 배제. 기전 미규명이므로 해결로 기록하지 않으며, 단언에 두 cgroup 파일의 실제 내용을 남기도록 보강함. 재현되면 `lifecycle_cgroup_path` 를 셸 내장 `read` 루프로 바꾸는 안을 검토한다.
+- [x] 부록 B 설계와 승인: bounded 설계를 대화에서 제시하고 사용자 승인 확보(2026-09-22).
+- [x] 부록 B 구현: `deploy/caddy/Caddyfile`·README 편입, `.gitignore` `._*`(`.DS_Store` 는 기존), `CLAUDE.md`·`AGENTS.md` 의 `.env.production` 서술 정정과 회전 절차 2단계화, `.env.example` FLASK_HOST 주석에 LAN 우회 근거, `deploy/systemd/README.md` 에 B5 기록. Caddy 계약 테스트는 RED→GREEN 으로 추가.
+- [x] 부록 B 리뷰와 검증: code-reviewer 2라운드 → CHANGES REQUESTED(M1~M4) 후 APPROVE. M2(두 번째 `reverse_proxy` 미검출), M3(백업 없이 덮어쓰기), M4(`AGENTS.md` 드리프트), N1·N3·N4 반영, N2·N5 는 근거를 갖춰 미반영. 변이 실험 9종 실패·원본 통과. `pytest tests/scripts/` 128 통과, 전체 pytest 2559 통과 2 skip. `git check-ignore -v` 로 `._*` 가 56행 규칙에 걸림을 확인. 로컬에 caddy 가 없어 Caddyfile 문법은 미검증. frontend 파일 변경 없음이라 type-check·Vitest 생략.
 
 
 ### [INFRA-076] 운영 유닛의 환경 주입과 프로덕션 서빙 방식 정리

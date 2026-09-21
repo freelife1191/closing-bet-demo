@@ -156,3 +156,32 @@ def test_repository_systemd_units_drop_the_settings_that_caused_the_restart_loop
     ]
     assert [line for line in backend if "--bind 127.0.0.1:" in line]
     assert not [line for line in backend if "0.0.0.0" in line]
+
+
+def test_repository_caddyfile_compresses_sets_security_headers_and_hides_port_80() -> None:
+    """운영 Caddy 설정이 압축·보안 헤더를 유지하고 80 포트 기본 페이지를 노출하지 않는다."""
+    text = (ROOT / "deploy" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
+    directives = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+    assert [line for line in directives if line.startswith("encode ")]
+    for header in (
+        "Strict-Transport-Security",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Referrer-Policy",
+    ):
+        assert [line for line in directives if line.startswith(header)], header
+    # 스니펫에만 있고 사이트 블록이 가져다 쓰지 않으면 위 두 단언은 의미가 없다.
+    assert "import common" in directives
+    # 80 포트 기본 페이지는 404 로만 닫고, 정적 파일 서빙은 이 설정 어디에도 두지 않는다.
+    assert ":80 {" in directives
+    assert "respond 404" in directives
+    assert not [line for line in directives if line.startswith("file_server")]
+    # Next 만 프록시한다. Flask(5501)로 가는 두 번째 reverse_proxy 가 생기면 loopback 계약이 깨진다.
+    assert [line for line in directives if line.startswith("reverse_proxy")] == [
+        "reverse_proxy localhost:3500"
+    ]

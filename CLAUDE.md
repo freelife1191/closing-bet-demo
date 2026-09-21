@@ -112,8 +112,10 @@ PRICE_CHANGE.MIN            # 5%
 - `chatbot/` - AI chatbot package (`chatbot/core.py` is the orchestrator)
 
 ### Configuration
-- `.env` - Environment variables (API keys, ports). `.env.production`, `.env.vertex`
-  hold real secrets too; `.gitignore` covers `.env.*` with `.env.example` as the only exception.
+- `.env` - Environment variables (API keys, ports). The production server runs on this one
+  file alone, in production mode too. `.env.production` and `.env.vertex` exist only in
+  deployments that keep them, and hold real secrets when they do; `.gitignore` covers `.env.*`
+  with `.env.example` as the only exception.
 - `.env.example` - The tracked reference for every variable. Update it when adding one.
 - `config.py` - Main configuration (dataclass-based)
 - `engine/config.py` - Engine-specific config
@@ -203,9 +205,9 @@ SCHEDULER_ENABLED=true
 
 `ADMIN_API_TOKEN` 은 `/api/system/env` 의 관리자 게이트가 쓰는 서버 전용 값입니다. Next.js
 라우트 핸들러가 NextAuth 세션으로 관리자를 확인한 뒤 이 토큰을 붙여 Flask 로 넘기고, Flask 는
-그 토큰만 확인합니다. **비어 있으면 그 경로는 모든 요청을 403 으로 막습니다.** `.env` 와
-`.env.production` 양쪽에 각각 두며 `NEXT_PUBLIC_` 접두사를 붙이지 않습니다. 붙이면 브라우저
-번들에 실려 게이트가 무의미해집니다.
+그 토큰만 확인합니다. **비어 있으면 그 경로는 모든 요청을 403 으로 막습니다.** 루트 `.env` 에
+두며 `NEXT_PUBLIC_` 접두사를 붙이지 않습니다. 붙이면 브라우저 번들에 실려 게이트가
+무의미해집니다.
 
 **이 토큰은 만료도 폐기 목록도 없는 순수 소지 비밀입니다.** `ADMIN_EMAILS` 에서 어떤 관리자를
 지워도 토큰 값을 아는 사람은 loopback 으로 Flask 에 직접 요청해 그대로 통과합니다.
@@ -247,22 +249,28 @@ Next와 Flask는 같은 릴리스로 적용해야 합니다. 구형·신형 워�
 
 회전 절차입니다. 순서를 지키지 않으면 관리자 화면이 그 사이 동안 막힙니다.
 
-1. 새 값을 만듭니다. `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-2. `.env` 와 `.env.production` **양쪽**의 `ADMIN_API_TOKEN` 을 새 값으로 바꿉니다. 한쪽만
-   바꾸면 배포 환경에 따라 갈립니다.
-3. **Flask 워커를 모두 재기동합니다.** `verify_admin_api_token` 은 부를 때마다 `os.environ` 을
-   읽지만, `.env` 파일을 고치는 것은 **이미 돌고 있는 워커의 `os.environ` 을 바꾸지
-   않습니다.** 그 값을 채우는 것은 기동 시점의 `load_dotenv()` 한 번뿐입니다. 설정 화면도
-   길이 아닙니다. `ADMIN_API_TOKEN` 은 `EDITABLE_ENV_KEYS` 밖이라 그 화면으로 바꿀 수
-   없습니다. 재기동 외에 다른 수단이 없습니다.
-4. **Next 쪽도 재기동합니다.** 라우트 핸들러는 `process.env` 를 부를 때마다 읽지만
-   (`frontend/src/app/api/system/env/route.ts` 의 `resolveAdminToken`), 그 `process.env` 를
-   루트 `.env` 에서 채우는 것은 기동 시점 한 번뿐입니다. `[INFRA-055]`의 npm 실행기는
-   루트 설정을 자식 환경으로 전달하므로 dev/start 모두 루트 설정 변경 후 재기동해야 합니다.
-5. 관리자 화면의 설정 모달을 열어 값이 읽히는지 확인합니다. 403 이 나면 3번이나 4번이 덜
-   끝난 것입니다.
+1. 새 값을 만들어 루트 `.env` 의 `ADMIN_API_TOKEN` 을 바꿉니다.
+   `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+   고칠 파일은 이 하나입니다. Flask 의 `load_dotenv()` 는 `.env` 만 읽습니다. Next 의 실행기
+   (`frontend/scripts/run-next.js`)는 `frontend/` 와 루트에서 각각 `.env.production.local` →
+   `.env.local` → `.env.production` → `.env` 순으로 읽되 없는 파일은 건너뛰므로, 운영 서버처럼
+   루트 `.env` 하나만 있으면 production 모드도 그 파일로 돕니다. 앞 순위 파일을 따로 두는
+   배포에서만 그 파일의 값도 함께 바꿉니다. 그런 파일을 새로 만들어 비밀을 두 곳에 두지
+   않습니다. 회전 지점만 늘어납니다.
+2. **Flask 워커와 Next 를 모두 재기동합니다.** `verify_admin_api_token` 은 부를 때마다
+   `os.environ` 을 읽지만, `.env` 파일을 고치는 것은 **이미 돌고 있는 워커의 `os.environ` 을
+   바꾸지 않습니다.** 그 값을 채우는 것은 기동 시점의 `load_dotenv()` 한 번뿐입니다. 설정
+   화면도 길이 아닙니다. `ADMIN_API_TOKEN` 은 `EDITABLE_ENV_KEYS` 밖이라 그 화면으로 바꿀 수
+   없습니다. 재기동 외에 다른 수단이 없습니다. Next 도 같습니다. 라우트 핸들러는 `process.env`
+   를 부를 때마다 읽지만 (`frontend/src/app/api/system/env/route.ts` 의 `resolveAdminToken`),
+   그 `process.env` 를 루트 `.env` 에서 채우는 것은 기동 시점 한 번뿐입니다. `[INFRA-055]`의
+   npm 실행기는 루트 설정을 자식 환경으로 전달하므로 dev/start 모두 루트 설정 변경 후
+   재기동해야 합니다.
 
-**`INTERNAL_IDENTITY_SECRET` 도 같은 4단계로 돌리되 실패의 파급이 훨씬 큽니다.**
+확인은 관리자 화면의 설정 모달을 열어 값이 읽히는지 보는 것입니다. 403 이 나면 2번이 덜 끝난
+것입니다.
+
+**`INTERNAL_IDENTITY_SECRET` 도 같은 두 단계로 돌리되 실패의 파급이 훨씬 큽니다.**
 `ADMIN_API_TOKEN` 을 잘못 돌리면 관리자 설정 화면만 403 이 되지만, 이 키가 Flask 와 Next
 사이에서 어긋나면 `verify_identity_header` 가 모든 요청에 `None` 을 돌려주므로 **모든
 사용자의 신원이 익명으로 떨어집니다.** 관리자 화면만이 아니라 챗봇 소유자 판정과 쿼터 키도
