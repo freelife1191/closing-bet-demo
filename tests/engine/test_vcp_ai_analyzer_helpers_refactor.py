@@ -424,3 +424,30 @@ def test_rule_based_fallback_preserves_real_zero_and_complete_verdicts():
     )
     assert sell_case["action"] == "SELL"
     assert sell_case["confidence"] == 69
+
+
+@pytest.mark.parametrize("value", [None, "bad", "", float("inf"), float("-inf"), float("nan")])
+def test_invalid_confidence_stays_missing(value):
+    """비수치 응답을 0으로 채우면 이 검사가 실패한다."""
+    import json
+
+    result = parse_json_response(json.dumps({
+        "action": "BUY", "confidence": value,
+        "reason": "VCP 점수와 수급을 대조한 합성 분석입니다. 실제 투자 판단이 아닌 회귀 검사입니다.",
+    }))
+    assert result is not None
+    assert result["confidence"] is None
+    assert is_low_quality_recommendation(result)
+
+
+@pytest.mark.parametrize("value, expected", [(0, 0), ("0%", 0), ("75%", 75), (0.9, 0), (100, 100), (-1, 0), (101, 100)])
+def test_confidence_preserves_percent_scale_and_real_zero(value, expected):
+    import json
+
+    result = parse_json_response(json.dumps({"action": "HOLD", "confidence": value, "reason": "합성 검증 사유"}))
+    assert result["confidence"] == expected
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan"), -1, 101])
+def test_raw_nonfinite_or_out_of_range_confidence_is_low_quality(value):
+    assert is_low_quality_recommendation({"action": "BUY", "confidence": value, "reason": "합성 검증 사유"})

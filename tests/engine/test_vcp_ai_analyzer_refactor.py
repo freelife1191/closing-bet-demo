@@ -1264,3 +1264,37 @@ def test_analyze_stock_builds_prompt_once_and_shares_to_providers():
     assert calls == {"prompt": 1, "gemini": 1, "gpt": 1}
     assert result["gemini_recommendation"]["action"] == "BUY"
     assert result["gpt_recommendation"]["action"] == "HOLD"
+
+
+def test_status_extraction_preserves_provider_specific_code_handling():
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    error = RuntimeError("provider failure")
+    error.code = 429
+    assert analyzer._extract_status_code(error) == 429
+    assert analyzer._extract_status_code(error, include_code=False) is None
+    error.response = SimpleNamespace(status_code=503)
+    assert analyzer._extract_status_code(error, include_code=False) == 503
+    assert analyzer._extract_status_code(RuntimeError("HTTP 429"), include_code=False) == 429
+
+
+def test_zai_echo_recovers_on_same_model_without_fallback(monkeypatch):
+    import json
+
+    calls = []
+    recovered = {"action": "BUY", "confidence": 88, "reason": "VCP 점수와 수급 개선 흐름이 동시에 확인되어 단기 추세 상방 가능성이 높습니다. 다만 전고점 저항 부근에서 거래량이 둔화되면 변동성 확대가 나올 수 있어 분할 진입이 필요합니다."}
+
+    def create(**kwargs):
+        calls.append((kwargs["model"], kwargs["temperature"]))
+        content = (
+            "1. **Analyze the Request:**\n * **Role:** Financial data analyst.\n * **Task:** Analyze the stock.\n * **Constraints:** Output only valid JSON."
+            if len(calls) == 1 else json.dumps(recovered, ensure_ascii=False)
+        )
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setenv("ZAI_MODEL", "primary-zai-model")
+    result = asyncio.run(analyzer._analyze_with_zai("합성 검증", {"ticker": "005930"}, "synthetic prompt"))
+    assert result == recovered
+    assert calls == [("primary-zai-model", 0.0), ("primary-zai-model", 0.3)]
+    assert not getattr(analyzer, "zai_disabled_reason", "")

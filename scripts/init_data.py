@@ -67,7 +67,6 @@ from engine.config import config, app_config
 from engine.constants import SCREENING
 from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
-from engine.market_gate import MarketGate
 from engine.pandas_utils_safe import safe_bool, safe_optional_float
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
@@ -75,62 +74,6 @@ from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 # 주말/휴일 처리를 위한 유틸리티 함수
 # =====================================================
 
-
-def assign_grade(data: dict) -> str | None:
-    """
-    Jongga 등급 산정 하위호환 함수.
-    tests/test_grading_logic.py의 기존 계약을 유지한다.
-    """
-    try:
-        trading_value = float(data.get("trading_value", 0) or 0)
-        rise_pct = float(data.get("rise_pct", 0) or 0)
-        volume_ratio = float(data.get("volume_ratio", 0) or 0)
-        foreign_positive = bool(data.get("foreign_positive", False))
-        inst_positive = bool(data.get("inst_positive", False))
-    except Exception:
-        return None
-
-    if rise_pct < 0:
-        return None
-
-    if (
-        trading_value >= 1_000_000_000_000
-        and rise_pct >= 10
-        and foreign_positive
-        and inst_positive
-        and volume_ratio >= 5
-    ):
-        return "S"
-
-    if (
-        trading_value >= 500_000_000_000
-        and rise_pct >= 5
-        and (foreign_positive or inst_positive)
-        and volume_ratio >= 3
-    ):
-        return "A"
-
-    if (
-        trading_value >= 100_000_000_000
-        and rise_pct >= 4
-        and (foreign_positive or inst_positive)
-        and volume_ratio >= 2
-    ):
-        return "B"
-
-    if (
-        trading_value >= 50_000_000_000
-        and rise_pct >= 5
-        and foreign_positive
-        and inst_positive
-        and volume_ratio >= 3
-    ):
-        return "C"
-
-    if trading_value >= 50_000_000_000 and rise_pct >= 4 and volume_ratio >= 2:
-        return "D"
-
-    return None
 
 def get_last_trading_date(reference_date=None):
     """
@@ -197,169 +140,6 @@ def get_last_trading_date(reference_date=None):
 # =====================================================
 # 실시간 시장 데이터 수집 함수
 # =====================================================
-
-def fetch_market_indices():
-    """KOSPI/KOSDAQ 실시간 지수 수집"""
-    indices = {
-        'kospi': {'value': 2650.0, 'change_pct': 0.0, 'prev_close': 2650.0},
-        'kosdaq': {'value': 850.0, 'change_pct': 0.0, 'prev_close': 850.0}
-    }
-    
-    if not YFINANCE_AVAILABLE:
-        log("yfinance 미설치 - 샘플 데이터 사용", "WARNING")
-        return indices
-    
-    try:
-        # yfinance 일괄 다운로드 (threads=False 필수)
-        ticker_map = {
-            'kospi': '^KS11', 'kosdaq': '^KQ11',
-            'gold': '411060.KS', 'silver': '144600.KS',
-            'us_gold': 'GC=F', 'us_silver': 'SI=F',
-            'sp500': '^GSPC', 'nasdaq': '^IXIC',
-            'btc': 'BTC-USD', 'eth': 'ETH-USD', 'xrp': 'XRP-USD'
-        }
-        
-        symbols = list(ticker_map.values())
-        
-        # 안전한 다운로드 (스레드 비활성화)
-        data = yf.download(symbols, period="5d", progress=False, threads=False)
-        
-        # 데이터 추출 Helper
-        def get_val_change_prev(ticker):
-             try:
-                # MultiIndex 처리
-                if isinstance(data.columns, pd.MultiIndex):
-                    if ticker in data['Close'].columns:
-                        series = data['Close'][ticker].dropna()
-                    else:
-                        return 0, 0, 0
-                else: # 단일 티커 혹은 Flattened
-                    if ticker in data.columns:
-                        series = data[ticker].dropna()
-                    elif 'Close' in data.columns:
-                        series = data['Close'].dropna()
-                    else:
-                        return 0, 0, 0
-                
-                if series.empty: return 0, 0, 0
-                
-                latest = float(series.iloc[-1])
-                prev = float(series.iloc[-2]) if len(series) >= 2 else latest
-                change = ((latest - prev) / prev) * 100 if prev != 0 else 0
-                return latest, change, prev
-             except:
-                return 0, 0, 0
-
-        # 결과 매핑
-        ks_val, ks_chg, ks_prev = get_val_change_prev(ticker_map['kospi'])
-        indices['kospi'] = {'value': round(ks_val, 2), 'change_pct': round(ks_chg, 2), 'prev_close': round(ks_prev, 2)}
-        
-        kq_val, kq_chg, kq_prev = get_val_change_prev(ticker_map['kosdaq'])
-        indices['kosdaq'] = {'value': round(kq_val, 2), 'change_pct': round(kq_chg, 2), 'prev_close': round(kq_prev, 2)}
-        
-        g_val, g_chg, g_prev = get_val_change_prev(ticker_map['gold'])
-        indices['kr_gold'] = {'value': round(g_val, 0), 'change_pct': round(g_chg, 2), 'prev_close': round(g_prev, 0)}
-        
-        s_val, s_chg, s_prev = get_val_change_prev(ticker_map['silver'])
-        indices['kr_silver'] = {'value': round(s_val, 0), 'change_pct': round(s_chg, 2), 'prev_close': round(s_prev, 0)}
-        
-        ug_val, ug_chg, ug_prev = get_val_change_prev(ticker_map['us_gold'])
-        indices['us_gold'] = {'value': round(ug_val, 2), 'change_pct': round(ug_chg, 2), 'prev_close': round(ug_prev, 2)}
-        
-        us_val, us_chg, us_prev = get_val_change_prev(ticker_map['us_silver'])
-        indices['us_silver'] = {'value': round(us_val, 2), 'change_pct': round(us_chg, 2), 'prev_close': round(us_prev, 2)}
-        
-        sp_val, sp_chg, sp_prev = get_val_change_prev(ticker_map['sp500'])
-        indices['sp500'] = {'value': round(sp_val, 2), 'change_pct': round(sp_chg, 2), 'prev_close': round(sp_prev, 2)}
-        
-        nd_val, nd_chg, nd_prev = get_val_change_prev(ticker_map['nasdaq'])
-        indices['nasdaq'] = {'value': round(nd_val, 2), 'change_pct': round(nd_chg, 2), 'prev_close': round(nd_prev, 2)}
-        
-        b_val, b_chg, b_prev = get_val_change_prev(ticker_map['btc'])
-        indices['btc'] = {'value': round(b_val, 2), 'change_pct': round(b_chg, 2), 'prev_close': round(b_prev, 2)}
-        
-        e_val, e_chg, e_prev = get_val_change_prev(ticker_map['eth'])
-        indices['eth'] = {'value': round(e_val, 2), 'change_pct': round(e_chg, 2), 'prev_close': round(e_prev, 2)}
-        
-        x_val, x_chg, x_prev = get_val_change_prev(ticker_map['xrp'])
-        indices['xrp'] = {'value': round(x_val, 4), 'change_pct': round(x_chg, 2), 'prev_close': round(x_prev, 4)}
-        
-        log(f"시장 지수 수집 완료: KOSPI {ks_val}, Gold {g_val}", "SUCCESS")
-            
-    except Exception as e:
-        log(f"시장 지수 수집 실패: {e} - 샘플 데이터 사용", "WARNING")
-    
-    return indices
-
-
-def fetch_sector_indices():
-    """pykrx를 사용하여 KOSPI 섹터 지수 수집"""
-    # 섹터 코드 매핑 (KOSPI 업종 지수 - KRX 공식 코드)
-    sector_codes = {
-        '1012': '철강',       # 철강·금속
-        '1027': '2차전지',   # 전기·전자 (2차전지, 반도체 포함)
-        '1024': '반도체',     # 반도체
-        '1016': '자동차',     # 운수장비
-        '1020': '증권',       # 금융업
-        '1018': 'IT서비스',   # 서비스업 (IT)
-        '1001': 'KOSPI200',   # KOSPI 200
-        '1026': '은행',       # 은행
-    }
-    
-    sectors = []
-    
-    try:
-        from pykrx import stock
-        # from datetime import datetime, timedelta
-        
-        today = datetime.now().strftime('%Y%m%d')
-        yesterday = (datetime.now() - timedelta(days=3)).strftime('%Y%m%d')
-        
-        for code, name in sector_codes.items():
-            try:
-                df = stock.get_index_ohlcv_by_date(yesterday, today, code)
-                if not df.empty and len(df) >= 2:
-                    current = df['종가'].iloc[-1]
-                    prev = df['종가'].iloc[-2]
-                    change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
-                    
-                    # 강세/약세 판단
-                    if change_pct > 1.0:
-                        signal = 'bullish'
-                    elif change_pct < -1.0:
-                        signal = 'bearish'
-                    else:
-                        signal = 'neutral'
-                    
-                    # 점수 계산 (등락률 기반)
-                    score = min(max(50 + int(change_pct * 10), 0), 100)
-                    
-                    sectors.append({
-                        'name': name,
-                        'signal': signal,
-                        'change_pct': round(change_pct, 2),
-                        'score': score
-                    })
-            except Exception as e:
-                pass
-        
-        if sectors:
-            log(f"섹터 데이터 수집 완료: {len(sectors)}개 섹터", "SUCCESS")
-        
-    except ImportError:
-        log("pykrx 미설치 - 샘플 섹터 데이터 사용", "WARNING")
-    except Exception as e:
-        log(f"pykrx 수급 데이터 수집 실패: {e} - 샘플 데이터 생성", "WARNING")
-        
-        
-        return False
-    
-    # 데이터가 없으면 샘플 반환
-    # 데이터가 없으면 빈 리스트 반환 (샘플 금지)
-    if not sectors:
-        return []
-    
-    return sectors
 
 
 def fetch_stock_price(ticker):
@@ -494,33 +274,6 @@ def fetch_stock_price(ticker):
         pass
 
     return None
-
-
-# 전역 캐시 (여러 함수에서 공유)
-_market_indices_cache = None
-_sector_indices_cache = None
-
-def get_market_indices():
-    """캐시된 시장 지수 반환"""
-    global _market_indices_cache
-    if _market_indices_cache is None:
-        _market_indices_cache = fetch_market_indices()
-    return _market_indices_cache
-
-def get_sector_indices():
-    """캐시된 섹터 지수 반환"""
-    global _sector_indices_cache
-    if _sector_indices_cache is None:
-        _sector_indices_cache = fetch_sector_indices()
-    return _sector_indices_cache
-
-def reset_cache():
-    """캐시 초기화 (Refresh 시 호출)"""
-    global _market_indices_cache, _sector_indices_cache
-    _market_indices_cache = None
-    _sector_indices_cache = None
-    log("캐시 초기화 완료", "SUCCESS")
-
 
 
 # 색상 코드 (터미널)
@@ -824,7 +577,6 @@ def create_korean_stocks_list():
         df.to_csv(file_path, index=False, encoding='utf-8-sig')
         log(f"기본 종목 목록 생성 완료: {file_path} ({len(df)} 종목 - KOSPI 15개 + KOSDAQ 10개)", "SUCCESS")
         return True
-
 
 
 def _chunk_items(items, chunk_size):
@@ -1938,7 +1690,6 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         return False
 
 
-
 def create_jongga_v2_latest():
     """종가베팅 V2 최신 결과 생성 - Using Central SignalGenerator"""
     log("종가베팅 V2 분석 중 (SignalGenerator)...")
@@ -1986,110 +1737,6 @@ def create_jongga_v2_latest():
         traceback.print_exc()
         return False
 
-
-def create_market_gate(target_date=None):
-    """Market Gate 데이터 생성 (8개 섹터, KOSPI/KOSDAQ 지수 포함) - 실시간 데이터"""
-    log("Market Gate 데이터 생성 중...")
-    try:
-        # 실시간 시장 지수 수집
-        indices = get_market_indices()
-        kospi = indices['kospi']
-        kosdaq = indices['kosdaq']
-        
-        # Market Gate 점수 계산 (KOSPI 등락률 기반 세분화)
-        change = kospi['change_pct']
-        
-        if change >= 2.0:
-            gate_status = 'GREEN'
-            gate_label = 'VERY BULLISH'
-            gate_score = 90
-        elif change >= 1.0:
-            gate_status = 'GREEN'
-            gate_label = 'BULLISH'
-            gate_score = 75
-        elif change >= 0.5:
-            gate_status = 'YELLOW'
-            gate_label = 'SLIGHTLY BULLISH'
-            gate_score = 60
-        elif change >= 0:
-            gate_status = 'YELLOW'
-            gate_label = 'NEUTRAL'
-            gate_score = 50
-        elif change >= -0.5:
-            gate_status = 'YELLOW'
-            gate_label = 'SLIGHTLY BEARISH'
-            gate_score = 40
-        elif change >= -1.0:
-            gate_status = 'RED'
-            gate_label = 'BEARISH'
-            gate_score = 25
-        else:
-            gate_status = 'RED'
-            gate_label = 'VERY BEARISH'
-            gate_score = 10
-        
-        gate_data = {
-            'status': gate_status,
-            'score': gate_score,
-            'label': gate_label,
-            'reasons': [
-                f"KOSPI {kospi['change_pct']:+.2f}% 변동",
-                '외국인 순매수 지속',
-                '반도체 섹터 강세 지속'
-            ],
-            'sectors': get_sector_indices(),  # 실제 섹터 데이터 사용
-            'indices': {
-                'kospi': {'value': kospi['value'], 'change_pct': kospi['change_pct']},
-                'kosdaq': {'value': kosdaq['value'], 'change_pct': kosdaq['change_pct']}
-            },
-            'commodities': {
-                'gold': indices.get('kr_gold', {'value': 0, 'change_pct': 0}),
-                'silver': indices.get('kr_silver', {'value': 0, 'change_pct': 0}),
-                'us_gold': indices.get('us_gold', {'value': 0, 'change_pct': 0}),
-                'us_silver': indices.get('us_silver', {'value': 0, 'change_pct': 0})
-            },
-            'global_indices': {
-                'sp500': indices.get('sp500', {'value': 0, 'change_pct': 0}),
-                'nasdaq': indices.get('nasdaq', {'value': 0, 'change_pct': 0})
-            },
-            'crypto': {
-                'btc': indices.get('btc', {'value': 0, 'change_pct': 0}),
-                'eth': indices.get('eth', {'value': 0, 'change_pct': 0}),
-                'xrp': indices.get('xrp', {'value': 0, 'change_pct': 0})
-            },
-            'metrics': {
-                'kospi': kospi['value'],
-                'kospi_ma20': kospi['value'] * 0.98,  # 근사값
-                'kospi_ma60': kospi['value'] * 0.96,  # 근사값
-                'kosdaq': kosdaq['value'],
-                'kosdaq_ma20': kosdaq['value'] * 0.98,
-                'usd_krw': 1345.5,
-                'foreign_net_total': 1200000000000,
-                'rsi': 62.5
-            },
-            'updated_at': datetime.now().isoformat()
-        }
-
-        file_path = os.path.join(BASE_DIR, 'data', 'market_gate.json')
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(gate_data, f, indent=2, ensure_ascii=False)
-            
-        # 날짜별 아카이브 저장
-        if target_date:
-             date_str = target_date.replace('-', '') if isinstance(target_date, str) else target_date.strftime('%Y%m%d')
-        else:
-             date_str = datetime.now().strftime('%Y%m%d')
-        
-        archive_path = os.path.join(BASE_DIR, 'data', f'market_gate_{date_str}.json')
-        with open(archive_path, 'w', encoding='utf-8') as f:
-             json.dump(gate_data, f, indent=2, ensure_ascii=False)
-             
-        log(f"Market Gate 데이터 생성 완료: {file_path}", "SUCCESS")
-        return True
-
-    except Exception as e:
-        log(f"Market Gate 데이터 생성 실패: {e}", "ERROR")
-        return False
 
 def create_kr_ai_analysis(target_date=None):
     """AI 분석 결과 생성 (실제 데이터 기반)"""

@@ -158,9 +158,10 @@ class VCPMultiAIAnalyzer:
             "Return exactly one JSON object with keys action, confidence, reason."
         )
 
-    def _extract_status_code(self, error: Exception) -> int | None:
+    def _extract_status_code(self, error: Exception, *, include_code: bool = True) -> int | None:
         """예외 객체에서 HTTP status code를 추출한다."""
-        for attr in ("status_code", "http_status", "code"):
+        attrs = ("status_code", "http_status", "code") if include_code else ("status_code", "http_status")
+        for attr in attrs:
             value = getattr(error, attr, None)
             if isinstance(value, int) and 100 <= value <= 599:
                 return value
@@ -386,22 +387,6 @@ class VCPMultiAIAnalyzer:
             return None
         max_retries = len(model_chain) - 1
 
-        def _extract_status_code(error: Exception) -> int | None:
-            for attr in ("status_code", "http_status", "code"):
-                value = getattr(error, attr, None)
-                if isinstance(value, int) and 100 <= value <= 599:
-                    return value
-            response_obj = getattr(error, "response", None)
-            status_code = getattr(response_obj, "status_code", None)
-            if isinstance(status_code, int) and 100 <= status_code <= 599:
-                return status_code
-            match = re.search(r"\b([45][0-9]{2})\b", str(error))
-            if match:
-                try:
-                    return int(match.group(1))
-                except (TypeError, ValueError):
-                    return None
-            return None
 
         for attempt, current_model in enumerate(model_chain):
             try:
@@ -440,7 +425,7 @@ class VCPMultiAIAnalyzer:
                 
             except Exception as e:
                 error_msg = str(e).lower()
-                status_code = _extract_status_code(e)
+                status_code = self._extract_status_code(e)
                 # 429: Rate Limit, 503/500: Server Error/Overloaded
                 retry_conditions = ['429', 'resource exhausted', 'quota exceeded', '503', '502', '500', 'overloaded']
                 is_model_unavailable = (
@@ -838,294 +823,273 @@ class VCPMultiAIAnalyzer:
                 return fallback_result
 
             # 요청사항: 재시도는 동일 모델 반복이 아닌 모델 전환 기반으로 수행
-            max_parse_attempts = 1
             request_timeout = float(getattr(app_config, "VCP_ZAI_API_TIMEOUT", 180))
             last_response_text = ""
             last_error: Exception | None = None
 
-            def _extract_status_code(error: Exception) -> int | None:
-                for attr in ("status_code", "http_status"):
-                    value = getattr(error, attr, None)
-                    if isinstance(value, int) and 100 <= value <= 599:
-                        return value
-                response_obj = getattr(error, "response", None)
-                status_code = getattr(response_obj, "status_code", None)
-                if isinstance(status_code, int) and 100 <= status_code <= 599:
-                    return status_code
-                match = re.search(r"\b([45][0-9]{2})\b", str(error))
-                if match:
-                    try:
-                        return int(match.group(1))
-                    except (TypeError, ValueError):
-                        return None
-                return None
 
             for model_idx, model in enumerate(model_chain):
-                should_try_next_model = False
                 same_model_echo_retries_used = 0
                 same_model_echo_retries_max = 2
 
-                for attempt in range(max_parse_attempts):
-                    start = time.time()
-                    attempt_timeout = request_timeout + (attempt * 20.0)
+                start = time.time()
+                attempt_timeout = request_timeout
 
-                    def _call(
-                        messages: list[dict[str, str]],
-                        use_json_mode: bool,
-                        max_tokens: int = 2500,
-                        timeout_value: float = request_timeout,
-                        temperature: float = 0.0,
-                    ):
-                        request_args = {
-                            "model": model,
-                            "messages": messages,
-                            "temperature": temperature,
-                            "max_tokens": max_tokens,
-                            "timeout": timeout_value,
-                        }
-                        if use_json_mode:
-                            request_args["response_format"] = {"type": "json_object"}
+                def _call(
+                    messages: list[dict[str, str]],
+                    use_json_mode: bool,
+                    max_tokens: int = 2500,
+                    timeout_value: float = request_timeout,
+                    temperature: float = 0.0,
+                ):
+                    request_args = {
+                        "model": model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "timeout": timeout_value,
+                    }
+                    if use_json_mode:
+                        request_args["response_format"] = {"type": "json_object"}
 
-                        try:
+                    try:
+                        response = zai_client.chat.completions.create(**request_args)
+                    except Exception as error:
+                        message = str(error).lower()
+                        if use_json_mode and "response_format" in message:
+                            request_args.pop("response_format", None)
                             response = zai_client.chat.completions.create(**request_args)
-                        except Exception as error:
-                            message = str(error).lower()
-                            if use_json_mode and "response_format" in message:
-                                request_args.pop("response_format", None)
-                                response = zai_client.chat.completions.create(**request_args)
-                            else:
-                                raise
+                        else:
+                            raise
 
-                        choices = getattr(response, "choices", None)
-                        if not choices and isinstance(response, dict):
-                            choices = response.get("choices")
-                        if not choices:
-                            return ""
-
-                        first_choice = choices[0]
-                        message_obj = getattr(first_choice, "message", None)
-                        if message_obj is None and isinstance(first_choice, dict):
-                            message_obj = first_choice.get("message")
-                        if message_obj is None:
-                            return ""
-
-                        content = getattr(message_obj, "content", None)
-                        if content is None and isinstance(message_obj, dict):
-                            content = message_obj.get("content")
-                        response_text = extract_openai_message_text(content)
-                        if response_text and response_text.strip():
-                            return _restore_zai_prefill(response_text)
-
-                        reasoning_content = getattr(message_obj, "reasoning_content", None)
-                        if reasoning_content is None and isinstance(message_obj, dict):
-                            reasoning_content = message_obj.get("reasoning_content")
-                        response_text = extract_openai_message_text(reasoning_content)
-                        if response_text and response_text.strip():
-                            return _restore_zai_prefill(response_text)
-
+                    choices = getattr(response, "choices", None)
+                    if not choices and isinstance(response, dict):
+                        choices = response.get("choices")
+                    if not choices:
                         return ""
 
-                    primary_messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                "당신은 한국 주식 기술적 분석가입니다. "
-                                "반드시 JSON 객체 1개만 출력하고 코드블록/설명문/마크다운을 금지합니다. "
-                                "JSON 외 텍스트를 단 한 글자도 출력하지 말고, 반드시 '{'로 시작해 '}'로 끝내십시오. "
-                                "reason은 반드시 한국어로 상세하게 작성하십시오. "
-                                "reason은 최소 2문장, 최소 90자 이상이어야 합니다. "
-                                "가능하면 아래 섹션 구조를 포함하십시오: "
-                                "[핵심 투자 포인트], [리스크 요인], [종합 의견]. "
-                                "You are a technical analyst. "
-                                "Return exactly one compact JSON object and nothing else. "
-                                "Required keys: action, confidence, reason. "
-                                "action must be BUY, SELL, or HOLD. "
-                                "confidence must be an integer 0-100. "
-                                "reason must be detailed Korean analysis with at least two sentences."
-                            ),
-                        },
-                        {"role": "user", "content": resolved_prompt},
-                        {"role": "assistant", "content": '{"action":"'},
-                    ]
-                    try:
-                        response_text = await asyncio.to_thread(
-                            _call,
-                            primary_messages,
-                            True,
-                            2500,
-                            attempt_timeout,
-                        )
-                        last_response_text = str(response_text or "")
+                    first_choice = choices[0]
+                    message_obj = getattr(first_choice, "message", None)
+                    if message_obj is None and isinstance(first_choice, dict):
+                        message_obj = first_choice.get("message")
+                    if message_obj is None:
+                        return ""
 
-                        elapsed = time.time() - start
-                        logger.debug(
-                            f"[Z.ai] {stock_name} 분석 완료 "
-                            f"(model={model}, {elapsed:.2f}s, attempt={attempt+1}/{max_parse_attempts}, "
-                            f"timeout={attempt_timeout:.0f}s)"
-                        )
+                    content = getattr(message_obj, "content", None)
+                    if content is None and isinstance(message_obj, dict):
+                        content = message_obj.get("content")
+                    response_text = extract_openai_message_text(content)
+                    if response_text and response_text.strip():
+                        return _restore_zai_prefill(response_text)
 
-                        if is_prompt_echo_response(last_response_text):
-                            logger.warning(
-                                f"[Z.ai] {stock_name} 프롬프트 에코/메타 응답 감지 "
-                                f"(model={model}, attempt={attempt+1})"
+                    reasoning_content = getattr(message_obj, "reasoning_content", None)
+                    if reasoning_content is None and isinstance(message_obj, dict):
+                        reasoning_content = message_obj.get("reasoning_content")
+                    response_text = extract_openai_message_text(reasoning_content)
+                    if response_text and response_text.strip():
+                        return _restore_zai_prefill(response_text)
+
+                    return ""
+
+                primary_messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "당신은 한국 주식 기술적 분석가입니다. "
+                            "반드시 JSON 객체 1개만 출력하고 코드블록/설명문/마크다운을 금지합니다. "
+                            "JSON 외 텍스트를 단 한 글자도 출력하지 말고, 반드시 '{'로 시작해 '}'로 끝내십시오. "
+                            "reason은 반드시 한국어로 상세하게 작성하십시오. "
+                            "reason은 최소 2문장, 최소 90자 이상이어야 합니다. "
+                            "가능하면 아래 섹션 구조를 포함하십시오: "
+                            "[핵심 투자 포인트], [리스크 요인], [종합 의견]. "
+                            "You are a technical analyst. "
+                            "Return exactly one compact JSON object and nothing else. "
+                            "Required keys: action, confidence, reason. "
+                            "action must be BUY, SELL, or HOLD. "
+                            "confidence must be an integer 0-100. "
+                            "reason must be detailed Korean analysis with at least two sentences."
+                        ),
+                    },
+                    {"role": "user", "content": resolved_prompt},
+                    {"role": "assistant", "content": '{"action":"'},
+                ]
+                try:
+                    response_text = await asyncio.to_thread(
+                        _call,
+                        primary_messages,
+                        True,
+                        2500,
+                        attempt_timeout,
+                    )
+                    last_response_text = str(response_text or "")
+
+                    elapsed = time.time() - start
+                    logger.debug(
+                        f"[Z.ai] {stock_name} 분석 완료 "
+                        f"(model={model}, {elapsed:.2f}s, attempt=1, "
+                        f"timeout={attempt_timeout:.0f}s)"
+                    )
+
+                    if is_prompt_echo_response(last_response_text):
+                        logger.warning(
+                            f"[Z.ai] {stock_name} 프롬프트 에코/메타 응답 감지 "
+                            f"(model={model}, attempt=1)"
+                        )
+                        recovered_text: str | None = None
+                        while same_model_echo_retries_used < same_model_echo_retries_max:
+                            same_model_echo_retries_used += 1
+                            # 결정론적 echo를 깨기 위해 retry마다 temperature를 점진적으로 올린다.
+                            retry_temperature = 0.3 + 0.2 * (same_model_echo_retries_used - 1)
+                            logger.info(
+                                f"[Z.ai] {stock_name} 같은 모델로 재시도 "
+                                f"(model={model}, retry={same_model_echo_retries_used}/{same_model_echo_retries_max}, temp={retry_temperature:.1f})"
                             )
-                            recovered_text: str | None = None
-                            while same_model_echo_retries_used < same_model_echo_retries_max:
-                                same_model_echo_retries_used += 1
-                                # 결정론적 echo를 깨기 위해 retry마다 temperature를 점진적으로 올린다.
-                                retry_temperature = 0.3 + 0.2 * (same_model_echo_retries_used - 1)
-                                logger.info(
-                                    f"[Z.ai] {stock_name} 같은 모델로 재시도 "
-                                    f"(model={model}, retry={same_model_echo_retries_used}/{same_model_echo_retries_max}, temp={retry_temperature:.1f})"
+                            try:
+                                retry_text = await asyncio.to_thread(
+                                    _call,
+                                    primary_messages,
+                                    True,
+                                    2500,
+                                    attempt_timeout,
+                                    retry_temperature,
                                 )
-                                try:
-                                    retry_text = await asyncio.to_thread(
-                                        _call,
-                                        primary_messages,
-                                        True,
-                                        2500,
-                                        attempt_timeout,
-                                        retry_temperature,
-                                    )
-                                except Exception as retry_error:
-                                    logger.warning(
-                                        f"[Z.ai] {stock_name} 재시도 호출 실패: {retry_error}"
-                                    )
-                                    retry_text = ""
-                                retry_text = str(retry_text or "")
-                                if retry_text and not is_prompt_echo_response(retry_text):
-                                    recovered_text = retry_text
-                                    break
-                            if recovered_text is not None:
-                                last_response_text = recovered_text
-                                # 재시도 응답으로 정상 흐름 재진입을 위해 아래 파싱 단계로 이어진다.
-                            else:
-                                if model_idx < len(model_chain) - 1:
-                                    next_model = model_chain[model_idx + 1]
-                                    logger.warning(
-                                        f"[Z.ai] {stock_name} 재시도도 메타 응답이라 모델 전환 "
-                                        f"({model} -> {next_model})"
-                                    )
-                                    should_try_next_model = True
-                                else:
-                                    self.zai_disabled_reason = "prompt-echo responses"
-                                    logger.warning(
-                                        f"[Z.ai] {stock_name} 마지막 모델 {model} 재시도까지 메타 응답이 반복되어 "
-                                        "이번 세션에서 Z.ai를 비활성화합니다."
-                                    )
-                                break
-
-                        result = self._parse_json_response(last_response_text)
-                        quality_low = False
-                        if result:
-                            if not is_low_quality_recommendation(result):
-                                return result
-                            quality_low = True
-                            logger.warning(
-                                f"[Z.ai] {stock_name} 응답 품질 미달 감지. "
-                                f"모델 전환 후보로 표시합니다 (model={model}, attempt={attempt+1})"
-                            )
-
-                        # 1차 응답이 JSON이 아니거나 품질 미달일 경우, 동일 모델에 JSON 보정 요청을 추가로 수행한다.
-                        if (not quality_low) and last_response_text.strip():
-                            repair_input = last_response_text.strip()
-                            if len(repair_input) > 4000:
-                                repair_input = repair_input[:4000]
-
-                            repair_messages = [
-                                {
-                                    "role": "system",
-                                    "content": (
-                                        "당신은 주식 분석 텍스트를 JSON으로 정규화하는 변환기입니다. "
-                                        "출력은 JSON 객체 1개만 허용됩니다. "
-                                        "JSON 외 텍스트를 단 한 글자도 출력하지 말고, 반드시 '{'로 시작해 '}'로 끝내십시오. "
-                                        "reason은 반드시 한국어로 상세하게 작성하십시오. "
-                                        "reason은 최소 2문장, 최소 90자 이상이어야 합니다. "
-                                        "가능하면 [핵심 투자 포인트], [리스크 요인], [종합 의견] 섹션을 포함하십시오. "
-                                        "You convert stock analysis text into strict JSON only. "
-                                        "Return exactly one JSON object with keys: action, confidence, reason. "
-                                        "action must be BUY, SELL, or HOLD. confidence must be integer 0-100. "
-                                        "reason must be detailed Korean analysis with at least two sentences."
-                                    ),
-                                },
-                                {
-                                    "role": "user",
-                                    "content": (
-                                        "Previous model output:\n"
-                                        f"{repair_input}\n\n"
-                                        "Return only valid JSON."
-                                    ),
-                                },
-                                {"role": "assistant", "content": '{"action":"'},
-                            ]
-                            repaired_text = await asyncio.to_thread(
-                                _call,
-                                repair_messages,
-                                True,
-                                2000,
-                                attempt_timeout,
-                            )
-                            repaired_result = self._parse_json_response(str(repaired_text or ""))
-                            if repaired_result:
-                                if not is_low_quality_recommendation(repaired_result):
-                                    logger.info(
-                                        f"[Z.ai] {stock_name} JSON 변환 보정 성공 "
-                                        f"(model={model}, attempt={attempt+1})"
-                                    )
-                                    return repaired_result
-                                quality_low = True
+                            except Exception as retry_error:
                                 logger.warning(
-                                    f"[Z.ai] {stock_name} JSON 보정 응답도 품질 미달입니다 "
-                                    f"(model={model}, attempt={attempt+1})"
+                                    f"[Z.ai] {stock_name} 재시도 호출 실패: {retry_error}"
                                 )
-
-                        if quality_low:
+                                retry_text = ""
+                            retry_text = str(retry_text or "")
+                            if retry_text and not is_prompt_echo_response(retry_text):
+                                recovered_text = retry_text
+                                break
+                        if recovered_text is not None:
+                            last_response_text = recovered_text
+                            # 재시도 응답으로 정상 흐름 재진입을 위해 아래 파싱 단계로 이어진다.
+                        else:
                             if model_idx < len(model_chain) - 1:
                                 next_model = model_chain[model_idx + 1]
                                 logger.warning(
-                                    f"[Z.ai] {stock_name} 응답 품질 미달로 모델 전환 "
+                                    f"[Z.ai] {stock_name} 재시도도 메타 응답이라 모델 전환 "
                                     f"({model} -> {next_model})"
                                 )
-                                should_try_next_model = True
                             else:
+                                self.zai_disabled_reason = "prompt-echo responses"
                                 logger.warning(
-                                    f"[Z.ai] {stock_name} 마지막 모델 {model}도 응답 품질 미달로 "
-                                    "추가 모델 전환 없이 fallback으로 종료합니다."
+                                    f"[Z.ai] {stock_name} 마지막 모델 {model} 재시도까지 메타 응답이 반복되어 "
+                                    "이번 세션에서 Z.ai를 비활성화합니다."
                                 )
+                            if model_idx < len(model_chain) - 1:
+                                continue
                             break
 
+                    result = self._parse_json_response(last_response_text)
+                    quality_low = False
+                    if result:
+                        if not is_low_quality_recommendation(result):
+                            return result
+                        quality_low = True
+                        logger.warning(
+                            f"[Z.ai] {stock_name} 응답 품질 미달 감지. "
+                            f"모델 전환 후보로 표시합니다 (model={model}, attempt=1)"
+                        )
+
+                    # 1차 응답이 JSON이 아니거나 품질 미달일 경우, 동일 모델에 JSON 보정 요청을 추가로 수행한다.
+                    if (not quality_low) and last_response_text.strip():
+                        repair_input = last_response_text.strip()
+                        if len(repair_input) > 4000:
+                            repair_input = repair_input[:4000]
+
+                        repair_messages = [
+                            {
+                                "role": "system",
+                                "content": (
+                                    "당신은 주식 분석 텍스트를 JSON으로 정규화하는 변환기입니다. "
+                                    "출력은 JSON 객체 1개만 허용됩니다. "
+                                    "JSON 외 텍스트를 단 한 글자도 출력하지 말고, 반드시 '{'로 시작해 '}'로 끝내십시오. "
+                                    "reason은 반드시 한국어로 상세하게 작성하십시오. "
+                                    "reason은 최소 2문장, 최소 90자 이상이어야 합니다. "
+                                    "가능하면 [핵심 투자 포인트], [리스크 요인], [종합 의견] 섹션을 포함하십시오. "
+                                    "You convert stock analysis text into strict JSON only. "
+                                    "Return exactly one JSON object with keys: action, confidence, reason. "
+                                    "action must be BUY, SELL, or HOLD. confidence must be integer 0-100. "
+                                    "reason must be detailed Korean analysis with at least two sentences."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Previous model output:\n"
+                                    f"{repair_input}\n\n"
+                                    "Return only valid JSON."
+                                ),
+                            },
+                            {"role": "assistant", "content": '{"action":"'},
+                        ]
+                        repaired_text = await asyncio.to_thread(
+                            _call,
+                            repair_messages,
+                            True,
+                            2000,
+                            attempt_timeout,
+                        )
+                        repaired_result = self._parse_json_response(str(repaired_text or ""))
+                        if repaired_result:
+                            if not is_low_quality_recommendation(repaired_result):
+                                logger.info(
+                                    f"[Z.ai] {stock_name} JSON 변환 보정 성공 "
+                                    f"(model={model}, attempt=1)"
+                                )
+                                return repaired_result
+                            quality_low = True
+                            logger.warning(
+                                f"[Z.ai] {stock_name} JSON 보정 응답도 품질 미달입니다 "
+                                f"(model={model}, attempt=1)"
+                            )
+
+                    if quality_low:
                         if model_idx < len(model_chain) - 1:
                             next_model = model_chain[model_idx + 1]
                             logger.warning(
-                                f"[Z.ai] {stock_name} JSON 파싱 실패로 모델 전환 "
+                                f"[Z.ai] {stock_name} 응답 품질 미달로 모델 전환 "
                                 f"({model} -> {next_model})"
                             )
-                            should_try_next_model = True
-                        break
-                    except Exception as error:
-                        last_error = error
-                        elapsed = time.time() - start
-                        status_code = _extract_status_code(error)
-                        if model_idx < len(model_chain) - 1:
-                            next_model = model_chain[model_idx + 1]
-                            reason = f"status={status_code}" if status_code is not None else str(error)
+                        else:
                             logger.warning(
-                                f"[Z.ai] {stock_name} 호출 실패로 모델 전환 "
-                                f"({model} -> {next_model}, reason={reason}, "
-                                f"elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s)"
+                                f"[Z.ai] {stock_name} 마지막 모델 {model}도 응답 품질 미달로 "
+                                "추가 모델 전환 없이 fallback으로 종료합니다."
                             )
-                            should_try_next_model = True
-                            break
-
-                        logger.error(
-                            f"[Z.ai] {stock_name} 호출 실패(최종): {error} "
-                            f"(model={model}, elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s)"
-                        )
+                        if model_idx < len(model_chain) - 1:
+                            continue
                         break
 
-                if should_try_next_model:
-                    continue
-                break
+                    if model_idx < len(model_chain) - 1:
+                        next_model = model_chain[model_idx + 1]
+                        logger.warning(
+                            f"[Z.ai] {stock_name} JSON 파싱 실패로 모델 전환 "
+                            f"({model} -> {next_model})"
+                        )
+                    if model_idx < len(model_chain) - 1:
+                        continue
+                    break
+                except Exception as error:
+                    last_error = error
+                    elapsed = time.time() - start
+                    status_code = self._extract_status_code(error, include_code=False)
+                    if model_idx < len(model_chain) - 1:
+                        next_model = model_chain[model_idx + 1]
+                        reason = f"status={status_code}" if status_code is not None else str(error)
+                        logger.warning(
+                            f"[Z.ai] {stock_name} 호출 실패로 모델 전환 "
+                            f"({model} -> {next_model}, reason={reason}, "
+                            f"elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s)"
+                        )
+                        continue
+
+                    logger.error(
+                        f"[Z.ai] {stock_name} 호출 실패(최종): {error} "
+                        f"(model={model}, elapsed={elapsed:.2f}s, timeout={attempt_timeout:.0f}s)"
+                    )
+                    break
 
             logger.warning(
                 f"[Z.ai] JSON 파싱 실패 for {stock_name}. Raw Output: {last_response_text[:300]}..."
@@ -1165,10 +1129,6 @@ class VCPMultiAIAnalyzer:
             chain.append("zai")
         if "gpt" in normalized_source:
             chain.append("gpt")
-        for provider in source:
-            key = normalize_provider_name(provider)
-            if key in {"gpt", "zai"} and key not in chain:
-                chain.append(key)
         return chain
 
     def _resolve_perplexity_fallback_providers(self) -> List[str]:
@@ -1184,11 +1144,8 @@ class VCPMultiAIAnalyzer:
                 return [provider for provider in configured if provider in allowed_set]
             return []
 
-        if allowed_chain:
-            return allowed_chain
-
         # fallback 대상은 반드시 VCP_AI_PROVIDERS 설정값 기반으로만 결정한다.
-        return []
+        return allowed_chain
 
     async def _fallback_from_perplexity(
         self,
@@ -1255,22 +1212,6 @@ class VCPMultiAIAnalyzer:
         logger.warning(f"[GPT->Z.ai fallback] {stock_name} 사유: {reason}")
         return await self._analyze_with_zai(stock_name, stock_data, prompt)
 
-    async def _fallback_to_zai(
-        self,
-        *,
-        stock_name: str,
-        stock_data: Dict,
-        prompt: str,
-        reason: str,
-    ) -> Optional[Dict]:
-        """하위 호환용 Z.ai 직접 폴백."""
-        if not getattr(self, "zai_client", None):
-            logger.error(
-                f"[Perplexity->Z.ai fallback] {stock_name} 폴백 불가: Z.ai 클라이언트 미초기화 ({reason})"
-            )
-            return None
-        logger.warning(f"[Perplexity->Z.ai fallback] {stock_name} 사유: {reason}")
-        return await self._analyze_with_zai(stock_name, stock_data, prompt)
     
     async def analyze_batch(self, stocks: List[Dict]) -> Dict[str, Dict]:
         """여러 종목 일괄 분석 (완전 병렬 처리 + 진행률 로그)"""

@@ -1,0 +1,15 @@
+{
+  "kind": "fixture",
+  "pid": 98444,
+  "pgid": 98444,
+  "port": 57962,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-cleanup-20260921-i8zw4fkf",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-cleanup-20260921-i8zw4fkf/venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-cleanup-20260921-i8zw4fkf/docs/dev-cycle/evidence/vcp-cleanup-20260921/fixture.py",
+    "--repo",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-cleanup-20260921-i8zw4fkf",
+    "--port",
+    "57962"
+  ]
+}

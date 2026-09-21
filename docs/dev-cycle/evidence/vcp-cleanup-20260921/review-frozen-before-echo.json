@@ -1,0 +1,8 @@
+{
+  "engine/vcp_ai_analyzer.py": "086dfdbaa3986325bd75370f3cd449de7e7627e909dc36dfe89d351cc00bc97e",
+  "engine/vcp_ai_analyzer_helpers.py": "cd37e284b80e82e2471245566851d16a401a0528916854b6ab535987697d9827",
+  "scripts/init_data.py": "28bcf6afe5da3ac4a453fa3dbaae423e01f863ffef6782963c2d546bf2e766d3",
+  "tests/engine/test_vcp_ai_analyzer_helpers_refactor.py": "0d7cc443e1167c36b56d570d588ac663f37738e896803145c5abfb71664bcb9a",
+  "tests/engine/test_vcp_ai_analyzer_refactor.py": "4155c1be50cf6a383452077763e06230ec34834fa5d1531975b7dcdbc604745b",
+  "tests/test_grading_logic.py": "deleted"
+}

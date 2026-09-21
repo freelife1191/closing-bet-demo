@@ -1,0 +1,12 @@
+[
+  {
+    "port": 57962,
+    "path": "/api/kr/ai-analysis",
+    "status": 200
+  },
+  {
+    "port": 57960,
+    "path": "/api/auth/session",
+    "status": 200
+  }
+]

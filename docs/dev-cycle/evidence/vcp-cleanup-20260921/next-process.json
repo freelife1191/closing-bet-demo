@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 98791,
+  "pgid": 98791,
+  "port": 57961,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-cleanup-20260921-i8zw4fkf/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-cleanup-20260921-i8zw4fkf/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "57961"
+  ]
+}

@@ -88,6 +88,10 @@
 - 진행 상태 (2026-09-09): 실제 앞단 프록시 구성·Procfile 기반 PaaS 사용 계획 정보 대기. 사용자의 연속 진행 요청에 따라 독립적으로 처리 가능한 INFRA-017·038을 먼저 완료했으며, 이 항목의 배포 정책은 아직 변경하지 않았다.
 
 ### [VCP-022] VCP 상세 모달의 세 탭 가운데 둘은 아직 0% 를 그릴 수 있다
+
+- 진행 라운드: 2026-09-21 VCP 정리 T3. 사용자 「승인도 알아서 진행하고 완료」 위임에 따른 리더 설계·계획 검토. `evidence/vcp-cleanup-20260921/design.md`, `plan.md`. 독립 critic ACCEPT. 원본 비밀·자료·서비스 접근 없이 scratch 실행.
+- [x] 관련 baseline90 / 회귀103 통과; 구현 완료, 전체 baseline·리뷰·UltraQA 진행 중. 완료 아카이브 전 항목 유지.
+- 이번 묶음은 confidence 부분 보완. 과거 모의 산출물/역사 실행 이력 요구는 미완료이며 이후 계속 처리한다.
 - 카테고리: VCP 시그널 | 티어: T3 | 근거: 2026-09-07 JONGGA-008 의 code-review 와 QA
 - `[JONGGA-008]` 이 확신도 없음을 값 없음으로 고쳤지만 그 화면의 게이지는 활성 탭에 따라
   세 추천 가운데 하나를 봅니다. 고쳐진 것은 `_build_vcp_gemini_recommendation` 이 CSV 에서
@@ -200,6 +204,9 @@
 ## P2 — 대기
 
 ### [VCP-005] `vcp_ai_analyzer.py` 의 죽은 폴백 코드와 중복 헬퍼 정리
+
+- 진행 라운드: 2026-09-21 VCP 정리 T3. 사용자 「승인도 알아서 진행하고 완료」 위임에 따른 리더 설계·계획 검토. `evidence/vcp-cleanup-20260921/design.md`, `plan.md`. 독립 critic ACCEPT. 원본 비밀·자료·서비스 접근 없이 scratch 실행.
+- [x] 관련 baseline90 / 회귀103 통과; 구현 완료, 전체 baseline·리뷰·UltraQA 진행 중. 완료 아카이브 전 항목 유지.
 - 카테고리: VCP 시그널 | 티어: T3 | 근거: AUDIT-VCP §3.1, §2.1
 - 티어 근거: `engine/vcp_ai_analyzer.py` 는 `tier-rules.md` §2 의 "VCP 판정" 위험 경로에
   올라 있으므로 줄 수와 무관하게 T3 입니다. 리뷰는 `/ponytail-review` → `/code-review` →
@@ -213,6 +220,9 @@
 - [ ] 기존 27건의 Z.ai 테스트가 그대로 통과하는지 확인
 
 ### [INFRA-008] init_data 의 죽은 진입점 정리
+
+- 진행 라운드: 2026-09-21 VCP 정리 T3. 사용자 「승인도 알아서 진행하고 완료」 위임에 따른 리더 설계·계획 검토. `evidence/vcp-cleanup-20260921/design.md`, `plan.md`. 독립 critic ACCEPT. 원본 비밀·자료·서비스 접근 없이 scratch 실행.
+- [x] 관련 baseline90 / 회귀103 통과; 구현 완료, 전체 baseline·리뷰·UltraQA 진행 중. 완료 아카이브 전 항목 유지.
 - 카테고리: 인프라 | 티어: T3 | 근거: AUDIT-INFRA §3.1, §3.2
 - `scripts/init_data.py` 가 위험 경로에 있어 T3 입니다.
 - [ ] `create_market_gate`(1993-2096)를 삭제하고 Market Gate 생성 경로가

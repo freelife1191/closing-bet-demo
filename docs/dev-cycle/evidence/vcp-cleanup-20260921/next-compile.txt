@@ -1,0 +1,2 @@
+event: message
+data: {"result":{"content":[{"type":"text","text":"{\"routeSpecifier\":\"/dashboard/kr/vcp\",\"issues\":[]}"}]},"jsonrpc":"2.0","id":2}

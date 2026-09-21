@@ -11,6 +11,7 @@ import json
 import re
 from typing import Any, Optional
 
+from engine.pandas_utils_safe import safe_confidence
 from engine.pandas_utils_safe import safe_optional_float
 
 
@@ -220,7 +221,7 @@ def is_low_quality_recommendation(result: Optional[dict[str, Any]]) -> bool:
 
     try:
         confidence = int(float(result.get("confidence")))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return True
     if confidence < 0 or confidence > 100:
         return True
@@ -298,16 +299,6 @@ def _normalize_action_value(value: Any) -> str | None:
     if "관망" in normalized or "보유" in normalized or "hold" in lowered or "중립" in normalized:
         return "HOLD"
     return None
-
-
-def _normalize_confidence_value(value: Any, default: int = 0) -> int:
-    if isinstance(value, str):
-        value = value.replace("%", "").replace(",", "").strip()
-    try:
-        numeric = int(float(value))
-    except (TypeError, ValueError):
-        numeric = int(default)
-    return max(0, min(100, numeric))
 
 
 def _extract_json_fenced_content(text: str) -> str:
@@ -406,7 +397,7 @@ def _parse_recommendation_by_pattern(text: str) -> Optional[dict[str, Any]]:
     action_value = _normalize_action_value(action_match.group(1))
     if action_value is None:
         return None
-    confidence_value = _normalize_confidence_value(confidence_match.group(1), default=0)
+    confidence_value = safe_confidence(confidence_match.group(1))
     reason_value = _extract_reason_by_pattern(text)
     if _is_low_quality_reason(reason_value):
         reason_value = _build_korean_reason_fallback(action_value, text)
@@ -689,7 +680,7 @@ def parse_json_response(text: str) -> Optional[dict[str, Any]]:
             if action_value is None:
                 return None
             parsed["action"] = action_value
-            parsed["confidence"] = _normalize_confidence_value(parsed.get("confidence"), default=0)
+            parsed["confidence"] = safe_confidence(parsed.get("confidence"))
             parsed["reason"] = _normalize_reason_value(parsed.get("reason"), action_value)
             return parsed
         return None
