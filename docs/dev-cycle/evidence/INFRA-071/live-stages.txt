@@ -1,0 +1,12 @@
+INFO:engine.phases_analysis:[Phase 1] Complete: 9 passed, 165 failed (Drops: TV=145, Grade=20, Other=0)
+INFO:engine.phases_news_llm:[Phase 2] Complete: 9 with news, 0 without news
+INFO:engine.llm_analyzer:[GEMINI] Jongga Batch Analysis (9 stocks): 29.20s
+INFO:engine.phases_news_llm:[Phase 3] Complete: 9 stocks analyzed, 0 failed
+INFO:engine.phases_analysis:[Phase 4] Complete: 9 signals created (S:2, A:2, B:5)
+INFO:engine.phases_analysis:[Phase 1] Complete: 12 passed, 412 failed (Drops: TV=367, Grade=45, Other=0)
+INFO:engine.phases_news_llm:[Phase 2] Complete: 12 with news, 0 without news
+INFO:engine.llm_analyzer:[GEMINI] Jongga Batch Analysis (3 stocks): 13.58s
+INFO:engine.phases_news_llm:[Phase 3] Complete: 3 stocks analyzed, 0 failed
+INFO:engine.phases_analysis:[Phase 4] Complete: 3 signals created (S:2, A:2, B:8)
+[저장 완료] Daily: data/jongga_v2_results_20260921.json
+[저장 완료] Latest: data/jongga_v2_latest.json

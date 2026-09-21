@@ -8,12 +8,12 @@
 **Tier:** T3(generator_runtime_mixin 위험 경로). writing-plans 적용. 기존 root package.json 보존.
 
 ## Tasks
-- [ ] 현행 HTTP410/네이버 검색 DOM 변경/다음 빈 페이지를 직접 재현한다.
-- [ ] 현재 DOM 합성 회귀와 빈 캐시 복구 RED→GREEN. base.py/news_scrape_helpers.py/news.py 및 관련 테스트만 수정한다.
-- [ ] 시장별 실패/부분 실패가 저장 전 전파됨을 tmp 데이터 회귀로 검증한다. 정상 후보 없음은 기존 동작 유지.
-- [ ] Ponytail→code+architect→T3 리뷰. 독립 검토는 각 단계 최대10분.
-- [ ] 격리된 전체 pytest/Vitest 검사, 원본 서비스 재기동 및 실제 분석1회, ego-browser 실제 결과 확인.
-- [ ] 증거/QA/아카이브 마감. 필수 미통과는 TODO 유지.
+- [x] 현행 HTTP410/네이버 검색 DOM 변경/다음 빈 페이지를 직접 재현한다.
+- [x] 현재 DOM 합성 회귀와 빈 캐시 복구 RED→GREEN. base.py/news_scrape_helpers.py/news.py 및 관련 테스트만 수정한다.
+- [x] 시장별 실패/부분 실패가 저장 전 전파됨을 tmp 데이터 회귀로 검증한다. 정상 후보 없음은 기존 동작 유지.
+- [x] Ponytail→code+architect→T3 리뷰. 독립 검토는 각 단계 최대10분.
+- [x] 격리된 전체 pytest/Vitest 검사, 원본 서비스 재기동 및 실제 분석1회, ego-browser 실제 결과 확인.
+- [x] 증거/QA/아카이브 마감. 필수 미통과는 TODO 유지.
 
 ## Review Focus
 - 뉴스 제목에서 접근성 “새 창 열림”/본문 중복 제외, 언론사 매칭, 구형 DOM 호환.

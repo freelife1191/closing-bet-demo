@@ -1,0 +1,723 @@
+[p1 "KR Market Dashboard" | space "뉴스 수집 복구 후 실제 AI 분석 검증"(28): 1 managed, 0 untracked — p1* "KR Market Dashboard"]
+root
+  container
+    container
+      anchor [ref=1, url=http://localhost:3500/]
+        text "M"
+        text "스마트 머니 봇"
+      container
+        text "DASHBOARD"
+        container
+          button [ref=2]
+            container
+              text ""
+              text "KR Market"
+            text ""
+          container
+            anchor [ref=3, loc=href:/dashboard/kr, url=http://localhost:3500/dashboard/kr]
+              text "● Overview"
+            anchor [ref=4, loc=href:/dashboard/kr/vcp, url=http://localhost:3500/dashboard/kr/vcp]
+              text "● VCP 시그널"
+            anchor [ref=5, loc=href:/dashboard/kr/closing-bet, url=http://localhost:3500/dashboard/kr/closing-bet]
+              text "● 종가베팅"
+            anchor [ref=6, loc=href:/dashboard/kr/cumulative, url=http://localhost:3500/dashboard/kr/cumulative]
+              text "● 누적 성과"
+            anchor [ref=7, loc=href:/chatbot, url=http://localhost:3500/chatbot]
+              text "● AI 상담"
+        button [ref=8]
+          text ""
+          text "모의투자"
+        anchor [ref=9, loc=href:/dashboard/data-status, url=http://localhost:3500/dashboard/data-status]
+          text ""
+          text "데이터 상태"
+      container
+        container
+          text "무료 사용량"
+          container
+            container
+              text "10"
+              text "회 남음"
+            button "무료 사용량 5회 충전 (하루 1회)" [ref=10, loc=css:button[aria-label="무료 사용량 5회 충전 (하루 1회)"]]
+              text "+"
+        button [ref=11]
+          text "U"
+          container
+            text "User"
+            text "Free Tier Plan"
+          text ""
+    container
+      container "현재 위치"
+        ordered_list
+          list_item
+            anchor "홈" [ref=12, loc=css:a[aria-label="홈"], url=http://localhost:3500/]
+              text ""
+          list_item
+            text "/"
+            text "대시보드"
+          list_item
+            text "/"
+            text "국내 시장"
+          list_item
+            text "/"
+            text "종가베팅"
+      button "설정 열기" [ref=13, loc=css:button[aria-label="설정 열기"]]
+        text ""
+    container
+      container
+        container
+          container
+            text ""
+            text "스마트 머니 봇"
+          text "AI 기반 전략"
+          heading
+            text "종가"
+            text "베팅"
+          paragraph
+            text "Gemini 분석 + 기관 수급 추세"
+        container
+          text "TRENDING THEMES"
+          text "데이터 갱신 후 표시됩니다"
+      container
+        container
+          text "엔진 단계"
+          container
+            container
+              container
+                text "CANDIDATES"
+                container [ref=14]
+                  text ""
+              text "12"
+            container
+              container
+                text "FILTERED"
+                container [ref=15]
+                  text ""
+              text "12"
+            container
+              container
+                text "DATA STATUS"
+                button "스크리너 전체 업데이트" [ref=16, loc=css:button[aria-label="스크리너 전체 업데이트"]]
+                  text ""
+                button "GEMINI AI 재분석" [ref=17, loc=css:button[aria-label="GEMINI AI 재분석"]]
+                  text ""
+              text "UPDATED"
+              text "오후 09:22"
+        container
+          container
+            container
+              container
+                text "거래대금"
+                container [ref=18]
+                  text ""
+              combobox "거래대금" [ref=19, loc=css:select[aria-label="거래대금"]]
+                text "전체"
+            container
+              container
+                text "상승률"
+                container [ref=20]
+                  text ""
+              combobox "상승률" [ref=21, loc=css:select[aria-label="상승률"]]
+                text "전체"
+            container
+              container
+                text "등급"
+                container [ref=22]
+                  text ""
+                button [ref=23]
+                  text "기준표"
+              combobox "등급" [ref=24, loc=css:select[aria-label="등급"]]
+                text "전체"
+            container
+              container
+                text "총점"
+                container [ref=25]
+                  text ""
+              combobox "총점" [ref=26, loc=css:select[aria-label="총점"]]
+                text "전체"
+          container
+            button [ref=27]
+              text ""
+              text "종가베팅 전체 10주 매수"
+            button [ref=28]
+              text ""
+              text "종가베팅 점수표"
+            combobox "리포트 날짜" [ref=29, loc=css:select[aria-label="리포트 날짜"]]
+              text "Latest Report"
+            button "선택한 날짜의 리포트 다시 불러오기" [ref=30, loc=css:button[aria-label="선택한 날짜의 리포트 다시 불러오기"]]
+              text ""
+      button [ref=31]
+        container
+          text ""
+          container
+            heading
+              text "Trading Tips & Strategy"
+            paragraph
+              text "시장 대응 전략 및 종가베팅 매수 패턴 가이드 보기"
+        text ""
+      container
+        container
+          container
+            container
+              container
+                text "S"
+                text "GRADE"
+              container
+                text "#"
+                text "1"
+            heading
+              text "삼성전자"
+            text "005930"
+            container
+              container
+                container
+                  text "상승률"
+                  container [ref=32]
+                    text ""
+                container
+                  text "+"
+                  text "5.4"
+                  text "%"
+              container
+                container
+                  text "거래량 배수"
+                  container [ref=33]
+                    text ""
+                container
+                  text "1"
+                  text "x"
+              container
+                container
+                  text "2026-09-21 종가"
+                  container [ref=34]
+                    text ""
+                text "₩275,000"
+              container
+                container
+                  text "거래대금"
+                  container [ref=35]
+                    text ""
+                text "9조 2089억"
+              container
+                container
+                  text "외인 (5일)"
+                  container [ref=36]
+                    text ""
+                text "1조 5584억"
+              container
+                container
+                  text "기관 (5일)"
+                  container [ref=37]
+                    text ""
+                text "3조 4372억"
+            container
+              container [ref=38]
+                text "BUY"
+              container
+                container
+                  text "확신도"
+                  container [ref=39]
+                    text ""
+                container
+                  text "90"
+                  text "%"
+            button "삼성전자 차트 크게 보기" [ref=40, loc=css:button[aria-label="삼성전자 차트 크게 보기"]]
+              text ""
+              text "실제 차트 크게 보기"
+          container
+            container
+              heading
+                text ""
+                text "AI 분석 리포트"
+                text "Gemini 3.7 flash"
+              paragraph
+                text "① 뉴스/재료 분석: 반도체 업황 턴어라운드와 수출 호조, 역대급 배당 모멘텀이 부각되며 코스피 7천선 탈환의 주역으로 강력한 시장 주도력을 입증했..."
+              paragraph
+                text "AI 원문에는 다른 가격이 포함될 수 있습니다. 이 화면의 시스템 계산 기준은 아래 목표가·손절가입니다."
+            container
+              container
+                heading
+                  text "시스템 계산 기준"
+                  container [ref=41]
+                    text ""
+                unordered_list
+                  list_item
+                    text "●"
+                    container
+                      container [ref=42]
+                        text "매수가"
+                      text ":"
+                      container
+                        text "₩"
+                        text "275,000"
+                      container
+                        text "("
+                        text "2026-09-21"
+                        text "종가)"
+                  list_item
+                    text "●"
+                    container
+                      container [ref=43]
+                        text "목표가"
+                      text ":"
+                      container
+                        text "₩"
+                        text "288,750"
+                      container
+                        text "(매수가"
+                        text "+"
+                        text "5.0"
+                        text "%)"
+                  list_item
+                    text "●"
+                    container
+                      container [ref=44]
+                        text "손절가"
+                      text ":"
+                      container
+                        text "₩"
+                        text "266,750"
+                      container
+                        text "(매수가"
+                        text "-3.0"
+                        text "%)"
+              container
+                heading
+                  text "체크리스트"
+                container
+                  text "뉴스/호재 있음"
+                  text "수급 양호 (외인/기관)"
+            container
+              container
+                text "REFERENCES"
+                container [ref=45]
+                  text ""
+              container
+                anchor [ref=46, url=https://www.hankyung.com/article/2026092188681]
+                  text ""
+                  text "["
+                  text "한국경제"
+                  text "]"
+                  text ""아파트 샀으니 그 다음은"…2030 반도체맨 지갑 열린 곳"
+                anchor [ref=47, url=http://www.yonhapnewstv.co.kr/news/MYH202609212100076W6]
+                  text ""
+                  text "["
+                  text "연합뉴스TV"
+                  text "]"
+                  text "반도체 타고 '7천피' 탈환…삼성전자 5% 급등"
+                anchor [ref=48, loc=href:https://www.etnews.com/20260921000440, url=https://www.etnews.com/20260921000440]
+                  text ""
+                  text "["
+                  text "전자신문"
+                  text "]"
+                  text "“1000주에 460만원, 막차 타자”…역대급 배당 '27만전자' 1조 쓸어담은..."
+          container
+            container
+              container
+                svg_root
+                container
+                  text "10"
+                  text "/ 19점"
+              container
+                text "TOTAL SCORE"
+                container [ref=49]
+                  text ""
+            container
+              container
+                container [ref=50]
+                  text "차트"
+                container
+                  text "1"
+                  text "/2"
+              container
+                container [ref=51]
+                  text "수급"
+                container
+                  text "2"
+                  text "/2"
+              container
+                container [ref=52]
+                  text "뉴스"
+                container
+                  text "3"
+                  text "/3"
+              container
+                container [ref=53]
+                  text "거래량"
+                container
+                  text "3"
+                  text "/3"
+              container
+                container [ref=54]
+                  text "캔들"
+                container
+                  text "0"
+                  text "/1"
+              container
+                container [ref=55]
+                  text "조정"
+                container
+                  text "0"
+                  text "/1"
+              container
+                container [ref=56]
+                  text "보너스 (가산점)"
+                container
+                  text "+"
+                  text "1"
+                  text "/7"
+                container
+                  text "거래량/"
+                  text "0"
+                  text "| 장대양봉/"
+                  text "1"
+                  text "/1"
+                  text "| 상한가/"
+                  text "0"
+                  text "/1"
+            container
+              button [ref=57]
+                text ""
+                text "상세 분석 보기"
+              button "삼성전자 모의 매수" [ref=58, loc=css:button[aria-label="삼성전자 모의 매수"]]
+                text ""
+                text "모의 매수"
+              container
+                anchor [ref=59, loc=href:https://m.stock.naver.com/domestic/stock/005930/main, url=https://m.stock.naver.com/domestic/stock/005930/main]
+                  text "N"
+                  text "네이버"
+                anchor [ref=60, loc=href:https://tossinvest.com/stocks/005930, url=https://tossinvest.com/stocks/005930]
+                  text ""
+                  text "토스"
+        container
+          container
+            container
+              container
+                text "S"
+                text "GRADE"
+              container
+                text "#"
+                text "2"
+            heading
+              text "SK하이닉스"
+            text "000660"
+            container
+              container
+                container
+                  text "상승률"
+                  container [ref=61]
+                    text ""
+                container
+                  text "+"
+                  text "1.1"
+                  text "%"
+              container
+                container
+                  text "거래량 배수"
+                  container [ref=62]
+                    text ""
+                container
+                  text "1"
+                  text "x"
+              container
+                container
+                  text "2026-09-21 종가"
+                  container [ref=63]
+                    text ""
+                text "₩1,878,000"
+              container
+                container
+                  text "거래대금"
+                  container [ref=64]
+                    text ""
+                text "8조 47억"
+              container
+                container
+                  text "외인 (5일)"
+                  container [ref=65]
+                    text ""
+                text "2조 4888억"
+              container
+                container
+                  text "기관 (5일)"
+                  container [ref=66]
+                    text ""
+                text "8971억"
+            container
+              container [ref=67]
+                text "BUY"
+              container
+                container
+                  text "확신도"
+                  container [ref=68]
+                    text ""
+                container
+                  text "89"
+                  text "%"
+            button "SK하이닉스 차트 크게 보기" [ref=69, loc=css:button[aria-label="SK하이닉스 차트 크게 보기"]]
+              text ""
+              text "실제 차트 크게 보기"
+          container
+            container
+              heading
+                text ""
+                text "AI 분석 리포트"
+                text "Gemini 3.7 flash"
+              paragraph
+                text "① 뉴스/재료 분석: AI 메모리(HBM) 주도권을 바탕으로 반도체 랠리를 주도하고 있으며, 7천피 탈환의 핵심 축으로 실적 턴어라운드 모멘텀이 극대화되고..."
+              paragraph
+                text "AI 원문에는 다른 가격이 포함될 수 있습니다. 이 화면의 시스템 계산 기준은 아래 목표가·손절가입니다."
+            container
+              container
+                heading
+                  text "시스템 계산 기준"
+                  container [ref=70]
+                    text ""
+                unordered_list
+                  list_item
+                    text "●"
+                    container
+                      container [ref=71]
+                        text "매수가"
+                      text ":"
+                      container
+                        text "₩"
+                        text "1,878,000"
+                      container
+                        text "("
+                        text "2026-09-21"
+                        text "종가)"
+                  list_item
+                    text "●"
+                    container
+                      container [ref=72]
+                        text "목표가"
+                      text ":"
+                      container
+                        text "₩"
+                        text "1,971,900"
+                      container
+                        text "(매수가"
+                        text "+"
+                        text "5.0"
+                        text "%)"
+                  list_item
+                    text "●"
+                    container
+                      container [ref=73]
+                        text "손절가"
+                      text ":"
+                      container
+                        text "₩"
+                        text "1,821,660"
+                      container
+                        text "(매수가"
+                        text "-3.0"
+                        text "%)"
+              container
+                heading
+                  text "체크리스트"
+                container
+                  text "뉴스/호재 있음"
+                  text "수급 양호 (외인/기관)"
+            container
+              container
+                text "REFERENCES"
+                container [ref=74]
+                  text ""
+              container
+                anchor [ref=75, url=https://www.hankyung.com/article/2026092188681]
+                  text ""
+                  text "["
+                  text "한국경제"
+                  text "]"
+                  text ""아파트 샀으니 그 다음은"…2030 반도체맨 지갑 열린 곳"
+                anchor [ref=76, url=http://www.yonhapnewstv.co.kr/news/MYH202609212100076W6]
+                  text ""
+                  text "["
+                  text "연합뉴스TV"
+                  text "]"
+                  text "반도체 타고 '7천피' 탈환…삼성전자 5% 급등"
+                anchor [ref=77, loc=href:http://www.enewstoday.co.kr/news/articleView.html?idxno=2473145, url=http://www.enewstoday.co.kr/news/articleView.html?idxno=2473145]
+                  text ""
+                  text "["
+                  text "이뉴스투데이"
+                  text "]"
+                  text "청주대 평생교육원, 행복모아 장애인 재직자 대상 '충북시민대학' 하반..."
+          container
+            container
+              container
+                svg_root
+                container
+                  text "10"
+                  text "/ 19점"
+              container
+                text "TOTAL SCORE"
+                container [ref=78]
+                  text ""
+            container
+              container
+                container [ref=79]
+                  text "차트"
+                container
+                  text "1"
+                  text "/2"
+              container
+                container [ref=80]
+                  text "수급"
+                container
+                  text "2"
+                  text "/2"
+              container
+                container [ref=81]
+                  text "뉴스"
+                container
+                  text "3"
+                  text "/3"
+              container
+                container [ref=82]
+                  text "거래량"
+                container
+                  text "3"
+                  text "/3"
+              container
+                container [ref=83]
+                  text "캔들"
+                container
+                  text "0"
+                  text "/1"
+              container
+                container [ref=84]
+                  text "조정"
+                container
+                  text "0"
+                  text "/1"
+              container
+                container [ref=85]
+                  text "보너스 (가산점)"
+                container
+                  text "+"
+                  text "1"
+                  text "/7"
+                container
+                  text "거래량/"
+                  text "0"
+                  text "| 장대양봉/"
+                  text "1"
+                  text "/1"
+                  text "| 상한가/"
+                  text "0"
+                  text "/1"
+            container
+              button [ref=86]
+                text ""
+                text "상세 분석 보기"
+              button "SK하이닉스 모의 매수" [ref=87, loc=css:button[aria-label="SK하이닉스 모의 매수"]]
+                text ""
+                text "모의 매수"
+              container
+                anchor [ref=88, loc=href:https://m.stock.naver.com/domestic/stock/000660/main, url=https://m.stock.naver.com/domestic/stock/000660/main]
+                  text "N"
+                  text "네이버"
+                anchor [ref=89, loc=href:https://tossinvest.com/stocks/000660, url=https://tossinvest.com/stocks/000660]
+                  text ""
+                  text "토스"
+        container
+          container
+            container
+              container
+                text "A"
+                text "GRADE"
+              container
+                text "#"
+                text "3"
+            heading
+              text "삼성전자우"
+            text "005935"
+            container
+              container
+                container
+                  text "상승률"
+                  container [ref=90]
+                    text ""
+                container
+                  text "+"
+                  text "7.3"
+                  text "%"
+              container
+                container
+                  text "거래량 배수"
+                  container [ref=91]
+                    text ""
+                container
+                  text "1"
+                  text "x"
+              container
+                container
+                  text "2026-09-21 종가"
+                  container [ref=92]
+                    text ""
+                text "₩210,500"
+              container
+                container
+                  text "거래대금"
+                  container [ref=93]
+                    text ""
+                text "9230억"
+              container
+                container
+                  text "외인 (5일)"
+                  container [ref=94]
+                    text ""
+                text "682억"
+              container
+                container
+                  text "기관 (5일)"
+                  container [ref=95]
+                    text ""
+                text "2092억"
+          container
+            heading
+              text ""
+              text "AI 분석 리포트"
+              text "Gemini 3.7 flash"
+            paragraph
+              text "① 뉴스/재료 분석: 코스피 7천선 탈환을 견인한 반도체 수출 호조와 고배당 기대감이 맞물리며 강력한 상승 모멘텀이 형성되었습니다. 자사주 매수 신..."
+          container
+            container
+              container
+                svg_root
+                container
+                  text "11"
+                  text "/ 19점"
+              container
+                text "TOTAL SCORE"
+                container [ref=96]
+                  text ""
+            container
+              container
+                container [ref=97]
+                  text "차트"
+                container
+                  text "2"
+                  text "/2"
+              container
+                container [ref=98]
+                  text "수급"
+                container
+                  text "2"
+                  text "/2"
+              container
+                container [ref=99]
+                  text "뉴스"
+                container
+                  text "3"
+                  text "/3"
+              container
+                container [ref=100]
+                  text "거래량"
+                container
+                  text "2"
+                  text "/3"
+  button "AI 상담" [ref=101, loc=css:button[aria-label="AI 상담"]]
+    text ""
+    text ""

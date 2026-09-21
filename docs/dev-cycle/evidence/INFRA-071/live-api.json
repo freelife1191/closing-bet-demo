@@ -1,0 +1,16 @@
+{
+  "latest": {
+    "date": "2026-09-21",
+    "total_candidates": 12,
+    "filtered_count": 12,
+    "is_stale": null,
+    "updated_at": "2026-09-21T21:22:36.852076"
+  },
+  "status": {
+    "isRunning": false,
+    "message": "",
+    "schedulerRunning": false,
+    "status": "IDLE",
+    "updated_at": "2026-09-21T21:22:36.852076"
+  }
+}
