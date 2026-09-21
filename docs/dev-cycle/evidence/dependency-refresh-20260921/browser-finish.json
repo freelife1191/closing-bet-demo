@@ -1,0 +1,13 @@
+{
+  "space_id": 23,
+  "finished": true,
+  "result": {
+    "spaceId": 23,
+    "closedSpace": true,
+    "keptManagedLabels": [],
+    "closedManagedLabels": [
+      "p1"
+    ],
+    "preservedUnmanagedCount": 0
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "kind": "gateway",
+  "pid": 91291,
+  "pgid": 91291,
+  "port": 58000,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn/candidate-venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn/docs/dev-cycle/evidence/dependency-refresh-20260921/gateway.py"
+  ]
+}

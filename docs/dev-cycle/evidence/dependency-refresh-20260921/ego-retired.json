@@ -1,0 +1,13 @@
+{
+  "ok": false,
+  "status": 410,
+  "statusText": "Gone",
+  "url": "http://127.0.0.1:58000/api/kr/reanalyze/gemini",
+  "headers": {
+    "content-length": "233",
+    "content-type": "application/json",
+    "date": "Mon, 21 Sep 2026 10:44:29 GMT, Mon, 21 Sep 2026 10:44:29 GMT",
+    "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.8 Python/3.11.16"
+  },
+  "body": "{\"code\":\"LEGACY_ANALYSIS_RETIRED\",\"message\":\"\\uad6c\\ud615 \\ubd84\\uc11d\\uc774 \\uc885\\ub8cc\\ub418\\uc5c8\\uc2b5\\ub2c8\\ub2e4. VCP \\ud654\\uba74\\uc758 \\uc7ac\\ubd84\\uc11d \\uae30\\ub2a5\\uc744 \\uc0ac\\uc6a9\\ud558\\uc138\\uc694.\",\"status\":\"error\"}\n"
+}

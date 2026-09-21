@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 91238,
+  "pgid": 91238,
+  "port": 58001,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "58001"
+  ]
+}

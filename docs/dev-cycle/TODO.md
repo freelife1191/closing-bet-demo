@@ -20,17 +20,6 @@
 
 ## P1 — 이번 주기
 
-### [INFRA-070] 보안 수정이 필요한 Python·프론트엔드 의존성 업데이트
-- 카테고리: 인프라 | 티어: T3 | 근거: 사용자 직접 요청 및 npm/OSV 감사
-- 설계 승인: 승인 일자 2026-09-21 | 범위: 공식 보안 수정판과 필요한 호환성 수정, 격리 검증 | 실제 대화 근거: 사용자 «업그레이드 필요한 패키지 업그레이드하고 검증해», 이전 승인 판단 위임
-- 계획: [업데이트 계획](evidence/dependency-refresh-20260921/plan.md)
-- QA 시나리오: 격리 실제 Next 앱 → VCP 정상·빈분석·차트 오류 복구 및 인증 거부 → 정상값/빈상태/복구·오류 없음
-- 브라우저 실측: required | driver: ego-browser (사용자 지정)
-- [x] 공식 버전·보안 근거와 계획 검토 — REJECT 2건 보완 후 ACCEPT
-- [x] Python·npm 의존성 업데이트와 감사 — fresh Python 설치/pipcheck/OSV0, npm audit0·peer 문제0
-- [x] 전체 테스트·타입·린트·빌드·독립 리뷰 — pytest2462/3skip, Vitest641, build3/3, 타입/린트오류0, Ponytail SHIP/code APPROVE/architect CLEAR/security APPROVE/deep ACCEPT
-- [ ] UltraQA 실측·정리·완료 아카이브
-
 
 ## P2 — 대기
 

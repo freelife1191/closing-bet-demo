@@ -1,5 +1,6 @@
 const task=await taskSpace(23),page=task.page('p1'),fs=await import('node:fs/promises');
 const out='/Users/freelife/vibe/lecture/hodu/closing-bet-demo/docs/dev-cycle/evidence/dependency-refresh-20260921';
+await page.cdp('Page.addScriptToEvaluateOnNewDocument',{source:`window.__qaErrors=[];window.__qaConsoleErrors=[];window.addEventListener('error',e=>window.__qaErrors.push(String(e.message)));window.addEventListener('unhandledrejection',e=>window.__qaErrors.push(String(e.reason)));const qaError=console.error;console.error=(...args)=>{window.__qaConsoleErrors.push(args.map(String).join(' '));qaError(...args);};`});
 const results=[];
 for(const mode of ['normal','legacy','raw','generated']) {
  await fetch('http://127.0.0.1:58002/__qa/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});

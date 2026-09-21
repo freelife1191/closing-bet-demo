@@ -1,0 +1,6 @@
+[p1 "Sign In" | space "의존성 업데이트 검수"(23): 1 managed, 0 untracked — p1* "Sign In"]
+root
+  form
+    button [ref=327]
+      image
+      text "Sign in with Google"

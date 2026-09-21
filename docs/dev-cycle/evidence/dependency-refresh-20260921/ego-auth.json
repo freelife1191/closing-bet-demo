@@ -1,0 +1,25 @@
+{
+  "actual": {
+    "text": "Sign in with Google",
+    "errors": [],
+    "consoleErrors": []
+  },
+  "session": {
+    "ok": true,
+    "status": 200,
+    "statusText": "OK",
+    "url": "http://127.0.0.1:58000/api/auth/session",
+    "headers": {
+      "cache-control": "private, no-cache, no-store",
+      "content-length": "2",
+      "content-type": "application/json",
+      "date": "Mon, 21 Sep 2026 10:45:39 GMT, Mon, 21 Sep 2026 10:45:39 GMT",
+      "expires": "0",
+      "keep-alive": "timeout=5",
+      "pragma": "no-cache",
+      "server": "BaseHTTP/0.6 Python/3.11.16",
+      "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch"
+    },
+    "body": "{}"
+  }
+}

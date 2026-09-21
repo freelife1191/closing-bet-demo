@@ -1,0 +1,27 @@
+[
+  {
+    "url": "http://127.0.0.1:58001/api/kr/user/quota",
+    "status": 200,
+    "body": {
+      "limit": 10,
+      "remaining": 8,
+      "usage": 2
+    }
+  },
+  {
+    "url": "http://127.0.0.1:58001/api/kr/user/quota",
+    "status": 200,
+    "body": {
+      "limit": 10,
+      "remaining": 8,
+      "usage": 2
+    }
+  },
+  {
+    "url": "http://127.0.0.1:58001/api/system/env",
+    "status": 403,
+    "body": {
+      "error": "Forbidden"
+    }
+  }
+]

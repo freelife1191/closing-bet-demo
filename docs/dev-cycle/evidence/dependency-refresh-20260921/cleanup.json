@@ -1,0 +1,16 @@
+{
+  "scratch": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn",
+  "removed": true,
+  "owned_processes_remaining": 0,
+  "ports_closed": {
+    "58000": true,
+    "58001": true,
+    "58002": true
+  },
+  "root_package_sha256": "4ef4b68fea412928af1832150490aaf5817d56c753e20a456f612142deaed3d8",
+  "original_venv_modified": false,
+  "original_node_modules_modified": false,
+  "original_services_touched": false,
+  "browser_space": 23,
+  "browser_finished_once": true
+}

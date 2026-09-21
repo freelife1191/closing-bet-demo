@@ -14,21 +14,21 @@
 - 원본 venv/node_modules, .env/data/logs, 3500/5501/live 미변경·미접속. 임시 소유 checkout/venv만 설치. 공식 npm/PyPI 설치 시 scripts 비활성 또는 wheel만 사용. 제품 실행은 외부 네트워크 차단.
 
 ## 작업과 검증
-- [ ] 공식 버전/보안 근거와 설치 전 감사 기록 확정. 독립 계획 검토 ACCEPT.
-- [ ] NextAuth malformed Bearer의 실제 getToken 경계 회귀를 먼저 추가해 이전 버전 실패 확인. 합성 JWT 정상 encode/decode와 익명/잘못된 토큰도 검증한다. 원본 인증 정보 없음.
-- [ ] 후보 manifest/보안 하한를 소유 scratch에서 설치. pipcheck, npm audit, Python OSV 재감사. 호환성 문제는 원인 확인 후 최소 수정; 수정되지 않은 취약점은 완료하지 않는다.
-- [ ] yfinance 실제 Ticker.history를 합성 HTTP 경계 응답으로 실행해 OHLCV/빈 응답/오류 동작과 외부 통신 0을 확인한다. 기존 소비 함수와 기대값을 대조하며 보안 변경 RED/GREEN은 NextAuth 실제 경계로 입증한다.
-- [ ] 표적 회귀, 전체 pytest/Vitest, type/lint, production build3종을 수행한다. Next16 patch에는 major codemod를 적용하지 않는다. Vitest4 migration 공식 문서에 따라 필요한 타입만 조정.
-- [ ] ponytail → code+architect → security/T3 순차 독립 검토. 설치 tarball/lock 해시와 정적검증 기준 고정.
-- [ ] 구현/QA 행렬 첫 커밋 후 UltraQA App 대응. ego-browser 신규 전용 공간 하나에서 실제 앱 VCP 정상/빈분석/합성엔진 생성·차트 실패복구, 로그인 화면·세션 거부를 검증한다. API와 모델 외부 전송만 합성하며 UI는 실제 Next 앱. 실제 NextAuth JWT 및 Flask JSON 계약은 별도 동적 경계 검사로 보강한다. MCP 오류0 확인.
-- [ ] 소유 프로세스/브라우저/scratch 정리, 원래 package.json SHA 불변. 필수 통과 후 INFRA-070만 archive. INFRA-018 유지.
+- [x] 공식 버전/보안 근거와 설치 전 감사 기록 확정. 독립 계획 검토 ACCEPT.
+- [x] NextAuth malformed Bearer의 실제 getToken 경계 회귀를 먼저 추가해 이전 버전 실패 확인. 합성 JWT 정상 encode/decode와 익명/잘못된 토큰도 검증한다. 원본 인증 정보 없음.
+- [x] 후보 manifest/보안 하한를 소유 scratch에서 설치. pipcheck, npm audit, Python OSV 재감사. 호환성 문제는 원인 확인 후 최소 수정; 수정되지 않은 취약점은 완료하지 않는다.
+- [x] yfinance 실제 Ticker.history를 합성 HTTP 경계 응답으로 실행해 OHLCV/빈 응답/오류 동작과 외부 통신 0을 확인한다. 기존 소비 함수와 기대값을 대조하며 보안 변경 RED/GREEN은 NextAuth 실제 경계로 입증한다.
+- [x] 표적 회귀, 전체 pytest/Vitest, type/lint, production build3종을 수행한다. Next16 patch에는 major codemod를 적용하지 않는다. Vitest4 migration 공식 문서에 따라 필요한 타입만 조정.
+- [x] ponytail → code+architect → security/T3 순차 독립 검토. 설치 tarball/lock 해시와 정적검증 기준 고정.
+- [x] 구현/QA 행렬 첫 커밋 후 UltraQA App 대응. ego-browser 신규 전용 공간 하나에서 실제 앱 VCP 정상/빈분석/합성엔진 생성·차트 실패복구, 로그인 화면·세션 거부를 검증한다. API와 모델 외부 전송만 합성하며 UI는 실제 Next 앱. 실제 NextAuth JWT 및 Flask JSON 계약은 별도 동적 경계 검사로 보강한다. MCP 오류0 확인.
+- [x] 소유 프로세스/브라우저/scratch 정리, 원래 package.json SHA 불변. 필수 통과 후 INFRA-070만 archive. INFRA-018 유지.
 
 ## 성공 기준 및 제한
 npm audit 보고23개 항목 제거, Python 설치환경17개 영향패키지의 알려진 보안 문제 제거 또는 미해결이면 BLOCKED. 전체 tests/형검사/빌드/실측 통과. 실제 OAuth 로그인·유료 모델·시세 원격 호출은 하지 않으며 그 영역의 실서비스 검증을 주장하지 않는다.
 현재원본환경 업데이트/서비스 재시작/배포는 이번 소스 업데이트와 분리한다.
 
 ## 근거
-- npm-audit-before.json, python-audit-before.json, python-advisories.json (공식 npm registry 및 OSV)
+- npm-audit-before.json, python-audit-before.json, python-advisories.json.gz (공식 npm registry 및 OSV)
 - https://nextjs.org/docs/app/guides/upgrading/version-16
 - https://vitest.dev/guide/migration/ (4.x는 v4 문서 별도 확인)
 - https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9

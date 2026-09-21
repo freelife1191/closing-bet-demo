@@ -1,0 +1,2 @@
+event: message
+data: {"result":{"content":[{"type":"text","text":"{\"error\":\"Timeout waiting for response from frontend. The browser may not be responding to HMR messages.\"}"}]},"jsonrpc":"2.0","id":1}

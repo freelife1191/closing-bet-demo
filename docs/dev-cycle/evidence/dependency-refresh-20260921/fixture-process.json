@@ -1,0 +1,15 @@
+{
+  "kind": "fixture",
+  "pid": 91177,
+  "pgid": 91177,
+  "port": 58002,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn/candidate-venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn/docs/dev-cycle/evidence/dependency-refresh-20260921/fixture.py",
+    "--repo",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/dependency-refresh-20260921-nnlllahn",
+    "--port",
+    "58002"
+  ]
+}
