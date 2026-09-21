@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-21",
+  "signals": 0,
+  "scanned": 424,
+  "seconds": 95.6,
+  "market_summary_present": true,
+  "process_status": "completed",
+  "qa_status": "blocked",
+  "reason": "Both markets rejected every eligible candidate because no news was collected; no Phase3 stock AI calls",
+  "latest_restored": true
+}

@@ -1,0 +1,15 @@
+{
+  "source_date": "2026-09-09",
+  "input_count": 1,
+  "provider": "gemini",
+  "result_count": 1,
+  "results": [
+    {
+      "ticker_or_name": "SK하이닉스",
+      "action": "BUY",
+      "model": "gemini-3.7-flash",
+      "reason_present": true
+    }
+  ],
+  "saved_to_current_report": false
+}
