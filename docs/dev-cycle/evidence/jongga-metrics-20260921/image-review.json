@@ -1,0 +1,14 @@
+{
+  "reviewed_by": "parent via view_image",
+  "images": [
+    "ego-card-known.png",
+    "ego-detail-known.png",
+    "ego-card-legacy.png",
+    "ego-detail-legacy.png",
+    "ego-card-invalid.png",
+    "ego-detail-invalid.png",
+    "ego-recovery-error.png",
+    "ego-recovery-known.png"
+  ],
+  "result": "values/periods/negative PER/legacy bonus/error recovery legible; desktop1440x1100 only; not full-app/mobile audit"
+}

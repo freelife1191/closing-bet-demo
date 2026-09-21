@@ -115,7 +115,7 @@ def jongga():
     today = datetime.now().strftime("%Y-%m-%d")
     bonus = {"known": 9, "legacy": 8, "invalid": 7, "error": 9}[state["mode"]]
     signal = {"stock_code": "005930", "stock_name": "재무 검증", "market": "KOSPI", "sector": "검증",
-              "grade": "B", "score": {"total": 7 + bonus, "base_score": 7, "bonus_score": bonus},
+              "grade": "B", "score": {"total": 7 + bonus, "base_score": 7, "bonus_score": bonus, "news": 1, "volume": 1, "chart": 1, "supply": 2, "candle": 1, "timing": 1},
               "current_price": 70000, "entry_price": 70000, "stop_price": 68000, "target_price": 75000,
               "change_pct": 1.5, "trading_value": 140_000_000_000, "signal_date": today,
               "checklist": {"has_news": False, "volume_surge": False, "supply_positive": True},

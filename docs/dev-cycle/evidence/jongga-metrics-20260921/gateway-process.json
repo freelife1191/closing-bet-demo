@@ -1,0 +1,11 @@
+{
+  "kind": "gateway",
+  "pid": 48660,
+  "pgid": 48660,
+  "port": 57950,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/jongga-metrics-20260921-wv68gv6l",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/jongga-metrics-20260921-wv68gv6l/venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/jongga-metrics-20260921-wv68gv6l/docs/dev-cycle/evidence/jongga-metrics-20260921/gateway.py"
+  ]
+}

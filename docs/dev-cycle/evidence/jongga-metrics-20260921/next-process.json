@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 48607,
+  "pgid": 48607,
+  "port": 57951,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/jongga-metrics-20260921-wv68gv6l/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/jongga-metrics-20260921-wv68gv6l/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "57951"
+  ]
+}

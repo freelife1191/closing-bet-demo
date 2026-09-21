@@ -1,0 +1,14 @@
+[
+  {
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"issues\":[]}"
+        }
+      ]
+    },
+    "jsonrpc": "2.0",
+    "id": 1
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "base": "2669d25",
+  "product_and_tests": {
+    "files": 6,
+    "added": 131,
+    "deleted": 21,
+    "net": 110
+  },
+  "product": {
+    "files": 4,
+    "added": 50,
+    "deleted": 19,
+    "net": 31
+  },
+  "tests": {
+    "files": 2,
+    "added": 81,
+    "deleted": 2,
+    "net": 79
+  },
+  "allocation": "Shared page/UI test and all six file counts assigned once to JONGGA-033; JONGGA-018 shares those files without double count.",
+  "docs_added": 1915,
+  "docs_deleted": 41,
+  "binary_files": 41
+}

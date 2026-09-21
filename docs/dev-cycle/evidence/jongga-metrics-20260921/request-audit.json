@@ -1,0 +1,72 @@
+{
+  "gateway_api_count": 48,
+  "status_counts": {
+    "200": 36,
+    "gateway-error": 9,
+    "503": 3
+  },
+  "non200": [
+    {
+      "path": "/api/auth/session",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/auth/session",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/auth/_log",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/jongga-v2/dates",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/auth/_log",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/jongga-v2/latest",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/jongga-v2/dates",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/jongga-v2/latest",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "path": "/api/kr/user/quota",
+      "error": "ConnectionRefusedError"
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/stock-detail/005930",
+      "status": 503,
+      "target": 57952
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/stock-detail/005930",
+      "status": 503,
+      "target": 57952
+    },
+    {
+      "method": "GET",
+      "path": "/api/kr/stock-detail/005930",
+      "status": 503,
+      "target": 57952
+    }
+  ],
+  "forbidden_mutations": 0,
+  "api_target": 57952,
+  "original_service_requests": 0,
+  "scope": "owned gateway records only; no claim on unrelated browser traffic",
+  "forbidden_mutations_basis": "delivered fixture requests; gateway errors omit method. auth/_log initialization diagnostics were refused before fixture readiness, not delivered.",
+  "harness_startup_failures": 9,
+  "expected_detail_503": 3,
+  "final_matrix_unexpected_errors": 0
+}

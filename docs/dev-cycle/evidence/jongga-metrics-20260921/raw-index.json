@@ -88,5 +88,95 @@
     "archive": "code-review-final.md.raw.gz",
     "sha256": "38e76a4f3d58ccb007a607728d7339f6c715a020a1d3bd3cbe301b5dbcf52296",
     "bytes": 1557
+  },
+  {
+    "original": "gateway-runtime.log",
+    "archive": "gateway-runtime.log.gz",
+    "sha256": "2756487fbe04e2e29003df944e70c316f1d722aaef458be0be7cbc808b2feba1",
+    "bytes": 12792
+  },
+  {
+    "original": "fixture-runtime.log",
+    "archive": "fixture-runtime.log.gz",
+    "sha256": "5cd8a94c735b0f1b8ac9b40a26a6177554b75cc25e9f85cb45153aa80216eea6",
+    "bytes": 4179
+  },
+  {
+    "original": "fixture.log",
+    "archive": "fixture.log.gz",
+    "sha256": "6edcf5dcbcb2bc43f7f8c4c162ca5510e784ba875d4567fbe93edf5db3bf950c",
+    "bytes": 3762
+  },
+  {
+    "original": "next-runtime.log",
+    "archive": "next-runtime.log.gz",
+    "sha256": "84fda9c78b87d5da05e686f7b8de8edbae7680d1efd80fb2c4d1e421058dacc1",
+    "bytes": 3306
+  },
+  {
+    "original": "ego-card-known.txt",
+    "archive": "ego-card-known.txt.gz",
+    "sha256": "188cee37003320941e29b1aa7e1619c74e86a755a7d5f9158ccab34a18d199cc",
+    "bytes": 12269
+  },
+  {
+    "original": "ego-detail-known.txt",
+    "archive": "ego-detail-known.txt.gz",
+    "sha256": "653ad1ea0a79f1ff9f301a2a06399f287772fda88829a2a3b903e353447b550c",
+    "bytes": 11601
+  },
+  {
+    "original": "ego-detail-legacy.txt",
+    "archive": "ego-detail-legacy.txt.gz",
+    "sha256": "5341f89af645ca09501ba413537b7776c31cb857aaee5cfef23ca008b0e9af6a",
+    "bytes": 11048
+  },
+  {
+    "original": "ego-card-legacy.txt",
+    "archive": "ego-card-legacy.txt.gz",
+    "sha256": "f8984d9a67d14883d1c07e5597b17cbb0b32e39174fb286305a3c4517d04d0f4",
+    "bytes": 12269
+  },
+  {
+    "original": "ego-recovery-known.txt",
+    "archive": "ego-recovery-known.txt.gz",
+    "sha256": "45ead730a83d2940b342029325670aaed4b962e8c0f9cdbacd49e0a3d60e4c5c",
+    "bytes": 11186
+  },
+  {
+    "original": "ego-bonus9.txt",
+    "archive": "ego-bonus9.txt.gz",
+    "sha256": "a7b2fc005d17b6cadb14f3cefbae6a61991908643dee29a11d1615f9bb893ef3",
+    "bytes": 12322
+  },
+  {
+    "original": "ego-recovery-error.txt",
+    "archive": "ego-recovery-error.txt.gz",
+    "sha256": "db3d13e081306f033ca8c915d45fba91e1ea529194814e057a20681d0fa70f65",
+    "bytes": 7096
+  },
+  {
+    "original": "ego-detail-invalid.txt",
+    "archive": "ego-detail-invalid.txt.gz",
+    "sha256": "35493bd940249d9760f6e4a4e06eb7b2c4a5577d7525c662a0da34c757d347aa",
+    "bytes": 11215
+  },
+  {
+    "original": "ego-card-invalid.txt",
+    "archive": "ego-card-invalid.txt.gz",
+    "sha256": "d93f86a29dab394caad745f66376726962ee8133374cb702fa8f27b41b4aeec0",
+    "bytes": 12419
+  },
+  {
+    "original": "ego-bonus9-final.txt",
+    "archive": "ego-bonus9-final.txt.gz",
+    "sha256": "e1e1b1b9f19401dd53baba272efb7d21ac3973facd1a2001ffc6783171a54f87",
+    "bytes": 12269
+  },
+  {
+    "original": "ego-initial.txt",
+    "archive": "ego-initial.txt.gz",
+    "sha256": "0681f56276c81646585bbea740a1ab567d670530a0ba850ae65523846547707f",
+    "bytes": 11370
   }
 ]
