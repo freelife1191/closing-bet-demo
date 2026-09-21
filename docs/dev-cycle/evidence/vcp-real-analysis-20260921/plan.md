@@ -25,47 +25,47 @@
 
 Files: engine/kr_ai_strategies.py, engine/kr_ai_analyzer.py, engine/kr_ai_templates.py, app/routes/kr_market_signal_common.py, services/kr_market_ai_payload_service.py, 관련engine/app/service tests.
 
-- [ ] 기존Mock producer를결정론적으로실행한합성결과를fixture로고정; read-boundary가이를거부해야하는RED와일반용어를포함한정상사유유지검사추가.
-- [ ] templates모듈에아래의미의순수predicate를추가한다. 길이4096이하, full-match만사용.
+- [x] 기존Mock producer를결정론적으로실행한합성결과를fixture로고정; read-boundary가이를거부해야하는RED와일반용어를포함한정상사유유지검사추가.
+- [x] templates모듈에아래의미의순수predicate를추가한다. 길이4096이하, full-match만사용.
 ```text
 정확한 GPT 고정문장 → 템플릿
 Gemini: 전체3섹션을분리하고2driver/risk가현재정적목록에있으며
 3가지hypothesis중하나가driver/risk를그대로참조하는전체문장과일치 → 템플릿
 나머지(같은어휘를쓴정상분석포함) → 그대로유지
 ```
-- [ ] _is_meaningful_ai_reason에서위predicate를사용(CSV·병합동일). rawAI응답은_clone_payload_for_signal_normalization의복사본에서3recommendation필드만필터한다. 원본dict수정금지.
-- [ ] legacy전략두개는None,가용성false로변경; 실제모델호출이라고설명하지않는다. random전용헬퍼/import삭제.
-- [ ] 표적pytest RED→GREEN; cache원본과정상legacy값불변확인.
+- [x] _is_meaningful_ai_reason에서위predicate를사용(CSV·병합동일). rawAI응답은_clone_payload_for_signal_normalization의복사본에서3recommendation필드만필터한다. 원본dict수정금지.
+- [x] legacy전략두개는None,가용성false로변경; 실제모델호출이라고설명하지않는다. random전용헬퍼/import삭제.
+- [x] 표적pytest RED→GREEN; cache원본과정상legacy값불변확인.
 
 ## Task 2: 실제 분석과 안전한 저장
 
 Files: services/common_update_ai_analysis_service.py, scripts/init_data.py, 관련service/script tests.
 
-- [ ] _load_ai_signal_targets의선택열에name/current_price/entry_price와기존AI_PROMPT_NUMERIC_FIELDS추가. 없는숫자는기존builder가생략한다.
-- [ ] 단독step: 선택/정규화/상위N dataframe에서build_ai_batch_payload를만들고 get_vcp_analyzer() + run_async_analyzer_batch() 호출. KrAiAnalyzer를호출하지않음.
-- [ ] 사용가능추천(action BUY/SELL/HOLD,비어있지않은사유,구형템플릿아님)이있는ticker만갱신. 기존datedpayload를복사하여새유효provider필드만대체하고None는기존값보존. news/기타ticker도보존. sanitize_for_json 후기존atomic_write_text사용.
-- [ ] date정규화는None/최신과YYYY-MM-DD·YYYYMMDD달력날짜만허용. filename생성전검증. dated2파일은항상성공시에만,latest2파일은오늘날짜일때만쓴다. 기존삭제함수/선삭제는제거.
-- [ ] 무대상은count0/기존파일보존,실패는error/count0/기존파일보존. 성공은updated count반환. common서비스의기존return무시호출과호환.
-- [ ] selected_items에VCP Signals가있으면기존step가이미실제분석했으므로같은날짜캐시의유효결과를재사용하고모델호출/파일write0. 유효결과없으면error로기록.
-- [ ] create_kr_ai_analysis는같은step를data_dir=BASE_DIR/data로부른다. CLI all의중복후속호출삭제. 필요한경로주입은실제스크립트경로를보존하는선택인자이며테스트전용분기없음.
-- [ ] 실제VCP클래스+가짜model응답으로batch/저장통합검사. partial/None/빈DF/history/latest/중복0회각회귀추가.
+- [x] _load_ai_signal_targets의선택열에name/current_price/entry_price와기존AI_PROMPT_NUMERIC_FIELDS추가. 없는숫자는기존builder가생략한다.
+- [x] 단독step: 선택/정규화/상위N dataframe에서build_ai_batch_payload를만들고 get_vcp_analyzer() + run_async_analyzer_batch() 호출. KrAiAnalyzer를호출하지않음.
+- [x] 사용가능추천(action BUY/SELL/HOLD,비어있지않은사유,구형템플릿아님)이있는ticker만갱신. 기존datedpayload를복사하여새유효provider필드만대체하고None는기존값보존. news/기타ticker도보존. sanitize_for_json 후기존atomic_write_text사용.
+- [x] date정규화는None/최신과YYYY-MM-DD·YYYYMMDD달력날짜만허용. filename생성전검증. dated2파일은항상성공시에만,latest2파일은오늘날짜일때만쓴다. 기존삭제함수/선삭제는제거.
+- [x] 무대상은count0/기존파일보존,실패는error/count0/기존파일보존. 성공은updated count반환. common서비스의기존return무시호출과호환.
+- [x] selected_items에VCP Signals가있으면기존step가이미실제분석했으므로같은날짜캐시의유효결과를재사용하고모델호출/파일write0. 유효결과없으면error로기록.
+- [x] create_kr_ai_analysis는같은step를data_dir=BASE_DIR/data로부른다. CLI all의중복후속호출삭제. 필요한경로주입은실제스크립트경로를보존하는선택인자이며테스트전용분기없음.
+- [x] 실제VCP클래스+가짜model응답으로batch/저장통합검사. partial/None/빈DF/history/latest/중복0회각회귀추가.
 
 ## Task 3: 구형 개인키 API 종료·정합성
 
 Files: app/routes/kr_market_system_http_routes.py, app/routes/kr_market_dependency_builders.py, app/routes/kr_market_route_registry.py, services/kr_market_route_service.py, scripts/init_data.py, 관련route/contract tests, .claude/skills/dev-cycle/references/tier-rules.md, frontend/src/app/dashboard/data-status/page.tsx.
 
-- [ ] POST /reanalyze/gemini는410과현재VCP재분석기능안내를반환. 키/쿼터tracker/파일을열기전종료한다. 현재VCP /signals/reanalyze-failed-ai는변경없음.
-- [ ] 쓰이지않는legacy user reanalysis함수/deps배선만제거. create_kr_ai_analysis_with_key는직접호출호환을위해구형경로종료error/count0 반환(어떤키도읽거나사용하지않음).
-- [ ] 기존개인키분석성공/쿼터검사는폐기된행동으로명시하고410/쿼터0/분석0/기존VCP경로유지검사로교체.
-- [ ] Data Status의AI Analysis설명은실제VCP엔진재사용/통합선택시중복호출없음으로맞춤. frontend-skills/Next06-fetching-data읽고본문설명만수정한다.
-- [ ] 위험목록에engine/signal_tracker_ai_helpers.py추가. 실제VCP판정열을만드는기존파일이라는근거기록.
+- [x] POST /reanalyze/gemini는410과현재VCP재분석기능안내를반환. 키/쿼터tracker/파일을열기전종료한다. 현재VCP /signals/reanalyze-failed-ai는변경없음.
+- [x] 쓰이지않는legacy user reanalysis함수/deps배선만제거. create_kr_ai_analysis_with_key는직접호출호환을위해구형경로종료error/count0 반환(어떤키도읽거나사용하지않음).
+- [x] 기존개인키분석성공/쿼터검사는폐기된행동으로명시하고410/쿼터0/분석0/기존VCP경로유지검사로교체.
+- [x] Data Status의AI Analysis설명은실제VCP엔진재사용/통합선택시중복호출없음으로맞춤. frontend-skills/Next06-fetching-data읽고본문설명만수정한다.
+- [x] 위험목록에engine/signal_tracker_ai_helpers.py추가. 실제VCP판정열을만드는기존파일이라는근거기록.
 
 ## Task 4: 리뷰·QA·마감
 
-- [ ] 전체pytest/Vitest/type/lint/build,원본package보존. ponytail→code-review+architect→T3심층/보안,입력SHA보존.
-- [ ] UltraQA행렬+정적통과첫커밋후소유Flask57992/Next57991/gateway57990,Space20실제VCP화면으로검증.
-- [ ] UI: 합성legacy템플릿은merged/raw어느경로에서도표시안됨,정상legacy실제분석과75%는유지,새실제VCP배치(transport대역)결과표시,실패시이전정상값보존,410은호출/쿼터0. API/DOM/이미지/console/Next증거대조.
-- [ ] 종료시소유PID/cwd/PGID확인·scratch삭제·원본불변,Space20finish1회. 요구범위검증통과후VCP022아카이브하되과거날짜의실제요청귀속미확정은명시한다.
+- [x] 전체pytest/Vitest/type/lint/build,원본package보존. ponytail→code-review+architect→T3심층/보안,입력SHA보존.
+- [x] UltraQA행렬+정적통과첫커밋후소유Flask57992/Next57991/gateway57990,Space20실제VCP화면으로검증.
+- [x] UI: 합성legacy템플릿은merged/raw어느경로에서도표시안됨,정상legacy실제분석과75%는유지,새실제VCP배치(transport대역)결과표시,실패시이전정상값보존,410은호출/쿼터0. API/DOM/이미지/console/Next증거대조.
+- [x] 종료시소유PID/cwd/PGID확인·scratch삭제·원본불변,Space20finish1회. 요구범위검증통과후VCP022아카이브하되과거날짜의실제요청귀속미확정은명시한다.
 
 ## Critic 수정 1 — 구현 전 고정 사항
 

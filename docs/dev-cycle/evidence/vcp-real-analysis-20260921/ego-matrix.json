@@ -1,0 +1,190 @@
+[
+  {
+    "mode": "normal",
+    "tabs": [
+      {
+        "provider": "Gemini",
+        "actual": {
+          "text": "AI 상세 분석× GPT Perplexity Gemini75%\"K-칩스법과 수급 영향을 비교한 정상 분석입니다. 과거 템플릿의 전체 문장이 아닙니다.\"종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      },
+      {
+        "provider": "GPT",
+        "actual": {
+          "text": "AI 상세 분석× GPT Perplexity Gemini75%\"K-칩스법과 수급 영향을 비교한 정상 분석입니다. 과거 템플릿의 전체 문장이 아닙니다.\"종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      },
+      {
+        "provider": "Perplexity",
+        "actual": {
+          "text": "AI 상세 분석× GPT Perplexity Gemini75%\"K-칩스법과 수급 영향을 비교한 정상 분석입니다. 과거 템플릿의 전체 문장이 아닙니다.\"종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      }
+    ],
+    "raw": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis",
+      "headers": {
+        "content-length": "1239",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:41 GMT, Mon, 21 Sep 2026 06:13:41 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"generated_at\":\"2026-09-21T15:13:41.264009\",\"signal_date\":\"2026-09-21\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"gemini_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"K-\\uce69\\uc2a4\\ubc95\\uacfc \\uc218\\uae09 \\uc601\\ud5a5\\uc744 \\ube44\\uad50\\ud55c \\uc815\\uc0c1 \\ubd84\\uc11d\\uc785\\ub2c8\\ub2e4. \\uacfc\\uac70 \\ud15c\\ud50c\\ub9bf\\uc758 \\uc804\\uccb4 \\ubb38\\uc7a5\\uc774 \\uc544\\ub2d9\\ub2c8\\ub2e4.\"},\"gpt_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"K-\\uce69\\uc2a4\\ubc95\\uacfc \\uc218\\uae09 \\uc601\\ud5a5\\uc744 \\ube44\\uad50\\ud55c \\uc815\\uc0c1 \\ubd84\\uc11d\\uc785\\ub2c8\\ub2e4. \\uacfc\\uac70 \\ud15c\\ud50c\\ub9bf\\uc758 \\uc804\\uccb4 \\ubb38\\uc7a5\\uc774 \\uc544\\ub2d9\\ub2c8\\ub2e4.\"},\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"perplexity_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"K-\\uce69\\uc2a4\\ubc95\\uacfc \\uc218\\uae09 \\uc601\\ud5a5\\uc744 \\ube44\\uad50\\ud55c \\uc815\\uc0c1 \\ubd84\\uc11d\\uc785\\ub2c8\\ub2e4. \\uacfc\\uac70 \\ud15c\\ud50c\\ub9bf\\uc758 \\uc804\\uccb4 \\ubb38\\uc7a5\\uc774 \\uc544\\ub2d9\\ub2c8\\ub2e4.\"},\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}]}\n"
+    },
+    "merged": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/signals",
+      "headers": {
+        "content-length": "1251",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:41 GMT, Mon, 21 Sep 2026 06:13:41 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"last_updated\":\"2026-09-21T15:13:41.267919\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"gemini_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"K-\\uce69\\uc2a4\\ubc95\\uacfc \\uc218\\uae09 \\uc601\\ud5a5\\uc744 \\ube44\\uad50\\ud55c \\uc815\\uc0c1 \\ubd84\\uc11d\\uc785\\ub2c8\\ub2e4. \\uacfc\\uac70 \\ud15c\\ud50c\\ub9bf\\uc758 \\uc804\\uccb4 \\ubb38\\uc7a5\\uc774 \\uc544\\ub2d9\\ub2c8\\ub2e4.\"},\"gpt_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"K-\\uce69\\uc2a4\\ubc95\\uacfc \\uc218\\uae09 \\uc601\\ud5a5\\uc744 \\ube44\\uad50\\ud55c \\uc815\\uc0c1 \\ubd84\\uc11d\\uc785\\ub2c8\\ub2e4. \\uacfc\\uac70 \\ud15c\\ud50c\\ub9bf\\uc758 \\uc804\\uccb4 \\ubb38\\uc7a5\\uc774 \\uc544\\ub2d9\\ub2c8\\ub2e4.\"},\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"perplexity_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"K-\\uce69\\uc2a4\\ubc95\\uacfc \\uc218\\uae09 \\uc601\\ud5a5\\uc744 \\ube44\\uad50\\ud55c \\uc815\\uc0c1 \\ubd84\\uc11d\\uc785\\ub2c8\\ub2e4. \\uacfc\\uac70 \\ud15c\\ud50c\\ub9bf\\uc758 \\uc804\\uccb4 \\ubb38\\uc7a5\\uc774 \\uc544\\ub2d9\\ub2c8\\ub2e4.\"},\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}],\"source\":\"synthetic\",\"total_scanned\":1}\n"
+    }
+  },
+  {
+    "mode": "legacy",
+    "tabs": [
+      {
+        "provider": "Gemini",
+        "actual": {
+          "text": "AI 상세 분석× Gemini미산출AI 분석 데이터 없음종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      }
+    ],
+    "raw": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis",
+      "headers": {
+        "content-length": "462",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:41 GMT, Mon, 21 Sep 2026 06:13:41 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"generated_at\":\"2026-09-21T15:13:41.869449\",\"signal_date\":\"2026-09-21\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"gemini_recommendation\":null,\"gpt_recommendation\":null,\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"perplexity_recommendation\":null,\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}]}\n"
+    },
+    "merged": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/signals",
+      "headers": {
+        "content-length": "386",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:41 GMT, Mon, 21 Sep 2026 06:13:41 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"last_updated\":\"2026-09-21T15:13:41.874259\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}],\"source\":\"synthetic\",\"total_scanned\":1}\n"
+    }
+  },
+  {
+    "mode": "raw",
+    "tabs": [
+      {
+        "provider": "Gemini",
+        "actual": {
+          "text": "AI 상세 분석× Gemini미산출AI 분석 데이터 없음종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      }
+    ],
+    "raw": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis",
+      "headers": {
+        "content-length": "462",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:42 GMT, Mon, 21 Sep 2026 06:13:42 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"generated_at\":\"2026-09-21T15:13:42.469688\",\"signal_date\":\"2026-09-21\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"gemini_recommendation\":null,\"gpt_recommendation\":null,\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"perplexity_recommendation\":null,\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}]}\n"
+    },
+    "merged": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/signals",
+      "headers": {
+        "content-length": "386",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:42 GMT, Mon, 21 Sep 2026 06:13:42 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"last_updated\":\"2026-09-21T15:13:42.475821\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}],\"source\":\"synthetic\",\"total_scanned\":1}\n"
+    }
+  },
+  {
+    "mode": "generated",
+    "tabs": [
+      {
+        "provider": "Gemini",
+        "actual": {
+          "text": "AI 상세 분석× GPT Perplexity Gemini75%\"실측 검증용 합성 모델 응답입니다. 수급과 변동성 자료를 비교했으며 추가 거래량 확인이 필요합니다. 외부 모델은 호출하지 않았습니다.\"종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      },
+      {
+        "provider": "GPT",
+        "actual": {
+          "text": "AI 상세 분석× GPT Perplexity Gemini75%\"실측 검증용 합성 모델 응답입니다. 수급과 변동성 자료를 비교했으며 추가 거래량 확인이 필요합니다. 외부 모델은 호출하지 않았습니다.\"종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      },
+      {
+        "provider": "Perplexity",
+        "actual": {
+          "text": "AI 상세 분석× GPT Perplexity Gemini75%\"실측 검증용 합성 모델 응답입니다. 수급과 변동성 자료를 비교했으며 추가 거래량 확인이 필요합니다. 외부 모델은 호출하지 않았습니다.\"종합 시그널 점수85.0VCP 패턴 보조 점수-수축비율 0.60 · 외국인 5일 순매수 1,000원 · 기관 5일 순매수 500원주요 뉴스관련 뉴스 없음AI 상담 (VCP 전문가)💡 사용법🤖 \"이 종목 VCP 패턴 맞아?\"📊 \"수급 상황 분석해줘\"💰 \"손절가랑 목표가 알려줘\"👋 안녕하세요! VCP 전문가 챗봇 입니다.\nVCP 검증 종목의 VCP 패턴, 수급 현황, 그리고 AI 투자 의견에 대해 무엇이든 물어보세요.\n명령어 예시:\n\n/status - 현재 상태 확인\n/help - 도움말\n추천 질문이 종목 VCP 패턴 분석해줘수급(기관/외국인) 상황 어때?진입가와 손절가 추천해줘",
+          "errors": [],
+          "consoleErrors": []
+        }
+      }
+    ],
+    "raw": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis",
+      "headers": {
+        "content-length": "1632",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:43 GMT, Mon, 21 Sep 2026 06:13:43 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"generated_at\":\"2026-09-21T15:13:43.378780\",\"signal_date\":\"2026-09-21\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"gemini_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"\\uc2e4\\uce21 \\uac80\\uc99d\\uc6a9 \\ud569\\uc131 \\ubaa8\\ub378 \\uc751\\ub2f5\\uc785\\ub2c8\\ub2e4. \\uc218\\uae09\\uacfc \\ubcc0\\ub3d9\\uc131 \\uc790\\ub8cc\\ub97c \\ube44\\uad50\\ud588\\uc73c\\uba70 \\ucd94\\uac00 \\uac70\\ub798\\ub7c9 \\ud655\\uc778\\uc774 \\ud544\\uc694\\ud569\\ub2c8\\ub2e4. \\uc678\\ubd80 \\ubaa8\\ub378\\uc740 \\ud638\\ucd9c\\ud558\\uc9c0 \\uc54a\\uc558\\uc2b5\\ub2c8\\ub2e4.\"},\"gpt_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"\\uc2e4\\uce21 \\uac80\\uc99d\\uc6a9 \\ud569\\uc131 \\ubaa8\\ub378 \\uc751\\ub2f5\\uc785\\ub2c8\\ub2e4. \\uc218\\uae09\\uacfc \\ubcc0\\ub3d9\\uc131 \\uc790\\ub8cc\\ub97c \\ube44\\uad50\\ud588\\uc73c\\uba70 \\ucd94\\uac00 \\uac70\\ub798\\ub7c9 \\ud655\\uc778\\uc774 \\ud544\\uc694\\ud569\\ub2c8\\ub2e4. \\uc678\\ubd80 \\ubaa8\\ub378\\uc740 \\ud638\\ucd9c\\ud558\\uc9c0 \\uc54a\\uc558\\uc2b5\\ub2c8\\ub2e4.\"},\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"perplexity_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"\\uc2e4\\uce21 \\uac80\\uc99d\\uc6a9 \\ud569\\uc131 \\ubaa8\\ub378 \\uc751\\ub2f5\\uc785\\ub2c8\\ub2e4. \\uc218\\uae09\\uacfc \\ubcc0\\ub3d9\\uc131 \\uc790\\ub8cc\\ub97c \\ube44\\uad50\\ud588\\uc73c\\uba70 \\ucd94\\uac00 \\uac70\\ub798\\ub7c9 \\ud655\\uc778\\uc774 \\ud544\\uc694\\ud569\\ub2c8\\ub2e4. \\uc678\\ubd80 \\ubaa8\\ub378\\uc740 \\ud638\\ucd9c\\ud558\\uc9c0 \\uc54a\\uc558\\uc2b5\\ub2c8\\ub2e4.\"},\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}]}\n"
+    },
+    "merged": {
+      "ok": true,
+      "status": 200,
+      "statusText": "OK",
+      "url": "http://127.0.0.1:57990/api/kr/signals",
+      "headers": {
+        "content-length": "1644",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:43 GMT, Mon, 21 Sep 2026 06:13:43 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"last_updated\":\"2026-09-21T15:13:43.385116\",\"signals\":[{\"contraction_ratio\":0.6,\"current_price\":71000,\"entry_price\":70000,\"foreign_1d\":100,\"foreign_5d\":1000,\"gemini_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"\\uc2e4\\uce21 \\uac80\\uc99d\\uc6a9 \\ud569\\uc131 \\ubaa8\\ub378 \\uc751\\ub2f5\\uc785\\ub2c8\\ub2e4. \\uc218\\uae09\\uacfc \\ubcc0\\ub3d9\\uc131 \\uc790\\ub8cc\\ub97c \\ube44\\uad50\\ud588\\uc73c\\uba70 \\ucd94\\uac00 \\uac70\\ub798\\ub7c9 \\ud655\\uc778\\uc774 \\ud544\\uc694\\ud569\\ub2c8\\ub2e4. \\uc678\\ubd80 \\ubaa8\\ub378\\uc740 \\ud638\\ucd9c\\ud558\\uc9c0 \\uc54a\\uc558\\uc2b5\\ub2c8\\ub2e4.\"},\"gpt_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"\\uc2e4\\uce21 \\uac80\\uc99d\\uc6a9 \\ud569\\uc131 \\ubaa8\\ub378 \\uc751\\ub2f5\\uc785\\ub2c8\\ub2e4. \\uc218\\uae09\\uacfc \\ubcc0\\ub3d9\\uc131 \\uc790\\ub8cc\\ub97c \\ube44\\uad50\\ud588\\uc73c\\uba70 \\ucd94\\uac00 \\uac70\\ub798\\ub7c9 \\ud655\\uc778\\uc774 \\ud544\\uc694\\ud569\\ub2c8\\ub2e4. \\uc678\\ubd80 \\ubaa8\\ub378\\uc740 \\ud638\\ucd9c\\ud558\\uc9c0 \\uc54a\\uc558\\uc2b5\\ub2c8\\ub2e4.\"},\"inst_1d\":50,\"inst_5d\":500,\"is_vcp\":true,\"market\":\"KOSPI\",\"name\":\"VCP \\uac80\\uc99d\",\"news\":[],\"perplexity_recommendation\":{\"action\":\"HOLD\",\"confidence\":75,\"reason\":\"\\uc2e4\\uce21 \\uac80\\uc99d\\uc6a9 \\ud569\\uc131 \\ubaa8\\ub378 \\uc751\\ub2f5\\uc785\\ub2c8\\ub2e4. \\uc218\\uae09\\uacfc \\ubcc0\\ub3d9\\uc131 \\uc790\\ub8cc\\ub97c \\ube44\\uad50\\ud588\\uc73c\\uba70 \\ucd94\\uac00 \\uac70\\ub798\\ub7c9 \\ud655\\uc778\\uc774 \\ud544\\uc694\\ud569\\ub2c8\\ub2e4. \\uc678\\ubd80 \\ubaa8\\ub378\\uc740 \\ud638\\ucd9c\\ud558\\uc9c0 \\uc54a\\uc558\\uc2b5\\ub2c8\\ub2e4.\"},\"return_pct\":1.43,\"score\":85,\"signal_date\":\"2026-09-21\",\"status\":\"ACTIVE\",\"ticker\":\"005930\"}],\"source\":\"synthetic\",\"total_scanned\":1}\n"
+    }
+  }
+]

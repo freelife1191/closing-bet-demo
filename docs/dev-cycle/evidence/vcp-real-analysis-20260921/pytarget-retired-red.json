@@ -1,0 +1,20 @@
+{
+  "stage": "pytarget:retired-red",
+  "started_at": "2026-09-21T05:51:08.765816+00:00",
+  "ended_at": "2026-09-21T05:51:10.553233+00:00",
+  "pid": 89764,
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/app/test_kr_market_route_integration.py",
+    "-k",
+    "retired"
+  ],
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr",
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "exit_code": 1,
+  "elapsed_seconds": 1.79
+}

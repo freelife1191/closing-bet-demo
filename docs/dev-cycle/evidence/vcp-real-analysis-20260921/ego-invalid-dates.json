@@ -1,0 +1,66 @@
+[
+  {
+    "date": "../../../package",
+    "response": {
+      "ok": false,
+      "status": 400,
+      "statusText": "Bad Request",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis?date=..%2F..%2F..%2Fpackage",
+      "headers": {
+        "content-length": "134",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:43 GMT, Mon, 21 Sep 2026 06:13:43 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"error\":\"\\ub0a0\\uc9dc\\ub294 \\uc720\\ud6a8\\ud55c YYYY-MM-DD \\ub610\\ub294 YYYYMMDD \\ud615\\uc2dd\\uc774\\uc5b4\\uc57c \\ud569\\ub2c8\\ub2e4.\"}\n"
+    }
+  },
+  {
+    "date": "2026-02-30",
+    "response": {
+      "ok": false,
+      "status": 400,
+      "statusText": "Bad Request",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis?date=2026-02-30",
+      "headers": {
+        "content-length": "134",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:43 GMT, Mon, 21 Sep 2026 06:13:43 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"error\":\"\\ub0a0\\uc9dc\\ub294 \\uc720\\ud6a8\\ud55c YYYY-MM-DD \\ub610\\ub294 YYYYMMDD \\ud615\\uc2dd\\uc774\\uc5b4\\uc57c \\ud569\\ub2c8\\ub2e4.\"}\n"
+    }
+  },
+  {
+    "date": "",
+    "response": {
+      "ok": false,
+      "status": 400,
+      "statusText": "Bad Request",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis?date=",
+      "headers": {
+        "content-length": "134",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:43 GMT, Mon, 21 Sep 2026 06:13:43 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"error\":\"\\ub0a0\\uc9dc\\ub294 \\uc720\\ud6a8\\ud55c YYYY-MM-DD \\ub610\\ub294 YYYYMMDD \\ud615\\uc2dd\\uc774\\uc5b4\\uc57c \\ud569\\ub2c8\\ub2e4.\"}\n"
+    }
+  },
+  {
+    "date": "２０２６-０２-１１",
+    "response": {
+      "ok": false,
+      "status": 400,
+      "statusText": "Bad Request",
+      "url": "http://127.0.0.1:57990/api/kr/ai-analysis?date=%EF%BC%92%EF%BC%90%EF%BC%92%EF%BC%96-%EF%BC%90%EF%BC%92-%EF%BC%91%EF%BC%91",
+      "headers": {
+        "content-length": "134",
+        "content-type": "application/json",
+        "date": "Mon, 21 Sep 2026 06:13:43 GMT, Mon, 21 Sep 2026 06:13:43 GMT",
+        "server": "BaseHTTP/0.6 Python/3.11.16, Werkzeug/3.1.5 Python/3.11.16"
+      },
+      "body": "{\"error\":\"\\ub0a0\\uc9dc\\ub294 \\uc720\\ud6a8\\ud55c YYYY-MM-DD \\ub610\\ub294 YYYYMMDD \\ud615\\uc2dd\\uc774\\uc5b4\\uc57c \\ud569\\ub2c8\\ub2e4.\"}\n"
+    }
+  }
+]

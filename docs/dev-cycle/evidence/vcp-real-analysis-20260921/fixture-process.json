@@ -1,0 +1,15 @@
+{
+  "kind": "fixture",
+  "pid": 59163,
+  "pgid": 59163,
+  "port": 57992,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr",
+  "command": [
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr/venv/bin/python",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr/docs/dev-cycle/evidence/vcp-real-analysis-20260921/fixture.py",
+    "--repo",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr",
+    "--port",
+    "57992"
+  ]
+}

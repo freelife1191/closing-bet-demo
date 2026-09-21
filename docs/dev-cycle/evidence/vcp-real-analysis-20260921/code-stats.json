@@ -1,0 +1,11 @@
+{
+  "base": "a14813d",
+  "head": "80770ac",
+  "add": 504,
+  "delete": 930,
+  "net": -426,
+  "excludes": [
+    "docs/",
+    ".claude/"
+  ]
+}

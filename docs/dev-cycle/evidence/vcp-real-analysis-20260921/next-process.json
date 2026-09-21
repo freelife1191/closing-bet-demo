@@ -1,0 +1,16 @@
+{
+  "kind": "next",
+  "pid": 48901,
+  "pgid": 48901,
+  "port": 57991,
+  "cwd": "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr/frontend",
+  "command": [
+    "node",
+    "/private/var/folders/99/kpfx0mdj3fvbczqpbncjl0bm0000gn/T/vcp-real-analysis-20260921-t_2nj9kr/frontend/node_modules/next/dist/bin/next",
+    "dev",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "57991"
+  ]
+}
