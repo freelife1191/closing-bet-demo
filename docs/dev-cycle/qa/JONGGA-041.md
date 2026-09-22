@@ -5,7 +5,7 @@
 - 구성 근거: `[JONGGA-041]` 의 QA 시나리오 줄 + 코드 리뷰(feature-dev:code-reviewer, APPROVE)의 참고 사항(이 화면에서
   `/api/kr/stock-chart` 의 첫 호출자라는 점, 카드 수만큼 동시 요청)
 - 구성 2026-09-22 18:33 | 실행 2026-09-22 18:31~18:35 (1회차)
-- 검증 기준 커밋: 첫 커밋(해시는 아카이브 커밋에서 기입). 실행은 첫 커밋 직전 작업 트리에서 했고, 그 뒤 바뀐 것은
+- 검증 기준 커밋: `1029f2e` (첫 커밋). 실행은 그 커밋 직전 작업 트리에서 했고, 커밋까지 바뀐 것은
   `MiniPriceChart.tsx` 의 주석 두 줄(리뷰 참고 사항 반영)뿐이다
 - QA 엔진(engine): Claude Code. 사용자 진입 흐름이 화면이므로 브라우저 실측을 필수로 두었다. 격리 사본(scratchpad 에
   rsync 한 작업 트리 + `node_modules` APFS clone, `.env` 계열·`data/`·`logs/`·`secrets/` 제외)에서
