@@ -79,6 +79,26 @@
 - QA: 격리 /chatbot 에서 「오늘 섹터 어때?」「VCP 매수 추천 알려줘」 전송 → 첫 답변이 반도체를 상승률 2.93% 로 말하고, 둘째가 「시그널 없음」 대신 「분석 4건, 매수 추천 0건, 기준일 2026-05-05」를 말한다. 브라우저 실측 required.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
 
+### [JONGGA-041] 종가베팅 카드에 실제 시세로 그린 작은 차트를 되살린다
+- 카테고리: 종가베팅 | 티어: T2 (frontend 세 파일, 위험 경로 없음) | 근거: 사용자 요청(2026-09-22 「작은 차트 되살려주고 진행해」).
+- 설계 승인: 2026-09-22 사용자 「작은 차트 되살려주고 진행해」 → AskUserQuestion 「차트 설계」에서 「실제 시세 SVG 선 차트」 선택(bounded). 같은 범위의 구현·리뷰·QA·커밋은 다시 승인을 기다리지 않는다. `[JONGGA-024]`(커밋 `d1163eb`, 09-20)가 상승·하락 두 모양뿐인 가짜 polyline 을 지우고 「실제 차트 크게 보기」 버튼만 남겼다. 카드에서 추세를 한눈에 보던 자리가 비었다.
+- 범위: 기존 `GET /api/kr/stock-chart/<code>?period=1m&end=<signal_date>`(`services/kr_market_analytics_service.py:158`, 로컬 `daily_prices.csv`)와 `krAPI.getStockChart`(`frontend/src/lib/api.ts:224`)를 그대로 써서 신호일까지 한 달 종가를 받아 카드의 96px 상자에 SVG 선 차트와 등락률을 그린다. 상자 전체가 종전과 같은 「{종목} 차트 크게 보기」 버튼이라 확대 모달 진입과 기존 회귀 테스트(`page.regression-jongga-021`, `-fe-024`, `-jongga-followup`)를 유지한다. 응답이 비거나 실패하면 지금 버튼 문구로 대체한다. 새 백엔드·새 의존성 없음. `frontend/src/app/dashboard/kr/closing-bet/MiniPriceChart.tsx`(신규)·`page.tsx`·테스트.
+- 스킬·문서: `vercel-react-best-practices`(mount 때 한 번 fetch 하는 effect), Next 번들 문서 `05-server-and-client-components.md`·`06-fetching-data.md`.
+- QA 시나리오: 격리 프론트+백엔드에서 종가베팅 카드마다 선 차트와 등락률이 보이고, 클릭하면 확대 모달이 열리며, 차트 응답이 빈 종목은 버튼 문구로 대체. 모바일 폭에서 상자가 넘치지 않음.
+- [x] 설계 승인(bounded, 2026-09-22 AskUserQuestion) - [x] 구현·RED→GREEN(`MiniPriceChart.test.tsx` 5건: 모듈 없음 실패 → 통과; closing-bet 디렉터리 14파일 93건 통과)
+- [x] `/ponytail-review`: 백엔드가 이미 거르는 `close > 0` 필터 삭제(-1줄), 그 외 lean → `/code-review`(feature-dev:code-reviewer `jongga041-reviewer`) APPROVE. 참고 2건: 확대 모달은 네이버 이미지라 이 API 의 첫 호출자라는 지적 → 주석 정정 반영; `data-testid` 는 브라우저 실측 선택자로 쓰므로 유지
+- [x] 정적 검증: `npx vitest run` 전체 exit 0 · `npm run type-check` exit 0 · `npx eslint` 신규 파일 0오류 0경고 · `pytest -q -p no:cacheprovider` 2582 통과 2 skipped. 읽은 문서: Next 번들 `05-server-and-client-components.md`·`06-fetching-data.md`(Client Components 절), 스킬 `vercel-react-best-practices`
+- [x] QA: `docs/dev-cycle/qa/JONGGA-041.md` 필수 3/3·인접 1/1 통과(격리 Next 57821 + 합성 fixture 57822, browse 실측, 스크린샷 3장)
+
+### [VCP-032] 스케줄러의 VCP 스캔이 어느 날에도 시그널을 내지 못한다 — 합산 점수 문턱 60 이 점수 구성상 도달 불가
+- 카테고리: VCP 시그널 | 티어: T2 (`engine/screener.py`·`engine/vcp.py`·`engine/constants_market_system.py` 는 위험 경로 목록 밖. `scripts/init_data.py` 에 닿으면 T3) | 근거: 사용자 보고(2026-09-22 17:43 운영 화면 「TOP 0, Scanned: 1996」 과 배너 「최신 저장 데이터는 2026-09-21」), 로컬 `logs/backend.log` 의 09-08·09-09 17시 실행 「수급 우선 정렬 완료: 상위 종목 2002개 → 총 0개 시그널 감지」, 읽기 전용 재현(scratchpad `vcp_diag_dates.py`, 2026-09-22): 로컬 `data/` 로 07-27~09-21 40거래일을 날짜별로 다시 판정하면 후보 600 가운데 `is_vcp` 통과는 하루 1~60종목이지만 `is_vcp ∧ score ≥ 60` 은 40일 모두 0건이고, `is_vcp` 종목의 최고 합산은 33~53 이다.
+- 원인: `SmartMoneyScreener.run_screening`(`engine/screener.py:225-231`)이 `is_vcp`(`engine/vcp.py:204-205`, 수축비 ≤ 0.7 ∧ VCP 원점수 ≥ 50)와 `score ≥ SCREENING.VCP_MIN_SCORE`(60, `engine/constants_market_system.py:74`, 02-25 `d5b757b` 부터)를 함께 요구한다. 합산은 수급(최대 70) + 거래량(최대 20) + VCP(원점수/10, 최대 10)(`engine/screener.py:295-307`)이다. VCP 패턴은 최근 거래량 감소를 요구하므로 거래량 점수는 대개 0 이고 VCP 몫은 10 이 상한이라, 수급만으로 50 이상이 필요하다. 그 점수는 외국인 5일 순매수 500억 초과(25) + 기관 500억 초과(20) + 연속 순매수 보너스(최대 25)로만 나오며(`engine/screener_scoring_helpers.py:62-108`), 그런 대형주 강한 유입일에 수축 조건까지 맞는 종목이 없다. 판정 탈락은 DEBUG 로만 남아 INFO 로그는 이유 없이 0건만 보인다.
+- 함께 볼 것: ① 로컬 `signals_log.csv` 의 05-05 행 15건은 스케줄러가 아니라 `run.py` 2번(`SignalTracker.scan_today_signals`, `engine/signal_tracker_analysis_mixin.py:263-327`, 수급지수 + 0~20점 VCP 의 별개 채점)이 쓴 것이다. 이 경로는 `is_vcp` 열을 쓰지 않아 화면 판정 `_is_vcp_signal_row`(`app/routes/kr_market_vcp_signal_helpers.py`, status OPEN ∧ score ≥ 60 ∧ is_vcp)에서 영구히 숨는다. 운영의 「최신 저장 데이터는 09-21」 배너는 그 날짜 행이 있으되 이 판정에서 떨어진 상태와 일치한다. 운영 판별은 운영자가 `tail -3 data/signals_log.csv` 로 09-21 행의 `status`·`score`·`is_vcp` 를 보면 갈린다. ② `[VCP-026]`·`[VCP-028]`·`[VCP-029]` 는 저장 실패 경로만 고친 것이라 이 문제와 무관하다.
+- 설계 승인: 2026-09-22 사용자 「진행해」 → AskUserQuestion 「VCP 설계」에서 「패턴 통과가 곧 시그널」 선택(bounded). `run_screening` 은 `is_vcp` 만 저장 조건으로 두고 합산 점수는 정렬과 상위 20 제한에만 쓴다. 화면 판정 `_is_vcp_signal_row` 에서도 점수 조건을 뺀다. `VCP_MIN_SCORE` 는 등급 산정(`scripts/init_data.py:1344`)에만 남긴다. 제시했던 대안: 문턱 60→30(40일 모두 1~28건, 총 437건), 60→35(34/40일, 총 191건). 선택한 안의 재현: 40일 모두 1~20건, 총 594건.
+- 범위: `engine/screener.py`(점수 게이트 제거), `app/routes/kr_market_vcp_signal_helpers.py`(`_is_vcp_signal_row` 점수 조건 제거), 관련 테스트(`tests/engine/test_screener_vcp_gate_refactor.py`, `tests/app/test_kr_market_vcp_signal_helpers_refactor.py`). `scripts/init_data.py` 는 건드리지 않는다.
+- QA 시나리오: 로컬 자료 격리 실행(`init_data.BASE_DIR` 교체)으로 `create_signals_log(run_ai=False)` 가 1건 이상 저장하고 `is_vcp`·`status`·`score` 가 화면 판정을 통과, 날짜 목록·「최신」 표에 표시, 0건인 날의 「오늘 기준 없음」 배너 유지. 원본 `data/` 는 읽기 전용.
+- [ ] 설계 승인(brainstorming) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
 ## P1 — 이번 주기
 
 ### [FE-045] 서버에 저장한 개인정보를 사용자가 실제로 지울 수 있게 한다

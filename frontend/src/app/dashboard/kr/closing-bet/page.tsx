@@ -14,6 +14,7 @@ import { useAdmin } from '@/hooks/useAdmin';
 import { formatMarketAmount } from '../formatMarketAmount';
 import { CHART_PERIODS, financialPeriodLabel, resolveJonggaAiEvaluation, stockChartUrl } from './displayHelpers';
 import { PriceRangeBar, StatBox } from './displayPrimitives';
+import MiniPriceChart from './MiniPriceChart';
 import ConfirmationModal from '@/app/components/ConfirmationModal';
 
 // 이 화면에서 되돌릴 수 없는 지출을 일으키는 조작은 셋이다. 앞의 둘은 DATA STATUS 의
@@ -2182,16 +2183,12 @@ function SignalCard({ signal, index, onOpenChart, onOpenDetail, onBuy, onRetry, 
             </div>
           </div>
 
-          <button
-            type="button"
-            data-testid="mini-chart"
-            aria-label={`${signal.stock_name} 차트 크게 보기`}
-            onClick={onOpenChart}
-            className="flex h-24 w-full items-center justify-center gap-2 rounded-xl bg-[#131722] text-xs font-semibold text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
-          >
-            <i className="fas fa-chart-line text-indigo-400"></i>
-            실제 차트 크게 보기
-          </button>
+          <MiniPriceChart
+            code={signal.stock_code}
+            name={signal.stock_name}
+            signalDate={signal.signal_date}
+            onOpenChart={onOpenChart}
+          />
 
         </div>
 
