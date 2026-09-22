@@ -69,17 +69,6 @@
 
 ## P1 — 이번 주기
 
-### [FLOW-017] 결과·등급 필터를 전체 기간에 건다
-- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §1.2, §5.1. `/api/kr/closing-bet/cumulative` 가 `page`·`limit` 만 받아 잘라낸 뒤 화면(`CumulativeClientPage.tsx:990-994`)이 그 50건을 다시 거른다. 「성공」을 누르면 전체 86건이 아니라 현재 페이지 안의 성공만 보이고 페이지 수는 그대로다. 1144줄 주석이 명시한 의도적 단순화이므로 결함이 아니라 개선 항목이다. 「현재 페이지 내」 안내가 결과 필터에만 있고 등급 「전체」 버튼에는 건수가 없다.
-- 범위: 라우트에 `outcome`·`grade` 쿼리 파라미터 추가(잘못된 값은 400), `paginate_items` 앞에서 거르고 캐시된 `trades` 와의 관계 확인, 화면의 클라이언트 필터 제거와 버튼 건수의 서버 집계 교체, 등급 「전체」 건수 추가와 안내 정리, 라우트 pytest 와 화면 vitest 회귀 테스트.
-- QA: 「성공」 필터 클릭 → 버튼 건수가 86 이고 표의 전체 행수와 페이지 수가 그 86건에 맞게 바뀐다. 브라우저 실측 required.
-- 설계 승인: 2026-09-23 사용자 승인(bounded, 대화에서 제시, 「승인, 구현 시작」). 순번은 「원래 번호 유지」로 결정: 서버가 필터 전 전체 목록 기준 `no` 를 붙여 보낸다(`[FLOW-016]` 결정 유지). 버튼 건수 `counts` 는 필터와 무관하게 전체 목록에서 센다. 필터를 바꾸면 1페이지로 돌아간다. 티어 T2(위험 경로 파일 없음, 엔드포인트 호출자는 이 화면 하나). 스킬: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-nextjs/`, `.claude/skills/closing-bet-verify/`, Next 번들 문서 `05-server-and-client-components.md`(상태·클릭 핸들러만 바뀌는 순수 클라이언트 변경)
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN: 라우트 pytest 3건 RED → GREEN, 화면 vitest 3건(`regression-flow-017`) RED → GREEN. 옛 계약을 고정하던 테스트 정리: `regression-flow-016` 삭제(대상인 클라이언트 순번 계산이 없어짐. 번호 규칙은 라우트 pytest, 서버 `no` 표시는 flow-017 이 검사), `regression-005` 칩 기준을 서버 counts 로 교체, `regression-performance-batch` 의 「현재 페이지 내」·「필터가 다시 조회하지 않음」 두 건 삭제와 D 버튼 단언 제거
-- [x] 정적 검증: type-check exit 0, eslint(변경 디렉터리) exit 0, 전체 vitest 92 파일 674 통과, 전체 pytest 2630 통과 2 skip
-- [x] `/ponytail-review` → `closing-bet-reviewer`: ponytail 「Lean already. Ship.」(검증 두 `if` 합치기·버튼 map 화는 가독성 이유로 지적 아님). 리뷰어 `flow017-reviewer` APPROVE, 최고 심각도 낮음. L5(필터 검증이 캐시 미스 계산 뒤에 옴) → handler 첫머리로 이동, L3(요청 실패 시 새 필터 버튼과 이전 필터 행이 함께 보임) → catch 에서 `setTrades([])`, L6(두 필터 조합·「전체」 복귀 쿼리 단언 없음) → flow-017 에 추가. L1(두 필터를 함께 켜면 칩 건수는 다른 축을 무시한 전체 건수라 표 total 과 다름)은 승인된 설계 그대로이며 QA 기대값을 「등급=전체」로 한정. L2(필터 클릭마다 전체 화면 스피너)는 QA 에서 체감 확인. L4(C·빈 등급 거래는 counts.total 에만 잡힘)는 `[FLOW-019]` 범위. 빈 결과 문구가 필터 0건에 어색한 점은 범위 밖. 반영 뒤 라우트 pytest 7·화면 vitest 14 통과, type-check·lint exit 0
-- [ ] QA
-
 ### [FLOW-019] 세 화면의 모집단 규칙을 맞추고 화면에 적는다
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §2.2, §5.2. 누적성과 KPI(`kpi_helpers.py:31, 74`)는 D 등급을 포함하고(`[FLOW-013]` 의 의도적 결정), 종가베팅 화면(`closing-bet/page.tsx:899, 1033`)은 D 를 제외하며, 백테스트 요약(`kr_market_analytics_service.py:329, 366`)은 결과 파일을 최근 30개로 자르는데 누적성과는 전부 읽는다. 현행 판정기(`engine/grade_decider.py:55-67`)는 S·A·B 만 내므로 D 는 2월 자료 7건에만 있는 과거 등급이다. 파일이 30개를 넘으면 두 화면의 승률이 벌어진다(지금 18개). `Grade` 열거형의 C 가 저장 자료에 섞이면 누적 추천수에만 잡히고 어느 등급 카드에도 나타나지 않는다.
 - 연결(`[FLOW-017]` 리뷰 L4): 누적성과 버튼 `counts` 는 S·A·B·D 만 세므로 그 밖의 등급 거래는 `counts.total` 에만 잡혀 등급 칩 합과 「전체」 건수가 어긋난다. 등급 집합 밖의 값을 드러내는 처리에 이 칩도 포함한다.
@@ -135,6 +124,12 @@
 - 범위: 음수를 부호와 함께 표시하고 자료가 없을 때만 하이픈, 양수 표기를 `formatSignedPercent` 와 통일, 음수·0·양수 세 경우의 vitest 회귀 테스트.
 - QA: 2026-09-01 삼성생명 행의 최고가 열에 `-1.5%` 가 보인다. 브라우저 실측 required.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [FLOW-021] 누적성과 필터·페이지 전환 중 화면 전체가 로딩 표시로 바뀐다
+- 카테고리: 수급·백테스트 | 티어: T1 | 근거: `[FLOW-017]` 리뷰 L2 와 QA S-6(2026-09-23). `CumulativeClientPage.tsx` 의 `if (loading) return ...` 이 요청마다 KPI·필터·표를 통째로 스피너로 바꾼다. `[FLOW-017]` 부터 필터 클릭도 요청을 보내므로 응답이 느리면 필터를 누를 때마다 화면이 비었다 돌아오고 스크롤 위치를 잃는다. 격리 실측 응답은 28~44ms 라 체감은 작다. 필터 결과가 0건일 때 빈 목록 문구가 「해당 기간에 대한 거래 내역이 없습니다」라 필터 때문임을 알리지 않는다.
+- 범위: 첫 로딩 뒤의 재조회는 표 영역만 로딩 상태로 두고 필터·KPI 를 유지, 필터가 켜진 0건 결과의 문구 구분, vitest 회귀 테스트.
+- QA: 필터를 눌러 응답을 기다리는 동안 필터 버튼과 KPI 카드가 남아 있고, `D` + `보유` 처럼 0건인 조합에서 필터 결과가 없다는 문구가 보인다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] QA
 
 ### [CHAT-034] SQLite 누락 테이블 복구 래퍼 통합
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §2.1. `storage_sqlite_history.py` 여섯 곳과 `storage_sqlite_memory.py` 여덟 곳, 열네 함수가 「스키마 확인 → `run_sqlite_with_retry` → `_is_missing_table_error` 면 `force_recheck` 뒤 `_retried=True` 로 재호출」 골격을 복제하고 있다. 재시도·복구 조건을 바꾸면 열네 곳을 함께 고쳐야 하고, 한 곳을 빠뜨려도 평소에는 증상이 없다. 공용 래퍼를 `services/sqlite_utils.py`(공통 접속 계층, 위험 경로)에 두면 T3.
