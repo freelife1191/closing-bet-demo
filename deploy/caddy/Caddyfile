@@ -1,4 +1,5 @@
-# 운영 서버 /etc/caddy/Caddyfile 의 사본입니다. 적용 절차와 함정은 README.md 에 있습니다.
+# 운영 서버 /etc/caddy/Caddyfile 가운데 이 프로젝트 블록의 기준본입니다. 서버 파일에는 다른 사이트
+# 블록도 있습니다. 적용 절차와 함정은 README.md 에 있습니다.
 
 # 사이트 블록이 import 로 가져다 쓰는 압축과 보안 헤더입니다.
 (common) {

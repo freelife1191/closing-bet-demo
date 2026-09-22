@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""재시작 수명주기가 다른 서비스나 실패한 기동을 성공으로 숨기지 않는지 검사한다."""
+"""재시작 수명주기가 다른 서비스나 실패한 기동을 성공으로 숨기지 않는지, 그리고 편입한 운영
+설정(systemd 유닛·Caddyfile·.gitignore)이 사고를 부른 설정으로 되돌아가지 않는지 검사한다."""
 
 from __future__ import annotations
 
@@ -123,7 +124,10 @@ def test_restart_and_stop_propagate_supervisor_refusal_without_success_message(
 
 
 def test_repository_systemd_units_drop_the_settings_that_caused_the_restart_loop() -> None:
-    """운영 유닛 파일이 포트 경쟁·잠금 삭제·로그 혼입·무한 재시작을 다시 만들지 않는다."""
+    """운영 유닛 파일이 포트 경쟁·잠금 삭제·무한 재시작을 다시 만들지 않는다.
+
+    서버본과 같아야 하므로 로그 위치(U4)는 단언하지 않는다. 근거는 유닛 파일의 [U4 미채택] 주석에 있다.
+    """
     units = sorted((ROOT / "deploy" / "systemd").glob("*.service"))
 
     assert [unit.name for unit in units] == [
@@ -137,16 +141,19 @@ def test_repository_systemd_units_drop_the_settings_that_caused_the_restart_loop
         assert not [line for line in directives if line.startswith("ExecStartPre=")], unit.name
         assert not [line for line in directives if re.search(r"rm\s+-f.*scheduler\.lock", line)], unit.name
         assert not [line for line in directives if "ln -sf" in line], unit.name
-        assert not [line for line in directives if "append:" in line], unit.name
-        assert "StandardOutput=journal" in directives, unit.name
-        assert "StandardError=journal" in directives, unit.name
-        # 상한이 사실상 없는 두 표기를 모두 막는다.
+        # Interval 과 Burst 중 어느 쪽이든 0 이면 systemd 가 상한을 끈다. 0 은 단위 접미사
+        # (0s·0sec·0min)를 붙여도 0 이고, infinity 도 같은 뜻이다.
         assert not [
             line
             for line in directives
-            if re.fullmatch(r"StartLimitIntervalSec=(0|infinity)", line.strip())
+            if re.fullmatch(r"StartLimitIntervalSec=\s*(0+\s*[a-z]*|infinity)", line.strip())
         ], unit.name
-        assert [line for line in directives if line.startswith("StartLimitBurst=")], unit.name
+        bursts = [
+            int(m.group(1))
+            for line in directives
+            if (m := re.fullmatch(r"StartLimitBurst=\s*(\d+)", line.strip()))
+        ]
+        assert bursts and min(bursts) >= 1, (unit.name, bursts)
     backend = [
         line
         for line in (ROOT / "deploy" / "systemd" / "closing-bet-backend.service")
@@ -185,3 +192,13 @@ def test_repository_caddyfile_compresses_sets_security_headers_and_hides_port_80
     assert [line for line in directives if line.startswith("reverse_proxy")] == [
         "reverse_proxy localhost:3500"
     ]
+
+
+def test_gitignore_hides_macos_appledouble_and_ds_store_files() -> None:
+    """secrets/ 는 무시되어도 같은 자리의 ._secrets 는 무시되지 않아 git add . 로 올라갈 수 있었다."""
+    for path in ("closingbet/._secrets", "frontend/._env", ".DS_Store"):
+        result = subprocess.run(
+            ["git", "check-ignore", "-v", path], cwd=ROOT, capture_output=True, text=True
+        )
+        # 전역 excludesFile 이나 .git/info/exclude 에 걸린 것은 이 저장소의 보장이 아니다.
+        assert result.stdout.startswith(".gitignore:"), (path, result.stdout, result.stderr)

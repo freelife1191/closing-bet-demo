@@ -1,6 +1,10 @@
 # 운영 Caddy 설정
 
-운영 서버(`close.highvalue.kr`)의 `/etc/caddy/Caddyfile` 사본입니다. `deploy/systemd/` 의 유닛
+운영 서버(`close.highvalue.kr`)의 `/etc/caddy/Caddyfile` 가운데 이 프로젝트에 해당하는 부분입니다.
+서버 파일에는 이 프로젝트와 무관한 다른 사이트 블록도 있으며, 이 파일은 그중 `(common)` 스니펫과
+`:80`, `close.highvalue.kr` 블록의 기준본입니다. `(common)` 은 Caddyfile 전역 스니펫이라 다른 사이트
+블록이 `import common` 하고 있으면 여기를 바꿀 때 그 사이트의 압축과 헤더도 함께 바뀝니다. 바꾸기
+전에 서버에서 `grep -n "import common" /etc/caddy/Caddyfile` 로 누가 쓰는지 봅니다. `deploy/systemd/` 의 유닛
 파일과 같은 이유로 저장소에 둡니다. 서버에만 있던 설정은 코드가 바뀌어도 따라오지 못하고, 그
 어긋남은 장애로만 드러납니다. 앞으로는 여기를 고친 뒤 서버에 반영합니다.
 
@@ -15,11 +19,19 @@
 검증이 실패하면 덮어쓴 파일이 그대로 남아 다음 재부팅에서 Caddy 가 기동하지 못하므로, 먼저
 백업을 떠 둡니다.
 
+서버 파일 전체를 이 파일로 덮어쓰지 않습니다. 다른 사이트 블록이 사라집니다. 이 파일에 해당하는
+세 블록만 서버 파일 안에서 같은 내용으로 맞춘 뒤 검증과 reload 를 합니다.
+
 ```bash
 sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak
-sudo cp deploy/caddy/Caddyfile /etc/caddy/Caddyfile
+sudoedit /etc/caddy/Caddyfile   # (common)·:80·close.highvalue.kr 블록을 이 파일과 같게 맞춥니다
 sudo -u caddy caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
+
+# 세 블록이 저장소 사본과 같아졌는지 봅니다. 주석·들여쓰기·빈 줄을 뺀 diff 가 비어야 정상입니다.
+# 서버에서 세 블록의 순서가 저장소와 다르면 내용이 같아도 순서 차이가 그대로 나옵니다.
+strip='s/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//; /^$/d'
+diff <(sudo sed -n '/^(common) {/,/^}/p; /^:80 {/,/^}/p; /^close\.highvalue\.kr {/,/^}/p' /etc/caddy/Caddyfile | sed "$strip") <(sed "$strip" deploy/caddy/Caddyfile)
 ```
 
 ## 검증을 root 로 돌리지 않습니다
