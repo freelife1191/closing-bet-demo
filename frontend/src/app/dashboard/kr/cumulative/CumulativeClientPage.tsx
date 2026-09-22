@@ -4,6 +4,14 @@ import React, { useState } from 'react';
 import Modal from '@/app/components/Modal';
 import Tooltip from '@/app/components/Tooltip';
 
+// 서버 paginate_items(services/kr_market_backtest_kpi_helpers.py)가 보내는 페이지 정보
+interface Pagination {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 // Revised Interface matching API response
 interface Trade {
   id: string;
@@ -809,7 +817,7 @@ function TableHeader({
   );
 }
 
-function TradeTable({ trades }: { trades: Trade[] }) {
+function TradeTable({ rows }: { rows: { trade: Trade; no: number }[] }) {
   return (
     <div className="bg-[#1c1c1e] rounded-2xl border border-white/5 overflow-hidden">
       <div className="overflow-x-auto">
@@ -831,9 +839,9 @@ function TradeTable({ trades }: { trades: Trade[] }) {
             </tr>
           </thead>
           <tbody className="text-xs divide-y divide-white/5">
-            {trades.map((trade, idx) => (
+            {rows.map(({ trade, no }, idx) => (
               <tr key={`${trade.id}-${idx}`} className="hover:bg-white/5 transition-colors group">
-                <td className="py-3 px-4 text-center text-gray-600">{trades.length - idx}</td>
+                <td className="py-3 px-4 text-center text-gray-600">{no}</td>
                 <td className="py-3 px-4 text-gray-400 font-mono tracking-tight">{trade.date}</td>
                 <td className="py-3 px-4">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${trade.grade === 'S' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
@@ -893,7 +901,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
           </tbody>
         </table>
       </div>
-      {trades.length === 0 && (
+      {rows.length === 0 && (
         <div className="py-8 text-center text-gray-500">
           해당 기간에 대한 거래 내역이 없습니다.
         </div>
@@ -932,7 +940,7 @@ export default function CumulativeClientPage() {
     consecutiveLosses: 0,
   });
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [pagination, setPagination] = useState<any>(null); // Pagination Metadata
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Pagination State
@@ -987,7 +995,12 @@ export default function CumulativeClientPage() {
   }, [currentPage, itemsPerPage]); // Re-fetch on page/limit change
 
   // Filter Logic
-  const filteredTrades = trades.filter(t => {
+  // 순번은 서버가 알려준 전체 목록 기준으로, 필터를 걸기 전에 매긴다. 그래야 페이지마다
+  // 번호가 이어지고, 필터가 켜져도 거래마다 같은 번호가 남는다.
+  const firstNo = pagination
+    ? pagination.total - (pagination.page - 1) * pagination.limit
+    : trades.length;
+  const filteredRows = trades.map((trade, idx) => ({ trade, no: firstNo - idx })).filter(({ trade: t }) => {
     if (outcomeFilter !== 'All' && t.outcome !== outcomeFilter) return false;
     if (gradeFilter !== 'All' && t.grade !== gradeFilter) return false;
     return true;
@@ -1181,7 +1194,7 @@ export default function CumulativeClientPage() {
           </div>
         </div>
 
-        <TradeTable trades={filteredTrades} />
+        <TradeTable rows={filteredRows} />
 
         {/* Pagination Controls */}
         {pagination && pagination.totalPages > 1 && (
