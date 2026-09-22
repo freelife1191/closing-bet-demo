@@ -133,18 +133,6 @@
 - QA 시나리오: 오래된 날짜의 활동 로그 파일을 만들어 두고 기동하면 기준 기간이 지난 파일이 사라지며, 새로 만들어진 데이터베이스 파일의 권한이 0600 이다.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
 
-### [VCP-029] VCP 로그의 병합·정리 실패 갈래 두 곳이 누적 이력을 덮어쓴다
-- 카테고리: VCP 시그널 | 티어: T3 (등록 때 T1 로 적었으나 `scripts/init_data.py` 는 `tier-rules.md` §2 「스케줄러와 데이터 적재」 위험 경로라 한 줄이라도 T3) | 근거: 2026-09-22 `[VCP-028]` 완료 뒤 「덮어쓰기가 남아 있는가」 재점검에서 발견. `scripts/init_data.py` 의 `create_signals_log` 에는 `[VCP-028]` 이 고친 바깥 예외 갈래 말고도 기존 파일을 버리는 안쪽 갈래가 둘 남아 있다. (가) 시그널이 있을 때 기존 로그와 병합하는 `try`(`:1578-1607`)가 실패하면 `:1610` 이 오늘 자 `df_new` 만 써서 지난 날짜 행이 사라진다(로그 문구도 「새로 생성합니다(덮어쓰기)」). (나) 시그널이 없을 때 오늘 자 행을 걷어내는 `try`(`:1621-1625`)가 실패하면 `:1628` 이 빈 파일을 쓴다(「빈 로그로 초기화합니다」). 두 갈래 모두 기존 CSV 를 `pd.read_csv` 로 읽거나 정리하다가 예외가 날 때만 들어가므로 `[VCP-028]` 보다 문턱은 높지만, 결과는 같은 전량 소실이고 `data/` 에는 백업이 없다.
-- 범위: 두 갈래에서 기존 파일을 건드리지 않고 경고 로그와 반환값만 남긴다(`[VCP-028]` 의 예외 갈래와 같은 계약). 병합에 실패하면 오늘 자 시그널이 CSV 에 남지 않으므로 반환값을 `False` 로 바꿀지 설계에서 정한다. 기존 CSV 읽기에 예외를 주입하는 회귀 테스트 두 건.
-- 설계 승인: 2026-09-22 17:0x. 범위는 두 `except` 본문과 회귀 테스트 2건. 근거는 이 대화에서 사용자가 「승인」이라 답한 뒤 AskUserQuestion 「VCP-029 설계」에서 추천안 「두 갈래 모두 False」를 고른 것이다. 설계 제시 때 T1 이라 말했으나 위험 경로라 T3 로 바로잡았고, 변경 범위는 같다.
-- QA 시나리오: 과거 날짜 행이 있는 사본을 두고 `pd.read_csv` 가 예외를 내게 한 뒤 두 갈래를 각각 부르면 사본의 행 수와 md5 가 그대로다.
-- [x] 설계 승인(bounded): 위 「설계 승인」 줄
-- [x] 계획 검토: `docs/superpowers/plans/2026-09-22-vcp029-signals-log-preserve.md` 를 `oh-my-claudecode:critic`(`vcp029-plan-critic`)에 검토. 판정 ACCEPT-WITH-RESERVATIONS(R1-R8). 반영: R1 QA 스크립트의 f-string 구문 오류, R2 호출자 서술(CLI 두 명령과 verify 스크립트 둘 추가), R3 데이터 갱신 화면의 「VCP Signals」 항목이 error 로 바뀌는 동작을 제약과 QA S-4 에 추가, R5 S-3 단언을 과거 행 기준으로, R6 `data/` 전체 스냅샷 비교, R7 정리 실패 때 성공처럼 읽히는 INFO 로그 생략, R8 커밋 메시지 형식. R4 의 0바이트 파일 회복은 `[VCP-030]` 으로 등록
-- [x] 구현·RED→GREEN: 새 테스트 2건이 종전 코드에서 `assert True is False` 로 실패하는 것을 확인한 뒤 구현(구현 diff +11 -6, 테스트 +43). 모듈 22 통과
-- [x] `/ponytail-review` → `/code-review` → `/review`: ponytail-review(자체 검토, 자를 것 없음 「Lean already. Ship.」) · code-review(feature-dev:code-reviewer `vcp029-reviewer`, APPROVE, 지적 0) · review(oh-my-claudecode:critic `vcp029-deep-review`, ACCEPT-WITH-RESERVATIONS: MAJOR 2 / MINOR 4. m1 두 WARNING 에 `file_path` 와 다음 행동 추가, m2 `[VCP-028]` 주석의 「정상 갈래」를 「시그널 없음」 갈래로 정정. M1 Refresh VCP 의 False → success 표시는 `[VCP-031]` 등록, M2 손상 파일 회복 경로 부재와 m4 0바이트 때 데이터 상태 화면의 「오늘」 표시는 `[VCP-030]` 범위 확장으로 이월. m3 결측 ticker 중복 제거는 확신도 낮음·현실 경로 없음으로 기록만)
-- [x] 정적 검증: `pytest -q -p no:cacheprovider` 2582 통과 2 skipped(직전 2580 + 신규 2, exit 0) · `npx vitest run` 87 파일 655 통과(exit 0)
-- [ ] QA: `/qa-only` 계획 → 첫 커밋 → `/qa` 실행, 기록은 `docs/dev-cycle/qa/VCP-029.md`
-
 ## P2 — 대기
 
 ### [FE-047] 루트 레이아웃의 `lang` 을 한국어로 바로잡는다
