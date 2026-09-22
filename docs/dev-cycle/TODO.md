@@ -182,4 +182,11 @@
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-029]` 심층 리뷰(oh-my-claudecode:critic, 2026-09-22) M1. `services/kr_market_vcp_background_service.py:78-86` 은 `create_signals_log` 의 반환값이 `False` 면 `elif result_df:` 를 통과하지 못하고 else 로 떨어져 `status="success"` 와 「완료: 조건 충족 종목 없음」을 세운다. `[VCP-028]`·`[VCP-029]` 뒤에는 스크리너 예외, 병합 실패, 정리 실패가 전부 `False` 이므로 시그널이 실제로 있었는데 저장만 실패한 경우까지 관리자는 성공 상태를 본다. 유일한 흔적은 `logs/backend.log` 의 WARNING 한 줄이다. `:78` 의 `isinstance(result_df, pd.DataFrame)` 은 죽은 분기다(`create_signals_log` 는 DataFrame 을 돌려주는 갈래가 없다). 같은 파일 `:82` 의 `elif result_df:` 갈래도 함께 본다.
 - 범위: `False` 를 `status="error"` 와 실패 문구로 옮기고 죽은 분기를 지운다. 종전처럼 「조건 충족 종목 없음」은 `True` 이면서 최신 payload 의 시그널이 0건일 때만 보인다. 회귀 테스트 두 건(False → error, True + 0건 → 종전 문구).
 - QA 시나리오: 손상 사본을 둔 격리 백엔드에서 「Refresh VCP」 를 누르면 상태창이 error 와 실패 문구를 보인다. 원본 `data/` 에서는 실행하지 않는다.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+- 설계 승인: 2026-09-22 사용자의 「백로그도 설계해서 진행해」 뒤 네 항목 일괄 설계(bounded, 대화 제시) → AskUserQuestion 「vcp_signals_latest.json 의 수」 선택. `create_signals_log` 가 `False` 면 예외를 던져 기존 except 갈래가 `status="error"` 와 「실패: 시그널 저장 실패 …」 를 세우게 하고, 죽은 DataFrame 분기를 지운다. `True` 면 방금 쓴 `vcp_signals_latest.json` 의 시그널 수로 「완료: N개 시그널 감지」 또는 「완료: 조건 충족 종목 없음」 을 낸다.
+- 파일: `services/kr_market_vcp_background_service.py`, 새 `tests/services/test_kr_market_vcp_background_service_refactor.py`. 위험 경로 없음(`scripts/init_data.py` 는 부르기만 함) → T2(구현 50줄 이하면 T1 이나 기존 화면의 관리자 흐름이라 code-review 를 둔다).
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: 새 테스트 3건(`test_kr_market_vcp_background_service_refactor.py`)이 구현 전 전부 실패(종전에는 False 도 success, True 는 「완료: 성공」)함을 확인한 뒤 구현. 구현 diff +20 -8, `pandas` import 제거
+- [x] `/ponytail-review`(인라인): 더 줄일 것 없음. 시그널 수는 캐시 계층 대신 stdlib `json` 으로 읽어 격리 실행이 원본 `runtime_cache.db` 에 닿는 경로(`[INFRA-078]`)를 만들지 않음
+- [x] `/code-review`(feature-dev:code-reviewer `vcp031-reviewer`): APPROVE, 블로커 0. 회신이 유실되어 subagents 기록에서 읽음. 낮은 확신도 2건: 화면 문구의 「❌ 오류: 실패: …」 접두 중복(except 갈래의 「실패: 」 와 화면의 「❌ 오류: 」 가 겹침, 기존 형식이라 미반영), `_count_latest_signals` 가 읽기 실패에 조용히 0 → 「조건 충족 종목 없음」(저장 직후 동기적으로 쓴 파일이라 극히 낮은 확률, 미반영). 리뷰어가 `_write_vcp_signals_latest_payload` 가 반환 직전 동기적으로 쓰므로 경쟁 없음을 확인
+- [x] pytest 전체 2592 통과 2 skipped. vitest 전체는 frontend 무변경이라 `[VCP-032]` 의 exit 0 유지
+- [ ] QA: `docs/dev-cycle/qa/VCP-031.md` (실행 완료, 필수 2/2·인접 2/2. 아카이브 커밋에서 마감)

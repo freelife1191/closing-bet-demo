@@ -6,16 +6,28 @@ KR Market VCP Background Service
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from datetime import datetime
 from typing import Any
 
-import pandas as pd
 from engine.constants import SCREENING
 
 
 def _set_vcp_status(status_state: dict[str, Any], **kwargs: Any) -> None:
     status_state.update(kwargs)
+
+
+def _count_latest_signals(base_dir: str) -> int:
+    """방금 저장한 vcp_signals_latest.json 의 시그널 수. 읽지 못하면 0."""
+    path = os.path.join(base_dir, "data", "vcp_signals_latest.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            signals = json.load(handle).get("signals")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return len(signals) if isinstance(signals, list) else 0
 
 
 def run_vcp_background_pipeline(
@@ -62,11 +74,15 @@ def run_vcp_background_pipeline(
 
         _set_vcp_status(status_state, message="VCP 패턴 분석 및 AI 진단 중...")
         logger.info("[VCP Screener] VCP 시그널 분석 및 AI 수행")
-        result_df = init_data.create_signals_log(
+        saved = init_data.create_signals_log(
             target_date=target_date,
             run_ai=True,
             max_stocks=effective_max_stocks,
         )
+        if not saved:
+            # 스크리너 예외·병합 실패·정리 실패는 전부 False 다([VCP-028]·[VCP-029]). 시그널이 있었는데
+            # 저장만 실패한 경우를 「조건 충족 종목 없음」 성공으로 보이지 않게 한다([VCP-031]).
+            raise RuntimeError("시그널 저장 실패. logs/backend.log 의 WARNING 을 확인하십시오")
         _set_vcp_status(status_state, progress=80)
 
         _set_vcp_status(status_state, message="최신 가격 동기화 중...")
@@ -74,12 +90,8 @@ def run_vcp_background_pipeline(
         init_data.update_vcp_signals_recent_price()
         _set_vcp_status(status_state, progress=100)
 
-        if isinstance(result_df, pd.DataFrame):
-            success_msg = f"완료: {len(result_df)}개 시그널 감지"
-        elif result_df:
-            success_msg = "완료: 성공"
-        else:
-            success_msg = "완료: 조건 충족 종목 없음"
+        signal_count = _count_latest_signals(init_data.BASE_DIR)
+        success_msg = f"완료: {signal_count}개 시그널 감지" if signal_count else "완료: 조건 충족 종목 없음"
 
         _set_vcp_status(status_state, message=success_msg, status="success")
         logger.info(f"[VCP Screener] {success_msg}")
