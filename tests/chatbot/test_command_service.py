@@ -82,7 +82,6 @@ class _FakeBot:
         self.memory = _FakeMemory()
         self.current_model_name = "gemini-2.0-flash-lite"
         self.available_models = ["gemini-2.0-flash-lite", "gemini-2.5-flash-lite"]
-        self._data_cache = {"v": 1}
         self.user_id = "u1"
 
     def get_available_models(self):

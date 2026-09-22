@@ -52,9 +52,6 @@ class _FakeBot:
             "sectors": [{"name": "반도체", "change_pct": 1.2}],
         }
 
-    def _get_cached_data(self):
-        return {"vcp_stocks": [{"name": "A"}], "sector_scores": {"기본": 0.1}}
-
     def _detect_stock_query(self, user_message):
         _ = user_message
         return self.stock_query
@@ -78,10 +75,9 @@ class _FakeBot:
 
 def test_collect_market_context_overrides_sector_scores_from_market_gate():
     bot = _FakeBot()
-    market_gate_data, vcp_data, sector_scores, market_data = collect_market_context(bot)
+    market_gate_data, sector_scores, market_data = collect_market_context(bot)
     assert market_gate_data["color"] == "GREEN"
-    assert vcp_data[0]["name"] == "A"
-    assert sector_scores["반도체"] == 1.2
+    assert sector_scores == {"반도체": 1.2}
     assert market_data["market_gate"] == "GREEN"
 
 

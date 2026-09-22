@@ -16,9 +16,6 @@ from .payload_service import (
     build_content_parts as _build_content_parts_impl,
     compose_system_prompt as _compose_system_prompt_impl,
 )
-from .stock_query_service import (
-    format_stock_info as _format_stock_info_impl,
-)
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -32,7 +29,6 @@ class CorePayloadMixin:
         user_message: str,
         target_model_name: str,
         market_data: Dict[str, Any],
-        vcp_data: List[dict],
         sector_scores: Dict[str, Any],
         watchlist: Optional[list],
         persona: Optional[str],
@@ -45,7 +41,6 @@ class CorePayloadMixin:
             user_message=user_message,
             target_model_name=target_model_name,
             market_data=market_data,
-            vcp_data=vcp_data,
             sector_scores=sector_scores,
             watchlist=watchlist,
             persona=persona,
@@ -97,7 +92,3 @@ class CorePayloadMixin:
     def _fetch_jongga_data(self) -> str:
         """jongga_v2_latest.json에서 최신 S/A급 종목 조회"""
         return _fetch_jongga_data_impl(DATA_DIR)
-
-    def _format_stock_info(self, stock: Dict) -> str:
-        """종목 정보 포맷팅"""
-        return _format_stock_info_impl(stock)

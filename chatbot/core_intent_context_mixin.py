@@ -20,7 +20,6 @@ from .intent_detail_service import (
     build_closing_bet_context as _build_closing_bet_context_impl,
     build_market_gate_context as _build_market_gate_context_impl,
     build_watchlist_detailed_context as _build_watchlist_detailed_context_impl,
-    build_watchlist_summary_context as _build_watchlist_summary_context_impl,
     contains_any_keyword as _contains_any_keyword_impl,
 )
 
@@ -50,19 +49,13 @@ class CoreIntentContextMixin:
     def _build_watchlist_detailed_context(
         self,
         watchlist: List[str],
-        vcp_data: List[dict],
     ) -> str:
         """관심종목 상세 컨텍스트 생성."""
         return _build_watchlist_detailed_context_impl(
             watchlist=watchlist,
-            vcp_data=vcp_data,
             stock_map=self.stock_map,
             format_stock_context_fn=self._format_stock_context,
         )
-
-    def _build_watchlist_summary_context(self, watchlist: List[str], vcp_data: List[dict]) -> str:
-        """관심종목 VCP 요약 컨텍스트 생성."""
-        return _build_watchlist_summary_context_impl(watchlist, vcp_data)
 
     def _build_vcp_intent_context(self) -> Tuple[str, str]:
         """VCP/수급 질문용 컨텍스트 생성."""
@@ -92,30 +85,25 @@ class CoreIntentContextMixin:
         self,
         user_message: str,
         watchlist: Optional[list],
-        vcp_data: List[dict],
     ) -> Tuple[str, str]:
         """관심종목 컨텍스트와(필요 시) 지시문 오버라이드를 생성한다."""
         return _build_watchlist_context_bundle_impl(
             user_message=user_message,
             watchlist=watchlist,
-            vcp_data=vcp_data,
             contains_any_keyword=self._contains_any_keyword,
             build_watchlist_detailed_context=self._build_watchlist_detailed_context,
-            build_watchlist_summary_context=self._build_watchlist_summary_context,
         )
 
     def _build_additional_context(
         self,
         user_message: str,
         watchlist: Optional[list],
-        vcp_data: List[dict],
         market_gate_data: Dict[str, Any],
     ) -> Tuple[str, str]:
         """질문 의도별 추가 컨텍스트와 intent 문구를 구성한다."""
         return _build_additional_context_impl(
             user_message=user_message,
             watchlist=watchlist,
-            vcp_data=vcp_data,
             market_gate_data=market_gate_data,
             resolve_primary_intent_context_fn=self._resolve_primary_intent_context,
             build_watchlist_context_bundle_fn=self._build_watchlist_context_bundle,

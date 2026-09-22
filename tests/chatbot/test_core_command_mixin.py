@@ -48,7 +48,7 @@ def _run_command(command: str):
 
 
 def test_state_changing_commands_are_persisted_to_history():
-    for command in ("/clear", "/model gemini-3.7-flash", "/memory add 메모", "/refresh"):
+    for command in ("/clear", "/model gemini-3.7-flash", "/memory add 메모"):
         bot, handled, response, error = _run_command(command)
 
         assert handled is True, command

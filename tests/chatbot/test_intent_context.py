@@ -47,38 +47,32 @@ def test_resolve_primary_intent_context_market_branch():
     assert "Market Gate" in instruction
 
 
-def test_build_watchlist_context_bundle_detailed_and_summary():
+def test_build_watchlist_context_bundle_only_for_detail_requests():
     detailed_context, detailed_instruction = build_watchlist_context_bundle(
         user_message="내 관심종목 분석해줘",
         watchlist=["삼성전자"],
-        vcp_data=[],
         contains_any_keyword=lambda message, keys: any(k in message for k in keys),
-        build_watchlist_detailed_context=lambda watchlist, vcp: f"DETAIL-{watchlist[0]}",
-        build_watchlist_summary_context=lambda watchlist, vcp: "SUMMARY",
+        build_watchlist_detailed_context=lambda watchlist: f"DETAIL-{watchlist[0]}",
     )
     assert detailed_context.startswith("DETAIL-")
     assert "상세히 진단" in detailed_instruction
 
-    summary_context, summary_instruction = build_watchlist_context_bundle(
+    # [CHAT-032] 상세 요청이 아니면 싣지 않는다. 종전의 VCP 요약은 늘 빈 목록을 보고 있었다.
+    assert build_watchlist_context_bundle(
         user_message="다른 질문",
         watchlist=["삼성전자"],
-        vcp_data=[],
         contains_any_keyword=lambda message, keys: any(k in message for k in keys),
-        build_watchlist_detailed_context=lambda watchlist, vcp: "DETAIL",
-        build_watchlist_summary_context=lambda watchlist, vcp: "SUMMARY",
-    )
-    assert summary_context == "SUMMARY"
-    assert summary_instruction == ""
+        build_watchlist_detailed_context=lambda watchlist: "DETAIL",
+    ) == ("", "")
 
 
 def test_build_additional_context_overrides_instruction_with_watchlist_instruction():
     additional, instruction = build_additional_context(
         user_message="msg",
         watchlist=["A"],
-        vcp_data=[],
         market_gate_data={},
         resolve_primary_intent_context_fn=lambda message, market: ("INTENT", "BASE"),
-        build_watchlist_context_bundle_fn=lambda message, watchlist, vcp: ("WATCH", "OVERRIDE"),
+        build_watchlist_context_bundle_fn=lambda message, watchlist: ("WATCH", "OVERRIDE"),
     )
     assert additional == "INTENTWATCH"
     assert instruction == "OVERRIDE"

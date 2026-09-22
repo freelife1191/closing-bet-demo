@@ -61,22 +61,11 @@ def handle_clear_command(
             logger.error("Chat history clear was not persisted: %s", error)
             return "⚠️ 대화 삭제를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."
         bot.memory.clear(owner_id)
-        bot._data_cache = None
-        if hasattr(bot, "_cache_timestamp"):
-            bot._cache_timestamp = None
-        return f"🧹 내 대화 {removed}건과 메모리, 데이터 캐시를 초기화했습니다."
+        return f"🧹 내 대화 {removed}건과 메모리를 초기화했습니다."
 
     if clear_current_session_messages(bot, session_id):
         return "🧹 현재 대화 세션이 초기화되었습니다."
     return "⚠️ 초기화할 현재 세션이 없습니다."
-
-
-def handle_refresh_command(bot: Any) -> str:
-    """시장 데이터 캐시 수동 갱신."""
-    bot._data_cache = None
-    if hasattr(bot, "_cache_timestamp"):
-        bot._cache_timestamp = None
-    return "🔄 데이터 캐시를 초기화했습니다. 다음 질의에서 최신 데이터를 다시 로드합니다."
 
 
 def render_model_command_help(bot: Any) -> str:
@@ -239,7 +228,6 @@ def get_help() -> str:
             "- `/help` 도움말",
             "- `/clear` 현재 세션 초기화",
             "- `/clear all` 전체 초기화",
-            "- `/refresh` 캐시 새로고침",
             "- `/model` 모델 확인/변경",
             "- `/memory ...` 메모리 관리",
         ]
@@ -264,8 +252,6 @@ def handle_command(
         return get_help()
     if root == "/clear":
         return handle_clear_command(bot, parts, session_id, owner_id)
-    if root == "/refresh":
-        return handle_refresh_command(bot)
     if root == "/model":
         return handle_model_command(bot, parts, session_id)
     if root == "/memory":
@@ -283,7 +269,6 @@ __all__ = [
     "handle_memory_command",
     "handle_memory_write_action",
     "handle_model_command",
-    "handle_refresh_command",
     "render_memory_help",
     "render_memory_view",
     "render_model_command_help",

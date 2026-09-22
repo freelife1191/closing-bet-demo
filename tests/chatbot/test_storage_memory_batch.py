@@ -74,8 +74,6 @@ def test_memory_commands_keep_profile_in_settings_boundary(tmp_path: Path, monke
     clear_all_bot = SimpleNamespace(
         history=_OwnerHistory(),
         memory=memory,
-        _data_cache=None,
-        _cache_timestamp=None,
     )
     assert "초기화" in handle_clear_command(
         clear_all_bot,

@@ -21,7 +21,6 @@ from .data_service import (
     fetch_market_gate as _fetch_market_gate_impl,
     fetch_vcp_ai_analysis as _fetch_vcp_ai_analysis_impl,
     get_cached_daily_suggestions as _get_cached_daily_suggestions_impl,
-    get_cached_data as _get_cached_data_impl,
 )
 from .markdown_utils import _normalize_markdown_text
 from .payload_service import collect_market_context as _collect_market_context_impl
@@ -31,10 +30,7 @@ from .stock_context import (
     fetch_stock_history,
     format_stock_context,
 )
-from .stock_query_service import (
-    detect_stock_query as _detect_stock_query_impl,
-    detect_stock_query_from_vcp_data as _detect_stock_query_from_vcp_data_impl,
-)
+from .stock_query_service import detect_stock_query_from_stock_map
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent
@@ -43,10 +39,6 @@ DATA_DIR = BASE_DIR / "data"
 
 class CoreDataAccessMixin:
     """`KRStockChatbot`의 데이터 접근/캐시/종목질의 래퍼."""
-
-    def _get_cached_data(self) -> Dict[str, Any]:
-        """Fetch market data with caching"""
-        return _get_cached_data_impl(self)
 
     def _fetch_market_gate(self) -> Dict[str, Any]:
         """market_gate.json에서 최신 시장 상태 조회"""
@@ -139,28 +131,14 @@ class CoreDataAccessMixin:
         signal_txt = self._fetch_signal_history(ticker)
         return format_stock_context(name, ticker, price_txt, trend_txt, signal_txt)
 
-    def _detect_stock_query_from_vcp_data(self, message: str) -> Optional[str]:
-        """VCP 캐시 데이터에서 종목 질문을 감지해 요약 정보를 반환한다."""
-        vcp_stocks = self._get_cached_data().get("vcp_stocks", [])
-        return _detect_stock_query_from_vcp_data_impl(
-            message=message,
-            vcp_stocks=vcp_stocks,
-            format_stock_info_fn=self._format_stock_info,
-        )
-
     def _detect_stock_query(self, message: str) -> Optional[str]:
-        """
-        종목 관련 질문 감지.
-        현재 동작 호환을 위해 VCP 캐시 기반 탐지 경로를 우선(사실상 단일) 사용한다.
-        """
-        return _detect_stock_query_impl(
+        """메시지의 종목명·6자리 티커를 전체 종목 맵에서 찾아 그 종목의 상세 문맥을 돌려준다."""
+        return detect_stock_query_from_stock_map(
             message=message,
-            get_cached_data_fn=self._get_cached_data,
-            detect_stock_query_from_vcp_data_fn=lambda msg, stocks: _detect_stock_query_from_vcp_data_impl(
-                message=msg,
-                vcp_stocks=stocks,
-                format_stock_info_fn=self._format_stock_info,
-            ),
+            stock_map=self.stock_map,
+            ticker_map=self.ticker_map,
+            format_stock_context_fn=self._format_stock_context,
+            logger=logger,
         )
 
     def _normalize_markdown_response(self, text: str) -> str:
@@ -169,6 +147,6 @@ class CoreDataAccessMixin:
 
     def _collect_market_context(
         self,
-    ) -> Tuple[Dict[str, Any], List[dict], Dict[str, Any], Dict[str, Any]]:
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
         """챗봇 프롬프트용 시장/시그널 컨텍스트를 수집한다."""
         return _collect_market_context_impl(self)

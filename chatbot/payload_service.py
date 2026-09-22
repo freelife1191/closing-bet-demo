@@ -13,13 +13,10 @@ from .prompts import build_system_prompt
 
 def collect_market_context(
     bot: Any,
-) -> Tuple[Dict[str, Any], List[dict], Dict[str, Any], Dict[str, Any]]:
-    """시장 게이트/캐시 데이터를 프롬프트용 컨텍스트로 정규화한다."""
+) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """시장 게이트 데이터를 프롬프트용 컨텍스트로 정규화한다."""
     market_gate_data = bot._fetch_market_gate() or {}
-    cached_data = bot._get_cached_data() or {}
-
-    vcp_data = cached_data.get("vcp_stocks", []) or []
-    sector_scores = dict(cached_data.get("sector_scores", {}) or {})
+    sector_scores: Dict[str, Any] = {}
 
     # 값은 당일 등락률(%)이다. 프롬프트가 부호로 색을 정하므로 숫자만 받는다([CHAT-031]).
     for sector in market_gate_data.get("sectors", []) or []:
@@ -39,7 +36,7 @@ def collect_market_context(
         # 시장 현황 제목에 붙는 기준일([CHAT-031]). dataset_date 가 없으면 갱신 시각의 날짜.
         "as_of": market_gate_data.get("dataset_date") or str(market_gate_data.get("timestamp") or "")[:10] or None,
     }
-    return market_gate_data, vcp_data, sector_scores, market_data
+    return market_gate_data, sector_scores, market_data
 
 
 def compose_system_prompt(
@@ -47,7 +44,6 @@ def compose_system_prompt(
     user_message: str,
     target_model_name: str,
     market_data: Dict[str, Any],
-    vcp_data: List[dict],
     sector_scores: Dict[str, Any],
     watchlist: Optional[list],
     persona: Optional[str],
@@ -62,17 +58,13 @@ def compose_system_prompt(
     system_prompt = build_system_prompt(
         memory_text=memory_text,
         market_data=market_data,
-        vcp_data=vcp_data,
         sector_scores=sector_scores,
         current_model=target_model_name,
         persona=persona,
         watchlist=watchlist,
     )
 
-    stock_query_context = ""
-    detect_stock_query_fn = getattr(bot, "_detect_stock_query", None)
-    if callable(detect_stock_query_fn):
-        stock_query_context = detect_stock_query_fn(user_message) or ""
+    stock_query_context = bot._detect_stock_query(user_message) or ""
     if stock_query_context:
         additional_context = f"{additional_context}\n\n[종목 조회 컨텍스트]\n{stock_query_context}"
 
@@ -124,11 +116,10 @@ def build_chat_payload(
     owner_id: Optional[str] = None,
 ) -> Tuple[List[dict], List[Any]]:
     """단일/스트림 공통 요청 payload(history + parts)를 빌드한다."""
-    market_gate_data, vcp_data, sector_scores, market_data = bot._collect_market_context()
+    market_gate_data, sector_scores, market_data = bot._collect_market_context()
     additional_context, intent_instruction = bot._build_additional_context(
         user_message=user_message,
         watchlist=watchlist,
-        vcp_data=vcp_data,
         market_gate_data=market_gate_data,
     )
 
@@ -136,7 +127,6 @@ def build_chat_payload(
         user_message=user_message,
         target_model_name=target_model_name,
         market_data=market_data,
-        vcp_data=vcp_data,
         sector_scores=sector_scores,
         watchlist=watchlist,
         persona=persona,

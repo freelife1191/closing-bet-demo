@@ -21,9 +21,7 @@ from chatbot.data_service import (
     build_watchlist_suggestions_text,
     default_daily_suggestions,
     fetch_market_gate,
-    fetch_mock_data,
     get_cached_daily_suggestions,
-    get_cached_data,
 )
 
 
@@ -34,55 +32,6 @@ class _FakeMemory:
     def get(self, key):
         _ = key
         return self.value
-
-
-class _FakeBot:
-    def __init__(self, data_fetcher=None):
-        self._data_cache = None
-        self._cache_timestamp = None
-        self._cache_ttl = 60
-        self.data_fetcher = data_fetcher
-
-
-def test_get_cached_data_uses_fetcher_and_cache():
-    calls = {"count": 0}
-
-    def _fetch():
-        calls["count"] += 1
-        return {"market": {"ok": True}, "vcp_stocks": [], "sector_scores": {}}
-
-    bot = _FakeBot(data_fetcher=_fetch)
-    first = get_cached_data(bot)
-    second = get_cached_data(bot)
-
-    assert first["market"]["ok"] is True
-    assert second["market"]["ok"] is True
-    assert calls["count"] == 1
-
-
-def test_get_cached_data_falls_back_to_mock_when_fetcher_fails():
-    def _raise():
-        raise RuntimeError("boom")
-
-    bot = _FakeBot(data_fetcher=_raise)
-    result = get_cached_data(bot)
-    assert result == {"market": {}, "vcp_stocks": [], "sector_scores": {}}
-
-
-def test_get_cached_data_refreshes_when_cache_is_older_than_a_day():
-    calls = {"count": 0}
-
-    def _fetch():
-        calls["count"] += 1
-        return {"market": {"ok": True}, "vcp_stocks": [], "sector_scores": {}}
-
-    bot = _FakeBot(data_fetcher=_fetch)
-    bot._data_cache = {"market": {"stale": True}, "vcp_stocks": [], "sector_scores": {}}
-    bot._cache_timestamp = datetime.now() - timedelta(days=1)
-
-    result = get_cached_data(bot)
-    assert result["market"]["ok"] is True
-    assert calls["count"] == 1
 
 
 def test_fetch_market_gate_reads_json(tmp_path: Path):
@@ -201,9 +150,3 @@ def test_build_cache_key_and_defaults():
     defaults = default_daily_suggestions()
     assert len(defaults) == 5
     assert defaults[0]["title"] == "시장 현황"
-
-
-def test_fetch_mock_data_shape():
-    data = fetch_mock_data()
-    assert "market" in data
-    assert "vcp_stocks" in data

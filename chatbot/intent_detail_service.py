@@ -65,20 +65,8 @@ def build_market_gate_context(market_gate_data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _find_vcp_row_for_watch(stock_name: str, ticker: str, vcp_data: List[dict]) -> dict | None:
-    for row in vcp_data or []:
-        row_name = str(row.get("name", "")).strip()
-        row_ticker = str(row.get("code") or row.get("ticker") or "").strip()
-        if row_name and row_name == stock_name:
-            return row
-        if ticker and row_ticker and row_ticker == ticker:
-            return row
-    return None
-
-
 def build_watchlist_detailed_context(
     watchlist: List[str],
-    vcp_data: List[dict],
     stock_map: Dict[str, str],
     format_stock_context_fn: Callable[[str, str], str],
 ) -> str:
@@ -89,47 +77,13 @@ def build_watchlist_detailed_context(
         detailed = format_stock_context_fn(stock_name, ticker)
         lines.append(detailed)
 
-        matched = _find_vcp_row_for_watch(stock_name, ticker, vcp_data)
-        if matched:
-            score = matched.get("supply_demand_score", matched.get("score", "N/A"))
-            stage = matched.get("supply_demand_stage", matched.get("stage", "N/A"))
-            lines.append(f"- VCP 상태: 점수 {score}, 단계 {stage}")
-        else:
-            lines.append("- VCP 상태: 현재 시그널 데이터 없음")
-
     return "\n".join(lines)
-
-
-def build_watchlist_summary_context(watchlist: List[str], vcp_data: List[dict]) -> str:
-    """관심종목 VCP 요약 컨텍스트."""
-    matched: list[str] = []
-    watch_set = {str(item).strip() for item in (watchlist or []) if str(item).strip()}
-    if not watch_set:
-        return ""
-
-    for row in vcp_data or []:
-        name = str(row.get("name", "")).strip()
-        if not name or name not in watch_set:
-            continue
-        score = row.get("supply_demand_score", row.get("score", "N/A"))
-        matched.append(f"{name}({score}점)")
-
-    if not matched:
-        return ""
-
-    return "\n".join(
-        [
-            "\n[관심종목 VCP 현황]",
-            "- " + ", ".join(matched),
-        ]
-    )
 
 
 __all__ = [
     "build_closing_bet_context",
     "build_market_gate_context",
     "build_watchlist_detailed_context",
-    "build_watchlist_summary_context",
     "contains_any_keyword",
 ]
 

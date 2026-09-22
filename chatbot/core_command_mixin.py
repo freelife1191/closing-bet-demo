@@ -16,7 +16,6 @@ from .command_service import (
     handle_clear_command as _handle_clear_command_impl,
     handle_command as _handle_command_impl,
     handle_model_command as _handle_model_command_impl,
-    handle_refresh_command as _handle_refresh_command_impl,
     render_memory_help as _render_memory_help_impl,
     render_model_command_help as _render_model_command_help_impl,
 )
@@ -138,10 +137,6 @@ class CoreCommandMixin:
     ) -> str:
         """`/clear` 명령 처리."""
         return _handle_clear_command_impl(self, parts, session_id, owner_id)
-
-    def _handle_refresh_command(self) -> str:
-        """데이터 캐시 초기화."""
-        return _handle_refresh_command_impl(self)
 
     def _render_model_command_help(self) -> str:
         """`/model` 도움말 텍스트 렌더링."""

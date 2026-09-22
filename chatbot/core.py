@@ -7,7 +7,7 @@ Gemini AI 연동 및 대화 처리 로직 (지원 모델 설정 가능)
 
 import os
 import logging
-from typing import Optional, Callable, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 
 # Load .env file
@@ -116,18 +116,11 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         self, 
         user_id: str,
         api_key: str = None,
-        data_fetcher: Optional[Callable] = None
     ):
         self.user_id = user_id
         self.memory = MemoryManager(user_id)
         self.history = HistoryManager(user_id)
-        self.data_fetcher = data_fetcher
         self._default_session_id: Optional[str] = None
-        
-        # Cache initialization
-        self._data_cache = None
-        self._cache_timestamp = None
-        self._cache_ttl = 60
         
         # Data maps initialization
         self.stock_map = {} 
@@ -293,11 +286,8 @@ class KRStockChatbot(CoreCommandMixin, CoreDataContextMixin):
         )
 
     def get_welcome_message(self) -> str:
-        """웰컴 메시지 반환 (VCP 데이터 기반)"""
-        # Fetch current data to make welcome message dynamic
-        data = self._get_cached_data()
-        vcp_data = data.get("vcp_stocks", [])
-        return get_welcome_message(vcp_data)
+        """웰컴 메시지 반환"""
+        return get_welcome_message()
 
     def get_history(self):
         return self.history.to_dict()

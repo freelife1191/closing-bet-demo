@@ -85,7 +85,6 @@ def _format_index(value) -> str:
 def build_system_prompt(
     memory_text: str = "",
     market_data: dict = None,
-    vcp_data: list = None,
     sector_scores: dict = None,
     current_model: str = "",
     persona: str = None,
@@ -97,7 +96,6 @@ def build_system_prompt(
     Args:
         memory_text: 장기 메모리 포맷팅된 텍스트
         market_data: 전체 시장 데이터 (KOSPI, KOSDAQ 등)
-        vcp_data: VCP 조건 충족 종목 리스트
         sector_scores: Market Gate 섹터 점수
         current_model: 현재 사용 중인 모델명
         persona: 적용할 페르소나 ('vcp' 또는 None)
@@ -148,19 +146,6 @@ def build_system_prompt(
             sector_text += f"{emoji} {sector}: {change_pct:+.2f}%\n"
         sections.append(sector_text)
     
-    # VCP 상위 종목
-    if vcp_data:
-        vcp_text = "## VCP 상위 종목 (수급 기반)\n"
-        for i, stock in enumerate(vcp_data[:10], 1):  # 상위 10개만
-            name = stock.get('name', 'N/A')
-            ticker = stock.get('ticker', stock.get('code', ''))
-            score = stock.get('supply_demand_score', stock.get('score', 'N/A'))
-            stage = stock.get('supply_demand_stage', stock.get('stage', ''))
-            double_buy = "🔥쌍끌이" if stock.get('is_double_buy', False) else ""
-            
-            vcp_text += f"{i}. **{name}** ({ticker}): {score}점 {stage} {double_buy}\n"
-        sections.append(vcp_text)
-    
     # 관심 종목 (Watchlist)
     if watchlist and len(watchlist) > 0:
         watchlist_text = "## [User's Interested Stocks] (관심 종목)\n"
@@ -182,19 +167,9 @@ def build_system_prompt(
     return "\n\n".join(sections)
 
 
-def get_welcome_message(top_stocks: list = None) -> str:
+def get_welcome_message() -> str:
     """첫 방문 시 웰컴 메시지 생성"""
     msg = "안녕하세요! **스마트머니봇**입니다 📈\n\n"
     msg += "VCP 기반 수급 분석으로 투자 의사결정을 도와드릴게요.\n\n"
-    
-    if top_stocks and len(top_stocks) >= 3:
-        msg += "**📊 오늘의 Top 3 수급 종목:**\n"
-        for i, stock in enumerate(top_stocks[:3], 1):
-            name = stock.get('name', 'N/A')
-            score = stock.get('supply_demand_score', stock.get('score', 0))
-            double_buy = " 🔥" if stock.get('is_double_buy', False) else ""
-            msg += f"{i}. {name} ({score}점){double_buy}\n"
-        msg += "\n"
-    
     msg += "질문해주세요! 예: \"오늘 뭐 살까?\", \"삼성전자 어때?\""
     return msg

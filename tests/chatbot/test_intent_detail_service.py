@@ -16,7 +16,6 @@ from chatbot.intent_detail_service import (
     build_closing_bet_context,
     build_market_gate_context,
     build_watchlist_detailed_context,
-    build_watchlist_summary_context,
     contains_any_keyword,
 )
 
@@ -74,22 +73,12 @@ def test_build_market_gate_context_formats_fields():
     assert "반도체" not in text
 
 
-def test_build_watchlist_detailed_context_includes_vcp_state():
+def test_build_watchlist_detailed_context_uses_stock_context():
     text = build_watchlist_detailed_context(
         watchlist=["삼성전자"],
-        vcp_data=[{"code": "005930", "score": 91}],
         stock_map={"삼성전자": "005930"},
         format_stock_context_fn=lambda name, ticker: f"{name}:{ticker}",
     )
     assert "삼성전자:005930" in text
-    assert "VCP 상태" in text
-
-
-def test_build_watchlist_summary_context_handles_empty_and_match():
-    empty = build_watchlist_summary_context(["A"], [{"name": "B", "score": 1}])
-    assert empty == ""
-
-    matched = build_watchlist_summary_context(
-        ["A"], [{"name": "A", "code": "0001", "score": 77}]
-    )
-    assert "A(77점)" in matched
+    # [CHAT-032] 비어 있던 vcp_stocks 로 늘 「현재 시그널 데이터 없음」을 싣던 줄을 없앴다.
+    assert "VCP 상태" not in text

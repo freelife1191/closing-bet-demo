@@ -70,10 +70,14 @@
 ## P1 — 이번 주기
 
 ### [CHAT-032] 종목 질의 문맥이 언제나 비는 경로 복구
-- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §3.1. `get_chatbot()` 이 `data_fetcher` 없이 인스턴스를 만들고 운영 코드 어디서도 넘기지 않아 `get_cached_data` 가 항상 `fetch_mock_data()`(`vcp_stocks: []`)로 떨어진다. 그래서 `[종목 조회 컨텍스트]` 절, `## VCP 상위 종목` 절, 웰컴 메시지 Top 3, 관심종목 요약이 모두 죽어 있고, 웰컴 메시지가 예시로 드는 「삼성전자 어때?」도 페르소나만 남는다. VCP 상담 모드가 `[종목명(티커)]` 접두를 붙여 보내도 서버는 그 종목 자료를 싣지 않는다. 실제 종목 맵과 CSV 로 최근 5일 주가·수급·시그널 이력을 붙이는 `detect_stock_query_from_stock_map` 은 테스트만 부른다. `[CHAT-005]` 가 그 private 래퍼를 미사용으로 지웠으나 살아 있는 경로가 늘 빈 목록을 본다는 사실은 그때 다루지 않았다.
+- 카테고리: 챗봇 | 티어: T3 (계획 T2, 구현 diff +27/-327 로 300줄 초과해 상향. 위험 경로 파일 없음) | 근거: AUDIT-CHAT(2차) §3.1. `get_chatbot()` 이 `data_fetcher` 없이 인스턴스를 만들고 운영 코드 어디서도 넘기지 않아 `get_cached_data` 가 항상 `fetch_mock_data()`(`vcp_stocks: []`)로 떨어진다. 그래서 `[종목 조회 컨텍스트]` 절, `## VCP 상위 종목` 절, 웰컴 메시지 Top 3, 관심종목 요약이 모두 죽어 있고, 웰컴 메시지가 예시로 드는 「삼성전자 어때?」도 페르소나만 남는다. VCP 상담 모드가 `[종목명(티커)]` 접두를 붙여 보내도 서버는 그 종목 자료를 싣지 않는다. 실제 종목 맵과 CSV 로 최근 5일 주가·수급·시그널 이력을 붙이는 `detect_stock_query_from_stock_map` 은 테스트만 부른다. `[CHAT-005]` 가 그 private 래퍼를 미사용으로 지웠으나 살아 있는 경로가 늘 빈 목록을 본다는 사실은 그때 다루지 않았다.
 - 범위: `_detect_stock_query` 를 `detect_stock_query_from_stock_map` 으로 연결, VCP 상담 모드의 선택 종목 문맥 확인(없으면 접두 파싱), `fetch_mock_data`·`detect_stock_query_from_vcp_data` 처리 방향 결정, 웰컴 Top 3 를 살릴지 문구에서 뺄지 결정, 종목명·티커 두 갈래의 문맥 주입 회귀 테스트.
 - QA: 격리 /chatbot 에서 「삼성전자 어때?」 전송 → 답변이 최근 5일 종가와 외국인·기관 순매수 수치를 인용한다. 브라우저 실측 required.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+- 설계 승인: 2026-09-23 사용자 승인(bounded, 대화 설계 제시 후 「진행해」). 선택지 질문에 「죽은 경로 제거」를 골랐다. `_detect_stock_query` 를 `detect_stock_query_from_stock_map` 에 연결하고(VCP 상담 접두는 6자리 티커 정규식이 그대로 잡으므로 별도 파싱 없음), 늘 빈 목록인 `vcp_stocks` 경로 전체(`get_cached_data`·`fetch_mock_data`·`data_fetcher`·캐시 필드·`detect_stock_query`·`detect_stock_query_from_vcp_data`·`fallback_response`·`format_stock_info`, `vcp_data` 인자 사슬, `## VCP 상위 종목` 절·웰컴 Top 3·관심종목 VCP 요약·「VCP 상태」 줄)를 제거한다. 티어 T2(위험 경로 파일 없음), diff 300줄 초과 시 T3 로 올린다. 읽은 정본: `.claude/skills/closing-bet-python/SKILL.md`.
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: `tests/chatbot/test_core_data_access_mixin.py` 가 구현 전 실패(옛 경로가 `_get_cached_data` 로 빠져 AttributeError)함을 확인한 뒤 `_detect_stock_query` 를 종목 맵에 연결. 빈 vcp_stocks 경로 제거와 함께 캐시만 비우던 챗봇 `/refresh` 명령도 지움(명령 목록·도움말·통합 테스트 매개변수에서 제거, 프론트 명령 목록에는 원래 없음). 지운 함수만 검사하던 테스트 10건(get_cached_data 3, fetch_mock_data 1, detect_stock_query_from_vcp_data 1, detect_stock_query 1, fallback_response 2, format_stock_info 1, build_watchlist_summary_context 1) 삭제, 시그니처가 바뀐 테스트 7곳 갱신. diff +27/-327 로 T3 상향.
+- [x] `/ponytail-review` → `/code-review` → `/review`(T3): ponytail(oh-my-claudecode:code-reviewer 레인) 2건 가운데 `payload_service` 의 getattr 방어를 직접 호출로 반영, 모듈 인라인은 chatbot 믹스인이 모두 서비스 `*_impl` 로 위임하는 기존 구조라 미반영. 통합 테스트의 `/refresh` 매개변수 제거(`/unknown` 이 같은 갈래). 코드 리뷰(closing-bet-reviewer) APPROVE, 지적 1(T3 상향) 반영, 지적 2(두 글자 이하 종목명 부분 문자열 오탐: 대상·레이·테스·선진·디오·TP 등)는 `_name_in_message` 로 두 글자 이하 이름을 한글·영숫자 경계에서만 잡고 조사 한 글자를 허용하도록 반영, 지적 6(맵에 없는 티커 → 이름 갈래) 테스트 추가, 3(기록용)·4(같은 문맥 두 번, 토큰만)·5(`docs/reference/PART_06.md` 는 원본 코드 덤프) 미반영. 심층 리뷰(oh-my-claudecode:critic) REVISE → 경계 반영 뒤 ACCEPT-WITH-RESERVATIONS: 티커 정규식을 `(?<!\d)\d{6}(?!\d)` 로 바꿔 「005930은」 감지(테스트 추가), 가장 긴 이름 하나만 싣는 한계에 `ponytail:` 표시. 독립 단어 오탐(대상·전방·남성·동양·TP·DB), 가격-티커 우선순위, 두 글자 조사는 `[CHAT-038]` 로 이월. 전체 `pytest -q -p no:cacheprovider` 2622 passed 2 skipped exit 0. frontend 변경 없음이라 type-check·vitest 생략.
+- [ ] QA
 
 ### [CHAT-033] 챗봇 저장소의 스레드 동시성 확보
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §1.4, §1.5, §5.1. 프로세스당 챗봇 인스턴스 하나를 워커의 스레드 여덟 개가 공유하는데 `MemoryManager` 와 `HistoryManager` 에 잠금이 없다. ① `add()` 가 `_reload()` 로 `self.memories` 를 통째로 교체한 뒤 `_save_single_entry` 가 그 사전을 다시 읽으므로, 그 사이 다른 스레드의 `view()`(모든 채팅 요청이 부름)가 사전을 또 교체하면 `KeyError`, `update()` 는 옛 값 저장. ② `HistoryManager._save()` 가 변경 표시가 비었거나 델타 저장이 실패하면 `save_history_sessions_to_sqlite` 로 떨어지고, 그 끝의 `_delete_stale_sessions_cursor` 가 이 워커 메모리에 없는 세션(다른 워커가 만든 것 포함)을 지우며 메시지는 CASCADE 로 함께 사라진다. 메모리 쪽은 `[CHAT-022]` 가 upsert 전용으로 고쳤으나 히스토리에는 같은 수정이 없다. 동시성 테스트가 없어 고쳐도 재발을 막을 장치가 없다.
@@ -163,3 +167,10 @@
 - 범위: 먼저 재현 조건을 확정한다(유휴 시간 뒤 동시 요청, keep-alive 값 변화). 가설이 맞으면 `restart_all.sh` 의 gunicorn `--keep-alive` 를 Next 프록시의 유휴 연결 유지 시간보다 길게 두는 안과 재시도 안을 비교한다. 재현 스크립트나 회귀 테스트를 남긴다.
 - QA: 격리 환경에서 유휴 뒤 종가베팅 화면을 여러 번 열어도 5xx 와 ECONNRESET 이 없다. 브라우저 실측 required.
 - [ ] 재현·원인 확정 - [ ] 설계 승인(bounded) - [ ] 구현·검증 - [ ] QA
+
+### [CHAT-038] 독립 단어로 쓰인 짧은 종목명이 종목 질의로 잡힌다
+- 카테고리: 챗봇 | 티어: T2 | 근거: `[CHAT-032]` 코드 리뷰. `[CHAT-032]` 가 종목 질의 문맥을 전체 종목 맵(1,997종목, 두 글자 이하 147개)에 연결하고 두 글자 이하 이름은 단어 경계에서만 잡도록 했다. 그래도 「VCP 분석 대상 종목 알려줘」→대상, 「전방 산업」→전방, 「러셀 지수」→러셀, 「요즘 한창 뜨는 섹터」→한창, 심층 리뷰의 「남성 소비」→남성·「동양 철학」→동양·「목표가 TP 얼마」→TP·「DB 오류」→DB처럼 종목명이 일반 단어로 쓰이면 그 종목의 `[종목 조회 컨텍스트]` 가 프롬프트에 붙는다. LLM 호출 수·저장·권한은 바뀌지 않지만 답변이 묻지 않은 종목의 수치를 끌어올 수 있다.
+- 함께(심층 리뷰 낮음): 6자리 숫자 경계가 `(?<!\d)\d{6}(?!\d)` 로 바뀌어 「150000원」처럼 조사·단위가 붙은 6자리 숫자도 그 값이 티커면 잡힌다. 가격을 적은 질문이 드문 티커와 겹치는지 함께 본다. 티커 갈래가 이름 갈래보다 먼저 돌아서, 「삼성전자 298000원 가면 팔까?」처럼 종목명이 있어도 가격이 티커와 같으면 다른 종목의 문맥이 실린다(천 원 단위 10만~99만9천 원 가운데 9개 값이 티커와 겹침, 만 원 단위는 0개). 또 두 글자 이하 이름 뒤에는 조사 한 글자만 허용해 「기아랑 비교」·「기아에서 신차」는 잡히지 않는다(문맥이 빠지는 안전한 쪽).
+- 범위: 일반 단어와 겹치는 짧은 종목명의 처리 방향 결정(흔한 단어 제외 목록, 「종목·주가·어때」 같은 종목 질의 신호와 함께 나올 때만 매칭, 또는 티커·긴 이름만 허용) 과 회귀 테스트.
+- QA: 격리 /chatbot 에서 「VCP 분석 대상 종목 알려줘」를 보내고 조립된 프롬프트에 `[종목 조회 컨텍스트]` 가 없음을 확인한다. 「대상 주가 어때?」는 여전히 대상의 문맥을 싣는다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA

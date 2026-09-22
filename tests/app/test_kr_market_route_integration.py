@@ -463,7 +463,7 @@ def test_chatbot_quota_guard_blocks_when_limit_exceeded(monkeypatch, tmp_path: P
 
 @pytest.mark.parametrize(
     "command",
-    ["/status", "/help", "/clear", "/refresh", "/model", "/memory", "/unknown"],
+    ["/status", "/help", "/clear", "/model", "/memory", "/unknown"],
 )
 def test_chatbot_slash_command_bypasses_exhausted_quota_without_increment(
     monkeypatch,

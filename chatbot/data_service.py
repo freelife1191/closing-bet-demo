@@ -28,47 +28,6 @@ from .suggestions_prompt import (
 logger = logging.getLogger(__name__)
 
 
-def get_cached_data(bot: Any) -> Dict[str, Any]:
-    """시장 데이터 캐시를 조회하고 필요 시 갱신한다."""
-    now = datetime.now()
-    cache_age_seconds = (
-        (now - bot._cache_timestamp).total_seconds()
-        if bot._cache_timestamp is not None
-        else None
-    )
-    if (
-        bot._data_cache is None
-        or bot._cache_timestamp is None
-        or (cache_age_seconds is not None and cache_age_seconds > bot._cache_ttl)
-    ):
-        try:
-            if bot.data_fetcher:
-                bot._data_cache = bot.data_fetcher()
-            else:
-                bot._data_cache = fetch_mock_data()
-            bot._cache_timestamp = now
-        except Exception as e:
-            logger.error("Data fetch error: %s", e)
-            if bot._data_cache is None:
-                bot._data_cache = {"market": {}, "vcp_stocks": [], "sector_scores": {}}
-
-    return bot._data_cache
-
-
-def fetch_mock_data() -> Dict[str, Any]:
-    """폴백용 Mock 데이터."""
-    return {
-        "market": {
-            "kospi": "2600.00",
-            "kosdaq": "850.00",
-            "usd_krw": 1350,
-            "market_gate": "YELLOW",
-        },
-        "vcp_stocks": [],
-        "sector_scores": {},
-    }
-
-
 def fetch_market_gate(data_dir: Path) -> Dict[str, Any]:
     """market_gate.json에서 최신 시장 상태 조회."""
     try:
