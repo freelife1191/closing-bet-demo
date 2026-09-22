@@ -69,7 +69,9 @@ def test_build_market_gate_context_formats_fields():
     )
     assert "GREEN" in text
     assert "수급 양호" in text
-    assert "반도체" in text
+    # [CHAT-031] 섹터 등락률은 시스템 프롬프트의 「섹터 등락률」 절 한 곳에만 싣는다. 여기에 다시 실으면
+    # 한 프롬프트에 같은 섹터가 두 단위로 두 번 나온다.
+    assert "반도체" not in text
 
 
 def test_build_watchlist_detailed_context_includes_vcp_state():

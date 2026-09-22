@@ -71,7 +71,14 @@
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §1.1, §1.2, §1.3, §2.2. 실제 `data/*.json` 으로 프롬프트를 생성해 확인. ① `collect_market_context`(`chatbot/payload_service.py:24-28`)가 섹터 변동률(퍼센트)을 `sector_scores` 에 넣고 `build_system_prompt`(`chatbot/prompts.py:136-147`)가 0~100 점수로 가정해 40 미만이면 🔴 와 「점」을 붙이므로 모든 섹터가 빨간색이 된다(반도체 +2.93% 가 「2.93점, 매우 약함」). 같은 요청에서 `build_market_gate_context` 는 올바른 퍼센트 표기를 만들어 한 프롬프트에 서로 다른 단위가 두 번 실린다. 지수는 소수 아홉 자리 원값. ② `build_vcp_buy_recommendations_text` 가 `action == "BUY"` 만 담아, 분석 4건이 전부 HOLD 면 빈 문자열이 되고 `build_vcp_intent_context` 가 「현재 분석된 VCP 시그널이 없습니다」로 바꾼다. VCP 화면은 같은 파일로 표를 그리므로 사용자는 표를 보면서 옆 상담 패널에서 「없다」는 답을 받는다. ③ 시그널·뉴스 문맥에 기준일이 없어 `kr_ai_analysis.json`(2026-05-05)이 「오늘의 시장 현황」 제목 아래 실린다. 기존 테스트 두 건(`test_payload_service.py:79-86`, `test_intent_context.py:24-28`)이 이 동작을 사양으로 고정하고 있다.
 - 범위: 섹터 절을 퍼센트 표기 하나로 모으고 점수 렌더 제거, 지수 자리수 포맷, 「분석 없음」과 「매수 추천 없음」 문구 분리, 시그널·뉴스·AI 분석 문맥에 기준일과 경과일 명시, 최종 시스템 프롬프트 문자열을 고정 입력으로 대조하는 회귀 테스트. `[VCP-026]` 과 무관한 별개 경로다.
 - QA: 격리 /chatbot 에서 「오늘 섹터 어때?」「VCP 매수 추천 알려줘」 전송 → 첫 답변이 반도체를 상승률 2.93% 로 말하고, 둘째가 「시그널 없음」 대신 「분석 4건, 매수 추천 0건, 기준일 2026-05-05」를 말한다. 브라우저 실측 required.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+- 설계 승인: 2026-09-22 사용자의 「백로그도 설계해서 진행해」 뒤 네 항목 일괄 설계(bounded, 대화 제시) → AskUserQuestion 「시스템 프롬프트 한 곳」 선택. 섹터는 시스템 프롬프트의 「섹터 등락률」 절 하나에 `🟢 반도체: +2.93%` 형식(부호로 색)으로 싣고 시장 의도 문맥의 중복 섹터 목록은 지운다. 지수는 소수 둘째 자리·천 단위 구분, 시장 현황 제목에 Market Gate 기준일. VCP 문맥은 「분석 N건 (기준일 X, D일 경과), 매수 추천 M건」 머리글 뒤 BUY 목록, M=0 이면 「매수 추천 없음」, N=0 일 때만 종전 「분석된 시그널 없음」. 뉴스·종가베팅 문맥에 기준일·경과일. 고정 입력으로 최종 시스템 프롬프트를 대조하는 테스트. QA 는 격리 사본에서 LLM 호출을 스텁으로 바꿔 화면에서 전송(원본 챗봇 전송 없음).
+- 파일: `chatbot/payload_service.py`, `chatbot/prompts.py`, `chatbot/intent_detail_service.py`, `chatbot/signal_context.py`, `chatbot/data_service.py`, `tests/chatbot/*`. 위험 경로 없음 → T2.
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: 새 테스트 7건(`test_prompts_refactor.py` 3, `test_signal_context.py` 3, `test_intent_detail_service.py` 의 섹터 단언 반전 1)이 구현 전 전부 실패함을 확인한 뒤 구현. `tests/chatbot` 228 통과. 실제 `data/` 파일로 만든 프롬프트(읽기 전용 하네스)에서 「## 시장 현황 (Market Gate 기준 2026-09-22)」·「🟢 반도체: +2.93%」·「분석 4건 (기준일 2026-05-05, 140일 경과), 매수 추천 0건」·뉴스·종가베팅의 「(기준일 2026-09-21, 1일 경과)」 확인
+- [x] `/ponytail-review`(인라인): 프로덕션 호출자가 없어진 `load_vcp_ai_signals` 래퍼 삭제(테스트 2건은 `load_vcp_ai_payload` 로 옮김). 나머지는 더 줄일 것 없음
+- [x] `/code-review`(feature-dev:code-reviewer `chat031-reviewer`): APPROVE, 블로커 0. 회신이 두 번 모두 유실되어 subagents 기록에서 결과를 읽음. 낮은 확신도 3건: `core_data_access_mixin.py` 의 docstring 드리프트 → 반영, `build_vcp_buy_recommendations_text` 가 `_vcp_action` 과 같은 필드를 다시 읽음 → 동작 영향 없어 미반영, `_describe_as_of` 가 호출마다 `date.today()` → 미반영. 리뷰어가 `sector_scores` 에 옛 0~100 점수가 섞일 가능성을 확인했으나 프로덕션 `get_chatbot()` 이 `data_fetcher` 없이 만들어져 그 경로가 늘 비어 있음을 확인
+- [x] pytest 전체 2589 통과 2 skipped(래퍼 삭제 전후 두 번). vitest 전체는 frontend 무변경이라 `[VCP-032]` 의 exit 0 유지
+- [ ] QA: `docs/dev-cycle/qa/CHAT-031.md` (실행 완료, 필수 2/2·인접 2/2 통과. 아카이브 커밋에서 마감)
 
 ## P1 — 이번 주기
 

@@ -21,10 +21,14 @@ def collect_market_context(
     vcp_data = cached_data.get("vcp_stocks", []) or []
     sector_scores = dict(cached_data.get("sector_scores", {}) or {})
 
+    # 값은 당일 등락률(%)이다. 프롬프트가 부호로 색을 정하므로 숫자만 받는다([CHAT-031]).
     for sector in market_gate_data.get("sectors", []) or []:
         name = sector.get("name")
-        change_pct = sector.get("change_pct")
-        if name is not None and change_pct is not None:
+        try:
+            change_pct = float(sector.get("change_pct"))
+        except (TypeError, ValueError):
+            continue
+        if name is not None:
             sector_scores[str(name)] = change_pct
 
     market_data = {
@@ -32,6 +36,8 @@ def collect_market_context(
         "kosdaq": market_gate_data.get("kosdaq_close"),
         "usd_krw": market_gate_data.get("usd_krw"),
         "market_gate": market_gate_data.get("color", market_gate_data.get("status", "")),
+        # 시장 현황 제목에 붙는 기준일([CHAT-031]). dataset_date 가 없으면 갱신 시각의 날짜.
+        "as_of": market_gate_data.get("dataset_date") or str(market_gate_data.get("timestamp") or "")[:10] or None,
     }
     return market_gate_data, vcp_data, sector_scores, market_data
 

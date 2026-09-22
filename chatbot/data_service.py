@@ -17,8 +17,8 @@ from .signal_context import (
     load_jongga_signals,
     build_latest_news_text,
     build_jongga_candidates_text,
-    load_vcp_ai_signals,
-    build_vcp_buy_recommendations_text,
+    build_vcp_analysis_summary_text,
+    load_vcp_ai_payload,
 )
 from .suggestions_prompt import (
     build_daily_suggestions_prompt as build_daily_suggestions_prompt_template,
@@ -85,10 +85,9 @@ def fetch_market_gate(data_dir: Path) -> Dict[str, Any]:
 
 
 def fetch_vcp_ai_analysis(data_dir: Path) -> str:
-    """kr_ai_analysis.json에서 VCP AI 분석 결과 조회 (상위 5개)."""
+    """kr_ai_analysis.json에서 VCP AI 분석 결과 조회 (건수·기준일 머리글 + 매수 추천 상위 5개)."""
     try:
-        signals = load_vcp_ai_signals(data_dir, logger)
-        return build_vcp_buy_recommendations_text(signals, limit=5)
+        return build_vcp_analysis_summary_text(load_vcp_ai_payload(data_dir, logger), limit=5)
     except Exception as e:
         logger.error("VCP AI analysis fetch error: %s", e)
         return ""

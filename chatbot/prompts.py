@@ -22,7 +22,7 @@ SYSTEM_PERSONA = """너는 VCP 기반 한국 주식 투자 어드바이저 '스�
 
 ## 🔥 RAG 데이터 활용 지침 (최우선 준수)
 **아래 [데이터] 섹션에 제공되는 정보를 반드시 우선적으로 참고하여 답변해야 해:**
-1. **[Market Gate 상세 분석]**: 시장 상태, 점수, 섹터 동향 → 시장 질문에 활용
+1. **[Market Gate 상세 분석]**: 시장 상태, 점수 → 시장 질문에 활용 (섹터 등락률은 위 「섹터 등락률」 절)
 2. **[VCP AI 분석 결과]**: Gemini/Perplexity AI 분석, 매수/매도 추천 → 종목 추천에 활용
 3. **[종가베팅 추천 종목]**: S/A급 종목, 점수, AI 분석 → 종가베팅 질문에 활용
 4. **[최근 뉴스]**: 수집된 최신 뉴스 제목 → 뉴스/이슈 질문에 활용
@@ -77,6 +77,11 @@ VCP_PERSONA = """너는 'VCP 전문가 챗봇'이야. (스마트머니봇이라�
 """
 
 
+def _format_index(value) -> str:
+    """지수는 소수 둘째 자리까지 천 단위 구분. 숫자가 아니면 그대로 둔다."""
+    return f"{value:,.2f}" if isinstance(value, (int, float)) else str(value)
+
+
 def build_system_prompt(
     memory_text: str = "",
     market_data: dict = None,
@@ -113,13 +118,14 @@ def build_system_prompt(
     if memory_text:
         sections.append(memory_text)
     
-    # 시장 현황
+    # 시장 현황. 기준일을 제목에 붙여 모델이 옛 자료를 오늘 것으로 말하지 않게 한다([CHAT-031]).
     if market_data:
-        market_text = "## 오늘의 시장 현황\n"
+        as_of = market_data.get('as_of')
+        market_text = f"## 시장 현황 (Market Gate 기준 {as_of})\n" if as_of else "## 시장 현황\n"
         if 'kospi' in market_data:
-            market_text += f"- **KOSPI**: {market_data['kospi']}\n"
+            market_text += f"- **KOSPI**: {_format_index(market_data['kospi'])}\n"
         if 'kosdaq' in market_data:
-            market_text += f"- **KOSDAQ**: {market_data['kosdaq']}\n"
+            market_text += f"- **KOSDAQ**: {_format_index(market_data['kosdaq'])}\n"
         if 'usd_krw' in market_data:
             val = market_data['usd_krw']
             if isinstance(val, (int, float)):
@@ -132,18 +138,14 @@ def build_system_prompt(
             market_text += f"- **Market Gate**: {gate_emoji} {gate}\n"
         sections.append(market_text)
     
-    # 섹터 점수 (Market Gate)
+    # 섹터 등락률 (Market Gate). 값은 0~100 점수가 아니라 당일 등락률(%)이다([CHAT-031]).
+    # 시장 의도 문맥에는 다시 싣지 않는다. 한 프롬프트에 같은 섹터를 두 단위로 두 번 실었었다.
     if sector_scores:
-        sector_text = "## 섹터별 점수 (Market Gate)\n"
+        sector_text = "## 섹터 등락률 (Market Gate)\n"
         sorted_sectors = sorted(sector_scores.items(), key=lambda x: x[1], reverse=True)
-        for sector, score in sorted_sectors:
-            if score >= 70:
-                emoji = "🟢"
-            elif score >= 40:
-                emoji = "🟡"
-            else:
-                emoji = "🔴"
-            sector_text += f"{emoji} {sector}: {score}점\n"
+        for sector, change_pct in sorted_sectors:
+            emoji = "🟢" if change_pct > 0 else ("🔴" if change_pct < 0 else "⚪")
+            sector_text += f"{emoji} {sector}: {change_pct:+.2f}%\n"
         sections.append(sector_text)
     
     # VCP 상위 종목

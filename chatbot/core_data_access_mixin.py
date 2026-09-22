@@ -53,7 +53,7 @@ class CoreDataAccessMixin:
         return _fetch_market_gate_impl(DATA_DIR)
 
     def _fetch_vcp_ai_analysis(self) -> str:
-        """kr_ai_analysis.json에서 VCP AI 분석 결과 조회 (상위 5개)"""
+        """kr_ai_analysis.json에서 VCP AI 분석 결과 조회 (건수·기준일 머리글 + 매수 추천 상위 5개)"""
         return _fetch_vcp_ai_analysis_impl(DATA_DIR)
 
     def _build_daily_suggestions_cache_key(

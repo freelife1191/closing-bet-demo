@@ -61,16 +61,7 @@ def build_market_gate_context(market_gate_data: Dict[str, Any]) -> str:
     ]
     if reason:
         lines.append(f"- 사유: {reason}")
-
-    sectors = market_gate_data.get("sectors", [])
-    if sectors:
-        lines.append("- 섹터 동향:")
-        for sector in sectors:
-            name = sector.get("name", "N/A")
-            change_pct = sector.get("change_pct", 0)
-            signal = sector.get("signal", "")
-            lines.append(f"  - {name}: {change_pct}% ({signal})")
-
+    # 섹터 등락률은 시스템 프롬프트의 「섹터 등락률」 절 한 곳에만 싣는다([CHAT-031]).
     return "\n".join(lines)
 
 
