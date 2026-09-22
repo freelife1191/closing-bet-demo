@@ -106,8 +106,11 @@ lifecycle_service_command_matches() {
         *"/venv/bin/gunicorn flask_app:app"|*"/venv/bin/gunicorn flask_app:app "*|"gunicorn: master [flask_app:app]"|"gunicorn: worker [flask_app:app]") return 0 ;;
       esac ;;
     frontend)
+      # 운영은 run-next.js start 로 뜬다([INFRA-076]). build 는 서버가 아니므로 받지 않는다. 실측 트리에
+      # 닿는 것은 래퍼 `node scripts/run-next.js <dev|start>` 와 `next-server (v…)` 둘이고, 나머지 변형은
+      # process.title 을 바꾸지 못하는 플랫폼의 보험으로 dev 줄과 대칭이다. 죽은 패턴으로 보고 지우지 않는다.
       case "$command" in
-        *"node scripts/run-next.js dev"|*"node scripts/run-next.js dev "*|*"node $PROJECT_ROOT/frontend/scripts/run-next.js dev"|"next-server (v"*")"|*"/node_modules/next/dist/bin/next dev"*|*"/node_modules/.bin/next dev"*) return 0 ;;
+        *"node scripts/run-next.js dev"|*"node scripts/run-next.js dev "*|*"node scripts/run-next.js start"|*"node scripts/run-next.js start "*|*"node $PROJECT_ROOT/frontend/scripts/run-next.js dev"|*"node $PROJECT_ROOT/frontend/scripts/run-next.js start"|"next-server (v"*")"|*"/node_modules/next/dist/bin/next dev"*|*"/node_modules/.bin/next dev"*|*"/node_modules/next/dist/bin/next start"*|*"/node_modules/.bin/next start"*) return 0 ;;
       esac ;;
   esac
   return 1

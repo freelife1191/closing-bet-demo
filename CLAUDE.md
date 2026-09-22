@@ -17,6 +17,7 @@ AI-powered Korean stock market analysis system combining institutional flow anal
 ### Quick Start (All-in-One)
 ```bash
 ./restart_all.sh    # Automated setup: venv, deps, port cleanup, start both services
+                    # .env 의 NEXT_MODE=prod 면 Next 를 빌드한 뒤 production 서버로 띄운다(운영). 기본은 dev
 ./stop_all.sh        # Verify and stop project-owned services on configured ports
 ```
 

@@ -2,7 +2,8 @@
 
 운영 서버(`close.highvalue.kr`)는 2026-09-22 부터 `systemd --user` 유닛 없이 `./restart_all.sh` 와
 `./stop_all.sh` 로만 두 서비스를 관리합니다. 앞단의 Caddy 가 `localhost:3500` 으로 리버스 프록시합니다.
-macOS 개발 머신과 같은 경로이며, 스크립트에는 플랫폼을 가르는 분기가 없습니다.
+macOS 개발 머신과 같은 경로이며, 스크립트에는 플랫폼을 가르는 분기가 없습니다. 갈리는 것은 `.env` 의
+`NEXT_MODE` 하나입니다(아래 「Next 를 production 으로 돌리기」).
 
 ## 유닛을 없앤 이유
 
@@ -108,13 +109,72 @@ Linux 에서 점유자의 cgroup 만 읽지 못하면 허용이 아니라 「알
 그것도 없으면 각각 120초·180초입니다(2026-09-22 서버 감사, 실제 로그로 확인). 다음 사람이
 다시 조사하지 않도록 적어 둡니다.
 
-## 남아 있는 판단 사항
+## Next 를 production 으로 돌리기
 
-**프로덕션이 Next dev 서버로 서빙 중입니다.** `restart_all.sh` 가 `run-next.js dev` 로 띄웁니다.
-`next dev` 는 요청이 올 때 컴파일하므로 첫 응답이 느리고, 프로덕션 최적화가 꺼져 있으며, 파일 감시
-때문에 메모리를 계속 쓰고, HMR 클라이언트 번들이 외부로 나갑니다. `npm run build` 를 배포 절차에
-넣고 `npm run start` 로 바꾸어야 하지만, 빌드 실패 시의 처리와 QA 없이 전환하면 라이브가 깨질 수
-있어 `[INFRA-076]` 으로 다룹니다. 전환 전 확인할 것은 `next start` 에서 `next.config.js` 의 rewrites
-와 NextAuth 콜백 주소, `run-next.js` 의 production 환경 필터가 dev 와 같은 값을 내는지, 그리고 Caddy
-뒤에서 로그인 흐름이 실제로 도는지입니다. 되돌리기는 기동 명령을 `dev` 로 돌리고 재기동하는 것이며,
-`.next` 는 dev 가 덮어씁니다.
+`[INFRA-076]` 이전에는 운영도 `run-next.js dev` 로 떠 있었습니다. Next 16 의 dev 서버는 Origin 이
+`localhost` 가 아닌 `/_next/hmr` 웹소켓을 403 으로 막고(`allowedDevOrigins`), 그 연결이 없으면
+클라이언트가 API 호출을 시작하지 않습니다. 그래서 대시보드가 틀만 그려지고 값이 전부 `--` 였고,
+서버 안의 `http://localhost:3500` 만 정상이었습니다. 그 사이 Caddy 에 `/_next/hmr` 요청의 `Origin` 을
+`http://localhost:3500` 으로 바꿔 넘기는 `@hmr` 블록을 두어 화면을 살려 두었습니다.
+
+`.env` 에 `NEXT_MODE=prod` 를 두면 같은 `./restart_all.sh` 가 다음 순서로 돕니다. 중지 → 의존성 동기화 →
+`node scripts/run-next.js build`(전경, 출력은 `logs/frontend.log` 에 이어 쓰고 실패하면 마지막 15줄을 화면에
+보여 줍니다) → gunicorn → `node scripts/run-next.js start`.
+빌드가 실패하면 비영점으로 끝나며 아무 서비스도 시작하지 않습니다. 그 시점에는 이전 서비스가 이미
+내려가 있으므로, **다운타임은 빌드 시간과 기동 시간의 합입니다.** 빌드가 실행 중인 서버가 읽는
+`frontend/.next` 에 쓰고, 빌드에 필요한 의존성 동기화가 서비스를 내린 뒤에만 돌도록 계약되어 있어
+빌드 후 교체 방식은 채택하지 않았습니다. `next.config.js` 의 rewrites 대상(`API_URL`)은 빌드 때
+고정되므로 `.env` 를 바꾸면 반드시 `./restart_all.sh` 로 다시 빌드합니다. 빌드는 타입 검사를 포함합니다.
+
+### 적용 절차 (Ubuntu)
+
+```bash
+# 1. 모드 지정. 따옴표 없이 적는다. 이미 줄이 있으면 그 줄을 고친다. 값을 비워 두면 dev 로 뜬다.
+grep -q '^NEXT_MODE=' .env && sed -i 's/^NEXT_MODE=.*/NEXT_MODE=prod/' .env || printf 'NEXT_MODE=prod\n' >> .env
+
+# 2. 재기동. 「🔨 Frontend production build...」 뒤 빌드가 logs/frontend.log 에 기록되고 끝에 「🎉 Ready!」가 나와야 한다.
+#    비영점으로 끝나면(빌드 실패 포함) 서비스는 내려간 상태다. 원인은 그 로그에 있고, 바로 아래 「되돌리기」로 간다.
+./restart_all.sh
+
+# 3. 프로세스 확인. 기록 PID 는 run-next.js start 래퍼이고 포트는 next-server 가 쥔다.
+ps -o pid,pgid,command -p "$(cut -d'|' -f1 logs/frontend.pid)"
+ss -ltnp 'sport = :3500'
+```
+
+`./restart_all.sh` 나 `./stop_all.sh` 가 「frontend PID … 의 종료를 확인하지 못했습니다」로 끝나면
+`ss -ltnp 'sport = :3500'` 으로 포트를 봅니다. 비어 있으면 종료는 된 것이고 보고만 거짓 음성입니다.
+`lifecycle_pid_alive` 가 `ps` 가 빈 값을 주는 순간을 「살아 있음」으로 읽고 이어지는 시작 시각 대조가 메시지
+없이 실패하는 경합이 있으며(`[INFRA-077]`), 그 경로는 SIGTERM 뒤 8초 안에 내려가지 않아 KILL 로 넘어간
+뒤에만 닿습니다. macOS 의 prod 사이클 여섯 번 가운데 첫 번째가 그렇게 끝났고, 8초를 넘긴 이유는 재현되지
+않았습니다(연결 없이, 그리고 keep-alive 1개를 쥔 채 잰 그룹 소멸은 0.04초 이내). 포트가 비었으면
+`./restart_all.sh` 를 다시 실행하면 됩니다.
+
+브라우저에서 `NEXTAUTH_URL` 의 호스트로 `/dashboard/kr` 을 엽니다. 확인할 것은 넷입니다. 콘솔에
+`/_next/hmr` 오류가 없어야 하고, 네트워크 탭에 `/api/kr/*` 호출이 생겨야 하며, 대시보드에 값이
+표시되어야 하고, Google 로그인이 `NEXTAUTH_URL` 로 돌아와야 합니다. 마지막 항목은 `next start` 가
+`run-next.js` 의 production 환경 필터로 같은 키를 받는지를 실제로 확인하는 것입니다.
+
+```bash
+# 4. Caddy 의 땜질 제거. @hmr 블록만 지운다. 저장소의 deploy/caddy/Caddyfile 에는 원래 없다.
+sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak
+sudoedit /etc/caddy/Caddyfile
+sudo -u caddy caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+
+# 5. 재확인. 강력 새로고침 뒤 3 의 브라우저 확인을 반복한다.
+```
+
+### 되돌리기
+
+```bash
+sed -i 's/^NEXT_MODE=.*/NEXT_MODE=dev/' .env   # 줄을 지워도 같다. 기본값이 dev 다
+./restart_all.sh
+```
+
+dev 로 돌아간 뒤에는 4 에서 지운 `@hmr` 블록이 없으므로 대시보드가 다시 비어 보입니다. 백업에서
+블록을 되살리거나, dev 서버를 운영에 계속 쓰기로 결정한 경우에만 `next.config.js` 에
+`allowedDevOrigins: process.env.NEXTAUTH_URL ? [new URL(process.env.NEXTAUTH_URL).hostname] : []`
+를 둡니다. 도메인 리터럴은 어느 쪽에도 넣지 않습니다. 공개 URL 의 출처는 `.env` 의 `NEXTAUTH_URL`
+하나입니다.
+
+dev 는 `.next/dev` 아래에 쓰므로 prod 빌드 산출물과 섞이지 않습니다.

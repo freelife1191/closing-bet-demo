@@ -22,6 +22,15 @@ _env_flask_host=$(env_value FLASK_HOST)
 FLASK_HOST=${_env_flask_host:-${FLASK_HOST:-127.0.0.1}}
 PROBE_HOST=$FLASK_HOST
 case "$PROBE_HOST" in 0.0.0.0|::) PROBE_HOST=127.0.0.1 ;; esac
+# Next 실행 모드. 운영은 prod 다. 이유는 .env.example 의 NEXT_MODE 주석에 있다. 잘못된 값은
+# 잠금을 잡거나 서비스를 내리기 전에 여기서 거부한다.
+_env_next_mode=$(env_value NEXT_MODE)
+NEXT_MODE=${_env_next_mode:-${NEXT_MODE:-dev}}
+case "$NEXT_MODE" in
+  dev) NEXT_COMMAND=dev ;;
+  prod) NEXT_COMMAND=start ;;
+  *) echo "❌ NEXT_MODE 의 값이 dev 또는 prod 가 아니다. .env 의 해당 줄을 따옴표 없이 적었는지 확인하라" >&2; exit 1 ;;
+esac
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -71,12 +80,24 @@ stop_managed_services "$FRONTEND_PORT" "$FLASK_PORT" || exit 1
 
 # 공유 venv/node_modules를 바꾸므로 기존 서비스를 내린 뒤 적용한다. 실패하면 성공처럼
 # 출력하지 않고 여기서 끝난다.
-bash "$PROJECT_ROOT/scripts/sync_dependencies.sh" || {
+bash "$PROJECT_ROOT/scripts/sync_dependencies.sh" 9>&- || {
   echo "❌ 의존성 준비 실패. 서비스를 시작하지 않았습니다." >&2
   exit 1
 }
 
-# 의존성 준비 동안 이 프로젝트 프로세스가 되살아났을 수 있다. 관리 대상으로 확인되면
+# 운영 빌드는 실행 중인 서버가 읽는 frontend/.next 에 쓰므로 서비스를 내린 뒤, 그리고 어떤
+# 서비스도 시작하기 전에 돌린다. 실패하면 아무것도 시작하지 않은 채 여기서 끝난다. 출력은
+# ssh 가 끊겨도 남도록 서비스 로그에 이어 쓰고, 잠금 FD 9 는 빌드 워커가 물려받지 않게 닫는다.
+if [ "$NEXT_MODE" = prod ]; then
+  echo "🔨 Frontend production build... (logs/frontend.log)"
+  (cd "$PROJECT_ROOT/frontend" && node scripts/run-next.js build) 9>&- >> "$PROJECT_ROOT/logs/frontend.log" 2>&1 || {
+    echo "❌ 프론트엔드 빌드 실패. 서비스를 시작하지 않았습니다." >&2
+    lifecycle_tail_service_log frontend
+    exit 1
+  }
+fi
+
+# 의존성 준비와 빌드 동안 이 프로젝트 프로세스가 되살아났을 수 있다. 관리 대상으로 확인되면
 # 한 번 더 내리고, 외부 점유자면 stop_managed_services 가 그대로 거부한다.
 if ! lifecycle_assert_port_free "$FLASK_PORT" 2>/dev/null ||
    ! lifecycle_assert_port_free "$FRONTEND_PORT" 2>/dev/null; then
@@ -99,7 +120,7 @@ echo "🚀 Frontend $FRONTEND_PORT..."
 (
   cd "$PROJECT_ROOT/frontend" || exit 1
   export PORT="$FRONTEND_PORT"
-  lifecycle_exec_detached node scripts/run-next.js dev
+  lifecycle_exec_detached node scripts/run-next.js "$NEXT_COMMAND"
 ) 9>&- >> "$PROJECT_ROOT/logs/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 lifecycle_write_pid frontend "$FRONTEND_PID" || exit 1

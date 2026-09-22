@@ -46,7 +46,7 @@
 - ✅ 가상환경(venv) 자동 생성, requirements 적용 및 의존성 충돌 검사
 - ✅ package.json·lock 파일·Node 환경·설치 상태 변경 시 `npm ci`, 변경 없으면 재설치 생략
 - ✅ 이 프로젝트의 프로세스만 확인하여 종료하고, 포트 충돌·종료 실패 시 중단
-- ✅ 백엔드(Gunicorn)과 프론트엔드(Next.js) 동시 시작
+- ✅ 백엔드(Gunicorn)과 프론트엔드(Next.js) 동시 시작. `.env` 의 `NEXT_MODE=prod` 면 Next 를 빌드한 뒤 production 서버로 띄움
 - ✅ .env 설정 자동 로드 및 포트 적용
 
 다른 환경에서 코드를 갱신할 때도 아래 두 명령이면 패키지 변경까지 적용됩니다.
@@ -149,6 +149,10 @@ PRICE_CACHE_TTL=300
   ./restart_all.sh
   ```
   *(현재 설정된 포트의 프로젝트 프로세스를 확인해 종료하고 준비 확인 후 성공을 알립니다. 포트를 바꾸려면 기존 포트 설정으로 먼저 중지하세요.)*
+
+- **운영 서버**: 운영은 dev 서버를 쓰지 않습니다. dev 서버는 `localhost` 밖 Origin 의 HMR 연결을 막아
+  대시보드가 비어 보입니다. `.env` 에 `NEXT_MODE=prod` 를 두면 같은 `./restart_all.sh` 가 빌드 뒤
+  `next start` 로 띄웁니다. 절차는 `deploy/systemd/README.md` 에 있습니다.
 
 - **서버 중지**:
   `stop_all.sh`로 이 프로젝트가 관리하는 서비스를 종료합니다.

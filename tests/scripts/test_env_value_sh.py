@@ -70,7 +70,7 @@ def test_env_value_does_not_strip_quotes_or_inline_comments(tmp_path: Path):
     """[INFRA-049] 이 함수는 dotenv 가 아니다. 벗기지 않는 것을 명시해 둔다.
 
     `source` 와 python-dotenv 는 따옴표와 인라인 주석을 벗기지만 이 함수는 벗기지
-    않는다. 지금 세 키가 그 모양이 아니라서 문제가 없을 뿐이다. 이 저장소의 `.env` 는
+    않는다. 지금 네 키가 그 모양이 아니라서 문제가 없을 뿐이다. 이 저장소의 `.env` 는
     159줄 가운데 21줄이 `KEY=값  # 설명` 모양이므로 언젠가 그 모양이 될 수 있다.
     포트는 env_port 가 막고, 나머지는 이 검사가 한계를 드러낸다.
     """
@@ -146,7 +146,7 @@ def test_env_port_prefers_env_file_then_inherited_then_default(tmp_path: Path):
 
 
 def test_env_value_matches_dotenv_for_startup_keys():
-    """[INFRA-049] 저장소의 실제 .env 에서 세 키가 python-dotenv 와 같은 값이다.
+    """[INFRA-049] 저장소의 실제 .env 에서 네 키가 python-dotenv 와 같은 값이다.
 
     이 검사만 실제 .env 를 읽는다. 값은 비교만 하고 출력하지 않는다. 두 스크립트가
     쓰는 값이 Flask·Next 가 읽는 값과 갈리면 바인딩 주소가 서로 달라진다. 위의
@@ -160,8 +160,8 @@ def test_env_value_matches_dotenv_for_startup_keys():
 
     # dotenv_values 의 반환값을 이름 붙은 지역 변수로 붙들지 않는다. `pytest -l` 은 실패
     # 시 지역 변수를 덤프하므로 .env 의 모든 키와 값이 출력에 실린다. 임시 객체는 덤프
-    # 대상이 아니다. 키가 셋뿐이라 세 번 파싱해도 값이 무시할 만하다.
-    for key in ("FLASK_PORT", "FRONTEND_PORT", "FLASK_HOST"):
+    # 대상이 아니다. 키가 넷뿐이라 네 번 파싱해도 값이 무시할 만하다.
+    for key in ("FLASK_PORT", "FRONTEND_PORT", "FLASK_HOST", "NEXT_MODE"):
         # 두 값을 직접 비교하는 어서트를 쓰면 실패할 때 pytest 가 양쪽 값을 출력에
         # 그대로 남긴다. 불리언 하나만 단언해 그 경로를 막는다.
         same = _env_value(_REPO_ROOT, key) == (dotenv_values(env_path).get(key) or "")
@@ -224,7 +224,7 @@ def test_env_value_rejects_key_names_with_shell_metacharacters(tmp_path: Path):
 
     GNU sed 의 `s///e` 는 치환 결과를 셸에 넘기고, bash 의 간접 확장은 이름 안의 배열
     첨자를 산술 평가한다. 후자는 이 머신의 bash 3.2 와 5.x 양쪽에서 실제로 명령이
-    실행되는 것을 확인했다. 호출자가 리터럴 세 개만 넘기는 지금은 닿지 않지만, 이
+    실행되는 것을 확인했다. 호출자가 리터럴 네 개만 넘기는 지금은 닿지 않지만, 이
     항목이 고치는 결함이 바로 그 성격이다.
     """
     (tmp_path / ".env").write_text("FLASK_PORT=5501\n", encoding="utf-8")
