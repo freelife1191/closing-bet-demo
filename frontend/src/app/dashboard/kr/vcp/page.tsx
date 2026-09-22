@@ -1009,12 +1009,15 @@ export default function VCPSignalsPage() {
     setChartLoading(true);
     try {
       // 히스토리 날짜를 보고 있으면 그 날짜까지의 구간을 받아야 한다. 그러지 않으면
-      // 시그널이 발생한 캔들이 차트 범위 밖으로 밀려나 화면에서 볼 수 없다.
-      const res = await krAPI.getStockChart(
-        ticker,
-        period || chartPeriod.toLowerCase(),
-        activeDateTab === 'history' ? (selectedHistoryDate ?? undefined) : undefined,
-      );
+      // 시그널이 발생한 캔들이 차트 범위 밖으로 밀려나 화면에서 볼 수 없다. 최신 탭이
+      // 최신 저장분으로 대체 표시 중일 때도 같다([VCP-026]). 그때는 시그널의 날짜를 넘긴다.
+      const chartEndDate =
+        activeDateTab === 'history'
+          ? (selectedHistoryDate ?? undefined)
+          : staleWarning
+            ? (signals[0]?.signal_date || undefined)
+            : undefined;
+      const res = await krAPI.getStockChart(ticker, period || chartPeriod.toLowerCase(), chartEndDate);
       if (requestId === chartRequest.current && res && res.data) {
         setChartData(res.data);
       }

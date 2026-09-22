@@ -30,7 +30,10 @@ from services.sqlite_ready_gate import SqliteReadyGate
 _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
 # 4: target_price·stop_price 를 진입가 기준으로 채우기 시작했다. 3 으로 굳어 있던
 #    캐시에는 두 값이 null 로 들어 있어 무효화가 필요하다.
-_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 4
+# 5: 날짜 없는 조회가 오늘 자 시그널이 없으면 최신 저장분으로 대체한다([VCP-026]). 4 로
+#    저장된 「오늘 기준 빈 결과」는 같은 날짜·같은 CSV 서명인 동안 그대로 조회되어 대체
+#    로직을 하루 내내 무력화하므로 통째로 무효화한다.
+_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 5
 _VCP_SIGNALS_MEMORY_CACHE: OrderedDict[
     str,
     tuple[tuple[Any, ...], list[dict[str, Any]]],

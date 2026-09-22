@@ -167,6 +167,12 @@ def _filter_signals_dataframe_by_date(
     """
     signals_log DataFrame를 요청 날짜 기준으로 필터링한다.
     반환값: (필터된 DataFrame, 비교 기준 today 문자열)
+
+    날짜 없는 조회는 오늘 자 행을 우선하되, 오늘 자 시그널이 없으면 오늘 이하의 최신 유효
+    날짜 행으로 대체한다([VCP-026]). 유효 날짜의 기준은 날짜 목록이 쓰는 `_is_vcp_signal_row`
+    와 같다. 유효 날짜가 하나도 없으면 오늘 행(빈 것이거나 판정 탈락분)을 그대로 넘겨 안내
+    문구가 「오늘 기준 없음」을 말하게 둔다([VCP-019]). 미래 날짜는 대체하지 않는다.
+    돌려주는 today 는 정규화한 오늘이며 대체해도 바뀌지 않는다.
     """
     today = default_today
     if not isinstance(signals_df, pd.DataFrame):
@@ -183,11 +189,17 @@ def _filter_signals_dataframe_by_date(
         return filtered_df, today
 
     normalized_today = _format_signal_date(default_today)
-    if normalized_today:
-        filtered_df = filtered_df[normalized_dates == normalized_today]
-        today = normalized_today
+    if not normalized_today:
+        return filtered_df, today
 
-    return filtered_df, today
+    qualifying_dates = {
+        signal_date
+        for signal_date, row in zip(normalized_dates, filtered_df.itertuples(index=False))
+        if signal_date and signal_date <= normalized_today and _is_vcp_signal_row(row)
+    }
+    # 집합의 날짜는 모두 오늘 이하라, 오늘이 들어 있으면 max 가 곧 오늘이다.
+    target_date = max(qualifying_dates, default=normalized_today)
+    return filtered_df[normalized_dates == target_date], normalized_today
 
 
 def _build_vcp_gemini_recommendation(row: Any) -> Optional[dict]:

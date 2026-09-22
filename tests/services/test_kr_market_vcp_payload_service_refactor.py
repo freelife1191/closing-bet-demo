@@ -21,7 +21,9 @@ import services.kr_market_vcp_signals_cache as vcp_signals_cache
 from services.sqlite_utils import connect_sqlite
 
 
-def _write_signals_csv(tmp_path, signal_date: str) -> None:
+def _write_signals_csv(tmp_path, signal_date: str, **overrides) -> None:
+    """한 행짜리 signals_log.csv. 기본 행은 status 가 NEW 라 시그널 판정에서 떨어진다.
+    판정을 통과시키려면 status="OPEN", is_vcp=True 를 넘긴다."""
     pd.DataFrame(
         [
             {
@@ -43,6 +45,7 @@ def _write_signals_csv(tmp_path, signal_date: str) -> None:
                 "ai_action": "BUY",
                 "ai_reason": "ok",
                 "ai_confidence": 0.9,
+                **overrides,
             }
         ]
     ).to_csv(tmp_path / "signals_log.csv", index=False)
@@ -89,6 +92,27 @@ def _build_payload(
         now=now,
         data_dir=str(tmp_path),
     )
+
+
+def _real_helper_kwargs(tmp_path, *, now: datetime, logger_name: str) -> dict:
+    """실제 필터·변환 헬퍼로 날짜 없는 조회를 만드는 인자 묶음."""
+    return {
+        "req_date": None,
+        "load_csv_file": lambda name: pd.read_csv(tmp_path / name),
+        "load_json_file": lambda _name, **_kwargs: {},
+        "filter_signals_dataframe_by_date": vcp_signal_helpers._filter_signals_dataframe_by_date,
+        "build_vcp_signals_from_dataframe": vcp_signal_helpers._build_vcp_signals_from_dataframe,
+        "load_latest_vcp_price_map": lambda: {},
+        "apply_latest_prices_to_jongga_signals": lambda _signals, _price_map: 0,
+        "sort_and_limit_vcp_signals": vcp_signal_helpers._sort_and_limit_vcp_signals,
+        "build_ai_data_map": vcp_signal_helpers._build_ai_data_map,
+        "merge_legacy_ai_fields_into_map": vcp_signal_helpers._merge_legacy_ai_fields_into_map,
+        "merge_ai_data_into_vcp_signals": vcp_signal_helpers._merge_ai_data_into_vcp_signals,
+        "count_total_scanned_stocks": lambda _data_dir: 1,
+        "logger": logging.getLogger(logger_name),
+        "now": now,
+        "data_dir": str(tmp_path),
+    }
 
 
 def _reset_vcp_signals_cache_state() -> None:
@@ -400,7 +424,8 @@ def test_build_vcp_payload_requests_readonly_ai_json_load(tmp_path):
     assert all(kwargs.get("deep_copy") is False for _, kwargs in captured_calls)
 
 
-def test_build_vcp_payload_keeps_today_empty_without_recent_fallback(tmp_path):
+def test_build_vcp_payload_names_latest_date_when_filter_returns_nothing(tmp_path):
+    """필터가 빈 결과를 주면 안내 문구가 오늘과 최신 저장 날짜를 함께 말한다."""
     _reset_vcp_signals_cache_state()
     _write_signals_csv(tmp_path, "2026-02-22")
 
@@ -568,6 +593,102 @@ def test_build_vcp_payload_emits_stale_warning_when_today_signals_missing(tmp_pa
     assert payload["count"] == 0
     assert "stale_warning" in payload
     assert "2026-03-03" in str(payload["stale_warning"])
+
+
+def test_build_vcp_payload_falls_back_to_latest_saved_signals_when_today_missing(tmp_path):
+    """[VCP-026] 오늘 자 시그널이 없으면 최신 저장분을 싣고 그 사실을 경고로 알린다.
+
+    캐시에서 돌아오는 두 번째 호출도 같은 시그널과 같은 경고를 유지해야 한다.
+    """
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-03", status="OPEN", is_vcp=True)
+
+    kwargs = _real_helper_kwargs(tmp_path, now=datetime(2026, 3, 4, 9, 0, 0), logger_name="vcp-payload-latest-fallback-test")
+    expected_warning = "오늘(2026-03-04) 기준 VCP 시그널이 없어 최신 저장분(2026-03-03)을 표시합니다."
+
+    first = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+    second = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+
+    assert first["count"] == 1
+    assert first["signals"][0]["signal_date"] == "2026-03-03"
+    assert first["source"] == "signals_log.csv"
+    assert first["stale_warning"] == expected_warning
+    assert second["count"] == 1
+    assert second["stale_warning"] == expected_warning
+
+
+def test_build_vcp_payload_ignores_empty_cache_saved_under_the_previous_schema(tmp_path):
+    """[VCP-026] 배포 전 스키마(버전 4)로 저장된 「오늘 기준 빈 결과」는 새 조회를 막지 못한다.
+
+    빈 결과도 캐시에 남고 워커 재기동에도 살아남으므로, 같은 날짜·같은 CSV 서명으로 저장된
+    옛 항목이 있으면 새 대체 로직이 그날 내내 무력화된다. 스키마 버전을 올려 옛 항목을
+    통째로 무효화한다. 코드 리뷰가 스크립트로 재현한 회귀다.
+    """
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-03", status="OPEN", is_vcp=True)
+    legacy_signature = list(
+        vcp_signals_cache.build_vcp_signals_cache_signature(
+            data_dir=str(tmp_path), req_date=None, today="2026-03-04"
+        )
+    )
+    legacy_signature[1] = 4
+    vcp_signals_cache.save_cached_vcp_signals(
+        signature=tuple(legacy_signature),
+        payload=[],
+        data_dir=str(tmp_path),
+        logger=logging.getLogger("vcp-payload-legacy-cache-test"),
+    )
+    _reset_vcp_signals_cache_state()
+
+    payload = vcp_payload_service.build_vcp_signals_payload(
+        **_real_helper_kwargs(tmp_path, now=datetime(2026, 3, 4, 9, 0, 0), logger_name="vcp-payload-legacy-cache-test")
+    )
+
+    assert payload["count"] == 1
+    assert payload["stale_warning"] == (
+        "오늘(2026-03-04) 기준 VCP 시그널이 없어 최신 저장분(2026-03-03)을 표시합니다."
+    )
+
+
+def test_build_vcp_payload_fallback_survives_memory_cache_eviction(tmp_path):
+    """대체 결과가 SQLite 캐시에서 돌아와도 같은 시그널과 경고를 유지한다."""
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-03", status="OPEN", is_vcp=True)
+    kwargs = _real_helper_kwargs(tmp_path, now=datetime(2026, 3, 4, 9, 0, 0), logger_name="vcp-payload-sqlite-fallback-test")
+
+    first = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+    with vcp_signals_cache._VCP_SIGNALS_CACHE_LOCK:
+        vcp_signals_cache._VCP_SIGNALS_MEMORY_CACHE.clear()
+    second = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+
+    assert second["count"] == first["count"] == 1
+    assert second["stale_warning"] == first["stale_warning"]
+    assert "최신 저장분(2026-03-03)" in second["stale_warning"]
+
+
+def test_build_vcp_payload_requested_past_date_has_no_fallback_warning(tmp_path):
+    """날짜를 지정한 조회는 과거 날짜라도 대체 표시 경고를 붙이지 않는다."""
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-03", status="OPEN", is_vcp=True)
+    kwargs = _real_helper_kwargs(tmp_path, now=datetime(2026, 3, 4, 9, 0, 0), logger_name="vcp-payload-req-date-test")
+    kwargs["req_date"] = "2026-03-03"
+
+    payload = vcp_payload_service.build_vcp_signals_payload(**kwargs)
+
+    assert payload["count"] == 1
+    assert "stale_warning" not in payload
+
+
+def test_build_vcp_payload_has_no_warning_when_today_signals_exist(tmp_path):
+    _reset_vcp_signals_cache_state()
+    _write_signals_csv(tmp_path, "2026-03-04", status="OPEN", is_vcp=True)
+
+    payload = vcp_payload_service.build_vcp_signals_payload(
+        **_real_helper_kwargs(tmp_path, now=datetime(2026, 3, 4, 9, 0, 0), logger_name="vcp-payload-today-present-test")
+    )
+
+    assert payload["count"] == 1
+    assert "stale_warning" not in payload
 
 
 def test_build_vcp_payload_warns_when_requested_date_has_no_signals(tmp_path):

@@ -1,193 +1,175 @@
-# AUDIT-FLOW — 수급·백테스트 감사
+# AUDIT-FLOW — 수급·백테스트 감사 (2차, 2026-09-22, 누적성과 집계 초점)
 
-**감사 범위**: `services/investor_trend_5day_service.py`, `services/kr_market_backtest_*.py`(11개),
-`services/kr_market_flow_service.py`
-**읽은 파일 수**: 12개 / 총 2,767줄
+> 1차 감사(2026-09-01, `[INFRA-004]`)의 지적은 아래 「이전 감사 항목의 현재 상태」 표로 대조했다.
+> 이번 감사는 사용자가 요청한 「누적성과 집계가 정확한가, 개선·보완할 부분이 있는가」에
+> 초점을 두었다. 감사자는 `dev-workflow` 에이전트이며, 리더가 지적 아홉 건 전부를 원본 코드로
+> 재확인한 뒤 기록했다.
 
-담당 경로를 `.claude/skills/dev-cycle/references/archive-format.md` §2 표에서 확정한 뒤 감사했습니다.
-영향 범위를 확인하기 위해 호출자(`app/routes/`, `engine/`, `frontend/`)를 함께 읽었지만,
-지적은 담당 경로 안에서 고칠 수 있는 것만 적었습니다.
+**감사 범위**: `app/routes/kr_market_data_ai_routes.py`, `services/kr_market_backtest_*.py`(7개),
+`services/kr_market_cumulative_cache.py`, `services/kr_market_data_cache_jongga.py`,
+`frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx`
+**읽은 파일 수**: 주요 12개 / 3,767줄 (추적 과정에서 `kr_market_analytics_service.py`,
+`kr_market_data_cache_prices.py`, `closing-bet/page.tsx` 를 부분 확인)
+**실측**: `./venv/bin/python` 으로 로컬 `data/` 의 `jongga_v2_results_*.json` 18개(시그널 234건)와
+`daily_prices.csv`(243,462행)를 읽어 집계 함수를 직접 호출했다. 서버는 띄우지 않았고 파일은 만들거나
+고치지 않았다.
 
-백로그에 이미 올라와 있는 `FLOW-001`(KIS 장중 수급 연동)과 `FLOW-002`(섹터별 수급 집계)는
-착수 전에 `docs/dev-cycle/TODO.md` 69~80줄에서 직접 확인했으며, 아래 지적에서 제외했습니다.
+## 이전 감사 항목의 현재 상태
+
+| 이전 지적 | 현재 | 확인한 근거 |
+|---|---|---|
+| §1.1 승패 판정이 두 경로로 갈림 | **완료** (FLOW-003) | 두 경로 모두 `resolve_hit_outcome` 사용 (`kr_market_backtest_common.py:117-129`) |
+| §1.2 수급 교차검증 무조건 교체 | **완료** (FLOW-005, FLOW-011) | 아카이브 2026-09-04 |
+| §1.3 손실 0일 때 손익비에 총이익 | **완료** (FLOW-004) | `kpi_helpers.py:119` 가 `None` 반환, 화면 1122줄이 `'—'` 표시 |
+| §1.4 백테스트 상태 어휘 | **완료** (FLOW-004, FLOW-009) | `common.py:65` 가 `closed_trades <= 0` 을 먼저 가름 |
+| §2.2 티커 패딩 중복 | **완료** (JONGGA-030 흡수) | 세 헬퍼가 모두 `get_ticker_padded_series` 사용 |
+| §3.1 재노출 계층 네 겹 | **완료** (FLOW-006) | `kr_market_backtest_service.py` 39줄 하나만 남음 |
+| §5.1·§5.2 검증 공백 | **완료** (FLOW-013, FLOW-015) | 실구현 직접 호출 테스트 34건 확인 |
+| §4.1 `investor_trend_5day_service.py` 비대 | **잔존** | 현재 44,845바이트. 이번 감사 초점 밖이라 재지적하지 않는다 |
+
+집계 정확성 자체는 손 검증에서 모두 맞았다. 종목 096770 은 진입가 134,400 / 손절가 130,368 에서
+09-03 저가 126,100 이 먼저 닿고 익절가 141,120 은 09-08 에 닿아 손절 우선 규칙대로 LOSS·보유 2일·
+수익률 -3.0% 로 나왔다. 최대상승률도 청산일까지의 고가 137,200 으로 +2.1% 가 맞다. 아래 지적은
+계산식이 아니라 **모집단과 화면 표시**에 몰려 있다.
 
 ---
 
 ## 1. 깨진 동작
 
-### 1.1 같은 종가베팅 시그널의 승패가 두 계산 경로에서 반대로 갈린다
+### 1.1 거래 표의 순번이 페이지마다 1부터 다시 매겨진다
 
-- 위치: `services/kr_market_backtest_scenario_helpers.py:167-178`,
-  `services/kr_market_backtest_trade_helpers.py:134-160`
-- 증상: 목표가와 손절가를 같은 날에 동시에 충족한 시그널을 한쪽은 손절로, 다른 쪽은 익절로
-  판정합니다. 대시보드의 종가베팅 승률(`frontend/src/app/dashboard/kr/page.tsx:908`)은
-  손절로 세고, 누적성과 페이지의 승률(`app/routes/kr_market_data_ai_routes.py:152-161`)은
-  익절로 셉니다. 두 화면이 같은 시그널 집합을 놓고 서로 다른 승률을 표시합니다.
-- 원인: `calculate_scenario_return` 은 `if first_low <= first_high: return -(stop_pct * 100)`
-  으로 손절을 우선합니다(167~173줄, "기존 규칙 유지" 주석이 붙어 있습니다).
-  `calculate_cumulative_trade_metrics` 는 `if first_win_date <= first_loss_date:` 로 익절을
-  우선합니다(144~152줄). 판정 기준이 한 곳에 모여 있지 않아 각자 굳어졌습니다.
-  익절·손절 폭도 마찬가지로 갈라져 있습니다. 시나리오 쪽은 `target_pct`/`stop_pct` 를
-  인자로 받는데(110~118줄), 누적성과 쪽은 `entry_price * 1.09` 와 `entry_price * 0.95` 를
-  본문에 직접 적었습니다(134~135줄).
-- 영향: 사용자가 두 화면에서 서로 다른 승률을 보고, 어느 쪽이 맞는지 판단할 근거가 없습니다.
-  익절·손절 폭을 조정할 때 한쪽만 고치면 두 값의 차이가 더 벌어집니다.
+- 위치: `frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx:836`
+- 증상: 총 234건을 50개씩 나누면 1페이지가 50번부터 1번까지 매겨지고, 2페이지도 똑같이 50번부터
+  1번까지 매겨진다. 서로 다른 거래에 같은 번호가 붙고, 전체에서 몇 번째인지 알 수 없다.
+- 원인: 번호를 `trades.length - idx` 로 계산하는데, 여기서 `trades` 는 1184줄이 넘겨 준
+  `filteredTrades`, 곧 **현재 페이지분에 필터까지 적용한 배열**이다. 서버가 함께 보내는
+  `pagination.total`(234)과 `pagination.page` 를 쓰지 않는다.
+- 영향: 실측으로 재현했다. 1페이지와 2페이지가 모두 `50, 49, 48 … 3, 2, 1` 이고 5페이지만 34부터
+  시작한다. 결과 필터를 켜면 같은 페이지 안에서도 번호가 다시 줄어든다.
+- 최소 수정 방향: 표에 `pagination` 을 함께 넘기고 `total - (page - 1) * limit - idx` 로 계산한다.
+  필터가 켜진 동안은 순번 열을 비우거나 필터 결과 안의 순번임을 표시한다.
 
-### 1.2 수급 교차검증이 불일치 판정과 무관하게 언제나 참조 데이터로 교체한다
+### 1.2 결과·등급 필터가 현재 페이지 50건에만 걸린다
 
-- 위치: `services/investor_trend_5day_service.py:839`, `:882-886`
-- 증상: CSV 와 pykrx 의 수급 값이 완전히 일치해도, 이상징후 플래그가 하나라도 붙으면 CSV 를
-  버리고 pykrx 값으로 교체합니다. 특히 `stale_csv`(4일 초과 지연) 하나만으로 연휴 직후에는
-  거의 모든 종목이 교체 대상이 됩니다.
-- 원인: 참조 데이터는 839줄의 `if verify_with_references and csv_flags:` 안에서만 조회되므로,
-  886줄의 `should_replace = any(disagreement_flags) or bool(csv_flags)` 에 도달하는 시점에는
-  `csv_flags` 가 반드시 비어 있지 않습니다. 따라서 `should_replace` 는 항상 참이고,
-  882~885줄이 계산한 `disagreement_flags` 는 결과에 아무런 영향을 주지 않습니다.
-  `_is_large_disagreement`(467~498줄)와 그것이 쓰는 세 상수
-  `_DISAGREE_RATIO_THRESHOLD`, `_DISAGREE_SIGNIFICANT_TOTAL`, `_DISAGREE_SIGNIFICANT_SIDE`
-  (41~43줄)는 전부 도달 불가능한 코드입니다.
-- 영향: 교차검증이 임계값을 두고 신중하게 고르는 것처럼 보이지만 실제로는 무조건 교체입니다.
-  임계값을 조정해도 동작이 바뀌지 않으므로, 수급 값이 틀렸을 때 원인을 찾기 어렵습니다.
-  종목마다 pykrx 네트워크 호출이 붙는 부담도 함께 발생합니다.
+- 위치: `CumulativeClientPage.tsx:990-994`(필터), `:1146-1160`(버튼), `:1184`(표 전달)
+- 증상: 「성공」을 누르면 전체 성공 86건이 아니라 현재 페이지 50건 안의 성공만 보인다. 페이지 표시는
+  그대로 5페이지이고, 다음 페이지로 넘어가면 그 페이지에서 다시 걸러진다. 사용자가 성공 거래 전체를
+  한 번에 볼 방법이 없다.
+- 원인: 서버가 이미 잘라 보낸 `trades` 를 클라이언트가 다시 거른다. 라우트
+  (`app/routes/kr_market_data_ai_routes.py:177-188`)는 `page` 와 `limit` 만 받고 필터 조건을 받지
+  않으므로, 잘라내기가 필터보다 먼저 일어난다. 1144줄의 주석이 「필터는 현재 페이지의 trades 만
+  거른다」고 명시하고 있어 의도된 단순화이며, 리더는 결함이 아니라 개선 항목으로 분류한다.
+- 영향: 안내도 한쪽에만 있다. 1142줄의 「현재 페이지 내」 표시는 결과 필터 옆에만 붙어 있고 등급
+  필터(1153-1162줄)에는 없다. 등급 「전체」 버튼(1156줄)만 건수가 아예 없어서, 옆의 S·A·B·D 버튼
+  건수와 더해 봐도 맞지 않는다.
+- 최소 수정 방향: 라우트에 `outcome` 과 `grade` 쿼리 파라미터를 받아 `paginate_items` 앞에서
+  거른다. 그러면 버튼 건수도 전체 기준이 되고 총 페이지 수도 필터에 맞게 줄어든다.
 
-### 1.3 손실이 없는 구간에서 손익비 자리에 총이익이 그대로 표시된다
+### 1.3 「최고가」 열이 음수 최고 수익률을 하이픈으로 숨긴다
 
-- 위치: `services/kr_market_backtest_kpi_helpers.py:78`
-- 증상: 손실 거래가 한 건도 없으면 손익비(Profit Factor)로 이익의 합계가 그대로 나옵니다.
-  ROI 가 +9% 인 거래 다섯 건만 있으면 손익비가 `45.0` 으로 표시됩니다.
-- 원인: `profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else round(gross_profit, 2)`
-  에서, 분모가 0 일 때 비율 대신 분자를 그대로 돌려줍니다.
-- 영향: 이 값은 `frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx:1106` 에
-  "손익비 (Profit Factor)" 로 표시되고, 같은 파일 258~266줄에서 2.0/1.5/1.2 를 기준으로
-  등급까지 매깁니다. 비율이 아닌 값이 비율 기준에 걸려 항상 최고 등급으로 평가됩니다.
-
-### 1.4 백테스트 상태 어휘가 소비자와 어긋나 있다
-
-- 위치: `services/kr_market_backtest_common.py:51-59`,
-  `services/kr_market_backtest_stats_helpers.py:31, 99, 101, 125, 168`
-- 증상: 두 가지가 함께 어긋나 있습니다. 첫째, 전패한 구간이 "실패"가 아니라 "대기"로
-  표시됩니다. 둘째, 화면의 확인 아이콘이 데이터가 없을 때만 켜집니다.
-- 원인: `determine_backtest_status` 는 `if win_rate == 0: return "PENDING"` 을 가장 앞에 두어,
-  승 0건 패 10건으로 승률이 0.0 인 경우와 종료된 거래가 아예 없는 경우를 구분하지 않습니다.
-  또한 이 함수가 돌려주는 값은 `PENDING`/`EXCELLENT`/`GOOD`/`BAD` 네 가지뿐인데,
-  `frontend/src/app/dashboard/kr/page.tsx:900, 963` 은 `status === 'OK'` 일 때 확인 아이콘을
-  켭니다. `'OK'` 는 `calculate_vcp_backtest_stats` 가 125줄에서 임시로 넣었다가 거래가
-  한 건이라도 있으면 168줄에서 덮어쓰는 값이므로, 거래가 0건일 때만 화면까지 도달합니다.
-  종가베팅 쪽은 `'Accumulating'`/`'OK (New)'` 와 위 네 값만 내므로 `'OK'` 가 절대 나오지 않습니다.
-- 영향: 성적이 가장 나쁜 구간이 아직 집계 중인 것처럼 보이고, 검증을 마친 전략에는 확인
-  표시가 붙지 않습니다. 상태 문자열이 여섯 가지로 흩어져 있어 소비자가 무엇을 기대해야
-  하는지 알 수 없습니다.
+- 위치: `CumulativeClientPage.tsx:874`, 툴팁 정의는 같은 파일 `:181-185`
+- 증상: 툴팁은 "보유 기간 동안 도달한 최고 수익률"이며 계산식이
+  `(기간내 최고가 - 진입가) / 진입가 * 100` 이라고 설명하는데, 값이 음수이면 화면에 `-` 만 나온다.
+- 원인: `trade.maxHigh > 0 ? trade.maxHigh + '%' : '-'` 로 0 이하를 한 갈래로 묶었다.
+- 영향: 실측에서 종목 032830 삼성생명은 진입가 307,000 에 청산일까지 최고가가 302,500 이어서
+  최대상승률이 -1.5% 다. 화면에는 `-` 만 보여, 값이 없는 것인지 한 번도 오르지 않은 것인지
+  구분되지 않는다. 양수일 때도 `2.1%` 로 부호 없이 적어 같은 화면의 다른 수익률 표기
+  (`formatSignedPercent`)와 다르다.
+- 최소 수정 방향: 값이 있으면 부호를 붙여 그대로 적고, 자료가 없을 때만 하이픈을 쓴다.
 
 ---
 
 ## 2. 중복
 
-### 2.1 "이상징후면 다시 조회한다" 는 두 번 호출 패턴이 다섯 곳에 복제되어 있다
+### 2.1 같은 종목의 보유 구간이 겹쳐도 독립한 두 거래로 센다
 
-- 위치: 원인은 `services/investor_trend_5day_service.py:1002-1031`,
-  복제된 곳은 `engine/screener.py:348, 359-372`, `engine/collectors.py:175, 1695-1712`,
-  `engine/collectors/krx_local_data_mixin.py:485, 1240-1250`,
-  `engine/collectors/naver_pykrx_mixin.py:437, 452-462`,
-  `services/kr_market_stock_detail_service.py:231-267, 356-363`
-- 증상: 모든 호출자가 같은 절차를 각자 구현합니다. 먼저 `verify_with_references=False` 로
-  부르고, 반환된 `quality.csv_anomaly_flags` 가 비어 있지 않으면 `verify_with_references=True`
-  로 한 번 더 부릅니다. 판정용 헬퍼 `_has_csv_anomaly_flags` 도 다섯 곳에 같은 내용으로
-  각각 정의되어 있습니다.
-- 원인: 서비스가 `verify_with_references` 를 단순한 켜고 끄기 플래그로만 노출합니다.
-  "평소에는 CSV 로 빠르게 답하고 이상징후일 때만 참조를 조회한다" 는 정책이 서비스 안에
-  없어서, 그 정책이 필요한 호출자마다 밖에서 다시 조립합니다.
-- 영향: 판정 조건이 바뀌면 다섯 곳을 모두 찾아 고쳐야 하고, 한 곳이라도 빠지면 그 경로만
-  낡은 기준으로 동작합니다. 담당 경로 밖의 네 곳은 다른 카테고리에 속하므로, 서비스 쪽
-  진입점을 먼저 만들고 호출자를 순차로 옮기는 순서가 필요합니다.
+- 위치: `app/routes/kr_market_data_ai_routes.py:145-163`, `services/kr_market_backtest_kpi_helpers.py:36-64`
+- 증상: 어떤 종목이 청산되기 전에 다시 추천되면 두 건이 각각 승패와 수익률로 집계된다. 실측으로
+  234건 가운데 13건이 여기에 해당했다. 종목 005935 삼성전자우는 09-04 진입분이 09-08 에
+  익절(+5.0%)되기 전인 09-07 에 다시 추천되어 그 건이 손절(-3.0%)로 잡혔다.
+- 원인: 거래 식별자가 `f"{ticker}-{stats_date}"`(`trade_helpers.py:298`)여서 날짜가 다르면 언제나
+  별개다. 이전 건의 청산 여부를 보는 자리가 없다.
+- 영향: 추천 건수를 세는 목적이라면 맞지만, 승률과 손익비는 서로 독립한 시행을 가정하는 지표다.
+  겹치는 구간의 같은 가격 움직임이 두 번 반영된다. 화면에는 그 가정이 적혀 있지 않다.
+- 최소 수정 방향: 겹침을 어떻게 다룰지부터 정해야 하므로 설계 판단이 앞선다. 세 갈래가 있다.
+  현행대로 두고 툴팁에 「추천 단위 집계이며 같은 종목의 재추천을 합치지 않습니다」를 적는 방법,
+  겹치는 재추천을 집계에서 빼는 방법, 겹침 건수를 별도 지표로 보여 주는 방법이다.
 
-### 2.2 티커 6자리 패딩 헬퍼가 공용 유틸을 두고 다시 구현되어 있다
+### 2.2 세 화면이 같은 시그널을 보면서 모집단이 서로 다르다
 
-- 위치: `services/kr_market_backtest_scenario_helpers.py:17-26`,
-  `services/kr_market_backtest_trade_helpers.py:17-26`
-- 증상: 두 파일이 열 줄짜리 `_get_ticker_padded_series` 를 글자 하나 다르지 않게 각각 가지고
-  있습니다.
-- 원인: 같은 기능이 `services/kr_market_csv_utils.py:202` 에 `get_ticker_padded_series` 로
-  이미 공개되어 있고, 같은 카테고리의 `services/kr_market_flow_service.py:20-23` 과
-  `services/investor_trend_5day_service.py:26` 은 그 공용 유틸을 가져다 씁니다.
-  백테스트 모듈만 자체 구현을 들고 있습니다.
-- 영향: 지금은 동작이 같아서 드러나지 않지만, 공용 유틸의 캐시 컬럼 규칙이 바뀌면 백테스트
-  경로만 다르게 동작합니다. 담당 경로 밖인 `engine/` 에도 같은 복제가 다섯 개 더 있습니다.
+- 위치: `services/kr_market_backtest_kpi_helpers.py:31, 74`(D 포함),
+  `frontend/src/app/dashboard/kr/closing-bet/page.tsx:899, 1033`(D 제외),
+  `services/kr_market_analytics_service.py:329, 366`(최근 30개 파일)
+- 증상: 세 가지가 어긋나 있다. 누적성과는 D 등급을 포함하고, 종가베팅 화면은 `signal.grade !== 'D'`
+  로 제외한다. 백테스트 요약은 결과 파일을 최근 30개로 자르는데 누적성과는 전부 읽는다.
+- 원인: D 포함은 `[FLOW-013]` 이 의도해서 정한 것이라고 아카이브에 적혀 있다. 종가베팅 화면의
+  제외는 그와 별개로 남아 있고, 두 판단이 같은 자리에 기록되어 있지 않다.
+- 영향: 실측 자료에서 D 는 7건이며 모두 2026-02-11 과 02-12 에 몰려 있다. 현행
+  `engine/grade_decider.py:55-67` 은 S·A·B 만 내므로 D 는 과거 자료에만 있는 등급이다. 파일 수가
+  30개를 넘으면 백테스트 요약의 승률과 누적성과의 승률이 벌어지기 시작하는데, 지금은 18개라 아직
+  드러나지 않는다.
+- 최소 수정 방향: 세 자리의 모집단 규칙을 한 곳에 적고 화면 문구로 드러낸다. 누적성과가 D 를
+  포함한다면 「과거 등급 D 포함」을 카드 근처에 적고, 30개 상한은 요약 화면에 기준 기간으로
+  표시한다.
 
 ---
 
 ## 3. 과잉 설계
 
-### 3.1 계산 로직이 없는 재노출 전용 계층이 네 겹 쌓여 있다
+### 3.1 누적성과 가격 원천이 두 갈래인데 결과가 같다
 
-- 위치: `services/kr_market_backtest_service.py`(38줄),
-  `services/kr_market_backtest_calculators.py`(39줄),
-  `services/kr_market_backtest_cumulative.py`(30줄),
-  `services/kr_market_backtest_signal_stats.py`(26줄)
-- 증상: 네 파일 합계 133줄이 전부 `import` 와 `__all__` 뿐이고 실행되는 계산은 한 줄도
-  없습니다. 호출 경로는 `app/routes/kr_market_backtest_helpers.py:14` →
-  `..._service` → `..._calculators` → `..._cumulative` / `..._signal_stats` →
-  실제 구현(`..._trade_helpers`, `..._kpi_helpers`, `..._scenario_helpers`, `..._stats_helpers`)
-  입니다. 함수 하나를 따라가려면 파일 다섯 개를 열어야 합니다.
-- 원인: `..._calculators` 는 `..._service` 하나만, `..._signal_stats` 는 `..._calculators`
-  하나만 가져다 씁니다. 구현체가 하나뿐인 중간 계층이 "호환 레이어"라는 이름으로 남았는데,
-  호환을 지켜 줄 외부 호출자가 실제로는 존재하지 않습니다.
-- 영향: 함수를 추가하거나 이름을 바꿀 때마다 네 파일의 `import` 와 `__all__` 을 함께 고쳐야
-  합니다. 같은 자리에 `services/investor_trend_5day_service.py:971-999` 의
-  `load_investor_trend_5day_map` 도 있습니다. `__all__` 에 공개되어 있지만 프로덕션 호출자가
-  한 곳도 없고, 테스트 세 건만 이 함수를 붙들고 있습니다.
+- 위치: `app/routes/kr_market_data_ai_routes.py:43-60`
+- 증상: 스냅샷 로더를 먼저 부르고 실패하면 CSV 를 직접 읽는다. 두 경로가 읽는 열도 다르다.
+  스냅샷은 `date, ticker, close, high, low` 이고 폴백은 `open` 이 더 있다.
+- 원인: 스냅샷 로더(`services/kr_market_data_cache_prices.py:191`)도 결국 같은
+  `data/daily_prices.csv` 를 읽는다. 폴백이 막아 주는 실패는 그 파일이 없는 경우인데, 그러면
+  스냅샷도 빈 DataFrame 을 돌려주고 폴백도 읽을 것이 없다.
+- 영향: 두 경로로 각각 집계해 대조한 결과 KPI 13개 항목이 모두 같았고 거래 건수도 234건으로
+  같았다. 지금은 해가 없지만 열 구성이 다른 두 입력이 같은 계산에 들어가는 상태가 남아 있다.
+- 최소 수정 방향: 폴백을 지우고 스냅샷 하나로 모으거나, 남긴다면 두 경로의 열 목록을 같게 맞춘다.
 
 ---
 
 ## 4. 비대한 파일
 
-### 4.1 investor_trend_5day_service.py 가 책임 여섯 개를 한 파일에 담고 있다
+### 4.1 `CumulativeClientPage.tsx` 가 책임 일곱 개를 한 파일에 담고 있다
 
-- 위치: `services/investor_trend_5day_service.py`(1,048줄)
-- 증상: 한 파일이 다음 여섯 가지를 모두 맡습니다.
-  (1) CSV 5거래일 합산(`_load_trend_df`, `_build_trend_map`, 307~420줄)
-  (2) 메모리 LRU 캐시(`_TREND_CACHE`, `_REFERENCE_CACHE`, 44~57줄과 905~968줄)
-  (3) SQLite 스냅숏 직렬화(`_serialize_trend_map`, `_deserialize_trend_map`, 229~304줄)
-  (4) pykrx 참조 조회와 영업일 해석(`_resolve_pykrx_latest_market_date`,
-      `_fetch_pykrx_reference_trend`, 543~678줄)
-  (5) Toss 참조 조회(`_get_toss_collector`, `_fetch_toss_reference_trend`, 681~717줄)
-  (6) 이상징후 판정과 최종 선택(`_detect_csv_anomaly_flags`, `_resolve_best_payload`,
-      501~540줄과 824~902줄)
-- 원인: 파일 이름이 가리키는 "5거래일 합산 제공"에 교차검증과 두 단계 캐시가 차례로
-  얹히면서, 서로 다른 이유로 바뀌는 코드가 한자리에 모였습니다.
-- 영향: §1.2 처럼 도달 불가능한 분기가 생겨도 눈에 띄지 않습니다. 이 파일은
-  `tier-rules.md` §2 의 위험 경로이므로 한 줄만 건드려도 T3 검증이 붙습니다. 그래서 분할
-  자체를 별도 항목으로 세우지 않고, 같은 파일을 이미 여는 `[FLOW-005]` 가 끝난 뒤에
-  실제 경계가 드러나면 그때 다시 판단하는 편이 낫다고 봅니다.
+- 위치: `frontend/src/app/dashboard/kr/cumulative/CumulativeClientPage.tsx`(1,212줄, 57,399바이트)
+- 증상: 툴팁 사전(60-215줄), 툴팁 렌더링과 조언 분기(216-350줄), 등급 카드, 분포 막대(696-745줄),
+  가격 흐름 그래프(750줄 부근), 거래 표(812-903줄), 필터와 페이지네이션과 데이터 페치(905-1212줄)를
+  한 파일이 맡는다.
+- 원인: 화면이 한 번에 만들어진 뒤 지표가 하나씩 얹혔고, 서로 다른 이유로 바뀌는 코드가 나뉘지
+  않았다.
+- 영향: §1.1 과 §1.2 가 둘 다 이 파일에 있는데, 하나는 표 렌더링이고 하나는 필터라서 한 화면
+  안에서도 서로 먼 자리다. 툴팁 문구와 실제 계산이 어긋난 §1.3 도 같은 이유로 눈에 띄지 않았다.
+- 최소 수정 방향: 지금 쪼개지 않는다. §1.1 과 §1.2 를 고칠 때 표와 필터가 실제로 어디서 갈리는지
+  드러나므로, 그 경계를 본 뒤에 판단하는 편이 낫다.
 
 ---
 
 ## 5. 검증 공백
 
-### 5.1 누적성과 승패 판정에 테스트가 한 건도 없다
+### 5.1 페이지 순번과 필터의 상호작용을 잡는 검사가 없다
 
-- 위치: `services/kr_market_backtest_trade_helpers.py:89-191`
-  (`calculate_cumulative_trade_metrics`)
-- 증상: 103줄짜리 함수가 WIN/LOSS/OPEN 판정, 동시 충족 시 우선순위, ROI, 최대상승률,
-  가격 궤적 보정을 모두 결정하는데 저장소 전체에서 이 함수를 직접 부르는 테스트가 없습니다.
-- 원인: 짝이 되는 `calculate_scenario_return` 쪽은 동시 충족 규칙이
-  `tests/services/test_kr_market_backtest_service.py:77`
-  (`test_calculate_scenario_return_prefers_stop_when_same_day_hits_both`)에 고정되어
-  있습니다. 한쪽만 테스트로 묶여 있어서 §1.1 의 불일치가 드러나지 않았습니다.
-- 영향: §1.1 을 고칠 때 어느 쪽이 기존 동작인지 판단할 근거가 한쪽에만 있습니다.
+- 위치: `services/kr_market_backtest_kpi_helpers.py:148-169`(`paginate_items`),
+  `frontend/src/app/dashboard/kr/cumulative/` 의 회귀 테스트 네 개
+- 증상: `paginate_items` 를 직접 부르는 테스트가 저장소 전체에서 1건이다. 화면 쪽 회귀 테스트는
+  `[FLOW-010]` 이후 등급 카드가 페이지를 넘겨도 고정되는지는 확인하지만, 표의 순번이 페이지마다
+  겹치는지와 필터가 전체에 걸리는지는 확인하지 않는다.
+- 원인: 백엔드 검사는 잘라내기 경계값을 보고 화면 검사는 카드 값을 보는데, 두 값이 만나는 자리인
+  「2페이지의 첫 행 번호」가 어느 쪽에도 없다.
+- 영향: §1.1 과 §1.2 가 pytest 2,452건과 vitest 640건이 모두 통과하는 상태에서 남아 있다.
+  「단위 테스트는 통과하는데 화면에서만 드러나는」 유형에 그대로 해당한다.
 
-### 5.2 KPI 집계와 상태 판정이 스텁으로만 등장한다
+### 5.2 등급 카드 건수 합과 누적 추천수가 어긋날 수 있다
 
-- 위치: `services/kr_market_backtest_kpi_helpers.py:15-101`(`aggregate_cumulative_kpis`),
-  `services/kr_market_backtest_common.py:51-59`(`determine_backtest_status`)
-- 증상: `aggregate_cumulative_kpis` 는 승률, 평균 ROI, 등급별 ROI, 평균 보유일, 손익비를
-  계산하는 87줄인데, 테스트에 나오는 것은
-  `tests/app/test_kr_market_data_ai_routes_refactor.py:130, 177` 의
-  `lambda trades, _price_df, _now: {"count": len(trades)}` 같은 스텁뿐입니다.
-  실제 구현을 부르는 테스트는 없습니다. `determine_backtest_status` 는 저장소 어디에서도
-  이름조차 나오지 않습니다.
-- 원인: 라우트 배선을 검증하는 테스트가 계산 함수를 주입 지점에서 대체하다 보니, 배선은
-  덮이고 계산은 비었습니다.
-- 영향: §1.3 의 손익비와 §1.4 의 상태 판정이 둘 다 이 공백 안에 있습니다.
+- 위치: `services/kr_market_backtest_kpi_helpers.py:28-31, 57`
+- 증상: 등급 누적은 S·A·B·D 네 가지만 받고 `if grade in grade_acc` 로 나머지를 버린다. 그런데
+  `total_signals` 는 등급과 무관하게 전부 센다.
+- 원인: `engine/models.py:6-11` 의 `Grade` 열거형에는 C 가 있다. 현행 판정기는 C 를 내지 않지만,
+  저장 자료에 C 가 섞이면 그 건은 누적 추천수에만 잡히고 어느 등급 카드에도 나타나지 않는다.
+- 영향: 실측 자료에는 C 가 없어 지금은 네 카드의 건수 합 234 가 누적 추천수와 맞다. 어긋나도 화면에
+  알려 주는 자리가 없다는 점이 문제다.
 
 ---
 
@@ -195,72 +177,23 @@
 
 | 관점 | 발견 | 그중 P0 | P1 | P2 |
 |---|---|---|---|---|
-| 깨진 동작 | 4 | 1 | 3 | 0 |
+| 깨진 동작 | 3 | 0 | 2 | 1 |
 | 중복 | 2 | 0 | 1 | 1 |
 | 과잉 설계 | 1 | 0 | 0 | 1 |
 | 비대한 파일 | 1 | 0 | 0 | 1 |
-| 검증 공백 | 2 | 1 | 1 | 0 |
-| 합계 | 10 | 2 | 5 | 3 |
+| 검증 공백 | 2 | 0 | 1 | 1 |
+| 합계 | 9 | 0 | 4 | 5 |
 
 ### 담당 경로 밖에서 관찰한 사실
 
-- `app/routes/kr_market_backtest_helpers.py` 는 §3.1 이 지적한 재노출 사슬의 다섯 번째
-  계층으로, 열두 개 함수를 인자만 그대로 넘겨 다시 감쌉니다. 종가베팅·라우트 카테고리에
-  속하므로 여기서는 사실만 적습니다.
-- `_has_csv_anomaly_flags` 의 동일 복제가 `engine/` 아래 네 곳에 더 있습니다(§2.1 위치 참고).
+- `frontend/src/app/dashboard/kr/closing-bet/page.tsx:899, 1033` 의 D 등급 제외는 종가베팅 카테고리에
+  속하므로 여기서는 §2.2 의 근거로만 적었다.
+- `services/kr_market_analytics_service.py:329, 366` 의 결과 파일 30개 상한도 같은 이유로 사실만
+  적었다.
 
----
+### 백로그 반영
 
-# 2부: TODO 항목 초안
-
-일련번호는 `docs/dev-cycle/` 전체에서 `FLOW` 의 최대 번호가 `FLOW-002` 임을 확인한 뒤
-`FLOW-003` 부터 매겼습니다. 티어는 `.claude/skills/dev-cycle/references/tier-rules.md` §3
-절차로 판정했습니다. `services/investor_trend_5day_service.py` 는 §2 "수급 집계" 위험 경로에
-있으므로 그 파일을 여는 항목은 줄 수와 무관하게 `T3` 입니다. `services/kr_market_backtest_*`
-는 위험 경로 목록에 없으므로 예상 변경 규모로 갈랐습니다.
-
-### [FLOW-003] 종가베팅 승패 판정을 한 곳으로 모은다
-- 카테고리: 수급·백테스트 | 티어: T2 | 우선순위: P0 | 근거: AUDIT-FLOW §1.1, §5.1
-- 두 계산 경로를 함께 고치고 회귀 테스트를 새로 붙이므로 50줄을 넘을 것으로 봅니다.
-  위험 경로에는 닿지 않습니다.
-- [ ] 동시 충족 시 익절과 손절 중 무엇을 우선할지 결정하고 근거를 항목에 남김
-- [ ] 판정 규칙과 익절·손절 폭을 공용 함수 하나로 모아 두 호출부가 함께 쓰도록 교체
-- [ ] `calculate_cumulative_trade_metrics` 의 `1.09`/`0.95` 하드코딩 제거
-- [ ] `calculate_cumulative_trade_metrics` 의 동시 충족·ROI·최대상승률 회귀 테스트 추가
-- [ ] 대시보드 승률과 누적성과 승률이 같은 시그널 집합에서 일치하는지 확인
-
-### [FLOW-004] 백테스트 상태 어휘와 손익비 계산을 바로잡는다
-- 카테고리: 수급·백테스트 | 티어: T2 | 우선순위: P1 | 근거: AUDIT-FLOW §1.3, §1.4, §5.2
-- [ ] 전패(승 0건, 패 N건)와 미집계(종료 거래 0건)를 구분하도록 `determine_backtest_status` 수정
-- [ ] 상태 문자열 집합을 확정하고 프론트엔드의 `status === 'OK'` 비교를 그 집합에 맞춤
-- [ ] 손실이 0일 때의 손익비 표기 방식을 결정해 반영 (비율이 아닌 값을 내보내지 않음)
-- [ ] `aggregate_cumulative_kpis` 실구현 테스트 추가 (승률·평균 ROI·손익비·등급별 ROI)
-- [ ] `determine_backtest_status` 경계값 테스트 추가
-
-### [FLOW-005] 수급 교차검증을 서비스 안에서 끝낸다
-- 카테고리: 수급·백테스트 | 티어: T3 | 우선순위: P1 | 근거: AUDIT-FLOW §1.2, §2.1, §3.1
-- `services/investor_trend_5day_service.py` 는 `tier-rules.md` §2 "수급 집계" 위험 경로이므로
-  줄 수와 무관하게 T3 입니다. 호출자 정리는 `engine/` 과 종목상세 카테고리에 걸치므로,
-  서비스 쪽 진입점을 먼저 만들고 호출자는 뒤이어 옮깁니다.
-- [ ] `_resolve_best_payload` 의 교체 조건을 다시 정의해 `_is_large_disagreement` 가 실제로
-      판정에 쓰이도록 하거나, 쓰지 않기로 하면 함수와 세 상수를 함께 제거
-- [ ] `stale_csv` 단독으로 무조건 교체하던 동작을 의도한 규칙으로 고침
-- [ ] 이상징후 재조회를 서비스 내부에서 수행하는 단일 진입점 추가
-- [ ] 호출자 다섯 곳의 `_has_csv_anomaly_flags` 와 두 번 호출 패턴을 그 진입점으로 교체
-- [ ] 호출자가 없는 `load_investor_trend_5day_map` 의 존치 여부 결정
-- [ ] 교체 규칙 회귀 테스트 추가 (일치·불일치·지연 각 경우)
-
-### [FLOW-006] 백테스트 재노출 전용 계층을 걷어낸다
-- 카테고리: 수급·백테스트 | 티어: T2 | 우선순위: P2 | 근거: AUDIT-FLOW §3.1
-- [ ] `..._service`, `..._calculators`, `..._cumulative`, `..._signal_stats` 네 파일의
-      외부 호출자를 확인한 뒤 남길 진입점 하나를 결정
-- [ ] 나머지 재노출 계층 제거하고 `app/routes/kr_market_backtest_helpers.py` 의 import 정리
-- [ ] `tests/services/test_kr_market_backtest_service.py` 의 import 경로 갱신
-- [ ] pytest 전체 통과 확인
-
-### [FLOW-007] 티커 패딩 헬퍼를 공용 유틸로 통합한다
-- 카테고리: 수급·백테스트 | 티어: T1 | 우선순위: P2 | 근거: AUDIT-FLOW §2.2
-- [ ] `..._scenario_helpers` 와 `..._trade_helpers` 의 자체 구현을
-      `services.kr_market_csv_utils.get_ticker_padded_series` 로 교체
-- [ ] 캐시 컬럼(`_ticker_padded`) 동작이 교체 전후로 같은지 확인
-- [ ] `tests/services/test_kr_market_backtest_service.py` 통과 확인
+`[FLOW-016]`(§1.1·§5.1), `[FLOW-017]`(§1.2·§5.1), `[FLOW-018]`(§2.1), `[FLOW-019]`(§2.2·§5.2),
+`[FLOW-020]`(§1.3)을 `docs/dev-cycle/TODO.md` 에 등록했다. §3.1 과 §4.1 은 항목으로 올리지 않고
+해당 항목을 고칠 때 함께 본다. 체크박스는 감사 근거에서 나온 방향이지 확정 설계가 아니며, 실제
+설계는 그 항목의 라운드가 시작될 때 `superpowers:brainstorming` 이 정한다.

@@ -680,22 +680,74 @@ def test_extract_jongga_ai_evaluation_falls_back_to_llm_reason():
     assert "reason" not in signal["ai_evaluation"]
 
 
-def test_filter_signals_dataframe_by_date_uses_today_when_date_missing():
+def _qualifying_row(signal_date: str, ticker: str, **overrides):
+    """`_is_vcp_signal_row` 를 통과하는 행. 날짜 목록과 대체 판정이 같은 기준을 쓴다."""
+    row = {"signal_date": signal_date, "ticker": ticker, "status": "OPEN", "score": 90, "is_vcp": True}
+    row.update(overrides)
+    return row
+
+
+def test_filter_signals_dataframe_by_date_falls_back_to_latest_qualifying_date_when_today_missing():
+    """[VCP-026] 오늘 자 행이 없으면 오늘 이하의 최신 유효 날짜로 대체한다.
+
+    판정에서 떨어지는 날짜(CLOSED)와 미래 날짜는 건너뛴다. 돌려주는 today 는 실제 오늘이라
+    안내 문구가 오늘을 그대로 말할 수 있다.
+    """
     signals_df = pd.DataFrame(
         [
-            {"signal_date": "2026-02-20", "ticker": "1"},
-            {"signal_date": "2026-02-21", "ticker": "2"},
+            _qualifying_row("2026-02-20", "1"),
+            _qualifying_row("2026-02-21", "2"),
+            _qualifying_row("2026-02-22", "3", status="CLOSED"),
+            _qualifying_row("2026-02-25", "4"),
         ]
     )
 
     filtered_df, today = _filter_signals_dataframe_by_date(
         signals_df,
         req_date=None,
-        default_today="2026-02-19",
+        default_today="2026-02-23",
     )
 
-    assert today == "2026-02-19"
-    assert len(filtered_df) == 0
+    assert today == "2026-02-23"
+    assert [str(value) for value in filtered_df["ticker"]] == ["2"]
+
+
+def test_filter_signals_dataframe_by_date_uses_today_when_today_has_qualifying_rows():
+    signals_df = pd.DataFrame(
+        [
+            _qualifying_row("2026-02-20", "1"),
+            _qualifying_row("2026-02-23", "2"),
+        ]
+    )
+
+    filtered_df, today = _filter_signals_dataframe_by_date(
+        signals_df,
+        req_date=None,
+        default_today="2026-02-23",
+    )
+
+    assert today == "2026-02-23"
+    assert [str(value) for value in filtered_df["ticker"]] == ["2"]
+
+
+def test_filter_signals_dataframe_by_date_keeps_today_rows_when_no_date_qualifies():
+    """유효한 날짜가 하나도 없으면 오늘 행만 돌려준다. 오늘 자 행이 판정에서 전부 떨어져도
+    그 행을 넘겨야 안내 문구가 「오늘 기준 없음」을 말한다([VCP-019])."""
+    signals_df = pd.DataFrame(
+        [
+            _qualifying_row("2026-02-20", "1", status="CLOSED"),
+            _qualifying_row("2026-02-23", "2", status="CLOSED"),
+        ]
+    )
+
+    filtered_df, today = _filter_signals_dataframe_by_date(
+        signals_df,
+        req_date=None,
+        default_today="2026-02-23",
+    )
+
+    assert today == "2026-02-23"
+    assert [str(value) for value in filtered_df["ticker"]] == ["2"]
 
 
 def test_filter_signals_dataframe_by_date_normalizes_datetime_date_values():

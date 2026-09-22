@@ -67,6 +67,30 @@
 - [x] 운영 적용 절차 문서화: `deploy/systemd/README.md` 「Next 를 production 으로 돌리기」(왜 dev 가 문제였는지, 기동 순서와 다운타임, 적용 5단계, 브라우저 확인 4항목, Caddy `@hmr` 제거, 되돌리기, 종료 확인 실패 시 대처), README 운영 절 한 단락, `.env.example` 키와 주석, `deploy/caddy/README.md` 의 `@hmr` 안내, `CLAUDE.md` Quick Start 한 줄. 운영 서버 적용은 미실시.
 
 
+### [VCP-026] 「최신」 조회가 오늘 자 행만 보아 오늘 스캔 전에는 시그널이 비어 보인다
+- 카테고리: VCP 시그널 | 티어: T3 (계획 T2, 코드 리뷰 반영으로 위험 경로 `services/kr_market_vcp_signals_cache.py` 한 줄을 고쳐 상향. 2026-09-22 사용자 확인) | 근거: 사용자 보고와 로컬 재현(2026-09-22). `app/routes/kr_market_vcp_signal_helpers.py:162-190` 의 `_filter_signals_dataframe_by_date` 가 날짜 없는 조회를 `default_today` 하루로만 거른다. `11ad7a9`(2026-03-04, 「block stale vcp flow」)가 종전의 「`signal_date` 최대값」 필터를 「오늘」 필터로 바꾼 뒤부터이며, 그 결과 오늘 스캔이 돌기 전에는 `/api/kr/signals` 가 `signals=[]` 와 `stale_warning="오늘(…) 기준 VCP 시그널이 없습니다. 최신 저장 데이터는 …입니다."` 만 내려준다. 로컬 재현: `signals=0`, 경고에 `2026-05-05`. VCP 화면 「최신」 탭과 홈 대시보드 「오늘의 시그널」 칸(`krAPI.getSignals()`)이 함께 빈다. 종가베팅은 같은 문제를 `[JONGGA-009]` 가 「저장분을 그대로 싣고 표식만 덧붙임」으로 이미 풀었다. 챗봇 VCP 문맥(`chatbot/signal_context.py:87`)은 `kr_ai_analysis.json` 을 읽는 별개 경로라 이 결함과 무관하다.
+- 범위: 날짜 없는 조회에서 오늘 자 행이 없으면 오늘 이하의 `signal_date` 최대값 행으로 대체하고 `stale_warning` 은 유지하되 「오늘(…) 기준 시그널이 없어 최신 저장분 X 를 표시합니다」로 바꾼다. 미래 날짜 행은 대체 대상에서 뺀다(`test_resolve_stale_warning_names_latest_date_when_it_is_in_the_future` 의 판정 유지). 캐시 서명(`build_vcp_signals_cache_signature`)은 `today` 와 파일 서명을 이미 담고 있어 키는 그대로 둔다. 화면은 `signalDate` 를 `generated_at` 이 아니라 시그널의 `signal_date` 에서 읽어 어제 시그널을 오늘로 표시하지 않게 하고, 매수 버튼은 `[JONGGA-010]` 과 같은 기준(오늘 자료가 아니면 잠금)을 따른다. AI 병합(`_merge_ai_into_vcp_signals`)은 시그널 날짜의 `ai_analysis_results_<date>.json` 을 읽으므로 그대로 동작한다.
+- 설계 승인: 2026-09-22 사용자 승인(bounded 설계, 대화에서 제시). 승인 범위: 백엔드 대체 규칙(`_is_vcp_signal_row` 를 통과하는 오늘 이하 날짜 가운데 최신)과 대체 표시 경고, 홈 대시보드 「오늘의 시그널」 칸의 기준일 문구. **매수 잠금은 사용자가 제외**(「매수 잠금 없이 진행」 선택)하여 「최신」 탭은 대체 표시 중에도 매수를 허용한다. VCP 화면은 경고 배너와 행별 날짜가 이미 있어 코드 변경 없음. 프론트엔드 번들 문서 `05-server-and-client-components.md` 를 읽고 시작하며 내용 기준 스킬 표에 해당 항목 없음.
+- 되돌리는 결정: `11ad7a9` 의 「오늘만」 판정과 이를 고정한 `test_filter_signals_dataframe_by_date_uses_today_when_date_missing`(`tests/app/test_kr_market_helpers_contract.py:683`), `test_build_vcp_payload_keeps_today_empty_without_recent_fallback`(`tests/services/test_kr_market_vcp_payload_service_refactor.py:403`), QA 기록 `VCP-008`·`VCP-019`·`INFRA-006`·`CHAT-016` 의 기대 문구. 그 커밋에는 사유가 적혀 있지 않으며, 같은 커밋의 「수급 단계 실패 시 VCP 갱신 차단」 은 갱신 파이프라인 쪽이라 유지한다.
+- [x] 설계 승인(bounded, 2026-09-22 12:50). 매수 잠금은 사용자가 제외.
+- [x] 구현·RED→GREEN: 계약 테스트 3건(대체·오늘 우선·유효 날짜 부재)과 페이로드 테스트 2건(대체 + 캐시 경로 동일 경고, 오늘 자 시그널이면 경고 없음), 홈 vitest 2건이 구현 전 실패(파이썬 3건·vitest 1건)하는 것을 확인한 뒤 구현. 구현은 `_filter_signals_dataframe_by_date` 의 유효 날짜 집합 + `max()` 대체, `_resolve_fallback_warning_message`(캐시 갈래 포함), 홈 칸 문구. 정적 검증: 전체 pytest 2575 통과 2 skip, vitest 644 통과, type-check 무오류(리뷰 반영 전 수치, 반영 후 재실행은 아래).
+- [x] `/ponytail-review`(oh-my-claudecode:code-reviewer 레인) 6건 전부 반영: 대체 날짜 선택을 `max(qualifying_dates, default=today)` 한 줄로, 죽은 `stale_warning = None` 삭제, 홈 문구 조건 축약, VCP 화면 회귀 테스트 삭제(화면 코드 무변경·기존 004/001/010/011 회귀가 각각 덮음), 페이로드 테스트 kwargs 를 `_real_helper_kwargs` 헬퍼로, 계약 테스트의 중복 미래 행 제거.
+- [x] `/code-review`(feature-dev:code-reviewer) REQUEST_CHANGES → 반영. 지적 1(확신도 80 이상): 배포 전 스키마 4 로 저장된 「오늘 기준 빈 결과」가 같은 날짜·CSV 서명 동안 캐시 적중해 대체 로직을 하루 내내 무력화(스크립트 재현). 반영: `_VCP_SIGNALS_CACHE_SCHEMA_VERSION` 4→5(위험 경로, 사용자 확인 후 T3 상향). 지적 2: 사전 시드된 옛 빈 캐시 회귀 테스트 추가(`test_build_vcp_payload_ignores_empty_cache_saved_under_the_previous_schema`, 버전 올리기 전 실패 확인). 문제 없음으로 확인된 것: zip 위치 정렬, AI 병합·시세 주입의 날짜 경로, 홈 `fallbackDate` 폴백. 낮은 확신도 관찰: `_resolve_single_signal_date` 가 None 이면 경고 없이 대체 표시(앱이 직접 쓰는 CSV 라 경로 없음) → 미반영. 반영 뒤 재검토 APPROVE(캐시 조회가 서명 해시·JSON 을 SQL 로 정확히 매칭하므로 버전이 다르면 반드시 미스, 우회 경로 없음. 새 테스트가 재현 시나리오와 일치, 88건 통과).
+- [x] `/review`(oh-my-claudecode:critic, review 스킬 절차, 재현 실험 포함): MAJOR 없음. MINOR 5건 가운데 4건 반영. MINOR 1(최신 탭이 대체 표시 중이면 상세 차트가 오늘 기준 3개월 구간을 잘라 대체 시그널 캔들이 밀림, 로컬 자료 재현) → 최신 탭에 경고가 있으면 시그널 날짜를 차트 기준일로 전달 + 회귀 테스트. MINOR 3(홈 카드 툴팁이 「오늘 포착된」으로 남아 아래 문구와 어긋남) → 툴팁도 기준일 문구로. MINOR 4(docstring 이 돌려주는 today 의 역할을 과장) → 문장 정정. MINOR 5(테스트 미고정 갈래 둘: 날짜 지정 조회의 경고 없음, SQLite 캐시 경로의 대체 결과) → 테스트 2건 추가. MINOR 2(실패 AI 재분석 스코프가 판정 없이 `signal_date` 최댓값을 써 화면의 대체 날짜와 어긋날 수 있음, 재현됨) → 재분석 흐름의 동작을 바꾸는 별개 결정이라 `[VCP-027]` 로 이월. 문제 없음 확인: 스키마 상향 뒤 캐시 정리(버전 4 행이 `updated_at` 순으로 먼저 빠짐, 상한 64), 혼재 워커(서명이 달라 서로의 행을 읽지 않음), 필터 비용(20,000행 44.6ms), `resolve_vcp_min_score` 는 frozen 상수라 환경값 무관, 자정 경계(서명에 날짜 포함), `source`·`stale_warning` 소비자는 VCP 화면과 홈뿐. 평가 불가: 운영 `signals_log.csv` 의 `is_vcp` 값(로컬은 전부 비어 대체가 일어나지 않음), 대체 범위 상한 없음(의도된 설계), 브라우저 실측.
+- [ ] QA(브라우저 실측: 「최신」 탭·홈 「오늘의 시그널」·대체 시그널 차트)
+
+### [JONGGA-039] 저장분이 비어 있으면 「최신」 이 과거 리포트로 내려가지 않고, 배너가 표시 중인 사실을 감춘다
+- 카테고리: 종가베팅 | 티어: T1 | 근거: 로컬 재현과 코드(2026-09-22). 정상 stale 갈래(어제 파일에 시그널 있음)는 `[JONGGA-009]` 대로 시그널 8건을 표식과 함께 내려주는 것을 확인했다. 남은 문제는 둘이다. ① `services/kr_market_jongga_payload_latest.py:221-241` 의 stale 갈래는 `jongga_v2_latest.json` 의 시그널이 비어 있으면 `find_recent_valid_jongga_payload` 를 부르지 않고 빈 응답에 「최신 저장 데이터는 어제입니다」 표식만 붙인다. 전날 실행이 0건으로 끝나면 `save_result_to_json` 이 빈 파일을 덮어쓰므로(`services/kr_market_jongga_runtime_service.py:128`, 0건 보호 없음) 다음 개장일 17시 전까지 화면은 배너와 「분석된 종목이 없습니다」 를 함께 보인다. `test_build_jongga_latest_payload_stale_without_signals_stays_empty` 가 이 동작을 고정하고 있다. ② `frontend/src/app/dashboard/kr/closing-bet/page.tsx:1255-1265` 배너가 굵은 제목 「오늘 종가베팅 데이터가 아직 없습니다.」 아래 `stale_warning` 을 우선 표시해, 백엔드가 함께 보내는 `message`(「가장 최근 저장분을 그대로 보여주고 있습니다」)는 어디에도 표시되지 않는다. 목록이 있어도 두 줄 모두 「없다」 고 읽힌다.
+- 범위: ① stale 갈래에서 저장분 시그널이 비어 있으면 `find_recent_valid_jongga_payload` 로 내려가 표식을 붙인다. 그 함수가 `message` 를 「주말/휴일로 인해 …」 로 덮어쓰므로 표식이 나중에 적용되게 순서를 둔다. 유효한 파일이 하나도 없을 때만 빈 응답을 낸다. ② 배너 제목을 「오늘 분석은 아직 없습니다. 최신 저장분(X)을 표시합니다」 형태로 바꾸고 `message` 줄을 함께 보인다. 0건 실행이 `jongga_v2_latest.json` 을 덮어쓰는 것 자체는 손대지 않는다(`jongga_v2_results_YYYYMMDD.json` 이력에는 0건도 기록이 맞다).
+- 운영 판별: 서버의 `data/jongga_v2_latest.json` 에서 `date` 와 `signals` 길이를 보면 어느 갈래인지 갈린다. 접속은 운영자가 한다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA(브라우저 실측)
+
+### [CHAT-031] 프롬프트가 싣는 시장·시그널 값과 기준일 바로잡기
+- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §1.1, §1.2, §1.3, §2.2. 실제 `data/*.json` 으로 프롬프트를 생성해 확인. ① `collect_market_context`(`chatbot/payload_service.py:24-28`)가 섹터 변동률(퍼센트)을 `sector_scores` 에 넣고 `build_system_prompt`(`chatbot/prompts.py:136-147`)가 0~100 점수로 가정해 40 미만이면 🔴 와 「점」을 붙이므로 모든 섹터가 빨간색이 된다(반도체 +2.93% 가 「2.93점, 매우 약함」). 같은 요청에서 `build_market_gate_context` 는 올바른 퍼센트 표기를 만들어 한 프롬프트에 서로 다른 단위가 두 번 실린다. 지수는 소수 아홉 자리 원값. ② `build_vcp_buy_recommendations_text` 가 `action == "BUY"` 만 담아, 분석 4건이 전부 HOLD 면 빈 문자열이 되고 `build_vcp_intent_context` 가 「현재 분석된 VCP 시그널이 없습니다」로 바꾼다. VCP 화면은 같은 파일로 표를 그리므로 사용자는 표를 보면서 옆 상담 패널에서 「없다」는 답을 받는다. ③ 시그널·뉴스 문맥에 기준일이 없어 `kr_ai_analysis.json`(2026-05-05)이 「오늘의 시장 현황」 제목 아래 실린다. 기존 테스트 두 건(`test_payload_service.py:79-86`, `test_intent_context.py:24-28`)이 이 동작을 사양으로 고정하고 있다.
+- 범위: 섹터 절을 퍼센트 표기 하나로 모으고 점수 렌더 제거, 지수 자리수 포맷, 「분석 없음」과 「매수 추천 없음」 문구 분리, 시그널·뉴스·AI 분석 문맥에 기준일과 경과일 명시, 최종 시스템 프롬프트 문자열을 고정 입력으로 대조하는 회귀 테스트. `[VCP-026]` 과 무관한 별개 경로다.
+- QA: 격리 /chatbot 에서 「오늘 섹터 어때?」「VCP 매수 추천 알려줘」 전송 → 첫 답변이 반도체를 상승률 2.93% 로 말하고, 둘째가 「시그널 없음」 대신 「분석 4건, 매수 추천 0건, 기준일 2026-05-05」를 말한다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
 ## P1 — 이번 주기
 
 ### [INFRA-077] 종료 판정의 거짓 음성 제거(`lifecycle_pid_alive` 경합)
@@ -76,4 +100,67 @@
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review`
 
 
+### [FLOW-016] 누적성과 표의 순번을 전체 기준으로 매긴다
+- 카테고리: 수급·백테스트 | 티어: T1 | 근거: AUDIT-FLOW(2차) §1.1, §5.1. `CumulativeClientPage.tsx:836` 이 순번을 `trades.length - idx` 로 계산하는데 그 `trades` 는 현재 페이지분에 필터까지 적용한 배열이라, 1페이지와 2페이지가 모두 50번부터 1번까지 매겨지고 서로 다른 거래에 같은 번호가 붙는다. 서버가 보내는 `pagination.total`·`page` 를 쓰지 않는다. 실측 재현.
+- 범위: `TradeTable` 에 `pagination` 을 넘겨 `total - (page - 1) * limit - idx` 로 계산. 필터가 켜진 동안의 순번 표기 방식(비우기 또는 「필터 결과 내 순번」 표시)을 정해 반영. 2페이지 첫 행 번호를 고정하는 vitest 회귀 테스트.
+- QA: `/dashboard/kr/cumulative` 진입 → 표 첫 행 번호를 읽고 다음 페이지로 이동 → 1페이지가 234 로 시작하고 2페이지가 184 로 이어진다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [FLOW-017] 결과·등급 필터를 전체 기간에 건다
+- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §1.2, §5.1. `/api/kr/closing-bet/cumulative` 가 `page`·`limit` 만 받아 잘라낸 뒤 화면(`CumulativeClientPage.tsx:990-994`)이 그 50건을 다시 거른다. 「성공」을 누르면 전체 86건이 아니라 현재 페이지 안의 성공만 보이고 페이지 수는 그대로다. 1144줄 주석이 명시한 의도적 단순화이므로 결함이 아니라 개선 항목이다. 「현재 페이지 내」 안내가 결과 필터에만 있고 등급 「전체」 버튼에는 건수가 없다.
+- 범위: 라우트에 `outcome`·`grade` 쿼리 파라미터 추가(잘못된 값은 400), `paginate_items` 앞에서 거르고 캐시된 `trades` 와의 관계 확인, 화면의 클라이언트 필터 제거와 버튼 건수의 서버 집계 교체, 등급 「전체」 건수 추가와 안내 정리, 라우트 pytest 와 화면 vitest 회귀 테스트.
+- QA: 「성공」 필터 클릭 → 버튼 건수가 86 이고 표의 전체 행수와 페이지 수가 그 86건에 맞게 바뀐다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [FLOW-019] 세 화면의 모집단 규칙을 맞추고 화면에 적는다
+- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §2.2, §5.2. 누적성과 KPI(`kpi_helpers.py:31, 74`)는 D 등급을 포함하고(`[FLOW-013]` 의 의도적 결정), 종가베팅 화면(`closing-bet/page.tsx:899, 1033`)은 D 를 제외하며, 백테스트 요약(`kr_market_analytics_service.py:329, 366`)은 결과 파일을 최근 30개로 자르는데 누적성과는 전부 읽는다. 현행 판정기(`engine/grade_decider.py:55-67`)는 S·A·B 만 내므로 D 는 2월 자료 7건에만 있는 과거 등급이다. 파일이 30개를 넘으면 두 화면의 승률이 벌어진다(지금 18개). `Grade` 열거형의 C 가 저장 자료에 섞이면 누적 추천수에만 잡히고 어느 등급 카드에도 나타나지 않는다.
+- 범위: 누적성과의 D 포함과 종가베팅 화면의 D 제외 가운데 기준을 정하고 한 자리에 기록, 30개 상한을 요약 화면에 기준 기간으로 표시, 등급 집합 밖의 값이 들어오면 카드 합과 누적 추천수의 불일치가 드러나게 처리, 그 일치를 고정하는 pytest 회귀 테스트.
+- QA: `/dashboard/kr/cumulative` 와 `/dashboard/kr/closing-bet` 을 차례로 열어 추천 건수와 승률을 읽는다 → 두 화면의 기준이 문구로 설명되고 D 취급이 일치한다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [CHAT-032] 종목 질의 문맥이 언제나 비는 경로 복구
+- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §3.1. `get_chatbot()` 이 `data_fetcher` 없이 인스턴스를 만들고 운영 코드 어디서도 넘기지 않아 `get_cached_data` 가 항상 `fetch_mock_data()`(`vcp_stocks: []`)로 떨어진다. 그래서 `[종목 조회 컨텍스트]` 절, `## VCP 상위 종목` 절, 웰컴 메시지 Top 3, 관심종목 요약이 모두 죽어 있고, 웰컴 메시지가 예시로 드는 「삼성전자 어때?」도 페르소나만 남는다. VCP 상담 모드가 `[종목명(티커)]` 접두를 붙여 보내도 서버는 그 종목 자료를 싣지 않는다. 실제 종목 맵과 CSV 로 최근 5일 주가·수급·시그널 이력을 붙이는 `detect_stock_query_from_stock_map` 은 테스트만 부른다. `[CHAT-005]` 가 그 private 래퍼를 미사용으로 지웠으나 살아 있는 경로가 늘 빈 목록을 본다는 사실은 그때 다루지 않았다.
+- 범위: `_detect_stock_query` 를 `detect_stock_query_from_stock_map` 으로 연결, VCP 상담 모드의 선택 종목 문맥 확인(없으면 접두 파싱), `fetch_mock_data`·`detect_stock_query_from_vcp_data` 처리 방향 결정, 웰컴 Top 3 를 살릴지 문구에서 뺄지 결정, 종목명·티커 두 갈래의 문맥 주입 회귀 테스트.
+- QA: 격리 /chatbot 에서 「삼성전자 어때?」 전송 → 답변이 최근 5일 종가와 외국인·기관 순매수 수치를 인용한다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [CHAT-033] 챗봇 저장소의 스레드 동시성 확보
+- 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §1.4, §1.5, §5.1. 프로세스당 챗봇 인스턴스 하나를 워커의 스레드 여덟 개가 공유하는데 `MemoryManager` 와 `HistoryManager` 에 잠금이 없다. ① `add()` 가 `_reload()` 로 `self.memories` 를 통째로 교체한 뒤 `_save_single_entry` 가 그 사전을 다시 읽으므로, 그 사이 다른 스레드의 `view()`(모든 채팅 요청이 부름)가 사전을 또 교체하면 `KeyError`, `update()` 는 옛 값 저장. ② `HistoryManager._save()` 가 변경 표시가 비었거나 델타 저장이 실패하면 `save_history_sessions_to_sqlite` 로 떨어지고, 그 끝의 `_delete_stale_sessions_cursor` 가 이 워커 메모리에 없는 세션(다른 워커가 만든 것 포함)을 지우며 메시지는 CASCADE 로 함께 사라진다. 메모리 쪽은 `[CHAT-022]` 가 upsert 전용으로 고쳤으나 히스토리에는 같은 수정이 없다. 동시성 테스트가 없어 고쳐도 재발을 막을 장치가 없다.
+- 범위: `MemoryManager` 의 재적재·쓰기를 인스턴스 잠금으로 직렬화, `_save_single_entry` 에 레코드를 인자로 전달, `_save()` 전체 동기화 폴백의 삭제 절 제거, 델타 장부와 세션 사전 접근 잠금, 두 스레드 동시 쓰기에서 유실·`KeyError` 가 없음을 확인하는 테스트. 테이블을 정의하는 `storage_sqlite_common.py` 는 건드리지 않는다. diff 가 300줄을 넘으면 T3 로 올린다.
+- QA: 격리 /chatbot 두 탭에서 같은 계정으로 각각 대화를 만들고 동시에 메시지를 보낸 뒤 새로고침 → 두 대화가 모두 남고 메시지가 유실되지 않는다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
 ## P2 — 대기
+
+### [INFRA-078] 격리 실행이 원본 `runtime_cache.db` 에 쓰는 절대 경로 세 곳
+- 카테고리: 인프라 | 티어: T1 | 근거: `[VCP-026]` QA(2026-09-22). scratchpad 사본을 cwd 로 삼은 임시 백엔드가 원본 `data/runtime_cache.db` 에 행을 남겼다. `services/file_row_count_cache.py:50`, `services/common_update_status_service.py:49`, `services/kr_market_data_cache_jongga.py:48` 이 `_BASE_DIR/data/runtime_cache.db` 를 절대 경로로 잡는다. 다른 캐시 모듈은 `data_dir` 인자나 원본 파일의 디렉터리에서 경로를 만든다. `browser-notes.md` 「공통」 절이 이 종류의 구멍을 일반론으로만 경고한다.
+- 범위: 세 모듈이 다른 캐시와 같은 방식(`data_dir` 인자 또는 대상 파일의 디렉터리)으로 경로를 정하게 하고, 격리 실행 뒤 원본 `data/` 가 바뀌지 않음을 확인하는 회귀 테스트. 운영 동작은 바뀌지 않는다(같은 파일).
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] QA
+
+### [VCP-027] 실패 AI 재분석의 대상 날짜를 화면과 같은 판정으로 정한다
+- 카테고리: VCP 시그널 | 티어: T1 | 근거: `[VCP-026]` 심층 리뷰 MINOR 2(2026-09-22, 재현됨). 화면의 날짜 목록과 「최신」 대체는 `_is_vcp_signal_row` 를 통과한 날짜의 최댓값을 쓰지만, `services/kr_market_vcp_reanalysis_service.py:61-63` 의 `prepare_vcp_signals_scope` 는 판정 없이 `signal_date` 전체의 최댓값을 쓴다. 2026-09-10 에 유효 행이 있고 2026-09-15 행이 전부 CLOSED 면 화면은 09-10 을 보이는데 재분석 스코프는 09-15 다. `[VCP-026]` 전에는 최신 탭이 비어 관리자가 그 단추를 누를 일이 없었으나 이제 도달할 수 있다.
+- 범위: `prepare_vcp_signals_scope` 의 날짜 없는 갈래에 같은 판정을 걸지, 판정 탈락 행(CLOSED)의 실패 AI 도 재분석 대상으로 둘지 먼저 정한다. 결정에 따라 스코프 함수와 회귀 테스트.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] QA
+
+### [FLOW-018] 겹치는 재추천을 어떻게 셀지 정하고 화면에 드러낸다
+- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §2.1. 거래 식별자가 `f"{ticker}-{stats_date}"`(`kr_market_backtest_trade_helpers.py:298`)라 청산 전에 다시 추천된 종목이 독립한 두 거래로 집계된다. 실측 234건 중 13건. 005935 삼성전자우는 09-04 진입분이 09-08 익절(+5.0%)되기 전인 09-07 에 재추천되어 그 건이 손절(-3.0%)로 잡혔다. 승률·손익비는 독립 시행을 가정하는 지표인데 같은 가격 움직임이 두 번 반영되고, 화면에 그 가정이 적혀 있지 않다.
+- 범위: 설계 판단이 먼저다. 현행 유지 + 툴팁에 「추천 단위 집계, 재추천 미합산」 명시 / 겹치는 재추천 제외 / 겹침 건수를 별도 지표로 표시 가운데 하나를 정하고 근거를 남긴 뒤 `aggregate_cumulative_kpis` 또는 툴팁을 수정, 겹침 사례를 담은 고정 자료로 회귀 테스트.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA(승률 카드 툴팁·값 확인)
+
+### [FLOW-020] 「최고가」 열이 값을 숨기지 않게 한다
+- 카테고리: 수급·백테스트 | 티어: T1 | 근거: AUDIT-FLOW(2차) §1.3. `CumulativeClientPage.tsx:874` 가 `maxHigh > 0` 이 아니면 `-` 를 그려, 실측에서 032830 삼성생명(진입가 307,000, 청산일까지 최고가 302,500, 최대상승률 -1.5%)이 하이픈으로 보인다. 값이 없는 것인지 한 번도 오르지 않은 것인지 구분되지 않고, 양수도 부호 없이 적어 같은 화면의 `formatSignedPercent` 표기와 다르다.
+- 범위: 음수를 부호와 함께 표시하고 자료가 없을 때만 하이픈, 양수 표기를 `formatSignedPercent` 와 통일, 음수·0·양수 세 경우의 vitest 회귀 테스트.
+- QA: 2026-09-01 삼성생명 행의 최고가 열에 `-1.5%` 가 보인다. 브라우저 실측 required.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [CHAT-034] SQLite 누락 테이블 복구 래퍼 통합
+- 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §2.1. `storage_sqlite_history.py` 여섯 곳과 `storage_sqlite_memory.py` 여덟 곳, 열네 함수가 「스키마 확인 → `run_sqlite_with_retry` → `_is_missing_table_error` 면 `force_recheck` 뒤 `_retried=True` 로 재호출」 골격을 복제하고 있다. 재시도·복구 조건을 바꾸면 열네 곳을 함께 고쳐야 하고, 한 곳을 빠뜨려도 평소에는 증상이 없다. 공용 래퍼를 `services/sqlite_utils.py`(공통 접속 계층, 위험 경로)에 두면 T3.
+- 범위: 공통 골격을 데코레이터 또는 헬퍼 하나로 추출, 테이블 이름만 주입, 양쪽 공개 함수 시그니처 유지, 열네 경로 모두의 복구 동작 테스트.
+- QA: `data/chatbot_storage.db` 를 지운 상태에서 질문을 보내고 사이드바 확인 → 오류 없이 답변이 오고 새 대화가 목록에 나타난다.
+- [ ] 설계 승인 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA
+
+### [CHAT-035] HistoryManager 의 책임 분리
+- 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §4.1. `chatbot/storage.py:39-493` 의 한 클래스가 SQLite 적재·저장, 레거시 JSON 스냅샷, 파일 서명 재적재 판정, 메시지·세션 LRU 캐시 둘, 델타 장부, 세션 CRUD, 메시지 CRUD 여덟 책임을 진다. `[CHAT-033]` 의 결함은 델타 장부·저장·재적재가 서로의 상태를 잠금 없이 건드리는 자리에서 나왔다. 선행 조건: `[CHAT-033]` 완료. 같은 자리를 두 항목이 동시에 건드리면 충돌한다.
+- 범위: 레거시 스냅샷 동기화, LRU 캐시와 파일 서명 판정, 델타 장부를 각각 분리. 기존 공개 메서드 시그니처와 기존 테스트 16건 통과 유지.
+- QA: 대화 생성·메시지 송수신·삭제 후 새로고침 → 목록과 본문이 조작한 대로 남는다.
+- [ ] 설계 승인 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA

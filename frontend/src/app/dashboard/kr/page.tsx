@@ -991,13 +991,16 @@ export default function KRMarketOverview() {
         {(() => {
           const signalCount = signalsData?.signals?.length ?? 0;
           const signalTheme = getSignalCountTheme(signalCount);
+          // [VCP-026] 오늘 스캔 전에는 백엔드가 최신 저장분을 경고와 함께 내려준다. 그 건수가
+          // 「오늘」 로 읽히지 않게 기준일을 밝힌다.
+          const fallbackDate = signalsData?.stale_warning ? signalsData.signals?.[0]?.signal_date : undefined;
           return (
             <div className={`p-5 rounded-2xl bg-[#1c1c1e] border border-white/10 relative group transition-all ${signalTheme.border}`}>
               <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-[25px] -translate-y-1/2 translate-x-1/2 ${signalTheme.glow}`}></div>
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">오늘의 시그널</div>
-                  <Tooltip size="lg" content="오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다." position="bottom" align="left">
+                  <Tooltip size="lg" content={fallbackDate ? `최신 저장분(${fallbackDate})에 포착된 VCP 패턴 + 수급 유입 종목 수입니다. 오늘 스캔 전이라 그 날짜의 시그널을 셉니다.` : '오늘 포착된 VCP 패턴 + 수급 유입 종목 수입니다.'} position="bottom" align="left">
                     <i className="fas fa-question-circle text-gray-600 hover:text-gray-300 transition-colors cursor-help text-[10px]"></i>
                   </Tooltip>
                 </div>
@@ -1005,7 +1008,9 @@ export default function KRMarketOverview() {
               <div className={`text-3xl font-black text-white transition-colors ${signalTheme.text}`}>
                 {loading ? '--' : signalCount}
               </div>
-              <div className="mt-2 text-xs text-gray-500">VCP + 외국인 순매수</div>
+              <div className="mt-2 text-xs text-gray-500">
+                {fallbackDate ? `최신 저장분(${fallbackDate}) 기준` : 'VCP + 외국인 순매수'}
+              </div>
             </div>
           );
         })()}

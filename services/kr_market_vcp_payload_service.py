@@ -142,9 +142,14 @@ def _load_vcp_signals(
         logger=logger,
     )
     if cached_signals is not None:
-        # 캐시에 시그널이 있으면 stale 경고 대상이 아니므로 CSV를 다시 읽지 않는다.
+        # 캐시에 시그널이 있으면 CSV 를 다시 읽지 않는다. 대체 표시 경고는 시그널 날짜만으로
+        # 만들 수 있다.
         if cached_signals:
-            return cached_signals, "signals_log.csv", None
+            return (
+                cached_signals,
+                "signals_log.csv",
+                _resolve_fallback_warning_message(req_date=req_date, signals=cached_signals, today=today),
+            )
         # 날짜를 지정한 조회는 그 날짜만으로 문구를 만들 수 있어 원본을 읽지 않는다.
         source_df = (
             pd.DataFrame()
@@ -194,11 +199,11 @@ def _load_vcp_signals(
         logger.debug(f"Filtered latest signal rows: {len(signals_df)}")
 
     signals = build_vcp_signals_from_dataframe(signals_df)
-    stale_warning = None
     # 날짜 행이 남아 있어도 시그널 판정에서 전부 떨어질 수 있다. 화면이 빈 표를 보이는
     # 기준은 변환 결과이므로 그 결과를 보고 안내 문구를 만든다.
     if signals:
         source = "signals_log.csv"
+        stale_warning = _resolve_fallback_warning_message(req_date=req_date, signals=signals, today=today)
     else:
         stale_warning = _resolve_stale_warning_message(
             req_date=req_date,
@@ -212,6 +217,25 @@ def _load_vcp_signals(
         logger=logger,
     )
     return signals, source, stale_warning
+
+
+def _resolve_fallback_warning_message(
+    *,
+    req_date: str | None,
+    signals: list[dict[str, Any]],
+    today: str,
+) -> str | None:
+    """날짜 없는 조회가 오늘보다 앞선 저장분으로 대체됐으면 그 사실을 알린다([VCP-026]).
+
+    필터가 한 날짜의 행만 넘기므로 시그널 날짜는 하나다. 날짜를 지정한 조회나 오늘 자
+    시그널에는 붙이지 않는다.
+    """
+    if req_date:
+        return None
+    signal_date = _resolve_single_signal_date(signals)
+    if signal_date is None or signal_date >= today:
+        return None
+    return f"오늘({today}) 기준 VCP 시그널이 없어 최신 저장분({signal_date})을 표시합니다."
 
 
 def _resolve_stale_warning_message(
