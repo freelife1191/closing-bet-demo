@@ -95,3 +95,32 @@ def recharge_user_usage(
             quota_file_path=quota_file_path,
         )
     return int(new_usage), True
+
+
+def delete_user_usage(
+    *,
+    usage_key: str | None,
+    quota_lock,
+    load_quota_data_unlocked: Callable,
+    save_quota_data_unlocked: Callable,
+    load_json_file: Callable[[str], dict],
+    atomic_write_text: Callable[[str, str], None],
+    quota_file_path: str,
+) -> bool:
+    """사용량과 충전 날짜를 함께 지운다([FE-045]). 지울 것이 없어도 True 다."""
+    if not usage_key:
+        return False
+
+    day_key = f"{RECHARGE_DAY_PREFIX}{usage_key}"
+    with quota_lock:
+        quota_data = load_quota_data_unlocked(load_json_file=load_json_file)
+        if usage_key not in quota_data and day_key not in quota_data:
+            return True
+        quota_data.pop(usage_key, None)
+        quota_data.pop(day_key, None)
+        save_quota_data_unlocked(
+            quota_data=quota_data,
+            atomic_write_text=atomic_write_text,
+            quota_file_path=quota_file_path,
+        )
+    return True

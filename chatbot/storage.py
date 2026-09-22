@@ -136,7 +136,8 @@ class HistoryManager:
 
         return sqlite_sessions or {}
 
-    def _save(self) -> None:
+    def _save(self) -> bool:
+        """SQLite 저장의 성패를 돌려준다. 실패해도 예외를 올리지 않고 스냅샷만 남긴다."""
         try:
             has_delta = (
                 self._pending_clear_all
@@ -171,8 +172,10 @@ class HistoryManager:
             self._pending_changed_session_ids.clear()
             self._pending_deleted_session_ids.clear()
             self._pending_clear_all = False
+            return bool(sqlite_saved)
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
+            return False
 
     def _reload_sessions(self, force: bool = False) -> None:
         """멀티 워커 환경에서 최신 파일 상태를 다시 로드한다."""
@@ -354,7 +357,9 @@ class HistoryManager:
         if not owner_id:
             return 0
 
-        self._reload_sessions()
+        # 파일 서명이 같아도 다시 읽는다. 직전 저장이 실패해 메모리에서만 사라진 세션을
+        # 이번 호출이 다시 찾아 지우게 하기 위해서다([FE-045]).
+        self._reload_sessions(force=True)
         targets = [
             session_id
             for session_id, session in self.sessions.items()
@@ -367,7 +372,9 @@ class HistoryManager:
 
         if targets:
             self._invalidate_session_list_cache()
-            self._save()
+            if not self._save():
+                # 삭제가 SQLite 에 남지 않았다. 지웠다고 돌려주면 계정 삭제가 성공으로 보인다.
+                raise RuntimeError("chat history delete was not persisted")
         return len(targets)
 
     def clear(self) -> None:

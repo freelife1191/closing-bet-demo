@@ -506,3 +506,36 @@ def test_saved_profile_reaches_only_its_owner_prompt(monkeypatch, tmp_path: Path
 
     assert "공격적" in memory.format_for_prompt("owner-a")
     assert memory.format_for_prompt("owner-b") == ""
+
+
+def test_delete_owner_removes_profile_too_and_keeps_other_owners(monkeypatch, tmp_path: Path):
+    """계정 삭제는 user_profile 까지 지우고 다른 소유자와 공용 행은 남긴다([FE-045])."""
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    manager = chatbot_core.MemoryManager("u1")
+    manager.add("risk", "aggressive", owner_id="alice@example.test")
+    update_user_profile(manager, "앨리스", "리서치", "alice@example.test")
+    manager.add("risk", "conservative", owner_id="bob@example.test")
+    manager.add("interest", "종가베팅")  # 공용
+
+    assert manager.delete_owner("alice@example.test") is True
+
+    with sqlite3.connect(resolve_chatbot_storage_db_path(tmp_path)) as conn:
+        owners = sorted({row[0] for row in conn.execute("SELECT owner_id FROM chatbot_memories")})
+    assert owners == ["", "bob@example.test"]
+    assert manager.view("alice@example.test") == {}
+    assert manager.delete_owner("") is False
+
+
+def test_delete_owner_reports_failure_when_snapshot_is_not_written(monkeypatch, tmp_path: Path):
+    """SQLite 삭제가 성공해도 레거시 스냅샷 갱신이 실패하면 성공으로 돌려주지 않는다([FE-045])."""
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    manager = chatbot_core.MemoryManager("u1")
+    manager.add("risk", "aggressive", owner_id="alice@example.test")
+    monkeypatch.setattr(manager, "_write_legacy_memory_snapshot", lambda *a, **k: False)
+
+    assert manager.delete_owner("alice@example.test") is False
+
+    with sqlite3.connect(resolve_chatbot_storage_db_path(tmp_path)) as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM chatbot_memories WHERE owner_id = ?", ("alice@example.test",)
+        ).fetchone()[0] == 0

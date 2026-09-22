@@ -195,3 +195,18 @@ def test_status_counts_only_requester_sessions():
     assert "세션 개수: 1" in handle_command(bot, "/status", "s1", "owner-a")
     assert "세션 개수: 0" in handle_command(bot, "/status", "s1", "owner-c")
     assert "세션 개수: 0" in handle_command(bot, "/status", "s1")
+
+
+def test_handle_clear_all_reports_unpersisted_history_delete():
+    """저장이 실패해 clear_for_owner 가 던지면 성공 문구를 내지 않는다([FE-045])."""
+    bot = _FakeBot()
+
+    def _raise(_owner_id):
+        raise RuntimeError("chat history delete was not persisted")
+
+    bot.history.clear_for_owner = _raise
+
+    result = handle_clear_command(bot, ["/clear", "all"], "s1", "owner-a")
+
+    assert result.startswith("⚠️")
+    assert bot.memory.cleared is False

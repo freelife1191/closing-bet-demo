@@ -242,6 +242,21 @@ class MemoryManager:
         self._write_legacy_memory_snapshot(self.memories)
         return "🧹 메모리가 초기화되었습니다."
 
+    def delete_owner(self, owner_id: str) -> bool:
+        """한 소유자의 메모리를 프로필까지 지우고 SQLite 삭제의 성패를 돌려준다([FE-045]).
+
+        clear 와 달리 소유자를 모르면 공용으로 떨어지지 않고 거절한다. 계정 삭제가 공용
+        캐시를 지워서는 안 된다.
+        """
+        if not owner_id:
+            return False
+        self._reload()
+        self.memories.pop(owner_id, None)
+        deleted = clear_memories_in_sqlite(self.db_path, logger=logger, owner_id=owner_id)
+        # 스냅샷이 옛 메모리를 쥔 채 남으면 표가 비었을 때 _load 가 그것을 SQLite 로 되돌린다.
+        written = self._write_legacy_memory_snapshot(self.memories, allow_uncommitted=not deleted)
+        return deleted and written
+
     def clear_general(self, owner_id: Optional[str] = None) -> str:
         """설정 프로필을 남기고 요청자의 일반 메모리만 초기화한다."""
         if not owner_id:

@@ -18,10 +18,12 @@ from services.kr_market_interval_service import (
     persist_market_gate_interval_to_env as persist_market_gate_interval_to_env_service,
 )
 from services.common_env_service import resolve_env_path
+from services.paper_trading import get_paper_trading_service
 from services.kr_market_interval_http_service import (
     handle_interval_config_request as handle_interval_config_request_service,
 )
 from services.kr_market_quota_runtime_service import (
+    delete_user_usage as delete_user_usage_service,
     get_user_usage as get_user_usage_service,
     increment_user_usage as increment_user_usage_service,
     recharge_user_usage as recharge_user_usage_service,
@@ -45,6 +47,7 @@ from services.kr_market_data_cache_service import (
 )
 from app.routes.route_guards import require_admin
 from app.routes.kr_market_chatbot_routes import register_chatbot_and_quota_routes
+from app.routes.kr_market_user_data_routes import register_user_data_routes
 from app.routes.kr_market_route_registry import (
     register_market_data_http_route_group,
     register_system_and_execution_route_groups,
@@ -273,6 +276,19 @@ def increment_user_usage(email):
         quota_file_path=QUOTA_FILE,
     )
 
+
+def delete_user_usage(email):
+    """계정 삭제가 부른다. 사용량과 충전 날짜를 함께 지운다([FE-045])."""
+    return delete_user_usage_service(
+        usage_key=email,
+        quota_lock=_quota_lock,
+        load_quota_data_unlocked=load_quota_data_unlocked_service,
+        save_quota_data_unlocked=save_quota_data_unlocked_service,
+        load_json_file=load_json_file,
+        atomic_write_text=_atomic_write_text,
+        quota_file_path=QUOTA_FILE,
+    )
+
 # 한국 시장을 다루는 서비스이므로 하루의 경계도 KST 로 센다. 서버가 UTC 면 자정부터
 # 오전 9시 사이에 하루가 두 번 바뀐 것처럼 보여 충전이 두 번 된다.
 KST = timezone(timedelta(hours=9))
@@ -300,4 +316,19 @@ register_chatbot_and_quota_routes(
     get_user_usage_fn=get_user_usage,
     increment_user_usage_fn=increment_user_usage,
     recharge_usage_fn=_recharge_user_usage,
+)
+
+
+def _get_chatbot():
+    # 다른 챗봇 라우트처럼 핸들러 안에서 늦게 만든다. 모듈 import 시점의 챗봇 초기화를 피한다.
+    from chatbot import get_chatbot
+    return get_chatbot()
+
+
+register_user_data_routes(
+    kr_bp,
+    logger=logger,
+    get_chatbot_fn=_get_chatbot,
+    get_paper_trading_fn=get_paper_trading_service,
+    delete_user_usage_fn=delete_user_usage,
 )

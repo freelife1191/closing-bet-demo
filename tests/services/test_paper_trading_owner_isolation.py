@@ -217,3 +217,20 @@ def test_owner_reads_recover_when_balance_table_is_missing(tmp_path, method_name
         assert result[-1]["cash"] == INITIAL_CASH_KRW
     else:
         assert result["cash"] == INITIAL_CASH_KRW
+
+
+def test_delete_account_removes_only_that_owner_from_every_table(tmp_path):
+    """계정 삭제는 reset 과 달리 balance 행까지 지우고 다른 소유자는 남긴다([FE-045])."""
+    service = _service(tmp_path)
+    for owner in (ALICE, BOB):
+        assert service.buy_stock("005930", "삼성전자", 1_000, 1, owner_id=owner)["status"] == "success"
+        service.record_asset_history(1_000, owner_id=owner)
+
+    assert service.delete_account(owner_id=ALICE) is True
+
+    with service.get_read_context() as conn:
+        for table in ("balance", "portfolio", "trade_log", "asset_history"):
+            owners = {row[0] for row in conn.execute(f"SELECT owner_id FROM {table}")}
+            assert owners == {BOB}, table
+    # 다시 접근하면 새 계좌다. 이전 잔고가 되살아나지 않는다.
+    assert service.get_balance(owner_id=ALICE) == INITIAL_CASH_KRW

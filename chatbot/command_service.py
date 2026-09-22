@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any, Optional
 
+
+logger = logging.getLogger(__name__)
 
 _RESERVED_MEMORY_KEYS = {"user_profile"}
 
@@ -52,7 +55,11 @@ def handle_clear_command(
     if subcommand == "all":
         if not owner_id:
             return "⚠️ 대화를 식별할 수 없어 초기화하지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
-        removed = bot.history.clear_for_owner(owner_id)
+        try:
+            removed = bot.history.clear_for_owner(owner_id)
+        except RuntimeError as error:
+            logger.error("Chat history clear was not persisted: %s", error)
+            return "⚠️ 대화 삭제를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."
         bot.memory.clear(owner_id)
         bot._data_cache = None
         if hasattr(bot, "_cache_timestamp"):

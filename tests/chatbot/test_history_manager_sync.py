@@ -10,6 +10,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 
 sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -392,3 +394,24 @@ def test_history_manager_detects_sqlite_wal_change_without_legacy_snapshot(monke
     writer.add_message(session_id, "model", "WAL 변경 메시지")
     refreshed = reader.get_messages(session_id)
     assert refreshed[-1]["parts"][0]["text"] == "WAL 변경 메시지"
+
+
+def test_clear_for_owner_raises_when_delete_is_not_persisted(monkeypatch, tmp_path):
+    """저장이 실패하면 지웠다고 돌려주지 않고, 다음 호출은 SQLite 를 다시 읽어 지운다([FE-045])."""
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    manager = chatbot_core.HistoryManager(user_id="u1")
+    session_id = manager.create_session(owner_id="alice@example.test")
+    manager.add_message(session_id, "user", "지워질 대화")
+
+    original_delta = chatbot_storage.apply_history_session_deltas_in_sqlite
+    original_full = chatbot_storage.save_history_sessions_to_sqlite
+    monkeypatch.setattr(chatbot_storage, "apply_history_session_deltas_in_sqlite", lambda *a, **k: False)
+    monkeypatch.setattr(chatbot_storage, "save_history_sessions_to_sqlite", lambda *a, **k: False)
+    with pytest.raises(RuntimeError):
+        manager.clear_for_owner("alice@example.test")
+    assert chatbot_core.HistoryManager(user_id="u2").get_all_sessions(owner_id="alice@example.test")
+
+    monkeypatch.setattr(chatbot_storage, "apply_history_session_deltas_in_sqlite", original_delta)
+    monkeypatch.setattr(chatbot_storage, "save_history_sessions_to_sqlite", original_full)
+    assert manager.clear_for_owner("alice@example.test") == 1
+    assert chatbot_core.HistoryManager(user_id="u3").get_all_sessions(owner_id="alice@example.test") == []

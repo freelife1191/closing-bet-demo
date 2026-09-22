@@ -318,6 +318,11 @@ class PaperTradingTradeAccountMixin:
         self._ensure_owner(owner_id)
         return self._execute_db_operation_with_schema_retry(operation)
 
+    def _forget_asset_history_snapshot(self, owner_id: str) -> None:
+        snapshot = getattr(self, "_last_asset_history_snapshot", None)
+        if isinstance(snapshot, dict) and snapshot.get("owner_id") == owner_id:
+            self._last_asset_history_snapshot = None
+
     def reset_account(self, *, owner_id: str) -> bool:
         owner_id = self._validate_owner_id(owner_id)
         def operation() -> None:
@@ -329,9 +334,23 @@ class PaperTradingTradeAccountMixin:
                 cursor.execute("UPDATE balance SET cash=?, total_deposit=0 WHERE owner_id=?", (INITIAL_CASH_KRW, owner_id))
                 conn.commit()
         self._execute_db_operation_with_schema_retry(operation)
-        snapshot = getattr(self, "_last_asset_history_snapshot", None)
-        if isinstance(snapshot, dict) and snapshot.get("owner_id") == owner_id:
-            self._last_asset_history_snapshot = None
+        self._forget_asset_history_snapshot(owner_id)
+        return True
+
+    def delete_account(self, *, owner_id: str) -> bool:
+        """계정 삭제. reset_account 와 달리 balance 행도 남기지 않는다([FE-045]).
+
+        다음 접근이 _ensure_owner 로 새 계좌를 만들므로 삭제 뒤 조회는 초기 잔고를 돌려준다.
+        """
+        owner_id = self._validate_owner_id(owner_id)
+        def operation() -> None:
+            with self.get_context() as conn:
+                cursor = conn.cursor()
+                for table in ("portfolio", "trade_log", "asset_history", "balance"):
+                    cursor.execute(f"DELETE FROM {table} WHERE owner_id = ?", (owner_id,))
+                conn.commit()
+        self._execute_db_operation_with_schema_retry(operation)
+        self._forget_asset_history_snapshot(owner_id)
         return True
 
     def get_trade_history(self, limit: object = DEFAULT_TRADE_HISTORY_LIMIT, ticker: str | None = None, *, owner_id: str) -> dict[str, list[dict[str, Any]]]:

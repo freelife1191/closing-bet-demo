@@ -7,6 +7,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { useAdmin } from '@/hooks/useAdmin';
 import { useQuota } from '@/hooks/useQuota';
 import { getBrowserSessionId } from '@/lib/session';
+import { fetchAPI } from '@/lib/api';
 import { pickNotificationEnv, storedEnvFieldProps } from './settingsEnv';
 
 interface SettingsModalProps {
@@ -43,6 +44,7 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
     ? { name: session.user.name || "User", email: session.user.email || "" }
     : null;
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const quotaIdentity = `authenticated:${session?.user?.email ?? ''}`;
   const { quota, quotaStatus, setQuota } = useQuota({
     enabled: isOpen && status === 'authenticated' && Boolean(session?.user?.email),
@@ -125,19 +127,40 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
   };
 
   const performResetData = async () => {
+    // 서버 기록을 먼저 지운다. 실패하면 로그아웃하지 않아야 사용자가 지워졌다고 믿지 않는다.
+    // 두 진입점 모두 로그인(또는 관리자) 상태에서만 보이므로 로그인 여부로 가르지 않는다.
+    // 세션이 그 사이 만료됐으면 서버가 401 을 돌려주고 그 사유가 그대로 뜬다.
+    // try 는 서버 삭제만 감싼다. 뒤의 signOut 실패까지 「지워지지 않았다」로 알리면 그것이 거짓이다.
+    setIsDeleting(true);
     try {
-      // 이 화면의 「초기화」는 브라우저에 남은 것만 지운다. 서버 .env 를 지우던
-      // DELETE 는 [INFRA-025] 에서 라우트째 없앴다.
-      localStorage.clear();
-      sessionStorage.clear();
-      await signOut({ callbackUrl: '/' });
+      // 세 저장소를 잇달아 지우는 동안 SQLite 재시도가 겹칠 수 있어 기본 10초보다 길게 둔다.
+      await fetchAPI('/api/kr/user/data', { method: 'DELETE', timeout: 30000 });
     } catch (e) {
       console.error(e);
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
       setTestModal({
         isOpen: true,
         type: 'danger',
-        title: '초기화 실패',
-        content: '계정 삭제 처리에 실패했습니다.'
+        title: '계정 삭제 실패',
+        content: `${e instanceof Error ? e.message : String(e)} 일부 기록은 이미 지워졌을 수 있고 로그아웃하지 않았습니다. 다시 시도하면 남은 기록을 지웁니다.`,
+      });
+      return;
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    try {
+      await signOut({ callbackUrl: '/' });
+    } catch (e) {
+      console.error(e);
+      // 기록은 이미 지워졌다. 로그아웃 요청만 실패했으므로 삭제 실패로 알리지 않고 그 사실만 알린다.
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
+      setTestModal({
+        isOpen: true,
+        type: 'default',
+        title: '계정 삭제 완료',
+        content: '서버 기록은 지워졌지만 로그아웃 요청이 실패했습니다. 페이지를 새로 고친 뒤 다시 로그아웃해 주세요.',
       });
     }
   };
@@ -1054,16 +1077,16 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   <div className="bg-[#27272a] rounded-xl border border-red-500/20 p-5">
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                       <div>
-                        <div className="text-sm font-bold text-white mb-1">모든 설정 초기화</div>
+                        <div className="text-sm font-bold text-white mb-1">계정 삭제</div>
                         <div className="text-xs text-gray-500 break-keep leading-relaxed">
-                          저장된 API Key, 구글 로그인 정보, 이메일 설정 등 모든 민감 정보를 영구적으로 삭제하고 로그아웃합니다.
+                          서버에 저장된 AI 상담 기록과 메모리, 모의투자 계좌, 무료 사용량 기록과 이 브라우저의 설정을 지우고 로그아웃합니다.
                         </div>
                       </div>
                       <button
                         onClick={handleResetData}
                         className="w-full md:w-auto px-5 py-2.5 bg-red-500/10 text-red-500 text-sm font-bold rounded-xl hover:bg-red-500 hover:text-white transition-all border border-red-500/20 shadow-lg hover:shadow-red-500/20 whitespace-nowrap flex-shrink-0"
                       >
-                        초기화 및 삭제
+                        계정 삭제
                       </button>
                     </div>
                   </div>
@@ -1098,18 +1121,21 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
             </button>
             <button
               onClick={performResetData}
+              disabled={isDeleting}
               className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg transition-colors shadow-lg shadow-red-900/20"
             >
-              삭제 (복구 불가)
+              {isDeleting ? '삭제 중…' : '삭제 (복구 불가)'}
             </button>
           </div>
         }
       >
         <div className="text-gray-300">
-          <p className="mb-2 font-bold text-white">정말로 모든 설정을 초기화하고 계정을 삭제하시겠습니까?</p>
+          <p className="mb-2 font-bold text-white">정말로 계정을 삭제하시겠습니까?</p>
           <p className="text-sm text-gray-400">
             이 작업은 되돌릴 수 없습니다.<br />
-            저장된 API Key, 사용자 설정, 쿼터 정보 등 모든 데이터가 영구적으로 삭제됩니다.
+            서버에 저장된 AI 상담 기록과 메모리(프로필 포함), 모의투자 계좌, 무료 사용량 기록이 지워지고 로그아웃됩니다.<br />
+            다른 기기에 로그인이 남아 있으면 그 기기도 로그아웃해 주세요. 남은 세션이 화면을 열면 빈 모의투자 계좌가 다시 만들어집니다.<br />
+            활동 로그 파일은 이 화면에서 지우지 않으며 30일이 지나면 자동으로 삭제됩니다.
           </p>
         </div>
       </Modal>
