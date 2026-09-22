@@ -74,7 +74,14 @@
 - 연결(`[FLOW-017]` 리뷰 L4): 누적성과 버튼 `counts` 는 S·A·B·D 만 세므로 그 밖의 등급 거래는 `counts.total` 에만 잡혀 등급 칩 합과 「전체」 건수가 어긋난다. 등급 집합 밖의 값을 드러내는 처리에 이 칩도 포함한다.
 - 범위: 누적성과의 D 포함과 종가베팅 화면의 D 제외 가운데 기준을 정하고 한 자리에 기록, 30개 상한을 요약 화면에 기준 기간으로 표시, 등급 집합 밖의 값이 들어오면 카드 합과 누적 추천수의 불일치가 드러나게 처리, 그 일치를 고정하는 pytest 회귀 테스트.
 - QA: `/dashboard/kr/cumulative` 와 `/dashboard/kr/closing-bet` 을 차례로 열어 추천 건수와 승률을 읽는다 → 두 화면의 기준이 문구로 설명되고 D 취급이 일치한다. 브라우저 실측 required.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 08:29
+  | 범위: 현행 모집단 유지(누적성과·요약은 D 포함, 종가베팅 화면은 D 제외)와 문구 명시, 요약 30개 상한 유지와 카드 표시, 규칙을 `kr_market_analytics_service.py` 상수 주석 한 곳에 기록, 누적성과 `counts.other` 와 안내 문구, pytest·vitest 회귀
+  | 실제 대화 근거: 2026-09-23 AskUserQuestion 응답 「현행 유지·문구 명시」「상한 유지·카드에 표시」, 대화 설계 제시 뒤 사용자 「진행해」
+- 티어 재판정: T2 (위험 경로 목록의 파일 없음). 읽은 정본: `.claude/skills/closing-bet-python/SKILL.md`, `.claude/skills/closing-bet-nextjs/SKILL.md`, `frontend-skills.md` §2, Next 번들 문서 `05-server-and-client-components.md`(순수 클라이언트 문구·조건부 렌더링 변경)
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: 구현 전 pytest 2건(`counts.other` 신규, 기존 counts 동등 단언) 실패와 vitest 3건(누적성과 안내 두 건, 종가베팅 D 혼재 안내) 실패를 확인한 뒤 구현. 라우트 `counts.other`, `JONGGA_SUMMARY_HISTORY_LIMIT` 상수와 규칙 주석, 누적성과 모집단 문구, 대시보드 카드 「최근 30거래일 결과 기준 · 과거 등급 D 포함」, 종가베팅 D 제외 안내와 D 판정 대소문자 통일(목록과 일괄 매수가 같은 `eligibleSignals` 사용). GREEN: pytest 8 통과, vitest 4 통과
+- [x] `/ponytail-review` → `closing-bet-reviewer`: ponytail-review 1건(`counts && counts.other > 0` → `!!counts?.other`) 반영. closing-bet-reviewer(name `flow019-reviewer`) 1차 CHANGES_REQUIRED: MAJOR 1(「최근 30거래일」은 실제로 파일명 기준 파일 30개, 파일은 분석한 날에만 생김) → 카드 「최근 결과 파일 30개(분석한 날) 기준 · D 포함」과 주석 정정, MAJOR 2(「D 는 현행 판정기가 내지 않는 과거 등급」은 틀림, 읽기 경로 재판정 `kr_market_jongga_grade_helpers.py:138-146` 이 미달 종목에 D 를 붙이고 결과 파일에 되쓸 수 있음) → 세 화면 표기 「현행 기준 미달 또는 과거 등급」과 규칙 주석 두 줄, MINOR 4(진입가 없는 시그널 제외) → 문구 정정, NIT 5(`other?: number`)·NIT 6(전부 D 갈래 테스트) 반영. MINOR 3(소문자 d 가 누적성과에서 other 로 셈)은 미반영: 저장 자료 18개 파일에 소문자 등급이 없고 서빙 경로 재판정이 대문자로 정규화한다. 재판정 APPROVE, 남은 MINOR 1(D 등급 카드 설명이 「과거 기록」만 말함)은 문자열 정정으로 반영, NIT 2(감사 원문의 D 전제)는 아카이브에 정정 기록, NIT 3(ticker 없는 시그널 미언급)은 영향 없어 미반영
+- [ ] 정적 검증·QA: 전체 pytest 2631 통과 2 skip, vitest 94 파일 678 통과, type-check·eslint exit 0(ponytail 반영 전 기준). 리뷰 반영 뒤 dashboard/kr 관련 vitest 50 통과·cumulative 16 통과·type-check·lint exit 0. QA 문서 `docs/dev-cycle/qa/FLOW-019.md`
 
 ### [CHAT-032] 종목 질의 문맥이 언제나 비는 경로 복구
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §3.1. `get_chatbot()` 이 `data_fetcher` 없이 인스턴스를 만들고 운영 코드 어디서도 넘기지 않아 `get_cached_data` 가 항상 `fetch_mock_data()`(`vcp_stocks: []`)로 떨어진다. 그래서 `[종목 조회 컨텍스트]` 절, `## VCP 상위 종목` 절, 웰컴 메시지 Top 3, 관심종목 요약이 모두 죽어 있고, 웰컴 메시지가 예시로 드는 「삼성전자 어때?」도 페르소나만 남는다. VCP 상담 모드가 `[종목명(티커)]` 접두를 붙여 보내도 서버는 그 종목 자료를 싣지 않는다. 실제 종목 맵과 CSV 로 최근 5일 주가·수급·시그널 이력을 붙이는 `detect_stock_query_from_stock_map` 은 테스트만 부른다. `[CHAT-005]` 가 그 private 래퍼를 미사용으로 지웠으나 살아 있는 경로가 늘 빈 목록을 본다는 사실은 그때 다루지 않았다.

@@ -198,7 +198,7 @@ def test_cumulative_route_handles_invalid_page_limit_query_params(tmp_path):
     assert payload["pagination"]["limit"] == 50
 
 
-def _filter_route_client(tmp_path, monkeypatch):
+def _filter_route_client(tmp_path, monkeypatch, extra_signals=()):
     """[FLOW-017] 필터 검사용. 거래 넷을 만드는 순서가 곧 서버 목록 순서다."""
     from services.kr_market_backtest_kpi_helpers import paginate_items
 
@@ -215,6 +215,7 @@ def _filter_route_client(tmp_path, monkeypatch):
         {"id": "t1", "outcome": "LOSS", "grade": "A"},
         {"id": "t2", "outcome": "WIN", "grade": "A"},
         {"id": "t3", "outcome": "OPEN", "grade": "B"},
+        *extra_signals,
     ]
     deps = {
         "build_ai_analysis_payload_for_target_date": lambda **_k: {"signals": []},
@@ -271,7 +272,25 @@ def test_cumulative_route_counts_the_whole_list_regardless_of_filter(tmp_path, m
         "total": 4,
         "outcome": {"WIN": 2, "LOSS": 1, "OPEN": 1},
         "grade": {"S": 1, "A": 2, "B": 1, "D": 0},
+        "other": 0,
     }
+
+
+def test_cumulative_route_counts_grades_outside_the_known_set_as_other(tmp_path, monkeypatch):
+    """[FLOW-019] 등급 집합 밖의 거래는 other 로 세어 칩 합이 전체와 맞는다."""
+    client = _filter_route_client(
+        tmp_path,
+        monkeypatch,
+        extra_signals=[
+            {"id": "t4", "outcome": "LOSS", "grade": "C"},
+            {"id": "t5", "outcome": "WIN", "grade": None},
+        ],
+    )
+
+    counts = client.get("/api/kr/closing-bet/cumulative").get_json()["counts"]
+
+    assert counts["other"] == 2
+    assert sum(counts["grade"].values()) + counts["other"] == counts["total"] == 6
 
 
 def test_cumulative_route_rejects_unknown_filter_values(tmp_path, monkeypatch):

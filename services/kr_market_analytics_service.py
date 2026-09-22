@@ -34,6 +34,16 @@ from services.kr_market_backtest_summary_cache import (
 )
 
 
+# 종가베팅 통계의 모집단 규칙([FLOW-019]). 세 화면의 기준을 여기 한 곳에 적는다.
+# - D 는 과거 등급이기도 하고, 읽기 경로의 재판정(app/routes/kr_market_jongga_grade_helpers.py)이 현행 기준
+#   미달 종목에 붙이는 표지이기도 하다. 재판정 결과가 결과 파일에 되써지면 새 D 가 생길 수 있다.
+# - 누적성과(/dashboard/kr/cumulative)는 결과 파일 전부를 읽고 D 를 포함한다([FLOW-013]).
+# - 백테스트 요약(/dashboard/kr 종가베팅 카드)은 파일명 기준 최근 JONGGA_SUMMARY_HISTORY_LIMIT 개 결과 파일만 읽고
+#   D 를 포함한다. 파일은 분석한 날에만 생기므로 거래일 수가 아니라 파일 개수다.
+#   이 값을 바꾸면 그 카드의 「최근 결과 파일 30개」 문구(frontend/src/app/dashboard/kr/page.tsx)도 함께 바꾼다.
+# - 종가베팅 화면(/dashboard/kr/closing-bet)은 매수 후보만 보이므로 D 를 목록과 일괄 매수에서 뺀다.
+JONGGA_SUMMARY_HISTORY_LIMIT = 30
+
 CHART_NUMERIC_COLUMNS = ["open", "high", "low", "close", "volume"]
 CHART_REQUIRED_COLUMNS = ["date", *CHART_NUMERIC_COLUMNS]
 _DATA_STATUS_CACHE: dict[
@@ -326,7 +336,7 @@ def build_backtest_summary_payload(
     cache_signature = build_backtest_summary_cache_signature(
         get_data_path=get_data_path,
         data_dir_getter=data_dir_getter,
-        history_limit=30,
+        history_limit=JONGGA_SUMMARY_HISTORY_LIMIT,
     )
     cached_payload = get_cached_backtest_summary(
         signature=cache_signature,
@@ -363,7 +373,7 @@ def build_backtest_summary_payload(
     try:
         history_payloads = [
             {**payload, "date": extract_stats_date_from_results_filename(path, payload.get("date", ""))}
-            for path, payload in load_jongga_result_payloads(30)
+            for path, payload in load_jongga_result_payloads(JONGGA_SUMMARY_HISTORY_LIMIT)
             if isinstance(payload, dict)
         ]
         try:

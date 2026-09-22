@@ -1115,6 +1115,7 @@ export default function KRMarketOverview() {
                   </div>
                 </>
               )}
+              <div className="mt-1 text-[10px] text-gray-600">최근 결과 파일 30개(분석한 날) 기준 · D 포함</div>
             </div>
           );
         })()}

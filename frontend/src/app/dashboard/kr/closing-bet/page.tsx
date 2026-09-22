@@ -897,7 +897,9 @@ export default function JonggaV2Page() {
   };
 
   const reportSignals = data?.signals ?? [];
-  const eligibleSignals = reportSignals.filter((signal) => signal.grade !== 'D');
+  // D 는 현행 기준 미달이거나 과거 등급이라 매수 후보에서 뺀다. 통계 화면은 포함한다(규칙: services/kr_market_analytics_service.py).
+  const eligibleSignals = reportSignals.filter((signal) => String(signal.grade || '').toUpperCase() !== 'D');
+  const excludedDCount = reportSignals.length - eligibleSignals.length;
 
   const getFilteredSignals = () => {
     return eligibleSignals.filter(s => {
@@ -1031,8 +1033,7 @@ export default function JonggaV2Page() {
       return;
     }
 
-    const sourceSignals = (data?.signals || []).filter((signal) => String(signal.grade || '').toUpperCase() !== 'D');
-    if (sourceSignals.length === 0) {
+    if (eligibleSignals.length === 0) {
       setAlertModal({
         isOpen: true,
         type: 'default',
@@ -1043,7 +1044,7 @@ export default function JonggaV2Page() {
     }
 
     const uniqueTargets = new Map<string, { ticker: string; name: string; price: number }>();
-    sourceSignals.forEach((signal) => {
+    eligibleSignals.forEach((signal) => {
       const ticker = signal.stock_code;
       if (!ticker || uniqueTargets.has(ticker)) return;
       const price = signal.current_price || signal.buy_price || signal.entry_price || 0;
@@ -1553,6 +1554,11 @@ export default function JonggaV2Page() {
         )}
       </div>
 
+      {excludedDCount > 0 && eligibleSignals.length > 0 && (
+        <p className="text-xs text-gray-500">
+          D등급(현행 기준 미달 또는 과거 등급) {excludedDCount}종목은 매수 대상이 아니어서 목록에서 제외했습니다. 누적성과 통계에는 포함됩니다.
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-6">
         {!data || displaySignals.length === 0 ? (
           <div className="bg-[#1c1c1e] rounded-2xl p-16 text-center border border-white/5 flex flex-col items-center">

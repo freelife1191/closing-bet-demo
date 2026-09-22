@@ -17,6 +17,7 @@ interface FilterCounts {
   total: number;
   outcome: Record<'WIN' | 'LOSS' | 'OPEN', number>;
   grade: Record<'S' | 'A' | 'B' | 'D', number>;
+  other?: number;
 }
 
 // Revised Interface matching API response
@@ -150,9 +151,9 @@ const TOOLTIP_CONTENT = {
     interpretation: "변동성이 클 수 있어 선별적인 접근이 필요합니다."
   },
   gradeD: {
-    title: "D등급 과거 기록",
-    desc: "현재 신규 매수 추천 대상이 아닌 과거 D등급 신호의 성과 기록입니다.",
-    criteria: "과거 등급 체계에서 수집된 기록",
+    title: "D등급 기록",
+    desc: "신규 매수 추천 대상이 아닌 D등급 신호의 성과 기록입니다.",
+    criteria: "과거 등급이거나 현행 기준 재판정에서 미달한 기록",
     interpretation: "성과 비교용으로만 확인하고 신규 진입 근거로 사용하지 마세요."
   },
   // --- Distribution ---
@@ -1149,6 +1150,12 @@ export default function CumulativeClientPage() {
           <GradeCard key={data.grade} data={data} />
         ))}
       </div>
+      <p className="text-xs text-gray-500">
+        전체 결과 파일에서 진입가가 있는 시그널을 셉니다. D(현행 기준 미달 또는 과거 등급)도 통계에 포함합니다(종가베팅 화면은 D 를 매수 목록에서 뺍니다).
+        {!!counts?.other && (
+          <span className="block text-amber-400">등급 집합 밖의 거래 {counts.other}건은 누적 추천수에만 포함됩니다.</span>
+        )}
+      </p>
 
       {/* DistributionBar */}
       <DistributionBar kpi={kpi} />

@@ -211,6 +211,8 @@ def _register_cumulative_performance_route(
                 "outcome": {key: sum(t.get("outcome") == key for t in trades) for key in _CUMULATIVE_OUTCOMES},
                 "grade": {key: sum(t.get("grade") == key for t in trades) for key in _CUMULATIVE_GRADES},
             }
+            # 등급 집합 밖의 거래(C·결측 등)는 누적 추천수에만 잡히므로 따로 세어 화면이 알린다.
+            counts["other"] = total - sum(counts["grade"].values())
             paginated_trades, pagination = deps["paginate_items"](filtered, page, limit)
 
             return jsonify({"kpi": kpi, "trades": paginated_trades, "pagination": pagination, "counts": counts})
