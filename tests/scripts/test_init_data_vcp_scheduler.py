@@ -870,3 +870,46 @@ def test_vcp_no_provider_result_does_not_log_save_success(monkeypatch, tmp_path)
     assert not any('분석 완료 및 저장' in message for message,level in logs)
     assert any('기존 캐시 유지' in message and level=='WARNING' for message,level in logs)
     assert not (tmp_path/'data/ai_analysis_results_20260219.json').exists()
+
+
+# [VCP-029] 세 번째 줄의 열 수가 헤더와 달라 pd.read_csv 가 ParserError 를 낸다.
+_RAGGED_LOG = (
+    "ticker,signal_date,status,score,is_vcp\n"
+    "005930,2026-09-19,OPEN,80,True\n"
+    "000660,2026-09-21,OPEN,81,True,extra,extra,extra\n"
+)
+
+
+def test_create_signals_log_keeps_unreadable_log_when_merge_fails(monkeypatch, tmp_path):
+    """[VCP-029] 기존 로그를 읽지 못해 병합에 실패하면 파일을 그대로 두고 실패를 돌려준다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    log_path = data_dir / "signals_log.csv"
+    log_path.write_text(_RAGGED_LOG, encoding="utf-8")
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _DummyScreener)
+
+    result = init_data.create_signals_log(target_date="2026-09-22", run_ai=False)
+
+    assert result is False
+    assert log_path.read_text(encoding="utf-8") == _RAGGED_LOG
+
+
+def test_create_signals_log_keeps_unreadable_log_when_cleanup_fails(monkeypatch, tmp_path):
+    """[VCP-029] 시그널이 없고 기존 로그를 읽지 못하면 빈 파일로 바꾸지 않고 실패를 돌려준다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    log_path = data_dir / "signals_log.csv"
+    log_path.write_text(_RAGGED_LOG, encoding="utf-8")
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _EmptyScreener)
+
+    result = init_data.create_signals_log(target_date="2026-09-22", run_ai=False)
+
+    assert result is False
+    assert log_path.read_text(encoding="utf-8") == _RAGGED_LOG
+    latest = json.loads((data_dir / "vcp_signals_latest.json").read_text(encoding="utf-8"))
+    assert latest["date"] == "2026-09-22"
+    assert latest["signals"] == []

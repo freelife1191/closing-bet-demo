@@ -1606,8 +1606,10 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     
                     df_combined.to_csv(file_path, index=False, encoding='utf-8-sig')
                 except Exception as e:
-                    log(f"기존 로그 병합 실패: {e}, 새로 생성합니다(덮어쓰기).", "WARNING")
-                    df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
+                    # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 시그널은 CSV 에 남지 않으므로
+                    # 실패로 돌려주고, 파일은 운영자가 이 경고를 보고 손본다.
+                    log(f"기존 로그 병합 실패: {e}. {file_path} 를 보존하고 오늘 자 결과를 저장하지 않습니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
+                    return False
             else:
                 df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
 
@@ -1617,6 +1619,7 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             log("VCP 조건 충족 종목 없음", "WARNING")
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
             current_date = str(target_date or datetime.now().strftime('%Y-%m-%d'))
+            cleaned = True
             if os.path.exists(file_path):
                 try:
                     existing_df = pd.read_csv(file_path, dtype={'ticker': str, 'signal_date': str})
@@ -1624,22 +1627,24 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                         existing_df = existing_df[existing_df['signal_date'].astype(str) != current_date]
                     existing_df.to_csv(file_path, index=False, encoding='utf-8-sig')
                 except Exception as e:
-                    log(f"기존 VCP 로그 정리 실패: {e}, 빈 로그로 초기화합니다.", "WARNING")
-                    pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')
+                    # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 옛 행을 걷어내지 못했으므로 실패로 돌려준다.
+                    log(f"기존 VCP 로그 정리 실패: {e}. {file_path} 를 보존합니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
+                    cleaned = False
             else:
                 pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')
             _write_vcp_signals_latest_payload(
                 target_date=target_date,
                 signals=[],
             )
-            log("VCP 조건 충족 종목 없음 - 빈 결과 저장", "INFO")
-            return True
+            if cleaned:
+                log("VCP 조건 충족 종목 없음 - 빈 결과 저장", "INFO")
+            return cleaned
             
     except Exception as e:
         log(f"VCP 분석 실패: {e}", "WARNING")
         # 누적 로그는 건드리지 않는다. 예외 한 번에 지난 날짜의 행까지 지우면 화면의
         # 최신 저장분 대체와 히스토리가 함께 사라진다([VCP-028]). 파일이 없을 때만
-        # 정상 갈래와 같은 열의 빈 파일을 만든다.
+        # 「시그널 없음」 갈래와 같은 23개 열의 빈 파일을 만든다.
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
         if not os.path.exists(file_path):
             pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')

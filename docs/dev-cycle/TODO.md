@@ -133,6 +133,18 @@
 - QA 시나리오: 오래된 날짜의 활동 로그 파일을 만들어 두고 기동하면 기준 기간이 지난 파일이 사라지며, 새로 만들어진 데이터베이스 파일의 권한이 0600 이다.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
 
+### [VCP-029] VCP 로그의 병합·정리 실패 갈래 두 곳이 누적 이력을 덮어쓴다
+- 카테고리: VCP 시그널 | 티어: T3 (등록 때 T1 로 적었으나 `scripts/init_data.py` 는 `tier-rules.md` §2 「스케줄러와 데이터 적재」 위험 경로라 한 줄이라도 T3) | 근거: 2026-09-22 `[VCP-028]` 완료 뒤 「덮어쓰기가 남아 있는가」 재점검에서 발견. `scripts/init_data.py` 의 `create_signals_log` 에는 `[VCP-028]` 이 고친 바깥 예외 갈래 말고도 기존 파일을 버리는 안쪽 갈래가 둘 남아 있다. (가) 시그널이 있을 때 기존 로그와 병합하는 `try`(`:1578-1607`)가 실패하면 `:1610` 이 오늘 자 `df_new` 만 써서 지난 날짜 행이 사라진다(로그 문구도 「새로 생성합니다(덮어쓰기)」). (나) 시그널이 없을 때 오늘 자 행을 걷어내는 `try`(`:1621-1625`)가 실패하면 `:1628` 이 빈 파일을 쓴다(「빈 로그로 초기화합니다」). 두 갈래 모두 기존 CSV 를 `pd.read_csv` 로 읽거나 정리하다가 예외가 날 때만 들어가므로 `[VCP-028]` 보다 문턱은 높지만, 결과는 같은 전량 소실이고 `data/` 에는 백업이 없다.
+- 범위: 두 갈래에서 기존 파일을 건드리지 않고 경고 로그와 반환값만 남긴다(`[VCP-028]` 의 예외 갈래와 같은 계약). 병합에 실패하면 오늘 자 시그널이 CSV 에 남지 않으므로 반환값을 `False` 로 바꿀지 설계에서 정한다. 기존 CSV 읽기에 예외를 주입하는 회귀 테스트 두 건.
+- 설계 승인: 2026-09-22 17:0x. 범위는 두 `except` 본문과 회귀 테스트 2건. 근거는 이 대화에서 사용자가 「승인」이라 답한 뒤 AskUserQuestion 「VCP-029 설계」에서 추천안 「두 갈래 모두 False」를 고른 것이다. 설계 제시 때 T1 이라 말했으나 위험 경로라 T3 로 바로잡았고, 변경 범위는 같다.
+- QA 시나리오: 과거 날짜 행이 있는 사본을 두고 `pd.read_csv` 가 예외를 내게 한 뒤 두 갈래를 각각 부르면 사본의 행 수와 md5 가 그대로다.
+- [x] 설계 승인(bounded): 위 「설계 승인」 줄
+- [x] 계획 검토: `docs/superpowers/plans/2026-09-22-vcp029-signals-log-preserve.md` 를 `oh-my-claudecode:critic`(`vcp029-plan-critic`)에 검토. 판정 ACCEPT-WITH-RESERVATIONS(R1-R8). 반영: R1 QA 스크립트의 f-string 구문 오류, R2 호출자 서술(CLI 두 명령과 verify 스크립트 둘 추가), R3 데이터 갱신 화면의 「VCP Signals」 항목이 error 로 바뀌는 동작을 제약과 QA S-4 에 추가, R5 S-3 단언을 과거 행 기준으로, R6 `data/` 전체 스냅샷 비교, R7 정리 실패 때 성공처럼 읽히는 INFO 로그 생략, R8 커밋 메시지 형식. R4 의 0바이트 파일 회복은 `[VCP-030]` 으로 등록
+- [x] 구현·RED→GREEN: 새 테스트 2건이 종전 코드에서 `assert True is False` 로 실패하는 것을 확인한 뒤 구현(구현 diff +11 -6, 테스트 +43). 모듈 22 통과
+- [x] `/ponytail-review` → `/code-review` → `/review`: ponytail-review(자체 검토, 자를 것 없음 「Lean already. Ship.」) · code-review(feature-dev:code-reviewer `vcp029-reviewer`, APPROVE, 지적 0) · review(oh-my-claudecode:critic `vcp029-deep-review`, ACCEPT-WITH-RESERVATIONS: MAJOR 2 / MINOR 4. m1 두 WARNING 에 `file_path` 와 다음 행동 추가, m2 `[VCP-028]` 주석의 「정상 갈래」를 「시그널 없음」 갈래로 정정. M1 Refresh VCP 의 False → success 표시는 `[VCP-031]` 등록, M2 손상 파일 회복 경로 부재와 m4 0바이트 때 데이터 상태 화면의 「오늘」 표시는 `[VCP-030]` 범위 확장으로 이월. m3 결측 ticker 중복 제거는 확신도 낮음·현실 경로 없음으로 기록만)
+- [x] 정적 검증: `pytest -q -p no:cacheprovider` 2582 통과 2 skipped(직전 2580 + 신규 2, exit 0) · `npx vitest run` 87 파일 655 통과(exit 0)
+- [ ] QA: `/qa-only` 계획 → 첫 커밋 → `/qa` 실행, 기록은 `docs/dev-cycle/qa/VCP-029.md`
+
 ## P2 — 대기
 
 ### [FE-047] 루트 레이아웃의 `lang` 을 한국어로 바로잡는다
@@ -173,3 +185,20 @@
 - 범위: 레거시 스냅샷 동기화, LRU 캐시와 파일 서명 판정, 델타 장부를 각각 분리. 기존 공개 메서드 시그니처와 기존 테스트 16건 통과 유지.
 - QA: 대화 생성·메시지 송수신·삭제 후 새로고침 → 목록과 본문이 조작한 대로 남는다.
 - [ ] 설계 승인 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA
+
+### [JONGGA-040] 종가베팅 결과를 저장한 뒤 `jongga_v2_latest.json` 을 비원자적으로 한 번 더 쓴다
+- 카테고리: 종가베팅 | 티어: T1 | 근거: 2026-09-22 저장 경로 재점검. `engine/generator.py:170` 의 `run_screener` 가 `save_result_to_json` 으로 일자 파일과 최신 파일을 `atomic_write_text` 로 이미 쓰는데, 스케줄러 진입 함수 `scripts/init_data.py:1685-1687` 의 `create_jongga_v2_latest` 가 같은 내용을 `open(..., 'w')` 로 최신 파일에 다시 쓴다. `services/kr_market_route_service.py:103` 과 `services/kr_market_jongga_runtime_service.py:128` 도 `run_screener` 뒤에 `save_result_to_json` 을 한 번 더 부른다. 두 번째 쓰기 도중 프로세스가 죽으면 최신 파일만 잘린 채 남고, `kr_market_data_cache_core.py:229` 의 `json.load` 가 예외를 내므로 「최신」 조회가 다음 저장 때까지 실패한다. 일자 파일은 온전해 이력은 잃지 않는다.
+- 범위: 중복 쓰기 세 곳을 지운다. `create_jongga_v2_latest` 가 파일을 직접 열지 않는 것을 고정하는 회귀 테스트 한 건.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] QA
+
+### [VCP-030] `signals_log.csv` 쓰기를 원자적으로 바꾸고 0바이트 파일에서 회복한다
+- 카테고리: VCP 시그널 | 티어: T3 (`scripts/init_data.py` 위험 경로) | 근거: `[VCP-029]` 계획 검토(oh-my-claudecode:critic, 2026-09-22) R4. `create_signals_log` 의 `to_csv` 세 곳은 파일을 자르고 쓰므로 중간에 죽으면 잘린 파일이나 0바이트 파일이 남는다. `[VCP-029]` 뒤에는 0바이트 파일에서 `pd.read_csv` 가 `EmptyDataError` 를 내어 이후 모든 실행이 「보존 + False」 갈래로 빠진다. 스케줄러 ERROR 로그는 남지만 운영자가 손보기 전까지 오늘 자 시그널이 저장되지 않는다. 종전 코드는 덮어쓰기로 스스로 회복하던 자리였다. `[JONGGA-040]` 의 형제 항목이다.
+- 함께(`[VCP-029]` 심층 리뷰 M2·m4): 손상은 0바이트만이 아니다. 열 수가 다른 행이 든 파일은 쓰는 쪽(`scripts/init_data.py:1580`, 전체 열 읽기)만 `ParserError` 로 막히고, 화면 쪽(`services/kr_market_vcp_payload_service.py:169-173`, `app/routes/kr_market_data_signals_routes.py:65-71`, `usecols` 읽기)은 예외 없이 보존된 행을 계속 보이므로 막힌 상태가 화면에 드러나지 않고 그날 자 옛 행이 남아 있으면 최신 대체가 그것을 오늘 자로 계속 노출한다. 0바이트일 때는 `_extract_csv_data_date` 가 `None` 을 돌려주고 `services/common_data_status_service.py:71` 이 `vcp_signals_latest.json`(세 실패 갈래가 모두 `date=오늘` 로 씀)으로 대체해 데이터 상태 화면이 「오늘」로 보인다.
+- 범위: CSV 를 임시 파일에 쓴 뒤 교체하는 방식으로 바꾸고(`services/kr_market_data_cache_service.py` 의 `atomic_write_text` 재사용 가능 여부를 설계에서 본다), 파싱에 실패한 파일의 회복 경로를 정한다(0바이트·헤더뿐인 파일은 「기존 로그 없음」으로, 열 수가 어긋난 파일은 원본을 `.corrupt-<시각>` 으로 옮겨 보존한 뒤 새로 시작하는 안을 설계에서 본다). 쓰는 쪽과 읽는 쪽의 관용도 차이를 설계에 적는다. 회귀 테스트 세 건.
+- [ ] 설계 승인(bounded) - [ ] 계획 검토 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA
+
+### [VCP-031] 「Refresh VCP」가 시그널 저장 실패를 「완료: 조건 충족 종목 없음」 성공으로 보인다
+- 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-029]` 심층 리뷰(oh-my-claudecode:critic, 2026-09-22) M1. `services/kr_market_vcp_background_service.py:78-86` 은 `create_signals_log` 의 반환값이 `False` 면 `elif result_df:` 를 통과하지 못하고 else 로 떨어져 `status="success"` 와 「완료: 조건 충족 종목 없음」을 세운다. `[VCP-028]`·`[VCP-029]` 뒤에는 스크리너 예외, 병합 실패, 정리 실패가 전부 `False` 이므로 시그널이 실제로 있었는데 저장만 실패한 경우까지 관리자는 성공 상태를 본다. 유일한 흔적은 `logs/backend.log` 의 WARNING 한 줄이다. `:78` 의 `isinstance(result_df, pd.DataFrame)` 은 죽은 분기다(`create_signals_log` 는 DataFrame 을 돌려주는 갈래가 없다). 같은 파일 `:82` 의 `elif result_df:` 갈래도 함께 본다.
+- 범위: `False` 를 `status="error"` 와 실패 문구로 옮기고 죽은 분기를 지운다. 종전처럼 「조건 충족 종목 없음」은 `True` 이면서 최신 payload 의 시그널이 0건일 때만 보인다. 회귀 테스트 두 건(False → error, True + 0건 → 종전 문구).
+- QA 시나리오: 손상 사본을 둔 격리 백엔드에서 「Refresh VCP」 를 누르면 상태창이 error 와 실패 문구를 보인다. 원본 `data/` 에서는 실행하지 않는다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
