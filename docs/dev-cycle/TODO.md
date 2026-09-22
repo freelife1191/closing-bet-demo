@@ -51,15 +51,14 @@
 - [x] v2 잔여분 구현(2026-09-22): 유닛 두 개를 서버본 그대로 교체. 지난 편입본은 세 군데 어긋나 있었다(U4 journal 선채택, frontend `After=closing-bet-backend.service` 추가, `Environment=PATH=` 누락). U4 는 미채택으로 확정하고 근거를 유닛 주석과 README 에 기록. 계약 테스트에서 journal 단언 제거. `.gitignore` 계약 테스트(`git check-ignore`) 추가. `deploy/caddy/README.md` 의 적용 절차가 서버 Caddyfile 전체를 덮어써 다른 사이트 블록을 지우는 결함을 발견해 블록 단위 반영으로 정정. `deploy/systemd/README.md` 에 「유닛을 내리고 스크립트로 운영하기」 절차와 그 대가(재부팅·크래시 시 자동 기동 없음) 기록.
 - [x] macOS 실기동(2026-09-22 08:26, Darwin 25.5, bash 5.3): 떠 있던 서비스(PID 52504·52719)를 `./restart_all.sh` 가 정상 종료 → 의존성 확인(변경 없음) → 재기동해 9초 만에 `🎉 Ready!` exit 0. backend `/api/kr/market-gate` 200, frontend `/` 200, 두 프로세스 모두 자기 프로세스 그룹 리더(setsid 분리 확인). `./stop_all.sh` 3초 만에 exit 0, 두 포트 비고 PID 파일 삭제, 작업 트리 변화 없음. `sync_dependencies.sh` 의 macOS 구문 문제 없음.
 - [x] v2 잔여분 리뷰: 별도 레인 둘(feature-dev:code-reviewer APPROVE + 낮은 확신도 3건, oh-my-claudecode:code-reviewer CHANGES REQUESTED M1~M4·N1~N9). 두 레인 모두 회신이 유실되어 subagents 기록에서 결과를 읽음. M1(`StartLimitBurst=0` 통과)·M2(`0s`·`0sec`·`0min` 통과)는 단언 보강, M3(backend 유닛의 StartLimit 주석이 systemd 동작과 다름)은 주석 정정 후 README 에 의도한 차이로 기록, M4(Caddy 절차의 대조 단계 부재)는 블록 단위 diff 스니펫 추가(가짜 다중 사이트 파일로 동작 확인). N1(`check-ignore -q` 가 전역 excludes 도 통과)은 `-v` 와 `.gitignore:` 접두 단언으로, N2·N3·N5·N7·N8·N9 반영, N4 는 해당 유닛 내용이 저장소에 없어 재작성 지침만 기록, N6 은 `[INFRA-076]` 에 이관. 첫 리뷰어의 `list-units` GC 시점 관찰은 `list-unit-files` 로, Caddyfile 헤더 주석의 「사본」 표현은 「기준본」으로 정정. 변이 8종(StartLimit 7 + 전역 excludes 1) 실패·원본 통과. 재판정 APPROVE. 후속 권고 F1(대조 스니펫 후행 공백)·F2(블록 순서 안내)·F3(oneshot 유닛에 `RemainAfterExit=yes` 필요)·F4(줄 수 표기)·F5(서버 파일 읽기에 sudo) 모두 반영. 최종 `pytest -q` 2560 통과 2 skip, `tests/scripts/` 129 통과.
+- [x] 유닛 파일 삭제(2026-09-22, 사용자 지시 「지워」): 서버에서 유닛을 완전히 제거했으므로 `deploy/systemd/*.service` 두 개와 유닛 계약 테스트를 지움. 마지막 판은 커밋 `13952d9`. `deploy/systemd/README.md` 는 입양 검사 설명, 스크립트 운영의 대가, 「유닛을 다시 만든다면」 규칙(U1~U5 와 리뷰 N6 의 교훈), B5 기록, U6 판단만 남김. `.env.example` 의 FLASK_HOST 주석과 `deploy/caddy/README.md` 의 유닛 참조를 정리. 리뷰(oh-my-claudecode:code-reviewer) CHANGES REQUESTED → D1(node 위치·`%h/n/bin/npm`)·D2(`After=` 금지)·D3(lingering)·B2(로그인 셸 PATH 는 미실측 가설로 되돌리고 확인 명령 복원) 반영, C1(`restart_all.sh` 의 `--bind` 기본값 loopback 을 텍스트 단언으로 고정, 변이 2종 실패)·C2(미사용 `import re`)·B1(`busctl` 유효값 확인)·B3(StartLimit 옛 이름 호환)·D4(`reset-failed`) 반영. 재판정 APPROVE, E1~E3(수치·줄 폭·표현) 반영. 유닛 계약 테스트 하나를 빼고 loopback 단언 하나를 더해 전체 pytest 는 2560 통과 2 skip 그대로.
 
 
-### [INFRA-076] 운영 유닛의 환경 주입과 프로덕션 서빙 방식 정리
+### [INFRA-076] 프로덕션 서빙 방식 정리(U6)
 - 카테고리: 인프라 | 티어: T2 | 근거: `[INFRA-075]` 에서 이월. 상세는 `deploy/systemd/README.md` 의 「남아 있는 판단 사항」
-- 선행 조건: 운영 서버에서 systemd 를 실제로 돌려 확인할 수 있을 때 착수한다. 로컬에서는 검증할 수 없다. 2026-09-22 에 운영자가 유닛을 내리고 `restart_all.sh` 로 운영하기로 했으므로, 아래 U6 은 그대로 유효하고(`restart_all.sh` 도 `run-next.js dev` 로 띄운다) 나머지 세 항목은 유닛을 다시 쓸 때만 해당한다.
-- [ ] U6: 프로덕션이 Next dev 서버로 서빙 중이다. `npm run build` 를 배포 절차에 넣고 `npm run start` 로 바꾼다. 빌드 실패 시의 처리를 함께 정한다.
-- [ ] 두 유닛이 `set -a; . ./.env` 로 `.env` 를 셸로 읽는다. 실제로 쓰는 값은 `FLASK_PORT` 와 `FRONTEND_PORT` 하나씩뿐이고, Flask 는 `load_dotenv()`, Next 는 `@next/env` 로 각자 읽으므로 나머지는 중복이다(`scripts/env_value.sh` 주석). `EnvironmentFile=` 은 인라인 주석을 떼지 않아 대안이 아니다. `scripts/env_value.sh` 를 쓰거나 포트만 주입한다. `/bin/bash -lc` 도 함께 걷어낸다. 그 로그인 셸 때문에 frontend 유닛의 `Environment=PATH=` 는 `/etc/profile` 에 덮여 듣지 않을 가능성이 크다(리뷰 N6, `systemd-run --user --wait --pipe -p 'Environment=PATH=/tmp' /bin/bash -lc 'echo $PATH'` 로 확인).
-- [ ] frontend 유닛의 `/home/ms/n/bin/npm` 절대 경로를 `%h/n/bin/npm` 으로 바꾼다.
-- [ ] 두 유닛의 `After=`·`Wants=network-online.target` 이 사용자 매니저에 없는 유닛을 가리킨다. 지우거나 사용자 매니저에서 쓸 수 있는 대상으로 바꾼다.
+- 선행 조건: 운영 서버의 기동 명령을 바꾸는 일이라 운영자 협조와 서버에서의 실측이 필요하다. 로컬에서는 검증할 수 없다.
+- 2026-09-22 에 운영자가 systemd 유닛을 서버에서 완전히 제거하고 `restart_all.sh` 로 운영하므로, 원래 함께 있던 유닛 전용 세 항목(`.env` 셸 source 제거, npm 절대 경로, `network-online.target`)은 이 항목에서 뺐다. 유닛을 다시 만들 때 지킬 규칙은 같은 README 의 「유닛을 다시 만든다면」에 있다.
+- [ ] U6: 프로덕션이 Next dev 서버로 서빙 중이다(`restart_all.sh` 가 `run-next.js dev` 로 띄운다). `npm run build` 를 배포 절차에 넣고 `npm run start` 로 바꾼다. 빌드 실패 시의 처리를 함께 정하고, `next start` 에서 rewrites·NextAuth 콜백·`run-next.js` 의 production 환경 필터가 dev 와 같은 값을 내는지와 Caddy 뒤 로그인 흐름을 실측한다. 되돌리기는 기동 명령을 `dev` 로 돌리는 것이다.
 
 
 ## P1 — 이번 주기

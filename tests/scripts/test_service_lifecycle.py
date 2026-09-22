@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """재시작 수명주기가 다른 서비스나 실패한 기동을 성공으로 숨기지 않는지, 그리고 편입한 운영
-설정(systemd 유닛·Caddyfile·.gitignore)이 사고를 부른 설정으로 되돌아가지 않는지 검사한다."""
+설정(Caddyfile·.gitignore)이 사고를 부른 설정으로 되돌아가지 않는지 검사한다."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
@@ -40,6 +39,14 @@ def test_restart_stops_verified_services_before_mutating_shared_dependencies() -
     restart = (ROOT / "restart_all.sh").read_text(encoding="utf-8")
 
     assert restart.index("stop_managed_services") < restart.index("sync_dependencies.sh")
+
+
+def test_restart_binds_gunicorn_to_loopback_unless_env_overrides() -> None:
+    """운영 기동 경로가 스크립트뿐이므로 --bind 의 기본값이 loopback 계약의 마지막 방어선이다."""
+    restart = (ROOT / "restart_all.sh").read_text(encoding="utf-8")
+
+    assert 'FLASK_HOST=${_env_flask_host:-${FLASK_HOST:-127.0.0.1}}' in restart
+    assert '--bind "${FLASK_HOST}:$FLASK_PORT"' in restart
 
 
 def test_restart_never_reports_ready_before_backend_and_frontend_probes_pass() -> None:
@@ -121,48 +128,6 @@ def test_restart_and_stop_propagate_supervisor_refusal_without_success_message(
         assert "systemctl --user restart closing-bet-frontend.service" in result.stderr, entrypoint
         assert "🎉 Ready!" not in result.stdout, entrypoint
         assert "종료되었습니다" not in result.stdout, entrypoint
-
-
-def test_repository_systemd_units_drop_the_settings_that_caused_the_restart_loop() -> None:
-    """운영 유닛 파일이 포트 경쟁·잠금 삭제·무한 재시작을 다시 만들지 않는다.
-
-    서버본과 같아야 하므로 로그 위치(U4)는 단언하지 않는다. 근거는 유닛 파일의 [U4 미채택] 주석에 있다.
-    """
-    units = sorted((ROOT / "deploy" / "systemd").glob("*.service"))
-
-    assert [unit.name for unit in units] == [
-        "closing-bet-backend.service",
-        "closing-bet-frontend.service",
-    ]
-    for unit in units:
-        text = unit.read_text(encoding="utf-8")
-        # 설명 주석이 아니라 실제로 systemd 가 읽는 설정 줄만 본다.
-        directives = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
-        assert not [line for line in directives if line.startswith("ExecStartPre=")], unit.name
-        assert not [line for line in directives if re.search(r"rm\s+-f.*scheduler\.lock", line)], unit.name
-        assert not [line for line in directives if "ln -sf" in line], unit.name
-        # Interval 과 Burst 중 어느 쪽이든 0 이면 systemd 가 상한을 끈다. 0 은 단위 접미사
-        # (0s·0sec·0min)를 붙여도 0 이고, infinity 도 같은 뜻이다.
-        assert not [
-            line
-            for line in directives
-            if re.fullmatch(r"StartLimitIntervalSec=\s*(0+\s*[a-z]*|infinity)", line.strip())
-        ], unit.name
-        bursts = [
-            int(m.group(1))
-            for line in directives
-            if (m := re.fullmatch(r"StartLimitBurst=\s*(\d+)", line.strip()))
-        ]
-        assert bursts and min(bursts) >= 1, (unit.name, bursts)
-    backend = [
-        line
-        for line in (ROOT / "deploy" / "systemd" / "closing-bet-backend.service")
-        .read_text(encoding="utf-8")
-        .splitlines()
-        if not line.lstrip().startswith("#")
-    ]
-    assert [line for line in backend if "--bind 127.0.0.1:" in line]
-    assert not [line for line in backend if "0.0.0.0" in line]
 
 
 def test_repository_caddyfile_compresses_sets_security_headers_and_hides_port_80() -> None:
