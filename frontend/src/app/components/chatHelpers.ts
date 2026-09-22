@@ -46,6 +46,32 @@ export function getAuthHeaders(): Record<string, string> {
   };
 }
 
+// 스트림이 아닌 챗봇 응답의 본문. 백엔드는 실패 사유를 `error` 에 적는다.
+export interface ChatJsonResponse {
+  response?: string;
+  error?: string;
+  session_id?: string;
+}
+
+// `text/event-stream` 이 아닌 응답을 읽는다. Next 프록시가 upstream 소켓을 끊으면
+// `Internal Server Error` 평문을 500 으로 보내므로, JSON 이 아니면 SyntaxError 문구 대신
+// 상태 코드가 담긴 사유를 만든다. 두 챗봇 화면이 같은 분기를 갖고 있어 한 곳에 둔다.
+export async function readChatJsonResponse(res: Response): Promise<ChatJsonResponse> {
+  try {
+    return await res.json();
+  } catch {
+    return { error: `서버 응답을 받지 못했습니다 (HTTP ${res.status}). 잠시 후 다시 시도해주세요.` };
+  }
+}
+
+const STREAM_CUT_NOTICE = '⚠️ 응답이 중간에 끊겼습니다. 잠시 후 다시 시도해주세요.';
+
+// 스트림이 `done`·`error` 없이 끝났을 때 받은 본문 뒤에 붙인다. 안내가 없으면 잘린
+// 답변이 완성된 것처럼 남는다.
+export function appendStreamCutNotice(text: string): string {
+  return text ? `${text}\n\n${STREAM_CUT_NOTICE}` : STREAM_CUT_NOTICE;
+}
+
 // 저장된 프로필이 없을 때 화면이 그리는 폴백. 서버 렌더와 첫 클라이언트 렌더가 같은 값을
 // 그리도록 `useState` 의 초기값으로도 쓴다.
 export interface UserProfile {

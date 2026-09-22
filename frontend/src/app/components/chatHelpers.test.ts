@@ -7,6 +7,8 @@ import {
   resolveUserProfile,
   setStoredModel,
   saveUserProfile,
+  readChatJsonResponse,
+  appendStreamCutNotice,
 } from './chatHelpers';
 
 describe('shouldSendOnEnter', () => {
@@ -147,5 +149,40 @@ describe('saveUserProfile', () => {
     }) as unknown as Response));
 
     await expect(saveUserProfile('홍길동', 'hong@example.com', '')).rejects.toThrow('HTTP 500');
+  });
+});
+
+// [CHAT-036] 스트림이 아닌 챗봇 응답 본문 읽기
+describe('readChatJsonResponse', () => {
+  it('JSON 본문은 그대로 돌려준다', async () => {
+    const res = { status: 200, json: async () => ({ response: '답변' }) } as unknown as Response;
+
+    expect(await readChatJsonResponse(res)).toEqual({ response: '답변' });
+  });
+
+  it('평문 500 은 SyntaxError 대신 상태 코드가 담긴 오류 문구가 된다', async () => {
+    // Next 프록시가 upstream 소켓을 끊으면 `Internal Server Error` 평문을 500 으로 보낸다.
+    const res = {
+      status: 500,
+      json: async () => { throw new SyntaxError(`Unexpected token 'I', "Internal S"... is not valid JSON`); },
+    } as unknown as Response;
+
+    const data = await readChatJsonResponse(res);
+
+    expect(data.error).toContain('HTTP 500');
+    expect(data.response).toBeUndefined();
+  });
+});
+
+describe('appendStreamCutNotice', () => {
+  it('받은 본문이 있으면 그 뒤에 안내를 붙인다', () => {
+    const text = appendStreamCutNotice('부분 답변');
+
+    expect(text.startsWith('부분 답변')).toBe(true);
+    expect(text).toContain('응답이 중간에 끊겼습니다');
+  });
+
+  it('받은 본문이 없으면 안내만 남긴다', () => {
+    expect(appendStreamCutNotice('').startsWith('⚠️')).toBe(true);
   });
 });

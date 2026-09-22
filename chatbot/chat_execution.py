@@ -9,11 +9,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
+from engine.llm_analyzer_retry import RetryConfig
+
 from .response_flow import (
     build_fallback_models,
     extract_usage_metadata,
     friendly_error_message,
-    is_retryable_stream_error,
     stream_with_fallback_models,
     sync_stream_with_final_response,
 )
@@ -41,22 +42,13 @@ def run_non_stream_response(
             return bot_response, usage_metadata
         except Exception as error:
             last_error = error
-            if is_retryable_stream_error(str(error)):
+            if RetryConfig.is_retryable_error(str(error)):
                 continue
             raise
 
     if last_error is not None:
         raise last_error
     raise RuntimeError("No available model for non-stream response")
-
-
-def _build_stream_fallback_error(error_msg: str) -> str:
-    if is_retryable_stream_error(error_msg):
-        return (
-            "⚠️ 서버 통신 지연이 발생했습니다. 잠시 후 다시 시도해주세요. "
-            f"(상세: {error_msg})"
-        )
-    return friendly_error_message(error_msg, "⚠️ 스트리밍 응답 처리 오류: ")
 
 
 def run_stream_response(
@@ -93,7 +85,12 @@ def run_stream_response(
             logger=logger,
         )
         if fallback_error:
-            return None, usage_metadata, _build_stream_fallback_error(fallback_error)
+            # 여기 오는 오류는 모두 재시도 대상이었다(아니면 위에서 raise 된다). 마지막
+            # 오류의 상태 코드로 문구를 고르고, 코드가 없을 때만 원문을 붙인다([CHAT-036]).
+            return None, usage_metadata, friendly_error_message(
+                fallback_error,
+                "⚠️ 서버 통신 지연이 발생했습니다. 잠시 후 다시 시도해주세요. 상세: ",
+            )
 
         normalized_response = yield from sync_stream_with_final_response(
             bot_response=bot_response,

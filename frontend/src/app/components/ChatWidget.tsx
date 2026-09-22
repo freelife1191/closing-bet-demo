@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ThinkingProcess from './ThinkingProcess';
-import { getAuthHeaders, getStoredModel, shouldSendOnEnter } from './chatHelpers';
+import { appendStreamCutNotice, getAuthHeaders, getStoredModel, readChatJsonResponse, shouldSendOnEnter } from './chatHelpers';
 
 interface Message {
   role: 'user' | 'model';
@@ -349,18 +349,23 @@ export default function ChatWidget() {
           }
         }
 
-        // Safety net: stream 종료 이벤트 누락 시에도 상태 복구
+        // Safety net: done·error 없이 끝난 스트림은 중간에 끊긴 것이다. 잘린 답변이
+        // 완성된 것처럼 남지 않게 안내를 붙인다.
         setMessages(prev => {
           if (prev.length === 0) return prev;
           const next = [...prev];
           const last = next[next.length - 1];
           if (last?.role === 'model' && last?.isStreaming) {
-            next[next.length - 1] = { ...last, isStreaming: false };
+            next[next.length - 1] = {
+              ...last,
+              parts: [appendStreamCutNotice(last.parts[0] ?? '')],
+              isStreaming: false,
+            };
           }
           return next;
         });
       } else {
-        const data = await res.json();
+        const data = await readChatJsonResponse(res);
 
         if (res.status === 401 || res.status === 402) {
           setMessages(prev => [...prev, { role: 'model', parts: [`⚠️ ${data.error}`] }]);
@@ -369,8 +374,9 @@ export default function ChatWidget() {
         }
 
         if (data.response) {
-          setMessages(prev => [...prev, { role: 'model', parts: [data.response] }]);
-          if (!data.response.startsWith('⚠️')) {
+          const responseText = data.response;
+          setMessages(prev => [...prev, { role: 'model', parts: [responseText] }]);
+          if (!responseText.startsWith('⚠️')) {
             window.dispatchEvent(new CustomEvent('quota-updated'));
           }
         } else if (data.error) {

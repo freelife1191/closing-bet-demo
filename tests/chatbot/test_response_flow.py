@@ -18,7 +18,6 @@ from chatbot.response_flow import (
     build_fallback_models,
     extract_usage_metadata,
     friendly_error_message,
-    is_retryable_stream_error,
     stream_single_model_response,
     stream_with_fallback_models,
     sync_stream_with_final_response,
@@ -75,17 +74,48 @@ def test_friendly_error_message_maps_rate_limit_and_api_key_errors():
     assert "AI 서버 인증 오류" in key_msg
 
 
+def test_friendly_error_message_maps_server_errors_by_leading_status_code():
+    # [CHAT-036] google-genai APIError 는 "<code> <status>. <details>" 형식이다.
+    internal = friendly_error_message(
+        "500 INTERNAL. {'error': {'code': 500, 'message': 'Internal error encountered.', 'status': 'INTERNAL'}}",
+        default_prefix="prefix:",
+    )
+
+    assert "AI 서버 일시 장애" in internal
+    assert "prefix:" not in internal
+
+
+def test_friendly_error_message_ignores_status_like_digits_inside_details():
+    # [CHAT-036] 세부 문구의 16400 이 "400" 부분 문자열에 걸려 인증 오류로 오분류되던 회귀
+    message = friendly_error_message(
+        "503 UNAVAILABLE. {'message': 'max_output_tokens=16400'}",
+        default_prefix="prefix:",
+    )
+
+    assert "인증 오류" not in message
+    assert "AI 서버 일시 장애" in message
+
+
+def test_friendly_error_message_maps_vertex_auth_failures_and_keeps_unknown_errors():
+    assert "AI 서버 인증 오류" in friendly_error_message(
+        "401 UNAUTHENTICATED. {'error': {'status': 'UNAUTHENTICATED'}}",
+        default_prefix="prefix:",
+    )
+    assert "AI 서버 인증 오류" in friendly_error_message(
+        "403 PERMISSION_DENIED. {'error': {'status': 'PERMISSION_DENIED'}}",
+        default_prefix="prefix:",
+    )
+    # 상태 코드가 없는 일반 예외는 접두사와 원문을 그대로 돌려준다.
+    assert friendly_error_message("connection reset", default_prefix="prefix:") == (
+        "prefix:connection reset"
+    )
+
+
 def test_build_fallback_models_starts_with_target_and_deduplicates():
     models = build_fallback_models("gemini-3.7-flash")
     assert models[0] == "gemini-3.7-flash"
     assert models.count("gemini-3.7-flash") == 1
     assert "gemini-2.5-flash" in models
-
-
-def test_is_retryable_stream_error_detects_known_patterns():
-    assert is_retryable_stream_error("503 UNAVAILABLE")
-    assert is_retryable_stream_error("429 Resource exhausted")
-    assert not is_retryable_stream_error("permission denied")
 
 
 def test_stream_single_model_response_emits_reasoning_and_answer_chunks():
@@ -173,6 +203,33 @@ class _FakeChats:
 class _FakeClient:
     def __init__(self, model_behaviors):
         self.chats = _FakeChats(model_behaviors)
+
+
+def test_stream_with_fallback_models_treats_500_internal_as_retryable():
+    # [CHAT-036] 500 INTERNAL 은 503 과 같은 일시 장애다. 다음 모델로 넘어가야 한다.
+    model_behaviors = {
+        "gemini-3.7-flash": RuntimeError(
+            "500 INTERNAL. {'error': {'code': 500, 'message': 'Internal error encountered.', 'status': 'INTERNAL'}}"
+        ),
+        "gemini-3.5-flash-lite": [SimpleNamespace(text="[답변]\n복구 응답")],
+    }
+    fake_client = _FakeClient(model_behaviors)
+
+    gen = stream_with_fallback_models(
+        active_client=fake_client,
+        target_model_name="gemini-3.7-flash",
+        api_history=[],
+        content_parts=["hello"],
+        session_id="s1",
+        user_id="u1",
+        logger=logging.getLogger("test.response_flow"),
+    )
+    events, result = _drain_generator(gen)
+    bot_response, _reasoning, _answer, _usage, fallback_error = result
+
+    assert events[0] == {"clear": True, "session_id": "s1"}
+    assert fallback_error is None
+    assert "복구 응답" in bot_response
 
 
 def test_stream_with_fallback_models_retries_then_succeeds():

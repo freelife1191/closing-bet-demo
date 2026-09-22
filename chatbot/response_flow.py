@@ -12,7 +12,6 @@ from .response_flow_errors import (
     build_fallback_models,
     extract_usage_metadata,
     friendly_error_message,
-    is_retryable_stream_error,
 )
 from .response_flow_fallback import (
     stream_with_fallback_models,
@@ -27,7 +26,6 @@ __all__ = [
     "extract_usage_metadata",
     "friendly_error_message",
     "build_fallback_models",
-    "is_retryable_stream_error",
     "yield_stream_deltas",
     "stream_single_model_response",
     "stream_with_fallback_models",

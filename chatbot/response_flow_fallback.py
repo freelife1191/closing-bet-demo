@@ -9,8 +9,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
+from engine.llm_analyzer_retry import RetryConfig
+
 from .markdown_utils import _extract_reasoning_and_answer
-from .response_flow_errors import build_fallback_models, is_retryable_stream_error
+from .response_flow_errors import build_fallback_models
 from .response_flow_stream import stream_single_model_response
 
 
@@ -45,7 +47,9 @@ def stream_with_fallback_models(
             return bot_response, streamed_reasoning, streamed_answer, usage_metadata, None
         except Exception as e:
             last_error = str(e)
-            if is_retryable_stream_error(last_error):
+            # 재시도 판정은 engine 의 것 하나만 쓴다. 챗봇 쪽 판정기가 따로 있던 동안
+            # 500 INTERNAL 이 여기서만 재시도 대상이 아니었다([CHAT-036]).
+            if RetryConfig.is_retryable_error(last_error):
                 logger.warning(
                     "[User: %s] %s Error (retryable). Details: %s",
                     user_id,

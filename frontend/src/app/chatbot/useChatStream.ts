@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getAuthHeaders } from '../components/chatHelpers';
+import { appendStreamCutNotice, getAuthHeaders, readChatJsonResponse } from '../components/chatHelpers';
 import { getMessagePartText, type Message } from './chatMessageParser';
 
 export interface StreamEvent {
@@ -283,8 +283,8 @@ export function useChatStream({
           }
         }
 
-        // Safety net: if stream closed without explicit done event,
-        // ensure the last placeholder message does not remain in streaming state.
+        // Safety net: 정상 종료는 done 이나 error 이벤트가 isStreaming 을 끈다. 여기까지
+        // 켜져 있으면 프록시나 네트워크가 스트림을 중간에 끊은 것이므로 그렇게 알린다.
         if (!isCurrentRequest()) return;
         setMessages(prev => {
           if (!isCurrentRequest()) return prev;
@@ -292,15 +292,21 @@ export function useChatStream({
           const next = [...prev];
           const last = next[next.length - 1];
           if (last?.role === 'model' && last?.isStreaming) {
-            next[next.length - 1] = { ...last, isStreaming: false };
+            next[next.length - 1] = {
+              ...last,
+              parts: [appendStreamCutNotice(getMessagePartText(last.parts[0]))],
+              isStreaming: false,
+            };
           }
           return next;
         });
       } else {
-        const data = await res.json();
+        const data = await readChatJsonResponse(res);
         if (!isCurrentRequest()) return;
 
         if (data.response) {
+          // 콜백 안에서는 프로퍼티 좁히기가 풀리므로 값을 먼저 잡아 둔다.
+          const responseText = data.response;
           if (data.session_id && data.session_id !== streamSessionRef.current) {
             if (!streamOwnsVisibleSession()) return;
             streamSessionRef.current = data.session_id;
@@ -310,7 +316,7 @@ export function useChatStream({
           onSessionsShouldRefresh();
           setMessages(prev => (
             isCurrentRequest() && streamOwnsVisibleSession()
-              ? [...prev, { role: 'model', parts: [data.response] }]
+              ? [...prev, { role: 'model', parts: [responseText] }]
               : prev
           ));
         } else if (data.error) {

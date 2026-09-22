@@ -123,6 +123,32 @@ def test_run_non_stream_response_retries_with_fallback_on_retryable_error():
     assert usage_metadata["total_token_count"] == 2
 
 
+def test_run_non_stream_response_retries_with_fallback_on_500_internal():
+    # [CHAT-036] 비스트림 경로도 스트림 폴백과 같은 판정을 쓴다.
+    recovered = SimpleNamespace(text="복구 응답", usage_metadata=None)
+    client = _FakeClient(
+        _FakeChats(
+            non_stream_behaviors={
+                "gemini-3.7-flash": RuntimeError(
+                    "500 INTERNAL. {'error': {'code': 500, 'status': 'INTERNAL'}}"
+                ),
+                "gemini-3.5-flash-lite": recovered,
+            }
+        )
+    )
+
+    bot_response, usage_metadata = run_non_stream_response(
+        active_client=client,
+        target_model_name="gemini-3.7-flash",
+        api_history=[],
+        content_parts=["msg"],
+        normalize_response=lambda text: text,
+    )
+
+    assert bot_response == "복구 응답"
+    assert usage_metadata == {}
+
+
 def test_run_stream_response_retries_and_returns_success():
     client = _FakeClient(
         _FakeChats(
@@ -213,4 +239,29 @@ def test_run_stream_response_returns_user_friendly_error_when_all_fallbacks_fail
     assert len(events) >= 1
     assert bot_response is None
     assert usage_metadata == {}
-    assert "서버 통신 지연" in stream_error
+    # [CHAT-036] 모두 소진되면 마지막 오류의 상태 코드로 문구를 고른다. 원문 JSON 을 붙이지 않는다.
+    assert "AI 서버 일시 장애" in stream_error
+    assert "HTTP 503" in stream_error
+
+
+def test_run_stream_response_keeps_detail_when_exhausted_error_has_no_status_code():
+    client = _FakeClient(
+        _FakeChats(default_stream_behavior=RuntimeError("model overloaded"))
+    )
+
+    gen = run_stream_response(
+        active_client=client,
+        target_model_name="gemini-3.7-flash",
+        api_history=[],
+        content_parts=["msg"],
+        session_id="s1",
+        user_id="u1",
+        logger=logging.getLogger("test.chat_execution"),
+        normalize_response=lambda text: text,
+    )
+    _events, result = _drain_generator(gen)
+    _bot_response, _usage_metadata, stream_error = result
+
+    assert stream_error == (
+        "⚠️ 서버 통신 지연이 발생했습니다. 잠시 후 다시 시도해주세요. 상세: model overloaded"
+    )

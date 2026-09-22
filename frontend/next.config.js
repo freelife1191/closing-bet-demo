@@ -21,6 +21,14 @@ const nextConfig = {
       },
     ];
   },
+  experimental: {
+    // 위 rewrite 로 Flask 에 중계할 때 Next 가 upstream 소켓에 거는 무활동 제한(ms).
+    // 기본 30초는 챗봇이 종목·뉴스 문맥을 모으고 Gemini 첫 토큰을 기다리는 침묵보다
+    // 짧아서, 스트림이 시작되기 전에 소켓을 끊고 평문 `Internal Server Error` 500 을
+    // 보냈다([CHAT-036]). gunicorn 의 `--timeout 120` 과 같은 값이다.
+    // ponytail: 침묵이 이 값에 가까워지면 SSE 하트비트(`: ping`)를 더한다
+    proxyTimeout: 120_000,
+  },
   transpilePackages: ['react-markdown', 'remark-gfm'],
   logging: {
     fetches: {

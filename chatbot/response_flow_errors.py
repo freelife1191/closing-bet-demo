@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from engine.llm_analyzer_retry import build_model_chain
@@ -25,8 +26,14 @@ def extract_usage_metadata(response: Any) -> Dict[str, int]:
 
 def friendly_error_message(error_msg: str, default_prefix: str) -> str:
     """사용자 친화 에러 메시지 변환."""
+    # google-genai 의 APIError 는 "<code> <status>. <details>" 로 문자열화된다. 판정은 이 맨 앞
+    # 코드로 한다. `"400" in error_msg` 같은 부분 문자열 검사는 details 에 낀 숫자
+    # (max_output_tokens=16400 등)에 걸려 오분류된다([CHAT-036]).
+    match = re.match(r"\s*(\d{3})\b", error_msg or "")
+    code = int(match.group(1)) if match else None
+
     if (
-        "429" in error_msg
+        code == 429
         or "Resource exhausted" in error_msg
         or "RESOURCE_EXHAUSTED" in error_msg
     ):
@@ -37,8 +44,9 @@ def friendly_error_message(error_msg: str, default_prefix: str) -> str:
             "💡 사용량이 자주 초과되면 관리자에게 문의해 주세요."
         )
 
+    # Vertex 서비스 계정 인증 실패는 401·403 으로 온다. API 키 문구는 종전 경로의 호환이다.
     if (
-        "400" in error_msg
+        code in (401, 403)
         or "API_KEY_INVALID" in error_msg
         or "API key not valid" in error_msg
     ):
@@ -47,6 +55,13 @@ def friendly_error_message(error_msg: str, default_prefix: str) -> str:
             "Vertex AI 서비스 계정 인증에 문제가 발생했습니다.\n"
             "관리자에게 문의해 주세요.\n"
             "(Google Cloud 서비스 일시 장애일 수도 있습니다.)"
+        )
+
+    if code is not None and code >= 500:
+        return (
+            "⚠️ **AI 서버 일시 장애**\n\n"
+            f"AI 서버가 요청을 처리하지 못했습니다 (HTTP {code}).\n"
+            "**잠시 후 다시 시도해주세요.**"
         )
 
     return f"{default_prefix}{error_msg}"
@@ -66,21 +81,8 @@ def build_fallback_models(target_model_name: str) -> List[str]:
     return build_model_chain(target_model_name, CHATBOT_STREAM_FALLBACK_CHAIN)
 
 
-def is_retryable_stream_error(error_msg: str) -> bool:
-    """스트리밍 폴백 재시도 가능 에러인지 판별한다."""
-    error_upper = error_msg.upper()
-    return (
-        "503" in error_msg
-        or "UNAVAILABLE" in error_upper
-        or "429" in error_msg
-        or "RESOURCE EXHAUSTED" in error_upper
-        or "RESOURCE_EXHAUSTED" in error_upper
-    )
-
-
 __all__ = [
     "extract_usage_metadata",
     "friendly_error_message",
     "build_fallback_models",
-    "is_retryable_stream_error",
 ]
