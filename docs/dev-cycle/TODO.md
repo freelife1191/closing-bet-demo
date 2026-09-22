@@ -133,6 +133,16 @@
 - QA 시나리오: 오래된 날짜의 활동 로그 파일을 만들어 두고 기동하면 기준 기간이 지난 파일이 사라지며, 새로 만들어진 데이터베이스 파일의 권한이 0600 이다.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
 
+### [VCP-028] VCP 스캔이 예외로 끝나면 `signals_log.csv` 의 누적 이력을 빈 파일로 덮어쓴다
+- 카테고리: VCP 시그널 | 티어: T2 (계획 T1, 구현 파일 diff 65줄로 상향) | 근거: 2026-09-22 「최신 저장분이 화면에 보이지 않는다」 조사 중 코드에서 발견. `scripts/init_data.py` 의 `create_signals_log` 마지막 `except Exception` 갈래(`:1674` 의 `df.to_csv`)는 열 13개짜리 빈 DataFrame 을 `data/signals_log.csv` 에 그대로 써서, 스크리너 생성·모델 초기화·`_write_vcp_signals_latest_payload` 등 try 안 어디서든 예외가 나면 그날까지 쌓인 모든 날짜의 행이 사라진다. 같은 함수의 정상 갈래(「VCP 조건 충족 종목 없음」, `:1608-1645`)는 오늘 자 행만 지우고 나머지를 보존하므로 두 갈래의 계약이 어긋난다. 빈 파일의 열 목록에는 `vcp_score`·`is_vcp`·`current_price`·`ai_*`·`return_pct`·`exit_*`·`hold_days` 가 없어 정상 갈래의 23개 열과도 다르다.
+- 문제: `[VCP-026]` 의 「최신 저장분 대체」와 히스토리 드롭다운은 이 파일의 과거 행에 기대므로, 예외 한 번이면 화면의 VCP 이력 전체가 비고 복구 수단이 없다(`data/` 는 백업이 없다). 스케줄러가 매 개장일 17시에 이 함수를 부르므로 노출 기회가 매일 있다.
+- 범위: 예외 갈래에서 기존 파일을 건드리지 않고 `_write_vcp_signals_latest_payload(signals=[])` 와 `False` 반환만 남긴다. 파일이 없을 때만 정상 갈래와 같은 23개 열의 빈 파일을 만든다. 스크리너 생성에 예외를 주입해 기존 행이 보존되는지 고정하는 회귀 테스트 한 건.
+- QA 시나리오: 과거 날짜 행이 있는 사본을 작업 디렉터리로 삼고 스크리너 생성이 예외를 내게 한 뒤 함수를 부르면, 반환값은 `False` 이고 사본의 행 수와 열 목록이 그대로다.
+- [x] 설계 승인(bounded): AskUserQuestion 「VCP-028 설계」 추천안 승인(2026-09-22 15:0x)
+- [x] 구현·RED→GREEN: 새 테스트 2건이 종전 코드에서 실패(행 소실, 열 13개)하는 것을 확인한 뒤 구현. 관련 5개 모듈 51 통과
+- [x] `/ponytail-review` → `/code-review`: ponytail-review(자체 검토, 23개 열 목록을 상수 하나로 모으고 예외 갈래의 13개 열 목록 삭제, 구현 파일 순 -29줄) · code-review(feature-dev:code-reviewer `vcp028-reviewer`, APPROVE. 리뷰어가 `git stash` 로 종전 코드에서 두 테스트의 실패를 직접 재현한 뒤 원복). 전체 pytest 2580 통과 2 skipped · vitest 655 통과
+- [x] QA: `docs/dev-cycle/qa/VCP-028.md` 필수 2/2 · 인접 1/1 통과 (원본 사본 + 예외 주입 재현, 원본 md5 무변경)
+
 ## P2 — 대기
 
 ### [FE-047] 루트 레이아웃의 `lang` 을 한국어로 바로잡는다

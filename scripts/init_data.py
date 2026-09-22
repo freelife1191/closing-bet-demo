@@ -1324,6 +1324,16 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
         return False
 
 
+# signals_log.csv 의 열 목록. 시그널이 없을 때와 예외로 끝났을 때 만드는 빈 파일이 같은
+# 열을 갖도록 한 곳에 둔다([VCP-028]).
+_SIGNALS_LOG_COLUMNS = [
+    'ticker', 'name', 'signal_date', 'market', 'status', 'score', 'grade', 'contraction_ratio',
+    'entry_price', 'foreign_5d', 'inst_5d', 'foreign_1d', 'inst_1d', 'vcp_score', 'is_vcp',
+    'current_price', 'ai_action', 'ai_confidence', 'ai_reason', 'return_pct', 'exit_price',
+    'exit_date', 'hold_days',
+]
+
+
 def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_limit=None):
     """VCP 시그널 로그 생성 - Using SmartMoneyScreener (engine.screener)"""
     log("VCP 시그널 분석 중 (SmartMoneyScreener)...")
@@ -1607,31 +1617,6 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             log("VCP 조건 충족 종목 없음", "WARNING")
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
             current_date = str(target_date or datetime.now().strftime('%Y-%m-%d'))
-            empty_columns = [
-                'ticker',
-                'name',
-                'signal_date',
-                'market',
-                'status',
-                'score',
-                'grade',
-                'contraction_ratio',
-                'entry_price',
-                'foreign_5d',
-                'inst_5d',
-                'foreign_1d',
-                'inst_1d',
-                'vcp_score',
-                'is_vcp',
-                'current_price',
-                'ai_action',
-                'ai_confidence',
-                'ai_reason',
-                'return_pct',
-                'exit_price',
-                'exit_date',
-                'hold_days',
-            ]
             if os.path.exists(file_path):
                 try:
                     existing_df = pd.read_csv(file_path, dtype={'ticker': str, 'signal_date': str})
@@ -1640,9 +1625,9 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     existing_df.to_csv(file_path, index=False, encoding='utf-8-sig')
                 except Exception as e:
                     log(f"기존 VCP 로그 정리 실패: {e}, 빈 로그로 초기화합니다.", "WARNING")
-                    pd.DataFrame(columns=empty_columns).to_csv(file_path, index=False, encoding='utf-8-sig')
+                    pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')
             else:
-                pd.DataFrame(columns=empty_columns).to_csv(file_path, index=False, encoding='utf-8-sig')
+                pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')
             _write_vcp_signals_latest_payload(
                 target_date=target_date,
                 signals=[],
@@ -1652,31 +1637,17 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             
     except Exception as e:
         log(f"VCP 분석 실패: {e}", "WARNING")
-        # 빈 결과 파일 생성 (샘플 데이터 생성 안함)
-        df = pd.DataFrame(
-            columns=[
-                'ticker',
-                'name',
-                'signal_date',
-                'market',
-                'status',
-                'score',
-                'grade',
-                'contraction_ratio',
-                'entry_price',
-                'foreign_5d',
-                'inst_5d',
-                'foreign_1d',
-                'inst_1d',
-            ]
-        )
+        # 누적 로그는 건드리지 않는다. 예외 한 번에 지난 날짜의 행까지 지우면 화면의
+        # 최신 저장분 대체와 히스토리가 함께 사라진다([VCP-028]). 파일이 없을 때만
+        # 정상 갈래와 같은 열의 빈 파일을 만든다.
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
-        df.to_csv(file_path, index=False, encoding='utf-8-sig')
+        if not os.path.exists(file_path):
+            pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')
         _write_vcp_signals_latest_payload(
             target_date=target_date,
             signals=[],
         )
-        log("VCP 분석 오류 - 빈 결과 저장", "INFO")
+        log("VCP 분석 오류 - 기존 로그 보존, 빈 최신 결과 저장", "INFO")
         return False
 
 

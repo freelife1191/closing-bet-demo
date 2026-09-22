@@ -368,6 +368,46 @@ def test_create_signals_log_returns_false_on_exception(monkeypatch, tmp_path):
     assert result is False
 
 
+def test_create_signals_log_keeps_existing_log_on_exception(monkeypatch, tmp_path):
+    """[VCP-028] 예외로 끝나도 그동안 쌓인 signals_log.csv 는 그대로 남아야 한다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    seeded = pd.DataFrame(
+        [
+            {"ticker": "005930", "signal_date": "2026-09-19", "status": "OPEN", "score": 80, "is_vcp": True},
+            {"ticker": "000660", "signal_date": "2026-09-21", "status": "OPEN", "score": 81, "is_vcp": True},
+        ]
+    )
+    seeded.to_csv(data_dir / "signals_log.csv", index=False)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _FailingScreener)
+
+    result = init_data.create_signals_log(target_date="2026-09-22", run_ai=False)
+
+    assert result is False
+    log_df = pd.read_csv(data_dir / "signals_log.csv", dtype={"ticker": str})
+    assert log_df["signal_date"].tolist() == ["2026-09-19", "2026-09-21"]
+    assert log_df.columns.tolist() == seeded.columns.tolist()
+
+
+def test_create_signals_log_creates_full_column_log_on_exception_without_file(monkeypatch, tmp_path):
+    """[VCP-028] 파일이 없을 때의 빈 로그는 정상 갈래와 같은 열 목록이어야 한다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _FailingScreener)
+
+    result = init_data.create_signals_log(target_date="2026-09-22", run_ai=False)
+
+    assert result is False
+    log_df = pd.read_csv(data_dir / "signals_log.csv")
+    assert log_df.empty
+    assert len(log_df.columns) == 23
+    assert {"is_vcp", "vcp_score", "hold_days"} <= set(log_df.columns)
+
+
 def test_create_signals_log_persists_only_vcp_screening_results(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
