@@ -3,15 +3,15 @@
 - 대상 화면: 없음. `scripts/service_lifecycle.sh` 를 쓰는 `./restart_all.sh`·`./stop_all.sh` 의 CLI 흐름
 - 구성 근거: TODO 의 QA 줄(하네스 회귀 2건 + macOS 실기동 1회) + 이번 변경 두 파일
   (`scripts/service_lifecycle.sh`, `tests/scripts/test_lifecycle_adversarial.py`)
-- 구성 2026-09-22 23:20 | 실행 (기록 전)
+- 구성 2026-09-22 23:20 | 실행 2026-09-22 23:24
 - QA 엔진(engine): Claude Code. 하네스는 pytest, 실기동은 저장소의 두 진입점 스크립트
-- 단계(phase): 시나리오 구성 완료 | 실행 전
+- 단계(phase): 시나리오 구성 완료 | 실행 완료
 - 반복(iteration): 1회
 - baseline 상태: 로컬 3500·5501 모두 비어 있고 `logs/*.pid` 없음(2026-09-22 23:06 `lsof` 확인)
 - 필수 여부(required): 예
-- 결과: (기록 전)
-- 증거: (기록 전)
-- 정리(cleanup): (기록 전)
+- 결과: 통과 5/5
+- 증거: 이 문서의 시나리오별 명령 출력. S-4 의 원문 로그는 scratchpad `infra077-s4/{restart,stop}.log`(세션 임시)
+- 정리(cleanup): S-4 뒤 두 포트 비어 있고 PID 파일 없음. 작업 트리에 QA 흔적 없음(`git status --short` 공백)
 - browser_applicability: not-applicable. 화면 없이 셸 스크립트만 바뀌었고 사용자 진입 흐름은
   터미널 명령이다. browser_driver: none
 - 읽은 정본: `.claude/skills/closing-bet-python/SKILL.md`, `.claude/skills/closing-bet-verify/SKILL.md`
@@ -62,9 +62,13 @@
   `http://localhost:3500/` 200. `stop_all.sh` exit 0, 출력에 `❌` 와 새 `⚠️ … KILL 로 올립니다` 줄이
   없음(정상 TERM 종료), 두 포트 비어 있음, `logs/backend.pid`·`logs/frontend.pid` 삭제.
 - 필수 여부(required): 예
-- 실제: (기록 전)
-- 결과: (기록 전)
-- 증거: (기록 전)
+- 실제: 2026-09-22 23:24:44 시작, 두 포트 리스너 0 확인 후 `./restart_all.sh` exit 0(7초, 의존성 변경 없음, `🎉 Ready!`,
+  backend PID 40273·frontend PID 40455). `curl` 결과 backend `/api/kr/market-gate` 200, frontend `/` 200, PID 파일 둘 존재.
+  `./stop_all.sh` exit 0(3초). 출력은 `🛑 관리 대상 서비스 종료: 3500 / 5501` → frontend·backend 「정상 종료합니다」 →
+  `✅ 이 프로젝트가 관리하던 서비스가 종료되었습니다` 네 줄이며 `❌`·`⚠️` 없음. 종료 뒤 리스너 0, PID 파일 둘 없음,
+  `git status --short` 공백.
+- 결과: 통과
+- 증거: 위 실측값. 정상 TERM 종료라 새 ⚠️ 줄이 찍히지 않는 것이 기대와 일치하고, 경합 경로 자체는 S-1·S-5 하네스가 증거다
 - 정리(cleanup): 사이클이 끝나면 서비스는 내려간 상태로 둔다
 
 ### S-5. `ps` 가 막힌 환경에서 시작한 자식의 정리가 `wait` 로 막히지 않는다 (회귀)
@@ -83,8 +87,15 @@
 
 ## 이월한 발견
 
-(기록 전)
+- 리뷰어(`infra077-reviewer`) 2차 low 1: `lifecycle_terminate_started_child` 끝의 판정에서 2(알 수 없음)가 `wait` 로 떨어지는
+  자리. TERM·KILL 대기 뒤라 방금 사라진 자식이 거의 전부이고 실패로 바꾸면 거짓 음성이 되살아나므로 미반영. 새 TODO 는 만들지
+  않는다.
+- `ps -o stat=` 과 `ps -o lstart=` 사이의 좁은 창은 PID 재사용 토큰 검증을 약화시켜야 닫히므로 알려진 천장으로
+  `deploy/systemd/README.md` 에 기록했다. 새 TODO 는 만들지 않는다.
 
 ## 실행 결과
 
-(기록 전)
+- 필수 시나리오: 통과 5 / 전체 5
+- 미통과 필수: 없음
+- 재개 판정: 완료 가능
+- 시나리오 밖에서 새로 발견: 없음
