@@ -69,20 +69,6 @@
 
 ## P1 — 이번 주기
 
-### [FLOW-019] 세 화면의 모집단 규칙을 맞추고 화면에 적는다
-- 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §2.2, §5.2. 누적성과 KPI(`kpi_helpers.py:31, 74`)는 D 등급을 포함하고(`[FLOW-013]` 의 의도적 결정), 종가베팅 화면(`closing-bet/page.tsx:899, 1033`)은 D 를 제외하며, 백테스트 요약(`kr_market_analytics_service.py:329, 366`)은 결과 파일을 최근 30개로 자르는데 누적성과는 전부 읽는다. 현행 판정기(`engine/grade_decider.py:55-67`)는 S·A·B 만 내므로 D 는 2월 자료 7건에만 있는 과거 등급이다. 파일이 30개를 넘으면 두 화면의 승률이 벌어진다(지금 18개). `Grade` 열거형의 C 가 저장 자료에 섞이면 누적 추천수에만 잡히고 어느 등급 카드에도 나타나지 않는다.
-- 연결(`[FLOW-017]` 리뷰 L4): 누적성과 버튼 `counts` 는 S·A·B·D 만 세므로 그 밖의 등급 거래는 `counts.total` 에만 잡혀 등급 칩 합과 「전체」 건수가 어긋난다. 등급 집합 밖의 값을 드러내는 처리에 이 칩도 포함한다.
-- 범위: 누적성과의 D 포함과 종가베팅 화면의 D 제외 가운데 기준을 정하고 한 자리에 기록, 30개 상한을 요약 화면에 기준 기간으로 표시, 등급 집합 밖의 값이 들어오면 카드 합과 누적 추천수의 불일치가 드러나게 처리, 그 일치를 고정하는 pytest 회귀 테스트.
-- QA: `/dashboard/kr/cumulative` 와 `/dashboard/kr/closing-bet` 을 차례로 열어 추천 건수와 승률을 읽는다 → 두 화면의 기준이 문구로 설명되고 D 취급이 일치한다. 브라우저 실측 required.
-- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 08:29
-  | 범위: 현행 모집단 유지(누적성과·요약은 D 포함, 종가베팅 화면은 D 제외)와 문구 명시, 요약 30개 상한 유지와 카드 표시, 규칙을 `kr_market_analytics_service.py` 상수 주석 한 곳에 기록, 누적성과 `counts.other` 와 안내 문구, pytest·vitest 회귀
-  | 실제 대화 근거: 2026-09-23 AskUserQuestion 응답 「현행 유지·문구 명시」「상한 유지·카드에 표시」, 대화 설계 제시 뒤 사용자 「진행해」
-- 티어 재판정: T2 (위험 경로 목록의 파일 없음). 읽은 정본: `.claude/skills/closing-bet-python/SKILL.md`, `.claude/skills/closing-bet-nextjs/SKILL.md`, `frontend-skills.md` §2, Next 번들 문서 `05-server-and-client-components.md`(순수 클라이언트 문구·조건부 렌더링 변경)
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN: 구현 전 pytest 2건(`counts.other` 신규, 기존 counts 동등 단언) 실패와 vitest 3건(누적성과 안내 두 건, 종가베팅 D 혼재 안내) 실패를 확인한 뒤 구현. 라우트 `counts.other`, `JONGGA_SUMMARY_HISTORY_LIMIT` 상수와 규칙 주석, 누적성과 모집단 문구, 대시보드 카드 「최근 30거래일 결과 기준 · 과거 등급 D 포함」, 종가베팅 D 제외 안내와 D 판정 대소문자 통일(목록과 일괄 매수가 같은 `eligibleSignals` 사용). GREEN: pytest 8 통과, vitest 4 통과
-- [x] `/ponytail-review` → `closing-bet-reviewer`: ponytail-review 1건(`counts && counts.other > 0` → `!!counts?.other`) 반영. closing-bet-reviewer(name `flow019-reviewer`) 1차 CHANGES_REQUIRED: MAJOR 1(「최근 30거래일」은 실제로 파일명 기준 파일 30개, 파일은 분석한 날에만 생김) → 카드 「최근 결과 파일 30개(분석한 날) 기준 · D 포함」과 주석 정정, MAJOR 2(「D 는 현행 판정기가 내지 않는 과거 등급」은 틀림, 읽기 경로 재판정 `kr_market_jongga_grade_helpers.py:138-146` 이 미달 종목에 D 를 붙이고 결과 파일에 되쓸 수 있음) → 세 화면 표기 「현행 기준 미달 또는 과거 등급」과 규칙 주석 두 줄, MINOR 4(진입가 없는 시그널 제외) → 문구 정정, NIT 5(`other?: number`)·NIT 6(전부 D 갈래 테스트) 반영. MINOR 3(소문자 d 가 누적성과에서 other 로 셈)은 미반영: 저장 자료 18개 파일에 소문자 등급이 없고 서빙 경로 재판정이 대문자로 정규화한다. 재판정 APPROVE, 남은 MINOR 1(D 등급 카드 설명이 「과거 기록」만 말함)은 문자열 정정으로 반영, NIT 2(감사 원문의 D 전제)는 아카이브에 정정 기록, NIT 3(ticker 없는 시그널 미언급)은 영향 없어 미반영
-- [ ] 정적 검증·QA: 전체 pytest 2631 통과 2 skip, vitest 94 파일 678 통과, type-check·eslint exit 0(ponytail 반영 전 기준). 리뷰 반영 뒤 dashboard/kr 관련 vitest 50 통과·cumulative 16 통과·type-check·lint exit 0. QA 문서 `docs/dev-cycle/qa/FLOW-019.md`
-
 ### [CHAT-032] 종목 질의 문맥이 언제나 비는 경로 복구
 - 카테고리: 챗봇 | 티어: T2 | 근거: AUDIT-CHAT(2차) §3.1. `get_chatbot()` 이 `data_fetcher` 없이 인스턴스를 만들고 운영 코드 어디서도 넘기지 않아 `get_cached_data` 가 항상 `fetch_mock_data()`(`vcp_stocks: []`)로 떨어진다. 그래서 `[종목 조회 컨텍스트]` 절, `## VCP 상위 종목` 절, 웰컴 메시지 Top 3, 관심종목 요약이 모두 죽어 있고, 웰컴 메시지가 예시로 드는 「삼성전자 어때?」도 페르소나만 남는다. VCP 상담 모드가 `[종목명(티커)]` 접두를 붙여 보내도 서버는 그 종목 자료를 싣지 않는다. 실제 종목 맵과 CSV 로 최근 5일 주가·수급·시그널 이력을 붙이는 `detect_stock_query_from_stock_map` 은 테스트만 부른다. `[CHAT-005]` 가 그 private 래퍼를 미사용으로 지웠으나 살아 있는 경로가 늘 빈 목록을 본다는 사실은 그때 다루지 않았다.
 - 범위: `_detect_stock_query` 를 `detect_stock_query_from_stock_map` 으로 연결, VCP 상담 모드의 선택 종목 문맥 확인(없으면 접두 파싱), `fetch_mock_data`·`detect_stock_query_from_vcp_data` 처리 방향 결정, 웰컴 Top 3 를 살릴지 문구에서 뺄지 결정, 종목명·티커 두 갈래의 문맥 주입 회귀 테스트.
@@ -171,3 +157,9 @@
 - 범위: 클라이언트 연결이 끊긴 뒤의 완료를 구분하는 방법 결정(닫힌 소켓 쓰기 실패 감지, `stream_with_context` 생성기의 `GeneratorExit`, 또는 `done` 이벤트가 실제로 쓰였을 때만 차감), 그 경우 차감을 건너뛰는 규칙과 테스트. 정상 도착 경로의 차감은 바꾸지 않는다.
 - QA: 격리 /chatbot 에서 첫 토큰이 130초 늦는 가짜 클라이언트로 전송 → 오류 문구가 뜬 뒤 「N회 남음」 이 줄지 않는다. 브라우저 실측 required.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [INFRA-080] Next rewrite 프록시가 gunicorn 요청을 ECONNRESET 으로 잃고 500 을 낸다
+- 카테고리: 인프라 | 티어: T2 | 근거: `[FLOW-019]` QA S-5 1회차(2026-09-23). 격리 환경(gunicorn `--workers 1 --threads 4`, Next dev)에서 종가베팅 화면 첫 로드 때 차트 요청 여러 개 가운데 `GET /api/kr/stock-chart/003160?period=1m&end=2026-09-21` 하나가 18ms 만에 500 이 되었고, Next 로그에 `Failed to proxy … Error: read ECONNRESET` 이 남았다. 같은 요청을 Flask 에 직접 보내면 200 이며, 이어진 다섯 번 로드에서는 재현되지 않았다. 원인은 미규명이다. gunicorn 의 keep-alive 기본값(2초)이 끝나 닫힌 연결을 프록시가 재사용하는 경합이 가설이며, 그렇다면 같은 구성인 운영에서도 드물게 차트나 API 요청 하나가 실패할 수 있다.
+- 범위: 먼저 재현 조건을 확정한다(유휴 시간 뒤 동시 요청, keep-alive 값 변화). 가설이 맞으면 `restart_all.sh` 의 gunicorn `--keep-alive` 를 Next 프록시의 유휴 연결 유지 시간보다 길게 두는 안과 재시도 안을 비교한다. 재현 스크립트나 회귀 테스트를 남긴다.
+- QA: 격리 환경에서 유휴 뒤 종가베팅 화면을 여러 번 열어도 5xx 와 ECONNRESET 이 없다. 브라우저 실측 required.
+- [ ] 재현·원인 확정 - [ ] 설계 승인(bounded) - [ ] 구현·검증 - [ ] QA
