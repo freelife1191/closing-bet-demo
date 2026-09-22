@@ -64,11 +64,11 @@ def _create_signal_dates_reader(
 
         dates: list[str] = []
         # 시그널 조회와 같은 판정을 걸어야 목록에 남은 날짜가 실제로 내용을 갖는다.
-        # 그래서 signal_date 만이 아니라 판정에 쓰는 세 열을 함께 읽는다.
+        # 그래서 signal_date 만이 아니라 판정에 쓰는 두 열을 함께 읽는다([VCP-032] 뒤 score 는 조건이 아니다).
         df = load_csv_readonly(
             load_csv_file,
             "signals_log.csv",
-            usecols=["signal_date", "status", "score", "is_vcp"],
+            usecols=["signal_date", "status", "is_vcp"],
         )
         if not df.empty and "signal_date" in df.columns:
             normalized_dates = [

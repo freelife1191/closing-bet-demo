@@ -20,7 +20,7 @@ from app.routes.kr_market_signal_common import (
 )
 from engine.config import config as signal_config
 from engine.pandas_utils_safe import safe_bool, safe_confidence, safe_optional_float
-from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
+from engine.screening_runtime import resolve_vcp_signals_to_show
 from engine.signal_tracker_ai_helpers import AI_PROMPT_NUMERIC_FIELDS
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
@@ -255,10 +255,11 @@ def _is_vcp_signal_row(row: Any) -> bool:
     날짜 목록과 시그널 조회는 같은 `signals_log.csv` 를 읽는다. 이 판정을 한쪽에만
     적용하면 목록에 있는 날짜를 눌러도 표가 비고, 화면은 그 이유를 알릴 방법이 없다.
     `[VCP-008]` 이 그 상태였다. 기준을 이 함수 하나에 둔다.
+
+    합산 점수는 조건이 아니다([VCP-032]). 스크리너가 패턴 통과 종목을 점수 순으로 저장하므로
+    여기서 점수를 다시 자르면 저장된 시그널이 화면에서 사라진다.
     """
     if str(_row_get(row, "status", "OPEN")) != "OPEN":
-        return False
-    if _safe_float(_row_get(row, "score", 0), default=0.0) < resolve_vcp_min_score(default=60.0):
         return False
     return safe_bool(_row_get(row, "is_vcp", False))
 

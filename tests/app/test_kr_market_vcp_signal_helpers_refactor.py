@@ -20,18 +20,22 @@ def test_sort_and_limit_vcp_signals_uses_runtime_limit_when_not_provided(monkeyp
     assert result[0]["score"] == 30
 
 
-def test_build_vcp_signal_from_row_respects_runtime_min_score(monkeypatch):
-    monkeypatch.setattr(vcp_helpers, "resolve_vcp_min_score", lambda **_kwargs: 70.0)
+def test_build_vcp_signal_from_row_keeps_low_score_vcp_row():
+    """[VCP-032] 합산 점수가 낮아도 OPEN 이고 is_vcp 면 화면에 노출한다. 점수는 정렬에만 쓴다."""
     row = {
         "ticker": "005930",
         "name": "삼성전자",
         "signal_date": "2026-02-24",
         "market": "KOSPI",
         "status": "OPEN",
-        "score": 69.9,
+        "score": 12.0,
+        "is_vcp": True,
     }
 
-    assert vcp_helpers._build_vcp_signal_from_row(row) is None
+    result = vcp_helpers._build_vcp_signal_from_row(row)
+
+    assert result is not None
+    assert result["score"] == 12.0
 
 
 def test_build_vcp_signal_from_row_requires_vcp_pattern():

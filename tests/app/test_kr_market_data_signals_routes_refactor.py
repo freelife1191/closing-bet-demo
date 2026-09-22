@@ -176,10 +176,10 @@ def test_vcp_status_route_reflects_scheduler_vcp_running(monkeypatch):
 
 
 def test_signal_dates_route_requests_only_signal_judgement_columns():
-    """날짜와 시그널 판정에 쓰는 세 열만 요청한다.
+    """날짜와 시그널 판정에 쓰는 두 열만 요청한다.
 
     판정 열이 늘어난 것은 `[VCP-008]` 때문이다. 날짜 목록이 시그널 조회와 같은
-    기준으로 걸러지려면 status·score·is_vcp 를 함께 읽어야 한다. 그래도 CSV 의
+    기준으로 걸러지려면 status·is_vcp 를 함께 읽어야 한다([VCP-032] 뒤 score 는 조건이 아니다). 그래도 CSV 의
     나머지 열은 읽지 않는다.
     """
     captured: dict[str, Any] = {}
@@ -212,7 +212,7 @@ def test_signal_dates_route_requests_only_signal_judgement_columns():
     assert response.get_json() == ["2026-02-21"]
     assert captured["name"] == "signals_log.csv"
     assert captured["kwargs"]["deep_copy"] is False
-    assert captured["kwargs"]["usecols"] == ["signal_date", "status", "score", "is_vcp"]
+    assert captured["kwargs"]["usecols"] == ["signal_date", "status", "is_vcp"]
 
 
 def test_signal_dates_route_normalizes_datetime_strings_and_deduplicates():
@@ -249,8 +249,9 @@ def test_signal_dates_route_normalizes_datetime_strings_and_deduplicates():
 def test_signal_dates_route_omits_dates_whose_rows_are_not_signals():
     """[VCP-008] 회귀: 목록에 남은 날짜는 그 날짜로 조회했을 때 반드시 시그널이 있다.
 
-    signals_log.csv 에 행이 있어도 status·score·is_vcp 판정에서 떨어지면 조회 결과가
+    signals_log.csv 에 행이 있어도 status·is_vcp 판정에서 떨어지면 조회 결과가
     비므로, 날짜 목록에도 그 날짜를 내보내지 않는다. 판정을 통과하는 날짜만 남는다.
+    합산 점수는 판정 조건이 아니다([VCP-032]). 낮은 점수의 OPEN·is_vcp 행도 시그널이다.
     """
 
     def _load_csv_file(_name: str, **_kwargs):
@@ -260,7 +261,7 @@ def test_signal_dates_route_omits_dates_whose_rows_are_not_signals():
                 {"signal_date": "2026-05-05", "status": "OPEN", "score": 82, "is_vcp": ""},
                 # 이미 종료된 시그널이다.
                 {"signal_date": "2026-04-04", "status": "CLOSED", "score": 90, "is_vcp": True},
-                # 최소 점수 60 에 못 미친다.
+                # 합산 점수가 낮아도 패턴을 통과한 OPEN 행은 시그널이다([VCP-032]).
                 {"signal_date": "2026-03-03", "status": "OPEN", "score": 41, "is_vcp": True},
                 {"signal_date": "2026-02-21", "status": "OPEN", "score": 85, "is_vcp": True},
             ]
@@ -284,7 +285,7 @@ def test_signal_dates_route_omits_dates_whose_rows_are_not_signals():
     response = client.get("/api/kr/signals/dates")
 
     assert response.status_code == 200
-    assert response.get_json() == ["2026-02-21"]
+    assert response.get_json() == ["2026-03-03", "2026-02-21"]
 
 
 def test_signals_route_count_callback_accepts_data_dir_argument():

@@ -769,7 +769,8 @@ def test_filter_signals_dataframe_by_date_normalizes_datetime_date_values():
     assert str(filtered_df.iloc[0]["ticker"]) == "1"
 
 
-def test_build_vcp_signals_from_dataframe_filters_closed_and_low_score():
+def test_build_vcp_signals_from_dataframe_filters_closed_but_keeps_low_score():
+    """종료된 행만 거른다. 합산 점수는 조건이 아니다([VCP-032])."""
     signals_df = pd.DataFrame(
         [
             {"ticker": "1", "status": "OPEN", "score": 70, "signal_date": "2026-02-21", "vcp_score": 6, "is_vcp": True},
@@ -780,9 +781,8 @@ def test_build_vcp_signals_from_dataframe_filters_closed_and_low_score():
 
     signals = _build_vcp_signals_from_dataframe(signals_df)
 
-    assert len(signals) == 1
-    assert signals[0]["ticker"] == "000001"
-    assert signals[0]["score"] == 70.0
+    assert [signal["ticker"] for signal in signals] == ["000001", "000003"]
+    assert [signal["score"] for signal in signals] == [70.0, 55.0]
 
 
 def test_build_ai_signals_from_jongga_results_include_without_ai_option():

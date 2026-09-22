@@ -83,3 +83,37 @@ def test_run_screening_counts_failed_stocks_against_max_stocks(monkeypatch):
 
     assert result.empty
     assert len(analyzed) == 2
+
+
+def test_run_screening_keeps_vcp_stock_below_composite_score(monkeypatch):
+    """[VCP-032] is_vcp=True 면 합산 점수가 낮아도 결과에 남고, 점수는 정렬에만 쓴다."""
+    screener = object.__new__(SmartMoneyScreener)
+    screener.stocks_df = pd.DataFrame(
+        [
+            {"ticker": "000001", "name": "수급약한VCP", "market": "KOSPI"},
+            {"ticker": "000002", "name": "수급중간VCP", "market": "KOSDAQ"},
+        ]
+    )
+    screener.prices_df = pd.DataFrame([{"ticker": "000001"}])
+    screener.inst_df = pd.DataFrame()
+    screener.target_date = None
+    screener.market_gate = SimpleNamespace(
+        analyze=lambda: {"status": "중립", "is_gate_open": True}
+    )
+
+    monkeypatch.setattr(SmartMoneyScreener, "_load_data", lambda _self: None)
+
+    def _fake_analyze(_self, stock):
+        return {
+            "ticker": stock["ticker"],
+            "name": stock["name"],
+            "score": 12 if stock["ticker"] == "000001" else 45,
+            "market": stock["market"],
+            "is_vcp": True,
+        }
+
+    monkeypatch.setattr(SmartMoneyScreener, "_analyze_stock", _fake_analyze)
+
+    result = screener.run_screening(max_stocks=10)
+
+    assert result["ticker"].tolist() == ["000002", "000001"]

@@ -86,7 +86,10 @@
 - 설계 승인: 2026-09-22 사용자 「진행해」 → AskUserQuestion 「VCP 설계」에서 「패턴 통과가 곧 시그널」 선택(bounded). `run_screening` 은 `is_vcp` 만 저장 조건으로 두고 합산 점수는 정렬과 상위 20 제한에만 쓴다. 화면 판정 `_is_vcp_signal_row` 에서도 점수 조건을 뺀다. `VCP_MIN_SCORE` 는 등급 산정(`scripts/init_data.py:1344`)에만 남긴다. 제시했던 대안: 문턱 60→30(40일 모두 1~28건, 총 437건), 60→35(34/40일, 총 191건). 선택한 안의 재현: 40일 모두 1~20건, 총 594건.
 - 범위: `engine/screener.py`(점수 게이트 제거), `app/routes/kr_market_vcp_signal_helpers.py`(`_is_vcp_signal_row` 점수 조건 제거), 관련 테스트(`tests/engine/test_screener_vcp_gate_refactor.py`, `tests/app/test_kr_market_vcp_signal_helpers_refactor.py`). `scripts/init_data.py` 는 건드리지 않는다.
 - QA 시나리오: 로컬 자료 격리 실행(`init_data.BASE_DIR` 교체)으로 `create_signals_log(run_ai=False)` 가 1건 이상 저장하고 `is_vcp`·`status`·`score` 가 화면 판정을 통과, 날짜 목록·「최신」 표에 표시, 0건인 날의 「오늘 기준 없음」 배너 유지. 원본 `data/` 는 읽기 전용.
-- [ ] 설계 승인(brainstorming) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+- [x] 설계 승인(bounded, 2026-09-22 AskUserQuestion 「패턴 통과가 곧 시그널」) - [x] 구현·RED→GREEN(`test_run_screening_keeps_vcp_stock_below_composite_score`·`test_build_vcp_signal_from_row_keeps_low_score_vcp_row` 2건 실패 → 통과. 옛 계약을 고정하던 `test_build_vcp_signal_from_row_respects_runtime_min_score` 는 새 검사로 대체, `..._filters_closed_and_low_score` 는 `..._filters_closed_but_keeps_low_score` 로, 날짜 목록 라우트 테스트 2건은 새 usecols·기대 날짜로)
+- [x] `/ponytail-review`: 삭제만 있는 diff, 날짜 목록 라우트의 불필요해진 `score` usecols 제거(-1) 외 lean → `/code-review`(feature-dev:code-reviewer `vcp032-reviewer`) APPROVE, 블로커 0. 참고 2건: 프로덕션 호출자가 없어진 `resolve_vcp_min_score` → 함수·전용 헬퍼·단위 테스트 삭제로 반영; AI 규칙 기반 폴백이 낮은 점수를 SELL 로 모는 문제 → `[VCP-033]` 등록
+- [x] 정적 검증: `pytest -q -p no:cacheprovider` 2583 통과 2 skipped(직전 2582 + 신규 1) · `npx vitest run` 전체 exit 0(frontend 무변경)
+- [x] QA: `docs/dev-cycle/qa/VCP-032.md` 필수 2/2·인접 2/2 통과(격리 사본에서 실제 스크리너로 2026-09-21 시그널 20건 저장, 격리 gunicorn+Next 로 VCP 화면 20행·홈 카드·날짜 목록 확인)
 
 ## P1 — 이번 주기
 
@@ -193,6 +196,11 @@
 - 함께(`[VCP-029]` 심층 리뷰 M2·m4): 손상은 0바이트만이 아니다. 열 수가 다른 행이 든 파일은 쓰는 쪽(`scripts/init_data.py:1580`, 전체 열 읽기)만 `ParserError` 로 막히고, 화면 쪽(`services/kr_market_vcp_payload_service.py:169-173`, `app/routes/kr_market_data_signals_routes.py:65-71`, `usecols` 읽기)은 예외 없이 보존된 행을 계속 보이므로 막힌 상태가 화면에 드러나지 않고 그날 자 옛 행이 남아 있으면 최신 대체가 그것을 오늘 자로 계속 노출한다. 0바이트일 때는 `_extract_csv_data_date` 가 `None` 을 돌려주고 `services/common_data_status_service.py:71` 이 `vcp_signals_latest.json`(세 실패 갈래가 모두 `date=오늘` 로 씀)으로 대체해 데이터 상태 화면이 「오늘」로 보인다.
 - 범위: CSV 를 임시 파일에 쓴 뒤 교체하는 방식으로 바꾸고(`services/kr_market_data_cache_service.py` 의 `atomic_write_text` 재사용 가능 여부를 설계에서 본다), 파싱에 실패한 파일의 회복 경로를 정한다(0바이트·헤더뿐인 파일은 「기존 로그 없음」으로, 열 수가 어긋난 파일은 원본을 `.corrupt-<시각>` 으로 옮겨 보존한 뒤 새로 시작하는 안을 설계에서 본다). 쓰는 쪽과 읽는 쪽의 관용도 차이를 설계에 적는다. 회귀 테스트 세 건.
 - [ ] 설계 승인(bounded) - [ ] 계획 검토 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA
+
+### [VCP-033] AI 규칙 기반 폴백이 낮은 합산 점수의 VCP 시그널을 일괄 SELL 로 판정한다
+- 카테고리: VCP 시그널 | 티어: T3 (`engine/vcp_ai_analyzer_helpers.py` 위험 경로) | 근거: `[VCP-032]` 코드 리뷰(feature-dev:code-reviewer, 2026-09-22, 확신도 중간). `build_vcp_rule_based_recommendation` 은 LLM 응답의 JSON 파싱이 실패했을 때 합산 점수 `score <= 62` 면 SELL, `>= 78` 이면 BUY 로 판정한다. 종전에는 저장 게이트가 60 이상을 보장했지만 `[VCP-032]` 뒤에는 12~59점 시그널이 정상 저장되므로, 폴백을 타는 시그널은 거의 예외 없이 SELL 이 된다. 「약한 수급은 보수적으로 SELL」 이 의도인지, 옛 게이트 전제가 남은 것인지 정해야 한다.
+- 범위: 폴백 기준을 새 점수 분포(패턴 통과 종목의 합산 27~53)에 맞추거나 VCP 원점수·수축비 같은 패턴 지표로 바꾼다. 폴백은 실패 경로라 실측은 파싱 실패를 주입한 하네스로 한다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA
 
 ### [VCP-031] 「Refresh VCP」가 시그널 저장 실패를 「완료: 조건 충족 종목 없음」 성공으로 보인다
 - 카테고리: VCP 시그널 | 티어: T2 | 근거: `[VCP-029]` 심층 리뷰(oh-my-claudecode:critic, 2026-09-22) M1. `services/kr_market_vcp_background_service.py:78-86` 은 `create_signals_log` 의 반환값이 `False` 면 `elif result_df:` 를 통과하지 못하고 else 로 떨어져 `status="success"` 와 「완료: 조건 충족 종목 없음」을 세운다. `[VCP-028]`·`[VCP-029]` 뒤에는 스크리너 예외, 병합 실패, 정리 실패가 전부 `False` 이므로 시그널이 실제로 있었는데 저장만 실패한 경우까지 관리자는 성공 상태를 본다. 유일한 흔적은 `logs/backend.log` 의 WARNING 한 줄이다. `:78` 의 `isinstance(result_df, pd.DataFrame)` 은 죽은 분기다(`create_signals_log` 는 DataFrame 을 돌려주는 갈래가 없다). 같은 파일 `:82` 의 `elif result_df:` 갈래도 함께 본다.

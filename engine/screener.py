@@ -12,7 +12,7 @@ import os
 
 from engine.market_gate import MarketGate
 from engine.pandas_utils_safe import safe_bool
-from engine.screening_runtime import resolve_vcp_min_score, resolve_vcp_signals_to_show
+from engine.screening_runtime import resolve_vcp_signals_to_show
 from engine.toss_collector import TossCollector # [NEW] Toss Collector 연동
 from engine.screener_data_loader import (
     load_inst_frame,
@@ -220,17 +220,17 @@ class SmartMoneyScreener:
                 logger=logger,
             )
 
-            # 결과 저장 리스트
+            # 결과 저장 리스트. 저장 조건은 VCP 패턴 통과뿐이고 합산 점수는 정렬에만 쓴다([VCP-032]).
+            # 종전에는 score >= VCP_MIN_SCORE(60) 도 요구했는데, 수급(최대 70)+거래량(최대 20)+VCP(최대 10)
+            # 구성에서 패턴 통과 종목이 그 문턱을 넘는 일이 실측 40거래일 동안 한 번도 없어 시그널이 늘 0건이었다.
             results = []
-            min_score = resolve_vcp_min_score(default=60.0)
 
             candidates = [build_stock_candidate(row) for row in prioritized_stocks.head(max(0, max_stocks)).itertuples(index=False)]
             for result in self._analyze_candidates(candidates):
                 if not result or not safe_bool(result.get("is_vcp", False)):
                     continue
-                if float(result.get("score", 0) or 0) >= min_score:
-                    result['market_status'] = gate_status['status']
-                    results.append(result)
+                result['market_status'] = gate_status['status']
+                results.append(result)
 
             # DataFrame으로 변환
             df = pd.DataFrame(results)

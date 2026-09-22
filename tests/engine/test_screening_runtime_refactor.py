@@ -34,13 +34,3 @@ def test_resolve_vcp_signals_to_show_applies_minimum(monkeypatch):
 
     assert screening_runtime.resolve_vcp_signals_to_show(default=20, minimum=0) == 0
     assert screening_runtime.resolve_vcp_signals_to_show(default=20, minimum=1) == 1
-
-
-def test_resolve_vcp_min_score_supports_comma_formatted_string(monkeypatch):
-    monkeypatch.setattr(
-        screening_runtime,
-        "SCREENING",
-        _DummyScreening(signals_to_show=20, min_score="1,234.5"),
-    )
-
-    assert screening_runtime.resolve_vcp_min_score(default=60.0) == 1234.5
