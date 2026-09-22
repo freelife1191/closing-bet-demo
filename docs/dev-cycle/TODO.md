@@ -79,6 +79,22 @@
 - QA: 격리 /chatbot 에서 「오늘 섹터 어때?」「VCP 매수 추천 알려줘」 전송 → 첫 답변이 반도체를 상승률 2.93% 로 말하고, 둘째가 「시그널 없음」 대신 「분석 4건, 매수 추천 0건, 기준일 2026-05-05」를 말한다. 브라우저 실측 required.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
 
+### [FE-044] 개인정보처리방침과 서비스 약관 페이지 신설
+- 카테고리: 프론트엔드 공통 | 티어: T3 (법적 고지 본문 분량으로 diff 300줄 초과) | 근거: 저장소 전체에 두 문서가 존재하지 않음(`frontend/src/app` 라우트 네 갈래에 `privacy`·`terms` 없음, `frontend/public` 비어 있음, 소스에 「개인정보」·「이용약관」 문구 0건). Google OAuth 클라이언트를 다시 만들어 프로덕션으로 게시하려면 동의 화면에 두 문서의 URL 이 필요하다. 투자 시그널을 제공하면서 면책 고지가 화면 어디에도 없다는 점도 함께 확인했다.
+- 설계 승인: 승인 일자 2026-09-22 | 승인 확인 시각 2026-09-22 (이 세션) | 범위: 정적 페이지 두 개와 랜딩 푸터 링크, 계약 테스트 | 실제 대화 근거: 사용자 「개인정보처리방침, 서비스 약관 만들어져 있어?」 → 「만들어줘」, 이어진 AskUserQuestion 응답으로 연락처 `freeopen1191@gmail.com` 과 운영자 표기 「Smart Money Bot 운영자」 확정
+- QA 시나리오: `/privacy` 와 `/terms` 가 200 으로 열려 각 문서의 필수 조항 제목이 모두 보이고, 랜딩 페이지 푸터의 두 링크를 눌러 각 문서로 이동하며, 문의 이메일과 시행일이 화면에 표시된다. 브라우저 실측 required.
+- [ ] 구현과 RED→GREEN 회귀
+- [ ] `/ponytail-review` → `/code-review` → `/review`
+- [ ] 기능 검증: vitest 전체, type-check, 브라우저 실측
+- [ ] 첫 커밋 → `/qa` → 아카이브 커밋
+
+### [FE-045] 서버에 저장한 개인정보를 사용자가 실제로 지울 수 있게 한다
+- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: `[FE-044]` 조사에서 발견. 설정 모달의 「계정 삭제」 버튼(`frontend/src/app/components/SettingsModal.tsx:630`)은 `localStorage` 와 `sessionStorage` 만 비우고 로그아웃할 뿐 서버 데이터를 지우지 않는다. 서버 DELETE 라우트는 `[INFRA-025]` 에서 제거되었고 주석만 남아 있다(`:125-142`). 실패 시 문구는 「계정 삭제 처리에 실패했습니다」라 사용자는 삭제되었다고 믿는다.
+- 문제: `chatbot_storage.db` 의 대화·메모리, `paper_trading.db` 의 계좌 네 테이블, `usage.db` 의 `usage_log` 에는 기간 기반 자동 삭제가 전혀 없다. 개별 수단(대화 세션 삭제, `/clear all`, 모의 계좌 초기화)은 있으나 세 데이터베이스를 한 번에 지우는 길이 없다. `chatbot/storage_memory_manager.py:231-243` 의 `clear` 는 `user_profile` 까지 지우지만 `clear_general` 은 남기므로 어느 경로를 타느냐로 결과가 갈린다. `services/paper_trading_trade_account_mixin.py:321` 의 `reset_account` 는 `portfolio`·`trade_log`·`asset_history` 만 지우고 `owner_id` 가 이메일인 `balance` 행을 남긴다.
+- 범위: 소유자 검증을 거쳐 한 이메일의 세 데이터베이스 행을 모두 지우는 경로와 화면 문구 정정. 활동 로그 파일은 30일 자동 삭제가 있으므로 이번 범위에서 제외하고 그 사실을 화면에 적는다.
+- QA 시나리오: 로그인 후 대화와 모의 매수를 남긴 계정으로 삭제를 실행하면 세 데이터베이스에서 해당 행이 사라지고, 다시 로그인해도 이전 기록이 복원되지 않는다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
 ## P1 — 이번 주기
 
 ### [INFRA-077] 종료 판정의 거짓 음성 제거(`lifecycle_pid_alive` 경합)
@@ -117,6 +133,20 @@
 - 범위: `MemoryManager` 의 재적재·쓰기를 인스턴스 잠금으로 직렬화, `_save_single_entry` 에 레코드를 인자로 전달, `_save()` 전체 동기화 폴백의 삭제 절 제거, 델타 장부와 세션 사전 접근 잠금, 두 스레드 동시 쓰기에서 유실·`KeyError` 가 없음을 확인하는 테스트. 테이블을 정의하는 `storage_sqlite_common.py` 는 건드리지 않는다. diff 가 300줄을 넘으면 T3 로 올린다.
 - QA: 격리 /chatbot 두 탭에서 같은 계정으로 각각 대화를 만들고 동시에 메시지를 보낸 뒤 새로고침 → 두 대화가 모두 남고 메시지가 유실되지 않는다. 브라우저 실측 required.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [FE-046] 활동 로그의 보관 기간을 날짜 기준으로 만들고 데이터 파일 권한을 좁힌다
+- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: `[FE-044]` 리뷰. `services/activity_logger.py:24` 의 `TimedRotatingFileHandler(when='midnight', backupCount=30)` 는 날짜가 아니라 파일 개수를 세며, 기록이 없는 날에는 회전 자체가 일어나지 않는다. 실측 결과 `logs/` 에 `user_activity.log.2026-02-22` 부터 20개 파일이 남아 보관 범위가 7개월이다. 그 파일에는 IP 주소와 챗봇 질문·답변이 각각 앞 2000자까지 들어 있다.
+- 함께: `data/paper_trading.db`, `data/usage.db`, `data/runtime_cache.db`, `logs/user_activity.log` 의 권한이 모두 0644 이며 이를 좁히는 코드가 저장소에 없다.
+- 문제: `[FE-044]` 의 개인정보처리방침은 이 실제 동작을 사실대로 적었으므로 지금은 거짓이 아니다. 다만 「최근 30일분의 파일」이라는 서술은 이용자가 기대하는 보관 기간보다 길게 남을 수 있다는 뜻이며, 날짜 기준 삭제를 넣으면 방침을 더 짧고 분명하게 고칠 수 있다.
+- 범위: 날짜를 기준으로 오래된 활동 로그 파일을 지우는 갈래 추가, 개인정보가 담긴 파일의 권한을 0600 으로 좁히는 갈래 추가, 두 가지를 고정하는 회귀 테스트, 그리고 `frontend/src/app/(legal)/privacy/page.tsx` 3항 문안의 갱신.
+- QA 시나리오: 오래된 날짜의 활동 로그 파일을 만들어 두고 기동하면 기준 기간이 지난 파일이 사라지며, 새로 만들어진 데이터베이스 파일의 권한이 0600 이다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [FE-047] 루트 레이아웃의 `lang` 을 한국어로 바로잡는다
+- 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: `[FE-044]` 리뷰. `frontend/src/app/layout.tsx:18` 이 `<html lang="en">` 인데 화면의 문구가 전부 한국어다. 화면 낭독기가 영어 발음 규칙으로 읽고 브라우저의 번역 제안도 어긋난다. 새로 만든 법적 고지 두 화면에서 특히 두드러진다.
+- 범위: `frontend/src/app/layout.tsx` 의 한 낱말과 이를 고정하는 계약 테스트. 다른 화면의 문구는 건드리지 않는다.
+- QA 시나리오: 아무 화면에서나 문서의 `lang` 속성이 `ko` 로 읽힌다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] QA
 
 ## P2 — 대기
 

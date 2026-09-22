@@ -678,6 +678,15 @@ export default function HomePage() {
           <i className="fas fa-code"></i>
           <span className="font-mono text-sm">Engineered by Gemini Agent</span>
         </div>
+        <div className="flex items-center justify-center gap-4 mb-3 text-xs text-gray-500">
+          <Link href="/privacy" className="hover:text-gray-300 transition-colors">
+            개인정보처리방침
+          </Link>
+          <span className="text-gray-700">|</span>
+          <Link href="/terms" className="hover:text-gray-300 transition-colors">
+            서비스 약관
+          </Link>
+        </div>
         <p className="text-gray-600 text-xs">
           © 2026 KR Market Analysis System. All rights reserved.
         </p>
