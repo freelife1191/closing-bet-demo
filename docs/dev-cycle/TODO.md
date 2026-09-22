@@ -69,20 +69,6 @@
 
 ## P1 — 이번 주기
 
-### [FLOW-016] 누적성과 표의 순번을 전체 기준으로 매긴다
-- 카테고리: 수급·백테스트 | 티어: T1 | 근거: AUDIT-FLOW(2차) §1.1, §5.1. `CumulativeClientPage.tsx:836` 이 순번을 `trades.length - idx` 로 계산하는데 그 `trades` 는 현재 페이지분에 필터까지 적용한 배열이라, 1페이지와 2페이지가 모두 50번부터 1번까지 매겨지고 서로 다른 거래에 같은 번호가 붙는다. 서버가 보내는 `pagination.total`·`page` 를 쓰지 않는다. 실측 재현.
-- 범위: `TradeTable` 에 `pagination` 을 넘겨 `total - (page - 1) * limit - idx` 로 계산. 필터가 켜진 동안의 순번 표기 방식(비우기 또는 「필터 결과 내 순번」 표시)을 정해 반영. 2페이지 첫 행 번호를 고정하는 vitest 회귀 테스트.
-- QA: `/dashboard/kr/cumulative` 진입 → 표 첫 행 번호를 읽고 다음 페이지로 이동 → 1페이지가 234 로 시작하고 2페이지가 184 로 이어진다. 브라우저 실측 required.
-- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23
-  | 범위: `CumulativeClientPage.tsx` 한 파일. 순번을 서버 `pagination` 의 `total - (page - 1) * limit - idx` 로 매기고(`idx` 는 필터 적용 전 위치), 필터 중에도 원래 번호를 유지해 건너뛰게 둔다. `pagination` 이 없으면 `trades.length - idx` 로 떨어진다. vitest 회귀 1파일. 티어 T1(§2 위험 경로 무관)
-  | 실제 대화 근거: 2026-09-23 사용자 「FLOW-016 진행해」 뒤 bounded 설계 제시, 필터 중 순번 질문에 「원래 번호 유지 (Recommended)」, 설계 승인 질문에 「승인, 구현 시작 (Recommended)」
-- 읽은 자료: `.claude/skills/closing-bet-nextjs/SKILL.md`, `frontend-skills.md` §2, 번들 문서 `01-app/01-getting-started/05-server-and-client-components.md`(상태·렌더링만 바뀌는 순수 클라이언트 변경이라 표의 여섯 줄에 맞는 것이 없음). `useEffect`·`useMemo` 변경과 프롭 과다가 없어 vendor 스킬은 해당 없음
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN (`CumulativeClientPage.regression-flow-016.test.tsx`): 구현 전 3건 중 2건 실패(2페이지 첫 행 3≠184, 필터 뒤 1≠183)·대체 경로 1건 통과 확인 뒤 구현. `pagination` 상태를 `any` 에서 `Pagination` 인터페이스로 좁힘
-- [x] `/ponytail-review`(T1 리뷰): 「Lean already. Ship.」 지적 0건
-- [x] 정적 검증: vitest 전체 92파일 676건 통과, `npm run type-check` exit 0, 변경 파일 eslint 오류 0·경고 1(579줄 기존 `any`, 이번 변경 전 2건에서 1건으로 감소)
-- [ ] QA: 격리 포트 브라우저 실측(1페이지 첫 행 = total, 2페이지 첫 행 = total - 50, 필터 중 번호 유지)
-
 ### [FLOW-017] 결과·등급 필터를 전체 기간에 건다
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §1.2, §5.1. `/api/kr/closing-bet/cumulative` 가 `page`·`limit` 만 받아 잘라낸 뒤 화면(`CumulativeClientPage.tsx:990-994`)이 그 50건을 다시 거른다. 「성공」을 누르면 전체 86건이 아니라 현재 페이지 안의 성공만 보이고 페이지 수는 그대로다. 1144줄 주석이 명시한 의도적 단순화이므로 결함이 아니라 개선 항목이다. 「현재 페이지 내」 안내가 결과 필터에만 있고 등급 「전체」 버튼에는 건수가 없다.
 - 범위: 라우트에 `outcome`·`grade` 쿼리 파라미터 추가(잘못된 값은 400), `paginate_items` 앞에서 거르고 캐시된 `trades` 와의 관계 확인, 화면의 클라이언트 필터 제거와 버튼 건수의 서버 집계 교체, 등급 「전체」 건수 추가와 안내 정리, 라우트 pytest 와 화면 vitest 회귀 테스트.
