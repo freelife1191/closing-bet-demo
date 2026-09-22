@@ -1,0 +1,3 @@
+# vendor/skills 는 upstream 커밋의 바이트를 그대로 보존한 사본이다(vendor/skills/README.md).
+# 원본 Markdown 의 줄끝 공백을 고치면 폴더 해시가 어긋나므로 공백 검사에서 뺀다.
+vendor/skills/** -whitespace

@@ -27,6 +27,10 @@
 
 ### 기본으로 읽는 것
 
+먼저 프로젝트 스킬 `closing-bet-nextjs`(`.claude/skills/closing-bet-nextjs/SKILL.md`)를
+읽는다. 이 저장소의 API 중계, 서명된 신원 헤더, 환경 변수 허용 목록, 검증 명령이 거기 있고
+아래 표의 고정 vendor 스킬을 어느 경로로 읽는지도 거기서 정한다.
+
 `frontend/src/app` 아래 파일을 하나라도 고치면 예외 없이
 `frontend/node_modules/next/dist/docs/01-app/` 아래에서 이번에 건드리는 주제의 문서를
 읽는다. 조건을 따로 판정하지 않는다. App Router 의 파일 규약과 서버·클라이언트 경계,
@@ -63,8 +67,8 @@ Vercel 이 2026 년에 `vercel-labs/next-skills` 를 접으면서 참고 지식�
 
 | 이런 코드를 고치면 | 스킬 |
 |---|---|
-| 프롭이 여덟 개를 넘거나 불리언 프롭이 셋을 넘는 컴포넌트. 또는 같은 UI 를 두 곳 이상에서 쓰려고 경계를 다시 그을 때 | `vercel-composition-patterns` |
-| `useEffect` 나 `useMemo` 로 렌더링을 제어하는 코드, 폴링·구독·타이머, `dynamic()` 이나 번들 분할 | `vercel-react-best-practices` |
+| 프롭이 여덟 개를 넘거나 불리언 프롭이 셋을 넘는 컴포넌트. 또는 같은 UI 를 두 곳 이상에서 쓰려고 경계를 다시 그을 때 | `vendor/skills/vercel-composition-patterns/` 고정 사본을 경로로 읽는다 |
+| `useEffect` 나 `useMemo` 로 렌더링을 제어하는 코드, 폴링·구독·타이머, `dynamic()` 이나 번들 분할 | `vendor/skills/vercel-react-best-practices/` 고정 사본을 경로로 읽는다 |
 | `frontend/package.json` 의 `next` 또는 `react` 버전 | `next-upgrade` (아래 각주) |
 
 Claude Code의 `next-upgrade` 는 상류에서 폐지되었으나 2026-09-01 에 받아 둔 사본이
@@ -102,7 +106,8 @@ Codex의 실제 방법은 [references/ultraqa.md](ultraqa.md)가 정본이며 �
 복제하지 않는다.
 `frontend/`을 건드리는 항목에서는 그 대조를 두 관점으로 나눈다.
 
-1. **브라우저 관점** — 화면이 실제로 무엇을 그리는지 읽는다. `next-dev-loop` 이 이 관점을
+1. **브라우저 관점** — 화면이 실제로 무엇을 그리는지 읽는다. `next-dev-loop`(고정 사본
+   `vendor/skills/next-dev-loop/SKILL.md`)이 이 관점을
    agent-browser 로 다루며, agent-browser 를 직접 써도 같은 것을 본다. 직접 쓸 때의
    요령은 `browser-notes.md` 에 있다.
 2. **프레임워크 관점** — Next.js 가 컴파일과 런타임에서 무엇을 보고 있는지 읽는다.
@@ -153,8 +158,14 @@ Codex의 조건부 스킬도 2026-09-06에 따로 대조했다. `next-dev-loop`,
 검증 범위는 `docs/dev-cycle/codex-setup.md` §9에 있다. 도입형 스킬의 설치는 §2의
 착수 조건이나 각 스킬의 기능 선행 조건을 충족했다는 뜻이 아니다.
 
-Claude Code 쪽 스킬은 `~/.claude/skills/` 에 설치되어 있다. 이 저장소에는 스킬 본문을 두지
-않는다. 다음 표는 Claude Code 쪽의 2026-09-05 기록이다. 당시 상류 저장소를 직접
+**2026-09-22 부터 이 저장소가 실제로 읽는 Next·Vercel 스킬 넷은 `vendor/skills/` 의 고정 사본이다.**
+`next-dev-loop`, `vercel-react-best-practices`, `vercel-composition-patterns`,
+`web-design-guidelines` 를 upstream 커밋에서 바이트 그대로 복사했고 출처·커밋·폴더 해시는
+`vendor/skills/README.md` 와 `sources.lock.json` 에 있으며 pytest(`tests/scripts/test_skill_set.py`)가
+대조한다. 카탈로그 이름으로 부르지 않고 경로로 읽는 이유는 Claude Code 가 같은 이름이면
+개인(`~/.claude/skills/`) 스킬을 프로젝트 스킬보다 우선하기 때문이다. 이름으로 부르면 어느
+사본이 읽혔는지 알 수 없다. 아래 표의 전역 설치 상태는 그대로 유효하며 도입형 세 스킬과
+`next-upgrade` 는 여전히 전역 사본을 쓴다. 다음 표는 Claude Code 쪽의 2026-09-05 기록이다. 당시 상류 저장소를 직접
 조회해 다음을 확인했다.
 
 | 스킬 | 상태 | 출처 |

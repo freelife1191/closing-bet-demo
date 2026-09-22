@@ -129,7 +129,7 @@ developer_instructions = """
 | 심층 리뷰 (T3) | `/review` | `$review` | `/skills` 에 `review` | gstack 설치 |
 | browse 바이너리 | `/qa` 와 `/qa-only` 가 내부에서 쓴다 | 같다 | `test -x "${CODEX_HOME:-$HOME/.codex}/skills/gstack/browse/dist/browse"` | gstack 설치가 함께 빌드한다 |
 | 브라우저 실측 | agent-browser | 같다. 셸 명령이다 | `which agent-browser` | `npm install -g agent-browser`. 검증마다 고유 namespace/session과 가짜 계정·fixture를 준비하며 기존 로그인 세션을 요구하거나 자동 재사용하지 않는다 |
-| 코드 리뷰 | `feature-dev:code-reviewer` 에이전트 | omx `$code-review` 스킬 | `/skills` 에 `code-review`, `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 (0번) |
+| 코드 리뷰 | `closing-bet-reviewer` 역할(`.claude/agents/`, 2026-09-22 부터. 없으면 `feature-dev:code-reviewer`) | omx `$code-review` 스킬. §13 의 전용 호출이 확인되면 `agent_type: "closing-bet-reviewer"` | `/skills` 에 `code-review`, `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 (0번) |
 | 과잉설계 리뷰 | `/ponytail-review` | omx `code-reviewer` 에이전트를 `spawn_agent` 로 띄운다. 프롬프트는 아래 「과잉설계 리뷰 프롬프트」 | `$CODEX_HOME/agents/code-reviewer.toml` | omx 설치 |
 | 계획 문서 (T3) | `superpowers:writing-plans` | `$superpowers:writing-plans` | 현재 스킬 목록에 `superpowers:writing-plans` | 아래 superpowers 설치. 그래도 없으면 omx `$plan` 으로 대신하고 그 사실을 문서에 적는다 |
 | 계획 검토 (architectural·T3) | `oh-my-claudecode:critic` 에이전트 | omx `critic` 역할을 `spawn_agent` 의 `agent_type: "critic"` 으로 띄운다 | `$CODEX_HOME/agents/critic.toml` | omx 설치 (0번) |
@@ -473,3 +473,42 @@ dev-cycle의 UltraQA가 agent-browser로 실제 웹 행을 실행한다. backend
 
 이번 보완의 실제 검증 결과는 `docs/dev-cycle/qa/browser-measurement-workflow-2026-09-08.md`에
 남긴다. 스킬 파일 설치 여부나 HTTP 성공만으로 브라우저 검증이 끝났다고 보고하지 않는다.
+
+## 13. 2026-09-22 프로젝트 스킬 셋과 고정 vendor 스킬
+
+`docs/reference/skill-set`(Shopping Pilot 에 적용한 agent-kit 기록. `docs/*` 가 `.gitignore` 에 있어
+이 기기에만 있는 참고 사본이다)을 본떠 이 저장소에 맞는 스킬 셋을 두었다. 설계 근거와 파일 목록은 `vendor/skills/README.md` 와 `CLAUDE.md` 의
+「개발 사이클」 문서 목록에 있다.
+
+| 종류 | 위치 | codex 에서 |
+|---|---|---|
+| 프로젝트 스킬 3개 | `.claude/skills/closing-bet-{nextjs,python,verify}/` (정본) | `.agents/skills/closing-bet-*` 링크로 발견되어 `$closing-bet-nextjs` 처럼 부른다 |
+| 고정 vendor 스킬 4개 | `vendor/skills/{next-dev-loop,vercel-react-best-practices,vercel-composition-patterns,web-design-guidelines}/` | 카탈로그에 넣지 않는다. 프로젝트 스킬이 이 경로를 직접 읽는다 |
+| 읽기 전용 리뷰 역할 | `.claude/agents/closing-bet-reviewer.md` (정본), `.codex/agents/closing-bet-reviewer.toml` | §2 의 `dev-workflow` 와 같은 방식. `agent_type: "closing-bet-reviewer"` |
+
+vendor 사본을 카탈로그 밖에 두는 이유는 두 호스트 모두 같은 이름의 사본이 둘이면 문제가 나기
+때문이다. Claude Code 는 개인 스킬을 프로젝트 스킬보다 우선하고, Codex 는 레퍼런스 기록
+(`docs/reference/skill-set/docs/agent-environment/SPEC.md` §4.3·§4.4)에서 같은 이름의 추가
+사본을 거부했으며 프로젝트 `config.toml` 의 `skills.config` 비활성 규칙도 적용하지 않았다.
+그래서 이 저장소는 전역 `~/.agents/skills/` 사본을 그대로 두고 비활성 규칙도 만들지 않는다.
+전역 카탈로그의 `$vercel-react-best-practices` 등은 §4 의 대조 기록대로 계속 보이지만, 이
+저장소의 작업에서는 프로젝트 스킬이 지시하는 `vendor/skills/` 경로를 읽는다.
+
+기기마다 확인할 것은 셋이다.
+
+1. `/skills` 목록에 `closing-bet-nextjs`·`closing-bet-python`·`closing-bet-verify` 가 보인다.
+   보이지 않으면 `.agents/skills/` 의 링크 셋이 `../../.claude/skills/<이름>` 을 가리키는지
+   `ls -la .agents/skills` 로 본다. 링크는 커밋되어 있으므로 clone 이 정상이면 있다.
+2. `python3 scripts/skill_set_lock.py` 가 종료 코드 0 이다. pytest 전체에도 들어 있다.
+3. `closing-bet-reviewer` 전용 호출은 §8 과 같은 방식으로 새 실행 문맥에서 확인한다.
+   설치 검증으로 「제약 목록만」을 요청하면 그 역할은 「하지 않을 일」 목록만 돌려준다.
+
+같은 날 Claude Code 의 코드 리뷰 자리(T2 이상)를 `feature-dev:code-reviewer` 에서 이 역할로
+바꿨다(`SKILL.md` `## 실행 환경`, `tier-rules.md` §1). 플러그인 설치와 무관하게 어느 기기에서든
+같은 검토 기준이 적용되게 하려는 것이다. Codex 열은 전용 호출이 확인될 때까지 `$code-review`
+그대로이며, 확인되면 표의 Codex 열을 `agent_type: "closing-bet-reviewer"` 로 바꾼다.
+
+이 절을 적은 세션은 Claude Code 였다. 세 스킬이 Claude Code 카탈로그에 뜨는 것과 pytest 통과,
+읽기 전용 smoke 는 확인했고(`docs/dev-cycle/evidence/skill-set-20260922/`), Codex 의 실제
+발견·전용 호출은 이 세션에서 확인하지 않았다. 다음 Codex 세션에서 위 셋을 확인하고 결과를
+이 절에 덧붙인다.

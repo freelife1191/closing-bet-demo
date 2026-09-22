@@ -340,6 +340,11 @@ Next와 Flask는 같은 릴리스로 적용해야 합니다. 구형·신형 워�
 - 기록 형식: `.claude/skills/dev-cycle/references/archive-format.md`
 - 프론트엔드 스킬 매핑: `.claude/skills/dev-cycle/references/frontend-skills.md`
 - 브라우저 실측 요령: `.claude/skills/dev-cycle/references/browser-notes.md`
+- 프로젝트 스킬 셋: `.claude/skills/closing-bet-{nextjs,python,verify}/` (이 저장소의 경계와 검증
+  요령. `.agents/skills/` 의 같은 이름은 그 정본을 가리키는 링크)
+- 고정 vendor 스킬: `vendor/skills/` (Next·Vercel 스킬 넷을 upstream 커밋에 고정한 사본. 출처와
+  해시는 그 `README.md` 와 `sources.lock.json`, 대조는 `tests/scripts/test_skill_set.py`)
+- 코드 리뷰 역할(T2 이상): `closing-bet-reviewer` (`.claude/agents/closing-bet-reviewer.md`, 읽기 전용)
 - 카테고리 감사: `dev-workflow` 에이전트. 리포트는 `docs/dev-cycle/audits/` 에 남깁니다
 
 `frontend/` 를 건드리는 작업은 프론트엔드 스킬 매핑을 먼저 읽습니다. 어느 스킬을 쓸지는
@@ -350,6 +355,15 @@ Next와 Flask는 같은 릴리스로 적용해야 합니다. 구형·신형 워�
 나머지는 파일에 무엇이 들어 있는지로 갈리며 매핑 문서 §2 에 표로 정리되어 있습니다.
 Next.js 관련 스킬 네 개가 16.3 을 하한선으로 두고 있었으나 `[FE-002]` 가 16.3.4 로 올려
 그 문턱을 해소했습니다.
+
+프로젝트 스킬 셋은 사이클을 대체하지 않고 이 저장소의 경계와 요령만 더합니다. 파이썬 파일을
+하나라도 건드리는 작업은 [1] 설계와 계획에서 `closing-bet-python` 을 읽고, `frontend/` 를
+건드리는 작업은 프론트엔드 스킬 매핑이 첫 줄에서 가리키는 `closing-bet-nextjs` 를 읽습니다.
+「됐다」「통과했다」를 말하기 전, 곧 [3] 검증과 [4] 마감에서는 `closing-bet-verify` 의 등급표로
+어떤 검사가 어떤 주장의 증거인지 판정합니다. 티어 T2 이상의 코드 리뷰 자리는
+`closing-bet-reviewer` 역할이며, 그 역할이 세션의 에이전트 목록에 없을 때만
+`feature-dev:code-reviewer` 로 대체하고 대체한 사실을 기록합니다. 어느 정본을 읽었는지는
+이름이 아니라 경로(`.claude/skills/closing-bet-*/`, `vendor/skills/<이름>/`)로 적습니다.
 
 새 TODO 라운드는 `superpowers:brainstorming`으로 설계하고 그 경로의 승인을 받은 뒤
 구현합니다. 이미 승인된 동일 범위의 구현·리뷰·검증·커밋과 재개는 다시 승인을 기다리지 않고

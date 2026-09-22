@@ -43,9 +43,15 @@ Z.ai 계열 모델을 함께 쓴다.
 | `.claude/skills/dev-cycle/references/archive-format.md` | TODO·아카이브·QA 문서 형식 |
 | `.claude/skills/dev-cycle/references/frontend-skills.md` | `frontend/` 를 건드릴 때만 |
 | `.claude/agents/dev-workflow.md` | 카테고리 감사 에이전트 정의 |
+| `.claude/skills/closing-bet-python/SKILL.md` | 파이썬을 건드릴 때. 계층·재사용 사다리·위험 경로·비밀·외부 효과 |
+| `.claude/skills/closing-bet-nextjs/SKILL.md` | `frontend/` 를 건드릴 때. API 중계·신원 헤더·환경 변수·검증 명령 |
+| `.claude/skills/closing-bet-verify/SKILL.md` | 완료를 말하기 전에. 증거 등급·격리 환경·두 관점·기록 |
+| `vendor/skills/` | Next·Vercel 스킬 넷의 고정 사본. 이름이 아니라 이 경로로 읽는다 |
+| `.claude/agents/closing-bet-reviewer.md` | T2 이상 코드 리뷰 자리의 읽기 전용 역할 정의. 대체 규칙은 `SKILL.md` 의 `## 실행 환경` |
 
 **codex 에서는 `$dev-cycle` 로 부른다.** 저장소의 `.agents/skills/dev-cycle` 링크가
-기존 `.claude/skills/dev-cycle/` 을 가리키므로 위 표의 문서가 계속 정본이다.
+기존 `.claude/skills/dev-cycle/` 을 가리키므로 위 표의 문서가 계속 정본이다. 세 프로젝트
+스킬도 같은 방식으로 `.agents/skills/closing-bet-*` 링크가 `.claude/skills/` 의 정본을 가리킨다.
 현재 스킬 목록(`/skills` 를 제공하는 환경이면 그 목록)에 `dev-cycle` 이 없으면
 `docs/dev-cycle/codex-setup.md` 를 읽고 연결을 점검한다. 링크가 정상이지만 현재 세션에
 노출되지 않으면 위 문서를 직접 읽고 절차를 수행하며, 자동 탐색 확인과 구분해 기록한다.

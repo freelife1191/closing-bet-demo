@@ -45,7 +45,7 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 | QA 실행·진단·수정·정리 | `/qa` | 같은 `$ultraqa`의 나머지 절차 |
 | 브라우저 실측 | agent-browser | `$ultraqa` 행렬을 `agent-browser`로 실행 |
 | 과잉설계 리뷰 | `/ponytail-review` | `code-reviewer`에 `CLAUDE.md`의 ponytail 기준 전달 |
-| 코드 리뷰 | `feature-dev:code-reviewer` | `$code-review` |
+| 코드 리뷰 | `closing-bet-reviewer` (`Agent` 의 `subagent_type`, `name` 필수) | `$code-review` (전용 호출 확인 전까지) |
 | 심층 리뷰(T3) | `/review` | `$review` |
 | 보안 리뷰 보강 (인증·시크릿) | `oh-my-claudecode:security-reviewer` | `$security-review` → 보안 범위의 `code-reviewer` |
 | 카테고리 감사 | `dev-workflow` | `agent_type: "dev-workflow"` |
@@ -53,6 +53,14 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 이후 본문의 「QA 계획」「QA 실행」「계획 검토」「보안 리뷰 보강」은 이 표의 해당 환경 단계를
 뜻한다. Codex 라운드에서 기존 gstack QA 도구로 되돌아가지 않는다. UltraQA의 구체적 호출과
 종료 판정은 `references/ultraqa.md`에 둔다. Claude Code의 도구 순서는 유지한다.
+
+코드 리뷰 자리는 저장소에 커밋된 역할 `closing-bet-reviewer`
+(`.claude/agents/closing-bet-reviewer.md`)다. 플러그인 설치와 무관하게 어느 기기에서든 같은
+검토 기준(결측·신원·비용·비밀·문서 계약)이 적용되도록 이 역할을 쓴다. 역할이 현재 세션의
+에이전트 목록에 없을 때만 `feature-dev:code-reviewer`로 대체하고, 그때는 `tier-rules.md` §1의
+낮은 확신도 요청을 프롬프트에 적으며 대체한 사실을 기록한다. Codex는
+`.codex/agents/closing-bet-reviewer.toml`이 있으나 전용 호출을 새 실행 문맥에서 확인하기
+전까지 `$code-review`를 유지한다(`docs/dev-cycle/codex-setup.md` §13).
 
 과잉설계 리뷰의 Codex 프롬프트는 `docs/dev-cycle/codex-setup.md`의 「과잉설계 리뷰
 프롬프트」를 쓴다. 에이전트를 사용할 수 없으면 같은 ponytail 기준과 형식으로 직접
@@ -132,6 +140,8 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
    바뀐 부분만 확인한다. `status`와 읽기 전용 감사에 개발 설계 게이트를 적용하지 않는다.
 3. 건드릴 파일을 정해 `tier-rules.md` §3으로 티어를 판정한다. frontend 파일이 있으면
    `frontend-skills.md` §2에서 스킬과 Next.js 번들 문서를 고른다. 구현 전에 읽는다.
+   파이썬 파일이 있으면 `closing-bet-python`, frontend 파일이 있으면 `closing-bet-nextjs`를
+   함께 읽고, 검증 증거의 요령은 `closing-bet-verify`를 따른다(정본은 `.claude/skills/closing-bet-*/`).
 4. bounded는 짧은 대화 설계로 충분하다. architectural 또는 저장소가 요구하는 T3는
    `writing-plans`로 구현 계획을 남긴다. 같은 계획을 중복 작성하지 않는다. `autoplan`을
    새 계획 생성 도구로 사용하지 않는다. 계획을 남긴 항목은 6번 보고 전에 실행 환경 표의
@@ -167,6 +177,8 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
    판정한다. 기존 화면이 사용하는 API·인증·데이터 변경도 `references/ultraqa.md` §1-1에
    따라 agent-browser 실측을 필수로 넣는다. 진짜 UI가 없는 CLI/배치만 근거와 함께
    CLI·서비스 하네스로 검사한다. 실행하지 못한 동작을 실행했다고 보고하지 않는다.
+   격리 환경을 세우고 브라우저·프레임워크 두 관점을 읽는 요령과 어떤 검사가 어떤 주장의
+   증거가 되는지는 `closing-bet-verify`(`.claude/skills/closing-bet-verify/SKILL.md`)를 따른다.
 4. 현재 환경의 **QA 계획**으로 `docs/dev-cycle/qa/<ID>.md`를 만든다. TODO의 QA 시나리오
    초안과 이번 변경을 출발점으로 삼는다. Codex의 정상·적대적 행렬과 필수 여부는
    `references/ultraqa.md`를 따른다. 계획 없이 즉흥적으로 전체 앱을 훑지 않는다.
@@ -193,7 +205,8 @@ Codex는 `CLAUDE.md`를 자동으로 읽지 않으므로 직접 읽는다.
 ## [4] 마감
 
 1. 완료 조건을 증거로 다시 확인한다. QA 실행 뒤 범위 파일이 바뀌었으면 영향을 받는 검증을
-   다시 한다. 새 검증 없이 오래된 PASS를 재사용하지 않는다.
+   다시 한다. 새 검증 없이 오래된 PASS를 재사용하지 않는다. 증거의 등급은
+   `closing-bet-verify`의 등급표로 가르고, 하네스 통과를 브라우저 증거로 적지 않는다.
 2. conventional commit `<유형>(<범위>): <요약>`을 쓴다. 문서 전용 항목처럼 [3]에서
    첫 커밋이 없었다면 구현/문서·TODO 진행 기록으로 첫 커밋을 만든다.
 3. `archive-format.md` §5·§6에 따라 월별·일별 완료 기록에 첫 커밋과 QA 수정 커밋을
