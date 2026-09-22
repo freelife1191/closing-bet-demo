@@ -80,7 +80,15 @@
 - 카테고리: 인프라 | 티어: T2 | 근거: `[INFRA-076]` 심층 리뷰(2026-09-22). `lifecycle_pid_alive` 가 `kill -0` 성공·`ps -o stat=` 공백을 「살아 있음」으로 판정하고, 이어지는 `lifecycle_record_matches_process` 가 `ps -o lstart=` 공백에 메시지 없이 실패해 `stop_managed_service` 가 「종료를 확인하지 못했습니다」 만 남긴다. 주입으로 결정적 재현. 실제로는 프로세스가 내려간 뒤라 거짓 음성이며, 그 실패로 `stop_all.sh`·`restart_all.sh` 가 중단되어 backend 가 남는다. macOS prod 사이클에서 1/6 관측.
 - 범위: `lifecycle_pid_alive` 에서 `ps` 공백을 죽음으로 판정(`[ -n "$state" ] || return 1`), `lifecycle_terminate_recorded_process` 의 TERM→KILL 승격을 stderr 에 한 줄 기록(`stop_managed_service` 의 ⚠️ 와 같은 형식. 이 기록이 있었으면 `[INFRA-076]` 의 8초 초과가 로그에 남았다), `ps` 공백을 주입하는 회귀 테스트. `[INFRA-074]`·`[INFRA-075]` 가 세운 종료 계약(종료 순서, flock, PID 토큰 검증, setsid)은 유지한다.
 - 미규명 승계: prod 첫 사이클에서 프론트엔드가 SIGTERM 뒤 8초 넘게 살아 있었던 이유. 리뷰어 실측은 연결 없이·keep-alive 1개 보유 모두 0.04초 이내 소멸. 브라우저의 장기 keep-alive·RSC 스트리밍이 남은 후보이며 승격 로그가 생기면 다음 발생 때 판별한다.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review`
+- 설계 승인: 승인 일자 2026-09-22 | 승인 확인 시각 2026-09-22 23:06
+  | 범위: `lifecycle_pid_alive` 의 `ps` 공백 판정 한 줄, `lifecycle_terminate_recorded_process` 의 KILL 승격 경고 한 줄, `tests/scripts/test_lifecycle_adversarial.py` 회귀 2건. 종료 순서·flock·PID 토큰·setsid 는 손대지 않는다. `ps` 자체가 막힌 환경에서는 「종료」로 오판할 수 있으나 뒤따르는 포트 점유 확인이 걸러낸다.
+  | 실제 대화 근거: 2026-09-22 사용자의 선택 「INFRA-077 승인, 끝나면 FE-045」(현재 세션의 bounded 설계 제안에 대한 AskUserQuestion 응답)
+- [x] 설계 승인(bounded): 위 메타 줄. 읽은 정본 `.claude/skills/closing-bet-python/SKILL.md`, `.claude/skills/closing-bet-verify/SKILL.md`
+- [x] 구현·RED→GREEN: `scripts/service_lifecycle.sh` 두 곳, 회귀 2건(`ps` 공백 주입, TERM→KILL 승격 경고). 두 검사 모두 구현 전 실패(반환 0, stderr 공백)를 확인한 뒤 통과.
+- [x] `/ponytail-review`(직접 수행): 주석 두 줄을 한 줄로(-1). 나머지는 Lean.
+- [x] `closing-bet-reviewer`(`infra077-reviewer`) 1차 CHANGES_REQUIRED(medium 1, low 2). M1: `lifecycle_terminate_started_child` 가 `ps` 공백을 종료로 받아 살아 있는 자식을 `wait` 로 막고 거짓 성공(리뷰어가 20초 자식으로 격리 재현, `ps` 가 막힌 샌드박스는 `[INFRA-074]` QA 에 실기록). 리뷰어의 `kill -0` 한 줄 제안은 zombie 자식을 실패로 바꾸므로 대신 `lifecycle_pid_alive` 가 알 수 없음을 2 로 돌려주고 그 호출 지점만 `case` 로 가르게 함. 회귀 검사 1건 추가(RED 3.13초 반환 0 → GREEN 즉시 반환 1). L1: `ps -o stat=` 과 `ps -o lstart=` 사이의 더 좁은 창은 남음. PID 재사용 토큰 검증을 약화시켜야 닫히므로 알려진 천장으로 README 와 아카이브에 기록. L2: `deploy/systemd/README.md` 의 미해결 서술을 현재 동작으로 정정. 2차 재판정 APPROVE(max low). 리뷰어가 세 판본을 나란히 격리 실행해 기준 커밋 0.02초 반환 1, 1차 반영본 3.03초 뒤 0, 2차 반영본 0.05초 반환 1 을 실측. 남은 low 2건: (a) `lifecycle_terminate_started_child` 끝의 `lifecycle_pid_alive "$pid" && return 1` 에서 2 가 `wait` 로 떨어지는 것을 「모르면 실패」로 바꾸자는 제안은 미반영. 그 줄은 TERM·KILL 대기 루프가 끝난 뒤라 2 는 방금 사라진 자식(bash 가 곧 회수해 `wait` 가 즉시 돌아옴)이 거의 전부이고, 실패로 바꾸면 이 라운드가 없애는 거짓 음성을 그 자리에서 다시 만든다. `ps` 가 통째로 막힌 환경은 첫 판정에서 이미 실패해 그 줄에 닿지 않는다. (b) S-1 검사의 이름·독스트링·단언을 「알 수 없음(2)」 계약에 맞춤(`test_pid_alive_returns_unknown_when_ps_state_is_blank`, `== 2`). 정보성: 새 단독 호출 `lifecycle_pid_alive "$pid"` 는 `set -e` 아래에서 셸을 끝내지만 두 진입점에 `errexit` 가 없어 지금은 해당 없음. 2차 판정 뒤 바뀐 파일은 검사 파일 하나이며 그 diff 는 (b) 뿐이다.
+- [ ] 정적 검증: `bash -n scripts/service_lifecycle.sh`, `pytest -q` 전체. frontend 변경 없음이라 vitest·type-check 생략
+- [ ] QA: `docs/dev-cycle/qa/INFRA-077.md`. 하네스(회귀 2건)와 macOS 실기동 1회(`./restart_all.sh` → `./stop_all.sh`, 로컬 서비스가 내려간 상태에서 시작). 화면 없음이라 브라우저 not-applicable
 
 
 ### [FLOW-016] 누적성과 표의 순번을 전체 기준으로 매긴다

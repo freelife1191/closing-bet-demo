@@ -916,3 +916,68 @@ def test_supervisor_refusal_never_tells_you_to_restart_the_user_session_manager(
     assert "user@1000.service" in result.stderr
     assert "restart" not in result.stderr
     assert "systemctl --user status user@1000.service" in result.stderr
+
+
+def test_pid_alive_returns_unknown_when_ps_state_is_blank(tmp_path: Path) -> None:
+    """kill -0 이 성공해도 ps 가 상태를 돌려주지 않으면 종료(1)가 아니라 알 수 없음(2)이다([INFRA-077])."""
+    project = _project(tmp_path)
+    bin_dir = project / "bin"
+    _write_executable(bin_dir / "ps", "#!/bin/sh\nexit 0\n")
+    env = {"PATH": f"{bin_dir}:{os.defpath}"}
+
+    result = _run_helper(project, "lifecycle_pid_alive $$\n", env=env)
+
+    assert result.returncode == 2, result.stdout
+
+
+def test_terminate_reports_term_to_kill_escalation(tmp_path: Path) -> None:
+    """TERM 대기가 만료되면 KILL 로 올리기 전에 stderr 에 한 줄 남긴다([INFRA-077])."""
+    project = _project(tmp_path)
+    result = _run_helper(
+        project,
+        """
+lifecycle_read_pid() { printf '100\n'; }
+lifecycle_pid_alive() { return 0; }
+lifecycle_pid_matches_service() { return 0; }
+lifecycle_record_matches_process() { return 0; }
+lifecycle_signal_process() { printf '%s %s\n' "$1" "$2" >> "$PROJECT_ROOT/signals"; }
+lifecycle_wait_for_exit() {
+  [ -e "$PROJECT_ROOT/term-waited" ] && return 0
+  : > "$PROJECT_ROOT/term-waited"
+  return 1
+}
+lifecycle_terminate_recorded_process frontend
+""",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (project / "signals").read_text(encoding="utf-8").splitlines() == ["TERM 100", "KILL 100"]
+    assert "⚠️  frontend PID 100" in result.stderr
+    assert "KILL" in result.stderr
+
+
+def test_terminate_started_child_fails_fast_when_ps_is_blank(tmp_path: Path) -> None:
+    """ps 가 비어 생사를 알 수 없으면 살아 있는 자식을 wait 로 기다리지 않고 바로 실패한다([INFRA-077])."""
+    project = _project(tmp_path)
+    bin_dir = project / "bin"
+    _write_executable(bin_dir / "ps", "#!/bin/sh\nexit 0\n")
+    env = {"PATH": f"{bin_dir}:{os.defpath}"}
+
+    started = time.monotonic()
+    result = _run_helper(
+        project,
+        """
+sleep 3 &
+child=$!
+lifecycle_terminate_started_child backend "$child"
+code=$?
+kill -KILL "$child" 2>/dev/null
+wait "$child" 2>/dev/null
+exit "$code"
+""",
+        env=env,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert time.monotonic() - started < 2

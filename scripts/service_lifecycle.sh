@@ -392,6 +392,9 @@ lifecycle_pid_alive() {
   local state
   kill -0 "$1" 2>/dev/null || return 1
   state=$(ps -p "$1" -o stat= 2>/dev/null | tr -d '[:space:]')
+  # ps 가 비면 kill -0 과 ps 사이에 사라진 프로세스다. 살아 있다고 보면 시작 식별자 대조가 빈 값으로 실패한다.
+  # 다만 ps 자체가 막힌 환경과 구분할 수 없으므로 2 로 돌려주고, wait 로 막힐 수 있는 호출자만 그 값을 가른다.
+  [ -n "$state" ] || return 2
   # 아직 부모가 회수하지 않은 zombie는 이미 실행을 마친 프로세스다.
   [[ "$state" != Z* ]]
 }
@@ -419,7 +422,9 @@ lifecycle_terminate_started_child() {
   # PID 파일 기록 자체가 실패해도 이번 셸의 실제 background job은 정리한다.
   # 파일이나 포트 조회 결과가 아니라 셸 job table로 직접 자식임을 확인한다.
   lifecycle_active_job "$pid" || return 0
-  lifecycle_pid_alive "$pid" || { wait "$pid" 2>/dev/null; return 0; }
+  lifecycle_pid_alive "$pid"
+  # 생사를 알 수 없는(2) 자식을 wait 로 기다리면 ps 가 막힌 환경에서 끝나지 않으므로 바로 실패한다.
+  case $? in 0) ;; 1) wait "$pid" 2>/dev/null; return 0 ;; *) return 1 ;; esac
   parent=$(ps -p "$pid" -o ppid= | tr -d '[:space:]')
   [ "$parent" = "$$" ] || return 1
   lifecycle_pid_matches_service "$service" "$pid" || return 1
@@ -453,6 +458,7 @@ lifecycle_terminate_recorded_process() {
   lifecycle_pid_alive "$master" || return 0
   lifecycle_pid_matches_service "$service" "$master" || return 1
   lifecycle_record_matches_process "$service" "$master" || return 1
+  echo "⚠️  $service PID $master 가 TERM 뒤 ${LIFECYCLE_TERM_WAIT_SECONDS}초 안에 멈추지 않아 KILL 로 올립니다." >&2
   lifecycle_signal_process KILL "$master" || return 1
   lifecycle_wait_for_exit "$service" "$master" "$LIFECYCLE_KILL_WAIT_SECONDS"
 }
