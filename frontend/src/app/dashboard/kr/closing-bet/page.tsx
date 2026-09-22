@@ -1257,10 +1257,17 @@ export default function JonggaV2Page() {
           <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
             <div className="flex items-start gap-3">
               <i className="fas fa-triangle-exclamation mt-0.5 text-amber-300"></i>
+              {/* [JONGGA-039] 저장분을 보이는 동안에는 제목이 표시 중인 사실과 날짜를 말하고 message 줄을 보인다. */}
               <div>
-                <div className="font-semibold">오늘 종가베팅 데이터가 아직 없습니다.</div>
+                <div className="font-semibold">
+                  {data?.signals?.length
+                    ? `오늘 분석은 아직 없습니다. 최신 저장분(${data.latest_available_date || data.date})을 표시합니다.`
+                    : '오늘 종가베팅 데이터가 아직 없습니다.'}
+                </div>
                 <div className="mt-1 text-amber-100/80">
-                  {data?.stale_warning || data?.message || `최신 저장 데이터는 ${data?.latest_available_date || data?.date}입니다.`}
+                  {data?.signals?.length
+                    ? data.message || data.stale_warning
+                    : data?.stale_warning || data?.message || `최신 저장 데이터는 ${data?.latest_available_date || data?.date}입니다.`}
                 </div>
               </div>
             </div>

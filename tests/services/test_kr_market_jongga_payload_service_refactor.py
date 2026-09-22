@@ -175,20 +175,52 @@ def test_build_jongga_latest_payload_stale_keeps_stored_prices_and_file(monkeypa
     assert not (tmp_path / "jongga_v2_latest.json").exists()
 
 
-def test_build_jongga_latest_payload_stale_without_signals_stays_empty(monkeypatch, tmp_path):
-    """저장분 자체에 신호가 없으면 빈 상태를 유지하되 오래됐다는 표식은 남긴다."""
+def test_build_jongga_latest_payload_stale_without_signals_falls_back_to_recent_report(
+    monkeypatch, tmp_path
+):
+    """[JONGGA-039] 저장분 자체에 신호가 없으면 가장 최근의 유효 리포트를 그 날짜의 표식과 함께 낸다.
+
+    전날 실행이 0건으로 끝나면 latest 파일이 비어 있는데, 그때 빈 목록에 표식만 붙이면
+    다음 개장일 17시까지 화면이 「없다」 는 배너와 빈 목록을 함께 보인다.
+    """
     counters: dict[str, int] = {}
-    latest_payload = {
-        "date": "2026-03-03",
-        "signals": [],
-        "filtered_count": 0,
-    }
+    latest_payload = {"date": "2026-03-03", "signals": [], "filtered_count": 0}
+    (tmp_path / "jongga_v2_results_20260303.json").write_text(
+        '{"date":"2026-03-03","signals":[]}', encoding="utf-8"
+    )
+    (tmp_path / "jongga_v2_results_20260302.json").write_text(
+        '{"date":"2026-03-02","signals":[{"ticker":"005930","grade":"S","score":{"total":12}}]}',
+        encoding="utf-8",
+    )
+
+    result = _build_stale_latest_payload(monkeypatch, tmp_path, latest_payload, counters)
+
+    assert [signal["ticker"] for signal in result["signals"]] == ["005930"]
+    assert result["is_stale"] is True
+    assert result["date"] == "2026-03-02"
+    assert result["latest_available_date"] == "2026-03-02"
+    assert "2026-03-04" in result["stale_warning"]
+    assert "주말/휴일" not in result["message"]
+    assert counters.get("sorted") == 1
+    assert counters.get("normalized") == 1
+
+
+def test_build_jongga_latest_payload_stale_without_any_valid_report_stays_empty(
+    monkeypatch, tmp_path
+):
+    """유효한 일자 파일이 하나도 없을 때만 빈 상태를 유지하되 오래됐다는 표식은 남긴다."""
+    counters: dict[str, int] = {}
+    latest_payload = {"date": "2026-03-03", "signals": [], "filtered_count": 0}
+    (tmp_path / "jongga_v2_results_20260303.json").write_text(
+        '{"date":"2026-03-03","signals":[]}', encoding="utf-8"
+    )
 
     result = _build_stale_latest_payload(monkeypatch, tmp_path, latest_payload, counters)
 
     assert result["signals"] == []
     assert result["is_stale"] is True
     assert result["date"] == "2026-03-03"
+    assert result["latest_available_date"] == "2026-03-03"
 
 
 def test_build_jongga_latest_payload_keeps_today_empty_result_without_recent_fallback(tmp_path):

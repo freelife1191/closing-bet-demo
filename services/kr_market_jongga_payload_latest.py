@@ -229,10 +229,20 @@ def build_jongga_latest_payload(
             )
             stale_notice = _build_stale_notice(current_time, data)
             if not has_non_empty_signals(data):
-                return {
-                    **_build_empty_latest_jongga_data_payload(current_time, data),
-                    **stale_notice,
-                }
+                # 전날 실행이 0건이면 latest 파일이 비어 있다. 가장 최근의 유효 리포트를 그 날짜의
+                # 표식과 함께 낸다([JONGGA-039]). 표식을 나중에 덮어 helper 의 「주말/휴일」 문구를 가린다.
+                recent_payload = find_recent_valid_jongga_payload(
+                    data_dir=data_dir,
+                    recalculate_jongga_grades=recalculate_jongga_grades,
+                    logger=logger,
+                )
+                if not recent_payload:
+                    return {
+                        **_build_empty_latest_jongga_data_payload(current_time, data),
+                        **stale_notice,
+                    }
+                data = recent_payload
+                stale_notice = _build_stale_notice(current_time, data)
             # 오늘 자료가 아니므로 오늘 시세를 덮어쓰지 않고 저장 파일도 다시 쓰지 않는다.
             sort_jongga_signals(data["signals"])
             normalize_jongga_signals_for_frontend(data["signals"])
