@@ -19,6 +19,10 @@ from services.kr_market_cumulative_cache import (
 )
 from services.kr_market_csv_utils import load_csv_readonly
 
+# 누적성과 필터가 받는 값. 화면의 결과·등급 버튼과 같은 목록이다.
+_CUMULATIVE_OUTCOMES = ("WIN", "LOSS", "OPEN")
+_CUMULATIVE_GRADES = ("S", "A", "B", "D")
+
 
 def _parse_positive_int_query_arg(
     raw_value: Any,
@@ -122,6 +126,14 @@ def _register_cumulative_performance_route(
     def get_cumulative_performance():
         """종가베팅 누적 성과 조회 (실제 데이터 연동)"""
         def _handler():
+            # 잘못된 필터 값이 캐시 미스의 전체 계산을 일으키지 않도록 먼저 거른다.
+            outcome = request.args.get("outcome")
+            grade = request.args.get("grade")
+            if outcome is not None and outcome not in _CUMULATIVE_OUTCOMES:
+                return jsonify({"error": "outcome 은 WIN, LOSS, OPEN 가운데 하나여야 합니다."}), 400
+            if grade is not None and grade not in _CUMULATIVE_GRADES:
+                return jsonify({"error": "grade 는 S, A, B, D 가운데 하나여야 합니다."}), 400
+
             cache_signature = build_cumulative_cache_signature(
                 get_data_path=deps.get("get_data_path"),
                 data_dir_getter=deps.get("data_dir_getter"),
@@ -185,9 +197,23 @@ def _register_cumulative_performance_route(
                 minimum=1,
                 maximum=500,
             )
-            paginated_trades, pagination = deps["paginate_items"](trades, page, limit)
+            # 순번은 필터 전 전체 목록 기준으로 매겨 필터가 켜져도 거래마다 같은 번호를 남긴다.
+            # 캐시가 쥔 dict 를 건드리지 않도록 사본에 붙인다.
+            total = len(trades)
+            numbered = [{**trade, "no": total - idx} for idx, trade in enumerate(trades)]
+            filtered = [
+                trade for trade in numbered
+                if (outcome is None or trade.get("outcome") == outcome)
+                and (grade is None or trade.get("grade") == grade)
+            ]
+            counts = {
+                "total": total,
+                "outcome": {key: sum(t.get("outcome") == key for t in trades) for key in _CUMULATIVE_OUTCOMES},
+                "grade": {key: sum(t.get("grade") == key for t in trades) for key in _CUMULATIVE_GRADES},
+            }
+            paginated_trades, pagination = deps["paginate_items"](filtered, page, limit)
 
-            return jsonify({"kpi": kpi, "trades": paginated_trades, "pagination": pagination})
+            return jsonify({"kpi": kpi, "trades": paginated_trades, "pagination": pagination, "counts": counts})
 
         return _execute_json_route(
             handler=_handler,

@@ -9,7 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CumulativeClientPage from './CumulativeClientPage';
 
 // 현재 페이지에는 3승 2패만 담고, 전체 기간 KPI 는 71승 105패로 크게 벌려 둔다.
-// 칩이 KPI 를 쓰면 3/2 대신 71/105 가 나오므로 두 기준이 갈리는지 바로 드러난다.
+// [FLOW-017] 부터 칩은 서버가 전체 목록에서 센 counts(5승 3패 1보유)를 읽는다.
+// 세 값이 모두 달라서 칩이 어느 기준을 읽는지 바로 드러난다.
 const PAGE_TRADES = [
   { id: 1, code: '005930', name: '삼성전자', date: '2026-05-05', grade: 'A', outcome: 'WIN', roi: 9, entry: 100, days: 1, market: 'KOSPI', maxHigh: 110, score: 12, themes: [], priceTrail: [] },
   { id: 2, code: '000660', name: 'SK하이닉스', date: '2026-05-05', grade: 'B', outcome: 'WIN', roi: 9, entry: 100, days: 1, market: 'KOSPI', maxHigh: 110, score: 11, themes: [], priceTrail: [] },
@@ -48,6 +49,7 @@ beforeEach(() => {
         trades: PAGE_TRADES,
         kpi: KPI,
         pagination: { page: 1, limit: 50, total: 176, totalPages: 4 },
+        counts: { total: 9, outcome: { WIN: 5, LOSS: 3, OPEN: 1 }, grade: { S: 0, A: 4, B: 5, D: 0 } },
       }),
     })),
   );
@@ -72,27 +74,27 @@ function openDistributionTooltip(): HTMLElement {
 }
 
 describe('CumulativeClientPage', () => {
-  it('결과 칩은 현재 페이지 기준으로 세어 전체 = 성공 + 실패 + 보유가 맞는다', async () => {
+  it('결과 칩은 서버 counts 로 세어 전체 = 성공 + 실패 + 보유가 맞는다', async () => {
     render(<CumulativeClientPage />);
 
     await waitFor(() => {
-      expect(chipLabels()).toContain('전체 (5)');
+      expect(chipLabels()).toContain('전체 (9)');
     });
 
     const labels = chipLabels();
-    expect(labels).toContain('성공 (3)');
-    expect(labels).toContain('실패 (2)');
-    expect(labels).toContain('보유 (0)');
-    // 전체 기간 KPI 값이 칩으로 새어 나오면 안 된다.
+    expect(labels).toContain('성공 (5)');
+    expect(labels).toContain('실패 (3)');
+    expect(labels).toContain('보유 (1)');
+    // KPI 값이나 현재 페이지 행으로 센 값이 칩으로 새어 나오면 안 된다.
     expect(labels).not.toContain('성공 (71)');
-    expect(labels).not.toContain('실패 (105)');
+    expect(labels).not.toContain('성공 (3)');
   });
 
   it('서버가 제공한 최근 승률을 표시한다', async () => {
     render(<CumulativeClientPage />);
 
     await waitFor(() => {
-      expect(chipLabels()).toContain('전체 (5)');
+      expect(chipLabels()).toContain('전체 (9)');
     });
 
     // 5건 중 3승인 60%를 서버 KPI로 공급한다. WIN/LOSS 대문자 집계 계약은
@@ -103,7 +105,7 @@ describe('CumulativeClientPage', () => {
 
 it('누적성과 안내는 저장 가격 우선과 기본 +5/-3을 설명한다', async () => {
   render(<CumulativeClientPage />);
-  await waitFor(() => expect(chipLabels()).toContain('전체 (5)'));
+  await waitFor(() => expect(chipLabels()).toContain('전체 (9)'));
   fireEvent.click(screen.getByRole('button', { name: '성과 가이드' }));
   expect(within(screen.getByRole('dialog')).getByText(/저장된 목표가·손절가를 우선/)).toBeTruthy();
 });

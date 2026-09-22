@@ -190,16 +190,10 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
 
     // 전체 기간 D 등급은 카드의 6건이며, 현재 페이지의 D 두 행과 혼동하면 안 된다.
     expect(within(gradeCard('D')).getByText('6건')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'D (2)' })).toBeTruthy();
 
     // 기존 S+A+B 재계산 값(평균 2.0%, 누적 36%)이 아니라 서버의 전체 KPI를 표시한다.
     expect(within(kpiCard('평균 수익률')).getByText('+2.04%')).toBeTruthy();
     expect(within(kpiCard('누적 수익률')).getByText('+49%')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'D (2)' }));
-    expect(screen.getByText('첫 번째 페이지 D-1')).toBeTruthy();
-    expect(screen.getByText('첫 번째 페이지 D-2')).toBeTruthy();
-    expect(screen.queryByText('첫 번째 페이지 S')).toBeNull();
   });
 
   it('페이지가 달라져도 최근 성과는 서버 KPI를 유지한다', async () => {
@@ -244,43 +238,6 @@ describe('[FLOW-013] 누적성과 KPI 표시', () => {
     const tooltip = within(openDistributionTooltip());
     expect(tooltip.getByText('최근 청산 2건 승률 (추천일순)')).toBeTruthy();
     expect(tooltip.getByText('최근 청산 2건 승률 (추천일순)').nextElementSibling?.textContent).toBe('50%');
-  });
-
-  it('필터 범위가 현재 페이지 행임을 표시한다', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: true, json: async () => responseFor(PAGE_ONE_TRADES) })),
-    );
-
-    render(<CumulativeClientPage />);
-
-    await waitFor(() => expect(screen.getByText('현재 페이지 내')).toBeTruthy());
-  });
-
-  it('2페이지에서 D·실패 필터를 골라도 같은 페이지를 유지하고 다시 조회하지 않는다', async () => {
-    const fetchMock = vi.fn(async (input: string) => ({
-      ok: true,
-      json: async () => responseFor(input.includes('page=2') ? PAGE_TWO_TRADES : PAGE_ONE_TRADES),
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<CumulativeClientPage />);
-
-    await waitFor(() => expect(screen.getByText('첫 번째 페이지 S')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(screen.getByText('두 번째 페이지 S')).toBeTruthy());
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    fireEvent.click(screen.getByRole('button', { name: 'D (2)' }));
-    await waitFor(() => expect(screen.getByText('두 번째 페이지 D-1')).toBeTruthy());
-    expect(screen.getByText('두 번째 페이지 D-2')).toBeTruthy();
-    expect(screen.queryByText('두 번째 페이지 S')).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    fireEvent.click(screen.getByRole('button', { name: '실패 (10)' }));
-    expect(screen.getByText('두 번째 페이지 D-1')).toBeTruthy();
-    expect(screen.getByText('두 번째 페이지 D-2')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('StrictMode 초기 요청의 늦은 응답이 최신 페이지 표와 KPI를 덮지 않는다', async () => {

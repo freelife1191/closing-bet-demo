@@ -12,9 +12,17 @@ interface Pagination {
   totalPages: number;
 }
 
+// 서버가 필터와 무관하게 전체 목록에서 센 버튼 건수
+interface FilterCounts {
+  total: number;
+  outcome: Record<'WIN' | 'LOSS' | 'OPEN', number>;
+  grade: Record<'S' | 'A' | 'B' | 'D', number>;
+}
+
 // Revised Interface matching API response
 interface Trade {
   id: string;
+  no: number; // 서버가 필터 전 전체 목록 기준으로 매긴 순번
   date: string;
   grade: string;
   name: string;
@@ -817,7 +825,7 @@ function TableHeader({
   );
 }
 
-function TradeTable({ rows }: { rows: { trade: Trade; no: number }[] }) {
+function TradeTable({ trades }: { trades: Trade[] }) {
   return (
     <div className="bg-[#1c1c1e] rounded-2xl border border-white/5 overflow-hidden">
       <div className="overflow-x-auto">
@@ -839,9 +847,9 @@ function TradeTable({ rows }: { rows: { trade: Trade; no: number }[] }) {
             </tr>
           </thead>
           <tbody className="text-xs divide-y divide-white/5">
-            {rows.map(({ trade, no }, idx) => (
+            {trades.map((trade, idx) => (
               <tr key={`${trade.id}-${idx}`} className="hover:bg-white/5 transition-colors group">
-                <td className="py-3 px-4 text-center text-gray-600">{no}</td>
+                <td className="py-3 px-4 text-center text-gray-600">{trade.no}</td>
                 <td className="py-3 px-4 text-gray-400 font-mono tracking-tight">{trade.date}</td>
                 <td className="py-3 px-4">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${trade.grade === 'S' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
@@ -901,7 +909,7 @@ function TradeTable({ rows }: { rows: { trade: Trade; no: number }[] }) {
           </tbody>
         </table>
       </div>
-      {rows.length === 0 && (
+      {trades.length === 0 && (
         <div className="py-8 text-center text-gray-500">
           해당 기간에 대한 거래 내역이 없습니다.
         </div>
@@ -941,6 +949,7 @@ export default function CumulativeClientPage() {
   });
   const [trades, setTrades] = useState<Trade[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [counts, setCounts] = useState<FilterCounts | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Pagination State
@@ -955,7 +964,10 @@ export default function CumulativeClientPage() {
       setLoading(true);
       try {
         // [FIX] Server-side Pagination
-        const res = await fetch(`/api/kr/closing-bet/cumulative?page=${currentPage}&limit=${itemsPerPage}`);
+        // 결과·등급 필터는 서버가 페이지를 자르기 전에 건다. 「전체」면 파라미터를 보내지 않는다.
+        const filterQuery = (outcomeFilter !== 'All' ? `&outcome=${outcomeFilter}` : '')
+          + (gradeFilter !== 'All' ? `&grade=${gradeFilter}` : '');
+        const res = await fetch(`/api/kr/closing-bet/cumulative?page=${currentPage}&limit=${itemsPerPage}${filterQuery}`);
         if (!res.ok) throw new Error('Failed to fetch data');
         const data = await res.json();
         if (!isActive) return;
@@ -976,10 +988,13 @@ export default function CumulativeClientPage() {
           consecutiveLosses: typeof apiKpi.consecutiveLosses === 'number' ? apiKpi.consecutiveLosses : 0,
         });
         setPagination(data.pagination);
+        setCounts(data.counts ?? null);
         setTrades(data.trades || []);
       } catch (error) {
         if (isActive) {
           console.error('Error fetching cumulative data:', error);
+          // 새 필터가 켜진 채 이전 필터의 행을 남기지 않는다.
+          setTrades([]);
         }
       } finally {
         if (isActive) {
@@ -992,19 +1007,11 @@ export default function CumulativeClientPage() {
     return () => {
       isActive = false;
     };
-  }, [currentPage, itemsPerPage]); // Re-fetch on page/limit change
+  }, [currentPage, itemsPerPage, outcomeFilter, gradeFilter]); // Re-fetch on page/limit/filter change
 
-  // Filter Logic
-  // 순번은 서버가 알려준 전체 목록 기준으로, 필터를 걸기 전에 매긴다. 그래야 페이지마다
-  // 번호가 이어지고, 필터가 켜져도 거래마다 같은 번호가 남는다.
-  const firstNo = pagination
-    ? pagination.total - (pagination.page - 1) * pagination.limit
-    : trades.length;
-  const filteredRows = trades.map((trade, idx) => ({ trade, no: firstNo - idx })).filter(({ trade: t }) => {
-    if (outcomeFilter !== 'All' && t.outcome !== outcomeFilter) return false;
-    if (gradeFilter !== 'All' && t.grade !== gradeFilter) return false;
-    return true;
-  });
+  // 필터를 바꾸면 걸러진 목록의 첫 페이지부터 다시 본다.
+  const selectOutcome = (value: string) => { setOutcomeFilter(value); setCurrentPage(1); };
+  const selectGrade = (value: string) => { setGradeFilter(value); setCurrentPage(1); };
 
   // 등급 카드는 전체 기간을 집계한 kpi.roiByGrade 만 읽는다. 표에 그려지는 trades 는
   // 현재 페이지분이므로 그것으로 다시 계산하면 페이지를 넘길 때마다 값이 달라진다.
@@ -1152,25 +1159,22 @@ export default function CumulativeClientPage() {
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">결과:</span>
-              <span className="text-[10px] text-gray-500">현재 페이지 내</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
-                {/* 필터는 현재 페이지의 trades 만 거르므로 건수도 같은 기준으로 센다.
-                    전체 기간 집계는 위쪽 KPI 카드가 이미 보여준다. */}
-                <FilterButton label="전체" count={trades.length} active={outcomeFilter === 'All'} onClick={() => setOutcomeFilter('All')} />
-                <FilterButton label="성공" count={trades.filter(t => t.outcome === 'WIN').length} active={outcomeFilter === 'WIN'} onClick={() => setOutcomeFilter('WIN')} />
-                <FilterButton label="실패" count={trades.filter(t => t.outcome === 'LOSS').length} active={outcomeFilter === 'LOSS'} onClick={() => setOutcomeFilter('LOSS')} />
-                <FilterButton label="보유" count={trades.filter(t => t.outcome === 'OPEN').length} active={outcomeFilter === 'OPEN'} onClick={() => setOutcomeFilter('OPEN')} />
+                <FilterButton label="전체" count={counts?.total} active={outcomeFilter === 'All'} onClick={() => selectOutcome('All')} />
+                <FilterButton label="성공" count={counts?.outcome.WIN} active={outcomeFilter === 'WIN'} onClick={() => selectOutcome('WIN')} />
+                <FilterButton label="실패" count={counts?.outcome.LOSS} active={outcomeFilter === 'LOSS'} onClick={() => selectOutcome('LOSS')} />
+                <FilterButton label="보유" count={counts?.outcome.OPEN} active={outcomeFilter === 'OPEN'} onClick={() => selectOutcome('OPEN')} />
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">등급:</span>
               <div className="flex gap-1 bg-[#1c1c1e] p-1 rounded-lg border border-white/5">
-                <FilterButton label="전체" active={gradeFilter === 'All'} onClick={() => setGradeFilter('All')} />
-                <FilterButton label="S" count={trades.filter(t => t.grade === 'S').length} active={gradeFilter === 'S'} onClick={() => setGradeFilter('S')} />
-                <FilterButton label="A" count={trades.filter(t => t.grade === 'A').length} active={gradeFilter === 'A'} onClick={() => setGradeFilter('A')} />
-                <FilterButton label="B" count={trades.filter(t => t.grade === 'B').length} active={gradeFilter === 'B'} onClick={() => setGradeFilter('B')} />
-                <FilterButton label="D" count={trades.filter(t => t.grade === 'D').length} active={gradeFilter === 'D'} onClick={() => setGradeFilter('D')} />
+                <FilterButton label="전체" count={counts?.total} active={gradeFilter === 'All'} onClick={() => selectGrade('All')} />
+                <FilterButton label="S" count={counts?.grade.S} active={gradeFilter === 'S'} onClick={() => selectGrade('S')} />
+                <FilterButton label="A" count={counts?.grade.A} active={gradeFilter === 'A'} onClick={() => selectGrade('A')} />
+                <FilterButton label="B" count={counts?.grade.B} active={gradeFilter === 'B'} onClick={() => selectGrade('B')} />
+                <FilterButton label="D" count={counts?.grade.D} active={gradeFilter === 'D'} onClick={() => selectGrade('D')} />
               </div>
             </div>
           </div>
@@ -1194,7 +1198,7 @@ export default function CumulativeClientPage() {
           </div>
         </div>
 
-        <TradeTable rows={filteredRows} />
+        <TradeTable trades={trades} />
 
         {/* Pagination Controls */}
         {pagination && pagination.totalPages > 1 && (

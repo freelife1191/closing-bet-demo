@@ -196,3 +196,87 @@ def test_cumulative_route_handles_invalid_page_limit_query_params(tmp_path):
     payload = response.get_json()
     assert payload["pagination"]["page"] == 1
     assert payload["pagination"]["limit"] == 50
+
+
+def _filter_route_client(tmp_path, monkeypatch):
+    """[FLOW-017] 필터 검사용. 거래 넷을 만드는 순서가 곧 서버 목록 순서다."""
+    from services.kr_market_backtest_kpi_helpers import paginate_items
+
+    cumulative_cache.clear_cumulative_cache()
+    monkeypatch.setattr(
+        cumulative_cache,
+        "_CUMULATIVE_CACHE_DB_PATH",
+        str(tmp_path / "runtime_cache.db"),
+    )
+    cumulative_cache._CUMULATIVE_SQLITE_READY.clear()
+
+    signals = [
+        {"id": "t0", "outcome": "WIN", "grade": "S"},
+        {"id": "t1", "outcome": "LOSS", "grade": "A"},
+        {"id": "t2", "outcome": "WIN", "grade": "A"},
+        {"id": "t3", "outcome": "OPEN", "grade": "B"},
+    ]
+    deps = {
+        "build_ai_analysis_payload_for_target_date": lambda **_k: {"signals": []},
+        "build_latest_ai_analysis_payload": lambda **_k: {"signals": []},
+        "load_json_file": lambda _name: {},
+        "build_ai_signals_from_jongga_results": lambda **_k: [],
+        "normalize_ai_payload_tickers": lambda payload: payload,
+        "should_use_jongga_ai_payload": lambda *_a, **_k: False,
+        "format_signal_date": lambda value: str(value),
+        "load_jongga_result_payloads": lambda: [("r.json", {"signals": signals})],
+        "load_backtest_price_snapshot": lambda: (pd.DataFrame(), {}),
+        "load_csv_file": lambda _name: pd.DataFrame(),
+        "prepare_cumulative_price_dataframe": lambda df: df,
+        "build_ticker_price_index": lambda _df: {},
+        "extract_stats_date_from_results_filename": lambda _fp, fallback_date="": str(fallback_date),
+        "build_cumulative_trade_record": lambda signal, *_a, **_k: dict(signal),
+        "aggregate_cumulative_kpis": lambda trades, _price_df, _now: {"count": len(trades)},
+        "paginate_items": paginate_items,
+        "get_data_path": lambda filename: str(tmp_path / filename),
+        "data_dir_getter": lambda: str(tmp_path),
+    }
+
+    app = Flask(__name__)
+    app.testing = True
+    bp = Blueprint("kr-filter-test", __name__)
+    ai_routes.register_market_data_ai_routes(bp, logger=logging.getLogger(__name__), deps=deps)
+    app.register_blueprint(bp, url_prefix="/api/kr")
+    return app.test_client()
+
+
+def test_cumulative_route_filters_before_paginating_and_keeps_original_numbers(tmp_path, monkeypatch):
+    client = _filter_route_client(tmp_path, monkeypatch)
+
+    payload = client.get("/api/kr/closing-bet/cumulative?outcome=WIN&limit=1&page=2").get_json()
+
+    # 성공 두 건 가운데 두 번째 페이지. 번호는 필터 전 전체 넷 기준(4,3,2,1)의 2 다.
+    assert [(t["id"], t["no"]) for t in payload["trades"]] == [("t2", 2)]
+    assert payload["pagination"]["total"] == 2
+    assert payload["pagination"]["totalPages"] == 2
+
+    both = client.get("/api/kr/closing-bet/cumulative?outcome=WIN&grade=A").get_json()
+    assert [(t["id"], t["no"]) for t in both["trades"]] == [("t2", 2)]
+
+    unfiltered = client.get("/api/kr/closing-bet/cumulative").get_json()
+    assert [t["no"] for t in unfiltered["trades"]] == [4, 3, 2, 1]
+
+
+def test_cumulative_route_counts_the_whole_list_regardless_of_filter(tmp_path, monkeypatch):
+    client = _filter_route_client(tmp_path, monkeypatch)
+
+    payload = client.get("/api/kr/closing-bet/cumulative?outcome=LOSS").get_json()
+
+    assert payload["counts"] == {
+        "total": 4,
+        "outcome": {"WIN": 2, "LOSS": 1, "OPEN": 1},
+        "grade": {"S": 1, "A": 2, "B": 1, "D": 0},
+    }
+
+
+def test_cumulative_route_rejects_unknown_filter_values(tmp_path, monkeypatch):
+    client = _filter_route_client(tmp_path, monkeypatch)
+
+    assert client.get("/api/kr/closing-bet/cumulative?outcome=All").status_code == 400
+    assert client.get("/api/kr/closing-bet/cumulative?grade=C").status_code == 400
+    assert client.get("/api/kr/closing-bet/cumulative?grade=S").status_code == 200
