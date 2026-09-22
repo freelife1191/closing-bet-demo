@@ -161,10 +161,10 @@ def detect_vcp_pattern(df: pd.DataFrame, ticker: str, name: str) -> VCPResult:
         else 1.0
     )
 
-    if contraction_ratio <= 0.5:
+    if contraction_ratio <= VCP_THRESHOLDS.STRONG_CONTRACTION_RATIO:
         score += 40
         reasons.append("Strong volatility contraction")
-    elif contraction_ratio <= 0.7:
+    elif contraction_ratio <= VCP_THRESHOLDS.CONTRACTION_RATIO:
         score += 30
         reasons.append("Healthy volatility contraction")
     elif contraction_ratio <= 0.9:

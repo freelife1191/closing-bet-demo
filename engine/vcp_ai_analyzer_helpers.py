@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from engine.pandas_utils_safe import safe_confidence
 from engine.pandas_utils_safe import safe_optional_float
+from engine.constants import VCP_THRESHOLDS
 
 
 _PERPLEXITY_QUOTA_KEYWORDS = (
@@ -507,14 +508,14 @@ def _parse_recommendation_from_narrative(text: str) -> Optional[dict[str, Any]]:
     }
 
 
-def _describe_vcp_state(score: float, contraction_ratio: float) -> str:
-    if score >= 80 and contraction_ratio <= 0.80:
+def _describe_vcp_state(contraction_ratio: float) -> str:
+    # 합산 점수는 패턴 강도가 아니므로 수축비만 본다([VCP-033]). 경계는 engine/vcp.py 의 점수 구간과 같은
+    # 상수다. 저장된 시그널은 CONTRACTION_RATIO 이하다.
+    if contraction_ratio <= VCP_THRESHOLDS.STRONG_CONTRACTION_RATIO:
         return "변동성 수축 신호가 강한 편입니다"
-    if score >= 70 and contraction_ratio <= 1.00:
+    if contraction_ratio <= VCP_THRESHOLDS.CONTRACTION_RATIO:
         return "변동성 수축 신호가 유지되는 구간입니다"
-    if score < 62 or contraction_ratio > 1.15:
-        return "변동성 수축 신호가 약화된 구간입니다"
-    return "변동성 수축 신호가 혼재한 구간입니다"
+    return "변동성 수축 신호가 약화된 구간입니다"
 
 
 def _describe_flow_state(flow_value: float, window_label: str) -> str:
@@ -541,11 +542,21 @@ def build_vcp_rule_based_recommendation(
     stock_name: str,
     stock_data: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    LLM JSON 응답 복구 실패 시 사용하는 규칙 기반 보정 추천.
+    """LLM JSON 응답 복구 실패 시 사용하는 규칙 기반 보정 추천.
+
+    판정 축은 수급뿐이다([VCP-033]). 5일·1일 수급이 모두 순매도면 SELL, 그 밖에는 HOLD 이고
+    BUY 는 내지 않는다. 응답을 읽지 못한 것은 매수 근거가 아니다. 합산 점수(수급 70 + 거래량 20
+    + VCP 10)는 패턴 강도가 아니어서 근거 문장에만 쓴다. 종전의 `score <= 62 → SELL` 은 저장
+    게이트(합산 ≥ 60)를 전제한 것이라 [VCP-032] 뒤 거의 모든 시그널을 SELL 로 몰았다.
     """
     score = safe_optional_float(stock_data.get("score"))
     contraction_ratio = safe_optional_float(stock_data.get("contraction_ratio"))
+    if contraction_ratio is not None and contraction_ratio <= 0:
+        # build_signal_item 은 결측 수축비를 0 으로 저장한다. 0 은 「강한 수축」이 아니라 결측이다.
+        contraction_ratio = None
+    if contraction_ratio is not None:
+        # 문장에 적는 소수 둘째 자리 값으로 판정해, 「0.50」 두 종목이 서로 다른 서술을 달지 않게 한다.
+        contraction_ratio = round(contraction_ratio, 2)
     foreign_5d = safe_optional_float(stock_data.get("foreign_5d"))
     inst_5d = safe_optional_float(stock_data.get("inst_5d"))
     foreign_1d = safe_optional_float(stock_data.get("foreign_1d"))
@@ -556,68 +567,34 @@ def build_vcp_rule_based_recommendation(
         value is not None
         for value in (score, contraction_ratio, foreign_5d, inst_5d, foreign_1d, inst_1d)
     )
-    topic_particle = _topic_particle(stock_name)
+    has_outflows = flow_5d is not None and flow_1d is not None and flow_5d < 0 and flow_1d < 0
+    action = "SELL" if has_outflows else "HOLD"
 
-    if not is_complete:
-        has_negative_flows = (
-            flow_5d is not None
-            and flow_1d is not None
-            and flow_5d < 0
-            and flow_1d < 0
+    evidence: list[str] = []
+    if score is not None and contraction_ratio is not None:
+        evidence.append(
+            f"종합 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}로 {_describe_vcp_state(contraction_ratio)}."
         )
-        if (score is not None and score <= 62) or has_negative_flows:
-            action = "SELL"
-        else:
-            action = "HOLD"
-
-        evidence: list[str] = []
-        if score is not None and contraction_ratio is not None:
-            evidence.append(
-                f"VCP 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}로 "
-                f"{_describe_vcp_state(score, contraction_ratio)}."
-            )
-        elif score is not None:
-            evidence.append(f"VCP 점수 {score:.1f}점이 확인됩니다.")
-        elif contraction_ratio is not None:
-            evidence.append(f"수축비율 {contraction_ratio:.2f}가 확인됩니다.")
-        if flow_5d is not None:
-            evidence.append(f"{_describe_flow_state(flow_5d, '5일')}.")
-        if flow_1d is not None:
-            evidence.append(f"{_describe_flow_state(flow_1d, '1일')}.")
-
-        detail = " ".join(evidence)
-        reason = (
-            f"{stock_name}{topic_particle} {detail + ' ' if detail else ''}"
-            f"정보가 부족하여 보수적으로 {action} 판단을 유지합니다."
-        )
-        return {
-            "action": action,
-            # 결측을 점수·비율 기본값으로 바꿔 신뢰도를 계산하지 않는다.
-            "confidence": 55,
-            "reason": reason[:600],
-        }
-
-    if score >= 78 and contraction_ratio <= 0.80 and flow_5d > 0 and flow_1d >= 0:
-        action = "BUY"
-        confidence = max(60, min(90, int(score * 0.95 + (4 if contraction_ratio <= 0.70 else 0))))
-    elif score <= 62 or (flow_5d < 0 and flow_1d < 0):
-        action = "SELL"
-        confidence = max(55, min(88, int(72 - max(0.0, score - 50) * 0.35)))
+    elif score is not None:
+        evidence.append(f"종합 점수 {score:.1f}점이 확인됩니다.")
+    elif contraction_ratio is not None:
+        evidence.append(f"수축비율 {contraction_ratio:.2f}로 {_describe_vcp_state(contraction_ratio)}.")
+    if flow_5d is not None:
+        evidence.append(f"{_describe_flow_state(flow_5d, '5일')}.")
+    if flow_1d is not None:
+        evidence.append(f"{_describe_flow_state(flow_1d, '1일')}.")
+    detail = " ".join(evidence)
+    if has_outflows:
+        closing = "5일·1일 수급이 모두 순매도라 SELL 로 판단합니다."
+    elif is_complete:
+        closing = "이 신호를 종합해 현재 판단은 HOLD입니다."
     else:
-        action = "HOLD"
-        confidence = max(52, min(82, int(58 + max(0.0, score - 60) * 0.4)))
-
-    vcp_state = _describe_vcp_state(score, contraction_ratio)
-    flow_5d_state = _describe_flow_state(flow_5d, "5일")
-    flow_1d_state = _describe_flow_state(flow_1d, "1일")
-    reason = (
-        f"{stock_name}{topic_particle} VCP 점수 {score:.1f}점, 수축비율 {contraction_ratio:.2f}로 {vcp_state}. "
-        f"{flow_5d_state}. {flow_1d_state}. "
-        f"이 신호를 종합해 현재 판단은 {action}입니다."
-    )
+        closing = "정보가 부족하여 보수적으로 HOLD 판단을 유지합니다."
+    reason = f"{stock_name}{_topic_particle(stock_name)} {detail + ' ' if detail else ''}{closing}"
     return {
         "action": action,
-        "confidence": confidence,
+        # 규칙 폴백은 신뢰도를 계산하지 않는다. AI 가 답하지 못한 자리라 낮은 값 하나로 둔다.
+        "confidence": 55,
         "reason": reason[:600],
     }
 

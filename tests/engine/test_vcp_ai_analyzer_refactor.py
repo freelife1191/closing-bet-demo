@@ -849,9 +849,9 @@ def test_analyze_with_zai_uses_rule_based_fallback_when_all_parsing_fails(monkey
     result = asyncio.run(analyzer._analyze_with_zai("고려아연", stock_data))
 
     assert result is not None
-    assert result["action"] == "BUY"
-    assert result["confidence"] >= 60
-    assert "현재 판단은 BUY" in result["reason"]
+    assert result["action"] == "HOLD"
+    assert result["confidence"] == 55
+    assert "현재 판단은 HOLD" in result["reason"]
     from engine.config import app_config
     from engine.vcp_ai_analyzer import ZAI_FALLBACK_MODEL_CHAIN
 

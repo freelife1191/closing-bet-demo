@@ -28,6 +28,8 @@ class VCPThresholds:
     """VCP 패턴 감지 관련 임계값"""
 
     CONTRACTION_RATIO: float = 0.7
+    # 직전 구간의 절반 이하로 좁아진 「강한 수축」. VCP 점수(engine/vcp.py)와 규칙 폴백의 서술([VCP-033])이 함께 쓴다.
+    STRONG_CONTRACTION_RATIO: float = 0.5
     MIN_SCORE: int = 50
     MAX_LOOKBACK_DAYS: int = 60
     PRICE_NEAR_HIGH_RATIO: float = 0.85

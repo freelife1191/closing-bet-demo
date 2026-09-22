@@ -250,45 +250,86 @@ def test_is_perplexity_quota_exceeded_detects_quota_like_errors():
     assert is_perplexity_quota_exceeded(429, "temporary network issue") is False
 
 
-def test_build_vcp_rule_based_recommendation_changes_by_signal_state():
-    buy_case = build_vcp_rule_based_recommendation(
+def test_build_vcp_rule_based_recommendation_never_buys_and_sells_only_on_outflows():
+    """[VCP-033] 폴백은 BUY 를 내지 않고, 5일·1일 수급이 모두 순매도일 때만 SELL 이다."""
+    inflow_case = build_vcp_rule_based_recommendation(
         stock_name="A",
-        stock_data={
-            "score": 83,
-            "contraction_ratio": 0.72,
-            "foreign_5d": 1000,
-            "inst_5d": 400,
-            "foreign_1d": 100,
-            "inst_1d": 50,
-        },
+        stock_data={"score": 83, "contraction_ratio": 0.72, "foreign_5d": 1000, "inst_5d": 400, "foreign_1d": 100, "inst_1d": 50},
     )
-    hold_case = build_vcp_rule_based_recommendation(
+    mixed_case = build_vcp_rule_based_recommendation(
         stock_name="B",
-        stock_data={
-            "score": 69,
-            "contraction_ratio": 0.9,
-            "foreign_5d": 10,
-            "inst_5d": -5,
-            "foreign_1d": 0,
-            "inst_1d": 0,
-        },
+        stock_data={"score": 69, "contraction_ratio": 0.9, "foreign_5d": 10, "inst_5d": -5, "foreign_1d": 0, "inst_1d": 0},
     )
-    sell_case = build_vcp_rule_based_recommendation(
+    outflow_case = build_vcp_rule_based_recommendation(
         stock_name="C",
-        stock_data={
-            "score": 58,
-            "contraction_ratio": 1.03,
-            "foreign_5d": -500,
-            "inst_5d": -300,
-            "foreign_1d": -80,
-            "inst_1d": -40,
-        },
+        stock_data={"score": 58, "contraction_ratio": 1.03, "foreign_5d": -500, "inst_5d": -300, "foreign_1d": -80, "inst_1d": -40},
     )
 
-    assert buy_case["action"] == "BUY"
-    assert hold_case["action"] == "HOLD"
-    assert sell_case["action"] == "SELL"
-    assert buy_case["confidence"] > hold_case["confidence"]
+    assert inflow_case["action"] == "HOLD"
+    assert mixed_case["action"] == "HOLD"
+    assert outflow_case["action"] == "SELL"
+    assert outflow_case["reason"].endswith("5일·1일 수급이 모두 순매도라 SELL 로 판단합니다.")
+    assert {inflow_case["confidence"], mixed_case["confidence"], outflow_case["confidence"]} == {55}
+
+
+def test_rule_based_fallback_holds_low_composite_score_with_inflows():
+    """[VCP-033] 합산 27~53 의 정상 시그널(수급 유입)은 SELL 이 아니라 HOLD 다."""
+    result = build_vcp_rule_based_recommendation(
+        stock_name="톱텍",
+        stock_data={"score": 31, "contraction_ratio": 0.55, "foreign_5d": 120, "inst_5d": 30, "foreign_1d": 5, "inst_1d": 2},
+    )
+
+    assert result["action"] == "HOLD"
+    assert result["confidence"] == 55
+    assert "종합 점수 31.0점" in result["reason"]
+    assert "변동성 수축 신호가 유지되는 구간입니다" in result["reason"]
+    assert result["reason"].endswith("이 신호를 종합해 현재 판단은 HOLD입니다.")
+
+
+def test_rule_based_fallback_treats_flat_one_day_flow_as_not_outflow():
+    """5일이 순매도여도 1일이 0 이면 순매도가 아니다(`<` 를 `<=` 로 잘못 쓰면 잡힌다)."""
+    result = build_vcp_rule_based_recommendation(
+        stock_name="A",
+        stock_data={"score": 40, "contraction_ratio": 0.6, "foreign_5d": -100, "inst_5d": 0, "foreign_1d": 0, "inst_1d": 0},
+    )
+
+    assert result["action"] == "HOLD"
+    assert "5일 수급은 순매도 우위입니다. 1일 수급은 중립입니다." in result["reason"]
+
+
+def test_rule_based_fallback_describes_contraction_without_score():
+    """패턴 상태 문장은 수축비만으로 정하고, 0 이하 수축비는 결측으로 본다."""
+    strong = build_vcp_rule_based_recommendation(stock_name="A", stock_data={"contraction_ratio": 0.39})
+    missing = build_vcp_rule_based_recommendation(stock_name="B", stock_data={"score": 27, "contraction_ratio": 0})
+
+    assert "수축비율 0.39로 변동성 수축 신호가 강한 편입니다." in strong["reason"]
+    assert strong["reason"].endswith("정보가 부족하여 보수적으로 HOLD 판단을 유지합니다.")
+    assert "종합 점수 27.0점이 확인됩니다." in missing["reason"]
+    assert "강한 편" not in missing["reason"] and "수축비율" not in missing["reason"]
+
+
+@pytest.mark.parametrize(
+    "ratio, expected",
+    [
+        (0.5, "강한 편"),
+        (0.7, "유지되는 구간"),
+        (0.71, "약화된 구간"),
+        (0.4952, "강한 편"),
+        (0.5027, "강한 편"),
+    ],
+)
+def test_rule_based_fallback_contraction_boundaries_follow_the_shown_two_decimals(ratio, expected):
+    """경계 0.5·0.7 은 포함이고, 문장에 적는 소수 둘째 자리 값으로 판정한다(0.4952 와 0.5027 은 둘 다 「0.50」)."""
+    result = build_vcp_rule_based_recommendation(stock_name="A", stock_data={"contraction_ratio": ratio})
+
+    assert f"수축비율 {ratio:.2f}로 변동성 수축 신호가 {expected}" in result["reason"]
+
+
+def test_rule_based_fallback_treats_negative_contraction_ratio_as_missing():
+    result = build_vcp_rule_based_recommendation(stock_name="A", stock_data={"score": 30, "contraction_ratio": -0.1})
+
+    assert "수축비율" not in result["reason"]
+    assert "종합 점수 30.0점이 확인됩니다." in result["reason"]
 
 
 def test_build_vcp_rule_based_recommendation_handles_nan_without_literal_nan_text():
@@ -367,17 +408,18 @@ def test_rule_based_fallback_partial_sell_uses_only_real_negative_evidence():
         stock_data={"foreign_5d": -10, "inst_5d": -5, "foreign_1d": -3, "inst_1d": -2},
     )
 
-    assert low_score["action"] == "SELL"
+    assert low_score["action"] == "HOLD"
     assert low_score["confidence"] == 55
-    assert "VCP 점수 58.0점" in low_score["reason"]
+    assert "종합 점수 58.0점" in low_score["reason"]
     assert negative_flows["action"] == "SELL"
     assert negative_flows["confidence"] == 55
     assert "점수" not in negative_flows["reason"]
     assert "5일 수급은 순매도 우위입니다" in negative_flows["reason"]
     assert "1일 수급은 순매도 우위입니다" in negative_flows["reason"]
+    assert negative_flows["reason"].endswith("5일·1일 수급이 모두 순매도라 SELL 로 판단합니다.")
 
 
-def test_rule_based_fallback_preserves_real_zero_and_complete_verdicts():
+def test_rule_based_fallback_complete_data_verdicts_ignore_score():
     zero_case = build_vcp_rule_based_recommendation(
         stock_name="C",
         stock_data={
@@ -413,17 +455,17 @@ def test_rule_based_fallback_preserves_real_zero_and_complete_verdicts():
     )
 
     assert zero_case["action"] == "HOLD"
-    assert zero_case["confidence"] == 61
+    assert zero_case["confidence"] == 55
     assert "1일 수급은 중립입니다" in zero_case["reason"]
-    assert buy_case["action"] == "BUY"
-    assert buy_case["confidence"] == 78
+    assert buy_case["action"] == "HOLD"
+    assert buy_case["confidence"] == 55
     assert buy_case["reason"] == (
-        "D는 VCP 점수 83.0점, 수축비율 0.72로 변동성 수축 신호가 강한 편입니다. "
+        "D는 종합 점수 83.0점, 수축비율 0.72로 변동성 수축 신호가 약화된 구간입니다. "
         "5일 수급은 순매수 우위입니다. 1일 수급은 순매수 우위입니다. "
-        "이 신호를 종합해 현재 판단은 BUY입니다."
+        "이 신호를 종합해 현재 판단은 HOLD입니다."
     )
     assert sell_case["action"] == "SELL"
-    assert sell_case["confidence"] == 69
+    assert sell_case["confidence"] == 55
 
 
 @pytest.mark.parametrize("value", [None, "bad", "", float("inf"), float("-inf"), float("nan")])
