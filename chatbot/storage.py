@@ -145,12 +145,23 @@ class HistoryManager:
                 if not sqlite_saved:
                     logger.warning("SQLite history delta save failed; legacy JSON snapshot only")
 
-                force_snapshot = (
-                    (not sqlite_saved)
-                    or self._delta.clear_all
-                    or bool(self._delta.deleted)
-                )
-                self._snapshot.sync(self.sessions, force=force_snapshot)
+                has_deletion = self._delta.clear_all or bool(self._delta.deleted)
+                try:
+                    self._snapshot.sync(self.sessions, force=(not sqlite_saved) or has_deletion)
+                except OSError as e:
+                    # 스냅샷은 복구용 사본이라 SQLite 저장의 성패를 바꾸지 않는다([CHAT-040]).
+                    # 다음 저장이 간격을 기다리지 않고 다시 쓴다.
+                    logger.error(f"Legacy history snapshot write failed: {e}")
+                    self._snapshot.last_monotonic = None
+                    if sqlite_saved and has_deletion:
+                        # 낡은 사본이 남으면 SQLite 가 빈 다음 로드가 그것을 다시 이관해
+                        # 지운 대화가 살아난다. 지우지 못하면 삭제를 실패로 돌려주되, 장부는 비우고
+                        # 서명을 비워 다음 접근이 SQLite 를 다시 읽게 한다(재시도가 되살아난 세션도 찾는다).
+                        try:
+                            self._snapshot.file_path.unlink(missing_ok=True)
+                        except OSError as unlink_error:
+                            logger.error(f"Failed to remove stale history snapshot: {unlink_error}")
+                            sqlite_saved = False
             # 실패했으면 서명을 비워 다음 접근이 DB 를 다시 읽게 한다. 그래야 저장되지 않은 변경이
             # 이 워커의 응답에 남지 않는다.
             self._last_reload_signature = (
