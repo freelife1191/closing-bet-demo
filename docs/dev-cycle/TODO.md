@@ -64,15 +64,6 @@
 - 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한다. 행이 있으면 그 이메일 행을 지우는 절차(또는 파일 제거)와 두 모듈·테스트의 삭제를 설계한다. 행이 없으면 두 모듈과 테스트 여섯 파일의 삭제만 남는다. 원격 서버 접속은 운영자가 한다.
 - [ ] 운영 서버 행 수 확인(운영자) - [ ] 설계 승인(bounded) - [ ] 구현·검증
 
-### [INFRA-086] `python scripts/init_data.py` 를 루트 밖에서 실행하면 종가 최신 파일이 `<cwd>/data` 에 생긴다
-- 카테고리: 인프라 | 티어: T3(`scripts/init_data.py` 는 위험 경로) | 근거: `[INFRA-082]` 코드 리뷰 발견 1·2(2026-09-24). `[INFRA-082]` 는 `run.py` 처럼 CLI 두 개에만 루트 `os.chdir` 를 넣었다. `scripts/init_data.py:2043` 의 인자 없는 `main()` 은 `create_jongga_v2_latest` 를 포함하고 `init_all.sh:128` 도 부르는데 chdir 가 없어, 루트가 아닌 cwd 에서는 `run_screener` 가 cwd 기준 `data/` 에 쓰고 `send_jongga_notification`(1722행)은 루트 기준으로 읽는다. `init_all.sh` 는 `PROJECT_DIR=$(pwd)` 로 루트 실행을 전제한다. 수동 실행기 `scripts/_run_full_update_test.py:10` 에도 chdir 가 없다(영향 미확인).
-- 범위 후보: `init_data.py` 의 `if __name__ == '__main__':` 아래 루트 `os.chdir` 한 줄(모듈 수준에 두면 import 하는 서비스와 테스트의 cwd 를 바꾸므로 금지).
-- 설계 승인: 2026-09-24 00:23 사용자 승인(AskUserQuestion 「A. init_data.py 한 줄」, bounded). 범위는 `scripts/init_data.py` 의 `__main__` 블록 첫 줄 `os.chdir(BASE_DIR)` 하나. `_run_full_update_test.py` 는 영향 미확인이라 제외. 테스트는 한 줄이라 추가하지 않고 격리 사본 QA(루트 밖 cwd 실행 + 변경 전 대조)로 확인. 화면 흐름 변경 없음이라 브라우저 실측 제외
-- [x] 구현: `scripts/init_data.py:2044-2045`
-- [x] `/ponytail-review` → `closing-bet-reviewer` → `/review`(T3): ponytail(oh-my-claudecode:code-reviewer 레인) 「Lean already. Ship.」. closing-bet-reviewer APPROVE, 낮음 1건(주석의 「알림」이 실제로는 스케줄러 `services/scheduler_jobs.py:30` 경로) → 주석을 「알림(스케줄러)은」으로 정정. 심층 리뷰(oh-my-claudecode:critic) ACCEPT, 낮음 참고 3건: 근본 원인인 `engine/generator.py:244` 의 cwd 상대 `"data"` 는 실행 파일 진입부 chdir 관례에 따라 범위 밖(승인 범위), 루트 실행 회귀 없음, 주석 길이는 수정 불요. 선택 제안 AST 계약 테스트는 한 줄 변경이라 ponytail 기준으로 미추가(격리 사본 QA 로 대체)
-- [x] 정적 검증: `venv/bin/python -m pytest -q -p no:cacheprovider` → 2728 passed, 2 skipped, exit 0. 주석 정정은 그 뒤이며 코드 동작 무관(`py_compile` 로 확인)
-- [ ] QA: `docs/dev-cycle/qa/INFRA-086.md`
-
 ### [INFRA-084] `closing-bet-reviewer` 에 일반 Python 보안 검토 항목을 더한다
 - 카테고리: 인프라 | 티어: 문서(`tier-rules.md` §5, 설계 때 재판정) | 근거: 2026-09-23 대화에서 `docs/reference/skill-trend/05_python_agent_skills_research_review.md` 의 추천 스킬을 대조했다. Pydantic Skills 는 저장소가 Pydantic 을 직접 쓰지 않아(import 0건, 구조체는 `@dataclass`) 제외했다. ECC(`affaan-m/everything-claude-code`, MIT) 의 `python-testing`·`python-patterns`·`python-reviewer` 전체는 `CLAUDE.md` 의 테스트 규칙(`test_*_refactor.py`, 새 fixture 계층 금지)·`engine/constants` 우선 규칙과 충돌하거나 일반 관용구라 제외했다. 차용할 가치가 있는 것은 `agents/python-reviewer.md` 의 CRITICAL 보안 항목뿐이다. 현재 `closing-bet-reviewer` 는 결측·신원·비용·비밀·문서 계약을 보지만 명령 주입(셸 문자열 `subprocess`), 경로 조작(`..`), 안전하지 않은 역직렬화(`pickle`·`yaml.load`), 잠금 없는 공유 상태(gunicorn 스레드·스케줄러)는 명시하지 않는다. 빈 `except` 는 `closing-bet-python` 이 이미 금지한다.
 - 범위: `.claude/agents/closing-bet-reviewer.md` 와 `.codex/agents/closing-bet-reviewer.toml` 의 검토 기준에 위 네 항목을 이 저장소의 사례와 함께 더하고 출처(ECC, MIT)를 적는다. ECC 를 설치하거나 다른 파일을 가져오지 않는다. `tests/scripts/test_skill_set.py` 의 대조가 계속 통과하는지 확인한다.
