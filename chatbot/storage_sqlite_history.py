@@ -14,22 +14,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from services.sqlite_utils import (
-    connect_sqlite,
-    is_sqlite_missing_table_error,
-    run_sqlite_with_retry,
+from services.sqlite_utils import connect_sqlite
+
+from .storage_sqlite_common import (
+    _SQLITE_SESSION_PRAGMAS,
+    ensure_chatbot_storage_schema,
+    run_chatbot_sqlite_with_recovery,
 )
 
-from .storage_sqlite_common import _SQLITE_SESSION_PRAGMAS, ensure_chatbot_storage_schema
-
 _SQLITE_TIMEOUT_SECONDS = 30
-_SQLITE_RETRY_ATTEMPTS = 2
-_SQLITE_RETRY_DELAY_SECONDS = 0.03
+_HISTORY_TABLES = ("chatbot_sessions", "chatbot_messages")
 _SQLITE_INLINE_DELETE_MAX_VARIABLES = 900
-
-
-def _is_missing_table_error(error: Exception, *, table_names: tuple[str, ...]) -> bool:
-    return is_sqlite_missing_table_error(error, table_names=table_names)
 
 
 def _serialize_message_parts(parts: Any) -> str:
@@ -328,8 +323,6 @@ def _load_existing_session_metadata_cursor(
 def load_history_sessions_from_sqlite(
     db_path: Path,
     logger: logging.Logger,
-    *,
-    _retried: bool = False,
 ) -> Dict[str, Any] | None:
     if not db_path.exists():
         return None
@@ -392,26 +385,13 @@ def load_history_sessions_from_sqlite(
 
                 return sessions
 
-        return run_sqlite_with_retry(
+        return run_chatbot_sqlite_with_recovery(
+            db_path,
+            logger,
             _load_sessions,
-            max_retries=_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+            table_names=_HISTORY_TABLES,
         )
     except Exception as error:
-        if (not _retried) and _is_missing_table_error(
-            error,
-            table_names=("chatbot_sessions", "chatbot_messages"),
-        ):
-            if ensure_chatbot_storage_schema(
-                db_path,
-                logger,
-                force_recheck=True,
-            ):
-                return load_history_sessions_from_sqlite(
-                    db_path,
-                    logger,
-                    _retried=True,
-                )
         logger.error(f"Failed to load chatbot history from SQLite: {error}")
         return None
 
@@ -501,8 +481,6 @@ def save_history_sessions_to_sqlite(
     db_path: Path,
     sessions: Dict[str, Any],
     logger: logging.Logger,
-    *,
-    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -536,28 +514,14 @@ def save_history_sessions_to_sqlite(
                 )
                 conn.commit()
 
-        run_sqlite_with_retry(
+        run_chatbot_sqlite_with_recovery(
+            db_path,
+            logger,
             _save_sessions,
-            max_retries=_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+            table_names=_HISTORY_TABLES,
         )
         return True
     except Exception as error:
-        if (not _retried) and _is_missing_table_error(
-            error,
-            table_names=("chatbot_sessions", "chatbot_messages"),
-        ):
-            if ensure_chatbot_storage_schema(
-                db_path,
-                logger,
-                force_recheck=True,
-            ):
-                return save_history_sessions_to_sqlite(
-                    db_path,
-                    sessions,
-                    logger,
-                    _retried=True,
-                )
         logger.error(f"Failed to save chatbot history into SQLite: {error}")
         return False
 
@@ -566,8 +530,6 @@ def upsert_history_session_with_messages(
     db_path: Path,
     session: Dict[str, Any],
     logger: logging.Logger,
-    *,
-    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -593,28 +555,14 @@ def upsert_history_session_with_messages(
                 )
                 conn.commit()
 
-        run_sqlite_with_retry(
+        run_chatbot_sqlite_with_recovery(
+            db_path,
+            logger,
             _upsert_session,
-            max_retries=_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+            table_names=_HISTORY_TABLES,
         )
         return True
     except Exception as error:
-        if (not _retried) and _is_missing_table_error(
-            error,
-            table_names=("chatbot_sessions", "chatbot_messages"),
-        ):
-            if ensure_chatbot_storage_schema(
-                db_path,
-                logger,
-                force_recheck=True,
-            ):
-                return upsert_history_session_with_messages(
-                    db_path,
-                    session,
-                    logger,
-                    _retried=True,
-                )
         logger.error(f"Failed to upsert chatbot session into SQLite: {error}")
         return False
 
@@ -626,8 +574,6 @@ def apply_history_session_deltas_in_sqlite(
     deleted_session_ids: set[str],
     clear_all: bool,
     logger: logging.Logger,
-    *,
-    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -669,31 +615,14 @@ def apply_history_session_deltas_in_sqlite(
             return True
 
         return bool(
-            run_sqlite_with_retry(
+            run_chatbot_sqlite_with_recovery(
+                db_path,
+                logger,
                 _apply_deltas,
-                max_retries=_SQLITE_RETRY_ATTEMPTS,
-                retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+                table_names=_HISTORY_TABLES,
             )
         )
     except Exception as error:
-        if (not _retried) and _is_missing_table_error(
-            error,
-            table_names=("chatbot_sessions", "chatbot_messages"),
-        ):
-            if ensure_chatbot_storage_schema(
-                db_path,
-                logger,
-                force_recheck=True,
-            ):
-                return apply_history_session_deltas_in_sqlite(
-                    db_path,
-                    sessions=sessions,
-                    changed_session_ids=changed_session_ids,
-                    deleted_session_ids=deleted_session_ids,
-                    clear_all=clear_all,
-                    logger=logger,
-                    _retried=True,
-                )
         logger.error(f"Failed to apply chatbot history deltas into SQLite: {error}")
         return False
 
@@ -702,8 +631,6 @@ def delete_history_session_from_sqlite(
     db_path: Path,
     session_id: str,
     logger: logging.Logger,
-    *,
-    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -724,28 +651,14 @@ def delete_history_session_from_sqlite(
                 )
                 conn.commit()
 
-        run_sqlite_with_retry(
+        run_chatbot_sqlite_with_recovery(
+            db_path,
+            logger,
             _delete_session,
-            max_retries=_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+            table_names=_HISTORY_TABLES,
         )
         return True
     except Exception as error:
-        if (not _retried) and _is_missing_table_error(
-            error,
-            table_names=("chatbot_sessions", "chatbot_messages"),
-        ):
-            if ensure_chatbot_storage_schema(
-                db_path,
-                logger,
-                force_recheck=True,
-            ):
-                return delete_history_session_from_sqlite(
-                    db_path,
-                    session_id,
-                    logger,
-                    _retried=True,
-                )
         logger.error(f"Failed to delete chatbot session from SQLite: {error}")
         return False
 
@@ -753,8 +666,6 @@ def delete_history_session_from_sqlite(
 def clear_history_sessions_in_sqlite(
     db_path: Path,
     logger: logging.Logger,
-    *,
-    _retried: bool = False,
 ) -> bool:
     if not ensure_chatbot_storage_schema(db_path, logger):
         return False
@@ -769,27 +680,14 @@ def clear_history_sessions_in_sqlite(
                 _clear_all_sessions_cursor(cursor=conn.cursor())
                 conn.commit()
 
-        run_sqlite_with_retry(
+        run_chatbot_sqlite_with_recovery(
+            db_path,
+            logger,
             _clear_sessions,
-            max_retries=_SQLITE_RETRY_ATTEMPTS,
-            retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+            table_names=_HISTORY_TABLES,
         )
         return True
     except Exception as error:
-        if (not _retried) and _is_missing_table_error(
-            error,
-            table_names=("chatbot_sessions", "chatbot_messages"),
-        ):
-            if ensure_chatbot_storage_schema(
-                db_path,
-                logger,
-                force_recheck=True,
-            ):
-                return clear_history_sessions_in_sqlite(
-                    db_path,
-                    logger,
-                    _retried=True,
-                )
         logger.error(f"Failed to clear chatbot history in SQLite: {error}")
         return False
 

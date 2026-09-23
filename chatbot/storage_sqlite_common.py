@@ -9,11 +9,13 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
+from typing import Callable, TypeVar
 
-from services.sqlite_ready_gate import SqliteReadyGate
+from services.sqlite_ready_gate import SqliteReadyGate, run_with_schema_recovery
 from services.sqlite_utils import (
     build_sqlite_pragmas,
     connect_sqlite,
+    is_sqlite_missing_table_error,
     run_sqlite_with_retry,
     sqlite_db_path_exists,
 )
@@ -37,6 +39,7 @@ _SCHEMA_READY_CONDITION = _SCHEMA_GATE.condition
 _SCHEMA_READY_DB_PATHS = _SCHEMA_GATE.ready_keys
 _SCHEMA_READY_MAX_ENTRIES = 2_048
 _SCHEMA_INIT_IN_PROGRESS = _SCHEMA_GATE.in_progress_keys
+_T = TypeVar("_T")
 
 
 def resolve_chatbot_storage_db_path(data_dir: Path) -> Path:
@@ -222,9 +225,28 @@ def ensure_chatbot_storage_schema(
     )
 
 
+def run_chatbot_sqlite_with_recovery(
+    db_path: Path,
+    logger: logging.Logger,
+    operation: Callable[[], _T],
+    *,
+    table_names: tuple[str, ...],
+) -> _T:
+    """테이블이 없어 실패하면 챗봇 스키마를 강제로 다시 만든 뒤 한 번 더 실행한다."""
+    return run_with_schema_recovery(
+        operation,
+        run_with_retry=run_sqlite_with_retry,
+        retry_attempts=_SQLITE_RETRY_ATTEMPTS,
+        retry_delay_seconds=_SQLITE_RETRY_DELAY_SECONDS,
+        is_missing_table=lambda error: is_sqlite_missing_table_error(error, table_names=table_names),
+        recover=lambda: ensure_chatbot_storage_schema(db_path, logger, force_recheck=True),
+    )
+
+
 __all__ = [
     "_SQLITE_INIT_PRAGMAS",
     "_SQLITE_SESSION_PRAGMAS",
     "ensure_chatbot_storage_schema",
     "resolve_chatbot_storage_db_path",
+    "run_chatbot_sqlite_with_recovery",
 ]

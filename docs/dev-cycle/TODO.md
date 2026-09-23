@@ -74,8 +74,15 @@
 ### [CHAT-034] SQLite 누락 테이블 복구 래퍼 통합
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §2.1. `storage_sqlite_history.py` 여섯 곳과 `storage_sqlite_memory.py` 여덟 곳, 열네 함수가 「스키마 확인 → `run_sqlite_with_retry` → `_is_missing_table_error` 면 `force_recheck` 뒤 `_retried=True` 로 재호출」 골격을 복제하고 있다. 재시도·복구 조건을 바꾸면 열네 곳을 함께 고쳐야 하고, 한 곳을 빠뜨려도 평소에는 증상이 없다. 공용 래퍼를 `services/sqlite_utils.py`(공통 접속 계층, 위험 경로)에 두면 T3.
 - 범위: 공통 골격을 데코레이터 또는 헬퍼 하나로 추출, 테이블 이름만 주입, 양쪽 공개 함수 시그니처 유지, 열네 경로 모두의 복구 동작 테스트.
-- QA: `data/chatbot_storage.db` 를 지운 상태에서 질문을 보내고 사이드바 확인 → 오류 없이 답변이 오고 새 대화가 목록에 나타난다.
-- [ ] 설계 승인 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA
+- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 13:12
+  | 범위: `chatbot/storage_sqlite_common.py` 에 기존 `services/sqlite_ready_gate.run_with_schema_recovery` 를 감싸는 `run_chatbot_sqlite_with_recovery` 하나를 두고, history 6·memory 8 함수의 재귀 복구를 그것으로 바꾼다. `_retried`·로컬 `_is_missing_table_error` 삭제, 공개 인자 유지, `services/` 는 고치지 않음. QA 는 챗봇 전송 대신 LLM 을 부르지 않는 저장소 경로로 격리 실측
+  | 실제 대화 근거: 2026-09-23 사용자 「응 진행해」 응답, 현재 세션의 해당 설계 제안
+- QA: 격리 사본에서 `chatbot_storage.db` 의 테이블이 없는 상태로 LLM 을 부르지 않는 세션 목록·생성·삭제 경로를 브라우저로 실측 → 오류 없이 목록이 뜨고 조작이 반영된다. (원래 초안의 「질문 전송」은 금지 조작이라 대체)
+- [x] 설계 승인
+- [x] 구현 계획·계획 검토 — `docs/superpowers/plans/2026-09-23-chat-034-sqlite-recovery-wrapper.md`. critic ACCEPT-WITH-RESERVATIONS, 필수 2·권고 3 모두 반영
+- [x] 구현·RED→GREEN — RED 는 래퍼 import 실패, 특성 16건은 전환 전 코드로 통과. 전환 뒤 `tests/chatbot` 256 passed, pyflakes 0, 변이 3종 모두 검출. 전체 pytest 는 사본에서 기준 대비 새 실패 0
+- [x] `/ponytail-review`(중복 테스트 1건 삭제) → `closing-bet-reviewer`(APPROVE, low 2건 기록) → `/review`(APPROVE, 테스트 1건 추가, 기존 동작 1건 `[CHAT-039]` 이월)
+- [ ] QA — `docs/dev-cycle/qa/CHAT-034.md`
 
 ### [CHAT-035] HistoryManager 의 책임 분리
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §4.1. `chatbot/storage.py:39-493` 의 한 클래스가 SQLite 적재·저장, 레거시 JSON 스냅샷, 파일 서명 재적재 판정, 메시지·세션 LRU 캐시 둘, 델타 장부, 세션 CRUD, 메시지 CRUD 여덟 책임을 진다. `[CHAT-033]` 의 결함은 델타 장부·저장·재적재가 서로의 상태를 잠금 없이 건드리는 자리에서 나왔다. 선행 조건: `[CHAT-033]` 완료(2026-09-23 충족, 커밋 `bd5adf1`). 같은 자리를 두 항목이 동시에 건드리면 충돌한다.
@@ -133,6 +140,10 @@
 - 추가 관찰(`[VCP-027]` 정적 검증, 2026-09-23 11:55): 원본 작업 트리의 전체 pytest 한 번이 `runtime_cache.db` 말고도 `data/vcp_status.json`·`v2_screener_status.json`·`scheduler_runtime_status.json`(모두 대기 상태 값으로 다시 씀), `paper_trading.db-wal`·`-shm`, `data/.krx_collector_cache/`·`.market_schedule_cache/` 아래 캐시 DB, `logs/user_activity.log`(테스트 클라이언트 요청 기록 추가)를 바꿨다. 범위를 `data/` 전체와 `logs/` 로 넓혀 판단한다.
 - 범위: `tests/conftest.py` 에 autouse 로 cwd 를 `tmp_path` 로 옮기거나 캐시 경로 상수를 `tmp_path` 로 돌리는 방안 가운데 하나를 고르고, 전체 실행 전후 원본 `data/` 수정 시각이 같음을 확인하는 검사.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] 정적 검증
+
+### [CHAT-039] 메시지 테이블만 복구된 뒤 적재가 JSON 스냅샷을 빈 메시지로 덮는다
+- 카테고리: 챗봇 | 티어: T2 | 근거: `[CHAT-034]` T3 심층 리뷰(2026-09-23) 지적 1. `chatbot_messages` 만 사라진 DB 에서 `load_history_sessions_from_sqlite` 가 테이블을 복구하면 세션은 있고 `messages: []` 인 dict 를 성공으로 돌려준다. `chatbot/storage.py:134-141` 의 `_load` 는 `_sync_snapshot_on_load` 가 참이라 `_sync_legacy_snapshot(..., force=True)` 로 레거시 JSON 스냅샷을 그 사본으로 덮어, 메시지의 마지막 사본이 사라진다. `[CHAT-034]` 이전의 재귀 복구도 같았으므로 그 라운드의 회귀는 아니다. 신규 테스트 `test_load_history_recovers_when_only_messages_table_missing` 는 세션 키만 확인한다.
+- 범위: 복구로 메시지 테이블을 새로 만든 적재에서는 스냅샷 강제 동기화를 건너뛰거나 JSON 의 메시지로 되살리는 쪽 중 하나를 설계에서 고른다.
 
 ### [INFRA-084] `closing-bet-reviewer` 에 일반 Python 보안 검토 항목을 더한다
 - 카테고리: 인프라 | 티어: 문서(`tier-rules.md` §5, 설계 때 재판정) | 근거: 2026-09-23 대화에서 `docs/reference/skill-trend/05_python_agent_skills_research_review.md` 의 추천 스킬을 대조했다. Pydantic Skills 는 저장소가 Pydantic 을 직접 쓰지 않아(import 0건, 구조체는 `@dataclass`) 제외했다. ECC(`affaan-m/everything-claude-code`, MIT) 의 `python-testing`·`python-patterns`·`python-reviewer` 전체는 `CLAUDE.md` 의 테스트 규칙(`test_*_refactor.py`, 새 fixture 계층 금지)·`engine/constants` 우선 규칙과 충돌하거나 일반 관용구라 제외했다. 차용할 가치가 있는 것은 `agents/python-reviewer.md` 의 CRITICAL 보안 항목뿐이다. 현재 `closing-bet-reviewer` 는 결측·신원·비용·비밀·문서 계약을 보지만 명령 주입(셸 문자열 `subprocess`), 경로 조작(`..`), 안전하지 않은 역직렬화(`pickle`·`yaml.load`), 잠금 없는 공유 상태(gunicorn 스레드·스케줄러)는 명시하지 않는다. 빈 `except` 는 `closing-bet-python` 이 이미 금지한다.
