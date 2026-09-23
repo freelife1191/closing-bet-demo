@@ -679,13 +679,28 @@ def execute_vcp_failed_ai_reanalysis(
                 stock_item["skip_second"] = True
 
         if callable(should_stop) or callable(on_progress):
+            # 배치 루프는 처리한 종목마다(분석이 예외로 끝나도) finally 에서 진행 콜백을 부른다
+            processed_tickers: set[str] = set()
+
+            def _track_progress(done: int, total: int, ticker: str) -> None:
+                processed_tickers.add(ticker)
+                if callable(on_progress):
+                    on_progress(done, total, ticker)
+
             ai_results, cancelled = run_async_analyzer_batch_with_control(
                 analyzer=analyzer,
                 stocks_to_analyze=stocks_to_analyze,
                 should_stop=should_stop,
-                on_progress=on_progress,
+                on_progress=_track_progress,
                 logger=logger,
             )
+            if cancelled:
+                # 닿지 않은 행에 실패 값을 쓰면 기존 AI 값을 지운다([VCP-039]). 판정은 티커 단위라
+                # 같은 티커의 행은 함께 남으며, 결과도 ai_results[ticker] 하나를 공유한다
+                apply_rows = [e for e in apply_rows if str(e[1].get("ticker", "")).zfill(6) in processed_tickers]
+                second_only_rows = [
+                    e for e in second_only_rows if str(e[1].get("ticker", "")).zfill(6) in processed_tickers
+                ]
         else:
             ai_results = run_async_analyzer_batch(
                 analyzer=analyzer,
