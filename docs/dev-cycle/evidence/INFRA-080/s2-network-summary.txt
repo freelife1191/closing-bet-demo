@@ -1,0 +1,10 @@
+# S-2 브라우저 /api 요청 상태 분포 (browse network, 22:26:44~22:27:43)
+ 180 → 200
+  40 GET http://localhost:58120/api/auth/session
+  20 GET http://localhost:58120/api/kr/user/quota
+  20 GET http://localhost:58120/api/kr/signals/status
+  20 GET http://localhost:58120/api/kr/signals
+  20 GET http://localhost:58120/api/kr/market-gate
+  20 GET http://localhost:58120/api/kr/jongga-v2/latest
+  20 GET http://localhost:58120/api/kr/jongga-v2/dates
+  20 GET http://localhost:58120/api/kr/ai-analysis

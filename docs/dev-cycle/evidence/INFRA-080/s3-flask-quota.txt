@@ -1,0 +1,13 @@
+# S-3 Flask 로그 발췌 (--keep-alive 0, 익명 키는 anon_… 로 가림)
+[2026-09-23 22:28:32 +0900] [36760] [DEBUG] POST /api/kr/chatbot
+2026-09-23 22:28:37,873 - app.routes.kr_market - INFO - [QUOTA] use_free_tier=True, stream_has_error=False, starts_with_warning=False, usage_key=anon_…
+2026-09-23 22:28:37,875 - app.routes.kr_market - INFO - [QUOTA] 사용량 차감 완료: anon_… -> 1회
+[2026-09-23 22:29:05 +0900] [36760] [DEBUG] POST /api/kr/chatbot
+[2026-09-23 22:29:05 +0900] [36760] [DEBUG] POST /api/kr/chatbot
+[2026-09-23 22:29:10 +0900] [36762] [DEBUG] POST /api/kr/chatbot
+[2026-09-23 22:29:32 +0900] [36762] [DEBUG] POST /api/kr/chatbot
+[2026-09-23 22:29:32 +0900] [36760] [DEBUG] POST /api/kr/chatbot
+[2026-09-23 22:29:36 +0900] [36760] [DEBUG] POST /api/kr/chatbot
+[2026-09-23 22:29:46 +0900] [36760] [DEBUG] POST /api/kr/chatbot
+2026-09-23 22:29:51,622 - app.routes.kr_market - INFO - [QUOTA] use_free_tier=True, stream_has_error=False, starts_with_warning=False, usage_key=anon_…
+2026-09-23 22:29:51,624 - app.routes.kr_market - INFO - [QUOTA] 사용량 차감 완료: anon_… -> 2회
