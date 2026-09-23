@@ -1,0 +1,4 @@
+Failed to proxy http://127.0.0.1:58121/api/kr/chatbot Error: socket hang up
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
