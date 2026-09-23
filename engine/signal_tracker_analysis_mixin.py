@@ -40,7 +40,7 @@ from services.kr_market_data_cache_sqlite_payload import (
     load_csv_payload_from_sqlite as _load_csv_payload_from_sqlite,
     save_csv_payload_to_sqlite as _save_csv_payload_to_sqlite,
 )
-from services.kr_market_vcp_reanalysis_service import write_vcp_signals_csv_atomic
+from services.kr_market_vcp_reanalysis_service import signals_log_lock, write_vcp_signals_csv_atomic
 
 
 logger = logging.getLogger(__name__)
@@ -338,60 +338,63 @@ class SignalTrackerAnalysisMixin:
             logger.info("   📝 시그널 로그 저장: 0개 (추가 없음)")
             return
 
-        if not os.path.exists(self.signals_log_path):
-            write_vcp_signals_csv_atomic(working_new, self.signals_log_path)
-            self._refresh_signals_log_source_cache(self.signals_log_path, working_new)
-            logger.info(f"   📝 시그널 로그 저장: {len(working_new)}개")
-            return
+        # 읽기·병합·교체를 다른 쓰기 경로와 직렬화한다([VCP-035])
+        with signals_log_lock(self.signals_log_path):
+            if not os.path.exists(self.signals_log_path):
+                write_vcp_signals_csv_atomic(working_new, self.signals_log_path)
+                self._refresh_signals_log_source_cache(self.signals_log_path, working_new)
+                logger.info(f"   📝 시그널 로그 저장: {len(working_new)}개")
+                return
 
-        existing = self._load_signals_log_source_frame(self.signals_log_path)
+            existing = self._load_signals_log_source_frame(self.signals_log_path)
 
-        combined = append_signals_log(
-            signals_log_path=self.signals_log_path,
-            new_signals=working_new,
-            today=today,
-            existing_signals=existing,
-        )
+            combined = append_signals_log(
+                signals_log_path=self.signals_log_path,
+                new_signals=working_new,
+                today=today,
+                existing_signals=existing,
+            )
 
-        write_vcp_signals_csv_atomic(combined, self.signals_log_path)
-        self._refresh_signals_log_source_cache(self.signals_log_path, combined)
-        logger.info(f"   📝 시그널 로그 저장: {len(combined)}개")
+            write_vcp_signals_csv_atomic(combined, self.signals_log_path)
+            self._refresh_signals_log_source_cache(self.signals_log_path, combined)
+            logger.info(f"   📝 시그널 로그 저장: {len(combined)}개")
 
     def update_open_signals(self):
         """열린 시그널 성과 업데이트."""
-        if not os.path.exists(self.signals_log_path):
-            logger.warning("⚠️ 시그널 로그 파일이 없습니다")
-            return
+        with signals_log_lock(self.signals_log_path):
+            if not os.path.exists(self.signals_log_path):
+                logger.warning("⚠️ 시그널 로그 파일이 없습니다")
+                return
 
-        df = self._load_signals_log_source_frame(self.signals_log_path)
-        if df.empty or "status" not in df.columns:
-            return
+            df = self._load_signals_log_source_frame(self.signals_log_path)
+            if df.empty or "status" not in df.columns:
+                return
 
-        if not (df["status"] == "OPEN").any():
-            logger.info("열린 시그널이 없습니다")
-            return
+            if not (df["status"] == "OPEN").any():
+                logger.info("열린 시그널이 없습니다")
+                return
 
-        now = datetime.now()
-        updated_df, closed_logs = update_open_signals_frame(
-            df=df,
-            latest_price_map=self._latest_price_map,
-            stop_loss_pct=self.strategy_params["stop_loss_pct"],
-            hold_days_limit=self.strategy_params["hold_days"],
-            now=now,
-        )
-
-        for closed_row in closed_logs.itertuples(index=False):
-            logger.info(
-                f"   🔴 {closed_row.ticker} 청산 ({closed_row.close_reason}): {closed_row.return_pct:.2f}%"
+            now = datetime.now()
+            updated_df, closed_logs = update_open_signals_frame(
+                df=df,
+                latest_price_map=self._latest_price_map,
+                stop_loss_pct=self.strategy_params["stop_loss_pct"],
+                hold_days_limit=self.strategy_params["hold_days"],
+                now=now,
             )
 
-        if updated_df.equals(df):
-            logger.info("✅ 시그널 업데이트 완료: 변경 없음")
-            return
+            for closed_row in closed_logs.itertuples(index=False):
+                logger.info(
+                    f"   🔴 {closed_row.ticker} 청산 ({closed_row.close_reason}): {closed_row.return_pct:.2f}%"
+                )
 
-        write_vcp_signals_csv_atomic(updated_df, self.signals_log_path)
-        self._refresh_signals_log_source_cache(self.signals_log_path, updated_df)
-        logger.info(f"✅ 시그널 업데이트 완료: {len(closed_logs)}개 청산")
+            if updated_df.equals(df):
+                logger.info("✅ 시그널 업데이트 완료: 변경 없음")
+                return
+
+            write_vcp_signals_csv_atomic(updated_df, self.signals_log_path)
+            self._refresh_signals_log_source_cache(self.signals_log_path, updated_df)
+            logger.info(f"✅ 시그널 업데이트 완료: {len(closed_logs)}개 청산")
 
     def calculate_vcp_score(self, vcp_info: Dict) -> float:
         """VCP 신호 강도 점수 (0-20점) - BLUEPRINT 기준."""

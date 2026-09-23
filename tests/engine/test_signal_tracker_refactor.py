@@ -592,7 +592,8 @@ def test_append_to_log_keeps_log_bytes_when_write_fails(tmp_path, monkeypatch, e
         tracker._append_to_log(pd.DataFrame([{"signal_date": today, "ticker": "1", "status": "OPEN"}]))
 
     assert (log_path.read_bytes() if log_path.exists() else None) == before
-    assert list(tmp_path.glob("signals_log.csv.*")) == []
+    # signals_log.csv.lock 은 [VCP-035] 의 잠금 파일이라 계속 남는다. 임시 파일만 본다
+    assert [p for p in tmp_path.glob("signals_log.csv.*") if p.name != "signals_log.csv.lock"] == []
 
 
 def test_update_open_signals_keeps_log_bytes_when_write_fails(tmp_path, monkeypatch):
@@ -613,7 +614,8 @@ def test_update_open_signals_keeps_log_bytes_when_write_fails(tmp_path, monkeypa
         tracker.update_open_signals()
 
     assert log_path.read_bytes() == before
-    assert list(tmp_path.glob("signals_log.csv.*")) == []
+    # signals_log.csv.lock 은 [VCP-035] 의 잠금 파일이라 계속 남는다. 임시 파일만 본다
+    assert [p for p in tmp_path.glob("signals_log.csv.*") if p.name != "signals_log.csv.lock"] == []
 
 
 def test_signal_tracker_rebuild_price_cache_uses_close_when_current_price_missing(tmp_path):

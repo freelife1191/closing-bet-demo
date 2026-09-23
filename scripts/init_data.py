@@ -69,7 +69,7 @@ from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
 from engine.pandas_utils_safe import safe_bool, safe_optional_float
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
-from services.kr_market_vcp_reanalysis_service import write_vcp_signals_csv_atomic
+from services.kr_market_vcp_reanalysis_service import signals_log_lock, write_vcp_signals_csv_atomic
 
 # =====================================================
 # 주말/휴일 처리를 위한 유틸리티 함수
@@ -1584,44 +1584,46 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             )
             
             # 기존 로그가 있으면 로드하여 병합 (Append & Deduplicate)
-            if os.path.exists(file_path):
-                try:
-                    # 타입 명시하여 로드 (중복 방지 핵심)
-                    df_old = _read_signals_log(file_path)
-                    df_old['ticker'] = df_old['ticker'].str.zfill(6)
+            # 읽기·병합·교체를 다른 쓰기 경로와 직렬화한다([VCP-035])
+            with signals_log_lock(file_path):
+                if os.path.exists(file_path):
+                    try:
+                        # 타입 명시하여 로드 (중복 방지 핵심)
+                        df_old = _read_signals_log(file_path)
+                        df_old['ticker'] = df_old['ticker'].str.zfill(6)
                     
-                    # 새 데이터 포맷 통일
-                    df_new['ticker'] = df_new['ticker'].astype(str).str.zfill(6)
-                    df_new['signal_date'] = df_new['signal_date'].astype(str)
+                        # 새 데이터 포맷 통일
+                        df_new['ticker'] = df_new['ticker'].astype(str).str.zfill(6)
+                        df_new['signal_date'] = df_new['signal_date'].astype(str)
 
-                    # [수정] 해당 날짜의 기존 데이터 삭제 (재실행 시 중복 방지)
-                    current_date = str(df_new['signal_date'].iloc[0])
-                    df_old = df_old[df_old['signal_date'] != current_date]
+                        # [수정] 해당 날짜의 기존 데이터 삭제 (재실행 시 중복 방지)
+                        current_date = str(df_new['signal_date'].iloc[0])
+                        df_old = df_old[df_old['signal_date'] != current_date]
 
-                    # 병합
-                    if df_old.empty and df_new.empty:
-                         df_combined = pd.DataFrame()
-                    elif df_old.empty:
-                         df_combined = df_new
-                    elif df_new.empty:
-                         df_combined = df_old
-                    else:
-                         df_combined = pd.concat([df_old, df_new])
+                        # 병합
+                        if df_old.empty and df_new.empty:
+                             df_combined = pd.DataFrame()
+                        elif df_old.empty:
+                             df_combined = df_new
+                        elif df_new.empty:
+                             df_combined = df_old
+                        else:
+                             df_combined = pd.concat([df_old, df_new])
                          
-                    # 중복 제거 (안전장치)
-                    if not df_combined.empty:
-                        df_combined = df_combined.drop_duplicates(subset=['signal_date', 'ticker'], keep='last')
-                        # 정렬 (최신 날짜 우선, 점수 높은 순)
-                        df_combined = df_combined.sort_values(by=['signal_date', 'score'], ascending=[False, False])
+                        # 중복 제거 (안전장치)
+                        if not df_combined.empty:
+                            df_combined = df_combined.drop_duplicates(subset=['signal_date', 'ticker'], keep='last')
+                            # 정렬 (최신 날짜 우선, 점수 높은 순)
+                            df_combined = df_combined.sort_values(by=['signal_date', 'score'], ascending=[False, False])
                     
-                    write_vcp_signals_csv_atomic(df_combined, file_path)
-                except Exception as e:
-                    # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 시그널은 CSV 에 남지 않으므로
-                    # 실패로 돌려주고, 파일은 운영자가 이 경고를 보고 손본다.
-                    log(f"기존 로그 병합 실패: {e}. {file_path} 를 보존하고 오늘 자 결과를 저장하지 않습니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
-                    return False
-            else:
-                write_vcp_signals_csv_atomic(df_new, file_path)
+                        write_vcp_signals_csv_atomic(df_combined, file_path)
+                    except Exception as e:
+                        # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 시그널은 CSV 에 남지 않으므로
+                        # 실패로 돌려주고, 파일은 운영자가 이 경고를 보고 손본다.
+                        log(f"기존 로그 병합 실패: {e}. {file_path} 를 보존하고 오늘 자 결과를 저장하지 않습니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
+                        return False
+                else:
+                    write_vcp_signals_csv_atomic(df_new, file_path)
 
             log(f"VCP 시그널 분석 완료: {len(signals)} 종목 감지 (누적 저장)", "SUCCESS")
             return True
@@ -1630,18 +1632,19 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
             current_date = str(target_date or datetime.now().strftime('%Y-%m-%d'))
             cleaned = True
-            if os.path.exists(file_path):
-                try:
-                    existing_df = _read_signals_log(file_path)
-                    if 'signal_date' in existing_df.columns:
-                        existing_df = existing_df[existing_df['signal_date'].astype(str) != current_date]
-                    write_vcp_signals_csv_atomic(existing_df, file_path)
-                except Exception as e:
-                    # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 옛 행을 걷어내지 못했으므로 실패로 돌려준다.
-                    log(f"기존 VCP 로그 정리 실패: {e}. {file_path} 를 보존합니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
-                    cleaned = False
-            else:
-                write_vcp_signals_csv_atomic(pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS), file_path)
+            with signals_log_lock(file_path):
+                if os.path.exists(file_path):
+                    try:
+                        existing_df = _read_signals_log(file_path)
+                        if 'signal_date' in existing_df.columns:
+                            existing_df = existing_df[existing_df['signal_date'].astype(str) != current_date]
+                        write_vcp_signals_csv_atomic(existing_df, file_path)
+                    except Exception as e:
+                        # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 옛 행을 걷어내지 못했으므로 실패로 돌려준다.
+                        log(f"기존 VCP 로그 정리 실패: {e}. {file_path} 를 보존합니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
+                        cleaned = False
+                else:
+                    write_vcp_signals_csv_atomic(pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS), file_path)
             _write_vcp_signals_latest_payload(
                 target_date=target_date,
                 signals=[],
@@ -1656,8 +1659,14 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         # 최신 저장분 대체와 히스토리가 함께 사라진다([VCP-028]). 파일이 없을 때만
         # 「시그널 없음」 갈래와 같은 23개 열의 빈 파일을 만든다.
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
-        if not os.path.exists(file_path):
-            write_vcp_signals_csv_atomic(pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS), file_path)
+        # 확인과 생성 사이에 다른 경로가 파일을 만들 수 있다([VCP-035]). 잠금을 열지 못한 예외가
+        # 이 갈래를 다시 지나면 실패는 False 라는 계약이 깨지므로 여기서 받는다
+        try:
+            with signals_log_lock(file_path):
+                if not os.path.exists(file_path):
+                    write_vcp_signals_csv_atomic(pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS), file_path)
+        except OSError as lock_error:
+            log(f"빈 VCP 로그 준비 실패: {lock_error}", "WARNING")
         _write_vcp_signals_latest_payload(
             target_date=target_date,
             signals=[],
@@ -1974,22 +1983,24 @@ def update_vcp_signals_recent_price():
         
         log(f"{len(current_prices)}개 종목 현재가 확보 완료. 업데이트 적용 중...")
         
-        # 데이터프레임 업데이트
-        for idx, row in df.iterrows():
-            ticker = row['ticker']
-            if ticker in current_prices:
-                current_p = current_prices[ticker]
-                entry_p = row['entry_price']
+        # 시세 조회는 잠금 밖에서 한다. 그동안 다른 경로가 쓴 행을 지우지 않도록 잠금 안에서
+        # 다시 읽고 티커 기준으로 적용한다([VCP-035])
+        with signals_log_lock(file_path):
+            df = pd.read_csv(file_path, dtype={'ticker': str})
+            for idx, row in df.iterrows():
+                ticker = row['ticker']
+                if ticker in current_prices:
+                    current_p = current_prices[ticker]
+                    entry_p = row['entry_price']
                 
-                df.at[idx, 'current_price'] = current_p
-                if entry_p > 0:
-                    ret = ((current_p - entry_p) / entry_p) * 100
-                    df.at[idx, 'return_pct'] = round(ret, 2)
+                    df.at[idx, 'current_price'] = current_p
+                    if entry_p > 0:
+                        ret = ((current_p - entry_p) / entry_p) * 100
+                        df.at[idx, 'return_pct'] = round(ret, 2)
                 
-                updated_count += 1
-        
-        # 저장
-        df.to_csv(file_path, index=False, encoding='utf-8-sig')
+                    updated_count += 1
+
+            write_vcp_signals_csv_atomic(df, file_path)
         log(f"VCP 시그널 가격 업데이트 완료: {updated_count}건 갱신", "SUCCESS")
         
         # kr_ai_analysis.json도 동기화 (선택 사항)

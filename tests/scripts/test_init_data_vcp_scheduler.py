@@ -972,4 +972,6 @@ def test_create_signals_log_keeps_log_bytes_when_write_fails(monkeypatch, tmp_pa
 
     assert init_data.create_signals_log(target_date="2026-02-19", run_ai=False) is False
     assert log_path.read_bytes() == before
-    assert [p.name for p in data_dir.iterdir() if p.name.startswith("signals_log.csv.")] == []
+    # signals_log.csv.lock 은 [VCP-035] 의 잠금 파일이라 계속 남는다. 임시 파일만 본다
+    leftovers = [p.name for p in data_dir.iterdir() if p.name.startswith("signals_log.csv.")]
+    assert [name for name in leftovers if name != "signals_log.csv.lock"] == []

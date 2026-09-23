@@ -70,6 +70,9 @@ def _env_file_lock(env_path: str) -> Iterator[None]:
     있어 이 자리에서 막을 것이 없다. 그리고 flock 은 NFS 같은 일부 네트워크 마운트에서
     호스트 로컬로 퇴화하므로, 저장소를 그런 마운트에 두는 배포가 생기면 워커 사이
     배타성이 조용히 사라진다([INFRA-050] 보안 리뷰 L1).
+
+    `data/signals_log.csv` 도 이 잠금을 `signals_log_lock` 이라는 이름으로 쓴다([VCP-035]).
+    그쪽 잠금 파일은 `data/*.lock` 에 걸리고, 보유 시간은 CSV 크기에 비례한다.
     """
     lock_path = f"{env_path}.lock"
     os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)

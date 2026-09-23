@@ -10,12 +10,15 @@ import asyncio
 import logging
 import os
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import pandas as pd
 
 from engine.config import app_config
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
+# signals_log.csv 의 읽기·병합·교체를 워커·프로세스 사이에서 직렬화한다([VCP-035]). `.env` 와 같은
+# `<경로>.lock` flock 이며 재진입이 불가능하므로 감싸는 쪽 한 자리에서만 잡는다.
+from services.common_env_service import _env_file_lock as signals_log_lock
 from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
@@ -263,8 +266,16 @@ def _merge_reanalysis_updates_into_full_signals_frame(
     updated_signals_df: pd.DataFrame,
     signals_path: str,
     load_csv_file: Callable[[str], Any],
+    target_indexes: Iterable[Any] | None = None,
 ) -> pd.DataFrame:
-    """부분 컬럼 DataFrame의 AI 업데이트를 원본 전체 CSV 프레임에 병합한다."""
+    """부분 컬럼 DataFrame의 AI 업데이트를 원본 전체 CSV 프레임에 병합한다.
+
+    target_indexes 는 재분석이 실제로 갱신한 행이다. 주면 그 행만 병합한다. updated_signals_df 는
+    AI 호출 전에 읽은 스냅샷이라, 나머지 행을 쓰면 그 사이 다른 실행이 저장한 값을 옛 값으로
+    되돌린다([VCP-035]).
+    """
+    if target_indexes is not None:
+        updated_signals_df = updated_signals_df.loc[list(target_indexes)]
     filename = os.path.basename(str(signals_path))
     try:
         # cache-backed loader가 지원하면 deep_copy=False 경로를 우선 사용해
@@ -283,6 +294,21 @@ def _merge_reanalysis_updates_into_full_signals_frame(
     if len(target_index) != len(updated_signals_df.index):
         raise ValueError("Updated row index does not match full signals frame index.")
 
+    # 재분석은 AI 호출 동안 잠금을 쥐지 않는다. 그 사이 다른 쓰기가 파일을 다시 정렬했으면
+    # 같은 index 가 다른 종목을 가리키므로, 덮지 않고 실패로 끝낸다([VCP-035]).
+    for key in ("ticker", "signal_date"):
+        if key not in merged.columns or key not in updated_signals_df.columns:
+            continue
+        current = merged.loc[target_index, key].astype(str).str.strip()
+        expected = updated_signals_df.loc[target_index, key].astype(str).str.strip()
+        if key == "ticker":
+            current, expected = current.str.zfill(6), expected.str.zfill(6)
+        if not current.equals(expected):
+            raise ValueError(
+                f"signals_log.csv rows moved during reanalysis ({key} mismatch). "
+                "Another run rewrote the log; run the reanalysis again."
+            )
+
     for column in _VCP_REANALYSIS_UPDATED_COLUMNS:
         if column not in updated_signals_df.columns:
             continue
@@ -296,6 +322,7 @@ def write_vcp_signals_csv_atomic(
     *,
     load_csv_file: Callable[[str], Any] | None = None,
     logger: logging.Logger | None = None,
+    target_indexes: Iterable[Any] | None = None,
 ) -> None:
     """signals_log.csv를 원자적으로 저장하고 캐시를 무효화한다."""
     persist_frame = signals_df
@@ -305,6 +332,7 @@ def write_vcp_signals_csv_atomic(
                 updated_signals_df=signals_df,
                 signals_path=signals_path,
                 load_csv_file=load_csv_file,
+                target_indexes=target_indexes,
             )
         except Exception as error:
             if logger is not None:
@@ -685,12 +713,15 @@ def execute_vcp_failed_ai_reanalysis(
         updated_count += second_only_success_count
         still_failed_count += second_only_failed_count
 
-        write_vcp_signals_csv_atomic(
-            signals_df,
-            signals_path,
-            load_csv_file=load_csv_file_for_persist,
-            logger=logger,
-        )
+        # 병합이 파일을 다시 읽으므로 재읽기·병합·교체가 한 잠금 안에 든다([VCP-035])
+        with signals_log_lock(signals_path):
+            write_vcp_signals_csv_atomic(
+                signals_df,
+                signals_path,
+                load_csv_file=load_csv_file_for_persist,
+                logger=logger,
+                target_indexes=[idx for idx, _ in apply_rows],
+            )
         try:
             cache_files_updated = update_cache_files(
                 normalized_target_date,
