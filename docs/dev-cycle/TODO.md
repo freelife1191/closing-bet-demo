@@ -71,15 +71,6 @@
 
 ## P2 — 대기
 
-### [CHAT-035] HistoryManager 의 책임 분리
-- 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §4.1. `chatbot/storage.py:39-493` 의 한 클래스가 SQLite 적재·저장, 레거시 JSON 스냅샷, 파일 서명 재적재 판정, 메시지·세션 LRU 캐시 둘, 델타 장부, 세션 CRUD, 메시지 CRUD 여덟 책임을 진다. `[CHAT-033]` 의 결함은 델타 장부·저장·재적재가 서로의 상태를 잠금 없이 건드리는 자리에서 나왔다. 선행 조건: `[CHAT-033]` 완료(2026-09-23 충족, 커밋 `bd5adf1`). 같은 자리를 두 항목이 동시에 건드리면 충돌한다.
-- 범위: 레거시 스냅샷 동기화, LRU 캐시와 파일 서명 판정, 델타 장부를 각각 분리. 기존 공개 메서드 시그니처와 기존 테스트 16건 통과 유지.
-- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 17:39
-  | 범위: 접근안 A(`chatbot/storage_history_parts.py` 에 `LegacySnapshot`·`HistoryReadCache`·`SessionDeltaLedger`·`storage_signature`, 잠금은 `HistoryManager` 의 RLock 하나, 외부가 부르는 비공개 메서드 네 개는 이름 유지 위임, 동작 변화 0), 테스트는 내부 접근 경로만 수정
-  | 실제 대화 근거: 2026-09-23 사용자 응답 「CHAT-035 (Recommended)」「A. 부품 세 개로 조립 (Recommended)」「테스트의 접근 경로만 고침 (Recommended)」「승인 (Recommended)」, spec `docs/superpowers/specs/2026-09-23-chat-035-history-manager-split-design.md`
-- QA: 대화 생성·메시지 송수신·삭제 후 새로고침 → 목록과 본문이 조작한 대로 남는다.
-- [x] 설계 승인 - [x] spec 검토 승인(「승인, 계획 작성 (Recommended)」) - [x] 구현 계획·critic 검토(`docs/superpowers/plans/2026-09-23-chat-035-history-manager-split.md`, 판정 ACCEPT-WITH-RESERVATIONS: grep 기대값 범위·커밋 스테이징과 트레일러 반영, 상한 상수 읽는 시점은 계획에 한 줄 기록) - [x] 구현·RED→GREEN(새 부품 검사 RED: 모듈 없음으로 수집 실패 → 7 passed, 접근 경로를 옮긴 여섯 테스트 RED: `AttributeError` → 269 passed. 원본 트리 전체 pytest 2699 passed 2 skipped exit 0) - [x] `/ponytail-review`(`is_due` 를 `sync` 에 합침, net -3) → `closing-bet-reviewer`(APPROVE, low 4: 상한 상수·logger 이름을 spec 에 예외로 기록, spec 의 캐시 생성자·계획의 `is_due` 정정, 서명 검사 단언 보강) → `/review`(`oh-my-claudecode:code-reviewer`, APPROVE. 종전판과 무작위 연산 차분 8시드 동일. L1 목록 docstring 정정, L2 도달 불가인 목록 버전 삭제, L3 전역 `time` 대신 모듈 참조 패치, L4 wal 단독·stat 오류 서명 검사 추가, import 순서. L4(c)는 매니저 테스트가 덮어 미반영, P1 은 `[CHAT-040]` 으로 등록, P2(`chatbot/core.py` 레거시 add/count 의 잠금 없는 순회)는 테스트 전용 경로라 미등록) - [ ] QA
-
 ### [VCP-035] `signals_log.csv` 의 읽기·병합·교체 사이에 잠금이 없다
 - 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-034]` 코드 리뷰 지적 3(확신도 낮음, 기존 문제). `SignalTracker._append_to_log`·`update_open_signals` 와 `scripts/init_data.py` 의 `create_signals_log` 는 파일을 읽고 병합한 뒤 교체하는 동안 잠금을 잡지 않는다. 스케줄러 파이프라인과 `run.py` 메뉴 2 가 동시에 돌면 한쪽이 추가한 행이 사라질 수 있다. `[VCP-034]` 가 빠른 append 분기를 없애 모든 추가가 이 창을 지난다. 실측하지 않았다.
 - 범위: 동시 실행이 실제로 가능한 경로인지(스케줄러 리더 잠금, CLI 사용 빈도) 먼저 확인하고, 필요하면 `.env.lock` 처럼 파일 잠금으로 읽기·교체를 직렬화하는 안을 설계한다.
