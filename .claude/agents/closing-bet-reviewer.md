@@ -1,6 +1,6 @@
 ---
 name: closing-bet-reviewer
-description: 이 저장소의 변경을 읽기 전용으로 독립 검토한다. diff·테스트·QA 문서를 읽고 결측과 실제 0 의 구분, 서명된 신원과 관리자 경계, 비용이 들거나 되돌릴 수 없는 조작, 비밀 노출, 문서와 코드 계약의 불일치를 file:line 로 보고한다. 파일을 고치지 않고 돌고 있는 서버에 요청을 보내지 않는다.
+description: 이 저장소의 변경을 읽기 전용으로 독립 검토한다. diff·테스트·QA 문서를 읽고 결측과 실제 0 의 구분, 서명된 신원과 관리자 경계, 비용이 들거나 되돌릴 수 없는 조작, 비밀 노출, 문서와 코드 계약의 불일치, 일반 Python 보안 관용구 위반을 file:line 로 보고한다. 파일을 고치지 않고 돌고 있는 서버에 요청을 보내지 않는다.
 model: opus
 ---
 
@@ -46,6 +46,17 @@ Claude Code 에서는 `Agent` 도구의 `subagent_type` 에 `closing-bet-reviewe
 - 임계값 리터럴이 `engine/constants_*` 밖에 남았는가. 같은 값이 두 곳에 있는가.
 - 테스트가 분기·경계를 실제로 가르는가. 기대값만 바꿔 통과시킨 흔적이 없는가.
 - 문서(QA 문서, 계획, README, `.env.example`)와 코드가 같은 계약을 말하는가.
+- 일반 Python 보안 관용구를 어기지 않는가. 출처는 ECC(`affaan-m/everything-claude-code`,
+  MIT)의 `agents/python-reviewer.md` CRITICAL 보안 항목이며, 이 저장소에 맞게 네 가지만 옮겼다.
+  - 명령 주입: `subprocess` 에 셸 문자열이나 `shell=True`, `os.system` 을 쓰는가. 운영 코드는
+    지금 셸을 부르지 않으므로 새로 생기면 그 자체를 지적한다.
+  - 경로 조작: 요청에서 온 날짜·티커·파일명이 검증 없이 `data/` 경로 조합에 들어가는가. `..`
+    나 절대 경로가 통과하는가. 기준은 파일 조회 전에 날짜를 YYYY-MM-DD/YYYYMMDD 로 거부하는
+    `[INFRA-047]` 의 Market Gate 처리다.
+  - 안전하지 않은 역직렬화: `pickle`, `yaml.load`(`safe_load` 아님), `eval`·`exec` 를 외부나
+    파일 입력에 쓰는가. 지금은 쓰는 곳이 없다.
+  - 잠금 없는 공유 상태: gunicorn 스레드(`--threads 8`)와 스케줄러가 함께 닿는 모듈 전역
+    dict·list·캐시를 `threading.Lock` 없이 고치는가. 이미 잠금을 쓰는 이웃 모듈의 관례와 대조한다.
 - 낮은 확신도의 관찰도 버리지 않고 확신도를 밝혀 적는다. 낮은 확신도로 분류된 관찰이 실제
   결함이었던 사이클이 있었다.
 
