@@ -1,11 +1,10 @@
 #!/bin/bash
 # restart_all.sh 와 stop_all.sh 가 공유하는, 이 저장소가 시작한 서비스의 수명주기 도우미다.
-# 외부 supervisor/systemd 서비스나 다른 프로젝트의 포트 점유자를 추측해서 종료하지 않는다.
+# 다른 실행 관리자나 다른 프로젝트의 포트 점유자를 추측해서 종료하지 않는다.
 
 LIFECYCLE_TERM_WAIT_SECONDS=${LIFECYCLE_TERM_WAIT_SECONDS:-8}
 LIFECYCLE_KILL_WAIT_SECONDS=${LIFECYCLE_KILL_WAIT_SECONDS:-3}
 LIFECYCLE_READY_WAIT_SECONDS=${LIFECYCLE_READY_WAIT_SECONDS:-60}
-LIFECYCLE_PROC_DIR=${LIFECYCLE_PROC_DIR:-/proc}
 
 lifecycle_init() {
   : "${PROJECT_ROOT:?PROJECT_ROOT must be set before loading service_lifecycle.sh}"
@@ -45,14 +44,12 @@ lifecycle_port_pids() {
 
 # 실행 관리자를 추측해 안내하지 않는다. 누가 포트를 쥐고 있는지는 점유자의 실제 계보에
 # 드러나므로 그대로 출력한다. 부모 한 단계만 보면 점유자가 고아가 된 뒤에는 PID 1 밖에
-# 보이지 않으므로 조상을 PID 1 까지 따라간다. Linux 에서는 cgroup 줄에 systemd 유닛명이나
-# 로그인 세션이 그대로 적히므로, 그 한 줄이 실행 관리자를 직접 지목한다.
+# 보이지 않으므로 조상을 PID 1 까지 따라간다.
 lifecycle_print_pid_genealogy() {
   local pid=$1 indent="" prefix="" depth=0
   case "$pid" in ''|*[!0-9]*) return 0 ;; esac
   while [ "$depth" -lt 8 ]; do
     ps -o pid,ppid,pgid,lstart,command -p "$pid" 2>/dev/null | sed "1d;s|^|$prefix|" >&2
-    [ -r "$LIFECYCLE_PROC_DIR/$pid/cgroup" ] && sed "s|^|$indent  cgroup |" "$LIFECYCLE_PROC_DIR/$pid/cgroup" >&2
     [ "$pid" = 1 ] && return 0
     pid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d '[:space:]')
     case "$pid" in ''|0|*[!0-9]*) return 0 ;; esac
@@ -224,89 +221,10 @@ lifecycle_record_matches_process() {
   [ -n "$current_token" ] && [ "$recorded_token" = "$current_token" ]
 }
 
-lifecycle_cgroup_path() {
-  local path
-  [ -r "$1" ] || return 1
-  # cgroup v1 의 name=systemd 줄과 v2 의 0:: 줄만 systemd 계층을 권위 있게 가리킨다. 다른
-  # 컨트롤러 줄까지 함께 보면 세션 스코프인 프로세스를 유닛으로 잘못 읽는다. 하이브리드
-  # 환경에서는 v1 줄이 실제 유닛을 담고 v2 줄은 루트만 가리키므로 v1 을 먼저 본다.
-  path=$(sed -n 's|^[0-9][0-9]*:name=systemd:||p' "$1" | head -n 1)
-  [ -n "$path" ] || path=$(sed -n 's|^0::||p' "$1" | head -n 1)
-  [ -n "$path" ] || return 1
-  printf '%s\n' "$path"
-}
-
-# 점유자를 입양하기 전에 「누가 이 프로세스의 수명주기를 관리하는가」를 본다. 소유자·작업
-# 경로·실행 명령이 모두 같아도 실행 관리자가 띄운 프로세스라면, 이 스크립트가 종료시켜도
-# 관리자가 곧바로 되살려 포트를 두고 경쟁하게 된다. cgroup 경로가 유닛 이름을 그대로 담으므로
-# 그 한 줄이 관리자를 직접 지목한다. 유닛 이름을 미리 정해 두지 않으므로 systemd --user 와
-# --system 어느 쪽이든 같은 검사로 걸린다.
-# 반환값: 0 관리자 있음(유닛 cgroup 경로를 출력) / 1 관리자 없음 / 2 알 수 없음
-# ponytail: cgroup 으로 판정한다. launchd 처럼 cgroup 밖에서 관리하는 방식은 잡지 못하며,
-# 그 환경이 문제가 되면 그때 해당 조회 수단을 추가한다.
-lifecycle_cgroup_unit() {
-  # Delegate= 로 하위 cgroup 을 만든 유닛에서는 잎이 유닛이 아니다. 그 프로세스를 관리하는
-  # 유닛은 경로에서 가장 안쪽의 .service 구성요소다. 유닛 안에 있지 않으면 실패로 돌려준다.
-  case "$1" in
-    *.service) printf '%s\n' "$1" ;;
-    *.service/*) printf '%s\n' "${1%.service/*}.service" ;;
-    *) return 1 ;;
-  esac
-}
-
-lifecycle_pid_supervisor() {
-  local pid=$1 path self
-  # self 는 점유자를 판정하는 값이 아니라 「이 호스트에 systemd 계층이 있는가」와 「호출자가
-  # 점유자와 같은 유닛에 있는가」만 정한다. 구하지 못했다는 것은 판정 불가가 아니라 이 guard
-  # 가 다룰 감독 관계가 없다는 뜻이다. macOS 에는 /proc 이 없고, systemd 가 아닌 Linux 에는
-  # systemd 계층 줄이 없다. 두 경우 모두 종전 입양 동작을 그대로 둔다.
-  self=$(lifecycle_cgroup_path "$LIFECYCLE_PROC_DIR/self/cgroup") || return 1
-  # 반면 호스트에 계층이 있는데 점유자의 것만 읽거나 해석하지 못한 것은 「관리자 없음」이
-  # 아니라 「알 수 없음」이다. 그것을 허용으로 떨어뜨리면 이 guard 의 목적이 무너진다.
-  path=$(lifecycle_cgroup_path "$LIFECYCLE_PROC_DIR/$pid/cgroup") || return 2
-  path=$(lifecycle_cgroup_unit "$path") || return 1
-  # 호출자는 유닛이 아니라 로그인 세션 스코프에 있는 것이 보통이며, 그때는 비교할 유닛이 없다.
-  self=$(lifecycle_cgroup_unit "$self") || self=""
-  # 호출자가 점유자와 같은 유닛 안에 있으면, 그 유닛은 점유자를 주 프로세스로 쥐고 있는 것이
-  # 아니라 둘을 함께 담고 있을 뿐이다. setsid 는 cgroup 을 바꾸지 않으므로 데스크톱 터미널
-  # (gnome-terminal-server.service)에서 손으로 띄운 서비스가 여기에 해당한다. 그 점유자는
-  # 종료해도 되살아나지 않으므로 막지 않는다.
-  [ "$path" = "$self" ] && return 1
-  printf '%s\n' "$path"
-}
-
-lifecycle_assert_pid_is_unsupervised() {
-  local pid=$1 path unit status
-  path=$(lifecycle_pid_supervisor "$pid")
-  status=$?
-  case "$status" in
-    0)
-      # 유닛 이름은 cgroup 디렉터리 이름이라 이 스크립트가 정하지 않는다. 제어 문자가 섞이면
-      # 터미널이 그대로 해석하므로 떼고 출력한다.
-      unit=$(printf '%s' "${path##*/}" | tr -d '[:cntrl:]')
-      echo "❌ PID $pid 는 systemd 유닛 $unit 가 관리합니다. 이 스크립트로 교체하지 않습니다." >&2
-      case "$unit" in
-        # 사용자 세션 관리자 자체다. 재기동하면 그 사용자의 세션 전체가 내려가므로 권하지 않는다.
-        user@*.service)
-          echo "   이 유닛은 사용자 세션 관리자입니다. 점유자를 직접 확인하세요: systemctl --user status $unit" >&2 ;;
-        *)
-          case "$path" in
-            */user@*) echo "   다음 명령을 사용하세요: systemctl --user restart $unit" >&2 ;;
-            *) echo "   다음 명령을 사용하세요: systemctl restart $unit" >&2 ;;
-          esac ;;
-      esac
-      return 1 ;;
-    2)
-      echo "❌ PID $pid 의 cgroup 에서 어떤 실행 관리자가 맡고 있는지 확인하지 못했습니다. 관리 대상으로 전환하지 않습니다." >&2
-      return 1 ;;
-  esac
-}
-
 lifecycle_legacy_master_pid() {
   local service=$1 pid candidate master=""
   shift
   for pid in "$@"; do
-    lifecycle_assert_pid_is_unsupervised "$pid" || return 1
     lifecycle_pid_matches_service "$service" "$pid" || return 1
   done
   for candidate in "$@"; do
@@ -344,7 +262,7 @@ lifecycle_assert_port_is_managed() {
   pids=$(lifecycle_port_pids "$port")
   status=$?
   if [ "$status" -eq 2 ]; then
-    echo "❌ 포트 $port 의 점유 PID를 확인할 권한이 없습니다. root/systemd/supervisor 상태를 확인하세요." >&2
+    echo "❌ 포트 $port 의 점유 PID를 확인할 권한이 없습니다. root 권한이나 실행 관리자 상태를 확인하세요." >&2
     return 1
   fi
   [ -n "$pids" ] || return 0

@@ -69,7 +69,10 @@ def test_restart_never_reports_ready_before_backend_and_frontend_probes_pass() -
     assert "cleanup_started_services" in restart
 
 
-def test_stop_refuses_unmanaged_listener_without_claiming_success(tmp_path: Path) -> None:
+@pytest.mark.parametrize("entrypoint", ["stop_all.sh", "restart_all.sh"])
+def test_entrypoints_refuse_unmanaged_listener_without_claiming_success(
+    tmp_path: Path, entrypoint: str
+) -> None:
     """PID 기록이 없는 외부 포트 점유자를 죽이거나 성공으로 출력하지 않는다."""
     project = _fixture(tmp_path)
     _command(
@@ -81,12 +84,13 @@ def test_stop_refuses_unmanaged_listener_without_claiming_success(tmp_path: Path
 
     env = {"PATH": f"{project / 'bin'}:{os.environ['PATH']}", "HOME": str(tmp_path / "home")}
     result = subprocess.run(
-        ["bash", "stop_all.sh"], cwd=project, env=env, capture_output=True, text=True, timeout=10
+        ["bash", entrypoint], cwd=project, env=env, capture_output=True, text=True, timeout=10
     )
 
     assert result.returncode != 0
     assert "관리 대상이 아닙니다" in result.stderr
-    assert "All services stopped" not in result.stdout
+    assert "종료되었습니다" not in result.stdout
+    assert "🎉 Ready!" not in result.stdout
     assert not (project / "kill-called").exists()
 
 
@@ -102,44 +106,6 @@ def test_process_command_trims_ps_padding_before_matching(tmp_path: Path) -> Non
         cwd=tmp_path, capture_output=True, text=True, timeout=5,
     )
     assert result.returncode == 0, result.stderr
-
-
-def test_restart_and_stop_propagate_supervisor_refusal_without_success_message(
-    tmp_path: Path,
-) -> None:
-    """실행 관리자가 쥔 포트에서 두 진입점 모두 성공 문구 없이 비영점으로 끝난다."""
-    project = _fixture(tmp_path)
-    _command(
-        project,
-        "lsof",
-        "import sys\nif '-t' in ''.join(sys.argv[1:]): print('4242')\nsys.exit(0)\n",
-    )
-    proc = project / "proc"
-    (proc / "self").mkdir(parents=True)
-    (proc / "self" / "cgroup").write_text(
-        "0::/user.slice/user-1000.slice/session-6873.scope\n", encoding="utf-8"
-    )
-    (proc / "4242").mkdir()
-    (proc / "4242" / "cgroup").write_text(
-        "0::/user.slice/user-1000.slice/user@1000.service/app.slice/closing-bet-frontend.service\n",
-        encoding="utf-8",
-    )
-    env = {
-        "PATH": f"{project / 'bin'}:{os.environ['PATH']}",
-        "HOME": str(tmp_path / "home"),
-        "LIFECYCLE_PROC_DIR": str(proc),
-    }
-
-    for entrypoint in ("restart_all.sh", "stop_all.sh"):
-        result = subprocess.run(
-            ["bash", entrypoint], cwd=project, env=env, capture_output=True, text=True, timeout=30
-        )
-
-        assert result.returncode != 0, entrypoint
-        assert "closing-bet-frontend.service" in result.stderr, entrypoint
-        assert "systemctl --user restart closing-bet-frontend.service" in result.stderr, entrypoint
-        assert "🎉 Ready!" not in result.stdout, entrypoint
-        assert "종료되었습니다" not in result.stdout, entrypoint
 
 
 def test_repository_caddyfile_compresses_sets_security_headers_and_hides_port_80() -> None:
