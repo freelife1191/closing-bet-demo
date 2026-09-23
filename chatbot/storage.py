@@ -79,7 +79,12 @@ class HistoryManager:
                 # 되살린 메시지를 DB 에 남기지 못했다. 빈 사본을 쓰면 스냅샷이 덮이므로 읽기 실패로 다룬다.
                 return None
             if self._sync_snapshot_on_load:
-                self._snapshot.sync(sqlite_sessions, force=True)
+                try:
+                    self._snapshot.sync(self._read_sqlite_sessions, force=True)
+                except OSError as e:
+                    # 복구용 사본이라 기동을 막지 않는다. 다음 저장이 간격을 기다리지 않고 다시 쓴다([CHAT-041]).
+                    logger.error(f"Legacy history snapshot write failed on load: {e}")
+                    self._snapshot.last_monotonic = None
             return sqlite_sessions
 
         legacy_sessions = load_history_sessions(self.file_path, logger)
@@ -89,6 +94,12 @@ class HistoryManager:
             return legacy_sessions
 
         return sqlite_sessions or {}
+
+    def _read_sqlite_sessions(self) -> Optional[Dict[str, Any]]:
+        """스냅샷에 쓸 정본을 읽는다. 메시지 표가 빈 채 복구된 DB 를 그대로 쓰면
+        [CHAT-039] 의 복구 원천인 사본이 덮이므로 같은 복구를 먼저 거친다."""
+        sessions = load_history_sessions_from_sqlite(self.db_path, logger)
+        return self._restore_lost_messages_from_snapshot(sessions) if sessions else sessions
 
     def _restore_lost_messages_from_snapshot(self, sqlite_sessions: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """메시지 테이블이 통째로 사라졌다가 빈 채로 복구됐으면 JSON 스냅샷의 메시지로 되살린다([CHAT-039]).
@@ -123,8 +134,13 @@ class HistoryManager:
         return load_history_sessions_from_sqlite(self.db_path, logger)
 
     @locked
-    def _save(self) -> bool:
-        """SQLite 저장의 성패를 돌려준다. 실패해도 예외를 올리지 않고 스냅샷만 남긴다."""
+    def _save(self, force_snapshot: bool = False) -> bool:
+        """SQLite 저장의 성패를 돌려준다. 실패해도 예외를 올리지 않는다.
+
+        사본은 SQLite 를 다시 읽어 쓰므로 저장되지 않은 변경은 어디에도 남지 않는다([CHAT-041]).
+
+        force_snapshot 은 삭제처럼 사본을 간격 없이 다시 쓰고, 쓰지 못하면 사본을 지우게 한다.
+        """
         try:
             has_delta = self._delta.has_delta
             # 전체 동기화 폴백은 두지 않는다. 낡은 사본을 통째로 쓰면 다른 워커가 만든 세션을 지우거나
@@ -143,11 +159,11 @@ class HistoryManager:
                     logger=logger,
                 )
                 if not sqlite_saved:
-                    logger.warning("SQLite history delta save failed; legacy JSON snapshot only")
+                    logger.warning("SQLite history delta save failed; changes will be dropped on reload")
 
-                has_deletion = self._delta.clear_all or bool(self._delta.deleted)
+                has_deletion = self._delta.clear_all or bool(self._delta.deleted) or force_snapshot
                 try:
-                    self._snapshot.sync(self.sessions, force=(not sqlite_saved) or has_deletion)
+                    self._snapshot.sync(self._read_sqlite_sessions, force=has_deletion)
                 except OSError as e:
                     # 스냅샷은 복구용 사본이라 SQLite 저장의 성패를 바꾸지 않는다([CHAT-040]).
                     # 다음 저장이 간격을 기다리지 않고 다시 쓴다.
@@ -157,6 +173,8 @@ class HistoryManager:
                         # 낡은 사본이 남으면 SQLite 가 빈 다음 로드가 그것을 다시 이관해
                         # 지운 대화가 살아난다. 지우지 못하면 삭제를 실패로 돌려주되, 장부는 비우고
                         # 서명을 비워 다음 접근이 SQLite 를 다시 읽게 한다(재시도가 되살아난 세션도 찾는다).
+                        # ponytail: 정본 읽기(복구 쓰기) 실패도 여기로 와서 [CHAT-039] 의 복구 원천을 지운다.
+                        # 재적재와 저장 사이에 메시지 표가 사라지는 창에서만 생긴다. 보이면 읽기 실패를 따로 구분한다.
                         try:
                             self._snapshot.file_path.unlink(missing_ok=True)
                         except OSError as unlink_error:
@@ -338,9 +356,10 @@ class HistoryManager:
 
         if targets:
             self._invalidate_session_list_cache()
-            if not self._save():
-                # 삭제가 SQLite 에 남지 않았다. 지웠다고 돌려주면 계정 삭제가 성공으로 보인다.
-                raise RuntimeError("chat history delete was not persisted")
+        # 대상이 없어도 사본을 다시 쓴다. 앞선 삭제가 사본 정리에 실패했으면 대화가 JSON 에만 남아 있다([CHAT-041]).
+        if not self._save(force_snapshot=True):
+            # 삭제가 SQLite 에 남지 않았거나 사본을 정리하지 못했다. 지웠다고 돌려주면 계정 삭제가 성공으로 보인다.
+            raise RuntimeError("chat history delete was not persisted")
         return len(targets)
 
     def clear(self) -> None:

@@ -40,14 +40,14 @@ def test_legacy_snapshot_writes_only_when_due(tmp_path, monkeypatch):
     # 전역 time 모듈이 아니라 이 모듈의 참조만 바꾼다
     monkeypatch.setattr(parts, "time", SimpleNamespace(monotonic=lambda: now["t"]))
     snapshot = LegacySnapshot(tmp_path / "history.json", interval_seconds=15.0)
-    assert snapshot.sync({"a": {}}) is True
-    assert snapshot.sync({"b": {}}) is False
-    assert snapshot.sync({"c": {}}, force=True) is True
+    assert snapshot.sync(lambda: {"a": {}}) is True
+    assert snapshot.sync(lambda: {"b": {}}) is False
+    assert snapshot.sync(lambda: {"c": {}}, force=True) is True
     now["t"] += 15.0
-    assert snapshot.sync({}) is True
+    assert snapshot.sync(lambda: {}) is True
     assert json.loads((tmp_path / "history.json").read_text(encoding="utf-8")) == {}
     snapshot.interval_seconds = 0.0
-    assert snapshot.sync({"d": {}}) is True
+    assert snapshot.sync(lambda: {"d": {}}) is True
 
 
 @pytest.mark.parametrize("raw, expected", [("3", 3.0), ("-1", 0.0), ("abc", 15.0)])
@@ -99,3 +99,31 @@ def test_storage_signature_treats_stat_error_as_missing(tmp_path, monkeypatch):
 
     monkeypatch.setattr(parts.Path, "stat", _denied)
     assert storage_signature(tmp_path / "chatbot_storage.db", tmp_path / "chatbot_history.json") is None
+
+
+def test_legacy_snapshot_serializes_writers_across_workers(tmp_path):
+    """[CHAT-041] 앞선 쓰기가 정본을 읽는 동안 다음 쓰기는 기다렸다가 그 뒤의 상태를 쓴다."""
+    import threading
+
+    reading = threading.Event()
+    release = threading.Event()
+
+    def slow_stale_read():
+        reading.set()
+        release.wait(5)
+        return {"stale": {}}
+
+    first = LegacySnapshot(tmp_path / "history.json", interval_seconds=15.0)
+    second = LegacySnapshot(tmp_path / "history.json", interval_seconds=15.0)
+    stale_writer = threading.Thread(target=first.sync, args=(slow_stale_read,), kwargs={"force": True})
+    stale_writer.start()
+    assert reading.wait(5)
+    fresh_writer = threading.Thread(target=second.sync, args=(lambda: {"fresh": {}},), kwargs={"force": True})
+    fresh_writer.start()
+    fresh_writer.join(0.3)
+    assert fresh_writer.is_alive()  # 잠금이 없으면 먼저 쓰고 끝난다
+
+    release.set()
+    stale_writer.join(5)
+    fresh_writer.join(5)
+    assert json.loads((tmp_path / "history.json").read_text(encoding="utf-8")) == {"fresh": {}}

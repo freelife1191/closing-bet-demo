@@ -7,12 +7,13 @@ HistoryManager 가 조립하는 부품([CHAT-035])
 두면 부품 사이의 상태가 서로 다른 시점을 보게 되어 [CHAT-033] 같은 경합이 다시 생긴다.
 """
 
+import fcntl
 import logging
 import os
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from .storage_history_helpers import atomic_write_json
 
@@ -69,7 +70,8 @@ class LegacySnapshot:
         """히스토리 파일을 원자적으로 저장해 부분 저장/빈 파일 상태를 방지한다."""
         atomic_write_json(self.file_path, data)
 
-    def sync(self, data: Dict[str, Any], force: bool = False) -> bool:
+    def sync(self, read_sessions: Callable[[], Optional[Dict[str, Any]]], force: bool = False) -> bool:
+        """간격이 찼거나 force 면 read_sessions 가 돌려준 정본을 쓴다. 읽지 못하면 OSError 를 올린다."""
         due = (
             force
             or self.interval_seconds <= 0
@@ -78,7 +80,15 @@ class LegacySnapshot:
         )
         if not due:
             return False
-        self.write(data)
+        # 메모리 사본은 다른 워커가 지우기 전에 읽은 것일 수 있다. 워커 사이 잠금 안에서 정본을
+        # 다시 읽어 쓰므로, 삭제를 커밋한 워커의 쓰기가 늘 그 뒤의 상태를 남긴다([CHAT-041]).
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.file_path.with_name(f"{self.file_path.name}.lock"), "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            data = read_sessions()
+            if data is None:
+                raise OSError("history source could not be read for the snapshot")
+            self.write(data)
         self.last_monotonic = time.monotonic()
         return True
 

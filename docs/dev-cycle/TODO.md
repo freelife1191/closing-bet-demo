@@ -110,7 +110,16 @@
 ### [CHAT-041] 삭제한 대화가 레거시 JSON 스냅샷에 남는 창
 - 카테고리: 챗봇 | 티어: T2(설계 때 재판정) | 근거: `[CHAT-040]` 코드 리뷰 low2·low3(2026-09-23, 종전부터 있던 동작). (1) `clear_for_owner` 가 스냅샷 쓰기와 낡은 JSON 삭제가 모두 실패해 500 을 낸 뒤 재시도하면, 다른 소유자의 세션이 SQLite 에 있을 때는 이관이 일어나지 않아 `targets=[]` 로 0(성공)을 돌려주지만 JSON 에는 지운 대화 전문이 다음 스냅샷 쓰기 성공 때까지 남는다(리뷰어 scratchpad `chat040rev/retry2.py` 로 재현). (2) 워커 B 가 A 의 삭제 커밋 전에 읽은 사본으로 `atomic_write_json` 을 진행 중이면 B 의 `os.replace` 가 A 의 unlink·스냅샷 뒤에 닿아 지운 세션을 담은 JSON 을 되살린다(파일 사이 잠금 없음, 코드 추론·미재현).
 - 범위: 삭제 재시도가 SQLite 에 대상이 없어도 스냅샷을 강제로 다시 쓰게 할지, 스냅샷 쓰기를 워커 사이에서 직렬화할지(`.env.lock` 같은 파일 잠금) 결정하고 회귀 테스트. `_load` 의 강제 스냅샷(82행)이 OSError 로 `HistoryManager` 생성을 실패시키는 것도 함께 본다.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `closing-bet-reviewer`
+- 설계 승인: 2026-09-23 20:59, 대화에서 bounded 설계 「세 개 모두 승인」. 항목 선택은 같은 대화의 「CHAT-041 (Recommended)」.
+- 승인 범위: (1) `clear_for_owner` 가 대상 수와 무관하게 `_save(force_snapshot=True)` 로 사본을 다시 쓰고, 실패 시 CHAT-040 의 unlink 경로를 탄다(재적재 실패 상태의 0 건도 실패로 돌려줌). (3) `_load` 의 강제 스냅샷 OSError 를 로그로 흡수. (2) `LegacySnapshot.sync` 가 메모리 사본 대신 SQLite 를 다시 읽어 쓰고, 그 구간을 `chatbot_history.json.lock` 의 `fcntl.flock` 으로 워커 사이 직렬화. SQLite 저장 실패 때 미저장 메모리 변경은 JSON 에 남지 않는다([CHAT-033] 원칙과 일치). 티어 T2(`chatbot/` 는 tier-rules §2 밖).
+- 파일: `chatbot/storage.py`, `chatbot/storage_history_parts.py`, `tests/chatbot/test_history_snapshot_failure_refactor.py`, `tests/chatbot/test_storage_history_parts_refactor.py`. 읽은 정본: `.claude/skills/closing-bet-python/SKILL.md`, `.claude/skills/closing-bet-verify/SKILL.md`
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: 신규 3건이 결함으로 실패(AttributeError·지운 소유자가 JSON 에 남음·OSError 28) → 구현 후 `pytest tests/chatbot` 277 passed
+- [x] `/ponytail-review`(oh-my-claudecode:code-reviewer 레인): shrink 2건 반영(잠금을 `storage_memory_manager.py` 와 같은 `with open(..., "a")` 관용구로, 테스트의 함수 안 import 를 모듈 머리로)
+- [x] `closing-bet-reviewer` 1차 APPROVE(low 4): 문구·`force=has_deletion`, flock 직렬화 테스트, 스냅샷 읽기가 [CHAT-039] 복구를 거치게 함, 재적재 실패 0 건·`last_monotonic` 단언 → 모두 반영. 변이 검사(flock no-op, 복구 제거, force_snapshot 제거)에서 각 신규 테스트가 실패함을 확인
+- [x] `closing-bet-reviewer` 재검토 APPROVE(low 1): 정본 읽기(복구 쓰기) 실패가 삭제와 겹치면 unlink 가 [CHAT-039] 복구 원천을 지운다 → 재적재와 저장 사이 창에서만 생겨 `ponytail:` 주석으로 한계 표시(미수정)
+- [x] 전체 pytest: 최종 코드 2720 passed, 2 skipped, exit 0 (주석 추가 뒤 `tests/chatbot` 280 passed)
+- [ ] QA(서비스 하네스, 브라우저는 삭제 조작이라 정책상 차단)
 
 ### [INFRA-084] `closing-bet-reviewer` 에 일반 Python 보안 검토 항목을 더한다
 - 카테고리: 인프라 | 티어: 문서(`tier-rules.md` §5, 설계 때 재판정) | 근거: 2026-09-23 대화에서 `docs/reference/skill-trend/05_python_agent_skills_research_review.md` 의 추천 스킬을 대조했다. Pydantic Skills 는 저장소가 Pydantic 을 직접 쓰지 않아(import 0건, 구조체는 `@dataclass`) 제외했다. ECC(`affaan-m/everything-claude-code`, MIT) 의 `python-testing`·`python-patterns`·`python-reviewer` 전체는 `CLAUDE.md` 의 테스트 규칙(`test_*_refactor.py`, 새 fixture 계층 금지)·`engine/constants` 우선 규칙과 충돌하거나 일반 관용구라 제외했다. 차용할 가치가 있는 것은 `agents/python-reviewer.md` 의 CRITICAL 보안 항목뿐이다. 현재 `closing-bet-reviewer` 는 결측·신원·비용·비밀·문서 계약을 보지만 명령 주입(셸 문자열 `subprocess`), 경로 조작(`..`), 안전하지 않은 역직렬화(`pickle`·`yaml.load`), 잠금 없는 공유 상태(gunicorn 스레드·스케줄러)는 명시하지 않는다. 빈 `except` 는 `closing-bet-python` 이 이미 금지한다.
