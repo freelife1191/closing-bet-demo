@@ -118,6 +118,11 @@ def _count_rules(client, path: str, method: str) -> int:
     )
 
 
+def test_vcp_status_file_follows_cwd_data_dir():
+    """[INFRA-082] import 때 파일을 만들므로 모듈 기준 경로면 새 클론의 pytest 가 원본 data/ 에 쓴다."""
+    assert kr_market.VCP_STATUS._path == os.path.join(kr_market.DATA_DIR, "vcp_status.json")
+
+
 def test_reanalyze_vcp_failed_ai_filters_failed_rows_and_updates_csv(monkeypatch, tmp_path: Path):
     signals_df = pd.DataFrame(
         [

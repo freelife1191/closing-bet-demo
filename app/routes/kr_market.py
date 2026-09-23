@@ -187,11 +187,7 @@ def set_interval_config():
 from services.file_backed_status import FileBackedStatus
 
 VCP_STATUS = FileBackedStatus(
-    file_path=os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        'data',
-        'vcp_status.json',
-    ),
+    file_path=os.path.join(DATA_DIR, 'vcp_status.json'),
     defaults={
         'running': False,
         'status': 'idle',  # idle, running, success, error, cancelled
