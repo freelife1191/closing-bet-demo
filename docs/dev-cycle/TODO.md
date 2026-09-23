@@ -71,18 +71,6 @@
 
 ## P2 — 대기
 
-### [VCP-039] 취소한 재분석이 아직 돌지 않은 행에 실패 값을 기록한다
-- 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-035]` 심층 리뷰 참고 사항(2026-09-23, 종전부터 있던 동작). 백그라운드 실패 AI 재분석을 도중에 취소하면 `execute_vcp_failed_ai_reanalysis`(`services/kr_market_vcp_reanalysis_service.py`)가 `apply_rows` 전체를 `_apply_vcp_reanalysis_updates` 에 넘겨, 아직 분석하지 않은 행에도 실패 값(`ai_action` 등)을 쓰고 병합한다. 그 사이 다른 실행이 같은 행에 성공 결과를 저장했으면 실패 값으로 덮인다. 실측하지 않았다.
-- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 20:20 | 범위: 취소된 경우에만 `apply_rows`·`second_only_rows` 를 배치 루프가 실제로 처리한 티커(감싼 `on_progress` 로 수집)로 좁힌다. 취소하지 않은 경로와 응답 형식은 그대로 둔다 | 근거: 대화에서 bounded 설계를 제시하고 사용자가 「승인 (Recommended)」 선택. 티어 T2(위험 경로 밖, 예상 십여 줄)
-- 범위: 취소 시 실제로 결과를 받은 행만 `apply_rows` 로 남기는 규칙과 회귀 테스트. 취소 응답의 집계 문구가 바뀌는지 함께 본다.
-- QA 시나리오: 서비스 하네스(화면 진입은 LLM 비용이 드는 재분석이라 금지). 취소 시 미처리 행의 기존 AI 값 보존과 집계, 취소하지 않은 경로 회귀 없음, 정리.
-- [x] 재현 확인(2026-09-23 20:15, scratch 스크립트): Gemini 강제 재분석에서 첫 종목 뒤 취소하면 미처리 두 행의 기존 값 `HOLD/50/prev` 가 `NaN/NaN/분석 실패` 로 덮이고 `still_failed_count` 2 로 집계된다. 다른 실행이 끼지 않아도 기존 정상 값을 지운다.
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN: 신규 테스트가 수정 전 `assert (1, 2) == (1, 1)` 로 실패한 뒤 구현. `execute_vcp_failed_ai_reanalysis` 가 진행 콜백을 감싸 처리한 티커를 모으고, 취소된 경우에만 `apply_rows`·`second_only_rows` 를 그 티커로 좁힌다. 배치 헬퍼 시그니처는 그대로다.
-- [x] `/ponytail-review`(oh-my-claudecode:code-reviewer 레인) → `closing-bet-reviewer`: ponytail 지적 1건(한 번만 쓰는 중첩 함수 → 컴프리헨션) 반영. 코드 리뷰 APPROVE(max low). low 1(판정이 티커 단위라 같은 티커의 두 번째 행도 남음, 결과를 공유해 데이터 손상 없음)은 주석으로 명시, low 2(`second_only_rows` 갈래를 가르는 테스트 없음)는 `force_provider="second"` 테스트 추가로 반영하고, 그 필터를 지우면 새 테스트가 실패함을 확인. 리뷰어가 첫 종목 전 취소·마지막 종목 뒤 취소·콜백 예외·처리 0행의 캐시 경로를 탐침으로 확인.
-- [x] 정적 검증: 전체 `pytest -q` 2711 passed, 2 skipped, exit 0(최종 코드). frontend 변경 없음이라 type-check·Vitest 생략.
-- [ ] QA(`docs/dev-cycle/qa/VCP-039.md`)
-
 ### [INFRA-079] 유물 사용량 저장소 `data/usage.db` 의 이메일 행 확인과 정리
 - 카테고리: 인프라 | 티어: T1 | 근거: `[FE-045]` 계획 검토(2026-09-22). `services/usage_tracker.py`(`usage_log`)와 `engine/services/usage_tracker.py`(`api_usage`)는 이메일을 기본 키로 쓰지만 어떤 운영 코드도 import 하지 않는 유물이다. 개발 기기의 `data/usage.db` 는 두 테이블 모두 행 0 이나 운영 서버의 파일은 이 기기에서 확인할 수 없다.
 - 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한다. 행이 있으면 그 이메일 행을 지우는 절차(또는 파일 제거)와 두 모듈·테스트의 삭제를 설계한다. 행이 없으면 두 모듈과 테스트 여섯 파일의 삭제만 남는다. 원격 서버 접속은 운영자가 한다.
