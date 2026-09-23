@@ -107,18 +107,6 @@
 - 범위: 각 경로가 캐시·상태·파이프라인 출력 가운데 무엇인지 분류하고, cwd 기준으로 옮겨도 운영(`restart_all.sh` 가 루트로 `cd`)과 스케줄러·CLI(`run.py`, `scripts/`) 동작이 같은지 확인한 뒤 통일할지 정한다.
 - [ ] 설계 승인 - [ ] 구현·RED→GREEN - [ ] 리뷰 - [ ] QA
 
-### [CHAT-040] 스냅샷 쓰기 실패가 이미 저장된 대화 삭제를 실패로 보고한다
-- 카테고리: 챗봇 | 티어: T2(설계 때 재판정) | 근거: `[CHAT-035]` 심층 리뷰 P1(2026-09-23, 종전부터 있던 동작). `HistoryManager._save`(`chatbot/storage.py`)는 SQLite 델타 저장이 커밋된 뒤 `self._snapshot.sync` 로 레거시 JSON 을 쓰는데, `atomic_write_json`(`chatbot/storage_history_helpers.py:33`)은 디스크 가득 참·권한 오류를 다시 올린다. 그러면 `except` 로 빠져 False 를 돌려주고 장부를 비우지 않으며 서명도 갱신하지 않는다. 그래서 `clear_for_owner` 는 삭제가 SQLite 에 남았는데도 `RuntimeError("chat history delete was not persisted")` 를 올려 계정 삭제가 실패로 보인다. 재시도는 멱등이라 자료는 안전하다. 실측하지 않았다.
-- 범위: 스냅샷 쓰기 실패를 SQLite 저장 성패와 분리하는 규칙(스냅샷 실패는 로그만 남기고 SQLite 결과를 돌려주는 안)과 회귀 테스트. 스냅샷은 `[CHAT-039]` 복원의 원천이므로 실패를 감출 때의 영향을 함께 본다.
-- 설계 승인: 2026-09-23 20:40 사용자 승인(bounded 설계, 대화에서 제시). 티어 T2(`chatbot/storage.py` 는 `tier-rules.md` §2 밖).
-- 승인 범위: `_save` 의 `self._snapshot.sync` 호출만 따로 감싸 실패는 오류 로그만 남기고 반환·서명·델타 초기화는 SQLite 결과로 정한다. 실패하면 `self._snapshot.last_monotonic = None` 으로 두어 다음 `_save` 가 간격 없이 스냅샷을 다시 쓴다. `_load` 의 스냅샷 쓰기(82행)는 범위 밖. 지운 대화가 JSON 에 남는 창은 현재 동작(재시도해도 `_save` 를 부르지 않음)보다 넓어지지 않는다. 테스트는 `tests/chatbot/` 신규 `test_*_refactor.py`. QA 는 계정 삭제가 되돌릴 수 없는 조작이라 서비스 하네스(격리 사본, 기준 커밋 대조).
-- 승인 범위 변경(2026-09-23 20:42 사용자 승인): 재현(scratchpad `chat040/repro.py`)에서 그 소유자의 세션이 유일해 SQLite 가 비면 `_load` 가 낡은 JSON 을 다시 이관해 지운 대화가 되살아났다(현재 동작에서도 동일). 그래서 삭제(`deleted`·`clear_all`)가 든 저장에서 스냅샷 쓰기가 실패하면 낡은 JSON 을 `unlink` 하고, 그것도 실패하면 종전처럼 False 를 돌려준다. 삭제가 없는 저장은 로그만 남긴다. JSON 을 지운 뒤 다음 저장까지 `[CHAT-039]` 복구 사본이 없다. 테스트에 새 `HistoryManager` 에서 되살아나지 않음을 단언한다.
-- [x] 구현·RED→GREEN: 신규 3건 가운데 2건이 구현 전 실패(삭제가 실패로 보고되고 새 `HistoryManager` 에서 되살아남, 삭제 없는 저장이 False), unlink 실패 갈래 1건은 종전 동작이라 통과. 구현 후 3 passed, `tests/chatbot` 274 passed. scratchpad `chat040/repro.py` 에서 `clear: 1`·`fresh sessions for alice: 0`
-- [x] `/ponytail-review`(oh-my-claudecode:code-reviewer 레인): 「Lean already. Ship.」. 범위 밖 참고(OSError 가 아닌 직렬화 예외는 종전처럼 False)는 승인 범위가 디스크 쓰기 실패라 미반영
-- [x] `closing-bet-reviewer`: APPROVE(max low). 변이 다섯 판 모두 새 테스트가 잡음. low1(unlink 실패 갈래에서 장부가 남아 나중에 되살아난 세션을 몰래 지우고 메모리·JSON 과 SQLite 가 어긋남)·정보4(바깥 except 에 기대는 암묵 반환) 반영: unlink OSError 를 그 자리에서 잡아 `sqlite_saved=False` 로 두고 서명 None·장부 초기화 경로로 흘림, 테스트에 장부·서명 단언 추가, 리뷰어 `retry.py` 재실행에서 SQLite·JSON·메모리가 같은 상태. low2·low3(종전 동작)은 `[CHAT-041]` 로 이월
-- [x] 전체 pytest(리뷰 반영 뒤 최종 코드): `venv/bin/python -m pytest -q -p no:cacheprovider` 2714 passed, 2 skipped, exit 0
-- [ ] QA(서비스 하네스, `docs/dev-cycle/qa/CHAT-040.md`)
-
 ### [CHAT-041] 삭제한 대화가 레거시 JSON 스냅샷에 남는 창
 - 카테고리: 챗봇 | 티어: T2(설계 때 재판정) | 근거: `[CHAT-040]` 코드 리뷰 low2·low3(2026-09-23, 종전부터 있던 동작). (1) `clear_for_owner` 가 스냅샷 쓰기와 낡은 JSON 삭제가 모두 실패해 500 을 낸 뒤 재시도하면, 다른 소유자의 세션이 SQLite 에 있을 때는 이관이 일어나지 않아 `targets=[]` 로 0(성공)을 돌려주지만 JSON 에는 지운 대화 전문이 다음 스냅샷 쓰기 성공 때까지 남는다(리뷰어 scratchpad `chat040rev/retry2.py` 로 재현). (2) 워커 B 가 A 의 삭제 커밋 전에 읽은 사본으로 `atomic_write_json` 을 진행 중이면 B 의 `os.replace` 가 A 의 unlink·스냅샷 뒤에 닿아 지운 세션을 담은 JSON 을 되살린다(파일 사이 잠금 없음, 코드 추론·미재현).
 - 범위: 삭제 재시도가 SQLite 에 대상이 없어도 스냅샷을 강제로 다시 쓰게 할지, 스냅샷 쓰기를 워커 사이에서 직렬화할지(`.env.lock` 같은 파일 잠금) 결정하고 회귀 테스트. `_load` 의 강제 스냅샷(82행)이 OSError 로 `HistoryManager` 생성을 실패시키는 것도 함께 본다.
