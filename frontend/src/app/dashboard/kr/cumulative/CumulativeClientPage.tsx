@@ -829,7 +829,7 @@ function TableHeader({
 
 const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
 
-function TradeTable({ trades }: { trades: Trade[] }) {
+function TradeTable({ trades, filtered }: { trades: Trade[], filtered: boolean }) {
   return (
     <div className="bg-[#1c1c1e] rounded-2xl border border-white/5 overflow-hidden">
       <div className="overflow-x-auto">
@@ -915,7 +915,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
       </div>
       {trades.length === 0 && (
         <div className="py-8 text-center text-gray-500">
-          해당 기간에 대한 거래 내역이 없습니다.
+          {filtered ? '선택한 필터에 해당하는 거래가 없습니다.' : '해당 기간에 대한 거래 내역이 없습니다.'}
         </div>
       )}
     </div>
@@ -1030,7 +1030,8 @@ export default function CumulativeClientPage() {
     avgRoi: roundToOne(kpi.roiByGrade[card.grade].avgRoi),
   }));
 
-  if (loading) {
+  // 전체 화면 스피너는 첫 응답 전에만 쓴다. 재조회 중에는 필터·KPI 를 두고 표만 흐리게 한다.
+  if (loading && pagination === null) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -1207,7 +1208,9 @@ export default function CumulativeClientPage() {
           </div>
         </div>
 
-        <TradeTable trades={trades} />
+        <div aria-busy={loading} className={loading ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
+          <TradeTable trades={trades} filtered={outcomeFilter !== 'All' || gradeFilter !== 'All'} />
+        </div>
 
         {/* Pagination Controls */}
         {pagination && pagination.totalPages > 1 && (

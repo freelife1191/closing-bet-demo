@@ -73,9 +73,13 @@
 
 ### [FLOW-021] 누적성과 필터·페이지 전환 중 화면 전체가 로딩 표시로 바뀐다
 - 카테고리: 수급·백테스트 | 티어: T1 | 근거: `[FLOW-017]` 리뷰 L2 와 QA S-6(2026-09-23). `CumulativeClientPage.tsx` 의 `if (loading) return ...` 이 요청마다 KPI·필터·표를 통째로 스피너로 바꾼다. `[FLOW-017]` 부터 필터 클릭도 요청을 보내므로 응답이 느리면 필터를 누를 때마다 화면이 비었다 돌아오고 스크롤 위치를 잃는다. 격리 실측 응답은 28~44ms 라 체감은 작다. 필터 결과가 0건일 때 빈 목록 문구가 「해당 기간에 대한 거래 내역이 없습니다」라 필터 때문임을 알리지 않는다.
+- 설계 승인: 승인 일자 2026-09-23 | 사용자 「응 진행해」. bounded(T1) 설계를 대화에서 제시: 전체 화면 스피너는 `loading && pagination === null`(첫 응답 전)에서만, 재조회 중에는 표 영역에 `aria-busy`·`opacity-50`, `TradeTable` 에 `filtered` 를 넘겨 필터 0건 문구 구분, vitest `regression-flow-021`. 읽을 정본 `.claude/skills/closing-bet-nextjs/SKILL.md`, `frontend-skills.md` §2, `05-server-and-client-components.md`(순수 클라이언트 상태 변경)
 - 범위: 첫 로딩 뒤의 재조회는 표 영역만 로딩 상태로 두고 필터·KPI 를 유지, 필터가 켜진 0건 결과의 문구 구분, vitest 회귀 테스트.
 - QA: 필터를 눌러 응답을 기다리는 동안 필터 버튼과 KPI 카드가 남아 있고, `D` + `보유` 처럼 0건인 조합에서 필터 결과가 없다는 문구가 보인다. 브라우저 실측 required.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] QA
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: 신규 테스트가 재조회 중 「데이터 불러오는 중...」에서 실패함을 확인한 뒤 구현. vitest 682 통과, type-check exit 0, 변경 파일 eslint 오류 0(589행 `any` 경고는 기존)
+- [x] `/ponytail-review`: Lean already. Ship. 범위 밖 관찰: 첫 응답이 실패하면 `pagination` 이 null 로 남아 다음 재조회도 전체 스피너가 된다(수정 전과 같은 동작, 수용)
+- [ ] QA
 
 ### [CHAT-034] SQLite 누락 테이블 복구 래퍼 통합
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §2.1. `storage_sqlite_history.py` 여섯 곳과 `storage_sqlite_memory.py` 여덟 곳, 열네 함수가 「스키마 확인 → `run_sqlite_with_retry` → `_is_missing_table_error` 면 `force_recheck` 뒤 `_retried=True` 로 재호출」 골격을 복제하고 있다. 재시도·복구 조건을 바꾸면 열네 곳을 함께 고쳐야 하고, 한 곳을 빠뜨려도 평소에는 증상이 없다. 공용 래퍼를 `services/sqlite_utils.py`(공통 접속 계층, 위험 경로)에 두면 T3.
