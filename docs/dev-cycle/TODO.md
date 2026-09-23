@@ -74,8 +74,11 @@
 ### [CHAT-035] HistoryManager 의 책임 분리
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §4.1. `chatbot/storage.py:39-493` 의 한 클래스가 SQLite 적재·저장, 레거시 JSON 스냅샷, 파일 서명 재적재 판정, 메시지·세션 LRU 캐시 둘, 델타 장부, 세션 CRUD, 메시지 CRUD 여덟 책임을 진다. `[CHAT-033]` 의 결함은 델타 장부·저장·재적재가 서로의 상태를 잠금 없이 건드리는 자리에서 나왔다. 선행 조건: `[CHAT-033]` 완료(2026-09-23 충족, 커밋 `bd5adf1`). 같은 자리를 두 항목이 동시에 건드리면 충돌한다.
 - 범위: 레거시 스냅샷 동기화, LRU 캐시와 파일 서명 판정, 델타 장부를 각각 분리. 기존 공개 메서드 시그니처와 기존 테스트 16건 통과 유지.
+- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 17:39
+  | 범위: 접근안 A(`chatbot/storage_history_parts.py` 에 `LegacySnapshot`·`HistoryReadCache`·`SessionDeltaLedger`·`storage_signature`, 잠금은 `HistoryManager` 의 RLock 하나, 외부가 부르는 비공개 메서드 네 개는 이름 유지 위임, 동작 변화 0), 테스트는 내부 접근 경로만 수정
+  | 실제 대화 근거: 2026-09-23 사용자 응답 「CHAT-035 (Recommended)」「A. 부품 세 개로 조립 (Recommended)」「테스트의 접근 경로만 고침 (Recommended)」「승인 (Recommended)」, spec `docs/superpowers/specs/2026-09-23-chat-035-history-manager-split-design.md`
 - QA: 대화 생성·메시지 송수신·삭제 후 새로고침 → 목록과 본문이 조작한 대로 남는다.
-- [ ] 설계 승인 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` → `/review` - [ ] QA
+- [x] 설계 승인 - [ ] spec 검토 승인 - [ ] 구현 계획·critic 검토 - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `closing-bet-reviewer` → `/review` - [ ] QA
 
 ### [VCP-035] `signals_log.csv` 의 읽기·병합·교체 사이에 잠금이 없다
 - 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-034]` 코드 리뷰 지적 3(확신도 낮음, 기존 문제). `SignalTracker._append_to_log`·`update_open_signals` 와 `scripts/init_data.py` 의 `create_signals_log` 는 파일을 읽고 병합한 뒤 교체하는 동안 잠금을 잡지 않는다. 스케줄러 파이프라인과 `run.py` 메뉴 2 가 동시에 돌면 한쪽이 추가한 행이 사라질 수 있다. `[VCP-034]` 가 빠른 append 분기를 없애 모든 추가가 이 창을 지난다. 실측하지 않았다.
