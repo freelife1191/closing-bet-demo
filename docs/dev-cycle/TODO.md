@@ -71,18 +71,6 @@
 
 ## P2 — 대기
 
-### [FLOW-020] 「최고가」 열이 값을 숨기지 않게 한다
-- 카테고리: 수급·백테스트 | 티어: T1 | 근거: AUDIT-FLOW(2차) §1.3. `CumulativeClientPage.tsx:874` 가 `maxHigh > 0` 이 아니면 `-` 를 그려, 실측에서 032830 삼성생명(진입가 307,000, 청산일까지 최고가 302,500, 최대상승률 -1.5%)이 하이픈으로 보인다. 값이 없는 것인지 한 번도 오르지 않은 것인지 구분되지 않고, 양수도 부호 없이 적어 같은 화면의 `formatSignedPercent` 표기와 다르다.
-- 범위: 음수를 부호와 함께 표시하고 자료가 없을 때만 하이픈, 양수 표기를 `formatSignedPercent` 와 통일, 음수·0·양수 세 경우의 vitest 회귀 테스트.
-- QA: 2026-09-01 삼성생명 행의 최고가 열에 `-1.5%` 가 보인다. 브라우저 실측 required.
-- 설계 승인: 2026-09-23 사용자 「응 진행해」(bounded, 대화에서 제시). 서버는 일봉이 없을 때도 `max_high` 에 0 을 보내므로 결측 판정은 `days === 0` 으로 한다(일봉이 없는 갈래는 모두 `days` 0). 부호 표기는 `formatSignedPercent` 를 모듈 최상위로 옮겨 재사용하고, 색상 규칙과 백엔드는 바꾸지 않는다.
-- 티어 근거: T1. 변경 파일은 `CumulativeClientPage.tsx` 와 새 vitest 하나이며 `tier-rules.md` §2 위험 경로에 없다. 읽은 정본 `.claude/skills/closing-bet-nextjs/SKILL.md`, `frontend-skills.md` §2, `05-server-and-client-components.md`(순수 클라이언트 표기 변경이라 표의 여섯 줄에 맞지 않음). vendor 스킬 해당 코드 없음.
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN: 새 테스트가 수정 전 `Expected "-1.5%" Received "-"` 로 실패, 수정 뒤 `cumulative/` 7파일 17건 통과
-- [x] `/ponytail-review`(T1 리뷰): Lean already. 지적 0건
-- [x] 정적 검증: `npm run type-check` exit 0, `npx vitest run` 681 통과, 변경 파일 eslint 오류 0(589행 `any` 경고 1건은 기존 코드)
-- [ ] QA(`docs/dev-cycle/qa/FLOW-020.md`)
-
 ### [FLOW-021] 누적성과 필터·페이지 전환 중 화면 전체가 로딩 표시로 바뀐다
 - 카테고리: 수급·백테스트 | 티어: T1 | 근거: `[FLOW-017]` 리뷰 L2 와 QA S-6(2026-09-23). `CumulativeClientPage.tsx` 의 `if (loading) return ...` 이 요청마다 KPI·필터·표를 통째로 스피너로 바꾼다. `[FLOW-017]` 부터 필터 클릭도 요청을 보내므로 응답이 느리면 필터를 누를 때마다 화면이 비었다 돌아오고 스크롤 위치를 잃는다. 격리 실측 응답은 28~44ms 라 체감은 작다. 필터 결과가 0건일 때 빈 목록 문구가 「해당 기간에 대한 거래 내역이 없습니다」라 필터 때문임을 알리지 않는다.
 - 범위: 첫 로딩 뒤의 재조회는 표 영역만 로딩 상태로 두고 필터·KPI 를 유지, 필터가 켜진 0건 결과의 문구 구분, vitest 회귀 테스트.
