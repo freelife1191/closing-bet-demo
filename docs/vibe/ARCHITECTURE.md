@@ -41,8 +41,7 @@ closing-bet-demo/
 │   ├── __init__.py
 │   ├── scheduler.py          # 백그라운드 스케줄러
 │   ├── notifier.py           # 멀티 채널 알림
-│   ├── paper_trading.py      # 모의투자 시스템
-│   └── usage_tracker.py      # 사용량 추적
+│   └── paper_trading.py      # 모의투자 시스템
 │
 ├── chatbot/                  # 챗봇 모듈
 │   ├── __init__.py
@@ -347,7 +346,6 @@ results = await asyncio.gather(*[analyze_single_stock(item) for item in items])
 ### 1. API Key 관리
 - 환경 변수로 관리 (`.env` 파일)
 - 사용자별 API Key 지원 (`X-Gemini-Key`, `X-User-Email` 헤더)
-- 사용량 추적 (`services/usage_tracker.py`)
 
 ### 2. CORS 설정
 - Render + Vercel 연동을 위해 구체적인 Origin 설정 또는 wildcard 사용

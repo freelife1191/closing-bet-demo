@@ -455,8 +455,7 @@ services/
 ├── common_update_ai_analysis_service.py            # AI 분석 통합 단계
 ├── common_data_status_service.py                   # 데이터 상태 점검
 ├── activity_logger.py                              # 활동 로그
-├── file_backed_status.py / file_row_count_cache.py # 파일 기반 상태/캐시
-└── usage_tracker.py                                # API 사용량/토큰 모니터링
+└── file_backed_status.py / file_row_count_cache.py # 파일 기반 상태/캐시
 ```
 
 **스케줄러 서비스 (`scheduler.py`):**

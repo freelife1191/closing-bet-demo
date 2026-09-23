@@ -255,7 +255,7 @@ Claude Code의 기존 QA 도구 순서는 실행 환경 표를 따른다.
 앞서 이 자리에는 "파일명에 `sqlite` 를 포함하는 모든 모듈" 이라고 적혀 있었다. 그 규칙이
 잡아낸 여섯 개 가운데 실제로 테이블을 정의하는 것은 `chatbot/storage_sqlite_common.py` 와
 `services/kr_market_data_cache_sqlite_payload.py` 둘뿐인데, 저장소 전체에서 테이블을
-정의하는 모듈은 스물한 개다. `[FLOW-003]` 에서 `services/kr_market_cumulative_cache.py` 가 목록 밖이라
+정의하는 모듈은 열아홉 개다. `[FLOW-003]` 에서 `services/kr_market_cumulative_cache.py` 가 목록 밖이라
 판정이 T2 로 나왔고 실질을 보고 손으로 T3 으로 올렸다.
 
 반대로 `chatbot/storage_sqlite_helpers.py`(재수출 파사드), `chatbot/storage_sqlite_history.py`,
@@ -268,7 +268,6 @@ Claude Code의 기존 QA 도구 순서는 실행 환경 표를 따른다.
 - `chatbot/stock_context_cache.py` — `chatbot_stock_context_cache`
 - `chatbot/storage_sqlite_common.py` — `chatbot_sessions`, `chatbot_messages`, `chatbot_memories`
 - `engine/kr_ai_stock_info_cache.py` — `kr_ai_stock_info_cache`
-- `engine/services/usage_tracker.py` — `api_usage`
 - `engine/signal_tracker_analysis_source_cache.py` — `signal_tracker_csv_source_cache`
 - `engine/signal_tracker_source_cache.py` — `signal_tracker_source_cache`
 - `services/common_update_status_service.py` — `update_status_snapshot`
@@ -282,7 +281,6 @@ Claude Code의 기존 QA 도구 순서는 실행 환경 표를 따른다.
 - `services/kr_market_realtime_market_map_cache.py` — `realtime_market_map_cache`
 - `services/kr_market_realtime_price_cache.py` — `realtime_price_cache`, `yfinance_failed_ticker_cache`
 - `services/kr_market_vcp_signals_cache.py` — `vcp_signals_payload_cache`
-- `services/usage_tracker.py` — `usage_log`
 
 `services/paper_trading.py`(`price_cache`)와 `services/paper_trading_db_setup.py`
 (`balance`, `portfolio`, `trade_log`, `asset_history`, `price_cache`)도 테이블을 정의하지만
@@ -293,7 +291,7 @@ Claude Code의 기존 QA 도구 순서는 실행 환경 표를 따른다.
 - `services/sqlite_utils.py`
 - `services/sqlite_ready_gate.py`
 
-`CREATE TABLE` 은 한 줄도 없지만 위 스물한 개 모듈이 모두 이 파일을 import 한다.
+`CREATE TABLE` 은 한 줄도 없지만 위 열아홉 개 모듈이 모두 이 파일을 import 한다.
 `connect_sqlite`, `build_sqlite_pragmas`, `prune_rows_by_updated_at_if_needed` 가 여기에
 있어서, 접속 방식이나 프루닝 조건이 바뀌면 모든 저장소가 함께 달라진다.
 

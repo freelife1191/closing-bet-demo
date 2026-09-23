@@ -719,12 +719,10 @@ def test_chatbot_multipart_command_classification_matches_parser_case(monkeypatc
 
 
 @pytest.mark.parametrize('body', [{}, {'target_dates': ['2026-02-30']}, []])
-def test_retired_gemini_returns_410_without_quota(monkeypatch, body):
-    import services.usage_tracker as usage_tracker_module
-    def forbidden(*args, **kwargs):
-        raise AssertionError('retired route must not consume quota')
-    monkeypatch.setattr(usage_tracker_module.usage_tracker, 'check_and_increment', forbidden)
+def test_retired_gemini_returns_410_without_quota(monkeypatch, tmp_path: Path, body):
+    _prepare_quota_store(monkeypatch, tmp_path)
     client = _create_client_with_user(user_api_key='unused-test-key', user_email='tester@example.com')
     response = client.post('/api/kr/reanalyze/gemini', json=body)
     assert response.status_code == 410
     assert response.get_json()['code'] == 'LEGACY_ANALYSIS_RETIRED'
+    assert not (tmp_path / 'user_quota.json').exists()
