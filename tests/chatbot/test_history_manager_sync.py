@@ -415,3 +415,118 @@ def test_clear_for_owner_raises_when_delete_is_not_persisted(monkeypatch, tmp_pa
     monkeypatch.setattr(chatbot_storage, "save_history_sessions_to_sqlite", original_full)
     assert manager.clear_for_owner("alice@example.test") == 1
     assert chatbot_core.HistoryManager(user_id="u3").get_all_sessions(owner_id="alice@example.test") == []
+
+
+def _drop_messages_table_after_write(monkeypatch, tmp_path) -> str:
+    """메시지가 있는 세션을 저장하고 JSON 스냅샷을 최신으로 만든 뒤 chatbot_messages 만 지운다."""
+    import sqlite3
+
+    monkeypatch.setenv("CHATBOT_HISTORY_LEGACY_SNAPSHOT_INTERVAL_SECONDS", "0")
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    writer = chatbot_core.HistoryManager(user_id="writer")
+    session_id = writer.create_session(owner_id="owner")
+    writer.add_message(session_id, "user", "남아야 할 질문")
+    writer.add_message(session_id, "model", "남아야 할 답변")
+    with sqlite3.connect(writer.db_path) as conn:
+        conn.execute("DROP TABLE chatbot_messages")
+    return session_id
+
+
+def test_load_restores_messages_from_snapshot_when_messages_table_was_lost(monkeypatch, tmp_path):
+    """[CHAT-039] 메시지 테이블만 사라지면 JSON 스냅샷의 메시지로 되살리고 스냅샷을 비우지 않는다."""
+    import sqlite3
+
+    session_id = _drop_messages_table_after_write(monkeypatch, tmp_path)
+
+    manager = chatbot_core.HistoryManager(user_id="reader")
+
+    texts = [m["parts"][0]["text"] for m in manager.get_messages(session_id)]
+    assert texts == ["남아야 할 질문", "남아야 할 답변"]
+    assert len(_read_history_file(tmp_path)[session_id]["messages"]) == 2
+    with sqlite3.connect(manager.db_path) as conn:
+        rows = conn.execute(
+            "SELECT COUNT(*) FROM chatbot_messages WHERE session_id = ?", (session_id,)
+        ).fetchone()[0]
+    assert rows == 2
+
+
+def test_load_does_not_restore_snapshot_messages_of_a_different_session_version(monkeypatch, tmp_path):
+    """[CHAT-039] updated_at 이 다르면 스냅샷이 낡은 판이므로 되살리지 않는다(지운 메시지 부활 방지)."""
+    session_id = _drop_messages_table_after_write(monkeypatch, tmp_path)
+    history_file = tmp_path / "chatbot_history.json"
+    snapshot = json.loads(history_file.read_text(encoding="utf-8"))
+    snapshot[session_id]["updated_at"] = "2000-01-01T00:00:00"
+    history_file.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+
+    manager = chatbot_core.HistoryManager(user_id="reader")
+
+    assert manager.get_messages(session_id) == []
+
+
+def test_failed_restore_write_blocks_writes_and_retries_on_next_access(monkeypatch, tmp_path):
+    """[CHAT-039] 되살린 메시지를 DB 에 쓰지 못하면 읽기 실패로 다뤄 스냅샷을 지키고 다음 접근에서 다시 시도한다."""
+    session_id = _drop_messages_table_after_write(monkeypatch, tmp_path)
+    original = chatbot_storage.restore_lost_history_messages_in_sqlite
+    monkeypatch.setattr(chatbot_storage, "restore_lost_history_messages_in_sqlite", lambda *a, **k: False)
+
+    manager = chatbot_core.HistoryManager(user_id="reader")
+
+    assert manager._reload_failed is True
+    assert len(_read_history_file(tmp_path)[session_id]["messages"]) == 2
+
+    monkeypatch.setattr(chatbot_storage, "restore_lost_history_messages_in_sqlite", original)
+    assert len(manager.get_messages(session_id)) == 2
+    assert manager._reload_failed is False
+
+
+def test_restore_write_skips_a_session_another_worker_already_changed(monkeypatch, tmp_path):
+    """[CHAT-039] 되살리기 쓰기는 DB 의 판이 바뀌었거나 메시지가 이미 있으면 그 세션을 덮지 않는다."""
+    import logging
+
+    from chatbot.storage_sqlite_history import restore_lost_history_messages_in_sqlite
+
+    session_id = _drop_messages_table_after_write(monkeypatch, tmp_path)
+    stale = _read_history_file(tmp_path)[session_id]
+    newer = chatbot_core.HistoryManager(user_id="other")  # 다른 워커가 먼저 되살리고 새 메시지를 쓴다
+    newer.add_message(session_id, "user", "다른 워커의 새 질문")
+
+    assert restore_lost_history_messages_in_sqlite(
+        newer.db_path, {session_id: stale}, logging.getLogger(__name__)
+    ) is True
+
+    texts = [m["parts"][0]["text"] for m in chatbot_core.HistoryManager(user_id="c").get_messages(session_id)]
+    assert texts == ["남아야 할 질문", "남아야 할 답변", "다른 워커의 새 질문"]
+
+
+def test_restoring_manager_serves_the_db_state_when_another_worker_won(monkeypatch, tmp_path):
+    """[CHAT-039] 되살리기 직전에 다른 워커가 세션을 바꿨으면 낡은 사본이 아니라 DB 의 판을 보여 준다."""
+    session_id = _drop_messages_table_after_write(monkeypatch, tmp_path)
+    original = chatbot_storage.restore_lost_history_messages_in_sqlite
+
+    def _other_worker_first(*args, **kwargs):
+        monkeypatch.setattr(chatbot_storage, "restore_lost_history_messages_in_sqlite", original)
+        chatbot_core.HistoryManager(user_id="other").add_message(session_id, "user", "다른 워커의 새 질문")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(chatbot_storage, "restore_lost_history_messages_in_sqlite", _other_worker_first)
+    manager = chatbot_core.HistoryManager(user_id="reader")
+
+    texts = [m["parts"][0]["text"] for m in manager.sessions[session_id]["messages"]]
+    assert texts[-1] == "다른 워커의 새 질문"
+
+
+def test_running_manager_restores_lost_messages_on_reload(monkeypatch, tmp_path):
+    """[CHAT-039] 이미 떠 있는 매니저도 재적재에서 메시지를 되살리고 스냅샷을 비우지 않는다."""
+    import sqlite3
+
+    monkeypatch.setenv("CHATBOT_HISTORY_LEGACY_SNAPSHOT_INTERVAL_SECONDS", "0")
+    monkeypatch.setattr(chatbot_core, "DATA_DIR", tmp_path)
+    manager = chatbot_core.HistoryManager(user_id="running")
+    session_id = manager.create_session(owner_id="owner")
+    manager.add_message(session_id, "user", "재적재로 되살릴 질문")
+    with sqlite3.connect(manager.db_path) as conn:
+        conn.execute("DROP TABLE chatbot_messages")
+
+    assert [m["parts"][0]["text"] for m in manager.get_messages(session_id)] == ["재적재로 되살릴 질문"]
+    manager.add_message(session_id, "model", "이어진 답변")
+    assert len(_read_history_file(tmp_path)[session_id]["messages"]) == 2

@@ -15,6 +15,7 @@ from .storage_sqlite_history import (
     clear_history_sessions_in_sqlite,
     delete_history_session_from_sqlite,
     load_history_sessions_from_sqlite,
+    restore_lost_history_messages_in_sqlite,
     save_history_sessions_to_sqlite,
     upsert_history_session_with_messages,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "load_memories_from_sqlite",
     "normalize_daily_suggestions_memories",
     "resolve_chatbot_storage_db_path",
+    "restore_lost_history_messages_in_sqlite",
     "save_daily_suggestions_in_sqlite",
     "save_history_sessions_to_sqlite",
     "save_memories_to_sqlite",

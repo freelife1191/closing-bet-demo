@@ -627,6 +627,66 @@ def apply_history_session_deltas_in_sqlite(
         return False
 
 
+def restore_lost_history_messages_in_sqlite(
+    db_path: Path,
+    sessions: Dict[str, Any],
+    logger: logging.Logger,
+) -> bool:
+    """메시지 행이 하나도 없고 updated_at 이 같은 세션에만 되살린 메시지를 넣는다([CHAT-039]).
+
+    조건이 어긋난 세션은 다른 워커가 이미 되살렸거나 갱신한 것이므로 건너뛴다. 세션 행과
+    messages_hash 는 그 판의 값 그대로이므로 건드리지 않는다.
+    """
+    if not ensure_chatbot_storage_schema(db_path, logger):
+        return False
+    db_path_text = str(db_path)
+
+    try:
+        def _restore() -> bool:
+            with connect_sqlite(
+                db_path_text,
+                timeout_seconds=_SQLITE_TIMEOUT_SECONDS,
+                pragmas=_SQLITE_SESSION_PRAGMAS,
+            ) as conn:
+                cursor = conn.cursor()
+                # 조건 확인과 INSERT 사이에 다른 워커가 끼지 않도록 쓰기 잠금을 먼저 잡는다.
+                cursor.execute("BEGIN IMMEDIATE")
+                for session_id, session in sessions.items():
+                    updated_at = str(session.get("updated_at") or "")
+                    unchanged = cursor.execute(
+                        """
+                        SELECT 1 FROM chatbot_sessions
+                        WHERE session_id = ? AND updated_at = ?
+                          AND NOT EXISTS (SELECT 1 FROM chatbot_messages WHERE session_id = ?)
+                        """,
+                        (session_id, updated_at, session_id),
+                    ).fetchone()
+                    if unchanged is None:
+                        continue
+                    cursor.executemany(
+                        """
+                        INSERT INTO chatbot_messages (
+                            session_id, message_index, role, parts_json, timestamp
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        [(session_id, *row) for row in _build_message_rows(session.get("messages"), updated_at)],
+                    )
+                conn.commit()
+            return True
+
+        return bool(
+            run_chatbot_sqlite_with_recovery(
+                db_path,
+                logger,
+                _restore,
+                table_names=_HISTORY_TABLES,
+            )
+        )
+    except Exception as error:
+        logger.error(f"Failed to restore chatbot history messages into SQLite: {error}")
+        return False
+
+
 def delete_history_session_from_sqlite(
     db_path: Path,
     session_id: str,

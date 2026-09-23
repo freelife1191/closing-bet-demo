@@ -28,6 +28,7 @@ from .storage_sqlite_helpers import (
     apply_history_session_deltas_in_sqlite,
     load_history_sessions_from_sqlite,
     resolve_chatbot_storage_db_path,
+    restore_lost_history_messages_in_sqlite,
     save_history_sessions_to_sqlite,
 )
 from .storage_memory_manager import MemoryManager
@@ -137,6 +138,10 @@ class HistoryManager:
             # None 을 돌려 호출자가 쓰기를 막고 다음 접근에서 다시 읽게 한다.
             return None
         if sqlite_sessions:
+            sqlite_sessions = self._restore_lost_messages_from_snapshot(sqlite_sessions)
+            if sqlite_sessions is None:
+                # 되살린 메시지를 DB 에 남기지 못했다. 빈 사본을 쓰면 스냅샷이 덮이므로 읽기 실패로 다룬다.
+                return None
             if self._sync_snapshot_on_load:
                 self._sync_legacy_snapshot(sqlite_sessions, force=True)
             return sqlite_sessions
@@ -148,6 +153,38 @@ class HistoryManager:
             return legacy_sessions
 
         return sqlite_sessions or {}
+
+    def _restore_lost_messages_from_snapshot(self, sqlite_sessions: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """메시지 테이블이 통째로 사라졌다가 빈 채로 복구됐으면 JSON 스냅샷의 메시지로 되살린다([CHAT-039]).
+
+        되살리지 않으면 다음 스냅샷 쓰기가 빈 메시지로 마지막 사본을 덮는다. 되살린 뒤에는 DB 를
+        다시 읽은 결과를, 되살릴 것이 없으면 받은 사본을, DB 에 쓰지 못했으면 None 을 돌려준다.
+        """
+        # ponytail: 모든 세션이 비었을 때만 본다(일부 행 손실은 대상 밖). 스냅샷은 최대 15초 늦으므로
+        # 그 사이 갱신된 세션은 updated_at 이 달라 되살리지 못한다. 메시지 없는 세션만 있는 정상
+        # 상태에서도 서명이 바뀔 때마다 JSON 을 읽으며, 그때 load_history_sessions 가 빈·손상 파일을 다시 쓸 수 있다.
+        if any(session.get("messages") for session in sqlite_sessions.values()):
+            return sqlite_sessions
+        snapshot = load_history_sessions(self.file_path, logger)
+        restorable: Dict[str, Any] = {}
+        for session_id, session in sqlite_sessions.items():
+            saved = snapshot.get(session_id)
+            # updated_at 이 같아야 같은 판이다. 메시지를 지우면 updated_at 이 바뀌므로 지운 메시지는 살아나지 않는다.
+            if (
+                isinstance(saved, dict)
+                and isinstance(saved.get("messages"), list)
+                and saved["messages"]
+                and saved.get("updated_at") == session.get("updated_at")
+            ):
+                restorable[session_id] = {**session, "messages": saved["messages"]}
+        if not restorable:
+            return sqlite_sessions
+        # 조건부로 쓰므로 다른 워커가 먼저 되살렸거나 갱신한 세션은 덮지 않는다([CHAT-033]).
+        if not restore_lost_history_messages_in_sqlite(self.db_path, restorable, logger):
+            logger.error("Failed to restore lost chat messages from the legacy snapshot")
+            return None
+        logger.warning(f"Restored messages of {len(restorable)} chat sessions from the legacy snapshot")
+        return load_history_sessions_from_sqlite(self.db_path, logger)
 
     @locked
     def _save(self) -> bool:
