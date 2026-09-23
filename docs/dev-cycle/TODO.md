@@ -64,16 +64,6 @@
 - 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한다. 행이 있으면 그 이메일 행을 지우는 절차(또는 파일 제거)와 두 모듈·테스트의 삭제를 설계한다. 행이 없으면 두 모듈과 테스트 여섯 파일의 삭제만 남는다. 원격 서버 접속은 운영자가 한다.
 - [ ] 운영 서버 행 수 확인(운영자) - [ ] 설계 승인(bounded) - [ ] 구현·검증
 
-### [INFRA-085] restart 를 거치지 않는 기동에서 `logs/` 가 0755 로 생긴다
-- 카테고리: 인프라 | 티어: T1(설계 때 재판정) | 근거: `[INFRA-081]` 코드 리뷰 F1(2026-09-23). `[INFRA-081]` 은 `restart_all.sh` 에서만 `logs/` 를 0700 으로 좁혔다. 새 checkout 에서 `python flask_app.py`·`CLAUDE.md` 의 gunicorn 명령을 바로 실행하거나 `deploy/systemd/README.md` 의 유닛을 다시 만들면 `services/activity_logger.py:76-77` 의 `os.makedirs` 가 `logs/` 를 0755 로 만들고, 그 안의 `critical_errors.log` 는 0644 다. 개인정보처리방침 10항은 조건 없이 「로그 파일과 데이터베이스 파일은 서버를 실행하는 계정만」이라 적는다.
-- 범위 후보: `os.makedirs(log_dir, mode=0o700)` 한 줄(기존 디렉터리는 좁히지 않음에 유의) 또는 `deploy/systemd/README.md` 「유닛을 다시 만든다면」에 logs/ 0700 규칙 한 줄.
-- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 00:12 | 범위: `services/activity_logger.py` 의 `os.makedirs` 를 `mode=0o700, exist_ok=True` 한 줄로(기존 디렉터리는 건드리지 않음, 좁히기는 `restart_all.sh` 몫) + 새 디렉터리 0700 테스트 1건 | 근거: 대화의 AskUserQuestion 응답 「A. makedirs 0700 한 줄 (Recommended)」. 티어 T1(위험 경로 아님, 예상 코드 2줄)
-- [x] 설계 승인(bounded)
-- [x] RED→GREEN: `tests/services/test_activity_logger_refactor.py` 에 새 디렉터리 모드 0700 단언. 구현 전 `AssertionError`(0755) 1 failed, 구현 뒤 모듈 10 passed
-- [x] `/ponytail-review`(T1, `infra085-ponytail` 레인): 「Lean already. Ship.」 회신이 유실되어 subagents 기록에서 읽음
-- [x] 정적 검증: 전체 `venv/bin/python -m pytest -q -p no:cacheprovider` 2728 passed, 2 skipped, exit 0
-- [ ] QA: 격리 사본에서 `logs/` 없이 gunicorn 직접 기동 → 요청 뒤 `logs/` 700
-
 ### [INFRA-086] `python scripts/init_data.py` 를 루트 밖에서 실행하면 종가 최신 파일이 `<cwd>/data` 에 생긴다
 - 카테고리: 인프라 | 티어: T3(`scripts/init_data.py` 는 위험 경로) | 근거: `[INFRA-082]` 코드 리뷰 발견 1·2(2026-09-24). `[INFRA-082]` 는 `run.py` 처럼 CLI 두 개에만 루트 `os.chdir` 를 넣었다. `scripts/init_data.py:2043` 의 인자 없는 `main()` 은 `create_jongga_v2_latest` 를 포함하고 `init_all.sh:128` 도 부르는데 chdir 가 없어, 루트가 아닌 cwd 에서는 `run_screener` 가 cwd 기준 `data/` 에 쓰고 `send_jongga_notification`(1722행)은 루트 기준으로 읽는다. `init_all.sh` 는 `PROJECT_DIR=$(pwd)` 로 루트 실행을 전제한다. 수동 실행기 `scripts/_run_full_update_test.py:10` 에도 chdir 가 없다(영향 미확인).
 - 범위 후보: `init_data.py` 의 `if __name__ == '__main__':` 아래 루트 `os.chdir` 한 줄(모듈 수준에 두면 import 하는 서비스와 테스트의 cwd 를 바꾸므로 금지).
