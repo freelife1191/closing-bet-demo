@@ -82,12 +82,6 @@
 - 범위: 동시 실행이 실제로 가능한 경로인지(스케줄러 리더 잠금, CLI 사용 빈도) 먼저 확인하고, 필요하면 `.env.lock` 처럼 파일 잠금으로 읽기·교체를 직렬화하는 안을 설계한다.
 - [ ] 동시 실행 가능성 확인 - [ ] 설계 승인(bounded) - [ ] 구현·검증
 
-### [VCP-038] `run.py` 메뉴 2 가 잘라 낸 `ai_reason` 을 로그에 저장한다
-- 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-037]` 코드 리뷰 지적 1(2026-09-23). `run.py:63` 은 출력용으로 `analyzed_df['ai_reason']` 을 50자로 자르고 "..." 을 붙인 뒤, 같은 프레임을 `_append_to_log` 로 저장한다. 값이 NaN 이면 문자열 "nan..." 이 된다. `[VCP-037]` 전에도 y 갈래가 같은 날짜 행을 이 프레임으로 대체했으므로 기존 동작이며, `[VCP-037]` 이후에는 이 프레임이 로그에 남는 유일한 사본이다.
-- 범위: 자르기를 출력용 복사본에만 적용하고 저장은 원래 값으로 하는 안. 회귀 테스트 여부는 설계 때 정한다.
-- 설계 승인: 2026-09-23 사용자가 항목 선택 질문에서 「VCP-038 (Recommended)」를 골랐다(질문에 「고르시면 설계를 승인하신 것으로 기록」 명시). bounded, T2(`run.py` 는 위험 경로 밖). 자르기는 출력용 복사본에만 적용하고 `_append_to_log(analyzed_df)` 는 원래 값으로 저장한다. 회귀 테스트는 `tests/test_run_menu_refactor.py` 1건(입력 `2`·`y`, 가짜 tracker). 리뷰는 ponytail-review → closing-bet-reviewer, QA 는 격리 사본 하네스(LLM 가짜) + VCP 화면 실측
-- [x] 설계 승인(bounded) - [x] 구현·검증(RED `AssertionError` 50자+"..." ≠ 원문 → GREEN, 전체 pytest 격리 사본 2690 passed 1 failed(사본이 git 저장소가 아닌 기존 gitignore 테스트) 3 skipped) - [x] 리뷰(ponytail-review: `shown` 두 줄을 `assign` 한 줄로 줄이는 shrink 1건, 가독성 때문에 미반영 / closing-bet-reviewer `vcp038-reviewer` APPROVE max low: 저장 프레임 전체 단언 → `assert_frame_equal` 반영, 출력 사본의 NaN "nan..." 표시는 화면 출력만이라 범위 밖) - [ ] QA
-
 ### [INFRA-079] 유물 사용량 저장소 `data/usage.db` 의 이메일 행 확인과 정리
 - 카테고리: 인프라 | 티어: T1 | 근거: `[FE-045]` 계획 검토(2026-09-22). `services/usage_tracker.py`(`usage_log`)와 `engine/services/usage_tracker.py`(`api_usage`)는 이메일을 기본 키로 쓰지만 어떤 운영 코드도 import 하지 않는 유물이다. 개발 기기의 `data/usage.db` 는 두 테이블 모두 행 0 이나 운영 서버의 파일은 이 기기에서 확인할 수 없다.
 - 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한다. 행이 있으면 그 이메일 행을 지우는 절차(또는 파일 제거)와 두 모듈·테스트의 삭제를 설계한다. 행이 없으면 두 모듈과 테스트 여섯 파일의 삭제만 남는다. 원격 서버 접속은 운영자가 한다.
@@ -101,6 +95,7 @@
 
 ### [INFRA-080] Next rewrite 프록시가 gunicorn 요청을 ECONNRESET 으로 잃고 500 을 낸다
 - 카테고리: 인프라 | 티어: T2 | 근거: `[FLOW-019]` QA S-5 1회차(2026-09-23). 격리 환경(gunicorn `--workers 1 --threads 4`, Next dev)에서 종가베팅 화면 첫 로드 때 차트 요청 여러 개 가운데 `GET /api/kr/stock-chart/003160?period=1m&end=2026-09-21` 하나가 18ms 만에 500 이 되었고, Next 로그에 `Failed to proxy … Error: read ECONNRESET` 이 남았다. 같은 요청을 Flask 에 직접 보내면 200 이며, 이어진 다섯 번 로드에서는 재현되지 않았다. 원인은 미규명이다. gunicorn 의 keep-alive 기본값(2초)이 끝나 닫힌 연결을 프록시가 재사용하는 경합이 가설이며, 그렇다면 같은 구성인 운영에서도 드물게 차트나 API 요청 하나가 실패할 수 있다.
+- 추가 관찰(`[VCP-038]` QA, 2026-09-23 16:44): 격리 Next dev 를 다시 띄운 직후 VCP 화면 첫 로드에서 `GET /api/kr/signals`·`/api/kr/signals/status` 두 요청이 `read ECONNRESET` 으로 500 이 되었다(gunicorn `--workers 1 --threads 4`, 직전 약 50초 동안 gunicorn 에 요청 없음, gunicorn access 는 모두 200). 유휴 뒤 첫 동시 요청이라는 가설과 맞는다
 - 범위: 먼저 재현 조건을 확정한다(유휴 시간 뒤 동시 요청, keep-alive 값 변화). 가설이 맞으면 `restart_all.sh` 의 gunicorn `--keep-alive` 를 Next 프록시의 유휴 연결 유지 시간보다 길게 두는 안과 재시도 안을 비교한다. 재현 스크립트나 회귀 테스트를 남긴다.
 - QA: 격리 환경에서 유휴 뒤 종가베팅 화면을 여러 번 열어도 5xx 와 ECONNRESET 이 없다. 브라우저 실측 required.
 - [ ] 재현·원인 확정 - [ ] 설계 승인(bounded) - [ ] 구현·검증 - [ ] QA
