@@ -71,17 +71,6 @@
 
 ## P2 — 대기
 
-### [FE-047] 루트 레이아웃의 `lang` 을 한국어로 바로잡는다
-- 카테고리: 프론트엔드 공통 | 티어: T1 | 근거: `[FE-044]` 리뷰. `frontend/src/app/layout.tsx:18` 이 `<html lang="en">` 인데 화면의 문구가 전부 한국어다. 화면 낭독기가 영어 발음 규칙으로 읽고 브라우저의 번역 제안도 어긋난다. 새로 만든 법적 고지 두 화면에서 특히 두드러진다.
-- 범위: `frontend/src/app/layout.tsx` 의 한 낱말과 이를 고정하는 계약 테스트. 다른 화면의 문구는 건드리지 않는다.
-- 설계 승인: 승인 일자 2026-09-23 | bounded. 범위는 `layout.tsx` 한 낱말(`en`→`ko`)과 `RootLayout` 을 함수로 호출해 `props.lang` 을 확인하는 vitest 1건, 격리 Next 브라우저 QA. 대화 근거: `/dev-cycle next` 에서 제시한 설계에 사용자가 「이대로 진행 (Recommended)」으로 답함.
-- QA 시나리오: 아무 화면에서나 문서의 `lang` 속성이 `ko` 로 읽힌다.
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN: `frontend/src/app/layout.test.tsx` 가 구현 전 `expected 'en' to be 'ko'` 로 실패, 구현 후 통과.
-- [x] `/ponytail-review`: Lean already. Ship. (net -0)
-- [x] 정적 검증: `npm run type-check` exit 0, `npx vitest run` 95 files / 680 passed exit 0.
-- [ ] QA: `docs/dev-cycle/qa/FE-047.md`
-
 ### [INFRA-078] 격리 실행이 원본 `runtime_cache.db` 에 쓰는 절대 경로 세 곳
 - 카테고리: 인프라 | 티어: T1 | 근거: `[VCP-026]` QA(2026-09-22). scratchpad 사본을 cwd 로 삼은 임시 백엔드가 원본 `data/runtime_cache.db` 에 행을 남겼다. `services/file_row_count_cache.py:50`, `services/common_update_status_service.py:49`, `services/kr_market_data_cache_jongga.py:48` 이 `_BASE_DIR/data/runtime_cache.db` 를 절대 경로로 잡고, `services/common_update_status_service.py`·`services/scheduler_runtime_status_service.py` 가 같은 방식으로 `v2_screener_status.json`·`scheduler_runtime_status.json` 을 원본 `data/` 에 쓴다(기동 시 초기화 플래그라 내용은 무해). 다른 캐시 모듈은 `data_dir` 인자나 원본 파일의 디렉터리에서 경로를 만든다. `browser-notes.md` 「공통」 절이 이 종류의 구멍을 일반론으로만 경고한다.
 - 범위: 세 모듈이 다른 캐시와 같은 방식(`data_dir` 인자 또는 대상 파일의 디렉터리)으로 경로를 정하게 하고, 격리 실행 뒤 원본 `data/` 가 바뀌지 않음을 확인하는 회귀 테스트. 운영 동작은 바뀌지 않는다(같은 파일).
