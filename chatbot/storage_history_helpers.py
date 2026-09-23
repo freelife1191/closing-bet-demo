@@ -6,14 +6,28 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from .markdown_utils import _normalize_markdown_text
+
+
+def locked(method: Callable) -> Callable:
+    """인스턴스의 self._lock(RLock) 아래에서 메서드를 실행한다.
+
+    워커의 요청 스레드들이 저장소 인스턴스 하나를 공유하고, 재적재가 인메모리 사전을 통째로
+    바꾸므로 「재적재 → 변경 → 저장」을 한 덩어리로 묶는다([CHAT-033]).
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapper
 
 
 def atomic_write_json(file_path: Path, data: Dict[str, Any]) -> None:
@@ -198,6 +212,7 @@ __all__ = [
     "has_meaningful_user_message",
     "is_session_accessible_by_owner",
     "load_history_sessions",
+    "locked",
     "sanitize_session_messages",
     "should_include_session_for_owner",
 ]

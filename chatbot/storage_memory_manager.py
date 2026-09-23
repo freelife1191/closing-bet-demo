@@ -10,12 +10,13 @@ import fcntl
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from .storage_history_helpers import atomic_write_json
+from .storage_history_helpers import atomic_write_json, locked
 from .storage_sqlite_helpers import (
     clear_general_memories_in_sqlite,
     clear_memories_in_sqlite,
@@ -64,6 +65,7 @@ class MemoryManager:
         self.db_path = resolve_chatbot_storage_db_path(self.data_dir)
         self._legacy_snapshot_interval_seconds = self._resolve_legacy_snapshot_interval_seconds()
         self._last_legacy_snapshot_monotonic: float | None = None
+        self._lock = threading.RLock()
         self.memories = self._load()
 
     @staticmethod
@@ -163,12 +165,12 @@ class MemoryManager:
             return True
         return False
 
-    def _save_single_entry(self, owner_id: str, key: str) -> None:
+    def _save_single_entry(self, owner_id: str, key: str, record: Dict[str, Any]) -> None:
         sqlite_saved = upsert_memory_entry_in_sqlite(
             self.db_path,
             owner_id=owner_id,
             key=key,
-            record=self.memories[owner_id][key],
+            record=record,
             logger=logger,
         )
         if not sqlite_saved:
@@ -183,23 +185,25 @@ class MemoryManager:
             return
         self._save_legacy_memory_snapshot(self.memories)
 
+    @locked
     def view(self, owner_id: Optional[str] = None) -> Dict[str, Any]:
         self._reload()
-        return self.memories.get(_normalize_memory_owner_id(owner_id), {})
+        # 사본을 돌려준다. 호출자가 순회하는 동안 다른 스레드가 같은 사전을 바꾸지 않게 한다.
+        return dict(self.memories.get(_normalize_memory_owner_id(owner_id), {}))
 
     def get(self, key: str, owner_id: Optional[str] = None) -> Any:
         return self.view(owner_id).get(key)
 
+    @locked
     def add(self, key: str, value: Any, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
         self._reload()
-        self.memories.setdefault(owner, {})[key] = {
-            "value": value,
-            "updated_at": datetime.now().isoformat(),
-        }
-        self._save_single_entry(owner, key)
+        record = {"value": value, "updated_at": datetime.now().isoformat()}
+        self.memories.setdefault(owner, {})[key] = record
+        self._save_single_entry(owner, key, record)
         return f"✅ 메모리 저장: {key} = {value}"
 
+    @locked
     def remove(self, key: str, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
         self._reload()
@@ -217,6 +221,7 @@ class MemoryManager:
             return f"🗑️ 메모리 삭제: {key}"
         return "⚠️ 해당 키를 찾을 수 없습니다."
 
+    @locked
     def update(self, key: str, value: Any, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
         self._reload()
@@ -224,10 +229,11 @@ class MemoryManager:
         if key in owned:
             owned[key]["value"] = value
             owned[key]["updated_at"] = datetime.now().isoformat()
-            self._save_single_entry(owner, key)
+            self._save_single_entry(owner, key, owned[key])
             return f"✅ 메모리 수정: {key} = {value}"
         return self.add(key, value, owner_id=owner_id)
 
+    @locked
     def clear(self, owner_id: Optional[str] = None) -> str:
         owner = _normalize_memory_owner_id(owner_id)
         self._reload()
@@ -242,6 +248,7 @@ class MemoryManager:
         self._write_legacy_memory_snapshot(self.memories)
         return "🧹 메모리가 초기화되었습니다."
 
+    @locked
     def delete_owner(self, owner_id: str) -> bool:
         """한 소유자의 메모리를 프로필까지 지우고 SQLite 삭제의 성패를 돌려준다([FE-045]).
 
@@ -257,6 +264,7 @@ class MemoryManager:
         written = self._write_legacy_memory_snapshot(self.memories, allow_uncommitted=not deleted)
         return deleted and written
 
+    @locked
     def clear_general(self, owner_id: Optional[str] = None) -> str:
         """설정 프로필을 남기고 요청자의 일반 메모리만 초기화한다."""
         if not owner_id:
@@ -276,6 +284,7 @@ class MemoryManager:
             return "⚠️ 메모리 초기화 후 동기화에 실패했습니다."
         return "🧹 메모리가 초기화되었습니다."
 
+    @locked
     def save_daily_suggestions(self, key: str, value: Any) -> bool:
         """공용 재생성 추천 캐시를 원자적으로 저장하고 JSON 스냅샷을 맞춘다."""
         if not save_daily_suggestions_in_sqlite(
