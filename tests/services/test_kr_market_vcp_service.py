@@ -31,12 +31,12 @@ from services.kr_market_vcp_service import (
 def test_prepare_vcp_signals_scope_uses_latest_date_when_target_missing():
     signals_df = pd.DataFrame(
         [
-            {"ticker": "1", "signal_date": "2026-02-20", "ai_action": "BUY", "ai_reason": "ok"},
-            {"ticker": "2", "signal_date": "2026-02-21", "ai_action": "N/A", "ai_reason": "분석 실패"},
+            {"ticker": "1", "signal_date": "2026-02-20", "status": "OPEN", "is_vcp": True, "ai_action": "BUY", "ai_reason": "ok"},
+            {"ticker": "2", "signal_date": "2026-02-21", "status": "OPEN", "is_vcp": True, "ai_action": "N/A", "ai_reason": "분석 실패"},
         ]
     )
 
-    date_key, scoped = prepare_vcp_signals_scope(signals_df, target_date=None)
+    date_key, scoped = prepare_vcp_signals_scope(signals_df, target_date=None, today="2026-02-21")
 
     assert date_key == "2026-02-21"
     assert len(scoped) == 1

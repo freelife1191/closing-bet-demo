@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime
 from typing import Any, Callable
 
 import pandas as pd
@@ -44,8 +45,13 @@ _VCP_REANALYSIS_UPDATED_COLUMNS = ("ai_action", "ai_confidence", "ai_reason")
 def prepare_vcp_signals_scope(
     signals_df: pd.DataFrame,
     target_date: str | None,
+    today: str | None = None,
 ) -> tuple[str, pd.DataFrame]:
-    """재분석 대상 범위(날짜)를 계산한다."""
+    """재분석 대상 범위(날짜)를 계산한다.
+
+    날짜가 없으면 화면의 「최신」 탭과 같은 함수로 날짜를 고른다([VCP-027]). 고른 날짜의
+    행은 판정 탈락분(CLOSED 등)까지 모두 대상에 둔다. 날짜를 지정한 갈래와 같은 범위다.
+    """
     normalized_df = signals_df.copy()
     normalized_df["ticker"] = normalized_df["ticker"].astype(str).str.zfill(6)
     normalized_df["signal_date"] = normalized_df["signal_date"].astype(str)
@@ -58,9 +64,14 @@ def prepare_vcp_signals_scope(
         ].copy()
         return target_date, scoped_df
 
-    latest_date = str(normalized_df["signal_date"].max())
-    scoped_df = normalized_df[normalized_df["signal_date"] == latest_date].copy()
-    return latest_date, scoped_df
+    from app.routes.kr_market_helpers import _filter_signals_dataframe_by_date, _format_signal_date
+
+    scoped_df, normalized_today = _filter_signals_dataframe_by_date(
+        normalized_df, None, today or datetime.now().strftime("%Y-%m-%d")
+    )
+    if scoped_df.empty:
+        return normalized_today, scoped_df.copy()
+    return _format_signal_date(scoped_df["signal_date"].iloc[0]), scoped_df.copy()
 
 
 def collect_failed_vcp_rows(

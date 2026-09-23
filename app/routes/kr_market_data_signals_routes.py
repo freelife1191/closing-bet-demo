@@ -25,6 +25,9 @@ from services.scheduler_runtime_status_service import get_scheduler_runtime_stat
 _VCP_REANALYSIS_SIGNAL_USECOLS = [
     "ticker",
     "signal_date",
+    # 날짜 없는 재분석이 화면과 같은 판정(_is_vcp_signal_row)으로 날짜를 고른다([VCP-027]).
+    "status",
+    "is_vcp",
     "name",
     "current_price",
     "entry_price",
