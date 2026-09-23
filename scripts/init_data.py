@@ -2041,6 +2041,8 @@ def update_kr_ai_analysis_prices(price_map):
         log(f"AI 분석 파일 가격 동기화 실패: {e}", "WARNING")
 
 if __name__ == '__main__':
+    # run_screener 는 cwd 기준 data/ 에 쓰고 알림(스케줄러)은 BASE_DIR 기준으로 읽으므로 루트에서 돈다. 모듈 수준에 두면 import 하는 쪽 cwd 가 바뀐다 [INFRA-086]
+    os.chdir(BASE_DIR)
     if len(sys.argv) > 1:
         cmd = sys.argv[1]
         if cmd == "init-prices":
