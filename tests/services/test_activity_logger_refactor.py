@@ -117,6 +117,19 @@ def test_activity_logger_prunes_on_creation(tmp_path: Path, monkeypatch):
     assert not old.exists()
 
 
+def test_activity_logger_creates_a_missing_log_dir_as_0700(tmp_path: Path, monkeypatch):
+    # [INFRA-085] restart_all.sh 를 거치지 않는 기동(gunicorn 직접 실행)에서도 logs/ 가 다른 계정을 막는다
+    user_logger = logging.getLogger("user_activity")
+    monkeypatch.setattr(user_logger, "handlers", [])
+    log_dir = tmp_path / "logs"
+    try:
+        ActivityLogger(log_dir=str(log_dir))
+    finally:
+        for handler in list(user_logger.handlers):
+            handler.close()
+    assert stat.S_IMODE(log_dir.stat().st_mode) == 0o700
+
+
 def test_activity_logger_rotates_and_prunes_a_stale_base_file_on_creation(tmp_path: Path, monkeypatch):
     # GET 은 활동 로그에 남지 않으므로 30일 넘게 기록이 없을 수 있다. 그 기준 파일도
     # 다음 기록을 기다리지 않고 기동 때 지워져야 방침 3항과 맞는다.

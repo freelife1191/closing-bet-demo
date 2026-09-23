@@ -73,8 +73,8 @@ class RetentionTimedRotatingFileHandler(TimedRotatingFileHandler):
 class ActivityLogger:
     def __init__(self, log_dir='logs', filename='user_activity.log'):
         self.log_dir = log_dir
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        # 새로 만들 때만 0700 이다. 이미 있는 디렉터리는 restart_all.sh 가 좁힌다 [INFRA-085]
+        os.makedirs(log_dir, mode=0o700, exist_ok=True)
             
         self.filepath = os.path.join(log_dir, filename)
         
