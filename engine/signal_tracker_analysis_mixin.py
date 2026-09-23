@@ -40,6 +40,7 @@ from services.kr_market_data_cache_sqlite_payload import (
     load_csv_payload_from_sqlite as _load_csv_payload_from_sqlite,
     save_csv_payload_to_sqlite as _save_csv_payload_to_sqlite,
 )
+from services.kr_market_vcp_reanalysis_service import write_vcp_signals_csv_atomic
 
 
 logger = logging.getLogger(__name__)
@@ -336,46 +337,12 @@ class SignalTrackerAnalysisMixin:
             return
 
         if not os.path.exists(self.signals_log_path):
-            working_new.to_csv(self.signals_log_path, index=False, encoding="utf-8-sig")
+            write_vcp_signals_csv_atomic(working_new, self.signals_log_path)
             self._refresh_signals_log_source_cache(self.signals_log_path, working_new)
             logger.info(f"   📝 시그널 로그 저장: {len(working_new)}개")
             return
 
         existing = self._load_signals_log_source_frame(self.signals_log_path)
-
-        # Fast path: 오늘 중복 티커가 없고 컬럼이 기존 스키마에 포함되면 append 모드로 저장.
-        can_fast_append = (
-            not existing.empty
-            and "signal_date" in existing.columns
-            and "ticker" in existing.columns
-            and "signal_date" in working_new.columns
-            and "ticker" in working_new.columns
-            and set(working_new.columns).issubset(set(existing.columns))
-        )
-        if can_fast_append:
-            existing_today_tickers = set(
-                existing.loc[existing["signal_date"] == today, "ticker"].astype(str).str.zfill(6)
-            )
-            incoming_today_tickers = set(
-                working_new.loc[working_new["signal_date"] == today, "ticker"].astype(str).str.zfill(6)
-            )
-            if existing_today_tickers.isdisjoint(incoming_today_tickers):
-                append_frame = working_new.copy()
-                for column in existing.columns:
-                    if column not in append_frame.columns:
-                        append_frame[column] = None
-                append_frame = append_frame[list(existing.columns)]
-                append_frame.to_csv(
-                    self.signals_log_path,
-                    mode="a",
-                    header=False,
-                    index=False,
-                    encoding="utf-8",
-                )
-                refreshed = pd.concat([existing, append_frame], ignore_index=True)
-                self._refresh_signals_log_source_cache(self.signals_log_path, refreshed)
-                logger.info(f"   📝 시그널 로그 append 저장: +{len(append_frame)}개")
-                return
 
         combined = append_signals_log(
             signals_log_path=self.signals_log_path,
@@ -384,7 +351,7 @@ class SignalTrackerAnalysisMixin:
             existing_signals=existing,
         )
 
-        combined.to_csv(self.signals_log_path, index=False, encoding="utf-8-sig")
+        write_vcp_signals_csv_atomic(combined, self.signals_log_path)
         self._refresh_signals_log_source_cache(self.signals_log_path, combined)
         logger.info(f"   📝 시그널 로그 저장: {len(combined)}개")
 
@@ -420,7 +387,7 @@ class SignalTrackerAnalysisMixin:
             logger.info("✅ 시그널 업데이트 완료: 변경 없음")
             return
 
-        updated_df.to_csv(self.signals_log_path, index=False, encoding="utf-8-sig")
+        write_vcp_signals_csv_atomic(updated_df, self.signals_log_path)
         self._refresh_signals_log_source_cache(self.signals_log_path, updated_df)
         logger.info(f"✅ 시그널 업데이트 완료: {len(closed_logs)}개 청산")
 

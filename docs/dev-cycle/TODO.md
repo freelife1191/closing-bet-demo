@@ -80,7 +80,14 @@
 ### [VCP-034] `SignalTracker` 의 `signals_log.csv` 쓰기 세 곳도 원자적으로 바꾼다
 - 카테고리: VCP 시그널 | 티어: T2 (`engine/signal_tracker_analysis_mixin.py` 는 `tier-rules.md` §2 목록에 없음, 설계에서 건드릴 파일로 재판정) | 근거: `[VCP-030]` 코드 리뷰(closing-bet-reviewer, 2026-09-23) 지적 1. `engine/signal_tracker_analysis_mixin.py:339`(새 파일), `:387`(추가 병합), `:423`(청산 갱신)이 같은 `data/signals_log.csv` 를 `to_csv` 로 자르고 쓴다. `services/common_update_pipeline_steps.py:220-226` 이 `create_signals_log` 직후 `SignalTracker().update_open_signals()` 를 부르므로 매 실행에서 이어서 돈다. 도중에 죽으면 0바이트 파일은 `[VCP-030]` 의 회복이 받아 준다. 그러나 행 중간에서 잘린 파일(`...\n005930,2026-02-1`)은 예외 없이 읽혀 `signal_date=2026-02-1`·`score=NaN` 같은 손상된 행이 되고, 다음 `create_signals_log` 가 그 행을 옛 날짜로 병합해 원자적으로 다시 쓰면서 True 를 돌려준다. 즉 실행이 막히기보다 손상이 조용히 굳는다. `ParserError`(보존 + False)는 따옴표 필드 안에서 잘린 경우에만 났다(`[VCP-030]` 심층 리뷰 실측, pandas 2.3.3). 헤더 중간에서 잘린 파일(`ticker,sig`)은 당일 정리 갈래가 `signal_date` 열이 없다며 필터를 건너뛰고 그대로 다시 쓴다.
 - 범위: 세 곳을 `services/kr_market_vcp_reanalysis_service.write_vcp_signals_csv_atomic` 으로 바꾸고 각 뒤의 `_refresh_signals_log_source_cache` 와의 관계(무효화 순서)를 설계에서 본다. 회귀 테스트는 쓰기 실패 시 원본 바이트 유지.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] 리뷰 - [ ] QA
+- 설계 승인: 2026-09-23 사용자 승인(bounded, 대화에서 제시). 다음 항목 선택 질문에서 「VCP-034 (Recommended)」, append 경로 질문에서 「분기 삭제 (Recommended)」를 골라 설계 전체를 승인했다.
+- 승인 범위: `_append_to_log` 의 새 파일(:339)·병합(:387)과 `update_open_signals`(:423)를 `write_vcp_signals_csv_atomic` 으로 바꾼다. 조사에서 네 번째 쓰기인 빠른 append 경로(:367, `mode="a"`)를 발견했고, 이 분기는 삭제해 항상 `append_signals_log` 병합 경로로 가게 한다. 캐시 순서는 종전과 같다(원자적 쓰기의 sqlite 무효화 → `_refresh_signals_log_source_cache`). 티어 T2(`engine/signal_tracker_analysis_mixin.py` 는 위험 경로 밖).
+- [x] 설계 승인(bounded) - [x] 구현·RED→GREEN(새 테스트 4건은 종전 코드에서 「DID NOT RAISE」로 실패, 변이 3종을 각각 잡음) - [x] `/ponytail-review`: 테스트 도우미 인라인과 매개변수 축소 2건 반영 → `/code-review`(closing-bet-reviewer, `vcp034-reviewer`): APPROVE, max low. 지적 1은 QA S-3 허용 차이로 반영, 지적 2(0600)는 VCP-030 과 같은 방향이라 수정 없음, 지적 3(잠금 없는 읽기·병합·교체)은 종전부터 있던 창이라 `[VCP-035]` 로 이월 - [x] 전체 pytest(사본): 2657 passed·3 skipped. 25 failed·8 errors 는 사본에 `frontend/node_modules` 가 없어 난 「Cannot find module '@next/env'」이며, 링크를 건 뒤 해당 세 파일을 다시 돌려 78 passed. 남은 gitignore 테스트 1건은 사본이 git 저장소가 아니라 실패했고 원본 트리에서 통과. vitest 682 passed - [ ] QA
+
+### [VCP-035] `signals_log.csv` 의 읽기·병합·교체 사이에 잠금이 없다
+- 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-034]` 코드 리뷰 지적 3(확신도 낮음, 기존 문제). `SignalTracker._append_to_log`·`update_open_signals` 와 `scripts/init_data.py` 의 `create_signals_log` 는 파일을 읽고 병합한 뒤 교체하는 동안 잠금을 잡지 않는다. 스케줄러 파이프라인과 `run.py` 메뉴 2 가 동시에 돌면 한쪽이 추가한 행이 사라질 수 있다. `[VCP-034]` 가 빠른 append 분기를 없애 모든 추가가 이 창을 지난다. 실측하지 않았다.
+- 범위: 동시 실행이 실제로 가능한 경로인지(스케줄러 리더 잠금, CLI 사용 빈도) 먼저 확인하고, 필요하면 `.env.lock` 처럼 파일 잠금으로 읽기·교체를 직렬화하는 안을 설계한다.
+- [ ] 동시 실행 가능성 확인 - [ ] 설계 승인(bounded) - [ ] 구현·검증
 
 ### [INFRA-079] 유물 사용량 저장소 `data/usage.db` 의 이메일 행 확인과 정리
 - 카테고리: 인프라 | 티어: T1 | 근거: `[FE-045]` 계획 검토(2026-09-22). `services/usage_tracker.py`(`usage_log`)와 `engine/services/usage_tracker.py`(`api_usage`)는 이메일을 기본 키로 쓰지만 어떤 운영 코드도 import 하지 않는 유물이다. 개발 기기의 `data/usage.db` 는 두 테이블 모두 행 0 이나 운영 서버의 파일은 이 기기에서 확인할 수 없다.

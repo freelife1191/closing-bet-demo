@@ -423,9 +423,9 @@ def test_update_open_signals_loads_log_with_ticker_dtype(tmp_path, monkeypatch):
 
     monkeypatch.setattr(signal_tracker_analysis_mixin.pd, "read_csv", _fake_read_csv)
     monkeypatch.setattr(
-        pd.DataFrame,
-        "to_csv",
-        lambda self, path, *args, **kwargs: None,
+        signal_tracker_analysis_mixin,
+        "write_vcp_signals_csv_atomic",
+        lambda *_args, **_kwargs: None,
     )
 
     tracker.update_open_signals()
@@ -521,7 +521,7 @@ def test_append_to_log_uses_sqlite_cache_after_memory_clear(tmp_path, monkeypatc
     assert set(updated["ticker"]) == {"000001", "000002"}
 
 
-def test_append_to_log_uses_fast_append_when_no_same_day_overlap(tmp_path, monkeypatch):
+def test_append_to_log_keeps_both_rows_without_same_day_overlap(tmp_path):
     pd.DataFrame(
         [
             {"ticker": "5930", "date": "2026-02-20", "close": 100, "high": 101, "low": 99, "volume": 1000},
@@ -538,23 +538,6 @@ def test_append_to_log_uses_fast_append_when_no_same_day_overlap(tmp_path, monke
     tracker = SignalTracker(data_dir=str(tmp_path))
     today = datetime.now().strftime("%Y-%m-%d")
 
-    monkeypatch.setattr(
-        signal_tracker_analysis_mixin,
-        "append_signals_log",
-        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("fallback merge path should not run")),
-    )
-
-    capture = {"append_mode": False}
-    original_to_csv = pd.DataFrame.to_csv
-
-    def _capture_to_csv(self, path, *args, **kwargs):
-        if str(path).endswith("signals_log.csv") and kwargs.get("mode") == "a":
-            capture["append_mode"] = True
-            assert kwargs.get("header") is False
-        return original_to_csv(self, path, *args, **kwargs)
-
-    monkeypatch.setattr(pd.DataFrame, "to_csv", _capture_to_csv)
-
     tracker._append_to_log(
         pd.DataFrame(
             [
@@ -563,9 +546,66 @@ def test_append_to_log_uses_fast_append_when_no_same_day_overlap(tmp_path, monke
         )
     )
 
+    raw = log_path.read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf")
+    assert raw.count(b"\xef\xbb\xbf") == 1
     updated = pd.read_csv(log_path, dtype={"ticker": str})
     assert set(updated["ticker"]) == {"000001", "000002"}
-    assert capture["append_mode"] is True
+
+
+def _fail_fsync(monkeypatch):
+    import services.kr_market_data_cache_core as cache_core
+
+    def _raise(_fd):
+        raise OSError("forced fsync failure")
+
+    monkeypatch.setattr(cache_core.os, "fsync", _raise)
+
+
+@pytest.mark.parametrize(
+    "existing_date",
+    [None, "2026-02-20", "today"],
+    ids=["new-file", "no-overlap", "same-day-merge"],
+)
+def test_append_to_log_keeps_log_bytes_when_write_fails(tmp_path, monkeypatch, existing_date):
+    today = datetime.now().strftime("%Y-%m-%d")
+    log_path = tmp_path / "signals_log.csv"
+    if existing_date is not None:
+        signal_date = today if existing_date == "today" else existing_date
+        pd.DataFrame([{"signal_date": signal_date, "ticker": "000001", "status": "OPEN"}]).to_csv(
+            log_path, index=False, encoding="utf-8-sig"
+        )
+    before = log_path.read_bytes() if log_path.exists() else None
+
+    tracker = SignalTracker(data_dir=str(tmp_path))
+    _fail_fsync(monkeypatch)
+
+    with pytest.raises(OSError, match="forced fsync failure"):
+        tracker._append_to_log(pd.DataFrame([{"signal_date": today, "ticker": "1", "status": "OPEN"}]))
+
+    assert (log_path.read_bytes() if log_path.exists() else None) == before
+    assert list(tmp_path.glob("signals_log.csv.*")) == []
+
+
+def test_update_open_signals_keeps_log_bytes_when_write_fails(tmp_path, monkeypatch):
+    pd.DataFrame(
+        [{"ticker": "000001", "date": "2026-02-20", "close": 110, "high": 111, "low": 109, "volume": 10_000}]
+    ).to_csv(tmp_path / "daily_prices.csv", index=False, encoding="utf-8-sig")
+    old_date = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
+    log_path = tmp_path / "signals_log.csv"
+    pd.DataFrame(
+        [{"signal_date": old_date, "ticker": "000001", "entry_price": 100, "status": "OPEN", "hold_days": 0}]
+    ).to_csv(log_path, index=False, encoding="utf-8-sig")
+    before = log_path.read_bytes()
+
+    tracker = SignalTracker(data_dir=str(tmp_path))
+    _fail_fsync(monkeypatch)
+
+    with pytest.raises(OSError, match="forced fsync failure"):
+        tracker.update_open_signals()
+
+    assert log_path.read_bytes() == before
+    assert list(tmp_path.glob("signals_log.csv.*")) == []
 
 
 def test_signal_tracker_rebuild_price_cache_uses_close_when_current_price_missing(tmp_path):
