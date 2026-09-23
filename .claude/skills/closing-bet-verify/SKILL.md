@@ -39,7 +39,8 @@ exit 0 으로 앞선 실패를 덮지 않는다. mock 이 통과한 것은 live 
   `NEXTAUTH_URL=http://localhost:<Next 포트>`, 챗봇 쿼터 가드용
   `GOOGLE_GENAI_USE_VERTEXAI=true GOOGLE_CLOUD_PROJECT=qa-stub`. 실제 비밀은 어디에도 적지 않는다.
 - **Flask**: 사본 루트에서 `SCHEDULER_ENABLED=false gunicorn <진입점>:app --bind 127.0.0.1:<포트>
-  --workers 1 --threads 4`. 진입점은 `flask_app` 이거나, 외부 호출을 바꿔치기한 QA 전용 파일
+  --workers 1 --threads 4 --keep-alive 0`. `--keep-alive 0` 은 운영(`restart_all.sh`)과 같은 값이며, 빠지면
+  Next 프록시가 닫히는 연결을 재사용해 무관한 500 이 난다(`[INFRA-080]`). 진입점은 `flask_app` 이거나, 외부 호출을 바꿔치기한 QA 전용 파일
   (`from flask_app import app` 앞에서 `engine.genai_client.build_genai_client` 나
   `scripts.init_data` 의 단계를 가짜로 바꾼 것)이다. 이 파일은 사본에만 두고 저장소에 넣지 않는다.
 - **Next**: 사본 `frontend/` 에서 `PORT=<포트> API_URL=http://127.0.0.1:<Flask 포트> TZ=Asia/Seoul

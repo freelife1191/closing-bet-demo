@@ -108,8 +108,10 @@ fi
 lifecycle_assert_port_free "$FLASK_PORT" || exit 1
 lifecycle_assert_port_free "$FRONTEND_PORT" || exit 1
 echo "🚀 Backend $FLASK_PORT (Gunicorn)..."
+# --keep-alive 0: Next rewrite 프록시(httpxy)의 연결 풀은 유휴 제한이 없어, gunicorn 이 keep-alive
+# 만료로 닫는 순간의 소켓을 재사용하면 ECONNRESET 으로 500 이 난다. 값을 늘려도 경계만 옮겨진다([INFRA-080])
 lifecycle_exec_detached "$PROJECT_ROOT/venv/bin/gunicorn" flask_app:app \
-  --bind "${FLASK_HOST}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 \
+  --bind "${FLASK_HOST}:$FLASK_PORT" --workers 2 --threads 8 --timeout 120 --keep-alive 0 \
   9>&- >> "$PROJECT_ROOT/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
 lifecycle_write_pid backend "$BACKEND_PID" || exit 1

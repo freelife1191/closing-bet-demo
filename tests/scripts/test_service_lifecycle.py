@@ -53,6 +53,14 @@ def test_restart_binds_gunicorn_to_loopback_unless_env_overrides() -> None:
     assert '--bind "${FLASK_HOST}:$FLASK_PORT"' in restart
 
 
+def test_restart_disables_gunicorn_keep_alive_behind_next_proxy() -> None:
+    """Next 프록시의 연결 풀은 유휴 제한이 없어 gunicorn 이 keep-alive 로 닫는 순간의 소켓을 재사용해 500 을 낸다."""
+    restart = (ROOT / "restart_all.sh").read_text(encoding="utf-8")
+
+    # 주석 줄에도 같은 문자열이 있으므로 gunicorn 명령 줄 자체를 본다
+    assert "--timeout 120 --keep-alive 0 \\\n" in restart
+
+
 def test_restart_never_reports_ready_before_backend_and_frontend_probes_pass() -> None:
     """포트 bind 실패를 Ready로 오인하지 않는다."""
     restart = (ROOT / "restart_all.sh").read_text(encoding="utf-8")

@@ -34,7 +34,7 @@ python flask_app.py              # Flask server on port 5501
 
 # Production
 # 바인딩은 loopback 이다. 이유는 .env.example 의 FLASK_HOST 주석에 있다
-gunicorn flask_app:app --bind 127.0.0.1:5501 --workers 2 --threads 8 --timeout 120
+gunicorn flask_app:app --bind 127.0.0.1:5501 --workers 2 --threads 8 --timeout 120 --keep-alive 0
 
 # Testing
 pytest                          # All tests

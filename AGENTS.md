@@ -92,7 +92,7 @@ python flask_app.py              # Flask 개발 서버 (5501)
 cd frontend && npm run dev       # Next.js 개발 서버 (3500)
 
 # 바인딩은 loopback 이다. 이유는 .env.example 의 FLASK_HOST 주석에 있다
-gunicorn flask_app:app --bind 127.0.0.1:5501 --workers 2 --threads 8 --timeout 120
+gunicorn flask_app:app --bind 127.0.0.1:5501 --workers 2 --threads 8 --timeout 120 --keep-alive 0
 ```
 
 **gunicorn 은 `--reload` 없이 돈다.** 파이썬 파일을 고쳤으면 QA 전에
