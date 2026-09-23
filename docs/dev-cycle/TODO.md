@@ -71,19 +71,6 @@
 
 ## P2 — 대기
 
-### [CHAT-034] SQLite 누락 테이블 복구 래퍼 통합
-- 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §2.1. `storage_sqlite_history.py` 여섯 곳과 `storage_sqlite_memory.py` 여덟 곳, 열네 함수가 「스키마 확인 → `run_sqlite_with_retry` → `_is_missing_table_error` 면 `force_recheck` 뒤 `_retried=True` 로 재호출」 골격을 복제하고 있다. 재시도·복구 조건을 바꾸면 열네 곳을 함께 고쳐야 하고, 한 곳을 빠뜨려도 평소에는 증상이 없다. 공용 래퍼를 `services/sqlite_utils.py`(공통 접속 계층, 위험 경로)에 두면 T3.
-- 범위: 공통 골격을 데코레이터 또는 헬퍼 하나로 추출, 테이블 이름만 주입, 양쪽 공개 함수 시그니처 유지, 열네 경로 모두의 복구 동작 테스트.
-- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 13:12
-  | 범위: `chatbot/storage_sqlite_common.py` 에 기존 `services/sqlite_ready_gate.run_with_schema_recovery` 를 감싸는 `run_chatbot_sqlite_with_recovery` 하나를 두고, history 6·memory 8 함수의 재귀 복구를 그것으로 바꾼다. `_retried`·로컬 `_is_missing_table_error` 삭제, 공개 인자 유지, `services/` 는 고치지 않음. QA 는 챗봇 전송 대신 LLM 을 부르지 않는 저장소 경로로 격리 실측
-  | 실제 대화 근거: 2026-09-23 사용자 「응 진행해」 응답, 현재 세션의 해당 설계 제안
-- QA: 격리 사본에서 `chatbot_storage.db` 의 테이블이 없는 상태로 LLM 을 부르지 않는 세션 목록·생성·삭제 경로를 브라우저로 실측 → 오류 없이 목록이 뜨고 조작이 반영된다. (원래 초안의 「질문 전송」은 금지 조작이라 대체)
-- [x] 설계 승인
-- [x] 구현 계획·계획 검토 — `docs/superpowers/plans/2026-09-23-chat-034-sqlite-recovery-wrapper.md`. critic ACCEPT-WITH-RESERVATIONS, 필수 2·권고 3 모두 반영
-- [x] 구현·RED→GREEN — RED 는 래퍼 import 실패, 특성 16건은 전환 전 코드로 통과. 전환 뒤 `tests/chatbot` 256 passed, pyflakes 0, 변이 3종 모두 검출. 전체 pytest 는 사본에서 기준 대비 새 실패 0
-- [x] `/ponytail-review`(중복 테스트 1건 삭제) → `closing-bet-reviewer`(APPROVE, low 2건 기록) → `/review`(APPROVE, 테스트 1건 추가, 기존 동작 1건 `[CHAT-039]` 이월)
-- [ ] QA — `docs/dev-cycle/qa/CHAT-034.md`
-
 ### [CHAT-035] HistoryManager 의 책임 분리
 - 카테고리: 챗봇 | 티어: T3 | 근거: AUDIT-CHAT(2차) §4.1. `chatbot/storage.py:39-493` 의 한 클래스가 SQLite 적재·저장, 레거시 JSON 스냅샷, 파일 서명 재적재 판정, 메시지·세션 LRU 캐시 둘, 델타 장부, 세션 CRUD, 메시지 CRUD 여덟 책임을 진다. `[CHAT-033]` 의 결함은 델타 장부·저장·재적재가 서로의 상태를 잠금 없이 건드리는 자리에서 나왔다. 선행 조건: `[CHAT-033]` 완료(2026-09-23 충족, 커밋 `bd5adf1`). 같은 자리를 두 항목이 동시에 건드리면 충돌한다.
 - 범위: 레거시 스냅샷 동기화, LRU 캐시와 파일 서명 판정, 델타 장부를 각각 분리. 기존 공개 메서드 시그니처와 기존 테스트 16건 통과 유지.
