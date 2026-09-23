@@ -79,12 +79,12 @@ const TOOLTIP_CONTENT = {
   totalSignals: {
     title: "누적 추천수 (Total Signals)",
     desc: "AI 알고리즘이 발굴한 전체 매매 신호의 총 횟수입니다.",
-    criteria: "전체 기간 동안 발생한 모든 매수 신호 포함",
+    criteria: "전체 기간 동안 발생한 모든 매수 신호 포함; 보유 중 같은 종목이 다시 추천되어도 각각 한 건",
     interpretation: "시장 상황에 따라 신호 발생 빈도가 달라질 수 있으며, 신호가 많다고 무조건 좋은 것은 아닙니다."
   },
   winRate: {
     title: "승률 (Win Rate)",
-    desc: "전체 청산된 매매 중 시그널 목표가에 먼저 도달한 비율입니다.",
+    desc: "전체 청산된 매매 중 시그널 목표가에 먼저 도달한 비율입니다. 추천 단위로 세므로, 앞선 추천이 청산되기 전 같은 종목이 다시 추천되면 각각 한 건이 되어 같은 가격 움직임이 겹쳐 반영될 수 있습니다.",
     criteria: "목표가 도달 성공 / (익절 + 손절) × 100; 미청산 거래 제외",
     interpretation: "목표가·손절가는 저장된 개별 가격을 사용하며, 누락 시 기본 +5%/-3%로 계산합니다."
   },
@@ -126,7 +126,7 @@ const TOOLTIP_CONTENT = {
   },
   profitFactor: {
     title: "손익비 (Profit Factor)",
-    desc: "총 이익금을 총 손실금으로 나눈 비율로, 전략의 효율성을 나타냅니다.",
+    desc: "총 이익금을 총 손실금으로 나눈 비율로, 전략의 효율성을 나타냅니다. 추천 단위로 세므로, 앞선 추천이 청산되기 전 같은 종목이 다시 추천되면 각각 한 건이 되어 같은 가격 움직임이 겹쳐 반영될 수 있습니다.",
     criteria: "(총 이익금 합계) / (총 손실금 합계의 절대값)",
     interpretation: "1.5 이상이면 훌륭한 전략이며, 2.0 이상이면 매우 강력한 수익 모델입니다."
   },
@@ -445,6 +445,7 @@ function CumulativeGuideModal({ isOpen, onClose }: { isOpen: boolean, onClose: (
               <p className="text-xs text-gray-400 leading-relaxed">
                 청산된 매매 중 시그널 목표가에 먼저 도달한 비율입니다.<br />
                 <span className="text-gray-500 mt-1 block">계산식: (익절 횟수 / (익절 + 손절 횟수)) * 100</span>
+                <span className="text-gray-500 mt-1 block">추천 단위로 셉니다. 앞선 추천이 청산되기 전 같은 종목이 다시 추천되면 각각 한 건입니다.</span>
               </p>
             </div>
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">

@@ -74,7 +74,16 @@
 ### [FLOW-018] 겹치는 재추천을 어떻게 셀지 정하고 화면에 드러낸다
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §2.1. 거래 식별자가 `f"{ticker}-{stats_date}"`(`kr_market_backtest_trade_helpers.py:298`)라 청산 전에 다시 추천된 종목이 독립한 두 거래로 집계된다. 실측 234건 중 13건. 005935 삼성전자우는 09-04 진입분이 09-08 익절(+5.0%)되기 전인 09-07 에 재추천되어 그 건이 손절(-3.0%)로 잡혔다. 승률·손익비는 독립 시행을 가정하는 지표인데 같은 가격 움직임이 두 번 반영되고, 화면에 그 가정이 적혀 있지 않다.
 - 범위: 설계 판단이 먼저다. 현행 유지 + 툴팁에 「추천 단위 집계, 재추천 미합산」 명시 / 겹치는 재추천 제외 / 겹침 건수를 별도 지표로 표시 가운데 하나를 정하고 근거를 남긴 뒤 `aggregate_cumulative_kpis` 또는 툴팁을 수정, 겹침 사례를 담은 고정 자료로 회귀 테스트.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA(승률 카드 툴팁·값 확인)
+- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 12:31
+  | 범위: 「현행 유지 + 문구」. 집계 코드는 바꾸지 않고 `CumulativeClientPage.tsx` 의 `totalSignals`·`winRate`·`profitFactor` 툴팁과 가이드 모달 승률 카드에 추천 단위 집계(보유 중 재추천도 각각 한 건, 같은 가격 움직임이 겹쳐 반영될 수 있음)를 적는다. 겹치는 두 추천을 `build_cumulative_trade_record`→`aggregate_cumulative_kpis` 로 흘려 두 거래로 세는지 고정하는 pytest 1개. 티어 T1(위험 경로 없음, 30줄 안팎. TODO 의 T2 는 집계 변경 선택지까지 포함한 추정)
+  | 실제 대화 근거: 2026-09-23 AskUserQuestion 응답 「현행 유지 + 문구 (Recommended)」, 이어 설계 제시에 사용자 「응 진행해」
+- 결정 근거: 이 화면이 재는 것은 추천의 성과이고 사용자는 추천마다 따로 진입할 수 있으므로 추천 단위 정의가 성립한다. 독립 시행 가정이 깨지는 점은 문구로 드러낸다.
+- QA 시나리오: 격리 누적성과 화면에서 누적 추천수·승률·손익비 툴팁과 가이드 모달 승률 카드에 재추천 집계 문구가 보이고 KPI 값은 수정 전과 같다. 브라우저 실측 required.
+- [x] 설계 승인(bounded)
+- [x] 구현: `CumulativeClientPage.tsx` 의 `totalSignals.criteria`·`winRate.desc`·`profitFactor.desc` 와 가이드 모달 승률 카드 한 줄. 처음에는 `interpretation` 에 넣었으나 `renderStatTooltip` 이 승률·손익비의 `interpretation` 을 그리지 않아(동적 코멘트로 대체) 보이는 필드로 옮겼다. 회귀 테스트 `tests/services/test_cumulative_overlap_refactor.py` 는 현행 정의를 고정하는 특성화 테스트라 처음부터 통과(RED 없음)
+- [x] `/ponytail-review`: 1건(판정에 쓰이지 않는 09-05 일봉) 반영, net -1
+- [x] 정적 검증: 전체 pytest 는 저장소 사본에서 2596 passed 3 skipped + frontend 의존 세 파일 재실행 78 passed + `git check-ignore` 테스트 1건(사본이 git 저장소가 아니라 원본에서 읽기 전용 실행) 통과. 첫 사본 실행의 실패 59건은 사본에서 `frontend/` 를 뺀 탓(재실행으로 확인). vitest 95 파일 680 통과, type-check exit 0, eslint 대상 파일 오류 0(경고 1건은 기존 588행 `any`)
+- [ ] QA(툴팁·가이드 문구, KPI 값 불변): `docs/dev-cycle/qa/FLOW-018.md`
 
 ### [FLOW-020] 「최고가」 열이 값을 숨기지 않게 한다
 - 카테고리: 수급·백테스트 | 티어: T1 | 근거: AUDIT-FLOW(2차) §1.3. `CumulativeClientPage.tsx:874` 가 `maxHigh > 0` 이 아니면 `-` 를 그려, 실측에서 032830 삼성생명(진입가 307,000, 청산일까지 최고가 302,500, 최대상승률 -1.5%)이 하이픈으로 보인다. 값이 없는 것인지 한 번도 오르지 않은 것인지 구분되지 않고, 양수도 부호 없이 적어 같은 화면의 `formatSignedPercent` 표기와 다르다.
