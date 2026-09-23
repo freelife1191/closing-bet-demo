@@ -69,6 +69,7 @@ from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
 from engine.pandas_utils_safe import safe_bool, safe_optional_float
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
+from services.kr_market_vcp_reanalysis_service import write_vcp_signals_csv_atomic
 
 # =====================================================
 # 주말/휴일 처리를 위한 유틸리티 함수
@@ -1334,6 +1335,15 @@ _SIGNALS_LOG_COLUMNS = [
 ]
 
 
+def _read_signals_log(file_path: str) -> pd.DataFrame:
+    """누적 로그를 읽는다. 0바이트·BOM 만 든 파일은 기존 로그가 없는 것으로 본다([VCP-030])."""
+    try:
+        return pd.read_csv(file_path, dtype={'ticker': str, 'signal_date': str})
+    except pd.errors.EmptyDataError:
+        log(f"{file_path} 가 비어 있어 기존 로그 없이 이어갑니다.", "WARNING")
+        return pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS)
+
+
 def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_limit=None):
     """VCP 시그널 로그 생성 - Using SmartMoneyScreener (engine.screener)"""
     log("VCP 시그널 분석 중 (SmartMoneyScreener)...")
@@ -1577,7 +1587,7 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             if os.path.exists(file_path):
                 try:
                     # 타입 명시하여 로드 (중복 방지 핵심)
-                    df_old = pd.read_csv(file_path, dtype={'ticker': str, 'signal_date': str})
+                    df_old = _read_signals_log(file_path)
                     df_old['ticker'] = df_old['ticker'].str.zfill(6)
                     
                     # 새 데이터 포맷 통일
@@ -1604,14 +1614,14 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                         # 정렬 (최신 날짜 우선, 점수 높은 순)
                         df_combined = df_combined.sort_values(by=['signal_date', 'score'], ascending=[False, False])
                     
-                    df_combined.to_csv(file_path, index=False, encoding='utf-8-sig')
+                    write_vcp_signals_csv_atomic(df_combined, file_path)
                 except Exception as e:
                     # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 시그널은 CSV 에 남지 않으므로
                     # 실패로 돌려주고, 파일은 운영자가 이 경고를 보고 손본다.
                     log(f"기존 로그 병합 실패: {e}. {file_path} 를 보존하고 오늘 자 결과를 저장하지 않습니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
                     return False
             else:
-                df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
+                write_vcp_signals_csv_atomic(df_new, file_path)
 
             log(f"VCP 시그널 분석 완료: {len(signals)} 종목 감지 (누적 저장)", "SUCCESS")
             return True
@@ -1622,16 +1632,16 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
             cleaned = True
             if os.path.exists(file_path):
                 try:
-                    existing_df = pd.read_csv(file_path, dtype={'ticker': str, 'signal_date': str})
+                    existing_df = _read_signals_log(file_path)
                     if 'signal_date' in existing_df.columns:
                         existing_df = existing_df[existing_df['signal_date'].astype(str) != current_date]
-                    existing_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+                    write_vcp_signals_csv_atomic(existing_df, file_path)
                 except Exception as e:
                     # 기존 로그를 버리지 않는다([VCP-029]). 오늘 자 옛 행을 걷어내지 못했으므로 실패로 돌려준다.
                     log(f"기존 VCP 로그 정리 실패: {e}. {file_path} 를 보존합니다. 파일을 고친 뒤 다시 실행하십시오.", "WARNING")
                     cleaned = False
             else:
-                pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')
+                write_vcp_signals_csv_atomic(pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS), file_path)
             _write_vcp_signals_latest_payload(
                 target_date=target_date,
                 signals=[],
@@ -1647,7 +1657,7 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         # 「시그널 없음」 갈래와 같은 23개 열의 빈 파일을 만든다.
         file_path = os.path.join(BASE_DIR, 'data', 'signals_log.csv')
         if not os.path.exists(file_path):
-            pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS).to_csv(file_path, index=False, encoding='utf-8-sig')
+            write_vcp_signals_csv_atomic(pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS), file_path)
         _write_vcp_signals_latest_payload(
             target_date=target_date,
             signals=[],

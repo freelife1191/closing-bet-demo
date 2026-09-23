@@ -12,6 +12,7 @@ import datetime
 import types
 
 import pandas as pd
+import pytest
 
 
 sys.path.insert(
@@ -913,3 +914,62 @@ def test_create_signals_log_keeps_unreadable_log_when_cleanup_fails(monkeypatch,
     latest = json.loads((data_dir / "vcp_signals_latest.json").read_text(encoding="utf-8"))
     assert latest["date"] == "2026-09-22"
     assert latest["signals"] == []
+
+
+def test_create_signals_log_recovers_from_empty_log_with_signals(monkeypatch, tmp_path):
+    """[VCP-030] 0바이트 로그가 있어도 오늘 자 시그널을 저장한다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "signals_log.csv").write_bytes(b"")
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _DummyScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+
+    assert init_data.create_signals_log(target_date="2026-02-19", run_ai=False) is True
+
+    raw = (data_dir / "signals_log.csv").read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf")
+    df = pd.read_csv(data_dir / "signals_log.csv", dtype={"ticker": str})
+    assert df["ticker"].tolist() == ["005930"]
+
+
+def test_create_signals_log_recovers_from_empty_log_without_signals(monkeypatch, tmp_path):
+    """[VCP-030] 0바이트 로그에서 시그널이 없으면 헤더만 있는 로그로 바꾸고 성공한다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "signals_log.csv").write_bytes(b"")
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _EmptyScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+
+    assert init_data.create_signals_log(target_date="2026-03-06", run_ai=False) is True
+
+    df = pd.read_csv(data_dir / "signals_log.csv")
+    assert df.empty
+    assert "signal_date" in df.columns
+
+
+@pytest.mark.parametrize("screener", [_DummyScreener, _EmptyScreener], ids=["merge", "cleanup"])
+def test_create_signals_log_keeps_log_bytes_when_write_fails(monkeypatch, tmp_path, screener):
+    """[VCP-030] 병합·당일 정리 쓰기가 도중에 실패해도 기존 로그가 잘리지 않는다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    log_path = data_dir / "signals_log.csv"
+    pd.DataFrame(
+        [{"ticker": "000660", "signal_date": "2026-02-18", "score": 70}]
+    ).to_csv(log_path, index=False, encoding="utf-8-sig")
+    before = log_path.read_bytes()
+
+    def _failing_fsync(_fd):
+        raise OSError("forced fsync failure")
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", screener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+    monkeypatch.setattr("services.kr_market_data_cache_core.os.fsync", _failing_fsync)
+
+    assert init_data.create_signals_log(target_date="2026-02-19", run_ai=False) is False
+    assert log_path.read_bytes() == before
+    assert [p.name for p in data_dir.iterdir() if p.name.startswith("signals_log.csv.")] == []
