@@ -71,17 +71,6 @@
 
 ## P2 — 대기
 
-### [INFRA-078] 격리 실행이 원본 `runtime_cache.db` 에 쓰는 절대 경로 세 곳
-- 카테고리: 인프라 | 티어: T1 | 근거: `[VCP-026]` QA(2026-09-22). scratchpad 사본을 cwd 로 삼은 임시 백엔드가 원본 `data/runtime_cache.db` 에 행을 남겼다. `services/file_row_count_cache.py:50`, `services/common_update_status_service.py:49`, `services/kr_market_data_cache_jongga.py:48` 이 `_BASE_DIR/data/runtime_cache.db` 를 절대 경로로 잡고, `services/common_update_status_service.py`·`services/scheduler_runtime_status_service.py` 가 같은 방식으로 `v2_screener_status.json`·`scheduler_runtime_status.json` 을 원본 `data/` 에 쓴다(기동 시 초기화 플래그라 내용은 무해). 다른 캐시 모듈은 `data_dir` 인자나 원본 파일의 디렉터리에서 경로를 만든다. `browser-notes.md` 「공통」 절이 이 종류의 구멍을 일반론으로만 경고한다.
-- 범위: 세 모듈이 다른 캐시와 같은 방식(`data_dir` 인자 또는 대상 파일의 디렉터리)으로 경로를 정하게 하고, 격리 실행 뒤 원본 `data/` 가 바뀌지 않음을 확인하는 회귀 테스트. 운영 동작은 바뀌지 않는다(같은 파일).
-- 설계 승인: 승인 일자 2026-09-23 | bounded. 조사로 같은 절대 경로 상수가 다섯 곳임을 확인(`services/kr_market_cumulative_cache.py:57`, `services/kr_market_backtest_summary_cache.py:58` 추가). 범위는 다섯 상수를 cwd 기준 `os.path.join("data", "runtime_cache.db")` 로 바꾸는 것과 회귀 테스트 1개, 원본 코드·`data/` 사본 cwd 구성의 격리 QA. 캐시가 아닌 절대 경로 여섯 곳(상태 파일·파이프라인 출력)은 범위 밖으로 새 항목 등록. 대화 근거: `/dev-cycle next` 에서 제시한 설계와 범위 질문에 사용자가 「캐시 5곳만 (Recommended)」으로 답함.
-- QA 시나리오: 원본 코드를 `data/` 사본 cwd 로 띄워 대시보드를 연 뒤 원본 `data/runtime_cache.db` 의 해시·수정 시각이 그대로이고 사본 DB 에 캐시 행이 생긴다.
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN: 신규 `tests/services/test_runtime_cache_path_refactor.py` 의 상수 검사 5건이 구현 전 실패, 구현 후 동작 검사 포함 6건 통과. 동작 검사는 구현 전에 돌리면 원본 DB 에 쓰므로 RED 에서 제외했다.
-- [x] `/ponytail-review`: Lean already. Ship. (다섯 파일 모두 `_BASE_DIR` 줄을 주석 한 줄로 바꿔 줄 수 불변)
-- [x] 정적 검증: `pytest -q` 2650 passed, 2 skipped, exit 0. frontend 변경 없음. 전체 실행이 원본 `data/runtime_cache.db` 수정 시각을 바꾸는 것을 확인해 `[INFRA-083]` 으로 등록(수정 전부터 같은 파일에 쓰던 동작). 범위 밖 절대 경로는 `[INFRA-082]` 로 등록.
-- [ ] QA: `docs/dev-cycle/qa/INFRA-078.md`
-
 ### [VCP-027] 실패 AI 재분석의 대상 날짜를 화면과 같은 판정으로 정한다
 - 카테고리: VCP 시그널 | 티어: T1 | 근거: `[VCP-026]` 심층 리뷰 MINOR 2(2026-09-22, 재현됨). 화면의 날짜 목록과 「최신」 대체는 `_is_vcp_signal_row` 를 통과한 날짜의 최댓값을 쓰지만, `services/kr_market_vcp_reanalysis_service.py:61-63` 의 `prepare_vcp_signals_scope` 는 판정 없이 `signal_date` 전체의 최댓값을 쓴다. 2026-09-10 에 유효 행이 있고 2026-09-15 행이 전부 CLOSED 면 화면은 09-10 을 보이는데 재분석 스코프는 09-15 다. `[VCP-026]` 전에는 최신 탭이 비어 관리자가 그 단추를 누를 일이 없었으나 이제 도달할 수 있다.
 - 범위: `prepare_vcp_signals_scope` 의 날짜 없는 갈래에 같은 판정을 걸지, 판정 탈락 행(CLOSED)의 실패 AI 도 재분석 대상으로 둘지 먼저 정한다. 결정에 따라 스코프 함수와 회귀 테스트.
