@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytest
 
+from engine.pandas_utils_safe import safe_bool
 from engine.signal_tracker import SignalTracker
 import engine.signal_tracker as signal_tracker_module
 import engine.signal_tracker_analysis_mixin as signal_tracker_analysis_mixin
@@ -118,7 +119,9 @@ def test_scan_today_signals_builds_signal_and_applies_name_map(tmp_path):
     assert signal["score"] >= 40
     assert signal["vcp_score"] > 0
     # VCP 화면은 is_vcp 가 참인 행만 보인다([VCP-036])
-    assert pd.read_csv(tmp_path / "signals_log.csv")["is_vcp"].tolist() == [True]
+    assert bool(signal["is_vcp"]) is True
+    # 저장은 run.py 메뉴 2 의 저장 질문에서만 한다([VCP-037])
+    assert not (tmp_path / "signals_log.csv").exists()
 
 
 def test_update_open_signals_uses_latest_price_cache_for_exit(tmp_path):
@@ -542,7 +545,7 @@ def test_append_to_log_keeps_both_rows_without_same_day_overlap(tmp_path):
     tracker._append_to_log(
         pd.DataFrame(
             [
-                {"signal_date": today, "ticker": "1", "status": "OPEN"},
+                {"signal_date": today, "ticker": "1", "status": "OPEN", "is_vcp": True},
             ]
         )
     )
@@ -552,6 +555,10 @@ def test_append_to_log_keeps_both_rows_without_same_day_overlap(tmp_path):
     assert raw.count(b"\xef\xbb\xbf") == 1
     updated = pd.read_csv(log_path, dtype={"ticker": str})
     assert set(updated["ticker"]) == {"000001", "000002"}
+    # is_vcp 열이 없던 로그와 병합해도 화면 판정(safe_bool)이 참으로 읽는다([VCP-036])
+    by_ticker = dict(zip(updated["ticker"], updated["is_vcp"]))
+    assert safe_bool(by_ticker["000001"]) is True
+    assert safe_bool(by_ticker["000002"]) is False
 
 
 def _fail_fsync(monkeypatch):

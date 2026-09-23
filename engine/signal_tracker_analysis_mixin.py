@@ -322,7 +322,7 @@ class SignalTrackerAnalysisMixin:
             if self._stock_name_map:
                 signals_df["name"] = signals_df["ticker"].map(self._stock_name_map).fillna(signals_df["ticker"])
 
-            self._append_to_log(signals_df)
+            # 저장은 호출자가 AI 분석 뒤에 한다(run.py 메뉴 2 의 저장 질문)
             logger.info(f"✅ 오늘 VCP 시그널: {len(signals_df)}개")
             return signals_df
 
