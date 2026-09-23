@@ -71,16 +71,6 @@
 
 ## P2 — 대기
 
-### [VCP-027] 실패 AI 재분석의 대상 날짜를 화면과 같은 판정으로 정한다
-- 카테고리: VCP 시그널 | 티어: T1 | 근거: `[VCP-026]` 심층 리뷰 MINOR 2(2026-09-22, 재현됨). 화면의 날짜 목록과 「최신」 대체는 `_is_vcp_signal_row` 를 통과한 날짜의 최댓값을 쓰지만, `services/kr_market_vcp_reanalysis_service.py:61-63` 의 `prepare_vcp_signals_scope` 는 판정 없이 `signal_date` 전체의 최댓값을 쓴다. 2026-09-10 에 유효 행이 있고 2026-09-15 행이 전부 CLOSED 면 화면은 09-10 을 보이는데 재분석 스코프는 09-15 다. `[VCP-026]` 전에는 최신 탭이 비어 관리자가 그 단추를 누를 일이 없었으나 이제 도달할 수 있다.
-- 범위: `prepare_vcp_signals_scope` 의 날짜 없는 갈래에 같은 판정을 걸지, 판정 탈락 행(CLOSED)의 실패 AI 도 재분석 대상으로 둘지 먼저 정한다. 결정에 따라 스코프 함수와 회귀 테스트.
-- 설계 승인: 2026-09-23 사용자 「응 진행해」(bounded, 대화에서 제시). 결정 「날짜만 맞춤」: 날짜 없는 갈래만 화면과 같은 `_filter_signals_dataframe_by_date(df, None, today)` 로 날짜를 고르고(today 는 화면과 같은 `datetime.now()`), 고른 날짜의 행은 CLOSED 포함 전부 대상으로 둔다. 날짜 지정 갈래 불변. 유효 날짜가 없으면 오늘 날짜로 404. 구현 중 확인: 라우트의 `_VCP_REANALYSIS_SIGNAL_USECOLS` 에 판정 열 `status`·`is_vcp` 가 없어 추가한다(읽기 열만, 저장은 AI 세 열 병합 그대로). 위험 경로 없음, T1.
-- [x] 설계 승인(bounded)
-- [x] 구현·RED→GREEN: 신규 `tests/services/test_vcp_reanalysis_scope_refactor.py` 5건이 구현 전 모두 실패(4건 `today` 인자 없음과 전체 최댓값, 1건 usecols 에 판정 열 없음) → 구현 후 통과. 옛 동작(판정 없는 최댓값)을 고정하던 `test_prepare_vcp_signals_scope_uses_latest_date_when_target_missing` 은 행에 판정 열과 `today` 를 넣어 새 계약으로 갱신(검사 취지 「최신 날짜 선택」은 유지). 관련 4모듈 94 통과.
-- [x] `/ponytail-review`: 지적 1건(shrink, 두 return 을 하나로)이나 줄 수가 같아 미반영. 「Lean already. Ship.」
-- [x] 정적 검증: 전체 `pytest -q -p no:cacheprovider` 2655 passed, 2 skipped, exit 0. 사본에서 돌리려던 명령의 사본 생성이 실패해 원본 작업 트리에서 실행되었다(영향은 `[INFRA-083]` 에 추가 기록). frontend 변경 없음이라 type-check·Vitest 생략.
-- [ ] QA: `docs/dev-cycle/qa/VCP-027.md`
-
 ### [FLOW-018] 겹치는 재추천을 어떻게 셀지 정하고 화면에 드러낸다
 - 카테고리: 수급·백테스트 | 티어: T2 | 근거: AUDIT-FLOW(2차) §2.1. 거래 식별자가 `f"{ticker}-{stats_date}"`(`kr_market_backtest_trade_helpers.py:298`)라 청산 전에 다시 추천된 종목이 독립한 두 거래로 집계된다. 실측 234건 중 13건. 005935 삼성전자우는 09-04 진입분이 09-08 익절(+5.0%)되기 전인 09-07 에 재추천되어 그 건이 손절(-3.0%)로 잡혔다. 승률·손익비는 독립 시행을 가정하는 지표인데 같은 가격 움직임이 두 번 반영되고, 화면에 그 가정이 적혀 있지 않다.
 - 범위: 설계 판단이 먼저다. 현행 유지 + 툴팁에 「추천 단위 집계, 재추천 미합산」 명시 / 겹치는 재추천 제외 / 겹침 건수를 별도 지표로 표시 가운데 하나를 정하고 근거를 남긴 뒤 `aggregate_cumulative_kpis` 또는 툴팁을 수정, 겹침 사례를 담은 고정 자료로 회귀 테스트.
