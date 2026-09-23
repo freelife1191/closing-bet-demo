@@ -309,6 +309,8 @@ class SignalTrackerAnalysisMixin:
                         "return_pct": None,
                         "hold_days": 0,
                         "vcp_score": self.calculate_vcp_score(vcp_info),
+                        # 화면은 is_vcp 가 참인 행만 보인다(_is_vcp_signal_row). 판정은 위에서 통과했다.
+                        "is_vcp": True,
                     }
                 )
 

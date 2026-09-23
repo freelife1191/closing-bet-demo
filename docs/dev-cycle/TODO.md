@@ -85,7 +85,18 @@
 ### [VCP-036] `SignalTracker` 가 저장한 시그널에 `is_vcp` 가 없어 화면에 나오지 않는다
 - 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-034]` QA S-4(2026-09-23). `engine/signal_tracker_analysis_mixin.py` 의 `scan_today_signals` 는 `detect_vcp_forming` 을 통과한 행만 모으면서 `is_vcp` 열을 쓰지 않는다. VCP 화면과 날짜 목록은 `app/routes/kr_market_vcp_signal_helpers.py` 의 `_is_vcp_signal_row` 로 `status == "OPEN"` 이고 `is_vcp` 가 참인 행만 보이므로, `run.py` 메뉴 2 로 저장한 시그널은 파일에 있어도 화면에 나오지 않는다. 개발 기기의 `data/signals_log.csv` 15행도 `is_vcp` 가 비어 있어 화면에 보이지 않는다.
 - 범위: `scan_today_signals` 가 `is_vcp=True` 를 쓰도록 할지, 이 CLI 경로가 아직 쓰이는지부터 확인한다. 이미 저장된 빈 `is_vcp` 행을 어떻게 볼지(그대로 둠, 판정 보정)도 정한다.
-- [ ] 사용 여부 확인 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] 리뷰 - [ ] QA
+- 설계 승인: 2026-09-23 사용자 승인(bounded 설계, 대화에서 제시, 항목 선택 질문의 「VCP-036 (Recommended)」). `scan_today_signals` 가 만드는 행에 `is_vcp=True` 를 쓴다. 이미 저장된 빈 `is_vcp` 행은 그대로 두고 화면 필터(`_is_vcp_signal_row`)는 바꾸지 않는다. 티어 T2: `engine/signal_tracker_analysis_mixin.py` 한 파일, 위험 경로 아님(`[VCP-034]` 과 같은 판정).
+- [x] 사용 여부 확인: 호출자는 `run.py:52` 메뉴 2 와 수동 스크립트 `tests/verify_vcp_pipeline.py:45` 뿐이다. 스케줄러 파이프라인은 `create_signals_log` 를 쓰며 그 경로는 `is_vcp` 를 쓴다(`scripts/init_data.py:1411`)
+- [x] 설계 승인(bounded) - [x] 구현·RED→GREEN(RED 는 `KeyError: 'is_vcp'`) - [x] 리뷰 - [ ] QA
+- [x] 정적 검증: `tests/engine` 668 passed · pyflakes 는 HEAD 에도 있던 미사용 import 1건(`_CSV_SOURCE_SQLITE_READY`)만 · 전체 pytest 는 격리 `git archive` 사본에서 2689 passed 1 failed 3 skipped, 실패 1건은 사본이 git 저장소가 아니라 실패하는 gitignore 테스트로 원본 트리에서 통과해 새 실패 0
+- [x] `/ponytail-review`: 반환 프레임 단언이 저장 로그 단언과 겹친다 1건 → 반영(저장 로그 단언만 남김)
+- [x] `closing-bet-reviewer`(vcp036-reviewer): APPROVE, 최고 심각도 low. 지적 1(저장 질문에 N 을 골라도 스캔 단계가 이미 저장한 행이 화면에 보인다, 기존 동작) → 범위 밖이라 `[VCP-037]` 로 등록하고 QA 에 기록. 지적 2(병합 갈래 단위 테스트 없음, 선택) → 미반영, QA S-1·S-2 가 `is_vcp` 열 없는 기존 로그와의 병합을 실측한다
+
+
+### [VCP-037] `run.py` 메뉴 2 의 저장 질문과 무관하게 스캔 결과가 이미 저장된다
+- 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-036]` 코드 리뷰 지적 1(2026-09-23). `scan_today_signals` 는 AI 분석 전에 `_append_to_log` 를 부른다(`engine/signal_tracker_analysis_mixin.py:325`). 그래서 `run.py:65-67` 의 「결과를 저장하시겠습니까? (y/N)」 에 N 을 골라도 AI 열이 없는 행이 이미 로그에 있다. `[VCP-036]` 전에는 `is_vcp` 가 없어 화면에 보이지 않았으나 이제는 VCP 화면과 날짜 목록에 AI 추천 없이 나타난다.
+- 범위: 스캔 단계의 저장을 없애고 메뉴 2 의 저장 질문에서만 쓰게 할지, 질문 문구를 실제 동작에 맞출지 정한다. `tests/verify_vcp_pipeline.py` 와 스캔 테스트가 기대하는 저장 동작을 함께 확인한다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] 리뷰 - [ ] QA
 
 ### [INFRA-079] 유물 사용량 저장소 `data/usage.db` 의 이메일 행 확인과 정리
 - 카테고리: 인프라 | 티어: T1 | 근거: `[FE-045]` 계획 검토(2026-09-22). `services/usage_tracker.py`(`usage_log`)와 `engine/services/usage_tracker.py`(`api_usage`)는 이메일을 기본 키로 쓰지만 어떤 운영 코드도 import 하지 않는 유물이다. 개발 기기의 `data/usage.db` 는 두 테이블 모두 행 0 이나 운영 서버의 파일은 이 기기에서 확인할 수 없다.

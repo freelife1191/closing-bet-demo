@@ -117,7 +117,8 @@ def test_scan_today_signals_builds_signal_and_applies_name_map(tmp_path):
     assert signal["name"] == "테스트주"
     assert signal["score"] >= 40
     assert signal["vcp_score"] > 0
-    assert (tmp_path / "signals_log.csv").exists()
+    # VCP 화면은 is_vcp 가 참인 행만 보인다([VCP-036])
+    assert pd.read_csv(tmp_path / "signals_log.csv")["is_vcp"].tolist() == [True]
 
 
 def test_update_open_signals_uses_latest_price_cache_for_exit(tmp_path):
