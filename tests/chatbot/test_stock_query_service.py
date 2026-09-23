@@ -77,6 +77,13 @@ def test_short_name_used_as_plain_word_is_not_a_stock_query():
         "DB 오류가 났어",
         "기아랑 현대차 비교",
         "현대기아 주가",
+        "VCP 분석 대상 주식 알려줘",
+        "한창 매수 중",
+        "동양 주식 시장",
+        "전방 수급",
+        "대상 주가지수 흐름",
+        "대상 주가 지수 흐름",
+        "대상 매도 시점",
     ]:
         assert _detect(message, _SHORT_NAMES) is None, message
 
@@ -86,6 +93,10 @@ def test_short_name_followed_by_query_signal_is_a_stock_query():
     assert _detect("기아는 어때", _SHORT_NAMES) == "기아:000270"
     assert _detect("LG 전망", _SHORT_NAMES) == "LG:003550"
     assert _detect("기아?", _SHORT_NAMES) == "기아:000270"
+    assert _detect("기아 주가는?", _SHORT_NAMES) == "기아:000270"
+    assert _detect("기아 실적발표", _SHORT_NAMES) == "기아:000270"
+    assert _detect("기아 배당금", _SHORT_NAMES) == "기아:000270"
+    assert _detect("LG 차트", _SHORT_NAMES) == "LG:003550"
 
 
 def test_six_digit_price_in_won_is_not_a_ticker():

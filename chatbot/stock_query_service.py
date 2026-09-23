@@ -15,11 +15,12 @@ from typing import Any, Callable, Dict, Optional
 _TICKER_REGEX = re.compile(r"(?<!\d)\d{6}(?!\d|\s*원)")
 # 두 글자 이하 종목명(대상·전방·TP 등)은 일반 단어로 더 자주 쓰인다. 단어 경계에 더해
 # 바로 뒤에 종목 질의 신호어가 오거나 메시지 전체가 그 이름일 때만 잡는다.
-# ponytail: 신호어 없는 질문(「기아 사도 돼?」·「기아랑 비교」)은 문맥이 빠진다. 안전한 쪽이라 둔다.
+# 주식·매수·매도·수급은 일반 명사 뒤에도 붙어(「대상 주식」·「한창 매수」·「전방 수급」) 신호어로 두지 않는다.
+# ponytail: 신호어 없는 질문(「기아 사도 돼?」·「기아 매수 타이밍」·「기아랑 비교」)은 문맥이 빠진다. 안전한 쪽이라 둔다.
 _SHORT_NAME_MAX_LEN = 2
 _WORD_CHAR = "가-힣A-Za-z0-9"
 _PARTICLE = "[은는이가을를의도에와과로]?"
-_QUERY_SIGNAL = "주가|주식|어때|전망|차트|실적|수급|시세|매수|매도|목표가|배당"
+_QUERY_SIGNAL = r"주가(?!\s*지수)|어때|전망|차트|실적|시세|목표가|배당"
 
 
 def _name_in_message(stock_name: str, message: str) -> bool:
