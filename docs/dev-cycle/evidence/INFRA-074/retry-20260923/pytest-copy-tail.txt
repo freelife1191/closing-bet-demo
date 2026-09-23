@@ -1,0 +1,3 @@
+FAILED tests/scripts/test_service_lifecycle.py::test_gitignore_hides_macos_appledouble_and_ds_store_files
+1 failed, 159 passed, 1 skipped in 50.47s
+exit=1

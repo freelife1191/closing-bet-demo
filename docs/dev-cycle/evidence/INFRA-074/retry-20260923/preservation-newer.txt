@@ -1,0 +1,6 @@
+./.gstack
+./.gstack/browse-daemon.log
+./.gstack/browse-console.log
+./.gstack/browse-audit.jsonl
+./.gstack/.gitignore
+./.gstack/browse-network.log
