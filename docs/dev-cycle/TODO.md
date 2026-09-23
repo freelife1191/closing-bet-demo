@@ -82,15 +82,6 @@
 - 범위: 동시 실행이 실제로 가능한 경로인지(스케줄러 리더 잠금, CLI 사용 빈도) 먼저 확인하고, 필요하면 `.env.lock` 처럼 파일 잠금으로 읽기·교체를 직렬화하는 안을 설계한다.
 - [ ] 동시 실행 가능성 확인 - [ ] 설계 승인(bounded) - [ ] 구현·검증
 
-### [VCP-037] `run.py` 메뉴 2 의 저장 질문과 무관하게 스캔 결과가 이미 저장된다
-- 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-036]` 코드 리뷰 지적 1(2026-09-23). `scan_today_signals` 는 AI 분석 전에 `_append_to_log` 를 부른다(`engine/signal_tracker_analysis_mixin.py:325`). 그래서 `run.py:65-67` 의 「결과를 저장하시겠습니까? (y/N)」 에 N 을 골라도 AI 열이 없는 행이 이미 로그에 있다. `[VCP-036]` 전에는 `is_vcp` 가 없어 화면에 보이지 않았으나 이제는 VCP 화면과 날짜 목록에 AI 추천 없이 나타난다.
-- 범위: 스캔 단계의 저장을 없애고 메뉴 2 의 저장 질문에서만 쓰게 할지, 질문 문구를 실제 동작에 맞출지 정한다. `tests/verify_vcp_pipeline.py` 와 스캔 테스트가 기대하는 저장 동작을 함께 확인한다.
-- 설계 승인: 2026-09-23 사용자 승인(bounded 설계, 대화에서 제시, 항목 선택 질문의 「VCP-037 (Recommended)」). `scan_today_signals` 의 `_append_to_log` 호출을 지워 스캔은 결과만 돌려주고, 저장은 메뉴 2 에서 y 를 골랐을 때만 한다. `tests/verify_vcp_pipeline.py` 도 로그를 쓰지 않게 된다(수동 검증 스크립트이므로 의도). 티어 T2: `engine/signal_tracker_analysis_mixin.py` 한 파일, 위험 경로 아님(`[VCP-036]` 과 같은 판정).
-- [x] 설계 승인(bounded) - [x] 구현·RED→GREEN(RED 는 스캔 뒤 `signals_log.csv` 존재 단언의 AssertionError) - [x] 리뷰 - [ ] QA
-- [x] `/ponytail-review`: Lean already. 지적 0건
-- [x] 정적 검증: `tests/engine` 668 passed · pyflakes 는 HEAD 에도 있던 미사용 import 1건(`_CSV_SOURCE_SQLITE_READY`)만 · 전체 pytest 는 격리 `git archive` 사본에서 2657 passed 25 failed 8 errors 3 skipped. 실패·오류 33건은 사본에 `frontend/node_modules` 가 없어 나는 Next 실행기·신원 교차 테스트와 gitignore 테스트이며, `node_modules` 를 링크해 해당 세 파일을 다시 돌리자 78 passed 1 failed(gitignore, 사본이 git 저장소가 아님, 원본 트리에서 통과)로 새 실패 0
-- [x] `closing-bet-reviewer`(vcp037-reviewer): APPROVE, 최고 심각도 low. 지적 1(`run.py:63` 이 저장 전에 `ai_reason` 을 50자로 자른다, 기존 동작) → 범위 밖이라 `[VCP-038]` 로 등록. 지적 2(`is_vcp` 의 CSV 왕복 단위 검사가 사라짐) → 반영, `test_append_to_log_keeps_both_rows_without_same_day_overlap` 에 `is_vcp` 열 없는 로그와 병합한 뒤 `safe_bool` 판정 단언을 더함. 반영 후 `tests/engine` 668 passed
-
 ### [VCP-038] `run.py` 메뉴 2 가 잘라 낸 `ai_reason` 을 로그에 저장한다
 - 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-037]` 코드 리뷰 지적 1(2026-09-23). `run.py:63` 은 출력용으로 `analyzed_df['ai_reason']` 을 50자로 자르고 "..." 을 붙인 뒤, 같은 프레임을 `_append_to_log` 로 저장한다. 값이 NaN 이면 문자열 "nan..." 이 된다. `[VCP-037]` 전에도 y 갈래가 같은 날짜 행을 이 프레임으로 대체했으므로 기존 동작이며, `[VCP-037]` 이후에는 이 프레임이 로그에 남는 유일한 사본이다.
 - 범위: 자르기를 출력용 복사본에만 적용하고 저장은 원래 값으로 하는 안. 회귀 테스트 여부는 설계 때 정한다.
