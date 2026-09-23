@@ -191,10 +191,10 @@ def test_get_messages_sanitized_cache_is_bounded_lru(monkeypatch, tmp_path):
     manager.get_messages(session_one)  # 최근 접근으로 갱신
     manager.get_messages(session_three)
 
-    assert len(manager._sanitized_messages_cache) == 2
-    assert session_one in manager._sanitized_messages_cache
-    assert session_three in manager._sanitized_messages_cache
-    assert session_two not in manager._sanitized_messages_cache
+    assert len(manager._cache.messages) == 2
+    assert session_one in manager._cache.messages
+    assert session_three in manager._cache.messages
+    assert session_two not in manager._cache.messages
 
 
 def test_add_message_auto_create_session_saves_once(monkeypatch, tmp_path):
@@ -262,10 +262,10 @@ def test_get_all_sessions_cache_is_bounded_lru(monkeypatch, tmp_path):
     manager.get_all_sessions(owner_id="owner-a")  # owner-a 최근 접근
     manager.get_all_sessions(owner_id="owner-c")
 
-    assert len(manager._session_list_cache) == 2
-    assert "owner-a" in manager._session_list_cache
-    assert "owner-c" in manager._session_list_cache
-    assert "owner-b" not in manager._session_list_cache
+    assert len(manager._cache.session_list) == 2
+    assert "owner-a" in manager._cache.session_list
+    assert "owner-c" in manager._cache.session_list
+    assert "owner-b" not in manager._cache.session_list
 
 
 def test_get_all_sessions_cache_invalidates_when_file_signature_changes(monkeypatch, tmp_path):
@@ -313,8 +313,8 @@ def test_reload_from_sqlite_skips_legacy_snapshot_rewrite(monkeypatch, tmp_path)
     assert baseline and baseline[0]["parts"][0]["text"] == "초기 메시지"
 
     monkeypatch.setattr(
-        reader,
-        "_atomic_write",
+        reader._snapshot,
+        "write",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("legacy snapshot rewrite should be skipped")),
     )
 
@@ -346,7 +346,7 @@ def test_history_manager_save_uses_sqlite_delta_batch_path(monkeypatch, tmp_path
         "save_history_sessions_to_sqlite",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("full sync should not run")),
     )
-    monkeypatch.setattr(manager, "_atomic_write", lambda *_a, **_k: None)
+    monkeypatch.setattr(manager._snapshot, "write", lambda *_a, **_k: None)
 
     manager._save()
 
@@ -360,11 +360,11 @@ def test_history_manager_skips_legacy_snapshot_on_frequent_sqlite_writes(monkeyp
     manager = chatbot_core.HistoryManager(user_id="u1")
     session_id = manager.create_session(owner_id="owner")
 
-    manager._legacy_snapshot_interval_seconds = 3_600.0
-    manager._last_legacy_snapshot_monotonic = time.monotonic()
+    manager._snapshot.interval_seconds = 3_600.0
+    manager._snapshot.last_monotonic = time.monotonic()
     monkeypatch.setattr(
-        manager,
-        "_atomic_write",
+        manager._snapshot,
+        "write",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("legacy snapshot write should be skipped")),
     )
 
@@ -383,11 +383,11 @@ def test_history_manager_detects_sqlite_wal_change_without_legacy_snapshot(monke
     baseline = reader.get_messages(session_id)
     assert baseline[-1]["parts"][0]["text"] == "초기 메시지"
 
-    writer._legacy_snapshot_interval_seconds = 3_600.0
-    writer._last_legacy_snapshot_monotonic = time.monotonic()
+    writer._snapshot.interval_seconds = 3_600.0
+    writer._snapshot.last_monotonic = time.monotonic()
     monkeypatch.setattr(
-        writer,
-        "_atomic_write",
+        writer._snapshot,
+        "write",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("legacy snapshot write should be skipped")),
     )
 

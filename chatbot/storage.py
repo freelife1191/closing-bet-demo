@@ -5,24 +5,25 @@
 """
 
 import logging
-import os
 import threading
-import time
 import uuid
-from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .storage_history_helpers import (
-    atomic_write_json,
-    backup_corrupt_history,
     has_meaningful_user_message,
     is_session_accessible_by_owner,
     load_history_sessions,
     locked,
     sanitize_session_messages,
     should_include_session_for_owner,
+)
+from .storage_history_parts import (
+    HistoryReadCache,
+    LegacySnapshot,
+    SessionDeltaLedger,
+    storage_signature,
 )
 from .storage_sqlite_helpers import (
     apply_history_session_deltas_in_sqlite,
@@ -47,19 +48,13 @@ class HistoryManager:
         self.data_dir = data_dir or (Path(__file__).parent.parent / "data")
         self.file_path = self.data_dir / "chatbot_history.json"
         self.db_path = resolve_chatbot_storage_db_path(self.data_dir)
-        self._legacy_snapshot_interval_seconds = self._resolve_legacy_snapshot_interval_seconds()
-        self._last_legacy_snapshot_monotonic: float | None = None
+        self._snapshot = LegacySnapshot.from_env(self.file_path)
+        self._cache = HistoryReadCache(
+            messages_max_entries=_SANITIZED_MESSAGES_CACHE_MAX_ENTRIES,
+            session_list_max_entries=_SESSION_LIST_CACHE_MAX_ENTRIES,
+        )
+        self._delta = SessionDeltaLedger()
         self._last_reload_signature: Any = None
-        self._sanitized_messages_cache: OrderedDict[
-            str, tuple[tuple[str, int], list[dict[str, Any]]]
-        ] = OrderedDict()
-        self._session_list_cache: OrderedDict[
-            str | None, tuple[int, list[dict[str, Any]]]
-        ] = OrderedDict()
-        self._session_list_version = 0
-        self._pending_changed_session_ids: set[str] = set()
-        self._pending_deleted_session_ids: set[str] = set()
-        self._pending_clear_all = False
         self._sync_snapshot_on_load = True
         # ponytail: 잠금을 쥔 채 SQLite busy 대기와 재적재를 하므로, 다른 워커가 쓰기 잠금을 오래 쥐면
         # 이 워커의 읽기 요청도 함께 기다린다. 지연이 보이면 읽기 경로를 잠금 밖 사본 읽기로 나눈다.
@@ -70,66 +65,7 @@ class HistoryManager:
         # 기동 시점의 읽기 실패도 재적재 실패와 같이 다룬다. 빈 사본으로 두고 쓰기를 막은 채 다음 접근에서 다시 읽는다.
         self._reload_failed = loaded is None
         self.sessions = loaded or {}
-        self._last_reload_signature = None if loaded is None else self._get_file_signature()
-
-    @staticmethod
-    def _resolve_legacy_snapshot_interval_seconds() -> float:
-        raw = os.getenv("CHATBOT_HISTORY_LEGACY_SNAPSHOT_INTERVAL_SECONDS", "15")
-        try:
-            value = float(raw)
-            return value if value >= 0 else 0.0
-        except (TypeError, ValueError):
-            return 15.0
-
-    @staticmethod
-    def _get_path_signature(path: Path) -> tuple[int, int, int] | None:
-        """스토리지 경로 변경 감지를 위한 시그니처(inode, mtime_ns, size)를 반환한다."""
-        try:
-            stat = path.stat()
-            return (int(stat.st_ino), int(stat.st_mtime_ns), int(stat.st_size))
-        except FileNotFoundError:
-            return None
-        except Exception as e:
-            logger.error(f"Failed to stat storage path ({path}): {e}")
-            return None
-
-    def _get_file_signature(self) -> Any:
-        signature = self._get_sqlite_storage_signature()
-        if signature is not None:
-            return signature
-        return self._get_path_signature(self.file_path)
-
-    def _get_sqlite_storage_signature(
-        self,
-    ) -> tuple[tuple[int, int, int] | None, tuple[int, int, int] | None, tuple[int, int, int] | None] | None:
-        db_sig = self._get_path_signature(self.db_path)
-        wal_sig = self._get_path_signature(self.db_path.with_name(f"{self.db_path.name}-wal"))
-        shm_sig = self._get_path_signature(self.db_path.with_name(f"{self.db_path.name}-shm"))
-        if db_sig is None and wal_sig is None and shm_sig is None:
-            return None
-        return (db_sig, wal_sig, shm_sig)
-
-    def _should_sync_legacy_snapshot(self, force: bool = False) -> bool:
-        if force or self._legacy_snapshot_interval_seconds <= 0:
-            return True
-        if self._last_legacy_snapshot_monotonic is None:
-            return True
-        return (time.monotonic() - self._last_legacy_snapshot_monotonic) >= self._legacy_snapshot_interval_seconds
-
-    def _sync_legacy_snapshot(self, data: Dict[str, Any], force: bool = False) -> bool:
-        if not self._should_sync_legacy_snapshot(force=force):
-            return False
-        self._atomic_write(data)
-        self._last_legacy_snapshot_monotonic = time.monotonic()
-        return True
-
-    def _atomic_write(self, data: Dict[str, Any]) -> None:
-        """히스토리 파일을 원자적으로 저장해 부분 저장/빈 파일 상태를 방지한다."""
-        atomic_write_json(self.file_path, data)
-
-    def _backup_corrupt_history(self) -> None:
-        """손상된 히스토리 파일을 백업하고 원본 경로는 재초기화 가능 상태로 만든다."""
-        backup_corrupt_history(self.file_path, logger)
+        self._last_reload_signature = None if loaded is None else storage_signature(self.db_path, self.file_path)
 
     def _load(self) -> Optional[Dict[str, Any]]:
         sqlite_sessions = load_history_sessions_from_sqlite(self.db_path, logger)
@@ -143,7 +79,7 @@ class HistoryManager:
                 # 되살린 메시지를 DB 에 남기지 못했다. 빈 사본을 쓰면 스냅샷이 덮이므로 읽기 실패로 다룬다.
                 return None
             if self._sync_snapshot_on_load:
-                self._sync_legacy_snapshot(sqlite_sessions, force=True)
+                self._snapshot.sync(sqlite_sessions, force=True)
             return sqlite_sessions
 
         legacy_sessions = load_history_sessions(self.file_path, logger)
@@ -190,11 +126,7 @@ class HistoryManager:
     def _save(self) -> bool:
         """SQLite 저장의 성패를 돌려준다. 실패해도 예외를 올리지 않고 스냅샷만 남긴다."""
         try:
-            has_delta = (
-                self._pending_clear_all
-                or bool(self._pending_changed_session_ids)
-                or bool(self._pending_deleted_session_ids)
-            )
+            has_delta = self._delta.has_delta
             # 전체 동기화 폴백은 두지 않는다. 낡은 사본을 통째로 쓰면 다른 워커가 만든 세션을 지우거나
             # 지운 세션을 되살린다([CHAT-033]). 같은 이유로 재적재에 실패한 사본도 쓰지 않는다.
             # 실패한 변경은 다음 재적재가 되돌린다.
@@ -205,9 +137,9 @@ class HistoryManager:
                 sqlite_saved = (not has_delta) or apply_history_session_deltas_in_sqlite(
                     self.db_path,
                     sessions=self.sessions,
-                    changed_session_ids=self._pending_changed_session_ids,
-                    deleted_session_ids=self._pending_deleted_session_ids,
-                    clear_all=self._pending_clear_all,
+                    changed_session_ids=self._delta.changed,
+                    deleted_session_ids=self._delta.deleted,
+                    clear_all=self._delta.clear_all,
                     logger=logger,
                 )
                 if not sqlite_saved:
@@ -215,16 +147,16 @@ class HistoryManager:
 
                 force_snapshot = (
                     (not sqlite_saved)
-                    or self._pending_clear_all
-                    or bool(self._pending_deleted_session_ids)
+                    or self._delta.clear_all
+                    or bool(self._delta.deleted)
                 )
-                self._sync_legacy_snapshot(self.sessions, force=force_snapshot)
+                self._snapshot.sync(self.sessions, force=force_snapshot)
             # 실패했으면 서명을 비워 다음 접근이 DB 를 다시 읽게 한다. 그래야 저장되지 않은 변경이
             # 이 워커의 응답에 남지 않는다.
-            self._last_reload_signature = self._get_file_signature() if sqlite_saved else None
-            self._pending_changed_session_ids.clear()
-            self._pending_deleted_session_ids.clear()
-            self._pending_clear_all = False
+            self._last_reload_signature = (
+                storage_signature(self.db_path, self.file_path) if sqlite_saved else None
+            )
+            self._delta.reset()
             return bool(sqlite_saved)
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
@@ -233,7 +165,7 @@ class HistoryManager:
     @locked
     def _reload_sessions(self, force: bool = False) -> None:
         """멀티 워커 환경에서 최신 파일 상태를 다시 로드한다."""
-        current_signature = self._get_file_signature()
+        current_signature = storage_signature(self.db_path, self.file_path)
         if not force and current_signature == self._last_reload_signature:
             return
 
@@ -247,50 +179,21 @@ class HistoryManager:
             self._last_reload_signature = None
             return
         self.sessions = loaded
-        self._last_reload_signature = self._get_file_signature()
-        self._sanitized_messages_cache.clear()
-        self._invalidate_session_list_cache()
+        self._last_reload_signature = storage_signature(self.db_path, self.file_path)
+        self._cache.invalidate_messages()
+        self._cache.invalidate_session_list()
 
     @locked
     def _invalidate_message_cache(self, session_id: str | None = None) -> None:
-        if session_id is None:
-            self._sanitized_messages_cache.clear()
-            return
-        self._sanitized_messages_cache.pop(session_id, None)
+        self._cache.invalidate_messages(session_id)
 
     @locked
     def _invalidate_session_list_cache(self) -> None:
-        self._session_list_cache.clear()
-        self._session_list_version += 1
-
-    @staticmethod
-    def _prune_ordered_cache(
-        cache: OrderedDict[Any, Any],
-        *,
-        max_entries: int,
-    ) -> None:
-        normalized_max_entries = max(1, int(max_entries))
-        while len(cache) > normalized_max_entries:
-            cache.popitem(last=False)
+        self._cache.invalidate_session_list()
 
     @locked
     def _mark_session_changed(self, session_id: str) -> None:
-        if not session_id:
-            return
-        self._pending_changed_session_ids.add(session_id)
-        self._pending_deleted_session_ids.discard(session_id)
-        self._pending_clear_all = False
-
-    def _mark_session_deleted(self, session_id: str) -> None:
-        if not session_id:
-            return
-        self._pending_deleted_session_ids.add(session_id)
-        self._pending_changed_session_ids.discard(session_id)
-
-    def _mark_clear_all(self) -> None:
-        self._pending_clear_all = True
-        self._pending_changed_session_ids.clear()
-        self._pending_deleted_session_ids.clear()
+        self._delta.mark_changed(session_id)
 
     @staticmethod
     def _now_iso() -> str:
@@ -335,21 +238,6 @@ class HistoryManager:
             return
         session["title"] = self._derive_auto_title(message)
 
-    @staticmethod
-    def _clone_sanitized_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """캐시 오염 방지를 위해 메시지 목록을 복제해 반환한다."""
-        cloned: list[dict[str, Any]] = []
-        for msg in messages:
-            cloned_parts = [
-                dict(part) if isinstance(part, dict) else part
-                for part in msg.get("parts", [])
-            ]
-            cloned_msg = {"role": msg.get("role", "user"), "parts": cloned_parts}
-            if "timestamp" in msg:
-                cloned_msg["timestamp"] = msg["timestamp"]
-            cloned.append(cloned_msg)
-        return cloned
-
     @locked
     def create_session(
         self,
@@ -379,7 +267,7 @@ class HistoryManager:
         self._reload_sessions()  # [Fix] Multi-worker Sync
         if session_id in self.sessions:
             del self.sessions[session_id]
-            self._mark_session_deleted(session_id)
+            self._delta.mark_deleted(session_id)
             self._invalidate_message_cache(session_id)
             self._invalidate_session_list_cache()
             self._save()
@@ -409,7 +297,7 @@ class HistoryManager:
         「내 대화 전부 지우기」는 clear_for_owner 를 쓴다.
         """
         self.sessions = {}
-        self._mark_clear_all()
+        self._delta.mark_clear_all()
         self._invalidate_message_cache()
         self._invalidate_session_list_cache()
         self._save()
@@ -434,7 +322,7 @@ class HistoryManager:
         ]
         for session_id in targets:
             del self.sessions[session_id]
-            self._mark_session_deleted(session_id)
+            self._delta.mark_deleted(session_id)
             self._invalidate_message_cache(session_id)
 
         if targets:
@@ -470,10 +358,9 @@ class HistoryManager:
     @locked
     def get_all_sessions(self, owner_id: str = None) -> list:
         self._reload_sessions()  # [Fix] Multi-worker Sync
-        cached = self._session_list_cache.get(owner_id)
-        if cached and cached[0] == self._session_list_version:
-            self._session_list_cache.move_to_end(owner_id)
-            return list(cached[1])
+        cached = self._cache.get_session_list(owner_id)
+        if cached is not None:
+            return cached
 
         # Filter out empty or ephemeral-only sessions AND filter by owner
         valid_sessions = []
@@ -494,13 +381,7 @@ class HistoryManager:
             key=lambda x: x.get("updated_at", ""),
             reverse=True,
         )
-        self._session_list_cache[owner_id] = (self._session_list_version, sorted_sessions)
-        self._session_list_cache.move_to_end(owner_id)
-        self._prune_ordered_cache(
-            self._session_list_cache,
-            max_entries=_SESSION_LIST_CACHE_MAX_ENTRIES,
-        )
-        return list(sorted_sessions)
+        return self._cache.put_session_list(owner_id, sorted_sessions)
 
     @locked
     def add_message(self, session_id: str, role: str, message: str, save: bool = True) -> None:
@@ -553,19 +434,10 @@ class HistoryManager:
                 str(session.get("updated_at", "")),
                 len(session.get("messages", [])),
             )
-            cached = self._sanitized_messages_cache.get(session_id)
-            if cached and cached[0] == fingerprint:
-                self._sanitized_messages_cache.move_to_end(session_id)
-                return self._clone_sanitized_messages(cached[1])
-
-            sanitized = sanitize_session_messages(session)
-            self._sanitized_messages_cache[session_id] = (fingerprint, sanitized)
-            self._sanitized_messages_cache.move_to_end(session_id)
-            self._prune_ordered_cache(
-                self._sanitized_messages_cache,
-                max_entries=_SANITIZED_MESSAGES_CACHE_MAX_ENTRIES,
-            )
-            return self._clone_sanitized_messages(sanitized)
+            cached = self._cache.get_messages(session_id, fingerprint)
+            if cached is not None:
+                return cached
+            return self._cache.put_messages(session_id, fingerprint, sanitize_session_messages(session))
         return []
 
     @locked

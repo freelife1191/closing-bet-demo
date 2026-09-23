@@ -58,20 +58,20 @@
     기본 15, 음수는 0, 해석 실패는 15 로 지금과 같다.
   - `write(data)`: `atomic_write_json` 호출. 테스트가 이 메서드를 몽키패치한다.
   - `sync(data, force=False) -> bool`: 간격 판정 뒤 `write` 를 부르고 시각을 기록한다.
-- `HistoryReadCache()`
-  - 상태: 정제 메시지 LRU(최대 2,048), 세션 목록 LRU(최대 256), 목록 버전
+- `HistoryReadCache(messages_max_entries, session_list_max_entries)`: 상한은 `chatbot/storage.py` 의 두 상수를 생성 때 넘긴다(테스트가 그 모듈에서 상수를 패치한다)
+  - 상태: 정제 메시지 LRU(최대 2,048), 세션 목록 LRU(최대 256). 종전의 목록 버전은 무효화가 목록을 비우면서 버전도 올려 버전 불일치 분기에 도달할 수 없었으므로 옮기지 않았다(심층 리뷰 L2)
   - `get_messages(session_id, fingerprint)` 는 적중 시 복제본을, 아니면 `None` 을 돌려준다.
     `put_messages(session_id, fingerprint, sanitized)` 는 저장 후 정리한다.
-  - `get_session_list(owner_id)`·`put_session_list(owner_id, sessions)` 는 버전이 같을 때만
-    적중하고 복사본을 돌려준다.
-  - `invalidate_messages(session_id=None)`, `invalidate_session_list()`(버전 증가)
+  - `get_session_list(owner_id)`·`put_session_list(owner_id, sessions)` 는 항목이 있으면 적중하고
+    얕은 사본을 돌려준다(빈 목록도 적중이다).
+  - `invalidate_messages(session_id=None)`, `invalidate_session_list()`(목록 비움)
 - `SessionDeltaLedger()`
   - 상태: `changed`, `deleted`, `clear_all`
   - `mark_changed`(빈 id 무시, `deleted` 에서 제거, `clear_all` 을 False 로 내림: 지금 동작
     유지), `mark_deleted`(빈 id 무시, `changed` 에서 제거), `mark_clear_all`, `has_delta`,
     `reset()`
 - `storage_signature(db_path, file_path)`: db·wal·shm 서명을 돌려주고 셋 다 없으면 JSON
-  파일의 서명을 돌려준다. `stat` 실패 로그도 지금과 같다.
+  파일의 서명을 돌려준다. `stat` 실패 로그의 문구는 같고 logger 이름만 `chatbot.storage_history_parts` 로 바뀐다.
 
 `HistoryManager` 는 `_snapshot`·`_cache`·`_delta` 를 조립하고 `sessions`, `_reload_failed`,
 `_last_reload_signature`, `_sync_snapshot_on_load`, `_lock` 을 계속 가진다. `_load`,
@@ -82,7 +82,7 @@
 
 ## 동작 보존
 
-동작 변화는 0 이다. 다음을 한 글자도 바꾸지 않고 옮긴다.
+동작 변화는 0 이다. 다음을 한 글자도 바꾸지 않고 옮긴다. 캐시 상한 상수를 prune 때가 아니라 생성 때 한 번 읽는 것과 로그의 logger 이름은 관찰 가능한 동작이 아니라서 예외로 둔다(구현 계획·코드 리뷰 기록).
 
 - `_save`: 재적재 실패 시 쓰기 거부, 델타가 없으면 SQLite 를 부르지 않음, 스냅샷 강제 조건
   (SQLite 실패·전체 삭제·세션 삭제), 실패하면 서명을 비움, 끝에 장부 초기화, 예외는 로그 후
@@ -90,7 +90,7 @@
 - `_reload_sessions`: 서명이 같으면 건너뜀, 재적재 중 스냅샷 쓰기 생략, 실패 시 서명을 비움,
   성공 시 두 캐시 무효화.
 - `_load`·`_restore_lost_messages_from_snapshot`: 호출 순서와 반환값 그대로.
-- 캐시 적중 조건(메시지는 `updated_at`·메시지 수 지문, 목록은 버전)과 복제 방식 그대로.
+- 캐시 적중 조건(메시지는 `updated_at`·메시지 수 지문, 목록은 무효화 전까지 항목 존재)과 복제 방식 그대로.
 
 ## 검증
 
