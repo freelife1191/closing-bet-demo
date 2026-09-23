@@ -70,12 +70,25 @@
 ## P1 — 이번 주기
 
 ### [FE-046] 활동 로그의 보관 기간을 날짜 기준으로 만들고 데이터 파일 권한을 좁힌다
-- 카테고리: 프론트엔드 공통 | 티어: T2 | 근거: `[FE-044]` 리뷰. `services/activity_logger.py:24` 의 `TimedRotatingFileHandler(when='midnight', backupCount=30)` 는 날짜가 아니라 파일 개수를 세며, 기록이 없는 날에는 회전 자체가 일어나지 않는다. 실측 결과 `logs/` 에 `user_activity.log.2026-02-22` 부터 20개 파일이 남아 보관 범위가 7개월이다. 그 파일에는 IP 주소와 챗봇 질문·답변이 각각 앞 2000자까지 들어 있다.
+- 카테고리: 프론트엔드 공통 | 티어: T3 (등록 시 T2, 위험 경로 `services/sqlite_utils.py` 로 상향) | 근거: `[FE-044]` 리뷰. `services/activity_logger.py:24` 의 `TimedRotatingFileHandler(when='midnight', backupCount=30)` 는 날짜가 아니라 파일 개수를 세며, 기록이 없는 날에는 회전 자체가 일어나지 않는다. 실측 결과 `logs/` 에 `user_activity.log.2026-02-22` 부터 20개 파일이 남아 보관 범위가 7개월이다. 그 파일에는 IP 주소와 챗봇 질문·답변이 각각 앞 2000자까지 들어 있다.
 - 함께: `data/paper_trading.db`, `data/usage.db`, `data/runtime_cache.db`, `logs/user_activity.log` 의 권한이 모두 0644 이며 이를 좁히는 코드가 저장소에 없다.
 - 문제: `[FE-044]` 의 개인정보처리방침은 이 실제 동작을 사실대로 적었으므로 지금은 거짓이 아니다. 다만 「최근 30일분의 파일」이라는 서술은 이용자가 기대하는 보관 기간보다 길게 남을 수 있다는 뜻이며, 날짜 기준 삭제를 넣으면 방침을 더 짧고 분명하게 고칠 수 있다.
 - 범위: 날짜를 기준으로 오래된 활동 로그 파일을 지우는 갈래 추가, 개인정보가 담긴 파일의 권한을 0600 으로 좁히는 갈래 추가, 두 가지를 고정하는 회귀 테스트, 그리고 `frontend/src/app/(legal)/privacy/page.tsx` 3항 문안의 갱신.
-- QA 시나리오: 오래된 날짜의 활동 로그 파일을 만들어 두고 기동하면 기준 기간이 지난 파일이 사라지며, 새로 만들어진 데이터베이스 파일의 권한이 0600 이다.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+- QA 시나리오: 오래된 수정 시각의 활동 로그 파일을 만들어 두고 기동하면(챗봇 블루프린트 등록 때 로거가 만들어짐) 요청 없이도 기준 기간이 지난 파일이 사라지고, 새로 만들어진 데이터베이스·활동 로그 파일의 권한이 0600 이다.
+- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 09:57
+  | 범위: 활동 로그를 회전 파일의 마지막 수정 시각 기준 30일로 삭제(기동 시·회전 시), `connect_sqlite`·활동 로그·`atomic_write_json` 의 파일을 0600 으로, 개인정보처리방침 3항·10항·시행일 문안, 회귀 테스트
+  | 사실 정정: 삭제 시점을 계획 검토 B2 에 따라 한때 「워커의 첫 기록 시」로 고쳤으나, 코드 리뷰(fe046-reviewer)가 `create_app()` 실측으로 챗봇 블루프린트 등록 때 로거가 만들어짐을 확인해 승인 원문의 「기동 시」로 되돌림. 사용자 결정이 아닌 사실 정정이며 범위는 바뀌지 않음
+  | 범위 확장: 계획 검토 B1(늦게 회전하는 워커가 날짜 붙은 파일에 계속 써서 그 파일이 영원히 지워지지 않음) 뒤 사용자가 AskUserQuestion 에 「이번에 함께 고침 (Recommended)」로 응답. `doRollover` 재정의로 이 항목에서 고친다
+  | 실제 대화 근거: 현재 세션에서 bounded 설계를 제시한 뒤 사용자가 AskUserQuestion 에 「30일로 진행 (Recommended)」로 응답. 첫 기동이나 전체 pytest 로 원본 `logs/` 의 30일 지난 회전 파일이 지워진다는 영향을 설계에 명시함
+- 계획: `docs/superpowers/plans/2026-09-23-fe-046-activity-log-retention.md`. 읽은 정본: `.claude/skills/closing-bet-python/SKILL.md`, `.claude/skills/closing-bet-nextjs/SKILL.md`, `.claude/skills/dev-cycle/references/frontend-skills.md` §2, `frontend/node_modules/next/dist/docs/01-app/01-getting-started/03-layouts-and-pages.md`(서버 컴포넌트 page 의 문안만 바뀜). vendor 스킬은 해당 코드 없음
+- [x] 설계 승인(bounded, T3)
+- [x] 계획 검토(`oh-my-claudecode:critic`, fe046-plan-critic): 1차 REVISE(B1 다중 워커 회전 경합으로 파일이 영원히 남음, B2 삭제 시점은 기동이 아니라 각 워커의 첫 기록, B3 회전 경로 테스트 부재, R1~R7) → 전부 반영(B1 은 사용자 범위 확장 승인) → 2차 ACCEPT-WITH-RESERVATIONS. 잔여 1(Task 3 테스트 파일 확정) 반영, 잔여 2(읽기 전용으로만 여는 DB 는 0644 로 남을 수 있음)는 QA 에서 `data/*.db` 권한 실측으로 확인, 잔여 3(umask 077 환경에서 새 파일 테스트가 변이를 못 잡음)은 기존 파일 테스트가 0644 를 명시해 변이를 잡으므로 미반영
+- [x] 구현·RED→GREEN: 신규 테스트 12건(활동 로그 6, SQLite 4, 챗봇 JSON 2) 가운데 구현 전 SQLite 3건·JSON 2건 실패와 활동 로그 모듈 import 실패, 읽기 전용 1건 통과를 확인한 뒤 구현. `services/activity_logger.py` 에 `RetentionTimedRotatingFileHandler`(수정 시각 30일 삭제 `prune_expired`, 조기 반환 뒤 재열기 `doRollover`, 0600 `_open`), `services/sqlite_utils.py` 에 `_restrict_sqlite_file_mode`(쓰기 연결 직후, 경로당 경고 한 번), `atomic_write_json` 을 0600 `os.open` 으로. 방침 3항·10항·시행일과 vitest 단언. 변이 6종(이름 날짜 기준, 재열기 제거, 회전 삭제 제거, `_open` chmod 제거, SQLite 호출 제거, JSON `open()` 복귀) 모두 해당 테스트 실패·원복. 테스트 모듈 import 로 원본 `logs/` 의 2026-02~05 회전 파일 9개가 지워지고 남은 11개와 기준 파일이 0600 이 됨을 확인(승인된 영향). 범위 밖 발견은 `[INFRA-081]` 로 등록
+- [x] `/ponytail-review`: 같은 문맥에서 직접 수행, `Lean already. Ship.`(net -0)
+- [x] `closing-bet-reviewer`(fe046-reviewer): CHANGES_REQUIRED(medium 1: 삭제 시점이 첫 기록이 아니라 기동 시, low 4: 「조금 더」 상한 없음, 생성 뒤 chmod 틈, DB 가 0600 이면 남은 -wal·-shm 미확인, 표준 라이브러리의 동시 회전 경합) → 1·2 문안·단언·계획·TODO 정정, 3 `ponytail:` 주석, 4 QA 실측으로, 5 기존 결함이라 기록만(마이크로초 창, 보관을 줄이는 방향) → APPROVE. 잔여 low(승인 기록 원문 보존)는 정정 문구로 반영
+- [x] `/review`(T3, oh-my-claudecode:critic 레인이 review 스킬 절차 수행, fe046-deep-review): 1차 REVISE. MEDIUM-1(30일 넘게 기록이 없던 기준 파일은 날짜 접미사가 없어 기동 시 정리에서 빠지는데 방침은 재기동으로 지워진다고 읽힘. GET 은 기록되지 않아 실제로 생김) → `ActivityLogger.__init__` 가 기준 파일의 날짜가 지났으면 기동 때 `doRollover()`(정리 포함)를 부르도록 고침, 테스트 1건 RED→GREEN. LOW-1(수정 전 늦은 워커가 12일간 쓴 `user_activity.log.2026-09-09` 는 mtime 09-21 이라 09-09 기록이 약 42일 남음, 과도기 한 파일이며 10-21 에 자연히 삭제) 기록만. LOW-2 는 MEDIUM-1 의 테스트로 해소 → 2차 ACCEPT-WITH-RESERVATIONS. LOW-A(기동 시 회전으로 두 워커의 동시 회전 창이 재기동마다 열림, 늦은 쪽 `os.rename` 이 전날 파일을 빈 기준 파일로 덮어씀) → `rotate` 를 `os.link`+`os.unlink` 로 재정의(대상이 있으면 그대로 둠), 테스트 RED→GREEN. LOW-B(기록 없던 날 재기동하면 0바이트 날짜 파일, 0600·30일 뒤 삭제) 조치 없음 → 3차 확인 ACCEPT-WITH-RESERVATIONS, LOW(원본이 이미 옮겨졌으면 `os.link` 가 FileNotFoundError, 기동 중이면 챗봇 라우트의 try 가 삼켜 그 워커는 활동 로그를 남기지 않음) → 권고대로 `except (FileExistsError, FileNotFoundError)` 한 줄, 테스트 RED→GREEN. 하드 링크를 지원하지 않는 파일 시스템은 운영 로컬 디스크라 해당 없음(참고)
+- [x] 정적 검증(리뷰 반영 뒤 최종): `pytest -q` 2644 passed 2 skipped exit 0, `npm run type-check` exit 0, `npm run test` 679 passed exit 0. 활동 로그 관련 세 파일은 저장소 밖 cwd 에서 65 passed
+- [ ] QA
 
 ## P2 — 대기
 
@@ -157,4 +170,9 @@
 - 함께(심층 리뷰 낮음): 6자리 숫자 경계가 `(?<!\d)\d{6}(?!\d)` 로 바뀌어 「150000원」처럼 조사·단위가 붙은 6자리 숫자도 그 값이 티커면 잡힌다. 가격을 적은 질문이 드문 티커와 겹치는지 함께 본다. 티커 갈래가 이름 갈래보다 먼저 돌아서, 「삼성전자 298000원 가면 팔까?」처럼 종목명이 있어도 가격이 티커와 같으면 다른 종목의 문맥이 실린다(천 원 단위 10만~99만9천 원 가운데 9개 값이 티커와 겹침, 만 원 단위는 0개). 또 두 글자 이하 이름 뒤에는 조사 한 글자만 허용해 「기아랑 비교」·「기아에서 신차」는 잡히지 않는다(문맥이 빠지는 안전한 쪽).
 - 범위: 일반 단어와 겹치는 짧은 종목명의 처리 방향 결정(흔한 단어 제외 목록, 「종목·주가·어때」 같은 종목 질의 신호와 함께 나올 때만 매칭, 또는 티커·긴 이름만 허용) 과 회귀 테스트.
 - QA: 격리 /chatbot 에서 「VCP 분석 대상 종목 알려줘」를 보내고 조립된 프롬프트에 `[종목 조회 컨텍스트]` 가 없음을 확인한다. 「대상 주가 어때?」는 여전히 대상의 문맥을 싣는다.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [INFRA-081] 활동 로그 밖의 로그 세 개가 0644 로 남는다
+- 카테고리: 인프라 | 티어: T2 | 근거: `[FE-046]` 계획 검토 R4. `[FE-046]` 은 활동 로그·SQLite DB·챗봇 JSON 만 0600 으로 좁혔다. `logs/backend.log`·`logs/frontend.log`(`restart_all.sh:113` 의 셸 리다이렉트, gunicorn 의 요청 로그와 예외 메시지), `logs/critical_errors.log`(`app/__init__.py:276`, 예외 메시지), gunicorn access 로그(IP)는 여전히 0644 로 만들어진다. 그래서 개인정보처리방침 10항은 권한 제한 범위를 「활동 로그와 데이터베이스 파일」로 좁혀 적었다.
+- 범위: 세 로그가 어떤 개인정보를 담는지 실측하고, 담는다면 생성 지점(셸 `umask`, `open` 의 모드)에서 0600 으로 만드는 방안과 회귀 테스트. 방침 10항 문안을 넓힐지 함께 정한다.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA

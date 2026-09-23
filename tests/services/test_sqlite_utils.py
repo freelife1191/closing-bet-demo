@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import stat
 import shutil
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
@@ -1157,3 +1158,51 @@ def test_prune_rows_by_updated_at_if_needed_rejects_invalid_identifier(tmp_path:
                 table_name="sample_cache;",
                 max_rows=1,
             )
+
+
+def _file_mode(path: str) -> int:
+    return stat.S_IMODE(os.stat(path).st_mode)
+
+
+def test_connect_sqlite_creates_db_as_0600(tmp_path: Path):
+    db = tmp_path / "new.db"
+    with sqlite_utils.connect_sqlite(str(db)) as conn:
+        conn.execute("CREATE TABLE t (x)")
+    assert _file_mode(str(db)) == 0o600
+
+
+def test_connect_sqlite_narrows_existing_db_and_wal_files(tmp_path: Path):
+    db = tmp_path / "old.db"
+    raw = sqlite3.connect(db)
+    try:
+        raw.execute("PRAGMA journal_mode=WAL")
+        raw.execute("CREATE TABLE t (x)")
+        raw.commit()
+        for suffix in ("", "-wal", "-shm"):
+            # raw 연결이 열려 있으므로 -wal·-shm 이 남아 있다.
+            assert os.path.exists(f"{db}{suffix}")
+            os.chmod(f"{db}{suffix}", 0o644)
+        with sqlite_utils.connect_sqlite(str(db)) as conn:
+            conn.execute("INSERT INTO t VALUES (1)")
+        for suffix in ("", "-wal", "-shm"):
+            assert _file_mode(f"{db}{suffix}") == 0o600
+    finally:
+        raw.close()
+
+
+def test_connect_sqlite_new_wal_inherits_0600(tmp_path: Path):
+    db = tmp_path / "wal.db"
+    with sqlite_utils.connect_sqlite(str(db), pragmas=("PRAGMA journal_mode=WAL",)) as conn:
+        conn.execute("CREATE TABLE t (x)")
+        conn.execute("INSERT INTO t VALUES (1)")
+        conn.commit()
+        assert _file_mode(f"{db}-wal") == 0o600
+
+
+def test_connect_sqlite_read_only_does_not_change_mode(tmp_path: Path):
+    db = tmp_path / "ro.db"
+    sqlite3.connect(db).close()
+    os.chmod(db, 0o644)
+    with sqlite_utils.connect_sqlite(str(db), read_only=True):
+        pass
+    assert _file_mode(str(db)) == 0o644

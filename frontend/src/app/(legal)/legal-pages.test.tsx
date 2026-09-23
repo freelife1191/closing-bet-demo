@@ -57,11 +57,15 @@ describe('개인정보처리방침', () => {
   it('실제로 저장하는 항목과 보관 기간을 사실대로 적는다', () => {
     const { container } = render(<PrivacyPage />);
     const text = container.textContent ?? '';
-    // services/activity_logger.py 의 TimedRotatingFileHandler 는 backupCount=30 이며
-    // 날짜가 아니라 파일 개수를 센다. 기록이 없는 날에는 회전하지 않으므로 달력 30일이
-    // 아니다. 이 사실을 감추면 방침이 거짓이 되므로 해당 문장을 통째로 고정한다.
-    expect(text).toContain('접속 기록이 있었던 날을 기준으로 최근 30일분의 파일을 보관하고');
-    expect(text).toContain('실제 보관 범위는 달력상 30일보다 길어질 수 있습니다');
+    // services/activity_logger.py 는 회전 파일을 마지막 수정 시각 기준
+    // ACTIVITY_LOG_RETENTION_DAYS(30) 일로 지운다. 챗봇 블루프린트를 등록할 때 전역 로거가
+    // 만들어지므로 기동 때 한 번, 그 뒤로는 자정 뒤 첫 기록(회전) 때 지운다. 삭제가 늦어지는
+    // 경우까지 사실대로 적는지 고정한다.
+    expect(text).toContain('마지막 기록 후 30일이 지난 파일');
+    expect(text).toContain('서버를 다시 시작할 때와 날짜가 바뀐 뒤 처음 기록을 남길 때');
+    expect(text).toContain('접속과 서버 재시작이 모두 없는 기간에는 그 기간만큼 삭제가 늦어집니다');
+    // 10항의 권한 제한은 실제로 0600 을 거는 두 종류로 범위를 좁혀 적는다.
+    expect(text).toContain('활동 로그와 데이터베이스 파일은 서버를 실행하는 계정만 읽고 쓸 수 있도록');
     // 이용을 멈추는 것만으로는 기록이 지워지지 않는다는 사실을 밝힌다.
     expect(text).toContain('이미 저장된 기록이 지워지지 않습니다');
     // 챗봇 대화가 활동 로그에도 남는다는 사실을 감추지 않는다.

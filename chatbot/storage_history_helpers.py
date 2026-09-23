@@ -38,7 +38,9 @@ def atomic_write_json(file_path: Path, data: Dict[str, Any]) -> None:
 
     tmp_path = file_path.with_name(f"{file_path.name}.tmp-{uuid.uuid4().hex}")
     try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        # 대화 내용이 담기므로 서버 계정만 읽도록 0600 으로 만든다. os.replace 가 권한을 옮긴다.
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())

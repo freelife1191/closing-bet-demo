@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
+import logging
 import os
 import re
 import sqlite3
@@ -33,6 +34,9 @@ SQLITE_BALANCED_PRAGMAS: tuple[str, ...] = (
     "PRAGMA temp_store=MEMORY",
     "PRAGMA cache_size=-8000",
 )
+logger = logging.getLogger(__name__)
+
+_SQLITE_MODE_WARNED: set[str] = set()
 _SQLITE_PARENT_DIRS_LOCK = threading.Lock()
 _SQLITE_PARENT_DIRS_READY: OrderedDict[str, None] = OrderedDict()
 _SQLITE_PARENT_DIRS_MAX_ENTRIES = 2_048
@@ -364,6 +368,25 @@ def _ensure_sqlite_parent_dir(db_path: str) -> None:
             _mark_parent_dir_ready_locked(parent_key)
 
 
+def _restrict_sqlite_file_mode(connect_path: str) -> None:
+    """개인정보가 담길 수 있는 DB 파일을 서버 계정만 읽도록 0600 으로 좁힌다."""
+    db_key = _normalize_sqlite_filesystem_key(connect_path)
+    if db_key is None:
+        return
+    try:
+        if not os.stat(db_key).st_mode & 0o077:
+            return
+        # -wal·-shm 은 SQLite 가 DB 파일의 권한을 따라 만든다. 이미 있던 것만 함께 좁힌다.
+        for path in (db_key, f"{db_key}-wal", f"{db_key}-shm"):
+            if os.path.exists(path):
+                os.chmod(path, 0o600)
+    except OSError as error:
+        # 다른 소유자의 파일처럼 영구히 실패하면 연결마다 경고가 쌓이지 않게 경로당 한 번만 남긴다.
+        if db_key not in _SQLITE_MODE_WARNED:
+            _SQLITE_MODE_WARNED.add(db_key)
+            logger.warning("SQLite 파일 권한을 좁히지 못했습니다(%s): %s", db_key, error)
+
+
 def _normalize_sqlite_identifier(identifier: str, *, label: str) -> str:
     normalized = str(identifier).strip()
     if not normalized or _SQLITE_IDENTIFIER_PATTERN.fullmatch(normalized) is None:
@@ -539,6 +562,10 @@ def connect_sqlite(
             cached_statements=normalized_cached_statements,
             uri=is_uri,
         )
+        if not read_only:
+            # ponytail: 파일을 umask 로 만든 뒤 좁히므로 새 DB 는 잠깐 0644 다(그때는 비어 있음).
+            # 다른 계정이 서버에 로그인한다면 os.open(0o600) 으로 미리 만든다.
+            _restrict_sqlite_file_mode(connect_path)
         applied_persistent_pragmas: list[str] = []
         try:
             for pragma_sql in normalized_pragmas:
