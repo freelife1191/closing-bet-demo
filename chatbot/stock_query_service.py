@@ -21,6 +21,9 @@ _SHORT_NAME_MAX_LEN = 2
 _WORD_CHAR = "가-힣A-Za-z0-9"
 _PARTICLE = "[은는이가을를의도에와과로]?"
 _QUERY_SIGNAL = r"주가(?!\s*지수)|어때|전망|차트|실적|시세|목표가|배당"
+# 「분석 대상 전망」처럼 수식 명사 뒤의 짧은 이름은 복합 명사의 일부다.
+# ponytail: 이름 자체가 일반 명사인 질문(「진도 어때」·「노을 어때」)은 여전히 잡힌다. 앞말 목록으로는 못 막는다.
+_MODIFIER_BEFORE = re.compile(r"(?:분석|투자|관심|매수|매도|편입|검토|적용|지원)\s*$")
 
 
 def _name_in_message(stock_name: str, message: str) -> bool:
@@ -30,7 +33,10 @@ def _name_in_message(stock_name: str, message: str) -> bool:
     if re.fullmatch(rf"\s*{name}{_PARTICLE}\s*[?!.]*\s*", message):
         return True
     pattern = rf"(?<![{_WORD_CHAR}]){name}{_PARTICLE}\s*(?:{_QUERY_SIGNAL})"
-    return re.search(pattern, message) is not None
+    return any(
+        not _MODIFIER_BEFORE.search(message, 0, match.start())
+        for match in re.finditer(pattern, message)
+    )
 
 
 def detect_stock_query_from_stock_map(

@@ -84,6 +84,11 @@ def test_short_name_used_as_plain_word_is_not_a_stock_query():
         "대상 주가지수 흐름",
         "대상 주가 지수 흐름",
         "대상 매도 시점",
+        "VCP 분석 대상 전망",
+        "투자 대상 실적은?",
+        "관심 대상 차트 보여줘",
+        "매수  대상 어때",
+        "편입 대상 전망",
     ]:
         assert _detect(message, _SHORT_NAMES) is None, message
 
@@ -97,6 +102,10 @@ def test_short_name_followed_by_query_signal_is_a_stock_query():
     assert _detect("기아 실적발표", _SHORT_NAMES) == "기아:000270"
     assert _detect("기아 배당금", _SHORT_NAMES) == "기아:000270"
     assert _detect("LG 차트", _SHORT_NAMES) == "LG:003550"
+    assert _detect("요즘 기아 전망 어때?", _SHORT_NAMES) == "기아:000270"
+    assert _detect("오늘 대상 주가", _SHORT_NAMES) == "대상:001680"
+    assert _detect("분석 말고 기아 전망", _SHORT_NAMES) == "기아:000270"
+    assert _detect("분석 대상 전망 말고 대상 주가 어때", _SHORT_NAMES) == "대상:001680"
 
 
 def test_six_digit_price_in_won_is_not_a_ticker():
