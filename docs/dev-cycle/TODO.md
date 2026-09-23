@@ -71,23 +71,6 @@
 
 ## P2 — 대기
 
-### [VCP-035] `signals_log.csv` 의 읽기·병합·교체 사이에 잠금이 없다
-- 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-034]` 코드 리뷰 지적 3(확신도 낮음, 기존 문제). `SignalTracker._append_to_log`·`update_open_signals` 와 `scripts/init_data.py` 의 `create_signals_log` 는 파일을 읽고 병합한 뒤 교체하는 동안 잠금을 잡지 않는다. 스케줄러 파이프라인과 `run.py` 메뉴 2 가 동시에 돌면 한쪽이 추가한 행이 사라질 수 있다. `[VCP-034]` 가 빠른 append 분기를 없애 모든 추가가 이 창을 지난다. 실측하지 않았다.
-- 범위: 동시 실행이 실제로 가능한 경로인지(스케줄러 리더 잠금, CLI 사용 빈도) 먼저 확인하고, 필요하면 `.env.lock` 처럼 파일 잠금으로 읽기·교체를 직렬화하는 안을 설계한다.
-- 티어 재판정: T3. `scripts/init_data.py` 가 `tier-rules.md` §2 「스케줄러와 데이터 적재」에 있다. 그래서 구현 계획(`docs/superpowers/plans/2026-09-23-vcp-035-signals-log-lock.md`)과 critic 검토를 거친다
-- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 19:31(설계와 범위 수정 모두 이 시각 이전 응답)
-  | 범위: `signals_log.csv` 를 쓰는 다섯 경로(`create_signals_log`, `update_vcp_signals_recent_price`, `SignalTracker.update_open_signals`·`_append_to_log`, 실패 AI 재분석)에 `fcntl` 파일 잠금 `signals_log_lock` 하나를 건다. 앞의 셋은 읽기부터 교체까지 잠그고, 시세 갱신과 재분석은 느린 작업을 잠금 밖에서 한 뒤 잠금 안에서 다시 읽어 병합·교체한다. 재분석 병합은 index 의 `ticker`·`signal_date` 가 다르면 덮지 않고 오류로 끝낸다. 시세 갱신의 비원자적 `to_csv` 를 원자적 쓰기로 바꾼다
-  | 실제 대화 근거: 2026-09-23 사용자 「VCP-035 (Recommended)」 항목 선택, 설계에 「승인 (Recommended)」, 재분석·시세 갱신 범위 수정에 「승인 (Recommended)」
-- [x] 동시 실행 가능성 확인: 17시 스케줄러, 관리자 Refresh VCP·데이터 갱신·실패 AI 재분석, `run.py` 메뉴 2 가 서로를 배타하지 않는다. `VCP_STATUS` 는 확인·설정이 원자적이지 않고 스케줄러·갱신 파이프라인을 보지 않으며, 워커가 둘이다
-- [x] 설계 승인(bounded, T3 계획 문서 동반)
-- [x] 구현 계획과 critic 검토: `oh-my-claudecode:critic` ACCEPT-WITH-RESERVATIONS. 교착 경로·범위 이탈 없음. R1(재분석 테스트 열을 `ai_action` 으로 확정)·R2(대기 검사 스레드 daemon)·R3(잠금 중 표지 행을 쓰고 남았는지 단언)·R5(호출자 수 서술 정정) 반영. R4(재분석 중 생성이 끝나면 재정렬로 재분석이 항상 오류로 끝나고 AI 결과가 남지 않음)는 승인 범위의 동작이라 유지하고 오류 문구에 재실행 안내를 넣음
-- [x] 구현·RED→GREEN: 잠금 도우미만 넣은 상태에서 신규 6건 가운데 4건(재분석 행 불일치, 생성·시세 갱신·`_append_to_log`)이 의도한 이유로 실패, 2건(잠금 배타, 행 일치 시 병합) 통과. 구현 뒤 6건 통과. 기존 테스트 세 곳(`test_signal_tracker_refactor.py` 2, `test_init_data_vcp_scheduler.py` 1)은 원자적 쓰기 실패 뒤 `signals_log.csv.*` 임시 파일이 없는지 보는 단언이 새 잠금 파일 `signals_log.csv.lock` 에 걸려 실패했다. 임시 파일 검사라는 의도는 두고 잠금 파일만 제외함. 범위 9개 파일 107 통과
-- [x] `/ponytail-review`(`oh-my-claudecode:code-reviewer` 레인, net -26): 새로 만든 `signals_log_lock` 이 `services/common_env_service.py` 의 `_env_file_lock`(같은 `<경로>.lock` flock, 0600·`O_NOFOLLOW`)과 같은 일이라 지우고 별칭 import 로 재사용. 겹치는 잠금 배타 단독 테스트 삭제(경로별 대기 검사 셋이 같은 성질을 증명). `LOCK_UN` 생략 지적은 도우미 삭제로 해소
-- [x] `closing-bet-reviewer`: APPROVE(max low). 교착 없음, 시세 갱신 저장 바이트 동일, 행 일치 검사 거짓 양성 없음(dtype 왕복 대조). L3(`_env_file_lock` docstring 에 CSV 호출자 한 줄)·L4(`update_open_signals` 대기 검사 추가, mixin 잠금을 `nullcontext` 로 바꾼 변이에서 `update_open_signals`·`_append_to_log` 검사 둘 다 실패 확인)·L6(계획 문서에 구현 메모) 반영. L1(시세 갱신 뒤 파일 모드가 0600, 다른 쓰기 경로는 이미 그렇다)·L2(잠금 파일이 처음 만든 계정 소유 0600 이라 다른 계정으로 CLI 를 돌리면 EACCES. 운영은 한 계정)·L5(행 불일치 문구가 영어. 같은 함수의 기존 index 불일치 문구와 같은 형식)는 기록만 함
-- [x] `/review`(`oh-my-claudecode:code-reviewer` opus 레인): 1차 CHANGES REQUESTED. M1(재분석 병합이 AI 호출 전 스냅샷의 모든 행 AI 열을 덮어, 그 사이 다른 실행이 저장한 비대상 행을 옛 값으로 되돌림. 리뷰어 하네스로 재현)은 병합·행 검사를 `apply_rows` 의 index 로 좁혀 반영(`target_indexes` 키워드, 신규 테스트 TypeError RED→GREEN). L1(예외 갈래에서 잠금을 열지 못하면 False 대신 OSError)은 `try/except OSError` 로 반영(링크 잠금 파일 테스트, except 무력화 변이에서 실패 확인). L2(재분석 쓰기 잠금의 대기 검사 없음)는 analyzer·라우트 입력 전체를 가짜로 세워야 해서 미반영하고 M1 테스트로 병합 정확성만 고정. 수정분 재검토 APPROVE(`force_provider="second"` 의 빈 `apply_rows`, 정수가 아닌 index, `target_indexes` 를 넘기지 않는 기존 호출자 모두 직접 실행해 이상 없음). 범위 밖 발견은 `[VCP-039]` 로 등록
-- [x] 정적 검증: 신규 `tests/services/test_vcp_signals_log_lock_refactor.py` 8 통과, 범위 묶음 통과, 원본 트리 전체 `pytest -q` 2709 passed 2 skipped exit 0(리뷰 반영 뒤 코드 기준). frontend 변경 없음
-- [ ] QA(격리 사본 하네스. 화면 경로는 Refresh VCP·재분석이라 금지 조작)
-
 ### [VCP-039] 취소한 재분석이 아직 돌지 않은 행에 실패 값을 기록한다
 - 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-035]` 심층 리뷰 참고 사항(2026-09-23, 종전부터 있던 동작). 백그라운드 실패 AI 재분석을 도중에 취소하면 `execute_vcp_failed_ai_reanalysis`(`services/kr_market_vcp_reanalysis_service.py`)가 `apply_rows` 전체를 `_apply_vcp_reanalysis_updates` 에 넘겨, 아직 분석하지 않은 행에도 실패 값(`ai_action` 등)을 쓰고 병합한다. 그 사이 다른 실행이 같은 행에 성공 결과를 저장했으면 실패 값으로 덮인다. 실측하지 않았다.
 - 범위: 취소 시 실제로 결과를 받은 행만 `apply_rows` 로 남기는 규칙과 회귀 테스트. 취소 응답의 집계 문구가 바뀌는지 함께 본다.
