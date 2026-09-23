@@ -88,7 +88,7 @@ def run_jongga_v2_background_pipeline(
     try:
         _reload_engine_submodules()
 
-        from engine.generator import run_screener, save_result_to_json
+        from engine.generator import run_screener
 
         result = _run_coro_in_fresh_loop(
             run_screener(
@@ -100,7 +100,6 @@ def run_jongga_v2_background_pipeline(
         )
 
         if result:
-            save_result_to_json(result)
             _send_jongga_notification_from_result(result, logger)
 
         logger.info("[Background] Jongga V2 Engine Completed Successfully.")

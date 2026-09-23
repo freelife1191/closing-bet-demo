@@ -1663,35 +1663,11 @@ def create_jongga_v2_latest():
         from engine.generator import run_screener
         import asyncio
 
-        # Run analysis (Sync wrapper for Async)
-        # run_screener returns ScreenerResult object
+        # run_screener 가 일자·최신 파일을 원자적으로 저장한다. 여기서 다시 쓰지 않는다.
         result = asyncio.run(run_screener())
-        
-        # Convert to JSON serializable structure
-        if result:
-            signals_json = [s.to_dict() for s in result.signals]
-            
-            output_data = {
-                'date': result.date.strftime('%Y-%m-%d'),
-                'total_candidates': result.total_candidates,
-                'filtered_count': result.filtered_count,
-                'scanned_count': getattr(result, 'scanned_count', 0),
-                'signals': signals_json,
-                'by_grade': result.by_grade,
-                'by_market': result.by_market,
-                'processing_time_ms': result.processing_time_ms,
-                'market_status': result.market_status,
-                'market_summary': result.market_summary,
-                'trending_themes': result.trending_themes,
-                'updated_at': datetime.now().isoformat()
-            }
 
-            # Save to JSON
-            file_path = os.path.join(BASE_DIR, 'data', 'jongga_v2_latest.json')
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(output_data, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
-                
-            log(f"종가베팅 V2 분석 완료: {len(signals_json)} 종목 (SignalGenerator)", "SUCCESS")
+        if result:
+            log(f"종가베팅 V2 분석 완료: {len(result.signals)} 종목 (SignalGenerator)", "SUCCESS")
             return True
         else:
             log("종가베팅 분석 결과 없음 (None returned)", "WARNING")
