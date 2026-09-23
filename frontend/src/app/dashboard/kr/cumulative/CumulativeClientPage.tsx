@@ -827,6 +827,8 @@ function TableHeader({
   );
 }
 
+const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
+
 function TradeTable({ trades }: { trades: Trade[] }) {
   return (
     <div className="bg-[#1c1c1e] rounded-2xl border border-white/5 overflow-hidden">
@@ -889,7 +891,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
                 <td className={`py-3 px-4 text-center font-mono ${trade.maxHigh >= 9 ? 'text-emerald-400 font-bold' :
                   trade.maxHigh > 0 ? 'text-yellow-400' : 'text-gray-500'
                   }`}>
-                  {trade.maxHigh > 0 ? trade.maxHigh + '%' : '-'}
+                  {trade.days > 0 ? formatSignedPercent(trade.maxHigh) : '-'}
                 </td>
                 {/* Daily Bar Graph */}
                 <td className="py-3 px-4 text-center align-middle">
@@ -921,7 +923,6 @@ function TradeTable({ trades }: { trades: Trade[] }) {
 }
 
 export default function CumulativeClientPage() {
-  const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`;
   const roundToOne = (value: number) => Math.round(value * 10) / 10;
   const createEmptyRoiByGrade = () => {
     const empty = { count: 0, avgRoi: 0, totalRoi: 0, wins: 0, losses: 0, winRate: 0 };
