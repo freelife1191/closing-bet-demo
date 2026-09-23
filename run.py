@@ -58,10 +58,11 @@ def main():
             print(f"\n[AI 분석 결과]")
             # 출력 컬럼 선택
             cols = ['name', 'ticker', 'score', 'ai_action', 'ai_confidence', 'ai_reason']
-            # ai_reason은 너무 길 수 있으니 요약
-            analyzed_df['ai_reason'] = analyzed_df['ai_reason'].astype(str).str.slice(0, 50) + "..."
-            
-            print(analyzed_df[cols].to_string())
+            # ai_reason은 너무 길 수 있으니 출력용 사본만 요약한다(저장은 원문)
+            shown = analyzed_df[cols].copy()
+            shown['ai_reason'] = shown['ai_reason'].astype(str).str.slice(0, 50) + "..."
+
+            print(shown.to_string())
             
             # 저장 질문
             save = input("\n결과를 저장하시겠습니까? (y/N): ").lower()

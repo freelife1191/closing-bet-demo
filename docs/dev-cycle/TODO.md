@@ -85,7 +85,8 @@
 ### [VCP-038] `run.py` 메뉴 2 가 잘라 낸 `ai_reason` 을 로그에 저장한다
 - 카테고리: VCP 시그널 | 티어: T2(설계 때 재판정) | 근거: `[VCP-037]` 코드 리뷰 지적 1(2026-09-23). `run.py:63` 은 출력용으로 `analyzed_df['ai_reason']` 을 50자로 자르고 "..." 을 붙인 뒤, 같은 프레임을 `_append_to_log` 로 저장한다. 값이 NaN 이면 문자열 "nan..." 이 된다. `[VCP-037]` 전에도 y 갈래가 같은 날짜 행을 이 프레임으로 대체했으므로 기존 동작이며, `[VCP-037]` 이후에는 이 프레임이 로그에 남는 유일한 사본이다.
 - 범위: 자르기를 출력용 복사본에만 적용하고 저장은 원래 값으로 하는 안. 회귀 테스트 여부는 설계 때 정한다.
-- [ ] 설계 승인(bounded) - [ ] 구현·검증 - [ ] 리뷰 - [ ] QA
+- 설계 승인: 2026-09-23 사용자가 항목 선택 질문에서 「VCP-038 (Recommended)」를 골랐다(질문에 「고르시면 설계를 승인하신 것으로 기록」 명시). bounded, T2(`run.py` 는 위험 경로 밖). 자르기는 출력용 복사본에만 적용하고 `_append_to_log(analyzed_df)` 는 원래 값으로 저장한다. 회귀 테스트는 `tests/test_run_menu_refactor.py` 1건(입력 `2`·`y`, 가짜 tracker). 리뷰는 ponytail-review → closing-bet-reviewer, QA 는 격리 사본 하네스(LLM 가짜) + VCP 화면 실측
+- [x] 설계 승인(bounded) - [x] 구현·검증(RED `AssertionError` 50자+"..." ≠ 원문 → GREEN, 전체 pytest 격리 사본 2690 passed 1 failed(사본이 git 저장소가 아닌 기존 gitignore 테스트) 3 skipped) - [x] 리뷰(ponytail-review: `shown` 두 줄을 `assign` 한 줄로 줄이는 shrink 1건, 가독성 때문에 미반영 / closing-bet-reviewer `vcp038-reviewer` APPROVE max low: 저장 프레임 전체 단언 → `assert_frame_equal` 반영, 출력 사본의 NaN "nan..." 표시는 화면 출력만이라 범위 밖) - [ ] QA
 
 ### [INFRA-079] 유물 사용량 저장소 `data/usage.db` 의 이메일 행 확인과 정리
 - 카테고리: 인프라 | 티어: T1 | 근거: `[FE-045]` 계획 검토(2026-09-22). `services/usage_tracker.py`(`usage_log`)와 `engine/services/usage_tracker.py`(`api_usage`)는 이메일을 기본 키로 쓰지만 어떤 운영 코드도 import 하지 않는 유물이다. 개발 기기의 `data/usage.db` 는 두 테이블 모두 행 0 이나 운영 서버의 파일은 이 기기에서 확인할 수 없다.
