@@ -145,3 +145,8 @@
 - 추가 관찰(`[VCP-027]` 정적 검증, 2026-09-23 11:55): 원본 작업 트리의 전체 pytest 한 번이 `runtime_cache.db` 말고도 `data/vcp_status.json`·`v2_screener_status.json`·`scheduler_runtime_status.json`(모두 대기 상태 값으로 다시 씀), `paper_trading.db-wal`·`-shm`, `data/.krx_collector_cache/`·`.market_schedule_cache/` 아래 캐시 DB, `logs/user_activity.log`(테스트 클라이언트 요청 기록 추가)를 바꿨다. 범위를 `data/` 전체와 `logs/` 로 넓혀 판단한다.
 - 범위: `tests/conftest.py` 에 autouse 로 cwd 를 `tmp_path` 로 옮기거나 캐시 경로 상수를 `tmp_path` 로 돌리는 방안 가운데 하나를 고르고, 전체 실행 전후 원본 `data/` 수정 시각이 같음을 확인하는 검사.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] 정적 검증
+
+### [INFRA-084] `closing-bet-reviewer` 에 일반 Python 보안 검토 항목을 더한다
+- 카테고리: 인프라 | 티어: 문서(`tier-rules.md` §5, 설계 때 재판정) | 근거: 2026-09-23 대화에서 `docs/reference/skill-trend/05_python_agent_skills_research_review.md` 의 추천 스킬을 대조했다. Pydantic Skills 는 저장소가 Pydantic 을 직접 쓰지 않아(import 0건, 구조체는 `@dataclass`) 제외했다. ECC(`affaan-m/everything-claude-code`, MIT) 의 `python-testing`·`python-patterns`·`python-reviewer` 전체는 `CLAUDE.md` 의 테스트 규칙(`test_*_refactor.py`, 새 fixture 계층 금지)·`engine/constants` 우선 규칙과 충돌하거나 일반 관용구라 제외했다. 차용할 가치가 있는 것은 `agents/python-reviewer.md` 의 CRITICAL 보안 항목뿐이다. 현재 `closing-bet-reviewer` 는 결측·신원·비용·비밀·문서 계약을 보지만 명령 주입(셸 문자열 `subprocess`), 경로 조작(`..`), 안전하지 않은 역직렬화(`pickle`·`yaml.load`), 잠금 없는 공유 상태(gunicorn 스레드·스케줄러)는 명시하지 않는다. 빈 `except` 는 `closing-bet-python` 이 이미 금지한다.
+- 범위: `.claude/agents/closing-bet-reviewer.md` 와 `.codex/agents/closing-bet-reviewer.toml` 의 검토 기준에 위 네 항목을 이 저장소의 사례와 함께 더하고 출처(ECC, MIT)를 적는다. ECC 를 설치하거나 다른 파일을 가져오지 않는다. `tests/scripts/test_skill_set.py` 의 대조가 계속 통과하는지 확인한다.
+- [ ] 설계 승인(bounded) - [ ] 문서 수정 - [ ] §5 검토 - [ ] `test_skill_set.py`
