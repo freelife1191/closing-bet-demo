@@ -91,7 +91,10 @@ openai·httpx, pytest 다. pydantic 은 전이 의존성으로만 설치되어 �
 의 모듈이면 `tests/services/` 다. `tests/conftest.py` 가 저장소 루트를
 `sys.path` 에 넣으므로 테스트 파일 머리에서 경로를 만지지 않는다. 경로와 환경은
 `monkeypatch` 로 바꾸고(`init_data.BASE_DIR` 을 `tmp_path` 로 두는 식), 네트워크·LLM·원본
-`data/` 에 닿지 않는다. 분기·반복·파서·판정에는 검사 하나를 남기고 한 줄 변경에는 만들지
+`data/` 에 닿지 않는다. `[INFRA-083]` 부터 conftest 가 cwd 를 테스트마다 `tmp_path` 로 옮기고
+세션이 끝날 때 저장소 `data/`·`logs/` 의 수정 시각이 바뀌었으면 실행을 실패로 끝낸다. 저장소
+파일을 읽는 테스트는 cwd 가 아니라 `__file__` 기준 경로를 쓰고, 이 검사가 실패하면 그 파일을
+쓰는 모듈의 경로를 `monkeypatch` 로 돌린다. 분기·반복·파서·판정에는 검사 하나를 남기고 한 줄 변경에는 만들지
 않는다. 실패하는 테스트의 기대값을 손질해 넘기지 않으며, 삭제 기준은 `dev-cycle` 의
 「테스트 정책」이다.
 

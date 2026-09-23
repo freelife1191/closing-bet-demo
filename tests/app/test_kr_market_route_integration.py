@@ -197,7 +197,10 @@ def test_reanalyze_vcp_failed_ai_filters_failed_rows_and_updates_csv(monkeypatch
     monkeypatch.setattr(kr_market, "load_csv_file", lambda _: signals_df.copy())
     monkeypatch.setattr(kr_market, "get_data_path", lambda filename: str(tmp_path / filename))
     monkeypatch.setattr(kr_market, "_update_vcp_ai_cache_files", lambda *_: 1)
-    monkeypatch.setitem(kr_market.VCP_STATUS, "running", False)
+    # VCP_STATUS 는 모듈 위치 기준 절대 경로라 cwd 격리로 막히지 않는다([INFRA-083]). 새 파일은
+    # 기본값(running=False)으로 읽힌다. setitem 은 쓰지 않는다: monkeypatch 가 setattr 을 먼저
+    # 되돌린 뒤 setitem 을 되돌려 그 복원이 원본 파일에 쓰인다
+    monkeypatch.setattr(kr_market.VCP_STATUS, "_path", str(tmp_path / "vcp_status.json"))
 
     import engine.vcp_ai_analyzer as vcp_ai_analyzer
 

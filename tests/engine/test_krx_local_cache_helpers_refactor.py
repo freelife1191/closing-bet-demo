@@ -22,7 +22,10 @@ def test_absolute_data_dir_is_not_rebased(tmp_path):
     assert KRXCollector(SimpleNamespace(DATA_DIR=str(tmp_path)))._get_data_dir() == str(tmp_path)
 
 
-def test_local_prices_and_lookup_use_configured_directory(tmp_path):
+def test_local_prices_and_lookup_use_configured_directory(tmp_path, monkeypatch):
+    # 조회 캐시는 모듈 기준 BASE_DIR/data 에 쓰인다. 원본 data/ 를 건드리지 않게 돌린다([INFRA-083])
+    import engine.collectors.krx_local_data_mixin as krx_local_data_mixin
+    monkeypatch.setattr(krx_local_data_mixin, "BASE_DIR", str(tmp_path / "repo"))
     pd.DataFrame([{"ticker": "005930", "date": "2026-02-21", "open": 1000, "close": 1100,
                    "volume": 2_000_000}]).to_csv(tmp_path / "daily_prices.csv", index=False)
     pd.DataFrame([{"ticker": "005930", "name": "테스트", "market": "KOSPI"}]).to_csv(
