@@ -45,3 +45,52 @@ def test_detect_stock_query_from_stock_map_by_ticker():
         logger=logger,
     )
     assert result == "삼성전자:005930"
+
+
+def _detect(message, stock_map):
+    ticker_map = {ticker: name for name, ticker in stock_map.items()}
+    return detect_stock_query_from_stock_map(
+        message=message,
+        stock_map=stock_map,
+        ticker_map=ticker_map,
+        format_stock_context_fn=lambda name, ticker: f"{name}:{ticker}",
+        logger=_FakeLogger(),
+    )
+
+
+_SHORT_NAMES = {
+    "대상": "001680", "전방": "000950", "러셀": "217500", "한창": "005110",
+    "남성": "004270", "동양": "001520", "TP": "007980", "DB": "012030",
+    "기아": "000270", "LG": "003550",
+}
+
+
+def test_short_name_used_as_plain_word_is_not_a_stock_query():
+    for message in [
+        "VCP 분석 대상 종목 알려줘",
+        "전방 산업 동향은?",
+        "러셀 지수 편입 기준",
+        "요즘 한창 뜨는 섹터",
+        "남성 소비 트렌드",
+        "동양 철학 책 추천",
+        "목표가 TP 얼마",
+        "DB 오류가 났어",
+        "기아랑 현대차 비교",
+        "현대기아 주가",
+    ]:
+        assert _detect(message, _SHORT_NAMES) is None, message
+
+
+def test_short_name_followed_by_query_signal_is_a_stock_query():
+    assert _detect("대상 주가 어때?", _SHORT_NAMES) == "대상:001680"
+    assert _detect("기아는 어때", _SHORT_NAMES) == "기아:000270"
+    assert _detect("LG 전망", _SHORT_NAMES) == "LG:003550"
+    assert _detect("기아?", _SHORT_NAMES) == "기아:000270"
+
+
+def test_six_digit_price_in_won_is_not_a_ticker():
+    stock_map = {"삼성전자": "005930", "가격겹침": "298000"}
+    assert _detect("삼성전자 298000원 가면 팔까?", stock_map) == "삼성전자:005930"
+    assert _detect("298000원이면 싸?", stock_map) is None
+    assert _detect("298000 원이면 싸?", stock_map) is None
+    assert _detect("298000 어때", stock_map) == "가격겹침:298000"

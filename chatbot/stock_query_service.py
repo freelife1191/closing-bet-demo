@@ -11,17 +11,24 @@ from typing import Any, Callable, Dict, Optional
 
 
 # 한글은 \w 이므로 \b 를 쓰면 「005930은」 같은 조사 붙은 티커를 놓친다.
-_TICKER_REGEX = re.compile(r"(?<!\d)\d{6}(?!\d)")
-# 두 글자 이하 종목명(대상·레이·TP 등)은 흔한 단어 안에 들어 있으므로 단어 경계에서만 잡는다.
-# 뒤에 조사 한 글자는 허용한다. 「대상 종목」처럼 독립 단어로 쓰인 경우는 여전히 잡힌다.
+# 뒤에 「원」이 오는 6자리 숫자는 가격이다(「298000원」·「298000 원」). 티커로 보지 않는다.
+_TICKER_REGEX = re.compile(r"(?<!\d)\d{6}(?!\d|\s*원)")
+# 두 글자 이하 종목명(대상·전방·TP 등)은 일반 단어로 더 자주 쓰인다. 단어 경계에 더해
+# 바로 뒤에 종목 질의 신호어가 오거나 메시지 전체가 그 이름일 때만 잡는다.
+# ponytail: 신호어 없는 질문(「기아 사도 돼?」·「기아랑 비교」)은 문맥이 빠진다. 안전한 쪽이라 둔다.
 _SHORT_NAME_MAX_LEN = 2
 _WORD_CHAR = "가-힣A-Za-z0-9"
+_PARTICLE = "[은는이가을를의도에와과로]?"
+_QUERY_SIGNAL = "주가|주식|어때|전망|차트|실적|수급|시세|매수|매도|목표가|배당"
 
 
 def _name_in_message(stock_name: str, message: str) -> bool:
     if len(stock_name) > _SHORT_NAME_MAX_LEN:
         return stock_name in message
-    pattern = rf"(?<![{_WORD_CHAR}]){re.escape(stock_name)}[은는이가을를의도에와과로]?(?![{_WORD_CHAR}])"
+    name = re.escape(stock_name)
+    if re.fullmatch(rf"\s*{name}{_PARTICLE}\s*[?!.]*\s*", message):
+        return True
+    pattern = rf"(?<![{_WORD_CHAR}]){name}{_PARTICLE}\s*(?:{_QUERY_SIGNAL})"
     return re.search(pattern, message) is not None
 
 
