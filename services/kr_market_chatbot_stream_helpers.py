@@ -85,6 +85,12 @@ def stream_chatbot_response_chunks(
                 stream_has_error = True
 
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+    except GeneratorExit:
+        # 클라이언트가 떠나 쓰기가 실패하면 gunicorn 이 생성기를 닫는다. 받지 못한 답에 무료 횟수를 쓰지 않는다.
+        # ponytail: 쓰기 실패로만 감지한다. 마지막 쓰기(done) 뒤에 끊기면 응답 길이와 무관하게 차감된다
+        stream_has_error = True
+        logger.info(f"[{usage_key}] Chat stream closed by client disconnect")
+        raise
     except Exception as e:
         stream_has_error = True
         logger.error(f"[{usage_key}] Chat stream error: {e}")

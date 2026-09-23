@@ -732,3 +732,34 @@ def test_chatbot_sessions_ignores_email_shaped_session_id(monkeypatch):
 
     assert response.status_code == 200
     assert seen["owner_id"] is None
+
+
+def test_stream_chatbot_response_chunks_marks_error_when_client_disconnects():
+    # gunicorn closes the generator after a write to a disconnected client fails.
+    bot = _StreamBot([{"chunk": "안녕"}, {"chunk": " 반가워"}, {"done": True}])
+    finalized = {}
+
+    def _finalize(full_response, usage_metadata, stream_has_error):
+        finalized["full_response"] = full_response
+        finalized["stream_has_error"] = stream_has_error
+
+    stream = stream_chatbot_response_chunks(
+        bot=bot,
+        payload={
+            "message": "hi",
+            "session_id": "s3",
+            "model_name": "m3",
+            "files": [],
+            "watchlist": None,
+            "persona": None,
+        },
+        user_api_key=None,
+        usage_key="owner-3",
+        logger=logging.getLogger("test"),
+        on_finalize=_finalize,
+    )
+    next(stream)
+    stream.close()
+
+    assert finalized["full_response"] == "안녕"
+    assert finalized["stream_has_error"] is True

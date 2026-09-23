@@ -66,9 +66,17 @@
 
 ### [CHAT-037] 프록시가 끊은 뒤 완료된 챗봇 스트림도 무료 사용량을 차감한다
 - 카테고리: 챗봇 | 티어: T2 | 근거: `[CHAT-036]` QA S-3(`docs/dev-cycle/qa/CHAT-036.md` 이월한 발견). Next 프록시가 120초 무활동으로 upstream 을 끊어 사용자는 「서버 응답을 받지 못했습니다 (HTTP 500)」 를 봤는데, Flask 는 침묵을 마친 뒤 닫힌 소켓에 스트림을 끝까지 쓰고 `services/kr_market_chatbot_stream_helpers.py` 의 `on_finalize` 가 `stream_has_error=False` 로 `maybe_increment_chatbot_usage` 를 불러 무료 횟수를 1 차감했다(격리 Flask 로그 「[QUOTA] … stream_has_error=False」 → 「사용량 차감 완료 … -> 4회」, 화면의 「N회 남음」 도 줄었다). 답을 받지 못한 요청에 횟수가 쓰인다.
+- 설계 승인: 승인 일자 2026-09-23 | 승인 확인 시각 2026-09-23 21:27
+  | 범위: `stream_chatbot_response_chunks` 가 `GeneratorExit`(클라이언트가 떠나 쓰기 실패 뒤 gunicorn 이 생성기를 닫음)를 받으면 차감 판정에 오류로 넘겨 무료 사용량을 차감하지 않는다. 모든 쓰기가 커널 버퍼에 들어가 쓰기 실패가 없는 짧은 응답은 여전히 차감되는 한계를 `ponytail:` 주석으로 남긴다. 테스트 1개, 격리 브라우저 QA
+  | 실제 대화 근거: 2026-09-23 세션에서 bounded 설계 제시 후 사용자가 AskUserQuestion 에 「승인 (Recommended)」 응답
+- 정책(2026-09-23 사용자 결정): 쓰기 실패로 감지되는 모든 이탈(프록시 끊김, 사용자 「중단」, 세션 전환, 언마운트)은 무료 횟수를 차감하지 않는다.
 - 범위: 클라이언트 연결이 끊긴 뒤의 완료를 구분하는 방법 결정(닫힌 소켓 쓰기 실패 감지, `stream_with_context` 생성기의 `GeneratorExit`, 또는 `done` 이벤트가 실제로 쓰였을 때만 차감), 그 경우 차감을 건너뛰는 규칙과 테스트. 정상 도착 경로의 차감은 바꾸지 않는다.
 - QA: 격리 /chatbot 에서 첫 토큰이 130초 늦는 가짜 클라이언트로 전송 → 오류 문구가 뜬 뒤 「N회 남음」 이 줄지 않는다. 브라우저 실측 required.
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: `tests/app/test_kr_market_chatbot_service.py::test_stream_chatbot_response_chunks_marks_error_when_client_disconnects` RED(`stream_has_error` False) → GREEN. `stream_with_context` 로 감싼 Flask 응답을 첫 청크 뒤 close 하면 finalize 가 오류 플래그를 받는 것도 scratchpad 스크립트로 확인
+- [x] `/ponytail-review` → `closing-bet-reviewer`: 과잉설계 리뷰(별도 에이전트) 「Lean already. Ship.」. 코드 리뷰 APPROVE, 최고 medium. 발견 1(medium, 사용자 「중단」·세션 전환도 차감하지 않음)은 사용자가 2026-09-23 AskUserQuestion 에서 「차감 안 함으로 명시」를 골라 정책으로 확정했고 QA 에 중단 시나리오를 더한다. 발견 3(low, `ponytail:` 주석이 한계를 좁게 적음)은 「마지막 쓰기(done) 뒤에 끊기면 응답 길이와 무관하게 차감된다」로 고쳤다. 발견 2(low, 활동 로그·QUOTA 로그가 끊김과 LLM 오류를 구분하지 않음)·4(low, 테스트가 Flask·gunicorn close 전달 경로를 거치지 않음)는 이번 범위에서 고치지 않고 QA 의 Flask 로그 「Chat stream closed by client disconnect」 로 확인한다. 범위 밖 XFF 지적은 `extract_chatbot_client_ip` 가 `remote_addr` 만 돌려주므로 해당 없음
+- [x] 정적 검증과 첫 커밋: 전체 `pytest -q -p no:cacheprovider` 2721 passed 2 skipped(exit 0), 주석 수정 뒤 `tests/app/test_kr_market_chatbot_service.py` 26 passed. QA 행렬 `docs/dev-cycle/qa/CHAT-037.md`
+- [ ] QA
 
 ### [INFRA-080] Next rewrite 프록시가 gunicorn 요청을 ECONNRESET 으로 잃고 500 을 낸다
 - 카테고리: 인프라 | 티어: T2 | 근거: `[FLOW-019]` QA S-5 1회차(2026-09-23). 격리 환경(gunicorn `--workers 1 --threads 4`, Next dev)에서 종가베팅 화면 첫 로드 때 차트 요청 여러 개 가운데 `GET /api/kr/stock-chart/003160?period=1m&end=2026-09-21` 하나가 18ms 만에 500 이 되었고, Next 로그에 `Failed to proxy … Error: read ECONNRESET` 이 남았다. 같은 요청을 Flask 에 직접 보내면 200 이며, 이어진 다섯 번 로드에서는 재현되지 않았다. 원인은 미규명이다. gunicorn 의 keep-alive 기본값(2초)이 끝나 닫힌 연결을 프록시가 재사용하는 경합이 가설이며, 그렇다면 같은 구성인 운영에서도 드물게 차트나 API 요청 하나가 실패할 수 있다.
