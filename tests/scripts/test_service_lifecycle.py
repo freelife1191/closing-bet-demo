@@ -264,6 +264,17 @@ def test_restart_runs_next_dev_without_a_build_when_mode_is_unset_or_dev(tmp_pat
     assert "🎉 Ready!" in result.stdout
 
 
+def test_restart_narrows_logs_dir_to_the_server_account(tmp_path: Path) -> None:
+    """backend.log 에 구독자 이메일이 남는다. 로그 파일은 0644 로 만들어지므로 디렉터리가 막는다."""
+    project = _restart_fixture(tmp_path, "")
+    (project / "logs").chmod(0o755)
+
+    result = _run_restart(project)
+
+    assert result.returncode == 0, result.stderr
+    assert (project / "logs").stat().st_mode & 0o777 == 0o700
+
+
 @pytest.mark.parametrize("env, shell_env", [("NEXT_MODE=prod\n", {}), ("", {"NEXT_MODE": "prod"})])
 def test_restart_builds_then_starts_next_in_prod_mode(tmp_path: Path, env: str, shell_env: dict[str, str]) -> None:
     """운영은 production 빌드로 돈다. .env 가 우선하고 없으면 환경 변수를 읽는다."""

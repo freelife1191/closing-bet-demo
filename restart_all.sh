@@ -69,6 +69,8 @@ trap 'exit 143' TERM
 
 lifecycle_acquire_lock || exit 1
 mkdir -p logs || exit 1
+# backend.log 에 구독자 이메일이 남는다. 리다이렉트와 open() 으로 만든 로그는 umask 022 에서 0644 라 디렉터리가 다른 계정을 막는다
+chmod 700 logs || { echo "❌ logs/ 권한을 0700 으로 좁히지 못했습니다." >&2; exit 1; }
 
 # 두 포트를 모두 먼저 검증한다. 하나라도 외부/권한/자동 재시작 프로세스면 기존 서비스를
 # 일부만 내리지 않는다.
