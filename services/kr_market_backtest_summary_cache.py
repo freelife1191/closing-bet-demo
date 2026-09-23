@@ -54,8 +54,8 @@ _BACKTEST_SUMMARY_SQLITE_PRUNE_FORCE_INTERVAL = 64
 _BACKTEST_SUMMARY_SQLITE_SAVE_COUNTER = 0
 _BACKTEST_SUMMARY_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
 
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_BACKTEST_SUMMARY_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
+# 데이터 파일(DATA_DIR = "data")과 같은 cwd 기준 data/ 를 따라야 격리 실행이 원본에 쓰지 않는다.
+_BACKTEST_SUMMARY_CACHE_DB_PATH = os.path.join("data", "runtime_cache.db")
 _BACKTEST_SUMMARY_MEMORY_MAX_ENTRIES = 16
 _BACKTEST_SUMMARY_SQLITE_MAX_ROWS = 64
 _BACKTEST_SUMMARY_SQLITE_TIMEOUT_SECONDS = 5

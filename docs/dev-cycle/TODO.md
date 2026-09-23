@@ -74,7 +74,13 @@
 ### [INFRA-078] 격리 실행이 원본 `runtime_cache.db` 에 쓰는 절대 경로 세 곳
 - 카테고리: 인프라 | 티어: T1 | 근거: `[VCP-026]` QA(2026-09-22). scratchpad 사본을 cwd 로 삼은 임시 백엔드가 원본 `data/runtime_cache.db` 에 행을 남겼다. `services/file_row_count_cache.py:50`, `services/common_update_status_service.py:49`, `services/kr_market_data_cache_jongga.py:48` 이 `_BASE_DIR/data/runtime_cache.db` 를 절대 경로로 잡고, `services/common_update_status_service.py`·`services/scheduler_runtime_status_service.py` 가 같은 방식으로 `v2_screener_status.json`·`scheduler_runtime_status.json` 을 원본 `data/` 에 쓴다(기동 시 초기화 플래그라 내용은 무해). 다른 캐시 모듈은 `data_dir` 인자나 원본 파일의 디렉터리에서 경로를 만든다. `browser-notes.md` 「공통」 절이 이 종류의 구멍을 일반론으로만 경고한다.
 - 범위: 세 모듈이 다른 캐시와 같은 방식(`data_dir` 인자 또는 대상 파일의 디렉터리)으로 경로를 정하게 하고, 격리 실행 뒤 원본 `data/` 가 바뀌지 않음을 확인하는 회귀 테스트. 운영 동작은 바뀌지 않는다(같은 파일).
-- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] QA
+- 설계 승인: 승인 일자 2026-09-23 | bounded. 조사로 같은 절대 경로 상수가 다섯 곳임을 확인(`services/kr_market_cumulative_cache.py:57`, `services/kr_market_backtest_summary_cache.py:58` 추가). 범위는 다섯 상수를 cwd 기준 `os.path.join("data", "runtime_cache.db")` 로 바꾸는 것과 회귀 테스트 1개, 원본 코드·`data/` 사본 cwd 구성의 격리 QA. 캐시가 아닌 절대 경로 여섯 곳(상태 파일·파이프라인 출력)은 범위 밖으로 새 항목 등록. 대화 근거: `/dev-cycle next` 에서 제시한 설계와 범위 질문에 사용자가 「캐시 5곳만 (Recommended)」으로 답함.
+- QA 시나리오: 원본 코드를 `data/` 사본 cwd 로 띄워 대시보드를 연 뒤 원본 `data/runtime_cache.db` 의 해시·수정 시각이 그대로이고 사본 DB 에 캐시 행이 생긴다.
+- [x] 설계 승인(bounded)
+- [x] 구현·RED→GREEN: 신규 `tests/services/test_runtime_cache_path_refactor.py` 의 상수 검사 5건이 구현 전 실패, 구현 후 동작 검사 포함 6건 통과. 동작 검사는 구현 전에 돌리면 원본 DB 에 쓰므로 RED 에서 제외했다.
+- [x] `/ponytail-review`: Lean already. Ship. (다섯 파일 모두 `_BASE_DIR` 줄을 주석 한 줄로 바꿔 줄 수 불변)
+- [x] 정적 검증: `pytest -q` 2650 passed, 2 skipped, exit 0. frontend 변경 없음. 전체 실행이 원본 `data/runtime_cache.db` 수정 시각을 바꾸는 것을 확인해 `[INFRA-083]` 으로 등록(수정 전부터 같은 파일에 쓰던 동작). 범위 밖 절대 경로는 `[INFRA-082]` 로 등록.
+- [ ] QA: `docs/dev-cycle/qa/INFRA-078.md`
 
 ### [VCP-027] 실패 AI 재분석의 대상 날짜를 화면과 같은 판정으로 정한다
 - 카테고리: VCP 시그널 | 티어: T1 | 근거: `[VCP-026]` 심층 리뷰 MINOR 2(2026-09-22, 재현됨). 화면의 날짜 목록과 「최신」 대체는 `_is_vcp_signal_row` 를 통과한 날짜의 최댓값을 쓰지만, `services/kr_market_vcp_reanalysis_service.py:61-63` 의 `prepare_vcp_signals_scope` 는 판정 없이 `signal_date` 전체의 최댓값을 쓴다. 2026-09-10 에 유효 행이 있고 2026-09-15 행이 전부 CLOSED 면 화면은 09-10 을 보이는데 재분석 스코프는 09-15 다. `[VCP-026]` 전에는 최신 탭이 비어 관리자가 그 단추를 누를 일이 없었으나 이제 도달할 수 있다.
@@ -149,3 +155,13 @@
 - 카테고리: 인프라 | 티어: T2 | 근거: `[FE-046]` 계획 검토 R4. `[FE-046]` 은 활동 로그·SQLite DB·챗봇 JSON 만 0600 으로 좁혔다. `logs/backend.log`·`logs/frontend.log`(`restart_all.sh:113` 의 셸 리다이렉트, gunicorn 의 요청 로그와 예외 메시지), `logs/critical_errors.log`(`app/__init__.py:276`, 예외 메시지), gunicorn access 로그(IP)는 여전히 0644 로 만들어진다. 그래서 개인정보처리방침 10항은 권한 제한 범위를 「활동 로그와 데이터베이스 파일」로 좁혀 적었다.
 - 범위: 세 로그가 어떤 개인정보를 담는지 실측하고, 담는다면 생성 지점(셸 `umask`, `open` 의 모드)에서 0600 으로 만드는 방안과 회귀 테스트. 방침 10항 문안을 넓힐지 함께 정한다.
 - [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` → `/code-review` - [ ] QA
+
+### [INFRA-082] 캐시가 아닌 `data/` 절대 경로 여섯 곳이 격리 실행에서도 원본을 가리킨다
+- 카테고리: 인프라 | 티어: T2 이상(종가베팅 실행·업데이트 파이프라인 경로를 건드리므로 설계 때 재판정) | 근거: `[INFRA-078]` 조사(2026-09-23). 데이터 파일은 cwd 기준 `data/` 를 읽지만 다음 여섯 곳은 모듈 위치 기준 절대 경로다. `app/routes/common.py:44`(`update_status.json`, `common_update_routes.py:119` 가 그 디렉터리를 스케줄러 상태 파일 위치로도 씀), `app/routes/kr_market.py:191`(`vcp_status.json`), `services/common_update_pipeline_steps.py:30`, `services/kr_market_jongga_runtime_service.py:40`, `services/common_update_ai_analysis_service.py:176`(인자가 없을 때), `services/usage_tracker.py:39`·`engine/services/usage_tracker.py:16`. `services/kr_market_realtime_price_cache.py:125` 의 대체 경로도 같은 방식이다. `[INFRA-078]` 은 사용자 결정으로 캐시 다섯 곳만 고쳤다.
+- 범위: 각 경로가 캐시·상태·파이프라인 출력 가운데 무엇인지 분류하고, cwd 기준으로 옮겨도 운영(`restart_all.sh` 가 루트로 `cd`)과 스케줄러·CLI(`run.py`, `scripts/`) 동작이 같은지 확인한 뒤 통일할지 정한다.
+- [ ] 설계 승인 - [ ] 구현·RED→GREEN - [ ] 리뷰 - [ ] QA
+
+### [INFRA-083] 전체 pytest 가 원본 `data/runtime_cache.db` 에 캐시 행을 쓴다
+- 카테고리: 인프라 | 티어: T1 | 근거: `[INFRA-078]` 정적 검증(2026-09-23). 저장소 루트에서 `pytest -q` 를 돌리면 원본 `data/runtime_cache.db` 의 수정 시각이 바뀐다. 테스트마다 수정 시각을 비교하는 임시 플러그인으로 11개 파일의 34개 테스트를 찾았다(`tests/services/test_kr_market_realtime_service.py` 6, `tests/services/test_kr_market_analytics_service_refactor.py` 5, `tests/app/test_common_data_status_service.py` 5, `tests/services/test_file_row_count_cache.py` 4, `tests/services/test_common_update_status_service.py` 4, `tests/services/test_kr_market_backtest_summary_cache.py` 3, `tests/services/test_kr_market_cumulative_cache.py` 2, `tests/app/test_kr_market_file_cache.py` 2, `tests/test_chatbot_feature.py`·`tests/app/test_kr_market_data_ai_routes_refactor.py`·`tests/app/test_common_routes_refactor.py` 각 1). 캐시 경로를 monkeypatch 하지 않고 cwd 가 저장소 루트라서다. `[INFRA-078]` 전에는 절대 경로로 같은 파일에 썼으므로 새로 생긴 문제는 아니다. `closing-bet-python` 스킬의 「원본 `data/` 를 쓰는 테스트를 만들지 않는다」와 어긋나고, `[FE-046]` 의 0600 권한 변경처럼 테스트가 원본 파일 상태를 바꾸는 통로가 된다.
+- 범위: `tests/conftest.py` 에 autouse 로 cwd 를 `tmp_path` 로 옮기거나 캐시 경로 상수를 `tmp_path` 로 돌리는 방안 가운데 하나를 고르고, 전체 실행 전후 원본 `data/` 수정 시각이 같음을 확인하는 검사.
+- [ ] 설계 승인(bounded) - [ ] 구현·RED→GREEN - [ ] `/ponytail-review` - [ ] 정적 검증

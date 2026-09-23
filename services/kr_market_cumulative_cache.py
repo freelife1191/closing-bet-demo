@@ -53,8 +53,8 @@ _CUMULATIVE_SQLITE_SAVE_COUNTER_LOCK = threading.Lock()
 # 옛 규칙으로 계산해 둔 항목은 데이터 파일이 그대로여도 더 이상 적중하지 않는다.
 _CUMULATIVE_CACHE_SCHEMA_VERSION = 6
 
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_CUMULATIVE_CACHE_DB_PATH = os.path.join(_BASE_DIR, "data", "runtime_cache.db")
+# 데이터 파일(DATA_DIR = "data")과 같은 cwd 기준 data/ 를 따라야 격리 실행이 원본에 쓰지 않는다.
+_CUMULATIVE_CACHE_DB_PATH = os.path.join("data", "runtime_cache.db")
 _CUMULATIVE_MEMORY_MAX_ENTRIES = 8
 _CUMULATIVE_SQLITE_MAX_ROWS = 16
 _CUMULATIVE_SQLITE_TIMEOUT_SECONDS = 5
