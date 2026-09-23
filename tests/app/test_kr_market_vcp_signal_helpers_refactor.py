@@ -343,3 +343,127 @@ def test_legacy_merge_does_not_push_todays_csv_verdict_out_of_the_signal():
 
     assert signals[0]["gemini_recommendation"]["action"] == "BUY"
     assert signals[0]["gemini_recommendation"]["reason"] == "오늘 CSV 가 담은 사유입니다."
+
+
+# [VCP-040] Gemini 가 비면 유효한 다른 프로바이더 추천을 판정으로 쓴다.
+_GPT_OK = {"action": "hold", "confidence": "72", "reason": "수급은 긍정적이나 돌파 확인이 필요합니다."}
+_GEMINI_OK = {"action": "BUY", "confidence": 68, "reason": "수축 비율과 동반 순매수가 확인됩니다."}
+
+
+def test_extract_falls_back_to_gpt_when_gemini_is_missing():
+    ai_results = {"033530": {"gemini_recommendation": None, "gpt_recommendation": _GPT_OK}}
+
+    assert vcp_helpers._extract_vcp_ai_recommendation(ai_results, "033530") == (
+        True, "HOLD", 72, _GPT_OK["reason"],
+    )
+
+
+def test_extract_prefers_gemini_when_both_are_valid():
+    ai_results = {"033530": {"gemini_recommendation": _GEMINI_OK, "gpt_recommendation": _GPT_OK}}
+
+    assert vcp_helpers._extract_vcp_ai_recommendation(ai_results, "033530")[1:3] == ("BUY", 68)
+
+
+def test_extract_fails_with_missing_confidence_when_every_provider_failed():
+    failed = {"action": "N/A", "confidence": 0, "reason": "분석 실패"}
+    ai_results = {
+        "033530": {
+            "gemini_recommendation": None,
+            "gpt_recommendation": failed,
+            "perplexity_recommendation": None,
+        }
+    }
+
+    assert vcp_helpers._extract_vcp_ai_recommendation(ai_results, "033530") == (
+        False, "N/A", None, "분석 실패",
+    )
+
+
+def test_reanalysis_counts_gpt_fallback_but_keeps_it_out_of_the_gemini_cache_slot():
+    import pandas as pd
+
+    signals_df = pd.DataFrame(
+        [{"ticker": "033530", "ai_action": "N/A", "ai_confidence": 0, "ai_reason": "분석 실패"}]
+    )
+    ai_results = {"033530": {"gemini_recommendation": None, "gpt_recommendation": _GPT_OK}}
+
+    updated, still_failed, recommendations = vcp_helpers._apply_vcp_reanalysis_updates(
+        signals_df, [(0, {"ticker": "033530"})], ai_results
+    )
+
+    assert (updated, still_failed) == (1, 0)
+    assert signals_df.at[0, "ai_action"] == "HOLD"
+    # update_vcp_ai_cache_files 가 이 dict 를 gemini_recommendation 칸에 덮어쓴다
+    assert recommendations == {}
+
+
+def _valid_verdict_frame():
+    import pandas as pd
+
+    signals_df = pd.DataFrame(
+        [{"ticker": "033530", "ai_action": "HOLD", "ai_confidence": 72, "ai_reason": _GPT_OK["reason"]}]
+    )
+    return signals_df, [(0, signals_df.iloc[0].to_dict())]
+
+
+def test_auto_reanalysis_keeps_an_existing_valid_verdict_when_the_retry_fails():
+    """수집이 쓴 GPT 판정을 Gemini 만 다시 부른 재시도의 실패로 덮지 않는다."""
+    signals_df, rows = _valid_verdict_frame()
+    retry_failed = {"033530": {"gemini_recommendation": None, "gpt_recommendation": None}}
+
+    result = vcp_helpers._apply_vcp_reanalysis_updates(
+        signals_df, rows, retry_failed, keep_valid_verdicts=True
+    )
+
+    assert result == (0, 1, {})
+    assert (signals_df.at[0, "ai_action"], signals_df.at[0, "ai_confidence"]) == ("HOLD", 72)
+
+
+def test_forced_reanalysis_still_records_a_failed_retry():
+    """강제 모드는 [VCP-039] 계약대로 처리했지만 실패한 행을 실패로 기록한다."""
+    signals_df, rows = _valid_verdict_frame()
+    retry_failed = {"033530": {"gemini_recommendation": None, "gpt_recommendation": None}}
+
+    vcp_helpers._apply_vcp_reanalysis_updates(signals_df, rows, retry_failed)
+
+    assert signals_df.at[0, "ai_reason"] == "분석 실패"
+
+
+def _csv_signal(action: str, reason: str) -> dict:
+    return vcp_helpers._build_vcp_signal_from_row(
+        {
+            "ticker": "033530", "name": "SJG세종", "signal_date": "2026-09-21",
+            "market": "KOSPI", "status": "OPEN", "score": 42, "vcp_score": 8.0,
+            "is_vcp": True, "entry_price": 7550, "current_price": 7550,
+            "ai_action": action, "ai_confidence": 72, "ai_reason": reason,
+        }
+    )
+
+
+def test_merge_does_not_show_a_gpt_fallback_verdict_under_the_gemini_label():
+    signals = [_csv_signal("HOLD", _GPT_OK["reason"])]
+    ai_data_map = {"033530": {"gemini_recommendation": None, "gpt_recommendation": _GPT_OK}}
+
+    vcp_helpers._merge_ai_data_into_vcp_signals(signals, ai_data_map)
+
+    assert signals[0]["gemini_recommendation"] is None
+    assert signals[0]["gpt_recommendation"] == _GPT_OK
+
+
+def test_merge_hides_an_older_gpt_verdict_after_a_forced_second_reanalysis():
+    """강제 Second 재분석은 CSV 를 쓰지 않으므로 CSV 의 옛 GPT 판정이 캐시의 새 GPT 와 다르다."""
+    signals = [_csv_signal("HOLD", "수집 때 받은 옛 GPT 사유입니다.")]
+    ai_data_map = {"033530": {"gemini_recommendation": None, "gpt_recommendation": _GPT_OK}}
+
+    vcp_helpers._merge_ai_data_into_vcp_signals(signals, ai_data_map)
+
+    assert signals[0]["gemini_recommendation"] is None
+
+
+def test_merge_keeps_the_csv_verdict_when_no_provider_in_the_cache_is_valid():
+    signals = [_csv_signal("BUY", _GEMINI_OK["reason"])]
+    ai_data_map = {"033530": {"gemini_recommendation": None, "gpt_recommendation": None}}
+
+    vcp_helpers._merge_ai_data_into_vcp_signals(signals, ai_data_map)
+
+    assert signals[0]["gemini_recommendation"]["action"] == "BUY"

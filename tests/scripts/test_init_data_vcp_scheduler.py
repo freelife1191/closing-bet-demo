@@ -873,6 +873,54 @@ def test_vcp_no_provider_result_does_not_log_save_success(monkeypatch, tmp_path)
     assert not (tmp_path/'data/ai_analysis_results_20260219.json').exists()
 
 
+
+def _run_vcp_collect_with(monkeypatch, tmp_path, results):
+    """가짜 분석기가 주어진 결과를 돌려주는 VCP 수집을 돌리고 CSV 첫 행을 돌려준다."""
+    (tmp_path / "data").mkdir()
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _DummyScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+
+    class Analyzer:
+        async def analyze_batch(self, stocks):
+            return results
+
+    class News:
+        def __init__(self, *args): pass
+        async def get_stock_news(self, *args, **kwargs): return []
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.get_vcp_analyzer", Analyzer)
+    monkeypatch.setattr("engine.collectors.EnhancedNewsCollector", News)
+    monkeypatch.setattr("pykrx.stock.get_index_ohlcv", lambda *args: pd.DataFrame())
+    assert init_data.create_signals_log("2026-09-21", run_ai=True) is True
+    return pd.read_csv(
+        tmp_path / "data" / "signals_log.csv", dtype={"ticker": str}, keep_default_na=False
+    ).iloc[0]
+
+
+def test_create_signals_log_uses_gpt_verdict_when_gemini_is_missing(monkeypatch, tmp_path):
+    """[VCP-040] Gemini 가 비고 GPT 가 성공하면 CSV 에 GPT 판정이 남는다."""
+    gpt = {"action": "HOLD", "confidence": "72", "reason": "돌파 확인이 필요합니다."}
+    row = _run_vcp_collect_with(
+        monkeypatch, tmp_path,
+        {"005930": {"gemini_recommendation": None, "gpt_recommendation": gpt}},
+    )
+
+    assert (row["ai_action"], int(row["ai_confidence"]), row["ai_reason"]) == (
+        "HOLD", 72, "돌파 확인이 필요합니다.",
+    )
+
+
+def test_create_signals_log_leaves_confidence_blank_when_every_provider_failed(monkeypatch, tmp_path):
+    """[VCP-040] 전부 실패하면 확신도는 0 이 아니라 결측이다."""
+    row = _run_vcp_collect_with(
+        monkeypatch, tmp_path,
+        {"005930": {"gemini_recommendation": None, "gpt_recommendation": None}},
+    )
+
+    assert row["ai_reason"] == "분석 실패"
+    assert row["ai_confidence"] == ""
+
 # [VCP-029] 세 번째 줄의 열 수가 헤더와 달라 pd.read_csv 가 ParserError 를 낸다.
 _RAGGED_LOG = (
     "ticker,signal_date,status,score,is_vcp\n"

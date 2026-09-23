@@ -1553,25 +1553,17 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
         
 
 
-        # [FIX] AI 분석 결과를 signals 리스트에 병합 (CSV 저장을 위해)
+        # AI 판정을 CSV 행에 병합한다. 고르는 규칙은 실패 재분석과 같은 함수 하나다([VCP-040])
         if run_ai and signals and 'ai_results' in locals() and ai_results:
             try:
+                # 지연 import: app 패키지는 이 분기에 들어올 때 적재한다(_write_ai_analysis_files 도 같다)
+                from app.routes.kr_market_vcp_signal_helpers import _extract_vcp_ai_recommendation
+
                 for signal in signals:
-                    ticker = signal['ticker']
-                    if ticker in ai_results:
-                        ai_data = ai_results[ticker]
-                        
-                        # Gemini 결과 우선
-                        gemini = ai_data.get('gemini_recommendation')
-                        if gemini:
-                            signal['ai_action'] = gemini.get('action', 'HOLD')
-                            signal['ai_confidence'] = gemini.get('confidence', 0)
-                            signal['ai_reason'] = gemini.get('reason', '')
-                        else:
-                            # 다른 AI 결과 폴백? (일단 Gemini 기준)
-                            signal['ai_action'] = 'N/A'
-                            signal['ai_confidence'] = 0
-                            signal['ai_reason'] = '분석 실패'
+                    if signal['ticker'] in ai_results:
+                        _, signal['ai_action'], signal['ai_confidence'], signal['ai_reason'] = (
+                            _extract_vcp_ai_recommendation(ai_results, signal['ticker'])
+                        )
             except Exception as e:
                 log(f"AI 결과 병합 중 오류: {e}", "WARNING")
 

@@ -96,8 +96,9 @@ def _extract_vcp_ai_recommendation(
     ticker: str,
 ) -> Tuple[bool, str, Optional[int], str]:
     """
-    ai_results에서 ticker 대상 Gemini 추천을 추출한다.
-    반환값: (is_valid, action, confidence, reason)
+    ai_results에서 ticker 대상 추천 하나를 고른다. Gemini → GPT → Perplexity 순서로
+    유효한 첫 추천이다. 수집 병합(scripts/init_data.py)과 실패 재분석이 이 규칙 하나를
+    같이 쓴다([VCP-040]). 반환값: (is_valid, action, confidence, reason)
 
     추천을 찾지 못하면 확신도는 0 이 아니라 None 이다. 이 값은 signals_log 의
     ai_confidence 열로 그대로 들어가는데, 그 열은 float64 라서 None 이 결측으로
@@ -110,15 +111,22 @@ def _extract_vcp_ai_recommendation(
     if not isinstance(ai_res, dict):
         return False, "N/A", None, "분석 실패"
 
-    gemini = ai_res.get("gemini_recommendation")
-    if not _is_valid_ai_recommendation(gemini):
+    recommendation = next(
+        (
+            ai_res.get(field)
+            for field in VCP_AI_RECOMMENDATION_FIELDS
+            if _is_valid_ai_recommendation(ai_res.get(field))
+        ),
+        None,
+    )
+    if recommendation is None:
         return False, "N/A", None, "분석 실패"
 
     return (
         True,
-        _normalize_text(gemini.get("action")).upper(),
-        safe_confidence(gemini.get("confidence")),
-        _normalize_text(gemini.get("reason")),
+        _normalize_text(recommendation.get("action")).upper(),
+        safe_confidence(recommendation.get("confidence")),
+        _normalize_text(recommendation.get("reason")),
     )
 
 
@@ -126,10 +134,16 @@ def _apply_vcp_reanalysis_updates(
     signals_df: Any,
     failed_rows: List[Tuple[int, dict]],
     ai_results: Any,
+    *,
+    keep_valid_verdicts: bool = False,
 ) -> Tuple[int, int, Dict[str, dict]]:
     """
     재분석 결과를 signals_df에 반영한다.
     반환값: (updated_count, still_failed_count, updated_recommendations)
+
+    keep_valid_verdicts 는 자동 모드용이다. 수집이 GPT 판정을 쓴 행은 캐시 gemini 칸이
+    비어 Gemini 만 다시 불리는데, 그 재시도가 실패해도 유효한 기존 판정을 덮지 않는다.
+    강제 모드는 처리했지만 실패한 행을 실패로 기록한다([VCP-039]).
     """
     updated_count = 0
     still_failed_count = 0
@@ -141,17 +155,27 @@ def _apply_vcp_reanalysis_updates(
             ai_results,
             ticker,
         )
+        if keep_valid_verdicts and not is_valid and not _is_vcp_ai_analysis_failed(row):
+            # 이미 유효한 판정을 실패한 재시도로 덮지 않는다([VCP-040])
+            still_failed_count += 1
+            continue
 
         signals_df.at[idx, "ai_action"] = action
         signals_df.at[idx, "ai_confidence"] = confidence_val
         signals_df.at[idx, "ai_reason"] = reason
 
         if is_valid:
-            updated_recommendations[ticker] = {
-                "action": action,
-                "confidence": confidence_val,
-                "reason": reason,
-            }
+            ai_res = ai_results.get(ticker) if isinstance(ai_results, dict) else None
+            # update_vcp_ai_cache_files 가 이 값을 gemini_recommendation 칸에 덮어쓴다.
+            # 다른 프로바이더 결과는 ai_results 로 제 칸에 들어간다([VCP-040]).
+            if isinstance(ai_res, dict) and _is_valid_ai_recommendation(
+                ai_res.get("gemini_recommendation")
+            ):
+                updated_recommendations[ticker] = {
+                    "action": action,
+                    "confidence": confidence_val,
+                    "reason": reason,
+                }
             updated_count += 1
         else:
             still_failed_count += 1
@@ -375,6 +399,23 @@ def _merge_legacy_ai_fields_into_map(ai_data_map: Dict[str, dict], legacy_payloa
                 current[field] = item[field]
 
 
+def _drop_csv_verdict_copied_from_another_provider(signal: dict, ai_item: dict) -> None:
+    """캐시 gemini 칸이 비고 다른 AI 추천이 유효하면 CSV 에서 만든 gemini 판정을 뺀다.
+
+    시그널의 gemini_recommendation 은 CSV 행에서 만든다. [VCP-040] 부터 CSV 판정은
+    Gemini 가 비었을 때 GPT 등에서 오므로, 그대로 두면 화면의 Gemini 열에 GPT 판정이
+    뜬다. 캐시 gemini 칸이 유효하면 뒤의 병합이 덮으므로 건드리지 않는다. 판정·사유
+    대조로 출처를 좁히지 않는다. 강제 Second 재분석은 CSV 를 쓰지 않아 CSV 의 옛 GPT
+    판정과 캐시의 새 GPT 판정이 달라지기 때문이다. 캐시 gemini 칸이 실패인데 CSV 에
+    진짜 Gemini 판정이 남은 드문 경우([VCP-018])에는 Gemini 열이 빈다. 다른 AI 판정을
+    Gemini 라벨로 보이는 것보다 비어 있는 편이 낫다.
+    """
+    if _is_valid_ai_recommendation(ai_item.get("gemini_recommendation")):
+        return
+    if any(_is_valid_ai_recommendation(ai_item.get(field)) for field in VCP_AI_RECOMMENDATION_FIELDS[1:]):
+        signal["gemini_recommendation"] = None
+
+
 def _merge_ai_data_into_vcp_signals(signals: List[dict], ai_data_map: Dict[str, dict]) -> int:
     """VCP 시그널 리스트에 AI 추천/뉴스 필드를 합친다."""
     if not isinstance(signals, list) or not isinstance(ai_data_map, dict):
@@ -388,6 +429,7 @@ def _merge_ai_data_into_vcp_signals(signals: List[dict], ai_data_map: Dict[str, 
         if ticker not in ai_data_map:
             continue
         ai_item = ai_data_map[ticker]
+        _drop_csv_verdict_copied_from_another_provider(signal, ai_item)
         # 캐시에 없거나 실패 기록인 추천으로 기존 값을 덮어쓰지 않는다.
         for field in VCP_AI_RECOMMENDATION_FIELDS:
             recommendation = ai_item.get(field)

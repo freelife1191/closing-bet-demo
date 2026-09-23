@@ -712,6 +712,7 @@ def execute_vcp_failed_ai_reanalysis(
             signals_df,
             apply_rows,
             ai_results,
+            keep_valid_verdicts=normalized_force_provider is None,
         )
 
         second_only_success_count = 0
