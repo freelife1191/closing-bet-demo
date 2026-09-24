@@ -6,29 +6,11 @@ KR Market VCP cache update service.
 
 from __future__ import annotations
 
-import json
 import os
-from datetime import datetime
 from typing import Any, Callable
 
 from engine.ticker_utils import normalize_ticker
-from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
-from services.kr_market_data_cache_service import atomic_write_text
-
-
-_normalize_ticker = normalize_ticker
-
-
-def _normalize_ai_payload(ai_payload: Any) -> dict[str, dict[str, Any]]:
-    if not isinstance(ai_payload, dict):
-        return {}
-
-    normalized: dict[str, dict[str, Any]] = {}
-    for key in VCP_AI_RECOMMENDATION_FIELDS:
-        value = ai_payload.get(key)
-        if isinstance(value, dict) and value:
-            normalized[key] = value
-    return normalized
+from services.common_update_ai_analysis_service import _valid_recommendations, _write_ai_analysis_files
 
 
 def update_vcp_ai_cache_files(
@@ -39,88 +21,37 @@ def update_vcp_ai_cache_files(
     logger: Any,
     ai_results: dict[str, Any] | None = None,
 ) -> int:
-    """VCP AI 캐시 파일(ai_analysis_results/kr_ai_analysis)에 재분석 결과를 반영한다."""
-    if not updated_recommendations and not ai_results:
+    """재분석 결과를 수집과 같은 규칙으로 날짜별 VCP AI 캐시에 병합하고 반영한 종목 수를 돌려준다.
+
+    캐시에 없던 종목은 추가하고 날짜 파일이 없으면 만든다. 날짜 없는 파일은 분석 날짜가
+    오늘이거나 그 파일의 signal_date 와 같을 때만 쓰고, 실패 판정은 기존 유효 판정을 덮지
+    않는다([VCP-044]).
+    """
+    del load_json_file  # 저장 함수가 파일을 직접 읽는다
+    if not target_date:
         return 0
 
-    normalized_gemini_updates: dict[str, dict[str, Any]] = {}
-    if isinstance(updated_recommendations, dict):
-        for ticker, recommendation in updated_recommendations.items():
-            if not isinstance(recommendation, dict) or not recommendation:
-                continue
-            ticker_key = _normalize_ticker(ticker)
-            if ticker_key:
-                normalized_gemini_updates[ticker_key] = recommendation
-
-    normalized_ai_results: dict[str, dict[str, dict[str, Any]]] = {}
-    if isinstance(ai_results, dict):
-        for ticker, ai_payload in ai_results.items():
-            normalized_payload = _normalize_ai_payload(ai_payload)
-            if normalized_payload:
-                ticker_key = _normalize_ticker(ticker)
-                if ticker_key:
-                    normalized_ai_results[ticker_key] = normalized_payload
-
-    target_tickers = set(normalized_gemini_updates) | set(normalized_ai_results)
-    if not target_tickers:
+    rows: dict[str, dict[str, Any]] = {}
+    for ticker, payload in (ai_results or {}).items():
+        ticker_key = normalize_ticker(ticker)
+        if ticker_key and isinstance(payload, dict):
+            rows[ticker_key] = {**payload, "ticker": ticker_key}
+    for ticker, recommendation in (updated_recommendations or {}).items():
+        ticker_key = normalize_ticker(ticker)
+        if ticker_key and isinstance(recommendation, dict) and recommendation:
+            row = rows.setdefault(ticker_key, {"ticker": ticker_key})
+            # 분석기 원본 판정이 유효하면 원본(model 등 부가 필드 포함)을 남긴다
+            if "gemini_recommendation" not in _valid_recommendations(row):
+                row["gemini_recommendation"] = recommendation
+    if not rows:
         return 0
 
-    date_str = str(target_date or "").replace("-", "")
-    candidate_files = [
-        f"ai_analysis_results_{date_str}.json" if date_str else "",
-        "ai_analysis_results.json",
-        f"kr_ai_analysis_{date_str}.json" if date_str else "",
-        "kr_ai_analysis.json",
-    ]
-
-    updated_files = 0
-    now_iso = datetime.now().isoformat()
-
-    for filename in candidate_files:
-        if not filename:
-            continue
-
-        filepath = get_data_path(filename)
-        if not os.path.exists(filepath):
-            continue
-
-        try:
-            data = load_json_file(filename)
-            signals = data.get("signals", []) if isinstance(data, dict) else []
-            if not isinstance(signals, list) or not signals:
-                continue
-
-            changed = False
-            for item in signals:
-                if not isinstance(item, dict):
-                    continue
-                ticker = _normalize_ticker(item.get("ticker") or item.get("stock_code"))
-                if not ticker or ticker not in target_tickers:
-                    continue
-
-                gemini_rec = normalized_gemini_updates.get(ticker)
-                if isinstance(gemini_rec, dict) and item.get("gemini_recommendation") != gemini_rec:
-                    item["gemini_recommendation"] = gemini_rec
-                    changed = True
-
-                ai_payload = normalized_ai_results.get(ticker)
-                if not isinstance(ai_payload, dict):
-                    continue
-                for key, recommendation in ai_payload.items():
-                    if item.get(key) != recommendation:
-                        item[key] = recommendation
-                        changed = True
-
-            if not changed:
-                continue
-
-            data["generated_at"] = now_iso
-            atomic_write_text(
-                filepath,
-                json.dumps(data, ensure_ascii=False, indent=2),
-            )
-            updated_files += 1
-        except Exception as error:
-            logger.warning(f"VCP AI cache update failed ({filename}): {error}")
-
-    return updated_files
+    try:
+        return _write_ai_analysis_files(
+            data_dir=os.path.dirname(get_data_path("signals_log.csv")),
+            analysis_date=target_date,
+            results={"signals": list(rows.values())},
+        )
+    except Exception as error:
+        logger.warning(f"VCP AI cache update failed ({target_date}): {error}")
+        return 0

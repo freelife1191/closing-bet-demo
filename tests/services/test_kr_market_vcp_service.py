@@ -114,6 +114,7 @@ def test_resolve_vcp_second_recommendation_key_supports_zai_aliases():
 
 def test_load_vcp_ai_cache_map_reads_existing_cache_files(tmp_path):
     cache_payload = {
+        "signal_date": "2026-02-21",
         "signals": [
             {
                 "ticker": "005930",
@@ -147,6 +148,7 @@ def test_load_vcp_ai_cache_map_reads_existing_cache_files(tmp_path):
 
 def test_load_vcp_ai_cache_map_uses_injected_json_loader(tmp_path):
     cache_payload = {
+        "signal_date": "2026-02-21",
         "signals": [
             {
                 "ticker": "005930",
@@ -179,6 +181,7 @@ def test_load_vcp_ai_cache_map_uses_injected_json_loader(tmp_path):
 
 def test_load_vcp_ai_cache_map_applies_ticker_filter(tmp_path):
     cache_payload = {
+        "signal_date": "2026-02-21",
         "signals": [
             {
                 "ticker": "005930",
@@ -211,6 +214,7 @@ def test_load_vcp_ai_cache_map_applies_ticker_filter(tmp_path):
 
 def test_load_vcp_ai_cache_map_stops_early_when_required_keys_resolved(tmp_path):
     cache_payload = {
+        "signal_date": "2026-02-21",
         "signals": [
             {
                 "ticker": "005930",
@@ -247,6 +251,27 @@ def test_load_vcp_ai_cache_map_stops_early_when_required_keys_resolved(tmp_path)
     assert call_count["count"] == 1
     assert "005930" in ai_map
     assert "000660" not in ai_map
+
+
+def test_load_vcp_ai_cache_map_ignores_undated_cache_of_other_date(tmp_path):
+    # 날짜 없는 파일이 전날 자료면 겹치는 종목을 캐시 있음으로 보고 재분석에서 빼면 안 된다 [VCP-044]
+    cache_payload = {
+        "signal_date": "2026-02-20",
+        "signals": [{"ticker": "005930", "gemini_recommendation": {"action": "BUY"}}],
+    }
+    for filename in ("ai_analysis_results.json", "kr_ai_analysis.json"):
+        (tmp_path / filename).write_text(json.dumps(cache_payload), encoding="utf-8")
+    signals_path = tmp_path / "signals_log.csv"
+    signals_path.write_text("ticker,signal_date\n005930,2026-02-21\n", encoding="utf-8")
+
+    cache_exists, ai_map = load_vcp_ai_cache_map(
+        target_date="2026-02-21",
+        signals_path=str(signals_path),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert cache_exists is False
+    assert ai_map == {}
 
 
 def test_execute_vcp_failed_ai_reanalysis_writes_signals_csv_atomically(monkeypatch, tmp_path):
@@ -646,6 +671,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
     (tmp_path / "ai_analysis_results.json").write_text(
         json.dumps(
             {
+                "signal_date": "2026-02-21",
                 "signals": [
                     {
                         "ticker": "005930",
@@ -780,6 +806,7 @@ def test_execute_vcp_failed_ai_reanalysis_cache_key_follows_analyzer_fallback(
     (tmp_path / "ai_analysis_results.json").write_text(
         json.dumps(
             {
+                "signal_date": "2026-02-21",
                 "signals": [
                     {
                         "ticker": "005930",
@@ -892,6 +919,7 @@ def test_execute_vcp_failed_ai_reanalysis_skips_second_column_when_provider_is_u
     (tmp_path / "ai_analysis_results.json").write_text(
         json.dumps(
             {
+                "signal_date": "2026-02-21",
                 "signals": [
                     {
                         "ticker": "005930",
@@ -1057,6 +1085,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatc
     (tmp_path / "ai_analysis_results.json").write_text(
         json.dumps(
             {
+                "signal_date": "2026-02-21",
                 "signals": [
                     {
                         "ticker": "005930",

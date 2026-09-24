@@ -72,8 +72,20 @@
 
 ### [VCP-044] VCP 재분석 결과가 캐시에 없는 종목을 캐시에 넣지 않고, 날짜 없는 캐시 파일을 날짜 확인 없이 읽고 쓴다
 - 카테고리: VCP | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-040]` 심층 리뷰(critic, 2026-09-24). `update_vcp_ai_cache_files` 는 파일이 없으면 건너뛰고(`services/kr_market_vcp_cache_update_service.py:84`) 파일 안에 이미 있는 종목만 고친다(`:98`). 수집 때 모든 AI 가 실패한 종목은 `_write_ai_analysis_files` 가 캐시에 넣지 않으므로(`services/common_update_ai_analysis_service.py:113-116`), 뒤의 재분석이 그 종목을 GPT 로 채워도 캐시에는 남지 않는다. `[VCP-040]` 이후 CSV 에는 GPT 판정이 들어가므로 화면의 Gemini 열에 GPT 판정이 뜨고 GPT 열은 빈다. 또 `load_vcp_ai_cache_map`(`services/kr_market_vcp_reanalysis_service.py:145-150`)과 `update_vcp_ai_cache_files`(`:70-75`)는 날짜 없는 `ai_analysis_results.json`·`kr_ai_analysis.json` 을 날짜 확인 없이 쓰므로, 날짜 파일이 없는 날 재분석하면 전날 파일의 겹치는 종목에 결과가 쓰일 수 있다.
-- [ ] 설계 승인(없는 종목 추가, 날짜 파일이 없을 때 새로 만들지, 날짜 없는 파일의 `signal_date` 확인)
-- [ ] 재현 테스트와 수정, 격리 사본 QA(재분석 뒤 화면 GPT 열), 리뷰
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 10:57 | 범위: 쓰기는 `update_vcp_ai_cache_files` 가 재분석 결과를 행으로 바꿔 수집용 `_write_ai_analysis_files` 를 재사용(날짜 파일 생성·없는 종목 추가·날짜 없는 파일은 분석 날짜가 오늘일 때만), 읽기는 `load_vcp_ai_cache_map` 이 날짜 없는 파일을 `signal_date` 가 요청 날짜와 같을 때만 사용. 티어 T2(`services/kr_market_vcp_cache_update_service.py`·`services/kr_market_vcp_reanalysis_service.py`, 위험 경로 밖) | 실제 대화 근거: 2026-09-24 AskUserQuestion 응답 「승인 (권장)」
+- QA 시나리오: 수집 때 캐시에 없던 종목을 재분석하면 VCP 화면 GPT 열에 그 판정이 뜬다
+- 범위 확장 승인: 2026-09-24 11:17 확인 | 범위: 수집과 공유하는 `_write_ai_analysis_files` 가 날짜 없는 파일을 「오늘」뿐 아니라 그 파일의 `signal_date` 가 분석 날짜와 같을 때도 씀(주말 재분석이 챗봇·날짜 없는 AI 조회에 반영되도록, 코드 리뷰 지적 2) | 실제 대화 근거: 2026-09-24 AskUserQuestion 응답 「넓힌다 (권장)」
+- [x] 설계 승인
+- [x] 재현 테스트(날짜 파일 생성, 없는 종목 추가, 전날 날짜 없는 파일 미기록, 날짜 다른 날짜 없는 파일 무시, 같은 날짜 날짜 없는 파일 기록, 오늘 갈래, 원본 gemini 우선). 수정 전 코드에서 새 검사가 실패함을 확인
+- [x] `/ponytail-review`: 별칭 `_normalize_ticker` 제거 반영, 그 밖에 줄일 것 없음
+- [x] 코드 리뷰(`closing-bet-reviewer`, 1차 APPROVE·low 6건): 1 지연 import 사유 오류 → 모듈 수준 import 로 반영, 2 날짜 없는 파일 쓰기 조건 → 사용자 승인으로 범위 확장 반영, 3 CLI `update_kr_ai_analysis_prices` 가 동기화한 가격을 오늘 재분석이 되돌림 → 수집 경로와 같은 성질이고 판정 손실이 없어 기록만, 4 챗봇 결측 점수 0점 표기 → 범위 밖이라 `[CHAT-045]` 로 등록, 5 원본 gemini 부가 필드 유실 → 반영, 6 오늘 갈래 테스트 → 반영. 반영분 재검토 APPROVE·low 2건: 1 원본 gemini 우선 조건이 저장 규칙(정확한 BUY/SELL/HOLD)과 달라 소문자 action 이면 칸이 빠짐 → 저장 쪽 `_valid_recommendations` 로 판정하도록 반영, 2 날짜 파일 없이 같은 날짜의 날짜 없는 파일만 있는 레거시 상태에서는 그 파일의 나머지 행이 사라짐 → 오늘 갈래에도 있던 성질이고 현재 작성 경로는 두 파일을 함께 쓰므로 기록만
+- [x] pytest 전체: `venv/bin/python -m pytest -q` 2730 passed, 2 skipped, exit 0 (2026-09-24 11:23 완료)
+- [ ] 격리 사본 QA(가짜 LLM 재분석 뒤 화면 GPT 열)
+
+### [CHAT-045] 챗봇 VCP 요약이 점수 없는 종목을 「0점 (매수 추천)」으로 LLM 문맥에 넣는다
+- 카테고리: 챗봇 | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-044]` 코드 리뷰 지적 4(2026-09-24). `chatbot/signal_context.py` 의 VCP 요약이 `signal.get("score", signal.get("vcp_score", 0))` 로 결측 점수를 0 으로 바꾼다. `[VCP-044]` 이후 재분석은 수집 때 캐시에 없던 종목을 `ticker`·`stock_name`·추천 칸만 가진 행으로 캐시에 넣으므로, 그 종목이 BUY 면 「0점 (매수 추천)」이 된다. 이름도 `name` 이 없으면 `stock_name` 으로 넘어가는지 확인이 필요하다
+- [ ] 설계 승인(점수 결측 시 표기 생략 또는 시그널 CSV 에서 보충)
+- [ ] 테스트와 수정, 리뷰
 
 ### [VCP-043] `signal_tracker` 경로의 AI 추천 선택이 실패 dict 도 고르고 VCP 수집과 다른 규칙을 쓴다
 - 카테고리: VCP | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-040]` 계획 검토(critic, 2026-09-24). `engine/signal_tracker_ai_helpers.py:91` `_pick_recommendation` 은 gemini → gpt → perplexity 순서로 `isinstance(Mapping)` 만 보고 고르므로 `{"action":"N/A","reason":"분석 실패"}` 도 선택된다. `run.py:56` 메뉴 2 가 이 경로로 `signals_log.csv` 에 쓰며 `ai_provider` 열도 남긴다(`:145`). `[VCP-040]` 이후 수집·재분석은 `_extract_vcp_ai_recommendation`(유효성 검사 포함)을 쓴다.

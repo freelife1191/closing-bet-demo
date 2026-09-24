@@ -106,6 +106,14 @@ def _read_analysis(path: str) -> dict[str, Any]:
     return payload
 
 
+def _signal_date_of(path: str) -> Any:
+    try:
+        with open(path, encoding="utf-8") as source:
+            return json.load(source).get("signal_date")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def _write_ai_analysis_files(*, data_dir: str, analysis_date: str, results: dict[str, Any]) -> int:
     """유효 추천만 병합한다. 실패·과거 실행은 최신 정상 자료를 덮지 않는다."""
     analysis_date = _analysis_date(analysis_date)
@@ -129,8 +137,10 @@ def _write_ai_analysis_files(*, data_dir: str, analysis_date: str, results: dict
                 payload[key] = value
         serialized = json.dumps(sanitize_for_json(payload), ensure_ascii=False, indent=2, cls=NumpyEncoder, allow_nan=False)
         writes.append((dated, serialized))
-        if analysis_date == datetime.now().strftime("%Y-%m-%d"):
-            writes.append((os.path.join(data_dir, f"{prefix}.json"), serialized))
+        undated = os.path.join(data_dir, f"{prefix}.json")
+        # 날짜 없는 파일은 최신 자료다. 오늘 분석이거나 그 파일이 같은 날짜를 가리킬 때만 덮는다([VCP-044])
+        if analysis_date in (datetime.now().strftime("%Y-%m-%d"), _signal_date_of(undated)):
+            writes.append((undated, serialized))
     for path, serialized in writes:
         atomic_write_text(path, serialized)
     return len(updates)

@@ -181,7 +181,6 @@ def load_vcp_ai_cache_map(
         file_path = os.path.join(data_dir, filename)
         if not os.path.exists(file_path):
             continue
-        cache_file_exists = True
 
         try:
             try:
@@ -189,8 +188,16 @@ def load_vcp_ai_cache_map(
             except TypeError:
                 payload = json_loader(file_path)
         except Exception as error:
+            cache_file_exists = True
             logger.warning(f"VCP AI 캐시 로드 실패 ({filename}): {error}")
             continue
+        # 날짜 없는 파일은 마지막 수집 날짜의 자료다. 다른 날짜면 겹치는 종목을 캐시 있음으로
+        # 보고 재분석에서 빠뜨리므로 쓰지 않는다([VCP-044])
+        if date_str and date_str not in filename and (
+            not isinstance(payload, dict) or str(payload.get("signal_date") or "").replace("-", "") != date_str
+        ):
+            continue
+        cache_file_exists = True
 
         signals = payload.get("signals", []) if isinstance(payload, dict) else []
         if not isinstance(signals, list):
