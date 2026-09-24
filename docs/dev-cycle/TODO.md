@@ -49,21 +49,6 @@
 - [ ] 구현, 결측과 실제 0 거래 구분 확인
 - [ ] T3 리뷰와 pytest 전체, 격리 사본에서 가짜 출처로 CLI QA
 
-### [VCP-057] VCP 수급 결측의 남은 0 기본값과 실제 0 의 색 표기
-- 카테고리: VCP | 티어: T2 | 근거: `[VCP-054]` 설계에서 범위 밖으로 남긴 것(2026-09-24 21:03)과 `closing-bet-reviewer` low
-- 남은 것: (1) `engine/screener.py` `ScreenerResult` 의 `foreign_net_5d: int`·1일 기본값 0(현재 dict 경로에서 쓰이지 않음), (2) `_score_supply_core` 가 `details` 행에 키가 없으면 1일 값을 0 으로 씀, (3) 수동 스크립트 `tests/test_vcp.py:72`·`scripts/diagnose_screener.py:62` 가 None 에서 TypeError, (4) VCP 표의 실제 0 이 매도와 같은 빨간색(`frontend/src/app/dashboard/kr/vcp/page.tsx` 의 `supplyColorClass`, `[VCP-054]` 이전과 같은 표기), (5) `engine/kr_ai_data_service.py:436-437` 이 빈 칸을 0 으로 읽음(읽는 곳은 `run.py` 의 `KrAiAnalyzer` 뿐이며 그 전략은 종료되어 값을 쓰지 않음)
-- 확인 수준: 코드로만 확인. 운영에서 드러나는 증상은 (4) 표기뿐이다
-- 설계 승인: 승인 확인 시각 2026-09-25 08:40
-  | 범위: (1) `engine/screener.py` 의 미사용 `ScreenerResult` 삭제, (2) `_score_supply_core` 의 1일 값을 키·값이 없으면 None(연속 매수는 None 에서 멈춤, 점수 불변), (3) 두 수동 스크립트가 None 을 `-` 로 출력, (4) `supplyColorClass` 의 실제 0 을 중립 회색 `text-gray-300`(결측 `text-gray-500`·매수·매도 불변), (5) `kr_ai_data_service` 는 `KrAiAnalyzer` 가 수급 값을 읽지 않아 변경 없음
-  | 실제 대화 근거: 2026-09-25 사용자 「진행해」 응답, 현재 세션의 VCP-057 설계 제안
-- QA 시나리오: VCP 표에서 실제 0 순매수 셀이 매도(빨강)와 다른 중립색이고 결측은 `-` 회색이다
-- [x] 구현 (1)~(4), (5) 변경 없음(근거: `KrAiAnalyzer.analyze` 는 `stock_info` 에서 name·price·change_pct 만 읽고 전략 둘은 종료되어 읽지 않음, 리뷰어 확인)
-- [x] pytest (2) 한 건(수정 전 TypeError 로 RED), vitest `page.regression-vcp-054.test.tsx` 에 0 색 한 건(수정 전 `text-red-400` 으로 RED)
-- [x] ponytail 리뷰(자체 수행): shrink 1건(1일 값 변환 4줄→한 식) 반영
-- [x] `closing-bet-reviewer`(vcp057-reviewer): APPROVE, 최대 low. low1(`tests/test_vcp.py` 가 NaN 을 `nan` 으로 출력) 반영해 `pd.isna` 로 판정, low2(정규화기 둘이 결측을 0 으로 채움)는 범위 밖이라 `[INFRA-109]` 에 추가, low3(음수 내림)은 종전 동작과 같아 미반영
-- [x] pytest·vitest 전체와 lint·type-check(리뷰 반영 뒤 재실행): pytest 2803 passed·2 skipped, vitest 100파일 691 passed, lint·type-check exit 0
-- [ ] 격리 사본 브라우저 QA(가짜 비밀)
-
 ### [VCP-045] Z.ai 폴백의 `zai_disabled_reason` 도 워커 수명 동안 풀리지 않는다 (운영자 단계)
 - 카테고리: VCP | 티어: T1(남은 단계는 운영자 확인과 배포) | 근거: `[VCP-041]` 코드 리뷰(2026-09-24). 코드 수정분은 커밋 `22b197a`(`_expire_session_blocks` 가 `zai_disabled_reason` 도 10분 뒤 비움)로 끝났고 기록은 `archive/daily/2026-09-24.md`·`qa/VCP-045.md` 에 있다
 - 남은 범위: 운영에서 실제로 발동했는지는 로그로만 확인된다. 배포는 gunicorn 워커를 모두 재기동해야 반영된다(장 중 금지). `[VCP-041]` 과 같은 재기동으로 함께 반영된다
