@@ -23,11 +23,12 @@
 `FLASK_HOST` 주석에 있습니다.
 
 운영 `.env` 에는 `CLOSING_SCHEDULE_TIME`, `SLACK_WEBHOOK_URL`, `VCP_GPT_FALLBACK_MODEL`,
-`VCP_PERPLEXITY_API_TIMEOUT`, `VCP_ZAI_API_TIMEOUT` 이 없지만 조치할 것이 없습니다. 다섯 키
-모두 코드에 기본값이 있습니다. `services/scheduler.py` 의 `_resolve_daily_schedule_time` 호출이
+`VCP_ZAI_API_TIMEOUT` 이 없지만 조치할 것이 없습니다. 네 키 모두 코드에 기본값이
+있습니다. `services/scheduler.py` 의 `_resolve_daily_schedule_time` 호출이
 17:00 을, `services/notifier.py` 의 `__init__` 이 빈 웹훅 주소를, `engine/config.py` 의 같은
-이름 프로퍼티 셋이 나머지를 채웁니다. 두 타임아웃은 `ANALYSIS_LLM_API_TIMEOUT` 을 먼저 보고
-그것도 없으면 각각 120초·180초입니다(2026-09-22 서버 감사, 실제 로그로 확인). 다음 사람이
+이름 프로퍼티 둘이 나머지를 채웁니다. Z.ai 타임아웃은 `ANALYSIS_LLM_API_TIMEOUT` 을 먼저 보고
+그것도 없으면 180초입니다(2026-09-22 서버 감사, 실제 로그로 확인). `VCP_PERPLEXITY_API_TIMEOUT`
+은 `[VCP-046]` 에서 Perplexity 와 함께 제거되었습니다. 다음 사람이
 다시 조사하지 않도록 적어 둡니다.
 
 ## Next 를 production 으로 돌리기

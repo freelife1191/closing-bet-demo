@@ -5,7 +5,7 @@ LLM Quality Harness — 실제 LLM 호출로 회귀/품질 검증.
 
 대상:
 - VCP analyze_stock (Gemini Vertex + GPT 병렬, 5 케이스 × 3회)
-- Perplexity 단독 (3 케이스 × 2회)
+- Z.ai 단독 (3 케이스 × 2회)
 - 챗봇 response_flow 스트리밍 (3 시나리오 × 2회)
 
 사용:
@@ -39,13 +39,8 @@ import config as app_config_module  # noqa: E402,F401
 from engine import config as engine_config_module  # noqa: E402,F401
 from engine.config import app_config  # noqa: E402
 from engine.vcp_ai_analyzer import VCPMultiAIAnalyzer  # noqa: E402
-from engine.vcp_ai_analyzer_helpers import (  # noqa: E402
-    build_perplexity_request,
-    is_low_quality_recommendation,
-)
+from engine.vcp_ai_analyzer_helpers import is_low_quality_recommendation  # noqa: E402
 from engine.genai_client import build_genai_client, vertex_configured  # noqa: E402
-
-import httpx  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -137,7 +132,7 @@ VCP_CASES: list[dict[str, Any]] = [
     },
 ]
 
-PERPLEXITY_CASES = VCP_CASES[:3]
+ZAI_CASES = VCP_CASES[:3]
 
 CHATBOT_CASES: list[dict[str, str]] = [
     {
@@ -240,77 +235,6 @@ async def run_zai_iteration(analyzer: VCPMultiAIAnalyzer, case: dict[str, Any], 
     # 각 호출 사이 세션 비활성화 상태를 초기화해서 진짜 호출이 일어나도록 한다.
     setattr(analyzer, "zai_disabled_reason", "")
     return await _run_direct(analyzer._analyze_with_zai, case, i, "zai")
-
-
-async def perplexity_availability_probe() -> tuple[bool, str | None]:
-    """Perplexity API 접근성 확인. 401/429이면 사용 불가."""
-    api_key = app_config.PERPLEXITY_API_KEY
-    if not api_key:
-        return False, "PERPLEXITY_API_KEY missing"
-    url, headers, payload = build_perplexity_request(
-        prompt="ping. JSON으로만 응답하세요. {\"action\":\"HOLD\",\"confidence\":50,\"reason\":\"test\"}",
-        api_key=api_key,
-        model=app_config.VCP_PERPLEXITY_MODEL,
-    )
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.post(url, headers=headers, json=payload)
-        if r.status_code == 200:
-            return True, None
-        snippet = (r.text or "")[:160]
-        return False, f"HTTP {r.status_code}: {snippet}"
-    except Exception as exc:
-        return False, f"{type(exc).__name__}: {exc}"
-
-
-async def run_perplexity_iteration(
-    analyzer: VCPMultiAIAnalyzer,
-    case: dict[str, Any],
-    iteration: int,
-) -> CallResult:
-    """Perplexity만 단독으로 호출(분석기 fallback 우회)."""
-    case_id = case["_case_id"]
-    api_key = app_config.PERPLEXITY_API_KEY
-    prompt = analyzer._build_vcp_prompt(case["name"], case)
-    url, headers, payload = build_perplexity_request(
-        prompt=prompt,
-        api_key=api_key,
-        model=app_config.VCP_PERPLEXITY_MODEL,
-    )
-    t0 = time.time()
-    err: str | None = None
-    rec: dict[str, Any] | None = None
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(url, headers=headers, json=payload)
-        if r.status_code != 200:
-            err = f"HTTP {r.status_code}: {(r.text or '')[:200]}"
-        else:
-            from engine.vcp_ai_analyzer_helpers import (
-                extract_perplexity_response_text,
-                parse_json_response,
-            )
-            text = extract_perplexity_response_text(r.json()) or ""
-            rec = parse_json_response(text)
-    except Exception as exc:
-        err = f"{type(exc).__name__}: {exc}"
-    latency = time.time() - t0
-    ok_quality, q_reason = quality_check_vcp(rec)
-    return CallResult(
-        case=case_id,
-        provider="perplexity",
-        iteration=iteration,
-        ok=rec is not None and err is None,
-        latency_s=latency,
-        quality_pass=ok_quality,
-        detail={
-            "quality_reason": q_reason,
-            "action": (rec or {}).get("action"),
-            "confidence": (rec or {}).get("confidence"),
-            "reason_len": len(str((rec or {}).get("reason") or "")),
-        },
-        error=err,
-    )
 
 
 def run_chatbot_iteration(
@@ -456,7 +380,7 @@ def write_report(
 # ---------- Orchestration ----------
 
 
-async def main_async(report_path: Path, vcp_iters: int, perplexity_iters: int, chatbot_iters: int) -> int:
+async def main_async(report_path: Path, vcp_iters: int, zai_iters: int, chatbot_iters: int) -> int:
     if not vertex_configured():
         logger.error("Vertex AI 환경변수가 설정되지 않았습니다.")
         return 2
@@ -493,27 +417,9 @@ async def main_async(report_path: Path, vcp_iters: int, perplexity_iters: int, c
                 r.latency_s,
             )
 
-    # Perplexity (직접 호출, 분석기 fallback 우회) — quota probe 후 진행
-    pplx_ok, pplx_err = await perplexity_availability_probe()
-    if not pplx_ok:
-        skipped.append(f"perplexity unavailable: {pplx_err}")
-        logger.warning("Perplexity 사용 불가 — 환경 이슈로 스킵: %s", pplx_err)
-    else:
-        for case in PERPLEXITY_CASES:
-            for i in range(1, perplexity_iters + 1):
-                r = await run_perplexity_iteration(analyzer, case, i)
-                results.append(r)
-                logger.info(
-                    "Perplexity %s iter%d %s/%s lat=%.1fs",
-                    case["_case_id"], i,
-                    "ok" if r.ok else "FAIL",
-                    "Q" if r.quality_pass else "q!",
-                    r.latency_s,
-                )
-
     # Z.ai (GLM)
-    for case in PERPLEXITY_CASES:
-        for i in range(1, perplexity_iters + 1):
+    for case in ZAI_CASES:
+        for i in range(1, zai_iters + 1):
             r = await run_zai_iteration(analyzer, case, i)
             results.append(r)
             logger.info(
@@ -564,7 +470,7 @@ def main() -> int:
         default=str(ROOT / "docs" / "llm_quality" / f"{datetime.now().strftime('%Y-%m-%d')}.md"),
     )
     parser.add_argument("--vcp-iters", type=int, default=3)
-    parser.add_argument("--perplexity-iters", type=int, default=2)
+    parser.add_argument("--zai-iters", type=int, default=2)
     parser.add_argument("--chatbot-iters", type=int, default=2)
     args = parser.parse_args()
 
@@ -573,7 +479,7 @@ def main() -> int:
             main_async(
                 Path(args.report),
                 args.vcp_iters,
-                args.perplexity_iters,
+                args.zai_iters,
                 args.chatbot_iters,
             )
         )

@@ -218,7 +218,7 @@ Claude Code의 기존 QA 도구 순서는 실행 환경 표를 따른다.
 뒤의 두 파일은 `[VCP-003]` 에서 추가했다. 둘 다 `vcp_ai_analyzer.py` 에서 분해되어 나왔고,
 어느 AI 프로바이더를 실제로 호출할지 결정한다. `[VCP-003]` 의 결함이 두 파일에 걸쳐 있었다.
 `orchestrate_stock_analysis` 의 분기가 두 번째 프로바이더를 고르고,
-`resolve_perplexity_disabled` 가 그 분기의 입력을 만든다. 이 결정이 VCP 표의 AI 추천 열을
+`resolve_effective_second_provider` 가 그 분기의 입력을 만든다. 이 결정이 VCP 표의 AI 추천 열을
 그대로 좌우하므로 「VCP 판정」에 해당한다.
 
 ### 모의투자 계좌와 거래

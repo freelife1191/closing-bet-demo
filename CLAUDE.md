@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Smart Money Bot: AI 기반 종가 베팅 & VCP 시그널 시스템**
 
-AI-powered Korean stock market analysis system combining institutional flow analysis with VCP (Volatility Contraction Pattern) technical analysis. Uses hybrid AI approach (Gemini 3.7 Flash, GPT via Z.ai, Perplexity) with Flask backend and Next.js dashboard.
+AI-powered Korean stock market analysis system combining institutional flow analysis with VCP (Volatility Contraction Pattern) technical analysis. Uses hybrid AI approach (Gemini 3.7 Flash, GPT with Z.ai fallback) with Flask backend and Next.js dashboard.
 
 **Live Demo**: https://close.highvalue.kr/dashboard/kr
 
@@ -186,7 +186,6 @@ Required for AI functionality:
 ```bash
 GOOGLE_API_KEY=your_gemini_key
 OPENAI_API_KEY=your_openai_key
-PERPLEXITY_API_KEY=your_perplexity_key
 ZAI_API_KEY=your_zai_key
 
 # Models — see .env.example for the authoritative list
@@ -289,9 +288,10 @@ Next와 Flask는 같은 릴리스로 적용해야 합니다. 구형·신형 워�
 값을 읽으므로, 워커가 둘 이상이면 나머지 워커는 재기동 전까지 옛 값을 계속 씁니다. 유출된
 키를 이 화면으로 교체했다면 반드시 워커를 모두 재기동해야 실제로 바뀝니다.
 
-`VCP_AI_PROVIDERS` 와 `VCP_SECOND_PROVIDER`, 그리고 `PERPLEXITY_API_KEY` 의 유무는
-`VCPMultiAIAnalyzer` 가 만들어질 때 한 번 읽혀 두 번째 AI 프로바이더를 확정합니다. 확정한
-값은 실행 경로와 재분석 캐시 판정이 함께 씁니다. 그래서 `.env` 에서 이 값을 바꾸면 워커를
+`VCP_AI_PROVIDERS` 와 `VCP_SECOND_PROVIDER` 는 `VCPMultiAIAnalyzer` 가 만들어질 때 한 번
+읽혀 두 번째 AI 프로바이더를 확정합니다. 두 번째 자리는 GPT 하나이며, `[VCP-046]` 이후
+perplexity 값은 경고와 함께 GPT 로 바뀝니다. 확정한 값은 실행 경로와 재분석 캐시 판정이
+함께 씁니다. 그래서 `.env` 에서 이 값을 바꾸면 워커를
 모두 재기동해야 반영됩니다. gunicorn 이 워커별로 이 값을 따로 확정하므로, 일부 워커만
 재기동하면 같은 요청이 어느 워커에 닿느냐에 따라 다르게 동작합니다.
 

@@ -48,9 +48,8 @@ API 키와 핵심 엔진 작동을 위한 변수입니다.
 | Key                  | 설명                                     | 비고                                    |
 | :------------------- | :--------------------------------------- | :-------------------------------------- |
 | `GOOGLE_API_KEY`     | Gemini 분석을 위한 필수 키               | 필수                                    |
-| `PERPLEXITY_API_KEY` | 실시간 뉴스 검색(Sonar) 필수 키          | 필수                                    |
 | `OPENAI_API_KEY`     | GPT 분석용 키                            | 선택 (Z.ai 사용 시 생략 가능)           |
-| `VCP_AI_PROVIDERS`   | 사용할 AI 목록 (예: `gemini,perplexity`) | **중요** (선택한 AI에 따라 결과 달라짐) |
+| `VCP_AI_PROVIDERS`   | 사용할 AI 목록 (예: `gemini,gpt`)        | **중요** (선택한 AI에 따라 결과 달라짐) |
 | `GEMINI_MODEL`       | 메인 분석에 사용할 구글 모델명           | 기본값: `gemini-flash-latest`           |
 
 #### ⚙️ 시스템 로직 설정 (Recommended Tuning)

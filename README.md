@@ -13,7 +13,7 @@
 ## 🎯 핵심 가치 제안
 
 - **Rule-based Screening + AI Reasoning**: 엄격한 기술적 필터링과 AI의 맥락 이해력을 결합하여 신호 품질을 극대화
-- **Multi-Model AI Cross-Validation**: 세 가지 모델(Gemini, GPT, Perplexity)을 조화롭게 운용하여 분석 신뢰도 극대화
+- **Multi-Model AI Cross-Validation**: 두 모델(Gemini, GPT)을 조화롭게 운용하여 분석 신뢰도 극대화
 - **Market-First Approach**: 개별 종목 분석 전에 시장 상태를 먼저 판단하여 하락장 리스크 사전 차단
 - **Real-time Multi-Channel Notification**: Telegram, Discord, Slack, Email로 분석 결과를 즉시 전달
 
@@ -28,7 +28,7 @@
 
 ### 3. Multi-Model AI Cross-Validation (이중 검증)
 - **Gemini**: 긴 문맥(Context) 이해와 심층 추론을 담당하여 상세한 투자 리포트를 작성합니다.
-- **GPT/Perplexity**: VCP 분석에서는 `VCP_SECOND_PROVIDER` 설정에 따라 Gemini의 보조 검증 모델로 동작합니다.
+- **GPT**: VCP 분석에서 Gemini의 보조 검증 모델로 동작하며, 실패하면 Z.ai로 넘어갑니다.
 
 ---
 
@@ -96,7 +96,6 @@ GOOGLE_APPLICATION_CREDENTIALS=./secrets/vertex-ai-runtime.json
 
 # === 기타 AI API 키 ===
 OPENAI_API_KEY=your_openai_api_key_here
-PERPLEXITY_API_KEY=your_perplexity_api_key_here
 
 # === Z.ai (GPT 호환 fallback) ===
 ZAI_API_KEY=your_zai_api_key_here
@@ -115,13 +114,11 @@ ANALYSIS_LLM_API_TIMEOUT=120
 ANALYSIS_LLM_REQUEST_DELAY=4         # API 호출 간 대기(초). 429 방지용 (None만 기본값으로 대체, 0 명시 가능)
 
 # === VCP 멀티 AI 설정 ===
-VCP_AI_PROVIDERS=gemini,perplexity   # 활성·폴백 허용 provider (gemini/gpt/perplexity/zai 조합)
-VCP_SECOND_PROVIDER=perplexity       # gemini 외 보조모델 1개 (gpt 또는 perplexity)
+VCP_AI_PROVIDERS=gemini,gpt,zai      # 활성·폴백 허용 provider (gemini/gpt/zai 조합)
+VCP_SECOND_PROVIDER=gpt              # 보조모델. gpt 만 지원 (perplexity 는 [VCP-046] 에서 제거, 경고와 함께 gpt 로 실행)
 VCP_GEMINI_MODEL=gemini-3.7-flash
 VCP_GPT_MODEL=gpt-5.6-luna           # GPT 분석용 모델
 VCP_GPT_FALLBACK_MODEL=gpt-5.4-nano  # 429/503 시 전환 모델
-VCP_PERPLEXITY_MODEL=sonar           # sonar | sonar-pro
-VCP_PERPLEXITY_API_TIMEOUT=120
 VCP_ZAI_FALLBACK_ENABLED=true        # Z.ai 폴백 클라이언트 활성화 (호출 조건·허용 provider는 별도)
 VCP_ZAI_API_TIMEOUT=180
 
@@ -186,7 +183,7 @@ graph TD
         B & D --> I{Phase1: Base Analysis}
         I -->|Filter 1,000억+| J[Phase2: News Collector]
         J --> K[Phase3: LLM Analyzer]
-        K -->|Gemini + GPT/Perplexity| L[Phase4: Signal Finalizer]
+        K -->|Gemini + GPT| L[Phase4: Signal Finalizer]
         L --> M[Grade System S/A/B]
 
         M --> N{Market Gate Check}
@@ -231,7 +228,7 @@ graph TD
 
 | 설계 원칙                       | 적용 방식                                                | 이유                                            |
 | ------------------------------- | -------------------------------------------------------- | ----------------------------------------------- |
-| **Multi-Model AI Verification** | Gemini + 설정된 보조모델(GPT 또는 Perplexity) 병렬 실행  | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
+| **Multi-Model AI Verification** | Gemini + 보조모델 GPT 병렬 실행                        | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
 | **Async Batch Processing**      | `asyncio` + `Semaphore`로 환경변수 기반 동시성 제어       | API 호출 시간 최적화, Rate Limit 방지           |
 | **Market Gate Pattern**         | 개별 종목 분석 전 시장 전체 상태 먼저 점검               | 하락장에서의 무분별한 매수 방지, 계좌 보호      |
 | **Chain Execution Pattern**     | 데이터 수집 → VCP 분석 → AI 종가베팅 순차 실행           | 데이터 정합성 보장 및 분석 단계별 의존성 해결   |
@@ -263,7 +260,7 @@ engine/
 ├── phases_news_llm.py                   # Phase2NewsCollector + Phase3LLMAnalyzer (배치 어댑터)
 │
 ├── signal_tracker.py                    # VCP 시그널 추적기
-├── signal_tracker_ai_helpers.py         # apply_ai_results, _PROVIDER_PRIORITY (gemini→gpt→perplexity), ai_provider 컬럼
+├── signal_tracker_ai_helpers.py         # apply_ai_results, _PROVIDER_PRIORITY (gemini→gpt, 과거 캐시는 perplexity), ai_provider 컬럼
 ├── signal_tracker_*_mixin.py / *_helpers.py   # 분석/소스 캐시/수급 헬퍼 분리
 │
 ├── collectors/                          # 로우 데이터 수집기 모듈 (KRX / Naver / News)
@@ -279,7 +276,7 @@ engine/
 │
 ├── vcp_ai_analyzer.py                   # VCPMultiAIAnalyzer 진입점
 ├── vcp_ai_analyzer_helpers.py           # VCP 데이터 어댑터
-├── vcp_ai_orchestration_helpers.py      # gemini/gpt/perplexity 병렬 오케스트레이션
+├── vcp_ai_orchestration_helpers.py      # gemini/gpt 병렬 오케스트레이션
 ├── vcp_ai_provider_init_helpers.py      # provider 초기화/검증
 ├── kr_ai_analyzer.py + kr_ai_*.py       # KR 시장 분석 (전략/템플릿/캐시 분리)
 ├── genai_client.py                      # Vertex AI Gemini 단일 진입점
@@ -319,7 +316,6 @@ engine/
 - **AI Engine**:
   - Google Gemini (Vertex AI 경로 일원화) — `gemini-3.7-flash`(분석 및 챗봇), `gemini-3.5-flash-lite`(경량 폴백) 등 환경변수로 선택
   - OpenAI GPT (직접 호출 또는 Z.ai 호환 경로) — `gpt-5.6-luna` 기본
-  - Perplexity Sonar (실시간 웹 검색, 출처 명시)
   - LangChain-style Prompt Composition (Chain of Thought, Intent Injection)
 - **Financial Services**:
   - **Toss Securities API**: 초고속 실시간 국내 주가 데이터 연동 (최우선 순위)
@@ -352,7 +348,7 @@ graph TD
 - 중복 제거 및 품질 필터링
 
 **Phase 3: AI 배치 분석**
-- Gemini, GPT/Perplexity 병렬 분석
+- Gemini, GPT 병렬 분석
 - `asyncio`와 `Semaphore`로 동시성 제어
 - 교차 검증 및 신뢰도 산출
 
@@ -554,42 +550,41 @@ frontend/src/app/
 ### 1. Multi-Model AI Engine Architecture
 
 서로 다른 특성을 가진 모델을 역할별로 분리해 운용합니다.  
-VCP 분석은 **Gemini + (GPT 또는 Perplexity 중 1개)** 조합으로 실행되고, 결과는 모델별 필드로 분리 저장됩니다. 종가베팅(Phase3)은 Vertex AI Gemini 단일 경로로 실행됩니다.
+VCP 분석은 **Gemini + GPT** 조합으로 실행되고, 결과는 모델별 필드로 분리 저장됩니다. 종가베팅(Phase3)은 Vertex AI Gemini 단일 경로로 실행됩니다.
 
 | 모델           | 역할                           | 사용 시나리오                                                 | 장점                                                              |
 | -------------- | ------------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------- |
 | **Gemini (Vertex AI)** | **Analysis Agent** (심층 추론) | 종가베팅 Phase3 분석, VCP 1차 추론, 다차원 데이터 통합 | **심층 추론(Thinking)** 지원, 긴 컨텍스트, 한-영문 혼용 처리 |
-| **Perplexity** | **Search Agent** (실시간 정보) | VCP 보조 검증, 최신 뉴스/팩트 체크              | **실시간 웹 검색(Web Search)**, 최신 정보 반영, 출처(Source) 명시 |
-| **GPT (OpenAI / Z.ai)** | **Speed Agent** (빠른 검증)    | VCP 보조 검증, 챗봇 대화, Perplexity 차단 시 Z.ai fallback             | 빠른 응답 시간, OpenAI 호환성, 비용 효율적                        |
+| **GPT (OpenAI / Z.ai)** | **Speed Agent** (빠른 검증)    | VCP 보조 검증, 챗봇 대화, 실패 시 Z.ai fallback             | 빠른 응답 시간, OpenAI 호환성, 비용 효율적                        |
 
 #### 교차 검증(Cross-Validation) 로직 및 Provider Fallback
 
 ```mermaid
 graph LR
     A[Input Data] --> B[Gemini Analysis]
-    A --> C[Secondary Analysis<br/>GPT or Perplexity]
+    A --> C[Secondary Analysis<br/>GPT]
     B --> D[gemini_recommendation]
-    C --> E[gpt_recommendation or<br/>perplexity_recommendation]
+    C --> E[gpt_recommendation]
     D --> F{apply_ai_results<br/>provider priority}
     E --> F
-    F -->|gemini → gpt → perplexity| G[ai_action / ai_confidence /<br/>ai_reason / ai_provider]
+    F -->|gemini → gpt| G[ai_action / ai_confidence /<br/>ai_reason / ai_provider]
 ```
 
 **검증 규칙 (VCP 기준):**
 1. Gemini는 기본 분석 모델로 실행됩니다.
-2. 보조 모델은 `VCP_SECOND_PROVIDER` 값(`gpt` 또는 `perplexity`)에 따라 1개만 실행됩니다.
-3. 분석 결과는 설정된 프로바이더 슬롯별로 저장되며, 프론트엔드에서 탭으로 비교합니다. Perplexity 내부의 Z.ai·GPT 폴백 결과는 `perplexity_recommendation`, GPT 내부의 Z.ai 폴백 결과는 `gpt_recommendation` 슬롯을 유지합니다.
-4. **Provider 우선순위 체인**: `engine/signal_tracker_ai_helpers.py::apply_ai_results`가 `gemini → gpt → perplexity` 순으로 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 기록합니다. `ai_provider`는 선택된 슬롯 이름이며 내부 폴백에서 실제 응답한 엔진까지 식별하는 값은 아닙니다. 유효한 추천 슬롯이 없으면 `ai_provider="N/A"`로 표시됩니다.
-5. **Perplexity 폴백**: 429·503 응답, 할당량·인증 오류 등 전환 조건에 해당하면 `VCP_AI_PROVIDERS`에 설정된 Z.ai → GPT 순서로 사용 가능한 클라이언트를 시도합니다. Z.ai는 `VCP_ZAI_FALLBACK_ENABLED=true`와 키 설정도 필요합니다. 일반 5xx·통신 예외·응답 파싱 실패에는 폴백을 보장하지 않습니다. Perplexity 키가 없으면 초기화 시 허용된 GPT를 보조 모델로 선택합니다. 위 예시의 `gemini,perplexity` 목록은 Z.ai·GPT 폴백을 허용하지 않습니다. 두 폴백을 사용하려면 `gemini,perplexity,zai,gpt`처럼 목록에 추가하고 각 키도 설정합니다.
+2. 보조 모델은 GPT 하나입니다. `VCP_SECOND_PROVIDER=perplexity` 가 남아 있으면 경고와 함께 GPT 로 실행합니다(`[VCP-046]`).
+3. 분석 결과는 프로바이더 슬롯별로 저장되며, 프론트엔드에서 탭으로 비교합니다. GPT 내부의 Z.ai 폴백 결과는 `gpt_recommendation` 슬롯을 유지합니다. 과거 캐시(2026-02 등)의 `perplexity_recommendation` 은 읽기 전용으로 표시됩니다.
+4. **Provider 우선순위 체인**: `engine/signal_tracker_ai_helpers.py::apply_ai_results`가 `gemini → gpt → perplexity`(과거 캐시) 순으로 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 기록합니다. `ai_provider`는 선택된 슬롯 이름이며 내부 폴백에서 실제 응답한 엔진까지 식별하는 값은 아닙니다. 유효한 추천 슬롯이 없으면 `ai_provider="N/A"`로 표시됩니다.
+5. **GPT 폴백**: 할당량 소진 등 전환 조건에 해당하면 `VCP_AI_PROVIDERS` 에 `zai` 가 있을 때 Z.ai 로 대체 분석을 시도합니다. Z.ai는 `VCP_ZAI_FALLBACK_ENABLED=true`와 키 설정도 필요합니다.
 
 ### Concurrency Architecture
 Python의 `asyncio`와 `ThreadPoolExecutor`를 결합하여, 동기식(Blocking)으로 동작하는 LLM 클라이언트 라이브러리들을 비동기 논블로킹(Non-blocking) 환경에서 병렬 실행합니다.
 
 *   **VCP 경로 (`engine/vcp_ai_analyzer.py` + `vcp_ai_orchestration_helpers.py`)**:
     1.  `VCPMultiAIAnalyzer.analyze_batch()`가 분석 요청을 수신합니다.
-    2.  **Gemini/GPT**는 스레드 풀(`loop.run_in_executor`)로 실행하고, **Perplexity**는 `httpx.AsyncClient`로 비동기 호출합니다.
-    3.  두 모델이 동시에 추론을 수행하고 응답을 개별 필드(`gemini_recommendation`, `gpt_recommendation`, `perplexity_recommendation`)에 저장합니다.
-    4.  `apply_ai_results`가 우선순위 체인(`gemini → gpt → perplexity`)에 따라 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 통합합니다.
+    2.  **Gemini/GPT**는 스레드 풀(`loop.run_in_executor`)로 실행합니다.
+    3.  두 모델이 동시에 추론을 수행하고 응답을 개별 필드(`gemini_recommendation`, `gpt_recommendation`)에 저장합니다.
+    4.  `apply_ai_results`가 우선순위 체인(`gemini → gpt`, 과거 캐시는 `perplexity`까지)에 따라 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 통합합니다.
 *   **종가베팅 경로 (`engine/phases_news_llm.py` + `engine/llm_analyzer*.py`)**:
     1.  `Phase3LLMAnalyzer`가 후보 종목과 뉴스를 받아 `analyze_news_batch_jongga()`를 호출합니다.
     2.  Vertex AI Gemini 단일 경로로 배치 분석을 수행하며, `ANALYSIS_LLM_CONCURRENCY` / `ANALYSIS_LLM_CHUNK_SIZE` / `ANALYSIS_LLM_REQUEST_DELAY`로 동시성·청크·지연을 제어합니다.
@@ -629,7 +624,7 @@ SYSTEM_PERSONA = """너는 VCP 기반 한국 주식 투자 어드바이저 '스�
 ## 🔥 RAG 데이터 활용 지침 (최우선 준수)
 **아래 [데이터] 섹션에 제공되는 정보를 반드시 우선적으로 참고하여 답변해야 해:**
 1. **[Market Gate 상세 분석]**: 시장 상태, 점수, 섹터 동향 → 시장 질문에 활용
-2. **[VCP AI 분석 결과]**: Gemini/GPT/Perplexity AI 분석(설정 기반), 매수/매도 추천 → 종목 추천에 활용
+2. **[VCP AI 분석 결과]**: Gemini/GPT AI 분석, 매수/매도 추천 → 종목 추천에 활용
 3. **[종가베팅 추천 종목]**: S/A급 종목, 점수, AI 분석 → 종가베팅 질문에 활용
 4. **[최근 뉴스]**: 수집된 최신 뉴스 제목 → 뉴스/이슈 질문에 활용
 
@@ -667,7 +662,7 @@ SYSTEM_PERSONA = """너는 VCP 기반 한국 주식 투자 어드바이저 '스�
 | **`closing_bet`**     | **종가베팅**    | S/A급 종목 우선 추천, 장 마감 전후 진입 전략 가이드                        |
 | **`risk_check`**      | **리스크 관리** | 구체적인 손절가(-5%) 제시, 포지션 비중 조절 및 거시 위험 대응              |
 | **`market_gate`**     | **시장 신호등** | 시장 상태(GREEN/YELLOW/RED)별 구체적 비중 및 공격성 조절 가이드            |
-| **`vcp_analysis`**    | **VCP 시그널**  | Gemini/GPT/Perplexity AI 추천 결과 분석, VCP 점수 및 수축 비율 설명        |
+| **`vcp_analysis`**    | **VCP 시그널**  | Gemini/GPT AI 추천 결과 분석, VCP 점수 및 수축 비율 설명                   |
 | **`news_analysis`**   | **뉴스 분석**   | 최근 뉴스 데이터(제목/출처) 기반 인용, 종목 영향력 및 호재/악재 평가       |
 
 **A. 뉴스 감성 분석 프롬프트 (News Sentiment Analysis)**
@@ -1077,7 +1072,7 @@ AI 통합 순서:
    - 뉴스 호재/악재 판단
    - 투자 포인트와 리스크 요인 식별
    - 종합 의견(매수/매도/관망) 생성
-4. GPT/Perplexity 분석 (크로스 밸리데이션):
+4. GPT 분석 (크로스 밸리데이션):
    - Gemini와 동일한 결론인지 확인
    - 기술적 지표 기반 보완 의견 제시
 5. 결과 통합:
@@ -1105,7 +1100,7 @@ AI 통합 순서:
     "final_recommendation": {
         "action": "BUY",
         "confidence": 85,
-        "reason": "Gemini: AI 반도체 호조세 / GPT/Perplexity: 기술적 매매"
+        "reason": "Gemini: AI 반도체 호조세 / GPT: 기술적 매매"
     }
 }
 ```
@@ -1242,7 +1237,7 @@ vcp_conditions = {
 - **Entry Price 대비 수익률**: 진입가 대비 현재 수익률을 실시간으로 계산하여 표시합니다.
 
 ** B. AI 심층 분석 및 뉴스 연동 (AI & News)**
-- **Multi-Model Analysis**: VCP는 Gemini(주분석) + 보조모델 1개(GPT 또는 Perplexity) 조합으로 실행되며, 모델별 결과를 비교합니다.
+- **Multi-Model Analysis**: VCP는 Gemini(주분석) + 보조모델 GPT 조합으로 실행되며, 모델별 결과를 비교합니다.
 - **뉴스 자동 수집**: `EnhancedNewsCollector`가 각 시그널 발생 종목의 최신 뉴스를 자동으로 수집하여 AI에게 제공합니다.
 - **AI 추천 배지**: AI의 분석 결과(매수/관망/매도)를 직관적인 배지로 시각화하여 제공합니다.
 
@@ -1305,7 +1300,7 @@ async def analyze_stock(stock_name: str, stock_data: Dict):
     # 1. Gemini 분석 (심층 추론 + 뉴스 분석)
     gemini_result = await _analyze_with_gemini(stock_name, stock_data)
 
-    # 2. GPT/Perplexity 분석 (크로스 밸리데이션)
+    # 2. GPT 분석 (크로스 밸리데이션)
     gpt_result = await _analyze_with_gpt(stock_name, stock_data)
 
 

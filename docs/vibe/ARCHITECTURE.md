@@ -6,7 +6,7 @@
 
 - **백엔드**: Python 3.10+ / Flask
 - **프론트엔드**: Next.js 16 (App Router) / React / TypeScript
-- **AI 엔진**: Gemini 2.0 Flash, GPT (Z.ai), Perplexity
+- **AI 엔진**: Gemini 2.0 Flash, GPT (Z.ai)
 - **데이터 소스**: pykrx, yfinance, 네이버/다음 뉴스 크롤링
 
 ---
@@ -105,7 +105,7 @@ closing-bet-demo/
 #### 1.3 AI 레이어 (AI Layer)
 - **`engine/llm_analyzer.py`**: LLM 공통 기능 (뉴스 감성 분석, 배치 분석)
 - **`engine/kr_ai_analyzer.py`**: 한국 시장 종목 분석 (Gemini + GPT 크로스 밸리데이션)
-- **`engine/vcp_ai_analyzer.py`**: VCP 패턴 종목의 멀티 AI 분석 (Gemini, GPT, Perplexity 병렬)
+- **`engine/vcp_ai_analyzer.py`**: VCP 패턴 종목의 멀티 AI 분석 (Gemini, GPT 병렬)
 
 #### 1.4 API 레이어 (API Layer)
 - **`app/routes/kr_market.py`**: 한국 시장 관련 API (`/api/kr/*`)
@@ -190,7 +190,7 @@ closing-bet-demo/
 │                                                                  │
 │  VCP 패턴 종목:                                             │
 │  ├─ Gemini 분석 (심층 추론, 뉴스 맥락 이해)             │
-│  ├─ GPT/Perplexity 분석 (크로스 밸리데이션)            │
+│  ├─ GPT 분석 (크로스 밸리데이션)                       │
 │  └─ Consensus (일치 시 신뢰도 상향, 불일치 시 보수)   │
 │                                                                  │
 │  종가베팅 종목:                                               │
@@ -238,7 +238,6 @@ closing-bet-demo/
 | ------------------- | ----------------------------------------- | ------------------------- | --------------------- |
 | **Google Gemini**   | 심층 추론, 뉴스 맥락 이해, 투자 가설 생성 | VCP 분석, 뉴스 감성, 챗봇 | `gemini-flash-latest` |
 | **Z.ai (GPT 호환)** | 빠른 응답, 크로스 밸리데이션              | 챗봇, 배치 분석           | `gpt-4o`              |
-| **Perplexity**      | 실시간 웹 검색, 최신 정보 반영            | 뉴스 검색, 팩트 체크      | `sonar-small-online`  |
 
 ### 3. 알림 서비스 (Notification Services)
 
@@ -255,7 +254,7 @@ closing-bet-demo/
 
 ### 1. Multi-Model AI Cross-Validation
 - **목적**: 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승
-- **구현**: Gemini와 GPT/Perplexity를 병렬로 실행하여 결과 교차 검증
+- **구현**: Gemini와 GPT를 병렬로 실행하여 결과 교차 검증
 - **검증 규칙**:
   - 일치(Agreement): 신뢰도 평균
   - 불일치(Disagreement): 더 높은 신뢰도 모델 선택 (동점 시 Gemini 우선)
@@ -288,7 +287,6 @@ closing-bet-demo/
 - **AI SDK**: 
   - `google-genai` (Gemini)
   - `openai` (Z.ai 호환)
-  - `perplexity` API
 - **HTTP Client**: `requests`, `httpx`
 - **스케줄링**: `APScheduler`, `threading`
 - **로깅**: Python `logging` (rotation)
@@ -416,7 +414,6 @@ FLASK_HOST=0.0.0.0
 # API Keys
 GOOGLE_API_KEY=your_gemini_key
 OPENAI_API_KEY=your_openai_key
-PERPLEXITY_API_KEY=your_perplexity_key
 ZAI_API_KEY=your_zai_key
 
 # AI Models
@@ -424,7 +421,7 @@ GEMINI_MODEL=gemini-flash-latest
 OPENAI_MODEL=gpt-4o
 
 # VCP AI 설정
-VCP_AI_PROVIDERS=gemini,gpt,perplexity
+VCP_AI_PROVIDERS=gemini,gpt
 MARKET_GATE_UPDATE_INTERVAL_MINUTES=30
 
 # 캐시

@@ -52,7 +52,6 @@ def test_ai_generation_and_api():
             {
                 "ticker": "005930",
                 "gpt_recommendation": "Buy",
-                "perplexity_recommendation": "Hold",
                 "gemini_recommendation": "Strong Buy"
             }
         ]

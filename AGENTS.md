@@ -237,7 +237,7 @@ from engine.constants import TRADING_VALUES, VCP_THRESHOLDS, SCORING, VOLUME, PR
 
 ## 이 저장소의 특징
 
-- **이중 AI**: Gemini 가 심층 추론을, Z.ai 와 Perplexity 가 빠른 배치를 맡는다
+- **이중 AI**: Gemini 가 심층 추론을, GPT(실패 시 Z.ai)가 보조 검증을 맡는다
 - **Market Gate**: 종목 분석에 앞서 시장 전체를 먼저 판정한다
 - **데이터 소스 이중화**: 기간 데이터는 `DataSourceManager`(FDR → pykrx → yfinance),
   단일 종목 실시간 시세는 `fetch_stock_price`(Toss → Naver → yfinance)로 서로 다른
