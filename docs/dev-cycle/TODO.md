@@ -66,21 +66,6 @@
 
 ## P2 — 대기
 
-### [INFRA-097] 관리자 중단 요청이 파이프라인이 도는 다른 gunicorn 워커에 전달되지 않는다
-- 카테고리: 인프라 | 티어: T3(위험 경로 `services/scheduler_jobs.py`, `services/common_update_status_service.py` 는 `update_status_snapshot` 을 정의. 설계 때 T2 로 잘못 적었고 첫 커밋 뒤 `tier-rules.md` §2 대조로 올림. 계획·critic·`/review` 를 보완) | 근거: `[INFRA-096]` 설계 중 발견(2026-09-24), 코드로 확인
-- 원인: `STOP_REQUESTED` 는 프로세스마다 따로 있는 모듈 전역(`engine/shared.py`)이다. 수동 업데이트는 `start` 요청을 받은 워커의 스레드에서 돌고, `stop-update` 요청이 다른 워커에 닿으면 그 워커의 값만 켜진다. 상태 파일은 공유되어 화면은 중단으로 보이지만 실제 작업은 계속 돈다. 중단 요청을 받은 워커에는 값이 켜진 채로 남아 그 워커의 관리자 개별 실행(VCP 백그라운드·종가베팅)을 막는다. `[INFRA-096]` 뒤로도 비리더 워커는 다음 `start_update` 까지, 리더 워커도 다음 17:00 체인 시작까지 남는다. 17:00 체인이 도는 중에 리더에 닿은 중단 요청은 체인을 멈추고, 체인에는 끝날 때 끄는 곳이 없어 다음 날 17:00 까지 남는다(`[INFRA-096]` `/review` 지적)
-- 관련 기존 결함(`[INFRA-096]` critic 지적 2): `stop_update` 가 `isRunning` 을 먼저 내리므로 중단된 스레드가 끝나기 전에 새 업데이트를 시작할 수 있다. 이때 새 업데이트를 다시 중단하면 옛 스레드의 `finally` 가 새 중단을 지우고, 옛 스레드의 `finish_update` 가 새 업데이트의 상태를 끝낸다
-- 확인 수준: 코드로만 확인. 운영에서 중단이 듣지 않은 사례는 확인하지 않았다
-- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 22:48 | 범위: (1) `stop_update` 는 상태 파일에 `stopRequested: true` 를 기록하고 받은 워커의 메모리 플래그는 켜지 않는다. `start_update` 는 `stopRequested` 를 false 로 기록한다. (2) `run_background_update_pipeline` 은 시작 때 자기 `startTime` 을 읽고, 감시 스레드가 1초마다 상태를 읽어 같은 `startTime` 에 `stopRequested` 가 켜져 있으면 이 워커의 플래그를 켠다. 읽는 쪽은 고치지 않는다. (3) `finally` 는 상태의 `startTime` 이 자기 것과 다르면 플래그 해제와 `finish_update` 를 건너뛴다. 중단 버튼은 수동 업데이트만 멈추며 반영은 최대 1초 늦다. 프론트엔드 변경 없음 | 근거: bounded 설계 제시 뒤 사용자 「진행해」
-- 설계와 달라진 점: 리뷰 지적 1 로 (3) 을 좁혔다. `finally` 는 플래그를 조건 없이 끄고 `startTime` 이 다를 때는 `finish_update` 만 건너뛴다. `startTime` 을 읽지 못하면 종전 동작(감시 없음, 항상 finish)이다(지적 3·4). 승인 목적(다른 워커로 중단 전달, 옛 실행이 새 실행을 끝내지 않음) 안의 수정이라 새 승인을 받지 않았고 완료 보고에서 알린다
-- [x] 테스트(다른 워커 중단 요청이 감시로 플래그를 켬, 받은 워커 플래그 꺼짐, 옛 실행이 새 실행 상태를 끝내지 않음) RED(`3 failed, 5 passed`)→GREEN. 변이 검사: 감시의 플래그 설정 줄, `finally` 의 `startTime` 가드, 리뷰 반영 뒤의 무조건 해제와 `start_time` None 갈래를 각각 되돌리면 해당 테스트 FAIL
-- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` net -10: 감시 스레드 `kwargs=dict(...)` → `args=` 반영 | `stop_update` 의 쓰지 않는 `shared_state` 인자 삭제 반영 · `closing-bet-reviewer` CHANGES_REQUIRED(max medium): 지적 1(medium) 옛 실행이 다른 워커의 새 실행에 밀리면 옛 워커 플래그가 남음 → 플래그 해제는 조건 없이 하고 `startTime` 분기로는 `finish_update` 만 가림(승인 범위 (3) 문구를 좁힘, 같은 워커의 새 실행은 그 감시가 1초 안에 다시 켬) | 지적 2 `watch_done.set()` 뒤 읽는 중이던 감시가 값을 다시 켤 수 있음 → `join` 반영 | 지적 3·4 `startTime` 을 못 읽거나 읽기 예외면 finish 를 놓쳐 `isRunning` 고착 → `_read_start_time` 이 None 을 주면 종전 동작(감시 없음, 항상 finish), 테스트 추가 | 지적 5 워커 사이 상태 파일 lost update → 기존 결함이라 `[INFRA-098]` 로 이월 | 지적 6 시그니처 캐시 tick → 크기가 거의 항상 달라지고 놓쳐도 다음 쓰기까지라 미반영 | 지적 7 반영됨 | 지적 8 17:00 체인 중 중단 버튼 → 승인된 동작, QA 문서에 명시 | 지적 9 정보
-- 설계 추가 승인: 승인 확인 시각 2026-09-24 22:58 | 범위: QA S-3 에서 중단 뒤 1초 안에 다른 워커가 새 실행을 시작하면 옛 실행이 멈추지 않음을 확인. 감시가 자기 실행이 다른 워커의 새 실행으로 대체된 것도 중단으로 본다. 새 실행이 같은 워커면 플래그를 함께 쓰므로 건너뛴다. 이를 위해 `start_update` 가 이 워커에서 시작한 실행의 `startTime` 을 `engine.shared.LOCAL_RUN_START_TIME` 에 남긴다 | 근거: 선택지 제시 뒤 사용자 「이번에 고침」
-- [x] pytest 전체: Task 1(첫 커밋 `3a87c29`) 2759 passed, 2 skipped(exit 0, 그 뒤 `__all__` 앞 빈 줄만 바뀜). Task 2 구현 뒤 2761 passed, 2 skipped(exit 0). critic·`/review` 반영 뒤 2764 passed, 2 skipped(exit 0)
-- [x] 계획 `docs/superpowers/plans/2026-09-24-infra-097-relay-stop-request.md`(T3 상향 뒤 사후 작성)와 계획 검토(`oh-my-claudecode:critic`): ACCEPT-WITH-RESERVATIONS | 지적 1(medium) 같은 워커에서 재시작하면 옛 실행이 계속 돔(동시 쓰기, LLM 비용 중복), 기동 시 상태 초기화도 트리거 → `[INFRA-099]` 로 올리고 계획 한계에 기록, QA S-4 로 실측 | 지적 2(low) 워커 사이 이중 시작 때 파이프라인이 상태에서 start_time 을 다시 읽음 → 창이 수 ms 라 계획 한계로 기록 | 지적 3(medium, 절차) Task 2 검증 미완·TODO 기록 부정확 → 이 줄과 위 pytest 줄로 정정, QA 는 Task 2 커밋으로 재실행 | 지적 4(low) `current is not None` 가드 테스트 없음 → `test_run_background_update_pipeline_ignores_status_without_start_time` 추가, 변이 검사 FAIL 확인. `join` 순서는 타이밍이라 테스트 생략 | Review Focus 추가 요청 → 계획에 반영
-- [x] `/review`(T3, `oh-my-claudecode:code-reviewer`) APPROVE(max medium): 지적 1(medium) 라우트가 `load_update_status` 를 넘기는지 확인하는 테스트 없음 → `test_route_background_update_wires_status_reader` 추가 | 지적 2 파이프라인이 자기 `startTime` 을 파일에서 다시 읽음(이중 시작 때 신원이 섞임, critic 지적 2 와 같음) → `LOCAL_RUN_START_TIME` 을 먼저 쓰고 없을 때만 파일 값, `test_run_background_update_pipeline_uses_local_start_time_over_shared_file` 추가. 저장 실패 갈래(a)는 대체 판정으로 여전히 멈추며 종전에도 상태가 어긋나던 경로라 미반영 | 지적 3 finish 가드의 확인과 실행 사이 창 → `[INFRA-098]` 에 경로 추가 | 지적 4·5 위 critic 반영과 같음 | 비차단 권고(옛 finally 뒤 감시가 다시 켜는지) → 감시가 매 주기 조건을 다시 보고 켜는 구조라 미반영. 변이 검사: 새 두 테스트 각각 FAIL · `closing-bet-reviewer` Task 2 재검토 APPROVE(max low): 중단 없이 `startTime` 이 바뀌어도 옛 실행이 멈추고 로그는 사용자 중단과 구분되지 않음 → 계획 한계 3 에 기록 | `start_update` 가 저장 전에 LOCAL 기록 → 저장 실패 전제라 미반영
-- [ ] 격리 사본 하네스 QA(`docs/dev-cycle/qa/INFRA-097.md`, 프로세스 둘이 사본 `data/` 공유)
-
 ### [INFRA-099] 중단된 수동 업데이트가 끝나기 전에 같은 워커에서 새 업데이트를 시작하면 옛 실행이 멈추지 않고 함께 돈다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-097]` critic 지적 1(2026-09-24), 코드로 확인
 - 원인: `stop_update` 가 `isRunning` 을 곧바로 내리므로 옛 스레드가 끝나기 전에 새 시작이 받아들여진다. 새 시작이 옛 실행과 같은 워커에 닿으면 `start_update` 가 그 워커의 `STOP_REQUESTED` 를 끄고, 감시는 새 실행이 같은 워커라 옛 실행을 멈추지 않는다(한 프로세스에 플래그가 하나). 두 실행이 같은 CSV 에 함께 쓰고 AI 단계면 LLM 비용이 겹친다. 워커 재기동 때 `app/__init__.py` 의 `_reset_startup_status_files` 가 도는 실행의 `isRunning` 을 내리는 것도 같은 상태를 만든다
@@ -90,7 +75,7 @@
 - [ ] 테스트, T3 리뷰와 pytest 전체
 
 ### [INFRA-098] 수동 업데이트 상태 파일의 읽기-수정-쓰기가 워커 사이에서 직렬화되지 않아 중단 요청이 사라질 수 있다
-- 카테고리: 인프라 | 티어: T2 | 근거: `[INFRA-097]` `closing-bet-reviewer` 지적 5(2026-09-24), 코드로 확인
+- 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-097]` `closing-bet-reviewer` 지적 5(2026-09-24), 코드로 확인
 - 원인: `update_lock` 은 프로세스 안의 `threading.Lock` 이다. 작업을 돌리는 워커의 `update_item_status` 가 상태를 읽고 쓰는 사이에 다른 워커의 `stop_update` 가 쓰면, 앞 워커의 저장이 `stopRequested` 와 `isRunning` 을 되돌려 중단 요청이 조용히 사라진다. 화면은 다시 실행 중으로 보이므로 재시도는 가능하다
 - 같은 부류(`[INFRA-097]` `/review` 지적 3): 파이프라인 `finally` 가 상태의 `startTime` 을 확인한 직후 다른 워커가 새 실행을 기록하면 옛 실행의 `finish_update` 가 새 실행의 `isRunning` 을 내린다
 - 확인 수준: 코드로만 확인. 창은 수 ms 이며 운영 빈도는 확인하지 않았다
