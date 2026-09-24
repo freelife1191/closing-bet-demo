@@ -69,6 +69,7 @@ from engine.collectors import EnhancedNewsCollector
 from engine.llm_analyzer import LLMAnalyzer
 from engine.pandas_utils_safe import safe_bool, safe_optional_float
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
+from services.kr_market_data_cache_core import atomic_write_text
 from services.kr_market_vcp_reanalysis_service import signals_log_lock, write_vcp_signals_csv_atomic
 
 # =====================================================
@@ -691,7 +692,6 @@ def _download_yfinance_with_timeout(
 def fetch_prices_yfinance(
     start_date,
     end_date,
-    existing_df,
     file_path,
     chunk_size=100,
     request_timeout=8,
@@ -834,21 +834,7 @@ def fetch_prices_yfinance(
             return False
 
         if new_data_list:
-            new_df = pd.concat(new_data_list, ignore_index=True)
-            new_df = new_df.drop_duplicates(subset=["ticker", "date"], keep="last")
-
-            if not existing_df.empty:
-                existing_copy = existing_df.copy()
-                if "date" in existing_copy.columns and not pd.api.types.is_string_dtype(existing_copy["date"]):
-                    existing_copy["date"] = pd.to_datetime(
-                        existing_copy["date"], errors="coerce"
-                    ).dt.strftime("%Y-%m-%d")
-                final_df = pd.concat([existing_copy, new_df], ignore_index=True)
-                final_df = final_df.drop_duplicates(subset=["ticker", "date"], keep="last")
-            else:
-                final_df = new_df
-
-            final_df.to_csv(file_path, index=False, encoding="utf-8-sig")
+            final_df = _save_daily_prices(pd.concat(new_data_list, ignore_index=True), file_path)
             log(f"yfinance 백업 수집 완료 ({len(final_df)}행)", "SUCCESS")
             return True
 
@@ -883,6 +869,36 @@ def _all_zero_close_dates(df: pd.DataFrame) -> list[str]:
         return []
     zero = pd.to_numeric(df["close"], errors="coerce").fillna(0).eq(0).groupby(df["date"]).all()
     return [str(d) for d in zero[zero].index]
+
+
+def _save_daily_prices(new_df: pd.DataFrame, file_path: str) -> pd.DataFrame:
+    """새 가격 행을 파일에 병합해 원자적으로 저장하고, 저장한 전체 프레임을 돌려준다.
+
+    병합 기준은 실행 시작 때 읽은 값이 아니라 잠금 안에서 다시 읽은 파일이다. 수집하는 몇 분
+    사이에 17:00 스케줄러와 「Refresh VCP」가 겹쳐 저장해도 앞 실행의 행이 유실되지 않는다.
+    잠금은 병합과 저장 구간만 잡고 네트워크 수집 동안에는 잡지 않는다. 읽는 쪽은 os.replace
+    로 교체된 온전한 파일만 보므로 잠그지 않는다([INFRA-091]).
+
+    빈 파일(0바이트)은 잃을 행이 없어 비어 있는 것으로 본다. 그 밖의 읽기 오류는 그대로 올려
+    저장을 포기한다. 읽지 못한 이력을 새 행만으로 덮지 않기 위해서다.
+    """
+    with signals_log_lock(file_path):
+        existing_df = pd.DataFrame()
+        if os.path.exists(file_path):
+            try:
+                existing_df = pd.read_csv(file_path, dtype={"ticker": str})
+            except pd.errors.EmptyDataError:
+                pass
+            zero_dates = _all_zero_close_dates(existing_df)
+            if zero_dates:
+                existing_df = existing_df[~existing_df["date"].isin(zero_dates)]
+
+        final_df = pd.concat([existing_df, new_df]) if not existing_df.empty else new_df
+        final_df = final_df.drop_duplicates(subset=["date", "ticker"], keep="last")
+        final_df = final_df.sort_values(["ticker", "date"])
+        # 기존 utf-8-sig 저장 형식을 유지한다
+        atomic_write_text(file_path, "\ufeff" + final_df.to_csv(index=False))
+    return final_df
 
 
 def create_daily_prices(target_date=None, force=False, lookback_days=5):
@@ -1084,21 +1100,19 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 processed_days += 1
 
         if pykrx_bulk_fetch_unavailable:
-            return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
+            return fetch_prices_yfinance(start_date_obj, end_date_obj, file_path)
                 
         # 병합 및 저장
         if new_data_list:
             log("데이터 병합 중...", "DEBUG")
             new_chunk_df = pd.concat(new_data_list, ignore_index=True)
-            
-            if not existing_df.empty:
-                final_df = pd.concat([existing_df, new_chunk_df])
-                final_df = final_df.drop_duplicates(subset=['date', 'ticker'], keep='last')
-            else:
-                final_df = new_chunk_df
-                
-            final_df = final_df.sort_values(['ticker', 'date'])
-            final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+            try:
+                final_df = _save_daily_prices(new_chunk_df, file_path)
+            except Exception as e:
+                # 저장 실패는 수집 실패가 아니다. 아래 except 로 흘리면 yfinance 로 최대 300초
+                # 다시 수집한 뒤 같은 저장에서 또 실패한다([INFRA-091] 리뷰)
+                log(f"일별 가격 저장 실패, 기존 파일 유지: {e}", "ERROR")
+                return False
             log(f"일별 가격 저장 완료: 총 {len(final_df)}행 (신규 {len(new_chunk_df)}행)", "DEBUG")
         else:
              if start_date_obj.date() > end_date_obj.date():
@@ -1112,13 +1126,13 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                  return True
 
              log("pykrx 수집 데이터 없음. yfinance 폴백 시도...", "DEBUG")
-             return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
+             return fetch_prices_yfinance(start_date_obj, end_date_obj, file_path)
                  
         return True
 
     except Exception as e:
         log(f"pykrx 수집 중 오류: {e} -> yfinance 폴백 시도", "WARNING")
-        return fetch_prices_yfinance(start_date_obj, end_date_obj, existing_df, file_path)
+        return fetch_prices_yfinance(start_date_obj, end_date_obj, file_path)
 
 
 def create_institutional_trend(target_date=None, force=False, lookback_days=7):

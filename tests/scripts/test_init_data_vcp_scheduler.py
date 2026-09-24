@@ -692,6 +692,54 @@ def test_create_daily_prices_handles_file_with_only_holiday_rows(monkeypatch, tm
     assert len(fetched) > 2  # 기존 자료가 없으므로 기본 90일 구간을 돈다
 
 
+def test_create_daily_prices_keeps_rows_saved_by_overlapping_run(monkeypatch, tmp_path):
+    # 수집하는 사이 다른 실행(스케줄러·Refresh VCP)이 저장한 행을 덮어 지우지 않는다([INFRA-091])
+    existing = [["2026-09-21", "000001", 100, 110, 90, 100, 100, 10000]]
+    frames = {"20260922": _krx_ohlcv_frame({"000001": (100, 110, 90, 105)})}
+    file_path = tmp_path / "data" / "daily_prices.csv"
+
+    def _other_run_saves(_date_str):
+        other = pd.read_csv(file_path, dtype={"ticker": str})
+        other.loc[len(other)] = ["2026-09-21", "000009", 10, 11, 9, 10, 1, 10]
+        other.to_csv(file_path, index=False)
+
+    result, _, saved = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-22", frames, existing, on_fetch=_other_run_saves
+    )
+
+    assert result is True
+    assert sorted(zip(saved["date"], saved["ticker"])) == [
+        ("2026-09-21", "000001"),
+        ("2026-09-21", "000009"),
+        ("2026-09-22", "000001"),
+    ]
+
+
+def test_create_daily_prices_keeps_existing_file_when_save_fails(monkeypatch, tmp_path):
+    # 저장 도중 디스크 오류가 나도 기존 파일은 잘리지 않고 그대로 남는다([INFRA-091])
+    existing = [["2026-09-21", "000001", 100, 110, 90, 100, 100, 10000]]
+    frames = {"20260922": _krx_ohlcv_frame({"000001": (100, 110, 90, 105)})}
+    file_path = tmp_path / "data" / "daily_prices.csv"
+    before: dict[str, bytes] = {}
+
+    def _disk_full(_fd):
+        raise OSError(28, "No space left on device")
+
+    def _capture(_date_str):
+        before["bytes"] = file_path.read_bytes()
+        monkeypatch.setattr(init_data.os, "fsync", _disk_full)
+
+    result, fallbacks, _ = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-22", frames, existing, on_fetch=_capture
+    )
+
+    assert result is False
+    assert fallbacks == 0  # 저장 실패를 yfinance 재수집으로 넘기지 않는다
+    assert file_path.read_bytes() == before["bytes"]
+    leftovers = [p.name for p in file_path.parent.iterdir() if p.name.startswith("daily_prices.csv.")]
+    assert leftovers in ([], ["daily_prices.csv.lock"])
+
+
 def test_all_zero_close_dates_handles_missing_columns():
     assert init_data._all_zero_close_dates(pd.DataFrame()) == []
     assert init_data._all_zero_close_dates(pd.DataFrame({"date": ["2026-09-22"], "open": [0]})) == []
@@ -776,7 +824,6 @@ def test_fetch_prices_yfinance_uses_chunked_download_with_timeout(monkeypatch, t
     result = init_data.fetch_prices_yfinance(
         datetime.datetime(2026, 3, 2),
         datetime.datetime(2026, 3, 4),
-        pd.DataFrame(),
         str(output_file),
         chunk_size=2,
         request_timeout=3,
@@ -855,7 +902,6 @@ def test_fetch_prices_yfinance_aborts_on_max_runtime(monkeypatch, tmp_path):
     result = init_data.fetch_prices_yfinance(
         datetime.datetime(2026, 3, 2),
         datetime.datetime(2026, 3, 4),
-        pd.DataFrame(),
         str(data_dir / "daily_prices.csv"),
         chunk_size=1,
         request_timeout=3,

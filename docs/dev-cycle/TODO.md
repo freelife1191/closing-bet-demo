@@ -68,8 +68,21 @@
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
 - 원인: yfinance 폴백(`scripts/init_data.py:851`)과 pykrx 경로(`:1101`)가 전체 가격 이력을 단순 `to_csv` 로 덮는다. 17:00 스케줄러와 관리자 「Refresh VCP」(`services/kr_market_vcp_background_service.py:66`)가 다른 워커에서 겹치거나 저장 중 재기동되면 파일이 잘리거나 한쪽 갱신이 유실된다. 저장 중 스크리너가 읽으면 부분 파일을 읽는다. `[INFRA-088]`~`[INFRA-090]` 과는 다른 결함이다
 - 확인 수준: 코드로만 확인. 운영에서 두 실행이 실제로 겹친 적이 있는지는 로그로 확인해야 한다
-- [ ] 설계 승인(`signals_log_lock` 과 같은 파일 잠금, 임시 파일 교체)
-- [ ] 동시 저장·중단 시 기존 파일 보존 테스트, T3 리뷰와 pytest 전체
+- [x] 설계 승인(2026-09-24 20:12 대화 「진행해」, bounded, T3). 범위: `init_data.py` 에 저장 헬퍼 `_save_daily_prices` 하나를 두고 pykrx(`:1101`)·yfinance(`:851`) 두 저장 지점이 부른다. `signals_log_lock(file_path)` 안에서 파일을 디스크에서 다시 읽어 0원 날짜를 빼고 새 행과 병합(`(date, ticker)` 새 값 우선, `ticker, date` 정렬)해 `atomic_write_text`(BOM 유지)로 교체한다. 잠금은 병합·저장 구간만 잡고 읽기 쪽은 잠그지 않는다. yfinance 결과도 정렬되는 것 외 값은 불변. `all_institutional_trend_data.csv` 저장(`:445`·`:1303`)은 범위 밖(새 TODO)
+- [x] 읽은 정본: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-verify/`
+- [x] 테스트: 실행 중 다른 실행이 저장한 행 보존, 저장 중 예외 시 기존 파일 바이트 동일·폴백 없음(두 건 모두 수정 전 코드에서 실패 확인), 0원 날짜 정리는 기존 테스트 유지
+- [x] 구현. `fetch_prices_yfinance` 의 쓰지 않게 된 `existing_df` 인자 제거. 설계에서 정하지 않은 것 하나를 정함: 잠금 안 재읽기가 0바이트면 빈 것으로, 그 밖의 읽기 오류면 저장을 포기(읽지 못한 이력을 새 행만으로 덮지 않음)
+- [x] `closing-bet-reviewer` APPROVE(low 4). 반영: pykrx 경로 저장 실패를 yfinance 폴백으로 넘기지 않고 `False`(2번, 테스트 단언 추가). 기록만: 권한 0644→0600(1번, QA 문서), 캐시 무효화 예외도 같은 흐름(3번, 확신도 낮음·2번 수정으로 pykrx 경로는 `False`), 테스트 2가 잘림을 직접 재현하지 않음(4번, QA S-2 가 맡음)
+- [x] `/review`(`oh-my-claudecode:code-reviewer`): M1 은 위 2번과 같아 반영됨, L1 은 위 1번과 같음, L2(임시 파일 gitignore)는 기존 문제라 `[INFRA-092]` 에 기록, 단순화(`EmptyDataError` 뒤 대입 → `pass`) 반영
+- [x] pytest 전체(리뷰 반영 뒤): 2739 passed, 2 skipped, 종료 코드 0
+- [ ] QA(격리 사본, 가짜 출처 하네스): 겹친 두 실행의 행 보존, 저장 중단 시 기존 파일 보존, 겹치지 않을 때 출력이 수정 전과 같음
+
+### [INFRA-092] `all_institutional_trend_data.csv` 를 잠금 없이 원자적이지 않게 저장한다
+- 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-091]` 설계(2026-09-24 20:12 승인 범위 밖으로 분리), 코드로 확인
+- 원인: 수급 수집의 pykrx 경로(`scripts/init_data.py:1303`)와 Toss 백필(`_backfill_institutional_trend_from_toss`, `:445`)이 시작 때 읽은 `existing_df` 에 병합해 전체 이력을 `to_csv` 로 덮는다. `[INFRA-091]` 의 `daily_prices.csv` 와 같은 결함(겹친 실행의 갱신 유실, 저장 중단 시 파일 잘림, 부분 파일 읽기)이다
+- 함께 볼 것: `atomic_write_text` 의 임시 파일(`<이름>.csv.XXXXXXXX`)은 저장 중 SIGKILL 이면 남는데 `.gitignore` 의 `data/*.csv` 에 걸리지 않는다(`[INFRA-091]` `/review` L2, `signals_log.csv`·`daily_prices.csv` 도 같음). `data/*.csv.*` 한 줄로 막을 수 있다
+- [ ] 설계 승인(`[INFRA-091]` 의 저장 헬퍼 방식을 따를지)
+- [ ] 테스트, T3 리뷰와 pytest 전체
 
 ### [VCP-053] 과거 날짜 재분석에서 분석 가능한 종목이 하나도 없어도 「시그널 없음」으로 그 날짜 행을 지운다
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py` 대조, 수정은 `engine/screener.py` 예상) | 근거: `[VCP-049]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` medium)
