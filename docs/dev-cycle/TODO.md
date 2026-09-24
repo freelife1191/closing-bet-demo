@@ -79,7 +79,7 @@
 - [x] 대화 설계 승인(캐시 호환, 설정값 폐기 방식, 개인정보 페이지 문구)
 - [x] 설계 문서 검토 승인(커밋 `3122d2f`)
 - [x] 구현 계획(writing-plans, `docs/superpowers/plans/2026-09-24-vcp-046-perplexity-removal.md`)과 계획 검토(critic)
-  - critic(`oh-my-claudecode:critic`) 판정 원문 「REVISE」. 반영: 오케스트레이션 테스트 세 개(`:218`·`:227`·`:260`)와 헬퍼 처리 명시, 설정 모달 테스트의 필드 수 2→1, `_extract_vcp_ai_recommendation` 과거 캐시 읽기 테스트 추가, `:1260` 삭제 줄 추가, 헬퍼 import 수 정정, `_REMOVED_PROVIDERS` 집합을 리터럴 비교로 축소, Review Focus 1 경고 수 3줄로 정정, `:772` 테스트 검사력 약화와 `:868` 이 대신 잡는다는 기록, CLAUDE.md:9 표현 정정. 미반영: 없음. 유보 1건(과거 날짜 재분석 뒤 표 두 번째 열이 Perplexity 를 우선하는 `decideSecondaryAI`)은 사용자에게 확인
+  - critic(`oh-my-claudecode:critic`) 판정 원문 「REVISE」. 반영: 오케스트레이션 테스트 세 개(`:218`·`:227`·`:260`)와 헬퍼 처리 명시, 설정 모달 테스트의 필드 수 2→1, `_extract_vcp_ai_recommendation` 과거 캐시 읽기 테스트 추가, `:1260` 삭제 줄 추가, 헬퍼 import 수 정정, `_REMOVED_PROVIDERS` 집합을 리터럴 비교로 축소, Review Focus 1 경고 수 3줄로 정정, `:772` 테스트 검사력 약화와 `:868` 이 대신 잡는다는 기록, CLAUDE.md:9 표현 정정. 미반영: 없음. 유보 1건(과거 날짜 재분석 뒤 표 두 번째 열이 Perplexity 를 우선하는 `decideSecondaryAI`)은 사용자에게 확인해 「GPT 먼저」로 결정(2026-09-24, AskUserQuestion), 계획 Task 5 에 반영. 실행 방식은 사용자 선택 Native
 - [ ] 테스트·수정·리뷰·QA
 
 ### [VCP-043] `signal_tracker` 경로의 AI 추천 선택이 실패 dict 도 고르고 VCP 수집과 다른 규칙을 쓴다

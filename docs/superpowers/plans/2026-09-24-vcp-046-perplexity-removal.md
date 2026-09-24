@@ -392,7 +392,8 @@ git add services/kr_market_vcp_reanalysis_service.py app/routes/kr_market_vcp_si
 - Modify: `frontend/src/app/page.tsx:54, 80, 129, 234, 260`
 - Modify: `frontend/src/app/components/VCPCriteriaModal.tsx:85-93`
 - Modify: `frontend/src/app/(legal)/privacy/page.tsx:9, 233-247, 277-280`
-- Modify: `frontend/src/app/dashboard/kr/vcp/page.tsx:552-557`, `frontend/src/app/dashboard/kr/vcp/aiHelpers.ts:3-15` (주석만)
+- Modify: `frontend/src/app/dashboard/kr/vcp/page.tsx:552-557`(주석만), `frontend/src/app/dashboard/kr/vcp/aiHelpers.ts:3-19`(`decideSecondaryAI` 우선순위를 GPT 먼저로, 사용자 결정 2026-09-24)
+- Test: `frontend/src/app/dashboard/kr/vcp/aiHelpers.test.ts:7-30`
 - Test: `tests/app/test_common_env_service.py`, `frontend/src/app/components/SettingsModal.apikeys.test.tsx`, `SettingsModal.env-fields.test.tsx`, `settingsEnv.test.ts`, `frontend/src/app/(legal)/legal-pages.test.tsx`
 
 - [ ] **Step 1: 테스트 수정**
@@ -416,6 +417,13 @@ frontend:
   - `:49-55` docstring 에서 「두 필드가 같은 경로를 거쳤다는 증거」와 `pplx-...` 문장을 지우고 「필드가 STORED_HINT 를 갖는 것이 반영 완료의 신호다」만 남긴다. `:73` 테스트 이름의 「두 입력 어느 쪽에도」를 「입력에」로 고친다. 두 필드를 대조하던 검사가 사라진다는 사실은 아카이브에 적는다.
   - `:97`·`:99` 를 `expect(screen.queryByLabelText('PERPLEXITY_API_KEY')).toBeNull();` 한 줄로 바꾼다. `:106` 의 localStorage 단언은 그대로 둔다.
 - `SettingsModal.env-fields.test.tsx:29`, `settingsEnv.test.ts:49`: 입력 fixture 이므로 그대로 둔다.
+- `aiHelpers.test.ts`: 두 값이 모두 있을 때 GPT 가 이긴다.
+  ```ts
+  it('returns gpt when both hasPerplexity and hasGpt are true (gpt wins, [VCP-046])', () => {
+    expect(decideSecondaryAI(true, true)).toBe('gpt');
+  });
+  ```
+  첫 테스트를 이것으로 바꾸고, `it.each` 표의 첫 행 기대값을 `'gpt'` 로 바꾼다. 나머지(Perplexity 만 있으면 perplexity, GPT 만 있으면 gpt, 둘 다 없으면 gpt, 실패 기록만 있으면 gpt)는 그대로 둔다.
 - `legal-pages.test.tsx:75`: `expect(text).toContain('OpenAI, L.L.C.');` 와 `expect(text).not.toContain('Perplexity');` 로 바꾼다.
 
 - [ ] **Step 2: 실패 확인**
@@ -456,7 +464,23 @@ Expected: 새 백엔드 테스트 FAIL, frontend 두 파일 FAIL
     </tr>
     ```
   - `:278` `Perplexity 와 Z.ai 로 가는 VCP 분석은` → `OpenAI 와 Z.ai 로 가는 VCP 분석은`
-- `dashboard/kr/vcp/page.tsx:552-557`, `aiHelpers.ts:3-15`: 주석을 「Perplexity 열은 [VCP-046] 이전 캐시(2026-02 등)에 판정이 있을 때만 나타난다」로 고친다. 로직은 바꾸지 않는다.
+- `aiHelpers.ts`:
+  ```ts
+  /**
+   * Decide which secondary AI provider to surface in the VCP table.
+   *
+   * GPT 가 두 번째 AI 다 [VCP-046]. Perplexity 는 그 이전 캐시(2026-02 등)에만 있으므로
+   * 그 날짜에 GPT 판정이 하나도 없을 때만 보여 준다. 과거 날짜를 재분석해 GPT 판정이
+   * 생기면 열은 GPT 로 바뀌고, 옛 Perplexity 판정은 상세 탭에서 볼 수 있다.
+   * 둘 다 없으면 'gpt' 를 기본값으로 둬 빈 Perplexity 열을 만들지 않는다.
+   */
+  export function decideSecondaryAI(hasPerplexity: boolean, hasGpt: boolean): SecondaryAI {
+    if (hasGpt) return 'gpt';
+    if (hasPerplexity) return 'perplexity';
+    return 'gpt';
+  }
+  ```
+- `dashboard/kr/vcp/page.tsx:552-557`: 주석을 「우선순위: GPT → (GPT 가 없는 과거 캐시) Perplexity → 기본값 gpt」로 고친다. 상세 탭 자동 전환(`:575-588`)은 바꾸지 않는다.
 
 - [ ] **Step 4: 통과 확인**
 
