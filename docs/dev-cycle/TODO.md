@@ -49,22 +49,6 @@
 - [ ] 구현, 결측과 실제 0 거래 구분 확인
 - [ ] T3 리뷰와 pytest 전체, 격리 사본에서 가짜 출처로 CLI QA
 
-### [INFRA-098] 수동 업데이트 상태 파일의 읽기-수정-쓰기가 워커 사이에서 직렬화되지 않아 중단 요청이 사라질 수 있다
-- 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-097]` `closing-bet-reviewer` 지적 5(2026-09-24), 코드로 확인
-- 원인: `update_lock` 은 프로세스 안의 `threading.Lock` 이다. 작업을 돌리는 워커의 `update_item_status` 가 상태를 읽고 쓰는 사이에 다른 워커의 `stop_update` 가 쓰면, 앞 워커의 저장이 `stopRequested` 와 `isRunning` 을 되돌려 중단 요청이 조용히 사라진다. 화면은 다시 실행 중으로 보이므로 재시도는 가능하다
-- 같은 부류(`[INFRA-097]` `/review` 지적 3): 파이프라인 `finally` 가 상태의 `startTime` 을 확인한 직후 다른 워커가 새 실행을 기록하면 옛 실행의 `finish_update` 가 새 실행의 `isRunning` 을 내린다
-- 확인 수준: 코드로만 확인. 창은 수 ms 이며 운영 빈도는 확인하지 않았다
-- 같은 부류(`[INFRA-101]` 심층 리뷰 지적 1): `load_update_status` 의 시그니처 캐시는 `(mtime_ns, size)` 로만 새 값을 가린다. 다른 워커의 저장이 같은 크기로 같은 mtime 틱 안에 일어나면(mtime 정밀도가 거친 파일시스템) 옛 값을 읽고, `[INFRA-101]` 의 `startTime` 가드도 통과한 뒤 옛 상태 전체를 저장한다
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 07:34
-  | 범위: `start_update`·`update_item_status`·`stop_update`·`finish_update` 가 기존 `update_lock` 안에서 `<상태 파일>.lock` 에 `fcntl.flock(LOCK_EX)` 를 걸고, 잠금 안에서는 시그니처 캐시를 거치지 않고 파일을 직접 읽음. `finish_update(start_time=...)` 가 잠금 안에서 `startTime` 을 비교하고 파이프라인 `finally` 의 바깥 비교는 제거. 폴링 GET 은 읽기 전용이라 캐시 경로 유지(한계). 중단 요청 별도 파일안은 `stop_update` 도 같은 파일을 읽고 써야 해서 기각
-  | 실제 대화 근거: 2026-09-25 대화 설계 제시 뒤 사용자 「진행해」 응답
-- [x] 설계 승인(위 줄)
-- [x] 구현 계획(`docs/superpowers/plans/2026-09-25-infra-098-update-status-file-lock.md`)과 계획 검토: critic REVISE. 필수 1(잠금 파일 열기 실패가 500·`isRunning` 고착) → `OSError` 로그 뒤 잠금 없이 진행, 필수 2(finish·start 경합 테스트 없음) → 테스트 추가, 권장 3(옛 캐시 테스트 finish 만) → 세 경우 parametrize, 권장 4·5·참고 6 → 계획 한계 4~6(5 는 `[INFRA-107]` 로 분리), 참고 7 → 계획 문구 수정
-- [x] 두 워커 흉내 테스트 6건(서로 다른 `threading.Lock`): 끼어든 중단 보존, finish 중 다른 워커 start 보존, 대체된 실행의 finish 무시, 옛 캐시 세 경우, 잠금 파일 불가. 변이 7종(flock 제거, item·stop 캐시 읽기, finish 가드 제거, start 잠금 제거, finish 비교를 잠금 밖으로, 열기 실패 미처리) 모두 해당 테스트 FAIL 뒤 `cmp` 로 복원 확인
-- [x] 구현, 리뷰: 과잉설계 직접 검토(중첩 `with` 를 한 줄로 합쳐 들여쓰기 변경 제거, 그 밖 Lean). 코드 리뷰(closing-bet-reviewer) APPROVE max low, low 2·info 2 → 계획 한계 7·8 과 Step 3 주석. 심층 리뷰(oh-my-claudecode:code-reviewer, opus) Critical 0·Important 1·Minor 4: I-1(상태 파일이 없으면 중단이 실행 워커에 전달되지 않음) → 잠금 안 읽기의 SQLite 스냅샷 폴백·테스트 RED→GREEN, M-1(`except` 안 `yield`) → 밖으로, M-2 → 한계 8, M-3 → 스레드 생존 단언, M-4 → `start_time=None` 수동 finish 단계 추가
-- [x] pytest 전체(리뷰 반영 뒤): 2793 passed, 2 skipped, exit 0
-- [ ] QA(격리 사본, 실제 두 프로세스로 경합 재현)
-
 ### [INFRA-095] 수급 수집이 결측을 0 으로 저장한다(pykrx 한쪽 프레임 누락, Toss 빈 필드)
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-093]` 리뷰 low, `[INFRA-094]` 설계에서 분리(2026-09-24 22:06)
 - 원인: pykrx 경로는 외국인·기관 프레임 중 한쪽에만 있는 종목의 다른 쪽 값을 0 으로 저장하고, Toss 행 파싱은 비어 있는 `close`·순매수 수량을 `or 0` 으로 0 으로 만든다. `[INFRA-093]` 뒤로는 백필이 기존 행을 덮지 않으므로 이런 0 이 그대로 남는다
