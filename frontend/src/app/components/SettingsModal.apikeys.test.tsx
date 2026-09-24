@@ -49,9 +49,8 @@ const STORED_HINT = '저장되어 있습니다. 바꾸려면 새 값을 입력�
 /**
  * API 탭을 열고 서버 응답이 상태에 반영될 때까지 기다린다.
  *
- * 이 대기가 없으면 응답 도착 전의 빈 필드를 보고 어떤 검사든 통과한다. 두 필드가
- * 모두 STORED_HINT 를 갖는 것이 반영 완료의 신호이자, 두 필드가 같은 경로를 거쳤다는
- * 증거다. 한쪽이 envVars 를 직접 참조하면 그쪽 문구가 `pplx-...` 로 남아 여기서 멈춘다.
+ * 이 대기가 없으면 응답 도착 전의 빈 필드를 보고 어떤 검사든 통과한다. 필드가
+ * STORED_HINT 를 갖는 것이 반영 완료의 신호다.
  */
 async function openApiTabWithStoredKeys() {
   const { baseElement } = render(
@@ -64,17 +63,17 @@ async function openApiTabWithStoredKeys() {
   );
   fireEvent.click(screen.getByText('API & 기능'));
   await waitFor(() => {
-    expect(screen.getAllByPlaceholderText(STORED_HINT)).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText(STORED_HINT)).toHaveLength(1);
   });
   return baseElement;
 }
 
 describe('SettingsModal API 키 필드', () => {
-  it('마스킹된 서버 값을 두 입력 어느 쪽에도 값으로 넣지 않는다', async () => {
+  it('마스킹된 서버 값을 입력에 값으로 넣지 않는다', async () => {
     const baseElement = await openApiTabWithStoredKeys();
 
     const inputs = baseElement.querySelectorAll<HTMLInputElement>('input[type="password"]');
-    expect(inputs).toHaveLength(2);
+    expect(inputs).toHaveLength(1);
     for (const input of inputs) {
       expect(input.value).toBe('');
     }
@@ -94,9 +93,9 @@ describe('SettingsModal API 키 필드', () => {
     await openApiTabWithStoredKeys();
 
     expect(screen.getByLabelText('OPENAI_API_KEY')).toHaveValue('');
-    expect(screen.getByLabelText('PERPLEXITY_API_KEY')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'OPENAI_API_KEY 삭제' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'PERPLEXITY_API_KEY 삭제' })).toBeTruthy();
+    // [VCP-046] 서버 .env 에 값이 남아 있어도 입력란을 그리지 않는다
+    expect(screen.queryByLabelText('PERPLEXITY_API_KEY')).toBeNull();
   });
 
   it('API 키를 localStorage 에 남기지 않는다', async () => {

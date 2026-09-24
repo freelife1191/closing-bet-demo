@@ -124,7 +124,6 @@ EDITABLE_ENV_KEYS = frozenset(
         "EMAIL_RECIPIENTS",
         "GOOGLE_SEARCH_ENGINE_ID",
         "OPENAI_API_KEY",
-        "PERPLEXITY_API_KEY",
         "SMTP_HOST",
         "SMTP_PASSWORD",
         "SMTP_PORT",

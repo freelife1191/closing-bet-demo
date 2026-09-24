@@ -5,16 +5,14 @@ export type SecondaryAI = 'gpt' | 'perplexity';
 /**
  * Decide which secondary AI provider to surface in the VCP table.
  *
- * Priority:
- *   1. Perplexity — when data is available
- *   2. GPT        — when Perplexity data is absent but GPT data is available
- *   3. 'gpt'      — safe default when neither provider has data;
- *                   the column will simply render no badge rather than
- *                   defaulting to Perplexity and showing an empty column.
+ * GPT 가 두 번째 AI 다 [VCP-046]. Perplexity 는 그 이전 캐시(2026-02 등)에만 있으므로
+ * 그 날짜에 GPT 판정이 하나도 없을 때만 보여 준다. 과거 날짜를 재분석해 GPT 판정이
+ * 생기면 열은 GPT 로 바뀌고, 옛 Perplexity 판정은 상세 탭에서 볼 수 있다.
+ * 둘 다 없으면 'gpt' 를 기본값으로 둬 빈 Perplexity 열을 만들지 않는다.
  */
 export function decideSecondaryAI(hasPerplexity: boolean, hasGpt: boolean): SecondaryAI {
-  if (hasPerplexity) return 'perplexity';
   if (hasGpt) return 'gpt';
+  if (hasPerplexity) return 'perplexity';
   return 'gpt';
 }
 

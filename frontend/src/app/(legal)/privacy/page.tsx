@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 };
 
 const CONTACT_EMAIL = 'freeopen1191@gmail.com';
-const EFFECTIVE_DATE = '2026년 9월 23일';
+const EFFECTIVE_DATE = '2026년 9월 24일';
 
 export default function PrivacyPage() {
   return (
@@ -232,17 +232,17 @@ export default function PrivacyPage() {
           </tr>
           <tr>
             <td>
-              Perplexity AI, Inc.
+              OpenAI, L.L.C.
               <br />
               <span className="text-gray-500">이전 국가: 미국</span>
               <br />
-              <span className="text-gray-500">연락처: support@perplexity.ai</span>
+              <span className="text-gray-500">연락처: https://openai.com/policies</span>
             </td>
             <td>
-              VCP 시그널 종목의 최신 소식을 조회하기 위해 종목명과 시세 지표를 전송합니다.
-              이용자의 개인정보는 전송하지 않으며 AI 상담의 대화 내용도 전송하지 않습니다.
+              VCP 시그널의 보조 분석을 위해 종목명과 시세 지표를 전송합니다. 이용자의 개인정보는
+              전송하지 않으며 AI 상담의 대화 내용도 전송하지 않습니다.
               <br />
-              보유·이용 기간: 조회하는 동안 처리하며, 그 이후의 보관은 해당 사업자의 정책을
+              보유·이용 기간: 분석하는 동안 처리하며, 그 이후의 보관은 해당 사업자의 정책을
               따릅니다.
             </td>
           </tr>
@@ -275,7 +275,7 @@ export default function PrivacyPage() {
         전제이므로, 거부하시려면 로그인하지 않고 서비스를 이용하시면 됩니다. 로그인해야 쓰는
         기능은 이용할 수 없습니다.{' '}
         <strong className="text-gray-100">
-          Perplexity 와 Z.ai 로 가는 VCP 분석은 서버가 정해진 시각에 자동으로 실행하므로 이용자가
+          OpenAI 와 Z.ai 로 가는 VCP 분석은 서버가 정해진 시각에 자동으로 실행하므로 이용자가
           개별로 거부할 수단이 없습니다.
         </strong>{' '}
         다만 그 경로에는 이용자를 알아볼 수 있는 정보가 포함되지 않습니다.

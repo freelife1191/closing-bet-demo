@@ -72,7 +72,8 @@ describe('개인정보처리방침', () => {
     expect(text).toContain('질문과 챗봇의 답변이 각각 앞 2000자까지');
     // 국외 이전 표의 행을 지우면 실패하도록 이전 국가까지 함께 고정한다.
     expect(text).toContain('Google LLC');
-    expect(text).toContain('Perplexity AI, Inc.');
+    expect(text).toContain('OpenAI, L.L.C.');
+    expect(text).not.toContain('Perplexity');
     expect(text).toContain('이전 국가: 미국');
     expect(text).toContain('이전 국가: 중국');
     // 거부할 수단이 없는 경로를 숨기지 않는다.

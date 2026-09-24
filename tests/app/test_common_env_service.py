@@ -414,3 +414,14 @@ def test_env_file_lock_creates_narrow_lock_file(tmp_path: Path):
     # 나간 뒤에도 파일은 남는다. 지우면 다음 진입이 새 inode 를 만들어 그 사이 잠금이
     # 배타되지 않는 창이 생긴다.
     assert lock_path.exists()
+
+
+def test_perplexity_key_is_no_longer_editable(tmp_path: Path):
+    # [VCP-046] 운영 .env 에 값이 남아 있어도 화면으로 읽거나 쓰지 않는다
+    env_path = tmp_path / ".env"
+    env_path.write_text("PERPLEXITY_API_KEY=pplx-secret-value-0000000000\n", encoding="utf-8")
+
+    assert "PERPLEXITY_API_KEY" not in read_masked_env_vars(str(env_path))
+    result = update_env_file(str(env_path), {"PERPLEXITY_API_KEY": "x"}, {})
+    assert result["rejected"] == {"PERPLEXITY_API_KEY": "unsupported_key"}
+    assert "pplx-secret-value" in env_path.read_text(encoding="utf-8")

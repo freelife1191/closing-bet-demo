@@ -796,38 +796,6 @@ export default function SettingsModal({ isOpen, onClose, profile, onSave }: Sett
                   </div>
                 </section>
 
-                <section>
-                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <div className="w-2 h-6 bg-cyan-500 rounded-sm"></div>
-                    Perplexity
-                  </h3>
-                  <div className="bg-[#27272a] rounded-xl border border-white/5 p-5">
-                    <div className="mb-4">
-                      <label htmlFor="env-perplexity-api-key" className="block text-xs font-bold text-gray-500 mb-1.5">PERPLEXITY_API_KEY</label>
-                      <div className="relative">
-                        <input
-                          id="env-perplexity-api-key"
-                          type="password"
-                          {...storedEnvFieldProps(envVars['PERPLEXITY_API_KEY'], 'pplx-...')}
-                          onChange={(e) => handleEnvChange('PERPLEXITY_API_KEY', e.target.value)}
-                          className="w-full bg-[#18181b] border border-white/10 rounded-lg pl-4 pr-10 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition-colors"
-                          autoComplete="new-password"
-                          data-lpignore="true"
-                        />
-                        {envVars['PERPLEXITY_API_KEY'] && (
-                          <button
-                            onClick={() => handleEnvChange('PERPLEXITY_API_KEY', '')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-500 transition-colors"
-                            title="API Key 삭제"
-                            aria-label="PERPLEXITY_API_KEY 삭제"
-                          >
-                            <i className="fas fa-trash-alt"></i>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </section>
               </div>
             )}
 

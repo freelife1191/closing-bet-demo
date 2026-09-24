@@ -5,8 +5,8 @@ import type { AIRecommendation } from '@/lib/api';
 import { decideSecondaryAI, isValidAIRecommendation } from './aiHelpers';
 
 describe('decideSecondaryAI', () => {
-  it('returns perplexity when both hasPerplexity and hasGpt are true (perplexity wins)', () => {
-    expect(decideSecondaryAI(true, true)).toBe('perplexity');
+  it('returns gpt when both hasPerplexity and hasGpt are true (gpt wins, [VCP-046])', () => {
+    expect(decideSecondaryAI(true, true)).toBe('gpt');
   });
 
   it('returns perplexity when only hasPerplexity is true', () => {
@@ -22,7 +22,7 @@ describe('decideSecondaryAI', () => {
   });
 
   it.each([
-    { hasPerplexity: true,  hasGpt: true,  expected: 'perplexity' },
+    { hasPerplexity: true,  hasGpt: true,  expected: 'gpt' },
     { hasPerplexity: true,  hasGpt: false, expected: 'perplexity' },
     { hasPerplexity: false, hasGpt: true,  expected: 'gpt' },
     { hasPerplexity: false, hasGpt: false, expected: 'gpt' },

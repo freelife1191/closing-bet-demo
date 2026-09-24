@@ -51,7 +51,7 @@ export default function HomePage() {
             </h1>
 
             <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-              VCP 패턴 인식, 기관/외국인 수급 추적, 그리고 <span className="text-indigo-400 font-semibold">Gemini + GPT + Perplexity 멀티 AI 엔진</span>이 결합된 올인원 주식 분석 패키지입니다.
+              VCP 패턴 인식, 기관/외국인 수급 추적, 그리고 <span className="text-indigo-400 font-semibold">Gemini + GPT 멀티 AI 엔진</span>이 결합된 올인원 주식 분석 패키지입니다.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -77,7 +77,6 @@ export default function HomePage() {
               <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-flask text-xl"></i> Flask</div>
               <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-brain text-xl"></i> Gemini</div>
               <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-robot text-xl"></i> GPT</div>
-              <div className="flex items-center gap-2 text-sm font-semibold"><i className="fas fa-robot text-xl"></i> Perplexity</div>
             </div>
             </div>
         </section>
@@ -126,7 +125,7 @@ export default function HomePage() {
                   </div>
                   <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
                     <div className="text-xs font-bold text-indigo-400 mb-2">AI Models</div>
-                    <div className="text-sm text-gray-300">Gemini + GPT + Perplexity</div>
+                    <div className="text-sm text-gray-300">Gemini + GPT</div>
                   </div>
                 </div>
               </div>
@@ -231,14 +230,14 @@ export default function HomePage() {
                       <i className="fas fa-brain text-2xl text-white"></i>
                     </div>
                     <h2 className="text-3xl font-bold mb-2">Multi AI Analysis System</h2>
-                    <p className="text-gray-400">Gemini 주분석 + GPT/Perplexity 보조 검증으로 신뢰도를 높이는 멀티 AI 구조</p>
+                    <p className="text-gray-400">Gemini 주분석 + GPT 보조 검증으로 신뢰도를 높이는 멀티 AI 구조</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-3 py-1 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-full border border-purple-500/30">MULTI ENGINE</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-indigo-500/20 hover:bg-[#252529] transition-colors">
                     <h3 className="text-lg font-bold text-indigo-400 mb-2 flex items-center gap-2">
                       <i className="fas fa-star"></i> Gemini (Main · Vertex AI)
@@ -253,14 +252,6 @@ export default function HomePage() {
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
                       설정에 따라 Gemini와 함께 VCP 신호를 보조 검증합니다. 할당량 소진 등 전환 조건에 해당하면 사용 가능한 Z.ai로 대체 분석을 시도합니다.
-                    </p>
-                  </div>
-                  <div className="p-6 rounded-2xl bg-[#1c1c1e] border border-green-500/20 hover:bg-[#252529] transition-colors">
-                    <h3 className="text-lg font-bold text-green-400 mb-2 flex items-center gap-2">
-                      <i className="fas fa-robot"></i> Perplexity (Sub)
-                    </h3>
-                    <p className="text-sm text-gray-400 leading-relaxed">
-                      설정에 따라 Gemini와 함께 VCP 신호를 보조 검증하며, 웹 검색으로 최신 뉴스와 공시를 참고합니다. 호출 제한·인증 오류 등 전환 조건에 해당하면 설정된 Z.ai·GPT 중 사용 가능한 모델로 대체 분석을 시도합니다.
                     </p>
                   </div>
                 </div>

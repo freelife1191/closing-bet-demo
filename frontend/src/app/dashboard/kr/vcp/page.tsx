@@ -552,9 +552,9 @@ export default function VCPSignalsPage() {
   // AI 탭 상태 (GPT vs Gemini vs Perplexity)
   const [activeAiTab, setActiveAiTab] = useState<'gpt' | 'gemini' | 'perplexity'>('gemini');
 
-  // Determine secondary AI (GPT or Perplexity) based on actual data availability.
-  // Priority: Perplexity (when data exists) → GPT (when Perplexity is absent but GPT exists)
-  //           → 'gpt' safe default (neither has data; column renders no badge instead of empty Perplexity column)
+  // Determine secondary AI based on actual data availability.
+  // 우선순위: GPT → (GPT 가 없는 [VCP-046] 이전 캐시) Perplexity → 기본값 gpt
+  //           (둘 다 없으면 빈 Perplexity 열 대신 배지 없는 GPT 열을 그린다)
   const secondaryAI = useMemo(() => {
     const hasPerplexity = signals.some(s => isValidAIRecommendation(s.perplexity_recommendation))
       || aiData?.signals?.some(s => isValidAIRecommendation(s.perplexity_recommendation));
