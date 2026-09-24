@@ -1298,3 +1298,103 @@ def test_zai_echo_recovers_on_same_model_without_fallback(monkeypatch):
     assert result == recovered
     assert calls == [("primary-zai-model", 0.0), ("primary-zai-model", 0.3)]
     assert not getattr(analyzer, "zai_disabled_reason", "")
+
+
+def _gemini_only_analyzer_with_clock(monkeypatch, generate_content):
+    clock = {"now": 0.0}
+    # 전역 time.monotonic 을 바꾸므로 asyncio 의 sleep·to_thread 도 가짜로 둔다(실제 타이머가 멈춘다)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.time.monotonic", lambda: clock["now"])
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def _no_sleep(_seconds):
+        return None
+
+    async def _gemini_only_orchestrate(*, stock_name, stock_data, analyze_with_gemini_fn, **_kwargs):
+        return {"gemini_recommendation": await analyze_with_gemini_fn(stock_name, stock_data)}
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.to_thread", _fake_to_thread)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.asyncio.sleep", _no_sleep)
+    monkeypatch.setattr("engine.vcp_ai_analyzer.orchestrate_stock_analysis_impl", _gemini_only_orchestrate)
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.providers, analyzer.second_provider = ["gemini"], None
+    analyzer.gemini_client = SimpleNamespace(models=SimpleNamespace(generate_content=generate_content))
+    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
+    return analyzer, clock
+
+
+def _flaky_gemini():
+    state = {"fail": True, "calls": 0}
+
+    def _generate_content(*, model, contents):
+        del model, contents
+        state["calls"] += 1
+        if state["fail"]:
+            raise RuntimeError("429 resource_exhausted")
+        return SimpleNamespace(text='{"action":"BUY","confidence":70,"reason":"ok"}')
+
+    return state, _generate_content
+
+
+def test_gemini_block_from_last_stock_of_batch_expires_before_next_day(monkeypatch):
+    # [VCP-041] 1일차 마지막 종목에서 체인 전체가 429 로 막혀도 2일차 첫 종목은 다시 호출한다.
+    state, generate_content = _flaky_gemini()
+    analyzer, clock = _gemini_only_analyzer_with_clock(monkeypatch, generate_content)
+
+    day1 = asyncio.run(analyzer.analyze_stock("A", {"ticker": "000001"}))
+    assert day1["gemini_recommendation"] is None
+    assert analyzer.gemini_blocked_models
+
+    state.update(fail=False, calls=0)
+    clock["now"] = 86_400.0
+    day2 = asyncio.run(analyzer.analyze_stock("B", {"ticker": "000002"}))
+
+    assert day2["gemini_recommendation"]["action"] == "BUY"
+    assert state["calls"] == 1
+
+
+def test_gemini_block_holds_within_ttl(monkeypatch):
+    # TTL 안에서는 429 폭주 중인 모델을 다시 부르지 않는다.
+    state, generate_content = _flaky_gemini()
+    analyzer, clock = _gemini_only_analyzer_with_clock(monkeypatch, generate_content)
+    asyncio.run(analyzer.analyze_stock("A", {"ticker": "000001"}))
+
+    state.update(fail=False, calls=0)
+    clock["now"] = 599.0
+    result = asyncio.run(analyzer.analyze_stock("B", {"ticker": "000002"}))
+
+    assert result["gemini_recommendation"] is None
+    assert state["calls"] == 0
+
+
+def test_analyze_stock_expires_gpt_and_perplexity_blocks(monkeypatch):
+    # 재분석 진행률 경로는 analyze_batch 를 거치지 않으므로 가드는 analyze_stock 에 있어야 한다.
+    monkeypatch.setattr("engine.vcp_ai_analyzer.time.monotonic", lambda: 601.0)
+
+    async def _fake_orchestrate(**_kwargs):
+        return {}
+
+    monkeypatch.setattr("engine.vcp_ai_analyzer.orchestrate_stock_analysis_impl", _fake_orchestrate)
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.providers, analyzer.second_provider = ["gemini", "gpt"], "gpt"
+    analyzer.gemini_blocked_models = {"gemini-x"}
+    analyzer.gpt_quota_exhausted, analyzer.gpt_blocked_reason = True, "quota-like-402"
+    analyzer.perplexity_quota_exhausted, analyzer.perplexity_blocked_reason = True, "429"
+    analyzer._session_blocks_since = 0.0
+
+    asyncio.run(analyzer.analyze_stock("A", {"ticker": "000001"}))
+
+    assert analyzer.gemini_blocked_models == set()
+    assert analyzer.gpt_quota_exhausted is False and analyzer.gpt_blocked_reason is None
+    assert analyzer.perplexity_quota_exhausted is False and analyzer.perplexity_blocked_reason is None
+    assert analyzer._session_blocks_since is None
+
+
+def test_expire_session_blocks_resets_clock_when_nothing_blocked(monkeypatch):
+    # 빈 상태에서 옛 시각이 남으면 다음 차단이 곧바로 풀린다.
+    monkeypatch.setattr("engine.vcp_ai_analyzer.time.monotonic", lambda: 1000.0)
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer._session_blocks_since = 0.0
+    analyzer._expire_session_blocks()
+    assert analyzer._session_blocks_since is None

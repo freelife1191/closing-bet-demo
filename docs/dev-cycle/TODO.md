@@ -28,10 +28,15 @@
 - 확인 수준(2026-09-24): 결함 자체(영구 제외)는 가짜 클라이언트로 재현해 확정했다. 운영에서 실제로 429·503 이 나서 이 결함이 발동했는지는 로그가 없어 **미확정**이다. 다음 대안을 아직 배제하지 못했다: `gemini-3.8-flash` 응답의 JSON 파싱 실패(코드펜스·thinking 텍스트), `response.text` 가 None, 체인 모델의 리전 404. 이 셋은 제외 집합에 들어가지 않으므로 영구 제외와 달리 매 호출 실패로 나타난다.
 - 추가 관찰(2026-09-24 08:10, `[VCP-040]` 실측): 로컬 `.env` 의 같은 모델·Vertex `global` 설정으로 새 프로세스에서 VCP 배치 2종목을 돌렸더니, Gemini 가 두 종목 모두 정상 JSON(BUY 68 / HOLD 65)을 돌려주었고 `gemini_blocked_models` 는 비어 있었다. 이 결과로 모델·리전·파싱 문제일 가능성은 낮아졌지만 배제한 것은 아니다. 로컬과 운영의 설정이 같다는 것은 확인하지 않았다. 새 프로세스에서는 정상인데 오래 산 워커에서만 null 이라는 형태는 영구 제외 가설과 들어맞는다. 기록은 `docs/dev-cycle/qa/VCP-040.md`
 - [ ] 원인 확정 1(운영자, 비용 없음): 운영 `backend.log` 에서 위 두 문구와 「JSON 파싱 실패」「분석 실패 (Final)」 중 어느 것이 찍히는지 확인해 기록한다
-- [ ] 원인 확정 2(실제 LLM 호출, **사용자 승인 필요**): 격리 사본에서 운영과 같은 `VCP_GEMINI_MODEL`·Vertex 설정으로 새 `VCPMultiAIAnalyzer` 를 만들어 종목 하나에 `_analyze_with_gemini` 를 한 번만 부른다. `generate_content` 원문(`response.text`, `candidates[0].finish_reason`), 예외와 상태 코드, `_parse_json_response` 결과를 기록한다. 체인 전환을 막도록 체인을 설정 모델 하나로 제한하고, 사본 `data/` 에만 쓴다. 정상 응답이면 영구 제외가 원인이라는 판단이 강해지고, 파싱·None 이면 원인을 그쪽으로 바꾼다
-- [ ] 설계 승인(제외 범위를 배치 한 번으로 한정할지, 만료 시각을 둘지. 기본안은 `analyze_batch` 시작 시 초기화 + 모델 하나 실패로 전 종목이 막히지 않게)
-- [ ] 재현 테스트를 `tests/engine/test_*_refactor.py` 로 추가(1차 배치 전 모델 429 → 2차 배치에서 다시 호출되는지)
-- [ ] 수정 구현, 필요 시 VCP 호출에 출력 토큰·타임아웃 정렬
+- [x] 원인 확정 2(2026-09-24 08:48 승인, 08:49 실측 1회): `gemini-3.8-flash`·Vertex `global` 새 분석기에서 `STOP`, 코드펜스 없는 JSON 400자, 파싱 성공(BUY 80), 제외 집합 빈 값. 대안 가설 셋은 재현되지 않음. 운영 설정과의 일치는 미확인. 기록은 `docs/dev-cycle/qa/VCP-041.md`
+  - 원래 계획: 원인 확정 2(실제 LLM 호출, **사용자 승인 필요**): 격리 사본에서 운영과 같은 `VCP_GEMINI_MODEL`·Vertex 설정으로 새 `VCPMultiAIAnalyzer` 를 만들어 종목 하나에 `_analyze_with_gemini` 를 한 번만 부른다. `generate_content` 원문(`response.text`, `candidates[0].finish_reason`), 예외와 상태 코드, `_parse_json_response` 결과를 기록한다. 체인 전환을 막도록 체인을 설정 모델 하나로 제한하고, 사본 `data/` 에만 쓴다. 정상 응답이면 영구 제외가 원인이라는 판단이 강해지고, 파싱·None 이면 원인을 그쪽으로 바꾼다
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 08:54 | 범위: 세션 차단 플래그 세 종류(`gemini_blocked_models`, GPT·Perplexity 쿼터 플래그)를 처음 관측한 뒤 10분(`LLMThresholds.SESSION_BLOCK_TTL_SECONDS`)이 지나면 비우고, 가드는 모든 경로가 지나는 `analyze_stock` 한 곳에 둔다(재분석 진행률 경로가 `analyze_batch` 를 거치지 않아 기본안에서 바꿈). 출력 토큰 `config`·타임아웃 정렬은 제외(실측 thoughts 303·출력 215 토큰, 멈춘 호출 관측 없음) | 근거: 대화 선택 「지금 설계 진행」(운영 로그 확인 없이 진입, 08:49 실측 뒤 08:54 전, 시각 미기록) 뒤 「승인, 진행」(08:54). 계획 `docs/superpowers/plans/2026-09-24-vcp-041-session-block-expiry.md`
+- [x] 설계 승인(기본안 대신 10분 시간 만료로 결정, 위 메타 줄)
+- [x] 계획 검토(critic): REVISE. F1 「배치의 마지막 종목에서 켠 차단은 시각이 기록되지 않아 다음 날 배치 전체가 막힌다」 → `analyze_stock` 의 `try/finally` 로 종료 시점에도 만료 판정, 재현 테스트로 교체. 선택 지적(`.clear()`, 별칭)도 반영. 미반영 없음
+- [x] 구현 리뷰: ponytail 「Lean already. Ship.」, closing-bet-reviewer APPROVE(low). L1(창 끝 무렵 새 차단도 함께 풀림, 승인 문구와 일치)은 코드 유지·마감 기록에 명시, L2(계획 문구 원안 기준)는 계획 문서 수정, 범위 밖 `zai_disabled_reason` 은 `[VCP-045]` 로 등록
+- [x] T3 심층 리뷰(critic): ACCEPT. F1 해소를 사본에서 재확인(원안 1건·수정 전 3건 실패, 현재 36건 통과), finally 의 예외·취소·동시성 2 실측 문제없음. O1(플래그가 시계 하나 공유)은 ponytail 주석에 반영, O2 는 `[VCP-045]`, O3(전역 monotonic 패치가 이벤트 루프 시계도 멈춤)은 테스트 헬퍼 주석으로 이미 표시
+- [x] 재현 테스트를 `tests/engine/test_vcp_ai_analyzer_refactor.py` 로 추가(4건, 1일차 마지막 종목 전 모델 429 → 2일차 첫 종목 재호출 포함)
+- [x] 수정 구현(출력 토큰·타임아웃 정렬은 승인 때 제외)
 - [ ] T3 리뷰와 pytest 전체, 마감 기록에 「워커 전부 재기동 필요」 명시
 
 ## P1 — 이번 주기
@@ -60,6 +65,12 @@
 - [ ] T3 리뷰와 pytest 전체
 
 ## P2 — 대기
+
+### [VCP-045] Z.ai 폴백의 `zai_disabled_reason` 도 워커 수명 동안 풀리지 않는다
+- 카테고리: VCP | 티어: T3(위험 경로 `engine/vcp_ai_analyzer.py`) | 근거: `[VCP-041]` 코드 리뷰(closing-bet-reviewer, 2026-09-24). `_analyze_with_zai` 는 마지막 모델까지 메타 응답(prompt echo)이 반복되면 `self.zai_disabled_reason = "prompt-echo responses"`(`engine/vcp_ai_analyzer.py:1025`)를 켜고, 이후 호출은 `:846` 에서 곧바로 건너뛴다. 이 값을 비우는 코드가 없고 분석기는 싱글톤이라 재기동 전까지 Z.ai 폴백이 꺼진 채 남는다. `[VCP-041]` 의 `_expire_session_blocks` 대상에는 넣지 않았다(승인 범위가 Gemini·GPT·Perplexity 세 종류). 운영에서 발동했는지는 확인하지 않았다
+- [ ] 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부 확인
+- [ ] 설계 승인(`_expire_session_blocks` 대상에 추가할지, 메타 응답은 429 와 달리 모델 품질 문제라 다른 만료가 필요한지)
+- [ ] 재현 테스트와 수정, 리뷰
 
 ### [VCP-044] VCP 재분석 결과가 캐시에 없는 종목을 캐시에 넣지 않고, 날짜 없는 캐시 파일을 날짜 확인 없이 읽고 쓴다
 - 카테고리: VCP | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-040]` 심층 리뷰(critic, 2026-09-24). `update_vcp_ai_cache_files` 는 파일이 없으면 건너뛰고(`services/kr_market_vcp_cache_update_service.py:84`) 파일 안에 이미 있는 종목만 고친다(`:98`). 수집 때 모든 AI 가 실패한 종목은 `_write_ai_analysis_files` 가 캐시에 넣지 않으므로(`services/common_update_ai_analysis_service.py:113-116`), 뒤의 재분석이 그 종목을 GPT 로 채워도 캐시에는 남지 않는다. `[VCP-040]` 이후 CSV 에는 GPT 판정이 들어가므로 화면의 Gemini 열에 GPT 판정이 뜨고 GPT 열은 빈다. 또 `load_vcp_ai_cache_map`(`services/kr_market_vcp_reanalysis_service.py:145-150`)과 `update_vcp_ai_cache_files`(`:70-75`)는 날짜 없는 `ai_analysis_results.json`·`kr_ai_analysis.json` 을 날짜 확인 없이 쓰므로, 날짜 파일이 없는 날 재분석하면 전날 파일의 겹치는 종목에 결과가 쓰일 수 있다.

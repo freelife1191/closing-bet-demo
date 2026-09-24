@@ -13,6 +13,7 @@ import re
 from typing import List, Dict, Optional
 
 from engine.config import app_config
+from engine.constants import LLM as LLM_THRESHOLD
 from engine.llm_analyzer_retry import build_gemini_retry_model_chain, build_model_chain
 from engine.vcp_ai_analyzer_helpers import (
     build_vcp_rule_based_recommendation,
@@ -119,6 +120,7 @@ class VCPMultiAIAnalyzer:
         self.gemini_blocked_models: set[str] = set()
         self.gpt_quota_exhausted = False
         self.gpt_blocked_reason: str | None = None
+        self._session_blocks_since: float | None = None
     
     def _build_vcp_prompt(self, stock_name: str, stock_data: Dict) -> str:
         """VCP 분석용 프롬프트 생성"""
@@ -619,23 +621,71 @@ class VCPMultiAIAnalyzer:
             logger.error(f"[GPT] {stock_name} 분석 실패: 빈 응답")
         return None
     
+    def _expire_session_blocks(self) -> None:
+        """세션 차단 플래그를 처음 관측한 시각에서 TTL 이 지나면 모두 비운다 [VCP-041].
+
+        싱글톤 분석기가 워커 수명 동안 살아 있어 차단이 재기동 전까지 남던 것을 막는다.
+        """
+        # ponytail: 만료는 종목 경계에서만 판정하므로 실제 차단은 TTL + 종목 하나의 분석 시간까지 늘 수 있고,
+        # 플래그 전체가 시계 하나를 써서 창 끝 무렵에 새로 켠 차단도 함께 풀린다(재호출 한 번 뒤 다시 막힌다)
+        blocked = bool(getattr(self, "gemini_blocked_models", None)) or any(
+            getattr(self, name, None)
+            for name in (
+                "gpt_quota_exhausted",
+                "gpt_blocked_reason",
+                "perplexity_quota_exhausted",
+                "perplexity_blocked_reason",
+            )
+        )
+        if not blocked:
+            self._session_blocks_since = None
+            return
+        now = time.monotonic()
+        since = getattr(self, "_session_blocks_since", None)
+        if since is None:
+            self._session_blocks_since = now
+            return
+        if now - since < LLM_THRESHOLD.SESSION_BLOCK_TTL_SECONDS:
+            return
+        logger.info(
+            "VCP 분석기 세션 차단 해제: gemini=%s, gpt=%s, perplexity=%s",
+            sorted(getattr(self, "gemini_blocked_models", None) or []),
+            getattr(self, "gpt_blocked_reason", None),
+            getattr(self, "perplexity_blocked_reason", None),
+        )
+        # 진행 중인 호출이 같은 집합을 쥐고 있으므로 새로 만들지 않고 비운다
+        if isinstance(getattr(self, "gemini_blocked_models", None), set):
+            self.gemini_blocked_models.clear()
+        else:
+            self.gemini_blocked_models = set()
+        self.gpt_quota_exhausted = False
+        self.gpt_blocked_reason = None
+        self.perplexity_quota_exhausted = False
+        self.perplexity_blocked_reason = None
+        self._session_blocks_since = None
+
     def _parse_json_response(self, text: str) -> Optional[Dict]:
         """LLM 응답에서 JSON 추출"""
         return parse_json_response(text)
     
     async def analyze_stock(self, stock_name: str, stock_data: Dict) -> Dict:
         """단일 종목 멀티 AI 분석 (Gemini + GPT/Perplexity 동시 실행 - 병렬 처리)"""
-        return await orchestrate_stock_analysis_impl(
-            stock_name=stock_name,
-            stock_data=stock_data,
-            providers=self.providers,
-            second_provider=self.second_provider,
-            build_prompt_fn=self._build_vcp_prompt,
-            analyze_with_gemini_fn=self._analyze_with_gemini,
-            analyze_with_gpt_fn=self._analyze_with_gpt,
-            analyze_with_perplexity_fn=self._analyze_with_perplexity,
-            logger=logger,
-        )
+        self._expire_session_blocks()
+        try:
+            return await orchestrate_stock_analysis_impl(
+                stock_name=stock_name,
+                stock_data=stock_data,
+                providers=self.providers,
+                second_provider=self.second_provider,
+                build_prompt_fn=self._build_vcp_prompt,
+                analyze_with_gemini_fn=self._analyze_with_gemini,
+                analyze_with_gpt_fn=self._analyze_with_gpt,
+                analyze_with_perplexity_fn=self._analyze_with_perplexity,
+                logger=logger,
+            )
+        finally:
+            # 배치의 마지막 종목에서 켠 차단도 여기서 시각을 남겨야 다음 배치 전에 풀린다
+            self._expire_session_blocks()
     
     async def _analyze_with_perplexity(
         self,

@@ -60,6 +60,8 @@ class LLMThresholds:
     TIMEOUT_GENERAL: int = 60
     MAX_RETRIES: int = 5
     BASE_RETRY_DELAY: float = 2.0
+    # 429·503·쿼터 오류로 켠 VCP 분석기 세션 차단을 푸는 시간(초) [VCP-041]
+    SESSION_BLOCK_TTL_SECONDS: int = 600
 
 
 @dataclass(frozen=True)
