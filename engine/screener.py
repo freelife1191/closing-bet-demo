@@ -198,13 +198,17 @@ class SmartMoneyScreener:
             logger.error(f"데이터 로드 실패: {e}")
 
     def run_screening(self, max_stocks: int = 50) -> pd.DataFrame:
-        """스크리닝 실행"""
+        """스크리닝 실행. 빈 프레임은 「조건 충족 종목 없음」만 뜻하고, 실패는 예외로 올린다([VCP-049]).
+
+        호출자(create_signals_log)는 빈 결과를 받으면 그 날짜의 기존 시그널을 지운다. 실패를 빈 결과로
+        돌려주면 저장된 시그널이 사라지므로, 예외를 올려 [VCP-028] 의 보존 갈래로 보낸다.
+        """
         try:
             # Load Data First
             self._load_data()
-            if self.stocks_df is None or self.prices_df is None or self.inst_df is None:
-                logger.error("필수 데이터 파일이 누락되었습니다.")
-                return pd.DataFrame()
+            # 파일이 없으면 로더는 None 이 아니라 빈 프레임을 준다. 수급은 없어도 분석한다
+            if any(frame is None or frame.empty for frame in (self.stocks_df, self.prices_df)) or self.inst_df is None:
+                raise RuntimeError("필수 데이터(종목 목록·일별 가격)가 없거나 비어 있습니다.")
 
             # Market Gate 확인
             gate_status = self.market_gate.analyze()
@@ -241,7 +245,7 @@ class SmartMoneyScreener:
 
         except Exception as e:
             logger.error(f"스크리닝 실패: {e}")
-            return pd.DataFrame()
+            raise
 
     def _analyze_candidates(self, candidates: List[Dict]) -> Iterator[Optional[Dict]]:
         if not getattr(self, "_target_datetime", None) or not self._should_use_csv_supply_for_target_date():

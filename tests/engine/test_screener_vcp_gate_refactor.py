@@ -9,6 +9,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from engine.screener import SmartMoneyScreener
 
@@ -117,3 +118,42 @@ def test_run_screening_keeps_vcp_stock_below_composite_score(monkeypatch):
     result = screener.run_screening(max_stocks=10)
 
     assert result["ticker"].tolist() == ["000002", "000001"]
+
+
+def _gate_screener(monkeypatch, *, prices_df, analyze=None):
+    screener = object.__new__(SmartMoneyScreener)
+    screener.stocks_df = pd.DataFrame([{"ticker": "000001", "name": "종목", "market": "KOSPI"}])
+    screener.prices_df = prices_df
+    screener.inst_df = pd.DataFrame()
+    screener.target_date = None
+    screener.market_gate = SimpleNamespace(
+        analyze=analyze or (lambda: {"status": "중립", "is_gate_open": True})
+    )
+    monkeypatch.setattr(SmartMoneyScreener, "_load_data", lambda _self: None)
+    return screener
+
+
+def test_run_screening_raises_when_market_gate_fails(monkeypatch):
+    """[VCP-049] 실패를 빈 결과로 돌려주면 호출자가 「시그널 없음」으로 보고 그 날짜 행을 지운다."""
+    def _boom():
+        raise RuntimeError("gate down")
+
+    screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame([{"ticker": "000001"}]), analyze=_boom)
+    with pytest.raises(RuntimeError, match="gate down"):
+        screener.run_screening(max_stocks=10)
+
+
+def test_run_screening_raises_when_prices_are_empty(monkeypatch):
+    """[VCP-049] 가격 파일이 없으면 로더가 빈 프레임을 준다. 이것도 0건이 아니라 실패다."""
+    screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame())
+    with pytest.raises(RuntimeError):
+        screener.run_screening(max_stocks=10)
+
+
+def test_run_screening_returns_empty_when_no_stock_passes(monkeypatch):
+    """[VCP-049] 조건 충족 종목이 실제로 없으면 종전처럼 빈 프레임이다."""
+    screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame([{"ticker": "000001"}]))
+    monkeypatch.setattr(
+        SmartMoneyScreener, "_analyze_stock", lambda _self, stock: {**stock, "score": 50, "is_vcp": False}
+    )
+    assert screener.run_screening(max_stocks=10).empty

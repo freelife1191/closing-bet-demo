@@ -66,11 +66,14 @@
 
 ### [VCP-049] 스크리너 실패가 「시그널 없음」으로 처리되어 그 날짜의 기존 시그널 행을 지운다
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
-- 원인: `run_screening`(`engine/screener.py:200-244`)은 필수 파일 누락(:205-207)과 Market Gate·분석 중 예외(:241-243)에서 모두 빈 DataFrame 을 돌려준다. `create_signals_log` 는 이를 정상적인 0건과 구분하지 못해 「조건 충족 종목 없음」 갈래(`scripts/init_data.py:1653-1675`)로 가서 `signal_date == 그 날짜` 인 기존 행을 지우고 최신 JSON 을 비운 뒤 `True` 를 돌려준다. `[VCP-028]` 이 예외 갈래에 둔 보존 장치를 우회한다
+- 원인: `run_screening`(`engine/screener.py:200-244`)은 필수 파일 누락(:205-207)과 Market Gate·분석 중 예외(:241-243)에서 모두 빈 DataFrame 을 돌려준다. `create_signals_log` 는 이를 정상적인 0건과 구분하지 못해 「조건 충족 종목 없음」 갈래(`scripts/init_data.py:1653-1675`)로 가서 `signal_date == 그 날짜` 인 기존 행을 지우고 `True` 를 돌려준다(최신 JSON 은 실패 갈래에서도 비우는 `[VCP-028]` 의 기존 설계라 이 항목의 범위가 아니다). `[VCP-028]` 이 예외 갈래에 둔 보존 장치를 우회한다
 - 영향: 같은 날 재실행이나 과거 날짜 재실행 중 데이터 로드·Market Gate 가 실패하면 저장된 그 날짜 시그널과 AI 결과 연결이 사라지고, 화면에는 성공으로 보인다
-- [ ] 설계 승인(실패를 예외나 구분 가능한 결과로 올리는 방식)
-- [ ] 스크리너 실패 시 기존 행 보존·`False` 반환 테스트, 정상 0건은 종전대로 정리되는지 테스트
-- [ ] T3 리뷰와 pytest 전체, 격리 사본 CLI QA
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 19:29 | 범위: bounded. `engine/screener.py` 의 `run_screening` 이 결과를 만들지 못한 실패(종목·가격 프레임 없음 또는 빈 프레임, Market Gate·분석 예외)를 빈 프레임 대신 예외로 올린다. 종목 단위 실패 건너뜀과 정상 0건은 유지. `scripts/init_data.py` 는 고치지 않고 기존 `[VCP-028]` 예외 갈래(보존·`False`)가 받는다 | 근거: 대화에서 설계 제시 뒤 사용자 「승인」
+- 티어 재판정: T2(변경 파일 `engine/screener.py` 는 위험 경로 밖. `scripts/init_data.py` 는 테스트로만 확인). 스킬: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-verify/`
+- [x] 스크리너 단위 테스트(Market Gate 예외·가격 누락이 예외, 정상 0건은 빈 프레임). 구현 전 2건 실패 확인. `create_signals_log` 의 보존·정리는 기존 테스트(`test_create_signals_log_keeps_existing_log_on_exception`, `..._writes_latest_metadata_when_no_signals`)가 덮는다
+- [x] 구현, `closing-bet-reviewer` 리뷰, pytest 전체(2734 passed, 2 skipped, exit 0). 픽스처 `tests/engine/test_screener_supply_batch.py:42` 의 빈 `prices_df` 는 분석에 쓰이지 않는 자리표시라 한 행으로 바꿨다(기대값 불변)
+- 리뷰(`closing-bet-reviewer`, APPROVE): medium(범위 밖) 과거 날짜에서 target 이전 20행 이상 종목이 없으면 여전히 빈 결과 → `[VCP-053]` 으로 이월 | low `_detect_vcp_pattern` 예외 삼킴 → `[VCP-053]` 에 함께 기록 | low 실제 `MarketGate.analyze` 는 내부 예외를 잡아 기본값(Open)을 돌려주므로 S-1 은 방어 경로 확인 → QA 문서에 명시 | low 최신 JSON 은 실패 갈래에서도 비움 → 원인 문구를 행 보존으로 한정 | low `run.py` 메뉴 1 은 실패 시 traceback 이 보임 → CLI 전용이라 미반영
+- [ ] 격리 사본 CLI QA(가격 파일을 뺀 사본에서 기존 행 보존·`False`, 수정 전 커밋과 대조)
 
 ### [VCP-050] 스크리너가 수급 결측을 0 으로 저장한다
 - 카테고리: VCP | 티어: T2 | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
@@ -85,6 +88,12 @@
 - 확인 수준: 코드로만 확인. 운영에서 두 실행이 실제로 겹친 적이 있는지는 로그로 확인해야 한다
 - [ ] 설계 승인(`signals_log_lock` 과 같은 파일 잠금, 임시 파일 교체)
 - [ ] 동시 저장·중단 시 기존 파일 보존 테스트, T3 리뷰와 pytest 전체
+
+### [VCP-053] 과거 날짜 재분석에서 분석 가능한 종목이 하나도 없어도 「시그널 없음」으로 그 날짜 행을 지운다
+- 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py` 대조, 수정은 `engine/screener.py` 예상) | 근거: `[VCP-049]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` medium)
+- 원인: `[VCP-049]` 는 가격 프레임이 비었을 때만 실패로 본다. 과거 날짜를 분석할 때 target 이전 가격이 20행 이상인 종목이 하나도 없으면(가격 창 밖이나 창 시작 부근의 날짜) 모든 종목이 `_prepare_stock_analysis`(`engine/screener.py:285-289`)에서 빠져 빈 결과가 되고, `create_signals_log` 가 그 날짜의 기존 행을 지우고 `True` 를 돌려준다. 같은 결로 `_detect_vcp_pattern`(`:329-333`)은 예외를 삼켜 `is_vcp=False` 를 주므로 전 종목에 걸친 체계적 오류도 0건이 된다
+- [ ] 설계 승인(분석 가능 종목 0개를 실패로 볼지, 분석 시도 대비 실패 비율 판정을 둘지)
+- [ ] 테스트, 리뷰와 pytest 전체
 
 ## P2 — 대기
 

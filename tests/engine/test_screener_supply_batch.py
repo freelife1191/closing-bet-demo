@@ -39,7 +39,7 @@ def test_historical_cutoff_does_not_refill_short_price_candidate(monkeypatch, li
     screener._target_datetime = datetime(2026, 9, 18)
     screener.target_date = "2026-09-18"
     screener.stocks_df = pd.DataFrame([{"ticker": f"{i:06d}", "name": "test", "market": "KOSPI"} for i in range(1, 5)])
-    screener.prices_df = pd.DataFrame()
+    screener.prices_df = pd.DataFrame([{"ticker": "000001"}])  # 비면 [VCP-049] 가 실패로 본다. 분석은 아래 인덱스를 쓴다
     screener.inst_df = pd.DataFrame()
     screener.market_gate = SimpleNamespace(analyze=lambda: {"status": "중립", "is_gate_open": True})
     screener._prices_by_ticker_target = {f"{i:06d}": pd.DataFrame({"close": [100] * (19 if i == 2 else 20)}) for i in range(1, 5)}
