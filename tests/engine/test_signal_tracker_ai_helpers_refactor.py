@@ -179,7 +179,8 @@ def test_cap_ai_target_signals_uses_runtime_limit_when_limit_not_provided(monkey
 
 
 # ---------------------------------------------------------------------------
-# ai_provider 컬럼 + 멀티 provider fallback (회귀 잠금)
+# 멀티 provider fallback (회귀 잠금). [VCP-043] 부터 선택은 수집·재분석과 같은
+# `_extract_vcp_ai_recommendation` 하나로 하고, 읽는 곳이 없던 ai_provider 열은 쓰지 않는다.
 # ---------------------------------------------------------------------------
 
 
@@ -187,38 +188,60 @@ class TestApplyAiResultsProvider:
     def _df(self, tickers):
         return pd.DataFrame([{"ticker": t, "name": t} for t in tickers])
 
-    def test_ai_provider_column_set_when_gemini_succeeds(self):
+    def test_gemini_succeeds_and_no_ai_provider_column(self):
         ai_results = {
             "000001": {
-                "gemini_recommendation": {"action": "BUY", "confidence": 80, "reason": "ok"}
+                "gemini_recommendation": {"action": "BUY", "confidence": 80, "reason": "추세 양호"}
             }
         }
         merged = apply_ai_results(self._df(["000001"]), ai_results)
-        assert merged.iloc[0]["ai_provider"] == "gemini"
         assert merged.iloc[0]["ai_action"] == "BUY"
+        assert "ai_provider" not in merged.columns
 
     def test_falls_back_to_gpt_when_gemini_missing(self):
         ai_results = {
             "000001": {
                 "gemini_recommendation": None,
-                "gpt_recommendation": {"action": "HOLD", "confidence": 60, "reason": "gpt"},
+                "gpt_recommendation": {"action": "HOLD", "confidence": 60, "reason": "관망 권고"},
             }
         }
         merged = apply_ai_results(self._df(["000001"]), ai_results)
-        assert merged.iloc[0]["ai_provider"] == "gpt"
         assert merged.iloc[0]["ai_action"] == "HOLD"
-        assert merged.iloc[0]["ai_reason"] == "gpt"
+        assert merged.iloc[0]["ai_reason"] == "관망 권고"
+
+    def test_skips_failed_gemini_dict_and_uses_valid_gpt(self):
+        # [VCP-043] 실패 dict 도 dict 라서 예전에는 여기서 N/A 가 골라졌다
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": {"action": "N/A", "confidence": 0, "reason": "분석 실패"},
+                "gpt_recommendation": {"action": "buy", "confidence": 70, "reason": "수급 개선"},
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_action"] == "BUY"
+        assert int(merged.iloc[0]["ai_confidence"]) == 70
+        assert merged.iloc[0]["ai_reason"] == "수급 개선"
+
+    def test_only_failed_dicts_marks_failed_without_confidence(self):
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": {"action": "N/A", "confidence": 0, "reason": "분석 실패"},
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_action"] == "N/A"
+        assert pd.isna(merged.iloc[0]["ai_confidence"])
+        assert merged.iloc[0]["ai_reason"] == "분석 실패"
 
     def test_falls_back_to_perplexity_when_gemini_and_gpt_missing(self):
         ai_results = {
             "000001": {
                 "gemini_recommendation": None,
                 "gpt_recommendation": None,
-                "perplexity_recommendation": {"action": "BUY", "confidence": 70, "reason": "ppl"},
+                "perplexity_recommendation": {"action": "BUY", "confidence": 70, "reason": "과거 캐시 판정"},
             }
         }
         merged = apply_ai_results(self._df(["000001"]), ai_results)
-        assert merged.iloc[0]["ai_provider"] == "perplexity"
         assert merged.iloc[0]["ai_action"] == "BUY"
 
     def test_all_providers_missing_marks_failed(self):
@@ -230,23 +253,32 @@ class TestApplyAiResultsProvider:
             }
         }
         merged = apply_ai_results(self._df(["000001"]), ai_results)
-        assert merged.iloc[0]["ai_provider"] == "N/A"
         assert merged.iloc[0]["ai_action"] == "N/A"
         assert merged.iloc[0]["ai_reason"] == "분석 실패"
 
     def test_missing_ticker_in_results_marks_failed(self):
         merged = apply_ai_results(self._df(["000001"]), {})
-        assert merged.iloc[0]["ai_provider"] == "N/A"
         assert merged.iloc[0]["ai_action"] == "N/A"
 
     def test_gemini_priority_over_others_when_all_present(self):
         ai_results = {
             "000001": {
-                "gemini_recommendation": {"action": "BUY", "confidence": 80, "reason": "g"},
-                "gpt_recommendation": {"action": "SELL", "confidence": 50, "reason": "x"},
-                "perplexity_recommendation": {"action": "HOLD", "confidence": 30, "reason": "p"},
+                "gemini_recommendation": {"action": "BUY", "confidence": 80, "reason": "추세 양호"},
+                "gpt_recommendation": {"action": "SELL", "confidence": 50, "reason": "과열"},
+                "perplexity_recommendation": {"action": "HOLD", "confidence": 30, "reason": "중립"},
             }
         }
         merged = apply_ai_results(self._df(["000001"]), ai_results)
-        assert merged.iloc[0]["ai_provider"] == "gemini"
         assert merged.iloc[0]["ai_action"] == "BUY"
+
+    def test_skips_legacy_template_reason_and_uses_valid_gpt(self):
+        # 수집·재분석과 같은 문턱: 옛 템플릿 사유는 실제 판정이 아니다
+        ai_results = {
+            "000001": {
+                "gemini_recommendation": {"action": "BUY", "confidence": 80, "reason": "VCP 패턴 및 외인 매집 추이 확인"},
+                "gpt_recommendation": {"action": "HOLD", "confidence": 60, "reason": "돌파 전 관망"},
+            }
+        }
+        merged = apply_ai_results(self._df(["000001"]), ai_results)
+        assert merged.iloc[0]["ai_action"] == "HOLD"
+        assert merged.iloc[0]["ai_reason"] == "돌파 전 관망"

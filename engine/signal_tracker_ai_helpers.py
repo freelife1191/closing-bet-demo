@@ -6,14 +6,12 @@ Signal Tracker AI 분석 헬퍼.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 import pandas as pd
 
-from engine.pandas_utils_safe import safe_confidence, safe_optional_float
+from engine.pandas_utils_safe import safe_optional_float
 from engine.screening_runtime import resolve_vcp_signals_to_show
-from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
 
 def _resolve_ai_target_limit(limit: int | None) -> int:
@@ -83,32 +81,18 @@ def build_ai_batch_payload(signals_df: pd.DataFrame) -> list[dict[str, Any]]:
     return payload
 
 
-_PROVIDER_PRIORITY: tuple[tuple[str, str], ...] = tuple(
-    zip(("gemini", "gpt", "perplexity"), VCP_AI_RECOMMENDATION_FIELDS)
-)
-
-
-def _pick_recommendation(payload: Mapping[str, Any]) -> tuple[str, Mapping[str, Any] | None]:
-    """우선순위(gemini→gpt→perplexity) 순으로 첫 유효 추천을 고른다.
-
-    perplexity 는 [VCP-046] 이전 캐시에서만 읽힌다.
-    """
-    for provider, key in _PROVIDER_PRIORITY:
-        rec = payload.get(key)
-        if isinstance(rec, Mapping):
-            return provider, rec
-    return "N/A", None
-
-
 def apply_ai_results(
     signals_df: pd.DataFrame,
-    ai_results: Mapping[str, dict[str, Any]],
+    ai_results: dict[str, dict[str, Any]],
 ) -> pd.DataFrame:
     """AI 분석 결과를 시그널 프레임에 병합.
 
-    Provider 우선순위(gemini → gpt → perplexity)를 적용해 첫 번째 유효 추천을 선택하고,
-    어느 provider가 응답했는지 ai_provider 컬럼에 기록한다.
+    추천 선택은 수집 병합·실패 재분석과 같은 `_extract_vcp_ai_recommendation` 이 한다
+    ([VCP-043]). 예전의 자체 선택은 실패 dict 도 골라 뒤의 유효한 판정을 버렸다.
     """
+    # 함수 안 import: app.routes 쪽 모듈이 이 모듈을 먼저 import 하므로 위에 두면 순환한다
+    from app.routes.kr_market_vcp_signal_helpers import _extract_vcp_ai_recommendation
+
     if signals_df.empty:
         return signals_df.copy()
 
@@ -118,32 +102,8 @@ def apply_ai_results(
     else:
         ticker_series = pd.Series([None] * len(result), index=result.index)
 
-    actions: list[Any] = []
-    confidences: list[Any] = []
-    reasons: list[Any] = []
-    providers: list[str] = []
-
-    for ticker in ticker_series:
-        ai_payload = ai_results.get(ticker, {}) if isinstance(ai_results, Mapping) else {}
-        if not isinstance(ai_payload, Mapping):
-            ai_payload = {}
-
-        provider, rec = _pick_recommendation(ai_payload)
-        if rec is None:
-            actions.append("N/A")
-            # [JONGGA-008] 추천이 없으면 확신도도 없다. 0 을 넣으면 이 값이 signals_log 를
-            # 거쳐 화면까지 흘러가 "AI 가 0% 확신한다" 는 막대가 된다.
-            confidences.append(None)
-            reasons.append("분석 실패")
-            providers.append("N/A")
-        else:
-            actions.append(rec.get("action"))
-            confidences.append(safe_confidence(rec.get("confidence")))
-            reasons.append(rec.get("reason"))
-            providers.append(provider)
-
-    result["ai_action"] = actions
-    result["ai_confidence"] = confidences
-    result["ai_reason"] = reasons
-    result["ai_provider"] = providers
+    # [JONGGA-008] 추천이 없으면 확신도는 0 이 아니라 None 이다. 0 을 넣으면 이 값이
+    # signals_log 를 거쳐 화면까지 흘러가 "AI 가 0% 확신한다" 는 막대가 된다.
+    picked = [_extract_vcp_ai_recommendation(ai_results, ticker)[1:] for ticker in ticker_series]
+    result["ai_action"], result["ai_confidence"], result["ai_reason"] = map(list, zip(*picked))
     return result
