@@ -30,12 +30,6 @@ from services.kr_market_data_cache_service import (
 
 _GEMINI_RECOMMENDATION_FIELD, _GPT_RECOMMENDATION_FIELD = VCP_AI_WRITTEN_FIELDS
 
-_VCP_SECOND_RECOMMENDATION_KEY_MAP = {
-    "gpt": _GPT_RECOMMENDATION_FIELD,
-    "openai": _GPT_RECOMMENDATION_FIELD,
-    "zai": _GPT_RECOMMENDATION_FIELD,
-    "z.ai": _GPT_RECOMMENDATION_FIELD,
-}
 _VCP_FORCE_PROVIDER_LABELS = {
     "gemini": "Gemini",
     "second": "Second AI",
@@ -101,9 +95,12 @@ def collect_scoped_vcp_rows(
 
 
 def resolve_vcp_second_recommendation_key(second_provider: str) -> str:
-    """second_provider 문자열을 recommendation 필드명으로 변환한다."""
-    provider = str(second_provider or "").strip().lower()
-    return _VCP_SECOND_RECOMMENDATION_KEY_MAP.get(provider, _GPT_RECOMMENDATION_FIELD)
+    """second_provider 문자열을 recommendation 필드명으로 변환한다.
+
+    두 번째 자리의 결과(GPT 와 그 Z.ai 폴백)는 모두 gpt_recommendation 에 담긴다 [VCP-046].
+    """
+    del second_provider
+    return _GPT_RECOMMENDATION_FIELD
 
 
 def normalize_vcp_force_provider(force_provider: str | None) -> str | None:
