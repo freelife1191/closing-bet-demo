@@ -28,6 +28,13 @@ function getVcpChatHeaders(sessionId: string): Record<string, string> {
   return { ...getAuthHeaders(), 'X-Session-Id': sessionId };
 }
 
+// 수급 결측(null)은 [VCP-054] 부터 API 가 0 과 구분해 보낸다. 매도처럼 빨갛게 그리지 않는다
+const supplyColorClass = (value: number | null) =>
+  value === null ? 'text-gray-500' : value > 0 ? 'text-green-400' : 'text-red-400';
+
+const formatSupplyWon = (value: number | null | undefined) =>
+  value === null || value === undefined ? '-' : `${formatMarketAmount(value)}원`;
+
 // Helper to fix CJK markdown issues and malformed AI output
 const preprocessMarkdown = (text: string) => {
   let processed = text;
@@ -1708,15 +1715,15 @@ export default function VCPSignalsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{signal.signal_date || signalDate || '-'}</td>
-                    <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${signal.foreign_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${supplyColorClass(signal.foreign_5d)}`}>
                       <div className="flex items-center justify-end gap-1">
-                        {signal.foreign_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.foreign_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
+                        {(signal.foreign_5d ?? 0) > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : (signal.foreign_5d ?? 0) < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
                         {formatMarketAmount(signal.foreign_5d)}
                       </div>
                     </td>
-                    <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${signal.inst_5d > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <td className={`px-4 py-3 text-right font-mono text-xs min-w-[100px] w-[100px] ${supplyColorClass(signal.inst_5d)}`}>
                       <div className="flex items-center justify-end gap-1">
-                        {signal.inst_5d > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : signal.inst_5d < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
+                        {(signal.inst_5d ?? 0) > 0 ? <i className="fas fa-arrow-up text-[8px]"></i> : (signal.inst_5d ?? 0) < 0 ? <i className="fas fa-arrow-down text-[8px]"></i> : null}
                         {formatMarketAmount(signal.inst_5d)}
                       </div>
                     </td>
@@ -2036,8 +2043,8 @@ export default function VCPSignalsPage() {
                           </div>
                           <div className="text-xs text-gray-400 leading-relaxed">
                             수축비율 {signal?.contraction_ratio?.toFixed(2) ?? '-'} · 외국인 5일 순매수{' '}
-                            {formatMarketAmount(signal?.foreign_5d)}원 · 기관 5일 순매수{' '}
-                            {formatMarketAmount(signal?.inst_5d)}원
+                            {formatSupplyWon(signal?.foreign_5d)} · 기관 5일 순매수{' '}
+                            {formatSupplyWon(signal?.inst_5d)}
                           </div>
                         </div>
                       </div>

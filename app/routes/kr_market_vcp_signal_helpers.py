@@ -15,7 +15,7 @@ from app.routes.kr_market_signal_common import (
     _none_if_nan,
     _normalize_text,
     _safe_float,
-    _safe_int,
+    _safe_optional_float,
     _VALID_AI_ACTIONS,
 )
 from engine.config import config as signal_config
@@ -314,8 +314,9 @@ def _build_vcp_signal_from_row(row: dict) -> Optional[dict]:
         "entry_price": entry_price,
         "target_price": target_price,
         "stop_price": stop_price,
-        "foreign_5d": _safe_int(_row_get(row, "foreign_5d", 0), default=0),
-        "inst_5d": _safe_int(_row_get(row, "inst_5d", 0), default=0),
+        # [VCP-054] 수급 결측은 빈 칸으로 저장된다([VCP-050]). 0 으로 채우면 화면이 「순매수 0」을 그린다
+        "foreign_5d": _safe_optional_float(_row_get(row, "foreign_5d")),
+        "inst_5d": _safe_optional_float(_row_get(row, "inst_5d")),
         # [VCP-011] 프롬프트는 이 열의 실수 원값을 싣는다. 여기서 `_safe_int` 로 버리면
         # 16.5 가 화면에서는 16, AI 사유에서는 16.5 가 되어 같은 값이 어긋나 보인다.
         # 기본값 0 을 두던 것도 없앤다. 값이 없는 행까지 `0.0` 으로 그려서 화면의

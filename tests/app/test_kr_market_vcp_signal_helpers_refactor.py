@@ -476,3 +476,15 @@ def test_extract_reads_legacy_perplexity_only_row():
     }
 
     assert vcp_helpers._extract_vcp_ai_recommendation(ai_results, "000001") == (True, "HOLD", 60, "과거 캐시 판정")
+
+
+def test_supply_keeps_missing_apart_from_real_zero():
+    """[VCP-054] 수급 결측(빈 칸·NaN)은 None, 실제 0 은 0 이다. 0 으로 채우면 화면이 「순매수 0」을 그린다."""
+    missing = vcp_helpers._build_vcp_signal_from_row(_vcp_row(foreign_5d=float("nan"), inst_5d=""))
+    zero = vcp_helpers._build_vcp_signal_from_row(_vcp_row(foreign_5d=0, inst_5d=-1_500))
+
+    assert missing is not None and zero is not None
+    assert missing["foreign_5d"] is None
+    assert missing["inst_5d"] is None
+    assert zero["foreign_5d"] == 0
+    assert zero["inst_5d"] == -1_500

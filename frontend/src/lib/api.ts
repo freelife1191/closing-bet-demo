@@ -91,8 +91,9 @@ export interface KRSignal {
   /** 진입가 기준 손절가. 진입가가 없으면 백엔드가 비워 둔다. */
   stop_price?: number | null;
   return_pct: number;
-  foreign_5d: number;
-  inst_5d: number;
+  /** 5일 순매수. 수급 결측이면 null 이다([VCP-054]). */
+  foreign_5d: number | null;
+  inst_5d: number | null;
   score: number;
   /** VCP 패턴 보조 점수(0~20). 종합 시그널 점수인 score 와 다른 값이다. */
   vcp_score?: number;

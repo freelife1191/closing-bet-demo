@@ -33,7 +33,9 @@ _VCP_SIGNALS_CACHE_LOCK = threading.Lock()
 # 5: 날짜 없는 조회가 오늘 자 시그널이 없으면 최신 저장분으로 대체한다([VCP-026]). 4 로
 #    저장된 「오늘 기준 빈 결과」는 같은 날짜·같은 CSV 서명인 동안 그대로 조회되어 대체
 #    로직을 하루 내내 무력화하므로 통째로 무효화한다.
-_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 5
+# 6: 수급 결측을 0 대신 null 로 보낸다([VCP-054]). 5 로 저장된 payload 에는 결측이 0 으로
+#    들어 있어 CSV 가 다시 쓰이기 전까지 화면이 「순매수 0」을 그린다.
+_VCP_SIGNALS_CACHE_SCHEMA_VERSION = 6
 _VCP_SIGNALS_MEMORY_CACHE: OrderedDict[
     str,
     tuple[tuple[Any, ...], list[dict[str, Any]]],

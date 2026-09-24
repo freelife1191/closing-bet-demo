@@ -69,8 +69,15 @@
 - 원인: `[VCP-050]` 이후 `signals_log.csv` 는 수급 결측을 빈 칸으로 저장한다. 그러나 API(`app/routes/kr_market_vcp_signal_helpers.py:317-318` 의 `_safe_int(default=0)`)와 챗봇 종목 정보(`engine/kr_ai_data_service.py:436-437` 의 `_to_int(..., 0)`)가 빈 칸을 다시 0 으로 읽는다. 화면(`frontend/src/app/dashboard/kr/vcp/page.tsx:1711-1720`, `:2039-2040`)과 타입(`frontend/src/lib/api.ts:94-95`)도 숫자만 가정한다
 - 영향: 결측 종목이 화면과 챗봇에 「순매수 0」으로 보인다. `[VCP-050]` 이전과 같은 표시이며 새로 나빠지지는 않았다
 - 함께 볼 것: `engine/screener.py` `ScreenerResult` 의 `foreign_net_5d: int`·1일 기본값 0(현재 dict 경로에서 쓰이지 않음), `_score_supply_core` 가 `details` 행에 키가 없으면 1일 값을 0 으로 쓰는 것, `generate_signals` 결과를 찍는 수동 스크립트 `tests/test_vcp.py:72`·`scripts/diagnose_screener.py:62` 가 None 에서 TypeError(`[VCP-050]` `/review` low)
-- [ ] 설계 승인(API 는 None, 화면은 `-` 표기)
-- [ ] 테스트, 리뷰, pytest·vitest 전체, 화면 실측
+- [x] 설계 승인(2026-09-24 21:03 대화 「진행해」, bounded, T2: `frontend/` 포함, 위험 경로 없음). 범위: API `_build_vcp_signal_from_row` 의 `foreign_5d`·`inst_5d` 를 `_safe_optional_float` 로(빈 칸 null, 실제 0 은 0), `KRSignal` 타입 `number | null`, VCP 표는 null 이면 회색 `-`·화살표 없음, 상세 문구는 null 이면 `원` 없이 `-`. `engine/kr_ai_data_service.py:436-437` 은 챗봇이 아니라 `run.py` 의 `KrAiAnalyzer` 만 부르고 그 전략이 종료되어 수급 값을 읽는 곳이 없으므로 범위에서 뺀다. `ScreenerResult` int 기본값, `_score_supply_core` 1일 기본값 0, 수동 스크립트 두 곳 TypeError 도 범위 밖으로 남긴다
+- [x] 읽은 정본: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-nextjs/`, `.claude/skills/dev-cycle/references/frontend-skills.md` §2, `frontend/node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md`(이미 `'use client'` 인 화면의 렌더링만 바뀌어 표의 여섯 줄에 맞지 않음). vendor 스킬은 해당 코드(useEffect·프롭 과다) 변경이 없어 읽지 않음
+- [x] 테스트: API 빈 칸·NaN 은 None·실제 0 은 0(pytest), 표의 결측 칸 회색 `-`·화살표 없음과 상세 문구 `-`(vitest 2건). 세 건 모두 수정 전 코드에서 실패 확인
+- [x] 구현
+- [x] pytest 전체 2746 passed·2 skipped(종료 코드 0), vitest 684 passed, type-check 종료 코드 0, lint 경고 183(기준선과 같음)
+- [x] `/ponytail-review`: Lean already
+- [x] `closing-bet-reviewer`(vcp054-review) CHANGES_REQUIRED(max medium). 1번 medium(영속 캐시 `services/kr_market_vcp_signals_cache.py` 의 서명이 같으면 수정 전 0 payload 가 계속 나감)은 반영해 스키마 버전을 6 으로 올렸고 QA S-4 로 확인한다. 2번 low(실제 0 도 빨간색)는 수정 전과 같은 표기이고 승인 범위 밖이라 미반영. 3번 low(수급 JSON 이 정수에서 실수로 바뀜)는 정수를 가정하는 소비자가 없어 미반영
+- [x] 캐시 버전 변경 뒤 pytest 전체 재실행: 2746 passed, 2 skipped, 종료 코드 0
+- [ ] QA(격리 사본 포트, 결측 행이 든 `signals_log.csv`, agent-browser 화면 실측, 옛 캐시 무효화)
 
 ### [VCP-055] Toss 수급 조회가 200 빈 응답을 받으면 5일 순매수 0 으로 저장·캐시한다
 - 카테고리: VCP | 티어: T2 | 근거: `[VCP-050]` `/review` Medium(2026-09-24, 코드와 로컬 재현으로 확인. 운영 빈도는 네트워크 금지로 미확인)
