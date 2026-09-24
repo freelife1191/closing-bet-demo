@@ -10,6 +10,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+import pytest
+
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -124,8 +126,8 @@ def _sample_stock() -> dict:
     }
 
 
-def _build_analyzer(monkeypatch, outcomes: list[object], *, zai_client=None):
-    monkeypatch.setenv("VCP_AI_PROVIDERS", "gemini,gpt,z.ai")
+def _build_analyzer(monkeypatch, outcomes: list[object], *, zai_client=None, providers="gemini,gpt,z.ai"):
+    monkeypatch.setenv("VCP_AI_PROVIDERS", providers)
     monkeypatch.setenv("VCP_SECOND_PROVIDER", "gpt")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("VCP_GPT_MODEL", "gpt-5-nano")
@@ -250,4 +252,52 @@ def test_second_provider_gpt_skips_call_when_model_env_is_blank(monkeypatch):
         for call in client.responses.calls + client.chat.completions.calls
     ]
     assert requested_models == []
+    assert result["gpt_recommendation"] is None
+
+
+def test_second_provider_gpt_goes_straight_to_zai_when_session_blocked(monkeypatch):
+    """세션 차단 중이면 GPT 를 부르지 않고 Z.ai 로 넘어간다."""
+    analyzer, client = _build_analyzer(monkeypatch, [], zai_client=object())
+    analyzer.gpt_blocked_reason = "quota-like-429"
+    zai_calls = []
+
+    async def _fake_analyze_with_zai(stock_name, stock_data, prompt=None):
+        zai_calls.append(stock_name)
+        return {"action": "HOLD", "confidence": 60, "reason": "z.ai", "model": "glm"}
+
+    analyzer._analyze_with_zai = _fake_analyze_with_zai
+
+    result = asyncio.run(analyzer.analyze_stock("테스트종목", _sample_stock()))
+
+    assert zai_calls == ["테스트종목"]
+    assert client.responses.calls == []
+    assert client.chat.completions.calls == []
+    assert result["gpt_recommendation"]["model"] == "glm"
+
+
+@pytest.mark.parametrize(
+    ("providers", "zai_client"),
+    [("gemini,gpt", object()), ("gemini,gpt,z.ai", None)],
+    ids=["zai-not-in-providers", "zai-client-missing"],
+)
+def test_second_provider_gpt_does_not_fall_back_when_zai_unavailable(monkeypatch, providers, zai_client):
+    """Z.ai 가 목록에 없거나 클라이언트가 없으면 폴백하지 않고 GPT 칸을 비운다."""
+    analyzer, client = _build_analyzer(
+        monkeypatch,
+        [DummyOpenAIError("insufficient_quota: credit exhausted", status_code=429)],
+        zai_client=zai_client,
+        providers=providers,
+    )
+    zai_calls = []
+
+    async def _fake_analyze_with_zai(stock_name, stock_data, prompt=None):
+        zai_calls.append(stock_name)
+        return {"action": "BUY", "confidence": 70, "reason": "z.ai", "model": "glm"}
+
+    analyzer._analyze_with_zai = _fake_analyze_with_zai
+
+    result = asyncio.run(analyzer.analyze_stock("테스트종목", _sample_stock()))
+
+    assert zai_calls == []
+    assert [call["model"] for call in client.responses.calls] == ["gpt-5-nano"]
     assert result["gpt_recommendation"] is None

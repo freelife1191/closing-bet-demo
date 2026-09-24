@@ -72,7 +72,12 @@
 
 ### [VCP-047] GPT 실패 시 Z.ai 폴백(`_fallback_from_gpt`)을 직접 검사하는 테스트가 없다
 - 카테고리: VCP | 티어: T1(테스트만) | 근거: `[VCP-046]` 코드 리뷰(2026-09-24). Perplexity 체인이 사라진 뒤 `engine/vcp_ai_analyzer.py` 의 `_fallback_from_gpt` 가 두 번째 자리의 유일한 폴백인데 `tests/` 에 이 이름을 직접 부르는 테스트가 0 건이다(`git grep` 확인). 차단·쿼터 경로에서 Z.ai 로 넘어가는지와 `VCP_AI_PROVIDERS` 에 `zai` 가 없을 때 넘어가지 않는지를 가짜 클라이언트로 고정한다
-- [ ] 설계 승인, 테스트 추가
+- 설계 승인: 2026-09-24 14:24 사용자 「좋아 진행해」(bounded 대화 설계). 범위: `tests/engine/test_vcp_gpt_second_provider.py` 에 세션 차단 → Z.ai 1건, 폴백 불가(목록에 zai 없음·`zai_client` None) 2건. 쿼터 소진 → Z.ai 는 `:202` 가 이미 덮는다. 제품 코드 변경 없음, 동적 QA 제외(테스트만)
+- 티어 재판정: 구현 파일 없이 테스트 파일만 +51 -2 라 T2(`tier-rules.md` §1 줄 수 조항)
+- [x] 설계 승인
+- [x] 테스트 3건 추가, guard 셋 무력화 시 3건 실패 확인 후 복원
+- [x] `/ponytail-review` net -4(가짜 Z.ai 헬퍼 합치기, 미반영: 제자리에서 읽히는 편이 낫다) · `closing-bet-reviewer` APPROVE low 3(assert 분리 반영, 폴백 사유 검사는 `:202` 가 덮어 미반영, TODO 형식 반영)
+- [x] pytest 대상 파일 8 passed, 전체 2725 passed 2 skipped
 
 ### [VCP-048] GPT 클라이언트가 없는데도 두 번째 자리를 gpt 로 확정해 재분석이 매번 같은 행을 실패로 잡는다
 - 카테고리: VCP | 티어: T3(`engine/vcp_ai_*`) | 근거: `[VCP-046]` 심층 리뷰(2026-09-24, 스크래치 재현). `resolve_effective_second_provider` 는 목록에 `gpt` 가 있는지만 보고 `init_gpt_client` 가 실제로 클라이언트를 만들었는지는 보지 않는다. `OPENAI_API_KEY` 가 없으면 `second_provider == "gpt"`·`gpt_client is None` 이 되어 재분석이 `gpt_recommendation` 을 필수 칸으로 요구하고, 그 칸은 채워지지 않으므로 부를 때마다 「실패 N건 중 0건 재분석 완료」가 된다(LLM 호출 0, 비용 없음). 기본 구성에도 원래 있던 동작이며 `[VCP-046]` 의 gpt 보충으로 옛 `gemini,perplexity` 구성에도 옮겨 왔다
