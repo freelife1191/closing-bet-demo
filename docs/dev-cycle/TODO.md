@@ -72,8 +72,14 @@
 
 ### [VCP-046] Perplexity 프로바이더를 코드·설정·화면에서 제거한다
 - 카테고리: VCP | 티어: T3(`engine/vcp_ai_*` 위험 경로) | 근거: 사용자 지시(2026-09-24 11:43, 「Perplexity 는 이제 사용안해 제거해도돼」). 참조는 `engine/vcp_ai_analyzer.py`·`vcp_ai_analyzer_helpers.py`·`vcp_ai_orchestration_helpers.py`(`VCP_AI_RECOMMENDATION_FIELDS`)·`vcp_ai_provider_init_helpers.py`·`signal_tracker_ai_helpers.py`·`engine/config.py`, `app/routes/kr_market_vcp_signal_helpers.py`, `services/kr_market_vcp_reanalysis_service.py`·`common_env_service.py`, 프론트엔드(`SettingsModal.tsx`·`VCPCriteriaModal.tsx`·`dashboard/kr/vcp`·`page.tsx`·`privacy/page.tsx`·`lib/api.ts`), `.env.example`, `scripts/test_perplexity_*.py` 등 30여 파일과 `CLAUDE.md`·`README.md`. 기존 캐시 JSON 의 `perplexity_recommendation` 칸을 읽는 쪽이 어떻게 처리할지와 `VCP_SECOND_PROVIDER=perplexity` 설정이 남은 배포의 동작을 정해야 한다
-- [ ] 설계 승인(캐시 호환, 설정값 폐기 방식, 개인정보 페이지 문구)
-- [ ] 계획·테스트·수정·리뷰·QA
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 12:46
+  | 범위: 대화 설계(과거 캐시 읽기 전용 표시 유지, perplexity 설정은 GPT 로 대체하고 경고, 개인정보 5절 Perplexity→OpenAI 교체)
+  | 실제 대화 근거: 2026-09-24 AskUserQuestion 세 답변과 설계 제시 뒤 사용자 「좋아 진행해」. 설계 문서 검토 승인은 아직이다
+- 설계 문서: `docs/superpowers/specs/2026-09-24-vcp-046-perplexity-removal-design.md`
+- [x] 대화 설계 승인(캐시 호환, 설정값 폐기 방식, 개인정보 페이지 문구)
+- [ ] 설계 문서 검토 승인
+- [ ] 구현 계획(writing-plans)과 계획 검토(critic)
+- [ ] 테스트·수정·리뷰·QA
 
 ### [VCP-043] `signal_tracker` 경로의 AI 추천 선택이 실패 dict 도 고르고 VCP 수집과 다른 규칙을 쓴다
 - 카테고리: VCP | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-040]` 계획 검토(critic, 2026-09-24). `engine/signal_tracker_ai_helpers.py:91` `_pick_recommendation` 은 gemini → gpt → perplexity 순서로 `isinstance(Mapping)` 만 보고 고르므로 `{"action":"N/A","reason":"분석 실패"}` 도 선택된다. `run.py:56` 메뉴 2 가 이 경로로 `signals_log.csv` 에 쓰며 `ai_provider` 열도 남긴다(`:145`). `[VCP-040]` 이후 수집·재분석은 `_extract_vcp_ai_recommendation`(유효성 검사 포함)을 쓴다.
