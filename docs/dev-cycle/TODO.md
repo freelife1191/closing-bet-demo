@@ -64,18 +64,6 @@
 - [ ] Market Gate 지수 입력과 `get_last_trading_date` 공휴일 판정 영향 확인과 테스트
 - [ ] T3 리뷰와 pytest 전체
 
-### [VCP-050] 스크리너가 수급 결측을 0 으로 저장한다
-- 카테고리: VCP | 티어: T2 | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
-- 원인: 수급 추세가 없으면 `{"score": 0, "foreign_1d": 0, "inst_1d": 0}`(`engine/screener.py:267`, `:376`)을 쓰고, 5일 값은 `engine/screener_result_builders.py:31-32` 의 기본값 0 이 된다. `[VCP-011]` 이 하위 단계에서 막은 「결측 → 0」이 원천에서 생긴다
-- 영향: `signals_log.csv` 의 `foreign_5d`·`inst_5d` 와 AI 프롬프트에 0 이 실제 순매수 0 처럼 들어간다. 점수의 수급 부분도 결측과 실제 0 이 같게 계산된다
-- 티어 재판정: T3(저장 단계 `scripts/init_data.py:1434-1435` 가 결측을 다시 0 으로 되돌리므로 위험 경로를 함께 고친다)
-- [x] 설계 승인(2026-09-24 19:45 대화 「승인」, bounded). 범위: 수급 추세 없음·CSV 5행 미만이면 점수 0 에 5일·1일 값 None(상수 하나로 모음), 일별 상세가 없으면 1일 값 None, 결과 빌더의 기본값 0 제거, `create_signals_log` 는 `safe_optional_float` 로 빈 칸 저장, `build_vcp_prompt` 는 None 을 `N/A` 로 적음. 점수·정렬 불변. API·화면·챗봇 데이터의 읽기 쪽 0 표시는 범위 밖(새 TODO)
-- [x] 구현과 결측·실제 0 구분 테스트(새 테스트 4건은 수정 전 코드에서 실패 확인). 기대값 변경 1건: `test_screener_supply_unified_service_refactor.py` 가 결측 결과 `{"score":0,"foreign_1d":0,"inst_1d":0}` 을 고정하던 것을 None 으로 바꿈(결함을 고정하던 기대값, 리뷰어 동의)
-- [x] `closing-bet-reviewer` APPROVE(low 4). 반영: 쓰이지 않는 `calculate_supply_score_from_csv` 의 결측 사본을 `MISSING_SUPPLY` 로 맞춤, 읽기 쪽 0 표시를 `[VCP-054]` 로 등록. 미반영: 5일 값의 실수 표기(아래 `/review` 반영으로 해소), `ScreenerResult` 타입 힌트(쓰이지 않는 경로, `[VCP-054]` 에 기록)
-- [x] `/review`(T3, `oh-my-claudecode:code-reviewer`) 차단 없음, Medium 1·Low 4. 반영: `create_signals_log` 가 5일 값을 정수로 저장(`_optional_int`)해 결측이 없는 날 기존 행이 `123.0` 표기로 바뀌지 않게 함(단언 추가, 실수 저장 시 실패 확인). 이월: Medium(Toss 200 빈 응답이 5일 0 으로 캐시됨, 변경 전부터 있던 경로이며 폴백이 pykrx 조회를 늘리므로 범위 밖) → `[VCP-055]`, 수동 스크립트 두 개의 None TypeError → `[VCP-054]`. 결측이 섞인 날은 열이 실수가 되어 `.0` 표기가 되는 것은 의도한 동작으로 둠
-- [x] pytest 전체(리뷰 반영 뒤) `venv/bin/python -m pytest -q` → 2737 passed, 2 skipped, exit 0
-- [ ] QA: 격리 사본에서 `create_signals_log` 수정 전후 CSV 원문 대조(LLM·네트워크 없음)
-
 ### [INFRA-091] `daily_prices.csv` 를 잠금 없이 원자적이지 않게 저장한다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
 - 원인: yfinance 폴백(`scripts/init_data.py:851`)과 pykrx 경로(`:1101`)가 전체 가격 이력을 단순 `to_csv` 로 덮는다. 17:00 스케줄러와 관리자 「Refresh VCP」(`services/kr_market_vcp_background_service.py:66`)가 다른 워커에서 겹치거나 저장 중 재기동되면 파일이 잘리거나 한쪽 갱신이 유실된다. 저장 중 스크리너가 읽으면 부분 파일을 읽는다. `[INFRA-088]`~`[INFRA-090]` 과는 다른 결함이다
@@ -86,6 +74,7 @@
 ### [VCP-053] 과거 날짜 재분석에서 분석 가능한 종목이 하나도 없어도 「시그널 없음」으로 그 날짜 행을 지운다
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py` 대조, 수정은 `engine/screener.py` 예상) | 근거: `[VCP-049]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` medium)
 - 원인: `[VCP-049]` 는 가격 프레임이 비었을 때만 실패로 본다. 과거 날짜를 분석할 때 target 이전 가격이 20행 이상인 종목이 하나도 없으면(가격 창 밖이나 창 시작 부근의 날짜) 모든 종목이 `_prepare_stock_analysis`(`engine/screener.py:285-289`)에서 빠져 빈 결과가 되고, `create_signals_log` 가 그 날짜의 기존 행을 지우고 `True` 를 돌려준다. 같은 결로 `_detect_vcp_pattern`(`:329-333`)은 예외를 삼켜 `is_vcp=False` 를 주므로 전 종목에 걸친 체계적 오류도 0건이 된다
+- 추가 관찰(2026-09-24 19:55, `[VCP-050]` QA 설정 중): 원본 자료 사본(가격 2025-11-13~2026-09-21, 수급 2026-01-12~2026-09-21)으로 `create_signals_log(target_date="2026-05-05", run_ai=False)` 를 네트워크 없이 돌리면 수정 전후 커밋 모두 조건 충족 0건으로 원본의 2026-05-05 15행을 지우고 `True` 를 돌려준다. 0건이 된 원인(가격 창·수급 결측·VCP 판정)은 조사하지 않았다
 - [ ] 설계 승인(분석 가능 종목 0개를 실패로 볼지, 분석 시도 대비 실패 비율 판정을 둘지)
 - [ ] 테스트, 리뷰와 pytest 전체
 
