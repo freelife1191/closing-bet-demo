@@ -11,6 +11,7 @@ import os
 import sys
 import pandas as pd
 import json
+import math
 import socket
 import yfinance as yf
 import time
@@ -382,9 +383,15 @@ def _collect_toss_trend_rows_for_ticker(ticker: str, expected_latest_dt: datetim
         if row_dt.date() > expected_latest_dt.date():
             continue
 
-        close = float(item.get("close", 0) or 0)
-        foreign_volume = float(item.get("netForeignerBuyVolume", 0) or 0)
-        institution_volume = float(item.get("netInstitutionBuyVolume", 0) or 0)
+        # [INFRA-095] 빈 종가·순매수 수량을 0 으로 채우지 않고 그 행을 버린다. 실제 0 수량은 저장한다
+        try:
+            close = float(item["close"])
+            foreign_volume = float(item["netForeignerBuyVolume"])
+            institution_volume = float(item["netInstitutionBuyVolume"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (close > 0 and math.isfinite(close) and math.isfinite(foreign_volume) and math.isfinite(institution_volume)):
+            continue
         rows.append(
             {
                 "date": normalized_date,
@@ -1282,29 +1289,18 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
                 # 인덱스: 티커
                 combined_rows = []
                 
-                # 외국인 데이터 기준 루프 (또는 set of tickers)
-                # target_tickers에 있는 것만 필터링
-                
-                # 인덱스(티커)를 set으로 확보
-                available_tickers = set(df_foreign.index) | set(df_inst.index)
-                if cur_date_fmt in refetch_dates:
-                    # [INFRA-094] 다시 받는 날짜는 두 프레임에 모두 있는 종목만 덮는다. 한쪽 누락의 0 이 기존 값을 지우지 않게
-                    available_tickers = set(df_foreign.index) & set(df_inst.index)
-                target_intersect = available_tickers & tickers_set
-                
+                # [INFRA-095] 한쪽 프레임에만 있거나 값이 비면 결측이다. 0 으로 채우지 않고 저장하지 않는다.
+                # 다시 받는 날짜([INFRA-094])도 같은 교집합이라 한쪽 누락이 기존 값을 지우지 않는다.
+                # 순매수거래대금 열이 없으면 KeyError 로 아래 except 가 그 날짜를 저장 없이 건너뛴다
+                target_intersect = set(df_foreign.index) & set(df_inst.index) & tickers_set
+                if df_foreign.empty != df_inst.empty:
+                    log(f"[Supply Trend] {cur_date_fmt} 한쪽 투자자 프레임만 비어 저장 생략", "WARNING")
+
                 for ticker in target_intersect:
-                    f_val = 0
-                    i_val = 0
-                    
-                    if ticker in df_foreign.index:
-                        # 순매수거래대금 컬럼 확인
-                        if '순매수거래대금' in df_foreign.columns:
-                            f_val = df_foreign.loc[ticker, '순매수거래대금']
-                    
-                    if ticker in df_inst.index:
-                        if '순매수거래대금' in df_inst.columns:
-                            i_val = df_inst.loc[ticker, '순매수거래대금']
-                            
+                    f_val = df_foreign.loc[ticker, '순매수거래대금']
+                    i_val = df_inst.loc[ticker, '순매수거래대금']
+                    if pd.isna(f_val) or pd.isna(i_val):
+                        continue
                     combined_rows.append({
                         'date': cur_date_fmt,
                         'ticker': ticker,

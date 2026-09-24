@@ -53,8 +53,12 @@
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-093]` 리뷰 low, `[INFRA-094]` 설계에서 분리(2026-09-24 22:06)
 - 원인: pykrx 경로는 외국인·기관 프레임 중 한쪽에만 있는 종목의 다른 쪽 값을 0 으로 저장하고, Toss 행 파싱은 비어 있는 `close`·순매수 수량을 `or 0` 으로 0 으로 만든다. `[INFRA-093]` 뒤로는 백필이 기존 행을 덮지 않으므로 이런 0 이 그대로 남는다
 - 확인 수준: 코드로만 확인. 운영에서 한쪽 프레임에만 종목이 있는 빈도는 확인하지 않았다
-- [ ] 설계 승인(결측을 빈 칸으로 저장할지 그 행을 버릴지, 읽는 쪽 `[VCP-050]`·`[VCP-054]` 의 None 처리와 맞추기)
-- [ ] 테스트, T3 리뷰와 pytest 전체
+- 설계 승인: 2026-09-25 07:56 사용자 「진행해」 | 범위: 결측이 있는 수급 행은 저장하지 않는다(빈 칸 저장안 기각, 읽는 쪽 무변경). pykrx 는 두 프레임 교집합만·`순매수거래대금` 열 없는 날짜 건너뜀·NaN 값 종목 건너뜀, Toss 는 종가 없음·0 이하·수량 빈 값·숫자 아님 행 버림, 실제 0 수량은 저장. 기존 저장분의 0 은 고치지 않음 | 실제 대화 근거: 현재 세션의 07:5x 설계 제안에 대한 응답
+- [x] 계획 `docs/superpowers/plans/2026-09-25-infra-095-supply-missing-not-zero.md` 와 계획 검토(`oh-my-claudecode:critic`) → ACCEPT-WITH-RESERVATIONS, 필수 0: 권장 1 기관 수량 `nan` 테스트 행 → 추가 | 권장 2 Step 5·Review Focus 1 을 Ruling 에 맞춤 | 권장 3 한쪽 프레임만 비면 날짜가 영구히 빔 → WARNING 한 줄·한계 4 | 참고 변이를 작업 트리에서 돌림 → 재확인은 스크래치 사본에서
+- [x] 실패 테스트 → 구현 → 변이 확인(사본 `m095`, 9종 모두 FAIL). 열 없음 검사는 변이가 살아남아(기존 `except` 가 같은 결과) 지움(계획 Ruling)
+- [x] 리뷰: 과잉설계 직접 검토 「Lean already. Ship.」 · `closing-bet-reviewer` APPROVE(max low): low 1 창이 과거로 밀림 → 한계 2 문구 | low 2 휴장일 무경고 테스트 → 추가(`or` 변이 FAIL 확인) | low 3 중복 인덱스(기존) → 한계 5 | 범위 밖 → `[INFRA-108]` · `/review`(T3, `oh-my-claudecode:code-reviewer` opus) APPROVE, Critical·Important 0: M1 Toss 백필 False 경로 테스트 → 추가 | M2 Toss 잠정 0 → 한계 6 | M3 계획 번호·이름 → 정리 | M4 메모리 파서의 0 기본값 → `[INFRA-109]`
+- [x] pytest 전체 `venv/bin/python -m pytest -q -p no:cacheprovider` 2800 passed 2 skipped(exit 0). 수정 전 코드에서 새 테스트 6건 FAIL
+- [ ] QA(격리 사본, 가짜 pykrx·Toss CLI 하네스) `docs/dev-cycle/qa/INFRA-095.md`
 
 ### [VCP-056] 가격 프레임의 high/low 가 없거나 전부 NaN 이면 VCP 판정이 예외 대신 실패 결과를 줘 전 종목 결함도 「시그널 없음」이 된다
 - 카테고리: VCP | 티어: T2 | 근거: `[VCP-053]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` low, 코드로 확인)
@@ -125,3 +129,17 @@
 - 확인 수준: 코드로만 확인. 운영에서 워커 단독 재기동 빈도는 확인하지 않았다
 - [ ] 설계 승인(마스터 기동 때만 초기화할지, 소유 워커의 생존으로 판정할지)
 - [ ] 테스트, T3 리뷰와 pytest 전체
+
+### [INFRA-108] Market Gate 의 시장 수급 점수가 수급 파일 마지막 날짜의 임의 종목 한 행을 시장 전체로 쓴다
+- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-095]` `closing-bet-reviewer` 범위 밖 관찰(2026-09-25), 코드로 확인
+- 내용: `engine/market_gate_fetchers_local.py:150-165` 의 `load_supply_data` 는 KIS 가 없으면 `all_institutional_trend_data.csv` 를 종목 구분 없이 날짜로 정렬해 마지막 한 행(마지막 날짜의 임의 종목)의 `foreign_buy`·`inst_buy` 를 돌려준다. `score_supply`(`engine/market_gate_logic_scoring.py:112`)는 그 값으로 시장 수급 점수(최대 15점)를 준다. 시장 합계나 지수 대표 종목이 아니다
+- 확인 수준: 코드로만 확인. 운영에서 KIS 키가 있어 이 경로를 타지 않는지는 확인하지 않았다
+- [ ] 설계 승인(마지막 날짜 합계로 바꿀지, 069500 행으로 할지, 결측이면 점수를 빼는지)
+- [ ] 테스트, 리뷰와 pytest 전체
+
+### [INFRA-109] Toss 투자자 추이의 메모리 파서가 빈 순매수 수량을 0 으로 읽는다
+- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-095]` 심층 리뷰 Minor 4(2026-09-25), 코드로 확인
+- 내용: `engine/toss_collector_metric_parsers.py:87-89` 는 종가가 있는 행의 `netForeignerBuyVolume`·`netInstitutionBuyVolume`·`netIndividualsBuyVolume` 이 비면 `to_float(..., 0)` 으로 0 을 더하고, `services/investor_trend_5day_service.py:234-235` 는 `int(float(detail.get(..., 0)))` 으로 키가 없으면 0 을 쓴다. 파일에는 쓰지 않지만 화면·판정에 결측이 순매수 0 으로 보인다. `[INFRA-095]` 는 파일 저장 경로만 고쳤다
+- 확인 수준: 코드로만 확인. Toss 가 수량만 비운 행을 실제로 주는지는 확인하지 않았다
+- [ ] 설계 승인(행을 버릴지, 합계를 결측으로 돌릴지)
+- [ ] 테스트, 리뷰와 pytest 전체

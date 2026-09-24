@@ -1067,7 +1067,7 @@ def test_create_institutional_trend_uses_toss_backfill_when_pykrx_is_empty(monke
     ]
 
 
-def _run_trend_with_fake_krx(monkeypatch, tmp_path, on_fetch, toss_rows=None):
+def _run_trend_with_fake_krx(monkeypatch, tmp_path, on_fetch, toss_rows=None, frames=None):
     # 기존 파일(09-21)에 09-22 를 더하는 수급 수집 한 번. pykrx 가 빈 응답이면 Toss 백필로 간다
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -1085,6 +1085,8 @@ def _run_trend_with_fake_krx(monkeypatch, tmp_path, on_fetch, toss_rows=None):
         def get_market_net_purchases_of_equities_by_ticker(start, _end, _market, investor):
             if investor == "외국인":
                 on_fetch()
+            if frames is not None:
+                return frames[investor]
             if toss_rows is not None:
                 return pd.DataFrame()
             return pd.DataFrame({"순매수거래대금": [30, 40]}, index=["000001", "069500"])
@@ -1178,6 +1180,113 @@ def test_toss_trend_backfill_does_not_overwrite_existing_rows(monkeypatch, tmp_p
     assert values[("2026-09-21", "000001")] == (1, 2)
     assert values[("2026-09-22", "000001")] == (30, 40)
     assert values[("2026-09-18", "000001")] == (7000, 9000)
+
+
+def _saved_rows_on(file_path, date):
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    new = saved[saved["date"] == date]
+    return list(zip(new["ticker"], new["foreign_buy"], new["inst_buy"]))
+
+
+def test_create_institutional_trend_skips_tickers_missing_from_one_frame(monkeypatch, tmp_path):
+    # [INFRA-095] 한쪽 프레임에만 있는 종목의 다른 쪽은 결측이다. 0 으로 저장하지 않는다
+    frames = {
+        "외국인": pd.DataFrame({"순매수거래대금": [30, 40]}, index=["000001", "069500"]),
+        "기관합계": pd.DataFrame({"순매수거래대금": [50]}, index=["000001"]),
+    }
+    result, file_path = _run_trend_with_fake_krx(monkeypatch, tmp_path, lambda: None, frames=frames)
+
+    assert result is True
+    assert _saved_rows_on(file_path, "2026-09-22") == [("000001", 30, 50)]
+
+
+def test_create_institutional_trend_skips_nan_value_but_keeps_real_zero(monkeypatch, tmp_path):
+    # [INFRA-095] 값이 빈 종목만 건너뛰고 그 날짜의 나머지는 저장한다. 실제 0 은 결측이 아니다
+    frames = {
+        "외국인": pd.DataFrame({"순매수거래대금": [0, float("nan")]}, index=["000001", "069500"]),
+        "기관합계": pd.DataFrame({"순매수거래대금": [50, 60]}, index=["000001", "069500"]),
+    }
+    result, file_path = _run_trend_with_fake_krx(monkeypatch, tmp_path, lambda: None, frames=frames)
+
+    assert result is True
+    assert _saved_rows_on(file_path, "2026-09-22") == [("000001", 0, 50)]
+
+
+def test_create_institutional_trend_skips_date_without_value_column(monkeypatch, tmp_path):
+    # [INFRA-095] 순매수거래대금 열이 없으면 그 날짜 전 종목이 0 이 되던 것을 저장하지 않는다
+    frames = {
+        "외국인": pd.DataFrame({"순매수거래량": [3]}, index=["000001"]),
+        "기관합계": pd.DataFrame({"순매수거래대금": [50]}, index=["000001"]),
+    }
+    _, file_path = _run_trend_with_fake_krx(monkeypatch, tmp_path, lambda: None, frames=frames)
+
+    assert _saved_rows_on(file_path, "2026-09-22") == []
+
+
+def test_create_institutional_trend_warns_when_one_frame_is_empty(monkeypatch, tmp_path):
+    # [INFRA-095] 한쪽 조회만 비면 그 날짜는 저장되지 않는다. 휴장일 DEBUG 로 묻히지 않게 경고한다
+    logged = []
+    monkeypatch.setattr(init_data, "log", lambda message, level="INFO": logged.append((level, message)))
+    frames = {
+        "외국인": pd.DataFrame({"순매수거래대금": [30]}, index=["000001"]),
+        "기관합계": pd.DataFrame(),
+    }
+    _, file_path = _run_trend_with_fake_krx(monkeypatch, tmp_path, lambda: None, frames=frames)
+
+    assert _saved_rows_on(file_path, "2026-09-22") == []
+    assert any(level == "WARNING" and "2026-09-22" in message and "한쪽" in message for level, message in logged)
+
+
+def test_create_institutional_trend_holiday_does_not_warn_one_frame_empty(monkeypatch, tmp_path):
+    # 두 프레임이 모두 비면 휴장일이다. 한쪽 조회 실패 경고를 남기지 않는다([INFRA-095] 리뷰 low 2)
+    logged = []
+    monkeypatch.setattr(init_data, "log", lambda message, level="INFO": logged.append((level, message)))
+    frames = {"외국인": pd.DataFrame(), "기관합계": pd.DataFrame()}
+    _run_trend_with_fake_krx(monkeypatch, tmp_path, lambda: None, frames=frames)
+
+    assert not any("한쪽" in message for _level, message in logged)
+
+
+def test_toss_trend_backfill_reports_stale_when_latest_rows_are_all_missing(monkeypatch, tmp_path):
+    # 최신일 행이 결측으로 모두 버려지면 과거 행만 채우고 성공으로 보고하지 않는다([INFRA-095] 심층 리뷰 M1)
+    toss_rows = [
+        {"baseDate": "2026-09-22", "close": None, "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1},
+        {"baseDate": "2026-09-18", "close": 1000, "netForeignerBuyVolume": 2, "netInstitutionBuyVolume": 3},
+    ]
+    result, file_path = _run_trend_with_fake_krx(monkeypatch, tmp_path, lambda: None, toss_rows=toss_rows)
+
+    assert result is False
+    assert _saved_rows_on(file_path, "2026-09-22") == []
+    assert _saved_rows_on(file_path, "2026-09-18") == [("000001", 2000, 3000)]
+
+
+def test_toss_trend_rows_drop_missing_fields_but_keep_real_zero(monkeypatch):
+    # [INFRA-095] 빈 종가·순매수 수량을 0 으로 만들지 않는다. 실제 0 수량은 남긴다
+    details = [
+        {"baseDate": "2026-09-22", "close": 1000, "netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 2},
+        {"baseDate": "2026-09-21", "close": None, "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1},
+        {"baseDate": "2026-09-18", "close": "", "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1},
+        {"baseDate": "2026-09-17", "close": 0, "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1},
+        {"baseDate": "2026-09-16", "close": 1000, "netInstitutionBuyVolume": 1},
+        {"baseDate": "2026-09-15", "close": 1000, "netForeignerBuyVolume": "nan", "netInstitutionBuyVolume": 1},
+        {"baseDate": "2026-09-14", "close": 1000, "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": ""},
+        {"baseDate": "2026-09-11", "close": "inf", "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1},
+        {"baseDate": "2026-09-10", "close": 1000, "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": "nan"},
+    ]
+
+    class _Toss:
+        def get_investor_trend(self, code, days=5):
+            return {"details": details}
+
+    fake_toss = types.ModuleType("engine.toss_collector")
+    fake_toss.TossCollector = _Toss
+    monkeypatch.setitem(sys.modules, "engine.toss_collector", fake_toss)
+
+    rows = init_data._collect_toss_trend_rows_for_ticker("1", datetime.datetime(2026, 9, 22))
+
+    assert [(r["date"], r["ticker"], r["foreign_buy"], r["inst_buy"]) for r in rows] == [
+        ("2026-09-22", "000001", 0, 2000)
+    ]
 
 
 def test_create_institutional_trend_refetches_approx_and_partial_dates_in_window(monkeypatch, tmp_path):
