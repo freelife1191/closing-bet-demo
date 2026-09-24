@@ -1150,6 +1150,34 @@ def test_toss_trend_backfill_keeps_rows_saved_by_overlapping_run(monkeypatch, tm
     assert ("2026-09-22", "000001") in set(zip(saved["date"], saved["ticker"]))
 
 
+def test_toss_trend_backfill_does_not_overwrite_existing_rows(monkeypatch, tmp_path):
+    # Toss 근사값은 빈 (date, ticker) 만 채우고 pykrx 로 저장된 값은 덮지 않는다([INFRA-093])
+    file_path = tmp_path / "data" / "all_institutional_trend_data.csv"
+
+    def _other_run_saves_exact_value():
+        other = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+        other.loc[len(other)] = ["2026-09-22", "000001", 30, 40]
+        other.to_csv(file_path, index=False)
+
+    toss_rows = [
+        {"baseDate": d, "close": 1000, "netForeignerBuyVolume": 7, "netInstitutionBuyVolume": 9}
+        for d in ("2026-09-22", "2026-09-21", "2026-09-18")
+    ]
+    result, _ = _run_trend_with_fake_krx(
+        monkeypatch, tmp_path, _other_run_saves_exact_value, toss_rows=toss_rows
+    )
+
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    values = {
+        (d, t): (f, i)
+        for d, t, f, i in zip(saved["date"], saved["ticker"], saved["foreign_buy"], saved["inst_buy"])
+    }
+    assert result is True
+    assert values[("2026-09-21", "000001")] == (1, 2)
+    assert values[("2026-09-22", "000001")] == (30, 40)
+    assert values[("2026-09-18", "000001")] == (7000, 9000)
+
+
 def test_create_institutional_trend_keeps_existing_file_when_save_fails(monkeypatch, tmp_path):
     # 저장 도중 디스크 오류가 나도 기존 수급 파일은 잘리지 않고 그대로 남는다([INFRA-092])
     file_path = tmp_path / "data" / "all_institutional_trend_data.csv"

@@ -438,7 +438,8 @@ def _backfill_institutional_trend_from_toss(
     if not collected_rows:
         return False
 
-    final_df = _merge_save_csv(pd.DataFrame(collected_rows), file_path)
+    # [INFRA-093] 근사값은 빈 칸만 채운다. pykrx 로 저장된 정확한 순매수거래대금을 덮지 않는다
+    final_df = _merge_save_csv(pd.DataFrame(collected_rows), file_path, keep="first")
 
     latest_backfilled_dt = pd.to_datetime(final_df["date"], errors="coerce").max()
     if pd.isna(latest_backfilled_dt):
@@ -866,7 +867,7 @@ def _all_zero_close_dates(df: pd.DataFrame) -> list[str]:
     return [str(d) for d in zero[zero].index]
 
 
-def _merge_save_csv(new_df: pd.DataFrame, file_path: str) -> pd.DataFrame:
+def _merge_save_csv(new_df: pd.DataFrame, file_path: str, keep: str = "last") -> pd.DataFrame:
     """새 행을 (date, ticker) 기준으로 파일에 병합해 원자적으로 저장하고, 저장한 전체 프레임을 돌려준다.
 
     daily_prices.csv([INFRA-091])와 all_institutional_trend_data.csv([INFRA-092])가 함께 쓴다.
@@ -879,6 +880,9 @@ def _merge_save_csv(new_df: pd.DataFrame, file_path: str) -> pd.DataFrame:
 
     빈 파일(0바이트)은 잃을 행이 없어 비어 있는 것으로 본다. 그 밖의 읽기 오류는 그대로 올려
     저장을 포기한다. 읽지 못한 이력을 새 행만으로 덮지 않기 위해서다.
+
+    keep="first" 이면 파일에 이미 있는 (date, ticker) 가 이긴다. Toss 백필은 이 값으로
+    빈 칸만 채워 pykrx 의 정확한 순매수거래대금을 근사값으로 덮지 않는다([INFRA-093]).
     """
     with signals_log_lock(file_path):
         existing_df = pd.DataFrame()
@@ -892,7 +896,7 @@ def _merge_save_csv(new_df: pd.DataFrame, file_path: str) -> pd.DataFrame:
                 existing_df = existing_df[~existing_df["date"].isin(zero_dates)]
 
         final_df = pd.concat([existing_df, new_df]) if not existing_df.empty else new_df
-        final_df = final_df.drop_duplicates(subset=["date", "ticker"], keep="last")
+        final_df = final_df.drop_duplicates(subset=["date", "ticker"], keep=keep)
         final_df = final_df.sort_values(["ticker", "date"])
         # 기존 utf-8-sig 저장 형식을 유지한다
         atomic_write_text(file_path, "\ufeff" + final_df.to_csv(index=False))

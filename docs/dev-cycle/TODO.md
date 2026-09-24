@@ -70,7 +70,24 @@
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-092]` `/review` 정보 1(2026-09-24), 코드로 확인
 - 원인: `_backfill_institutional_trend_from_toss` 는 최근 5거래일을 「순매수 수량 × 종가」 근사값으로 만들고 `_merge_save_csv` 의 `keep="last"` 로 병합한다. 그래서 그 5일 안에 pykrx 로 저장된 정확한 `순매수거래대금` 행이 근사값으로 바뀐다. 겹친 실행에서도 A 가 시작 때 stale 로 판정한 뒤 B 가 pykrx 로 저장한 날짜를 A 의 백필이 덮는다. `[INFRA-092]` 이전부터 있던 동작이다
 - 확인 수준: 코드로만 확인. 운영에서 백필이 도는 빈도는 로그의 「Toss 백필」 줄로 확인해야 한다
-- [ ] 설계 승인(백필은 파일에 없는 (date, ticker) 만 채울지)
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 21:55
+  | 범위: `_merge_save_csv` 에 `keep="last"` 기본 인자를 더하고 Toss 백필만 `keep="first"` 로 불러 파일(잠금 안에서 다시 읽은 것)에 이미 있는 (date, ticker) 를 보존하고 빈 칸만 채운다. 가격 파일·pykrx 수급 경로는 기본값 그대로. 앞선 백필의 근사값을 뒤 백필이 갱신하지 않는 부작용은 `get_last_trading_date` 가 16시 전 당일을 제외해 장중 부분 값이 저장되지 않으므로 수용
+  | 실제 대화 근거: 2026-09-24 사용자 「진행해」 응답, 현재 세션의 INFRA-093 bounded 설계 제안
+- [x] 설계 승인(백필은 파일에 없는 (date, ticker) 만 채운다)
+- [x] 구현 계획 `docs/superpowers/plans/2026-09-24-infra-093-toss-backfill-keep-existing.md` 과 계획 검토(`oh-my-claudecode:critic`, infra093-critic): ACCEPT-WITH-RESERVATIONS. R1 근사값이 pykrx 날짜 Skip 때문에 영구히 남을 수 있음(수정 전부터, 범위 밖)은 계획 Review Focus 에 적고 `[INFRA-094]` 로 이월. R2 테스트가 이미 작성됨은 계획 Step 1 에 반영. R3 ticker 표기 불일치는 `keep` 과 무관한 종전 동작이라 미반영
+- [x] 테스트(`tests/scripts/test_init_data_vcp_scheduler.py::test_toss_trend_backfill_does_not_overwrite_existing_rows`) RED(`(7000, 9000) == (1, 2)` 실패) → 구현 → GREEN(파일 43 passed)
+- [x] `/ponytail-review`: Lean already
+- [x] `closing-bet-reviewer`(infra093-review): APPROVE(max low). low 1 pykrx 경로가 한쪽 프레임에만 있는 종목의 다른 쪽을 0 으로 저장하는데 이제 백필이 그 0 을 덮지 않음(대부분 실제 0 으로 판단, `[INFRA-094]` 에 메모). low 2 계획의 호출자 줄 번호가 수정 전 기준(기록용이라 미반영). 범위 밖 관찰 Toss 행 파싱 `or 0` 은 `[INFRA-094]` 에 메모
+- [x] `/review`(T3, `oh-my-claudecode:code-reviewer` infra093-deep-review): 지적 없음. `keep` 무시 변이에서 새 테스트만 실패함을 확인, date·ticker 표기 일치, 같은 날 Toss 재실행 경로는 수정 전에도 없어 새 회귀 아님. 남는 위험: 이미 있는 NaN 행은 채우지 않음(두 저장 경로 모두 int 라 재현 경로 없음)
+- [x] pytest 전체: `venv/bin/python -m pytest` 2749 passed, 2 skipped(exit 0)
+- [ ] QA(격리 사본, 가짜 pykrx 빈 응답·가짜 Toss, 수정 전후 CSV 비교)
+
+### [INFRA-094] 수급 수집이 과거 날짜에 행이 하나라도 있으면 그 날짜를 건너뛰어 Toss 근사값·부분 수집이 정확한 값으로 바뀌지 않는다
+- 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-093]` 계획 검토(critic R1, 2026-09-24), 코드로 확인
+- 원인: `create_institutional_trend` 의 날짜 루프(`scripts/init_data.py:1242-1248` 무렵)는 과거 날짜가 파일에 한 행이라도 있으면 「수급 데이터 존재 (Skip)」로 넘어간다. 그래서 Toss 백필이 저장한 「순매수 수량 × 종가」 근사값이나 일부 종목만 저장된 날짜는, 최신 날짜 종목 수 부족·신규 종목·force 로 lookback 재수집에 들어가지 않는 한 pykrx 의 정확한 값으로 바뀌지 않는다. `[INFRA-088]` 의 가격 파일 「데이터 존재 (Skip)」과 같은 모양이다
+- 확인 수준: 코드로만 확인. 운영에서 백필이 도는 빈도는 로그의 「Toss 백필」 줄로 확인해야 한다
+- 함께 볼 것(`[INFRA-093]` 리뷰 low): pykrx 경로(`scripts/init_data.py:1277-1289` 무렵)는 외국인·기관 프레임 중 한쪽에만 있는 종목의 다른 쪽 값을 0 으로 저장하고, Toss 행 파싱(`:385-387` 무렵)은 비어 있는 필드를 `or 0` 으로 0 으로 만든다. `[INFRA-093]` 뒤로는 백필이 기존 행을 덮지 않으므로 이런 0 도 그대로 남는다
+- [ ] 설계 승인(근사 행 표시 열을 둘지, 날짜별 종목 수로 재수집 대상을 고를지. `[INFRA-088]` 설계와 함께 볼지)
 - [ ] 테스트, T3 리뷰와 pytest 전체
 
 ### [VCP-056] 가격 프레임의 high/low 가 없거나 전부 NaN 이면 VCP 판정이 예외 대신 실패 결과를 줘 전 종목 결함도 「시그널 없음」이 된다
