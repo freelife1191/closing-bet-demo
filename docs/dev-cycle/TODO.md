@@ -70,19 +70,6 @@
 - [ ] 운영자 확인: 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부
 - [ ] 배포와 워커 전부 재기동(운영자, 장 마감 뒤), 발동했다면 10분 뒤 「VCP 분석기 세션 차단 해제: … zai=prompt-echo responses」 로그 확인
 
-### [VCP-042] 실패 재분석 저장이 `signals_log.csv` 전체를 숫자 티커로 다시 써 앞자리 0 이 사라진다
-- 카테고리: VCP | 티어: T3(재분석 저장 경로) | 근거: `[VCP-040]` 원인 확정 실행 2(2026-09-24 08:11, 격리 사본, 기록 `docs/dev-cycle/qa/VCP-040.md`). 수집 직후 원문 `033530` 이던 행이 재분석(갱신 0건) 뒤 원문 `33530` 이 되었다.
-- 원인(코드 확인): `write_vcp_signals_csv_atomic`(`services/kr_market_vcp_reanalysis_service.py:320`)은 `load_csv_file_for_persist` 로 전체 파일을 다시 읽어 병합한 뒤 `to_csv` 로 통째로 쓴다. 이 로더가 `ticker` 를 문자열로 고정하지 않으면 정수로 읽혀 앞자리 0 이 빠진 채 저장된다. 갱신 행이 없어도 파일을 다시 쓰는지는 확인이 필요하다.
-- 영향(미확인): 읽는 쪽 대부분(`kr_market_vcp_signal_helpers.py`, `init_data._read_signals_log`)이 `zfill(6)` 으로 되돌리므로 화면 영향은 제한적일 수 있다. `zfill` 없이 티커를 비교하는 소비자가 있는지와 운영 파일에 이미 5자리 티커가 있는지는 확인하지 않았다.
-- 설계 승인: 2026-09-24 17:18 사용자 「좋아 진행해」(bounded 대화 설계). 범위: `write_vcp_signals_csv_atomic` 이 `to_csv` 직전에 `ticker` 열을 `astype(str).str.zfill(6)` 으로 맞춤(쓰기 호출 열 곳이 모두 지나는 지점: 재분석 1, 트래커 3, `scripts/init_data.py` 6), 재현 테스트 1건. 범위 밖: 공유 로더 `load_csv_file` 의 dtype·SQLite 복원 수정(모든 CSV API 에 영향), 갱신 0건일 때 쓰기 생략
-- 원인 확정(읽기 전용): 로더가 `pd.read_csv`(dtype 없음, `services/kr_market_data_cache_core.py:327`)와 SQLite 스냅샷 `pd.read_json(orient="split")`(`services/kr_market_data_cache_sqlite_payload.py:627`, 로컬 실험 `'033530'`→`33530`) 두 경로 모두 티커를 숫자로 만든다
-- [x] 소비자 확인: `chatbot/stock_context`·`kr_market_analytics_service`·`kr_ai_data_service`·VCP 헬퍼·`init_data` 모두 zfill 뒤 비교. 트래커 누적 저장(`engine/signal_tracker_log_helpers.py:124`)이 기존 행을 zfill 하므로 다음 저장에서 저절로 복구된다. 운영 파일 확인은 참고로 낮춤
-- [x] 재현 테스트(수정 전 실패 확인)와 수정
-- [x] 심층 리뷰(oh-my-claudecode:code-reviewer): APPROVE, LOW-1 결측 티커가 "000nan" 으로 저장 → 반영(`where(notna)` 로 빈 칸 유지, 테스트에 결측 행 단언 추가). LOW-2 float 열(`33530.0`)은 복원 못 함 → 미반영: 수정 전과 같은 결과이며 결측 티커 행이 관측되면 다룬다
-- [x] closing-bet-reviewer: CHANGES_REQUIRED. 1(medium) "000nan" → 위와 같이 반영. 2(low) float 열 → 미반영(위와 같음). 3(low) 호출자 수 「넷」 → 열 곳으로 정정. 4(low) 캐시 불일치 우려 → 변경 불필요: 트래커 경로는 상류 `_get_ticker_padded_series` 가 이미 결측을 "000nan" 문자열로 만들어 넘기므로 `notna` 가 참이고 파일과 캐시가 같다. 쓰기 함수가 최종 프레임을 돌려주는 구조 변경은 범위 밖
-- [x] pytest 전체: `venv/bin/python -m pytest -q -p no:cacheprovider` 2731 passed, 2 skipped, exit 0(리뷰 반영 뒤 최종 코드)
-- [ ] QA: 격리 사본 하네스(가짜 분석기로 재분석 저장 → CSV 원문 티커), 수정 전 커밋 대조
-
 ### [INFRA-079] 유물 사용량 저장소 `data/usage.db` 의 이메일 행 확인과 정리
 - 카테고리: 인프라 | 티어: T1(남은 단계는 운영자 확인과 파일 정리) | 근거: `[FE-045]` 계획 검토(2026-09-22). 이메일을 기본 키로 쓰던 유물 모듈 `services/usage_tracker.py`(`usage_log`)·`engine/services/usage_tracker.py`(`api_usage`)는 코드 삭제분으로 제거했다(2026-09-24, 커밋 `6efcb93`, 아카이브 2026-09-24). 개발 기기의 `data/usage.db` 는 두 테이블 모두 행 0 이나 운영 서버의 파일은 이 기기에서 확인할 수 없다.
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
