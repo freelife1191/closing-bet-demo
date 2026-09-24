@@ -83,6 +83,23 @@ def test_reanalysis_merge_applies_when_rows_match():
     assert merged.loc[0, "ai_action"] == "BUY"
 
 
+def test_reanalysis_write_keeps_leading_zero_of_ticker(tmp_path):
+    """[VCP-042] 공유 로더가 티커를 정수(33530)로 읽어도 파일에는 033530 으로 쓴다."""
+    path = tmp_path / "signals_log.csv"
+    full = pd.DataFrame(
+        {"ticker": pd.Series([33530, None], dtype=object), "signal_date": ["2026-09-22"] * 2, "ai_action": ["BUY"] * 2}
+    )
+    reanalysis.write_vcp_signals_csv_atomic(
+        full.copy(),
+        str(path),
+        load_csv_file=lambda *_a, **_k: full,
+        target_indexes=[],  # 갱신 0건이어도 파일 전체를 다시 쓴다
+    )
+    rows = path.read_text(encoding="utf-8-sig").splitlines()
+    assert rows[1].startswith("033530,")
+    assert rows[2].startswith(",")  # 결측 티커는 "000nan" 이 아니라 빈 칸
+
+
 def test_reanalysis_merge_keeps_rows_it_did_not_reanalyze():
     """재분석하지 않은 행은 AI 호출 동안 다른 실행이 쓴 값을 유지한다."""
     snapshot = pd.DataFrame(

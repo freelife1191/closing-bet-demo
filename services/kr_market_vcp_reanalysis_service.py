@@ -342,6 +342,11 @@ def write_vcp_signals_csv_atomic(
                 logger.error("Failed to merge VCP reanalysis updates into full signals frame: %s", error)
             raise
 
+    # 공유 로더는 dtype 없이 읽어 티커를 정수(33530)로 돌려준다. 쓰기 경로가 모두 이 함수를
+    # 지나므로 여기서 앞자리 0 을 되살린다([VCP-042]). 결측은 "000nan" 이 되지 않게 빈 칸으로 둔다
+    if "ticker" in persist_frame.columns:
+        tickers = persist_frame["ticker"]
+        persist_frame = persist_frame.assign(ticker=tickers.astype(str).str.zfill(6).where(tickers.notna()))
     csv_content = persist_frame.to_csv(index=False)
     # 기존 utf-8-sig 저장 형식을 유지한다.
     atomic_write_text(signals_path, f"\ufeff{csv_content}")
