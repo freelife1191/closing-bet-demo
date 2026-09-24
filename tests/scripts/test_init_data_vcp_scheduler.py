@@ -1065,6 +1065,126 @@ def test_create_institutional_trend_uses_toss_backfill_when_pykrx_is_empty(monke
     ]
 
 
+def _run_trend_with_fake_krx(monkeypatch, tmp_path, on_fetch, toss_rows=None):
+    # 기존 파일(09-21)에 09-22 를 더하는 수급 수집 한 번. pykrx 가 빈 응답이면 Toss 백필로 간다
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{"ticker": "000001"}]).to_csv(data_dir / "korean_stocks_list.csv", index=False)
+    file_path = data_dir / "all_institutional_trend_data.csv"
+    pd.DataFrame(
+        [
+            {"date": "2026-09-21", "ticker": t, "foreign_buy": 1, "inst_buy": 2}
+            for t in ("000001", "069500")
+        ]
+    ).to_csv(file_path, index=False, encoding="utf-8-sig")
+
+    class _Stock:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(start, _end, _market, investor):
+            if investor == "외국인":
+                on_fetch()
+            if toss_rows is not None:
+                return pd.DataFrame()
+            return pd.DataFrame({"순매수거래대금": [30, 40]}, index=["000001", "069500"])
+
+    class _Toss:
+        def get_investor_trend(self, code, days=5):
+            return {"details": toss_rows if code == "000001" else []}
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _Stock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    fake_toss = types.ModuleType("engine.toss_collector")
+    fake_toss.TossCollector = _Toss
+    monkeypatch.setitem(sys.modules, "engine.toss_collector", fake_toss)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(init_data, "shared_state", types.SimpleNamespace(STOP_REQUESTED=False))
+    monkeypatch.setattr(init_data.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: ("20260922", datetime.datetime(2026, 9, 22)),
+    )
+    result = init_data.create_institutional_trend(target_date="2026-09-22")
+    return result, file_path
+
+
+def _other_trend_run_saves(file_path):
+    def _save():
+        other = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+        other.loc[len(other)] = ["2026-09-21", "000009", 5, 6]
+        other.to_csv(file_path, index=False)
+
+    return _save
+
+
+def test_create_institutional_trend_keeps_rows_saved_by_overlapping_run(monkeypatch, tmp_path):
+    # 수집하는 사이 다른 실행이 저장한 수급 행을 덮어 지우지 않는다([INFRA-092])
+    file_path = tmp_path / "data" / "all_institutional_trend_data.csv"
+    result, _ = _run_trend_with_fake_krx(monkeypatch, tmp_path, _other_trend_run_saves(file_path))
+
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    assert result is True
+    assert sorted(zip(saved["date"], saved["ticker"])) == [
+        ("2026-09-21", "000001"),
+        ("2026-09-21", "000009"),
+        ("2026-09-21", "069500"),
+        ("2026-09-22", "000001"),
+        ("2026-09-22", "069500"),
+    ]
+
+
+def test_toss_trend_backfill_keeps_rows_saved_by_overlapping_run(monkeypatch, tmp_path):
+    # Toss 백필 경로도 잠금 안에서 파일을 다시 읽어 병합한다([INFRA-092])
+    file_path = tmp_path / "data" / "all_institutional_trend_data.csv"
+    toss_rows = [
+        {"baseDate": "2026-09-22", "close": 1000, "netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1}
+    ]
+    result, _ = _run_trend_with_fake_krx(
+        monkeypatch, tmp_path, _other_trend_run_saves(file_path), toss_rows=toss_rows
+    )
+
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    assert result is True
+    assert ("2026-09-21", "000009") in set(zip(saved["date"], saved["ticker"]))
+    assert ("2026-09-22", "000001") in set(zip(saved["date"], saved["ticker"]))
+
+
+def test_create_institutional_trend_keeps_existing_file_when_save_fails(monkeypatch, tmp_path):
+    # 저장 도중 디스크 오류가 나도 기존 수급 파일은 잘리지 않고 그대로 남는다([INFRA-092])
+    file_path = tmp_path / "data" / "all_institutional_trend_data.csv"
+    before: dict[str, bytes] = {}
+
+    def _disk_full(_fd):
+        raise OSError(28, "No space left on device")
+
+    def _capture():
+        before["bytes"] = file_path.read_bytes()
+        monkeypatch.setattr(init_data.os, "fsync", _disk_full)
+
+    result, _ = _run_trend_with_fake_krx(monkeypatch, tmp_path, _capture)
+
+    assert result is False
+    assert file_path.read_bytes() == before["bytes"]
+    leftovers = [p.name for p in file_path.parent.iterdir() if p.name.startswith(file_path.name + ".")]
+    assert leftovers in ([], [file_path.name + ".lock"])
+
+
+def test_create_institutional_trend_keeps_unreadable_file(monkeypatch, tmp_path):
+    # 기존 파일을 읽지 못하면 새 행만으로 이력을 덮지 않고 파일을 그대로 둔다([INFRA-092])
+    file_path = tmp_path / "data" / "all_institutional_trend_data.csv"
+    before: dict[str, bytes] = {}
+
+    def _corrupt():
+        file_path.write_text("date,ticker,foreign_buy,inst_buy\n2026-09-21,000001,1,2\n2026-09-21,000002,1,2,3,4\n")
+        before["bytes"] = file_path.read_bytes()
+
+    result, _ = _run_trend_with_fake_krx(monkeypatch, tmp_path, _corrupt)
+
+    assert result is False
+    assert file_path.read_bytes() == before["bytes"]
+
+
 def test_historical_vcp_analysis_keeps_latest_files(monkeypatch, tmp_path):
     data_dir = tmp_path / 'data'
     data_dir.mkdir()

@@ -68,8 +68,14 @@
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-091]` 설계(2026-09-24 20:12 승인 범위 밖으로 분리), 코드로 확인
 - 원인: 수급 수집의 pykrx 경로(`scripts/init_data.py:1303`)와 Toss 백필(`_backfill_institutional_trend_from_toss`, `:445`)이 시작 때 읽은 `existing_df` 에 병합해 전체 이력을 `to_csv` 로 덮는다. `[INFRA-091]` 의 `daily_prices.csv` 와 같은 결함(겹친 실행의 갱신 유실, 저장 중단 시 파일 잘림, 부분 파일 읽기)이다
 - 함께 볼 것: `atomic_write_text` 의 임시 파일(`<이름>.csv.XXXXXXXX`)은 저장 중 SIGKILL 이면 남는데 `.gitignore` 의 `data/*.csv` 에 걸리지 않는다(`[INFRA-091]` `/review` L2, `signals_log.csv`·`daily_prices.csv` 도 같음). `data/*.csv.*` 한 줄로 막을 수 있다
-- [ ] 설계 승인(`[INFRA-091]` 의 저장 헬퍼 방식을 따를지)
-- [ ] 테스트, T3 리뷰와 pytest 전체
+- [x] 설계 승인(2026-09-24 20:41 대화 「진행해」, bounded, T3). 범위: `[INFRA-091]` 의 `_save_daily_prices` 를 `_merge_save_csv` 로 이름을 바꿔 두 파일이 함께 쓴다(0원 날짜 제거는 `close` 열이 없으면 무동작이라 분기 없음). pykrx 경로·Toss 백필 두 저장 지점이 부르고, 백필의 쓰지 않게 된 `existing_df` 인자를 뺀다. 저장 실패는 기존 바깥 except 로 `False`. `.gitignore` 에 `data/*.csv.*` 추가
+- [x] 읽은 정본: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-verify/`
+- [x] 테스트: pykrx 경로·Toss 백필 경로의 겹친 실행 행 보존, 저장 중 예외 시 기존 파일 바이트 동일·`False`(세 건 모두 수정 전 코드에서 실패 확인)
+- [x] 구현
+- [x] `closing-bet-reviewer` APPROVE(low 3). 반영: `atomic_write_text` 의 임시 파일이 무시되지 않는다는 주석(`services/kr_market_data_cache_core.py:170`)이 `data/*.csv.*` 추가로 틀려져 고침(1번). 기록만: 권한 0644→0600(2번, `[INFRA-091]` 과 같음, 같은 계정 운영에서 무영향), 겹침 테스트가 BOM 없는 파일을 쓰는 점(3번, 헬퍼의 BOM 재읽기는 `[INFRA-091]` 테스트와 QA S-3 이 맡음)
+- [x] `/review`(`oh-my-claudecode:code-reviewer`): blocking·high 없음. Low 1 은 위 1번과 같아 반영됨. Low 2 반영: 기존 파일을 읽지 못할 때 「새로 시작」 로그가 실제(저장 포기)와 달라 문구를 고치고, 읽지 못하는 파일을 그대로 두고 `False` 인지 보는 테스트 추가(수정 전 코드에서 실패 확인). 정보 1(Toss 근사값이 pykrx 정확값을 덮음, 기존 동작)은 `[INFRA-093]` 으로 등록, 정보 2(같은 키는 나중 저장 우선, 수정 전과 같음)는 기록만
+- [x] pytest 전체(리뷰 반영 뒤): 2743 passed, 2 skipped, 종료 코드 0
+- [ ] QA(격리 사본, 가짜 출처 하네스): 겹친 두 실행의 행 보존, 저장 중단 시 기존 파일 보존, 겹치지 않을 때 출력이 수정 전과 같음
 
 ### [VCP-053] 과거 날짜 재분석에서 분석 가능한 종목이 하나도 없어도 「시그널 없음」으로 그 날짜 행을 지운다
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py` 대조, 수정은 `engine/screener.py` 예상) | 근거: `[VCP-049]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` medium)
@@ -94,6 +100,13 @@
 - [ ] 테스트, 리뷰와 pytest 전체
 
 ## P2 — 대기
+
+### [INFRA-093] 수급 Toss 백필이 pykrx 로 저장된 정확한 순매수거래대금을 근사값으로 덮는다
+- 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-092]` `/review` 정보 1(2026-09-24), 코드로 확인
+- 원인: `_backfill_institutional_trend_from_toss` 는 최근 5거래일을 「순매수 수량 × 종가」 근사값으로 만들고 `_merge_save_csv` 의 `keep="last"` 로 병합한다. 그래서 그 5일 안에 pykrx 로 저장된 정확한 `순매수거래대금` 행이 근사값으로 바뀐다. 겹친 실행에서도 A 가 시작 때 stale 로 판정한 뒤 B 가 pykrx 로 저장한 날짜를 A 의 백필이 덮는다. `[INFRA-092]` 이전부터 있던 동작이다
+- 확인 수준: 코드로만 확인. 운영에서 백필이 도는 빈도는 로그의 「Toss 백필」 줄로 확인해야 한다
+- [ ] 설계 승인(백필은 파일에 없는 (date, ticker) 만 채울지)
+- [ ] 테스트, T3 리뷰와 pytest 전체
 
 ### [VCP-045] Z.ai 폴백의 `zai_disabled_reason` 도 워커 수명 동안 풀리지 않는다 (운영자 단계)
 - 카테고리: VCP | 티어: T1(남은 단계는 운영자 확인과 배포) | 근거: `[VCP-041]` 코드 리뷰(2026-09-24). 코드 수정분은 커밋 `22b197a`(`_expire_session_blocks` 가 `zai_disabled_reason` 도 10분 뒤 비움)로 끝났고 기록은 `archive/daily/2026-09-24.md`·`qa/VCP-045.md` 에 있다

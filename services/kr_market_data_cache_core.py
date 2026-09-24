@@ -167,10 +167,8 @@ def atomic_write_text(
             # `git add -A` 한 번에 커밋으로 실린다. `.env.tmpXXXX` 가 되면 기존 `.env.*`
             # 규칙이 그대로 덮는다([INFRA-050] 보안 리뷰 M1).
             #
-            # 이 함수는 data/ 아래 캐시 파일도 쓴다. 그쪽은 무시 여부가 달라지지 않는다.
-            # .gitignore 가 data/*.csv 처럼 확장자로 걸어 두어서, 접두사를 붙이기 전의
-            # `tmpXXXX` 도 붙인 뒤의 `daily_prices.csv.tmpXXXX` 도 똑같이 걸리지 않는다.
-            # 그 파일들은 시크릿이 아니고 이름이 명확해지는 이득만 남는다.
+            # 이 함수는 data/ 아래 캐시 파일도 쓴다. 남은 `daily_prices.csv.XXXX` 같은
+            # CSV 임시 파일은 .gitignore 의 `data/*.csv.*` 규칙이 덮는다([INFRA-092]).
             prefix=f"{os.path.basename(file_path)}.",
         ) as tmp_file:
             # 이름을 먼저 잡는다. 이 대입이 아래 세 줄 뒤에 있으면, write 나 flush,

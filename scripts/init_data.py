@@ -400,7 +400,6 @@ def _collect_toss_trend_rows_for_ticker(ticker: str, expected_latest_dt: datetim
 def _backfill_institutional_trend_from_toss(
     *,
     tickers_set: set[str],
-    existing_df: pd.DataFrame,
     file_path: str,
     expected_latest_dt: datetime,
 ) -> bool:
@@ -439,11 +438,7 @@ def _backfill_institutional_trend_from_toss(
     if not collected_rows:
         return False
 
-    fallback_df = pd.DataFrame(collected_rows)
-    final_df = fallback_df if existing_df.empty else pd.concat([existing_df, fallback_df], ignore_index=True)
-    final_df = final_df.drop_duplicates(subset=["date", "ticker"], keep="last")
-    final_df = final_df.sort_values(["ticker", "date"])
-    final_df.to_csv(file_path, index=False, encoding="utf-8-sig")
+    final_df = _merge_save_csv(pd.DataFrame(collected_rows), file_path)
 
     latest_backfilled_dt = pd.to_datetime(final_df["date"], errors="coerce").max()
     if pd.isna(latest_backfilled_dt):
@@ -834,7 +829,7 @@ def fetch_prices_yfinance(
             return False
 
         if new_data_list:
-            final_df = _save_daily_prices(pd.concat(new_data_list, ignore_index=True), file_path)
+            final_df = _merge_save_csv(pd.concat(new_data_list, ignore_index=True), file_path)
             log(f"yfinance 백업 수집 완료 ({len(final_df)}행)", "SUCCESS")
             return True
 
@@ -871,13 +866,16 @@ def _all_zero_close_dates(df: pd.DataFrame) -> list[str]:
     return [str(d) for d in zero[zero].index]
 
 
-def _save_daily_prices(new_df: pd.DataFrame, file_path: str) -> pd.DataFrame:
-    """새 가격 행을 파일에 병합해 원자적으로 저장하고, 저장한 전체 프레임을 돌려준다.
+def _merge_save_csv(new_df: pd.DataFrame, file_path: str) -> pd.DataFrame:
+    """새 행을 (date, ticker) 기준으로 파일에 병합해 원자적으로 저장하고, 저장한 전체 프레임을 돌려준다.
+
+    daily_prices.csv([INFRA-091])와 all_institutional_trend_data.csv([INFRA-092])가 함께 쓴다.
+    0원 날짜 제거는 close 열이 있는 가격 파일에만 적용된다.
 
     병합 기준은 실행 시작 때 읽은 값이 아니라 잠금 안에서 다시 읽은 파일이다. 수집하는 몇 분
     사이에 17:00 스케줄러와 「Refresh VCP」가 겹쳐 저장해도 앞 실행의 행이 유실되지 않는다.
     잠금은 병합과 저장 구간만 잡고 네트워크 수집 동안에는 잡지 않는다. 읽는 쪽은 os.replace
-    로 교체된 온전한 파일만 보므로 잠그지 않는다([INFRA-091]).
+    로 교체된 온전한 파일만 보므로 잠그지 않는다.
 
     빈 파일(0바이트)은 잃을 행이 없어 비어 있는 것으로 본다. 그 밖의 읽기 오류는 그대로 올려
     저장을 포기한다. 읽지 못한 이력을 새 행만으로 덮지 않기 위해서다.
@@ -1107,7 +1105,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
             log("데이터 병합 중...", "DEBUG")
             new_chunk_df = pd.concat(new_data_list, ignore_index=True)
             try:
-                final_df = _save_daily_prices(new_chunk_df, file_path)
+                final_df = _merge_save_csv(new_chunk_df, file_path)
             except Exception as e:
                 # 저장 실패는 수집 실패가 아니다. 아래 except 로 흘리면 yfinance 로 최대 300초
                 # 다시 수집한 뒤 같은 저장에서 또 실패한다([INFRA-091] 리뷰)
@@ -1210,7 +1208,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
                             start_date_obj = max_date_dt + timedelta(days=1)
                         except: pass
             except Exception as e:
-                log(f"기존 수급 데이터 로드 실패 (새로 시작): {e}", "WARNING")
+                log(f"기존 수급 데이터 로드 실패 (저장 때 다시 읽지 못하면 기존 파일을 두고 중단): {e}", "WARNING")
 
         start_date = start_date_obj.strftime('%Y%m%d')
         
@@ -1304,17 +1302,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
         # 결과 저장
         if new_data_list:
             log("수급 데이터 병합 및 저장 중...", "DEBUG")
-            new_df = pd.DataFrame(new_data_list)
-            
-            if not existing_df.empty:
-                final_df = pd.concat([existing_df, new_df])
-                final_df = final_df.drop_duplicates(subset=['date', 'ticker'], keep='last')
-            else:
-                final_df = new_df
-            
-            # 정렬
-            final_df = final_df.sort_values(['ticker', 'date'])
-            final_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+            final_df = _merge_save_csv(pd.DataFrame(new_data_list), file_path)
             log(f"수급 데이터 업데이트 완료: 총 {len(final_df)}행 (신규 {len(new_data_list)}행)", "DEBUG")
             return True
         else:
@@ -1331,7 +1319,6 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             if latest_existing_dt is None:
                 if _backfill_institutional_trend_from_toss(
                     tickers_set=tickers_set,
-                    existing_df=existing_df,
                     file_path=file_path,
                     expected_latest_dt=expected_latest_dt,
                 ):
@@ -1345,7 +1332,6 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             if latest_existing_dt.date() < expected_latest_dt.date():
                 if _backfill_institutional_trend_from_toss(
                     tickers_set=tickers_set,
-                    existing_df=existing_df,
                     file_path=file_path,
                     expected_latest_dt=expected_latest_dt,
                 ):

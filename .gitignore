@@ -32,6 +32,7 @@ logs/
 
 # Data files
 data/*.csv
+data/*.csv.*
 data/*.json
 data/*.db
 *.db-shm
