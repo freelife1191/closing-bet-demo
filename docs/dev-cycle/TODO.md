@@ -64,20 +64,6 @@
 - [ ] Market Gate 지수 입력과 `get_last_trading_date` 공휴일 판정 영향 확인과 테스트
 - [ ] T3 리뷰와 pytest 전체
 
-### [VCP-055] Toss 수급 조회가 200 빈 응답을 받으면 5일 순매수 0 으로 저장·캐시한다
-- 카테고리: VCP | 티어: T2 | 근거: `[VCP-050]` `/review` Medium(2026-09-24, 코드와 로컬 재현으로 확인. 운영 빈도는 네트워크 금지로 미확인)
-- 원인: `engine/toss_collector_metric_parsers.py:61-102` 의 `parse_investor_trend` 가 body 가 `[]` 이거나 오류 JSON 이면 `foreign=0.0, institution=0.0, details=[]` 을 준다. `_normalize_toss_supply_payload`(`engine/screener_supply_helpers.py:81-113`)가 이를 유효한 dict 로 통과시켜 `calculate_supply_score_with_toss` 가 폴백하지 않고 15분 슬롯 캐시(메모리·SQLite)에 저장한다
-- 영향: 최신 날짜 스크리닝에서 `foreign_5d=0, inst_5d=0, foreign_1d=빈 칸` 처럼 한 행 안에서 결측 표기가 어긋나고, 프롬프트에 「5일 순매수 0주」가 사실처럼 실린다
-- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 21:38
-  | 범위: `parse_investor_trend` 가 유효 행(dict·`close != 0`)이 하나도 없으면 `None` 을 돌려준다. 호출자 넷(스크리너 Toss 수급, 5일 수급 Toss 참조, `init_data.py` Toss 백필, 종목 상세)은 기존 `None` 처리를 그대로 쓴다. 스크리너 폴백은 CSV 우선이라 정상 자료에서 pykrx 조회가 늘지 않는다. 종목 상세의 결측 0 표기는 범위 밖
-  | 실제 대화 근거: 2026-09-24 사용자 「진행해」 응답, 현재 세션의 VCP-055 bounded 설계 제안
-- [x] 설계 승인(`details` 가 비면 결측으로 보고 폴백. 폴백 비용은 CSV 우선이라 정상 자료에서 0)
-- [x] 파서 `None` 반환과 테스트(`tests/engine/test_toss_collector_parsers_refactor.py`, `tests/engine/test_screener_supply_helpers_refactor.py`). 두 테스트 RED(2 failed) 뒤 GREEN(대상 3파일 50 passed)
-- [x] `/ponytail-review`: Lean already
-- [x] `closing-bet-reviewer`(vcp055-review): APPROVE(max low). low 1 호출자 `scripts/verify_toss_supply.py:24` 는 `if trend:` 로 None 을 「Fetch Failed」로 처리해 수정 불필요(호출자 목록만 보완). low 2 빈 응답 종목은 15분 안 재스크리닝 때 Toss 요청과 CSV 폴백이 반복된다(종전은 0 캐시). 미반영: 운영 빈도 미관측이라 negative cache 는 YAGNI. low 3 체크 중복은 이 줄로 반영. low 4 SQLite 직접 단언·참조 실패 TTL 테스트는 기존 None 처리 경로라 미반영, QA S-2 가 실측한다
-- [x] pytest 전체: `venv/bin/python -m pytest` 2748 passed, 2 skipped(exit 0)
-- [ ] QA 하네스(격리 사본, 가짜 Toss 빈 body, 수정 전후 스크리닝 행과 캐시 비교)
-
 ## P2 — 대기
 
 ### [INFRA-093] 수급 Toss 백필이 pykrx 로 저장된 정확한 순매수거래대금을 근사값으로 덮는다
