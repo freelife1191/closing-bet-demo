@@ -49,17 +49,6 @@
 - [ ] 구현, 결측과 실제 0 거래 구분 확인
 - [ ] T3 리뷰와 pytest 전체, 격리 사본에서 가짜 출처로 CLI QA
 
-### [INFRA-095] 수급 수집이 결측을 0 으로 저장한다(pykrx 한쪽 프레임 누락, Toss 빈 필드)
-- 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-093]` 리뷰 low, `[INFRA-094]` 설계에서 분리(2026-09-24 22:06)
-- 원인: pykrx 경로는 외국인·기관 프레임 중 한쪽에만 있는 종목의 다른 쪽 값을 0 으로 저장하고, Toss 행 파싱은 비어 있는 `close`·순매수 수량을 `or 0` 으로 0 으로 만든다. `[INFRA-093]` 뒤로는 백필이 기존 행을 덮지 않으므로 이런 0 이 그대로 남는다
-- 확인 수준: 코드로만 확인. 운영에서 한쪽 프레임에만 종목이 있는 빈도는 확인하지 않았다
-- 설계 승인: 2026-09-25 07:56 사용자 「진행해」 | 범위: 결측이 있는 수급 행은 저장하지 않는다(빈 칸 저장안 기각, 읽는 쪽 무변경). pykrx 는 두 프레임 교집합만·`순매수거래대금` 열 없는 날짜 건너뜀·NaN 값 종목 건너뜀, Toss 는 종가 없음·0 이하·수량 빈 값·숫자 아님 행 버림, 실제 0 수량은 저장. 기존 저장분의 0 은 고치지 않음 | 실제 대화 근거: 현재 세션의 07:5x 설계 제안에 대한 응답
-- [x] 계획 `docs/superpowers/plans/2026-09-25-infra-095-supply-missing-not-zero.md` 와 계획 검토(`oh-my-claudecode:critic`) → ACCEPT-WITH-RESERVATIONS, 필수 0: 권장 1 기관 수량 `nan` 테스트 행 → 추가 | 권장 2 Step 5·Review Focus 1 을 Ruling 에 맞춤 | 권장 3 한쪽 프레임만 비면 날짜가 영구히 빔 → WARNING 한 줄·한계 4 | 참고 변이를 작업 트리에서 돌림 → 재확인은 스크래치 사본에서
-- [x] 실패 테스트 → 구현 → 변이 확인(사본 `m095`, 9종 모두 FAIL). 열 없음 검사는 변이가 살아남아(기존 `except` 가 같은 결과) 지움(계획 Ruling)
-- [x] 리뷰: 과잉설계 직접 검토 「Lean already. Ship.」 · `closing-bet-reviewer` APPROVE(max low): low 1 창이 과거로 밀림 → 한계 2 문구 | low 2 휴장일 무경고 테스트 → 추가(`or` 변이 FAIL 확인) | low 3 중복 인덱스(기존) → 한계 5 | 범위 밖 → `[INFRA-108]` · `/review`(T3, `oh-my-claudecode:code-reviewer` opus) APPROVE, Critical·Important 0: M1 Toss 백필 False 경로 테스트 → 추가 | M2 Toss 잠정 0 → 한계 6 | M3 계획 번호·이름 → 정리 | M4 메모리 파서의 0 기본값 → `[INFRA-109]`
-- [x] pytest 전체 `venv/bin/python -m pytest -q -p no:cacheprovider` 2800 passed 2 skipped(exit 0). 수정 전 코드에서 새 테스트 6건 FAIL
-- [ ] QA(격리 사본, 가짜 pykrx·Toss CLI 하네스) `docs/dev-cycle/qa/INFRA-095.md`
-
 ### [VCP-056] 가격 프레임의 high/low 가 없거나 전부 NaN 이면 VCP 판정이 예외 대신 실패 결과를 줘 전 종목 결함도 「시그널 없음」이 된다
 - 카테고리: VCP | 티어: T2 | 근거: `[VCP-053]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` low, 코드로 확인)
 - 원인: `[VCP-053]` 은 결과가 None 인 종목만 분석 불가로 센다. `engine/vcp.py` 의 `_normalize_price_frame` 은 high/low 열이 없거나 값이 전부 NaN 이면 예외가 아니라 `is_vcp=False` 인 「Invalid or empty price frame」 결과를 준다. 그래서 가격 파일 스키마가 체계적으로 깨져도 전 종목이 분석된 것으로 세어져 그 날짜 행이 지워진다
