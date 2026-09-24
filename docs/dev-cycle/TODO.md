@@ -72,7 +72,15 @@
 
 ### [CHAT-045] 챗봇 VCP 요약이 점수 없는 종목을 「0점 (매수 추천)」으로 LLM 문맥에 넣는다
 - 카테고리: 챗봇 | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-044]` 코드 리뷰 지적 4(2026-09-24). `chatbot/signal_context.py` 의 VCP 요약이 `signal.get("score", signal.get("vcp_score", 0))` 로 결측 점수를 0 으로 바꾼다. `[VCP-044]` 이후 재분석은 수집 때 캐시에 없던 종목을 `ticker`·`stock_name`·추천 칸만 가진 행으로 캐시에 넣으므로, 그 종목이 BUY 면 「0점 (매수 추천)」이 된다. 이름도 `name` 이 없으면 `stock_name` 으로 넘어가는지 확인이 필요하다
-- [ ] 설계 승인(점수 결측 시 표기 생략 또는 시그널 CSV 에서 보충)
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 11:31 | 범위: bounded, T1(`chatbot/signal_context.py` 한 파일, 위험 경로 아님). 점수가 `score`·`vcp_score` 모두 없거나 None 이면 점수를 적지 않고 `- **<이름>** (매수 추천)` 으로 쓴다. 이름은 `name or stock_name or "N/A"`. 시그널 CSV 보충은 하지 않는다. `_vcp_action` 의 GPT 미반영은 범위 밖(`[CHAT-046]`) | 근거: AskUserQuestion 「승인, GPT 는 별도 TODO (권장)」
+- [x] 설계 승인(점수 결측 시 표기 생략)
+- [x] 테스트(재분석 모양 행: 점수 없음·`stock_name` 만·BUY)와 수정
+- [x] 리뷰(T1: `/ponytail-review` 「Lean already. Ship.」), pytest 전체(2731 passed, 2 skipped, exit 0)
+- [ ] QA: 함수 하네스로 `build_vcp_analysis_summary_text` 출력 확인(실제 LLM 호출 없음)
+
+### [CHAT-046] 챗봇 VCP 요약의 BUY 판정이 `gpt_recommendation` 을 보지 않는다
+- 카테고리: 챗봇 | 티어: 판정 시 파일 목록으로 정함 | 근거: `[CHAT-045]` 설계 중 발견(2026-09-24). `chatbot/signal_context.py` 의 `_vcp_action` 은 gemini → perplexity 순서로만 action 을 고른다. 두 번째 AI 가 GPT(또는 GPT 자리를 채운 Z.ai)인 설정에서 Gemini 가 실패하고 GPT 만 BUY 인 종목은 매수 추천 건수와 목록에서 빠진다. VCP 화면과 수집 쪽 선택 규칙(`_extract_vcp_ai_recommendation`)과도 다르다
+- [ ] 설계 승인(수집 쪽 선택 함수를 재사용할지, 사유 선택 순서)
 - [ ] 테스트와 수정, 리뷰
 
 ### [VCP-043] `signal_tracker` 경로의 AI 추천 선택이 실패 dict 도 고르고 VCP 수집과 다른 규칙을 쓴다

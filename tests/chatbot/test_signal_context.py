@@ -94,6 +94,21 @@ def test_build_vcp_analysis_summary_text_counts_and_dates():
     assert "**A**" not in text
 
 
+def test_build_vcp_analysis_summary_text_omits_missing_score():
+    # 재분석이 캐시에 새로 넣은 행은 점수가 없다. 「0점」으로 적으면 LLM 이 실제 0점으로 읽는다 [CHAT-045]
+    signals = [
+        {"ticker": "030200", "stock_name": "KT", "gemini_recommendation": {"action": "BUY", "reason": "r"}},
+        {"name": None, "stock_name": "한화", "score": None, "vcp_score": 55,
+         "gemini_recommendation": {"action": "BUY", "reason": "r"}},
+    ]
+
+    text = signal_context.build_vcp_buy_recommendations_text(signals)
+
+    assert "- **KT** (매수 추천)" in text
+    assert "0점" not in text
+    assert "- **한화**: 55점 (매수 추천)" in text
+
+
 def test_build_vcp_analysis_summary_text_distinguishes_no_buy_from_no_analysis():
     from datetime import date
 

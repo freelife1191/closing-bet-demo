@@ -149,14 +149,18 @@ def build_vcp_buy_recommendations_text(signals: List[Dict[str, Any]], limit: int
         gemini_rec = signal.get("gemini_recommendation", {})
         perplexity_rec = signal.get("perplexity_recommendation", {})
 
-        name = signal.get("name", signal.get("stock_name", "N/A"))
-        score = signal.get("score", signal.get("vcp_score", 0))
+        name = signal.get("name") or signal.get("stock_name") or "N/A"
+        score = signal.get("score")
+        if score is None:
+            score = signal.get("vcp_score")
+        # 재분석이 캐시에 새로 넣은 행은 점수가 없다. 0점으로 적지 않는다 [CHAT-045]
+        score_text = f": {score}점" if score is not None else ""
 
         reason = gemini_rec.get("reason", "") if isinstance(gemini_rec, dict) else ""
         if not reason and isinstance(perplexity_rec, dict):
             reason = perplexity_rec.get("reason", "")
 
-        result_text += f"- **{name}**: {score}점 (매수 추천)\n  - AI 분석: {reason[:120]}...\n"
+        result_text += f"- **{name}**{score_text} (매수 추천)\n  - AI 분석: {reason[:120]}...\n"
         count += 1
         if count >= limit:
             break
