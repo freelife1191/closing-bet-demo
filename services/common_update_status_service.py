@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import copy
+import fcntl
 import json
 import os
 import sqlite3
 import threading
 from collections import OrderedDict
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict
 
@@ -508,6 +510,45 @@ def save_update_status(*, status: Dict[str, Any], update_status_file: str, logge
         logger.error(f"Failed to save update status: {error}")
 
 
+@contextmanager
+def _status_file_lock(update_status_file: str, logger):
+    """[INFRA-098] update_lock 은 워커 안에서만 듣는다. 상태를 읽고-수정-쓰는 동안 워커 사이도 막는다."""
+    try:
+        _ensure_parent_dir(update_status_file)
+        lock_fp = open(update_status_file + ".lock", "a+")
+    except OSError as error:
+        # ponytail: 잠금 파일을 못 열면(권한 등) 종전처럼 워커 안 잠금만으로 진행한다. 여기서 예외를 내면
+        # 중단·완료 요청이 500 이 되고 isRunning 이 재기동 전까지 고착된다
+        logger.error(f"Update status file lock unavailable, continuing without it: {error}")
+        lock_fp = None
+    if lock_fp is None:
+        yield
+        return
+    with lock_fp:
+        fcntl.flock(lock_fp.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_fp.fileno(), fcntl.LOCK_UN)
+
+
+def _read_status_file(update_status_file: str, logger) -> Dict[str, Any]:
+    """잠금 안에서 쓰는 읽기. (mtime, size) 캐시는 같은 틱의 다른 워커 저장을 놓치므로 파일을 직접 읽는다."""
+    try:
+        with open(update_status_file, "r", encoding="utf-8") as handle:
+            loaded = json.load(handle)
+        if isinstance(loaded, dict):
+            return loaded
+    except FileNotFoundError:
+        pass
+    except Exception as error:
+        logger.error(f"Failed to load update status: {error}")
+    # 파일이 없거나 깨졌으면 load_update_status 처럼 스냅샷을 쓴다. 기본값(startTime 없음)에서 출발하면
+    # 실행 중인 워커의 감시가 중단을 자기 실행의 것으로 알아보지 못한다
+    snapshot = _load_update_status_from_sqlite(update_status_file=update_status_file, logger=logger)
+    return snapshot if snapshot is not None else default_update_status()
+
+
 def start_update(
     *,
     items_list: list[str],
@@ -517,14 +558,14 @@ def start_update(
     logger,
 ) -> bool:
     """업데이트 시작. 이 워커에서 앞 실행이 아직 돌면 상태를 바꾸지 않고 False 를 돌려준다."""
-    with update_lock:
+    with update_lock, _status_file_lock(update_status_file, logger):
         if getattr(shared_state, "LOCAL_PIPELINE_ACTIVE", False):
             # [INFRA-099] 중단된 앞 실행이 끝나기 전이다. 플래그가 워커에 하나뿐이라 받으면 둘이 함께 돈다.
             # 상태를 그대로 두면 남은 stopRequested 를 앞 실행의 감시가 읽고 멈춘다
             logger.warning("Update start refused: a previous update is still running in this worker")
             return False
         shared_state.STOP_REQUESTED = False
-        status = load_update_status(update_status_file=update_status_file, logger=logger)
+        status = _read_status_file(update_status_file, logger)
         status["isRunning"] = True
         status["stopRequested"] = False
         status["startTime"] = datetime.now().isoformat()
@@ -545,8 +586,8 @@ def update_item_status(
     start_time: str | None = None,
 ) -> None:
     """아이템 상태 업데이트. start_time 이 주어지면 그 실행이 아직 상태의 주인일 때만 쓴다."""
-    with update_lock:
-        status = load_update_status(update_status_file=update_status_file, logger=logger)
+    with update_lock, _status_file_lock(update_status_file, logger):
+        status = _read_status_file(update_status_file, logger)
         if start_time is not None and status.get("startTime") != start_time:
             # [INFRA-101] 다른 워커의 새 실행에 대체된 옛 실행이다. 이름이 같은 새 실행 항목에 쓰지 않는다
             logger.info(f"Item status skipped for replaced run: {name} -> {status_code}")
@@ -567,10 +608,10 @@ def stop_update(
     logger,
 ) -> None:
     """업데이트 중단."""
-    with update_lock:
+    with update_lock, _status_file_lock(update_status_file, logger):
         # [INFRA-097] 작업은 다른 워커에서 돌 수 있으므로 이 워커의 플래그가 아니라 공유 상태에 남긴다.
         # 작업을 돌리는 워커의 감시 스레드(run_background_update_pipeline)가 그 워커의 플래그를 켠다
-        status = load_update_status(update_status_file=update_status_file, logger=logger)
+        status = _read_status_file(update_status_file, logger)
         status["isRunning"] = False
         status["stopRequested"] = True
         status["currentItem"] = None
@@ -589,10 +630,15 @@ def finish_update(
     update_lock,
     update_status_file: str,
     logger,
+    start_time: str | None = None,
 ) -> None:
-    """업데이트 완료."""
-    with update_lock:
-        status = load_update_status(update_status_file=update_status_file, logger=logger)
+    """업데이트 완료. start_time 이 주어지면 그 실행이 아직 상태의 주인일 때만 끝낸다."""
+    with update_lock, _status_file_lock(update_status_file, logger):
+        status = _read_status_file(update_status_file, logger)
+        if start_time is not None and status.get("startTime") not in (None, start_time):
+            # [INFRA-098] 중단된 사이 다른 워커에서 새 실행이 시작됐다. 그 상태를 끝내는 것은 새 실행의 몫이다
+            logger.info("Finish skipped for replaced run")
+            return
         status["isRunning"] = False
         status["currentItem"] = None
         save_update_status(status=status, update_status_file=update_status_file, logger=logger)

@@ -13,11 +13,13 @@ import threading
 import time
 import types
 
+import pytest
+
 import services.common_update_status_service as status_service
 
 
 def _logger():
-    return types.SimpleNamespace(error=lambda *_a, **_k: None)
+    return types.SimpleNamespace(error=lambda *_a, **_k: None, info=lambda *_a, **_k: None)
 
 
 def test_load_update_status_reuses_signature_cache(monkeypatch, tmp_path: Path):
@@ -828,3 +830,188 @@ def test_save_update_status_forces_periodic_prune_for_same_file(tmp_path: Path, 
     )
 
     assert prune_calls["count"] == 2
+
+
+def _slow_save_in_worker_a(monkeypatch, entered: threading.Event, release: threading.Event):
+    original_save = status_service.save_update_status
+
+    def _save(**kwargs):
+        if threading.current_thread().name == "worker-a":
+            entered.set()
+            release.wait(2)
+        original_save(**kwargs)
+
+    monkeypatch.setattr(status_service, "save_update_status", _save)
+
+
+def test_stop_from_other_worker_survives_item_update(monkeypatch, tmp_path: Path):
+    # [INFRA-098] 워커마다 update_lock 이 따로다. 항목 저장 중에 끼어든 다른 워커의 중단이 덮이지 않아야 한다
+    status_service.clear_update_status_cache()
+    path = str(tmp_path / "update_status.json")
+    status_service.save_update_status(
+        status={"isRunning": True, "startTime": "run-1", "items": [{"name": "A", "status": "pending"}]},
+        update_status_file=path,
+        logger=_logger(),
+    )
+    entered, release = threading.Event(), threading.Event()
+    _slow_save_in_worker_a(monkeypatch, entered, release)
+
+    a = threading.Thread(
+        name="worker-a",
+        target=lambda: status_service.update_item_status(
+            name="A", status_code="running", update_lock=threading.Lock(),
+            update_status_file=path, logger=_logger(), start_time="run-1",
+        ),
+    )
+    a.start()
+    assert entered.wait(2)
+    b = threading.Thread(
+        target=lambda: status_service.stop_update(update_lock=threading.Lock(), update_status_file=path, logger=_logger()),
+    )
+    b.start()
+    time.sleep(0.2)  # 잠금이 없으면 b 는 이 사이에 저장을 끝낸다
+    release.set()
+    a.join(2)
+    b.join(2)
+    assert not a.is_alive() and not b.is_alive()  # 잠금이 풀리지 않는 회귀면 여기서 멈추지 않고 실패한다
+
+    final = json.loads(Path(path).read_text(encoding="utf-8"))
+    assert final.get("stopRequested") is True
+    assert final["isRunning"] is False
+
+
+def test_finish_from_replaced_run_leaves_new_run(tmp_path: Path):
+    # [INFRA-098] 옛 실행의 finish 는 잠금 안에서 startTime 을 보고 새 실행을 끝내지 않는다
+    status_service.clear_update_status_cache()
+    path = tmp_path / "update_status.json"
+    status_service.save_update_status(
+        status={"isRunning": True, "startTime": "run-2", "items": []}, update_status_file=str(path), logger=_logger(),
+    )
+    status_service.finish_update(
+        update_lock=threading.Lock(), update_status_file=str(path), logger=_logger(), start_time="run-1",
+    )
+    assert json.loads(path.read_text(encoding="utf-8"))["isRunning"] is True
+    status_service.finish_update(
+        update_lock=threading.Lock(), update_status_file=str(path), logger=_logger(), start_time="run-2",
+    )
+    assert json.loads(path.read_text(encoding="utf-8"))["isRunning"] is False
+    # 수동 finish(/system/finish-update)는 start_time 없이 부르며 파일의 startTime 과 무관하게 끝낸다
+    status_service.save_update_status(
+        status={"isRunning": True, "startTime": "run-3", "items": []}, update_status_file=str(path), logger=_logger(),
+    )
+    status_service.finish_update(update_lock=threading.Lock(), update_status_file=str(path), logger=_logger())
+    assert json.loads(path.read_text(encoding="utf-8"))["isRunning"] is False
+
+
+def test_stop_without_status_file_keeps_run_identity_from_snapshot(tmp_path: Path):
+    # [INFRA-098] JSON 파일이 없어도 SQLite 스냅샷의 startTime 을 이어 써야 실행 중인 워커의 감시가 중단을 알아본다
+    status_service.clear_update_status_cache()
+    path = tmp_path / "update_status.json"
+    status_service.save_update_status(
+        status={"isRunning": True, "startTime": "run-1", "items": [{"name": "A", "status": "running"}]},
+        update_status_file=str(path),
+        logger=_logger(),
+    )
+    path.unlink()
+    status_service.stop_update(update_lock=threading.Lock(), update_status_file=str(path), logger=_logger())
+    final = json.loads(path.read_text(encoding="utf-8"))
+    assert (final["startTime"], final["stopRequested"], final["items"]) == (
+        "run-1",
+        True,
+        [{"name": "A", "status": "error"}],
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (
+            lambda path, log: status_service.finish_update(
+                update_lock=threading.Lock(), update_status_file=path, logger=log, start_time="run-1",
+            ),
+            lambda final: final["isRunning"] is False,
+        ),
+        (
+            lambda path, log: status_service.update_item_status(
+                name="A", status_code="done", update_lock=threading.Lock(), update_status_file=path, logger=log,
+                start_time="run-1",
+            ),
+            lambda final: final["items"] == [{"name": "A", "status": "done"}],
+        ),
+        (
+            lambda path, log: status_service.stop_update(
+                update_lock=threading.Lock(), update_status_file=path, logger=log,
+            ),
+            lambda final: final["items"] == [{"name": "A", "status": "error"}],
+        ),
+    ],
+    ids=["finish", "item", "stop"],
+)
+def test_mutation_reads_file_not_stale_signature_cache(tmp_path: Path, mutate, expected):
+    # [INFRA-098] 시그니처가 같은 옛 캐시(run-0, 항목 없음)가 있어도 상태 변경은 파일의 현재 값에서 출발한다
+    status_service.clear_update_status_cache()
+    path = tmp_path / "update_status.json"
+    status_service.save_update_status(
+        status={"isRunning": True, "startTime": "run-1", "stopRequested": False, "items": [{"name": "A", "status": "running"}]},
+        update_status_file=str(path),
+        logger=_logger(),
+    )
+    signature = status_service._status_file_signature(str(path))
+    stale = {"isRunning": True, "startTime": "run-0", "stopRequested": False, "items": []}
+    with status_service._UPDATE_STATUS_CACHE_LOCK:
+        status_service._UPDATE_STATUS_CACHE[status_service._normalize_update_status_file_key(str(path))] = (
+            signature,
+            stale,
+        )
+    mutate(str(path), _logger())
+    final = json.loads(path.read_text(encoding="utf-8"))
+    assert final["startTime"] == "run-1"
+    assert expected(final)
+
+
+def test_finish_does_not_revert_start_from_other_worker(monkeypatch, tmp_path: Path):
+    # [INFRA-098] 옛 실행의 finish 가 읽고 쓰는 사이에 다른 워커가 새 실행을 시작해도 그 새 실행이 남는다
+    status_service.clear_update_status_cache()
+    path = tmp_path / "update_status.json"
+    status_service.save_update_status(
+        status={"isRunning": True, "startTime": "run-1", "items": []}, update_status_file=str(path), logger=_logger(),
+    )
+    entered, release = threading.Event(), threading.Event()
+    _slow_save_in_worker_a(monkeypatch, entered, release)
+
+    a = threading.Thread(
+        name="worker-a",
+        target=lambda: status_service.finish_update(
+            update_lock=threading.Lock(), update_status_file=str(path), logger=_logger(), start_time="run-1",
+        ),
+    )
+    a.start()
+    assert entered.wait(2)
+    b = threading.Thread(
+        target=lambda: status_service.start_update(
+            items_list=["A"], update_lock=threading.Lock(), update_status_file=str(path),
+            shared_state=types.SimpleNamespace(), logger=_logger(),
+        ),
+    )
+    b.start()
+    time.sleep(0.2)  # 잠금이 없으면 b 는 이 사이에 새 실행을 기록한다
+    release.set()
+    a.join(2)
+    b.join(2)
+    assert not a.is_alive() and not b.is_alive()  # 잠금이 풀리지 않는 회귀면 여기서 멈추지 않고 실패한다
+
+    final = json.loads(path.read_text(encoding="utf-8"))
+    assert final["startTime"] != "run-1"
+    assert final["isRunning"] is True
+
+
+def test_mutation_proceeds_when_lock_file_unavailable(tmp_path: Path):
+    # [INFRA-098] 잠금 파일을 열 수 없어도(권한 등) 중단 요청은 종전처럼 저장된다. 예외를 내면 isRunning 이 고착된다
+    status_service.clear_update_status_cache()
+    path = tmp_path / "update_status.json"
+    status_service.save_update_status(
+        status={"isRunning": True, "startTime": "run-1", "items": []}, update_status_file=str(path), logger=_logger(),
+    )
+    (tmp_path / "update_status.json.lock").mkdir()  # 열기가 OSError 가 되게 한다
+    status_service.stop_update(update_lock=threading.Lock(), update_status_file=str(path), logger=_logger())
+    assert json.loads(path.read_text(encoding="utf-8"))["stopRequested"] is True

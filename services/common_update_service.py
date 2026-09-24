@@ -188,9 +188,8 @@ def run_background_update_pipeline(
             # [INFRA-096] 중단의 대상이던 작업이 끝났으므로 중단 요청도 끝낸다. 남겨 두면 스케줄러와 개별 실행이 멈춘다
             # [INFRA-099] 이 실행이 도는 동안 같은 워커의 새 시작은 거부되므로 끌 대상은 이 실행의 요청뿐이다
             shared_state.STOP_REQUESTED = False
-            # [INFRA-097] 중단된 사이 다른 워커에서 새 실행이 시작됐으면 그 상태를 끝내는 것은 새 실행의 몫이다
-            if start_time is None or _read_start_time(load_update_status, logger) in (None, start_time):
-                finish_update()
+            # [INFRA-098] 대체된 실행인지는 finish_update 가 상태 파일 잠금 안에서 startTime 으로 가린다
+            finish_update()
         finally:
             # [INFRA-099] 상태를 다 정리한 뒤에 끈다. 켜진 채 남으면 이 워커는 재기동 전까지 시작을 거부한다
             shared_state.LOCAL_PIPELINE_ACTIVE = False

@@ -99,12 +99,13 @@ def stop_update():
     )
 
 
-def finish_update():
+def finish_update(start_time=None):
     """업데이트 완료."""
     finish_update_impl(
         update_lock=update_lock,
         update_status_file=UPDATE_STATUS_FILE,
         logger=logger,
+        start_time=start_time,
     )
 
 
@@ -117,7 +118,7 @@ def run_background_update(target_date, selected_items=None, force=False):
         selected_items=selected_items,
         force=bool(force),
         update_item_status=lambda name, status_code: update_item_status(name, status_code, start_time=run_start_time),
-        finish_update=finish_update,
+        finish_update=lambda: finish_update(start_time=run_start_time),
         shared_state=shared_state,
         logger=logger,
         load_update_status=load_update_status,

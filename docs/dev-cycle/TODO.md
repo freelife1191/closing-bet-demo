@@ -55,8 +55,15 @@
 - 같은 부류(`[INFRA-097]` `/review` 지적 3): 파이프라인 `finally` 가 상태의 `startTime` 을 확인한 직후 다른 워커가 새 실행을 기록하면 옛 실행의 `finish_update` 가 새 실행의 `isRunning` 을 내린다
 - 확인 수준: 코드로만 확인. 창은 수 ms 이며 운영 빈도는 확인하지 않았다
 - 같은 부류(`[INFRA-101]` 심층 리뷰 지적 1): `load_update_status` 의 시그니처 캐시는 `(mtime_ns, size)` 로만 새 값을 가린다. 다른 워커의 저장이 같은 크기로 같은 mtime 틱 안에 일어나면(mtime 정밀도가 거친 파일시스템) 옛 값을 읽고, `[INFRA-101]` 의 `startTime` 가드도 통과한 뒤 옛 상태 전체를 저장한다
-- [ ] 설계 승인(파일 잠금 `fcntl` 로 워커 사이 직렬화할지, 중단 요청만 별도 파일로 분리할지)
-- [ ] 테스트, 리뷰와 pytest 전체
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 07:34
+  | 범위: `start_update`·`update_item_status`·`stop_update`·`finish_update` 가 기존 `update_lock` 안에서 `<상태 파일>.lock` 에 `fcntl.flock(LOCK_EX)` 를 걸고, 잠금 안에서는 시그니처 캐시를 거치지 않고 파일을 직접 읽음. `finish_update(start_time=...)` 가 잠금 안에서 `startTime` 을 비교하고 파이프라인 `finally` 의 바깥 비교는 제거. 폴링 GET 은 읽기 전용이라 캐시 경로 유지(한계). 중단 요청 별도 파일안은 `stop_update` 도 같은 파일을 읽고 써야 해서 기각
+  | 실제 대화 근거: 2026-09-25 대화 설계 제시 뒤 사용자 「진행해」 응답
+- [x] 설계 승인(위 줄)
+- [x] 구현 계획(`docs/superpowers/plans/2026-09-25-infra-098-update-status-file-lock.md`)과 계획 검토: critic REVISE. 필수 1(잠금 파일 열기 실패가 500·`isRunning` 고착) → `OSError` 로그 뒤 잠금 없이 진행, 필수 2(finish·start 경합 테스트 없음) → 테스트 추가, 권장 3(옛 캐시 테스트 finish 만) → 세 경우 parametrize, 권장 4·5·참고 6 → 계획 한계 4~6(5 는 `[INFRA-107]` 로 분리), 참고 7 → 계획 문구 수정
+- [x] 두 워커 흉내 테스트 6건(서로 다른 `threading.Lock`): 끼어든 중단 보존, finish 중 다른 워커 start 보존, 대체된 실행의 finish 무시, 옛 캐시 세 경우, 잠금 파일 불가. 변이 7종(flock 제거, item·stop 캐시 읽기, finish 가드 제거, start 잠금 제거, finish 비교를 잠금 밖으로, 열기 실패 미처리) 모두 해당 테스트 FAIL 뒤 `cmp` 로 복원 확인
+- [x] 구현, 리뷰: 과잉설계 직접 검토(중첩 `with` 를 한 줄로 합쳐 들여쓰기 변경 제거, 그 밖 Lean). 코드 리뷰(closing-bet-reviewer) APPROVE max low, low 2·info 2 → 계획 한계 7·8 과 Step 3 주석. 심층 리뷰(oh-my-claudecode:code-reviewer, opus) Critical 0·Important 1·Minor 4: I-1(상태 파일이 없으면 중단이 실행 워커에 전달되지 않음) → 잠금 안 읽기의 SQLite 스냅샷 폴백·테스트 RED→GREEN, M-1(`except` 안 `yield`) → 밖으로, M-2 → 한계 8, M-3 → 스레드 생존 단언, M-4 → `start_time=None` 수동 finish 단계 추가
+- [x] pytest 전체(리뷰 반영 뒤): 2793 passed, 2 skipped, exit 0
+- [ ] QA(격리 사본, 실제 두 프로세스로 경합 재현)
 
 ### [INFRA-095] 수급 수집이 결측을 0 으로 저장한다(pykrx 한쪽 프레임 누락, Toss 빈 필드)
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-093]` 리뷰 low, `[INFRA-094]` 설계에서 분리(2026-09-24 22:06)
@@ -127,3 +134,10 @@
 - 내용: `scripts/init_data.py:119` 는 지수 조회가 실패하면 DEBUG 만 남기고 주말만 거른다. 세션이 인증되지 않았을 때 공휴일을 기대 날짜로 돌려주며, 호출자는 `create_daily_prices`·수급 수집·수동 갱신 stale 검증(`services/common_update_pipeline_steps.py:61-90`)이다. `[INFRA-089]` 의 재로그인 복구 뒤에도 KRX 점검 시간처럼 로그인 자체가 실패하면 남는다
 - [ ] 설계 승인(WARNING 승격, 실패 때 판정 보류 여부)
 - [ ] 테스트, 리뷰, pytest 전체
+
+### [INFRA-107] 워커가 새로 기동하면 다른 워커에서 도는 수동 업데이트의 `isRunning` 과 항목을 지운다
+- 카테고리: 인프라 | 티어: T3(판정은 설계 때 §2 대조) | 근거: `[INFRA-098]` 계획 검토(critic 권장 5, 2026-09-25), 코드로 확인
+- 내용: `app/__init__.py` 의 `_reset_startup_status_files` 는 기동 때 `update_status.json` 이 `isRunning` 이면 `isRunning=False`·`items=[]` 로 저장한다. 서버 전체 재기동에는 맞지만, gunicorn 이 워커 하나만 다시 띄우면(워커 비정상 종료 등) 다른 워커의 실행 중 상태를 지운다. 잠금도 없어 그 사이의 중단 요청을 덮을 수 있다
+- 확인 수준: 코드로만 확인. 운영에서 워커 단독 재기동 빈도는 확인하지 않았다
+- [ ] 설계 승인(마스터 기동 때만 초기화할지, 소유 워커의 생존으로 판정할지)
+- [ ] 테스트, T3 리뷰와 pytest 전체

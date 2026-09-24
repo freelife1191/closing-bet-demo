@@ -375,7 +375,9 @@ def test_run_background_update_pipeline_superseded_run_leaves_new_run_alone(monk
         load_update_status=lambda: dict(status),
     )
 
-    assert finished == []
+    # [INFRA-098] 파이프라인은 항상 부르고, 대체된 실행인지는 finish_update 가 잠금 안에서 가린다
+    # (tests/services/test_common_update_status_service.py::test_finish_from_replaced_run_leaves_new_run)
+    assert finished == [True]
     # 옛 실행의 워커에 값을 남기지 않는다. 같은 워커의 새 실행이면 그 실행의 감시가 다시 켠다(리뷰 지적 1)
     assert shared_state.STOP_REQUESTED is False
 
@@ -507,7 +509,7 @@ def test_run_background_update_pipeline_uses_local_start_time_over_shared_file(m
     )
 
     assert captured == {"start_time": "run-A"}
-    assert finished == []  # 늦게 쓴 다른 워커의 실행 상태를 끝내지 않는다
+    assert finished == [True]  # [INFRA-098] 끝낼지는 라우트가 묶은 run-A 로 finish_update 가 가린다
 
 
 def test_route_background_update_wires_status_reader(monkeypatch):
@@ -520,6 +522,22 @@ def test_route_background_update_wires_status_reader(monkeypatch):
     common.run_background_update("2026-02-21", ["Daily Prices"], False)
 
     assert captured["load_update_status"] is common.load_update_status
+
+
+def test_route_background_update_binds_start_time_to_finish(monkeypatch):
+    # [INFRA-098] 대체 판정은 finish_update 가 하므로 라우트가 이 실행의 startTime 을 묶어 넘겨야 한다
+    import app.routes.common as common
+
+    captured: dict = {}
+    finish_calls: list = []
+    monkeypatch.setattr(common, "run_background_update_pipeline", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(common, "finish_update_impl", lambda **kwargs: finish_calls.append(kwargs["start_time"]))
+    monkeypatch.setattr(common.shared_state, "LOCAL_RUN_START_TIME", "run-A", raising=False)
+
+    common.run_background_update("2026-02-21", ["Daily Prices"], False)
+    captured["finish_update"]()
+
+    assert finish_calls == ["run-A"]
 
 
 def test_route_start_update_returns_refusal(monkeypatch):
