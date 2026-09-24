@@ -877,6 +877,14 @@ def _should_abort_daily_pykrx_bulk_fetch(error: Exception) -> bool:
     return any(signature in message for signature in known_error_signatures)
 
 
+def _all_zero_close_dates(df: pd.DataFrame) -> list[str]:
+    """종가가 전 종목 0 인 날짜. pykrx 는 평일 휴장일에 이런 행을 돌려준다([INFRA-090])."""
+    if df.empty or "date" not in df.columns or "close" not in df.columns:
+        return []
+    zero = pd.to_numeric(df["close"], errors="coerce").fillna(0).eq(0).groupby(df["date"]).all()
+    return [str(d) for d in zero[zero].index]
+
+
 def create_daily_prices(target_date=None, force=False, lookback_days=5):
     """
     일별 가격 데이터 수집 - pykrx 날짜별 일괄 조회 (속도 최적화)
@@ -917,6 +925,10 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
         if os.path.exists(file_path):
             try:
                 existing_df = pd.read_csv(file_path, dtype={'ticker': str})
+                zero_dates = _all_zero_close_dates(existing_df)
+                if zero_dates:
+                    log(f"전 종목 종가 0 인 저장 날짜 {zero_dates} 를 제외합니다. 다음 저장 때 파일에서 빠집니다.", "WARNING")
+                    existing_df = existing_df[~existing_df['date'].isin(zero_dates)]
                 if not existing_df.empty and 'date' in existing_df.columns:
                     max_date_str = existing_df['date'].max()
                     
@@ -968,7 +980,9 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
         new_data_list = []
         processed_days = 0
         pykrx_bulk_fetch_unavailable = False
-        
+        zero_close_days = 0  # 전 종목 종가 0 으로 건너뛴 평일(휴장일)
+        missed_days = 0  # 빈 결과나 예외로 자료를 못 받은 평일
+
         for dt in date_range:
             if shared_state.STOP_REQUESTED:
                 log("⛔️ 사용자 요청으로 중단", "WARNING")
@@ -998,6 +1012,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 
                 if df is None or df.empty:
                     # 휴장일 가능성
+                    missed_days += 1
                     processed_days += 1
                     continue
                     
@@ -1030,7 +1045,13 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                 
                 df['ticker'] = df['ticker'].astype(str).str.zfill(6)
                 df['date'] = cur_date_fmt
-                
+
+                if _all_zero_close_dates(df):
+                    log(f"[Daily Prices] {cur_date_fmt} 전 종목 종가 0, 저장 생략 (휴장일 추정)", "INFO")
+                    zero_close_days += 1
+                    processed_days += 1
+                    continue
+
                 # 필요한 컬럼만 추출
                 cols = ['date', 'ticker', 'open', 'high', 'low', 'close', 'volume', 'trading_value']
                 # 거래대금 없을 경우 처리
@@ -1059,6 +1080,7 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
                     )
                     break
                 log(f"날짜별 수집 실패 ({cur_date_str}): {e}", "WARNING")
+                missed_days += 1
                 processed_days += 1
 
         if pykrx_bulk_fetch_unavailable:
@@ -1081,6 +1103,12 @@ def create_daily_prices(target_date=None, force=False, lookback_days=5):
         else:
              if start_date_obj.date() > end_date_obj.date():
                  log("pykrx 수집 데이터 없음 (이미 최신).", "SUCCESS")
+                 return True
+
+             # 구간의 평일이 전부 휴장일이면 폴백하지 않는다. yfinance 는 직전 거래일 봉을
+             # 일부 종목만 돌려줘 그 날짜를 덮어쓴다([INFRA-088] 3차)
+             if zero_close_days and not missed_days and not shared_state.STOP_REQUESTED:
+                 log(f"수집 구간의 평일 {zero_close_days}일이 모두 휴장일입니다. 저장할 자료가 없습니다.", "SUCCESS")
                  return True
 
              log("pykrx 수집 데이터 없음. yfinance 폴백 시도...", "DEBUG")

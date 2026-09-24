@@ -506,6 +506,172 @@ def test_create_daily_prices_switches_to_yfinance_on_known_pykrx_error(monkeypat
     assert not any("날짜별 수집 실패" in message for _, message in logs)
 
 
+def _krx_ohlcv_frame(rows: Dict[str, tuple]) -> pd.DataFrame:
+    """pykrx get_market_ohlcv(date, market="ALL") 모양. rows: {티커: (시가, 고가, 저가, 종가)}"""
+    records = [
+        {"시가": o, "고가": h, "저가": lo, "종가": c, "거래량": 100 if c else 0, "거래대금": c * 100}
+        for o, h, lo, c in rows.values()
+    ]
+    return pd.DataFrame(records, index=pd.Index(list(rows), name="티커"))
+
+
+def _run_daily_prices_with_fake_krx(monkeypatch, tmp_path, target, frames, existing_rows, on_fetch=None):
+    """기존 파일과 날짜별 가짜 pykrx 응답으로 create_daily_prices 를 돌린다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    file_path = data_dir / "daily_prices.csv"
+    pd.DataFrame(
+        existing_rows,
+        columns=["date", "ticker", "open", "high", "low", "close", "volume", "trading_value"],
+    ).to_csv(file_path, index=False)
+
+    target_dt = datetime.datetime.strptime(target, "%Y-%m-%d")
+    monkeypatch.setattr(init_data.shared_state, "STOP_REQUESTED", False)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: (target_dt.strftime("%Y%m%d"), target_dt),
+    )
+
+    class _FakeStock:
+        @staticmethod
+        def get_market_ohlcv(date_str, *_args, **_kwargs):
+            if on_fetch:
+                on_fetch(date_str)
+            return frames.get(date_str, pd.DataFrame())
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _FakeStock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(init_data, "log", lambda message, level="INFO": None)
+
+    fallback_calls = {"count": 0}
+
+    def _fake_fallback(*_args, **_kwargs):
+        fallback_calls["count"] += 1
+        return True
+
+    monkeypatch.setattr(init_data, "fetch_prices_yfinance", _fake_fallback)
+
+    result = init_data.create_daily_prices(target_date=target)
+    saved = pd.read_csv(file_path, dtype={"ticker": str})
+    return result, fallback_calls["count"], saved
+
+
+_ZERO_DAY = {"000001": (0, 0, 0, 0), "000002": (0, 0, 0, 0)}
+
+
+def test_create_daily_prices_skips_holiday_zero_close_but_keeps_suspended_ticker(monkeypatch, tmp_path):
+    frames = {
+        "20260922": _krx_ohlcv_frame(
+            {"000001": (100, 110, 90, 105), "000002": (0, 0, 0, 1000), "000003": (0, 0, 0, 0)}
+        ),
+        "20260923": _krx_ohlcv_frame(_ZERO_DAY),
+    }
+    existing = [["2026-09-21", "000001", 100, 110, 90, 100, 100, 10000]]
+
+    result, fallbacks, saved = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-23", frames, existing
+    )
+
+    assert result is True
+    assert fallbacks == 0
+    assert sorted(saved["date"].unique()) == ["2026-09-21", "2026-09-22"]
+    day = saved[saved["date"] == "2026-09-22"].set_index("ticker")
+    assert sorted(day.index) == ["000001", "000002", "000003"]
+    assert day.loc["000003", "close"] == 0
+
+
+def test_create_daily_prices_holiday_only_range_does_not_fall_back(monkeypatch, tmp_path):
+    existing = [
+        ["2026-09-23", "000001", 100, 110, 90, 105, 100, 10500],
+        ["2026-09-23", "000002", 50, 55, 45, 52, 100, 5200],
+    ]
+
+    result, fallbacks, saved = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-24", {"20260924": _krx_ohlcv_frame(_ZERO_DAY)}, existing
+    )
+
+    assert result is True
+    assert fallbacks == 0
+    # 직전 거래일 행이 그대로 남고 휴장일 행은 생기지 않는다
+    assert saved["date"].tolist() == ["2026-09-23", "2026-09-23"]
+    assert saved["close"].tolist() == [105, 52]
+
+
+def test_create_daily_prices_falls_back_when_holiday_mixes_with_empty_day(monkeypatch, tmp_path):
+    existing = [["2026-09-22", "000001", 100, 110, 90, 105, 100, 10500]]
+    frames = {"20260923": pd.DataFrame(), "20260924": _krx_ohlcv_frame(_ZERO_DAY)}
+
+    result, fallbacks, _ = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-24", frames, existing
+    )
+
+    assert result is True
+    assert fallbacks == 1
+
+
+def test_create_daily_prices_falls_back_when_stopped_after_holiday(monkeypatch, tmp_path):
+    # 휴장일 하나를 처리한 뒤 중단되면 뒤 평일을 보지 못했으므로 폴백 생략 대상이 아니다
+    monkeypatch.setattr(init_data.shared_state, "STOP_REQUESTED", False)
+    existing = [["2026-09-22", "000001", 100, 110, 90, 105, 100, 10500]]
+
+    def _stop(_date_str):
+        init_data.shared_state.STOP_REQUESTED = True
+
+    _, fallbacks, _ = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-24", {"20260923": _krx_ohlcv_frame(_ZERO_DAY)}, existing, on_fetch=_stop
+    )
+
+    assert fallbacks == 1
+
+
+def test_create_daily_prices_drops_stored_holiday_rows_on_next_save(monkeypatch, tmp_path):
+    existing = [
+        ["2026-09-21", "000001", 100, 110, 90, 100, 100, 10000],
+        ["2026-09-22", "000001", 0, 0, 0, 0, 0, 0],
+        ["2026-09-22", "000002", 0, 0, 0, 0, 0, 0],
+    ]
+    frames = {
+        "20260922": _krx_ohlcv_frame(_ZERO_DAY),
+        "20260923": _krx_ohlcv_frame({"000001": (100, 110, 90, 105), "000002": (50, 55, 45, 52)}),
+    }
+    fetched: list[str] = []
+
+    result, fallbacks, saved = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-23", frames, existing, on_fetch=fetched.append
+    )
+
+    assert result is True
+    assert fallbacks == 0
+    assert sorted(saved["date"].unique()) == ["2026-09-21", "2026-09-23"]
+    # 0원 날짜를 빼면 마지막 저장일이 09-21 로 돌아가 09-22 를 다시 조회한다
+    assert fetched == ["20260922", "20260923"]
+
+
+def test_create_daily_prices_handles_file_with_only_holiday_rows(monkeypatch, tmp_path):
+    existing = [["2026-09-22", "000001", 0, 0, 0, 0, 0, 0]]
+    fetched: list[str] = []
+    frames = {"20260923": _krx_ohlcv_frame({"000001": (100, 110, 90, 105)})}
+
+    result, fallbacks, saved = _run_daily_prices_with_fake_krx(
+        monkeypatch, tmp_path, "2026-09-23", frames, existing, on_fetch=fetched.append
+    )
+
+    assert result is True
+    assert fallbacks == 0
+    assert saved["date"].tolist() == ["2026-09-23"]
+    assert len(fetched) > 2  # 기존 자료가 없으므로 기본 90일 구간을 돈다
+
+
+def test_all_zero_close_dates_handles_missing_columns():
+    assert init_data._all_zero_close_dates(pd.DataFrame()) == []
+    assert init_data._all_zero_close_dates(pd.DataFrame({"date": ["2026-09-22"], "open": [0]})) == []
+    mixed = pd.DataFrame({"date": ["2026-09-22", "2026-09-22", "2026-09-23"], "close": [0, "x", 5]})
+    assert init_data._all_zero_close_dates(mixed) == ["2026-09-22"]
+
+
 def test_extract_yfinance_ohlcv_handles_price_first_multiindex():
     index = pd.DatetimeIndex(
         [datetime.datetime(2026, 3, 3), datetime.datetime(2026, 3, 4)], name="Date"
