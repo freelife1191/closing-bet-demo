@@ -90,7 +90,7 @@ def test_build_vcp_analysis_summary_text_counts_and_dates():
     text = signal_context.build_vcp_analysis_summary_text(payload, today=date(2026, 9, 22))
 
     assert text.startswith("분석 2건 (기준일 2026-05-05, 140일 경과), 매수 추천 1건\n")
-    assert "- **B**: 80점 (매수 추천)" in text
+    assert "- **B**: 80점 (Gemini 매수)" in text
     assert "**A**" not in text
 
 
@@ -104,9 +104,32 @@ def test_build_vcp_analysis_summary_text_omits_missing_score():
 
     text = signal_context.build_vcp_buy_recommendations_text(signals)
 
-    assert "- **KT** (매수 추천)" in text
+    assert "- **KT** (Gemini 매수)" in text
     assert "0점" not in text
-    assert "- **한화**: 55점 (매수 추천)" in text
+    assert "- **한화**: 55점 (Gemini 매수)" in text
+
+
+def test_build_vcp_analysis_summary_text_reads_gemini_and_gpt():
+    # Gemini·GPT 가 메인이다. 실패한 Gemini 기록(N/A)이 GPT BUY 를 가리지 않고, 판정이 갈리면 둘 다 적는다.
+    # Perplexity 칸은 보지 않는다 [CHAT-046]
+    payload = {
+        "signal_date": "2026-09-21",
+        "signals": [
+            {"name": "KT", "gemini_recommendation": {"action": "N/A", "reason": "분석 실패"},
+             "gpt_recommendation": {"action": "BUY", "reason": "gpt buy"}},
+            {"name": "한화", "score": 72, "gemini_recommendation": {"action": "HOLD", "reason": "g hold"},
+             "gpt_recommendation": {"action": "BUY", "reason": "gpt buy2"}},
+            {"name": "P", "gemini_recommendation": {"action": "HOLD", "reason": "r"},
+             "perplexity_recommendation": {"action": "BUY", "reason": "p"}},
+        ],
+    }
+
+    text = signal_context.build_vcp_analysis_summary_text(payload)
+
+    assert ", 매수 추천 2건\n" in text
+    assert "- **KT** (GPT 매수)\n  - AI 분석: gpt buy..." in text
+    assert "- **한화**: 72점 (Gemini 관망 · GPT 매수)\n  - AI 분석: gpt buy2..." in text
+    assert "**P**" not in text
 
 
 def test_build_vcp_analysis_summary_text_distinguishes_no_buy_from_no_analysis():

@@ -7,7 +7,7 @@
 import logging
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from services.kr_market_data_cache_service import load_json_payload_from_path
 
@@ -112,13 +112,26 @@ def load_vcp_ai_payload(data_dir: Path, logger: logging.Logger) -> Dict[str, Any
     return {}
 
 
-def _vcp_action(signal: Dict[str, Any]) -> Any:
-    gemini_rec = signal.get("gemini_recommendation", {})
-    action = gemini_rec.get("action") if isinstance(gemini_rec, dict) else None
-    perplexity_rec = signal.get("perplexity_recommendation", {})
-    if not action and isinstance(perplexity_rec, dict):
-        action = perplexity_rec.get("action")
-    return action
+_VCP_AI_FIELDS = (("Gemini", "gemini_recommendation"), ("GPT", "gpt_recommendation"))
+_VCP_ACTION_LABELS = {"BUY": "매수", "SELL": "매도", "HOLD": "관망"}
+
+
+def _vcp_verdicts(signal: Dict[str, Any]) -> List[Tuple[str, str, str]]:
+    """유효한 Gemini·GPT 판정을 (AI 이름, action, 사유) 로 모은다.
+
+    action 이 BUY/SELL/HOLD 가 아닌 실패 기록(N/A)은 뺀다. Perplexity 는 쓰지 않는다 [CHAT-046].
+    """
+    verdicts = []
+    for label, field in _VCP_AI_FIELDS:
+        rec = signal.get(field)
+        action = str(rec.get("action") or "").upper() if isinstance(rec, dict) else ""
+        if action in _VCP_ACTION_LABELS:
+            verdicts.append((label, action, str(rec.get("reason") or "")))
+    return verdicts
+
+
+def _is_vcp_buy(signal: Dict[str, Any]) -> bool:
+    return any(action == "BUY" for _, action, _ in _vcp_verdicts(signal))
 
 
 def build_vcp_analysis_summary_text(
@@ -131,7 +144,7 @@ def build_vcp_analysis_summary_text(
     signals = payload.get("signals", [])
     if not isinstance(signals, list) or not signals:
         return ""
-    buy_count = sum(1 for signal in signals if _vcp_action(signal) == "BUY")
+    buy_count = sum(1 for signal in signals if _is_vcp_buy(signal))
     as_of = payload.get("signal_date") or str(payload.get("generated_at") or "")[:10]
     header = f"분석 {len(signals)}건 ({_describe_as_of(as_of, today)}), 매수 추천 {buy_count}건"
     body = build_vcp_buy_recommendations_text(signals, limit=limit).rstrip("\n")
@@ -144,10 +157,11 @@ def build_vcp_buy_recommendations_text(signals: List[Dict[str, Any]], limit: int
     count = 0
 
     for signal in signals:
-        if _vcp_action(signal) != "BUY":
+        verdicts = _vcp_verdicts(signal)
+        # 사유는 BUY 를 낸 첫 판정의 것이다
+        reason = next((text for _, action, text in verdicts if action == "BUY"), None)
+        if reason is None:
             continue
-        gemini_rec = signal.get("gemini_recommendation", {})
-        perplexity_rec = signal.get("perplexity_recommendation", {})
 
         name = signal.get("name") or signal.get("stock_name") or "N/A"
         score = signal.get("score")
@@ -156,11 +170,10 @@ def build_vcp_buy_recommendations_text(signals: List[Dict[str, Any]], limit: int
         # 재분석이 캐시에 새로 넣은 행은 점수가 없다. 0점으로 적지 않는다 [CHAT-045]
         score_text = f": {score}점" if score is not None else ""
 
-        reason = gemini_rec.get("reason", "") if isinstance(gemini_rec, dict) else ""
-        if not reason and isinstance(perplexity_rec, dict):
-            reason = perplexity_rec.get("reason", "")
+        # 판정이 갈려도 LLM 이 알 수 있게 두 AI 판정을 모두 적는다
+        labels = " · ".join(f"{ai} {_VCP_ACTION_LABELS[action]}" for ai, action, _ in verdicts)
 
-        result_text += f"- **{name}**{score_text} (매수 추천)\n  - AI 분석: {reason[:120]}...\n"
+        result_text += f"- **{name}**{score_text} ({labels})\n  - AI 분석: {reason[:120]}...\n"
         count += 1
         if count >= limit:
             break
