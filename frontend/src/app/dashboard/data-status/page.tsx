@@ -6,6 +6,15 @@ import { fetchAPI } from '@/lib/api';
 import { useAdmin } from '@/hooks/useAdmin';
 import Tooltip from '@/app/components/Tooltip';
 
+// 이미 실행 중이면 /api/system/start-update 가 409 를 돌려준다(개별·전체 업데이트 공용)
+const DUPLICATE_UPDATE_MODAL = {
+  isOpen: true,
+  type: 'default' as const,
+  title: '업데이트 중복',
+  content: '⚠️ 이미 다른 업데이트가 진행 중입니다. 잠시 후 다시 시도해주세요.',
+  showCancel: false,
+};
+
 interface FileStatus {
   name: string;
   path: string;
@@ -283,13 +292,7 @@ export default function DataStatusPage() {
 
     } catch (e: any) {
       if (e.status === 409) {
-        setModal({
-          isOpen: true,
-          type: 'default',
-          title: '업데이트 중복',
-          content: '⚠️ 이미 다른 업데이트가 진행 중입니다. 잠시 후 다시 시도해주세요.',
-          showCancel: false
-        });
+        setModal(DUPLICATE_UPDATE_MODAL);
       } else {
         throw e;
       }
@@ -358,7 +361,7 @@ export default function DataStatusPage() {
 
     } catch (error: any) {
       console.error('Update All failed:', error);
-      setModal({
+      setModal(error.status === 409 ? DUPLICATE_UPDATE_MODAL : {
         isOpen: true,
         type: 'danger',
         title: '업데이트 오류',

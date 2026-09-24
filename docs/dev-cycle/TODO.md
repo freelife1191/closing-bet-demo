@@ -70,7 +70,23 @@
 - 카테고리: 인프라 | 티어: T2(프론트엔드·라우트 응답) | 근거: `[INFRA-099]` 설계 중 발견(2026-09-24), 코드로 확인
 - 원인: `app/routes/common_update_routes.py` 의 `api_start_update` 는 실행 중이면 400 "Already running" 을 돌려준다. `frontend/src/app/dashboard/data-status/page.tsx` 의 `performUpdate` 는 `e.status === 409` 일 때만 「업데이트 중복」 모달을 띄우고 나머지는 다시 던지며, `handleUpdate` 는 `error.message` 를 그대로 「업데이트 오류」로 띄운다. 그래서 중복 시작이 영어 문구의 오류로 보일 수 있다. 같은 역할의 `launch_background_update_job` 은 409 다
 - 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
-- [ ] 설계 승인(라우트를 409 로 맞출지, 화면이 400 도 중복으로 볼지)
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 23:28
+  | 범위: 설계 (a) — `/system/start-update` 중복 응답을 400 → 409(본문 유지, `[INFRA-099]` 거부 포함), `handleUpdateAll` 이 409 면 「업데이트 중복」 모달. 개별 업데이트의 409 외 오류 무표시는 범위 밖 별도 TODO
+  | 실제 대화 근거: 2026-09-24 사용자 「진행해」 응답, 현재 세션의 bounded 설계 제안
+- QA 시나리오: 실행 중 상태에서 개별·전체 업데이트를 누르면 둘 다 「업데이트 중복」 모달이 뜬다
+- 스킬: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-nextjs/`, `frontend/node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md`(클릭 핸들러 catch 분기만 바뀌는 순수 클라이언트 변경). vendor 스킬 해당 없음(폴링·effect·프롭 구조 불변)
+- [x] 실패 테스트: pytest 라우트 409, vitest 두 버튼 409 모달(`page.regression-INFRA-100.test.tsx`). 수정 전 라우트·전체 업데이트 2건 실패, 개별 업데이트 1건은 종전부터 409 를 처리해 통과(계약 고정용)
+- [x] 구현: `app/routes/common_update_routes.py`(400→409), `frontend/src/app/dashboard/data-status/page.tsx`(`handleUpdateAll` 409 분기, 중복 모달을 상수 `DUPLICATE_UPDATE_MODAL` 로 공용)
+- [x] 리뷰: ponytail-review 「Lean already. Ship.」(23:31), `closing-bet-reviewer` APPROVE·max low(23:33). L-1(INFRA-099 기록의 400) QA 문서에 관계 한 줄로 반영, L-2(409 뒤 폴링 없음) 범위 밖이라 `[INFRA-102]` 에 이월
+- [x] 정적 검증(23:30~23:32): `venv/bin/python -m pytest -q` 2770 passed·2 skipped exit 0, `npx vitest run` 99 files·686 passed exit 0, `npm run type-check` exit 0, `npm run lint` 0 errors·183 warnings exit 0(수정 파일 경고 13건, 수정 전과 같음)
+- [ ] 브라우저 QA(격리 사본, 상태 파일 `isRunning: true`)
+
+### [INFRA-102] 데이터 상태 화면의 개별 업데이트가 409 가 아닌 시작 오류를 화면에 보이지 않는다
+- 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-100]` 설계 중 발견(2026-09-24), 코드로 확인
+- 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `performUpdate` 는 409 가 아니면 다시 던지고, `handleUpdate` 는 `console.error` 만 남긴다. 403(세션 만료)·500 등으로 시작이 실패해도 버튼이 원래대로 돌아올 뿐 사유가 보이지 않는다. 전체 업데이트는 같은 경우 「업데이트 오류」 모달을 띄운다
+- 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
+- 함께 볼 것(`[INFRA-100]` 리뷰 L-2): 중복 시작이 409 로 거부되면 두 버튼 모두 폴링을 시작하지 않는다. 화면을 연 뒤 다른 세션이 시작한 실행이면 모달을 닫아도 진행 상태가 보이지 않는다(마운트 때 한 번만 확인). 409 분기에서 `startPolling()` 을 부를지 함께 정한다
+- [ ] 설계 승인(전체 업데이트와 같은 「업데이트 오류」 모달을 띄울지, 409 뒤 폴링)
 - [ ] 테스트, 리뷰, 브라우저 QA
 
 ### [INFRA-101] 대체된 옛 수동 업데이트가 새 실행의 항목 상태를 덮어쓴다

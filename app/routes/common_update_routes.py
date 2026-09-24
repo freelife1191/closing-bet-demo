@@ -139,8 +139,9 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
         except TypeError:
             current_status = ctx.load_update_status()
         # [INFRA-099] start_update 는 이 워커에서 중단된 앞 실행이 아직 돌면 False 를 돌려준다
+        # [INFRA-100] 데이터 상태 화면은 409 만 중복으로 띄운다(launch_background_update_job 과 같은 코드)
         if current_status.get("isRunning", False) or ctx.start_update(items_list) is False:
-            return jsonify({"status": "error", "message": "Already running"}), 400
+            return jsonify({"status": "error", "message": "Already running"}), 409
 
         thread = Thread(
             target=ctx.run_background_update,

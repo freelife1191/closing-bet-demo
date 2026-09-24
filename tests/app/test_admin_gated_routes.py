@@ -242,7 +242,8 @@ def test_start_update_route_rejects_when_start_update_refuses(monkeypatch):
         identity_email="admin@example.com",
     )
     res = client.post("/system/start-update", json={"items": ["Daily Prices"]})
-    assert res.status_code == 400
+    # [INFRA-100] 데이터 상태 화면은 409 만 「업데이트 중복」으로 띄운다
+    assert res.status_code == 409
     assert res.get_json() == {"status": "error", "message": "Already running"}
     assert threads == []
 
