@@ -89,6 +89,14 @@ def run_daily_closing_analysis(test_mode: bool = False) -> None:
         )
         return
 
+    # [INFRA-096] 이 리더 워커에 남은 중단 요청(파이프라인이 다른 워커에서 돌 때)이 무인 수집을 막지 않게 한다
+    # ponytail: 같은 워커에서 수동 업데이트 중단과 17:00 시작이 겹치면 수동 작업이 계속된다. 워커 간 중단 전달은 [INFRA-097]
+    import engine.shared as shared_state
+
+    if shared_state.STOP_REQUESTED:
+        logger.warning("[Scheduler] 남아 있던 사용자 중단 요청을 해제하고 정기 분석을 시작합니다.")
+        shared_state.STOP_REQUESTED = False
+
     set_scheduler_runtime_status(
         data_scheduling_running=True,
         vcp_scheduling_running=False,

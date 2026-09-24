@@ -125,6 +125,9 @@ def run_background_update_pipeline(
         else:
             logger.error(f"Background Update Failed: {e}")
     finally:
+        # [INFRA-096] 중단의 대상이던 작업이 끝났으므로 중단 요청도 끝낸다. 남겨 두면 스케줄러와 개별 실행이 멈춘다
+        # ponytail: 중단된 스레드가 끝나기 전에 새 업데이트를 시작해 다시 중단하면, 옛 스레드의 finally 가 새 중단을 지운다. [INFRA-097]
+        shared_state.STOP_REQUESTED = False
         finish_update()
 
 

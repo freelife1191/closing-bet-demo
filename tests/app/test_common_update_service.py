@@ -73,6 +73,8 @@ def test_run_background_update_pipeline_honors_stop_request(monkeypatch):
 
     assert calls["finish"] == 1
     assert statuses == []
+    # [INFRA-096] 중단된 작업이 끝나면 중단 요청도 끝난다
+    assert shared_state.STOP_REQUESTED is False
 
 
 def test_run_background_update_pipeline_ai_jongga_does_not_touch_ai_analysis_status(monkeypatch):

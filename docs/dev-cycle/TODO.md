@@ -67,10 +67,23 @@
 ## P2 — 대기
 
 ### [INFRA-096] 사용자 중단 플래그 `STOP_REQUESTED` 가 켜진 채로 남아 다음 스케줄러 실행의 수집을 막는다
-- 카테고리: 인프라 | 티어: T2 | 근거: `[INFRA-094]` `closing-bet-reviewer` N1(2026-09-24), 코드로 확인
+- 카테고리: 인프라 | 티어: T3(위험 경로 `services/scheduler_jobs.py`) | 근거: `[INFRA-094]` `closing-bet-reviewer` N1(2026-09-24), 코드로 확인
 - 원인: `STOP_REQUESTED` 는 `stop_update` 가 켜고 다음 `start_update` 만 끈다(`services/common_update_status_service.py:521`, `:559` 무렵). 17:00 스케줄러 경로는 이 값을 끄지 않으므로, 사용자가 수동 업데이트를 중단한 뒤에는 스케줄러의 수급·가격 수집 루프가 첫 줄에서 빠져나온다
 - 확인 수준: 코드로만 확인. 운영에서 중단 뒤 스케줄러가 돈 사례는 확인하지 않았다
-- [ ] 설계 승인(스케줄러 체인 시작에서 끌지, 중단이 끝난 시점에 끌지)
+- 영향 범위(설계 때 확인): 이 값은 가격·수급 수집 루프 말고도 Phase 파이프라인(`engine/phases_base.py:30`, 종가베팅 스크리닝)과 VCP AI 분석(`engine/kr_ai_analyzer.py:165`)이 본다. `start_update` 를 거치지 않는 관리자 개별 실행(VCP 백그라운드·종가베팅 실행·수급 새로고침)도 같이 막힌다
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 22:29 | 범위: (1) `run_background_update_pipeline` 의 `finally` 에서 `finish_update()` 와 함께 `STOP_REQUESTED` 를 끈다. (2) `run_daily_closing_analysis` 시작에서 켜져 있으면 경고 로그와 함께 끈다(무인 경로, 다른 워커에 닿은 중단 요청 대비). `run_jongga_v2_analysis` 에는 넣지 않는다(등록된 잡이 아니고 체인 안에서 불림). 수동 업데이트 중단과 17:00 체인 시작이 겹치면 수동 작업이 계속될 수 있음은 `ponytail:` 주석으로 표시. 워커 사이 중단 전달은 `[INFRA-097]` 로 분리 | 근거: bounded 설계 제시 뒤 사용자 「진행해」
+- [x] 계획 `docs/superpowers/plans/2026-09-24-infra-096-clear-stale-stop-flag.md` 와 계획 검토(`oh-my-claudecode:critic`): ACCEPT-WITH-RESERVATIONS. 수정 전 사본에서 두 테스트 실패(`2 failed, 20 passed`) 확인, 빠진 진입점 없음 | 지적 1 중 Goal 이 비리더 워커 잔여 결함까지 막는 것처럼 적힘 → Goal·주석을 리더 워커로 좁히고 `[INFRA-097]` 원인 줄에 이관 | 지적 2 저 옛 스레드 finally 가 새 중단을 지우는 경합 → `ponytail:` 주석과 `[INFRA-097]` 에 기록 | 지적 3 저 finish 예외·휴장일 갈래 테스트 없음 → 줄 순서와 조기 반환 위치로 정해지는 구조라 미반영 | 지적 4 정보 효과 없는 `is_market_open` 패치 → 삭제
+- [x] 테스트(파이프라인 중단 뒤 플래그 꺼짐, 켜진 플래그로 시작한 스케줄러 체인의 가격 수집기가 꺼진 값을 봄) RED(`2 failed, 20 passed`)→GREEN(`22 passed`)
+- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` Lean already(스케줄러 `if` 는 경고 로그 때문에 유지) · `closing-bet-reviewer` APPROVE(max low): 계획 코드 블록이 critic 반영 전 문구 → 계획에 차이 한 줄 기록 | 잠금 밖 대입 → 순서 역전은 이미 기록된 한계, 수정 불필요 · `/review`(T3, `oh-my-claudecode:code-reviewer`) APPROVE: 중간(문서) 리더 워커에도 17:00 전까지 값이 남음 → `[INFRA-097]` 원인 줄 정정 | 낮음 계획·테스트 불일치 → 위 기록으로 해소 | 낮음 import 가 try 밖 → 운영에서 실패할 수 없어 미반영. 변이 검사: 두 해제 줄을 각각 `pass` 로 바꾸면 해당 테스트 FAIL
+- [x] pytest 전체 2755 passed, 2 skipped(exit 0)
+- [ ] 격리 사본 하네스 QA(`docs/dev-cycle/qa/INFRA-096.md`)
+
+### [INFRA-097] 관리자 중단 요청이 파이프라인이 도는 다른 gunicorn 워커에 전달되지 않는다
+- 카테고리: 인프라 | 티어: T2 | 근거: `[INFRA-096]` 설계 중 발견(2026-09-24), 코드로 확인
+- 원인: `STOP_REQUESTED` 는 프로세스마다 따로 있는 모듈 전역(`engine/shared.py`)이다. 수동 업데이트는 `start` 요청을 받은 워커의 스레드에서 돌고, `stop-update` 요청이 다른 워커에 닿으면 그 워커의 값만 켜진다. 상태 파일은 공유되어 화면은 중단으로 보이지만 실제 작업은 계속 돈다. 중단 요청을 받은 워커에는 값이 켜진 채로 남아 그 워커의 관리자 개별 실행(VCP 백그라운드·종가베팅)을 막는다. `[INFRA-096]` 뒤로도 비리더 워커는 다음 `start_update` 까지, 리더 워커도 다음 17:00 체인 시작까지 남는다. 17:00 체인이 도는 중에 리더에 닿은 중단 요청은 체인을 멈추고, 체인에는 끝날 때 끄는 곳이 없어 다음 날 17:00 까지 남는다(`[INFRA-096]` `/review` 지적)
+- 관련 기존 결함(`[INFRA-096]` critic 지적 2): `stop_update` 가 `isRunning` 을 먼저 내리므로 중단된 스레드가 끝나기 전에 새 업데이트를 시작할 수 있다. 이때 새 업데이트를 다시 중단하면 옛 스레드의 `finally` 가 새 중단을 지우고, 옛 스레드의 `finish_update` 가 새 업데이트의 상태를 끝낸다
+- 확인 수준: 코드로만 확인. 운영에서 중단이 듣지 않은 사례는 확인하지 않았다
+- [ ] 설계 승인(공유 상태 파일·SQLite 로 중단 요청을 전달할지)
 - [ ] 테스트, 리뷰와 pytest 전체
 
 ### [INFRA-095] 수급 수집이 결측을 0 으로 저장한다(pykrx 한쪽 프레임 누락, Toss 빈 필드)

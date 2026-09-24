@@ -370,3 +370,29 @@ def test_scheduler_path_resolves_init_data_through_scripts_package(monkeypatch):
 
     assert scheduler_jobs.run_jongga_v2_analysis(test_mode=False) is True
     assert calls == {"analyze": 1, "notify": 1}
+
+
+def test_run_daily_closing_analysis_clears_stale_stop_request(monkeypatch):
+    # [INFRA-096] 앞선 수동 업데이트 중단이 남긴 플래그가 17:00 수집을 막지 않는다
+    import engine.shared as shared_state
+
+    monkeypatch.setattr(scheduler_jobs, "set_scheduler_runtime_status", lambda **_kwargs: None)
+    monkeypatch.setattr(shared_state, "STOP_REQUESTED", True)
+    seen: list[bool] = []
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "_load_init_data_functions",
+        lambda: {
+            "create_daily_prices": lambda: seen.append(shared_state.STOP_REQUESTED) or True,
+            "create_institutional_trend": lambda: True,
+            "create_signals_log": lambda run_ai: True,
+            "send_jongga_notification": lambda: None,
+        },
+    )
+    monkeypatch.setattr(
+        scheduler_jobs, "run_jongga_v2_analysis", lambda test_mode=False, send_notification=True: True
+    )
+
+    scheduler_jobs.run_daily_closing_analysis(test_mode=True)
+
+    assert seen == [False]
