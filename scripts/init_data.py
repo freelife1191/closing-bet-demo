@@ -391,6 +391,7 @@ def _collect_toss_trend_rows_for_ticker(ticker: str, expected_latest_dt: datetim
                 "ticker": str(ticker).zfill(6),
                 "foreign_buy": int(foreign_volume * close),
                 "inst_buy": int(institution_volume * close),
+                "source": "toss",
             }
         )
 
@@ -1143,7 +1144,8 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
     Args:
         target_date: 기준 날짜
         force: 강제 업데이트 여부
-        lookback_days: 강제 업데이트 시 재수집할 기간 (기본: 7일)
+        lookback_days: 강제 업데이트 시 재수집할 기간 (기본: 7일). force 와 무관하게 Toss 근사·부분 날짜를
+            다시 받는 창으로도 쓴다([INFRA-094])
     """
     log("수급 데이터 수집 중 (pykrx 실제 데이터)...", "DEBUG")
     try:
@@ -1214,6 +1216,21 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             except Exception as e:
                 log(f"기존 수급 데이터 로드 실패 (저장 때 다시 읽지 못하면 기존 파일을 두고 중단): {e}", "WARNING")
 
+        # [INFRA-094] 창 안의 Toss 근사 날짜와 종목이 모자란 날짜는 pykrx 로 다시 받는다
+        # ponytail: lookback_days 창 밖의 근사·부분 날짜는 남는다. 먼 과거 복구가 필요하면 재수집 범위를 넓힌다.
+        # pykrx 가 주지 않는 종목(ETF 등)의 Toss 행도 창을 벗어날 때까지 그 날짜를 매 실행 다시 묻게 한다(날짜당 호출 2회)
+        refetch_dates = set()
+        if not existing_df.empty and 'date' in existing_df.columns:
+            window_start = (end_date_obj - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
+            in_window = existing_df[existing_df['date'].between(window_start, end_date_obj.strftime('%Y-%m-%d'))]
+            counts = in_window.groupby('date').size()
+            refetch_dates = set(counts[counts < len(tickers_set) * 0.8].index)
+            if 'source' in in_window.columns:
+                refetch_dates |= set(in_window.loc[in_window['source'] == 'toss', 'date'])
+        if refetch_dates:
+            log(f"수급 데이터: 근사·부분 날짜 {len(refetch_dates)}개를 다시 수집합니다: {sorted(refetch_dates)}", "WARNING")
+            start_date_obj = min(start_date_obj, datetime.strptime(min(refetch_dates)[:10], '%Y-%m-%d'))
+
         start_date = start_date_obj.strftime('%Y%m%d')
         
         # 시작일이 종료일보다 미래인 경우 (그리고 미싱 티커 없는 경우) 처리
@@ -1245,7 +1262,7 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             
             # [Optimization] 이미 수집된 데이터는 건너뛰기 (과거 데이터인 경우만)
             if not existing_df.empty and 'date' in existing_df.columns:
-                if cur_date_fmt in existing_df['date'].values:
+                if cur_date_fmt in existing_df['date'].values and cur_date_fmt not in refetch_dates:
                     # 오늘이 아니면 Skip
                     if dt.date() < datetime.now().date():
                          log(f"  -> {cur_date_fmt} 수급 데이터 존재 (Skip)", "DEBUG")
@@ -1270,6 +1287,9 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
                 
                 # 인덱스(티커)를 set으로 확보
                 available_tickers = set(df_foreign.index) | set(df_inst.index)
+                if cur_date_fmt in refetch_dates:
+                    # [INFRA-094] 다시 받는 날짜는 두 프레임에 모두 있는 종목만 덮는다. 한쪽 누락의 0 이 기존 값을 지우지 않게
+                    available_tickers = set(df_foreign.index) & set(df_inst.index)
                 target_intersect = available_tickers & tickers_set
                 
                 for ticker in target_intersect:
@@ -1308,47 +1328,56 @@ def create_institutional_trend(target_date=None, force=False, lookback_days=7):
             log("수급 데이터 병합 및 저장 중...", "DEBUG")
             final_df = _merge_save_csv(pd.DataFrame(new_data_list), file_path)
             log(f"수급 데이터 업데이트 완료: 총 {len(final_df)}행 (신규 {len(new_data_list)}행)", "DEBUG")
-            return True
-        else:
-            expected_latest_dt = end_date_obj
-            latest_existing_dt = None
+            # [INFRA-094] 과거 날짜만 다시 받고 최신일이 비었으면 아래 Toss 백필·stale 판정으로 넘긴다
+            latest_saved_dt = pd.to_datetime(final_df["date"], errors="coerce").max()
+            if pd.notna(latest_saved_dt) and latest_saved_dt.date() >= end_date_obj.date():
+                return True
+            existing_df = final_df
 
-            if not existing_df.empty and "date" in existing_df.columns:
-                latest_existing_dt = pd.to_datetime(
-                    existing_df["date"], errors="coerce"
-                ).max()
-                if pd.isna(latest_existing_dt):
-                    latest_existing_dt = None
+        expected_latest_dt = end_date_obj
+        latest_existing_dt = None
 
-            if latest_existing_dt is None:
-                if _backfill_institutional_trend_from_toss(
-                    tickers_set=tickers_set,
-                    file_path=file_path,
-                    expected_latest_dt=expected_latest_dt,
-                ):
-                    return True
-                log(
-                    "수급 데이터: 신규 수집 데이터가 없고 기존 데이터의 최신 날짜도 확인할 수 없습니다.",
-                    "ERROR",
-                )
-                return False
+        if not existing_df.empty and "date" in existing_df.columns:
+            latest_existing_dt = pd.to_datetime(
+                existing_df["date"], errors="coerce"
+            ).max()
+            if pd.isna(latest_existing_dt):
+                latest_existing_dt = None
 
-            if latest_existing_dt.date() < expected_latest_dt.date():
-                if _backfill_institutional_trend_from_toss(
-                    tickers_set=tickers_set,
-                    file_path=file_path,
-                    expected_latest_dt=expected_latest_dt,
-                ):
-                    return True
-                log(
-                    f"수급 데이터 stale 감지: latest={latest_existing_dt.strftime('%Y-%m-%d')}, "
-                    f"expected>={expected_latest_dt.strftime('%Y-%m-%d')}",
-                    "ERROR",
-                )
-                return False
+        needs_backfill = latest_existing_dt is None or latest_existing_dt.date() < expected_latest_dt.date()
+        if needs_backfill and shared_state.STOP_REQUESTED:
+            log("⛔️ 사용자 요청으로 중단되어 수급 Toss 백필을 건너뜁니다", "WARNING")
+            return False
 
-            log("수급 데이터: 신규 수집된 데이터가 없습니다.", "SUCCESS")
-            return True
+        if latest_existing_dt is None:
+            if _backfill_institutional_trend_from_toss(
+                tickers_set=tickers_set,
+                file_path=file_path,
+                expected_latest_dt=expected_latest_dt,
+            ):
+                return True
+            log(
+                "수급 데이터: 신규 수집 데이터가 없고 기존 데이터의 최신 날짜도 확인할 수 없습니다.",
+                "ERROR",
+            )
+            return False
+
+        if latest_existing_dt.date() < expected_latest_dt.date():
+            if _backfill_institutional_trend_from_toss(
+                tickers_set=tickers_set,
+                file_path=file_path,
+                expected_latest_dt=expected_latest_dt,
+            ):
+                return True
+            log(
+                f"수급 데이터 stale 감지: latest={latest_existing_dt.strftime('%Y-%m-%d')}, "
+                f"expected>={expected_latest_dt.strftime('%Y-%m-%d')}",
+                "ERROR",
+            )
+            return False
+
+        log("수급 데이터: 신규 수집된 데이터가 없습니다.", "SUCCESS")
+        return True
 
     except Exception as e:
         log(f"수급 데이터 수집 중 치명적 오류: {e}", "ERROR")

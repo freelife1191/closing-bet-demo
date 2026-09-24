@@ -1055,12 +1055,14 @@ def test_create_institutional_trend_uses_toss_backfill_when_pykrx_is_empty(monke
             "ticker": "005930",
             "foreign_buy": -1800,
             "inst_buy": 3600,
+            "source": "toss",
         },
         {
             "date": "2026-03-06",
             "ticker": "005930",
             "foreign_buy": 10000,
             "inst_buy": 5000,
+            "source": "toss",
         },
     ]
 
@@ -1176,6 +1178,238 @@ def test_toss_trend_backfill_does_not_overwrite_existing_rows(monkeypatch, tmp_p
     assert values[("2026-09-21", "000001")] == (1, 2)
     assert values[("2026-09-22", "000001")] == (30, 40)
     assert values[("2026-09-18", "000001")] == (7000, 9000)
+
+
+def test_create_institutional_trend_refetches_approx_and_partial_dates_in_window(monkeypatch, tmp_path):
+    # 창 안의 Toss 근사 날짜와 종목이 모자란 날짜는 pykrx 로 다시 받고, 나머지는 Skip 한다([INFRA-094])
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{"ticker": "000001"}]).to_csv(data_dir / "korean_stocks_list.csv", index=False)
+    file_path = data_dir / "all_institutional_trend_data.csv"
+    rows = [
+        ("2026-09-14", "000001", 1, 1, None),  # 창 밖 부분 날짜
+        ("2026-09-17", "000001", 3, 4, None),  # 창 안 부분 날짜
+        ("2026-09-18", "000001", 1, 2, None),
+        ("2026-09-18", "069500", 1, 2, None),
+        ("2026-09-21", "000001", 7000, 9000, "toss"),
+        ("2026-09-21", "069500", 7000, 9000, "toss"),
+        ("2026-09-22", "000001", 5, 6, None),
+        ("2026-09-22", "069500", 5, 6, None),
+    ]
+    pd.DataFrame(rows, columns=["date", "ticker", "foreign_buy", "inst_buy", "source"]).to_csv(
+        file_path, index=False, encoding="utf-8-sig"
+    )
+    called = []
+
+    class _Stock:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(start, _end, _market, investor):
+            if investor == "외국인":
+                called.append(start)
+            value = 100 if investor == "외국인" else 200
+            return pd.DataFrame({"순매수거래대금": [value, value]}, index=["000001", "069500"])
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _Stock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(init_data, "shared_state", types.SimpleNamespace(STOP_REQUESTED=False))
+    monkeypatch.setattr(init_data.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: ("20260922", datetime.datetime(2026, 9, 22)),
+    )
+
+    result = init_data.create_institutional_trend(target_date="2026-09-22")
+
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    values = {
+        (d, t): (f, i, s)
+        for d, t, f, i, s in zip(
+            saved["date"], saved["ticker"], saved["foreign_buy"], saved["inst_buy"], saved["source"].fillna("")
+        )
+    }
+    assert result is True
+    assert called == ["20260917", "20260921"]
+    assert values[("2026-09-14", "000001")] == (1, 1, "")
+    assert values[("2026-09-17", "000001")] == (100, 200, "")
+    assert values[("2026-09-17", "069500")] == (100, 200, "")
+    assert values[("2026-09-18", "000001")] == (1, 2, "")
+    assert values[("2026-09-21", "000001")] == (100, 200, "")
+    assert values[("2026-09-22", "069500")] == (5, 6, "")
+
+
+def test_create_institutional_trend_backfills_latest_date_after_refetching_past_dates(monkeypatch, tmp_path):
+    # 과거 근사 날짜는 pykrx 로 받았어도 최신일이 비었으면 Toss 백필로 채운다([INFRA-094] critic 지적 1)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{"ticker": "000001"}]).to_csv(data_dir / "korean_stocks_list.csv", index=False)
+    file_path = data_dir / "all_institutional_trend_data.csv"
+    pd.DataFrame(
+        [("2026-09-22", t, 7000, 9000, "toss") for t in ("000001", "069500")],
+        columns=["date", "ticker", "foreign_buy", "inst_buy", "source"],
+    ).to_csv(file_path, index=False, encoding="utf-8-sig")
+
+    class _Stock:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(start, _end, _market, _investor):
+            if start == "20260923":
+                return pd.DataFrame()
+            return pd.DataFrame({"순매수거래대금": [100, 100]}, index=["000001", "069500"])
+
+    class _Toss:
+        def get_investor_trend(self, code, days=5):
+            return {
+                "details": [
+                    {"baseDate": d, "close": 1000, "netForeignerBuyVolume": 7, "netInstitutionBuyVolume": 9}
+                    for d in ("2026-09-23", "2026-09-22")
+                ]
+            }
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _Stock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    fake_toss = types.ModuleType("engine.toss_collector")
+    fake_toss.TossCollector = _Toss
+    monkeypatch.setitem(sys.modules, "engine.toss_collector", fake_toss)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(init_data, "shared_state", types.SimpleNamespace(STOP_REQUESTED=False))
+    monkeypatch.setattr(init_data.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: ("20260923", datetime.datetime(2026, 9, 23)),
+    )
+
+    result = init_data.create_institutional_trend(target_date="2026-09-23")
+
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    values = {
+        (d, t): (f, i, s)
+        for d, t, f, i, s in zip(
+            saved["date"], saved["ticker"], saved["foreign_buy"], saved["inst_buy"], saved["source"].fillna("")
+        )
+    }
+    assert result is True
+    assert values[("2026-09-22", "000001")] == (100, 100, "")
+    assert values[("2026-09-23", "000001")] == (7000, 9000, "toss")
+
+
+def test_create_institutional_trend_refetch_keeps_rows_missing_from_one_frame(monkeypatch, tmp_path):
+    # 다시 받는 날짜에서 한쪽 프레임에 없는 종목은 0 으로 덮지 않고 기존 값을 둔다([INFRA-094] 심층 리뷰 M1)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{"ticker": "000001"}]).to_csv(data_dir / "korean_stocks_list.csv", index=False)
+    file_path = data_dir / "all_institutional_trend_data.csv"
+    pd.DataFrame(
+        [("2026-09-22", t, 7000, 9000, "toss") for t in ("000001", "069500")],
+        columns=["date", "ticker", "foreign_buy", "inst_buy", "source"],
+    ).to_csv(file_path, index=False, encoding="utf-8-sig")
+
+    class _Stock:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(_start, _end, _market, investor):
+            if investor == "외국인":
+                return pd.DataFrame({"순매수거래대금": [100, 100]}, index=["000001", "069500"])
+            return pd.DataFrame({"순매수거래대금": [200]}, index=["000001"])
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = _Stock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(init_data, "shared_state", types.SimpleNamespace(STOP_REQUESTED=False))
+    monkeypatch.setattr(init_data.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: ("20260922", datetime.datetime(2026, 9, 22)),
+    )
+
+    result = init_data.create_institutional_trend(target_date="2026-09-22")
+
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    values = {
+        t: (f, i, s)
+        for t, f, i, s in zip(saved["ticker"], saved["foreign_buy"], saved["inst_buy"], saved["source"].fillna(""))
+    }
+    assert result is True
+    assert values["000001"] == (100, 200, "")
+    assert values["069500"] == (7000, 9000, "toss")
+
+
+def _run_trend_refetch_case(monkeypatch, tmp_path, rows, stock, toss_calls, expected_date="2026-09-22"):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{"ticker": "000001"}]).to_csv(data_dir / "korean_stocks_list.csv", index=False)
+    file_path = data_dir / "all_institutional_trend_data.csv"
+    pd.DataFrame(rows, columns=["date", "ticker", "foreign_buy", "inst_buy"]).to_csv(
+        file_path, index=False, encoding="utf-8-sig"
+    )
+
+    class _TossMustNotRun:
+        def get_investor_trend(self, code, days=5):
+            toss_calls.append(code)  # 백필 쪽 예외 처리가 삼키므로 호출을 기록해 단언한다
+            return {"details": []}
+
+    fake_pykrx = types.ModuleType("pykrx")
+    fake_pykrx.stock = stock
+    monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
+    fake_toss = types.ModuleType("engine.toss_collector")
+    fake_toss.TossCollector = _TossMustNotRun
+    monkeypatch.setitem(sys.modules, "engine.toss_collector", fake_toss)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(init_data.time, "sleep", lambda _s: None)
+    expected = datetime.datetime.strptime(expected_date, "%Y-%m-%d")
+    monkeypatch.setattr(
+        init_data,
+        "get_last_trading_date",
+        lambda reference_date=None: (expected.strftime("%Y%m%d"), expected),
+    )
+    return file_path, init_data.create_institutional_trend(target_date=expected_date)
+
+
+def test_create_institutional_trend_refetch_without_source_column_keeps_file_on_empty_response(monkeypatch, tmp_path):
+    # source 열이 없는 기존 파일도 행 수로 부분 날짜를 고르고, pykrx 가 또 비면 파일을 그대로 둔다([INFRA-094])
+    called = []
+
+    class _EmptyStock:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(start, _end, _market, _investor):
+            called.append(start)
+            return pd.DataFrame()
+
+    monkeypatch.setattr(init_data, "shared_state", types.SimpleNamespace(STOP_REQUESTED=False))
+    rows = [("2026-09-17", "000001", 3, 4)] + [("2026-09-22", t, 5, 6) for t in ("000001", "069500")]
+    toss_calls = []
+    file_path, result = _run_trend_refetch_case(monkeypatch, tmp_path, rows, _EmptyStock, toss_calls)
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    assert result is True
+    assert "20260917" in called
+    assert sorted(zip(saved["date"], saved["ticker"], saved["foreign_buy"], saved["inst_buy"])) == sorted(rows)
+    assert "source" not in saved.columns
+    assert toss_calls == []
+
+
+def test_create_institutional_trend_stop_request_skips_toss_backfill(monkeypatch, tmp_path):
+    # 사용자 중단 뒤에는 최신일이 비어도 전 종목 Toss 백필을 시작하지 않고 False 로 끝난다([INFRA-094] 리뷰 지적 2)
+    state = types.SimpleNamespace(STOP_REQUESTED=False)
+    monkeypatch.setattr(init_data, "shared_state", state)
+
+    class _StopAfterFirstDay:
+        @staticmethod
+        def get_market_net_purchases_of_equities_by_ticker(_start, _end, _market, _investor):
+            state.STOP_REQUESTED = True
+            return pd.DataFrame({"순매수거래대금": [100, 100]}, index=["000001", "069500"])
+
+    rows = [("2026-09-18", t, 1, 2) for t in ("000001", "069500")]
+    toss_calls = []
+    file_path, result = _run_trend_refetch_case(monkeypatch, tmp_path, rows, _StopAfterFirstDay, toss_calls)
+
+    saved = pd.read_csv(file_path, dtype={"ticker": str, "date": str})
+    assert result is False
+    assert saved["date"].max() == "2026-09-21"
+    assert toss_calls == []
 
 
 def test_create_institutional_trend_keeps_existing_file_when_save_fails(monkeypatch, tmp_path):
