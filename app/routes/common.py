@@ -94,7 +94,6 @@ def stop_update():
     stop_update_impl(
         update_lock=update_lock,
         update_status_file=UPDATE_STATUS_FILE,
-        shared_state=shared_state,
         logger=logger,
     )
 
@@ -118,6 +117,7 @@ def run_background_update(target_date, selected_items=None, force=False):
         finish_update=finish_update,
         shared_state=shared_state,
         logger=logger,
+        load_update_status=load_update_status,
     )
 
 

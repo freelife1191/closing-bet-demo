@@ -8,6 +8,7 @@ Common Update Service
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Callable
 
 import pandas as pd
@@ -32,6 +33,38 @@ DEFAULT_UPDATE_ITEMS = [
     "AI Jongga V2",
 ]
 
+STOP_WATCH_INTERVAL_SECONDS = 1.0
+
+
+def _read_start_time(load_update_status: Callable[[], dict] | None, logger: Any) -> Any:
+    """현재 실행의 startTime. 읽지 못하면 None 이며, 호출자는 종전 동작(감시 없음, 항상 finish)으로 돌아간다."""
+    if load_update_status is None:
+        return None
+    try:
+        return load_update_status().get("startTime")
+    except Exception as error:
+        logger.warning(f"Update status read failed: {error}")
+        return None
+
+
+def _watch_stop_request(
+    load_update_status: Callable[[], dict],
+    start_time: Any,
+    shared_state: Any,
+    done: threading.Event,
+    logger: Any,
+) -> None:
+    """[INFRA-097] 다른 워커가 공유 상태에 남긴 이 실행의 중단 요청을 이 워커의 플래그로 옮긴다."""
+    while not done.wait(STOP_WATCH_INTERVAL_SECONDS):
+        try:
+            status = load_update_status()
+        except Exception as error:
+            logger.warning(f"Stop request watch failed: {error}")
+            continue
+        # 매번 다시 켜므로 같은 워커의 옛 실행 finally 가 지운 값도 다음 주기에 되살아난다
+        if status.get("startTime") == start_time and status.get("stopRequested"):
+            shared_state.STOP_REQUESTED = True
+
 
 def run_background_update_pipeline(
     *,
@@ -42,12 +75,23 @@ def run_background_update_pipeline(
     finish_update: Callable[[], None],
     shared_state: Any,
     logger: Any,
+    load_update_status: Callable[[], dict] | None = None,
 ) -> None:
     """백그라운드에서 순차적으로 데이터 업데이트 실행."""
     items = selected_items or list(DEFAULT_UPDATE_ITEMS)
     vcp_df: pd.DataFrame | None = None
     institutional_trend_ok = True
     vcp_step_blocked = False
+    watch_done = threading.Event()
+    watcher: threading.Thread | None = None
+    start_time = _read_start_time(load_update_status, logger)
+    if start_time is not None:
+        watcher = threading.Thread(
+            target=_watch_stop_request,
+            args=(load_update_status, start_time, shared_state, watch_done, logger),
+            daemon=True,
+        )
+        watcher.start()
 
     try:
         from scripts import init_data
@@ -125,10 +169,16 @@ def run_background_update_pipeline(
         else:
             logger.error(f"Background Update Failed: {e}")
     finally:
+        watch_done.set()
+        if watcher is not None:
+            watcher.join()  # 읽는 중이던 감시가 아래 해제 뒤에 값을 다시 켜지 않게 한다
         # [INFRA-096] 중단의 대상이던 작업이 끝났으므로 중단 요청도 끝낸다. 남겨 두면 스케줄러와 개별 실행이 멈춘다
-        # ponytail: 중단된 스레드가 끝나기 전에 새 업데이트를 시작해 다시 중단하면, 옛 스레드의 finally 가 새 중단을 지운다. [INFRA-097]
+        # 같은 워커의 새 실행이 이미 중단됐다면 그 실행의 감시가 1초 안에 다시 켠다
         shared_state.STOP_REQUESTED = False
-        finish_update()
+        # [INFRA-097] 중단된 사이 새 실행이 시작됐으면 그 상태를 끝내는 것은 새 실행의 몫이다
+        # ponytail: 새 실행이 같은 워커에서 시작되면 start_update 가 플래그를 꺼 옛 실행도 다시 돈다. 한 프로세스에 플래그가 하나라서다
+        if start_time is None or _read_start_time(load_update_status, logger) in (None, start_time):
+            finish_update()
 
 
 __all__ = ["DEFAULT_UPDATE_ITEMS", "run_background_update_pipeline"]

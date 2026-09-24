@@ -71,7 +71,18 @@
 - 원인: `STOP_REQUESTED` 는 프로세스마다 따로 있는 모듈 전역(`engine/shared.py`)이다. 수동 업데이트는 `start` 요청을 받은 워커의 스레드에서 돌고, `stop-update` 요청이 다른 워커에 닿으면 그 워커의 값만 켜진다. 상태 파일은 공유되어 화면은 중단으로 보이지만 실제 작업은 계속 돈다. 중단 요청을 받은 워커에는 값이 켜진 채로 남아 그 워커의 관리자 개별 실행(VCP 백그라운드·종가베팅)을 막는다. `[INFRA-096]` 뒤로도 비리더 워커는 다음 `start_update` 까지, 리더 워커도 다음 17:00 체인 시작까지 남는다. 17:00 체인이 도는 중에 리더에 닿은 중단 요청은 체인을 멈추고, 체인에는 끝날 때 끄는 곳이 없어 다음 날 17:00 까지 남는다(`[INFRA-096]` `/review` 지적)
 - 관련 기존 결함(`[INFRA-096]` critic 지적 2): `stop_update` 가 `isRunning` 을 먼저 내리므로 중단된 스레드가 끝나기 전에 새 업데이트를 시작할 수 있다. 이때 새 업데이트를 다시 중단하면 옛 스레드의 `finally` 가 새 중단을 지우고, 옛 스레드의 `finish_update` 가 새 업데이트의 상태를 끝낸다
 - 확인 수준: 코드로만 확인. 운영에서 중단이 듣지 않은 사례는 확인하지 않았다
-- [ ] 설계 승인(공유 상태 파일·SQLite 로 중단 요청을 전달할지)
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 22:48 | 범위: (1) `stop_update` 는 상태 파일에 `stopRequested: true` 를 기록하고 받은 워커의 메모리 플래그는 켜지 않는다. `start_update` 는 `stopRequested` 를 false 로 기록한다. (2) `run_background_update_pipeline` 은 시작 때 자기 `startTime` 을 읽고, 감시 스레드가 1초마다 상태를 읽어 같은 `startTime` 에 `stopRequested` 가 켜져 있으면 이 워커의 플래그를 켠다. 읽는 쪽은 고치지 않는다. (3) `finally` 는 상태의 `startTime` 이 자기 것과 다르면 플래그 해제와 `finish_update` 를 건너뛴다. 중단 버튼은 수동 업데이트만 멈추며 반영은 최대 1초 늦다. 프론트엔드 변경 없음 | 근거: bounded 설계 제시 뒤 사용자 「진행해」
+- 설계와 달라진 점: 리뷰 지적 1 로 (3) 을 좁혔다. `finally` 는 플래그를 조건 없이 끄고 `startTime` 이 다를 때는 `finish_update` 만 건너뛴다. `startTime` 을 읽지 못하면 종전 동작(감시 없음, 항상 finish)이다(지적 3·4). 승인 목적(다른 워커로 중단 전달, 옛 실행이 새 실행을 끝내지 않음) 안의 수정이라 새 승인을 받지 않았고 완료 보고에서 알린다
+- [x] 테스트(다른 워커 중단 요청이 감시로 플래그를 켬, 받은 워커 플래그 꺼짐, 옛 실행이 새 실행 상태를 끝내지 않음) RED(`3 failed, 5 passed`)→GREEN. 변이 검사: 감시의 플래그 설정 줄, `finally` 의 `startTime` 가드, 리뷰 반영 뒤의 무조건 해제와 `start_time` None 갈래를 각각 되돌리면 해당 테스트 FAIL
+- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` net -10: 감시 스레드 `kwargs=dict(...)` → `args=` 반영 | `stop_update` 의 쓰지 않는 `shared_state` 인자 삭제 반영 · `closing-bet-reviewer` CHANGES_REQUIRED(max medium): 지적 1(medium) 옛 실행이 다른 워커의 새 실행에 밀리면 옛 워커 플래그가 남음 → 플래그 해제는 조건 없이 하고 `startTime` 분기로는 `finish_update` 만 가림(승인 범위 (3) 문구를 좁힘, 같은 워커의 새 실행은 그 감시가 1초 안에 다시 켬) | 지적 2 `watch_done.set()` 뒤 읽는 중이던 감시가 값을 다시 켤 수 있음 → `join` 반영 | 지적 3·4 `startTime` 을 못 읽거나 읽기 예외면 finish 를 놓쳐 `isRunning` 고착 → `_read_start_time` 이 None 을 주면 종전 동작(감시 없음, 항상 finish), 테스트 추가 | 지적 5 워커 사이 상태 파일 lost update → 기존 결함이라 `[INFRA-098]` 로 이월 | 지적 6 시그니처 캐시 tick → 크기가 거의 항상 달라지고 놓쳐도 다음 쓰기까지라 미반영 | 지적 7 반영됨 | 지적 8 17:00 체인 중 중단 버튼 → 승인된 동작, QA 문서에 명시 | 지적 9 정보
+- [x] pytest 전체 2759 passed, 2 skipped(exit 0). 이후 바뀐 것은 `__all__` 앞 빈 줄 하나뿐이라 해당 파일 테스트만 다시 돌림
+- [ ] 격리 사본 하네스 QA(`docs/dev-cycle/qa/INFRA-097.md`, 프로세스 둘이 사본 `data/` 공유)
+
+### [INFRA-098] 수동 업데이트 상태 파일의 읽기-수정-쓰기가 워커 사이에서 직렬화되지 않아 중단 요청이 사라질 수 있다
+- 카테고리: 인프라 | 티어: T2 | 근거: `[INFRA-097]` `closing-bet-reviewer` 지적 5(2026-09-24), 코드로 확인
+- 원인: `update_lock` 은 프로세스 안의 `threading.Lock` 이다. 작업을 돌리는 워커의 `update_item_status` 가 상태를 읽고 쓰는 사이에 다른 워커의 `stop_update` 가 쓰면, 앞 워커의 저장이 `stopRequested` 와 `isRunning` 을 되돌려 중단 요청이 조용히 사라진다. 화면은 다시 실행 중으로 보이므로 재시도는 가능하다
+- 확인 수준: 코드로만 확인. 창은 수 ms 이며 운영 빈도는 확인하지 않았다
+- [ ] 설계 승인(파일 잠금 `fcntl` 로 워커 사이 직렬화할지, 중단 요청만 별도 파일로 분리할지)
 - [ ] 테스트, 리뷰와 pytest 전체
 
 ### [INFRA-095] 수급 수집이 결측을 0 으로 저장한다(pykrx 한쪽 프레임 누락, Toss 빈 필드)

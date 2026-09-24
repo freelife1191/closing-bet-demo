@@ -521,6 +521,7 @@ def start_update(
         shared_state.STOP_REQUESTED = False
         status = load_update_status(update_status_file=update_status_file, logger=logger)
         status["isRunning"] = True
+        status["stopRequested"] = False
         status["startTime"] = datetime.now().isoformat()
         status["items"] = [{"name": name, "status": "pending"} for name in items_list]
         status["currentItem"] = None
@@ -551,14 +552,15 @@ def stop_update(
     *,
     update_lock,
     update_status_file: str,
-    shared_state,
     logger,
 ) -> None:
     """업데이트 중단."""
     with update_lock:
-        shared_state.STOP_REQUESTED = True
+        # [INFRA-097] 작업은 다른 워커에서 돌 수 있으므로 이 워커의 플래그가 아니라 공유 상태에 남긴다.
+        # 작업을 돌리는 워커의 감시 스레드(run_background_update_pipeline)가 그 워커의 플래그를 켠다
         status = load_update_status(update_status_file=update_status_file, logger=logger)
         status["isRunning"] = False
+        status["stopRequested"] = True
         status["currentItem"] = None
 
         for item in status["items"]:

@@ -242,7 +242,7 @@ def _update_ctx():
 def test_update_control_routes_refuse_anonymous(monkeypatch, path, payload):
     """시작만 잠그고 중단을 열어 두면 비대칭이 남는다([INFRA-042] 적대적 리뷰 F2).
 
-    stop-update 는 STOP_REQUESTED 를 세우고 isRunning 을 내리며 running 항목을 error 로,
+    stop-update 는 공유 상태에 중단 요청을 남기고 isRunning 을 내리며 running 항목을 error 로,
     pending 항목을 cancelled 로 바꾼다. 게이트가 없으면 익명 요청 한 번이 관리자가 시작한
     갱신을 죽인다. update-item-status 는 임의의 name 과 status 를 공유 상태 파일에 쓴다.
 
