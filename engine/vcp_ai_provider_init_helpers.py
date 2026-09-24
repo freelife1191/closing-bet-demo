@@ -111,13 +111,16 @@ def init_zai_client(app_config: Any, logger: Any) -> Any:
 
 
 def drop_removed_providers(providers: list[str], logger: Any) -> list[str]:
-    """허용 목록에서 제거된 perplexity 를 빼고, 뺐으면 경고한다 [VCP-046].
+    """허용 목록에서 제거된 perplexity 를 빼고 그 자리를 gpt 가 잇게 한다 [VCP-046].
 
-    운영 .env 에 남아 있어도 기동은 계속한다.
+    운영 .env 를 고치지 않아도 두 번째 AI 가 계속 돌게 하려는 것이다. gpt 가 이미 있으면
+    빼기만 한다. 뺐으면 경고한다.
     """
     kept = [provider for provider in providers if provider != "perplexity"]
     if len(kept) != len(providers):
-        logger.warning("VCP_AI_PROVIDERS 의 perplexity 는 [VCP-046] 에서 제거되어 무시합니다")
+        logger.warning("VCP_AI_PROVIDERS 의 perplexity 는 [VCP-046] 에서 제거되어 gpt 로 대신합니다")
+        if "gpt" not in kept:
+            kept.append("gpt")
     return kept
 
 

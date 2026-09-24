@@ -170,11 +170,14 @@ def test_resolve_effective_second_provider_warns_twice_when_gpt_is_not_listed():
     assert "VCP_SECOND_PROVIDER" in logger.warnings[1]
 
 
-def test_drop_removed_providers_ignores_perplexity_with_warning():
+def test_drop_removed_providers_replaces_perplexity_with_gpt():
+    """[VCP-046] 운영 .env 를 고치지 않아도 두 번째 AI 가 계속 돌도록 perplexity 자리를 gpt 가 잇는다."""
     logger = _Logger()
 
     assert drop_removed_providers(["gemini", "perplexity", "gpt"], logger) == ["gemini", "gpt"]
     assert len(logger.warnings) == 1
+    assert drop_removed_providers(["gemini", "perplexity"], _Logger()) == ["gemini", "gpt"]
+    assert drop_removed_providers(["gemini"], _Logger()) == ["gemini"]
     assert drop_removed_providers(["gemini", "gpt"], _Logger()) == ["gemini", "gpt"]
 
 

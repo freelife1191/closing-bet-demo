@@ -54,7 +54,9 @@
     경고를 남기고 `gpt` 로 바꾼 뒤 기존 규칙(`gpt` 가 providers 에 있으면 `gpt`, 아니면 `None`
     과 경고)을 적용한다. `perplexity_disabled` 인자는 없앤다.
   - `normalize_provider_list` 는 이름 정규화만 하고, 분석기 생성자에서 `perplexity` 가 목록에
-    있으면 경고를 남기고 뺀다(경고는 기동마다 한 번).
+    있으면 경고를 남기고 뺀다(경고는 기동마다 한 번). 목록에 `gpt` 가 없으면 그 자리에 `gpt` 를
+    넣어 §2 의 「GPT 로 대체」를 지킨다(코드 리뷰 반영, 2026-09-24). GPT 는 `OPENAI_API_KEY` 가
+    있어야 실제로 돈다.
 - `engine/config.py`: `PERPLEXITY_API_KEY`·`VCP_PERPLEXITY_MODEL`·`VCP_PERPLEXITY_API_TIMEOUT`
   속성 삭제. 다른 참조가 없는지 grep 으로 확인한다.
 
@@ -130,6 +132,7 @@
 
 - 반영에는 gunicorn 워커 전부 재기동이 필요하다(장 중 금지). 일부 워커만 재기동하면 워커마다
   두 번째 프로바이더가 다를 수 있다.
-- 운영 `.env` 에 perplexity 설정이 남아 있어도 GPT 로 동작한다. 운영자는 편한 때
+- 운영 `.env` 에 perplexity 설정이 남아 있어도 GPT 로 동작한다. 단 `OPENAI_API_KEY` 가 없으면
+  두 번째 열은 비므로, 재기동 전에 운영 `.env` 에 그 키가 있는지 확인한다. 운영자는 편한 때
   `PERPLEXITY_API_KEY`·`VCP_PERPLEXITY_*` 를 지우고 `VCP_SECOND_PROVIDER=gpt` 로 고치면 경고가
   사라진다.

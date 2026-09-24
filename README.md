@@ -572,7 +572,7 @@ graph LR
 
 **검증 규칙 (VCP 기준):**
 1. Gemini는 기본 분석 모델로 실행됩니다.
-2. 보조 모델은 GPT 하나입니다. `VCP_SECOND_PROVIDER=perplexity` 가 남아 있으면 경고와 함께 GPT 로 실행합니다(`[VCP-046]`).
+2. 보조 모델은 GPT 하나입니다. `VCP_SECOND_PROVIDER=perplexity` 나 `VCP_AI_PROVIDERS` 의 `perplexity` 가 남아 있으면 경고와 함께 GPT 로 대신 실행합니다(`[VCP-046]`). GPT 는 `OPENAI_API_KEY` 가 있어야 돕니다.
 3. 분석 결과는 프로바이더 슬롯별로 저장되며, 프론트엔드에서 탭으로 비교합니다. GPT 내부의 Z.ai 폴백 결과는 `gpt_recommendation` 슬롯을 유지합니다. 과거 캐시(2026-02 등)의 `perplexity_recommendation` 은 읽기 전용으로 표시됩니다.
 4. **Provider 우선순위 체인**: `engine/signal_tracker_ai_helpers.py::apply_ai_results`가 `gemini → gpt → perplexity`(과거 캐시) 순으로 첫 유효 추천을 선택해 `ai_action / ai_confidence / ai_reason / ai_provider` 컬럼에 기록합니다. `ai_provider`는 선택된 슬롯 이름이며 내부 폴백에서 실제 응답한 엔진까지 식별하는 값은 아닙니다. 유효한 추천 슬롯이 없으면 `ai_provider="N/A"`로 표시됩니다.
 5. **GPT 폴백**: 할당량 소진 등 전환 조건에 해당하면 `VCP_AI_PROVIDERS` 에 `zai` 가 있을 때 Z.ai 로 대체 분석을 시도합니다. Z.ai는 `VCP_ZAI_FALLBACK_ENABLED=true`와 키 설정도 필요합니다.

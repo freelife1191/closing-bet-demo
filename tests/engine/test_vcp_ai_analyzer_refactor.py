@@ -787,16 +787,27 @@ def test_init_confirms_second_provider_with_fallback_applied(monkeypatch):
     assert analyzer.second_provider == "gpt"
 
 
-def test_init_leaves_second_provider_unset_when_nothing_can_run(monkeypatch):
-    """폴백할 GPT 가 허용 목록에 없으면 두 번째 자리를 비운 채로 둔다."""
+def test_init_keeps_second_ai_when_env_still_lists_perplexity(monkeypatch):
+    """[VCP-046] 옛 운영 구성(gemini,perplexity + perplexity)도 .env 를 고치지 않고 GPT 로 돈다."""
     analyzer = _build_analyzer_without_clients(
         monkeypatch,
         providers="gemini,perplexity",
         second_provider="perplexity",
     )
 
+    assert analyzer.providers == ["gemini", "gpt"]
+    assert analyzer.second_provider == "gpt"
+
+
+def test_init_leaves_second_provider_unset_when_nothing_can_run(monkeypatch):
+    """허용 목록에 GPT 가 없으면 두 번째 자리를 비운 채로 둔다."""
+    analyzer = _build_analyzer_without_clients(
+        monkeypatch,
+        providers="gemini",
+        second_provider="gpt",
+    )
+
     assert analyzer.second_provider is None
-    assert analyzer.providers == ["gemini"]
 
 
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers():
