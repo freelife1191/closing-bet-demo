@@ -28,16 +28,13 @@ def test_parse_json_response_normalizes_action_for_embedded_json():
     assert parsed["confidence"] == 77
 
 
-def test_get_available_providers_excludes_perplexity_when_disabled(monkeypatch):
+def test_get_available_providers_lists_only_initialized_clients():
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.gemini_client = object()
     analyzer.gpt_client = None
-    analyzer.perplexity_disabled = True
+    analyzer.zai_client = object()
 
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy")
-    providers = analyzer.get_available_providers()
-
-    assert providers == ["gemini"]
+    assert analyzer.get_available_providers() == ["gemini", "zai"]
 
 
 def test_analyze_with_gpt_uses_to_thread(monkeypatch):
@@ -114,416 +111,6 @@ def test_analyze_with_gemini_429_blocks_model_for_session(monkeypatch):
     assert second["action"] == "BUY"
     # 429가 발생한 모델은 세션에서 제외되어 두 번째 종목에서는 재시도하지 않는다.
     assert calls.count("gemini-3.1-flash-lite") == 1
-
-
-def test_analyze_with_perplexity_429_switches_to_fallback_without_retry(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = False
-    analyzer.perplexity_blocked_reason = None
-    analyzer.providers = ["gemini", "perplexity", "zai"]
-    analyzer.perplexity_fallback_providers = ["zai"]
-    analyzer.zai_client = object()
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-    monkeypatch.setenv("VCP_PERPLEXITY_MODEL", "sonar-pro")
-
-    async def _zai(_name, _data, prompt=None):
-        assert prompt == "prompt"
-        return {"action": "BUY", "confidence": 81}
-
-    analyzer._analyze_with_zai = _zai
-
-    class _Resp:
-        def __init__(self, status_code, payload=None, text=""):
-            self.status_code = status_code
-            self._payload = payload or {}
-            self.text = text
-
-        def json(self):
-            return self._payload
-
-    class _FakeAsyncClient:
-        enter_count = 0
-        post_count = 0
-
-        def __init__(self, timeout=60.0):
-            self.timeout = timeout
-            self._responses = [
-                _Resp(429, text="rate limit"),
-            ]
-
-        async def __aenter__(self):
-            _FakeAsyncClient.enter_count += 1
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, _url, headers=None, json=None):
-            del headers, json
-            _FakeAsyncClient.post_count += 1
-            return self._responses.pop(0)
-
-    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-
-    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-
-    assert result is not None
-    assert result["action"] == "BUY"
-    assert analyzer.perplexity_quota_exhausted is True
-    assert analyzer.perplexity_blocked_reason == "429"
-    assert _FakeAsyncClient.enter_count == 1
-    assert _FakeAsyncClient.post_count == 1
-
-
-def test_analyze_with_perplexity_503_blocks_session_and_uses_cached_fallback(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = False
-    analyzer.perplexity_blocked_reason = None
-    analyzer.providers = ["gemini", "perplexity", "zai"]
-    analyzer.perplexity_fallback_providers = ["zai"]
-    analyzer.zai_client = object()
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-    calls = {"http": 0, "zai": 0}
-
-    async def _zai(_name, _data, prompt=None):
-        calls["zai"] += 1
-        assert prompt == "prompt"
-        return {"action": "HOLD", "confidence": 65}
-
-    analyzer._analyze_with_zai = _zai
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    class _Resp:
-        status_code = 503
-        text = "service unavailable"
-
-        @staticmethod
-        def json():
-            return {}
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs):
-            del args, kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, _url, headers=None, json=None):
-            del headers, json
-            calls["http"] += 1
-            return _Resp()
-
-    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-
-    first = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-    second = asyncio.run(analyzer._analyze_with_perplexity("LG화학", {"ticker": "051910"}))
-
-    assert first is not None and second is not None
-    assert analyzer.perplexity_quota_exhausted is True
-    assert analyzer.perplexity_blocked_reason == "503"
-    assert calls["http"] == 1
-    assert calls["zai"] == 2
-
-
-def test_analyze_with_perplexity_auth_401_marks_quota_cache_and_fallbacks(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = False
-    analyzer.providers = ["gemini", "perplexity", "zai"]
-    analyzer.perplexity_fallback_providers = ["zai"]
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-    analyzer.zai_client = object()
-
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    async def _zai(_name, _data, prompt=None):
-        assert prompt == "prompt"
-        return {"action": "HOLD", "confidence": 61}
-
-    analyzer._analyze_with_zai = _zai
-
-    class _Resp:
-        status_code = 401
-        text = "unauthorized"
-
-        @staticmethod
-        def json():
-            return {}
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs):
-            del args, kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, _url, headers=None, json=None):
-            del headers, json
-            return _Resp()
-
-    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-
-    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-
-    assert result is not None
-    assert result["action"] == "HOLD"
-    assert analyzer.perplexity_quota_exhausted is True
-    assert analyzer.perplexity_blocked_reason == "auth-401"
-    assert analyzer.perplexity_disabled is False
-
-
-def test_analyze_with_perplexity_ambiguous_401_marks_quota_and_fallbacks(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = False
-    analyzer.providers = ["gemini", "perplexity", "zai"]
-    analyzer.perplexity_fallback_providers = ["zai"]
-    analyzer.zai_client = object()
-    analyzer.gpt_client = None
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-
-    async def _zai(_name, _data, prompt=None):
-        assert prompt == "prompt"
-        return {"action": "BUY", "confidence": 67}
-
-    analyzer._analyze_with_zai = _zai
-
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    class _Resp:
-        status_code = 401
-        text = "<html><center><h1>401 Authorization Required</h1></center><hr><center>openresty</center>"
-
-        @staticmethod
-        def json():
-            return {}
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs):
-            del args, kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, _url, headers=None, json=None):
-            del headers, json
-            return _Resp()
-
-    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-
-    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-
-    assert result is not None
-    assert result["action"] == "BUY"
-    assert analyzer.perplexity_quota_exhausted is True
-    assert analyzer.perplexity_blocked_reason == "auth-or-quota-401"
-    assert analyzer.perplexity_disabled is False
-
-
-def test_analyze_with_perplexity_after_first_401_uses_session_cached_fallback(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = False
-    analyzer.providers = ["gemini", "perplexity", "zai"]
-    analyzer.perplexity_fallback_providers = ["zai"]
-    analyzer.zai_client = object()
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-    calls = {"http": 0, "zai": 0}
-
-    async def _zai(_name, _data, prompt=None):
-        calls["zai"] += 1
-        assert prompt == "prompt"
-        return {"action": "BUY", "confidence": 67}
-
-    analyzer._analyze_with_zai = _zai
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    class _Resp:
-        status_code = 401
-        text = "unauthorized"
-
-        @staticmethod
-        def json():
-            return {}
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs):
-            del args, kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, _url, headers=None, json=None):
-            del headers, json
-            calls["http"] += 1
-            return _Resp()
-
-    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-
-    first = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-    second = asyncio.run(analyzer._analyze_with_perplexity("LG화학", {"ticker": "051910"}))
-
-    assert first is not None and second is not None
-    assert analyzer.perplexity_quota_exhausted is True
-    assert analyzer.perplexity_blocked_reason == "auth-401"
-    assert calls["http"] == 1
-    assert calls["zai"] == 2
-
-
-def test_analyze_with_perplexity_falls_back_to_zai_after_repeated_429(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = False
-    analyzer.perplexity_blocked_reason = None
-    analyzer.providers = ["gemini", "perplexity", "zai"]
-    analyzer.perplexity_fallback_providers = ["zai"]
-    analyzer.zai_client = object()
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-
-    async def _zai(_name, _data, prompt=None):
-        assert prompt == "prompt"
-        return {"action": "SELL", "confidence": 55}
-
-    analyzer._analyze_with_zai = _zai
-
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    class _Resp:
-        status_code = 429
-        text = "rate limit"
-
-        @staticmethod
-        def json():
-            return {}
-
-    class _FakeAsyncClient:
-        post_count = 0
-
-        def __init__(self, *args, **kwargs):
-            del args, kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, _url, headers=None, json=None):
-            del headers, json
-            _FakeAsyncClient.post_count += 1
-            return _Resp()
-
-    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _FakeAsyncClient)
-
-    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-
-    assert result is not None
-    assert result["action"] == "SELL"
-    assert analyzer.perplexity_quota_exhausted is True
-    assert analyzer.perplexity_blocked_reason == "429"
-    assert _FakeAsyncClient.post_count == 1
-
-
-def test_analyze_with_perplexity_fallback_uses_gpt_when_configured(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = True
-    analyzer.zai_client = None
-    analyzer.gpt_client = object()
-    analyzer.providers = ["gemini", "gpt"]
-    analyzer.perplexity_fallback_providers = ["gpt"]
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-    calls = {"gpt": 0}
-
-    async def _gpt(_name, _data, prompt=None):
-        calls["gpt"] += 1
-        assert prompt == "prompt"
-        return {"action": "SELL", "confidence": 55}
-
-    analyzer._analyze_with_gpt = _gpt
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-
-    assert result is not None
-    assert result["action"] == "SELL"
-    assert calls["gpt"] == 1
-
-
-def test_analyze_with_perplexity_uses_cached_quota_fallback_without_http(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = True
-    analyzer.providers = ["gemini", "perplexity", "zai"]
-    analyzer.perplexity_fallback_providers = ["zai"]
-    analyzer.zai_client = object()
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-    calls = {"zai": 0}
-
-    async def _zai(_name, _data, prompt=None):
-        calls["zai"] += 1
-        assert prompt == "prompt"
-        return {"action": "BUY", "confidence": 77}
-
-    analyzer._analyze_with_zai = _zai
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    class _ShouldNotCallAsyncClient:
-        def __init__(self, *args, **kwargs):
-            raise AssertionError("httpx.AsyncClient should not be used when quota cache is active")
-
-    monkeypatch.setattr("engine.vcp_ai_analyzer.httpx.AsyncClient", _ShouldNotCallAsyncClient)
-
-    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-
-    assert result is not None
-    assert result["action"] == "BUY"
-    assert calls["zai"] == 1
-
-
-def test_analyze_with_perplexity_does_not_fallback_when_provider_not_in_vcp_ai_providers(monkeypatch):
-    analyzer = object.__new__(VCPMultiAIAnalyzer)
-    analyzer.perplexity_disabled = False
-    analyzer.perplexity_quota_exhausted = True
-    analyzer.providers = ["gemini", "perplexity"]
-    analyzer.perplexity_fallback_providers = []
-    analyzer.zai_client = object()
-    analyzer.gpt_client = object()
-    analyzer._build_vcp_prompt = lambda *_args, **_kwargs: "prompt"
-    calls = {"zai": 0, "gpt": 0}
-
-    async def _zai(_name, _data, prompt=None):
-        calls["zai"] += 1
-        return {"action": "BUY", "confidence": 70}
-
-    async def _gpt(_name, _data, prompt=None):
-        calls["gpt"] += 1
-        return {"action": "BUY", "confidence": 70}
-
-    analyzer._analyze_with_zai = _zai
-    analyzer._analyze_with_gpt = _gpt
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "dummy-key")
-
-    result = asyncio.run(analyzer._analyze_with_perplexity("삼성전자", {"ticker": "005930"}))
-
-    assert result is None
-    assert calls == {"zai": 0, "gpt": 0}
 
 
 def test_analyze_with_zai_uses_openai_client(monkeypatch):
@@ -1170,16 +757,12 @@ def test_analyze_with_zai_disables_session_after_prompt_echo_responses(monkeypat
     assert len(calls) == first_call_count
 
 
-def _build_analyzer_without_clients(monkeypatch, *, providers, second_provider, has_perplexity_key):
+def _build_analyzer_without_clients(monkeypatch, *, providers, second_provider):
     """클라이언트 초기화를 막고 실제 생성자를 태워 provider 배선만 본다."""
     import engine.vcp_ai_analyzer as analyzer_module
 
     monkeypatch.setenv("VCP_AI_PROVIDERS", providers)
     monkeypatch.setenv("VCP_SECOND_PROVIDER", second_provider)
-    if has_perplexity_key:
-        monkeypatch.setenv("PERPLEXITY_API_KEY", "test-perplexity-key")
-    else:
-        monkeypatch.delenv("PERPLEXITY_API_KEY", raising=False)
 
     monkeypatch.setattr(analyzer_module, "init_gemini_client", lambda *a, **k: None)
     monkeypatch.setattr(analyzer_module, "init_gpt_client", lambda *a, **k: None)
@@ -1189,34 +772,19 @@ def _build_analyzer_without_clients(monkeypatch, *, providers, second_provider, 
 
 
 def test_init_confirms_second_provider_with_fallback_applied(monkeypatch):
-    """생성자가 perplexity_disabled 를 계산한 뒤 그 값으로 두 번째 provider 를 확정한다.
+    """생성자가 perplexity 설정을 gpt 로 확정한다 [VCP-046].
 
-    resolve_effective_second_provider 자체는 단위 검사로 덮여 있지만, 생성자가 두 함수를
-    올바른 순서와 인자로 잇는지는 이 검사만 본다. 이 배선이 `[VCP-015]` 가 고친 결함의
+    resolve_effective_second_provider 자체는 단위 검사로 덮여 있지만, 생성자가 그 결과를
+    self.second_provider 로 잇는지는 이 검사만 본다. 이 배선이 `[VCP-015]` 가 고친 결함의
     자리다. 설정값을 그대로 self.second_provider 에 넣던 예전 방식으로 되돌리면 실패한다.
     """
     analyzer = _build_analyzer_without_clients(
         monkeypatch,
         providers="gemini,gpt",
         second_provider="perplexity",
-        has_perplexity_key=False,
     )
 
-    assert analyzer.perplexity_disabled is True
     assert analyzer.second_provider == "gpt"
-
-
-def test_init_keeps_perplexity_when_key_is_present(monkeypatch):
-    """키가 있으면 설정한 provider 를 그대로 지킨다."""
-    analyzer = _build_analyzer_without_clients(
-        monkeypatch,
-        providers="gemini,perplexity",
-        second_provider="perplexity",
-        has_perplexity_key=True,
-    )
-
-    assert analyzer.perplexity_disabled is False
-    assert analyzer.second_provider == "perplexity"
 
 
 def test_init_leaves_second_provider_unset_when_nothing_can_run(monkeypatch):
@@ -1225,16 +793,15 @@ def test_init_leaves_second_provider_unset_when_nothing_can_run(monkeypatch):
         monkeypatch,
         providers="gemini,perplexity",
         second_provider="perplexity",
-        has_perplexity_key=False,
     )
 
     assert analyzer.second_provider is None
+    assert analyzer.providers == ["gemini"]
 
 
 def test_analyze_stock_builds_prompt_once_and_shares_to_providers():
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer.providers = ["gemini", "gpt"]
-    analyzer.perplexity_disabled = True
     # __init__ 을 거치지 않으므로 resolve_effective_second_provider 의 결과를 직접 심는다.
     analyzer.second_provider = "gpt"
 
@@ -1257,7 +824,6 @@ def test_analyze_stock_builds_prompt_once_and_shares_to_providers():
     analyzer._build_vcp_prompt = _build_prompt
     analyzer._analyze_with_gemini = _gemini
     analyzer._analyze_with_gpt = _gpt
-    analyzer._analyze_with_perplexity = lambda *_a, **_k: None
 
     result = asyncio.run(analyzer.analyze_stock("삼성전자", {"ticker": "005930"}))
 
@@ -1368,7 +934,7 @@ def test_gemini_block_holds_within_ttl(monkeypatch):
     assert state["calls"] == 0
 
 
-def test_analyze_stock_expires_gpt_and_perplexity_blocks(monkeypatch):
+def test_analyze_stock_expires_gpt_blocks(monkeypatch):
     # 재분석 진행률 경로는 analyze_batch 를 거치지 않으므로 가드는 analyze_stock 에 있어야 한다.
     monkeypatch.setattr("engine.vcp_ai_analyzer.time.monotonic", lambda: 601.0)
 
@@ -1380,7 +946,6 @@ def test_analyze_stock_expires_gpt_and_perplexity_blocks(monkeypatch):
     analyzer.providers, analyzer.second_provider = ["gemini", "gpt"], "gpt"
     analyzer.gemini_blocked_models = {"gemini-x"}
     analyzer.gpt_quota_exhausted, analyzer.gpt_blocked_reason = True, "quota-like-402"
-    analyzer.perplexity_quota_exhausted, analyzer.perplexity_blocked_reason = True, "429"
     analyzer.zai_disabled_reason = "prompt-echo responses"
     analyzer._session_blocks_since = 0.0
 
@@ -1388,7 +953,6 @@ def test_analyze_stock_expires_gpt_and_perplexity_blocks(monkeypatch):
 
     assert analyzer.gemini_blocked_models == set()
     assert analyzer.gpt_quota_exhausted is False and analyzer.gpt_blocked_reason is None
-    assert analyzer.perplexity_quota_exhausted is False and analyzer.perplexity_blocked_reason is None
     assert analyzer.zai_disabled_reason is None
     assert analyzer._session_blocks_since is None
 

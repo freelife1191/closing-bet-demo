@@ -110,27 +110,37 @@ def init_zai_client(app_config: Any, logger: Any) -> Any:
         return None
 
 
+def drop_removed_providers(providers: list[str], logger: Any) -> list[str]:
+    """허용 목록에서 제거된 perplexity 를 빼고, 뺐으면 경고한다 [VCP-046].
+
+    운영 .env 에 남아 있어도 기동은 계속한다.
+    """
+    kept = [provider for provider in providers if provider != "perplexity"]
+    if len(kept) != len(providers):
+        logger.warning("VCP_AI_PROVIDERS 의 perplexity 는 [VCP-046] 에서 제거되어 무시합니다")
+    return kept
+
+
 def resolve_effective_second_provider(
     providers: list[str],
     second_provider: str | None,
-    perplexity_disabled: bool,
     logger: Any,
 ) -> str | None:
     """실제로 실행할 두 번째 provider 를 확정한다. 실행할 수 없으면 None 을 돌려준다.
 
-    Perplexity 를 쓸 수 없으면 GPT 로 넘긴다. 넘기지 않으면 두 번째 AI 열이 모든 종목에서
-    빈 채로 남는다. 넘긴 뒤에도 실행할 수 없는 조합이면 경고를 남긴다. 호출부가 이 값을
-    캐시 키 판정에도 쓰므로, 실행 결과가 담기는 필드와 판정이 기다리는 필드가 갈리지 않는다.
+    두 번째 자리는 GPT 하나다. 제거된 perplexity 설정은 GPT 로 바꾼다 [VCP-046]. 호출부가
+    이 값을 캐시 키 판정에도 쓰므로, 실행 결과가 담기는 필드와 판정이 기다리는 필드가 갈리지 않는다.
     """
     normalized_providers = normalize_provider_list(providers)
     provider = normalize_provider_name(second_provider)
 
-    if provider == "perplexity" and perplexity_disabled:
+    if provider == "perplexity":
+        logger.warning(
+            f"VCP_SECOND_PROVIDER={second_provider} 는 [VCP-046] 에서 제거되어 gpt 로 실행합니다. "
+            ".env 를 gpt 로 고치면 이 경고가 사라집니다"
+        )
         provider = "gpt"
 
-    # Perplexity 는 자체 fallback 체인(GPT·Z.ai)을 갖고 있어 providers 에 gpt 만 있어도 실행한다.
-    if provider == "perplexity" and ("perplexity" in normalized_providers or "gpt" in normalized_providers):
-        return "perplexity"
     if provider == "gpt" and "gpt" in normalized_providers:
         return "gpt"
 
@@ -141,28 +151,12 @@ def resolve_effective_second_provider(
     return None
 
 
-def resolve_perplexity_disabled(
-    providers: list[str],
-    second_provider: str,
-    has_api_key: bool,
-    logger: Any,
-) -> bool:
-    """Perplexity 사용 가능 여부(비활성화 플래그)를 계산한다."""
-    normalized_providers = normalize_provider_list(providers)
-    normalized_second = normalize_provider_name(second_provider)
-    needs_perplexity = "perplexity" in normalized_providers or normalized_second == "perplexity"
-    if needs_perplexity and not has_api_key:
-        logger.warning("PERPLEXITY_API_KEY가 설정되지 않아 Perplexity 사용 불가")
-        return True
-    return False
-
-
 __all__ = [
+    "drop_removed_providers",
     "init_gemini_client",
     "init_gpt_client",
     "init_zai_client",
     "normalize_provider_name",
     "normalize_provider_list",
     "resolve_effective_second_provider",
-    "resolve_perplexity_disabled",
 ]

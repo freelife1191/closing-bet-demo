@@ -15,13 +15,10 @@ sys.path.insert(
 
 from engine.vcp_ai_analyzer_helpers import (
     build_vcp_rule_based_recommendation,
-    build_perplexity_request,
     build_vcp_prompt,
     extract_openai_message_text,
-    extract_perplexity_response_text,
     is_prompt_echo_response,
     is_low_quality_recommendation,
-    is_perplexity_quota_exceeded,
     parse_json_response,
 )
 
@@ -223,31 +220,6 @@ def test_extract_openai_message_text_handles_reasoning_content_only():
     extracted = extract_openai_message_text(content)
 
     assert '"action":"BUY"' in extracted
-
-
-def test_perplexity_request_and_response_helpers():
-    url, headers, payload = build_perplexity_request(
-        prompt="hello",
-        api_key="secret",
-        model="sonar-pro",
-    )
-
-    assert "perplexity.ai" in url
-    assert headers["Authorization"] == "Bearer secret"
-    assert payload["model"] == "sonar-pro"
-    assert payload["messages"][1]["content"] == "hello"
-
-    text = extract_perplexity_response_text(
-        {"choices": [{"message": {"content": "{\"action\":\"HOLD\",\"confidence\":60}"}}]}
-    )
-    assert text == "{\"action\":\"HOLD\",\"confidence\":60}"
-
-
-def test_is_perplexity_quota_exceeded_detects_quota_like_errors():
-    assert is_perplexity_quota_exceeded(402, "payment required") is True
-    assert is_perplexity_quota_exceeded(429, "Quota exceeded for this month") is True
-    assert is_perplexity_quota_exceeded(403, "insufficient credits") is True
-    assert is_perplexity_quota_exceeded(429, "temporary network issue") is False
 
 
 def test_build_vcp_rule_based_recommendation_never_buys_and_sells_only_on_outflows():

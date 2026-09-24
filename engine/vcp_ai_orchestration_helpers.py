@@ -10,11 +10,16 @@ import asyncio
 from typing import Any, Awaitable, Callable
 
 
+# AI 추천을 담는 칸. 세 번째 perplexity_recommendation 은 과거 캐시 읽기 전용이다.
+# [VCP-046] 이후 새로 쓰지 않지만, 2026-02 캐시가 두 번째 판정을 이 칸에만 담고 있어
+# legacy 보강과 수집 병합은 계속 세 칸을 읽는다.
 VCP_AI_RECOMMENDATION_FIELDS = (
     "gemini_recommendation",
     "gpt_recommendation",
     "perplexity_recommendation",
 )
+# 새 분석 결과가 쓰는 칸
+VCP_AI_WRITTEN_FIELDS = VCP_AI_RECOMMENDATION_FIELDS[:2]
 
 
 async def orchestrate_stock_analysis(
@@ -26,14 +31,13 @@ async def orchestrate_stock_analysis(
     build_prompt_fn: Callable[[str, dict[str, Any]], str],
     analyze_with_gemini_fn: Callable[[str, dict[str, Any], str | None], Awaitable[dict[str, Any] | None]],
     analyze_with_gpt_fn: Callable[[str, dict[str, Any], str | None], Awaitable[dict[str, Any] | None]],
-    analyze_with_perplexity_fn: Callable[[str, dict[str, Any], str | None], Awaitable[dict[str, Any] | None]],
     logger: Any,
 ) -> dict[str, Any]:
     """단일 종목에 대해 멀티 Provider 병렬 분석을 오케스트레이션한다."""
     results = {
         "ticker": stock_data.get("ticker", ""),
         "stock_name": stock_name,
-        **dict.fromkeys(VCP_AI_RECOMMENDATION_FIELDS),
+        **dict.fromkeys(VCP_AI_WRITTEN_FIELDS),
     }
 
     tasks: list[Awaitable[dict[str, Any] | None]] = []
@@ -49,10 +53,7 @@ async def orchestrate_stock_analysis(
 
     # second_provider 는 resolve_effective_second_provider 가 폴백까지 반영해 확정한 값이다.
     # 실행할 수 없는 조합이면 None 이 넘어오므로 두 번째 자리를 비운다.
-    if not skip_second and second_provider == "perplexity":
-        tasks.append(analyze_with_perplexity_fn(stock_name, stock_data, shared_prompt))
-        providers_map.append("perplexity")
-    elif not skip_second and second_provider == "gpt":
+    if not skip_second and second_provider == "gpt":
         tasks.append(analyze_with_gpt_fn(stock_name, stock_data, shared_prompt))
         providers_map.append("gpt")
 
