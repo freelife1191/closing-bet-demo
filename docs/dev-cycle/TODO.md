@@ -70,16 +70,6 @@
 - [ ] 운영자 확인: 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부
 - [ ] 배포와 워커 전부 재기동(운영자, 장 마감 뒤), 발동했다면 10분 뒤 「VCP 분석기 세션 차단 해제: … zai=prompt-echo responses」 로그 확인
 
-### [VCP-048] GPT 클라이언트가 없는데도 두 번째 자리를 gpt 로 확정해 재분석이 매번 같은 행을 실패로 잡는다
-- 카테고리: VCP | 티어: T3(`engine/vcp_ai_*`) | 근거: `[VCP-046]` 심층 리뷰(2026-09-24, 스크래치 재현). `resolve_effective_second_provider` 는 목록에 `gpt` 가 있는지만 보고 `init_gpt_client` 가 실제로 클라이언트를 만들었는지는 보지 않는다. `OPENAI_API_KEY` 가 없으면 `second_provider == "gpt"`·`gpt_client is None` 이 되어 재분석이 `gpt_recommendation` 을 필수 칸으로 요구하고, 그 칸은 채워지지 않으므로 부를 때마다 「실패 N건 중 0건 재분석 완료」가 된다(LLM 호출 0, 비용 없음). 기본 구성에도 원래 있던 동작이며 `[VCP-046]` 의 gpt 보충으로 옛 `gemini,perplexity` 구성에도 옮겨 왔다
-- 수정 후보: 생성자에서 `self.gpt_client is None` 이면 `second_provider` 를 `None` 으로 둔다. 분석기 생성자 테스트(`init_gpt_client` 를 None 으로 막는 도우미)의 전제가 함께 바뀐다
-- 설계 승인: 2026-09-24 15:52 사용자 「좋아 진행해」(bounded 대화 설계). 범위: `resolve_effective_second_provider` 에 `gpt_ready` 인자, 생성자가 `gpt_client is not None` 을 넘김, 재분석 Second 강제 503 안내문에 `OPENAI_API_KEY` 추가, 테스트(헬퍼·생성자, 기존 생성자 테스트 전제 수정). 범위 밖: GPT 없이 Z.ai 를 두 번째 자리에 세우기
-- [x] 설계 승인
-- [x] 테스트(실패 확인)와 수정: 새 테스트 2건과 인자 추가로 6 failed 확인 뒤 구현, 대상 파일 42 passed. `.env.example` 주석 추가
-- [x] ponytail(Lean already) · `closing-bet-reviewer` APPROVE low 2(L1 설정 화면 키 추가는 재기동 전 미반영 → 503 안내문에 재기동 문구 반영, L2 CLAUDE.md 절 한 줄 추가는 `.env.example` 가 같은 계약을 적어 미반영) · `/review`(`oh-my-claudecode:code-reviewer` opus, 이름 vcp048-deep-review) APPROVE low 2·info 1(경고문을 SDK 초기화 실패까지 넓힘 반영, 503 안내문·`.env.example` 도 키 누락만 말함은 드문 경우이고 `init_gpt_client` 가 error 로그를 남겨 미반영, 테스트 기본값 공유 객체는 sentinel 이라 무해)
-- [x] pytest 전체 2727 passed 2 skipped(리뷰 반영 뒤 재실행, exit 0)
-- [ ] 격리 사본 하네스 QA(LLM 호출 없음, `qa/VCP-048.md`)
-
 ### [VCP-043] `signal_tracker` 경로의 AI 추천 선택이 실패 dict 도 고르고 VCP 수집과 다른 규칙을 쓴다
 - 카테고리: VCP | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-040]` 계획 검토(critic, 2026-09-24). `engine/signal_tracker_ai_helpers.py:91` `_pick_recommendation` 은 gemini → gpt → perplexity 순서로 `isinstance(Mapping)` 만 보고 고르므로 `{"action":"N/A","reason":"분석 실패"}` 도 선택된다. `run.py:56` 메뉴 2 가 이 경로로 `signals_log.csv` 에 쓰며 `ai_provider` 열도 남긴다(`:145`). `[VCP-040]` 이후 수집·재분석은 `_extract_vcp_ai_recommendation`(유효성 검사 포함)을 쓴다.
 - [ ] 이 경로가 운영에서 쓰이는지 확인, 설계 승인(같은 선택 함수로 통일할지, `ai_provider` 열을 유지할지)
