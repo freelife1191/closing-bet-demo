@@ -635,6 +635,7 @@ class VCPMultiAIAnalyzer:
                 "gpt_blocked_reason",
                 "perplexity_quota_exhausted",
                 "perplexity_blocked_reason",
+                "zai_disabled_reason",
             )
         )
         if not blocked:
@@ -648,10 +649,11 @@ class VCPMultiAIAnalyzer:
         if now - since < LLM_THRESHOLD.SESSION_BLOCK_TTL_SECONDS:
             return
         logger.info(
-            "VCP 분석기 세션 차단 해제: gemini=%s, gpt=%s, perplexity=%s",
+            "VCP 분석기 세션 차단 해제: gemini=%s, gpt=%s, perplexity=%s, zai=%s",
             sorted(getattr(self, "gemini_blocked_models", None) or []),
             getattr(self, "gpt_blocked_reason", None),
             getattr(self, "perplexity_blocked_reason", None),
+            getattr(self, "zai_disabled_reason", None),
         )
         # 진행 중인 호출이 같은 집합을 쥐고 있으므로 새로 만들지 않고 비운다
         if isinstance(getattr(self, "gemini_blocked_models", None), set):
@@ -662,6 +664,7 @@ class VCPMultiAIAnalyzer:
         self.gpt_blocked_reason = None
         self.perplexity_quota_exhausted = False
         self.perplexity_blocked_reason = None
+        self.zai_disabled_reason = None
         self._session_blocks_since = None
 
     def _parse_json_response(self, text: str) -> Optional[Dict]:

@@ -1381,6 +1381,7 @@ def test_analyze_stock_expires_gpt_and_perplexity_blocks(monkeypatch):
     analyzer.gemini_blocked_models = {"gemini-x"}
     analyzer.gpt_quota_exhausted, analyzer.gpt_blocked_reason = True, "quota-like-402"
     analyzer.perplexity_quota_exhausted, analyzer.perplexity_blocked_reason = True, "429"
+    analyzer.zai_disabled_reason = "prompt-echo responses"
     analyzer._session_blocks_since = 0.0
 
     asyncio.run(analyzer.analyze_stock("A", {"ticker": "000001"}))
@@ -1388,6 +1389,7 @@ def test_analyze_stock_expires_gpt_and_perplexity_blocks(monkeypatch):
     assert analyzer.gemini_blocked_models == set()
     assert analyzer.gpt_quota_exhausted is False and analyzer.gpt_blocked_reason is None
     assert analyzer.perplexity_quota_exhausted is False and analyzer.perplexity_blocked_reason is None
+    assert analyzer.zai_disabled_reason is None
     assert analyzer._session_blocks_since is None
 
 
@@ -1397,4 +1399,21 @@ def test_expire_session_blocks_resets_clock_when_nothing_blocked(monkeypatch):
     analyzer = object.__new__(VCPMultiAIAnalyzer)
     analyzer._session_blocks_since = 0.0
     analyzer._expire_session_blocks()
+    assert analyzer._session_blocks_since is None
+
+
+def test_expire_session_blocks_clears_zai_disabled_reason(monkeypatch):
+    # Z.ai 메타 응답 비활성화도 다른 플래그처럼 10분 뒤 풀려야 한다 [VCP-045].
+    clock = {"now": 0.0}
+    monkeypatch.setattr("engine.vcp_ai_analyzer.time.monotonic", lambda: clock["now"])
+    analyzer = object.__new__(VCPMultiAIAnalyzer)
+    analyzer.zai_disabled_reason = "prompt-echo responses"
+
+    analyzer._expire_session_blocks()
+    assert analyzer._session_blocks_since == 0.0
+    assert analyzer.zai_disabled_reason == "prompt-echo responses"
+
+    clock["now"] = 600.0
+    analyzer._expire_session_blocks()
+    assert analyzer.zai_disabled_reason is None
     assert analyzer._session_blocks_since is None

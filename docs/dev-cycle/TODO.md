@@ -65,10 +65,14 @@
 ## P2 — 대기
 
 ### [VCP-045] Z.ai 폴백의 `zai_disabled_reason` 도 워커 수명 동안 풀리지 않는다
-- 카테고리: VCP | 티어: T3(위험 경로 `engine/vcp_ai_analyzer.py`) | 근거: `[VCP-041]` 코드 리뷰(closing-bet-reviewer, 2026-09-24). `_analyze_with_zai` 는 마지막 모델까지 메타 응답(prompt echo)이 반복되면 `self.zai_disabled_reason = "prompt-echo responses"`(`engine/vcp_ai_analyzer.py:1025`)를 켜고, 이후 호출은 `:846` 에서 곧바로 건너뛴다. 이 값을 비우는 코드가 없고 분석기는 싱글톤이라 재기동 전까지 Z.ai 폴백이 꺼진 채 남는다. `[VCP-041]` 의 `_expire_session_blocks` 대상에는 넣지 않았다(승인 범위가 Gemini·GPT·Perplexity 세 종류). 운영에서 발동했는지는 확인하지 않았다
-- [ ] 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부 확인
-- [ ] 설계 승인(`_expire_session_blocks` 대상에 추가할지, 메타 응답은 429 와 달리 모델 품질 문제라 다른 만료가 필요한지)
-- [ ] 재현 테스트와 수정, 리뷰
+- 카테고리: VCP | 티어: T3(위험 경로 `engine/vcp_ai_analyzer.py`) | 근거: `[VCP-041]` 코드 리뷰(closing-bet-reviewer, 2026-09-24). `_analyze_with_zai` 는 마지막 모델까지 메타 응답(prompt echo)이 반복되면 `self.zai_disabled_reason = "prompt-echo responses"`(`engine/vcp_ai_analyzer.py` `_analyze_with_zai` 의 마지막 모델 분기)를 켜고, 이후 호출은 같은 함수 진입 가드에서 곧바로 건너뛴다. 이 값을 비우는 코드가 없고 분석기는 싱글톤이라 재기동 전까지 Z.ai 폴백이 꺼진 채 남는다. `[VCP-041]` 의 `_expire_session_blocks` 대상에는 넣지 않았다(승인 범위가 Gemini·GPT·Perplexity 세 종류). 운영에서 발동했는지는 확인하지 않았다
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 10:43 | 범위: `_expire_session_blocks` 의 감시·해제 대상에 `zai_disabled_reason` 을 더해 다른 플래그와 같은 10분(`SESSION_BLOCK_TTL_SECONDS`)이 지나면 `None` 으로 비우고 해제 로그에 `zai=` 를 붙인다. 별도 TTL 은 두지 않는다 | 근거: 대화 선택 「같은 10분 만료 (권장)」(운영 로그 확인 없이 진입). 계획 `docs/superpowers/plans/2026-09-24-vcp-045-zai-disable-expiry.md`
+- [ ] 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부 확인(운영자)
+- [x] 설계 승인(같은 10분 만료, 위 메타 줄)
+- [x] 계획 검토(critic): ACCEPT-WITH-RESERVATIONS. 보류 1(재켜짐 비용 상한에 `ANALYSIS_LLM_CONCURRENCY` 누락)은 계획 Review Focus 에 반영, 보류 2(`analyze_stock` 경로)는 기존 `test_analyze_stock_expires_gpt_and_perplexity_blocks` 에 두 줄 추가. 미반영 없음
+- [x] 재현 테스트(`tests/engine/test_vcp_ai_analyzer_refactor.py`, 새 1건 + 기존 1건 보강, 수정 전 2건 실패 확인)와 수정(`_expire_session_blocks` 감시·해제·로그에 `zai_disabled_reason`)
+- [x] T3 리뷰: ponytail 「Lean already. Ship.」(추가 4줄, 직접 검토), closing-bet-reviewer APPROVE(low: TODO 근거의 줄 번호 어긋남 → 함수 이름으로 고침, 공유 시계 한계는 기존 ponytail 주석과 승인 범위대로 유지), 심층 리뷰(critic) ACCEPT-WITH-RESERVATIONS(수정 전 사본 2건 실패·종단 간 하네스로 t=600 재호출 실측. 보류 「실제 Z.ai 호출 횟수 테스트 없음」은 QA S-3 하네스가 호출 수로 확인해 대신함, 정보 「`__init__` 초기화 없음」은 모든 읽기가 `getattr` 기본값이라 미반영). pytest 전체 2,720 passed·2 skipped(exit 0)
+- [ ] QA(가짜 Z.ai 하네스, LLM 호출 없음)와 마감 기록에 「워커 전부 재기동 필요」 명시
 
 ### [VCP-044] VCP 재분석 결과가 캐시에 없는 종목을 캐시에 넣지 않고, 날짜 없는 캐시 파일을 날짜 확인 없이 읽고 쓴다
 - 카테고리: VCP | 티어: 판정 시 파일 목록으로 정함 | 근거: `[VCP-040]` 심층 리뷰(critic, 2026-09-24). `update_vcp_ai_cache_files` 는 파일이 없으면 건너뛰고(`services/kr_market_vcp_cache_update_service.py:84`) 파일 안에 이미 있는 종목만 고친다(`:98`). 수집 때 모든 AI 가 실패한 종목은 `_write_ai_analysis_files` 가 캐시에 넣지 않으므로(`services/common_update_ai_analysis_service.py:113-116`), 뒤의 재분석이 그 종목을 GPT 로 채워도 캐시에는 남지 않는다. `[VCP-040]` 이후 CSV 에는 GPT 판정이 들어가므로 화면의 Gemini 열에 GPT 판정이 뜨고 GPT 열은 빈다. 또 `load_vcp_ai_cache_map`(`services/kr_market_vcp_reanalysis_service.py:145-150`)과 `update_vcp_ai_cache_files`(`:70-75`)는 날짜 없는 `ai_analysis_results.json`·`kr_ai_analysis.json` 을 날짜 확인 없이 쓰므로, 날짜 파일이 없는 날 재분석하면 전날 파일의 겹치는 종목에 결과가 쓰일 수 있다.
