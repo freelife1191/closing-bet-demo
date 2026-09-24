@@ -64,19 +64,6 @@
 - [ ] Market Gate 지수 입력과 `get_last_trading_date` 공휴일 판정 영향 확인과 테스트
 - [ ] T3 리뷰와 pytest 전체
 
-### [VCP-053] 과거 날짜 재분석에서 분석 가능한 종목이 하나도 없어도 「시그널 없음」으로 그 날짜 행을 지운다
-- 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py` 대조, 수정은 `engine/screener.py` 예상) | 근거: `[VCP-049]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` medium)
-- 원인: `[VCP-049]` 는 가격 프레임이 비었을 때만 실패로 본다. 과거 날짜를 분석할 때 target 이전 가격이 20행 이상인 종목이 하나도 없으면(가격 창 밖이나 창 시작 부근의 날짜) 모든 종목이 `_prepare_stock_analysis`(`engine/screener.py:285-289`)에서 빠져 빈 결과가 되고, `create_signals_log` 가 그 날짜의 기존 행을 지우고 `True` 를 돌려준다. 같은 결로 `_detect_vcp_pattern`(`:329-333`)은 예외를 삼켜 `is_vcp=False` 를 주므로 전 종목에 걸친 체계적 오류도 0건이 된다
-- 추가 관찰(2026-09-24 19:55, `[VCP-050]` QA 설정 중): 원본 자료 사본(가격 2025-11-13~2026-09-21, 수급 2026-01-12~2026-09-21)으로 `create_signals_log(target_date="2026-05-05", run_ai=False)` 를 네트워크 없이 돌리면 수정 전후 커밋 모두 조건 충족 0건으로 원본의 2026-05-05 15행을 지우고 `True` 를 돌려준다. 0건이 된 원인(가격 창·수급 결측·VCP 판정)은 조사하지 않았다
-- [x] 설계 승인(2026-09-24 20:53 이전 대화 「진행해」, bounded, T2: 수정은 위험 경로 밖 `engine/screener.py` 뿐이라 TODO 의 T3 에서 재판정. `init_data.py` 를 고치게 되면 T3). 범위: `_detect_vcp_pattern` 의 예외 삼킴을 없애 판정 예외를 `_prepare_stock_analysis` 의 분석 불가(None)로 보낸다. `run_screening` 이 분석된(결과가 None 이 아닌) 종목 수를 세어 후보가 있는데 0개면 `RuntimeError` 로 `[VCP-028]` 보존 갈래에 보낸다. 일부 실패는 종전대로 정상, 실패 비율 판정은 두지 않는다(문턱 근거 없음). 05-05 는 QA 에서 분석 종목 수를 실측해 기록만 한다
-- [x] 읽은 정본: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-verify/`
-- [x] 테스트: 전 종목 가격 20행 미만, 전 종목 VCP 판정 예외(두 건 모두 수정 전 코드에서 DID NOT RAISE 확인). 기존 `test_run_screening_counts_failed_stocks_against_max_stocks` 는 「전 종목 예외 → 빈 결과」를 전제했으므로 결과 기대만 예외로 바꾸고 예산 소모(2종목) 단언은 유지
-- [x] 구현
-- [x] pytest 전체: 2745 passed, 2 skipped, 종료 코드 0
-- [x] `/ponytail-review`: Lean already
-- [x] `closing-bet-reviewer` APPROVE(low 2). 1번(high/low 열이 없거나 전부 NaN 이면 `detect_vcp_pattern` 이 예외 대신 실패 결과를 줘 여전히 0건)은 승인 범위 밖이라 `[VCP-056]` 으로 등록. 2번(보존 갈래도 최신 payload 는 빈 값으로 덮음, 기존 설계)은 QA 문서에서 행과 payload 를 나눠 기록
-- [ ] QA(격리 사본, 네트워크·AI 없음): 가격 창 시작 부근 날짜는 `False`·기존 행 보존, 정상 날짜 출력이 수정 전과 같음, 05-05 분석 종목 수 실측
-
 ### [VCP-054] VCP 화면·챗봇 데이터가 빈 수급을 0 으로 읽는다
 - 카테고리: VCP | 티어: T2(`frontend/` 포함) | 근거: `[VCP-050]` 설계(2026-09-24 19:45 승인 범위 밖으로 분리), `closing-bet-reviewer` low
 - 원인: `[VCP-050]` 이후 `signals_log.csv` 는 수급 결측을 빈 칸으로 저장한다. 그러나 API(`app/routes/kr_market_vcp_signal_helpers.py:317-318` 의 `_safe_int(default=0)`)와 챗봇 종목 정보(`engine/kr_ai_data_service.py:436-437` 의 `_to_int(..., 0)`)가 빈 칸을 다시 0 으로 읽는다. 화면(`frontend/src/app/dashboard/kr/vcp/page.tsx:1711-1720`, `:2039-2040`)과 타입(`frontend/src/lib/api.ts:94-95`)도 숫자만 가정한다
