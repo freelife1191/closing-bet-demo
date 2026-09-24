@@ -285,7 +285,12 @@ class SmartMoneyScreener:
         try:
             price_index = self._prices_by_ticker_target if self._target_datetime is not None else self._prices_by_ticker
             stock_prices = price_index.get(stock['ticker'])
-            if stock_prices is None or len(stock_prices) < 20:
+            # 네 값(high·low·close·volume)이 모두 숫자인 행만 센다. 원래 행 수로 세면 값이 빈 프레임이
+            # 「무효 프레임」 결과로 분석 수에 들어가 전 종목 결함이 「시그널 없음」이 된다([VCP-056])
+            # 문턱은 판정의 최소 행 수와 같아야 부족분이 「Insufficient data」 결과로 분석 수에 들어가지 않는다
+            from engine.constants import VCP_THRESHOLDS
+            from engine.vcp import _normalize_price_frame
+            if stock_prices is None or len(_normalize_price_frame(stock_prices)) < VCP_THRESHOLDS.MIN_DATA_POINTS:
                 return None
             return stock, stock_prices, self._detect_vcp_pattern(stock_prices, stock)
         except Exception as error:

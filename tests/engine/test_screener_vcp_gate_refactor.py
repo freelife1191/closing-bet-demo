@@ -173,12 +173,39 @@ def test_run_screening_raises_when_vcp_detection_fails_for_all(monkeypatch):
     """[VCP-053] VCP 판정 예외를 is_vcp=False 로 삼키면 체계적 오류가 「시그널 없음」이 된다."""
     screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame([{"ticker": "000001"}]))
     screener._target_datetime = None
-    screener._prices_by_ticker = {"000001": pd.DataFrame({"close": [100.0] * 30})}
+    screener._prices_by_ticker = {"000001": _frame_with_high([110.0] * 30)}
     monkeypatch.setattr(SmartMoneyScreener, "_calculate_supply_score", lambda _self, _ticker: {"score": 0})
+    called = []
 
     def _boom(*_args, **_kwargs):
+        called.append(True)
         raise ValueError("vcp broken")
 
     monkeypatch.setattr("engine.vcp.detect_vcp_pattern", _boom)
     with pytest.raises(RuntimeError, match="분석 가능한 종목"):
         screener.run_screening(max_stocks=10)
+    # 유효 행 검사([VCP-056])를 지나 판정까지 갔어야 이 테스트가 판정 예외를 검사한다
+    assert called
+
+
+def _frame_with_high(high):
+    return pd.DataFrame({"high": high, "low": [90.0] * 30, "close": [100.0] * 30, "volume": [1_000] * 30})
+
+
+def test_run_screening_raises_when_all_high_values_are_missing(monkeypatch):
+    """[VCP-056] 행이 20개 넘어도 high 가 전부 비면 판정이 「무효 프레임」 결과로 끝나 분석 수에 들어갔다."""
+    screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame([{"ticker": "000001"}]))
+    screener._target_datetime = None
+    screener._prices_by_ticker = {"000001": _frame_with_high([float("nan")] * 30)}
+    monkeypatch.setattr(SmartMoneyScreener, "_calculate_supply_score", lambda _self, _ticker: {"score": 0})
+    with pytest.raises(RuntimeError, match="분석 가능한 종목"):
+        screener.run_screening(max_stocks=10)
+
+
+def test_run_screening_analyzes_when_enough_rows_remain_valid(monkeypatch):
+    """[VCP-056] 일부 행만 비고 유효 행이 20 이상이면 종전처럼 분석한다."""
+    screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame([{"ticker": "000001"}]))
+    screener._target_datetime = None
+    screener._prices_by_ticker = {"000001": _frame_with_high([float("nan")] * 10 + [110.0] * 20)}
+    monkeypatch.setattr(SmartMoneyScreener, "_calculate_supply_score", lambda _self, _ticker: {"score": 0})
+    assert screener.run_screening(max_stocks=10).empty

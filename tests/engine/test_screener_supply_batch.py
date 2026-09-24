@@ -33,6 +33,11 @@ def test_four_references_enter_together_without_reloading_csv(monkeypatch, tmp_p
     assert loads == [threading.get_ident()]
 
 
+def _prices(rows):
+    # 스크리너는 네 값이 모두 숫자인 행만 센다([VCP-056])
+    return pd.DataFrame({"high": [110] * rows, "low": [90] * rows, "close": [100] * rows, "volume": [1000] * rows})
+
+
 @pytest.mark.parametrize("limit, expected", [(3, ["000001", "000003"]), (0, []), (-1, [])])
 def test_historical_cutoff_does_not_refill_short_price_candidate(monkeypatch, limit, expected):
     screener = object.__new__(SmartMoneyScreener)
@@ -42,7 +47,7 @@ def test_historical_cutoff_does_not_refill_short_price_candidate(monkeypatch, li
     screener.prices_df = pd.DataFrame([{"ticker": "000001"}])  # 비면 [VCP-049] 가 실패로 본다. 분석은 아래 인덱스를 쓴다
     screener.inst_df = pd.DataFrame()
     screener.market_gate = SimpleNamespace(analyze=lambda: {"status": "중립", "is_gate_open": True})
-    screener._prices_by_ticker_target = {f"{i:06d}": pd.DataFrame({"close": [100] * (19 if i == 2 else 20)}) for i in range(1, 5)}
+    screener._prices_by_ticker_target = {f"{i:06d}": _prices(19 if i == 2 else 20) for i in range(1, 5)}
     monkeypatch.setattr(screener, "_load_data", lambda: None)
     monkeypatch.setattr(screener, "_detect_vcp_pattern", lambda *args: SimpleNamespace(is_vcp=False))
     monkeypatch.setattr(screener, "_calculate_supply_score", lambda *args: (_ for _ in ()).throw(AssertionError("single supply query used")))
@@ -85,7 +90,7 @@ def test_prepared_batch_results_equal_original_single_analysis(monkeypatch, tmp_
     screener._target_datetime = datetime(2026, 9, 18)
     screener.target_date = "2026-09-18"
     candidates = [{"ticker": code, "name": "동등성", "market": "KOSPI"} for code in ["000001", "000002", "000001"]]
-    screener._prices_by_ticker_target = {code: pd.DataFrame({"close": [100] * 20, "volume": [1000] * 20}) for code in ["000001", "000002"]}
+    screener._prices_by_ticker_target = {code: _prices(20) for code in ["000001", "000002"]}
     monkeypatch.setattr(screener, "_detect_vcp_pattern", lambda *args: SimpleNamespace(
         is_vcp=True, vcp_score=80, entry_price=100, contraction_ratio=0.5))
     trend = {"foreign": 50, "institution": 100,
