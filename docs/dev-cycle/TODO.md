@@ -66,17 +66,6 @@
 
 ## P2 — 대기
 
-### [INFRA-101] 대체된 옛 수동 업데이트가 새 실행의 항목 상태를 덮어쓴다
-- 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-099]` QA S-3(2026-09-24 23:24) 관찰, 코드로 확인
-- 원인: `update_item_status` 는 상태 파일의 `items` 를 이름으로만 찾아 고치며 자기 실행의 `startTime` 을 확인하지 않는다. 중단 뒤 다른 워커에서 새 실행이 시작되면, 옛 실행은 감시가 멈출 때까지(최대 1초와 다음 중단 확인 지점까지) 단계를 마치며 `running`·`done`·`error` 를 새 실행의 같은 이름 항목에 쓴다. QA S-3 에서 새 실행의 `Daily Prices` 가 시작도 전에 `done` 으로 보였다
-- 확인 수준: 가짜 수집기 하네스에서 한 번 관찰. 실제 수집기는 중단을 보면 예외로 끝나므로 `error` 가 쓰일 수 있다. 운영 빈도는 확인하지 않았다
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 06:30 | 범위: 해법 (a). (1) `update_item_status` 에 선택 인자 `start_time` 을 두고, 값이 있는데 `update_lock` 안에서 읽은 상태의 `startTime` 과 다르면 저장하지 않고 INFO 로그만 남긴다. (2) `app/routes/common.py` 의 `run_background_update` 가 진입 때의 `LOCAL_RUN_START_TIME` 을 묶은 인자 두 개짜리 콜백을 파이프라인에 넘긴다. 파이프라인·단계 함수·수동 API `api_update_item_status` 는 바꾸지 않는다. (b)(파이프라인에서 콜백 전에 비교)와 워커 사이 직렬화(`[INFRA-098]`)는 범위 밖 | 근거: bounded 설계 제시 뒤 사용자 「진행해」
-- [x] 계획 문서와 critic 검토(T3): `docs/superpowers/plans/2026-09-25-infra-101-item-status-run-guard.md` · `oh-my-claudecode:critic` ACCEPT-WITH-RESERVATIONS: 중 시작 처리와 스레드 진입 사이 틈에서는 옛 스레드도 새 실행 시각을 묶음 → 계획 한계 3(막으려면 `start_update` 에서 표시를 켜야 해 범위 밖) | 낮 같은 실행 안 중단 뒤 쓰기는 막지 않음 → 한계 4, QA 판정을 새 실행 `startTime` 아래 항목으로 한정 | 낮 상태 파일·스냅샷이 없으면 건너뜀 → 한계 5 | 낮 `LOCAL_RUN_START_TIME` 이 없을 때 `None` 전달 확인 없음 → assert 추가 | 래퍼 `start_time=None` 하드코딩 지적은 변이 검사 중 순간을 읽은 것이라 해당 없음
-- [x] 테스트(다른 실행의 `startTime` 이면 쓰지 않음, 같거나 인자 없음이면 씀, 래퍼가 진입 때 값을 묶음) RED(`2 failed`: `unexpected keyword argument 'start_time'`, `KeyError: 'start_time'`)→GREEN(관련 세 파일 65 passed). 변이 검사: 비교 분기 삭제·래퍼 미전달·콜백 호출 때 읽기 각각 `1 failed`
-- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` 「Lean already. Ship.」 · `closing-bet-reviewer` APPROVE(max low): low 1 값을 묶는 시점이 스레드 진입이라 한계 3 의 틈이 남음 → 범위 밖 `[INFRA-104]` 등록 | low 2 계획 Step 1 스케치가 실제 테스트와 다름 → 스케치 정정 · `/review`(T3, `oh-my-claudecode:code-reviewer`) APPROVE: 지적 1 시그니처 캐시 `(mtime_ns, size)` 충돌 시 옛 값 읽음(기존 결함) → `[INFRA-098]` 근거에 추가 | 지적 2 건너뛴 쓰기가 `currentItem` 을 안 바꾸는지 미검증 → `running` 건너뛰기 assert 추가, 건너뛰며 `currentItem` 을 저장하는 변이 `1 failed` | 지적 3 파이프라인 통과 통합 테스트 없음 → QA S-1 이 실제 배선으로 대체 | 지적 4 `getattr` 기본값 불필요 → 파일의 기존 관용구라 유지 | QA 전제(`hold` 2초 > 재시작 0.5초) → QA 문서에 명시
-- [x] pytest 전체(`venv/bin/python -m pytest -q -p no:cacheprovider`): 리뷰 반영 뒤 2772 passed, 2 skipped, exit 0
-- [ ] QA: 격리 사본에서 `[INFRA-099]` S-3 두 프로세스 하네스로 다른 워커 중단·재시작 재현(새 실행 항목이 옛 실행 값으로 덮이지 않음)
-
 ### [INFRA-098] 수동 업데이트 상태 파일의 읽기-수정-쓰기가 워커 사이에서 직렬화되지 않아 중단 요청이 사라질 수 있다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-097]` `closing-bet-reviewer` 지적 5(2026-09-24), 코드로 확인
 - 원인: `update_lock` 은 프로세스 안의 `threading.Lock` 이다. 작업을 돌리는 워커의 `update_item_status` 가 상태를 읽고 쓰는 사이에 다른 워커의 `stop_update` 가 쓰면, 앞 워커의 저장이 `stopRequested` 와 `isRunning` 을 되돌려 중단 요청이 조용히 사라진다. 화면은 다시 실행 중으로 보이므로 재시도는 가능하다
