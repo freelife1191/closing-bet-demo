@@ -70,16 +70,6 @@
 - [ ] 운영자 확인: 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부
 - [ ] 배포와 워커 전부 재기동(운영자, 장 마감 뒤), 발동했다면 10분 뒤 「VCP 분석기 세션 차단 해제: … zai=prompt-echo responses」 로그 확인
 
-### [VCP-043] `signal_tracker` 경로의 AI 추천 선택이 실패 dict 도 고르고 VCP 수집과 다른 규칙을 쓴다
-- 카테고리: VCP | 티어: T3(`engine/signal_tracker_ai_helpers.py`) | 근거: `[VCP-040]` 계획 검토(critic, 2026-09-24). `engine/signal_tracker_ai_helpers.py:91` `_pick_recommendation` 은 gemini → gpt → perplexity 순서로 `isinstance(Mapping)` 만 보고 고르므로 `{"action":"N/A","reason":"분석 실패"}` 도 선택된다. `run.py:56` 메뉴 2 가 이 경로로 `signals_log.csv` 에 쓰며 `ai_provider` 열도 남긴다(`:145`). `[VCP-040]` 이후 수집·재분석은 `_extract_vcp_ai_recommendation`(유효성 검사 포함)을 쓴다.
-- 설계 승인: 2026-09-24 17:07 사용자 「좋아 진행해」(bounded 대화 설계). 범위: `apply_ai_results` 가 종목마다 `_extract_vcp_ai_recommendation` 을 함수 안 import 로 부름(순환 import 회피, `scripts/init_data.py:1588` 과 같은 방식), `_pick_recommendation`·`_PROVIDER_PRIORITY` 삭제, 읽는 곳이 없는 `ai_provider` 열 기록 중단(저장된 열은 건드리지 않음), 기존 테스트 수정과 「Gemini 실패 dict + 유효한 GPT → GPT」 추가. 범위 밖: 선택 함수를 engine 으로 옮기기
-- [x] 이 경로가 운영에서 쓰이는지 확인: 호출처는 `run.py` 메뉴 2(대화형, 저장은 y 확인) 하나이고 스케줄러·Flask 는 쓰지 않는다. 운영자가 메뉴 2 를 쓰는지는 이 기기에서 확인할 수 없다. `ai_provider` 를 읽는 코드·화면 없음
-- [x] 설계 승인
-- [x] 테스트(실패 확인)와 수정: 새 테스트로 3 failed 확인 뒤 구현, 대상 두 파일 47 passed
-- [x] ponytail(net -2: 세 컴프리헨션을 `zip(*picked)` 한 줄로, 반영) · `closing-bet-reviewer`(이름 vcp043-review) CHANGES_REQUIRED medium 1·low 2(README.md:263·570·577·587 옛 `_PROVIDER_PRIORITY`·`ai_provider` 계약 → 반영, 레거시 템플릿 사유 테스트 → 반영, engine→app.routes 함수 안 import 의 계층 역전 → 승인 범위 밖이라 미반영) · `/review`(`oh-my-claudecode:code-reviewer` opus, 이름 vcp043-deep-review) REQUEST_CHANGES medium 1·low 1·info 1(README 같은 지적 반영, `ai_results` 힌트를 `dict` 로 좁히고 `Mapping` import 삭제 반영, app 패키지 적재는 범위 밖 승인으로 차단 아님). 두 리뷰 모두 반영하면 APPROVE 라고 명시
-- [ ] pytest 전체
-- [ ] 격리 사본 하네스 QA(LLM 호출 없음, `qa/VCP-043.md`)
-
 ### [VCP-042] 실패 재분석 저장이 `signals_log.csv` 전체를 숫자 티커로 다시 써 앞자리 0 이 사라진다
 - 카테고리: VCP | 티어: T3(재분석 저장 경로) | 근거: `[VCP-040]` 원인 확정 실행 2(2026-09-24 08:11, 격리 사본, 기록 `docs/dev-cycle/qa/VCP-040.md`). 수집 직후 원문 `033530` 이던 행이 재분석(갱신 0건) 뒤 원문 `33530` 이 되었다.
 - 원인(코드 확인): `write_vcp_signals_csv_atomic`(`services/kr_market_vcp_reanalysis_service.py:320`)은 `load_csv_file_for_persist` 로 전체 파일을 다시 읽어 병합한 뒤 `to_csv` 로 통째로 쓴다. 이 로더가 `ticker` 를 문자열로 고정하지 않으면 정수로 읽혀 앞자리 0 이 빠진 채 저장된다. 갱신 행이 없어도 파일을 다시 쓰는지는 확인이 필요하다.
