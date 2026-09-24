@@ -1,4 +1,4 @@
-# pykrx 1.2.9+cookie.2
+# pykrx 1.2.9+cookie.3
 
 공식 pykrx 1.2.9에 인증 쿠키 전달 경계와 로그인 실패 처리를 수정한 프로젝트 배포본이다. 런타임 monkeypatch를 설치하지 않는다.
 
@@ -9,6 +9,7 @@
 - 로그인 warmup·HTTP 오류·JSON 오류·응답 스키마 오류와 CD011 재시도 오류는 예외를 전파하지 않는다. 기존 인증 상태와 새 CookieJar를 비우고 `network_error`·`http_error`·`invalid_json`·`invalid_schema` 같은 비밀 없는 범주만 남긴다.
 - 로그인 ID·비밀번호와 KRX 응답 본문·오류 메시지는 출력하지 않는다.
 - 공개 요청은 새 세션에서 Cookie/Authorization/Proxy-Authorization을 제거한다. URL 내 자격증명·auth/cookies 인자는 거부하며, netrc/환경 프록시 등 ambient 인증 설정도 상속하지 않는다. 프록시가 필요한 환경은 이 제한을 검토해야 한다.
+- KRX 데이터 요청이 `400` + 본문 `LOGOUT`(서버가 세션을 끊음)을 받으면 재로그인 1회 뒤 같은 요청을 한 번 더 보낸다. 재로그인은 모듈 잠금으로 직렬화하고, 요청 뒤 다른 스레드가 이미 로그인했으면 다시 로그인하지 않는다. 1시간 타이머 재로그인과 세션이 없을 때의 첫 로그인도 같은 잠금을 거친다. 재로그인이 실패하면 60초(`time.monotonic`) 동안 어느 경로에서도 로그인하지 않으며, 실패 출력에는 비밀이 아닌 범주만 붙인다. 로그인한 지 60초 안에 다시 `LOGOUT` 을 받으면 재로그인하지 않는다(프로세스끼리 서로 세션을 끊는 교대의 상한). 잠금과 차단은 프로세스 안에서만 유효하며, gunicorn 워커와 별도 스크립트는 각자 로그인한다(`[INFRA-089]`, `+cookie.3`).
 - 원래의 KRXSession.session 원객체에 직접 접근하는 코드는 이 경계를 우회할 수 있다. 프로젝트는 공개 pykrx API를 사용한다.
 
 ## 출처와 재빌드
@@ -16,7 +17,7 @@
 공식 파일: https://files.pythonhosted.org/packages/cd/87/c54da498f80f0839ec7b4145119b2d395600542d1301f626716538356e93/pykrx-1.2.9-py3-none-any.whl
 
 원본 SHA256: `e768a64830d21dee46b1a5dd3e9e33112c390d65dbdf931a6bb89ac5a7bea8ea`
-수정본 SHA256: `3648009de4202f6087be7e8eef174a86c3d77eed6d3db60eb9ecf18ac6b8a099`
+수정본 SHA256: `4af4baf6e47ba7ab0c80af95121accafd998c66500c67cb9e15c74ef9fbe9da7`
 
 `python3 vendor/pykrx/rebuild.py`는 공식 파일을 다운로드하고 먼저SHA를검증한다. 이미받은파일은 `--upstream-wheel <path>`로 지정할 수 있다. Python3.10+와patch 명령이 필요하다. sourcepatch 외에는 localversion/METADATA/WHEEL/RECORD만 갱신한다. fixed ZIP metadata와무압축으로동일바이트를생성한다. 표준앱설치는완성된wheel만사용하므로patch도구·재빌드·추가다운로드가필요없다.
 
@@ -24,7 +25,7 @@
 
 ## 설치와 갱신
 
-루트 `requirements.txt`의 `--find-links vendor/pykrx`와 `pykrx==1.2.9+cookie.2`를 통해 설치된다. requirements-security.txt의보안하한도유지한다.
+루트 `requirements.txt`의 `--find-links vendor/pykrx`와 `pykrx==1.2.9+cookie.3`을 통해 설치된다. requirements-security.txt의보안하한도유지한다.
 업스트림이같은문제를수정하면공식판의네트워크없는인증/고수준시세회귀·전체검수후localpin/find-links/wheel/patch를함께제거한다. 새upstream에무조건패치를재적용하지않는다.
 
-검증: tests/test_pykrx_transport_security.py (실제requests·공개Naver조회,합성쿠키/HTTP), tests/test_pykrx_login_guard.py (합성 로그인 오류), docs/dev-cycle/qa/INFRA-018.md. 실제KRX로그인·원격시세·계정쿠키는검수에사용하지않았다.
+검증: tests/test_pykrx_logout_relogin.py (가짜 전송, LOGOUT 재로그인·동시 1회·실패 차단), tests/test_pykrx_transport_security.py (실제requests·공개Naver조회,합성쿠키/HTTP), tests/test_pykrx_login_guard.py (합성 로그인 오류), docs/dev-cycle/qa/INFRA-018.md. 실제KRX로그인·원격시세·계정쿠키는검수에사용하지않았다.

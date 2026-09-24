@@ -1,8 +1,10 @@
 --- a/pykrx/website/comm/auth.py
 +++ b/pykrx/website/comm/auth.py
-@@ -4,0 +5 @@
+@@ -1,0 +2 @@
++import threading
+@@ -4,0 +6 @@
 +from urllib.parse import urlsplit
-@@ -15,0 +17,24 @@
+@@ -15,0 +18,24 @@
 +
 +def is_krx_origin(url: str) -> bool:
 +    """Only this exact HTTPS origin may use the KRX authentication session."""
@@ -27,21 +29,54 @@
 +        session.trust_env = False
 +        return session.request(method, url, headers=public_headers, **kwargs)
 +
-@@ -34,0 +60 @@
+@@ -18,0 +45,4 @@
++# 재로그인은 한 번에 하나만 한다. 실패하면 이 시각까지 어느 경로에서도 로그인하지 않는다
++_refresh_lock = threading.Lock()
++_REFRESH_RETRY_SECONDS = 60
++_refresh_blocked_until = 0.0
+@@ -19,0 +50,27 @@
++
++def _is_logout_response(response) -> bool:
++    """KRX 가 세션을 끊은 요청에 주는 응답(400, 본문 LOGOUT)인지 판별합니다."""
++    return response.status_code == 400 and response.content.strip() == b"LOGOUT"
++
++
++def _refresh_session(krxs, seen_login_time: float, reason: str) -> bool:
++    """재로그인을 직렬화합니다. 요청 뒤 다른 스레드가 이미 로그인했으면 로그인하지 않습니다."""
++    global _refresh_blocked_until
++    with _refresh_lock:
++        if krxs.login_time != seen_login_time:
++            return krxs.is_authenticated
++        if time.monotonic() < _refresh_blocked_until:
++            return False
++        login_id = os.getenv("KRX_ID")
++        login_pw = os.getenv("KRX_PW")
++        if not (login_id and login_pw):
++            return False
++        print(f"KRX 세션 {reason}, 재로그인 시도...", flush=True)
++        if krxs.refresh(login_id, login_pw):
++            print("KRX 세션 갱신 완료.", flush=True)
++            return True
++        _refresh_blocked_until = time.monotonic() + _REFRESH_RETRY_SECONDS
++        print(f"KRX 세션 갱신 실패: {krxs.last_error or 'login_rejected'}", flush=True)
++        return False
++
++
+@@ -34,0 +92 @@
 +    last_error: str = ""
-@@ -46,2 +72 @@
+@@ -46,2 +104 @@
 -        except Exception as e:
 -            print(f"Session close error: {e}")
 +        except Exception:
-@@ -49,0 +75,4 @@
+@@ -49,0 +107,4 @@
 +        self.is_authenticated = False
 +        self.cookies.clear()
 +        self.last_error = ""
 +        self.session.cookies.clear()
-@@ -51,2 +79,0 @@
+@@ -51,2 +111,0 @@
 -        warmup_krx_session(self.session)
 -
-@@ -55,4 +82,4 @@
+@@ -55,4 +114,4 @@
 -        if success:
 -            self.login_time = time.time()
 -            self.expiry_time = time.time() + 3600  # 1 시간 만료
@@ -50,7 +85,7 @@
 +            self.last_error = getattr(self.session, "_pykrx_login_error", "login_rejected")
 +            self.session.cookies.clear()
 +            return False
-@@ -60,9 +87,3 @@
+@@ -60,9 +119,4 @@
 -            # 쿠키 추출 및 저장
 -            for cookie in self.session.cookies:
 -                self.cookies[cookie.name] = {
@@ -60,10 +95,11 @@
 -                    "secure": cookie.secure,
 -                    "expires": cookie.expires or 0,
 -                }
-+        self.login_time = time.time()
++        # login_time 은 마지막에 쓴다. 재로그인 판단의 기준값이라, 인증 상태가 먼저 갖춰져야 한다
 +        self.expiry_time = time.time() + 3600  # 1 시간 만료
 +        self.is_authenticated = True
-@@ -70 +91,9 @@
++        self.login_time = time.time()
+@@ -70 +124,9 @@
 -        return success
 +        # 쿠키 추출 및 저장
 +        for cookie in self.session.cookies:
@@ -74,16 +110,16 @@
 +                "secure": cookie.secure,
 +                "expires": cookie.expires or 0,
 +            }
-@@ -71,0 +101,2 @@
+@@ -71,0 +134,2 @@
 +        return True
 +
-@@ -78,5 +108,0 @@
+@@ -78,5 +141,0 @@
 -            "Cookie": "; ".join(
 -                [f"{name}={info['value']}" for name, info in self.cookies.items()]
 -            )
 -            if self.cookies
 -            else "",
-@@ -84,0 +111,9 @@
+@@ -84,0 +144,19 @@
 +    def _request(self, method: str, url: str, headers: dict = None, **kwargs):
 +        request_headers = self.get_headers()
 +        if headers is not None:
@@ -91,9 +127,19 @@
 +        if not is_krx_origin(url):
 +            return public_request(method, url, request_headers, **kwargs)
 +        kwargs["allow_redirects"] = False
-+        return self.session.request(method, url, headers=request_headers, **kwargs)
++        seen_login_time = self.login_time
++        response = self.session.request(method, url, headers=request_headers, **kwargs)
++        # 로그인한 지 60초 안에 다시 끊기면(다른 프로세스와 서로 끊는 경우 등) 재로그인하지 않는다
++        if (
++            _is_logout_response(response)
++            and time.time() - seen_login_time >= _REFRESH_RETRY_SECONDS
++            and _refresh_session(self, seen_login_time, "서버에서 끊김(LOGOUT)")
++        ):
++            response.close()
++            response = self.session.request(method, url, headers=request_headers, **kwargs)
++        return response
 +
-@@ -87,7 +122 @@
+@@ -87,7 +165 @@
 -        if headers is None:
 -            headers = self.get_headers()
 -        else:
@@ -102,10 +148,10 @@
 -            default_headers.update(headers)
 -            headers = default_headers
 +        return self._request("GET", url, headers, params=params, **kwargs)
-@@ -95,2 +123,0 @@
+@@ -95,2 +166,0 @@
 -        return self.session.get(url, headers=headers, params=params, **kwargs)
 -
-@@ -99,7 +126 @@
+@@ -99,7 +169 @@
 -        if headers is None:
 -            headers = self.get_headers()
 -        else:
@@ -114,11 +160,11 @@
 -            default_headers.update(headers)
 -            headers = default_headers
 +        return self._request("POST", url, headers, data=data, **kwargs)
-@@ -107 +127,0 @@
+@@ -107 +170,0 @@
 -        return self.session.post(url, headers=headers, data=data, **kwargs)
-@@ -109 +128,0 @@
+@@ -109 +171,0 @@
 -
-@@ -117,2 +136,8 @@
+@@ -117,2 +179,8 @@
 -    session.get(LOGIN_PAGE, headers={"User-Agent": USER_AGENT}, timeout=15)
 -    session.get(
 +    response = session.get(
@@ -129,11 +175,11 @@
 +    )
 +    _require_success_status(response)
 +    response = session.get(
-@@ -121,0 +147 @@
+@@ -121,0 +190 @@
 +        allow_redirects=False,
-@@ -122,0 +149 @@
+@@ -122,0 +192 @@
 +    _require_success_status(response)
-@@ -124,0 +152,24 @@
+@@ -124,0 +195,24 @@
 +def _require_success_status(response: requests.Response) -> None:
 +    status_code = response.status_code
 +    if not isinstance(status_code, int) or not 200 <= status_code < 300:
@@ -158,7 +204,7 @@
 +    session._pykrx_login_error = category
 +
 +
-@@ -140 +191,8 @@
+@@ -140 +234,8 @@
 -    warmup_krx_session(session)
 +    try:
 +        warmup_krx_session(session)
@@ -168,7 +214,7 @@
 +    except requests.RequestException:
 +        _set_login_error(session, "network_error")
 +        return False
-@@ -152,2 +210,11 @@
+@@ -152,2 +253,11 @@
 -    resp = session.post(LOGIN_URL, data=payload, headers=headers, timeout=15)
 -    data = resp.json()
 +    try:
@@ -182,14 +228,14 @@
 +    if data is None:
 +        _set_login_error(session, error)
 +        return False
-@@ -155 +221,0 @@
+@@ -155 +264,0 @@
 -    error_message = data.get("_error_message", "")
-@@ -159,3 +225 @@
+@@ -159,3 +268 @@
 -        print("⚠️ KRX 비밀번호 변경이 필요합니다.")
 -        print(f"   오류 메시지: {error_message}")
 -        print("   https://www.krx.co.kr 에서 비밀번호를 변경한 후 다시 시도하세요.")
 +        _set_login_error(session, "password_change_required")
-@@ -167,2 +231,11 @@
+@@ -167,2 +274,11 @@
 -        resp = session.post(LOGIN_URL, data=payload, headers=headers, timeout=15)
 -        data = resp.json()
 +        try:
@@ -203,19 +249,53 @@
 +        if data is None:
 +            _set_login_error(session, error)
 +            return False
-@@ -170 +242,0 @@
+@@ -170 +285,0 @@
 -        error_message = data.get("_error_message", "")
-@@ -172 +244,4 @@
+@@ -172 +287,4 @@
 -    return error_code == "CD001"  # CD001 = 정상
 +    if error_code != "CD001":
 +        _set_login_error(session, "login_rejected")
 +        return False
 +    return True
-@@ -189 +263,0 @@
+@@ -189 +306,0 @@
 -    print(f"  로그인 ID: {login_id}")
-@@ -204 +278 @@
+@@ -204 +321 @@
 -        print("KRX 로그인 실패: 자격 증명을 확인하세요.")
 +        print(f"KRX 로그인 실패: {krxs.last_error or 'login_rejected'}")
+@@ -215 +332 @@
+-    global _auth_session
++    global _auth_session, _refresh_blocked_until
+@@ -218 +335 @@
+-        # 환경 변수에서 다시 시도
++        # 환경 변수에서 다시 시도. 재로그인과 같은 잠금·실패 차단을 따른다
+@@ -222 +339,5 @@
+-            _auth_session = build_krx_session(login_id, login_pw)
++            with _refresh_lock:
++                if _auth_session is None and time.monotonic() >= _refresh_blocked_until:
++                    _auth_session = build_krx_session(login_id, login_pw)
++                    if _auth_session is None:
++                        _refresh_blocked_until = time.monotonic() + _REFRESH_RETRY_SECONDS
+@@ -225,12 +346,5 @@
+-    # 세션 만료 확인 및 재로그인
+-    if not _auth_session.is_valid():
+-        login_id = os.getenv("KRX_ID")
+-        login_pw = os.getenv("KRX_PW")
+-        if login_id and login_pw:
+-            print("KRX 세션 만료, 재로그인 시도...")
+-            if _auth_session.refresh(login_id, login_pw):
+-                print("KRX 세션 갱신 완료.")
+-            else:
+-                print("KRX 세션 갱신 실패.")
+-                return None
+-        else:
++    # 세션 만료 확인 및 재로그인. 기준 시각은 유효성 판단보다 먼저 읽는다
++    krxs = _auth_session
++    seen_login_time = krxs.login_time
++    if not krxs.is_valid():
++        if not _refresh_session(krxs, seen_login_time, "만료"):
+@@ -239 +353 @@
+-    return _auth_session
++    return krxs
 --- a/pykrx/website/comm/webio.py
 +++ b/pykrx/website/comm/webio.py
 @@ -7,0 +8,2 @@

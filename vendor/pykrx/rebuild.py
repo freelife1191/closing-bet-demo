@@ -20,7 +20,7 @@ UPSTREAM_URL = (
     "pykrx-1.2.9-py3-none-any.whl"
 )
 UPSTREAM_SHA256 = "e768a64830d21dee46b1a5dd3e9e33112c390d65dbdf931a6bb89ac5a7bea8ea"
-VERSION = "1.2.9+cookie.2"
+VERSION = "1.2.9+cookie.3"
 WHEEL_NAME = f"pykrx-{VERSION}-py3-none-any.whl"
 
 

@@ -51,6 +51,9 @@
 
 ### [INFRA-089] 운영에서 KRX(pykrx) 조회가 간헐적으로 빈 응답을 받아 가격·지수 수집이 폴백으로 떨어진다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: 운영 09-23 17:00 `backend.log` 의 `get_index_ohlcv_by_date: None of [Index(['TRD_DD', 'OPNPRC_IDX', ...])]`, `get_market_trading_value_and_volume_on_ticker_by_date: Expecting value: line 1 column 1`. 같은 코드가 로컬에서는 2026-09-24 01:25 로그인 후 지수·전종목 시세 모두 정상이었다. 따라서 KRX 응답 형식 변경보다 운영 세션 문제일 가능성이 높다.
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 07:09
+  | 범위: `vendor/pykrx` 수정판(`transport.patch`·wheel 재빌드, `1.2.9+cookie.3`)에서 KRX 응답 `400`+`LOGOUT` 을 받으면 잠금 아래 재로그인 1회 뒤 같은 요청을 한 번 더 보냄, 동시 수신 시 로그인 1회, 기존 1시간 타이머 재로그인도 같은 잠금, 재로그인 실패 뒤 60초 재시도 금지, 실패 사유 범주 출력. (리뷰 반영으로 좁힘: 로그인 뒤 60초 안의 LOGOUT 은 재로그인하지 않음, 재전송 전 첫 응답 close, 세션 없음 갈래도 같은 잠금·차단) `restart_all.sh` gunicorn 에 `PYTHONUNBUFFERED=1`. 섹터 ETF `0.0`·`get_last_trading_date` DEBUG 로그는 `[INFRA-105]`·`[INFRA-106]` 으로 분리
+  | 실제 대화 근거: 2026-09-25 사용자 「복구 경로 설계 진행」 선택 뒤 대화 설계 제시, 사용자 「진행해 그리고 실측은 이제 운영에 요구하지말고 여기서 바로바로 진행하면서 돼」 응답
 - 가설(미확정, 운영 로그 필요): pykrx 1.2.9+cookie.2 는 로그인 세션 만료를 클라이언트 쪽 1시간 타이머로만 판단한다(`pykrx/website/comm/auth.py`). 같은 KRX 계정으로 gunicorn 워커 둘과 스케줄러·수동 스크립트가 각각 로그인하면 서버 쪽에서 앞 세션이 끊길 수 있고(vendor README 가 다루는 CD011 계열), 끊긴 세션의 요청은 빈 응답이 되어 위 두 오류로 나타난다. 운영에 `KRX_ID`·`KRX_PW` 가 없는 경우도 같은 증상이므로 먼저 배제한다.
 - 영향: `create_daily_prices` 는 이 오류를 `_should_abort_daily_pykrx_bulk_fetch` 로 잡아 yfinance 로 넘어가며 이것이 `[INFRA-088]` 의 부분 저장을 부른다. `get_last_trading_date`(`scripts/init_data.py:119`)는 실패 시 DEBUG 로그만 남기고 주말만 거르므로 공휴일을 거래일로 볼 수 있다. VCP AI 파일의 `market_indices`(`:1508-1525`)는 빈 dict 로 저장되지만 AI 프롬프트 입력은 아니다(분석 뒤에 조립). Market Gate 는 `DataSourceManager` 폴백 체인을 거치므로 영향 여부를 이 항목에서 확인한다.
 - 확인 수준(2026-09-24): 01:25 조회에서는 로컬에서 오류가 재현되지 않았다. 원인은 가설 단계다.
@@ -63,9 +66,11 @@
 - [ ] 원인 확정(실측, 실제 KRX 조회): 같은 KRX 계정으로 프로세스 둘을 띄워 차례로 로그인한 뒤, 먼저 로그인한 쪽에서 `get_index_ohlcv_by_date`·`get_market_ohlcv(market="ALL")`·`get_market_trading_value_by_date` 를 실제로 불러 운영과 같은 두 오류가 나는지 본다(중복 로그인 가설). 이어 로그인 뒤 1시간 넘게 둔 세션으로 같은 조회를 해 만료 가설을, `KRX_ID` 를 비운 프로세스로 미설정 가설을 가린다. 조회만 하고 `data/` 에는 쓰지 않는다. 계정 잠금 위험이 있으므로 로그인 시도는 경우마다 1회로 제한한다. 로컬에서 재현되지 않으면 운영자 확인 결과로만 판정하고 그 한계를 기록한다
   - 1차 결과(2026-09-24 09:46~10:13, 기록 `qa/INFRA-089.md`, 로그인 2회): 같은 계정 두 번째 로그인은 `CD001`(중복 아님)이었고 먼저 만든 세션의 조회도 정상이라 **중복 로그인 가설은 재현되지 않음.** 정상 세션으로 휴장일 지수를 물으면 운영의 `None of [Index(['TRD_DD', ...` 가 그대로 나므로 **이 문구는 「그 날짜 자료 없음」으로 확정.** `Expecting value` 는 미로그인 실행(09:16)에서만 나왔다. 만료 가설(30·50분 뒤 조회)은 사용자 지시로 중단해 미확인
   - 2차 결과(09-24 17:30~18:40, 로그인 1회, 클라이언트 재로그인 차단): 35분 유휴 뒤·로그인 54분·70분 뒤 조회 모두 정상. **만료 가설도 재현되지 않음.** 남은 후보는 운영 프로세스의 미인증(키 미설정·기동 시 로그인 실패)이며 운영자 확인으로만 가린다
-- [ ] 원인 확정 뒤 설계 승인(세션 공유·재로그인 트리거, 실패를 DEBUG 가 아닌 WARNING 으로)
-- [ ] Market Gate 지수 입력과 `get_last_trading_date` 공휴일 판정 영향 확인과 테스트
-- [ ] T3 리뷰와 pytest 전체
+- [x] 원인 확정 뒤 설계 승인(위 설계 승인 줄). Market Gate 섹터 ETF·`get_last_trading_date` 는 `[INFRA-105]`·`[INFRA-106]` 으로 분리
+- [x] 구현 계획(`docs/superpowers/plans/2026-09-25-infra-089-krx-logout-relogin.md`)과 계획 검토: critic REVISE. R1(테스트 import 시 실제 로그인 가능) → 픽스처가 계정을 지운 뒤 늦게 import, R2(변이 복원) → `--force-reinstall` 과 `cmp`. 권고 1(타이머 경로 기준값 먼저 읽기)·2(세션 없음 갈래 잠금·차단)·4(`monotonic`)·6(테스트 3건 추가)·8(교대 한계) 반영, 3(영구 실패 차단 연장)은 한계 5로 기록. 권고 7의 `CLAUDE.md` gunicorn 명령 수정은 피어 제안만으로 `CLAUDE.md` 를 바꾸지 않는 규칙에 따라 미반영, 한계 8로 사용자 판단에 넘김
+- [x] 가짜 HTTP 테스트 12건(`tests/test_pykrx_logout_relogin.py`), 수정판 재빌드(`4af4baf6…`, 두 번 빌드 동일), RED 5건 확인, 변이 (a)~(g) 7종 모두 해당 테스트 FAIL 뒤 강제 재설치·`cmp` 로 복원
+- [x] 과잉설계 리뷰: 직접 검토(Lean already). 보안 리뷰 보강(oh-my-claudecode:security-reviewer): 차단급 없음, Medium(성공 재로그인 무제한, 워커 교대 시 폭주) → 로그인 뒤 60초 안의 LOGOUT 은 재로그인하지 않음, Low(재전송 전 응답 미종료) → `close()`, Low 2건(영구 실패 60초 재시도, 잠금 중 네트워크) → 한계 5·6. 코드 리뷰(closing-bet-reviewer): APPROVE low 4건(`login_time` 을 마지막에 씀, 벽시계 한계, 계획 한계 문장, 승인 범위 기록) 모두 반영 뒤 재검토 APPROVE none. 심층 리뷰(oh-my-claudecode:code-reviewer, opus): Critical 없음, Important(새 wheel 미스테이징 시 운영 재기동 실패) → 첫 커밋에 포함, Minor 2건(다른 스레드 재로그인 뒤 LOGOUT, 재전송 인자 동일) → 테스트 추가·변이 (f)(g) 확인, Minor 1건(타이머 동시·세션 없음 성공 갈래 테스트)은 같은 잠금 경로라 미반영. pytest 전체 2783 passed, 2 skipped, exit 0(테스트 2건 추가 전 실행, 추가 뒤 관련 테스트 12 passed)
+- [ ] 로컬 실측 QA(실제 KRX, 무효 세션 자동 복구)
 
 ## P2 — 대기
 
@@ -135,3 +140,15 @@
 - 확인 수준: 코드로만 확인. 창은 스레드 기동 시간(수 ms)이다
 - [ ] 설계 승인
 - [ ] 테스트, T3 리뷰와 pytest 전체
+
+### [INFRA-105] Market Gate 섹터 ETF 등락률 조회가 실패하면 결측 대신 0.0 을 넣어 섹터 급락 감점이 사라진다
+- 카테고리: 인프라 | 티어: T3(판정 경로 여부는 설계 때 §2 대조) | 근거: `[INFRA-089]` 영향 확인(2026-09-24)에서 분리(2026-09-25)
+- 내용: `engine/market_gate_fetchers_external.py:88-135` 는 pykrx 를 직접 부르고 실패하면 종목마다 `0.0` 을 넣는다. `_calculate_sector_crash_penalty`(`engine/market_gate_analysis.py:77`)가 전부 0 을 받아 감점 0 이 되고, 화면 섹터 신호도 0.00% 로 보인다
+- [ ] 설계 승인(실패를 `None` 으로 남기고 감점·화면이 결측을 구분)
+- [ ] 테스트, 리뷰, pytest·vitest 전체
+
+### [INFRA-106] `get_last_trading_date` 의 지수 조회 실패가 DEBUG 로그로만 남고 휴장일을 거래일로 본다
+- 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-089]` 영향 확인에서 분리(2026-09-25)
+- 내용: `scripts/init_data.py:119` 는 지수 조회가 실패하면 DEBUG 만 남기고 주말만 거른다. 세션이 인증되지 않았을 때 공휴일을 기대 날짜로 돌려주며, 호출자는 `create_daily_prices`·수급 수집·수동 갱신 stale 검증(`services/common_update_pipeline_steps.py:61-90`)이다. `[INFRA-089]` 의 재로그인 복구 뒤에도 KRX 점검 시간처럼 로그인 자체가 실패하면 남는다
+- [ ] 설계 승인(WARNING 승격, 실패 때 판정 보류 여부)
+- [ ] 테스트, 리뷰, pytest 전체
