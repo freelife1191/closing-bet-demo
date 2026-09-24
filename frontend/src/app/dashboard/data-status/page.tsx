@@ -279,24 +279,32 @@ export default function DataStatusPage() {
 
   // 개별 업데이트 로직 분리 (재사용 위해)
   const performUpdate = async (fileName: string, effectiveDate: string | null) => {
-    try {
-      // Single item update using global system (Unified Async Update)
-      await fetchAPI('/api/system/start-update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: [fileName], target_date: effectiveDate, force: true })
-      });
+    // Single item update using global system (Unified Async Update)
+    await fetchAPI('/api/system/start-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [fileName], target_date: effectiveDate, force: true })
+    });
 
-      // Trigger polling immediately to catch the 'running' status
+    // Trigger polling immediately to catch the 'running' status
+    startPolling();
+  };
+
+  // 시작 실패를 화면에 알린다(개별·전체 공용). 409 는 이미 도는 실행이 있다는 뜻이라
+  // 다른 세션이 시작한 실행이어도 진행 상황이 보이도록 폴링을 시작한다
+  const showStartUpdateError = (error: any, fallback: string) => {
+    if (error.status === 409) {
+      setModal(DUPLICATE_UPDATE_MODAL);
       startPolling();
-
-    } catch (e: any) {
-      if (e.status === 409) {
-        setModal(DUPLICATE_UPDATE_MODAL);
-      } else {
-        throw e;
-      }
+      return;
     }
+    setModal({
+      isOpen: true,
+      type: 'danger',
+      title: '업데이트 오류',
+      content: error.message || fallback,
+      showCancel: false
+    });
   };
 
   const handleUpdate = async (fileName: string) => {
@@ -321,6 +329,7 @@ export default function DataStatusPage() {
       await performUpdate(fileName, effectiveDate);
     } catch (error) {
       console.error(`Update failed for ${fileName}:`, error);
+      showStartUpdateError(error, '업데이트 시작 중 오류가 발생했습니다.');
     } finally {
       setUpdatingItem(null);
     }
@@ -361,13 +370,7 @@ export default function DataStatusPage() {
 
     } catch (error: any) {
       console.error('Update All failed:', error);
-      setModal(error.status === 409 ? DUPLICATE_UPDATE_MODAL : {
-        isOpen: true,
-        type: 'danger',
-        title: '업데이트 오류',
-        content: error.message || '전체 업데이트 시작 중 오류가 발생했습니다.',
-        showCancel: false
-      });
+      showStartUpdateError(error, '전체 업데이트 시작 중 오류가 발생했습니다.');
       setUpdating(false); // Only reset on error, otherwise let poll handle it
     }
   };

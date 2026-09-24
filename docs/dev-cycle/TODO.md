@@ -71,8 +71,16 @@
 - 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `performUpdate` 는 409 가 아니면 다시 던지고, `handleUpdate` 는 `console.error` 만 남긴다. 403(세션 만료)·500 등으로 시작이 실패해도 버튼이 원래대로 돌아올 뿐 사유가 보이지 않는다. 전체 업데이트는 같은 경우 「업데이트 오류」 모달을 띄운다
 - 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
 - 함께 볼 것(`[INFRA-100]` 리뷰 L-2): 중복 시작이 409 로 거부되면 두 버튼 모두 폴링을 시작하지 않는다. 화면을 연 뒤 다른 세션이 시작한 실행이면 모달을 닫아도 진행 상태가 보이지 않는다(마운트 때 한 번만 확인). 409 분기에서 `startPolling()` 을 부를지 함께 정한다
-- [ ] 설계 승인(전체 업데이트와 같은 「업데이트 오류」 모달을 띄울지, 409 뒤 폴링)
-- [ ] 테스트, 리뷰, 브라우저 QA
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 06:20
+  | 범위: 설계 (a) — `performUpdate` 의 409 분기를 없애고 `handleUpdate` catch 가 409 면 「업데이트 중복」 모달과 `startPolling()`, 그 밖은 「업데이트 오류」 모달(`error.message`, 없으면 기본 문구). `handleUpdateAll` 의 409 분기에도 `startPolling()`. 백엔드 불변
+  | 실제 대화 근거: 2026-09-25 사용자 「진행해」 응답, 현재 세션의 bounded 설계 제안
+- QA 시나리오: 개별 업데이트 시작이 409 가 아닌 오류로 실패하면 「업데이트 오류」 모달이 뜬다. 409 모달을 닫으면 진행 중인 실행의 진행 표시가 보인다
+- 스킬: `.claude/skills/closing-bet-nextjs/`, `frontend/node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md`(클릭 핸들러의 catch 분기만 바뀌는 순수 클라이언트 변경), `vendor/skills/vercel-react-best-practices/rules/rerender-move-effect-to-event.md`(폴링 시작을 effect 가 아닌 이벤트 핸들러에 둠)
+- [x] 실패 테스트: vitest 4건(`page.regression-INFRA-102.test.tsx`: 개별 403·500 오류 모달, 개별·전체 409 뒤 진행 표시). 수정 전 4건 모두 실패
+- [x] 구현: `page.tsx` 의 `performUpdate` 409 분기 제거, 공용 `showStartUpdateError`(409 면 중복 모달과 `startPolling()`, 그 밖은 「업데이트 오류」)를 `handleUpdate`·`handleUpdateAll` catch 에서 부름
+- [x] 리뷰: ponytail-review `performUpdate` 인라인 가능(-3줄) 지적은 이번 diff 전부터 있던 함수라 범위 밖 구조 변경으로 보고 미반영. `closing-bet-reviewer` APPROVE·max low(06:22). L-1(`[INFRA-099]` 경로의 409 는 진행 표시 없음, 종전과 같음) QA 문서에 기대값 제외로 반영, L-2(`any`) 주변 관례라 미반영, 범위 밖(폴링 오류 시 무한 요청)은 `[INFRA-103]` 로 등록
+- [x] 정적 검증(06:21): `npx vitest run` 100 files·690 passed exit 0, `npm run type-check` exit 0, `npm run lint` 0 errors·183 warnings exit 0(`page.tsx` 경고 11건, 수정 전과 같음). 파이썬 변경 없음
+- [ ] 브라우저 QA(격리 사본)
 
 ### [INFRA-101] 대체된 옛 수동 업데이트가 새 실행의 항목 상태를 덮어쓴다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-099]` QA S-3(2026-09-24 23:24) 관찰, 코드로 확인
@@ -132,3 +140,9 @@
 - 원인: 수동 갱신 병합(`services/common_update_ai_analysis_service.py:117-146`, 원자적 교체는 함)·수집(`scripts/init_data.py:1522`)·재분석(`services/kr_market_vcp_reanalysis_service.py:750`)이 같은 날짜 파일을 잠금 없이 읽고 병합해 쓴다. `vcp_status` 는 워커 메모리에만 있어 서로 막지 못한다. 가격 동기화(`scripts/init_data.py:2056`)는 `open('w')` 로 직접 쓴다
 - 영향: 동시 실행 시 한쪽이 더한 판정이 유실될 수 있고, 저장 중 중단되면 최신 파일이 깨진다. 실제로 겹치는지는 운영 로그로 확인해야 한다(추측)
 - [ ] 설계 승인(파일 잠금 범위), 동시 병합 테스트, 리뷰와 pytest 전체
+
+### [INFRA-103] 데이터 상태 화면의 진행 폴링이 조회 오류에도 멈추지 않고 500ms 간격으로 계속 요청한다
+- 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-102]` 코드 리뷰의 범위 밖 관찰(2026-09-25), 코드로 확인
+- 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `pollUpdateStatus` catch 는 `console.error` 만 남기고 interval 을 유지한다. 백엔드가 멈췄거나 네트워크가 끊기면 실행 중 표시가 남은 채로 요청이 끝없이 이어진다. 종전부터 있던 동작이다
+- 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
+- [ ] 설계 승인(연속 실패 횟수 뒤 멈추고 알릴지, 간격을 늘릴지), 테스트, 리뷰, 브라우저 QA
