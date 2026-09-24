@@ -70,24 +70,6 @@
 - [ ] 운영자 확인: 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부
 - [ ] 배포와 워커 전부 재기동(운영자, 장 마감 뒤), 발동했다면 10분 뒤 「VCP 분석기 세션 차단 해제: … zai=prompt-echo responses」 로그 확인
 
-### [VCP-046] Perplexity 프로바이더를 코드·설정·화면에서 제거한다
-- 카테고리: VCP | 티어: T3(`engine/vcp_ai_*` 위험 경로) | 근거: 사용자 지시(2026-09-24 11:43, 「Perplexity 는 이제 사용안해 제거해도돼」). 참조는 `engine/vcp_ai_analyzer.py`·`vcp_ai_analyzer_helpers.py`·`vcp_ai_orchestration_helpers.py`(`VCP_AI_RECOMMENDATION_FIELDS`)·`vcp_ai_provider_init_helpers.py`·`signal_tracker_ai_helpers.py`·`engine/config.py`, `app/routes/kr_market_vcp_signal_helpers.py`, `services/kr_market_vcp_reanalysis_service.py`·`common_env_service.py`, 프론트엔드(`SettingsModal.tsx`·`VCPCriteriaModal.tsx`·`dashboard/kr/vcp`·`page.tsx`·`privacy/page.tsx`·`lib/api.ts`), `.env.example`, `scripts/test_perplexity_*.py` 등 30여 파일과 `CLAUDE.md`·`README.md`. 기존 캐시 JSON 의 `perplexity_recommendation` 칸을 읽는 쪽이 어떻게 처리할지와 `VCP_SECOND_PROVIDER=perplexity` 설정이 남은 배포의 동작을 정해야 한다
-- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 12:46
-  | 범위: 대화 설계(과거 캐시 읽기 전용 표시 유지, perplexity 설정은 GPT 로 대체하고 경고, 개인정보 5절 Perplexity→OpenAI 교체)
-  | 실제 대화 근거: 2026-09-24 AskUserQuestion 세 답변과 설계 제시 뒤 사용자 「좋아 진행해」. 설계 문서는 13:02 확인 시각에 사용자 「좋아 승인, 계획 작성해」로 승인
-- 설계 문서: `docs/superpowers/specs/2026-09-24-vcp-046-perplexity-removal-design.md`
-- [x] 대화 설계 승인(캐시 호환, 설정값 폐기 방식, 개인정보 페이지 문구)
-- [x] 설계 문서 검토 승인(커밋 `3122d2f`)
-- [x] 구현 계획(writing-plans, `docs/superpowers/plans/2026-09-24-vcp-046-perplexity-removal.md`)과 계획 검토(critic)
-  - critic(`oh-my-claudecode:critic`) 판정 원문 「REVISE」. 반영: 오케스트레이션 테스트 세 개(`:218`·`:227`·`:260`)와 헬퍼 처리 명시, 설정 모달 테스트의 필드 수 2→1, `_extract_vcp_ai_recommendation` 과거 캐시 읽기 테스트 추가, `:1260` 삭제 줄 추가, 헬퍼 import 수 정정, `_REMOVED_PROVIDERS` 집합을 리터럴 비교로 축소, Review Focus 1 경고 수 3줄로 정정, `:772` 테스트 검사력 약화와 `:868` 이 대신 잡는다는 기록, CLAUDE.md:9 표현 정정. 미반영: 없음. 유보 1건(과거 날짜 재분석 뒤 표 두 번째 열이 Perplexity 를 우선하는 `decideSecondaryAI`)은 사용자에게 확인해 「GPT 먼저」로 결정(2026-09-24, AskUserQuestion), 계획 Task 5 에 반영. 실행 방식은 사용자 선택 Native
-- [x] 구현(Native, 계획 Task 1~6): 커밋 `4e4b540`(분석기·헬퍼·설정), `f276191`(재분석 캐시 키, 과거 캐시 읽기 테스트), `e76f3d8`(설정 키·화면·개인정보), `31c640f`(스크립트·문서). 판단(Ruling) 넷은 진행 장부 `.superpowers/sdd/2026-09-24-vcp-046-perplexity-removal/progress.md` 에 있다(develop 직접 작업, 랜딩 격자 3→2열, 하네스 `--perplexity-iters`→`--zai-iters`, Task 2 의 legacy 테스트 확인을 Task 3 뒤로)
-- [x] 정적 검증: pytest 전체 2721 passed·2 skipped(exit 0, `31c640f`), frontend `npm run test` 682/682·`type-check`·`lint` 모두 exit 0(lint 경고는 바꾼 세 파일 기준 수정 전과 같은 35건)
-- [x] 과잉설계 리뷰(`/ponytail-review`): net -6, 모든 값이 `gpt_recommendation` 인 두 번째 칸 대응표를 상수 반환으로 축소(`cf92949`)
-- [x] 코드 리뷰(`closing-bet-reviewer`, fable): CHANGES_REQUIRED(medium). 반영: Important 「`VCP_AI_PROVIDERS=gemini,perplexity` 구성에서 두 번째 AI 가 빈다」→ `drop_removed_providers` 가 gpt 를 보충(`09883efc`, 사용자 선택지 설명 「운영 .env 를 고치지 않아도 두 번째 AI 가 계속 돕니다」와 일치), Minor `DEPLOYMENT_GUIDE` 의 `OPENAI_API_KEY` 「선택」 문구, QA S-2 기대 문구. 미반영: OpenAI 법인명 대조(공식 페이지 403, 게시 전 사용자 확인), 약해진 `cache_key_follows_analyzer_fallback` 테스트(주석이 대체 테스트를 가리킴), 범위 밖 둘은 `[VCP-047]` 등록과 `ARCHITECTURE.md` 의 오래된 Z.ai 행(이력성 문서라 보류)
-- [x] 심층 리뷰(`/review`, `oh-my-claudecode:code-reviewer` opus): 차단 결함 없음, Minor 1. 미반영: `OPENAI_API_KEY` 가 없으면 재분석이 매번 같은 행을 실패로 잡는 문제(LLM 호출 0)는 기본 구성 `gemini,gpt` 에도 원래 있던 결함이라 `[VCP-048]` 로 이월
-- [x] 리뷰 반영 뒤 pytest 전체 재실행: 2722 passed·2 skipped, exit 0(`09883ef`). frontend 는 `e76f3d8` 뒤 변경 없음
-- [ ] QA(`docs/dev-cycle/qa/VCP-046.md`, 필수 S-1~S-5)
-
 ### [VCP-047] GPT 실패 시 Z.ai 폴백(`_fallback_from_gpt`)을 직접 검사하는 테스트가 없다
 - 카테고리: VCP | 티어: T1(테스트만) | 근거: `[VCP-046]` 코드 리뷰(2026-09-24). Perplexity 체인이 사라진 뒤 `engine/vcp_ai_analyzer.py` 의 `_fallback_from_gpt` 가 두 번째 자리의 유일한 폴백인데 `tests/` 에 이 이름을 직접 부르는 테스트가 0 건이다(`git grep` 확인). 차단·쿼터 경로에서 Z.ai 로 넘어가는지와 `VCP_AI_PROVIDERS` 에 `zai` 가 없을 때 넘어가지 않는지를 가짜 클라이언트로 고정한다
 - [ ] 설계 승인, 테스트 추가
