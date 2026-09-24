@@ -66,7 +66,8 @@ def _watch_stop_request(
             stopped = bool(status.get("stopRequested"))
         else:
             # 새 실행이 시작됐다면 이 실행은 중단된 것이다. 감시가 읽기 전에 중단과 재시작이 끝난 경우다.
-            # ponytail: 새 실행이 같은 워커면 플래그를 함께 쓰므로 건너뛰고, 옛 실행은 새 실행과 함께 돈다
+            # ponytail: 새 실행이 같은 워커면 플래그를 함께 쓰므로 건너뛰고, 옛 실행은 새 실행과 함께 돈다.
+            # [INFRA-099] 뒤로 같은 워커의 새 시작은 거부되므로 시작 처리와 스레드 진입 사이 틈에서만 닿는다
             stopped = current is not None and current != getattr(shared_state, "LOCAL_RUN_START_TIME", None)
         # 매번 다시 켜므로 같은 워커의 옛 실행 finally 가 지운 값도 다음 주기에 되살아난다
         if stopped:
@@ -104,6 +105,7 @@ def run_background_update_pipeline(
         watcher.start()
 
     try:
+        shared_state.LOCAL_PIPELINE_ACTIVE = True
         from scripts import init_data
 
         if "Daily Prices" in items:
@@ -179,15 +181,19 @@ def run_background_update_pipeline(
         else:
             logger.error(f"Background Update Failed: {e}")
     finally:
-        watch_done.set()
-        if watcher is not None:
-            watcher.join()  # 읽는 중이던 감시가 아래 해제 뒤에 값을 다시 켜지 않게 한다
-        # [INFRA-096] 중단의 대상이던 작업이 끝났으므로 중단 요청도 끝낸다. 남겨 두면 스케줄러와 개별 실행이 멈춘다
-        # 같은 워커의 새 실행이 이미 중단됐다면 그 실행의 감시가 1초 안에 다시 켠다
-        shared_state.STOP_REQUESTED = False
-        # [INFRA-097] 중단된 사이 새 실행이 시작됐으면 그 상태를 끝내는 것은 새 실행의 몫이다
-        if start_time is None or _read_start_time(load_update_status, logger) in (None, start_time):
-            finish_update()
+        try:
+            watch_done.set()
+            if watcher is not None:
+                watcher.join()  # 읽는 중이던 감시가 아래 해제 뒤에 값을 다시 켜지 않게 한다
+            # [INFRA-096] 중단의 대상이던 작업이 끝났으므로 중단 요청도 끝낸다. 남겨 두면 스케줄러와 개별 실행이 멈춘다
+            # [INFRA-099] 이 실행이 도는 동안 같은 워커의 새 시작은 거부되므로 끌 대상은 이 실행의 요청뿐이다
+            shared_state.STOP_REQUESTED = False
+            # [INFRA-097] 중단된 사이 다른 워커에서 새 실행이 시작됐으면 그 상태를 끝내는 것은 새 실행의 몫이다
+            if start_time is None or _read_start_time(load_update_status, logger) in (None, start_time):
+                finish_update()
+        finally:
+            # [INFRA-099] 상태를 다 정리한 뒤에 끈다. 켜진 채 남으면 이 워커는 재기동 전까지 시작을 거부한다
+            shared_state.LOCAL_PIPELINE_ACTIVE = False
 
 
 __all__ = ["DEFAULT_UPDATE_ITEMS", "run_background_update_pipeline"]

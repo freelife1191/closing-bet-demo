@@ -223,7 +223,7 @@ def launch_background_update_job(
     items_list: list[str],
     target_date: str | None,
     load_update_status: Callable[..., dict[str, Any]],
-    start_update: Callable[[list[str]], None],
+    start_update: Callable[[list[str]], bool],
     run_background_update: Callable[[str | None, list[str]], None],
     logger: logging.Logger,
 ) -> tuple[int, dict[str, Any]]:
@@ -232,10 +232,9 @@ def launch_background_update_job(
         status = load_update_status(deep_copy=False)
     except TypeError:
         status = load_update_status()
-    if status.get("isRunning", False):
+    # [INFRA-099] start_update 는 이 워커에서 중단된 앞 실행이 아직 돌면 False 를 돌려준다
+    if status.get("isRunning", False) or start_update(items_list) is False:
         return 409, {"status": "error", "message": "Update already in progress"}
-
-    start_update(items_list)
 
     thread = threading.Thread(
         target=run_background_update,
@@ -256,7 +255,7 @@ def launch_init_data_update(
     data_type: str,
     target_date: str | None,
     load_update_status: Callable[..., dict[str, Any]],
-    start_update: Callable[[list[str]], None],
+    start_update: Callable[[list[str]], bool],
     run_background_update: Callable[[str | None, list[str]], None],
     logger: logging.Logger,
 ) -> tuple[int, dict[str, Any]]:

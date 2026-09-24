@@ -138,10 +138,9 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
             current_status = ctx.load_update_status(deep_copy=False)
         except TypeError:
             current_status = ctx.load_update_status()
-        if current_status.get("isRunning", False):
+        # [INFRA-099] start_update 는 이 워커에서 중단된 앞 실행이 아직 돌면 False 를 돌려준다
+        if current_status.get("isRunning", False) or ctx.start_update(items_list) is False:
             return jsonify({"status": "error", "message": "Already running"}), 400
-
-        ctx.start_update(items_list)
 
         thread = Thread(
             target=ctx.run_background_update,

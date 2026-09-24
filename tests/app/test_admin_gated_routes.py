@@ -214,6 +214,39 @@ def test_start_update_refuses_anonymous(monkeypatch):
     assert res.status_code == 403
 
 
+def test_start_update_route_rejects_when_start_update_refuses(monkeypatch):
+    """[INFRA-099] 이 워커에 중단된 실행이 아직 돌면 start_update 가 거부하고 스레드를 띄우지 않는다."""
+    import app.routes.common_update_routes as routes
+    from app.routes.common_route_context import CommonRouteContext
+    from app.routes.common_update_routes import register_common_update_routes
+
+    threads: list = []
+    monkeypatch.setattr(routes, "Thread", lambda *a, **k: threads.append(k))
+
+    ctx = CommonRouteContext(
+        logger=_LOGGER,
+        update_lock=threading.Lock(),
+        update_status_file="/dev/null",
+        load_update_status=lambda **_k: {"isRunning": False},
+        start_update=lambda _items: False,
+        update_item_status=_must_not_run,
+        stop_update=_must_not_run,
+        finish_update=_must_not_run,
+        run_background_update=_must_not_run,
+        paper_trading=None,
+    )
+
+    client = _build_app(
+        lambda bp: register_common_update_routes(bp, ctx),
+        monkeypatch,
+        identity_email="admin@example.com",
+    )
+    res = client.post("/system/start-update", json={"items": ["Daily Prices"]})
+    assert res.status_code == 400
+    assert res.get_json() == {"status": "error", "message": "Already running"}
+    assert threads == []
+
+
 def _update_ctx():
     from app.routes.common_route_context import CommonRouteContext
 

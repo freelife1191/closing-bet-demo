@@ -515,9 +515,14 @@ def start_update(
     update_status_file: str,
     shared_state,
     logger,
-) -> None:
-    """업데이트 시작."""
+) -> bool:
+    """업데이트 시작. 이 워커에서 앞 실행이 아직 돌면 상태를 바꾸지 않고 False 를 돌려준다."""
     with update_lock:
+        if getattr(shared_state, "LOCAL_PIPELINE_ACTIVE", False):
+            # [INFRA-099] 중단된 앞 실행이 끝나기 전이다. 플래그가 워커에 하나뿐이라 받으면 둘이 함께 돈다.
+            # 상태를 그대로 두면 남은 stopRequested 를 앞 실행의 감시가 읽고 멈춘다
+            logger.warning("Update start refused: a previous update is still running in this worker")
+            return False
         shared_state.STOP_REQUESTED = False
         status = load_update_status(update_status_file=update_status_file, logger=logger)
         status["isRunning"] = True
@@ -527,6 +532,7 @@ def start_update(
         status["items"] = [{"name": name, "status": "pending"} for name in items_list]
         status["currentItem"] = None
         save_update_status(status=status, update_status_file=update_status_file, logger=logger)
+        return True
 
 
 def update_item_status(

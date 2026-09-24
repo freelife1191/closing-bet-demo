@@ -68,8 +68,8 @@ def save_update_status(status):
 
 
 def start_update(items_list):
-    """업데이트 시작."""
-    start_update_impl(
+    """업데이트 시작. 이 워커에서 앞 실행이 아직 돌면 False."""
+    return start_update_impl(
         items_list=items_list,
         update_lock=update_lock,
         update_status_file=UPDATE_STATUS_FILE,

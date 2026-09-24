@@ -250,6 +250,24 @@ def test_launch_background_update_job_and_conflict():
     assert payload["message"] == "Update already in progress"
 
 
+def test_launch_background_update_job_rejects_when_start_update_refuses(monkeypatch):
+    # [INFRA-099] 이 워커에 중단된 실행이 아직 돌면 start_update 가 거부하고 스레드를 띄우지 않는다
+    threads: list = []
+    monkeypatch.setattr(flow_service.threading, "Thread", lambda *a, **k: threads.append(k))
+
+    status_code, payload = launch_background_update_job(
+        items_list=["A"],
+        target_date=None,
+        load_update_status=lambda: {"isRunning": False},
+        start_update=lambda _items: False,
+        run_background_update=lambda *_args: None,
+        logger=types.SimpleNamespace(info=lambda *_args, **_kwargs: None),
+    )
+    assert status_code == 409
+    assert payload["message"] == "Update already in progress"
+    assert threads == []
+
+
 def test_launch_background_update_job_requests_readonly_status_load():
     captured = {"kwargs": None}
 

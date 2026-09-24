@@ -231,6 +231,86 @@ def test_stop_update_records_request_in_shared_status_not_local_flag(tmp_path):
     assert shared_state.LOCAL_RUN_START_TIME == restarted["startTime"]
 
 
+def test_start_update_refuses_while_local_pipeline_active(tmp_path):
+    # [INFRA-099] 이 워커에서 중단된 실행이 아직 돌면 새 시작을 받지 않는다. 상태를 그대로 둬야 옛 실행의 감시가 멈춘다
+    import threading
+
+    from services.common_update_status_service import load_update_status, start_update, stop_update
+
+    status_file = str(tmp_path / "update_status.json")
+    shared_state = types.SimpleNamespace(STOP_REQUESTED=False)
+    kwargs = dict(update_lock=threading.Lock(), update_status_file=status_file, logger=_noop_logger())
+
+    assert start_update(items_list=["Daily Prices"], shared_state=shared_state, **kwargs) is True
+    stop_update(**kwargs)
+    stopped = load_update_status(update_status_file=status_file, logger=_noop_logger())
+    shared_state.LOCAL_PIPELINE_ACTIVE = True
+    shared_state.STOP_REQUESTED = True  # 옛 실행의 감시가 이미 켠 값
+
+    assert start_update(items_list=["VCP Signals"], shared_state=shared_state, **kwargs) is False
+    assert load_update_status(update_status_file=status_file, logger=_noop_logger()) == stopped
+    assert shared_state.LOCAL_RUN_START_TIME == stopped["startTime"]
+    assert shared_state.STOP_REQUESTED is True
+
+
+def test_run_background_update_pipeline_marks_local_pipeline_active(monkeypatch):
+    # [INFRA-099] 도는 동안 켜고, 수집기가 예외로 끝나도 끈다. 켜진 채 남으면 이 워커는 재기동 전까지 시작을 거부한다
+    shared_state = types.SimpleNamespace(STOP_REQUESTED=False)
+    seen: list[bool] = []
+
+    def _collect(*_a, **_k):
+        seen.append(shared_state.LOCAL_PIPELINE_ACTIVE)
+        raise RuntimeError("boom")
+
+    fake_scripts = types.ModuleType("scripts")
+    fake_scripts.init_data = types.SimpleNamespace(create_daily_prices=_collect)
+    monkeypatch.setitem(sys.modules, "scripts", fake_scripts)
+
+    run_background_update_pipeline(
+        target_date="2026-02-21",
+        selected_items=["Daily Prices"],
+        force=False,
+        update_item_status=lambda *_a: None,
+        finish_update=lambda: None,
+        shared_state=shared_state,
+        logger=_noop_logger(),
+    )
+
+    assert seen == [True]
+    assert shared_state.LOCAL_PIPELINE_ACTIVE is False
+
+
+def test_run_background_update_pipeline_clears_local_pipeline_after_finish_even_if_it_fails(monkeypatch):
+    # [INFRA-099] 표시는 finish_update 뒤에 끈다. 먼저 끄면 같은 워커의 새 시작이 끼어들어 그 상태를 끝낼 수 있다.
+    # finish_update 가 예외를 내도 끄지 않으면 이 워커는 재기동 전까지 시작을 거부한다(critic 지적 a)
+    import pytest
+
+    shared_state = types.SimpleNamespace(STOP_REQUESTED=False)
+    seen_at_finish: list[bool] = []
+
+    def _finish():
+        seen_at_finish.append(shared_state.LOCAL_PIPELINE_ACTIVE)
+        raise OSError("status write failed")
+
+    fake_scripts = types.ModuleType("scripts")
+    fake_scripts.init_data = types.SimpleNamespace(create_daily_prices=lambda *_a, **_k: True)
+    monkeypatch.setitem(sys.modules, "scripts", fake_scripts)
+
+    with pytest.raises(OSError):
+        run_background_update_pipeline(
+            target_date="2026-02-21",
+            selected_items=["Daily Prices"],
+            force=False,
+            update_item_status=lambda *_a: None,
+            finish_update=_finish,
+            shared_state=shared_state,
+            logger=_noop_logger(),
+        )
+
+    assert seen_at_finish == [True]
+    assert shared_state.LOCAL_PIPELINE_ACTIVE is False
+
+
 def test_run_background_update_pipeline_sees_stop_request_from_other_worker(monkeypatch):
     # [INFRA-097] 다른 워커가 상태에 남긴 중단 요청을 감시 스레드가 이 워커의 플래그로 옮긴다
     import time
@@ -440,3 +520,12 @@ def test_route_background_update_wires_status_reader(monkeypatch):
     common.run_background_update("2026-02-21", ["Daily Prices"], False)
 
     assert captured["load_update_status"] is common.load_update_status
+
+
+def test_route_start_update_returns_refusal(monkeypatch):
+    # [INFRA-099] 래퍼가 거부를 돌려주지 않으면 호출자는 None 을 받아 정상 시작으로 본다(심층 리뷰 1)
+    import app.routes.common as common
+
+    monkeypatch.setattr(common, "start_update_impl", lambda **_k: False)
+
+    assert common.start_update(["Daily Prices"]) is False

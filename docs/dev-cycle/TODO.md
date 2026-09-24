@@ -71,8 +71,19 @@
 - 원인: `stop_update` 가 `isRunning` 을 곧바로 내리므로 옛 스레드가 끝나기 전에 새 시작이 받아들여진다. 새 시작이 옛 실행과 같은 워커에 닿으면 `start_update` 가 그 워커의 `STOP_REQUESTED` 를 끄고, 감시는 새 실행이 같은 워커라 옛 실행을 멈추지 않는다(한 프로세스에 플래그가 하나). 두 실행이 같은 CSV 에 함께 쓰고 AI 단계면 LLM 비용이 겹친다. 워커 재기동 때 `app/__init__.py` 의 `_reset_startup_status_files` 가 도는 실행의 `isRunning` 을 내리는 것도 같은 상태를 만든다
 - `[INFRA-097]` 전후 차이: 수정 전에는 같은 워커의 중단이 플래그를 곧바로 켰으므로 옛 실행이 재시작 전에 중단 확인 지점을 지나면 멈췄다. 수정 뒤에는 감시가 1초 주기라 1초 안에 같은 워커에서 재시작하면 옛 실행은 멈추지 않는다(QA S-4 로 실측)
 - 해법 후보: (a) 이 워커에 끝나지 않은 파이프라인이 있으면 시작을 409 로 거부, (b) `stop_update` 가 `isRunning` 을 내리지 않고 실제로 끝난 실행의 `finally` 가 내림(화면의 중단 표시 변경 필요)
-- [ ] 설계 승인
-- [ ] 테스트, T3 리뷰와 pytest 전체
+- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 23:11 | 범위: 해법 (a). (1) `engine/shared.py` 에 워커별 표시 `LOCAL_PIPELINE_ACTIVE` 를 두고 `run_background_update_pipeline` 진입 때 켜고 `finally` 에서 끈다. (2) `start_update` 가 `update_lock` 안에서 표시가 켜져 있으면 상태를 바꾸지 않고 `False` 를 돌려준다. (3) `/system/start-update`(400 "Already running")와 `launch_background_update_job`(409)이 거부를 각자의 기존 「실행 중」 응답으로 돌려준다. 거부되면 `startTime` 이 그대로이고 `stopRequested` 가 남아 옛 실행은 `[INFRA-097]` 감시로 1초 안에 멈춘다. (b) 와 프론트엔드 변경은 범위 밖 | 근거: bounded 설계 제시 뒤 사용자 「진행해」
+- [x] 계획 문서와 critic 검토(T3): `docs/superpowers/plans/2026-09-24-infra-099-reject-local-restart.md` · `oh-my-claudecode:critic` ACCEPT-WITH-RESERVATIONS: 지적 a(표시를 끄는 줄이 상태 정리보다 먼저면 같은 워커 새 시작이 끼어듦, `finish_update` 예외 시 고착 우려) → `finally` 중첩, 바깥에서 끔, 순서 테스트 추가 | 지적 b(멈춘 단계 동안 그 워커만 계속 거부) → 거부 경고 로그와 한계 2 에 복구 수단(워커 재기동) 명시 | 지적 c(락 밖 `isRunning` 검사로 같은 워커 이중 시작) → 수정 전부터 있던 경합이고 승인 범위 밖이라 한계 1 문구만 정정 | 지적 d(표시가 bool) → 한계 1 에 명시 | 타입 힌트 `bool` 반영
+- [x] 테스트(표시가 켜져 있으면 `start_update` 가 상태를 바꾸지 않고 `False`, 파이프라인이 표시를 켜고 예외에도 끔, 두 시작 경로의 400/409, `finish_update` 뒤에 끄고 그 예외에도 끔) RED(`4 failed`, 순서 테스트 `1 failed`)→GREEN(관련 세 파일 53 passed). 변이 검사: 표시 켜기·끄기·`start_update` 거부·두 호출자 거부 분기를 각각 되돌리면 해당 테스트 FAIL
+- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` net -4: 두 시작 경로의 `isRunning` 검사와 거부 검사를 한 분기로 합침 반영 · `closing-bet-reviewer` APPROVE(max low, critic 반영 전 판을 본 1차 보고는 해시 대조로 stale 판정 뒤 재확인, 최종 max none): 지적 1 `_watch_stop_request` 의 ponytail 주석이 일반 경로가 아님 → 주석 반영 | 지적 2 거부 때 로컬 `STOP_REQUESTED` 를 건드리지 않음을 테스트가 안 잼 → assert 추가, 거부 분기 위로 해제를 옮기는 변이 FAIL 확인 | 지적 3 표시가 bool → 계획 한계 1 에 명시 · `/review`(`oh-my-claudecode:code-reviewer`) APPROVE: medium 래퍼 `app/routes/common.py` 의 `return` 을 고정하는 테스트가 없음 → `test_route_start_update_returns_refusal` 추가, `return` 삭제 변이 FAIL | low 두 테스트가 스레드 미기동을 실제로 재지 않음 → `Thread` 를 가로채 `threads == []` 단언, 거부 뒤 스레드를 띄우는 변이 FAIL
+- [x] pytest 전체(`venv/bin/python -m pytest -q`): 리뷰 반영 뒤 2770 passed, 2 skipped, exit 0
+- [ ] QA: 격리 사본에서 `[INFRA-097]` S-4 하네스 재실행(같은 워커 0.5초 재시작이 거부되고 옛 실행이 약 1초에 멈춤)
+
+### [INFRA-100] 데이터 상태 화면이 중복 시작을 409 로 기대하지만 `/system/start-update` 는 400 을 돌려준다
+- 카테고리: 인프라 | 티어: T2(프론트엔드·라우트 응답) | 근거: `[INFRA-099]` 설계 중 발견(2026-09-24), 코드로 확인
+- 원인: `app/routes/common_update_routes.py` 의 `api_start_update` 는 실행 중이면 400 "Already running" 을 돌려준다. `frontend/src/app/dashboard/data-status/page.tsx` 의 `performUpdate` 는 `e.status === 409` 일 때만 「업데이트 중복」 모달을 띄우고 나머지는 다시 던지며, `handleUpdate` 는 `error.message` 를 그대로 「업데이트 오류」로 띄운다. 그래서 중복 시작이 영어 문구의 오류로 보일 수 있다. 같은 역할의 `launch_background_update_job` 은 409 다
+- 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
+- [ ] 설계 승인(라우트를 409 로 맞출지, 화면이 400 도 중복으로 볼지)
+- [ ] 테스트, 리뷰, 브라우저 QA
 
 ### [INFRA-098] 수동 업데이트 상태 파일의 읽기-수정-쓰기가 워커 사이에서 직렬화되지 않아 중단 요청이 사라질 수 있다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-097]` `closing-bet-reviewer` 지적 5(2026-09-24), 코드로 확인
