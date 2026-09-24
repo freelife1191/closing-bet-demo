@@ -68,8 +68,14 @@
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py` 대조, 수정은 `engine/screener.py` 예상) | 근거: `[VCP-049]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` medium)
 - 원인: `[VCP-049]` 는 가격 프레임이 비었을 때만 실패로 본다. 과거 날짜를 분석할 때 target 이전 가격이 20행 이상인 종목이 하나도 없으면(가격 창 밖이나 창 시작 부근의 날짜) 모든 종목이 `_prepare_stock_analysis`(`engine/screener.py:285-289`)에서 빠져 빈 결과가 되고, `create_signals_log` 가 그 날짜의 기존 행을 지우고 `True` 를 돌려준다. 같은 결로 `_detect_vcp_pattern`(`:329-333`)은 예외를 삼켜 `is_vcp=False` 를 주므로 전 종목에 걸친 체계적 오류도 0건이 된다
 - 추가 관찰(2026-09-24 19:55, `[VCP-050]` QA 설정 중): 원본 자료 사본(가격 2025-11-13~2026-09-21, 수급 2026-01-12~2026-09-21)으로 `create_signals_log(target_date="2026-05-05", run_ai=False)` 를 네트워크 없이 돌리면 수정 전후 커밋 모두 조건 충족 0건으로 원본의 2026-05-05 15행을 지우고 `True` 를 돌려준다. 0건이 된 원인(가격 창·수급 결측·VCP 판정)은 조사하지 않았다
-- [ ] 설계 승인(분석 가능 종목 0개를 실패로 볼지, 분석 시도 대비 실패 비율 판정을 둘지)
-- [ ] 테스트, 리뷰와 pytest 전체
+- [x] 설계 승인(2026-09-24 20:53 이전 대화 「진행해」, bounded, T2: 수정은 위험 경로 밖 `engine/screener.py` 뿐이라 TODO 의 T3 에서 재판정. `init_data.py` 를 고치게 되면 T3). 범위: `_detect_vcp_pattern` 의 예외 삼킴을 없애 판정 예외를 `_prepare_stock_analysis` 의 분석 불가(None)로 보낸다. `run_screening` 이 분석된(결과가 None 이 아닌) 종목 수를 세어 후보가 있는데 0개면 `RuntimeError` 로 `[VCP-028]` 보존 갈래에 보낸다. 일부 실패는 종전대로 정상, 실패 비율 판정은 두지 않는다(문턱 근거 없음). 05-05 는 QA 에서 분석 종목 수를 실측해 기록만 한다
+- [x] 읽은 정본: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-verify/`
+- [x] 테스트: 전 종목 가격 20행 미만, 전 종목 VCP 판정 예외(두 건 모두 수정 전 코드에서 DID NOT RAISE 확인). 기존 `test_run_screening_counts_failed_stocks_against_max_stocks` 는 「전 종목 예외 → 빈 결과」를 전제했으므로 결과 기대만 예외로 바꾸고 예산 소모(2종목) 단언은 유지
+- [x] 구현
+- [x] pytest 전체: 2745 passed, 2 skipped, 종료 코드 0
+- [x] `/ponytail-review`: Lean already
+- [x] `closing-bet-reviewer` APPROVE(low 2). 1번(high/low 열이 없거나 전부 NaN 이면 `detect_vcp_pattern` 이 예외 대신 실패 결과를 줘 여전히 0건)은 승인 범위 밖이라 `[VCP-056]` 으로 등록. 2번(보존 갈래도 최신 payload 는 빈 값으로 덮음, 기존 설계)은 QA 문서에서 행과 payload 를 나눠 기록
+- [ ] QA(격리 사본, 네트워크·AI 없음): 가격 창 시작 부근 날짜는 `False`·기존 행 보존, 정상 날짜 출력이 수정 전과 같음, 05-05 분석 종목 수 실측
 
 ### [VCP-054] VCP 화면·챗봇 데이터가 빈 수급을 0 으로 읽는다
 - 카테고리: VCP | 티어: T2(`frontend/` 포함) | 근거: `[VCP-050]` 설계(2026-09-24 19:45 승인 범위 밖으로 분리), `closing-bet-reviewer` low
@@ -94,6 +100,13 @@
 - 확인 수준: 코드로만 확인. 운영에서 백필이 도는 빈도는 로그의 「Toss 백필」 줄로 확인해야 한다
 - [ ] 설계 승인(백필은 파일에 없는 (date, ticker) 만 채울지)
 - [ ] 테스트, T3 리뷰와 pytest 전체
+
+### [VCP-056] 가격 프레임의 high/low 가 없거나 전부 NaN 이면 VCP 판정이 예외 대신 실패 결과를 줘 전 종목 결함도 「시그널 없음」이 된다
+- 카테고리: VCP | 티어: T2 | 근거: `[VCP-053]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` low, 코드로 확인)
+- 원인: `[VCP-053]` 은 결과가 None 인 종목만 분석 불가로 센다. `engine/vcp.py` 의 `_normalize_price_frame` 은 high/low 열이 없거나 값이 전부 NaN 이면 예외가 아니라 `is_vcp=False` 인 「Invalid or empty price frame」 결과를 준다. 그래서 가격 파일 스키마가 체계적으로 깨져도 전 종목이 분석된 것으로 세어져 그 날짜 행이 지워진다
+- 확인 수준: 코드로만 확인. 운영 CSV 의 high/low 결측 빈도는 확인하지 않았다
+- [ ] 설계 승인(무효 프레임을 예외로 올릴지, 스크리너가 무효 결과를 분석 불가로 셀지)
+- [ ] 테스트, 리뷰와 pytest 전체
 
 ### [VCP-045] Z.ai 폴백의 `zai_disabled_reason` 도 워커 수명 동안 풀리지 않는다 (운영자 단계)
 - 카테고리: VCP | 티어: T1(남은 단계는 운영자 확인과 배포) | 근거: `[VCP-041]` 코드 리뷰(2026-09-24). 코드 수정분은 커밋 `22b197a`(`_expire_session_blocks` 가 `zai_disabled_reason` 도 10분 뒤 비움)로 끝났고 기록은 `archive/daily/2026-09-24.md`·`qa/VCP-045.md` 에 있다

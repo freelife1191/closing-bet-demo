@@ -80,9 +80,10 @@ def test_run_screening_counts_failed_stocks_against_max_stocks(monkeypatch):
 
     monkeypatch.setattr(SmartMoneyScreener, "_analyze_stock", _always_raises)
 
-    result = screener.run_screening(max_stocks=2)
+    # 전 종목 실패는 [VCP-053] 부터 빈 결과가 아니라 예외다. 예산 소모는 그대로 확인한다
+    with pytest.raises(RuntimeError, match="분석 가능한 종목"):
+        screener.run_screening(max_stocks=2)
 
-    assert result.empty
     assert len(analyzed) == 2
 
 
@@ -157,3 +158,27 @@ def test_run_screening_returns_empty_when_no_stock_passes(monkeypatch):
         SmartMoneyScreener, "_analyze_stock", lambda _self, stock: {**stock, "score": 50, "is_vcp": False}
     )
     assert screener.run_screening(max_stocks=10).empty
+
+
+def test_run_screening_raises_when_no_candidate_can_be_analyzed(monkeypatch):
+    """[VCP-053] 가격이 20행 미만이라 전 종목이 분석 전에 빠지면 0건이 아니라 실패다."""
+    screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame([{"ticker": "000001"}]))
+    screener._target_datetime = None
+    screener._prices_by_ticker = {"000001": pd.DataFrame({"close": [100.0] * 5})}
+    with pytest.raises(RuntimeError, match="분석 가능한 종목"):
+        screener.run_screening(max_stocks=10)
+
+
+def test_run_screening_raises_when_vcp_detection_fails_for_all(monkeypatch):
+    """[VCP-053] VCP 판정 예외를 is_vcp=False 로 삼키면 체계적 오류가 「시그널 없음」이 된다."""
+    screener = _gate_screener(monkeypatch, prices_df=pd.DataFrame([{"ticker": "000001"}]))
+    screener._target_datetime = None
+    screener._prices_by_ticker = {"000001": pd.DataFrame({"close": [100.0] * 30})}
+    monkeypatch.setattr(SmartMoneyScreener, "_calculate_supply_score", lambda _self, _ticker: {"score": 0})
+
+    def _boom(*_args, **_kwargs):
+        raise ValueError("vcp broken")
+
+    monkeypatch.setattr("engine.vcp.detect_vcp_pattern", _boom)
+    with pytest.raises(RuntimeError, match="분석 가능한 종목"):
+        screener.run_screening(max_stocks=10)

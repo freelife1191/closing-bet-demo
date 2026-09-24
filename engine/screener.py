@@ -231,11 +231,18 @@ class SmartMoneyScreener:
             results = []
 
             candidates = [build_stock_candidate(row) for row in prioritized_stocks.head(max(0, max_stocks)).itertuples(index=False)]
+            analyzed = 0
             for result in self._analyze_candidates(candidates):
-                if not result or not safe_bool(result.get("is_vcp", False)):
+                if not result:
+                    continue
+                analyzed += 1
+                if not safe_bool(result.get("is_vcp", False)):
                     continue
                 result['market_status'] = gate_status['status']
                 results.append(result)
+            # 전 종목이 분석 전에 빠졌으면(가격 20행 미만, VCP 판정 예외) 0건이 아니라 실패다([VCP-053])
+            if candidates and analyzed == 0:
+                raise RuntimeError(f"분석 가능한 종목이 없습니다 (후보 {len(candidates)}개 모두 가격 부족 또는 분석 오류).")
 
             # DataFrame으로 변환
             df = pd.DataFrame(results)
@@ -326,12 +333,9 @@ class SmartMoneyScreener:
         )
 
     def _detect_vcp_pattern(self, df: pd.DataFrame, stock: Dict) -> VCPResult:
-        """VCP 패턴 감지 (Shared Logic)"""
-        try:
-            from engine.vcp import detect_vcp_pattern
-            return detect_vcp_pattern(df, stock['ticker'], stock['name'])
-        except Exception as e:
-            return VCPResult(stock['ticker'], stock['name'], 0, 1.0, False, str(df.iloc[-1]['date']) if not df.empty else "", 0, f"Error: {e}")
+        """VCP 패턴 감지 (Shared Logic). 예외는 호출자가 그 종목을 분석 불가로 센다([VCP-053])"""
+        from engine.vcp import detect_vcp_pattern
+        return detect_vcp_pattern(df, stock['ticker'], stock['name'])
 
     def _calculate_supply_score(self, ticker: str) -> Dict:
         """수급 점수 계산 (Toss API 기반)"""
