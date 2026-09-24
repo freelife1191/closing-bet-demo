@@ -20,24 +20,11 @@
 
 > 아래 VCP-041, INFRA-088·089 는 설계 전에 **실측 수집으로 원인을 확정**한다. 코드 읽기와 가짜 주입 재현은 가설의 근거일 뿐 확정 근거가 아니다. 실측 결과(명령, 시각, 날짜별 수치, 로그 원문)는 `docs/dev-cycle/qa/<ID>.md` 의 「원인 확정」 절에 남기고, 실측이 가설과 다르면 원인·수정 계획을 먼저 고친다.
 
-### [VCP-041] VCP 분석기가 429/503 을 받은 Gemini 모델을 워커 수명 동안 영구 제외한다
-- 카테고리: VCP | 티어: T3(위험 경로 `engine/vcp_ai_analyzer.py`) | 근거: 운영자 제보(2026-09-24, 최근 14거래일 `gemini_recommendation` 전부 null, 같은 Vertex 설정의 종가베팅은 09-23 정상)와 로컬 재현(2026-09-24 01:2x, 가짜 클라이언트, 외부 호출 없음).
-- 원인(재현으로 확인한 유력 원인): `get_vcp_analyzer()`(`engine/vcp_ai_analyzer.py:1248`)는 프로세스 싱글톤이고, `_analyze_with_gemini`(`:367`)는 429·503·resource exhausted 를 받은 모델을 `self.gemini_blocked_models` 에 넣는다. 이 집합을 비우는 코드가 없다. 체인(`build_gemini_retry_model_chain`, 설정 모델 + 6개)이 한 번의 429 폭주로 모두 들어가면 그 뒤로는 `model_chain` 이 비어 「사용 가능한 모델이 없습니다」를 로그에 남기고 **호출 없이** None 을 돌려준다. 재현: 1일차 전 모델 429 → `blocked=7`, 2일차 정상 클라이언트로 바꿔도 결과 None·호출 0회. 스케줄러를 쥔 gunicorn 워커는 며칠씩 살아 있으므로 재기동 전까지 Gemini 가 죽은 채로 남는다. 종가베팅 경로(`GeminiRetryStrategy`)에는 이런 영구 집합이 없어 같은 모델로 정상이다. 같은 형태의 영구 플래그 `gpt_quota_exhausted`·`perplexity_quota_exhausted` 도 설계 때 함께 본다.
-- 부수 차이: VCP 호출은 `generate_content` 에 `config`(출력 토큰)와 타임아웃이 없다(종가베팅은 `GenerateContentConfig(max_output_tokens=16384)` + `wait_for`). 원인은 아니지만 같은 라운드에서 판단한다.
-- 운영 확인(운영자): 다음 17:00 실행 뒤 `logs/backend.log` 에서 「사용 가능한 모델이 없습니다」「세션에서 제외합니다」가 찍히는지 본다. 찍히면 이 원인이 확정이다. 수정 배포는 gunicorn 워커를 모두 재기동해야 반영되며, 재기동만으로도 일시 회복된다(장 중 금지).
-- 확인 수준(2026-09-24): 결함 자체(영구 제외)는 가짜 클라이언트로 재현해 확정했다. 운영에서 실제로 429·503 이 나서 이 결함이 발동했는지는 로그가 없어 **미확정**이다. 다음 대안을 아직 배제하지 못했다: `gemini-3.8-flash` 응답의 JSON 파싱 실패(코드펜스·thinking 텍스트), `response.text` 가 None, 체인 모델의 리전 404. 이 셋은 제외 집합에 들어가지 않으므로 영구 제외와 달리 매 호출 실패로 나타난다.
-- 추가 관찰(2026-09-24 08:10, `[VCP-040]` 실측): 로컬 `.env` 의 같은 모델·Vertex `global` 설정으로 새 프로세스에서 VCP 배치 2종목을 돌렸더니, Gemini 가 두 종목 모두 정상 JSON(BUY 68 / HOLD 65)을 돌려주었고 `gemini_blocked_models` 는 비어 있었다. 이 결과로 모델·리전·파싱 문제일 가능성은 낮아졌지만 배제한 것은 아니다. 로컬과 운영의 설정이 같다는 것은 확인하지 않았다. 새 프로세스에서는 정상인데 오래 산 워커에서만 null 이라는 형태는 영구 제외 가설과 들어맞는다. 기록은 `docs/dev-cycle/qa/VCP-040.md`
-- [ ] 원인 확정 1(운영자, 비용 없음): 운영 `backend.log` 에서 위 두 문구와 「JSON 파싱 실패」「분석 실패 (Final)」 중 어느 것이 찍히는지 확인해 기록한다
-- [x] 원인 확정 2(2026-09-24 08:48 승인, 08:49 실측 1회): `gemini-3.8-flash`·Vertex `global` 새 분석기에서 `STOP`, 코드펜스 없는 JSON 400자, 파싱 성공(BUY 80), 제외 집합 빈 값. 대안 가설 셋은 재현되지 않음. 운영 설정과의 일치는 미확인. 기록은 `docs/dev-cycle/qa/VCP-041.md`
-  - 원래 계획: 원인 확정 2(실제 LLM 호출, **사용자 승인 필요**): 격리 사본에서 운영과 같은 `VCP_GEMINI_MODEL`·Vertex 설정으로 새 `VCPMultiAIAnalyzer` 를 만들어 종목 하나에 `_analyze_with_gemini` 를 한 번만 부른다. `generate_content` 원문(`response.text`, `candidates[0].finish_reason`), 예외와 상태 코드, `_parse_json_response` 결과를 기록한다. 체인 전환을 막도록 체인을 설정 모델 하나로 제한하고, 사본 `data/` 에만 쓴다. 정상 응답이면 영구 제외가 원인이라는 판단이 강해지고, 파싱·None 이면 원인을 그쪽으로 바꾼다
-- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 08:54 | 범위: 세션 차단 플래그 세 종류(`gemini_blocked_models`, GPT·Perplexity 쿼터 플래그)를 처음 관측한 뒤 10분(`LLMThresholds.SESSION_BLOCK_TTL_SECONDS`)이 지나면 비우고, 가드는 모든 경로가 지나는 `analyze_stock` 한 곳에 둔다(재분석 진행률 경로가 `analyze_batch` 를 거치지 않아 기본안에서 바꿈). 출력 토큰 `config`·타임아웃 정렬은 제외(실측 thoughts 303·출력 215 토큰, 멈춘 호출 관측 없음) | 근거: 대화 선택 「지금 설계 진행」(운영 로그 확인 없이 진입, 08:49 실측 뒤 08:54 전, 시각 미기록) 뒤 「승인, 진행」(08:54). 계획 `docs/superpowers/plans/2026-09-24-vcp-041-session-block-expiry.md`
-- [x] 설계 승인(기본안 대신 10분 시간 만료로 결정, 위 메타 줄)
-- [x] 계획 검토(critic): REVISE. F1 「배치의 마지막 종목에서 켠 차단은 시각이 기록되지 않아 다음 날 배치 전체가 막힌다」 → `analyze_stock` 의 `try/finally` 로 종료 시점에도 만료 판정, 재현 테스트로 교체. 선택 지적(`.clear()`, 별칭)도 반영. 미반영 없음
-- [x] 구현 리뷰: ponytail 「Lean already. Ship.」, closing-bet-reviewer APPROVE(low). L1(창 끝 무렵 새 차단도 함께 풀림, 승인 문구와 일치)은 코드 유지·마감 기록에 명시, L2(계획 문구 원안 기준)는 계획 문서 수정, 범위 밖 `zai_disabled_reason` 은 `[VCP-045]` 로 등록
-- [x] T3 심층 리뷰(critic): ACCEPT. F1 해소를 사본에서 재확인(원안 1건·수정 전 3건 실패, 현재 36건 통과), finally 의 예외·취소·동시성 2 실측 문제없음. O1(플래그가 시계 하나 공유)은 ponytail 주석에 반영, O2 는 `[VCP-045]`, O3(전역 monotonic 패치가 이벤트 루프 시계도 멈춤)은 테스트 헬퍼 주석으로 이미 표시
-- [x] 재현 테스트를 `tests/engine/test_vcp_ai_analyzer_refactor.py` 로 추가(4건, 1일차 마지막 종목 전 모델 429 → 2일차 첫 종목 재호출 포함)
-- [x] 수정 구현(출력 토큰·타임아웃 정렬은 승인 때 제외)
-- [ ] T3 리뷰와 pytest 전체, 마감 기록에 「워커 전부 재기동 필요」 명시
+### [VCP-041] VCP 분석기가 429/503 을 받은 Gemini 모델을 워커 수명 동안 영구 제외한다 (운영자 단계)
+- 카테고리: VCP | 티어: T1(남은 단계는 운영자 확인과 배포) | 근거: 운영자 제보(2026-09-24, 최근 14거래일 `gemini_recommendation` 전부 null). 코드 수정분은 커밋 `7470475`(세션 차단 플래그 10분 만료)로 끝났고 기록은 `archive/daily/2026-09-24.md`·`qa/VCP-041.md` 에 있다
+- 남은 범위: 원인 확정 실호출(08:49)에서 새 프로세스의 Gemini 는 정상이었으므로, 운영 null 은 영구 제외 결함이 유력하다. 운영에서 실제로 발동했는지는 로그로만 확정된다. 배포는 gunicorn 워커를 모두 재기동해야 반영된다(장 중 금지). 재기동만으로도 지금의 차단은 풀린다
+- [ ] 원인 확정 1(운영자, 비용 없음): 운영 `logs/backend.log` 에서 「사용 가능한 모델이 없습니다」「세션에서 제외합니다」「JSON 파싱 실패」「분석 실패 (Final)」 중 어느 것이 찍혔는지 확인해 기록한다. 앞의 두 문구가 아니면 원인을 다시 본다
+- [ ] 배포와 워커 전부 재기동(운영자, 장 마감 뒤), 첫 17:00 실행 뒤 `kr_ai_analysis_<날짜>.json` 의 `gemini_recommendation` 이 채워졌는지와 「VCP 분석기 세션 차단 해제」 로그 여부 확인
 
 ## P1 — 이번 주기
 
