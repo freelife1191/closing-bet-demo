@@ -61,8 +61,15 @@ def _watch_stop_request(
         except Exception as error:
             logger.warning(f"Stop request watch failed: {error}")
             continue
+        current = status.get("startTime")
+        if current == start_time:
+            stopped = bool(status.get("stopRequested"))
+        else:
+            # 새 실행이 시작됐다면 이 실행은 중단된 것이다. 감시가 읽기 전에 중단과 재시작이 끝난 경우다.
+            # ponytail: 새 실행이 같은 워커면 플래그를 함께 쓰므로 건너뛰고, 옛 실행은 새 실행과 함께 돈다
+            stopped = current is not None and current != getattr(shared_state, "LOCAL_RUN_START_TIME", None)
         # 매번 다시 켜므로 같은 워커의 옛 실행 finally 가 지운 값도 다음 주기에 되살아난다
-        if status.get("startTime") == start_time and status.get("stopRequested"):
+        if stopped:
             shared_state.STOP_REQUESTED = True
 
 
@@ -84,7 +91,10 @@ def run_background_update_pipeline(
     vcp_step_blocked = False
     watch_done = threading.Event()
     watcher: threading.Thread | None = None
-    start_time = _read_start_time(load_update_status, logger)
+    start_time = None
+    if load_update_status is not None:
+        # start_update 가 이 워커에서 방금 정한 값이 우선이다. 두 워커가 함께 시작하면 파일에는 늦게 쓴 쪽만 남는다
+        start_time = getattr(shared_state, "LOCAL_RUN_START_TIME", None) or _read_start_time(load_update_status, logger)
     if start_time is not None:
         watcher = threading.Thread(
             target=_watch_stop_request,
@@ -176,7 +186,6 @@ def run_background_update_pipeline(
         # 같은 워커의 새 실행이 이미 중단됐다면 그 실행의 감시가 1초 안에 다시 켠다
         shared_state.STOP_REQUESTED = False
         # [INFRA-097] 중단된 사이 새 실행이 시작됐으면 그 상태를 끝내는 것은 새 실행의 몫이다
-        # ponytail: 새 실행이 같은 워커에서 시작되면 start_update 가 플래그를 꺼 옛 실행도 다시 돈다. 한 프로세스에 플래그가 하나라서다
         if start_time is None or _read_start_time(load_update_status, logger) in (None, start_time):
             finish_update()
 

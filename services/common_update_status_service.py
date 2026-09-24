@@ -523,6 +523,7 @@ def start_update(
         status["isRunning"] = True
         status["stopRequested"] = False
         status["startTime"] = datetime.now().isoformat()
+        shared_state.LOCAL_RUN_START_TIME = status["startTime"]
         status["items"] = [{"name": name, "status": "pending"} for name in items_list]
         status["currentItem"] = None
         save_update_status(status=status, update_status_file=update_status_file, logger=logger)
