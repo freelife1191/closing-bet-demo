@@ -68,8 +68,13 @@
 - 카테고리: VCP | 티어: T2 | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
 - 원인: 수급 추세가 없으면 `{"score": 0, "foreign_1d": 0, "inst_1d": 0}`(`engine/screener.py:267`, `:376`)을 쓰고, 5일 값은 `engine/screener_result_builders.py:31-32` 의 기본값 0 이 된다. `[VCP-011]` 이 하위 단계에서 막은 「결측 → 0」이 원천에서 생긴다
 - 영향: `signals_log.csv` 의 `foreign_5d`·`inst_5d` 와 AI 프롬프트에 0 이 실제 순매수 0 처럼 들어간다. 점수의 수급 부분도 결측과 실제 0 이 같게 계산된다
-- [ ] 설계 승인(결측을 `None` 으로 남길 때 점수 계산·정렬·CSV·프롬프트 표기)
-- [ ] 결측과 실제 0 구분 테스트, 리뷰와 pytest 전체
+- 티어 재판정: T3(저장 단계 `scripts/init_data.py:1434-1435` 가 결측을 다시 0 으로 되돌리므로 위험 경로를 함께 고친다)
+- [x] 설계 승인(2026-09-24 19:45 대화 「승인」, bounded). 범위: 수급 추세 없음·CSV 5행 미만이면 점수 0 에 5일·1일 값 None(상수 하나로 모음), 일별 상세가 없으면 1일 값 None, 결과 빌더의 기본값 0 제거, `create_signals_log` 는 `safe_optional_float` 로 빈 칸 저장, `build_vcp_prompt` 는 None 을 `N/A` 로 적음. 점수·정렬 불변. API·화면·챗봇 데이터의 읽기 쪽 0 표시는 범위 밖(새 TODO)
+- [x] 구현과 결측·실제 0 구분 테스트(새 테스트 4건은 수정 전 코드에서 실패 확인). 기대값 변경 1건: `test_screener_supply_unified_service_refactor.py` 가 결측 결과 `{"score":0,"foreign_1d":0,"inst_1d":0}` 을 고정하던 것을 None 으로 바꿈(결함을 고정하던 기대값, 리뷰어 동의)
+- [x] `closing-bet-reviewer` APPROVE(low 4). 반영: 쓰이지 않는 `calculate_supply_score_from_csv` 의 결측 사본을 `MISSING_SUPPLY` 로 맞춤, 읽기 쪽 0 표시를 `[VCP-054]` 로 등록. 미반영: 5일 값의 실수 표기(아래 `/review` 반영으로 해소), `ScreenerResult` 타입 힌트(쓰이지 않는 경로, `[VCP-054]` 에 기록)
+- [x] `/review`(T3, `oh-my-claudecode:code-reviewer`) 차단 없음, Medium 1·Low 4. 반영: `create_signals_log` 가 5일 값을 정수로 저장(`_optional_int`)해 결측이 없는 날 기존 행이 `123.0` 표기로 바뀌지 않게 함(단언 추가, 실수 저장 시 실패 확인). 이월: Medium(Toss 200 빈 응답이 5일 0 으로 캐시됨, 변경 전부터 있던 경로이며 폴백이 pykrx 조회를 늘리므로 범위 밖) → `[VCP-055]`, 수동 스크립트 두 개의 None TypeError → `[VCP-054]`. 결측이 섞인 날은 열이 실수가 되어 `.0` 표기가 되는 것은 의도한 동작으로 둠
+- [x] pytest 전체(리뷰 반영 뒤) `venv/bin/python -m pytest -q` → 2737 passed, 2 skipped, exit 0
+- [ ] QA: 격리 사본에서 `create_signals_log` 수정 전후 CSV 원문 대조(LLM·네트워크 없음)
 
 ### [INFRA-091] `daily_prices.csv` 를 잠금 없이 원자적이지 않게 저장한다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
@@ -82,6 +87,21 @@
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py` 대조, 수정은 `engine/screener.py` 예상) | 근거: `[VCP-049]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` medium)
 - 원인: `[VCP-049]` 는 가격 프레임이 비었을 때만 실패로 본다. 과거 날짜를 분석할 때 target 이전 가격이 20행 이상인 종목이 하나도 없으면(가격 창 밖이나 창 시작 부근의 날짜) 모든 종목이 `_prepare_stock_analysis`(`engine/screener.py:285-289`)에서 빠져 빈 결과가 되고, `create_signals_log` 가 그 날짜의 기존 행을 지우고 `True` 를 돌려준다. 같은 결로 `_detect_vcp_pattern`(`:329-333`)은 예외를 삼켜 `is_vcp=False` 를 주므로 전 종목에 걸친 체계적 오류도 0건이 된다
 - [ ] 설계 승인(분석 가능 종목 0개를 실패로 볼지, 분석 시도 대비 실패 비율 판정을 둘지)
+- [ ] 테스트, 리뷰와 pytest 전체
+
+### [VCP-054] VCP 화면·챗봇 데이터가 빈 수급을 0 으로 읽는다
+- 카테고리: VCP | 티어: T2(`frontend/` 포함) | 근거: `[VCP-050]` 설계(2026-09-24 19:45 승인 범위 밖으로 분리), `closing-bet-reviewer` low
+- 원인: `[VCP-050]` 이후 `signals_log.csv` 는 수급 결측을 빈 칸으로 저장한다. 그러나 API(`app/routes/kr_market_vcp_signal_helpers.py:317-318` 의 `_safe_int(default=0)`)와 챗봇 종목 정보(`engine/kr_ai_data_service.py:436-437` 의 `_to_int(..., 0)`)가 빈 칸을 다시 0 으로 읽는다. 화면(`frontend/src/app/dashboard/kr/vcp/page.tsx:1711-1720`, `:2039-2040`)과 타입(`frontend/src/lib/api.ts:94-95`)도 숫자만 가정한다
+- 영향: 결측 종목이 화면과 챗봇에 「순매수 0」으로 보인다. `[VCP-050]` 이전과 같은 표시이며 새로 나빠지지는 않았다
+- 함께 볼 것: `engine/screener.py` `ScreenerResult` 의 `foreign_net_5d: int`·1일 기본값 0(현재 dict 경로에서 쓰이지 않음), `_score_supply_core` 가 `details` 행에 키가 없으면 1일 값을 0 으로 쓰는 것, `generate_signals` 결과를 찍는 수동 스크립트 `tests/test_vcp.py:72`·`scripts/diagnose_screener.py:62` 가 None 에서 TypeError(`[VCP-050]` `/review` low)
+- [ ] 설계 승인(API 는 None, 화면은 `-` 표기)
+- [ ] 테스트, 리뷰, pytest·vitest 전체, 화면 실측
+
+### [VCP-055] Toss 수급 조회가 200 빈 응답을 받으면 5일 순매수 0 으로 저장·캐시한다
+- 카테고리: VCP | 티어: T2 | 근거: `[VCP-050]` `/review` Medium(2026-09-24, 코드와 로컬 재현으로 확인. 운영 빈도는 네트워크 금지로 미확인)
+- 원인: `engine/toss_collector_metric_parsers.py:61-102` 의 `parse_investor_trend` 가 body 가 `[]` 이거나 오류 JSON 이면 `foreign=0.0, institution=0.0, details=[]` 을 준다. `_normalize_toss_supply_payload`(`engine/screener_supply_helpers.py:81-113`)가 이를 유효한 dict 로 통과시켜 `calculate_supply_score_with_toss` 가 폴백하지 않고 15분 슬롯 캐시(메모리·SQLite)에 저장한다
+- 영향: 최신 날짜 스크리닝에서 `foreign_5d=0, inst_5d=0, foreign_1d=빈 칸` 처럼 한 행 안에서 결측 표기가 어긋나고, 프롬프트에 「5일 순매수 0주」가 사실처럼 실린다
+- [ ] 설계 승인(`details` 가 비면 결측으로 보고 폴백할지. 폴백은 `verify_with_references=True` 로 pykrx 조회를 늘릴 수 있어 비용 판단 필요)
 - [ ] 테스트, 리뷰와 pytest 전체
 
 ## P2 — 대기

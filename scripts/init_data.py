@@ -1390,6 +1390,11 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                 return "C"
             return "D"
 
+        def _optional_int(value):
+            # [VCP-050] 결측은 None(빈 칸)이다. 값은 정수로 둬야 결측이 없는 날 기존 행이 `123.0` 표기로 바뀌지 않는다
+            number = safe_optional_float(value)
+            return None if number is None else int(number)
+
         resolved_max_stocks = int(SCREENING.VCP_SCREENING_DEFAULT_MAX_STOCKS)
         if max_stocks is not None:
             try:
@@ -1431,8 +1436,8 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     'grade': _grade_from_score(float(getattr(row, 'score', 0) or 0)),
                     'contraction_ratio': float(getattr(row, 'contraction_ratio', 0) or 0),
                     'entry_price': int(float(getattr(row, 'entry_price', 0) or 0)),
-                    'foreign_5d': int(float(getattr(row, 'foreign_net_5d', 0) or 0)),
-                    'inst_5d': int(float(getattr(row, 'inst_net_5d', 0) or 0)),
+                    'foreign_5d': _optional_int(getattr(row, 'foreign_net_5d', None)),
+                    'inst_5d': _optional_int(getattr(row, 'inst_net_5d', None)),
                     'foreign_1d': safe_optional_float(getattr(row, 'foreign_net_1d', None)),
                     'inst_1d': safe_optional_float(getattr(row, 'inst_net_1d', None)),
                     'vcp_score': int(row_vcp_score),

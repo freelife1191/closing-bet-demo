@@ -31,6 +31,19 @@ def test_build_vcp_prompt_includes_stock_name_and_score():
     assert "JSON" in prompt
 
 
+def test_build_vcp_prompt_writes_missing_supply_as_na():
+    """[VCP-050] 결측(None·NaN)은 N/A, 실제 0 은 0 으로 적는다. 예전에는 None 이 「None주」가 됐다."""
+    prompt = build_vcp_prompt(
+        "삼성전자", {"foreign_5d": None, "inst_5d": float("nan"), "foreign_1d": 0, "inst_1d": -3}
+    )
+
+    assert "None" not in prompt and "nan" not in prompt
+    assert "외국인 5일 순매수: N/A주" in prompt
+    assert "기관 5일 순매수: N/A주" in prompt
+    assert "외국인 1일(오늘) 순매수: 0주" in prompt
+    assert "기관 1일(오늘) 순매수: -3주" in prompt
+
+
 def test_build_vcp_prompt_avoids_hardcoded_threshold_and_mentions_score_context():
     prompt = build_vcp_prompt(
         "고영",

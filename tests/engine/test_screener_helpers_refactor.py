@@ -63,6 +63,17 @@ def test_score_supply_from_toss_trend_returns_expected_shape():
     assert scored["score"] > 0
 
 
+def test_score_supply_distinguishes_missing_from_real_zero():
+    """[VCP-050] 자료가 없으면 순매수 값은 None, 실제 순매수 0 은 0 이다. 점수는 둘 다 가점 없음."""
+    missing = score_supply_from_toss_trend(None)
+    assert missing == {"score": 0, "foreign_5d": None, "inst_5d": None, "foreign_1d": None, "inst_1d": None}
+
+    no_details = score_supply_from_toss_trend({"foreign": 0, "institution": 0, "details": []})
+    assert (no_details["foreign_5d"], no_details["inst_5d"]) == (0, 0)
+    assert (no_details["foreign_1d"], no_details["inst_1d"]) == (None, None)
+    assert no_details["score"] == 0
+
+
 def test_score_supply_from_csv_handles_target_datetime_and_columns():
     df = pd.DataFrame(
         [

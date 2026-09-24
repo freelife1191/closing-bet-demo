@@ -580,6 +580,11 @@ def build_vcp_rule_based_recommendation(
 
 def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
     """VCP 분석용 프롬프트 생성"""
+    # [VCP-050] 수급 결측은 None 이다. get 기본값은 키가 없을 때만 쓰이므로 None·NaN 도 N/A 로 적는다
+    supply = {
+        key: "N/A" if safe_optional_float(stock_data.get(key)) is None else stock_data[key]
+        for key in ("foreign_5d", "inst_5d", "foreign_1d", "inst_1d")
+    }
     score = stock_data.get("score", "N/A")
     vcp_score = stock_data.get("vcp_score", "N/A")
     score_lines = [f"- 종합 시그널 점수: {score}점"]
@@ -597,10 +602,10 @@ def build_vcp_prompt(stock_name: str, stock_data: dict[str, Any]) -> str:
 - 현재가: {stock_data.get('current_price', 'N/A')}
 {score_block}
 - 수축 비율: {stock_data.get('contraction_ratio', 'N/A')}
-- 외국인 5일 순매수: {stock_data.get('foreign_5d', 'N/A')}주
-- 기관 5일 순매수: {stock_data.get('inst_5d', 'N/A')}주
-- 외국인 1일(오늘) 순매수: {stock_data.get('foreign_1d', 'N/A')}주
-- 기관 1일(오늘) 순매수: {stock_data.get('inst_1d', 'N/A')}주
+- 외국인 5일 순매수: {supply['foreign_5d']}주
+- 기관 5일 순매수: {supply['inst_5d']}주
+- 외국인 1일(오늘) 순매수: {supply['foreign_1d']}주
+- 기관 1일(오늘) 순매수: {supply['inst_1d']}주
 (주의: 5일 누적과 오늘의 수급 방향이 다를 경우, 오늘의 변화를 중요하게 고려하십시오)
 (주의: 점수의 절대 임계값을 임의로 가정하지 말고, 제공된 숫자의 상대적 강약과 다른 지표와의 조합을 중심으로 해석하십시오)
 

@@ -59,11 +59,16 @@ def calculate_volume_score(volume: pd.Series) -> tuple[int, float]:
     return vol_score, float(vol_ratio)
 
 
+# [VCP-050] 수급 자료가 없을 때의 결과. 점수는 0(확인되지 않은 순매수에 가점 없음)이지만 순매수 값은
+# None 이다. 0 을 쓰면 signals_log 와 AI 프롬프트에 「순매수 0」이 사실처럼 남는다.
+MISSING_SUPPLY: dict[str, Any] = {"score": 0, "foreign_5d": None, "inst_5d": None, "foreign_1d": None, "inst_1d": None}
+
+
 def _score_supply_core(
     foreign_5d: float,
     inst_5d: float,
     details: list[dict[str, Any]] | None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     score = 0
 
     if foreign_5d > 50_000_000_000:
@@ -98,9 +103,9 @@ def _score_supply_core(
                 break
     score += min(consecutive_i * 2, 10)
 
-    foreign_1d = 0
-    inst_1d = 0
-    if details and len(details) > 0:
+    foreign_1d = None
+    inst_1d = None
+    if details:
         latest = details[0]
         foreign_1d = int(latest.get("netForeignerBuyVolume", 0))
         inst_1d = int(latest.get("netInstitutionBuyVolume", 0))
@@ -109,15 +114,15 @@ def _score_supply_core(
         "score": int(score),
         "foreign_5d": int(foreign_5d),
         "inst_5d": int(inst_5d),
-        "foreign_1d": int(foreign_1d),
-        "inst_1d": int(inst_1d),
+        "foreign_1d": foreign_1d,
+        "inst_1d": inst_1d,
     }
 
 
-def score_supply_from_toss_trend(trend_data: dict[str, Any] | None) -> dict[str, int]:
+def score_supply_from_toss_trend(trend_data: dict[str, Any] | None) -> dict[str, Any]:
     """Toss 수급 데이터에서 수급 점수를 계산한다."""
     if not trend_data:
-        return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+        return dict(MISSING_SUPPLY)
 
     foreign_5d = trend_data.get("foreign", 0)
     inst_5d = trend_data.get("institution", 0)
@@ -128,17 +133,17 @@ def score_supply_from_toss_trend(trend_data: dict[str, Any] | None) -> dict[str,
 def score_supply_from_csv(
     ticker_inst: pd.DataFrame | None,
     target_datetime: datetime | None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """CSV 기반 수급 점수 계산."""
     if ticker_inst is None or ticker_inst.empty or len(ticker_inst) < 5:
-        return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+        return dict(MISSING_SUPPLY)
 
     working = ticker_inst
     if target_datetime is not None:
         working = working[working["date"] <= target_datetime]
 
     if len(working) < 5:
-        return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+        return dict(MISSING_SUPPLY)
 
     recent = working.tail(5)
     f_col = "foreign_net_buy" if "foreign_net_buy" in recent.columns else "foreign_buy"
@@ -178,6 +183,7 @@ def scale_vcp_score(vcp_score: float) -> int:
 
 
 __all__ = [
+    "MISSING_SUPPLY",
     "build_ticker_index",
     "calculate_volume_score",
     "score_supply_from_toss_trend",

@@ -20,6 +20,7 @@ from engine.screener_data_loader import (
     load_stocks_frame,
 )
 from engine.screener_scoring_helpers import (
+    MISSING_SUPPLY,
     build_ticker_index,
     calculate_volume_score,
     scale_vcp_score,
@@ -268,7 +269,7 @@ class SmartMoneyScreener:
             for item in prepared:
                 try:
                     trend = trends.get(normalize_ticker(item[0]["ticker"]))
-                    supply = score_supply_from_toss_trend(trend) if trend else {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+                    supply = score_supply_from_toss_trend(trend) if trend else dict(MISSING_SUPPLY)
                     yield self._finish_stock_analysis(item, supply)
                 except Exception as error:
                     logger.debug("종목 분석 스킵 %s: %s", item[0].get("ticker"), error, exc_info=True)
@@ -377,7 +378,7 @@ class SmartMoneyScreener:
             verify_with_references=True,
         )
         if not trend_data:
-            return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+            return dict(MISSING_SUPPLY)
         return score_supply_from_toss_trend(
             {
                 "foreign": trend_data.get("foreign", 0),

@@ -175,6 +175,33 @@ def test_create_signals_log_persists_detected_signal(monkeypatch, tmp_path):
     assert df.iloc[0]["grade"] == "B"
     assert df.iloc[0]["foreign_1d"] == 11_111_111
     assert df.iloc[0]["inst_1d"] == 22_222_222
+    # [VCP-050] 결측이 없으면 5일 값은 정수 표기 그대로다(기존 행이 `123.0` 으로 바뀌지 않게)
+    assert ",123456789,234567890," in output_path.read_text(encoding="utf-8-sig")
+
+
+class _MissingSupplyScreener(_DummyScreener):
+    """[VCP-050] 수급 결측 종목(None)과 실제 순매수 0 종목을 함께 돌려준다."""
+
+    def run_screening(self, max_stocks: int = 600) -> pd.DataFrame:
+        base = super().run_screening(max_stocks).iloc[0].to_dict()
+        missing = {**base, "foreign_net_5d": None, "inst_net_5d": None, "foreign_net_1d": None, "inst_net_1d": None}
+        zero = {**base, "ticker": "000660", "foreign_net_5d": 0, "inst_net_5d": 0}
+        return pd.DataFrame([missing, zero])
+
+
+def test_create_signals_log_keeps_missing_supply_blank(monkeypatch, tmp_path):
+    """[VCP-050] 결측은 빈 칸, 실제 0 은 0 으로 저장한다. 예전에는 둘 다 0 이었다."""
+    (tmp_path / "data").mkdir()
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _MissingSupplyScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+
+    assert init_data.create_signals_log(target_date="2026-02-19", run_ai=False) is True
+
+    df = pd.read_csv(tmp_path / "data" / "signals_log.csv", dtype={"ticker": str}).set_index("ticker")
+    assert df.loc["005930", ["foreign_5d", "inst_5d", "foreign_1d", "inst_1d"]].isna().all()
+    assert df.loc["000660", "foreign_5d"] == 0
+    assert df.loc["000660", "inst_5d"] == 0
 
 
 def test_create_signals_log_passes_max_stocks(monkeypatch, tmp_path):

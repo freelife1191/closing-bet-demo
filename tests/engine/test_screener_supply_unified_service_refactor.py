@@ -44,7 +44,7 @@ def test_calculate_supply_score_csv_uses_unified_5day_service(monkeypatch):
     assert result["score"] > 0
 
 
-def test_calculate_supply_score_csv_returns_zero_when_unified_service_has_no_data(monkeypatch):
+def test_calculate_supply_score_csv_returns_missing_when_unified_service_has_no_data(monkeypatch):
     screener = object.__new__(SmartMoneyScreener)
     screener._target_datetime = None
     captured: dict[str, object] = {}
@@ -59,7 +59,8 @@ def test_calculate_supply_score_csv_returns_zero_when_unified_service_has_no_dat
     assert captured["ticker"] == "005930"
     assert captured["verify_with_references"] is True
     assert captured["target_datetime"] is None
-    assert result == {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+    # [VCP-050] 결측은 0 이 아니라 None 이다
+    assert result == {"score": 0, "foreign_5d": None, "inst_5d": None, "foreign_1d": None, "inst_1d": None}
 
 
 def test_calculate_supply_score_csv_calls_the_service_once(monkeypatch):

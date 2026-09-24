@@ -12,6 +12,7 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Callable
 
+from engine.screener_scoring_helpers import MISSING_SUPPLY
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
@@ -242,12 +243,12 @@ def calculate_supply_score_from_csv(
     """CSV 기반 수급 점수를 계산한다."""
     try:
         if not inst_by_ticker:
-            return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+            return dict(MISSING_SUPPLY)
 
         ticker_inst = inst_by_ticker.get(ticker)
         return score_supply_from_csv_fn(ticker_inst=ticker_inst, target_datetime=target_datetime)
     except Exception:
-        return {"score": 0, "foreign_1d": 0, "inst_1d": 0}
+        return dict(MISSING_SUPPLY)
 
 
 __all__ = ["calculate_supply_score_with_toss", "calculate_supply_score_from_csv"]
