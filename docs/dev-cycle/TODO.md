@@ -49,19 +49,6 @@
 - [ ] 구현, 결측과 실제 0 거래 구분 확인
 - [ ] T3 리뷰와 pytest 전체, 격리 사본에서 가짜 출처로 CLI QA
 
-### [VCP-056] 가격 프레임의 high/low 가 없거나 전부 NaN 이면 VCP 판정이 예외 대신 실패 결과를 줘 전 종목 결함도 「시그널 없음」이 된다
-- 카테고리: VCP | 티어: T2 | 근거: `[VCP-053]` 코드 리뷰(2026-09-24, `closing-bet-reviewer` low, 코드로 확인)
-- 원인: `[VCP-053]` 은 결과가 None 인 종목만 분석 불가로 센다. `engine/vcp.py` 의 `_normalize_price_frame` 은 high/low 열이 없거나 값이 전부 NaN 이면 예외가 아니라 `is_vcp=False` 인 「Invalid or empty price frame」 결과를 준다. 그래서 가격 파일 스키마가 체계적으로 깨져도 전 종목이 분석된 것으로 세어져 그 날짜 행이 지워진다
-- 확인 수준: 코드로만 확인. 운영 CSV 의 high/low 결측 빈도는 확인하지 않았다
-- 설계 승인: 2026-09-25 08:19 | 범위: `engine/screener.py` `_prepare_stock_analysis` 의 사전 검사를 원래 행 수 대신 네 값(high·low·close·volume)이 모두 숫자인 행 수(`engine/vcp.py` `_normalize_price_frame` 재사용)로 바꿔 20 미만이면 분석 불가로 센다. `detect_vcp_pattern` 계약과 위험 경로 Phase1 은 바꾸지 않는다 | 실제 대화 근거: 2026-09-25 사용자 「진행해」 응답, 현재 세션의 bounded 설계 제안
-- 티어: T2(`engine/screener.py` 는 `tier-rules.md` §2 밖). 스킬: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-verify/`
-- [x] 테스트: `tests/engine/test_screener_vcp_gate_refactor.py` 에 high 전부 NaN → 예외(수정 전 RED 확인), 일부 NaN·유효 20행 이상 → 분석. `[VCP-053]` 판정 예외 테스트는 네 열 프레임으로 바꾸고 판정 호출 여부를 확인(close 만 있는 프레임은 이제 사전 검사에서 걸러져 판정 예외를 검사하지 못함)
-- [x] 구현
-- [x] pytest 전체: `venv/bin/python -m pytest -q -p no:cacheprovider` → 2802 passed, 2 skipped, exit 0(리뷰 low1 반영 뒤 재실행도 같음). 첫 실행에서 `tests/engine/test_screener_supply_batch.py` 두 건이 실패했는데, 픽스처가 close(·volume)만 있는 프레임이라 새 사전 검사에서 걸러졌기 때문이다. 기대값은 두고 입력을 네 열 프레임(`_prices`)으로 맞췄다
-- [x] `/ponytail-review`(작성자 직접 검토, 별도 에이전트 없음): Lean already. Ship. 함수 안 import 는 옆 `_detect_vcp_pattern` 과 같은 관용이라 유지
-- [x] 코드 리뷰(`closing-bet-reviewer`, 에이전트 `vcp056-reviewer`): APPROVE, max low. low1(사전 검사의 리터럴 20 이 판정의 `VCP_THRESHOLDS.MIN_DATA_POINTS` 와 따로 놀면 부족분이 다시 분석 수에 들어감) → 상수로 바꿈. low2(high 가 전부 실제 0 이면 「Invalid recent high」 결과가 분석 수에 들어감, 확신도 낮음) → 미반영: 설계가 실제 0 을 유효 값으로 남기기로 했고 가격 high/low 를 0 으로 채우는 수집 경로가 없어(리뷰어 `rg` 확인) 별도 항목으로도 올리지 않음. nit(정규화 두 번, 비공개 함수 import) → 수정 불필요 판정
-- [ ] QA(격리 사본 하네스)
-
 ### [VCP-057] VCP 수급 결측의 남은 0 기본값과 실제 0 의 색 표기
 - 카테고리: VCP | 티어: T2 | 근거: `[VCP-054]` 설계에서 범위 밖으로 남긴 것(2026-09-24 21:03)과 `closing-bet-reviewer` low
 - 남은 것: (1) `engine/screener.py` `ScreenerResult` 의 `foreign_net_5d: int`·1일 기본값 0(현재 dict 경로에서 쓰이지 않음), (2) `_score_supply_core` 가 `details` 행에 키가 없으면 1일 값을 0 으로 씀, (3) 수동 스크립트 `tests/test_vcp.py:72`·`scripts/diagnose_screener.py:62` 가 None 에서 TypeError, (4) VCP 표의 실제 0 이 매도와 같은 빨간색(`frontend/src/app/dashboard/kr/vcp/page.tsx` 의 `supplyColorClass`, `[VCP-054]` 이전과 같은 표기), (5) `engine/kr_ai_data_service.py:436-437` 이 빈 칸을 0 으로 읽음(읽는 곳은 `run.py` 의 `KrAiAnalyzer` 뿐이며 그 전략은 종료되어 값을 쓰지 않음)
