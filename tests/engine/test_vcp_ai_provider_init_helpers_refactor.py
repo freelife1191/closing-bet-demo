@@ -143,6 +143,7 @@ def test_resolve_effective_second_provider_maps_perplexity_to_gpt():
         resolve_effective_second_provider(
             providers=["gemini", "gpt"],
             second_provider="perplexity",
+            gpt_ready=True,
             logger=logger,
         )
         == "gpt"
@@ -162,12 +163,33 @@ def test_resolve_effective_second_provider_warns_twice_when_gpt_is_not_listed():
         resolve_effective_second_provider(
             providers=["gemini"],
             second_provider="perplexity",
+            gpt_ready=True,
             logger=logger,
         )
         is None
     )
     assert len(logger.warnings) == 2
     assert "VCP_SECOND_PROVIDER" in logger.warnings[1]
+
+
+def test_resolve_effective_second_provider_leaves_slot_empty_without_gpt_client():
+    """[VCP-048] 목록에 gpt 가 있어도 클라이언트가 없으면 두 번째 자리를 비운다.
+
+    gpt 로 확정하면 재분석이 채워질 수 없는 gpt_recommendation 을 기다려 같은 행을 매번 다시 잡는다.
+    """
+    logger = _Logger()
+
+    assert (
+        resolve_effective_second_provider(
+            providers=["gemini", "gpt"],
+            second_provider="gpt",
+            gpt_ready=False,
+            logger=logger,
+        )
+        is None
+    )
+    assert len(logger.warnings) == 1
+    assert "OPENAI_API_KEY" in logger.warnings[0]
 
 
 def test_drop_removed_providers_replaces_perplexity_with_gpt():
@@ -193,6 +215,7 @@ def test_resolve_effective_second_provider_rejects_unsupported_provider():
         resolve_effective_second_provider(
             providers=["gemini", "gpt", "zai"],
             second_provider="zai",
+            gpt_ready=True,
             logger=logger,
         )
         is None
@@ -206,6 +229,7 @@ def test_resolve_effective_second_provider_normalizes_aliases():
         resolve_effective_second_provider(
             providers=["gemini", "openai"],
             second_provider="openai",
+            gpt_ready=True,
             logger=_Logger(),
         )
         == "gpt"

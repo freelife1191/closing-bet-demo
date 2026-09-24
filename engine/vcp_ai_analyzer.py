@@ -100,6 +100,7 @@ class VCPMultiAIAnalyzer:
         self.second_provider = resolve_effective_second_provider(
             providers=self.providers,
             second_provider=configured_second_provider,
+            gpt_ready=self.gpt_client is not None,
             logger=logger,
         )
         self.gemini_blocked_models: set[str] = set()

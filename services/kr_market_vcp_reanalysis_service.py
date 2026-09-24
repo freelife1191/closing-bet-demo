@@ -625,7 +625,8 @@ def execute_vcp_failed_ai_reanalysis(
                 "status": "error",
                 "message": (
                     "두 번째 AI Provider를 실행할 수 없습니다. "
-                    "VCP_SECOND_PROVIDER 와 VCP_AI_PROVIDERS 설정을 확인하세요."
+                    "VCP_SECOND_PROVIDER·VCP_AI_PROVIDERS 설정과 OPENAI_API_KEY 를 확인하세요. "
+                    "바꾼 값은 워커를 모두 재기동해야 반영됩니다."
                 ),
             }
 

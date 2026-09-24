@@ -757,15 +757,18 @@ def test_analyze_with_zai_disables_session_after_prompt_echo_responses(monkeypat
     assert len(calls) == first_call_count
 
 
-def _build_analyzer_without_clients(monkeypatch, *, providers, second_provider):
-    """클라이언트 초기화를 막고 실제 생성자를 태워 provider 배선만 본다."""
+def _build_analyzer_without_clients(monkeypatch, *, providers, second_provider, gpt_client=object()):
+    """클라이언트 초기화를 막고 실제 생성자를 태워 provider 배선만 본다.
+
+    GPT 는 클라이언트가 떠 있어야 두 번째 자리로 확정되므로 기본값으로 가짜 객체를 둔다 [VCP-048].
+    """
     import engine.vcp_ai_analyzer as analyzer_module
 
     monkeypatch.setenv("VCP_AI_PROVIDERS", providers)
     monkeypatch.setenv("VCP_SECOND_PROVIDER", second_provider)
 
     monkeypatch.setattr(analyzer_module, "init_gemini_client", lambda *a, **k: None)
-    monkeypatch.setattr(analyzer_module, "init_gpt_client", lambda *a, **k: None)
+    monkeypatch.setattr(analyzer_module, "init_gpt_client", lambda *a, **k: gpt_client)
     monkeypatch.setattr(analyzer_module, "init_zai_client", lambda *a, **k: None)
 
     return analyzer_module.VCPMultiAIAnalyzer()
@@ -805,6 +808,18 @@ def test_init_leaves_second_provider_unset_when_nothing_can_run(monkeypatch):
         monkeypatch,
         providers="gemini",
         second_provider="gpt",
+    )
+
+    assert analyzer.second_provider is None
+
+
+def test_init_leaves_second_provider_unset_without_gpt_client(monkeypatch):
+    """[VCP-048] OPENAI_API_KEY 가 없어 GPT 클라이언트가 없으면 두 번째 자리를 비운다."""
+    analyzer = _build_analyzer_without_clients(
+        monkeypatch,
+        providers="gemini,gpt",
+        second_provider="gpt",
+        gpt_client=None,
     )
 
     assert analyzer.second_provider is None

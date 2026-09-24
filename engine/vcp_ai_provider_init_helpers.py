@@ -127,12 +127,15 @@ def drop_removed_providers(providers: list[str], logger: Any) -> list[str]:
 def resolve_effective_second_provider(
     providers: list[str],
     second_provider: str | None,
+    gpt_ready: bool,
     logger: Any,
 ) -> str | None:
     """실제로 실행할 두 번째 provider 를 확정한다. 실행할 수 없으면 None 을 돌려준다.
 
     두 번째 자리는 GPT 하나다. 제거된 perplexity 설정은 GPT 로 바꾼다 [VCP-046]. 호출부가
     이 값을 캐시 키 판정에도 쓰므로, 실행 결과가 담기는 필드와 판정이 기다리는 필드가 갈리지 않는다.
+    gpt_ready 는 GPT 클라이언트가 실제로 만들어졌는지다. 목록에만 있고 클라이언트가 없으면
+    결과 칸이 채워질 수 없으므로 자리를 비운다 [VCP-048].
     """
     normalized_providers = normalize_provider_list(providers)
     provider = normalize_provider_name(second_provider)
@@ -145,7 +148,12 @@ def resolve_effective_second_provider(
         provider = "gpt"
 
     if provider == "gpt" and "gpt" in normalized_providers:
-        return "gpt"
+        if gpt_ready:
+            return "gpt"
+        logger.warning(
+            "GPT 클라이언트를 만들지 못해(OPENAI_API_KEY·GPT 초기화 로그 확인) VCP 표의 두 번째 AI 열이 비게 됩니다"
+        )
+        return None
 
     logger.warning(
         "두 번째 AI Provider를 실행할 수 없어 VCP 표의 두 번째 AI 열이 비게 됩니다 "
