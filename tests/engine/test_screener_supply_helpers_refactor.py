@@ -55,6 +55,27 @@ def test_calculate_supply_score_with_toss_falls_back_on_empty_or_error():
     assert result_error["score"] == 0
 
 
+def test_calculate_supply_score_with_toss_falls_back_on_empty_toss_body(tmp_path):
+    """[VCP-055] Toss 200 빈 응답은 폴백으로 가고 15분 캐시에 0 을 남기지 않는다."""
+    from engine.toss_collector_metric_parsers import parse_investor_trend
+
+    class _EmptyBodyToss:
+        def get_investor_trend(self, _ticker, days=5):
+            return parse_investor_trend({"result": {"body": []}}, days)
+
+    with supply_helpers._TOSS_SUPPLY_CACHE_LOCK:
+        supply_helpers._TOSS_SUPPLY_CACHE.clear()
+    result = calculate_supply_score_with_toss(
+        ticker="005930",
+        toss_collector=_EmptyBodyToss(),
+        fallback_fn=lambda _ticker: {"score": -1},
+        score_supply_from_toss_trend_fn=lambda _trend: {"score": 99},
+        cache_data_dir=str(tmp_path),
+    )
+    assert result == {"score": -1}
+    assert not supply_helpers._TOSS_SUPPLY_CACHE
+
+
 def test_calculate_supply_score_with_toss_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
     with supply_helpers._TOSS_SUPPLY_CACHE_LOCK:
         supply_helpers._TOSS_SUPPLY_CACHE.clear()

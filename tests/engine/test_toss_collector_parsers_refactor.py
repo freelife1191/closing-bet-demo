@@ -160,6 +160,14 @@ def test_parse_investor_trend_ignores_non_dict_or_zero_close_items():
     assert len(parsed["details"]) == 3
 
 
+def test_parse_investor_trend_treats_no_valid_row_as_missing():
+    """[VCP-055] 200 빈 응답을 순매수 0 으로 만들면 호출자가 폴백하지 않고 0 을 저장한다."""
+    assert parse_investor_trend({"result": {"body": []}}, days=5) is None
+    assert parse_investor_trend({"error": {"code": "X"}}, days=5) is None
+    zero_close = {"result": {"body": [{"netForeignerBuyVolume": 7, "close": 0}, "INVALID"]}}
+    assert parse_investor_trend(zero_close, days=5) is None
+
+
 def test_parse_financials_builds_latest_and_quarterly():
     revenue_payload = {
         "result": {

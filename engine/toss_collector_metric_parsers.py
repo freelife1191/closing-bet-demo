@@ -74,6 +74,7 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
     foreign_sum = 0.0
     institution_sum = 0.0
     individual_sum = 0.0
+    valid_rows = 0
     for item in trends:
         if not isinstance(item, dict):
             continue
@@ -82,9 +83,14 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
         if close == 0:
             continue
 
+        valid_rows += 1
         foreign_sum += to_float(item.get("netForeignerBuyVolume", 0)) * close
         institution_sum += to_float(item.get("netInstitutionBuyVolume", 0)) * close
         individual_sum += to_float(item.get("netIndividualsBuyVolume", 0)) * close
+
+    # [VCP-055] 200 빈 응답·오류 JSON 은 결측이다. 순매수 0 으로 돌려주면 호출자가 폴백하지 않고 저장한다
+    if valid_rows == 0:
+        return None
 
     personal = personal_flow_details(trends, price_key="close") if days == 5 else []
     if days == 5:
