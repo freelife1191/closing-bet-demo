@@ -78,7 +78,7 @@ def start_update(items_list):
     )
 
 
-def update_item_status(name, status_code):
+def update_item_status(name, status_code, start_time=None):
     """아이템 상태 업데이트."""
     update_item_status_impl(
         name=name,
@@ -86,6 +86,7 @@ def update_item_status(name, status_code):
         update_lock=update_lock,
         update_status_file=UPDATE_STATUS_FILE,
         logger=logger,
+        start_time=start_time,
     )
 
 
@@ -109,11 +110,13 @@ def finish_update():
 
 def run_background_update(target_date, selected_items=None, force=False):
     """백그라운드에서 순차적으로 데이터 업데이트 실행."""
+    # [INFRA-101] 직전 start_update 가 이 워커에 정한 이 실행의 시각. 대체된 뒤의 항목 쓰기를 거른다
+    run_start_time = getattr(shared_state, "LOCAL_RUN_START_TIME", None)
     run_background_update_pipeline(
         target_date=target_date,
         selected_items=selected_items,
         force=bool(force),
-        update_item_status=update_item_status,
+        update_item_status=lambda name, status_code: update_item_status(name, status_code, start_time=run_start_time),
         finish_update=finish_update,
         shared_state=shared_state,
         logger=logger,

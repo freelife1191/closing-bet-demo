@@ -542,10 +542,15 @@ def update_item_status(
     update_lock,
     update_status_file: str,
     logger,
+    start_time: str | None = None,
 ) -> None:
-    """아이템 상태 업데이트."""
+    """아이템 상태 업데이트. start_time 이 주어지면 그 실행이 아직 상태의 주인일 때만 쓴다."""
     with update_lock:
         status = load_update_status(update_status_file=update_status_file, logger=logger)
+        if start_time is not None and status.get("startTime") != start_time:
+            # [INFRA-101] 다른 워커의 새 실행에 대체된 옛 실행이다. 이름이 같은 새 실행 항목에 쓰지 않는다
+            logger.info(f"Item status skipped for replaced run: {name} -> {status_code}")
+            return
         for item in status["items"]:
             if item["name"] == name:
                 item["status"] = status_code

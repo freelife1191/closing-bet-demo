@@ -529,3 +529,58 @@ def test_route_start_update_returns_refusal(monkeypatch):
     monkeypatch.setattr(common, "start_update_impl", lambda **_k: False)
 
     assert common.start_update(["Daily Prices"]) is False
+
+
+def test_update_item_status_skips_write_for_replaced_run(tmp_path):
+    # [INFRA-101] 다른 워커의 새 실행에 대체된 옛 실행은 새 실행의 같은 이름 항목에 쓰지 않는다
+    import threading
+
+    from services.common_update_status_service import load_update_status, save_update_status, update_item_status
+
+    status_file = str(tmp_path / "update_status.json")
+    kwargs = dict(update_lock=threading.Lock(), update_status_file=status_file, logger=_noop_logger())
+    new_run = {
+        "isRunning": True,
+        "startTime": "run-B",
+        "currentItem": None,
+        "items": [{"name": "Daily Prices", "status": "pending"}],
+    }
+    save_update_status(status=new_run, update_status_file=status_file, logger=_noop_logger())
+
+    def _load():
+        return load_update_status(update_status_file=status_file, logger=_noop_logger())
+
+    update_item_status(name="Daily Prices", status_code="done", start_time="run-A", **kwargs)
+    assert _load() == new_run
+    update_item_status(name="Daily Prices", status_code="running", start_time="run-A", **kwargs)
+    assert _load() == new_run  # currentItem 도 그대로
+
+    update_item_status(name="Daily Prices", status_code="running", start_time="run-B", **kwargs)
+    assert _load()["items"] == [{"name": "Daily Prices", "status": "running"}]
+    assert _load()["currentItem"] == "Daily Prices"
+
+    update_item_status(name="Daily Prices", status_code="done", **kwargs)  # 수동 API 는 종전 동작
+    assert _load()["items"] == [{"name": "Daily Prices", "status": "done"}]
+
+
+def test_route_run_background_update_binds_local_start_time(monkeypatch):
+    # [INFRA-101] 래퍼는 진입 때의 이 워커 실행 시각을 항목 상태 콜백에 묶어 넘긴다
+    import app.routes.common as common
+
+    item_calls: list[dict] = []
+    monkeypatch.setattr(common, "update_item_status_impl", lambda **kwargs: item_calls.append(kwargs))
+    monkeypatch.setattr(common.shared_state, "LOCAL_RUN_START_TIME", "run-A", raising=False)
+
+    def _pipeline(**kwargs):
+        common.shared_state.LOCAL_RUN_START_TIME = "run-later"
+        kwargs["update_item_status"]("Daily Prices", "done")
+
+    monkeypatch.setattr(common, "run_background_update_pipeline", _pipeline)
+
+    common.run_background_update("2026-02-21", ["Daily Prices"], False)
+
+    assert [(c["name"], c["status_code"], c["start_time"]) for c in item_calls] == [("Daily Prices", "done", "run-A")]
+
+    common.shared_state.LOCAL_RUN_START_TIME = None  # start_update 를 거치지 않은 실행은 종전처럼 확인하지 않는다
+    common.run_background_update("2026-02-21", ["Daily Prices"], False)
+    assert item_calls[-1]["start_time"] is None
