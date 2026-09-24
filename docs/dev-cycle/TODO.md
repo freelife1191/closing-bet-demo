@@ -70,14 +70,6 @@
 - [ ] 운영자 확인: 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부
 - [ ] 배포와 워커 전부 재기동(운영자, 장 마감 뒤), 발동했다면 10분 뒤 「VCP 분석기 세션 차단 해제: … zai=prompt-echo responses」 로그 확인
 
-### [CHAT-046] 챗봇 VCP 요약의 BUY 판정이 `gpt_recommendation` 을 보지 않는다
-- 카테고리: 챗봇 | 티어: 판정 시 파일 목록으로 정함 | 근거: `[CHAT-045]` 설계 중 발견(2026-09-24). `chatbot/signal_context.py` 의 `_vcp_action` 은 gemini → perplexity 순서로만 action 을 고른다. 두 번째 AI 가 GPT(또는 GPT 자리를 채운 Z.ai)인 설정에서 Gemini 가 실패하고 GPT 만 BUY 인 종목은 매수 추천 건수와 목록에서 빠진다. VCP 화면과 수집 쪽 선택 규칙(`_extract_vcp_ai_recommendation`)과도 다르다
-- 설계 승인: 승인 일자 2026-09-24 | 승인 확인 시각 2026-09-24 11:43 | 범위: bounded, T1 예상(`chatbot/signal_context.py`·`chatbot/prompts.py`, 위험 경로 아님). 판정은 Gemini·GPT 두 칸만 보고 Perplexity 는 뺀다. action 이 BUY/SELL/HOLD 가 아닌 실패 기록(`N/A`)은 건너뛴다. 둘 중 하나라도 BUY 면 매수 목록에 넣고 줄마다 `(Gemini 관망 · GPT 매수)` 처럼 유효한 판정을 모두 적는다. 사유는 BUY 를 낸 첫 판정의 것. 프롬프트의 「Gemini/Perplexity」는 「Gemini/GPT」로. 수집 쪽 `_is_valid_ai_recommendation` 은 `app.routes` 가 `chatbot` 을 import 하므로 순환을 피해 재사용하지 않는다. Perplexity 전면 제거는 범위 밖(`[VCP-046]`) | 근거: 사용자 「Gemini 와 GPT 가 메인이어야해 Perplexity 는 이제 사용안해 제거해도돼」, AskUserQuestion 「둘 다 표기 (권장)」·「챗봇만, 전면 제거는 TODO (권장)」
-- [x] 설계 승인(두 판정 모두 표기, Perplexity 는 챗봇에서만 제거)
-- [x] 테스트(Gemini 실패·GPT 만 BUY, 두 판정 불일치, Perplexity 무시)와 수정. 기존 테스트 둘은 표기 변경(「(매수 추천)」→「(Gemini 매수)」)에 맞춰 기대값을 고쳤다
-- [x] 리뷰(T1, 코드 46줄: `/ponytail-review` 「net: -1」, BUY 검사와 사유 선택을 `next(..., None)` 하나로 합쳐 반영. `_is_vcp_buy` 인라인 제안은 이름이 읽기 쉬워 보류), pytest 전체(2732 passed, 2 skipped, exit 0), 반영 뒤 `tests/chatbot`(285 passed)
-- [ ] QA: 함수 하네스로 `build_vcp_analysis_summary_text` 출력 확인(실제 LLM 호출 없음)
-
 ### [VCP-046] Perplexity 프로바이더를 코드·설정·화면에서 제거한다
 - 카테고리: VCP | 티어: T3(`engine/vcp_ai_*` 위험 경로) | 근거: 사용자 지시(2026-09-24 11:43, 「Perplexity 는 이제 사용안해 제거해도돼」). 참조는 `engine/vcp_ai_analyzer.py`·`vcp_ai_analyzer_helpers.py`·`vcp_ai_orchestration_helpers.py`(`VCP_AI_RECOMMENDATION_FIELDS`)·`vcp_ai_provider_init_helpers.py`·`signal_tracker_ai_helpers.py`·`engine/config.py`, `app/routes/kr_market_vcp_signal_helpers.py`, `services/kr_market_vcp_reanalysis_service.py`·`common_env_service.py`, 프론트엔드(`SettingsModal.tsx`·`VCPCriteriaModal.tsx`·`dashboard/kr/vcp`·`page.tsx`·`privacy/page.tsx`·`lib/api.ts`), `.env.example`, `scripts/test_perplexity_*.py` 등 30여 파일과 `CLAUDE.md`·`README.md`. 기존 캐시 JSON 의 `perplexity_recommendation` 칸을 읽는 쪽이 어떻게 처리할지와 `VCP_SECOND_PROVIDER=perplexity` 설정이 남은 배포의 동작을 정해야 한다
 - [ ] 설계 승인(캐시 호환, 설정값 폐기 방식, 개인정보 페이지 문구)
