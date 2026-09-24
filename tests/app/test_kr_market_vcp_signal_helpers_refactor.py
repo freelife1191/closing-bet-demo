@@ -467,3 +467,12 @@ def test_merge_keeps_the_csv_verdict_when_no_provider_in_the_cache_is_valid():
     vcp_helpers._merge_ai_data_into_vcp_signals(signals, ai_data_map)
 
     assert signals[0]["gemini_recommendation"]["action"] == "BUY"
+
+
+def test_extract_reads_legacy_perplexity_only_row():
+    # [VCP-046] 2026-02 캐시는 두 번째 판정을 perplexity 칸에만 담았다. 새로 쓰지 않아도 계속 읽는다
+    ai_results = {
+        "000001": {"perplexity_recommendation": {"action": "HOLD", "confidence": 60, "reason": "과거 캐시 판정"}}
+    }
+
+    assert vcp_helpers._extract_vcp_ai_recommendation(ai_results, "000001") == (True, "HOLD", 60, "과거 캐시 판정")

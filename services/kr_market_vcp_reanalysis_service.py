@@ -15,7 +15,10 @@ from typing import Any, Callable, Iterable
 import pandas as pd
 
 from engine.config import app_config
-from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
+from engine.vcp_ai_orchestration_helpers import (
+    VCP_AI_RECOMMENDATION_FIELDS,
+    VCP_AI_WRITTEN_FIELDS,
+)
 # signals_log.csv 의 읽기·병합·교체를 워커·프로세스 사이에서 직렬화한다([VCP-035]). `.env` 와 같은
 # `<경로>.lock` flock 이며 재진입이 불가능하므로 감싸는 쪽 한 자리에서만 잡는다.
 from services.common_env_service import _env_file_lock as signals_log_lock
@@ -25,18 +28,13 @@ from services.kr_market_data_cache_service import (
 )
 
 
-(
-    _GEMINI_RECOMMENDATION_FIELD,
-    _GPT_RECOMMENDATION_FIELD,
-    _PERPLEXITY_RECOMMENDATION_FIELD,
-) = VCP_AI_RECOMMENDATION_FIELDS
+_GEMINI_RECOMMENDATION_FIELD, _GPT_RECOMMENDATION_FIELD = VCP_AI_WRITTEN_FIELDS
 
 _VCP_SECOND_RECOMMENDATION_KEY_MAP = {
     "gpt": _GPT_RECOMMENDATION_FIELD,
     "openai": _GPT_RECOMMENDATION_FIELD,
     "zai": _GPT_RECOMMENDATION_FIELD,
     "z.ai": _GPT_RECOMMENDATION_FIELD,
-    "perplexity": _PERPLEXITY_RECOMMENDATION_FIELD,
 }
 _VCP_FORCE_PROVIDER_LABELS = {
     "gemini": "Gemini",
@@ -138,7 +136,8 @@ def load_vcp_ai_cache_map(
 
     반환값:
       - bool: AI 캐시 파일 존재 여부
-      - dict: {ticker: {"gemini_recommendation": ..., "gpt_recommendation": ..., "perplexity_recommendation": ...}}
+      - dict: {ticker: {"gemini_recommendation": ..., "gpt_recommendation": ...}}
+        과거 캐시(2026-02 등)에는 "perplexity_recommendation" 도 있을 수 있다(읽기 전용, [VCP-046]).
     """
     date_str = str(target_date or "").replace("-", "")
     data_dir = os.path.dirname(str(signals_path))
@@ -569,9 +568,9 @@ def execute_vcp_failed_ai_reanalysis(
             is_failed=_is_vcp_ai_analysis_failed,
         )
 
-        # 설정값이 아니라 analyzer 가 폴백까지 반영해 확정한 provider 를 읽는다. 설정값만
-        # 읽으면 폴백이 GPT 를 실행한 환경에서 캐시 판정은 Perplexity 를 기다려, 재분석을
-        # 부를 때마다 스코프 전체가 다시 호출된다.
+        # 설정값이 아니라 analyzer 가 확정한 provider 를 읽는다. 설정값과 확정값이 갈리면
+        # 캐시 판정이 실행 결과가 없는 칸을 기다려, 재분석을 부를 때마다 스코프 전체가
+        # 다시 호출된다.
         analyzer = get_vcp_analyzer()
         effective_second_provider = analyzer.second_provider
         second_recommendation_key = (

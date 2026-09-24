@@ -25,10 +25,9 @@ from engine.signal_tracker_ai_helpers import AI_PROMPT_NUMERIC_FIELDS
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 
 # AI 추천을 담는 세 필드. legacy 보강과 시그널 병합이 같은 목록을 봐야 한다. 두 번째
-# 프로바이더는 VCP_SECOND_PROVIDER 와 PERPLEXITY_API_KEY 를 읽어 실행 시점에 정해지고
-# 저장된 자료도 그에 따라 갈린다. data/ 를 세어 보면 2026-02-11 은 gpt, 02-12~02-20 은
-# perplexity, 02-26 은 둘 다 없고, 05-05 는 다시 gpt 다. 그러므로 보강 목록이 부분집합이면
-# 그때 쓰인 필드가 legacy 에만 있을 때 응답에 닿지 못한다.
+# 판정은 [VCP-046] 이후 gpt_recommendation 에만 쓰지만, data/ 의 2026-02-12~02-20
+# 캐시는 perplexity_recommendation 에만 담고 있다. 그러므로 보강 목록이 부분집합이면
+# 그 날짜의 두 번째 판정이 응답에 닿지 못한다.
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
     if isinstance(row, dict):
         return row.get(key, default)
@@ -98,7 +97,8 @@ def _extract_vcp_ai_recommendation(
     """
     ai_results에서 ticker 대상 추천 하나를 고른다. Gemini → GPT → Perplexity 순서로
     유효한 첫 추천이다. 수집 병합(scripts/init_data.py)과 실패 재분석이 이 규칙 하나를
-    같이 쓴다([VCP-040]). 반환값: (is_valid, action, confidence, reason)
+    같이 쓴다([VCP-040]). Perplexity 는 [VCP-046] 이전 캐시에서만 읽힌다.
+    반환값: (is_valid, action, confidence, reason)
 
     추천을 찾지 못하면 확신도는 0 이 아니라 None 이다. 이 값은 signals_log 의
     ai_confidence 열로 그대로 들어가는데, 그 열은 float64 라서 None 이 결측으로

@@ -89,7 +89,10 @@ _PROVIDER_PRIORITY: tuple[tuple[str, str], ...] = tuple(
 
 
 def _pick_recommendation(payload: Mapping[str, Any]) -> tuple[str, Mapping[str, Any] | None]:
-    """우선순위(gemini→gpt→perplexity) 순으로 첫 유효 추천을 고른다."""
+    """우선순위(gemini→gpt→perplexity) 순으로 첫 유효 추천을 고른다.
+
+    perplexity 는 [VCP-046] 이전 캐시에서만 읽힌다.
+    """
     for provider, key in _PROVIDER_PRIORITY:
         rec = payload.get(key)
         if isinstance(rec, Mapping):

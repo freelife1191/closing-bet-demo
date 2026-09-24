@@ -107,6 +107,11 @@ def test_merge_vcp_reanalysis_target_rows_deduplicates_by_index():
     assert [idx for idx, _ in merged] == [10, 20]
 
 
+def test_resolve_vcp_second_recommendation_key_no_longer_maps_perplexity():
+    # [VCP-046] 분석기의 두 번째 자리는 perplexity 가 될 수 없다
+    assert resolve_vcp_second_recommendation_key("perplexity") == "gpt_recommendation"
+
+
 def test_resolve_vcp_second_recommendation_key_supports_zai_aliases():
     assert resolve_vcp_second_recommendation_key("zai") == "gpt_recommendation"
     assert resolve_vcp_second_recommendation_key("z.ai") == "gpt_recommendation"
@@ -301,11 +306,11 @@ def test_execute_vcp_failed_ai_reanalysis_writes_signals_csv_atomically(monkeypa
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
@@ -316,7 +321,7 @@ def test_execute_vcp_failed_ai_reanalysis_writes_signals_csv_atomically(monkeypa
                         "confidence": 80,
                         "reason": "재분석 완료",
                     },
-                    "perplexity_recommendation": {
+                    "gpt_recommendation": {
                         "action": "HOLD",
                         "confidence": 65,
                         "reason": "보조 분석",
@@ -403,11 +408,11 @@ def test_execute_vcp_failed_ai_reanalysis_preserves_full_csv_columns_with_partia
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
@@ -418,7 +423,7 @@ def test_execute_vcp_failed_ai_reanalysis_preserves_full_csv_columns_with_partia
                         "confidence": 80,
                         "reason": "재분석 완료",
                     },
-                    "perplexity_recommendation": {
+                    "gpt_recommendation": {
                         "action": "HOLD",
                         "confidence": 65,
                         "reason": "보조 분석",
@@ -513,11 +518,11 @@ def test_execute_vcp_failed_ai_reanalysis_prefers_deep_copy_false_for_persist_lo
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
@@ -528,7 +533,7 @@ def test_execute_vcp_failed_ai_reanalysis_prefers_deep_copy_false_for_persist_lo
                         "confidence": 80,
                         "reason": "재분석 완료",
                     },
-                    "perplexity_recommendation": {
+                    "gpt_recommendation": {
                         "action": "HOLD",
                         "confidence": 65,
                         "reason": "보조 분석",
@@ -600,11 +605,11 @@ def test_execute_vcp_failed_ai_reanalysis_force_gemini_skips_cache_load(monkeypa
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
@@ -667,7 +672,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
     signals_path = tmp_path / "signals_log.csv"
     signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
 
-    # second provider(perplexity) 추천 누락 상태를 만든다.
+    # second provider(gpt) 추천 누락 상태를 만든다.
     (tmp_path / "ai_analysis_results.json").write_text(
         json.dumps(
             {
@@ -692,11 +697,11 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
@@ -708,7 +713,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
                         "confidence": 66,
                         "reason": "재분석 갱신",
                     },
-                    "perplexity_recommendation": {
+                    "gpt_recommendation": {
                         "action": "BUY",
                         "confidence": 71,
                         "reason": "Second AI 갱신",
@@ -740,7 +745,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_second_ai(monkeypatch,
     assert payload["updated_count"] == 1
     assert payload["cache_files_updated"] == 1
     assert captured["called"] == 1
-    assert isinstance(captured["ai_results"]["005930"]["perplexity_recommendation"], dict)
+    assert isinstance(captured["ai_results"]["005930"]["gpt_recommendation"], dict)
     assert captured_stocks["items"]
     assert captured_stocks["items"][0].get("skip_gemini") is True
 
@@ -831,7 +836,7 @@ def test_execute_vcp_failed_ai_reanalysis_cache_key_follows_analyzer_fallback(
     called = {"analyze_batch": 0}
 
     class _DummyAnalyzer:
-        # VCP_SECOND_PROVIDER 는 perplexity 이지만 키가 없어 GPT 로 확정된 상태.
+        # VCP_SECOND_PROVIDER 는 perplexity 이지만 [VCP-046] 이후 GPT 로 확정된 상태.
         second_provider = "gpt"
 
         @staticmethod
@@ -846,10 +851,10 @@ def test_execute_vcp_failed_ai_reanalysis_cache_key_follows_analyzer_fallback(
     import engine.vcp_ai_analyzer as vcp_ai_analyzer
 
     monkeypatch.setattr(vcp_ai_analyzer, "get_vcp_analyzer", lambda: _DummyAnalyzer())
-    # 이 설정은 서비스가 읽지 않지만 지우면 안 된다. 설정과 확정값이 서로 다른 상태를
-    # 만들어 두어야, 캐시 키를 app_config 에서 다시 읽도록 되돌리는 회귀를 이 검사가
-    # 잡아낸다. VCP_SECOND_PROVIDER 의 기본값이 gpt 라서 이 줄이 없으면 되돌린 코드도
-    # 같은 키를 보게 되어 검사가 그냥 통과한다.
+    # [VCP-046] 이후 perplexity 설정도 gpt_recommendation 으로 풀리므로, 이 검사는 캐시 키를
+    # app_config 에서 다시 읽는 회귀를 더는 잡지 못한다. 그 회귀는 바로 아래
+    # test_execute_vcp_failed_ai_reanalysis_skips_second_column_when_provider_is_unset
+    # (분석기 second_provider=None, 설정 기본값 gpt)가 잡는다.
     monkeypatch.setenv("VCP_SECOND_PROVIDER", "perplexity")
 
     status_code, payload = execute_vcp_failed_ai_reanalysis(
@@ -1081,7 +1086,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatc
     signals_path = tmp_path / "signals_log.csv"
     signals_df.to_csv(signals_path, index=False, encoding="utf-8-sig")
 
-    # second provider(perplexity)는 있고 gemini만 누락된 상태.
+    # second provider(gpt)는 있고 gemini만 누락된 상태.
     (tmp_path / "ai_analysis_results.json").write_text(
         json.dumps(
             {
@@ -1089,7 +1094,7 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatc
                 "signals": [
                     {
                         "ticker": "005930",
-                        "perplexity_recommendation": {
+                        "gpt_recommendation": {
                             "action": "BUY",
                             "confidence": 72,
                             "reason": "기존 Second 분석",
@@ -1106,11 +1111,11 @@ def test_execute_vcp_failed_ai_reanalysis_targets_missing_gemini_only(monkeypatc
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
@@ -1193,11 +1198,11 @@ def test_execute_vcp_failed_ai_reanalysis_force_gemini_reanalyzes_all_scoped_row
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
@@ -1271,18 +1276,18 @@ def test_execute_vcp_failed_ai_reanalysis_force_second_reanalyzes_all_scoped_row
 
     class _DummyAnalyzer:
         # 재분석 서비스가 캐시 키를 정할 때 읽는 확정값.
-        second_provider = "perplexity"
+        second_provider = "gpt"
 
         @staticmethod
         def get_available_providers():
-            return ["gemini", "perplexity"]
+            return ["gemini", "gpt"]
 
         @staticmethod
         async def analyze_batch(_stocks):
             captured_stocks["items"] = list(_stocks)
             return {
                 "005930": {
-                    "perplexity_recommendation": {
+                    "gpt_recommendation": {
                         "action": "HOLD",
                         "confidence": 66,
                         "reason": "Second 강제 재분석",
