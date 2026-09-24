@@ -64,6 +64,16 @@ describe('[VCP-054] VCP 수급 결측 표기', () => {
     expect(inst).toBeTruthy();
   });
 
+  it('[VCP-057] 실제 0 은 매도의 빨간색이 아니라 중립색으로 그린다', async () => {
+    render(<VCPPage />);
+    const cells = (await screen.findByText('SK')).closest('tr')!.querySelectorAll('td');
+    const inst = Array.from(cells).find((td) => td.textContent === '0')!;
+
+    expect(inst.className).toContain('text-gray-300');
+    expect(inst.className).not.toContain('text-red-400');
+    expect(inst.querySelector('i')).toBeNull();
+  });
+
   it('상세 문구는 결측에 원을 붙이지 않는다', async () => {
     render(<VCPPage />);
     fireEvent.click(await screen.findByText('SK'));

@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 def main():
     """메인 함수"""
+    import pandas as pd
+
     from engine.screener import SmartMoneyScreener
     
     # 커맨드라인 인자 파싱
@@ -69,8 +71,10 @@ def main():
         print(f"    점수: {signal['score']:.1f}")
         print(f"    진입가: {signal['entry_price']:,.0f}원")
         print(f"    등락률: {signal['change_pct']:+.2f}%")
-        print(f"    외인 5일: {signal['foreign_5d']:,.0f}")
-        print(f"    기관 5일: {signal['inst_5d']:,.0f}")
+        # 수급 자료가 없으면 값이 None·NaN 이다([VCP-050])
+        f_5d, i_5d = ('-' if pd.isna(v) else format(v, ',.0f') for v in (signal['foreign_5d'], signal['inst_5d']))
+        print(f"    외인 5일: {f_5d}")
+        print(f"    기관 5일: {i_5d}")
         print(f"    시그널 날짜: {signal['signal_date']}")
     
     print("\n" + "=" * 60)
@@ -81,8 +85,6 @@ def main():
     save_option = input("\n결과를 signals_log.csv에 저장하시겠습니까? (y/N): ").strip().lower()
     
     if save_option == 'y':
-        import pandas as pd
-        
         signals_df = pd.DataFrame(signals)
         signals_path = os.path.join('data', 'signals_log.csv')
         

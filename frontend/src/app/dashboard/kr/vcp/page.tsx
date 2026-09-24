@@ -29,8 +29,9 @@ function getVcpChatHeaders(sessionId: string): Record<string, string> {
 }
 
 // 수급 결측(null)은 [VCP-054] 부터 API 가 0 과 구분해 보낸다. 매도처럼 빨갛게 그리지 않는다
+// 결측은 흐린 회색, 실제 0 은 매도와 구분되는 중립색이다([VCP-057])
 const supplyColorClass = (value: number | null) =>
-  value === null ? 'text-gray-500' : value > 0 ? 'text-green-400' : 'text-red-400';
+  value === null ? 'text-gray-500' : value > 0 ? 'text-green-400' : value < 0 ? 'text-red-400' : 'text-gray-300';
 
 const formatSupplyWon = (value: number | null | undefined) =>
   value === null || value === undefined ? '-' : `${formatMarketAmount(value)}원`;

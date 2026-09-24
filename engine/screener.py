@@ -69,22 +69,6 @@ class VCPResult:
     pattern_desc: str = ""
 
 
-@dataclass
-class ScreenerResult:
-    """스크리닝 결과"""
-    ticker: str
-    name: str
-    score: float
-    foreign_net_5d: int
-    inst_net_5d: int
-    market: str
-    entry_price: float
-    change_pct: float
-    market_status: str = "UNKNOWN" # Market Gate Status
-    foreign_net_1d: int = 0
-    inst_net_1d: int = 0
-
-
 class SmartMoneyScreener:
     """스마트 머니 스크리너"""
 

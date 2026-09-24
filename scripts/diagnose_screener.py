@@ -59,7 +59,9 @@ def main():
     print("\n[Top 10 by Score]")
     top_10 = df.sort_values('score', ascending=False).head(10)
     for _, row in top_10.iterrows():
-        print(f"{row['name']} ({row['ticker']}): Score {row['score']} | Supply(F:{row['foreign_net_5d'] // 100000000}억, I:{row['inst_net_5d'] // 100000000}억) | VCP CR:{row['contraction_ratio']}")
+        # 수급 자료가 없으면 값이 None·NaN 이다([VCP-050])
+        f_5d, i_5d = (('-' if pd.isna(v) else f"{v // 100_000_000:.0f}") for v in (row['foreign_net_5d'], row['inst_net_5d']))
+        print(f"{row['name']} ({row['ticker']}): Score {row['score']} | Supply(F:{f_5d}억, I:{i_5d}억) | VCP CR:{row['contraction_ratio']}")
 
 if __name__ == "__main__":
     main()

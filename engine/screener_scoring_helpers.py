@@ -88,7 +88,7 @@ def _score_supply_core(
     consecutive_f = 0
     if details:
         for d in details:
-            if d.get("netForeignerBuyVolume", 0) > 0:
+            if (d.get("netForeignerBuyVolume") or 0) > 0:
                 consecutive_f += 1
             else:
                 break
@@ -97,18 +97,17 @@ def _score_supply_core(
     consecutive_i = 0
     if details:
         for d in details:
-            if d.get("netInstitutionBuyVolume", 0) > 0:
+            if (d.get("netInstitutionBuyVolume") or 0) > 0:
                 consecutive_i += 1
             else:
                 break
     score += min(consecutive_i * 2, 10)
 
-    foreign_1d = None
-    inst_1d = None
-    if details:
-        latest = details[0]
-        foreign_1d = int(latest.get("netForeignerBuyVolume", 0))
-        inst_1d = int(latest.get("netInstitutionBuyVolume", 0))
+    # [VCP-057] 값이 없는 1일 순매수는 0 이 아니라 None 이다. 연속 매수 계산은 위에서 그 행에서 멈춘다
+    latest = details[0] if details else {}
+    foreign_1d, inst_1d = (
+        None if v is None else int(v) for v in (latest.get("netForeignerBuyVolume"), latest.get("netInstitutionBuyVolume"))
+    )
 
     return {
         "score": int(score),

@@ -74,6 +74,22 @@ def test_score_supply_distinguishes_missing_from_real_zero():
     assert no_details["score"] == 0
 
 
+def test_score_supply_keeps_missing_daily_value_as_none():
+    """[VCP-057] details 행에 값이 없으면 1일 값은 0 이 아니라 None, 연속 매수는 거기서 멈추고 점수는 같다."""
+    scored = score_supply_from_toss_trend(
+        {
+            "foreign": 0,
+            "institution": 0,
+            "details": [
+                {"netInstitutionBuyVolume": None},
+                {"netForeignerBuyVolume": 5, "netInstitutionBuyVolume": 5},
+            ],
+        }
+    )
+    assert (scored["foreign_1d"], scored["inst_1d"]) == (None, None)
+    assert scored["score"] == 0
+
+
 def test_score_supply_from_csv_handles_target_datetime_and_columns():
     df = pd.DataFrame(
         [
