@@ -1,0 +1,30 @@
+# [INFRA-109] Toss 투자자 추이의 빈 순매수 수량을 날짜 단위 결측으로 보존 — QA 기록
+
+- 대상: `engine/toss_collector_metric_parsers.py`(`parse_investor_trend`), `engine/toss_collector_numeric_helpers.py`(`optional_volume`), `engine/screener_supply_helpers.py`(`_normalize_toss_supply_payload`), `services/investor_trend_5day_service.py`(`_normalize_external_trend_payload`)
+- 단계(phase): 시나리오 구성 완료 | 실행 전
+- 구성 2026-09-25(설계 승인·구현·대상 테스트 뒤, 실행 전, 분 단위 시각은 기록하지 않음)
+- 검증 기준 커밋: 이 문서를 담은 첫 커밋. 대조는 수정 전 커밋 `eb70daf2`. 사본은 각 커밋의 `git archive` 다
+- 구성 근거: 설계 승인(대화, 확인 시각 11:51). 사용자 진입 흐름은 종가베팅·VCP 신호의 수급 점수와 1일 순매수 표시이며, 화면은 스크리너가 저장한 결과를 읽는다. 스크리너 수급은 `calculate_supply_score_with_toss`, 참조 검증은 `_get_reference_trend_cached` 를 지난다. 실제 신호 생성은 외부 조회와 LLM 을 부르는 금지 조작이라 하네스로 대체한다
+- QA 엔진(engine): Claude Code. browser_applicability: 하네스 대체. 바뀐 것은 수급 점수 입력의 결측 표현뿐이고 화면 코드는 바뀌지 않는다. 상세 모달의 `null`→0 표시는 `[FE-048]` 로 이월했다
+- 격리: 각 커밋의 `git archive` 사본에서 `secrets/`·`data/`·`.env` 를 지운다. 하네스는 `TossCollector._safe_request` 만 가짜 응답으로 바꾸고 파서부터는 실제 코드를 부른다. 소켓 연결을 막고, 캐시는 사본 `data/` 에 쓴다. 서버와 포트는 쓰지 않는다
+- 하네스: 세션 스크래치의 `infra109qa_harness.py`(사본 경로가 scratchpad 가 아니면 거부)
+- 가짜 종목: 000001 최신일 외국인 `""`·기관 `None`, 000002 다섯 날 외국인 공란, 000003 최신 자리에 종가·수량이 모두 빈 행, 000004 정상(최신일 실제 0)
+- 필수 여부(required): S-1~S-4 예
+
+## 시나리오
+
+### S-1. 최신일 수량만 빈 종목은 1일 값이 결측이고 5일 합계는 나머지 네 날의 합이다 (하네스, 필수)
+- 조작: 수정 전후 사본에서 000001 의 스크리너·참조 결과를 읽는다
+- 기대: 수정 뒤 두 경로 모두 `foreign_1d`·`inst_1d` 가 `null`, `foreign_5d` 40000, `inst_5d` 20000. 수정 전 참조 경로는 1일 값 0
+
+### S-2. 다섯 날 외국인이 모두 빈 종목은 스크리너가 폴백하고 참조는 자료 없음이다 (하네스, 필수)
+- 조작: 000002 의 결과를 읽는다
+- 기대: 수정 뒤 스크리너 결과 `{"fallback": true}`, 참조 `null`. 수정 전에는 외국인 5일 합계 0 으로 점수를 매겼다
+
+### S-3. 종가 없는 최신 행은 1일 순매수 자리를 차지하지 않는다 (하네스, 필수)
+- 조작: 000003 의 결과를 읽는다
+- 기대: 수정 뒤 두 경로 모두 `foreign_1d` 10·`inst_1d` 5, 참조 `details[0].date` 가 2026-09-24. 수정 전 참조 경로는 2026-09-25 행을 1일 값 0 으로 읽었다
+
+### S-4. 정상 종목과 파일 저장 행은 수정 전후가 같다 (하네스, 필수, 회귀)
+- 조작: 000004 의 스크리너·참조 결과와 네 종목의 `init_rows` 를 비교한다
+- 기대: 000004 결과 전체와 네 종목의 `init_rows` 가 수정 전후 같다. 최신일 실제 0 은 0 으로 남는다. 두 실행 exit 0, 소켓 차단 예외 0건, 원본 `data/` 수정 시각 불변

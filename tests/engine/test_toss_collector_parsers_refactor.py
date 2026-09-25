@@ -157,7 +157,8 @@ def test_parse_investor_trend_ignores_non_dict_or_zero_close_items():
     assert parsed["foreign"] == 500
     assert parsed["institution"] == -200
     assert parsed["individual"] == -300
-    assert len(parsed["details"]) == 3
+    # [INFRA-109] details 는 합계에 넣은 행만 담는다. 종가 없는 행이 1일 순매수 자리를 차지하지 않는다
+    assert parsed["details"] == [payload["result"]["body"][2]]
 
 
 def test_parse_investor_trend_treats_no_valid_row_as_missing():
@@ -261,3 +262,40 @@ def test_financial_period_requires_the_corresponding_metric():
     assert parsed["net_income_period"] is None
     missing = parse_financials({"result": {"table": [{"period": "2026Q1", "revenueKrw": 100}]}}, None)
     assert missing["net_income_period"] is None
+
+
+def _trend_rows(foreign, institution):
+    return {
+        "result": {
+            "body": [
+                {"netForeignerBuyVolume": f, "netInstitutionBuyVolume": i, "netIndividualsBuyVolume": 0, "close": 100}
+                for f, i in zip(foreign, institution)
+            ]
+        }
+    }
+
+
+def test_parse_investor_trend_skips_blank_day_in_sum_without_zero_fill():
+    """[INFRA-109] 빈 수량은 그날만 결측이다. 합계는 값 있는 날의 합이고 details 원본은 그대로다."""
+    parsed = parse_investor_trend(_trend_rows(["", 2, "1,000", 4, 5], [None, 1, 1, 1, 1]), days=5)
+
+    assert parsed["foreign"] == (2 + 1_000 + 4 + 5) * 100
+    assert parsed["institution"] == 4 * 100
+    assert parsed["details"][0]["netForeignerBuyVolume"] == ""
+
+
+def test_parse_investor_trend_all_blank_field_sum_is_missing_and_real_zero_is_kept():
+    parsed = parse_investor_trend(_trend_rows([None, "", "-", "nan", None], [0, "0", 0.0, 0, 0]), days=5)
+
+    assert parsed["foreign"] is None
+    assert parsed["institution"] == 0
+
+
+def test_parse_investor_trend_all_real_zero_is_zero_and_closeless_latest_row_is_dropped():
+    payload = _trend_rows([0, 0, 0, 0, 0], [0, 0, 0, 0, 0])
+    payload["result"]["body"].insert(0, {"netForeignerBuyVolume": None, "netInstitutionBuyVolume": None, "close": None})
+
+    parsed = parse_investor_trend(payload, days=5)
+
+    assert parsed["foreign"] == 0 and parsed["institution"] == 0
+    assert parsed["details"][0]["netForeignerBuyVolume"] == 0

@@ -1136,3 +1136,30 @@ def test_deserialize_rejects_infinity_from_a_corrupted_snapshot():
     )
 
     assert trend_service._deserialize_trend_map(payload) is None
+
+
+def test_normalize_external_trend_payload_keeps_missing_day_as_none_through_cache():
+    """[INFRA-109] 하루 결측은 0 이 아니라 None 이고, SQLite 캐시(JSON) 왕복 뒤에도 None 이다."""
+    payload = {
+        "foreign": 9,
+        "institution": 5,
+        "details": [
+            {"netForeignerBuyVolume": "", "netInstitutionBuyVolume": None, "date": "2026-02-24"},
+            {"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": "0", "date": "2026-02-23"},
+        ],
+    }
+    result = trend_service._normalize_external_trend_payload(payload, source="toss")
+
+    assert result["details"][0]["netForeignerBuyVolume"] is None
+    assert result["details"][0]["netInstitutionBuyVolume"] is None
+    assert result["details"][1]["netForeignerBuyVolume"] == 0
+    assert result["details"][1]["netInstitutionBuyVolume"] == 0
+    reloaded = trend_service._normalize_external_trend_payload(
+        json.loads(json.dumps(result)), source="toss", from_cache=True
+    )
+    assert reloaded["details"] == result["details"]
+
+
+def test_normalize_external_trend_payload_missing_sum_is_missing_payload():
+    assert trend_service._normalize_external_trend_payload({"foreign": None, "institution": 1}, source="toss") is None
+    assert trend_service._normalize_external_trend_payload({"institution": 1}, source="toss") is None

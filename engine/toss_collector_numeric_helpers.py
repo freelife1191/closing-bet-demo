@@ -6,6 +6,7 @@ Engine - Toss Collector Numeric Helpers
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -33,6 +34,17 @@ def to_float(value: Any) -> float:
         return float(cleaned)
     except ValueError:
         return 0.0
+
+
+def optional_volume(value: Any) -> float | None:
+    """[INFRA-109] 순매수 수량을 읽는다. 비었거나 숫자가 아니면 0 이 아니라 None 이다."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        volume = float(str(value).replace(",", "").strip())
+    except ValueError:
+        return None
+    return volume if math.isfinite(volume) else None
 
 
 def to_int(value: Any) -> int:

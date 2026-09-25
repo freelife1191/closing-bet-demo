@@ -10,7 +10,7 @@ from typing import Any
 
 from engine.investor_personal_flow import personal_flow_details
 
-from engine.toss_collector_numeric_helpers import normalize_result_payload, to_float, to_int
+from engine.toss_collector_numeric_helpers import normalize_result_payload, optional_volume, to_float, to_int
 
 
 def parse_investment_indicators(data: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -71,10 +71,12 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
         legacy_trends = data.get("trends", [])
         trends = legacy_trends if isinstance(legacy_trends, list) else []
 
-    foreign_sum = 0.0
-    institution_sum = 0.0
+    # [INFRA-109] 빈 수량은 그날만 결측이다. 합계는 값 있는 날의 합이고, 다섯 날 모두 비면 None 이다
+    foreign_sum: float | None = None
+    institution_sum: float | None = None
     individual_sum = 0.0
-    valid_rows = 0
+    # 종가 없는 행은 details 에서도 뺀다. 남기면 정규화기가 그 행을 1일 순매수 None 으로 읽는다
+    priced_rows: list[dict[str, Any]] = []
     for item in trends:
         if not isinstance(item, dict):
             continue
@@ -83,13 +85,17 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
         if close == 0:
             continue
 
-        valid_rows += 1
-        foreign_sum += to_float(item.get("netForeignerBuyVolume", 0)) * close
-        institution_sum += to_float(item.get("netInstitutionBuyVolume", 0)) * close
+        priced_rows.append(item)
+        foreign = optional_volume(item.get("netForeignerBuyVolume"))
+        if foreign is not None:
+            foreign_sum = (foreign_sum or 0.0) + foreign * close
+        institution = optional_volume(item.get("netInstitutionBuyVolume"))
+        if institution is not None:
+            institution_sum = (institution_sum or 0.0) + institution * close
         individual_sum += to_float(item.get("netIndividualsBuyVolume", 0)) * close
 
     # [VCP-055] 200 빈 응답·오류 JSON 은 결측이다. 순매수 0 으로 돌려주면 호출자가 폴백하지 않고 저장한다
-    if valid_rows == 0:
+    if not priced_rows:
         return None
 
     personal = personal_flow_details(trends, price_key="close") if days == 5 else []
@@ -102,7 +108,7 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
         "institution": institution_sum,
         "individual": individual_sum,
         "days": days,
-        "details": trends,
+        "details": priced_rows,
     }
 
 

@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 from engine.screener_scoring_helpers import MISSING_SUPPLY
+from engine.toss_collector_numeric_helpers import optional_volume
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
@@ -84,22 +85,25 @@ def _normalize_toss_supply_payload(payload: dict[str, Any] | None) -> dict[str, 
         return None
 
     try:
-        foreign_value = int(float(payload.get("foreign", 0)))
-        institution_value = int(float(payload.get("institution", 0)))
-    except (TypeError, ValueError):
+        foreign_value = int(float(payload.get("foreign")))
+        institution_value = int(float(payload.get("institution")))
+    except (TypeError, ValueError, OverflowError):
         return None
 
     details_payload = payload.get("details")
-    normalized_details: list[dict[str, int]] = []
+    normalized_details: list[dict[str, int | None]] = []
     if isinstance(details_payload, list):
         for row in details_payload[:5]:
             if not isinstance(row, dict):
                 continue
-            try:
-                foreign_1d = int(float(row.get("netForeignerBuyVolume", 0)))
-                institution_1d = int(float(row.get("netInstitutionBuyVolume", 0)))
-            except (TypeError, ValueError):
-                continue
+            # [INFRA-109] 빈 값은 그 자리에 None 으로 둔다. 행을 버리면 전날 값이 1일 순매수가 된다
+            foreign_1d, institution_1d = (
+                None if v is None else int(v)
+                for v in (
+                    optional_volume(row.get("netForeignerBuyVolume")),
+                    optional_volume(row.get("netInstitutionBuyVolume")),
+                )
+            )
             normalized_details.append(
                 {
                     "netForeignerBuyVolume": foreign_1d,

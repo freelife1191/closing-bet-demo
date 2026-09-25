@@ -24,6 +24,7 @@ import pandas as pd
 
 from engine.investor_personal_flow import personal_flow_details
 from engine.ticker_utils import normalize_ticker
+from engine.toss_collector_numeric_helpers import optional_volume
 from services.kr_market_csv_utils import get_ticker_padded_series
 from services.kr_market_data_cache_service import load_csv_file
 from services.kr_market_data_cache_sqlite_payload import (
@@ -450,8 +451,12 @@ def _normalize_external_trend_payload(
     if not isinstance(payload, dict):
         return None
 
-    foreign_value = _safe_int(payload.get("foreign", 0))
-    inst_value = _safe_int(payload.get("institution", 0))
+    # [INFRA-109] 5일 합계가 결측이면 그 참조 전체가 결측이다. 0 으로 채우면 순매수 0 으로 판정된다
+    try:
+        foreign_value = int(float(payload.get("foreign")))
+        inst_value = int(float(payload.get("institution")))
+    except (TypeError, ValueError, OverflowError):
+        return None
 
     details_payload = payload.get("details")
     details: list[dict[str, Any]] = []
@@ -459,8 +464,13 @@ def _normalize_external_trend_payload(
         for item in details_payload[:5]:
             if not isinstance(item, dict):
                 continue
-            foreign_1d = _safe_int(item.get("netForeignerBuyVolume", 0))
-            inst_1d = _safe_int(item.get("netInstitutionBuyVolume", 0))
+            foreign_1d, inst_1d = (
+                None if v is None else int(v)
+                for v in (
+                    optional_volume(item.get("netForeignerBuyVolume")),
+                    optional_volume(item.get("netInstitutionBuyVolume")),
+                )
+            )
             day = next((_parse_date_string(item.get(key)) for key in ("date", "localDate", "baseDate", "tradeDate") if item.get(key)), None)
             detail: dict[str, Any] = {"netForeignerBuyVolume": foreign_1d, "netInstitutionBuyVolume": inst_1d}
             if day is not None:

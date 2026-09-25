@@ -30,7 +30,7 @@ class _DummyToss:
 def test_calculate_supply_score_with_toss_uses_primary_payload():
     result = calculate_supply_score_with_toss(
         ticker="005930",
-        toss_collector=_DummyToss(payload={"foreign": 10}),
+        toss_collector=_DummyToss(payload={"foreign": 10, "institution": 0}),
         fallback_fn=lambda _ticker: {"score": -1},
         score_supply_from_toss_trend_fn=lambda trend: {"score": trend["foreign"]},
     )
@@ -155,3 +155,54 @@ def test_calculate_supply_score_from_csv_delegates_to_score_fn():
     )
     assert result["score"] == 1
     assert result["target"] == "2026-02-21"
+
+
+def test_normalize_toss_supply_payload_keeps_missing_day_in_place():
+    """[INFRA-109] 결측 행을 버리면 전날 값이 1일 순매수 자리로 밀려 오른다."""
+    from engine.screener_scoring_helpers import score_supply_from_toss_trend
+
+    details = [
+        {"netForeignerBuyVolume": None, "netInstitutionBuyVolume": ""},
+        {"netForeignerBuyVolume": 7, "netInstitutionBuyVolume": 3},
+        {"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 0},
+        {"netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1},
+        {"netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1},
+    ]
+    normalized = supply_helpers._normalize_toss_supply_payload({"foreign": 9, "institution": 5, "details": details})
+
+    assert len(normalized["details"]) == 5
+    assert normalized["details"][0] == {"netForeignerBuyVolume": None, "netInstitutionBuyVolume": None}
+    assert normalized["details"][2] == {"netForeignerBuyVolume": 0, "netInstitutionBuyVolume": 0}
+    scored = score_supply_from_toss_trend(normalized)
+    assert scored["foreign_1d"] is None and scored["inst_1d"] is None
+
+
+def test_normalize_toss_supply_payload_missing_sum_is_missing_payload():
+    assert supply_helpers._normalize_toss_supply_payload({"foreign": None, "institution": 5, "details": []}) is None
+
+
+def test_calculate_supply_score_with_toss_falls_back_when_sum_missing_without_caching(tmp_path):
+    supply_helpers._TOSS_SUPPLY_CACHE.clear()
+    result = calculate_supply_score_with_toss(
+        ticker="005930",
+        toss_collector=_DummyToss(payload={"foreign": None, "institution": 5, "details": []}),
+        fallback_fn=lambda _ticker: {"score": -1},
+        score_supply_from_toss_trend_fn=lambda trend: {"score": trend["foreign"]},
+        cache_data_dir=str(tmp_path),
+    )
+    assert result == {"score": -1}
+    assert not supply_helpers._TOSS_SUPPLY_CACHE
+
+
+def test_toss_supply_sqlite_cache_keeps_missing_day_as_none(tmp_path):
+    details = [{"netForeignerBuyVolume": None, "netInstitutionBuyVolume": 3}] + [
+        {"netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 1}
+    ] * 4
+    supply_helpers._save_cached_toss_supply_payload(
+        data_dir=str(tmp_path), ticker="005930", cache_slot="slot", payload={"foreign": 4, "institution": 7, "details": details}
+    )
+    supply_helpers._TOSS_SUPPLY_CACHE.clear()
+
+    loaded = supply_helpers._load_cached_toss_supply_payload(data_dir=str(tmp_path), ticker="005930", cache_slot="slot")
+
+    assert loaded["details"][0] == {"netForeignerBuyVolume": None, "netInstitutionBuyVolume": 3}
