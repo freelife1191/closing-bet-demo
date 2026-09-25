@@ -60,20 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-105] Market Gate 섹터 ETF 등락률 조회가 실패하면 결측 대신 0.0 을 넣어 섹터 급락 감점이 사라진다
-- 카테고리: 인프라 | 티어: T3(§2 「시장 진입 판정」 `engine/market_gate_fetchers_external.py`·`engine/market_gate_logic_scoring.py`) | 근거: `[INFRA-089]` 영향 확인(2026-09-24)에서 분리(2026-09-25)
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 09:57 | 범위: bounded 설계(대화) — 섹터 조회 실패·빈 결과·한 줄 결과를 `None` 으로 남김, `build_sector_signals` 는 `None` 을 `change_pct: None`·`Neutral` 로 내보냄, 대시보드 카드는 null 을 `—` 로 표시(`KRSector.change_pct: number | null`), 과거 저장분 0.0 은 되돌리지 않음 | 근거: 사용자 「진행해」
-- 내용: `engine/market_gate_fetchers_external.py:88-135` 는 pykrx 를 직접 부르고 실패하면 종목마다 `0.0` 을 넣는다. `_calculate_sector_crash_penalty`(`engine/market_gate_analysis.py:77`)가 전부 0 을 받아 감점 0 이 되고, 화면 섹터 신호도 0.00% 로 보인다. 부분 실패면 0 이 평균과 하락 비율을 희석해 감점이 빠진다(예: 5개 -3%·5개 실패 → 평균 -1.5%·비율 0.5 → 감점 0, 결측 제외면 30)
-- 스킬: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-nextjs/`, `frontend/node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md`(순수 클라이언트 렌더 변경이라 표의 여섯 줄에 맞지 않음), vendor 스킬 해당 없음(효과·폴링·프롭 구조 변경 없음)
-- [x] 설계 승인
-- [x] 테스트(백엔드 결측 보존·분석 유지·부분 실패 감점, 화면 `—` 카드) RED 확인 뒤 구현 → 세 테스트 모두 수정 전 실패(0.0 != None, `'>' not supported … NoneType`, null 에서 `toFixed` 오류)
-- [x] 리뷰: `/ponytail-review` → `closing-bet-reviewer` → T3 심층 리뷰
-  - `/ponytail-review`: Lean already
-  - `closing-bet-reviewer`: APPROVE, max low. 반영: 1(결측 카드에 보합 노란 배경 대신 회색·`title="조회 실패"`), 4(KOSPI 200 결측 시 `kospi_change` 폴백 단언), 5(빈 줄). 이월: 3 → `[INFRA-111]`, 6 → `[INFRA-112]`. 미반영: 2(감점 하한 4·임계값 리터럴은 기존 코드이며 이번 범위 밖)
-  - T3 심층 리뷰(`oh-my-claudecode:code-reviewer`, opus): APPROVE, Critical 0·Important 0·Minor 4. 반영: 1(`=== null` → `== null` 로 키 누락 undefined 도 결측 처리), 2(`tests/chatbot/test_payload_service.py` 에 None 섹터가 `sector_scores` 에서 빠지는 사례). 이월: 4 → `[INFRA-111]` 에 기록. 미반영: 3(디버그 스크립트 `None%` 출력, 영향 없음)
-- [x] pytest 전체, vitest 전체, type-check, lint → 리뷰 반영 뒤 10:15 `venv/bin/python -m pytest -q -p no:cacheprovider` 2810 passed·2 skipped exit 0, `npx vitest run` 102 files·695 tests exit 0, `npm run type-check` exit 0, 바꾼 파일 eslint 경고 19(기준 page 8·api 11 과 같음) exit 0
-- [ ] QA(격리 사본, 섹터 조회 실패 주입, 대시보드 브라우저 확인)
-
 ### [INFRA-111] Market Gate 유효성 판정이 섹터 값이 모두 결측이어도 목록만 있으면 유효로 본다
 - 카테고리: 인프라 | 티어: T2(`services/kr_market_market_gate_validity.py`, §2 대조는 설계 때) | 근거: `[INFRA-105]` 코드 리뷰 low 3(2026-09-25)
 - 내용: `_is_market_gate_data_structurally_valid`(`:31`)와 스냅샷 대체 조건(`:100`)은 `sectors` 목록이 비었는지만 본다. `[INFRA-105]` 뒤로 조회 실패 섹터는 `change_pct: null` 이므로 전부 결측인 분석도 유효로 판정되어 스냅샷 대체가 걸리지 않는다. 종전의 전부 0.0 과 같은 동작이라 회귀는 아니다. 같은 자리에서 볼 것: `_calculate_sector_crash_penalty` 의 표본 하한 `len(changes) < 4`(`engine/market_gate_analysis.py:86`) 때문에 유효 값이 셋 이하면 모두 -5% 여도 감점 0 이다(`[INFRA-105]` 심층 리뷰 Minor 4, 종전과 같은 결과)
