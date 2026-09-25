@@ -169,6 +169,25 @@ class _MissingIndicesButSectorCrashGate(_FakeMarketGate):
         }
 
 
+class _PartialSectorFailureGate(_MissingIndicesButSectorCrashGate):
+    def _get_sector_data(self, _target_date, global_data=None):
+        del global_data
+        # [INFRA-105] 다섯 섹터는 -3%, 나머지는 조회 실패로 결측이다
+        return {
+            "반도체": -3.0,
+            "2차전지": -3.0,
+            "자동차": -3.0,
+            "헬스케어": -3.0,
+            "IT": -3.0,
+            "은행": None,
+            "철강": None,
+            "증권": None,
+            "조선": None,
+            "에너지": None,
+            "KOSPI 200": None,
+        }
+
+
 def test_analyze_market_state_builds_expected_payload():
     result = analyze_market_state(_FakeMarketGate(), target_date="2026-02-21", logger=logging.getLogger("test"))
 
@@ -208,3 +227,20 @@ def test_analyze_market_state_penalizes_sector_crash_when_indices_missing():
     assert result["details"]["tech_score"] == 95
     assert result["total_score"] < 40
     assert result["status"] == "약세장 (Bearish)"
+
+
+def test_analyze_market_state_keeps_sector_penalty_and_missing_values_on_partial_failure():
+    result = analyze_market_state(
+        _PartialSectorFailureGate(),
+        target_date="2026-02-21",
+        logger=logging.getLogger("test"),
+    )
+
+    assert "error" not in result
+    # 결측을 빼면 평균 -3%·하락 비율 1.0 이라 30 점 감점이다. 0 으로 채웠다면 감점 0 이다
+    assert result["details"]["sector_penalty"] == 30
+    # KOSPI 200 이 결측이면 가짜 0.0 이 아니라 가격 자료의 등락률로 폴백한다
+    assert result["kospi_change"] == 2.1
+    missing = {s["name"]: s for s in result["sectors"] if s["change_pct"] is None}
+    assert set(missing) == {"은행", "철강", "증권", "조선", "에너지", "KOSPI 200"}
+    assert {s["signal"] for s in missing.values()} == {"Neutral"}

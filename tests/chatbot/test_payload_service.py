@@ -49,7 +49,8 @@ class _FakeBot:
             "color": "GREEN",
             "status": "상승",
             "total_score": 8,
-            "sectors": [{"name": "반도체", "change_pct": 1.2}],
+            # [INFRA-105] 조회하지 못한 섹터는 None 으로 온다. 0 으로 채워 프롬프트에 싣지 않는다
+            "sectors": [{"name": "반도체", "change_pct": 1.2}, {"name": "은행", "change_pct": None}],
         }
 
     def _detect_stock_query(self, user_message):

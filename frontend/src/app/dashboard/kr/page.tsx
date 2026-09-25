@@ -968,12 +968,17 @@ export default function KRMarketOverview() {
               gateData?.sectors?.map((sector) => (
                 <div
                   key={sector.name}
-                  className={`p-3 rounded-xl border ${getSectorColor(sector.signal)} transition-all hover:scale-105`}
+                  className={`p-3 rounded-xl border ${sector.change_pct == null ? 'bg-gray-500/10 text-gray-400 border-gray-500/30' : getSectorColor(sector.signal)} transition-all hover:scale-105`}
                 >
                   <div className="text-xs font-bold truncate">{sector.name}</div>
-                  <div className={`text-lg font-black ${sector.change_pct >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                    {sector.change_pct >= 0 ? '+' : ''}{sector.change_pct.toFixed(2)}%
-                  </div>
+                  {/* [INFRA-105] 조회하지 못한 섹터는 null 이다. 0.00%·보합 색으로 보이지 않게 따로 그린다 */}
+                  {sector.change_pct == null ? (
+                    <div className="text-lg font-black text-gray-500" title="조회 실패">—</div>
+                  ) : (
+                    <div className={`text-lg font-black ${sector.change_pct >= 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                      {sector.change_pct >= 0 ? '+' : ''}{sector.change_pct.toFixed(2)}%
+                    </div>
+                  )}
                 </div>
               ))
             )}

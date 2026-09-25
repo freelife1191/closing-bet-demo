@@ -9,7 +9,7 @@ Market Gate 지표 계산/점수/상태 빌더 함수를 분리한다.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
 
@@ -140,12 +140,16 @@ def build_gate_reason(total_score: int, macro_status: str) -> str:
     return gate_reason
 
 
-def build_sector_signals(sector_data: Dict[str, float]) -> list[dict]:
+def build_sector_signals(sector_data: Dict[str, Optional[float]]) -> list[dict]:
+    # [INFRA-105] 결측(None)은 값 그대로 내보내고 신호는 Neutral 로 둔다. 화면이 결측을 따로 그린다
     return [
         {
             "name": name,
             "change_pct": change_pct,
-            "signal": "Bullish" if change_pct > 0.5 else "Bearish" if change_pct < -0.5 else "Neutral",
+            "signal": "Neutral" if change_pct is None
+            else "Bullish" if change_pct > 0.5
+            else "Bearish" if change_pct < -0.5
+            else "Neutral",
         }
         for name, change_pct in sector_data.items()
     ]

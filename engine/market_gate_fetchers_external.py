@@ -101,7 +101,8 @@ def get_sector_data(
         today = now.strftime("%Y%m%d")
         start_date = (now - timedelta(days=5)).strftime("%Y%m%d")
 
-        result: dict[str, float] = {}
+        # [INFRA-105] 조회하지 못한 섹터는 0.0 이 아니라 None 이다. 0 은 급락 감점의 평균과 하락 비율을 희석한다
+        result: dict[str, float | None] = {}
         for name, ticker in sectors.items():
             if name == "KOSPI 200" and global_data:
                 kospi_indices = global_data.get("indices", {}).get("kospi", {})
@@ -113,7 +114,8 @@ def get_sector_data(
             try:
                 df = stock.get_market_ohlcv_by_date(start_date, today, ticker)
                 if df.empty:
-                    result[name] = 0.0
+                    logger.warning(f"Sector {name} returned no rows")
+                    result[name] = None
                     continue
 
                 latest = df.iloc[-1]
@@ -124,10 +126,10 @@ def get_sector_data(
                     now_price = float(latest["종가"])
                     result[name] = round(((now_price - prev) / prev) * 100, 2)
                 else:
-                    result[name] = 0.0
+                    result[name] = None
             except Exception as error:
                 logger.warning(f"Sector {name} fetch failed: {error}")
-                result[name] = 0.0
+                result[name] = None
 
         return result
     except Exception as error:

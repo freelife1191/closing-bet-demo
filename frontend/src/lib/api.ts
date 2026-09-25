@@ -145,7 +145,7 @@ export interface KRMarketGate {
 
 export interface KRSector {
   name: string;
-  change_pct: number;
+  change_pct: number | null; // [INFRA-105] 조회하지 못한 섹터는 null
   signal: 'bullish' | 'neutral' | 'bearish';
 }
 
