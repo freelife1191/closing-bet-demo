@@ -18,9 +18,14 @@ def _noop_logger():
     )
 
 
-def test_run_background_update_pipeline_daily_prices_and_finish(monkeypatch):
+def test_run_background_update_pipeline_daily_prices_and_finish(monkeypatch, tmp_path):
     calls = {"daily_prices": 0, "finish": 0}
     statuses: list[tuple[str, str]] = []
+    # [INFRA-106] stale 검증은 기대 날짜가 없어도 출력 파일을 읽는다
+    from services import common_update_pipeline_steps as step_module
+
+    (tmp_path / "daily_prices.csv").write_text("date,ticker\n2026-02-20,005930\n", encoding="utf-8")
+    monkeypatch.setattr(step_module, "_resolve_data_file_path", lambda filename: str(tmp_path / filename))
 
     fake_scripts = types.ModuleType("scripts")
     fake_scripts.init_data = types.SimpleNamespace(

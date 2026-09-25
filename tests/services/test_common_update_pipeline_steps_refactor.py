@@ -81,7 +81,7 @@ def test_run_daily_prices_step_sets_error_when_latest_date_is_stale(tmp_path, mo
             return True
 
         @staticmethod
-        def get_last_trading_date(reference_date=None):
+        def get_last_trading_date(reference_date=None, **_kwargs):
             _ = reference_date
             return "20260304", datetime.datetime(2026, 3, 4)
 
@@ -118,7 +118,7 @@ def test_run_institutional_trend_step_sets_error_when_latest_date_is_stale(tmp_p
             return True
 
         @staticmethod
-        def get_last_trading_date(reference_date=None):
+        def get_last_trading_date(reference_date=None, **_kwargs):
             _ = reference_date
             return "20260304", datetime.datetime(2026, 3, 4)
 
@@ -139,6 +139,84 @@ def test_run_institutional_trend_step_sets_error_when_latest_date_is_stale(tmp_p
         logger=_logger(),
     )
 
+    assert statuses == [("Institutional Trend", "running"), ("Institutional Trend", "error")]
+
+
+def test_run_daily_prices_step_skips_stale_check_when_trading_date_unconfirmed(tmp_path, monkeypatch):
+    # [INFRA-106] 개장일을 확인하지 못하면(strict 예외) 휴장일일 수 있는 날짜로 stale 판정하지 않는다
+    statuses: list[tuple[str, str]] = []
+    warnings: list[str] = []
+    daily_prices_path = tmp_path / "daily_prices.csv"
+    pd.DataFrame(
+        [{"date": "2026-03-03", "ticker": "005930", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+    ).to_csv(daily_prices_path, index=False, encoding="utf-8-sig")
+
+    class _InitData:
+        @staticmethod
+        def create_daily_prices(*_a, **_k):
+            return True
+
+        @staticmethod
+        def get_last_trading_date(reference_date=None, strict=False):
+            if strict:
+                raise RuntimeError("unconfirmed")
+            return "20260304", datetime.datetime(2026, 3, 4)
+
+    from services import common_update_pipeline_steps as step_module
+
+    monkeypatch.setattr(
+        step_module,
+        "_resolve_data_file_path",
+        lambda filename: str(daily_prices_path) if filename == "daily_prices.csv" else filename,
+    )
+
+    run_daily_prices_step(
+        init_data=_InitData(),
+        target_date="2026-03-04",
+        force=False,
+        update_item_status=lambda name, status: statuses.append((name, status)),
+        shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
+        logger=types.SimpleNamespace(
+            info=lambda *_a, **_k: None,
+            warning=lambda message, *_a, **_k: warnings.append(message),
+            error=lambda *_a, **_k: None,
+        ),
+    )
+
+    assert statuses == [("Daily Prices", "running"), ("Daily Prices", "done")]
+    assert warnings == ["Daily Prices: trading date unconfirmed, stale check skipped"]
+
+
+def test_run_institutional_trend_step_still_errors_on_missing_file_when_trading_date_unconfirmed(
+    tmp_path, monkeypatch
+):
+    # [INFRA-106] 판정 보류는 날짜 비교만 건너뛴다. 출력 파일이 없으면 여전히 error 라 VCP 게이트가 막힌다
+    statuses: list[tuple[str, str]] = []
+
+    class _InitData:
+        @staticmethod
+        def create_institutional_trend(*_a, **_k):
+            return True
+
+        @staticmethod
+        def get_last_trading_date(reference_date=None, strict=False):
+            raise RuntimeError("unconfirmed")
+
+    from services import common_update_pipeline_steps as step_module
+
+    monkeypatch.setattr(step_module, "_resolve_data_file_path", lambda filename: str(tmp_path / filename))
+
+    assert (
+        run_institutional_trend_step(
+            init_data=_InitData(),
+            target_date="2026-03-04",
+            force=False,
+            update_item_status=lambda name, status: statuses.append((name, status)),
+            shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
+            logger=_logger(),
+        )
+        is False
+    )
     assert statuses == [("Institutional Trend", "running"), ("Institutional Trend", "error")]
 
 

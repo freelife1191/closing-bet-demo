@@ -48,6 +48,7 @@ def _resolve_expected_trading_date_str(init_data: Any, target_date: str | None) 
     try:
         last_trading_date_str, _ = get_last_trading_date(
             reference_date=_resolve_reference_datetime(target_date),
+            strict=True,  # [INFRA-106] 미확인 날짜(휴장일일 수 있음)로 stale 판정하지 않는다
         )
     except Exception:
         return None
@@ -65,8 +66,6 @@ def _validate_latest_date_not_stale(
     step_name: str,
     logger: Any,
 ) -> bool:
-    if not expected_date_str:
-        return True
     if not os.path.exists(file_path):
         logger.error(f"{step_name} Failed: output file missing ({file_path})")
         return False
@@ -80,6 +79,11 @@ def _validate_latest_date_not_stale(
     if latest_df.empty or "date" not in latest_df.columns:
         logger.error(f"{step_name} Failed: date column missing or empty in {file_path}")
         return False
+
+    if not expected_date_str:
+        # [INFRA-106] 개장일 미확인이면 날짜 비교만 보류한다. 파일·날짜 열 검사는 위에서 끝났다
+        logger.warning(f"{step_name}: trading date unconfirmed, stale check skipped")
+        return True
 
     date_series = latest_df["date"].astype(str).str.slice(0, 10)
     latest_date = date_series.max()

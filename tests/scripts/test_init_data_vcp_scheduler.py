@@ -747,6 +747,41 @@ def test_all_zero_close_dates_handles_missing_columns():
     assert init_data._all_zero_close_dates(mixed) == ["2026-09-22"]
 
 
+def _fake_pykrx(monkeypatch, ohlcv):
+    fake = types.ModuleType("pykrx")
+    fake.stock = types.SimpleNamespace(get_index_ohlcv_by_date=ohlcv)
+    monkeypatch.setitem(sys.modules, "pykrx", fake)
+
+
+@pytest.mark.parametrize("fail", ["empty", "raise", "missing"])
+def test_get_last_trading_date_warns_and_strict_raises_when_unconfirmed(monkeypatch, caplog, fail):
+    # [INFRA-106] 지수 조회가 비거나 실패하거나 pykrx 가 없으면 WARNING 을 남기고 주말 처리 날짜를 돌려준다. strict 면 예외
+    def _ohlcv(*_a, **_k):
+        if fail == "raise":
+            raise KeyError("지수명")
+        return pd.DataFrame()
+
+    if fail == "missing":
+        monkeypatch.setitem(sys.modules, "pykrx", None)
+    else:
+        _fake_pykrx(monkeypatch, _ohlcv)
+    ref = datetime.datetime(2026, 9, 27)  # 일요일 → 금요일 09-25
+
+    with caplog.at_level("WARNING"):
+        assert init_data.get_last_trading_date(reference_date=ref)[0] == "20260925"
+    assert any(r.levelname == "WARNING" and "개장일 미확인" in r.getMessage() for r in caplog.records)
+    with pytest.raises(RuntimeError):
+        init_data.get_last_trading_date(reference_date=ref, strict=True)
+
+
+def test_get_last_trading_date_strict_returns_confirmed_date(monkeypatch):
+    # [INFRA-106] 지수로 확인되면 strict 여도 그 날짜를 돌려준다(추석 연휴 09-25 대신 09-24)
+    _fake_pykrx(monkeypatch, lambda *_a, **_k: pd.DataFrame({"종가": [1.0]}, index=pd.DatetimeIndex(["2026-09-24"])))
+    ref = datetime.datetime(2026, 9, 27)
+
+    assert init_data.get_last_trading_date(reference_date=ref, strict=True)[0] == "20260924"
+
+
 def test_extract_yfinance_ohlcv_handles_price_first_multiindex():
     index = pd.DatetimeIndex(
         [datetime.datetime(2026, 3, 3), datetime.datetime(2026, 3, 4)], name="Date"

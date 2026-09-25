@@ -63,7 +63,22 @@
 ### [INFRA-106] `get_last_trading_date` 의 지수 조회 실패가 DEBUG 로그로만 남고 휴장일을 거래일로 본다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-089]` 영향 확인에서 분리(2026-09-25)
 - 내용: `scripts/init_data.py:119` 는 지수 조회가 실패하면 DEBUG 만 남기고 주말만 거른다. 세션이 인증되지 않았을 때 공휴일을 기대 날짜로 돌려주며, 호출자는 `create_daily_prices`·수급 수집·수동 갱신 stale 검증(`services/common_update_pipeline_steps.py:61-90`)이다. `[INFRA-089]` 의 재로그인 복구 뒤에도 KRX 점검 시간처럼 로그인 자체가 실패하면 남는다
-- [ ] 설계 승인(WARNING 승격, 실패 때 판정 보류 여부)
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 10:29
+  | 범위: `get_last_trading_date` 의 확인 실패(빈 결과·미설치·예외)를 WARNING 으로 올리고 `strict=True` 면 `RuntimeError`, 수동 갱신 stale 검증(`_resolve_expected_trading_date_str`)만 strict 로 불러 판정 보류. 수집기 두 곳은 종전 동작
+  | 실제 대화 근거: 2026-09-25 사용자 선택 「WARNING 승격 + stale 검증만 판정 보류 (Recommended)」, 현재 세션의 해당 설계 제안
+- 계획: `docs/superpowers/plans/2026-09-25-infra-106-trading-date-unconfirmed.md` | 스킬: `.claude/skills/closing-bet-python/`, `.claude/skills/closing-bet-verify/`
+- [x] 설계 승인(WARNING 승격, 실패 때 판정 보류 여부)
+- [x] 계획 검토(critic): ACCEPT-WITH-RESERVATIONS. 반영 1(strict 성공 경로 테스트, 사본 변이로 실패 확인) 2(WARNING 메시지 조건) 3(미설치 분기 parametrize) 4(「개장일 미확인」 문구와 비strict 폴백 로그). 참고 5(단계마다 조회·WARNING 두 번, 종전도 호출 두 번)·6(TODO 행 번호) 기록만
+- [x] 테스트(가짜 pykrx) 실패 확인(3 failed) → 구현 → 통과(두 파일 66 passed)
+- [x] `/ponytail-review`: Lean already. Ship.
+- [x] `closing-bet-reviewer`: APPROVE(max medium). 반영 1(판정 보류가 파일 없음·날짜 열 검사까지 꺼 수급 파일 없이 VCP 게이트 통과 → 기대 날짜 확인을 날짜 비교 앞으로, 사본 변이로 새 테스트 실패 확인) 2(계획 Review Focus 정정) 3(「stale check skipped」 WARNING) 4(Institutional Trend 파일 없음 테스트). 3 의 호출 두 번·WARNING 중복은 종전 호출 구조라 기록만
+- [x] `/review`(심층, `oh-my-claudecode:code-reviewer`): APPROVE-WITH-FIX. 반영 1(기대 날짜 확인 이동으로 `tests/app/test_common_update_service.py` 의 가짜 `init_data` 테스트가 저장소 `data/daily_prices.csv` 를 읽게 됨 → conftest 가 `services.common_update_pipeline_steps._BASE_DIR` 도 격리하고 그 테스트에 자기 CSV, 격리만 넣었을 때 그 테스트 실패로 재현 확인) 2(「stale check skipped」 WARNING 단언). 관찰(날짜 열 전부 결측이면 통과, 기존 결함) → `[INFRA-113]` 이월
+- [ ] pytest 전체, QA 2단계(가짜 pykrx 하네스, 네트워크 없음)
+
+### [INFRA-113] 수동 갱신 stale 검증이 날짜 열이 모두 결측인 파일을 최신으로 본다
+- 카테고리: 인프라 | 티어: T1(예상, `services/common_update_pipeline_steps.py` 는 위험 경로 아님) | 근거: `[INFRA-106]` 심층 리뷰 관찰(2026-09-25, 기존 결함)
+- 내용: `_validate_latest_date_not_stale` 은 `read_csv(dtype=str)` 의 결측을 `astype(str)` 로 `"nan"` 으로 바꾼 뒤 문자열 최댓값을 비교한다. `"nan" > "2026-…"` 이라 날짜 열이 전부(또는 일부) 결측이면 최신 날짜가 `"nan"` 이 되어 검증을 통과한다. 결측을 확정 날짜로 취급하는 경로다. 실제 파일에서 발생한 적이 있는지는 확인하지 않았다
+- [ ] 설계 승인(결측 날짜 제외 후 비교, 전부 결측이면 error)
 - [ ] 테스트, 리뷰, pytest 전체
 
 ### [INFRA-107] 워커가 새로 기동하면 다른 워커에서 도는 수동 업데이트의 `isRunning` 과 항목을 지운다

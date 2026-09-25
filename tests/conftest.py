@@ -128,6 +128,10 @@ def _isolate_repo_writes(tmp_path, tmp_path_factory, monkeypatch):
         if module is not None:
             relative = Path(module.__file__).resolve().relative_to(PROJECT_ROOT)
             monkeypatch.setattr(module, "__file__", str(fake_root / relative))
+    steps = sys.modules.get("services.common_update_pipeline_steps")
+    if steps is not None:
+        # [INFRA-106] stale 검증이 기대 날짜 없이도 출력 파일을 읽으므로 저장소 data/ 를 보지 않게 한다
+        monkeypatch.setattr(steps, "_BASE_DIR", str(fake_root))
     common = sys.modules.get("app.routes.common")
     if common is not None:
         # 상태 파일 옆 runtime_cache.db 에 캐시 행이 쓰이므로 디렉터리까지 만든다

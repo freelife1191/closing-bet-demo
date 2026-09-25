@@ -79,7 +79,7 @@ from services.kr_market_vcp_reanalysis_service import signals_log_lock, write_vc
 # =====================================================
 
 
-def get_last_trading_date(reference_date=None):
+def get_last_trading_date(reference_date=None, strict=False):
     """
     마지막 개장일 날짜를 반환합니다.
     - 주말(토/일)인 경우 금요일로 이동
@@ -87,6 +87,7 @@ def get_last_trading_date(reference_date=None):
     
     Args:
         reference_date: 기준 날짜 (datetime 객체). None이면 오늘 날짜 사용.
+        strict: True 면 지수로 개장일을 확인하지 못했을 때 주말 처리 날짜 대신 RuntimeError
     
     Returns:
         tuple: (last_trading_date_str, last_trading_date_obj)
@@ -128,16 +129,18 @@ def get_last_trading_date(reference_date=None):
             log(f"마지막 개장일 확인: {last_trading_date_str}", "DEBUG")
             return last_trading_date_str, last_trading_date
         else:
-            # 데이터가 없으면 계산된 날짜 사용
-            log(f"pykrx 데이터 없음, 계산된 날짜 사용: {target_date.strftime('%Y%m%d')}", "DEBUG")
-            
+            log(f"개장일 미확인: pykrx 지수 데이터 없음 (기준 {target_date.strftime('%Y%m%d')}, 휴장일일 수 있음)", "WARNING")
+
     except ImportError:
-        log("pykrx 미설치 - 주말 처리만 적용", "WARNING")
+        log("개장일 미확인: pykrx 미설치", "WARNING")
     except Exception as e:
-        # 지수명 KeyError 등 pykrx 내부 오류 발생 시 조용히 넘어가고 주말 처리만 적용
-        log(f"개장일 확인 실패 (pykrx): {e}. 기본 주말 처리만 적용합니다.", "DEBUG")
-    
+        # [INFRA-106] 지수명 KeyError, KRX 미인증·점검 등. 공휴일을 거래일로 볼 수 있으므로 WARNING 으로 남긴다
+        log(f"개장일 미확인: pykrx 지수 조회 실패 ({e})", "WARNING")
+
+    if strict:
+        raise RuntimeError("마지막 개장일을 확인하지 못했습니다")
     # 폴백: 주말 처리만 된 날짜 반환
+    log(f"주말 처리 날짜로 진행합니다: {target_date.strftime('%Y%m%d')}", "WARNING")
     return target_date.strftime('%Y%m%d'), target_date
 
 
