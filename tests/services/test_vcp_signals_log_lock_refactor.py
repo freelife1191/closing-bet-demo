@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """[VCP-035] signals_log.csv 를 쓰는 경로가 같은 파일 잠금을 지나는지 검사한다."""
 
+import json
 import sys
 import threading
 from datetime import datetime, timedelta
@@ -233,3 +234,49 @@ def test_update_recent_price_keeps_closed_rows(monkeypatch, tmp_path):
     frame = pd.read_csv(path, dtype={"ticker": str}, encoding="utf-8-sig").set_index("status")
     assert (frame.loc["CLOSED", "current_price"], frame.loc["CLOSED", "return_pct"]) == (90, -10.0)
     assert (frame.loc["OPEN", "current_price"], frame.loc["OPEN", "return_pct"]) == (110, 10.0)
+
+
+def _ai_row(ticker):
+    rec = {"action": "BUY", "confidence": 70, "reason": f"{ticker} 거래량 수축 뒤 돌파 시도가 확인된다"}
+    return {"ticker": ticker, "name": ticker, "gemini_recommendation": rec}
+
+
+def test_ai_analysis_merge_waits_for_lock_and_keeps_other_writer(tmp_path):
+    """[VCP-052] AI JSON 병합은 잠금 안에서 다시 읽어, 그 사이 다른 쪽이 더한 종목을 지우지 않는다."""
+    from services.common_update_ai_analysis_service import _write_ai_analysis_files
+
+    dated = tmp_path / "kr_ai_analysis_20260922.json"
+
+    def _other_writer():
+        dated.write_text(json.dumps({"signal_date": "2026-09-22", "signals": [_ai_row("000660")]}))
+
+    _assert_waits_for_lock(
+        tmp_path / "kr_ai_analysis.json",
+        lambda: _write_ai_analysis_files(
+            data_dir=str(tmp_path), analysis_date="2026-09-22", results={"signals": [_ai_row("005930")]}
+        ),
+        while_locked=_other_writer,
+    )
+    tickers = {row["ticker"] for row in json.loads(dated.read_text())["signals"]}
+    assert tickers == {"000660", "005930"}
+
+
+def test_ai_price_sync_waits_for_lock_and_writes_atomically(monkeypatch, tmp_path):
+    """[VCP-052] 가격 동기화도 같은 잠금 안에서 다시 읽고 원자적으로 교체한다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    path = data_dir / "kr_ai_analysis.json"
+    path.write_text(json.dumps({"signals": [{"ticker": "005930", "entry_price": 100}]}))
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    written = []
+    real_atomic = init_data.atomic_write_text
+    monkeypatch.setattr(init_data, "atomic_write_text", lambda p, text: (written.append(p), real_atomic(p, text)))
+
+    def _other_writer():
+        path.write_text(json.dumps({"signals": [{"ticker": "005930", "entry_price": 100}, {"ticker": "000660"}]}))
+
+    _assert_waits_for_lock(path, lambda: init_data.update_kr_ai_analysis_prices({"005930": 110}), _other_writer)
+    signals = json.loads(path.read_text())["signals"]
+    assert [row["ticker"] for row in signals] == ["005930", "000660"]
+    assert (signals[0]["current_price"], signals[0]["return_pct"]) == (110, 10.0)
+    assert written == [str(path)]

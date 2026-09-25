@@ -64,7 +64,11 @@
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
 - 원인: 수동 갱신 병합(`services/common_update_ai_analysis_service.py:117-146`, 원자적 교체는 함)·수집(`scripts/init_data.py:1522`)·재분석(`services/kr_market_vcp_reanalysis_service.py:750`)이 같은 날짜 파일을 잠금 없이 읽고 병합해 쓴다. `vcp_status` 는 워커 메모리에만 있어 서로 막지 못한다. 가격 동기화(`scripts/init_data.py:2056`)는 `open('w')` 로 직접 쓴다
 - 영향: 동시 실행 시 한쪽이 더한 판정이 유실될 수 있고, 저장 중 중단되면 최신 파일이 깨진다. 실제로 겹치는지는 운영 로그로 확인해야 한다(추측)
-- [ ] 설계 승인(파일 잠금 범위), 동시 병합 테스트, 리뷰와 pytest 전체
+- 설계 승인: 2026-09-25 09:19 사용자 「진행해」(bounded, T3). 범위: `_write_ai_analysis_files` 의 읽기·병합·저장 전체와 `update_kr_ai_analysis_prices` 를 `data/kr_ai_analysis.json.lock` 파일 잠금 하나로 감싸고, 가격 동기화는 `atomic_write_text` 로 저장. `vcp_status` 는 범위 밖, `vcp_signals_latest.json` 직접 쓰기는 새 TODO 로 등록
+- [x] 구현과 테스트 2건(동시 병합 보존, 가격 동기화 잠금 대기·원자적 저장, 수정 전 두 건 모두 RED 확인)
+- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · 과잉설계 직접 검토 「Lean already. Ship.」 · `closing-bet-reviewer` APPROVE(max low): low 1 `_env_file_lock` docstring 에 새 사용처 없음 → 반영 | low 2 같은 잠금을 `signals_log_lock` 이름으로 부름 → `ai_analysis_lock` 으로 반영 | low 3 JSON 이 없어도 `data/`·잠금 파일 생성 → `data/*.lock` 이 덮어 미반영 | low 4 파일 없음 갈래 테스트 없음 → 한 줄 갈래라 미반영 · 심층 리뷰(`oh-my-claudecode:code-reviewer`) 차단 0: Minor 1 0.3초 판정의 거짓 통과 가능성 → 기존 헬퍼 방식, import 57ms 라 미반영 | Minor 2 docstring → low 1 과 같이 반영 | Minor 3 private 이름 가져오기 → 기존 선례와 같아 미반영 | 참고(병합이 가격 동기화 값을 되돌림) → `[VCP-059]` 등록
+- [x] 정적 검증: `venv/bin/python -m pytest -q -p no:cacheprovider` 2806 passed 2 skipped(exit 0, 리뷰 반영 뒤), `npm run test` 100파일 691 passed(exit 0)
+- [ ] QA(CLI 하네스, 수정 전후 사본 대조): `docs/dev-cycle/qa/VCP-052.md`
 
 ### [INFRA-103] 데이터 상태 화면의 진행 폴링이 조회 오류에도 멈추지 않고 500ms 간격으로 계속 요청한다
 - 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-102]` 코드 리뷰의 범위 밖 관찰(2026-09-25), 코드로 확인
@@ -112,4 +116,18 @@
 - 확인 수준: 코드로만 확인. Toss 가 수량만 비운 행을 실제로 주는지는 확인하지 않았다
 - 추가 발견(`[VCP-057]` `closing-bet-reviewer` low2, 2026-09-25): `_score_supply_core` 로 가는 details 의 정규화기 둘도 같은 모양이다. `services/investor_trend_5day_service.py:462-463` 은 키가 없거나 None 이면 `_safe_int` 로 0 을 넣고, `engine/screener_supply_helpers.py:99-100` 은 키가 없으면 0, 값이 None 이면 그 행을 버려 전날 행이 `details[0]`(1일 순매수)이 될 수 있다(확신도 중간). `[VCP-057]` 이 `_score_supply_core` 에서 None 을 보존하게 했으므로 정규화기가 None 을 넘기면 끝까지 결측으로 남는다
 - [ ] 설계 승인(행을 버릴지, 합계를 결측으로 돌릴지)
+- [ ] 테스트, 리뷰와 pytest 전체
+
+### [VCP-058] `vcp_signals_latest.json` 을 `open('w')` 로 직접 써서 저장 중 중단되면 파일이 깨진다
+- 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[VCP-052]` 설계 때 범위 밖으로 뺀 발견(2026-09-25), 코드로 확인
+- 내용: `scripts/init_data.py:475-477` 의 `_write_vcp_signals_latest_payload` 는 원자적 교체 없이 바로 쓴다. 이 파일은 `services/kr_market_vcp_background_service.py:24`(방금 저장한 시그널 수)와 `services/common_data_status_service.py:71`(데이터 상태 화면)이 읽는다. 쓰는 도중 읽거나 중단되면 빈 파일이나 잘린 JSON 을 읽는다
+- 확인 수준: 코드로만 확인. 운영에서 깨진 파일이 관찰된 적은 없다
+- [ ] 설계 승인(`atomic_write_text` 로 바꾸는 것만인지)
+- [ ] 테스트, 리뷰와 pytest 전체
+
+### [VCP-059] AI 판정 병합이 날짜 없는 `kr_ai_analysis.json` 을 날짜 파일 내용으로 덮어 가격 동기화 값을 되돌린다
+- 카테고리: VCP | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[VCP-052]` 심층 리뷰 참고 사항(2026-09-25), 코드로 확인
+- 내용: `update_kr_ai_analysis_prices`(`scripts/init_data.py`)는 날짜 없는 파일의 `current_price`·`return_pct` 만 고친다. `_merge_ai_analysis_files`(`services/common_update_ai_analysis_service.py`)는 날짜 파일을 병합한 직렬화 결과로 날짜 없는 파일을 통째로 덮으므로, 오늘 날짜 병합이 한 번 돌면 그 값이 날짜 파일의 값으로 돌아간다. 순차 실행에서도 일어나며 다음 가격 동기화 때 다시 채워진다. AI 판정은 사라지지 않는다
+- 확인 수준: 코드로만 확인. 화면에 옛 가격이 보이는 시간이 실제로 얼마나 되는지는 확인하지 않았다
+- [ ] 설계 승인(가격 필드를 보존할지, 가격 동기화가 날짜 파일도 고칠지)
 - [ ] 테스트, 리뷰와 pytest 전체

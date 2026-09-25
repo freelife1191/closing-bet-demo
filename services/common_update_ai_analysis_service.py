@@ -21,6 +21,7 @@ from engine.vcp_ai_analyzer import get_vcp_analyzer
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 from services.kr_market_vcp_reanalysis_service import run_async_analyzer_batch
 from engine.screening_runtime import resolve_vcp_signals_to_show
+from services.common_env_service import _env_file_lock as ai_analysis_lock
 from services.common_update_pipeline_steps import is_stop_requested, raise_if_stopped
 from services.kr_market_ai_payload_service import normalize_ai_analysis_date as _analysis_date
 from services.kr_market_data_cache_service import atomic_write_text, load_csv_file
@@ -122,6 +123,12 @@ def _write_ai_analysis_files(*, data_dir: str, analysis_date: str, results: dict
                if isinstance(row, dict) and normalize_ticker(row.get("ticker")) and _valid_recommendations(row)}
     if not updates:
         return 0
+    # 수동 갱신·수집·재분석과 가격 동기화가 이 파일들을 함께 쓰므로 다시 읽기부터 교체까지 한 잠금 안에 둔다([VCP-052])
+    with ai_analysis_lock(os.path.join(data_dir, "kr_ai_analysis.json")):
+        return _merge_ai_analysis_files(data_dir=data_dir, analysis_date=analysis_date, results=results, updates=updates)
+
+
+def _merge_ai_analysis_files(*, data_dir: str, analysis_date: str, results: dict[str, Any], updates: dict[str, Any]) -> int:
     writes = []
     for prefix in ("ai_analysis_results", "kr_ai_analysis"):
         dated = os.path.join(data_dir, f"{prefix}_{analysis_date.replace('-', '')}.json")
