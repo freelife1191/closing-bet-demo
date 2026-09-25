@@ -62,19 +62,6 @@
 
 ## P2 — 대기
 
-### [FLOW-029] pykrx 수급 참조가 끝 날짜를 기준일과 대조하지 않고 기준일 키로 영구 캐시된다
-- 카테고리: 수급·백테스트 | 티어: T3(위험 경로 `services/investor_trend_5day_service.py`) | 근거: `[FLOW-025]` 묶음 계획 검토(critic Nit 5, 2026-09-25), 코드로 확인
-- 내용: `_fetch_pykrx_reference_trend` 는 기준일까지 14일을 받아 `tail(5)` 를 쓰지만 마지막 행이 기준일인지 보지 않는다. 그날 자료가 아직 없으면 전날까지의 5일이 기준일의 5일 값으로 채택되어 `_get_reference_trend_cached` 가 기준일 키로 SQLite 에 저장하고, 이후 같은 기준일 조회는 다시 받지 않는다. `[FLOW-026]` 로 종가베팅 기준일 실행이 이 경로를 1순위로 쓴다. 옛 믹스인 요약 캐시도 같은 동작이었으므로 회귀는 아니다
-- 확인 수준: 코드로만 확인. 17시 체인에서 pykrx 가 당일 행을 늦게 주는 빈도는 확인하지 않았다
-- 같은 캐시의 관찰 둘(`[FLOW-025]` 묶음 리뷰, 2026-09-25): (1) `/review` M2 — `_reference_reject_reason` 이 거부하는 값(NaN 인 날의 `insufficient_days`, `zero_total`)도 정규화를 통과해 기준일 키로 SQLite 에 저장된다. `get_pykrx_trend_5day` 는 저장한 뒤에 거부하므로 같은 날 새 워커가 다시 실행해도 pykrx 를 다시 묻지 않는다(가짜 pykrx 로 2회차 정상 값에도 None·호출 1회 확인). 4행·빈 프레임은 메모리 60초 실패 캐시라 다시 묻는다 (2) `closing-bet-reviewer` F3 — `930525be` 이전 `_fetch_pykrx_reference_trend` 는 NaN 을 0 으로 저장했고 참조 캐시의 네임스페이스·서명에 버전이 없어, 그 항목이 기준일 실행에서 부분합으로 채택될 수 있다. 존재 여부는 확인하지 않았다. 설계 때 「거부 값은 저장하지 않음」과 캐시 버전 올림을 함께 본다
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 23:26 | 범위: `[JONGGA-043]` 과 묶음(T3). (1) pykrx 표의 마지막 날이 조회 끝 날짜(기준일, 없으면 캐시 키인 pykrx 최근 거래일)와 다르면 None — 60초 실패 캐시, 저장 없음 (2) `_reference_reject_reason` 에 걸리는 값은 메모리·SQLite 에 두지 않고 60초 실패 캐시, 그 호출에는 값을 돌려줘 사유 기록 유지 (3) 참조 SQLite 서명에 `v2` | 실제 대화 근거: 2026-09-25 사용자 「FLOW-029 JONGGA-043 한번에 진행해」 뒤 설계 제시, `/effort high` + 「승인」 응답
-- 계획: `docs/superpowers/plans/2026-09-25-flow-029-reference-cache-end-date.md`
-- [x] 계획 검토(critic): `ACCEPT-WITH-RESERVATIONS`. 반영 — Minor-1 사유 기록은 조회한 호출에만 남는다고 계획 문구·QA 기대값을 좁힘, Nit-1 Task 2 실패 메시지 정정, Info-1 JONGGA-043 영향 정정(서비스 15분 슬롯 캐시가 있어 「매번」이 아니라 15분마다 스크랩)과 캐시 재사용은 CLI 하네스로 확인. 미반영 — Minor-2 휴장일 끝 날짜의 영구 거부는 승인 문구(「다르면 None」)대로 두고 아카이브 한계로 기록, Minor-3 거부 참조의 60초 재조회 비용은 승인된 절충이라 QA 비용 항목에 기록, Nit-2 SQLite 의 거부 값 재읽기는 v2 뒤 발생하지 않아 조치 없음, Info-2 장중 당일 부분 행은 범위 밖이라 `[FLOW-030]` 로 등록, Info-3 호출자가 이미 `normalize_ticker` 를 거쳐 영향 없음
-- [x] 구현과 테스트(끝 날짜 거부, 거부 값 비저장, v1 서명 무시): 새 검사 3건 RED 확인(dict 반환, SQLite 행 `True`, v1 의 4_995) 후 GREEN, 관련 4개 파일 93 passed
-- [x] 리뷰: `/ponytail-review` → `closing-bet-reviewer` → `/review` — ponytail: `Lean already. Ship.`(코드 +18 −3). `closing-bet-reviewer`: `APPROVE`, 최대 low(검토 해시 서비스 `325dad50ce80`·Naver `2135d8747dec`). `/review`(oh-my-claudecode:code-reviewer, opus): `APPROVE`, Critical·Important 0(변이 S1·S4~S7·N1 은 새 검사가 잡음). 반영 — `/review` Minor-1 시각 붙은 끝 날짜(지수 조회 실패 시 `now` 폴백)를 지키는 단언 추가(변이 S2 가 이제 실패함을 확인 후 원복, 해시 `9b83611e1192`), F3·Nit-2 `get_pykrx_trend_5day`·`get_investor_trend_5day_for_ticker` docstring 에 끝 날짜 None 과 사유가 조회한 호출에만 남는다는 점 추가, Nit-1 v2 주석에 거부 값 행과 「판정을 엄격하게 바꾸면 버전을 올린다」 추가, F2·`/review` Minor-2 `[FLOW-030]` 범위 보강, F1 기준일 실행의 CSV 폴백이 전날 끝 창을 쓰는 문제는 범위 밖이라 `[FLOW-031]` 로 등록(아카이브에서 「전날 창을 쓰지 않는다」고 주장하지 않음). 미반영 — F4 자정 밀리초 창의 키·end_dt 불일치와 F5 tz-aware 기준일·접두사 코드는 운영 호출자에 없어 조치 없음, 최신 창 끝 날짜 전용 테스트는 Minor-1 단언이 같은 경로를 덮음
-- [x] 정적 검증: pytest 전체 `KRX_ID= KRX_PW= venv/bin/python -m pytest -q -p no:cacheprovider` → 2862 passed, 2 skipped, exit 0(리뷰 반영 뒤, 「KRX 로그인」 0회). vitest 전체 `npx vitest run` 은 23:5x 실행에서 `page.regression-jongga-037.test.tsx` 1건이 실패(700/701, 단독 3회 재현)했다. 가짜 타이머가 `Date` 까지 350초 앞당겨 자정을 넘기면 화면이 「OLD DATA」를 그리는 시각 의존 검사이며 이번 변경은 frontend 를 건드리지 않았다. 09-26 00:01 재실행에서 해당 파일 5/5, 전체 104 파일 701 passed, exit 0. 검사 결함은 `[JONGGA-044]` 로 등록. 첫 커밋
-- [ ] QA: CLI 하네스 + 브라우저(`docs/dev-cycle/qa/FLOW-029.md`)
-
 ### [FLOW-030] pykrx·Toss 수급 참조가 확정 전 당일 값을 당일 키로 저장할 수 있다
 - 카테고리: 수급·백테스트 | 티어: T3(위험 경로 `services/investor_trend_5day_service.py`) | 근거: `[FLOW-029]` 계획 검토(critic Info-2), 같은 묶음의 `closing-bet-reviewer` F2·`/review` Minor-2(2026-09-25)
 - 내용: (1) 정규 17시 실행은 기준일을 최근 거래일(당일)로 채우고(`engine/generator_runtime_mixin.py:132-134`) 후보 전부에 `get_pykrx_trend_5day(target=당일)` 을 먼저 부른다(`engine/collectors/krx_local_data_mixin.py:1008-1011`). KRX 가 그때 확정 전 당일 행(시간외 거래 등)을 주면 `[FLOW-029]` 의 끝 날짜 대조를 통과해 당일 키로 SQLite 에 영구 저장된다 (2) 종목 상세 모달의 최신 창(CSV 이상 징후 종목만)은 `_resolve_pykrx_latest_market_date` 가 장중에 당일로 확정하면 같은 일이 생긴다. 최신 창과 기준일 D 는 메모리 키·SQLite 경로·서명이 같아(탐침으로 확인) 장중에 저장된 값을 17시 기준일 실행이 1순위로 채택한다 (3) `_fetch_toss_reference_trend` 는 끝 날짜 대조가 없고 키가 달력상 오늘이라, 아침에 받은 스냅숏(전날로 끝나거나 장중 부분 행)이 그날 내내 남는다 (4) 반대로 최근 거래일이 당일로 확정됐는데 pykrx 표에 당일 행이 아직 없으면 공표 전까지 60초마다 다시 조회한다
@@ -97,11 +84,3 @@
 - 내용: Toss 종목 정보 조회가 실패하면 상세 API 는 Naver(`engine/collectors/naver_extractors_mixin.py:42-45` 의 `investorTrend` 기본값 0)나 기본 페이로드(`services/kr_market_stock_detail_service.py:216` 의 `foreign`·`institution` 0)를 돌려준다. 확정 집계도 없으면 모달은 결측을 실제 0 과 같은 「-」로 그린다. `[FE-048]` 은 Toss 갈래만 고쳤다
 - 확인 수준: 코드로만 확인. Naver 수집기가 값을 채우지 못하는 조건과 운영 빈도는 확인하지 않았다
 - [ ] 설계 승인(Naver·기본값의 결측을 None 으로 둘지), 테스트, 리뷰, 브라우저 QA
-
-### [JONGGA-043] Naver 상세 캐시가 영문자로 끝나는 종목코드를 저장하지 않아 모달을 열 때마다 다시 스크랩한다
-- 카테고리: 종가베팅 | 티어: 판정은 설계 때 §2 대조 | 근거: `[FLOW-025]` 묶음 T3 심층 리뷰(/review O1, 2026-09-25), 코드로 확인
-- 내용: `NaverFinanceCollector._normalize_stock_detail_payload`(`engine/collectors/naver.py:228-229`)는 코드가 숫자 여섯 자리가 아니면 None 을 돌려준다. `[FLOW-028]` 이후 `00680K` 같은 코드가 자기 코드로 상세 API 에 오므로, Toss 가 실패해 Naver 로 넘어가면 결과가 캐시되지 않고(`naver.py:304` 가 정규화 전 결과를 그대로 반환) 모달을 열 때마다 Naver 를 다시 스크랩하고 통합 수급 서비스(참조 조회 포함)를 다시 부른다. 읽기 캐시 갈래(`:264`)도 같은 함수로 거른다. 예전에는 숫자 코드로 바뀌어 다른 종목 키로 캐시되었으므로 회귀가 아니라 비용 문제다
-- 확인 수준: 코드로만 확인. Toss 상세가 실패하는 빈도와 영문자 코드 종목의 모달 조회 빈도는 확인하지 않았다
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 23:26 | 범위: `_normalize_stock_detail_payload` 의 숫자 여섯 자리 검사를 `normalize_ticker` 로 교체, `[FLOW-029]` 와 묶음(T3) | 실제 대화 근거: `[FLOW-029]` 와 같은 응답
-- [x] 구현과 테스트(Naver 캐시 재사용 테스트를 `5930`·`00680K` 로 매개변수화): `00680K` 만 RED(`second is None`) 확인 후 GREEN
-- [ ] 리뷰·검증·QA 는 `[FLOW-029]` 체크를 따른다
