@@ -60,12 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-111] Market Gate 유효성 판정이 섹터 값이 모두 결측이어도 목록만 있으면 유효로 본다
-- 카테고리: 인프라 | 티어: T2(`services/kr_market_market_gate_validity.py`, §2 대조는 설계 때) | 근거: `[INFRA-105]` 코드 리뷰 low 3(2026-09-25)
-- 내용: `_is_market_gate_data_structurally_valid`(`:31`)와 스냅샷 대체 조건(`:100`)은 `sectors` 목록이 비었는지만 본다. `[INFRA-105]` 뒤로 조회 실패 섹터는 `change_pct: null` 이므로 전부 결측인 분석도 유효로 판정되어 스냅샷 대체가 걸리지 않는다. 종전의 전부 0.0 과 같은 동작이라 회귀는 아니다. 같은 자리에서 볼 것: `_calculate_sector_crash_penalty` 의 표본 하한 `len(changes) < 4`(`engine/market_gate_analysis.py:86`) 때문에 유효 값이 셋 이하면 모두 -5% 여도 감점 0 이다(`[INFRA-105]` 심층 리뷰 Minor 4, 종전과 같은 결과)
-- [ ] 설계 승인(「유효한 섹터 값이 하나 이상」으로 좁힐지, 다른 필드와의 조합, 표본 하한을 둘지)
-- [ ] 테스트, 리뷰, pytest 전체
-
 ### [INFRA-112] 섹터 ETF 등락률이 NaN 으로 오면 그대로 저장되어 화면에 「NaN%」 로 보인다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `engine/market_gate_fetchers_external.py`) | 근거: `[INFRA-105]` 코드 리뷰 low 6(2026-09-25)
 - 내용: `get_sector_data` 는 `round(float(latest["등락률"]), 2)` 를 검사 없이 넣는다. NaN 이면 `save_analysis` 의 `sanitize_for_json` 이 `null` 로 바꾸는지, 응답 경로에서 화면까지 어떻게 보이는지를 먼저 실측한다. 감점 계산은 `isfinite` 로 거른다
