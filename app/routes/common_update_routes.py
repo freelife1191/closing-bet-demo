@@ -116,6 +116,9 @@ def _register_update_control_routes(common_bp, ctx: CommonRouteContext) -> None:
 
             # 상태 폴링 응답에서 파생 필드를 주입하므로 원본 캐시 객체를 직접 변경하지 않는다.
             status = dict(loaded_status) if isinstance(loaded_status, dict) else {}
+            # [INFRA-107] 소유 워커 판정용 pid 는 기동 초기화만 쓴다. 공개 폴링 응답의 계약은 그대로 둔다
+            status.pop("ownerPid", None)
+            status.pop("ownerPpid", None)
             scheduler_data_dir = os.path.dirname(ctx.update_status_file) or "data"
             scheduler_status = get_scheduler_runtime_status(data_dir=scheduler_data_dir)
             if scheduler_status.get("is_data_scheduling_running"):

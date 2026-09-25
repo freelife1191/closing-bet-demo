@@ -90,6 +90,20 @@ def test_system_update_status_returns_debug_fields():
     assert "_debug_exists" in payload
 
 
+def test_system_update_status_hides_owner_pids(monkeypatch):
+    # [INFRA-107] 기동 초기화용 워커 pid 는 공개 폴링 응답에 싣지 않는다
+    monkeypatch.setattr(
+        common.route_context,
+        "load_update_status",
+        lambda deep_copy=True: {"isRunning": True, "items": [], "ownerPid": 123, "ownerPpid": 45},
+    )
+
+    payload = _create_client().get("/api/system/update-status").get_json()
+
+    assert payload["isRunning"] is True
+    assert "ownerPid" not in payload and "ownerPpid" not in payload
+
+
 def test_system_update_status_merges_scheduler_running_message(monkeypatch):
     monkeypatch.setattr(
         common_update_routes,

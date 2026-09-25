@@ -18,10 +18,8 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 from engine.pandas_utils_safe import sanitize_for_json
-from services.kr_market_data_cache_service import (
-    atomic_write_text,
-    load_json_payload_from_path,
-)
+from services.common_update_status_service import reset_orphaned_update_status
+from services.kr_market_data_cache_service import atomic_write_text
 from services.identity_helpers import resolve_anonymous_id, verify_identity_header
 from services.scheduler_runtime_status_service import reset_scheduler_runtime_status
 
@@ -96,21 +94,14 @@ def _reset_startup_status_files() -> None:
         common_status_file = os.path.join(data_dir, 'update_status.json')
         v2_status_file = os.path.join(data_dir, 'v2_screener_status.json')
 
-        if os.path.exists(common_status_file):
-            try:
-                # 시작 시점에는 읽기 전용 접근이므로 deep_copy 비용을 줄인다.
-                status = load_json_payload_from_path(common_status_file, deep_copy=False)
-
-                if isinstance(status, dict) and status.get('isRunning', False):
-                    status['isRunning'] = False
-                    status['items'] = []
-                    atomic_write_text(
-                        common_status_file,
-                        json.dumps(status, ensure_ascii=False, indent=2),
-                    )
-                    print("[Startup] 🧹 Reset stuck update_status.json")
-            except Exception as error:
-                print(f"[Startup] Error reading/writing update_status.json: {error}")
+        # [INFRA-107] gunicorn 이 워커 하나만 다시 띄우면 다른 워커의 실행 중 상태를 지우지 않는다
+        try:
+            if reset_orphaned_update_status(
+                update_status_file=common_status_file, logger=logging.getLogger(__name__)
+            ):
+                print("[Startup] 🧹 Reset stuck update_status.json")
+        except Exception as error:
+            print(f"[Startup] Error reading/writing update_status.json: {error}")
 
         atomic_write_text(
             v2_status_file,

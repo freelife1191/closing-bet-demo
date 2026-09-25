@@ -569,12 +569,45 @@ def start_update(
         status["isRunning"] = True
         status["stopRequested"] = False
         status["startTime"] = datetime.now().isoformat()
+        # [INFRA-107] 기동 초기화가 소유 워커 생존을 판정한다. 마스터 pid 는 재부팅 뒤 pid 재사용을 거른다
+        status["ownerPid"] = os.getpid()
+        status["ownerPpid"] = os.getppid()
         shared_state.LOCAL_RUN_START_TIME = status["startTime"]
         # [INFRA-104] 스레드가 파이프라인에 들어가기 전에도 같은 워커의 재시작을 거부하도록 여기서 켠다.
         # 파이프라인의 finally 가 끈다. ponytail: thread.start() 가 실패하면 이 워커는 재기동까지 시작을 거부한다
         shared_state.LOCAL_PIPELINE_ACTIVE = True
         status["items"] = [{"name": name, "status": "pending"} for name in items_list]
         status["currentItem"] = None
+        save_update_status(status=status, update_status_file=update_status_file, logger=logger)
+        return True
+
+
+def _owner_process_alive(pid: Any) -> bool:
+    """[INFRA-107] 상태를 연 워커가 아직 살아 있는가. 자기 pid 는 방금 뜬 워커이므로 옛 실행의 주인이 아니다."""
+    if type(pid) is not int or pid <= 0 or pid == os.getpid():
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except (OSError, OverflowError):
+        return False
+    return True
+
+
+def reset_orphaned_update_status(*, update_status_file: str, logger) -> bool:
+    """기동 때 주인이 사라진 실행 상태만 내린다. 다른 워커가 살아서 돌리는 실행은 그대로 둔다."""
+    with _status_file_lock(update_status_file, logger):
+        status = _read_status_file(update_status_file, logger)
+        if not status.get("isRunning", False):
+            return False
+        # 같은 마스터의 형제 워커이고 살아 있을 때만 보존한다. 전체 재기동은 마스터가 바뀌어 항상 초기화된다.
+        # ponytail: 같은 마스터 안의 pid 재사용과 graceful 재기동(HUP)의 옛 워커는 살아 있다고 본다. 그때는 관리자 중단 요청이 푼다
+        if status.get("ownerPpid") == os.getppid() and _owner_process_alive(status.get("ownerPid")):
+            logger.info(f"Startup reset skipped: update owned by live worker {status.get('ownerPid')}")
+            return False
+        status["isRunning"] = False
+        status["items"] = []
         save_update_status(status=status, update_status_file=update_status_file, logger=logger)
         return True
 

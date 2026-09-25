@@ -237,6 +237,21 @@ def test_stop_update_records_request_in_shared_status_not_local_flag(tmp_path):
     assert shared_state.LOCAL_RUN_START_TIME == restarted["startTime"]
 
 
+def test_start_update_records_owner_pid(tmp_path):
+    # [INFRA-107] 기동 초기화가 소유 워커 생존을 판정하도록 실행한 워커 pid 를 남긴다
+    import os
+    import threading
+
+    from services.common_update_status_service import load_update_status, start_update
+
+    status_file = str(tmp_path / "update_status.json")
+    kwargs = dict(update_lock=threading.Lock(), update_status_file=status_file, logger=_noop_logger())
+
+    assert start_update(items_list=["Daily Prices"], shared_state=types.SimpleNamespace(), **kwargs) is True
+    status = load_update_status(update_status_file=status_file, logger=_noop_logger())
+    assert (status["ownerPid"], status["ownerPpid"]) == (os.getpid(), os.getppid())
+
+
 def test_start_update_refuses_while_local_pipeline_active(tmp_path):
     # [INFRA-099] 이 워커에서 중단된 실행이 아직 돌면 새 시작을 받지 않는다. 상태를 그대로 둬야 옛 실행의 감시가 멈춘다
     import threading
