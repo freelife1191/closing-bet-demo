@@ -60,18 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [VCP-058] `vcp_signals_latest.json` 을 `open('w')` 로 직접 써서 저장 중 중단되면 파일이 깨진다
-- 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[VCP-052]` 설계 때 범위 밖으로 뺀 발견(2026-09-25), 코드로 확인
-- 내용: `scripts/init_data.py:475-477` 의 `_write_vcp_signals_latest_payload` 는 원자적 교체 없이 바로 쓴다. 이 파일은 `services/kr_market_vcp_background_service.py:24`(방금 저장한 시그널 수)와 `services/common_data_status_service.py:71`(데이터 상태 화면)이 읽는다. 쓰는 도중 읽거나 중단되면 빈 파일이나 잘린 JSON 을 읽는다
-- 확인 수준: 코드로만 확인. 운영에서 깨진 파일이 관찰된 적은 없다
-- 설계 승인: 2026-09-25 13:00(대화, bounded, 「이대로 진행」). 범위: `_write_vcp_signals_latest_payload` 를 `atomic_write_text(json.dumps(...))` 로 교체(`:2097` 과 같은 방식), 파일 권한 0600·캐시 무효화는 부수 효과로 수용, 다른 `open('w')` 는 범위 밖. 범위 추가 13:02 확인(대화, 「이번에 함께 막기」): 교체로 fsync 를 거치게 되자 `[VCP-030]` 테스트 2건이 `create_signals_log` 바깥 except 갈래의 최신 파일 재저장에서 예외가 새는 것을 드러냈다(수정 전에도 `open('w')` 실패면 같음). 그 호출을 `OSError` 로 감싸 경고 후 `False`
-- 티어 T3(위험 경로 `scripts/init_data.py`). 스킬 `.claude/skills/closing-bet-python/SKILL.md`. 파일: `scripts/init_data.py`, `tests/scripts/test_init_data_vcp_scheduler.py`
-- [x] 설계 승인(`atomic_write_text` 로 바꾸는 것만인지)
-- [x] 테스트: `test_write_vcp_signals_latest_keeps_previous_file_when_write_fails`(수정 전 코드에서 잘린 파일로 실패 확인). except 갈래 보호는 기존 `test_create_signals_log_keeps_log_bytes_when_write_fails[merge|cleanup]` 이 덮는다(교체만 하면 실패, 보호 뒤 통과)
-- [x] 리뷰: 과잉설계 직접 검토 「Lean already. Ship.」 · `closing-bet-reviewer` CHANGES_REQUIRED(max medium): medium `[VCP-030]` merge 케이스가 최신 파일 저장에서 먼저 실패해 병합 쓰기에 닿지 않음(리뷰어 실측 호출 0회) → 그 테스트에서 최신 파일 저장을 no-op 으로 반영(사본에서 병합 쓰기를 `to_csv` 로 바꾸면 [merge] 실패 확인) | low 새 테스트는 `json.dumps` 단계 실패라 쓰기 도중 실패를 안 봄 → `test_create_signals_log_returns_false_when_latest_replace_fails`(최신 파일 `os.replace` 만 실패) 추가, 사본에서 except 보호 제거 시 이 테스트만 실패·수정 전 코드면 새 테스트 둘 실패. 재검토 APPROVE(max none, 탐침 [merge]=1·[cleanup]=1) · `/review`(T3, `oh-my-claudecode:code-reviewer` opus) Critical·Important 0: Minor 1 merge 갈래 저장 실패 뒤 except 갈래가 빈 결과로 덮는 것은 `[VCP-028]` 설계라 그대로, QA 문서에서 「이전 결과 유지」 증거로 쓰지 않음 | Minor 2 「교체 뒤 fsync」 설명 오류 → 기록은 「교체 전 fsync 실패면 교체가 일어나지 않음」으로 적음
-- [x] pytest 전체: `venv/bin/python -m pytest -q -p no:cacheprovider` 13:06:29~13:08:34 2841 passed, 2 skipped, exit 0
-- [ ] QA(CLI 하네스, 화면 흐름 없음, `qa/VCP-058.md`)
-
 ### [VCP-059] AI 판정 병합이 날짜 없는 `kr_ai_analysis.json` 을 날짜 파일 내용으로 덮어 가격 동기화 값을 되돌린다
 - 카테고리: VCP | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[VCP-052]` 심층 리뷰 참고 사항(2026-09-25), 코드로 확인
 - 내용: `update_kr_ai_analysis_prices`(`scripts/init_data.py`)는 날짜 없는 파일의 `current_price`·`return_pct` 만 고친다. `_merge_ai_analysis_files`(`services/common_update_ai_analysis_service.py`)는 날짜 파일을 병합한 직렬화 결과로 날짜 없는 파일을 통째로 덮으므로, 오늘 날짜 병합이 한 번 돌면 그 값이 날짜 파일의 값으로 돌아간다. 순차 실행에서도 일어나며 다음 가격 동기화 때 다시 채워진다. AI 판정은 사라지지 않는다
