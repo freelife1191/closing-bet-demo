@@ -62,19 +62,6 @@
 
 ## P2 — 대기
 
-### [FLOW-024] 시그널 추적기의 수급 점수가 최근 5행의 빈 칸을 건너뛴 합을 5일 값으로 쓴다
-- 카테고리: 수급·백테스트 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[FLOW-023]` 계획 검토(critic, 2026-09-25) 지적 (2), 코드로 확인
-- 내용: `build_supply_score_frame`(`engine/signal_tracker_supply_helpers.py:51-58`)은 `groupby.tail(5)` 뒤 `("foreign_buy","sum")` 으로 합하는데 pandas 는 NaN 을 건너뛰고, `window_count` 는 행 수(`size`)로 센다. 그래서 최근 5행 중 하루가 빈 종목도 `window_count >= 5` 를 통과해 4일 합으로 점수가 매겨진다. `[FLOW-023]` 은 통합 서비스와 상세 API 만 고쳤다
-- 확인 수준: 코드로만 확인. 로컬 CSV 는 빈 칸 0개(`[FLOW-023]` 설계 때 집계), 운영 CSV 는 확인하지 않았다. 2026-09-25 설계 때 가짜 CSV 로 재현(09-22 외국인 칸만 빈 종목이 4일 합 9억·67점으로 통과). 호출자는 `run.py` 메뉴 2 뿐이고 웹 파이프라인은 부르지 않는다
-- 설계 승인: 2026-09-25 21:30 | 범위: bounded T1. `build_supply_score_frame` 이 최근 5행에서 외국인·기관 열을 `count` 로 세어 둘 다 5개인 종목만 남기고 뺀 수를 로그로 남김, SQLite 점수 캐시 키 접미사 교체. (A) 스크리너 우선순위 정렬은 유지(순서에만 쓰이고 점수는 통합 서비스), (B) 죽은 CSV 점수 함수는 `[FLOW-027]` 로 등록, (C) `[FLOW-025]` 는 분리하고 시그널 추적기 창도 같은 문제임을 그 항목에 기록 | 실제 대화 근거: 현재 세션의 설계 제안에 사용자 「승인」 응답
-- QA 시나리오: 격리 사본(수정본·기준 `72fc8c17`) CLI 하네스로 `scan_today_signals` 만 호출. 웹 진입 경로가 없어 브라우저 대상 아님
-- [x] 실패 테스트 먼저(외국인 빈 칸·기관 빈 칸 제외, 정상 유지, 창 밖 빈 칸 유지) → 수정 전 000001·000002 가 남아 실패
-- [x] 구현(`engine/signal_tracker_supply_helpers.py`, `engine/signal_tracker_analysis_mixin.py` 접미사)
-- [x] `/ponytail-review` → Lean already. Ship.
-- [x] 범위 pytest(3파일 29 passed), pytest 전체(`KRX_ID= KRX_PW= venv/bin/python -m pytest -q -p no:cacheprovider` 2853 passed·2 skipped, exit 0). frontend 변경 없어 vitest 생략
-- [x] QA 계획 `docs/dev-cycle/qa/FLOW-024.md`, 첫 커밋
-- [ ] QA 실행과 기록, 정리
-
 ### [FLOW-025] 수급 CSV 의 5행 창이 빠진 거래일을 모르고 6거래일 이상의 합을 5일 값으로 쓴다
 - 카테고리: 수급·백테스트 | 티어: T3(위험 경로 `services/investor_trend_5day_service.py`) | 근거: `[FLOW-023]` 코드 리뷰(closing-bet-reviewer F1, 2026-09-25), 코드로 확인
 - 내용: `[INFRA-095]` 이후 수급 CSV 작성부(`scripts/init_data.py:389-395` Toss 경로, `:1294-1303` pykrx 경로)는 값이 빈 날을 빈 칸으로 쓰지 않고 그 행을 저장하지 않는다. `_build_trend_map`(`services/investor_trend_5day_service.py:396-400`)은 종목별 `tail(5)` 와 `len(recent) < 5` 만 보므로, 창 안의 하루가 빠진 종목은 6거래일 이상에 걸친 합을 `days: 5` 로 내보낸다. 가장 최근 날만 빠지면 전날 값이 details[0] 이 되고, `stale_csv` 는 영업일 4일을 넘어야 붙으므로 플래그도 없다. `[FLOW-023]` 은 빈 칸만 걸러 낸다
