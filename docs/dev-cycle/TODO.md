@@ -38,15 +38,3 @@
 - [ ] T3 리뷰와 pytest 전체, 격리 사본에서 가짜 출처로 CLI QA
 
 ## P2 — 대기
-
-### [JONGGA-042] 상세 API 의 Naver·기본값 폴백이 결측 수급을 0 으로 채운다
-- 카테고리: 종가베팅 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[FE-048]` 구현 중 코드로 확인(2026-09-25)
-- 내용: Toss 종목 정보 조회가 실패하면 상세 API 는 Naver(`engine/collectors/naver_extractors_mixin.py:42-45` 의 `investorTrend` 기본값 0)나 기본 페이로드(`services/kr_market_stock_detail_service.py` `build_default_stock_detail_payload` 의 `foreign`·`institution` 0)를 돌려준다. 확정 집계도 없으면 모달은 결측을 실제 0 과 같은 「-」로 그린다. `[FE-048]` 은 Toss 갈래만 고쳤다
-- 확인 수준: 코드로만 확인. Naver 수집기가 값을 채우지 못하는 조건과 운영 빈도는 확인하지 않았다
-- 설계 승인: 승인 일자 2026-09-26 | 범위: Naver 빈 결과 틀과 기본 페이로드의 `investorTrend.foreign`·`institution` 기본값을 0 → None, `_get_investor_trend` 독스트링. 프론트엔드·캐시 스키마·가격 등 수급 외 기본값은 범위 밖 | 티어: 규칙상 T1(§2 무관, 50줄 이하)이나 T2 절차로 진행 | 실제 대화 근거: 현재 세션의 bounded 설계 제안에 대한 사용자 「승인」 응답
-- QA 시나리오: Toss 가 실패하고 통합 5일 값도 없을 때 종가베팅 상세 모달의 외국인·기관 5일 칸이 「-」가 아니라 「자료 없음」으로 그려진다
-- [x] 설계 승인
-- [x] 구현과 테스트(Naver 기본값·서비스 예외·기본 페이로드), `.claude/skills/closing-bet-python/`. 새 테스트 3건 수정 전 RED(`assert 0 is None`) → 수정 뒤 관련 4파일 69 passed
-- [x] `/ponytail-review` → `closing-bet-reviewer`: ponytail 「Lean already. Ship.」. reviewer APPROVE(max low). low 1 빈 틀의 `individual: 0` 은 `_get_investor_trend` 가 항상 None 으로 덮어 밖으로 나가지 않고 승인 범위 밖이라 미반영. low 2 `int(trend_data["foreign"])` 가 try 밖인 것은 기존 동작이고 통합 서비스가 결측을 걸러 현재 도달하지 않아 미반영. low 3 이 절의 줄 번호를 함수 이름으로 고침
-- [x] pytest·vitest 전체: `KRX_ID= KRX_PW= venv/bin/python -m pytest -q -p no:cacheprovider` 2875 passed·2 skipped(exit 0), `npx vitest run` 701 passed(exit 0), 2026-09-26 07:21~07:24
-- [ ] 브라우저 QA(격리 사본, Toss 강제 실패, Naver·기본값 두 경로와 값 있는 대조)
