@@ -60,20 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-107] 워커가 새로 기동하면 다른 워커에서 도는 수동 업데이트의 `isRunning` 과 항목을 지운다
-- 카테고리: 인프라 | 티어: T3(판정은 설계 때 §2 대조) | 근거: `[INFRA-098]` 계획 검토(critic 권장 5, 2026-09-25), 코드로 확인
-- 내용: `app/__init__.py` 의 `_reset_startup_status_files` 는 기동 때 `update_status.json` 이 `isRunning` 이면 `isRunning=False`·`items=[]` 로 저장한다. 서버 전체 재기동에는 맞지만, gunicorn 이 워커 하나만 다시 띄우면(워커 비정상 종료 등) 다른 워커의 실행 중 상태를 지운다. 잠금도 없어 그 사이의 중단 요청을 덮을 수 있다
-- 확인 수준: 코드로만 확인. 운영에서 워커 단독 재기동 빈도는 확인하지 않았다
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 10:56
-  | 범위: `start_update` 가 `ownerPid` 를 기록하고, 기동 초기화는 `_status_file_lock` 안에서 소유 워커가 살아 있으면(자기 pid 제외) 상태를 보존한다. `v2_screener_status.json`·스케줄러 런타임 상태는 범위 밖(`[INFRA-114]`)
-  | 실제 대화 근거: 2026-09-25 사용자 「승인 (Recommended)」 응답, 현재 세션의 bounded 설계 제안. 티어 T3(`services/common_update_status_service.py` 가 §2 저장소 스키마 목록)
-- [x] 설계 승인(소유 워커 생존 판정)
-- [x] 계획 `docs/superpowers/plans/2026-09-25-infra-107-startup-reset-owner-pid.md` 와 critic 계획 검토 → ACCEPT-WITH-RESERVATIONS: 지적 1 재부팅 뒤 pid 재사용 → `ownerPpid`(마스터 일치) 추가 반영 | 2 HUP 고착 → 알려진 한계·QA 문서 기록(`restart_all.sh` 는 HUP 미사용) | 3 `OverflowError` → 반영 | 4 계획·구현 불일치 → 계획 수정 | 5 잠금 미검증 → 잠금 대기 테스트 추가, 사본에서 잠금 제거 시 그 테스트만 실패 확인
-- [x] 테스트(살아 있는 타 워커·EPERM pid 보존, 죽은·자기·bool·overflow·마스터 불일치 초기화, `ownerPid`·`ownerPpid` 기록, 잠금 대기, 공개 응답에서 pid 제외)와 구현
-- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` 「Lean already. Ship.」 · `closing-bet-reviewer` APPROVE(max low): low 1 HUP → QA 문서 기록 | low 2 공개 GET 에 pid 노출 → 응답에서 제외 반영(`app/routes/common_update_routes.py`, 테스트 추가) | low 3 스냅샷 대체로 파일 신규 작성 → QA 문서 기록 · 심층 리뷰(`oh-my-claudecode:code-reviewer`) 차단 0: Minor 1 flock 실패 때 초기화 안 됨 → 같은 환경에서 시작·중단도 실패해 미반영 | Minor 2 pid 노출 → 위와 같이 반영 | Minor 3 같은 마스터 안 pid 재사용·USR2 → 알려진 한계, `restart_all.sh` 는 USR2 미사용 | Minor 4 `flask_app` 을 import 하는 다른 프로세스 → 종전과 같음, 미반영 | Minor 5 컨테이너 PID 1 에서 테스트 환경 의존 → 개발 환경 해당 없음, 미반영 | Minor 6 EPERM 갈래 테스트 → 반영, 스냅샷 전용 갈래 테스트 → 계획 Review Focus 기록으로 갈음
-- [x] pytest 전체(리뷰 반영 뒤) → `venv/bin/python -m pytest -q -p no:cacheprovider` 2825 passed, 2 skipped, exit 0
-- [ ] 격리 사본 CLI 하네스 QA(`qa/INFRA-107.md`)
-
 ### [INFRA-114] 기동 초기화가 `v2_screener_status.json` 과 스케줄러 런타임 상태를 조건 없이 지운다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/scheduler_runtime_status_service.py`) | 근거: `[INFRA-107]` 설계 때 범위 밖으로 뺀 발견(2026-09-25), 코드로 확인
 - 내용: `app/__init__.py` 의 `_reset_startup_status_files` 는 워커가 뜰 때마다 `v2_screener_status.json` 을 `{'isRunning': False}` 로 쓰고 `reset_scheduler_runtime_status` 를 부른다. gunicorn 이 워커 하나만 다시 띄우면 다른 워커에서 도는 종가베팅 V2 실행이나 스케줄러 잡의 실행 표시가 꺼진다. `[INFRA-107]` 은 `update_status.json` 만 고친다
