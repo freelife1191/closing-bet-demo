@@ -10,11 +10,10 @@ import logging
 import math
 import os
 
-from engine.investor_personal_flow import cached_personal_value, personal_flow_total
 from engine.models import StockData, ChartData, SupplyData
 from engine.ticker_utils import normalize_ticker
 from engine.toss_collector import TossCollector
-from services.investor_trend_5day_service import get_investor_trend_5day_for_ticker, has_csv_anomaly_flags
+from services.investor_trend_5day_service import get_investor_trend_5day_for_ticker, get_pykrx_trend_5day
 from services.kr_market_data_cache_service import file_signature as _shared_file_signature, load_csv_file as _load_shared_csv_file
 from services.kr_market_data_cache_sqlite_payload import load_json_payload_from_sqlite as _load_json_payload_from_sqlite, save_json_payload_to_sqlite as _save_json_payload_to_sqlite
 
@@ -435,124 +434,6 @@ class KRXCollectorLocalDataMixin:
             )
         except Exception as error:
             logger.debug("KRX top gainers SQLite cache save failed: %s", error)
-
-    @classmethod
-    def _pykrx_supply_sqlite_context(
-        cls,
-        *,
-        ticker: str,
-        end_date: str,
-    ) -> tuple[str, tuple[int, int]]:
-        ticker_key = str(ticker).zfill(6)
-        date_key = cls._normalize_top_gainers_target_token(end_date)
-        cache_key = os.path.join(
-            BASE_DIR,
-            "data",
-            cls._market_date_sqlite_namespace_dir,
-            "pykrx_supply_5d",
-            f"{ticker_key}__{date_key}.snapshot",
-        )
-        signature_seed = f"{ticker_key}:{date_key}:pykrx_supply_5d"
-        signature = (
-            cls._stable_token_to_int(signature_seed),
-            cls._stable_token_to_int(f"pykrx_supply::{signature_seed[::-1]}"),
-        )
-        return cache_key, signature
-
-    @classmethod
-    def _deserialize_pykrx_supply_payload(cls, payload: dict[str, object]) -> dict[str, int] | None:
-        try:
-            foreign = int(float(payload.get("foreign_buy_5d", 0)))
-            inst = int(float(payload.get("inst_buy_5d", 0)))
-        except (TypeError, ValueError):
-            return None
-        retail = cached_personal_value(payload, "retail_buy_5d")
-        return {
-            "foreign_buy_5d": foreign,
-            "inst_buy_5d": inst,
-            "retail_buy_5d": retail,
-            "individual_schema": 1 if retail is not None else 0,
-        }
-
-    @classmethod
-    def _load_cached_pykrx_supply_summary(
-        cls,
-        *,
-        ticker: str,
-        end_date: str,
-    ) -> dict[str, int] | None:
-        ticker_key = str(ticker).zfill(6)
-        date_key = cls._normalize_top_gainers_target_token(end_date)
-        memory_key = (ticker_key, date_key)
-
-        with cls._pykrx_supply_cache_lock:
-            cached = cls._pykrx_supply_cache.get(memory_key)
-            if isinstance(cached, dict):
-                cls._pykrx_supply_cache.move_to_end(memory_key)
-                return dict(cached)
-
-        sqlite_key, sqlite_signature = cls._pykrx_supply_sqlite_context(
-            ticker=ticker_key,
-            end_date=date_key,
-        )
-        try:
-            loaded, payload = _load_json_payload_from_sqlite(
-                filepath=sqlite_key,
-                signature=sqlite_signature,
-                logger=logger,
-            )
-        except Exception as error:
-            logger.debug("KRX pykrx supply SQLite cache load failed: %s", error)
-            return None
-
-        if not loaded or not isinstance(payload, dict):
-            return None
-        normalized_payload = cls._deserialize_pykrx_supply_payload(payload)
-        if normalized_payload is None:
-            return None
-
-        with cls._pykrx_supply_cache_lock:
-            cls._pykrx_supply_cache[memory_key] = dict(normalized_payload)
-            cls._pykrx_supply_cache.move_to_end(memory_key)
-            while len(cls._pykrx_supply_cache) > cls._pykrx_supply_memory_max_entries:
-                cls._pykrx_supply_cache.popitem(last=False)
-        return dict(normalized_payload)
-
-    @classmethod
-    def _save_cached_pykrx_supply_summary(
-        cls,
-        *,
-        ticker: str,
-        end_date: str,
-        payload: dict[str, int],
-    ) -> None:
-        normalized_payload = cls._deserialize_pykrx_supply_payload(payload)
-        if normalized_payload is None:
-            return
-
-        ticker_key = str(ticker).zfill(6)
-        date_key = cls._normalize_top_gainers_target_token(end_date)
-        memory_key = (ticker_key, date_key)
-        with cls._pykrx_supply_cache_lock:
-            cls._pykrx_supply_cache[memory_key] = dict(normalized_payload)
-            cls._pykrx_supply_cache.move_to_end(memory_key)
-            while len(cls._pykrx_supply_cache) > cls._pykrx_supply_memory_max_entries:
-                cls._pykrx_supply_cache.popitem(last=False)
-
-        sqlite_key, sqlite_signature = cls._pykrx_supply_sqlite_context(
-            ticker=ticker_key,
-            end_date=date_key,
-        )
-        try:
-            _save_json_payload_to_sqlite(
-                filepath=sqlite_key,
-                signature=sqlite_signature,
-                payload=normalized_payload,
-                max_rows=cls._pykrx_supply_sqlite_max_rows,
-                logger=logger,
-            )
-        except Exception as error:
-            logger.debug("KRX pykrx supply SQLite cache save failed: %s", error)
 
     @classmethod
     def _pykrx_chart_sqlite_context(
@@ -1111,7 +992,7 @@ class KRXCollectorLocalDataMixin:
         code: str,
         target_date: str | date | datetime | None = None,
     ) -> Optional[SupplyData]:
-        """수급 데이터 조회 - 단일 5일 합산 서비스(CSV 캐시) 우선."""
+        """수급 5일 합계. 기준일이 있으면 pykrx, 없거나 pykrx 가 5일 값을 못 주면 검증 켠 통합 서비스. 없으면 None."""
         try:
             data_dir = str(getattr(getattr(self, "config", None), "DATA_DIR", "data") or "data")
             if not os.path.isabs(data_dir):
@@ -1122,96 +1003,23 @@ class KRXCollectorLocalDataMixin:
                 str(target_date) if target_date is not None else None
             )
             target_datetime = None if normalized_target_date == "latest" else normalized_target_date
-            explicit_target_requested = target_datetime is not None
-            trend_data = get_investor_trend_5day_for_ticker(
-                ticker=str(code).zfill(6),
-                data_dir=data_dir,
-                target_datetime=target_datetime,
-                verify_with_references=False,
+            ticker = str(code).zfill(6)
+            trend_data = None
+            if target_datetime is not None:
+                # 기준일을 준 실행(정규 종가베팅 포함)은 수급 CSV 수집이 실패해도 돌므로 pykrx 를 먼저 본다.
+                # [FLOW-026] 예전 자체 경로는 부분합과 빈 프레임의 0 을 5일 값으로 써서 요약 캐시에 남겼다
+                trend_data = get_pykrx_trend_5day(ticker=ticker, data_dir=data_dir, target_datetime=target_datetime)
+            if trend_data is None:
+                trend_data = get_investor_trend_5day_for_ticker(
+                    ticker=ticker, data_dir=data_dir, target_datetime=target_datetime,
+                )
+            if not isinstance(trend_data, dict):
+                return None
+            return SupplyData(
+                foreign_buy_5d=int(trend_data["foreign"]),
+                inst_buy_5d=int(trend_data["institution"]),
+                retail_buy_5d=trend_data.get("individual"),
             )
-            if (
-                not explicit_target_requested
-                and isinstance(trend_data, dict)
-                and not has_csv_anomaly_flags(trend_data)
-            ):
-                return SupplyData(
-                    foreign_buy_5d=int(trend_data.get("foreign", 0)),
-                    inst_buy_5d=int(trend_data.get("institution", 0)),
-                    retail_buy_5d=trend_data.get("individual") if isinstance(trend_data, dict) else None,
-                )
-            if not explicit_target_requested and isinstance(trend_data, dict):
-                logger.debug(
-                    "통합 5일 수급 이상징후 감지(%s): pykrx fallback 사용",
-                    str(code).zfill(6),
-                )
-
-            from pykrx import stock
-
-            end_date = normalized_target_date
-            if end_date == "latest":
-                end_date = self._get_latest_market_date()
-            cached_supply = self._load_cached_pykrx_supply_summary(
-                ticker=str(code).zfill(6),
-                end_date=end_date,
-            )
-            if isinstance(cached_supply, dict):
-                return SupplyData(
-                    foreign_buy_5d=int(cached_supply.get("foreign_buy_5d", 0)),
-                    inst_buy_5d=int(cached_supply.get("inst_buy_5d", 0)),
-                    retail_buy_5d=cached_supply.get("retail_buy_5d"),
-                )
-
-            end_dt = datetime.strptime(end_date, "%Y%m%d")
-            start_date = (end_dt - timedelta(days=10)).strftime("%Y%m%d")
-
-            df = stock.get_market_trading_value_by_date(start_date, end_date, code)
-            if df.empty:
-                if isinstance(trend_data, dict):
-                    return SupplyData(
-                        foreign_buy_5d=int(trend_data.get("foreign", 0)),
-                        inst_buy_5d=int(trend_data.get("institution", 0)),
-                        retail_buy_5d=trend_data.get("individual") if isinstance(trend_data, dict) else None,
-                    )
-                empty_payload = {
-                    "foreign_buy_5d": 0,
-                    "inst_buy_5d": 0,
-                    "retail_buy_5d": None,
-                    "individual_schema": 0,
-                }
-                self._save_cached_pykrx_supply_summary(
-                    ticker=str(code).zfill(6),
-                    end_date=end_date,
-                    payload=empty_payload,
-                )
-                return SupplyData(foreign_buy_5d=0, inst_buy_5d=0, retail_buy_5d=None)
-
-            df = df.tail(5)
-            foreign_col = "외국인합계" if "외국인합계" in df.columns else "외국인"
-            inst_col = "기관합계" if "기관합계" in df.columns else "기관"
-            retail_col = "개인" if "개인" in df.columns else "개인합계"
-
-            foreign_5d = int(df[foreign_col].sum()) if foreign_col in df.columns else 0
-            inst_5d = int(df[inst_col].sum()) if inst_col in df.columns else 0
-            retail_5d = personal_flow_total([{ "date": str(day)[:10], "netIndividualsBuyVolume": row[retail_col]} for day, row in df.iterrows()]) if retail_col in df.columns else None
-
-            resolved_payload = {
-                "foreign_buy_5d": foreign_5d,
-                "inst_buy_5d": inst_5d,
-                "retail_buy_5d": retail_5d,
-                "individual_schema": 1 if retail_5d is not None else 0,
-            }
-            self._save_cached_pykrx_supply_summary(
-                ticker=str(code).zfill(6),
-                end_date=end_date,
-                payload=resolved_payload,
-            )
-            return SupplyData(foreign_buy_5d=foreign_5d, inst_buy_5d=inst_5d, retail_buy_5d=retail_5d)
         except Exception as e:
-            if isinstance(locals().get("trend_data"), dict):
-                return SupplyData(
-                    foreign_buy_5d=int(trend_data.get("foreign", 0)),
-                    inst_buy_5d=int(trend_data.get("institution", 0)),
-                    retail_buy_5d=trend_data.get("individual") if isinstance(trend_data, dict) else None,
-                )
             logger.error(f"수급 데이터 조회 실패 ({code}): {e}")
             return None

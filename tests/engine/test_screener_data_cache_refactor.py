@@ -21,7 +21,6 @@ def _build_minimal_screener_instance():
     inst.inst_df = None
     inst._prices_by_ticker = {}
     inst._prices_by_ticker_target = {}
-    inst._inst_by_ticker = {}
     inst._data_mtimes = {}
     inst._target_datetime = None
     return inst

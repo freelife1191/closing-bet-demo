@@ -25,7 +25,7 @@ import pandas as pd
 from engine.investor_personal_flow import personal_flow_details
 from engine.ticker_utils import normalize_ticker
 from engine.toss_collector_numeric_helpers import optional_volume
-from services.kr_market_csv_utils import get_ticker_padded_series
+from services.kr_market_csv_utils import get_ticker_padded_series, recent_trading_dates
 from services.kr_market_data_cache_service import load_csv_file
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite,
@@ -35,7 +35,8 @@ from services.kr_market_data_cache_sqlite_payload import (
 logger = logging.getLogger(__name__)
 
 _TREND_FILENAME = "all_institutional_trend_data.csv"
-_SQLITE_KEY_SUFFIX = "::investor_trend_5day_unified"
+# [FLOW-025] 종목별 마지막 5행으로 만든 스냅숏, [FLOW-028] 영문자 코드가 숫자 코드와 섞인 스냅숏을 다시 쓰지 않도록 v2 로 바꿨다
+_SQLITE_KEY_SUFFIX = "::investor_trend_5day_unified_v2"
 _SQLITE_MAX_ROWS = 256
 _REFERENCE_SQLITE_MAX_ROWS = 20_000
 _REFERENCE_SQLITE_NAMESPACE_DIR = ".investor_trend_reference_cache"
@@ -389,6 +390,10 @@ def _build_trend_map(
             working = working[working["date"] <= normalized_target_datetime]
         if working.empty:
             return {}
+        # [FLOW-025] 종목마다 마지막 5행을 쓰면 행이 빠진 종목은 6거래일 이상의 합이 5일 값이 된다. 모든 종목을 같은 최근 5거래일로 잰다
+        window_dates = recent_trading_dates(working["date"])
+        ticker_count = working["ticker"].nunique()
+        working = working[working["date"].isin(window_dates)]
         working = working.sort_values(["ticker", "date"])
     elif normalized_target_datetime is not None:
         return {}
@@ -441,6 +446,12 @@ def _build_trend_map(
             "latest_date": latest_date_value,
         }
 
+    if has_date:
+        logger.info(
+            "수급 CSV 최근 5거래일 %s~%s: 5일 값 %d종목, 빠진 날·빈 칸으로 제외 %d종목",
+            window_dates[0].strftime("%Y-%m-%d"), window_dates[-1].strftime("%Y-%m-%d"),
+            len(trend_map), ticker_count - len(trend_map),
+        )
     return trend_map
 
 def _normalize_external_trend_payload(
@@ -574,26 +585,27 @@ def _detect_csv_anomaly_flags(
     if abs_total >= _CSV_EXTREME_ABS_TOTAL:
         flags.append("extreme_abs_total")
 
-    if target_datetime is None:
-        latest_date = _parse_date_string(csv_payload.get("latest_date"))
-        if latest_date is not None:
-            # 주말과 휴장일을 세지 않는다. 달력 날짜로 세면 금요일 자료가 그 주
-            # 수요일에 이미 낡은 것으로 판정되고, 설·추석 연휴에는 온 시장이 한꺼번에
-            # 교체 대상이 되면서 종목마다 참조 조회가 붙는다. 휴장일 목록은 해마다
-            # 손으로 채우는 것이라 비어 있는 해에는 주말까지만 걸러진다.
-            # engine 패키지가 초기화될 때 이 모듈을 도로 임포트하므로 함수 안에서
-            # 가져온다. 같은 파일의 _get_toss_collector 도 같은 이유로 그렇게 한다.
-            from engine.market_schedule import MarketSchedule
+    latest_date = _parse_date_string(csv_payload.get("latest_date"))
+    if latest_date is not None:
+        # [FLOW-025] 기준일이 있으면 그날을 기준으로 잰다. 예전에는 기준일을 준 호출이 CSV 전체가 낡아도 플래그 없이 채택했다
+        reference_day = _normalize_target_datetime(target_datetime) or datetime.now()
+        # 주말과 휴장일을 세지 않는다. 달력 날짜로 세면 금요일 자료가 그 주
+        # 수요일에 이미 낡은 것으로 판정되고, 설·추석 연휴에는 온 시장이 한꺼번에
+        # 교체 대상이 되면서 종목마다 참조 조회가 붙는다. 휴장일 목록은 해마다
+        # 손으로 채우는 것이라 비어 있는 해에는 주말까지만 걸러진다.
+        # engine 패키지가 초기화될 때 이 모듈을 도로 임포트하므로 함수 안에서
+        # 가져온다. 같은 파일의 _get_toss_collector 도 같은 이유로 그렇게 한다.
+        from engine.market_schedule import MarketSchedule
 
-            business_gap = int(
-                np.busday_count(
-                    latest_date.date(),
-                    datetime.now().date(),
-                    holidays=MarketSchedule.known_holidays(),
-                )
+        business_gap = int(
+            np.busday_count(
+                latest_date.date(),
+                reference_day.date(),
+                holidays=MarketSchedule.known_holidays(),
             )
-            if business_gap > _CSV_STALE_BUSINESS_DAYS:
-                flags.append("stale_csv")
+        )
+        if business_gap > _CSV_STALE_BUSINESS_DAYS:
+            flags.append("stale_csv")
 
     return flags
 
@@ -1042,19 +1054,21 @@ def _get_or_build_trend_map(
 
     return trend_map
 
-def has_csv_anomaly_flags(trend_data: dict[str, Any] | None) -> bool:
-    """반환된 페이로드에 CSV 이상징후 플래그가 붙어 있는지 판정한다.
+def get_pykrx_trend_5day(
+    *,
+    ticker: str,
+    data_dir: str,
+    target_datetime: datetime | pd.Timestamp | str | None = None,
+) -> dict[str, Any] | None:
+    """pykrx 5거래일 합계를 참조와 같은 판정(_reference_reject_reason)을 거쳐 돌려준다.
 
-    수급 조회 결과를 받아 자기 경로로 빠질지 결정하는 호출자를 위한 것이다.
-    None 은 False 다. CSV 에 종목이 없다는 뜻이지 이상징후가 있다는 뜻이 아니다.
+    [FLOW-026] 수집기가 자기 pykrx 경로에서 5행 미만이나 NaN 인 날을 건너뛴 부분합, 빈 프레임의 0 을 5일 값으로
+    썼다. 5일치가 모이지 않았거나 하루라도 수량이 비었거나 전부 0 이거나 합계가 상한을 넘으면 None 이다.
     """
-    if not isinstance(trend_data, dict):
-        return False
-    quality = trend_data.get("quality")
-    if not isinstance(quality, dict):
-        return False
-    csv_flags = quality.get("csv_anomaly_flags")
-    return isinstance(csv_flags, list) and len(csv_flags) > 0
+    payload = _get_reference_trend_cached(
+        data_dir=_normalize_data_dir(data_dir), source="pykrx", ticker=ticker, target_datetime=target_datetime,
+    )
+    return payload if _reference_reject_reason(payload) is None else None
 
 def get_investor_trend_5day_for_ticker(
     *,
@@ -1140,6 +1154,6 @@ def clear_investor_trend_5day_memory_cache() -> None:
 __all__ = [
     "get_investor_trend_5day_for_ticker",
     "get_investor_trends_5day_for_tickers",
-    "has_csv_anomaly_flags",
+    "get_pykrx_trend_5day",
     "clear_investor_trend_5day_memory_cache",
 ]

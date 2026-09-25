@@ -37,14 +37,6 @@ class KRXCollector(KRXCollectorDataMixin, BaseCollector):
 
     _top_gainers_sqlite_max_rows = 512
 
-    _pykrx_supply_cache_lock = threading.Lock()
-
-    _pykrx_supply_cache: OrderedDict[tuple[str, str], dict[str, int]] = OrderedDict()
-
-    _pykrx_supply_memory_max_entries = 1_024
-
-    _pykrx_supply_sqlite_max_rows = 8_192
-
     _pykrx_chart_cache_lock = threading.Lock()
 
     _pykrx_chart_cache: OrderedDict[tuple[str, str, int], dict[str, object]] = OrderedDict()

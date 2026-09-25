@@ -6,7 +6,6 @@ Screener helper 분해 회귀 테스트
 
 import os
 import sys
-from datetime import datetime
 
 import pandas as pd
 
@@ -19,7 +18,6 @@ from engine.screener_scoring_helpers import (
     build_ticker_index,
     calculate_volume_score,
     scale_vcp_score,
-    score_supply_from_csv,
     score_supply_from_toss_trend,
 )
 
@@ -88,41 +86,6 @@ def test_score_supply_keeps_missing_daily_value_as_none():
     )
     assert (scored["foreign_1d"], scored["inst_1d"]) == (None, None)
     assert scored["score"] == 0
-
-
-def test_score_supply_from_csv_handles_target_datetime_and_columns():
-    df = pd.DataFrame(
-        [
-            {"date": pd.Timestamp("2026-02-19"), "foreign_buy": 1, "inst_buy": 2},
-            {"date": pd.Timestamp("2026-02-20"), "foreign_buy": 3, "inst_buy": 4},
-            {"date": pd.Timestamp("2026-02-21"), "foreign_buy": 5, "inst_buy": 6},
-            {"date": pd.Timestamp("2026-02-22"), "foreign_buy": 7, "inst_buy": 8},
-            {"date": pd.Timestamp("2026-02-23"), "foreign_buy": 9, "inst_buy": 10},
-        ]
-    )
-
-    scored = score_supply_from_csv(df, target_datetime=datetime(2026, 2, 23))
-    assert scored["foreign_5d"] == 25
-    assert scored["inst_5d"] == 30
-    assert scored["foreign_1d"] == 9
-    assert scored["inst_1d"] == 10
-
-
-def test_score_supply_from_csv_builds_latest_first_details_without_iterrows_regression():
-    df = pd.DataFrame(
-        [
-            {"date": pd.Timestamp("2026-02-19"), "foreign_buy": 0, "inst_buy": 1},
-            {"date": pd.Timestamp("2026-02-20"), "foreign_buy": 1, "inst_buy": 1},
-            {"date": pd.Timestamp("2026-02-21"), "foreign_buy": 1, "inst_buy": 1},
-            {"date": pd.Timestamp("2026-02-22"), "foreign_buy": 1, "inst_buy": 1},
-            {"date": pd.Timestamp("2026-02-23"), "foreign_buy": 1, "inst_buy": 1},
-        ]
-    )
-
-    scored = score_supply_from_csv(df, target_datetime=datetime(2026, 2, 23))
-
-    assert scored["score"] > 0
-    assert scored["foreign_1d"] == 1
 
 
 def test_scale_vcp_score_caps_to_ten():

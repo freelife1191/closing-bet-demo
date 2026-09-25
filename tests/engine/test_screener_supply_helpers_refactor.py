@@ -7,12 +7,8 @@ Screener supply helper 분해 회귀 테스트
 from __future__ import annotations
 
 import engine.screener_supply_helpers as supply_helpers
-import pandas as pd
 
-from engine.screener_supply_helpers import (
-    calculate_supply_score_from_csv,
-    calculate_supply_score_with_toss,
-)
+from engine.screener_supply_helpers import calculate_supply_score_with_toss
 
 
 class _DummyToss:
@@ -130,31 +126,6 @@ def test_calculate_supply_score_with_toss_reuses_sqlite_snapshot_after_memory_cl
     )
     assert second == {"score": 30}
     assert calls["count"] == 1
-
-
-def test_calculate_supply_score_from_csv_handles_missing_index():
-    result = calculate_supply_score_from_csv(
-        ticker="005930",
-        inst_by_ticker={},
-        target_datetime=None,
-        score_supply_from_csv_fn=lambda *_a, **_k: {"score": 9},
-    )
-    assert result["score"] == 0
-
-
-def test_calculate_supply_score_from_csv_delegates_to_score_fn():
-    frame = pd.DataFrame([{"value": 1}])
-    result = calculate_supply_score_from_csv(
-        ticker="005930",
-        inst_by_ticker={"005930": frame},
-        target_datetime="2026-02-21",
-        score_supply_from_csv_fn=lambda ticker_inst, target_datetime: {
-            "score": len(ticker_inst),
-            "target": target_datetime,
-        },
-    )
-    assert result["score"] == 1
-    assert result["target"] == "2026-02-21"
 
 
 def test_normalize_toss_supply_payload_keeps_missing_day_in_place():

@@ -41,18 +41,6 @@ def test_marked_detail_integral_float_is_normalized_to_integer():
     assert type(value) is int and value == 1
 
 
-@pytest.mark.parametrize("bad", [True, 1.5, float("inf"), float("nan"), "bad", None])
-def test_collector_cache_bad_personal_value_keeps_foreign_and_institution(bad):
-    from engine.collectors import KRXCollector
-    result = KRXCollector._deserialize_pykrx_supply_payload({
-        "foreign_buy_5d": 123, "inst_buy_5d": 456, "retail_buy_5d": bad, "individual_schema": 1,
-    })
-    assert result is not None
-    assert result["foreign_buy_5d"] == 123
-    assert result["inst_buy_5d"] == 456
-    assert result["retail_buy_5d"] is None
-
-
 @pytest.mark.parametrize("bad", [None, True, float("nan"), float("inf"), "invalid"])
 def test_one_invalid_personal_day_makes_value_unavailable(bad):
     data = payload(50)

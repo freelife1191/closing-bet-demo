@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 import pandas as pd
 
+from engine.constants import SUPPLY
 from engine.ticker_utils import normalize_ticker
 
 _ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -217,6 +218,22 @@ def get_ticker_padded_series(
         return df[cache_column]
     except Exception:
         return padded
+
+
+def recent_trading_dates(dates: pd.Series) -> list[pd.Timestamp]:
+    """행이 있는 날짜 가운데 최근 거래일 SUPPLY.LOOKBACK_DAYS 개를 오래된 순으로 돌려준다.
+
+    최신 날짜의 행 수가 바로 전 날짜의 PARTIAL_DATE_RATIO 에 못 미치면 수집이 덜 끝난 날로 보고 뺀다([FLOW-025]).
+    그 날을 창에 넣으면 그날 행이 없는 대다수 종목이 한꺼번에 5일 값을 잃는다.
+    """
+    per_date = dates.value_counts().sort_index()
+    while len(per_date) > 1 and per_date.iloc[-1] < per_date.iloc[-2] * SUPPLY.PARTIAL_DATE_RATIO:
+        per_date = per_date.iloc[:-1]
+    # ponytail: 끝쪽의 모자란 날만 뺀다. 창 중간의 부분 날짜는 남겨 그날 행이 없는 종목이 빠진다(빼면 그날 행이 있는 종목이 6거래일 합을 낸다).
+    # 중간 부분 날짜는 init_data 가 다음 실행에서 다시 받는다. CSV 전체에서 빠진 날은 알 수 없다(거래일 달력은 휴장일 목록을 손으로 채워야 해서 쓰지 않는다).
+    # 끝쪽 부분 날짜가 둘 이상 이어지고 행 수가 서로 80% 안쪽이면(예: 1900, 1330, 1330) 첫 비교에서 멈춰 둘 다 창에 남고, 그날 행이 없는 종목이
+    # 빠진다(틀린 값 대신 결측). 앞선 날짜들의 최대와 견주면 이 경우는 풀리지만 종목 목록이 줄어든 CSV 에서 창이 며칠 동안 옛 날짜에 머문다
+    return list(per_date.index[-SUPPLY.LOOKBACK_DAYS:])
 
 
 def _is_iso_date_series(series: pd.Series) -> bool:

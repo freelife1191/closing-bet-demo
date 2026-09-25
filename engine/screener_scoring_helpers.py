@@ -6,7 +6,6 @@ Screener 계산 보조 유틸
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -129,53 +128,6 @@ def score_supply_from_toss_trend(trend_data: dict[str, Any] | None) -> dict[str,
     return _score_supply_core(foreign_5d=foreign_5d, inst_5d=inst_5d, details=details)
 
 
-def score_supply_from_csv(
-    ticker_inst: pd.DataFrame | None,
-    target_datetime: datetime | None,
-) -> dict[str, Any]:
-    """CSV 기반 수급 점수 계산."""
-    if ticker_inst is None or ticker_inst.empty or len(ticker_inst) < 5:
-        return dict(MISSING_SUPPLY)
-
-    working = ticker_inst
-    if target_datetime is not None:
-        working = working[working["date"] <= target_datetime]
-
-    if len(working) < 5:
-        return dict(MISSING_SUPPLY)
-
-    recent = working.tail(5)
-    f_col = "foreign_net_buy" if "foreign_net_buy" in recent.columns else "foreign_buy"
-    i_col = "inst_net_buy" if "inst_net_buy" in recent.columns else "inst_buy"
-
-    if f_col not in recent.columns:
-        f_col = "foreign"
-    if i_col not in recent.columns:
-        i_col = "institutional"
-
-    foreign_5d = recent[f_col].sum() if f_col in recent.columns else 0
-    inst_5d = recent[i_col].sum() if i_col in recent.columns else 0
-
-    latest_row = working.iloc[-1]
-    foreign_1d = int(latest_row[f_col]) if f_col in latest_row.index else 0
-    inst_1d = int(latest_row[i_col]) if i_col in latest_row.index else 0
-
-    details = []
-    if f_col in recent.columns and i_col in recent.columns:
-        for row in recent.iloc[::-1].itertuples(index=False):
-            details.append(
-                {
-                    "netForeignerBuyVolume": float(getattr(row, f_col)),
-                    "netInstitutionBuyVolume": float(getattr(row, i_col)),
-                }
-            )
-
-    scored = _score_supply_core(foreign_5d=foreign_5d, inst_5d=inst_5d, details=details)
-    scored["foreign_1d"] = foreign_1d
-    scored["inst_1d"] = inst_1d
-    return scored
-
-
 def scale_vcp_score(vcp_score: float) -> int:
     """VCP 점수(0~100)를 최종 점수(0~10)로 변환한다."""
     return min(round(vcp_score / 10), 10)
@@ -186,6 +138,5 @@ __all__ = [
     "build_ticker_index",
     "calculate_volume_score",
     "score_supply_from_toss_trend",
-    "score_supply_from_csv",
     "scale_vcp_score",
 ]

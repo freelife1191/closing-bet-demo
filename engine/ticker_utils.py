@@ -12,7 +12,8 @@ from numbers import Integral, Real
 from typing import Any
 
 
-_TICKER_PATTERN = re.compile(r"(?<![0-9])[0-9][0-9A-Z]{4}[0-9](?![0-9])")
+# [FLOW-028] 마지막 자리도 영문자를 받는다. 옛 우선주(00088K)와 새 형식(0220WL)을 숫자만 남겨 읽으면 다른 종목 키가 된다
+_TICKER_PATTERN = re.compile(r"(?<![0-9])[0-9][0-9A-Z]{5}(?![0-9])")
 _FRACTIONAL_TEXT_PATTERN = re.compile(r"[+-]?[0-9]+\.[0-9]+")
 _SIGNED_INTEGER_TEXT_PATTERN = re.compile(r"[+-][0-9]+")
 

@@ -12,6 +12,7 @@ from services.kr_market_csv_utils import (
     build_latest_close_map_from_prices_df,
     get_ticker_padded_series,
     load_csv_readonly,
+    recent_trading_dates,
 )
 
 
@@ -190,3 +191,27 @@ def test_build_latest_close_map_from_prices_df_skips_invalid_close():
 
     assert result["005930"] == 130.0
     assert "000660" not in result
+
+
+def _dates(counts: dict[str, int]) -> pd.Series:
+    return pd.to_datetime(pd.Series([day for day, n in counts.items() for _ in range(n)]))
+
+
+def test_recent_trading_dates_drops_partial_latest_dates():
+    """[FLOW-025] 최신 날짜가 전날 행 수의 80% 에 못 미치면 수집이 덜 끝난 날이다. 행 수가 계속 줄어드는 끝쪽 날짜는 연달아 뺀다."""
+    dates = _dates({"2026-09-15": 10, "2026-09-16": 10, "2026-09-17": 10, "2026-09-18": 10,
+                    "2026-09-21": 10, "2026-09-22": 7, "2026-09-23": 2})
+    assert [d.strftime("%Y-%m-%d") for d in recent_trading_dates(dates)] == [
+        "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21"]
+
+
+def test_recent_trading_dates_keeps_a_latest_date_with_more_rows():
+    """[FLOW-025] 신규 상장으로 행이 늘어난 날은 부분 날짜가 아니다. 이전 날짜도 버리지 않는다."""
+    dates = _dates({"2026-09-16": 1, "2026-09-17": 1, "2026-09-18": 1, "2026-09-21": 1, "2026-09-22": 3})
+    assert len(recent_trading_dates(dates)) == 5
+
+
+def test_recent_trading_dates_keeps_a_latest_date_at_exactly_the_ratio():
+    """[FLOW-025] 전날의 딱 80% 인 날은 부분 날짜가 아니다(미만만 뺀다)."""
+    dates = _dates({"2026-09-16": 10, "2026-09-17": 10, "2026-09-18": 10, "2026-09-21": 10, "2026-09-22": 8})
+    assert recent_trading_dates(dates)[-1] == pd.Timestamp("2026-09-22")

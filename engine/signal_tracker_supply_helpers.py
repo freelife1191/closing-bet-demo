@@ -12,6 +12,8 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from services.kr_market_csv_utils import recent_trading_dates
+
 
 REQUIRED_SUPPLY_COLUMNS = {"ticker", "date", "foreign_buy", "inst_buy"}
 
@@ -49,7 +51,8 @@ def build_supply_score_frame(
         return pd.DataFrame()
 
     working = working.sort_values(["ticker", "date"])
-    recent = working.groupby("ticker", sort=False).tail(5)
+    # [FLOW-025] 종목마다 마지막 5행을 쓰면 행이 빠진 종목은 6거래일 이상의 합이 된다. 모든 종목에 같은 최근 5거래일을 쓴다
+    recent = working[working["date"].isin(recent_trading_dates(working["date"]))]
     scored = recent.groupby("ticker", sort=False).agg(
         window_count=("ticker", "size"),
         foreign_count=("foreign_buy", "count"),
@@ -59,12 +62,15 @@ def build_supply_score_frame(
         consecutive=("foreign_buy", lambda series: count_consecutive_positive(series.to_numpy())),
     )
     scored = scored.reset_index()
+    missing = working["ticker"].nunique() - int((scored["window_count"] >= 5).sum())
+    if missing:
+        logger.info(f"   최근 5거래일에 빠진 날이 있어 점수에서 제외: {missing}개 종목")
 
-    # [FLOW-024] sum 은 빈 칸을 건너뛰어 최근 5행에 빈 칸이 있으면 4일 이하의 합이 5일 값이 된다.
+    # [FLOW-024] sum 은 빈 칸을 건너뛰어 최근 5거래일에 빈 칸이 있으면 4일 이하의 합이 5일 값이 된다.
     # count 는 빈 칸을 세지 않으므로 두 열이 모두 5개인 종목만 남긴다
     blank = (scored["window_count"] >= 5) & ((scored["foreign_count"] < 5) | (scored["inst_count"] < 5))
     if blank.any():
-        logger.info(f"   최근 5행에 빈 수급 값이 있어 점수에서 제외: {int(blank.sum())}개 종목")
+        logger.info(f"   최근 5거래일에 빈 수급 값이 있어 점수에서 제외: {int(blank.sum())}개 종목")
     scored = scored[(scored["window_count"] >= 5) & ~blank].copy()
     if scored.empty:
         return scored

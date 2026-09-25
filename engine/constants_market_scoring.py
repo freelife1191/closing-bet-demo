@@ -87,6 +87,9 @@ class SupplyThresholds:
     INST_LARGE: int = 50_000_000_000
     INST_MEDIUM: int = 20_000_000_000
     LOOKBACK_DAYS: int = 5
+    # [FLOW-025] 최신 날짜 행 수가 전날의 이 비율에 못 미치면 수집이 덜 끝난 날로 본다. scripts/init_data.py 의 부분 날짜 재수집 기준과
+    # 숫자만 같다(그쪽은 전체 종목 수 대비이고 리터럴 0.8 을 따로 쓴다). 함께 바꿀 값이 아니다
+    PARTIAL_DATE_RATIO: float = 0.8
 
 
 @dataclass(frozen=True)

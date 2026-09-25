@@ -93,7 +93,6 @@ class SmartMoneyScreener:
         self.inst_df = None
         self._prices_by_ticker: dict[str, pd.DataFrame] = {}
         self._prices_by_ticker_target: dict[str, pd.DataFrame] = {}
-        self._inst_by_ticker: dict[str, pd.DataFrame] = {}
         self._data_mtimes: dict[str, tuple[int, int]] = {}
 
     @staticmethod
@@ -176,7 +175,6 @@ class SmartMoneyScreener:
                 self._prices_by_ticker_target = self._build_ticker_index(target_prices_df)
             else:
                 self._prices_by_ticker_target = self._prices_by_ticker
-            self._inst_by_ticker = self._build_ticker_index(self.inst_df)
             self._data_mtimes = new_mtimes
 
         except Exception as e:
@@ -359,7 +357,9 @@ class SmartMoneyScreener:
         해당 종목이 없어 비용이 0 이다(2026-09-04 최신 날짜 기준 1997 종목 가운데 0 개).
         반대로 CSV 시작일 부근을 target_date 로 주면 전 종목이 해당한다. 그 경로는 수동
         CLI(`init_data.py vcp-signal <날짜>`) 뿐이고 예전에는 그 자리에서 전 종목이
-        0 점이었다.
+        0 점이었다. [FLOW-025] 부터는 최근 5거래일 중 하루라도 행이 없는 종목도 CSV 에서
+        빠지므로 정상 자료에서도 비용이 0 이 아니다(2026-09-21 로컬 파일 기준 2,002종목 중
+        약 100개).
 
         이미 이상징후 플래그가 붙던 종목은 여기에 들지 않는다. 예전 방식도 둘째 호출로
         참조를 받아 왔으므로 비용이 같다.

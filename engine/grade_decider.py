@@ -37,7 +37,7 @@ class GradeClassifier:
         stock: StockData,
         score: ScoreDetail,
         score_details: dict,
-        supply: SupplyData,
+        supply: Optional[SupplyData],
     ) -> Optional[Grade]:
         """
         최종 등급 판정
@@ -46,7 +46,7 @@ class GradeClassifier:
             stock: 종목 데이터
             score: 점수 상세
             score_details: 점수 상세 딕셔너리
-            supply: 수급 데이터
+            supply: 수급 데이터(없으면 None)
         """
         trading_value = stock.trading_value
         change_pct = stock.change_pct
@@ -72,7 +72,7 @@ class GradeClassifier:
         trading_value: int,
         change_pct: float,
         total_score: float,
-        supply: SupplyData,
+        supply: Optional[SupplyData],
     ) -> bool:
         """S급 조건: 1조 이상, 10점 이상, 최소 등락률 이상, 외인+기관 양매수"""
         min_change = self._min_change_pct()
@@ -88,7 +88,7 @@ class GradeClassifier:
         trading_value: int,
         change_pct: float,
         total_score: float,
-        supply: SupplyData,
+        supply: Optional[SupplyData],
     ) -> bool:
         """A급 조건: 5000억 이상, 8점 이상, 최소 등락률 이상, 외인+기관 양매수"""
         min_change = self._min_change_pct()
@@ -104,7 +104,7 @@ class GradeClassifier:
         trading_value: int,
         change_pct: float,
         total_score: float,
-        supply: SupplyData,
+        supply: Optional[SupplyData],
     ) -> bool:
         """B급 조건: 1,000억 이상, 6점 이상, 최소 등락률 이상, 외인+기관 양매수"""
         min_change = self._min_change_pct()
@@ -116,6 +116,6 @@ class GradeClassifier:
         )
 
     @staticmethod
-    def _has_dual_buy(supply: SupplyData) -> bool:
-        """외인+기관 동반 매수 여부"""
-        return supply.foreign_buy_5d > 0 and supply.inst_buy_5d > 0
+    def _has_dual_buy(supply: Optional[SupplyData]) -> bool:
+        """외인+기관 동반 매수 여부. [FLOW-026] 수급이 없으면 확인할 수 없으므로 아니다"""
+        return supply is not None and supply.foreign_buy_5d > 0 and supply.inst_buy_5d > 0

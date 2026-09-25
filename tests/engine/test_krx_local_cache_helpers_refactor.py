@@ -39,4 +39,4 @@ def test_local_prices_and_lookup_use_configured_directory(tmp_path, monkeypatch)
 
 def test_class_cache_shared_between_public_and_submodule():
     from engine.collectors.krx import KRXCollector as SubmoduleKRX
-    assert KRXCollector._pykrx_supply_cache is SubmoduleKRX._pykrx_supply_cache
+    assert KRXCollector._pykrx_chart_cache is SubmoduleKRX._pykrx_chart_cache

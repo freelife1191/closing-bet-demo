@@ -12,6 +12,7 @@ import sqlite3
 import types
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import pytest
 from pykrx import stock as pykrx_stock
@@ -718,25 +719,6 @@ def test_resolve_pykrx_latest_market_date_reuses_sqlite_snapshot_after_memory_cl
     assert call_count["value"] == 1
 
 
-def test_has_csv_anomaly_flags_reads_the_quality_block():
-    assert trend_service.has_csv_anomaly_flags(
-        {"quality": {"csv_anomaly_flags": ["stale_csv"]}}
-    ) is True
-
-
-def test_has_csv_anomaly_flags_is_false_for_missing_or_empty_flags():
-    # None 은 「CSV 에 종목이 없다」는 뜻이지 「이상징후가 있다」는 뜻이 아니다.
-    assert trend_service.has_csv_anomaly_flags(None) is False
-    assert trend_service.has_csv_anomaly_flags({}) is False
-    assert trend_service.has_csv_anomaly_flags({"quality": {}}) is False
-    assert trend_service.has_csv_anomaly_flags(
-        {"quality": {"csv_anomaly_flags": []}}
-    ) is False
-    assert trend_service.has_csv_anomaly_flags(
-        {"quality": {"csv_anomaly_flags": "stale_csv"}}
-    ) is False
-
-
 def test_safe_int_survives_infinite_values_from_external_json():
     """json.loads 는 Infinity 와 1e400 을 inf 로 파싱하고 int(inf) 는 OverflowError 다.
 
@@ -753,11 +735,8 @@ def test_safe_int_survives_infinite_values_from_external_json():
 def test_verify_false_keeps_anomalous_csv_without_touching_references(monkeypatch, tmp_path):
     """verify_with_references=False 는 이상징후가 있어도 참조를 조회하지 않는다.
 
-    자체 fallback 을 가진 호출자 네 곳(engine/collectors.py 의 get_supply_data 와
-    _get_investor_trend, 두 믹스인의 같은 함수들)이 이 계약에 기댄다. 그들은 False 로
-    부르고 플래그가 붙으면 자기 pykrx 경로로 빠진다. 서비스가 False 를 무시하기
-    시작하면 서비스의 pykrx 와 호출자의 pykrx 가 잇달아 도는데, 그 호출자 검사들은
-    서비스를 대역으로 바꾸므로 인자만 볼 뿐 이 회귀를 잡지 못한다.
+    [FLOW-026] 이후 운영 호출자는 모두 검증을 켠다. 이 검사는 CSV 판정만 떼어 보는 다른 검사들이
+    기대는 격리 계약을 지킨다.
     """
     # 두 달 전 날짜라 stale_csv 가 붙는다.
     old_dates = [
@@ -795,8 +774,6 @@ def test_verify_false_keeps_anomalous_csv_without_touching_references(monkeypatc
     assert result is not None
     assert result["source"] == "csv"
     assert result["foreign"] == 60
-    # 플래그는 그대로 실려 나간다. 호출자가 이것을 보고 자기 경로로 빠지기 때문이다.
-    assert trend_service.has_csv_anomaly_flags(result) is True
     assert "stale_csv" in result["quality"]["csv_anomaly_flags"]
 
 
@@ -835,6 +812,67 @@ def test_trend_map_drops_a_ticker_with_a_blank_in_the_last_five_rows(tmp_path):
     assert "000660" not in trend_map  # 최근 5행 안의 빈 칸
     assert trend_map["035720"]["foreign"] == 5  # 빈 칸이 6번째 이전 행에만 있다
     assert "051910" not in trend_map  # 무한대 한 칸이 map 전체를 깨뜨리지 않는다
+
+
+def test_trend_map_drops_a_ticker_missing_a_day_inside_the_window(tmp_path):
+    """[FLOW-025] 마지막 5행이 아니라 모든 종목에 공통인 최근 5거래일로 잰다.
+
+    000020 은 02-20 행이 없어 마지막 5행이 02-17~02-24 의 6거래일에 걸치고, 000030 은 02-24 행이 없어 창이 하루 앞에서
+    끝난다. 정상 종목을 여럿 두는 이유는 한 종목의 02-24 누락이 그날을 부분 날짜(전날의 80% 미만)로 만들지 않게 하려는 것이다.
+    """
+    days = ["2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20", "2026-02-23", "2026-02-24"]
+    rows = []
+    normal = [(f"00001{n}", None) for n in range(5)]
+    # 000040 은 창 밖(02-17) 행만 없으므로 남는다
+    normal.append(("000040", "2026-02-17"))
+    for ticker, missing in normal + [("000020", "2026-02-20"), ("000030", "2026-02-24")]:
+        for index, day in enumerate(days, start=1):
+            if day != missing:
+                rows.append({"ticker": ticker, "date": day, "foreign_buy": index, "inst_buy": 10 * index})
+    pd.DataFrame(rows).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    trend_map = trend_service._get_or_build_trend_map(
+        data_dir=trend_service._normalize_data_dir(str(tmp_path)),
+        filename=trend_service._TREND_FILENAME,
+    )
+
+    assert sorted(trend_map) == [ticker for ticker, _ in normal]
+    assert trend_map["000010"]["foreign"] == 2 + 3 + 4 + 5 + 6
+    assert trend_map["000010"]["latest_date"] == "2026-02-24"
+    assert trend_map["000010"]["details"][0] == {"netForeignerBuyVolume": 6, "netInstitutionBuyVolume": 60}
+
+
+def test_trend_map_ignores_a_latest_date_that_only_some_tickers_have(tmp_path):
+    """[FLOW-025] 최신 날짜가 일부 종목에만 들어왔으면 그날을 창에서 빼고 모두 직전 5거래일을 쓴다."""
+    days = ["2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20", "2026-02-23"]
+    rows = [
+        {"ticker": f"00001{n}", "date": day, "foreign_buy": 1, "inst_buy": 10}
+        for n in range(5) for day in days
+    ]
+    rows.append({"ticker": "000010", "date": "2026-02-24", "foreign_buy": 1_000, "inst_buy": 1_000})
+    pd.DataFrame(rows).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    trend_map = trend_service._get_or_build_trend_map(
+        data_dir=trend_service._normalize_data_dir(str(tmp_path)),
+        filename=trend_service._TREND_FILENAME,
+    )
+
+    assert len(trend_map) == 5
+    assert {payload["latest_date"] for payload in trend_map.values()} == {"2026-02-23"}
+    assert trend_map["000010"]["foreign"] == 5
+
+
+def test_stale_flag_uses_the_target_date_when_given():
+    """[FLOW-025] 기준일을 준 호출도 CSV 의 마지막 날이 기준일보다 영업일 4일 넘게 앞서면 낡은 자료다."""
+    payload = {
+        "foreign": 5, "institution": 50, "latest_date": "2026-02-24",
+        "details": [{"netForeignerBuyVolume": 1, "netInstitutionBuyVolume": 10}] * 5,
+    }
+
+    assert "stale_csv" in trend_service._detect_csv_anomaly_flags(payload, target_datetime="2026-03-10")
+    assert "stale_csv" not in trend_service._detect_csv_anomaly_flags(payload, target_datetime="2026-02-25")
 
 
 def test_pykrx_reference_with_a_nan_day_is_rejected_as_insufficient_days(monkeypatch):
@@ -1283,3 +1321,31 @@ def test_normalize_external_trend_payload_keeps_missing_day_as_none_through_cach
 def test_normalize_external_trend_payload_missing_sum_is_missing_payload():
     assert trend_service._normalize_external_trend_payload({"foreign": None, "institution": 1}, source="toss") is None
     assert trend_service._normalize_external_trend_payload({"institution": 1}, source="toss") is None
+
+
+def _fake_pykrx_frame(foreign, inst):
+    index = pd.bdate_range("2026-02-26", periods=len(foreign))
+    return pd.DataFrame({"외국인합계": foreign, "기관합계": inst}, index=index)
+
+
+@pytest.mark.parametrize(
+    ("foreign", "inst", "expected"),
+    [
+        ([1, 2, 3, 4, 5], [10, 20, 30, 40, 50], (15, 150)),
+        ([1, 2, 3, 4], [10, 20, 30, 40], None),  # 4행
+        ([1, np.nan, 3, 4, 5], [10, 20, 30, 40, 50], None),  # NaN 인 날
+        ([0] * 5, [0] * 5, None),  # 전부 0
+        ([], [], None),
+    ],
+)
+def test_get_pykrx_trend_5day_returns_only_complete_windows(monkeypatch, tmp_path, foreign, inst, expected):
+    """[FLOW-026] 수집기가 쓰는 pykrx 5일 값은 참조와 같은 거부 판정을 거친다. 부분합이나 0 을 돌려주지 않는다."""
+    trend_service.clear_investor_trend_5day_memory_cache()
+    fake = types.ModuleType("pykrx")
+    fake.stock = types.SimpleNamespace(get_market_trading_value_by_date=lambda *_a: _fake_pykrx_frame(foreign, inst))
+    monkeypatch.setitem(sys.modules, "pykrx", fake)
+
+    result = trend_service.get_pykrx_trend_5day(ticker="005930", data_dir=str(tmp_path), target_datetime="2026-03-04")
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    assert (None if result is None else (result["foreign"], result["institution"])) == expected

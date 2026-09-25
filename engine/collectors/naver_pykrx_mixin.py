@@ -12,11 +12,7 @@ import math
 import os
 import threading
 
-from engine.investor_personal_flow import personal_flow_total
-from services.investor_trend_5day_service import (
-    get_investor_trend_5day_for_ticker,
-    has_csv_anomaly_flags,
-)
+from services.investor_trend_5day_service import get_investor_trend_5day_for_ticker
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
@@ -436,101 +432,25 @@ class NaverPykrxMixin:
         return 0.0
 
     async def _get_investor_trend(self, code: str, result: Dict) -> None:
-        """통합 5일 합산 서비스 우선 + pykrx 요약 캐시 fallback."""
+        """통합 5일 합산 서비스(검증 켬)로 채운다. 값이 없으면 기본값을 둔다([JONGGA-042])."""
         normalized_code = str(code).zfill(6)
         investor_trend = result.setdefault("investorTrend", {})
         investor_trend["individual"] = None
         investor_trend["individual_schema"] = 1
 
         try:
+            # [FLOW-026] 예전에는 이상징후가 붙으면 자체 pykrx 경로로 빠져 부분합과 빈 프레임의 0 을 표시하고 저장했다
             trend_data = get_investor_trend_5day_for_ticker(
                 ticker=normalized_code,
                 data_dir=self._resolve_data_dir(getattr(self, "config", None)),
-                verify_with_references=False,
             )
-            if isinstance(trend_data, dict) and not has_csv_anomaly_flags(trend_data):
-                investor_trend["foreign"] = int(trend_data.get("foreign", 0))
-                investor_trend["institution"] = int(trend_data.get("institution", 0))
-                investor_trend["individual"] = trend_data.get("individual")
-                return
-            if isinstance(trend_data, dict):
-                logger.debug("투자자 동향 통합 서비스 이상징후 감지 (%s): pykrx fallback 사용", normalized_code)
         except Exception as error:
             logger.debug("투자자 동향 통합 서비스 조회 실패 (%s): %s", normalized_code, error)
-
-        try:
-            from engine.collectors.krx import KRXCollector
-            from pykrx import stock
-
-            cache_collector = KRXCollector(config=getattr(self, "config", None))
-            latest_market_date_resolver = getattr(cache_collector, "_get_latest_market_date", None)
-            if callable(latest_market_date_resolver):
-                end_date = str(latest_market_date_resolver())
-            else:
-                end_date = datetime.now().strftime("%Y%m%d")
-            cached_supply = cache_collector._load_cached_pykrx_supply_summary(
-                ticker=normalized_code,
-                end_date=end_date,
-            )
-            if isinstance(cached_supply, dict):
-                investor_trend["foreign"] = int(cached_supply.get("foreign_buy_5d", 0))
-                investor_trend["institution"] = int(cached_supply.get("inst_buy_5d", 0))
-                investor_trend["individual"] = cached_supply.get("retail_buy_5d")
-                return
-
-            try:
-                end_dt = datetime.strptime(end_date, "%Y%m%d")
-            except ValueError:
-                end_dt = datetime.now()
-                end_date = end_dt.strftime("%Y%m%d")
-            start_date = (end_dt - timedelta(days=10)).strftime("%Y%m%d")
-
-            df = stock.get_market_trading_value_by_date(start_date, end_date, normalized_code)
-            if df.empty:
-                empty_payload = {
-                    "foreign_buy_5d": 0,
-                    "inst_buy_5d": 0,
-                    "retail_buy_5d": None,
-                    "individual_schema": 0,
-                }
-                cache_collector._save_cached_pykrx_supply_summary(
-                    ticker=normalized_code,
-                    end_date=end_date,
-                    payload=empty_payload,
-                )
-                investor_trend["foreign"] = 0
-                investor_trend["institution"] = 0
-                investor_trend["individual"] = None
-                return
-
-            df = df.tail(5)
-
-            foreign_col = "외국인합계" if "외국인합계" in df.columns else "외국인"
-            inst_col = "기관합계" if "기관합계" in df.columns else "기관"
-            if "개인" in df.columns:
-                retail_col = "개인"
-            elif "개인합계" in df.columns:
-                retail_col = "개인합계"
-            else:
-                retail_col = None
-
-            resolved_payload = {
-                "foreign_buy_5d": int(df[foreign_col].sum()) if foreign_col in df.columns else 0,
-                "inst_buy_5d": int(df[inst_col].sum()) if inst_col in df.columns else 0,
-                "retail_buy_5d": personal_flow_total([{ "date": str(day)[:10], "netIndividualsBuyVolume": row[retail_col]} for day, row in df.iterrows()]) if retail_col and retail_col in df.columns else None,
-            }
-            resolved_payload["individual_schema"] = 1 if resolved_payload["retail_buy_5d"] is not None else 0
-            cache_collector._save_cached_pykrx_supply_summary(
-                ticker=normalized_code,
-                end_date=end_date,
-                payload=resolved_payload,
-            )
-            investor_trend["foreign"] = int(resolved_payload.get("foreign_buy_5d", 0))
-            investor_trend["institution"] = int(resolved_payload.get("inst_buy_5d", 0))
-            investor_trend["individual"] = resolved_payload.get("retail_buy_5d")
-
-        except Exception as e:
-            logger.debug("투자자 동향 pykrx 조회 실패 (%s): %s", normalized_code, e)
+            return
+        if isinstance(trend_data, dict):
+            investor_trend["foreign"] = int(trend_data["foreign"])
+            investor_trend["institution"] = int(trend_data["institution"])
+            investor_trend["individual"] = trend_data.get("individual")
 
     async def _get_fundamental_data(self, code: str, result: Dict) -> None:
         """pykrx를 통해 펀더멘탈 데이터 수집"""

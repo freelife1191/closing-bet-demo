@@ -12,7 +12,6 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Callable
 
-from engine.screener_scoring_helpers import MISSING_SUPPLY
 from engine.toss_collector_numeric_helpers import optional_volume
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
@@ -237,22 +236,4 @@ def calculate_supply_score_with_toss(
         return fallback_fn(ticker_key)
 
 
-def calculate_supply_score_from_csv(
-    *,
-    ticker: str,
-    inst_by_ticker: dict[str, Any],
-    target_datetime: Any,
-    score_supply_from_csv_fn: Callable[[Any, Any], dict[str, int]],
-) -> dict[str, int]:
-    """CSV 기반 수급 점수를 계산한다."""
-    try:
-        if not inst_by_ticker:
-            return dict(MISSING_SUPPLY)
-
-        ticker_inst = inst_by_ticker.get(ticker)
-        return score_supply_from_csv_fn(ticker_inst=ticker_inst, target_datetime=target_datetime)
-    except Exception:
-        return dict(MISSING_SUPPLY)
-
-
-__all__ = ["calculate_supply_score_with_toss", "calculate_supply_score_from_csv"]
+__all__ = ["calculate_supply_score_with_toss"]

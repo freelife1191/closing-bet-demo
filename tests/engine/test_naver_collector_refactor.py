@@ -115,47 +115,33 @@ def test_naver_pykrx_investor_trend_prefers_unified_service(monkeypatch):
     asyncio.run(collector._get_investor_trend("5930", result))
 
     assert captured["ticker"] == "005930"
-    assert captured["verify_with_references"] is False
+    assert captured.get("verify_with_references", True) is True
     assert result["investorTrend"]["foreign"] == 510_000_000
     assert result["investorTrend"]["institution"] == -210_000_000
     assert result["investorTrend"]["individual"] is None
 
 
-def test_naver_pykrx_investor_trend_uses_sqlite_summary_cache(monkeypatch):
+def test_naver_pykrx_investor_trend_keeps_defaults_when_unified_has_no_value(monkeypatch, tmp_path):
+    """[FLOW-026] 통합 서비스가 값을 주지 못하면 기본값을 그대로 두고 pykrx 를 직접 부르지 않는다."""
     collector = NaverFinanceCollector(config=SimpleNamespace(DATA_DIR="data"))
-
-    monkeypatch.setattr(
-        pykrx_mixin_module,
-        "get_investor_trend_5day_for_ticker",
-        lambda **_kwargs: {
-            "foreign": 101,
-            "institution": 202,
-            "quality": {"csv_anomaly_flags": ["stale_csv"]},
-        },
-    )
-    monkeypatch.setattr(
-        krx_module.KRXCollector,
-        "_load_cached_pykrx_supply_summary",
-        lambda self, *, ticker, end_date: {
-            "foreign_buy_5d": 700_000_000,
-            "inst_buy_5d": -200_000_000,
-            "retail_buy_5d": -500_000_000,
-        },
-    )
+    monkeypatch.setattr(pykrx_mixin_module, "get_investor_trend_5day_for_ticker", lambda **_kwargs: None)
+    # 옛 코드가 원본 data/ 의 캐시를 읽고 쓰지 않게 막는다
+    monkeypatch.setattr(krx_module.KRXCollector, "_get_latest_market_date", lambda self: "20260304")
+    monkeypatch.setattr("engine.collectors.krx_local_data_mixin.BASE_DIR", str(tmp_path))
+    calls: list[tuple] = []
     fake_pykrx = types.ModuleType("pykrx")
     fake_pykrx.stock = types.SimpleNamespace(
-        get_market_trading_value_by_date=lambda *_a, **_k: (_ for _ in ()).throw(
-            AssertionError("pykrx 조회는 sqlite summary cache hit에서 호출되면 안 됩니다.")
-        )
+        get_market_trading_value_by_date=lambda *args, **_k: calls.append(args) or pd.DataFrame()
     )
     monkeypatch.setitem(sys.modules, "pykrx", fake_pykrx)
 
     result = collector._create_empty_result_dict("005930")
     asyncio.run(collector._get_investor_trend("5930", result))
 
-    assert result["investorTrend"]["foreign"] == 700_000_000
-    assert result["investorTrend"]["institution"] == -200_000_000
-    assert result["investorTrend"]["individual"] == -500_000_000
+    assert calls == []
+    assert result["investorTrend"]["foreign"] == 0
+    assert result["investorTrend"]["institution"] == 0
+    assert result["investorTrend"]["individual"] is None
 
 
 def test_naver_pykrx_fundamental_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):

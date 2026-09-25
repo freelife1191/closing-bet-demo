@@ -54,3 +54,10 @@ def test_classify_b_grade_when_change_pct_is_zero():
 
     grade = classifier.classify(stock=stock, score=score, score_details={}, supply=_dual_buy_supply())
     assert grade == Grade.B
+
+
+def test_classify_none_without_supply():
+    """[FLOW-026] 수급이 없으면 양매수를 확인할 수 없으므로 예외 없이 등급이 없다."""
+    stock = _build_stock(change_pct=10.0, trading_value=1_200_000_000_000)
+    grade = GradeClassifier().classify(stock=stock, score=ScoreDetail(total=10, news=1), score_details={}, supply=None)
+    assert grade is None
