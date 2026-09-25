@@ -64,7 +64,13 @@
 - 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-102]` 코드 리뷰의 범위 밖 관찰(2026-09-25), 코드로 확인
 - 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `pollUpdateStatus` catch 는 `console.error` 만 남기고 interval 을 유지한다. 백엔드가 멈췄거나 네트워크가 끊기면 실행 중 표시가 남은 채로 요청이 끝없이 이어진다. 종전부터 있던 동작이다
 - 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
-- [ ] 설계 승인(연속 실패 횟수 뒤 멈추고 알릴지, 간격을 늘릴지), 테스트, 리뷰, 브라우저 QA
+- 설계 승인: 2026-09-25 09:32 대화(「진행해」), bounded. 범위: 연속 3회 실패 시 폴링을 멈추고 진행 표시를 내린 뒤 「업데이트 오류」 모달로 알림, 성공 시 실패 횟수 초기화, 앞선 조회가 끝나지 않았으면 tick 건너뜀. 간격·timeout·다른 두 폴링·백엔드는 그대로
+- 스킬: `.claude/skills/closing-bet-nextjs/`, `vendor/skills/vercel-react-best-practices/rules/rerender-use-ref-transient-values.md`(폴링·타이머), 번들 문서 `01-app/01-getting-started/05-server-and-client-components.md`(순수 클라이언트 상태·폴링 변경이라 표의 여섯 줄에 맞지 않음)
+- [x] 회귀 테스트 `page.regression-INFRA-103.test.tsx` 3건(수정 전 3/3 실패 확인) - [x] 구현 `page.tsx`
+- [x] `/ponytail-review`: 과잉설계 없음. 새 상수가 기존 409 주석과 그 대상 사이에 끼어든 배치만 고침
+- [x] `closing-bet-reviewer`: APPROVE, 최고 low. low-1(마운트 조회가 걸린 채 시작하면 새 세션이 실패 2회에 멈출 수 있음)·low-4(마운트 실패·409 재부착 테스트 공백, 실제 타이머 의존) 미반영: 창이 좁고 결과가 조기 알림뿐이며 코드상 맞게 동작. low-2 는 종전 경합이라 `[INFRA-110]` 으로 이월. low-3(unmount 뒤 setModal)은 React 에서 no-op 이라 기록만
+- [x] vitest 전체 101 파일 694 통과(exit 0), tsc exit 0, lint exit 0(경고 183, 수정 전과 같음)
+- [ ] 브라우저 QA(`qa/INFRA-103.md`)
 
 ### [INFRA-104] 수동 업데이트의 실행 시각을 시작 처리에서 스레드로 넘기지 않아 스레드 진입 전의 틈에서 옛 실행이 새 실행으로 보인다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-101]` critic 지적 2·`closing-bet-reviewer` low 1(2026-09-25), 코드로 확인
@@ -107,6 +113,12 @@
 - 추가 발견(`[VCP-057]` `closing-bet-reviewer` low2, 2026-09-25): `_score_supply_core` 로 가는 details 의 정규화기 둘도 같은 모양이다. `services/investor_trend_5day_service.py:462-463` 은 키가 없거나 None 이면 `_safe_int` 로 0 을 넣고, `engine/screener_supply_helpers.py:99-100` 은 키가 없으면 0, 값이 None 이면 그 행을 버려 전날 행이 `details[0]`(1일 순매수)이 될 수 있다(확신도 중간). `[VCP-057]` 이 `_score_supply_core` 에서 None 을 보존하게 했으므로 정규화기가 None 을 넘기면 끝까지 결측으로 남는다
 - [ ] 설계 승인(행을 버릴지, 합계를 결측으로 돌릴지)
 - [ ] 테스트, 리뷰와 pytest 전체
+
+### [INFRA-110] 데이터 상태 화면의 마운트 조회가 시작 요청보다 늦게 `isRunning:false` 로 도착하면 막 시작한 진행 폴링을 끊는다
+- 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-103]` 코드 리뷰 low-2(2026-09-25), 코드로 확인. 종전부터 있던 동작
+- 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `pollUpdateStatus` 완료 분기는 `!status.isRunning && pollingRef.current` 이면 interval 을 끊는다. 마운트 때 보낸 조회가 늦게 끝나면 그 사이 사용자가 시작해 만든 interval 도 끊겨 진행 표시가 사라진다
+- 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
+- [ ] 설계 승인(응답이 어느 폴링 세션의 것인지 구분할지), 테스트, 리뷰, 브라우저 QA
 
 ### [VCP-058] `vcp_signals_latest.json` 을 `open('w')` 로 직접 써서 저장 중 중단되면 파일이 깨진다
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[VCP-052]` 설계 때 범위 밖으로 뺀 발견(2026-09-25), 코드로 확인

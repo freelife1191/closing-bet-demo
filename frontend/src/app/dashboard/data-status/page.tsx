@@ -6,6 +6,9 @@ import { fetchAPI } from '@/lib/api';
 import { useAdmin } from '@/hooks/useAdmin';
 import Tooltip from '@/app/components/Tooltip';
 
+// 진행 폴링이 이 횟수만큼 연속 실패하면 멈춘다([INFRA-103])
+const POLL_FAILURE_LIMIT = 3;
+
 // 이미 실행 중이면 /api/system/start-update 가 409 를 돌려준다(개별·전체 업데이트 공용)
 const DUPLICATE_UPDATE_MODAL = {
   isOpen: true,
@@ -78,6 +81,8 @@ export default function DataStatusPage() {
   const [updateItems, setUpdateItems] = useState<UpdateItem[]>([]);
   const [updateProgress, setUpdateProgress] = useState<string>('');
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const pollInFlightRef = useRef(false);
+  const pollFailuresRef = useRef(0);
 
   // ADMIN 권한 체크
   const { isAdmin, isLoading: isAdminLoading } = useAdmin();
@@ -105,8 +110,12 @@ export default function DataStatusPage() {
 
   // 업데이트 상태만 폴링 (가벼움)
   const pollUpdateStatus = useCallback(async () => {
+    // 앞선 조회가 끝나지 않았으면 겹쳐 보내지 않는다([INFRA-103])
+    if (pollInFlightRef.current) return;
+    pollInFlightRef.current = true;
     try {
       const status: UpdateStatusResponse = await fetchAPI('/api/system/update-status', { timeout: 30000 });
+      pollFailuresRef.current = 0;
 
       // 로컬 updating 상태를 우선시하되, 백엔드가 실행 중이고 로컬이 아니면 동기화 (선택적)
       // 여기서는 handleUpdateAll이 클라이언트 주도이므로 백엔드 isRunning을 강제로 반영하지 않음
@@ -156,12 +165,31 @@ export default function DataStatusPage() {
 
     } catch (error) {
       console.error('Failed to poll update status:', error);
+      // 연속 실패가 이어지면 폴링을 멈추고 알린다. 실행이 아직 돌고 있으면 재시작이 409 로 막히고 폴링이 다시 붙는다([INFRA-103])
+      pollFailuresRef.current += 1;
+      if (pollFailuresRef.current >= POLL_FAILURE_LIMIT && pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        setUpdating(false);
+        setUpdateItems([]);
+        setUpdateProgress('');
+        setModal({
+          isOpen: true,
+          type: 'danger',
+          title: '업데이트 오류',
+          content: '진행 상황을 확인하지 못해 자동 확인을 멈췄습니다. 페이지를 새로고침하면 다시 확인합니다.',
+          showCancel: false
+        });
+      }
+    } finally {
+      pollInFlightRef.current = false;
     }
   }, [loadData, updating, updateItems.length]);
 
   // 폴링 시작
   const startPolling = useCallback(() => {
     if (pollingRef.current) return;
+    pollFailuresRef.current = 0;
     pollingRef.current = setInterval(pollUpdateStatus, 500);
   }, [pollUpdateStatus]);
 
