@@ -60,18 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-109] Toss 투자자 추이의 메모리 파서가 빈 순매수 수량을 0 으로 읽는다
-- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-095]` 심층 리뷰 Minor 4(2026-09-25), 코드로 확인
-- 내용: `engine/toss_collector_metric_parsers.py:87-89` 는 종가가 있는 행의 `netForeignerBuyVolume`·`netInstitutionBuyVolume`·`netIndividualsBuyVolume` 이 비면 `to_float(..., 0)` 으로 0 을 더하고, `services/investor_trend_5day_service.py:234-235` 는 `int(float(detail.get(..., 0)))` 으로 키가 없으면 0 을 쓴다. 파일에는 쓰지 않지만 화면·판정에 결측이 순매수 0 으로 보인다. `[INFRA-095]` 는 파일 저장 경로만 고쳤다
-- 확인 수준: 코드로만 확인. Toss 가 수량만 비운 행을 실제로 주는지는 확인하지 않았다
-- 추가 발견(`[VCP-057]` `closing-bet-reviewer` low2, 2026-09-25): `_score_supply_core` 로 가는 details 의 정규화기 둘도 같은 모양이다. `services/investor_trend_5day_service.py:462-463` 은 키가 없거나 None 이면 `_safe_int` 로 0 을 넣고, `engine/screener_supply_helpers.py:99-100` 은 키가 없으면 0, 값이 None 이면 그 행을 버려 전날 행이 `details[0]`(1일 순매수)이 될 수 있다(확신도 중간). `[VCP-057]` 이 `_score_supply_core` 에서 None 을 보존하게 했으므로 정규화기가 None 을 넘기면 끝까지 결측으로 남는다
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 11:51 | 범위: 날짜 단위 결측 보존(하루 값만 `None`, 행 순서 유지, 5일 합계는 값 있는 날의 합이며 다섯 날 모두 비면 `None` → 정규화기가 페이로드 `None` 으로 폴백), `init_data` 파일 경로·개인 순매수 불변 | 근거: 대화에서 「날짜 단위 보존 (Recommended)」 선택. 11:48 의 「추이 전체를 결측 처리」는 사용자가 「결측이 하나라고 5일 추이 전체를 결측으로 보기엔 애매하다」고 되물어 철회 | 티어 T3(§2 수급 집계) | 계획 `docs/superpowers/plans/2026-09-25-infra-109-toss-supply-missing-per-day.md` | 읽은 정본 `.claude/skills/closing-bet-python/`
-- [x] 계획 검토(critic): REVISE. 종가 없는 행이 정규화기에서 `None` 행으로 남는 지적은 파서가 합계에 넣은 행만 `details` 로 넘기게 고쳐 반영했다. `_serialize_trend_map` 변경 철회, 공용 `optional_volume` 문구, 권고 테스트 (a)(b) 반영, (c) 는 기존 테스트로 갈음, 화면 `null`→0 은 `[FE-048]` 로 등록(계획 「계획 검토 반영」 절)
-- [x] 테스트: 파서·두 정규화기·Toss SQLite 캐시 왕복·폴백. 새 테스트는 구현 전에 실패를 확인했다
-- [x] 리뷰: ponytail(shrink 1: `valid_rows` 카운터를 `priced_rows` 로 대체, 반영)·`closing-bet-reviewer` APPROVE(low 4: 종가 없고 수량만 있는 행도 빠지는 절충은 계획에 기록, 상세 API `null` 은 `[FE-048]`, 개인 합계 `days != 5` 와 캐시 스키마 버전은 범위 밖·영향 미미로 유지)·T3 심층(`oh-my-claudecode:code-reviewer` APPROVE, Critical·Major 0, M1 참조 `insufficient_days` 동작 변화는 계획에 기록, M2 최신일 빈 참조의 하루 캐시는 종전과 결과가 같아 알려진 한계로 기록, N2 줄바꿈 반영, N1·N3 유지)
-- [x] pytest 전체(리뷰 반영 뒤): 2839 passed, 2 skipped, exit 0
-- [ ] QA(격리 사본, 가짜 Toss 응답)
-
 ### [INFRA-110] 데이터 상태 화면의 마운트 조회가 시작 요청보다 늦게 `isRunning:false` 로 도착하면 막 시작한 진행 폴링을 끊는다
 - 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-103]` 코드 리뷰 low-2(2026-09-25), 코드로 확인. 종전부터 있던 동작
 - 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `pollUpdateStatus` 완료 분기는 `!status.isRunning && pollingRef.current` 이면 interval 을 끊는다. 마운트 때 보낸 조회가 늦게 끝나면 그 사이 사용자가 시작해 만든 interval 도 끊겨 진행 표시가 사라진다
