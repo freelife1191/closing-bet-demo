@@ -60,16 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [VCP-052] VCP AI JSON 의 읽기·병합·저장에 잠금이 없고 최신 파일 가격 동기화는 원자적이지 않다
-- 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
-- 원인: 수동 갱신 병합(`services/common_update_ai_analysis_service.py:117-146`, 원자적 교체는 함)·수집(`scripts/init_data.py:1522`)·재분석(`services/kr_market_vcp_reanalysis_service.py:750`)이 같은 날짜 파일을 잠금 없이 읽고 병합해 쓴다. `vcp_status` 는 워커 메모리에만 있어 서로 막지 못한다. 가격 동기화(`scripts/init_data.py:2056`)는 `open('w')` 로 직접 쓴다
-- 영향: 동시 실행 시 한쪽이 더한 판정이 유실될 수 있고, 저장 중 중단되면 최신 파일이 깨진다. 실제로 겹치는지는 운영 로그로 확인해야 한다(추측)
-- 설계 승인: 2026-09-25 09:19 사용자 「진행해」(bounded, T3). 범위: `_write_ai_analysis_files` 의 읽기·병합·저장 전체와 `update_kr_ai_analysis_prices` 를 `data/kr_ai_analysis.json.lock` 파일 잠금 하나로 감싸고, 가격 동기화는 `atomic_write_text` 로 저장. `vcp_status` 는 범위 밖, `vcp_signals_latest.json` 직접 쓰기는 새 TODO 로 등록
-- [x] 구현과 테스트 2건(동시 병합 보존, 가격 동기화 잠금 대기·원자적 저장, 수정 전 두 건 모두 RED 확인)
-- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · 과잉설계 직접 검토 「Lean already. Ship.」 · `closing-bet-reviewer` APPROVE(max low): low 1 `_env_file_lock` docstring 에 새 사용처 없음 → 반영 | low 2 같은 잠금을 `signals_log_lock` 이름으로 부름 → `ai_analysis_lock` 으로 반영 | low 3 JSON 이 없어도 `data/`·잠금 파일 생성 → `data/*.lock` 이 덮어 미반영 | low 4 파일 없음 갈래 테스트 없음 → 한 줄 갈래라 미반영 · 심층 리뷰(`oh-my-claudecode:code-reviewer`) 차단 0: Minor 1 0.3초 판정의 거짓 통과 가능성 → 기존 헬퍼 방식, import 57ms 라 미반영 | Minor 2 docstring → low 1 과 같이 반영 | Minor 3 private 이름 가져오기 → 기존 선례와 같아 미반영 | 참고(병합이 가격 동기화 값을 되돌림) → `[VCP-059]` 등록
-- [x] 정적 검증: `venv/bin/python -m pytest -q -p no:cacheprovider` 2806 passed 2 skipped(exit 0, 리뷰 반영 뒤), `npm run test` 100파일 691 passed(exit 0)
-- [ ] QA(CLI 하네스, 수정 전후 사본 대조): `docs/dev-cycle/qa/VCP-052.md`
-
 ### [INFRA-103] 데이터 상태 화면의 진행 폴링이 조회 오류에도 멈추지 않고 500ms 간격으로 계속 요청한다
 - 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-102]` 코드 리뷰의 범위 밖 관찰(2026-09-25), 코드로 확인
 - 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `pollUpdateStatus` catch 는 `console.error` 만 남기고 interval 을 유지한다. 백엔드가 멈췄거나 네트워크가 끊기면 실행 중 표시가 남은 채로 요청이 끝없이 이어진다. 종전부터 있던 동작이다
