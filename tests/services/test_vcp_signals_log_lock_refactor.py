@@ -207,3 +207,29 @@ def test_create_signals_log_returns_false_when_lock_cannot_open(monkeypatch, tmp
     monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
 
     assert init_data.create_signals_log(target_date="2026-02-19", run_ai=False) is False
+
+
+def test_update_recent_price_keeps_closed_rows(monkeypatch, tmp_path):
+    """[VCP-051] 시세 갱신은 청산 행의 현재가·실현 수익률을 덮지 않는다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    path = data_dir / "signals_log.csv"
+    pd.DataFrame(
+        {
+            "ticker": ["005930", "005930"],
+            "signal_date": ["2026-09-01", "2026-09-22"],
+            "status": ["CLOSED", "OPEN"],
+            "entry_price": [100.0, 100.0],
+            "current_price": [90.0, 100.0],
+            "return_pct": [-10.0, 0.0],
+        }
+    ).to_csv(path, index=False)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    stock = SimpleNamespace(get_market_ohlcv=lambda *_: pd.DataFrame({"종가": [110]}))
+    monkeypatch.setitem(sys.modules, "pykrx", SimpleNamespace(stock=stock))
+
+    init_data.update_vcp_signals_recent_price()
+
+    frame = pd.read_csv(path, dtype={"ticker": str}, encoding="utf-8-sig").set_index("status")
+    assert (frame.loc["CLOSED", "current_price"], frame.loc["CLOSED", "return_pct"]) == (90, -10.0)
+    assert (frame.loc["OPEN", "current_price"], frame.loc["OPEN", "return_pct"]) == (110, 10.0)

@@ -2043,7 +2043,8 @@ def update_vcp_signals_recent_price():
             df = pd.read_csv(file_path, dtype={'ticker': str})
             for idx, row in df.iterrows():
                 ticker = row['ticker']
-                if ticker in current_prices:
+                # 청산 행의 현재가·수익률은 청산 시점의 실현값이다([VCP-051])
+                if ticker in current_prices and row.get('status') != 'CLOSED':
                     current_p = current_prices[ticker]
                     entry_p = row['entry_price']
                 
