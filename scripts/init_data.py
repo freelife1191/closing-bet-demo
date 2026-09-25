@@ -71,7 +71,6 @@ from engine.llm_analyzer import LLMAnalyzer
 from engine.pandas_utils_safe import safe_bool, safe_optional_float
 from engine.vcp_ai_orchestration_helpers import VCP_AI_RECOMMENDATION_FIELDS
 from services.kr_market_data_cache_core import atomic_write_text
-from services.common_env_service import _env_file_lock as ai_analysis_lock
 from services.kr_market_vcp_reanalysis_service import signals_log_lock, write_vcp_signals_csv_atomic
 
 # =====================================================
@@ -2065,44 +2064,10 @@ def update_vcp_signals_recent_price():
 
             write_vcp_signals_csv_atomic(df, file_path)
         log(f"VCP 시그널 가격 업데이트 완료: {updated_count}건 갱신", "SUCCESS")
-        
-        # kr_ai_analysis.json도 동기화 (선택 사항)
-        update_kr_ai_analysis_prices(current_prices)
+        # kr_ai_analysis.json 의 가격은 /api/kr/ai-analysis 응답에 실리지만 쓰는 소비자가 없어 동기화하지 않는다. 쓰면 AI 판정 병합이 되돌린다([VCP-059])
         
     except Exception as e:
         log(f"가격 업데이트 실패: {e}", "ERROR")
-
-def update_kr_ai_analysis_prices(price_map):
-    """kr_ai_analysis.json 파일의 가격 정보도 업데이트"""
-    try:
-        kr_ai_path = os.path.join(BASE_DIR, 'data', 'kr_ai_analysis.json')
-        # AI 판정 병합(_write_ai_analysis_files)과 같은 잠금이다. 잠금 밖에서 읽으면 그 사이 병합한 판정을 지운다([VCP-052])
-        with ai_analysis_lock(kr_ai_path):
-            if not os.path.exists(kr_ai_path):
-                return
-
-            with open(kr_ai_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            updated = False
-            if 'signals' in data:
-                for signal in data['signals']:
-                    ticker = signal.get('ticker')
-                    if ticker in price_map:
-                        current_p = price_map[ticker]
-                        entry_p = signal.get('entry_price', current_p)
-
-                        signal['current_price'] = current_p
-                        if entry_p > 0:
-                            signal['return_pct'] = round(((current_p - entry_p) / entry_p) * 100, 2)
-                        updated = True
-
-            if updated:
-                atomic_write_text(kr_ai_path, json.dumps(data, ensure_ascii=False, indent=2, cls=NumpyEncoder))
-                log("kr_ai_analysis.json 가격 동기화 완료", "INFO")
-
-    except Exception as e:
-        log(f"AI 분석 파일 가격 동기화 실패: {e}", "WARNING")
 
 if __name__ == '__main__':
     # run_screener 는 cwd 기준 data/ 에 쓰고 알림(스케줄러)은 BASE_DIR 기준으로 읽으므로 루트에서 돈다. 모듈 수준에 두면 import 하는 쪽 cwd 가 바뀐다 [INFRA-086]

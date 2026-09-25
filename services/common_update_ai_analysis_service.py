@@ -123,7 +123,7 @@ def _write_ai_analysis_files(*, data_dir: str, analysis_date: str, results: dict
                if isinstance(row, dict) and normalize_ticker(row.get("ticker")) and _valid_recommendations(row)}
     if not updates:
         return 0
-    # 수동 갱신·수집·재분석과 가격 동기화가 이 파일들을 함께 쓰므로 다시 읽기부터 교체까지 한 잠금 안에 둔다([VCP-052])
+    # 수동 갱신·수집·재분석이 이 파일들을 함께 쓰므로 다시 읽기부터 교체까지 한 잠금 안에 둔다([VCP-052])
     with ai_analysis_lock(os.path.join(data_dir, "kr_ai_analysis.json")):
         return _merge_ai_analysis_files(data_dir=data_dir, analysis_date=analysis_date, results=results, updates=updates)
 

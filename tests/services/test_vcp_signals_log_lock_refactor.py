@@ -259,24 +259,3 @@ def test_ai_analysis_merge_waits_for_lock_and_keeps_other_writer(tmp_path):
     )
     tickers = {row["ticker"] for row in json.loads(dated.read_text())["signals"]}
     assert tickers == {"000660", "005930"}
-
-
-def test_ai_price_sync_waits_for_lock_and_writes_atomically(monkeypatch, tmp_path):
-    """[VCP-052] 가격 동기화도 같은 잠금 안에서 다시 읽고 원자적으로 교체한다."""
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    path = data_dir / "kr_ai_analysis.json"
-    path.write_text(json.dumps({"signals": [{"ticker": "005930", "entry_price": 100}]}))
-    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
-    written = []
-    real_atomic = init_data.atomic_write_text
-    monkeypatch.setattr(init_data, "atomic_write_text", lambda p, text: (written.append(p), real_atomic(p, text)))
-
-    def _other_writer():
-        path.write_text(json.dumps({"signals": [{"ticker": "005930", "entry_price": 100}, {"ticker": "000660"}]}))
-
-    _assert_waits_for_lock(path, lambda: init_data.update_kr_ai_analysis_prices({"005930": 110}), _other_writer)
-    signals = json.loads(path.read_text())["signals"]
-    assert [row["ticker"] for row in signals] == ["005930", "000660"]
-    assert (signals[0]["current_price"], signals[0]["return_pct"]) == (110, 10.0)
-    assert written == [str(path)]

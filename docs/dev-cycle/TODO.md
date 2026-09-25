@@ -61,10 +61,21 @@
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
 ### [VCP-059] AI 판정 병합이 날짜 없는 `kr_ai_analysis.json` 을 날짜 파일 내용으로 덮어 가격 동기화 값을 되돌린다
-- 카테고리: VCP | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[VCP-052]` 심층 리뷰 참고 사항(2026-09-25), 코드로 확인
+- 카테고리: VCP | 티어: T3(`scripts/init_data.py` 가 §2 「스케줄러와 데이터 적재」) | 근거: `[VCP-052]` 심층 리뷰 참고 사항(2026-09-25), 코드로 확인
+- 설계 승인: 승인 시각 2026-09-25 13:26 | 범위: 날짜 없는 `kr_ai_analysis.json` 의 가격을 읽는 코드가 없으므로 `update_kr_ai_analysis_prices` 와 호출 한 줄을 지우고, 그 잠금 테스트와 `services/common_env_service.py` 잠금 주석의 함수 이름을 함께 정리한다. 병합 쪽은 바꾸지 않는다
+  | 실제 대화 근거: 2026-09-25 사용자 「가격 동기화 삭제 (Recommended)」 선택, 현재 세션의 설계 제안
 - 내용: `update_kr_ai_analysis_prices`(`scripts/init_data.py`)는 날짜 없는 파일의 `current_price`·`return_pct` 만 고친다. `_merge_ai_analysis_files`(`services/common_update_ai_analysis_service.py`)는 날짜 파일을 병합한 직렬화 결과로 날짜 없는 파일을 통째로 덮으므로, 오늘 날짜 병합이 한 번 돌면 그 값이 날짜 파일의 값으로 돌아간다. 순차 실행에서도 일어나며 다음 가격 동기화 때 다시 채워진다. AI 판정은 사라지지 않는다
 - 확인 수준: 코드로만 확인. 화면에 옛 가격이 보이는 시간이 실제로 얼마나 되는지는 확인하지 않았다
-- [ ] 설계 승인(가격 필드를 보존할지, 가격 동기화가 날짜 파일도 고칠지)
+- [x] 설계 승인(가격 동기화 삭제안)
+- [x] `scripts/init_data.py` 에서 함수와 호출 삭제, 잠금 테스트 삭제, 잠금 주석 정리
+- [x] 리뷰와 pytest 전체. 과잉설계는 순수 삭제라 직접 검토해 Lean. closing-bet-reviewer APPROVE(max low): 설계 근거 2번(최신 조회는 `kr_ai_analysis.json` 을 먼저 읽어 가격이 응답에 실린다)이 틀렸다는 지적과 주석·QA 문서 low 3건을 모두 반영했고 결론(가격을 쓰는 소비자 없음)은 유지된다. 심층 리뷰(oh-my-claudecode:code-reviewer opus) Critical·Important 0: M2·M3 은 QA 기대값을 숫자로 적어 반영, M4 는 선택 시나리오 S-4 로 반영, M1 은 범위 밖이라 `[VCP-060]` 으로 등록. pytest 전체 2840 passed, 2 skipped, exit 0(13:27:17~13:29:24, 주석 수정 전), 주석 수정 뒤 관련 216 passed
+- [ ] QA 하네스(가격 동기화 뒤 `kr_ai_analysis.json` 바이트·수정 시각 불변, `signals_log.csv` 가격 갱신 유지)
+
+### [VCP-060] 가격 동기화가 청산 행만 남은 종목의 시세도 조회한다
+- 카테고리: VCP | 티어: T3(`scripts/init_data.py` 가 §2 「스케줄러와 데이터 적재」) | 근거: `[VCP-059]` 심층 리뷰 Minor 1(2026-09-25), 코드로 확인
+- 내용: `update_vcp_signals_recent_price`(`scripts/init_data.py`)는 `df['ticker'].unique()` 전체의 시세를 pykrx·폴백으로 조회하지만, 적용 루프는 `status == 'CLOSED'` 행을 건너뛴다([VCP-051]). `[VCP-052]` 리뷰 low 1 은 그 값을 `kr_ai_analysis.json` 동기화가 쓴다는 이유로 미반영했는데, `[VCP-059]` 에서 그 동기화를 지워 이제 외부 호출만 낭비한다. 조회 대상을 CLOSED 가 아닌 행의 티커로 좁히면 된다
+- 확인 수준: 코드로만 확인. 운영 로그에서 조회 수가 실제로 얼마나 줄지는 확인하지 않았다
+- [ ] 설계 승인
 - [ ] 테스트, 리뷰와 pytest 전체
 
 ### [INFRA-115] 종가베팅 V2 실행 요청의 409 잠금이 워커 사이에서 원자적이지 않다

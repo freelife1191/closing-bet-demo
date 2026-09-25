@@ -73,8 +73,8 @@ def _env_file_lock(env_path: str) -> Iterator[None]:
 
     `data/signals_log.csv` 도 이 잠금을 `signals_log_lock` 이라는 이름으로 쓴다([VCP-035]).
     그쪽 잠금 파일은 `data/*.lock` 에 걸리고, 보유 시간은 CSV 크기에 비례한다.
-    VCP AI JSON 도 `data/kr_ai_analysis.json.lock` 으로 쓴다(`_write_ai_analysis_files`,
-    `update_kr_ai_analysis_prices`, [VCP-052]). 둘 다 이 잠금을 쥔 채 서로를 부르지 않는다.
+    VCP AI JSON 도 `data/kr_ai_analysis.json.lock` 으로 쓴다(`_write_ai_analysis_files`, [VCP-052]).
+    이 잠금을 쥔 채 `signals_log_lock` 을 부르지 않는다.
     """
     lock_path = f"{env_path}.lock"
     os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
