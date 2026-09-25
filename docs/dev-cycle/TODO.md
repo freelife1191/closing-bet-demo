@@ -60,12 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-112] 섹터 ETF 등락률이 NaN 으로 오면 그대로 저장되어 화면에 「NaN%」 로 보인다
-- 카테고리: 인프라 | 티어: T3(위험 경로 `engine/market_gate_fetchers_external.py`) | 근거: `[INFRA-105]` 코드 리뷰 low 6(2026-09-25)
-- 내용: `get_sector_data` 는 `round(float(latest["등락률"]), 2)` 를 검사 없이 넣는다. NaN 이면 `save_analysis` 의 `sanitize_for_json` 이 `null` 로 바꾸는지, 응답 경로에서 화면까지 어떻게 보이는지를 먼저 실측한다. 감점 계산은 `isfinite` 로 거른다
-- [ ] 실측(저장·응답·화면에서 NaN 이 어떻게 보이는지)
-- [ ] 설계 승인, 테스트, 리뷰
-
 ### [INFRA-106] `get_last_trading_date` 의 지수 조회 실패가 DEBUG 로그로만 남고 휴장일을 거래일로 본다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[INFRA-089]` 영향 확인에서 분리(2026-09-25)
 - 내용: `scripts/init_data.py:119` 는 지수 조회가 실패하면 DEBUG 만 남기고 주말만 거른다. 세션이 인증되지 않았을 때 공휴일을 기대 날짜로 돌려주며, 호출자는 `create_daily_prices`·수급 수집·수동 갱신 stale 검증(`services/common_update_pipeline_steps.py:61-90`)이다. `[INFRA-089]` 의 재로그인 복구 뒤에도 KRX 점검 시간처럼 로그인 자체가 실패하면 남는다
