@@ -52,13 +52,20 @@ def build_supply_score_frame(
     recent = working.groupby("ticker", sort=False).tail(5)
     scored = recent.groupby("ticker", sort=False).agg(
         window_count=("ticker", "size"),
+        foreign_count=("foreign_buy", "count"),
+        inst_count=("inst_buy", "count"),
         foreign_net_buy_5d=("foreign_buy", "sum"),
         institutional_net_buy_5d=("inst_buy", "sum"),
         consecutive=("foreign_buy", lambda series: count_consecutive_positive(series.to_numpy())),
     )
     scored = scored.reset_index()
 
-    scored = scored[scored["window_count"] >= 5].copy()
+    # [FLOW-024] sum 은 빈 칸을 건너뛰어 최근 5행에 빈 칸이 있으면 4일 이하의 합이 5일 값이 된다.
+    # count 는 빈 칸을 세지 않으므로 두 열이 모두 5개인 종목만 남긴다
+    blank = (scored["window_count"] >= 5) & ((scored["foreign_count"] < 5) | (scored["inst_count"] < 5))
+    if blank.any():
+        logger.info(f"   최근 5행에 빈 수급 값이 있어 점수에서 제외: {int(blank.sum())}개 종목")
+    scored = scored[(scored["window_count"] >= 5) & ~blank].copy()
     if scored.empty:
         return scored
 

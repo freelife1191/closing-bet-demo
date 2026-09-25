@@ -94,3 +94,35 @@ def test_build_supply_score_frame_normalizes_ticker_and_computes_consecutive_fro
     assert len(result) == 1
     assert result.iloc[0]["ticker"] == "000001"
     assert result.iloc[0]["supply_demand_index"] >= 40
+
+
+def test_build_supply_score_frame_drops_tickers_with_blank_values_in_the_window():
+    """[FLOW-024] sum 은 빈 칸을 건너뛰므로 최근 5행에 빈 칸이 있으면 4일 합이 5일 값이 된다."""
+    dates = ["2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24"]
+
+    def _rows(ticker, foreign, inst):
+        return [
+            {"ticker": ticker, "date": day, "foreign_buy": f, "inst_buy": i}
+            for day, f, i in zip(dates, foreign, inst)
+        ]
+
+    full = [600_000_000] * 5
+    blank = [600_000_000, 600_000_000, np.nan, 600_000_000, 600_000_000]
+    raw_df = pd.DataFrame(
+        _rows("1", blank, full)  # 외국인 빈 칸
+        + _rows("2", full, blank)  # 기관 빈 칸
+        + _rows("3", full, full)  # 정상
+        # 창 밖(09-17)의 빈 칸은 최근 5행에 들지 않으므로 종목을 빼지 않는다
+        + [{"ticker": "4", "date": "2026-09-17", "foreign_buy": np.nan, "inst_buy": np.nan}]
+        + _rows("4", full, full)
+    )
+
+    result = build_supply_score_frame(
+        raw_df,
+        foreign_min=1,
+        count_consecutive_positive=_count_consecutive_positive,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert sorted(result["ticker"]) == ["000003", "000004"]
+    assert set(result["foreign_net_buy_5d"]) == {3_000_000_000}

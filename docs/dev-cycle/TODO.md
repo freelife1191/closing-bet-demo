@@ -65,14 +65,21 @@
 ### [FLOW-024] 시그널 추적기의 수급 점수가 최근 5행의 빈 칸을 건너뛴 합을 5일 값으로 쓴다
 - 카테고리: 수급·백테스트 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[FLOW-023]` 계획 검토(critic, 2026-09-25) 지적 (2), 코드로 확인
 - 내용: `build_supply_score_frame`(`engine/signal_tracker_supply_helpers.py:51-58`)은 `groupby.tail(5)` 뒤 `("foreign_buy","sum")` 으로 합하는데 pandas 는 NaN 을 건너뛰고, `window_count` 는 행 수(`size`)로 센다. 그래서 최근 5행 중 하루가 빈 종목도 `window_count >= 5` 를 통과해 4일 합으로 점수가 매겨진다. `[FLOW-023]` 은 통합 서비스와 상세 API 만 고쳤다
-- 확인 수준: 코드로만 확인. 로컬 CSV 는 빈 칸 0개(`[FLOW-023]` 설계 때 집계), 운영 CSV 는 확인하지 않았다
-- [ ] 설계 승인(빈 칸이 있는 종목을 점수에서 뺄지), 테스트, 리뷰
+- 확인 수준: 코드로만 확인. 로컬 CSV 는 빈 칸 0개(`[FLOW-023]` 설계 때 집계), 운영 CSV 는 확인하지 않았다. 2026-09-25 설계 때 가짜 CSV 로 재현(09-22 외국인 칸만 빈 종목이 4일 합 9억·67점으로 통과). 호출자는 `run.py` 메뉴 2 뿐이고 웹 파이프라인은 부르지 않는다
+- 설계 승인: 2026-09-25 21:30 | 범위: bounded T1. `build_supply_score_frame` 이 최근 5행에서 외국인·기관 열을 `count` 로 세어 둘 다 5개인 종목만 남기고 뺀 수를 로그로 남김, SQLite 점수 캐시 키 접미사 교체. (A) 스크리너 우선순위 정렬은 유지(순서에만 쓰이고 점수는 통합 서비스), (B) 죽은 CSV 점수 함수는 `[FLOW-027]` 로 등록, (C) `[FLOW-025]` 는 분리하고 시그널 추적기 창도 같은 문제임을 그 항목에 기록 | 실제 대화 근거: 현재 세션의 설계 제안에 사용자 「승인」 응답
+- QA 시나리오: 격리 사본(수정본·기준 `72fc8c17`) CLI 하네스로 `scan_today_signals` 만 호출. 웹 진입 경로가 없어 브라우저 대상 아님
+- [x] 실패 테스트 먼저(외국인 빈 칸·기관 빈 칸 제외, 정상 유지, 창 밖 빈 칸 유지) → 수정 전 000001·000002 가 남아 실패
+- [x] 구현(`engine/signal_tracker_supply_helpers.py`, `engine/signal_tracker_analysis_mixin.py` 접미사)
+- [x] `/ponytail-review` → Lean already. Ship.
+- [x] 범위 pytest(3파일 29 passed), pytest 전체(`KRX_ID= KRX_PW= venv/bin/python -m pytest -q -p no:cacheprovider` 2853 passed·2 skipped, exit 0). frontend 변경 없어 vitest 생략
+- [x] QA 계획 `docs/dev-cycle/qa/FLOW-024.md`, 첫 커밋
+- [ ] QA 실행과 기록, 정리
 
 ### [FLOW-025] 수급 CSV 의 5행 창이 빠진 거래일을 모르고 6거래일 이상의 합을 5일 값으로 쓴다
 - 카테고리: 수급·백테스트 | 티어: T3(위험 경로 `services/investor_trend_5day_service.py`) | 근거: `[FLOW-023]` 코드 리뷰(closing-bet-reviewer F1, 2026-09-25), 코드로 확인
 - 내용: `[INFRA-095]` 이후 수급 CSV 작성부(`scripts/init_data.py:389-395` Toss 경로, `:1294-1303` pykrx 경로)는 값이 빈 날을 빈 칸으로 쓰지 않고 그 행을 저장하지 않는다. `_build_trend_map`(`services/investor_trend_5day_service.py:396-400`)은 종목별 `tail(5)` 와 `len(recent) < 5` 만 보므로, 창 안의 하루가 빠진 종목은 6거래일 이상에 걸친 합을 `days: 5` 로 내보낸다. 가장 최근 날만 빠지면 전날 값이 details[0] 이 되고, `stale_csv` 는 영업일 4일을 넘어야 붙으므로 플래그도 없다. `[FLOW-023]` 은 빈 칸만 걸러 낸다
 - 확인 수준: 코드로만 확인. 운영·로컬 CSV 에서 창 안의 행이 빠진 종목 수는 확인하지 않았다
-- 설계 방향(제안): 종목의 최근 5개 날짜를 CSV 전체의 최근 5거래일(기준일 이하)과 대조해 다르면 map 에서 빼거나 플래그를 붙인다. `[FLOW-024]` 의 시그널 추적기 경로와 함께 볼지 설계 때 정한다
+- 설계 방향(제안): 종목의 최근 5개 날짜를 CSV 전체의 최근 5거래일(기준일 이하)과 대조해 다르면 map 에서 빼거나 플래그를 붙인다. 시그널 추적기(`engine/signal_tracker_supply_helpers.py` 의 `groupby.tail(5)`)도 같은 창을 써서 같은 문제가 있다. `[FLOW-024]` 는 빈 칸만 고치고 이 문제는 이 항목에 남겼으므로(2026-09-25 설계 (C)) 두 경로를 같은 기준으로 설계한다. 최신 날짜만 일부 종목에 들어온 CSV 에서 전 종목이 빠지지 않게 하는 기준도 함께 정한다
 - 관련 관찰(`[FLOW-023]` /review L1, 확신도 중간): `_detect_csv_anomaly_flags`(`services/investor_trend_5day_service.py:577`)는 target 이 None 일 때만 `stale_csv` 를 판정한다. 스크리너가 오늘 날짜 target 으로 Toss 실패 대체 경로(`engine/screener.py:367-373`)를 타면 CSV 전체가 낡아도 플래그 없이 채택된다. 창을 기준일의 최근 5거래일과 대조하면 이 경우도 함께 잡힌다. 운영 파이프라인(`services/kr_market_vcp_background_service.py:69-77`)은 CSV 를 먼저 갱신하므로 가능성은 낮다
 - [ ] 설계 승인, 테스트, 리뷰, QA
 
@@ -81,6 +88,11 @@
 - 내용: `get_investor_trend_5day_for_ticker` 를 verify=False 로 부르는 두 믹스인은 플래그가 붙거나 None 이면 자기 pykrx 경로로 빠진다. (a) `engine/collectors/krx_local_data_mixin.py:1168-1186` 은 pykrx 가 빈 프레임이면 플래그 붙은 CSV(`stale_csv`·`extreme_abs_total` 포함)를 그대로 쓰고, CSV 가 없으면 0·0 을 요약 캐시(SQLite)에 저장한다. 예외 갈래(`:1209-1214`)도 CSV 를 그대로 쓴다. `engine/collectors/naver_pykrx_mixin.py:489-503` 은 빈 프레임이면 0·0 을 저장하고 표시한다 (b) 프레임이 있으면 `df.tail(5)` 뒤 `int(df[col].sum())` 으로 합치므로(`krx_local_data_mixin.py:1188-1195`, `naver_pykrx_mixin.py:506-519`) NaN 인 날을 건너뛴 부분합과 5행 미만의 합이 `foreign_buy_5d` 로 남는다. `[FLOW-023]` (1) 로 map 에서 빠진 종목도 이 경로를 탄다. `get_supply_data` 는 `engine/phases_analysis.py:104`·`engine/generator_helpers.py:145` 가 불러 종가베팅 점수에 닿는다
 - 확인 수준: 코드로만 확인. pykrx 가 예외 대신 빈 프레임을 주는 빈도와 NaN 을 주는 조건은 확인하지 않았다
 - [ ] 설계 승인(빈 프레임·NaN·5행 미만을 결측으로 둘지, 플래그 붙은 CSV 를 쓸지), 테스트, 리뷰, QA
+
+### [FLOW-027] 호출자가 없는 스크리너 CSV 수급 점수 함수와 읽히지 않는 `_inst_by_ticker` 를 지운다
+- 카테고리: 수급·백테스트 | 티어: 판정은 설계 때 §2 대조(`engine/screener.py` 를 고침) | 근거: `[FLOW-024]` 설계 조사(2026-09-25), 코드로 확인
+- 내용: `score_supply_from_csv`(`engine/screener_scoring_helpers.py:132`)와 `calculate_supply_score_from_csv`(`engine/screener_supply_helpers.py:240`)는 2026-02-26 `dd5a011e` 에서 스크리너의 호출이 사라진 뒤 테스트만 부른다. 둘 다 5행 합에서 빈 칸을 건너뛰고 `int(NaN)` 에서 예외가 난다. 이 함수에 넘기던 `SmartMoneyScreener._inst_by_ticker`(`engine/screener.py:96`·`:179`)는 실행마다 수급 CSV 전체를 종목별로 나누지만 읽는 곳이 없다. 사용자에게 보이는 결함은 없고, 다시 연결되면 결함이 되살아난다
+- [ ] 설계 승인(삭제 범위), 관련 테스트 정리(`tests/engine/test_screener_helpers_refactor.py`·`test_screener_supply_helpers_refactor.py`·`test_screener_data_cache_refactor.py:24`), 리뷰, QA
 
 ### [JONGGA-042] 상세 API 의 Naver·기본값 폴백이 결측 수급을 0 으로 채운다
 - 카테고리: 종가베팅 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[FE-048]` 구현 중 코드로 확인(2026-09-25)

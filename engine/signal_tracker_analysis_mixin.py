@@ -61,7 +61,8 @@ _SUPPLY_SCORE_FRAME_CACHE: OrderedDict[
 ] = OrderedDict()
 _SUPPLY_SCORE_FRAME_CACHE_MAX_ENTRIES = 32
 _SUPPLY_SCORE_FRAME_SQLITE_MAX_ROWS = 256
-_SUPPLY_SCORE_FRAME_SQLITE_CACHE_KEY_SUFFIX = "::signal_tracker_supply_score_frame"
+# [FLOW-024] 빈 칸 제외 이전에 계산한 프레임을 다시 쓰지 않도록 v2 로 바꿨다
+_SUPPLY_SCORE_FRAME_SQLITE_CACHE_KEY_SUFFIX = "::signal_tracker_supply_score_frame_v2"
 
 
 def _supply_score_frame_sqlite_cache_key(source_path: str, foreign_min: float) -> str:
