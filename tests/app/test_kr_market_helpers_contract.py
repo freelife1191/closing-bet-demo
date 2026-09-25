@@ -976,8 +976,19 @@ def test_route_service_jongga_latest_updates_prices_and_writes_latest_file(tmp_p
 
 
 
-def test_route_service_background_pipeline_resets_status_on_error(monkeypatch):
+def test_route_service_background_pipeline_error_still_releases_claim_once(monkeypatch):
+    # [INFRA-118] 파이프라인은 상태를 쓰지 않고, 실행권을 잡은 launcher 가 오류에도 한 번만 내린다
+    import threading
+
+    from services.kr_market_jongga_runtime_service import launch_jongga_v2_screener
+
     status_calls = []
+    released = threading.Event()
+
+    def _save(running):
+        status_calls.append(running)
+        if running is False:
+            released.set()
 
     async def _run_screener(*_args, **_kwargs):
         raise RuntimeError("engine failed")
@@ -992,13 +1003,16 @@ def test_route_service_background_pipeline_resets_status_on_error(monkeypatch):
     monkeypatch.setattr(route_service, "_reload_engine_submodules", lambda: None)
     monkeypatch.setitem(sys.modules, "engine.generator", generator_module)
 
-    with pytest.raises(RuntimeError, match="engine failed"):
-        route_service.run_jongga_v2_background_pipeline(
-            capital=50_000_000,
-            markets=None,
-            target_date=None,
-            save_status=status_calls.append,
-            logger=TEST_LOGGER,
-        )
+    status_code, _ = launch_jongga_v2_screener(
+        req_data={},
+        load_v2_status=lambda: {"isRunning": False},
+        save_v2_status=_save,
+        run_jongga_background=lambda **kwargs: route_service.run_jongga_v2_background_pipeline(
+            **kwargs, logger=TEST_LOGGER
+        ),
+        logger=TEST_LOGGER,
+    )
 
+    assert status_code == 200
+    assert released.wait(5)
     assert status_calls == [True, False]

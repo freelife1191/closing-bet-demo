@@ -53,7 +53,7 @@ def _create_client(data_dir: str, deps: dict):
     register_jongga_execution_routes(
         bp,
         data_dir=data_dir,
-        logger=type("L", (), {"error": lambda *_a, **_k: None})(),
+        logger=type("L", (), {"error": lambda *_a, **_k: None, "info": lambda *_a, **_k: None})(),
         load_json_file=deps["load_json_file"],
         launch_jongga_v2_screener=deps["launch_jongga_v2_screener"],
         run_jongga_v2_background_pipeline=deps["run_jongga_v2_background_pipeline"],
@@ -403,3 +403,55 @@ def test_run_jongga_v2_screener_route_persists_status_with_atomic_writer(monkeyp
     status_response = client.get("/api/kr/jongga-v2/status").get_json()
     assert status_response["isRunning"] is True
     assert "ownerPid" not in status_response and "ownerPpid" not in status_response
+
+
+def test_manual_run_releases_v2_claim_once_so_a_later_claim_survives(monkeypatch, tmp_path: Path):
+    # [INFRA-118] 수동 실행이 끝날 때 False 를 두 번 쓰면, 첫 False 뒤에 대기하던 체인이 잡은 True 를 두 번째가 덮는다
+    import types
+
+    import services.kr_market_jongga_runtime_service as runtime_module
+    from services import kr_market_route_service as route_service
+
+    async def _run_screener(*_a, **_k):
+        return None
+
+    generator = types.ModuleType("engine.generator")
+    generator.run_screener = _run_screener
+    monkeypatch.setitem(sys.modules, "engine.generator", generator)
+    monkeypatch.setattr(route_service, "_reload_engine_submodules", lambda: None)
+
+    class _InlineThread:
+        def __init__(self, target, daemon):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(runtime_module, "threading", types.SimpleNamespace(Thread=_InlineThread))
+
+    written: list[bool] = []
+    real_write = runtime_module.atomic_write_text
+
+    def _write(path: str, content: str):
+        running = json.loads(content)["isRunning"]
+        written.append(running)
+        real_write(path, content)
+        if running is False and written.count(False) == 1:
+            # 대기하던 [INFRA-116] 체인이 첫 False 를 보고 곧바로 실행권을 잡는다
+            real_write(path, json.dumps({"isRunning": True, "owner": "scheduler"}))
+
+    monkeypatch.setattr(runtime_module, "atomic_write_text", _write)
+
+    client = _create_client(
+        str(tmp_path),
+        _build_deps(
+            launch_jongga_v2_screener=runtime_module.launch_jongga_v2_screener,
+            run_jongga_v2_background_pipeline=route_service.run_jongga_v2_background_pipeline,
+        ),
+    )
+    response = client.post("/api/kr/jongga-v2/run", json={})
+
+    assert response.status_code == 200
+    assert written == [True, False]
+    saved = json.loads((tmp_path / "v2_screener_status.json").read_text(encoding="utf-8"))
+    assert saved == {"isRunning": True, "owner": "scheduler"}

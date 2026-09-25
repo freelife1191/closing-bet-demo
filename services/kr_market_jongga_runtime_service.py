@@ -103,38 +103,33 @@ def run_jongga_v2_background_pipeline(
     capital: int,
     markets: list[str] | None,
     target_date: str | None,
-    save_status: Callable[[bool], None],
     logger: logging.Logger,
 ) -> None:
     """종가베팅 v2 엔진 백그라운드 실행 파이프라인."""
+    # [INFRA-118] 실행권은 launch_jongga_v2_screener 가 잡고 내린다. 여기서 한 번 더 내리면 그 사이 체인이 잡은 실행권을 덮는다
     selected_markets = markets or ["KOSPI", "KOSDAQ"]
-    save_status(True)
 
     logger.info("[Background] Jongga V2 Engine Started...")
     if target_date:
         logger.info(f"[테스트 모드] 지정 날짜 기준 분석: {target_date}")
 
-    try:
-        _reload_engine_submodules()
+    _reload_engine_submodules()
 
-        from engine.generator import run_screener
+    from engine.generator import run_screener
 
-        result = _run_coro_in_fresh_loop(
-            run_screener(
-                capital=capital,
-                markets=selected_markets,
-                target_date=target_date,
-            ),
-            logger=logger,
-        )
+    result = _run_coro_in_fresh_loop(
+        run_screener(
+            capital=capital,
+            markets=selected_markets,
+            target_date=target_date,
+        ),
+        logger=logger,
+    )
 
-        if result:
-            _send_jongga_notification_from_result(result, logger)
+    if result:
+        _send_jongga_notification_from_result(result, logger)
 
-        logger.info("[Background] Jongga V2 Engine Completed Successfully.")
-    finally:
-        save_status(False)
-        logger.info("[Background] Jongga V2 Status reset to False")
+    logger.info("[Background] Jongga V2 Engine Completed Successfully.")
 
 
 def read_v2_status_uncached(v2_status_file: str) -> dict[str, Any]:
@@ -200,6 +195,7 @@ def launch_jongga_v2_screener(
             logger.error(f"Background Engine Failed: {e}")
         finally:
             save_v2_status(False)
+            logger.info("[Background] Jongga V2 Status reset to False")
 
     thread = threading.Thread(target=_run_wrapper, daemon=True)
     try:

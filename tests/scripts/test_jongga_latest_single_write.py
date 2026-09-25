@@ -55,12 +55,9 @@ def test_background_pipeline_does_not_save_twice(monkeypatch, service):
     _fake_generator(monkeypatch, saves.append)
     monkeypatch.setattr(service, "_reload_engine_submodules", lambda: None)
     monkeypatch.setattr(service, "_send_jongga_notification_from_result", lambda *_a: None)
-    status = []
 
     service.run_jongga_v2_background_pipeline(
-        capital=50_000_000, markets=None, target_date=None,
-        save_status=status.append, logger=LOGGER,
+        capital=50_000_000, markets=None, target_date=None, logger=LOGGER,
     )
 
     assert saves == []
-    assert status == [True, False]

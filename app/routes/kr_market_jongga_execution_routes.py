@@ -52,7 +52,6 @@ def _build_jongga_background_runner(
     *,
     logger: Any,
     run_jongga_v2_background_pipeline: Callable[..., None],
-    save_v2_status: Callable[[bool], None],
 ) -> Callable[[int, list[str] | None, str | None], None]:
     def _run_jongga_v2_background(
         capital: int = 50_000_000,
@@ -63,7 +62,6 @@ def _build_jongga_background_runner(
             capital=capital,
             markets=markets,
             target_date=target_date,
-            save_status=save_v2_status,
             logger=logger,
         )
 
@@ -300,7 +298,6 @@ def register_jongga_execution_routes(
     run_jongga_background = _build_jongga_background_runner(
         logger=logger,
         run_jongga_v2_background_pipeline=run_jongga_v2_background_pipeline,
-        save_v2_status=save_v2_status,
     )
     _register_jongga_run_status_routes(
         kr_bp,
