@@ -55,19 +55,6 @@
 - [x] 운영자 확인: 운영 `backend.log` 에서 「이번 세션에서 Z.ai를 비활성화합니다」 발생 여부 → 2026-09-25 확인: 발생 없음(`qa/VCP-045.md`)
 - [ ] 배포와 워커 전부 재기동(운영자, 장 마감 뒤), 발동했다면 10분 뒤 「VCP 분석기 세션 차단 해제: … zai=prompt-echo responses」 로그 확인
 
-### [INFRA-121] pytest 가 실제 pykrx 조회로 나가 `.env` 자격 증명으로 KRX 에 로그인한다
-- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[FLOW-022]` RED 실행 중 발견(2026-09-25 16:49, 출력 「KRX 로그인 시도... KRX 로그인 완료.」)
-- 내용: `config.py:13`·`engine/config.py:14` 가 import 때 `load_dotenv()` 로 실제 `.env` 를 읽고, pykrx 는 `build_krx_session` 의 기본 인자로 `KRX_ID`·`KRX_PW` 를 읽는다. `tests/services/test_investor_trend_5day_service.py` 의 참조 가짜 검사(`test_toss_is_tried_when_the_pykrx_reference_is_discarded` 등)는 `_fetch_pykrx_reference_trend` 만 바꾸므로 `_reference_cache_token(source="pykrx")` → `_resolve_pykrx_latest_market_date` 가 실제 `stock.get_index_ohlcv_by_date` 를 부른다. 그래서 전체 pytest 가 사용자 승인 없이 KRX 에 로그인하고 네트워크에 닿는다. `KRX_ID= KRX_PW=` 로 돌리면 로그인은 막히지만(「KRX 로그인 실패」 출력) 네트워크 접근은 남는다
-- 확인 수준: 전체 pytest 를 외부 소켓·DNS·curl_cffi 차단 플러그인으로 돌려 셌다(2026-09-25, 2855 passed). 외부 접속 시도 20건이 세 파일에서 나왔다: 수급 서비스 테스트 11건(`data.krx.co.kr`), `tests/manual/test_holiday.py` 6건(`data.krx.co.kr`), `tests/test_price_fetch.py` 3건(Yahoo·Toss·Naver). 운영 코드가 예외를 삼켜 전부 통과했다
-- 티어 판정: T2 bounded. 변경은 `tests/` 뿐이고 tier-rules §2 위험 경로에 닿지 않는다
-- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 17:47
-  | 범위: (1) `tests/conftest.py` 가 import 전에 `KRX_ID`·`KRX_PW` 를 빈 값으로 둔다 (2) conftest 에 외부 접속 가드(loopback·AF_UNIX 외 connect·getaddrinfo·curl_cffi 차단, 시도한 테스트를 모아 세션 실패, `RUN_GEMINI_HANG_TESTS=true` 면 미설치)와 가드 자체 검사 한 건 (3) 수급 테스트 파일에 `pykrx.stock.get_index_ohlcv_by_date` 를 빈 DataFrame 대역으로 바꾸는 autouse (4) `tests/manual/test_holiday.py`·`tests/test_price_fetch.py` 를 수집되지 않는 `tests/manual/check_*.py` 로 옮기고 pytest 함수 셋과 `ticker` 픽스처 삭제
-  | 실제 대화 근거: 2026-09-25 현재 세션에서 설계 제시 뒤 사용자가 effort 를 high 로 바꾸고 「진행해」 응답
-- [x] 가드 RED: 가드만 넣은 전체 pytest 2856 passed 뒤 누출 20건 목록, exit 1(측정과 같은 테스트·대상)
-- [x] GREEN: 2852 passed, 2 skipped, 누출 보고 없음, exit 0(수집에서 뺀 4건 차감). `tests/test_network_guard.py` 통과
-- [x] `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` Lean · `closing-bet-reviewer` APPROVE(max low 6건): 가드가 놓치는 경로(UDP·gethostbyname·C 확장, 운영 코드 사용 0건) → ponytail 주석에 한도 명시 | bytes·127/8 기타·IPv4-mapped 호스트 오탐 가능(low) → 실측 0건이라 둠 | curl_cffi 는 loopback 도 막음(low) → in-process 사용 없어 둠 | `RUN_GEMINI_HANG_TESTS=true` 면 세션 전체 가드 해제(low) → 승인 범위, 그 파일만 돌리는 관례 | 테스트 뒤 남은 스레드의 귀속(low) → 진단 문구만 영향, 둠 | `check_holiday.py` 의 `test_dates` 이름(정보) → 수집 안 됨, 둠. 범위 밖 → `[INFRA-122]`
-- [x] 동적 QA 제외(테스트만 변경, tier-rules §1-1). 전체 pytest 와 누출 0 을 증거로 기록
-
 ### [INFRA-079] 유물 사용량 저장소 `data/usage.db` 의 이메일 행 확인과 정리
 - 카테고리: 인프라 | 티어: T1(남은 단계는 운영자 확인과 파일 정리) | 근거: `[FE-045]` 계획 검토(2026-09-22). 이메일을 기본 키로 쓰던 유물 모듈 `services/usage_tracker.py`(`usage_log`)·`engine/services/usage_tracker.py`(`api_usage`)는 코드 삭제분으로 제거했다(2026-09-24, 커밋 `6efcb93`, 아카이브 2026-09-24). 개발 기기의 `data/usage.db` 는 두 테이블 모두 행 0 이나 운영 서버의 파일은 이 기기에서 확인할 수 없다.
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
