@@ -63,7 +63,9 @@
 ### [INFRA-120] README 의 Market Gate 설명이 신호를 차단한다고 쓴다
 - 카테고리: 인프라 | 티어: T1(문서만, 판정은 설계 때 §2 대조) | 근거: `[INFRA-117]` 코드 리뷰(closing-bet-reviewer, 2026-09-25 low), 코드로 확인
 - 내용: `engine/screener.py:201-202` 는 `is_gate_open` 이 False 여도 경고 로그만 남기고 분석을 계속하며, `engine/generator.py` 는 신호를 만든 뒤 Gate 결과를 `market_status` 로 저장·LLM 문맥에만 쓴다. 그런데 `README.md` 흐름도(`CLOSED --> Block Signal`, 약 189-191행), 「매수 버튼을 활성화할지」(약 937행), 「매매를 보류」·「1480원 이상은 Warning」(약 946행)이 차단·보류를 말한다. 사유에 실제로 붙는 것은 환율 DANGER 뿐이다. 23행은 `[INFRA-117]` 에서 고쳤다
-- [ ] 설계 승인(문서를 코드에 맞출지, 아니면 Gate 로 신호를 실제로 막는 기능이 필요한지)
+- [x] 설계 승인(2026-09-25 15:47, 대화 AskUserQuestion 「문서를 코드에 맞춤 (Recommended)」, bounded): README 흐름도의 Block Signal, 233행 표, §1 의 「매수 버튼 활성화」·「매매 보류」·환율 기준(1450 WARNING·1480 DANGER), §1.1 RSI 구간(>70 10점·<30 15점·그 외 5점), §1.2 예시 코드(실제 위치 `engine/market_gate_analysis.py`, 급락 감점), §1.3 시나리오 B 를 코드에 맞춘다. 같은 README 의 「접속 즉시 동적 계산」(약 2077·2086행)은 `[INFRA-047]` 이후 GET 이 저장값만 읽으므로 함께 고친다. 챗봇 페르소나 지침·예시(약 620·1607·1864·1912행)는 AI 답변 지침이라 둔다. 티어 T1(README 는 §2 밖, 문서만)
+- [x] README 수정과 바꾼 문장별 코드 대조, `git diff --check` exit 0. 대조: 경고만(`engine/screener.py:201-202`), 강세·중립·약세 70/40(`market_gate_logic_scoring.py` `build_market_status`), RSI 25/10/15/5(`score_rsi`), 환율 1450/1480(`engine/config.py:105-106`), 「[환율 위험]」만 붙음(`build_gate_reason`), 감점 최대 60·둘 중 큰 값(`market_gate_analysis.py:38-57·77-100·148-150`), 기본 50점·Open(`market_gate_logic_utils.py:45-47`), 갱신 POST(`kr_market_system_http_routes.py:100`). 프런트엔드에 `is_gate_open` 사용 0건이라 「화면 버튼」 서술은 넣지 않음
+- [x] 문서 검토(tier-rules §5): 참조 경로 여섯 개 실재 확인, `git diff --stat` 은 `README.md`·`TODO.md` 뿐으로 실행 코드 변경 0. QA 제외(문서만, 동적 검증 요청 없음)
 
 ### [FE-048] 종가베팅 상세 모달이 결측인 Toss 5일 순매수를 0 으로 표시한다
 - 카테고리: 프론트엔드 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-109]` 계획 검토(critic, 2026-09-25), 코드로 확인

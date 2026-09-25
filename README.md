@@ -188,7 +188,8 @@ graph TD
 
         M --> N{Market Gate Check}
         N -->|OPEN| O[Signal Output]
-        N -->|CLOSED| P[Block Signal]
+        N -->|CLOSED| P[Warning Log]
+        P --> O
     end
 
     subgraph "API Layer (Flask Blueprint)"
@@ -230,7 +231,7 @@ graph TD
 | ------------------------------- | -------------------------------------------------------- | ----------------------------------------------- |
 | **Multi-Model AI Verification** | Gemini + 보조모델 GPT 병렬 실행                        | 단일 모델의 편향성(bias) 완화, 신호 신뢰도 상승 |
 | **Async Batch Processing**      | `asyncio` + `Semaphore`로 환경변수 기반 동시성 제어       | API 호출 시간 최적화, Rate Limit 방지           |
-| **Market Gate Pattern**         | 개별 종목 분석 전 시장 전체 상태 먼저 점검               | 하락장에서의 무분별한 매수 방지, 계좌 보호      |
+| **Market Gate Pattern**         | 개별 종목 분석 전 시장 전체 상태 먼저 점검               | 약세장 경고와 시장 상태를 AI 분석 문맥에 제공   |
 | **Chain Execution Pattern**     | 데이터 수집 → VCP 분석 → AI 종가베팅 순차 실행           | 데이터 정합성 보장 및 분석 단계별 의존성 해결   |
 | **Persona-Based Prompting**     | 일관된 투자 철학(스마트머니봇)을 시스템 프롬프트에 탑재  | AI 응답의 편차 최소화, 신뢰할 수 있는 조언 생성 |
 | **Modular Phase Pipeline**      | `phases.py`의 4단계 파이프라인으로 시그널 생성 분리      | 단일 책임 원칙(SRP), 테스트 가능성 향상         |
@@ -934,11 +935,11 @@ INVESTMENT_HYPOTHESIS = """
 
 ### 1. Market Gate (시장 신호등 - 최상위 관문)
 
-시장의 거시적/미시적 환경을 정량화하여 **"지금 주식을 사도 되는가?"** 를 결정하는 최상위 관문입니다. 하락장에서는 아무리 좋은 종목도 5~10% 급락 가능성이 있어, 시장 상태를 먼저 확인하는 것이 계좌를 지키는 핵심입니다.
+시장의 거시적/미시적 환경을 정량화하여 **"지금 시장이 매수하기 좋은 상태인가?"** 를 판단하는 최상위 점검입니다. 하락장에서는 아무리 좋은 종목도 5~10% 급락 가능성이 있어, 시장 상태를 먼저 확인합니다.
 
-시장의 거시적/미시적 데이터를 정량화하여 **"매수 버튼을 활성화할지"** 결정하는 최상위 관문입니다. 코드 레벨(`engine/market_gate.py`)에서 구현된 실제 스코어링 로직은 다음과 같습니다.
+Gate 판정은 신호를 막지 않습니다. Gate Closed 이면 스크리너가 경고 로그를 남기고(`engine/screener.py`), 종가베팅 생성기는 판정 결과를 `market_status` 로 저장해 AI 분석의 시장 문맥으로 넘깁니다(`engine/generator.py`). 신호 생성은 Gate 결과와 무관하게 진행됩니다. 실제 스코어링은 `engine/market_gate_analysis.py` 와 `engine/market_gate_logic_scoring.py` 에 있습니다.
 
-*   **총점 100점 만점** (40점 이상 Open)
+*   **기술 점수 100점 만점**에서 급락 감점을 뺀 총점이 40점 이상이면 Open
 
 | 카테고리      | 지표       | 상세 조건                       | 배점     | 비고                              |
 | ------------- | ---------- | ------------------------------- | -------- | ------------------ |
@@ -948,7 +949,10 @@ INVESTMENT_HYPOTHESIS = """
 |               | **Volume** | 거래량 > 20일 평균거래량        | **15점** | 거래 활성화        |
 |               | **RS**     | KOSPI 대비 상대 수익률          | **15점** | 시장 주도력 확인   |
 
-*   **Gate Closed 트리거**: 총점이 **40점 미만(Bearish)** 인 경우 '기술적 약세장'으로 판단하여 매매를 보류합니다. (환율 1480원 이상은 Warning으로 표시)
+*   **급락 감점**: 당일 KOSPI·KOSDAQ 급락 감점(최대 60점)과 섹터 급락 감점(최대 60점) 중 큰 값을 기술 점수에서 뺍니다.
+*   **Gate Closed 트리거**: 총점이 **40점 미만(Bearish)** 인 경우 '기술적 약세장'으로 표시하고 경고를 남깁니다. 70점 이상은 강세(GREEN), 40~69점은 중립(YELLOW), 40점 미만은 약세(RED)입니다.
+*   **환율**: USD/KRW 1450원 이상은 WARNING, 1480원 이상은 DANGER 입니다. DANGER 이면 판정 사유에 「[환율 위험]」이 붙을 뿐 총점과 Open 여부는 바뀌지 않습니다.
+*   **데이터 부족·분석 실패**: 50점·Open 기본값을 돌려줍니다.
 
 #### 1.1 구성 지표
 
@@ -956,6 +960,9 @@ INVESTMENT_HYPOTHESIS = """
 | ------------- | --------------- | ------------------------ | --------- |
 | **Technical** | KODEX 200 지수  | 정배열 여부              | 25점      |
 |               | RSI (KODEX 200) | 50~70 최적구간           | 25점      |
+|               |                 | 30 미만 (과매도)         | 15점      |
+|               |                 | 70 초과 (과매수)         | 10점      |
+|               |                 | 30~50                    | 5점       |
 |               | MACD Signal     | 골든크로스               | 20점      |
 |               | 거래량 (Liquid) | 20일 평균 상회           | 15점      |
 |               | 상대강도 (RS)   | KOSPI 대비 2%p 이상 우위 | 15점      |
@@ -967,39 +974,15 @@ INVESTMENT_HYPOTHESIS = """
 #### 1.2 Gate 판정 로직
 
 ```python
-# engine/market_gate.py
-def evaluate_market_gate():
-    score = 0
+# engine/market_gate_analysis.py 의 analyze_market_state 요약
+tech_score = trend + rsi + macd + volume + rs      # 25 + 25 + 20 + 15 + 15
+penalty = max(intraday_penalty, sector_penalty)    # 당일 지수·섹터 급락 감점
+total_score = min(max(tech_score - penalty, 0), 100)
 
-    # 1. KODEX 200 정배열
-    if kodex_200_ma20 > kodex_200_ma60:
-        score += 25
-
-    # 2. RSI 확인
-    if 50 <= rsi_14day <= 70:  # 최적 구간
-        score += 25
-
-    # 3. MACD 시그널
-    if macd_line > signal_line:
-        score += 20
-
-    # 4. 거래량 분석
-    if volume > avg_volume_20d:
-        score += 15
-
-    # 5. 상대강도 (RS) - Tiered Score
-    if rs_score > 2.0:
-        score += 15
-    elif rs_score >= 0:
-        score += 10
-    elif rs_score >= -2.0:
-        score += 5
-
-    # 판정
-    if score >= 40:
-        return MarketStatus.GATE_OPEN, f"{score}점: 매수 허용"
-    else:
-        return MarketStatus.GATE_CLOSED, f"{score}점: 매수 보류"
+is_gate_open = total_score >= 40
+gate_reason = "시장 양호 (Technical)" if is_gate_open else f"기술적 점수 미달 ({total_score}/40)"
+if usd_krw_status == "DANGER":                     # 1480원 이상
+    gate_reason += " [환율 위험]"                   # 점수에는 반영하지 않는다
 ```
 
 #### 1.3 Rule-Based Scorer (기본 12점 + 가산 7점)
@@ -1025,8 +1008,8 @@ def evaluate_market_gate():
 - **결과**: 수익률 -40% (10번 중 6번 손실)
 
 **시나리오 B (Market Gate 적용):**
-- 하락장 감지 → 모든 신호 차단 → 현금 보유
-- **결과**: 리스크 완전 회피, 하락장 종료 후 재진입
+- 하락장 감지 → Gate Closed 경고와 약세 상태를 AI 분석 문맥에 전달 → 신호는 그대로 생성되므로 매수 여부는 사용자가 시장 상태를 보고 판단
+- **결과**: 약세장임을 모른 채 매수하는 일을 줄임 (신호를 자동으로 막지는 않음)
 
 ---
 
@@ -2074,7 +2057,7 @@ Response 200 OK:
 페이지 접속 시 또는 브라우저에서 요청 시 즉시 갱신되는 항목입니다.
 - **글로벌 지수**: S&P 500, NASDAQ, KOSPI, KOSDAQ 실시간 지수 (`yfinance`)
 - **원자재 및 자산**: 금(Gold), 은(Silver), 비트코인(BTC), 이더리움(ETH) 시세
-- **Market Gate 점수**: 위 실시간 지표와 현재 환율을 결합하여 **접속 즉시** 동적 계산
+- **Market Gate 점수**: 접속 시에는 저장된 최신 결과를 조회만 합니다. 점수 계산은 주기적 동기화(스케줄러)와 관리자 강제 동기화(`POST /api/kr/market-gate/update`)가 수행합니다
 
 ![스마트머니 추적](assets/7.png)
 *스마트머니 추적을 통한 데이터 확인*
@@ -2083,7 +2066,7 @@ Response 200 OK:
 *AI전략 성과 지표*
 
 ### 2. 자동 스케줄 업데이트 (Scheduled Tasks)
-- **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토, Market Gate 실시간 산출)
+- **실시간 데이터**: 페이지 진입 또는 요청 시 최신 데이터 조회 (글로벌 지수, 원자재, 크립토. Market Gate 는 저장된 결과 조회)
 - **주기적 동기화 (사용자 설정 가능)**: 매크로 지표(환율, 지수 등) 자동 동기화 (`MARKET_GATE_UPDATE_INTERVAL_MINUTES` 기본 30분, **1분~60분 단위 설정 가능**)
 - **장 마감 순차 분석 (`CLOSING_SCHEDULE_TIME`, 기본 17:00 ~)**: 데이터 수집 → VCP 분석 → AI 종가베팅 → 알림이 순차적으로 자동 실행 (Chain Execution).
 - **수동 업데이트**: 우측 상단 'Refresh Data' 버튼으로 즉시 갱신 가능 (스크리너 포함)
