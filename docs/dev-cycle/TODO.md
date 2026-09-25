@@ -60,18 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-103] 데이터 상태 화면의 진행 폴링이 조회 오류에도 멈추지 않고 500ms 간격으로 계속 요청한다
-- 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-102]` 코드 리뷰의 범위 밖 관찰(2026-09-25), 코드로 확인
-- 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `pollUpdateStatus` catch 는 `console.error` 만 남기고 interval 을 유지한다. 백엔드가 멈췄거나 네트워크가 끊기면 실행 중 표시가 남은 채로 요청이 끝없이 이어진다. 종전부터 있던 동작이다
-- 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
-- 설계 승인: 2026-09-25 09:32 대화(「진행해」), bounded. 범위: 연속 3회 실패 시 폴링을 멈추고 진행 표시를 내린 뒤 「업데이트 오류」 모달로 알림, 성공 시 실패 횟수 초기화, 앞선 조회가 끝나지 않았으면 tick 건너뜀. 간격·timeout·다른 두 폴링·백엔드는 그대로
-- 스킬: `.claude/skills/closing-bet-nextjs/`, `vendor/skills/vercel-react-best-practices/rules/rerender-use-ref-transient-values.md`(폴링·타이머), 번들 문서 `01-app/01-getting-started/05-server-and-client-components.md`(순수 클라이언트 상태·폴링 변경이라 표의 여섯 줄에 맞지 않음)
-- [x] 회귀 테스트 `page.regression-INFRA-103.test.tsx` 3건(수정 전 3/3 실패 확인) - [x] 구현 `page.tsx`
-- [x] `/ponytail-review`: 과잉설계 없음. 새 상수가 기존 409 주석과 그 대상 사이에 끼어든 배치만 고침
-- [x] `closing-bet-reviewer`: APPROVE, 최고 low. low-1(마운트 조회가 걸린 채 시작하면 새 세션이 실패 2회에 멈출 수 있음)·low-4(마운트 실패·409 재부착 테스트 공백, 실제 타이머 의존) 미반영: 창이 좁고 결과가 조기 알림뿐이며 코드상 맞게 동작. low-2 는 종전 경합이라 `[INFRA-110]` 으로 이월. low-3(unmount 뒤 setModal)은 React 에서 no-op 이라 기록만
-- [x] vitest 전체 101 파일 694 통과(exit 0), tsc exit 0, lint exit 0(경고 183, 수정 전과 같음)
-- [ ] 브라우저 QA(`qa/INFRA-103.md`)
-
 ### [INFRA-104] 수동 업데이트의 실행 시각을 시작 처리에서 스레드로 넘기지 않아 스레드 진입 전의 틈에서 옛 실행이 새 실행으로 보인다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/common_update_status_service.py`) | 근거: `[INFRA-101]` critic 지적 2·`closing-bet-reviewer` low 1(2026-09-25), 코드로 확인
 - 원인: `start_update` 는 이 실행의 `startTime` 을 워커 공용 `LOCAL_RUN_START_TIME` 에만 남기고, 스레드의 `run_background_update` 가 진입 때 그 값을 다시 읽는다. `LOCAL_PIPELINE_ACTIVE` 는 파이프라인 진입 뒤에 켜지므로, 시작 처리와 스레드 진입 사이에 다른 워커의 중단과 같은 워커의 재시작이 겹치면 옛 스레드가 새 실행 시각을 읽는다. 그러면 `[INFRA-097]` 감시는 옛 실행을 멈추지 않고(`_watch_stop_request` ponytail 주석), `[INFRA-101]` 가드는 옛 실행의 항목 쓰기를 새 실행에 통과시킨다
