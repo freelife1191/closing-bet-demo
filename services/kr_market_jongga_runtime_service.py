@@ -160,9 +160,15 @@ def launch_jongga_v2_screener(
         finally:
             save_v2_status(False)
 
-    thread = threading.Thread(target=_run_wrapper, daemon=True)
-    thread.start()
+    # [INFRA-114] 백그라운드가 곧바로 끝나 False 를 쓴 뒤에 True 가 덮여 409 로 굳지 않게 먼저 저장한다
     save_v2_status(True)
+    thread = threading.Thread(target=_run_wrapper, daemon=True)
+    try:
+        thread.start()
+    except Exception:
+        # 살아 있는 이 워커 pid 로 True 가 남으면 형제 재기동으로도 풀리지 않는다
+        save_v2_status(False)
+        raise
 
     message = "Engine started in background. Poll /jongga-v2/status for completion."
     if target_date:

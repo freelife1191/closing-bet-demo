@@ -63,9 +63,16 @@
 ### [INFRA-114] 기동 초기화가 `v2_screener_status.json` 과 스케줄러 런타임 상태를 조건 없이 지운다
 - 카테고리: 인프라 | 티어: T3(위험 경로 `services/scheduler_runtime_status_service.py`) | 근거: `[INFRA-107]` 설계 때 범위 밖으로 뺀 발견(2026-09-25), 코드로 확인
 - 내용: `app/__init__.py` 의 `_reset_startup_status_files` 는 워커가 뜰 때마다 `v2_screener_status.json` 을 `{'isRunning': False}` 로 쓰고 `reset_scheduler_runtime_status` 를 부른다. gunicorn 이 워커 하나만 다시 띄우면 다른 워커에서 도는 종가베팅 V2 실행이나 스케줄러 잡의 실행 표시가 꺼진다. `[INFRA-107]` 은 `update_status.json` 만 고친다
-- 확인 수준: 코드로만 확인. 표시가 꺼졌을 때 중복 실행이 허용되는지는 확인하지 않았다
-- [ ] 설계 승인(`[INFRA-107]` 의 소유 pid 방식을 따를지)
-- [ ] 테스트, T3 리뷰와 pytest 전체
+- 확인 수준: 코드로만 확인. 설계 때 확인(2026-09-25): V2 `isRunning` 은 `launch_jongga_v2_screener` 의 409 중복 실행 잠금이라 지워지면 다른 워커에서 두 번째 실행이 허용된다. 스케줄러 세 플래그는 상태 조회 GET 셋의 표시에만 쓰인다
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 11:13
+  | 범위: `[INFRA-107]` 의 판정을 공개 함수 `owned_by_live_sibling` 으로 모으고, `_save_v2_status`·`set_scheduler_runtime_status` 가 `ownerPid`·`ownerPpid` 를 기록하며, 기동 초기화는 두 파일이 실행 중이고 같은 마스터의 살아 있는 형제가 소유하면 보존한다. V2 실행 요청의 읽기-쓰기 경쟁은 범위 밖(새 TODO)
+  | 실제 대화 근거: 2026-09-25 사용자 「승인 (Recommended)」 응답, 현재 세션의 bounded 설계 제안. 티어 T3(`services/scheduler_runtime_status_service.py` 가 §2 목록)
+- [x] 설계 승인(소유 pid 방식 재사용, 두 파일 모두)
+- [x] 계획 `docs/superpowers/plans/2026-09-25-infra-114-startup-reset-v2-scheduler-owner.md` 와 critic 계획 검토 → ACCEPT-WITH-RESERVATIONS: 지적 1(중) 스레드 시작 뒤 `True` 저장으로 409 고착 → 저장을 `thread.start()` 앞으로 옮김, 옛 순서에서 순서 테스트 3/3 실패 확인 | 2 HUP 뒤 스케줄러 플래그 → 계획 알려진 한계 1 기록 | 3 스케줄러 초기화도 프로세스 사이 잠금 없음 → 알려진 한계 3 기록 | 4 import 누락 → 반영 | 5 테스트 공백 둘 → 반영
+- [x] 테스트(두 파일 형제 소유 보존, 죽은·자기·마스터 불일치·옛 파일·깨진 파일 초기화, 두 writer 의 pid 기록과 공개 응답 제외, 옛 소유자 덮기, 플래그 없으면 기본값, 저장 순서, 스레드 시작 실패 되돌림)와 구현
+- [x] 리뷰: `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` shrink 2(중복 `isinstance` 조건) → 반영 · `closing-bet-reviewer` APPROVE(max low): low 1 `thread.start()` 실패 시 `True` 고착 → `try/except` 로 `False` 되돌림과 테스트 반영 | low 2 공용 함수 ponytail 주석의 해제 수단 → 파일별로 고침 | low 3 기동 초기화 읽기-쓰기 창 → 종전보다 좁아짐, `[INFRA-115]` 로 이월 | 관찰 테스트 위치 → `tests/services/test_kr_market_jongga_runtime_service_refactor.py` 로 옮김 | 범위 밖 17시 체인과 수동 실행 겹침 → `[INFRA-116]` 등록 · 심층 리뷰(`oh-my-claudecode:code-reviewer`): 중 1 스레드 시작 실패 고착 → 위와 같이 반영 | 낮음 2 주석 → 반영 | 낮음 3 파일 잠금 부재 → `[INFRA-115]` | 낮음 4 `False` 기록 실패 때 복구 경로 좁아짐 → 의도된 트레이드오프, 미반영
+- [x] pytest 전체(리뷰 반영 뒤) → `venv/bin/python -m pytest -q -p no:cacheprovider` 2832 passed, 2 skipped, exit 0
+- [ ] 격리 사본 gunicorn 하네스 QA(`qa/INFRA-114.md`)
 
 ### [INFRA-108] Market Gate 의 시장 수급 점수가 수급 파일 마지막 날짜의 임의 종목 한 행을 시장 전체로 쓴다
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-095]` `closing-bet-reviewer` 범위 밖 관찰(2026-09-25), 코드로 확인
@@ -100,4 +107,18 @@
 - 내용: `update_kr_ai_analysis_prices`(`scripts/init_data.py`)는 날짜 없는 파일의 `current_price`·`return_pct` 만 고친다. `_merge_ai_analysis_files`(`services/common_update_ai_analysis_service.py`)는 날짜 파일을 병합한 직렬화 결과로 날짜 없는 파일을 통째로 덮으므로, 오늘 날짜 병합이 한 번 돌면 그 값이 날짜 파일의 값으로 돌아간다. 순차 실행에서도 일어나며 다음 가격 동기화 때 다시 채워진다. AI 판정은 사라지지 않는다
 - 확인 수준: 코드로만 확인. 화면에 옛 가격이 보이는 시간이 실제로 얼마나 되는지는 확인하지 않았다
 - [ ] 설계 승인(가격 필드를 보존할지, 가격 동기화가 날짜 파일도 고칠지)
+- [ ] 테스트, 리뷰와 pytest 전체
+
+### [INFRA-115] 종가베팅 V2 실행 요청의 409 잠금이 워커 사이에서 원자적이지 않다
+- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` 설계와 심층 리뷰 지적 3(2026-09-25), 코드로 확인
+- 내용: `launch_jongga_v2_screener`(`services/kr_market_jongga_runtime_service.py`)는 `v2_screener_status.json` 을 읽어 `isRunning` 을 확인한 뒤 `True` 를 저장하는데, 그 사이에 프로세스 사이 잠금이 없다. 두 워커에 관리자 실행 요청이 거의 동시에 닿으면 둘 다 통과해 LLM 분석이 두 번 돈다. 기동 초기화의 읽기-쓰기(`app/__init__.py`, `reset_scheduler_runtime_status`)도 같은 창을 가진다(`[INFRA-114]` 로 창은 좁아졌다)
+- 확인 수준: 코드로만 확인. 실제 동시 요청은 재현하지 않았다
+- [ ] 설계 승인(`update_status.json` 처럼 fcntl 파일 잠금을 쓸지)
+- [ ] 테스트, 리뷰와 pytest 전체
+
+### [INFRA-116] 17시 스케줄러 체인의 종가베팅 분석이 수동 V2 실행 중인지 확인하지 않는다
+- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` `closing-bet-reviewer` 범위 밖 관찰(2026-09-25), 코드로 확인
+- 내용: `run_jongga_v2_analysis`(`services/scheduler_jobs.py`)는 `v2_screener_status.json` 의 `isRunning` 을 보지 않고, 수동 실행 경로(`launch_jongga_v2_screener`)도 스케줄러 플래그를 보지 않는다. 관리자가 17시 무렵 수동 실행하면 두 분석이 겹쳐 LLM 을 두 번 부르고 같은 결과 파일을 번갈아 쓴다
+- 확인 수준: 코드로만 확인. 운영에서 겹친 적이 있는지는 확인하지 않았다
+- [ ] 설계 승인(겹치면 어느 쪽을 건너뛸지)
 - [ ] 테스트, 리뷰와 pytest 전체

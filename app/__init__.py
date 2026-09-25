@@ -18,8 +18,8 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 from engine.pandas_utils_safe import sanitize_for_json
-from services.common_update_status_service import reset_orphaned_update_status
-from services.kr_market_data_cache_service import atomic_write_text
+from services.common_update_status_service import owned_by_live_sibling, reset_orphaned_update_status
+from services.kr_market_data_cache_service import atomic_write_text, load_json_payload_from_path
 from services.identity_helpers import resolve_anonymous_id, verify_identity_header
 from services.scheduler_runtime_status_service import reset_scheduler_runtime_status
 
@@ -103,12 +103,20 @@ def _reset_startup_status_files() -> None:
         except Exception as error:
             print(f"[Startup] Error reading/writing update_status.json: {error}")
 
-        atomic_write_text(
-            v2_status_file,
-            json.dumps({'isRunning': False}, ensure_ascii=False, indent=2),
-        )
+        # [INFRA-114] 살아 있는 다른 워커의 V2 실행(중복 실행 409 잠금)은 지우지 않는다
+        try:
+            v2_status = load_json_payload_from_path(v2_status_file, deep_copy=False)
+        except Exception:
+            v2_status = None
+        if owned_by_live_sibling(v2_status) and v2_status.get('isRunning'):
+            print(f"[Startup] V2 reset skipped: run owned by live worker {v2_status.get('ownerPid')}")
+        else:
+            atomic_write_text(
+                v2_status_file,
+                json.dumps({'isRunning': False}, ensure_ascii=False, indent=2),
+            )
+            logging.debug("[Startup] 🧹 Reset v2_screener_status.json")
         reset_scheduler_runtime_status(data_dir=data_dir)
-        logging.debug("[Startup] 🧹 Reset v2_screener_status.json")
     except Exception as error:
         print(f"[Startup] Failed to reset status files: {error}")
 

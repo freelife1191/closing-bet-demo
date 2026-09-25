@@ -14,6 +14,7 @@ import threading
 from datetime import datetime
 from typing import Any
 
+from services.common_update_status_service import owned_by_live_sibling
 from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
@@ -21,6 +22,7 @@ from services.kr_market_data_cache_service import (
 
 _SCHEDULER_RUNTIME_STATUS_FILENAME = "scheduler_runtime_status.json"
 _SCHEDULER_RUNTIME_STATUS_LOCK = threading.Lock()
+_RUNNING_KEYS = ("is_data_scheduling_running", "is_jongga_scheduling_running", "is_vcp_scheduling_running")
 
 
 def _build_default_status() -> dict[str, Any]:
@@ -73,6 +75,8 @@ def set_scheduler_runtime_status(
             current["is_vcp_scheduling_running"] = bool(vcp_scheduling_running)
 
         current["updated_at"] = datetime.now().isoformat()
+        # [INFRA-114] 기동 초기화가 소유 워커 생존을 판정하도록 남긴다. 조회는 정규화로 이 키를 버린다
+        current["ownerPid"], current["ownerPpid"] = os.getpid(), os.getppid()
         status_file = _resolve_status_file_path(data_dir)
         atomic_write_text(
             status_file,
@@ -82,11 +86,18 @@ def set_scheduler_runtime_status(
 
 
 def reset_scheduler_runtime_status(*, data_dir: str = "data") -> dict[str, Any]:
-    """스케줄러 런타임 상태를 초기화한다."""
+    """기동 때 스케줄러 런타임 상태를 초기화한다. 살아 있는 다른 워커(리더)가 실행 중이면 그대로 둔다."""
     with _SCHEDULER_RUNTIME_STATUS_LOCK:
+        status_file = _resolve_status_file_path(data_dir)
+        try:
+            raw = load_json_payload_from_path(status_file, deep_copy=False)
+        except Exception:
+            raw = None
+        # [INFRA-114] 리더가 아닌 워커가 다시 떠도 리더의 체인 실행 표시를 끄지 않는다
+        if owned_by_live_sibling(raw) and any(raw.get(k) for k in _RUNNING_KEYS):
+            return _normalize_scheduler_runtime_status(raw)
         status = _build_default_status()
         status["updated_at"] = datetime.now().isoformat()
-        status_file = _resolve_status_file_path(data_dir)
         atomic_write_text(
             status_file,
             json.dumps(status, ensure_ascii=False, indent=2),

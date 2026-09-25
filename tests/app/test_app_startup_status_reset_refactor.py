@@ -127,3 +127,60 @@ def test_reset_orphaned_update_status_waits_for_status_file_lock(tmp_path: Path)
         fcntl.flock(lock_fp.fileno(), fcntl.LOCK_UN)
     assert done.wait(5)
     assert json.loads(status_file.read_text(encoding="utf-8"))["isRunning"] is False
+
+
+def test_reset_startup_status_files_keeps_v2_and_scheduler_status_of_live_other_worker(monkeypatch, tmp_path: Path):
+    # [INFRA-114] 살아 있는 다른 워커의 V2 실행(409 잠금)과 스케줄러 체인 표시를 지우지 않는다
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    owner = {"ownerPid": os.getppid(), "ownerPpid": os.getppid()}
+    (data_dir / "v2_screener_status.json").write_text(json.dumps({"isRunning": True, **owner}), encoding="utf-8")
+    (data_dir / "scheduler_runtime_status.json").write_text(
+        json.dumps(
+            {
+                "is_data_scheduling_running": True,
+                "is_jongga_scheduling_running": False,
+                "is_vcp_scheduling_running": True,
+                "updated_at": "2026-09-25T17:00:00",
+                **owner,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    app_module._reset_startup_status_files()
+
+    assert json.loads((data_dir / "v2_screener_status.json").read_text(encoding="utf-8"))["isRunning"] is True
+    sched = json.loads((data_dir / "scheduler_runtime_status.json").read_text(encoding="utf-8"))
+    assert (sched["is_data_scheduling_running"], sched["is_vcp_scheduling_running"]) == (True, True)
+
+
+def test_reset_startup_status_files_resets_v2_and_scheduler_when_not_live_sibling(monkeypatch, tmp_path: Path):
+    # [INFRA-114] 소유자 사망·자기 pid·마스터 불일치·pid 없는 옛 파일·깨진 파일은 종전처럼 초기화한다
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    cases = [
+        {"ownerPid": dead.pid, "ownerPpid": os.getppid()},
+        {"ownerPid": os.getpid(), "ownerPpid": os.getppid()},
+        {"ownerPid": os.getppid(), "ownerPpid": -1},
+        {},
+        None,  # 깨진 JSON
+    ]
+    running_keys = ("is_data_scheduling_running", "is_jongga_scheduling_running", "is_vcp_scheduling_running")
+    for owner in cases:
+        for name, running in (
+            ("v2_screener_status.json", {"isRunning": True}),
+            ("scheduler_runtime_status.json", {"is_jongga_scheduling_running": True}),
+        ):
+            text = "{broken" if owner is None else json.dumps({**running, **owner})
+            (data_dir / name).write_text(text, encoding="utf-8")
+
+        app_module._reset_startup_status_files()
+
+        assert json.loads((data_dir / "v2_screener_status.json").read_text(encoding="utf-8")) == {"isRunning": False}, owner
+        sched = json.loads((data_dir / "scheduler_runtime_status.json").read_text(encoding="utf-8"))
+        assert not any(sched[k] for k in running_keys), owner

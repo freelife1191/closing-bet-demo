@@ -595,15 +595,23 @@ def _owner_process_alive(pid: Any) -> bool:
     return True
 
 
+def owned_by_live_sibling(status: Any) -> bool:
+    """[INFRA-114] 상태를 쓴 워커가 같은 마스터 아래 살아 있는 다른 워커인가. 전체 재기동은 마스터가 바뀌어 항상 거짓이다."""
+    # ponytail: 같은 마스터 안의 pid 재사용과 graceful 재기동(HUP)의 옛 워커는 살아 있다고 본다. 그때 update 는 관리자 중단 요청, V2 는 다음 전체 재기동, 스케줄러 플래그는 다음 잡의 finally 가 푼다
+    return (
+        isinstance(status, dict)
+        and status.get("ownerPpid") == os.getppid()
+        and _owner_process_alive(status.get("ownerPid"))
+    )
+
+
 def reset_orphaned_update_status(*, update_status_file: str, logger) -> bool:
     """기동 때 주인이 사라진 실행 상태만 내린다. 다른 워커가 살아서 돌리는 실행은 그대로 둔다."""
     with _status_file_lock(update_status_file, logger):
         status = _read_status_file(update_status_file, logger)
         if not status.get("isRunning", False):
             return False
-        # 같은 마스터의 형제 워커이고 살아 있을 때만 보존한다. 전체 재기동은 마스터가 바뀌어 항상 초기화된다.
-        # ponytail: 같은 마스터 안의 pid 재사용과 graceful 재기동(HUP)의 옛 워커는 살아 있다고 본다. 그때는 관리자 중단 요청이 푼다
-        if status.get("ownerPpid") == os.getppid() and _owner_process_alive(status.get("ownerPid")):
+        if owned_by_live_sibling(status):
             logger.info(f"Startup reset skipped: update owned by live worker {status.get('ownerPid')}")
             return False
         status["isRunning"] = False

@@ -351,3 +351,9 @@ def test_run_jongga_v2_screener_route_persists_status_with_atomic_writer(monkeyp
     status_path, status_content = writes[-1]
     assert status_path.endswith("v2_screener_status.json")
     assert "\"isRunning\": true" in status_content
+    # [INFRA-114] 기동 초기화가 소유 워커를 판정하도록 pid 를 남기고, 공개 상태 응답에는 싣지 않는다
+    payload = json.loads(status_content)
+    assert (payload["ownerPid"], payload["ownerPpid"]) == (os.getpid(), os.getppid())
+    status_response = client.get("/api/kr/jongga-v2/status").get_json()
+    assert status_response["isRunning"] is True
+    assert "ownerPid" not in status_response and "ownerPpid" not in status_response

@@ -41,6 +41,9 @@ def _build_v2_status_io(
                     {
                         "isRunning": running,
                         "updated_at": datetime.now().isoformat(),
+                        # [INFRA-114] 기동 초기화가 소유 워커 생존을 판정하도록 남긴다
+                        "ownerPid": os.getpid(),
+                        "ownerPpid": os.getppid(),
                     },
                     ensure_ascii=False,
                     indent=2,
