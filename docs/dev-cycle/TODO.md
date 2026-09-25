@@ -60,16 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [VCP-051] 시그널 가격 갱신이 청산(CLOSED)된 행의 수익률도 오늘 가격으로 덮는다
-- 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
-- 원인: `update_vcp_signals_recent_price`(`scripts/init_data.py:2006-2018`)가 `status` 를 보지 않고 모든 행의 `current_price`·`return_pct` 를 덮는다. 청산된 행의 실현 수익률이 사라진다
-- 영향: 지금은 청산 행의 이 값을 읽는 화면이 없어 드러나지 않는 잠재적 이력 오염이다. 청산 행이 화면에서 빠지는 것(`[VCP-034]`)은 의도된 동작이며, 과거 날짜 조회에 청산 행을 보일지는 정책으로 따로 정한다
-- 설계 승인: 2026-09-25 09:10 대화(사용자 「진행해」). 범위: 잠금 안 적용 루프에서 `status == 'CLOSED'` 행만 건너뜀(열 없음·빈 값은 종전대로 갱신), 가격 조회·`kr_ai_analysis.json` 동기화는 그대로, 과거 날짜 청산 행 표시 정책과 운영 이력 복구는 범위 밖. bounded·T3(위험 경로 `scripts/init_data.py`)
-- [x] 회귀 테스트 `test_update_recent_price_keeps_closed_rows`(수정 전 실패 확인)와 수정
-- [x] 과잉설계 리뷰(직접, `Lean already. Ship.`), `closing-bet-reviewer` APPROVE(max low), 심층 리뷰(`oh-my-claudecode:code-reviewer`) 차단 0. 미반영 low: 청산 행만 남은 종목도 시세 조회(종전 동작, 그 가격은 `kr_ai_analysis.json` 동기화가 씀), `update_kr_ai_analysis_prices` 상태 무시(JSON signals 에 `status`·`return_pct` 키 없음을 로컬에서 확인해 해당 없음), `PENDING`·`CANCELLED` 도 갱신(`signals_log.csv` 에 쓰는 경로 없음), 빈 status 테스트(열 없음은 기존 테스트, 빈 값은 QA 하네스로 확인)
-- [x] pytest 2804 passed·2 skipped(exit 0), vitest 100 files·691 passed(exit 0)
-- [ ] 격리 사본 CLI QA(`qa/VCP-051.md`)
-
 ### [VCP-052] VCP AI JSON 의 읽기·병합·저장에 잠금이 없고 최신 파일 가격 동기화는 원자적이지 않다
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `vcp-data-audit` 읽기 전용 감사(2026-09-24 17:4x, 사용자 질문 「과거 데이터가 사라지지 않는지」), 리더가 코드로 재확인
 - 원인: 수동 갱신 병합(`services/common_update_ai_analysis_service.py:117-146`, 원자적 교체는 함)·수집(`scripts/init_data.py:1522`)·재분석(`services/kr_market_vcp_reanalysis_service.py:750`)이 같은 날짜 파일을 잠금 없이 읽고 병합해 쓴다. `vcp_status` 는 워커 메모리에만 있어 서로 막지 못한다. 가격 동기화(`scripts/init_data.py:2056`)는 `open('w')` 로 직접 쓴다
