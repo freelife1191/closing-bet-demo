@@ -8,9 +8,7 @@ KR Market Jongga Execution Routes
 
 from __future__ import annotations
 
-import json
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -20,11 +18,8 @@ from werkzeug.exceptions import BadRequest
 from app.routes.route_execution import execute_json_route
 from app.routes.route_guards import require_admin
 from services.common_update_status_service import _status_file_lock
-from services.kr_market_jongga_runtime_service import read_v2_status_uncached
-from services.kr_market_data_cache_service import (
-    atomic_write_text,
-    load_json_payload_from_path,
-)
+from services.kr_market_jongga_runtime_service import read_v2_status_uncached, write_v2_status
+from services.kr_market_data_cache_service import load_json_payload_from_path
 from services.scheduler_runtime_status_service import get_scheduler_runtime_status
 
 
@@ -36,23 +31,7 @@ def _build_v2_status_io(
     v2_status_file = os.path.join(data_dir, "v2_screener_status.json")
 
     def _save_v2_status(running: bool) -> None:
-        try:
-            atomic_write_text(
-                v2_status_file,
-                json.dumps(
-                    {
-                        "isRunning": running,
-                        "updated_at": datetime.now().isoformat(),
-                        # [INFRA-114] 기동 초기화가 소유 워커 생존을 판정하도록 남긴다
-                        "ownerPid": os.getpid(),
-                        "ownerPpid": os.getppid(),
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-            )
-        except Exception as error:
-            logger.error(f"Failed to save V2 status: {error}")
+        write_v2_status(v2_status_file, running, logger)
 
     def _load_v2_status() -> dict[str, Any]:
         try:

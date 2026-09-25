@@ -9,13 +9,22 @@ Scheduler job 실행 로직.
 from __future__ import annotations
 
 import logging
+import os
+import time
 from datetime import datetime
 from typing import Any, Callable
 
 from engine.market_schedule import MarketSchedule
+from services.common_update_status_service import _status_file_lock
+from services.kr_market_jongga_runtime_service import read_v2_status_uncached, write_v2_status
 from services.scheduler_runtime_status_service import set_scheduler_runtime_status
 
 logger = logging.getLogger(__name__)
+
+# [INFRA-116] 수동 실행 라우트·기동 초기화와 같은 cwd 기준 경로
+V2_STATUS_FILE = os.path.join("data", "v2_screener_status.json")
+V2_WAIT_SECONDS = 30 * 60
+V2_POLL_SECONDS = 10
 
 
 def _load_init_data_functions() -> dict[str, Callable[..., Any]]:
@@ -40,6 +49,28 @@ def _run_market_gate_analysis() -> None:
     market_gate.save_analysis(result)
 
 
+def _claim_v2_run() -> bool:
+    """[INFRA-116] 수동 V2 실행과 같은 잠금·파일로 실행권을 잡는다."""
+    with _status_file_lock(V2_STATUS_FILE, logger):
+        if read_v2_status_uncached(V2_STATUS_FILE).get("isRunning", False):
+            return False
+        # 기록하지 못한 실행권은 수동 요청을 409 로 막지 못한다
+        return write_v2_status(V2_STATUS_FILE, True, logger)
+
+
+def _wait_and_claim_v2_run() -> bool:
+    if _claim_v2_run():
+        return True
+    logger.warning("[Scheduler] 수동 종가베팅 실행이 진행 중이라 끝나기를 기다립니다 (최대 30분).")
+    deadline = time.monotonic() + V2_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        time.sleep(V2_POLL_SECONDS)
+        if _claim_v2_run():
+            return True
+    logger.error("[Scheduler] 수동 종가베팅 실행이 30분 안에 끝나지 않아 정기 종가베팅 분석을 건너뜁니다.")
+    return False
+
+
 def run_jongga_v2_analysis(test_mode: bool = False, send_notification: bool = True) -> bool:
     """장 마감 후 AI 종가베팅 분석."""
     now = datetime.now()
@@ -53,7 +84,11 @@ def run_jongga_v2_analysis(test_mode: bool = False, send_notification: bool = Tr
 
     set_scheduler_runtime_status(jongga_scheduling_running=True)
     logger.info(">>> [Scheduler] AI 종가베팅 분석 시작 (After Closing Analysis)")
+    claimed = False
     try:
+        claimed = _wait_and_claim_v2_run()
+        if not claimed:
+            return False
         init_data_functions = _load_init_data_functions()
         analysis_ok = init_data_functions["create_jongga_v2_latest"]()
         if analysis_ok is False:
@@ -71,6 +106,8 @@ def run_jongga_v2_analysis(test_mode: bool = False, send_notification: bool = Tr
         logger.error(f"[Scheduler] AI 종가베팅 분석 실패: {e}")
         return False
     finally:
+        if claimed:
+            write_v2_status(V2_STATUS_FILE, False, logger)
         set_scheduler_runtime_status(jongga_scheduling_running=False)
 
 

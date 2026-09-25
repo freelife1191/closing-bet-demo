@@ -372,7 +372,7 @@ def test_send_jongga_v2_message_route_skips_duplicate_without_force(monkeypatch,
 
 
 def test_run_jongga_v2_screener_route_persists_status_with_atomic_writer(monkeypatch, tmp_path: Path):
-    import app.routes.kr_market_jongga_execution_routes as route_module
+    import services.kr_market_jongga_runtime_service as runtime_module
 
     writes: list[tuple[str, str]] = []
 
@@ -384,7 +384,7 @@ def test_run_jongga_v2_screener_route_persists_status_with_atomic_writer(monkeyp
         kwargs["save_v2_status"](True)
         return 200, {"status": "started"}
 
-    monkeypatch.setattr(route_module, "atomic_write_text", _atomic_write)
+    monkeypatch.setattr(runtime_module, "atomic_write_text", _atomic_write)
 
     client = _create_client(
         str(tmp_path),

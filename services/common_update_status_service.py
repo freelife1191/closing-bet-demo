@@ -597,7 +597,7 @@ def _owner_process_alive(pid: Any) -> bool:
 
 def owned_by_live_sibling(status: Any) -> bool:
     """[INFRA-114] 상태를 쓴 워커가 같은 마스터 아래 살아 있는 다른 워커인가. 전체 재기동은 마스터가 바뀌어 항상 거짓이다."""
-    # ponytail: 같은 마스터 안의 pid 재사용과 graceful 재기동(HUP)의 옛 워커는 살아 있다고 본다. 그때 update 는 관리자 중단 요청, V2 는 다음 전체 재기동, 스케줄러 플래그는 다음 잡의 finally 가 푼다
+    # ponytail: 같은 마스터 안의 pid 재사용과 graceful 재기동(HUP)의 옛 워커는 살아 있다고 본다. 그때 update 는 관리자 중단 요청, V2 는 다음 전체 재기동(그때까지 17시 체인도 30분 기다린 뒤 종가베팅을 건너뛴다 [INFRA-116]), 스케줄러 플래그는 다음 잡의 finally 가 푼다
     return (
         isinstance(status, dict)
         and status.get("ownerPpid") == os.getppid()

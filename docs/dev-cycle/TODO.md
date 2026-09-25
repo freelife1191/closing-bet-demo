@@ -64,8 +64,19 @@
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` `closing-bet-reviewer` 범위 밖 관찰(2026-09-25), 코드로 확인
 - 내용: `run_jongga_v2_analysis`(`services/scheduler_jobs.py`)는 `v2_screener_status.json` 의 `isRunning` 을 보지 않고, 수동 실행 경로(`launch_jongga_v2_screener`)도 스케줄러 플래그를 보지 않는다. 관리자가 17시 무렵 수동 실행하면 두 분석이 겹쳐 LLM 을 두 번 부르고 같은 결과 파일을 번갈아 쓴다
 - 확인 수준: 코드로만 확인. 운영에서 겹친 적이 있는지는 확인하지 않았다
-- [ ] 설계 승인(겹치면 어느 쪽을 건너뛸지)
-- [ ] 테스트, 리뷰와 pytest 전체
+- [x] 설계 승인(2026-09-25 14:19, 대화 「이 설계로 진행 (Recommended)」, bounded). 범위: 스케줄러 `run_jongga_v2_analysis` 가 수동 경로와 같은 `v2_screener_status.json`(`_status_file_lock` 안 캐시 없는 읽기)으로 실행권을 잡고 `finally` 에서 내림. 체인 중 수동 요청은 기존 검사로 409. 체인 시작 때 수동 실행 중이면 10초 간격·최대 30분 기다린 뒤 실행, 초과하면 오류 로그와 False. 저장 함수는 `write_v2_status` 로 런타임 서비스에 옮겨 라우트와 공유. 주인 없는 True 는 종전처럼 전체 재기동으로만 풀림
+- 티어: T3(`services/scheduler_jobs.py` 가 §2 「스케줄러와 데이터 적재」). 스킬: `.claude/skills/closing-bet-python/`. 계획: `docs/superpowers/plans/2026-09-25-infra-116-scheduler-v2-run-claim.md`
+- [x] 계획 검토(critic, ACCEPT-WITH-RESERVATIONS): Step 2 RED 기대 오류(autouse fixture 가 전 테스트를 ERROR 로 만듦) → fixture 에 `raising=False` 반영. 테스트 import 누락 → 반영. 대기 테스트가 「기다렸다」를 증명 못 함 → sleep 횟수·분석 중 True 확인 반영. 클록 `range` 고갈이 `except` 에 삼켜져 거짓 통과 → `itertools.count`·sleep 2회 확인 반영. 체인 중 수동 409 테스트·휴장일 실행권 미획득 확인 누락 → 반영. 수동 경로가 끝날 때 False 를 잠금 없이 두 번 써 대기 중인 체인의 True 를 덮을 수 있음 → 범위 밖, `[INFRA-118]` 로 등록
+- [x] 테스트 5건(분석 중 실행권 보유·예외 뒤 해제, 수동 실행이 끝나기를 기다린 뒤 실행, 한도 초과 시 분석 없이 남의 실행권 보존, 체인 중 수동 요청 409, 실행권 저장 실패 시 분석 없음)과 휴장일 실행권 미획득 단언. 모두 수정 전 실패 확인
+- [x] 과잉설계 리뷰(직접, Lean). `closing-bet-reviewer` APPROVE(최고 low). T3 심층 리뷰(`oh-my-claudecode:code-reviewer`) 중간 1·낮음 3·참고 2. 저장 실패를 실행권 획득으로 처리(두 리뷰 low) → 반영(`write_v2_status` bool). fixture `raising=False`(low) → 제거. 주인이 살아 보이는 낡은 True 가 매일 체인도 막음(중간) → ponytail 주석·계획 한계 4 에 기록, 낡은 값 판정은 `[INFRA-118]` 설계로. 대기 중 스케줄러 루프 정지(low)·대기 중 상태 문구(참고) → 계획 한계 5·6. CLI 경로(`scripts/run_full_update.py`·`verify_collection_logic.py`)의 실행권 미사용 → 수동 CLI 라 범위 밖, 기록만
+- [x] pytest 전체 2850 passed, 2 skipped, exit 0(14:30, 리뷰 반영 뒤)
+- [ ] QA 계획·실행(`docs/dev-cycle/qa/INFRA-116.md`)
+
+### [INFRA-118] 수동 V2 실행이 끝날 때 상태 False 를 잠금 없이 두 번 쓴다
+- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-116]` 계획 검토(critic, 2026-09-25), 코드로 확인
+- 내용: `run_jongga_v2_background_pipeline` 의 `finally`(`services/kr_market_jongga_runtime_service.py`)와 `launch_jongga_v2_screener` 의 `_run_wrapper` `finally` 가 각각 `save_v2_status(False)` 를 `_status_file_lock` 없이 부른다. 첫 False 뒤 두 번째 False 전에 다른 요청이나 `[INFRA-116]` 의 대기 중인 스케줄러가 실행권(True)을 잡으면 두 번째 False 가 그것을 덮어, 그 분석이 도는 동안 수동 요청이 다시 200 을 받는다. 틈은 로그 한 줄 길이다
+- 확인 수준: 코드로만 확인. 재현하지 않았다
+- [ ] 설계 승인(중복 저장 제거, 또는 소유자 확인 뒤 잠금 안에서 내림). `[INFRA-116]` 심층 리뷰 중간 1 도 함께 판단: 주인이 살아 보이는 낡은 True(graceful 재기동·pid 재사용)가 매일 17시 체인의 종가베팅을 30분 대기 뒤 건너뛰게 하므로 `updated_at` 기준 낡은 값 판정 여부를 정한다
 
 ### [INFRA-117] `engine/kis_collector.py` 에 운영 호출자가 남지 않았다
 - 카테고리: 인프라 | 티어: T1(판정은 설계 때 §2 대조) | 근거: `[INFRA-108]` ponytail 리뷰(2026-09-25), `git grep` 으로 확인

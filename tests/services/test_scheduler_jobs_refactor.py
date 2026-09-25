@@ -6,12 +6,36 @@ Scheduler job 리팩토링 회귀 테스트
 
 from __future__ import annotations
 
+import itertools
+import json
+import logging
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
 import services.scheduler_jobs as scheduler_jobs
+
+
+@pytest.fixture(autouse=True)
+def _isolated_v2_status(monkeypatch, tmp_path):
+    # 원본 data/ 에 쓰지 않는다
+    monkeypatch.setattr(scheduler_jobs, "V2_STATUS_FILE", str(tmp_path / "v2_screener_status.json"))
+
+
+def _open_market_scheduler(monkeypatch, create):
+    monkeypatch.setattr(scheduler_jobs, "set_scheduler_runtime_status", lambda **_kwargs: None)
+    monkeypatch.setattr(scheduler_jobs.MarketSchedule, "is_market_open", lambda _date: True)
+    monkeypatch.setattr(
+        scheduler_jobs,
+        "_load_init_data_functions",
+        lambda: {"create_jongga_v2_latest": create, "send_jongga_notification": lambda: None},
+    )
+
+
+def _v2_running() -> bool:
+    return json.loads(Path(scheduler_jobs.V2_STATUS_FILE).read_text(encoding="utf-8"))["isRunning"]
 
 
 def test_run_jongga_v2_analysis_skips_when_market_closed(monkeypatch):
@@ -38,6 +62,8 @@ def test_run_jongga_v2_analysis_skips_when_market_closed(monkeypatch):
     scheduler_jobs.run_jongga_v2_analysis(test_mode=False)
 
     assert calls == {"analyze": 0, "notify": 0}
+    # [INFRA-116] 휴장일 분기는 실행권을 잡지 않는다
+    assert not Path(scheduler_jobs.V2_STATUS_FILE).exists()
 
 
 def test_run_jongga_v2_analysis_runs_analysis_and_notification(monkeypatch):
@@ -396,3 +422,94 @@ def test_run_daily_closing_analysis_clears_stale_stop_request(monkeypatch):
     scheduler_jobs.run_daily_closing_analysis(test_mode=True)
 
     assert seen == [False]
+
+
+def test_run_jongga_v2_analysis_holds_v2_run_claim_during_analysis(monkeypatch):
+    seen = []
+
+    def _create():
+        seen.append(_v2_running())
+        raise RuntimeError("boom")
+
+    _open_market_scheduler(monkeypatch, _create)
+
+    assert scheduler_jobs.run_jongga_v2_analysis(send_notification=False) is False
+    assert seen == [True]
+    assert _v2_running() is False
+
+
+def test_run_jongga_v2_analysis_waits_for_manual_run_then_runs(monkeypatch):
+    Path(scheduler_jobs.V2_STATUS_FILE).write_text('{"isRunning": true}', encoding="utf-8")
+    sleeps = []
+
+    def _manual_finishes(seconds):
+        sleeps.append(seconds)
+        Path(scheduler_jobs.V2_STATUS_FILE).write_text('{"isRunning": false}', encoding="utf-8")
+
+    seen = []
+    monkeypatch.setattr(scheduler_jobs.time, "sleep", _manual_finishes)
+    _open_market_scheduler(monkeypatch, lambda: seen.append(_v2_running()) or True)
+
+    assert scheduler_jobs.run_jongga_v2_analysis(send_notification=False) is True
+    assert sleeps == [scheduler_jobs.V2_POLL_SECONDS]
+    assert seen == [True]
+    assert _v2_running() is False
+
+
+def test_run_jongga_v2_analysis_skips_after_wait_limit_and_keeps_manual_claim(monkeypatch):
+    Path(scheduler_jobs.V2_STATUS_FILE).write_text('{"isRunning": true}', encoding="utf-8")
+    clock = itertools.count(0, 600)  # 한 번 확인할 때마다 10분 흐른다
+    sleeps = []
+    monkeypatch.setattr(scheduler_jobs.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(scheduler_jobs.time, "sleep", sleeps.append)
+    calls = {"analyze": 0}
+    _open_market_scheduler(monkeypatch, lambda: calls.__setitem__("analyze", 1) or True)
+
+    assert scheduler_jobs.run_jongga_v2_analysis(send_notification=False) is False
+    assert calls["analyze"] == 0
+    assert len(sleeps) == 2  # 10분·20분 뒤 확인, 30분에 멈춘다
+    assert _v2_running() is True  # 남의 실행권을 지우지 않는다
+
+
+def test_manual_run_request_gets_409_while_scheduler_holds_v2_claim(monkeypatch):
+    from services.common_update_status_service import _status_file_lock
+    from services.kr_market_jongga_runtime_service import launch_jongga_v2_screener, read_v2_status_uncached
+
+    path = scheduler_jobs.V2_STATUS_FILE
+    logger = logging.getLogger(__name__)
+    started = []
+
+    def _create():
+        code, _payload = launch_jongga_v2_screener(
+            req_data={},
+            load_v2_status=lambda: read_v2_status_uncached(path),
+            save_v2_status=lambda running: started.append(running),
+            run_jongga_background=lambda **_kwargs: started.append("bg"),
+            logger=logger,
+            status_lock=lambda: _status_file_lock(path, logger),
+        )
+        started.append(code)
+        return True
+
+    _open_market_scheduler(monkeypatch, _create)
+
+    assert scheduler_jobs.run_jongga_v2_analysis(send_notification=False) is True
+    assert started == [409]
+
+
+def test_run_jongga_v2_analysis_does_not_run_when_claim_write_fails(monkeypatch):
+    # 실행권을 파일에 남기지 못하면 수동 요청이 409 를 받지 못하므로 분석하지 않는다
+    import services.kr_market_jongga_runtime_service as runtime_module
+
+    def _fail(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runtime_module, "atomic_write_text", _fail)
+    clock = itertools.count(0, scheduler_jobs.V2_WAIT_SECONDS)  # 첫 확인 뒤 곧바로 한도
+    monkeypatch.setattr(scheduler_jobs.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(scheduler_jobs.time, "sleep", lambda _seconds: None)
+    calls = {"analyze": 0}
+    _open_market_scheduler(monkeypatch, lambda: calls.__setitem__("analyze", 1) or True)
+
+    assert scheduler_jobs.run_jongga_v2_analysis(send_notification=False) is False
+    assert calls["analyze"] == 0

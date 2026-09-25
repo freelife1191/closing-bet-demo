@@ -18,6 +18,8 @@ from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from typing import Any, Callable
 
+from services.kr_market_data_cache_service import atomic_write_text
+
 
 def _reload_engine_submodules() -> None:
     for module_name in [name for name in list(sys.modules.keys()) if name.startswith("engine.")]:
@@ -143,6 +145,29 @@ def read_v2_status_uncached(v2_status_file: str) -> dict[str, Any]:
     except (OSError, ValueError):
         return {"isRunning": False}
     return loaded if isinstance(loaded, dict) else {"isRunning": False}
+
+
+def write_v2_status(v2_status_file: str, running: bool, logger: logging.Logger) -> bool:
+    """[INFRA-116] 수동 실행과 스케줄러 체인이 같은 형식으로 V2 실행권을 기록한다. 저장 성공 여부를 돌려준다."""
+    try:
+        atomic_write_text(
+            v2_status_file,
+            json.dumps(
+                {
+                    "isRunning": running,
+                    "updated_at": datetime.now().isoformat(),
+                    # [INFRA-114] 기동 초기화가 소유 워커 생존을 판정하도록 남긴다
+                    "ownerPid": os.getpid(),
+                    "ownerPpid": os.getppid(),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+        return True
+    except Exception as error:
+        logger.error(f"Failed to save V2 status: {error}")
+        return False
 
 
 def launch_jongga_v2_screener(
