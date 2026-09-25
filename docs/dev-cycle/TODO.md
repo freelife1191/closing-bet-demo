@@ -60,18 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-118] 수동 V2 실행이 끝날 때 상태 False 를 잠금 없이 두 번 쓴다
-- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-116]` 계획 검토(critic, 2026-09-25), 코드로 확인
-- 내용: `run_jongga_v2_background_pipeline` 의 `finally`(`services/kr_market_jongga_runtime_service.py`)와 `launch_jongga_v2_screener` 의 `_run_wrapper` `finally` 가 각각 `save_v2_status(False)` 를 `_status_file_lock` 없이 부른다. 첫 False 뒤 두 번째 False 전에 다른 요청이나 `[INFRA-116]` 의 대기 중인 스케줄러가 실행권(True)을 잡으면 두 번째 False 가 그것을 덮어, 그 분석이 도는 동안 수동 요청이 다시 200 을 받는다. 틈은 로그 한 줄 길이다
-- 확인 수준: 코드로만 확인. 재현하지 않았다
-- 설계 승인: 2026-09-25 14:35(AskUserQuestion 응답 「이 설계로 진행 (Recommended)」, 14:35:27 측정)
-  | 범위: 두 파이프라인 사본(`services/kr_market_route_service.py`·`services/kr_market_jongga_runtime_service.py`)에서 `save_status` 저장과 매개변수를 지우고, 실행권 해제는 실행권을 잡은 `launch_jongga_v2_screener` 의 `_run_wrapper` `finally` 한 곳에서만 한다. 라우트(`app/routes/kr_market_jongga_execution_routes.py`)는 `save_status` 전달을 지운다. `updated_at` 기준 낡은 True 판정은 넣지 않는다(운영 재기동은 전체 재기동이라 이 상태를 남기지 않고, 실행 중 갱신이 없어 기준 시간을 정할 수 없으며, `scheduler_jobs.py` 가 §2 라 T3 가 된다. 한계는 `owned_by_live_sibling` 의 ponytail 주석에 이미 있다). 티어 T2(세 파일 모두 §2 밖)
-  | 실제 대화 근거: 현재 세션 「다음 진행사항 확인해서 진행해」 뒤 제시한 설계에 대한 응답
-- [x] 파이프라인 상태 저장 제거와 해제 단일화, 기존 테스트 기대값 변경(`[True, False]` → 저장 없음)과 회귀 테스트(해제 한 번, 사이에 잡힌 True 를 덮지 않음, 수정 전 실패 확인) → 회귀 테스트 `test_manual_run_releases_v2_claim_once_so_a_later_claim_survives` 수정 전 `[True, True, False, False]` 로 실패 확인, 관련 5개 파일 96 통과. 라우트 테스트 헬퍼의 가짜 logger 에 `info` 추가(없으면 파이프라인이 `logger.info` 에서 먼저 빠져 결함이 가려짐)
-- [x] 리뷰: `/ponytail-review` → 「Lean already. Ship.」(두 파이프라인 사본 중복은 범위 밖으로 둠), `closing-bet-reviewer` → APPROVE(max low). low 2 「해제 로그 사라짐」 반영: `_run_wrapper` `finally` 에 「Status reset to False」 로그를 옮김. low 1 「True 저장 실패 미확인」은 수정 전부터 있던 결함이라 `[INFRA-119]` 로 등록
-- [x] 정적 검증: pytest 전체(`venv/bin/python -m pytest -q -p no:cacheprovider`) → 로그 복원 뒤 재실행 2851 passed, 2 skipped, exit 0
-- [ ] QA: 격리 사본 하네스로 수동 실행 종료 시 상태 쓰기 횟수와 대기 중인 체인의 실행권 유지 확인
-
 ### [INFRA-119] 수동 V2 실행이 실행권 True 저장 실패를 확인하지 않고 분석을 시작한다
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-118]` 코드 리뷰(closing-bet-reviewer, 2026-09-25 low), 코드로 확인
 - 내용: 라우트의 `_save_v2_status`(`app/routes/kr_market_jongga_execution_routes.py`)가 `write_v2_status` 의 성공 여부를 버리고, `launch_jongga_v2_screener` 는 잠금 안의 `save_v2_status(True)` 가 실패해도 200 을 주고 분석 스레드를 띄운다. 그러면 실행권 없이 분석이 돌고, 그 사이 `[INFRA-116]` 스케줄러 체인이 실행권을 잡으면 수동 실행의 해제 False 가 그것을 덮는다. 스케줄러 쪽(`_claim_v2_run`)은 이미 저장 실패를 확인한다
