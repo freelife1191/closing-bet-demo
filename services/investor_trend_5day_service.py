@@ -22,6 +22,7 @@ from pandas.api.types import is_datetime64_any_dtype
 import numpy as np
 import pandas as pd
 
+from engine.constants import SUPPLY
 from engine.investor_personal_flow import personal_flow_details
 from engine.ticker_utils import normalize_ticker
 from engine.toss_collector_numeric_helpers import optional_volume
@@ -35,8 +36,9 @@ from services.kr_market_data_cache_sqlite_payload import (
 logger = logging.getLogger(__name__)
 
 _TREND_FILENAME = "all_institutional_trend_data.csv"
-# [FLOW-025] 종목별 마지막 5행으로 만든 스냅숏, [FLOW-028] 영문자 코드가 숫자 코드와 섞인 스냅숏을 다시 쓰지 않도록 v2 로 바꿨다
-_SQLITE_KEY_SUFFIX = "::investor_trend_5day_unified_v2"
+# [FLOW-025] 종목별 마지막 5행으로 만든 스냅숏, [FLOW-028] 영문자 코드가 숫자 코드와 섞인 스냅숏을 다시 쓰지 않도록 v2 로 바꿨다.
+# [FLOW-031] 기준일 행 없이 전날로 끝난 창을 기준일 키로 둔 스냅숏을 읽지 않도록 v3 로 바꿨다
+_SQLITE_KEY_SUFFIX = "::investor_trend_5day_unified_v3"
 _SQLITE_MAX_ROWS = 256
 _REFERENCE_SQLITE_MAX_ROWS = 20_000
 _REFERENCE_SQLITE_NAMESPACE_DIR = ".investor_trend_reference_cache"
@@ -204,8 +206,9 @@ def _reference_sqlite_context(
         f"{str(ticker).zfill(6)}__{token}.snapshot",
     )
     # [FLOW-029] v1 에는 NaN 을 0 으로 저장한 값(930525be 이전), 끝 날짜가 기준일이 아닌 값, 거부될 값이 남아 있을 수 있다.
-    # SQLite 에서 읽은 값은 거부되어도 다시 조회하지 않으므로 _reference_reject_reason 을 엄격하게 바꾸면 이 버전도 올린다
-    signature = (_stable_token_to_int(token), _stable_token_to_int(f"{source}:v2"))
+    # [FLOW-030] v2 에는 오늘 키로 저장한 확정 전 값이 남아 있을 수 있다. 다음 날에는 확정 값처럼 읽힌다.
+    # SQLite 에서 읽은 값은 거부되어도 다시 조회하지 않으므로 _reference_reject_reason 이나 저장 조건을 엄격하게 바꾸면 이 버전도 올린다
+    signature = (_stable_token_to_int(token), _stable_token_to_int(f"{source}:v3"))
     return cache_key, signature
 
 def _resolve_trend_file_context(
@@ -393,7 +396,30 @@ def _build_trend_map(
         if working.empty:
             return {}
         # [FLOW-025] 종목마다 마지막 5행을 쓰면 행이 빠진 종목은 6거래일 이상의 합이 5일 값이 된다. 모든 종목을 같은 최근 5거래일로 잰다
-        window_dates = recent_trading_dates(working["date"])
+        # [FLOW-031] 기준일 실행은 끝쪽 부분 수집일을 빼지 않는다. 빼면 창이 전날로 끝나 아래 판정이 맵 전체를 버리고, 그날 행이 있는
+        # 종목까지 결측이 된다. 빼지 않으면 그날 행이 없는 종목만 빠진다. 최신 창은 전날 끝 창도 「최신」이라 [FLOW-025] 대로 뺀다
+        window_dates = (
+            recent_trading_dates(working["date"]) if normalized_target_datetime is None
+            else list(pd.Index(working["date"].unique()).sort_values()[-SUPPLY.LOOKBACK_DAYS:])
+        )
+        if normalized_target_datetime is not None:
+            # [FLOW-031] 창 끝 다음 날부터 기준일까지 빈 영업일이 있으면 그 창은 기준일의 5거래일이 아니다(그날 수집 실패).
+            # 빈 맵을 돌려주면 종목마다 missing_csv 로 기준일 참조를 묻고, 참조도 없으면 None 이다(비거래일 기준일은 참조의 끝 날짜
+            # 대조에서 늘 실패해 None). 휴장일 목록에 없는 휴장일을 기준일로 주면 여기서 버려진다. pykrx 로 확정한 기준일은 실제
+            # 거래일이지만 pykrx 가 실패하면 주말만 거른 날이 되므로 engine/market_schedule.py 의 목록을 해마다 채운다
+            from engine.market_schedule import MarketSchedule
+
+            missing_days = int(np.busday_count(
+                (window_dates[-1] + pd.Timedelta(days=1)).date(),
+                (normalized_target_datetime + timedelta(days=1)).date(),
+                holidays=MarketSchedule.known_holidays(),
+            ))
+            if missing_days:
+                logger.warning(
+                    "수급 CSV 가 기준일 %s 전 %s 로 끝나 영업일 %d일이 비었다. 기준일 5일 값을 CSV 로 만들지 않는다",
+                    normalized_target_datetime.strftime("%Y-%m-%d"), window_dates[-1].strftime("%Y-%m-%d"), missing_days,
+                )
+                return {}
         ticker_count = working["ticker"].nunique()
         working = working[working["date"].isin(window_dates)]
         working = working.sort_values(["ticker", "date"])
@@ -831,6 +857,8 @@ def _get_reference_trend_cached(
     result = None
     fatal = None
     fetched = False
+    # [FLOW-030] 조회를 시작한 날로 판정한다. 자정을 넘겨 끝난 조회도 시작할 때 오늘 키였으면 두지 않는다
+    today_key = datetime.now().strftime("%Y%m%d")
     try:
         sqlite_key, signature = _reference_sqlite_context(
             data_dir=directory, source=source, ticker=ticker_key, target_datetime=target_datetime,
@@ -859,16 +887,19 @@ def _get_reference_trend_cached(
             if generation == _REFERENCE_GENERATION:
                 # [FLOW-029] 거부될 값도 실패로 다룬다. 저장하면 같은 키로 다시 묻지 않는다
                 if result is not None and _reference_reject_reason(result) is None:
-                    _REFERENCE_CACHE[cache_key] = copy.deepcopy(result)
-                    _REFERENCE_CACHE.move_to_end(cache_key)
-                    while len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX_ENTRIES:
-                        _REFERENCE_CACHE.popitem(last=False)
-                    if fetched:
-                        try:
-                            save_json_payload_to_sqlite(filepath=sqlite_key, signature=signature, payload=result,
-                                                       max_rows=_REFERENCE_SQLITE_MAX_ROWS, logger=logger)
-                        except Exception as error:
-                            logger.debug("Failed to save reference cache: %s", error)
+                    # [FLOW-030] 키 날짜가 오늘이면 장중·시간외 부분 값이거나 아침 스냅숏일 수 있다(Toss 는 늘 오늘 키).
+                    # 조회한 호출과 기다린 호출에만 주고 두지 않는다. 다음 날 같은 키를 처음 묻는 호출이 확정 값을 저장한다
+                    if target_key < today_key:
+                        _REFERENCE_CACHE[cache_key] = copy.deepcopy(result)
+                        _REFERENCE_CACHE.move_to_end(cache_key)
+                        while len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX_ENTRIES:
+                            _REFERENCE_CACHE.popitem(last=False)
+                        if fetched:
+                            try:
+                                save_json_payload_to_sqlite(filepath=sqlite_key, signature=signature, payload=result,
+                                                           max_rows=_REFERENCE_SQLITE_MAX_ROWS, logger=logger)
+                            except Exception as error:
+                                logger.debug("Failed to save reference cache: %s", error)
                 elif fatal is None:
                     _REFERENCE_FAILURES[cache_key] = time.monotonic() + _REFERENCE_FAILURE_TTL
                     _REFERENCE_FAILURES.move_to_end(cache_key)
@@ -1108,6 +1139,9 @@ def get_investor_trend_5day_for_ticker(
     돌려준다. 버린 참조는 quality.discarded_references 에 "<출처>:<사유>" 형식으로 남는다. 다만 버린 참조는
     캐시하지 않고 60초 실패 캐시에 넣으므로([FLOW-029]) 사유는 그 참조를 조회한 호출에만 남고, 60초 안의
     후속 호출(기준일 실행에서 get_pykrx_trend_5day 뒤에 이어지는 호출 포함)에는 남지 않는다.
+    키 날짜가 오늘인 참조(기준일이 오늘인 실행, 최근 거래일이 오늘로 확정된 최신 창, 늘 오늘 키인 Toss)는 확정 전일 수 있어
+    쓸 만한 값도 어디에도 두지 않는다. 진행 중인 조회를 기다린 호출만 같은 값을 받고 그 뒤의 호출은 다시 받는다.
+    조회 실패와 거부 값은 오늘 키도 60초 실패 캐시를 따른다([FLOW-030]).
 
     quality.reference_only 는 CSV 대응값이 없어 참조 단독으로 채운 값이라는 표식이다.
     이 표식에 점수 감점이나 상한을 두지 않는다. 기본 참조인 pykrx 는 KRX 공식 자료라

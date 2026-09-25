@@ -24,6 +24,12 @@ def test_market_schedule_fallback_holidays_cover_known_2026_cases(monkeypatch):
     assert MarketSchedule.is_market_open(date(2026, 3, 2)) is False
     assert MarketSchedule.is_market_open(date(2026, 5, 5)) is False
     assert MarketSchedule.is_market_open(date(2026, 5, 25)) is False
+    # [FLOW-031] 하반기. 6/3·7/17·8/17 은 로컬 가격 CSV 에 거래가 없던 평일, 나머지는 공휴일 달력(KRX 공고와 대조하지 않음)
+    for day in (
+        date(2026, 6, 3), date(2026, 7, 17), date(2026, 8, 17), date(2026, 9, 24), date(2026, 9, 25),
+        date(2026, 10, 5), date(2026, 10, 9), date(2026, 12, 25), date(2026, 12, 31),
+    ):
+        assert MarketSchedule.is_market_open(day) is False, day
 
 
 def test_market_schedule_prefers_pykrx_when_available(monkeypatch, tmp_path):

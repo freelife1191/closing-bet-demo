@@ -44,6 +44,9 @@ async function renderAndStartUpdate() {
 }
 
 beforeEach(() => {
+  // [JONGGA-044] 고정 자료의 KST 날짜와 가짜 타이머가 앞당긴 시각이 자정을 넘어 어긋나지 않게 KST 정오에 고정한다.
+  // 가짜 타이머 전이라 Date 만 고정되고, 뒤이은 useFakeTimers 가 이 시각에서 시작하며 afterEach 의 useRealTimers 가 되돌린다
+  vi.setSystemTime(new Date(TODAY()));
   api.fetchAPI.mockReset();
   api.statusResponses = [];
   api.defaultStatus = { is_running: false };
