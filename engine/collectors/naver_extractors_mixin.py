@@ -40,8 +40,9 @@ class NaverExtractorsMixin:
                 "dividendYield": 0,
             },
             "investorTrend": {
-                "foreign": 0,
-                "institution": 0,
+                # [JONGGA-042] 통합 5일 값이 없으면 결측으로 남는다. 0 은 실제 순매수 0 과 구분되지 않는다
+                "foreign": None,
+                "institution": None,
                 "individual": 0,
             },
             "safety": {

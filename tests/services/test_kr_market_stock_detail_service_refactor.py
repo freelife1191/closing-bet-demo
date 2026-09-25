@@ -13,6 +13,7 @@ import pytest
 
 from services.kr_market_stock_detail_service import (
     append_investor_trend_5day,
+    build_default_stock_detail_payload,
     fetch_stock_detail_payload,
     load_naver_stock_detail_payload,
 )
@@ -101,6 +102,13 @@ def test_append_investor_trend_5day_leaves_the_key_out_without_a_unified_value(m
     assert "investorTrend5Day" not in payload
     # data_dir 가 없으면 서비스를 부르지 않는다. 예외는 삼켜지므로 호출 기록으로 본다
     assert len(calls) == (0 if data_dir is None else 1)
+
+
+def test_default_stock_detail_payload_leaves_flow_missing():
+    """[JONGGA-042] 수급을 모르는 기본 페이로드는 0 이 아니라 결측을 보낸다."""
+    trend = build_default_stock_detail_payload("005930")["investorTrend"]
+    assert trend["foreign"] is None
+    assert trend["institution"] is None
 
 
 def test_load_naver_stock_detail_payload_clears_event_loop_after_run(monkeypatch):

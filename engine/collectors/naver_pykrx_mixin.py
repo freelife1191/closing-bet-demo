@@ -432,7 +432,7 @@ class NaverPykrxMixin:
         return 0.0
 
     async def _get_investor_trend(self, code: str, result: Dict) -> None:
-        """통합 5일 합산 서비스(검증 켬)로 채운다. 값이 없으면 기본값을 둔다([JONGGA-042])."""
+        """통합 5일 합산 서비스(검증 켬)로 채운다. 값이 없으면 외국인·기관을 결측(None)으로 둔다([JONGGA-042])."""
         normalized_code = str(code).zfill(6)
         investor_trend = result.setdefault("investorTrend", {})
         investor_trend["individual"] = None

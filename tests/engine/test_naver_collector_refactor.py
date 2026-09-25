@@ -122,10 +122,16 @@ def test_naver_pykrx_investor_trend_prefers_unified_service(monkeypatch):
     assert result["investorTrend"]["individual"] is None
 
 
-def test_naver_pykrx_investor_trend_keeps_defaults_when_unified_has_no_value(monkeypatch, tmp_path):
-    """[FLOW-026] 통합 서비스가 값을 주지 못하면 기본값을 그대로 두고 pykrx 를 직접 부르지 않는다."""
+def _raise_unified(**_kwargs):
+    raise RuntimeError("unified down")
+
+
+@pytest.mark.parametrize("unified", [lambda **_kwargs: None, _raise_unified], ids=["none", "error"])
+def test_naver_pykrx_investor_trend_keeps_missing_when_unified_has_no_value(monkeypatch, tmp_path, unified):
+    """[FLOW-026] 통합 서비스가 값을 주지 못하면 pykrx 를 직접 부르지 않는다.
+    [JONGGA-042] 그때 외국인·기관은 0 이 아니라 결측(None)이다. 0 이면 모달이 실제 순매수 0 과 같은 「-」를 그린다."""
     collector = NaverFinanceCollector(config=SimpleNamespace(DATA_DIR="data"))
-    monkeypatch.setattr(pykrx_mixin_module, "get_investor_trend_5day_for_ticker", lambda **_kwargs: None)
+    monkeypatch.setattr(pykrx_mixin_module, "get_investor_trend_5day_for_ticker", unified)
     # 옛 코드가 원본 data/ 의 캐시를 읽고 쓰지 않게 막는다
     monkeypatch.setattr(krx_module.KRXCollector, "_get_latest_market_date", lambda self: "20260304")
     monkeypatch.setattr("engine.collectors.krx_local_data_mixin.BASE_DIR", str(tmp_path))
@@ -140,8 +146,8 @@ def test_naver_pykrx_investor_trend_keeps_defaults_when_unified_has_no_value(mon
     asyncio.run(collector._get_investor_trend("5930", result))
 
     assert calls == []
-    assert result["investorTrend"]["foreign"] == 0
-    assert result["investorTrend"]["institution"] == 0
+    assert result["investorTrend"]["foreign"] is None
+    assert result["investorTrend"]["institution"] is None
     assert result["investorTrend"]["individual"] is None
 
 

@@ -197,7 +197,7 @@ def build_default_stock_detail_payload(ticker_padded: str) -> dict[str, Any]:
         "priceInfo": {"current": 0, "prevClose": 0, "high": 0, "low": 0},
         "yearRange": {"high_52w": 0, "low_52w": 0},
         "indicators": {"marketCap": 0, "per": 0, "pbr": 0},
-        "investorTrend": {"foreign": 0, "institution": 0, "individual": None, "individual_schema": 1},
+        "investorTrend": {"foreign": None, "institution": None, "individual": None, "individual_schema": 1},
         "financials": {"revenue": 0, "operatingProfit": 0, "netIncome": 0},
         "safety": {"debtRatio": 0, "currentRatio": 0},
         "message": "NaverFinanceCollector를 사용할 수 없어 기본 데이터를 반환합니다.",
