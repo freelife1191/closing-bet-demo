@@ -60,17 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-115] 종가베팅 V2 실행 요청의 409 잠금이 워커 사이에서 원자적이지 않다
-- 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` 설계와 심층 리뷰 지적 3(2026-09-25), 코드로 확인
-- 내용: `launch_jongga_v2_screener`(`services/kr_market_jongga_runtime_service.py`)는 `v2_screener_status.json` 을 읽어 `isRunning` 을 확인한 뒤 `True` 를 저장하는데, 그 사이에 프로세스 사이 잠금이 없다. 두 워커에 관리자 실행 요청이 거의 동시에 닿으면 둘 다 통과해 LLM 분석이 두 번 돈다. 기동 초기화의 읽기-쓰기(`app/__init__.py`, `reset_scheduler_runtime_status`)도 같은 창을 가진다(`[INFRA-114]` 로 창은 좁아졌다)
-- 확인 수준: 코드로만 확인. 실제 동시 요청은 재현하지 않았다
-- [x] 설계 승인(2026-09-25 14:03, 대화 「이 설계로 진행 (Recommended)」, bounded). 범위: 기존 `_status_file_lock`(`services/common_update_status_service.py`, import 만) 으로 `v2_screener_status.json.lock` 을 잡아 실행 요청의 확인·저장과 기동 초기화의 읽기·쓰기를 직렬화. `launch_jongga_v2_screener` 에 `status_lock` 인자(기본 `nullcontext`), 스레드 시작은 잠금 밖
-- 티어: T2(`kr_market_jongga_runtime_service.py`·`kr_market_jongga_execution_routes.py`·`app/__init__.py` 는 §2 밖, `common_update_status_service.py` 는 고치지 않음). 스킬: `.claude/skills/closing-bet-python/`
-- [x] 테스트 4건(동시 실행 요청 200·409 하나씩, 라우트가 잠금을 넘김, 판정 읽기가 시그니처 캐시를 거치지 않음, 기동 초기화가 잠금을 기다림). 모두 수정 전 실패 확인, 잠금 없는 변형은 `[200, 200]` 재현
-- [x] 과잉설계 리뷰(직접, Lean). `closing-bet-reviewer` APPROVE(최고 low): low 1 잠금 안 판정이 `(mtime, size)` 캐시를 거쳐 같은 틱·같은 크기의 다른 워커 저장을 놓칠 수 있음 → 반영(`read_v2_status_uncached`, 라우트·기동 초기화). low 2 `join` 뒤 스레드 생존 미확인 → 반영
-- [x] pytest 전체 2845 passed, 2 skipped, exit 0(14:09, 리뷰 반영 뒤)
-- [ ] QA 계획·실행(`docs/dev-cycle/qa/INFRA-115.md`)
-
 ### [INFRA-116] 17시 스케줄러 체인의 종가베팅 분석이 수동 V2 실행 중인지 확인하지 않는다
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` `closing-bet-reviewer` 범위 밖 관찰(2026-09-25), 코드로 확인
 - 내용: `run_jongga_v2_analysis`(`services/scheduler_jobs.py`)는 `v2_screener_status.json` 의 `isRunning` 을 보지 않고, 수동 실행 경로(`launch_jongga_v2_screener`)도 스케줄러 플래그를 보지 않는다. 관리자가 17시 무렵 수동 실행하면 두 분석이 겹쳐 LLM 을 두 번 부르고 같은 결과 파일을 번갈아 쓴다
