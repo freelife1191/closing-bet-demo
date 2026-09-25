@@ -109,19 +109,6 @@ def score_macro(usd_krw: float, config: Any) -> Tuple[int, str]:
     return score, status
 
 
-def score_supply(data: Dict, config: Any) -> int:
-    if not data:
-        return 0
-
-    f_buy = data.get("foreign_buy", 0)
-    score = 0
-    if f_buy > 0:
-        score += 10
-    if f_buy > config.foreign_net_buy_threshold:
-        score += 5
-    return min(score, 15)
-
-
 def build_market_status(total_score: int) -> Tuple[str, str, str]:
     if total_score >= 70:
         return "강세장 (Bullish)", "Bullish", "GREEN"
@@ -163,7 +150,6 @@ __all__ = [
     "score_volume",
     "score_rs",
     "score_macro",
-    "score_supply",
     "build_market_status",
     "build_gate_reason",
     "build_sector_signals",

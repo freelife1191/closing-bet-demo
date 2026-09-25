@@ -12,7 +12,7 @@ import time
 
 import pandas as pd
 
-from engine.market_gate_logic_fetchers import load_price_data, load_supply_data
+from engine.market_gate_logic_fetchers import load_price_data
 
 
 def test_load_price_data_uses_cached_csv(monkeypatch, tmp_path):
@@ -72,25 +72,4 @@ def test_load_price_data_uses_cached_csv(monkeypatch, tmp_path):
 
     assert calls["count"] == 2
     assert len(third) == 3
-
-
-def test_load_supply_data_reads_latest_values(tmp_path):
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = data_dir / "all_institutional_trend_data.csv"
-    pd.DataFrame(
-        [
-            {"date": "2026-02-20", "foreign_buy": 100, "inst_buy": 200},
-            {"date": "2026-02-21", "foreign_buy": 300, "inst_buy": 400},
-        ]
-    ).to_csv(csv_path, index=False)
-
-    loaded = load_supply_data(
-        data_dir=str(data_dir),
-        kis=None,
-        logger=logging.getLogger(__name__),
-    )
-
-    assert loaded["foreign_buy"] == 300
-    assert loaded["inst_buy"] == 400
 

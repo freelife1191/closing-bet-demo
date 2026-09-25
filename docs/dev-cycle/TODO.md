@@ -64,8 +64,13 @@
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-095]` `closing-bet-reviewer` 범위 밖 관찰(2026-09-25), 코드로 확인
 - 내용: `engine/market_gate_fetchers_local.py:150-165` 의 `load_supply_data` 는 KIS 가 없으면 `all_institutional_trend_data.csv` 를 종목 구분 없이 날짜로 정렬해 마지막 한 행(마지막 날짜의 임의 종목)의 `foreign_buy`·`inst_buy` 를 돌려준다. `score_supply`(`engine/market_gate_logic_scoring.py:112`)는 그 값으로 시장 수급 점수(최대 15점)를 준다. 시장 합계나 지수 대표 종목이 아니다
 - 확인 수준: 코드로만 확인. 운영에서 KIS 키가 있어 이 경로를 타지 않는지는 확인하지 않았다
-- [ ] 설계 승인(마지막 날짜 합계로 바꿀지, 069500 행으로 할지, 결측이면 점수를 빼는지)
-- [ ] 테스트, 리뷰와 pytest 전체
+- 설계 조사(2026-09-25): `analyze_market_state`(`engine/market_gate_analysis.py:106-150`)의 `total_score` 는 기술 점수 다섯 개와 급락 벌점만 쓰고 수급 함수를 부르지 않는다. 호출은 `45ad2a67`(2026-02-22)에서 빠졌다. 결함은 판정·화면에 영향이 없는 죽은 코드다
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 11:34 | 범위: 죽은 수급 경로 삭제(`load_supply_data`·`score_supply`·`MarketGate` 래퍼와 `KisCollector` 생성·`foreign_net_buy_threshold`·관련 테스트와 수동 스크립트), `engine/kis_collector.py` 는 유지 | 근거: 대화에서 「죽은 경로 삭제 (Recommended)」 선택 | 티어 T3(§2 시장 진입 판정) | 계획 `docs/superpowers/plans/2026-09-25-infra-108-market-gate-dead-supply-path.md` | 읽은 정본 `.claude/skills/closing-bet-python/`
+- [x] 계획 검토(critic): ACCEPT-WITH-RESERVATIONS. 지적 1(남는 typing import)·2(중복 테스트)·3(grep 기준)·5(QA 방식) 반영, 4(`kis_collector.py` 죽은 코드·`README.md:23`)는 `[INFRA-117]` 로 등록(계획 「계획 검토 반영」 절)
+- [x] 삭제와 테스트 정리, `git grep` 결과는 종가베팅 점수기 `_score_supply` 두 줄뿐
+- [x] 리뷰: ponytail(삭제만 있는 diff, `Lean already`. 남는 `engine/kis_collector.py` 는 `[INFRA-117]`)·`closing-bet-reviewer` APPROVE(low 4: KIS 가이드 문서 불일치·import 빈 줄·중복 테스트 반영, `README.md:23` 은 `[INFRA-117]`)·T3 심층(`oh-my-claudecode:code-reviewer`, 차단 0, Minor 1·Nit 3 중 KIS 가이드·빈 줄 반영, `docs/reference/` 스냅샷과 테스트 이름은 그대로)
+- [x] pytest 전체(리뷰 반영 뒤 재실행): 2830 passed, 2 skipped, exit 0 (삭제 테스트 둘만큼 감소)
+- [ ] QA(격리 사본, 삭제 전후 `analyze` 결과 동일)
 
 ### [INFRA-109] Toss 투자자 추이의 메모리 파서가 빈 순매수 수량을 0 으로 읽는다
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-095]` 심층 리뷰 Minor 4(2026-09-25), 코드로 확인
@@ -108,3 +113,9 @@
 - 확인 수준: 코드로만 확인. 운영에서 겹친 적이 있는지는 확인하지 않았다
 - [ ] 설계 승인(겹치면 어느 쪽을 건너뛸지)
 - [ ] 테스트, 리뷰와 pytest 전체
+
+### [INFRA-117] `engine/kis_collector.py` 에 운영 호출자가 남지 않았다
+- 카테고리: 인프라 | 티어: T1(판정은 설계 때 §2 대조) | 근거: `[INFRA-108]` ponytail 리뷰(2026-09-25), `git grep` 으로 확인
+- 내용: `[INFRA-108]` 이 `MarketGate` 의 `KisCollector` 생성을 지운 뒤, 저장소의 `.py`·`.sh` 가운데 `engine/kis_collector.py`(229줄)를 import 하는 곳은 그 테스트(`tests/engine/test_kis_collector_refactor.py`)뿐이다. `.env.example` 의 `KIS_*` 변수와 README 의 파일 목록 줄, `docs/KIS_API_GUIDE.md` 도 함께 남아 있다. `README.md:23` 은 「환율, 수급」이 Gate 를 닫는다고 쓰지만 실제 판정은 `total_score >= 40` 하나다(`[INFRA-108]` 이전부터의 불일치, 문서 정리를 이 항목에서 함께 한다)
+- 확인 수준: 저장소 안의 호출자만 확인했다. 운영자가 저장소 밖 스크립트에서 이 모듈을 쓰는지는 확인하지 않았다
+- [ ] 설계 승인(모듈·테스트·`KIS_*` 변수를 지울지, 쓸 계획이 있어 남길지)

@@ -14,7 +14,6 @@ from engine.market_gate_logic_fetchers import (
     get_sector_data,
     get_usd_krw,
     load_price_data,
-    load_supply_data,
 )
 from engine.market_gate_logic_scoring import (
     build_gate_reason,
@@ -25,7 +24,6 @@ from engine.market_gate_logic_scoring import (
     score_macd,
     score_rs,
     score_rsi,
-    score_supply,
     score_trend,
     score_volume,
 )
@@ -43,7 +41,6 @@ __all__ = [
     "sanitize_for_json",
     "resolve_analysis_date_str",
     "get_usd_krw",
-    "load_supply_data",
     "calculate_indicators",
     "score_trend",
     "score_rsi",
@@ -51,7 +48,6 @@ __all__ = [
     "score_volume",
     "score_rs",
     "score_macro",
-    "score_supply",
     "build_market_status",
     "build_gate_reason",
     "build_sector_signals",

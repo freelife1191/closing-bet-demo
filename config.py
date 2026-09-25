@@ -61,9 +61,6 @@ class MarketGateConfig:
     kospi_ma_short: int = 20                # 단기 이평
     kospi_ma_long: int = 60                 # 장기 이평
 
-    # 외인 수급 기준
-    foreign_net_buy_threshold: int = 500_000_000_000  # 5000억원 순매수
-
 
 @dataclass
 class BacktestConfig:

@@ -24,14 +24,12 @@ from engine.market_gate_logic import (
     get_sector_data as _get_sector_data_impl,
     get_usd_krw as _get_usd_krw_impl,
     load_price_data as _load_price_data_impl,
-    load_supply_data as _load_supply_data_impl,
     resolve_analysis_date_str as _resolve_analysis_date_str_impl,
     sanitize_for_json as _sanitize_for_json_impl,
     score_macro as _score_macro_impl,
     score_macd as _score_macd_impl,
     score_rs as _score_rs_impl,
     score_rsi as _score_rsi_impl,
-    score_supply as _score_supply_impl,
     score_trend as _score_trend_impl,
     score_volume as _score_volume_impl,
 )
@@ -52,12 +50,11 @@ except ImportError:
         usd_krw_danger: float = 1480.0
         kospi_ma_short: int = 20
         kospi_ma_long: int = 60
-        foreign_net_buy_threshold: int = 500_000_000_000
 
 logger = logging.getLogger(__name__)
 
 class MarketGate:
-    """시장 상태 분석기 (신호등) - KODEX 200 + 환율 + 수급"""
+    """시장 상태 분석기 (신호등) - KODEX 200 + 환율"""
 
     def __init__(self, data_dir: str = 'data'):
         self.data_dir = data_dir
@@ -66,14 +63,6 @@ class MarketGate:
 
         # [REFACTORED] Use GlobalDataFetcher for global market data
         self.global_fetcher = GlobalDataFetcher(DataSourceManager())
-
-        # [2026-02-06] KIS 실시간 수급 수집기 초기화
-        try:
-            from .kis_collector import KisCollector
-            self.kis = KisCollector()
-        except ImportError:
-            self.kis = None
-            logger.warning("KisCollector not found. Real-time supply score will be disabled.")
 
         # 주요 섹터 ETF (KODEX/TIGER)
         self.sectors = {
@@ -166,14 +155,6 @@ class MarketGate:
         """환율 조회 (FDR -> yfinance) - 실패 시 1350(SAFE) 반환"""
         return _get_usd_krw_impl(logger)
 
-    def _load_supply_data(self) -> Dict:
-        """최근 수급 데이터 로드 (실시간 KIS 지원)"""
-        return _load_supply_data_impl(
-            data_dir=self.data_dir,
-            kis=self.kis,
-            logger=logger,
-        )
-
     def _calculate_indicators(self, df: pd.DataFrame, bench_df: pd.DataFrame = None) -> pd.DataFrame:
         """기술적 지표 계산 (RS 포함)"""
         return _calculate_indicators_impl(
@@ -206,10 +187,6 @@ class MarketGate:
     def _score_macro(self, usd_krw: float) -> Tuple[int, str]:
         """환율 점수 및 상태 (15점 + Penalty)"""
         return _score_macro_impl(usd_krw, self.config)
-
-    def _score_supply(self, data: Dict) -> int:
-        """수급 점수 (15점)"""
-        return _score_supply_impl(data, self.config)
 
     def _default_result(self, msg: str) -> Dict[str, Any]:
         """기본 응답"""

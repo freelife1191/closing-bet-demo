@@ -3,7 +3,7 @@
 이 문서는 추후 한국투자증권 계좌 개설 및 API 신청이 완료된 후, **장중 실시간 수급 연동 작업**을 마무리하기 위한 가이드입니다.
 
 ## 1. 개요
-현재 코드(`engine/kis_collector.py`, `engine/market_gate.py`)는 이미 **KIS API 연동 준비가 100% 완료**된 상태입니다. API 키만 입력되면 즉시 실시간 수급 데이터 수집이 시작됩니다.
+`engine/kis_collector.py` 는 토큰 관리와 조회 함수만 있고, 운영 경로에서 이 모듈을 부르는 곳은 없습니다. Market Gate 판정은 수급을 쓰지 않으며, `engine/market_gate.py` 의 쓰이지 않던 KIS 수급 경로는 `[INFRA-108]`(2026-09-25)에서 삭제했습니다. 모듈을 남길지는 `[INFRA-117]` 에서 정합니다.
 
 ---
 
@@ -54,12 +54,11 @@ python engine/kis_collector.py
 서버가 실행 중이라면 로그(`logs/app.log`)에서 다음과 같은 메시지를 확인할 수 있습니다.
 ```
 INFO:engine.kis_collector:KIS API Access Token issued and saved
-INFO:engine.market_gate:KIS 실시간 수급 데이터 확보: Foreign=12345678
 ```
 
 ---
 
 ## 5. 현재 구현 상태 요약
 - **`engine/kis_collector.py`:** 완료 (토큰 관리, 캐싱, 데이터 조회)
-- **`engine/market_gate.py`:** 완료 (장중 KIS 우선 조회, 실패 시 CSV Fallback)
+- **`engine/market_gate.py`:** 미연동 (`[INFRA-108]` 에서 쓰이지 않던 수급 경로 삭제, 판정은 기술 점수와 급락 벌점만 사용)
 - **`scheduler.py`:** 별도 수정 불필요 (기존 1분 주기 로직에서 자동으로 Market Gate를 호출하므로, 위 코드가 활성화되면 자동 반영됨)

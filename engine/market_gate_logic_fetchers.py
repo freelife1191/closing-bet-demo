@@ -12,10 +12,7 @@ from engine.market_gate_fetchers_external import (
     get_sector_data,
     get_usd_krw,
 )
-from engine.market_gate_fetchers_local import (
-    load_price_data,
-    load_supply_data,
-)
+from engine.market_gate_fetchers_local import load_price_data
 
 __all__ = [
     "fetch_benchmark_data",
@@ -23,6 +20,5 @@ __all__ = [
     "get_sector_data",
     "load_price_data",
     "get_usd_krw",
-    "load_supply_data",
 ]
 

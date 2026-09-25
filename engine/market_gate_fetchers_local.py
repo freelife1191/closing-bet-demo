@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Any, Dict
 
 import pandas as pd
 
@@ -126,44 +125,3 @@ def load_price_data(
             return pd.DataFrame()
 
     return df
-
-
-def load_supply_data(*, data_dir: str, kis: Any, logger: logging.Logger) -> Dict:
-    """최근 수급 데이터 로드 (실시간 KIS 지원)."""
-    if kis and os.getenv("KIS_APP_KEY"):
-        try:
-            kis_data = kis.get_market_investor_trend("0001")
-            if kis_data and kis_data.get("foreign_buy") != 0:
-                logger.info(f"KIS 실시간 수급 데이터 확보: Foreign={kis_data['foreign_buy']}")
-                return {
-                    "foreign_buy": kis_data["foreign_buy"],
-                    "inst_buy": kis_data["inst_buy"],
-                }
-        except Exception as error:
-            logger.warning(f"KIS 실시간 수급 로드 실패: {error}")
-
-    filepath = os.path.join(data_dir, "all_institutional_trend_data.csv")
-    if not os.path.exists(filepath):
-        return {}
-
-    try:
-        usecols = ["date", "foreign_buy", "inst_buy"]
-        df = _load_cached_csv_frame(
-            data_dir=data_dir,
-            filename="all_institutional_trend_data.csv",
-            usecols=usecols,
-            logger=logger,
-        )
-        if df.empty:
-            logger.warning(f"수급 데이터 파일이 비어있습니다: {filepath}")
-            return {}
-
-        df = df.sort_values("date")
-        latest = df.iloc[-1]
-        return {
-            "foreign_buy": latest.get("foreign_buy", 0),
-            "inst_buy": latest.get("inst_buy", 0),
-        }
-    except Exception as error:
-        logger.error(f"수급 데이터 로드 실패: {error}")
-        return {}

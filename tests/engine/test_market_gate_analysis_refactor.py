@@ -47,9 +47,6 @@ class _FakeMarketGate:
     def _get_usd_krw(self):
         return 1420.0
 
-    def _load_supply_data(self):
-        return {}
-
     def _score_trend(self, _row):
         return 20
 
@@ -67,9 +64,6 @@ class _FakeMarketGate:
 
     def _score_macro(self, _usd_krw):
         return 15, "SAFE"
-
-    def _score_supply(self, _supply_data):
-        return 0
 
     def _get_global_data(self, _target_date):
         return {
@@ -92,14 +86,6 @@ class _FakeMarketGate:
 class _EmptyFakeMarketGate(_FakeMarketGate):
     def _load_price_data(self, _target_date):
         return pd.DataFrame()
-
-
-class _SupplyFailureGate(_FakeMarketGate):
-    def _load_supply_data(self):
-        raise AssertionError("supply path should not be used")
-
-    def _score_supply(self, _supply_data):
-        raise AssertionError("supply score should not be calculated")
 
 
 class _CrashHighTechGate(_FakeMarketGate):
@@ -202,11 +188,6 @@ def test_analyze_market_state_builds_expected_payload():
 def test_analyze_market_state_returns_default_when_price_data_empty():
     result = analyze_market_state(_EmptyFakeMarketGate(), target_date=None, logger=logging.getLogger("test"))
     assert result == {"error": "가격 데이터 부족"}
-
-
-def test_analyze_market_state_does_not_require_supply_side_path():
-    result = analyze_market_state(_SupplyFailureGate(), target_date="2026-02-21", logger=logging.getLogger("test"))
-    assert result["total_score"] == 75
 
 
 def test_analyze_market_state_applies_intraday_market_crash_penalty():

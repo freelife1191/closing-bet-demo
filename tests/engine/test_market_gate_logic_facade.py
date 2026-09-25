@@ -23,7 +23,6 @@ from engine.market_gate_logic import (
     resolve_analysis_date_str,
     sanitize_for_json,
     score_macro,
-    score_supply,
 )
 
 
@@ -31,7 +30,6 @@ from engine.market_gate_logic import (
 class _Config:
     usd_krw_warning: float = 1450.0
     usd_krw_danger: float = 1480.0
-    foreign_net_buy_threshold: int = 500_000_000_000
 
 
 def test_sanitize_for_json_replaces_nan_and_inf_recursively():
@@ -56,22 +54,12 @@ def test_market_status_and_gate_reason_thresholds():
     assert build_gate_reason(80, "DANGER") == "시장 양호 (Technical) [환율 위험]"
 
 
-def test_score_macro_and_supply_follow_config_thresholds():
+def test_score_macro_follows_config_thresholds():
     config = _Config()
 
     assert score_macro(1490.0, config) == (-20, "DANGER")
     assert score_macro(1460.0, config) == (0, "WARNING")
     assert score_macro(1420.0, config) == (15, "SAFE")
-
-    assert score_supply({}, config) == 0
-    assert score_supply({"foreign_buy": 1}, config) == 10
-    assert (
-        score_supply(
-            {"foreign_buy": config.foreign_net_buy_threshold + 1},
-            config,
-        )
-        == 15
-    )
 
 
 def test_build_sector_signals_applies_bullish_neutral_bearish_rules():
