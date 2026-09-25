@@ -82,3 +82,18 @@ def test_build_sector_signals_applies_bullish_neutral_bearish_rules():
     assert result_map["반도체"] == "Bullish"
     assert result_map["은행"] == "Neutral"
     assert result_map["자동차"] == "Bearish"
+
+
+def test_nan_sector_change_is_saved_and_served_as_null():
+    # [INFRA-112] pykrx 등락률이 NaN 이어도 저장(sanitize)과 응답(NaNSafeJSONProvider)에서 null 이 되어
+    # 화면은 결측 `—` 로 그린다. 원천에서 따로 거르지 않는다
+    from flask import Flask
+
+    from app import NaNSafeJSONProvider
+
+    signals = build_sector_signals({"반도체": float("nan")})
+    assert signals[0]["signal"] == "Neutral"
+    assert sanitize_for_json(signals)[0]["change_pct"] is None
+    served = NaNSafeJSONProvider(Flask(__name__)).dumps({"sectors": signals})
+    assert '"change_pct": null' in served
+    assert "NaN" not in served
