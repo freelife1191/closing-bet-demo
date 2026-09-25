@@ -60,16 +60,6 @@
 - 남은 범위: 운영자가 운영 서버에서 `sqlite3 data/usage.db 'select count(*) from usage_log; select count(*) from api_usage'` 로 행 수를 읽어 기록한 뒤 파일을 제거한다. 코드가 사라져 계정 삭제(`[FE-045]`)와 0600 좁히기(`[FE-046]`)가 이 파일에 닿지 않으므로 제거 전까지는 `chmod 600 data/usage.db` 로 둔다. 원격 서버 접속은 운영자가 한다.
 - [x] 코드 삭제(T3, 설계 승인 2026-09-24 00:36, QA 필수 3/3) - [ ] 운영 서버 행 수 확인과 파일 제거(운영자)
 
-### [INFRA-117] `engine/kis_collector.py` 에 운영 호출자가 남지 않았다
-- 카테고리: 인프라 | 티어: T1(판정은 설계 때 §2 대조) | 근거: `[INFRA-108]` ponytail 리뷰(2026-09-25), `git grep` 으로 확인
-- 내용: `[INFRA-108]` 이 `MarketGate` 의 `KisCollector` 생성을 지운 뒤, 저장소의 `.py`·`.sh` 가운데 `engine/kis_collector.py`(229줄)를 import 하는 곳은 그 테스트(`tests/engine/test_kis_collector_refactor.py`)뿐이다. `.env.example` 의 `KIS_*` 변수와 README 의 파일 목록 줄, `docs/KIS_API_GUIDE.md` 도 함께 남아 있다. `README.md:23` 은 「환율, 수급」이 Gate 를 닫는다고 쓰지만 실제 판정은 `total_score >= 40` 하나다(`[INFRA-108]` 이전부터의 불일치, 문서 정리를 이 항목에서 함께 한다)
-- 확인 수준: 저장소 안의 호출자만 확인했다. 운영자가 저장소 밖 스크립트에서 이 모듈을 쓰는지는 확인하지 않았다
-- [x] 설계 승인(2026-09-25 15:19, 대화 AskUserQuestion 「삭제 (Recommended)」, bounded): `engine/kis_collector.py`·그 테스트·`docs/KIS_API_GUIDE.md`·`.env.example` 의 `KIS_*` 네 줄·`README.md` 파일 목록 줄을 지우고, `README.md:23` 을 실제 판정(기술적 점수 40점 미만이면 Gate Closed)에 맞춘다. 과거 계획·증거 문서의 언급은 기록이라 둔다. 저장소 밖 호출자는 없다는 전제다. 티어 T2(대상이 §2 밖이나 모듈 삭제)
-- [x] 삭제와 README 수정, `git grep -i`(kis_collector·KisCollector·KIS_API_GUIDE·KIS_APP·KIS_MODE·KIS_ACCOUNT)로 `docs/dev-cycle`·`docs/superpowers` 밖 참조 0건 확인
-- [x] ponytail 리뷰(직접 검토, 「Lean already. Ship.」), closing-bet-reviewer CHANGES_REQUIRED(max medium). 반영: ① README:23 「매수를 원천 차단」은 코드와 다르다(`engine/screener.py:201-202` 는 경고만, 신호 생성을 막지 않음) → 「Gate Closed(약세)로 표시하고 경고, 신호 생성은 막지 않음」과 데이터 부족 시 50점·Open 기본값을 적음 ② 「지수·섹터 급락 감점」→「둘 중 큰 값」(`market_gate_analysis.py:148-150`). 이월: ③ README 흐름도·937·946행의 같은 과장은 범위 밖이라 `[INFRA-120]` 으로 등록
-- [x] pytest 전체: `venv/bin/python -m pytest -q -p no:cacheprovider` 2850 passed, 2 skipped, exit 0 (직전 2853 에서 삭제한 KIS 테스트 3건 차감, README 수정은 그 뒤이나 README 를 읽는 테스트 없음)
-- [x] QA: 동적 QA 제외. 삭제한 모듈은 테스트 외 import 가 0건이라 도달하는 실행 경로가 없고, 나머지는 문서다. 근거는 위 `git grep` 과 pytest
-
 ### [INFRA-120] README 의 Market Gate 설명이 신호를 차단한다고 쓴다
 - 카테고리: 인프라 | 티어: T1(문서만, 판정은 설계 때 §2 대조) | 근거: `[INFRA-117]` 코드 리뷰(closing-bet-reviewer, 2026-09-25 low), 코드로 확인
 - 내용: `engine/screener.py:201-202` 는 `is_gate_open` 이 False 여도 경고 로그만 남기고 분석을 계속하며, `engine/generator.py` 는 신호를 만든 뒤 Gate 결과를 `market_status` 로 저장·LLM 문맥에만 쓴다. 그런데 `README.md` 흐름도(`CLOSED --> Block Signal`, 약 189-191행), 「매수 버튼을 활성화할지」(약 937행), 「매매를 보류」·「1480원 이상은 Warning」(약 946행)이 차단·보류를 말한다. 사유에 실제로 붙는 것은 환율 DANGER 뿐이다. 23행은 `[INFRA-117]` 에서 고쳤다
