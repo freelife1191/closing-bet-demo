@@ -849,6 +849,15 @@ def test_reference_reject_reason_rejects_an_all_zero_payload():
     assert trend_service._reference_reject_reason(payload) == "zero_total"
 
 
+def test_reference_reject_reason_rejects_a_day_with_missing_volume():
+    """[FLOW-022] 하루라도 수량이 비면 5일 합계가 5일치가 아니다. 5일 집계로 채택하지 않는다."""
+    for side in ("netForeignerBuyVolume", "netInstitutionBuyVolume"):
+        details = [{"netForeignerBuyVolume": 200, "netInstitutionBuyVolume": 400} for _ in range(5)]
+        details[2][side] = None
+        payload = {"foreign": 800, "institution": 1_600, "details": details}
+        assert trend_service._reference_reject_reason(payload) == "insufficient_days", side
+
+
 def test_reference_reject_reason_keeps_a_payload_whose_sum_cancels_out():
     """5일 합계가 0 이어도 하루별 값이 살아 있으면 정상 자료다."""
     payload = {
@@ -955,6 +964,38 @@ def test_toss_is_tried_when_the_pykrx_reference_is_discarded(monkeypatch, tmp_pa
     assert result["source"] == "toss"
     assert result["quality"]["discarded_references"] == ["pykrx:zero_total"]
     assert result["quality"]["reference_sources"] == ["toss"]
+
+
+def test_a_toss_reference_missing_one_day_does_not_replace_the_csv(monkeypatch, tmp_path):
+    """[FLOW-022] 실제 Toss 파서·정규화를 거친 부분 일수 참조는 버려지고 CSV 가 남는다."""
+    from engine.toss_collector_metric_parsers import parse_investor_trend
+
+    _write_five_day_csv(tmp_path, ticker="005930")
+    rows = [
+        {"baseDate": f"2026-02-{day}", "close": 100, "netIndividualsBuyVolume": 0,
+         "netForeignerBuyVolume": foreign, "netInstitutionBuyVolume": 10}
+        for day, foreign in zip(("27", "26", "25", "24", "23"), (1, 2, None, 4, 5))
+    ]
+
+    class _FakeToss:
+        def get_investor_trend(self, code, days=5):
+            return parse_investor_trend({"result": {"body": rows}}, days)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(trend_service, "_fetch_pykrx_reference_trend", lambda **_kwargs: None)
+    # 캐시 토큰을 만들며 실제 pykrx 지수 조회(KRX 로그인)로 나가지 않게 막는다
+    monkeypatch.setattr(trend_service, "_resolve_pykrx_latest_market_date", lambda **_kwargs: datetime(2026, 2, 27))
+    monkeypatch.setattr(trend_service, "_get_toss_collector", lambda: _FakeToss())
+
+    result = trend_service.get_investor_trend_5day_for_ticker(ticker="005930", data_dir=str(tmp_path))
+
+    assert result is not None
+    assert result["source"] == "csv"
+    assert result["foreign"] == 6_000
+    assert result["quality"]["csv_anomaly_flags"] == ["stale_csv"]
+    assert result["quality"]["discarded_references"] == ["toss:insufficient_days"]
+    # CSV 에 없는 종목은 버린 뒤 남는 자료가 없다. 상세 API 는 키를 빼고 모달이 Toss 합계 「(N일)」로 물러선다
+    assert trend_service.get_investor_trend_5day_for_ticker(ticker="000660", data_dir=str(tmp_path)) is None
 
 
 def test_missing_csv_with_only_a_bad_reference_returns_nothing(monkeypatch, tmp_path):

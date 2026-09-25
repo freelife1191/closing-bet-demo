@@ -525,8 +525,13 @@ def _reference_reject_reason(payload: dict[str, Any] | None) -> str | None:
     for detail in details[:5]:
         if not isinstance(detail, dict):
             return "insufficient_days"
-        day_abs_total += abs(_safe_int(detail.get("netForeignerBuyVolume", 0)))
-        day_abs_total += abs(_safe_int(detail.get("netInstitutionBuyVolume", 0)))
+        foreign_1d = detail.get("netForeignerBuyVolume")
+        inst_1d = detail.get("netInstitutionBuyVolume")
+        # [FLOW-022] 하루라도 수량이 비면 합계가 5일치가 아니다. 0 으로 읽어 5일 집계로 채택하지 않는다
+        if foreign_1d is None or inst_1d is None:
+            return "insufficient_days"
+        day_abs_total += abs(_safe_int(foreign_1d))
+        day_abs_total += abs(_safe_int(inst_1d))
 
     if day_abs_total == 0:
         return "zero_total"
@@ -1064,9 +1069,10 @@ def get_investor_trend_5day_for_ticker(
     없기 때문이다.
 
     다만 참조를 쓰기 전에 _reference_reject_reason 으로 쓸 만한 값인지 먼저 본다.
-    퇴화한 참조(전 항목이 0, 5일치가 모이지 않음, 20조 상한 초과)는 채택하지 않으므로
-    그 경우 정확한 CSV 가 살아남는다. 버린 참조는 quality.discarded_references 에
-    "<출처>:<사유>" 형식으로 남는다.
+    퇴화한 참조(전 항목이 0, 5일치가 모이지 않거나 하루라도 수량이 빔, 20조 상한
+    초과)는 채택하지 않으므로 그 경우 플래그가 붙은 CSV 가 그대로 남는다. 플래그가
+    stale_csv 나 extreme_abs_total 이면 남는 CSV 도 정확하다고 볼 수 없다. 버린 참조는
+    quality.discarded_references 에 "<출처>:<사유>" 형식으로 남는다.
 
     quality.reference_only 는 CSV 대응값이 없어 참조 단독으로 채운 값이라는 표식이다.
     이 표식에 점수 감점이나 상한을 두지 않는다. 기본 참조인 pykrx 는 KRX 공식 자료라
