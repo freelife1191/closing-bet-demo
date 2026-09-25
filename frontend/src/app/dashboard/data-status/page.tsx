@@ -83,6 +83,8 @@ export default function DataStatusPage() {
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const pollInFlightRef = useRef(false);
   const pollFailuresRef = useRef(0);
+  // startPolling 과 전체 업데이트 클릭이 올린다. 이전 세션에 보낸 조회의 응답은 반영하지 않는다([INFRA-110])
+  const pollSessionRef = useRef(0);
 
   // ADMIN 권한 체크
   const { isAdmin, isLoading: isAdminLoading } = useAdmin();
@@ -113,8 +115,10 @@ export default function DataStatusPage() {
     // 앞선 조회가 끝나지 않았으면 겹쳐 보내지 않는다([INFRA-103])
     if (pollInFlightRef.current) return;
     pollInFlightRef.current = true;
+    const session = pollSessionRef.current;
     try {
       const status: UpdateStatusResponse = await fetchAPI('/api/system/update-status', { timeout: 30000 });
+      if (session !== pollSessionRef.current) return;
       pollFailuresRef.current = 0;
 
       // 로컬 updating 상태를 우선시하되, 백엔드가 실행 중이고 로컬이 아니면 동기화 (선택적)
@@ -165,6 +169,7 @@ export default function DataStatusPage() {
 
     } catch (error) {
       console.error('Failed to poll update status:', error);
+      if (session !== pollSessionRef.current) return;
       // 연속 실패가 이어지면 폴링을 멈추고 알린다. 실행이 아직 돌고 있으면 재시작이 409 로 막히고 폴링이 다시 붙는다([INFRA-103])
       pollFailuresRef.current += 1;
       if (pollFailuresRef.current >= POLL_FAILURE_LIMIT && pollingRef.current) {
@@ -189,6 +194,7 @@ export default function DataStatusPage() {
   // 폴링 시작
   const startPolling = useCallback(() => {
     if (pollingRef.current) return;
+    pollSessionRef.current += 1;
     pollFailuresRef.current = 0;
     pollingRef.current = setInterval(pollUpdateStatus, 500);
   }, [pollUpdateStatus]);
@@ -381,6 +387,8 @@ export default function DataStatusPage() {
     const effectiveDate = getEffectiveTargetDate();
     const itemsToUpdate = ['Daily Prices', 'Institutional Trend', 'VCP Signals', 'AI Analysis', 'AI Jongga V2', 'Market Gate'];
 
+    // 시작 응답을 기다리는 동안 도착하는 이전 조회도 버린다([INFRA-110])
+    pollSessionRef.current += 1;
     setUpdating(true);
     setUpdateItems([]);
 

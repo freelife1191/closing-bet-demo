@@ -64,7 +64,13 @@
 - 카테고리: 인프라 | 티어: T2(프론트엔드) | 근거: `[INFRA-103]` 코드 리뷰 low-2(2026-09-25), 코드로 확인. 종전부터 있던 동작
 - 원인: `frontend/src/app/dashboard/data-status/page.tsx` 의 `pollUpdateStatus` 완료 분기는 `!status.isRunning && pollingRef.current` 이면 interval 을 끊는다. 마운트 때 보낸 조회가 늦게 끝나면 그 사이 사용자가 시작해 만든 interval 도 끊겨 진행 표시가 사라진다
 - 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
-- [ ] 설계 승인(응답이 어느 폴링 세션의 것인지 구분할지), 테스트, 리뷰, 브라우저 QA
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 12:34 | 범위: `pollSessionRef` 번호를 `startPolling` 이 올리고, 요청을 보낸 시점과 번호가 다른 응답은 성공·실패 모두 반영하지 않는다(`page.tsx` 한 파일과 회귀 테스트) | 근거: 대화에서 「세션 번호로 늦은 응답 버림 (Recommended)」 선택(대안: 시작 직후 일정 시간 false 무시) | 티어 T2(§2 위험 경로 아님) | bounded, 계획 문서 없음 | 읽은 정본 `.claude/skills/closing-bet-nextjs/`, `vendor/skills/vercel-react-best-practices/rules/rerender-use-ref-transient-values.md`, 번들 문서 `01-app/01-getting-started/05-server-and-client-components.md`(상태·폴링만 바뀌는 순수 클라이언트 변경이라 §2 표의 다른 줄에 해당하지 않음)
+- 범위 확장: `closing-bet-reviewer` low 1(시작 요청의 응답 전에 도착한 마운트 조회가 진행 상태를 잠깐 지움)을 대화에서 「이번에 함께 막기 (Recommended)」로 확인받아 `handleUpdateAll` 클릭 직후에도 번호를 올린다
+- [x] 회귀 테스트 `page.regression-INFRA-110.test.tsx` 2건. 수정 전 실패 확인(1건째 `expected 1 to be greater than 2`, 2건째 「업데이트 중...」 버튼 없음)
+- [x] 구현. 리뷰: ponytail(직접 검토, 추가 8줄에서 줄일 것 없음)·`closing-bet-reviewer` APPROVE(low 1 은 위 범위 확장으로 반영, low 2 마운트 조회가 느리면 새 세션 폴링이 그동안 멈추는 것은 `[INFRA-103]` 겹침 방지에서 온 기존 동작, 참고 2건(완료 뒤 1초 지연 콜백, 언마운트 정리)은 범위 밖·영향 없음으로 유지)
+- [x] 범위 확장분 재검토(`closing-bet-reviewer`): APPROVE, 지적 없음(409·기타 오류 경로에서 버려지는 응답은 시작 전 마운트 조회뿐. 「이미 실행 중인데 409 가 아닌 오류」에서 폴링이 붙지 않는 차이는 참고, 확신도 낮음)
+- [x] vitest 전체 103 files·697 tests, type-check exit 0, lint 오류 0(경고 183, 변경 파일의 경고는 기존 줄)
+- [ ] 브라우저 QA(격리 사본, 가짜 백엔드)
 
 ### [VCP-058] `vcp_signals_latest.json` 을 `open('w')` 로 직접 써서 저장 중 중단되면 파일이 깨진다
 - 카테고리: VCP | 티어: T3(위험 경로 `scripts/init_data.py`) | 근거: `[VCP-052]` 설계 때 범위 밖으로 뺀 발견(2026-09-25), 코드로 확인
