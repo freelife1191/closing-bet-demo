@@ -6,8 +6,8 @@
   → `_resolve_best_payload` → Toss 참조 `_normalize_external_trend_payload` → `_reference_reject_reason`(이번 변경). 채택되면 응답에
   `investorTrend5Day` 가 들어가고 모달은 그 값을 일수 표시 없이 그린다. 버려지면 CSV 가 있으면 CSV 합계, 없으면 키가 빠져 모달이
   `[FE-048]` 의 Toss 합계 「(N일)」로 물러선다. 사용자 진입 흐름이 이 모달이므로 브라우저 실측이 필수다
-- 구성 2026-09-25(설계 승인 16:47 뒤, 첫 커밋 전) | 실행: (실행 뒤 기록)
-- 검증 기준 커밋: (첫 커밋 해시를 실행 때 기록). 사본은 그 커밋의 `git archive` 다
+- 구성 2026-09-25(설계 승인 16:47 뒤, 첫 커밋 전) | 실행 2026-09-25 17:10:04(두 서버 응답 확인)~17:11:07, 정리 확인 17:11:29
+- 검증 기준 커밋: `d3dca8c9`(이 문서를 담은 첫 커밋). 사본은 그 커밋의 `git archive` 다
 - QA 엔진(engine): Claude Code, 브라우저는 gstack `browse`(`~/.claude/skills/gstack/browse/dist/browse`). `[FE-048]` 과 같은 방식으로
   시나리오를 직접 구성했고 `/qa-only`·`/qa` 스킬 본체는 부르지 않았다(두 스킬의 전체 앱 탐색 대신 이 문서의 시나리오만 실행한다)
 - browser_applicability: required. 사용자가 보는 것은 모달의 글자다. browser_driver: gstack `browse`
@@ -19,14 +19,19 @@
   연결은 모두 막는다. LLM·발송 경로는 부르지 않는다. 기동 환경에 `KRX_ID=`·`KRX_PW=` 를 빈 값으로 준다
 - 기동: Flask `SCHEDULER_ENABLED=false KRX_ID= KRX_PW= gunicorn qa_flow022_app:app --bind 127.0.0.1:5749 --workers 1 --threads 4 --keep-alive 0`,
   Next `PORT=3749 API_URL=http://127.0.0.1:5749 TZ=Asia/Seoul npm run dev`(더미 `NEXTAUTH_SECRET`·`INTERNAL_IDENTITY_SECRET`·`NEXTAUTH_URL`)
-- 단계(phase): 시나리오 구성 완료 | 실행 대기
-- 반복(iteration): 0회
+- 단계(phase): 시나리오 구성 완료 | 실행 완료
+- 반복(iteration): 1회
 - baseline 상태: 수정 전 동작은 pytest 회귀 검사가 실패로 확인했다(`test_reference_reject_reason_rejects_a_day_with_missing_volume`·
   `test_a_toss_reference_missing_one_day_does_not_replace_the_csv` RED, 수정 전에는 하루 빈 Toss 참조가 채택되어 `source == "toss"`)
 - 필수 여부(required): S-1~S-4 예
-- 결과: (실행 뒤 기록)
-- 증거: (실행 뒤 기록)
-- 정리(cleanup): (실행 뒤 기록)
+- 결과: 통과 (필수 4/4)
+- 증거: 각 시나리오의 「실제」 줄. API 응답 scratchpad `qa-flow022-api.txt`(17:10:09), 모달 글자·콘솔·네트워크·MCP `qa-flow022-browser.txt`, 스크린샷 `flow022-QA외국인빈날-flow.png`·
+  `flow022-QACSV유지-flow.png`(열어 확인)와 `flow022-QA기관빈날-flow.png`·`flow022-QA실제0-flow.png`, 격리 로그 `qa-flow022-flask.log`·`qa-flow022-next.log`.
+  사본에서 import 된 것이 사본 코드임은 사본 `services/__pycache__/investor_trend_5day_service.cpython-311.pyc` 생성과 사본 `data/` 에 생긴 런타임 파일로 확인했다
+- 정리(cleanup): browse 서버 정지, 격리 gunicorn(5749)·Next(3749) 종료 뒤 3749/5749/3500/5501 리스너 0, 사본 경로 프로세스 0, browse 프로세스 0, 사본 `qa-flow022/` 삭제,
+  원본 `data/` 에서 17:09:27 표식 이후 바뀐 파일 0, 저장소 루트 `node_modules/.vite` 없음. 원본 3500/5501 은 처음부터 떠 있지 않았다
+- 실행 중 절차 이탈 1건: 사본을 만드는 명령에서 zsh 가 매치 없는 `frontend/.env.*` glob 으로 멈춰 `data/` 생성과 고정 자료 복사가 빠졌다. 서버 기동 전에 발견해
+  `find -name '.env*' -delete` 로 `.env*` 를 지우고(`.env.example` 1개) `data/` 를 만들어 고정 자료를 넣었다. 원본에는 닿지 않았다
 - 읽은 정본: `.claude/skills/closing-bet-python/SKILL.md`, `.claude/skills/closing-bet-verify/SKILL.md`. frontend 변경이 없어 Next 번들 문서는 읽지 않았다
 
 고정 자료의 Toss 투자자 동향(다섯 행 모두 종가 10,000)과 판정 경로는 다음과 같다. 수량 단위는 주이며 합계는 수량×종가다.
@@ -66,21 +71,31 @@ target 을 넘기면 오늘 날짜라도 Toss 참조를 조회하지 않는다)�
 - 조작: `curl` 로 `/api/kr/stock-detail/900201` 을 받아 `investorTrend`·`investorTrend5Day` 를 읽는다. 브라우저에서 QA외국인빈날 카드의 「상세 분석 보기」를 눌러 외국인·기관 칸의 글자를 읽는다.
 - 기대: API 는 `investorTrend5Day` 키 없음, `investorTrend.foreign` 1000000000·`foreignDays` 4, `institution` 200000000·`institutionDays` 5. 화면은 외국인 「+10억(4일)」, 기관 「+2억」(「일)」 없음).
 - 필수 여부(required): 예
+- 실제: API `investorTrend5Day` 없음, `foreign` 1000000000.0·`foreignDays` 4, `institution` 200000000.0·`institutionDays` 5. 모달 칸 textContent 「외국인+10억(4일)」「기관+2억」. 스크린샷 `flow022-QA외국인빈날-flow.png` 에서 외국인은 붉은 「+10억」 옆에 작은 회색 「(4일)」, 기관은 「+2억」만 보였다
+- 결과: 통과
 
 ### S-2. 기관 수량이 하루 빈 Toss 참조도 같은 판정을 받는다 (회귀)
 - 조작: 900202 에 같은 조작을 한다.
 - 기대: API 는 `investorTrend5Day` 키 없음, `foreign` 200000000·`foreignDays` 5, `institution` -1000000000·`institutionDays` 4. 화면은 외국인 「+2억」, 기관 「-10억(4일)」.
 - 필수 여부(required): 예
+- 실제: API `investorTrend5Day` 없음, `foreign` 200000000.0·`foreignDays` 5, `institution` -1000000000.0·`institutionDays` 4. 모달 「외국인+2억」「기관-10억(4일)」
+- 결과: 통과
 
 ### S-3. 실제 0 인 날이 있는 참조는 계속 채택한다 (인접)
 - 조작: 900203 에 같은 조작을 한다. 네 모달을 연 뒤 `console --errors` 와 `/_next/mcp` `get_errors`·`get_compilation_issues` 를 읽고, Flask 로그에서 error·traceback·blocked 줄을 센다.
 - 기대: API 는 `investorTrend5Day` 가 `{foreign: 400000000, institution: -200000000}`, `foreignDays`·`institutionDays` 5. 화면은 외국인 「+4억」, 기관 「-2억」이고 「일)」 글자가 없다. 콘솔·런타임·컴파일 오류 없음, Flask 로그 오류 0줄.
 - 필수 여부(required): 예
+- 실제: API `investorTrend5Day` `{foreign: 400000000, institution: -200000000}`, `foreignDays`·`institutionDays` 5. 모달 「외국인+4억」「기관-2억」, 「일)」 없음. 네 모달을 연 뒤 browse `console --errors` 는 「(no console errors)」,
+  `/_next/mcp` `get_errors` 는 `configErrors:[]`·`sessionErrors:[]`, `get_compilation_issues` 는 `issues:[]`. `browse network` 의 `stock-detail`·`jongga-v2` 요청은 모두 200. Flask 로그의 error·traceback·blocked 0줄
+- 결과: 통과
 
 ### S-4. CSV 가 있으면 하루 빈 Toss 참조 대신 CSV 합계가 남는다 (회귀)
 - 조작: 900204 에 같은 조작을 한다.
 - 기대: API 는 `investorTrend5Day` 가 `{foreign: 500000000, institution: -300000000}`(CSV 합계), `investorTrend.foreign` 1000000000·`foreignDays` 4. 화면은 외국인 「+5억」, 기관 「-3억」이고 「일)」 글자가 없다.
 - 필수 여부(required): 예
+- 실제: API `investorTrend5Day` `{foreign: 500000000, institution: -300000000}`, `investorTrend.foreign` 1000000000.0·`foreignDays` 4. 모달 「외국인+5억」「기관-3억」, 「일)」 없음. 스크린샷 `flow022-QACSV유지-flow.png` 에서 붉은 「+5억」, 푸른 「-3억」으로 보였다.
+  이 결과는 승인된 설계대로이며, 위 「알려진 한계」의 R1 처럼 낡은 CSV 가 표시 없이 남는 갈래이기도 하다
+- 결과: 통과
 
 ## 이월한 발견
 
@@ -89,4 +104,7 @@ target 을 넘기면 오늘 날짜라도 Toss 참조를 조회하지 않는다)�
 
 ## 실행 결과
 
-(실행 뒤 기록)
+- 필수 시나리오: 통과 4 / 전체 4
+- 미통과 필수: 없음
+- 재개 판정: 완료 가능
+- 시나리오 밖에서 새로 발견: 없음(위 이월 두 건은 구현·리뷰 중 발견)
