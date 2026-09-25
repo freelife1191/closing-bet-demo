@@ -203,7 +203,9 @@ def _reference_sqlite_context(
         namespace_dir,
         f"{str(ticker).zfill(6)}__{token}.snapshot",
     )
-    signature = (_stable_token_to_int(token), _stable_token_to_int(source))
+    # [FLOW-029] v1 에는 NaN 을 0 으로 저장한 값(930525be 이전), 끝 날짜가 기준일이 아닌 값, 거부될 값이 남아 있을 수 있다.
+    # SQLite 에서 읽은 값은 거부되어도 다시 조회하지 않으므로 _reference_reject_reason 을 엄격하게 바꾸면 이 버전도 올린다
+    signature = (_stable_token_to_int(token), _stable_token_to_int(f"{source}:v2"))
     return cache_key, signature
 
 def _resolve_trend_file_context(
@@ -708,6 +710,11 @@ def _fetch_pykrx_reference_trend(
     trend_df = trend_df.tail(5)
     if len(trend_df) < 5:
         return None
+    last_day = pd.Timestamp(trend_df.index[-1]).normalize()
+    if last_day != pd.Timestamp(end_dt).normalize():
+        # [FLOW-029] 끝 날짜의 자료가 아직 없으면 전날까지의 5일이다. 끝 날짜 키로 저장되지 않게 버린다
+        logger.debug("pykrx reference for %s ends on %s, not %s", ticker, last_day.date(), end_dt.date())
+        return None
 
     foreign_col = next((col for col in trend_df.columns if "외국인" in col), None)
     inst_col = next((col for col in trend_df.columns if "기관" in col), None)
@@ -850,7 +857,8 @@ def _get_reference_trend_cached(
         # A clear separates generations. Publish and clear are serialized, including SQLite.
         with _REFERENCE_CACHE_LOCK:
             if generation == _REFERENCE_GENERATION:
-                if result is not None:
+                # [FLOW-029] 거부될 값도 실패로 다룬다. 저장하면 같은 키로 다시 묻지 않는다
+                if result is not None and _reference_reject_reason(result) is None:
                     _REFERENCE_CACHE[cache_key] = copy.deepcopy(result)
                     _REFERENCE_CACHE.move_to_end(cache_key)
                     while len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX_ENTRIES:
@@ -1064,6 +1072,8 @@ def get_pykrx_trend_5day(
 
     [FLOW-026] 수집기가 자기 pykrx 경로에서 5행 미만이나 NaN 인 날을 건너뛴 부분합, 빈 프레임의 0 을 5일 값으로
     썼다. 5일치가 모이지 않았거나 하루라도 수량이 비었거나 전부 0 이거나 합계가 상한을 넘으면 None 이다.
+    [FLOW-029] 표의 마지막 날이 기준일(없으면 pykrx 최근 거래일)이 아니어도 None 이다. 이 경우는 거부 사유가 아니라
+    조회 실패로 다뤄 debug 로그에만 남는다.
     """
     payload = _get_reference_trend_cached(
         data_dir=_normalize_data_dir(data_dir), source="pykrx", ticker=ticker, target_datetime=target_datetime,
@@ -1095,7 +1105,9 @@ def get_investor_trend_5day_for_ticker(
     초과)는 채택하지 않는다. 그 경우 single_day_spike·insufficient_days 만 붙은 CSV 는
     그대로 남고, stale_csv·extreme_abs_total 이 붙은 CSV 는 참조로 확인하지 못했으므로
     None 을 돌려준다([FLOW-023]). verify_with_references=False 는 플래그 붙은 CSV 를 그대로
-    돌려준다. 버린 참조는 quality.discarded_references 에 "<출처>:<사유>" 형식으로 남는다.
+    돌려준다. 버린 참조는 quality.discarded_references 에 "<출처>:<사유>" 형식으로 남는다. 다만 버린 참조는
+    캐시하지 않고 60초 실패 캐시에 넣으므로([FLOW-029]) 사유는 그 참조를 조회한 호출에만 남고, 60초 안의
+    후속 호출(기준일 실행에서 get_pykrx_trend_5day 뒤에 이어지는 호출 포함)에는 남지 않는다.
 
     quality.reference_only 는 CSV 대응값이 없어 참조 단독으로 채운 값이라는 표식이다.
     이 표식에 점수 감점이나 상한을 두지 않는다. 기본 참조인 pykrx 는 KRX 공식 자료라

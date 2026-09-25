@@ -11,6 +11,7 @@ import types
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 
 sys.path.insert(
@@ -382,7 +383,9 @@ def test_get_themes_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_p
     assert second == ["반도체", "전기전자", "AI"]
 
 
-def test_get_stock_detail_info_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
+@pytest.mark.parametrize(("first_code", "second_code", "expected"), [("5930", "005930", "005930"), ("00680K", "00680K", "00680K")])
+def test_get_stock_detail_info_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path, first_code, second_code, expected):
+    """[JONGGA-043] 영문자로 끝나는 코드도 상세 결과를 캐시해 두 번째 조회가 스크랩하지 않는다."""
     collector = NaverFinanceCollector()
     with collector._naver_cache_lock:
         collector._naver_cache.clear()
@@ -429,9 +432,9 @@ def test_get_stock_detail_info_reuses_sqlite_snapshot_after_memory_clear(monkeyp
         lambda *_a, **_k: asyncio.sleep(0),
     )
 
-    first = asyncio.run(collector.get_stock_detail_info("5930"))
+    first = asyncio.run(collector.get_stock_detail_info(first_code))
     assert first is not None
-    assert first["code"] == "005930"
+    assert first["code"] == expected
     assert first["name"] == "삼성전자"
 
     with collector._naver_cache_lock:
@@ -440,9 +443,9 @@ def test_get_stock_detail_info_reuses_sqlite_snapshot_after_memory_clear(monkeyp
     collector._request = lambda *_a, **_k: (_ for _ in ()).throw(
         AssertionError("sqlite detail_info cache should be reused")
     )
-    second = asyncio.run(collector.get_stock_detail_info("005930"))
+    second = asyncio.run(collector.get_stock_detail_info(second_code))
     assert second is not None
-    assert second["code"] == "005930"
+    assert second["code"] == expected
     assert second["name"] == "삼성전자"
 
 

@@ -1349,3 +1349,65 @@ def test_get_pykrx_trend_5day_returns_only_complete_windows(monkeypatch, tmp_pat
 
     trend_service.clear_investor_trend_5day_memory_cache()
     assert (None if result is None else (result["foreign"], result["institution"])) == expected
+
+
+def _complete_reference(value: int) -> dict:
+    return {
+        "foreign": value * 5, "institution": value * 5, "latest_date": "2026-02-24", "source": "pykrx",
+        "details": [{"netForeignerBuyVolume": value, "netInstitutionBuyVolume": value}] * 5,
+    }
+
+
+def test_pykrx_reference_that_ends_before_the_target_is_rejected(monkeypatch):
+    """[FLOW-029] 기준일 자료가 아직 없어 전날로 끝나는 표는 기준일의 5일 값이 아니다."""
+    days = pd.to_datetime(["2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20", "2026-02-23"])
+    frame = pd.DataFrame({"기관합계": [10.0] * 5, "외국인합계": [1.0] * 5}, index=days)
+    monkeypatch.setattr(pykrx_stock, "get_market_trading_value_by_date", lambda *a, **k: frame)
+
+    assert trend_service._fetch_pykrx_reference_trend(ticker="005930", target_datetime="2026-02-24") is None
+    assert trend_service._fetch_pykrx_reference_trend(ticker="005930", target_datetime="2026-02-23")["foreign"] == 5
+    # 지수 조회가 실패하면 최근 거래일은 시각이 붙은 now 로 물러난다. 날짜로만 견준다
+    monkeypatch.setattr(trend_service, "_resolve_pykrx_latest_market_date", lambda **_k: datetime(2026, 2, 23, 17, 5))
+    assert trend_service._fetch_pykrx_reference_trend(ticker="005930", target_datetime=None)["foreign"] == 5
+
+
+def test_a_rejected_reference_is_not_cached_and_is_asked_again(monkeypatch, tmp_path):
+    """[FLOW-029] 거부될 참조는 메모리·SQLite 에 두지 않고 실패처럼 60초 뒤 다시 묻는다."""
+    trend_service.clear_investor_trend_5day_memory_cache()
+    clock = [100.0]
+    monkeypatch.setattr(trend_service.time, "monotonic", lambda: clock[0])
+    replies = [_complete_reference(0), _complete_reference(300)]
+    calls = []
+    monkeypatch.setattr(trend_service, "_fetch_pykrx_reference_trend", lambda **_k: calls.append(1) or replies[len(calls) - 1])
+    kwargs = {"data_dir": str(tmp_path), "source": "pykrx", "ticker": "005930", "target_datetime": "2026-02-24"}
+
+    first = trend_service._get_reference_trend_cached(**kwargs)
+    sqlite_key, signature = trend_service._reference_sqlite_context(
+        data_dir=str(tmp_path), source="pykrx", ticker="005930", target_datetime="2026-02-24",
+    )
+
+    assert trend_service._reference_reject_reason(first) == "zero_total"  # 이 호출은 사유를 남길 수 있다
+    assert sqlite_payload_cache.load_json_payload_from_sqlite(filepath=sqlite_key, signature=signature)[0] is False
+    assert trend_service._get_reference_trend_cached(**kwargs) is None  # 60초 안에는 다시 묻지 않는다
+    clock[0] += 60.0
+    assert trend_service._get_reference_trend_cached(**kwargs)["foreign"] == 1_500
+    assert len(calls) == 2
+    trend_service.clear_investor_trend_5day_memory_cache()
+
+
+def test_a_reference_saved_under_the_v1_signature_is_not_read(monkeypatch, tmp_path):
+    """[FLOW-029] v1 참조 캐시에는 NaN 을 0 으로 저장한 값과 끝 날짜가 어긋난 값이 있을 수 있어 읽지 않는다."""
+    trend_service.clear_investor_trend_5day_memory_cache()
+    sqlite_key, _ = trend_service._reference_sqlite_context(
+        data_dir=str(tmp_path), source="pykrx", ticker="005930", target_datetime="2026-02-24",
+    )
+    v1_signature = (trend_service._stable_token_to_int("20260224"), trend_service._stable_token_to_int("pykrx"))
+    sqlite_payload_cache.save_json_payload_to_sqlite(filepath=sqlite_key, signature=v1_signature, payload=_complete_reference(999))
+    monkeypatch.setattr(trend_service, "_fetch_pykrx_reference_trend", lambda **_k: _complete_reference(300))
+
+    result = trend_service._get_reference_trend_cached(
+        data_dir=str(tmp_path), source="pykrx", ticker="005930", target_datetime="2026-02-24",
+    )
+
+    assert result["foreign"] == 1_500
+    trend_service.clear_investor_trend_5day_memory_cache()

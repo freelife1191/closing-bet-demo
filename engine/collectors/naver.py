@@ -22,6 +22,7 @@ from engine.collectors.base import BaseCollector
 from engine.collectors.naver_extractors_mixin import NaverExtractorsMixin
 from engine.collectors.naver_pykrx_mixin import NaverPykrxMixin
 from engine.collectors.naver_request_mixin import NaverRequestMixin
+from engine.ticker_utils import normalize_ticker
 from services.kr_market_data_cache_sqlite_payload import (
     load_json_payload_from_sqlite as _load_json_payload_from_sqlite,
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
@@ -225,8 +226,10 @@ class NaverFinanceCollector(
     def _normalize_stock_detail_payload(cls, payload: dict[str, object] | None) -> dict[str, object] | None:
         if not isinstance(payload, dict):
             return None
-        code_value = str(payload.get("code") or "").zfill(6)
-        if len(code_value) != 6 or not code_value.isdigit():
+        # [JONGGA-043] 숫자만 받으면 00680K 같은 코드의 상세 결과가 캐시되지 않는다
+        code_value = normalize_ticker(payload.get("code"))
+        if not code_value:
+            logger.debug("Naver detail payload has no valid code: %r", payload.get("code"))
             return None
         normalized = dict(payload)
         normalized["code"] = code_value
