@@ -477,8 +477,7 @@ def _write_vcp_signals_latest_payload(
         "signals": signals or [],
     }
     latest_path = os.path.join(BASE_DIR, "data", "vcp_signals_latest.json")
-    with open(latest_path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+    atomic_write_text(latest_path, json.dumps(payload, ensure_ascii=False, indent=2, cls=NumpyEncoder))
 
 def create_korean_stocks_list():
     """한국 주식 목록 생성 - pykrx로 시가총액 상위 종목 조회"""
@@ -1725,10 +1724,15 @@ def create_signals_log(target_date=None, run_ai=True, max_stocks=None, signal_li
                     write_vcp_signals_csv_atomic(pd.DataFrame(columns=_SIGNALS_LOG_COLUMNS), file_path)
         except OSError as lock_error:
             log(f"빈 VCP 로그 준비 실패: {lock_error}", "WARNING")
-        _write_vcp_signals_latest_payload(
-            target_date=target_date,
-            signals=[],
-        )
+        # 최신 파일 저장이 실패해 이 갈래로 왔다면 여기서도 다시 실패한다([VCP-058])
+        try:
+            _write_vcp_signals_latest_payload(
+                target_date=target_date,
+                signals=[],
+            )
+        except OSError as latest_error:
+            log(f"빈 VCP 최신 결과 저장 실패: {latest_error}", "WARNING")
+            return False
         log("VCP 분석 오류 - 기존 로그 보존, 빈 최신 결과 저장", "INFO")
         return False
 

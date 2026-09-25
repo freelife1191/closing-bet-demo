@@ -482,6 +482,49 @@ def test_create_signals_log_writes_latest_metadata_when_no_signals(monkeypatch, 
     assert log_df["signal_date"].tolist() == ["2026-03-05"]
 
 
+def test_write_vcp_signals_latest_keeps_previous_file_when_write_fails(monkeypatch, tmp_path):
+    # [VCP-058] 저장이 도중에 실패해도 읽는 쪽이 빈 파일이나 잘린 JSON 을 보지 않는다
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    latest_path = data_dir / "vcp_signals_latest.json"
+    previous = '{"date": "2026-03-05", "signals": []}'
+    latest_path.write_text(previous, encoding="utf-8")
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+
+    with pytest.raises(TypeError):
+        init_data._write_vcp_signals_latest_payload(
+            target_date="2026-03-06",
+            signals=[{"ticker": "005930"}, {"ticker": "000660", "raw": object()}],
+        )
+
+    assert latest_path.read_text(encoding="utf-8") == previous
+    assert [p.name for p in data_dir.iterdir()] == ["vcp_signals_latest.json"]
+
+
+def test_create_signals_log_returns_false_when_latest_replace_fails(monkeypatch, tmp_path):
+    # [VCP-058] 최신 파일 교체가 실패하면 기존 파일이 남고, except 갈래의 재저장도 실패하지만 False 로 끝난다
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    latest_path = data_dir / "vcp_signals_latest.json"
+    previous = '{"date": "2026-02-18", "signals": []}'
+    latest_path.write_text(previous, encoding="utf-8")
+    real_replace = os.replace
+
+    def _failing_replace(src, dst):
+        if str(dst).endswith("vcp_signals_latest.json"):
+            raise OSError("forced replace failure")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr("engine.screener.SmartMoneyScreener", _DummyScreener)
+    monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
+    monkeypatch.setattr("services.kr_market_data_cache_core.os.replace", _failing_replace)
+
+    assert init_data.create_signals_log(target_date="2026-02-19", run_ai=False) is False
+    assert latest_path.read_text(encoding="utf-8") == previous
+    assert not [p.name for p in data_dir.iterdir() if p.name.startswith("vcp_signals_latest.json.")]
+
+
 def test_should_abort_daily_pykrx_bulk_fetch_detects_known_error_signature():
     known_error = KeyError(
         "None of [Index(['시가', '고가', '저가', '종가'], dtype='object')] are in the [columns]"
@@ -1782,6 +1825,9 @@ def test_create_signals_log_keeps_log_bytes_when_write_fails(monkeypatch, tmp_pa
     monkeypatch.setattr("engine.screener.SmartMoneyScreener", screener)
     monkeypatch.setattr("engine.market_gate.MarketGate", _DummyMarketGate)
     monkeypatch.setattr("services.kr_market_data_cache_core.os.fsync", _failing_fsync)
+    # 최신 파일 저장도 fsync 를 거친다. merge 갈래는 그것을 CSV 병합보다 먼저 하므로 비워 둬야
+    # 이 테스트가 병합 쓰기에 닿는다([VCP-058] 리뷰)
+    monkeypatch.setattr(init_data, "_write_vcp_signals_latest_payload", lambda **_: None)
 
     assert init_data.create_signals_log(target_date="2026-02-19", run_ai=False) is False
     assert log_path.read_bytes() == before
