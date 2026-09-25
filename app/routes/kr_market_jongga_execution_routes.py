@@ -19,6 +19,8 @@ from werkzeug.exceptions import BadRequest
 
 from app.routes.route_execution import execute_json_route
 from app.routes.route_guards import require_admin
+from services.common_update_status_service import _status_file_lock
+from services.kr_market_jongga_runtime_service import read_v2_status_uncached
 from services.kr_market_data_cache_service import (
     atomic_write_text,
     load_json_payload_from_path,
@@ -105,12 +107,14 @@ def _register_jongga_run_status_routes(
     def run_jongga_v2_screener_route():
         """종가베팅 v2 스크리너 실행 (비동기 - 백그라운드 스레드)"""
         req_data = request.get_json(silent=True) or {}
+        v2_status_file = os.path.join(data_dir, "v2_screener_status.json")
         status_code, payload = launch_jongga_v2_screener(
             req_data=req_data,
-            load_v2_status=load_v2_status,
+            load_v2_status=lambda: read_v2_status_uncached(v2_status_file),
             save_v2_status=save_v2_status,
             run_jongga_background=run_jongga_background,
             logger=logger,
+            status_lock=lambda: _status_file_lock(v2_status_file, logger),
         )
         return jsonify(payload), int(status_code)
 

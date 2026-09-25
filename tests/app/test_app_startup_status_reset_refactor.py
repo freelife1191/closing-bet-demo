@@ -184,3 +184,22 @@ def test_reset_startup_status_files_resets_v2_and_scheduler_when_not_live_siblin
         assert json.loads((data_dir / "v2_screener_status.json").read_text(encoding="utf-8")) == {"isRunning": False}, owner
         sched = json.loads((data_dir / "scheduler_runtime_status.json").read_text(encoding="utf-8"))
         assert not any(sched[k] for k in running_keys), owner
+
+
+def test_reset_startup_status_files_waits_for_v2_status_file_lock(monkeypatch, tmp_path: Path):
+    # [INFRA-115] 다른 워커가 실행 요청의 확인·저장 중이면 기동 초기화가 그 True 를 덮지 않고 기다린다
+    import fcntl
+
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    v2_file = data_dir / "v2_screener_status.json"
+    done = threading.Event()
+    worker = threading.Thread(target=lambda: (app_module._reset_startup_status_files(), done.set()))
+    with open(str(v2_file) + ".lock", "a+") as lock_fp:
+        fcntl.flock(lock_fp.fileno(), fcntl.LOCK_EX)
+        worker.start()
+        assert not done.wait(0.3)
+        fcntl.flock(lock_fp.fileno(), fcntl.LOCK_UN)
+    assert done.wait(5)
+    assert json.loads(v2_file.read_text(encoding="utf-8")) == {"isRunning": False}

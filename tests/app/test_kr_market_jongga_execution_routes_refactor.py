@@ -98,6 +98,52 @@ def test_run_jongga_v2_screener_route_delegates_launch(tmp_path: Path):
     assert callable(captured["save_v2_status"])
 
 
+def test_run_jongga_v2_screener_route_passes_status_file_lock(tmp_path: Path):
+    # [INFRA-115] 확인·저장을 워커 사이에서 직렬화하도록 v2_screener_status.json.lock 을 잡는 잠금을 넘긴다
+    import fcntl
+
+    held = []
+
+    def _launch(**kwargs):
+        with kwargs["status_lock"]():
+            with open(tmp_path / "v2_screener_status.json.lock", "a+") as other:
+                try:
+                    fcntl.flock(other.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held.append(False)
+                except BlockingIOError:
+                    held.append(True)
+        return 200, {"status": "started"}
+
+    client = _create_client(str(tmp_path), _build_deps(launch_jongga_v2_screener=_launch))
+    response = client.post("/api/kr/jongga-v2/run", json={})
+
+    assert response.status_code == 200
+    assert held == [True]
+
+
+def test_run_jongga_v2_screener_route_checks_running_without_signature_cache(tmp_path: Path):
+    # [INFRA-115] 잠금 안의 판정은 (mtime, size) 캐시를 거치지 않는다. 같은 틱·같은 크기로 바뀐 다른 워커 저장을 읽는다
+    from services.kr_market_data_cache_service import load_json_payload_from_path
+
+    status_file = tmp_path / "v2_screener_status.json"
+    status_file.write_text('{"isRunning": false, "ownerPid": 9999}', encoding="utf-8")
+    assert load_json_payload_from_path(str(status_file))["isRunning"] is False  # 캐시를 채운다
+    before = os.stat(status_file)
+    status_file.write_text('{"isRunning": true, "ownerPid": 10000}', encoding="utf-8")
+    os.utime(status_file, ns=(before.st_atime_ns, before.st_mtime_ns))
+    assert os.stat(status_file).st_size == before.st_size
+    captured = {}
+
+    def _launch(**kwargs):
+        captured["status"] = kwargs["load_v2_status"]()
+        return 409, {"status": "error"}
+
+    client = _create_client(str(tmp_path), _build_deps(launch_jongga_v2_screener=_launch))
+    client.post("/api/kr/jongga-v2/run", json={})
+
+    assert captured["status"]["isRunning"] is True
+
+
 def test_get_jongga_v2_status_route_reads_status_file_and_latest_updated_at(tmp_path: Path):
     status_file = tmp_path / "v2_screener_status.json"
     status_file.write_text(json.dumps({"isRunning": True}), encoding="utf-8")

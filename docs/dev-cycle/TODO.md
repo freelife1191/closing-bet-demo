@@ -64,8 +64,12 @@
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` 설계와 심층 리뷰 지적 3(2026-09-25), 코드로 확인
 - 내용: `launch_jongga_v2_screener`(`services/kr_market_jongga_runtime_service.py`)는 `v2_screener_status.json` 을 읽어 `isRunning` 을 확인한 뒤 `True` 를 저장하는데, 그 사이에 프로세스 사이 잠금이 없다. 두 워커에 관리자 실행 요청이 거의 동시에 닿으면 둘 다 통과해 LLM 분석이 두 번 돈다. 기동 초기화의 읽기-쓰기(`app/__init__.py`, `reset_scheduler_runtime_status`)도 같은 창을 가진다(`[INFRA-114]` 로 창은 좁아졌다)
 - 확인 수준: 코드로만 확인. 실제 동시 요청은 재현하지 않았다
-- [ ] 설계 승인(`update_status.json` 처럼 fcntl 파일 잠금을 쓸지)
-- [ ] 테스트, 리뷰와 pytest 전체
+- [x] 설계 승인(2026-09-25 14:03, 대화 「이 설계로 진행 (Recommended)」, bounded). 범위: 기존 `_status_file_lock`(`services/common_update_status_service.py`, import 만) 으로 `v2_screener_status.json.lock` 을 잡아 실행 요청의 확인·저장과 기동 초기화의 읽기·쓰기를 직렬화. `launch_jongga_v2_screener` 에 `status_lock` 인자(기본 `nullcontext`), 스레드 시작은 잠금 밖
+- 티어: T2(`kr_market_jongga_runtime_service.py`·`kr_market_jongga_execution_routes.py`·`app/__init__.py` 는 §2 밖, `common_update_status_service.py` 는 고치지 않음). 스킬: `.claude/skills/closing-bet-python/`
+- [x] 테스트 4건(동시 실행 요청 200·409 하나씩, 라우트가 잠금을 넘김, 판정 읽기가 시그니처 캐시를 거치지 않음, 기동 초기화가 잠금을 기다림). 모두 수정 전 실패 확인, 잠금 없는 변형은 `[200, 200]` 재현
+- [x] 과잉설계 리뷰(직접, Lean). `closing-bet-reviewer` APPROVE(최고 low): low 1 잠금 안 판정이 `(mtime, size)` 캐시를 거쳐 같은 틱·같은 크기의 다른 워커 저장을 놓칠 수 있음 → 반영(`read_v2_status_uncached`, 라우트·기동 초기화). low 2 `join` 뒤 스레드 생존 미확인 → 반영
+- [x] pytest 전체 2845 passed, 2 skipped, exit 0(14:09, 리뷰 반영 뒤)
+- [ ] QA 계획·실행(`docs/dev-cycle/qa/INFRA-115.md`)
 
 ### [INFRA-116] 17시 스케줄러 체인의 종가베팅 분석이 수동 V2 실행 중인지 확인하지 않는다
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` `closing-bet-reviewer` 범위 밖 관찰(2026-09-25), 코드로 확인

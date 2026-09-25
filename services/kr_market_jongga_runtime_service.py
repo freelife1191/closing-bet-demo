@@ -9,10 +9,12 @@ KR Market Jongga Runtime Service
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import sys
 import threading
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from typing import Any, Callable
 
@@ -133,20 +135,34 @@ def run_jongga_v2_background_pipeline(
         logger.info("[Background] Jongga V2 Status reset to False")
 
 
+def read_v2_status_uncached(v2_status_file: str) -> dict[str, Any]:
+    """[INFRA-115] 잠금 안의 판정용 읽기. (mtime, size) 캐시는 같은 틱·같은 크기의 다른 워커 저장을 놓친다."""
+    try:
+        with open(v2_status_file, "r", encoding="utf-8") as fp:
+            loaded = json.load(fp)
+    except (OSError, ValueError):
+        return {"isRunning": False}
+    return loaded if isinstance(loaded, dict) else {"isRunning": False}
+
+
 def launch_jongga_v2_screener(
     req_data: dict[str, Any],
     load_v2_status: Callable[[], dict[str, Any]],
     save_v2_status: Callable[[bool], None],
     run_jongga_background: Callable[..., None],
     logger: logging.Logger,
+    status_lock: Callable[[], AbstractContextManager[Any]] = nullcontext,
 ) -> tuple[int, dict[str, Any]]:
     """종가베팅 v2 백그라운드 스크리너 실행을 시작한다."""
-    status = load_v2_status()
-    if status.get("isRunning", False):
-        return 409, {
-            "status": "error",
-            "message": "Engine is already running. Please wait.",
-        }
+    # [INFRA-115] 확인과 저장 사이에 다른 워커의 요청이 끼면 둘 다 통과해 분석이 두 번 돈다
+    with status_lock():
+        if load_v2_status().get("isRunning", False):
+            return 409, {
+                "status": "error",
+                "message": "Engine is already running. Please wait.",
+            }
+        # [INFRA-114] 백그라운드가 곧바로 끝나 False 를 쓴 뒤에 True 가 덮여 409 로 굳지 않게 먼저 저장한다
+        save_v2_status(True)
 
     capital = req_data.get("capital", 50_000_000)
     markets = req_data.get("markets", ["KOSPI", "KOSDAQ"])
@@ -160,8 +176,6 @@ def launch_jongga_v2_screener(
         finally:
             save_v2_status(False)
 
-    # [INFRA-114] 백그라운드가 곧바로 끝나 False 를 쓴 뒤에 True 가 덮여 409 로 굳지 않게 먼저 저장한다
-    save_v2_status(True)
     thread = threading.Thread(target=_run_wrapper, daemon=True)
     try:
         thread.start()
