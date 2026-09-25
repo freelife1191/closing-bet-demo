@@ -570,6 +570,9 @@ def start_update(
         status["stopRequested"] = False
         status["startTime"] = datetime.now().isoformat()
         shared_state.LOCAL_RUN_START_TIME = status["startTime"]
+        # [INFRA-104] 스레드가 파이프라인에 들어가기 전에도 같은 워커의 재시작을 거부하도록 여기서 켠다.
+        # 파이프라인의 finally 가 끈다. ponytail: thread.start() 가 실패하면 이 워커는 재기동까지 시작을 거부한다
+        shared_state.LOCAL_PIPELINE_ACTIVE = True
         status["items"] = [{"name": name, "status": "pending"} for name in items_list]
         status["currentItem"] = None
         save_update_status(status=status, update_status_file=update_status_file, logger=logger)

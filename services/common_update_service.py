@@ -66,8 +66,8 @@ def _watch_stop_request(
             stopped = bool(status.get("stopRequested"))
         else:
             # 새 실행이 시작됐다면 이 실행은 중단된 것이다. 감시가 읽기 전에 중단과 재시작이 끝난 경우다.
-            # ponytail: 새 실행이 같은 워커면 플래그를 함께 쓰므로 건너뛰고, 옛 실행은 새 실행과 함께 돈다.
-            # [INFRA-099] 뒤로 같은 워커의 새 시작은 거부되므로 시작 처리와 스레드 진입 사이 틈에서만 닿는다
+            # 새 실행이 같은 워커면 플래그를 함께 쓰므로 건너뛴다. [INFRA-099]·[INFRA-104] 뒤로 같은 워커의 새 시작은
+            # 이 실행이 끝날 때까지 거부되므로, 같은 워커라서 건너뛰는 경우는 start_update 를 거치지 않은 실행에서만 생긴다
             stopped = current is not None and current != getattr(shared_state, "LOCAL_RUN_START_TIME", None)
         # 매번 다시 켜므로 같은 워커의 옛 실행 finally 가 지운 값도 다음 주기에 되살아난다
         if stopped:
@@ -96,16 +96,19 @@ def run_background_update_pipeline(
     if load_update_status is not None:
         # start_update 가 이 워커에서 방금 정한 값이 우선이다. 두 워커가 함께 시작하면 파일에는 늦게 쓴 쪽만 남는다
         start_time = getattr(shared_state, "LOCAL_RUN_START_TIME", None) or _read_start_time(load_update_status, logger)
-    if start_time is not None:
-        watcher = threading.Thread(
-            target=_watch_stop_request,
-            args=(load_update_status, start_time, shared_state, watch_done, logger),
-            daemon=True,
-        )
-        watcher.start()
 
     try:
         shared_state.LOCAL_PIPELINE_ACTIVE = True
+        if start_time is not None:
+            # [INFRA-104] start_update 가 켠 플래그를 시작 실패에도 finally 가 끄도록 try 안에서 띄운다.
+            # 시작된 스레드만 watcher 에 둔다. 시작하지 못한 스레드를 join 하면 finish_update 전에 예외가 난다
+            thread = threading.Thread(
+                target=_watch_stop_request,
+                args=(load_update_status, start_time, shared_state, watch_done, logger),
+                daemon=True,
+            )
+            thread.start()
+            watcher = thread
         from scripts import init_data
 
         if "Daily Prices" in items:

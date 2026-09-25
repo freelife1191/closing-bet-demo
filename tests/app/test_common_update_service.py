@@ -224,6 +224,7 @@ def test_stop_update_records_request_in_shared_status_not_local_flag(tmp_path):
     assert load_update_status(update_status_file=status_file, logger=_noop_logger())["stopRequested"] is True
     assert shared_state.STOP_REQUESTED is False
 
+    shared_state.LOCAL_PIPELINE_ACTIVE = False  # 앞 실행의 파이프라인이 끝났다
     start_update(items_list=["Daily Prices"], shared_state=shared_state, **kwargs)
     restarted = load_update_status(update_status_file=status_file, logger=_noop_logger())
     assert restarted["stopRequested"] is False
@@ -251,6 +252,58 @@ def test_start_update_refuses_while_local_pipeline_active(tmp_path):
     assert load_update_status(update_status_file=status_file, logger=_noop_logger()) == stopped
     assert shared_state.LOCAL_RUN_START_TIME == stopped["startTime"]
     assert shared_state.STOP_REQUESTED is True
+
+
+def test_start_update_refuses_restart_before_thread_enters_pipeline(tmp_path):
+    # [INFRA-104] 시작 처리와 스레드의 파이프라인 진입 사이에도 같은 워커의 재시작을 거부한다.
+    # 받으면 옛 스레드가 새 실행의 시각을 읽어 감시는 옛 실행을 멈추지 않고 항목 가드도 통과시킨다
+    import threading
+
+    from services.common_update_status_service import load_update_status, start_update, stop_update
+
+    status_file = str(tmp_path / "update_status.json")
+    shared_state = types.SimpleNamespace(STOP_REQUESTED=False)
+    kwargs = dict(update_lock=threading.Lock(), update_status_file=status_file, logger=_noop_logger())
+
+    assert start_update(items_list=["Daily Prices"], shared_state=shared_state, **kwargs) is True
+    stop_update(**kwargs)  # 다른 워커의 중단. 이 워커의 스레드는 아직 파이프라인에 들어가지 않았다
+    stopped = load_update_status(update_status_file=status_file, logger=_noop_logger())
+
+    assert start_update(items_list=["VCP Signals"], shared_state=shared_state, **kwargs) is False
+    assert load_update_status(update_status_file=status_file, logger=_noop_logger()) == stopped
+    assert shared_state.LOCAL_RUN_START_TIME == stopped["startTime"]
+
+
+def test_run_background_update_pipeline_clears_flag_when_watcher_cannot_start(monkeypatch):
+    # [INFRA-104] start_update 가 켠 플래그는 감시 스레드를 띄우지 못해도 꺼지고 실행도 끝나야 한다.
+    # 남으면 이 워커는 상태가 실행 중이 아닌데도 재기동 전까지 시작을 거부한다
+    import services.common_update_service as service
+
+    class _NoThread:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(service.threading, "Thread", _NoThread)
+    monkeypatch.setitem(sys.modules, "scripts", types.ModuleType("scripts"))
+    shared_state = types.SimpleNamespace(STOP_REQUESTED=False, LOCAL_PIPELINE_ACTIVE=True, LOCAL_RUN_START_TIME="run-A")
+    finished: list[bool] = []
+
+    run_background_update_pipeline(
+        target_date=None,
+        selected_items=["QA Noop"],
+        force=False,
+        update_item_status=lambda *_a: None,
+        finish_update=lambda: finished.append(True),
+        shared_state=shared_state,
+        logger=_noop_logger(),
+        load_update_status=lambda: {"startTime": "run-A"},
+    )
+
+    assert finished == [True]
+    assert shared_state.LOCAL_PIPELINE_ACTIVE is False
 
 
 def test_run_background_update_pipeline_marks_local_pipeline_active(monkeypatch):

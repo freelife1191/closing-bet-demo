@@ -65,8 +65,13 @@
 - 원인: `start_update` 는 이 실행의 `startTime` 을 워커 공용 `LOCAL_RUN_START_TIME` 에만 남기고, 스레드의 `run_background_update` 가 진입 때 그 값을 다시 읽는다. `LOCAL_PIPELINE_ACTIVE` 는 파이프라인 진입 뒤에 켜지므로, 시작 처리와 스레드 진입 사이에 다른 워커의 중단과 같은 워커의 재시작이 겹치면 옛 스레드가 새 실행 시각을 읽는다. 그러면 `[INFRA-097]` 감시는 옛 실행을 멈추지 않고(`_watch_stop_request` ponytail 주석), `[INFRA-101]` 가드는 옛 실행의 항목 쓰기를 새 실행에 통과시킨다
 - 수정 후보: `start_update` 가 `startTime` 을 돌려주고 시작 경로가 스레드 인자로 넘긴다(리뷰 제안). 또는 `start_update` 안에서 `LOCAL_PIPELINE_ACTIVE` 를 켠다(스레드가 뜨지 못하면 고착 위험, `[INFRA-099]` 계획 제약)
 - 확인 수준: 코드로만 확인. 창은 스레드 기동 시간(수 ms)이다
-- [ ] 설계 승인
-- [ ] 테스트, T3 리뷰와 pytest 전체
+- 설계 승인: 2026-09-25 09:45 | 범위: 해법 (B) `start_update` 가 상태 파일 잠금 안에서 `LOCAL_PIPELINE_ACTIVE` 를 켜 스레드 진입 전에도 같은 워커의 재시작을 거부. (A) 스레드 인자 전달은 같은 워커의 두 실행 동시 진행을 막지 못해 제외. `thread.start()` 실패 시 그 워커가 재기동까지 시작을 거부하는 한계는 `ponytail:` 주석 | 실제 대화 근거: 2026-09-25 사용자 「진ㅇ해」(진행해) 응답, 현재 세션의 설계 제안
+- [x] 설계 승인
+- [x] 테스트(RED 먼저): 시작 직후 파이프라인 진입 전 같은 워커의 재시작 거부(RED `1 failed` → GREEN), 기존 두 번 시작 테스트 보정, 감시 스레드 시작 실패에도 `finish_update`·플래그 해제(HEAD 파이프라인에서 RED)
+- [x] 구현과 감시 주석 갱신, `closing-bet-python` 기준(`.claude/skills/closing-bet-python/SKILL.md`)
+- [x] `/ponytail-review`·`closing-bet-reviewer`·`/review`(T3): `/ponytail-review` Lean already · `closing-bet-reviewer` APPROVE(max low): 감시 스레드 `start()` 가 try 밖이라 실패 시 플래그 고착 → try 안으로 옮기고 시작된 스레드만 `watcher` 에 대입·테스트 | 주석 「이 갈래」 모호 → 대상 명시 · `/review`(T3, `oh-my-claudecode:code-reviewer` opus) Critical·Important 0, Minor 3: 1·2 는 위와 같음 → 반영 | 3 왕복 테스트 없음 → 해제는 기존 `[INFRA-099]` 테스트가 덮어 미반영 · 반영분 `closing-bet-reviewer` 재검토 APPROVE(max none)
+- [x] pytest 전체: `venv/bin/python -m pytest -q -p no:cacheprovider` 2808 passed, 2 skipped, exit 0(리뷰 반영 뒤)
+- [ ] QA: 격리 사본 서비스 하네스로 틈 재현(수정 전·후), 데이터 상태 화면 실행 중 「업데이트」 409 모달 브라우저 실측
 
 ### [INFRA-105] Market Gate 섹터 ETF 등락률 조회가 실패하면 결측 대신 0.0 을 넣어 섹터 급락 감점이 사라진다
 - 카테고리: 인프라 | 티어: T3(판정 경로 여부는 설계 때 §2 대조) | 근거: `[INFRA-089]` 영향 확인(2026-09-24)에서 분리(2026-09-25)
