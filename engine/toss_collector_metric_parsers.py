@@ -74,6 +74,9 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
     # [INFRA-109] 빈 수량은 그날만 결측이다. 합계는 값 있는 날의 합이고, 다섯 날 모두 비면 None 이다
     foreign_sum: float | None = None
     institution_sum: float | None = None
+    # [FE-048] 합계에 들어간 날 수. 5 미만이면 화면이 「(N일)」로 알린다
+    foreign_days = 0
+    institution_days = 0
     individual_sum = 0.0
     # 종가 없는 행은 details 에서도 뺀다. 남기면 정규화기가 그 행을 1일 순매수 None 으로 읽는다
     priced_rows: list[dict[str, Any]] = []
@@ -89,9 +92,11 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
         foreign = optional_volume(item.get("netForeignerBuyVolume"))
         if foreign is not None:
             foreign_sum = (foreign_sum or 0.0) + foreign * close
+            foreign_days += 1
         institution = optional_volume(item.get("netInstitutionBuyVolume"))
         if institution is not None:
             institution_sum = (institution_sum or 0.0) + institution * close
+            institution_days += 1
         individual_sum += to_float(item.get("netIndividualsBuyVolume", 0)) * close
 
     # [VCP-055] 200 빈 응답·오류 JSON 은 결측이다. 순매수 0 으로 돌려주면 호출자가 폴백하지 않고 저장한다
@@ -106,6 +111,8 @@ def parse_investor_trend(data: dict[str, Any] | None, days: int) -> dict[str, An
         "individual_details": personal,
         "foreign": foreign_sum,
         "institution": institution_sum,
+        "foreign_days": foreign_days,
+        "institution_days": institution_days,
         "individual": individual_sum,
         "days": days,
         "details": priced_rows,

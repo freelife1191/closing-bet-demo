@@ -510,8 +510,11 @@ def build_toss_detail_payload(ticker_padded: str, toss_data: dict[str, Any]) -> 
             "psr": indicators.get("psr", 0),
         },
         "investorTrend": {
-            "foreign": investor_trend.get("foreign", 0),
-            "institution": investor_trend.get("institution", 0),
+            # [FE-048] 추세 요청이 실패하면 {} 가 온다. 0 을 채우면 실제 순매수 0 과 구분되지 않는다
+            "foreign": investor_trend.get("foreign"),
+            "institution": investor_trend.get("institution"),
+            "foreignDays": investor_trend.get("foreign_days"),
+            "institutionDays": investor_trend.get("institution_days"),
             "individual": investor_trend.get("individual"),
             "individual_schema": 1,
         },

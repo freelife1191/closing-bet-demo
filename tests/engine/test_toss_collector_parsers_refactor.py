@@ -299,3 +299,31 @@ def test_parse_investor_trend_all_real_zero_is_zero_and_closeless_latest_row_is_
 
     assert parsed["foreign"] == 0 and parsed["institution"] == 0
     assert parsed["details"][0]["netForeignerBuyVolume"] == 0
+
+
+def test_parse_investor_trend_counts_days_with_value_per_side():
+    """[FE-048] 합계에 들어간 날 수를 따로 센다. 빈 날은 빠지고 실제 0 은 센다."""
+    parsed = parse_investor_trend(_trend_rows(["", 2, 0, 4, 5], [None, "", "-", 1, 0]), days=5)
+
+    assert parsed["foreign_days"] == 4
+    assert parsed["institution_days"] == 2
+    assert parsed["foreign"] == (2 + 0 + 4 + 5) * 100
+
+
+def test_toss_detail_payload_exposes_summed_days():
+    from services.kr_market_stock_detail_service import build_toss_detail_payload
+
+    parsed = parse_investor_trend(_trend_rows(["", 2, 3, 4, 5], [None, None, None, None, None]), days=5)
+    trend = build_toss_detail_payload("005930", {"investor_trend": parsed})["investorTrend"]
+
+    assert trend["foreign"] == 1_400 and trend["foreignDays"] == 4
+    assert trend["institution"] is None and trend["institutionDays"] == 0
+
+
+def test_toss_detail_payload_keeps_missing_trend_as_none():
+    """[FE-048] 추세 요청이 실패하거나 빈 응답이면 파서가 None 을 주고 수집기는 {} 를 넘긴다. 0 이 아니라 결측이다."""
+    from services.kr_market_stock_detail_service import build_toss_detail_payload
+
+    trend = build_toss_detail_payload("005930", {"investor_trend": {}})["investorTrend"]
+
+    assert trend["foreign"] is None and trend["institution"] is None

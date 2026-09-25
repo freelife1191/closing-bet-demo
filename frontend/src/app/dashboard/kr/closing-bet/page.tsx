@@ -173,8 +173,11 @@ interface StockDetailInfo {
     psr?: number;
   };
   investorTrend: {
-    foreign: number;
-    institution: number;
+    foreign: number | null;
+    institution: number | null;
+    // [FE-048] Toss 합계에 들어간 날 수. 이 키가 없는 응답도 있다
+    foreignDays?: number | null;
+    institutionDays?: number | null;
     individual: number | null;
   };
   investorTrend5Day?: {
@@ -402,6 +405,22 @@ function TrendingThemesBox({ themes }: { themes: { theme: string; count: number 
   );
 }
 
+const finiteOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/** [FE-048] 5일 순매수 한 칸. 결측은 「자료 없음」, 5일을 못 채운 합계에는 실제 일수를 붙인다. */
+function FlowAmount({ value, days }: { value: number | null; days: number | null }) {
+  return (
+    <div className={`text-sm font-bold ${value !== null && value > 0 ? 'text-rose-400' : value !== null && value < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+      {value === null ? '자료 없음' : `${value > 0 ? '+' : ''}${formatMarketAmount(value, '-')}`}
+      {days !== null && <span className="ml-1 text-[10px] font-normal text-gray-400">({days}일)</span>}
+    </div>
+  );
+}
+
+const partialDays = (days: number | null | undefined): number | null =>
+  typeof days === 'number' && days > 0 && days < 5 ? days : null;
+
 // Stock Detail Modal Component
 function StockDetailModal({ code, name, onClose }: { code: string; name: string; onClose: () => void }) {
   const titleId = useId();
@@ -412,8 +431,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
   // TossCollector 응답을 StockDetailInfo 형식으로 변환
   const mapTossDataToDetail = (data: Record<string, unknown>): StockDetailInfo => {
     const rawTrend = (data.priceInfo ? data.investorTrend : data.investor_trend) as Record<string, unknown> | undefined;
-    const rawPersonal = rawTrend?.individual;
-    const personal = typeof rawPersonal === 'number' && Number.isFinite(rawPersonal) ? rawPersonal : null;
+    const personal = finiteOrNull(rawTrend?.individual);
     if (data.priceInfo) {
       const mapped = data as unknown as StockDetailInfo;
       return { ...mapped, investorTrend: { ...mapped.investorTrend, individual: personal } };
@@ -457,14 +475,15 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
         psr: indicators.psr || 0,
       },
       investorTrend: {
-        foreign: investorTrend.foreign || 0,
-        institution: investorTrend.institution || 0,
+        foreign: finiteOrNull(investorTrend.foreign),
+        institution: finiteOrNull(investorTrend.institution),
         individual: personal,
       },
-      investorTrend5Day: {
+      // 확정 집계가 없는데 0 을 채우면 위의 Toss 합계로 물러서지 못한다
+      investorTrend5Day: data.investorTrend5Day ? {
         foreign: investorTrend5Day.foreign || 0,
         institution: investorTrend5Day.institution || 0,
-      },
+      } : undefined,
       financials: {
         revenue: financials.revenue || 0,
         operatingProfit: financials.operating_profit || 0,
@@ -503,8 +522,11 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
   // 응답에 그 키가 없으면 실시간 시세 제공처가 낸 5일 집계로 물러선다.
   // 같은 집계이되 같은 값은 아니다. 상세 API 는 날짜를 받지 않아 늘 오늘 기준으로
   // 돌려주므로, 지난 날짜의 리포트를 보고 있으면 카드의 신호일 기준값과 어긋난다.
-  const foreign5Day = detail?.investorTrend5Day?.foreign ?? detail?.investorTrend?.foreign ?? 0;
-  const institution5Day = detail?.investorTrend5Day?.institution ?? detail?.investorTrend?.institution ?? 0;
+  // [FE-048] 물러선 Toss 합계가 없으면 0 이 아니라 결측이다. 5일을 못 채웠으면 합산 일수를 함께 보인다.
+  const foreign5Day = detail?.investorTrend5Day?.foreign ?? detail?.investorTrend?.foreign ?? null;
+  const institution5Day = detail?.investorTrend5Day?.institution ?? detail?.investorTrend?.institution ?? null;
+  const foreignDays = detail?.investorTrend5Day?.foreign == null ? partialDays(detail?.investorTrend?.foreignDays) : null;
+  const institutionDays = detail?.investorTrend5Day?.institution == null ? partialDays(detail?.investorTrend?.institutionDays) : null;
   const personal = detail?.investorTrend?.individual ?? null;
 
   return (
@@ -703,9 +725,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${foreign5Day > 0 ? 'text-rose-400' : foreign5Day < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
-                      {foreign5Day > 0 ? '+' : ''}{formatMarketAmount(foreign5Day, '-')}
-                    </div>
+                    <FlowAmount value={foreign5Day} days={foreignDays} />
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -714,9 +734,7 @@ function StockDetailModal({ code, name, onClose }: { code: string; name: string;
                         <i className="fas fa-question-circle text-gray-600 hover:text-gray-400 text-[8px] cursor-help"></i>
                       </Tooltip>
                     </div>
-                    <div className={`text-sm font-bold ${institution5Day > 0 ? 'text-rose-400' : institution5Day < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
-                      {institution5Day > 0 ? '+' : ''}{formatMarketAmount(institution5Day, '-')}
-                    </div>
+                    <FlowAmount value={institution5Day} days={institutionDays} />
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-center gap-1">

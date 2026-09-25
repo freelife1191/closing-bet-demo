@@ -238,7 +238,8 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
     expect(within(tooltip).getByText(/이 값만 실시간 시세 제공처가 집계하므로/)).toBeTruthy();
   });
 
-  it('5일 확정 집계가 없으면 외국인·기관은 -를 유지하고 개인 실제0은 0을 표시한다', async () => {
+  // [FE-048] 이전에는 결측인 외국인도 「-」로 그렸다. 이제 결측은 「자료 없음」, 실제 0 은 「-」다.
+  it('5일 확정 집계가 없으면 외국인 결측은 자료 없음, 기관 실제0은 -, 개인 실제0은 0을 표시한다', async () => {
     state.detail = {
       ...DETAIL,
       investorTrend5Day: undefined,
@@ -247,7 +248,8 @@ describe('[JONGGA-022] 카드와 상세 모달의 지표 어휘', () => {
     await openDetailModal();
 
     const section = screen.getByText('투자자 동향 (오늘 기준 5영업일)').closest('div[class~="bg-white/5"]') as HTMLElement;
-    expect(within(section).getAllByText('-')).toHaveLength(2);
+    expect(within(section).getByText('외국인').parentElement?.textContent).toContain('자료 없음');
+    expect(within(section).getAllByText('-')).toHaveLength(1);
     expect(within(section).getByText('개인').parentElement?.textContent).toContain('0');
     expect(section.textContent).not.toContain('+-');
     expect(section.textContent).not.toContain('+0');

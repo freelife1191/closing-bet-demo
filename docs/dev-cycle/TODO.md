@@ -64,4 +64,24 @@
 - 카테고리: 프론트엔드 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-109]` 계획 검토(critic, 2026-09-25), 코드로 확인
 - 내용: `[INFRA-109]` 이후 Toss 파서는 외국인·기관 수량이 다섯 날 모두 비면 5일 합계를 `null` 로 돌려준다. 상세 API(`services/kr_market_stock_detail_service.py:512-514` `build_toss_detail_payload`)는 그 값을 `investorTrend.foreign` 으로 내보내지만 `frontend/src/app/dashboard/kr/closing-bet/page.tsx:460-461` 의 `|| 0` 과 `:506-507` 의 `?? 0` 이 0 으로 바꿔 보여 준다. `investorTrend5Day` 가 있으면 그 값을 먼저 쓰므로 노출되는 경우는 좁다. 4일치 합계가 5일 값으로 보이는 한계도 같은 자리의 문제다
 - 확인 수준: 코드로만 확인. 화면에서 실측하지 않았다
-- [ ] 설계 승인(결측을 「-」로 보일지), 테스트, 리뷰, 브라우저 QA
+- [x] 설계 승인(2026-09-25 16:07, 대화 AskUserQuestion 두 번, bounded): 첫 설계(「자료 없음」 표시만)에 「4일치 한계도 포함」을 골랐고, 넓힌 범위를 「승인 (Recommended)」으로 확정했다. 범위: (1) `engine/toss_collector_metric_parsers.py` `parse_investor_trend` 에 값 있는 날 수 `foreign_days`·`institution_days` 추가(합계 불변, 소비처 `scripts/init_data.py:361`·`engine/screener_supply_helpers.py:224`·`services/investor_trend_5day_service.py:766` 은 필요한 키만 읽어 점수·저장 불변) (2) `services/kr_market_stock_detail_service.py` `build_toss_detail_payload` 가 `investorTrend.foreignDays`·`institutionDays` 로 내보냄 (3) 모달: `investorTrend.foreign`·`institution` 을 `number | null` 로, 옛 응답 갈래 `|| 0`(`page.tsx:460-461`)은 `Number.isFinite` 검사로, `:506-507` 의 `?? 0` 제거. 결측은 회색 「자료 없음」, KRX 집계(`investorTrend5Day`)가 없어 Toss 합계로 물러섰고 일수가 5 미만이면 「(N일)」을 붙인다. 티어 T2(세 파일 모두 §2 밖). 스킬: `.claude/skills/closing-bet-python/`·`.claude/skills/closing-bet-nextjs/`, Next 번들 문서 `01-app/01-getting-started/05-server-and-client-components.md`(순수 클라이언트 조건부 렌더링이라 표 여섯 줄 밖), vendor 스킬 해당 없음(`useEffect`·폴링 변경 없음)
+- [x] 테스트 먼저: 파서 일수·상세 페이로드 일수 2건(`tests/engine/test_toss_collector_parsers_refactor.py`, KeyError 로 RED), 모달 회귀 4건(`page.regression-fe-048.test.tsx`, 3건 RED, 확정 집계가 있을 때 일수를 붙이지 않는 보호 검사 1건은 수정 전에도 통과). 기존 `page.regression-jongga-022.test.tsx:241`(커밋 `cb51702` 에서 추가)은 결측 외국인을 「-」로 고정하고 있어, 승인한 동작대로 외국인 「자료 없음」·기관 실제 0 「-」 하나로 기대값을 바꿨다
+- [x] 구현: 파서 카운터 두 개, 페이로드 키 두 개, 모달 `finiteOrNull`·`FlowAmount`·`partialDays`. 옛 응답 갈래는 `investorTrend5Day` 가 없을 때 0 을 채우지 않게 했다(채우면 Toss 합계로 물러서지 못한다)
+- [x] `/ponytail-review`: Lean already. Ship.(지적 0)
+- [x] `closing-bet-reviewer` 리뷰(2026-09-25, CHANGES_REQUIRED, max medium): (1) medium, Toss 추세 요청이 실패하면 수집기가 `{}` 를 넘기고 `build_toss_detail_payload` 의 `.get("foreign", 0)` 이 0 을 내보내 「-」로 보임 → 반영. 항목 제목의 결함과 같은 종류이고 이미 범위 안의 함수라 범위 안으로 판단했다. 기본값 0 을 빼고 검사 1건 추가(RED→GREEN), QA 에 S-5 추가 (2) low, QA 문서의 「(4일)」 띄어쓰기 불일치 → 공백 없는 표기로 통일 (3) low, 상세 캐시 스키마를 올리지 않아 배포 뒤 최대 15분은 옛 캐시에 일수가 없어 「(N일)」이 붙지 않음 → 조치 불필요(결측 표시는 영향 없음), 기록만 (4) low, 종가 0 행이 일수에서 빠지므로 장중 오늘 행이 종가 없이 오면 폴백 화면에 「(4일)」이 자주 붙을 수 있음 → 표시는 사실과 맞아 조치 없음, 실제 빈도는 미확인 (5) low, `partialDays` 의 5 가 백엔드 `days=5` 와 이중 기재, 옛 갈래의 `|| 0` 잔존(도달 불가) → 조치 불필요
+- [x] 정적 검증: `venv/bin/python -m pytest -q -p no:cacheprovider` 2853 passed·2 skipped exit 0(리뷰 반영 뒤 재실행), `(cd frontend && npx vitest run)` 104 files·701 passed exit 0, `npm run type-check` exit 0, `npm run lint` 오류 0·경고 183(변경 파일의 경고 8건은 모두 992행 이후 기존 코드, 새 테스트 파일 경고 0). 프런트엔드 세 검사는 리뷰 반영 전에 돌렸고 그 뒤 프런트엔드 파일은 바뀌지 않았다
+- [ ] 브라우저 QA(격리 사본, 3500·5501 외 포트, 상세 API 는 가짜 응답)
+
+## P2 — 대기
+
+### [FLOW-022] 5행 중 하루만 빈 Toss 참조가 확정 5일 집계로 채택되어 4일 합계가 표시 없이 보인다
+- 카테고리: 수급·백테스트 | 티어: T3(위험 경로 `services/investor_trend_5day_service.py`) | 근거: `[FE-048]` QA 설계 중 코드와 순수 함수로 확인(2026-09-25). 네트워크 없이 `parse_investor_trend` → `_normalize_external_trend_payload` → `_reference_reject_reason` 을 호출했다
+- 내용: Toss 참조가 가격 있는 다섯 행을 모두 갖고 외국인 수량만 하루 비면, 정규화는 4일 합계를 그대로 5일 합계로 받고 `_reference_reject_reason` 은 행 수와 절대값만 보므로 채택한다. 그러면 상세 API 의 `investorTrend5Day` 가 4일 합계를 담아 모달이 「(N일)」 없이 보이고, 같은 통합 서비스를 쓰는 점수 경로에도 4일 합계가 들어갈 수 있다. `[FE-048]` 은 확정 집계가 없어 Toss 합계로 물러선 경우만 일수를 표시한다
+- 확인 수준: 순수 함수로만 확인. 점수 경로에 실제로 들어가는지와 운영 빈도는 확인하지 않았다
+- [ ] 설계 승인(부분 일수 참조를 버릴지, 일수를 함께 넘길지), 테스트, T3 리뷰
+
+### [JONGGA-042] 상세 API 의 Naver·기본값 폴백이 결측 수급을 0 으로 채운다
+- 카테고리: 종가베팅 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[FE-048]` 구현 중 코드로 확인(2026-09-25)
+- 내용: Toss 종목 정보 조회가 실패하면 상세 API 는 Naver(`engine/collectors/naver_extractors_mixin.py:42-45` 의 `investorTrend` 기본값 0)나 기본 페이로드(`services/kr_market_stock_detail_service.py:216` 의 `foreign`·`institution` 0)를 돌려준다. 확정 집계도 없으면 모달은 결측을 실제 0 과 같은 「-」로 그린다. `[FE-048]` 은 Toss 갈래만 고쳤다
+- 확인 수준: 코드로만 확인. Naver 수집기가 값을 채우지 못하는 조건과 운영 빈도는 확인하지 않았다
+- [ ] 설계 승인(Naver·기본값의 결측을 None 으로 둘지), 테스트, 리뷰, 브라우저 QA
