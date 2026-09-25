@@ -236,6 +236,36 @@ def test_update_recent_price_keeps_closed_rows(monkeypatch, tmp_path):
     assert (frame.loc["OPEN", "current_price"], frame.loc["OPEN", "return_pct"]) == (110, 10.0)
 
 
+def test_update_recent_price_skips_quotes_for_closed_only_tickers(monkeypatch, tmp_path):
+    """[VCP-060] 청산 행만 남은 종목은 적용되지 않으므로 시세도 조회하지 않는다. status 결측 행은 청산이 아니다."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    path = data_dir / "signals_log.csv"
+    pd.DataFrame(
+        {
+            "ticker": ["005930", "005930", "000660", "035420"],
+            "signal_date": ["2026-09-01", "2026-09-22", "2026-09-01", "2026-09-22"],
+            "status": ["CLOSED", "OPEN", "CLOSED", None],
+            "entry_price": [100.0, 100.0, 200.0, 100.0],
+            "current_price": [90.0, 100.0, 180.0, 100.0],
+            "return_pct": [-10.0, 0.0, -10.0, 0.0],
+        }
+    ).to_csv(path, index=False)
+    monkeypatch.setattr(init_data, "BASE_DIR", str(tmp_path))
+    queried = []
+
+    def _ohlcv(_start, _end, ticker):
+        queried.append(ticker)
+        return pd.DataFrame({"종가": [110]})
+
+    monkeypatch.setitem(sys.modules, "pykrx", SimpleNamespace(stock=SimpleNamespace(get_market_ohlcv=_ohlcv)))
+    monkeypatch.setattr(init_data, "fetch_stock_price", lambda ticker: queried.append(f"fallback:{ticker}"))
+
+    init_data.update_vcp_signals_recent_price()
+
+    assert queried == ["005930", "035420"]
+
+
 def _ai_row(ticker):
     rec = {"action": "BUY", "confidence": 70, "reason": f"{ticker} 거래량 수축 뒤 돌파 시도가 확인된다"}
     return {"ticker": ticker, "name": ticker, "gemini_recommendation": rec}

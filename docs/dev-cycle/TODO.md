@@ -64,8 +64,9 @@
 - 카테고리: VCP | 티어: T3(`scripts/init_data.py` 가 §2 「스케줄러와 데이터 적재」) | 근거: `[VCP-059]` 심층 리뷰 Minor 1(2026-09-25), 코드로 확인
 - 내용: `update_vcp_signals_recent_price`(`scripts/init_data.py`)는 `df['ticker'].unique()` 전체의 시세를 pykrx·폴백으로 조회하지만, 적용 루프는 `status == 'CLOSED'` 행을 건너뛴다([VCP-051]). `[VCP-052]` 리뷰 low 1 은 그 값을 `kr_ai_analysis.json` 동기화가 쓴다는 이유로 미반영했는데, `[VCP-059]` 에서 그 동기화를 지워 이제 외부 호출만 낭비한다. 조회 대상을 CLOSED 가 아닌 행의 티커로 좁히면 된다
 - 확인 수준: 코드로만 확인. 운영 로그에서 조회 수가 실제로 얼마나 줄지는 확인하지 않았다
-- [ ] 설계 승인
-- [ ] 테스트, 리뷰와 pytest 전체
+- [x] 설계 승인 — 2026-09-25 13:41 대화 승인(bounded). 범위: 시세 조회 대상을 CLOSED 가 아닌 행의 티커로 좁히고 `status` 열이 없으면 전 티커를 조회한다. 적용 루프·잠금·원자적 쓰기는 그대로. 잠금 밖 조회 중 청산 전용 종목에 새로 생긴 OPEN 행은 다음 동기화에서 갱신되는 한계를 수용. 스킬 `.claude/skills/closing-bet-python/SKILL.md`
+- [x] 테스트(`test_update_recent_price_skips_quotes_for_closed_only_tickers`, 수정 전 코드에서 실패 확인), 과잉설계 직접 검토 Lean, closing-bet-reviewer APPROVE(max low: status 열 없는 갈래 테스트 부재 → 미반영, 기존 `test_recent_price_update_keeps_rows_added_during_fetch` 가 status 열 없는 로그로 갱신을 단언해 갈래를 지우면 실패), 심층 리뷰 Critical 0·Major 0·Minor 2(M1 NaN status 미고정 → 새 테스트에 NaN 행 추가, M2 조회 로그 숫자가 미청산 종목 수 → 의도한 동작이라 미반영. 범위 밖 참고: 전부 청산이어도 파일을 다시 쓰나 원자적 쓰기라 손실 없어 TODO 미등록), pytest 전체
+- [ ] QA(`docs/dev-cycle/qa/VCP-060.md`, 하네스, 수정 전후 사본 대조)
 
 ### [INFRA-115] 종가베팅 V2 실행 요청의 409 잠금이 워커 사이에서 원자적이지 않다
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-114]` 설계와 심층 리뷰 지적 3(2026-09-25), 코드로 확인

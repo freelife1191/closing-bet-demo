@@ -2005,8 +2005,9 @@ def update_vcp_signals_recent_price():
 
         updated_count = 0
         
-        # 유니크 티커 목록
-        tickers = df['ticker'].unique()
+        # 청산 행은 아래 적용 루프가 건너뛰므로 그 행만 남은 종목은 조회하지 않는다([VCP-060])
+        open_rows = df[df['status'] != 'CLOSED'] if 'status' in df.columns else df
+        tickers = open_rows['ticker'].unique()
         
         current_prices = {}
         log(f"총 {len(tickers)}개 종목의 현재가 조회 중...")
