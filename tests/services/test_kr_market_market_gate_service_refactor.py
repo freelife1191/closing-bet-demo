@@ -42,6 +42,31 @@ def test_evaluate_market_gate_validity_marks_stale_dataset_as_needs_update():
     assert needs_update is True
 
 
+def test_all_missing_sector_analysis_stays_valid_without_snapshot_fallback():
+    # [INFRA-111] 섹터 조회가 모두 실패해도 기술 점수는 로컬 가격으로 나오므로 유효하다.
+    # 스냅샷(다른 날짜 자료)으로 바꾸지 않는다.
+    gate_data = {
+        "status": "중립 (Neutral)",
+        "sectors": [{"name": "반도체", "change_pct": None, "signal": "Neutral"}],
+        "total_score": 50,
+    }
+    is_valid, _ = evaluate_market_gate_validity(gate_data=gate_data, target_date="2026-09-25")
+    assert is_valid is True
+
+    def _load_json_file(*_args, **_kwargs):
+        raise AssertionError("snapshot must not be loaded")
+
+    result, result_valid = apply_market_gate_snapshot_fallback(
+        gate_data=gate_data,
+        is_valid=is_valid,
+        target_date=None,
+        load_json_file=_load_json_file,
+        logger=logging.getLogger(__name__),
+    )
+    assert result is gate_data
+    assert result_valid is True
+
+
 def test_build_latest_ai_analysis_payload_reuses_loaded_vcp_data():
     load_calls: list[str] = []
 
