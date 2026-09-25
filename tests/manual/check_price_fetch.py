@@ -60,20 +60,6 @@ def _fetch_naver_price(ticker):
     return None
 
 
-def test_yfinance(ticker):
-    price = _fetch_yfinance_price(ticker)
-    assert price is None or isinstance(price, float)
-
-
-def test_toss_api(ticker):
-    price = _fetch_toss_price(ticker)
-    assert price is None or isinstance(price, float)
-
-
-def test_naver_api(ticker):
-    price = _fetch_naver_price(ticker)
-    assert price is None or isinstance(price, float)
-
 def run_tests():
     results = {}
     

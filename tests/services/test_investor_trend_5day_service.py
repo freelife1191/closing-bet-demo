@@ -13,9 +13,17 @@ import types
 from datetime import datetime
 
 import pandas as pd
+import pytest
+from pykrx import stock as pykrx_stock
 
 import services.investor_trend_5day_service as trend_service
 import services.kr_market_data_cache_sqlite_payload as sqlite_payload_cache
+
+
+@pytest.fixture(autouse=True)
+def _no_krx_market_date_lookup(monkeypatch):
+    """[INFRA-121] 참조 캐시 토큰의 최신 거래일 조회가 KRX 로 나가지 않게 한다. 빈 결과면 오늘로 물러난다."""
+    monkeypatch.setattr(pykrx_stock, "get_index_ohlcv_by_date", lambda *args, **kwargs: pd.DataFrame())
 
 
 def test_trend_map_aggregates_with_latest_first_details(tmp_path):

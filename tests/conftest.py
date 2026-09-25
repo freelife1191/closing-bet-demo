@@ -5,7 +5,15 @@ pytest 공통 설정
 """
 
 import os
+
+# [INFRA-121] .env 의 KRX 자격 증명으로 pykrx 가 로그인하지 않게 한다. load_dotenv 는 이미 있는 키를
+# 덮어쓰지 않으므로 프로젝트 모듈 import 전에 빈 값으로 둔다
+os.environ["KRX_ID"] = ""
+os.environ["KRX_PW"] = ""
+
 import sys
+import errno
+import socket
 import asyncio
 import inspect
 import shutil
@@ -20,6 +28,86 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # 테스트가 건드리면 안 되는 저장소의 실제 자료 디렉터리([INFRA-083])
 _GUARDED_DIRS = ("data", "logs")
+
+
+# [INFRA-121] 테스트가 외부로 나가는 시도. (테스트 nodeid, 종류, 대상)
+_NETWORK_LEAKS = []
+_CURRENT_TEST = {"nodeid": "<collect>"}
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "0.0.0.0"}
+
+
+def _install_network_guard():
+    """loopback·AF_UNIX 가 아닌 접속을 막고 어느 테스트가 시도했는지 남긴다."""
+    # ponytail: 이 프로세스의 socket.connect·connect_ex·getaddrinfo 와 curl_cffi Session 만 본다. 하위 프로세스,
+    # UDP sendto, gethostbyname, C 확장 전송(grpc 등)은 잡지 못한다. 쓰는 코드가 생기면 여기에 더한다
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+    original_getaddrinfo = socket.getaddrinfo
+
+    def is_local(sock, address):
+        if sock.family == getattr(socket, "AF_UNIX", None):
+            return True
+        host = address[0] if isinstance(address, tuple) else address
+        return str(host) in _LOCAL_HOSTS
+
+    def record(kind, target):
+        _NETWORK_LEAKS.append((_CURRENT_TEST["nodeid"], kind, str(target)))
+
+    def guarded_connect(self, address):
+        if is_local(self, address):
+            return original_connect(self, address)
+        record("connect", address)
+        raise OSError(errno.ECONNREFUSED, "[INFRA-121] 테스트의 외부 접속 차단")
+
+    def guarded_connect_ex(self, address):
+        if is_local(self, address):
+            return original_connect_ex(self, address)
+        record("connect_ex", address)
+        return errno.ECONNREFUSED
+
+    def guarded_getaddrinfo(host, *args, **kwargs):
+        if host is None or str(host) in _LOCAL_HOSTS:
+            return original_getaddrinfo(host, *args, **kwargs)
+        record("dns", host)
+        raise socket.gaierror(socket.EAI_NONAME, "[INFRA-121] 테스트의 외부 DNS 조회 차단")
+
+    socket.socket.connect = guarded_connect
+    socket.socket.connect_ex = guarded_connect_ex
+    socket.getaddrinfo = guarded_getaddrinfo
+
+    # yfinance 가 쓰는 curl_cffi 는 파이썬 socket 을 거치지 않는다
+    try:
+        from curl_cffi import requests as curl_requests
+    except ImportError:
+        return
+
+    def guarded_request(self, method, url, *args, **kwargs):
+        record("curl_cffi", f"{method} {url}")
+        raise OSError(errno.ECONNREFUSED, "[INFRA-121] 테스트의 외부 접속 차단")
+
+    async def guarded_async_request(self, method, url, *args, **kwargs):
+        return guarded_request(self, method, url)
+
+    curl_requests.Session.request = guarded_request
+    curl_requests.AsyncSession.request = guarded_async_request
+
+
+# 수동 Gemini 통합 테스트는 실제 API 에 닿아야 한다
+if os.getenv("RUN_GEMINI_HANG_TESTS", "").strip().lower() != "true":
+    _install_network_guard()
+
+
+def pytest_configure(config):
+    config._network_leaks = _NETWORK_LEAKS
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    _CURRENT_TEST["nodeid"] = item.nodeid
+    try:
+        return (yield)
+    finally:
+        _CURRENT_TEST["nodeid"] = "<between tests>"
 
 
 def _snapshot_guarded_dirs():
@@ -45,6 +133,10 @@ def pytest_sessionstart(session):
 def pytest_sessionfinish(session, exitstatus):
     os.chdir(session.config.invocation_params.dir)
     shutil.rmtree(session.config._session_cwd, ignore_errors=True)
+    if _NETWORK_LEAKS:
+        lines = "\n".join(f"  {nodeid}  {kind}  {target}" for nodeid, kind, target in _NETWORK_LEAKS[:50])
+        sys.stderr.write(f"\n[INFRA-121] 테스트가 외부 접속을 시도했다 ({len(_NETWORK_LEAKS)}건):\n{lines}\n")
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
     before = session.config._guarded_snapshot
     after = _snapshot_guarded_dirs()
     changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
@@ -139,9 +231,3 @@ def _isolate_repo_writes(tmp_path, tmp_path_factory, monkeypatch):
         status_file = str(fake_root / "data" / "update_status.json")
         monkeypatch.setattr(common, "UPDATE_STATUS_FILE", status_file)
         monkeypatch.setattr(common.route_context, "update_status_file", status_file)
-
-
-@pytest.fixture(params=["005930"])
-def ticker(request):
-    """script-style 가격 조회 테스트용 기본 티커."""
-    return request.param
