@@ -10,6 +10,9 @@ import os
 # 덮어쓰지 않으므로 프로젝트 모듈 import 전에 빈 값으로 둔다
 os.environ["KRX_ID"] = ""
 os.environ["KRX_PW"] = ""
+# [INFRA-122] create_app() 이 실제 스케줄러를 켜면 저장소 services/scheduler.lock 을 잡고 가격 동기화·스케줄 루프
+# 스레드가 세션 끝까지 돈다. 켜야 하는 테스트는 monkeypatch.setenv 로 연다
+os.environ["SCHEDULER_ENABLED"] = "false"
 
 import sys
 import errno

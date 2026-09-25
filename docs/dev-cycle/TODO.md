@@ -66,7 +66,14 @@
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-121]` 코드 리뷰(closing-bet-reviewer, 2026-09-25) 범위 밖 지적
 - 내용: 리뷰어가 수집 파일 247개를 파일마다 따로 돌리자 `tests/test_chatbot_feature.py`·`tests/test_dependency_contracts.py`·`tests/test_logic_alignment.py`·`tests/services/test_vcp_signals_log_lock_refactor.py` 네 파일이 `[INFRA-083]`(data/paper_trading.db-wal, -shm)으로 실패했다. 네 파일이 동시에 돌았고 paper_trading 을 참조하는 파일은 `test_chatbot_feature.py` 뿐이다. `tests/conftest.py` 의 `_isolate_repo_writes` 는 이미 import 된 모듈만 돌리므로(「처음 import 하면 세션 끝 검사가 잡는다」 한도) 파일 단독 실행에서 `services.paper_trading` 이 테스트 안에서 처음 import 되면 저장소 `data/` 에 연결하는 것으로 보인다. 전체 실행에서는 드러나지 않는다
 - 확인 수준: 리뷰어의 격리 실행 결과만 있다. 원인 파일은 확신도 중간이며 직접 재현하지 않았다. 그 실행으로 개발 기기의 `data/paper_trading.db-wal`(0바이트)·`-shm` 의 mtime 이 2026-09-25 17:58 로 바뀌었고 본 DB 파일(09-21)은 바뀌지 않았다
-- [ ] 설계 승인(원인 파일 재현, 격리 방식), 테스트, 리뷰
+- 원인 확정(2026-09-25 18:15~18:30, `git archive HEAD` 사본, audit hook 측정): 네 파일을 하나씩 돌리면 `test_chatbot_feature.py` 만 exit 1(INFRA-083: `data/paper_trading.db`·`-wal`·`-shm`)이고 나머지 셋은 통과한다. 첫 테스트 `setUp` 의 `create_app()` → `_start_scheduler()`(`SCHEDULER_ENABLED` 기본 true) → `services/scheduler.lock` 획득 → `_ensure_paper_trading_sync()` 가 `services.paper_trading` 을 처음 import 해 `_isolate_repo_writes` 를 비켜 실제 `data/paper_trading.db` 에 연결한다. 전체 실행에서도 같은 테스트가 잠금을 잡고 `_scheduler_loop`·`_update_prices_loop` 스레드가 세션 끝까지 돈다. `SCHEDULER_ENABLED=false` 로 같은 파일을 돌리면 5 passed, exit 0, 변경·잠금·스레드 없음
+- 티어 판정: T1 bounded. 변경은 `tests/conftest.py` 뿐이고 tier-rules §2 위험 경로에 닿지 않는다
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 18:49
+  | 범위: `tests/conftest.py` 맨 위 `KRX_ID` 줄 옆에 `os.environ["SCHEDULER_ENABLED"] = "false"`. 새 테스트 없음. 검증은 사본 네 파일 단독 실행, 저장소 pytest 전체, 저장소 `services/scheduler.lock` mtime 불변
+  | 실제 대화 근거: 2026-09-25 현재 세션에서 설계 제시 뒤 사용자가 effort 를 high 로 바꾸고 「진행해」 응답
+- [x] 구현과 사본 GREEN(네 파일 단독): 모두 exit 0, `data/` 변경·`services/scheduler.lock`·백그라운드 스레드 없음
+- [x] 저장소 pytest 전체(18:50~18:52): 2852 passed, 2 skipped, exit 0, INFRA-083·121 보고 없음. `services/scheduler.lock`(18:03:23)·`data/paper_trading.db*` mtime 전후 동일
+- [x] `.claude/skills/closing-bet-python/SKILL.md` · `/ponytail-review` Lean already. Ship · 동적 QA 제외(테스트만 변경, tier-rules §1-1)
 
 ### [FLOW-023] 수급 CSV 를 읽는 두 경로와 pykrx 참조가 빈 값을 0 으로 읽는다
 - 카테고리: 수급·백테스트 | 티어: T3(위험 경로 `services/investor_trend_5day_service.py`) | 근거: `[FLOW-022]` 코드 리뷰(closing-bet-reviewer, 2026-09-25) 지적 (2)(4), 코드로 확인
