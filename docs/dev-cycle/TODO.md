@@ -63,8 +63,12 @@
 ### [INFRA-113] 수동 갱신 stale 검증이 날짜 열이 모두 결측인 파일을 최신으로 본다
 - 카테고리: 인프라 | 티어: T1(예상, `services/common_update_pipeline_steps.py` 는 위험 경로 아님) | 근거: `[INFRA-106]` 심층 리뷰 관찰(2026-09-25, 기존 결함)
 - 내용: `_validate_latest_date_not_stale` 은 `read_csv(dtype=str)` 의 결측을 `astype(str)` 로 `"nan"` 으로 바꾼 뒤 문자열 최댓값을 비교한다. `"nan" > "2026-…"` 이라 날짜 열이 전부(또는 일부) 결측이면 최신 날짜가 `"nan"` 이 되어 검증을 통과한다. 결측을 확정 날짜로 취급하는 경로다. 실제 파일에서 발생한 적이 있는지는 확인하지 않았다
-- [ ] 설계 승인(결측 날짜 제외 후 비교, 전부 결측이면 error)
-- [ ] 테스트, 리뷰, pytest 전체
+- 설계 승인: 승인 일자 2026-09-25 | 승인 확인 시각 2026-09-25 10:49 | 범위: 날짜 앞 10자리를 `%Y-%m-%d` 로 엄격 변환해 결측·형식 오류를 비교에서 빼고 유효 날짜 최댓값으로 판정, 유효 날짜가 없으면 error, 일부 결측은 경고 없음, 테스트 2개 | 근거: 대화 AskUserQuestion 「승인 (Recommended)」
+- [x] 설계 승인(결측 날짜 제외 후 비교, 전부 결측이면 error)
+- [x] 테스트(전부 결측 → error, 결측+오래된 날짜 → stale error): 구현 전 2 failed 확인 뒤 통과
+- [x] 티어 재판정 T1(구현 13줄, 딸린 테스트 제외), `/ponytail-review` → Lean already. Ship.(지적 없음)
+- [x] pytest 전체 `venv/bin/python -m pytest -q -p no:cacheprovider` → 2820 passed, 2 skipped (exit 0)
+- [ ] QA(`qa/INFRA-113.md`, 사본 하네스)
 
 ### [INFRA-107] 워커가 새로 기동하면 다른 워커에서 도는 수동 업데이트의 `isRunning` 과 항목을 지운다
 - 카테고리: 인프라 | 티어: T3(판정은 설계 때 §2 대조) | 근거: `[INFRA-098]` 계획 검토(critic 권장 5, 2026-09-25), 코드로 확인

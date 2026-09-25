@@ -85,9 +85,16 @@ def _validate_latest_date_not_stale(
         logger.warning(f"{step_name}: trading date unconfirmed, stale check skipped")
         return True
 
-    date_series = latest_df["date"].astype(str).str.slice(0, 10)
-    latest_date = date_series.max()
-    if not latest_date or latest_date < expected_date_str:
+    # [INFRA-113] 결측·형식 오류는 비교에서 뺀다. 문자열 비교면 "nan" 이 최댓값이 되어 통과했다
+    valid_dates = pd.to_datetime(
+        latest_df["date"].str.slice(0, 10), format="%Y-%m-%d", errors="coerce"
+    ).dropna()
+    if valid_dates.empty:
+        logger.error(f"{step_name} Failed: no valid date in {file_path}")
+        return False
+
+    latest_date = valid_dates.max().strftime("%Y-%m-%d")
+    if latest_date < expected_date_str:
         logger.error(
             f"{step_name} Failed: stale data detected ({latest_date} < {expected_date_str})"
         )

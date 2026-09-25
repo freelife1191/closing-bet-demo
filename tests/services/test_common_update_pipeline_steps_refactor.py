@@ -220,6 +220,48 @@ def test_run_institutional_trend_step_still_errors_on_missing_file_when_trading_
     assert statuses == [("Institutional Trend", "running"), ("Institutional Trend", "error")]
 
 
+def _run_daily_prices_with_dates(tmp_path, monkeypatch, dates):
+    statuses: list[tuple[str, str]] = []
+    daily_prices_path = tmp_path / "daily_prices.csv"
+    pd.DataFrame({"date": dates, "ticker": ["005930"] * len(dates)}).to_csv(
+        daily_prices_path, index=False, encoding="utf-8-sig"
+    )
+
+    class _InitData:
+        @staticmethod
+        def create_daily_prices(*_a, **_k):
+            return True
+
+        @staticmethod
+        def get_last_trading_date(reference_date=None, **_kwargs):
+            return "20260304", datetime.datetime(2026, 3, 4)
+
+    from services import common_update_pipeline_steps as step_module
+
+    monkeypatch.setattr(step_module, "_resolve_data_file_path", lambda _filename: str(daily_prices_path))
+    run_daily_prices_step(
+        init_data=_InitData(),
+        target_date="2026-03-04",
+        force=False,
+        update_item_status=lambda name, status: statuses.append((name, status)),
+        shared_state=types.SimpleNamespace(STOP_REQUESTED=False),
+        logger=_logger(),
+    )
+    return statuses
+
+
+def test_run_daily_prices_step_errors_when_all_dates_missing(tmp_path, monkeypatch):
+    # [INFRA-113] 결측이 "nan" 문자열로 최댓값이 되어 최신으로 통과하던 경로
+    assert _run_daily_prices_with_dates(tmp_path, monkeypatch, [None, None])[-1] == ("Daily Prices", "error")
+
+
+def test_run_daily_prices_step_ignores_invalid_dates_in_stale_check(tmp_path, monkeypatch):
+    # [INFRA-113] 결측·형식 오류는 비교에서 빠지고 유효 날짜 03-03 < 03-04 로 stale 이다
+    statuses = _run_daily_prices_with_dates(tmp_path, monkeypatch, ["2026-03-03", None, "abc"])
+    assert statuses[-1] == ("Daily Prices", "error")
+    assert _run_daily_prices_with_dates(tmp_path, monkeypatch, ["2026-03-04", None])[-1] == ("Daily Prices", "done")
+
+
 def test_run_vcp_signals_step_returns_dataframe_and_marks_done(monkeypatch):
     statuses: list[tuple[str, str]] = []
     expected = pd.DataFrame([{"ticker": "005930"}])
