@@ -15,10 +15,7 @@ import os
 import threading
 from collections import OrderedDict
 from datetime import datetime
-from typing import Any, Callable
-
-import pandas as pd
-from pandas.api.types import is_datetime64_any_dtype
+from typing import Any
 
 from engine.investor_personal_flow import cached_personal_value
 from services.kr_market_data_cache_sqlite_payload import (
@@ -26,21 +23,9 @@ from services.kr_market_data_cache_sqlite_payload import (
     save_json_payload_to_sqlite as _save_json_payload_to_sqlite,
 )
 from services.investor_trend_5day_service import get_investor_trend_5day_for_ticker
-from services.kr_market_csv_utils import (
-    get_ticker_padded_series as _get_padded_ticker_series,
-    load_csv_readonly as _load_csv_readonly,
-)
 from services.kr_market_realtime_price_service import normalize_ticker
 
 
-_INVESTOR_TREND_5DAY_CACHE_LOCK = threading.Lock()
-_INVESTOR_TREND_5DAY_CACHE: OrderedDict[
-    tuple[object, ...],
-    dict[str, tuple[int, int]],
-] = OrderedDict()
-_INVESTOR_TREND_5DAY_CACHE_MAX_ENTRIES = 8
-_INVESTOR_TREND_5DAY_SQLITE_MAX_ROWS = 256
-_INVESTOR_TREND_5DAY_SQLITE_CACHE_KEY_SUFFIX = "::investor_trend_5day_map"
 _STOCK_DETAIL_CACHE_LOCK = threading.Lock()
 _STOCK_DETAIL_CACHE: OrderedDict[
     tuple[str, str, str],
@@ -50,7 +35,6 @@ _STOCK_DETAIL_CACHE_MAX_ENTRIES = 256
 _STOCK_DETAIL_SQLITE_MAX_ROWS = 4_096
 _STOCK_DETAIL_SQLITE_CACHE_SCHEMA_VERSION = "stock_detail_v1"
 _STOCK_DETAIL_SQLITE_CACHE_INTERVAL_MINUTES = 15
-_LOGGER = logging.getLogger(__name__)
 
 
 def _resolve_data_dir_path(data_dir: str | None = None) -> str:
@@ -223,252 +207,42 @@ def build_default_stock_detail_payload(ticker_padded: str) -> dict[str, Any]:
 def append_investor_trend_5day(
     payload: dict[str, Any],
     ticker_padded: str,
-    load_csv_file: Callable[[str], pd.DataFrame],
     logger: logging.Logger,
     data_dir: str | None = None,
 ) -> None:
+    """통합 서비스의 확정 5일 합계를 붙인다. 값이 없으면 키를 넣지 않는다([FLOW-023]).
+
+    모달은 키가 없으면 Toss 합계로 물러서고, Toss 일수가 5 보다 적으면 「(N일)」을 붙인다.
+    같은 5일 규칙을 여기에 다시 두지 않는다.
+    """
     normalized_ticker = str(ticker_padded).zfill(6)
-
     normalized_data_dir = (data_dir or "").strip()
-    if normalized_data_dir:
-        try:
-            trend_data = get_investor_trend_5day_for_ticker(
-                ticker=normalized_ticker,
-                data_dir=normalized_data_dir,
-                verify_with_references=True,
-            )
-        except Exception as error:
-            logger.debug("Unified 5-day trend service failed (%s): %s", normalized_ticker, error)
-        else:
-            if isinstance(trend_data, dict):
-                quality = trend_data.get("quality")
-                if isinstance(quality, dict) and quality.get("csv_anomaly_flags"):
-                    logger.debug(
-                        "Unified 5-day trend anomaly (%s): flags=%s source=%s",
-                        normalized_ticker,
-                        quality.get("csv_anomaly_flags"),
-                        trend_data.get("source"),
-                    )
-                payload["investorTrend5Day"] = {
-                    "foreign": int(trend_data.get("foreign", 0) or 0),
-                    "institution": int(trend_data.get("institution", 0) or 0),
-                }
-                return
+    if not normalized_data_dir:
+        return
 
     try:
-        trend_df = _load_csv_readonly(
-            load_csv_file,
-            "all_institutional_trend_data.csv",
-            usecols=["ticker", "date", "foreign_buy", "inst_buy"],
+        trend_data = get_investor_trend_5day_for_ticker(
+            ticker=normalized_ticker,
+            data_dir=normalized_data_dir,
+            verify_with_references=True,
         )
-    except Exception as e:
-        logger.warning(f"Failed to calculate 5-day trend for {ticker_padded}: {e}")
+    except Exception as error:
+        logger.debug("Unified 5-day trend service failed (%s): %s", normalized_ticker, error)
+        return
+    if not isinstance(trend_data, dict):
         return
 
-    if trend_df.empty or "ticker" not in trend_df.columns:
-        return
-    if "foreign_buy" not in trend_df.columns or "inst_buy" not in trend_df.columns:
-        return
-
-    trend_map = _get_or_build_investor_trend_5day_map(trend_df)
-    trend_values = trend_map.get(normalized_ticker)
-    if not trend_values:
-        return
-
-    foreign_5d, inst_5d = trend_values
+    quality = trend_data.get("quality")
+    if isinstance(quality, dict) and quality.get("csv_anomaly_flags"):
+        logger.debug(
+            "Unified 5-day trend anomaly (%s): flags=%s source=%s",
+            normalized_ticker,
+            quality.get("csv_anomaly_flags"),
+            trend_data.get("source"),
+        )
     payload["investorTrend5Day"] = {
-        "foreign": foreign_5d,
-        "institution": inst_5d,
-    }
-
-
-def _get_or_build_investor_trend_5day_map(
-    trend_df: pd.DataFrame,
-) -> dict[str, tuple[int, int]]:
-    """
-    투자자 5일 수급 합산 맵을 프레임 단위로 캐시한다.
-
-    CSV 원본 로드는 load_csv_readonly(내부 SQLite snapshot 포함)로 처리하고,
-    여기서는 반복 groupby 비용만 줄인다.
-    """
-    cache_key = _build_investor_trend_5day_cache_key(trend_df)
-    with _INVESTOR_TREND_5DAY_CACHE_LOCK:
-        cached = _INVESTOR_TREND_5DAY_CACHE.get(cache_key)
-        if isinstance(cached, dict):
-            _INVESTOR_TREND_5DAY_CACHE.move_to_end(cache_key)
-            return cached
-
-    sqlite_cache_context = _resolve_investor_trend_5day_sqlite_cache_context(cache_key)
-    if sqlite_cache_context is not None:
-        sqlite_cache_key, signature = sqlite_cache_context
-        try:
-            loaded, payload = _load_json_payload_from_sqlite(
-                filepath=sqlite_cache_key,
-                signature=signature,
-                logger=_LOGGER,
-            )
-            if loaded and isinstance(payload, dict):
-                cached_map = _deserialize_investor_trend_5day_map(payload)
-                if cached_map is not None:
-                    with _INVESTOR_TREND_5DAY_CACHE_LOCK:
-                        _INVESTOR_TREND_5DAY_CACHE[cache_key] = cached_map
-                        _INVESTOR_TREND_5DAY_CACHE.move_to_end(cache_key)
-                        while len(_INVESTOR_TREND_5DAY_CACHE) > _INVESTOR_TREND_5DAY_CACHE_MAX_ENTRIES:
-                            _INVESTOR_TREND_5DAY_CACHE.popitem(last=False)
-                    return cached_map
-        except Exception as error:
-            _LOGGER.debug("Failed to load investor trend 5day sqlite cache: %s", error)
-
-    trend_map = _build_investor_trend_5day_map(trend_df)
-    with _INVESTOR_TREND_5DAY_CACHE_LOCK:
-        _INVESTOR_TREND_5DAY_CACHE[cache_key] = trend_map
-        _INVESTOR_TREND_5DAY_CACHE.move_to_end(cache_key)
-        while len(_INVESTOR_TREND_5DAY_CACHE) > _INVESTOR_TREND_5DAY_CACHE_MAX_ENTRIES:
-            _INVESTOR_TREND_5DAY_CACHE.popitem(last=False)
-
-    if sqlite_cache_context is not None:
-        sqlite_cache_key, signature = sqlite_cache_context
-        try:
-            _save_json_payload_to_sqlite(
-                filepath=sqlite_cache_key,
-                signature=signature,
-                payload=_serialize_investor_trend_5day_map(trend_map),
-                max_rows=_INVESTOR_TREND_5DAY_SQLITE_MAX_ROWS,
-                logger=_LOGGER,
-            )
-        except Exception as error:
-            _LOGGER.debug("Failed to save investor trend 5day sqlite cache: %s", error)
-    return trend_map
-
-
-def _build_investor_trend_5day_cache_key(trend_df: pd.DataFrame) -> tuple[object, ...]:
-    """
-    5일 수급 집계 캐시 키를 생성한다.
-
-    SQLite-backed CSV loader가 주입한 attrs 메타데이터가 있으면 이를 우선 사용해
-    shallow copy로 생성된 서로 다른 DataFrame 객체 간에도 캐시를 재사용한다.
-    """
-    attrs = trend_df.attrs if isinstance(getattr(trend_df, "attrs", None), dict) else {}
-    signature = attrs.get("kr_cache_signature")
-    filepath = attrs.get("kr_cache_filepath")
-    usecols = attrs.get("kr_cache_usecols")
-
-    if (
-        isinstance(filepath, str)
-        and filepath
-        and isinstance(signature, tuple)
-        and len(signature) == 2
-    ):
-        try:
-            mtime_ns = int(signature[0])
-            size = int(signature[1])
-            normalized_usecols = tuple(usecols) if isinstance(usecols, tuple) else ()
-            return ("csv", filepath, mtime_ns, size, normalized_usecols)
-        except Exception:
-            pass
-
-    return ("frame", id(trend_df), int(len(trend_df)))
-
-
-def _investor_trend_5day_sqlite_cache_key(filepath: str) -> str:
-    normalized_filepath = filepath.strip()
-    return f"{normalized_filepath}{_INVESTOR_TREND_5DAY_SQLITE_CACHE_KEY_SUFFIX}"
-
-
-def _resolve_investor_trend_5day_sqlite_cache_context(
-    cache_key: tuple[object, ...],
-) -> tuple[str, tuple[int, int]] | None:
-    if len(cache_key) < 5:
-        return None
-    if cache_key[0] != "csv":
-        return None
-
-    filepath = cache_key[1]
-    mtime_ns = cache_key[2]
-    size = cache_key[3]
-    if not isinstance(filepath, str) or not filepath:
-        return None
-
-    try:
-        signature = (int(mtime_ns), int(size))
-    except (TypeError, ValueError):
-        return None
-    return _investor_trend_5day_sqlite_cache_key(filepath), signature
-
-
-def _serialize_investor_trend_5day_map(
-    trend_map: dict[str, tuple[int, int]],
-) -> dict[str, object]:
-    rows: dict[str, list[int]] = {}
-    for ticker, values in trend_map.items():
-        if not isinstance(values, tuple) or len(values) != 2:
-            continue
-        foreign_value, inst_value = values
-        rows[str(ticker).zfill(6)] = [int(foreign_value), int(inst_value)]
-    return {"rows": rows}
-
-
-def _deserialize_investor_trend_5day_map(
-    payload: dict[str, object],
-) -> dict[str, tuple[int, int]] | None:
-    rows_payload = payload.get("rows")
-    if not isinstance(rows_payload, dict):
-        return None
-
-    trend_map: dict[str, tuple[int, int]] = {}
-    for ticker, values in rows_payload.items():
-        ticker_key = str(ticker).zfill(6)
-        if not ticker_key:
-            continue
-        if not isinstance(values, (list, tuple)) or len(values) != 2:
-            continue
-        try:
-            foreign_value = int(float(values[0]))
-            inst_value = int(float(values[1]))
-        except (TypeError, ValueError):
-            continue
-        trend_map[ticker_key] = (foreign_value, inst_value)
-    return trend_map
-
-
-def _build_investor_trend_5day_map(
-    trend_df: pd.DataFrame,
-) -> dict[str, tuple[int, int]]:
-    if trend_df.empty or "ticker" not in trend_df.columns:
-        return {}
-
-    working = trend_df
-    ticker_series = _get_padded_ticker_series(working)
-    try:
-        working["ticker"] = ticker_series
-    except Exception:
-        working = working.copy()
-        working["ticker"] = ticker_series
-
-    working["foreign_buy"] = pd.to_numeric(working["foreign_buy"], errors="coerce").fillna(0)
-    working["inst_buy"] = pd.to_numeric(working["inst_buy"], errors="coerce").fillna(0)
-
-    if "date" in working.columns:
-        if not is_datetime64_any_dtype(working["date"]):
-            working["date"] = pd.to_datetime(working["date"], errors="coerce")
-        working = working[working["date"].notna()]
-        if working.empty:
-            return {}
-        working = working.sort_values(["ticker", "date"])
-    else:
-        working = working.sort_values(["ticker"])
-
-    recent_5 = working.groupby("ticker", sort=False).tail(5)
-    if recent_5.empty:
-        return {}
-
-    grouped = recent_5.groupby("ticker", sort=False).agg(
-        foreign_buy_5d=("foreign_buy", "sum"),
-        inst_buy_5d=("inst_buy", "sum"),
-    )
-    return {
-        str(ticker).zfill(6): (int(foreign_sum), int(inst_sum))
-        for ticker, foreign_sum, inst_sum in grouped.itertuples()
+        "foreign": int(trend_data.get("foreign", 0) or 0),
+        "institution": int(trend_data.get("institution", 0) or 0),
     }
 
 
@@ -557,7 +331,6 @@ def load_naver_stock_detail_payload(ticker_padded: str) -> dict[str, Any] | None
 
 def fetch_stock_detail_payload(
     ticker: str,
-    load_csv_file: Callable[[str], pd.DataFrame],
     logger: logging.Logger,
     data_dir: str | None = None,
 ) -> dict[str, Any]:
@@ -580,13 +353,7 @@ def fetch_stock_detail_payload(
         toss_data = TossCollector().get_full_stock_detail(ticker_padded)
         if toss_data and toss_data.get("name"):
             payload = build_toss_detail_payload(ticker_padded, toss_data)
-            append_investor_trend_5day(
-                payload,
-                ticker_padded,
-                load_csv_file,
-                logger,
-                data_dir=data_dir,
-            )
+            append_investor_trend_5day(payload, ticker_padded, logger, data_dir=data_dir)
             _save_cached_stock_detail_payload(
                 ticker_padded=ticker_padded,
                 cache_slot=cache_slot,

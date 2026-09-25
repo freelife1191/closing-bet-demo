@@ -6,59 +6,20 @@ KR Market Stock Detail Service 리팩토링 테스트
 
 from __future__ import annotations
 
-import sqlite3
 import sys
 import types
 
-import pandas as pd
+import pytest
 
 from services.kr_market_stock_detail_service import (
-    _get_padded_ticker_series,
-    _get_or_build_investor_trend_5day_map,
     append_investor_trend_5day,
     fetch_stock_detail_payload,
     load_naver_stock_detail_payload,
 )
 
 
-def test_get_padded_ticker_series_creates_cache_column_once():
-    df = pd.DataFrame({"ticker": [5930, 660]})
-
-    first = _get_padded_ticker_series(df)
-    second = _get_padded_ticker_series(df)
-
-    assert first.tolist() == ["005930", "000660"]
-    assert second.tolist() == ["005930", "000660"]
-    assert "_ticker_padded" in df.columns
-
-
-def test_append_investor_trend_5day_aggregates_recent_five_rows():
-    trend_df = pd.DataFrame(
-        [
-            {"ticker": "005930", "date": "2026-02-22", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-23", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-24", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-25", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-26", "foreign_buy": 1, "inst_buy": 10},
-            # 과거 데이터가 파일 뒤쪽에 있어도 날짜 정렬 후 최근 5일만 집계되어야 한다.
-            {"ticker": "005930", "date": "2026-02-21", "foreign_buy": 100, "inst_buy": 1000},
-        ]
-    )
-    payload: dict[str, object] = {}
-
-    append_investor_trend_5day(
-        payload=payload,
-        ticker_padded="005930",
-        load_csv_file=lambda _filename: trend_df,
-        logger=type("L", (), {"warning": lambda *_a, **_k: None})(),
-    )
-
-    assert payload["investorTrend5Day"] == {"foreign": 5, "institution": 50}
-
-
 def test_append_investor_trend_5day_prefers_unified_service_when_data_dir_provided(monkeypatch, tmp_path):
     payload: dict[str, object] = {}
-    calls = {"csv": 0}
     captured_calls: list[dict[str, object]] = []
 
     import services.kr_market_stock_detail_service as stock_detail_service
@@ -69,20 +30,14 @@ def test_append_investor_trend_5day_prefers_unified_service_when_data_dir_provid
         lambda **kwargs: captured_calls.append(dict(kwargs)) or {"foreign": 321, "institution": 654},
     )
 
-    def _should_not_read_csv(_filename: str) -> pd.DataFrame:
-        calls["csv"] += 1
-        raise AssertionError("CSV fallback should not be called")
-
     append_investor_trend_5day(
         payload=payload,
         ticker_padded="005930",
-        load_csv_file=_should_not_read_csv,
         logger=type("L", (), {"warning": lambda *_a, **_k: None, "debug": lambda *_a, **_k: None})(),
         data_dir=str(tmp_path),
     )
 
     assert payload["investorTrend5Day"] == {"foreign": 321, "institution": 654}
-    assert calls["csv"] == 0
     assert len(captured_calls) == 1
     assert captured_calls[0]["verify_with_references"] is True
 
@@ -90,7 +45,6 @@ def test_append_investor_trend_5day_prefers_unified_service_when_data_dir_provid
 def test_append_investor_trend_5day_calls_the_service_once(monkeypatch, tmp_path):
     """서비스가 이상징후일 때만 참조를 조회하므로 호출자가 두 번 부를 이유가 없다."""
     payload: dict[str, object] = {}
-    calls = {"csv": 0}
     captured_calls: list[dict[str, object]] = []
 
     import services.kr_market_stock_detail_service as stock_detail_service
@@ -109,159 +63,44 @@ def test_append_investor_trend_5day_calls_the_service_once(monkeypatch, tmp_path
         _fake_get_trend,
     )
 
-    def _should_not_read_csv(_filename: str) -> pd.DataFrame:
-        calls["csv"] += 1
-        raise AssertionError("CSV fallback should not be called")
-
     append_investor_trend_5day(
         payload=payload,
         ticker_padded="005930",
-        load_csv_file=_should_not_read_csv,
         logger=type("L", (), {"warning": lambda *_a, **_k: None, "debug": lambda *_a, **_k: None})(),
         data_dir=str(tmp_path),
     )
 
     assert payload["investorTrend5Day"] == {"foreign": 333, "institution": 444}
-    assert calls["csv"] == 0
     assert len(captured_calls) == 1
     assert captured_calls[0]["verify_with_references"] is True
 
 
-def test_append_investor_trend_5day_falls_back_to_csv_when_unified_service_has_no_data(monkeypatch):
-    trend_df = pd.DataFrame(
-        [
-            {"ticker": "005930", "date": "2026-02-22", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-23", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-24", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-25", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-26", "foreign_buy": 1, "inst_buy": 10},
-        ]
-    )
-    payload: dict[str, object] = {}
-
+@pytest.mark.parametrize("outcome, data_dir", [("none", "/tmp/unused"), ("raise", "/tmp/unused"), ("none", None)])
+def test_append_investor_trend_5day_leaves_the_key_out_without_a_unified_value(monkeypatch, outcome, data_dir):
+    """[FLOW-023] 통합 서비스가 값을 주지 않으면 키를 넣지 않는다. 모달은 Toss 합계 「(N일)」로 물러선다."""
     import services.kr_market_stock_detail_service as stock_detail_service
 
-    monkeypatch.setattr(
-        stock_detail_service,
-        "get_investor_trend_5day_for_ticker",
-        lambda **_kwargs: None,
-    )
+    calls: list[dict[str, object]] = []
 
-    append_investor_trend_5day(
-        payload=payload,
-        ticker_padded="005930",
-        load_csv_file=lambda _filename: trend_df,
-        logger=type("L", (), {"warning": lambda *_a, **_k: None, "debug": lambda *_a, **_k: None})(),
-        data_dir="/tmp/unknown",
-    )
+    def _fake_get_trend(**kwargs):
+        calls.append(kwargs)
+        if outcome == "raise":
+            raise RuntimeError("boom")
+        return None
 
-    assert payload["investorTrend5Day"] == {"foreign": 5, "institution": 50}
-
-
-def test_append_investor_trend_5day_skips_when_required_columns_missing():
-    trend_df = pd.DataFrame([{"ticker": "005930"}])
+    monkeypatch.setattr(stock_detail_service, "get_investor_trend_5day_for_ticker", _fake_get_trend)
     payload: dict[str, object] = {}
 
     append_investor_trend_5day(
         payload=payload,
         ticker_padded="005930",
-        load_csv_file=lambda _filename: trend_df,
-        logger=type("L", (), {"warning": lambda *_a, **_k: None})(),
+        logger=type("L", (), {"warning": lambda *_a, **_k: None, "debug": lambda *_a, **_k: None})(),
+        data_dir=data_dir,
     )
 
     assert "investorTrend5Day" not in payload
-
-
-def test_investor_trend_5day_map_cache_reuses_sqlite_metadata_across_shallow_copies(monkeypatch, tmp_path):
-    import services.kr_market_stock_detail_service as stock_detail_service
-
-    trend_csv = tmp_path / "all_institutional_trend_data.csv"
-    trend_csv.write_text("ticker,date,foreign_buy,inst_buy\n", encoding="utf-8")
-
-    trend_df = pd.DataFrame(
-        [
-            {"ticker": "005930", "date": "2026-02-22", "foreign_buy": 1, "inst_buy": 2},
-            {"ticker": "005930", "date": "2026-02-23", "foreign_buy": 3, "inst_buy": 4},
-        ]
-    )
-    trend_df.attrs["kr_cache_filepath"] = str(trend_csv)
-    trend_df.attrs["kr_cache_signature"] = (123456789, 98765)
-    trend_df.attrs["kr_cache_usecols"] = ("ticker", "date", "foreign_buy", "inst_buy")
-
-    with stock_detail_service._INVESTOR_TREND_5DAY_CACHE_LOCK:
-        stock_detail_service._INVESTOR_TREND_5DAY_CACHE.clear()
-
-    call_count = {"value": 0}
-    original_builder = stock_detail_service._build_investor_trend_5day_map
-
-    def _counted_builder(frame):
-        call_count["value"] += 1
-        return original_builder(frame)
-
-    monkeypatch.setattr(stock_detail_service, "_build_investor_trend_5day_map", _counted_builder)
-
-    # deep_copy=False 시나리오를 모사: 새로운 DataFrame 객체지만 attrs 메타데이터는 동일
-    first = trend_df.copy(deep=False)
-    second = trend_df.copy(deep=False)
-
-    first_result = _get_or_build_investor_trend_5day_map(first)
-    second_result = _get_or_build_investor_trend_5day_map(second)
-
-    assert first_result == second_result
-    assert call_count["value"] == 1
-
-
-def test_investor_trend_5day_map_reuses_sqlite_snapshot_after_memory_clear(monkeypatch, tmp_path):
-    import services.kr_market_stock_detail_service as stock_detail_service
-
-    trend_csv = tmp_path / "all_institutional_trend_data.csv"
-    trend_csv.write_text("ticker,date,foreign_buy,inst_buy\n", encoding="utf-8")
-
-    signature = (123456789, 98765)
-    trend_df = pd.DataFrame(
-        [
-            {"ticker": "005930", "date": "2026-02-22", "foreign_buy": 1, "inst_buy": 10},
-            {"ticker": "005930", "date": "2026-02-23", "foreign_buy": 2, "inst_buy": 20},
-            {"ticker": "005930", "date": "2026-02-24", "foreign_buy": 3, "inst_buy": 30},
-            {"ticker": "005930", "date": "2026-02-25", "foreign_buy": 4, "inst_buy": 40},
-            {"ticker": "005930", "date": "2026-02-26", "foreign_buy": 5, "inst_buy": 50},
-        ]
-    )
-    trend_df.attrs["kr_cache_filepath"] = str(trend_csv)
-    trend_df.attrs["kr_cache_signature"] = signature
-    trend_df.attrs["kr_cache_usecols"] = ("ticker", "date", "foreign_buy", "inst_buy")
-
-    with stock_detail_service._INVESTOR_TREND_5DAY_CACHE_LOCK:
-        stock_detail_service._INVESTOR_TREND_5DAY_CACHE.clear()
-
-    first = _get_or_build_investor_trend_5day_map(trend_df.copy(deep=False))
-    assert first["005930"] == (15, 150)
-
-    with stock_detail_service._INVESTOR_TREND_5DAY_CACHE_LOCK:
-        stock_detail_service._INVESTOR_TREND_5DAY_CACHE.clear()
-
-    monkeypatch.setattr(
-        stock_detail_service,
-        "_build_investor_trend_5day_map",
-        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("should load from sqlite snapshot")),
-    )
-
-    second = _get_or_build_investor_trend_5day_map(trend_df.copy(deep=False))
-    assert second["005930"] == (15, 150)
-
-    sqlite_cache_key = stock_detail_service._investor_trend_5day_sqlite_cache_key(str(trend_csv))
-    with sqlite3.connect(tmp_path / "runtime_cache.db") as conn:
-        row_count = int(
-            conn.execute(
-                """
-                SELECT COUNT(*)
-                FROM json_file_payload_cache
-                WHERE filepath = ?
-                """,
-                (sqlite_cache_key,),
-            ).fetchone()[0]
-        )
-    assert row_count >= 1
+    # data_dir 가 없으면 서비스를 부르지 않는다. 예외는 삼켜지므로 호출 기록으로 본다
+    assert len(calls) == (0 if data_dir is None else 1)
 
 
 def test_load_naver_stock_detail_payload_clears_event_loop_after_run(monkeypatch):
@@ -366,13 +205,11 @@ def test_fetch_stock_detail_payload_reuses_sqlite_snapshot_after_memory_clear(mo
             "safety": {"debtRatio": 0, "currentRatio": 0},
         },
     )
+    # 실제 append 를 돌려 fetch → append 호출의 인자 모양도 함께 고정한다([FLOW-023] /review M1)
     monkeypatch.setattr(
         stock_detail_service,
-        "append_investor_trend_5day",
-        lambda payload, *_args, **_kwargs: payload.setdefault(
-            "investorTrend5Day",
-            {"foreign": 1, "institution": 2},
-        ),
+        "get_investor_trend_5day_for_ticker",
+        lambda **_kwargs: {"foreign": 1, "institution": 2},
     )
 
     calls = {"count": 0}
@@ -389,7 +226,6 @@ def test_fetch_stock_detail_payload_reuses_sqlite_snapshot_after_memory_clear(mo
     logger = type("L", (), {"warning": lambda *_a, **_k: None, "debug": lambda *_a, **_k: None})()
     first_payload = fetch_stock_detail_payload(
         ticker="5930",
-        load_csv_file=lambda _filename: pd.DataFrame(),
         logger=logger,
         data_dir=str(tmp_path),
     )
@@ -407,7 +243,6 @@ def test_fetch_stock_detail_payload_reuses_sqlite_snapshot_after_memory_clear(mo
     fake_toss_module.TossCollector = _FailingTossCollector
     second_payload = fetch_stock_detail_payload(
         ticker="5930",
-        load_csv_file=lambda _filename: pd.DataFrame(),
         logger=logger,
         data_dir=str(tmp_path),
     )

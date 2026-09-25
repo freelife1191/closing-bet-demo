@@ -375,8 +375,9 @@ def _build_trend_map(
         working = working.copy()
         working["ticker"] = ticker_series
 
-    working["foreign_buy"] = pd.to_numeric(working["foreign_buy"], errors="coerce").fillna(0)
-    working["inst_buy"] = pd.to_numeric(working["inst_buy"], errors="coerce").fillna(0)
+    # [FLOW-023] 빈 칸은 NaN 으로 남겨 아래 반복문이 그날을 건너뛰게 한다. 0 으로 채우면 순매수 0 으로 읽힌다
+    working["foreign_buy"] = pd.to_numeric(working["foreign_buy"], errors="coerce")
+    working["inst_buy"] = pd.to_numeric(working["inst_buy"], errors="coerce")
 
     normalized_target_datetime = _normalize_target_datetime(target_datetime)
     has_date = "date" in working.columns
@@ -409,7 +410,7 @@ def _build_trend_map(
             try:
                 foreign_int = int(float(foreign_value))
                 inst_int = int(float(inst_value))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 continue
 
             foreign_5d += foreign_int
@@ -702,14 +703,17 @@ def _fetch_pykrx_reference_trend(
         return None
 
     ordered = trend_df.iloc[::-1]
-    details: list[dict[str, int]] = []
+    details: list[dict[str, Any]] = []
     foreign_sum = 0
     inst_sum = 0
     for day, (foreign_value, inst_value) in zip(ordered.index, ordered[[foreign_col, inst_col]].itertuples(index=False, name=None)):
-        foreign_int = _safe_int(foreign_value)
-        inst_int = _safe_int(inst_value)
-        foreign_sum += foreign_int
-        inst_sum += inst_int
+        # [FLOW-023] NaN 은 0 이 아니라 결측이다. None 으로 남겨 _reference_reject_reason 이 버리게 한다.
+        # 그런 날이 있으면 합계는 부분합이므로 그 판정을 거치지 않고 쓰지 않는다
+        foreign_int, inst_int = (
+            None if v is None else int(v) for v in (optional_volume(foreign_value), optional_volume(inst_value))
+        )
+        foreign_sum += foreign_int or 0
+        inst_sum += inst_int or 0
         details.append(
             {
                 "date": str(day)[:10],
@@ -946,6 +950,10 @@ def _resolve_best_payload(
         return None
 
     if not references:
+        # [FLOW-023] 낡았거나 상한을 넘은 CSV 는 참조로 확인하지 못하면 최근 5일 값으로 내보내지 않는다
+        if verify_with_references and {"stale_csv", "extreme_abs_total"} & set(csv_flags):
+            logger.debug("Dropped unverified CSV trend for %s: flags=%s discarded=%s", ticker, csv_flags, discarded_references)
+            return None
         return _attach_selection_metadata(
             normalized_csv,
             selected_source="csv",
@@ -1070,9 +1078,10 @@ def get_investor_trend_5day_for_ticker(
 
     다만 참조를 쓰기 전에 _reference_reject_reason 으로 쓸 만한 값인지 먼저 본다.
     퇴화한 참조(전 항목이 0, 5일치가 모이지 않거나 하루라도 수량이 빔, 20조 상한
-    초과)는 채택하지 않으므로 그 경우 플래그가 붙은 CSV 가 그대로 남는다. 플래그가
-    stale_csv 나 extreme_abs_total 이면 남는 CSV 도 정확하다고 볼 수 없다. 버린 참조는
-    quality.discarded_references 에 "<출처>:<사유>" 형식으로 남는다.
+    초과)는 채택하지 않는다. 그 경우 single_day_spike·insufficient_days 만 붙은 CSV 는
+    그대로 남고, stale_csv·extreme_abs_total 이 붙은 CSV 는 참조로 확인하지 못했으므로
+    None 을 돌려준다([FLOW-023]). verify_with_references=False 는 플래그 붙은 CSV 를 그대로
+    돌려준다. 버린 참조는 quality.discarded_references 에 "<출처>:<사유>" 형식으로 남는다.
 
     quality.reference_only 는 CSV 대응값이 없어 참조 단독으로 채운 값이라는 표식이다.
     이 표식에 점수 감점이나 상한을 두지 않는다. 기본 참조인 pykrx 는 KRX 공식 자료라

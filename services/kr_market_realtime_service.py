@@ -28,7 +28,6 @@ from services.kr_market_realtime_price_service import (
     normalize_unique_tickers as _normalize_unique_tickers_impl,
 )
 from services.kr_market_stock_detail_service import (
-    append_investor_trend_5day as _append_investor_trend_5day_impl,
     build_default_stock_detail_payload as _build_default_stock_detail_payload_impl,
     build_toss_detail_payload as _build_toss_detail_payload_impl,
     fetch_stock_detail_payload as _fetch_stock_detail_payload_impl,
@@ -388,22 +387,6 @@ def _build_default_stock_detail_payload(ticker_padded: str) -> dict[str, Any]:
     return _build_default_stock_detail_payload_impl(ticker_padded)
 
 
-def _append_investor_trend_5day(
-    payload: dict[str, Any],
-    ticker_padded: str,
-    load_csv_file: Callable[[str], pd.DataFrame],
-    logger: logging.Logger,
-    data_dir: str | None = None,
-) -> None:
-    _append_investor_trend_5day_impl(
-        payload,
-        ticker_padded,
-        load_csv_file,
-        logger,
-        data_dir=data_dir,
-    )
-
-
 def _build_toss_detail_payload(ticker_padded: str, toss_data: dict[str, Any]) -> dict[str, Any]:
     return _build_toss_detail_payload_impl(ticker_padded, toss_data)
 
@@ -414,13 +397,7 @@ def _load_naver_stock_detail_payload(ticker_padded: str) -> dict[str, Any] | Non
 
 def fetch_stock_detail_payload(
     ticker: str,
-    load_csv_file: Callable[[str], pd.DataFrame],
     logger: logging.Logger,
     data_dir: str | None = None,
 ) -> dict[str, Any]:
-    return _fetch_stock_detail_payload_impl(
-        ticker,
-        load_csv_file,
-        logger,
-        data_dir=data_dir,
-    )
+    return _fetch_stock_detail_payload_impl(ticker, logger, data_dir=data_dir)

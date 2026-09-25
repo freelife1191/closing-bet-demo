@@ -813,6 +813,68 @@ def _write_five_day_csv(tmp_path, *, ticker: str) -> None:
     ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
 
 
+def test_trend_map_drops_a_ticker_with_a_blank_in_the_last_five_rows(tmp_path):
+    """[FLOW-023] 최근 5행의 빈 칸·무한대는 0 이 아니라 결측이다. 더 오래된 행으로 창을 채우지 않는다."""
+    rows = []
+    for ticker, blank_at in (("005930", None), ("000660", "2026-02-23"), ("035720", "2026-02-19")):
+        for day in ("2026-02-19", "2026-02-20", "2026-02-21", "2026-02-22", "2026-02-23", "2026-02-24"):
+            rows.append({"ticker": ticker, "date": day,
+                         "foreign_buy": "" if day == blank_at else 1, "inst_buy": 10})
+    for day in ("2026-02-20", "2026-02-21", "2026-02-22", "2026-02-23", "2026-02-24"):
+        rows.append({"ticker": "051910", "date": day, "foreign_buy": 1, "inst_buy": "inf" if day == "2026-02-24" else 10})
+    # 파일 순서가 아니라 날짜로 창을 고른다. 거꾸로 쓰면 정렬 없이는 035720 창에 빈 칸이 들어온다
+    pd.DataFrame(rows[::-1]).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    trend_map = trend_service._get_or_build_trend_map(
+        data_dir=trend_service._normalize_data_dir(str(tmp_path)),
+        filename=trend_service._TREND_FILENAME,
+    )
+
+    assert trend_map["005930"]["foreign"] == 5
+    assert "000660" not in trend_map  # 최근 5행 안의 빈 칸
+    assert trend_map["035720"]["foreign"] == 5  # 빈 칸이 6번째 이전 행에만 있다
+    assert "051910" not in trend_map  # 무한대 한 칸이 map 전체를 깨뜨리지 않는다
+
+
+def test_pykrx_reference_with_a_nan_day_is_rejected_as_insufficient_days(monkeypatch):
+    """[FLOW-023] pykrx 가 하루 값을 NaN 으로 주면 0 이 아니라 결측이므로 참조를 버린다."""
+    days = pd.to_datetime(["2026-02-18", "2026-02-19", "2026-02-20", "2026-02-23", "2026-02-24"])
+    frame = pd.DataFrame(
+        {"기관합계": [10.0, 10.0, 10.0, 10.0, 10.0], "외국인합계": [1.0, 2.0, float("nan"), 4.0, 5.0]},
+        index=days,
+    )
+    monkeypatch.setattr(pykrx_stock, "get_market_trading_value_by_date", lambda *a, **k: frame)
+
+    payload = trend_service._fetch_pykrx_reference_trend(ticker="005930", target_datetime="2026-02-24")
+
+    assert payload["foreign"] == 12  # 값 있는 날만 더한다
+    assert [d["netForeignerBuyVolume"] for d in payload["details"]] == [5, 4, None, 2, 1]
+    normalized = trend_service._normalize_external_trend_payload(payload, source="pykrx")
+    assert trend_service._reference_reject_reason(normalized) == "insufficient_days"
+
+
+def test_extreme_csv_with_no_usable_reference_returns_nothing(monkeypatch, tmp_path):
+    """[FLOW-023] 20조 상한을 넘은 CSV 는 참조가 없으면 값으로 쓰지 않는다. 과거 기준일에서도 같다."""
+    pd.DataFrame(
+        [{"ticker": "005930", "date": f"2026-02-{day}", "foreign_buy": 5_000_000_000_000, "inst_buy": 0}
+         for day in ("20", "21", "22", "23", "24")]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
+
+    trend_service.clear_investor_trend_5day_memory_cache()
+    monkeypatch.setattr(trend_service, "_fetch_pykrx_reference_trend", lambda **_kwargs: None)
+    monkeypatch.setattr(trend_service, "_fetch_toss_reference_trend", lambda **_kwargs: None)
+
+    assert trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930", data_dir=str(tmp_path), target_datetime="2026-02-24"
+    ) is None
+    # verify=False 는 플래그 붙은 CSV 를 그대로 돌려준다(호출자가 자기 폴백으로 빠진다)
+    kept = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930", data_dir=str(tmp_path), target_datetime="2026-02-24", verify_with_references=False
+    )
+    assert "extreme_abs_total" in kept["quality"]["csv_anomaly_flags"]
+
+
 def test_reference_reject_reason_accepts_a_complete_payload():
     payload = {
         "foreign": 1_000,
@@ -899,11 +961,13 @@ def test_reference_reject_reason_rejects_an_extreme_total():
     assert trend_service._reference_reject_reason(just_below) is None
 
 
-def test_a_zero_reference_does_not_overwrite_a_stale_but_real_csv(monkeypatch, tmp_path):
-    """퇴화한 참조로 정확한 CSV 가 덮이지 않는다.
+def test_a_zero_reference_does_not_overwrite_a_stale_csv_and_nothing_is_returned(monkeypatch, tmp_path):
+    """퇴화한 참조로 CSV 가 덮이지 않는다.
 
     이 검사가 없으면 거래정지 종목이나 파싱 실패로 전 항목이 0 이 된 참조가 5거래일이
     모인 CSV 를 통째로 덮고, 그 0 이 스크리너 수급 점수와 대시보드로 흘러간다.
+    [FLOW-023] 낡은 CSV 도 최근 5일 값처럼 내보내지 않으므로 결과는 None 이다. 0 참조가
+    채택됐다면 source 가 pykrx 인 0 값이 나오므로 None 이 「덮지 않았다」도 함께 보인다.
     """
     _write_five_day_csv(tmp_path, ticker="005930")
 
@@ -926,13 +990,12 @@ def test_a_zero_reference_does_not_overwrite_a_stale_but_real_csv(monkeypatch, t
         data_dir=str(tmp_path),
     )
 
-    assert result is not None
-    assert result["source"] == "csv"
-    assert result["foreign"] == 6_000
-    assert result["institution"] == 11_000
-    assert result["quality"]["discarded_references"] == ["pykrx:zero_total"]
-    assert result["quality"]["reference_sources"] == []
-    assert result["quality"]["reference_only"] is False
+    assert result is None
+    # None 은 CSV 가 map 에 없어서가 아니라 stale_csv 갈래 때문이다
+    kept = trend_service.get_investor_trend_5day_for_ticker(
+        ticker="005930", data_dir=str(tmp_path), verify_with_references=False
+    )
+    assert "stale_csv" in kept["quality"]["csv_anomaly_flags"]
 
 
 def test_toss_is_tried_when_the_pykrx_reference_is_discarded(monkeypatch, tmp_path):
@@ -975,10 +1038,18 @@ def test_toss_is_tried_when_the_pykrx_reference_is_discarded(monkeypatch, tmp_pa
 
 
 def test_a_toss_reference_missing_one_day_does_not_replace_the_csv(monkeypatch, tmp_path):
-    """[FLOW-022] 실제 Toss 파서·정규화를 거친 부분 일수 참조는 버려지고 CSV 가 남는다."""
+    """[FLOW-022] 실제 Toss 파서·정규화를 거친 부분 일수 참조는 버려지고 CSV 가 남는다.
+
+    [FLOW-023] 낡은 CSV 는 참조를 모두 버리면 None 이므로, 남는 CSV 는 최근 날짜에 하루 급등만 붙은 것으로 둔다.
+    """
     from engine.toss_collector_metric_parsers import parse_investor_trend
 
-    _write_five_day_csv(tmp_path, ticker="005930")
+    today = datetime.now().date()
+    recent = [(today - pd.Timedelta(days=offset)).strftime("%Y-%m-%d") for offset in (4, 3, 2, 1, 0)]
+    pd.DataFrame(
+        [{"ticker": "005930", "date": day, "foreign_buy": 50_000_000_000 if day == recent[-1] else 1_000, "inst_buy": 0}
+         for day in recent]
+    ).to_csv(tmp_path / "all_institutional_trend_data.csv", index=False)
     rows = [
         {"baseDate": f"2026-02-{day}", "close": 100, "netIndividualsBuyVolume": 0,
          "netForeignerBuyVolume": foreign, "netInstitutionBuyVolume": 10}
@@ -999,8 +1070,8 @@ def test_a_toss_reference_missing_one_day_does_not_replace_the_csv(monkeypatch, 
 
     assert result is not None
     assert result["source"] == "csv"
-    assert result["foreign"] == 6_000
-    assert result["quality"]["csv_anomaly_flags"] == ["stale_csv"]
+    assert result["foreign"] == 50_000_004_000
+    assert result["quality"]["csv_anomaly_flags"] == ["single_day_spike"]
     assert result["quality"]["discarded_references"] == ["toss:insufficient_days"]
     # CSV 에 없는 종목은 버린 뒤 남는 자료가 없다. 상세 API 는 키를 빼고 모달이 Toss 합계 「(N일)」로 물러선다
     assert trend_service.get_investor_trend_5day_for_ticker(ticker="000660", data_dir=str(tmp_path)) is None
