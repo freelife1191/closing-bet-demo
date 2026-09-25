@@ -20,7 +20,7 @@
  ### 1. Market-First Philosophy (시장 우선주의)
 > *"시장을 이기는 종목은 없다."*
 - 개별 종목 분석 이전에 **Market Gate(시장 신호등)** 가 시장의 건전성을 먼저 판단합니다.
-- 환율, 수급, 기술적 지표가 위험 수준일 경우, 아무리 좋은 종목이 포착되어도 매수를 **원천 차단(Gate Closed)** 하여 계좌를 보호합니다.        
+- 기술적 지표 점수에서 당일 지수 급락 감점과 섹터 급락 감점 중 큰 값을 뺀 시장 점수가 40점 미만이면 **Gate Closed(약세)** 로 표시하고 경고를 남깁니다. 신호 생성 자체를 막지는 않습니다. 환율은 위험 수준일 때 사유에 표시만 하고, 수급은 판정에 쓰지 않습니다. 데이터가 없거나 분석에 실패하면 50점·Open 기본값을 돌려줍니다.
 
 ### 2. Rule-based Screening + AI Reasoning (하이브리드 분석)
 - **1차 후보군 필터(Rule)**: `get_top_gainers` 단계에서 **거래대금 10억 이상 + 등락률 하한(`MIN_CHANGE_PCT`, 기본 0%)** 조건으로 후보를 압축합니다.
@@ -265,7 +265,6 @@ engine/
 │
 ├── collectors/                          # 로우 데이터 수집기 모듈 (KRX / Naver / News)
 ├── toss_collector.py                    # 토스증권 실시간 시세
-├── kis_collector.py                     # KIS API 연동
 │
 ├── generator.py + generator_*.py        # SignalGenerator / ReportGenerator (런타임/스토리지 분리)
 │
