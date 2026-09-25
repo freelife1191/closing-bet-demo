@@ -27,11 +27,11 @@ def _build_v2_status_io(
     *,
     data_dir: str,
     logger: Any,
-) -> tuple[Callable[[bool], None], Callable[[], dict[str, Any]]]:
+) -> tuple[Callable[[bool], bool], Callable[[], dict[str, Any]]]:
     v2_status_file = os.path.join(data_dir, "v2_screener_status.json")
 
-    def _save_v2_status(running: bool) -> None:
-        write_v2_status(v2_status_file, running, logger)
+    def _save_v2_status(running: bool) -> bool:
+        return write_v2_status(v2_status_file, running, logger)
 
     def _load_v2_status() -> dict[str, Any]:
         try:
@@ -76,7 +76,7 @@ def _register_jongga_run_status_routes(
     load_json_file: Callable[..., dict[str, Any]],
     launch_jongga_v2_screener: Callable[..., tuple[int, dict[str, Any]]],
     load_v2_status: Callable[[], dict[str, Any]],
-    save_v2_status: Callable[[bool], None],
+    save_v2_status: Callable[[bool], bool],
     run_jongga_background: Callable[[int, list[str] | None, str | None], None],
 ) -> None:
     @kr_bp.route("/jongga-v2/run", methods=["POST"])

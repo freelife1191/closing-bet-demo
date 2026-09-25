@@ -168,7 +168,7 @@ def write_v2_status(v2_status_file: str, running: bool, logger: logging.Logger) 
 def launch_jongga_v2_screener(
     req_data: dict[str, Any],
     load_v2_status: Callable[[], dict[str, Any]],
-    save_v2_status: Callable[[bool], None],
+    save_v2_status: Callable[[bool], bool | None],
     run_jongga_background: Callable[..., None],
     logger: logging.Logger,
     status_lock: Callable[[], AbstractContextManager[Any]] = nullcontext,
@@ -182,7 +182,15 @@ def launch_jongga_v2_screener(
                 "message": "Engine is already running. Please wait.",
             }
         # [INFRA-114] 백그라운드가 곧바로 끝나 False 를 쓴 뒤에 True 가 덮여 409 로 굳지 않게 먼저 저장한다
-        save_v2_status(True)
+        # [INFRA-119] 저장하지 못하면 실행권 없이 돌다가 끝날 때 남의 실행권을 덮으므로 시작하지 않는다
+        if save_v2_status(True) is False:
+            logger.error("[Background] Jongga V2 run refused: failed to save run claim")
+            # 교체 뒤 캐시 무효화에서 실패했다면 True 가 이미 디스크에 있다. 잠금 안이라 남의 실행권을 덮지 않는다
+            save_v2_status(False)
+            return 500, {
+                "status": "error",
+                "message": "Failed to save engine status. Please retry.",
+            }
 
     capital = req_data.get("capital", 50_000_000)
     markets = req_data.get("markets", ["KOSPI", "KOSDAQ"])

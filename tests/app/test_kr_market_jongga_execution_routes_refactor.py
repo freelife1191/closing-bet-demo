@@ -455,3 +455,31 @@ def test_manual_run_releases_v2_claim_once_so_a_later_claim_survives(monkeypatch
     assert written == [True, False]
     saved = json.loads((tmp_path / "v2_screener_status.json").read_text(encoding="utf-8"))
     assert saved == {"isRunning": True, "owner": "scheduler"}
+
+
+def test_manual_run_refuses_when_v2_claim_cannot_be_saved(monkeypatch, tmp_path: Path):
+    # [INFRA-119] 실행권 True 를 저장하지 못하면 500 으로 거부하고 분석 스레드를 띄우지 않는다.
+    # 교체 뒤에 실패해 True 가 디스크에 남았을 수 있으므로 잠금 안에서 False 를 한 번 더 시도한다
+    import services.kr_market_jongga_runtime_service as runtime_module
+
+    written: list[bool] = []
+
+    def _write(_path: str, content: str):
+        written.append(json.loads(content)["isRunning"])
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(runtime_module, "atomic_write_text", _write)
+    started: list[bool] = []
+    client = _create_client(
+        str(tmp_path),
+        _build_deps(
+            launch_jongga_v2_screener=runtime_module.launch_jongga_v2_screener,
+            run_jongga_v2_background_pipeline=lambda **_: started.append(True),
+        ),
+    )
+    response = client.post("/api/kr/jongga-v2/run", json={})
+
+    assert response.status_code == 500
+    assert response.get_json()["status"] == "error"
+    assert written == [True, False]
+    assert started == []

@@ -64,6 +64,23 @@ def test_launch_jongga_v2_screener_clears_running_when_thread_start_fails(monkey
     assert saved == [True, False]
 
 
+def test_launch_jongga_v2_screener_refuses_when_claim_save_fails():
+    # [INFRA-119] 실행권 True 를 저장하지 못하면 실행권 없이 분석이 돌지 않게 거부한다
+    started: list[bool] = []
+
+    status_code, payload = launch_jongga_v2_screener(
+        req_data={},
+        load_v2_status=lambda: {"isRunning": False},
+        save_v2_status=lambda _running: False,
+        run_jongga_background=lambda **_: started.append(True),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert status_code == 500
+    assert payload["status"] == "error"
+    assert started == []
+
+
 def test_launch_jongga_v2_screener_serializes_concurrent_requests(tmp_path):
     # [INFRA-115] 두 워커의 실행 요청이 겹쳐도 파일 잠금 안에서 확인·저장하므로 하나만 시작한다
     import json

@@ -64,7 +64,11 @@
 - 카테고리: 인프라 | 티어: T2(판정은 설계 때 §2 대조) | 근거: `[INFRA-118]` 코드 리뷰(closing-bet-reviewer, 2026-09-25 low), 코드로 확인
 - 내용: 라우트의 `_save_v2_status`(`app/routes/kr_market_jongga_execution_routes.py`)가 `write_v2_status` 의 성공 여부를 버리고, `launch_jongga_v2_screener` 는 잠금 안의 `save_v2_status(True)` 가 실패해도 200 을 주고 분석 스레드를 띄운다. 그러면 실행권 없이 분석이 돌고, 그 사이 `[INFRA-116]` 스케줄러 체인이 실행권을 잡으면 수동 실행의 해제 False 가 그것을 덮는다. 스케줄러 쪽(`_claim_v2_run`)은 이미 저장 실패를 확인한다
 - 확인 수준: 코드로만 확인. 디스크 쓰기 실패 상황은 재현하지 않았다
-- [ ] 설계 승인(저장 실패 시 5xx 로 거부하고 스레드를 띄우지 않을지)
+- [x] 설계 승인(2026-09-25 14:45, 대화 AskUserQuestion 「이 설계로 진행」, bounded): 라우트 `_save_v2_status` 가 `write_v2_status` 의 bool 을 돌려주고, launcher 는 잠금 안의 `save_v2_status(True) is False` 면 스레드 없이 500 을 준다. 프론트는 409 외 오류에서 스피너를 끄므로 바꾸지 않는다. 해제 False 실패는 종전처럼 로그만 남긴다. 티어 T2(변경 경로 `app/routes/kr_market_jongga_execution_routes.py`·`services/kr_market_jongga_runtime_service.py` 는 §2 밖)
+- [x] 회귀 테스트 `test_launch_jongga_v2_screener_refuses_when_claim_save_fails`(수정 전 실패 확인)와 구현
+- [x] ponytail 리뷰(직접 검토, 「Lean already. Ship.」), closing-bet-reviewer APPROVE(max low 3건). 반영: ① 교체 뒤 캐시 무효화 예외로 True 가 디스크에 남은 채 False 를 받는 갈래에 대비해 500 갈래에서 잠금 안 `save_v2_status(False)` 를 한 번 더 시도 ② 라우트가 bool 을 돌려주는지 지키는 테스트 `test_manual_run_refuses_when_v2_claim_cannot_be_saved` 추가(라우트의 `return` 을 지우는 변이에서 실패 확인). 미반영: ③ launcher `bool | None` 과 라우트 `bool` 의 타입 차이는 None 을 돌려주는 테스트 가짜를 받기 위한 것이라 둔다
+- [x] pytest 전체: `venv/bin/python -m pytest -q -p no:cacheprovider` 2852 passed, 2 skipped, exit 0 (리뷰 반영 뒤)
+- [ ] QA: 사본 하네스에서 상태 파일 쓰기를 실패시켜 500·분석 미시작 확인, 회귀로 정상 200
 
 ### [INFRA-117] `engine/kis_collector.py` 에 운영 호출자가 남지 않았다
 - 카테고리: 인프라 | 티어: T1(판정은 설계 때 §2 대조) | 근거: `[INFRA-108]` ponytail 리뷰(2026-09-25), `git grep` 으로 확인
